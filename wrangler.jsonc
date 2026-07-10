@@ -1,0 +1,18 @@
+{
+  // bubblelab.dev 전체를 서빙하는 단일 워커.
+  // sites/ 아래 최상위 폴더 하나가 서브도메인 하나에 대응된다.
+  "name": "bubblelab",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-07-01",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page",
+    "run_worker_first": true
+  },
+  "routes": [
+    { "pattern": "bubblelab.dev/*", "zone_name": "bubblelab.dev" },
+    { "pattern": "*.bubblelab.dev/*", "zone_name": "bubblelab.dev" }
+  ]
+}

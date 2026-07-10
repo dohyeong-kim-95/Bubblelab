@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bubble pop</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; overflow: hidden; font-family: ui-monospace, monospace;
+         background: light-dark(#eef6fb, #0b1420); }
+  canvas { display: block; }
+  #score { position: fixed; top: 1rem; left: 1.25rem; font-size: 1.1rem;
+           color: light-dark(#123, #cde); user-select: none; }
+</style>
+</head>
+<body>
+<div id="score">pop: 0</div>
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+let popped = 0;
+
+function resize() {
+  canvas.width = innerWidth;
+  canvas.height = innerHeight;
+}
+addEventListener("resize", resize);
+resize();
+
+const bubbles = [];
+function spawn() {
+  const r = 14 + Math.random() * 30;
+  bubbles.push({
+    x: Math.random() * canvas.width,
+    y: canvas.height + r,
+    r,
+    v: 0.4 + Math.random() * 1.2,
+    hue: 190 + Math.random() * 60,
+    wobble: Math.random() * Math.PI * 2,
+  });
+}
+
+function pop(x, y) {
+  for (let i = bubbles.length - 1; i >= 0; i--) {
+    const b = bubbles[i];
+    if ((x - b.x) ** 2 + (y - b.y) ** 2 < b.r * b.r) {
+      bubbles.splice(i, 1);
+      popped++;
+      document.getElementById("score").textContent = "pop: " + popped;
+      return;
+    }
+  }
+}
+addEventListener("pointerdown", (e) => pop(e.clientX, e.clientY));
+
+function tick(t) {
+  if (bubbles.length < 25 && Math.random() < 0.08) spawn();
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  for (let i = bubbles.length - 1; i >= 0; i--) {
+    const b = bubbles[i];
+    b.y -= b.v;
+    b.x += Math.sin(t / 900 + b.wobble) * 0.4;
+    if (b.y < -b.r) { bubbles.splice(i, 1); continue; }
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+    ctx.fillStyle = `hsla(${b.hue}, 80%, 70%, .25)`;
+    ctx.fill();
+    ctx.strokeStyle = `hsla(${b.hue}, 80%, 60%, .6)`;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(b.x - b.r * 0.3, b.y - b.r * 0.35, b.r * 0.18, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,255,255,.7)";
+    ctx.fill();
+  }
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>
