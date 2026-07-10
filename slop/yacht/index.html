@@ -94,7 +94,8 @@
     <input id="name" maxlength="10" placeholder="닉네임">
     <button id="create" class="primary">방 만들기</button>
     <div class="row">
-      <input id="joincode" maxlength="4" placeholder="방 코드" style="text-transform:uppercase">
+      <input id="joincode" maxlength="6" inputmode="numeric" autocomplete="off"
+             placeholder="방 코드 (숫자 6자리)">
       <button id="join">참가</button>
     </div>
     <div id="err"></div>
@@ -247,9 +248,8 @@ function myName() {
 async function createRoom() {
   const name = myName(); if (!name) return;
   await cleanupStale();
-  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ';
   for (let i = 0; i < 10; i++) {
-    const c = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    const c = Array.from({ length: 6 }, () => Math.floor(Math.random() * 10)).join('');
     if (await rt.get(`rooms/${c}`)) continue;
     await rt.set(`rooms/${c}`, {
       meta: { hostId: uid, status: 'lobby', createdAt: Date.now(), round: 0 },
@@ -263,8 +263,8 @@ async function createRoom() {
 
 async function joinRoom(c) {
   const name = myName(); if (!name) return;
-  c = c.trim().toUpperCase();
-  if (c.length !== 4) { showErr('방 코드는 4글자입니다'); return; }
+  c = c.replace(/\D/g, '');
+  if (c.length !== 6) { showErr('방 코드는 숫자 6자리입니다'); return; }
   const room = await rt.get(`rooms/${c}`);
   if (!room) { showErr('없는 방이에요'); return; }
   const already = room.players?.[uid];
@@ -501,10 +501,16 @@ const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 $('#create').addEventListener('click', () => createRoom().catch((e) => showErr(e.message)));
 $('#join').addEventListener('click', () => joinRoom($('#joincode').value).catch((e) => showErr(e.message)));
 $('#joincode').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#join').click(); });
+// 숫자 외 입력(한글 등) 즉시 제거
+$('#joincode').addEventListener('input', () => {
+  const el = $('#joincode');
+  const v = el.value.replace(/\D/g, '').slice(0, 6);
+  if (el.value !== v) el.value = v;
+});
 
 // 공유 링크(#CODE)로 들어온 경우 코드 자동 입력, 기존 멤버면 자동 입장
-const hashCode = location.hash.slice(1).toUpperCase();
-if (/^[A-Z]{4}$/.test(hashCode)) {
+const hashCode = location.hash.slice(1);
+if (/^\d{6}$/.test(hashCode)) {
   $('#joincode').value = hashCode;
   rt.get(`rooms/${hashCode}/players/${uid}`).then((p) => {
     if (p) enterRoom(hashCode);
