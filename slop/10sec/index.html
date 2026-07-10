@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>10초 맞추기</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; font-family: ui-monospace, monospace; min-height: 100vh;
+         display: flex; flex-direction: column; align-items: center;
+         justify-content: center; gap: 1.2rem; text-align: center;
+         padding: 1.5rem; box-sizing: border-box; user-select: none;
+         -webkit-user-select: none; }
+  h1 { font-size: 1.1rem; margin: 0; opacity: .7; }
+  #clock { font-size: 4rem; font-weight: bold; font-variant-numeric: tabular-nums;
+           min-height: 5rem; display: grid; place-items: center; }
+  #clock.hidden-time { filter: blur(14px); opacity: .35; }
+  #msg { opacity: .7; min-height: 2.6em; white-space: pre-line; }
+  button { font: inherit; font-size: 1.2rem; padding: .9rem 2.6rem;
+           border-radius: 2rem; border: 2px solid currentColor;
+           background: none; color: inherit; cursor: pointer; }
+  button:active { transform: scale(.96); }
+  #best { opacity: .5; font-size: .85rem; min-height: 1.2em; }
+</style>
+</head>
+<body>
+  <h1>⏱ 10초 맞추기</h1>
+  <div id="clock">0.000</div>
+  <div id="msg">시작을 누르고, 정확히 10초라고 생각될 때 정지!
+3초 뒤에 시계가 가려져요.</div>
+  <button id="btn">시작</button>
+  <div id="best"></div>
+<script>
+const clock = document.getElementById("clock");
+const msg = document.getElementById("msg");
+const btn = document.getElementById("btn");
+const bestEl = document.getElementById("best");
+
+let running = false;
+let startTime = 0;
+let raf = null;
+let best = null;
+
+function tick() {
+  const t = (performance.now() - startTime) / 1000;
+  clock.textContent = t.toFixed(3);
+  if (t >= 3) clock.classList.add("hidden-time");
+  raf = requestAnimationFrame(tick);
+}
+
+btn.addEventListener("click", () => {
+  if (!running) {
+    running = true;
+    startTime = performance.now();
+    clock.classList.remove("hidden-time");
+    msg.textContent = "…";
+    btn.textContent = "정지";
+    tick();
+  } else {
+    running = false;
+    cancelAnimationFrame(raf);
+    clock.classList.remove("hidden-time");
+    const t = (performance.now() - startTime) / 1000;
+    clock.textContent = t.toFixed(3);
+    const diff = Math.abs(t - 10);
+    if (best === null || diff < best) {
+      best = diff;
+      bestEl.textContent = `최고 기록: 오차 ${best.toFixed(3)}초`;
+    }
+    const grade =
+      diff < 0.05 ? "🎯 인간 시계" :
+      diff < 0.2  ? "🔥 대단한데요" :
+      diff < 0.5  ? "👍 나쁘지 않아요" :
+      diff < 1    ? "🙂 연습하면 돼요" : "🫠 시계 보는 법부터…";
+    msg.textContent = `${t < 10 ? "-" : "+"}${diff.toFixed(3)}초 ${grade}`;
+    btn.textContent = "다시";
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>반응속도 테스트</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; font-family: ui-monospace, monospace; }
+  #stage { min-height: 100vh; display: flex; flex-direction: column;
+           align-items: center; justify-content: center; gap: 1rem;
+           cursor: pointer; user-select: none; -webkit-user-select: none;
+           transition: background .15s; text-align: center; padding: 1.5rem;
+           box-sizing: border-box; }
+  #stage.idle { background: light-dark(#eef2f6, #10161f); }
+  #stage.wait { background: light-dark(#e05252, #7a2020); color: #fff; }
+  #stage.go   { background: light-dark(#3fae5f, #1d6b38); color: #fff; }
+  #main { font-size: 2rem; font-weight: bold; }
+  #sub  { opacity: .7; }
+  #stats { position: fixed; top: 1rem; left: 0; right: 0; text-align: center;
+           opacity: .6; font-size: .9rem; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="stats"></div>
+<div id="stage" class="idle">
+  <div id="main">⚡ 반응속도 테스트</div>
+  <div id="sub">화면이 초록색이 되면 최대한 빨리 클릭!<br>클릭해서 시작</div>
+</div>
+<script>
+const stage = document.getElementById("stage");
+const main = document.getElementById("main");
+const sub = document.getElementById("sub");
+const stats = document.getElementById("stats");
+
+let state = "idle"; // idle | wait | go | result
+let timer = null;
+let goTime = 0;
+const results = [];
+
+function updateStats() {
+  if (!results.length) return;
+  const best = Math.min(...results);
+  const avg = Math.round(results.reduce((a, b) => a + b) / results.length);
+  stats.textContent = `최고 ${best}ms · 평균 ${avg}ms · ${results.length}회`;
+}
+
+function arm() {
+  state = "wait";
+  stage.className = "wait";
+  main.textContent = "기다려…";
+  sub.textContent = "초록색이 되면 클릭";
+  timer = setTimeout(() => {
+    state = "go";
+    stage.className = "go";
+    main.textContent = "클릭!";
+    sub.textContent = "";
+    goTime = performance.now();
+  }, 1500 + Math.random() * 3000);
+}
+
+stage.addEventListener("pointerdown", () => {
+  if (state === "idle" || state === "result") {
+    arm();
+  } else if (state === "wait") {
+    clearTimeout(timer);
+    state = "result";
+    stage.className = "idle";
+    main.textContent = "🐇 너무 빨라요";
+    sub.textContent = "초록색이 되기 전에 클릭했어요. 클릭해서 다시";
+  } else if (state === "go") {
+    const ms = Math.round(performance.now() - goTime);
+    results.push(ms);
+    updateStats();
+    state = "result";
+    stage.className = "idle";
+    main.textContent = `${ms}ms`;
+    sub.textContent =
+      (ms < 200 ? "⚡ 미쳤다" : ms < 250 ? "🔥 빠른데요" :
+       ms < 320 ? "👍 평범" : "🐢 커피 한잔 하세요") + " · 클릭해서 다시";
+  }
+});
+</script>
+</body>
+</html>

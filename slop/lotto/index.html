@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>로또번호 추첨기</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: ui-monospace, monospace; margin: 0; min-height: 100vh;
+         display: flex; flex-direction: column; align-items: center;
+         justify-content: center; gap: 2rem; padding: 1.5rem; box-sizing: border-box; }
+  h1 { font-size: 1.1rem; margin: 0; opacity: .7; }
+  #balls { display: flex; gap: .6rem; flex-wrap: wrap; justify-content: center;
+           min-height: 3.4rem; }
+  .ball { width: 3.2rem; height: 3.2rem; border-radius: 50%; display: grid;
+          place-items: center; font-size: 1.15rem; font-weight: bold; color: #fff;
+          text-shadow: 0 1px 2px rgba(0,0,0,.35);
+          box-shadow: inset -4px -6px 10px rgba(0,0,0,.25),
+                      inset 4px 6px 10px rgba(255,255,255,.35),
+                      0 3px 6px rgba(0,0,0,.2);
+          animation: pop .35s cubic-bezier(.2,1.6,.4,1) both; }
+  .ball.bonus { margin-left: 1rem; position: relative; }
+  .ball.bonus::before { content: "+"; position: absolute; left: -1rem;
+                        color: light-dark(#666, #999); font-weight: normal; }
+  @keyframes pop { from { transform: scale(0); } to { transform: scale(1); } }
+  button { font: inherit; font-size: 1.1rem; padding: .8rem 2.2rem;
+           border-radius: 2rem; border: 2px solid currentColor;
+           background: none; color: inherit; cursor: pointer; }
+  button:active { transform: scale(.96); }
+  #history { list-style: none; padding: 0; margin: 0; opacity: .55;
+             font-size: .85rem; text-align: center; }
+  #history li { padding: .15rem 0; }
+</style>
+</head>
+<body>
+  <h1>🍀 로또번호 추첨기</h1>
+  <div id="balls"></div>
+  <button id="draw">추첨</button>
+  <ul id="history"></ul>
+<script>
+const ballsEl = document.getElementById("balls");
+const historyEl = document.getElementById("history");
+const drawBtn = document.getElementById("draw");
+
+// 공 색깔은 실제 로또 컬러 규칙
+function color(n) {
+  if (n <= 10) return "#f5a623";
+  if (n <= 20) return "#4a90d9";
+  if (n <= 30) return "#e05252";
+  if (n <= 40) return "#7d7d7d";
+  return "#4caf6d";
+}
+
+function drawNumbers() {
+  const pool = Array.from({ length: 45 }, (_, i) => i + 1);
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return { main: pool.slice(0, 6).sort((a, b) => a - b), bonus: pool[6] };
+}
+
+let drawing = false;
+drawBtn.addEventListener("click", () => {
+  if (drawing) return;
+  drawing = true;
+
+  if (ballsEl.children.length) {
+    const prev = [...ballsEl.children].map((b) => b.textContent);
+    const li = document.createElement("li");
+    li.textContent = prev.slice(0, 6).join(" ") + " + " + prev[6];
+    historyEl.prepend(li);
+    while (historyEl.children.length > 5) historyEl.lastChild.remove();
+  }
+
+  ballsEl.innerHTML = "";
+  const { main, bonus } = drawNumbers();
+  [...main, bonus].forEach((n, i) => {
+    setTimeout(() => {
+      const b = document.createElement("div");
+      b.className = "ball" + (i === 6 ? " bonus" : "");
+      b.style.background = color(n);
+      b.textContent = n;
+      ballsEl.appendChild(b);
+      if (i === 6) drawing = false;
+    }, i * 280);
+  });
+});
+</script>
+</body>
+</html>
