@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>📈 20초 트레이더</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: ui-monospace, monospace; height: 100dvh;
+         display: flex; flex-direction: column; user-select: none;
+         -webkit-user-select: none; touch-action: manipulation;
+         background: light-dark(#f2f5f8, #0d131c); }
+  #top { display: flex; justify-content: space-between; align-items: baseline;
+         padding: .6rem 1rem; font-size: .95rem; gap: 1rem; }
+  #timer { font-weight: bold; font-variant-numeric: tabular-nums; }
+  #timer.hurry { color: #e05252; }
+  #equity { font-variant-numeric: tabular-nums; }
+  #ret { font-weight: bold; }
+  .up { color: #e05252; } .down { color: #4a90d9; }
+  #grid { flex: 1; display: grid; gap: .5rem; padding: 0 .5rem .5rem;
+          grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
+          min-height: 0; }
+  .cell { border-radius: .8rem; padding: .45rem .55rem; cursor: pointer;
+          display: flex; flex-direction: column; min-height: 0;
+          background: light-dark(#fff, #141c28);
+          border: 2px solid light-dark(#dde4ec, #232e3e); }
+  .cell.held { border-color: #f5a623;
+          box-shadow: 0 0 0 2px rgba(245,166,35,.35); }
+  .head { display: flex; justify-content: space-between; align-items: baseline;
+          font-size: .78rem; gap: .4rem; white-space: nowrap; }
+  .price { font-variant-numeric: tabular-nums; }
+  .pnl { font-size: .72rem; min-height: 1em; font-weight: bold; }
+  canvas { flex: 1; width: 100%; min-height: 0; }
+  #overlay { position: fixed; inset: 0; display: grid; place-items: center;
+             background: light-dark(rgba(242,245,248,.92), rgba(13,19,28,.92));
+             text-align: center; padding: 1.5rem; z-index: 10; }
+  #overlay.hidden { display: none; }
+  #overlay h1 { font-size: 1.3rem; margin: 0 0 .4rem; }
+  #overlay .big { font-size: 2.4rem; font-weight: bold; margin: .4rem 0; }
+  #overlay p { opacity: .7; line-height: 1.7; margin: .4rem 0 1.2rem;
+               font-size: .9rem; }
+  #overlay button { font: inherit; font-size: 1.15rem; padding: .8rem 2.4rem;
+             border-radius: 2rem; border: 2px solid currentColor;
+             background: none; color: inherit; cursor: pointer; }
+  #overlay button:active { transform: scale(.96); }
+</style>
+</head>
+<body>
+<div id="top">
+  <span id="timer">20.0</span>
+  <span id="equity">₩1,000,000</span>
+  <span id="ret"></span>
+</div>
+<div id="grid"></div>
+<div id="overlay">
+  <div>
+    <h1>📈 20초 트레이더</h1>
+    <p>차트를 탭하면 <b>전량 매수</b>, 다시 탭하면 <b>전량 매도</b>.<br>
+       다른 차트를 탭하면 바로 갈아탑니다.<br>
+       20초 뒤 수익률로 승부. 시드는 100만원.</p>
+    <button id="start">시작</button>
+  </div>
+</div>
+<script>
+const TICKERS = [
+  { name: '🍜 라면전자' },
+  { name: '🚀 로켓모빌리티' },
+  { name: '🧊 아이스바이오' },
+  { name: '🐹 햄스터게임즈' },
+];
+const GAME_SECONDS = 20;
+const TICKS_PER_SEC = 10;
+const TOTAL_TICKS = GAME_SECONDS * TICKS_PER_SEC;
+const SEED_CASH = 1_000_000;
+
+const gridEl = document.getElementById('grid');
+const timerEl = document.getElementById('timer');
+const equityEl = document.getElementById('equity');
+const retEl = document.getElementById('ret');
+const overlayEl = document.getElementById('overlay');
+
+const fmt = (n) => '₩' + Math.round(n).toLocaleString('ko-KR');
+const pct = (r) => (r >= 0 ? '+' : '') + (r * 100).toFixed(2) + '%';
+
+// 표준정규분포 난수 (Box-Muller)
+function gauss() {
+  let u = 0, v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+// 종목: 기하 브라운 운동(GBM) + 가끔 점프
+function makeStock(t) {
+  return {
+    ...t,
+    price: 10_000 * (0.5 + Math.random()),
+    startPrice: 0,
+    mu: (Math.random() - 0.45) * 0.0012,      // 틱당 드리프트 (게임마다 숨은 추세)
+    sigma: 0.004 + Math.random() * 0.009,     // 틱당 변동성
+    candles: [],
+    el: null, canvas: null, ctx: null,
+    priceEl: null, pnlEl: null,
+  };
+}
+
+function stepPrice(s) {
+  // GBM: S ← S·exp((μ−σ²/2) + σ·Z)  (dt는 틱 단위에 흡수)
+  s.price *= Math.exp(s.mu - s.sigma * s.sigma / 2 + s.sigma * gauss());
+  if (Math.random() < 0.008) {                // 점프 확산: 급등락 이벤트
+    s.price *= 1 + (Math.random() < 0.5 ? -1 : 1) * (0.02 + Math.random() * 0.04);
+  }
+}
+
+let stocks = [];
+let cash, heldIdx, shares, entryPrice;
+let tickCount, timerId, lastResult = null;
+
+function equity() {
+  return cash + (heldIdx >= 0 ? shares * stocks[heldIdx].price : 0);
+}
+
+function setupGrid() {
+  gridEl.innerHTML = '';
+  stocks = TICKERS.map(makeStock);
+  for (const [i, s] of stocks.entries()) {
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    cell.innerHTML = `
+      <div class="head"><span>${s.name}</span><span class="price"></span></div>
+      <div class="pnl"></div>
+      <canvas></canvas>`;
+    cell.addEventListener('pointerdown', (e) => { e.preventDefault(); tap(i); });
+    gridEl.appendChild(cell);
+    s.el = cell;
+    s.priceEl = cell.querySelector('.price');
+    s.pnlEl = cell.querySelector('.pnl');
+    s.canvas = cell.querySelector('canvas');
+    s.ctx = s.canvas.getContext('2d');
+  }
+  sizeCanvases();
+}
+
+function sizeCanvases() {
+  const dpr = devicePixelRatio || 1;
+  for (const s of stocks) {
+    const r = s.canvas.getBoundingClientRect();
+    s.canvas.width = r.width * dpr;
+    s.canvas.height = r.height * dpr;
+  }
+}
+addEventListener('resize', () => { if (stocks.length) { sizeCanvases(); stocks.forEach(draw); } });
+
+function tap(i) {
+  if (timerId == null) return; // 게임 중에만
+  if (heldIdx === i) {         // 매도
+    cash = shares * stocks[i].price;
+    heldIdx = -1; shares = 0;
+  } else {                     // (갈아)타기: 팔고 전량 매수
+    if (heldIdx >= 0) { cash = shares * stocks[heldIdx].price; heldIdx = -1; }
+    entryPrice = stocks[i].price;
+    shares = cash / entryPrice;
+    cash = 0; heldIdx = i;
+  }
+  updateHud();
+  stocks.forEach(updateCell);
+}
+
+function updateCell(s, i) {
+  s.el.classList.toggle('held', i === heldIdx);
+  const chg = s.price / s.startPrice - 1;
+  s.priceEl.textContent = Math.round(s.price).toLocaleString('ko-KR');
+  s.priceEl.className = 'price ' + (chg >= 0 ? 'up' : 'down');
+  if (i === heldIdx) {
+    const r = s.price / entryPrice - 1;
+    s.pnlEl.textContent = '보유중 ' + pct(r);
+    s.pnlEl.className = 'pnl ' + (r >= 0 ? 'up' : 'down');
+  } else {
+    s.pnlEl.textContent = '';
+  }
+}
+
+function updateHud() {
+  const eq = equity();
+  const r = eq / SEED_CASH - 1;
+  equityEl.textContent = fmt(eq);
+  retEl.textContent = pct(r);
+  retEl.className = r >= 0 ? 'up' : 'down';
+}
+
+function draw(s, i) {
+  const ctx = s.ctx, W = s.canvas.width, H = s.canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  if (!s.candles.length) return;
+  let lo = Infinity, hi = -Infinity;
+  for (const c of s.candles) { lo = Math.min(lo, c.l); hi = Math.max(hi, c.h); }
+  if (i === heldIdx) { lo = Math.min(lo, entryPrice); hi = Math.max(hi, entryPrice); }
+  const pad = (hi - lo) * 0.08 || 1;
+  lo -= pad; hi += pad;
+  const y = (p) => H - ((p - lo) / (hi - lo)) * H;
+  const slot = W / GAME_SECONDS;
+  const bw = Math.max(2, slot * 0.62);
+
+  const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+  for (const [k, c] of s.candles.entries()) {
+    const x = k * slot + slot / 2;
+    const up = c.c >= c.o;
+    ctx.strokeStyle = ctx.fillStyle = up ? '#e05252' : '#4a90d9';
+    ctx.beginPath(); ctx.moveTo(x, y(c.h)); ctx.lineTo(x, y(c.l)); ctx.stroke();
+    const top = y(Math.max(c.o, c.c)), bot = y(Math.min(c.o, c.c));
+    ctx.fillRect(x - bw / 2, top, bw, Math.max(1, bot - top));
+  }
+  if (i === heldIdx) {           // 진입가 라인
+    ctx.strokeStyle = '#f5a623';
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath(); ctx.moveTo(0, y(entryPrice)); ctx.lineTo(W, y(entryPrice)); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  void dark;
+}
+
+function tick() {
+  tickCount++;
+  const candleIdx = Math.floor((tickCount - 1) / TICKS_PER_SEC);
+  for (const [i, s] of stocks.entries()) {
+    stepPrice(s);
+    let c = s.candles[candleIdx];
+    if (!c) c = s.candles[candleIdx] = { o: s.price, h: s.price, l: s.price, c: s.price };
+    c.h = Math.max(c.h, s.price); c.l = Math.min(c.l, s.price); c.c = s.price;
+    updateCell(s, i);
+    draw(s, i);
+  }
+  updateHud();
+  const remain = (TOTAL_TICKS - tickCount) / TICKS_PER_SEC;
+  timerEl.textContent = remain.toFixed(1);
+  timerEl.classList.toggle('hurry', remain <= 5);
+  if (tickCount >= TOTAL_TICKS) end();
+}
+
+function start() {
+  setupGrid();
+  cash = SEED_CASH; heldIdx = -1; shares = 0; tickCount = 0;
+  for (const s of stocks) { s.startPrice = s.price; }
+  overlayEl.classList.add('hidden');
+  updateHud();
+  timerId = setInterval(tick, 1000 / TICKS_PER_SEC);
+}
+
+function end() {
+  clearInterval(timerId); timerId = null;
+  if (heldIdx >= 0) { cash = shares * stocks[heldIdx].price; heldIdx = -1; shares = 0; }
+  const r = cash / SEED_CASH - 1;
+  lastResult = r;
+  const grade =
+    r >= 0.15 ? '🐋 여의도로 가자' :
+    r >= 0.05 ? '🔥 초단타 재능 있음' :
+    r >= 0    ? '🙂 은행 이자보단 낫다' :
+    r >= -0.1 ? '🫠 수업료 냈다 치자' : '📉 계좌가 녹았어요';
+  overlayEl.innerHTML = `
+    <div>
+      <h1>결과</h1>
+      <div class="big ${r >= 0 ? 'up' : 'down'}">${pct(r)}</div>
+      <p>${fmt(SEED_CASH)} → ${fmt(cash)}<br>${grade}</p>
+      <button id="start">다시하기</button>
+    </div>`;
+  overlayEl.classList.remove('hidden');
+  overlayEl.querySelector('#start').addEventListener('click', start);
+}
+
+document.getElementById('start').addEventListener('click', start);
+
+// 공유 자랑 문구 (_shared/share.js)
+window.blShareText = () =>
+  lastResult === null
+    ? '📈 20초 초단타 모의투자 — 도전해보세요!'
+    : `20초 초단타 수익률 ${pct(lastResult)}! 📈 이길 수 있으면 이겨보세요`;
+</script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>
