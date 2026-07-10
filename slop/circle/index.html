@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>완벽한 원 그리기</title>
+<style>
+  :root { color-scheme: light dark; }
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body { font-family: ui-monospace, monospace;
+         background: light-dark(#eef2f6, #10161f); }
+  #cv { display: block; touch-action: none; cursor: crosshair; }
+  #hud { position: fixed; inset: 0; display: flex; flex-direction: column;
+         align-items: center; justify-content: center; gap: .5rem;
+         pointer-events: none; text-align: center; padding: 1.5rem;
+         user-select: none; -webkit-user-select: none; }
+  #score { font-size: 3.2rem; font-weight: bold; font-variant-numeric: tabular-nums;
+           min-height: 1em; transition: color .1s; }
+  #msg { opacity: .7; line-height: 1.5; }
+  #best { position: fixed; top: 1rem; left: 0; right: 0; text-align: center;
+          opacity: .6; font-size: .9rem; pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="best"></div>
+<div id="hud">
+  <div id="score"></div>
+  <div id="msg">⭕ 한 붓으로 최대한 완벽한 원을 그려보세요</div>
+</div>
+<script>
+const cv = document.getElementById("cv");
+const ctx = cv.getContext("2d");
+const scoreEl = document.getElementById("score");
+const msgEl = document.getElementById("msg");
+const bestEl = document.getElementById("best");
+
+let W, H;
+let pts = [];
+let drawing = false;
+let done = false;
+let fit = null; // { cx, cy, r, score, sweep }
+let best = +localStorage.getItem("bl-circle-best") || 0;
+
+function resize() {
+  const dpr = devicePixelRatio || 1;
+  W = innerWidth; H = innerHeight;
+  cv.width = W * dpr; cv.height = H * dpr;
+  cv.style.width = W + "px"; cv.style.height = H + "px";
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  redraw();
+}
+addEventListener("resize", resize);
+
+function updateBest() {
+  bestEl.textContent = best ? `최고 기록 ${best.toFixed(1)}%` : "";
+}
+
+window.blShareText = () =>
+  best ? `내가 그린 원은 ${best.toFixed(1)}% 완벽! ⭕ 도전해보세요`
+       : "⭕ 완벽한 원 그리기 — 도전해보세요!";
+
+// 점 목록으로 중심·반지름·정확도·회전각을 계산
+function analyze() {
+  const n = pts.length;
+  let cx = 0, cy = 0;
+  for (const p of pts) { cx += p.x; cy += p.y; }
+  cx /= n; cy /= n;
+  let rSum = 0;
+  for (const p of pts) rSum += Math.hypot(p.x - cx, p.y - cy);
+  const r = rSum / n;
+  let sq = 0, sweep = 0, prev = null;
+  for (const p of pts) {
+    const d = Math.hypot(p.x - cx, p.y - cy);
+    sq += (d - r) * (d - r);
+    const a = Math.atan2(p.y - cy, p.x - cx);
+    if (prev !== null) {
+      let da = a - prev;
+      if (da > Math.PI) da -= 2 * Math.PI;
+      if (da < -Math.PI) da += 2 * Math.PI;
+      sweep += da;
+    }
+    prev = a;
+  }
+  const dev = Math.sqrt(sq / n) / r; // 반지름 대비 표준편차
+  const score = Math.max(0, Math.min(100, 100 * (1 - dev * 3)));
+  return { cx, cy, r, score, sweep: Math.abs(sweep) };
+}
+
+function hue(score) { return `hsl(${score * 1.2} 80% 50%)`; }
+
+function redraw() {
+  ctx.clearRect(0, 0, W, H);
+  if (pts.length < 2) return;
+  const color = fit ? hue(fit.score) : "gray";
+  if (done && fit) {
+    ctx.strokeStyle = "color-mix(in srgb, currentColor 25%, transparent)";
+    ctx.setLineDash([6, 8]);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(fit.cx, fit.cy, fit.r, 0, 2 * Math.PI);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 5;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.stroke();
+}
+
+function grade(s) {
+  return s >= 97 ? "🤯 컴퍼스세요?" : s >= 92 ? "🔥 원의 장인" :
+         s >= 85 ? "👍 제법 동그람" : s >= 70 ? "🙂 원의 형태는 있음" :
+         s >= 50 ? "🥚 계란인데요" : "🥔 이건 감자";
+}
+
+function finish() {
+  drawing = false;
+  done = true;
+  if (fit.sweep < Math.PI * 1.9) {
+    scoreEl.textContent = "";
+    msgEl.textContent = "⭕ 원을 끝까지 이어서 그려주세요 — 다시 도전!";
+    fit = null;
+  } else if (fit.r < 40) {
+    scoreEl.textContent = "";
+    msgEl.textContent = "🔍 너무 작아요 — 더 크게 그려주세요!";
+    fit = null;
+  } else {
+    const s = fit.score;
+    scoreEl.textContent = s.toFixed(1) + "%";
+    scoreEl.style.color = hue(s);
+    msgEl.textContent = grade(s) + " · 다시 그려서 도전";
+    if (s > best) {
+      best = s;
+      localStorage.setItem("bl-circle-best", best);
+      msgEl.textContent = "🎉 최고 기록! " + msgEl.textContent;
+      updateBest();
+    }
+  }
+  redraw();
+}
+
+cv.addEventListener("pointerdown", e => {
+  drawing = true;
+  done = false;
+  fit = null;
+  pts = [{ x: e.clientX, y: e.clientY }];
+  scoreEl.textContent = "";
+  scoreEl.style.color = "";
+  msgEl.textContent = "";
+  cv.setPointerCapture(e.pointerId);
+  redraw();
+});
+
+cv.addEventListener("pointermove", e => {
+  if (!drawing) return;
+  const last = pts[pts.length - 1];
+  if (Math.hypot(e.clientX - last.x, e.clientY - last.y) < 3) return;
+  pts.push({ x: e.clientX, y: e.clientY });
+  if (pts.length >= 20) {
+    fit = analyze();
+    if (fit.sweep > Math.PI / 3) {
+      scoreEl.textContent = fit.score.toFixed(1) + "%";
+      scoreEl.style.color = hue(fit.score);
+    }
+    if (fit.sweep >= 2 * Math.PI) { finish(); return; } // 한 바퀴 완성
+  }
+  redraw();
+});
+
+function up() {
+  if (!drawing) return;
+  if (pts.length < 20 || !fit) {
+    drawing = false;
+    scoreEl.textContent = "";
+    msgEl.textContent = "⭕ 한 붓으로 최대한 완벽한 원을 그려보세요";
+    pts = [];
+    redraw();
+    return;
+  }
+  finish();
+}
+cv.addEventListener("pointerup", up);
+cv.addEventListener("pointercancel", up);
+
+resize();
+updateBest();
+</script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>
