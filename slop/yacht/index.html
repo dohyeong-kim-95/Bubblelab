@@ -34,6 +34,10 @@
   input.invalid { border-color: #e05252; }
   .fieldwarn { color: #e05252; font-size: .75rem; min-height: 1.1em;
                margin: -.35rem 0 0 .3rem; }
+  .or { display: flex; align-items: center; gap: .8rem; opacity: .45;
+        font-size: .8rem; margin: .1rem 0; }
+  .or::before, .or::after { content: ""; flex: 1; height: 1px;
+        background: currentColor; }
 
   /* 룰 요약 */
   .rules { font-size: .78rem; opacity: .75; border: 1px dashed
@@ -96,6 +100,7 @@
   <div class="stack">
     <input id="name" maxlength="10" placeholder="닉네임">
     <button id="create" class="primary">방 만들기</button>
+    <div class="or">or</div>
     <div class="row">
       <input id="joincode" maxlength="6" inputmode="numeric" autocomplete="off"
              placeholder="방 코드 (숫자 6자리)">
