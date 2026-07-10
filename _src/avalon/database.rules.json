@@ -1,0 +1,70 @@
+{
+  "rules": {
+    "rooms": {
+      "$roomCode": {
+        ".read": "auth != null",
+        ".write": "!data.exists() || data.child('meta/hostId').val() === auth.uid",
+
+        "meta": {
+          ".read": "auth != null",
+          ".write": "data.child('hostId').val() === auth.uid || !data.exists()"
+        },
+        "players": {
+          ".read": "auth != null",
+          "$playerId": {
+            ".write": "$playerId === auth.uid"
+          }
+        },
+        "readyStatus": {
+          ".read": "root.child('rooms/' + $roomCode + '/players/' + auth.uid).exists()",
+          "$playerId": {
+            ".write": "$playerId === auth.uid"
+          }
+        },
+        "gameState": {
+          ".read": "root.child('rooms/' + $roomCode + '/players/' + auth.uid).exists()",
+          ".write": "root.child('rooms/' + $roomCode + '/meta/hostId').val() === auth.uid"
+        },
+        "actions": {
+          ".read": "root.child('rooms/' + $roomCode + '/players/' + auth.uid).exists()",
+          ".write": "root.child('rooms/' + $roomCode + '/meta/hostId').val() === auth.uid",
+          "votes": {
+            "$playerId": {
+              ".write": "$playerId === auth.uid && !data.exists() && root.child('rooms/' + $roomCode + '/gameState/phase').val() === 'voting'"
+            }
+          },
+          "missionCards": {
+            "$playerId": {
+              ".write": "$playerId === auth.uid && !data.exists() && root.child('rooms/' + $roomCode + '/gameState/phase').val() === 'mission' && (root.child('privateData/' + $roomCode + '/' + auth.uid + '/team').val() !== 'good' || newData.child('card').val() === 'success')"
+            }
+          },
+          "assassination": {
+            ".write": "root.child('privateData/' + $roomCode + '/' + auth.uid + '/role').val() === 'assassin' && root.child('rooms/' + $roomCode + '/gameState/phase').val() === 'assassination' && root.child('privateData/' + $roomCode + '/' + newData.child('targetId').val() + '/team').val() === 'good'"
+          },
+          "readyPlayers": {
+            "$playerId": {
+              ".write": "$playerId === auth.uid"
+            }
+          },
+          "teamProposal": {
+            ".write": "root.child('rooms/' + $roomCode + '/players/' + auth.uid).exists() && root.child('rooms/' + $roomCode + '/gameState/phase').val() === 'team_proposal' && auth.uid === newData.child('leaderId').val() && auth.uid === root.child('rooms/' + $roomCode + '/gameState/playerOrder').child(root.child('rooms/' + $roomCode + '/gameState/currentLeaderIndex').val()).val()"
+          }
+        },
+        "chat": {
+          ".read": "root.child('rooms/' + $roomCode + '/players/' + auth.uid).exists()",
+          ".write": "root.child('rooms/' + $roomCode + '/players/' + auth.uid).exists()"
+        }
+      }
+    },
+    "privateData": {
+      "$roomCode": {
+        ".read": "root.child('rooms/' + $roomCode + '/meta/hostId').val() === auth.uid",
+        ".write": "root.child('rooms/' + $roomCode + '/meta/hostId').val() === auth.uid",
+        "$playerId": {
+          ".read": "$playerId === auth.uid",
+          ".write": "root.child('rooms/' + $roomCode + '/meta/hostId').val() === auth.uid"
+        }
+      }
+    }
+  }
+}

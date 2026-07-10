@@ -1,0 +1,79 @@
+.home-view {
+  justify-content: center;
+  align-items: center;
+  gap: var(--spacing-2xl);
+  padding: var(--spacing-xl);
+}
+
+.home-hero {
+  text-align: center;
+}
+
+.home-emblem {
+  width: 100px;
+  height: 120px;
+  margin: 0 auto var(--spacing-lg);
+}
+
+.emblem-svg {
+  width: 100%;
+  height: 100%;
+}
+
+.home-title {
+  font-size: var(--font-size-2xl);
+  font-weight: 700;
+  color: var(--color-gold);
+  letter-spacing: 0.05em;
+}
+
+.home-subtitle {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin-top: var(--spacing-xs);
+}
+
+.home-actions {
+  width: 100%;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.home-info {
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.input-label {
+  display: block;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--spacing-xs);
+}
+
+/* 토스트 */
+.toast {
+  position: fixed;
+  bottom: var(--spacing-xl);
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: var(--color-evil);
+  color: white;
+  padding: var(--spacing-sm) var(--spacing-lg);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  z-index: 200;
+  animation: toastIn 0.3s ease-out;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}

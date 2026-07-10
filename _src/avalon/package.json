@@ -1,0 +1,26 @@
+{
+  "name": "resistance-avalon",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "simulate": "node ./scripts/simulate-games.mjs",
+    "simulate:quick": "node ./scripts/simulate-games.mjs --iterations 25",
+    "test:sim": "node ./scripts/simulate-games.mjs --iterations 100 --assert",
+    "test:lobby": "node ./scripts/check-lobby-invariants.mjs",
+    "test:game-phases": "node ./scripts/check-game-phase-invariants.mjs",
+    "test:button-labels": "node ./scripts/check-button-label-invariants.mjs",
+    "test:missions": "node ./scripts/check-mission-rules.mjs",
+    "test:result-replay": "node ./scripts/check-result-replay-invariants.mjs",
+    "test:ci": "npm run test:sim && npm run test:lobby && npm run test:game-phases && npm run test:button-labels && npm run test:missions && npm run test:result-replay && npm run build"
+  },
+  "devDependencies": {
+    "vite": "^7.3.1"
+  },
+  "dependencies": {
+    "firebase": "^12.10.0"
+  }
+}

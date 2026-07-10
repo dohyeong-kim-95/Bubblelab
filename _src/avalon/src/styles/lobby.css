@@ -1,0 +1,358 @@
+.lobby-view {
+  gap: var(--spacing-md);
+}
+
+.room-code-display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-sm);
+}
+
+.room-code-label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.room-code {
+  font-size: var(--font-size-xl);
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: var(--color-gold);
+  font-family: monospace;
+}
+
+.btn-copy {
+  background: none;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: all var(--transition-fast);
+}
+
+.btn-copy:hover {
+  border-color: var(--color-gold);
+  color: var(--color-gold);
+}
+
+/* 플레이어 목록 */
+.player-count {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-sm);
+  font-weight: 600;
+}
+
+.player-list {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.player-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 10px 12px;
+  background-color: var(--color-surface);
+  border-radius: var(--radius-md);
+  min-height: 72px;
+  gap: 8px;
+}
+
+.player-kickable {
+  cursor: pointer;
+  transition: border-color var(--transition-fast), transform var(--transition-fast);
+}
+
+.player-kickable:hover {
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.player-kickable:active {
+  transform: scale(0.99);
+}
+
+.player-offline {
+  opacity: 0.5;
+}
+
+.player-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.player-name {
+  font-weight: 500;
+  min-width: 0;
+  flex: 1;
+  line-height: 1.2;
+  word-break: break-word;
+}
+
+.player-name-host {
+  color: var(--color-gold);
+  font-weight: 700;
+}
+
+.player-head-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.player-badges {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 28px;
+  width: 100%;
+}
+
+.badge-bot {
+  color: var(--color-gold);
+  border-color: rgba(212, 175, 55, 0.35);
+}
+
+.btn-bot-remove,
+.btn-bot-add {
+  height: 28px;
+  padding: 0 8px;
+  font-size: var(--font-size-xs);
+  flex: 0 0 auto;
+}
+
+.bot-add-zone {
+  margin-top: var(--spacing-sm);
+  padding: 10px 12px;
+  border: 1px dashed rgba(212, 175, 55, 0.35);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  background: linear-gradient(180deg, rgba(212, 175, 55, 0.06), rgba(212, 175, 55, 0.02));
+}
+
+.bot-add-title {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  color: var(--color-gold);
+}
+
+/* 역할 구성 */
+.config-title {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  margin-bottom: var(--spacing-md);
+  color: var(--color-gold);
+}
+
+.role-team-section + .role-team-section {
+  margin-top: var(--spacing-md);
+}
+
+.role-team-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+}
+
+.role-team-title {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+}
+
+.role-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.role-config-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+  min-height: 76px;
+  cursor: pointer;
+}
+
+.role-config-card-fixed {
+  cursor: default;
+}
+
+.role-config-card-active.role-config-card-good {
+  border-color: rgba(59, 130, 246, 0.35);
+  background-color: rgba(59, 130, 246, 0.12);
+}
+
+.role-config-card-active.role-config-card-evil {
+  border-color: rgba(239, 68, 68, 0.35);
+  background-color: rgba(239, 68, 68, 0.12);
+}
+
+.role-config-card-inactive {
+  opacity: 0.75;
+}
+
+.role-config-card-disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.role-config-main,
+.role-config-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.role-config-name {
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.role-config-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background-color: rgba(212, 175, 55, 0.14);
+  color: var(--color-gold);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  flex: 0 0 auto;
+}
+
+.role-config-card-good .role-config-count-badge {
+  background-color: rgba(59, 130, 246, 0.16);
+  color: #93c5fd;
+}
+
+.role-config-card-evil .role-config-count-badge {
+  background-color: rgba(239, 68, 68, 0.16);
+  color: #fca5a5;
+}
+
+.role-config-fixed,
+.role-config-toggle-text {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  flex: 0 0 auto;
+}
+
+.role-config-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.toggle-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-sm) 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggle-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.toggle-label {
+  font-weight: 500;
+}
+
+.toggle-input {
+  display: none;
+}
+
+.toggle-slider {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  background-color: var(--color-border);
+  border-radius: var(--radius-full);
+  transition: background-color var(--transition-fast);
+}
+
+.toggle-slider::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  background-color: white;
+  border-radius: 50%;
+  transition: transform var(--transition-fast);
+}
+
+.toggle-input:checked + .toggle-slider {
+  background-color: var(--color-gold);
+}
+
+.toggle-input:checked + .toggle-slider::after {
+  transform: translateX(20px);
+}
+
+/* 시간 프리셋 버튼 */
+.time-preset-buttons {
+  display: flex;
+  gap: var(--spacing-xs);
+  flex-wrap: wrap;
+}
+
+.btn-time-preset {
+  flex: 1;
+  min-width: 60px;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: var(--font-size-sm);
+}
+
+/* 액션 버튼 */
+.lobby-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  margin-top: auto;
+}
+
+@media (max-width: 640px) {
+  .bot-add-zone {
+    padding: 10px;
+  }
+
+  .btn-bot-add {
+    min-width: 88px;
+  }
+}
