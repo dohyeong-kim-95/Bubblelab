@@ -82,15 +82,12 @@ function hueOf(name) {
 
 function listingPage(site, entries) {
   const cards = entries
-    .map(({ name, date, emoji }, i) => {
-      const when = date
-        ? `<time>${new Date(date).toISOString().slice(0, 10)}</time>`
-        : "";
+    .map(({ name, emoji }, i) => {
       return `    <a class="card" href="/${escapeHtml(name)}/"
        style="--hue:${hueOf(name)};--i:${i}">
       <span class="emoji">${emoji}</span>
       <span class="name">${escapeHtml(name)}</span>
-      ${when}
+      <span class="champ" data-game="${escapeHtml(name)}"></span>
     </a>`;
     })
     .join("\n");
@@ -126,7 +123,8 @@ function listingPage(site, entries) {
   .emoji { font-size: 2.6rem; line-height: 1; }
   .name { font-weight: bold; font-size: 1.02rem; word-break: break-all;
           text-align: center; }
-  time { opacity: .55; font-size: .72rem; }
+  .champ { opacity: .55; font-size: .72rem; min-height: 1em; max-width: 100%;
+           overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .empty { text-align: center; opacity: .6; margin-top: 4rem; }
   footer { margin-top: 3.5rem; opacity: .4; font-size: .8em; text-align: center; }
   footer a { color: inherit; }
@@ -136,6 +134,26 @@ function listingPage(site, entries) {
   <h1>${escapeHtml(site)}<span>.bubblelab.dev</span></h1>
 ${cards ? `  <div class="grid">\n${cards}\n  </div>` : `  <p class="empty">아직 아무것도 없어요 🫧</p>`}
   <footer><a href="https://bubblelab.dev">bubblelab.dev</a></footer>
+<script>
+// 주간 신기록 보드(/_records)에서 카드별 챔피언을 채운다. 실패해도 조용히 넘어간다.
+(async () => {
+  const els = [...document.querySelectorAll(".champ[data-game]")];
+  if (!els.length) return;
+  try {
+    const games = els.map((el) => el.dataset.game).join(",");
+    const res = await fetch("/_records?games=" + encodeURIComponent(games), { cache: "no-store" });
+    if (!res.ok) return;
+    const { records } = await res.json();
+    for (const el of els) {
+      const r = records[el.dataset.game];
+      if (!r) continue;
+      // text 없는 옛 기록은 생 float가 못생기지 않게 반올림해서 보여준다
+      el.textContent = \`👑 \${r.nick} · \${r.text ?? Math.round(r.score * 100) / 100}\`;
+      el.title = "이번 주 1위 — 월요일 09시 초기화";
+    }
+  } catch {}
+})();
+</script>
 </body>
 </html>
 `;

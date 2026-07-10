@@ -22,6 +22,16 @@ export class RecordsDO {
     const week = weekKey();
 
     if (request.method === "GET") {
+      // 배치 조회 (카테고리 홈 카드용): ?games=a,b,c → { records: { 이름: 기록 } }
+      const batch = url.searchParams.get("games");
+      if (batch !== null) {
+        const records = {};
+        for (const g of batch.split(",").filter((g) => GAME.test(g)).slice(0, 50)) {
+          const r = await this.state.storage.get(`rec:${week}:${g}`);
+          if (r) records[g] = r;
+        }
+        return Response.json({ week, records }, { headers: { "Cache-Control": "no-store" } });
+      }
       const game = url.searchParams.get("game");
       if (!GAME.test(game ?? "")) return new Response("invalid game", { status: 400 });
       const record = (await this.state.storage.get(`rec:${week}:${game}`)) ?? null;
@@ -29,12 +39,16 @@ export class RecordsDO {
     }
 
     if (request.method === "POST") {
-      const { game, nick, score, dir } = await request.json().catch(() => ({}));
+      const { game, nick, score, dir, text } = await request.json().catch(() => ({}));
       if (!GAME.test(game ?? "") || !NICK.test(nick ?? "") ||
           typeof score !== "number" || !Number.isFinite(score) ||
           !["min", "max"].includes(dir)) {
         return new Response("invalid record", { status: 400 });
       }
+      // 표시용 문자열(토이의 fmt 결과, 예: "12.34초"). 홈 카드처럼 단위를
+      // 모르는 화면에서 쓴다. 수상하면 숫자 그대로로 대체.
+      const display = typeof text === "string" && /^[^\x00-\x1f<>&"']{1,24}$/.test(text.trim())
+        ? text.trim() : String(score);
 
       const key = `rec:${week}:${game}`;
       const current = await this.state.storage.get(key);
@@ -46,7 +60,7 @@ export class RecordsDO {
         return Response.json({ week, accepted: false, record: current });
       }
 
-      const record = { nick, score, dir: effectiveDir, at: Date.now() };
+      const record = { nick, score, text: display, dir: effectiveDir, at: Date.now() };
       await this.state.storage.put(key, record);
 
       // 지난주 기록은 새 기록이 들어올 때 정리한다.

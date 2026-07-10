@@ -71,6 +71,23 @@ test("games are independent and old weeks are pruned", async () => {
   assert.equal((await circle.json()).record.nick, "동글이");
 });
 
+test("stores display text and serves batch lookups for category homes", async () => {
+  const records = new RecordsDO({ storage: new MemoryStorage() });
+  await post(records, { game: "touch25", nick: "철수", score: 12.34, dir: "min", text: "12.34초" });
+  await post(records, { game: "circle", nick: "동글이", score: 95.5, dir: "max", text: "95.5%" });
+  // 수상한 text는 숫자로 대체
+  await post(records, { game: "2048", nick: "해커", score: 100, dir: "max", text: "<img onerror=x>" });
+
+  const res = await records.fetch(
+    new Request("https://records.internal/?games=touch25,circle,2048,lotto,invalid game!!"),
+  );
+  const { records: batch } = await res.json();
+  assert.equal(batch.touch25.text, "12.34초");
+  assert.equal(batch.circle.text, "95.5%");
+  assert.equal(batch["2048"].text, "100");
+  assert.equal("lotto" in batch, false); // 기록 없는 게임은 빠진다
+});
+
 test("rejects malformed submissions", async () => {
   const records = new RecordsDO({ storage: new MemoryStorage() });
   const bad = [

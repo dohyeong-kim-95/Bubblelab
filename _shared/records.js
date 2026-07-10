@@ -76,7 +76,7 @@
 
   function renderBadge() {
     badge.textContent = current
-      ? `👑 ${current.nick} · ${fmt(current.score)}`
+      ? `👑 ${current.nick} · ${current.text ?? fmt(current.score)}`
       : "👑 주간 1위 자리가 비어있어요";
     badge.title = "주간 신기록 보드 — 매주 월요일 09시 초기화";
   }
@@ -115,7 +115,8 @@
       const res = await fetch("/_records", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ game: cfg.game, nick, score: pending, dir: cfg.dir }),
+        body: JSON.stringify({ game: cfg.game, nick, score: pending, dir: cfg.dir,
+                               text: fmt(pending) }),
       });
       if (!res.ok) throw new Error();
       const data = await res.json();
