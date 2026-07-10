@@ -7,6 +7,8 @@
 
 const ROOT_DOMAIN = "bubblelab.dev";
 
+export { RealtimeDO } from "./realtime.js";
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -20,6 +22,14 @@ export default {
       return env.ASSETS.fetch(request);
     }
 
+    // 실시간 데이터 서버: /_rt/<이름> → 이름당 Durable Object 하나
+    if (path.startsWith("/_rt/")) {
+      const name = path.slice("/_rt/".length).split("/")[0];
+      if (!name) return new Response("missing name", { status: 400 });
+      const id = env.REALTIME.idFromName(name);
+      return env.REALTIME.get(id).fetch(request);
+    }
+
     if (host === ROOT_DOMAIN || host === `www.${ROOT_DOMAIN}`) {
       site = "www";
     } else if (host.endsWith(`.${ROOT_DOMAIN}`)) {
@@ -28,6 +38,8 @@ export default {
       const segments = path.split("/").filter(Boolean);
       site = segments[0] ?? "www";
       path = "/" + segments.slice(1).join("/");
+      // 트레일링 슬래시 보존 (없으면 에셋 서버의 canonical 리다이렉트와 루프)
+      if (url.pathname.endsWith("/") && !path.endsWith("/")) path += "/";
     }
 
     url.pathname = `/${site}${path}`;

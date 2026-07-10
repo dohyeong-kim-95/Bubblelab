@@ -14,5 +14,10 @@
   "routes": [
     { "pattern": "bubblelab.dev/*", "zone_name": "bubblelab.dev" },
     { "pattern": "*.bubblelab.dev/*", "zone_name": "bubblelab.dev" }
-  ]
+  ],
+  // /_rt/<이름> 실시간 데이터 서버 (아발론 등 멀티플레이어 토이용)
+  "durable_objects": {
+    "bindings": [{ "name": "REALTIME", "class_name": "RealtimeDO" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RealtimeDO"] }]
 }
