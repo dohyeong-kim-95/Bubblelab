@@ -21,6 +21,9 @@ jobs:
         with:
           node-version: 22
 
+      - name: Test infra
+        run: node --test _infra/*.test.mjs
+
       - name: Build
         run: node _infra/build.mjs
 

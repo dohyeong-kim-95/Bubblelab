@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Bubblelab Admin</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; font-family: ui-monospace, monospace;
+         background: light-dark(#f2f6fa, #0d131c); color: light-dark(#17202b, #dbe5ef); }
+  main { width: min(54rem, 100%); margin: 0 auto; padding: 3rem 1.25rem; }
+  header { display: flex; align-items: center; justify-content: space-between;
+           gap: 1rem; margin-bottom: 2rem; }
+  h1 { margin: 0; font-size: 1.3rem; }
+  .logout { color: inherit; opacity: .65; font-size: .85rem; }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+  .card { min-height: 10rem; padding: 1.25rem; border-radius: 1.2rem;
+          display: flex; flex-direction: column; justify-content: space-between;
+          background: light-dark(#fff, #151e2a); border: 1px solid light-dark(#dce4ec, #263445); }
+  .label { opacity: .58; font-size: .85rem; }
+  .value { font-size: clamp(2.3rem, 8vw, 4rem); font-weight: bold;
+           font-variant-numeric: tabular-nums; }
+  .range { opacity: .45; font-size: .75rem; }
+  #warning { display: none; margin-top: 1rem; padding: .85rem 1rem; border-radius: .8rem;
+             background: light-dark(#fff2c7, #4a3711); color: light-dark(#6a4a00, #ffe49a); }
+  footer { margin-top: 2rem; opacity: .5; font-size: .78rem; line-height: 1.7; }
+  @media (max-width: 38rem) { .cards { grid-template-columns: 1fr; } .card { min-height: 8rem; } }
+</style>
+</head>
+<body>
+<main>
+  <header><h1>🫧 Bubblelab Admin</h1><a class="logout" href="logout">로그아웃</a></header>
+  <section class="cards" aria-label="순사용자 통계">
+    <article class="card"><span class="label">일간 사용자</span><strong class="value" id="daily">—</strong><span class="range">오늘 · KST</span></article>
+    <article class="card"><span class="label">주간 사용자</span><strong class="value" id="weekly">—</strong><span class="range">최근 7일</span></article>
+    <article class="card"><span class="label">월간 사용자</span><strong class="value" id="monthly">—</strong><span class="range">최근 30일</span></article>
+  </section>
+  <div id="warning">⚠️ 초기 계정 admin/admin을 사용 중입니다. Cloudflare secrets를 설정해 변경하세요.</div>
+  <footer id="status">불러오는 중…</footer>
+</main>
+<script>
+async function loadStats() {
+  const status = document.getElementById('status');
+  try {
+    const base = location.hostname.endsWith('bubblelab.dev') ? '' : '/admin';
+    const res = await fetch(`${base}/api/stats`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    for (const key of ['daily', 'weekly', 'monthly']) {
+      document.getElementById(key).textContent = data[key].toLocaleString('ko-KR');
+    }
+    document.getElementById('warning').style.display = data.usingDefaultCredentials ? 'block' : 'none';
+    status.textContent = `${data.date} 기준 · 익명 브라우저 순사용자 · ${new Date(data.generatedAt).toLocaleTimeString('ko-KR')} 갱신`;
+  } catch (err) {
+    status.textContent = `통계를 불러오지 못했습니다: ${err.message}`;
+  }
+}
+loadStats();
+setInterval(loadStats, 60_000);
+</script>
+</body>
+</html>

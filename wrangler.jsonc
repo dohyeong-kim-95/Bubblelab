@@ -20,7 +20,13 @@
   ],
   // /_rt/<이름> 실시간 데이터 서버 (아발론 등 멀티플레이어 토이용)
   "durable_objects": {
-    "bindings": [{ "name": "REALTIME", "class_name": "RealtimeDO" }]
+    "bindings": [
+      { "name": "REALTIME", "class_name": "RealtimeDO" },
+      { "name": "ANALYTICS", "class_name": "AnalyticsDO" }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RealtimeDO"] }]
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["RealtimeDO"] },
+    { "tag": "v2", "new_sqlite_classes": ["AnalyticsDO"] }
+  ]
 }

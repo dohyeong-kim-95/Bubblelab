@@ -9,6 +9,7 @@ bubblelab.dev에서 서비스하는 모든 것이 사는 모노레포.
 ├── www/       → https://bubblelab.dev            (랜딩)
 ├── slop/      → https://slop.bubblelab.dev       (실험장. 새 토이는 여기서 시작)
 ├── games/     → https://games.bubblelab.dev      (승격된 게임들. 아발론 등)
+├── admin/     → https://admin.bubblelab.dev      (익명 방문 통계, 로그인 필요)
 ├── _shared/   → 모든 서브도메인 공용 에셋 (/_shared/* 로 서빙)
 ├── _src/      → 빌드가 필요한 것들의 소스 (배포 안 됨)
 └── _infra/    → 워커·빌드·실시간 서버 (배포 안 됨)
@@ -56,6 +57,14 @@ Workers 배포. 워커 하나가 `*.bubblelab.dev` 전체를 받아서 호스트
    `CLOUDFLARE_ACCOUNT_ID`
 4. Cloudflare 계정에 workers.dev 서브도메인 등록 (Workers 메뉴 한 번 열면 됨.
    Durable Object 배포에 필수)
+
+관리자 계정은 설정 전에는 `admin/admin`이다. 공개 저장소이므로 첫 배포 후 반드시
+Cloudflare Worker secrets로 교체한다:
+
+```bash
+npx wrangler secret put ADMIN_ID
+npx wrangler secret put ADMIN_PASSWORD
+```
 
 ## 규칙 (미래의 나에게)
 
