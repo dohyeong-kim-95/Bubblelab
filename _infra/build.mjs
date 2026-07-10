@@ -33,6 +33,11 @@ for (const site of sites) {
   cpSync(join(ROOT, site.name), join(DIST, site.name), { recursive: true });
 }
 
+// 공용 에셋은 dist 루트로 (worker가 /_shared/* 를 프리픽스 없이 서빙)
+if (existsSync(join(ROOT, "_shared"))) {
+  cpSync(join(ROOT, "_shared"), join(DIST, "_shared"), { recursive: true });
+}
+
 // 마지막 커밋 시각 (없으면 0). 자동 목록을 최신순으로 정렬하는 데 쓴다.
 function lastCommitTime(path) {
   try {

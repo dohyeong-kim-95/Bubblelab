@@ -15,6 +15,11 @@ export default {
     let site;
     let path = url.pathname;
 
+    // 공용 에셋(_shared/*)은 모든 서브도메인에서 사이트 프리픽스 없이 서빙
+    if (path.startsWith("/_shared/")) {
+      return env.ASSETS.fetch(request);
+    }
+
     if (host === ROOT_DOMAIN || host === `www.${ROOT_DOMAIN}`) {
       site = "www";
     } else if (host.endsWith(`.${ROOT_DOMAIN}`)) {
