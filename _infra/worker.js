@@ -101,6 +101,17 @@ export default {
       return env.ASSETS.fetch(request);
     }
 
+    // 공개 페이지 통계 (카테고리 홈의 접속량순 정렬용). 개인 데이터 없음.
+    if (path === "/_stats") {
+      const id = env.ANALYTICS.idFromName("global");
+      const response = await env.ANALYTICS.get(id).fetch(
+        `https://analytics.internal/pages?date=${kstDate()}&days=7`,
+      );
+      const headers = new Headers(response.headers);
+      headers.set("Cache-Control", "public, max-age=300");
+      return new Response(response.body, { status: response.status, headers });
+    }
+
     // 주간 신기록 보드: 모든 서브도메인에서 같은 저장소를 쓴다
     if (path === "/_records") {
       const id = env.RECORDS.idFromName("global");

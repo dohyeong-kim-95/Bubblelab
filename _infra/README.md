@@ -24,7 +24,8 @@
 - 루트의 사이트 폴더들(`_`/`.` 미시작)을 `dist/`로 복사 (README.md 제외)
 - `_shared/` → `dist/_shared/`
 - index.html이 없는 사이트 루트에 하위 폴더 카드 그리드 페이지 자동 생성
-  (이모지는 각 토이 index.html의 첫 이모지, 정렬은 마지막 커밋 최신순)
+  (이모지는 각 토이 index.html의 첫 이모지. 순서는 주간 접속량순 —
+  기본은 가나다순으로 생성하고 클라이언트가 `/_stats`로 재정렬)
 - `dist/404.html` 생성
 
 의존성 제로. Node만 있으면 된다.
@@ -45,7 +46,7 @@ get/set/update, 경로 구독(onValue), 접속 종료 시 쓰기(onDisconnect),
 
 ## deploy.yml (.github/workflows/)
 
-main에 푸시하면: checkout(fetch-depth 0, 목록 최신순 정렬용) → build.mjs →
+main에 푸시하면: checkout → build.mjs →
 `wrangler deploy`. 시크릿 `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` 사용.
 wrangler 버전 4 고정 (3.x는 wrangler.jsonc를 못 읽음).
 

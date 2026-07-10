@@ -57,6 +57,29 @@ export class AnalyticsDO {
       return new Response(null, { status: 204 });
     }
 
+    // 페이지별 최근 N일 순방문자 (카테고리 홈의 접속량순 정렬용, 공개)
+    if (request.method === "GET" && url.pathname === "/pages") {
+      const date = url.searchParams.get("date");
+      if (!DATE_KEY.test(date ?? "")) return new Response("invalid date", { status: 400 });
+      const days = Math.min(30, Math.max(1, Number(url.searchParams.get("days")) || 7));
+      const window = new Set(recentDates(date, days));
+      const visitorsByPage = new Map();
+      const pv = await this.state.storage.list({ prefix: "pv:" });
+      for (const key of pv.keys()) {
+        const [, day, page, visitorId] = key.split(":");
+        if (!window.has(day)) continue;
+        if (!visitorsByPage.has(page)) visitorsByPage.set(page, new Set());
+        visitorsByPage.get(page).add(visitorId);
+      }
+      return Response.json({
+        date,
+        days,
+        pages: Object.fromEntries(
+          [...visitorsByPage].map(([page, ids]) => [page, ids.size]),
+        ),
+      });
+    }
+
     if (request.method === "GET" && url.pathname === "/stats") {
       const date = url.searchParams.get("date");
       if (!DATE_KEY.test(date ?? "")) return new Response("invalid date", { status: 400 });

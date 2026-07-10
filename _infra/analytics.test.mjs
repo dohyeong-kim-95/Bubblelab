@@ -79,6 +79,23 @@ test("ranks monthly top pages by unique visitors, excluding site homes", async (
   ]);
 });
 
+test("serves per-page weekly visitor counts for card sorting", async () => {
+  const vid = (n) => `00000000-0000-4000-8000-00000000000${n}`;
+  const storage = new MemoryStorage([
+    ["pv:2026-07-10:slop/circle:" + vid(1), true],
+    ["pv:2026-07-09:slop/circle:" + vid(2), true],
+    ["pv:2026-07-07:slop/lotto:" + vid(3), true],
+    ["pv:2026-07-10:slop:" + vid(1), true],          // 홈도 그대로 포함
+    ["pv:2026-07-01:slop/trader:" + vid(1), true],   // 7일 밖은 제외
+  ]);
+  const analytics = new AnalyticsDO({ storage });
+  const response = await analytics.fetch(
+    new Request("https://analytics.internal/pages?date=2026-07-10&days=7"),
+  );
+  const { pages } = await response.json();
+  assert.deepEqual(pages, { "slop/circle": 2, "slop/lotto": 1, "slop": 1 });
+});
+
 test("ignores invalid page but still counts the visitor", async () => {
   const storage = new MemoryStorage();
   const analytics = new AnalyticsDO({ storage });
