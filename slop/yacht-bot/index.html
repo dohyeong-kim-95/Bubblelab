@@ -27,6 +27,12 @@
   .die.held { border-color: light-dark(#3fae5f, #4dd07a); transform: translateY(-8px); }
   .die.bot { cursor: default; }
   .die:disabled { opacity: .9; }
+  .die.rolling { animation: tumble .45s ease; }
+  @keyframes tumble {
+    20% { transform: rotate(-16deg) translateY(-7px); }
+    45% { transform: rotate(13deg) translateY(2px); }
+    70% { transform: rotate(-7deg) translateY(-3px); }
+  }
   /* 맨 아랫줄은 공통 유틸(주간 1위 배지·공유 버튼) 몫 — 굴리기는 그 윗줄 */
   #roll { position: fixed; bottom: 4.3rem; left: 50%; transform: translateX(-50%);
           z-index: 50; font: inherit; font-weight: bold; font-size: 1.05rem;
@@ -38,7 +44,16 @@
   #roll:disabled { opacity: .35; cursor: default; }
   #hint { opacity: .55; font-size: .78rem; text-align: center; min-height: 1em; }
   #tables { display: flex; gap: .5rem; width: min(96vw, 30rem);
-            align-items: flex-start; }
+            align-items: flex-start; -webkit-touch-callout: none; }
+  #tip { position: fixed; bottom: 8.4rem; left: 50%; transform: translateX(-50%);
+         z-index: 60; width: min(88vw, 20rem); box-sizing: border-box;
+         font-size: .85rem; line-height: 1.5; padding: .8rem 1rem;
+         border-radius: 1rem; border: 1.5px solid currentColor;
+         background: light-dark(rgba(255,255,255,.95), rgba(20,26,36,.95));
+         backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+         display: none; pointer-events: none; }
+  #tip.show { display: block; }
+  #tip b { display: block; margin-bottom: .2rem; }
   table { border-collapse: collapse; font-size: .8rem; flex: 1; }
   th, td { padding: .3rem .3rem; text-align: right; border-bottom: 1px solid
            light-dark(#d8e0e8, #263445); white-space: nowrap; }
@@ -80,6 +95,7 @@
   </table>
 </div>
 <footer><b>🤖 야추 봇 대전</b><span id="best"></span></footer>
+<div id="tip"></div>
 <button id="roll">굴리기</button>
 <div id="over">
   <div class="big" id="overtitle"></div>
@@ -119,6 +135,18 @@ const CAT_NAMES = {
   sStraight:'S.스트레이트', bStraight:'B.스트레이트', yacht:'야추',
 };
 const FACE = { ones:1, twos:2, threes:3, fours:4, fives:5, sixes:6 };
+const RULES = {
+  ones: "1이 나온 주사위 눈의 합", twos: "2가 나온 주사위 눈의 합",
+  threes: "3이 나온 주사위 눈의 합", fours: "4가 나온 주사위 눈의 합",
+  fives: "5가 나온 주사위 눈의 합", sixes: "6이 나온 주사위 눈의 합",
+  choice: "주사위 5개 눈의 합 (조건 없음)",
+  fourKind: "같은 눈 4개 이상 → 주사위 5개 눈의 합, 아니면 0점",
+  fullHouse: "같은 눈 3개 + 2개 → 주사위 5개 눈의 합, 아니면 0점 (5개 동일은 인정 안 됨)",
+  sStraight: "연속한 눈 4개 (1234·2345·3456) → 15점",
+  bStraight: "연속한 눈 5개 (12345·23456) → 30점",
+  yacht: "같은 눈 5개 → 50점",
+  bonus: "1~6 칸의 합이 63점 이상이면 +35점",
+};
 const upperSum = (sc) => sum(UPPER.map((c) => sc[c] ?? 0));
 const bonusOf = (sc) => upperSum(sc) >= 63 ? 35 : 0;
 const totalOf = (sc) => upperSum(sc) + bonusOf(sc) +
@@ -217,6 +245,47 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let my = {}, bot = {}, round = 1, phase = "idle"; // idle|me|bot|end
 let dice = [0, 0, 0, 0, 0], held = [false, false, false, false, false], rollsLeft = 3;
 let best = +localStorage.getItem("bl-yacht-bot-best") || 0;
+let animating = false;
+
+/* ---------- 굴림 모션: 안 킵한 주사위의 눈을 셔플하며 흔든다 ---------- */
+async function animateRoll(mask, botTurn) {
+  animating = true;
+  const els = [...diceboxEl.children];
+  els.forEach((el, i) => { if (mask[i]) el.classList.add("rolling"); });
+  for (let f = 0; f < 6; f++) {
+    els.forEach((el, i) => {
+      if (mask[i]) el.textContent = DICE_CH[1 + Math.floor(Math.random() * 6)];
+    });
+    await sleep(70);
+  }
+  animating = false;
+  renderDice(botTurn);
+}
+
+/* ---------- 항목 꾹 누르면 점수 집계 방식 표시 ---------- */
+const tip = document.getElementById("tip");
+let pressTimer = null, suppressPick = false;
+function attachLongPress(tr, key, title) {
+  tr.addEventListener("pointerdown", () => {
+    clearTimeout(pressTimer);
+    pressTimer = setTimeout(() => {
+      suppressPick = true;
+      tip.innerHTML = "";
+      const b = document.createElement("b");
+      b.textContent = title;
+      tip.append(b, RULES[key]);
+      tip.classList.add("show");
+    }, 400);
+  });
+  tr.addEventListener("contextmenu", (e) => e.preventDefault());
+}
+for (const ev of ["pointerup", "pointercancel"]) {
+  addEventListener(ev, () => {
+    clearTimeout(pressTimer);
+    tip.classList.remove("show");
+    setTimeout(() => { suppressPick = false; }, 60); // click보다 늦게 해제
+  });
+}
 
 window.blShareText = () =>
   best ? `야추 봇 대전 최고 ${best}점! 🤖 이길 수 있으면 이겨보세요`
@@ -237,11 +306,13 @@ function buildBoard() {
     tr.dataset.cat = cat;
     tr.innerHTML = `<td>${CAT_NAMES[cat]}</td><td class="me"></td><td class="bot"></td>`;
     tr.querySelector(".me").addEventListener("click", () => pick(cat));
+    attachLongPress(tr, cat, CAT_NAMES[cat]);
     (UPPER.includes(cat) ? tbodyU : tbodyL).append(tr);
     if (cat === "sixes") {
       const b = document.createElement("tr");
       b.className = "bonusrow";
       b.innerHTML = `<td>보너스 63↑</td><td class="me"></td><td class="bot"></td>`;
+      attachLongPress(b, "bonus", "상단 보너스");
       tbodyU.append(b);
     }
   }
@@ -278,7 +349,7 @@ function renderDice(botTurn = false) {
     b.textContent = d ? DICE_CH[d] : "❔";
     b.disabled = botTurn || phase !== "me" || rollsLeft === 3 || !d;
     b.addEventListener("click", () => {
-      if (phase !== "me" || rollsLeft === 3) return;
+      if (phase !== "me" || rollsLeft === 3 || animating) return;
       held[i] = !held[i];
       renderDice();
     });
@@ -310,18 +381,20 @@ function myTurn() {
   renderBoard();
 }
 
-rollBtn.addEventListener("click", () => {
-  if (phase !== "me" || rollsLeft === 0) return;
-  dice = dice.map((d, i) => (held[i] && d ? d : 1 + Math.floor(Math.random() * 6)));
+rollBtn.addEventListener("click", async () => {
+  if (phase !== "me" || rollsLeft === 0 || animating) return;
+  const mask = held.map((h, i) => !(h && dice[i]));
+  dice = dice.map((d, i) => (mask[i] ? 1 + Math.floor(Math.random() * 6) : d));
   rollsLeft--;
   rollBtn.textContent = rollsLeft ? `🎲 굴리기 ×${rollsLeft}` : "🎲 굴림 끝";
+  rollBtn.disabled = true;
+  await animateRoll(mask, false);
   rollBtn.disabled = rollsLeft === 0;
-  renderDice();
   renderBoard();
 });
 
 function pick(cat) {
-  if (phase !== "me" || rollsLeft === 3 || cat in my) return;
+  if (phase !== "me" || rollsLeft === 3 || cat in my || animating || suppressPick) return;
   my[cat] = SCORERS[cat](dice);
   flash(cat, "me");
   rollBtn.disabled = true;
@@ -341,10 +414,11 @@ async function botTurn() {
   for (let roll = 1; roll <= 3; roll++) {
     bdice = bdice.map((d, i) => (held[i] ? d : 0));
     while (bdice.length < 5) bdice.push(0);
+    const rollMask = bdice.map((d) => !d);
     bdice = bdice.map((d) => d || 1 + Math.floor(Math.random() * 6));
     dice = bdice;
-    renderDice(true);
-    await sleep(700);
+    await animateRoll(rollMask, true);
+    await sleep(350);
     if (roll === 3 || botShouldStop(bdice, filled)) break;
     const { mask, intent } = botKeeps(bdice, filled);
     held = mask;
