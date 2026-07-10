@@ -31,6 +31,9 @@
   .stack { display: flex; flex-direction: column; gap: .7rem; margin: 1.2rem 0; }
   .row { display: flex; gap: .5rem; }
   .row > * { flex: 1; }
+  input.invalid { border-color: #e05252; }
+  .fieldwarn { color: #e05252; font-size: .75rem; min-height: 1.1em;
+               margin: -.35rem 0 0 .3rem; }
 
   /* 룰 요약 */
   .rules { font-size: .78rem; opacity: .75; border: 1px dashed
@@ -98,6 +101,7 @@
              placeholder="방 코드 (숫자 6자리)">
       <button id="join">참가</button>
     </div>
+    <div id="codewarn" class="fieldwarn"></div>
     <div id="err"></div>
   </div>
   <div class="rules">
@@ -501,11 +505,21 @@ const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 $('#create').addEventListener('click', () => createRoom().catch((e) => showErr(e.message)));
 $('#join').addEventListener('click', () => joinRoom($('#joincode').value).catch((e) => showErr(e.message)));
 $('#joincode').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#join').click(); });
-// 숫자 외 입력(한글 등) 즉시 제거
+// 숫자 외 입력(한글·복붙 등)은 제거하고, 입력창 빨간 표시 + 경고 문구
+let codeWarnT;
 $('#joincode').addEventListener('input', () => {
   const el = $('#joincode');
   const v = el.value.replace(/\D/g, '').slice(0, 6);
-  if (el.value !== v) el.value = v;
+  if (el.value !== v) {
+    el.value = v;
+    el.classList.add('invalid');
+    $('#codewarn').textContent = '숫자만 입력할 수 있어요';
+    clearTimeout(codeWarnT);
+    codeWarnT = setTimeout(() => {
+      el.classList.remove('invalid');
+      $('#codewarn').textContent = '';
+    }, 1800);
+  }
 });
 
 // 공유 링크(#CODE)로 들어온 경우 코드 자동 입력, 기존 멤버면 자동 입장
