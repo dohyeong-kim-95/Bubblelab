@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>🎲 야추</title>
+<!--
+  야추 다이스 — 모여봐요 아소비대전51 룰 (침착맨 버전).
+  Yahtzee와 다름 주의: 12칸, 풀하우스/포카드 = 주사위 합,
+  S.스트레이트 15점, B.스트레이트 30점, 상단 63점 이상 보너스 +35.
+  멀티플레이: /_rt/yacht (Durable Object) 사용.
+-->
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: ui-monospace, monospace; min-height: 100dvh;
+         user-select: none; -webkit-user-select: none;
+         background: light-dark(#f2f5f8, #0d131c); }
+  .view { max-width: 30rem; margin: 0 auto; padding: 1rem; }
+  h1 { font-size: 1.25rem; text-align: center; margin: 1rem 0; }
+  .sub { opacity: .65; font-size: .85rem; text-align: center; line-height: 1.6; }
+  button { font: inherit; border-radius: .7rem; border: 2px solid currentColor;
+           background: none; color: inherit; cursor: pointer; padding: .7rem 1rem; }
+  button:active { transform: scale(.97); }
+  button:disabled { opacity: .35; cursor: default; }
+  button.primary { background: light-dark(#1c2836, #dce6f0);
+                   color: light-dark(#fff, #10161f); border-color: transparent; }
+  input { font: inherit; padding: .7rem .8rem; border-radius: .7rem;
+          border: 2px solid light-dark(#ccd6e0, #2a3648); background: none;
+          color: inherit; width: 100%; }
+  .stack { display: flex; flex-direction: column; gap: .7rem; margin: 1.2rem 0; }
+  .row { display: flex; gap: .5rem; }
+  .row > * { flex: 1; }
+
+  /* 룰 요약 */
+  .rules { font-size: .78rem; opacity: .75; border: 1px dashed
+           light-dark(#c5d0dc, #2a3648); border-radius: .8rem;
+           padding: .7rem .9rem; line-height: 1.8; }
+
+  /* 로비 */
+  .code { font-size: 2rem; font-weight: bold; letter-spacing: .4rem;
+          text-align: center; margin: .5rem 0; }
+  .players { display: flex; flex-direction: column; gap: .4rem; margin: 1rem 0; }
+  .prow { display: flex; justify-content: space-between; padding: .6rem .9rem;
+          border-radius: .7rem; background: light-dark(#fff, #151e2a);
+          border: 1px solid light-dark(#dde4ec, #232e3e); }
+  .off { opacity: .45; }
+
+  /* 게임 */
+  #gamebar { display: flex; justify-content: space-between; font-size: .82rem;
+             opacity: .8; margin-bottom: .5rem; }
+  #turnmsg { text-align: center; font-weight: bold; margin: .4rem 0 .7rem;
+             min-height: 1.4em; }
+  #dice { display: flex; justify-content: center; gap: .45rem; margin: .3rem 0 .8rem; }
+  .die { font-size: 3.2rem; line-height: 1; cursor: pointer; border-radius: .6rem;
+         border: 3px solid transparent; padding: 0 .05rem;
+         color: light-dark(#1c2836, #dce6f0); background: light-dark(#fff, #151e2a); }
+  .die.held { border-color: #f5a623; background: light-dark(#fdf3e0, #33280f); }
+  .die.rolling { animation: spin .35s linear; }
+  @keyframes spin { 50% { transform: rotate(180deg) scale(.8); } }
+  #rollbtn { display: block; margin: 0 auto .8rem; min-width: 11rem; }
+
+  table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+  th, td { padding: .34rem .45rem; text-align: right;
+           border-bottom: 1px solid light-dark(#e3e9f0, #1d2735); }
+  th:first-child, td:first-child { text-align: left; white-space: nowrap; }
+  thead th { font-size: .78rem; }
+  thead th.me { color: #f5a623; }
+  td.turn-col { background: light-dark(#f6f9fc, #141c28); }
+  td.avail { color: light-dark(#2f7dd1, #7db8ec); font-weight: bold; cursor: pointer; }
+  td.avail.sel { outline: 2px solid #f5a623; border-radius: .3rem; }
+  tr.sect td, tr.sect th { font-weight: bold;
+           background: light-dark(#eef2f7, #131b26); }
+  tr.total td, tr.total th { font-weight: bold; font-size: .9rem; }
+  #confirmbar { position: sticky; bottom: .6rem; margin-top: .8rem; }
+  #confirmbar button { width: 100%; }
+  .hidden { display: none !important; }
+
+  /* 종료 */
+  .rank { font-size: 1.05rem; padding: .55rem .9rem; border-radius: .7rem;
+          background: light-dark(#fff, #151e2a); display: flex;
+          justify-content: space-between;
+          border: 1px solid light-dark(#dde4ec, #232e3e); }
+  .rank.win { border-color: #f5a623; box-shadow: 0 0 0 2px rgba(245,166,35,.3); }
+  #err { color: #e05252; text-align: center; min-height: 1.2em; font-size: .85rem; }
+</style>
+</head>
+<body>
+
+<div id="home" class="view">
+  <h1>🎲 야추</h1>
+  <p class="sub">주사위 5개, 12라운드, 친구들과 실시간.<br>턴마다 3번까지 굴리고 점수칸 하나를 채웁니다.</p>
+  <div class="stack">
+    <input id="name" maxlength="10" placeholder="닉네임">
+    <button id="create" class="primary">방 만들기</button>
+    <div class="row">
+      <input id="joincode" maxlength="4" placeholder="방 코드" style="text-transform:uppercase">
+      <button id="join">참가</button>
+    </div>
+    <div id="err"></div>
+  </div>
+  <div class="rules">
+    <b>점수 (아소비대전51 야추 룰)</b><br>
+    1~6: 해당 눈의 합 · 63점 넘기면 보너스 +35<br>
+    초이스: 전체 합 · 포카드: 4개 같으면 전체 합<br>
+    풀하우스(3+2): 전체 합 · S.스트레이트(4연속): 15<br>
+    B.스트레이트(5연속): 30 · 야추(5개 같음): 50
+  </div>
+</div>
+
+<div id="room" class="view hidden"></div>
+
+<script>
+/* ---------- 실시간 클라이언트 (/_rt/yacht) ---------- */
+const rt = (() => {
+  let ws = null, openP = null, nextId = 1;
+  const pending = new Map(), subs = new Map(), discs = new Map();
+  const wsUrl = () =>
+    (location.protocol === 'http:' ? 'ws' : 'wss') + '://' + location.host + '/_rt/yacht';
+  const snap = (v) => v === undefined ? null : v;
+  function connect() {
+    if (openP) return openP;
+    openP = new Promise((res, rej) => {
+      const s = new WebSocket(wsUrl());
+      let opened = false;
+      s.onopen = () => {
+        opened = true; ws = s;
+        for (const p of subs.keys()) raw({ op: 'sub', path: p });
+        for (const [p, v] of discs) raw({ op: 'ondisc', path: p, value: v });
+        res();
+      };
+      s.onmessage = (e) => {
+        const m = JSON.parse(e.data);
+        if (m.id && pending.has(m.id)) {
+          const { res: r, rej: j } = pending.get(m.id); pending.delete(m.id);
+          m.ok ? r(snap(m.value)) : j(new Error(m.error));
+        } else if (m.ev === 'v') {
+          for (const cb of subs.get(m.path) ?? []) cb(snap(m.value));
+        }
+      };
+      s.onclose = () => {
+        ws = null; openP = null;
+        for (const { rej: j } of pending.values()) j(new Error('closed'));
+        pending.clear();
+        if (opened) setTimeout(() => connect().catch(() => {}), 1000);
+      };
+      s.onerror = () => { if (!opened) rej(new Error('연결 실패')); };
+    });
+    return openP;
+  }
+  const raw = (o) => ws?.readyState === 1 && ws.send(JSON.stringify(o));
+  async function req(msg) {
+    await connect();
+    return new Promise((res, rej) => {
+      const id = nextId++; pending.set(id, { res, rej });
+      ws.send(JSON.stringify({ id, ...msg }));
+    });
+  }
+  return {
+    connect,
+    get: (p) => req({ op: 'get', path: p }),
+    set: (p, value) => req({ op: 'set', path: p, value }),
+    update: (p, value) => req({ op: 'update', path: p, value }),
+    sub(p, cb) {
+      if (!subs.has(p)) subs.set(p, new Set());
+      subs.get(p).add(cb);
+      connect().then(() => raw({ op: 'sub', path: p })).catch(() => {});
+      return () => { subs.get(p)?.delete(cb); };
+    },
+    onDisc: async (p, value) => { discs.set(p, value); await req({ op: 'ondisc', path: p, value }); },
+  };
+})();
+
+/* ---------- 야추 점수 규칙 (아소비대전51 버전 — Yahtzee 아님!) ---------- */
+const sum = (d) => d.reduce((a, b) => a + b, 0);
+const counts = (d) => { const c = [0,0,0,0,0,0,0]; for (const x of d) c[x]++; return c; };
+const straight = (d, runs) => {
+  const s = new Set(d);
+  return runs.some((r) => [...r].every((n) => s.has(+n)));
+};
+const SCORERS = {
+  ones:   (d) => sum(d.filter((x) => x === 1)),
+  twos:   (d) => sum(d.filter((x) => x === 2)),
+  threes: (d) => sum(d.filter((x) => x === 3)),
+  fours:  (d) => sum(d.filter((x) => x === 4)),
+  fives:  (d) => sum(d.filter((x) => x === 5)),
+  sixes:  (d) => sum(d.filter((x) => x === 6)),
+  choice:    (d) => sum(d),
+  fourKind:  (d) => counts(d).some((c) => c >= 4) ? sum(d) : 0,
+  fullHouse: (d) => {
+    const c = counts(d).filter(Boolean).sort().join('');
+    return c === '23' ? sum(d) : 0;   // 5개 동일은 풀하우스 아님
+  },
+  sStraight: (d) => straight(d, ['1234', '2345', '3456']) ? 15 : 0,
+  bStraight: (d) => straight(d, ['12345', '23456']) ? 30 : 0,
+  yacht:     (d) => counts(d).some((c) => c === 5) ? 50 : 0,
+};
+const UPPER = ['ones','twos','threes','fours','fives','sixes'];
+const LOWER = ['choice','fourKind','fullHouse','sStraight','bStraight','yacht'];
+const CAT_NAMES = {
+  ones:'1', twos:'2', threes:'3', fours:'4', fives:'5', sixes:'6',
+  choice:'초이스', fourKind:'포카드', fullHouse:'풀하우스',
+  sStraight:'S.스트레이트', bStraight:'B.스트레이트', yacht:'야추',
+};
+const ROUNDS = 12;
+const upperSum = (sc) => sum(UPPER.map((c) => sc?.[c] ?? 0));
+const bonusOf = (sc) => upperSum(sc) >= 63 ? 35 : 0;
+const totalOf = (sc) =>
+  upperSum(sc) + bonusOf(sc) + sum(LOWER.map((c) => sc?.[c] ?? 0));
+window.__yachtScorers = { SCORERS, upperSum, bonusOf, totalOf }; // 테스트용
+
+/* ---------- 앱 상태 ---------- */
+const $ = (s) => document.querySelector(s);
+const homeEl = $('#home'), roomEl = $('#room');
+const uid = localStorage.getItem('yacht_uid') ||
+  (localStorage.setItem('yacht_uid', 'u' + crypto.randomUUID().slice(0, 12)),
+   localStorage.getItem('yacht_uid'));
+$('#name').value = localStorage.getItem('yacht_name') || '';
+
+let code = null, state = null, selCat = null, unsub = null;
+const rpath = () => `rooms/${code}`;
+const DICE_CH = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+
+function showErr(msg) { $('#err').textContent = msg; }
+
+async function cleanupStale() {
+  try {
+    const rooms = await rt.get('rooms');
+    if (!rooms) return;
+    const now = Date.now(), upd = {};
+    for (const [c, r] of Object.entries(rooms)) {
+      const age = now - (r.meta?.createdAt || 0);
+      if (age > 2 * 3600e3 || (r.meta?.status === 'finished' && age > 30 * 60e3))
+        upd[`rooms/${c}`] = null;
+    }
+    if (Object.keys(upd).length) await rt.update('', upd);
+  } catch {}
+}
+
+function myName() {
+  const n = $('#name').value.trim();
+  if (!n) { showErr('닉네임을 입력하세요'); return null; }
+  localStorage.setItem('yacht_name', n);
+  return n;
+}
+
+async function createRoom() {
+  const name = myName(); if (!name) return;
+  await cleanupStale();
+  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ';
+  for (let i = 0; i < 10; i++) {
+    const c = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    if (await rt.get(`rooms/${c}`)) continue;
+    await rt.set(`rooms/${c}`, {
+      meta: { hostId: uid, status: 'lobby', createdAt: Date.now(), round: 0 },
+      players: { [uid]: { name, order: 0, online: true } },
+    });
+    enterRoom(c);
+    return;
+  }
+  showErr('방 생성 실패 — 다시 시도해주세요');
+}
+
+async function joinRoom(c) {
+  const name = myName(); if (!name) return;
+  c = c.trim().toUpperCase();
+  if (c.length !== 4) { showErr('방 코드는 4글자입니다'); return; }
+  const room = await rt.get(`rooms/${c}`);
+  if (!room) { showErr('없는 방이에요'); return; }
+  const already = room.players?.[uid];
+  if (!already) {
+    if (room.meta.status !== 'lobby') { showErr('이미 시작된 게임이에요'); return; }
+    const orders = Object.values(room.players || {}).map((p) => p.order);
+    if (orders.length >= 4) { showErr('방이 가득 찼어요 (최대 4명)'); return; }
+    await rt.update(`rooms/${c}/players/${uid}`, {
+      name, order: Math.max(-1, ...orders) + 1, online: true,
+    });
+  }
+  enterRoom(c);
+}
+
+function enterRoom(c) {
+  code = c;
+  location.hash = c;
+  homeEl.classList.add('hidden');
+  roomEl.classList.remove('hidden');
+  rt.set(`${rpath()}/players/${uid}/online`, true).catch(() => {});
+  rt.onDisc(`${rpath()}/players/${uid}/online`, false).catch(() => {});
+  unsub = rt.sub(rpath(), (v) => {
+    state = v;
+    if (!state) { leaveToHome('방이 사라졌어요'); return; }
+    render();
+  });
+}
+
+function leaveToHome(msg) {
+  unsub?.(); code = null; state = null; location.hash = '';
+  roomEl.classList.add('hidden'); homeEl.classList.remove('hidden');
+  if (msg) showErr(msg);
+}
+
+/* ---------- 게임 액션 ---------- */
+const playersInOrder = () =>
+  Object.entries(state.players || {})
+    .map(([id, p]) => ({ id, ...p }))
+    .sort((a, b) => a.order - b.order);
+
+const isMyTurn = () => state?.turn?.pid === uid && state.meta.status === 'playing';
+
+function freshTurn(pid) {
+  return { pid, rollsLeft: 3, dice: null, held: [false, false, false, false, false] };
+}
+
+async function startGame() {
+  const ps = playersInOrder();
+  await rt.update(rpath(), {
+    'meta/status': 'playing', 'meta/round': 1,
+    scores: null,
+    turn: freshTurn(ps[0].id),
+  });
+}
+
+let rolling = false;
+async function roll() {
+  if (!isMyTurn() || state.turn.rollsLeft <= 0 || rolling) return;
+  rolling = true;
+  document.querySelectorAll('.die').forEach((d) => d.classList.add('rolling'));
+  const prev = state.turn.dice, held = state.turn.held || [];
+  const dice = Array.from({ length: 5 }, (_, i) =>
+    prev && held[i] ? prev[i] : 1 + Math.floor(Math.random() * 6));
+  setTimeout(async () => {
+    await rt.update(`${rpath()}/turn`, { dice, rollsLeft: state.turn.rollsLeft - 1 });
+    rolling = false;
+  }, 350);
+}
+
+async function toggleHold(i) {
+  if (!isMyTurn() || !state.turn.dice || state.turn.rollsLeft <= 0) return;
+  const held = [...(state.turn.held || [false,false,false,false,false])];
+  held[i] = !held[i];
+  await rt.update(`${rpath()}/turn`, { held });
+}
+
+async function advanceTurn(pid, cat, value) {
+  const ps = playersInOrder();
+  const idx = ps.findIndex((p) => p.id === pid);
+  const last = idx === ps.length - 1;
+  const round = (state.meta.round || 1) + (last ? 1 : 0);
+  const upd = { [`scores/${pid}/${cat}`]: value };
+  if (last && round > ROUNDS) {
+    upd['meta/status'] = 'finished';
+  } else {
+    upd['meta/round'] = round;
+    upd.turn = freshTurn(ps[(idx + 1) % ps.length].id);
+  }
+  await rt.update(rpath(), upd);
+}
+
+/* ---------- 렌더 ---------- */
+function render() {
+  const { meta } = state;
+  if (meta.status === 'lobby') renderLobby();
+  else renderGame(meta.status === 'finished');
+  window.blShareText = () =>
+    meta.status === 'finished'
+      ? `야추 ${totalOf(state.scores?.[uid])}점! 🎲 나랑 한 판 붙을 사람`
+      : `🎲 야추 같이 해요! 방 코드 ${code}`;
+}
+
+function renderLobby() {
+  const ps = playersInOrder();
+  const isHost = state.meta.hostId === uid;
+  roomEl.innerHTML = `
+    <h1>🎲 야추</h1>
+    <p class="sub">친구에게 방 코드를 알려주세요 (공유 버튼을 눌러도 돼요)</p>
+    <div class="code">${code}</div>
+    <div class="players">
+      ${ps.map((p) => `<div class="prow ${p.online ? '' : 'off'}">
+          <span>${esc(p.name)}${p.id === state.meta.hostId ? ' 👑' : ''}${p.id === uid ? ' (나)' : ''}</span>
+          <span>${p.online ? '' : '연결 끊김'}</span>
+        </div>`).join('')}
+    </div>
+    <div class="stack">
+      ${isHost
+        ? `<button id="startbtn" class="primary" ${ps.length < 2 ? 'disabled' : ''}>
+             ${ps.length < 2 ? '2명 이상 모이면 시작' : '게임 시작'}</button>`
+        : `<p class="sub">방장이 시작하길 기다리는 중…</p>`}
+      <button id="leavebtn">나가기</button>
+    </div>`;
+  $('#startbtn')?.addEventListener('click', startGame);
+  $('#leavebtn').addEventListener('click', async () => {
+    await rt.set(`${rpath()}/players/${uid}`, null).catch(() => {});
+    leaveToHome();
+  });
+}
+
+function renderGame(finished) {
+  const ps = playersInOrder();
+  const turn = state.turn || {};
+  const dice = turn.dice;
+  const held = turn.held || [];
+  const current = ps.find((p) => p.id === turn.pid);
+  const mine = isMyTurn();
+
+  let turnMsg = '';
+  if (!finished) {
+    turnMsg = mine
+      ? (dice ? `🫵 내 차례 — 남은 굴림 ${turn.rollsLeft}` : '🫵 내 차례 — 주사위를 굴리세요!')
+      : `⏳ ${esc(current?.name || '?')} 차례`;
+  }
+
+  roomEl.innerHTML = `
+    <div id="gamebar">
+      <span>방 ${code}</span>
+      <span>${finished ? '게임 종료' : `라운드 ${state.meta.round}/${ROUNDS}`}</span>
+    </div>
+    <div id="turnmsg">${turnMsg}</div>
+    ${finished ? renderRanks(ps) : `
+      <div id="dice">
+        ${(dice || [0,0,0,0,0]).map((d, i) => `
+          <span class="die ${held[i] && dice ? 'held' : ''}" data-i="${i}">
+            ${d ? DICE_CH[d] : '❔'}</span>`).join('')}
+      </div>
+      <button id="rollbtn" class="primary"
+        ${mine && turn.rollsLeft > 0 ? '' : 'disabled'}>
+        ${mine ? `굴리기 (${turn.rollsLeft})` : '상대 차례'}</button>`}
+    ${renderBoard(ps, finished)}
+    ${!finished && mine && dice && selCat ? `
+      <div id="confirmbar"><button class="primary" id="confirmbtn">
+        ${CAT_NAMES[selCat]}에 ${SCORERS[selCat](dice)}점 기록
+      </button></div>` : ''}
+    ${finished && state.meta.hostId === uid ? `
+      <div class="stack"><button id="againbtn" class="primary">한판 더</button></div>` : ''}
+    ${!finished && !mine && current && !current.online && state.meta.hostId === uid ? `
+      <div class="stack"><button id="skipbtn">⏭ 오프라인 플레이어 차례 넘기기 (0점 기록)</button></div>` : ''}
+  `;
+
+  document.querySelectorAll('.die').forEach((el) =>
+    el.addEventListener('pointerdown', () => toggleHold(+el.dataset.i)));
+  $('#rollbtn')?.addEventListener('click', roll);
+  $('#confirmbtn')?.addEventListener('click', async () => {
+    const cat = selCat; selCat = null;
+    if (state.scores?.[uid]?.[cat] != null) return;
+    await advanceTurn(uid, cat, SCORERS[cat](state.turn.dice));
+  });
+  $('#againbtn')?.addEventListener('click', startGame);
+  $('#skipbtn')?.addEventListener('click', async () => {
+    const pid = state.turn.pid;
+    const cat = [...UPPER, ...LOWER].find((c) => state.scores?.[pid]?.[c] == null);
+    if (cat) await advanceTurn(pid, cat, 0);
+  });
+  document.querySelectorAll('td.avail').forEach((el) =>
+    el.addEventListener('pointerdown', () => {
+      selCat = selCat === el.dataset.cat ? null : el.dataset.cat;
+      render();
+    }));
+}
+
+function renderBoard(ps, finished) {
+  const dice = state.turn?.dice;
+  const mine = isMyTurn() && dice;
+  const cell = (p, cat) => {
+    const v = state.scores?.[p.id]?.[cat];
+    const cls = p.id === state.turn?.pid && !finished ? 'turn-col' : '';
+    if (v != null) return `<td class="${cls}">${v}</td>`;
+    if (p.id === uid && mine)
+      return `<td class="avail ${selCat === cat ? 'sel' : ''} ${cls}"
+                data-cat="${cat}">${SCORERS[cat](dice)}</td>`;
+    return `<td class="${cls}"></td>`;
+  };
+  const row = (cat) => `<tr><td>${CAT_NAMES[cat]}</td>
+    ${ps.map((p) => cell(p, cat)).join('')}</tr>`;
+  return `<table>
+    <thead><tr><th></th>${ps.map((p) =>
+      `<th class="${p.id === uid ? 'me' : ''}">${esc(p.name)}</th>`).join('')}</tr></thead>
+    <tbody>
+      ${UPPER.map(row).join('')}
+      <tr class="sect"><td>보너스 (63↑ +35)</td>
+        ${ps.map((p) => `<td>${upperSum(state.scores?.[p.id])}/63
+          ${bonusOf(state.scores?.[p.id]) ? ' ✓' : ''}</td>`).join('')}</tr>
+      ${LOWER.map(row).join('')}
+      <tr class="total"><td>합계</td>
+        ${ps.map((p) => `<td>${totalOf(state.scores?.[p.id])}</td>`).join('')}</tr>
+    </tbody></table>`;
+}
+
+function renderRanks(ps) {
+  const ranked = [...ps].sort((a, b) => totalOf(state.scores?.[b.id]) - totalOf(state.scores?.[a.id]));
+  const top = totalOf(state.scores?.[ranked[0].id]);
+  return `<div class="players">${ranked.map((p, i) => {
+    const t = totalOf(state.scores?.[p.id]);
+    return `<div class="rank ${t === top ? 'win' : ''}">
+      <span>${t === top ? '🏆' : `${i + 1}위`} ${esc(p.name)}${p.id === uid ? ' (나)' : ''}</span>
+      <span><b>${t}</b>점</span></div>`;
+  }).join('')}</div>`;
+}
+
+const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/* ---------- 진입 ---------- */
+$('#create').addEventListener('click', () => createRoom().catch((e) => showErr(e.message)));
+$('#join').addEventListener('click', () => joinRoom($('#joincode').value).catch((e) => showErr(e.message)));
+$('#joincode').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#join').click(); });
+
+// 공유 링크(#CODE)로 들어온 경우 코드 자동 입력, 기존 멤버면 자동 입장
+const hashCode = location.hash.slice(1).toUpperCase();
+if (/^[A-Z]{4}$/.test(hashCode)) {
+  $('#joincode').value = hashCode;
+  rt.get(`rooms/${hashCode}/players/${uid}`).then((p) => {
+    if (p) enterRoom(hashCode);
+  }).catch(() => {});
+}
+
+window.blShareText = () => '🎲 야추 한 판 하실 분!';
+</script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>
