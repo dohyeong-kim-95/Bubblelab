@@ -1,8 +1,8 @@
 {
   // bubblelab.dev 전체를 서빙하는 단일 워커.
-  // sites/ 아래 최상위 폴더 하나가 서브도메인 하나에 대응된다.
+  // 리포 루트의 폴더 하나가 서브도메인 하나에 대응된다.
   "name": "bubblelab",
-  "main": "worker/index.js",
+  "main": "_infra/worker.js",
   "compatibility_date": "2026-07-01",
   "assets": {
     "directory": "./dist",

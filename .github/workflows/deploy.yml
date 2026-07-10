@@ -22,7 +22,7 @@ jobs:
           node-version: 22
 
       - name: Build
-        run: node scripts/build.mjs
+        run: node _infra/build.mjs
 
       - name: Deploy to Cloudflare
         uses: cloudflare/wrangler-action@v3

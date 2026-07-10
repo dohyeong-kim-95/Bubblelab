@@ -1,4 +1,5 @@
-// sites/ → dist/ 로 복사하고, index.html이 없는 카테고리 루트에는
+// 리포 루트에서 `_`나 `.`로 시작하지 않는 폴더 = 서브도메인.
+// 각 폴더를 dist/ 로 복사하고, index.html이 없는 서브도메인 루트에는
 // 하위 폴더 목록 페이지를 자동 생성한다. (slop에 토이를 추가하면
 // slop.bubblelab.dev 홈에 자동으로 링크가 뜬다.)
 import {
@@ -10,19 +11,32 @@ import {
   writeFileSync,
 } from "node:fs";
 import { execSync } from "node:child_process";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const SITES = "sites";
-const DIST = "dist";
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+const DIST = join(ROOT, "dist");
+const SKIP = new Set(["dist", "node_modules"]);
+
+const isSite = (d) =>
+  d.isDirectory() &&
+  !d.name.startsWith("_") &&
+  !d.name.startsWith(".") &&
+  !SKIP.has(d.name);
 
 rmSync(DIST, { recursive: true, force: true });
 mkdirSync(DIST);
-cpSync(SITES, DIST, { recursive: true });
+
+const sites = readdirSync(ROOT, { withFileTypes: true }).filter(isSite);
+for (const site of sites) {
+  cpSync(join(ROOT, site.name), join(DIST, site.name), { recursive: true });
+}
 
 // 마지막 커밋 시각 (없으면 0). 자동 목록을 최신순으로 정렬하는 데 쓴다.
 function lastCommitTime(path) {
   try {
     const out = execSync(`git log -1 --format=%ct -- "${path}"`, {
+      cwd: ROOT,
       encoding: "utf8",
     }).trim();
     return out ? Number(out) * 1000 : 0;
@@ -73,27 +87,27 @@ ${items || "      <li>아직 아무것도 없어요</li>"}
 `;
 }
 
-for (const dirent of readdirSync(DIST, { withFileTypes: true })) {
-  if (!dirent.isDirectory()) continue;
-  const site = dirent.name;
-  if (existsSync(join(DIST, site, "index.html"))) continue;
+for (const site of sites) {
+  if (existsSync(join(DIST, site.name, "index.html"))) continue;
 
-  const entries = readdirSync(join(DIST, site), { withFileTypes: true })
+  const entries = readdirSync(join(DIST, site.name), { withFileTypes: true })
     .filter((d) => d.isDirectory())
     .map((d) => ({
       name: d.name,
-      date: lastCommitTime(join(SITES, site, d.name)),
+      date: lastCommitTime(join(ROOT, site.name, d.name)),
     }))
     .sort((a, b) => b.date - a.date || a.name.localeCompare(b.name));
 
-  writeFileSync(join(DIST, site, "index.html"), listingPage(site, entries));
-  console.log(`generated index for ${site} (${entries.length} entries)`);
+  writeFileSync(
+    join(DIST, site.name, "index.html"),
+    listingPage(site.name, entries),
+  );
+  console.log(`generated index for ${site.name} (${entries.length} entries)`);
 }
 
-if (!existsSync(join(DIST, "404.html"))) {
-  writeFileSync(
-    join(DIST, "404.html"),
-    `<!doctype html>
+writeFileSync(
+  join(DIST, "404.html"),
+  `<!doctype html>
 <html lang="ko">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>404</title>
@@ -102,7 +116,6 @@ display:grid;place-items:center;min-height:100vh;margin:0}</style></head>
 <body><p>404 — 여기엔 아직 아무것도 없어요. <a href="https://bubblelab.dev">bubblelab.dev</a></p></body>
 </html>
 `,
-  );
-}
+);
 
-console.log("build done → dist/");
+console.log(`build done → dist/ (${sites.map((s) => s.name).join(", ")})`);
