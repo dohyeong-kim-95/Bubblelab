@@ -45,6 +45,13 @@ function updateStats() {
   stats.textContent = `최고 ${best}ms · 평균 ${avg}ms · ${results.length}회`;
 }
 
+// 공유 버튼(_shared/share.js)용 자랑 문구
+window.blShareText = () => {
+  if (!results.length) return "⚡ 반응속도 테스트 — 도전해보세요!";
+  const best = Math.min(...results);
+  return `내 반응속도는 ${best}ms! ⚡ 도전해보세요`;
+};
+
 function arm() {
   state = "wait";
   stage.className = "wait";

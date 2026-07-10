@@ -33,10 +33,20 @@
     toastTimer = setTimeout(() => toastEl.classList.remove("show"), 1800);
   }
 
+  // 토이가 자랑 문구를 지정할 수 있다:
+  //   window.blShareText = () => `내 기록은 123ms! 도전해보세요`;
+  // (문자열도 가능. 없으면 링크만 공유)
+  function shareText() {
+    const t = window.blShareText;
+    return (typeof t === "function" ? t() : t) || "";
+  }
+
   async function copyLink() {
+    const text = shareText();
+    const payload = text ? `${text}\n${location.href}` : location.href;
     try {
-      await navigator.clipboard.writeText(location.href);
-      toast("링크를 복사했어요 ✓");
+      await navigator.clipboard.writeText(payload);
+      toast(text ? "자랑 문구를 복사했어요 ✓" : "링크를 복사했어요 ✓");
     } catch {
       toast("복사 실패 — 주소창에서 복사해주세요");
     }
@@ -52,7 +62,10 @@
     e.stopPropagation();
     if (navigator.share) {
       try {
-        await navigator.share({ title: document.title, url: location.href });
+        const data = { title: document.title, url: location.href };
+        const text = shareText();
+        if (text) data.text = text;
+        await navigator.share(data);
         return;
       } catch (err) {
         if (err.name === "AbortError") return; // 사용자가 시트를 닫음
