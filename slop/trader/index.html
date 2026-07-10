@@ -314,6 +314,7 @@ function end() {
     </div>`;
   overlayEl.classList.remove('hidden');
   overlayEl.querySelector('#start').addEventListener('click', start);
+  window.blWeeklyReport?.(r);
 }
 
 document.getElementById('start').addEventListener('click', start);
@@ -323,7 +324,10 @@ window.blShareText = () =>
   lastResult === null
     ? '📈 20초 초단타 모의투자 — 도전해보세요!'
     : `20초 초단타 수익률 ${pct(lastResult)}! 📈 이길 수 있으면 이겨보세요`;
+
+window.blWeekly = { game: 'trader', dir: 'max', fmt: pct };
 </script>
+<script defer src="/_shared/records.js"></script>
 <script defer src="/_shared/share.js"></script>
 </body>
 </html>

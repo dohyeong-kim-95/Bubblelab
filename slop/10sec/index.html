@@ -41,6 +41,8 @@ let startTime = 0;
 let raf = null;
 let best = null;
 
+window.blWeekly = { game: "10sec", dir: "min", fmt: (v) => "오차 " + v.toFixed(3) + "초" };
+
 function tick() {
   const t = (performance.now() - startTime) / 1000;
   clock.textContent = t.toFixed(3);
@@ -74,9 +76,11 @@ btn.addEventListener("click", () => {
       diff < 1    ? "🙂 연습하면 돼요" : "🫠 시계 보는 법부터…";
     msg.textContent = `${t < 10 ? "-" : "+"}${diff.toFixed(3)}초 ${grade}`;
     btn.textContent = "다시";
+    window.blWeeklyReport?.(diff);
   }
 });
 </script>
+<script defer src="/_shared/records.js"></script>
 <script defer src="/_shared/share.js"></script>
 </body>
 </html>

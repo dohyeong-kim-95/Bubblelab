@@ -72,6 +72,8 @@ window.blShareText = () =>
   best ? `1부터 25까지 ${best.toFixed(2)}초에 터치! 👆 도전해보세요`
        : "👆 숫자 순서대로 터치 — 도전해보세요!";
 
+window.blWeekly = { game: "touch25", dir: "min", fmt: (v) => v.toFixed(2) + "초" };
+
 function updateBest() {
   bestEl.textContent = best ? `최고 기록 ${best.toFixed(2)}초` : " ";
 }
@@ -139,11 +141,13 @@ function hit(btn, n) {
   gradeEl.textContent = msg + (penalty ? ` (패널티 +${penalty.toFixed(1)}초 포함)` : "");
   document.getElementById("go").textContent = "다시 도전";
   cover.classList.remove("hide");
+  window.blWeeklyReport?.(s);
 }
 
 document.getElementById("go").addEventListener("click", start);
 updateBest();
 </script>
+<script defer src="/_shared/records.js"></script>
 <script defer src="/_shared/share.js"></script>
 </body>
 </html>

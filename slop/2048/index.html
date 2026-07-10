@@ -72,6 +72,9 @@ window.blShareText = () =>
   best ? `2048에서 ${best.toLocaleString("ko-KR")}점! 🔢 도전해보세요`
        : "🔢 2048 — 도전해보세요!";
 
+window.blWeekly = { game: "2048", dir: "max",
+                    fmt: (v) => v.toLocaleString("ko-KR") + "점" };
+
 function updateHud() {
   scoreEl.textContent = `점수 ${score.toLocaleString("ko-KR")}`;
   bestEl.textContent = `최고 ${best.toLocaleString("ko-KR")}`;
@@ -169,6 +172,7 @@ function move(dir) {
   if (!canMove()) {
     playing = false;
     showOver(`💀 게임 오버 — ${score.toLocaleString("ko-KR")}점`, "다시 시작");
+    window.blWeeklyReport?.(score);
   }
 }
 
@@ -212,6 +216,7 @@ addEventListener("pointerup", (e) => {
 
 restart();
 </script>
+<script defer src="/_shared/records.js"></script>
 <script defer src="/_shared/share.js"></script>
 </body>
 </html>

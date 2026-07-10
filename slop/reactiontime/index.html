@@ -52,6 +52,8 @@ window.blShareText = () => {
   return `내 반응속도는 ${best}ms! ⚡ 도전해보세요`;
 };
 
+window.blWeekly = { game: "reactiontime", dir: "min", fmt: (v) => v + "ms" };
+
 function arm() {
   state = "wait";
   stage.className = "wait";
@@ -85,9 +87,11 @@ stage.addEventListener("pointerdown", () => {
     sub.textContent =
       (ms < 200 ? "⚡ 미쳤다" : ms < 250 ? "🔥 빠른데요" :
        ms < 320 ? "👍 평범" : "🐢 커피 한잔 하세요") + " · 클릭해서 다시";
+    window.blWeeklyReport?.(ms);
   }
 });
 </script>
+<script defer src="/_shared/records.js"></script>
 <script defer src="/_shared/share.js"></script>
 </body>
 </html>

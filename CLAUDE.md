@@ -22,6 +22,10 @@
 - 파일 안에 이모지 하나 (카드 아이콘으로 자동 추출됨)
 - `</body>` 직전에 `<script defer src="/_shared/share.js"></script>` (공유 버튼)
 - 기록 자랑 문구: `window.blShareText = () => "내 기록은 X! 도전해보세요";`
+- 주간 신기록 보드(월요일 09시 KST 초기화): `window.blWeekly = { game: "이름",
+  dir: "min|max", fmt: v => … }` 선언 + `<script defer
+  src="/_shared/records.js"></script>` 추가 후, 기록이 나올 때마다
+  `window.blWeeklyReport?.(점수)` 호출. 서버는 `/_records` (_infra/records.js).
 - 다크모드: `:root { color-scheme: light dark; }` + `light-dark()` 함수
 - 언어는 한국어, 스타일은 ui-monospace 계열의 가벼운 느낌
 

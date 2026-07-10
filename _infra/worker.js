@@ -9,6 +9,7 @@ const ROOT_DOMAIN = "bubblelab.dev";
 
 export { RealtimeDO } from "./realtime.js";
 export { AnalyticsDO } from "./analytics.js";
+export { RecordsDO } from "./records.js";
 
 const LOGIN_PAGE = (failed = false, base = "") => `<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -98,6 +99,12 @@ export default {
     // 공용 에셋(_shared/*)은 모든 서브도메인에서 사이트 프리픽스 없이 서빙
     if (path.startsWith("/_shared/")) {
       return env.ASSETS.fetch(request);
+    }
+
+    // 주간 신기록 보드: 모든 서브도메인에서 같은 저장소를 쓴다
+    if (path === "/_records") {
+      const id = env.RECORDS.idFromName("global");
+      return env.RECORDS.get(id).fetch(request);
     }
 
     // 실시간 데이터 서버: /_rt/<이름> → 이름당 Durable Object 하나
