@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>2048</title>
+<style>
+  :root { color-scheme: light dark; }
+  html, body { margin: 0; height: 100%; overflow: hidden; touch-action: none; }
+  body { font-family: ui-monospace, monospace;
+         background: light-dark(#eef2f6, #10161f);
+         color: light-dark(#17202b, #dbe5ef);
+         display: flex; flex-direction: column; align-items: center;
+         justify-content: center; gap: 1rem; user-select: none;
+         -webkit-user-select: none; padding: 1rem; box-sizing: border-box; }
+  h1 { margin: 0; font-size: 1.4rem; }
+  #hud { display: flex; gap: .8rem; font-size: .9rem; opacity: .8;
+         font-variant-numeric: tabular-nums; }
+  #wrap { position: relative; }
+  #board { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2.5vmin;
+           width: min(88vw, 58vh, 25rem); aspect-ratio: 1; padding: 2.5vmin;
+           border-radius: 1rem; box-sizing: border-box;
+           background: light-dark(#c8d2dc, #1c2735); }
+  .cell { border-radius: .5rem; display: flex; align-items: center;
+          justify-content: center; font-weight: bold;
+          font-size: clamp(1rem, 6.5vmin, 2rem);
+          background: light-dark(#dde5ec, #26344455); color: #17202b; }
+  .cell.small { font-size: clamp(.7rem, 4.5vmin, 1.4rem); }
+  .cell.pop { animation: pop .16s ease-out; }
+  @keyframes pop { from { transform: scale(.4); } to { transform: scale(1); } }
+  .v2    { background: #eee4da; } .v4    { background: #ede0c8; }
+  .v8    { background: #f2b179; color: #fff; }
+  .v16   { background: #f59563; color: #fff; }
+  .v32   { background: #f67c5f; color: #fff; }
+  .v64   { background: #f65e3b; color: #fff; }
+  .v128  { background: #edcf72; color: #fff; }
+  .v256  { background: #edcc61; color: #fff; }
+  .v512  { background: #edc850; color: #fff; }
+  .v1024 { background: #edc53f; color: #fff; }
+  .v2048 { background: #edc22e; color: #fff; }
+  .vbig  { background: #3c3a32; color: #fff; }
+  #over { position: absolute; inset: 0; border-radius: 1rem; display: none;
+          flex-direction: column; align-items: center; justify-content: center;
+          gap: .8rem; text-align: center; font-weight: bold; font-size: 1.3rem;
+          background: light-dark(#eef2f6cc, #10161fcc); backdrop-filter: blur(3px); }
+  #over.show { display: flex; }
+  button { font: inherit; font-weight: bold; padding: .6rem 1.2rem;
+           border-radius: .7rem; border: 1px solid currentColor;
+           background: none; color: inherit; cursor: pointer; }
+  #hint { opacity: .55; font-size: .8rem; text-align: center; }
+</style>
+</head>
+<body>
+<h1>🔢 2048</h1>
+<div id="hud"><span id="score">점수 0</span><span>·</span><span id="best"></span></div>
+<div id="wrap">
+  <div id="board"></div>
+  <div id="over"><span id="overmsg"></span><button id="retry">다시 시작</button></div>
+</div>
+<div id="hint">방향키 또는 스와이프로 타일을 합쳐보세요</div>
+<script>
+const board = document.getElementById("board");
+const scoreEl = document.getElementById("score");
+const bestEl = document.getElementById("best");
+const over = document.getElementById("over");
+const overmsg = document.getElementById("overmsg");
+
+let grid, score, won, playing;
+let best = +localStorage.getItem("bl-2048-best") || 0;
+
+window.blShareText = () =>
+  best ? `2048에서 ${best.toLocaleString("ko-KR")}점! 🔢 도전해보세요`
+       : "🔢 2048 — 도전해보세요!";
+
+function updateHud() {
+  scoreEl.textContent = `점수 ${score.toLocaleString("ko-KR")}`;
+  bestEl.textContent = `최고 ${best.toLocaleString("ko-KR")}`;
+}
+
+function spawn() {
+  const empty = [];
+  for (let i = 0; i < 16; i++) if (!grid[i]) empty.push(i);
+  if (!empty.length) return;
+  const i = empty[Math.floor(Math.random() * empty.length)];
+  grid[i] = Math.random() < 0.9 ? 2 : 4;
+  fresh.add(i);
+}
+
+const fresh = new Set(); // 이번 턴에 새로 생기거나 합쳐진 칸 (pop 애니메이션용)
+
+function render() {
+  board.replaceChildren();
+  for (let i = 0; i < 16; i++) {
+    const v = grid[i];
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    if (v) {
+      cell.textContent = v;
+      cell.classList.add(v <= 2048 ? `v${v}` : "vbig");
+      if (v >= 1024) cell.classList.add("small");
+      if (fresh.has(i)) cell.classList.add("pop");
+    }
+    board.append(cell);
+  }
+  fresh.clear();
+}
+
+// 한 줄을 왼쪽으로 밀며 합치기. 인덱스 목록을 받아 제자리에서 처리한다.
+function slideLine(idx) {
+  const vals = idx.map((i) => grid[i]).filter(Boolean);
+  const out = [];
+  let moved = false;
+  for (let i = 0; i < vals.length; i++) {
+    if (vals[i] === vals[i + 1]) {
+      out.push(vals[i] * 2);
+      score += vals[i] * 2;
+      fresh.add(idx[out.length - 1]);
+      if (vals[i] * 2 === 2048 && !won) {
+        won = true;
+        showOver("🎉 2048 달성!", "계속하기");
+      }
+      i++;
+    } else {
+      out.push(vals[i]);
+    }
+  }
+  idx.forEach((gi, k) => {
+    const v = out[k] ?? 0;
+    if (grid[gi] !== v) moved = true;
+    grid[gi] = v;
+  });
+  return moved;
+}
+
+const LINES = {
+  left:  [0, 1, 2, 3].map((r) => [0, 1, 2, 3].map((c) => r * 4 + c)),
+  right: [0, 1, 2, 3].map((r) => [3, 2, 1, 0].map((c) => r * 4 + c)),
+  up:    [0, 1, 2, 3].map((c) => [0, 1, 2, 3].map((r) => r * 4 + c)),
+  down:  [0, 1, 2, 3].map((c) => [3, 2, 1, 0].map((r) => r * 4 + c)),
+};
+
+function canMove() {
+  if (grid.includes(0)) return true;
+  for (let i = 0; i < 16; i++) {
+    if (i % 4 < 3 && grid[i] === grid[i + 1]) return true;
+    if (i < 12 && grid[i] === grid[i + 4]) return true;
+  }
+  return false;
+}
+
+function showOver(msg, action) {
+  overmsg.textContent = msg;
+  document.getElementById("retry").textContent = action;
+  over.classList.add("show");
+}
+
+function move(dir) {
+  if (!playing || over.classList.contains("show")) return;
+  let moved = false;
+  for (const line of LINES[dir]) moved = slideLine(line) || moved;
+  if (!moved) { fresh.clear(); return; }
+  spawn();
+  if (score > best) {
+    best = score;
+    localStorage.setItem("bl-2048-best", best);
+  }
+  updateHud();
+  render();
+  if (!canMove()) {
+    playing = false;
+    showOver(`💀 게임 오버 — ${score.toLocaleString("ko-KR")}점`, "다시 시작");
+  }
+}
+
+function restart() {
+  grid = Array(16).fill(0);
+  score = 0;
+  won = false;
+  playing = true;
+  over.classList.remove("show");
+  spawn(); spawn();
+  updateHud();
+  render();
+}
+
+document.getElementById("retry").addEventListener("click", () => {
+  if (playing) over.classList.remove("show"); // 2048 달성 후 계속하기
+  else restart();
+});
+
+const KEYS = { ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down" };
+addEventListener("keydown", (e) => {
+  if (!KEYS[e.key]) return;
+  e.preventDefault();
+  move(KEYS[e.key]);
+});
+
+// 스와이프 (포인터 이벤트라 마우스 드래그도 동작)
+let sx = 0, sy = 0, swiping = false;
+addEventListener("pointerdown", (e) => {
+  if (e.target.closest("button")) return;
+  sx = e.clientX; sy = e.clientY; swiping = true;
+});
+addEventListener("pointerup", (e) => {
+  if (!swiping) return;
+  swiping = false;
+  const dx = e.clientX - sx, dy = e.clientY - sy;
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+  move(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left")
+                                   : (dy > 0 ? "down" : "up"));
+});
+
+restart();
+</script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>
