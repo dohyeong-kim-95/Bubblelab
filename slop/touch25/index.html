@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>숫자 순서대로 터치</title>
+<style>
+  :root { color-scheme: light dark; }
+  html, body { margin: 0; height: 100%; overflow: hidden; touch-action: manipulation; }
+  body { font-family: ui-monospace, monospace;
+         background: light-dark(#eef2f6, #10161f);
+         color: light-dark(#17202b, #dbe5ef);
+         display: flex; flex-direction: column; align-items: center;
+         justify-content: center; gap: 1rem; padding: 1rem;
+         box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+  h1 { margin: 0; font-size: 1.3rem; }
+  #hud { display: flex; gap: .8rem; font-size: 1rem; opacity: .85;
+         font-variant-numeric: tabular-nums; }
+  #timer.oops { color: #e05252; }
+  #best { opacity: .6; font-size: .9rem; }
+  #wrap { position: relative; }
+  #grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1.8vmin;
+          width: min(90vw, 55vh, 24rem); aspect-ratio: 1; }
+  .n { border: 0; border-radius: .6rem; font: inherit; font-weight: bold;
+       font-size: clamp(1rem, 5vmin, 1.6rem); cursor: pointer;
+       background: light-dark(#fff, #1c2735); color: inherit;
+       box-shadow: 0 1px 3px #0002; font-variant-numeric: tabular-nums; }
+  .n:active { transform: scale(.93); }
+  .n.done { visibility: hidden; }
+  .n.oops { animation: oops .25s; }
+  @keyframes oops { 0%, 100% { background: light-dark(#fff, #1c2735); }
+                    50% { background: #e05252; color: #fff; } }
+  #cover { position: absolute; inset: 0; border-radius: .8rem;
+           display: flex; flex-direction: column; align-items: center;
+           justify-content: center; gap: 1rem; text-align: center;
+           background: light-dark(#eef2f6f2, #10161ff2); padding: 1rem;
+           box-sizing: border-box; }
+  #cover.hide { display: none; }
+  #result { font-size: 2rem; font-weight: bold; min-height: 1em; }
+  #grade { opacity: .75; }
+  button.go { font: inherit; font-weight: bold; padding: .8rem 2rem;
+              border-radius: .8rem; border: 1px solid currentColor;
+              background: none; color: inherit; cursor: pointer; font-size: 1.1rem; }
+  #hint { opacity: .55; font-size: .8rem; text-align: center; line-height: 1.5; }
+</style>
+</head>
+<body>
+<h1>👆 숫자 순서대로 터치</h1>
+<div id="hud"><span id="timer">0.00초</span></div>
+<div id="best"></div>
+<div id="wrap">
+  <div id="grid"></div>
+  <div id="cover">
+    <div id="result">1 → 25</div>
+    <div id="grade">흩어진 숫자를 순서대로 최대한 빨리!<br>잘못 누르면 +0.3초</div>
+    <button class="go" id="go">시작</button>
+  </div>
+</div>
+<div id="hint">사무실에서는 소리가 나지 않아요 (원래 안 남)</div>
+<script>
+const grid = document.getElementById("grid");
+const cover = document.getElementById("cover");
+const timerEl = document.getElementById("timer");
+const resultEl = document.getElementById("result");
+const gradeEl = document.getElementById("grade");
+const bestEl = document.getElementById("best");
+
+let next, startAt, penalty, raf, playing = false;
+let best = +localStorage.getItem("bl-touch25-best") || 0;
+
+window.blShareText = () =>
+  best ? `1부터 25까지 ${best.toFixed(2)}초에 터치! 👆 도전해보세요`
+       : "👆 숫자 순서대로 터치 — 도전해보세요!";
+
+function updateBest() {
+  bestEl.textContent = best ? `최고 기록 ${best.toFixed(2)}초` : " ";
+}
+
+const elapsed = () => (performance.now() - startAt) / 1000 + penalty;
+
+function tick() {
+  timerEl.textContent = elapsed().toFixed(2) + "초";
+  raf = requestAnimationFrame(tick);
+}
+
+function grade(s) {
+  return s <= 13 ? "🤯 인간 CPU" : s <= 17 ? "⚡ 사무실의 전설" :
+         s <= 22 ? "🔥 빠른데요" : s <= 30 ? "🙂 평범한 직장인" : "🐢 야근 확정";
+}
+
+function start() {
+  const nums = Array.from({ length: 25 }, (_, i) => i + 1);
+  for (let i = nums.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [nums[i], nums[j]] = [nums[j], nums[i]];
+  }
+  grid.replaceChildren();
+  for (const n of nums) {
+    const b = document.createElement("button");
+    b.className = "n";
+    b.textContent = n;
+    b.addEventListener("pointerdown", () => hit(b, n));
+    grid.append(b);
+  }
+  next = 1;
+  penalty = 0;
+  playing = true;
+  cover.classList.add("hide");
+  startAt = performance.now();
+  tick();
+}
+
+function hit(btn, n) {
+  if (!playing) return;
+  if (n !== next) {
+    penalty += 0.3;
+    btn.classList.remove("oops");
+    void btn.offsetWidth; // 애니메이션 재시작
+    btn.classList.add("oops");
+    timerEl.classList.add("oops");
+    setTimeout(() => timerEl.classList.remove("oops"), 250);
+    return;
+  }
+  btn.classList.add("done");
+  if (++next <= 25) return;
+
+  playing = false;
+  cancelAnimationFrame(raf);
+  const s = elapsed();
+  timerEl.textContent = s.toFixed(2) + "초";
+  resultEl.textContent = s.toFixed(2) + "초";
+  let msg = grade(s);
+  if (!best || s < best) {
+    best = s;
+    localStorage.setItem("bl-touch25-best", best);
+    msg = "🎉 최고 기록! " + msg;
+    updateBest();
+  }
+  gradeEl.textContent = msg + (penalty ? ` (패널티 +${penalty.toFixed(1)}초 포함)` : "");
+  document.getElementById("go").textContent = "다시 도전";
+  cover.classList.remove("hide");
+}
+
+document.getElementById("go").addEventListener("click", start);
+updateBest();
+</script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>
