@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>야추 봇 대전</title>
+<style>
+  :root { color-scheme: light dark; }
+  html, body { margin: 0; }
+  body { font-family: ui-monospace, monospace;
+         background: light-dark(#eef2f6, #10161f);
+         color: light-dark(#17202b, #dbe5ef);
+         display: flex; flex-direction: column; align-items: center;
+         gap: .8rem; padding: 1rem 1rem 4.5rem; box-sizing: border-box;
+         user-select: none; -webkit-user-select: none; min-height: 100vh; }
+  h1 { margin: 0; font-size: 1.2rem; }
+  #status { font-size: .95rem; min-height: 1.3em; opacity: .85; text-align: center; }
+  #dicebox { display: flex; gap: .5rem; }
+  .die { font-size: 2.6rem; line-height: 1; border: 2px solid transparent;
+         border-radius: .6rem; background: light-dark(#fff, #1c2735);
+         padding: .15rem .25rem; cursor: pointer; transition: transform .1s;
+         color: inherit; font-family: inherit; }
+  .die.held { border-color: light-dark(#3fae5f, #4dd07a); transform: translateY(-6px); }
+  .die.bot { cursor: default; }
+  .die:disabled { opacity: .9; }
+  #roll { font: inherit; font-weight: bold; font-size: 1rem; padding: .6rem 1.6rem;
+          border-radius: .7rem; border: 2px solid currentColor; background: none;
+          color: inherit; cursor: pointer; }
+  #roll:disabled { opacity: .35; cursor: default; }
+  #hint { opacity: .55; font-size: .78rem; text-align: center; min-height: 1em; }
+  table { border-collapse: collapse; font-size: .88rem; width: min(92vw, 22rem); }
+  th, td { padding: .32rem .5rem; text-align: right; border-bottom: 1px solid
+           light-dark(#d8e0e8, #263445); }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { opacity: .6; font-weight: normal; }
+  tr.cat.open td.me { cursor: pointer; }
+  tr.cat.open:hover td.me { background: light-dark(#dfe9f2, #1d2a3a); }
+  td.preview { opacity: .45; }
+  td.me.just, td.bot.just { animation: flash .6s; }
+  @keyframes flash { from { background: light-dark(#ffe9a8, #4a3711); } }
+  tr.sumrow td { font-weight: bold; border-top: 2px solid light-dark(#b9c6d2, #34455a);
+                 border-bottom: none; }
+  tr.bonusrow td { opacity: .7; font-size: .8rem; border-bottom: 2px solid
+                   light-dark(#b9c6d2, #34455a); }
+  #best { opacity: .6; font-size: .85rem; }
+  #over { position: fixed; inset: 0; display: none; flex-direction: column;
+          align-items: center; justify-content: center; gap: 1rem; z-index: 100;
+          background: light-dark(#eef2f6ee, #10161fee); backdrop-filter: blur(4px);
+          text-align: center; padding: 1.5rem; }
+  #over.show { display: flex; }
+  #over .big { font-size: 2rem; font-weight: bold; }
+  #over button { font: inherit; font-weight: bold; padding: .7rem 1.8rem;
+                 border-radius: .8rem; border: 2px solid currentColor;
+                 background: none; color: inherit; cursor: pointer; }
+</style>
+</head>
+<body>
+<h1>🤖 야추 봇 대전</h1>
+<div id="best"></div>
+<div id="status"></div>
+<div id="dicebox"></div>
+<button id="roll">굴리기</button>
+<div id="hint"></div>
+<table id="board">
+  <thead><tr><th>항목</th><th>나</th><th>🤖 봇</th></tr></thead>
+  <tbody></tbody>
+</table>
+<div id="over">
+  <div class="big" id="overtitle"></div>
+  <div id="oversub"></div>
+  <button id="again">다시 대결</button>
+</div>
+<script>
+/* ---------- 야추 점수 규칙 (games/yacht와 동일 — 아소비대전51 버전) ---------- */
+const sum = (d) => d.reduce((a, b) => a + b, 0);
+const counts = (d) => { const c = [0,0,0,0,0,0,0]; for (const x of d) c[x]++; return c; };
+const straight = (d, runs) => {
+  const s = new Set(d);
+  return runs.some((r) => [...r].every((n) => s.has(+n)));
+};
+const SCORERS = {
+  ones:   (d) => sum(d.filter((x) => x === 1)),
+  twos:   (d) => sum(d.filter((x) => x === 2)),
+  threes: (d) => sum(d.filter((x) => x === 3)),
+  fours:  (d) => sum(d.filter((x) => x === 4)),
+  fives:  (d) => sum(d.filter((x) => x === 5)),
+  sixes:  (d) => sum(d.filter((x) => x === 6)),
+  choice:    (d) => sum(d),
+  fourKind:  (d) => counts(d).some((c) => c >= 4) ? sum(d) : 0,
+  fullHouse: (d) => {
+    const c = counts(d).filter(Boolean).sort().join('');
+    return c === '23' ? sum(d) : 0;   // 5개 동일은 풀하우스 아님
+  },
+  sStraight: (d) => straight(d, ['1234', '2345', '3456']) ? 15 : 0,
+  bStraight: (d) => straight(d, ['12345', '23456']) ? 30 : 0,
+  yacht:     (d) => counts(d).some((c) => c === 5) ? 50 : 0,
+};
+const UPPER = ['ones','twos','threes','fours','fives','sixes'];
+const CATS = [...UPPER, 'choice','fourKind','fullHouse','sStraight','bStraight','yacht'];
+const CAT_NAMES = {
+  ones:'1', twos:'2', threes:'3', fours:'4', fives:'5', sixes:'6',
+  choice:'초이스', fourKind:'포카드', fullHouse:'풀하우스',
+  sStraight:'S.스트레이트', bStraight:'B.스트레이트', yacht:'야추',
+};
+const FACE = { ones:1, twos:2, threes:3, fours:4, fives:5, sixes:6 };
+const upperSum = (sc) => sum(UPPER.map((c) => sc[c] ?? 0));
+const bonusOf = (sc) => upperSum(sc) >= 63 ? 35 : 0;
+const totalOf = (sc) => upperSum(sc) + bonusOf(sc) +
+  sum(CATS.slice(6).map((c) => sc[c] ?? 0));
+
+/* ---------- 봇 전략 ----------
+ * 1) 무엇을 남길까 (매 굴림 후):
+ *    - 4개 이상 같은 눈 → 그 눈만 남기고 야추(50)를 노린다.
+ *    - 서로 다른 눈 4개가 연속(1234 같은) → 그 4개를 남기고
+ *      B.스트레이트(30)를 노린다. (S.스트레이트는 이미 확보 상태)
+ *    - 트리플 → 트리플은 고정. 나머지 2개는 풀하우스/포카드 재료로 굴린다.
+ *      (단 이미 풀하우스가 완성돼 있으면 멈춘다)
+ *    - 페어 → 가장 개수가 많은 눈(동수면 높은 눈)을 남긴다.
+ *    - 모두 제각각 → 5·6만 남긴다 (상단 고득점/초이스 재료).
+ * 2) 언제 멈출까: 야추·B.스트레이트·풀하우스가 완성됐고 그 칸이
+ *    비어 있으면 더 굴리지 않는다.
+ * 3) 어디에 적을까: 빈 칸마다 (당장 점수 - 그 칸의 기대가치)를 계산해
+ *    가장 큰 칸을 고른다. 기대가치가 큰 칸(야추·초이스 등)에 0점을
+ *    버리는 일을 피하고, 자연스럽게 1·2 같은 싼 칸부터 희생한다.
+ *    상단 칸은 3개 이상 모였으면 보너스(63→35점) 가산점 +4.
+ */
+const FUTURE = { ones: 2, twos: 4, threes: 6, fours: 8, fives: 10, sixes: 12,
+                 choice: 21, fourKind: 13, fullHouse: 15,
+                 sStraight: 8, bStraight: 13, yacht: 16 };
+
+function longestRun(dice) {
+  const s = new Set(dice);
+  let best = { len: 0, faces: [] };
+  for (let start = 1; start <= 6; start++) {
+    const faces = [];
+    for (let f = start; f <= 6 && s.has(f); f++) faces.push(f);
+    if (faces.length > best.len) best = { len: faces.length, faces };
+  }
+  return best;
+}
+
+// dice 중 남길 것 → hold mask. filled = 봇이 이미 채운 칸 집합.
+function botKeeps(dice, filled) {
+  const c = counts(dice);
+  const maxCount = Math.max(...c);
+  let face = 0;
+  for (let f = 6; f >= 1; f--) if (c[f] === maxCount) { face = f; break; }
+
+  if (maxCount >= 4) {
+    return { mask: dice.map((d) => d === face), intent: "야추 노리는 중… 🎯" };
+  }
+  const run = longestRun(dice);
+  if (run.len >= 4 && !filled.has("bStraight")) {
+    const used = new Set();
+    const mask = dice.map((d) => {
+      if (run.faces.includes(d) && !used.has(d)) { used.add(d); return true; }
+      return false;
+    });
+    return { mask, intent: "B.스트레이트 노리는 중… 📏" };
+  }
+  if (maxCount === 3) {
+    return { mask: dice.map((d) => d === face), intent: `${face} 트리플 굳히는 중` };
+  }
+  if (maxCount === 2) {
+    return { mask: dice.map((d) => d === face), intent: `${face} 모으는 중` };
+  }
+  return { mask: dice.map((d) => d >= 5), intent: "높은 눈만 남기고 다시!" };
+}
+
+function botShouldStop(dice, filled) {
+  if (SCORERS.yacht(dice) && !filled.has("yacht")) return true;
+  if (SCORERS.bStraight(dice) && !filled.has("bStraight")) return true;
+  if (SCORERS.fullHouse(dice) && !filled.has("fullHouse")) return true;
+  return false;
+}
+
+function botPickCat(dice, score) {
+  let bestCat = null, bestVal = -Infinity;
+  for (const cat of CATS) {
+    if (cat in score) continue;
+    const raw = SCORERS[cat](dice);
+    let val = raw - FUTURE[cat];
+    if (FACE[cat] && raw >= FACE[cat] * 3) val += 4; // 상단 보너스 진행 가산점
+    if (val > bestVal) { bestVal = val; bestCat = cat; }
+  }
+  return bestCat;
+}
+
+/* ---------- 게임 상태 ---------- */
+const DICE_CH = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+const statusEl = document.getElementById("status");
+const diceboxEl = document.getElementById("dicebox");
+const rollBtn = document.getElementById("roll");
+const hintEl = document.getElementById("hint");
+const tbody = document.querySelector("#board tbody");
+const bestEl = document.getElementById("best");
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+let my = {}, bot = {}, round = 1, phase = "idle"; // idle|me|bot|end
+let dice = [0, 0, 0, 0, 0], held = [false, false, false, false, false], rollsLeft = 3;
+let best = +localStorage.getItem("bl-yacht-bot-best") || 0;
+
+window.blShareText = () =>
+  best ? `야추 봇 대전 최고 ${best}점! 🤖 이길 수 있으면 이겨보세요`
+       : "🤖 야추 봇 대전 — 도전해보세요!";
+window.blWeekly = { game: "yacht-bot", dir: "max", fmt: (v) => v + "점" };
+
+function updateBest() {
+  bestEl.textContent = best ? `내 최고 기록 ${best}점` : " ";
+}
+
+/* ---------- 렌더 ---------- */
+function buildBoard() {
+  tbody.replaceChildren();
+  for (const cat of CATS) {
+    const tr = document.createElement("tr");
+    tr.className = "cat";
+    tr.dataset.cat = cat;
+    tr.innerHTML = `<td>${CAT_NAMES[cat]}</td><td class="me"></td><td class="bot"></td>`;
+    tr.querySelector(".me").addEventListener("click", () => pick(cat));
+    tbody.append(tr);
+    if (cat === "sixes") {
+      const b = document.createElement("tr");
+      b.className = "bonusrow";
+      b.innerHTML = `<td>보너스 (63↑ +35)</td><td class="me"></td><td class="bot"></td>`;
+      tbody.append(b);
+    }
+  }
+  const t = document.createElement("tr");
+  t.className = "sumrow";
+  t.innerHTML = `<td>합계</td><td class="me"></td><td class="bot"></td>`;
+  tbody.append(t);
+}
+
+function renderBoard() {
+  for (const tr of tbody.querySelectorAll("tr.cat")) {
+    const cat = tr.dataset.cat;
+    const meTd = tr.querySelector(".me"), botTd = tr.querySelector(".bot");
+    const open = !(cat in my) && phase === "me" && rollsLeft < 3;
+    tr.classList.toggle("open", open);
+    if (cat in my) { meTd.textContent = my[cat]; meTd.classList.remove("preview"); }
+    else if (open) { meTd.textContent = SCORERS[cat](dice); meTd.classList.add("preview"); }
+    else { meTd.textContent = ""; meTd.classList.remove("preview"); }
+    botTd.textContent = cat in bot ? bot[cat] : "";
+  }
+  const bonus = tbody.querySelector(".bonusrow");
+  bonus.querySelector(".me").textContent = `${upperSum(my)}/63 → ${bonusOf(my)}`;
+  bonus.querySelector(".bot").textContent = `${upperSum(bot)}/63 → ${bonusOf(bot)}`;
+  const total = tbody.querySelector(".sumrow");
+  total.querySelector(".me").textContent = totalOf(my);
+  total.querySelector(".bot").textContent = totalOf(bot);
+}
+
+function renderDice(botTurn = false) {
+  diceboxEl.replaceChildren();
+  dice.forEach((d, i) => {
+    const b = document.createElement("button");
+    b.className = "die" + (held[i] ? " held" : "") + (botTurn ? " bot" : "");
+    b.textContent = d ? DICE_CH[d] : "❔";
+    b.disabled = botTurn || phase !== "me" || rollsLeft === 3 || !d;
+    b.addEventListener("click", () => {
+      if (phase !== "me" || rollsLeft === 3) return;
+      held[i] = !held[i];
+      renderDice();
+    });
+    diceboxEl.append(b);
+  });
+}
+
+function setStatus(text, hint = "") {
+  statusEl.textContent = text;
+  hintEl.textContent = hint;
+}
+
+function flash(cat, who) {
+  const td = tbody.querySelector(`tr[data-cat="${cat}"] .${who}`);
+  td?.classList.add("just");
+  setTimeout(() => td?.classList.remove("just"), 700);
+}
+
+/* ---------- 내 차례 ---------- */
+function myTurn() {
+  phase = "me";
+  dice = [0, 0, 0, 0, 0];
+  held = [false, false, false, false, false];
+  rollsLeft = 3;
+  rollBtn.disabled = false;
+  rollBtn.textContent = "굴리기 (3번 남음)";
+  setStatus(`${round}/12 라운드 — 내 차례`, "굴린 뒤 주사위를 눌러 킵, 표의 내 칸을 눌러 기록");
+  renderDice();
+  renderBoard();
+}
+
+rollBtn.addEventListener("click", () => {
+  if (phase !== "me" || rollsLeft === 0) return;
+  dice = dice.map((d, i) => (held[i] && d ? d : 1 + Math.floor(Math.random() * 6)));
+  rollsLeft--;
+  rollBtn.textContent = rollsLeft ? `굴리기 (${rollsLeft}번 남음)` : "굴리기 (끝)";
+  rollBtn.disabled = rollsLeft === 0;
+  renderDice();
+  renderBoard();
+});
+
+function pick(cat) {
+  if (phase !== "me" || rollsLeft === 3 || cat in my) return;
+  my[cat] = SCORERS[cat](dice);
+  flash(cat, "me");
+  rollBtn.disabled = true;
+  renderBoard();
+  botTurn();
+}
+
+/* ---------- 봇 차례 ---------- */
+async function botTurn() {
+  phase = "bot";
+  const filled = new Set(Object.keys(bot));
+  let bdice = [];
+  held = [false, false, false, false, false];
+  setStatus(`${round}/12 라운드 — 🤖 봇 차례`);
+  renderBoard(); // 내 미리보기 점수 지우기
+
+  for (let roll = 1; roll <= 3; roll++) {
+    bdice = bdice.map((d, i) => (held[i] ? d : 0));
+    while (bdice.length < 5) bdice.push(0);
+    bdice = bdice.map((d) => d || 1 + Math.floor(Math.random() * 6));
+    dice = bdice;
+    renderDice(true);
+    await sleep(700);
+    if (roll === 3 || botShouldStop(bdice, filled)) break;
+    const { mask, intent } = botKeeps(bdice, filled);
+    held = mask;
+    setStatus(`${round}/12 라운드 — 🤖 ${intent}`);
+    renderDice(true);
+    await sleep(700);
+  }
+
+  const cat = botPickCat(bdice, bot);
+  bot[cat] = SCORERS[cat](bdice);
+  setStatus(`${round}/12 라운드 — 🤖 ${CAT_NAMES[cat]}에 ${bot[cat]}점!`);
+  flash(cat, "bot");
+  renderBoard();
+  await sleep(900);
+
+  if (++round > 12) return finish();
+  myTurn();
+}
+
+/* ---------- 종료 ---------- */
+function finish() {
+  phase = "end";
+  const me = totalOf(my), him = totalOf(bot);
+  const title = me > him ? "🏆 승리!" : me < him ? "🤖 봇의 승리…" : "🤝 무승부";
+  document.getElementById("overtitle").textContent = title;
+  document.getElementById("oversub").textContent =
+    `나 ${me}점 vs 봇 ${him}점` + (me > best ? " · 🎉 내 최고 기록!" : "");
+  if (me > best) {
+    best = me;
+    localStorage.setItem("bl-yacht-bot-best", best);
+    updateBest();
+  }
+  document.getElementById("over").classList.add("show");
+  window.blWeeklyReport?.(me);
+}
+
+document.getElementById("again").addEventListener("click", () => {
+  my = {}; bot = {}; round = 1;
+  document.getElementById("over").classList.remove("show");
+  myTurn();
+});
+
+buildBoard();
+updateBest();
+myTurn();
+</script>
+<script defer src="/_shared/records.js"></script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>
