@@ -132,6 +132,7 @@ export default {
     const response = await env.ASSETS.fetch(new Request(url, request));
 
     // HTML 문서 방문만 집계한다. IP/UA는 저장하지 않고 익명 쿠키 ID만 사용한다.
+    // 페이지별 인기 집계를 위해 문서마다 보낸다 (DO 쓰기는 방문자별 key라 멱등).
     const isDocument = request.headers.get("Sec-Fetch-Dest") === "document" ||
       request.headers.get("Accept")?.includes("text/html");
     if (site !== "admin" && isDocument && response.ok &&
@@ -139,19 +140,18 @@ export default {
       const date = kstDate();
       const jar = cookies(request);
       const visitorId = jar.bl_vid || crypto.randomUUID();
-      if (jar.bl_seen !== date) {
-        const id = env.ANALYTICS.idFromName("global");
-        ctx.waitUntil(env.ANALYTICS.get(id).fetch("https://analytics.internal/track", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ visitorId, date }),
-        }));
-      }
+      const segment = path.split("/").filter(Boolean)[0];
+      const page = (segment ? `${site}/${segment}` : site).toLowerCase();
+      const id = env.ANALYTICS.idFromName("global");
+      ctx.waitUntil(env.ANALYTICS.get(id).fetch("https://analytics.internal/track", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ visitorId, date, page }),
+      }));
       const headers = new Headers(response.headers);
       const domain = host === ROOT_DOMAIN || host.endsWith(`.${ROOT_DOMAIN}`)
         ? `; Domain=${ROOT_DOMAIN}; Secure` : "";
       headers.append("Set-Cookie", `bl_vid=${visitorId}; Path=/; Max-Age=31536000; SameSite=Lax${domain}`);
-      headers.append("Set-Cookie", `bl_seen=${date}; Path=/; Max-Age=172800; SameSite=Lax${domain}`);
       return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
     }
     return response;

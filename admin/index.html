@@ -23,6 +23,17 @@
   .value { font-size: clamp(2.3rem, 8vw, 4rem); font-weight: bold;
            font-variant-numeric: tabular-nums; }
   .range { opacity: .45; font-size: .75rem; }
+  .top { margin-top: 2rem; }
+  .top h2 { font-size: 1rem; margin: 0 0 .8rem; opacity: .8; }
+  #top { list-style: none; margin: 0; padding: 0; display: flex;
+         flex-direction: column; gap: .6rem; }
+  #top li { display: flex; align-items: center; gap: .8rem; padding: .85rem 1.1rem;
+            border-radius: 1rem; background: light-dark(#fff, #151e2a);
+            border: 1px solid light-dark(#dce4ec, #263445); }
+  #top .medal { font-size: 1.3rem; }
+  #top .page { flex: 1; font-weight: bold; overflow-wrap: anywhere; }
+  #top .users { opacity: .6; font-size: .9rem; font-variant-numeric: tabular-nums; }
+  #top .empty { opacity: .55; justify-content: center; }
   #warning { display: none; margin-top: 1rem; padding: .85rem 1rem; border-radius: .8rem;
              background: light-dark(#fff2c7, #4a3711); color: light-dark(#6a4a00, #ffe49a); }
   footer { margin-top: 2rem; opacity: .5; font-size: .78rem; line-height: 1.7; }
@@ -37,6 +48,10 @@
     <article class="card"><span class="label">주간 사용자</span><strong class="value" id="weekly">—</strong><span class="range">최근 7일</span></article>
     <article class="card"><span class="label">월간 사용자</span><strong class="value" id="monthly">—</strong><span class="range">최근 30일</span></article>
   </section>
+  <section class="top" aria-label="월간 인기 카드">
+    <h2>🏆 월간 인기 카드 TOP 3</h2>
+    <ol id="top"><li class="empty">불러오는 중…</li></ol>
+  </section>
   <div id="warning">⚠️ 초기 계정 admin/admin을 사용 중입니다. Cloudflare secrets를 설정해 변경하세요.</div>
   <footer id="status">불러오는 중…</footer>
 </main>
@@ -50,6 +65,28 @@ async function loadStats() {
     const data = await res.json();
     for (const key of ['daily', 'weekly', 'monthly']) {
       document.getElementById(key).textContent = data[key].toLocaleString('ko-KR');
+    }
+    const top = document.getElementById('top');
+    top.replaceChildren();
+    const medals = ['🥇', '🥈', '🥉'];
+    for (const [i, entry] of (data.top ?? []).entries()) {
+      const li = document.createElement('li');
+      for (const [cls, text] of [
+        ['medal', medals[i]], ['page', entry.page],
+        ['users', `${entry.users.toLocaleString('ko-KR')}명`],
+      ]) {
+        const span = document.createElement('span');
+        span.className = cls;
+        span.textContent = text;
+        li.append(span);
+      }
+      top.append(li);
+    }
+    if (!top.children.length) {
+      const li = document.createElement('li');
+      li.className = 'empty';
+      li.textContent = '아직 집계된 카드가 없어요';
+      top.append(li);
     }
     document.getElementById('warning').style.display = data.usingDefaultCredentials ? 'block' : 'none';
     status.textContent = `${data.date} 기준 · 익명 브라우저 순사용자 · ${new Date(data.generatedAt).toLocaleTimeString('ko-KR')} 갱신`;

@@ -27,7 +27,7 @@ test("tracks one browser once per day and calculates rolling uniques", async () 
     const response = await analytics.fetch(new Request("https://analytics.internal/track", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ visitorId, date: "2026-07-10" }),
+      body: JSON.stringify({ visitorId, date: "2026-07-10", page: "slop/circle" }),
     }));
     assert.equal(response.status, 204);
   }
@@ -41,10 +41,57 @@ test("tracks one browser once per day and calculates rolling uniques", async () 
     daily: 1,
     weekly: 2,
     monthly: 3,
+    top: [{ page: "slop/circle", users: 1 }],
     generatedAt: "<timestamp>",
   });
   assert.equal(Number.isNaN(Date.parse(stats.generatedAt)), false);
   assert.equal([...storage.data.keys()].filter((key) => key === `seen:2026-07-10:${visitorId}`).length, 1);
+});
+
+test("ranks monthly top pages by unique visitors, excluding site homes", async () => {
+  const vid = (n) => `00000000-0000-4000-8000-00000000000${n}`;
+  const storage = new MemoryStorage([
+    // slop/circle: 3명 (한 명은 이틀 방문 — 중복 아님)
+    ["pv:2026-07-10:slop/circle:" + vid(1), true],
+    ["pv:2026-07-09:slop/circle:" + vid(1), true],
+    ["pv:2026-07-09:slop/circle:" + vid(2), true],
+    ["pv:2026-06-15:slop/circle:" + vid(3), true],
+    // games/avalon: 2명
+    ["pv:2026-07-08:games/avalon:" + vid(1), true],
+    ["pv:2026-07-08:games/avalon:" + vid(4), true],
+    // slop/lotto: 1명, slop/yacht: 1명 (4위는 잘림)
+    ["pv:2026-07-07:slop/lotto:" + vid(5), true],
+    ["pv:2026-07-07:slop/yacht:" + vid(6), true],
+    // 사이트 홈과 30일 밖 방문은 제외
+    ["pv:2026-07-10:www:" + vid(1), true],
+    ["pv:2026-05-01:slop/trader:" + vid(1), true],
+  ]);
+  const analytics = new AnalyticsDO({ storage });
+
+  const response = await analytics.fetch(
+    new Request("https://analytics.internal/stats?date=2026-07-10"),
+  );
+  const { top } = await response.json();
+  assert.deepEqual(top, [
+    { page: "slop/circle", users: 3 },
+    { page: "games/avalon", users: 2 },
+    { page: "slop/lotto", users: 1 },
+  ]);
+});
+
+test("ignores invalid page but still counts the visitor", async () => {
+  const storage = new MemoryStorage();
+  const analytics = new AnalyticsDO({ storage });
+  const visitorId = "00000000-0000-4000-8000-000000000001";
+  const response = await analytics.fetch(new Request("https://analytics.internal/track", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ visitorId, date: "2026-07-10", page: "../evil:path" }),
+  }));
+  assert.equal(response.status, 204);
+  const keys = [...storage.data.keys()];
+  assert.ok(keys.includes(`seen:2026-07-10:${visitorId}`));
+  assert.equal(keys.some((k) => k.startsWith("pv:")), false);
 });
 
 test("rejects malformed visitor events", async () => {
