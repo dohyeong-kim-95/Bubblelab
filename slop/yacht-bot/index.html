@@ -11,7 +11,7 @@
          background: light-dark(#eef2f6, #10161f);
          color: light-dark(#17202b, #dbe5ef);
          display: flex; flex-direction: column; align-items: center;
-         gap: .7rem; padding: .9rem .6rem 4.5rem; box-sizing: border-box;
+         gap: .7rem; padding: .9rem .6rem 8rem; box-sizing: border-box;
          user-select: none; -webkit-user-select: none; min-height: 100vh; }
   footer { margin-top: .4rem; font-size: .8rem; opacity: .55; display: flex;
            gap: .8rem; align-items: baseline; }
@@ -27,7 +27,8 @@
   .die.held { border-color: light-dark(#3fae5f, #4dd07a); transform: translateY(-8px); }
   .die.bot { cursor: default; }
   .die:disabled { opacity: .9; }
-  #roll { position: fixed; bottom: .9rem; left: 50%; transform: translateX(-50%);
+  /* 맨 아랫줄은 공통 유틸(주간 1위 배지·공유 버튼) 몫 — 굴리기는 그 윗줄 */
+  #roll { position: fixed; bottom: 4.3rem; left: 50%; transform: translateX(-50%);
           z-index: 50; font: inherit; font-weight: bold; font-size: 1.05rem;
           padding: .85rem 1.4rem; white-space: nowrap;
           border-radius: 2rem; border: 2px solid currentColor;
@@ -62,8 +63,6 @@
   #over button { font: inherit; font-weight: bold; padding: .7rem 1.8rem;
                  border-radius: .8rem; border: 2px solid currentColor;
                  background: none; color: inherit; cursor: pointer; }
-  /* 하단 고정 굴리기 버튼과 겹치지 않게 주간 1위 배지를 위로 */
-  body #bl-weekly { bottom: 4.6rem; }
 </style>
 </head>
 <body>
