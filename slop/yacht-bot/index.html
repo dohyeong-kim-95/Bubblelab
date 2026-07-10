@@ -11,26 +11,36 @@
          background: light-dark(#eef2f6, #10161f);
          color: light-dark(#17202b, #dbe5ef);
          display: flex; flex-direction: column; align-items: center;
-         gap: .8rem; padding: 1rem 1rem 4.5rem; box-sizing: border-box;
+         gap: .7rem; padding: .9rem .6rem 4.5rem; box-sizing: border-box;
          user-select: none; -webkit-user-select: none; min-height: 100vh; }
-  h1 { margin: 0; font-size: 1.2rem; }
+  footer { margin-top: .4rem; font-size: .8rem; opacity: .55; display: flex;
+           gap: .8rem; align-items: baseline; }
+  footer b { font-size: .9rem; }
   #status { font-size: .95rem; min-height: 1.3em; opacity: .85; text-align: center; }
-  #dicebox { display: flex; gap: .5rem; }
-  .die { font-size: 2.6rem; line-height: 1; border: 2px solid transparent;
-         border-radius: .6rem; background: light-dark(#fff, #1c2735);
-         padding: .15rem .25rem; cursor: pointer; transition: transform .1s;
+  #dicebox { display: flex; gap: 2vw; justify-content: center;
+             width: min(96vw, 30rem); padding-top: .5rem; }
+  .die { font-size: clamp(3rem, 15vw, 4.2rem); line-height: 1;
+         border: 3px solid transparent; flex: 1; max-width: 5.2rem;
+         border-radius: .7rem; background: light-dark(#fff, #1c2735);
+         padding: .1rem 0; cursor: pointer; transition: transform .1s;
          color: inherit; font-family: inherit; }
-  .die.held { border-color: light-dark(#3fae5f, #4dd07a); transform: translateY(-6px); }
+  .die.held { border-color: light-dark(#3fae5f, #4dd07a); transform: translateY(-8px); }
   .die.bot { cursor: default; }
   .die:disabled { opacity: .9; }
-  #roll { font: inherit; font-weight: bold; font-size: 1rem; padding: .6rem 1.6rem;
-          border-radius: .7rem; border: 2px solid currentColor; background: none;
+  #roll { position: fixed; bottom: .9rem; left: 50%; transform: translateX(-50%);
+          z-index: 50; font: inherit; font-weight: bold; font-size: 1.05rem;
+          padding: .85rem 1.4rem; white-space: nowrap;
+          border-radius: 2rem; border: 2px solid currentColor;
+          background: light-dark(rgba(255,255,255,.85), rgba(20,26,36,.85));
+          backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
           color: inherit; cursor: pointer; }
   #roll:disabled { opacity: .35; cursor: default; }
   #hint { opacity: .55; font-size: .78rem; text-align: center; min-height: 1em; }
-  table { border-collapse: collapse; font-size: .88rem; width: min(92vw, 22rem); }
-  th, td { padding: .32rem .5rem; text-align: right; border-bottom: 1px solid
-           light-dark(#d8e0e8, #263445); }
+  #tables { display: flex; gap: .5rem; width: min(96vw, 30rem);
+            align-items: flex-start; }
+  table { border-collapse: collapse; font-size: .8rem; flex: 1; }
+  th, td { padding: .3rem .3rem; text-align: right; border-bottom: 1px solid
+           light-dark(#d8e0e8, #263445); white-space: nowrap; }
   th:first-child, td:first-child { text-align: left; }
   thead th { opacity: .6; font-weight: normal; }
   tr.cat.open td.me { cursor: pointer; }
@@ -52,19 +62,26 @@
   #over button { font: inherit; font-weight: bold; padding: .7rem 1.8rem;
                  border-radius: .8rem; border: 2px solid currentColor;
                  background: none; color: inherit; cursor: pointer; }
+  /* 하단 고정 굴리기 버튼과 겹치지 않게 주간 1위 배지를 위로 */
+  body #bl-weekly { bottom: 4.6rem; }
 </style>
 </head>
 <body>
-<h1>🤖 야추 봇 대전</h1>
-<div id="best"></div>
-<div id="status"></div>
 <div id="dicebox"></div>
-<button id="roll">굴리기</button>
+<div id="status"></div>
 <div id="hint"></div>
-<table id="board">
-  <thead><tr><th>항목</th><th>나</th><th>🤖 봇</th></tr></thead>
-  <tbody></tbody>
-</table>
+<div id="tables">
+  <table id="upperT">
+    <thead><tr><th>항목</th><th>나</th><th>🤖</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <table id="lowerT">
+    <thead><tr><th>항목</th><th>나</th><th>🤖</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+<footer><b>🤖 야추 봇 대전</b><span id="best"></span></footer>
+<button id="roll">굴리기</button>
 <div id="over">
   <div class="big" id="overtitle"></div>
   <div id="oversub"></div>
@@ -192,7 +209,9 @@ const statusEl = document.getElementById("status");
 const diceboxEl = document.getElementById("dicebox");
 const rollBtn = document.getElementById("roll");
 const hintEl = document.getElementById("hint");
-const tbody = document.querySelector("#board tbody");
+const tbodyU = document.querySelector("#upperT tbody");
+const tbodyL = document.querySelector("#lowerT tbody");
+const tablesEl = document.getElementById("tables");
 const bestEl = document.getElementById("best");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -211,29 +230,30 @@ function updateBest() {
 
 /* ---------- 렌더 ---------- */
 function buildBoard() {
-  tbody.replaceChildren();
+  tbodyU.replaceChildren();
+  tbodyL.replaceChildren();
   for (const cat of CATS) {
     const tr = document.createElement("tr");
     tr.className = "cat";
     tr.dataset.cat = cat;
     tr.innerHTML = `<td>${CAT_NAMES[cat]}</td><td class="me"></td><td class="bot"></td>`;
     tr.querySelector(".me").addEventListener("click", () => pick(cat));
-    tbody.append(tr);
+    (UPPER.includes(cat) ? tbodyU : tbodyL).append(tr);
     if (cat === "sixes") {
       const b = document.createElement("tr");
       b.className = "bonusrow";
-      b.innerHTML = `<td>보너스 (63↑ +35)</td><td class="me"></td><td class="bot"></td>`;
-      tbody.append(b);
+      b.innerHTML = `<td>보너스 63↑</td><td class="me"></td><td class="bot"></td>`;
+      tbodyU.append(b);
     }
   }
   const t = document.createElement("tr");
   t.className = "sumrow";
   t.innerHTML = `<td>합계</td><td class="me"></td><td class="bot"></td>`;
-  tbody.append(t);
+  tbodyL.append(t);
 }
 
 function renderBoard() {
-  for (const tr of tbody.querySelectorAll("tr.cat")) {
+  for (const tr of tablesEl.querySelectorAll("tr.cat")) {
     const cat = tr.dataset.cat;
     const meTd = tr.querySelector(".me"), botTd = tr.querySelector(".bot");
     const open = !(cat in my) && phase === "me" && rollsLeft < 3;
@@ -243,10 +263,10 @@ function renderBoard() {
     else { meTd.textContent = ""; meTd.classList.remove("preview"); }
     botTd.textContent = cat in bot ? bot[cat] : "";
   }
-  const bonus = tbody.querySelector(".bonusrow");
-  bonus.querySelector(".me").textContent = `${upperSum(my)}/63 → ${bonusOf(my)}`;
-  bonus.querySelector(".bot").textContent = `${upperSum(bot)}/63 → ${bonusOf(bot)}`;
-  const total = tbody.querySelector(".sumrow");
+  const bonus = tablesEl.querySelector(".bonusrow");
+  bonus.querySelector(".me").textContent = `${upperSum(my)}/63`;
+  bonus.querySelector(".bot").textContent = `${upperSum(bot)}/63`;
+  const total = tablesEl.querySelector(".sumrow");
   total.querySelector(".me").textContent = totalOf(my);
   total.querySelector(".bot").textContent = totalOf(bot);
 }
@@ -273,7 +293,7 @@ function setStatus(text, hint = "") {
 }
 
 function flash(cat, who) {
-  const td = tbody.querySelector(`tr[data-cat="${cat}"] .${who}`);
+  const td = tablesEl.querySelector(`tr[data-cat="${cat}"] .${who}`);
   td?.classList.add("just");
   setTimeout(() => td?.classList.remove("just"), 700);
 }
@@ -285,7 +305,7 @@ function myTurn() {
   held = [false, false, false, false, false];
   rollsLeft = 3;
   rollBtn.disabled = false;
-  rollBtn.textContent = "굴리기 (3번 남음)";
+  rollBtn.textContent = "🎲 굴리기 ×3";
   setStatus(`${round}/12 라운드 — 내 차례`, "굴린 뒤 주사위를 눌러 킵, 표의 내 칸을 눌러 기록");
   renderDice();
   renderBoard();
@@ -295,7 +315,7 @@ rollBtn.addEventListener("click", () => {
   if (phase !== "me" || rollsLeft === 0) return;
   dice = dice.map((d, i) => (held[i] && d ? d : 1 + Math.floor(Math.random() * 6)));
   rollsLeft--;
-  rollBtn.textContent = rollsLeft ? `굴리기 (${rollsLeft}번 남음)` : "굴리기 (끝)";
+  rollBtn.textContent = rollsLeft ? `🎲 굴리기 ×${rollsLeft}` : "🎲 굴림 끝";
   rollBtn.disabled = rollsLeft === 0;
   renderDice();
   renderBoard();
