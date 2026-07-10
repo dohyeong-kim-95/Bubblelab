@@ -7,6 +7,7 @@ import {
   existsSync,
   mkdirSync,
   readdirSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -48,13 +49,35 @@ function lastCommitTime(path) {
 const escapeHtml = (s) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+// 토이의 index.html에서 이모지(카드 아이콘용)를 뽑아온다.
+function toyEmoji(site, name) {
+  try {
+    const html = readFileSync(join(ROOT, site, name, "index.html"), "utf8");
+    return html.match(/\p{Extended_Pictographic}/u)?.[0] ?? "🫧";
+  } catch {
+    return "🫧";
+  }
+}
+
+// 이름을 해시해서 카드마다 고정된 파스텔 색상을 준다.
+function hueOf(name) {
+  let h = 0;
+  for (const c of name) h = (h * 31 + c.codePointAt(0)) % 360;
+  return h;
+}
+
 function listingPage(site, entries) {
-  const items = entries
-    .map(({ name, date }) => {
+  const cards = entries
+    .map(({ name, date, emoji }, i) => {
       const when = date
         ? `<time>${new Date(date).toISOString().slice(0, 10)}</time>`
         : "";
-      return `      <li><a href="/${escapeHtml(name)}/">${escapeHtml(name)}</a>${when}</li>`;
+      return `    <a class="card" href="/${escapeHtml(name)}/"
+       style="--hue:${hueOf(name)};--i:${i}">
+      <span class="emoji">${emoji}</span>
+      <span class="name">${escapeHtml(name)}</span>
+      ${when}
+    </a>`;
     })
     .join("\n");
   return `<!doctype html>
@@ -65,22 +88,39 @@ function listingPage(site, entries) {
 <title>${escapeHtml(site)}.bubblelab.dev</title>
 <style>
   :root { color-scheme: light dark; }
-  body { font-family: ui-monospace, monospace; max-width: 40rem;
-         margin: 4rem auto; padding: 0 1.5rem; line-height: 1.7; }
-  h1 { font-size: 1.2rem; } h1 span { opacity: .45; font-weight: normal; }
-  ul { list-style: none; padding: 0; }
-  li { display: flex; justify-content: space-between; gap: 1rem;
-       border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent);
-       padding: .5rem 0; }
-  time { opacity: .5; font-size: .85em; }
-  footer { margin-top: 3rem; opacity: .4; font-size: .8em; }
+  body { font-family: ui-monospace, monospace; max-width: 52rem;
+         margin: 3rem auto 4rem; padding: 0 1.25rem; }
+  h1 { font-size: 1.25rem; text-align: center; margin-bottom: 2rem; }
+  h1 span { opacity: .45; font-weight: normal; }
+  .grid { display: grid; gap: 1rem;
+          grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); }
+  .card { aspect-ratio: 1; border-radius: 1.25rem; text-decoration: none;
+          display: flex; flex-direction: column; align-items: center;
+          justify-content: center; gap: .55rem; padding: .75rem;
+          color: light-dark(hsl(var(--hue) 45% 22%), hsl(var(--hue) 55% 88%));
+          background: light-dark(hsl(var(--hue) 75% 91%), hsl(var(--hue) 35% 20%));
+          border: 2px solid light-dark(hsl(var(--hue) 60% 82%), hsl(var(--hue) 35% 30%));
+          box-shadow: 0 4px 0 light-dark(hsl(var(--hue) 55% 78%), hsl(var(--hue) 35% 12%));
+          transition: transform .12s, box-shadow .12s;
+          animation: pop .4s cubic-bezier(.2,1.5,.4,1) both;
+          animation-delay: calc(var(--i) * 45ms); }
+  .card:hover { transform: translateY(-3px);
+          box-shadow: 0 7px 0 light-dark(hsl(var(--hue) 55% 78%), hsl(var(--hue) 35% 12%)); }
+  .card:active { transform: translateY(2px); box-shadow: 0 1px 0
+          light-dark(hsl(var(--hue) 55% 78%), hsl(var(--hue) 35% 12%)); }
+  @keyframes pop { from { transform: scale(.6); opacity: 0; } }
+  .emoji { font-size: 2.6rem; line-height: 1; }
+  .name { font-weight: bold; font-size: 1.02rem; word-break: break-all;
+          text-align: center; }
+  time { opacity: .55; font-size: .72rem; }
+  .empty { text-align: center; opacity: .6; margin-top: 4rem; }
+  footer { margin-top: 3.5rem; opacity: .4; font-size: .8em; text-align: center; }
+  footer a { color: inherit; }
 </style>
 </head>
 <body>
   <h1>${escapeHtml(site)}<span>.bubblelab.dev</span></h1>
-  <ul>
-${items || "      <li>아직 아무것도 없어요</li>"}
-  </ul>
+${cards ? `  <div class="grid">\n${cards}\n  </div>` : `  <p class="empty">아직 아무것도 없어요 🫧</p>`}
   <footer><a href="https://bubblelab.dev">bubblelab.dev</a></footer>
 </body>
 </html>
@@ -95,6 +135,7 @@ for (const site of sites) {
     .map((d) => ({
       name: d.name,
       date: lastCommitTime(join(ROOT, site.name, d.name)),
+      emoji: toyEmoji(site.name, d.name),
     }))
     .sort((a, b) => b.date - a.date || a.name.localeCompare(b.name));
 
