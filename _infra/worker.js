@@ -113,6 +113,21 @@ async function handleAdmin(request, env, url, base = "") {
     data.usingDefaultCredentials = !env.ADMIN_ID || !env.ADMIN_PASSWORD;
     return Response.json(data, { headers: { "Cache-Control": "no-store" } });
   }
+
+  if (url.pathname === "/api/suggestions") {
+    const id = env.RECORDS.idFromName("global");
+    const stub = env.RECORDS.get(id);
+    if (request.method === "GET") {
+      return stub.fetch("https://records.internal/_suggestions");
+    }
+    if (request.method === "DELETE") {
+      const sid = url.searchParams.get("id") ?? "";
+      return stub.fetch(
+        `https://records.internal/_suggestions?id=${encodeURIComponent(sid)}`,
+        { method: "DELETE" },
+      );
+    }
+  }
   return null;
 }
 
@@ -138,6 +153,17 @@ export default {
       const headers = new Headers(response.headers);
       headers.set("Cache-Control", "public, max-age=300");
       return new Response(response.body, { status: response.status, headers });
+    }
+
+    // 토이 아이디어 제출 (조회는 admin 전용 /api/suggestions)
+    if (path === "/_suggest" && request.method === "POST") {
+      const { text, page } = await request.json().catch(() => ({}));
+      const id = env.RECORDS.idFromName("global");
+      return env.RECORDS.get(id).fetch("https://records.internal/_suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, page, vid: cookies(request).bl_vid, date: kstDate() }),
+      });
     }
 
     // 주간 신기록 보드: 모든 서브도메인에서 같은 저장소를 쓴다

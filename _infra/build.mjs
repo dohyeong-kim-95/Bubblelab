@@ -165,6 +165,7 @@ const SITE = ${JSON.stringify(site)};
   } catch {}
 })();
 </script>
+<script defer src="/_shared/suggest.js"></script>
 </body>
 </html>
 `;

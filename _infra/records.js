@@ -4,6 +4,13 @@
 
 const GAME = /^[a-z0-9-]{1,32}$/;
 const NICK = /^[가-힣a-zA-Z0-9]{1,6}$/;
+const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
+const VISITOR_ID = /^[a-f0-9-]{36}$/i;
+
+// 토이 아이디어 우편함 (홈의 💡 버튼 → admin에서 조회)
+const SUG_TEXT = /^[^\x00-\x1f]{1,200}$/;
+const SUG_MAX = 300;   // 이 이상 쌓이면 오래된 것부터 정리
+const SUG_DAILY = 5;   // 방문자당 하루 제출 수
 
 // 주간 보드를 쓰는 토이는 여기에 한 줄 등록한다. 비교 방향과 점수 범위는
 // 서버가 고정한다 — 클라이언트가 보낸 dir은 무시된다 (dir 바꿔치기·
@@ -33,6 +40,60 @@ export class RecordsDO {
   async fetch(request) {
     const url = new URL(request.url);
     const week = weekKey();
+
+    // ---------- 토이 아이디어 우편함 ----------
+    if (url.pathname === "/_suggest" && request.method === "POST") {
+      const { text, page, vid, date } = await request.json().catch(() => ({}));
+      const clean = typeof text === "string" ? text.trim().replace(/\s+/g, " ") : "";
+      if (!SUG_TEXT.test(clean) || !DATE_KEY.test(date ?? "")) {
+        return new Response("invalid suggestion", { status: 400 });
+      }
+
+      // 방문자당 하루 SUG_DAILY건 (쿠키 없는 익명은 공용 버킷 20건)
+      const who = VISITOR_ID.test(vid ?? "") ? vid : "anon";
+      const dayKey = `sugday:${date}:${who}`;
+      const used = (await this.state.storage.get(dayKey)) ?? 0;
+      if (used >= (who === "anon" ? 20 : SUG_DAILY)) {
+        return new Response("daily limit", { status: 429 });
+      }
+      await this.state.storage.put(dayKey, used + 1);
+
+      // 지난날 카운터와 넘치는 옛 제안 정리
+      const days = await this.state.storage.list({ prefix: "sugday:" });
+      const staleDays = [...days.keys()].filter((k) => k.split(":")[1] !== date);
+      if (staleDays.length) await this.state.storage.delete(staleDays);
+      const all = await this.state.storage.list({ prefix: "sug:" });
+      if (all.size >= SUG_MAX) {
+        await this.state.storage.delete(
+          [...all.keys()].sort().slice(0, all.size - SUG_MAX + 1),
+        );
+      }
+
+      const id = `sug:${String(Date.now()).padStart(14, "0")}:${crypto.randomUUID().slice(0, 8)}`;
+      await this.state.storage.put(id, {
+        text: clean,
+        page: typeof page === "string" ? page.slice(0, 40) : "",
+        at: Date.now(),
+      });
+      return Response.json({ ok: true }, { status: 201 });
+    }
+
+    if (url.pathname === "/_suggestions") {
+      if (request.method === "GET") {
+        const all = await this.state.storage.list({ prefix: "sug:" });
+        const items = [...all]
+          .map(([id, v]) => ({ id, ...v }))
+          .sort((a, b) => b.at - a.at)
+          .slice(0, 200);
+        return Response.json({ items }, { headers: { "Cache-Control": "no-store" } });
+      }
+      if (request.method === "DELETE") {
+        const id = url.searchParams.get("id") ?? "";
+        if (!id.startsWith("sug:")) return new Response("invalid id", { status: 400 });
+        await this.state.storage.delete(id);
+        return new Response(null, { status: 204 });
+      }
+    }
 
     if (request.method === "GET") {
       // 배치 조회 (카테고리 홈 카드용): ?games=a,b,c → { records: { 이름: 기록 } }

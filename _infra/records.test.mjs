@@ -88,6 +88,46 @@ test("stores display text and serves batch lookups for category homes", async ()
   assert.equal("lotto" in batch, false); // 기록 없는 게임은 빠진다
 });
 
+test("suggestion box: submit, list newest-first, delete, daily cap", async () => {
+  const storage = new MemoryStorage();
+  const records = new RecordsDO({ storage });
+  const vid = "00000000-0000-4000-8000-000000000001";
+  const suggest = (body) => records.fetch(new Request("https://records.internal/_suggest", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ vid, date: "2026-07-11", ...body }),
+  }));
+
+  // 정상 제출 (앞뒤 공백·연속 공백 정리)
+  let res = await suggest({ text: "  테트리스   만들어줘요  ", page: "slop" });
+  assert.equal(res.status, 201);
+  // 잘못된 제출
+  assert.equal((await suggest({ text: "" })).status, 400);
+  assert.equal((await suggest({ text: "가".repeat(201) })).status, 400);
+
+  // 하루 5건 제한 (위에서 1건 사용)
+  for (let i = 0; i < 4; i++) {
+    assert.equal((await suggest({ text: `아이디어 ${i}` })).status, 201);
+  }
+  assert.equal((await suggest({ text: "6번째" })).status, 429);
+
+  // 목록: 최신순 + 정리된 텍스트
+  res = await records.fetch(new Request("https://records.internal/_suggestions"));
+  const { items } = await res.json();
+  assert.equal(items.length, 5);
+  assert.equal(items[items.length - 1].text, "테트리스 만들어줘요");
+  assert.equal(items[items.length - 1].page, "slop");
+
+  // 삭제
+  res = await records.fetch(new Request(
+    `https://records.internal/_suggestions?id=${encodeURIComponent(items[0].id)}`,
+    { method: "DELETE" },
+  ));
+  assert.equal(res.status, 204);
+  const after = await (await records.fetch(new Request("https://records.internal/_suggestions"))).json();
+  assert.equal(after.items.length, 4);
+});
+
 test("rejects malformed submissions", async () => {
   const records = new RecordsDO({ storage: new MemoryStorage() });
   const bad = [
