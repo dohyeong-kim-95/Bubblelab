@@ -35,9 +35,36 @@ function cookies(request) {
   );
 }
 
-async function sha256(value) {
-  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return [...new Uint8Array(bytes)].map((b) => b.toString(16).padStart(2, "0")).join("");
+/* 관리자 세션: 만료시각 + 랜덤값에 HMAC 서명한 토큰. 로그인마다 다르고
+ * 만료가 있어서 쿠키가 비밀번호 등가물이 되지 않는다. 서명 키는
+ * ADMIN_SESSION_SECRET, 없으면 계정 정보에서 파생(설정 부담 없이 동작). */
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+
+async function sessionKey(env, adminId, adminPassword) {
+  const secret = env.ADMIN_SESSION_SECRET || `${adminId}\0${adminPassword}\0bl-admin-session`;
+  return crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
+  );
+}
+
+const hex = (buf) =>
+  [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+
+async function issueSession(key) {
+  const payload = `${Date.now() + SESSION_TTL_MS}.${crypto.randomUUID()}`;
+  const sig = hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload)));
+  return `${payload}.${sig}`;
+}
+
+async function validSession(key, token) {
+  const [expiry, nonce, sig] = token?.split(".") ?? [];
+  if (!expiry || !nonce || !sig || !/^[0-9a-f]+$/.test(sig)) return false;
+  if (!Number.isFinite(+expiry) || Date.now() > +expiry) return false;
+  const sigBytes = Uint8Array.from(sig.match(/../g) ?? [], (h) => parseInt(h, 16));
+  return crypto.subtle.verify(
+    "HMAC", key, sigBytes, new TextEncoder().encode(`${expiry}.${nonce}`),
+  );
 }
 
 function kstDate() {
@@ -52,14 +79,15 @@ const redirect = (location, headers = {}) =>
 async function handleAdmin(request, env, url, base = "") {
   const adminId = env.ADMIN_ID || "admin";
   const adminPassword = env.ADMIN_PASSWORD || "admin";
-  const expected = await sha256(`${adminId}\0${adminPassword}`);
-  const isAuthed = cookies(request).bl_admin === expected;
+  const key = await sessionKey(env, adminId, adminPassword);
+  const isAuthed = await validSession(key, cookies(request).bl_admin);
   const cookieFlags = `Path=/; HttpOnly; SameSite=Strict; Max-Age=86400${url.protocol === "https:" ? "; Secure" : ""}`;
 
   if (url.pathname === "/login" && request.method === "POST") {
     const form = await request.formData();
     if (form.get("id") === adminId && form.get("password") === adminPassword) {
-      return redirect(`${base}/`, { "Set-Cookie": `bl_admin=${expected}; ${cookieFlags}` });
+      const token = await issueSession(key);
+      return redirect(`${base}/`, { "Set-Cookie": `bl_admin=${token}; ${cookieFlags}` });
     }
     return new Response(LOGIN_PAGE(true, base), {
       status: 401, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
@@ -118,10 +146,13 @@ export default {
       return env.RECORDS.get(id).fetch(request);
     }
 
-    // 실시간 데이터 서버: /_rt/<이름> → 이름당 Durable Object 하나
+    // 실시간 데이터 서버: /_rt/<이름> → 이름당 Durable Object 하나.
+    // 임의 이름 폭주로 DO가 무한 생성되지 않게 형식·길이를 제한한다.
     if (path.startsWith("/_rt/")) {
       const name = path.slice("/_rt/".length).split("/")[0];
-      if (!name) return new Response("missing name", { status: 400 });
+      if (!/^[a-z0-9-]{1,64}$/.test(name)) {
+        return new Response("invalid name", { status: 400 });
+      }
       const id = env.REALTIME.idFromName(name);
       return env.REALTIME.get(id).fetch(request);
     }
@@ -139,10 +170,15 @@ export default {
     }
 
     if (site === "admin") {
+      // 프로덕션에서 secrets가 빠졌으면 admin/admin으로 열리는 대신 잠근다
+      // (fail-closed). 로컬 개발에서만 기본 계정을 허용한다.
+      const isProdHost = host === ROOT_DOMAIN || host.endsWith(`.${ROOT_DOMAIN}`);
+      if (isProdHost && (!env.ADMIN_ID || !env.ADMIN_PASSWORD)) {
+        return new Response("admin credentials are not configured", { status: 503 });
+      }
       const adminUrl = new URL(url);
       adminUrl.pathname = path || "/";
-      const localBase = host === ROOT_DOMAIN || host.endsWith(`.${ROOT_DOMAIN}`) ? "" : "/admin";
-      const adminResponse = await handleAdmin(request, env, adminUrl, localBase);
+      const adminResponse = await handleAdmin(request, env, adminUrl, isProdHost ? "" : "/admin");
       if (adminResponse) return adminResponse;
     }
 

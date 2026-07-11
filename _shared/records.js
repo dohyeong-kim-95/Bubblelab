@@ -115,8 +115,7 @@
       const res = await fetch("/_records", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ game: cfg.game, nick, score: pending, dir: cfg.dir,
-                               text: fmt(pending) }),
+        body: JSON.stringify({ game: cfg.game, nick, score: pending, text: fmt(pending) }),
       });
       if (!res.ok) throw new Error();
       const data = await res.json();

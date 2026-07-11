@@ -14,8 +14,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # 자동 목록 페이지의 최신순 정렬(git log)에 필요
 
       - uses: actions/setup-node@v4
         with:

@@ -9,8 +9,9 @@
 1. `/_rt/<이름>` → 실시간 서버 (아래 realtime.js). 이름당 Durable Object 하나.
 2. `/_records` → 주간 신기록 보드 (records.js, RecordsDO). GET `?game=`
    또는 배치 `?games=a,b,c`(카테고리 홈 카드용), POST `{game, nick, score,
-   dir, text}`. 게임별로 이번 주(월 09시 KST 시작) 1위 하나만 저장,
-   클라이언트는 `_shared/records.js`.
+   text}`. 게임별로 이번 주(월 09시 KST 시작) 1위 하나만 저장, 비교
+   방향과 점수 범위는 records.js의 `GAMES` 테이블이 고정한다 (새 게임은
+   여기 한 줄 등록). 클라이언트는 `_shared/records.js`.
 3. `/_shared/*` → 공용 에셋. 어느 서브도메인에서든 같은 파일.
 4. 나머지 → 호스트명 라우팅: `slop.bubblelab.dev/x` → `dist/slop/x`,
    apex와 www는 `dist/www`.

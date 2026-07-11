@@ -46,7 +46,7 @@ test("keeps only the best record per game and lets a better one claim it", async
   assert.equal(body.accepted, true);
   assert.equal(body.record.nick, "영희");
 
-  // dir 바꿔치기 시도: 첫 기록의 dir(min)로 비교되어 거절된다
+  // dir 바꿔치기 시도: 클라이언트 dir은 무시되고 서버 설정(min)으로 비교된다
   res = await post(records, { game: "touch25", nick: "해커", score: 999, dir: "max" });
   assert.equal((await res.json()).accepted, false);
 
@@ -91,19 +91,23 @@ test("stores display text and serves batch lookups for category homes", async ()
 test("rejects malformed submissions", async () => {
   const records = new RecordsDO({ storage: new MemoryStorage() });
   const bad = [
-    { game: "touch25", nick: "일곱글자닉네임", score: 1, dir: "min" }, // 6자 초과
-    { game: "touch25", nick: "한 글", score: 1, dir: "min" },          // 공백
-    { game: "touch25", nick: "nick!", score: 1, dir: "min" },          // 특수문자
-    { game: "touch25", nick: "철수", score: "12", dir: "min" },        // 문자열 점수
-    { game: "touch25", nick: "철수", score: Infinity, dir: "min" },
-    { game: "touch25", nick: "철수", score: 1, dir: "sideways" },
-    { game: "Touch 25", nick: "철수", score: 1, dir: "min" },          // 게임 이름
+    { game: "touch25", nick: "일곱글자닉네임", score: 1 },  // 6자 초과
+    { game: "touch25", nick: "한 글", score: 1 },           // 공백
+    { game: "touch25", nick: "nick!", score: 1 },           // 특수문자
+    { game: "touch25", nick: "철수", score: "12" },         // 문자열 점수
+    { game: "touch25", nick: "철수", score: Infinity },
+    { game: "Touch 25", nick: "철수", score: 1 },           // 게임 이름
+    { game: "lotto", nick: "철수", score: 1 },              // GAMES 미등록
+    { game: "touch25", nick: "철수", score: -1 },           // 범위 밖 (min 0)
+    { game: "touch25", nick: "철수", score: 999999 },       // 범위 밖 (max 3600)
+    { game: "circle", nick: "철수", score: 100.1 },         // 100% 초과
+    { game: "reactiontime", nick: "봇임", score: 1 },       // 인간 불가능 반응속도
   ];
   for (const body of bad) {
     const res = await post(records, body);
     assert.equal(res.status, 400, JSON.stringify(body));
   }
-  // 한글/영문/숫자 6자는 통과
-  const ok = await post(records, { game: "touch25", nick: "김a1나2", score: 1, dir: "min" });
+  // 한글/영문/숫자 6자 + 범위 내 점수는 통과
+  const ok = await post(records, { game: "touch25", nick: "김a1나2", score: 1 });
   assert.equal(ok.status, 200);
 });

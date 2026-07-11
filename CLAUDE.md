@@ -25,7 +25,9 @@
 - 주간 신기록 보드(월요일 09시 KST 초기화): `window.blWeekly = { game: "이름",
   dir: "min|max", fmt: v => … }` 선언 + `<script defer
   src="/_shared/records.js"></script>` 추가 후, 기록이 나올 때마다
-  `window.blWeeklyReport?.(점수)` 호출. 서버는 `/_records` (_infra/records.js).
+  `window.blWeeklyReport?.(점수)` 호출. **추가로 `_infra/records.js`의
+  `GAMES`에 dir·점수 범위 한 줄 등록** (서버가 방향·범위를 고정한다 —
+  미등록 게임의 제출은 거절됨).
 - 다크모드: `:root { color-scheme: light dark; }` + `light-dark()` 함수
 - 언어는 한국어, 스타일은 ui-monospace 계열의 가벼운 느낌
 
