@@ -14,7 +14,8 @@
          justify-content: center; gap: .6rem; padding: 1rem 1rem 5rem;
          box-sizing: border-box; user-select: none; -webkit-user-select: none; }
   h1 { margin: 0; font-size: 1.1rem; opacity: .75; }
-  #status { min-height: 1.4em; font-size: .95rem; opacity: .85; text-align: center; }
+  #status { min-height: 2.7em; font-size: .95rem; opacity: .9; text-align: center;
+            line-height: 1.35; width: min(92vw, 22rem); }
   #rig { position: relative; width: 20rem; height: 24rem; }
   /* 손님 (인내심에 따라 표정이 바뀐다) */
   #customer { position: absolute; left: 0; bottom: .35rem; width: 4.6rem;
@@ -85,8 +86,9 @@
          border: 2px solid currentColor;
          background: light-dark(rgba(255,255,255,.85), rgba(20,26,36,.85));
          backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
-         color: inherit; cursor: pointer; }
-  #serve:disabled { opacity: .35; cursor: default; }
+         color: inherit; cursor: pointer;
+         display: none; }  /* 첫 붓기 전에는 숨긴다 */
+  #serve.show { display: block; }
   /* 신기록 닉네임 패널이 서빙 버튼을 가리지 않게 이 페이지에선 위로 */
   body #bl-claim { bottom: 8.4rem; }
 </style>
@@ -94,7 +96,6 @@
 <body>
 <h1>🍺 맥주 따르기</h1>
 <div id="best"></div>
-<div id="status">꾹 누르면 따르고, 떼면 멈춰요</div>
 <div id="rig">
   <div id="tap"><div id="handle"></div></div>
   <div id="stream"></div>
@@ -110,16 +111,17 @@
   <div id="spill"></div>
 </div>
 <div id="patience"><div></div></div>
-<div id="hint">거품 가라앉는 타이밍을 노려 500cc 딱 맞게!<br>거품까지 넘치면 실패 · 손님 인내심 8초</div>
-<button id="serve" disabled>🍺 서빙하기</button>
+<div id="status">꾹 누르면 따르고, 떼면 멈춰요</div>
+<div id="hint">거품 가라앉는 타이밍을 노려 500cc 딱 맞게!<br>거품까지 넘치면 실패 · 손님 인내심 4초 · 오차가 같으면 빨리 딴 쪽이 승리</div>
+<button id="serve">🍺 서빙하기</button>
 <script>
 const CAPACITY = 600;   // 잔 크기 (cc)
 const TARGET = 500;     // 목표선
-const FLOW = 170;       // 초당 맥주 (cc/s)
-const FOAM_RATE = 85;   // 초당 거품 생성
-const SETTLE = 30;      // 초당 거품 가라앉음
+const FLOW = 280;       // 초당 맥주 (cc/s)
+const FOAM_RATE = 140;  // 초당 거품 생성
+const SETTLE = 80;      // 초당 거품 가라앉음
 const SETTLE_KEEP = .25;// 가라앉은 거품 중 맥주로 바뀌는 비율
-const PATIENCE = 8;     // 손님 인내심 (초)
+const PATIENCE = 4;     // 손님 인내심 (초)
 
 const statusEl = document.getElementById("status");
 const liquidEl = document.getElementById("liquid");
@@ -148,13 +150,23 @@ let liquid, foam, pouring, started, done, patience, jitter;
 let best = localStorage.getItem("bl-beer-best");
 best = best === null ? null : +best;
 
+// 점수 = 오차(정수 cc) + 소진한 인내심 비율×0.9 — 오차가 같으면
+// 남긴 시간이 많은 쪽이 이기는 타이브레이커가 소수부에 실린다.
+const encodeScore = (err, remain) =>
+  Math.round(err) + (1 - Math.max(0, remain) / PATIENCE) * 0.9;
+const fmtScore = (v) => {
+  const err = Math.floor(v);
+  const remain = (1 - (v - err) / 0.9) * PATIENCE;
+  return `오차 ${err}cc·${remain.toFixed(1)}초`;
+};
+
 window.blShareText = () =>
-  best !== null ? `맥주 500cc 따르기, 오차 ${best.toFixed(0)}cc! 🍺 이겨보세요`
+  best !== null ? `맥주 500cc 따르기, ${fmtScore(best)} 남김! 🍺 이겨보세요`
                 : "🍺 맥주 500cc 따르기 — 도전해보세요!";
-window.blWeekly = { game: "beer", dir: "min", fmt: (v) => `오차 ${v.toFixed(0)}cc` };
+window.blWeekly = { game: "beer", dir: "min", fmt: fmtScore };
 
 function updateBest() {
-  bestEl.textContent = best !== null ? `내 최고 기록 오차 ${best.toFixed(0)}cc` : " ";
+  bestEl.textContent = best !== null ? `내 최고 기록 ${fmtScore(best)}` : " ";
 }
 
 function reset() {
@@ -163,7 +175,7 @@ function reset() {
   patience = PATIENCE;
   jitter = 1;
   document.body.classList.remove("pouring", "spilled");
-  serveBtn.disabled = true;
+  serveBtn.classList.remove("show");
   serveBtn.textContent = "🍺 서빙하기";
   statusEl.textContent = "꾹 누르면 따르고, 떼면 멈춰요";
   lineEl.style.bottom = (TARGET / CAPACITY * 100) + "%";
@@ -193,17 +205,18 @@ function serve(auto = false) {
   pouring = false;
   document.body.classList.remove("pouring");
   const err = Math.abs(TARGET - liquid);
+  const score = encodeScore(err, patience);
   statusEl.textContent =
-    `${auto ? "⏳ 손님이 뺏어갔어요! " : ""}${liquid.toFixed(0)}cc — 오차 ${err.toFixed(0)}cc ${grade(err)}`;
+    `${auto ? "⏳ 손님이 뺏어갔어요! " : ""}${liquid.toFixed(0)}cc — 오차 ` +
+    `${Math.round(err)}cc · ${Math.max(0, patience).toFixed(1)}초 남김 ${grade(err)}`;
   setFace(auto ? "😤" : err <= 10 ? "🤩" : err <= 25 ? "😋" : err <= 60 ? "🙂" : "😒");
-  if (best === null || err < best) {
-    best = err;
+  if (best === null || score < best) {
+    best = score;
     localStorage.setItem("bl-beer-best", best);
     statusEl.textContent += " · 🎉 최고 기록!";
     updateBest();
   }
-  window.blWeeklyReport?.(err);
-  serveBtn.disabled = false;
+  window.blWeeklyReport?.(score);
   serveBtn.textContent = "🔄 한 잔 더";
 }
 
@@ -214,7 +227,6 @@ function overflow() {
   document.body.classList.add("spilled");
   statusEl.textContent = "🌊 넘쳤어요! 걸레 가져와… (기록 없음)";
   setFace("😱");
-  serveBtn.disabled = false;
   serveBtn.textContent = "🔄 한 잔 더";
 }
 
@@ -247,7 +259,7 @@ addEventListener("pointerdown", (e) => {
   jitter = 0.85 + Math.random() * 0.4; // 잔마다 거품이 조금씩 다르게
   if (!started) {
     started = true;
-    serveBtn.disabled = false;
+    serveBtn.classList.add("show");
     statusEl.textContent = "🍺 따르는 중…";
   }
   document.body.classList.add("pouring");
