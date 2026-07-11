@@ -3,8 +3,8 @@
 (() => {
   const css = `
   #bl-suggest { position: fixed; right: 1rem; bottom: 1rem; z-index: 9999;
-    width: 2.6rem; height: 2.6rem; border-radius: 50%; cursor: pointer;
-    font-size: 1.2rem; line-height: 1; border: 1.5px solid currentColor;
+    width: 3.2rem; height: 3.2rem; border-radius: 50%; cursor: pointer;
+    font-size: 1.6rem; line-height: 1; border: 1.5px solid currentColor;
     color: light-dark(#334, #ccd);
     background: light-dark(rgba(255,255,255,.75), rgba(20,26,36,.75));
     backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
@@ -30,7 +30,11 @@
   #bl-suggest-panel button { font: inherit; font-weight: bold; padding: .45rem .9rem;
     border-radius: .5rem; border: 1.5px solid currentColor; background: none;
     color: inherit; cursor: pointer; }
-  #bl-suggest-panel .msg { opacity: .65; min-height: 1em; font-size: .78rem; }`;
+  #bl-suggest-panel .msg { opacity: .65; min-height: 1em; font-size: .78rem; }
+  #bl-suggest-panel .x { position: absolute; top: .35rem; right: .55rem;
+    border: 0; background: none; color: inherit; opacity: .5; cursor: pointer;
+    font: inherit; padding: .2rem; }
+  #bl-suggest-panel .x:hover { opacity: 1; }`;
   const style = document.createElement("style");
   style.textContent = css;
   document.head.appendChild(style);
@@ -45,6 +49,7 @@
   const panel = document.createElement("div");
   panel.id = "bl-suggest-panel";
   panel.innerHTML = `
+    <button class="x" type="button" title="닫기">✕</button>
     <b>💡 이런 토이 만들어줘요!</b>
     <textarea maxlength="200" placeholder="예: 사무실에서 몰래 하는 테트리스"></textarea>
     <div class="row"><span class="count">0/200</span><button type="button">보내기</button></div>
@@ -66,6 +71,7 @@
     panel.classList.toggle("show");
     if (panel.classList.contains("show")) ta.focus();
   });
+  panel.querySelector(".x").addEventListener("click", () => panel.classList.remove("show"));
   ta.addEventListener("input", () => { countEl.textContent = `${ta.value.length}/200`; });
 
   // 어느 페이지에서 보냈는지 (admin 표시용)
