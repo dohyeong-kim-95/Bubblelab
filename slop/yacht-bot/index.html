@@ -55,7 +55,9 @@
   #tip.show { display: block; }
   #tip b { display: block; margin-bottom: .2rem; }
   table { border-collapse: collapse; font-size: .8rem; flex: 1; }
-  th, td { padding: .3rem .3rem; text-align: right; border-bottom: 1px solid
+  /* 두 단의 행 높이를 고정해서 항목끼리 나란히 정렬되게 한다 */
+  tr { height: 2.15rem; }
+  th, td { padding: 0 .3rem; text-align: right; border-bottom: 1px solid
            light-dark(#d8e0e8, #263445); white-space: nowrap; }
   th:first-child, td:first-child { text-align: left; }
   thead th { opacity: .6; font-weight: normal; }
