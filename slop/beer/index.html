@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>맥주 따르기</title>
+<style>
+  :root { color-scheme: light dark; }
+  html, body { margin: 0; height: 100%; overflow: hidden; touch-action: none; }
+  body { font-family: ui-monospace, monospace;
+         background: light-dark(#eef2f6, #10161f);
+         color: light-dark(#17202b, #dbe5ef);
+         display: flex; flex-direction: column; align-items: center;
+         justify-content: center; gap: .6rem; padding: 1rem 1rem 5rem;
+         box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+  h1 { margin: 0; font-size: 1.1rem; opacity: .75; }
+  #status { min-height: 1.4em; font-size: .95rem; opacity: .85; text-align: center; }
+  #rig { position: relative; width: 15rem; height: 24rem; }
+  /* 디스펜서 */
+  #tap { position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+         width: 9rem; height: 3.4rem; border-radius: .8rem;
+         background: light-dark(#b9c6d2, #2a3a4d); }
+  #tap::after { content: ""; position: absolute; bottom: -1.3rem; left: 50%;
+         transform: translateX(-50%); width: 1.1rem; height: 1.4rem;
+         background: inherit; border-radius: 0 0 .3rem .3rem; }
+  #handle { position: absolute; top: -1.4rem; left: 50%; width: .8rem; height: 1.6rem;
+         background: #e05252; border-radius: .4rem .4rem .2rem .2rem;
+         transform-origin: bottom center; transform: translateX(-50%);
+         transition: transform .12s; }
+  body.pouring #handle { transform: translateX(-50%) rotate(-38deg); }
+  #stream { position: absolute; top: 4.6rem; left: 50%; transform: translateX(-50%);
+         width: .55rem; height: 7.4rem; opacity: 0; border-radius: 0 0 .3rem .3rem;
+         background: linear-gradient(#f6b93b, #eda11f); }
+  body.pouring #stream { opacity: 1; }
+  /* 잔 */
+  #glass { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+         width: 8.4rem; height: 12.5rem; border: 3px solid light-dark(#8296a8, #55708a);
+         border-top-width: 1px; border-radius: .4rem .4rem 1rem 1rem;
+         overflow: hidden;
+         background: light-dark(rgba(255,255,255,.35), rgba(255,255,255,.05)); }
+  #liquid { position: absolute; bottom: 0; left: 0; right: 0; height: 0;
+         background: linear-gradient(#f6b93b, #e08e0b); }
+  #foam { position: absolute; left: 0; right: 0; height: 0;
+         background: radial-gradient(circle at 20% 40%, #fff 18%, transparent 19%),
+                     radial-gradient(circle at 60% 70%, #fff 22%, transparent 23%),
+                     radial-gradient(circle at 85% 30%, #fff 15%, transparent 16%),
+                     light-dark(#f4f0e4, #e8e2d0); }
+  /* 500cc 목표선 */
+  #targetline { position: absolute; left: 0; right: 0; height: 0;
+         border-top: 2px dashed light-dark(#e05252, #ff7b7b); }
+  #targetline::after { content: "500cc"; position: absolute; left: .35rem; top: -1.25em;
+         font-size: .7rem; font-weight: bold;
+         color: light-dark(#e05252, #ff7b7b); }
+  #spill { position: absolute; bottom: -0.4rem; left: 50%; transform: translateX(-50%);
+         width: 12rem; height: .5rem; border-radius: 50%;
+         background: #f6b93b; opacity: 0; transition: opacity .3s; }
+  body.spilled #spill { opacity: .8; }
+  /* 인내심 게이지 */
+  #patience { width: 15rem; height: .5rem; border-radius: .3rem;
+         background: light-dark(#d5dee6, #223244); overflow: hidden; }
+  #patience div { height: 100%; width: 100%;
+         background: light-dark(#3fae5f, #4dd07a); transition: width .2s linear; }
+  #patience div.low { background: #e05252; }
+  #hint { opacity: .55; font-size: .78rem; text-align: center; line-height: 1.5; }
+  #best { opacity: .6; font-size: .85rem; min-height: 1em; }
+  #serve { position: fixed; bottom: 4.3rem; left: 50%; transform: translateX(-50%);
+         z-index: 50; font: inherit; font-weight: bold; font-size: 1.05rem;
+         padding: .85rem 2rem; white-space: nowrap; border-radius: 2rem;
+         border: 2px solid currentColor;
+         background: light-dark(rgba(255,255,255,.85), rgba(20,26,36,.85));
+         backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+         color: inherit; cursor: pointer; }
+  #serve:disabled { opacity: .35; cursor: default; }
+</style>
+</head>
+<body>
+<h1>🍺 맥주 따르기</h1>
+<div id="best"></div>
+<div id="status">꾹 누르면 따르고, 떼면 멈춰요</div>
+<div id="rig">
+  <div id="tap"><div id="handle"></div></div>
+  <div id="stream"></div>
+  <div id="glass">
+    <div id="liquid"></div>
+    <div id="foam"></div>
+    <div id="targetline"></div>
+  </div>
+  <div id="spill"></div>
+</div>
+<div id="patience"><div></div></div>
+<div id="hint">거품 가라앉는 타이밍을 노려 500cc 딱 맞게!<br>거품까지 넘치면 실패 · 손님 인내심 8초</div>
+<button id="serve" disabled>🍺 서빙하기</button>
+<script>
+const CAPACITY = 600;   // 잔 크기 (cc)
+const TARGET = 500;     // 목표선
+const FLOW = 170;       // 초당 맥주 (cc/s)
+const FOAM_RATE = 85;   // 초당 거품 생성
+const SETTLE = 30;      // 초당 거품 가라앉음
+const SETTLE_KEEP = .25;// 가라앉은 거품 중 맥주로 바뀌는 비율
+const PATIENCE = 8;     // 손님 인내심 (초)
+
+const statusEl = document.getElementById("status");
+const liquidEl = document.getElementById("liquid");
+const foamEl = document.getElementById("foam");
+const lineEl = document.getElementById("targetline");
+const patienceEl = document.querySelector("#patience div");
+const serveBtn = document.getElementById("serve");
+const bestEl = document.getElementById("best");
+const glassH = () => document.getElementById("glass").clientHeight;
+
+let liquid, foam, pouring, started, done, patience, jitter;
+let best = localStorage.getItem("bl-beer-best");
+best = best === null ? null : +best;
+
+window.blShareText = () =>
+  best !== null ? `맥주 500cc 따르기, 오차 ${best.toFixed(0)}cc! 🍺 이겨보세요`
+                : "🍺 맥주 500cc 따르기 — 도전해보세요!";
+window.blWeekly = { game: "beer", dir: "min", fmt: (v) => `오차 ${v.toFixed(0)}cc` };
+
+function updateBest() {
+  bestEl.textContent = best !== null ? `내 최고 기록 오차 ${best.toFixed(0)}cc` : " ";
+}
+
+function reset() {
+  liquid = 0; foam = 0;
+  pouring = false; started = false; done = false;
+  patience = PATIENCE;
+  jitter = 1;
+  document.body.classList.remove("pouring", "spilled");
+  serveBtn.disabled = true;
+  serveBtn.textContent = "🍺 서빙하기";
+  statusEl.textContent = "꾹 누르면 따르고, 떼면 멈춰요";
+  lineEl.style.bottom = (TARGET / CAPACITY * 100) + "%";
+  render();
+}
+
+function render() {
+  const h = glassH();
+  liquidEl.style.height = (liquid / CAPACITY * h) + "px";
+  foamEl.style.height = (foam / CAPACITY * h) + "px";
+  foamEl.style.bottom = (liquid / CAPACITY * h) + "px";
+  const p = Math.max(0, patience / PATIENCE);
+  patienceEl.style.width = (p * 100) + "%";
+  patienceEl.classList.toggle("low", p < .3);
+}
+
+function grade(err) {
+  return err <= 2 ? "🍺 마스터 바텐더!" : err <= 10 ? "🔥 눈금이 보이세요?" :
+         err <= 25 ? "👍 한 잔 잘 따랐다" : err <= 60 ? "🙂 마실 만해요" :
+         "🫠 이건 좀…";
+}
+
+function serve(auto = false) {
+  if (done || !started) return;
+  done = true;
+  pouring = false;
+  document.body.classList.remove("pouring");
+  const err = Math.abs(TARGET - liquid);
+  statusEl.textContent =
+    `${auto ? "⏳ 손님이 뺏어갔어요! " : ""}${liquid.toFixed(0)}cc — 오차 ${err.toFixed(0)}cc ${grade(err)}`;
+  if (best === null || err < best) {
+    best = err;
+    localStorage.setItem("bl-beer-best", best);
+    statusEl.textContent += " · 🎉 최고 기록!";
+    updateBest();
+  }
+  window.blWeeklyReport?.(err);
+  serveBtn.disabled = false;
+  serveBtn.textContent = "🔄 한 잔 더";
+}
+
+function overflow() {
+  done = true;
+  pouring = false;
+  document.body.classList.remove("pouring");
+  document.body.classList.add("spilled");
+  statusEl.textContent = "🌊 넘쳤어요! 걸레 가져와… (기록 없음)";
+  serveBtn.disabled = false;
+  serveBtn.textContent = "🔄 한 잔 더";
+}
+
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  if (!done) {
+    if (pouring) {
+      liquid += FLOW * dt;
+      foam += FOAM_RATE * jitter * dt;
+    }
+    const settled = Math.min(foam, SETTLE * dt);
+    foam -= settled;
+    liquid += settled * SETTLE_KEEP;
+    if (started) {
+      patience -= dt;
+      if (patience <= 0) serve(true);
+    }
+    if (liquid + foam > CAPACITY) overflow();
+    render();
+  }
+  requestAnimationFrame(loop);
+}
+
+addEventListener("pointerdown", (e) => {
+  if (e.target.closest("button")) return;
+  if (done) return;
+  pouring = true;
+  jitter = 0.85 + Math.random() * 0.4; // 잔마다 거품이 조금씩 다르게
+  if (!started) {
+    started = true;
+    serveBtn.disabled = false;
+    statusEl.textContent = "🍺 따르는 중…";
+  }
+  document.body.classList.add("pouring");
+});
+for (const ev of ["pointerup", "pointercancel"]) {
+  addEventListener(ev, () => {
+    if (!pouring) return;
+    pouring = false;
+    document.body.classList.remove("pouring");
+    if (!done) statusEl.textContent = "거품이 가라앉길 기다리거나, 더 따르거나, 서빙!";
+  });
+}
+serveBtn.addEventListener("click", () => {
+  if (done) reset();
+  else serve();
+});
+
+reset();
+updateBest();
+requestAnimationFrame(loop);
+</script>
+<script defer src="/_shared/records.js"></script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>
