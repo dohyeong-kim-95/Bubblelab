@@ -151,9 +151,13 @@ export default {
 
     // HTML 문서 방문만 집계한다. IP/UA는 저장하지 않고 익명 쿠키 ID만 사용한다.
     // 페이지별 인기 집계를 위해 문서마다 보낸다 (DO 쓰기는 방문자별 key라 멱등).
-    const isDocument = request.headers.get("Sec-Fetch-Dest") === "document" ||
-      request.headers.get("Accept")?.includes("text/html");
-    if (site !== "admin" && isDocument && response.ok &&
+    // 봇 부풀리기 방지: 실제 브라우저 내비게이션에만 붙는 Sec-Fetch-Dest를
+    // 요구하고, 크롤러/미리보기/스크립트류 User-Agent는 집계에서 뺀다.
+    const ua = request.headers.get("User-Agent") ?? "";
+    const isBot = !ua ||
+      /bot|crawl|spider|scrap|preview|scan|monitor|headless|lighthouse|externalhit|curl|wget|python|java|okhttp|node|undici|axios|libwww|httpclient|ruby|php|perl|postman|insomnia/i.test(ua);
+    const isDocument = request.headers.get("Sec-Fetch-Dest") === "document";
+    if (site !== "admin" && isDocument && !isBot && response.ok &&
         response.headers.get("Content-Type")?.includes("text/html")) {
       const date = kstDate();
       const jar = cookies(request);
