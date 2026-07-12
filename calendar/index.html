@@ -11,13 +11,20 @@
          margin: 0; min-height: 100dvh; display: flex; align-items: center; justify-content: center;
          background: light-dark(#eef2f6, #10161f);
          color: light-dark(#1c2733, #dbe4ee); }
-  main { padding: 1.5rem; width: min(26rem, 100%); box-sizing: border-box; }
-  h1 { font-size: 1.3rem; text-align: center; margin: 0 0 1.2rem;
-       font-variant-numeric: tabular-nums; }
+  main { padding: 1.5rem; width: min(26rem, 100%); box-sizing: border-box;
+         /* 저장 이미지와 같은 비례: 셀 폭 기준으로 모든 크기를 계산 */
+         --cell: calc((min(26rem, 100vw) - 3rem) / 7); }
+  header { text-align: center; margin-bottom: calc(var(--cell) * .45); }
+  #year { margin: 0; opacity: .6; font-size: calc(var(--cell) * .3); }
+  #month { margin: 0; font-weight: bold; font-size: calc(var(--cell) * .62);
+           letter-spacing: .02em; }
   table { width: 100%; border-collapse: collapse; table-layout: fixed;
           font-variant-numeric: tabular-nums; }
-  th { font-weight: normal; opacity: .55; font-size: .8rem; padding-bottom: .6rem; }
-  td { text-align: center; padding: .55rem 0; position: relative; z-index: 0; }
+  th { font-weight: normal; opacity: .5; font-size: calc(var(--cell) * .21);
+       padding-bottom: calc(var(--cell) * .3); }
+  th.sun, th.sat { opacity: .9; }
+  td { text-align: center; padding: 0; height: calc(var(--cell) * 1.05);
+       font-size: calc(var(--cell) * .3); position: relative; z-index: 0; }
   .sun { color: light-dark(#c0392b, #ff8a7a); }
   .sat { color: light-dark(#2563ab, #8ab8ff); }
   .today { position: relative; font-weight: bold;
@@ -53,12 +60,15 @@
 </head>
 <body>
 <main>
-  <h1 id="title">📅</h1>
+  <header>
+    <p id="year"></p>
+    <h1 id="month">📅</h1>
+  </header>
   <table>
     <thead>
       <tr>
-        <th class="sun">일</th><th>월</th><th>화</th><th>수</th><th>목</th><th>금</th>
-        <th class="sat">토</th>
+        <th class="sun">SUN</th><th>MON</th><th>TUE</th><th>WED</th><th>THU</th>
+        <th>FRI</th><th class="sat">SAT</th>
       </tr>
     </thead>
     <tbody id="days"></tbody>
@@ -113,11 +123,16 @@ function themeColors() {
     : { bg: "#eef2f6", fg: "#1c2733", sun: "#c0392b", sat: "#2563ab" };
 }
 
+const MONTHS_EN = ["JANUARY","FEBRUARY","MARCH","APRIL","MAY","JUNE",
+                   "JULY","AUGUST","SEPTEMBER","OCTOBER","NOVEMBER","DECEMBER"];
+const DOW_EN = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
+
 const cal = monthData(now.getFullYear(), now.getMonth());
 const today = now.getDate();
 
-// ---- 화면 달력 ----
-document.getElementById("title").textContent = `📅 ${cal.y}년 ${cal.m + 1}월`;
+// ---- 화면 달력 (저장 이미지와 같은 구성: 연도 / 영문 월 / 영문 요일) ----
+document.getElementById("year").textContent = cal.y;
+document.getElementById("month").textContent = MONTHS_EN[cal.m];
 document.title = `${cal.y}년 ${cal.m + 1}월 달력`;
 
 const tbody = document.getElementById("days");
@@ -136,10 +151,6 @@ for (const week of cal.weeks) {
 window.blShareText = () => `📅 ${cal.y}년 ${cal.m + 1}월 달력 — calendar.bubblelab.dev`;
 
 // ---- 배경화면 PNG ----
-const MONTHS_EN = ["JANUARY","FEBRUARY","MARCH","APRIL","MAY","JUNE",
-                   "JULY","AUGUST","SEPTEMBER","OCTOBER","NOVEMBER","DECEMBER"];
-const DOW_EN = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
-
 // 기종 해상도 자동 인식: 모바일 세로 화면일 때만 신뢰한다
 function detectDevice() {
   const dpr = devicePixelRatio || 1;
