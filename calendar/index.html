@@ -150,11 +150,10 @@ function detectDevice() {
 }
 
 const DEVICE_PRESETS = [
+  ["Galaxy S26", 1080, 2340],
+  ["Galaxy S26+ / Ultra", 1440, 3120],
   ["iPhone Pro Max", 1290, 2796],
   ["iPhone / Pro", 1179, 2556],
-  ["Galaxy QHD+", 1440, 3120],
-  ["Galaxy FHD+", 1080, 2340],
-  ["기타", 1440, 3200],
 ];
 
 // 배경화면 렌더링. 오늘 날짜 강조 없음(정적 이미지이므로).
@@ -255,7 +254,7 @@ for (const [name, w, h] of DEVICE_PRESETS) {
   opt.textContent = `${name} (${w}×${h})`;
   deviceSel.appendChild(opt);
 }
-if (!detected) deviceSel.value = "1440x3200"; // 인식 실패 시 기본값
+if (!detected) deviceSel.value = "1080x2340"; // 인식 실패 시 기본값: Galaxy S26
 
 function currentOpt() {
   const [w, h] = deviceSel.value.split("x").map(Number);
