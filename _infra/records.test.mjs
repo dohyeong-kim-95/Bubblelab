@@ -112,7 +112,14 @@ test("admin can list this week's records and reset one", async () => {
   assert.equal((await again.json()).accepted, true);
 });
 
-test("suggestion box: submit, list newest-first, delete, daily cap", async () => {
+test("suggestion box: submit, list newest-first, delete, daily cap", async (t) => {
+  // at은 Date.now()라 같은 밀리초에 제출되면 최신순 정렬이 동률로 뒤섞인다.
+  // 시계를 단조 증가로 고정해 순서를 결정적으로 만든다.
+  const realNow = Date.now;
+  let tick = realNow();
+  Date.now = () => ++tick;
+  t.after(() => { Date.now = realNow; });
+
   const storage = new MemoryStorage();
   const records = new RecordsDO({ storage });
   const vid = "00000000-0000-4000-8000-000000000001";
