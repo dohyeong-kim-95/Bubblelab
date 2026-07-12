@@ -87,8 +87,10 @@ function listingPage(site, entries) {
   :root { color-scheme: light dark; }
   body { font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; max-width: 52rem;
          margin: 3rem auto 4rem; padding: 0 1.25rem; }
-  h1 { font-size: 1.25rem; text-align: center; margin-bottom: 2rem; }
+  h1 { font-size: 1.25rem; text-align: center; margin-bottom: .4rem; }
   h1 span { opacity: .45; font-weight: normal; }
+  #crown { text-align: center; opacity: .6; font-size: .85rem;
+           margin: 0 0 1.8rem; min-height: 1.2em; }
   .grid { display: grid; gap: 1rem;
           grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); }
   .card { aspect-ratio: 1; border-radius: 1.25rem; text-decoration: none;
@@ -118,6 +120,7 @@ function listingPage(site, entries) {
 </head>
 <body>
   <h1>${escapeHtml(site)}<span>.bubblelab.dev</span></h1>
+  <div id="crown" title="이번 주 1위를 가장 많이 가진 사람 — 월요일 09시 초기화"></div>
 ${cards ? `  <div class="grid">\n${cards}\n  </div>` : `  <p class="empty">아직 아무것도 없어요 🫧</p>`}
   <footer><a href="https://bubblelab.dev">bubblelab.dev</a></footer>
 <script>
@@ -132,12 +135,20 @@ const SITE = ${JSON.stringify(site)};
     const res = await fetch("/_records?games=" + encodeURIComponent(games), { cache: "no-store" });
     if (!res.ok) return;
     const { records } = await res.json();
+    const wins = {}; // 닉네임 → 이번 주 1위 개수
     for (const el of els) {
       const r = records[el.dataset.game];
       if (!r) continue;
       // text 없는 옛 기록은 생 float가 못생기지 않게 반올림해서 보여준다
       el.textContent = \`👑 \${r.nick} · \${r.text ?? Math.round(r.score * 100) / 100}\`;
       el.title = "이번 주 1위 — 월요일 09시 초기화";
+      wins[r.nick] = (wins[r.nick] ?? 0) + 1;
+    }
+    const top = Math.max(0, ...Object.values(wins));
+    if (top > 0) {
+      const leaders = Object.keys(wins).filter((n) => wins[n] === top);
+      document.getElementById("crown").textContent =
+        \`🏆 이번 주 종합 1위: \${leaders.join(" · ")} (1위 \${top}개)\`;
     }
   } catch {}
 })();
