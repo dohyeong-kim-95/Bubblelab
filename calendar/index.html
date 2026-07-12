@@ -17,7 +17,7 @@
   table { width: 100%; border-collapse: collapse; table-layout: fixed;
           font-variant-numeric: tabular-nums; }
   th { font-weight: normal; opacity: .55; font-size: .8rem; padding-bottom: .6rem; }
-  td { text-align: center; padding: .55rem 0; }
+  td { text-align: center; padding: .55rem 0; position: relative; z-index: 0; }
   .sun { color: light-dark(#c0392b, #ff8a7a); }
   .sat { color: light-dark(#2563ab, #8ab8ff); }
   .today { position: relative; font-weight: bold;
@@ -26,14 +26,28 @@
                    width: 2.1em; height: 2.1em; border-radius: 50%;
                    transform: translate(-50%, -50%); z-index: -1;
                    background: light-dark(#1c2733, #dbe4ee); }
-  td { position: relative; z-index: 0; }
   #actions { text-align: center; margin-top: 1.6rem; }
-  #save { font: inherit; color: inherit; background: none; cursor: pointer;
-          padding: .55rem 1.1rem; border-radius: .5rem;
-          border: 1px solid light-dark(#1c273355, #dbe4ee55); }
-  #save:hover:not(:disabled) { background: light-dark(#1c273310, #dbe4ee14); }
-  #save:disabled { opacity: .5; cursor: default; }
-  #err { min-height: 1.2em; margin: .7rem 0 0; font-size: .85rem;
+  button { font: inherit; color: inherit; background: none; cursor: pointer;
+           padding: .55rem 1.1rem; border-radius: .5rem;
+           border: 1px solid light-dark(#1c273355, #dbe4ee55); }
+  button:hover:not(:disabled) { background: light-dark(#1c273310, #dbe4ee14); }
+  button:disabled { opacity: .5; cursor: default; }
+  #panel { margin-top: 1.2rem; display: flex; flex-direction: column; gap: .9rem;
+           align-items: center; padding: 1.1rem;
+           border: 1px solid light-dark(#1c273322, #dbe4ee22); border-radius: .75rem; }
+  #panel[hidden] { display: none; }
+  #preview { width: 9.5rem; height: auto; border-radius: .6rem;
+             border: 1px solid light-dark(#1c273333, #dbe4ee33); }
+  .ctl { display: flex; align-items: center; gap: .7rem; width: 100%;
+         font-size: .85rem; }
+  .ctl > label { width: 4.5rem; text-align: right; opacity: .6; flex: none; }
+  .ctl > select, .ctl > input[type=range] { flex: 1; min-width: 0; }
+  select { font: inherit; font-size: .85rem; color: inherit;
+           background: light-dark(#eef2f6, #10161f);
+           border: 1px solid light-dark(#1c273355, #dbe4ee55);
+           border-radius: .4rem; padding: .3rem .4rem; }
+  input[type=range] { accent-color: light-dark(#1c2733, #dbe4ee); }
+  #err { min-height: 1.2em; margin: 0; font-size: .85rem;
          color: light-dark(#c0392b, #ff8a7a); }
 </style>
 </head>
@@ -50,9 +64,28 @@
     <tbody id="days"></tbody>
   </table>
   <div id="actions">
-    <button id="save" type="button"
-            aria-label="이번달 달력을 휴대폰 배경화면용 PNG 이미지로 저장">휴대폰 배경화면 저장</button>
-    <p id="err" role="alert"></p>
+    <button id="save" type="button" aria-expanded="false" aria-controls="panel"
+            aria-label="휴대폰 배경화면 만들기 열기">휴대폰 배경화면 저장</button>
+    <div id="panel" hidden>
+      <canvas id="preview" role="img" aria-label="배경화면 미리보기"></canvas>
+      <div class="ctl">
+        <label for="device">기종</label>
+        <select id="device" aria-label="휴대폰 기종 선택"></select>
+      </div>
+      <div class="ctl">
+        <label for="cal-size">달력 크기</label>
+        <input type="range" id="cal-size" min="40" max="95" value="60"
+               aria-label="달력 크기 조절">
+      </div>
+      <div class="ctl">
+        <label for="cal-pos">세로 위치</label>
+        <input type="range" id="cal-pos" min="30" max="80" value="55"
+               aria-label="달력 세로 위치 조절">
+      </div>
+      <button id="download" type="button"
+              aria-label="배경화면 PNG 이미지 다운로드">PNG 다운로드</button>
+      <p id="err" role="alert"></p>
+    </div>
   </div>
 </main>
 <script>
@@ -76,10 +109,8 @@ function monthData(y, m) {
 function themeColors() {
   const dark = matchMedia("(prefers-color-scheme: dark)").matches;
   return dark
-    ? { bg: "#10161f", fg: "#dbe4ee", sun: "#ff8a7a", sat: "#8ab8ff",
-        todayBg: "#dbe4ee", todayFg: "#10161f" }
-    : { bg: "#eef2f6", fg: "#1c2733", sun: "#c0392b", sat: "#2563ab",
-        todayBg: "#1c2733", todayFg: "#ffffff" };
+    ? { bg: "#10161f", fg: "#dbe4ee", sun: "#ff8a7a", sat: "#8ab8ff" }
+    : { bg: "#eef2f6", fg: "#1c2733", sun: "#c0392b", sat: "#2563ab" };
 }
 
 const cal = monthData(now.getFullYear(), now.getMonth());
@@ -109,9 +140,28 @@ const MONTHS_EN = ["JANUARY","FEBRUARY","MARCH","APRIL","MAY","JUNE",
                    "JULY","AUGUST","SEPTEMBER","OCTOBER","NOVEMBER","DECEMBER"];
 const DOW_EN = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
 
-// 1440×3200 캔버스에 배경화면을 그린다. 상단 20%는 시계·알림용 빈 영역.
-function drawWallpaper(canvas, data, todayDate, c) {
-  const W = 1440, H = 3200;
+// 기종 해상도 자동 인식: 모바일 세로 화면일 때만 신뢰한다
+function detectDevice() {
+  const dpr = devicePixelRatio || 1;
+  const w = Math.round(screen.width * dpr), h = Math.round(screen.height * dpr);
+  const mobile = /Android|iPhone|iPod|Mobile/i.test(navigator.userAgent);
+  if (mobile && h > w && w >= 640 && w <= 2200 && h <= 4400) return { w, h };
+  return null;
+}
+
+const DEVICE_PRESETS = [
+  ["iPhone Pro Max", 1290, 2796],
+  ["iPhone / Pro", 1179, 2556],
+  ["Galaxy QHD+", 1440, 3120],
+  ["Galaxy FHD+", 1080, 2340],
+  ["기타", 1440, 3200],
+];
+
+// 배경화면 렌더링. 오늘 날짜 강조 없음(정적 이미지이므로).
+// opt: { w, h, scale(달력 폭 비율 0~1), pos(달력 세로 중심 0~1) }
+// 상단 20%는 시계·알림용 안전 영역으로 항상 비워 둔다.
+function drawWallpaper(canvas, data, c, opt) {
+  const W = opt.w, H = opt.h;
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext("2d");
   const mono = 'ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace';
@@ -121,46 +171,50 @@ function drawWallpaper(canvas, data, todayDate, c) {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
-  const top = H * 0.2;
+  const bw = W * opt.scale;          // 달력 블록 너비
+  const cell = bw / 7;
+  const rows = data.weeks.length;
+  const rowH = cell * 1.05;
+  const yearH = cell * 0.55, monthH = cell * 1.15, dowH = cell * 0.85;
+  const blockH = yearH + monthH + dowH + rowH * rows;
+
+  const minTop = H * 0.2;
+  const maxTop = Math.max(minTop, H - blockH - H * 0.04);
+  const top = Math.min(Math.max(H * opt.pos - blockH / 2, minTop), maxTop);
+  const left = (W - bw) / 2;
+  const colX = (i) => left + cell * (i + .5);
+
+  let y = top;
   ctx.fillStyle = c.fg;
   ctx.globalAlpha = .6;
-  ctx.font = `64px ${mono}`;
-  ctx.fillText(String(data.y), W / 2, top + 130);
+  ctx.font = `${cell * 0.30}px ${mono}`;
+  ctx.fillText(String(data.y), W / 2, y + yearH / 2);
+  y += yearH;
+
   ctx.globalAlpha = 1;
-  ctx.font = `bold 140px ${mono}`;
-  ctx.fillText(MONTHS_EN[data.m], W / 2, top + 330);
+  ctx.font = `bold ${cell * 0.62}px ${mono}`;
+  ctx.fillText(MONTHS_EN[data.m], W / 2, y + monthH / 2);
+  y += monthH;
 
-  const margin = 150, cell = (W - margin * 2) / 7;
-  const colX = (i) => margin + cell * (i + .5);
-
-  const headY = top + 590;
-  ctx.font = `44px ${mono}`;
+  ctx.font = `${cell * 0.21}px ${mono}`;
   DOW_EN.forEach((name, i) => {
     ctx.fillStyle = i === 0 ? c.sun : i === 6 ? c.sat : c.fg;
     ctx.globalAlpha = (i === 0 || i === 6) ? .9 : .5;
-    ctx.fillText(name, colX(i), headY);
+    ctx.fillText(name, colX(i), y + dowH / 2);
   });
   ctx.globalAlpha = 1;
+  y += dowH;
 
-  const gridY = headY + 220, rowH = 250;
+  ctx.font = `${cell * 0.30}px ${mono}`;
   data.weeks.forEach((week, r) => {
     week.forEach((d, i) => {
       if (d === null) return;
-      const x = colX(i), y = gridY + rowH * r;
-      if (d === todayDate) {
-        ctx.fillStyle = c.todayBg;
-        ctx.beginPath();
-        ctx.arc(x, y, 80, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = c.todayFg;
-        ctx.font = `bold 62px ${mono}`;
-      } else {
-        ctx.fillStyle = i === 0 ? c.sun : i === 6 ? c.sat : c.fg;
-        ctx.font = `62px ${mono}`;
-      }
-      ctx.fillText(String(d), x, y);
+      ctx.fillStyle = i === 0 ? c.sun : i === 6 ? c.sat : c.fg;
+      ctx.fillText(String(d), colX(i), y + rowH * r + rowH / 2);
     });
   });
+
+  return { cell, colX, gridTop: y, rowH, top, blockH };
 }
 
 function downloadCanvasPng(canvas, filename, done) {
@@ -178,23 +232,70 @@ function downloadCanvasPng(canvas, filename, done) {
   }, "image/png");
 }
 
+// ---- 미리보기 패널 ----
 const saveBtn = document.getElementById("save");
+const panel = document.getElementById("panel");
+const previewCv = document.getElementById("preview");
+const deviceSel = document.getElementById("device");
+const sizeInput = document.getElementById("cal-size");
+const posInput = document.getElementById("cal-pos");
+const dlBtn = document.getElementById("download");
 const errEl = document.getElementById("err");
-const idleLabel = saveBtn.textContent;
+
+const detected = detectDevice();
+if (detected) {
+  const opt = document.createElement("option");
+  opt.value = `${detected.w}x${detected.h}`;
+  opt.textContent = `내 기기 (${detected.w}×${detected.h})`;
+  deviceSel.appendChild(opt);
+}
+for (const [name, w, h] of DEVICE_PRESETS) {
+  const opt = document.createElement("option");
+  opt.value = `${w}x${h}`;
+  opt.textContent = `${name} (${w}×${h})`;
+  deviceSel.appendChild(opt);
+}
+if (!detected) deviceSel.value = "1440x3200"; // 인식 실패 시 기본값
+
+function currentOpt() {
+  const [w, h] = deviceSel.value.split("x").map(Number);
+  return { w, h, scale: sizeInput.value / 100, pos: posInput.value / 100 };
+}
+
+let rafPending = false;
+function renderPreview() {
+  if (rafPending) return;
+  rafPending = true;
+  requestAnimationFrame(() => {
+    rafPending = false;
+    drawWallpaper(previewCv, cal, themeColors(), currentOpt());
+  });
+}
 
 saveBtn.addEventListener("click", () => {
-  if (saveBtn.disabled) return;
-  saveBtn.disabled = true;
-  saveBtn.textContent = "이미지 생성 중...";
+  const open = panel.hidden;
+  panel.hidden = !open;
+  saveBtn.setAttribute("aria-expanded", String(open));
+  if (open) renderPreview();
+});
+deviceSel.addEventListener("change", renderPreview);
+sizeInput.addEventListener("input", renderPreview);
+posInput.addEventListener("input", renderPreview);
+matchMedia("(prefers-color-scheme: dark)")
+  .addEventListener("change", () => { if (!panel.hidden) renderPreview(); });
+
+dlBtn.addEventListener("click", () => {
+  if (dlBtn.disabled) return;
+  dlBtn.disabled = true;
+  const idleLabel = dlBtn.textContent;
+  dlBtn.textContent = "이미지 생성 중...";
   errEl.textContent = "";
-  const restore = () => { saveBtn.disabled = false; saveBtn.textContent = idleLabel; };
-  // 버튼 텍스트가 먼저 화면에 반영되도록 한 프레임 뒤에 렌더링
+  const restore = () => { dlBtn.disabled = false; dlBtn.textContent = idleLabel; };
   setTimeout(() => {
     try {
-      const canvas = document.createElement("canvas");
-      drawWallpaper(canvas, cal, today, themeColors());
+      drawWallpaper(previewCv, cal, themeColors(), currentOpt());
       const name = `calendar-${cal.y}-${String(cal.m + 1).padStart(2, "0")}-mobile.png`;
-      downloadCanvasPng(canvas, name, (err) => {
+      downloadCanvasPng(previewCv, name, (err) => {
         if (err) errEl.textContent = "배경화면을 생성하지 못했습니다.";
         restore();
       });
