@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>달력</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>📅</text></svg>">
 <style>
   :root { color-scheme: light dark; }
   body { font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
@@ -26,6 +27,14 @@
                    transform: translate(-50%, -50%); z-index: -1;
                    background: light-dark(#1c2733, #dbe4ee); }
   td { position: relative; z-index: 0; }
+  #actions { text-align: center; margin-top: 1.6rem; }
+  #save { font: inherit; color: inherit; background: none; cursor: pointer;
+          padding: .55rem 1.1rem; border-radius: .5rem;
+          border: 1px solid light-dark(#1c273355, #dbe4ee55); }
+  #save:hover:not(:disabled) { background: light-dark(#1c273310, #dbe4ee14); }
+  #save:disabled { opacity: .5; cursor: default; }
+  #err { min-height: 1.2em; margin: .7rem 0 0; font-size: .85rem;
+         color: light-dark(#c0392b, #ff8a7a); }
 </style>
 </head>
 <body>
@@ -40,30 +49,161 @@
     </thead>
     <tbody id="days"></tbody>
   </table>
+  <div id="actions">
+    <button id="save" type="button"
+            aria-label="이번달 달력을 휴대폰 배경화면용 PNG 이미지로 저장">휴대폰 배경화면 저장</button>
+    <p id="err" role="alert"></p>
+  </div>
 </main>
 <script>
 const now = new Date();
-const y = now.getFullYear(), m = now.getMonth();
-document.getElementById("title").textContent = `📅 ${y}년 ${m + 1}월`;
-document.title = `${y}년 ${m + 1}월 달력`;
 
-const first = new Date(y, m, 1).getDay();
-const last = new Date(y, m + 1, 0).getDate();
-const tbody = document.getElementById("days");
-
-let row = tbody.insertRow();
-for (let i = 0; i < first; i++) row.insertCell();
-for (let d = 1; d <= last; d++) {
-  const dow = (first + d - 1) % 7;
-  if (dow === 0 && d > 1) row = tbody.insertRow();
-  const cell = row.insertCell();
-  cell.textContent = d;
-  if (dow === 0) cell.classList.add("sun");
-  if (dow === 6) cell.classList.add("sat");
-  if (d === now.getDate()) cell.classList.add("today");
+// 월별 날짜 데이터: 7칸짜리 주 배열 (빈 칸은 null)
+function monthData(y, m) {
+  const firstDow = new Date(y, m, 1).getDay();
+  const lastDate = new Date(y, m + 1, 0).getDate();
+  const weeks = [];
+  let week = new Array(firstDow).fill(null);
+  for (let d = 1; d <= lastDate; d++) {
+    week.push(d);
+    if (week.length === 7) { weeks.push(week); week = []; }
+  }
+  if (week.length) { while (week.length < 7) week.push(null); weeks.push(week); }
+  return { y, m, weeks };
 }
 
-window.blShareText = () => `📅 ${y}년 ${m + 1}월 달력 — calendar.bubblelab.dev`;
+// 현재 활성 테마의 색상 (CSS의 light-dark() 값과 동일하게 유지)
+function themeColors() {
+  const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+  return dark
+    ? { bg: "#10161f", fg: "#dbe4ee", sun: "#ff8a7a", sat: "#8ab8ff",
+        todayBg: "#dbe4ee", todayFg: "#10161f" }
+    : { bg: "#eef2f6", fg: "#1c2733", sun: "#c0392b", sat: "#2563ab",
+        todayBg: "#1c2733", todayFg: "#ffffff" };
+}
+
+const cal = monthData(now.getFullYear(), now.getMonth());
+const today = now.getDate();
+
+// ---- 화면 달력 ----
+document.getElementById("title").textContent = `📅 ${cal.y}년 ${cal.m + 1}월`;
+document.title = `${cal.y}년 ${cal.m + 1}월 달력`;
+
+const tbody = document.getElementById("days");
+for (const week of cal.weeks) {
+  const row = tbody.insertRow();
+  week.forEach((d, dow) => {
+    const cell = row.insertCell();
+    if (d === null) return;
+    cell.textContent = d;
+    if (dow === 0) cell.classList.add("sun");
+    if (dow === 6) cell.classList.add("sat");
+    if (d === today) cell.classList.add("today");
+  });
+}
+
+window.blShareText = () => `📅 ${cal.y}년 ${cal.m + 1}월 달력 — calendar.bubblelab.dev`;
+
+// ---- 배경화면 PNG ----
+const MONTHS_EN = ["JANUARY","FEBRUARY","MARCH","APRIL","MAY","JUNE",
+                   "JULY","AUGUST","SEPTEMBER","OCTOBER","NOVEMBER","DECEMBER"];
+const DOW_EN = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
+
+// 1440×3200 캔버스에 배경화면을 그린다. 상단 20%는 시계·알림용 빈 영역.
+function drawWallpaper(canvas, data, todayDate, c) {
+  const W = 1440, H = 3200;
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext("2d");
+  const mono = 'ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace';
+
+  ctx.fillStyle = c.bg;
+  ctx.fillRect(0, 0, W, H);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  const top = H * 0.2;
+  ctx.fillStyle = c.fg;
+  ctx.globalAlpha = .6;
+  ctx.font = `64px ${mono}`;
+  ctx.fillText(String(data.y), W / 2, top + 130);
+  ctx.globalAlpha = 1;
+  ctx.font = `bold 140px ${mono}`;
+  ctx.fillText(MONTHS_EN[data.m], W / 2, top + 330);
+
+  const margin = 150, cell = (W - margin * 2) / 7;
+  const colX = (i) => margin + cell * (i + .5);
+
+  const headY = top + 590;
+  ctx.font = `44px ${mono}`;
+  DOW_EN.forEach((name, i) => {
+    ctx.fillStyle = i === 0 ? c.sun : i === 6 ? c.sat : c.fg;
+    ctx.globalAlpha = (i === 0 || i === 6) ? .9 : .5;
+    ctx.fillText(name, colX(i), headY);
+  });
+  ctx.globalAlpha = 1;
+
+  const gridY = headY + 220, rowH = 250;
+  data.weeks.forEach((week, r) => {
+    week.forEach((d, i) => {
+      if (d === null) return;
+      const x = colX(i), y = gridY + rowH * r;
+      if (d === todayDate) {
+        ctx.fillStyle = c.todayBg;
+        ctx.beginPath();
+        ctx.arc(x, y, 80, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = c.todayFg;
+        ctx.font = `bold 62px ${mono}`;
+      } else {
+        ctx.fillStyle = i === 0 ? c.sun : i === 6 ? c.sat : c.fg;
+        ctx.font = `62px ${mono}`;
+      }
+      ctx.fillText(String(d), x, y);
+    });
+  });
+}
+
+function downloadCanvasPng(canvas, filename, done) {
+  canvas.toBlob((blob) => {
+    if (!blob) { done(new Error("PNG 인코딩 실패")); return; }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    done(null);
+  }, "image/png");
+}
+
+const saveBtn = document.getElementById("save");
+const errEl = document.getElementById("err");
+const idleLabel = saveBtn.textContent;
+
+saveBtn.addEventListener("click", () => {
+  if (saveBtn.disabled) return;
+  saveBtn.disabled = true;
+  saveBtn.textContent = "이미지 생성 중...";
+  errEl.textContent = "";
+  const restore = () => { saveBtn.disabled = false; saveBtn.textContent = idleLabel; };
+  // 버튼 텍스트가 먼저 화면에 반영되도록 한 프레임 뒤에 렌더링
+  setTimeout(() => {
+    try {
+      const canvas = document.createElement("canvas");
+      drawWallpaper(canvas, cal, today, themeColors());
+      const name = `calendar-${cal.y}-${String(cal.m + 1).padStart(2, "0")}-mobile.png`;
+      downloadCanvasPng(canvas, name, (err) => {
+        if (err) errEl.textContent = "배경화면을 생성하지 못했습니다.";
+        restore();
+      });
+    } catch (e) {
+      errEl.textContent = "배경화면을 생성하지 못했습니다.";
+      restore();
+    }
+  }, 30);
+});
 </script>
 <script defer src="/_shared/share.js"></script>
 </body>
