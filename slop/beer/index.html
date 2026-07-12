@@ -95,7 +95,6 @@
 </head>
 <body>
 <h1>🍺 맥주 따르기</h1>
-<div id="best"></div>
 <div id="rig">
   <div id="tap"><div id="handle"></div></div>
   <div id="stream"></div>
@@ -129,7 +128,6 @@ const foamEl = document.getElementById("foam");
 const lineEl = document.getElementById("targetline");
 const patienceEl = document.querySelector("#patience div");
 const serveBtn = document.getElementById("serve");
-const bestEl = document.getElementById("best");
 const customerEl = document.getElementById("customer");
 const glassH = () => document.getElementById("glass").clientHeight;
 
@@ -164,10 +162,6 @@ window.blShareText = () =>
   best !== null ? `맥주 500cc 따르기, ${fmtScore(best)} 남김! 🍺 이겨보세요`
                 : "🍺 맥주 500cc 따르기 — 도전해보세요!";
 window.blWeekly = { game: "beer", dir: "min", fmt: fmtScore };
-
-function updateBest() {
-  bestEl.textContent = best !== null ? `내 최고 기록 ${fmtScore(best)}` : " ";
-}
 
 function reset() {
   liquid = 0; foam = 0;
@@ -214,7 +208,6 @@ function serve(auto = false) {
     best = score;
     localStorage.setItem("bl-beer-best", best);
     statusEl.textContent += " · 🎉 최고 기록!";
-    updateBest();
   }
   window.blWeeklyReport?.(score);
   serveBtn.textContent = "🔄 한 잔 더";
@@ -278,7 +271,6 @@ serveBtn.addEventListener("click", () => {
 });
 
 reset();
-updateBest();
 requestAnimationFrame(loop);
 </script>
 <script defer src="/_shared/records.js"></script>
