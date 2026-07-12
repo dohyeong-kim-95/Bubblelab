@@ -114,6 +114,21 @@ async function handleAdmin(request, env, url, base = "") {
     return Response.json(data, { headers: { "Cache-Control": "no-store" } });
   }
 
+  if (url.pathname === "/api/records") {
+    const id = env.RECORDS.idFromName("global");
+    const stub = env.RECORDS.get(id);
+    if (request.method === "GET") {
+      return stub.fetch("https://records.internal/_allrecords");
+    }
+    if (request.method === "DELETE") {
+      const game = url.searchParams.get("game") ?? "";
+      return stub.fetch(
+        `https://records.internal/_records?game=${encodeURIComponent(game)}`,
+        { method: "DELETE" },
+      );
+    }
+  }
+
   if (url.pathname === "/api/suggestions") {
     const id = env.RECORDS.idFromName("global");
     const stub = env.RECORDS.get(id);
@@ -166,8 +181,12 @@ export default {
       });
     }
 
-    // 주간 신기록 보드: 모든 서브도메인에서 같은 저장소를 쓴다
+    // 주간 신기록 보드: 모든 서브도메인에서 같은 저장소를 쓴다.
+    // 삭제는 admin의 /api/records 뒤에만 있다 — 여기서는 조회·제출만.
     if (path === "/_records") {
+      if (request.method !== "GET" && request.method !== "POST") {
+        return new Response("method not allowed", { status: 405 });
+      }
       const id = env.RECORDS.idFromName("global");
       return env.RECORDS.get(id).fetch(request);
     }

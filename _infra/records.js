@@ -96,6 +96,20 @@ export class RecordsDO {
       }
     }
 
+    // ---------- 관리자용 (worker의 admin 인증 뒤에서만 도달) ----------
+    if (url.pathname === "/_allrecords" && request.method === "GET") {
+      const all = await this.state.storage.list({ prefix: `rec:${week}:` });
+      const records = {};
+      for (const [key, v] of all) records[key.split(":")[2]] = v;
+      return Response.json({ week, records }, { headers: { "Cache-Control": "no-store" } });
+    }
+    if (request.method === "DELETE") {
+      const game = url.searchParams.get("game");
+      if (!GAME.test(game ?? "")) return new Response("invalid game", { status: 400 });
+      await this.state.storage.delete(`rec:${week}:${game}`);
+      return new Response(null, { status: 204 });
+    }
+
     if (request.method === "GET") {
       // 배치 조회 (카테고리 홈 카드용): ?games=a,b,c → { records: { 이름: 기록 } }
       const batch = url.searchParams.get("games");

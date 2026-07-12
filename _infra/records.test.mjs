@@ -88,6 +88,30 @@ test("stores display text and serves batch lookups for category homes", async ()
   assert.equal("lotto" in batch, false); // 기록 없는 게임은 빠진다
 });
 
+test("admin can list this week's records and reset one", async () => {
+  const records = new RecordsDO({ storage: new MemoryStorage() });
+  await post(records, { game: "beer", nick: "맥주왕", score: 3.2, text: "오차 3cc·1.2초" });
+  await post(records, { game: "circle", nick: "동글이", score: 95.5 });
+
+  let res = await records.fetch(new Request("https://records.internal/_allrecords"));
+  let { records: all } = await res.json();
+  assert.deepEqual(Object.keys(all).sort(), ["beer", "circle"]);
+  assert.equal(all.beer.nick, "맥주왕");
+
+  // beer만 리셋
+  res = await records.fetch(
+    new Request("https://records.internal/_records?game=beer", { method: "DELETE" }),
+  );
+  assert.equal(res.status, 204);
+  res = await records.fetch(new Request("https://records.internal/_allrecords"));
+  all = (await res.json()).records;
+  assert.deepEqual(Object.keys(all), ["circle"]);
+
+  // 리셋 후 새 기록이 다시 들어간다
+  const again = await post(records, { game: "beer", nick: "새주인", score: 10 });
+  assert.equal((await again.json()).accepted, true);
+});
+
 test("suggestion box: submit, list newest-first, delete, daily cap", async () => {
   const storage = new MemoryStorage();
   const records = new RecordsDO({ storage });

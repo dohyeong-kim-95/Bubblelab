@@ -33,18 +33,18 @@
   #top .medal { font-size: 1.3rem; }
   #top .page { flex: 1; font-weight: bold; overflow-wrap: anywhere; }
   #top .users { opacity: .6; font-size: .9rem; font-variant-numeric: tabular-nums; }
-  #top .empty, #suggestions .empty { opacity: .55; justify-content: center; }
-  #suggestions { list-style: none; margin: 0; padding: 0; display: flex;
+  #top .empty, #suggestions .empty, #records .empty { opacity: .55; justify-content: center; }
+  #suggestions, #records { list-style: none; margin: 0; padding: 0; display: flex;
                  flex-direction: column; gap: .6rem; }
-  #suggestions li { display: flex; align-items: baseline; gap: .8rem;
+  #suggestions li, #records li { display: flex; align-items: baseline; gap: .8rem;
                     padding: .85rem 1.1rem; border-radius: 1rem;
                     background: light-dark(#fff, #151e2a);
                     border: 1px solid light-dark(#dce4ec, #263445); }
-  #suggestions .text { flex: 1; overflow-wrap: anywhere; }
-  #suggestions .meta { opacity: .5; font-size: .78rem; white-space: nowrap; }
-  #suggestions .del { border: 0; background: none; color: inherit; opacity: .45;
-                      cursor: pointer; font: inherit; padding: 0 .2rem; }
-  #suggestions .del:hover { opacity: 1; }
+  #suggestions .text, #records .text { flex: 1; overflow-wrap: anywhere; }
+  #suggestions .meta, #records .meta { opacity: .5; font-size: .78rem; white-space: nowrap; }
+  #suggestions .del, #records .del { border: 0; background: none; color: inherit;
+                      opacity: .45; cursor: pointer; font: inherit; padding: 0 .2rem; }
+  #suggestions .del:hover, #records .del:hover { opacity: 1; }
   #warning { display: none; margin-top: 1rem; padding: .85rem 1rem; border-radius: .8rem;
              background: light-dark(#fff2c7, #4a3711); color: light-dark(#6a4a00, #ffe49a); }
   footer { margin-top: 2rem; opacity: .5; font-size: .78rem; line-height: 1.7; }
@@ -62,6 +62,10 @@
   <section class="top" aria-label="월간 인기 카드">
     <h2>🏆 월간 인기 카드 TOP 3</h2>
     <ol id="top"><li class="empty">불러오는 중…</li></ol>
+  </section>
+  <section class="top" aria-label="주간 신기록 보드">
+    <h2>👑 주간 신기록 보드 <span id="recweek" style="opacity:.5;font-weight:normal;font-size:.8rem"></span></h2>
+    <ol id="records"><li class="empty">불러오는 중…</li></ol>
   </section>
   <section class="top" aria-label="토이 아이디어 요청함">
     <h2>💡 토이 아이디어 요청함</h2>
@@ -150,10 +154,54 @@ async function loadSuggestions() {
   }
 }
 
+async function loadRecords() {
+  const list = document.getElementById('records');
+  const empty = (text) => {
+    const li = document.createElement('li');
+    li.className = 'empty';
+    li.textContent = text;
+    list.replaceChildren(li);
+  };
+  try {
+    const res = await fetch(`${base}/api/records`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const { week, records } = await res.json();
+    document.getElementById('recweek').textContent = `(${week} 주)`;
+    const games = Object.keys(records).sort();
+    if (!games.length) return empty('이번 주 기록이 아직 없어요');
+    list.replaceChildren();
+    for (const game of games) {
+      const r = records[game];
+      const li = document.createElement('li');
+      const text = document.createElement('span');
+      text.className = 'text';
+      text.textContent = `${game} — 👑 ${r.nick} · ${r.text ?? r.score}`;
+      const meta = document.createElement('span');
+      meta.className = 'meta';
+      meta.textContent = new Date(r.at).toLocaleDateString('ko-KR');
+      const del = document.createElement('button');
+      del.className = 'del';
+      del.textContent = '✕';
+      del.title = `${game} 기록 리셋`;
+      del.addEventListener('click', async () => {
+        if (!confirm(`${game}의 이번 주 기록(${r.nick})을 리셋할까요?`)) return;
+        await fetch(`${base}/api/records?game=${encodeURIComponent(game)}`, { method: 'DELETE' });
+        loadRecords();
+      });
+      li.append(text, meta, del);
+      list.append(li);
+    }
+  } catch (err) {
+    empty(`불러오지 못했어요: ${err.message}`);
+  }
+}
+
 loadStats();
 loadSuggestions();
+loadRecords();
 setInterval(loadStats, 60_000);
 setInterval(loadSuggestions, 60_000);
+setInterval(loadRecords, 60_000);
 </script>
 </body>
 </html>
