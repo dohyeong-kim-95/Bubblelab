@@ -85,7 +85,7 @@ function listingPage(site, entries) {
 <title>${escapeHtml(site)}.bubblelab.dev</title>
 <style>
   :root { color-scheme: light dark; }
-  body { font-family: ui-monospace, monospace; max-width: 52rem;
+  body { font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; max-width: 52rem;
          margin: 3rem auto 4rem; padding: 0 1.25rem; }
   h1 { font-size: 1.25rem; text-align: center; margin-bottom: 2rem; }
   h1 span { opacity: .45; font-weight: normal; }

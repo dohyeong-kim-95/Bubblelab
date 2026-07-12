@@ -14,7 +14,7 @@
   #bl-suggest-panel { position: fixed; right: 1rem; bottom: 4.2rem; z-index: 9999;
     width: min(85vw, 19rem); padding: 1rem; border-radius: 1rem;
     border: 1.5px solid currentColor; color: light-dark(#334, #ccd);
-    font: .85rem ui-monospace, monospace;
+    font: .85rem ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
     background: light-dark(rgba(255,255,255,.95), rgba(20,26,36,.95));
     backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
     display: none; flex-direction: column; gap: .6rem; box-sizing: border-box; }

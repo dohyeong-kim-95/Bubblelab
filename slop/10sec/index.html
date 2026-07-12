@@ -6,7 +6,7 @@
 <title>10초 맞추기</title>
 <style>
   :root { color-scheme: light dark; }
-  body { margin: 0; font-family: ui-monospace, monospace; min-height: 100vh;
+  body { margin: 0; font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; min-height: 100vh;
          display: flex; flex-direction: column; align-items: center;
          justify-content: center; gap: 1.2rem; text-align: center;
          padding: 1.5rem; box-sizing: border-box; user-select: none;
@@ -21,6 +21,13 @@
            background: none; color: inherit; cursor: pointer; }
   button:active { transform: scale(.96); }
   #best { opacity: .5; font-size: .85rem; min-height: 1.2em; }
+  /* 데스크톱: 사용 영역(모바일 폭 스테이지) 밖은 톤을 낮춰 구분 */
+  body::before { content: ""; position: fixed; inset: 0; z-index: -2;
+                 background: light-dark(#dee6ee, #0a0e15); }
+  body::after { content: ""; position: fixed; top: 0; bottom: 0; left: 50%;
+                transform: translateX(-50%); width: min(100vw, 34rem); z-index: -1;
+                background: light-dark(#eef2f6, #10161f);
+                box-shadow: 0 0 1.5rem light-dark(rgba(30,50,70,.14), rgba(0,0,0,.5)); }
 </style>
 </head>
 <body>

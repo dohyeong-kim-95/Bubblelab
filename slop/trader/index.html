@@ -7,7 +7,7 @@
 <style>
   :root { color-scheme: light dark; }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: ui-monospace, monospace; height: 100dvh;
+  body { margin: 0; font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; height: 100dvh;
          display: flex; flex-direction: column; user-select: none;
          -webkit-user-select: none; touch-action: manipulation;
          background: light-dark(#f2f5f8, #0d131c); }
@@ -60,6 +60,13 @@
   @keyframes shake { 25% { transform: translateX(-4px); }
                      75% { transform: translateX(4px); } }
   .cell.deny { animation: shake .18s 2; }
+  /* 데스크톱: 사용 영역(모바일 폭 스테이지) 밖은 톤을 낮춰 구분 */
+  body::before { content: ""; position: fixed; inset: 0; z-index: -2;
+                 background: light-dark(#dee6ee, #0a0e15); }
+  body::after { content: ""; position: fixed; top: 0; bottom: 0; left: 50%;
+                transform: translateX(-50%); width: min(100vw, 34rem); z-index: -1;
+                background: light-dark(#f2f5f8, #0d131c);
+                box-shadow: 0 0 1.5rem light-dark(rgba(30,50,70,.14), rgba(0,0,0,.5)); }
 </style>
 </head>
 <body>

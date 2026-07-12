@@ -12,14 +12,14 @@
 
   const css = `
   #bl-weekly { position: fixed; left: 1rem; bottom: 1rem; z-index: 9999;
-    font: bold .85rem ui-monospace, monospace; padding: .55rem .95rem;
+    font: bold .85rem ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; padding: .55rem .95rem;
     border-radius: 2rem; border: 1.5px solid currentColor;
     color: light-dark(#334, #ccd); max-width: min(60vw, 18rem);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     background: light-dark(rgba(255,255,255,.75), rgba(20,26,36,.75));
     backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
   #bl-claim { position: fixed; left: 1rem; bottom: 3.6rem; z-index: 9999;
-    font: .85rem ui-monospace, monospace; padding: .9rem 1rem;
+    font: .85rem ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; padding: .9rem 1rem;
     border-radius: 1rem; border: 1.5px solid currentColor;
     color: light-dark(#334, #ccd); width: min(80vw, 17rem);
     background: light-dark(rgba(255,255,255,.92), rgba(20,26,36,.92));

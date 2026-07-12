@@ -5,14 +5,14 @@
 (() => {
   const css = `
   #bl-share { position: fixed; right: 1rem; bottom: 1rem; z-index: 9999;
-    font: bold .85rem ui-monospace, monospace; padding: .55rem .95rem;
+    font: bold .85rem ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; padding: .55rem .95rem;
     border-radius: 2rem; border: 1.5px solid currentColor; cursor: pointer;
     color: light-dark(#334, #ccd);
     background: light-dark(rgba(255,255,255,.75), rgba(20,26,36,.75));
     backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
   #bl-share:active { transform: scale(.94); }
   #bl-toast { position: fixed; left: 50%; bottom: 4.2rem; z-index: 9999;
-    transform: translateX(-50%); font: .85rem ui-monospace, monospace;
+    transform: translateX(-50%); font: .85rem ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
     padding: .55rem 1rem; border-radius: 2rem; pointer-events: none;
     color: light-dark(#fff, #123); background: light-dark(#333c46, #dce6f0);
     opacity: 0; transition: opacity .25s; }
