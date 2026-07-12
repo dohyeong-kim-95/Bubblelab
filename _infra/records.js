@@ -20,6 +20,7 @@ export const GAMES = {
   beer:         { dir: "min", min: 0, max: 501 },       // 500cc 오차(cc)+시간 타이브레이커
   "2048":       { dir: "max", min: 0, max: 1000000 },   // 점수
   circle:       { dir: "max", min: 0, max: 100 },       // 정확도(%)
+  clicker:      { dir: "max", min: 0, max: 300 },       // 10초 클릭 수
   reactiontime: { dir: "min", min: 30, max: 60000 },    // 반응속도(ms)
   touch25:      { dir: "min", min: 0, max: 3600 },      // 완주 시간(초)
   trader:       { dir: "max", min: -1, max: 100 },      // 수익률(비율)

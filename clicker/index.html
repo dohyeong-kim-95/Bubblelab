@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>10초 광클</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; min-height: 100vh;
+         display: flex; flex-direction: column; align-items: center;
+         justify-content: center; gap: 1.2rem; text-align: center;
+         padding: 1.5rem; box-sizing: border-box; user-select: none;
+         -webkit-user-select: none; touch-action: manipulation; }
+  h1 { font-size: 1.1rem; margin: 0; opacity: .7; }
+  #count { font-size: 4.5rem; font-weight: bold; font-variant-numeric: tabular-nums;
+           min-height: 5rem; display: grid; place-items: center; line-height: 1; }
+  #time { font-size: 1.1rem; opacity: .6; font-variant-numeric: tabular-nums; min-height: 1.4em; }
+  #msg { opacity: .7; min-height: 2.6em; white-space: pre-line; }
+  #pad { font: inherit; font-size: 1.4rem; width: min(80vw, 18rem); height: 11rem;
+         border-radius: 1.5rem; border: 2px solid currentColor;
+         background: none; color: inherit; cursor: pointer; }
+  #pad:active { transform: scale(.97); }
+  #pad.done { opacity: .35; cursor: default; }
+  #pad.done:active { transform: none; }
+  #best { opacity: .5; font-size: .85rem; min-height: 1.2em; }
+  /* 데스크톱: 사용 영역(모바일 폭 스테이지) 밖은 톤을 낮춰 구분 */
+  body::before { content: ""; position: fixed; inset: 0; z-index: -2;
+                 background: light-dark(#dee6ee, #0a0e15); }
+  body::after { content: ""; position: fixed; top: 0; bottom: 0; left: 50%;
+                transform: translateX(-50%); width: min(100vw, 34rem); z-index: -1;
+                background: light-dark(#eef2f6, #10161f);
+                box-shadow: 0 0 1.5rem light-dark(rgba(30,50,70,.14), rgba(0,0,0,.5)); }
+</style>
+</head>
+<body>
+  <h1>👆 10초 광클</h1>
+  <div id="count">0</div>
+  <div id="time">10.0초</div>
+  <div id="msg">첫 클릭과 동시에 10초 카운트가 시작돼요.
+있는 힘껏 두드리세요!</div>
+  <button id="pad">시작!</button>
+  <div id="best"></div>
+<script>
+const countEl = document.getElementById("count");
+const timeEl = document.getElementById("time");
+const msg = document.getElementById("msg");
+const pad = document.getElementById("pad");
+const bestEl = document.getElementById("best");
+
+const LIMIT = 10;   // 초
+let phase = "idle"; // idle | running | done
+let startTime = 0;
+let count = 0;
+let raf = null;
+let best = null;
+
+window.blWeekly = { game: "clicker", dir: "max", fmt: (v) => v + "회" };
+window.blShareText = () => `10초 동안 ${best ?? count}번 클릭! 도전해보세요`;
+
+function tick() {
+  const left = LIMIT - (performance.now() - startTime) / 1000;
+  if (left <= 0) return finish();
+  timeEl.textContent = left.toFixed(1) + "초";
+  raf = requestAnimationFrame(tick);
+}
+
+function finish() {
+  phase = "done";
+  cancelAnimationFrame(raf);
+  timeEl.textContent = "0.0초";
+  pad.classList.add("done");
+  pad.textContent = "끝!";
+  const cps = count / LIMIT;
+  if (best === null || count > best) {
+    best = count;
+    bestEl.textContent = `최고 기록: ${best}회`;
+  }
+  const grade =
+    cps >= 12 ? "🤖 사람 맞아요?" :
+    cps >= 9  ? "⚡ 광클의 신" :
+    cps >= 7  ? "🔥 대단한데요" :
+    cps >= 5  ? "👍 나쁘지 않아요" :
+    cps >= 3  ? "🙂 준비운동은 됐어요" : "🫠 손가락 깨우고 오세요…";
+  msg.textContent = `${count}회 (초당 ${cps.toFixed(1)}회) ${grade}`;
+  window.blWeeklyReport?.(count);
+  setTimeout(() => {
+    phase = "idle";
+    pad.classList.remove("done");
+    pad.textContent = "다시!";
+  }, 1200);
+}
+
+pad.addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  if (phase === "done") return;
+  if (phase === "idle") {
+    phase = "running";
+    count = 0;
+    startTime = performance.now();
+    msg.textContent = "…";
+    tick();
+  }
+  if ((performance.now() - startTime) / 1000 >= LIMIT) return finish();
+  count++;
+  countEl.textContent = count;
+  pad.textContent = "클릭!!";
+});
+</script>
+<script defer src="/_shared/records.js"></script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>
