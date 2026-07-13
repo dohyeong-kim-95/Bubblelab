@@ -14,9 +14,6 @@
   // workers.dev 서브도메인 미등록 계정에서도 배포되도록 비활성화
   "workers_dev": false,
   "preview_urls": false,
-  "r2_buckets": [
-    { "binding": "UPLOADED_ASSETS", "bucket_name": "bubblelab-assets" }
-  ],
   "routes": [
     { "pattern": "bubblelab.dev/*", "zone_name": "bubblelab.dev" },
     { "pattern": "*.bubblelab.dev/*", "zone_name": "bubblelab.dev" }
