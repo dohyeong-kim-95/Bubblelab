@@ -58,10 +58,10 @@
                        border: 2px dashed #df5f7580; }
   .frame-actions { margin-top: auto; padding-top: 1rem; display: grid; }
 
-  .camera-box { position: relative; width: 100%; aspect-ratio: 3/2; overflow: hidden;
+  .camera-box { position: relative; width: 100%; aspect-ratio: 3/2; flex: none; overflow: hidden;
                 border-radius: 1rem; background: #080b10; display: grid; place-items: center; }
-  #camera { width: 100%; height: 100%; object-fit: cover; }
-  #camera.mirror { transform: scaleX(-1); }
+  #camera { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+  #cameraPreview { display: block; width: 100%; height: 100%; background: #080b10; }
   #cameraEmpty { position: absolute; inset: 0; display: grid; place-items: center; padding: 1rem;
                  text-align: center; font-size: .78rem; color: #a9b4c1; }
   #cameraEmpty[hidden], #countdown[hidden] { display: none; }
@@ -166,6 +166,7 @@
     <p class="eyebrow">STEP 2 · 3초 간격 자동 촬영</p>
     <div class="camera-box">
       <video id="camera" autoplay muted playsinline></video>
+      <canvas id="cameraPreview" width="1080" height="720"></canvas>
       <div id="cameraEmpty">카메라를 켜주세요.</div>
       <div id="countdown" hidden></div>
       <div id="flash"></div>
@@ -254,8 +255,11 @@ let frameIndex = 0, reviewIndex = 0, retakeIndex = -1;
 let stream = null, facingMode = "user", shooting = false, currentStep = "welcome";
 let videoBlob = null, videoMime = "", videoUrl = "";
 let recorder = null, recordAnimation = 0, recordStopPromise = null;
+let previewAnimation = 0;
 
 const videoEl = document.getElementById("camera");
+const previewCanvas = document.getElementById("cameraPreview");
+const previewCtx = previewCanvas.getContext("2d", { alpha: false });
 const cameraEmptyEl = document.getElementById("cameraEmpty");
 const cameraStatusEl = document.getElementById("cameraStatus");
 const countdownEl = document.getElementById("countdown");
@@ -363,7 +367,7 @@ async function startCamera() {
       video: { facingMode: { ideal: facingMode }, width: { ideal: 1920 }, height: { ideal: 1280 } }, audio: false,
     });
     videoEl.srcObject = stream; await videoEl.play();
-    videoEl.classList.toggle("mirror", facingMode === "user"); cameraEmptyEl.hidden = true;
+    startPreviewDrawing(); cameraEmptyEl.hidden = true;
     document.getElementById("cameraStart").disabled = true;
     document.getElementById("cameraStart").textContent = "카메라 켜짐";
     document.getElementById("shoot").disabled = false;
@@ -380,7 +384,7 @@ async function startCamera() {
 
 function stopCamera() {
   if (recorder?.state === "recording") recorder.stop();
-  stopRecordDrawing();
+  stopRecordDrawing(); stopPreviewDrawing();
   stream?.getTracks().forEach((track) => track.stop()); stream = null; videoEl.srcObject = null;
   cameraEmptyEl.hidden = false;
   document.getElementById("cameraStart").disabled = false;
@@ -397,16 +401,10 @@ function resetCameraScreen() {
 }
 
 function captureFrame() {
-  const vw = videoEl.videoWidth, vh = videoEl.videoHeight;
-  if (!vw || !vh) throw new Error("camera not ready");
-  const targetRatio = 3 / 2;
-  let sx = 0, sy = 0, sw = vw, sh = vh;
-  if (vw / vh > targetRatio) { sw = vh * targetRatio; sx = (vw - sw) / 2; }
-  else { sh = vw / targetRatio; sy = (vh - sh) / 2; }
+  if (!videoEl.videoWidth || !videoEl.videoHeight) throw new Error("camera not ready");
   const output = document.createElement("canvas"); output.width = 1800; output.height = 1200;
   const c = output.getContext("2d");
-  if (facingMode === "user") { c.translate(output.width, 0); c.scale(-1, 1); }
-  c.drawImage(videoEl, sx, sy, sw, sh, 0, 0, output.width, output.height);
+  c.drawImage(previewCanvas, 0, 0, output.width, output.height);
   return output;
 }
 
@@ -416,6 +414,27 @@ function cameraCrop() {
   if (vw / vh > targetRatio) { sw = vh * targetRatio; sx = (vw - sw) / 2; }
   else { sh = vw / targetRatio; sy = (vh - sh) / 2; }
   return { sx, sy, sw, sh };
+}
+
+function stopPreviewDrawing() {
+  if (previewAnimation) cancelAnimationFrame(previewAnimation);
+  previewAnimation = 0;
+}
+
+function startPreviewDrawing() {
+  stopPreviewDrawing();
+  const draw = () => {
+    if (!stream) return;
+    if (videoEl.videoWidth && videoEl.videoHeight) {
+      const { sx, sy, sw, sh } = cameraCrop();
+      previewCtx.save();
+      if (facingMode === "user") { previewCtx.translate(previewCanvas.width, 0); previewCtx.scale(-1, 1); }
+      previewCtx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, previewCanvas.width, previewCanvas.height);
+      previewCtx.restore();
+    }
+    previewAnimation = requestAnimationFrame(draw);
+  };
+  draw();
 }
 
 function preferredVideoMime() {
@@ -436,11 +455,7 @@ function beginVideoRecording() {
   const context = recordCanvas.getContext("2d", { alpha: false });
   const draw = () => {
     if (!stream || !videoEl.videoWidth) return;
-    const { sx, sy, sw, sh } = cameraCrop();
-    context.save();
-    if (facingMode === "user") { context.translate(recordCanvas.width, 0); context.scale(-1, 1); }
-    context.drawImage(videoEl, sx, sy, sw, sh, 0, 0, recordCanvas.width, recordCanvas.height);
-    context.restore();
+    context.drawImage(previewCanvas, 0, 0, recordCanvas.width, recordCanvas.height);
     recordAnimation = requestAnimationFrame(draw);
   };
   draw();
