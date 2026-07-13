@@ -25,6 +25,15 @@ jobs:
       - name: Build
         run: node _infra/build.mjs
 
+      - name: Ensure image bucket exists
+        continue-on-error: true
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4"
+          command: r2 bucket create bubblelab-assets
+
       - name: Deploy to Cloudflare
         uses: cloudflare/wrangler-action@v3
         with:

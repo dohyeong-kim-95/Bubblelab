@@ -13,8 +13,23 @@
   main { width: min(54rem, 100%); margin: 0 auto; padding: 3rem 1.25rem; }
   header { display: flex; align-items: center; justify-content: space-between;
            gap: 1rem; margin-bottom: 2rem; }
+  .head-left { display: flex; align-items: center; gap: .65rem; }
+  .home-btn { display: none; border: 0; padding: .3rem; background: none; color: inherit;
+              font: inherit; font-size: 1.25rem; cursor: pointer; }
+  body:not([data-view="home"]) .home-btn { display: block; }
   h1 { margin: 0; font-size: 1.3rem; }
   .logout { color: inherit; opacity: .65; font-size: .85rem; }
+  .view[hidden] { display: none; }
+  .hub-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+  .hub-card { min-height: 13rem; padding: 1.3rem; border-radius: 1.2rem; color: inherit;
+              text-decoration: none; display: flex; flex-direction: column; justify-content: space-between;
+              background: light-dark(#fff, #151e2a); border: 1px solid light-dark(#dce4ec, #263445);
+              transition: transform .15s, box-shadow .15s; }
+  .hub-card:hover { transform: translateY(-3px); box-shadow: 0 10px 28px #0002; }
+  .hub-icon { font-size: 2.4rem; }
+  .hub-card strong { display: block; margin-bottom: .35rem; font-size: 1.1rem; }
+  .hub-card small { display: block; opacity: .55; line-height: 1.55; }
+  .view-title { margin: 0 0 1.2rem; font-size: 1.15rem; }
   .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
   .card { min-height: 10rem; padding: 1.25rem; border-radius: 1.2rem;
           display: flex; flex-direction: column; justify-content: space-between;
@@ -59,13 +74,62 @@
                  background: none; color: inherit; cursor: pointer; }
   #warning { display: none; margin-top: 1rem; padding: .85rem 1rem; border-radius: .8rem;
              background: light-dark(#fff2c7, #4a3711); color: light-dark(#6a4a00, #ffe49a); }
+  .upload-card { padding: 1.15rem; border-radius: 1rem; background: light-dark(#fff, #151e2a);
+                 border: 1px solid light-dark(#dce4ec, #263445); }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; }
+  .field { display: flex; flex-direction: column; gap: .35rem; }
+  .field.full { grid-column: 1 / -1; }
+  .field label, .file-labels label { opacity: .65; font-size: .75rem; }
+  .field input, .field select, .field textarea, .file-labels input { width: 100%; padding: .7rem .75rem;
+        border-radius: .65rem; border: 1px solid light-dark(#dce4ec, #263445);
+        background: none; color: inherit; font: inherit; }
+  .field textarea { resize: vertical; }
+  .drop { padding: 1.3rem; border: 1px dashed light-dark(#afbac6, #425267); border-radius: .8rem;
+          text-align: center; cursor: pointer; }
+  .drop input { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; }
+  .drop strong, .drop small { display: block; }
+  .drop small { margin-top: .35rem; opacity: .5; font-size: .7rem; }
+  .file-labels { display: grid; gap: .5rem; margin-top: .7rem; }
+  .file-row { display: grid; grid-template-columns: 3.2rem 1fr; gap: .6rem; align-items: center; }
+  .file-row img { width: 3.2rem; height: 3.2rem; border-radius: .5rem; object-fit: cover;
+                  background: light-dark(#eef1f4, #0d131c); }
+  .upload-actions { display: flex; align-items: center; gap: .8rem; margin-top: 1rem; }
+  .primary { padding: .7rem 1.1rem; border: 0; border-radius: .65rem; background: #477a5d;
+             color: #fff; font: inherit; font-weight: bold; cursor: pointer; }
+  .primary:disabled { opacity: .45; cursor: default; }
+  #upload-status { opacity: .6; font-size: .75rem; }
+  #asset-list { display: grid; gap: .6rem; margin-top: .8rem; }
+  .asset-row { display: grid; grid-template-columns: 4.2rem 1fr auto; align-items: center; gap: .8rem;
+               padding: .7rem; border-radius: .8rem; background: light-dark(#fff, #151e2a);
+               border: 1px solid light-dark(#dce4ec, #263445); }
+  .asset-row img { width: 4.2rem; height: 3.5rem; object-fit: cover; border-radius: .5rem;
+                   background: light-dark(#eef1f4, #0d131c); }
+  .asset-row strong, .asset-row small { display: block; }
+  .asset-row small { margin-top: .25rem; opacity: .5; }
+  .asset-row button { border: 0; background: none; color: inherit; opacity: .55; cursor: pointer; font: inherit; }
+  .asset-empty { padding: 2.5rem; text-align: center; opacity: .5; border: 1px dashed light-dark(#dce4ec, #263445); border-radius: .8rem; }
   footer { margin-top: 2rem; opacity: .5; font-size: .78rem; line-height: 1.7; }
-  @media (max-width: 38rem) { .cards { grid-template-columns: 1fr; } .card { min-height: 8rem; } }
+  @media (max-width: 38rem) {
+    .cards, .hub-grid { grid-template-columns: 1fr; }
+    .card { min-height: 8rem; }
+    .hub-card { min-height: 9rem; }
+    .form-grid { grid-template-columns: 1fr; }
+    .field.full { grid-column: auto; }
+  }
 </style>
 </head>
 <body>
 <main>
-  <header><h1>🫧 Bubblelab Admin</h1><a class="logout" href="logout">로그아웃</a></header>
+  <header><div class="head-left"><button class="home-btn" id="home-btn" type="button" aria-label="관리 홈">‹</button><h1>🫧 Bubblelab Admin</h1></div><a class="logout" href="logout">로그아웃</a></header>
+  <section class="view" id="view-home">
+    <div class="hub-grid">
+      <a class="hub-card" href="#insights"><span class="hub-icon">📊</span><span><strong>Insights</strong><small>방문자와 인기 서비스 통계</small></span></a>
+      <a class="hub-card" href="#upload"><span class="hub-icon">🖼️</span><span><strong>Upload</strong><small>배경화면·스티커·프레임 관리</small></span></a>
+      <a class="hub-card" href="#slop"><span class="hub-icon">🎮</span><span><strong>Slop</strong><small>기록·공지·아이디어 관리</small></span></a>
+    </div>
+  </section>
+  <section class="view" id="view-insights" hidden>
+  <h2 class="view-title">📊 Insights</h2>
   <section class="cards" aria-label="순사용자 통계">
     <article class="card"><span class="label">일간 사용자</span><strong class="value" id="daily">—</strong><span class="range">오늘 · KST</span></article>
     <article class="card"><span class="label">주간 사용자</span><strong class="value" id="weekly">—</strong><span class="range">최근 7일</span></article>
@@ -75,6 +139,24 @@
     <h2>🏆 월간 인기 카드 TOP 3</h2>
     <ol id="top"><li class="empty">불러오는 중…</li></ol>
   </section>
+  </section>
+  <section class="view" id="view-upload" hidden>
+    <h2 class="view-title">🖼️ Upload</h2>
+    <form class="upload-card" id="asset-form">
+      <div class="form-grid">
+        <div class="field"><label for="asset-category">종류</label><select id="asset-category" name="category" required><option value="wallpaper">Wallpaper</option><option value="sticker">Sticker</option><option value="photo-frame">Photo frame</option></select></div>
+        <div class="field"><label for="asset-title">제목</label><input id="asset-title" name="title" maxlength="50" required placeholder="예: 여름 구름"></div>
+        <div class="field full"><label for="asset-description">설명</label><textarea id="asset-description" name="description" maxlength="200" rows="2" placeholder="이미지에 대한 짧은 설명"></textarea></div>
+        <div class="field full"><label for="asset-tags">태그</label><input id="asset-tags" name="tags" maxlength="120" placeholder="여름, 하늘, 파랑 (쉼표로 구분)"></div>
+        <label class="drop field full" for="asset-files"><input id="asset-files" name="files" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple required><strong>사진을 선택하거나 여기에 놓아주세요</strong><small>PNG · JPG · WebP · GIF / 파일당 10MB / 최대 4개</small></label>
+      </div>
+      <div class="file-labels" id="file-labels"></div>
+      <div class="upload-actions"><button class="primary" id="upload-button" type="submit">업로드</button><span id="upload-status"></span></div>
+    </form>
+    <section class="top" aria-label="업로드 이미지"><h2>최근 업로드</h2><div id="asset-list"><div class="asset-empty">불러오는 중…</div></div></section>
+  </section>
+  <section class="view" id="view-slop" hidden>
+  <h2 class="view-title">🎮 Slop</h2>
   <section class="top" aria-label="주간 신기록 보드">
     <h2>👑 주간 신기록 보드 <span id="recweek" style="opacity:.5;font-weight:normal;font-size:.8rem"></span></h2>
     <ol id="records"><li class="empty">불러오는 중…</li></ol>
@@ -95,10 +177,22 @@
     <h2>💡 토이 아이디어 요청함</h2>
     <ol id="suggestions"><li class="empty">불러오는 중…</li></ol>
   </section>
+  </section>
   <div id="warning">⚠️ 초기 계정 admin/admin을 사용 중입니다. Cloudflare secrets를 설정해 변경하세요.</div>
   <footer id="status">불러오는 중…</footer>
 </main>
 <script>
+const views = ['home', 'insights', 'upload', 'slop'];
+function showView() {
+  const selected = views.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'home';
+  document.body.dataset.view = selected;
+  for (const view of views) document.getElementById(`view-${view}`).hidden = view !== selected;
+  if (selected === 'upload') loadAssets();
+  scrollTo({ top: 0, behavior: 'auto' });
+}
+addEventListener('hashchange', showView);
+document.getElementById('home-btn').addEventListener('click', () => { location.hash = 'home'; });
+
 async function loadStats() {
   const status = document.getElementById('status');
   try {
@@ -138,6 +232,93 @@ async function loadStats() {
   }
 }
 const base = location.hostname.endsWith('bubblelab.dev') ? '' : '/admin';
+showView();
+
+const assetForm = document.getElementById('asset-form');
+const assetFiles = document.getElementById('asset-files');
+const fileLabels = document.getElementById('file-labels');
+const uploadStatus = document.getElementById('upload-status');
+const uploadButton = document.getElementById('upload-button');
+
+assetFiles.addEventListener('change', () => {
+  const files = [...assetFiles.files];
+  if (files.length > 4) {
+    uploadStatus.textContent = '한 번에 최대 4개까지 선택할 수 있습니다.';
+    assetFiles.value = '';
+    fileLabels.replaceChildren();
+    return;
+  }
+  const invalid = files.find((file) => !['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(file.type) || file.size > 10 * 1024 * 1024);
+  if (invalid) {
+    uploadStatus.textContent = `${invalid.name}: 지원하지 않는 형식이거나 10MB를 넘습니다.`;
+    assetFiles.value = '';
+    fileLabels.replaceChildren();
+    return;
+  }
+  uploadStatus.textContent = '';
+  fileLabels.replaceChildren();
+  files.forEach((file, index) => {
+    const row = document.createElement('div');
+    row.className = 'file-row';
+    const img = document.createElement('img');
+    img.src = URL.createObjectURL(file);
+    img.alt = '';
+    img.addEventListener('load', () => URL.revokeObjectURL(img.src), { once: true });
+    const label = document.createElement('input');
+    label.className = 'asset-file-label';
+    label.maxLength = 30;
+    label.placeholder = assetFiles.files.length === 1 ? '다운로드 버튼 이름' : `파일 ${index + 1} 용도 (예: 모바일)`;
+    row.append(img, label);
+    fileLabels.append(row);
+  });
+});
+
+assetForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (!assetFiles.files.length || assetFiles.files.length > 4) return;
+  uploadButton.disabled = true;
+  uploadStatus.textContent = '업로드 중…';
+  const form = new FormData(assetForm);
+  form.set('labels', JSON.stringify([...document.querySelectorAll('.asset-file-label')].map((input) => input.value)));
+  try {
+    const res = await fetch(`${base}/api/assets`, { method: 'POST', body: form });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    uploadStatus.textContent = '업로드 완료';
+    assetForm.reset();
+    fileLabels.replaceChildren();
+    await loadAssets();
+  } catch (error) {
+    uploadStatus.textContent = `업로드 실패: ${error.message}`;
+  } finally { uploadButton.disabled = false; }
+});
+
+async function loadAssets() {
+  const list = document.getElementById('asset-list');
+  try {
+    const res = await fetch(`${base}/api/assets`, { cache: 'no-store' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!data.items.length) { list.innerHTML = '<div class="asset-empty">아직 업로드한 이미지가 없습니다.</div>'; return; }
+    list.replaceChildren();
+    for (const item of data.items) {
+      const row = document.createElement('article');
+      row.className = 'asset-row';
+      const img = document.createElement('img'); img.src = item.preview; img.alt = '';
+      const info = document.createElement('span');
+      const title = document.createElement('strong'); title.textContent = item.title;
+      const meta = document.createElement('small'); meta.textContent = `${item.category} · ${item.downloads.length}개 파일 · ${item.createdAt}`;
+      info.append(title, meta);
+      const del = document.createElement('button'); del.type = 'button'; del.textContent = '삭제';
+      del.addEventListener('click', async () => {
+        if (!confirm(`“${item.title}”과 파일을 삭제할까요?`)) return;
+        const response = await fetch(`${base}/api/assets?id=${encodeURIComponent(item.id)}`, { method: 'DELETE' });
+        if (response.ok) row.remove(); else alert('삭제하지 못했습니다.');
+      });
+      row.append(img, info, del); list.append(row);
+    }
+  } catch (error) { list.innerHTML = `<div class="asset-empty">불러오지 못했습니다: ${error.message}</div>`; }
+}
 
 async function loadSuggestions() {
   const list = document.getElementById('suggestions');

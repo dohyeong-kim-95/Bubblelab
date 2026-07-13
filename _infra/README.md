@@ -15,7 +15,9 @@
 3. `/_suggest` → 토이 아이디어 우편함 제출 (RecordsDO에 저장, 방문자당
    하루 5건). 카테고리 홈의 💡 버튼(`_shared/suggest.js`)이 사용하고,
    조회·삭제는 admin의 `/api/suggestions`.
-4. `/_shared/*` → 공용 에셋. 어느 서브도메인에서든 같은 파일.
+4. `/_shared/*` → 공용 코드, `/_assets/*` → 정적 이미지와 R2 관리자 업로드.
+   어느 서브도메인에서든 같은 파일을 사용한다. 관리자 업로드 API는
+   `admin.bubblelab.dev/api/assets`이며 기존 관리자 세션 뒤에서만 동작한다.
 5. 나머지 → 호스트명 라우팅: `slop.bubblelab.dev/x` → `dist/slop/x`,
    apex와 www는 `dist/www`.
    로컬 개발(호스트가 *.bubblelab.dev가 아닐 때)은 첫 경로 세그먼트가
@@ -39,6 +41,7 @@ npx wrangler secret put PLANNER_SESSION_SECRET
 
 - 루트의 사이트 폴더들(`_`/`.` 미시작)을 `dist/`로 복사 (README.md 제외)
 - `_shared/` → `dist/_shared/`
+- `_assets/` → `dist/_assets/`, 각 아이템 `metadata.json`을 합친 카탈로그 생성
 - index.html이 없는 사이트 루트에 하위 폴더 카드 그리드 페이지 자동 생성
   (이모지는 각 토이 index.html의 첫 이모지. 순서는 주간 접속량순 —
   기본은 가나다순으로 생성하고 클라이언트가 `/_stats`로 재정렬)

@@ -7,6 +7,7 @@
 
 const ROOT_DOMAIN = "bubblelab.dev";
 import { validPlannerCode } from "./planner.js";
+import { handleAdminAssets, serveMergedCatalog, serveUploadedAsset } from "./assets-store.js";
 
 export { RealtimeDO } from "./realtime.js";
 export { AnalyticsDO } from "./analytics.js";
@@ -218,6 +219,9 @@ async function handleAdmin(request, env, url, base = "") {
       );
     }
   }
+  if (url.pathname === "/api/assets") {
+    return handleAdminAssets(request, env, url);
+  }
   return null;
 }
 
@@ -229,6 +233,13 @@ export default {
     let site;
     let path = url.pathname;
 
+    // 업로드 카탈로그는 정적 에셋과 R2의 관리자 업로드를 합쳐 제공한다.
+    if (path === "/_assets/catalog.json") {
+      return serveMergedCatalog(request, env);
+    }
+    if (path.startsWith("/_assets/upload/")) {
+      return serveUploadedAsset(request, env, path);
+    }
     // 공용 코드와 이미지 에셋은 모든 서브도메인에서 사이트 프리픽스 없이 서빙
     if (path.startsWith("/_shared/") || path.startsWith("/_assets/")) {
       return env.ASSETS.fetch(request);
