@@ -25,9 +25,25 @@
   button:active { transform: scale(.97); }
   button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   button:disabled { opacity: .45; cursor: default; }
-  .pick { width: 100%; border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
-          color: var(--accent); font-weight: bold; }
-  input[type=file] { display: none; }
+  .camera { position: relative; aspect-ratio: 3 / 4; overflow: hidden; border-radius: .8rem;
+            background: #090c11; display: grid; place-items: center; }
+  #camera { width: 100%; height: 100%; object-fit: cover; }
+  #camera.mirror { transform: scaleX(-1); }
+  #cameraEmpty { position: absolute; inset: 0; display: grid; place-items: center;
+                 color: #aeb8c4; font-size: .8rem; text-align: center; padding: 1rem; }
+  #cameraEmpty[hidden] { display: none; }
+  #countdown { position: absolute; inset: 0; display: grid; place-items: center;
+               color: white; font-size: 6rem; font-weight: bold; text-shadow: 0 4px 18px #000b;
+               pointer-events: none; }
+  #countdown[hidden] { display: none; }
+  #flash { position: absolute; inset: 0; background: white; opacity: 0; pointer-events: none; }
+  #flash.on { animation: flash .22s ease-out; }
+  @keyframes flash { 25% { opacity: .92; } to { opacity: 0; } }
+  .camera-actions { display: grid; grid-template-columns: 1fr 1.25fr 1fr; gap: .45rem; margin-top: .65rem; }
+  .camera-actions button { padding: .6rem .25rem; font-size: .75rem; }
+  #shoot { border-color: var(--accent); color: var(--accent); font-weight: bold; }
+  #cameraStatus { min-height: 1.3em; margin: .55rem 0 0; text-align: center;
+                  font-size: .72rem; color: var(--muted); }
   .stage { position: relative; width: min(82vw, 23rem); margin: 0 auto;
            filter: drop-shadow(0 .5rem 1rem light-dark(#1a273322, #0008)); }
   #preview { display: block; width: 100%; aspect-ratio: 2 / 3; background: #fff;
@@ -65,11 +81,21 @@
     <h1>📸 네컷사진 만들기</h1>
     <span></span>
   </header>
-  <p class="lead">사진 네 장과 프레임을 골라 나만의 네컷사진을 만드세요.</p>
+  <p class="lead">3초 간격으로 네 장을 촬영하고 프레임을 골라보세요.</p>
 
-  <section class="panel">
-    <input id="files" type="file" accept="image/*" multiple>
-    <button class="pick" id="pick" type="button">사진 4장 선택</button>
+  <section class="panel" id="cameraPanel">
+    <div class="camera">
+      <video id="camera" autoplay muted playsinline></video>
+      <div id="cameraEmpty">카메라를 켜고 네컷 촬영을 시작하세요.</div>
+      <div id="countdown" hidden></div>
+      <div id="flash"></div>
+    </div>
+    <div class="camera-actions">
+      <button id="cameraStart" type="button">카메라 켜기</button>
+      <button id="shoot" type="button" disabled>네컷 촬영</button>
+      <button id="cameraSwitch" type="button" disabled>카메라 전환</button>
+    </div>
+    <p id="cameraStatus" role="status"></p>
   </section>
 
   <section class="panel">
@@ -87,10 +113,10 @@
       <span id="zoomValue">100%</span>
     </div>
     <div class="mini-actions">
+      <button id="retake" type="button">재촬영</button>
       <button id="prev" type="button">← 순서</button>
       <button id="next" type="button">순서 →</button>
       <button id="rotate" type="button">↻ 회전</button>
-      <button id="remove" type="button">삭제</button>
     </div>
   </section>
 
@@ -106,7 +132,7 @@
     </div>
     <p id="status" role="status"></p>
   </section>
-  <p class="privacy">🔒 선택한 사진은 서버로 전송되지 않으며 이 브라우저 안에서만 처리됩니다.<br>
+  <p class="privacy">🔒 촬영한 사진은 서버로 전송되지 않으며 이 브라우저 안에서만 처리됩니다.<br>
      iPhone은 공유 메뉴의 ‘이미지 저장’을 이용할 수 있습니다.</p>
 </main>
 
@@ -114,39 +140,38 @@
 const W = 1200, H = 1800;
 const canvas = document.getElementById("preview");
 const ctx = canvas.getContext("2d");
-const fileInput = document.getElementById("files");
+const videoEl = document.getElementById("camera");
+const countdownEl = document.getElementById("countdown");
+const cameraEmptyEl = document.getElementById("cameraEmpty");
+const cameraStatusEl = document.getElementById("cameraStatus");
 const slotTabs = document.getElementById("slotTabs");
 const zoomInput = document.getElementById("zoom");
 const zoomValue = document.getElementById("zoomValue");
 const statusEl = document.getElementById("status");
 
-const gridSlots = [
-  { x: 70, y: 190, w: 510, h: 650 }, { x: 620, y: 190, w: 510, h: 650 },
-  { x: 70, y: 880, w: 510, h: 650 }, { x: 620, y: 880, w: 510, h: 650 },
-];
-const stripSlots = [0, 1, 2, 3].map((i) => ({ x: 150, y: 105 + i * 405, w: 900, h: 365 }));
+const stripSlots = [0, 1, 2, 3].map((i) => ({ x: 90, y: 125 + i * 390, w: 1020, h: 350 }));
 
 const FRAMES = [
   {
-    id: "cream", name: "크림", swatch: "#f7f0df", slots: gridSlots,
+    id: "cream", name: "크림", swatch: "#f7f0df", slots: stripSlots,
     draw(c) {
       c.fillStyle = "#f7f0df"; c.fillRect(0, 0, W, H);
       c.fillStyle = "#342e2a"; c.textAlign = "center";
-      c.font = "bold 58px ui-monospace, monospace"; c.fillText("FOUR LITTLE MOMENTS", W / 2, 105);
-      c.font = "30px ui-monospace, monospace"; c.fillText(dateText(), W / 2, 1660);
+      c.font = "bold 42px ui-monospace, monospace"; c.fillText("FOUR LITTLE MOMENTS", W / 2, 70);
+      c.font = "28px ui-monospace, monospace"; c.fillText(dateText(), W / 2, 1715);
       c.font = "24px ui-monospace, monospace"; c.globalAlpha = .55;
-      c.fillText("BUBBLELAB PHOTO", W / 2, 1720); c.globalAlpha = 1;
+      c.fillText("BUBBLELAB PHOTO", W / 2, 1760); c.globalAlpha = 1;
     },
   },
   {
-    id: "midnight", name: "미드나잇", swatch: "#141923", slots: gridSlots,
+    id: "midnight", name: "미드나잇", swatch: "#141923", slots: stripSlots,
     draw(c) {
       c.fillStyle = "#141923"; c.fillRect(0, 0, W, H);
       c.strokeStyle = "#d9e2ef"; c.lineWidth = 3; c.strokeRect(38, 38, W - 76, H - 76);
       c.fillStyle = "#f3f6fa"; c.textAlign = "left";
-      c.font = "bold 64px ui-monospace, monospace"; c.fillText("NIGHT CUT", 70, 115);
+      c.font = "bold 48px ui-monospace, monospace"; c.fillText("NIGHT CUT", 70, 78);
       c.textAlign = "right"; c.font = "25px ui-monospace, monospace";
-      c.fillText(dateText(), W - 70, 1710);
+      c.fillText(dateText(), W - 70, 1745);
     },
   },
   {
@@ -154,8 +179,8 @@ const FRAMES = [
     draw(c) {
       c.fillStyle = "#f7dce5"; c.fillRect(0, 0, W, H);
       c.fillStyle = "#8e3e59"; c.textAlign = "center";
-      c.font = "bold 42px ui-monospace, monospace"; c.fillText("♡  OUR FOUR CUTS  ♡", W / 2, 65);
-      c.font = "24px ui-monospace, monospace"; c.fillText(dateText(), W / 2, 1760);
+      c.font = "bold 38px ui-monospace, monospace"; c.fillText("♡  OUR FOUR CUTS  ♡", W / 2, 68);
+      c.font = "24px ui-monospace, monospace"; c.fillText(dateText(), W / 2, 1745);
     },
   },
 ];
@@ -164,6 +189,9 @@ const photos = Array.from({ length: 4 }, () => null);
 let selected = 0;
 let frameIndex = 0;
 let drag = null;
+let stream = null;
+let facingMode = "user";
+let shooting = false;
 
 function dateText() {
   const d = new Date();
@@ -218,7 +246,7 @@ function updateControls() {
   zoomInput.disabled = !item;
   zoomInput.value = Math.round((item?.zoom || 1) * 100);
   zoomValue.textContent = `${zoomInput.value}%`;
-  for (const id of ["prev", "next", "rotate", "remove"]) {
+  for (const id of ["retake", "prev", "next", "rotate"]) {
     document.getElementById(id).disabled = !item;
   }
   render();
@@ -245,46 +273,121 @@ FRAMES.forEach((frame, i) => {
 });
 document.querySelector(".frame").classList.add("active");
 
-async function photoSource(file) {
-  const url = URL.createObjectURL(file);
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function startCamera() {
+  if (stream) return true;
+  if (!navigator.mediaDevices?.getUserMedia) {
+    cameraStatusEl.textContent = "이 브라우저에서는 카메라 촬영을 지원하지 않습니다.";
+    return false;
+  }
+  cameraStatusEl.textContent = "카메라 권한을 확인하는 중…";
   try {
-    const img = new Image(); img.src = url;
-    await img.decode();
-    const maxSide = 2400;
-    const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
-    if (scale === 1) return img;
-    const cv = document.createElement("canvas");
-    cv.width = Math.round(img.naturalWidth * scale); cv.height = Math.round(img.naturalHeight * scale);
-    cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
-    return cv;
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: facingMode }, width: { ideal: 1920 }, height: { ideal: 1440 } },
+      audio: false,
+    });
+    videoEl.srcObject = stream;
+    await videoEl.play();
+    videoEl.classList.toggle("mirror", facingMode === "user");
+    cameraEmptyEl.hidden = true;
+    document.getElementById("shoot").disabled = false;
+    document.getElementById("cameraSwitch").disabled = false;
+    document.getElementById("cameraStart").textContent = "카메라 켜짐";
+    document.getElementById("cameraStart").disabled = true;
+    cameraStatusEl.textContent = "준비됐습니다. 화면을 보고 촬영을 시작하세요.";
+    return true;
+  } catch (err) {
+    cameraStatusEl.textContent = err?.name === "NotAllowedError"
+      ? "카메라 권한이 필요합니다. 브라우저 설정에서 허용해주세요."
+      : "카메라를 열지 못했습니다. 기본 브라우저에서 다시 시도해주세요.";
+    return false;
+  }
+}
+
+function stopCamera() {
+  stream?.getTracks().forEach((track) => track.stop());
+  stream = null; videoEl.srcObject = null;
+  cameraEmptyEl.hidden = false;
+  document.getElementById("shoot").disabled = true;
+  document.getElementById("cameraSwitch").disabled = true;
+  document.getElementById("cameraStart").textContent = "카메라 켜기";
+  document.getElementById("cameraStart").disabled = false;
+}
+
+function capturePhoto() {
+  if (!videoEl.videoWidth || !videoEl.videoHeight) throw new Error("카메라 준비 안 됨");
+  const source = document.createElement("canvas");
+  const maxSide = 2400;
+  const scale = Math.min(1, maxSide / Math.max(videoEl.videoWidth, videoEl.videoHeight));
+  source.width = Math.round(videoEl.videoWidth * scale);
+  source.height = Math.round(videoEl.videoHeight * scale);
+  const c = source.getContext("2d");
+  if (facingMode === "user") {
+    c.translate(source.width, 0); c.scale(-1, 1);
+  }
+  c.drawImage(videoEl, 0, 0, source.width, source.height);
+  return { source, zoom: 1, x: 0, y: 0, rotation: 0 };
+}
+
+async function countdownAndCapture(index) {
+  selected = index; updateControls();
+  for (let n = 3; n >= 1; n--) {
+    countdownEl.textContent = String(n); countdownEl.hidden = false;
+    cameraStatusEl.textContent = `${index + 1}번째 사진 · ${n}초`;
+    await wait(1000);
+  }
+  countdownEl.hidden = true;
+  const flashEl = document.getElementById("flash");
+  flashEl.classList.remove("on"); void flashEl.offsetWidth; flashEl.classList.add("on");
+  photos[index] = capturePhoto();
+  updateControls();
+  await wait(250);
+}
+
+async function shootFour() {
+  if (shooting || !(await startCamera())) return;
+  shooting = true;
+  document.getElementById("shoot").disabled = true;
+  document.getElementById("cameraSwitch").disabled = true;
+  try {
+    for (let i = 0; i < 4; i++) await countdownAndCapture(i);
+    cameraStatusEl.textContent = "촬영 완료! 아래에서 컷과 프레임을 확인하세요.";
+    statusEl.textContent = "원하는 컷을 선택하면 다시 촬영할 수 있습니다.";
+  } catch (_) {
+    cameraStatusEl.textContent = "촬영 중 문제가 생겼습니다. 다시 시도해주세요.";
   } finally {
-    URL.revokeObjectURL(url);
+    shooting = false; stopCamera();
+    document.getElementById("preview").scrollIntoView({ behavior: "smooth", block: "center" });
   }
 }
 
-async function addFiles(files) {
-  const list = [...files].slice(0, 4);
-  if (!list.length) return;
-  statusEl.textContent = "사진을 불러오는 중…";
-  let target = list.length === 1 ? selected : Math.max(0, photos.findIndex((p) => !p));
-  if (target < 0) target = 0;
-  let loaded = 0;
-  for (const file of list) {
-    if (!file.type.startsWith("image/") || target > 3) continue;
-    try {
-      const source = await photoSource(file);
-      photos[target] = { source, zoom: 1, x: 0, y: 0, rotation: 0 };
-      selected = target; target++; loaded++;
-    } catch (_) {
-      statusEl.textContent = "일부 사진을 불러오지 못했습니다.";
-    }
+async function retakeSelected() {
+  if (shooting || !photos[selected] || !(await startCamera())) return;
+  shooting = true;
+  document.getElementById("cameraPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+  document.getElementById("shoot").disabled = true;
+  document.getElementById("cameraSwitch").disabled = true;
+  try {
+    await countdownAndCapture(selected);
+    cameraStatusEl.textContent = `${selected + 1}번째 사진을 다시 촬영했습니다.`;
+  } catch (_) {
+    cameraStatusEl.textContent = "재촬영 중 문제가 생겼습니다.";
+  } finally {
+    shooting = false; stopCamera();
   }
-  if (loaded) statusEl.textContent = `${loaded}장의 사진을 불러왔습니다.`;
-  fileInput.value = ""; updateControls();
 }
 
-document.getElementById("pick").addEventListener("click", () => fileInput.click());
-fileInput.addEventListener("change", () => addFiles(fileInput.files));
+document.getElementById("cameraStart").addEventListener("click", startCamera);
+document.getElementById("shoot").addEventListener("click", shootFour);
+document.getElementById("retake").addEventListener("click", retakeSelected);
+document.getElementById("cameraSwitch").addEventListener("click", async () => {
+  if (shooting) return;
+  stopCamera(); facingMode = facingMode === "user" ? "environment" : "user";
+  await startCamera();
+});
+addEventListener("pagehide", stopCamera);
+
 zoomInput.addEventListener("input", () => {
   if (!photos[selected]) return;
   photos[selected].zoom = zoomInput.value / 100;
@@ -293,9 +396,6 @@ zoomInput.addEventListener("input", () => {
 document.getElementById("rotate").addEventListener("click", () => {
   if (!photos[selected]) return;
   photos[selected].rotation = (photos[selected].rotation + 90) % 360; render();
-});
-document.getElementById("remove").addEventListener("click", () => {
-  photos[selected] = null; updateControls();
 });
 function swap(direction) {
   const other = selected + direction;
@@ -315,7 +415,11 @@ canvas.addEventListener("pointerdown", (e) => {
   const hit = FRAMES[frameIndex].slots.findIndex((s) => p.x >= s.x && p.x <= s.x + s.w && p.y >= s.y && p.y <= s.y + s.h);
   if (hit < 0) return;
   selected = hit; updateControls();
-  if (!photos[selected]) { fileInput.click(); return; }
+  if (!photos[selected]) {
+    statusEl.textContent = "먼저 네컷 촬영을 시작해주세요.";
+    document.getElementById("cameraPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
   canvas.setPointerCapture(e.pointerId);
   drag = { pointerId: e.pointerId, p, x: photos[selected].x, y: photos[selected].y };
 });
