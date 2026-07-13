@@ -3,23 +3,67 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>bubble pop</title>
+<title>버블팝</title>
 <style>
   :root { color-scheme: light dark; }
   body { margin: 0; overflow: hidden; font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
-         background: light-dark(#eef6fb, #0b1420); }
+         background: light-dark(#eef6fb, #0b1420); user-select: none;
+         -webkit-user-select: none; touch-action: manipulation; }
   canvas { display: block; }
   #score { position: fixed; top: 1rem; left: 1.25rem; font-size: 1.1rem;
-           color: light-dark(#123, #cde); user-select: none; }
+           color: light-dark(#123, #cde); }
+  #time { position: fixed; top: 1rem; right: 1.25rem; font-size: 1.1rem;
+          font-variant-numeric: tabular-nums; color: light-dark(#123, #cde); }
+  #overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+             display: flex; flex-direction: column; align-items: center; gap: 1rem;
+             padding: 1.6rem 2rem; border-radius: 1.25rem; text-align: center;
+             border: 1.5px solid light-dark(rgba(30,50,70,.25), rgba(200,215,235,.25));
+             background: light-dark(rgba(255,255,255,.85), rgba(15,22,32,.85));
+             backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+             color: light-dark(#123, #cde); width: min(80vw, 18rem); }
+  #overlay.hide { display: none; }
+  #overlay h1 { font-size: 1.15rem; margin: 0; opacity: .75; }
+  #msg { margin: 0; opacity: .7; white-space: pre-line; }
+  #result { font-weight: bold; white-space: pre-line; min-height: 0; }
+  #btn { font: inherit; font-size: 1.15rem; padding: .8rem 2.4rem;
+         border-radius: 2rem; border: 2px solid currentColor;
+         background: none; color: inherit; cursor: pointer; }
+  #btn:active { transform: scale(.96); }
+  #btn:disabled { opacity: .4; cursor: default; }
+  #best { opacity: .5; font-size: .85rem; min-height: 1.2em; margin: 0; }
 </style>
 </head>
 <body>
-<div id="score">pop: 0</div>
+<div id="score">🫧 0개</div>
+<div id="time">20.0초</div>
+<div id="overlay">
+  <h1>🫧 버블팝</h1>
+  <p id="msg">20초 동안 버블을
+최대한 많이 터트리세요!</p>
+  <div id="result"></div>
+  <button id="btn">시작!</button>
+  <p id="best"></p>
+</div>
 <canvas id="c"></canvas>
 <script>
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
+const scoreEl = document.getElementById("score");
+const timeEl = document.getElementById("time");
+const overlay = document.getElementById("overlay");
+const msg = document.getElementById("msg");
+const result = document.getElementById("result");
+const btn = document.getElementById("btn");
+const bestEl = document.getElementById("best");
+
+const LIMIT = 20;   // 초
+let phase = "idle"; // idle | running | done
+let startTime = 0;
 let popped = 0;
+let best = null;
+
+window.blWeekly = { game: "bubble-pop", dir: "max", fmt: (v) => v + "개" };
+window.blShareText = () => `20초 동안 버블 ${best ?? popped}개 터트림! 도전해보세요`;
 
 function resize() {
   canvas.width = innerWidth;
@@ -46,16 +90,62 @@ function pop(x, y) {
     const b = bubbles[i];
     if ((x - b.x) ** 2 + (y - b.y) ** 2 < b.r * b.r) {
       bubbles.splice(i, 1);
-      popped++;
-      document.getElementById("score").textContent = "pop: " + popped;
+      if (phase === "running") {
+        popped++;
+        scoreEl.textContent = "🫧 " + popped + "개";
+      }
       return;
     }
   }
 }
 addEventListener("pointerdown", (e) => pop(e.clientX, e.clientY));
+// 오버레이 조작이 버블 팝으로 새지 않게
+for (const ev of ["pointerdown", "click"]) {
+  overlay.addEventListener(ev, (e) => e.stopPropagation());
+}
+
+btn.addEventListener("click", () => {
+  if (phase === "running") return;
+  phase = "running";
+  popped = 0;
+  startTime = performance.now();
+  scoreEl.textContent = "🫧 0개";
+  overlay.classList.add("hide");
+});
+
+function finish() {
+  phase = "done";
+  timeEl.textContent = "0.0초";
+  if (best === null || popped > best) {
+    best = popped;
+    bestEl.textContent = `최고 기록: ${best}개`;
+  }
+  const grade =
+    popped >= 70 ? "🤖 물방울 진공청소기" :
+    popped >= 55 ? "⚡ 광속 손가락" :
+    popped >= 40 ? "🔥 대단한데요" :
+    popped >= 25 ? "🙂 나쁘지 않아요" : "🫠 여유롭게 즐기셨군요…";
+  result.textContent = `${popped}개 터트림!\n${grade}`;
+  msg.textContent = "";
+  btn.textContent = "다시!";
+  overlay.classList.remove("hide");
+  // 종료 직후 연타로 바로 재시작되지 않게 잠깐 잠근다
+  btn.disabled = true;
+  setTimeout(() => { btn.disabled = false; }, 1000);
+  window.blWeeklyReport?.(popped);
+}
 
 function tick(t) {
-  if (bubbles.length < 25 && Math.random() < 0.08) spawn();
+  const running = phase === "running";
+  if (running) {
+    const left = LIMIT - (performance.now() - startTime) / 1000;
+    if (left <= 0) finish();
+    else timeEl.textContent = left.toFixed(1) + "초";
+  }
+  // 게임 중에는 버블이 더 자주, 더 많이 올라온다
+  const cap = running ? 35 : 25;
+  const rate = running ? 0.18 : 0.08;
+  if (bubbles.length < cap && Math.random() < rate) spawn();
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   for (let i = bubbles.length - 1; i >= 0; i--) {
     const b = bubbles[i];
@@ -77,6 +167,7 @@ function tick(t) {
 }
 requestAnimationFrame(tick);
 </script>
+<script defer src="/_shared/records.js"></script>
 <script defer src="/_shared/share.js"></script>
 </body>
 </html>
