@@ -163,7 +163,7 @@ const SITE = ${JSON.stringify(site)};
     if (document.readyState === "loading") {
       await new Promise((r) => addEventListener("DOMContentLoaded", r, { once: true }));
     }
-    window.blWeeklyResetNotice?.(week, notice);
+    if (SITE === "slop") window.blWeeklyResetNotice?.(week, notice);
   } catch {}
 })();
 
