@@ -240,7 +240,9 @@
       <button id="downloadPhoto" type="button">사진 저장</button>
       <button id="downloadVideo" type="button">영상 저장</button>
       <button class="primary" id="downloadAll" type="button">모두 저장</button>
-      <button id="share" type="button">함께 공유</button>
+      <button id="shareAll" type="button" hidden>함께 공유</button>
+      <button id="sharePhoto" type="button" hidden>사진 공유</button>
+      <button id="shareVideo" type="button" hidden>영상 공유</button>
     </div>
     <p id="resultStatus" role="status"></p>
     <button class="restart" id="restart" type="button">처음부터 다시 찍기</button>
@@ -733,6 +735,7 @@ async function showResult() {
   document.getElementById("videoResult").hidden = !videoBlob;
   document.getElementById("downloadVideo").disabled = !videoBlob;
   document.getElementById("downloadAll").disabled = !videoBlob;
+  updateShareOptions();
   const actions = document.getElementById("resultActions"); actions.classList.remove("ready");
   finalCanvas.classList.remove("printing"); void finalCanvas.offsetWidth; finalCanvas.classList.add("printing");
   await wait(1750); actions.classList.add("ready");
@@ -791,19 +794,55 @@ document.getElementById("downloadAll").addEventListener("click", () => {
   } catch (_) { document.getElementById("resultStatus").textContent = "사진과 영상을 저장하지 못했습니다."; }
 });
 
-const shareButton = document.getElementById("share");
-const canShare = (() => {
+const hasWebShare = (() => {
   try { return typeof navigator.share === "function" && typeof navigator.canShare === "function"; }
   catch (_) { return false; }
 })();
-shareButton.hidden = !canShare;
-shareButton.addEventListener("click", () => {
+
+function canShareFiles(files) {
+  try { return hasWebShare && navigator.canShare({ files }); }
+  catch (_) { return false; }
+}
+
+function updateShareOptions(forceSeparate = false) {
+  const allButton = document.getElementById("shareAll");
+  const photoButton = document.getElementById("sharePhoto");
+  const videoButton = document.getElementById("shareVideo");
+  allButton.hidden = photoButton.hidden = videoButton.hidden = true;
+  if (!hasWebShare) return;
   try {
-    const files = [makePhotoFile()]; if (videoBlob) files.push(makeVideoFile());
-    if (!navigator.canShare({ files })) throw new Error("unsupported files");
-    navigator.share({ title: "Bubblelab 네컷사진", files })
-      .catch((err) => { if (err?.name !== "AbortError") document.getElementById("resultStatus").textContent = "공유 메뉴를 열지 못했습니다."; });
-  } catch (_) { document.getElementById("resultStatus").textContent = "이미지를 공유하지 못했습니다."; }
+    const photoFile = makePhotoFile(), videoFile = videoBlob ? makeVideoFile() : null;
+    if (!forceSeparate && videoFile && canShareFiles([photoFile, videoFile])) allButton.hidden = false;
+    else {
+      photoButton.hidden = !canShareFiles([photoFile]);
+      videoButton.hidden = !videoFile || !canShareFiles([videoFile]);
+    }
+  } catch (_) {}
+}
+
+async function shareFiles(files, failureMessage) {
+  try {
+    if (!canShareFiles(files)) throw new Error("unsupported files");
+    await navigator.share({ title: "Bubblelab 네컷사진", files });
+  } catch (err) {
+    if (err?.name !== "AbortError") document.getElementById("resultStatus").textContent = failureMessage;
+    throw err;
+  }
+}
+
+document.getElementById("shareAll").addEventListener("click", async () => {
+  try { await shareFiles([makePhotoFile(), makeVideoFile()], "두 파일을 동시에 공유하지 못했습니다."); }
+  catch (err) {
+    if (err?.name === "AbortError") return;
+    updateShareOptions(true);
+    document.getElementById("resultStatus").textContent = "이 기기에서는 사진과 영상을 각각 공유해주세요.";
+  }
+});
+document.getElementById("sharePhoto").addEventListener("click", () => {
+  shareFiles([makePhotoFile()], "사진 공유 메뉴를 열지 못했습니다.").catch(() => {});
+});
+document.getElementById("shareVideo").addEventListener("click", () => {
+  shareFiles([makeVideoFile()], "영상 공유 메뉴를 열지 못했습니다.").catch(() => {});
 });
 
 document.getElementById("restart").addEventListener("click", () => {
