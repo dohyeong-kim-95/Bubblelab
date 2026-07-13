@@ -13,6 +13,7 @@ import {
 } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { generateAssetCatalog } from "./assets.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const DIST = join(ROOT, "dist");
@@ -44,6 +45,21 @@ if (existsSync(join(ROOT, "_shared"))) {
     recursive: true,
     filter: notReadme,
   });
+}
+
+// Bubblelab 전체 서비스가 함께 쓰는 이미지 원본. 각 아이템 폴더의
+// metadata.json을 모아 다운로드 화면과 다른 서비스가 읽는 카탈로그를 만든다.
+if (existsSync(join(ROOT, "_assets"))) {
+  cpSync(join(ROOT, "_assets"), join(DIST, "_assets"), {
+    recursive: true,
+    filter: notReadme,
+  });
+  const catalog = generateAssetCatalog(join(ROOT, "_assets"));
+  writeFileSync(
+    join(DIST, "_assets", "catalog.json"),
+    JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), items: catalog }, null, 2),
+  );
+  console.log(`generated asset catalog (${catalog.length} items)`);
 }
 
 const escapeHtml = (s) =>

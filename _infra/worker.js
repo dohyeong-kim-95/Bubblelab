@@ -229,8 +229,8 @@ export default {
     let site;
     let path = url.pathname;
 
-    // 공용 에셋(_shared/*)은 모든 서브도메인에서 사이트 프리픽스 없이 서빙
-    if (path.startsWith("/_shared/")) {
+    // 공용 코드와 이미지 에셋은 모든 서브도메인에서 사이트 프리픽스 없이 서빙
+    if (path.startsWith("/_shared/") || path.startsWith("/_assets/")) {
       return env.ASSETS.fetch(request);
     }
 
