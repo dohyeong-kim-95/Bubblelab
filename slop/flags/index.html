@@ -6,6 +6,15 @@
 <title>국기 맞추기</title>
 <style>
   :root { color-scheme: light dark; }
+  /* 국기 이모지가 없는 브라우저(Windows 등)에서도 국기가 보이게 하는
+     자체 호스팅 웹폰트. unicode-range로 국기 코드포인트에만 적용된다. */
+  @font-face {
+    font-family: "BL Flags";
+    unicode-range: U+1F1E6-1F1FF, U+1F3F4, U+E0062-E0063, U+E0065, U+E0067,
+      U+E006C, U+E006E, U+E0073-E0074, U+E0077, U+E007F;
+    src: url("/_shared/TwemojiCountryFlags.woff2") format("woff2");
+    font-display: swap;
+  }
   body { margin: 0; font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; min-height: 100vh;
          display: flex; flex-direction: column; align-items: center;
          justify-content: center; gap: 1rem; text-align: center;
@@ -14,7 +23,9 @@
   h1 { font-size: 1.1rem; margin: 0; opacity: .7; }
   #streak { font-size: 1rem; opacity: .6; font-variant-numeric: tabular-nums; min-height: 1.3em; }
   #flag { font-size: 6.5rem; line-height: 1.15; min-height: 7.5rem;
-          display: grid; place-items: center; }
+          display: grid; place-items: center;
+          font-family: "BL Flags", "Apple Color Emoji", "Segoe UI Emoji",
+                       "Noto Color Emoji", sans-serif; }
   #choices { display: flex; flex-direction: column; gap: .55rem;
              width: min(80vw, 18rem); }
   #choices button { font: inherit; font-size: 1rem; padding: .75rem .9rem;
@@ -100,20 +111,6 @@ const recent = []; // 최근 출제 코드 (반복 방지)
 window.blWeekly = { game: "flags", dir: "max", fmt: (v) => v + "개 연속" };
 window.blShareText = () => `국기 ${best ?? streak}개 연속으로 맞춤! 도전해보세요`;
 
-// 윈도우 등 국기 이모지가 안 나오는 환경 감지 (글자 "KR"로 그려지면 무채색)
-function flagsRenderable() {
-  const c = document.createElement("canvas");
-  c.width = c.height = 32;
-  const x = c.getContext("2d", { willReadFrequently: true });
-  x.font = "24px sans-serif";
-  x.fillText(flagOf("KR"), 0, 24);
-  const d = x.getImageData(0, 0, 32, 32).data;
-  for (let i = 0; i < d.length; i += 4) {
-    if (d[i + 3] > 0 && (Math.abs(d[i] - d[i + 1]) > 24 || Math.abs(d[i + 1] - d[i + 2]) > 24)) return true;
-  }
-  return false;
-}
-
 const shuffle = (a) => {
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -181,12 +178,13 @@ btn.addEventListener("click", () => {
   round();
 });
 
-if (flagsRenderable()) {
-  round();
-} else {
-  flagEl.textContent = "😢";
-  msg.textContent = "이 브라우저는 국기 이모지를 지원하지 않아요.\n모바일에서 즐겨주세요!";
-}
+// 국기 웹폰트를 먼저 로드해, 국기 이모지가 없는 브라우저에서도 첫 문제부터
+// 나라 코드(예: "KR")가 잠깐 비쳤다가 바뀌는 일이 없게 한다. 로드 실패해도
+// (네이티브 국기가 있는 Mac/모바일 등) 그냥 시작한다.
+const ready = document.fonts
+  ? document.fonts.load('1em "BL Flags"', flagOf("KR")).catch(() => {})
+  : Promise.resolve();
+ready.finally(round);
 </script>
 <script defer src="/_shared/records.js"></script>
 <script defer src="/_shared/share.js"></script>
