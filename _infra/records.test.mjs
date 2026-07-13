@@ -77,14 +77,17 @@ test("stores display text and serves batch lookups for category homes", async ()
   await post(records, { game: "circle", nick: "동글이", score: 95.5, dir: "max", text: "95.5%" });
   // 수상한 text는 숫자로 대체
   await post(records, { game: "2048", nick: "해커", score: 100, dir: "max", text: "<img onerror=x>" });
+  const ten = await post(records, { game: "10sec", nick: "시계왕", score: 0.123, text: "오차 0.123초" });
+  assert.equal((await ten.json()).record.text, "오차 123 ms");
 
   const res = await records.fetch(
-    new Request("https://records.internal/?games=touch25,circle,2048,lotto,invalid game!!"),
+    new Request("https://records.internal/?games=touch25,circle,2048,10sec,lotto,invalid game!!"),
   );
   const { records: batch } = await res.json();
   assert.equal(batch.touch25.text, "12.34초");
   assert.equal(batch.circle.text, "95.5%");
   assert.equal(batch["2048"].text, "100");
+  assert.equal(batch["10sec"].text, "오차 123 ms"); // 예전 초 단위 저장분도 ms로 정규화
   assert.equal("lotto" in batch, false); // 기록 없는 게임은 빠진다
 });
 

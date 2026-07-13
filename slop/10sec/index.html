@@ -48,7 +48,10 @@ let startTime = 0;
 let raf = null;
 let best = null;
 
-window.blWeekly = { game: "10sec", dir: "min", fmt: (v) => "오차 " + v.toFixed(3) + "초" };
+const formatError = (seconds) =>
+  `${Math.round(seconds * 1000).toLocaleString("ko-KR")} ms`;
+
+window.blWeekly = { game: "10sec", dir: "min", fmt: (v) => "오차 " + formatError(v) };
 
 function tick() {
   const t = (performance.now() - startTime) / 1000;
@@ -74,14 +77,14 @@ btn.addEventListener("click", () => {
     const diff = Math.abs(t - 10);
     if (best === null || diff < best) {
       best = diff;
-      bestEl.textContent = `최고 기록: 오차 ${best.toFixed(3)}초`;
+      bestEl.textContent = `최고 기록: 오차 ${formatError(best)}`;
     }
     const grade =
       diff < 0.05 ? "🎯 인간 시계" :
       diff < 0.2  ? "🔥 대단한데요" :
       diff < 0.5  ? "👍 나쁘지 않아요" :
       diff < 1    ? "🙂 연습하면 돼요" : "🫠 시계 보는 법부터…";
-    msg.textContent = `${t < 10 ? "-" : "+"}${diff.toFixed(3)}초 ${grade}`;
+    msg.textContent = `${t < 10 ? "-" : "+"}${formatError(diff)} ${grade}`;
     btn.textContent = "다시";
     window.blWeeklyReport?.(diff);
   }

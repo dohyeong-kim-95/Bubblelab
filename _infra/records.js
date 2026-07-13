@@ -35,6 +35,13 @@ export const GAMES = {
 const beats = (dir, score, record) =>
   !record || (dir === "max" ? score > record.score : score < record.score);
 
+// 10초 맞추기는 내부 비교 단위를 초로 유지하되 모든 화면에는 ms로 표시한다.
+// 예전에 저장된 "0.123초" 형식의 기록도 읽는 즉시 새 단위로 보인다.
+const presentRecord = (game, record) =>
+  record && game === "10sec"
+    ? { ...record, text: `오차 ${Math.round(record.score * 1000).toLocaleString("ko-KR")} ms` }
+    : record;
+
 // 가장 최근 월요일 00:00 UTC의 날짜 = 주차 key
 export function weekKey(now = new Date()) {
   const d = new Date(now);
@@ -129,7 +136,10 @@ export class RecordsDO {
     if (url.pathname === "/_allrecords" && request.method === "GET") {
       const all = await this.state.storage.list({ prefix: `rec:${week}:` });
       const records = {};
-      for (const [key, v] of all) records[key.split(":")[2]] = v;
+      for (const [key, v] of all) {
+        const game = key.split(":")[2];
+        records[game] = presentRecord(game, v);
+      }
       return Response.json({ week, records }, { headers: { "Cache-Control": "no-store" } });
     }
     if (request.method === "DELETE") {
@@ -153,6 +163,7 @@ export class RecordsDO {
           const game = k.split(":")[2];
           if (beats(GAMES[game]?.dir ?? v.dir, v.score, records[game])) records[game] = v;
         }
+        for (const game of Object.keys(records)) records[game] = presentRecord(game, records[game]);
         return Response.json({ records }, { headers: { "Cache-Control": "no-store" } });
       }
       // 공지는 별도 요청 없이 기록 조회에 실어 보낸다 (방문자 팝업용)
@@ -167,12 +178,12 @@ export class RecordsDO {
         const vid = url.searchParams.get("vid");
         for (const g of batch.split(",").filter((g) => GAME.test(g)).slice(0, 50)) {
           const r = await this.state.storage.get(`rec:${week}:${g}`);
-          if (r) records[g] = r;
+          if (r) records[g] = presentRecord(g, r);
           if (GAMES[g]) {
             supported.push(g);
             if (VISITOR_ID.test(vid ?? "")) {
               const mine = await this.state.storage.get(`personal:${vid}:${g}`);
-              if (mine) personal[g] = mine;
+              if (mine) personal[g] = presentRecord(g, mine);
             }
           }
         }
@@ -183,7 +194,7 @@ export class RecordsDO {
       }
       const game = url.searchParams.get("game");
       if (!GAME.test(game ?? "")) return new Response("invalid game", { status: 400 });
-      const record = (await this.state.storage.get(`rec:${week}:${game}`)) ?? null;
+      const record = presentRecord(game, (await this.state.storage.get(`rec:${week}:${game}`)) ?? null);
       return Response.json({ week, record, notice }, { headers: { "Cache-Control": "no-store" } });
     }
 
@@ -200,11 +211,11 @@ export class RecordsDO {
       const key = `personal:${vid}:${game}`;
       const current = await this.state.storage.get(key);
       if (!beats(cfg.dir, score, current)) {
-        return Response.json({ accepted: false, record: current });
+        return Response.json({ accepted: false, record: presentRecord(game, current) });
       }
       const record = { score, text: display, dir: cfg.dir, at: Date.now() };
       await this.state.storage.put(key, record);
-      return Response.json({ accepted: true, record });
+      return Response.json({ accepted: true, record: presentRecord(game, record) });
     }
 
     if (request.method === "POST") {
@@ -223,7 +234,7 @@ export class RecordsDO {
       const key = `rec:${week}:${game}`;
       const current = await this.state.storage.get(key);
       if (!beats(cfg.dir, score, current)) {
-        return Response.json({ week, accepted: false, record: current });
+        return Response.json({ week, accepted: false, record: presentRecord(game, current) });
       }
 
       const record = { nick, score, text: display, dir: cfg.dir, at: Date.now() };
@@ -247,7 +258,7 @@ export class RecordsDO {
       }
       if (stale.length) await this.state.storage.delete(stale.map(([k]) => k));
 
-      return Response.json({ week, accepted: true, record });
+      return Response.json({ week, accepted: true, record: presentRecord(game, record) });
     }
 
     return new Response("not found", { status: 404 });
