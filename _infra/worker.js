@@ -122,8 +122,9 @@ async function handleAdmin(request, env, url, base = "") {
     }
     if (request.method === "DELETE") {
       const game = url.searchParams.get("game") ?? "";
+      const alltime = url.searchParams.has("alltime") ? "&alltime=1" : "";
       return stub.fetch(
-        `https://records.internal/_records?game=${encodeURIComponent(game)}`,
+        `https://records.internal/_records?game=${encodeURIComponent(game)}${alltime}`,
         { method: "DELETE" },
       );
     }

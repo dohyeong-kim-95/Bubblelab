@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>명예의 전당</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; min-height: 100vh;
+         display: flex; flex-direction: column; align-items: center;
+         justify-content: center; gap: 1.4rem; text-align: center;
+         padding: 2.5rem 1.5rem; box-sizing: border-box; }
+  h1 { font-size: 1.1rem; margin: 0; opacity: .7; }
+  #sub { opacity: .5; font-size: .85rem; margin: -0.8rem 0 0; }
+  #board { width: min(100%, 26rem); display: flex; flex-direction: column;
+           gap: .55rem; text-align: left; }
+  .row { display: flex; align-items: baseline; gap: .7rem;
+         padding: .7rem .9rem; border-radius: .9rem;
+         border: 1.5px solid light-dark(rgba(30,50,70,.2), rgba(200,215,235,.2));
+         background: light-dark(rgba(255,255,255,.55), rgba(20,26,36,.55));
+         text-decoration: none; color: inherit; }
+  .row:hover { border-color: currentColor; }
+  .row .emoji { flex: none; }
+  .row .game { flex: none; font-weight: bold; }
+  .row .rec { flex: 1; text-align: right; overflow: hidden;
+              text-overflow: ellipsis; white-space: nowrap; }
+  .row .rec.empty { opacity: .4; }
+  .row .date { flex: none; opacity: .4; font-size: .75rem; }
+  #msg { opacity: .6; min-height: 1.2em; font-size: .9rem; }
+  /* 데스크톱: 사용 영역(모바일 폭 스테이지) 밖은 톤을 낮춰 구분 */
+  body::before { content: ""; position: fixed; inset: 0; z-index: -2;
+                 background: light-dark(#dee6ee, #0a0e15); }
+  body::after { content: ""; position: fixed; top: 0; bottom: 0; left: 50%;
+                transform: translateX(-50%); width: min(100vw, 34rem); z-index: -1;
+                background: light-dark(#eef2f6, #10161f);
+                box-shadow: 0 0 1.5rem light-dark(rgba(30,50,70,.14), rgba(0,0,0,.5)); }
+</style>
+</head>
+<body>
+  <h1>🏆 명예의 전당</h1>
+  <p id="sub">slop별 올타임 1위 — 주간 보드와 달리 초기화되지 않아요</p>
+  <div id="board"></div>
+  <div id="msg">불러오는 중…</div>
+<script>
+const EMOJI = {
+  "10sec": "⏱", "2048": "🔢", beer: "🍺", circle: "⭕", clicker: "👆",
+  reactiontime: "⚡", touch25: "👆", trader: "📈", "yacht-bot": "🤖",
+};
+const board = document.getElementById("board");
+const msg = document.getElementById("msg");
+
+(async () => {
+  try {
+    const res = await fetch("/_records?alltime=1", { cache: "no-store" });
+    if (!res.ok) throw new Error();
+    const { records } = await res.json();
+    // 기록 있는 게임 먼저(달성일 최신순), 그 뒤에 아직 빈 게임들
+    const games = [...new Set([...Object.keys(records), ...Object.keys(EMOJI)])]
+      .sort((a, b) => (records[b]?.at ?? -1) - (records[a]?.at ?? -1) ||
+                      a.localeCompare(b));
+    for (const game of games) {
+      const r = records[game];
+      const row = document.createElement("a");
+      row.className = "row";
+      row.href = `/${game}/`;
+      row.innerHTML = `<span class="emoji"></span><span class="game"></span>
+        <span class="rec"></span><span class="date"></span>`;
+      row.querySelector(".emoji").textContent = EMOJI[game] ?? "🫧";
+      row.querySelector(".game").textContent = game;
+      const rec = row.querySelector(".rec");
+      if (r) {
+        // text 없는 옛 기록은 생 float가 못생기지 않게 반올림해서 보여준다
+        rec.textContent = `👑 ${r.nick} · ${r.text ?? Math.round(r.score * 100) / 100}`;
+        row.querySelector(".date").textContent = new Date(r.at)
+          .toLocaleDateString("ko-KR", { year: "2-digit", month: "numeric", day: "numeric" });
+      } else {
+        rec.classList.add("empty");
+        rec.textContent = "아직 주인이 없어요";
+      }
+      board.appendChild(row);
+    }
+    msg.textContent = games.length ? "" : "아직 아무 기록도 없어요";
+  } catch {
+    msg.textContent = "⚠️ 기록 보드 연결 실패";
+  }
+})();
+</script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>

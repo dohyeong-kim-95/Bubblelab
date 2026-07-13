@@ -112,6 +112,38 @@ test("admin can list this week's records and reset one", async () => {
   assert.equal((await again.json()).accepted, true);
 });
 
+test("all-time hall of fame: updates on accept, survives weekly pruning", async () => {
+  const storage = new MemoryStorage([
+    // 올타임 도입 전에 세워진 지난주 기록 (아직 올타임에 없음)
+    ["rec:2000-01-03:touch25", { nick: "고인물", score: 9.9, text: "9.90초", dir: "min", at: 0 }],
+  ]);
+  const records = new RecordsDO({ storage });
+  const alltime = async () => {
+    const res = await records.fetch(new Request("https://records.internal/?alltime=1"));
+    return (await res.json()).records;
+  };
+
+  // 이번 주 기록이 들어오면 지난주 것은 프루닝 전에 올타임으로 흡수된다
+  await post(records, { game: "touch25", nick: "뉴비", score: 20 });
+  assert.equal(storage.data.has("rec:2000-01-03:touch25"), false);
+  assert.equal((await alltime()).touch25.nick, "고인물"); // 20초 < 9.9초 아님
+
+  // 올타임보다 좋은 기록이 들어오면 교체된다
+  await post(records, { game: "touch25", nick: "신기록", score: 5.5 });
+  assert.equal((await alltime()).touch25.nick, "신기록");
+
+  // 올타임 저장분이 없어도 이번 주 기록은 병합돼 보인다 (이행기)
+  await post(records, { game: "circle", nick: "동글이", score: 95.5 });
+  await storage.delete("alltime:circle");
+  assert.equal((await alltime()).circle.nick, "동글이");
+
+  // 주간 리셋(DELETE)은 올타임에 손대지 않고, alltime 파라미터로만 지운다
+  await records.fetch(new Request("https://records.internal/?game=touch25", { method: "DELETE" }));
+  assert.equal((await alltime()).touch25.nick, "신기록");
+  await records.fetch(new Request("https://records.internal/?game=touch25&alltime=1", { method: "DELETE" }));
+  assert.equal("touch25" in (await alltime()), false);
+});
+
 test("suggestion box: submit, list newest-first, delete, daily cap", async (t) => {
   // at은 Date.now()라 같은 밀리초에 제출되면 최신순 정렬이 동률로 뒤섞인다.
   // 시계를 단조 증가로 고정해 순서를 결정적으로 만든다.
