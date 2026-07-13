@@ -67,12 +67,19 @@ function hueOf(name) {
 }
 
 function listingPage(site, entries) {
-  const categoryLinks = sites
+  const categoryNames = sites
     .map((item) => item.name)
     .filter((name) => !["admin", "www"].includes(name))
-    .sort((a, b) => a.localeCompare(b, "ko"))
+    .sort((a, b) => a.localeCompare(b, "ko"));
+  const categoryLinks = categoryNames
     .map((name) => `      <a href="https://${escapeHtml(name)}.bubblelab.dev"${name === site ? ' aria-current="page"' : ""}><span>${name === site ? "✓" : ""}</span>${escapeHtml(name)}</a>`)
     .join("\n");
+  const preconnectLinks = [
+    '<link rel="preconnect" href="https://bubblelab.dev">',
+    ...categoryNames
+      .filter((name) => name !== site)
+      .map((name) => `<link rel="preconnect" href="https://${escapeHtml(name)}.bubblelab.dev">`),
+  ].join("\n");
   const cards = entries
     .map(({ name, emoji }, i) => {
       return `    <a class="card" href="/${escapeHtml(name)}/"
@@ -89,6 +96,7 @@ function listingPage(site, entries) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(site)}.bubblelab.dev</title>
+${preconnectLinks}
 <style>
   :root { color-scheme: light dark; }
   body { font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; max-width: 52rem;
@@ -111,6 +119,8 @@ function listingPage(site, entries) {
           padding: .65rem .7rem; border-radius: .55rem; color: inherit; text-decoration: none; font-size: .9rem; }
   .site-menu a:hover, .site-menu a:focus-visible { background: light-dark(#eef3f7, #202c3a); outline: none; }
   .site-menu a[aria-current="page"] { font-weight: bold; }
+  .site-menu a.loading { opacity: .65; pointer-events: none; }
+  .site-menu a.loading::after { content: "…"; margin-left: auto; }
   .site-menu .menu-home { border-bottom: 1px solid light-dark(#e6ebef, #263342); margin-bottom: .25rem; }
   #crown { text-align: center; opacity: .6; font-size: .85rem;
            margin: 0 0 1.8rem; min-height: 1.2em; }
@@ -131,15 +141,6 @@ function listingPage(site, entries) {
   .card:active { transform: translateY(2px); box-shadow: 0 1px 0
           light-dark(hsl(var(--hue) 55% 78%), hsl(var(--hue) 35% 12%)); }
   @keyframes pop { from { transform: scale(.6); opacity: 0; } }
-  /* 접속량순 정렬이 끝나기 전에는 스켈레톤으로 — 재배치 점프가 안 보이게 */
-  .grid.skeleton .card { animation: skel 1.1s ease-in-out infinite alternate;
-          pointer-events: none;
-          color: transparent;
-          background: light-dark(#e3e9f0, #1a2230);
-          border-color: light-dark(#dbe3ec, #232f40);
-          box-shadow: 0 4px 0 light-dark(#d5dde6, #141c28); }
-  .grid.skeleton .card > * { visibility: hidden; }
-  @keyframes skel { to { opacity: .5; } }
   .emoji { font-size: 2.6rem; line-height: 1; }
   .name { font-weight: bold; font-size: 1.02rem; word-break: break-all;
           text-align: center; }
@@ -161,7 +162,7 @@ ${categoryLinks}
     </nav>
   </div>
   <div id="crown" title="이번 주 1위를 가장 많이 가진 사람 — 월요일 09시 초기화"></div>
-${cards ? `  <div class="grid skeleton">\n${cards}\n  </div>` : `  <p class="empty">아직 아무것도 없어요 🫧</p>`}
+${cards ? `  <div class="grid">\n${cards}\n  </div>` : `  <p class="empty">아직 아무것도 없어요 🫧</p>`}
   <footer><a href="https://bubblelab.dev">bubblelab.dev</a></footer>
 <script>
 const SITE = ${JSON.stringify(site)};
@@ -175,7 +176,23 @@ siteTrigger.addEventListener("click", () => {
   const opening = siteMenu.hidden;
   siteMenu.hidden = !opening;
   siteTrigger.setAttribute("aria-expanded", String(opening));
-  if (opening) siteMenu.querySelector("a[aria-current=page]")?.focus();
+  if (opening) {
+    siteMenu.querySelector("a[aria-current=page]")?.focus();
+    // 사용자가 메뉴를 고르는 동안 다른 서브도메인 문서를 미리 받아 둔다.
+    for (const anchor of siteMenu.querySelectorAll("a:not([aria-current=page])")) {
+      if (document.head.querySelector(\`link[rel=prefetch][href="\${anchor.href}"]\`)) continue;
+      const link = document.createElement("link");
+      link.rel = "prefetch";
+      link.href = anchor.href;
+      document.head.append(link);
+    }
+  }
+});
+siteMenu.addEventListener("click", (event) => {
+  const anchor = event.target.closest("a");
+  if (!anchor || anchor.hasAttribute("aria-current")) return;
+  anchor.classList.add("loading");
+  anchor.setAttribute("aria-busy", "true");
 });
 addEventListener("click", (event) => {
   if (!event.target.closest(".site-switcher")) closeSiteMenu();
@@ -219,30 +236,38 @@ addEventListener("keydown", (event) => {
   } catch {}
 })();
 
-// 주간 접속량(/_stats, 최근 7일 순방문자) 많은 순으로 카드를 재정렬한다.
-// 동률(0 포함)은 빌드 시점의 가나다순이 그대로 유지된다. 순서가 정해질
-// 때까지는 스켈레톤으로 보이다가, 정렬 후에 pop 애니메이션으로 등장한다.
+// 카드는 즉시 보여주고, 최근에 저장한 인기순을 먼저 적용한다. 최신 통계는
+// 백그라운드에서 받아 다음 방문에 사용하므로 화면이 통계를 기다리거나 점프하지 않는다.
 (async () => {
   const grid = document.querySelector(".grid");
   if (!grid) return;
+  const cacheKey = \`bl-card-order:\${SITE}\`;
+  const cards = [...grid.children];
+  const gameOf = (card) => card.querySelector(".champ")?.dataset.game;
   try {
-    const res = await fetch("/_stats", { signal: AbortSignal.timeout(4000) });
+    const cached = JSON.parse(localStorage.getItem(cacheKey) || "null");
+    if (cached && Date.now() - cached.at < 5 * 60 * 1000 && Array.isArray(cached.order)) {
+      const rank = new Map(cached.order.map((name, index) => [name, index]));
+      cards
+        .map((card, index) => ({ card, index, rank: rank.get(gameOf(card)) ?? 1e9 }))
+        .sort((a, b) => a.rank - b.rank || a.index - b.index)
+        .forEach(({ card }, index) => {
+          card.style.setProperty("--i", index);
+          grid.append(card);
+        });
+    }
+  } catch {}
+  try {
+    const res = await fetch("/_stats");
     if (!res.ok) throw new Error();
     const { pages } = await res.json();
-    const count = (card) =>
-      pages[\`\${SITE}/\${card.querySelector(".champ")?.dataset.game}\`] ?? 0;
-    const cards = [...grid.children];
-    if (!cards.some((c) => count(c) > 0)) return;
-    cards
+    const count = (card) => pages[\`\${SITE}/\${gameOf(card)}\`] ?? 0;
+    const order = cards
       .map((card, i) => ({ card, n: count(card), i })) // i = 가나다순 (안정 정렬용)
       .sort((a, b) => b.n - a.n || a.i - b.i)
-      .forEach(({ card }, i) => {
-        card.style.setProperty("--i", i);
-        grid.append(card);
-      });
-  } catch {} finally {
-    grid.classList.remove("skeleton"); // 실패해도 기본(가나다) 순서로 공개
-  }
+      .map(({ card }) => gameOf(card));
+    localStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), order }));
+  } catch {}
 })();
 </script>
 <script defer src="/_shared/records.js"></script>
