@@ -6,10 +6,12 @@
 // 이번 주 1위보다 좋은 기록이면 닉네임(한글/영문/숫자 6자) 등록 폼이 뜬다.
 (() => {
   // 방문자 팝업: (1) 지난주에 왔던 방문자가 이번 주 처음 들어오면 주간 보드
-  // 리셋 안내 토스트를 상단에 한 번 띄우고, (2) 관리자 공지가 있으면 화면
+  // 리셋 안내 토스트를 상단에 한 번 띄우고, (2) notice가 넘어오면 화면
   // 중앙 모달로 "다시 보지 않기"를 누를 때까지 방문할 때마다 띄운다.
-  // records 응답의 week(주차 키)와 notice를 받아 호출한다.
-  // 토이 페이지(아래 fetch)와 카테고리 홈 양쪽에서 쓰므로 자급자족으로 만든다.
+  // records 응답의 week(주차 키)와 notice를 받아 호출한다. 공지 모달은
+  // 카테고리 홈에서만 쓴다 — 게임 안에서까지 띄우는 건 부적절하므로
+  // 토이 페이지(아래 fetch)는 notice를 넘기지 않는다.
+  // 홈과 토이 양쪽에서 쓰므로 자급자족으로 만든다.
   window.blWeeklyResetNotice = (week, notice) => {
     try {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(week ?? "")) return;
@@ -189,7 +191,8 @@
     .then((data) => {
       current = data.record;
       renderBadge();
-      window.blWeeklyResetNotice(data.week, data.notice);
+      window.blWeeklyResetNotice(data.week); // 공지 모달은 홈에서만
+
     })
     .catch(() => { badge.textContent = "👑 기록 보드 연결 실패"; });
 
