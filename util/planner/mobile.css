@@ -1,0 +1,60 @@
+.login-screen { min-height: 100dvh; display: grid; place-items: center; padding: 24px; }
+.login-card { width: min(360px, 100%); background: #fff; padding: 32px; border-radius: 18px;
+    box-shadow: 0 14px 45px rgba(20, 30, 50, .12); text-align: center; }
+.login-mark { display: inline-grid; place-items: center; width: 42px; height: 42px; border-radius: 12px;
+    background: #2196f3; color: white; font-size: 24px; }
+.login-card h1 { margin: 14px 0 4px; font-size: 24px; }
+.login-card > p { color: #777; font-size: 13px; }
+.code-fields { display: grid; grid-template-columns: 1fr 58px; gap: 10px; margin: 24px 0 12px; }
+.code-fields input { width: 100%; border: 1px solid #ccd5df; border-radius: 10px; padding: 13px;
+    text-align: center; font: 700 20px ui-monospace, monospace; text-transform: uppercase; letter-spacing: .18em; }
+.login-card button { width: 100%; border: 0; border-radius: 10px; padding: 13px; color: #fff;
+    background: #2196f3; font-weight: 700; cursor: pointer; }
+.login-card .login-error { min-height: 1.4em; margin-top: 12px; color: #d64545; }
+.container, .mobile-app { display: none; }
+body.authenticated .login-screen { display: none; }
+body.authenticated .container { display: block; }
+
+.mobile-app { min-height: 100dvh; padding: 18px 14px 40px; background: #f4f6f8; }
+.mobile-header { display: flex; justify-content: space-between; align-items: end; margin: 2px 2px 16px; }
+.mobile-kicker { font-size: 10px; letter-spacing: .16em; color: #87909a; font-weight: 700; }
+.mobile-header h1 { margin: 2px 0 0; font-size: 20px; }
+.mobile-date-nav { display: flex; gap: 5px; }
+.mobile-date-nav button { border: 1px solid #d7dde4; background: #fff; border-radius: 8px; padding: 7px 9px; }
+.mobile-card { background: #fff; border: 1px solid #e1e5ea; border-radius: 14px; padding: 14px;
+    margin-bottom: 12px; box-shadow: 0 2px 8px rgba(20, 30, 50, .04); }
+.mobile-section-title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 11px; }
+.mobile-section-title h2 { font-size: 13px; letter-spacing: .08em; }
+.mobile-section-title span { color: #8a929c; font-size: 11px; }
+.mobile-todo { display: grid; grid-template-columns: 25px 1fr; gap: 8px; align-items: start;
+    padding: 10px 4px; border-top: 1px solid #eef0f2; }
+.mobile-todo:first-child { border-top: 0; }
+.mobile-todo input { width: 19px; height: 19px; accent-color: #2196f3; }
+.mobile-todo.done span { text-decoration: line-through; color: #959ca5; }
+.mobile-empty { color: #9299a1; font-size: 13px; padding: 10px 4px; }
+.diff-legend { display: flex; gap: 7px; margin-bottom: 10px; font: 700 9px ui-monospace, monospace; }
+.diff-legend span, .diff-tag { border-radius: 4px; padding: 2px 5px; }
+.same { background: #edf1f5; color: #59636e; }
+.minus { background: #ffebe9; color: #9d2721; }
+.plus { background: #e6ffec; color: #187a36; }
+.diff-hour { display: grid; grid-template-columns: 38px 1fr; border-top: 1px solid #e9edf1; padding: 10px 0; }
+.diff-hour:first-child { border-top: 0; }
+.diff-time { color: #7c858e; font: 700 11px ui-monospace, monospace; padding-top: 3px; }
+.diff-lines { min-width: 0; }
+.diff-line { display: grid; grid-template-columns: 30px repeat(6, minmax(0, 1fr)); min-height: 28px;
+    align-items: stretch; margin-bottom: 3px; font: 10px ui-monospace, monospace; }
+.diff-tag { align-self: center; justify-self: start; font-weight: 700; }
+.diff-cell { display: grid; place-items: center; min-width: 0; padding: 3px 1px; border-left: 1px solid rgba(0,0,0,.05);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.diff-line.same-line .diff-cell { background: #f4f6f8; }
+.diff-line.minus-line .diff-cell { background: #fff1f0; }
+.diff-line.plus-line .diff-cell { background: #edfff1; }
+.diff-cell.empty { color: transparent; background: transparent !important; }
+.diff-minutes { display: grid; grid-template-columns: 30px repeat(6, 1fr); color: #9aa1a9;
+    font: 9px ui-monospace, monospace; text-align: center; margin-bottom: 3px; }
+.mobile-sync { text-align: center; color: #8d959d; font-size: 11px; }
+
+@media (max-width: 768px) {
+    body.authenticated .container { display: none; }
+    body.authenticated .mobile-app { display: block; }
+}

@@ -10,6 +10,7 @@ const ROOT_DOMAIN = "bubblelab.dev";
 export { RealtimeDO } from "./realtime.js";
 export { AnalyticsDO } from "./analytics.js";
 export { RecordsDO } from "./records.js";
+export { PlannerDO } from "./planner.js";
 
 const LOGIN_PAGE = (failed = false, base = "") => `<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -65,6 +66,48 @@ async function validSession(key, token) {
   return crypto.subtle.verify(
     "HMAC", key, sigBytes, new TextEncoder().encode(`${expiry}.${nonce}`),
   );
+}
+
+async function handlePlanner(request, env, url) {
+  const code = env.PLANNER_CODE?.trim().toUpperCase();
+  if (!code || !/^\d{4}[A-Z]$/.test(code)) {
+    return new Response("planner code is not configured", { status: 503 });
+  }
+  const plannerSecret = `${env.ADMIN_SESSION_SECRET || code}\0bl-planner-session`;
+  const key = await crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(plannerSecret),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
+  );
+  const authed = await validSession(key, cookies(request).bl_planner);
+  const cookieFlags = `Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000${url.protocol === "https:" ? "; Secure" : ""}`;
+
+  if (url.pathname === "/_planner/login" && request.method === "POST") {
+    const body = await request.json().catch(() => ({}));
+    const supplied = String(body.code ?? "").trim().toUpperCase();
+    if (supplied !== code) return Response.json({ error: "invalid code" }, { status: 401 });
+    const token = await issueSession(key);
+    return Response.json({ authenticated: true }, {
+      headers: { "Set-Cookie": `bl_planner=${token}; ${cookieFlags}`, "Cache-Control": "no-store" },
+    });
+  }
+
+  if (url.pathname === "/_planner/logout" && request.method === "POST") {
+    return Response.json({ authenticated: false }, {
+      headers: { "Set-Cookie": "bl_planner=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0" },
+    });
+  }
+
+  if (!authed) return Response.json({ error: "authentication required" }, { status: 401 });
+  if (url.pathname === "/_planner/data" && ["GET", "PUT"].includes(request.method)) {
+    const id = env.PLANNER.idFromName("owner");
+    return env.PLANNER.get(id).fetch("https://planner.internal/", {
+      method: request.method,
+      ...(request.method === "PUT" && {
+        headers: { "Content-Type": "application/json" }, body: await request.text(),
+      }),
+    });
+  }
+  return new Response("not found", { status: 404 });
 }
 
 function kstDate() {
@@ -172,6 +215,10 @@ export default {
     // 공용 에셋(_shared/*)은 모든 서브도메인에서 사이트 프리픽스 없이 서빙
     if (path.startsWith("/_shared/")) {
       return env.ASSETS.fetch(request);
+    }
+
+    if (path.startsWith("/_planner/")) {
+      return handlePlanner(request, env, url);
     }
 
     // 공개 페이지 통계 (카테고리 홈의 접속량순 정렬용). 개인 데이터 없음.

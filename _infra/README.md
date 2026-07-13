@@ -21,6 +21,16 @@
    로컬 개발(호스트가 *.bubblelab.dev가 아닐 때)은 첫 경로 세그먼트가
    서브도메인 역할: `localhost:8787/slop/x` → `dist/slop/x`.
 
+Planner는 `/_planner/login`, `/_planner/data`, `/_planner/logout` API와
+`PlannerDO`를 사용한다. 로그인 코드는 저장소에 두지 않고 Worker secret으로 설정한다:
+
+```bash
+npx wrangler secret put PLANNER_CODE
+```
+
+형식은 숫자 4자리와 영문 1자(예: `1234A`)다. 데이터는 KST 기준 현재 달만
+보존하며 PC 편집 화면과 모바일 조회 화면이 같은 저장소를 사용한다.
+
 ## build.mjs — 빌드
 
 `node _infra/build.mjs` 하면:

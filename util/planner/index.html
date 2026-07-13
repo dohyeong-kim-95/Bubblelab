@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Planner</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="mobile.css">
+</head>
+<body>
+    <main class="login-screen" id="loginScreen">
+        <form class="login-card" id="plannerLoginForm">
+            <span class="login-mark">◫</span>
+            <h1>Daily Planner</h1>
+            <p>Enter your 4-digit + letter code</p>
+            <div class="code-fields">
+                <input id="plannerPin" type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="0000" aria-label="4-digit PIN" required>
+                <input id="plannerLetter" type="text" inputmode="text" pattern="[A-Za-z]" maxlength="1" placeholder="A" aria-label="Letter code" required>
+            </div>
+            <button type="submit">Continue</button>
+            <p class="login-error" id="loginError" role="alert"></p>
+        </form>
+    </main>
+
+    <main class="mobile-app" id="mobileApp" aria-label="Mobile planner">
+        <header class="mobile-header">
+            <div>
+                <p class="mobile-kicker">DAILY PLANNER</p>
+                <h1 id="mobileDate"></h1>
+            </div>
+            <div class="mobile-date-nav">
+                <button id="mobilePrev" type="button" aria-label="Previous day">←</button>
+                <button id="mobileToday" type="button">Today</button>
+                <button id="mobileNext" type="button" aria-label="Next day">→</button>
+            </div>
+        </header>
+        <section class="mobile-card">
+            <div class="mobile-section-title"><h2>TODO</h2><span id="mobileTodoCount"></span></div>
+            <div id="mobileTodos"></div>
+        </section>
+        <section class="mobile-card diff-card">
+            <div class="mobile-section-title"><h2>PLAN / REAL</h2><span>10 min cells</span></div>
+            <div class="diff-legend"><span class="same">SAME</span><span class="minus">− PLAN</span><span class="plus">+ REAL</span></div>
+            <div id="mobileDiff"></div>
+        </section>
+        <p class="mobile-sync" id="mobileSync">Synced</p>
+    </main>
+
+    <div class="container">
+        <!-- D-DAY Dashboard -->
+        <section class="dday-section" id="ddaySection">
+            <div class="dday-container">
+                <div class="dday-list" id="ddayList">
+                    <!-- D-DAYs will be rendered here -->
+                </div>
+                <button class="btn-add-dday" id="addDdayBtn" title="Add D-DAY (Ctrl+D)">+ D-DAY</button>
+            </div>
+        </section>
+
+        <header>
+            <div class="header-top">
+                <div class="header-left">
+                    <h1>Daily Planner</h1>
+                    <span class="header-clock" id="headerClock">00:00:00</span>
+                </div>
+                <div class="header-right">
+                    <div class="header-summary" id="dailySummary"></div>
+                    <button class="btn-export" id="exportBtn" title="Export (Ctrl+S for quick CSV)">Export</button>
+                </div>
+            </div>
+            <div class="date-control">
+                <button class="btn-prev">◀</button>
+                <span class="current-date" id="currentDate" title="Double-click to open calendar"></span>
+                <button class="btn-next">▶</button>
+            </div>
+        </header>
+
+        <!-- Global Notes (persists across all days) -->
+        <section class="notes-section">
+            <div class="notes-container">
+                <h3>Notes</h3>
+                <textarea id="notesTextarea" class="notes-textarea" placeholder="Quick notes, deadlines, reminders...&#10;e.g., SEMINAR DUE: Feb 10"></textarea>
+            </div>
+        </section>
+
+        <main class="planner-container">
+            <!-- PLAN section -->
+            <section class="planner-section">
+                <div class="section-header">
+                    <h2 class="section-title">PLAN</h2>
+                    <button class="delete-all-btn" id="deletePlanBtn">🗑️</button>
+                </div>
+                <div class="time-grid" id="planGrid" data-type="plan">
+                    <div class="time-labels">
+                        <div class="time-header">
+                            <span>00</span>
+                            <span>10</span>
+                            <span>20</span>
+                            <span>30</span>
+                            <span>40</span>
+                            <span>50</span>
+                        </div>
+                    </div>
+                    <div class="grid-content" id="planContent">
+                        <!-- Time grid will be generated here -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Copy arrow button -->
+            <div class="copy-arrows" id="copyArrows">
+                <button class="arrow-btn copy-all-btn-arrow" id="copyAllBtn" title="Copy all to REAL">→</button>
+            </div>
+
+            <!-- REAL section -->
+            <section class="planner-section">
+                <div class="section-header">
+                    <h2 class="section-title">REAL</h2>
+                    <button class="delete-all-btn" id="deleteRealBtn">🗑️</button>
+                </div>
+                <div class="time-grid" id="realGrid" data-type="real">
+                    <div class="time-labels">
+                        <div class="time-header">
+                            <span>00</span>
+                            <span>10</span>
+                            <span>20</span>
+                            <span>30</span>
+                            <span>40</span>
+                            <span>50</span>
+                        </div>
+                    </div>
+                    <div class="grid-content" id="realContent">
+                        <!-- Time grid will be generated here -->
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- TODO Section -->
+        <section class="todo-section">
+            <div class="todo-container">
+                <!-- TODO List -->
+                <div class="todo-column">
+                    <div class="todo-header">
+                        <h3>TODO <span id="todoCount">(0/7)</span></h3>
+                        <div class="todo-actions">
+                            <button class="btn-add-todo" id="addTodoBtn" title="Add TODO (Ctrl+T)">+ Add</button>
+                            <button class="btn-carry-todo" id="carryTodoBtn" title="Carry from yesterday">Carry</button>
+                        </div>
+                    </div>
+                    <div class="todo-list" id="todoList">
+                        <div class="todo-empty">No TODOs yet</div>
+                    </div>
+                    <div class="todo-legend">
+                        <span class="legend-item"><span class="legend-color" style="background:#F8B4B4"></span>Urgent+Important</span>
+                        <span class="legend-item"><span class="legend-color" style="background:#FDE68A"></span>Urgent</span>
+                        <span class="legend-item"><span class="legend-color" style="background:#A7F3D0"></span>Important</span>
+                        <span class="legend-item"><span class="legend-color" style="background:#E5E7EB"></span>Neither</span>
+                    </div>
+                </div>
+
+                <!-- DONE List -->
+                <div class="done-column">
+                    <div class="todo-header">
+                        <h3>DONE</h3>
+                    </div>
+                    <div class="done-list" id="doneList">
+                        <div class="todo-empty">No completed items</div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+    </div>
+
+    <!-- Block creation/edit modal -->
+    <div class="modal" id="blockModal">
+        <div class="modal-content">
+            <h3>Add Block</h3>
+            <div class="form-group">
+                <label for="blockTitle">Task:</label>
+                <input type="text" id="blockTitle" placeholder="Enter task name">
+            </div>
+            <div class="form-group">
+                <label>Category:</label>
+                <div class="color-picker">
+                    <button class="color-option" data-color="#FFB3BA" style="background-color: #FFB3BA;" title="Useless">Useless</button>
+                    <button class="color-option" data-color="#BAE1FF" style="background-color: #BAE1FF;" title="Work">Work</button>
+                    <button class="color-option" data-color="#BAFFC9" style="background-color: #BAFFC9;" title="Rest">Rest</button>
+                    <button class="color-option" data-color="#E0E0E0" style="background-color: #E0E0E0;" title="Non-work">Non-work</button>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-cancel" id="btnCancel">Cancel</button>
+                <button class="btn-save" id="btnSave">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation modal -->
+    <div class="modal" id="confirmModal">
+        <div class="modal-content">
+            <p id="confirmMessage">Are you sure?</p>
+            <div class="modal-actions">
+                <button class="btn-cancel" id="btnConfirmNo">No</button>
+                <button class="btn-save" id="btnConfirmYes">Yes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export modal -->
+    <div class="modal" id="exportModal">
+        <div class="modal-content export-modal">
+            <h3>Export & Backup</h3>
+            <div class="export-section">
+                <h4>Daily (Current Day)</h4>
+                <div class="export-buttons">
+                    <button class="btn-export-option" id="btnExportDailyCSV">CSV</button>
+                    <button class="btn-export-option" id="btnExportDailyJSON">JSON</button>
+                </div>
+            </div>
+            <div class="export-section">
+                <h4>Weekly (Mon-Sun)</h4>
+                <div class="export-buttons">
+                    <button class="btn-export-option" id="btnExportWeeklyCSV">CSV</button>
+                    <button class="btn-export-option" id="btnExportWeeklyJSON">JSON</button>
+                </div>
+            </div>
+            <div class="export-section">
+                <h4>For LLM Analysis</h4>
+                <div class="export-buttons">
+                    <button class="btn-export-option btn-llm" id="btnExportLLM">Markdown Report</button>
+                </div>
+            </div>
+            <div class="export-section backup-section">
+                <h4>Backup & Restore</h4>
+                <div class="export-buttons">
+                    <button class="btn-export-option btn-backup" id="btnBackup">Backup All</button>
+                    <label class="btn-export-option btn-import">
+                        Import
+                        <input type="file" id="importFile" accept=".json" hidden>
+                    </label>
+                </div>
+            </div>
+            <p class="export-hint">Shortcuts: Ctrl+S (CSV) | Ctrl+B (Backup)</p>
+            <div class="modal-actions">
+                <button class="btn-cancel" id="btnExportClose">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TODO modal -->
+    <div class="modal" id="todoModal">
+        <div class="modal-content">
+            <h3>Add TODO</h3>
+            <div class="form-group">
+                <label for="todoTitle">TODO:</label>
+                <input type="text" id="todoTitle" placeholder="Enter TODO item">
+            </div>
+            <p class="todo-hint">Right-click item to change priority color</p>
+            <div class="modal-actions">
+                <button class="btn-cancel" id="btnTodoCancel">Cancel</button>
+                <button class="btn-save" id="btnTodoSave">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- D-DAY modal -->
+    <div class="modal" id="ddayModal">
+        <div class="modal-content">
+            <h3 id="ddayModalTitle">Add D-DAY</h3>
+            <div class="form-group">
+                <label for="ddayTitle">Title:</label>
+                <input type="text" id="ddayTitle" placeholder="e.g., Exam, Trip, Deadline">
+            </div>
+            <div class="form-group">
+                <label for="ddayEmoji">Emoji (optional):</label>
+                <input type="text" id="ddayEmoji" placeholder="e.g., 🎯 📚 ✈️" maxlength="4">
+            </div>
+            <div class="form-group">
+                <label for="ddayDate">Target Date:</label>
+                <input type="date" id="ddayDate">
+            </div>
+            <p class="dday-hint">Max 3 D-DAYs. Click to edit, right-click to delete.</p>
+            <div class="modal-actions">
+                <button class="btn-cancel" id="btnDdayCancel">Cancel</button>
+                <button class="btn-save" id="btnDdaySave">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Calendar modal -->
+    <div class="modal" id="calendarModal">
+        <div class="modal-content calendar-modal">
+            <div class="calendar-header">
+                <button class="btn-calendar-nav" id="calendarPrev">◀</button>
+                <span class="calendar-month" id="calendarMonth">January 2026</span>
+                <button class="btn-calendar-nav" id="calendarNext">▶</button>
+            </div>
+            <div class="calendar-weekdays">
+                <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+            </div>
+            <div class="calendar-grid" id="calendarGrid">
+                <!-- Calendar days will be rendered here -->
+            </div>
+            <div class="calendar-footer">
+                <button class="btn-today" id="calendarToday">Today</button>
+                <button class="btn-cancel" id="btnCalendarClose">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="bootstrap.js"></script>
+</body>
+</html>
