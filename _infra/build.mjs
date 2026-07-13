@@ -108,6 +108,15 @@ function listingPage(site, entries) {
   .card:active { transform: translateY(2px); box-shadow: 0 1px 0
           light-dark(hsl(var(--hue) 55% 78%), hsl(var(--hue) 35% 12%)); }
   @keyframes pop { from { transform: scale(.6); opacity: 0; } }
+  /* 접속량순 정렬이 끝나기 전에는 스켈레톤으로 — 재배치 점프가 안 보이게 */
+  .grid.skeleton .card { animation: skel 1.1s ease-in-out infinite alternate;
+          pointer-events: none;
+          color: transparent;
+          background: light-dark(#e3e9f0, #1a2230);
+          border-color: light-dark(#dbe3ec, #232f40);
+          box-shadow: 0 4px 0 light-dark(#d5dde6, #141c28); }
+  .grid.skeleton .card > * { visibility: hidden; }
+  @keyframes skel { to { opacity: .5; } }
   .emoji { font-size: 2.6rem; line-height: 1; }
   .name { font-weight: bold; font-size: 1.02rem; word-break: break-all;
           text-align: center; }
@@ -121,7 +130,7 @@ function listingPage(site, entries) {
 <body>
   <h1>${escapeHtml(site)}<span>.bubblelab.dev</span></h1>
   <div id="crown" title="이번 주 1위를 가장 많이 가진 사람 — 월요일 09시 초기화"></div>
-${cards ? `  <div class="grid">\n${cards}\n  </div>` : `  <p class="empty">아직 아무것도 없어요 🫧</p>`}
+${cards ? `  <div class="grid skeleton">\n${cards}\n  </div>` : `  <p class="empty">아직 아무것도 없어요 🫧</p>`}
   <footer><a href="https://bubblelab.dev">bubblelab.dev</a></footer>
 <script>
 const SITE = ${JSON.stringify(site)};
@@ -159,13 +168,14 @@ const SITE = ${JSON.stringify(site)};
 })();
 
 // 주간 접속량(/_stats, 최근 7일 순방문자) 많은 순으로 카드를 재정렬한다.
-// 동률(0 포함)은 빌드 시점의 가나다순이 그대로 유지된다.
+// 동률(0 포함)은 빌드 시점의 가나다순이 그대로 유지된다. 순서가 정해질
+// 때까지는 스켈레톤으로 보이다가, 정렬 후에 pop 애니메이션으로 등장한다.
 (async () => {
   const grid = document.querySelector(".grid");
   if (!grid) return;
   try {
-    const res = await fetch("/_stats");
-    if (!res.ok) return;
+    const res = await fetch("/_stats", { signal: AbortSignal.timeout(4000) });
+    if (!res.ok) throw new Error();
     const { pages } = await res.json();
     const count = (card) =>
       pages[\`\${SITE}/\${card.querySelector(".champ")?.dataset.game}\`] ?? 0;
@@ -178,7 +188,9 @@ const SITE = ${JSON.stringify(site)};
         card.style.setProperty("--i", i);
         grid.append(card);
       });
-  } catch {}
+  } catch {} finally {
+    grid.classList.remove("skeleton"); // 실패해도 기본(가나다) 순서로 공개
+  }
 })();
 </script>
 <script defer src="/_shared/records.js"></script>
