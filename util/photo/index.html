@@ -29,6 +29,7 @@
   #back[hidden] { visibility: hidden; display: block; }
   .step { display: none; flex: 1; min-height: 0; }
   .step.active { display: flex; flex-direction: column; animation: enter .22s ease-out; }
+  .step[data-step="result"].active { justify-content: flex-start; }
   @keyframes enter { from { opacity: 0; transform: translateX(12px); } }
   .center { justify-content: center; align-items: center; text-align: center; }
   .eyebrow { margin: 0 0 .45rem; color: var(--accent); font-size: .72rem; font-weight: bold; }
@@ -94,6 +95,13 @@
   .result-actions { display: grid; grid-template-columns: 1.25fr 1fr; gap: .55rem;
                     width: 100%; opacity: 0; pointer-events: none; }
   .result-actions.ready { opacity: 1; pointer-events: auto; transition: opacity .3s; }
+  .video-result { width: 100%; margin: .2rem 0 .7rem; padding: .65rem; border: 1px solid var(--line);
+                  border-radius: .8rem; background: var(--panel); text-align: left; }
+  .video-result[hidden] { display: none; }
+  .video-result p { margin: 0 0 .5rem; color: var(--muted); font-size: .68rem; }
+  #resultVideo { display: block; width: 100%; aspect-ratio: 3/2; object-fit: cover;
+                 border-radius: .5rem; background: #080b10; }
+  #resultVideo.mirror { transform: scaleX(-1); }
   #resultStatus { min-height: 1.25em; margin: .55rem 0 0; color: var(--muted); font-size: .7rem; }
   .restart { margin-top: .55rem; border: 0; background: transparent; color: var(--muted); font-size: .72rem; }
   @media (min-width: 48rem) { .app { padding-top: 1.2rem; } }
@@ -111,7 +119,7 @@
     <div class="hero-strip"><span></span><span></span><span></span><span></span></div>
     <p class="eyebrow">FOUR CUT PHOTO</p>
     <h2>우리만의 순간을<br>네 컷에 담아보세요</h2>
-    <p class="desc">프레임을 고르고 3초 간격으로 촬영합니다.<br>사진은 기기 밖으로 전송되지 않습니다.</p>
+    <p class="desc">프레임을 고르고 3초 간격으로 촬영합니다.<br>사진과 촬영 영상은 기기 밖으로 전송되지 않습니다.</p>
     <button class="primary" id="begin" type="button">촬영 시작</button>
   </section>
 
@@ -159,9 +167,15 @@
     <div class="progress"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></div>
     <p class="eyebrow">STEP 4 · PRINTING</p>
     <div class="print-window"><canvas id="finalCanvas" width="1200" height="3600"></canvas></div>
+    <div class="video-result" id="videoResult" hidden>
+      <p>🎬 네 컷을 찍는 동안의 영상</p>
+      <video id="resultVideo" controls muted playsinline preload="metadata"></video>
+    </div>
     <div class="result-actions" id="resultActions">
-      <button class="primary" id="download" type="button">PNG 저장</button>
-      <button id="share" type="button">공유</button>
+      <button id="downloadPhoto" type="button">사진 저장</button>
+      <button id="downloadVideo" type="button">영상 저장</button>
+      <button class="primary" id="downloadAll" type="button">모두 저장</button>
+      <button id="share" type="button">함께 공유</button>
     </div>
     <p id="resultStatus" role="status"></p>
     <button class="restart" id="restart" type="button">처음부터 다시 찍기</button>
@@ -174,6 +188,8 @@ const SLOTS = [0, 1, 2, 3].map((i) => ({ x: 72, y: 230 + i * 760, w: 1056, h: 70
 const photos = [null, null, null, null];
 let frameIndex = 0, reviewIndex = 0, retakeIndex = -1;
 let stream = null, facingMode = "user", shooting = false, currentStep = "welcome";
+let videoBlob = null, videoMime = "", videoUrl = "";
+let recorder = null, recordAnimation = 0, recordStopPromise = null;
 
 const videoEl = document.getElementById("camera");
 const cameraEmptyEl = document.getElementById("cameraEmpty");
@@ -288,6 +304,8 @@ async function startCamera() {
 }
 
 function stopCamera() {
+  if (recorder?.state === "recording") recorder.stop();
+  stopRecordDrawing();
   stream?.getTracks().forEach((track) => track.stop()); stream = null; videoEl.srcObject = null;
   cameraEmptyEl.hidden = false;
   document.getElementById("cameraStart").disabled = false;
@@ -317,6 +335,66 @@ function captureFrame() {
   return output;
 }
 
+function cameraCrop() {
+  const vw = videoEl.videoWidth, vh = videoEl.videoHeight, targetRatio = 3 / 2;
+  let sx = 0, sy = 0, sw = vw, sh = vh;
+  if (vw / vh > targetRatio) { sw = vh * targetRatio; sx = (vw - sw) / 2; }
+  else { sh = vw / targetRatio; sy = (vh - sh) / 2; }
+  return { sx, sy, sw, sh };
+}
+
+function preferredVideoMime() {
+  if (!window.MediaRecorder) return "";
+  return ["video/mp4;codecs=avc1.42E01E", "video/mp4", "video/webm;codecs=vp8", "video/webm"]
+    .find((type) => MediaRecorder.isTypeSupported?.(type)) || "";
+}
+
+function stopRecordDrawing() {
+  if (recordAnimation) cancelAnimationFrame(recordAnimation);
+  recordAnimation = 0;
+}
+
+function beginVideoRecording() {
+  videoBlob = null; videoMime = "";
+  if (!window.MediaRecorder || typeof HTMLCanvasElement.prototype.captureStream !== "function") return false;
+  const recordCanvas = document.createElement("canvas"); recordCanvas.width = 1080; recordCanvas.height = 720;
+  const context = recordCanvas.getContext("2d", { alpha: false });
+  const draw = () => {
+    if (!stream || !videoEl.videoWidth) return;
+    const { sx, sy, sw, sh } = cameraCrop();
+    context.save();
+    if (facingMode === "user") { context.translate(recordCanvas.width, 0); context.scale(-1, 1); }
+    context.drawImage(videoEl, sx, sy, sw, sh, 0, 0, recordCanvas.width, recordCanvas.height);
+    context.restore();
+    recordAnimation = requestAnimationFrame(draw);
+  };
+  draw();
+  try {
+    const mimeType = preferredVideoMime();
+    const options = { videoBitsPerSecond: 2_500_000 };
+    if (mimeType) options.mimeType = mimeType;
+    recorder = new MediaRecorder(recordCanvas.captureStream(30), options);
+    const chunks = [];
+    recorder.addEventListener("dataavailable", (event) => { if (event.data?.size) chunks.push(event.data); });
+    recordStopPromise = new Promise((resolve) => recorder.addEventListener("stop", () => {
+      stopRecordDrawing();
+      videoMime = recorder.mimeType || mimeType || "video/webm";
+      videoBlob = chunks.length ? new Blob(chunks, { type: videoMime }) : null;
+      resolve();
+    }, { once: true }));
+    recorder.start(500);
+    return true;
+  } catch (_) {
+    recorder = null; recordStopPromise = null; stopRecordDrawing(); return false;
+  }
+}
+
+async function finishVideoRecording() {
+  if (recorder?.state === "recording") recorder.stop();
+  if (recordStopPromise) await recordStopPromise;
+  recorder = null; recordStopPromise = null;
+}
+
 async function takeOne(index) {
   for (let n = 3; n >= 1; n--) {
     countdownEl.textContent = String(n); countdownEl.hidden = false;
@@ -334,11 +412,16 @@ async function shoot() {
   shooting = true; document.getElementById("back").hidden = true;
   document.getElementById("shoot").disabled = true; document.getElementById("cameraSwitch").disabled = true;
   try {
-    if (retakeIndex >= 0) await takeOne(retakeIndex);
+    const fullShoot = retakeIndex < 0;
+    const recording = fullShoot && beginVideoRecording();
+    if (fullShoot && !recording) cameraStatusEl.textContent = "이 브라우저에서는 영상 없이 사진만 촬영합니다.";
+    if (!fullShoot) await takeOne(retakeIndex);
     else for (let i = 0; i < 4; i++) await takeOne(i);
+    if (recording) await finishVideoRecording();
     reviewIndex = retakeIndex >= 0 ? retakeIndex : 0; retakeIndex = -1;
     stopCamera(); updatePhotoViews(); go("review");
   } catch (_) {
+    await finishVideoRecording();
     cameraStatusEl.textContent = "촬영 중 문제가 생겼습니다. 다시 시도해주세요.";
   } finally {
     shooting = false; document.getElementById("back").hidden = false;
@@ -374,12 +457,20 @@ function paintFinal() {
 document.getElementById("print").addEventListener("click", async () => {
   if (!photos.every(Boolean)) return;
   paintFinal(); go("result");
+  if (videoUrl) URL.revokeObjectURL(videoUrl);
+  videoUrl = videoBlob ? URL.createObjectURL(videoBlob) : "";
+  const resultVideo = document.getElementById("resultVideo");
+  resultVideo.src = videoUrl;
+  resultVideo.classList.remove("mirror");
+  document.getElementById("videoResult").hidden = !videoBlob;
+  document.getElementById("downloadVideo").disabled = !videoBlob;
+  document.getElementById("downloadAll").disabled = !videoBlob;
   const actions = document.getElementById("resultActions"); actions.classList.remove("ready");
   finalCanvas.classList.remove("printing"); void finalCanvas.offsetWidth; finalCanvas.classList.add("printing");
   await wait(1750); actions.classList.add("ready");
 });
 
-function makeFile() {
+function makePhotoFile() {
   const dataUrl = finalCanvas.toDataURL("image/png");
   const binary = atob(dataUrl.slice(dataUrl.indexOf(",") + 1));
   const bytes = new Uint8Array(binary.length);
@@ -387,32 +478,60 @@ function makeFile() {
   return new File([bytes], `bubblelab-fourcut-${dateText().replaceAll(".", "-")}.png`, { type: "image/png" });
 }
 
-document.getElementById("download").addEventListener("click", () => {
+function videoExtension() { return videoMime.includes("mp4") ? "mp4" : "webm"; }
+function makeVideoFile() {
+  return new File([videoBlob], `bubblelab-fourcut-video-${dateText().replaceAll(".", "-")}.${videoExtension()}`,
+    { type: videoMime || "video/webm" });
+}
+
+function requestDownload(file) {
+  const url = URL.createObjectURL(file);
+  const a = document.createElement("a"); a.href = url; a.download = file.name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+document.getElementById("downloadPhoto").addEventListener("click", () => {
   try {
-    const file = makeFile(), url = URL.createObjectURL(file);
-    const a = document.createElement("a"); a.href = url; a.download = file.name;
-    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
-    document.getElementById("resultStatus").textContent = "PNG 다운로드를 요청했습니다.";
+    requestDownload(makePhotoFile());
+    document.getElementById("resultStatus").textContent = "사진 저장을 요청했습니다.";
   } catch (_) { document.getElementById("resultStatus").textContent = "이미지를 저장하지 못했습니다."; }
+});
+
+document.getElementById("downloadVideo").addEventListener("click", () => {
+  try {
+    if (!videoBlob) throw new Error("no video"); requestDownload(makeVideoFile());
+    document.getElementById("resultStatus").textContent = "영상 저장을 요청했습니다.";
+  } catch (_) { document.getElementById("resultStatus").textContent = "영상을 저장하지 못했습니다."; }
+});
+
+document.getElementById("downloadAll").addEventListener("click", () => {
+  try {
+    if (!videoBlob) throw new Error("no video");
+    requestDownload(makePhotoFile()); requestDownload(makeVideoFile());
+    document.getElementById("resultStatus").textContent = "사진과 영상 저장을 요청했습니다. 하나만 보이면 개별 저장을 눌러주세요.";
+  } catch (_) { document.getElementById("resultStatus").textContent = "사진과 영상을 저장하지 못했습니다."; }
 });
 
 const shareButton = document.getElementById("share");
 const canShare = (() => {
-  try { return typeof navigator.share === "function" && typeof navigator.canShare === "function"
-    && navigator.canShare({ files: [new File([""], "photo.png", { type: "image/png" })] }); }
+  try { return typeof navigator.share === "function" && typeof navigator.canShare === "function"; }
   catch (_) { return false; }
 })();
 shareButton.hidden = !canShare;
-if (!canShare) document.getElementById("resultActions").style.gridTemplateColumns = "1fr";
 shareButton.addEventListener("click", () => {
   try {
-    navigator.share({ title: "Bubblelab 네컷사진", files: [makeFile()] })
+    const files = [makePhotoFile()]; if (videoBlob) files.push(makeVideoFile());
+    if (!navigator.canShare({ files })) throw new Error("unsupported files");
+    navigator.share({ title: "Bubblelab 네컷사진", files })
       .catch((err) => { if (err?.name !== "AbortError") document.getElementById("resultStatus").textContent = "공유 메뉴를 열지 못했습니다."; });
   } catch (_) { document.getElementById("resultStatus").textContent = "이미지를 공유하지 못했습니다."; }
 });
 
 document.getElementById("restart").addEventListener("click", () => {
   stopCamera(); photos.fill(null); frameIndex = 0; reviewIndex = 0; retakeIndex = -1;
+  if (videoUrl) URL.revokeObjectURL(videoUrl); videoUrl = ""; videoBlob = null; videoMime = "";
+  const resultVideo = document.getElementById("resultVideo"); resultVideo.removeAttribute("src"); resultVideo.load();
+  document.getElementById("videoResult").hidden = true;
   document.querySelectorAll(".frame-choice").forEach((b, i) => b.classList.toggle("active", i === 0));
   updatePhotoViews(); finalCanvas.classList.remove("printing");
   document.getElementById("resultActions").classList.remove("ready");
