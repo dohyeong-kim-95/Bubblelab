@@ -67,6 +67,12 @@ function hueOf(name) {
 }
 
 function listingPage(site, entries) {
+  const categoryLinks = sites
+    .map((item) => item.name)
+    .filter((name) => !["admin", "www"].includes(name))
+    .sort((a, b) => a.localeCompare(b, "ko"))
+    .map((name) => `      <a href="https://${escapeHtml(name)}.bubblelab.dev"${name === site ? ' aria-current="page"' : ""}><span>${name === site ? "✓" : ""}</span>${escapeHtml(name)}</a>`)
+    .join("\n");
   const cards = entries
     .map(({ name, emoji }, i) => {
       return `    <a class="card" href="/${escapeHtml(name)}/"
@@ -87,8 +93,25 @@ function listingPage(site, entries) {
   :root { color-scheme: light dark; }
   body { font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; max-width: 52rem;
          margin: 3rem auto 4rem; padding: 0 1.25rem; }
-  h1 { font-size: 1.25rem; text-align: center; margin-bottom: .4rem; }
-  h1 span { opacity: .45; font-weight: normal; }
+  h1 { font-size: 1.25rem; text-align: center; margin: 0 0 .4rem; }
+  .site-switcher { position: relative; width: max-content; max-width: 100%; margin: 0 auto; }
+  .site-trigger { border: 0; padding: .35rem .5rem; border-radius: .55rem; background: transparent;
+          color: inherit; font: inherit; cursor: pointer; }
+  .site-trigger:hover, .site-trigger:focus-visible { background: light-dark(#edf1f5, #1a2330); outline: none; }
+  .site-trigger .domain { opacity: .45; font-weight: normal; }
+  .site-trigger .chevron { display: inline-block; margin-left: .18rem; opacity: .5; font-size: .8em;
+          transition: transform .15s; }
+  .site-trigger[aria-expanded="true"] .chevron { transform: rotate(180deg); }
+  .site-menu { position: absolute; z-index: 30; top: calc(100% + .3rem); left: 50%; transform: translateX(-50%);
+          width: 13rem; padding: .4rem; border-radius: .8rem;
+          background: light-dark(#fff, #141d28); border: 1px solid light-dark(#dce3ea, #2a3747);
+          box-shadow: 0 12px 30px light-dark(#1b27331f, #0008); text-align: left; }
+  .site-menu[hidden] { display: none; }
+  .site-menu a { display: grid; grid-template-columns: 1.3rem 1fr; align-items: center;
+          padding: .65rem .7rem; border-radius: .55rem; color: inherit; text-decoration: none; font-size: .9rem; }
+  .site-menu a:hover, .site-menu a:focus-visible { background: light-dark(#eef3f7, #202c3a); outline: none; }
+  .site-menu a[aria-current="page"] { font-weight: bold; }
+  .site-menu .menu-home { border-bottom: 1px solid light-dark(#e6ebef, #263342); margin-bottom: .25rem; }
   #crown { text-align: center; opacity: .6; font-size: .85rem;
            margin: 0 0 1.8rem; min-height: 1.2em; }
   .grid { display: grid; gap: 1rem;
@@ -128,12 +151,41 @@ function listingPage(site, entries) {
 </style>
 </head>
 <body>
-  <h1>${escapeHtml(site)}<span>.bubblelab.dev</span></h1>
+  <div class="site-switcher">
+    <h1><button class="site-trigger" id="siteTrigger" type="button" aria-expanded="false" aria-controls="siteMenu">
+      <strong>${escapeHtml(site)}</strong><span class="chevron">⌄</span><span class="domain">.bubblelab.dev</span>
+    </button></h1>
+    <nav class="site-menu" id="siteMenu" aria-label="Bubblelab sites" hidden>
+      <a class="menu-home" href="https://bubblelab.dev"><span>🫧</span>bubblelab</a>
+${categoryLinks}
+    </nav>
+  </div>
   <div id="crown" title="이번 주 1위를 가장 많이 가진 사람 — 월요일 09시 초기화"></div>
 ${cards ? `  <div class="grid skeleton">\n${cards}\n  </div>` : `  <p class="empty">아직 아무것도 없어요 🫧</p>`}
   <footer><a href="https://bubblelab.dev">bubblelab.dev</a></footer>
 <script>
 const SITE = ${JSON.stringify(site)};
+const siteTrigger = document.getElementById("siteTrigger");
+const siteMenu = document.getElementById("siteMenu");
+const closeSiteMenu = () => {
+  siteMenu.hidden = true;
+  siteTrigger.setAttribute("aria-expanded", "false");
+};
+siteTrigger.addEventListener("click", () => {
+  const opening = siteMenu.hidden;
+  siteMenu.hidden = !opening;
+  siteTrigger.setAttribute("aria-expanded", String(opening));
+  if (opening) siteMenu.querySelector("a[aria-current=page]")?.focus();
+});
+addEventListener("click", (event) => {
+  if (!event.target.closest(".site-switcher")) closeSiteMenu();
+});
+addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !siteMenu.hidden) {
+    closeSiteMenu();
+    siteTrigger.focus();
+  }
+});
 
 // 주간 신기록 보드(/_records)에서 카드별 챔피언을 채운다. 실패해도 조용히 넘어간다.
 (async () => {
