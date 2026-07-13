@@ -47,13 +47,15 @@
   .progress { display: flex; justify-content: center; gap: .4rem; margin: .35rem 0 1rem; }
   .progress i { width: .45rem; height: .45rem; border-radius: 50%; background: var(--line); }
   .progress i.on { background: var(--accent); }
-  .frame-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: .65rem; width: 100%; }
+  .frame-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: .65rem; width: 100%; }
   .frame-choice { padding: .6rem .35rem; color: var(--muted); font-size: .72rem; }
   .frame-choice.active { border-color: var(--accent); color: var(--accent); font-weight: bold; }
   .frame-mini { width: 3.7rem; aspect-ratio: 1/3; padding: .32rem; margin: 0 auto .45rem;
                 border-radius: .2rem; background: var(--frame); display: grid;
                 grid-template-rows: repeat(4, 1fr); gap: .14rem; border: 1px solid #8884; }
   .frame-mini span { background: linear-gradient(135deg, #a9c6d4, #dec0d1); border-radius: .08rem; }
+  .frame-mini.custom { display: grid; place-items: center; color: var(--accent); font-size: 1.7rem;
+                       border: 2px dashed #df5f7580; }
   .frame-actions { margin-top: auto; padding-top: 1rem; display: grid; }
 
   .camera-box { position: relative; width: 100%; aspect-ratio: 3/2; overflow: hidden;
@@ -85,6 +87,23 @@
   .review-shot.active { border-color: var(--accent); }
   .review-shot canvas { display: block; width: 100%; height: 100%; }
   .review-actions { margin-top: auto; padding-top: .9rem; display: grid; grid-template-columns: 1fr 1.25fr; gap: .55rem; }
+
+  .decorate-toolbar { position: sticky; top: 0; z-index: 5; display: grid;
+                      grid-template-columns: 1.4fr repeat(4, 1fr); gap: .35rem; padding: .55rem 0;
+                      background: var(--bg); }
+  .decorate-toolbar button { min-width: 0; padding: .62rem .25rem; font-size: .68rem; }
+  .decorator-wrap { position: relative; width: min(100%, 20rem); aspect-ratio: 1/3; margin: .2rem auto .8rem;
+                    flex: none; box-shadow: 0 10px 28px #0003; overflow: hidden; background: #fff; }
+  #decoratorCanvas, #stickerLayer { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #decoratorCanvas { display: block; }
+  #stickerLayer { overflow: hidden; touch-action: none; }
+  .sticker { position: absolute; transform-origin: center; height: auto; max-width: none;
+             border: 2px solid transparent; border-radius: .2rem; touch-action: none;
+             -webkit-user-drag: none; user-select: none; }
+  .sticker.selected { border-color: #fff; outline: 2px solid var(--accent); }
+  .decorate-help { margin: 0 0 .7rem; color: var(--muted); text-align: center;
+                   font-size: .68rem; line-height: 1.55; }
+  .decorate-finish { display: grid; margin-bottom: .5rem; }
 
   .print-window { width: min(47vw, 10rem); height: min(64dvh, 31rem); overflow: hidden;
                   margin: .8rem auto; display: flex; justify-content: center; align-items: flex-start; }
@@ -163,6 +182,27 @@
     </div>
   </section>
 
+  <section class="step" data-step="decorate">
+    <div class="progress"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></div>
+    <p class="eyebrow">STEP 3 · CUSTOM FRAME</p>
+    <h2>스티커처럼 꾸며보세요</h2>
+    <p class="desc">사진을 추가하고 직접 움직여 나만의 프레임을 만듭니다.</p>
+    <div class="decorate-toolbar">
+      <button class="primary" id="addSticker" type="button">＋ 사진 추가</button>
+      <button id="stickerSmaller" type="button" disabled>－ 크기</button>
+      <button id="stickerLarger" type="button" disabled>＋ 크기</button>
+      <button id="duplicateSticker" type="button" disabled>복제</button>
+      <button id="deleteSticker" type="button" disabled>삭제</button>
+    </div>
+    <input id="stickerInput" type="file" accept="image/*" multiple hidden>
+    <p class="decorate-help" id="decorateStatus">한 손가락으로 이동 · 두 손가락으로 크기와 각도 조절 · 최대 12개</p>
+    <div class="decorator-wrap" id="decoratorWrap">
+      <canvas id="decoratorCanvas" width="1200" height="3600"></canvas>
+      <div id="stickerLayer" aria-label="스티커 편집 영역"></div>
+    </div>
+    <div class="decorate-finish"><button class="primary" id="finishDecorate" type="button">꾸미기 완료 · 출력</button></div>
+  </section>
+
   <section class="step center" data-step="result">
     <div class="progress"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></div>
     <p class="eyebrow">STEP 4 · PRINTING</p>
@@ -212,7 +252,12 @@ const FRAMES = [
     title: "NIGHT CUT" },
   { id: "pink", name: "포토 스트립", color: "#f7dce5", text: "#8e3e59",
     title: "♡  OUR FOUR CUTS  ♡" },
+  { id: "custom", name: "＋ 커스텀", color: "#f3f0e9", text: "#3d3935",
+    title: "MY FOUR CUTS" },
 ];
+
+const stickers = [];
+let selectedSticker = -1, stickerId = 0;
 
 function go(step) {
   currentStep = step;
@@ -227,21 +272,27 @@ document.getElementById("back").addEventListener("click", () => {
   if (currentStep === "frame") go("welcome");
   else if (currentStep === "camera") { stopCamera(); go(photos.every(Boolean) ? "review" : "frame"); }
   else if (currentStep === "review") go("frame");
-  else if (currentStep === "result") go("review");
+  else if (currentStep === "decorate") go("review");
+  else if (currentStep === "result") go(FRAMES[frameIndex].id === "custom" ? "decorate" : "review");
 });
 
 FRAMES.forEach((frame, index) => {
   const button = document.createElement("button");
   button.type = "button"; button.className = "frame-choice";
-  button.innerHTML = `<span class="frame-mini" style="--frame:${frame.color}"><span></span><span></span><span></span><span></span></span>${frame.name}`;
+  button.innerHTML = frame.id === "custom"
+    ? `<span class="frame-mini custom" style="--frame:${frame.color}"><b>＋</b></span>${frame.name}`
+    : `<span class="frame-mini" style="--frame:${frame.color}"><span></span><span></span><span></span><span></span></span>${frame.name}`;
   button.addEventListener("click", () => {
     frameIndex = index;
     document.querySelectorAll(".frame-choice").forEach((b, i) => b.classList.toggle("active", i === index));
+    document.getElementById("print").textContent = frame.id === "custom" ? "꾸미러 가기" : "이대로 출력";
   });
   document.getElementById("frameGrid").appendChild(button);
 });
 document.querySelector(".frame-choice").classList.add("active");
-document.getElementById("frameNext").addEventListener("click", () => { retakeIndex = -1; resetCameraScreen(); go("camera"); });
+document.getElementById("frameNext").addEventListener("click", () => {
+  retakeIndex = -1; resetCameraScreen(); go("camera");
+});
 
 function buildPhotoViews() {
   const rail = document.getElementById("shotRail");
@@ -438,7 +489,155 @@ document.getElementById("retake").addEventListener("click", () => {
 });
 addEventListener("pagehide", stopCamera);
 
-function paintFinal() {
+const decoratorCanvas = document.getElementById("decoratorCanvas");
+const decoratorCtx = decoratorCanvas.getContext("2d");
+const stickerLayer = document.getElementById("stickerLayer");
+const decorateStatus = document.getElementById("decorateStatus");
+const activePointers = new Map();
+let stickerGesture = null;
+
+function currentSticker() { return stickers[selectedSticker] || null; }
+function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
+
+function updateStickerControls() {
+  const enabled = !!currentSticker();
+  ["stickerSmaller", "stickerLarger", "duplicateSticker", "deleteSticker"].forEach((id) => {
+    document.getElementById(id).disabled = !enabled;
+  });
+  stickers.forEach((item, index) => item.el.classList.toggle("selected", index === selectedSticker));
+}
+
+function positionSticker(item) {
+  item.el.style.left = `${item.x * 100}%`;
+  item.el.style.top = `${item.y * 100}%`;
+  item.el.style.width = `${item.size * 100}%`;
+  item.el.style.transform = `translate(-50%, -50%) rotate(${item.rotation}deg)`;
+}
+
+function selectSticker(index) {
+  selectedSticker = index; updateStickerControls();
+}
+
+function addStickerImage(image, url) {
+  if (stickers.length >= 12) { URL.revokeObjectURL(url); decorateStatus.textContent = "스티커는 최대 12개까지 추가할 수 있습니다."; return; }
+  const offset = stickers.length % 5;
+  const item = { id: ++stickerId, image, el: image, url, x: .5 + (offset - 2) * .045,
+    y: .16 + (stickers.length % 7) * .1, size: .34, rotation: (offset - 2) * 6 };
+  image.className = "sticker"; image.alt = "추가한 사진 스티커"; image.draggable = false;
+  image.addEventListener("pointerdown", (event) => {
+    event.preventDefault(); selectSticker(stickers.indexOf(item));
+    activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    try { stickerLayer.setPointerCapture(event.pointerId); } catch (_) {}
+    beginStickerGesture();
+  });
+  stickers.push(item); stickerLayer.appendChild(image); positionSticker(item);
+  selectSticker(stickers.length - 1);
+  decorateStatus.textContent = `${stickers.length}개 추가됨 · 한 손가락 이동 · 두 손가락 크기/회전`;
+}
+
+async function addStickerFile(file) {
+  if (!file?.type.startsWith("image/")) return;
+  let url = URL.createObjectURL(file), image = new Image(); image.src = url;
+  try {
+    await image.decode();
+    const longest = Math.max(image.naturalWidth, image.naturalHeight);
+    if (longest > 1600) {
+      const scale = 1600 / longest, canvas = document.createElement("canvas");
+      canvas.width = Math.round(image.naturalWidth * scale); canvas.height = Math.round(image.naturalHeight * scale);
+      canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
+      const outputType = file.type === "image/png" ? "image/png" : "image/webp";
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, outputType, .9));
+      if (!blob) throw new Error("resize failed");
+      URL.revokeObjectURL(url); url = URL.createObjectURL(blob); image = new Image(); image.src = url; await image.decode();
+    }
+    addStickerImage(image, url);
+  } catch (_) { URL.revokeObjectURL(url); decorateStatus.textContent = "이 사진 형식은 불러오지 못했습니다."; }
+}
+
+function beginStickerGesture() {
+  const item = currentSticker(), points = [...activePointers.values()];
+  if (!item || !points.length) { stickerGesture = null; return; }
+  const base = { x: item.x, y: item.y, size: item.size, rotation: item.rotation };
+  if (points.length === 1) stickerGesture = { count: 1, base, point: points[0] };
+  else {
+    const [a, b] = points;
+    stickerGesture = { count: 2, base,
+      mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+      distance: Math.hypot(b.x - a.x, b.y - a.y),
+      angle: Math.atan2(b.y - a.y, b.x - a.x) };
+  }
+}
+
+stickerLayer.addEventListener("pointermove", (event) => {
+  if (!activePointers.has(event.pointerId) || !currentSticker()) return;
+  event.preventDefault(); activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  const points = [...activePointers.values()].slice(0, 2), rect = stickerLayer.getBoundingClientRect();
+  if (!stickerGesture || stickerGesture.count !== points.length) beginStickerGesture();
+  const item = currentSticker();
+  if (points.length === 1) {
+    item.x = clamp(stickerGesture.base.x + (points[0].x - stickerGesture.point.x) / rect.width, -.1, 1.1);
+    item.y = clamp(stickerGesture.base.y + (points[0].y - stickerGesture.point.y) / rect.height, -.04, 1.04);
+  } else {
+    const [a, b] = points, mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const distance = Math.max(1, Math.hypot(b.x - a.x, b.y - a.y));
+    const angle = Math.atan2(b.y - a.y, b.x - a.x);
+    item.x = clamp(stickerGesture.base.x + (mid.x - stickerGesture.mid.x) / rect.width, -.1, 1.1);
+    item.y = clamp(stickerGesture.base.y + (mid.y - stickerGesture.mid.y) / rect.height, -.04, 1.04);
+    item.size = clamp(stickerGesture.base.size * distance / Math.max(1, stickerGesture.distance), .08, .8);
+    item.rotation = stickerGesture.base.rotation + (angle - stickerGesture.angle) * 180 / Math.PI;
+  }
+  positionSticker(item);
+});
+
+function endStickerPointer(event) {
+  activePointers.delete(event.pointerId); beginStickerGesture();
+}
+stickerLayer.addEventListener("pointerup", endStickerPointer);
+stickerLayer.addEventListener("pointercancel", endStickerPointer);
+stickerLayer.addEventListener("pointerdown", (event) => {
+  if (event.target === stickerLayer) selectSticker(-1);
+});
+
+document.getElementById("addSticker").addEventListener("click", () => document.getElementById("stickerInput").click());
+document.getElementById("stickerInput").addEventListener("change", async (event) => {
+  const remaining = Math.max(0, 12 - stickers.length);
+  for (const file of [...event.target.files].slice(0, remaining)) await addStickerFile(file);
+  event.target.value = "";
+});
+document.getElementById("stickerSmaller").addEventListener("click", () => {
+  const item = currentSticker(); if (!item) return; item.size = clamp(item.size * .85, .08, .8); positionSticker(item);
+});
+document.getElementById("stickerLarger").addEventListener("click", () => {
+  const item = currentSticker(); if (!item) return; item.size = clamp(item.size * 1.15, .08, .8); positionSticker(item);
+});
+document.getElementById("duplicateSticker").addEventListener("click", () => {
+  const source = currentSticker(); if (!source || stickers.length >= 12) return;
+  const image = new Image();
+  image.addEventListener("load", () => {
+    addStickerImage(image, source.url);
+    const item = currentSticker(); item.x = clamp(source.x + .06, 0, 1); item.y = clamp(source.y + .025, 0, 1);
+    item.size = source.size; item.rotation = source.rotation; positionSticker(item);
+  }, { once: true });
+  image.src = source.url;
+});
+document.getElementById("deleteSticker").addEventListener("click", () => {
+  const item = currentSticker(); if (!item) return;
+  item.el.remove(); stickers.splice(selectedSticker, 1); selectedSticker = -1; updateStickerControls();
+  if (!stickers.some((other) => other.url === item.url)) URL.revokeObjectURL(item.url);
+  decorateStatus.textContent = stickers.length ? `${stickers.length}개 스티커` : "사진을 추가해 스티커처럼 꾸며보세요.";
+});
+
+function drawStickers(context) {
+  for (const item of stickers) {
+    const width = item.size * OUTPUT_W;
+    const height = width * item.image.naturalHeight / item.image.naturalWidth;
+    context.save(); context.translate(item.x * OUTPUT_W, item.y * OUTPUT_H);
+    context.rotate(item.rotation * Math.PI / 180);
+    context.drawImage(item.image, -width / 2, -height / 2, width, height); context.restore();
+  }
+}
+
+function paintFinal(includeStickers = true) {
   const frame = FRAMES[frameIndex];
   finalCtx.fillStyle = frame.color; finalCtx.fillRect(0, 0, OUTPUT_W, OUTPUT_H);
   for (let i = 0; i < 4; i++) {
@@ -452,11 +651,11 @@ function paintFinal() {
   if (frame.id === "midnight") {
     finalCtx.strokeStyle = frame.text; finalCtx.lineWidth = 3; finalCtx.strokeRect(35, 35, OUTPUT_W - 70, OUTPUT_H - 70);
   }
+  if (includeStickers && frame.id === "custom") drawStickers(finalCtx);
 }
 
-document.getElementById("print").addEventListener("click", async () => {
-  if (!photos.every(Boolean)) return;
-  paintFinal(); go("result");
+async function showResult() {
+  go("result");
   if (videoUrl) URL.revokeObjectURL(videoUrl);
   videoUrl = videoBlob ? URL.createObjectURL(videoBlob) : "";
   const resultVideo = document.getElementById("resultVideo");
@@ -468,6 +667,18 @@ document.getElementById("print").addEventListener("click", async () => {
   const actions = document.getElementById("resultActions"); actions.classList.remove("ready");
   finalCanvas.classList.remove("printing"); void finalCanvas.offsetWidth; finalCanvas.classList.add("printing");
   await wait(1750); actions.classList.add("ready");
+}
+
+document.getElementById("print").addEventListener("click", async () => {
+  if (!photos.every(Boolean)) return;
+  if (FRAMES[frameIndex].id === "custom") {
+    paintFinal(false); decoratorCtx.clearRect(0, 0, OUTPUT_W, OUTPUT_H);
+    decoratorCtx.drawImage(finalCanvas, 0, 0); selectSticker(-1); go("decorate");
+  } else { paintFinal(); await showResult(); }
+});
+
+document.getElementById("finishDecorate").addEventListener("click", async () => {
+  paintFinal(true); await showResult();
 });
 
 function makePhotoFile() {
@@ -529,10 +740,15 @@ shareButton.addEventListener("click", () => {
 
 document.getElementById("restart").addEventListener("click", () => {
   stopCamera(); photos.fill(null); frameIndex = 0; reviewIndex = 0; retakeIndex = -1;
+  for (const url of new Set(stickers.map((item) => item.url))) URL.revokeObjectURL(url);
+  stickers.forEach((item) => item.el.remove()); stickers.length = 0; selectedSticker = -1;
+  activePointers.clear(); stickerGesture = null; updateStickerControls();
+  decorateStatus.textContent = "한 손가락으로 이동 · 두 손가락으로 크기와 각도 조절 · 최대 12개";
   if (videoUrl) URL.revokeObjectURL(videoUrl); videoUrl = ""; videoBlob = null; videoMime = "";
   const resultVideo = document.getElementById("resultVideo"); resultVideo.removeAttribute("src"); resultVideo.load();
   document.getElementById("videoResult").hidden = true;
   document.querySelectorAll(".frame-choice").forEach((b, i) => b.classList.toggle("active", i === 0));
+  document.getElementById("print").textContent = "이대로 출력";
   updatePhotoViews(); finalCanvas.classList.remove("printing");
   document.getElementById("resultActions").classList.remove("ready");
   document.getElementById("resultStatus").textContent = ""; go("welcome");
