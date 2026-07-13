@@ -124,7 +124,6 @@
   <section class="view" id="view-home">
     <div class="hub-grid">
       <a class="hub-card" href="#insights"><span class="hub-icon">📊</span><span><strong>Insights</strong><small>방문자와 인기 서비스 통계</small></span></a>
-      <a class="hub-card" href="#upload"><span class="hub-icon">🖼️</span><span><strong>Upload</strong><small>배경화면·스티커·프레임 관리</small></span></a>
       <a class="hub-card" href="#slop"><span class="hub-icon">🎮</span><span><strong>Slop</strong><small>기록·공지·아이디어 관리</small></span></a>
     </div>
   </section>
@@ -182,12 +181,11 @@
   <footer id="status">불러오는 중…</footer>
 </main>
 <script>
-const views = ['home', 'insights', 'upload', 'slop'];
+const views = ['home', 'insights', 'slop'];
 function showView() {
   const selected = views.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'home';
   document.body.dataset.view = selected;
   for (const view of views) document.getElementById(`view-${view}`).hidden = view !== selected;
-  if (selected === 'upload') loadAssets();
   scrollTo({ top: 0, behavior: 'auto' });
 }
 addEventListener('hashchange', showView);
