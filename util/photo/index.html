@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>📸 네컷사진 만들기</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>📸</text></svg>">
+<style>
+  :root { color-scheme: light dark; --bg: light-dark(#f2f4f7, #0e141d);
+          --panel: light-dark(#fff, #171f2b); --line: light-dark(#dbe1e8, #293545);
+          --muted: light-dark(#687482, #91a0b2); --accent: #df5f75; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100dvh; background: var(--bg); color: light-dark(#1b2733, #e2e9f0);
+         font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; }
+  main { width: min(34rem, 100%); margin: 0 auto; padding: 1rem 1rem 3rem; }
+  header { display: grid; grid-template-columns: 2.5rem 1fr 2.5rem; align-items: center;
+           margin-bottom: .9rem; text-align: center; }
+  header a { color: inherit; text-decoration: none; font-size: 1.35rem; }
+  h1 { margin: 0; font-size: 1.08rem; }
+  .lead { margin: .25rem 0 1rem; color: var(--muted); text-align: center; font-size: .78rem; line-height: 1.6; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 1rem;
+           padding: .85rem; margin-bottom: .8rem; }
+  button { font: inherit; color: inherit; cursor: pointer; border: 1px solid var(--line);
+           background: light-dark(#f8fafb, #111923); border-radius: .65rem; padding: .65rem .8rem; }
+  button:active { transform: scale(.97); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button:disabled { opacity: .45; cursor: default; }
+  .pick { width: 100%; border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+          color: var(--accent); font-weight: bold; }
+  input[type=file] { display: none; }
+  .stage { position: relative; width: min(82vw, 23rem); margin: 0 auto;
+           filter: drop-shadow(0 .5rem 1rem light-dark(#1a273322, #0008)); }
+  #preview { display: block; width: 100%; aspect-ratio: 2 / 3; background: #fff;
+             border-radius: .35rem; touch-action: none; }
+  .stage-note { text-align: center; margin: .65rem 0 0; color: var(--muted); font-size: .72rem; }
+  .slot-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: .45rem; margin-bottom: .75rem; }
+  .slot { padding: .55rem .2rem; color: var(--muted); }
+  .slot.filled { color: light-dark(#1b2733, #e2e9f0); }
+  .slot.active { border-color: var(--accent); color: var(--accent); font-weight: bold; }
+  .adjust { display: grid; grid-template-columns: auto 1fr auto; gap: .6rem; align-items: center; }
+  .adjust label { font-size: .76rem; color: var(--muted); }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .mini-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: .4rem; margin-top: .7rem; }
+  .mini-actions button { padding: .55rem .25rem; font-size: .75rem; }
+  h2 { margin: 0 0 .7rem; font-size: .85rem; }
+  .frames { display: grid; grid-template-columns: repeat(3, 1fr); gap: .55rem; }
+  .frame { min-width: 0; padding: .5rem .35rem; color: var(--muted); font-size: .72rem; }
+  .frame::before { content: ""; display: block; width: 2.6rem; aspect-ratio: 2/3; margin: 0 auto .35rem;
+                   border-radius: .2rem; background: var(--swatch); border: 1px solid #8885; }
+  .frame.active { border-color: var(--accent); color: var(--accent); font-weight: bold; }
+  .export { display: grid; grid-template-columns: 1.3fr 1fr; gap: .55rem; }
+  .export button:first-child { background: var(--accent); color: white; border-color: var(--accent); font-weight: bold; }
+  #status { min-height: 1.4em; margin: .7rem 0 0; text-align: center; font-size: .75rem; color: var(--muted); }
+  .privacy { color: var(--muted); font-size: .7rem; line-height: 1.6; text-align: center; margin: 1rem 0 0; }
+  @media (min-width: 48rem) {
+    main { padding-top: 1.5rem; }
+    .stage { width: 22rem; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <a href="/" aria-label="util 홈으로">‹</a>
+    <h1>📸 네컷사진 만들기</h1>
+    <span></span>
+  </header>
+  <p class="lead">사진 네 장과 프레임을 골라 나만의 네컷사진을 만드세요.</p>
+
+  <section class="panel">
+    <input id="files" type="file" accept="image/*" multiple>
+    <button class="pick" id="pick" type="button">사진 4장 선택</button>
+  </section>
+
+  <section class="panel">
+    <div class="stage">
+      <canvas id="preview" width="1200" height="1800" aria-label="네컷사진 미리보기"></canvas>
+    </div>
+    <p class="stage-note">사진을 탭하고 드래그해 위치를 조정하세요.</p>
+  </section>
+
+  <section class="panel" aria-label="사진 조정">
+    <div class="slot-tabs" id="slotTabs"></div>
+    <div class="adjust">
+      <label for="zoom">확대</label>
+      <input id="zoom" type="range" min="100" max="260" value="100" aria-label="선택한 사진 확대">
+      <span id="zoomValue">100%</span>
+    </div>
+    <div class="mini-actions">
+      <button id="prev" type="button">← 순서</button>
+      <button id="next" type="button">순서 →</button>
+      <button id="rotate" type="button">↻ 회전</button>
+      <button id="remove" type="button">삭제</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>프레임</h2>
+    <div class="frames" id="frames"></div>
+  </section>
+
+  <section class="panel">
+    <div class="export">
+      <button id="download" type="button">PNG 저장</button>
+      <button id="share" type="button">공유</button>
+    </div>
+    <p id="status" role="status"></p>
+  </section>
+  <p class="privacy">🔒 선택한 사진은 서버로 전송되지 않으며 이 브라우저 안에서만 처리됩니다.<br>
+     iPhone은 공유 메뉴의 ‘이미지 저장’을 이용할 수 있습니다.</p>
+</main>
+
+<script>
+const W = 1200, H = 1800;
+const canvas = document.getElementById("preview");
+const ctx = canvas.getContext("2d");
+const fileInput = document.getElementById("files");
+const slotTabs = document.getElementById("slotTabs");
+const zoomInput = document.getElementById("zoom");
+const zoomValue = document.getElementById("zoomValue");
+const statusEl = document.getElementById("status");
+
+const gridSlots = [
+  { x: 70, y: 190, w: 510, h: 650 }, { x: 620, y: 190, w: 510, h: 650 },
+  { x: 70, y: 880, w: 510, h: 650 }, { x: 620, y: 880, w: 510, h: 650 },
+];
+const stripSlots = [0, 1, 2, 3].map((i) => ({ x: 150, y: 105 + i * 405, w: 900, h: 365 }));
+
+const FRAMES = [
+  {
+    id: "cream", name: "크림", swatch: "#f7f0df", slots: gridSlots,
+    draw(c) {
+      c.fillStyle = "#f7f0df"; c.fillRect(0, 0, W, H);
+      c.fillStyle = "#342e2a"; c.textAlign = "center";
+      c.font = "bold 58px ui-monospace, monospace"; c.fillText("FOUR LITTLE MOMENTS", W / 2, 105);
+      c.font = "30px ui-monospace, monospace"; c.fillText(dateText(), W / 2, 1660);
+      c.font = "24px ui-monospace, monospace"; c.globalAlpha = .55;
+      c.fillText("BUBBLELAB PHOTO", W / 2, 1720); c.globalAlpha = 1;
+    },
+  },
+  {
+    id: "midnight", name: "미드나잇", swatch: "#141923", slots: gridSlots,
+    draw(c) {
+      c.fillStyle = "#141923"; c.fillRect(0, 0, W, H);
+      c.strokeStyle = "#d9e2ef"; c.lineWidth = 3; c.strokeRect(38, 38, W - 76, H - 76);
+      c.fillStyle = "#f3f6fa"; c.textAlign = "left";
+      c.font = "bold 64px ui-monospace, monospace"; c.fillText("NIGHT CUT", 70, 115);
+      c.textAlign = "right"; c.font = "25px ui-monospace, monospace";
+      c.fillText(dateText(), W - 70, 1710);
+    },
+  },
+  {
+    id: "strip", name: "포토 스트립", swatch: "#f7dce5", slots: stripSlots,
+    draw(c) {
+      c.fillStyle = "#f7dce5"; c.fillRect(0, 0, W, H);
+      c.fillStyle = "#8e3e59"; c.textAlign = "center";
+      c.font = "bold 42px ui-monospace, monospace"; c.fillText("♡  OUR FOUR CUTS  ♡", W / 2, 65);
+      c.font = "24px ui-monospace, monospace"; c.fillText(dateText(), W / 2, 1760);
+    },
+  },
+];
+
+const photos = Array.from({ length: 4 }, () => null);
+let selected = 0;
+let frameIndex = 0;
+let drag = null;
+
+function dateText() {
+  const d = new Date();
+  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function roundedRect(c, x, y, w, h, r) {
+  const rr = Math.min(r, w / 2, h / 2);
+  c.beginPath(); c.moveTo(x + rr, y); c.arcTo(x + w, y, x + w, y + h, rr);
+  c.arcTo(x + w, y + h, x, y + h, rr); c.arcTo(x, y + h, x, y, rr);
+  c.arcTo(x, y, x + w, y, rr); c.closePath();
+}
+
+function drawPhoto(c, item, slot) {
+  c.save(); roundedRect(c, slot.x, slot.y, slot.w, slot.h, 14); c.clip();
+  c.fillStyle = "#d8dde3"; c.fillRect(slot.x, slot.y, slot.w, slot.h);
+  if (!item) {
+    c.fillStyle = "#77818c"; c.textAlign = "center"; c.textBaseline = "middle";
+    c.font = "bold 58px ui-monospace, monospace"; c.fillText("+", slot.x + slot.w / 2, slot.y + slot.h / 2 - 26);
+    c.font = "25px ui-monospace, monospace"; c.fillText("PHOTO", slot.x + slot.w / 2, slot.y + slot.h / 2 + 35);
+    c.restore(); return;
+  }
+  const turns = ((item.rotation % 360) + 360) % 360;
+  const rotated = turns === 90 || turns === 270;
+  const iw = rotated ? item.source.height : item.source.width;
+  const ih = rotated ? item.source.width : item.source.height;
+  const scale = Math.max(slot.w / iw, slot.h / ih) * item.zoom;
+  c.translate(slot.x + slot.w / 2 + item.x * slot.w, slot.y + slot.h / 2 + item.y * slot.h);
+  c.rotate(item.rotation * Math.PI / 180); c.scale(scale, scale);
+  c.drawImage(item.source, -item.source.width / 2, -item.source.height / 2);
+  c.restore();
+}
+
+function render(showSelection = true) {
+  const frame = FRAMES[frameIndex];
+  frame.draw(ctx);
+  frame.slots.forEach((slot, i) => drawPhoto(ctx, photos[i], slot));
+  if (showSelection) {
+    const s = frame.slots[selected];
+    ctx.save(); ctx.strokeStyle = "#ff5f7a"; ctx.lineWidth = 10;
+    roundedRect(ctx, s.x + 4, s.y + 4, s.w - 8, s.h - 8, 14); ctx.stroke(); ctx.restore();
+  }
+}
+
+function updateControls() {
+  [...slotTabs.children].forEach((button, i) => {
+    button.classList.toggle("active", i === selected);
+    button.classList.toggle("filled", !!photos[i]);
+    button.textContent = `${i + 1}${photos[i] ? " ✓" : ""}`;
+  });
+  const item = photos[selected];
+  zoomInput.disabled = !item;
+  zoomInput.value = Math.round((item?.zoom || 1) * 100);
+  zoomValue.textContent = `${zoomInput.value}%`;
+  for (const id of ["prev", "next", "rotate", "remove"]) {
+    document.getElementById(id).disabled = !item;
+  }
+  render();
+}
+
+for (let i = 0; i < 4; i++) {
+  const button = document.createElement("button");
+  button.type = "button"; button.className = "slot"; button.textContent = String(i + 1);
+  button.setAttribute("aria-label", `${i + 1}번 사진 선택`);
+  button.addEventListener("click", () => { selected = i; updateControls(); });
+  slotTabs.appendChild(button);
+}
+
+FRAMES.forEach((frame, i) => {
+  const button = document.createElement("button");
+  button.type = "button"; button.className = "frame"; button.textContent = frame.name;
+  button.style.setProperty("--swatch", frame.swatch);
+  button.addEventListener("click", () => {
+    frameIndex = i;
+    [...document.querySelectorAll(".frame")].forEach((b, k) => b.classList.toggle("active", k === i));
+    render();
+  });
+  document.getElementById("frames").appendChild(button);
+});
+document.querySelector(".frame").classList.add("active");
+
+async function photoSource(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image(); img.src = url;
+    await img.decode();
+    const maxSide = 2400;
+    const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+    if (scale === 1) return img;
+    const cv = document.createElement("canvas");
+    cv.width = Math.round(img.naturalWidth * scale); cv.height = Math.round(img.naturalHeight * scale);
+    cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+    return cv;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+async function addFiles(files) {
+  const list = [...files].slice(0, 4);
+  if (!list.length) return;
+  statusEl.textContent = "사진을 불러오는 중…";
+  let target = list.length === 1 ? selected : Math.max(0, photos.findIndex((p) => !p));
+  if (target < 0) target = 0;
+  let loaded = 0;
+  for (const file of list) {
+    if (!file.type.startsWith("image/") || target > 3) continue;
+    try {
+      const source = await photoSource(file);
+      photos[target] = { source, zoom: 1, x: 0, y: 0, rotation: 0 };
+      selected = target; target++; loaded++;
+    } catch (_) {
+      statusEl.textContent = "일부 사진을 불러오지 못했습니다.";
+    }
+  }
+  if (loaded) statusEl.textContent = `${loaded}장의 사진을 불러왔습니다.`;
+  fileInput.value = ""; updateControls();
+}
+
+document.getElementById("pick").addEventListener("click", () => fileInput.click());
+fileInput.addEventListener("change", () => addFiles(fileInput.files));
+zoomInput.addEventListener("input", () => {
+  if (!photos[selected]) return;
+  photos[selected].zoom = zoomInput.value / 100;
+  zoomValue.textContent = `${zoomInput.value}%`; render();
+});
+document.getElementById("rotate").addEventListener("click", () => {
+  if (!photos[selected]) return;
+  photos[selected].rotation = (photos[selected].rotation + 90) % 360; render();
+});
+document.getElementById("remove").addEventListener("click", () => {
+  photos[selected] = null; updateControls();
+});
+function swap(direction) {
+  const other = selected + direction;
+  if (!photos[selected] || other < 0 || other > 3) return;
+  [photos[selected], photos[other]] = [photos[other], photos[selected]];
+  selected = other; updateControls();
+}
+document.getElementById("prev").addEventListener("click", () => swap(-1));
+document.getElementById("next").addEventListener("click", () => swap(1));
+
+function canvasPoint(e) {
+  const r = canvas.getBoundingClientRect();
+  return { x: (e.clientX - r.left) * W / r.width, y: (e.clientY - r.top) * H / r.height };
+}
+canvas.addEventListener("pointerdown", (e) => {
+  const p = canvasPoint(e);
+  const hit = FRAMES[frameIndex].slots.findIndex((s) => p.x >= s.x && p.x <= s.x + s.w && p.y >= s.y && p.y <= s.y + s.h);
+  if (hit < 0) return;
+  selected = hit; updateControls();
+  if (!photos[selected]) { fileInput.click(); return; }
+  canvas.setPointerCapture(e.pointerId);
+  drag = { pointerId: e.pointerId, p, x: photos[selected].x, y: photos[selected].y };
+});
+canvas.addEventListener("pointermove", (e) => {
+  if (!drag || drag.pointerId !== e.pointerId || !photos[selected]) return;
+  const p = canvasPoint(e), s = FRAMES[frameIndex].slots[selected];
+  photos[selected].x = drag.x + (p.x - drag.p.x) / s.w;
+  photos[selected].y = drag.y + (p.y - drag.p.y) / s.h;
+  render();
+});
+const endDrag = (e) => { if (drag?.pointerId === e.pointerId) drag = null; };
+canvas.addEventListener("pointerup", endDrag);
+canvas.addEventListener("pointercancel", endDrag);
+
+function makePngFile() {
+  render(false);
+  const dataUrl = canvas.toDataURL("image/png");
+  render(true);
+  const binary = atob(dataUrl.slice(dataUrl.indexOf(",") + 1));
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new File([bytes], `bubblelab-fourcut-${dateText().replaceAll(".", "-")}.png`, { type: "image/png" });
+}
+function readyToExport() {
+  if (photos.every(Boolean)) return true;
+  statusEl.textContent = "사진 네 장을 모두 선택해주세요.";
+  return false;
+}
+document.getElementById("download").addEventListener("click", () => {
+  if (!readyToExport()) return;
+  try {
+    const file = makePngFile();
+    const url = URL.createObjectURL(file);
+    const a = document.createElement("a"); a.href = url; a.download = file.name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    statusEl.textContent = "PNG 다운로드를 요청했습니다.";
+  } catch (_) { statusEl.textContent = "이미지를 만들지 못했습니다."; }
+});
+
+const shareButton = document.getElementById("share");
+const canShareFiles = (() => {
+  try {
+    return typeof navigator.share === "function" && typeof navigator.canShare === "function"
+      && navigator.canShare({ files: [new File([""], "photo.png", { type: "image/png" })] });
+  } catch (_) { return false; }
+})();
+shareButton.hidden = !canShareFiles;
+if (!canShareFiles) document.querySelector(".export").style.gridTemplateColumns = "1fr";
+shareButton.addEventListener("click", () => {
+  if (!readyToExport()) return;
+  try {
+    const file = makePngFile();
+    navigator.share({ title: "Bubblelab 네컷사진", files: [file] })
+      .catch((err) => { if (err?.name !== "AbortError") statusEl.textContent = "공유 메뉴를 열지 못했습니다."; });
+  } catch (_) { statusEl.textContent = "이미지를 만들지 못했습니다."; }
+});
+
+updateControls();
+</script>
+</body>
+</html>
