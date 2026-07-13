@@ -88,11 +88,21 @@
   .review-shot canvas { display: block; width: 100%; height: 100%; }
   .review-actions { margin-top: auto; padding-top: .9rem; display: grid; grid-template-columns: 1fr 1.25fr; gap: .55rem; }
 
-  .decorate-toolbar { position: sticky; top: 0; z-index: 5; display: grid;
-                      grid-template-columns: 1.4fr repeat(4, 1fr); gap: .35rem; padding: .55rem 0;
-                      background: var(--bg); }
+  .decorate-tools { position: sticky; top: 0; z-index: 5; padding: .45rem 0 .55rem; background: var(--bg); }
+  .custom-colors { display: flex; align-items: center; gap: .45rem; padding: 0 .1rem .5rem;
+                   overflow-x: auto; scrollbar-width: none; }
+  .custom-colors::-webkit-scrollbar { display: none; }
+  .custom-colors > span { flex: none; color: var(--muted); font-size: .66rem; margin-right: .1rem; }
+  .color-swatch { width: 1.65rem; height: 1.65rem; flex: none; padding: 0; border-radius: 50%;
+                  background: var(--swatch); border: 2px solid #8885; }
+  .color-swatch.active { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #customColor { width: 1.8rem; height: 1.8rem; flex: none; padding: 0; border: 0;
+                 border-radius: 50%; overflow: hidden; background: transparent; }
+  #customColor::-webkit-color-swatch-wrapper { padding: 0; }
+  #customColor::-webkit-color-swatch { border: 2px solid #8885; border-radius: 50%; }
+  .decorate-toolbar { display: grid; grid-template-columns: 1.4fr repeat(4, 1fr); gap: .35rem; }
   .decorate-toolbar button { min-width: 0; padding: .62rem .25rem; font-size: .68rem; }
-  .decorator-wrap { position: relative; width: min(100%, 20rem); aspect-ratio: 1/3; margin: .2rem auto .8rem;
+  .decorator-wrap { position: relative; width: min(100%, 28rem); aspect-ratio: 1/3; margin: .2rem auto .8rem;
                     flex: none; box-shadow: 0 10px 28px #0003; overflow: hidden; background: #fff; }
   #decoratorCanvas, #stickerLayer { position: absolute; inset: 0; width: 100%; height: 100%; }
   #decoratorCanvas { display: block; }
@@ -187,12 +197,26 @@
     <p class="eyebrow">STEP 3 · CUSTOM FRAME</p>
     <h2>스티커처럼 꾸며보세요</h2>
     <p class="desc">사진을 추가하고 직접 움직여 나만의 프레임을 만듭니다.</p>
-    <div class="decorate-toolbar">
-      <button class="primary" id="addSticker" type="button">＋ 사진 추가</button>
-      <button id="stickerSmaller" type="button" disabled>－ 크기</button>
-      <button id="stickerLarger" type="button" disabled>＋ 크기</button>
-      <button id="duplicateSticker" type="button" disabled>복제</button>
-      <button id="deleteSticker" type="button" disabled>삭제</button>
+    <div class="decorate-tools">
+      <div class="custom-colors" id="customColors">
+        <span>프레임 색상</span>
+        <button class="color-swatch active" type="button" data-color="#f3f0e9" style="--swatch:#f3f0e9" aria-label="아이보리"></button>
+        <button class="color-swatch" type="button" data-color="#ffffff" style="--swatch:#ffffff" aria-label="흰색"></button>
+        <button class="color-swatch" type="button" data-color="#111827" style="--swatch:#111827" aria-label="검정"></button>
+        <button class="color-swatch" type="button" data-color="#f7dce5" style="--swatch:#f7dce5" aria-label="분홍"></button>
+        <button class="color-swatch" type="button" data-color="#dbeafe" style="--swatch:#dbeafe" aria-label="하늘"></button>
+        <button class="color-swatch" type="button" data-color="#dcfce7" style="--swatch:#dcfce7" aria-label="민트"></button>
+        <button class="color-swatch" type="button" data-color="#fef3c7" style="--swatch:#fef3c7" aria-label="노랑"></button>
+        <button class="color-swatch" type="button" data-color="#e9d5ff" style="--swatch:#e9d5ff" aria-label="보라"></button>
+        <input id="customColor" type="color" value="#f3f0e9" aria-label="직접 색상 선택">
+      </div>
+      <div class="decorate-toolbar">
+        <button class="primary" id="addSticker" type="button">＋ 사진 추가</button>
+        <button id="stickerSmaller" type="button" disabled>－ 크기</button>
+        <button id="stickerLarger" type="button" disabled>＋ 크기</button>
+        <button id="duplicateSticker" type="button" disabled>복제</button>
+        <button id="deleteSticker" type="button" disabled>삭제</button>
+      </div>
     </div>
     <input id="stickerInput" type="file" accept="image/*" multiple hidden>
     <p class="decorate-help" id="decorateStatus">한 손가락으로 이동 · 두 손가락으로 크기와 각도 조절 · 최대 12개</p>
@@ -637,6 +661,36 @@ function drawStickers(context) {
   }
 }
 
+function refreshDecoratorBase() {
+  if (!photos.every(Boolean)) return;
+  paintFinal(false); decoratorCtx.clearRect(0, 0, OUTPUT_W, OUTPUT_H);
+  decoratorCtx.drawImage(finalCanvas, 0, 0);
+}
+
+function frameTextColor(hex) {
+  const value = hex.replace("#", ""), r = parseInt(value.slice(0, 2), 16);
+  const g = parseInt(value.slice(2, 4), 16), b = parseInt(value.slice(4, 6), 16);
+  return (r * .299 + g * .587 + b * .114) > 150 ? "#332f2b" : "#ffffff";
+}
+
+function setCustomFrameColor(color, matchingSwatch = true) {
+  const frame = FRAMES.find((item) => item.id === "custom");
+  frame.color = color; frame.text = frameTextColor(color);
+  document.getElementById("customColor").value = color;
+  document.querySelector(".frame-mini.custom")?.style.setProperty("--frame", color);
+  document.querySelectorAll(".color-swatch").forEach((button) => {
+    button.classList.toggle("active", matchingSwatch && button.dataset.color === color);
+  });
+  if (currentStep === "decorate") refreshDecoratorBase();
+}
+
+document.querySelectorAll(".color-swatch").forEach((button) => {
+  button.addEventListener("click", () => setCustomFrameColor(button.dataset.color));
+});
+document.getElementById("customColor").addEventListener("input", (event) => {
+  setCustomFrameColor(event.target.value, false);
+});
+
 function paintFinal(includeStickers = true) {
   const frame = FRAMES[frameIndex];
   finalCtx.fillStyle = frame.color; finalCtx.fillRect(0, 0, OUTPUT_W, OUTPUT_H);
@@ -672,8 +726,7 @@ async function showResult() {
 document.getElementById("print").addEventListener("click", async () => {
   if (!photos.every(Boolean)) return;
   if (FRAMES[frameIndex].id === "custom") {
-    paintFinal(false); decoratorCtx.clearRect(0, 0, OUTPUT_W, OUTPUT_H);
-    decoratorCtx.drawImage(finalCanvas, 0, 0); selectSticker(-1); go("decorate");
+    refreshDecoratorBase(); selectSticker(-1); go("decorate");
   } else { paintFinal(); await showResult(); }
 });
 
@@ -744,6 +797,7 @@ document.getElementById("restart").addEventListener("click", () => {
   stickers.forEach((item) => item.el.remove()); stickers.length = 0; selectedSticker = -1;
   activePointers.clear(); stickerGesture = null; updateStickerControls();
   decorateStatus.textContent = "한 손가락으로 이동 · 두 손가락으로 크기와 각도 조절 · 최대 12개";
+  setCustomFrameColor("#f3f0e9");
   if (videoUrl) URL.revokeObjectURL(videoUrl); videoUrl = ""; videoBlob = null; videoMime = "";
   const resultVideo = document.getElementById("resultVideo"); resultVideo.removeAttribute("src"); resultVideo.load();
   document.getElementById("videoResult").hidden = true;
