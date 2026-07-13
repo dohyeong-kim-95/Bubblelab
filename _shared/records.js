@@ -5,6 +5,60 @@
 //   기록이 나올 때마다 window.blWeeklyReport(점수) 호출.
 // 이번 주 1위보다 좋은 기록이면 닉네임(한글/영문/숫자 6자) 등록 폼이 뜬다.
 (() => {
+  // 방문자 팝업: (1) 지난주에 왔던 방문자가 이번 주 처음 들어오면 주간 보드
+  // 리셋 안내를, (2) 아직 안 본 관리자 공지가 있으면 공지를 한 번 띄운다.
+  // records 응답의 week(주차 키)와 notice를 받아 호출한다.
+  // 토이 페이지(아래 fetch)와 카테고리 홈 양쪽에서 쓰므로 자급자족으로 만든다.
+  window.blWeeklyResetNotice = (week, notice) => {
+    try {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(week ?? "")) return;
+      const prev = localStorage.getItem("bl-seen-week");
+      localStorage.setItem("bl-seen-week", week);
+      const lines = [];
+      if (prev && prev !== week) { // 처음 온 사람에게 리셋 안내는 무의미
+        lines.push("🧹 새로운 한 주가 시작됐어요!\n주간 1위 보드는 매주 월요일 09시에 리셋돼요. 빈자리를 노려보세요 👑");
+        // 2026-07-13 주 한정 안내 (공지 기능 도입 전 주의 기록 — 다음부터는 admin 공지로)
+        if (week === "2026-07-13") lines.push("지난주 통합 1위는 김윤배님이었어요 🏆");
+      }
+      if (notice?.text && localStorage.getItem("bl-seen-notice") !== String(notice.at)) {
+        localStorage.setItem("bl-seen-notice", String(notice.at));
+        lines.push("📢 " + notice.text);
+      }
+      if (!lines.length) return;
+      const style = document.createElement("style");
+      style.textContent = `
+      #bl-week-reset { position: fixed; top: 1rem; left: 50%; z-index: 9999;
+        transform: translateX(-50%); font: .85rem ui-monospace, "SF Mono",
+        "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+        padding: .85rem 2.3rem .85rem 1.1rem; border-radius: 1rem;
+        border: 1.5px solid currentColor; color: light-dark(#334, #ccd);
+        width: max-content; max-width: min(85vw, 22rem); white-space: pre-line;
+        background: light-dark(rgba(255,255,255,.92), rgba(20,26,36,.92));
+        backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+        animation: bl-week-drop .35s cubic-bezier(.2,1.4,.4,1); }
+      #bl-week-reset .x { position: absolute; top: .25rem; right: .5rem;
+        border: 0; background: none; color: inherit; font: inherit;
+        opacity: .5; cursor: pointer; padding: .2rem; }
+      @keyframes bl-week-drop { from { transform: translate(-50%, -1.5rem); opacity: 0; } }`;
+      document.head.appendChild(style);
+      const box = document.createElement("div");
+      box.id = "bl-week-reset";
+      box.setAttribute("role", "status");
+      box.textContent = lines.join("\n\n");
+      const x = document.createElement("button");
+      x.className = "x";
+      x.textContent = "✕";
+      x.addEventListener("click", () => box.remove());
+      box.appendChild(x);
+      // 전체 화면을 클릭 영역으로 쓰는 토이에 이벤트가 새지 않게
+      for (const ev of ["pointerdown", "click", "keydown"]) {
+        box.addEventListener(ev, (e) => e.stopPropagation());
+      }
+      document.body.appendChild(box);
+      setTimeout(() => box.remove(), 4000 + lines.length * 4000);
+    } catch {} // localStorage 불가(시크릿 모드 등)면 조용히 넘어간다
+  };
+
   const cfg = window.blWeekly;
   if (!cfg?.game || !["min", "max"].includes(cfg.dir)) return;
   const fmt = cfg.fmt ?? ((v) => String(v));
@@ -83,7 +137,11 @@
 
   fetch(`/_records?game=${cfg.game}`, { cache: "no-store" })
     .then((r) => (r.ok ? r.json() : Promise.reject()))
-    .then((data) => { current = data.record; renderBadge(); })
+    .then((data) => {
+      current = data.record;
+      renderBadge();
+      window.blWeeklyResetNotice(data.week, data.notice);
+    })
     .catch(() => { badge.textContent = "👑 기록 보드 연결 실패"; });
 
   window.blWeeklyReport = (score) => {

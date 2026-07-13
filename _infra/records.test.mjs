@@ -144,6 +144,30 @@ test("all-time hall of fame: updates on accept, survives weekly pruning", async 
   assert.equal("touch25" in (await alltime()), false);
 });
 
+test("notice: set, piggybacks on record reads, delete, validation", async () => {
+  const records = new RecordsDO({ storage: new MemoryStorage() });
+  const notice = (method, body) => records.fetch(new Request("https://records.internal/_notice", {
+    method,
+    ...(body && { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  }));
+
+  assert.equal((await notice("POST", { text: "  지난주 통합 1위는 김윤배님!  " })).status, 201);
+  assert.equal((await notice("POST", { text: "" })).status, 400);
+  assert.equal((await notice("POST", { text: "가".repeat(201) })).status, 400);
+  assert.equal((await (await notice("GET")).json()).notice.text, "지난주 통합 1위는 김윤배님!");
+
+  // 기록 조회(단건·배치) 응답에 공지가 실려온다
+  let res = await records.fetch(new Request("https://records.internal/?game=circle"));
+  assert.equal((await res.json()).notice.text, "지난주 통합 1위는 김윤배님!");
+  res = await records.fetch(new Request("https://records.internal/?games=circle,touch25"));
+  assert.equal((await res.json()).notice.text, "지난주 통합 1위는 김윤배님!");
+
+  assert.equal((await notice("DELETE")).status, 204);
+  assert.equal((await (await notice("GET")).json()).notice, null);
+  res = await records.fetch(new Request("https://records.internal/?game=circle"));
+  assert.equal((await res.json()).notice, null);
+});
+
 test("suggestion box: submit, list newest-first, delete, daily cap", async (t) => {
   // at은 Date.now()라 같은 밀리초에 제출되면 최신순 정렬이 동률로 뒤섞인다.
   // 시계를 단조 증가로 고정해 순서를 결정적으로 만든다.

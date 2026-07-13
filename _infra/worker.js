@@ -130,6 +130,20 @@ async function handleAdmin(request, env, url, base = "") {
     }
   }
 
+  if (url.pathname === "/api/notice") {
+    const id = env.RECORDS.idFromName("global");
+    const stub = env.RECORDS.get(id);
+    if (["GET", "POST", "DELETE"].includes(request.method)) {
+      return stub.fetch("https://records.internal/_notice", {
+        method: request.method,
+        ...(request.method === "POST" && {
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(await request.json().catch(() => ({}))),
+        }),
+      });
+    }
+  }
+
   if (url.pathname === "/api/suggestions") {
     const id = env.RECORDS.idFromName("global");
     const stub = env.RECORDS.get(id);

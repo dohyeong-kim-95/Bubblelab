@@ -134,7 +134,7 @@ const SITE = ${JSON.stringify(site)};
     const games = els.map((el) => el.dataset.game).join(",");
     const res = await fetch("/_records?games=" + encodeURIComponent(games), { cache: "no-store" });
     if (!res.ok) return;
-    const { records } = await res.json();
+    const { week, records, notice } = await res.json();
     const wins = {}; // 닉네임 → 이번 주 1위 개수
     for (const el of els) {
       const r = records[el.dataset.game];
@@ -150,6 +150,11 @@ const SITE = ${JSON.stringify(site)};
       document.getElementById("crown").textContent =
         \`🏆 이번 주 종합 1위: \${leaders.join(" · ")} (1위 \${top}개)\`;
     }
+    // 주간 리셋·공지 팝업 (records.js가 정의 — defer 스크립트 실행을 기다린다)
+    if (document.readyState === "loading") {
+      await new Promise((r) => addEventListener("DOMContentLoaded", r, { once: true }));
+    }
+    window.blWeeklyResetNotice?.(week, notice);
   } catch {}
 })();
 
@@ -176,6 +181,7 @@ const SITE = ${JSON.stringify(site)};
   } catch {}
 })();
 </script>
+<script defer src="/_shared/records.js"></script>
 <script defer src="/_shared/suggest.js"></script>
 </body>
 </html>

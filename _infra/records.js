@@ -7,6 +7,9 @@ const NICK = /^[가-힣a-zA-Z0-9]{1,6}$/;
 const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
 const VISITOR_ID = /^[a-f0-9-]{36}$/i;
 
+// 관리자 공지 (기록 조회 응답에 실려 나가 방문자 팝업으로 전파)
+const NOTICE_TEXT = /^[^\x00-\x09\x0b-\x1f]{1,200}$/; // 줄바꿈은 허용
+
 // 토이 아이디어 우편함 (홈의 💡 버튼 → admin에서 조회)
 const SUG_TEXT = /^[^\x00-\x1f]{1,200}$/;
 const SUG_MAX = 300;   // 이 이상 쌓이면 오래된 것부터 정리
@@ -100,6 +103,26 @@ export class RecordsDO {
       }
     }
 
+    // ---------- 공지 (작성·삭제는 worker의 admin 인증 뒤에서만 도달) ----------
+    if (url.pathname === "/_notice") {
+      if (request.method === "GET") {
+        const notice = (await this.state.storage.get("notice")) ?? null;
+        return Response.json({ notice }, { headers: { "Cache-Control": "no-store" } });
+      }
+      if (request.method === "POST") {
+        const { text } = await request.json().catch(() => ({}));
+        const clean = typeof text === "string" ? text.trim() : "";
+        if (!NOTICE_TEXT.test(clean)) return new Response("invalid notice", { status: 400 });
+        const notice = { text: clean, at: Date.now() };
+        await this.state.storage.put("notice", notice);
+        return Response.json({ notice }, { status: 201 });
+      }
+      if (request.method === "DELETE") {
+        await this.state.storage.delete("notice");
+        return new Response(null, { status: 204 });
+      }
+    }
+
     // ---------- 관리자용 (worker의 admin 인증 뒤에서만 도달) ----------
     if (url.pathname === "/_allrecords" && request.method === "GET") {
       const all = await this.state.storage.list({ prefix: `rec:${week}:` });
@@ -130,6 +153,9 @@ export class RecordsDO {
         }
         return Response.json({ records }, { headers: { "Cache-Control": "no-store" } });
       }
+      // 공지는 별도 요청 없이 기록 조회에 실어 보낸다 (방문자 팝업용)
+      const notice = (await this.state.storage.get("notice")) ?? null;
+
       // 배치 조회 (카테고리 홈 카드용): ?games=a,b,c → { records: { 이름: 기록 } }
       const batch = url.searchParams.get("games");
       if (batch !== null) {
@@ -138,12 +164,12 @@ export class RecordsDO {
           const r = await this.state.storage.get(`rec:${week}:${g}`);
           if (r) records[g] = r;
         }
-        return Response.json({ week, records }, { headers: { "Cache-Control": "no-store" } });
+        return Response.json({ week, records, notice }, { headers: { "Cache-Control": "no-store" } });
       }
       const game = url.searchParams.get("game");
       if (!GAME.test(game ?? "")) return new Response("invalid game", { status: 400 });
       const record = (await this.state.storage.get(`rec:${week}:${game}`)) ?? null;
-      return Response.json({ week, record }, { headers: { "Cache-Control": "no-store" } });
+      return Response.json({ week, record, notice }, { headers: { "Cache-Control": "no-store" } });
     }
 
     if (request.method === "POST") {

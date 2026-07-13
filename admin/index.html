@@ -45,6 +45,18 @@
   #suggestions .del, #records .del { border: 0; background: none; color: inherit;
                       opacity: .45; cursor: pointer; font: inherit; padding: 0 .2rem; }
   #suggestions .del:hover, #records .del:hover { opacity: 1; }
+  #notice-card { padding: 1rem 1.1rem; border-radius: 1rem;
+                 background: light-dark(#fff, #151e2a);
+                 border: 1px solid light-dark(#dce4ec, #263445);
+                 display: flex; flex-direction: column; gap: .7rem; }
+  #notice-text { width: 100%; font: inherit; padding: .6rem .7rem; resize: vertical;
+                 border-radius: .6rem; border: 1px solid light-dark(#dce4ec, #263445);
+                 background: none; color: inherit; }
+  .notice-actions { display: flex; align-items: center; gap: .6rem; }
+  .notice-actions .meta { flex: 1; opacity: .5; font-size: .78rem; }
+  .notice-actions button { font: inherit; font-size: .85rem; padding: .45rem .9rem;
+                 border-radius: .6rem; border: 1px solid currentColor;
+                 background: none; color: inherit; cursor: pointer; }
   #warning { display: none; margin-top: 1rem; padding: .85rem 1rem; border-radius: .8rem;
              background: light-dark(#fff2c7, #4a3711); color: light-dark(#6a4a00, #ffe49a); }
   footer { margin-top: 2rem; opacity: .5; font-size: .78rem; line-height: 1.7; }
@@ -66,6 +78,18 @@
   <section class="top" aria-label="주간 신기록 보드">
     <h2>👑 주간 신기록 보드 <span id="recweek" style="opacity:.5;font-weight:normal;font-size:.8rem"></span></h2>
     <ol id="records"><li class="empty">불러오는 중…</li></ol>
+  </section>
+  <section class="top" aria-label="공지">
+    <h2>📢 공지 <span style="opacity:.5;font-weight:normal;font-size:.8rem">방문자에게 팝업으로 한 번씩 보여요</span></h2>
+    <div id="notice-card">
+      <textarea id="notice-text" rows="3" maxlength="200"
+        placeholder="예: 지난주 통합 1위는 김윤배님! 이번 주도 도전해보세요"></textarea>
+      <div class="notice-actions">
+        <span id="notice-meta" class="meta">불러오는 중…</span>
+        <button id="notice-save">게시</button>
+        <button id="notice-clear">내리기</button>
+      </div>
+    </div>
   </section>
   <section class="top" aria-label="토이 아이디어 요청함">
     <h2>💡 토이 아이디어 요청함</h2>
@@ -196,9 +220,45 @@ async function loadRecords() {
   }
 }
 
+const noticeText = document.getElementById('notice-text');
+const noticeMeta = document.getElementById('notice-meta');
+
+async function loadNotice() {
+  try {
+    const res = await fetch(`${base}/api/notice`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const { notice } = await res.json();
+    noticeText.value = notice?.text ?? '';
+    noticeMeta.textContent = notice
+      ? `${new Date(notice.at).toLocaleString('ko-KR')} 게시됨` : '게시된 공지 없음';
+  } catch (err) {
+    noticeMeta.textContent = `불러오지 못했어요: ${err.message}`;
+  }
+}
+
+document.getElementById('notice-save').addEventListener('click', async () => {
+  const text = noticeText.value.trim();
+  if (!text) { noticeMeta.textContent = '⚠️ 내용을 입력해주세요 (내리려면 "내리기")'; return; }
+  noticeMeta.textContent = '게시 중…';
+  const res = await fetch(`${base}/api/notice`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  });
+  noticeMeta.textContent = res.ok ? '' : `⚠️ 게시 실패 (HTTP ${res.status})`;
+  if (res.ok) loadNotice();
+});
+
+document.getElementById('notice-clear').addEventListener('click', async () => {
+  if (!confirm('공지를 내릴까요?')) return;
+  await fetch(`${base}/api/notice`, { method: 'DELETE' });
+  loadNotice();
+});
+
 loadStats();
 loadSuggestions();
 loadRecords();
+loadNotice();
 setInterval(loadStats, 60_000);
 setInterval(loadSuggestions, 60_000);
 setInterval(loadRecords, 60_000);
