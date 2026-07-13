@@ -53,15 +53,10 @@
       checkbox.type = "checkbox";
       checkbox.checked = Boolean(todo.done);
       checkbox.addEventListener("change", async () => {
-        const data = PlannerSync.getData();
-        const target = data[date]?.todo?.find((item) => item.id === todo.id);
-        if (!target) return;
-        target.done = checkbox.checked;
-        label.classList.toggle("done", target.done);
-        await PlannerSync.setData(data).catch(() => {
+        label.classList.toggle("done", checkbox.checked);
+        await PlannerSync.toggleTodo(date, todo.id, checkbox.checked).catch(() => {
           checkbox.checked = !checkbox.checked;
-          target.done = checkbox.checked;
-          label.classList.toggle("done", target.done);
+          label.classList.toggle("done", checkbox.checked);
         });
         render();
       });

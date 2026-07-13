@@ -5,7 +5,9 @@
     background: #2196f3; color: white; font-size: 24px; }
 .login-card h1 { margin: 14px 0 4px; font-size: 24px; }
 .login-card > p { color: #777; font-size: 13px; }
-.code-fields { display: grid; grid-template-columns: 1fr 58px; gap: 10px; margin: 24px 0 12px; }
+.code-fields { display: grid; gap: 10px; margin: 24px 0 12px; text-align: left; }
+.code-step { display: grid; grid-template-columns: 106px 1fr; align-items: center; gap: 10px; }
+.code-step > span { color: #8b949e; font: 700 9px ui-monospace, monospace; letter-spacing: .06em; }
 .code-fields input { width: 100%; border: 1px solid #ccd5df; border-radius: 10px; padding: 13px;
     text-align: center; font: 700 20px ui-monospace, monospace; text-transform: uppercase; letter-spacing: .18em; }
 .login-card button { width: 100%; border: 0; border-radius: 10px; padding: 13px; color: #fff;
@@ -14,6 +16,10 @@
 .container, .mobile-app { display: none; }
 body.authenticated .login-screen { display: none; }
 body.authenticated .container { display: block; }
+.planner-switch { display: none; position: fixed; left: 12px; bottom: 12px; z-index: 900;
+    border: 1px solid #d8dee5; background: rgba(255,255,255,.92); color: #68717b;
+    border-radius: 8px; padding: 7px 9px; font-size: 10px; cursor: pointer; }
+body.authenticated .planner-switch { display: block; }
 
 .mobile-app { min-height: 100dvh; padding: 18px 14px 40px; background: #f4f6f8; }
 .mobile-header { display: flex; justify-content: space-between; align-items: end; margin: 2px 2px 16px; }

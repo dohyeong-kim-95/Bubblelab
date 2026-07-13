@@ -22,14 +22,16 @@
    서브도메인 역할: `localhost:8787/slop/x` → `dist/slop/x`.
 
 Planner는 `/_planner/login`, `/_planner/data`, `/_planner/logout` API와
-`PlannerDO`를 사용한다. 로그인 코드는 저장소에 두지 않고 Worker secret으로 설정한다:
+`PlannerDO`를 사용한다. 사용자가 숫자 6자리와 영문 2자로 개인 코드를 만들며,
+코드마다 별도 Durable Object가 배정된다. 세션 서명 전용 secret을 따로 쓰려면:
 
 ```bash
-npx wrangler secret put PLANNER_CODE
+npx wrangler secret put PLANNER_SESSION_SECRET
 ```
 
-형식은 숫자 4자리와 영문 1자(예: `1234A`)다. 데이터는 KST 기준 현재 달만
-보존하며 PC 편집 화면과 모바일 조회 화면이 같은 저장소를 사용한다.
+설정하지 않으면 기존 `ADMIN_SESSION_SECRET` 또는 관리자 계정 secret에서 서명 키를
+파생한다. 데이터는 KST 기준 현재 달만 보존하며 같은 개인 코드를 입력한 PC 편집
+화면과 모바일 조회 화면이 같은 저장소를 사용한다. 코드는 복구할 수 없다.
 
 ## build.mjs — 빌드
 

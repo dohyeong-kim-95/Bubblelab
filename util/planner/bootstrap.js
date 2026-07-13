@@ -44,6 +44,16 @@
   window.PlannerSync = {
     getData: () => JSON.parse(localStorage.getItem(DATA_KEY) || "{}"),
     setData(data) { setLocal(data); return saveRemote(data); },
+    async toggleTodo(date, id, done) {
+      const data = this.getData();
+      const todo = data[date]?.todo?.find((item) => item.id === id);
+      if (todo) { todo.done = done; setLocal(data); }
+      const response = await fetch("/_planner/data", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, id, done }),
+      });
+      if (!response.ok) throw new Error("todo sync failed");
+    },
     refresh: () => fetchRemote({ notify: true }),
   };
 
@@ -58,7 +68,7 @@
     const response = await fetchRemote();
     if (response.ok) return loadApp();
     if (response.status === 503) {
-      document.getElementById("loginError").textContent = "Planner code is not configured.";
+      document.getElementById("loginError").textContent = "Planner login is not configured.";
     }
   }
 
@@ -67,8 +77,8 @@
     const pin = document.getElementById("plannerPin").value.trim();
     const letter = document.getElementById("plannerLetter").value.trim().toUpperCase();
     const error = document.getElementById("loginError");
-    if (!/^\d{4}$/.test(pin) || !/^[A-Z]$/.test(letter)) {
-      error.textContent = "Enter 4 digits and 1 letter.";
+    if (!/^\d{6}$/.test(pin) || !/^[A-Z]{2}$/.test(letter)) {
+      error.textContent = "Enter 6 digits and 2 letters.";
       return;
     }
     error.textContent = "";
@@ -77,7 +87,7 @@
       body: JSON.stringify({ code: pin + letter }),
     });
     if (!response.ok) {
-      error.textContent = response.status === 503 ? "Planner code is not configured." : "The code is not correct.";
+      error.textContent = response.status === 503 ? "Planner login is not configured." : "Enter 6 digits and 2 letters.";
       return;
     }
     await fetchRemote();
@@ -85,8 +95,16 @@
   });
 
   document.getElementById("plannerPin").addEventListener("input", (event) => {
-    event.target.value = event.target.value.replace(/\D/g, "").slice(0, 4);
-    if (event.target.value.length === 4) document.getElementById("plannerLetter").focus();
+    event.target.value = event.target.value.replace(/\D/g, "").slice(0, 6);
+    if (event.target.value.length === 6) document.getElementById("plannerLetter").focus();
+  });
+  document.getElementById("plannerLetter").addEventListener("input", (event) => {
+    event.target.value = event.target.value.replace(/[^A-Za-z]/g, "").toUpperCase().slice(0, 2);
+  });
+  document.getElementById("plannerSwitch").addEventListener("click", async () => {
+    await fetch("/_planner/logout", { method: "POST" });
+    localStorage.removeItem(DATA_KEY);
+    location.reload();
   });
   start();
 })();

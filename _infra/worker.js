@@ -6,6 +6,7 @@
 //   localhost:8787/slop/foo → dist/slop/foo
 
 const ROOT_DOMAIN = "bubblelab.dev";
+import { validPlannerCode } from "./planner.js";
 
 export { RealtimeDO } from "./realtime.js";
 export { AnalyticsDO } from "./analytics.js";
@@ -68,24 +69,40 @@ async function validSession(key, token) {
   );
 }
 
+async function issuePlannerSession(key, userId) {
+  const payload = `${Date.now() + 30 * 24 * 60 * 60 * 1000}.${userId}.${crypto.randomUUID()}`;
+  const sig = hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload)));
+  return `${payload}.${sig}`;
+}
+
+async function plannerSessionUser(key, token) {
+  const [expiry, userId, nonce, sig] = token?.split(".") ?? [];
+  if (!expiry || !/^[0-9a-f]{64}$/.test(userId ?? "") || !nonce || !/^[0-9a-f]+$/.test(sig ?? "")) return null;
+  if (!Number.isFinite(+expiry) || Date.now() > +expiry) return null;
+  const sigBytes = Uint8Array.from(sig.match(/../g) ?? [], (part) => parseInt(part, 16));
+  const valid = await crypto.subtle.verify(
+    "HMAC", key, sigBytes, new TextEncoder().encode(`${expiry}.${userId}.${nonce}`),
+  );
+  return valid ? userId : null;
+}
+
 async function handlePlanner(request, env, url) {
-  const code = env.PLANNER_CODE?.trim().toUpperCase();
-  if (!code || !/^\d{4}[A-Z]$/.test(code)) {
-    return new Response("planner code is not configured", { status: 503 });
-  }
-  const plannerSecret = `${env.ADMIN_SESSION_SECRET || code}\0bl-planner-session`;
+  const plannerSecret = env.PLANNER_SESSION_SECRET || env.ADMIN_SESSION_SECRET ||
+    (env.ADMIN_ID && env.ADMIN_PASSWORD ? `${env.ADMIN_ID}\0${env.ADMIN_PASSWORD}` : null);
+  if (!plannerSecret) return new Response("planner session secret is not configured", { status: 503 });
   const key = await crypto.subtle.importKey(
-    "raw", new TextEncoder().encode(plannerSecret),
+    "raw", new TextEncoder().encode(`${plannerSecret}\0bl-planner-session`),
     { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
   );
-  const authed = await validSession(key, cookies(request).bl_planner);
+  const sessionUser = await plannerSessionUser(key, cookies(request).bl_planner);
   const cookieFlags = `Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000${url.protocol === "https:" ? "; Secure" : ""}`;
 
   if (url.pathname === "/_planner/login" && request.method === "POST") {
     const body = await request.json().catch(() => ({}));
     const supplied = String(body.code ?? "").trim().toUpperCase();
-    if (supplied !== code) return Response.json({ error: "invalid code" }, { status: 401 });
-    const token = await issueSession(key);
+    if (!validPlannerCode(supplied)) return Response.json({ error: "invalid code format" }, { status: 400 });
+    const userId = hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`user:${supplied}`)));
+    const token = await issuePlannerSession(key, userId);
     return Response.json({ authenticated: true }, {
       headers: { "Set-Cookie": `bl_planner=${token}; ${cookieFlags}`, "Cache-Control": "no-store" },
     });
@@ -97,12 +114,12 @@ async function handlePlanner(request, env, url) {
     });
   }
 
-  if (!authed) return Response.json({ error: "authentication required" }, { status: 401 });
-  if (url.pathname === "/_planner/data" && ["GET", "PUT"].includes(request.method)) {
-    const id = env.PLANNER.idFromName("owner");
+  if (!sessionUser) return Response.json({ error: "authentication required" }, { status: 401 });
+  if (url.pathname === "/_planner/data" && ["GET", "PUT", "PATCH"].includes(request.method)) {
+    const id = env.PLANNER.idFromName(sessionUser);
     return env.PLANNER.get(id).fetch("https://planner.internal/", {
       method: request.method,
-      ...(request.method === "PUT" && {
+      ...(["PUT", "PATCH"].includes(request.method) && {
         headers: { "Content-Type": "application/json" }, body: await request.text(),
       }),
     });

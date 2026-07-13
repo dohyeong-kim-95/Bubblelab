@@ -1,6 +1,8 @@
 const DATA_KEY = "planner:data";
 const MAX_BYTES = 512 * 1024;
 
+export const validPlannerCode = (code) => /^\d{6}[A-Z]{2}$/.test(code);
+
 function currentMonth() {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Seoul", year: "numeric", month: "2-digit",
@@ -38,6 +40,21 @@ export class PlannerDO {
         return new Response("invalid planner data", { status: 400 });
       }
       const data = prunePlannerData(body.data);
+      await this.storage.put(DATA_KEY, data);
+      return Response.json({ saved: true });
+    }
+
+    if (request.method === "PATCH") {
+      const body = await request.json().catch(() => ({}));
+      const month = currentMonth();
+      if (!new RegExp(`^${month}-\\d{2}$`).test(body.date ?? "") ||
+          typeof body.id !== "string" || body.id.length > 100 || typeof body.done !== "boolean") {
+        return new Response("invalid todo update", { status: 400 });
+      }
+      const data = prunePlannerData((await this.storage.get(DATA_KEY)) ?? {}, month);
+      const todo = data[body.date]?.todo?.find((item) => item.id === body.id);
+      if (!todo) return new Response("todo not found", { status: 404 });
+      todo.done = body.done;
       await this.storage.put(DATA_KEY, data);
       return Response.json({ saved: true });
     }

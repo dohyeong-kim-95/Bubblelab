@@ -12,10 +12,10 @@
         <form class="login-card" id="plannerLoginForm">
             <span class="login-mark">◫</span>
             <h1>Daily Planner</h1>
-            <p>Enter your 4-digit + letter code</p>
+            <p>Enter the same personal code on PC and mobile</p>
             <div class="code-fields">
-                <input id="plannerPin" type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="0000" aria-label="4-digit PIN" required>
-                <input id="plannerLetter" type="text" inputmode="text" pattern="[A-Za-z]" maxlength="1" placeholder="A" aria-label="Letter code" required>
+                <label class="code-step"><span>1 · SIX DIGITS</span><input id="plannerPin" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="000000" aria-label="6-digit code" required></label>
+                <label class="code-step"><span>2 · TWO LETTERS</span><input id="plannerLetter" type="text" inputmode="text" pattern="[A-Za-z]{2}" maxlength="2" placeholder="AB" aria-label="2-letter code" required></label>
             </div>
             <button type="submit">Continue</button>
             <p class="login-error" id="loginError" role="alert"></p>
@@ -45,6 +45,7 @@
         </section>
         <p class="mobile-sync" id="mobileSync">Synced</p>
     </main>
+    <button class="planner-switch" id="plannerSwitch" type="button">Switch code</button>
 
     <div class="container">
         <!-- D-DAY Dashboard -->
