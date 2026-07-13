@@ -88,6 +88,26 @@ test("stores display text and serves batch lookups for category homes", async ()
   assert.equal("lotto" in batch, false); // 기록 없는 게임은 빠진다
 });
 
+test("stores an all-time personal best per browser and game", async () => {
+  const records = new RecordsDO({ storage: new MemoryStorage() });
+  const vid = "00000000-0000-4000-8000-000000000001";
+  const personal = (body) => records.fetch(new Request("https://records.internal/_personal", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ vid, game: "reactiontime", ...body }),
+  }));
+
+  assert.equal((await (await personal({ score: 250, text: "250ms" })).json()).accepted, true);
+  assert.equal((await (await personal({ score: 300, text: "300ms" })).json()).accepted, false);
+  assert.equal((await (await personal({ score: 190, text: "190ms" })).json()).accepted, true);
+
+  const response = await records.fetch(new Request(
+    `https://records.internal/?games=reactiontime,lotto&vid=${vid}`,
+  ));
+  const data = await response.json();
+  assert.equal(data.personal.reactiontime.score, 190);
+  assert.deepEqual(data.supported, ["reactiontime"]);
+});
+
 test("admin can list this week's records and reset one", async () => {
   const records = new RecordsDO({ storage: new MemoryStorage() });
   await post(records, { game: "beer", nick: "맥주왕", score: 3.2, text: "오차 3cc·1.2초" });

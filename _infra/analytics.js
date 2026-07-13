@@ -28,6 +28,22 @@ export class AnalyticsDO {
   async fetch(request) {
     const url = new URL(request.url);
 
+    if (request.method === "POST" && url.pathname === "/streak") {
+      const { visitorId, date } = await request.json().catch(() => ({}));
+      if (!VISITOR_ID.test(visitorId ?? "") || !DATE_KEY.test(date ?? "")) {
+        return new Response("invalid event", { status: 400 });
+      }
+      const key = `streak:${visitorId}`;
+      const previous = await this.state.storage.get(key);
+      if (previous?.lastDate !== date) {
+        const yesterday = recentDates(date, 2)[1];
+        const streak = previous?.lastDate === yesterday ? previous.streak + 1 : 1;
+        await this.state.storage.put(key, { lastDate: date, streak });
+      }
+      const current = await this.state.storage.get(key);
+      return Response.json(current, { headers: { "Cache-Control": "no-store" } });
+    }
+
     if (request.method === "POST" && url.pathname === "/track") {
       const { visitorId, date, page } = await request.json();
       if (!VISITOR_ID.test(visitorId ?? "") || !DATE_KEY.test(date ?? "")) {
@@ -41,6 +57,15 @@ export class AnalyticsDO {
       // 방문자 집계까지 버리지 않도록 조용히 무시한다.
       if (typeof page === "string" && PAGE_KEY.test(page)) {
         await this.state.storage.put(`pv:${date}:${page}:${visitorId}`, true);
+        if (page === "slop" || page.startsWith("slop/")) {
+          const streakKey = `streak:${visitorId}`;
+          const previous = await this.state.storage.get(streakKey);
+          if (previous?.lastDate !== date) {
+            const yesterday = recentDates(date, 2)[1];
+            const streak = previous?.lastDate === yesterday ? previous.streak + 1 : 1;
+            await this.state.storage.put(streakKey, { lastDate: date, streak });
+          }
+        }
       }
 
       // 매일 첫 방문 때 오래된 버킷을 정리한다. DAU가 작은 동안 충분히 가볍다.
@@ -49,7 +74,8 @@ export class AnalyticsDO {
         const keep = new Set(recentDates(date, 35));
         const stored = await this.state.storage.list();
         // 모든 key(seen:/pv:/cleanup:)는 두 번째 조각이 날짜다.
-        const stale = [...stored.keys()].filter((k) => !keep.has(k.split(":")[1]));
+        const stale = [...stored.keys()].filter((k) =>
+          /^(seen|pv|cleanup):/.test(k) && !keep.has(k.split(":")[1]));
         if (stale.length) await this.state.storage.delete(stale);
         await this.state.storage.put(cleanupKey, true);
       }

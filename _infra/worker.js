@@ -249,6 +249,17 @@ export default {
       return new Response(response.body, { status: response.status, headers });
     }
 
+    if (path === "/_streak" && request.method === "GET") {
+      const visitorId = cookies(request).bl_vid;
+      if (!visitorId) return Response.json({ streak: 1 }, { headers: { "Cache-Control": "no-store" } });
+      const id = env.ANALYTICS.idFromName("global");
+      return env.ANALYTICS.get(id).fetch("https://analytics.internal/streak", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ visitorId, date: kstDate() }),
+      });
+    }
+
     // 토이 아이디어 제출 (조회는 admin 전용 /api/suggestions)
     if (path === "/_suggest" && request.method === "POST") {
       const { text, page } = await request.json().catch(() => ({}));
@@ -267,7 +278,23 @@ export default {
         return new Response("method not allowed", { status: 405 });
       }
       const id = env.RECORDS.idFromName("global");
+      if (request.method === "GET") {
+        const recordsUrl = new URL(request.url);
+        const vid = cookies(request).bl_vid;
+        if (vid) recordsUrl.searchParams.set("vid", vid);
+        return env.RECORDS.get(id).fetch(new Request(recordsUrl, request));
+      }
       return env.RECORDS.get(id).fetch(request);
+    }
+
+    if (path === "/_personal" && request.method === "POST") {
+      const body = await request.json().catch(() => ({}));
+      const id = env.RECORDS.idFromName("global");
+      return env.RECORDS.get(id).fetch("https://records.internal/_personal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...body, vid: cookies(request).bl_vid }),
+      });
     }
 
     // 실시간 데이터 서버: /_rt/<이름> → 이름당 Durable Object 하나.

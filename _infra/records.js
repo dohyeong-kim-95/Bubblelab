@@ -162,16 +162,49 @@ export class RecordsDO {
       const batch = url.searchParams.get("games");
       if (batch !== null) {
         const records = {};
+        const personal = {};
+        const supported = [];
+        const vid = url.searchParams.get("vid");
         for (const g of batch.split(",").filter((g) => GAME.test(g)).slice(0, 50)) {
           const r = await this.state.storage.get(`rec:${week}:${g}`);
           if (r) records[g] = r;
+          if (GAMES[g]) {
+            supported.push(g);
+            if (VISITOR_ID.test(vid ?? "")) {
+              const mine = await this.state.storage.get(`personal:${vid}:${g}`);
+              if (mine) personal[g] = mine;
+            }
+          }
         }
-        return Response.json({ week, records, notice }, { headers: { "Cache-Control": "no-store" } });
+        return Response.json(
+          { week, records, personal, supported, notice },
+          { headers: { "Cache-Control": "no-store" } },
+        );
       }
       const game = url.searchParams.get("game");
       if (!GAME.test(game ?? "")) return new Response("invalid game", { status: 400 });
       const record = (await this.state.storage.get(`rec:${week}:${game}`)) ?? null;
       return Response.json({ week, record, notice }, { headers: { "Cache-Control": "no-store" } });
+    }
+
+    if (request.method === "POST" && url.pathname === "/_personal") {
+      const { game, score, text, vid } = await request.json().catch(() => ({}));
+      const cfg = GAMES[game];
+      if (!cfg || !VISITOR_ID.test(vid ?? "") ||
+          typeof score !== "number" || !Number.isFinite(score) ||
+          score < cfg.min || score > cfg.max) {
+        return new Response("invalid personal record", { status: 400 });
+      }
+      const display = typeof text === "string" && /^[^\x00-\x1f<>&"']{1,24}$/.test(text.trim())
+        ? text.trim() : String(score);
+      const key = `personal:${vid}:${game}`;
+      const current = await this.state.storage.get(key);
+      if (!beats(cfg.dir, score, current)) {
+        return Response.json({ accepted: false, record: current });
+      }
+      const record = { score, text: display, dir: cfg.dir, at: Date.now() };
+      await this.state.storage.put(key, record);
+      return Response.json({ accepted: true, record });
     }
 
     if (request.method === "POST") {

@@ -120,3 +120,26 @@ test("rejects malformed visitor events", async () => {
   }));
   assert.equal(response.status, 400);
 });
+
+test("tracks a browser's consecutive Slop visit days", async () => {
+  const storage = new MemoryStorage();
+  const analytics = new AnalyticsDO({ storage });
+  const visitorId = "00000000-0000-4000-8000-000000000001";
+  const visit = (date, page = "slop") => analytics.fetch(new Request("https://analytics.internal/track", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ visitorId, date, page }),
+  }));
+  const streak = (date) => analytics.fetch(new Request("https://analytics.internal/streak", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ visitorId, date }),
+  })).then((response) => response.json());
+
+  await visit("2026-07-08");
+  await visit("2026-07-08", "slop/circle"); // 같은 날 중복은 증가하지 않는다
+  assert.equal((await streak("2026-07-08")).streak, 1);
+  await visit("2026-07-09", "games/avalon"); // Slop 외 방문은 증가시키지 않는다
+  assert.equal((await streak("2026-07-09")).streak, 2); // 홈 조회 자체가 오늘 방문을 확정
+  assert.equal((await streak("2026-07-09")).streak, 2);
+  assert.equal((await streak("2026-07-11")).streak, 1); // 하루를 건너뛰면 다시 1일
+  assert.equal(storage.data.has(`streak:${visitorId}`), true); // 날짜 버킷 정리에서 보존
+});

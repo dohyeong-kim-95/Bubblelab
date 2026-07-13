@@ -87,6 +87,7 @@ function listingPage(site, entries) {
       <span class="emoji">${emoji}</span>
       <span class="name">${escapeHtml(name)}</span>
       <span class="champ" data-game="${escapeHtml(name)}"></span>
+      <span class="mine"></span>
     </a>`;
     })
     .join("\n");
@@ -123,6 +124,8 @@ ${preconnectLinks}
   .site-menu a.loading::after { content: "…"; margin-left: auto; }
   .site-menu .menu-home { border-bottom: 1px solid light-dark(#e6ebef, #263342); margin-bottom: .25rem; }
   #crown { text-align: center; opacity: .6; font-size: .85rem;
+           margin: 0 0 .35rem; min-height: 1.2em; }
+  #streak { text-align: center; opacity: .6; font-size: .8rem;
            margin: 0 0 1.8rem; min-height: 1.2em; }
   .grid { display: grid; gap: 1rem;
           grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); }
@@ -146,6 +149,8 @@ ${preconnectLinks}
           text-align: center; }
   .champ { opacity: .55; font-size: .72rem; min-height: 1em; max-width: 100%;
            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mine { opacity: .48; font-size: .7rem; min-height: 1em; max-width: 100%;
+           overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .empty { text-align: center; opacity: .6; margin-top: 4rem; }
   footer { margin-top: 3.5rem; opacity: .4; font-size: .8em; text-align: center; }
   footer a { color: inherit; }
@@ -162,6 +167,7 @@ ${categoryLinks}
     </nav>
   </div>
   <div id="crown" title="이번 주 1위를 가장 많이 가진 사람 — 월요일 09시 초기화"></div>
+${site === "slop" ? '  <div id="streak">🔥 연속 방문 계산 중…</div>' : ""}
 ${cards ? `  <div class="grid">\n${cards}\n  </div>` : `  <p class="empty">아직 아무것도 없어요 🫧</p>`}
   <footer><a href="https://bubblelab.dev">bubblelab.dev</a></footer>
 <script>
@@ -212,7 +218,8 @@ addEventListener("keydown", (event) => {
     const games = els.map((el) => el.dataset.game).join(",");
     const res = await fetch("/_records?games=" + encodeURIComponent(games), { cache: "no-store" });
     if (!res.ok) return;
-    const { week, records, notice } = await res.json();
+    const { week, records, personal = {}, supported = [], notice } = await res.json();
+    const supportedGames = new Set(supported);
     const wins = {}; // 닉네임 → 이번 주 1위 개수
     for (const el of els) {
       const r = records[el.dataset.game];
@@ -221,6 +228,14 @@ addEventListener("keydown", (event) => {
       el.textContent = \`👑 \${r.nick} · \${r.text ?? Math.round(r.score * 100) / 100}\`;
       el.title = "이번 주 1위 — 월요일 09시 초기화";
       wins[r.nick] = (wins[r.nick] ?? 0) + 1;
+    }
+    for (const el of els) {
+      const game = el.dataset.game;
+      if (!supportedGames.has(game)) continue;
+      const mine = personal[game];
+      el.closest(".card").querySelector(".mine").textContent = mine
+        ? \`나의 최고 · \${mine.text ?? Math.round(mine.score * 100) / 100}\`
+        : "나의 기록 · 아직 없음";
     }
     const top = Math.max(0, ...Object.values(wins));
     if (top > 0) {
@@ -234,6 +249,20 @@ addEventListener("keydown", (event) => {
     }
     if (SITE === "slop") window.blWeeklyResetNotice?.(week, notice);
   } catch {}
+})();
+
+// Slop에서만 현재 브라우저의 KST 기준 연속 방문일을 보여준다.
+(async () => {
+  const streak = document.getElementById("streak");
+  if (!streak) return;
+  try {
+    const res = await fetch("/_streak", { cache: "no-store" });
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    streak.textContent = \`🔥 나의 Slop 연속 방문 · \${data.streak ?? 1}일\`;
+  } catch {
+    streak.textContent = "";
+  }
 })();
 
 // 카드는 즉시 보여주고, 최근에 저장한 인기순을 먼저 적용한다. 최신 통계는

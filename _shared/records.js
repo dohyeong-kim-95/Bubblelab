@@ -198,6 +198,13 @@
 
   window.blWeeklyReport = (score) => {
     if (typeof score !== "number" || !Number.isFinite(score)) return;
+    // 주간 1위 여부와 무관하게 이 브라우저의 올타임 최고 기록을 갱신한다.
+    fetch("/_personal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ game: cfg.game, score, text: fmt(score) }),
+      keepalive: true,
+    }).catch(() => {});
     if (!beats(score, current)) return;
     if (pending && !beats(score, { score: pending })) return; // 이미 더 좋은 게 대기 중
     pending = score;
