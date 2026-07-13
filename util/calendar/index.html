@@ -246,7 +246,7 @@ function downloadCanvasPng(canvas, filename, done) {
   }, "image/png");
 }
 
-// iOS에서는 <a download>가 사진 앱 저장을 보장하지 않는다.
+// 모바일에서는 <a download>가 실제 파일 저장을 보장하지 않을 수 있다.
 // 사용자 탭의 활성 상태를 유지하기 위해 PNG File을 동기 생성해 공유 시트를 연다.
 function canvasPngFile(canvas, filename) {
   const dataUrl = canvas.toDataURL("image/png");
@@ -257,9 +257,19 @@ function canvasPngFile(canvas, filename) {
   return new File([bytes], filename, { type: "image/png" });
 }
 
-function isAppleMobile() {
-  return /iPhone|iPad|iPod/i.test(navigator.userAgent)
+function isMobileDevice() {
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
     || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
+function canShareFile(file) {
+  try {
+    return typeof navigator.share === "function"
+      && typeof navigator.canShare === "function"
+      && navigator.canShare({ files: [file] });
+  } catch (_) {
+    return false;
+  }
 }
 
 // ---- 미리보기 패널 ----
@@ -272,17 +282,16 @@ const posInput = document.getElementById("cal-pos");
 const dlBtn = document.getElementById("download");
 const saveHintEl = document.getElementById("save-hint");
 const errEl = document.getElementById("err");
-const appleMobile = isAppleMobile();
-const appleFileShare = appleMobile
-  && typeof navigator.share === "function"
-  && typeof navigator.canShare === "function"
-  && navigator.canShare({ files: [new File([""], "calendar.png", { type: "image/png" })] });
+const mobileDevice = isMobileDevice();
+const mobileFileShare = mobileDevice
+  && canShareFile(new File([""], "calendar.png", { type: "image/png" }));
 
-if (appleFileShare) {
-  dlBtn.textContent = "사진 앱에 저장";
-  dlBtn.setAttribute("aria-label", "배경화면 PNG 이미지를 사진 앱에 저장");
+if (mobileFileShare) {
+  dlBtn.textContent = "이미지 저장 / 공유";
+  dlBtn.setAttribute("aria-label", "배경화면 PNG 이미지 저장 또는 공유");
+  saveHintEl.textContent = "공유 메뉴에서 갤러리, 포토 또는 내 파일을 선택하세요.";
   saveHintEl.hidden = false;
-} else if (appleMobile) {
+} else if (mobileDevice) {
   saveHintEl.textContent = "다운로드 후 파일 앱의 다운로드 폴더에서 확인하세요.";
   saveHintEl.hidden = false;
 }
@@ -341,9 +350,9 @@ dlBtn.addEventListener("click", () => {
     drawWallpaper(previewCv, cal, themeColors(), currentOpt());
     const name = `calendar-${cal.y}-${String(cal.m + 1).padStart(2, "0")}-mobile.png`;
 
-    if (appleFileShare) {
+    if (mobileFileShare) {
       const file = canvasPngFile(previewCv, name);
-      if (navigator.canShare({ files: [file] })) {
+      if (canShareFile(file)) {
         navigator.share({
           title: `${cal.y}년 ${cal.m + 1}월 달력`,
           files: [file],
@@ -360,7 +369,7 @@ dlBtn.addEventListener("click", () => {
     setTimeout(() => {
       downloadCanvasPng(previewCv, name, (err) => {
         if (err) errEl.textContent = "배경화면을 생성하지 못했습니다.";
-        else if (appleMobile) errEl.textContent = "다운로드를 요청했습니다. 파일 앱에서 확인해주세요.";
+        else if (mobileDevice) errEl.textContent = "다운로드를 요청했습니다. 파일 앱에서 확인해주세요.";
         restore();
       });
     }, 30);
