@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>국기 맞추기</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; min-height: 100vh;
+         display: flex; flex-direction: column; align-items: center;
+         justify-content: center; gap: 1rem; text-align: center;
+         padding: 1.5rem; box-sizing: border-box; user-select: none;
+         -webkit-user-select: none; touch-action: manipulation; }
+  h1 { font-size: 1.1rem; margin: 0; opacity: .7; }
+  #streak { font-size: 1rem; opacity: .6; font-variant-numeric: tabular-nums; min-height: 1.3em; }
+  #flag { font-size: 6.5rem; line-height: 1.15; min-height: 7.5rem;
+          display: grid; place-items: center; }
+  #choices { display: flex; flex-direction: column; gap: .55rem;
+             width: min(80vw, 18rem); }
+  #choices button { font: inherit; font-size: 1rem; padding: .75rem .9rem;
+             border-radius: .8rem; border: 2px solid currentColor;
+             background: none; color: inherit; cursor: pointer;
+             overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #choices button:active { transform: scale(.98); }
+  #choices button.right { background: light-dark(#c9ecd3, #1d4a2c); }
+  #choices button.wrong { background: light-dark(#f6cdd0, #5a2026); }
+  #msg { opacity: .7; min-height: 2.6em; white-space: pre-line; }
+  #btn { font: inherit; font-size: 1.15rem; padding: .8rem 2.4rem;
+         border-radius: 2rem; border: 2px solid currentColor;
+         background: none; color: inherit; cursor: pointer; display: none; }
+  #btn.show { display: block; }
+  #best { opacity: .5; font-size: .85rem; min-height: 1.2em; }
+  /* 데스크톱: 사용 영역(모바일 폭 스테이지) 밖은 톤을 낮춰 구분 */
+  body::before { content: ""; position: fixed; inset: 0; z-index: -2;
+                 background: light-dark(#dee6ee, #0a0e15); }
+  body::after { content: ""; position: fixed; top: 0; bottom: 0; left: 50%;
+                transform: translateX(-50%); width: min(100vw, 34rem); z-index: -1;
+                background: light-dark(#eef2f6, #10161f);
+                box-shadow: 0 0 1.5rem light-dark(rgba(30,50,70,.14), rgba(0,0,0,.5)); }
+</style>
+</head>
+<body>
+  <h1>🌍 국기 맞추기</h1>
+  <div id="streak">연속 0개</div>
+  <div id="flag"></div>
+  <div id="choices"></div>
+  <div id="msg">한 번이라도 틀리면 그대로 끝!
+연속으로 맞춘 개수가 점수예요.</div>
+  <button id="btn">다시!</button>
+  <div id="best"></div>
+<script>
+// 앞쪽일수록 유명한 나라 — 연속으로 맞출수록 출제 풀이 넓어진다.
+const COUNTRIES = [
+  ["KR","대한민국"],["JP","일본"],["CN","중국"],["US","미국"],["GB","영국"],
+  ["FR","프랑스"],["DE","독일"],["IT","이탈리아"],["ES","스페인"],["CA","캐나다"],
+  ["AU","호주"],["BR","브라질"],["IN","인도"],["RU","러시아"],["MX","멕시코"],
+  ["TH","태국"],["VN","베트남"],["PH","필리핀"],["ID","인도네시아"],["TR","튀르키예"],
+  ["GR","그리스"],["NL","네덜란드"],["CH","스위스"],["SE","스웨덴"],["NO","노르웨이"],
+  ["DK","덴마크"],["FI","핀란드"],["PL","폴란드"],["PT","포르투갈"],["AR","아르헨티나"],
+  ["EG","이집트"],["SA","사우디아라비아"],["IL","이스라엘"],["SG","싱가포르"],["MY","말레이시아"],
+  ["NZ","뉴질랜드"],["IE","아일랜드"],["AT","오스트리아"],["BE","벨기에"],["CZ","체코"],
+  ["HU","헝가리"],["UA","우크라이나"],["ZA","남아프리카공화국"],["NG","나이지리아"],["KE","케냐"],
+  ["MA","모로코"],["CL","칠레"],["PE","페루"],["CO","콜롬비아"],["CU","쿠바"],
+  ["MN","몽골"],["NP","네팔"],["BD","방글라데시"],["PK","파키스탄"],["LK","스리랑카"],
+  ["MM","미얀마"],["KH","캄보디아"],["LA","라오스"],["TW","대만"],["HK","홍콩"],
+  ["KZ","카자흐스탄"],["UZ","우즈베키스탄"],["IR","이란"],["IQ","이라크"],["JO","요르단"],
+  ["LB","레바논"],["QA","카타르"],["AE","아랍에미리트"],["KW","쿠웨이트"],["OM","오만"],
+  ["IS","아이슬란드"],["RO","루마니아"],["BG","불가리아"],["HR","크로아티아"],["RS","세르비아"],
+  ["SK","슬로바키아"],["SI","슬로베니아"],["EE","에스토니아"],["LV","라트비아"],["LT","리투아니아"],
+  ["BY","벨라루스"],["GE","조지아"],["AM","아르메니아"],["AZ","아제르바이잔"],["DZ","알제리"],
+  ["TN","튀니지"],["LY","리비아"],["SD","수단"],["ET","에티오피아"],["GH","가나"],
+  ["CM","카메룬"],["SN","세네갈"],["TZ","탄자니아"],["UG","우간다"],["ZW","짐바브웨"],
+  ["VE","베네수엘라"],["EC","에콰도르"],["BO","볼리비아"],["UY","우루과이"],["PY","파라과이"],
+  ["PA","파나마"],["CR","코스타리카"],["GT","과테말라"],["HN","온두라스"],["NI","니카라과"],
+  ["SV","엘살바도르"],["DO","도미니카공화국"],["HT","아이티"],["JM","자메이카"],["TT","트리니다드토바고"],
+  ["FJ","피지"],["PG","파푸아뉴기니"],["WS","사모아"],["TO","통가"],["VU","바누아투"],
+  ["MV","몰디브"],["BT","부탄"],["BN","브루나이"],["TL","동티모르"],["KG","키르기스스탄"],
+  ["TJ","타지키스탄"],["TM","투르크메니스탄"],["AF","아프가니스탄"],["SY","시리아"],["YE","예멘"],
+  ["BH","바레인"],["CY","키프로스"],["MT","몰타"],["LI","리히텐슈타인"],["SM","산마리노"],
+  ["AD","안도라"],["AL","알바니아"],["MK","북마케도니아"],["BA","보스니아헤르체고비나"],["ME","몬테네그로"],
+  ["MD","몰도바"],["CI","코트디부아르"],["ML","말리"],["NE","니제르"],["ZM","잠비아"],
+  ["MZ","모잠비크"],["MG","마다가스카르"],["NA","나미비아"],["BW","보츠와나"],["RW","르완다"],
+  ["GY","가이아나"],["SR","수리남"],
+];
+const flagOf = (code) =>
+  String.fromCodePoint(...[...code].map((c) => 0x1f1a5 + c.charCodeAt(0)));
+
+const streakEl = document.getElementById("streak");
+const flagEl = document.getElementById("flag");
+const choicesEl = document.getElementById("choices");
+const msg = document.getElementById("msg");
+const btn = document.getElementById("btn");
+const bestEl = document.getElementById("best");
+
+let streak = 0;
+let best = null;
+let locked = false;
+const recent = []; // 최근 출제 코드 (반복 방지)
+
+window.blWeekly = { game: "flags", dir: "max", fmt: (v) => v + "개 연속" };
+window.blShareText = () => `국기 ${best ?? streak}개 연속으로 맞춤! 도전해보세요`;
+
+// 윈도우 등 국기 이모지가 안 나오는 환경 감지 (글자 "KR"로 그려지면 무채색)
+function flagsRenderable() {
+  const c = document.createElement("canvas");
+  c.width = c.height = 32;
+  const x = c.getContext("2d", { willReadFrequently: true });
+  x.font = "24px sans-serif";
+  x.fillText(flagOf("KR"), 0, 24);
+  const d = x.getImageData(0, 0, 32, 32).data;
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] > 0 && (Math.abs(d[i] - d[i + 1]) > 24 || Math.abs(d[i + 1] - d[i + 2]) > 24)) return true;
+  }
+  return false;
+}
+
+const shuffle = (a) => {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+};
+
+function round() {
+  locked = false;
+  streakEl.textContent = `연속 ${streak}개`;
+  // 처음엔 유명한 40개국, 맞출 때마다 8개국씩 넓어진다
+  const pool = COUNTRIES.slice(0, Math.min(COUNTRIES.length, 40 + streak * 8));
+  const fresh = pool.filter(([code]) => !recent.includes(code));
+  const answer = fresh[Math.floor(Math.random() * fresh.length)];
+  recent.push(answer[0]);
+  if (recent.length > 8) recent.shift();
+
+  const options = shuffle([
+    answer,
+    ...shuffle(pool.filter((c) => c !== answer)).slice(0, 3),
+  ]);
+  flagEl.textContent = flagOf(answer[0]);
+  choicesEl.replaceChildren(...options.map(([code, name]) => {
+    const b = document.createElement("button");
+    b.textContent = name;
+    b.addEventListener("click", () => pick(b, code, answer));
+    return b;
+  }));
+}
+
+function pick(b, code, [answerCode, answerName]) {
+  if (locked) return;
+  locked = true;
+  if (code === answerCode) {
+    b.classList.add("right");
+    streak++;
+    setTimeout(round, 220);
+    return;
+  }
+  // 게임 오버
+  b.classList.add("wrong");
+  for (const el of choicesEl.children) {
+    el.disabled = true;
+    if (el.textContent === answerName) el.classList.add("right");
+  }
+  const grade =
+    streak >= 40 ? "🤖 지리 교사 자격 취득" :
+    streak >= 25 ? "🌏 세계지도가 머릿속에" :
+    streak >= 15 ? "🔥 대단한데요" :
+    streak >= 7  ? "🙂 나쁘지 않아요" : "🫠 세계는 넓어요…";
+  msg.textContent = `정답은 ${answerName}!\n연속 ${streak}개 ${grade}`;
+  if (best === null || streak > best) {
+    best = streak;
+    bestEl.textContent = `최고 기록: 연속 ${best}개`;
+  }
+  if (streak > 0) window.blWeeklyReport?.(streak);
+  btn.classList.add("show");
+}
+
+btn.addEventListener("click", () => {
+  streak = 0;
+  msg.textContent = "";
+  btn.classList.remove("show");
+  round();
+});
+
+if (flagsRenderable()) {
+  round();
+} else {
+  flagEl.textContent = "😢";
+  msg.textContent = "이 브라우저는 국기 이모지를 지원하지 않아요.\n모바일에서 즐겨주세요!";
+}
+</script>
+<script defer src="/_shared/records.js"></script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>
