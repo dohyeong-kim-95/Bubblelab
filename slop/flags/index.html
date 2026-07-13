@@ -92,6 +92,17 @@ const COUNTRIES = [
   ["MD","몰도바"],["CI","코트디부아르"],["ML","말리"],["NE","니제르"],["ZM","잠비아"],
   ["MZ","모잠비크"],["MG","마다가스카르"],["NA","나미비아"],["BW","보츠와나"],["RW","르완다"],
   ["GY","가이아나"],["SR","수리남"],
+  ["LU","룩셈부르크"],["MC","모나코"],["VA","바티칸"],["AO","앙골라"],
+  ["BJ","베냉"],["BF","부르키나파소"],["BI","부룬디"],["CV","카보베르데"],
+  ["CF","중앙아프리카공화국"],["TD","차드"],["KM","코모로"],["CG","콩고공화국"],
+  ["CD","콩고민주공화국"],["DJ","지부티"],["GQ","적도기니"],["ER","에리트레아"],
+  ["SZ","에스와티니"],["GA","가봉"],["GM","감비아"],["GN","기니"],["GW","기니비사우"],
+  ["LS","레소토"],["LR","라이베리아"],["MW","말라위"],["MR","모리타니"],["MU","모리셔스"],
+  ["ST","상투메프린시페"],["SC","세이셸"],["SL","시에라리온"],["SO","소말리아"],
+  ["SS","남수단"],["TG","토고"],["AG","앤티가바부다"],["BS","바하마"],["BB","바베이도스"],
+  ["BZ","벨리즈"],["DM","도미니카연방"],["GD","그레나다"],["KN","세인트키츠네비스"],
+  ["LC","세인트루시아"],["VC","세인트빈센트그레나딘"],["KI","키리바시"],["MH","마셜제도"],
+  ["FM","미크로네시아"],["NR","나우루"],["PW","팔라우"],["SB","솔로몬제도"],["TV","투발루"],
 ];
 const flagOf = (code) =>
   String.fromCodePoint(...[...code].map((c) => 0x1f1a5 + c.charCodeAt(0)));
@@ -127,7 +138,7 @@ function round() {
   const fresh = pool.filter(([code]) => !recent.includes(code));
   const answer = fresh[Math.floor(Math.random() * fresh.length)];
   recent.push(answer[0]);
-  if (recent.length > 8) recent.shift();
+  if (recent.length > 16) recent.shift();
 
   const options = shuffle([
     answer,
