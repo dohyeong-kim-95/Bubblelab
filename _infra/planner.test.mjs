@@ -41,11 +41,25 @@ test("stores and returns planner data", async () => {
 
   response = await planner.fetch(new Request("https://planner.internal/", {
     method: "PATCH", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ date: TEST_DATE, id: "1", done: true }),
+    body: JSON.stringify({ action: "toggle", date: TEST_DATE, id: "1", done: true }),
   }));
   assert.equal(response.status, 200);
   response = await planner.fetch(new Request("https://planner.internal/"));
   assert.equal((await response.json()).data[TEST_DATE].todo[0].done, true);
+
+  response = await planner.fetch(new Request("https://planner.internal/", {
+    method: "PATCH", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "add", date: TEST_DATE, title: "  New   task  " }),
+  }));
+  const added = (await response.json()).item;
+  assert.equal(added.title, "New task");
+  response = await planner.fetch(new Request("https://planner.internal/", {
+    method: "PATCH", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "delete", date: TEST_DATE, id: added.id }),
+  }));
+  assert.equal(response.status, 200);
+  response = await planner.fetch(new Request("https://planner.internal/"));
+  assert.equal((await response.json()).data[TEST_DATE].todo.length, 1);
 });
 
 test("rejects invalid planner writes", async () => {

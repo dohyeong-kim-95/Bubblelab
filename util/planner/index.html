@@ -36,6 +36,11 @@
         </header>
         <section class="mobile-card">
             <div class="mobile-section-title"><h2>TODO</h2><span id="mobileTodoCount"></span></div>
+            <form class="mobile-todo-add" id="mobileTodoForm">
+                <input id="mobileTodoTitle" type="text" maxlength="200" placeholder="Add a TODO" aria-label="New TODO">
+                <button type="submit" aria-label="Add TODO">Add</button>
+            </form>
+            <p class="mobile-todo-error" id="mobileTodoError" role="alert"></p>
             <div id="mobileTodos"></div>
         </section>
         <section class="mobile-card diff-card">

@@ -32,11 +32,16 @@ body.authenticated .planner-switch { display: block; }
 .mobile-section-title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 11px; }
 .mobile-section-title h2 { font-size: 13px; letter-spacing: .08em; }
 .mobile-section-title span { color: #8a929c; font-size: 11px; }
-.mobile-todo { display: grid; grid-template-columns: 25px 1fr; gap: 8px; align-items: start;
+.mobile-todo-add { display: grid; grid-template-columns: 1fr auto; gap: 7px; margin-bottom: 2px; }
+.mobile-todo-add input { min-width: 0; border: 1px solid #d9dfe5; border-radius: 8px; padding: 9px 10px; font: inherit; }
+.mobile-todo-add button { border: 0; border-radius: 8px; padding: 0 13px; background: #2196f3; color: #fff; font-weight: 700; }
+.mobile-todo-error { min-height: 1.3em; color: #c53c3c; font-size: 11px; padding: 3px 2px 0; }
+.mobile-todo { display: grid; grid-template-columns: 25px 1fr 28px; gap: 8px; align-items: start;
     padding: 10px 4px; border-top: 1px solid #eef0f2; }
 .mobile-todo:first-child { border-top: 0; }
 .mobile-todo input { width: 19px; height: 19px; accent-color: #2196f3; }
 .mobile-todo.done span { text-decoration: line-through; color: #959ca5; }
+.mobile-todo-delete { border: 0; background: transparent; color: #a0a7af; font-size: 20px; line-height: 18px; }
 .mobile-empty { color: #9299a1; font-size: 13px; padding: 10px 4px; }
 .diff-legend { display: flex; gap: 7px; margin-bottom: 10px; font: 700 9px ui-monospace, monospace; }
 .diff-legend span, .diff-tag { border-radius: 4px; padding: 2px 5px; }

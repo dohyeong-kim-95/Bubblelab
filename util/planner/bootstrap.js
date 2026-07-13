@@ -44,16 +44,26 @@
   window.PlannerSync = {
     getData: () => JSON.parse(localStorage.getItem(DATA_KEY) || "{}"),
     setData(data) { setLocal(data); return saveRemote(data); },
+    async mutateTodo(action, payload) {
+      const response = await fetch("/_planner/data", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, ...payload }),
+      });
+      if (!response.ok) {
+        const error = new Error("todo sync failed");
+        error.status = response.status;
+        throw error;
+      }
+      return response.json();
+    },
     async toggleTodo(date, id, done) {
       const data = this.getData();
       const todo = data[date]?.todo?.find((item) => item.id === id);
       if (todo) { todo.done = done; setLocal(data); }
-      const response = await fetch("/_planner/data", {
-        method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date, id, done }),
-      });
-      if (!response.ok) throw new Error("todo sync failed");
+      return this.mutateTodo("toggle", { date, id, done });
     },
+    addTodo: (date, title) => window.PlannerSync.mutateTodo("add", { date, title }),
+    deleteTodo: (date, id) => window.PlannerSync.mutateTodo("delete", { date, id }),
     refresh: () => fetchRemote({ notify: true }),
   };
 

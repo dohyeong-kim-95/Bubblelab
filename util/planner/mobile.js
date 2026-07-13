@@ -47,23 +47,39 @@
       return;
     }
     todos.forEach((todo) => {
-      const label = document.createElement("label");
-      label.className = `mobile-todo${todo.done ? " done" : ""}`;
+      const row = document.createElement("div");
+      row.className = `mobile-todo${todo.done ? " done" : ""}`;
       const checkbox = document.createElement("input");
       checkbox.type = "checkbox";
       checkbox.checked = Boolean(todo.done);
       checkbox.addEventListener("change", async () => {
-        label.classList.toggle("done", checkbox.checked);
-        await PlannerSync.toggleTodo(date, todo.id, checkbox.checked).catch(() => {
+        row.classList.toggle("done", checkbox.checked);
+        await PlannerSync.toggleTodo(date, todo.id, checkbox.checked).catch(async () => {
           checkbox.checked = !checkbox.checked;
-          label.classList.toggle("done", checkbox.checked);
+          row.classList.toggle("done", checkbox.checked);
+          await PlannerSync.refresh();
         });
         render();
       });
       const title = document.createElement("span");
       title.textContent = todo.title;
-      label.append(checkbox, title);
-      root.append(label);
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "mobile-todo-delete";
+      remove.textContent = "×";
+      remove.setAttribute("aria-label", `Delete ${todo.title}`);
+      remove.addEventListener("click", async () => {
+        remove.disabled = true;
+        try {
+          await PlannerSync.deleteTodo(date, todo.id);
+          await PlannerSync.refresh();
+        } catch {
+          remove.disabled = false;
+          document.getElementById("mobileTodoError").textContent = "Could not delete TODO.";
+        }
+      });
+      row.append(checkbox, title, remove);
+      root.append(row);
     });
   }
 
@@ -108,6 +124,21 @@
   document.getElementById("mobilePrev").addEventListener("click", () => { date = shiftDate(date, -1); render(); });
   document.getElementById("mobileNext").addEventListener("click", () => { date = shiftDate(date, 1); render(); });
   document.getElementById("mobileToday").addEventListener("click", () => { date = kstToday(); render(); });
+  document.getElementById("mobileTodoForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const input = document.getElementById("mobileTodoTitle");
+    const error = document.getElementById("mobileTodoError");
+    const title = input.value.trim();
+    if (!title) return;
+    error.textContent = "";
+    try {
+      await PlannerSync.addTodo(date, title);
+      input.value = "";
+      await PlannerSync.refresh();
+    } catch (failure) {
+      error.textContent = failure.status === 409 ? "Maximum 7 active TODOs." : "Could not add TODO.";
+    }
+  });
   addEventListener("planner:remote", render);
   addEventListener("visibilitychange", () => { if (!document.hidden) PlannerSync.refresh(); });
   setInterval(() => PlannerSync.refresh(), 30000);

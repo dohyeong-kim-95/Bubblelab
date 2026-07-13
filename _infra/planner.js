@@ -48,13 +48,37 @@ export class PlannerDO {
       const body = await request.json().catch(() => ({}));
       const month = currentMonth();
       if (!new RegExp(`^${month}-\\d{2}$`).test(body.date ?? "") ||
-          typeof body.id !== "string" || body.id.length > 100 || typeof body.done !== "boolean") {
+          !["add", "toggle", "delete"].includes(body.action)) {
         return new Response("invalid todo update", { status: 400 });
       }
       const data = prunePlannerData((await this.storage.get(DATA_KEY)) ?? {}, month);
-      const todo = data[body.date]?.todo?.find((item) => item.id === body.id);
-      if (!todo) return new Response("todo not found", { status: 404 });
-      todo.done = body.done;
+      data[body.date] ??= { plan: [], real: [], todo: [] };
+      data[body.date].todo ??= [];
+      const todos = data[body.date].todo;
+
+      if (body.action === "add") {
+        const title = String(body.title ?? "").trim().replace(/\s+/g, " ");
+        if (!title || title.length > 200) return new Response("invalid todo title", { status: 400 });
+        if (todos.filter((item) => !item.done).length >= 7) {
+          return new Response("todo list is full", { status: 409 });
+        }
+        const item = { id: crypto.randomUUID(), title, color: "#E5E7EB", done: false };
+        todos.push(item);
+        await this.storage.put(DATA_KEY, data);
+        return Response.json({ saved: true, item });
+      }
+
+      if (typeof body.id !== "string" || body.id.length > 100) {
+        return new Response("invalid todo id", { status: 400 });
+      }
+      const index = todos.findIndex((item) => item.id === body.id);
+      if (index < 0) return new Response("todo not found", { status: 404 });
+      if (body.action === "toggle") {
+        if (typeof body.done !== "boolean") return new Response("invalid todo state", { status: 400 });
+        todos[index].done = body.done;
+      } else {
+        todos.splice(index, 1);
+      }
       await this.storage.put(DATA_KEY, data);
       return Response.json({ saved: true });
     }
