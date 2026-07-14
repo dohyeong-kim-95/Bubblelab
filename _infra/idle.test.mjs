@@ -31,21 +31,28 @@ test("bubble idle shares the Monday 09:00 KST weekly season", () => {
   assert.equal(seasonBounds(Date.parse("2026-07-20T00:00:00Z")).key, "2026-07-20");
 });
 
-test("valuable bubbles unlock on later days", () => {
-  assert.equal(pickBubbleTier(2, () => 0).id, "clear");
-  assert.equal(pickBubbleTier(3, () => 0).id, "pearl");
-  assert.equal(pickBubbleTier(5, () => 0).id, "gold");
-  assert.equal(pickBubbleTier(7, () => 0).id, "aurora");
-  assert.equal(pickBubbleTier(7, () => .99).id, "clear");
+test("valuable bubbles unlock at lifetime bubble milestones", () => {
+  assert.equal(pickBubbleTier(499, () => 0).id, "clear");
+  assert.equal(pickBubbleTier(500, () => 0).id, "pearl");
+  assert.equal(pickBubbleTier(50000, () => 0).id, "gold");
+  assert.equal(pickBubbleTier(5000000, () => 0).id, "aurora");
+  assert.equal(pickBubbleTier(5000000, () => .99).id, "clear");
 });
 
 test("generator cost grows and ownership milestones double production", () => {
   const generator = GENERATORS[0];
   assert.ok(generatorCost(generator, 1) > generatorCost(generator, 0));
-  assert.equal(milestoneMultiplier(9), 1);
-  assert.equal(milestoneMultiplier(10), 2);
-  assert.equal(milestoneMultiplier(25), 4);
-  assert.equal(milestoneMultiplier(50), 8);
+  assert.equal(milestoneMultiplier(24), 1);
+  assert.equal(milestoneMultiplier(25), 2);
+  assert.equal(milestoneMultiplier(50), 4);
+  assert.equal(milestoneMultiplier(100), 8);
+});
+
+test("the free first generator makes the first purchase available within seconds", () => {
+  const state = freshState();
+  const wand = GENERATORS[0];
+  assert.equal(state.generators.wand, 1);
+  assert.ok(generatorCost(wand, 1) / productionPerSecond(state) < 4);
 });
 
 test("active and idle upgrades visibly increase growth", () => {
