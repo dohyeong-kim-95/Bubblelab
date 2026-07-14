@@ -257,6 +257,7 @@ function tick() {
 }
 
 const visualBubbles = [];
+const floatingRewards = [];
 let canvasWidth = 0, canvasHeight = 0, lastSpawn = 0;
 
 function resizeCanvas() {
@@ -304,6 +305,22 @@ function drawScene(time) {
     ctx.fillStyle = gradient; ctx.fill();
     ctx.strokeStyle = `hsla(${bubble.tier.hue},75%,45%,.65)`; ctx.lineWidth = bubble.tier.id === "clear" ? 1.2 : 2; ctx.stroke();
   }
+  for (let index = floatingRewards.length - 1; index >= 0; index--) {
+    const reward = floatingRewards[index];
+    const progress = (time - reward.startedAt) / 1100;
+    if (progress >= 1) { floatingRewards.splice(index, 1); continue; }
+    const eased = 1 - (1 - progress) ** 2;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, 1 - progress);
+    ctx.fillStyle = `hsl(${reward.hue} 70% 38%)`;
+    ctx.font = "700 15px ui-monospace, SFMono-Regular, Consolas, monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.shadowColor = "rgba(255,255,255,.9)";
+    ctx.shadowBlur = 5;
+    ctx.fillText(reward.text, reward.x, reward.y - eased * 46);
+    ctx.restore();
+  }
   requestAnimationFrame(drawScene);
 }
 
@@ -317,7 +334,10 @@ canvas.addEventListener("pointerdown", (event) => {
       visualBubbles.splice(index, 1);
       const earned = clickValue(state) * bubble.tier.multiplier;
       addBubbles(state, earned);
-      toast(`${bubble.tier.name} · +${formatNumber(earned)}`);
+      floatingRewards.push({
+        x: bubble.x, y: bubble.y, hue: bubble.tier.hue,
+        text: `+${formatNumber(earned)}`, startedAt: performance.now(),
+      });
       render(true);
       return;
     }
