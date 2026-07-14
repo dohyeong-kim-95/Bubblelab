@@ -2,6 +2,8 @@
 
 설계 문서: [`docs/progression-research.md`](./docs/progression-research.md)
 
+밸런스·콘텐츠 소진 시뮬레이터: [`../_infra/idle-balance.mjs`](../_infra/idle-balance.mjs)
+
 `idle.bubblelab.dev`의 첫 번째 실험. 기존 `slop/bubble-pop`의 버블 캔버스와
 직접 터뜨리는 감각을 가져오되, 모든 플레이어가 월요일 09:00 KST부터 다음
 월요일 09:00 KST까지 같은 시즌을 플레이하는 유한 방치형 게임으로 다시 설계한다.
