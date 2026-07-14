@@ -12,7 +12,12 @@
 <main id="game" hidden>
   <header class="status">
     <a class="icon-link" href="/" aria-label="idle 홈">‹</a>
-    <div class="resource"><strong id="bubble-count">0</strong><span> BUBBLES</span></div>
+    <div class="status-resources">
+      <div class="resource"><strong id="bubble-count">0</strong><span>BUBBLES</span></div>
+      <div class="resource pressure-resource" id="pressure-resource" hidden>
+        <strong id="pressure-count">0</strong><span>PRESSURE</span>
+      </div>
+    </div>
     <a class="icon-link" href="/hall-of-fame/" aria-label="명예의 전당">🏆</a>
   </header>
   <section class="sky" aria-label="버블을 직접 터뜨리는 공간">
@@ -34,6 +39,18 @@
       </div>
     </div>
     <div class="generators" id="generators"></div>
+    <section class="compression locked" id="compression-section">
+      <div class="compression-head">
+        <div><span>SECOND LAYER</span><h2>버블 압축</h2></div>
+        <b id="compression-status">자동화 1 / 7</b>
+      </div>
+      <p id="compression-copy">모든 자동 생산기를 해금하면 압력과 새로운 성장 경로가 열립니다.</p>
+      <div class="pressure-summary" id="pressure-summary" hidden>
+        <strong><span id="pressure-panel-count">0</span> PRESSURE</strong>
+        <span><b id="pressure-rate">0</b>/초</span>
+      </div>
+      <div class="pressure-upgrades" id="pressure-upgrades" hidden></div>
+    </section>
     <div class="danger-zone"><button id="reset-button" type="button">디버깅: 진행 상황 완전 초기화</button></div>
   </section>
 </main>
@@ -59,6 +76,7 @@
   <p class="eyebrow">WELCOME BACK</p>
   <h2>자리를 비운 동안</h2>
   <strong class="offline-earned" id="offline-earned">+0</strong>
+  <strong class="offline-pressure" id="offline-pressure" hidden>+0 PRESSURE</strong>
   <p id="offline-detail"></p>
   <button class="primary" id="offline-close">받기</button>
 </section>
