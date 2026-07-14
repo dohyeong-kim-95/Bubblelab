@@ -81,7 +81,7 @@ $("#start-nickname").value = localStorage.getItem("bl-nick") || "";
 $("#offline-close").addEventListener("click", () => { offlineModal.hidden = true; });
 $("#reset-button").addEventListener("click", () => {
   const confirmed = confirm(
-    "이 브라우저의 Bubble Pop Idle 진행 상황을 완전히 초기화할까요?\n\n주간 명예의 전당에 이미 전송된 기록은 유지됩니다.",
+    "이 버튼은 환생 버튼이 아니라 완전 초기화 버튼입니다.\n진행 상황은 복구할 수 없습니다.\n\n그래도 진행하시겠습니까?",
   );
   if (!confirmed) return;
   localStorage.removeItem(SAVE_KEY);
