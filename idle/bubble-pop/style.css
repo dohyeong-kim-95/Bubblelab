@@ -36,10 +36,6 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .shop-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
 .shop-head h1 { margin: 0; font-size: 1rem; }
 .shop-head span { color: var(--muted); font-size: .62rem; }
-.shop-tools { display:flex; align-items:center; justify-content:flex-end; gap:.55rem; }
-#reset-button { padding:.25rem .4rem; border:0; color:var(--muted); background:transparent;
-  font-size:.6rem; cursor:pointer; text-decoration:underline; text-underline-offset:2px; }
-#reset-button:active { color:var(--ink); }
 .shop h2 { margin: 1.25rem 0 .65rem; color: var(--muted); font-size: .72rem; letter-spacing: .08em; }
 .upgrades { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; margin-top: .9rem; }
 .upgrades button, .generator { border: 1px solid var(--line); color: var(--ink); background: #fff;
@@ -50,6 +46,11 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .upgrades span { color: var(--muted); font-size: .65rem; }
 .upgrades em { display: block; margin-top: .45rem; color: var(--deep); font-size: .68rem; font-style: normal; font-weight: bold; }
 .generators { display: grid; gap: .55rem; padding-bottom: 2rem; }
+.danger-zone { padding:1.2rem 0 2.5rem; text-align:center; opacity:.38; transition:opacity .15s; }
+.danger-zone:hover, .danger-zone:focus-within { opacity:.8; }
+#reset-button { padding:.35rem; border:0; color:var(--muted); background:transparent;
+  font-size:.58rem; cursor:pointer; text-decoration:underline; text-underline-offset:3px; }
+#reset-button:active { color:#a64242; }
 .generator { width: 100%; min-height: 4.6rem; padding: .7rem .8rem; display: grid;
   grid-template-columns: 2.5rem 1fr auto; align-items: center; gap: .65rem; text-align: left; }
 .generator:active, .upgrades button:active { transform: translateY(2px); box-shadow: 0 1px 0 #cde7f0; }
