@@ -6,6 +6,11 @@
 <meta name="theme-color" content="#eefaff">
 <meta name="description" content="일주일 동안 천천히 자라는 Bubblelab 방치형 게임">
 <title>idle.bubblelab.dev</title>
+<link rel="preconnect" href="https://bubblelab.dev">
+<link rel="preconnect" href="https://assets.bubblelab.dev">
+<link rel="preconnect" href="https://games.bubblelab.dev">
+<link rel="preconnect" href="https://slop.bubblelab.dev">
+<link rel="preconnect" href="https://util.bubblelab.dev">
 <style>
   :root { color-scheme:light dark; --ink:light-dark(#17384a,#dff6ff); --muted:light-dark(#688594,#89aebe);
     --line:light-dark(#bcdce8,#2d5263); --panel:light-dark(#fff,#102d3a); --bg:light-dark(#eefaff,#071a23); }
@@ -14,8 +19,23 @@
     font-family:ui-monospace,"SF Mono","Cascadia Mono","Roboto Mono",Consolas,monospace; }
   main { width:min(100%,42rem); margin:0 auto; }
   header { margin-bottom:2rem; text-align:center; }
-  .home { color:var(--muted); font-size:.72rem; }
-  h1 { margin:1.7rem 0 .4rem; font-size:1.35rem; }
+  h1 { margin:0; font-size:1.35rem; }
+  .site-switcher { position:relative; width:max-content; max-width:100%; margin:0 auto 1rem; }
+  .site-trigger { border:0; padding:.4rem .55rem; border-radius:.6rem; color:inherit; background:transparent;
+    font:inherit; font-size:1.35rem; cursor:pointer; }
+  .site-trigger:hover,.site-trigger:focus-visible { background:light-dark(#deeff5,#102d3a); outline:none; }
+  .site-trigger .domain { color:var(--muted); font-weight:normal; }
+  .chevron { display:inline-block; margin-left:.2rem; color:var(--muted); font-size:.65em; transition:transform .15s; }
+  .site-trigger[aria-expanded="true"] .chevron { transform:rotate(180deg); }
+  .site-menu { position:absolute; z-index:30; top:calc(100% + .3rem); left:50%; transform:translateX(-50%);
+    width:13rem; padding:.4rem; border:1px solid var(--line); border-radius:.8rem; background:var(--panel);
+    box-shadow:0 12px 30px light-dark(#1b27331f,#0008); text-align:left; }
+  .site-menu[hidden] { display:none; }
+  .site-menu a { display:grid; grid-template-columns:1.3rem 1fr; align-items:center; padding:.65rem .7rem;
+    border-radius:.55rem; color:inherit; text-decoration:none; font-size:.9rem; }
+  .site-menu a:hover,.site-menu a:focus-visible { background:light-dark(#eef6fa,#1b3a48); outline:none; }
+  .site-menu a[aria-current="page"] { font-weight:bold; }
+  .site-menu .menu-home { margin-bottom:.25rem; border-bottom:1px solid var(--line); }
   .intro { margin:0; color:var(--muted); font-size:.75rem; line-height:1.7; }
   .grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
   .card { position:relative; min-height:17rem; overflow:hidden; display:flex; flex-direction:column;
@@ -41,8 +61,19 @@
 <body>
 <main>
   <header>
-    <a class="home" href="https://bubblelab.dev">← bubblelab.dev</a>
-    <h1>🫧 idle.bubblelab.dev</h1>
+    <div class="site-switcher">
+      <h1><button class="site-trigger" id="siteTrigger" type="button" aria-expanded="false" aria-controls="siteMenu">
+        🫧 <strong>idle</strong><span class="chevron">⌄</span><span class="domain">.bubblelab.dev</span>
+      </button></h1>
+      <nav class="site-menu" id="siteMenu" aria-label="Bubblelab sites" hidden>
+        <a class="menu-home" href="https://bubblelab.dev"><span>🫧</span>bubblelab</a>
+        <a href="https://assets.bubblelab.dev"><span></span>assets</a>
+        <a href="https://games.bubblelab.dev"><span></span>games</a>
+        <a href="https://idle.bubblelab.dev" aria-current="page"><span>✓</span>idle</a>
+        <a href="https://slop.bubblelab.dev"><span></span>slop</a>
+        <a href="https://util.bubblelab.dev"><span></span>util</a>
+      </nav>
+    </div>
     <p class="intro">켜두지 않아도 자라고, 끝이 있어서 기억에 남는 작은 게임.</p>
   </header>
   <section class="grid">
@@ -61,6 +92,31 @@
   <footer>모든 시즌은 매주 월요일 09:00 KST에 함께 시작합니다.</footer>
 </main>
 <script>
+const siteTrigger = document.getElementById("siteTrigger");
+const siteMenu = document.getElementById("siteMenu");
+const closeSiteMenu = () => {
+  siteMenu.hidden = true;
+  siteTrigger.setAttribute("aria-expanded", "false");
+};
+siteTrigger.addEventListener("click", () => {
+  const opening = siteMenu.hidden;
+  siteMenu.hidden = !opening;
+  siteTrigger.setAttribute("aria-expanded", String(opening));
+  if (opening) {
+    siteMenu.querySelector('[aria-current="page"]')?.focus();
+    for (const anchor of siteMenu.querySelectorAll('a:not([aria-current="page"])')) {
+      if (document.head.querySelector(`link[rel="prefetch"][href="${anchor.href}"]`)) continue;
+      const link = document.createElement("link"); link.rel = "prefetch"; link.href = anchor.href;
+      document.head.append(link);
+    }
+  }
+});
+addEventListener("click", (event) => {
+  if (!event.target.closest(".site-switcher")) closeSiteMenu();
+});
+addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !siteMenu.hidden) { closeSiteMenu(); siteTrigger.focus(); }
+});
 const countdown = document.getElementById("countdown");
 const warning = document.getElementById("reset-warning");
 function nextReset(now = new Date()) {
