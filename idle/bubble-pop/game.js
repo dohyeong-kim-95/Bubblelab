@@ -1,7 +1,9 @@
 import {
-  BUBBLE_TIERS, GENERATORS, addBubbles, clickUpgradeCost, clickValue, elapsedDay,
+  BUBBLE_TIERS, GENERATORS, PRESSURE_UPGRADES, RUN_MS, SAVE_VERSION, addBubbles, addPressure,
+  clickUpgradeCost, clickValue, elapsedDay,
   endsAt, flowUpgradeCost, formatNumber, freshState, generatorBulkCost, generatorCost,
-  generatorProduction, maxAffordableGenerators, milestoneProgress, pickBubbleTier, productionPerSecond, remainingText,
+  generatorProduction, maxAffordableGenerators, migrateState, milestoneProgress, pickBubbleTier,
+  pressurePerSecond, pressureUnlocked, pressureUpgradeCost, productionPerSecond, remainingText,
   seasonBounds, settleOffline,
 } from "./game-core.js";
 
@@ -17,6 +19,10 @@ const remainingEl = $("#remaining");
 const generatorsEl = $("#generators");
 const upgradesEl = $("#upgrades");
 const buyModesEl = $("#buy-modes");
+const pressureResourceEl = $("#pressure-resource");
+const pressureCountEl = $("#pressure-count");
+const compressionSection = $("#compression-section");
+const pressureUpgradesEl = $("#pressure-upgrades");
 const startModal = $("#start-modal");
 const offlineModal = $("#offline-modal");
 const finishModal = $("#finish-modal");
@@ -37,18 +43,22 @@ let suppressGeneratorClick = false;
 function loadState() {
   try {
     const parsed = JSON.parse(localStorage.getItem(SAVE_KEY));
-    if (!parsed || parsed.version !== 1 || parsed.season !== seasonBounds().key || !Number.isFinite(parsed.startedAt) ||
+    if (!parsed || ![1, SAVE_VERSION].includes(parsed.version) || parsed.season !== seasonBounds().key || !Number.isFinite(parsed.startedAt) ||
         !Number.isFinite(parsed.bubbles) || !Number.isFinite(parsed.lifetime)) return null;
-    parsed.generators ||= {};
-    for (const { id } of GENERATORS) parsed.generators[id] = Math.max(0, Math.floor(parsed.generators[id] || 0));
-    if (!parsed.starterGranted) {
-      parsed.generators.wand = Math.max(1, parsed.generators.wand);
-      parsed.starterGranted = true;
-    }
-    parsed.clickLevel = Math.max(0, Math.floor(parsed.clickLevel || 0));
-    parsed.flowLevel = Math.max(0, Math.floor(parsed.flowLevel || 0));
-    return parsed;
+    return migrateState(parsed);
   } catch { return null; }
+}
+
+function formatPressure(value) {
+  if (value < 10) return value.toFixed(2);
+  if (value < 100) return value.toFixed(1);
+  return formatNumber(value);
+}
+
+function formatPressureRate(value) {
+  if (value < .01) return value.toFixed(3);
+  if (value < 1) return value.toFixed(2);
+  return formatNumber(value);
 }
 
 function saveState() {
@@ -108,6 +118,9 @@ function resume() {
   resetScene();
   if (result.elapsed >= 60_000 && result.earned > 0 && !state.finished) {
     $("#offline-earned").textContent = `+${formatNumber(result.earned)}`;
+    const offlinePressureEl = $("#offline-pressure");
+    offlinePressureEl.hidden = !(result.pressureEarned > 0);
+    offlinePressureEl.textContent = `+${formatPressure(result.pressureEarned)} PRESSURE`;
     $("#offline-detail").textContent = `${remainingText(result.elapsed)} 동안 자동으로 터뜨렸어요.${result.capped ? " 최대 24시간까지만 계산됐습니다." : ""}`;
     offlineModal.hidden = false;
   }
@@ -169,6 +182,18 @@ function buildShop() {
     else buyUpgrade("flowLevel", flowUpgradeCost(state.flowLevel));
   });
 
+  pressureUpgradesEl.innerHTML = PRESSURE_UPGRADES.map((upgrade) => `
+    <button type="button" data-pressure-upgrade="${upgrade.id}">
+      <b>${upgrade.icon} ${upgrade.name} · Lv.<span class="level">0</span></b>
+      <span class="effect"></span><em class="cost"></em>
+    </button>`).join("");
+  pressureUpgradesEl.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-pressure-upgrade]");
+    if (!button || state.finished) return;
+    const upgrade = PRESSURE_UPGRADES.find(({ id }) => id === button.dataset.pressureUpgrade);
+    if (upgrade) buyPressureUpgrade(upgrade);
+  });
+
   for (const generator of GENERATORS) {
     const button = document.createElement("button");
     button.type = "button";
@@ -218,6 +243,17 @@ function buyUpgrade(key, cost) {
   render(true);
 }
 
+function buyPressureUpgrade(upgrade) {
+  if (!pressureUnlocked(state)) return;
+  const level = state.pressureUpgrades[upgrade.id];
+  const cost = pressureUpgradeCost(upgrade, level);
+  if (state.pressure < cost) { toast("압력이 조금 더 필요해요"); return; }
+  state.pressure = Math.max(0, state.pressure - cost);
+  state.pressureUpgrades[upgrade.id]++;
+  saveState();
+  render(true);
+}
+
 function buyGenerator(generator, quiet = false) {
   if (state.lifetime < generator.unlockAt) {
     if (!quiet) toast(`누적 ${formatNumber(generator.unlockAt)} 버블에 열립니다`); return false;
@@ -238,6 +274,13 @@ function buyGenerator(generator, quiet = false) {
   return true;
 }
 
+function pressureEffectText(id) {
+  if (id === "flow") return "모든 자동 생산 ×1.35";
+  if (id === "pop") return "직접·희귀 버블 보상 ×1.75";
+  if (id === "storage") return "오프라인 생산 효율 +25%p";
+  return "압력 생산 ×1.6";
+}
+
 function render(force = false) {
   if (!state) return;
   const now = Date.now();
@@ -248,12 +291,46 @@ function render(force = false) {
   rateEl.textContent = formatNumber(productionPerSecond(state));
   dayEl.textContent = `DAY ${day} / 7`;
   remainingEl.textContent = state.finished ? "실험 종료" : `${remainingText(endsAt(state) - now)} 남음`;
+  const compressionOpen = pressureUnlocked(state);
+  const ownedGeneratorTypes = GENERATORS.filter(({ id }) => state.generators[id] > 0).length;
   const nextUnlock = [...GENERATORS.slice(1), ...BUBBLE_TIERS.slice(1)]
     .filter((item) => item.unlockAt > state.lifetime)
     .sort((a, b) => a.unlockAt - b.unlockAt)[0];
   $("#tap-hint").textContent = nextUnlock
     ? `다음 해금: ${nextUnlock.name} · ${formatNumber(nextUnlock.unlockAt - state.lifetime)} 버블`
-    : "모든 버블과 자동화를 해금했습니다";
+    : compressionOpen ? "압력을 모아 이번 시즌의 성장 경로를 선택하세요"
+      : `버블 압축 준비 · 자동화 ${ownedGeneratorTypes} / ${GENERATORS.length}`;
+
+  pressureResourceEl.hidden = !compressionOpen;
+  compressionSection.classList.toggle("locked", !compressionOpen);
+  $("#compression-status").textContent = compressionOpen ? "OPEN" : `자동화 ${ownedGeneratorTypes} / ${GENERATORS.length}`;
+  $("#compression-copy").textContent = compressionOpen
+    ? "자동 생산이 압력을 만듭니다. 원하는 성장 경로부터 강화하세요."
+    : "모든 자동 생산기를 해금하면 압력과 새로운 성장 경로가 열립니다.";
+  $("#pressure-summary").hidden = !compressionOpen;
+  pressureUpgradesEl.hidden = !compressionOpen;
+  if (compressionOpen) {
+    const pressureRate = pressurePerSecond(state);
+    pressureCountEl.textContent = formatPressure(state.pressure);
+    $("#pressure-panel-count").textContent = formatPressure(state.pressure);
+    $("#pressure-rate").textContent = formatPressureRate(pressureRate);
+    if (!state.compressionSeen) {
+      state.compressionSeen = true;
+      compressionSection.classList.add("just-unlocked");
+      setTimeout(() => compressionSection.classList.remove("just-unlocked"), 800);
+      saveState();
+    }
+  }
+
+  for (const upgrade of PRESSURE_UPGRADES) {
+    const button = pressureUpgradesEl.querySelector(`[data-pressure-upgrade="${upgrade.id}"]`);
+    const level = state.pressureUpgrades[upgrade.id];
+    const cost = pressureUpgradeCost(upgrade, level);
+    button.querySelector(".level").textContent = level;
+    button.querySelector(".effect").textContent = pressureEffectText(upgrade.id);
+    button.querySelector(".cost").textContent = `💠 ${formatPressure(cost)}`;
+    button.disabled = state.finished || !compressionOpen || state.pressure < cost;
+  }
 
   const clickButton = upgradesEl.querySelector('[data-upgrade="click"]');
   clickButton.querySelector(".level").textContent = state.clickLevel;
@@ -277,6 +354,7 @@ function render(force = false) {
     const progress = locked ? 0 : milestoneProgress(owned);
     const currentRate = generatorProduction(generator, owned, state.flowLevel);
     const nextRate = generatorProduction(generator, owned + 1, state.flowLevel);
+    const pressureFlow = 1.35 ** state.pressureUpgrades.flow;
     button.classList.toggle("locked", locked);
     button.style.setProperty("--progress", `${progress * 100}%`);
     button.disabled = state.finished || locked || count === 0 || state.bubbles < cost;
@@ -286,7 +364,7 @@ function render(force = false) {
     button.querySelector(".next-double").textContent = locked ? "" : `NEXT DOUBLE: ${nextMark}`;
     button.querySelector(".desc").textContent = locked
       ? `누적 ${formatNumber(generator.unlockAt)} 버블에 해금`
-      : `+${formatNumber(nextRate - currentRate)}/초`;
+      : `+${formatNumber((nextRate - currentRate) * pressureFlow)}/초`;
   }
 }
 
@@ -327,7 +405,11 @@ function tick() {
     const now = Date.now();
     const activeUntil = Math.min(now, endsAt(state));
     const from = Math.min(lastTick, activeUntil);
-    if (!state.finished && activeUntil > from) addBubbles(state, productionPerSecond(state) * (activeUntil - from) / 1000);
+    if (!state.finished && activeUntil > from) {
+      const elapsed = (activeUntil - from) / 1000;
+      addBubbles(state, productionPerSecond(state) * elapsed);
+      addPressure(state, pressurePerSecond(state) * elapsed);
+    }
     lastTick = now;
     if (now >= endsAt(state)) finish();
     if (now - lastSave >= 5000) { saveState(); lastSave = now; }
