@@ -1,6 +1,6 @@
 export const RUN_MS = 7 * 24 * 60 * 60 * 1000;
 export const OFFLINE_CAP_MS = 24 * 60 * 60 * 1000;
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 export const GENERATORS = Object.freeze([
   { id: "wand", unlockAt: 0, icon: "🪄", name: "버블 막대", baseCost: 4, growth: 1.30, rate: 1.5 },
