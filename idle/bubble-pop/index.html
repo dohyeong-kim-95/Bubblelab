@@ -24,7 +24,15 @@
   <section class="shop">
     <div class="shop-head"><h1>Bubble Pop Idle</h1><span>오프라인 최대 24시간</span></div>
     <div class="upgrades" id="upgrades"></div>
-    <h2>자동 터뜨리기</h2>
+    <div class="generator-heading">
+      <h2>자동 터뜨리기</h2>
+      <div class="buy-modes" id="buy-modes" role="group" aria-label="생산기 구매 수량">
+        <button type="button" data-buy-mode="1" aria-pressed="true">×1</button>
+        <button type="button" data-buy-mode="10" aria-pressed="false">×10</button>
+        <button type="button" data-buy-mode="100" aria-pressed="false">×100</button>
+        <button type="button" data-buy-mode="max" aria-pressed="false">MAX</button>
+      </div>
+    </div>
     <div class="generators" id="generators"></div>
     <div class="danger-zone"><button id="reset-button" type="button">디버깅: 진행 상황 완전 초기화</button></div>
   </section>
