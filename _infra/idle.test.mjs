@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  GENERATORS, OFFLINE_CAP_MS, clickValue, elapsedDay, freshState,
+  GENERATORS, OFFLINE_CAP_MS, PRESSURE_UPGRADES, SAVE_VERSION, clickValue, elapsedDay, freshState,
   generatorBulkCost, generatorCost, maxAffordableGenerators, milestoneMultiplier, milestoneProgress, pickBubbleTier, productionPerSecond,
-  seasonBounds, settleOffline,
+  migrateState, pressurePerSecond, pressureUnlocked, pressureUpgradeCost, seasonBounds, settleOffline,
 } from "../idle/bubble-pop/game-core.js";
+import { simulateFirstLayer } from "./idle-balance.mjs";
 import { RecordsDO } from "./records.js";
 
 class MemoryStorage {
@@ -70,6 +71,47 @@ test("the free first generator makes the first purchase available within seconds
   assert.ok(generatorCost(wand, 1) / productionPerSecond(state) < 4);
 });
 
+test("the tuned first layer has an optimized lower bound between 15 and 25 minutes", () => {
+  const result = simulateFirstLayer();
+  assert.equal(result.completed, true);
+  assert.ok(result.seconds >= 15 * 60, `too fast: ${result.seconds}s`);
+  assert.ok(result.seconds <= 25 * 60, `too slow: ${result.seconds}s`);
+});
+
+test("version one saves migrate without losing weekly progress", () => {
+  const old = freshState(Date.UTC(2026, 6, 14));
+  old.version = 1;
+  old.bubbles = 123;
+  old.generators.ocean = 2;
+  delete old.pressure;
+  delete old.pressureLifetime;
+  delete old.pressureUpgrades;
+  const migrated = migrateState(old);
+  assert.equal(migrated.version, SAVE_VERSION);
+  assert.equal(migrated.bubbles, 123);
+  assert.equal(migrated.generators.ocean, 2);
+  assert.equal(migrated.pressure, 0);
+  assert.deepEqual(Object.keys(migrated.pressureUpgrades), PRESSURE_UPGRADES.map(({ id }) => id));
+});
+
+test("owning every generator opens pressure and its four growth paths", () => {
+  const state = freshState();
+  assert.equal(pressureUnlocked(state), false);
+  for (const generator of GENERATORS) state.generators[generator.id] = 1;
+  assert.equal(pressureUnlocked(state), true);
+  assert.ok(pressurePerSecond(state) > 0);
+  const baseProduction = productionPerSecond(state);
+  const baseClick = clickValue(state);
+  const basePressure = pressurePerSecond(state);
+  state.pressureUpgrades.flow = 1;
+  assert.equal(productionPerSecond(state), baseProduction * 1.35);
+  state.pressureUpgrades.pop = 1;
+  assert.equal(clickValue(state), baseClick * 1.75);
+  state.pressureUpgrades.compression = 1;
+  assert.ok(pressurePerSecond(state) > basePressure * 1.6);
+  assert.equal(pressureUpgradeCost(PRESSURE_UPGRADES[0], 2), 16);
+});
+
 test("active and idle upgrades visibly increase growth", () => {
   const state = freshState();
   state.generators.wand = 10;
@@ -89,6 +131,22 @@ test("offline earnings are capped at 24 hours", () => {
   assert.equal(result.elapsed, OFFLINE_CAP_MS);
   assert.equal(result.capped, true);
   assert.equal(state.lifetime, productionPerSecond(state) * 86400);
+});
+
+test("the pressure storage path improves offline bubbles and pressure without extending the cap", () => {
+  const start = Date.UTC(2026, 6, 14);
+  const base = freshState(start);
+  const stored = freshState(start);
+  for (const generator of GENERATORS) {
+    base.generators[generator.id] = 1;
+    stored.generators[generator.id] = 1;
+  }
+  stored.pressureUpgrades.storage = 1;
+  const baseResult = settleOffline(base, start + 3600000);
+  const storedResult = settleOffline(stored, start + 3600000);
+  assert.equal(storedResult.elapsed, baseResult.elapsed);
+  assert.equal(storedResult.earned, baseResult.earned * 1.25);
+  assert.equal(storedResult.pressureEarned, baseResult.pressureEarned * 1.25);
 });
 
 test("finite idle hall keeps one champion for every weekly season", async () => {
