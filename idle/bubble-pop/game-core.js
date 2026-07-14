@@ -54,8 +54,10 @@ export function pickBubbleTier(lifetime, random = Math.random) {
 }
 
 export function milestoneMultiplier(owned) {
-  return 2 ** [25, 50, 100].filter((mark) => owned >= mark).length;
+  return 2 ** Math.floor(owned / 25);
 }
+
+export const milestoneProgress = (owned) => (owned % 25) / 25;
 
 export const ownershipEfficiency = (owned) => owned > 0 ? 1.02 ** (owned - 1) : 1;
 
