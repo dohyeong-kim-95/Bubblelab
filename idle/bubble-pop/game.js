@@ -1,10 +1,11 @@
 import {
-  BUBBLE_TIERS, GENERATORS, PRESSURE_UPGRADES, RUN_MS, SAVE_VERSION, addBubbles, addPressure,
+  BUBBLE_TIERS, GENERATORS, PRESSURE_UPGRADES, RUN_MS, SAVE_VERSION, actualGeneratorProduction, addBubbles, addPressure,
   clickUpgradeCost, clickValue, elapsedDay,
   endsAt, flowUpgradeCost, formatNumber, freshState, generatorBulkCost, generatorCost,
-  generatorProduction, maxAffordableGenerators, migrateState, milestoneProgress, pickBubbleTier,
+  maxAffordableGenerators, migrateState, milestoneProgress, pickBubbleTier, purchaseRevivalOffer,
   pressurePerSecond, pressureUnlocked, pressureUpgradeCost, productionPerSecond, remainingText,
   seasonBounds, settleOffline,
+  updateRevivalOffer,
 } from "./game-core.js";
 
 const SAVE_KEY = "bl-bubble-pop-idle-v1";
@@ -23,6 +24,7 @@ const pressureResourceEl = $("#pressure-resource");
 const pressureCountEl = $("#pressure-count");
 const compressionSection = $("#compression-section");
 const pressureUpgradesEl = $("#pressure-upgrades");
+const revivalItemEl = $("#revival-item");
 const startModal = $("#start-modal");
 const offlineModal = $("#offline-modal");
 const finishModal = $("#finish-modal");
@@ -43,7 +45,7 @@ let suppressGeneratorClick = false;
 function loadState() {
   try {
     const parsed = JSON.parse(localStorage.getItem(SAVE_KEY));
-    if (!parsed || ![1, SAVE_VERSION].includes(parsed.version) || parsed.season !== seasonBounds().key || !Number.isFinite(parsed.startedAt) ||
+    if (!parsed || !Number.isInteger(parsed.version) || parsed.version < 1 || parsed.version > SAVE_VERSION || parsed.season !== seasonBounds().key || !Number.isFinite(parsed.startedAt) ||
         !Number.isFinite(parsed.bubbles) || !Number.isFinite(parsed.lifetime)) return null;
     return migrateState(parsed);
   } catch { return null; }
@@ -193,6 +195,17 @@ function buildShop() {
     const upgrade = PRESSURE_UPGRADES.find(({ id }) => id === button.dataset.pressureUpgrade);
     if (upgrade) buyPressureUpgrade(upgrade);
   });
+  revivalItemEl.addEventListener("click", () => {
+    if (!state.revivalOffer || state.finished) return;
+    if (state.pressure < state.revivalOffer.cost) { toast("압력이 조금 더 필요해요"); return; }
+    const offer = purchaseRevivalOffer(state);
+    if (!offer) return;
+    const generator = GENERATORS.find(({ id }) => id === offer.id);
+    toast(`${generator.name} 생산이 ×${formatNumber(offer.multiplier)} 증폭됐어요`);
+    updateRevivalOffer(state);
+    saveState();
+    render(true);
+  });
 
   for (const generator of GENERATORS) {
     const button = document.createElement("button");
@@ -292,6 +305,7 @@ function render(force = false) {
   dayEl.textContent = `DAY ${day} / 7`;
   remainingEl.textContent = state.finished ? "실험 종료" : `${remainingText(endsAt(state) - now)} 남음`;
   const compressionOpen = pressureUnlocked(state);
+  if (compressionOpen && updateRevivalOffer(state, now)) saveState();
   const ownedGeneratorTypes = GENERATORS.filter(({ id }) => state.generators[id] > 0).length;
   const nextUnlock = [...GENERATORS.slice(1), ...BUBBLE_TIERS.slice(1)]
     .filter((item) => item.unlockAt > state.lifetime)
@@ -309,6 +323,19 @@ function render(force = false) {
     : "모든 자동 생산기를 해금하면 압력과 새로운 성장 경로가 열립니다.";
   $("#pressure-summary").hidden = !compressionOpen;
   pressureUpgradesEl.hidden = !compressionOpen;
+  const revivalOffer = state.revivalOffer;
+  revivalItemEl.hidden = !compressionOpen || !revivalOffer;
+  if (revivalOffer) {
+    const generator = GENERATORS.find(({ id }) => id === revivalOffer.id);
+    revivalItemEl.querySelector(".revival-name").textContent =
+      `♻️ ${generator.name} 역류 증폭 · Mk.${revivalOffer.tier}`;
+    revivalItemEl.querySelector(".revival-gap").textContent =
+      `최고 설비보다 ${formatNumber(revivalOffer.ratio)}배 느림`;
+    revivalItemEl.querySelector(".revival-effect").textContent =
+      `생산 ×${formatNumber(revivalOffer.multiplier)}`;
+    revivalItemEl.querySelector(".revival-cost").textContent = `💠 ${formatPressure(revivalOffer.cost)}`;
+    revivalItemEl.disabled = state.finished || state.pressure < revivalOffer.cost;
+  }
   if (compressionOpen) {
     const pressureRate = pressurePerSecond(state);
     pressureCountEl.textContent = formatPressure(state.pressure);
@@ -352,8 +379,8 @@ function render(force = false) {
     const { count, cost } = locked ? { count: 0, cost: 0 } : selectedPurchase(generator);
     const nextMark = (Math.floor(owned / 25) + 1) * 25;
     const progress = locked ? 0 : milestoneProgress(owned);
-    const currentRate = generatorProduction(generator, owned, state.flowLevel);
-    const nextRate = generatorProduction(generator, owned + 1, state.flowLevel);
+    const currentRate = actualGeneratorProduction(state, generator, owned);
+    const nextRate = actualGeneratorProduction(state, generator, owned + 1);
     const pressureFlow = 1.35 ** state.pressureUpgrades.flow;
     button.classList.toggle("locked", locked);
     button.style.setProperty("--progress", `${progress * 100}%`);
