@@ -1,7 +1,7 @@
 import {
-  GENERATORS, addBubbles, clickUpgradeCost, clickValue, elapsedDay,
+  BUBBLE_TIERS, GENERATORS, addBubbles, clickUpgradeCost, clickValue, elapsedDay,
   endsAt, flowUpgradeCost, formatNumber, freshState, generatorCost,
-  milestoneMultiplier, pickBubbleTier, productionPerSecond, remainingText,
+  generatorProduction, pickBubbleTier, productionPerSecond, remainingText,
   seasonBounds, settleOffline,
 } from "./game-core.js";
 
@@ -26,7 +26,6 @@ let lastTick = Date.now();
 let lastRender = 0;
 let lastSave = 0;
 let finishShown = false;
-let tapCount = 0;
 let lastSyncAt = 0;
 
 function loadState() {
@@ -36,6 +35,10 @@ function loadState() {
         !Number.isFinite(parsed.bubbles) || !Number.isFinite(parsed.lifetime)) return null;
     parsed.generators ||= {};
     for (const { id } of GENERATORS) parsed.generators[id] = Math.max(0, Math.floor(parsed.generators[id] || 0));
+    if (!parsed.starterGranted) {
+      parsed.generators.wand = Math.max(1, parsed.generators.wand);
+      parsed.starterGranted = true;
+    }
     parsed.clickLevel = Math.max(0, Math.floor(parsed.clickLevel || 0));
     parsed.flowLevel = Math.max(0, Math.floor(parsed.flowLevel || 0));
     return parsed;
@@ -136,15 +139,16 @@ function buyUpgrade(key, cost) {
 }
 
 function buyGenerator(generator) {
-  const day = elapsedDay(state);
-  if (day < generator.day) { toast(`DAY ${generator.day}에 열립니다`); return; }
+  if (state.lifetime < generator.unlockAt) {
+    toast(`누적 ${formatNumber(generator.unlockAt)} 버블에 열립니다`); return;
+  }
   const owned = state.generators[generator.id];
   const cost = generatorCost(generator, owned);
   if (state.bubbles < cost) { toast("버블이 조금 더 필요해요"); return; }
   state.bubbles -= cost;
   state.generators[generator.id] = owned + 1;
   const next = state.generators[generator.id];
-  if ([10, 25, 50].includes(next)) toast(`${generator.name} ${next}개! 생산량이 2배가 됐어요`);
+  if ([25, 50, 100].includes(next)) toast(`${generator.name} ${next}개! 생산량이 2배가 됐어요`);
   saveState();
   render(true);
 }
@@ -159,6 +163,12 @@ function render(force = false) {
   rateEl.textContent = formatNumber(productionPerSecond(state));
   dayEl.textContent = `DAY ${day} / 7`;
   remainingEl.textContent = state.finished ? "실험 종료" : `${remainingText(endsAt(state) - now)} 남음`;
+  const nextUnlock = [...GENERATORS.slice(1), ...BUBBLE_TIERS.slice(1)]
+    .filter((item) => item.unlockAt > state.lifetime)
+    .sort((a, b) => a.unlockAt - b.unlockAt)[0];
+  $("#tap-hint").textContent = nextUnlock
+    ? `다음 해금: ${nextUnlock.name} · ${formatNumber(nextUnlock.unlockAt - state.lifetime)} 버블`
+    : "모든 버블과 자동화를 해금했습니다";
 
   const clickButton = upgradesEl.querySelector('[data-upgrade="click"]');
   clickButton.querySelector(".level").textContent = state.clickLevel;
@@ -173,16 +183,17 @@ function render(force = false) {
     const button = generatorButtons.get(generator.id);
     const owned = state.generators[generator.id];
     const cost = generatorCost(generator, owned);
-    const locked = day < generator.day;
-    const multiplier = milestoneMultiplier(owned);
-    const nextMark = [10, 25, 50].find((mark) => owned < mark);
+    const locked = state.lifetime < generator.unlockAt;
+    const nextMark = [25, 50, 100].find((mark) => owned < mark);
+    const currentRate = generatorProduction(generator, owned, state.flowLevel);
+    const nextRate = generatorProduction(generator, owned + 1, state.flowLevel);
     button.classList.toggle("locked", locked);
     button.disabled = state.finished || locked || state.bubbles < cost;
-    button.querySelector(".owned").textContent = locked ? `DAY ${generator.day}` : owned;
+    button.querySelector(".owned").textContent = locked ? "🔒" : owned;
     button.querySelector(".cost").textContent = locked ? "잠김" : `🫧 ${formatNumber(cost)}`;
     button.querySelector(".desc").textContent = locked
-      ? `${generator.day}일차에 해금`
-      : `${formatNumber(generator.rate * multiplier * 1.6 ** state.flowLevel)}/초${nextMark ? ` · ${nextMark}개에서 ×2` : " · MAX 보너스"}`;
+      ? `누적 ${formatNumber(generator.unlockAt)} 버블에 해금`
+      : `구매 시 +${formatNumber(nextRate - currentRate)}/초${nextMark ? ` · ${nextMark}개에서 ×2` : " · MAX 보너스"}`;
   }
 }
 
@@ -248,7 +259,7 @@ function resizeCanvas() {
 
 function spawnBubble(initial = false) {
   const radius = 17 + Math.random() * 26;
-  const tier = pickBubbleTier(state ? elapsedDay(state) : 1);
+  const tier = pickBubbleTier(state?.lifetime || 0);
   visualBubbles.push({
     x: radius + Math.random() * Math.max(1, canvasWidth - radius * 2),
     y: initial ? 70 + Math.random() * Math.max(1, canvasHeight - 100) : canvasHeight + radius,
@@ -295,8 +306,6 @@ canvas.addEventListener("pointerdown", (event) => {
       visualBubbles.splice(index, 1);
       const earned = clickValue(state) * bubble.tier.multiplier;
       addBubbles(state, earned);
-      tapCount++;
-      if (tapCount === 3) $("#tap-hint").style.opacity = "0";
       toast(`${bubble.tier.name} · +${formatNumber(earned)}`);
       render(true);
       return;
