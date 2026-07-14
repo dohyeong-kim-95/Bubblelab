@@ -174,7 +174,7 @@ function buildShop() {
     <button type="button" data-upgrade="click"><b>👆 터치 파워 · Lv.<span class="level"></span></b>
       <span>직접 터뜨리는 버블 ×2</span><em class="cost"></em></button>
     <button type="button" data-upgrade="flow"><b>💨 안정된 흐름 · Lv.<span class="level"></span></b>
-      <span>모든 자동 생산 ×1.6</span><em class="cost"></em></button>`;
+      <span>모든 자동 생산 ×1.45</span><em class="cost"></em></button>`;
   upgradesEl.addEventListener("click", (event) => {
     const button = event.target.closest("button[data-upgrade]");
     if (!button || state.finished) return;
