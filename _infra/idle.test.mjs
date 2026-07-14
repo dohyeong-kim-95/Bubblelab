@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  GENERATORS, OFFLINE_CAP_MS, PRESSURE_UPGRADES, SAVE_VERSION, clickValue, elapsedDay, freshState,
+  FLOW_MULTIPLIER, GENERATORS, OFFLINE_CAP_MS, PRESSURE_UPGRADES, SAVE_VERSION, clickValue, elapsedDay, freshState,
   generatorBulkCost, generatorCost, maxAffordableGenerators, milestoneMultiplier, milestoneProgress, pickBubbleTier, productionPerSecond,
   migrateState, pressurePerSecond, pressureUnlocked, pressureUpgradeCost, seasonBounds, settleOffline,
 } from "../idle/bubble-pop/game-core.js";
@@ -71,11 +71,11 @@ test("the free first generator makes the first purchase available within seconds
   assert.ok(generatorCost(wand, 1) / productionPerSecond(state) < 4);
 });
 
-test("the tuned first layer has an optimized lower bound between 15 and 25 minutes", () => {
+test("the tuned first layer has an optimized lower bound between 30 and 40 minutes", () => {
   const result = simulateFirstLayer();
   assert.equal(result.completed, true);
-  assert.ok(result.seconds >= 15 * 60, `too fast: ${result.seconds}s`);
-  assert.ok(result.seconds <= 25 * 60, `too slow: ${result.seconds}s`);
+  assert.ok(result.seconds >= 30 * 60, `too fast: ${result.seconds}s`);
+  assert.ok(result.seconds <= 40 * 60, `too slow: ${result.seconds}s`);
 });
 
 test("version one saves migrate without losing weekly progress", () => {
@@ -117,7 +117,7 @@ test("active and idle upgrades visibly increase growth", () => {
   state.generators.wand = 10;
   const base = productionPerSecond(state);
   state.flowLevel = 1;
-  assert.equal(productionPerSecond(state), base * 1.6);
+  assert.equal(productionPerSecond(state), base * FLOW_MULTIPLIER);
   assert.equal(clickValue(state), 1);
   state.clickLevel = 3;
   assert.equal(clickValue(state), 8);
