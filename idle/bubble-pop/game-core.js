@@ -6,11 +6,21 @@ export const GENERATORS = Object.freeze([
   { id: "wand", unlockAt: 0, icon: "🪄", name: "버블 막대", baseCost: 4, growth: 1.30, rate: 1.5 },
   { id: "needle", unlockAt: 100, icon: "📌", name: "자동 바늘", baseCost: 180, growth: 1.28, rate: 14 },
   { id: "fan", unlockAt: 2500, icon: "🌀", name: "거품 선풍기", baseCost: 3200, growth: 1.26, rate: 180 },
-  { id: "lab", unlockAt: 50000, icon: "🧪", name: "버블 연구소", baseCost: 65000, growth: 1.24, rate: 3400 },
-  { id: "cloud", unlockAt: 1000000, icon: "☁️", name: "비눗방울 구름", baseCost: 1400000, growth: 1.22, rate: 70000 },
-  { id: "reactor", unlockAt: 25000000, icon: "⚛️", name: "거품 반응로", baseCost: 38000000, growth: 1.20, rate: 1900000 },
-  { id: "ocean", unlockAt: 750000000, icon: "🌊", name: "버블 바다", baseCost: 1100000000, growth: 1.18, rate: 58000000 },
+  { id: "lab", unlockAt: 100000, icon: "🧪", name: "버블 연구소", baseCost: 150000, growth: 1.24, rate: 800 },
+  { id: "cloud", unlockAt: 7000000, icon: "☁️", name: "비눗방울 구름", baseCost: 10000000, growth: 1.22, rate: 40000 },
+  { id: "reactor", unlockAt: 500000000, icon: "⚛️", name: "거품 반응로", baseCost: 800000000, growth: 1.20, rate: 4000000 },
+  { id: "ocean", unlockAt: 50000000000, icon: "🌊", name: "버블 바다", baseCost: 80000000000, growth: 1.18, rate: 250000000 },
 ]);
+
+export const PRESSURE_UPGRADES = Object.freeze([
+  { id: "flow", icon: "🌊", name: "압축 흐름", baseCost: 1, growth: 4 },
+  { id: "pop", icon: "✨", name: "표면 파동", baseCost: 1, growth: 4 },
+  { id: "storage", icon: "🫙", name: "보존 용기", baseCost: 2, growth: 4 },
+  { id: "compression", icon: "💠", name: "심층 압축", baseCost: 3, growth: 4 },
+]);
+
+export const PRESSURE_BASE_PRODUCTION = 1e9;
+export const PRESSURE_RATE = .00025;
 
 export const BUBBLE_TIERS = Object.freeze([
   { id: "clear", unlockAt: 0, name: "맑은 버블", multiplier: 1, chance: 1, hue: 198 },
@@ -30,10 +40,36 @@ export function freshState(now = Date.now()) {
   const season = seasonBounds(now);
   return {
     version: SAVE_VERSION, season: season.key, startedAt: season.start, lastSeenAt: now, bubbles: 0,
-    lifetime: 0, clickLevel: 0, flowLevel: 0,
+    lifetime: 0, clickLevel: 0, flowLevel: 0, pressure: 0, pressureLifetime: 0,
+    pressureUpgrades: Object.fromEntries(PRESSURE_UPGRADES.map(({ id }) => [id, 0])),
+    compressionSeen: false,
     generators: Object.fromEntries(GENERATORS.map(({ id }) => [id, id === "wand" ? 1 : 0])),
     starterGranted: true, finished: false, submitted: false,
   };
+}
+
+export function migrateState(state) {
+  if (!state || ![1, SAVE_VERSION].includes(state.version)) return null;
+  state.version = SAVE_VERSION;
+  state.generators ||= {};
+  for (const { id } of GENERATORS) {
+    state.generators[id] = Math.max(0, Math.floor(state.generators[id] || 0));
+  }
+  if (!state.starterGranted) {
+    state.generators.wand = Math.max(1, state.generators.wand);
+    state.starterGranted = true;
+  }
+  state.clickLevel = Math.max(0, Math.floor(state.clickLevel || 0));
+  state.flowLevel = Math.max(0, Math.floor(state.flowLevel || 0));
+  state.pressure = Number.isFinite(state.pressure) ? Math.max(0, state.pressure) : 0;
+  state.pressureLifetime = Number.isFinite(state.pressureLifetime)
+    ? Math.max(state.pressure, state.pressureLifetime) : state.pressure;
+  state.pressureUpgrades ||= {};
+  for (const { id } of PRESSURE_UPGRADES) {
+    state.pressureUpgrades[id] = Math.max(0, Math.floor(state.pressureUpgrades[id] || 0));
+  }
+  state.compressionSeen = Boolean(state.compressionSeen);
+  return state;
 }
 
 export const elapsedDay = (state, now = Date.now()) =>
@@ -84,7 +120,7 @@ export function maxAffordableGenerators(generator, owned, bubbles) {
 }
 
 export function clickValue(state) {
-  return 1 * 2 ** state.clickLevel;
+  return 2 ** state.clickLevel * 1.75 ** (state.pressureUpgrades?.pop || 0);
 }
 
 export function generatorProduction(generator, owned, flowLevel = 0) {
@@ -93,11 +129,28 @@ export function generatorProduction(generator, owned, flowLevel = 0) {
 }
 
 export function productionPerSecond(state) {
-  return GENERATORS.reduce((sum, generator) => {
+  const base = GENERATORS.reduce((sum, generator) => {
     const owned = state.generators[generator.id] || 0;
     return sum + generatorProduction(generator, owned, state.flowLevel);
   }, 0);
+  return base * 1.35 ** (state.pressureUpgrades?.flow || 0);
 }
+
+export const pressureUnlocked = (state) =>
+  GENERATORS.every(({ id }) => (state.generators?.[id] || 0) > 0);
+
+export const pressureUpgradeCost = (upgrade, level) =>
+  upgrade.baseCost * upgrade.growth ** level;
+
+export function pressurePerSecond(state) {
+  if (!pressureUnlocked(state)) return 0;
+  const compressionLevel = state.pressureUpgrades?.compression || 0;
+  return Math.sqrt(productionPerSecond(state) / PRESSURE_BASE_PRODUCTION) *
+    PRESSURE_RATE * 1.6 ** compressionLevel;
+}
+
+export const offlineEfficiency = (state) =>
+  1 + .25 * (state.pressureUpgrades?.storage || 0);
 
 export const clickUpgradeCost = (level) => 25 * 4 ** level;
 export const flowUpgradeCost = (level) => 150 * 6 ** level;
@@ -109,15 +162,25 @@ export function addBubbles(state, amount) {
   return amount;
 }
 
+export function addPressure(state, amount) {
+  if (!Number.isFinite(amount) || amount <= 0) return 0;
+  state.pressure += amount;
+  state.pressureLifetime += amount;
+  return amount;
+}
+
 export function settleOffline(state, now = Date.now()) {
   const until = Math.min(now, endsAt(state));
   const from = Math.min(Math.max(state.lastSeenAt || state.startedAt, state.startedAt), until);
   const elapsed = Math.min(Math.max(0, until - from), OFFLINE_CAP_MS);
-  const earned = productionPerSecond(state) * elapsed / 1000;
+  const efficiency = offlineEfficiency(state);
+  const earned = productionPerSecond(state) * elapsed / 1000 * efficiency;
+  const pressureEarned = pressurePerSecond(state) * elapsed / 1000 * efficiency;
   addBubbles(state, earned);
+  addPressure(state, pressureEarned);
   state.lastSeenAt = now;
   if (now >= endsAt(state)) state.finished = true;
-  return { earned, elapsed, capped: until - from > OFFLINE_CAP_MS };
+  return { earned, pressureEarned, elapsed, capped: until - from > OFFLINE_CAP_MS };
 }
 
 export function formatNumber(value) {
