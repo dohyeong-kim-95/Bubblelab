@@ -1,5 +1,5 @@
 import {
-  GENERATORS, flowUpgradeCost, freshState, generatorCost, generatorProduction,
+  FLOW_MULTIPLIER, GENERATORS, flowUpgradeCost, freshState, generatorCost, generatorProduction,
   productionPerSecond,
 } from "../idle/bubble-pop/game-core.js";
 
@@ -33,7 +33,7 @@ export function simulateFirstLayer({ stepSeconds = .1, maxSeconds = 24 * 60 * 60
       });
 
     const flowCost = flowUpgradeCost(state.flowLevel);
-    const flowGain = productionPerSecond(state) * .6;
+    const flowGain = productionPerSecond(state) * (FLOW_MULTIPLIER - 1);
     choices.push({ type: "flow", cost: flowCost, payback: flowGain ? flowCost / flowGain : Infinity });
     choices.sort((left, right) => left.payback - right.payback);
 
