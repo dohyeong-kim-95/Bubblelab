@@ -73,6 +73,20 @@ button, a { -webkit-tap-highlight-color: transparent; }
   padding:.7rem .75rem; border-radius:.8rem; color:#4c3a92; background:#fff9; }
 .pressure-summary > strong { font-size:.8rem; }
 .pressure-summary > span { color:var(--muted); font-size:.58rem; }
+.revival-item { position:relative; width:100%; min-height:6.3rem; margin:0 0 .65rem; padding:.8rem .85rem;
+  border:1px solid #e5b960; border-radius:.9rem; color:var(--ink); background:linear-gradient(135deg,#fffdf6,#fff3cf);
+  text-align:left; cursor:pointer; box-shadow:0 3px 0 #ead39d; overflow:hidden; }
+.revival-item::after { content:""; position:absolute; width:5rem; height:5rem; right:-1.5rem; top:-1.7rem;
+  border:1px solid #e2bd6c66; border-radius:50%; box-shadow:0 0 0 .8rem #edca7b18,0 0 0 1.6rem #edca7b10; }
+.revival-item:active { transform:translateY(2px); box-shadow:0 1px 0 #ead39d; }
+.revival-item:disabled { opacity:.58; transform:none; cursor:default; }
+.revival-item > * { position:relative; z-index:1; display:block; }
+.revival-label { margin-bottom:.35rem; color:#a16b12; font-size:.48rem; font-weight:900; letter-spacing:.13em; }
+.revival-name { padding-right:4rem; font-size:.7rem; }
+.revival-gap { margin-top:.3rem; color:var(--muted); font-size:.57rem; }
+.revival-effect { margin-top:.42rem; color:#8a5b0d; font-size:.72rem; }
+.revival-cost { position:absolute; z-index:2; right:.8rem; bottom:.8rem; color:#6653ad; font-size:.65rem;
+  font-style:normal; font-weight:900; }
 .pressure-upgrades { display:grid; grid-template-columns:1fr 1fr; gap:.55rem; }
 .pressure-upgrades button { min-height:5.1rem; padding:.7rem; border:1px solid #c8bee8; border-radius:.9rem;
   color:var(--ink); background:#fff; text-align:left; cursor:pointer; box-shadow:0 3px 0 #ded7f2; }
