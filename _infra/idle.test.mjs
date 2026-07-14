@@ -5,7 +5,7 @@ import {
   generatorBulkCost, generatorCost, maxAffordableGenerators, milestoneMultiplier, milestoneProgress, pickBubbleTier, productionPerSecond,
   migrateState, pressurePerSecond, pressureUnlocked, pressureUpgradeCost, seasonBounds, settleOffline,
 } from "../idle/bubble-pop/game-core.js";
-import { simulateFirstLayer } from "./idle-balance.mjs";
+import { EXHAUSTION_RULES, simulateFirstLayer, simulateSeason } from "./idle-balance.mjs";
 import { RecordsDO } from "./records.js";
 
 class MemoryStorage {
@@ -76,6 +76,17 @@ test("the tuned first layer has an optimized lower bound between 30 and 40 minut
   assert.equal(result.completed, true);
   assert.ok(result.seconds >= 30 * 60, `too fast: ${result.seconds}s`);
   assert.ok(result.seconds <= 40 * 60, `too slow: ${result.seconds}s`);
+});
+
+test("the season simulation reports novelty, repetition, wait wall, and exhaustion separately", () => {
+  const result = simulateSeason();
+  assert.equal(EXHAUSTION_RULES.meaningfulWaitSeconds, 12 * 60 * 60);
+  assert.ok(result.allMechanicsTriedAt > result.firstLayerCompletedAt);
+  assert.equal(result.repetitionOnlyAt, result.allMechanicsTriedAt);
+  assert.ok(result.waitWallAt > result.repetitionOnlyAt);
+  assert.ok(result.contentExhaustedAt >= result.waitWallAt);
+  assert.ok(result.gapAfterExhaustion > 0);
+  assert.ok(Object.values(result.final.pressureUpgrades).every((level) => level > 0));
 });
 
 test("version one saves migrate without losing weekly progress", () => {
