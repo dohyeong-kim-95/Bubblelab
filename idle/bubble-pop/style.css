@@ -79,6 +79,10 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .generator .buy { text-align: right; }
 .generator .owned { display: block; font-size: 1rem; font-weight: bold; }
 .generator .cost { display: block; margin-top: .2rem; color: var(--deep); font-size: .62rem; }
+.generator .next-double { position:absolute; z-index:2; top:.38rem; right:.7rem; color:var(--muted);
+  font-size:.48rem; font-weight:800; letter-spacing:.025em; line-height:1; white-space:nowrap;
+  transition:opacity .12s; }
+.generator.milestone-active .next-double { opacity:0; }
 .generator .milestone-reward { position:absolute; z-index:4; top:1.55rem; right:.7rem; pointer-events:none;
   color:#0877a5; font-size:1rem; font-weight:950; line-height:1; text-shadow:0 2px 8px #fff, 0 0 12px #8ce3ff;
   animation:milestone-rise 1.05s cubic-bezier(.18,.8,.28,1) forwards; }
