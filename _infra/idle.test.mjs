@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   GENERATORS, OFFLINE_CAP_MS, clickValue, elapsedDay, freshState,
-  generatorCost, milestoneMultiplier, pickBubbleTier, productionPerSecond,
+  generatorCost, milestoneMultiplier, milestoneProgress, pickBubbleTier, productionPerSecond,
   seasonBounds, settleOffline,
 } from "../idle/bubble-pop/game-core.js";
 import { RecordsDO } from "./records.js";
@@ -45,7 +45,10 @@ test("generator cost grows and ownership milestones double production", () => {
   assert.equal(milestoneMultiplier(24), 1);
   assert.equal(milestoneMultiplier(25), 2);
   assert.equal(milestoneMultiplier(50), 4);
-  assert.equal(milestoneMultiplier(100), 8);
+  assert.equal(milestoneMultiplier(75), 8);
+  assert.equal(milestoneMultiplier(80), 8);
+  assert.equal(milestoneMultiplier(100), 16);
+  assert.equal(milestoneProgress(80), 5 / 25);
 });
 
 test("the free first generator makes the first purchase available within seconds", () => {
