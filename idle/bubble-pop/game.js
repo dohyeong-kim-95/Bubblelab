@@ -1,7 +1,7 @@
 import {
   BUBBLE_TIERS, GENERATORS, addBubbles, clickUpgradeCost, clickValue, elapsedDay,
   endsAt, flowUpgradeCost, formatNumber, freshState, generatorCost,
-  generatorProduction, pickBubbleTier, productionPerSecond, remainingText,
+  generatorProduction, milestoneProgress, pickBubbleTier, productionPerSecond, remainingText,
   seasonBounds, settleOffline,
 } from "./game-core.js";
 
@@ -159,7 +159,7 @@ function buyGenerator(generator) {
   state.bubbles -= cost;
   state.generators[generator.id] = owned + 1;
   const next = state.generators[generator.id];
-  if ([25, 50, 100].includes(next)) toast(`${generator.name} ${next}개! 생산량이 2배가 됐어요`);
+  if (next % 25 === 0) toast(`${generator.name} ${next}개! 생산량이 2배가 됐어요`);
   saveState();
   render(true);
 }
@@ -195,16 +195,18 @@ function render(force = false) {
     const owned = state.generators[generator.id];
     const cost = generatorCost(generator, owned);
     const locked = state.lifetime < generator.unlockAt;
-    const nextMark = [25, 50, 100].find((mark) => owned < mark);
+    const nextMark = (Math.floor(owned / 25) + 1) * 25;
+    const progress = locked ? 0 : milestoneProgress(owned);
     const currentRate = generatorProduction(generator, owned, state.flowLevel);
     const nextRate = generatorProduction(generator, owned + 1, state.flowLevel);
     button.classList.toggle("locked", locked);
+    button.style.setProperty("--progress", `${progress * 100}%`);
     button.disabled = state.finished || locked || state.bubbles < cost;
     button.querySelector(".owned").textContent = locked ? "🔒" : owned;
     button.querySelector(".cost").textContent = locked ? "잠김" : `🫧 ${formatNumber(cost)}`;
     button.querySelector(".desc").textContent = locked
       ? `누적 ${formatNumber(generator.unlockAt)} 버블에 해금`
-      : `구매 시 +${formatNumber(nextRate - currentRate)}/초${nextMark ? ` · ${nextMark}개에서 ×2` : " · MAX 보너스"}`;
+      : `구매 시 +${formatNumber(nextRate - currentRate)}/초 · ${nextMark}개에서 ×2`;
   }
 }
 
