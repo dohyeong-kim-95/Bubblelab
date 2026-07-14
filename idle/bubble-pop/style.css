@@ -69,6 +69,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .generator.locked::before { display:none; }
 .generator:active, .upgrades button:active { transform: translateY(2px); box-shadow: 0 1px 0 #cde7f0; }
 .generator:disabled, .upgrades button:disabled { cursor: default; opacity: .48; transform: none; }
+.generator.milestone-active:disabled { opacity:1; }
 .generator.locked { filter: grayscale(.65); }
 .generator .emoji { font-size: 1.7rem; text-align: center; }
 .generator .info { min-width: 0; }
@@ -78,6 +79,17 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .generator .buy { text-align: right; }
 .generator .owned { display: block; font-size: 1rem; font-weight: bold; }
 .generator .cost { display: block; margin-top: .2rem; color: var(--deep); font-size: .62rem; }
+.generator .milestone-reward { position:absolute; z-index:4; top:1.55rem; right:.7rem; pointer-events:none;
+  color:#0877a5; font-size:1rem; font-weight:950; line-height:1; text-shadow:0 2px 8px #fff, 0 0 12px #8ce3ff;
+  animation:milestone-rise 1.05s cubic-bezier(.18,.8,.28,1) forwards; }
+@keyframes milestone-rise {
+  0% { opacity:0; transform:translateY(.35rem) scale(.82); }
+  18% { opacity:1; transform:translateY(0) scale(1.08); }
+  100% { opacity:0; transform:translateY(-1.65rem) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .generator .milestone-reward { animation-duration:.45s; }
+}
 .modal { position: fixed; z-index: 100; inset: 0; display: flex; flex-direction: column;
   justify-content: center; align-items: center; padding: 1.5rem; text-align: center;
   background: radial-gradient(circle at 50% 25%, #fff, #dff6ff 70%); }
