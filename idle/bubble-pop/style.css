@@ -36,6 +36,10 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .shop-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
 .shop-head h1 { margin: 0; font-size: 1rem; }
 .shop-head span { color: var(--muted); font-size: .62rem; }
+.shop-tools { display:flex; align-items:center; justify-content:flex-end; gap:.55rem; }
+#reset-button { padding:.25rem .4rem; border:0; color:var(--muted); background:transparent;
+  font-size:.6rem; cursor:pointer; text-decoration:underline; text-underline-offset:2px; }
+#reset-button:active { color:var(--ink); }
 .shop h2 { margin: 1.25rem 0 .65rem; color: var(--muted); font-size: .72rem; letter-spacing: .08em; }
 .upgrades { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; margin-top: .9rem; }
 .upgrades button, .generator { border: 1px solid var(--line); color: var(--ink); background: #fff;
@@ -87,4 +91,5 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .sky { height: 48dvh; }
   .shop { min-height: 52dvh; padding-inline: 1.3rem; }
 }
+@media (max-width: 25rem) { .shop-head span { display:none; } }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; scroll-behavior: auto !important; } }
