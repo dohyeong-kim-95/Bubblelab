@@ -65,6 +65,24 @@ export function generatorCost(generator, owned) {
   return generator.baseCost * generator.growth ** owned;
 }
 
+export function generatorBulkCost(generator, owned, count) {
+  count = Math.max(0, Math.floor(count));
+  if (!count) return 0;
+  const firstCost = generatorCost(generator, owned);
+  return firstCost * (generator.growth ** count - 1) / (generator.growth - 1);
+}
+
+export function maxAffordableGenerators(generator, owned, bubbles) {
+  const firstCost = generatorCost(generator, owned);
+  if (!Number.isFinite(bubbles) || bubbles < firstCost) return 0;
+  let count = Math.max(1, Math.floor(
+    Math.log1p(bubbles * (generator.growth - 1) / firstCost) / Math.log(generator.growth),
+  ));
+  while (count > 0 && generatorBulkCost(generator, owned, count) > bubbles) count--;
+  while (generatorBulkCost(generator, owned, count + 1) <= bubbles) count++;
+  return count;
+}
+
 export function clickValue(state) {
   return 1 * 2 ** state.clickLevel;
 }
