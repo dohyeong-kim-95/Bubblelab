@@ -3,20 +3,20 @@ export const OFFLINE_CAP_MS = 24 * 60 * 60 * 1000;
 export const SAVE_VERSION = 1;
 
 export const GENERATORS = Object.freeze([
-  { id: "wand", day: 1, icon: "🪄", name: "버블 막대", baseCost: 25, growth: 1.16, rate: 0.4 },
-  { id: "needle", day: 2, icon: "📌", name: "자동 바늘", baseCost: 240, growth: 1.17, rate: 4 },
-  { id: "fan", day: 3, icon: "🌀", name: "거품 선풍기", baseCost: 2600, growth: 1.18, rate: 42 },
-  { id: "lab", day: 4, icon: "🧪", name: "버블 연구소", baseCost: 32000, growth: 1.19, rate: 480 },
-  { id: "cloud", day: 5, icon: "☁️", name: "비눗방울 구름", baseCost: 420000, growth: 1.20, rate: 5600 },
-  { id: "reactor", day: 6, icon: "⚛️", name: "거품 반응로", baseCost: 6800000, growth: 1.21, rate: 72000 },
-  { id: "ocean", day: 7, icon: "🌊", name: "버블 바다", baseCost: 120000000, growth: 1.22, rate: 1000000 },
+  { id: "wand", unlockAt: 0, icon: "🪄", name: "버블 막대", baseCost: 4, growth: 1.30, rate: 1.5 },
+  { id: "needle", unlockAt: 100, icon: "📌", name: "자동 바늘", baseCost: 180, growth: 1.28, rate: 14 },
+  { id: "fan", unlockAt: 2500, icon: "🌀", name: "거품 선풍기", baseCost: 3200, growth: 1.26, rate: 180 },
+  { id: "lab", unlockAt: 50000, icon: "🧪", name: "버블 연구소", baseCost: 65000, growth: 1.24, rate: 3400 },
+  { id: "cloud", unlockAt: 1000000, icon: "☁️", name: "비눗방울 구름", baseCost: 1400000, growth: 1.22, rate: 70000 },
+  { id: "reactor", unlockAt: 25000000, icon: "⚛️", name: "거품 반응로", baseCost: 38000000, growth: 1.20, rate: 1900000 },
+  { id: "ocean", unlockAt: 750000000, icon: "🌊", name: "버블 바다", baseCost: 1100000000, growth: 1.18, rate: 58000000 },
 ]);
 
 export const BUBBLE_TIERS = Object.freeze([
-  { id: "clear", day: 1, name: "맑은 버블", multiplier: 1, chance: 1, hue: 198 },
-  { id: "pearl", day: 3, name: "진주 버블", multiplier: 5, chance: .12, hue: 282 },
-  { id: "gold", day: 5, name: "황금 버블", multiplier: 25, chance: .07, hue: 43 },
-  { id: "aurora", day: 7, name: "오로라 버블", multiplier: 100, chance: .03, hue: 148 },
+  { id: "clear", unlockAt: 0, name: "맑은 버블", multiplier: 1, chance: 1, hue: 198 },
+  { id: "pearl", unlockAt: 500, name: "진주 버블", multiplier: 5, chance: .12, hue: 282 },
+  { id: "gold", unlockAt: 50000, name: "황금 버블", multiplier: 25, chance: .07, hue: 43 },
+  { id: "aurora", unlockAt: 5000000, name: "오로라 버블", multiplier: 100, chance: .03, hue: 148 },
 ]);
 
 export function seasonBounds(now = Date.now()) {
@@ -31,8 +31,8 @@ export function freshState(now = Date.now()) {
   return {
     version: SAVE_VERSION, season: season.key, startedAt: season.start, lastSeenAt: now, bubbles: 0,
     lifetime: 0, clickLevel: 0, flowLevel: 0,
-    generators: Object.fromEntries(GENERATORS.map(({ id }) => [id, 0])),
-    finished: false, submitted: false,
+    generators: Object.fromEntries(GENERATORS.map(({ id }) => [id, id === "wand" ? 1 : 0])),
+    starterGranted: true, finished: false, submitted: false,
   };
 }
 
@@ -41,8 +41,8 @@ export const elapsedDay = (state, now = Date.now()) =>
 
 export const endsAt = (state) => state.startedAt + RUN_MS;
 
-export function pickBubbleTier(day, random = Math.random) {
-  const available = BUBBLE_TIERS.filter((tier) => tier.day <= day).reverse();
+export function pickBubbleTier(lifetime, random = Math.random) {
+  const available = BUBBLE_TIERS.filter((tier) => tier.unlockAt <= lifetime).reverse();
   const roll = random();
   let threshold = 0;
   for (const tier of available) {
@@ -54,8 +54,10 @@ export function pickBubbleTier(day, random = Math.random) {
 }
 
 export function milestoneMultiplier(owned) {
-  return 2 ** [10, 25, 50].filter((mark) => owned >= mark).length;
+  return 2 ** [25, 50, 100].filter((mark) => owned >= mark).length;
 }
+
+export const ownershipEfficiency = (owned) => owned > 0 ? 1.02 ** (owned - 1) : 1;
 
 export function generatorCost(generator, owned) {
   return generator.baseCost * generator.growth ** owned;
@@ -65,16 +67,20 @@ export function clickValue(state) {
   return 1 * 2 ** state.clickLevel;
 }
 
-export function productionPerSecond(state) {
-  const base = GENERATORS.reduce((sum, generator) => {
-    const owned = state.generators[generator.id] || 0;
-    return sum + owned * generator.rate * milestoneMultiplier(owned);
-  }, 0);
-  return base * 1.6 ** state.flowLevel;
+export function generatorProduction(generator, owned, flowLevel = 0) {
+  return owned * generator.rate * ownershipEfficiency(owned) *
+    milestoneMultiplier(owned) * 1.6 ** flowLevel;
 }
 
-export const clickUpgradeCost = (level) => 80 * 7 ** level;
-export const flowUpgradeCost = (level) => 350 * 9 ** level;
+export function productionPerSecond(state) {
+  return GENERATORS.reduce((sum, generator) => {
+    const owned = state.generators[generator.id] || 0;
+    return sum + generatorProduction(generator, owned, state.flowLevel);
+  }, 0);
+}
+
+export const clickUpgradeCost = (level) => 25 * 4 ** level;
+export const flowUpgradeCost = (level) => 150 * 6 ** level;
 
 export function addBubbles(state, amount) {
   if (!Number.isFinite(amount) || amount <= 0) return 0;
