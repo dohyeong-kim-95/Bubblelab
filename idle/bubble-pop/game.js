@@ -1,7 +1,7 @@
 import {
   BUBBLE_TIERS, GENERATORS, addBubbles, clickUpgradeCost, clickValue, elapsedDay,
-  endsAt, flowUpgradeCost, formatNumber, freshState, generatorCost,
-  generatorProduction, milestoneProgress, pickBubbleTier, productionPerSecond, remainingText,
+  endsAt, flowUpgradeCost, formatNumber, freshState, generatorBulkCost, generatorCost,
+  generatorProduction, maxAffordableGenerators, milestoneProgress, pickBubbleTier, productionPerSecond, remainingText,
   seasonBounds, settleOffline,
 } from "./game-core.js";
 
@@ -16,6 +16,7 @@ const dayEl = $("#day-label");
 const remainingEl = $("#remaining");
 const generatorsEl = $("#generators");
 const upgradesEl = $("#upgrades");
+const buyModesEl = $("#buy-modes");
 const startModal = $("#start-modal");
 const offlineModal = $("#offline-modal");
 const finishModal = $("#finish-modal");
@@ -27,6 +28,11 @@ let lastRender = 0;
 let lastSave = 0;
 let finishShown = false;
 let lastSyncAt = 0;
+let buyMode = localStorage.getItem("bl-bubble-pop-buy-mode") || "1";
+if (!["1", "10", "100", "max"].includes(buyMode)) buyMode = "1";
+let holdDelay = 0;
+let holdRepeat = 0;
+let suppressGeneratorClick = false;
 
 function loadState() {
   try {
@@ -114,6 +120,21 @@ function resume() {
 
 const generatorButtons = new Map();
 
+function stopGeneratorHold() {
+  clearTimeout(holdDelay);
+  clearInterval(holdRepeat);
+  holdDelay = 0;
+  holdRepeat = 0;
+}
+
+function selectedPurchase(generator) {
+  const owned = state.generators[generator.id];
+  const count = buyMode === "max"
+    ? maxAffordableGenerators(generator, owned, state.bubbles)
+    : Number(buyMode);
+  return { count, cost: generatorBulkCost(generator, owned, count) };
+}
+
 function buildShop() {
   upgradesEl.innerHTML = `
     <button type="button" data-upgrade="click"><b>👆 터치 파워 · Lv.<span class="level"></span></b>
@@ -135,33 +156,64 @@ function buildShop() {
     button.innerHTML = `<span class="emoji">${generator.icon}</span><span class="info">
       <b class="name">${generator.name}</b><span class="desc"></span></span>
       <span class="buy"><b class="owned"></b><span class="cost"></span></span>`;
-    button.addEventListener("click", () => buyGenerator(generator));
+    button.addEventListener("click", () => {
+      if (suppressGeneratorClick) { suppressGeneratorClick = false; return; }
+      buyGenerator(generator);
+    });
+    button.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || button.disabled) return;
+      suppressGeneratorClick = false;
+      stopGeneratorHold();
+      holdDelay = setTimeout(() => {
+        suppressGeneratorClick = true;
+        if (!buyGenerator(generator)) return;
+        holdRepeat = setInterval(() => {
+          if (!buyGenerator(generator, true)) stopGeneratorHold();
+        }, 110);
+      }, 360);
+    });
+    for (const eventName of ["pointerup", "pointercancel", "pointerleave"]) {
+      button.addEventListener(eventName, stopGeneratorHold);
+    }
     generatorsEl.appendChild(button);
     generatorButtons.set(generator.id, button);
   }
 }
 
+buyModesEl.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-buy-mode]");
+  if (!button) return;
+  buyMode = button.dataset.buyMode;
+  localStorage.setItem("bl-bubble-pop-buy-mode", buyMode);
+  render(true);
+});
+
 function buyUpgrade(key, cost) {
   if (state.bubbles < cost) { toast("버블이 조금 더 필요해요"); return; }
-  state.bubbles -= cost;
+  state.bubbles = Math.max(0, state.bubbles - cost);
   state[key]++;
   saveState();
   render(true);
 }
 
-function buyGenerator(generator) {
+function buyGenerator(generator, quiet = false) {
   if (state.lifetime < generator.unlockAt) {
-    toast(`누적 ${formatNumber(generator.unlockAt)} 버블에 열립니다`); return;
+    if (!quiet) toast(`누적 ${formatNumber(generator.unlockAt)} 버블에 열립니다`); return false;
   }
   const owned = state.generators[generator.id];
-  const cost = generatorCost(generator, owned);
-  if (state.bubbles < cost) { toast("버블이 조금 더 필요해요"); return; }
-  state.bubbles -= cost;
-  state.generators[generator.id] = owned + 1;
+  const { count, cost } = selectedPurchase(generator);
+  if (!count || state.bubbles < cost) {
+    if (!quiet) toast("버블이 조금 더 필요해요");
+    return false;
+  }
+  state.bubbles = Math.max(0, state.bubbles - cost);
+  state.generators[generator.id] = owned + count;
   const next = state.generators[generator.id];
-  if (next % 25 === 0) toast(`${generator.name} ${next}개! 생산량이 2배가 됐어요`);
+  const crossedMilestones = Math.floor(next / 25) - Math.floor(owned / 25);
+  if (crossedMilestones > 0) toast(`${generator.name} ${next}개! 생산량이 ${2 ** crossedMilestones}배 더 강해졌어요`);
   saveState();
   render(true);
+  return true;
 }
 
 function render(force = false) {
@@ -190,20 +242,25 @@ function render(force = false) {
   flowButton.querySelector(".cost").textContent = `🫧 ${formatNumber(flowUpgradeCost(state.flowLevel))}`;
   flowButton.disabled = state.finished || state.bubbles < flowUpgradeCost(state.flowLevel);
 
+  for (const modeButton of buyModesEl.querySelectorAll("button[data-buy-mode]")) {
+    modeButton.setAttribute("aria-pressed", String(modeButton.dataset.buyMode === buyMode));
+  }
+
   for (const generator of GENERATORS) {
     const button = generatorButtons.get(generator.id);
     const owned = state.generators[generator.id];
-    const cost = generatorCost(generator, owned);
     const locked = state.lifetime < generator.unlockAt;
+    const { count, cost } = locked ? { count: 0, cost: 0 } : selectedPurchase(generator);
     const nextMark = (Math.floor(owned / 25) + 1) * 25;
     const progress = locked ? 0 : milestoneProgress(owned);
     const currentRate = generatorProduction(generator, owned, state.flowLevel);
     const nextRate = generatorProduction(generator, owned + 1, state.flowLevel);
     button.classList.toggle("locked", locked);
     button.style.setProperty("--progress", `${progress * 100}%`);
-    button.disabled = state.finished || locked || state.bubbles < cost;
+    button.disabled = state.finished || locked || count === 0 || state.bubbles < cost;
     button.querySelector(".owned").textContent = locked ? "🔒" : owned;
-    button.querySelector(".cost").textContent = locked ? "잠김" : `🫧 ${formatNumber(cost)}`;
+    button.querySelector(".cost").textContent = locked ? "잠김"
+      : count ? `🫧 ${formatNumber(cost)} · ×${count}` : `🫧 ${formatNumber(generatorCost(generator, owned))}`;
     button.querySelector(".desc").textContent = locked
       ? `누적 ${formatNumber(generator.unlockAt)} 버블에 해금`
       : `구매 시 +${formatNumber(nextRate - currentRate)}/초 · ${nextMark}개에서 ×2`;
