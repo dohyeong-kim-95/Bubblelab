@@ -135,6 +135,27 @@ function selectedPurchase(generator) {
   return { count, cost: generatorBulkCost(generator, owned, count) };
 }
 
+function showMilestoneReward(button, count) {
+  const visibleCount = Math.min(count, 4);
+  button.classList.add("milestone-active");
+  clearTimeout(button._milestoneTimer);
+  button._milestoneTimer = setTimeout(
+    () => button.classList.remove("milestone-active"),
+    (visibleCount - 1) * 180 + 1100,
+  );
+  for (let index = 0; index < visibleCount; index++) {
+    setTimeout(() => {
+      if (!button.isConnected) return;
+      const reward = document.createElement("span");
+      reward.className = "milestone-reward";
+      reward.textContent = "×2";
+      reward.setAttribute("aria-hidden", "true");
+      reward.addEventListener("animationend", () => reward.remove(), { once: true });
+      button.appendChild(reward);
+    }, index * 180);
+  }
+}
+
 function buildShop() {
   upgradesEl.innerHTML = `
     <button type="button" data-upgrade="click"><b>👆 터치 파워 · Lv.<span class="level"></span></b>
@@ -210,7 +231,7 @@ function buyGenerator(generator, quiet = false) {
   state.generators[generator.id] = owned + count;
   const next = state.generators[generator.id];
   const crossedMilestones = Math.floor(next / 25) - Math.floor(owned / 25);
-  if (crossedMilestones > 0) toast(`${generator.name} ${next}개! 생산량이 ${2 ** crossedMilestones}배 더 강해졌어요`);
+  if (crossedMilestones > 0) showMilestoneReward(generatorButtons.get(generator.id), crossedMilestones);
   saveState();
   render(true);
   return true;
