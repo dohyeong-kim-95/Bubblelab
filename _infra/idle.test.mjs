@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  FLOW_MULTIPLIER, GENERATORS, OFFLINE_CAP_MS, PRESSURE_UPGRADES, SAVE_VERSION, clickValue, elapsedDay, freshState,
+  FLOW_MULTIPLIER, GENERATORS, OFFLINE_CAP_MS, PRESSURE_UPGRADES, SAVE_VERSION, actualGeneratorProduction, clickValue, elapsedDay, freshState,
   generatorBulkCost, generatorCost, maxAffordableGenerators, milestoneMultiplier, milestoneProgress, pickBubbleTier, productionPerSecond,
-  migrateState, pressurePerSecond, pressureUnlocked, pressureUpgradeCost, seasonBounds, settleOffline,
+  migrateState, pressurePerSecond, pressureUnlocked, pressureUpgradeCost, purchaseRevivalOffer, seasonBounds, settleOffline,
+  updateRevivalOffer,
 } from "../idle/bubble-pop/game-core.js";
-import { EXHAUSTION_RULES, simulateFirstLayer, simulateSeason } from "./idle-balance.mjs";
+import { EXHAUSTION_RULES, REVIVAL_RULES, simulateFirstLayer, simulateSeason } from "./idle-balance.mjs";
 import { RecordsDO } from "./records.js";
 
 class MemoryStorage {
@@ -82,11 +83,24 @@ test("the season simulation reports novelty, repetition, wait wall, and exhausti
   const result = simulateSeason();
   assert.equal(EXHAUSTION_RULES.meaningfulWaitSeconds, 12 * 60 * 60);
   assert.ok(result.allMechanicsTriedAt > result.firstLayerCompletedAt);
-  assert.equal(result.repetitionOnlyAt, result.allMechanicsTriedAt);
+  assert.ok(result.repetitionOnlyAt > result.allMechanicsTriedAt);
   assert.ok(result.waitWallAt > result.repetitionOnlyAt);
   assert.ok(result.contentExhaustedAt >= result.waitWallAt);
   assert.ok(result.gapAfterExhaustion > 0);
   assert.ok(Object.values(result.final.pressureUpgrades).every((level) => level > 0));
+});
+
+test("revival offers recover generators after a sticky 3000x efficiency gap", () => {
+  const revived = simulateSeason();
+  const baseline = simulateSeason({ revivalEnabled: false });
+  assert.equal(REVIVAL_RULES.unlockRatio, 3000);
+  assert.equal(REVIVAL_RULES.targetRatio, 30);
+  assert.ok(revived.revivalPurchases.length >= 5);
+  assert.ok(revived.revivalPurchases.every(({ ratio, multiplier }) =>
+    ratio >= REVIVAL_RULES.unlockRatio && multiplier >= 100));
+  assert.ok(revived.revivalPurchases.some(({ tier }) => tier >= 2));
+  assert.ok(revived.final.bubbles > baseline.final.bubbles);
+  assert.ok(revived.final.bubbles / baseline.final.bubbles < 1.25);
 });
 
 test("version one saves migrate without losing weekly progress", () => {
@@ -103,6 +117,42 @@ test("version one saves migrate without losing weekly progress", () => {
   assert.equal(migrated.generators.ocean, 2);
   assert.equal(migrated.pressure, 0);
   assert.deepEqual(Object.keys(migrated.pressureUpgrades), PRESSURE_UPGRADES.map(({ id }) => id));
+});
+
+test("version two saves gain revival fields without losing progress", () => {
+  const old = freshState(Date.UTC(2026, 6, 14));
+  old.version = 2;
+  old.bubbles = 456;
+  delete old.revivalMultipliers;
+  delete old.revivalPurchased;
+  delete old.revivalEligible;
+  delete old.revivalOffer;
+  const migrated = migrateState(old);
+  assert.equal(migrated.version, SAVE_VERSION);
+  assert.equal(migrated.bubbles, 456);
+  assert.ok(GENERATORS.every(({ id }) => migrated.revivalMultipliers[id] === 1));
+});
+
+test("revival offers are sticky, singular, and multiply only their generator", () => {
+  const state = freshState();
+  for (const generator of GENERATORS) state.generators[generator.id] = 1;
+  state.pressureLifetime = 100;
+  assert.equal(updateRevivalOffer(state, 1000), true);
+  assert.equal(state.revivalOffer.id, "cloud");
+  assert.equal(state.revivalOffer.tier, 1);
+  assert.ok(state.revivalOffer.ratio >= REVIVAL_RULES.unlockRatio);
+  assert.ok(Number.isFinite(state.revivalOffer.cost));
+  const offer = { ...state.revivalOffer };
+  state.generators.cloud = 1000;
+  updateRevivalOffer(state, 2000);
+  assert.equal(state.revivalOffer.key, offer.key);
+  const before = actualGeneratorProduction(state, GENERATORS.find(({ id }) => id === offer.id));
+  state.pressure = offer.cost;
+  assert.equal(purchaseRevivalOffer(state).key, offer.key);
+  const after = actualGeneratorProduction(state, GENERATORS.find(({ id }) => id === offer.id));
+  assert.equal(after, before * offer.multiplier);
+  assert.equal(state.revivalPurchased[offer.id], 1);
+  assert.equal(state.revivalOffer, null);
 });
 
 test("owning every generator opens pressure and its four growth paths", () => {
