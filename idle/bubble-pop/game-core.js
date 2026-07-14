@@ -21,6 +21,7 @@ export const PRESSURE_UPGRADES = Object.freeze([
 
 export const PRESSURE_BASE_PRODUCTION = 1e9;
 export const PRESSURE_RATE = .00025;
+export const FLOW_MULTIPLIER = 1.45;
 
 export const BUBBLE_TIERS = Object.freeze([
   { id: "clear", unlockAt: 0, name: "맑은 버블", multiplier: 1, chance: 1, hue: 198 },
@@ -125,7 +126,7 @@ export function clickValue(state) {
 
 export function generatorProduction(generator, owned, flowLevel = 0) {
   return owned * generator.rate * ownershipEfficiency(owned) *
-    milestoneMultiplier(owned) * 1.6 ** flowLevel;
+    milestoneMultiplier(owned) * FLOW_MULTIPLIER ** flowLevel;
 }
 
 export function productionPerSecond(state) {
