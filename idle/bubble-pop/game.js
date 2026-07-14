@@ -84,11 +84,14 @@ $("#reset-button").addEventListener("click", () => {
     "이 버튼은 환생 버튼이 아니라 완전 초기화 버튼입니다.\n진행 상황은 복구할 수 없습니다.\n\n그래도 진행하시겠습니까?",
   );
   if (!confirmed) return;
+  state = null;
   localStorage.removeItem(SAVE_KEY);
   location.reload();
 });
 $("#new-season-button").addEventListener("click", () => {
-  localStorage.removeItem(SAVE_KEY); location.reload();
+  state = null;
+  localStorage.removeItem(SAVE_KEY);
+  location.reload();
 });
 
 function resume() {
