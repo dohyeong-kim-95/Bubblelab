@@ -23,6 +23,7 @@ export const GAMES = {
   beer:         { dir: "min", min: 0, max: 501 },       // 500cc 오차(cc)+시간 타이브레이커
   "2048":       { dir: "max", min: 0, max: 1000000 },   // 점수
   "bubble-pop": { dir: "max", min: 0, max: 300 },       // 20초 터트린 버블 수
+  "bubble-pop-idle": { dir: "max", min: 0, max: 1e100 }, // 7일 누적 버블 수
   circle:       { dir: "max", min: 0, max: 100 },       // 정확도(%)
   clicker:      { dir: "max", min: 0, max: 300 },       // 10초 클릭 수
   flags:        { dir: "max", min: 0, max: 1000 },      // 연속으로 맞춘 국기 수
@@ -31,6 +32,7 @@ export const GAMES = {
   trader:       { dir: "max", min: -1, max: 100 },      // 수익률(비율)
   "yacht-bot":  { dir: "max", min: 0, max: 400 },       // 야추 총점
 };
+const HISTORICAL_GAMES = new Set(["bubble-pop-idle"]);
 
 const beats = (dir, score, record) =>
   !record || (dir === "max" ? score > record.score : score < record.score);
@@ -152,6 +154,26 @@ export class RecordsDO {
     }
 
     if (request.method === "GET") {
+      // 유한 시즌 게임의 주차별 우승 기록. 아직 프루닝되지 않은 rec 키와
+      // 프루닝 전에 보존한 idlehall 키를 합쳐 최근 시즌부터 돌려준다.
+      if (url.searchParams.has("history")) {
+        const game = url.searchParams.get("game");
+        if (!HISTORICAL_GAMES.has(game)) return new Response("invalid history game", { status: 400 });
+        const byWeek = new Map();
+        for (const [key, value] of await this.state.storage.list({ prefix: "idlehall:" })) {
+          const [, savedWeek, savedGame] = key.split(":");
+          if (savedGame === game) byWeek.set(savedWeek, value);
+        }
+        for (const [key, value] of await this.state.storage.list({ prefix: "rec:" })) {
+          const [, savedWeek, savedGame] = key.split(":");
+          if (savedGame === game) byWeek.set(savedWeek, value);
+        }
+        const records = [...byWeek]
+          .sort(([a], [b]) => b.localeCompare(a))
+          .slice(0, 52)
+          .map(([savedWeek, record]) => ({ week: savedWeek, ...presentRecord(game, record) }));
+        return Response.json({ week, game, records }, { headers: { "Cache-Control": "no-store" } });
+      }
       // 올타임 명예의 전당: 저장된 올타임 + 이번 주 기록의 병합.
       // (올타임 저장 기능 도입 전에 세워진 이번 주 기록도 보이게 한다)
       if (url.searchParams.has("alltime")) {
@@ -252,6 +274,10 @@ export class RecordsDO {
       const stale = [...stored].filter(([k]) => k.split(":")[1] !== week);
       for (const [k, v] of stale) {
         const g = k.split(":")[2];
+        const oldWeek = k.split(":")[1];
+        if (HISTORICAL_GAMES.has(g)) {
+          await this.state.storage.put(`idlehall:${oldWeek}:${g}`, v);
+        }
         if (beats(GAMES[g]?.dir ?? v.dir, v.score, await this.state.storage.get(`alltime:${g}`))) {
           await this.state.storage.put(`alltime:${g}`, v);
         }
