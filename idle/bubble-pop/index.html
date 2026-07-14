@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<meta name="theme-color" content="#dff6ff">
+<meta name="description" content="딱 7일 동안 자라는 Bubblelab 방치형 버블팝">
+<title>🫧 Bubble Pop Idle</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<main id="game" hidden>
+  <header class="status">
+    <a class="icon-link" href="/" aria-label="idle 홈">‹</a>
+    <div class="resource"><strong id="bubble-count">0</strong><span> BUBBLES</span></div>
+    <a class="icon-link" href="/hall-of-fame/" aria-label="명예의 전당">🏆</a>
+  </header>
+  <section class="sky" aria-label="버블을 직접 터뜨리는 공간">
+    <canvas id="bubble-canvas"></canvas>
+    <div class="run-info"><b id="day-label">DAY 1 / 7</b><span id="remaining">7일 남음</span></div>
+    <div class="rate"><strong id="rate">0</strong><span>/초</span></div>
+    <p class="tap-hint" id="tap-hint">버블을 직접 터뜨려 보세요</p>
+  </section>
+  <section class="shop">
+    <div class="shop-head"><h1>Bubble Pop Idle</h1><span>오프라인 최대 24시간</span></div>
+    <div class="upgrades" id="upgrades"></div>
+    <h2>자동 터뜨리기</h2>
+    <div class="generators" id="generators"></div>
+  </section>
+</main>
+
+<section class="modal start" id="start-modal">
+  <div class="hero-bubble">🫧</div>
+  <p class="eyebrow">BUBBLELAB · 7 DAY EXPERIMENT</p>
+  <h1>Bubble Pop Idle</h1>
+  <p>버블을 터뜨리고 자동화하세요.<br>모든 기록은 매주 월요일 09:00 KST에 초기화됩니다.</p>
+  <ul>
+    <li>꺼두어도 버블은 쌓여요</li>
+    <li>오프라인 보상은 한 번에 최대 24시간</li>
+    <li>이번 주 누적 버블로 명예의 전당 도전</li>
+  </ul>
+  <input class="nickname-input" id="start-nickname" maxlength="6" autocomplete="nickname" placeholder="닉네임 (6자)" aria-label="닉네임">
+  <p class="form-message" id="start-message"></p>
+  <button class="primary" id="start-button">이번 주 참여하기</button>
+  <a href="/hall-of-fame/">먼저 명예의 전당 보기 →</a>
+</section>
+
+<section class="modal" id="offline-modal" hidden>
+  <div class="hero-bubble">🌙</div>
+  <p class="eyebrow">WELCOME BACK</p>
+  <h2>자리를 비운 동안</h2>
+  <strong class="offline-earned" id="offline-earned">+0</strong>
+  <p id="offline-detail"></p>
+  <button class="primary" id="offline-close">받기</button>
+</section>
+
+<section class="modal finish" id="finish-modal" hidden>
+  <div class="hero-bubble">🏁</div>
+  <p class="eyebrow">WEEKLY RESET</p>
+  <h2>이번 주 실험이 끝났어요</h2>
+  <strong class="final-score" id="final-score">0</strong>
+  <p>누적 버블</p>
+  <p class="form-message" id="form-message"></p>
+  <button class="primary" id="new-season-button">새 시즌 시작하기</button>
+  <a href="/hall-of-fame/">지난 시즌 기록 보기 →</a>
+</section>
+
+<div id="toast" role="status" hidden></div>
+<script type="module" src="./game.js"></script>
+</body>
+</html>
