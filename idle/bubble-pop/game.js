@@ -176,7 +176,8 @@ function buildShop() {
     button.dataset.id = generator.id;
     button.innerHTML = `<span class="emoji">${generator.icon}</span><span class="info">
       <b class="name">${generator.name}</b><span class="desc"></span></span>
-      <span class="buy"><b class="owned"></b><span class="cost"></span></span>`;
+      <span class="buy"><b class="owned"></b><span class="cost"></span></span>
+      <span class="next-double"></span>`;
     button.addEventListener("click", () => {
       if (suppressGeneratorClick) { suppressGeneratorClick = false; return; }
       buyGenerator(generator);
@@ -282,9 +283,10 @@ function render(force = false) {
     button.querySelector(".owned").textContent = locked ? "🔒" : owned;
     button.querySelector(".cost").textContent = locked ? "잠김"
       : count ? `🫧 ${formatNumber(cost)} · ×${count}` : `🫧 ${formatNumber(generatorCost(generator, owned))}`;
+    button.querySelector(".next-double").textContent = locked ? "" : `NEXT DOUBLE: ${nextMark}`;
     button.querySelector(".desc").textContent = locked
       ? `누적 ${formatNumber(generator.unlockAt)} 버블에 해금`
-      : `구매 시 +${formatNumber(nextRate - currentRate)}/초 · ${nextMark}개에서 ×2`;
+      : `+${formatNumber(nextRate - currentRate)}/초`;
   }
 }
 
