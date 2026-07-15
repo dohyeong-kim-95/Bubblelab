@@ -947,7 +947,7 @@
     H += categoryRows.reduce((sum, row) => sum + row.height + 8, 0);
     H += 26;                // gap
     H += 20;                // footer
-    H += 30;                // bottom pad
+    H += 48;                // footer가 잘리지 않도록 넉넉한 bottom pad
 
     const cv = document.createElement("canvas");
     cv.width = W * S; cv.height = H * S;
@@ -1022,11 +1022,11 @@
     }
 
     // 푸터 (링크)
-    y += 26;
     ctx.fillStyle = DIM + "0.72)";
-    ctx.font = "bold 14px " + MONO;
-    y += 10;
-    ctx.fillText("👉 util.bubblelab.dev/fortune", W / 2, y);
+    ctx.font = "bold 13px " + MONO;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("👉 util.bubblelab.dev/fortune", W / 2, H - 28);
 
     return cv;
   }
