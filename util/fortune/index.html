@@ -519,12 +519,12 @@
     ctx.font = "15px " + MONO;
     for (const ln of headLines) { y += 22; ctx.fillText(ln, W / 2, y); }
 
-    // 푸터
+    // 푸터 (링크)
     y += 26;
-    ctx.fillStyle = DIM + "0.4)";
-    ctx.font = "12px " + MONO;
-    y += 8;
-    ctx.fillText("util.bubblelab.dev/fortune", W / 2, y);
+    ctx.fillStyle = DIM + "0.72)";
+    ctx.font = "bold 14px " + MONO;
+    y += 10;
+    ctx.fillText("👉 util.bubblelab.dev/fortune", W / 2, y);
 
     return cv;
   }
