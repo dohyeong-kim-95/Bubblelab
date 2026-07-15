@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildChart } from "./fortune.js";
+import { buildChart, buildDailyFortune } from "./fortune.js";
 
 test("calculates a known four-pillars example at an exact KST time", () => {
   const chart = buildChart({
@@ -54,4 +54,17 @@ test("rejects impossible dates and malformed times", () => {
   assert.throws(() => buildChart({
     year: 2026, month: 2, day: 10, timeMode: "clock", time: "25:00",
   }), /올바르지/);
+});
+
+test("builds a deterministic daily fortune from the natal chart and KST date", () => {
+  const chart = buildChart({
+    year: 1992, month: 10, day: 24,
+    timeMode: "clock", time: "05:30",
+  });
+  const daily = buildDailyFortune(chart.candidates[0], { year: 2026, month: 7, day: 15 });
+  assert.deepEqual(
+    { date: daily.date, iljin: daily.iljin, tenGod: daily.tenGod, method: daily.method },
+    { date: "2026-07-15", iljin: "경인", tenGod: "정인", method: "natal-daymaster+daily-pillar-v1" },
+  );
+  assert.match(daily.text, /배우고 도움받는 흐름/);
 });

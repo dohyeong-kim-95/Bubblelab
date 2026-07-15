@@ -9,6 +9,23 @@ const {
 } = manseryeok;
 
 const BRANCH_NAMES = ["자", "축", "인", "묘", "진", "사", "오", "미", "신", "유", "술", "해"];
+const ELEMENTS = ["목", "화", "토", "금", "수"];
+const STEM_EMOJI = { 비견: "🤝", 겁재: "⚡", 식신: "🌱", 상관: "💬", 편재: "🎯",
+  정재: "🧾", 편관: "🧭", 정관: "📌", 편인: "💡", 정인: "📚" };
+const DAILY_TEXT = {
+  비견: "내 기준이 또렷해지는 날입니다. 함께하되 역할과 경계를 분명히 해보세요.",
+  겁재: "경쟁심과 추진력이 커지는 날입니다. 즉흥 지출과 성급한 승부만 조심하세요.",
+  식신: "꾸준히 만들고 표현하기 좋은 날입니다. 작은 결과물을 하나 완성해보세요.",
+  상관: "아이디어와 말의 힘이 살아나는 날입니다. 솔직함이 날카로움이 되지 않게 다듬어보세요.",
+  편재: "사람과 기회가 넓게 들어오는 날입니다. 가능성을 보되 약속과 지출은 현실적으로 확인하세요.",
+  정재: "실무와 재정 감각이 안정되는 날입니다. 미뤄둔 정리나 확실한 한 걸음에 좋습니다.",
+  편관: "요구와 긴장감이 추진력으로 바뀌는 날입니다. 무리한 돌파보다 우선순위를 세워보세요.",
+  정관: "책임과 질서를 세우기 좋은 날입니다. 원칙대로 처리하면 신뢰를 얻기 쉽습니다.",
+  편인: "익숙한 답보다 새로운 관점이 보이는 날입니다. 바로 결론 내리기보다 한 번 더 살펴보세요.",
+  정인: "배우고 도움받는 흐름이 좋은 날입니다. 기록하고 조언을 구하면 실마리가 생깁니다.",
+};
+const BRANCH_HARMONY = new Set(["자축", "인해", "묘술", "진유", "사신", "오미"]);
+const BRANCH_CLASH = new Set(["자오", "축미", "인신", "묘유", "진술", "사해"]);
 const PILLAR_KEYS = ["year", "month", "day", "hour"];
 const RULES = {
   version: "korea-kst-midnight-v1",
@@ -107,6 +124,58 @@ function serialize(result, point, includeHour) {
 
 function signature(candidate) {
   return PILLAR_KEYS.map((key) => candidate.pillars[key]?.korean ?? "미상").join("|");
+}
+
+function tenGod(dayStem, targetStem) {
+  const dayElement = getHeavenlyStemElement(dayStem);
+  const targetElement = getHeavenlyStemElement(targetStem);
+  const samePolarity = getHeavenlyStemYinYang(dayStem) === getHeavenlyStemYinYang(targetStem);
+  const dayIndex = ELEMENTS.indexOf(dayElement);
+  const targetIndex = ELEMENTS.indexOf(targetElement);
+  if (dayIndex === targetIndex) return samePolarity ? "비견" : "겁재";
+  if ((dayIndex + 1) % 5 === targetIndex) return samePolarity ? "식신" : "상관";
+  if ((dayIndex + 2) % 5 === targetIndex) return samePolarity ? "편재" : "정재";
+  if ((targetIndex + 2) % 5 === dayIndex) return samePolarity ? "편관" : "정관";
+  return samePolarity ? "편인" : "정인";
+}
+
+function pairKey(a, b) {
+  return [a, b].sort((x, y) => BRANCH_NAMES.indexOf(x) - BRANCH_NAMES.indexOf(y)).join("");
+}
+
+export function buildDailyFortune(candidate, date) {
+  const today = calculateFourPillars({
+    year: date.year, month: date.month, day: date.day, hour: 12, minute: 0,
+    dayBoundary: RULES.dayBoundary,
+  });
+  const todayPillar = pillarData(today, "day", true);
+  const dayStem = candidate.pillars.day.stem.korean;
+  const god = tenGod(dayStem, todayPillar.stem.korean);
+  const natalBranches = PILLAR_KEYS.map((key) => candidate.pillars[key]?.branch.korean).filter(Boolean);
+  const harmony = natalBranches.filter((branch) => BRANCH_HARMONY.has(pairKey(branch, todayPillar.branch.korean)));
+  const clash = natalBranches.filter((branch) => BRANCH_CLASH.has(pairKey(branch, todayPillar.branch.korean)));
+  let accent = "";
+  if (harmony.length && clash.length) accent = " 관계의 연결과 변화 신호가 함께 있어, 속도보다 조율이 중요합니다.";
+  else if (harmony.length) accent = " 원국과 합의 신호가 있어 사람이나 계획을 연결하기에 좋습니다.";
+  else if (clash.length) accent = " 원국과 충의 신호가 있어 일정 변경이나 감정적 반응에는 여유를 두세요.";
+  return {
+    date: `${date.year}-${String(date.month).padStart(2, "0")}-${String(date.day).padStart(2, "0")}`,
+    iljin: todayPillar.korean,
+    iljinHanja: todayPillar.hanja,
+    tenGod: god,
+    emoji: STEM_EMOJI[god],
+    text: DAILY_TEXT[god] + accent,
+    signals: { harmony, clash },
+    method: "natal-daymaster+daily-pillar-v1",
+  };
+}
+
+function kstToday(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: RULES.timeZone, year: "numeric", month: "numeric", day: "numeric",
+  }).formatToParts(now);
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return { year: +value.year, month: +value.month, day: +value.day };
 }
 
 export function buildChart(input) {
@@ -208,6 +277,8 @@ export async function handleFortuneChart(request, env) {
   try {
     const input = await request.json();
     const chart = buildChart(input);
+    const today = kstToday();
+    chart.dailyFortunes = chart.candidates.map((candidate) => buildDailyFortune(candidate, today));
     const [year, month, day] = chart.birthDate.split("-").map(Number);
     const verification = await kasiDay(env, year, month, day);
     if (verification.status === "received") {
