@@ -154,6 +154,13 @@
   <section class="card" id="form" hidden>
     <h2 style="margin:0 0 1rem;font-size:.95rem;">생년월일시를 입력해주세요</h2>
     <div class="row">
+      <label>달력</label>
+      <div class="time-mode" role="group" aria-label="생년월일 달력 방식">
+        <button type="button" id="mode-solar" aria-pressed="true">양력</button>
+        <button type="button" id="mode-lunar" aria-pressed="false">음력</button>
+      </div>
+    </div>
+    <div class="row">
       <label for="in-y">년</label>
       <select id="in-y"></select>
     </div>
@@ -165,6 +172,14 @@
       <label for="in-d">일</label>
       <select id="in-d"></select>
     </div>
+    <div class="row" id="lunar-leap-row" hidden>
+      <label for="in-lunar-leap">월 구분</label>
+      <select id="in-lunar-leap">
+        <option value="normal">평달</option>
+        <option value="leap">윤달</option>
+      </select>
+    </div>
+    <p class="time-help" id="lunar-help" hidden>윤달 생일인 경우에만 윤달을 선택하세요.</p>
     <div class="row">
       <label>시간</label>
       <div class="time-mode" role="group" aria-label="출생시간 입력 방식">
@@ -310,12 +325,18 @@
   const selD = document.getElementById("in-d");
   const selH = document.getElementById("in-h");
   const inTime = document.getElementById("in-time");
+  const modeSolar = document.getElementById("mode-solar");
+  const modeLunar = document.getElementById("mode-lunar");
+  const lunarLeapRow = document.getElementById("lunar-leap-row");
+  const lunarLeap = document.getElementById("in-lunar-leap");
+  const lunarHelp = document.getElementById("lunar-help");
   const modeBranch = document.getElementById("mode-branch");
   const modeClock = document.getElementById("mode-clock");
   const branchRow = document.getElementById("branch-row");
   const branchHelp = document.getElementById("branch-help");
   const clockRow = document.getElementById("clock-row");
   const clockHelp = document.getElementById("clock-help");
+  let calendarMode = "solar";
   let timeMode = "branch";
   const thisYear = now.getFullYear();
   function opt(sel, val, label) {
@@ -327,7 +348,7 @@
   function fillDays() {
     const y = +selY.value, m = +selM.value;
     const keep = selD.value;
-    const days = new Date(y, m, 0).getDate();
+    const days = calendarMode === "lunar" ? 30 : new Date(y, m, 0).getDate();
     selD.innerHTML = "";
     for (let d = 1; d <= days; d++) opt(selD, d, d + "일");
     if (keep && +keep <= days) selD.value = keep;
@@ -335,6 +356,17 @@
   selY.addEventListener("change", fillDays);
   selM.addEventListener("change", fillDays);
   fillDays();
+  function setCalendarMode(mode) {
+    calendarMode = mode === "lunar" ? "lunar" : "solar";
+    const isLunar = calendarMode === "lunar";
+    modeSolar.setAttribute("aria-pressed", String(!isLunar));
+    modeLunar.setAttribute("aria-pressed", String(isLunar));
+    lunarLeapRow.hidden = !isLunar;
+    lunarHelp.hidden = !isLunar;
+    fillDays();
+  }
+  modeSolar.addEventListener("click", () => setCalendarMode("solar"));
+  modeLunar.addEventListener("click", () => setCalendarMode("lunar"));
   // 십이지시(十二支時): 자시(23~01)부터 두 시간 단위
   const BRANCHES = [
     { k: "자", c: "子", range: "23~01시" },
@@ -483,6 +515,8 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           year: birth.y, month: birth.m, day: birth.d,
+          calendar: birth.calendar === "lunar" ? "lunar" : "solar",
+          lunarLeap: birth.lunarLeap === true,
           timeMode: birth.timeMode === "clock" ? "clock" : "branch",
           time: birth.time,
           branch: birth.h,
@@ -493,6 +527,16 @@
       if (requestId !== sajuRequestId) return;
       lastSajuData = data;
       sajuCopy.disabled = false;
+      if (birth.calendar === "lunar") {
+        birth.solar = { y: data.solarDate.year, m: data.solarDate.month, d: data.solarDate.day };
+        try { localStorage.setItem(KEY, JSON.stringify(birth)); } catch (e) {}
+        renderBioResult(birth, birth.solar);
+        document.getElementById("saju-rule").textContent =
+          `음력 ${birth.lunarLeap ? "윤달" : "평달"} → 양력 ${data.solarDate.year}.${data.solarDate.month}.${data.solarDate.day} · 대한민국 표준시(KST) · 00시 일주 변경`;
+      } else {
+        document.getElementById("saju-rule").textContent =
+          "양력 · 대한민국 표준시(KST) · 00시 일주 변경 · 진태양시 미보정";
+      }
       if (data.dailyFortunes?.[0]) showSajuFortune(data.dailyFortunes[0]);
       for (const candidate of data.candidates) renderSajuCandidate(candidate, data.ambiguous);
       const verifyText = {
@@ -509,6 +553,7 @@
     } catch (error) {
       if (requestId !== sajuRequestId) return;
       sajuStatus.textContent = error.message || "명식을 계산하지 못했습니다.";
+      if (birth.calendar === "lunar" && !birth.solar) document.getElementById("form").hidden = false;
     }
   }
 
@@ -532,7 +577,10 @@
     ctx.fillStyle = INK; ctx.textAlign = "left"; ctx.font = `bold 20px ${MONO}`;
     ctx.fillText("🧭 사주 명식", pad, 34);
     ctx.fillStyle = DIM; ctx.font = `11px ${MONO}`;
-    ctx.fillText("양력 · 대한민국 표준시(KST) · 00시 일주 변경", pad, 60);
+    const calendarNote = data.inputCalendar === "lunar"
+      ? `음력${data.inputDate.leap ? " 윤달" : " 평달"} → 양력 ${data.solarDate.year}.${data.solarDate.month}.${data.solarDate.day}`
+      : "양력";
+    ctx.fillText(`${calendarNote} · 대한민국 표준시(KST) · 00시 일주 변경`, pad, 60);
     let y = 84;
 
     const drawCell = (x, top, w, h, fill) => {
@@ -604,13 +652,13 @@
   });
 
   let lastBio = null;   // { n, vals, head } — 공유 이미지에서 재사용
-  function renderResult(birth) {
+  function renderBioResult(birth, solarBirth) {
     document.getElementById("form").hidden = true;
     document.getElementById("reveal").hidden = true;
     const res = document.getElementById("result");
     res.hidden = false;
 
-    const n = daysBetween(birth, now);
+    const n = daysBetween(solarBirth, now);
     const vals = {};
     for (const c of CYCLES) {
       const v = Math.sin((2 * Math.PI * n) / c.period);
@@ -639,10 +687,27 @@
     const hourTxt = birth.timeMode === "clock" && birth.time
       ? ` ${birth.time}`
       : (b ? ` ${b.k}시(${b.c})` : "");
+    const dateTxt = birth.calendar === "lunar"
+      ? `음력 ${birth.y}.${birth.m}.${birth.d} ${birth.lunarLeap ? "윤달" : "평달"} → 양력 ${solarBirth.y}.${solarBirth.m}.${solarBirth.d}`
+      : `양력 ${birth.y}.${birth.m}.${birth.d}`;
     document.getElementById("saved-info").textContent =
-      `저장됨: ${birth.y}.${birth.m}.${birth.d}${hourTxt} · 이 기기에만 저장됩니다`;
+      `저장됨: ${dateTxt}${hourTxt} · 이 기기에만 저장됩니다`;
 
     lastBio = { n, vals, head };   // 공유 이미지에서 재사용
+  }
+
+  function renderResult(birth) {
+    document.getElementById("form").hidden = true;
+    document.getElementById("reveal").hidden = true;
+    if (birth.calendar === "lunar") {
+      if (birth.solar) renderBioResult(birth, birth.solar);
+      else {
+        lastBio = null;
+        document.getElementById("result").hidden = true;
+      }
+    } else {
+      renderBioResult(birth, birth);
+    }
     renderSaju(birth);
   }
 
@@ -658,7 +723,9 @@
   }
   function fillForm(b) {
     if (!b) return;
+    setCalendarMode(b.calendar === "lunar" ? "lunar" : "solar");
     selY.value = b.y; selM.value = b.m; fillDays(); selD.value = b.d;
+    lunarLeap.value = b.lunarLeap ? "leap" : "normal";
     selH.value = (b.h == null || !BRANCHES[b.h]) ? "" : b.h;
     inTime.value = b.time || "";
     setTimeMode(b.timeMode === "clock" ? "clock" : "branch");
@@ -696,10 +763,14 @@
     const h = timeMode === "clock"
       ? branchFromClock(time)
       : (selH.value === "" ? null : +selH.value);
-    const birth = { y, m, d, timeMode, h, time: time || null };
+    const birth = {
+      y, m, d, calendar: calendarMode,
+      lunarLeap: calendarMode === "lunar" && lunarLeap.value === "leap",
+      timeMode, h, time: time || null,
+    };
     // 미래 날짜 방어
     const bd = new Date(y, m - 1, d);
-    if (bd > now) { errEl.textContent = "미래 날짜는 입력할 수 없어요."; return; }
+    if (calendarMode === "solar" && bd > now) { errEl.textContent = "미래 날짜는 입력할 수 없어요."; return; }
     errEl.textContent = "";
     try { localStorage.setItem(KEY, JSON.stringify(birth)); } catch (e) {}
     renderResult(birth);

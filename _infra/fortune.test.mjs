@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildChart, buildDailyFortune } from "./fortune.js";
+import { buildChart, buildDailyFortune, handleFortuneChart, selectLunarConversion } from "./fortune.js";
 
 test("calculates a known four-pillars example at an exact KST time", () => {
   const chart = buildChart({
@@ -67,4 +67,47 @@ test("builds a deterministic daily fortune from the natal chart and KST date", (
     { date: "2026-07-15", iljin: "경인", tenGod: "정인", method: "natal-daymaster+daily-pillar-v1" },
   );
   assert.match(daily.text, /배우고 도움받는 흐름/);
+});
+
+test("selects the requested normal or leap lunar date from KASI XML", () => {
+  const xml = `<response><header><resultCode>00</resultCode></header><body><items>
+    <item><lunYear>2023</lunYear><lunMonth>02</lunMonth><lunDay>01</lunDay><lunLeapmonth>평</lunLeapmonth><solYear>2023</solYear><solMonth>02</solMonth><solDay>20</solDay></item>
+    <item><lunYear>2023</lunYear><lunMonth>02</lunMonth><lunDay>01</lunDay><lunLeapmonth>윤</lunLeapmonth><solYear>2023</solYear><solMonth>03</solMonth><solDay>22</solDay></item>
+  </items></body></response>`;
+  assert.deepEqual(selectLunarConversion(xml, { year: 2023, month: 2, day: 1, leap: false }),
+    { year: 2023, month: 2, day: 20 });
+  assert.deepEqual(selectLunarConversion(xml, { year: 2023, month: 2, day: 1, leap: true }),
+    { year: 2023, month: 3, day: 22 });
+  assert.equal(selectLunarConversion(xml, { year: 2023, month: 3, day: 1, leap: true }), null);
+});
+
+test("converts a lunar birth date before building the chart", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("getSolCalInfo")) return new Response(
+      `<response><header><resultCode>00</resultCode></header><body><items><item>
+        <lunYear>2015</lunYear><lunMonth>01</lunMonth><lunDay>01</lunDay><lunLeapmonth>평</lunLeapmonth>
+        <solYear>2015</solYear><solMonth>02</solMonth><solDay>19</solDay>
+      </item></items></body></response>`,
+    );
+    return new Response(`<response><header><resultCode>99</resultCode></header></response>`);
+  };
+  try {
+    const request = new Request("https://example.test/_fortune/chart", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        year: 2015, month: 1, day: 1, calendar: "lunar", lunarLeap: false,
+        timeMode: "clock", time: "12:00",
+      }),
+    });
+    const response = await handleFortuneChart(request, { KASI_SERVICE_KEY: "test-key" });
+    const data = await response.json();
+    assert.equal(response.status, 200);
+    assert.deepEqual(data.solarDate, { year: 2015, month: 2, day: 19 });
+    assert.equal(data.inputCalendar, "lunar");
+    assert.equal(data.inputDate.leap, false);
+    assert.equal(data.birthDate, "2015-02-19");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

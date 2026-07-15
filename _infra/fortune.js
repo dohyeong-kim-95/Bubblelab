@@ -217,6 +217,10 @@ function xmlTag(xml, name) {
   return match?.[1]?.trim() ?? null;
 }
 
+function xmlItems(xml) {
+  return [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].map((match) => match[1]);
+}
+
 function serviceKey(raw) {
   const value = String(raw ?? "").trim();
   if (!value) return null;
@@ -269,6 +273,67 @@ async function kasiDay(env, year, month, day) {
   }
 }
 
+export function selectLunarConversion(xml, expected) {
+  if (xmlTag(xml, "resultCode") !== "00") return null;
+  const leapLabel = expected.leap ? "윤" : "평";
+  const item = xmlItems(xml).find((value) =>
+    +(xmlTag(value, "lunYear") ?? 0) === expected.year
+    && +(xmlTag(value, "lunMonth") ?? 0) === expected.month
+    && +(xmlTag(value, "lunDay") ?? 0) === expected.day
+    && xmlTag(value, "lunLeapmonth") === leapLabel);
+  if (!item) return null;
+  const solar = {
+    year: +(xmlTag(item, "solYear") ?? 0),
+    month: +(xmlTag(item, "solMonth") ?? 0),
+    day: +(xmlTag(item, "solDay") ?? 0),
+  };
+  return validSolarDate(solar.year, solar.month, solar.day) ? solar : null;
+}
+
+async function kasiSolarFromLunar(env, lunar) {
+  const key = serviceKey(env.KASI_SERVICE_KEY);
+  if (!key) throw new Error("음력 변환 서비스가 설정되지 않았습니다.");
+  const cacheKey = `${lunar.year}-${lunar.month}-${lunar.day}-${lunar.leap ? "leap" : "normal"}`;
+  const cache = typeof caches === "undefined" ? null : caches.default;
+  const cacheRequest = new Request(`https://kasi-cache.bubblelab.dev/lunar/${cacheKey}`);
+  const cached = await cache?.match(cacheRequest);
+  if (cached) return cached.json();
+
+  const endpoint = new URL("https://apis.data.go.kr/B090041/openapi/service/LrsrCldInfoService/getSolCalInfo");
+  endpoint.searchParams.set("lunYear", String(lunar.year));
+  endpoint.searchParams.set("lunMonth", String(lunar.month).padStart(2, "0"));
+  endpoint.searchParams.set("lunDay", String(lunar.day).padStart(2, "0"));
+  endpoint.searchParams.set("ServiceKey", key);
+  let response;
+  try {
+    response = await fetch(endpoint, { signal: AbortSignal.timeout(5000) });
+  } catch {
+    throw new Error("KASI 음력 변환 서비스에 연결하지 못했습니다.");
+  }
+  const xml = await response.text();
+  const solar = response.ok ? selectLunarConversion(xml, lunar) : null;
+  if (!solar) throw new RangeError("해당 음력 날짜가 없거나 평달·윤달 선택이 올바르지 않습니다.");
+  if (cache) {
+    await cache.put(cacheRequest, Response.json(solar, {
+      headers: { "Cache-Control": "public, max-age=31536000" },
+    }));
+  }
+  return solar;
+}
+
+async function resolveBirthDate(input, env) {
+  const calendar = input?.calendar === "lunar" ? "lunar" : "solar";
+  const year = integer(input?.year, "연도", 1800, 2300);
+  const month = integer(input?.month, "월", 1, 12);
+  const day = integer(input?.day, "일", 1, calendar === "lunar" ? 30 : 31);
+  if (calendar === "solar") {
+    if (!validSolarDate(year, month, day)) throw new RangeError("실재하지 않는 양력 날짜입니다.");
+    return { calendar, inputDate: { year, month, day, leap: false }, solar: { year, month, day } };
+  }
+  const lunar = { year, month, day, leap: input?.lunarLeap === true };
+  return { calendar, inputDate: lunar, solar: await kasiSolarFromLunar(env, lunar) };
+}
+
 export async function handleFortuneChart(request, env) {
   if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
   if (+(request.headers.get("Content-Length") ?? 0) > 2048) {
@@ -276,7 +341,11 @@ export async function handleFortuneChart(request, env) {
   }
   try {
     const input = await request.json();
-    const chart = buildChart(input);
+    const resolved = await resolveBirthDate(input, env);
+    const chart = buildChart({ ...input, ...resolved.solar });
+    chart.inputCalendar = resolved.calendar;
+    chart.inputDate = resolved.inputDate;
+    chart.solarDate = resolved.solar;
     const today = kstToday();
     chart.dailyFortunes = chart.candidates.map((candidate) => buildDailyFortune(candidate, today));
     const [year, month, day] = chart.birthDate.split("-").map(Number);
