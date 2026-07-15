@@ -41,6 +41,18 @@
     return (typeof t === "function" ? t() : t) || "";
   }
 
+  // 토이가 이미지를 함께 공유하도록 파일을 넘길 수 있다:
+  //   window.blShareFiles = async () => [new File([blob], "x.png", {type:"image/png"})];
+  // (File 배열 반환. 없거나 null이면 텍스트/링크만 공유)
+  async function shareFiles() {
+    const f = window.blShareFiles;
+    if (typeof f !== "function") return null;
+    try {
+      const files = await f();
+      return files && files.length ? files : null;
+    } catch { return null; }
+  }
+
   async function copyLink() {
     const text = shareText();
     const payload = text ? `${text}\n${location.href}` : location.href;
@@ -65,6 +77,10 @@
         const data = { title: document.title, url: location.href };
         const text = shareText();
         if (text) data.text = text;
+        const files = await shareFiles();
+        if (files && navigator.canShare && navigator.canShare({ files })) {
+          data.files = files;
+        }
         await navigator.share(data);
         return;
       } catch (err) {

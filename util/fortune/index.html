@@ -195,10 +195,12 @@
     x -= Math.floor(x);
     return Math.floor(x * FORTUNES.length);
   }
+  let currentLine = FORTUNES[0];   // 공유 이미지에서 재사용
   function showFortune(seed) {
     const i = seedToIdx(seed);
-    fEmoji.textContent = FORTUNES[i][0];
-    fText.textContent = FORTUNES[i][1];
+    currentLine = FORTUNES[i];
+    fEmoji.textContent = currentLine[0];
+    fText.textContent = currentLine[1];
   }
 
   // ── 날짜 표기 ─────────────────────────────────────────────────
@@ -279,6 +281,7 @@
     else { fill.style.left = (50 + v * 50) + "%"; fill.style.width = (-v * 50) + "%"; }
   }
 
+  let lastBio = null;   // { n, vals, head } — 공유 이미지에서 재사용
   function renderResult(birth) {
     document.getElementById("form").hidden = true;
     document.getElementById("reveal").hidden = true;
@@ -314,6 +317,8 @@
     const hourTxt = b ? ` ${b.k}시(${b.c})` : "";
     document.getElementById("saved-info").textContent =
       `저장됨: ${birth.y}.${birth.m}.${birth.d}${hourTxt} · 이 기기에만 저장됩니다`;
+
+    lastBio = { n, vals, head };   // 공유 이미지에서 재사용
   }
 
   // ── 저장/불러오기 ──────────────────────────────────────────────
@@ -368,8 +373,171 @@
   if (saved) { fillForm(saved); renderResult(saved); }
   else { showFortune(todayNum()); }  // 생년월일 없으면 오늘 날짜 기준
 
-  // 공유 문구
-  window.blShareText = () => "오늘의 운세를 확인해보세요 🔮";
+  // ── 공유 ───────────────────────────────────────────────────────
+  const dateStr = document.getElementById("today").textContent;
+
+  // 공유 텍스트: 오늘의 문구를 항상 포함.
+  // (생년월일 미입력자는 이 텍스트만, 입력자는 이미지와 함께 공유된다)
+  window.blShareText = () => {
+    const [emoji, text] = currentLine;
+    return `🔮 오늘의 운세 · ${dateStr}\n${emoji} ${text}`;
+  };
+
+  // 공유 이미지: 생년월일을 입력해 바이오리듬이 있을 때만 생성.
+  function rr(ctx, x, y, w, h, r) {
+    r = Math.min(r, Math.abs(w) / 2, h / 2);
+    if (w < 0) { x += w; w = -w; }
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, w, h, r);
+    else {
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+  }
+  function wrapLines(ctx, text, maxW) {
+    const lines = [];
+    let cur = "";
+    for (const ch of text) {
+      const test = cur + ch;
+      if (ctx.measureText(test).width > maxW && cur) { lines.push(cur); cur = ch; }
+      else cur = test;
+    }
+    if (cur) lines.push(cur);
+    return lines;
+  }
+
+  function drawCard() {
+    const S = 2, W = 450, pad = 34, innerW = W - pad * 2;
+    const MONO = 'ui-monospace, "SF Mono", monospace';
+    const [emoji, text] = currentLine;
+    const { vals, n, head } = lastBio;
+
+    // 측정용 컨텍스트로 문구 줄바꿈 계산
+    const meas = document.createElement("canvas").getContext("2d");
+    meas.font = "19px " + MONO;
+    const lines = wrapLines(meas, text, innerW);
+    meas.font = "15px " + MONO;
+    const headLines = wrapLines(meas, head, innerW);
+
+    // 높이 계산
+    let H = 34;             // top pad
+    H += 26 + 20;           // title + date
+    H += 30;                // gap
+    H += 52;                // emoji
+    H += lines.length * 28; // 문구
+    H += 26;                // gap
+    H += 1 + 26;            // divider + label
+    H += CYCLES.length * 52;// 바 3개
+    H += 16;                // gap
+    H += headLines.length * 22;
+    H += 26;                // gap
+    H += 20;                // footer
+    H += 30;                // bottom pad
+
+    const cv = document.createElement("canvas");
+    cv.width = W * S; cv.height = H * S;
+    const ctx = cv.getContext("2d");
+    ctx.scale(S, S);
+
+    // 배경
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, "#141c27");
+    g.addColorStop(1, "#0f151d");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    const INK = "#dbe4ee", DIM = "rgba(219,228,238,";
+    ctx.textBaseline = "alphabetic";
+    let y = 34;
+
+    // 타이틀
+    ctx.textAlign = "left";
+    ctx.fillStyle = INK;
+    ctx.font = "bold 20px " + MONO;
+    y += 20;
+    ctx.fillText("🔮 오늘의 운세", pad, y);
+    ctx.fillStyle = DIM + "0.5)";
+    ctx.font = "13px " + MONO;
+    y += 20;
+    ctx.fillText(`${dateStr} · 태어난 지 ${n.toLocaleString()}일째`, pad, y);
+
+    // 오늘의 문구
+    y += 30;
+    ctx.textAlign = "center";
+    ctx.font = "40px " + MONO;
+    y += 40;
+    ctx.fillText(emoji, W / 2, y);
+    ctx.fillStyle = INK;
+    ctx.font = "19px " + MONO;
+    y += 12;
+    for (const ln of lines) { y += 28; ctx.fillText(ln, W / 2, y); }
+
+    // 구분선
+    y += 26;
+    ctx.fillStyle = DIM + "0.12)";
+    ctx.fillRect(pad, y, innerW, 1);
+
+    // 바이오리듬 라벨
+    ctx.textAlign = "left";
+    ctx.fillStyle = DIM + "0.7)";
+    ctx.font = "bold 14px " + MONO;
+    y += 26;
+    ctx.fillText("🌊 오늘의 바이오리듬", pad, y);
+
+    // 바 3개
+    const COLORS = { phy: "#ff8a7a", emo: "#ffcf6b", int: "#6fd4ac" };
+    for (const c of CYCLES) {
+      const v = vals[c.key];
+      ctx.fillStyle = INK;
+      ctx.font = "13px " + MONO;
+      ctx.textAlign = "left";
+      ctx.fillText(c.name, pad, y + 26);
+      const pct = Math.round(v * 100);
+      ctx.fillStyle = DIM + "0.75)";
+      ctx.textAlign = "right";
+      ctx.fillText((pct > 0 ? "+" : "") + pct + "%", pad + innerW, y + 26);
+      // 트랙
+      const by = y + 34, barH = 8, half = innerW / 2;
+      ctx.fillStyle = DIM + "0.10)";
+      rr(ctx, pad, by, innerW, barH, 4); ctx.fill();
+      ctx.fillStyle = DIM + "0.22)";
+      ctx.fillRect(pad + half - 0.5, by - 2, 1, barH + 4);
+      ctx.fillStyle = COLORS[c.key];
+      if (v >= 0) { rr(ctx, pad + half, by, half * v, barH, 4); ctx.fill(); }
+      else { rr(ctx, pad + half + half * v, by, -half * v, barH, 4); ctx.fill(); }
+      y += 52;
+    }
+
+    // 종합 한줄
+    y += 16;
+    ctx.textAlign = "center";
+    ctx.fillStyle = INK;
+    ctx.font = "15px " + MONO;
+    for (const ln of headLines) { y += 22; ctx.fillText(ln, W / 2, y); }
+
+    // 푸터
+    y += 26;
+    ctx.fillStyle = DIM + "0.4)";
+    ctx.font = "12px " + MONO;
+    y += 8;
+    ctx.fillText("util.bubblelab.dev/fortune", W / 2, y);
+
+    return cv;
+  }
+
+  window.blShareFiles = async () => {
+    if (!load() || !lastBio) return null;   // 생년월일 없으면 이미지 없이 텍스트만
+    try {
+      const cv = drawCard();
+      const blob = await new Promise((res) => cv.toBlob(res, "image/png"));
+      if (!blob) return null;
+      return [new File([blob], "오늘의운세.png", { type: "image/png" })];
+    } catch (e) { return null; }
+  };
 </script>
 <script defer src="/_shared/share.js"></script>
 </body>
