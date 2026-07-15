@@ -38,6 +38,13 @@
 
   section { margin-top: 1.4rem; }
   [hidden] { display: none !important; }
+  .panel-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between;
+                  padding: 0; border: 0; border-radius: 0; text-align: left; }
+  .panel-toggle:hover { background: none !important; }
+  .panel-toggle h2 { margin: 0 !important; }
+  .panel-chevron { opacity: .45; font-size: .8rem; transition: transform .18s ease; }
+  .panel-toggle[aria-expanded="false"] .panel-chevron { transform: rotate(-90deg); }
+  .panel-content { margin-top: .3rem; }
 
   /* 생년월일 입력 */
   #reveal { text-align: center; }
@@ -91,14 +98,14 @@
   /* 사주 명식 */
   #saju h2 { margin: 0 0 .3rem; font-size: .95rem; }
   #saju .sub { margin: 0 0 1rem; font-size: .72rem; opacity: .55; line-height: 1.5; }
-  .saju-status { margin: .7rem 0 0; font-size: .8rem; line-height: 1.55; opacity: .7; }
+  .saju-status { margin: .55rem 0 0; font-size: .56rem; line-height: 1.4; opacity: .42; }
   .saju-candidate + .saju-candidate { margin-top: 1rem; padding-top: 1rem;
                                      border-top: 1px solid light-dark(#1c273322, #dbe4ee22); }
   .saju-candidate-title { margin: 0 0 .55rem; font-size: .75rem; opacity: .62; }
   .saju-grid { display: grid; grid-template-columns: 3.2rem repeat(4, minmax(0, 1fr));
                border: 1px solid light-dark(#1c273322, #dbe4ee22); border-radius: .65rem;
                overflow: hidden; }
-  .saju-cell { min-width: 0; padding: .55rem .2rem; text-align: center;
+  .saju-cell { min-width: 0; overflow: hidden; padding: .55rem .15rem; text-align: center;
                border-right: 1px solid light-dark(#1c273318, #dbe4ee18);
                border-bottom: 1px solid light-dark(#1c273318, #dbe4ee18); }
   .saju-cell:nth-child(5n) { border-right: 0; }
@@ -107,11 +114,21 @@
                             background: light-dark(#1c273307, #dbe4ee08); }
   .saju-char { display: block; font-family: serif; font-size: 1.55rem; line-height: 1.2; }
   .saju-korean { display: block; margin-top: .18rem; font-size: .72rem; }
-  .saju-meta { display: block; margin-top: .12rem; font-size: .61rem; opacity: .52;
-               white-space: nowrap; }
+  .saju-meta, .saju-god { display: block; margin-top: .12rem; font-size: .56rem;
+                          line-height: 1.25; opacity: .52; white-space: normal; word-break: keep-all; }
+  .saju-god { margin-top: .08rem; opacity: .7; }
+  .saju-actions { display: flex; justify-content: flex-end; margin-top: .75rem; }
+  .saju-copy { padding: .38rem .65rem; font-size: .7rem; }
   .saju-warning { margin: .8rem 0 0; padding: .65rem .75rem; border-radius: .5rem;
                   font-size: .73rem; line-height: 1.5;
                   background: light-dark(#d99a2614, #ffcf6b12); }
+  @media (max-width: 390px) {
+    body { padding: 1rem; }
+    .card { padding: 1.15rem .9rem; }
+    .saju-grid { grid-template-columns: 2.65rem repeat(4, minmax(0, 1fr)); }
+    .saju-char { font-size: 1.4rem; }
+    .saju-korean { font-size: .66rem; }
+  }
 </style>
 </head>
 <body>
@@ -172,18 +189,26 @@
 
   <!-- 사주 명식 -->
   <section class="card" id="saju" hidden>
-    <h2>🧭 사주 명식</h2>
-    <p class="sub" id="saju-rule">양력 · 대한민국 표준시(KST) · 00시 일주 변경 · 진태양시 미보정</p>
-    <div id="saju-candidates"></div>
-    <p class="saju-status" id="saju-status">명식을 계산하고 있습니다…</p>
-    <p class="saju-warning" id="saju-warning" hidden></p>
+    <button type="button" class="panel-toggle" aria-expanded="true" aria-controls="saju-content">
+      <h2>🧭 사주 명식</h2><span class="panel-chevron" aria-hidden="true">▼</span>
+    </button>
+    <div class="panel-content" id="saju-content">
+      <p class="sub" id="saju-rule">양력 · 대한민국 표준시(KST) · 00시 일주 변경 · 진태양시 미보정</p>
+      <div id="saju-candidates"></div>
+      <div class="saju-actions"><button type="button" class="saju-copy" id="saju-copy" disabled>명식 이미지 복사</button></div>
+      <p class="saju-status" id="saju-status">명식을 계산하고 있습니다…</p>
+      <p class="saju-warning" id="saju-warning" hidden></p>
+    </div>
   </section>
 
   <!-- 바이오리듬 결과 -->
   <section class="card" id="result" hidden>
-    <h2>🌊 오늘의 바이오리듬</h2>
-    <p class="sub" id="bio-sub"></p>
-    <p class="headline" id="bio-headline"></p>
+    <button type="button" class="panel-toggle" aria-expanded="true" aria-controls="bio-content">
+      <h2>🌊 오늘의 바이오리듬</h2><span class="panel-chevron" aria-hidden="true">▼</span>
+    </button>
+    <div class="panel-content" id="bio-content">
+      <p class="sub" id="bio-sub"></p>
+      <p class="headline" id="bio-headline"></p>
 
     <div class="bio phy">
       <div class="bio-top"><span class="bio-name">신체 <small>Physical</small></span><span class="bio-pct" id="pct-phy"></span></div>
@@ -201,9 +226,10 @@
       <p class="bio-note" id="note-int"></p>
     </div>
 
-    <div class="footer">
-      <p class="saved" id="saved-info"></p>
-      <button class="link-btn" id="edit-btn">생년월일 다시 입력</button>
+      <div class="footer">
+        <p class="saved" id="saved-info"></p>
+        <button class="link-btn" id="edit-btn">생년월일 다시 입력</button>
+      </div>
     </div>
   </section>
 </main>
@@ -372,8 +398,10 @@
   const sajuCandidates = document.getElementById("saju-candidates");
   const sajuStatus = document.getElementById("saju-status");
   const sajuWarning = document.getElementById("saju-warning");
+  const sajuCopy = document.getElementById("saju-copy");
   const SAJU_COLUMNS = [["hour", "시주"], ["day", "일주"], ["month", "월주"], ["year", "연주"]];
   let sajuRequestId = 0;
+  let lastSajuData = null;
 
   function addSajuCell(grid, className, text) {
     const cell = document.createElement("div");
@@ -398,8 +426,14 @@
     korean.textContent = part.korean;
     const meta = document.createElement("span");
     meta.className = "saju-meta";
-    meta.textContent = `${part.yinYang} · ${part.element}${part.tenGod ? ` · ${part.tenGod}` : ""}`;
+    meta.textContent = `${part.yinYang}·${part.element}`;
     cell.append(char, korean, meta);
+    if (part.tenGod) {
+      const god = document.createElement("span");
+      god.className = "saju-god";
+      god.textContent = part.tenGod;
+      cell.appendChild(god);
+    }
   }
 
   function renderSajuCandidate(candidate, showTitle) {
@@ -427,6 +461,8 @@
     const requestId = ++sajuRequestId;
     sajuSec.hidden = false;
     sajuCandidates.replaceChildren();
+    lastSajuData = null;
+    sajuCopy.disabled = true;
     sajuStatus.hidden = false;
     sajuStatus.textContent = "명식을 계산하고 있습니다…";
     sajuWarning.hidden = true;
@@ -444,6 +480,8 @@
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "명식을 계산하지 못했습니다.");
       if (requestId !== sajuRequestId) return;
+      lastSajuData = data;
+      sajuCopy.disabled = false;
       for (const candidate of data.candidates) renderSajuCandidate(candidate, data.ambiguous);
       const verifyText = {
         verified: "KASI 일진 교차검증 완료",
@@ -461,6 +499,97 @@
       sajuStatus.textContent = error.message || "명식을 계산하지 못했습니다.";
     }
   }
+
+  function drawSajuCard(data) {
+    const S = 2, W = 500, pad = 28, rowLabelW = 54;
+    const cellW = (W - pad * 2 - rowLabelW) / 4;
+    const candidateH = 248;
+    const titleExtra = data.ambiguous ? 28 : 0;
+    const H = 102 + data.candidates.length * (candidateH + titleExtra) + 34;
+    const cv = document.createElement("canvas");
+    cv.width = W * S; cv.height = H * S;
+    const ctx = cv.getContext("2d");
+    ctx.scale(S, S);
+    const MONO = 'ui-monospace, "SF Mono", monospace';
+    const SERIF = 'serif';
+    const INK = "#dbe4ee", DIM = "rgba(219,228,238,.56)", LINE = "rgba(219,228,238,.15)";
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, "#182230"); g.addColorStop(1, "#10161f");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = INK; ctx.textAlign = "left"; ctx.font = `bold 20px ${MONO}`;
+    ctx.fillText("🧭 사주 명식", pad, 34);
+    ctx.fillStyle = DIM; ctx.font = `11px ${MONO}`;
+    ctx.fillText("양력 · 대한민국 표준시(KST) · 00시 일주 변경", pad, 60);
+    let y = 84;
+
+    const drawCell = (x, top, w, h, fill) => {
+      ctx.fillStyle = fill || "rgba(219,228,238,.025)"; ctx.fillRect(x, top, w, h);
+      ctx.strokeStyle = LINE; ctx.strokeRect(x, top, w, h);
+    };
+    const drawPart = (part, x, top, w, h) => {
+      drawCell(x, top, w, h);
+      ctx.textAlign = "center";
+      if (!part) {
+        ctx.fillStyle = DIM; ctx.font = `13px ${MONO}`; ctx.fillText("미상", x + w / 2, top + h / 2);
+        return;
+      }
+      ctx.fillStyle = INK; ctx.font = `30px ${SERIF}`; ctx.fillText(part.hanja, x + w / 2, top + 31);
+      ctx.font = `12px ${MONO}`; ctx.fillText(part.korean, x + w / 2, top + 59);
+      ctx.fillStyle = DIM; ctx.font = `10px ${MONO}`;
+      ctx.fillText(`${part.yinYang}·${part.element}`, x + w / 2, top + 78);
+      if (part.tenGod) ctx.fillText(part.tenGod, x + w / 2, top + 94);
+    };
+
+    for (const candidate of data.candidates) {
+      if (data.ambiguous) {
+        ctx.fillStyle = DIM; ctx.textAlign = "left"; ctx.font = `11px ${MONO}`;
+        ctx.fillText(candidate.timeLabel, pad, y + 10); y += 28;
+      }
+      const headH = 34, partH = 105;
+      drawCell(pad, y, rowLabelW, headH, "rgba(219,228,238,.055)");
+      SAJU_COLUMNS.forEach(([, label], i) => {
+        const x = pad + rowLabelW + cellW * i;
+        drawCell(x, y, cellW, headH, "rgba(219,228,238,.055)");
+        ctx.fillStyle = DIM; ctx.textAlign = "center"; ctx.font = `11px ${MONO}`;
+        ctx.fillText(label, x + cellW / 2, y + headH / 2);
+      });
+      ["stem", "branch"].forEach((partKey, row) => {
+        const top = y + headH + partH * row;
+        drawCell(pad, top, rowLabelW, partH, "rgba(219,228,238,.055)");
+        ctx.fillStyle = DIM; ctx.textAlign = "center"; ctx.font = `11px ${MONO}`;
+        ctx.fillText(row === 0 ? "천간" : "지지", pad + rowLabelW / 2, top + partH / 2);
+        SAJU_COLUMNS.forEach(([key], i) => drawPart(
+          candidate.pillars[key]?.[partKey], pad + rowLabelW + cellW * i, top, cellW, partH
+        ));
+      });
+      y += candidateH;
+    }
+    ctx.fillStyle = "rgba(219,228,238,.5)"; ctx.textAlign = "center"; ctx.font = `bold 11px ${MONO}`;
+    ctx.fillText("util.bubblelab.dev/fortune", W / 2, H - 19);
+    return cv;
+  }
+
+  sajuCopy.addEventListener("click", async () => {
+    if (!lastSajuData) return;
+    const original = "명식 이미지 복사";
+    try {
+      if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
+        throw new Error("이 브라우저에서는 이미지 복사를 지원하지 않습니다.");
+      }
+      const cv = drawSajuCard(lastSajuData);
+      const blob = await new Promise((resolve) => cv.toBlob(resolve, "image/png"));
+      if (!blob) throw new Error("이미지를 만들지 못했습니다.");
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      sajuCopy.textContent = "복사됨 ✓";
+    } catch (error) {
+      sajuCopy.textContent = "복사 실패";
+      sajuStatus.hidden = false;
+      sajuStatus.textContent = error.message || "이미지를 복사하지 못했습니다.";
+    } finally {
+      setTimeout(() => { sajuCopy.textContent = original; }, 1800);
+    }
+  });
 
   let lastBio = null;   // { n, vals, head } — 공유 이미지에서 재사용
   function renderResult(birth) {
@@ -562,6 +691,15 @@
     errEl.textContent = "";
     try { localStorage.setItem(KEY, JSON.stringify(birth)); } catch (e) {}
     renderResult(birth);
+  });
+
+  document.querySelectorAll(".panel-toggle").forEach((toggle) => {
+    toggle.addEventListener("click", () => {
+      const content = document.getElementById(toggle.getAttribute("aria-controls"));
+      const expanded = toggle.getAttribute("aria-expanded") === "true";
+      toggle.setAttribute("aria-expanded", String(!expanded));
+      content.hidden = expanded;
+    });
   });
 
   // ── 초기 상태 ──────────────────────────────────────────────────
