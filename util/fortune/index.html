@@ -26,10 +26,7 @@
   #fortune .emoji { font-size: 2.6rem; line-height: 1; }
   #fortune .text { margin: 1rem 0 0; font-size: 1.05rem; line-height: 1.7;
                    min-height: 3.4em; display: flex; align-items: center; justify-content: center; }
-  #fortune .text.fade { opacity: 0; transition: none; }
-  #fortune .text { transition: opacity .35s; }
 
-  #actions { text-align: center; margin-top: 1.1rem; }
   button { font: inherit; color: inherit; background: none; cursor: pointer;
            padding: .6rem 1.2rem; border-radius: .55rem;
            border: 1px solid light-dark(#1c273355, #dbe4ee55); transition: background .15s; }
@@ -93,10 +90,6 @@
     <div class="emoji" id="f-emoji">🔮</div>
     <p class="text" id="f-text"></p>
   </div>
-  <div id="actions">
-    <button id="draw">다시 뽑기 🎲</button>
-  </div>
-
   <!-- 개인 운세 진입 -->
   <section id="reveal">
     <button class="link-btn" id="reveal-btn">나에게 맞는 운세를 보고싶다면? →</button>
@@ -191,20 +184,22 @@
 
   const fEmoji = document.getElementById("f-emoji");
   const fText = document.getElementById("f-text");
-  let lastIdx = -1;
-  function draw() {
-    let i;
-    do { i = Math.floor(Math.random() * FORTUNES.length); }
-    while (FORTUNES.length > 1 && i === lastIdx);
-    lastIdx = i;
-    fText.classList.add("fade");
-    setTimeout(() => {
-      fEmoji.textContent = FORTUNES[i][0];
-      fText.textContent = FORTUNES[i][1];
-      fText.classList.remove("fade");
-    }, 180);
+
+  // 오늘의 한줄: 무작위가 아니라 날짜(+생년월일·바이오리듬 수치)로 결정.
+  // → 하루 동안 같은 문구가 유지되고, 사람마다 다르게 나온다.
+  function todayNum() {
+    return Math.floor(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / 86400000);
   }
-  document.getElementById("draw").addEventListener("click", draw);
+  function seedToIdx(seed) {
+    let x = Math.sin(seed) * 10000;
+    x -= Math.floor(x);
+    return Math.floor(x * FORTUNES.length);
+  }
+  function showFortune(seed) {
+    const i = seedToIdx(seed);
+    fEmoji.textContent = FORTUNES[i][0];
+    fText.textContent = FORTUNES[i][1];
+  }
 
   // ── 날짜 표기 ─────────────────────────────────────────────────
   const now = new Date();
@@ -299,6 +294,12 @@
       document.getElementById("note-" + c.key).textContent = noteFor(c.name, v);
     }
     const avg = (vals.phy + vals.emo + vals.int) / 3;
+
+    // 오늘의 한줄을 생년월일·바이오리듬 수치로 갱신 (하루 동안 고정)
+    const seed = todayNum() + n +
+      Math.round((vals.phy + vals.emo + vals.int) * 1000);
+    showFortune(seed);
+
     let head;
     if (avg >= 0.5) head = "✨ 세 리듬이 모두 좋은 날! 자신감을 가져도 좋습니다.";
     else if (avg >= 0.15) head = "🙂 전반적으로 순조로운 흐름. 무난하게 좋은 하루.";
@@ -363,9 +364,9 @@
   });
 
   // ── 초기 상태 ──────────────────────────────────────────────────
-  draw();
   const saved = load();
   if (saved) { fillForm(saved); renderResult(saved); }
+  else { showFortune(todayNum()); }  // 생년월일 없으면 오늘 날짜 기준
 
   // 공유 문구
   window.blShareText = () => "오늘의 운세를 확인해보세요 🔮";
