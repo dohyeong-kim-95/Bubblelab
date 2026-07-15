@@ -343,8 +343,10 @@
     return Math.floor(x * FORTUNES.length);
   }
   let currentLine = FORTUNES[0];   // 공유 이미지에서 재사용
+  let currentDaily = null;          // 분야별 운세 공유 이미지에서 재사용
   let fallbackFortuneSeed = 0;
   function showFortuneLoading() {
+    currentDaily = null;
     fortuneCard.classList.add("is-loading");
     fortuneCard.setAttribute("aria-busy", "true");
     fEmoji.textContent = "";
@@ -354,6 +356,7 @@
   }
   function showFortune(seed) {
     const i = seedToIdx(seed);
+    currentDaily = null;
     currentLine = FORTUNES[i];
     fEmoji.textContent = currentLine[0];
     fText.textContent = currentLine[1];
@@ -370,6 +373,7 @@
   }
   function showSajuFortune(daily) {
     currentLine = [daily.emoji, daily.text];
+    currentDaily = daily;
     fEmoji.textContent = daily.emoji;
     fText.textContent = daily.text;
     for (const key of ["wealth", "career", "love"]) showFortuneCategory(key, daily.categories[key]);
@@ -885,7 +889,7 @@
     return `🔮 오늘의 운세 · ${dateStr}\n${emoji} ${text}`;
   };
 
-  // 공유 이미지: 생년월일을 입력해 바이오리듬이 있을 때만 생성.
+  // 공유 이미지: 명식 기반 분야별 운세가 계산된 경우에만 생성.
   function rr(ctx, x, y, w, h, r) {
     r = Math.min(r, Math.abs(w) / 2, h / 2);
     if (w < 0) { x += w; w = -w; }
@@ -916,14 +920,21 @@
     const S = 2, W = 450, pad = 34, innerW = W - pad * 2;
     const MONO = 'ui-monospace, "SF Mono", monospace';
     const [emoji, text] = currentLine;
-    const { vals, n, head } = lastBio;
+    const categoryData = [
+      ["재물운", currentDaily.categories.wealth],
+      ["직업운", currentDaily.categories.career],
+      ["연애운", currentDaily.categories.love],
+    ];
 
     // 측정용 컨텍스트로 문구 줄바꿈 계산
     const meas = document.createElement("canvas").getContext("2d");
     meas.font = "19px " + MONO;
     const lines = wrapLines(meas, text, innerW);
-    meas.font = "15px " + MONO;
-    const headLines = wrapLines(meas, head, innerW);
+    meas.font = "12px " + MONO;
+    const categoryRows = categoryData.map(([name, category]) => {
+      const commentLines = wrapLines(meas, category.comment, innerW - 82);
+      return { name, ...category, commentLines, height: Math.max(62, 20 + commentLines.length * 19) };
+    });
 
     // 높이 계산
     let H = 34;             // top pad
@@ -932,10 +943,8 @@
     H += 52;                // emoji
     H += lines.length * 28; // 문구
     H += 26;                // gap
-    H += 1 + 26;            // divider + label
-    H += CYCLES.length * 52;// 바 3개
-    H += 16;                // gap
-    H += headLines.length * 22;
+    H += 1 + 22;            // divider + gap
+    H += categoryRows.reduce((sum, row) => sum + row.height + 8, 0);
     H += 26;                // gap
     H += 20;                // footer
     H += 30;                // bottom pad
@@ -965,7 +974,7 @@
     ctx.fillStyle = DIM + "0.5)";
     ctx.font = "13px " + MONO;
     y += 20;
-    ctx.fillText(`${dateStr} · 태어난 지 ${n.toLocaleString()}일째`, pad, y);
+    ctx.fillText(dateStr, pad, y);
 
     // 오늘의 문구
     y += 30;
@@ -983,43 +992,34 @@
     ctx.fillStyle = DIM + "0.12)";
     ctx.fillRect(pad, y, innerW, 1);
 
-    // 바이오리듬 라벨
-    ctx.textAlign = "left";
-    ctx.fillStyle = DIM + "0.7)";
-    ctx.font = "bold 14px " + MONO;
-    y += 26;
-    ctx.fillText("🌊 오늘의 바이오리듬", pad, y);
+    // 재물운 · 직업운 · 연애운
+    y += 22;
+    for (const category of categoryRows) {
+      const top = y;
+      ctx.fillStyle = "rgba(219,228,238,.035)";
+      rr(ctx, pad, top, innerW, category.height, 8); ctx.fill();
 
-    // 바 3개
-    const COLORS = { phy: "#ff8a7a", emo: "#ffcf6b", int: "#6fd4ac" };
-    for (const c of CYCLES) {
-      const v = vals[c.key];
+      const left = pad + 12;
       ctx.fillStyle = INK;
-      ctx.font = "13px " + MONO;
+      ctx.font = "bold 13px " + MONO;
       ctx.textAlign = "left";
-      ctx.fillText(c.name, pad, y + 26);
-      const pct = Math.round(v * 100);
-      ctx.fillStyle = DIM + "0.75)";
-      ctx.textAlign = "right";
-      ctx.fillText((pct > 0 ? "+" : "") + pct + "%", pad + innerW, y + 26);
-      // 트랙
-      const by = y + 34, barH = 8, half = innerW / 2;
-      ctx.fillStyle = DIM + "0.10)";
-      rr(ctx, pad, by, innerW, barH, 4); ctx.fill();
-      ctx.fillStyle = DIM + "0.22)";
-      ctx.fillRect(pad + half - 0.5, by - 2, 1, barH + 4);
-      ctx.fillStyle = COLORS[c.key];
-      if (v >= 0) { rr(ctx, pad + half, by, half * v, barH, 4); ctx.fill(); }
-      else { rr(ctx, pad + half + half * v, by, -half * v, barH, 4); ctx.fill(); }
-      y += 52;
-    }
+      ctx.fillText(category.name, left, top + 21);
 
-    // 종합 한줄
-    y += 16;
-    ctx.textAlign = "center";
-    ctx.fillStyle = INK;
-    ctx.font = "15px " + MONO;
-    for (const ln of headLines) { y += 22; ctx.fillText(ln, W / 2, y); }
+      ctx.font = "bold 11px " + MONO;
+      const badgeW = ctx.measureText(category.level).width + 12;
+      ctx.fillStyle = "rgba(219,228,238,.10)";
+      rr(ctx, left, top + 31, badgeW, 20, 4); ctx.fill();
+      ctx.fillStyle = category.level === "원활" ? "#6fd4ac"
+        : category.level === "주의" ? "#ff8a7a" : INK;
+      ctx.fillText(category.level, left + 6, top + 45);
+
+      ctx.fillStyle = DIM + "0.75)";
+      ctx.font = "12px " + MONO;
+      category.commentLines.forEach((line, index) => {
+        ctx.fillText(line, pad + 82, top + 21 + index * 19);
+      });
+      y += category.height + 8;
+    }
 
     // 푸터 (링크)
     y += 26;
@@ -1032,7 +1032,7 @@
   }
 
   window.blShareFiles = async () => {
-    if (!load() || !lastBio) return null;   // 생년월일 없으면 이미지 없이 텍스트만
+    if (!load() || !currentDaily) return null;   // 명식 운세가 없으면 이미지 없이 텍스트만
     try {
       const cv = drawCard();
       const blob = await new Promise((res) => cv.toBlob(res, "image/png"));
