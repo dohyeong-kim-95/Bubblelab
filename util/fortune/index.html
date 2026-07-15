@@ -47,6 +47,17 @@
                  background: light-dark(#eef2f6, #10161f);
                  border: 1px solid light-dark(#1c273355, #dbe4ee55);
                  border-radius: .4rem; padding: .35rem .4rem; }
+  #form input[type="time"] { flex: 1; min-width: 0; font: inherit; font-size: .85rem; color: inherit;
+                 background: light-dark(#eef2f6, #10161f);
+                 border: 1px solid light-dark(#1c273355, #dbe4ee55);
+                 border-radius: .4rem; padding: .35rem .4rem; }
+  .time-mode { display: grid; grid-template-columns: 1fr 1fr; gap: .3rem; width: 100%;
+               padding: .2rem; border-radius: .55rem;
+               background: light-dark(#1c27330b, #dbe4ee0d); }
+  .time-mode button { padding: .42rem .5rem; border: 0; font-size: .8rem; opacity: .58; }
+  .time-mode button[aria-pressed="true"] { opacity: 1; font-weight: bold;
+               background: light-dark(#fff, #273445); box-shadow: 0 1px 4px #0002; }
+  .time-help { margin: -.35rem 0 .8rem 3.7rem; font-size: .72rem; line-height: 1.45; opacity: .52; }
   #form .form-actions { display: flex; gap: .6rem; margin-top: 1rem; }
   #form .form-actions button { flex: 1; }
   #err { min-height: 1.1em; margin: .6rem 0 0; font-size: .8rem; text-align: center;
@@ -111,9 +122,22 @@
       <select id="in-d"></select>
     </div>
     <div class="row">
-      <label for="in-h">시</label>
+      <label>시간</label>
+      <div class="time-mode" role="group" aria-label="출생시간 입력 방식">
+        <button type="button" id="mode-branch" aria-pressed="true">시진 · 자축인묘</button>
+        <button type="button" id="mode-clock" aria-pressed="false">정확한 시각</button>
+      </div>
+    </div>
+    <div class="row" id="branch-row">
+      <label for="in-h">시진</label>
       <select id="in-h"></select>
     </div>
+    <p class="time-help" id="branch-help">정확한 시각을 모르면 두 시간 단위의 시진을 선택하세요.</p>
+    <div class="row" id="clock-row" hidden>
+      <label for="in-time">시각</label>
+      <input type="time" id="in-time" step="60">
+    </div>
+    <p class="time-help" id="clock-help" hidden>태어난 시각을 시·분까지 입력하세요.</p>
     <div class="form-actions">
       <button id="cancel">취소</button>
       <button id="save">내 운세 보기</button>
@@ -214,6 +238,14 @@
   const selM = document.getElementById("in-m");
   const selD = document.getElementById("in-d");
   const selH = document.getElementById("in-h");
+  const inTime = document.getElementById("in-time");
+  const modeBranch = document.getElementById("mode-branch");
+  const modeClock = document.getElementById("mode-clock");
+  const branchRow = document.getElementById("branch-row");
+  const branchHelp = document.getElementById("branch-help");
+  const clockRow = document.getElementById("clock-row");
+  const clockHelp = document.getElementById("clock-help");
+  let timeMode = "branch";
   const thisYear = now.getFullYear();
   function opt(sel, val, label) {
     const o = document.createElement("option");
@@ -249,6 +281,26 @@
   ];
   opt(selH, "", "모름");
   BRANCHES.forEach((b, i) => opt(selH, i, `${b.k}시 (${b.c}, ${b.range})`));
+  function setTimeMode(mode) {
+    timeMode = mode === "clock" ? "clock" : "branch";
+    const isClock = timeMode === "clock";
+    modeBranch.setAttribute("aria-pressed", String(!isClock));
+    modeClock.setAttribute("aria-pressed", String(isClock));
+    branchRow.hidden = isClock;
+    branchHelp.hidden = isClock;
+    clockRow.hidden = !isClock;
+    clockHelp.hidden = !isClock;
+  }
+  modeBranch.addEventListener("click", () => setTimeMode("branch"));
+  modeClock.addEventListener("click", () => setTimeMode("clock"));
+
+  // 23~01시는 자시, 이후에는 두 시간마다 축·인·묘…로 진행한다.
+  function branchFromClock(value) {
+    if (!/^\d{2}:\d{2}$/.test(value)) return null;
+    const hour = +value.slice(0, 2);
+    if (hour === 23 || hour === 0) return 0;
+    return Math.floor((hour + 1) / 2);
+  }
   // 기본값: 90년생 정도로 시작
   selY.value = "1990"; selM.value = "1"; fillDays(); selD.value = "1";
 
@@ -314,7 +366,9 @@
     document.getElementById("bio-sub").textContent = `태어난 지 ${n.toLocaleString()}일째`;
 
     const b = BRANCHES[birth.h];
-    const hourTxt = b ? ` ${b.k}시(${b.c})` : "";
+    const hourTxt = birth.timeMode === "clock" && birth.time
+      ? ` ${birth.time}`
+      : (b ? ` ${b.k}시(${b.c})` : "");
     document.getElementById("saved-info").textContent =
       `저장됨: ${birth.y}.${birth.m}.${birth.d}${hourTxt} · 이 기기에만 저장됩니다`;
 
@@ -335,6 +389,8 @@
     if (!b) return;
     selY.value = b.y; selM.value = b.m; fillDays(); selD.value = b.d;
     selH.value = (b.h == null || !BRANCHES[b.h]) ? "" : b.h;
+    inTime.value = b.time || "";
+    setTimeMode(b.timeMode === "clock" ? "clock" : "branch");
   }
 
   const revealSec = document.getElementById("reveal");
@@ -359,8 +415,15 @@
   });
   document.getElementById("save").addEventListener("click", () => {
     const y = +selY.value, m = +selM.value, d = +selD.value;
-    const h = selH.value === "" ? null : +selH.value;
-    const birth = { y, m, d, h };
+    const time = timeMode === "clock" ? inTime.value : "";
+    if (timeMode === "clock" && !time) {
+      errEl.textContent = "정확한 시각을 입력하거나 시진 입력을 선택해주세요.";
+      return;
+    }
+    const h = timeMode === "clock"
+      ? branchFromClock(time)
+      : (selH.value === "" ? null : +selH.value);
+    const birth = { y, m, d, timeMode, h, time: time || null };
     // 미래 날짜 방어
     const bd = new Date(y, m - 1, d);
     if (bd > now) { errEl.textContent = "미래 날짜는 입력할 수 없어요."; return; }
