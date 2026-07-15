@@ -80,6 +80,10 @@
         const files = await shareFiles();
         if (files && navigator.canShare && navigator.canShare({ files })) {
           data.files = files;
+          // 일부 공유 대상은 파일이 있으면 url만 챙기고 text(문구)를 버린다.
+          // 문구가 확실히 함께 가도록 url을 빼고 문구+링크를 text에 합친다.
+          delete data.url;
+          data.text = text ? `${text}\n${location.href}` : location.href;
         }
         await navigator.share(data);
         return;
