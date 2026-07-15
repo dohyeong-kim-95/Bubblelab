@@ -27,6 +27,20 @@
   #fortune .text { margin: 1rem 0 0; font-size: 1.05rem; line-height: 1.7;
                    min-height: 3.4em; display: flex; align-items: center; justify-content: center; }
   #fortune .basis { margin: .65rem 0 0; font-size: .62rem; line-height: 1.45; opacity: .42; }
+  #fortune.is-loading .emoji, #fortune.is-loading .text {
+    color: transparent; border-radius: .45rem;
+    background: linear-gradient(100deg,
+      light-dark(#1c27330d, #dbe4ee0d) 25%,
+      light-dark(#1c27331c, #dbe4ee1c) 42%,
+      light-dark(#1c27330d, #dbe4ee0d) 58%);
+    background-size: 220% 100%; animation: fortune-shimmer 1.25s ease-in-out infinite;
+  }
+  #fortune.is-loading .emoji { width: 3rem; height: 3rem; margin: 0 auto; }
+  #fortune.is-loading .text { width: min(22rem, 88%); min-height: 3.4rem; margin: 1rem auto 0; }
+  @keyframes fortune-shimmer { to { background-position-x: -220%; } }
+  @media (prefers-reduced-motion: reduce) {
+    #fortune.is-loading .emoji, #fortune.is-loading .text { animation: none; }
+  }
 
   button { font: inherit; color: inherit; background: none; cursor: pointer;
            padding: .6rem 1.2rem; border-radius: .55rem;
@@ -286,6 +300,7 @@
   const fEmoji = document.getElementById("f-emoji");
   const fText = document.getElementById("f-text");
   const fBasis = document.getElementById("f-basis");
+  const fortuneCard = document.getElementById("fortune");
 
   // 오늘의 한줄: 무작위가 아니라 날짜(+생년월일·바이오리듬 수치)로 결정.
   // → 하루 동안 같은 문구가 유지되고, 사람마다 다르게 나온다.
@@ -298,12 +313,22 @@
     return Math.floor(x * FORTUNES.length);
   }
   let currentLine = FORTUNES[0];   // 공유 이미지에서 재사용
+  let fallbackFortuneSeed = 0;
+  function showFortuneLoading() {
+    fortuneCard.classList.add("is-loading");
+    fortuneCard.setAttribute("aria-busy", "true");
+    fEmoji.textContent = "";
+    fText.textContent = "";
+    fBasis.hidden = true;
+  }
   function showFortune(seed) {
     const i = seedToIdx(seed);
     currentLine = FORTUNES[i];
     fEmoji.textContent = currentLine[0];
     fText.textContent = currentLine[1];
     fBasis.hidden = true;
+    fortuneCard.classList.remove("is-loading");
+    fortuneCard.removeAttribute("aria-busy");
   }
   function showSajuFortune(daily) {
     currentLine = [daily.emoji, daily.text];
@@ -311,6 +336,8 @@
     fText.textContent = daily.text;
     fBasis.hidden = false;
     fBasis.textContent = `명식 일간 + 오늘 일진 ${daily.iljin}(${daily.iljinHanja}) · ${daily.tenGod} · ${daily.method}`;
+    fortuneCard.classList.remove("is-loading");
+    fortuneCard.removeAttribute("aria-busy");
   }
 
   // ── 날짜 표기 ─────────────────────────────────────────────────
@@ -553,6 +580,7 @@
     } catch (error) {
       if (requestId !== sajuRequestId) return;
       sajuStatus.textContent = error.message || "명식을 계산하지 못했습니다.";
+      showFortune(fallbackFortuneSeed);
       if (birth.calendar === "lunar" && !birth.solar) document.getElementById("form").hidden = false;
     }
   }
@@ -671,7 +699,7 @@
     // 오늘의 한줄을 생년월일·바이오리듬 수치로 갱신 (하루 동안 고정)
     const seed = todayNum() + n +
       Math.round((vals.phy + vals.emo + vals.int) * 1000);
-    showFortune(seed);
+    fallbackFortuneSeed = seed;
 
     let head;
     if (avg >= 0.5) head = "✨ 세 리듬이 모두 좋은 날! 자신감을 가져도 좋습니다.";
@@ -699,6 +727,7 @@
   function renderResult(birth) {
     document.getElementById("form").hidden = true;
     document.getElementById("reveal").hidden = true;
+    showFortuneLoading();
     if (birth.calendar === "lunar") {
       if (birth.solar) renderBioResult(birth, birth.solar);
       else {
