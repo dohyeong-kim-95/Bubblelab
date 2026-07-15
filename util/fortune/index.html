@@ -28,15 +28,19 @@
                    min-height: 3.4em; display: flex; align-items: center; justify-content: center; }
   #fortune .basis { margin: .65rem 0 0; font-size: .62rem; line-height: 1.45; opacity: .42; }
   .fortune-categories { display: grid; gap: .38rem; margin-top: 1rem; }
-  .fortune-category { display: grid; grid-template-columns: 3.2rem 3.6rem minmax(0, 1fr);
-                      gap: .35rem; align-items: baseline; padding: .5rem .6rem;
+  .fortune-category { display: grid; grid-template-columns: 3.2rem minmax(0, 1fr);
+                      grid-template-areas: "name comment" "level level";
+                      column-gap: .55rem; row-gap: .35rem; align-items: baseline; padding: .55rem .6rem;
                       border-radius: .45rem; text-align: left; font-size: .74rem;
                       line-height: 1.45; background: light-dark(#1c273307, #dbe4ee08); }
-  .fortune-category-name { font-weight: bold; }
-  .fortune-category-level { font-weight: bold; white-space: nowrap; }
+  .fortune-category-name { grid-area: name; font-weight: bold; }
+  .fortune-category-comment { grid-area: comment; min-width: 0; opacity: .72; }
+  .fortune-category-level { grid-area: level; justify-self: start; padding: .08rem .35rem;
+                            border-radius: .28rem; font: 600 .7rem/1.45 ui-monospace, SFMono-Regular,
+                            Menlo, Consolas, monospace; white-space: nowrap;
+                            background: light-dark(#1c273310, #dbe4ee16); }
   .fortune-category[data-level="원활"] .fortune-category-level { color: light-dark(#247b5f, #6fd4ac); }
   .fortune-category[data-level="주의"] .fortune-category-level { color: light-dark(#b6483d, #ff8a7a); }
-  .fortune-category-comment { opacity: .72; }
   #fortune.is-loading .emoji, #fortune.is-loading .text, #fortune.is-loading .fortune-category {
     color: transparent; border-radius: .45rem;
     background: linear-gradient(100deg,
@@ -170,9 +174,9 @@
     <div class="emoji" id="f-emoji">🔮</div>
     <p class="text" id="f-text"></p>
     <div class="fortune-categories" id="f-categories" hidden>
-      <div class="fortune-category" id="f-wealth"><span class="fortune-category-name">재물운</span><span class="fortune-category-level"></span><span class="fortune-category-comment"></span></div>
-      <div class="fortune-category" id="f-career"><span class="fortune-category-name">직업운</span><span class="fortune-category-level"></span><span class="fortune-category-comment"></span></div>
-      <div class="fortune-category" id="f-love"><span class="fortune-category-name">연애운</span><span class="fortune-category-level"></span><span class="fortune-category-comment"></span></div>
+      <div class="fortune-category" id="f-wealth"><span class="fortune-category-name">재물운</span><code class="fortune-category-level"></code><span class="fortune-category-comment"></span></div>
+      <div class="fortune-category" id="f-career"><span class="fortune-category-name">직업운</span><code class="fortune-category-level"></code><span class="fortune-category-comment"></span></div>
+      <div class="fortune-category" id="f-love"><span class="fortune-category-name">연애운</span><code class="fortune-category-level"></code><span class="fortune-category-comment"></span></div>
     </div>
     <p class="basis" id="f-basis" hidden></p>
   </div>
@@ -361,7 +365,7 @@
   function showFortuneCategory(key, category) {
     const row = document.getElementById(`f-${key}`);
     row.dataset.level = category.level;
-    row.querySelector(".fortune-category-level").textContent = `[${category.level}]`;
+    row.querySelector(".fortune-category-level").textContent = category.level;
     row.querySelector(".fortune-category-comment").textContent = category.comment;
   }
   function showSajuFortune(daily) {
