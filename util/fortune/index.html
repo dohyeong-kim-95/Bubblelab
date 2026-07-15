@@ -235,12 +235,23 @@
   selY.addEventListener("change", fillDays);
   selM.addEventListener("change", fillDays);
   fillDays();
+  // 십이지시(十二支時): 자시(23~01)부터 두 시간 단위
+  const BRANCHES = [
+    { k: "자", c: "子", range: "23~01시" },
+    { k: "축", c: "丑", range: "01~03시" },
+    { k: "인", c: "寅", range: "03~05시" },
+    { k: "묘", c: "卯", range: "05~07시" },
+    { k: "진", c: "辰", range: "07~09시" },
+    { k: "사", c: "巳", range: "09~11시" },
+    { k: "오", c: "午", range: "11~13시" },
+    { k: "미", c: "未", range: "13~15시" },
+    { k: "신", c: "申", range: "15~17시" },
+    { k: "유", c: "酉", range: "17~19시" },
+    { k: "술", c: "戌", range: "19~21시" },
+    { k: "해", c: "亥", range: "21~23시" },
+  ];
   opt(selH, "", "모름");
-  for (let h = 0; h < 24; h++) {
-    const ampm = h < 12 ? "오전" : "오후";
-    const h12 = h % 12 === 0 ? 12 : h % 12;
-    opt(selH, h, `${ampm} ${h12}시 (${String(h).padStart(2, "0")}시)`);
-  }
+  BRANCHES.forEach((b, i) => opt(selH, i, `${b.k}시 (${b.c}, ${b.range})`));
   // 기본값: 90년생 정도로 시작
   selY.value = "1990"; selM.value = "1"; fillDays(); selD.value = "1";
 
@@ -298,8 +309,8 @@
 
     document.getElementById("bio-sub").textContent = `태어난 지 ${n.toLocaleString()}일째`;
 
-    const hourTxt = birth.h === "" || birth.h == null ? "" :
-      `, ${String(birth.h).padStart(2, "0")}시`;
+    const b = BRANCHES[birth.h];
+    const hourTxt = b ? ` ${b.k}시(${b.c})` : "";
     document.getElementById("saved-info").textContent =
       `저장됨: ${birth.y}.${birth.m}.${birth.d}${hourTxt} · 이 기기에만 저장됩니다`;
   }
@@ -317,7 +328,7 @@
   function fillForm(b) {
     if (!b) return;
     selY.value = b.y; selM.value = b.m; fillDays(); selD.value = b.d;
-    selH.value = b.h == null ? "" : b.h;
+    selH.value = (b.h == null || !BRANCHES[b.h]) ? "" : b.h;
   }
 
   const revealSec = document.getElementById("reveal");
