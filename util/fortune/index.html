@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>오늘의 운세</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🔮</text></svg>">
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+         margin: 0; min-height: 100dvh; display: flex; align-items: center; justify-content: center;
+         padding: 1.5rem;
+         background: light-dark(#eef2f6, #10161f);
+         color: light-dark(#1c2733, #dbe4ee); }
+  main { width: min(30rem, 100%); }
+  header { text-align: center; margin-bottom: 1.4rem; }
+  h1 { margin: 0; font-size: 1.15rem; font-weight: bold; letter-spacing: .02em; }
+  .date { margin: .35rem 0 0; opacity: .55; font-size: .8rem; }
+
+  .card { padding: 1.4rem 1.3rem; border-radius: .9rem;
+          border: 1px solid light-dark(#1c273322, #dbe4ee22);
+          background: light-dark(#ffffffaa, #182230aa); }
+
+  #fortune { text-align: center; }
+  #fortune .emoji { font-size: 2.6rem; line-height: 1; }
+  #fortune .text { margin: 1rem 0 0; font-size: 1.05rem; line-height: 1.7;
+                   min-height: 3.4em; display: flex; align-items: center; justify-content: center; }
+  #fortune .text.fade { opacity: 0; transition: none; }
+  #fortune .text { transition: opacity .35s; }
+
+  #actions { text-align: center; margin-top: 1.1rem; }
+  button { font: inherit; color: inherit; background: none; cursor: pointer;
+           padding: .6rem 1.2rem; border-radius: .55rem;
+           border: 1px solid light-dark(#1c273355, #dbe4ee55); transition: background .15s; }
+  button:hover:not(:disabled) { background: light-dark(#1c273310, #dbe4ee14); }
+  button:active { transform: scale(.97); }
+  .link-btn { border: none; padding: .5rem; opacity: .7; text-decoration: underline;
+              text-underline-offset: 3px; font-size: .82rem; }
+  .link-btn:hover { opacity: 1; background: none !important; }
+
+  section { margin-top: 1.4rem; }
+  [hidden] { display: none !important; }
+
+  /* 생년월일 입력 */
+  #reveal { text-align: center; }
+  #form .row { display: flex; gap: .5rem; align-items: center; margin-bottom: .8rem; }
+  #form label { width: 3.2rem; flex: none; opacity: .6; font-size: .82rem; text-align: right; }
+  #form select { flex: 1; min-width: 0; font: inherit; font-size: .85rem; color: inherit;
+                 background: light-dark(#eef2f6, #10161f);
+                 border: 1px solid light-dark(#1c273355, #dbe4ee55);
+                 border-radius: .4rem; padding: .35rem .4rem; }
+  #form .form-actions { display: flex; gap: .6rem; margin-top: 1rem; }
+  #form .form-actions button { flex: 1; }
+  #err { min-height: 1.1em; margin: .6rem 0 0; font-size: .8rem; text-align: center;
+         color: light-dark(#c0392b, #ff8a7a); }
+
+  /* 바이오리듬 결과 */
+  #result h2 { margin: 0 0 .3rem; font-size: .95rem; }
+  #result .sub { margin: 0 0 1.1rem; font-size: .78rem; opacity: .55; }
+  #result .headline { margin: 0 0 1.2rem; font-size: 1rem; line-height: 1.65;
+                      text-align: center; }
+  .bio { margin-bottom: 1rem; }
+  .bio:last-of-type { margin-bottom: 0; }
+  .bio .bio-top { display: flex; justify-content: space-between; align-items: baseline;
+                  font-size: .82rem; margin-bottom: .35rem; }
+  .bio .bio-name { font-weight: bold; }
+  .bio .bio-name small { font-weight: normal; opacity: .5; margin-left: .35rem; }
+  .bio .bio-pct { font-variant-numeric: tabular-nums; opacity: .8; }
+  .track { position: relative; height: .5rem; border-radius: 1rem;
+           background: light-dark(#1c273315, #dbe4ee12); overflow: hidden; }
+  .track .mid { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px;
+                background: light-dark(#1c273330, #dbe4ee30); }
+  .track .fill { position: absolute; top: 0; bottom: 0; border-radius: 1rem;
+                 transition: width .6s ease, left .6s ease; }
+  .bio.phy .fill { background: light-dark(#e05a4d, #ff8a7a); }
+  .bio.emo .fill { background: light-dark(#d99a26, #ffcf6b); }
+  .bio.int .fill { background: light-dark(#2f8f6e, #6fd4ac); }
+  .bio .bio-note { margin: .35rem 0 0; font-size: .78rem; line-height: 1.55; opacity: .75; }
+  #result .footer { margin-top: 1.3rem; text-align: center; }
+  #result .saved { font-size: .78rem; opacity: .5; margin: 0 0 .6rem; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>🔮 오늘의 운세</h1>
+    <p class="date" id="today"></p>
+  </header>
+
+  <!-- 랜덤 운세 -->
+  <div class="card" id="fortune">
+    <div class="emoji" id="f-emoji">🔮</div>
+    <p class="text" id="f-text"></p>
+  </div>
+  <div id="actions">
+    <button id="draw">다시 뽑기 🎲</button>
+  </div>
+
+  <!-- 개인 운세 진입 -->
+  <section id="reveal">
+    <button class="link-btn" id="reveal-btn">나에게 맞는 운세를 보고싶다면? →</button>
+  </section>
+
+  <!-- 생년월일 입력 -->
+  <section class="card" id="form" hidden>
+    <h2 style="margin:0 0 1rem;font-size:.95rem;">생년월일시를 입력해주세요</h2>
+    <div class="row">
+      <label for="in-y">년</label>
+      <select id="in-y"></select>
+    </div>
+    <div class="row">
+      <label for="in-m">월</label>
+      <select id="in-m"></select>
+    </div>
+    <div class="row">
+      <label for="in-d">일</label>
+      <select id="in-d"></select>
+    </div>
+    <div class="row">
+      <label for="in-h">시</label>
+      <select id="in-h"></select>
+    </div>
+    <div class="form-actions">
+      <button id="cancel">취소</button>
+      <button id="save">내 운세 보기</button>
+    </div>
+    <p id="err"></p>
+  </section>
+
+  <!-- 바이오리듬 결과 -->
+  <section class="card" id="result" hidden>
+    <h2>🌊 오늘의 바이오리듬</h2>
+    <p class="sub" id="bio-sub"></p>
+    <p class="headline" id="bio-headline"></p>
+
+    <div class="bio phy">
+      <div class="bio-top"><span class="bio-name">신체 <small>Physical</small></span><span class="bio-pct" id="pct-phy"></span></div>
+      <div class="track"><span class="mid"></span><span class="fill" id="fill-phy"></span></div>
+      <p class="bio-note" id="note-phy"></p>
+    </div>
+    <div class="bio emo">
+      <div class="bio-top"><span class="bio-name">감성 <small>Emotional</small></span><span class="bio-pct" id="pct-emo"></span></div>
+      <div class="track"><span class="mid"></span><span class="fill" id="fill-emo"></span></div>
+      <p class="bio-note" id="note-emo"></p>
+    </div>
+    <div class="bio int">
+      <div class="bio-top"><span class="bio-name">지성 <small>Intellectual</small></span><span class="bio-pct" id="pct-int"></span></div>
+      <div class="track"><span class="mid"></span><span class="fill" id="fill-int"></span></div>
+      <p class="bio-note" id="note-int"></p>
+    </div>
+
+    <div class="footer">
+      <p class="saved" id="saved-info"></p>
+      <button class="link-btn" id="edit-btn">생년월일 다시 입력</button>
+    </div>
+  </section>
+</main>
+
+<script>
+  "use strict";
+  const KEY = "bl-fortune-birth";
+
+  // ── 랜덤 운세 문구 ─────────────────────────────────────────────
+  const FORTUNES = [
+    ["🌤️", "서두르지 않아도 괜찮아요. 오늘은 천천히 가도 도착합니다."],
+    ["🍀", "생각지 못한 곳에서 작은 행운이 굴러옵니다. 주변을 살펴보세요."],
+    ["🔥", "미뤄둔 일을 시작하기 딱 좋은 날. 첫 걸음이 제일 무겁습니다."],
+    ["🌊", "감정의 파도가 높은 날. 결정은 하루 미뤄도 늦지 않아요."],
+    ["☕", "잠깐의 쉼이 하루 전체를 바꿉니다. 커피 한 잔의 여유를."],
+    ["💬", "오늘의 대화 속에 답이 숨어 있어요. 귀를 기울여 보세요."],
+    ["🌱", "지금 심은 씨앗은 훗날 큰 그늘이 됩니다. 조급해 마세요."],
+    ["✨", "당신의 작은 친절이 누군가의 하루를 구합니다."],
+    ["🎯", "집중력이 빛나는 날. 하나에만 몰두하면 크게 이룹니다."],
+    ["🌙", "밤이 되면 마음이 잔잔해집니다. 오늘 하루를 스스로 칭찬하세요."],
+    ["🧭", "길을 잃은 것 같아도 방향은 틀리지 않았습니다. 계속 가세요."],
+    ["🎁", "받는 것보다 주는 것이 더 큰 복이 되어 돌아오는 날."],
+    ["⚡", "에너지가 넘치는 날! 다만 말보다 행동이 앞서지 않게 조심."],
+    ["🕊️", "묵은 감정을 흘려보내기 좋은 날. 용서는 나를 위한 선물입니다."],
+    ["📮", "연락이 뜸했던 사람에게 먼저 손을 내밀어 보세요. 반가운 답이 옵니다."],
+    ["🌸", "예상 밖의 칭찬을 듣게 됩니다. 겸손하되 마음껏 기뻐하세요."],
+    ["🛟", "무리하지 마세요. 오늘의 최선은 '적당히'입니다."],
+    ["🔑", "닫혀 있던 문이 열립니다. 준비된 자만이 그 문을 알아봅니다."],
+    ["🌈", "흐린 아침이 맑은 오후로 바뀌듯, 기분도 점점 나아집니다."],
+    ["🍜", "따뜻한 한 끼가 곧 보약. 잘 챙겨 먹는 것부터 시작하세요."],
+    ["🎲", "작은 도전에 운이 따릅니다. 망설였던 그것, 오늘 해보세요."],
+    ["🧩", "흩어져 있던 조각들이 맞춰지는 날. 인내가 곧 보상받습니다."],
+    ["💛", "당신은 생각보다 많은 사람에게 소중한 존재입니다."],
+    ["🌵", "버티는 것도 성장입니다. 오늘을 견딘 당신이 자랑스럽습니다."],
+  ];
+
+  const fEmoji = document.getElementById("f-emoji");
+  const fText = document.getElementById("f-text");
+  let lastIdx = -1;
+  function draw() {
+    let i;
+    do { i = Math.floor(Math.random() * FORTUNES.length); }
+    while (FORTUNES.length > 1 && i === lastIdx);
+    lastIdx = i;
+    fText.classList.add("fade");
+    setTimeout(() => {
+      fEmoji.textContent = FORTUNES[i][0];
+      fText.textContent = FORTUNES[i][1];
+      fText.classList.remove("fade");
+    }, 180);
+  }
+  document.getElementById("draw").addEventListener("click", draw);
+
+  // ── 날짜 표기 ─────────────────────────────────────────────────
+  const now = new Date();
+  const WD = ["일", "월", "화", "수", "목", "금", "토"];
+  document.getElementById("today").textContent =
+    `${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일 (${WD[now.getDay()]})`;
+
+  // ── 입력 폼 옵션 채우기 ────────────────────────────────────────
+  const selY = document.getElementById("in-y");
+  const selM = document.getElementById("in-m");
+  const selD = document.getElementById("in-d");
+  const selH = document.getElementById("in-h");
+  const thisYear = now.getFullYear();
+  function opt(sel, val, label) {
+    const o = document.createElement("option");
+    o.value = val; o.textContent = label; sel.appendChild(o);
+  }
+  for (let y = thisYear; y >= 1920; y--) opt(selY, y, y + "년");
+  for (let m = 1; m <= 12; m++) opt(selM, m, m + "월");
+  function fillDays() {
+    const y = +selY.value, m = +selM.value;
+    const keep = selD.value;
+    const days = new Date(y, m, 0).getDate();
+    selD.innerHTML = "";
+    for (let d = 1; d <= days; d++) opt(selD, d, d + "일");
+    if (keep && +keep <= days) selD.value = keep;
+  }
+  selY.addEventListener("change", fillDays);
+  selM.addEventListener("change", fillDays);
+  fillDays();
+  opt(selH, "", "모름");
+  for (let h = 0; h < 24; h++) {
+    const ampm = h < 12 ? "오전" : "오후";
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    opt(selH, h, `${ampm} ${h12}시 (${String(h).padStart(2, "0")}시)`);
+  }
+  // 기본값: 90년생 정도로 시작
+  selY.value = "1990"; selM.value = "1"; fillDays(); selD.value = "1";
+
+  // ── 바이오리듬 계산 ────────────────────────────────────────────
+  const CYCLES = [
+    { key: "phy", name: "신체", period: 23 },
+    { key: "emo", name: "감성", period: 28 },
+    { key: "int", name: "지성", period: 33 },
+  ];
+  function daysBetween(birth, today) {
+    // 자정 기준 경과 일수 (시간 무시)
+    const a = Date.UTC(birth.y, birth.m - 1, birth.d);
+    const b = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+    return Math.round((b - a) / 86400000);
+  }
+  // 값별 코멘트 (v: -1~1)
+  function noteFor(name, v) {
+    if (v >= 0.7) return `${name} 최고조! 자신 있게 밀어붙여도 좋은 날.`;
+    if (v >= 0.2) return `${name}이(가) 상승세. 컨디션이 받쳐줍니다.`;
+    if (v > -0.2) return `${name}이(가) 전환점. 무리 없이 평소대로.`;
+    if (v > -0.7) return `${name}이(가) 저조. 욕심내지 말고 페이스 조절을.`;
+    return `${name} 바닥권. 오늘은 회복과 휴식에 집중하세요.`;
+  }
+  function setBar(key, v) {
+    const pct = Math.round(v * 100);
+    document.getElementById("pct-" + key).textContent = (pct > 0 ? "+" : "") + pct + "%";
+    // 바: 중앙(50%)이 0, 왼쪽이 -100, 오른쪽이 +100
+    const fill = document.getElementById("fill-" + key);
+    if (v >= 0) { fill.style.left = "50%"; fill.style.width = (v * 50) + "%"; }
+    else { fill.style.left = (50 + v * 50) + "%"; fill.style.width = (-v * 50) + "%"; }
+  }
+
+  function renderResult(birth) {
+    document.getElementById("form").hidden = true;
+    document.getElementById("reveal").hidden = true;
+    const res = document.getElementById("result");
+    res.hidden = false;
+
+    const n = daysBetween(birth, now);
+    const vals = {};
+    for (const c of CYCLES) {
+      const v = Math.sin((2 * Math.PI * n) / c.period);
+      vals[c.key] = v;
+      setBar(c.key, v);
+      document.getElementById("note-" + c.key).textContent = noteFor(c.name, v);
+    }
+    const avg = (vals.phy + vals.emo + vals.int) / 3;
+    let head;
+    if (avg >= 0.5) head = "✨ 세 리듬이 모두 좋은 날! 자신감을 가져도 좋습니다.";
+    else if (avg >= 0.15) head = "🙂 전반적으로 순조로운 흐름. 무난하게 좋은 하루.";
+    else if (avg > -0.15) head = "😌 균형 잡힌 날. 큰 기복 없이 차분하게 보내기 좋아요.";
+    else if (avg > -0.5) head = "🌥️ 리듬이 다소 가라앉는 날. 무리하지 말고 쉬엄쉬엄.";
+    else head = "🛌 컨디션 저점 구간. 오늘은 나를 아껴주는 하루로.";
+    document.getElementById("bio-headline").textContent = head;
+
+    document.getElementById("bio-sub").textContent = `태어난 지 ${n.toLocaleString()}일째`;
+
+    const hourTxt = birth.h === "" || birth.h == null ? "" :
+      `, ${String(birth.h).padStart(2, "0")}시`;
+    document.getElementById("saved-info").textContent =
+      `저장됨: ${birth.y}.${birth.m}.${birth.d}${hourTxt} · 이 기기에만 저장됩니다`;
+  }
+
+  // ── 저장/불러오기 ──────────────────────────────────────────────
+  function load() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (!raw) return null;
+      const o = JSON.parse(raw);
+      if (o && o.y && o.m && o.d) return o;
+    } catch (e) {}
+    return null;
+  }
+  function fillForm(b) {
+    if (!b) return;
+    selY.value = b.y; selM.value = b.m; fillDays(); selD.value = b.d;
+    selH.value = b.h == null ? "" : b.h;
+  }
+
+  const revealSec = document.getElementById("reveal");
+  const formSec = document.getElementById("form");
+  const errEl = document.getElementById("err");
+
+  document.getElementById("reveal-btn").addEventListener("click", () => {
+    revealSec.hidden = true;
+    formSec.hidden = false;
+    errEl.textContent = "";
+  });
+  document.getElementById("cancel").addEventListener("click", () => {
+    formSec.hidden = true;
+    if (!load()) revealSec.hidden = false;
+    else renderResult(load());
+  });
+  document.getElementById("edit-btn").addEventListener("click", () => {
+    document.getElementById("result").hidden = true;
+    fillForm(load());
+    formSec.hidden = false;
+    errEl.textContent = "";
+  });
+  document.getElementById("save").addEventListener("click", () => {
+    const y = +selY.value, m = +selM.value, d = +selD.value;
+    const h = selH.value === "" ? null : +selH.value;
+    const birth = { y, m, d, h };
+    // 미래 날짜 방어
+    const bd = new Date(y, m - 1, d);
+    if (bd > now) { errEl.textContent = "미래 날짜는 입력할 수 없어요."; return; }
+    try { localStorage.setItem(KEY, JSON.stringify(birth)); } catch (e) {}
+    renderResult(birth);
+  });
+
+  // ── 초기 상태 ──────────────────────────────────────────────────
+  draw();
+  const saved = load();
+  if (saved) { fillForm(saved); renderResult(saved); }
+
+  // 공유 문구
+  window.blShareText = () => "오늘의 운세를 확인해보세요 🔮";
+</script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>
