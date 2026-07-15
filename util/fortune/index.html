@@ -27,7 +27,17 @@
   #fortune .text { margin: 1rem 0 0; font-size: 1.05rem; line-height: 1.7;
                    min-height: 3.4em; display: flex; align-items: center; justify-content: center; }
   #fortune .basis { margin: .65rem 0 0; font-size: .62rem; line-height: 1.45; opacity: .42; }
-  #fortune.is-loading .emoji, #fortune.is-loading .text {
+  .fortune-categories { display: grid; gap: .38rem; margin-top: 1rem; }
+  .fortune-category { display: grid; grid-template-columns: 3.2rem 3.6rem minmax(0, 1fr);
+                      gap: .35rem; align-items: baseline; padding: .5rem .6rem;
+                      border-radius: .45rem; text-align: left; font-size: .74rem;
+                      line-height: 1.45; background: light-dark(#1c273307, #dbe4ee08); }
+  .fortune-category-name { font-weight: bold; }
+  .fortune-category-level { font-weight: bold; white-space: nowrap; }
+  .fortune-category[data-level="원활"] .fortune-category-level { color: light-dark(#247b5f, #6fd4ac); }
+  .fortune-category[data-level="주의"] .fortune-category-level { color: light-dark(#b6483d, #ff8a7a); }
+  .fortune-category-comment { opacity: .72; }
+  #fortune.is-loading .emoji, #fortune.is-loading .text, #fortune.is-loading .fortune-category {
     color: transparent; border-radius: .45rem;
     background: linear-gradient(100deg,
       light-dark(#1c27330d, #dbe4ee0d) 25%,
@@ -37,9 +47,10 @@
   }
   #fortune.is-loading .emoji { width: 3rem; height: 3rem; margin: 0 auto; }
   #fortune.is-loading .text { width: min(22rem, 88%); min-height: 3.4rem; margin: 1rem auto 0; }
+  #fortune.is-loading .fortune-category { min-height: 2.6rem; }
   @keyframes fortune-shimmer { to { background-position-x: -220%; } }
   @media (prefers-reduced-motion: reduce) {
-    #fortune.is-loading .emoji, #fortune.is-loading .text { animation: none; }
+    #fortune.is-loading .emoji, #fortune.is-loading .text, #fortune.is-loading .fortune-category { animation: none; }
   }
 
   button { font: inherit; color: inherit; background: none; cursor: pointer;
@@ -79,6 +90,7 @@
   .time-mode button { padding: .42rem .5rem; border: 0; font-size: .8rem; opacity: .58; }
   .time-mode button[aria-pressed="true"] { opacity: 1; font-weight: bold;
                background: light-dark(#fff, #273445); box-shadow: 0 1px 4px #0002; }
+  .time-mode.gender-mode { grid-template-columns: repeat(3, 1fr); }
   .time-help { margin: -.35rem 0 .8rem 3.7rem; font-size: .72rem; line-height: 1.45; opacity: .52; }
   #form .form-actions { display: flex; gap: .6rem; margin-top: 1rem; }
   #form .form-actions button { flex: 1; }
@@ -157,6 +169,11 @@
   <div class="card" id="fortune">
     <div class="emoji" id="f-emoji">🔮</div>
     <p class="text" id="f-text"></p>
+    <div class="fortune-categories" id="f-categories" hidden>
+      <div class="fortune-category" id="f-wealth"><span class="fortune-category-name">재물운</span><span class="fortune-category-level"></span><span class="fortune-category-comment"></span></div>
+      <div class="fortune-category" id="f-career"><span class="fortune-category-name">직업운</span><span class="fortune-category-level"></span><span class="fortune-category-comment"></span></div>
+      <div class="fortune-category" id="f-love"><span class="fortune-category-name">연애운</span><span class="fortune-category-level"></span><span class="fortune-category-comment"></span></div>
+    </div>
     <p class="basis" id="f-basis" hidden></p>
   </div>
   <!-- 개인 운세 진입 -->
@@ -172,6 +189,14 @@
       <div class="time-mode" role="group" aria-label="생년월일 달력 방식">
         <button type="button" id="mode-solar" aria-pressed="true">양력</button>
         <button type="button" id="mode-lunar" aria-pressed="false">음력</button>
+      </div>
+    </div>
+    <div class="row">
+      <label>성별</label>
+      <div class="time-mode gender-mode" role="group" aria-label="성별">
+        <button type="button" id="gender-none" aria-pressed="true">미선택</button>
+        <button type="button" id="gender-male" aria-pressed="false">남</button>
+        <button type="button" id="gender-female" aria-pressed="false">여</button>
       </div>
     </div>
     <div class="row">
@@ -300,6 +325,7 @@
   const fEmoji = document.getElementById("f-emoji");
   const fText = document.getElementById("f-text");
   const fBasis = document.getElementById("f-basis");
+  const fCategories = document.getElementById("f-categories");
   const fortuneCard = document.getElementById("fortune");
 
   // 오늘의 한줄: 무작위가 아니라 날짜(+생년월일·바이오리듬 수치)로 결정.
@@ -319,6 +345,7 @@
     fortuneCard.setAttribute("aria-busy", "true");
     fEmoji.textContent = "";
     fText.textContent = "";
+    fCategories.hidden = false;
     fBasis.hidden = true;
   }
   function showFortune(seed) {
@@ -326,14 +353,23 @@
     currentLine = FORTUNES[i];
     fEmoji.textContent = currentLine[0];
     fText.textContent = currentLine[1];
+    fCategories.hidden = true;
     fBasis.hidden = true;
     fortuneCard.classList.remove("is-loading");
     fortuneCard.removeAttribute("aria-busy");
+  }
+  function showFortuneCategory(key, category) {
+    const row = document.getElementById(`f-${key}`);
+    row.dataset.level = category.level;
+    row.querySelector(".fortune-category-level").textContent = `[${category.level}]`;
+    row.querySelector(".fortune-category-comment").textContent = category.comment;
   }
   function showSajuFortune(daily) {
     currentLine = [daily.emoji, daily.text];
     fEmoji.textContent = daily.emoji;
     fText.textContent = daily.text;
+    for (const key of ["wealth", "career", "love"]) showFortuneCategory(key, daily.categories[key]);
+    fCategories.hidden = false;
     fBasis.hidden = false;
     fBasis.textContent = `명식 일간 + 오늘 일진 ${daily.iljin}(${daily.iljinHanja}) · ${daily.tenGod} · ${daily.method}`;
     fortuneCard.classList.remove("is-loading");
@@ -354,6 +390,9 @@
   const inTime = document.getElementById("in-time");
   const modeSolar = document.getElementById("mode-solar");
   const modeLunar = document.getElementById("mode-lunar");
+  const genderNone = document.getElementById("gender-none");
+  const genderMale = document.getElementById("gender-male");
+  const genderFemale = document.getElementById("gender-female");
   const lunarLeapRow = document.getElementById("lunar-leap-row");
   const lunarLeap = document.getElementById("in-lunar-leap");
   const lunarHelp = document.getElementById("lunar-help");
@@ -364,6 +403,7 @@
   const clockRow = document.getElementById("clock-row");
   const clockHelp = document.getElementById("clock-help");
   let calendarMode = "solar";
+  let genderMode = "unspecified";
   let timeMode = "branch";
   const thisYear = now.getFullYear();
   function opt(sel, val, label) {
@@ -394,6 +434,15 @@
   }
   modeSolar.addEventListener("click", () => setCalendarMode("solar"));
   modeLunar.addEventListener("click", () => setCalendarMode("lunar"));
+  function setGenderMode(gender) {
+    genderMode = ["male", "female"].includes(gender) ? gender : "unspecified";
+    genderNone.setAttribute("aria-pressed", String(genderMode === "unspecified"));
+    genderMale.setAttribute("aria-pressed", String(genderMode === "male"));
+    genderFemale.setAttribute("aria-pressed", String(genderMode === "female"));
+  }
+  genderNone.addEventListener("click", () => setGenderMode("unspecified"));
+  genderMale.addEventListener("click", () => setGenderMode("male"));
+  genderFemale.addEventListener("click", () => setGenderMode("female"));
   // 십이지시(十二支時): 자시(23~01)부터 두 시간 단위
   const BRANCHES = [
     { k: "자", c: "子", range: "23~01시" },
@@ -544,6 +593,7 @@
           year: birth.y, month: birth.m, day: birth.d,
           calendar: birth.calendar === "lunar" ? "lunar" : "solar",
           lunarLeap: birth.lunarLeap === true,
+          gender: birth.gender,
           timeMode: birth.timeMode === "clock" ? "clock" : "branch",
           time: birth.time,
           branch: birth.h,
@@ -753,6 +803,7 @@
   function fillForm(b) {
     if (!b) return;
     setCalendarMode(b.calendar === "lunar" ? "lunar" : "solar");
+    setGenderMode(b.gender);
     selY.value = b.y; selM.value = b.m; fillDays(); selD.value = b.d;
     lunarLeap.value = b.lunarLeap ? "leap" : "normal";
     selH.value = (b.h == null || !BRANCHES[b.h]) ? "" : b.h;
@@ -795,6 +846,7 @@
     const birth = {
       y, m, d, calendar: calendarMode,
       lunarLeap: calendarMode === "lunar" && lunarLeap.value === "leap",
+      gender: genderMode,
       timeMode, h, time: time || null,
     };
     // 미래 날짜 방어

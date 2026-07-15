@@ -26,6 +26,28 @@ const DAILY_TEXT = {
 };
 const BRANCH_HARMONY = new Set(["자축", "인해", "묘술", "진유", "사신", "오미"]);
 const BRANCH_CLASH = new Set(["자오", "축미", "인신", "묘유", "진술", "사해"]);
+const CATEGORY_GOD_WEIGHT = {
+  wealth: { 정재: 2, 편재: 2, 식신: 1, 상관: 1, 비견: -1, 겁재: -2, 편관: -1 },
+  career: { 정관: 2, 편관: 1, 정인: 2, 편인: 1, 식신: 1, 정재: 1, 편재: 1, 겁재: -1 },
+  love: { 식신: 1, 정재: 1, 편재: 1, 정관: 1, 정인: 1, 상관: -1, 겁재: -1 },
+};
+const CATEGORY_TEXT = {
+  wealth: {
+    원활: "수입과 지출의 흐름을 잡기 좋은 날이에요. 현실적인 기회를 차분히 살펴보세요.",
+    무난: "큰 변동보다는 관리가 중요한 날이에요. 계획한 범위 안에서 움직여보세요.",
+    주의: "충동적인 지출이나 성급한 결정은 피하고, 조건을 한 번 더 확인하세요.",
+  },
+  career: {
+    원활: "집중력과 실행력이 잘 이어지는 날이에요. 중요한 일을 한 단계 진전시켜보세요.",
+    무난: "평소의 리듬을 지키면 안정적인 날이에요. 우선순위대로 처리해보세요.",
+    주의: "업무 압박이나 의견 충돌이 생기기 쉬워요. 서두르지 말고 기준을 확인하세요.",
+  },
+  love: {
+    원활: "대화와 교류가 자연스럽게 이어지는 날이에요. 먼저 마음을 표현해보세요.",
+    무난: "큰 기복 없이 편안한 흐름이에요. 평소처럼 솔직하게 대화해보세요.",
+    주의: "감정이 엇갈리기 쉬운 날이에요. 단정하기보다 상대의 말을 한 번 더 들어보세요.",
+  },
+};
 const PILLAR_KEYS = ["year", "month", "day", "hour"];
 const RULES = {
   version: "korea-kst-midnight-v1",
@@ -143,7 +165,33 @@ function pairKey(a, b) {
   return [a, b].sort((x, y) => BRANCH_NAMES.indexOf(x) - BRANCH_NAMES.indexOf(y)).join("");
 }
 
-export function buildDailyFortune(candidate, date) {
+function branchRelation(natalBranch, todayBranch) {
+  if (!natalBranch) return 0;
+  const key = pairKey(natalBranch, todayBranch);
+  if (BRANCH_HARMONY.has(key)) return 1;
+  if (BRANCH_CLASH.has(key)) return -1;
+  return 0;
+}
+
+function categoryResult(key, score) {
+  const level = score >= 2 ? "원활" : score <= -2 ? "주의" : "무난";
+  return { level, comment: CATEGORY_TEXT[key][level] };
+}
+
+function categoryFortunes(candidate, todayBranch, god, harmony, clash, gender) {
+  const dayRelation = branchRelation(candidate.pillars.day?.branch.korean, todayBranch);
+  const monthRelation = branchRelation(candidate.pillars.month?.branch.korean, todayBranch);
+  const generalRelation = (harmony.length ? 1 : 0) + (clash.length ? -1 : 0);
+  const spouseStar = (gender === "male" && ["정재", "편재"].includes(god))
+    || (gender === "female" && ["정관", "편관"].includes(god)) ? 1 : 0;
+  return {
+    wealth: categoryResult("wealth", (CATEGORY_GOD_WEIGHT.wealth[god] ?? 0) + generalRelation),
+    career: categoryResult("career", (CATEGORY_GOD_WEIGHT.career[god] ?? 0) + monthRelation * 2),
+    love: categoryResult("love", (CATEGORY_GOD_WEIGHT.love[god] ?? 0) + dayRelation * 2 + spouseStar),
+  };
+}
+
+export function buildDailyFortune(candidate, date, gender = "unspecified") {
   const today = calculateFourPillars({
     year: date.year, month: date.month, day: date.day, hour: 12, minute: 0,
     dayBoundary: RULES.dayBoundary,
@@ -154,6 +202,7 @@ export function buildDailyFortune(candidate, date) {
   const natalBranches = PILLAR_KEYS.map((key) => candidate.pillars[key]?.branch.korean).filter(Boolean);
   const harmony = natalBranches.filter((branch) => BRANCH_HARMONY.has(pairKey(branch, todayPillar.branch.korean)));
   const clash = natalBranches.filter((branch) => BRANCH_CLASH.has(pairKey(branch, todayPillar.branch.korean)));
+  const categories = categoryFortunes(candidate, todayPillar.branch.korean, god, harmony, clash, gender);
   let accent = "";
   if (harmony.length && clash.length) accent = " 관계의 연결과 변화 신호가 함께 있어, 속도보다 조율이 중요합니다.";
   else if (harmony.length) accent = " 원국과 합의 신호가 있어 사람이나 계획을 연결하기에 좋습니다.";
@@ -165,6 +214,7 @@ export function buildDailyFortune(candidate, date) {
     tenGod: god,
     emoji: STEM_EMOJI[god],
     text: DAILY_TEXT[god] + accent,
+    categories,
     signals: { harmony, clash },
     method: "natal-daymaster+daily-pillar-v1",
   };
@@ -347,7 +397,9 @@ export async function handleFortuneChart(request, env) {
     chart.inputDate = resolved.inputDate;
     chart.solarDate = resolved.solar;
     const today = kstToday();
-    chart.dailyFortunes = chart.candidates.map((candidate) => buildDailyFortune(candidate, today));
+    const gender = ["male", "female"].includes(input?.gender) ? input.gender : "unspecified";
+    chart.gender = gender;
+    chart.dailyFortunes = chart.candidates.map((candidate) => buildDailyFortune(candidate, today, gender));
     const [year, month, day] = chart.birthDate.split("-").map(Number);
     const verification = await kasiDay(env, year, month, day);
     if (verification.status === "received") {

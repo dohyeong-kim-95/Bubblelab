@@ -67,6 +67,21 @@ test("builds a deterministic daily fortune from the natal chart and KST date", (
     { date: "2026-07-15", iljin: "경인", tenGod: "정인", method: "natal-daymaster+daily-pillar-v1" },
   );
   assert.match(daily.text, /배우고 도움받는 흐름/);
+  assert.deepEqual(
+    Object.fromEntries(Object.entries(daily.categories).map(([key, value]) => [key, value.level])),
+    { wealth: "무난", career: "원활", love: "무난" },
+  );
+});
+
+test("uses selected gender only as a supporting traditional spouse-star signal", () => {
+  const candidate = buildChart({
+    year: 1992, month: 10, day: 24,
+    timeMode: "clock", time: "05:30",
+  }).candidates[0];
+  const date = { year: 2026, month: 7, day: 1 };
+  assert.equal(buildDailyFortune(candidate, date).categories.love.level, "무난");
+  assert.equal(buildDailyFortune(candidate, date, "male").categories.love.level, "원활");
+  assert.equal(buildDailyFortune(candidate, date, "female").categories.love.level, "무난");
 });
 
 test("selects the requested normal or leap lunar date from KASI XML", () => {
