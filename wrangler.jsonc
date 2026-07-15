@@ -18,6 +18,9 @@
     { "pattern": "bubblelab.dev/*", "zone_name": "bubblelab.dev" },
     { "pattern": "*.bubblelab.dev/*", "zone_name": "bubblelab.dev" }
   ],
+  "secrets": {
+    "required": ["KASI_SERVICE_KEY"]
+  },
   // /_rt/<이름> 실시간 데이터 서버 (아발론 등 멀티플레이어 토이용)
   "durable_objects": {
     "bindings": [

@@ -7,6 +7,7 @@
 
 const ROOT_DOMAIN = "bubblelab.dev";
 import { validPlannerCode } from "./planner.js";
+import { handleFortuneChart } from "./fortune.js";
 
 export { RealtimeDO } from "./realtime.js";
 export { AnalyticsDO } from "./analytics.js";
@@ -243,6 +244,12 @@ export default {
 
     if (path.startsWith("/_planner/")) {
       return handlePlanner(request, env, url);
+    }
+
+    // 생년월일시는 저장하지 않고 요청 순간에만 명식으로 변환한다.
+    // KASI 인증키는 Worker secret에서만 읽으며 브라우저로 전달하지 않는다.
+    if (path === "/_fortune/chart") {
+      return handleFortuneChart(request, env);
     }
 
     // 공개 페이지 통계 (카테고리 홈의 접속량순 정렬용). 개인 데이터 없음.

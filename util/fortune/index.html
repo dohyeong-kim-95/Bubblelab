@@ -87,6 +87,31 @@
   .bio .bio-note { margin: .35rem 0 0; font-size: .78rem; line-height: 1.55; opacity: .75; }
   #result .footer { margin-top: 1.3rem; text-align: center; }
   #result .saved { font-size: .78rem; opacity: .5; margin: 0 0 .6rem; }
+
+  /* 사주 명식 */
+  #saju h2 { margin: 0 0 .3rem; font-size: .95rem; }
+  #saju .sub { margin: 0 0 1rem; font-size: .72rem; opacity: .55; line-height: 1.5; }
+  .saju-status { margin: .7rem 0 0; font-size: .8rem; line-height: 1.55; opacity: .7; }
+  .saju-candidate + .saju-candidate { margin-top: 1rem; padding-top: 1rem;
+                                     border-top: 1px solid light-dark(#1c273322, #dbe4ee22); }
+  .saju-candidate-title { margin: 0 0 .55rem; font-size: .75rem; opacity: .62; }
+  .saju-grid { display: grid; grid-template-columns: 3.2rem repeat(4, minmax(0, 1fr));
+               border: 1px solid light-dark(#1c273322, #dbe4ee22); border-radius: .65rem;
+               overflow: hidden; }
+  .saju-cell { min-width: 0; padding: .55rem .2rem; text-align: center;
+               border-right: 1px solid light-dark(#1c273318, #dbe4ee18);
+               border-bottom: 1px solid light-dark(#1c273318, #dbe4ee18); }
+  .saju-cell:nth-child(5n) { border-right: 0; }
+  .saju-cell:nth-last-child(-n+5) { border-bottom: 0; }
+  .saju-head, .saju-label { display: grid; place-items: center; font-size: .7rem; opacity: .58;
+                            background: light-dark(#1c273307, #dbe4ee08); }
+  .saju-char { display: block; font-family: serif; font-size: 1.55rem; line-height: 1.2; }
+  .saju-korean { display: block; margin-top: .18rem; font-size: .72rem; }
+  .saju-meta { display: block; margin-top: .12rem; font-size: .61rem; opacity: .52;
+               white-space: nowrap; }
+  .saju-warning { margin: .8rem 0 0; padding: .65rem .75rem; border-radius: .5rem;
+                  font-size: .73rem; line-height: 1.5;
+                  background: light-dark(#d99a2614, #ffcf6b12); }
 </style>
 </head>
 <body>
@@ -143,6 +168,15 @@
       <button id="save">내 운세 보기</button>
     </div>
     <p id="err"></p>
+  </section>
+
+  <!-- 사주 명식 -->
+  <section class="card" id="saju" hidden>
+    <h2>🧭 사주 명식</h2>
+    <p class="sub" id="saju-rule">양력 · 대한민국 표준시(KST) · 00시 일주 변경 · 진태양시 미보정</p>
+    <div id="saju-candidates"></div>
+    <p class="saju-status" id="saju-status">명식을 계산하고 있습니다…</p>
+    <p class="saju-warning" id="saju-warning" hidden></p>
   </section>
 
   <!-- 바이오리듬 결과 -->
@@ -333,6 +367,101 @@
     else { fill.style.left = (50 + v * 50) + "%"; fill.style.width = (-v * 50) + "%"; }
   }
 
+  // ── 사주 명식 ──────────────────────────────────────────────────
+  const sajuSec = document.getElementById("saju");
+  const sajuCandidates = document.getElementById("saju-candidates");
+  const sajuStatus = document.getElementById("saju-status");
+  const sajuWarning = document.getElementById("saju-warning");
+  const SAJU_COLUMNS = [["hour", "시주"], ["day", "일주"], ["month", "월주"], ["year", "연주"]];
+  let sajuRequestId = 0;
+
+  function addSajuCell(grid, className, text) {
+    const cell = document.createElement("div");
+    cell.className = `saju-cell ${className}`;
+    cell.textContent = text;
+    grid.appendChild(cell);
+    return cell;
+  }
+
+  function addPillarPart(grid, part) {
+    const cell = addSajuCell(grid, "", "");
+    if (!part) {
+      cell.textContent = "미상";
+      cell.style.opacity = ".45";
+      return;
+    }
+    const char = document.createElement("span");
+    char.className = "saju-char";
+    char.textContent = part.hanja;
+    const korean = document.createElement("span");
+    korean.className = "saju-korean";
+    korean.textContent = part.korean;
+    const meta = document.createElement("span");
+    meta.className = "saju-meta";
+    meta.textContent = `${part.yinYang} · ${part.element}${part.tenGod ? ` · ${part.tenGod}` : ""}`;
+    cell.append(char, korean, meta);
+  }
+
+  function renderSajuCandidate(candidate, showTitle) {
+    const wrap = document.createElement("div");
+    wrap.className = "saju-candidate";
+    if (showTitle) {
+      const title = document.createElement("p");
+      title.className = "saju-candidate-title";
+      title.textContent = candidate.timeLabel;
+      wrap.appendChild(title);
+    }
+    const grid = document.createElement("div");
+    grid.className = "saju-grid";
+    addSajuCell(grid, "saju-head", "");
+    for (const [, label] of SAJU_COLUMNS) addSajuCell(grid, "saju-head", label);
+    addSajuCell(grid, "saju-label", "천간");
+    for (const [key] of SAJU_COLUMNS) addPillarPart(grid, candidate.pillars[key]?.stem);
+    addSajuCell(grid, "saju-label", "지지");
+    for (const [key] of SAJU_COLUMNS) addPillarPart(grid, candidate.pillars[key]?.branch);
+    wrap.appendChild(grid);
+    sajuCandidates.appendChild(wrap);
+  }
+
+  async function renderSaju(birth) {
+    const requestId = ++sajuRequestId;
+    sajuSec.hidden = false;
+    sajuCandidates.replaceChildren();
+    sajuStatus.hidden = false;
+    sajuStatus.textContent = "명식을 계산하고 있습니다…";
+    sajuWarning.hidden = true;
+    try {
+      const response = await fetch("/_fortune/chart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          year: birth.y, month: birth.m, day: birth.d,
+          timeMode: birth.timeMode === "clock" ? "clock" : "branch",
+          time: birth.time,
+          branch: birth.h,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "명식을 계산하지 못했습니다.");
+      if (requestId !== sajuRequestId) return;
+      for (const candidate of data.candidates) renderSajuCandidate(candidate, data.ambiguous);
+      const verifyText = {
+        verified: "KASI 일진 교차검증 완료",
+        mismatch: "KASI 일진과 계산값이 달라 확인이 필요합니다",
+        unavailable: "KASI 연결 없이 내장 정밀 만세력으로 계산했습니다",
+        "not-configured": "내장 정밀 만세력으로 계산했습니다",
+      }[data.verification?.status] || "내장 정밀 만세력으로 계산했습니다";
+      sajuStatus.textContent = `${verifyText} · 계산 기준 ${data.rules.version}`;
+      if (data.ambiguous) {
+        sajuWarning.hidden = false;
+        sajuWarning.textContent = `⚠️ ${data.ambiguityReason} 가능한 명식을 함께 표시했습니다.`;
+      }
+    } catch (error) {
+      if (requestId !== sajuRequestId) return;
+      sajuStatus.textContent = error.message || "명식을 계산하지 못했습니다.";
+    }
+  }
+
   let lastBio = null;   // { n, vals, head } — 공유 이미지에서 재사용
   function renderResult(birth) {
     document.getElementById("form").hidden = true;
@@ -373,6 +502,7 @@
       `저장됨: ${birth.y}.${birth.m}.${birth.d}${hourTxt} · 이 기기에만 저장됩니다`;
 
     lastBio = { n, vals, head };   // 공유 이미지에서 재사용
+    renderSaju(birth);
   }
 
   // ── 저장/불러오기 ──────────────────────────────────────────────
@@ -409,6 +539,8 @@
   });
   document.getElementById("edit-btn").addEventListener("click", () => {
     document.getElementById("result").hidden = true;
+    sajuSec.hidden = true;
+    sajuRequestId++;
     fillForm(load());
     formSec.hidden = false;
     errEl.textContent = "";
@@ -427,6 +559,7 @@
     // 미래 날짜 방어
     const bd = new Date(y, m - 1, d);
     if (bd > now) { errEl.textContent = "미래 날짜는 입력할 수 없어요."; return; }
+    errEl.textContent = "";
     try { localStorage.setItem(KEY, JSON.stringify(birth)); } catch (e) {}
     renderResult(birth);
   });
