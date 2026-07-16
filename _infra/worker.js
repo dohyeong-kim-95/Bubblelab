@@ -166,9 +166,10 @@ async function handleAdmin(request, env, url, base = "") {
   if (!isAuthed) return redirect(`${base}/login`);
 
   if (url.pathname === "/api/stats") {
+    const days = Math.min(30, Math.max(1, Number(url.searchParams.get("days")) || 30));
     const id = env.ANALYTICS.idFromName("global");
     const response = await env.ANALYTICS.get(id).fetch(
-      `https://analytics.internal/stats?date=${kstDate()}`,
+      `https://analytics.internal/stats?date=${kstDate()}&days=${days}`,
     );
     const data = await response.json();
     data.usingDefaultCredentials = !env.ADMIN_ID || !env.ADMIN_PASSWORD;
@@ -271,6 +272,20 @@ export default {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ visitorId, date: kstDate() }),
+      });
+    }
+
+    // 카드 페이지의 활성화면 체류시간. 방문 문서에서 발급한 익명 쿠키만 사용하고
+    // 클라이언트가 임의 방문자 ID를 제출하지 못하게 Worker에서 ID를 붙인다.
+    if (path === "/_engagement" && request.method === "POST") {
+      const visitorId = cookies(request).bl_vid;
+      if (!visitorId) return new Response(null, { status: 204 });
+      const body = await request.json().catch(() => ({}));
+      const id = env.ANALYTICS.idFromName("global");
+      return env.ANALYTICS.get(id).fetch("https://analytics.internal/engage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...body, visitorId, date: kstDate() }),
       });
     }
 
