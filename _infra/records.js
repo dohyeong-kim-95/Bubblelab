@@ -21,7 +21,8 @@ const SUG_DAILY = 5;   // 방문자당 하루 제출 수
 export const GAMES = {
   "10sec":      { dir: "min", min: 0, max: 60 },        // 10초 오차(초)
   beer:         { dir: "min", min: 0, max: 501 },       // 500cc 오차(cc)+시간 타이브레이커
-  "2048":       { dir: "max", min: 0, max: 1000000 },   // 점수\n  fruitmerge:   { dir: "max", min: 0, max: 1000000000 }, // 합체 점수
+  "2048":       { dir: "max", min: 0, max: 1000000 },   // 점수
+  fruitmerge:   { dir: "max", min: 0, max: 1000000000 }, // 합체 점수
   "bubble-pop": { dir: "max", min: 0, max: 300 },       // 20초 터트린 버블 수
   "bubble-pop-idle": { dir: "max", min: 0, max: 1e100 }, // 7일 누적 버블 수
   circle:       { dir: "max", min: 0, max: 100 },       // 정확도(%)
