@@ -34,6 +34,7 @@ let watch = JSON.parse(localStorage.getItem("bi:watch") || 'null') || ["NVDA", "
 let currentRange = "1M";
 let orderSide = "buy";
 let chartPoints = [];
+let chartType = localStorage.getItem("bi:chart-type") || "candle";
 
 function seeded(symbol, count) {
   let seed = [...symbol].reduce((a, c) => a * 31 + c.charCodeAt(0), count * 97) >>> 0;
@@ -47,7 +48,12 @@ function seeded(symbol, count) {
     values.push(value);
   }
   const scale = item.price / values.at(-1);
-  return values.map((v, i) => ({ value: v * scale, volume: .15 + rand() * .85, index: i }));
+  const closes = values.map(v => v * scale);
+  return closes.map((close, i) => {
+    const open = i ? closes[i - 1] : close * (1 + (rand() - .5) * .01);
+    const spread = Math.max(open, close) * (.002 + rand() * .009);
+    return { value: close, open, high: Math.max(open, close) + spread, low: Math.min(open, close) - spread * (.65 + rand() * .5), volume: .15 + rand() * .85, index: i };
+  });
 }
 
 function renderTicker() {
@@ -71,6 +77,9 @@ function renderQuote() {
   $("#symbol").textContent = selected;
   $("#companyName").textContent = d.name;
   $("#exchange").textContent = `${d.exchange} · USD · DEMO`;
+  $("#chartSymbol").textContent = selected;
+  $("#chartCompany").textContent = d.name;
+  $("#chartExchange").textContent = `${d.exchange} · USD`;
   $("#price").textContent = d.price.toFixed(2);
   const direction = d.change >= 0 ? "up" : "down";
   const absolute = d.price * d.change / (100 + d.change);
@@ -88,13 +97,22 @@ function renderQuote() {
 
 function renderChart() {
   chartPoints = seeded(selected, ranges[currentRange]);
-  const vals = chartPoints.map(p => p.value);
+  const vals = chartType === "candle" ? chartPoints.flatMap(p => [p.low, p.high]) : chartPoints.map(p => p.value);
   const min = Math.min(...vals), max = Math.max(...vals), pad = (max - min || 1) * .12;
   const x = i => 16 + i / (vals.length - 1) * 868;
   const y = v => 300 - (v - (min - pad)) / ((max + pad) - (min - pad)) * 275;
   const line = chartPoints.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join(" ");
   $("#linePath").setAttribute("d", line);
   $("#areaPath").setAttribute("d", `${line} L884,315 L16,315 Z`);
+  const candleWidth = Math.max(2, Math.min(8, 650 / chartPoints.length));
+  $("#candleLayer").innerHTML = chartPoints.map((p, i) => {
+    const cls = p.value >= p.open ? "bull" : "bear", cx = x(i), top = y(Math.max(p.open, p.value)), bottom = y(Math.min(p.open, p.value));
+    return `<line class="wick ${cls}" x1="${cx.toFixed(1)}" x2="${cx.toFixed(1)}" y1="${y(p.high).toFixed(1)}" y2="${y(p.low).toFixed(1)}"></line><rect class="${cls}" x="${(cx - candleWidth / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${candleWidth.toFixed(1)}" height="${Math.max(1.2, bottom - top).toFixed(1)}"></rect>`;
+  }).join("");
+  $("#candleLayer").style.display = chartType === "candle" ? "block" : "none";
+  $("#linePath").style.display = chartType === "line" ? "block" : "none";
+  $("#areaPath").style.display = chartType === "line" ? "block" : "none";
+  $$("#chartTypeToggle button").forEach(b => b.classList.toggle("active", b.dataset.chartType === chartType));
   $("#gridLines").innerHTML = [60, 120, 180, 240, 300].map(v => `<line x1="16" x2="884" y1="${v}" y2="${v}"></line>`).join("");
   $("#chartHigh").textContent = `H ${max.toFixed(2)}`;
   $("#chartLow").textContent = `L ${min.toFixed(2)}`;
@@ -194,6 +212,7 @@ function updateClock() {
 
 $("#watchlist").addEventListener("click", e => { const row = e.target.closest("[data-symbol]"); if (row) selectSymbol(row.dataset.symbol); });
 $("#rangeTabs").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; currentRange = b.dataset.range; $$("#rangeTabs button").forEach(x => x.classList.toggle("active", x === b)); renderChart(); });
+$("#chartTypeToggle").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; chartType = b.dataset.chartType; localStorage.setItem("bi:chart-type", chartType); renderChart(); });
 $("#sectionTabs").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; $$("#sectionTabs button").forEach(x => x.classList.toggle("active", x === b)); renderSection(b.dataset.section); });
 $("#sideToggle").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; orderSide = b.dataset.side; $$("#sideToggle button").forEach(x => x.classList.toggle("active", x === b)); $("#orderButton").textContent = `모의 ${orderSide === "buy" ? "매수" : "매도"}`; $("#orderButton").classList.toggle("sell", orderSide === "sell"); });
 $("#orderQty").addEventListener("input", updateOrderEstimate);
@@ -209,10 +228,10 @@ $("#chartHitbox").addEventListener("pointermove", e => {
   const svg = $("#priceChart"), rect = svg.getBoundingClientRect();
   const px = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
   const i = Math.round(px * (chartPoints.length - 1)), p = chartPoints[i], x = 16 + i / (chartPoints.length - 1) * 868;
-  const vals = chartPoints.map(p => p.value), min = Math.min(...vals), max = Math.max(...vals), pad = (max - min || 1) * .12;
+  const vals = chartType === "candle" ? chartPoints.flatMap(p => [p.low, p.high]) : chartPoints.map(p => p.value), min = Math.min(...vals), max = Math.max(...vals), pad = (max - min || 1) * .12;
   const y = 300 - (p.value - (min - pad)) / ((max + pad) - (min - pad)) * 275;
   const cursor = $("#chartCursor"); cursor.hidden = false; cursor.setAttribute("transform", `translate(${x} 0)`); cursor.querySelector("circle").setAttribute("cy", y);
-  const tip = $("#chartTooltip"); tip.hidden = false; tip.textContent = `${selected}  ${p.value.toFixed(2)}`; tip.style.left = `${Math.min(rect.width - 110, Math.max(5, e.clientX - rect.left + 12))}px`; tip.style.top = `${Math.max(8, e.clientY - rect.top - 20)}px`;
+  const tip = $("#chartTooltip"); tip.hidden = false; tip.textContent = chartType === "candle" ? `${selected}  O ${p.open.toFixed(2)}  H ${p.high.toFixed(2)}  L ${p.low.toFixed(2)}  C ${p.value.toFixed(2)}` : `${selected}  ${p.value.toFixed(2)}`; tip.style.left = `${Math.min(rect.width - 245, Math.max(5, e.clientX - rect.left + 12))}px`; tip.style.top = `${Math.max(8, e.clientY - rect.top - 20)}px`;
 });
 $("#chartHitbox").addEventListener("pointerleave", () => { $("#chartCursor").hidden = true; $("#chartTooltip").hidden = true; });
 
