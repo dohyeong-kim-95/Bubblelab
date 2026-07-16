@@ -63,10 +63,9 @@
   function endFlight() {
     if (state !== "release" || flightEnded) return;
     flightEnded = true;
-    thoughtBubble.classList.remove("is-floating");
     floatingThought.textContent = "";
     releaseMessage.textContent = "이제 지금의 호흡과 감각으로 돌아와요.";
-    timers.push(setTimeout(finishRelease, REDUCED_MOTION ? 450 : 650));
+    timers.push(setTimeout(finishRelease, REDUCED_MOTION ? 450 : 750));
   }
 
   function beginRelease(thought) {
@@ -90,7 +89,7 @@
     timers.push(setTimeout(() => {
       if (state === "release") releaseMessage.textContent = "붙잡지 않아도, 밀어내지 않아도 괜찮아요.";
     }, REDUCED_MOTION ? 1050 : 1900));
-    timers.push(setTimeout(endFlight, REDUCED_MOTION ? 2000 : 3500));
+    timers.push(setTimeout(endFlight, REDUCED_MOTION ? 2000 : 4100));
   }
 
   function returnToIntro() {

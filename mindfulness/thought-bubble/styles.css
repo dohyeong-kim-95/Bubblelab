@@ -133,13 +133,20 @@ form > label { display: block; margin: 0 0 9px 3px; font-size: .77rem; font-weig
 .privacy-note span { margin-right: 4px; }
 
 .release-view { min-height: calc(100svh - 56px - env(safe-area-inset-top)); padding: 20px 0 max(26px, env(safe-area-inset-bottom)); display: grid; grid-template-rows: auto 1fr auto auto; text-align: center; }
+.release-view:not([hidden]) { animation: viewReveal .7s ease-out both; }
 .release-heading h2 { margin: 5px 0 0; font-size: clamp(1.3rem, 5vw, 1.8rem); letter-spacing: -.04em; }
 .sky { position: relative; min-height: 390px; display: grid; place-items: center; overflow: hidden; }
 .thought-bubble {
-  --mid-x: 10vw;
+  --near-x: 4vw;
+  --mid-x: 12vw;
+  --far-x: 27vw;
+  --late-x: 36vw;
   --end-x: 44vw;
-  --mid-tilt: -5deg;
-  --end-tilt: 18deg;
+  --tilt-1: 1.6deg;
+  --tilt-2: 3.2deg;
+  --tilt-3: 4.8deg;
+  --tilt-4: 6.4deg;
+  --end-tilt: 8deg;
   position: relative;
   width: min(72vw, 280px);
   aspect-ratio: 1;
@@ -157,29 +164,38 @@ form > label { display: block; margin: 0 0 9px 3px; font-size: .77rem; font-weig
   will-change: transform, opacity, filter;
 }
 .thought-bubble[data-direction="left"] {
-  --mid-x: -10vw;
+  --near-x: -4vw;
+  --mid-x: -12vw;
+  --far-x: -27vw;
+  --late-x: -36vw;
   --end-x: -44vw;
-  --mid-tilt: 5deg;
-  --end-tilt: -18deg;
+  --tilt-1: -1.6deg;
+  --tilt-2: -3.2deg;
+  --tilt-3: -4.8deg;
+  --tilt-4: -6.4deg;
+  --end-tilt: -8deg;
 }
 .thought-bubble i { position: absolute; border: 1px solid rgba(255,255,255,.92); border-radius: 50%; box-shadow: inset -5px -7px 10px rgba(55,110,115,.08); }
 .thought-bubble i:nth-of-type(1) { width: 29px; height: 29px; left: 2px; bottom: 17px; }
 .thought-bubble i:nth-of-type(2) { width: 14px; height: 14px; left: 24px; bottom: -11px; }
-.thought-bubble.is-floating { animation: floatAway 3.2s cubic-bezier(.32,.05,.25,1) forwards; }
-.thought-bubble.is-floating > span { animation: thoughtTextFade 3.2s ease forwards; }
+.thought-bubble.is-floating { animation: floatAway 3.8s linear forwards; }
+.thought-bubble.is-floating > span { animation: thoughtTextFade 3.8s ease-out forwards; }
 @keyframes floatAway {
-  0% { opacity: 0; transform: translate(0, 13vh) scale(.74) rotate(0); }
-  12% { opacity: 1; }
-  28% { opacity: 1; transform: translate(var(--mid-x), 1vh) scale(1) rotate(var(--mid-tilt)); }
-  60% { opacity: .86; transform: translate(var(--mid-x), -16vh) scale(.86) rotate(0); filter: blur(0); }
-  100% { opacity: 0; transform: translate(var(--end-x), -48vh) scale(.46) rotate(var(--end-tilt)); filter: blur(4px); }
+  0% { opacity: .78; transform: translate3d(0, 9vh, 0) scale(.96) rotate(0); filter: blur(0); }
+  20% { opacity: 1; transform: translate3d(var(--near-x), 2vh, 0) scale(.91) rotate(var(--tilt-1)); }
+  40% { opacity: .96; transform: translate3d(var(--mid-x), -9vh, 0) scale(.82) rotate(var(--tilt-2)); }
+  60% { opacity: .82; transform: translate3d(var(--far-x), -22vh, 0) scale(.7) rotate(var(--tilt-3)); filter: blur(0); }
+  80% { opacity: .46; transform: translate3d(var(--late-x), -36vh, 0) scale(.56) rotate(var(--tilt-4)); filter: blur(1px); }
+  100% { opacity: 0; transform: translate3d(var(--end-x), -52vh, 0) scale(.42) rotate(var(--end-tilt)); filter: blur(3px); }
 }
-@keyframes thoughtTextFade { 0%, 28% { opacity: 1; } 52% { opacity: .22; } 100% { opacity: 0; } }
+@keyframes thoughtTextFade { 0%, 24% { opacity: 1; } 68%, 100% { opacity: 0; } }
 .release-message { min-height: 1.5em; margin: 2px 0 16px; color: var(--muted); font-size: .77rem; }
 .secondary-button { justify-self: center; padding: 10px 17px; border: 1px solid rgba(255,255,255,.9); border-radius: 999px; color: var(--muted); background: rgba(255,255,255,.45); box-shadow: inset 0 0 0 1px rgba(51,96,98,.08); font-size: .7rem; cursor: pointer; }
 .secondary-button:focus-visible { outline: 3px solid #649592; outline-offset: 3px; }
 
 .complete-view { min-height: calc(100svh - 56px - env(safe-area-inset-top)); padding: 10vh 0 max(36px, env(safe-area-inset-bottom)); text-align: center; }
+.complete-view:not([hidden]) { animation: viewReveal .9s ease-out both; }
+@keyframes viewReveal { from { opacity: 0; } to { opacity: 1; } }
 .empty-sky { position: relative; width: 155px; height: 155px; margin: 0 auto 30px; }
 .empty-sky i { position: absolute; border: 1px solid rgba(255,255,255,.9); border-radius: 50%; box-shadow: inset -7px -9px 14px rgba(61,119,126,.07), 0 14px 30px rgba(67,110,113,.07); animation: drift 5s ease-in-out infinite alternate; }
 .empty-sky i:nth-child(1) { width: 82px; height: 82px; left: 34px; top: 39px; }
