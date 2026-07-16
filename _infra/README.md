@@ -29,7 +29,7 @@ Worker는 다음 우선순위로 요청을 처리합니다.
 | `/_shared/*`, `/_assets/*` | 모든 서브도메인의 공용 정적 파일 |
 | `/_planner/login`, `/_planner/data`, `/_planner/logout` | 개인 플래너 세션과 데이터 |
 | `/_fortune/chart` | 생년월일시를 명식·오늘 운세 계산용 데이터로 변환 |
-| `/_stats`, `/_streak` | 최근 방문량과 Slop 연속 방문 |
+| `/_stats`, `/_streak`, `/_engagement` | 최근 방문량, Slop 연속 방문, 카드 활성 체류시간 |
 | `/_suggest` | 익명 토이 아이디어 제출 |
 | `/_records`, `/_personal` | 주간·올타임·개인 기록 조회와 제출 |
 | `/_rt/<namespace>` | namespace별 실시간 Durable Object |
@@ -65,7 +65,9 @@ node _infra/build.mjs
   `onDisconnect`, 서버 타임스탬프를 WebSocket 위에 제공합니다. namespace별 JSON
   트리를 통째로 저장하므로 소규모 친구 게임에 맞춘 구조입니다.
 - `AnalyticsDO`: IP와 User-Agent를 저장하지 않고 익명 방문자 쿠키 기준으로 HTML
-  문서 방문을 멱등 집계합니다.
+  문서 방문을 멱등 집계합니다. 카드 페이지는 화면에 표시된 시간만 세션별 최대
+  30분까지 누적하며 관리자 Insights에서 7일·30일 총 체류, 중앙값과 10초 이상
+  체류율을 확인할 수 있습니다.
 - `RecordsDO`: 월요일 09:00 KST 기준 주간 보드, 브라우저별 최고 기록, 올타임
   기록과 Bubble Pop Idle 시즌 역사를 보관합니다.
 - `PlannerDO`: 개인 코드별로 KST 현재 달 데이터만 유지합니다.
