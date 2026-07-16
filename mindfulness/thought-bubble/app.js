@@ -89,7 +89,7 @@
     timers.push(setTimeout(() => {
       if (state === "release") releaseMessage.textContent = "붙잡지 않아도, 밀어내지 않아도 괜찮아요.";
     }, REDUCED_MOTION ? 1050 : 1900));
-    timers.push(setTimeout(endFlight, REDUCED_MOTION ? 2000 : 4100));
+    timers.push(setTimeout(endFlight, REDUCED_MOTION ? 2000 : 4800));
   }
 
   function returnToIntro() {

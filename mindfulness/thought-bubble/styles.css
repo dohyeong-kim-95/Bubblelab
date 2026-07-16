@@ -140,6 +140,7 @@ form > label { display: block; margin: 0 0 9px 3px; font-size: .77rem; font-weig
   --near-x: 4vw;
   --mid-x: 12vw;
   --far-x: 27vw;
+  --fade-x: 33vw;
   --late-x: 36vw;
   --end-x: 44vw;
   --tilt-1: 1.6deg;
@@ -167,6 +168,7 @@ form > label { display: block; margin: 0 0 9px 3px; font-size: .77rem; font-weig
   --near-x: -4vw;
   --mid-x: -12vw;
   --far-x: -27vw;
+  --fade-x: -33vw;
   --late-x: -36vw;
   --end-x: -44vw;
   --tilt-1: -1.6deg;
@@ -178,17 +180,18 @@ form > label { display: block; margin: 0 0 9px 3px; font-size: .77rem; font-weig
 .thought-bubble i { position: absolute; border: 1px solid rgba(255,255,255,.92); border-radius: 50%; box-shadow: inset -5px -7px 10px rgba(55,110,115,.08); }
 .thought-bubble i:nth-of-type(1) { width: 29px; height: 29px; left: 2px; bottom: 17px; }
 .thought-bubble i:nth-of-type(2) { width: 14px; height: 14px; left: 24px; bottom: -11px; }
-.thought-bubble.is-floating { animation: floatAway 3.8s linear forwards; }
-.thought-bubble.is-floating > span { animation: thoughtTextFade 3.8s ease-out forwards; }
+.thought-bubble.is-floating { animation: floatAway 4.5s linear forwards; }
+.thought-bubble.is-floating > span { animation: thoughtTextFade 4.5s ease-out forwards; }
 @keyframes floatAway {
   0% { opacity: .78; transform: translate3d(0, 9vh, 0) scale(.96) rotate(0); filter: blur(0); }
-  20% { opacity: 1; transform: translate3d(var(--near-x), 2vh, 0) scale(.91) rotate(var(--tilt-1)); }
-  40% { opacity: .96; transform: translate3d(var(--mid-x), -9vh, 0) scale(.82) rotate(var(--tilt-2)); }
-  60% { opacity: .82; transform: translate3d(var(--far-x), -22vh, 0) scale(.7) rotate(var(--tilt-3)); filter: blur(0); }
-  80% { opacity: .46; transform: translate3d(var(--late-x), -36vh, 0) scale(.56) rotate(var(--tilt-4)); filter: blur(1px); }
+  17% { opacity: 1; transform: translate3d(var(--near-x), 2vh, 0) scale(.91) rotate(var(--tilt-1)); }
+  34% { opacity: .98; transform: translate3d(var(--mid-x), -9vh, 0) scale(.82) rotate(var(--tilt-2)); }
+  51% { opacity: .94; transform: translate3d(var(--far-x), -22vh, 0) scale(.7) rotate(var(--tilt-3)); filter: blur(0); }
+  65% { opacity: .66; transform: translate3d(var(--fade-x), -32vh, 0) scale(.61) rotate(var(--tilt-3)); filter: blur(.35px); }
+  82% { opacity: .28; transform: translate3d(var(--late-x), -42vh, 0) scale(.51) rotate(var(--tilt-4)); filter: blur(1.5px); }
   100% { opacity: 0; transform: translate3d(var(--end-x), -52vh, 0) scale(.42) rotate(var(--end-tilt)); filter: blur(3px); }
 }
-@keyframes thoughtTextFade { 0%, 24% { opacity: 1; } 68%, 100% { opacity: 0; } }
+@keyframes thoughtTextFade { 0%, 28% { opacity: 1; } 64%, 100% { opacity: 0; } }
 .release-message { min-height: 1.5em; margin: 2px 0 16px; color: var(--muted); font-size: .77rem; }
 .secondary-button { justify-self: center; padding: 10px 17px; border: 1px solid rgba(255,255,255,.9); border-radius: 999px; color: var(--muted); background: rgba(255,255,255,.45); box-shadow: inset 0 0 0 1px rgba(51,96,98,.08); font-size: .7rem; cursor: pointer; }
 .secondary-button:focus-visible { outline: 3px solid #649592; outline-offset: 3px; }
