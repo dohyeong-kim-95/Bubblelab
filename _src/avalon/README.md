@@ -1,223 +1,103 @@
-# ResistanceAvalon
+# The Resistance: Avalon
 
-Serverless web implementation of **The Resistance: Avalon** for mobile and desktop browsers.
+<https://games.bubblelab.dev/avalon>에서 서비스하는 5–10인용 사회적 추론 게임의
+원본 Vite 프로젝트입니다. 각 플레이어가 자기 기기로 방에 참여하며, 별도 사회자
+없이 역할 배정부터 팀 제안·투표·미션·암살·결과까지 진행합니다.
 
-The project is built around one goal: let 5 to 10 players run an Avalon session on their own devices without a human moderator. Room creation, role distribution, voting, mission resolution, assassin phase, and result reveal are handled in the app.
+## 현재 구조
 
-## Current State
+- Vite 7 + Vanilla JavaScript ES modules
+- Bubblelab `/_rt/avalon` WebSocket 실시간 서버
+- `RealtimeDO`가 방의 공개 상태·비공개 역할·액션을 저장
+- 호스트 클라이언트가 상태 전이의 권위자로 동작
+- 플레이어 ID는 브라우저 `localStorage`에 보관
+- Firebase, Firebase Auth, GitHub Pages, 별도 API 키는 사용하지 않음
 
-This repository is already beyond prototype stage.
+Firebase 시절 게임 로직을 크게 바꾸지 않도록 `src/firebase.js`가 `ref`, `get`,
+`set`, `update`, `onValue`, `onDisconnect` 호환 어댑터를 제공합니다. 이관 배경은
+[`MIGRATION.md`](MIGRATION.md)를 참고하세요.
 
-- Play flow implemented: home -> lobby -> role reveal -> team proposal -> voting -> mission -> assassin -> result
-- Realtime backend implemented with Firebase Realtime Database + Anonymous Auth
-- GitHub Pages deployment workflow exists
-- Extra gameplay support exists for:
-  - host-managed bots
-  - host-only force-kick controls in the lobby
-  - vote history
-  - collapsible result vote history by mission
-  - compact 2-column lobby/game player layouts
-  - host treated as always ready in lobby
-  - role composition board split into good/evil sections
-  - normalized role config guards by player count
-  - optimistic waiting-state UI after role reveal / vote result / mission result confirmations
-  - per-phase timers
-  - floating chat
-  - audio/BGM
+## 구현 범위
 
-## Stack
+- 방 생성·입장·준비·강제 퇴장·방장 승계
+- 5–10인 역할 구성과 공개 정보 생성
+- 팀 제안, 전체 투표, 미션 판정, 5회 연속 부결 처리
+- 7인 이상 4번째 미션의 실패 2장 규칙
+- 멀린 암살과 최종 결과
+- 진행 단계별 타이머와 확인 인원 표시
+- 호스트 관리 봇, 투표 이력, 재경기
+- 플로팅 채팅과 오디오/BGM
+- 모바일 2열 플레이어 레이아웃
 
-- Vite
-- Vanilla JavaScript (ES modules)
-- Firebase Realtime Database
-- Firebase Anonymous Authentication
-- GitHub Pages
-- GitHub Actions
+게임 규칙은 [`Rulebook.md`](Rulebook.md)에 정리되어 있습니다.
 
-## Project Structure
+## 주요 디렉터리
 
 ```text
 src/
-  config/
-    gameConfig.js        Game constants, roles, mission sizes, timer presets
-  game/
-    GameEngine.js        Host-side state machine and phase transitions
-    RoleManager.js       Role assignment and visible-info generation
-    VoteManager.js       Vote aggregation
-    MissionManager.js    Mission card judgment
-    AssassinManager.js   Merlin assassination flow
-  services/
-    RoomService.js       Room lifecycle and Firebase room access
-    PlayerService.js     Presence, vote, mission, ready, assassination actions
-    BotService.js        Host-managed bot players
-    ChatService.js       Floating in-game chat
-    AudioService.js      Audio and BGM
-  views/
-    HomeView.js
-    LobbyView.js
-    GameView.js
-    ResultView.js
-  components/
-    MissionTrack.js
-    PlayerList.js
-    VoteResult.js
+├── config/       역할·인원·미션·타이머 설정
+├── game/         호스트 상태 머신과 투표·미션·암살 로직
+├── services/     방·플레이어·봇·채팅·오디오 서비스
+├── views/        홈·로비·게임·결과 화면
+├── components/   미션 트랙·플레이어 목록·투표 결과
+├── lobby/        로비 불변식과 역할 구성 정규화
+├── result/       결과·재경기 상태
+├── sim/          전체 게임 시뮬레이터
+├── ui/           공용 버튼 라벨 상태
+└── firebase.js   Bubblelab 실시간 서버 어댑터
 ```
 
-## Core Runtime Model
+## 개발과 테스트
 
-- The room host acts as the game engine.
-- The host client listens for Firebase actions and writes authoritative `gameState` transitions.
-- Private role data is stored under `privateData/{roomCode}/{playerId}`.
-- Public room state is stored under `rooms/{roomCode}`.
-
-This means the game is lightweight and serverless, but host migration and edge-case handling matter a lot.
-
-## Local Development
-
-1. Install dependencies:
-
-```sh
+```bash
+cd _src/avalon
 npm ci
-```
-
-2. Create or update `.env`:
-
-```env
-VITE_FIREBASE_API_KEY=...
-VITE_FIREBASE_AUTH_DOMAIN=...
-VITE_FIREBASE_DATABASE_URL=...
-VITE_FIREBASE_PROJECT_ID=...
-```
-
-3. Run:
-
-```sh
 npm run dev
 ```
 
-4. Open the local Vite URL in two or more separate browser sessions.
-   Use separate browsers or incognito windows for multiplayer QA.
+Vite 개발 서버에서 실제 Bubblelab 실시간 서버를 쓰려면 환경 변수
+`VITE_RT_HOST=games.bubblelab.dev`를 설정할 수 있습니다. 로컬 Durable Object까지
+검증하려면 저장소 루트에서 다음을 실행하세요.
 
-## Automated Validation
-
-This repo now has two lightweight validation paths that do not require a browser:
-
-- `npm run test:sim`
-  Runs 5-player through 10-player full-game simulations repeatedly and asserts that the game always reaches a valid terminal state.
-- `npm run test:lobby`
-  Runs focused lobby-state invariant checks for multiplayer regressions such as:
-  - guest `READY` state surviving unrelated room updates
-  - guest `READY` state surviving reconnect / presence flips
-  - host exclusion from ready requirements
-  - host migration recomputing the correct ready set
-  - bot add/remove and replay reset behavior
-  - force-kicked players being removed from both the player roster and ready state
-  - only active players being used when a game starts
-  - role-config slot limits being normalized for smaller player counts
-- `npm run test:game-phases`
-  Runs focused phase-ready checks for "everyone must press next" flows after role reveal, vote result, and mission result.
-  It validates ready-count aggregation and UI labels such as `대기 중 (2/x)`, including optimistic local progress immediately after a player confirms.
-- `npm run test:button-labels`
-  Runs reusable button-label checks across 5-player through 10-player setups.
-  It validates lobby start labels, team proposal count labels for each mission, role reveal / voting / vote-result / mission-result button copy, and vote completion messages.
-- `npm run test:result-replay`
-  Runs replay routing checks so guests return to the lobby when the host resets the room after a finished game.
-- `npm run test:ci`
-  Runs both validation suites and then `vite build`.
-
-Quick local commands:
-
-```sh
-npm run simulate:quick
-npm run test:lobby
-npm run test:game-phases
-npm run test:button-labels
-npm run test:result-replay
-npm run test:ci
+```bash
+node _infra/build.mjs
+npx wrangler@4 dev --local --local-upstream localhost
+# http://localhost:8787/games/avalon
 ```
 
-Relevant sources:
+자동 검증:
 
-- [src/sim/GameSimulator.js](/home/kimdohyeong/Working_kdh/1_Projects/Y2026/PJT005_Games/ResistanceAvalon/src/sim/GameSimulator.js)
-- [src/lobby/lobbyState.js](/home/kimdohyeong/Working_kdh/1_Projects/Y2026/PJT005_Games/ResistanceAvalon/src/lobby/lobbyState.js)
-- [scripts/simulate-games.mjs](/home/kimdohyeong/Working_kdh/1_Projects/Y2026/PJT005_Games/ResistanceAvalon/scripts/simulate-games.mjs)
-- [scripts/check-lobby-invariants.mjs](/home/kimdohyeong/Working_kdh/1_Projects/Y2026/PJT005_Games/ResistanceAvalon/scripts/check-lobby-invariants.mjs)
-- [scripts/check-game-phase-invariants.mjs](/home/kimdohyeong/Working_kdh/1_Projects/Y2026/PJT005_Games/ResistanceAvalon/scripts/check-game-phase-invariants.mjs)
-- [scripts/check-result-replay-invariants.mjs](/home/kimdohyeong/Working_kdh/1_Projects/Y2026/PJT005_Games/ResistanceAvalon/scripts/check-result-replay-invariants.mjs)
+| 명령 | 범위 |
+| --- | --- |
+| `npm run test:sim` | 5–10인 전체 게임 반복 시뮬레이션 |
+| `npm run test:lobby` | 준비 상태, 재접속, 방장 승계, 봇·강퇴 불변식 |
+| `npm run test:game-phases` | 역할·투표·미션 확인 단계의 ready 집계 |
+| `npm run test:button-labels` | 인원·미션별 버튼과 진행 문구 |
+| `npm run test:missions` | 미션 인원과 실패 판정 규칙 |
+| `npm run test:result-replay` | 종료 후 재경기 라우팅 |
+| `npm run test:ci` | 위 검증 전체와 Vite 빌드 |
 
-## Firebase Setup
+## 공개 산출물 갱신
 
-This repo uses:
-
-- Firebase Anonymous Auth
-- Firebase Realtime Database
-
-Rules source:
-
-- [database.rules.json](/home/kimdohyeong/Working_kdh/1_Projects/Y2026/PJT005_Games/ResistanceAvalon/database.rules.json)
-
-CLI config:
-
-- [firebase.json](/home/kimdohyeong/Working_kdh/1_Projects/Y2026/PJT005_Games/ResistanceAvalon/firebase.json)
-- [.firebaserc](/home/kimdohyeong/Working_kdh/1_Projects/Y2026/PJT005_Games/ResistanceAvalon/.firebaserc)
-
-Deploy rules:
-
-```sh
-firebase deploy --only database
+```bash
+cd _src/avalon
+./rebuild.sh
 ```
 
-Detailed Firebase notes:
+스크립트는 `npm ci`, `vite build --base=/avalon/`을 실행하고
+`games/avalon/`을 새 산출물로 교체한 뒤 카드 아이콘용 이모지 주석을 넣습니다.
+소스와 생성 결과를 함께 커밋하세요. `games/avalon/`을 직접 수정하면 다음 빌드에서
+덮어써집니다.
 
-- [FIREBASE_SETUP.md](/home/kimdohyeong/Working_kdh/1_Projects/Y2026/PJT005_Games/ResistanceAvalon/FIREBASE_SETUP.md)
+## 수동 QA 우선순위
 
-## GitHub Pages Deployment
+1. 5인 방 생성부터 결과까지 완주
+2. 7인 이상 4번째 미션의 실패 2장 규칙
+3. 로비와 게임 중 방장 이탈·승계
+4. 투표·미션 도중 일반 플레이어 재접속
+5. 결과 화면 재경기와 홈 이동
+6. 타이머 만료, 봇 추가·제거, 강제 퇴장
+7. 여러 기기에서 채팅·오디오·모바일 레이아웃 확인
 
-Deploy workflow:
-
-- [.github/workflows/deploy.yml](/home/kimdohyeong/Working_kdh/1_Projects/Y2026/PJT005_Games/ResistanceAvalon/.github/workflows/deploy.yml)
-
-Expected branch:
-
-- `claude/main`
-
-Required GitHub Actions secrets:
-
-- `VITE_FIREBASE_API_KEY`
-- `VITE_FIREBASE_AUTH_DOMAIN`
-- `VITE_FIREBASE_DATABASE_URL`
-- `VITE_FIREBASE_PROJECT_ID`
-
-Validation on push:
-
-- The GitHub Actions workflow now runs simulation checks and lobby invariant checks before building and deploying.
-
-## QA Priorities
-
-The most important manual QA scenarios are:
-
-1. 5-player happy path from room creation to result
-2. 7+ player fourth mission rule (`2 fails required`)
-3. Host leaves during lobby
-4. Host leaves during active game
-5. Non-host disconnects during vote
-6. Non-host disconnects during mission
-7. Replay after result
-8. Timer expiry in proposal/vote/mission/assassination
-9. Vote-history toggle on/off
-10. Host-managed bot add/remove flow
-11. 2-column lobby/game player layout readability on mobile
-12. Vote submit / next-confirm waiting UI copy
-13. Role composition visibility for both host and guests
-14. Host force-kick flow in lobby on both mobile and desktop
-15. Result screen `홈으로` fully leaving the room before replay starts
-
-## Known Architectural Constraints
-
-- The host client is authoritative for game progression.
-- Multiplayer QA should not be done with multiple tabs in the same browser session.
-- Firebase rules and client-side checks must both be correct; UI-only restrictions are not enough.
-
-## Source Of Truth
-
-The source of truth is now the implemented code plus this README.
+같은 브라우저의 여러 탭은 플레이어 ID를 공유하므로 멀티플레이 QA에는 서로 다른
+브라우저나 시크릿 창을 사용하세요.

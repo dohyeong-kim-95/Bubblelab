@@ -1,75 +1,89 @@
-# 🫧 bubblelab
+# 🫧 Bubblelab
 
-bubblelab.dev에서 서비스하는 모든 것이 사는 모노레포.
+`bubblelab.dev`에서 운영하는 게임·도구·실험을 한곳에 모은 정적 사이트 모노레포입니다.
 
-**루트 폴더 = 서브도메인.** 그게 전부예요.
+루트의 공개 폴더 하나가 서브도메인 하나에 대응합니다. `_` 또는 `.`으로 시작하는
+폴더는 배포 대상에서 제외됩니다.
 
-```
-/
-├── www/       → https://bubblelab.dev            (랜딩)
-├── slop/      → https://slop.bubblelab.dev       (실험장. 새 토이는 여기서 시작)
-├── games/     → https://games.bubblelab.dev      (승격된 게임들. 아발론 등)
-├── admin/     → https://admin.bubblelab.dev      (익명 방문 통계, 로그인 필요)
-├── _shared/   → 모든 서브도메인 공용 에셋 (/_shared/* 로 서빙)
-├── _src/      → 빌드가 필요한 것들의 소스 (배포 안 됨)
-└── _infra/    → 워커·빌드·실시간 서버 (배포 안 됨)
-```
+| 폴더 | 주소 | 내용 |
+| --- | --- | --- |
+| `www/` | <https://bubblelab.dev> | 메인 랜딩 |
+| `slop/` | <https://slop.bubblelab.dev> | 짧은 게임과 실험 |
+| `games/` | <https://games.bubblelab.dev> | 승격된 멀티·보드게임 |
+| `idle/` | <https://idle.bubblelab.dev> | 7일 단위 방치형 게임 |
+| `util/` | <https://util.bubblelab.dev> | 달력·운세·사진·플래너 |
+| `invest/` | <https://invest.bubblelab.dev> | 반응형 개인 투자 터미널 데모 |
+| `assets/` | <https://assets.bubblelab.dev> | 스티커·배경화면 카탈로그 |
+| `admin/` | <https://admin.bubblelab.dev> | 통계·기록·공지 관리 화면 |
 
-규칙 하나: **`_`나 `.`로 시작하지 않는 루트 폴더는 전부 인터넷에 공개된다.**
-새 카테고리(=새 서브도메인)는 폴더만 만들면 생긴다 — DNS·호스팅 설정 불필요.
+비공개 지원 폴더는 다음과 같습니다.
 
-## 일상 워크플로우
+- `_shared/`: 모든 서브도메인에서 `/_shared/*`로 쓰는 공용 브라우저 모듈
+- `_assets/`: 카탈로그 원본 이미지와 `metadata.json`
+- `_src/`: Vite 등 별도 빌드가 필요한 프로젝트 소스
+- `_infra/`: 빌드 스크립트, Cloudflare Worker, Durable Object와 테스트
+
+## 빠른 작업 흐름
+
+의존성이 없는 토이는 `index.html` 하나로 시작할 수 있습니다.
 
 ```bash
 mkdir slop/my-idea
-vim slop/my-idea/index.html      # 이모지 하나 + 공유 버튼 한 줄 넣기 (slop/README.md 참고)
-git add . && git commit -m "slop: my-idea" && git push
-# → 1분 안에 https://slop.bubblelab.dev/my-idea 라이브
+$EDITOR slop/my-idea/index.html
+git add slop/my-idea
+git commit -m "slop: add my idea"
+git push
 ```
 
-승격: `git mv slop/my-idea games/my-idea && git push` — 끝.
+`main`에 반영되면 GitHub Actions가 테스트와 빌드를 거쳐 Cloudflare Worker에
+배포합니다. `index.html`이 없는 공개 사이트 루트에는 하위 프로젝트 카드 페이지가
+자동 생성됩니다. 카드는 기본적으로 이름순으로 만들어지고, 브라우저에서 최근 7일
+방문량 순으로 재정렬됩니다.
 
-## 로컬에서 보기
+검증된 토이는 다음처럼 승격할 수 있습니다.
 
 ```bash
+git mv slop/my-idea games/my-idea
+git commit -m "games: promote my idea"
+git push
+```
+
+## 로컬 실행과 검증
+
+Node.js 22 기준입니다.
+
+```bash
+npm ci
+node --test _infra/*.test.mjs
 node _infra/build.mjs
 npx wrangler@4 dev --local --local-upstream localhost
-# http://localhost:8787/slop/my-idea   (첫 경로 세그먼트 = 서브도메인)
 ```
 
-`--local-upstream localhost`가 없으면 라우트 설정 때문에 모든 요청이
-apex(www)로 위장되니 꼭 붙일 것.
+예: <http://localhost:8787/slop/fruitmerge>
 
-## 어떻게 돌아가나
+`--local-upstream localhost`를 빼면 Wrangler의 프로덕션 라우트 호스트가 적용되어
+요청이 `www`로 라우팅될 수 있습니다.
 
-푸시 → GitHub Actions(`.github/workflows/deploy.yml`) → 빌드 → Cloudflare
-Workers 배포. 워커 하나가 `*.bubblelab.dev` 전체를 받아서 호스트명을 폴더로
-매핑한다. 멀티플레이어 토이용 실시간 서버(`/_rt/*`)도 같은 워커에 있다.
-자세한 건 [`_infra/README.md`](_infra/README.md).
+## 배포 구조
 
-## 재해 복구용 최초 설정 (이미 완료됨)
-
-새 계정/도메인에서 처음부터 다시 세팅해야 할 때만 필요:
-
-1. Cloudflare에 도메인 등록 (네임서버 이전)
-2. DNS: `@`와 `*`에 `AAAA 100::` Proxied 레코드 2개
-3. GitHub repo secrets: `CLOUDFLARE_API_TOKEN` ("Edit Cloudflare Workers" 템플릿),
-   `CLOUDFLARE_ACCOUNT_ID`
-4. Cloudflare 계정에 workers.dev 서브도메인 등록 (Workers 메뉴 한 번 열면 됨.
-   Durable Object 배포에 필수)
-
-관리자 계정은 설정 전에는 `admin/admin`이다. 공개 저장소이므로 첫 배포 후 반드시
-Cloudflare Worker secrets로 교체한다:
-
-```bash
-npx wrangler secret put ADMIN_ID
-npx wrangler secret put ADMIN_PASSWORD
+```text
+main push
+  → infra tests
+  → build.mjs가 dist/ 생성
+  → wrangler deploy
+  → 단일 Worker가 호스트명과 경로를 실제 파일·API·Durable Object로 라우팅
 ```
 
-## 규칙 (미래의 나에게)
+배포에는 `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` GitHub Actions secret이
+필요합니다. 운영 환경에는 `ADMIN_ID`, `ADMIN_PASSWORD`, `KASI_SERVICE_KEY`를
+Worker secret으로 설정하고, 세션 키는 `ADMIN_SESSION_SECRET`과
+`PLANNER_SESSION_SECRET`으로 분리할 수 있습니다. 자세한 API와 스토리지 구조는
+[`_infra/README.md`](_infra/README.md)를 참고하세요.
 
-- slop에 올리는 건 완성도 신경 쓰지 말 것. 폴더 하나, index.html 하나면 충분.
-- 남들이 쓰거나 내가 아끼게 되면 그때 `git mv`로 승격.
-- 빌드가 필요한 물건은 소스를 `_src/<이름>/`에 두고 빌드 결과물만 사이트
-  폴더에 커밋 (예: `_src/avalon/` → `games/avalon/`).
-- 미리 복잡하게 만들지 말 것.
+## 저장소 규칙
+
+- 실험은 먼저 `slop/`에 작게 올립니다.
+- 공용 기능은 토이마다 복사하지 않고 `_shared/`에 둡니다.
+- 빌드가 필요한 소스는 `_src/<name>/`, 배포 산출물은 공개 사이트 폴더에 둡니다.
+- `games/avalon/`처럼 생성된 산출물은 직접 수정하지 않습니다.
+- README 파일은 `dist/`에 복사되지 않으므로 운영 문서로 자유롭게 사용할 수 있습니다.

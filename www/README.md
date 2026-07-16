@@ -1,6 +1,15 @@
-# www — 랜딩 페이지
+# www — Bubblelab 랜딩
 
-bubblelab.dev (apex와 www) 에 서빙되는 폴더. index.html 하나가 전부.
+`www/index.html`은 <https://bubblelab.dev>와 <https://www.bubblelab.dev>에 제공되는
+가벼운 정적 랜딩 페이지입니다.
 
-카테고리 서브도메인을 새로 만들면 여기 목록에 링크 한 줄 추가해줄 것
-(자동화 안 되어 있음 — 카테고리가 자주 늘어나면 그때 자동화).
+현재 랜딩은 다음 카테고리를 소개합니다.
+
+- `slop`: 짧은 게임과 실험
+- `games`: 승격된 게임
+- `util`: 일상 도구
+- `idle`: 7일 방치형 게임
+
+`assets`, `invest`, `admin`도 독립 서브도메인으로 배포되지만 랜딩 목록에는 아직
+노출하지 않습니다. 새 공개 카테고리를 랜딩에 보여주려면 `www/index.html`의 목록을
+직접 수정해야 합니다. 빌드 스크립트가 이 페이지의 링크를 자동 갱신하지는 않습니다.

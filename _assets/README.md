@@ -1,46 +1,41 @@
-# Bubblelab 공용 이미지 추가 안내
+# _assets — 공용 이미지 원본
 
-실제 이미지 파일은 이 폴더 한 곳에서 관리합니다.
+Bubblelab 서비스가 함께 사용하는 이미지와 카탈로그 메타데이터를 관리합니다.
+빌드 시 폴더 전체가 `dist/_assets/`로 복사되고, 모든 `metadata.json`을 합친
+`/_assets/catalog.json`이 생성됩니다.
 
-- `wallpaper/`: 다운로드용 배경화면
-- `sticker/`: 다운로드 및 다른 Bubblelab 서비스에서 사용할 스티커
-- `photo-frame/`: 네컷사진 등에서 사용할 공용 프레임
+| 카테고리 | 용도 | 현재 상태 |
+| --- | --- | --- |
+| `sticker/` | 개별 다운로드용 스티커 팩 | 4개 팩, 각 16장 |
+| `wallpaper/` | 모바일·PC 배경화면 | 항목 없음 |
+| `photo-frame/` | 네컷사진 공용 프레임 | 항목 없음 |
 
-## 이미지 하나 추가하기
+## 항목 추가
 
-1. 알맞은 카테고리 아래에 영문 소문자 ID로 폴더를 만듭니다.
-   예: `_assets/sticker/hello-bear/`
-2. 원본·미리보기 파일을 폴더에 넣습니다.
-3. 같은 폴더에 `metadata.json`을 만듭니다.
-4. `main`에 반영하면 빌드가 `/_assets/catalog.json`을 자동 생성합니다.
+1. `_assets/<category>/<id>/` 폴더를 만듭니다.
+2. 미리보기와 다운로드 파일을 넣습니다.
+3. 같은 폴더에 `metadata.json`을 작성합니다.
+4. `node _infra/build.mjs`를 실행해 카탈로그 생성 오류가 없는지 확인합니다.
 
 ```json
 {
   "title": "안녕 곰돌이",
-  "description": "인사하는 곰돌이 투명 스티커",
+  "description": "일상에서 쓰는 곰돌이 스티커 모음",
   "preview": "preview.webp",
-  "tags": ["곰", "인사", "귀여움"],
-  "createdAt": "2026-07-14",
+  "tags": ["곰", "인사", "캐릭터"],
+  "createdAt": "2026-07-16",
   "downloads": [
-    { "label": "투명 PNG", "file": "hello-bear.png" }
+    { "label": "01. 안녕!", "file": "01.png" }
   ]
 }
 ```
 
-`wallpaper`는 하나의 항목에 모바일·PC 파일을 함께 넣을 수 있습니다.
+필수 규칙:
 
-```json
-{
-  "title": "여름 구름",
-  "description": "푸른 여름 하늘 배경화면",
-  "preview": "preview.webp",
-  "tags": ["여름", "하늘"],
-  "createdAt": "2026-07-14",
-  "downloads": [
-    { "label": "모바일", "file": "mobile.webp" },
-    { "label": "PC", "file": "desktop.webp" }
-  ]
-}
-```
-
-폴더명과 파일명은 영문·숫자·점·밑줄·하이픈만 사용합니다. 공개 목록에서만 내리려면 `"active": false`를 추가하세요. 파일을 삭제하지 않으므로 기존 서비스의 링크는 유지됩니다.
+- 카테고리는 `sticker`, `wallpaper`, `photo-frame` 중 하나입니다.
+- ID와 파일명은 영문·숫자·점·밑줄·하이픈만 사용합니다.
+- `title`, `preview`, `downloads`가 필요하며 참조한 파일은 실제로 존재해야 합니다.
+- 공개 목록에서만 숨기려면 `"active": false`를 추가합니다. 기존 URL을 보존하려면
+  파일 자체는 삭제하지 않습니다.
+- 현재 운영 경로는 저장소에 커밋된 정적 파일입니다. 관리자 R2 업로드 API와
+  `/_assets/upload/*` 공개 경로는 비활성화되어 있습니다.

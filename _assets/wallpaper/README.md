@@ -1,1 +1,7 @@
-배경화면 아이템 폴더를 이곳에 추가합니다. 형식은 상위 `README.md`를 참고하세요.
+# wallpaper — 배경화면 원본
+
+<https://assets.bubblelab.dev/wallpaper>에서 보여 줄 배경화면 항목을 둡니다.
+현재 등록된 항목은 없습니다.
+
+한 항목에 모바일·PC 등 여러 해상도를 `downloads` 배열로 함께 등록할 수 있습니다.
+폴더 구조와 `metadata.json` 형식은 [`../README.md`](../README.md)를 참고하세요.

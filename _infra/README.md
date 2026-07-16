@@ -1,81 +1,100 @@
-# _infra — 인프라 전부
+# _infra — 빌드와 Cloudflare 런타임
 
-파일 세 개 + 워크플로우 하나가 전부다.
+Bubblelab의 정적 빌드, 단일 Cloudflare Worker, Durable Object 저장소와 Node 테스트를
+관리합니다.
 
-## worker.js — 라우터
+## 파일 구성
 
-모든 요청을 받는 단일 Cloudflare Worker. 우선순위 순서로:
+| 파일 | 역할 |
+| --- | --- |
+| `build.mjs` | 공개 사이트·공용 파일을 `dist/`로 복사하고 카드 페이지와 404 생성 |
+| `worker.js` | 호스트 라우팅, 공개 API, 관리자·플래너 세션 처리 |
+| `realtime.js` | 경로 기반 JSON 실시간 서버 `RealtimeDO` |
+| `analytics.js` | 익명 방문 집계와 Slop 연속 방문 `AnalyticsDO` |
+| `records.js` | 주간·개인·올타임 기록, 공지, 아이디어 우편함 `RecordsDO` |
+| `planner.js` | 개인 코드별 이번 달 플래너 데이터 `PlannerDO` |
+| `fortune.js` | KASI 양력·음력 변환과 사주 명식 응답 |
+| `assets.js` | 저장소 이미지 메타데이터 검증과 카탈로그 생성 |
+| `assets-store.js` | R2용 데이터 변환 코드. 현재 운영 라우트에서는 비활성 |
+| `idle-balance.mjs` | Bubble Pop Idle 밸런스 시뮬레이터 |
 
-1. `/_rt/<이름>` → 실시간 서버 (아래 realtime.js). 이름당 Durable Object 하나.
-2. `/_records` → 주간 신기록 보드 (records.js, RecordsDO). GET `?game=`
-   또는 배치 `?games=a,b,c`(카테고리 홈 카드용), POST `{game, nick, score,
-   text}`. 게임별로 이번 주(월 09시 KST 시작) 1위 하나만 저장, 비교
-   방향과 점수 범위는 records.js의 `GAMES` 테이블이 고정한다 (새 게임은
-   여기 한 줄 등록). 클라이언트는 `_shared/records.js`.
-3. `/_suggest` → 토이 아이디어 우편함 제출 (RecordsDO에 저장, 방문자당
-   하루 5건). 카테고리 홈의 💡 버튼(`_shared/suggest.js`)이 사용하고,
-   조회·삭제는 admin의 `/api/suggestions`.
-4. `/_shared/*` → 공용 코드, `/_assets/*` → 정적 이미지와 R2 관리자 업로드.
-   어느 서브도메인에서든 같은 파일을 사용한다. 관리자 업로드 API는
-   `admin.bubblelab.dev/api/assets`이며 기존 관리자 세션 뒤에서만 동작한다.
-5. 나머지 → 호스트명 라우팅: `slop.bubblelab.dev/x` → `dist/slop/x`,
-   apex와 www는 `dist/www`.
-   로컬 개발(호스트가 *.bubblelab.dev가 아닐 때)은 첫 경로 세그먼트가
-   서브도메인 역할: `localhost:8787/slop/x` → `dist/slop/x`.
+`*.test.mjs`는 Node 내장 테스트 러너로 실행됩니다.
 
-Planner는 `/_planner/login`, `/_planner/data`, `/_planner/logout` API와
-`PlannerDO`를 사용한다. 사용자가 숫자 6자리와 영문 2자로 개인 코드를 만들며,
-코드마다 별도 Durable Object가 배정된다. 세션 서명 전용 secret을 따로 쓰려면:
+## 요청 라우팅
+
+Worker는 다음 우선순위로 요청을 처리합니다.
+
+| 경로 | 기능 |
+| --- | --- |
+| `/_shared/*`, `/_assets/*` | 모든 서브도메인의 공용 정적 파일 |
+| `/_planner/login`, `/_planner/data`, `/_planner/logout` | 개인 플래너 세션과 데이터 |
+| `/_fortune/chart` | 생년월일시를 명식·오늘 운세 계산용 데이터로 변환 |
+| `/_stats`, `/_streak` | 최근 방문량과 Slop 연속 방문 |
+| `/_suggest` | 익명 토이 아이디어 제출 |
+| `/_records`, `/_personal` | 주간·올타임·개인 기록 조회와 제출 |
+| `/_rt/<namespace>` | namespace별 실시간 Durable Object |
+| 나머지 | 호스트명을 `dist/<site>/`에 매핑 |
+
+예를 들어 `slop.bubblelab.dev/fruitmerge`는 `dist/slop/fruitmerge`로,
+apex와 `www`는 `dist/www`로 연결됩니다. 로컬에서는 첫 경로 세그먼트가 사이트가
+되어 `localhost:8787/slop/fruitmerge` 형식으로 접근합니다.
+
+`admin`은 별도 처리되며 로그인 뒤 `/api/stats`, `/api/records`, `/api/notice`,
+`/api/suggestions`를 제공합니다. `/api/assets`와 `/_assets/upload/*`는 현재 404로
+닫혀 있습니다.
+
+## 빌드
 
 ```bash
-npx wrangler secret put PLANNER_SESSION_SECRET
+node _infra/build.mjs
 ```
 
-설정하지 않으면 기존 `ADMIN_SESSION_SECRET` 또는 관리자 계정 secret에서 서명 키를
-파생한다. 데이터는 KST 기준 현재 달만 보존하며 같은 개인 코드를 입력한 PC 편집
-화면과 모바일 조회 화면이 같은 저장소를 사용한다. 코드는 복구할 수 없다.
+빌드 결과:
 
-## build.mjs — 빌드
-
-`node _infra/build.mjs` 하면:
-
-- 루트의 사이트 폴더들(`_`/`.` 미시작)을 `dist/`로 복사 (README.md 제외)
-- `_shared/` → `dist/_shared/`
-- `_assets/` → `dist/_assets/`, 각 아이템 `metadata.json`을 합친 카탈로그 생성
-- index.html이 없는 사이트 루트에 하위 폴더 카드 그리드 페이지 자동 생성
-  (이모지는 각 토이 index.html의 첫 이모지. 순서는 주간 접속량순 —
-  기본은 가나다순으로 생성하고 클라이언트가 `/_stats`로 재정렬)
+- `_`·`.`으로 시작하지 않는 루트 폴더를 `dist/`로 복사
+- `_shared/`와 `_assets/`를 공용 경로로 복사
+- `_assets/*/*/metadata.json`을 검증해 `dist/_assets/catalog.json` 생성
+- `index.html`이 없는 사이트 루트에 하위 폴더 카드 페이지 생성
+- 카드에 주간 1위·개인 최고·인기순·연속 방문·아이디어 버튼 연결
 - `dist/404.html` 생성
+- 모든 README는 배포 결과에서 제외
 
-의존성 제로. Node만 있으면 된다.
+## Durable Object
 
-## realtime.js — 실시간 데이터 서버 (Durable Object)
+- `RealtimeDO`: Firebase RTDB와 비슷한 `get`, `set`, `update`, 구독,
+  `onDisconnect`, 서버 타임스탬프를 WebSocket 위에 제공합니다. namespace별 JSON
+  트리를 통째로 저장하므로 소규모 친구 게임에 맞춘 구조입니다.
+- `AnalyticsDO`: IP와 User-Agent를 저장하지 않고 익명 방문자 쿠키 기준으로 HTML
+  문서 방문을 멱등 집계합니다.
+- `RecordsDO`: 월요일 09:00 KST 기준 주간 보드, 브라우저별 최고 기록, 올타임
+  기록과 Bubble Pop Idle 시즌 역사를 보관합니다.
+- `PlannerDO`: 개인 코드별로 KST 현재 달 데이터만 유지합니다.
 
-Firebase RTDB의 서브셋을 WebSocket 위에 구현: 경로 기반 JSON 트리,
-get/set/update, 경로 구독(onValue), 접속 종료 시 쓰기(onDisconnect),
-서버 타임스탬프 치환(`{".sv":"timestamp"}`).
+## 설정과 보안
 
-- 접속: `wss://<아무 서브도메인>/_rt/<이름>` — 이름마다 독립된 트리
-- 프로토콜: 파일 상단 주석 참고
-- 사용 예: 아발론의 `_src/avalon/src/firebase.js`가 이걸 쓰는 클라이언트
-  어댑터. 새 멀티플레이어 토이 만들 땐 그 파일을 복사해서 시작하면 된다.
+GitHub Actions:
 
-트리는 DO 스토리지에 통짜 JSON으로 저장된다. 친구들끼리 하는 게임 규모용이지
-대규모 트래픽용이 아니다 (그때 가서 고민할 것).
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
 
-## deploy.yml (.github/workflows/)
+Worker secrets:
 
-main에 푸시하면: checkout → build.mjs →
-`wrangler deploy`. 시크릿 `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` 사용.
-wrangler 버전 4 고정 (3.x는 wrangler.jsonc를 못 읽음).
+- `ADMIN_ID`, `ADMIN_PASSWORD`: 운영 관리자 계정. 운영에서는 누락 시 fail-closed
+- `KASI_SERVICE_KEY`: 운세의 양력·음력 변환
+- `ADMIN_SESSION_SECRET`: 선택 사항, 관리자 세션 서명 키 분리
+- `PLANNER_SESSION_SECRET`: 플래너 세션용. 운영 플래너 사용 시 명시 권장
 
-## 로컬 개발
+로컬에서만 관리자 기본값 `admin/admin`을 허용합니다. 플래너 코드는 복구할 수
+없으며 생년월일시는 저장하지 않고 요청 시점에만 처리합니다.
+
+## 로컬 검증
 
 ```bash
+npm ci
+node --test _infra/*.test.mjs
 node _infra/build.mjs
 npx wrangler@4 dev --local --local-upstream localhost
 ```
 
-`--local-upstream localhost` 필수 — 없으면 wrangler가 라우트 패턴 호스트
-(bubblelab.dev)로 요청을 위장시켜서 전부 www로 라우팅된다.
-Durable Object도 로컬에서 그대로 돈다.
+배포 워크플로우는 `main` push에서 Node 22로 의존성을 설치하고, 인프라 테스트와
+빌드가 성공한 뒤 Wrangler 4로 배포합니다.
