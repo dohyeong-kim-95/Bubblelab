@@ -55,6 +55,13 @@
       </article>
 
       <article class="chart-panel panel" data-mobile-view="chart">
+        <div class="chart-title-row">
+          <div class="chart-identity"><b id="chartSymbol">NVDA</b><span id="chartCompany">NVIDIA Corporation</span><small id="chartExchange">NASDAQ</small></div>
+          <div class="chart-type-toggle" id="chartTypeToggle" aria-label="차트 유형">
+            <button type="button" class="active" data-chart-type="candle">캔들</button>
+            <button type="button" data-chart-type="line">라인</button>
+          </div>
+        </div>
         <div class="chart-toolbar">
           <div class="range-tabs" id="rangeTabs" aria-label="차트 기간">
             <button data-range="1D">1D</button><button data-range="1W">1W</button>
@@ -71,7 +78,7 @@
                 <stop offset="1" stop-color="#ffb000" stop-opacity="0"/>
               </linearGradient>
             </defs>
-            <g id="gridLines"></g><path id="areaPath" fill="url(#areaFill)"></path>
+            <g id="gridLines"></g><g id="candleLayer"></g><path id="areaPath" fill="url(#areaFill)"></path>
             <path id="linePath" fill="none" stroke="#ffb000" stroke-width="2.4" vector-effect="non-scaling-stroke"></path>
             <g id="chartCursor" hidden><line y1="12" y2="305"></line><circle r="5"></circle></g>
             <rect id="chartHitbox" x="0" y="0" width="900" height="330" fill="transparent"></rect>
