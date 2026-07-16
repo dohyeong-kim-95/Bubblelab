@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#eaf7f5">
+  <meta name="description" content="턱 아래에서 태어나 멀어지는 소리와 그 뒤의 침묵을 듣는 2분 마음챙김 카드">
+  <title>소리방울 — Bubble Mindfulness</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body data-view="intro" data-phase="idle">
+  <div class="ambient" aria-hidden="true"><i></i><i></i><i></i></div>
+
+  <header class="topbar">
+    <a class="back" href="../" aria-label="마음챙김 카드로 돌아가기">‹ <span>카드</span></a>
+    <a class="brand" href="../">mindfulness<span>.bubblelab.dev</span></a>
+    <button class="quiet-button" id="infoButton" type="button" aria-haspopup="dialog">안내</button>
+  </header>
+
+  <main>
+    <section class="intro-view" id="introView" aria-labelledby="pageTitle">
+      <div class="hero" aria-hidden="true"><i></i><i></i><span>♪</span></div>
+      <p class="eyebrow">2 minute mindful listening</p>
+      <h1 id="pageTitle">소리방울</h1>
+      <p class="lead">가까이에서 태어나 멀어지는 소리와<br>그 뒤에 남는 고요를 들어봐요.</p>
+
+      <fieldset class="mode-picker">
+        <legend>어떻게 들을까요?</legend>
+        <div class="mode-grid">
+          <label class="mode-card">
+            <input type="radio" name="listenMode" value="speaker" checked>
+            <span class="mode-icon" aria-hidden="true">▰</span>
+            <strong>휴대폰 스피커</strong>
+            <small>턱 아래에 두고</small>
+          </label>
+          <label class="mode-card">
+            <input type="radio" name="listenMode" value="headphones">
+            <span class="mode-icon" aria-hidden="true">⌒</span>
+            <strong>이어폰</strong>
+            <small>공간의 움직임과 함께</small>
+          </label>
+        </div>
+      </fieldset>
+
+      <div class="placement" id="placementCopy">
+        <span class="placement-icon" aria-hidden="true">◌</span>
+        <p><strong>휴대폰을 손바닥에 올려보세요.</strong><small>피부에 붙이지 않고 턱 아래 15~20cm에 편안히 둡니다.</small></p>
+      </div>
+
+      <div class="audio-options">
+        <button class="preview-button" id="previewButton" type="button">
+          <span aria-hidden="true">♪</span>
+          <span><strong>소리방울 하나 미리 듣기</strong><small>약 7초 · 언제든 다시 들을 수 있어요</small></span>
+        </button>
+        <div class="volume-control">
+          <label for="volume">음량</label>
+          <input id="volume" type="range" min="0" max="100" value="42">
+          <output id="volumeOutput" for="volume">42%</output>
+        </div>
+      </div>
+
+      <button class="start-button" id="startButton" type="button">
+        <span>2분 동안 듣기</span><small>8개의 소리방울과 그 사이의 고요</small>
+      </button>
+      <p class="gentle-note">가장 작은 편안한 음량으로 시작하세요.</p>
+    </section>
+
+    <section class="practice-view" id="practiceView" aria-labelledby="phaseText" hidden>
+      <div class="practice-meta">
+        <span id="elapsedText">0:00</span>
+        <span>2:00</span>
+      </div>
+      <div class="progress-track" aria-hidden="true"><i id="progressFill"></i></div>
+
+      <div class="sound-stage" aria-hidden="true">
+        <div class="sound-halo"></div>
+        <div class="sound-bubble" id="soundBubble"><span>♪</span></div>
+      </div>
+
+      <div class="phase-copy">
+        <p class="phase-kicker" id="phaseKicker">잠시 후 시작해요</p>
+        <h2 id="phaseText" aria-live="polite">휴대폰을 편안히 놓아보세요</h2>
+        <p id="phaseHint">소리를 쫓지 않고, 들리는 만큼만 들어요.</p>
+      </div>
+
+      <div class="practice-controls">
+        <button id="pauseButton" type="button"><span aria-hidden="true">Ⅱ</span><b>일시정지</b></button>
+        <button id="stopButton" type="button"><span aria-hidden="true">×</span><b>그만하기</b></button>
+      </div>
+    </section>
+
+    <section class="complete-view" id="completeView" aria-labelledby="completeTitle" hidden>
+      <div class="quiet-rings" aria-hidden="true"><i></i><i></i><i></i></div>
+      <p class="eyebrow">the sound has passed</p>
+      <h2 id="completeTitle">소리가 지나간 자리도<br>들을 수 있었습니다.</h2>
+      <p>특별한 느낌이 없어도 괜찮아요.<br>지금 들리는 가장 가까운 소리를 잠시 느껴보세요.</p>
+      <div class="complete-actions">
+        <button class="start-button" id="againButton" type="button">다시 듣기</button>
+        <a href="../">카드로 돌아가기</a>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="infoDialog">
+    <div class="dialog-card">
+      <button class="dialog-close" id="dialogClose" type="button" aria-label="닫기">×</button>
+      <p class="eyebrow">before you begin</p>
+      <h2>소리를 잘 찾지 않아도 괜찮아요.</h2>
+      <p>소리가 생기고 변하고 사라지는 과정과, 그 뒤에 남는 침묵을 가볍게 알아차리는 연습입니다.</p>
+      <ul>
+        <li>휴대폰을 피부에 붙이거나 얼굴 위에 들지 마세요.</li>
+        <li>낮은 음량으로 시작하고 불편하면 바로 멈추세요.</li>
+        <li>모든 소리는 기기에서 만들어지며 녹음하거나 전송하지 않아요.</li>
+      </ul>
+      <button class="dialog-confirm" id="dialogConfirm" type="button">알겠어요</button>
+    </div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="./app.js"></script>
+</body>
+</html>

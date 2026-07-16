@@ -98,8 +98,13 @@
       border-radius: 50%;
       box-shadow: inset -5px -7px 10px rgba(72,135,143,.08);
     }
+    .sound-card-bubble { display: grid; place-items: center; color: rgba(50,76,81,.52); font-size: 1.35rem; animation-name: soundFloat; }
+    .sound-card-bubble::before, .sound-card-bubble::after { content: ""; position: absolute; border: 1px solid rgba(87,139,137,.16); border-radius: 50%; }
+    .sound-card-bubble::before { inset: -16px; }
+    .sound-card-bubble::after { inset: -32px; opacity: .55; }
     @keyframes breathe { 40% { transform: scale(1.12); } 100% { transform: scale(.94); } }
     @keyframes thoughtFloat { 50% { transform: translateY(-10px) scale(1.03); } 100% { transform: translateY(4px) scale(.96); } }
+    @keyframes soundFloat { 50% { transform: translateY(-7px) scale(.96); } 100% { transform: translateY(3px) scale(.9); opacity: .72; } }
     .time { display: inline-flex; padding: 7px 11px; border-radius: 999px; background: rgba(255,255,255,.72); color: #557073; font-size: .72rem; font-weight: 700; }
     .card-copy { position: absolute; left: 25px; right: 25px; bottom: 24px; }
     .card h3 { margin: 0 0 8px; font-size: 1.45rem; letter-spacing: -.035em; }
@@ -138,6 +143,14 @@
         <div class="card-copy">
           <h3>💭 생각방울</h3>
           <p>생각을 한 줄 적고<br>조금 떨어져 바라봐요.</p>
+        </div>
+      </a>
+      <a class="card" href="/sound-bubble/">
+        <span class="bubble sound-card-bubble" aria-hidden="true">♪</span>
+        <span class="time">약 2분</span>
+        <div class="card-copy">
+          <h3>♪ 소리방울</h3>
+          <p>가까이에서 멀어지는 소리와<br>그 뒤의 고요를 들어봐요.</p>
         </div>
       </a>
     </section>
