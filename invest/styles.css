@@ -91,6 +91,8 @@ kbd { border: 1px solid #364039; background: #181d1a; color: #9aa39e; padding: 2
 .chart-meta { display: flex; gap: 12px; color: var(--muted); font: 9px ui-monospace, monospace; }
 .chart-wrap { position: relative; height: calc(100% - 103px); min-height: 220px; }
 #priceChart { width: 100%; height: 100%; overflow: visible; }
+#priceChart, #chartHitbox { touch-action: pan-y; }
+#chartHitbox { cursor: crosshair; }
 #gridLines line { stroke: #1c2420; stroke-width: 1; vector-effect: non-scaling-stroke; }
 #candleLayer .wick { stroke-width: 1; vector-effect: non-scaling-stroke; }
 #candleLayer .bull { fill: var(--green); stroke: var(--green); }
