@@ -341,6 +341,27 @@ for (const site of sites) {
   console.log(`generated index for ${site.name} (${entries.length} entries)`);
 }
 
+// 모든 공개 카드 페이지에 체류 측정기를 한 번만 삽입한다. 개별 토이가 공용
+// 스크립트를 직접 챙길 필요가 없고, admin과 카테고리 홈은 클라이언트에서 제외된다.
+function injectEngagement(dir) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      injectEngagement(path);
+    } else if (entry.name.endsWith(".html")) {
+      const html = readFileSync(path, "utf8");
+      if (html.includes('/_shared/engagement.js') || !/<\/body>/i.test(html)) continue;
+      writeFileSync(path, html.replace(
+        /<\/body>/i,
+        '<script defer src="/_shared/engagement.js"></script>\n</body>',
+      ));
+    }
+  }
+}
+for (const site of sites) {
+  if (site.name !== "admin") injectEngagement(join(DIST, site.name));
+}
+
 writeFileSync(
   join(DIST, "404.html"),
   `<!doctype html>
