@@ -99,7 +99,7 @@ function renderChart() {
   chartPoints = seeded(selected, ranges[currentRange]);
   const vals = chartType === "candle" ? chartPoints.flatMap(p => [p.low, p.high]) : chartPoints.map(p => p.value);
   const min = Math.min(...vals), max = Math.max(...vals), pad = (max - min || 1) * .12;
-  const x = i => 16 + i / (vals.length - 1) * 868;
+  const x = i => 16 + i / (chartPoints.length - 1) * 868;
   const y = v => 300 - (v - (min - pad)) / ((max + pad) - (min - pad)) * 275;
   const line = chartPoints.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join(" ");
   $("#linePath").setAttribute("d", line);
