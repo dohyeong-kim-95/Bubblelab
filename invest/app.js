@@ -236,3 +236,8 @@ $("#chartHitbox").addEventListener("pointermove", e => {
 $("#chartHitbox").addEventListener("pointerleave", () => { $("#chartCursor").hidden = true; $("#chartTooltip").hidden = true; });
 
 renderTicker(); renderWatchlist(); renderQuote(); updateClock(); setInterval(updateClock, 1000); setView("home");
+requestAnimationFrame(() => requestAnimationFrame(() => {
+  document.body.classList.remove("app-loading");
+  document.body.classList.add("app-ready");
+  document.body.setAttribute("aria-busy", "false");
+}));
