@@ -8,7 +8,7 @@
   <title>Bubble Invest — Personal Market Terminal</title>
   <link rel="stylesheet" href="./styles.css">
 </head>
-<body>
+<body class="app-loading" aria-busy="true">
   <header class="terminal-bar">
     <a class="brand" href="https://bubblelab.dev" aria-label="Bubblelab 홈">
       <span class="brand-mark">BI</span>
@@ -26,6 +26,14 @@
 
   <div class="ticker-tape" aria-label="시장 지수">
     <div class="ticker-track" id="tickerTrack"></div>
+  </div>
+
+  <div class="mobile-skeleton" id="mobileSkeleton" aria-hidden="true">
+    <div class="skeleton-heading"><i></i><span></span></div>
+    <div class="skeleton-price"></div>
+    <div class="skeleton-change"></div>
+    <div class="skeleton-stats"><i></i><i></i><i></i></div>
+    <div class="skeleton-cards"><i></i><i></i><i></i><i></i></div>
   </div>
 
   <main class="terminal-grid">
