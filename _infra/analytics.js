@@ -6,6 +6,17 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const VISITOR_ID = /^[a-f0-9-]{36}$/i;
 const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
 const PAGE_KEY = /^[a-z0-9_-]{1,32}(\/[a-z0-9._-]{1,64})?$/;
+const SESSION_ID = /^[a-f0-9-]{36}$/i;
+const MAX_SESSION_MS = 30 * 60 * 1000;
+
+function median(values) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2
+    ? sorted[middle]
+    : Math.round((sorted[middle - 1] + sorted[middle]) / 2);
+}
 
 function recentDates(endDate, count) {
   const end = new Date(`${endDate}T00:00:00+09:00`);
@@ -75,11 +86,30 @@ export class AnalyticsDO {
         const stored = await this.state.storage.list();
         // 모든 key(seen:/pv:/cleanup:)는 두 번째 조각이 날짜다.
         const stale = [...stored.keys()].filter((k) =>
-          /^(seen|pv|cleanup):/.test(k) && !keep.has(k.split(":")[1]));
+          /^(seen|pv|eng|cleanup):/.test(k) && !keep.has(k.split(":")[1]));
         if (stale.length) await this.state.storage.delete(stale);
         await this.state.storage.put(cleanupKey, true);
       }
 
+      return new Response(null, { status: 204 });
+    }
+
+    // 한 카드 페이지 세션의 누적 활성화면 시간을 저장한다. 클라이언트가 같은
+    // 세션을 주기적으로 다시 보내므로 delta를 더하지 않고 가장 큰 누적값만 둔다.
+    // 네트워크 재시도나 순서 역전이 있어도 시간이 부풀지 않는다.
+    if (request.method === "POST" && url.pathname === "/engage") {
+      const { visitorId, date, page, sessionId, activeMs } = await request.json().catch(() => ({}));
+      if (!VISITOR_ID.test(visitorId ?? "") || !DATE_KEY.test(date ?? "") ||
+          !PAGE_KEY.test(page ?? "") || !page.includes("/") ||
+          !SESSION_ID.test(sessionId ?? "") || !Number.isFinite(activeMs) || activeMs < 0) {
+        return new Response("invalid engagement", { status: 400 });
+      }
+      const key = `eng:${date}:${page}:${visitorId}:${sessionId}`;
+      const previous = await this.state.storage.get(key);
+      const nextMs = Math.min(MAX_SESSION_MS, Math.round(activeMs));
+      if (nextMs >= 1000 && nextMs > (previous?.activeMs ?? 0)) {
+        await this.state.storage.put(key, { activeMs: nextMs });
+      }
       return new Response(null, { status: 204 });
     }
 
@@ -109,6 +139,7 @@ export class AnalyticsDO {
     if (request.method === "GET" && url.pathname === "/stats") {
       const date = url.searchParams.get("date");
       if (!DATE_KEY.test(date ?? "")) return new Response("invalid date", { status: 400 });
+      const engagementDays = Math.min(30, Math.max(1, Number(url.searchParams.get("days")) || 30));
 
       const dates = recentDates(date, 30);
       const stored = await this.state.storage.list({ prefix: "seen:" });
@@ -137,12 +168,43 @@ export class AnalyticsDO {
         .sort((a, b) => b.users - a.users || a.page.localeCompare(b.page))
         .slice(0, 3);
 
+      const engagementWindow = new Set(dates.slice(0, engagementDays));
+      const engagementByPage = new Map();
+      const engagementStored = await this.state.storage.list({ prefix: "eng:" });
+      for (const [key, value] of engagementStored) {
+        const [, day, page, visitorId] = key.split(":");
+        const activeMs = Number(value?.activeMs);
+        if (!engagementWindow.has(day) || !page?.includes("/") || !Number.isFinite(activeMs)) continue;
+        if (!engagementByPage.has(page)) {
+          engagementByPage.set(page, { visitors: new Set(), sessions: [] });
+        }
+        const group = engagementByPage.get(page);
+        group.visitors.add(visitorId);
+        group.sessions.push(activeMs);
+      }
+      const engagement = [...engagementByPage]
+        .map(([page, group]) => {
+          const totalMs = group.sessions.reduce((sum, ms) => sum + ms, 0);
+          const engagedSessions = group.sessions.filter((ms) => ms >= 10_000).length;
+          return {
+            page,
+            visitors: group.visitors.size,
+            sessions: group.sessions.length,
+            totalMs,
+            medianMs: median(group.sessions),
+            engagedRate: Math.round(engagedSessions / group.sessions.length * 1000) / 10,
+          };
+        })
+        .sort((a, b) => b.totalMs - a.totalMs || b.medianMs - a.medianMs || a.page.localeCompare(b.page));
+
       return Response.json({
         date,
         daily: unique(1),
         weekly: unique(7),
         monthly: unique(30),
         top,
+        engagementDays,
+        engagement,
         generatedAt: new Date().toISOString(),
       });
     }
