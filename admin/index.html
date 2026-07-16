@@ -48,7 +48,27 @@
   #top .medal { font-size: 1.3rem; }
   #top .page { flex: 1; font-weight: bold; overflow-wrap: anywhere; }
   #top .users { opacity: .6; font-size: .9rem; font-variant-numeric: tabular-nums; }
-  #top .empty, #suggestions .empty, #records .empty { opacity: .55; justify-content: center; }
+  #top .empty, #engagement .empty, #suggestions .empty, #records .empty { opacity: .55; justify-content: center; }
+  .insight-heading { display: flex; align-items: center; justify-content: space-between; gap: .8rem; margin-bottom: .8rem; }
+  .insight-heading h2 { margin: 0; }
+  .period { display: flex; padding: .2rem; border-radius: .65rem;
+            background: light-dark(#e7edf3, #0d131c); }
+  .period button { border: 0; border-radius: .5rem; padding: .35rem .65rem;
+                   background: none; color: inherit; font: inherit; font-size: .78rem; cursor: pointer; }
+  .period button[aria-pressed="true"] { background: light-dark(#fff, #263445); box-shadow: 0 1px 4px #0002; }
+  .insight-note { margin: -.25rem 0 .8rem; opacity: .5; font-size: .75rem; line-height: 1.5; }
+  #engagement { display: flex; flex-direction: column; gap: .65rem; }
+  .engagement-row { padding: .9rem 1.05rem; border-radius: 1rem;
+                    background: light-dark(#fff, #151e2a);
+                    border: 1px solid light-dark(#dce4ec, #263445); }
+  .engagement-main { display: flex; align-items: baseline; justify-content: space-between; gap: .8rem; }
+  .engagement-page { font-weight: bold; overflow-wrap: anywhere; }
+  .engagement-total { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .engagement-track { height: .42rem; margin: .65rem 0 .55rem; overflow: hidden; border-radius: 1rem;
+                      background: light-dark(#e7edf3, #263445); }
+  .engagement-bar { display: block; height: 100%; min-width: .25rem; border-radius: inherit; background: #5a8f70; }
+  .engagement-meta { display: flex; flex-wrap: wrap; gap: .35rem .9rem; opacity: .58;
+                     font-size: .75rem; font-variant-numeric: tabular-nums; }
   #suggestions, #records { list-style: none; margin: 0; padding: 0; display: flex;
                  flex-direction: column; gap: .6rem; }
   #suggestions li, #records li { display: flex; align-items: baseline; gap: .8rem;
@@ -138,6 +158,17 @@
     <h2>🏆 월간 인기 카드 TOP 3</h2>
     <ol id="top"><li class="empty">불러오는 중…</li></ol>
   </section>
+  <section class="top" aria-label="카드별 체류시간">
+    <div class="insight-heading">
+      <h2>⏱️ 카드별 활성 체류</h2>
+      <div class="period" aria-label="체류시간 조회 기간">
+        <button type="button" data-days="7" aria-pressed="true">7일</button>
+        <button type="button" data-days="30" aria-pressed="false">30일</button>
+      </div>
+    </div>
+    <p class="insight-note">화면에 실제로 표시된 시간 · 세션당 최대 30분 · 중앙값은 방문 세션 기준</p>
+    <div id="engagement"><div class="empty">불러오는 중…</div></div>
+  </section>
   </section>
   <section class="view" id="view-upload" hidden>
     <h2 class="view-title">🖼️ Upload</h2>
@@ -191,11 +222,71 @@ function showView() {
 addEventListener('hashchange', showView);
 document.getElementById('home-btn').addEventListener('click', () => { location.hash = 'home'; });
 
+let engagementDays = 7;
+
+function formatDuration(ms) {
+  const seconds = Math.max(0, Math.round(ms / 1000));
+  if (seconds < 60) return `${seconds}초`;
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor(seconds % 3600 / 60);
+  const rest = seconds % 60;
+  if (hours) return `${hours}시간 ${minutes}분`;
+  return `${minutes}분 ${rest}초`;
+}
+
+function renderEngagement(entries) {
+  const list = document.getElementById('engagement');
+  list.replaceChildren();
+  if (!entries?.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    empty.textContent = '아직 체류시간 데이터가 없어요';
+    list.append(empty);
+    return;
+  }
+  const maxTotal = Math.max(...entries.map((entry) => entry.totalMs));
+  for (const entry of entries) {
+    const row = document.createElement('article');
+    row.className = 'engagement-row';
+    const main = document.createElement('div');
+    main.className = 'engagement-main';
+    const page = document.createElement('span');
+    page.className = 'engagement-page';
+    page.textContent = entry.page;
+    const total = document.createElement('strong');
+    total.className = 'engagement-total';
+    total.textContent = formatDuration(entry.totalMs);
+    main.append(page, total);
+
+    const track = document.createElement('div');
+    track.className = 'engagement-track';
+    const bar = document.createElement('span');
+    bar.className = 'engagement-bar';
+    bar.style.width = `${Math.max(1, entry.totalMs / maxTotal * 100)}%`;
+    track.append(bar);
+
+    const meta = document.createElement('div');
+    meta.className = 'engagement-meta';
+    for (const text of [
+      `순사용자 ${entry.visitors.toLocaleString('ko-KR')}명`,
+      `방문 ${entry.sessions.toLocaleString('ko-KR')}회`,
+      `중앙 ${formatDuration(entry.medianMs)}`,
+      `10초+ ${entry.engagedRate.toLocaleString('ko-KR')}%`,
+    ]) {
+      const span = document.createElement('span');
+      span.textContent = text;
+      meta.append(span);
+    }
+    row.append(main, track, meta);
+    list.append(row);
+  }
+}
+
 async function loadStats() {
   const status = document.getElementById('status');
   try {
     const base = location.hostname.endsWith('bubblelab.dev') ? '' : '/admin';
-    const res = await fetch(`${base}/api/stats`, { cache: 'no-store' });
+    const res = await fetch(`${base}/api/stats?days=${engagementDays}`, { cache: 'no-store' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     for (const key of ['daily', 'weekly', 'monthly']) {
@@ -223,6 +314,7 @@ async function loadStats() {
       li.textContent = '아직 집계된 카드가 없어요';
       top.append(li);
     }
+    renderEngagement(data.engagement);
     document.getElementById('warning').style.display = data.usingDefaultCredentials ? 'block' : 'none';
     status.textContent = `${data.date} 기준 · 익명 브라우저 순사용자 · ${new Date(data.generatedAt).toLocaleTimeString('ko-KR')} 갱신`;
   } catch (err) {
@@ -231,6 +323,17 @@ async function loadStats() {
 }
 const base = location.hostname.endsWith('bubblelab.dev') ? '' : '/admin';
 showView();
+
+for (const button of document.querySelectorAll('.period button')) {
+  button.addEventListener('click', () => {
+    engagementDays = Number(button.dataset.days);
+    for (const item of document.querySelectorAll('.period button')) {
+      item.setAttribute('aria-pressed', String(item === button));
+    }
+    document.getElementById('engagement').innerHTML = '<div class="empty">불러오는 중…</div>';
+    loadStats();
+  });
+}
 
 const assetForm = document.getElementById('asset-form');
 const assetFiles = document.getElementById('asset-files');
