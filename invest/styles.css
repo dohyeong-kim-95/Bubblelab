@@ -75,15 +75,26 @@ kbd { border: 1px solid #364039; background: #181d1a; color: #9aa39e; padding: 2
 .stat span { display: block; color: var(--muted); font: 8px ui-monospace, monospace; text-transform: uppercase; }
 .stat b { display: block; margin-top: 4px; font: 11px ui-monospace, monospace; }
 .chart-panel { position: relative; min-width: 0; padding: 10px 16px 8px; }
+.chart-title-row { min-height: 37px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line-soft); }
+.chart-identity { min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+.chart-identity b { color: var(--amber); font: 800 13px ui-monospace, monospace; }
+.chart-identity span { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+.chart-identity small { color: var(--muted); font: 8px ui-monospace, monospace; }
+.chart-type-toggle { display: flex; border: 1px solid var(--line); }
+.chart-type-toggle button { border: 0; background: transparent; color: var(--muted); padding: 5px 8px; font: 9px ui-monospace, monospace; cursor: pointer; }
+.chart-type-toggle button.active { background: #352a12; color: var(--amber); }
 .chart-toolbar { height: 32px; display: flex; align-items: center; justify-content: space-between; }
 .range-tabs, .section-tabs, .side-toggle { display: flex; }
 .range-tabs button, .section-tabs button, .side-toggle button { border: 0; background: transparent; color: var(--muted); cursor: pointer; }
 .range-tabs button { font: 9px ui-monospace, monospace; padding: 5px 8px; }
 .range-tabs button.active { background: #352a12; color: var(--amber); }
 .chart-meta { display: flex; gap: 12px; color: var(--muted); font: 9px ui-monospace, monospace; }
-.chart-wrap { position: relative; height: calc(100% - 66px); min-height: 250px; }
+.chart-wrap { position: relative; height: calc(100% - 103px); min-height: 220px; }
 #priceChart { width: 100%; height: 100%; overflow: visible; }
 #gridLines line { stroke: #1c2420; stroke-width: 1; vector-effect: non-scaling-stroke; }
+#candleLayer .wick { stroke-width: 1; vector-effect: non-scaling-stroke; }
+#candleLayer .bull { fill: var(--green); stroke: var(--green); }
+#candleLayer .bear { fill: var(--red); stroke: var(--red); }
 #chartCursor line { stroke: #66716b; stroke-width: 1; stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; }
 #chartCursor circle { fill: var(--panel); stroke: var(--amber); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .chart-tooltip { position: absolute; z-index: 3; pointer-events: none; background: #e8ece9; color: #111512; padding: 7px 9px; font: 10px ui-monospace, monospace; box-shadow: 0 5px 25px #0008; }
@@ -191,9 +202,14 @@ kbd { border: 1px solid #364039; background: #181d1a; color: #9aa39e; padding: 2
   .mobile-summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line-soft); }
   .mobile-summary-grid .info-card { min-height: 78px; }
   .chart-panel { padding: 13px 10px; }
+  .chart-title-row { min-height: 46px; }
+  .chart-identity { display: grid; grid-template-columns: auto 1fr; gap: 1px 7px; }
+  .chart-identity b { grid-row: 1 / 3; align-self: center; font-size: 15px; }
+  .chart-identity span { max-width: 145px; font-size: 10px; }
+  .chart-identity small { font-size: 7px; }
   .chart-toolbar { height: 38px; }
   .chart-meta { display: none; }
-  .chart-wrap { height: calc(100vh - 240px); min-height: 330px; }
+  .chart-wrap { height: calc(100vh - 286px); min-height: 300px; }
   .volume-bars { height: 40px; }
   .section-tabs { overflow-x: auto; gap: 22px; }
   #sectionContent { padding: 4px 14px 20px; }
