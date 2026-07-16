@@ -201,8 +201,8 @@ kbd { border: 1px solid #364039; background: #181d1a; color: #9aa39e; padding: 2
   .info-grid, .financial-grid, .macro-grid { grid-template-columns: repeat(2, 1fr); }
   .intel-column { background: var(--bg); gap: 1px; }
   .order-panel, .portfolio-panel, .insight-panel { margin-bottom: 1px; }
-  .mobile-nav { position: fixed; display: grid; grid-template-columns: repeat(5, 1fr); left: 0; right: 0; bottom: 0; z-index: 40; height: calc(60px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); background: #0b0f0c; border-top: 1px solid var(--line); }
-  .mobile-nav button { border: 0; background: transparent; color: var(--muted); font-size: 9px; display: grid; place-content: center; gap: 3px; }
+  .mobile-nav { position: fixed; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-rows: 1fr; align-items: stretch; left: 0; right: 0; bottom: 0; z-index: 40; height: calc(60px + env(safe-area-inset-bottom)); background: #0b0f0c; border-top: 1px solid var(--line); }
+  .mobile-nav button { width: 100%; height: 100%; min-width: 0; min-height: 60px; padding: 3px 0 env(safe-area-inset-bottom); border: 0; background: transparent; color: var(--muted); font-size: 9px; display: grid; place-content: center; gap: 3px; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
   .mobile-nav button span { font-size: 17px; font-family: ui-monospace, monospace; }
   .mobile-nav button.active { color: var(--amber); }
   .toast { left: 12px; right: 12px; bottom: 75px; text-align: center; }
