@@ -42,6 +42,8 @@ test("tracks one browser once per day and calculates rolling uniques", async () 
     weekly: 2,
     monthly: 3,
     top: [{ page: "slop/circle", users: 1 }],
+    engagementDays: 30,
+    engagement: [],
     generatedAt: "<timestamp>",
   });
   assert.equal(Number.isNaN(Date.parse(stats.generatedAt)), false);
@@ -117,6 +119,64 @@ test("rejects malformed visitor events", async () => {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ visitorId: "not-an-id", date: "2026-07-10" }),
+  }));
+  assert.equal(response.status, 400);
+});
+
+test("aggregates active card time without double-counting periodic session reports", async () => {
+  const storage = new MemoryStorage();
+  const analytics = new AnalyticsDO({ storage });
+  const engage = (visitorId, sessionId, activeMs, date = "2026-07-10") =>
+    analytics.fetch(new Request("https://analytics.internal/engage", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ visitorId, date, page: "slop/fruitmerge", sessionId, activeMs }),
+    }));
+
+  await engage(
+    "00000000-0000-4000-8000-000000000001",
+    "10000000-0000-4000-8000-000000000001",
+    10_000,
+  );
+  await engage( // 같은 세션의 최신 누적값으로 덮어쓴다
+    "00000000-0000-4000-8000-000000000001",
+    "10000000-0000-4000-8000-000000000001",
+    15_000,
+  );
+  await engage(
+    "00000000-0000-4000-8000-000000000002",
+    "20000000-0000-4000-8000-000000000002",
+    25_000,
+  );
+  await engage( // 선택한 7일 범위 밖
+    "00000000-0000-4000-8000-000000000003",
+    "30000000-0000-4000-8000-000000000003",
+    90_000,
+    "2026-07-01",
+  );
+
+  const response = await analytics.fetch(
+    new Request("https://analytics.internal/stats?date=2026-07-10&days=7"),
+  );
+  const stats = await response.json();
+  assert.equal(stats.engagementDays, 7);
+  assert.deepEqual(stats.engagement, [{
+    page: "slop/fruitmerge",
+    visitors: 2,
+    sessions: 2,
+    totalMs: 40_000,
+    medianMs: 20_000,
+    engagedRate: 100,
+  }]);
+});
+
+test("rejects engagement for a site home or malformed session", async () => {
+  const analytics = new AnalyticsDO({ storage: new MemoryStorage() });
+  const response = await analytics.fetch(new Request("https://analytics.internal/engage", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      visitorId: "00000000-0000-4000-8000-000000000001",
+      date: "2026-07-10", page: "slop", sessionId: "bad", activeMs: 10_000,
+    }),
   }));
   assert.equal(response.status, 400);
 });
