@@ -35,6 +35,10 @@ let currentRange = "1M";
 let orderSide = "buy";
 let chartPoints = [];
 let chartType = localStorage.getItem("bi:chart-type") || "candle";
+let chartScale = { min: 0, max: 1, pad: 0 };
+let activeChartPointer = null;
+let chartPointerFrame = 0;
+let pendingChartPoint = null;
 
 function seeded(symbol, count) {
   let seed = [...symbol].reduce((a, c) => a * 31 + c.charCodeAt(0), count * 97) >>> 0;
@@ -99,6 +103,7 @@ function renderChart() {
   chartPoints = seeded(selected, ranges[currentRange]);
   const vals = chartType === "candle" ? chartPoints.flatMap(p => [p.low, p.high]) : chartPoints.map(p => p.value);
   const min = Math.min(...vals), max = Math.max(...vals), pad = (max - min || 1) * .12;
+  chartScale = { min, max, pad };
   const x = i => 16 + i / (chartPoints.length - 1) * 868;
   const y = v => 300 - (v - (min - pad)) / ((max + pad) - (min - pad)) * 275;
   const line = chartPoints.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join(" ");
@@ -224,16 +229,58 @@ $("#commandInput").addEventListener("input", e => renderCommandResults(e.target.
 $("#commandResults").addEventListener("click", e => { const r = e.target.closest("[data-symbol]"); if (!r) return; addToWatch(r.dataset.symbol); $("#commandDialog").close(); selectSymbol(r.dataset.symbol); });
 $(".mobile-nav").addEventListener("click", e => { const b = e.target.closest("button"); if (b) setView(b.dataset.view); });
 addEventListener("keydown", e => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k" || (e.key === "/" && !/INPUT|TEXTAREA/.test(document.activeElement.tagName))) { e.preventDefault(); openCommand(); } });
-$("#chartHitbox").addEventListener("pointermove", e => {
+function updateChartPointer({ clientX, clientY }) {
   const svg = $("#priceChart"), rect = svg.getBoundingClientRect();
-  const px = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  const px = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
   const i = Math.round(px * (chartPoints.length - 1)), p = chartPoints[i], x = 16 + i / (chartPoints.length - 1) * 868;
-  const vals = chartType === "candle" ? chartPoints.flatMap(p => [p.low, p.high]) : chartPoints.map(p => p.value), min = Math.min(...vals), max = Math.max(...vals), pad = (max - min || 1) * .12;
+  const { min, max, pad } = chartScale;
   const y = 300 - (p.value - (min - pad)) / ((max + pad) - (min - pad)) * 275;
   const cursor = $("#chartCursor"); cursor.hidden = false; cursor.setAttribute("transform", `translate(${x} 0)`); cursor.querySelector("circle").setAttribute("cy", y);
-  const tip = $("#chartTooltip"); tip.hidden = false; tip.textContent = chartType === "candle" ? `${selected}  O ${p.open.toFixed(2)}  H ${p.high.toFixed(2)}  L ${p.low.toFixed(2)}  C ${p.value.toFixed(2)}` : `${selected}  ${p.value.toFixed(2)}`; tip.style.left = `${Math.min(rect.width - 245, Math.max(5, e.clientX - rect.left + 12))}px`; tip.style.top = `${Math.max(8, e.clientY - rect.top - 20)}px`;
+  const tip = $("#chartTooltip");
+  const tooltipWidth = Math.min(245, Math.max(120, rect.width - 10));
+  tip.hidden = false;
+  tip.textContent = chartType === "candle" ? `${selected}  O ${p.open.toFixed(2)}  H ${p.high.toFixed(2)}  L ${p.low.toFixed(2)}  C ${p.value.toFixed(2)}` : `${selected}  ${p.value.toFixed(2)}`;
+  tip.style.left = `${Math.max(5, Math.min(rect.width - tooltipWidth, clientX - rect.left + 12))}px`;
+  tip.style.top = `${Math.max(8, clientY - rect.top - 20)}px`;
+}
+
+function scheduleChartPointer(e) {
+  pendingChartPoint = { clientX: e.clientX, clientY: e.clientY };
+  if (chartPointerFrame) return;
+  chartPointerFrame = requestAnimationFrame(() => {
+    chartPointerFrame = 0;
+    if (pendingChartPoint) updateChartPointer(pendingChartPoint);
+    pendingChartPoint = null;
+  });
+}
+
+function hideChartPointer() {
+  $("#chartCursor").hidden = true;
+  $("#chartTooltip").hidden = true;
+}
+
+const chartHitbox = $("#chartHitbox");
+chartHitbox.addEventListener("pointerdown", e => {
+  activeChartPointer = e.pointerId;
+  chartHitbox.setPointerCapture(e.pointerId);
+  scheduleChartPointer(e);
 });
-$("#chartHitbox").addEventListener("pointerleave", () => { $("#chartCursor").hidden = true; $("#chartTooltip").hidden = true; });
+chartHitbox.addEventListener("pointermove", e => {
+  if (e.pointerType === "mouse" || activeChartPointer === e.pointerId) scheduleChartPointer(e);
+});
+chartHitbox.addEventListener("pointerup", e => {
+  if (activeChartPointer !== e.pointerId) return;
+  scheduleChartPointer(e);
+  if (chartHitbox.hasPointerCapture(e.pointerId)) chartHitbox.releasePointerCapture(e.pointerId);
+  activeChartPointer = null;
+});
+chartHitbox.addEventListener("pointercancel", e => {
+  if (activeChartPointer === e.pointerId) activeChartPointer = null;
+  hideChartPointer();
+});
+chartHitbox.addEventListener("pointerleave", e => {
+  if (e.pointerType === "mouse" && activeChartPointer === null) hideChartPointer();
+});
 
 renderTicker(); renderWatchlist(); renderQuote(); updateClock(); setInterval(updateClock, 1000); setView("home");
 requestAnimationFrame(() => requestAnimationFrame(() => {
