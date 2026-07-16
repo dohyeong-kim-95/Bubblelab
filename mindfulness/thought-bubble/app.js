@@ -22,6 +22,7 @@
 
   let timers = [];
   let state = "intro";
+  let flightEnded = false;
 
   function setView(view) {
     state = view;
@@ -59,26 +60,37 @@
     againButton.focus();
   }
 
+  function endFlight() {
+    if (state !== "release" || flightEnded) return;
+    flightEnded = true;
+    thoughtBubble.classList.remove("is-floating");
+    floatingThought.textContent = "";
+    releaseMessage.textContent = "이제 지금의 호흡과 감각으로 돌아와요.";
+    timers.push(setTimeout(finishRelease, REDUCED_MOTION ? 450 : 650));
+  }
+
   function beginRelease(thought) {
     clearTimers();
+    flightEnded = false;
     floatingThought.textContent = thought;
     input.value = "";
     charCount.textContent = "0";
     inputError.textContent = "";
-    releaseMessage.textContent = "잠시 바라봐요. 바꾸지 않아도 괜찮아요.";
+    releaseMessage.textContent = "이건 지금 떠오른 하나의 생각이에요.";
     setView("release");
 
     thoughtBubble.classList.remove("is-floating");
+    thoughtBubble.dataset.direction = Math.random() < .5 ? "left" : "right";
     void thoughtBubble.offsetWidth;
     thoughtBubble.classList.add("is-floating");
 
     timers.push(setTimeout(() => {
-      if (state === "release") releaseMessage.textContent = "생각과 나 사이에 작은 거리를 두어봐요.";
-    }, REDUCED_MOTION ? 900 : 3000));
+      if (state === "release") releaseMessage.textContent = "조금 떨어져 바라봐요.";
+    }, REDUCED_MOTION ? 500 : 900));
     timers.push(setTimeout(() => {
       if (state === "release") releaseMessage.textContent = "붙잡지 않아도, 밀어내지 않아도 괜찮아요.";
-    }, REDUCED_MOTION ? 1800 : 6200));
-    timers.push(setTimeout(finishRelease, REDUCED_MOTION ? 3300 : 10500));
+    }, REDUCED_MOTION ? 1050 : 1900));
+    timers.push(setTimeout(endFlight, REDUCED_MOTION ? 2000 : 3500));
   }
 
   function returnToIntro() {
@@ -105,7 +117,7 @@
   });
 
   thoughtBubble.addEventListener("animationend", (event) => {
-    if (["floatAway", "gentlyFade"].includes(event.animationName)) finishRelease();
+    if (["floatAway", "gentlyFade"].includes(event.animationName)) endFlight();
   });
   cancelButton.addEventListener("click", returnToIntro);
   againButton.addEventListener("click", returnToIntro);
