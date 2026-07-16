@@ -1,0 +1,25 @@
+{
+  "title": "골댕이 이모티콘 16종",
+  "description": "일상에서 쓰기 좋은 골든리트리버 캐릭터 스티커 모음",
+  "preview": "preview.webp",
+  "tags": ["골든리트리버", "골댕이", "강아지", "이모티콘", "캐릭터"],
+  "createdAt": "2026-07-16",
+  "downloads": [
+    { "label": "01. 헤헤", "file": "01.png" },
+    { "label": "02. 반가워!", "file": "02.png" },
+    { "label": "03. 간식?!", "file": "03.png" },
+    { "label": "04. 놀자!", "file": "04.png" },
+    { "label": "05. 제발...", "file": "05.png" },
+    { "label": "06. 졸려...", "file": "06.png" },
+    { "label": "07. 냠냠", "file": "07.png" },
+    { "label": "08. 사랑해!", "file": "08.png" },
+    { "label": "09. 미안해...", "file": "09.png" },
+    { "label": "10. 최고!", "file": "10.png" },
+    { "label": "11. 신난다!", "file": "11.png" },
+    { "label": "12. 앗!", "file": "12.png" },
+    { "label": "13. 자신감!", "file": "13.png" },
+    { "label": "14. 시무룩...", "file": "14.png" },
+    { "label": "15. 꼬옥!", "file": "15.png" },
+    { "label": "16. 잘자~", "file": "16.png" }
+  ]
+}

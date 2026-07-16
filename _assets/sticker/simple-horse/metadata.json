@@ -1,0 +1,25 @@
+{
+  "title": "심플 손그림 말 이모티콘 16종",
+  "description": "가볍고 익살스러운 선화 말 캐릭터 스티커 모음",
+  "preview": "preview.webp",
+  "tags": ["말", "선화", "손그림", "이모티콘", "캐릭터"],
+  "createdAt": "2026-07-16",
+  "downloads": [
+    { "label": "01. 최고야!", "file": "01.png" },
+    { "label": "02. 당근 좋아", "file": "02.png" },
+    { "label": "03. 피곤...", "file": "03.png" },
+    { "label": "04. 헉!", "file": "04.png" },
+    { "label": "05. 아무것도 하기 싫다...", "file": "05.png" },
+    { "label": "06. 나는 명마다", "file": "06.png" },
+    { "label": "07. 헤헤", "file": "07.png" },
+    { "label": "08. 열일 중", "file": "08.png" },
+    { "label": "09. 화가 난다!!", "file": "09.png" },
+    { "label": "10. 뭐라고?", "file": "10.png" },
+    { "label": "11. 화이팅!!", "file": "11.png" },
+    { "label": "12. 시무룩...", "file": "12.png" },
+    { "label": "13. 안녕!", "file": "13.png" },
+    { "label": "14. 냠냠", "file": "14.png" },
+    { "label": "15. ...", "file": "15.png" },
+    { "label": "16. 푸하하하!", "file": "16.png" }
+  ]
+}
