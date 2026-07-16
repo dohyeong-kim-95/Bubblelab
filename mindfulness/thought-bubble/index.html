@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#eef8f7">
+  <meta name="description" content="생각을 한 줄 적고 버블에 실어 흘려보내는 짧은 마음챙김 카드">
+  <title>생각방울 — Bubble Mindfulness</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body data-view="intro">
+  <div class="ambient" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+
+  <header class="topbar">
+    <a class="back" href="../" aria-label="마음챙김 카드로 돌아가기">‹ <span>카드</span></a>
+    <a class="brand" href="../">mindfulness<span>.bubblelab.dev</span></a>
+    <button class="info-button" id="infoButton" type="button" aria-haspopup="dialog">안내</button>
+  </header>
+
+  <main>
+    <section class="intro-view" id="introView" aria-labelledby="pageTitle">
+      <div class="hero" aria-hidden="true">
+        <i></i><i></i><i></i>
+        <span>생각 하나</span>
+      </div>
+      <p class="eyebrow">watch a thought pass</p>
+      <h1 id="pageTitle">생각방울</h1>
+      <p class="lead">지금 당장 붙잡고 있지 않아도 되는<br>생각을 한 줄 적어보세요.</p>
+
+      <form id="thoughtForm" novalidate>
+        <label for="thoughtInput">지금 이런 생각이 있구나</label>
+        <div class="input-shell">
+          <input
+            id="thoughtInput"
+            name="thought"
+            type="text"
+            maxlength="120"
+            placeholder="내일 회의에서 실수하면 어떡하지..."
+            autocomplete="off"
+            autocapitalize="sentences"
+            enterkeyhint="go"
+            required
+          >
+          <span class="count"><output id="charCount" for="thoughtInput">0</output>/120</span>
+        </div>
+        <p class="input-error" id="inputError" role="alert"></p>
+        <button class="primary-button" type="submit">
+          <span>버블에 실어 보내기</span>
+          <small>Enter를 눌러도 좋아요</small>
+        </button>
+      </form>
+
+      <p class="privacy-note"><span aria-hidden="true">◇</span> 입력한 내용은 저장하거나 전송하지 않아요.</p>
+    </section>
+
+    <section class="release-view" id="releaseView" aria-labelledby="releaseTitle" hidden>
+      <div class="release-heading">
+        <p class="eyebrow">just a thought</p>
+        <h2 id="releaseTitle">생각 하나가 떠올랐네요.</h2>
+      </div>
+      <div class="sky" id="sky">
+        <div class="thought-bubble" id="thoughtBubble" role="img" aria-label="적은 생각이 담긴 버블">
+          <span id="floatingThought"></span>
+          <i></i><i></i>
+        </div>
+      </div>
+      <p class="release-message" id="releaseMessage" aria-live="polite">잠시 바라봐요. 바꾸지 않아도 괜찮아요.</p>
+      <button class="secondary-button" id="cancelButton" type="button">여기서 그만하기</button>
+    </section>
+
+    <section class="complete-view" id="completeView" aria-labelledby="completeTitle" hidden>
+      <div class="empty-sky" aria-hidden="true"><i></i><i></i><i></i></div>
+      <p class="eyebrow">welcome back</p>
+      <h2 id="completeTitle">잠시 손을<br>놓아보았습니다.</h2>
+      <p>생각이 완전히 사라질 필요는 없어요.<br>다시 떠오르면, 다시 알아차리면 됩니다.</p>
+      <div class="complete-actions">
+        <button class="primary-button" id="againButton" type="button">하나 더 흘려보내기</button>
+        <a href="../">카드로 돌아가기</a>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="infoDialog">
+    <div class="dialog-card">
+      <button class="dialog-close" id="dialogClose" type="button" aria-label="닫기">×</button>
+      <p class="eyebrow">about this card</p>
+      <h2>생각을 없애는 연습이 아니에요.</h2>
+      <p>생각을 사실이나 명령으로 곧바로 받아들이지 않고, 잠시 떨어져 바라보는 연습입니다.</p>
+      <ul>
+        <li>좋은 생각이나 불편한 생각 모두 적을 수 있어요.</li>
+        <li>실제로 해야 할 일은 필요한 때 다시 다뤄도 괜찮아요.</li>
+        <li>입력한 문장은 저장하거나 서버로 보내지 않아요.</li>
+      </ul>
+      <button class="dialog-confirm" id="dialogConfirm" type="button">알겠어요</button>
+    </div>
+  </dialog>
+
+  <script src="./app.js"></script>
+</body>
+</html>
