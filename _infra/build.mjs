@@ -18,6 +18,12 @@ import { generateAssetCatalog } from "./assets.js";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const DIST = join(ROOT, "dist");
 const SKIP = new Set(["dist", "node_modules"]);
+// 백엔드가 보안상 닫혀 있는 동안 카테고리 홈에서 발견되지 않게 한다.
+// 소스와 직접 URL은 유지되며, 인증/ACL 검토 후 이 목록에서 제거한다.
+const UNLISTED_ENTRIES = new Map([
+  ["games", new Set(["avalon", "liargame", "yacht"])],
+  ["util", new Set(["planner"])],
+]);
 
 const isSite = (d) =>
   d.isDirectory() &&
@@ -327,7 +333,7 @@ for (const site of sites) {
 
   // 기본 순서는 가나다순. 접속량 데이터가 있으면 클라이언트에서 재정렬한다.
   const entries = readdirSync(join(DIST, site.name), { withFileTypes: true })
-    .filter((d) => d.isDirectory())
+    .filter((d) => d.isDirectory() && !UNLISTED_ENTRIES.get(site.name)?.has(d.name))
     .map((d) => ({
       name: d.name,
       emoji: toyEmoji(site.name, d.name),

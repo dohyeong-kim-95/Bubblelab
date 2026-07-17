@@ -6,14 +6,25 @@
 //   localhost:8787/slop/foo → dist/slop/foo
 
 const ROOT_DOMAIN = "bubblelab.dev";
+const REALTIME_NAMESPACES = new Set(["avalon", "liargame", "yacht"]);
 import { validPlannerCode } from "./planner.js";
 import { handleFortuneChart } from "./fortune.js";
 import { serveAssetDownload, serveAssetDownloadCounts } from "./downloads.js";
+import {
+  applySecurityHeaders,
+  consumeRateLimit,
+  featureEnabled,
+  rateLimitResponse,
+  requireJsonRequest,
+  validateMutationRequest,
+  validateWebSocketOrigin,
+} from "./security.js";
 
 export { RealtimeDO } from "./realtime.js";
 export { AnalyticsDO } from "./analytics.js";
 export { RecordsDO } from "./records.js";
 export { PlannerDO } from "./planner.js";
+export { RateLimiterDO } from "./security.js";
 
 const LOGIN_PAGE = (failed = false, base = "") => `<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -37,6 +48,12 @@ function cookies(request) {
       return [key, value.join("=")];
     }),
   );
+}
+
+const VISITOR_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function visitorId(request) {
+  const value = cookies(request).bl_vid;
+  return VISITOR_ID.test(value ?? "") ? value : null;
 }
 
 /* 관리자 세션: 만료시각 + 랜덤값에 HMAC 서명한 토큰. 로그인마다 다르고
@@ -63,11 +80,22 @@ async function issueSession(key) {
 
 async function validSession(key, token) {
   const [expiry, nonce, sig] = token?.split(".") ?? [];
-  if (!expiry || !nonce || !sig || !/^[0-9a-f]+$/.test(sig)) return false;
+  if (!expiry || !nonce || !/^[0-9a-f]{64}$/.test(sig ?? "")) return false;
   if (!Number.isFinite(+expiry) || Date.now() > +expiry) return false;
   const sigBytes = Uint8Array.from(sig.match(/../g) ?? [], (h) => parseInt(h, 16));
   return crypto.subtle.verify(
     "HMAC", key, sigBytes, new TextEncoder().encode(`${expiry}.${nonce}`),
+  );
+}
+
+async function matchesCredential(key, supplied, expected) {
+  const expectedBytes = new TextEncoder().encode(String(expected));
+  const signature = await crypto.subtle.sign("HMAC", key, expectedBytes);
+  return crypto.subtle.verify(
+    "HMAC",
+    key,
+    signature,
+    new TextEncoder().encode(String(supplied ?? "")),
   );
 }
 
@@ -138,6 +166,11 @@ function kstDate() {
 const redirect = (location, headers = {}) =>
   new Response(null, { status: 303, headers: { Location: location, ...headers } });
 
+async function enforceRateLimit(request, env, options) {
+  const result = await consumeRateLimit(request, env, options);
+  return result.allowed ? null : rateLimitResponse(result);
+}
+
 async function handleAdmin(request, env, url, base = "") {
   const adminId = env.ADMIN_ID || "admin";
   const adminPassword = env.ADMIN_PASSWORD || "admin";
@@ -146,8 +179,16 @@ async function handleAdmin(request, env, url, base = "") {
   const cookieFlags = `Path=/; HttpOnly; SameSite=Strict; Max-Age=86400${url.protocol === "https:" ? "; Secure" : ""}`;
 
   if (url.pathname === "/login" && request.method === "POST") {
+    const limited = await enforceRateLimit(request, env, {
+      scope: "admin-login", limit: 5, windowMs: 15 * 60 * 1000,
+    });
+    if (limited) return limited;
     const form = await request.formData();
-    if (form.get("id") === adminId && form.get("password") === adminPassword) {
+    const [idMatches, passwordMatches] = await Promise.all([
+      matchesCredential(key, form.get("id"), adminId),
+      matchesCredential(key, form.get("password"), adminPassword),
+    ]);
+    if (idMatches && passwordMatches) {
       const token = await issueSession(key);
       return redirect(`${base}/`, { "Set-Cookie": `bl_admin=${token}; ${cookieFlags}` });
     }
@@ -227,18 +268,27 @@ async function handleAdmin(request, env, url, base = "") {
   return null;
 }
 
-export default {
-  async fetch(request, env, ctx) {
+export async function handleRequest(request, env, ctx) {
     const url = new URL(request.url);
     const host = url.hostname;
 
     let site;
     let path = url.pathname;
 
+    const mutationError = validateMutationRequest(
+      request,
+      path === "/_planner/data" ? 600 * 1024 : 64 * 1024,
+    );
+    if (mutationError) return mutationError;
+
     if (path.startsWith("/_download/")) {
       return serveAssetDownload(request, env, ctx, url);
     }
     if (path === "/_asset-downloads" && request.method === "GET") {
+      const limited = await enforceRateLimit(request, env, {
+        scope: "asset-download-counts", limit: 60, windowMs: 60 * 1000,
+      });
+      if (limited) return limited;
       return serveAssetDownloadCounts(env);
     }
 
@@ -252,17 +302,51 @@ export default {
     }
 
     if (path.startsWith("/_planner/")) {
+      if (!featureEnabled(env, "ENABLE_PLANNER")) {
+        return Response.json({ error: "planner is temporarily unavailable" }, {
+          status: 503,
+          headers: { "Cache-Control": "no-store", "Retry-After": "86400" },
+        });
+      }
+      if (path === "/_planner/login" && request.method === "POST") {
+        const contentTypeError = requireJsonRequest(request);
+        if (contentTypeError) return contentTypeError;
+        const limited = await enforceRateLimit(request, env, {
+          scope: "planner-login", limit: 5, windowMs: 15 * 60 * 1000,
+        });
+        if (limited) return limited;
+      }
+      if (path === "/_planner/data" && ["PUT", "PATCH"].includes(request.method)) {
+        const contentTypeError = requireJsonRequest(request);
+        if (contentTypeError) return contentTypeError;
+      }
       return handlePlanner(request, env, url);
     }
 
     // 생년월일시는 저장하지 않고 요청 순간에만 명식으로 변환한다.
     // KASI 인증키는 Worker secret에서만 읽으며 브라우저로 전달하지 않는다.
     if (path === "/_fortune/chart") {
+      if (request.method !== "POST") {
+        return new Response("method not allowed", { status: 405, headers: { Allow: "POST" } });
+      }
+      const contentTypeError = requireJsonRequest(request);
+      if (contentTypeError) return contentTypeError;
+      const limited = await enforceRateLimit(request, env, {
+        scope: "fortune-chart", limit: 10, windowMs: 60 * 1000,
+      });
+      if (limited) return limited;
       return handleFortuneChart(request, env);
     }
 
     // 공개 페이지 통계 (카테고리 홈의 접속량순 정렬용). 개인 데이터 없음.
     if (path === "/_stats") {
+      if (request.method !== "GET") {
+        return new Response("method not allowed", { status: 405, headers: { Allow: "GET" } });
+      }
+      const limited = await enforceRateLimit(request, env, {
+        scope: "public-stats", limit: 60, windowMs: 60 * 1000,
+      });
+      if (limited) return limited;
       const id = env.ANALYTICS.idFromName("global");
       const response = await env.ANALYTICS.get(id).fetch(
         `https://analytics.internal/pages?date=${kstDate()}&days=7`,
@@ -273,38 +357,54 @@ export default {
     }
 
     if (path === "/_streak" && request.method === "GET") {
-      const visitorId = cookies(request).bl_vid;
-      if (!visitorId) return Response.json({ streak: 1 }, { headers: { "Cache-Control": "no-store" } });
+      const limited = await enforceRateLimit(request, env, {
+        scope: "streak", limit: 30, windowMs: 60 * 1000,
+      });
+      if (limited) return limited;
+      const currentVisitorId = visitorId(request);
+      if (!currentVisitorId) return Response.json({ streak: 1 }, { headers: { "Cache-Control": "no-store" } });
       const id = env.ANALYTICS.idFromName("global");
       return env.ANALYTICS.get(id).fetch("https://analytics.internal/streak", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ visitorId, date: kstDate() }),
+        body: JSON.stringify({ visitorId: currentVisitorId, date: kstDate() }),
       });
     }
 
     // 카드 페이지의 활성화면 체류시간. 방문 문서에서 발급한 익명 쿠키만 사용하고
     // 클라이언트가 임의 방문자 ID를 제출하지 못하게 Worker에서 ID를 붙인다.
     if (path === "/_engagement" && request.method === "POST") {
-      const visitorId = cookies(request).bl_vid;
-      if (!visitorId) return new Response(null, { status: 204 });
+      const contentTypeError = requireJsonRequest(request);
+      if (contentTypeError) return contentTypeError;
+      const limited = await enforceRateLimit(request, env, {
+        scope: "engagement", limit: 120, windowMs: 60 * 60 * 1000,
+      });
+      if (limited) return limited;
+      const currentVisitorId = visitorId(request);
+      if (!currentVisitorId) return new Response(null, { status: 204 });
       const body = await request.json().catch(() => ({}));
       const id = env.ANALYTICS.idFromName("global");
       return env.ANALYTICS.get(id).fetch("https://analytics.internal/engage", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...body, visitorId, date: kstDate() }),
+        body: JSON.stringify({ ...body, visitorId: currentVisitorId, date: kstDate() }),
       });
     }
 
     // 토이 아이디어 제출 (조회는 admin 전용 /api/suggestions)
     if (path === "/_suggest" && request.method === "POST") {
+      const contentTypeError = requireJsonRequest(request);
+      if (contentTypeError) return contentTypeError;
+      const limited = await enforceRateLimit(request, env, {
+        scope: "suggestion", limit: 5, windowMs: 60 * 60 * 1000,
+      });
+      if (limited) return limited;
       const { text, page } = await request.json().catch(() => ({}));
       const id = env.RECORDS.idFromName("global");
       return env.RECORDS.get(id).fetch("https://records.internal/_suggest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, page, vid: cookies(request).bl_vid, date: kstDate() }),
+        body: JSON.stringify({ text, page, vid: visitorId(request), date: kstDate() }),
       });
     }
 
@@ -316,31 +416,59 @@ export default {
       }
       const id = env.RECORDS.idFromName("global");
       if (request.method === "GET") {
+        const limited = await enforceRateLimit(request, env, {
+          scope: "records-read", limit: 120, windowMs: 60 * 1000,
+        });
+        if (limited) return limited;
         const recordsUrl = new URL(request.url);
-        const vid = cookies(request).bl_vid;
+        const vid = visitorId(request);
         if (vid) recordsUrl.searchParams.set("vid", vid);
         return env.RECORDS.get(id).fetch(new Request(recordsUrl, request));
       }
+      const contentTypeError = requireJsonRequest(request);
+      if (contentTypeError) return contentTypeError;
+      const limited = await enforceRateLimit(request, env, {
+        scope: "records", limit: 10, windowMs: 60 * 1000,
+      });
+      if (limited) return limited;
       return env.RECORDS.get(id).fetch(request);
     }
 
     if (path === "/_personal" && request.method === "POST") {
+      const contentTypeError = requireJsonRequest(request);
+      if (contentTypeError) return contentTypeError;
+      const limited = await enforceRateLimit(request, env, {
+        scope: "personal-record", limit: 20, windowMs: 60 * 1000,
+      });
+      if (limited) return limited;
       const body = await request.json().catch(() => ({}));
       const id = env.RECORDS.idFromName("global");
       return env.RECORDS.get(id).fetch("https://records.internal/_personal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...body, vid: cookies(request).bl_vid }),
+        body: JSON.stringify({ ...body, vid: visitorId(request) }),
       });
     }
 
     // 실시간 데이터 서버: /_rt/<이름> → 이름당 Durable Object 하나.
     // 임의 이름 폭주로 DO가 무한 생성되지 않게 형식·길이를 제한한다.
     if (path.startsWith("/_rt/")) {
+      if (!featureEnabled(env, "ENABLE_REALTIME")) {
+        return Response.json({ error: "realtime experiments are temporarily unavailable" }, {
+          status: 503,
+          headers: { "Cache-Control": "no-store", "Retry-After": "86400" },
+        });
+      }
       const name = path.slice("/_rt/".length).split("/")[0];
-      if (!/^[a-z0-9-]{1,64}$/.test(name)) {
+      if (!REALTIME_NAMESPACES.has(name)) {
         return new Response("invalid name", { status: 400 });
       }
+      const originError = validateWebSocketOrigin(request);
+      if (originError) return originError;
+      const limited = await enforceRateLimit(request, env, {
+        scope: `realtime-connect:${name}`, limit: 20, windowMs: 60 * 1000,
+      });
+      if (limited) return limited;
       const id = env.REALTIME.idFromName(name);
       return env.REALTIME.get(id).fetch(request);
     }
@@ -373,6 +501,17 @@ export default {
     url.pathname = `/${site}${path}`;
     const response = await env.ASSETS.fetch(new Request(url, request));
 
+    if (site === "admin") {
+      const headers = new Headers(response.headers);
+      headers.set("Cache-Control", "no-store");
+      headers.set("X-Robots-Tag", "noindex, nofollow");
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+      });
+    }
+
     // HTML 문서 방문만 집계한다. IP/UA는 저장하지 않고 익명 쿠키 ID만 사용한다.
     // 페이지별 인기 집계를 위해 문서마다 보낸다 (DO 쓰기는 방문자별 key라 멱등).
     // 봇 부풀리기 방지: 실제 브라우저 내비게이션에만 붙는 Sec-Fetch-Dest를
@@ -385,21 +524,43 @@ export default {
         response.headers.get("Content-Type")?.includes("text/html")) {
       const date = kstDate();
       const jar = cookies(request);
-      const visitorId = jar.bl_vid || crypto.randomUUID();
+      const currentVisitorId = VISITOR_ID.test(jar.bl_vid ?? "") ? jar.bl_vid : crypto.randomUUID();
       const segment = path.split("/").filter(Boolean)[0];
       const page = (segment ? `${site}/${segment}` : site).toLowerCase();
       const id = env.ANALYTICS.idFromName("global");
-      ctx.waitUntil(env.ANALYTICS.get(id).fetch("https://analytics.internal/track", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ visitorId, date, page }),
-      }));
+      ctx.waitUntil((async () => {
+        const result = await consumeRateLimit(request, env, {
+          scope: "page-view", limit: 120, windowMs: 60 * 60 * 1000,
+        });
+        if (!result.allowed) return;
+        await env.ANALYTICS.get(id).fetch("https://analytics.internal/track", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ visitorId: currentVisitorId, date, page }),
+        });
+      })().catch(() => {}));
       const headers = new Headers(response.headers);
       const domain = host === ROOT_DOMAIN || host.endsWith(`.${ROOT_DOMAIN}`)
         ? `; Domain=${ROOT_DOMAIN}; Secure` : "";
-      headers.append("Set-Cookie", `bl_vid=${visitorId}; Path=/; Max-Age=31536000; SameSite=Lax${domain}`);
+      headers.append("Set-Cookie", `bl_vid=${currentVisitorId}; Path=/; HttpOnly; Max-Age=31536000; SameSite=Lax${domain}`);
       return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
     }
     return response;
+}
+
+export default {
+  async fetch(request, env, ctx) {
+    try {
+      return applySecurityHeaders(await handleRequest(request, env, ctx), request);
+    } catch (error) {
+      console.error("unhandled worker request", error);
+      return applySecurityHeaders(
+        Response.json({ error: "internal server error" }, {
+          status: 500,
+          headers: { "Cache-Control": "no-store" },
+        }),
+        request,
+      );
+    }
   },
 };

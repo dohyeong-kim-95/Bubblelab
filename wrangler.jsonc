@@ -14,12 +14,24 @@
   // workers.dev 서브도메인 미등록 계정에서도 배포되도록 비활성화
   "workers_dev": false,
   "preview_urls": false,
+  // 인증/권한 모델을 갖추기 전까지 개인용 기능은 명시적으로 닫아 둔다.
+  // 다시 열 때는 값만 바꾸지 말고 해당 기능의 ACL 검토를 먼저 통과해야 한다.
+  "vars": {
+    "ENABLE_REALTIME": "false",
+    "ENABLE_PLANNER": "false"
+  },
   "routes": [
     { "pattern": "bubblelab.dev/*", "zone_name": "bubblelab.dev" },
     { "pattern": "*.bubblelab.dev/*", "zone_name": "bubblelab.dev" }
   ],
   "secrets": {
-    "required": ["KASI_SERVICE_KEY"]
+    "required": [
+      "ADMIN_ID",
+      "ADMIN_PASSWORD",
+      "ADMIN_SESSION_SECRET",
+      "PLANNER_SESSION_SECRET",
+      "KASI_SERVICE_KEY"
+    ]
   },
   // /_rt/<이름> 실시간 데이터 서버 (아발론 등 멀티플레이어 토이용)
   "durable_objects": {
@@ -27,13 +39,15 @@
       { "name": "REALTIME", "class_name": "RealtimeDO" },
       { "name": "ANALYTICS", "class_name": "AnalyticsDO" },
       { "name": "RECORDS", "class_name": "RecordsDO" },
-      { "name": "PLANNER", "class_name": "PlannerDO" }
+      { "name": "PLANNER", "class_name": "PlannerDO" },
+      { "name": "RATE_LIMITER", "class_name": "RateLimiterDO" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["RealtimeDO"] },
     { "tag": "v2", "new_sqlite_classes": ["AnalyticsDO"] },
     { "tag": "v3", "new_sqlite_classes": ["RecordsDO"] },
-    { "tag": "v4", "new_sqlite_classes": ["PlannerDO"] }
+    { "tag": "v4", "new_sqlite_classes": ["PlannerDO"] },
+    { "tag": "v5", "new_sqlite_classes": ["RateLimiterDO"] }
   ]
 }

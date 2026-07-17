@@ -3,10 +3,11 @@
 // 35일이 지나면 삭제한다.
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const VISITOR_ID = /^[a-f0-9-]{36}$/i;
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const VISITOR_ID = UUID_V4;
 const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
 const PAGE_KEY = /^[a-z0-9_-]{1,32}(\/[a-z0-9._-]{1,64})?$/;
-const SESSION_ID = /^[a-f0-9-]{36}$/i;
+const SESSION_ID = UUID_V4;
 const MAX_SESSION_MS = 30 * 60 * 1000;
 const ASSET_CATEGORY = /^(sticker|wallpaper|photo-frame|music)$/;
 const ASSET_PART = /^[a-z0-9][a-z0-9._-]{0,127}$/i;

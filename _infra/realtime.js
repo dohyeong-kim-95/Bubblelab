@@ -11,8 +11,63 @@
 //                { ev: "v", path, value }     … 구독 경로 변경 알림
 // 값 안의 { ".sv": "timestamp" } 는 서버 시각(ms)으로 치환된다.
 
-const split = (p) => p.split("/").filter(Boolean);
-const norm = (p) => split(p).join("/");
+const MAX_PATH_LENGTH = 512;
+const MAX_PATH_SEGMENTS = 16;
+const MAX_VALUE_DEPTH = 20;
+const MAX_VALUE_NODES = 5_000;
+const MAX_MESSAGE_BYTES = 128 * 1024;
+const MAX_SUBSCRIPTIONS = 32;
+const MAX_ON_DISCONNECT = 32;
+const MAX_UPDATE_ENTRIES = 64;
+const MAX_CONNECTIONS = 100;
+const SAFE_SEGMENT = /^[A-Za-z0-9._-]{1,64}$/;
+const POISON_KEYS = new Set(["__proto__", "prototype", "constructor"]);
+
+const split = (path) => {
+  if (typeof path !== "string" || path.length > MAX_PATH_LENGTH) {
+    throw new Error("invalid path");
+  }
+  const parts = path.split("/").filter(Boolean);
+  if (parts.length > MAX_PATH_SEGMENTS || parts.some((part) =>
+    !SAFE_SEGMENT.test(part) || POISON_KEYS.has(part))) {
+    throw new Error("invalid path");
+  }
+  return parts;
+};
+
+export const normalizeRealtimePath = (path) => split(path).join("/");
+
+export function validateRealtimeValue(value) {
+  let nodes = 0;
+  const visit = (current, depth) => {
+    nodes += 1;
+    if (nodes > MAX_VALUE_NODES || depth > MAX_VALUE_DEPTH) {
+      throw new Error("value too complex");
+    }
+    if (current === null || typeof current === "boolean") return;
+    if (typeof current === "number") {
+      if (!Number.isFinite(current)) throw new Error("invalid number");
+      return;
+    }
+    if (typeof current === "string") {
+      if (current.length > 8_192) throw new Error("string too long");
+      return;
+    }
+    if (typeof current !== "object") throw new Error("invalid value");
+    if (!Array.isArray(current) && Object.getPrototypeOf(current) !== Object.prototype &&
+        Object.getPrototypeOf(current) !== null) {
+      throw new Error("invalid object");
+    }
+    const entries = Object.entries(current);
+    if (entries.length > 1_000) throw new Error("object too large");
+    for (const [key, child] of entries) {
+      if (!key || key.length > 128 || POISON_KEYS.has(key)) throw new Error("invalid key");
+      visit(child, depth + 1);
+    }
+  };
+  visit(value, 0);
+  return value;
+}
 
 function getAt(tree, path) {
   let node = tree;
@@ -26,7 +81,7 @@ function getAt(tree, path) {
 
 function resolveSentinels(v, now) {
   if (v && typeof v === "object") {
-    if (v[".sv"] === "timestamp") return now;
+    if (v[".sv"] === "timestamp" && Object.keys(v).length === 1) return now;
     const out = Array.isArray(v) ? [] : {};
     for (const k of Object.keys(v)) out[k] = resolveSentinels(v[k], now);
     return out;
@@ -89,6 +144,9 @@ export class RealtimeDO {
     if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
       return new Response("WebSocket expected", { status: 426 });
     }
+    if (this.conns.size >= MAX_CONNECTIONS) {
+      return new Response("too many connections", { status: 503 });
+    }
     await this.load();
     const pair = new WebSocketPair();
     const client = pair[0];
@@ -101,14 +159,25 @@ export class RealtimeDO {
     server.addEventListener("message", (e) => {
       let msg;
       try {
+        if (typeof e.data !== "string" ||
+            new TextEncoder().encode(e.data).byteLength > MAX_MESSAGE_BYTES) {
+          server.close(1009, "message too large");
+          return;
+        }
         msg = JSON.parse(e.data);
+        if (!msg || typeof msg !== "object" || Array.isArray(msg)) throw new Error("invalid message");
+        if (msg.id !== undefined &&
+            !((typeof msg.id === "number" && Number.isSafeInteger(msg.id)) ||
+              (typeof msg.id === "string" && msg.id.length <= 64))) {
+          throw new Error("invalid id");
+        }
       } catch {
         return;
       }
       try {
         this.handle(conn, msg);
-      } catch (err) {
-        if (msg.id) this.send(conn, { id: msg.id, ok: false, error: String(err) });
+      } catch {
+        if (msg.id !== undefined) this.send(conn, { id: msg.id, ok: false, error: "invalid request" });
       }
     });
     const bye = () => this.onClose(conn);
@@ -127,7 +196,7 @@ export class RealtimeDO {
   }
 
   handle(conn, { id, op, path = "", value }) {
-    path = norm(path);
+    path = normalizeRealtimePath(path);
     const now = Date.now();
 
     switch (op) {
@@ -136,15 +205,22 @@ export class RealtimeDO {
         return;
 
       case "set": {
+        validateRealtimeValue(value ?? null);
         setAt(this.tree, path, resolveSentinels(value ?? null, now));
         this.afterWrite([path]);
         break;
       }
 
       case "update": {
+        if (!value || typeof value !== "object" || Array.isArray(value)) {
+          throw new Error("invalid update");
+        }
+        const entries = Object.entries(value);
+        if (entries.length > MAX_UPDATE_ENTRIES) throw new Error("update too large");
+        validateRealtimeValue(value);
         const changed = [];
-        for (const [rel, v] of Object.entries(value ?? {})) {
-          const full = norm(path + "/" + rel);
+        for (const [rel, v] of entries) {
+          const full = normalizeRealtimePath(path + "/" + rel);
           setAt(this.tree, full, resolveSentinels(v, now));
           changed.push(full);
         }
@@ -153,6 +229,9 @@ export class RealtimeDO {
       }
 
       case "sub":
+        if (!conn.subs.has(path) && conn.subs.size >= MAX_SUBSCRIPTIONS) {
+          throw new Error("too many subscriptions");
+        }
         conn.subs.add(path);
         this.send(conn, { ev: "v", path, value: getAt(this.tree, path) });
         break;
@@ -162,6 +241,10 @@ export class RealtimeDO {
         break;
 
       case "ondisc":
+        validateRealtimeValue(value ?? null);
+        if (!conn.disc.has(path) && conn.disc.size >= MAX_ON_DISCONNECT) {
+          throw new Error("too many on-disconnect writes");
+        }
         conn.disc.set(path, value ?? null);
         break;
 
@@ -170,10 +253,10 @@ export class RealtimeDO {
         break;
 
       default:
-        this.send(conn, { id, ok: false, error: `unknown op: ${op}` });
+        this.send(conn, { id, ok: false, error: "unknown operation" });
         return;
     }
-    if (id) this.send(conn, { id, ok: true });
+    if (id !== undefined) this.send(conn, { id, ok: true });
   }
 
   afterWrite(changedPaths) {

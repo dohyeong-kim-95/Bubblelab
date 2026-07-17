@@ -1,3 +1,5 @@
+import { consumeRateLimit } from "./security.js";
+
 const ASSET_CATEGORIES = new Set(["sticker", "wallpaper", "photo-frame", "music"]);
 const SAFE_PART = /^[a-z0-9][a-z0-9._-]{0,127}$/i;
 
@@ -38,12 +40,27 @@ export async function serveAssetDownload(request, env, ctx, url) {
   const response = await env.ASSETS.fetch(new Request(assetUrl, { method: "GET" }));
   if (!response.ok) return response;
 
-  const analyticsId = env.ANALYTICS.idFromName("global");
-  ctx.waitUntil(env.ANALYTICS.get(analyticsId).fetch("https://analytics.internal/download", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(asset),
-  }));
+  // 동일 IP의 같은 파일은 하루에 한 번만 집계한다. 실제 다운로드는 막지
+  // 않으므로 공유기/NAT 환경에서도 사용성은 유지되고, 카운터 반복 호출만 줄인다.
+  let shouldCount = false;
+  try {
+    const result = await consumeRateLimit(request, env, {
+      scope: `asset-download:${asset.category}/${asset.id}/${asset.file}`,
+      limit: 1,
+      windowMs: 24 * 60 * 60 * 1000,
+    });
+    shouldCount = result.allowed;
+  } catch {
+    // 통계 인프라 장애가 파일 다운로드 자체를 실패시키지 않게 한다.
+  }
+  if (shouldCount) {
+    const analyticsId = env.ANALYTICS.idFromName("global");
+    ctx.waitUntil(env.ANALYTICS.get(analyticsId).fetch("https://analytics.internal/download", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(asset),
+    }));
+  }
 
   const headers = new Headers(response.headers);
   headers.set("Content-Disposition", downloadContentDisposition(asset.file));

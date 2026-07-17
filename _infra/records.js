@@ -5,7 +5,7 @@
 const GAME = /^[a-z0-9-]{1,32}$/;
 const NICK = /^[가-힣a-zA-Z0-9]{1,6}$/;
 const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
-const VISITOR_ID = /^[a-f0-9-]{36}$/i;
+const VISITOR_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 // 관리자 공지 (기록 조회 응답에 실려 나가 방문자 팝업으로 전파)
 const NOTICE_TEXT = /^[^\x00-\x09\x0b-\x1f]{1,200}$/; // 줄바꿈은 허용

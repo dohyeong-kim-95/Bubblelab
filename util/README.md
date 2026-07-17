@@ -29,3 +29,5 @@
 
 운영에는 `PLANNER_SESSION_SECRET` 또는 대체 가능한 관리자 세션 secret이 필요합니다.
 브라우저가 직접 Durable Object를 호출하지 않고 `/_planner/*` 세션 API를 사용합니다.
+공개 보안 정비 중에는 코드만 아는 사람을 소유자로 보는 현재 인증 방식을 외부에
+노출하지 않도록 카드 목록에서 숨기고 `ENABLE_PLANNER=false`로 API를 닫아 둡니다.
