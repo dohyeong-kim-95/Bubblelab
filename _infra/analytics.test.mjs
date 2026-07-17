@@ -12,7 +12,40 @@ class MemoryStorage {
   async list({ prefix } = {}) {
     return new Map([...this.data].filter(([key]) => !prefix || key.startsWith(prefix)));
   }
+  async transaction(callback) { return callback(this); }
 }
+
+test("counts asset downloads by file and aggregates each card", async () => {
+  const analytics = new AnalyticsDO({ storage: new MemoryStorage() });
+  const record = (file) => analytics.fetch(new Request("https://analytics.internal/download", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ category: "music", id: "upward-drift", file }),
+  }));
+
+  assert.equal((await record("upward_drift.mp3")).status, 200);
+  await record("upward_drift.mp3");
+  await record("upward_drift.webp");
+  const response = await analytics.fetch(new Request("https://analytics.internal/downloads"));
+  assert.deepEqual(await response.json(), {
+    files: {
+      "music/upward-drift/upward_drift.mp3": 2,
+      "music/upward-drift/upward_drift.webp": 1,
+    },
+    items: { "music/upward-drift": 3 },
+    total: 3,
+  });
+});
+
+test("rejects malformed asset download events", async () => {
+  const analytics = new AnalyticsDO({ storage: new MemoryStorage() });
+  const response = await analytics.fetch(new Request("https://analytics.internal/download", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ category: "music", id: "../private", file: "secret" }),
+  }));
+  assert.equal(response.status, 400);
+});
 
 test("tracks one browser once per day and calculates rolling uniques", async () => {
   const storage = new MemoryStorage([

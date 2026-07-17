@@ -8,6 +8,7 @@
 const ROOT_DOMAIN = "bubblelab.dev";
 import { validPlannerCode } from "./planner.js";
 import { handleFortuneChart } from "./fortune.js";
+import { serveAssetDownload, serveAssetDownloadCounts } from "./downloads.js";
 
 export { RealtimeDO } from "./realtime.js";
 export { AnalyticsDO } from "./analytics.js";
@@ -233,6 +234,13 @@ export default {
 
     let site;
     let path = url.pathname;
+
+    if (path.startsWith("/_download/")) {
+      return serveAssetDownload(request, env, ctx, url);
+    }
+    if (path === "/_asset-downloads" && request.method === "GET") {
+      return serveAssetDownloadCounts(env);
+    }
 
     // R2 활성화 전까지 관리자 업로드 파일은 공개하지 않는다.
     if (path.startsWith("/_assets/upload/")) {

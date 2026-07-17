@@ -8,6 +8,8 @@ const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
 const PAGE_KEY = /^[a-z0-9_-]{1,32}(\/[a-z0-9._-]{1,64})?$/;
 const SESSION_ID = /^[a-f0-9-]{36}$/i;
 const MAX_SESSION_MS = 30 * 60 * 1000;
+const ASSET_CATEGORY = /^(sticker|wallpaper|photo-frame|music)$/;
+const ASSET_PART = /^[a-z0-9][a-z0-9._-]{0,127}$/i;
 
 function median(values) {
   if (!values.length) return 0;
@@ -38,6 +40,43 @@ export class AnalyticsDO {
 
   async fetch(request) {
     const url = new URL(request.url);
+
+    if (request.method === "POST" && url.pathname === "/download") {
+      const { category, id, file } = await request.json().catch(() => ({}));
+      if (!ASSET_CATEGORY.test(category ?? "") || !ASSET_PART.test(id ?? "") ||
+          !ASSET_PART.test(file ?? "")) {
+        return new Response("invalid download", { status: 400 });
+      }
+      const key = `download:${category}:${id}:${file}`;
+      let count;
+      const increment = async (storage) => {
+        count = (Number(await storage.get(key)) || 0) + 1;
+        await storage.put(key, count);
+      };
+      if (typeof this.state.storage.transaction === "function") {
+        await this.state.storage.transaction(increment);
+      } else {
+        await increment(this.state.storage);
+      }
+      return Response.json({ count }, { headers: { "Cache-Control": "no-store" } });
+    }
+
+    if (request.method === "GET" && url.pathname === "/downloads") {
+      const stored = await this.state.storage.list({ prefix: "download:" });
+      const files = {};
+      const items = {};
+      let total = 0;
+      for (const [key, value] of stored) {
+        const [, category, id, file] = key.split(":");
+        const count = Number(value) || 0;
+        const fileKey = `${category}/${id}/${file}`;
+        const itemKey = `${category}/${id}`;
+        files[fileKey] = count;
+        items[itemKey] = (items[itemKey] || 0) + count;
+        total += count;
+      }
+      return Response.json({ files, items, total });
+    }
 
     if (request.method === "POST" && url.pathname === "/streak") {
       const { visitorId, date } = await request.json().catch(() => ({}));

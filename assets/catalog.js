@@ -3,8 +3,10 @@ const grid = document.getElementById("grid");
 const search = document.getElementById("search");
 const count = document.getElementById("count");
 let items = [];
+let downloadCounts = { files: {}, items: {} };
 const animatePreviews = !matchMedia("(prefers-reduced-motion: reduce)").matches;
 let activeRepeat = null;
+const numberFormat = new Intl.NumberFormat("ko-KR");
 
 const esc = (value) => String(value).replace(/[&<>'"]/g, (char) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;",
@@ -87,12 +89,18 @@ function render() {
     <article class="card">
       <div class="preview">${previewMarkup(item)}</div>
       <div class="info">
-        <h2>${esc(item.title)}</h2>
+        <div class="title-row">
+          <h2>${esc(item.title)}</h2>
+          <span class="item-download-count">총 ${numberFormat.format(downloadCounts.items[`${item.category}/${item.id}`] || 0)}회</span>
+        </div>
         <p class="description">${esc(item.description || "Bubblelab에서 만든 에셋입니다.")}</p>
         ${playerMarkup(item)}
         <div class="tags">${(item.tags || []).map((tag) => `<span class="tag">#${esc(tag)}</span>`).join("")}</div>
         <div class="downloads">${item.downloads.map((download) =>
-          `<a class="download" href="${esc(download.url)}" download="${esc(download.file)}">↓ ${esc(download.label)}</a>`).join("")}</div>
+          `<div class="download-item">
+            <a class="download" href="/_download/${encodeURIComponent(item.category)}/${encodeURIComponent(item.id)}/${encodeURIComponent(download.file)}" download="${esc(download.file)}">↓ ${esc(download.label)}</a>
+            <span class="download-count">${numberFormat.format(downloadCounts.files[`${item.category}/${item.id}/${download.file}`] || 0)}회 다운로드</span>
+          </div>`).join("")}</div>
       </div>
     </article>`).join("");
   for (const video of grid.querySelectorAll("video")) {
@@ -121,9 +129,13 @@ if ("mediaSession" in navigator) {
 search.addEventListener("input", render);
 
 try {
-  const response = await fetch("/_assets/catalog.json", { cache: "no-cache" });
+  const [response, countsResponse] = await Promise.all([
+    fetch("/_assets/catalog.json", { cache: "no-cache" }),
+    fetch("/_asset-downloads", { cache: "no-cache" }).catch(() => null),
+  ]);
   if (!response.ok) throw new Error("catalog unavailable");
   const catalog = await response.json();
+  if (countsResponse?.ok) downloadCounts = await countsResponse.json();
   items = (catalog.items || []).filter((item) => item.category === category);
   search.hidden = items.length < 5;
   render();
