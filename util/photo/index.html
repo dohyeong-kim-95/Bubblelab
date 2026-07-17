@@ -56,6 +56,8 @@
   .frame-mini span { background: linear-gradient(135deg, #a9c6d4, #dec0d1); border-radius: .08rem; }
   .frame-mini.custom { display: grid; place-items: center; color: var(--accent); font-size: 1.7rem;
                        border: 2px dashed #df5f7580; }
+  .frame-mini-img { display: block; width: 3.7rem; aspect-ratio: 1/3; object-fit: cover;
+                    margin: 0 auto .45rem; border-radius: .2rem; border: 1px solid #8884; background: #fff; }
   .frame-actions { margin-top: auto; padding-top: 1rem; display: grid; }
 
   .camera-box { position: relative; width: 100%; aspect-ratio: 3/2; flex: none; overflow: hidden;
@@ -100,8 +102,9 @@
                  border-radius: 50%; overflow: hidden; background: transparent; }
   #customColor::-webkit-color-swatch-wrapper { padding: 0; }
   #customColor::-webkit-color-swatch { border: 2px solid #8885; border-radius: 50%; }
-  .decorate-toolbar { display: grid; grid-template-columns: 1.4fr repeat(4, 1fr); gap: .35rem; }
+  .decorate-toolbar { display: grid; grid-template-columns: repeat(4, 1fr); gap: .35rem; }
   .decorate-toolbar button { min-width: 0; padding: .62rem .25rem; font-size: .68rem; }
+  #addSticker, #pickAsset { grid-column: span 2; }
   .decorator-wrap { position: relative; width: min(100%, 28rem); aspect-ratio: 1/3; margin: .2rem auto .8rem;
                     flex: none; box-shadow: 0 10px 28px #0003; overflow: hidden; background: #fff; }
   #decoratorCanvas, #stickerLayer { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -113,7 +116,23 @@
   .sticker.selected { border-color: #fff; outline: 2px solid var(--accent); }
   .decorate-help { margin: 0 0 .7rem; color: var(--muted); text-align: center;
                    font-size: .68rem; line-height: 1.55; }
-  .decorate-finish { display: grid; margin-bottom: .5rem; }
+  .decorate-finish { display: grid; grid-template-columns: 1fr 1.35fr; gap: .55rem; margin-bottom: .5rem; }
+  #exportFrame { font-size: .78rem; }
+
+  #assetPicker { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column;
+                 justify-content: flex-end; background: #0007; }
+  #assetPicker[hidden] { display: none; }
+  .picker-sheet { max-height: 72dvh; overflow-y: auto; background: var(--panel);
+                  border-radius: 1rem 1rem 0 0; padding: .9rem 1rem 1.2rem; }
+  .picker-head { display: flex; justify-content: space-between; align-items: center; gap: .6rem; }
+  .picker-head h3 { margin: 0; font-size: .92rem; }
+  .picker-head button { padding: .45rem .8rem; font-size: .72rem; }
+  .picker-status { margin: .5rem 0; color: var(--muted); font-size: .7rem; line-height: 1.5; }
+  .picker-pack { margin: .8rem 0 .35rem; color: var(--muted); font-size: .72rem; font-weight: bold; }
+  .picker-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: .45rem; }
+  .picker-grid button { padding: .3rem; aspect-ratio: 1; display: grid; place-items: center; }
+  .picker-grid button:disabled { opacity: .5; }
+  .picker-grid img { max-width: 100%; max-height: 100%; object-fit: contain; }
 
   .print-window { width: min(47vw, 10rem); height: min(64dvh, 31rem); overflow: hidden;
                   margin: .8rem auto; display: flex; justify-content: center; align-items: flex-start; }
@@ -158,6 +177,7 @@
     <h2>프레임을 골라주세요</h2>
     <p class="desc">모든 프레임은 실제 포토부스 규격인 1:3 스트립입니다.</p>
     <div class="frame-grid" id="frameGrid"></div>
+    <p class="camera-status" id="frameStatus"></p>
     <div class="frame-actions"><button class="primary" id="frameNext" type="button">이 프레임으로 촬영</button></div>
   </section>
 
@@ -213,6 +233,7 @@
       </div>
       <div class="decorate-toolbar">
         <button class="primary" id="addSticker" type="button">＋ 사진 추가</button>
+        <button id="pickAsset" type="button">🐶 에셋 스티커</button>
         <button id="stickerSmaller" type="button" disabled>－ 크기</button>
         <button id="stickerLarger" type="button" disabled>＋ 크기</button>
         <button id="duplicateSticker" type="button" disabled>복제</button>
@@ -225,7 +246,10 @@
       <canvas id="decoratorCanvas" width="1200" height="3600"></canvas>
       <div id="stickerLayer" aria-label="스티커 편집 영역"></div>
     </div>
-    <div class="decorate-finish"><button class="primary" id="finishDecorate" type="button">꾸미기 완료 · 출력</button></div>
+    <div class="decorate-finish">
+      <button id="exportFrame" type="button">프레임 내보내기</button>
+      <button class="primary" id="finishDecorate" type="button">꾸미기 완료 · 출력</button>
+    </div>
   </section>
 
   <section class="step center" data-step="result">
@@ -248,6 +272,17 @@
     <button class="restart" id="restart" type="button">처음부터 다시 찍기</button>
   </section>
 </main>
+
+<div id="assetPicker" hidden>
+  <div class="picker-sheet">
+    <div class="picker-head">
+      <h3>🖼️ 에셋 스티커</h3>
+      <button id="closePicker" type="button">닫기</button>
+    </div>
+    <p class="picker-status" id="pickerStatus">assets.bubblelab.dev의 스티커입니다. 누르면 배경을 지우고 프레임에 붙여드려요.</p>
+    <div id="pickerBody"></div>
+  </div>
+</div>
 
 <script>
 const OUTPUT_W = 1200, OUTPUT_H = 3600;
@@ -668,6 +703,236 @@ document.getElementById("deleteSticker").addEventListener("click", () => {
   decorateStatus.textContent = stickers.length ? `${stickers.length}개 스티커` : "사진을 추가해 스티커처럼 꾸며보세요.";
 });
 
+// ── 에셋 스티커: /_assets 카탈로그의 스티커를 배경 제거 후 붙인다 ──
+const escapeText = (value) => String(value).replace(/[&<>'"]/g, (char) => ({
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;",
+})[char]);
+const assetPicker = document.getElementById("assetPicker");
+const pickerBody = document.getElementById("pickerBody");
+const pickerStatus = document.getElementById("pickerStatus");
+const cutoutCache = new Map();
+let stickerCatalogLoaded = false;
+
+async function fetchCatalogItems(category) {
+  const response = await fetch("/_assets/catalog.json", { cache: "no-cache" });
+  if (!response.ok) throw new Error("catalog unavailable");
+  const catalog = await response.json();
+  return (catalog.items || []).filter((item) => item.category === category);
+}
+
+// 테두리에서 시작하는 flood fill로 흰 배경만 투명 처리 (그림 속 흰색은 유지)
+function cutoutWhiteBackground(imageData) {
+  const { data, width, height } = imageData;
+  const whiteness = (i) => Math.min(data[i], data[i + 1], data[i + 2]);
+  const visited = new Uint8Array(width * height);
+  const queue = [];
+  for (let x = 0; x < width; x++) queue.push(x, (height - 1) * width + x);
+  for (let y = 0; y < height; y++) queue.push(y * width, y * width + width - 1);
+  while (queue.length) {
+    const p = queue.pop();
+    if (visited[p]) continue;
+    visited[p] = 1;
+    const i = p * 4;
+    const w = whiteness(i);
+    if (w < 208) continue;
+    // 235 이상은 완전 투명, 208~235는 경계 안티앨리어싱을 살려 반투명 처리
+    data[i + 3] = w >= 235 ? 0 : Math.round(((235 - w) / 27) * 255);
+    const x = p % width, y = (p / width) | 0;
+    if (x > 0) queue.push(p - 1);
+    if (x < width - 1) queue.push(p + 1);
+    if (y > 0) queue.push(p - width);
+    if (y < height - 1) queue.push(p + width);
+  }
+}
+
+async function addAssetSticker(src) {
+  let url = cutoutCache.get(src);
+  if (!url) {
+    const source = new Image();
+    source.src = src;
+    await source.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = source.naturalWidth; canvas.height = source.naturalHeight;
+    const context = canvas.getContext("2d");
+    context.drawImage(source, 0, 0);
+    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+    cutoutWhiteBackground(imageData);
+    context.putImageData(imageData, 0, 0);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!blob) throw new Error("cutout failed");
+    url = URL.createObjectURL(blob);
+    cutoutCache.set(src, url);
+  }
+  const image = new Image();
+  image.src = url;
+  await image.decode();
+  addStickerImage(image, url);
+}
+
+async function openAssetPicker() {
+  assetPicker.hidden = false;
+  if (stickerCatalogLoaded) return;
+  pickerBody.innerHTML = '<p class="picker-status">스티커를 불러오는 중…</p>';
+  try {
+    const packs = await fetchCatalogItems("sticker");
+    const markup = packs.map((pack) => `
+      <p class="picker-pack">${escapeText(pack.title)}</p>
+      <div class="picker-grid">${pack.downloads
+        .filter((download) => /\.(png|webp|jpe?g)$/i.test(download.file))
+        .map((download) => `<button type="button" data-src="${escapeText(download.url)}" aria-label="${escapeText(download.label)}">
+          <img src="${escapeText(download.url)}" alt="" loading="lazy"></button>`).join("")}</div>`).join("");
+    pickerBody.innerHTML = markup || '<p class="picker-status">아직 등록된 스티커가 없습니다.</p>';
+    stickerCatalogLoaded = true;
+  } catch (_) {
+    pickerBody.innerHTML = '<p class="picker-status">스티커 목록을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.</p>';
+  }
+}
+
+document.getElementById("pickAsset").addEventListener("click", openAssetPicker);
+document.getElementById("closePicker").addEventListener("click", () => { assetPicker.hidden = true; });
+assetPicker.addEventListener("click", (event) => { if (event.target === assetPicker) assetPicker.hidden = true; });
+pickerBody.addEventListener("click", async (event) => {
+  const button = event.target.closest("button[data-src]");
+  if (!button || stickers.length >= 12) {
+    if (button) pickerStatus.textContent = "스티커는 최대 12개까지 추가할 수 있습니다.";
+    return;
+  }
+  button.disabled = true;
+  try {
+    await addAssetSticker(button.dataset.src);
+    pickerStatus.textContent = `추가했어요! (${stickers.length}/12) 계속 고르거나 닫기를 눌러주세요.`;
+  } catch (_) {
+    pickerStatus.textContent = "이 스티커는 불러오지 못했습니다.";
+  } finally {
+    button.disabled = false;
+  }
+});
+
+// ── 공용 프레임: 카탈로그의 photo-frame을 불러와 커스텀 프레임으로 적용 ──
+const DEFAULT_CUSTOM_TITLE = "MY FOUR CUTS";
+const customFrame = FRAMES.find((frame) => frame.id === "custom");
+const frameStatusEl = document.getElementById("frameStatus");
+
+function clearStickers() {
+  for (const url of new Set(stickers.map((item) => item.url))) {
+    if (url.startsWith("blob:") && ![...cutoutCache.values()].includes(url)) URL.revokeObjectURL(url);
+  }
+  stickers.forEach((item) => item.el.remove());
+  stickers.length = 0; selectedSticker = -1; updateStickerControls();
+}
+
+async function applyFrameDefinition(def) {
+  const loaded = [];
+  for (const entry of (Array.isArray(def.stickers) ? def.stickers : []).slice(0, 12)) {
+    if (typeof entry?.image !== "string" || !entry.image.startsWith("data:image/")) continue;
+    const image = new Image();
+    image.src = entry.image;
+    try { await image.decode(); loaded.push({ entry, image }); } catch (_) {}
+  }
+  clearStickers();
+  if (/^#[0-9a-f]{6}$/i.test(def.color || "")) setCustomFrameColor(def.color, true);
+  customFrame.title = typeof def.title === "string" && def.title.trim() ? def.title.trim().slice(0, 40) : DEFAULT_CUSTOM_TITLE;
+  for (const { entry, image } of loaded) {
+    addStickerImage(image, entry.image);
+    const item = stickers[stickers.length - 1];
+    if (!item || item.image !== image) continue;
+    item.x = clamp(Number(entry.x) || .5, -.1, 1.1);
+    item.y = clamp(Number(entry.y) || .5, -.04, 1.04);
+    item.size = clamp(Number(entry.size) || .34, .08, .8);
+    item.rotation = Number(entry.rotation) || 0;
+    positionSticker(item);
+  }
+  selectSticker(-1);
+}
+
+async function loadCommunalFrames() {
+  let items;
+  try { items = await fetchCatalogItems("photo-frame"); } catch (_) { return; }
+  for (const item of items) {
+    const download = item.downloads.find((entry) => entry.file.endsWith(".json"));
+    if (!download) continue;
+    const button = document.createElement("button");
+    button.type = "button"; button.className = "frame-choice";
+    button.innerHTML = `<img class="frame-mini-img" alt="" loading="lazy">${escapeText(item.title)}`;
+    button.querySelector("img").src = item.preview;
+    let definition = null;
+    button.addEventListener("click", async () => {
+      document.querySelectorAll(".frame-choice").forEach((b) => b.classList.toggle("active", b === button));
+      frameIndex = FRAMES.indexOf(customFrame);
+      document.getElementById("print").textContent = "꾸미러 가기";
+      frameStatusEl.textContent = "프레임을 불러오는 중…";
+      try {
+        if (!definition) {
+          const response = await fetch(download.url, { cache: "no-cache" });
+          if (!response.ok) throw new Error("frame unavailable");
+          definition = await response.json();
+        }
+        await applyFrameDefinition(definition);
+        frameStatusEl.textContent = `'${item.title}' 프레임을 불러왔습니다. 촬영 후 자유롭게 고쳐 쓸 수 있어요.`;
+      } catch (_) {
+        frameStatusEl.textContent = "프레임을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.";
+      }
+    });
+    document.getElementById("frameGrid").appendChild(button);
+  }
+}
+loadCommunalFrames();
+
+// ── 프레임 내보내기: frame.json + preview.png를 ZIP으로 저장 ──
+function stickerDataUrl(image) {
+  const longest = Math.max(image.naturalWidth, image.naturalHeight);
+  const scale = Math.min(1, 1200 / longest);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+  canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
+  const webp = canvas.toDataURL("image/webp", .85);
+  return webp.startsWith("data:image/webp") ? webp : canvas.toDataURL("image/png");
+}
+
+function renderFramePreview() {
+  const canvas = document.createElement("canvas");
+  canvas.width = OUTPUT_W / 2; canvas.height = OUTPUT_H / 2;
+  const context = canvas.getContext("2d");
+  context.scale(.5, .5);
+  context.fillStyle = customFrame.color; context.fillRect(0, 0, OUTPUT_W, OUTPUT_H);
+  context.fillStyle = "#00000018";
+  for (const slot of SLOTS) context.fillRect(slot.x, slot.y, slot.w, slot.h);
+  context.fillStyle = customFrame.text; context.textAlign = "center";
+  context.font = "bold 38px ui-monospace, monospace";
+  context.fillText(customFrame.title, OUTPUT_W / 2, 105);
+  drawStickers(context);
+  return canvas;
+}
+
+document.getElementById("exportFrame").addEventListener("click", async () => {
+  const button = document.getElementById("exportFrame");
+  button.disabled = true;
+  try {
+    const definition = {
+      version: 1,
+      color: customFrame.color,
+      title: customFrame.title,
+      stickers: stickers.map((item) => ({
+        x: item.x, y: item.y, size: item.size, rotation: item.rotation,
+        image: stickerDataUrl(item.image),
+      })),
+    };
+    const previewBlob = await new Promise((resolve) => renderFramePreview().toBlob(resolve, "image/png"));
+    if (!previewBlob) throw new Error("preview failed");
+    const zip = window.blMakeZip([
+      { name: "frame.json", data: new TextEncoder().encode(JSON.stringify(definition, null, 2)) },
+      { name: "preview.png", data: new Uint8Array(await previewBlob.arrayBuffer()) },
+    ]);
+    requestDownload(new File([zip], `bubblelab-frame-${dateText().replaceAll(".", "-")}.zip`, { type: "application/zip" }));
+    decorateStatus.textContent = "프레임 파일을 저장했어요. 운영자에게 보내면 공용 프레임 후보가 됩니다.";
+  } catch (_) {
+    decorateStatus.textContent = "프레임을 내보내지 못했습니다.";
+  } finally {
+    button.disabled = false;
+  }
+});
+
 function drawStickers(context) {
   for (const item of stickers) {
     const width = item.size * OUTPUT_W;
@@ -847,10 +1112,10 @@ document.getElementById("shareVideo").addEventListener("click", () => {
 
 document.getElementById("restart").addEventListener("click", () => {
   stopCamera(); photos.fill(null); frameIndex = 0; reviewIndex = 0; retakeIndex = -1;
-  for (const url of new Set(stickers.map((item) => item.url))) URL.revokeObjectURL(url);
-  stickers.forEach((item) => item.el.remove()); stickers.length = 0; selectedSticker = -1;
+  clearStickers();
   activePointers.clear(); stickerGesture = null; updateStickerControls();
   decorateStatus.textContent = "한 손가락으로 이동 · 두 손가락으로 크기와 각도 조절 · 최대 12개";
+  customFrame.title = DEFAULT_CUSTOM_TITLE; frameStatusEl.textContent = "";
   setCustomFrameColor("#f3f0e9");
   if (videoUrl) URL.revokeObjectURL(videoUrl); videoUrl = ""; videoBlob = null; videoMime = "";
   const resultVideo = document.getElementById("resultVideo"); resultVideo.removeAttribute("src"); resultVideo.load();
@@ -862,5 +1127,6 @@ document.getElementById("restart").addEventListener("click", () => {
   document.getElementById("resultStatus").textContent = ""; go("welcome");
 });
 </script>
+<script src="/_shared/zip.js"></script>
 </body>
 </html>

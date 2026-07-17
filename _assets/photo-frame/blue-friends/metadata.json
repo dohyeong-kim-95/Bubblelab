@@ -1,0 +1,10 @@
+{
+  "title": "하늘색 네컷 친구들",
+  "description": "골댕이와 말 스티커가 들어간 하늘색 공용 프레임. 네컷사진에서 불러와 자유롭게 고쳐 쓸 수 있습니다.",
+  "preview": "preview.png",
+  "tags": ["네컷사진", "프레임", "하늘색", "골든리트리버", "말"],
+  "createdAt": "2026-07-17",
+  "downloads": [
+    { "label": "프레임 정의 (frame.json)", "file": "frame.json" }
+  ]
+}
