@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
-export const ASSET_CATEGORIES = new Set(["wallpaper", "sticker", "photo-frame"]);
+export const ASSET_CATEGORIES = new Set(["wallpaper", "sticker", "photo-frame", "music"]);
 
 const safePart = (value) =>
   typeof value === "string" && /^[a-z0-9][a-z0-9._-]*$/i.test(value) && value !== "." && value !== "..";
