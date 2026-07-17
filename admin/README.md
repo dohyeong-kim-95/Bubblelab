@@ -1,5 +1,7 @@
 # admin — 운영 관리 화면
 
+상태: **Restricted**. 공개 프로젝트 카드가 아니며 운영자 인증 뒤에서만 사용합니다.
+
 <https://admin.bubblelab.dev>에서 Bubblelab 운영 데이터를 관리합니다. 정적 화면은
 `index.html` 하나지만 로그인과 API는 `_infra/worker.js`가 처리합니다.
 
@@ -11,10 +13,16 @@
 - 방문자가 보낸 토이 아이디어 조회·삭제
 - 이미지 업로드 UI는 남아 있지만 서버 `/api/assets`가 비활성화되어 실제 업로드 불가
 
-운영 환경은 `ADMIN_ID`, `ADMIN_PASSWORD` Worker secret이 모두 있어야 열립니다.
+운영 환경은 `ADMIN_ID`, `ADMIN_PASSWORD`, `ADMIN_SESSION_SECRET` Worker secret이
+모두 있어야 열립니다.
 누락 시 기본 계정으로 열리지 않고 503으로 잠깁니다. 로컬 개발에서만
-`admin/admin`을 기본값으로 사용합니다. `ADMIN_SESSION_SECRET`을 설정하면 계정
-정보와 별도의 HMAC 세션 키를 사용할 수 있으며 로그인 세션은 24시간 유지됩니다.
+`admin/admin`을 기본값으로 사용합니다. 관리자 세션은 계정 정보와 분리된
+`ADMIN_SESSION_SECRET`으로 HMAC 서명하며 24시간 유지됩니다.
+
+로그인은 Cloudflare가 확인한 IP 기준 15분에 5회로 제한됩니다. IP 원문은 저장하지
+않고 HMAC 처리한 rate-limit 버킷만 제한 시간 동안 사용합니다. 관리자 응답에는
+`Cache-Control: no-store`, `X-Robots-Tag: noindex, nofollow`, 클릭재킹 방지 헤더가
+붙습니다. Cloudflare Access는 결제 수단 등록이 가능한 시점까지 보류된 2차 방어입니다.
 
 관리자 API는 인증 쿠키 뒤에서만 접근할 수 있습니다.
 

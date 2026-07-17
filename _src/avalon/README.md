@@ -1,5 +1,8 @@
 # The Resistance: Avalon
 
+상태: **Archived**. 소스와 정적 산출물은 유지하지만 `ENABLE_REALTIME=false`이고
+카테고리 목록에서 숨겨져 있어 현재 공개 플레이를 지원하지 않습니다.
+
 <https://games.bubblelab.dev/avalon>에서 서비스하는 5–10인용 사회적 추론 게임의
 원본 Vite 프로젝트입니다. 각 플레이어가 자기 기기로 방에 참여하며, 별도 사회자
 없이 역할 배정부터 팀 제안·투표·미션·암살·결과까지 진행합니다.
@@ -12,6 +15,11 @@
 - 호스트 클라이언트가 상태 전이의 권위자로 동작
 - 플레이어 ID는 브라우저 `localStorage`에 보관
 - Firebase, Firebase Auth, GitHub Pages, 별도 API 키는 사용하지 않음
+
+현재 서버는 사용자 인증이나 방별 ACL을 제공하지 않으므로, `privateData`를 포함한
+namespace 트리에 참가자가 임의로 접근할 수 있었던 것이 비활성화 이유입니다. 경로·
+값 크기·프로토타입 오염·Origin 방어는 추가됐지만 권한 모델이 생기기 전에는 feature
+flag를 켜면 안 됩니다.
 
 Firebase 시절 게임 로직을 크게 바꾸지 않도록 `src/firebase.js`가 `ref`, `get`,
 `set`, `update`, `onValue`, `onDisconnect` 호환 어댑터를 제공합니다. 이관 배경은
@@ -56,7 +64,8 @@ npm run dev
 ```
 
 Vite 개발 서버에서 실제 Bubblelab 실시간 서버를 쓰려면 환경 변수
-`VITE_RT_HOST=games.bubblelab.dev`를 설정할 수 있습니다. 로컬 Durable Object까지
+`VITE_RT_HOST=games.bubblelab.dev`를 설정할 수 있지만 운영 서버는 현재 503을
+반환합니다. 로컬 Durable Object까지
 검증하려면 저장소 루트에서 다음을 실행하세요.
 
 ```bash
@@ -76,6 +85,9 @@ npx wrangler@4 dev --local --local-upstream localhost
 | `npm run test:missions` | 미션 인원과 실패 판정 규칙 |
 | `npm run test:result-replay` | 종료 후 재경기 라우팅 |
 | `npm run test:ci` | 위 검증 전체와 Vite 빌드 |
+
+현재 lockfile 기준 `npm audit`은 0건입니다. 의존성을 바꾸면 `npm audit`과
+`npm run test:ci`를 모두 다시 실행합니다.
 
 ## 공개 산출물 갱신
 

@@ -99,6 +99,12 @@ Worker vars:
 없으며 생년월일시는 저장하지 않고 요청 시점에만 처리합니다. 비활성 기능의 소스와
 직접 URL은 유지하지만, 카테고리 카드 목록에서는 노출하지 않습니다.
 
+공개 API는 변경 메서드의 Origin·`Sec-Fetch-Site`, 선언된 본문 크기와 JSON
+Content-Type을 검사합니다. 전역 응답에는 CSP, HSTS, `nosniff`, frame 차단,
+Referrer·Permissions 정책을 붙입니다. 현재 정적 페이지 구조 때문에 CSP의 inline
+script/style 허용은 과도기적으로 남아 있으며 향후 nonce 또는 외부 파일화가
+추가 보강 항목입니다.
+
 ## 로컬 검증
 
 ```bash

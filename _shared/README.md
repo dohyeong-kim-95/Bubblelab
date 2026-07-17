@@ -1,5 +1,8 @@
 # _shared — 브라우저 공용 모듈
 
+이 폴더의 JavaScript는 여러 공개 서브도메인에 동시에 영향을 주므로 개별 토이보다
+높은 검토 수준을 적용합니다.
+
 모든 서브도메인에서 사이트 접두사 없이 `/_shared/<file>`로 접근합니다.
 
 | 파일 | 기능 |
@@ -43,7 +46,24 @@ window.blWeekly = {
 
 ## 멀티플레이
 
+현재 `ENABLE_REALTIME=false`이므로 `realtime-client.js`와
+`multiplayer-room.js`를 사용하는 공개 게임은 카드 목록에서 숨겨져 있고 서버 연결은
+503으로 거절됩니다.
+
 `realtime-client.js`는 경로 기반 `get`, `set`, `update`, `remove`, 실시간 구독과
 연결 종료 작업을 제공합니다. `multiplayer-room.js`는 그 위에 영문 6자리 방 코드,
 닉네임 중복 검사, 최대 인원, 강제 퇴장, 방장 승계와 오래된 데이터 정리를 더합니다.
 각 게임은 고유 namespace와 `rooms`, `privateData`, `actions` 하위 구조를 사용합니다.
+
+메시지 크기·경로·Origin·namespace 제한은 방어선일 뿐 사용자 권한을 대신하지
+않습니다. 다시 공개할 때는 방 참가자별 세션과 `rooms/<code>`·
+`privateData/<code>` 읽기/쓰기 ACL을 서버에서 강제해야 합니다.
+
+## 공용 모듈 보안 규칙
+
+- 사용자·서버 문자열은 `textContent`, DOM 속성 또는 검증된 URL로만 표시합니다.
+- 공개 쓰기는 상대 경로의 JSON 요청을 사용하며 Worker의 동일 출처·본문 크기·
+  rate-limit 검사를 우회하는 별도 엔드포인트를 만들지 않습니다.
+- 비밀키, 관리자 정보, 민감한 자유 입력을 `localStorage`나 공유 모듈 전역 상태에
+  넣지 않습니다.
+- 변경 후 최소한 인프라 테스트와 관련 카테고리의 모바일 흐름을 확인합니다.

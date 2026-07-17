@@ -1,5 +1,7 @@
 # wallpaper — 배경화면 원본
 
+상태: **Archived**. 현재 공개 항목이 없습니다.
+
 <https://assets.bubblelab.dev/wallpaper>에서 보여 줄 배경화면 항목을 둡니다.
 현재 등록된 항목은 없습니다.
 
