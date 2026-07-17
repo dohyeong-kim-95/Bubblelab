@@ -32,7 +32,12 @@ body[data-category="music"] .preview { aspect-ratio: 1; }
 .info { padding: 1rem; }
 .info h2 { margin: 0; font-size: 1rem; }
 .description { min-height: 2.7em; margin: .45rem 0 .8rem; color: var(--muted); font-size: .74rem; line-height: 1.5; }
-.audio-player { display: block; width: 100%; height: 2.6rem; margin: .1rem 0 .9rem; accent-color: var(--accent); }
+.listen-tools { margin: .1rem 0 .9rem; }
+.audio-player { display: block; width: 100%; height: 2.6rem; accent-color: var(--accent); }
+.repeat-button { width: 100%; margin-top: .45rem; padding: .62rem .7rem; border: 1px solid var(--line); border-radius: .65rem; background: transparent; color: var(--text); font: inherit; font-size: .68rem; font-weight: 700; cursor: pointer; }
+.repeat-button:hover { background: light-dark(#f2f0ea, #25292d); }
+.repeat-button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: light-dark(#edf5ef, #1c2922); }
+.repeat-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .tags { display: flex; flex-wrap: wrap; gap: .3rem; min-height: 1.4rem; margin-bottom: .85rem; }
 .tag { padding: .2rem .42rem; border-radius: 999px; background: light-dark(#efede7, #292d31); color: var(--muted); font-size: .62rem; }
 .downloads { display: grid; grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr)); gap: .4rem; }

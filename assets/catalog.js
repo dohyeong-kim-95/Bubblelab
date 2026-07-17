@@ -4,13 +4,14 @@ const search = document.getElementById("search");
 const count = document.getElementById("count");
 let items = [];
 const animatePreviews = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+let activeRepeat = null;
 
 const esc = (value) => String(value).replace(/[&<>'"]/g, (char) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;",
 })[char]);
 
 function previewMarkup(item) {
-  if (item.category === "music") {
+  if (item.category === "music" && /\.mp4$/i.test(item.preview)) {
     return `<video src="${esc(item.preview)}" aria-label="${esc(item.title)} 움직이는 썸네일" muted loop playsinline${animatePreviews ? " autoplay" : ""} preload="metadata"></video>`;
   }
   return `<img src="${esc(item.preview)}" alt="${esc(item.title)} 미리보기" loading="lazy">`;
@@ -20,7 +21,57 @@ function playerMarkup(item) {
   if (item.category !== "music") return "";
   const audio = item.downloads.find((download) => /\.(mp3|m4a|aac|wav|ogg)$/i.test(download.file));
   if (!audio) return "";
-  return `<audio class="audio-player" src="${esc(audio.url)}" controls preload="metadata" aria-label="${esc(item.title)} 재생"></audio>`;
+  const playerId = `player-${item.id}`;
+  return `<div class="listen-tools">
+    <audio class="audio-player" id="${esc(playerId)}" src="${esc(audio.url)}" controls preload="metadata" aria-label="${esc(item.title)} 재생"></audio>
+    <button class="repeat-button" type="button" data-repeat-player="${esc(playerId)}" data-title="${esc(item.title)}" data-preview="${esc(item.preview)}" aria-pressed="false">↻ 반복 듣기</button>
+  </div>`;
+}
+
+function setRepeatButton(button, active) {
+  button.setAttribute("aria-pressed", String(active));
+  button.textContent = active ? "■ 반복 듣기 중" : "↻ 반복 듣기";
+}
+
+function stopRepeat() {
+  if (!activeRepeat) return;
+  activeRepeat.audio.loop = false;
+  activeRepeat.audio.pause();
+  activeRepeat.audio.currentTime = 0;
+  setRepeatButton(activeRepeat.button, false);
+  activeRepeat = null;
+  if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "none";
+}
+
+async function toggleRepeat(button) {
+  const audio = document.getElementById(button.dataset.repeatPlayer);
+  if (!audio) return;
+  if (activeRepeat?.audio === audio) {
+    stopRepeat();
+    return;
+  }
+  stopRepeat();
+  audio.loop = true;
+  try {
+    await audio.play();
+  } catch {
+    audio.loop = false;
+    button.textContent = "재생을 시작하지 못했어요";
+    setTimeout(() => setRepeatButton(button, false), 1800);
+    return;
+  }
+  activeRepeat = { audio, button };
+  setRepeatButton(button, true);
+  if ("mediaSession" in navigator) {
+    if ("MediaMetadata" in window) {
+      navigator.mediaSession.metadata = new window.MediaMetadata({
+        title: button.dataset.title,
+        artist: "Bubblelab Assets",
+        artwork: [{ src: new URL(button.dataset.preview, location.href).href, type: "image/webp" }],
+      });
+    }
+    navigator.mediaSession.playbackState = "playing";
+  }
 }
 
 function render() {
@@ -48,6 +99,23 @@ function render() {
     video.muted = true;
     if (animatePreviews) video.play()?.catch(() => {});
   }
+  for (const button of grid.querySelectorAll("[data-repeat-player]")) {
+    button.addEventListener("click", () => toggleRepeat(button));
+  }
+}
+
+if ("mediaSession" in navigator) {
+  const setMediaAction = (action, handler) => {
+    try { navigator.mediaSession.setActionHandler(action, handler); } catch {}
+  };
+  setMediaAction("play", () => {
+    activeRepeat?.audio.play().then(() => { navigator.mediaSession.playbackState = "playing"; }).catch(() => {});
+  });
+  setMediaAction("pause", () => {
+    activeRepeat?.audio.pause();
+    navigator.mediaSession.playbackState = "paused";
+  });
+  setMediaAction("stop", stopRepeat);
 }
 
 search.addEventListener("input", render);

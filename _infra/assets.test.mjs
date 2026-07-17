@@ -27,16 +27,16 @@ test("music assets support a video preview and audio download", () => {
   const root = mkdtempSync(join(tmpdir(), "bubblelab-assets-"));
   const item = join(root, "music", "upward-drift");
   mkdirSync(item, { recursive: true });
-  writeFileSync(join(item, "upward_drift.mp4"), "preview");
+  writeFileSync(join(item, "upward_drift_preview.webp"), "preview");
   writeFileSync(join(item, "upward_drift.mp3"), "audio");
   writeFileSync(join(item, "metadata.json"), JSON.stringify({
-    title: "Upward Drift", preview: "upward_drift.mp4", createdAt: "2026-07-17",
+    title: "Upward Drift", preview: "upward_drift_preview.webp", createdAt: "2026-07-17",
     downloads: [{ label: "MP3", file: "upward_drift.mp3" }],
   }));
 
   const [music] = generateAssetCatalog(root);
   assert.equal(music.category, "music");
-  assert.equal(music.preview, "/_assets/music/upward-drift/upward_drift.mp4");
+  assert.equal(music.preview, "/_assets/music/upward-drift/upward_drift_preview.webp");
   assert.equal(music.downloads[0].url, "/_assets/music/upward-drift/upward_drift.mp3");
 });
 
