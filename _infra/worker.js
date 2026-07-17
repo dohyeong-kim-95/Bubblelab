@@ -145,7 +145,7 @@ async function handlePlanner(request, env, url) {
   }
 
   if (!sessionUser) return Response.json({ error: "authentication required" }, { status: 401 });
-  if (url.pathname === "/_planner/data" && ["GET", "PUT", "PATCH"].includes(request.method)) {
+  if (url.pathname === "/_planner/data" && ["GET", "PUT", "PATCH", "DELETE"].includes(request.method)) {
     const id = env.PLANNER.idFromName(sessionUser);
     return env.PLANNER.get(id).fetch("https://planner.internal/", {
       method: request.method,
@@ -316,9 +316,15 @@ export async function handleRequest(request, env, ctx) {
         });
         if (limited) return limited;
       }
-      if (path === "/_planner/data" && ["PUT", "PATCH"].includes(request.method)) {
-        const contentTypeError = requireJsonRequest(request);
-        if (contentTypeError) return contentTypeError;
+      if (path === "/_planner/data" && ["PUT", "PATCH", "DELETE"].includes(request.method)) {
+        if (request.method !== "DELETE") {
+          const contentTypeError = requireJsonRequest(request);
+          if (contentTypeError) return contentTypeError;
+        }
+        const limited = await enforceRateLimit(request, env, {
+          scope: "planner-write", limit: 60, windowMs: 60 * 1000,
+        });
+        if (limited) return limited;
       }
       return handlePlanner(request, env, url);
     }

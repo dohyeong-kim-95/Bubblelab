@@ -6,6 +6,7 @@ class MemoryStorage {
   constructor() { this.data = new Map(); }
   async get(key) { return this.data.get(key); }
   async put(key, value) { this.data.set(key, value); }
+  async delete(key) { this.data.delete(key); }
 }
 const TEST_DATE = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit",
@@ -66,5 +67,18 @@ test("rejects invalid planner writes", async () => {
   const planner = new PlannerDO({ storage: new MemoryStorage() });
   assert.equal((await planner.fetch(new Request("https://planner.internal/", { method: "PUT", body: "nope" }))).status, 400);
   assert.equal((await planner.fetch(new Request("https://planner.internal/", { method: "PATCH", body: "{}" }))).status, 400);
-  assert.equal((await planner.fetch(new Request("https://planner.internal/", { method: "DELETE" }))).status, 405);
+  assert.equal((await planner.fetch(new Request("https://planner.internal/", { method: "HEAD" }))).status, 405);
+});
+
+test("deletes all planner data on request", async () => {
+  const planner = new PlannerDO({ storage: new MemoryStorage() });
+  await planner.fetch(new Request("https://planner.internal/", {
+    method: "PUT", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ data: { [TEST_DATE]: { plan: [], real: [], todo: [] } } }),
+  }));
+  const response = await planner.fetch(new Request("https://planner.internal/", { method: "DELETE" }));
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).deleted, true);
+  const after = await planner.fetch(new Request("https://planner.internal/"));
+  assert.deepEqual((await after.json()).data, {});
 });

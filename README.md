@@ -12,7 +12,7 @@
 | `mindfulness/` | <https://mindfulness.bubblelab.dev> | Beta | 짧은 호흡·소리·생각 알아차림 |
 | `assets/` | <https://assets.bubblelab.dev> | Beta | 스티커·배경화면·음악 카탈로그 |
 | `idle/` | <https://idle.bubblelab.dev> | Experiment | 7일 단위 방치형 게임 |
-| `util/` | <https://util.bubblelab.dev> | Beta | 달력·운세·사진·이미지 변환 도구. Planner는 Archived |
+| `util/` | <https://util.bubblelab.dev> | Beta | 달력·운세·사진·이미지 변환·플래너 도구 |
 | `invest/` | <https://invest.bubblelab.dev> | Experiment | 실제 투자용이 아닌 UI 데모 |
 | `games/` | <https://games.bubblelab.dev> | Archived | 실시간 게임 서버 비활성·목록 비노출 |
 | `admin/` | <https://admin.bubblelab.dev> | Restricted | 인증 후 통계·기록·공지 관리 |

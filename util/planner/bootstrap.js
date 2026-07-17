@@ -116,5 +116,22 @@
     localStorage.removeItem(DATA_KEY);
     location.reload();
   });
+  document.getElementById("plannerGenerate").addEventListener("click", () => {
+    const random = crypto.getRandomValues(new Uint32Array(8));
+    document.getElementById("plannerPin").value =
+      Array.from(random.slice(0, 6), (n) => n % 10).join("");
+    document.getElementById("plannerLetter").value =
+      Array.from(random.slice(6), (n) => String.fromCharCode(65 + (n % 26))).join("");
+    document.getElementById("loginError").textContent =
+      "새 코드예요. 분실하면 복구할 수 없으니 안전한 곳에 적어두세요.";
+  });
+  document.getElementById("plannerDelete").addEventListener("click", async () => {
+    if (!confirm("이 코드의 모든 플래너 데이터를 서버에서 삭제할까요? 되돌릴 수 없습니다.")) return;
+    const response = await fetch("/_planner/data", { method: "DELETE" });
+    if (!response.ok) { alert("삭제하지 못했습니다. 잠시 후 다시 시도해주세요."); return; }
+    await fetch("/_planner/logout", { method: "POST" });
+    localStorage.removeItem(DATA_KEY);
+    location.reload();
+  });
   start();
 })();

@@ -20,6 +20,13 @@ body.authenticated .container { display: block; }
     border: 1px solid #d8dee5; background: rgba(255,255,255,.92); color: #68717b;
     border-radius: 8px; padding: 7px 9px; font-size: 10px; cursor: pointer; }
 body.authenticated .planner-switch { display: block; }
+.planner-delete { left: auto; right: 12px; color: #c14848; }
+.login-card .login-generate { width: 100%; margin-top: 8px; border: 1px dashed #b9c2cc;
+    background: #fff; color: #4b5661; border-radius: 10px; padding: 11px; cursor: pointer;
+    font-weight: 400; }
+.login-policy { margin: 14px 0 0; padding: 0 0 0 18px; text-align: left; color: #7a838d;
+    font-size: 11px; line-height: 1.7; }
+.login-policy b { color: #4b5661; }
 
 .mobile-app { min-height: 100dvh; padding: 18px 14px 40px; background: #f4f6f8; }
 .mobile-header { display: flex; justify-content: space-between; align-items: end; margin: 2px 2px 16px; }

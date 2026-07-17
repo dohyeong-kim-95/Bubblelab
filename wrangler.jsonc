@@ -18,7 +18,7 @@
   // 다시 열 때는 값만 바꾸지 말고 해당 기능의 ACL 검토를 먼저 통과해야 한다.
   "vars": {
     "ENABLE_REALTIME": "false",
-    "ENABLE_PLANNER": "false"
+    "ENABLE_PLANNER": "true"
   },
   "routes": [
     { "pattern": "bubblelab.dev/*", "zone_name": "bubblelab.dev" },

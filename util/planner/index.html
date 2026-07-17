@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Daily Planner</title>
+    <title>🗓️ Daily Planner</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="mobile.css">
 </head>
@@ -18,7 +18,14 @@
                 <label class="code-step"><span>2 · TWO LETTERS</span><input id="plannerLetter" type="text" inputmode="text" pattern="[A-Za-z]{2}" maxlength="2" placeholder="AB" aria-label="2-letter code" required></label>
             </div>
             <button type="submit">Continue</button>
+            <button type="button" class="login-generate" id="plannerGenerate">🎲 무작위 새 코드 만들기</button>
             <p class="login-error" id="loginError" role="alert"></p>
+            <ul class="login-policy">
+                <li><b>코드가 곧 열쇠</b>입니다. 코드를 아는 사람은 누구나 이 플래너를 보고 고칠 수 있으니, 직접 정한 짧은 코드보다 무작위 코드를 추천해요.</li>
+                <li>분실한 코드는 <b>복구할 수 없습니다</b>. 새 코드로 다시 시작해야 해요.</li>
+                <li>서버에는 <b>이번 달 데이터만</b> 남고 지난 달은 자동 삭제됩니다.</li>
+                <li>화면 아래 <b>Delete all data</b> 버튼으로 언제든 서버 데이터를 지울 수 있어요.</li>
+            </ul>
         </form>
     </main>
 
@@ -51,6 +58,7 @@
         <p class="mobile-sync" id="mobileSync">Synced</p>
     </main>
     <button class="planner-switch" id="plannerSwitch" type="button">Switch code</button>
+    <button class="planner-switch planner-delete" id="plannerDelete" type="button">Delete all data</button>
 
     <div class="container">
         <!-- D-DAY Dashboard -->

@@ -44,6 +44,12 @@ export class PlannerDO {
       return Response.json({ saved: true });
     }
 
+    // 소유자 스스로 서버 데이터를 즉시 지울 수 있게 한다 (삭제 요청 정책).
+    if (request.method === "DELETE") {
+      await this.storage.delete(DATA_KEY);
+      return Response.json({ deleted: true });
+    }
+
     if (request.method === "PATCH") {
       const body = await request.json().catch(() => ({}));
       const month = currentMonth();

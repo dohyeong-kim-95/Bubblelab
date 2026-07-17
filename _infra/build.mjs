@@ -22,7 +22,6 @@ const SKIP = new Set(["dist", "node_modules"]);
 // 소스와 직접 URL은 유지되며, 인증/ACL 검토 후 이 목록에서 제거한다.
 const UNLISTED_ENTRIES = new Map([
   ["games", new Set(["avalon", "liargame", "yacht"])],
-  ["util", new Set(["planner"])],
 ]);
 
 const isSite = (d) =>
