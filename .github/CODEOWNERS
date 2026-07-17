@@ -1,0 +1,11 @@
+# Review is requested for production-sensitive paths. Without a branch ruleset,
+# these entries do not block direct pushes or merges.
+/.github/CODEOWNERS @dohyeong-kim-95
+/.github/workflows/ @dohyeong-kim-95
+/.github/dependabot.yml @dohyeong-kim-95
+/_infra/ @dohyeong-kim-95
+/wrangler.jsonc @dohyeong-kim-95
+/package.json @dohyeong-kim-95
+/package-lock.json @dohyeong-kim-95
+/_src/*/package.json @dohyeong-kim-95
+/_src/*/package-lock.json @dohyeong-kim-95

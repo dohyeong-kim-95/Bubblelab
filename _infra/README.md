@@ -114,5 +114,13 @@ node _infra/build.mjs
 npx wrangler@4 dev --local --local-upstream localhost
 ```
 
-배포 워크플로우는 `main` push에서 Node 22로 의존성을 설치하고, 인프라 테스트와
-빌드가 성공한 뒤 Wrangler 4로 배포합니다.
+## CI와 배포
+
+- `ci.yml`: pull request에서 루트 인프라 테스트·전체 빌드와 Avalon 테스트·빌드를
+  실행합니다. 배포용 secret을 사용하지 않으며 Cloudflare에 배포하지 않습니다.
+- `deploy.yml`: `main` push에서 루트 의존성을 설치하고, 인프라 테스트와 빌드가
+  성공한 뒤 Cloudflare에 자동 배포합니다. 별도의 수동 배포 작업은 없습니다.
+- 외부 GitHub Action은 공급망 변경을 막기 위해 전체 commit SHA로 고정하고,
+  Wrangler도 정확한 버전으로 고정합니다. Dependabot이 매주 업데이트 PR을 엽니다.
+- `CODEOWNERS`는 배포·인프라·의존성 파일의 PR 검토를 요청합니다. Branch ruleset을
+  켜기 전까지는 직접 push나 merge를 차단하지 않습니다.

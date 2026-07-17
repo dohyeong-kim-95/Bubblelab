@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            _src/avalon/package-lock.json
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Test infra
+        run: node --test _infra/*.test.mjs
+
+      - name: Build Bubblelab
+        run: node _infra/build.mjs
+
+      - name: Install Avalon dependencies
+        run: npm ci --prefix _src/avalon
+
+      - name: Test and build Avalon
+        run: npm run test:ci --prefix _src/avalon
