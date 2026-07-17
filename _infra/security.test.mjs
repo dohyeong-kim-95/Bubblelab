@@ -76,6 +76,15 @@ test("adds browser hardening headers without replacing response metadata", () =>
   assert.equal(response.headers.get("Cache-Control"), "public, max-age=60");
 });
 
+test("admin responses are never cached or indexed", () => {
+  const response = applySecurityHeaders(
+    new Response(null, { status: 303, headers: { Location: "/login" } }),
+    new Request("https://admin.bubblelab.dev/"),
+  );
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
+  assert.equal(response.headers.get("X-Robots-Tag"), "noindex, nofollow");
+});
+
 test("durable rate limiter persists a fixed-window limit", async () => {
   const limiter = new RateLimiterDO({ storage: new MemoryStorage() });
   const check = () => limiter.fetch(new Request("https://rate-limit.internal/check", {

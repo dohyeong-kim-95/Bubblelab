@@ -74,8 +74,13 @@ export function applySecurityHeaders(response, request) {
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
     if (!headers.has(name)) headers.set(name, value);
   }
-  if (new URL(request.url).protocol === "https:") {
+  const url = new URL(request.url);
+  if (url.protocol === "https:") {
     headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+  if (url.hostname === "admin.bubblelab.dev") {
+    headers.set("Cache-Control", "no-store");
+    headers.set("X-Robots-Tag", "noindex, nofollow");
   }
   return new Response(response.body, {
     status: response.status,
