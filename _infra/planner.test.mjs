@@ -70,6 +70,40 @@ test("rejects invalid planner writes", async () => {
   assert.equal((await planner.fetch(new Request("https://planner.internal/", { method: "HEAD" }))).status, 405);
 });
 
+test("adds, updates, and deletes schedule blocks with validation", async () => {
+  const planner = new PlannerDO({ storage: new MemoryStorage() });
+  const patch = (payload) => planner.fetch(new Request("https://planner.internal/", {
+    method: "PATCH", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ date: TEST_DATE, ...payload }),
+  }));
+
+  let response = await patch({ action: "block-add", track: "plan", startTime: "09:00", endTime: "10:00", title: "  Deep   work " });
+  assert.equal(response.status, 200);
+  const block = (await response.json()).block;
+  assert.equal(block.title, "Deep work");
+
+  // 같은 트랙 겹침은 409, 다른 트랙은 허용
+  assert.equal((await patch({ action: "block-add", track: "plan", startTime: "09:30", endTime: "10:30", title: "Clash" })).status, 409);
+  assert.equal((await patch({ action: "block-add", track: "real", startTime: "09:30", endTime: "10:30", title: "Real" })).status, 200);
+
+  // 범위·형식 검증 (07:00–21:00, 10분 단위, 시작<끝)
+  assert.equal((await patch({ action: "block-add", track: "plan", startTime: "06:50", endTime: "08:00", title: "Early" })).status, 400);
+  assert.equal((await patch({ action: "block-add", track: "plan", startTime: "20:30", endTime: "21:10", title: "Late" })).status, 400);
+  assert.equal((await patch({ action: "block-add", track: "plan", startTime: "11:05", endTime: "12:00", title: "Odd" })).status, 400);
+  assert.equal((await patch({ action: "block-add", track: "plan", startTime: "12:00", endTime: "12:00", title: "Empty" })).status, 400);
+  assert.equal((await patch({ action: "block-add", track: "todo", startTime: "12:00", endTime: "13:00", title: "Bad track" })).status, 400);
+
+  response = await patch({ action: "block-update", track: "plan", id: block.id, startTime: "10:00", endTime: "11:00", title: "Moved" });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).block.startTime, "10:00");
+  assert.equal((await patch({ action: "block-update", track: "plan", id: "missing", title: "x" })).status, 404);
+
+  assert.equal((await patch({ action: "block-delete", track: "plan", id: block.id })).status, 200);
+  const data = (await (await planner.fetch(new Request("https://planner.internal/"))).json()).data;
+  assert.equal(data[TEST_DATE].plan.length, 0);
+  assert.equal(data[TEST_DATE].real.length, 1);
+});
+
 test("deletes all planner data on request", async () => {
   const planner = new PlannerDO({ storage: new MemoryStorage() });
   await planner.fetch(new Request("https://planner.internal/", {

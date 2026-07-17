@@ -112,18 +112,170 @@
     });
   }
 
+  // ── 트랙 편집 (탭 두 번 방식): 빈 칸 두 번 탭 → 새 블록, 블록 탭 → 수정 시트 ──
+  let track = "diff", pendingStart = null;
+  const blockSheet = document.getElementById("blockSheet");
+  const trackHint = document.getElementById("trackHint");
+  let sheet = null; // { mode, id, startTime, endTime }
+
+  const timeAt = (hour, minute) => `${pad(hour)}:${pad(minute)}`;
+  const addMinutes = (time, delta) => {
+    const total = minutesOf(time) + delta;
+    return `${pad(Math.floor(total / 60))}:${pad(total % 60)}`;
+  };
+  const editingActive = () => pendingStart !== null || !blockSheet.hidden;
+
+  function setHint(message) {
+    trackHint.textContent = message ||
+      "Tap an empty cell to start, tap another to finish. Tap a block to edit.";
+  }
+
+  function renderTrack(day) {
+    const root = document.getElementById("mobileDiff");
+    root.replaceChildren();
+    const blocks = day[track] || [];
+    HOURS.forEach((hour) => {
+      const row = document.createElement("div");
+      row.className = "track-hour-row";
+      const label = document.createElement("span");
+      label.className = "track-time";
+      label.textContent = pad(hour);
+      row.append(label);
+      MINUTES.forEach((minute) => {
+        const point = hour * 60 + minute;
+        const block = blocks.find((item) => minutesOf(item.startTime) <= point && minutesOf(item.endTime) > point);
+        const cell = document.createElement("button");
+        cell.type = "button";
+        cell.className = "track-cell";
+        if (block) {
+          cell.classList.add("filled");
+          cell.style.background = block.color || "#E5E7EB";
+          if (minutesOf(block.startTime) === point) cell.textContent = block.title;
+          cell.setAttribute("aria-label", `${block.title} ${block.startTime}–${block.endTime}`);
+          cell.addEventListener("click", () => openSheet({
+            mode: "edit", id: block.id, startTime: block.startTime, endTime: block.endTime, title: block.title,
+          }));
+        } else {
+          const time = timeAt(hour, minute);
+          if (time === pendingStart) cell.classList.add("start-sel");
+          cell.setAttribute("aria-label", `Empty ${time}`);
+          cell.addEventListener("click", () => onEmptyCellTap(time, blocks));
+        }
+        row.append(cell);
+      });
+      root.append(row);
+    });
+  }
+
+  function onEmptyCellTap(time, blocks) {
+    if (!pendingStart) {
+      pendingStart = time;
+      setHint(`Start ${time} — now tap the end cell.`);
+    } else if (time === pendingStart) {
+      pendingStart = null;
+      setHint("");
+    } else {
+      const startTime = minutesOf(time) < minutesOf(pendingStart) ? time : pendingStart;
+      const endTime = addMinutes(minutesOf(time) < minutesOf(pendingStart) ? pendingStart : time, 10);
+      if (blocks.some((block) => minutesOf(startTime) < minutesOf(block.endTime) && minutesOf(endTime) > minutesOf(block.startTime))) {
+        pendingStart = null;
+        setHint("That range crosses a block. Start again.");
+      } else {
+        openSheet({ mode: "create", startTime, endTime, title: "" });
+        return;
+      }
+    }
+    render();
+  }
+
+  function openSheet(state) {
+    sheet = state;
+    document.getElementById("blockSheetHeading").textContent =
+      state.mode === "create" ? `New ${track.toUpperCase()} block` : `Edit ${track.toUpperCase()} block`;
+    document.getElementById("blockTitleInput").value = state.title;
+    document.getElementById("blockDelete").hidden = state.mode === "create";
+    document.getElementById("blockError").textContent = "";
+    refreshSheetTimes();
+    blockSheet.hidden = false;
+    if (state.mode === "create") document.getElementById("blockTitleInput").focus();
+  }
+
+  function closeSheet() {
+    blockSheet.hidden = true;
+    sheet = null;
+    pendingStart = null;
+    setHint("");
+    render();
+  }
+
+  function refreshSheetTimes() {
+    document.getElementById("blockStartLabel").textContent = sheet.startTime;
+    document.getElementById("blockEndLabel").textContent = sheet.endTime;
+  }
+
+  blockSheet.addEventListener("click", (event) => { if (event.target === blockSheet) closeSheet(); });
+  document.getElementById("blockCancel").addEventListener("click", closeSheet);
+  document.querySelectorAll("[data-adjust]").forEach((button) => button.addEventListener("click", () => {
+    const [edge, delta] = button.dataset.adjust.split(":");
+    const next = addMinutes(sheet[edge === "start" ? "startTime" : "endTime"], Number(delta));
+    if (minutesOf(next) < 7 * 60 || minutesOf(next) > 21 * 60) return;
+    if (edge === "start" && minutesOf(next) >= minutesOf(sheet.endTime)) return;
+    if (edge === "end" && minutesOf(next) <= minutesOf(sheet.startTime)) return;
+    sheet[edge === "start" ? "startTime" : "endTime"] = next;
+    refreshSheetTimes();
+  }));
+
+  async function mutateBlock(action, payload) {
+    const button = document.getElementById(action === "block-delete" ? "blockDelete" : "blockSave");
+    button.disabled = true;
+    try {
+      await PlannerSync.mutateTodo(action, { date, track, ...payload });
+      closeSheet();
+      await PlannerSync.refresh();
+    } catch (failure) {
+      document.getElementById("blockError").textContent =
+        failure.status === 409 ? "Overlaps another block." :
+        failure.status === 400 ? "Only the current month can be edited." : "Could not save. Try again.";
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  document.getElementById("blockSave").addEventListener("click", () => {
+    const title = document.getElementById("blockTitleInput").value.trim();
+    if (!title) { document.getElementById("blockError").textContent = "Enter a title."; return; }
+    const payload = { startTime: sheet.startTime, endTime: sheet.endTime, title };
+    if (sheet.mode === "create") mutateBlock("block-add", payload);
+    else mutateBlock("block-update", { id: sheet.id, ...payload });
+  });
+  document.getElementById("blockDelete").addEventListener("click", () => mutateBlock("block-delete", { id: sheet.id }));
+
+  document.getElementById("trackTabs").addEventListener("click", (event) => {
+    const tab = event.target.closest("button[data-track]");
+    if (!tab) return;
+    track = tab.dataset.track;
+    pendingStart = null;
+    setHint("");
+    document.querySelectorAll("#trackTabs button").forEach((b) => b.classList.toggle("on", b === tab));
+    document.getElementById("diffLegend").hidden = track !== "diff";
+    trackHint.hidden = track === "diff";
+    render();
+  });
+
   function render() {
     const data = PlannerSync.getData();
     const day = data[date] || { plan: [], real: [], todo: [] };
     const weekday = new Date(`${date}T12:00:00+09:00`).toLocaleDateString("en-US", { weekday: "short" });
     document.getElementById("mobileDate").textContent = `${date} (${weekday})`;
     renderTodos(day);
-    renderDiff(day);
+    if (track === "diff") renderDiff(day);
+    else renderTrack(day);
   }
 
-  document.getElementById("mobilePrev").addEventListener("click", () => { date = shiftDate(date, -1); render(); });
-  document.getElementById("mobileNext").addEventListener("click", () => { date = shiftDate(date, 1); render(); });
-  document.getElementById("mobileToday").addEventListener("click", () => { date = kstToday(); render(); });
+  const goTo = (next) => { date = next; pendingStart = null; setHint(""); render(); };
+  document.getElementById("mobilePrev").addEventListener("click", () => goTo(shiftDate(date, -1)));
+  document.getElementById("mobileNext").addEventListener("click", () => goTo(shiftDate(date, 1)));
+  document.getElementById("mobileToday").addEventListener("click", () => goTo(kstToday()));
   let addingTodo = false;
   document.getElementById("mobileTodoForm").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -150,8 +302,9 @@
       addingTodo = false;
     }
   });
-  addEventListener("planner:remote", render);
-  addEventListener("visibilitychange", () => { if (!document.hidden) PlannerSync.refresh(); });
-  setInterval(() => PlannerSync.refresh(), 30000);
+  // 편집(셀 선택·시트) 중에는 자동 갱신이 상태를 지우지 않게 멈춘다
+  addEventListener("planner:remote", () => { if (!editingActive()) render(); });
+  addEventListener("visibilitychange", () => { if (!document.hidden && !editingActive()) PlannerSync.refresh(); });
+  setInterval(() => { if (!editingActive()) PlannerSync.refresh(); }, 30000);
   render();
 })();

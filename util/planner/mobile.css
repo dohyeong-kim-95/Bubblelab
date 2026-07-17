@@ -21,6 +21,45 @@ body.authenticated .container { display: block; }
     border-radius: 8px; padding: 7px 9px; font-size: 10px; cursor: pointer; }
 body.authenticated .planner-switch { display: block; }
 .planner-delete { left: auto; right: 12px; color: #c14848; }
+
+/* 트랙 편집 (탭 두 번 방식) */
+.track-tabs { display: flex; gap: 4px; }
+.track-tabs button { border: 1px solid #d7dde4; background: #fff; color: #68717b;
+    border-radius: 7px; padding: 5px 9px; font-size: 10px; font-weight: 700; cursor: pointer; }
+.track-tabs button.on { background: #2196f3; border-color: #2196f3; color: #fff; }
+.track-hint { margin: 0 0 10px; color: #87909a; font-size: 11px; line-height: 1.5; }
+.track-hour-row { display: grid; grid-template-columns: 26px repeat(6, minmax(0, 1fr));
+    gap: 3px; margin-bottom: 3px; }
+.track-time { display: flex; align-items: center; font-size: 10px; color: #87909a; font-weight: 700; }
+.track-cell { min-height: 38px; padding: 2px 3px; border: 1px solid #e4e8ed; border-radius: 6px;
+    background: #fafbfc; font-size: 9px; line-height: 1.25; text-align: left; overflow: hidden;
+    cursor: pointer; color: #333; word-break: break-all; }
+.track-cell.filled { border-color: transparent; }
+.track-cell.start-sel { outline: 2px solid #2196f3; outline-offset: -1px; background: #e3f0fd; }
+
+.block-sheet { position: fixed; inset: 0; z-index: 950; display: flex; flex-direction: column;
+    justify-content: flex-end; background: rgba(15, 23, 32, .45); }
+.block-sheet[hidden] { display: none; }
+.block-sheet-card { background: #fff; border-radius: 16px 16px 0 0; padding: 16px 16px
+    calc(16px + env(safe-area-inset-bottom)); }
+.block-sheet-card h3 { margin: 0 0 10px; font-size: 14px; }
+.block-sheet-card input { width: 100%; box-sizing: border-box; border: 1px solid #d7dde4;
+    border-radius: 10px; padding: 11px 12px; font: inherit; }
+.block-times { display: grid; gap: 8px; margin-top: 10px; }
+.block-time-row { display: grid; grid-template-columns: 44px 44px 1fr 44px; align-items: center;
+    gap: 8px; }
+.block-time-row span { font-size: 11px; color: #87909a; font-weight: 700; }
+.block-time-row b { text-align: center; font-size: 15px; }
+.block-time-row button { min-height: 40px; border: 1px solid #d7dde4; background: #fff;
+    border-radius: 9px; font-size: 12px; cursor: pointer; }
+.block-error { min-height: 1.3em; margin: 8px 0 0; color: #d64545; font-size: 11px; }
+.block-actions { display: flex; gap: 8px; margin-top: 8px; }
+.block-actions button { flex: 1; min-height: 44px; border: 1px solid #d7dde4; background: #fff;
+    border-radius: 10px; font: inherit; cursor: pointer; }
+.block-actions .danger { flex: 0 0 auto; }
+.block-actions button[hidden] { display: none; }
+.block-actions .primary { background: #2196f3; border-color: #2196f3; color: #fff; font-weight: 700; }
+.block-actions .danger { color: #c14848; padding: 0 12px; }
 .login-card .login-generate { width: 100%; margin-top: 8px; border: 1px dashed #b9c2cc;
     background: #fff; color: #4b5661; border-radius: 10px; padding: 11px; cursor: pointer;
     font-weight: 400; }
@@ -51,6 +90,7 @@ body.authenticated .planner-switch { display: block; }
 .mobile-todo-delete { border: 0; background: transparent; color: #a0a7af; font-size: 20px; line-height: 18px; }
 .mobile-empty { color: #9299a1; font-size: 13px; padding: 10px 4px; }
 .diff-legend { display: flex; gap: 7px; margin-bottom: 10px; font: 700 9px ui-monospace, monospace; }
+.diff-legend[hidden], .track-hint[hidden] { display: none; }
 .diff-legend span, .diff-tag { border-radius: 4px; padding: 2px 5px; }
 .same { background: #edf1f5; color: #59636e; }
 .minus { background: #ffebe9; color: #9d2721; }

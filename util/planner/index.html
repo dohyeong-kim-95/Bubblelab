@@ -51,12 +51,44 @@
             <div id="mobileTodos"></div>
         </section>
         <section class="mobile-card diff-card">
-            <div class="mobile-section-title"><h2>PLAN / REAL</h2><span>10 min cells</span></div>
-            <div class="diff-legend"><span class="same">SAME</span><span class="minus">− PLAN</span><span class="plus">+ REAL</span></div>
+            <div class="mobile-section-title"><h2>PLAN / REAL</h2>
+                <div class="track-tabs" id="trackTabs">
+                    <button type="button" data-track="diff" class="on">DIFF</button>
+                    <button type="button" data-track="plan">PLAN</button>
+                    <button type="button" data-track="real">REAL</button>
+                </div>
+            </div>
+            <div class="diff-legend" id="diffLegend"><span class="same">SAME</span><span class="minus">− PLAN</span><span class="plus">+ REAL</span></div>
+            <p class="track-hint" id="trackHint" hidden>Tap an empty cell to start, tap another to finish. Tap a block to edit.</p>
             <div id="mobileDiff"></div>
         </section>
         <p class="mobile-sync" id="mobileSync">Synced</p>
     </main>
+
+    <div class="block-sheet" id="blockSheet" hidden>
+        <div class="block-sheet-card">
+            <h3 id="blockSheetHeading">New block</h3>
+            <input id="blockTitleInput" type="text" maxlength="200" placeholder="What will you do?" aria-label="Block title">
+            <div class="block-times">
+                <div class="block-time-row"><span>Start</span>
+                    <button type="button" data-adjust="start:-10" aria-label="Start 10 minutes earlier">−10</button>
+                    <b id="blockStartLabel"></b>
+                    <button type="button" data-adjust="start:10" aria-label="Start 10 minutes later">+10</button>
+                </div>
+                <div class="block-time-row"><span>End</span>
+                    <button type="button" data-adjust="end:-10" aria-label="End 10 minutes earlier">−10</button>
+                    <b id="blockEndLabel"></b>
+                    <button type="button" data-adjust="end:10" aria-label="End 10 minutes later">+10</button>
+                </div>
+            </div>
+            <p class="block-error" id="blockError" role="alert"></p>
+            <div class="block-actions">
+                <button type="button" id="blockDelete" class="danger" hidden>Delete</button>
+                <button type="button" id="blockCancel">Cancel</button>
+                <button type="button" id="blockSave" class="primary">Save</button>
+            </div>
+        </div>
+    </div>
     <button class="planner-switch" id="plannerSwitch" type="button">Switch code</button>
     <button class="planner-switch planner-delete" id="plannerDelete" type="button">Delete all data</button>
 
