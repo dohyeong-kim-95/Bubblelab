@@ -153,7 +153,8 @@
           if (minutesOf(block.startTime) === point) cell.textContent = block.title;
           cell.setAttribute("aria-label", `${block.title} ${block.startTime}–${block.endTime}`);
           cell.addEventListener("click", () => openSheet({
-            mode: "edit", id: block.id, startTime: block.startTime, endTime: block.endTime, title: block.title,
+            mode: "edit", id: block.id, startTime: block.startTime, endTime: block.endTime,
+            title: block.title, color: block.color,
           }));
         } else {
           const time = timeAt(hour, minute);
@@ -181,7 +182,7 @@
         pendingStart = null;
         setHint("That range crosses a block. Start again.");
       } else {
-        openSheet({ mode: "create", startTime, endTime, title: "" });
+        openSheet({ mode: "create", startTime, endTime, title: "", color: "#FFB3BA" }); // PC 기본색과 동일
         return;
       }
     }
@@ -195,6 +196,7 @@
     document.getElementById("blockTitleInput").value = state.title;
     document.getElementById("blockDelete").hidden = state.mode === "create";
     document.getElementById("blockError").textContent = "";
+    refreshSheetColors();
     refreshSheetTimes();
     blockSheet.hidden = false;
     if (state.mode === "create") document.getElementById("blockTitleInput").focus();
@@ -212,6 +214,18 @@
     document.getElementById("blockStartLabel").textContent = sheet.startTime;
     document.getElementById("blockEndLabel").textContent = sheet.endTime;
   }
+
+  function refreshSheetColors() {
+    document.querySelectorAll("#blockColors button").forEach((button) =>
+      button.classList.toggle("on", button.dataset.color === sheet.color));
+  }
+
+  document.getElementById("blockColors").addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-color]");
+    if (!button) return;
+    sheet.color = button.dataset.color;
+    refreshSheetColors();
+  });
 
   blockSheet.addEventListener("click", (event) => { if (event.target === blockSheet) closeSheet(); });
   document.getElementById("blockCancel").addEventListener("click", closeSheet);
@@ -244,7 +258,7 @@
   document.getElementById("blockSave").addEventListener("click", () => {
     const title = document.getElementById("blockTitleInput").value.trim();
     if (!title) { document.getElementById("blockError").textContent = "Enter a title."; return; }
-    const payload = { startTime: sheet.startTime, endTime: sheet.endTime, title };
+    const payload = { startTime: sheet.startTime, endTime: sheet.endTime, title, color: sheet.color };
     if (sheet.mode === "create") mutateBlock("block-add", payload);
     else mutateBlock("block-update", { id: sheet.id, ...payload });
   });

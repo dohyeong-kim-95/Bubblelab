@@ -66,6 +66,10 @@ function applyBlockAction(day, body) {
   }
   if (body.startTime !== undefined) next.startTime = body.startTime;
   if (body.endTime !== undefined) next.endTime = body.endTime;
+  if (body.color !== undefined) {
+    if (!/^#[0-9a-fA-F]{6}$/.test(body.color)) return new Response("invalid block color", { status: 400 });
+    next.color = body.color;
+  }
   if (!validBlockRange(next.startTime, next.endTime)) return new Response("invalid block time", { status: 400 });
   if (overlapsTrack(blocks, next.startTime, next.endTime, body.id)) return new Response("block overlap", { status: 409 });
   blocks[index] = next;

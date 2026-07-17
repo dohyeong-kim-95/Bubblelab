@@ -98,6 +98,11 @@ test("adds, updates, and deletes schedule blocks with validation", async () => {
   assert.equal((await response.json()).block.startTime, "10:00");
   assert.equal((await patch({ action: "block-update", track: "plan", id: "missing", title: "x" })).status, 404);
 
+  // 색상 변경: PC 팔레트 hex는 허용, 형식이 아니면 400
+  response = await patch({ action: "block-update", track: "plan", id: block.id, color: "#BAE1FF" });
+  assert.equal((await response.json()).block.color, "#BAE1FF");
+  assert.equal((await patch({ action: "block-update", track: "plan", id: block.id, color: "red" })).status, 400);
+
   assert.equal((await patch({ action: "block-delete", track: "plan", id: block.id })).status, 200);
   const data = (await (await planner.fetch(new Request("https://planner.internal/"))).json()).data;
   assert.equal(data[TEST_DATE].plan.length, 0);
