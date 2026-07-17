@@ -31,8 +31,8 @@ body.authenticated .planner-switch { display: block; }
 .mobile-app { min-height: 100dvh; padding: 18px 14px 40px; background: #f4f6f8; }
 .mobile-header { display: flex; justify-content: space-between; align-items: end; margin: 2px 2px 16px; }
 .mobile-kicker { font-size: 10px; letter-spacing: .16em; color: #87909a; font-weight: 700; }
-.mobile-header h1 { margin: 2px 0 0; font-size: 20px; }
-.mobile-date-nav { display: flex; gap: 5px; }
+.mobile-header h1 { margin: 2px 0 0; font-size: clamp(14px, 4.4vw, 20px); white-space: nowrap; }
+.mobile-date-nav { display: flex; gap: 5px; flex: none; }
 .mobile-date-nav button { border: 1px solid #d7dde4; background: #fff; border-radius: 8px; padding: 7px 9px; }
 .mobile-card { background: #fff; border: 1px solid #e1e5ea; border-radius: 14px; padding: 14px;
     margin-bottom: 12px; box-shadow: 0 2px 8px rgba(20, 30, 50, .04); }

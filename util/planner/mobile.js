@@ -124,19 +124,30 @@
   document.getElementById("mobilePrev").addEventListener("click", () => { date = shiftDate(date, -1); render(); });
   document.getElementById("mobileNext").addEventListener("click", () => { date = shiftDate(date, 1); render(); });
   document.getElementById("mobileToday").addEventListener("click", () => { date = kstToday(); render(); });
+  let addingTodo = false;
   document.getElementById("mobileTodoForm").addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (addingTodo) return;
     const input = document.getElementById("mobileTodoTitle");
     const error = document.getElementById("mobileTodoError");
     const title = input.value.trim();
     if (!title) return;
+    addingTodo = true;
+    // 입력창을 먼저 비워 연타로 같은 TODO가 중복 제출되지 않게 하고,
+    // 서버 응답을 기다리지 않고 임시 항목을 그려 바로 반응하게 한다.
+    input.value = "";
     error.textContent = "";
+    const day = PlannerSync.getData()[date] || { plan: [], real: [], todo: [] };
+    renderTodos({ ...day, todo: [...(day.todo || []), { id: "pending", title, done: false }] });
     try {
       await PlannerSync.addTodo(date, title);
-      input.value = "";
       await PlannerSync.refresh();
     } catch (failure) {
       error.textContent = failure.status === 409 ? "Maximum 7 active TODOs." : "Could not add TODO.";
+      input.value = title;
+      render();
+    } finally {
+      addingTodo = false;
     }
   });
   addEventListener("planner:remote", render);
