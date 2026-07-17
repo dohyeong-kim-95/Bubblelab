@@ -421,6 +421,9 @@ export async function handleRequest(request, env, ctx) {
         });
         if (limited) return limited;
         const recordsUrl = new URL(request.url);
+        // 개인 기록 조회는 서버가 인증한 방문자 쿠키로만 스코프한다.
+        // 클라이언트가 직접 붙인 ?vid=<타인 UUID>는 무시(개인 기록 누출 방지).
+        recordsUrl.searchParams.delete("vid");
         const vid = visitorId(request);
         if (vid) recordsUrl.searchParams.set("vid", vid);
         return env.RECORDS.get(id).fetch(new Request(recordsUrl, request));
