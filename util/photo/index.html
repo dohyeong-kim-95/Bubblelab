@@ -136,10 +136,16 @@
                         display: grid; place-items: center; border-radius: .6rem; }
   .picker-tabs button.on { border-color: var(--accent); outline: 1px solid var(--accent); }
   .picker-tabs img { max-width: 100%; max-height: 100%; object-fit: contain; }
-  .picker-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: .45rem; min-height: 34dvh; align-content: start; }
-  .picker-grid button { padding: .3rem; aspect-ratio: 1; display: grid; place-items: center; }
+  /* minmax(0,1fr)+min-width:0 — 이미지 고유 폭이 트랙을 밀어내 가로로 넘치는 것 방지 */
+  .picker-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .45rem;
+                 min-height: 34dvh; align-content: start; touch-action: pan-y; }
+  .picker-grid button { min-width: 0; padding: .3rem; aspect-ratio: 1; display: grid; place-items: center; }
   .picker-grid button:disabled { opacity: .5; }
-  .picker-grid img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .picker-grid img { width: 100%; height: 100%; object-fit: contain; }
+  .picker-grid.swap-left { animation: packSwapL .16s ease-out; }
+  .picker-grid.swap-right { animation: packSwapR .16s ease-out; }
+  @keyframes packSwapL { from { opacity: .3; transform: translateX(14px); } }
+  @keyframes packSwapR { from { opacity: .3; transform: translateX(-14px); } }
 
   .print-window { width: min(47vw, 10rem); height: min(64dvh, 31rem); overflow: hidden;
                   margin: .8rem auto; display: flex; justify-content: center; align-items: flex-start; }
@@ -785,15 +791,40 @@ async function addAssetSticker(src) {
 }
 
 // 카카오톡 이모티콘 픽커처럼 팩 탭을 두고 현재 팩의 스티커만 로드한다
-function renderPickerPack() {
+function renderPickerPack(direction = 0) {
   const pack = stickerPacks[activePack];
-  [...pickerTabs.children].forEach((tab, index) => tab.classList.toggle("on", index === activePack));
+  [...pickerTabs.children].forEach((tab, index) => {
+    tab.classList.toggle("on", index === activePack);
+    if (index === activePack) tab.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+  });
   pickerStatus.textContent = `${pack.title} · 누르면 배경을 지우고 프레임에 붙여드려요.`;
   pickerBody.innerHTML = pack.downloads
     .filter((download) => /\.(png|webp|jpe?g)$/i.test(download.file))
     .map((download) => `<button type="button" data-src="${escapeText(download.url)}" aria-label="${escapeText(download.label)}">
       <img src="${escapeText(download.url)}" alt="" loading="lazy" decoding="async"></button>`).join("");
+  pickerBody.classList.remove("swap-left", "swap-right");
+  if (direction) {
+    void pickerBody.offsetWidth;
+    pickerBody.classList.add(direction > 0 ? "swap-left" : "swap-right");
+  }
 }
+
+// 그리드에서 좌우 스와이프로 이웃 팩으로 이동 (세로 스크롤과 구분)
+let packSwipe = null;
+pickerBody.addEventListener("touchstart", (event) => {
+  packSwipe = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+}, { passive: true });
+pickerBody.addEventListener("touchend", (event) => {
+  if (!packSwipe || !stickerPacks) return;
+  const dx = event.changedTouches[0].clientX - packSwipe.x;
+  const dy = event.changedTouches[0].clientY - packSwipe.y;
+  packSwipe = null;
+  if (Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy) * 1.6) return;
+  const next = activePack + (dx < 0 ? 1 : -1);
+  if (next < 0 || next >= stickerPacks.length) return;
+  activePack = next;
+  renderPickerPack(dx < 0 ? 1 : -1);
+}, { passive: true });
 
 async function openAssetPicker() {
   assetPicker.hidden = false;
