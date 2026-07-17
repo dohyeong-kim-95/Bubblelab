@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🔁 이미지 변환</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🔁</text></svg>">
+<style>
+  :root { color-scheme: light dark; --bg: light-dark(#f2f4f7, #0d131c);
+          --panel: light-dark(#fff, #171f2b); --line: light-dark(#d9e0e7, #2a3646);
+          --text: light-dark(#1c2733, #e2e9f0); --muted: light-dark(#6e7985, #91a0b2);
+          --accent: #4f7fdd; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100dvh; background: var(--bg); color: var(--text);
+         font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; }
+  .app { width: min(34rem, 100%); margin: 0 auto; padding: 1.2rem 1rem 2rem; }
+  h1 { margin: .2rem 0 .3rem; font-size: 1.25rem; }
+  .desc { margin: 0 0 1.1rem; color: var(--muted); font-size: .78rem; line-height: 1.6; }
+  button { font: inherit; color: inherit; cursor: pointer; border: 1px solid var(--line);
+           background: light-dark(#fff, #111923); border-radius: .6rem; padding: .55rem .9rem; }
+  button:active { transform: scale(.97); }
+  button:disabled { opacity: .42; cursor: default; transform: none; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: bold; }
+
+  #drop { display: grid; place-items: center; gap: .4rem; padding: 2.2rem 1rem; text-align: center;
+          border: 2px dashed var(--line); border-radius: 1rem; background: var(--panel);
+          cursor: pointer; transition: border-color .15s, background .15s; }
+  #drop.over { border-color: var(--accent); background: light-dark(#eef3fd, #1a2436); }
+  #drop .big { font-size: 2.2rem; }
+  #drop p { margin: 0; font-size: .8rem; color: var(--muted); line-height: 1.6; }
+  #file { display: none; }
+
+  .options { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin: 1rem 0; }
+  .options .label { font-size: .75rem; color: var(--muted); }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: .6rem; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; padding: .5rem 1.1rem; font-size: .8rem; }
+  .seg button.on { background: var(--accent); color: #fff; font-weight: bold; }
+  #qualityWrap { display: flex; align-items: center; gap: .45rem; font-size: .75rem; color: var(--muted); }
+  #qualityWrap[hidden] { display: none; }
+  #quality { accent-color: var(--accent); width: 7rem; }
+
+  .item { display: grid; grid-template-columns: 3.4rem 1fr auto; gap: .7rem; align-items: center;
+          padding: .65rem; margin-bottom: .55rem; background: var(--panel);
+          border: 1px solid var(--line); border-radius: .8rem; }
+  .item img { width: 3.4rem; height: 3.4rem; object-fit: cover; border-radius: .45rem;
+              background: repeating-conic-gradient(#8883 0% 25%, transparent 0% 50%) 0 0/.8rem .8rem; }
+  .item .meta { min-width: 0; font-size: .72rem; line-height: 1.55; }
+  .item .name { font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item .info { color: var(--muted); }
+  .item .err { color: #d05a5a; }
+  .item a { display: inline-block; padding: .5rem .8rem; border: 1px solid var(--accent);
+            border-radius: .6rem; color: var(--accent); font-size: .75rem; font-weight: bold;
+            text-decoration: none; white-space: nowrap; }
+  .actions { display: flex; gap: .55rem; margin-top: .9rem; }
+  .actions[hidden] { display: none; }
+  .actions .primary { flex: 1; }
+  .privacy { margin-top: 1.1rem; color: var(--muted); font-size: .68rem; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>🔁 이미지 변환</h1>
+  <p class="desc">이미지를 올리면 JPG나 PNG로 바꿔서 내려받을 수 있어요. 여러 장도 한 번에 됩니다.</p>
+
+  <div id="drop" role="button" tabindex="0" aria-label="이미지 선택">
+    <span class="big">🖼️</span>
+    <p>여기를 눌러 이미지를 고르거나<br>파일을 끌어다 놓으세요 (붙여넣기도 가능)</p>
+  </div>
+  <input id="file" type="file" accept="image/*" multiple>
+
+  <div class="options">
+    <span class="label">변환할 형식</span>
+    <div class="seg" role="group" aria-label="출력 형식">
+      <button type="button" data-fmt="jpg" class="on">JPG</button>
+      <button type="button" data-fmt="png">PNG</button>
+    </div>
+    <label id="qualityWrap">품질
+      <input id="quality" type="range" min="50" max="100" value="90">
+      <span id="qualityVal">90</span>
+    </label>
+  </div>
+
+  <div id="list"></div>
+
+  <div class="actions" id="actions" hidden>
+    <button class="primary" id="saveAll">전체 저장</button>
+    <button id="clear">비우기</button>
+  </div>
+
+  <p class="privacy">변환은 전부 이 브라우저 안에서만 일어나요. 이미지는 서버로 전송·저장되지 않습니다.</p>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const drop = $("#drop"), fileInput = $("#file"), list = $("#list");
+const FMT = { jpg: { mime: "image/jpeg", ext: "jpg" }, png: { mime: "image/png", ext: "png" } };
+let fmt = "jpg";
+const items = []; // { file, img(bitmap), row, url, outName }
+
+const fmtSize = (n) => n < 1024 * 1024 ? (n / 1024).toFixed(1) + "KB" : (n / 1024 / 1024).toFixed(2) + "MB";
+const baseName = (name) => name.replace(/\.[^.]+$/, "") || "image";
+
+drop.addEventListener("click", () => fileInput.click());
+drop.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInput.click(); } });
+fileInput.addEventListener("change", () => { addFiles(fileInput.files); fileInput.value = ""; });
+
+["dragover", "dragenter"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", (e) => addFiles(e.dataTransfer.files));
+window.addEventListener("paste", (e) => {
+  const files = [...(e.clipboardData?.items ?? [])].map((i) => i.getAsFile()).filter(Boolean);
+  if (files.length) addFiles(files);
+});
+
+document.querySelectorAll(".seg button").forEach((b) => b.addEventListener("click", () => {
+  fmt = b.dataset.fmt;
+  document.querySelectorAll(".seg button").forEach((x) => x.classList.toggle("on", x === b));
+  $("#qualityWrap").hidden = fmt !== "jpg";
+  items.forEach(convert);
+}));
+$("#quality").addEventListener("input", () => { $("#qualityVal").textContent = $("#quality").value; });
+$("#quality").addEventListener("change", () => items.forEach(convert));
+
+async function addFiles(fileList) {
+  for (const file of [...fileList]) {
+    if (!file.type.startsWith("image/") && !/\.(heic|heif|avif|webp|bmp|gif|tiff?)$/i.test(file.name)) continue;
+    const row = document.createElement("div");
+    row.className = "item";
+    row.innerHTML = `<img alt=""><div class="meta"><div class="name"></div><div class="info">읽는 중…</div></div><a hidden>저장</a>`;
+    row.querySelector(".name").textContent = file.name;
+    list.append(row);
+    const it = { file, row };
+    items.push(it);
+    try {
+      it.img = await createImageBitmap(file);
+      row.querySelector("img").src = URL.createObjectURL(file);
+      await convert(it);
+    } catch {
+      row.querySelector(".info").className = "err";
+      row.querySelector(".info").textContent = "이 형식은 브라우저가 읽지 못해요 (예: HEIC)";
+    }
+  }
+  $("#actions").hidden = items.length === 0;
+}
+
+function convert(it) {
+  if (!it.img) return;
+  return new Promise((resolve) => {
+    const { mime, ext } = FMT[fmt];
+    const canvas = document.createElement("canvas");
+    canvas.width = it.img.width; canvas.height = it.img.height;
+    const ctx = canvas.getContext("2d");
+    if (fmt === "jpg") { ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height); } // JPG는 투명도가 없어서 흰 배경을 깐다
+    ctx.drawImage(it.img, 0, 0);
+    canvas.toBlob((blob) => {
+      if (it.url) URL.revokeObjectURL(it.url);
+      it.blob = blob;
+      it.url = URL.createObjectURL(blob);
+      it.outName = `${baseName(it.file.name)}.${ext}`;
+      it.row.querySelector(".info").textContent =
+        `${it.img.width}×${it.img.height} · ${fmtSize(it.file.size)} → ${ext.toUpperCase()} ${fmtSize(blob.size)}`;
+      const a = it.row.querySelector("a");
+      a.href = it.url; a.download = it.outName; a.hidden = false;
+      resolve();
+    }, mime, fmt === "jpg" ? $("#quality").value / 100 : undefined);
+  });
+}
+
+// 모바일 Safari/Chrome은 한 번의 탭에서 다운로드 하나만 허용하므로
+// 여러 장은 ZIP(무압축) 하나로 묶어 내려받는다.
+const crcTable = Array.from({ length: 256 }, (_, n) => {
+  for (let k = 0; k < 8; k++) n = n & 1 ? 0xedb88320 ^ (n >>> 1) : n >>> 1;
+  return n >>> 0;
+});
+const crc32 = (buf) => {
+  let c = 0xffffffff;
+  for (const b of buf) c = crcTable[(c ^ b) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+};
+function makeZip(files) { // files: [{ name, data:Uint8Array }]
+  const chunks = [], central = [];
+  let offset = 0;
+  for (const f of files) {
+    const name = new TextEncoder().encode(f.name);
+    const crc = crc32(f.data);
+    const head = new DataView(new ArrayBuffer(30));
+    head.setUint32(0, 0x04034b50, true); head.setUint16(4, 20, true);
+    head.setUint32(14, crc, true);
+    head.setUint32(18, f.data.length, true); head.setUint32(22, f.data.length, true);
+    head.setUint16(26, name.length, true);
+    chunks.push(new Uint8Array(head.buffer), name, f.data);
+    const cd = new DataView(new ArrayBuffer(46));
+    cd.setUint32(0, 0x02014b50, true); cd.setUint16(4, 20, true); cd.setUint16(6, 20, true);
+    cd.setUint32(16, crc, true);
+    cd.setUint32(20, f.data.length, true); cd.setUint32(24, f.data.length, true);
+    cd.setUint16(28, name.length, true); cd.setUint32(42, offset, true);
+    central.push(new Uint8Array(cd.buffer), name);
+    offset += 30 + name.length + f.data.length;
+  }
+  const cdSize = central.reduce((s, c) => s + c.length, 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true);
+  end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
+  end.setUint32(12, cdSize, true); end.setUint32(16, offset, true);
+  return new Blob([...chunks, ...central, new Uint8Array(end.buffer)], { type: "application/zip" });
+}
+
+$("#saveAll").addEventListener("click", async () => {
+  const done = items.filter((it) => it.url);
+  if (!done.length) return;
+  if (done.length === 1) {
+    const a = document.createElement("a");
+    a.href = done[0].url; a.download = done[0].outName; a.click();
+    return;
+  }
+  $("#saveAll").disabled = true;
+  try {
+    const seen = new Map(); // 같은 이름이 겹치면 (2), (3)…을 붙인다
+    const files = await Promise.all(done.map(async (it) => {
+      const n = (seen.get(it.outName) ?? 0) + 1;
+      seen.set(it.outName, n);
+      const name = n === 1 ? it.outName : it.outName.replace(/(\.[^.]+)$/, ` (${n})$1`);
+      return { name, data: new Uint8Array(await it.blob.arrayBuffer()) };
+    }));
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(makeZip(files));
+    a.download = "converted-images.zip";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
+  } finally {
+    $("#saveAll").disabled = false;
+  }
+});
+$("#clear").addEventListener("click", () => {
+  items.forEach((it) => { it.url && URL.revokeObjectURL(it.url); it.img?.close?.(); });
+  items.length = 0; list.innerHTML = ""; $("#actions").hidden = true;
+});
+
+window.blShareText = () => "이미지를 JPG/PNG로 바로 변환! 서버 업로드 없이 브라우저에서 끝나요";
+</script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>
