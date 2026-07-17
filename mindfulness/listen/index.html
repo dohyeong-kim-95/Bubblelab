@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#edf8f5">
+  <meta name="description" content="같은 음악을 세 번 다르게 들으며 주의를 넓혀가는 2분 마음챙김 카드">
+  <title>세 번 듣기 — Bubble Mindfulness</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body data-view="intro" data-phase="idle">
+  <div class="ambient" aria-hidden="true"><i></i><i></i><i></i></div>
+
+  <header class="topbar">
+    <a class="back" href="../" aria-label="마음챙김 카드로 돌아가기">‹ <span>카드</span></a>
+    <a class="brand" href="../">mindfulness<span>.bubblelab.dev</span></a>
+    <button class="quiet-button" id="infoButton" type="button" aria-haspopup="dialog">안내</button>
+  </header>
+
+  <main>
+    <section class="intro-view" id="introView" aria-labelledby="pageTitle">
+      <div class="cover-wrap">
+        <img class="cover" src="https://assets.bubblelab.dev/_assets/music/upward-drift/upward_drift_preview.webp" alt="Upward Drift 앨범 이미지">
+      </div>
+      <p class="eyebrow">one track · three ways</p>
+      <h1 id="pageTitle">세 번 듣기</h1>
+      <p class="lead">같은 음악을 다르게 들으며<br>주의를 천천히 넓혀봅니다.</p>
+
+      <ol class="steps-preview">
+        <li><span>1</span><strong>전체</strong><small>그대로 듣기</small></li>
+        <li><span>2</span><strong>변화</strong><small>달라짐 듣기</small></li>
+        <li><span>3</span><strong>주변</strong><small>넓게 듣기</small></li>
+      </ol>
+
+      <button class="primary-button" id="threeButton" type="button">
+        <span>세 번 듣기</span><small>약 2분 · 음악 사이의 침묵과 함께</small>
+      </button>
+      <button class="single-button" id="singleButton" type="button">한 번만 듣기 <span>· 약 40초</span></button>
+      <p class="gentle-note">이어폰은 선택 사항이에요. 가장 작은 편안한 음량으로 시작하세요.</p>
+
+      <details class="about">
+        <summary>이 연습에 대하여 <span>＋</span></summary>
+        <p>음악을 평가하거나 분석하기보다, 주의가 머물고 넓어지는 과정을 알아차리는 연습입니다. 음악이 끝난 뒤의 주변 소리도 연습의 일부예요.</p>
+      </details>
+    </section>
+
+    <section class="practice-view" id="practiceView" aria-labelledby="phaseText" hidden>
+      <div class="practice-meta"><span id="elapsedText">0:00</span><span id="totalText">2:00</span></div>
+      <div class="progress-track" aria-hidden="true"><i id="progressFill"></i></div>
+      <ol class="step-dots" id="stepDots">
+        <li data-step="0"><span>1</span>전체</li>
+        <li data-step="1"><span>2</span>변화</li>
+        <li data-step="2"><span>3</span>주변</li>
+      </ol>
+
+      <div class="listening-stage" aria-hidden="true">
+        <div class="cover-glow"></div>
+        <img src="https://assets.bubblelab.dev/_assets/music/upward-drift/upward_drift_preview.webp" alt="">
+      </div>
+
+      <div class="phase-copy">
+        <p class="phase-kicker" id="phaseKicker">잠시 후 시작해요</p>
+        <h2 id="phaseText" aria-live="polite">전체로 듣기</h2>
+        <p id="phaseHint">좋고 나쁨을 판단하지 않고, 들리는 만큼만 들어보세요.</p>
+      </div>
+
+      <div class="practice-controls">
+        <button id="pauseButton" type="button"><span aria-hidden="true">Ⅱ</span><b>일시정지</b></button>
+        <button id="stopButton" type="button"><span aria-hidden="true">×</span><b>그만하기</b></button>
+      </div>
+    </section>
+
+    <section class="complete-view" id="completeView" aria-labelledby="completeTitle" hidden>
+      <div class="quiet-rings" aria-hidden="true"><i></i><i></i><i></i></div>
+      <p class="eyebrow">after the music</p>
+      <h2 id="completeTitle">음악이 멈춘 뒤에도<br>들리는 것은 남아 있습니다.</h2>
+      <p>지금 가장 가까운 소리를<br>한 번 더 가볍게 알아차려보세요.</p>
+      <div class="complete-actions">
+        <button class="primary-button" id="againButton" type="button">한 번 더 듣기</button>
+        <a href="https://assets.bubblelab.dev/music/">Upward Drift · Bubblelab Assets</a>
+        <a href="../">카드로 돌아가기</a>
+      </div>
+    </section>
+  </main>
+
+  <audio id="track" src="https://assets.bubblelab.dev/_assets/music/upward-drift/upward_drift.mp3" preload="auto"></audio>
+
+  <dialog id="infoDialog">
+    <div class="dialog-card">
+      <button class="dialog-close" id="dialogClose" type="button" aria-label="닫기">×</button>
+      <p class="eyebrow">before you begin</p>
+      <h2>음악을 잘 들으려 하지 않아도 괜찮아요.</h2>
+      <p>주의가 다른 곳으로 가면 실패한 것이 아닙니다. 알아차린 순간, 지금 들리는 소리로 가볍게 돌아오면 됩니다.</p>
+      <ul>
+        <li>스피커나 이어폰 모두 사용할 수 있어요.</li>
+        <li>불편하지 않은 작은 음량으로 들어주세요.</li>
+        <li>음악과 이미지는 Assets의 한 원본을 공유하며 별도로 저장하지 않아요.</li>
+      </ul>
+      <button class="dialog-confirm" id="dialogConfirm" type="button">알겠어요</button>
+    </div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="./app.js"></script>
+</body>
+</html>

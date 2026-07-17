@@ -102,6 +102,8 @@
     .sound-card-bubble::before, .sound-card-bubble::after { content: ""; position: absolute; border: 1px solid rgba(87,139,137,.16); border-radius: 50%; }
     .sound-card-bubble::before { inset: -16px; }
     .sound-card-bubble::after { inset: -32px; opacity: .55; }
+    .listen-card-art { position: absolute; width: 150px; height: 150px; right: -20px; top: -18px; padding: 6px; overflow: hidden; border: 1px solid rgba(255,255,255,.92); border-radius: 32px; background: rgba(255,255,255,.5); box-shadow: 0 20px 40px rgba(105,142,146,.12); transform: rotate(3deg); }
+    .listen-card-art img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 26px; }
     @keyframes breathe { 40% { transform: scale(1.12); } 100% { transform: scale(.94); } }
     @keyframes thoughtFloat { 50% { transform: translateY(-10px) scale(1.03); } 100% { transform: translateY(4px) scale(.96); } }
     @keyframes soundFloat { 50% { transform: translateY(-7px) scale(.96); } 100% { transform: translateY(3px) scale(.9); opacity: .72; } }
@@ -151,6 +153,14 @@
         <div class="card-copy">
           <h3>♪ 소리방울</h3>
           <p>가까이에서 멀어지는 소리와<br>그 뒤의 고요를 들어봐요.</p>
+        </div>
+      </a>
+      <a class="card" href="/listen/">
+        <span class="listen-card-art" aria-hidden="true"><img src="https://assets.bubblelab.dev/_assets/music/upward-drift/upward_drift_preview.webp" alt=""></span>
+        <span class="time">약 2분</span>
+        <div class="card-copy">
+          <h3>🎧 세 번 듣기</h3>
+          <p>같은 음악을 다르게 들으며<br>주의를 천천히 넓혀봐요.</p>
         </div>
       </a>
     </section>
