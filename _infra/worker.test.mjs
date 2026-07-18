@@ -22,6 +22,13 @@ test("realtime and planner routes are closed unless explicitly enabled", async (
   );
   assert.equal(planner.status, 503);
   assert.match(planner.headers.get("Content-Security-Policy"), /default-src 'self'/);
+
+  const podcast = await worker.fetch(
+    new Request("https://podcast.bubblelab.dev/_podcast/session"),
+    env,
+    ctx,
+  );
+  assert.equal(podcast.status, 503);
 });
 
 test("worker rejects cross-site public writes before storage access", async () => {

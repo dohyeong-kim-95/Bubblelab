@@ -9,6 +9,7 @@ const ROOT_DOMAIN = "bubblelab.dev";
 const REALTIME_NAMESPACES = new Set(["avalon", "liargame", "yacht"]);
 import { validPlannerCode } from "./planner.js";
 import { handleFortuneChart } from "./fortune.js";
+import { handlePodcast, handlePodcastAdmin, runDailyGeneration, UPLOAD_MAX_BYTES } from "./podcast.js";
 import { serveAssetDownload, serveAssetDownloadCounts } from "./downloads.js";
 import {
   applySecurityHeaders,
@@ -26,6 +27,7 @@ export { WorkQnaDO } from "./workqna.js";
 export { AnalyticsDO } from "./analytics.js";
 export { RecordsDO } from "./records.js";
 export { PlannerDO } from "./planner.js";
+export { PodcastDO } from "./podcast.js";
 export { RateLimiterDO } from "./security.js";
 
 const LOGIN_PAGE = (failed = false, base = "") => `<!doctype html>
@@ -339,6 +341,13 @@ async function handleAdmin(request, env, url, base = "") {
       return stub.fetch("https://chat.internal/reset", { method: "POST" });
     }
   }
+  if (url.pathname.startsWith("/api/podcast/")) {
+    if (!featureEnabled(env, "ENABLE_PODCAST")) {
+      return Response.json({ error: "podcast is disabled" }, { status: 503 });
+    }
+    const podcastResponse = await handlePodcastAdmin(request, env, url);
+    if (podcastResponse) return podcastResponse;
+  }
   if (url.pathname === "/api/assets") {
     return new Response("not found", { status: 404 });
   }
@@ -354,6 +363,7 @@ export async function handleRequest(request, env, ctx) {
 
     const mutationError = validateMutationRequest(
       request,
+      path === "/_podcast/upload" ? UPLOAD_MAX_BYTES :
       path === "/_planner/data" ? 600 * 1024 : 64 * 1024,
     );
     if (mutationError) return mutationError;
@@ -571,6 +581,18 @@ export async function handleRequest(request, env, ctx) {
       });
     }
 
+    // 데일리 팟캐스트 (podcast.bubblelab.dev). 초대 코드 로그인 뒤에만
+    // 쓸 수 있고, ENABLE_PODCAST가 없으면 fail-closed로 닫힌다.
+    if (path.startsWith("/_podcast/")) {
+      if (!featureEnabled(env, "ENABLE_PODCAST")) {
+        return Response.json({ error: "podcast is temporarily unavailable" }, {
+          status: 503,
+          headers: { "Cache-Control": "no-store", "Retry-After": "86400" },
+        });
+      }
+      return handlePodcast(request, env, url);
+    }
+
     // 익명 채팅 로비: /_chat → 단일 Durable Object (util.bubblelab.dev/chat).
     // 메시지는 서버에 저장하지 않고 접속자에게만 브로드캐스트한다.
     if (path === "/_chat") {
@@ -701,6 +723,11 @@ export async function handleRequest(request, env, ctx) {
 }
 
 export default {
+  // 06:40 KST 데일리 팟캐스트 생성 (wrangler.jsonc triggers.crons)
+  async scheduled(controller, env, ctx) {
+    if (!featureEnabled(env, "ENABLE_PODCAST")) return;
+    ctx.waitUntil(runDailyGeneration(env));
+  },
   async fetch(request, env, ctx) {
     try {
       return applySecurityHeaders(await handleRequest(request, env, ctx), request);

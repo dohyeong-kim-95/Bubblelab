@@ -20,8 +20,18 @@
     "ENABLE_REALTIME": "false",
     "ENABLE_PLANNER": "true",
     // 익명 채팅(util/chat). 서버는 메시지를 저장하지 않고 브로드캐스트만 한다.
-    "ENABLE_CHAT": "true"
+    "ENABLE_CHAT": "true",
+    // 데일리 팟캐스트(podcast/). 켜기 전에 GEMINI_API_KEY·PODCAST_SESSION_SECRET
+    // secret과 R2 버킷(bubblelab-podcast)이 준비되어야 한다. 푸시 알림까지
+    // 쓰려면 VAPID_PUBLIC_KEY var와 VAPID_PRIVATE_KEY secret도 필요.
+    "ENABLE_PODCAST": "false"
   },
+  // 팟캐스트 소스 파일·생성 오디오 저장소
+  "r2_buckets": [
+    { "binding": "PODCAST_BUCKET", "bucket_name": "bubblelab-podcast" }
+  ],
+  // 매일 06:40 KST(21:40 UTC) 팟캐스트 자동 생성
+  "triggers": { "crons": ["40 21 * * *"] },
   "routes": [
     { "pattern": "bubblelab.dev/*", "zone_name": "bubblelab.dev" },
     { "pattern": "*.bubblelab.dev/*", "zone_name": "bubblelab.dev" }
@@ -44,7 +54,8 @@
       { "name": "PLANNER", "class_name": "PlannerDO" },
       { "name": "RATE_LIMITER", "class_name": "RateLimiterDO" },
       { "name": "WORK_QNA", "class_name": "WorkQnaDO" },
-      { "name": "CHAT", "class_name": "ChatDO" }
+      { "name": "CHAT", "class_name": "ChatDO" },
+      { "name": "PODCAST", "class_name": "PodcastDO" }
     ]
   },
   "migrations": [
@@ -54,6 +65,7 @@
     { "tag": "v4", "new_sqlite_classes": ["PlannerDO"] },
     { "tag": "v5", "new_sqlite_classes": ["RateLimiterDO"] },
     { "tag": "v6", "new_sqlite_classes": ["WorkQnaDO"] },
-    { "tag": "v7", "new_sqlite_classes": ["ChatDO"] }
+    { "tag": "v7", "new_sqlite_classes": ["ChatDO"] },
+    { "tag": "v8", "new_sqlite_classes": ["PodcastDO"] }
   ]
 }

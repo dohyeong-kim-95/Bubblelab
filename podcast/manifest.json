@@ -1,0 +1,13 @@
+{
+  "name": "데일리 팟캐스트",
+  "short_name": "팟캐스트",
+  "description": "낮에 모은 자료를 다음 날 아침 한국어 팟캐스트로",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0d131c",
+  "theme_color": "#0d131c",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

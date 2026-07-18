@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>🎙️ 데일리 팟캐스트</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0d131c">
+<style>
+:root { color-scheme: light dark; }
+* { box-sizing: border-box; }
+body {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  margin: 0; min-height: 100dvh;
+  background: light-dark(#f2f6fa, #0d131c);
+  color: light-dark(#1c2733, #e2e9f0);
+  padding: 1.2rem 1rem calc(2rem + env(safe-area-inset-bottom));
+}
+main { max-width: 34rem; margin: 0 auto; display: grid; gap: 1rem; }
+h1 { font-size: 1.2rem; margin: .4rem 0 .8rem; }
+h2 { font-size: .95rem; margin: 0 0 .6rem; opacity: .85; }
+.card {
+  border: 1px solid light-dark(#dce4ec, #263445); border-radius: 1rem;
+  background: light-dark(#fff, #151e2a); padding: 1.1rem;
+}
+button, input, textarea {
+  font: inherit; color: inherit; border-radius: .6rem;
+  border: 1px solid light-dark(#c8d3de, #2a3646); background: transparent;
+}
+input, textarea { width: 100%; padding: .7rem .8rem; }
+textarea { min-height: 6rem; resize: vertical; }
+button { padding: .65rem 1rem; cursor: pointer; }
+button.primary { background: #4f7fdd; border-color: #4f7fdd; color: #fff; font-weight: bold; }
+button.danger { color: #d05a5a; border-color: #d05a5a; }
+button:disabled { opacity: .45; cursor: default; }
+.row { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
+.muted { opacity: .6; font-size: .78rem; line-height: 1.6; }
+.error { color: #d05a5a; font-size: .8rem; min-height: 1.1em; margin: .4rem 0 0; }
+.status { font-size: .82rem; padding: .2rem .6rem; border-radius: 999px;
+  border: 1px solid currentColor; display: inline-block; }
+.status.generating { color: #b98a2f; }
+.status.completed { color: #3f9d63; }
+.status.failed { color: #d05a5a; }
+ul { list-style: none; margin: .6rem 0 0; padding: 0; display: grid; gap: .45rem; }
+li { display: flex; gap: .6rem; align-items: center; justify-content: space-between;
+  font-size: .82rem; border: 1px dashed light-dark(#d5dee7, #2a3646);
+  border-radius: .6rem; padding: .5rem .7rem; }
+li .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+li button { padding: .2rem .55rem; font-size: .75rem; }
+audio { width: 100%; margin-top: .7rem; }
+#drop { border: 2px dashed light-dark(#c8d3de, #2a3646); border-radius: .8rem;
+  padding: 1.2rem; text-align: center; cursor: pointer; font-size: .85rem; opacity: .8; }
+#drop.hover { border-color: #4f7fdd; opacity: 1; }
+details summary { cursor: pointer; font-size: .95rem; opacity: .85; }
+label.toggle { display: flex; gap: .6rem; align-items: center; font-size: .85rem; margin: .8rem 0; }
+[hidden] { display: none !important; }
+footer { text-align: center; }
+</style>
+</head>
+<body>
+<main>
+  <h1>🎙️ 데일리 팟캐스트</h1>
+
+  <section id="view-login" class="card" hidden>
+    <h2>초대 코드로 로그인</h2>
+    <p class="muted">낮에 모아둔 PDF·이미지를 다음 날 아침 한국어 팟캐스트로 만들어 드립니다.</p>
+    <form id="login-form" class="row" style="margin-top:.8rem">
+      <input id="login-code" placeholder="XXXX-XXXX-XXXX" autocomplete="off"
+             spellcheck="false" style="flex:1; text-transform:uppercase" required>
+      <button class="primary" type="submit">입장</button>
+    </form>
+    <p class="error" id="login-error"></p>
+  </section>
+
+  <section id="view-app" hidden>
+    <div class="card" id="today-card">
+      <div class="row" style="justify-content:space-between">
+        <h2 id="today-title">오늘의 팟캐스트</h2>
+        <span id="today-status" class="status" hidden></span>
+      </div>
+      <div id="today-body" class="muted">불러오는 중…</div>
+      <audio id="player" controls preload="metadata" hidden></audio>
+      <div class="row" style="margin-top:.8rem">
+        <button id="generate" class="primary" hidden>지금 팟캐스트 만들기</button>
+        <a id="download" hidden><button type="button">다운로드</button></a>
+      </div>
+      <p class="error" id="today-error"></p>
+    </div>
+
+    <div class="card">
+      <h2>소스 올리기</h2>
+      <div id="drop">여기를 눌러 PDF·이미지 선택 (또는 끌어다 놓기)</div>
+      <input id="file-input" type="file" hidden multiple
+             accept="application/pdf,image/png,image/jpeg,image/webp">
+      <ul id="source-list"></ul>
+      <p class="muted" style="margin-bottom:0">파일당 10MB · 하루 20개까지. 다음 생성 때 모두 사용되고 정리됩니다.</p>
+      <p class="error" id="upload-error"></p>
+    </div>
+
+    <div class="card">
+      <h2>지난 에피소드</h2>
+      <ul id="history"></ul>
+    </div>
+
+    <div class="card">
+      <details>
+        <summary>⚙️ 설정</summary>
+        <p class="muted" style="margin:.8rem 0 .3rem">메모리 — 대본에 항상 반영할 개인 지침</p>
+        <textarea id="memory" placeholder="예: 나는 개발자다. 새 소식 위주로, 어려운 용어는 풀어서 설명해줘."></textarea>
+        <div class="row" style="margin-top:.6rem">
+          <button id="save-memory">저장</button>
+          <span id="memory-saved" class="muted" hidden>저장됨</span>
+        </div>
+        <label class="toggle"><input type="checkbox" id="push-toggle" style="width:auto">
+          생성 완료 푸시 알림 받기</label>
+        <button id="logout" class="danger">로그아웃</button>
+      </details>
+    </div>
+  </section>
+
+  <footer class="muted">bubblelab · podcast</footer>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const api = async (path, options = {}) => {
+  const response = await fetch(`/_podcast/${path}`, options);
+  if (response.status === 401 && path !== "session") { showLogin(); throw new Error("로그인이 필요합니다"); }
+  return response;
+};
+const fmtSize = (n) => n > 1e6 ? `${(n / 1e6).toFixed(1)}MB` : `${Math.round(n / 1e3)}KB`;
+const fmtDur = (s) => s ? `${Math.floor(s / 60)}분 ${s % 60}초` : "";
+
+let vapidPublicKey = null;
+let pollTimer = null;
+
+function showLogin() {
+  $("view-login").hidden = false;
+  $("view-app").hidden = true;
+}
+
+async function init() {
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+  const session = await (await api("session")).json();
+  vapidPublicKey = session.vapidPublicKey;
+  if (!session.authenticated) return showLogin();
+  $("view-login").hidden = true;
+  $("view-app").hidden = false;
+  await refresh();
+  syncPushToggle();
+}
+
+async function refresh() {
+  const response = await api("home");
+  if (!response.ok) return;
+  render(await response.json());
+}
+
+function render(home) {
+  const pod = home.todayPodcast;
+  const generating = pod && ["pending", "generating"].includes(pod.status);
+  const status = $("today-status");
+  status.hidden = !pod;
+  if (pod) {
+    status.className = `status ${pod.status}`;
+    status.textContent = pod.status === "completed" ? "완성"
+      : pod.status === "failed" ? "실패"
+      : { script: "대본 작성 중", tts: "녹음 중", store: "저장 중" }[pod.stage] ?? "대기 중";
+  }
+  const body = $("today-body");
+  const player = $("player");
+  const download = $("download");
+  player.hidden = true; download.hidden = true;
+  if (!pod) {
+    body.textContent = home.sources.length
+      ? "소스가 준비됐습니다. 내일 아침 6시 40분에 자동 생성되거나, 지금 바로 만들 수 있습니다."
+      : "먼저 아래에서 PDF나 이미지를 올려주세요.";
+  } else if (pod.status === "completed") {
+    body.textContent = `${pod.title ?? ""} · ${fmtDur(pod.durationSeconds)}`;
+    const src = `/_podcast/audio/${pod.id}`;
+    if (!player.src.endsWith(src)) player.src = src;
+    player.hidden = false;
+    download.href = `${src}?download=1`;
+    download.hidden = false;
+  } else if (pod.status === "failed") {
+    body.textContent = `생성에 실패했습니다: ${pod.error ?? "알 수 없는 오류"}. 소스는 남아 있으니 다시 시도해주세요.`;
+  } else {
+    body.textContent = pod.title ? `"${pod.title}" 만드는 중…` : "팟캐스트를 만드는 중입니다. 몇 분 걸려요.";
+  }
+  $("generate").hidden = generating || home.queued || home.sources.length === 0 ||
+    (pod && pod.status === "completed");
+
+  $("source-list").replaceChildren(...home.sources.map((s) => {
+    const li = document.createElement("li");
+    const name = Object.assign(document.createElement("span"), { className: "name", textContent: `${s.name} (${fmtSize(s.size)})` });
+    const del = Object.assign(document.createElement("button"), { textContent: "삭제" });
+    del.onclick = async () => { await api(`source?id=${encodeURIComponent(s.id)}`, { method: "DELETE" }); refresh(); };
+    li.append(name, del);
+    return li;
+  }));
+
+  $("history").replaceChildren(...home.podcasts.filter((p) => p.status === "completed").map((p) => {
+    const li = document.createElement("li");
+    const name = Object.assign(document.createElement("span"), { className: "name", textContent: `${p.date} · ${p.title}` });
+    const play = Object.assign(document.createElement("button"), { textContent: "재생" });
+    play.onclick = () => { player.src = `/_podcast/audio/${p.id}`; player.hidden = false; player.play(); };
+    li.append(name, play);
+    return li;
+  }));
+  if (!$("history").children.length) {
+    $("history").replaceChildren(Object.assign(document.createElement("li"), { textContent: "아직 없습니다" }));
+  }
+
+  if ($("memory") !== document.activeElement) $("memory").value = home.user.memory;
+
+  clearTimeout(pollTimer);
+  if (generating || home.queued) pollTimer = setTimeout(refresh, 8000);
+}
+
+$("login-form").onsubmit = async (event) => {
+  event.preventDefault();
+  $("login-error").textContent = "";
+  const response = await api("login", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code: $("login-code").value.trim().toUpperCase() }),
+  });
+  if (!response.ok) {
+    $("login-error").textContent = (await response.json().catch(() => ({}))).error ?? "로그인 실패";
+    return;
+  }
+  init();
+};
+
+$("drop").onclick = () => $("file-input").click();
+$("drop").ondragover = (e) => { e.preventDefault(); $("drop").classList.add("hover"); };
+$("drop").ondragleave = () => $("drop").classList.remove("hover");
+$("drop").ondrop = (e) => { e.preventDefault(); $("drop").classList.remove("hover"); uploadFiles(e.dataTransfer.files); };
+$("file-input").onchange = () => uploadFiles($("file-input").files);
+
+async function uploadFiles(files) {
+  $("upload-error").textContent = "";
+  for (const file of files) {
+    const response = await api("upload", {
+      method: "POST",
+      headers: { "Content-Type": file.type || "application/octet-stream", "X-File-Name": encodeURIComponent(file.name) },
+      body: file,
+    }).catch(() => null);
+    if (!response?.ok) {
+      $("upload-error").textContent =
+        (await response?.json().catch(() => ({})))?.error ?? `${file.name} 업로드 실패`;
+      break;
+    }
+  }
+  $("file-input").value = "";
+  refresh();
+}
+
+$("generate").onclick = async () => {
+  $("today-error").textContent = "";
+  const response = await api("generate", { method: "POST" });
+  if (!response.ok) {
+    $("today-error").textContent = (await response.json().catch(() => ({}))).error ?? "요청 실패";
+  }
+  refresh();
+};
+
+$("save-memory").onclick = async () => {
+  await api("memory", {
+    method: "PUT", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ memory: $("memory").value }),
+  });
+  $("memory-saved").hidden = false;
+  setTimeout(() => { $("memory-saved").hidden = true; }, 1500);
+};
+
+async function syncPushToggle() {
+  const toggle = $("push-toggle");
+  if (!vapidPublicKey || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+    toggle.disabled = true;
+    return;
+  }
+  const registration = await navigator.serviceWorker.ready;
+  toggle.checked = Boolean(await registration.pushManager.getSubscription());
+  toggle.onchange = async () => {
+    try {
+      if (toggle.checked) {
+        if ((await Notification.requestPermission()) !== "granted") { toggle.checked = false; return; }
+        const subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true, applicationServerKey: vapidKeyBytes(vapidPublicKey),
+        });
+        await api("push", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ subscription }),
+        });
+      } else {
+        const subscription = await registration.pushManager.getSubscription();
+        if (subscription) {
+          await api("push", {
+            method: "DELETE", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ endpoint: subscription.endpoint }),
+          });
+          await subscription.unsubscribe();
+        }
+      }
+    } catch { toggle.checked = false; }
+  };
+}
+
+function vapidKeyBytes(base64url) {
+  const padded = base64url.replace(/-/g, "+").replace(/_/g, "/")
+    .padEnd(Math.ceil(base64url.length / 4) * 4, "=");
+  return Uint8Array.from(atob(padded), (c) => c.charCodeAt(0));
+}
+
+$("logout").onclick = async () => {
+  await api("logout", { method: "POST" });
+  location.reload();
+};
+
+init().catch(() => showLogin());
+</script>
+</body>
+</html>

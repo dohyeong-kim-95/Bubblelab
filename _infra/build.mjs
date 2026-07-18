@@ -21,7 +21,7 @@ const SKIP = new Set(["dist", "node_modules"]);
 // 서브도메인 공개 구분. 퍼블릭은 www 랜딩 카드와 카테고리 홈 풀다운 메뉴에
 // 노출되고, confidential은 주소를 직접 쳐야만 들어갈 수 있다(어디에도 링크 없음).
 // 새 폴더는 기본 퍼블릭이며, 빌드가 www 랜딩 카드 존재 여부를 검사한다.
-const CONFIDENTIAL_SUBDOMAINS = new Set(["admin", "work"]);
+const CONFIDENTIAL_SUBDOMAINS = new Set(["admin", "work", "podcast"]);
 // 백엔드가 보안상 닫혀 있는 동안 카테고리 홈에서 발견되지 않게 한다.
 // 소스와 직접 URL은 유지되며, 인증/ACL 검토 후 이 목록에서 제거한다.
 const UNLISTED_ENTRIES = new Map([
