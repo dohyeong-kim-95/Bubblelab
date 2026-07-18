@@ -67,8 +67,9 @@ node _infra/sticker-pack.mjs 시트.png <팩id> --title "제목 16종" \
   --labels labels.txt --chat "짧은제목" --tags "태그,태그"
 ```
 
-슬라이스·트리밍·preview·metadata.json·`CHAT_STICKER_PACKS` 등록·스티커 README
-표까지 자동 갱신된다(외부 의존성 없음, `_infra/png.mjs` 순수 JS 코덱 사용).
+시트는 PNG·JPEG 모두 받는다(매직 바이트 자동 판별 — PNG는 `_infra/png.mjs`
+자체 코덱, JPEG는 jpeg-js 의존성이라 `npm ci` 필요). 슬라이스·트리밍·preview·
+metadata.json·`CHAT_STICKER_PACKS` 등록·스티커 README 표까지 자동 갱신된다.
 util/chat 클라이언트는 `catalog.json`의 `chat.title` 팩을 자동으로 읽으므로
 손댈 곳 없음. 등록 누락·장수 불일치는 `_infra/sticker-pack.test.mjs`가 잡는다.
 

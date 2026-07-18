@@ -3,7 +3,7 @@
 // metadata.json, 카탈로그 미리보기, util/chat 서버 등록(CHAT_STICKER_PACKS),
 // _assets/sticker/README.md 표까지 한 번에 갱신한다. 외부 의존성 없음.
 //
-//   node _infra/sticker-pack.mjs <시트이미지.png> <팩id> --title "제목" \
+//   node _infra/sticker-pack.mjs <시트이미지.png|.jpg> <팩id> --title "제목" \
 //     [--grid 4x4] [--labels labels.txt] [--chat "짧은제목"] \
 //     [--desc "설명"] [--tags "태그,태그"] [--force]
 //
@@ -12,6 +12,7 @@
 // --chat:   지정하면 익명 채팅 스티커 서랍에도 등록된다 (metadata.json의
 //           chat.title + _infra/chat.js의 CHAT_STICKER_PACKS 자동 패치).
 //           util/chat 클라이언트는 catalog.json에서 팩을 읽으므로 손댈 곳 없음.
+// 입력 시트는 PNG(자체 코덱) 또는 JPEG(jpeg-js) — 매직 바이트로 자동 판별.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,6 +26,22 @@ const PREVIEW_MAX_WIDTH = 512;
 const TRIM_ALPHA_MAX = 16;
 const TRIM_WHITE_MIN = 246;
 const TRIM_PADDING = 4;
+
+// PNG는 자체 코덱, JPEG는 jpeg-js(순수 JS)로 디코드해 RGBA로 통일한다.
+export async function decodeSheet(bytes) {
+  if (bytes[0] === 0x89 && bytes[1] === 0x50) return decodePng(bytes);
+  if (bytes[0] === 0xff && bytes[1] === 0xd8) {
+    let jpeg;
+    try {
+      ({ default: jpeg } = await import("jpeg-js"));
+    } catch {
+      throw new Error("JPEG 디코더(jpeg-js)가 없습니다 — 리포 루트에서 npm ci 후 다시 실행하세요");
+    }
+    const { width, height, data } = jpeg.decode(bytes, { useTArray: true, maxMemoryUsageInMB: 1024 });
+    return { width, height, data };
+  }
+  throw new Error("지원하지 않는 이미지 형식입니다 — PNG 또는 JPEG 시트를 주세요");
+}
 
 export function parseGrid(text) {
   const match = /^(\d+)x(\d+)$/.exec(String(text).trim());
@@ -174,7 +191,7 @@ export function buildLabels(labelsText, count) {
 }
 
 // 시트 이미지 → 팩 폴더 생성 + 등록. CLI와 테스트가 함께 쓴다.
-export function buildStickerPack({
+export async function buildStickerPack({
   imagePath,
   id,
   title,
@@ -200,7 +217,7 @@ export function buildStickerPack({
     throw new Error(`이미 존재하는 팩입니다: ${packDir} (덮어쓰려면 --force)`);
   }
 
-  const sheet = decodePng(readFileSync(imagePath));
+  const sheet = await decodeSheet(readFileSync(imagePath));
   const cells = sliceGrid(sheet, cols, rows);
   const trimmed = cells.map((cell, i) => {
     const result = trimCell(cell);
@@ -261,14 +278,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const [imagePath, id] = positional;
   if (!imagePath || !id) {
     console.error(
-      'usage: node _infra/sticker-pack.mjs <시트이미지.png> <팩id> --title "제목"\n' +
+      'usage: node _infra/sticker-pack.mjs <시트이미지.png|.jpg> <팩id> --title "제목"\n' +
       '       [--grid 4x4] [--labels labels.txt] [--chat "짧은제목"]\n' +
       '       [--desc "설명"] [--tags "태그,태그"] [--force]',
     );
     process.exit(1);
   }
   try {
-    const result = buildStickerPack({
+    const result = await buildStickerPack({
       imagePath,
       id,
       title: options.title,

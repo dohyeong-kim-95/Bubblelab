@@ -20,7 +20,7 @@
 
 ## 새 팩 추가 (권장 경로)
 
-4x4 그리드 시트 이미지 하나로 팩 전체를 생성합니다:
+4x4 그리드 시트 이미지(PNG 또는 JPEG) 하나로 팩 전체를 생성합니다:
 
 ```bash
 node _infra/sticker-pack.mjs 시트.png <팩id> --title "제목 16종" \

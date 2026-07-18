@@ -5,10 +5,12 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { decodePng, encodePng } from "./png.mjs";
+import jpeg from "jpeg-js";
 import {
   buildLabels,
   buildStickerPack,
   contentBounds,
+  decodeSheet,
   downscale,
   parseGrid,
   sliceGrid,
@@ -126,7 +128,21 @@ test("withReadmeRow appends to the pack table once", () => {
   assert.equal(withReadmeRow(added, "new-pack", "새 팩", 9), added);
 });
 
-test("buildStickerPack: sheet → sliced pack + metadata + chat registration", () => {
+test("decodeSheet detects JPEG by magic bytes and decodes to RGBA", async () => {
+  const image = makeImage(32, 16, [200, 60, 30, 255]);
+  const encoded = jpeg.encode({ width: 32, height: 16, data: Buffer.from(image.data) }, 95);
+  const decoded = await decodeSheet(new Uint8Array(encoded.data));
+  assert.equal(decoded.width, 32);
+  assert.equal(decoded.height, 16);
+  // JPEG는 손실 압축 — 색이 근사치로 돌아오는지만 확인
+  assert.ok(Math.abs(decoded.data[0] - 200) < 12, `r=${decoded.data[0]}`);
+  assert.equal(decoded.data[3], 255);
+  const png = await decodeSheet(encodePng(image));
+  assert.deepEqual([...png.data], [...image.data]);
+  await assert.rejects(() => decodeSheet(Buffer.from("GIF89a...")), /지원하지 않는 이미지/);
+});
+
+test("buildStickerPack: sheet → sliced pack + metadata + chat registration", async () => {
   const root = mkdtempSync(join(tmpdir(), "bl-sticker-"));
   try {
     // 가짜 리포 뼈대
@@ -149,7 +165,7 @@ test("buildStickerPack: sheet → sliced pack + metadata + chat registration", (
     const sheetPath = join(root, "sheet.png");
     writeFileSync(sheetPath, encodePng(sheet));
 
-    const result = buildStickerPack({
+    const result = await buildStickerPack({
       imagePath: sheetPath,
       id: "test-pack",
       title: "테스트 팩 4종",
@@ -180,9 +196,21 @@ test("buildStickerPack: sheet → sliced pack + metadata + chat registration", (
     assert.match(readFileSync(join(root, "_assets", "sticker", "README.md"), "utf8"), /`test-pack`/);
 
     // 같은 id 재실행은 --force 없이는 거부
-    assert.throws(() => buildStickerPack({
+    await assert.rejects(() => buildStickerPack({
       imagePath: sheetPath, id: "test-pack", title: "x", grid: "2x2", root,
     }), /--force/);
+
+    // JPEG 시트도 같은 파이프라인으로 통과한다
+    const jpegPath = join(root, "sheet.jpg");
+    writeFileSync(jpegPath, jpeg.encode({ width: sheet.width, height: sheet.height, data: Buffer.from(sheet.data) }, 95).data);
+    const fromJpeg = await buildStickerPack({
+      imagePath: jpegPath, id: "test-jpeg", title: "JPEG 팩 4종", grid: "2x2",
+      createdAt: "2026-07-18", root,
+    });
+    assert.equal(fromJpeg.count, 4);
+    const jpegCell = decodePng(readFileSync(join(root, "_assets", "sticker", "test-jpeg", "01.png")));
+    // 손실 압축 노이즈가 있어도 트리밍이 블롭 근처(16px + 패딩 ±여유)로 잘라야 한다
+    assert.ok(jpegCell.width >= 16 && jpegCell.width <= 40, `width=${jpegCell.width}`);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
