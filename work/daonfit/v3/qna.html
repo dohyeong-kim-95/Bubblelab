@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>문의 Q&A — 다온핏 DAONFIT</title>
+<link rel="icon" href="_work_assets/logo.png">
+<link rel="stylesheet" href="daonfit.css">
+<style>
+  .qna-form { display: grid; gap: .6rem; padding: 1.2rem; background: #fff;
+              border: 1px solid var(--line); border-radius: 1.1rem; margin-bottom: 2rem; }
+  .qna-form .row { display: grid; grid-template-columns: 1fr 1.4fr; gap: .6rem; }
+  .qna-form input, .qna-form select, .qna-form textarea {
+    font: inherit; color: inherit; padding: .7rem .85rem; border-radius: .7rem;
+    border: 1px solid var(--line); background: var(--paper); width: 100%; }
+  .qna-form textarea { min-height: 6.5rem; resize: vertical; }
+  .qna-form button { font: inherit; padding: .8rem; border: 0; border-radius: .7rem;
+                     background: var(--orange); color: #fff; font-weight: 700; cursor: pointer; }
+  .qna-form button:disabled { opacity: .5; }
+  .qna-note { font-size: .74rem; color: var(--muted); margin: 0; }
+  .qna-status { min-height: 1.2em; font-size: .82rem; color: var(--orange-deep); margin: 0; }
+  .qna-item { padding: 1rem 1.1rem; background: #fff; border: 1px solid var(--line);
+              border-radius: 1rem; margin-bottom: .7rem; }
+  .qna-item .head { display: flex; gap: .5rem; align-items: baseline; flex-wrap: wrap;
+                    font-size: .78rem; color: var(--muted); }
+  .qna-item .head b { color: var(--brown); font-size: .85rem; }
+  .qna-item .head .prod { background: var(--cream); padding: .1rem .55rem; border-radius: 2rem;
+                          color: var(--orange-deep); font-weight: 700; }
+  .qna-item .q { margin: .45rem 0 0; font-size: .93rem; white-space: pre-wrap; }
+  .qna-item .a { margin: .7rem 0 0; padding: .7rem .85rem; background: var(--paper);
+                 border-left: 3px solid var(--orange); border-radius: 0 .6rem .6rem 0;
+                 font-size: .9rem; white-space: pre-wrap; }
+  .qna-item .a::before { content: "다온핏 답변"; display: block; font-size: .72rem;
+                         font-weight: 800; color: var(--orange-deep); margin-bottom: .25rem; }
+  .qna-item .waiting { margin: .6rem 0 0; font-size: .78rem; color: var(--muted); }
+  .qna-empty { text-align: center; color: var(--muted); font-size: .88rem; padding: 2rem 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <a href="./"><img src="_work_assets/logo.png" alt="다온핏 홈"></a>
+    <b><a href="./" style="text-decoration:none">다온핏</a></b>
+    <a class="store-btn" href="https://smartstore.naver.com/samyong_2" target="_blank" rel="noopener">스토어 가기</a>
+  </div>
+</header>
+
+<div class="wrap">
+  <p class="crumb"><a href="./">← 홈으로</a></p>
+  <section style="padding-top:1rem">
+    <span class="kicker">Q&amp;A</span>
+    <h2>무엇이든 물어보세요</h2>
+
+    <form class="qna-form" id="qnaForm">
+      <div class="row">
+        <input id="qnaNick" maxlength="20" placeholder="닉네임" aria-label="닉네임" required>
+        <select id="qnaProduct" aria-label="관련 상품">
+          <option value="">상품 선택 (선택사항)</option>
+          <option>차량용 견인고리 비상키함</option>
+          <option>주차위치 표시 슬라이드 키링</option>
+          <option>차량용 방향제 연장 클립</option>
+          <option>미니 ATM 저금통</option>
+          <option>티니핑 피규어 받침대</option>
+          <option>커스텀 제작 문의</option>
+        </select>
+      </div>
+      <textarea id="qnaQuestion" maxlength="1000" placeholder="궁금한 점을 적어주세요. 커스텀 제작 아이디어도 환영해요!" aria-label="문의 내용" required></textarea>
+      <p class="qna-note">문의와 답변은 이 페이지에 공개됩니다. 개인정보(전화번호·주소 등)는 적지 말아주세요.</p>
+      <button type="submit" id="qnaSubmit">문의 남기기</button>
+      <p class="qna-status" id="qnaStatus" role="status"></p>
+    </form>
+
+    <div id="qnaList"><p class="qna-empty">문의를 불러오는 중…</p></div>
+  </section>
+</div>
+
+<footer>
+  <nav>
+    <a href="https://smartstore.naver.com/samyong_2" target="_blank" rel="noopener">스마트스토어</a>
+    <a href="https://www.instagram.com/daonfit/" target="_blank" rel="noopener">인스타그램</a>
+  </nav>
+  ⓒ 다온핏 DAONFIT. 로고와 상품 사진의 권리는 다온핏에 있습니다.
+</footer>
+
+<script>
+const API = "/_workqna/daonfit";
+const esc = (value) => String(value).replace(/[&<>'"]/g, (c) => ({
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;",
+})[c]);
+const dateOf = (iso) => iso ? iso.slice(0, 10).replaceAll("-", ".") : "";
+
+async function loadQna() {
+  const list = document.getElementById("qnaList");
+  try {
+    const response = await fetch(API, { cache: "no-store" });
+    if (!response.ok) throw new Error();
+    const { items } = await response.json();
+    if (!items.length) {
+      list.innerHTML = '<p class="qna-empty">아직 문의가 없어요. 첫 질문을 남겨보세요!</p>';
+      return;
+    }
+    list.innerHTML = items.map((item) => `
+      <article class="qna-item">
+        <p class="head"><b>${esc(item.nick)}</b>
+          ${item.product ? `<span class="prod">${esc(item.product)}</span>` : ""}
+          <span>${dateOf(item.askedAt)}</span></p>
+        <p class="q">${esc(item.question)}</p>
+        ${item.answer ? `<p class="a">${esc(item.answer)}</p>`
+          : '<p class="waiting">답변을 준비하고 있어요.</p>'}
+      </article>`).join("");
+  } catch {
+    list.innerHTML = '<p class="qna-empty">문의 목록을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.</p>';
+  }
+}
+
+document.getElementById("qnaForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const status = document.getElementById("qnaStatus");
+  const button = document.getElementById("qnaSubmit");
+  const nick = document.getElementById("qnaNick").value.trim();
+  const question = document.getElementById("qnaQuestion").value.trim();
+  if (!nick || !question) { status.textContent = "닉네임과 문의 내용을 채워주세요."; return; }
+  button.disabled = true;
+  status.textContent = "";
+  try {
+    const response = await fetch(API + "/ask", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nick, question, product: document.getElementById("qnaProduct").value }),
+    });
+    if (!response.ok) throw new Error(response.status);
+    document.getElementById("qnaQuestion").value = "";
+    status.textContent = "문의가 등록됐어요! 답변이 달리면 이 페이지에서 확인할 수 있어요.";
+    await loadQna();
+  } catch (failure) {
+    status.textContent = String(failure.message) === "429"
+      ? "문의가 너무 잦아요. 잠시 후 다시 시도해주세요."
+      : "등록하지 못했습니다. 잠시 후 다시 시도해주세요.";
+  } finally {
+    button.disabled = false;
+  }
+});
+loadQna();
+</script>
+</body>
+</html>

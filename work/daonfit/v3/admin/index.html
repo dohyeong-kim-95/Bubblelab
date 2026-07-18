@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>다온핏 관리자 — 문의 관리</title>
+<link rel="icon" href="../_work_assets/logo.png">
+<link rel="stylesheet" href="../daonfit.css">
+<style>
+  .admin-head { display: flex; align-items: baseline; gap: .7rem; flex-wrap: wrap;
+                padding-top: 1.4rem; }
+  .admin-head h1 { margin: 0; font-size: 1.3rem; }
+  .admin-head .count { color: var(--muted); font-size: .85rem; }
+  .filters { display: flex; gap: .4rem; margin: 1rem 0 1.2rem; }
+  .filters button { font: inherit; padding: .45rem .95rem; border-radius: 2rem; cursor: pointer;
+                    border: 1px solid var(--line); background: #fff; font-size: .82rem; }
+  .filters button.on { background: var(--brown); border-color: var(--brown); color: #fff; }
+  .aq { padding: 1rem 1.1rem; background: #fff; border: 1px solid var(--line);
+        border-radius: 1rem; margin-bottom: .8rem; }
+  .aq.unanswered { border-left: 4px solid var(--orange); }
+  .aq .head { display: flex; gap: .5rem; align-items: baseline; flex-wrap: wrap;
+              font-size: .78rem; color: var(--muted); }
+  .aq .head b { color: var(--brown); font-size: .88rem; }
+  .aq .head .prod { background: var(--cream); padding: .1rem .55rem; border-radius: 2rem;
+                    color: var(--orange-deep); font-weight: 700; }
+  .aq .q { margin: .5rem 0 .7rem; font-size: .93rem; white-space: pre-wrap; }
+  .aq textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 4.2rem;
+                 padding: .65rem .8rem; border: 1px solid var(--line); border-radius: .7rem;
+                 background: var(--paper); resize: vertical; }
+  .aq .actions { display: flex; gap: .5rem; margin-top: .55rem; }
+  .aq .actions button { font: inherit; padding: .55rem 1.1rem; border-radius: .6rem;
+                        cursor: pointer; border: 1px solid var(--line); background: #fff;
+                        font-size: .84rem; }
+  .aq .actions .save { background: var(--orange); border-color: var(--orange); color: #fff;
+                       font-weight: 700; }
+  .aq .actions .del { color: #c14848; margin-left: auto; }
+  .aq .actions button:disabled { opacity: .5; }
+  .aq .saved-at { font-size: .74rem; color: var(--muted); align-self: center; }
+  .admin-empty { text-align: center; color: var(--muted); padding: 2.5rem 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <a href="../"><img src="../_work_assets/logo.png" alt="다온핏 홈"></a>
+    <b>다온핏 관리자</b>
+    <a class="store-btn" href="../qna.html">고객 화면 보기</a>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="admin-head">
+    <h1>문의 관리</h1>
+    <span class="count" id="adminCount">불러오는 중…</span>
+  </div>
+  <div class="filters" id="filters">
+    <button type="button" data-filter="all" class="on">전체</button>
+    <button type="button" data-filter="unanswered">미답변</button>
+    <button type="button" data-filter="answered">답변 완료</button>
+  </div>
+  <div id="adminList"></div>
+</div>
+
+<script>
+const API = "/_workqna/daonfit";
+const esc = (value) => String(value).replace(/[&<>'"]/g, (c) => ({
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;",
+})[c]);
+const dateOf = (iso) => iso ? iso.slice(0, 16).replace("T", " ") : "";
+let items = [], filter = "all";
+
+function render() {
+  const list = document.getElementById("adminList");
+  const visible = items.filter((item) =>
+    filter === "all" || (filter === "answered") === Boolean(item.answer));
+  const unanswered = items.filter((item) => !item.answer).length;
+  document.getElementById("adminCount").textContent =
+    `전체 ${items.length}건 · 미답변 ${unanswered}건`;
+  if (!visible.length) {
+    list.innerHTML = '<p class="admin-empty">해당하는 문의가 없습니다.</p>';
+    return;
+  }
+  list.innerHTML = visible.map((item) => `
+    <article class="aq ${item.answer ? "" : "unanswered"}" data-id="${item.id}">
+      <p class="head"><b>${esc(item.nick)}</b>
+        ${item.product ? `<span class="prod">${esc(item.product)}</span>` : ""}
+        <span>${dateOf(item.askedAt)}</span></p>
+      <p class="q">${esc(item.question)}</p>
+      <textarea placeholder="답변을 입력하세요">${esc(item.answer)}</textarea>
+      <div class="actions">
+        <button type="button" class="save">답변 저장</button>
+        <span class="saved-at">${item.answeredAt ? "답변: " + dateOf(item.answeredAt) : ""}</span>
+        <button type="button" class="del">삭제</button>
+      </div>
+    </article>`).join("");
+}
+
+async function load() {
+  try {
+    const response = await fetch(API, { cache: "no-store" });
+    if (!response.ok) throw new Error();
+    items = (await response.json()).items;
+    render();
+  } catch {
+    document.getElementById("adminList").innerHTML =
+      '<p class="admin-empty">문의를 불러오지 못했습니다. 새로고침 해주세요.</p>';
+  }
+}
+
+document.getElementById("filters").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-filter]");
+  if (!button) return;
+  filter = button.dataset.filter;
+  document.querySelectorAll("#filters button").forEach((b) => b.classList.toggle("on", b === button));
+  render();
+});
+
+document.getElementById("adminList").addEventListener("click", async (event) => {
+  const article = event.target.closest(".aq");
+  if (!article) return;
+  const id = article.dataset.id;
+  if (event.target.classList.contains("save")) {
+    event.target.disabled = true;
+    try {
+      const response = await fetch(API + "/answer", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, answer: article.querySelector("textarea").value.trim() }),
+      });
+      if (!response.ok) throw new Error();
+      await load();
+    } catch { alert("저장하지 못했습니다. 다시 시도해주세요."); event.target.disabled = false; }
+  }
+  if (event.target.classList.contains("del")) {
+    if (!confirm("이 문의를 삭제할까요? 되돌릴 수 없습니다.")) return;
+    event.target.disabled = true;
+    try {
+      const response = await fetch(API + "/delete", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (!response.ok) throw new Error();
+      await load();
+    } catch { alert("삭제하지 못했습니다. 다시 시도해주세요."); event.target.disabled = false; }
+  }
+});
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,195 @@
+/* v3 — Apple 디자인 문법 × 다온핏 팔레트.
+ * 원칙: 사진이 주인공, UI는 물러난다. 액션 컬러는 오렌지 단 하나.
+ * 타일은 엣지-투-엣지로 맞닿고 색 전환 자체가 구분선. 그림자는
+ * 표면 위에 놓인 상품 사진에만 단 하나(rgba(0,0,0,.22) 3px 5px 30px). */
+:root {
+  --accent: #f1592a;            /* Action Blue 역할 — 유일한 인터랙션 컬러 */
+  --accent-focus: #ff6a35;
+  --accent-on-dark: #ff8a5c;    /* 다크 타일 위 링크용 밝은 오렌지 */
+  --ink: #2b1d16;               /* 순검정 대신 브라운 잉크 */
+  --muted: #7a6f66;
+  --canvas: #ffffff;
+  --parchment: #f7f3ea;         /* 크림을 살짝 눌러 만든 파치먼트 */
+  --tile-dark: #2b1d16;
+  --tile-dark-2: #32241b;
+  --hairline: #e8e1d6;
+  --nav-black: #1a120d;
+  --product-shadow: 3px 5px 30px rgba(0, 0, 0, .22);
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--canvas); color: var(--ink);
+       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Pretendard Variable",
+         Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+       font-size: 17px; font-weight: 400; line-height: 1.47; letter-spacing: -.012em;
+       word-break: keep-all; }
+a { color: var(--accent); text-decoration: none; }
+img { max-width: 100%; }
+.wrap { width: min(61rem, 100%); margin: 0 auto; padding: 0 1.4rem; }
+
+/* ── 글로벌 나브(초슬림 블랙) + 프로스티드 서브나브 ── */
+.global-nav { background: var(--nav-black); }
+.global-nav .wrap { display: flex; align-items: center; justify-content: center; gap: 1.6rem;
+                    height: 44px; }
+.global-nav a { color: #fffc; font-size: 12px; letter-spacing: -.01em; }
+.global-nav a:hover { color: #fff; }
+header { position: sticky; top: 0; z-index: 10;
+         background: #f7f3eacc; backdrop-filter: saturate(180%) blur(20px);
+         border-bottom: 1px solid var(--hairline); }
+.nav { display: flex; align-items: center; gap: .6rem; height: 52px; }
+.nav img { width: 1.7rem; height: 1.7rem; object-fit: cover; border-radius: 6px; }
+.nav b { font-size: 21px; font-weight: 600; letter-spacing: -.017em; }
+.nav b a { color: inherit; }
+.nav .store-btn { margin-left: auto; padding: 7px 16px; border-radius: 9999px;
+                  background: var(--accent); color: #fff; font-size: 14px;
+                  letter-spacing: -.016em; }
+.nav .store-btn:active { transform: scale(.95); }
+
+/* ── 풀블리드 타일: 색 전환이 곧 구분선 ── */
+.tile { padding: 80px 24px; text-align: center; }
+.tile.parchment { background: var(--parchment); }
+.tile.dark { background: var(--tile-dark); color: #fff; }
+.tile.dark-2 { background: var(--tile-dark-2); color: #fff; }
+.tile .eyebrow { margin: 0 0 6px; font-size: 12px; font-weight: 600; letter-spacing: .02em;
+                 color: var(--accent); }
+.tile.dark .eyebrow, .tile.dark-2 .eyebrow { color: var(--accent-on-dark); }
+.tile h1 { margin: 0; font-size: clamp(34px, 6.4vw, 56px); font-weight: 600;
+           line-height: 1.07; letter-spacing: -.022em; }
+.tile h2 { margin: 0; font-size: clamp(28px, 5vw, 40px); font-weight: 600;
+           line-height: 1.1; letter-spacing: -.02em; }
+.tile .t-lead { margin: 10px auto 0; max-width: 34rem; font-size: clamp(17px, 3.4vw, 21px);
+                font-weight: 400; line-height: 1.4; color: var(--muted); }
+.tile.dark .t-lead, .tile.dark-2 .t-lead { color: #ccc; }
+.tile .t-price { margin: 8px 0 0; font-size: 14px; letter-spacing: -.016em; color: var(--muted); }
+.tile.dark .t-price, .tile.dark-2 .t-price { color: #ccc; }
+.tile .t-ctas { display: flex; justify-content: center; gap: 14px; margin-top: 22px;
+                flex-wrap: wrap; }
+.tile .render { margin: 44px auto 0; max-width: min(28rem, 86%); }
+.tile .render img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover;
+                    box-shadow: var(--product-shadow); }
+.tile .flag { display: inline-block; margin-bottom: 10px; padding: 4px 14px;
+              border-radius: 9999px; background: #d2d2d7a3; color: var(--ink);
+              font-size: 12px; font-weight: 600; }
+.tile.dark .flag, .tile.dark-2 .flag { background: #ffffff26; color: #fff; }
+
+/* ── 버튼: 작은 필 CTA 한 쌍 (채움 / 고스트) — 액션은 오직 오렌지 ── */
+.pill { display: inline-block; padding: 11px 22px; border-radius: 9999px; font-size: 17px;
+        letter-spacing: -.012em; }
+.pill:active { transform: scale(.95); }
+.pill.fill { background: var(--accent); color: #fff; }
+.pill.ghost { border: 1px solid var(--accent); color: var(--accent); }
+.tile.dark .pill.ghost, .tile.dark-2 .pill.ghost { border-color: var(--accent-on-dark);
+                                                   color: var(--accent-on-dark); }
+
+/* ── 상세페이지: 화이트 캔버스 + 헤어라인 유틸리티 카드 ── */
+.crumb { padding: 1.2rem 0 0; font-size: 14px; letter-spacing: -.016em; }
+.detail { display: grid; gap: 2rem; padding: 1.6rem 0 0; }
+@media (min-width: 720px) { .detail { grid-template-columns: 1.05fr 1fr; align-items: start; } }
+.detail-photo { background: var(--parchment); padding: 2rem; }
+.detail-photo img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover;
+                    box-shadow: var(--product-shadow); }
+.detail-info h1 { margin: .2rem 0 .5rem; font-size: clamp(28px, 4.8vw, 40px); font-weight: 600;
+                  line-height: 1.1; letter-spacing: -.02em; }
+.detail-info .meta { color: var(--muted); font-size: 14px; letter-spacing: -.016em; }
+.detail-info .meta .star { color: var(--ink); font-weight: 600; }
+.detail-price { margin: 1.2rem 0; padding: 1.2rem 1.3rem; background: var(--canvas);
+                border: 1px solid var(--hairline); border-radius: 18px;
+                font-size: 28px; font-weight: 600; letter-spacing: -.02em; }
+.detail-price small { display: block; margin-top: 2px; font-size: 12px; font-weight: 400;
+                      letter-spacing: -.01em; color: var(--muted); }
+.detail-cta { display: grid; gap: 10px; }
+.detail-cta .btn, .btn { display: inline-block; text-align: center; padding: 11px 22px;
+                         border-radius: 9999px; font-size: 17px; letter-spacing: -.012em; }
+.btn:active { transform: scale(.95); }
+.btn.primary, .npay { background: var(--accent) !important; color: #fff !important;
+                      box-shadow: none !important; }
+.btn.ghost { border: 1px solid var(--accent); color: var(--accent); background: transparent; }
+.points { margin: 1.6rem 0 0; padding: 0; list-style: none; display: grid; gap: 0;
+          border: 1px solid var(--hairline); border-radius: 18px; overflow: hidden; }
+.points li { padding: .85rem 1.1rem; background: var(--canvas); font-size: 14px;
+             letter-spacing: -.016em; border-top: 1px solid var(--hairline); }
+.points li:first-child { border-top: 0; }
+section.about { max-width: 44rem; margin: 0 auto; padding: 3.4rem 0 0; }
+.about h2 { margin: 0 0 .7rem; font-size: clamp(24px, 4vw, 34px); font-weight: 600;
+            letter-spacing: -.02em; }
+.about p { margin: 0; color: #4c4038; }
+.notice { max-width: 44rem; margin: 2.4rem auto 0; padding: 1.2rem 1.3rem;
+          border: 1px solid var(--hairline); border-radius: 18px; font-size: 12px;
+          line-height: 1.6; color: var(--muted); }
+.notice b { color: var(--ink); }
+.soldout-flag { display: inline-block; margin-bottom: .6rem; padding: 4px 14px;
+                border-radius: 9999px; background: var(--ink); color: #fff;
+                font-size: 12px; font-weight: 600; }
+
+/* ── 홈 외 페이지 공통 ── */
+.kicker { font-size: 12px; font-weight: 600; letter-spacing: .02em; color: var(--accent); }
+h2 { font-weight: 600; letter-spacing: -.02em; }
+section { padding: 2.6rem 0 1rem; }
+
+/* ── QnA (고객) ── */
+.qna-form { display: grid; gap: 10px; padding: 24px; background: var(--canvas);
+            border: 1px solid var(--hairline); border-radius: 18px; margin-bottom: 2.2rem; }
+.qna-form .row { display: grid; grid-template-columns: 1fr 1.4fr; gap: 10px; }
+.qna-form input, .qna-form select, .qna-form textarea {
+  font: inherit; color: inherit; letter-spacing: -.012em; padding: 12px 16px;
+  border-radius: 9999px; border: 1px solid var(--hairline); background: var(--canvas);
+  width: 100%; }
+.qna-form textarea { min-height: 6.5rem; resize: vertical; border-radius: 18px; }
+.qna-form button { font: inherit; padding: 11px; border: 0; border-radius: 9999px;
+                   background: var(--accent); color: #fff; cursor: pointer; }
+.qna-form button:active { transform: scale(.97); }
+.qna-form button:disabled { opacity: .5; }
+.qna-note { margin: 0; font-size: 12px; color: var(--muted); }
+.qna-status { min-height: 1.2em; margin: 0; font-size: 14px; color: var(--accent); }
+.qna-item { padding: 20px 24px; background: var(--canvas); border: 1px solid var(--hairline);
+            border-radius: 18px; margin-bottom: 12px; }
+.qna-item .head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap;
+                  font-size: 12px; color: var(--muted); }
+.qna-item .head b { color: var(--ink); font-size: 14px; font-weight: 600; }
+.qna-item .head .prod { background: var(--parchment); padding: 2px 12px; border-radius: 9999px;
+                        color: var(--ink); font-weight: 600; }
+.qna-item .q { margin: .5rem 0 0; font-size: 15px; white-space: pre-wrap; }
+.qna-item .a { margin: .8rem 0 0; padding: .8rem 1rem; background: var(--parchment);
+               border-radius: 12px; font-size: 15px; white-space: pre-wrap; }
+.qna-item .a::before { content: "다온핏 답변"; display: block; margin-bottom: .25rem;
+                       font-size: 12px; font-weight: 600; color: var(--accent); }
+.qna-item .waiting { margin: .6rem 0 0; font-size: 12px; color: var(--muted); }
+.qna-empty { padding: 2.4rem 0; text-align: center; color: var(--muted); font-size: 15px; }
+
+/* ── 관리자 ── */
+.admin-head { display: flex; align-items: baseline; gap: .7rem; flex-wrap: wrap;
+              padding-top: 1.6rem; }
+.admin-head h1 { margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -.02em; }
+.admin-head .count { color: var(--muted); font-size: 14px; }
+.filters { display: flex; gap: 6px; margin: 1.1rem 0 1.4rem; }
+.filters button { font: inherit; font-size: 14px; letter-spacing: -.016em; cursor: pointer;
+                  padding: 8px 16px; border-radius: 9999px; border: 1px solid var(--hairline);
+                  background: var(--canvas); color: var(--ink); }
+.filters button.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+.aq { padding: 20px 24px; background: var(--canvas); border: 1px solid var(--hairline);
+      border-radius: 18px; margin-bottom: 12px; }
+.aq.unanswered { border-color: var(--accent); }
+.aq .head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap;
+            font-size: 12px; color: var(--muted); }
+.aq .head b { color: var(--ink); font-size: 14px; font-weight: 600; }
+.aq .head .prod { background: var(--parchment); padding: 2px 12px; border-radius: 9999px;
+                  font-weight: 600; color: var(--ink); }
+.aq .q { margin: .5rem 0 .8rem; font-size: 15px; white-space: pre-wrap; }
+.aq textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 4.2rem;
+               padding: 12px 14px; border: 1px solid var(--hairline); border-radius: 12px;
+               background: var(--canvas); resize: vertical; }
+.aq .actions { display: flex; gap: 8px; margin-top: 10px; }
+.aq .actions button { font: inherit; font-size: 14px; cursor: pointer; padding: 9px 18px;
+                      border-radius: 9999px; border: 1px solid var(--hairline);
+                      background: var(--canvas); color: var(--ink); }
+.aq .actions .save { background: var(--accent); border-color: var(--accent); color: #fff; }
+.aq .actions .del { color: #c14848; margin-left: auto; }
+.aq .actions button:disabled { opacity: .5; }
+.aq .saved-at { align-self: center; font-size: 12px; color: var(--muted); }
+.admin-empty { padding: 2.6rem 0; text-align: center; color: var(--muted); }
+
+/* ── 푸터: 파치먼트 ── */
+footer { background: var(--parchment); border-top: 1px solid var(--hairline);
+         padding: 40px 24px 48px; text-align: center; color: var(--muted); font-size: 12px; }
+footer nav { display: flex; justify-content: center; gap: 22px; margin-bottom: 10px; }
+footer a { color: var(--ink); font-size: 14px; letter-spacing: -.016em; }
