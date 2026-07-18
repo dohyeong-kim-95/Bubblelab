@@ -6,8 +6,10 @@
 ## 핵심 규칙
 
 - **루트 폴더 = 서브도메인**: `slop/` → slop.bubblelab.dev, `games/` →
-  games.bubblelab.dev, `www/` → bubblelab.dev(apex). 새 폴더 = 새 서브도메인
-  (설정 불필요).
+  games.bubblelab.dev, `www/` → bubblelab.dev(apex). 새 폴더 = 새 서브도메인.
+  퍼블릭 서브도메인은 `www/index.html` 랜딩에 카드 추가 필수(빌드가 검사),
+  비공개는 `_infra/build.mjs`의 `CONFIDENTIAL_SUBDOMAINS`에 등록(랜딩·풀다운
+  미노출, 직접 주소로만 접근).
 - `_`나 `.`로 시작하는 폴더는 배포되지 않는다 (`_infra`, `_src`, `_shared`는
   각각 인프라, 빌드 소스, 공용 에셋).
 - 토이 하나 = 폴더 하나 (`slop/이름/index.html`). 의존성·빌드 도구 없는

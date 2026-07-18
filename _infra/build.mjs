@@ -18,6 +18,10 @@ import { generateAssetCatalog } from "./assets.js";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const DIST = join(ROOT, "dist");
 const SKIP = new Set(["dist", "node_modules"]);
+// 서브도메인 공개 구분. 퍼블릭은 www 랜딩 카드와 카테고리 홈 풀다운 메뉴에
+// 노출되고, confidential은 주소를 직접 쳐야만 들어갈 수 있다(어디에도 링크 없음).
+// 새 폴더는 기본 퍼블릭이며, 빌드가 www 랜딩 카드 존재 여부를 검사한다.
+const CONFIDENTIAL_SUBDOMAINS = new Set(["admin", "work"]);
 // 백엔드가 보안상 닫혀 있는 동안 카테고리 홈에서 발견되지 않게 한다.
 // 소스와 직접 URL은 유지되며, 인증/ACL 검토 후 이 목록에서 제거한다.
 const UNLISTED_ENTRIES = new Map([
@@ -37,6 +41,25 @@ mkdirSync(DIST);
 const notReadme = (src) => !src.endsWith("/README.md");
 
 const sites = readdirSync(ROOT, { withFileTypes: true }).filter(isSite);
+
+// 퍼블릭 서브도메인은 반드시 www 랜딩에 카드로 연결되고,
+// confidential 서브도메인은 랜딩에 링크가 있으면 안 된다.
+{
+  const landing = readFileSync(join(ROOT, "www", "index.html"), "utf8");
+  for (const { name } of sites) {
+    if (name === "www") continue;
+    const linked = landing.includes(`https://${name}.bubblelab.dev`);
+    if (CONFIDENTIAL_SUBDOMAINS.has(name) && linked) {
+      throw new Error(`confidential subdomain "${name}" must not be linked from www/index.html`);
+    }
+    if (!CONFIDENTIAL_SUBDOMAINS.has(name) && !linked) {
+      throw new Error(
+        `public subdomain "${name}" is missing from www/index.html — ` +
+        `랜딩에 카드를 추가하거나 _infra/build.mjs의 CONFIDENTIAL_SUBDOMAINS에 등록하세요`,
+      );
+    }
+  }
+}
 for (const site of sites) {
   cpSync(join(ROOT, site.name), join(DIST, site.name), {
     recursive: true,
@@ -90,7 +113,7 @@ function hueOf(name) {
 function listingPage(site, entries) {
   const categoryNames = sites
     .map((item) => item.name)
-    .filter((name) => !["admin", "www"].includes(name))
+    .filter((name) => name !== "www" && !CONFIDENTIAL_SUBDOMAINS.has(name))
     .sort((a, b) => a.localeCompare(b, "ko"));
   const categoryLinks = categoryNames
     .map((name) => `      <a href="https://${escapeHtml(name)}.bubblelab.dev"${name === site ? ' aria-current="page"' : ""}><span>${name === site ? "✓" : ""}</span>${escapeHtml(name)}</a>`)
