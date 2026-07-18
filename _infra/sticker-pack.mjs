@@ -66,19 +66,57 @@ export function crop(image, x, y, width, height) {
   return { width, height, data };
 }
 
-// 시트를 cols x rows 셀로 균등 분할 (좌→우, 위→아래)
+// 절단 위치 선택: 균등 분할 지점 근처(±칸의 1/3)에서 내용(비배경 픽셀)을
+// 가장 적게 가로지르는 선을 고른다. 배경만 지나는 선이 있으면 그중 균등
+// 위치에 가장 가까운 것. counts[i] = i번째 선 위의 비배경 픽셀 수.
+function cutPositions(counts, parts) {
+  const size = counts.length;
+  const cuts = [0];
+  for (let k = 1; k < parts; k++) {
+    const ideal = Math.round((k * size) / parts);
+    const radius = Math.floor(size / (parts * 3));
+    let best = ideal;
+    let bestScore = Infinity;
+    for (let d = 0; d <= radius; d++) {
+      for (const pos of d ? [ideal - d, ideal + d] : [ideal]) {
+        if (pos <= cuts[cuts.length - 1] || pos >= size) continue;
+        const score = counts[pos] * size + d; // 내용 교차 최소 우선, 동률이면 균등 위치 근처
+        if (score < bestScore) { bestScore = score; best = pos; }
+      }
+    }
+    cuts.push(best);
+  }
+  cuts.push(size);
+  return cuts;
+}
+
+// 시트를 cols x rows 셀로 분할 (좌→우, 위→아래).
+// 행을 먼저 자르고 행마다 열 절단 위치를 따로 잡으므로, 그림이 균등 격자선을
+// 살짝 넘어도(예: 옆 칸으로 튀어나온 공) 절단선이 그림을 피해서 지나간다.
 export function sliceGrid(image, cols, rows) {
   if (image.width < cols || image.height < rows) {
     throw new Error(`이미지(${image.width}x${image.height})가 ${cols}x${rows} 그리드보다 작습니다`);
   }
+  const rowCounts = new Array(image.height).fill(0);
+  for (let y = 0; y < image.height; y++) {
+    for (let x = 0; x < image.width; x++) {
+      if (!isBackground(image.data, (y * image.width + x) * 4)) rowCounts[y]++;
+    }
+  }
   const cells = [];
+  const yCuts = cutPositions(rowCounts, rows);
   for (let gy = 0; gy < rows; gy++) {
+    const y = yCuts[gy];
+    const bandHeight = yCuts[gy + 1] - y;
+    const colCounts = new Array(image.width).fill(0);
+    for (let x = 0; x < image.width; x++) {
+      for (let dy = 0; dy < bandHeight; dy++) {
+        if (!isBackground(image.data, ((y + dy) * image.width + x) * 4)) colCounts[x]++;
+      }
+    }
+    const xCuts = cutPositions(colCounts, cols);
     for (let gx = 0; gx < cols; gx++) {
-      const x = Math.round((gx * image.width) / cols);
-      const y = Math.round((gy * image.height) / rows);
-      const right = Math.round(((gx + 1) * image.width) / cols);
-      const bottom = Math.round(((gy + 1) * image.height) / rows);
-      cells.push(crop(image, x, y, right - x, bottom - y));
+      cells.push(crop(image, xCuts[gx], y, xCuts[gx + 1] - xCuts[gx], bandHeight));
     }
   }
   return cells;

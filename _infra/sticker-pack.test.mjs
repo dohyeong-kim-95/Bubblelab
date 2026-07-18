@@ -38,6 +38,14 @@ function paintRect(image, x, y, w, h, color) {
   }
 }
 
+function countColor(image, color) {
+  let n = 0;
+  for (let i = 0; i < image.data.length; i += 4) {
+    if (color.every((v, k) => image.data[i + k] === v)) n++;
+  }
+  return n;
+}
+
 test("png codec: RGBA roundtrip preserves every pixel", () => {
   const image = makeImage(13, 7, [0, 0, 0, 0]);
   // 결정적 패턴 (테스트마다 같은 결과)
@@ -78,14 +86,35 @@ test("parseGrid accepts CxR and rejects nonsense", () => {
 });
 
 test("sliceGrid cuts row-major cells that cover the sheet exactly", () => {
-  const sheet = makeImage(10, 6);
-  paintRect(sheet, 0, 0, 5, 3, [255, 0, 0, 255]);   // 좌상
-  paintRect(sheet, 5, 3, 5, 3, [0, 0, 255, 255]);   // 우하
+  const sheet = makeImage(40, 24);
+  paintRect(sheet, 2, 2, 16, 8, [255, 0, 0, 255]);    // 좌상 셀 내용
+  paintRect(sheet, 24, 14, 14, 8, [0, 0, 255, 255]);  // 우하 셀 내용
   const cells = sliceGrid(sheet, 2, 2);
   assert.equal(cells.length, 4);
-  assert.deepEqual(cells.map((c) => [c.width, c.height]), [[5, 3], [5, 3], [5, 3], [5, 3]]);
-  assert.deepEqual([...cells[0].data.slice(0, 4)], [255, 0, 0, 255]);
-  assert.deepEqual([...cells[3].data.slice(-4)], [0, 0, 255, 255]);
+  // 행 높이는 행 전체가 공유하고, 각 행의 열 폭 합 = 시트 폭 (겹침·누락 없음)
+  assert.equal(cells[0].height, cells[1].height);
+  assert.equal(cells[0].width + cells[1].width, 40);
+  assert.equal(cells[2].width + cells[3].width, 40);
+  assert.equal(cells[0].height + cells[2].height, 24);
+  // 내용은 통째로 자기 셀 안에 들어간다
+  assert.equal(countColor(cells[0], [255, 0, 0, 255]), 16 * 8);
+  assert.equal(countColor(cells[3], [0, 0, 255, 255]), 14 * 8);
+});
+
+test("sliceGrid shifts cuts per row so art crossing the uniform gridline stays whole", () => {
+  const sheet = makeImage(60, 60);
+  // 1행: 정상적으로 셀 안에 든 두 블롭
+  paintRect(sheet, 8, 8, 14, 14, [200, 0, 0, 255]);
+  paintRect(sheet, 38, 8, 14, 14, [0, 200, 0, 255]);
+  // 2행: 왼쪽 셀 그림(공)이 균등 격자선(x=30)을 넘어 오른쪽으로 튀어나온 상황
+  paintRect(sheet, 20, 40, 16, 12, [0, 0, 200, 255]); // x 20–35, 격자선 침범
+  paintRect(sheet, 46, 40, 10, 12, [90, 60, 0, 255]);
+  const cells = sliceGrid(sheet, 2, 2);
+  // 침범한 공은 쪼개지지 않고 통째로 3번 셀(2행 1열)에 들어간다
+  assert.equal(countColor(cells[2], [0, 0, 200, 255]), 16 * 12);
+  assert.equal(countColor(cells[3], [0, 0, 200, 255]), 0);
+  // 그러기 위해 2행의 열 절단 위치는 1행과 다르다
+  assert.notEqual(cells[0].width, cells[2].width);
 });
 
 test("trimCell drops white/transparent margins but keeps padding", () => {
