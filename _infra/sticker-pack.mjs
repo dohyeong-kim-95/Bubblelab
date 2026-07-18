@@ -297,13 +297,32 @@ export async function buildStickerPack({
     if (sheet.data[i] !== 255) { sheetOpaque = false; break; }
   }
   const cells = sliceGrid(sheet, cols, rows);
+  const cutoutApplied = cutout && sheetOpaque;
   const trimmed = cells.map((cell, i) => {
-    const result = trimCell(cutout && sheetOpaque ? cutoutBackground(cell) : cell);
+    const result = trimCell(cutoutApplied ? cutoutBackground(cell) : cell);
     if (!result) {
       throw new Error(`${i + 1}번째 셀(${pad2(i + 1)})이 비어 있습니다 — 그리드 수를 확인하세요`);
     }
     return result;
   });
+
+  // 누끼 검증은 생성 산출물 기준: 각 셀에서 배경이 실제로 투명하게 떨어졌는지
+  // 확인한다 (클라이언트 표시가 아니라 저장되는 PNG가 검증 대상).
+  const transparentRatios = trimmed.map((cell) => {
+    let transparent = 0;
+    for (let p = 3; p < cell.data.length; p += 4) if (cell.data[p] === 0) transparent++;
+    return transparent / (cell.width * cell.height);
+  });
+  if (cutoutApplied) {
+    transparentRatios.forEach((ratio, i) => {
+      if (ratio < 0.05) {
+        throw new Error(
+          `${pad2(i + 1)} 셀 누끼 검증 실패 — 배경이 투명해지지 않았습니다 ` +
+          "(그림이 셀을 가득 채우면 --no-cutout, 배경이 흰색이 아니면 시트를 확인하세요)",
+        );
+      }
+    });
+  }
 
   mkdirSync(packDir, { recursive: true });
   for (let i = 0; i < trimmed.length; i++) {
@@ -327,7 +346,10 @@ export async function buildStickerPack({
   // 빌드와 같은 검증을 즉시 돌려 커밋 전에 실패를 알린다
   readAssetMetadata(join(root, "_assets"), "sticker", packDir);
 
-  const touched = [`_assets/sticker/${id}/ (${count}장 + preview.png + metadata.json)`];
+  const cutoutSummary = cutoutApplied
+    ? `누끼 적용 — 셀당 투명 ${Math.round(Math.min(...transparentRatios) * 100)}–${Math.round(Math.max(...transparentRatios) * 100)}%`
+    : sheetOpaque ? "누끼 생략(--no-cutout)" : "이미 투명한 시트 — 누끼 생략";
+  const touched = [`_assets/sticker/${id}/ (${count}장 + preview.png + metadata.json, ${cutoutSummary})`];
   if (chatTitle?.trim()) {
     const chatPath = join(root, "_infra", "chat.js");
     writeFileSync(chatPath, withChatPack(readFileSync(chatPath, "utf8"), id, count));

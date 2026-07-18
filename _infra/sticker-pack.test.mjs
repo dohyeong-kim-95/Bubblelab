@@ -251,6 +251,14 @@ test("buildStickerPack: sheet → sliced pack + metadata + chat registration", a
     assert.match(chatSource, /\["test-pack", 4\],\n  \["zebra", 16\]/);
     assert.match(readFileSync(join(root, "_assets", "sticker", "README.md"), "utf8"), /`test-pack`/);
 
+    // 누끼 검증(생성 산출물 기준): 배경이 투명해지지 않는 시트는 거부된다
+    const fullBleed = makeImage(40, 40, [60, 60, 60, 255]); // 흰 배경 없는 꽉 찬 시트
+    const fullBleedPath = join(root, "full-bleed.png");
+    writeFileSync(fullBleedPath, encodePng(fullBleed));
+    await assert.rejects(() => buildStickerPack({
+      imagePath: fullBleedPath, id: "full-bleed", title: "x", grid: "2x2", root,
+    }), /누끼 검증 실패/);
+
     // 같은 id 재실행은 --force 없이는 거부
     await assert.rejects(() => buildStickerPack({
       imagePath: sheetPath, id: "test-pack", title: "x", grid: "2x2", root,
