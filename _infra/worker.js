@@ -21,6 +21,7 @@ import {
 } from "./security.js";
 
 export { RealtimeDO } from "./realtime.js";
+export { WorkQnaDO } from "./workqna.js";
 export { AnalyticsDO } from "./analytics.js";
 export { RecordsDO } from "./records.js";
 export { PlannerDO } from "./planner.js";
@@ -515,6 +516,41 @@ export async function handleRequest(request, env, ctx) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...body, vid: visitorId(request) }),
+      });
+    }
+
+    // 외주 프로젝트 QnA: work 게이트 세션이 있어야만 읽고 쓸 수 있다.
+    if (path.startsWith("/_workqna/")) {
+      if (!env.WORK_PASSWORD) {
+        return new Response("work preview is not configured", { status: 503 });
+      }
+      const workKey = await crypto.subtle.importKey(
+        "raw", new TextEncoder().encode(`${env.WORK_PASSWORD}\0bl-work-session`),
+        { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
+      );
+      if (!(await validSession(workKey, cookies(request).bl_work))) {
+        return Response.json({ error: "authentication required" }, { status: 401 });
+      }
+      const [project, action = ""] = path.slice("/_workqna/".length).split("/");
+      if (!/^[a-z0-9-]{1,32}$/.test(project) || !["", "ask", "answer", "delete"].includes(action)) {
+        return new Response("not found", { status: 404 });
+      }
+      if (request.method === "POST") {
+        const contentTypeError = requireJsonRequest(request);
+        if (contentTypeError) return contentTypeError;
+        const limited = await enforceRateLimit(request, env, {
+          scope: "workqna-write", limit: 10, windowMs: 10 * 60 * 1000,
+        });
+        if (limited) return limited;
+      } else if (request.method !== "GET") {
+        return new Response("method not allowed", { status: 405, headers: { Allow: "GET, POST" } });
+      }
+      const id = env.WORK_QNA.idFromName(project);
+      return env.WORK_QNA.get(id).fetch(`https://workqna.internal/${action}`, {
+        method: request.method,
+        ...(request.method === "POST" && {
+          headers: { "Content-Type": "application/json" }, body: await request.text(),
+        }),
       });
     }
 

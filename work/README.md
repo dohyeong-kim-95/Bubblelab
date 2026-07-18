@@ -16,6 +16,12 @@
 - 모든 응답에 `X-Robots-Tag: noindex`와 `Cache-Control: no-store`가 붙고 방문
   통계에서도 제외됩니다.
 
+## QnA API
+
+프로젝트별 문의 보드가 필요하면 `/_workqna/<프로젝트>` API를 씁니다
+(GET 목록 / POST ask·answer·delete). work 게이트 세션 쿠키가 있어야만 접근되고,
+쓰기는 10분당 10회로 제한되며 `WorkQnaDO`에 프로젝트당 최근 500건을 보관합니다.
+
 ## 주의
 
 - **리포는 public입니다.** 게이트는 배포된 화면만 가리므로, 커밋된 코드·이미지는

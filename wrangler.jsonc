@@ -40,7 +40,8 @@
       { "name": "ANALYTICS", "class_name": "AnalyticsDO" },
       { "name": "RECORDS", "class_name": "RecordsDO" },
       { "name": "PLANNER", "class_name": "PlannerDO" },
-      { "name": "RATE_LIMITER", "class_name": "RateLimiterDO" }
+      { "name": "RATE_LIMITER", "class_name": "RateLimiterDO" },
+      { "name": "WORK_QNA", "class_name": "WorkQnaDO" }
     ]
   },
   "migrations": [
@@ -48,6 +49,7 @@
     { "tag": "v2", "new_sqlite_classes": ["AnalyticsDO"] },
     { "tag": "v3", "new_sqlite_classes": ["RecordsDO"] },
     { "tag": "v4", "new_sqlite_classes": ["PlannerDO"] },
-    { "tag": "v5", "new_sqlite_classes": ["RateLimiterDO"] }
+    { "tag": "v5", "new_sqlite_classes": ["RateLimiterDO"] },
+    { "tag": "v6", "new_sqlite_classes": ["WorkQnaDO"] }
   ]
 }
