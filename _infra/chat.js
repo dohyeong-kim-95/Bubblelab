@@ -83,6 +83,15 @@ function randomNick() {
   return `${head} ${tail}${Math.floor(Math.random() * 90) + 10}`;
 }
 
+// 로비 안에서 겹치지 않는 랜덤 닉네임 (닉네임은 접속자 간 유일해야 한다)
+export function uniqueNick(taken) {
+  for (let i = 0; i < 30; i++) {
+    const nick = randomNick();
+    if (!taken.has(nick)) return nick;
+  }
+  return `버블${Math.floor(Math.random() * 9000) + 1000}`;
+}
+
 export class ChatDO {
   constructor(state) {
     this.state = state;
@@ -125,7 +134,7 @@ export class ChatDO {
     const conn = {
       ws: server,
       id: crypto.randomUUID().slice(0, 8),
-      nick: randomNick(),
+      nick: uniqueNick(new Set([...this.conns].map((c) => c.nick))),
       stamps: [],
     };
     this.conns.add(conn);
@@ -195,6 +204,11 @@ export class ChatDO {
         return;
       }
       if (nick === conn.nick) return;
+      // 닉네임은 접속자 간 유일 — 다른 브라우저가 같은 이름을 쓸 수 없다
+      if ([...this.conns].some((c) => c !== conn && c.nick === nick)) {
+        this.send(conn, { type: "error", error: "nick-taken" });
+        return;
+      }
       conn.stamps.push(now);
       const prev = conn.nick;
       conn.nick = nick;

@@ -4,6 +4,7 @@ import {
   CHAT_STICKER_PACKS,
   parseMaxConnections,
   sanitizeChatNick,
+  uniqueNick,
   validateChatMessage,
 } from "./chat.js";
 
@@ -70,6 +71,15 @@ test("rejects unknown or malformed frames", () => {
   assert.throws(() => validateChatMessage(null), /invalid message/);
   assert.throws(() => validateChatMessage([]), /invalid message/);
   assert.throws(() => validateChatMessage({ type: "eval", code: "x" }), /unknown type/);
+});
+
+test("random nicknames avoid names already in the lobby", () => {
+  for (let i = 0; i < 50; i++) {
+    const nick = uniqueNick(new Set());
+    assert.ok(typeof nick === "string" && nick.length >= 1 && nick.length <= 16);
+    const taken = new Set([nick]);
+    assert.ok(!taken.has(uniqueNick(taken)));
+  }
 });
 
 test("admin max-connections values are validated as integers 1-100", () => {

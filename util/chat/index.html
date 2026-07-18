@@ -20,12 +20,18 @@
         border-radius: 2rem; padding: .35rem .8rem; max-width: 11rem;
         overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #me:hover { background: light-dark(#1c27330d, #dbe4ee12); }
+  /* 공유 버튼(/_shared/share.js)은 기본 우하단 고정이라 전송 버튼과 겹친다
+     → 헤더로 옮겨 닉네임 옆 알약 버튼으로 표시 */
+  header #bl-share { position: static; font-size: .8rem; font-weight: normal;
+                     padding: .35rem .8rem; border-width: 1px; backdrop-filter: none;
+                     -webkit-backdrop-filter: none; background: none; color: inherit; }
   #notice { flex: none; margin: 0; padding: .45rem 1rem; font-size: .72rem; opacity: .55;
             text-align: center; line-height: 1.5; }
   #log-wrap { flex: 1; min-height: 0; position: relative; display: flex; }
   #log { flex: 1; overflow-y: auto; padding: .4rem 1rem 1rem; display: flex;
          flex-direction: column; gap: .55rem; scrollbar-width: thin; }
-  #to-bottom { position: absolute; right: 1rem; bottom: .8rem; width: 2.6rem; height: 2.6rem;
+  #to-bottom { position: absolute; left: 50%; transform: translateX(-50%); bottom: .8rem;
+               width: 2.6rem; height: 2.6rem;
                border-radius: 50%; border: 1px solid light-dark(#1c273326, #dbe4ee2a);
                background: light-dark(#fff, #1a2434); color: inherit; font-size: 1.05rem;
                cursor: pointer; box-shadow: 0 3px 10px #0003; }
@@ -44,7 +50,8 @@
                       border-top-left-radius: 1rem; border-top-right-radius: .3rem; }
   /* 스티커는 정사각형 자리를 먼저 잡아 로드 시 스크롤이 밀리지 않게 한다 */
   .bubble img { display: block; width: clamp(6.5rem, 30vw, 9rem); aspect-ratio: 1 / 1; height: auto; }
-  .bubble.sticker { padding: .25rem; background: none; border: none; }
+  /* 누끼 스티커는 내 말풍선(.msg.mine .bubble) 배경보다 우선해 완전 투명으로 */
+  .bubble.sticker, .msg.mine .bubble.sticker { padding: .25rem; background: none; border: none; }
   #status { flex: none; text-align: center; font-size: .74rem; padding: .3rem;
             color: light-dark(#a05a2c, #f0b27a); min-height: 1.3rem; }
   #status:empty { display: none; }
@@ -62,9 +69,18 @@
           padding: 0 1rem; border-radius: .7rem; border: 0;
           background: light-dark(#1c2733, #dbe4ee); color: light-dark(#eef2f6, #10161f); }
   #send:disabled, #text:disabled, #sticker-btn:disabled { opacity: .45; cursor: default; }
-  #picker { flex: none; border-top: 1px solid light-dark(#1c273318, #dbe4ee1c);
+  #picker { flex: none; position: relative; border-top: 1px solid light-dark(#1c273318, #dbe4ee1c);
             background: light-dark(#e6ebf1, #0d131c); }
   #picker[hidden] { display: none; }
+  /* 선택한 스티커 미리보기 — 픽커 바로 위에 떠서 로그를 가리지 않게 통과 클릭 */
+  #preview { position: absolute; bottom: calc(100% + .6rem); left: 50%; transform: translateX(-50%);
+             display: flex; flex-direction: column; align-items: center; gap: .35rem;
+             padding: .7rem .9rem .55rem; border-radius: 1rem; z-index: 2; pointer-events: none;
+             background: light-dark(#ffffffe6, #1a2434f0);
+             border: 1px solid light-dark(#1c273322, #dbe4ee2a); box-shadow: 0 8px 24px #0004; }
+  #preview[hidden] { display: none; }
+  #preview img { width: clamp(7rem, 34vw, 9.5rem); aspect-ratio: 1 / 1; height: auto; display: block; }
+  #preview span { font-size: .72rem; opacity: .7; max-width: 12rem; text-align: center; }
   #tabs { display: flex; gap: .25rem; padding: .5rem .8rem 0; overflow-x: auto; }
   #tabs button { font: inherit; font-size: .74rem; color: inherit; cursor: pointer;
                  background: none; border: 0; border-radius: .5rem .5rem 0 0;
@@ -100,8 +116,9 @@
 </div>
 <div id="status"></div>
 <div id="picker" hidden>
+  <div id="preview" hidden></div>
   <div id="tabs" role="tablist"></div>
-  <div id="picker-hint">스티커를 한 번 누르면 고르고, 한 번 더 누르면 전송돼요</div>
+  <div id="picker-hint">스티커를 누르면 미리보기, 한 번 더 누르면 전송돼요</div>
   <div id="grid"></div>
 </div>
 <form id="composer">
@@ -303,6 +320,9 @@ function connect() {
     } else if (msg.type === "error" && msg.error === "rate") {
       setStatus("너무 빨라요 — 잠시 쉬었다 보내주세요");
       setTimeout(() => setStatus(""), 3000);
+    } else if (msg.type === "error" && msg.error === "nick-taken") {
+      setStatus("이미 사용 중인 닉네임이에요 — 다른 이름을 골라주세요");
+      setTimeout(() => setStatus(""), 3000);
     }
   });
 
@@ -340,7 +360,8 @@ const picker = $("picker");
 const tabs = $("tabs");
 const grid = $("grid");
 const pickerHint = $("picker-hint");
-const HINT_DEFAULT = "스티커를 한 번 누르면 고르고, 한 번 더 누르면 전송돼요";
+const preview = $("preview");
+const HINT_DEFAULT = "스티커를 누르면 미리보기, 한 번 더 누르면 전송돼요";
 const labelCache = new Map();  // pack → Promise<[라벨…]>
 const gridPages = new Map();   // pack → 만들어 둔 그리드 노드 (열 때마다 재생성하지 않는다)
 let activeTab = "recent";
@@ -375,7 +396,16 @@ function packLabels(pack) {
 function clearSelection() {
   selectedKey = null;
   pickerHint.textContent = HINT_DEFAULT;
+  preview.hidden = true;
+  preview.replaceChildren();
   for (const button of grid.querySelectorAll("button.selected")) button.classList.remove("selected");
+}
+
+function showPreview(pack, n, label) {
+  const caption = document.createElement("span");
+  caption.textContent = label ? `${label} — 한 번 더 누르면 전송` : "한 번 더 누르면 전송";
+  preview.replaceChildren(stickerImg(pack, n, label || "선택한 스티커"), caption);
+  preview.hidden = false;
 }
 
 function sendSticker(pack, n) {
@@ -394,7 +424,7 @@ function onStickerClick(button, pack, n) {
   clearSelection();
   selectedKey = key;
   button.classList.add("selected");
-  pickerHint.textContent = `${button.title || "이 스티커"} — 한 번 더 누르면 전송`;
+  showPreview(pack, n, button.title);
 }
 
 function stickerButton(pack, n, label) {
@@ -495,6 +525,12 @@ idle(() => {
 });
 
 window.blShareText = () => "util.bubblelab.dev/chat — 익명 채팅방에서 말 스티커로 수다 떨어요 💬";
+
+// share.js가 만든 고정 버튼을 헤더 안으로 옮긴다 (전송 버튼과 겹치지 않게)
+addEventListener("load", () => {
+  const share = document.getElementById("bl-share");
+  if (share) document.querySelector("header").append(share);
+});
 
 connect();
 </script>
