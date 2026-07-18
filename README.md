@@ -48,6 +48,16 @@ git push
 자동 생성됩니다. 카드는 기본적으로 이름순으로 만들어지고, 브라우저에서 최근 7일
 방문량 순으로 재정렬됩니다.
 
+스티커 팩은 4x4 그리드 시트 이미지 하나로 추가합니다. 슬라이스·트리밍·
+미리보기·`metadata.json`·채팅 서버 등록(`--chat`)까지 한 명령으로 끝나고,
+등록 누락은 `_infra/sticker-pack.test.mjs`가 잡습니다. 자세한 사용법은
+[`_assets/sticker/README.md`](_assets/sticker/README.md)를 참고하세요.
+
+```bash
+node _infra/sticker-pack.mjs 시트.png my-pack --title "제목 16종" \
+  --labels labels.txt --chat "짧은제목"
+```
+
 검증된 토이는 다음처럼 승격할 수 있습니다. 단, 서버 쓰기나 실시간 기능이 있는
 토이는 경로만 옮기지 말고 아래 공개 체크를 먼저 통과해야 합니다.
 

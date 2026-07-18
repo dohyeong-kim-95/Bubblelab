@@ -4,6 +4,7 @@
   "preview": "preview.webp",
   "tags": ["골든리트리버", "골댕이", "강아지", "이모티콘", "캐릭터"],
   "createdAt": "2026-07-16",
+  "chat": { "title": "골댕이" },
   "downloads": [
     { "label": "01. 헤헤", "file": "01.png" },
     { "label": "02. 반가워!", "file": "02.png" },

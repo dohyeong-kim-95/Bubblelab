@@ -33,6 +33,8 @@ const PING_INTERVAL_MS = 30_000;
 
 // 사용할 수 있는 스티커 팩과 장수. /_assets/sticker/<팩>/NN.png 와 1:1 대응.
 // 클라이언트는 URL이 아니라 { pack, n } 참조만 보내고 서버가 여기서 검증한다.
+// 새 팩은 node _infra/sticker-pack.mjs --chat 이 자동 등록하며(수동 편집 불필요),
+// 에셋 폴더·metadata.chat과의 동기화는 sticker-pack.test.mjs가 검사한다.
 export const CHAT_STICKER_PACKS = new Map([
   ["brown-horse", 16],
   ["golden-retriever", 16],

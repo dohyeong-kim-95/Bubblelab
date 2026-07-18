@@ -4,6 +4,7 @@
   "preview": "preview.webp",
   "tags": ["말", "선화", "손그림", "이모티콘", "캐릭터"],
   "createdAt": "2026-07-16",
+  "chat": { "title": "심플말" },
   "downloads": [
     { "label": "01. 최고야!", "file": "01.png" },
     { "label": "02. 당근 좋아", "file": "02.png" },

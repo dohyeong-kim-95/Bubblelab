@@ -26,6 +26,14 @@ export function readAssetMetadata(root, category, itemDir) {
   if (!existsSync(join(itemDir, data.preview))) throw new Error(`${category}/${id}: preview file not found`);
   if (!Array.isArray(data.downloads) || !data.downloads.length) throw new Error(`${category}/${id}: downloads are required`);
 
+  // 선택 필드: 익명 채팅(util/chat) 스티커 서랍 노출용 짧은 제목.
+  // 클라이언트는 catalog.json에서 chat 팩 목록을 읽는다 (하드코딩 없음).
+  // 서버 검증(_infra/chat.js CHAT_STICKER_PACKS)은 sticker-pack.test.mjs가 동기화를 검사한다.
+  const chat = typeof data.chat?.title === "string" && data.chat.title.trim()
+    ? { title: data.chat.title.trim() }
+    : null;
+  if (data.chat && !chat) throw new Error(`${category}/${id}: chat.title must be a non-empty string`);
+
   const downloads = data.downloads.map((download, index) => {
     if (!safePart(download?.file)) throw new Error(`${category}/${id}: invalid download file #${index + 1}`);
     if (!existsSync(join(itemDir, download.file))) throw new Error(`${category}/${id}: download file not found: ${download.file}`);
@@ -46,6 +54,7 @@ export function readAssetMetadata(root, category, itemDir) {
     downloads,
     createdAt: /^\d{4}-\d{2}-\d{2}$/.test(data.createdAt || "") ? data.createdAt : null,
     active: data.active !== false,
+    ...(chat ? { chat } : {}),
   };
 }
 

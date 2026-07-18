@@ -53,9 +53,24 @@ conclusion으로 확인한다.
 
 익명 채팅(`util/chat`)은 별도의 전용 DO를 쓴다: `_infra/chat.js`의
 `ChatDO`(`/_chat` WebSocket, 단일 로비, 메시지 미저장 브로드캐스트).
-스티커 팩을 추가하면 `chat.js`의 `CHAT_STICKER_PACKS`에도 등록해야 전송이
-허용된다. 정원(기본 10명)은 admin 페이지 💬 Chat에서 조정, `ENABLE_CHAT`
+정원(기본 10명)은 admin 페이지 💬 Chat에서 조정, `ENABLE_CHAT`
 var(fail-closed)로 전체 차단 가능.
+
+## 스티커 팩 추가 (원샷)
+
+4x4 그리드 시트 이미지를 받으면: ① 시트를 **한 번만** 보고 셀 순서(좌→우,
+위→아래)대로 라벨 16줄을 `labels.txt`에 작성 ② 아래 한 명령 실행 ③ 테스트·빌드로
+검증. 개별 셀 이미지를 따로 볼 필요 없고, 다른 파일을 수동 편집하지 않는다.
+
+```bash
+node _infra/sticker-pack.mjs 시트.png <팩id> --title "제목 16종" \
+  --labels labels.txt --chat "짧은제목" --tags "태그,태그"
+```
+
+슬라이스·트리밍·preview·metadata.json·`CHAT_STICKER_PACKS` 등록·스티커 README
+표까지 자동 갱신된다(외부 의존성 없음, `_infra/png.mjs` 순수 JS 코덱 사용).
+util/chat 클라이언트는 `catalog.json`의 `chat.title` 팩을 자동으로 읽으므로
+손댈 곳 없음. 등록 누락·장수 불일치는 `_infra/sticker-pack.test.mjs`가 잡는다.
 
 ## 더 읽을 것 (필요할 때만)
 

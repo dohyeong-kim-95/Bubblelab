@@ -147,13 +147,26 @@
 </form>
 <script>
 "use strict";
-const PACKS = [
-  { id: "brown-horse", title: "갈색말", count: 16 },
-  { id: "golden-retriever", title: "골댕이", count: 16 },
-  { id: "pink-horse", title: "핑크말", count: 16 },
-  { id: "simple-horse", title: "심플말", count: 16 },
-];
-const PACK_IDS = new Map(PACKS.map((pack) => [pack.id, pack]));
+// 스티커 팩 목록은 빌드가 생성하는 /_assets/catalog.json에서 온다 —
+// metadata.json에 chat.title이 있는 sticker 항목이 서랍에 노출된다.
+// (새 팩은 node _infra/sticker-pack.mjs 한 번으로 등록되며 여기는 손댈 곳 없음.
+//  카탈로그 로드 실패 시 텍스트 채팅만 동작한다.)
+const PACKS = [];
+const PACK_IDS = new Map();
+
+async function loadPacks() {
+  try {
+    const res = await fetch("/_assets/catalog.json");
+    if (!res.ok) throw new Error();
+    const { items } = await res.json();
+    for (const item of items ?? []) {
+      if (item.category !== "sticker" || !item.chat?.title || !Array.isArray(item.downloads)) continue;
+      const pack = { id: item.id, title: item.chat.title, count: item.downloads.length };
+      PACKS.push(pack);
+      PACK_IDS.set(pack.id, pack);
+    }
+  } catch { /* 카탈로그 없이도 채팅은 되게 조용히 넘어간다 */ }
+}
 const RECENT_KEY = "bl-chat-recent-stickers";
 const NICK_KEY = "bl-chat-nick";
 
@@ -568,7 +581,7 @@ function openPicker() {
   $("text").blur(); // 모바일: 키보드를 내리고 그 자리를 패널이 차지한다
   picker.hidden = false;
   $("sticker-btn").setAttribute("aria-expanded", "true");
-  if (activeTab === "recent" && !recentStickers().length) activeTab = PACKS[0].id;
+  if (activeTab === "recent" && !recentStickers().length && PACKS.length) activeTab = PACKS[0].id;
   renderTabs();
   renderGrid();
   scrollToBottom();
@@ -596,10 +609,11 @@ if (window.visualViewport) {
   });
 }
 
-// 첫 오픈이 느리지 않게 유휴 시간에 미리 데워 둔다:
+// 팩 목록이 도착하면, 첫 오픈이 느리지 않게 유휴 시간에 미리 데워 둔다:
 // 라벨 전부 + 최근 사용·첫 팩의 누끼 이미지
 const idle = window.requestIdleCallback ?? ((fn) => setTimeout(fn, 400));
-idle(() => {
+loadPacks().then(() => idle(() => {
+  if (!PACKS.length) return;
   for (const pack of PACKS) packLabels(pack.id);
   const warm = [...new Set([
     ...recentStickers(),
@@ -611,7 +625,7 @@ idle(() => {
     const [pack, n] = key.split("/");
     stickerObjectUrl(pack, Number(n)).finally(() => idle(next));
   })();
-});
+}));
 
 window.blShareText = () => "util.bubblelab.dev/chat — 익명 채팅방에서 말 스티커로 수다 떨어요 💬";
 

@@ -4,6 +4,7 @@
   "preview": "preview.webp",
   "tags": ["말", "갈색", "손그림", "이모티콘", "캐릭터"],
   "createdAt": "2026-07-16",
+  "chat": { "title": "갈색말" },
   "downloads": [
     { "label": "01. 탑승했승~", "file": "01.png" },
     { "label": "02. 당근이지~", "file": "02.png" },
