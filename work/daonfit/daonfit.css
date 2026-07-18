@@ -144,3 +144,40 @@
            box-shadow: 0 8px 8px #2b1d161a, 0 4px 4px #2b1d1612, 0 2px 2px #2b1d160f,
                        0 0 0 1px #2b1d1614; }
 .product:hover { box-shadow: 0 14px 22px #2b1d1622, 0 4px 6px #2b1d1614, 0 0 0 1px #2b1d1614; }
+
+/* ── 라이트 트랙 마감: 시네마틱 히어로와 짝이 되는 트랜잭셔널 문법 ── */
+.kicker { font-weight: 500; letter-spacing: .32em; font-size: .68rem; }
+h2 { font-weight: 300; font-size: clamp(1.6rem, 5.2vw, 2.4rem); letter-spacing: -.01em; }
+section { padding: 4.2rem 0 1rem; }
+
+/* USP: 이모지 없이 헤어라인으로 나눈 지표 스트립 */
+.usp { gap: 0; padding: 1.7rem 0; }
+.usp > div { padding: 0 .8rem; border-left: 1px solid var(--line); }
+.usp > div:first-child { border-left: 0; }
+.usp .big { font-size: 1.15rem; font-weight: 300; letter-spacing: .06em; }
+.usp b { margin-top: .2rem; font-size: .78rem; letter-spacing: .04em; }
+
+/* 상품 카드: 얇은 가격, 브라운 채움 필 버튼, 대표 상품은 크림 필 */
+.product h3 { font-weight: 500; font-size: 1rem; }
+.product h3 a { color: inherit; }
+.product .meta { font-size: .76rem; }
+.product .price { font-size: 1.5rem; font-weight: 300; letter-spacing: -.01em; }
+.product .price small { font-size: .72rem; }
+.product .buy { background: var(--brown); color: #fff; font-weight: 600; padding: .72rem; }
+.product .buy:hover { background: var(--orange); color: #fff; }
+.product.featured { background: var(--cream); }
+.product.featured .buy { background: var(--orange); }
+.product.featured .buy:hover { background: var(--orange-deep); }
+
+/* 커스텀 밴드: 그라디언트 대신 플랫 크림 밴드 + 잉크 텍스트 */
+.custom { background: var(--cream); color: var(--brown); border-radius: 1rem;
+          padding: 3rem 1.6rem; }
+.custom h2 { font-weight: 300; }
+.custom p { color: #6d5c50; opacity: 1; }
+.custom .btn { background: var(--brown); color: #fff; }
+.custom .btn:hover { background: var(--orange); }
+.custom .qna-link a { color: var(--orange-deep); font-weight: 700; }
+
+/* 상세페이지도 같은 톤으로 */
+.detail-info h1 { font-weight: 400; }
+.detail-price { font-weight: 300; font-size: 1.7rem; }
