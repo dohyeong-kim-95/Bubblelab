@@ -16,6 +16,7 @@
 | `invest/` | <https://invest.bubblelab.dev> | Experiment | 실제 투자용이 아닌 UI 데모 |
 | `games/` | <https://games.bubblelab.dev> | Archived | 실시간 게임 서버 비활성·목록 비노출 |
 | `admin/` | <https://admin.bubblelab.dev> | Restricted | 인증 후 통계·기록·공지 관리 |
+| `work/` | <https://work.bubblelab.dev> | Restricted | 외주 작업 클라이언트 미리보기 (비밀번호 게이트) |
 
 상태 의미는 `Stable`(운영 기대 가능), `Beta`(공개 검증 중),
 `Experiment`(동작·데이터가 바뀔 수 있음), `Archived`(목록 또는 서버 비활성)입니다.

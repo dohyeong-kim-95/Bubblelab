@@ -41,6 +41,30 @@ ${failed ? '<p class="error">ID 또는 비밀번호가 맞지 않습니다.</p>'
 <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required>
 <button type="submit">로그인</button></form></body></html>`;
 
+// 외주 작업 미리보기(work.bubblelab.dev) 로그인 화면
+const WORK_LOGIN_PAGE = (failed, base) => `<!doctype html><html lang="ko"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow"><title>bubblelab works</title><style>
+:root { color-scheme: light dark; }
+body { font-family: ui-monospace, monospace; min-height: 100dvh; margin: 0; display: grid;
+       place-items: center; background: light-dark(#f2f4f7, #0d131c); color: light-dark(#1c2733, #e2e9f0); }
+form { display: grid; gap: .7rem; width: min(19rem, 88vw); padding: 1.6rem;
+       background: light-dark(#fff, #171f2b); border: 1px solid light-dark(#d9e0e7, #2a3646);
+       border-radius: 1rem; }
+h1 { margin: 0; font-size: 1.05rem; }
+p { margin: 0; font-size: .74rem; opacity: .65; line-height: 1.6; }
+input { font: inherit; color: inherit; padding: .65rem .8rem; border-radius: .6rem;
+        border: 1px solid light-dark(#d9e0e7, #2a3646); background: transparent; }
+button { font: inherit; padding: .65rem; border: 0; border-radius: .6rem;
+         background: #4f7fdd; color: #fff; font-weight: bold; cursor: pointer; }
+.error { color: #d05a5a; font-size: .74rem; min-height: 1em; margin: 0; }</style></head>
+<body><form method="post" action="${base}/login">
+<h1>🔒 bubblelab works</h1>
+<p>클라이언트 미리보기 공간입니다. 전달받은 비밀번호를 입력해주세요.</p>
+<input name="password" type="password" autocomplete="current-password" aria-label="비밀번호" required autofocus>
+<p class="error">${failed ? "비밀번호가 맞지 않습니다." : ""}</p>
+<button type="submit">들어가기</button></form></body></html>`;
+
 function cookies(request) {
   return Object.fromEntries(
     (request.headers.get("Cookie") ?? "").split(";").filter(Boolean).map((part) => {
@@ -155,6 +179,41 @@ async function handlePlanner(request, env, url) {
     });
   }
   return new Response("not found", { status: 404 });
+}
+
+/* 외주 작업 미리보기 게이트. 비밀번호는 WORK_PASSWORD secret 하나로,
+ * 세션은 admin과 같은 HMAC 서명 토큰을 쓴다. 인증되면 null을 돌려
+ * 정적 서빙으로 폴스루한다. */
+async function handleWork(request, env, url, base = "") {
+  const key = await crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(`${env.WORK_PASSWORD}\0bl-work-session`),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
+  );
+  const isAuthed = await validSession(key, cookies(request).bl_work);
+  const cookieFlags = `Path=/; HttpOnly; SameSite=Strict; Max-Age=86400${url.protocol === "https:" ? "; Secure" : ""}`;
+  const htmlHeaders = { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" };
+
+  if (url.pathname === "/login" && request.method === "POST") {
+    const limited = await enforceRateLimit(request, env, {
+      scope: "work-login", limit: 5, windowMs: 15 * 60 * 1000,
+    });
+    if (limited) return limited;
+    const form = await request.formData();
+    if (await matchesCredential(key, form.get("password"), env.WORK_PASSWORD)) {
+      const token = await issueSession(key);
+      return redirect(`${base}/`, { "Set-Cookie": `bl_work=${token}; ${cookieFlags}` });
+    }
+    return new Response(WORK_LOGIN_PAGE(true, base), { status: 401, headers: htmlHeaders });
+  }
+  if (url.pathname === "/logout") {
+    return redirect(`${base}/login`, { "Set-Cookie": "bl_work=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0" });
+  }
+  if (url.pathname === "/login") {
+    if (isAuthed) return redirect(`${base}/`);
+    return new Response(WORK_LOGIN_PAGE(false, base), { headers: htmlHeaders });
+  }
+  if (!isAuthed) return redirect(`${base}/login`);
+  return null;
 }
 
 function kstDate() {
@@ -507,10 +566,22 @@ export async function handleRequest(request, env, ctx) {
       if (adminResponse) return adminResponse;
     }
 
+    if (site === "work") {
+      // 비밀번호 미설정이면 fail-closed. 미리보기 공개 전까지 검색·외부 접근을 막는다.
+      if (!env.WORK_PASSWORD) {
+        return new Response("work preview is not configured", { status: 503 });
+      }
+      const isProdHost = host === ROOT_DOMAIN || host.endsWith(`.${ROOT_DOMAIN}`);
+      const workUrl = new URL(url);
+      workUrl.pathname = path || "/";
+      const workResponse = await handleWork(request, env, workUrl, isProdHost ? "" : "/work");
+      if (workResponse) return workResponse;
+    }
+
     url.pathname = `/${site}${path}`;
     const response = await env.ASSETS.fetch(new Request(url, request));
 
-    if (site === "admin") {
+    if (site === "admin" || site === "work") {
       const headers = new Headers(response.headers);
       headers.set("Cache-Control", "no-store");
       headers.set("X-Robots-Tag", "noindex, nofollow");
@@ -529,7 +600,7 @@ export async function handleRequest(request, env, ctx) {
     const isBot = !ua ||
       /bot|crawl|spider|scrap|preview|scan|monitor|headless|lighthouse|externalhit|curl|wget|python|java|okhttp|node|undici|axios|libwww|httpclient|ruby|php|perl|postman|insomnia/i.test(ua);
     const isDocument = request.headers.get("Sec-Fetch-Dest") === "document";
-    if (site !== "admin" && isDocument && !isBot && response.ok &&
+    if (!["admin", "work"].includes(site) && isDocument && !isBot && response.ok &&
         response.headers.get("Content-Type")?.includes("text/html")) {
       const date = kstDate();
       const jar = cookies(request);
