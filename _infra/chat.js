@@ -36,6 +36,7 @@ const PING_INTERVAL_MS = 30_000;
 // 새 팩은 node _infra/sticker-pack.mjs --chat 이 자동 등록하며(수동 편집 불필요),
 // 에셋 폴더·metadata.chat과의 동기화는 sticker-pack.test.mjs가 검사한다.
 export const CHAT_STICKER_PACKS = new Map([
+  ["blonde-horse", 16],
   ["brown-horse", 16],
   ["golden-retriever", 16],
   ["pink-horse", 16],
