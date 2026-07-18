@@ -168,6 +168,9 @@ let myNick = null;
 let online = new Map();
 let retryMs = 1000;
 let closedByFull = false;
+// 재접속 플랩 억제: 나감 메시지를 잠시 보류했다가 같은 닉이 돌아오면 둘 다 생략
+const REJOIN_GRACE_MS = 6000;
+const pendingLeaves = new Map(); // nick → timer
 
 function setStatus(text) { statusLine.textContent = text; }
 function setComposerEnabled(enabled) {
@@ -328,7 +331,10 @@ function addChat({ id, nick, kind, text, pack, n, at }) {
 
 function connect() {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  ws = new WebSocket(`${proto}//${location.host}/_chat`);
+  // 저장된 닉네임은 접속 시점에 서버가 바로 적용한다 (재접속 개명 소음 방지)
+  const saved = localStorage.getItem(NICK_KEY);
+  const query = saved ? `?nick=${encodeURIComponent(saved)}` : "";
+  ws = new WebSocket(`${proto}//${location.host}/_chat${query}`);
   closedByFull = false;
   setStatus("연결 중…");
 
@@ -347,19 +353,29 @@ function connect() {
       retryMs = 1000;
       addSystem(`입장했어요 — 지금 ${online.size}명 (최대 ${msg.max}명)`);
       $("me").textContent = myNick;
-      // 저장된 닉네임이 있으면 복원
-      const saved = localStorage.getItem(NICK_KEY);
-      if (saved && saved !== myNick) ws.send(JSON.stringify({ type: "nick", nick: saved }));
     } else if (msg.type === "chat") {
       addChat(msg);
     } else if (msg.type === "join") {
       online.set(msg.id, msg.nick);
       renderOnline();
-      addSystem(`${msg.nick} 님이 들어왔어요`);
+      // 방금 나갔던 닉네임이 바로 돌아왔으면(재접속 플랩) 입퇴장 메시지를 삼킨다
+      const pending = pendingLeaves.get(msg.nick);
+      if (pending) {
+        clearTimeout(pending);
+        pendingLeaves.delete(msg.nick);
+      } else {
+        addSystem(`${msg.nick} 님이 들어왔어요`);
+      }
     } else if (msg.type === "leave") {
       online.delete(msg.id);
       renderOnline();
-      addSystem(`${msg.nick} 님이 나갔어요`);
+      // 나감 메시지는 잠시 미뤄 두고, 곧 재접속하면 조용히 지운다
+      const nick = msg.nick;
+      clearTimeout(pendingLeaves.get(nick));
+      pendingLeaves.set(nick, setTimeout(() => {
+        pendingLeaves.delete(nick);
+        addSystem(`${nick} 님이 나갔어요`);
+      }, REJOIN_GRACE_MS));
     } else if (msg.type === "nick") {
       online.set(msg.id, msg.nick);
       renderOnline();

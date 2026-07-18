@@ -141,10 +141,15 @@ export class ChatDO {
       return new Response(null, { status: 101, webSocket: client });
     }
 
+    // 저장해 둔 닉네임(?nick=)은 접속 시점에 바로 적용한다 — 재접속 때
+    // "랜덤닉 입장 → 개명" 두 단계 브로드캐스트가 생기지 않게.
+    // 부적합하거나 이미 쓰는 이름이면 조용히 랜덤 닉으로 대체한다.
+    const taken = new Set([...this.conns].map((c) => c.nick));
+    const requested = sanitizeChatNick(url.searchParams.get("nick") ?? "");
     const conn = {
       ws: server,
       id: crypto.randomUUID().slice(0, 8),
-      nick: uniqueNick(new Set([...this.conns].map((c) => c.nick))),
+      nick: requested && !taken.has(requested) ? requested : uniqueNick(taken),
       stamps: [],
       alive: true,
     };
