@@ -11,7 +11,8 @@
   ],
   "createdAt": "2026-07-18",
   "chat": {
-    "title": "금발말"
+    "title": "금발말",
+    "cutout": false
   },
   "downloads": [
     {
