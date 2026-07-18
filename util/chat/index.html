@@ -22,8 +22,14 @@
   #me:hover { background: light-dark(#1c27330d, #dbe4ee12); }
   #notice { flex: none; margin: 0; padding: .45rem 1rem; font-size: .72rem; opacity: .55;
             text-align: center; line-height: 1.5; }
+  #log-wrap { flex: 1; min-height: 0; position: relative; display: flex; }
   #log { flex: 1; overflow-y: auto; padding: .4rem 1rem 1rem; display: flex;
          flex-direction: column; gap: .55rem; scrollbar-width: thin; }
+  #to-bottom { position: absolute; right: 1rem; bottom: .8rem; width: 2.6rem; height: 2.6rem;
+               border-radius: 50%; border: 1px solid light-dark(#1c273326, #dbe4ee2a);
+               background: light-dark(#fff, #1a2434); color: inherit; font-size: 1.05rem;
+               cursor: pointer; box-shadow: 0 3px 10px #0003; }
+  #to-bottom[hidden] { display: none; }
   .sys { align-self: center; font-size: .72rem; opacity: .5; padding: .1rem .6rem; }
   .msg { max-width: min(75%, 26rem); display: flex; flex-direction: column; gap: .25rem;
          align-self: flex-start; align-items: flex-start; }
@@ -36,7 +42,8 @@
             border-top-left-radius: .3rem; }
   .msg.mine .bubble { background: light-dark(#dcebdb, #2c4436);
                       border-top-left-radius: 1rem; border-top-right-radius: .3rem; }
-  .bubble img { display: block; width: clamp(6.5rem, 30vw, 9rem); height: auto; }
+  /* 스티커는 정사각형 자리를 먼저 잡아 로드 시 스크롤이 밀리지 않게 한다 */
+  .bubble img { display: block; width: clamp(6.5rem, 30vw, 9rem); aspect-ratio: 1 / 1; height: auto; }
   .bubble.sticker { padding: .25rem; background: none; border: none; }
   #status { flex: none; text-align: center; font-size: .74rem; padding: .3rem;
             color: light-dark(#a05a2c, #f0b27a); min-height: 1.3rem; }
@@ -46,7 +53,7 @@
          border-top: 1px solid light-dark(#1c273318, #dbe4ee1c); }
   #sticker-btn { flex: none; font: inherit; font-size: 1.15rem; width: 2.7rem; cursor: pointer;
                  background: none; color: inherit; border: 1px solid light-dark(#1c273344, #dbe4ee44);
-                 border-radius: .7rem; }
+                 border-radius: .7rem; touch-action: manipulation; }
   #sticker-btn[aria-expanded="true"] { background: light-dark(#1c273312, #dbe4ee18); }
   #text { flex: 1; min-width: 0; font: inherit; font-size: .9rem; color: inherit;
           padding: .6rem .8rem; border-radius: .7rem; background: light-dark(#fff, #1a2434);
@@ -61,15 +68,21 @@
   #tabs { display: flex; gap: .25rem; padding: .5rem .8rem 0; overflow-x: auto; }
   #tabs button { font: inherit; font-size: .74rem; color: inherit; cursor: pointer;
                  background: none; border: 0; border-radius: .5rem .5rem 0 0;
-                 padding: .45rem .7rem; white-space: nowrap; opacity: .6; }
+                 padding: .45rem .7rem; white-space: nowrap; opacity: .6;
+                 touch-action: manipulation; }
   #tabs button[aria-selected="true"] { opacity: 1; font-weight: bold;
                  background: light-dark(#eef2f6, #10161f); }
+  #picker-hint { font-size: .7rem; opacity: .55; padding: .45rem .9rem 0; min-height: 1.4rem;
+                 background: light-dark(#eef2f6, #10161f); }
   #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(4.2rem, 1fr));
-          gap: .3rem; padding: .6rem .8rem; max-height: 30dvh; overflow-y: auto;
+          gap: .3rem; padding: .4rem .8rem .6rem; max-height: 30dvh; overflow-y: auto;
           background: light-dark(#eef2f6, #10161f); }
-  #grid button { padding: .3rem; background: none; border: 0; border-radius: .6rem; cursor: pointer; }
+  #grid button { padding: .3rem; background: none; border: 2px solid transparent;
+                 border-radius: .6rem; cursor: pointer; touch-action: manipulation; }
   #grid button:hover { background: light-dark(#1c27330d, #dbe4ee12); }
-  #grid img { width: 100%; height: auto; display: block; }
+  #grid button.selected { border-color: light-dark(#477a5d, #7fb894);
+                          background: light-dark(#477a5d1a, #7fb89422); }
+  #grid img { width: 100%; aspect-ratio: 1 / 1; height: auto; display: block; }
   #grid .empty { grid-column: 1 / -1; text-align: center; font-size: .78rem;
                  opacity: .5; padding: 1.5rem 0; }
 </style>
@@ -81,10 +94,14 @@
   <button id="me" type="button" title="닉네임 바꾸기">…</button>
 </header>
 <p id="notice">메시지는 서버에 저장되지 않아요 — 지금 접속한 사람들에게만 전달됩니다.</p>
-<div id="log" aria-live="polite"></div>
+<div id="log-wrap">
+  <div id="log" aria-live="polite"></div>
+  <button id="to-bottom" type="button" hidden aria-label="맨 아래로">⬇</button>
+</div>
 <div id="status"></div>
 <div id="picker" hidden>
   <div id="tabs" role="tablist"></div>
+  <div id="picker-hint">스티커를 한 번 누르면 고르고, 한 번 더 누르면 전송돼요</div>
   <div id="grid"></div>
 </div>
 <form id="composer">
@@ -107,6 +124,7 @@ const NICK_KEY = "bl-chat-nick";
 const $ = (id) => document.getElementById(id);
 const log = $("log");
 const statusLine = $("status");
+const toBottom = $("to-bottom");
 
 let ws = null;
 let myId = null;
@@ -131,12 +149,22 @@ function renderOnline() {
 function nearBottom() {
   return log.scrollHeight - log.scrollTop - log.clientHeight < 60;
 }
-function append(el) {
-  const stick = nearBottom();
+function scrollToBottom(smooth = false) {
+  log.scrollTo({ top: log.scrollHeight, behavior: smooth ? "smooth" : "auto" });
+}
+function updateToBottom() { toBottom.hidden = nearBottom(); }
+
+// force = 내 메시지: 어디를 보고 있었든 맨 아래로 따라간다
+function append(el, force = false) {
+  const stick = force || nearBottom();
   log.append(el);
   while (log.children.length > 300) log.firstChild.remove();
-  if (stick) log.scrollTop = log.scrollHeight;
+  if (stick) scrollToBottom();
+  updateToBottom(); // 위를 보는 중에 새 메시지가 오면 ⬇ 버튼을 띄운다
 }
+
+log.addEventListener("scroll", updateToBottom, { passive: true });
+toBottom.addEventListener("click", () => scrollToBottom(true));
 
 function addSystem(text) {
   const div = document.createElement("div");
@@ -149,11 +177,70 @@ function stickerUrl(pack, n) {
   return `/_assets/sticker/${pack}/${String(n).padStart(2, "0")}.png`;
 }
 
+// ── 누끼: 흰 배경 제거 (util/photo와 같은 테두리 flood fill) ──
+const cutoutCache = new Map(); // "pack/n" → Promise<url>
+
+function cutoutWhiteBackground(imageData) {
+  const { data, width, height } = imageData;
+  const whiteness = (i) => Math.min(data[i], data[i + 1], data[i + 2]);
+  const visited = new Uint8Array(width * height);
+  const queue = [];
+  for (let x = 0; x < width; x++) queue.push(x, (height - 1) * width + x);
+  for (let y = 0; y < height; y++) queue.push(y * width, y * width + width - 1);
+  while (queue.length) {
+    const p = queue.pop();
+    if (visited[p]) continue;
+    visited[p] = 1;
+    const i = p * 4;
+    const w = whiteness(i);
+    if (w < 208) continue;
+    // 235 이상은 완전 투명, 208~235는 경계 안티앨리어싱을 살려 반투명 처리
+    data[i + 3] = w >= 235 ? 0 : Math.round(((235 - w) / 27) * 255);
+    const x = p % width, y = (p / width) | 0;
+    if (x > 0) queue.push(p - 1);
+    if (x < width - 1) queue.push(p + 1);
+    if (y > 0) queue.push(p - width);
+    if (y < height - 1) queue.push(p + width);
+  }
+}
+
+function stickerObjectUrl(pack, n) {
+  const key = `${pack}/${n}`;
+  if (!cutoutCache.has(key)) {
+    cutoutCache.set(key, (async () => {
+      const source = new Image();
+      source.src = stickerUrl(pack, n);
+      await source.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = source.naturalWidth;
+      canvas.height = source.naturalHeight;
+      const context = canvas.getContext("2d");
+      context.drawImage(source, 0, 0);
+      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+      cutoutWhiteBackground(imageData);
+      context.putImageData(imageData, 0, 0);
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+      if (!blob) throw new Error("cutout failed");
+      return URL.createObjectURL(blob);
+    })().catch(() => stickerUrl(pack, n))); // 실패하면 원본 그대로
+  }
+  return cutoutCache.get(key);
+}
+
+function stickerImg(pack, n, alt) {
+  const img = document.createElement("img");
+  img.alt = alt;
+  img.decoding = "async";
+  stickerObjectUrl(pack, n).then((url) => { img.src = url; });
+  return img;
+}
+
 function addChat({ id, nick, kind, text, pack, n, at }) {
   if (kind === "sticker" && (!PACK_IDS.has(pack) || !Number.isInteger(n) || n < 1 ||
       n > PACK_IDS.get(pack).count)) return;
+  const mine = id === myId;
   const wrap = document.createElement("div");
-  wrap.className = "msg" + (id === myId ? " mine" : "");
+  wrap.className = "msg" + (mine ? " mine" : "");
   const who = document.createElement("span");
   who.className = "nick";
   who.textContent = nick;
@@ -161,17 +248,13 @@ function addChat({ id, nick, kind, text, pack, n, at }) {
   bubble.className = "bubble";
   if (kind === "sticker") {
     bubble.classList.add("sticker");
-    const img = document.createElement("img");
-    img.src = stickerUrl(pack, n);
-    img.alt = `${PACK_IDS.get(pack).title} 스티커`;
-    img.loading = "lazy";
-    bubble.append(img);
+    bubble.append(stickerImg(pack, n, `${PACK_IDS.get(pack).title} 스티커`));
   } else {
     bubble.textContent = text;
   }
   bubble.title = new Date(at).toLocaleTimeString("ko-KR");
   wrap.append(who, bubble);
-  append(wrap);
+  append(wrap, mine);
 }
 
 function connect() {
@@ -256,8 +339,12 @@ $("me").addEventListener("click", () => {
 const picker = $("picker");
 const tabs = $("tabs");
 const grid = $("grid");
-const labelCache = new Map(); // pack → [라벨…] (metadata.json에서)
+const pickerHint = $("picker-hint");
+const HINT_DEFAULT = "스티커를 한 번 누르면 고르고, 한 번 더 누르면 전송돼요";
+const labelCache = new Map();  // pack → Promise<[라벨…]>
+const gridPages = new Map();   // pack → 만들어 둔 그리드 노드 (열 때마다 재생성하지 않는다)
 let activeTab = "recent";
+let selectedKey = null;        // "pack/n" — 한 번 더 누르면 전송
 
 function recentStickers() {
   try {
@@ -275,15 +362,20 @@ function rememberSticker(pack, n) {
   localStorage.setItem(RECENT_KEY, JSON.stringify(list));
 }
 
-async function packLabels(pack) {
+function packLabels(pack) {
   if (!labelCache.has(pack)) {
-    try {
-      const res = await fetch(`/_assets/sticker/${pack}/metadata.json`);
-      const meta = await res.json();
-      labelCache.set(pack, (meta.downloads ?? []).map((item) => String(item.label ?? "")));
-    } catch { labelCache.set(pack, []); }
+    labelCache.set(pack, fetch(`/_assets/sticker/${pack}/metadata.json`)
+      .then((res) => res.json())
+      .then((meta) => (meta.downloads ?? []).map((item) => String(item.label ?? "")))
+      .catch(() => []));
   }
   return labelCache.get(pack);
+}
+
+function clearSelection() {
+  selectedKey = null;
+  pickerHint.textContent = HINT_DEFAULT;
+  for (const button of grid.querySelectorAll("button.selected")) button.classList.remove("selected");
 }
 
 function sendSticker(pack, n) {
@@ -292,42 +384,67 @@ function sendSticker(pack, n) {
   rememberSticker(pack, n);
 }
 
+function onStickerClick(button, pack, n) {
+  const key = `${pack}/${n}`;
+  if (selectedKey === key) {          // 두 번째 클릭(더블클릭·더블터치) → 전송
+    clearSelection();
+    sendSticker(pack, n);
+    return;
+  }
+  clearSelection();
+  selectedKey = key;
+  button.classList.add("selected");
+  pickerHint.textContent = `${button.title || "이 스티커"} — 한 번 더 누르면 전송`;
+}
+
 function stickerButton(pack, n, label) {
   const button = document.createElement("button");
   button.type = "button";
-  const img = document.createElement("img");
-  img.src = stickerUrl(pack, n);
-  img.alt = label || `${PACK_IDS.get(pack).title} ${n}`;
-  img.loading = "lazy";
   button.title = label || "";
-  button.append(img);
-  button.addEventListener("click", () => sendSticker(pack, n));
+  button.dataset.key = `${pack}/${n}`;
+  button.append(stickerImg(pack, n, label || `${PACK_IDS.get(pack).title} ${n}`));
+  button.addEventListener("click", () => onStickerClick(button, pack, n));
   return button;
 }
 
-async function renderGrid() {
-  grid.replaceChildren();
+// 팩 그리드는 한 번만 만들어 두고 탭 전환 시 노드를 통째로 갈아끼운다.
+// 라벨은 기다리지 않고 그리드부터 그린 뒤 도착하면 title만 채운다.
+function packGridPage(packId) {
+  if (!gridPages.has(packId)) {
+    const pack = PACK_IDS.get(packId);
+    const buttons = [];
+    for (let n = 1; n <= pack.count; n++) buttons.push(stickerButton(packId, n));
+    gridPages.set(packId, buttons);
+    packLabels(packId).then((labels) => {
+      buttons.forEach((button, index) => {
+        if (labels[index]) {
+          button.title = labels[index];
+          button.querySelector("img").alt = labels[index];
+        }
+      });
+    });
+  }
+  return gridPages.get(packId);
+}
+
+function renderGrid() {
+  clearSelection();
   if (activeTab === "recent") {
     const list = recentStickers();
     if (!list.length) {
       const empty = document.createElement("div");
       empty.className = "empty";
       empty.textContent = "최근 보낸 스티커가 여기 모여요";
-      grid.append(empty);
+      grid.replaceChildren(empty);
       return;
     }
-    for (const key of list) {
+    grid.replaceChildren(...list.map((key) => {
       const [pack, n] = key.split("/");
-      grid.append(stickerButton(pack, Number(n)));
-    }
+      return stickerButton(pack, Number(n));
+    }));
     return;
   }
-  const pack = PACK_IDS.get(activeTab);
-  const labels = await packLabels(pack.id);
-  if (activeTab !== pack.id) return; // 탭이 그새 바뀜
-  for (let n = 1; n <= pack.count; n++) {
-    grid.append(stickerButton(pack.id, n, labels[n - 1]));
-  }
+  grid.replaceChildren(...packGridPage(activeTab));
 }
 
 function renderTabs() {
@@ -355,7 +472,26 @@ $("sticker-btn").addEventListener("click", () => {
     if (activeTab === "recent" && !recentStickers().length) activeTab = PACKS[0].id;
     renderTabs();
     renderGrid();
+  } else {
+    clearSelection();
   }
+});
+
+// 첫 오픈이 느리지 않게 유휴 시간에 미리 데워 둔다:
+// 라벨 전부 + 최근 사용·첫 팩의 누끼 이미지
+const idle = window.requestIdleCallback ?? ((fn) => setTimeout(fn, 400));
+idle(() => {
+  for (const pack of PACKS) packLabels(pack.id);
+  const warm = [...new Set([
+    ...recentStickers(),
+    ...Array.from({ length: PACKS[0].count }, (_, i) => `${PACKS[0].id}/${i + 1}`),
+  ])];
+  (function next() {
+    const key = warm.shift();
+    if (!key) return;
+    const [pack, n] = key.split("/");
+    stickerObjectUrl(pack, Number(n)).finally(() => idle(next));
+  })();
 });
 
 window.blShareText = () => "util.bubblelab.dev/chat — 익명 채팅방에서 말 스티커로 수다 떨어요 💬";

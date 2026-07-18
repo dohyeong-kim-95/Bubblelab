@@ -51,6 +51,12 @@ conclusion으로 확인한다.
 `_src/avalon/src/firebase.js` — 복사해서 시작하면 된다. 외부 서비스를
 추가하지 말 것.
 
+익명 채팅(`util/chat`)은 별도의 전용 DO를 쓴다: `_infra/chat.js`의
+`ChatDO`(`/_chat` WebSocket, 단일 로비, 메시지 미저장 브로드캐스트).
+스티커 팩을 추가하면 `chat.js`의 `CHAT_STICKER_PACKS`에도 등록해야 전송이
+허용된다. 정원(기본 10명)은 admin 페이지 💬 Chat에서 조정, `ENABLE_CHAT`
+var(fail-closed)로 전체 차단 가능.
+
 ## 더 읽을 것 (필요할 때만)
 
 - 배포/워커/빌드 파이프라인 내부: `_infra/README.md`
