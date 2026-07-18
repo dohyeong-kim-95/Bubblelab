@@ -4,7 +4,7 @@
 // _assets/sticker/README.md 표까지 한 번에 갱신한다. 외부 의존성 없음.
 //
 //   node _infra/sticker-pack.mjs <시트이미지.png|.jpg> <팩id> --title "제목" \
-//     [--grid 4x4] [--labels labels.txt] [--chat "짧은제목"] \
+//     [--grid 4x4] [--labels labels.txt] [--chat "짧은제목"] [--chat-no-cutout] \
 //     [--desc "설명"] [--tags "태그,태그"] [--force]
 //
 // --labels: 셀 순서(좌→우, 위→아래)대로 한 줄에 하나씩 적은 텍스트 파일.
@@ -12,6 +12,8 @@
 // --chat:   지정하면 익명 채팅 스티커 서랍에도 등록된다 (metadata.json의
 //           chat.title + _infra/chat.js의 CHAT_STICKER_PACKS 자동 패치).
 //           util/chat 클라이언트는 catalog.json에서 팩을 읽으므로 손댈 곳 없음.
+//           --chat-no-cutout: 채팅 클라이언트의 흰 배경 누끼를 생략
+//           (흰 캐릭터가 같이 지워지는 팩, 이미 투명한 팩용).
 // 입력 시트는 PNG(자체 코덱) 또는 JPEG(jpeg-js) — 매직 바이트로 자동 판별.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -198,6 +200,7 @@ export async function buildStickerPack({
   grid = "4x4",
   labelsText = null,
   chatTitle = null,
+  chatCutout = true,
   description = "",
   tags = [],
   createdAt,
@@ -239,7 +242,9 @@ export async function buildStickerPack({
     preview: "preview.png",
     tags: tags.map((tag) => String(tag).trim()).filter(Boolean),
     createdAt: createdAt ?? new Date().toISOString().slice(0, 10),
-    ...(chatTitle?.trim() ? { chat: { title: chatTitle.trim() } } : {}),
+    ...(chatTitle?.trim()
+      ? { chat: { title: chatTitle.trim(), ...(chatCutout ? {} : { cutout: false }) } }
+      : {}),
     downloads: labels.map((label, i) => ({ label, file: `${pad2(i + 1)}.png` })),
   };
   writeFileSync(join(packDir, "metadata.json"), JSON.stringify(metadata, null, 2) + "\n");
@@ -264,9 +269,10 @@ export async function buildStickerPack({
 function parseArgs(argv) {
   const positional = [];
   const options = {};
+  const flags = new Set(["force", "chat-no-cutout"]);
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === "--force") options.force = true;
+    if (arg.startsWith("--") && flags.has(arg.slice(2))) options[arg.slice(2)] = true;
     else if (arg.startsWith("--")) options[arg.slice(2)] = argv[++i];
     else positional.push(arg);
   }
@@ -279,7 +285,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (!imagePath || !id) {
     console.error(
       'usage: node _infra/sticker-pack.mjs <시트이미지.png|.jpg> <팩id> --title "제목"\n' +
-      '       [--grid 4x4] [--labels labels.txt] [--chat "짧은제목"]\n' +
+      '       [--grid 4x4] [--labels labels.txt] [--chat "짧은제목"] [--chat-no-cutout]\n' +
       '       [--desc "설명"] [--tags "태그,태그"] [--force]',
     );
     process.exit(1);
@@ -292,6 +298,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       grid: options.grid ?? "4x4",
       labelsText: options.labels ? readFileSync(options.labels, "utf8") : null,
       chatTitle: options.chat ?? null,
+      chatCutout: !options["chat-no-cutout"],
       description: options.desc ?? "",
       tags: options.tags ? options.tags.split(",") : [],
       force: options.force ?? false,

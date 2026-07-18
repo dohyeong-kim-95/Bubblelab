@@ -29,8 +29,12 @@ export function readAssetMetadata(root, category, itemDir) {
   // 선택 필드: 익명 채팅(util/chat) 스티커 서랍 노출용 짧은 제목.
   // 클라이언트는 catalog.json에서 chat 팩 목록을 읽는다 (하드코딩 없음).
   // 서버 검증(_infra/chat.js CHAT_STICKER_PACKS)은 sticker-pack.test.mjs가 동기화를 검사한다.
+  // cutout:false = 클라이언트 흰 배경 누끼 생략 (흰 캐릭터가 같이 지워지는 팩용).
   const chat = typeof data.chat?.title === "string" && data.chat.title.trim()
-    ? { title: data.chat.title.trim() }
+    ? {
+        title: data.chat.title.trim(),
+        ...(data.chat.cutout === false ? { cutout: false } : {}),
+      }
     : null;
   if (data.chat && !chat) throw new Error(`${category}/${id}: chat.title must be a non-empty string`);
 

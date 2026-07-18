@@ -161,7 +161,9 @@ async function loadPacks() {
     const { items } = await res.json();
     for (const item of items ?? []) {
       if (item.category !== "sticker" || !item.chat?.title || !Array.isArray(item.downloads)) continue;
-      const pack = { id: item.id, title: item.chat.title, count: item.downloads.length };
+      // cutout:false = 흰 배경 누끼 생략 (흰 캐릭터 팩·이미 투명한 팩)
+      const pack = { id: item.id, title: item.chat.title, count: item.downloads.length,
+                     cutout: item.chat.cutout !== false };
       PACKS.push(pack);
       PACK_IDS.set(pack.id, pack);
     }
@@ -290,6 +292,7 @@ function cutoutWhiteBackground(imageData) {
 }
 
 function stickerObjectUrl(pack, n) {
+  if (PACK_IDS.get(pack)?.cutout === false) return Promise.resolve(stickerUrl(pack, n));
   const key = `${pack}/${n}`;
   if (!cutoutCache.has(key)) {
     cutoutCache.set(key, (async () => {

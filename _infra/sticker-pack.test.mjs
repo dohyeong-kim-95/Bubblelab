@@ -205,9 +205,12 @@ test("buildStickerPack: sheet → sliced pack + metadata + chat registration", a
     writeFileSync(jpegPath, jpeg.encode({ width: sheet.width, height: sheet.height, data: Buffer.from(sheet.data) }, 95).data);
     const fromJpeg = await buildStickerPack({
       imagePath: jpegPath, id: "test-jpeg", title: "JPEG 팩 4종", grid: "2x2",
-      createdAt: "2026-07-18", root,
+      chatTitle: "제이펙", chatCutout: false, createdAt: "2026-07-18", root,
     });
     assert.equal(fromJpeg.count, 4);
+    // --chat-no-cutout → 클라이언트 누끼 생략 플래그가 metadata에 남는다
+    const jpegMeta = JSON.parse(readFileSync(join(root, "_assets", "sticker", "test-jpeg", "metadata.json"), "utf8"));
+    assert.deepEqual(jpegMeta.chat, { title: "제이펙", cutout: false });
     const jpegCell = decodePng(readFileSync(join(root, "_assets", "sticker", "test-jpeg", "01.png")));
     // 손실 압축 노이즈가 있어도 트리밍이 블롭 근처(16px + 패딩 ±여유)로 잘라야 한다
     assert.ok(jpegCell.width >= 16 && jpegCell.width <= 40, `width=${jpegCell.width}`);
