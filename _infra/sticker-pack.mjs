@@ -5,7 +5,7 @@
 //
 //   node _infra/sticker-pack.mjs <시트이미지.png|.jpg> <팩id> --title "제목" \
 //     [--grid 4x4] [--labels labels.txt] [--chat "짧은제목"] [--chat-no-cutout] \
-//     [--desc "설명"] [--tags "태그,태그"] [--force]
+//     [--no-cutout] [--desc "설명"] [--tags "태그,태그"] [--force]
 //
 // --labels: 셀 순서(좌→우, 위→아래)대로 한 줄에 하나씩 적은 텍스트 파일.
 //           "NN. 라벨" 형태로 저장된다. 없으면 "01"–"NN" 플레이스홀더.
@@ -15,6 +15,8 @@
 //           --chat-no-cutout: 채팅 클라이언트의 흰 배경 누끼를 생략
 //           (흰 캐릭터가 같이 지워지는 팩, 이미 투명한 팩용).
 // 입력 시트는 PNG(자체 코덱) 또는 JPEG(jpeg-js) — 매직 바이트로 자동 판별.
+// 불투명 시트는 생성 시점에 흰 배경을 투명하게 딴다(누끼) — --no-cutout으로 끄고,
+// 이미 투명한 시트는 자동으로 건너뛴다.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -85,6 +87,35 @@ export function sliceGrid(image, cols, rows) {
 function isBackground(data, i) {
   if (data[i + 3] < TRIM_ALPHA_MAX) return true;
   return Math.min(data[i], data[i + 1], data[i + 2]) >= TRIM_WHITE_MIN;
+}
+
+// 생성 시점 누끼: 셀 테두리에서 시작하는 플러드필로 흰 배경만 투명하게 만든다.
+// 임계값이 클라이언트(208)보다 훨씬 엄격해서(soft=235) 밝은 회색 외곽선을
+// 뚫고 흰 캐릭터 몸통까지 지워지는 사고가 없고, 외곽선 안쪽 흰색은 보존된다.
+// full 이상은 완전 투명, soft–full 구간은 경계 안티앨리어싱용 반투명.
+export function cutoutBackground(image, { full = 248, soft = 235 } = {}) {
+  const { width, height } = image;
+  const data = new Uint8Array(image.data);
+  const visited = new Uint8Array(width * height);
+  const queue = [];
+  for (let x = 0; x < width; x++) queue.push(x, (height - 1) * width + x);
+  for (let y = 0; y < height; y++) queue.push(y * width, y * width + width - 1);
+  while (queue.length) {
+    const p = queue.pop();
+    if (visited[p]) continue;
+    visited[p] = 1;
+    const i = p * 4;
+    const whiteness = Math.min(data[i], data[i + 1], data[i + 2]);
+    if (whiteness < soft) continue;
+    data[i + 3] = whiteness >= full ? 0 : Math.round(((full - whiteness) / (full - soft)) * 255);
+    const x = p % width;
+    const y = (p / width) | 0;
+    if (x > 0) queue.push(p - 1);
+    if (x < width - 1) queue.push(p + 1);
+    if (y > 0) queue.push(p - width);
+    if (y < height - 1) queue.push(p + width);
+  }
+  return { width, height, data };
 }
 
 // 내용이 있는 픽셀의 경계 상자. 전부 배경이면 null.
@@ -201,6 +232,7 @@ export async function buildStickerPack({
   labelsText = null,
   chatTitle = null,
   chatCutout = true,
+  cutout = true,
   description = "",
   tags = [],
   createdAt,
@@ -221,9 +253,14 @@ export async function buildStickerPack({
   }
 
   const sheet = await decodeSheet(readFileSync(imagePath));
+  // 시트가 이미 투명 배경이면 누끼를 건너뛴다 (알파 채널 존재 = 이미 따진 것)
+  let sheetOpaque = true;
+  for (let i = 3; i < sheet.data.length; i += 4) {
+    if (sheet.data[i] !== 255) { sheetOpaque = false; break; }
+  }
   const cells = sliceGrid(sheet, cols, rows);
   const trimmed = cells.map((cell, i) => {
-    const result = trimCell(cell);
+    const result = trimCell(cutout && sheetOpaque ? cutoutBackground(cell) : cell);
     if (!result) {
       throw new Error(`${i + 1}번째 셀(${pad2(i + 1)})이 비어 있습니다 — 그리드 수를 확인하세요`);
     }
@@ -269,7 +306,7 @@ export async function buildStickerPack({
 function parseArgs(argv) {
   const positional = [];
   const options = {};
-  const flags = new Set(["force", "chat-no-cutout"]);
+  const flags = new Set(["force", "chat-no-cutout", "no-cutout"]);
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg.startsWith("--") && flags.has(arg.slice(2))) options[arg.slice(2)] = true;
@@ -286,7 +323,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     console.error(
       'usage: node _infra/sticker-pack.mjs <시트이미지.png|.jpg> <팩id> --title "제목"\n' +
       '       [--grid 4x4] [--labels labels.txt] [--chat "짧은제목"] [--chat-no-cutout]\n' +
-      '       [--desc "설명"] [--tags "태그,태그"] [--force]',
+      '       [--no-cutout] [--desc "설명"] [--tags "태그,태그"] [--force]',
     );
     process.exit(1);
   }
@@ -299,6 +336,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       labelsText: options.labels ? readFileSync(options.labels, "utf8") : null,
       chatTitle: options.chat ?? null,
       chatCutout: !options["chat-no-cutout"],
+      cutout: !options["no-cutout"],
       description: options.desc ?? "",
       tags: options.tags ? options.tags.split(",") : [],
       force: options.force ?? false,

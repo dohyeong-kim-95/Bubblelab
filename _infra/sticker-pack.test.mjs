@@ -10,6 +10,7 @@ import {
   buildLabels,
   buildStickerPack,
   contentBounds,
+  cutoutBackground,
   decodeSheet,
   downscale,
   parseGrid,
@@ -95,6 +96,31 @@ test("trimCell drops white/transparent margins but keeps padding", () => {
   assert.equal(trimmed.width, 12 + 8);  // 내용 12 + 좌우 패딩 4씩
   assert.equal(trimmed.height, 8 + 8);
   assert.equal(trimCell(makeImage(8, 8)), null); // 전부 배경이면 빈 셀
+});
+
+test("cutoutBackground clears white bg but keeps outline-protected interior white", () => {
+  const cell = makeImage(20, 20); // 전부 흰색
+  // 진한 외곽선 사각 링 (5..14), 내부는 흰색 유지
+  for (let i = 5; i <= 14; i++) {
+    for (const [x, y] of [[i, 5], [i, 14], [5, i], [14, i]]) {
+      cell.data.set([80, 80, 80, 255], (y * 20 + x) * 4);
+    }
+  }
+  const cut = cutoutBackground(cell);
+  assert.equal(cut.data[3], 0, "테두리 흰 배경은 투명");
+  assert.equal(cut.data[(10 * 20 + 10) * 4 + 3], 255, "외곽선 안쪽 흰색은 보존");
+  assert.equal(cut.data[(5 * 20 + 5) * 4 + 3], 255, "외곽선 자체는 불투명");
+  // soft(235)–full(248) 사이 밝기의 배경 연결 픽셀은 반투명 (안티앨리어싱)
+  const soft = makeImage(4, 1);
+  soft.data.set([240, 240, 240, 255], 4);
+  const softCut = cutoutBackground(soft);
+  assert.ok(softCut.data[7] > 0 && softCut.data[7] < 255, `alpha=${softCut.data[7]}`);
+  // 클라이언트 사고 재현 방지: 밝은 회색(220) 외곽선은 soft보다 어두워 뚫리지 않는다
+  assert.equal(cutoutBackground((() => {
+    const c = makeImage(3, 1);
+    c.data.set([220, 220, 220, 255], 4);
+    return c;
+  })()).data[7], 255);
 });
 
 test("downscale box-averages and caps the width", () => {
@@ -184,6 +210,7 @@ test("buildStickerPack: sheet → sliced pack + metadata + chat registration", a
     const first = decodePng(readFileSync(join(packDir, "01.png")));
     assert.equal(first.width, 16 + 8); // 블롭 16px + 패딩 4px 양쪽
     assert.deepEqual([...first.data.slice((4 * first.width + 4) * 4, (4 * first.width + 4) * 4 + 4)], colors[0]);
+    assert.equal(first.data[3], 0, "생성 시점 누끼 — 흰 배경 모서리가 투명");
 
     const metadata = JSON.parse(readFileSync(join(packDir, "metadata.json"), "utf8"));
     assert.equal(metadata.title, "테스트 팩 4종");

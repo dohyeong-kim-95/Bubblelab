@@ -29,6 +29,8 @@ node _infra/sticker-pack.mjs 시트.png <팩id> --title "제목 16종" \
 ```
 
 - 슬라이스·여백 트리밍·`preview.png`·`metadata.json`·위 표 갱신까지 자동입니다.
+- 불투명 시트는 흰 배경을 생성 시점에 투명하게 땁니다(누끼). `--no-cutout`으로
+  끄고, 이미 투명한 시트는 자동으로 건너뜁니다.
 - `--labels`: 셀 순서(좌→우, 위→아래)대로 한 줄에 하나씩 적은 파일 (16줄).
 - `--chat "짧은제목"`을 주면 익명 채팅(util/chat) 스티커 서랍에도 등록됩니다 —
   `metadata.json`의 `chat.title`과 `_infra/chat.js`의 `CHAT_STICKER_PACKS`가

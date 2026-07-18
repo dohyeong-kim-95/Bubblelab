@@ -10,6 +10,10 @@
     "캐릭터"
   ],
   "createdAt": "2026-07-18",
+  "chat": {
+    "title": "테니스멍",
+    "cutout": false
+  },
   "downloads": [
     {
       "label": "01. 테니스 갈 사람?",
