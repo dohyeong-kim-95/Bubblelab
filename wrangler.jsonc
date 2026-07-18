@@ -18,7 +18,9 @@
   // 다시 열 때는 값만 바꾸지 말고 해당 기능의 ACL 검토를 먼저 통과해야 한다.
   "vars": {
     "ENABLE_REALTIME": "false",
-    "ENABLE_PLANNER": "true"
+    "ENABLE_PLANNER": "true",
+    // 익명 채팅(util/chat). 서버는 메시지를 저장하지 않고 브로드캐스트만 한다.
+    "ENABLE_CHAT": "true"
   },
   "routes": [
     { "pattern": "bubblelab.dev/*", "zone_name": "bubblelab.dev" },
@@ -41,7 +43,8 @@
       { "name": "RECORDS", "class_name": "RecordsDO" },
       { "name": "PLANNER", "class_name": "PlannerDO" },
       { "name": "RATE_LIMITER", "class_name": "RateLimiterDO" },
-      { "name": "WORK_QNA", "class_name": "WorkQnaDO" }
+      { "name": "WORK_QNA", "class_name": "WorkQnaDO" },
+      { "name": "CHAT", "class_name": "ChatDO" }
     ]
   },
   "migrations": [
@@ -50,6 +53,7 @@
     { "tag": "v3", "new_sqlite_classes": ["RecordsDO"] },
     { "tag": "v4", "new_sqlite_classes": ["PlannerDO"] },
     { "tag": "v5", "new_sqlite_classes": ["RateLimiterDO"] },
-    { "tag": "v6", "new_sqlite_classes": ["WorkQnaDO"] }
+    { "tag": "v6", "new_sqlite_classes": ["WorkQnaDO"] },
+    { "tag": "v7", "new_sqlite_classes": ["ChatDO"] }
   ]
 }

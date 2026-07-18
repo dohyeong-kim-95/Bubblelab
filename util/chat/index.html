@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>익명 채팅</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>💬</text></svg>">
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+         margin: 0; height: 100dvh; display: flex; flex-direction: column;
+         background: light-dark(#eef2f6, #10161f); color: light-dark(#1c2733, #dbe4ee); }
+  header { flex: none; display: flex; align-items: center; gap: .7rem;
+           padding: .8rem 1rem; border-bottom: 1px solid light-dark(#1c273318, #dbe4ee1c); }
+  h1 { margin: 0; font-size: 1rem; }
+  #online { opacity: .55; font-size: .8rem; font-variant-numeric: tabular-nums; }
+  #me { margin-left: auto; font: inherit; font-size: .8rem; color: inherit; cursor: pointer;
+        background: none; border: 1px solid light-dark(#1c273344, #dbe4ee44);
+        border-radius: 2rem; padding: .35rem .8rem; max-width: 11rem;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #me:hover { background: light-dark(#1c27330d, #dbe4ee12); }
+  #notice { flex: none; margin: 0; padding: .45rem 1rem; font-size: .72rem; opacity: .55;
+            text-align: center; line-height: 1.5; }
+  #log { flex: 1; overflow-y: auto; padding: .4rem 1rem 1rem; display: flex;
+         flex-direction: column; gap: .55rem; scrollbar-width: thin; }
+  .sys { align-self: center; font-size: .72rem; opacity: .5; padding: .1rem .6rem; }
+  .msg { max-width: min(75%, 26rem); display: flex; flex-direction: column; gap: .25rem;
+         align-self: flex-start; align-items: flex-start; }
+  .msg.mine { align-self: flex-end; align-items: flex-end; }
+  .msg .nick { font-size: .7rem; opacity: .55; padding: 0 .3rem; }
+  .msg.mine .nick { display: none; }
+  .bubble { padding: .55rem .8rem; border-radius: 1rem; font-size: .88rem; line-height: 1.55;
+            white-space: pre-wrap; overflow-wrap: anywhere;
+            background: light-dark(#fff, #1a2434); border: 1px solid light-dark(#1c273315, #dbe4ee1a);
+            border-top-left-radius: .3rem; }
+  .msg.mine .bubble { background: light-dark(#dcebdb, #2c4436);
+                      border-top-left-radius: 1rem; border-top-right-radius: .3rem; }
+  .bubble img { display: block; width: clamp(6.5rem, 30vw, 9rem); height: auto; }
+  .bubble.sticker { padding: .25rem; background: none; border: none; }
+  #status { flex: none; text-align: center; font-size: .74rem; padding: .3rem;
+            color: light-dark(#a05a2c, #f0b27a); min-height: 1.3rem; }
+  #status:empty { display: none; }
+  form { flex: none; display: flex; gap: .5rem; padding: .7rem 1rem;
+         padding-bottom: max(.7rem, env(safe-area-inset-bottom));
+         border-top: 1px solid light-dark(#1c273318, #dbe4ee1c); }
+  #sticker-btn { flex: none; font: inherit; font-size: 1.15rem; width: 2.7rem; cursor: pointer;
+                 background: none; color: inherit; border: 1px solid light-dark(#1c273344, #dbe4ee44);
+                 border-radius: .7rem; }
+  #sticker-btn[aria-expanded="true"] { background: light-dark(#1c273312, #dbe4ee18); }
+  #text { flex: 1; min-width: 0; font: inherit; font-size: .9rem; color: inherit;
+          padding: .6rem .8rem; border-radius: .7rem; background: light-dark(#fff, #1a2434);
+          border: 1px solid light-dark(#1c273344, #dbe4ee44); }
+  #send { flex: none; font: inherit; font-size: .85rem; font-weight: bold; cursor: pointer;
+          padding: 0 1rem; border-radius: .7rem; border: 0;
+          background: light-dark(#1c2733, #dbe4ee); color: light-dark(#eef2f6, #10161f); }
+  #send:disabled, #text:disabled, #sticker-btn:disabled { opacity: .45; cursor: default; }
+  #picker { flex: none; border-top: 1px solid light-dark(#1c273318, #dbe4ee1c);
+            background: light-dark(#e6ebf1, #0d131c); }
+  #picker[hidden] { display: none; }
+  #tabs { display: flex; gap: .25rem; padding: .5rem .8rem 0; overflow-x: auto; }
+  #tabs button { font: inherit; font-size: .74rem; color: inherit; cursor: pointer;
+                 background: none; border: 0; border-radius: .5rem .5rem 0 0;
+                 padding: .45rem .7rem; white-space: nowrap; opacity: .6; }
+  #tabs button[aria-selected="true"] { opacity: 1; font-weight: bold;
+                 background: light-dark(#eef2f6, #10161f); }
+  #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(4.2rem, 1fr));
+          gap: .3rem; padding: .6rem .8rem; max-height: 30dvh; overflow-y: auto;
+          background: light-dark(#eef2f6, #10161f); }
+  #grid button { padding: .3rem; background: none; border: 0; border-radius: .6rem; cursor: pointer; }
+  #grid button:hover { background: light-dark(#1c27330d, #dbe4ee12); }
+  #grid img { width: 100%; height: auto; display: block; }
+  #grid .empty { grid-column: 1 / -1; text-align: center; font-size: .78rem;
+                 opacity: .5; padding: 1.5rem 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>💬 익명 채팅</h1>
+  <span id="online">접속 중…</span>
+  <button id="me" type="button" title="닉네임 바꾸기">…</button>
+</header>
+<p id="notice">메시지는 서버에 저장되지 않아요 — 지금 접속한 사람들에게만 전달됩니다.</p>
+<div id="log" aria-live="polite"></div>
+<div id="status"></div>
+<div id="picker" hidden>
+  <div id="tabs" role="tablist"></div>
+  <div id="grid"></div>
+</div>
+<form id="composer">
+  <button id="sticker-btn" type="button" aria-expanded="false" aria-label="스티커 선택">🐴</button>
+  <input id="text" maxlength="500" autocomplete="off" placeholder="메시지 입력…" disabled>
+  <button id="send" type="submit" disabled>전송</button>
+</form>
+<script>
+"use strict";
+const PACKS = [
+  { id: "brown-horse", title: "갈색말", count: 16 },
+  { id: "golden-retriever", title: "골댕이", count: 16 },
+  { id: "pink-horse", title: "핑크말", count: 16 },
+  { id: "simple-horse", title: "심플말", count: 16 },
+];
+const PACK_IDS = new Map(PACKS.map((pack) => [pack.id, pack]));
+const RECENT_KEY = "bl-chat-recent-stickers";
+const NICK_KEY = "bl-chat-nick";
+
+const $ = (id) => document.getElementById(id);
+const log = $("log");
+const statusLine = $("status");
+
+let ws = null;
+let myId = null;
+let myNick = null;
+let online = new Map();
+let retryMs = 1000;
+let closedByFull = false;
+
+function setStatus(text) { statusLine.textContent = text; }
+function setComposerEnabled(enabled) {
+  $("text").disabled = !enabled;
+  $("send").disabled = !enabled;
+  $("sticker-btn").disabled = !enabled;
+}
+
+function renderOnline() {
+  const names = [...online.values()];
+  $("online").textContent = `${names.length}명`;
+  $("online").title = names.join(", ");
+}
+
+function nearBottom() {
+  return log.scrollHeight - log.scrollTop - log.clientHeight < 60;
+}
+function append(el) {
+  const stick = nearBottom();
+  log.append(el);
+  while (log.children.length > 300) log.firstChild.remove();
+  if (stick) log.scrollTop = log.scrollHeight;
+}
+
+function addSystem(text) {
+  const div = document.createElement("div");
+  div.className = "sys";
+  div.textContent = text;
+  append(div);
+}
+
+function stickerUrl(pack, n) {
+  return `/_assets/sticker/${pack}/${String(n).padStart(2, "0")}.png`;
+}
+
+function addChat({ id, nick, kind, text, pack, n, at }) {
+  if (kind === "sticker" && (!PACK_IDS.has(pack) || !Number.isInteger(n) || n < 1 ||
+      n > PACK_IDS.get(pack).count)) return;
+  const wrap = document.createElement("div");
+  wrap.className = "msg" + (id === myId ? " mine" : "");
+  const who = document.createElement("span");
+  who.className = "nick";
+  who.textContent = nick;
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  if (kind === "sticker") {
+    bubble.classList.add("sticker");
+    const img = document.createElement("img");
+    img.src = stickerUrl(pack, n);
+    img.alt = `${PACK_IDS.get(pack).title} 스티커`;
+    img.loading = "lazy";
+    bubble.append(img);
+  } else {
+    bubble.textContent = text;
+  }
+  bubble.title = new Date(at).toLocaleTimeString("ko-KR");
+  wrap.append(who, bubble);
+  append(wrap);
+}
+
+function connect() {
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  ws = new WebSocket(`${proto}//${location.host}/_chat`);
+  closedByFull = false;
+  setStatus("연결 중…");
+
+  ws.addEventListener("message", (event) => {
+    let msg;
+    try { msg = JSON.parse(event.data); } catch { return; }
+    if (msg.type === "welcome") {
+      myId = msg.id;
+      myNick = msg.nick;
+      online = new Map(msg.online.map((user) => [user.id, user.nick]));
+      renderOnline();
+      setStatus("");
+      setComposerEnabled(true);
+      retryMs = 1000;
+      addSystem(`입장했어요 — 지금 ${online.size}명 (최대 ${msg.max}명)`);
+      $("me").textContent = myNick;
+      // 저장된 닉네임이 있으면 복원
+      const saved = localStorage.getItem(NICK_KEY);
+      if (saved && saved !== myNick) ws.send(JSON.stringify({ type: "nick", nick: saved }));
+    } else if (msg.type === "chat") {
+      addChat(msg);
+    } else if (msg.type === "join") {
+      online.set(msg.id, msg.nick);
+      renderOnline();
+      addSystem(`${msg.nick} 님이 들어왔어요`);
+    } else if (msg.type === "leave") {
+      online.delete(msg.id);
+      renderOnline();
+      addSystem(`${msg.nick} 님이 나갔어요`);
+    } else if (msg.type === "nick") {
+      online.set(msg.id, msg.nick);
+      renderOnline();
+      if (msg.id === myId) {
+        myNick = msg.nick;
+        $("me").textContent = myNick;
+      }
+      addSystem(`${msg.prev} → ${msg.nick}`);
+    } else if (msg.type === "full") {
+      closedByFull = true;
+      setStatus(`정원이 가득 찼어요 (최대 ${msg.max}명). 잠시 후 다시 연결합니다…`);
+    } else if (msg.type === "error" && msg.error === "rate") {
+      setStatus("너무 빨라요 — 잠시 쉬었다 보내주세요");
+      setTimeout(() => setStatus(""), 3000);
+    }
+  });
+
+  ws.addEventListener("close", () => {
+    setComposerEnabled(false);
+    online = new Map();
+    $("online").textContent = "연결 끊김";
+    if (!closedByFull) setStatus("연결이 끊겼어요. 다시 연결하는 중…");
+    const delay = closedByFull ? 10_000 : retryMs;
+    retryMs = Math.min(retryMs * 2, 15_000);
+    setTimeout(connect, delay);
+  });
+}
+
+$("composer").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const text = $("text").value.trim();
+  if (!text || ws?.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ type: "text", text }));
+  $("text").value = "";
+  $("text").focus();
+});
+
+$("me").addEventListener("click", () => {
+  const nick = prompt("새 닉네임 (최대 16자)", myNick ?? "");
+  if (nick === null) return;
+  const trimmed = nick.trim().slice(0, 16);
+  if (!trimmed || ws?.readyState !== WebSocket.OPEN) return;
+  localStorage.setItem(NICK_KEY, trimmed);
+  ws.send(JSON.stringify({ type: "nick", nick: trimmed }));
+});
+
+// ── 스티커 픽커 ──────────────────────────────────────────
+const picker = $("picker");
+const tabs = $("tabs");
+const grid = $("grid");
+const labelCache = new Map(); // pack → [라벨…] (metadata.json에서)
+let activeTab = "recent";
+
+function recentStickers() {
+  try {
+    const list = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]");
+    return Array.isArray(list) ? list.filter((key) => {
+      const [pack, n] = String(key).split("/");
+      return PACK_IDS.has(pack) && Number(n) >= 1 && Number(n) <= (PACK_IDS.get(pack)?.count ?? 0);
+    }) : [];
+  } catch { return []; }
+}
+
+function rememberSticker(pack, n) {
+  const key = `${pack}/${n}`;
+  const list = [key, ...recentStickers().filter((item) => item !== key)].slice(0, 16);
+  localStorage.setItem(RECENT_KEY, JSON.stringify(list));
+}
+
+async function packLabels(pack) {
+  if (!labelCache.has(pack)) {
+    try {
+      const res = await fetch(`/_assets/sticker/${pack}/metadata.json`);
+      const meta = await res.json();
+      labelCache.set(pack, (meta.downloads ?? []).map((item) => String(item.label ?? "")));
+    } catch { labelCache.set(pack, []); }
+  }
+  return labelCache.get(pack);
+}
+
+function sendSticker(pack, n) {
+  if (ws?.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ type: "sticker", pack, n }));
+  rememberSticker(pack, n);
+}
+
+function stickerButton(pack, n, label) {
+  const button = document.createElement("button");
+  button.type = "button";
+  const img = document.createElement("img");
+  img.src = stickerUrl(pack, n);
+  img.alt = label || `${PACK_IDS.get(pack).title} ${n}`;
+  img.loading = "lazy";
+  button.title = label || "";
+  button.append(img);
+  button.addEventListener("click", () => sendSticker(pack, n));
+  return button;
+}
+
+async function renderGrid() {
+  grid.replaceChildren();
+  if (activeTab === "recent") {
+    const list = recentStickers();
+    if (!list.length) {
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      empty.textContent = "최근 보낸 스티커가 여기 모여요";
+      grid.append(empty);
+      return;
+    }
+    for (const key of list) {
+      const [pack, n] = key.split("/");
+      grid.append(stickerButton(pack, Number(n)));
+    }
+    return;
+  }
+  const pack = PACK_IDS.get(activeTab);
+  const labels = await packLabels(pack.id);
+  if (activeTab !== pack.id) return; // 탭이 그새 바뀜
+  for (let n = 1; n <= pack.count; n++) {
+    grid.append(stickerButton(pack.id, n, labels[n - 1]));
+  }
+}
+
+function renderTabs() {
+  tabs.replaceChildren();
+  for (const tab of [{ id: "recent", title: "🕘 최근" }, ...PACKS]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.role = "tab";
+    button.textContent = tab.title;
+    button.setAttribute("aria-selected", String(tab.id === activeTab));
+    button.addEventListener("click", () => {
+      activeTab = tab.id;
+      renderTabs();
+      renderGrid();
+    });
+    tabs.append(button);
+  }
+}
+
+$("sticker-btn").addEventListener("click", () => {
+  const open = picker.hidden;
+  picker.hidden = !open;
+  $("sticker-btn").setAttribute("aria-expanded", String(open));
+  if (open) {
+    if (activeTab === "recent" && !recentStickers().length) activeTab = PACKS[0].id;
+    renderTabs();
+    renderGrid();
+  }
+});
+
+window.blShareText = () => "util.bubblelab.dev/chat — 익명 채팅방에서 말 스티커로 수다 떨어요 💬";
+
+connect();
+</script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>

@@ -21,6 +21,7 @@ import {
 } from "./security.js";
 
 export { RealtimeDO } from "./realtime.js";
+export { ChatDO } from "./chat.js";
 export { WorkQnaDO } from "./workqna.js";
 export { AnalyticsDO } from "./analytics.js";
 export { RecordsDO } from "./records.js";
@@ -322,6 +323,19 @@ async function handleAdmin(request, env, url, base = "") {
       );
     }
   }
+  if (url.pathname === "/api/chat") {
+    const stub = env.CHAT.get(env.CHAT.idFromName("lobby"));
+    if (request.method === "GET") {
+      return stub.fetch("https://chat.internal/settings");
+    }
+    if (request.method === "POST") {
+      return stub.fetch("https://chat.internal/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(await request.json().catch(() => ({}))),
+      });
+    }
+  }
   if (url.pathname === "/api/assets") {
     return new Response("not found", { status: 404 });
   }
@@ -552,6 +566,25 @@ export async function handleRequest(request, env, ctx) {
           headers: { "Content-Type": "application/json" }, body: await request.text(),
         }),
       });
+    }
+
+    // 익명 채팅 로비: /_chat → 단일 Durable Object (util.bubblelab.dev/chat).
+    // 메시지는 서버에 저장하지 않고 접속자에게만 브로드캐스트한다.
+    if (path === "/_chat") {
+      if (!featureEnabled(env, "ENABLE_CHAT")) {
+        return Response.json({ error: "chat is temporarily unavailable" }, {
+          status: 503,
+          headers: { "Cache-Control": "no-store", "Retry-After": "86400" },
+        });
+      }
+      const originError = validateWebSocketOrigin(request);
+      if (originError) return originError;
+      const limited = await enforceRateLimit(request, env, {
+        scope: "chat-connect", limit: 20, windowMs: 60 * 1000,
+      });
+      if (limited) return limited;
+      const id = env.CHAT.idFromName("lobby");
+      return env.CHAT.get(id).fetch(request);
     }
 
     // 실시간 데이터 서버: /_rt/<이름> → 이름당 Durable Object 하나.

@@ -80,6 +80,11 @@
   #suggestions .del, #records .del { border: 0; background: none; color: inherit;
                       opacity: .45; cursor: pointer; font: inherit; padding: 0 .2rem; }
   #suggestions .del:hover, #records .del:hover { opacity: 1; }
+  #chat-card { padding: 1rem 1.1rem; border-radius: 1rem;
+               background: light-dark(#fff, #151e2a);
+               border: 1px solid light-dark(#dce4ec, #263445);
+               display: flex; flex-direction: column; gap: .9rem; }
+  #chat-card .field { max-width: 14rem; }
   #notice-card { padding: 1rem 1.1rem; border-radius: 1rem;
                  background: light-dark(#fff, #151e2a);
                  border: 1px solid light-dark(#dce4ec, #263445);
@@ -145,6 +150,7 @@
     <div class="hub-grid">
       <a class="hub-card" href="#insights"><span class="hub-icon">📊</span><span><strong>Insights</strong><small>방문자와 인기 서비스 통계</small></span></a>
       <a class="hub-card" href="#slop"><span class="hub-icon">🎮</span><span><strong>Slop</strong><small>기록·공지·아이디어 관리</small></span></a>
+      <a class="hub-card" href="#chat"><span class="hub-icon">💬</span><span><strong>Chat</strong><small>익명 채팅 정원 관리</small></span></a>
     </div>
   </section>
   <section class="view" id="view-insights" hidden>
@@ -208,11 +214,25 @@
     <ol id="suggestions"><li class="empty">불러오는 중…</li></ol>
   </section>
   </section>
+  <section class="view" id="view-chat" hidden>
+  <h2 class="view-title">💬 Chat</h2>
+  <section class="top" aria-label="익명 채팅 설정">
+    <h2>👥 최대 동시 접속 인원 <span style="opacity:.5;font-weight:normal;font-size:.8rem">이미 접속한 사람은 끊지 않고 새 접속부터 적용돼요</span></h2>
+    <div id="chat-card">
+      <div class="field"><label for="chat-max">최대 인원 (1–100)</label>
+        <input id="chat-max" type="number" min="1" max="100" step="1" inputmode="numeric"></div>
+      <div class="notice-actions">
+        <span id="chat-meta" class="meta">불러오는 중…</span>
+        <button id="chat-save">저장</button>
+      </div>
+    </div>
+  </section>
+  </section>
   <div id="warning">⚠️ 초기 계정 admin/admin을 사용 중입니다. Cloudflare secrets를 설정해 변경하세요.</div>
   <footer id="status">불러오는 중…</footer>
 </main>
 <script>
-const views = ['home', 'insights', 'slop'];
+const views = ['home', 'insights', 'slop', 'chat'];
 function showView() {
   const selected = views.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'home';
   document.body.dataset.view = selected;
@@ -537,10 +557,43 @@ document.getElementById('notice-clear').addEventListener('click', async () => {
   loadNotice();
 });
 
+const chatMax = document.getElementById('chat-max');
+const chatMeta = document.getElementById('chat-meta');
+
+async function loadChat() {
+  try {
+    const res = await fetch(`${base}/api/chat`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const { maxConnections, online } = await res.json();
+    if (document.activeElement !== chatMax) chatMax.value = maxConnections;
+    chatMeta.textContent = `현재 접속 ${online}명 · 최대 ${maxConnections}명`;
+  } catch (err) {
+    chatMeta.textContent = `불러오지 못했어요: ${err.message}`;
+  }
+}
+
+document.getElementById('chat-save').addEventListener('click', async () => {
+  const value = Number(chatMax.value);
+  if (!Number.isInteger(value) || value < 1 || value > 100) {
+    chatMeta.textContent = '⚠️ 1–100 사이 정수를 입력해주세요';
+    return;
+  }
+  chatMeta.textContent = '저장 중…';
+  const res = await fetch(`${base}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ maxConnections: value }),
+  });
+  if (res.ok) loadChat();
+  else chatMeta.textContent = `⚠️ 저장 실패 (HTTP ${res.status})`;
+});
+
 loadStats();
 loadSuggestions();
 loadRecords();
 loadNotice();
+loadChat();
+setInterval(loadChat, 60_000);
 setInterval(loadStats, 60_000);
 setInterval(loadSuggestions, 60_000);
 setInterval(loadRecords, 60_000);
