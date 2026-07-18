@@ -14,6 +14,9 @@
 | `simple-horse` | 심플 손그림 말 이모티콘 16종 | `01.png`–`16.png` |
 | `blonde-horse` | 금발 갈기 말 이모티콘 16종 | `01.png`–`16.png` |
 | `tennis-samoyed` | 테니스 사모예드 이모티콘 16종 | `01.png`–`16.png` |
+| `hoodie-cat` | 후드 회색 고양이 이모티콘 16종 | `01.png`–`16.png` |
+| `ribbon-cat` | 리본 핑크후드 고양이 이모티콘 16종 | `01.png`–`16.png` |
+| `couple-cat` | 커플 고양이 이모티콘 16종 | `01.png`–`16.png` |
 
 각 팩은 미리보기(`preview.webp` 또는 `preview.png`), 개별 이미지,
 `metadata.json`으로 구성됩니다. 새 팩의 형식과 검증 규칙은
