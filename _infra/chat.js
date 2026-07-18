@@ -41,6 +41,7 @@ export const CHAT_STICKER_PACKS = new Map([
   ["golden-retriever", 16],
   ["pink-horse", 16],
   ["simple-horse", 16],
+  ["tennis-samoyed", 16],
 ]);
 
 // 제어문자·양방향 제어·폭 없는 문자 제거. 본문(TEXT_STRIP)은 줄바꿈(\n)만 남긴다.
