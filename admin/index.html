@@ -48,7 +48,7 @@
   #top .medal { font-size: 1.3rem; }
   #top .page { flex: 1; font-weight: bold; overflow-wrap: anywhere; }
   #top .users { opacity: .6; font-size: .9rem; font-variant-numeric: tabular-nums; }
-  #top .empty, #engagement .empty, #suggestions .empty, #records .empty { opacity: .55; justify-content: center; }
+  #top .empty, #engagement .empty, #suggestions .empty, #records .empty, #podcast-users .empty { opacity: .55; justify-content: center; }
   .insight-heading { display: flex; align-items: center; justify-content: space-between; gap: .8rem; margin-bottom: .8rem; }
   .insight-heading h2 { margin: 0; }
   .period { display: flex; padding: .2rem; border-radius: .65rem;
@@ -69,18 +69,26 @@
   .engagement-bar { display: block; height: 100%; min-width: .25rem; border-radius: inherit; background: #5a8f70; }
   .engagement-meta { display: flex; flex-wrap: wrap; gap: .35rem .9rem; opacity: .58;
                      font-size: .75rem; font-variant-numeric: tabular-nums; }
-  #suggestions, #records { list-style: none; margin: 0; padding: 0; display: flex;
+  #suggestions, #records, #podcast-users { list-style: none; margin: 0; padding: 0; display: flex;
                  flex-direction: column; gap: .6rem; }
-  #suggestions li, #records li { display: flex; align-items: baseline; gap: .8rem;
+  #suggestions li, #records li, #podcast-users li { display: flex; align-items: baseline; gap: .8rem;
                     padding: .85rem 1.1rem; border-radius: 1rem;
                     background: light-dark(#fff, #151e2a);
                     border: 1px solid light-dark(#dce4ec, #263445); }
-  #suggestions .text, #records .text { flex: 1; overflow-wrap: anywhere; }
-  #suggestions .meta, #records .meta { opacity: .5; font-size: .78rem; white-space: nowrap; }
-  #suggestions .del, #records .del { border: 0; background: none; color: inherit;
+  #suggestions .text, #records .text, #podcast-users .text { flex: 1; overflow-wrap: anywhere; }
+  #suggestions .meta, #records .meta, #podcast-users .meta { opacity: .5; font-size: .78rem; white-space: nowrap; }
+  #suggestions .del, #records .del, #podcast-users .del { border: 0; background: none; color: inherit;
                       opacity: .45; cursor: pointer; font: inherit; padding: 0 .2rem; }
-  #suggestions .del:hover, #records .del:hover { opacity: 1; }
-  #chat-card { padding: 1rem 1.1rem; border-radius: 1rem;
+  #suggestions .del:hover, #records .del:hover, #podcast-users .del:hover { opacity: 1; }
+  #podcast-code { display: none; padding: .9rem 1.1rem; border-radius: .8rem;
+                  background: light-dark(#e8f3ec, #16301f); border: 1px solid #477a5d;
+                  line-height: 1.7; overflow-wrap: anywhere; }
+  #podcast-code code { font-size: 1.05rem; font-weight: bold; letter-spacing: .05em; }
+  #podcast-code button { margin-left: .5rem; font: inherit; font-size: .78rem; padding: .25rem .6rem;
+                  border-radius: .5rem; border: 1px solid currentColor; background: none;
+                  color: inherit; cursor: pointer; }
+  #podcast-code small { display: block; opacity: .65; }
+  #chat-card, #podcast-card { padding: 1rem 1.1rem; border-radius: 1rem;
                background: light-dark(#fff, #151e2a);
                border: 1px solid light-dark(#dce4ec, #263445);
                display: flex; flex-direction: column; gap: .9rem; }
@@ -151,6 +159,7 @@
       <a class="hub-card" href="#insights"><span class="hub-icon">📊</span><span><strong>Insights</strong><small>방문자와 인기 서비스 통계</small></span></a>
       <a class="hub-card" href="#slop"><span class="hub-icon">🎮</span><span><strong>Slop</strong><small>기록·공지·아이디어 관리</small></span></a>
       <a class="hub-card" href="#chat"><span class="hub-icon">💬</span><span><strong>Chat</strong><small>익명 채팅 정원 관리</small></span></a>
+      <a class="hub-card" href="#podcast"><span class="hub-icon">🎙️</span><span><strong>Podcast</strong><small>데일리 팟캐스트 사용자 관리</small></span></a>
     </div>
   </section>
   <section class="view" id="view-insights" hidden>
@@ -230,11 +239,29 @@
     </div>
   </section>
   </section>
+  <section class="view" id="view-podcast" hidden>
+  <h2 class="view-title">🎙️ Podcast</h2>
+  <section class="top" aria-label="팟캐스트 사용자 추가">
+    <h2>➕ 사용자 추가 <span style="opacity:.5;font-weight:normal;font-size:.8rem">초대 코드는 생성 직후 한 번만 보여요 — 서버엔 해시만 남습니다</span></h2>
+    <div id="podcast-card">
+      <div class="notice-actions">
+        <input id="podcast-name" maxlength="40" placeholder="이름 (예: 도형)" style="flex:1;font:inherit;color:inherit;padding:.6rem .7rem;border-radius:.6rem;border:1px solid light-dark(#dce4ec,#263445);background:none">
+        <button id="podcast-create">코드 발급</button>
+      </div>
+      <div id="podcast-code"></div>
+      <span id="podcast-meta" class="meta" style="opacity:.5;font-size:.78rem"></span>
+    </div>
+  </section>
+  <section class="top" aria-label="팟캐스트 사용자 목록">
+    <h2>👥 사용자 목록</h2>
+    <ol id="podcast-users"><li class="empty">불러오는 중…</li></ol>
+  </section>
+  </section>
   <div id="warning">⚠️ 초기 계정 admin/admin을 사용 중입니다. Cloudflare secrets를 설정해 변경하세요.</div>
   <footer id="status">불러오는 중…</footer>
 </main>
 <script>
-const views = ['home', 'insights', 'slop', 'chat'];
+const views = ['home', 'insights', 'slop', 'chat', 'podcast'];
 function showView() {
   const selected = views.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'home';
   document.body.dataset.view = selected;
@@ -598,11 +625,96 @@ document.getElementById('chat-reset').addEventListener('click', async () => {
   else chatMeta.textContent = `⚠️ 초기화 실패 (HTTP ${res.status})`;
 });
 
+const podcastMeta = document.getElementById('podcast-meta');
+const podcastCode = document.getElementById('podcast-code');
+
+async function loadPodcastUsers() {
+  const list = document.getElementById('podcast-users');
+  const empty = (text) => {
+    const li = document.createElement('li');
+    li.className = 'empty';
+    li.textContent = text;
+    list.replaceChildren(li);
+  };
+  try {
+    const res = await fetch(`${base}/api/podcast/users`, { cache: 'no-store' });
+    if (res.status === 503) return empty('팟캐스트가 꺼져 있어요 (ENABLE_PODCAST)');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const { users } = await res.json();
+    if (!users.length) return empty('아직 사용자가 없어요');
+    list.replaceChildren();
+    for (const user of users) {
+      const li = document.createElement('li');
+      const text = document.createElement('span');
+      text.className = 'text';
+      text.textContent = user.name;
+      const meta = document.createElement('span');
+      meta.className = 'meta';
+      meta.textContent = user.lastLoginAt
+        ? `최근 로그인 ${new Date(user.lastLoginAt).toLocaleDateString('ko-KR')}`
+        : `${new Date(user.createdAt).toLocaleDateString('ko-KR')} 생성 · 미접속`;
+      const del = document.createElement('button');
+      del.className = 'del';
+      del.textContent = '✕';
+      del.title = '사용자와 모든 데이터 삭제';
+      del.addEventListener('click', async () => {
+        if (!confirm(`“${user.name}” 사용자와 소스·에피소드를 모두 삭제할까요?`)) return;
+        const response = await fetch(`${base}/api/podcast/users?id=${encodeURIComponent(user.id)}`, { method: 'DELETE' });
+        if (response.ok) loadPodcastUsers(); else alert('삭제하지 못했습니다.');
+      });
+      li.append(text, meta, del);
+      list.append(li);
+    }
+  } catch (err) {
+    empty(`불러오지 못했어요: ${err.message}`);
+  }
+}
+
+document.getElementById('podcast-create').addEventListener('click', async () => {
+  const nameInput = document.getElementById('podcast-name');
+  const name = nameInput.value.trim();
+  if (!name) { podcastMeta.textContent = '⚠️ 이름을 입력해주세요'; return; }
+  podcastMeta.textContent = '발급 중…';
+  podcastCode.style.display = 'none';
+  const res = await fetch(`${base}/api/podcast/users`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    podcastMeta.textContent = `⚠️ 발급 실패 (${data.error ?? `HTTP ${res.status}`})`;
+    return;
+  }
+  podcastMeta.textContent = '';
+  nameInput.value = '';
+  podcastCode.replaceChildren();
+  const line = document.createElement('div');
+  line.append(`${data.user.name} 님의 초대 코드: `);
+  const code = document.createElement('code');
+  code.textContent = data.code;
+  const copy = document.createElement('button');
+  copy.type = 'button';
+  copy.textContent = '복사';
+  copy.addEventListener('click', async () => {
+    await navigator.clipboard.writeText(data.code).catch(() => {});
+    copy.textContent = '복사됨';
+    setTimeout(() => { copy.textContent = '복사'; }, 1500);
+  });
+  line.append(code, copy);
+  const note = document.createElement('small');
+  note.textContent = '이 코드는 지금만 보입니다. 전달 후 이 화면을 벗어나면 다시 볼 수 없어요.';
+  podcastCode.append(line, note);
+  podcastCode.style.display = 'block';
+  loadPodcastUsers();
+});
+
 loadStats();
 loadSuggestions();
 loadRecords();
 loadNotice();
 loadChat();
+loadPodcastUsers();
 setInterval(loadChat, 60_000);
 setInterval(loadStats, 60_000);
 setInterval(loadSuggestions, 60_000);
