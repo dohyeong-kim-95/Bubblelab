@@ -27,6 +27,9 @@ const MAX_MESSAGE_BYTES = 8 * 1024;
 // 접속당 플러드 제한: 10초 창에 메시지·닉변경 합산 12건까지
 const FLOOD_WINDOW_MS = 10_000;
 const FLOOD_LIMIT = 12;
+// 유령 연결 정리: 30초마다 ping, 다음 ping까지 pong이 없으면 끊는다
+// (모바일 브라우저가 백그라운드로 가며 소켓만 남기는 경우 최대 ~60초 안에 정리)
+const PING_INTERVAL_MS = 30_000;
 
 // 사용할 수 있는 스티커 팩과 장수. /_assets/sticker/<팩>/NN.png 와 1:1 대응.
 // 클라이언트는 URL이 아니라 { pack, n } 참조만 보내고 서버가 여기서 검증한다.
@@ -111,6 +114,13 @@ export class ChatDO {
     await this.load();
 
     if (url.pathname === "/settings") return this.handleSettings(request);
+    if (url.pathname === "/reset" && request.method === "POST") {
+      for (const conn of [...this.conns]) {
+        try { conn.ws.close(4003, "lobby reset"); } catch { /* 이미 닫힌 소켓 */ }
+      }
+      this.conns.clear();
+      return Response.json({ maxConnections: this.maxConnections, online: 0 });
+    }
 
     if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
       return new Response("WebSocket expected", { status: 426 });
@@ -136,8 +146,11 @@ export class ChatDO {
       id: crypto.randomUUID().slice(0, 8),
       nick: uniqueNick(new Set([...this.conns].map((c) => c.nick))),
       stamps: [],
+      alive: true,
     };
     this.conns.add(conn);
+    // 주의: accept와 101 응답 반환 사이에 await를 두면 소켓 페어가 깨진다
+    this.scheduleAlarm();
 
     this.send(conn, {
       type: "welcome",
@@ -187,8 +200,34 @@ export class ChatDO {
     return new Response("method not allowed", { status: 405, headers: { Allow: "GET, POST" } });
   }
 
+  scheduleAlarm() {
+    if (this.alarmScheduled) return;
+    this.alarmScheduled = true;
+    this.state.storage.setAlarm(Date.now() + PING_INTERVAL_MS);
+  }
+
+  // 30초마다: 지난 ping에 pong이 없던 연결을 정리하고 나머지에 다시 ping
+  async alarm() {
+    this.alarmScheduled = false;
+    for (const conn of [...this.conns]) {
+      if (!conn.alive) {
+        try { conn.ws.close(4002, "ping timeout"); } catch { /* 이미 닫힌 소켓 */ }
+        this.onClose(conn);
+        continue;
+      }
+      conn.alive = false;
+      this.send(conn, { type: "ping" });
+    }
+    if (this.conns.size) this.scheduleAlarm();
+  }
+
   handle(conn, msg) {
     if (!msg || typeof msg !== "object" || Array.isArray(msg)) return;
+
+    if (msg.type === "pong") { // 생존 응답 — 플러드 카운트에 넣지 않는다
+      conn.alive = true;
+      return;
+    }
 
     const now = Date.now();
     conn.stamps = conn.stamps.filter((t) => now - t < FLOOD_WINDOW_MS);
@@ -228,22 +267,24 @@ export class ChatDO {
   }
 
   send(conn, obj) {
+    this.sendFrame(conn, JSON.stringify(obj));
+  }
+
+  // send가 던지면 그 연결은 끝난 것 — 그 자리에서 정리해 다음 브로드캐스트가
+  // 죽은 소켓을 다시 건드리지 않게 한다.
+  sendFrame(conn, frame) {
     try {
-      conn.ws.send(JSON.stringify(obj));
+      conn.ws.send(frame);
     } catch {
-      /* 이미 닫힌 소켓 */
+      this.onClose(conn);
     }
   }
 
   broadcast(obj, except = null) {
     const frame = JSON.stringify(obj);
-    for (const conn of this.conns) {
+    for (const conn of [...this.conns]) {
       if (conn === except) continue;
-      try {
-        conn.ws.send(frame);
-      } catch {
-        /* 이미 닫힌 소켓 */
-      }
+      this.sendFrame(conn, frame);
     }
   }
 

@@ -335,6 +335,9 @@ async function handleAdmin(request, env, url, base = "") {
         body: JSON.stringify(await request.json().catch(() => ({}))),
       });
     }
+    if (request.method === "DELETE") { // 로비 초기화: 모든 연결을 끊는다
+      return stub.fetch("https://chat.internal/reset", { method: "POST" });
+    }
   }
   if (url.pathname === "/api/assets") {
     return new Response("not found", { status: 404 });

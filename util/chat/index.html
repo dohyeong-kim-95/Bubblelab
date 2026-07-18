@@ -11,10 +11,25 @@
   body { font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
          margin: 0; height: 100dvh; display: flex; flex-direction: column;
          background: light-dark(#eef2f6, #10161f); color: light-dark(#1c2733, #dbe4ee); }
-  header { flex: none; display: flex; align-items: center; gap: .7rem;
+  header { flex: none; position: relative; display: flex; align-items: center; gap: .7rem;
            padding: .8rem 1rem; border-bottom: 1px solid light-dark(#1c273318, #dbe4ee1c); }
   h1 { margin: 0; font-size: 1rem; }
-  #online { opacity: .55; font-size: .8rem; font-variant-numeric: tabular-nums; }
+  #online { opacity: .65; font-size: .8rem; font-variant-numeric: tabular-nums;
+            background: none; border: 0; color: inherit; font-family: inherit;
+            cursor: pointer; padding: .2rem .1rem;
+            text-decoration: underline dotted; text-underline-offset: .25em; }
+  /* 접속자 목록 팝오버 (n명 클릭) */
+  #roster { position: absolute; top: calc(100% + .4rem); left: 1rem; z-index: 6;
+            min-width: 11rem; max-width: 16rem; max-height: 40dvh; overflow-y: auto;
+            padding: .5rem; border-radius: .8rem;
+            background: light-dark(#fff, #1a2434);
+            border: 1px solid light-dark(#1c273322, #dbe4ee2a); box-shadow: 0 8px 24px #0004; }
+  #roster[hidden] { display: none; }
+  #roster ul { list-style: none; margin: 0; padding: 0; display: flex;
+               flex-direction: column; gap: .1rem; }
+  #roster li { padding: .4rem .55rem; border-radius: .5rem; font-size: .82rem;
+               overflow-wrap: anywhere; }
+  #roster li.me { background: light-dark(#477a5d14, #7fb89420); font-weight: bold; }
   #me { margin-left: auto; font: inherit; font-size: .8rem; color: inherit; cursor: pointer;
         background: none; border: 1px solid light-dark(#1c273344, #dbe4ee44);
         border-radius: 2rem; padding: .35rem .8rem; max-width: 11rem;
@@ -90,8 +105,11 @@
                  background: light-dark(#eef2f6, #10161f); }
   #picker-hint { font-size: .7rem; opacity: .55; padding: .45rem .9rem 0; min-height: 1.4rem;
                  background: light-dark(#eef2f6, #10161f); }
+  /* 키보드 높이를 측정해 두면(--kb) 그 자리를 그대로 차지한다 — 카카오톡처럼 */
   #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(4.2rem, 1fr));
-          gap: .3rem; padding: .4rem .8rem .6rem; max-height: 30dvh; overflow-y: auto;
+          gap: .3rem; padding: .4rem .8rem .6rem;
+          height: max(11rem, calc(var(--kb, 16rem) - 4.8rem));
+          max-height: 45dvh; overflow-y: auto;
           background: light-dark(#eef2f6, #10161f); }
   #grid button { padding: .3rem; background: none; border: 2px solid transparent;
                  border-radius: .6rem; cursor: pointer; touch-action: manipulation; }
@@ -106,8 +124,9 @@
 <body>
 <header>
   <h1>💬 익명 채팅</h1>
-  <span id="online">접속 중…</span>
+  <button id="online" type="button" aria-expanded="false" title="접속자 보기">접속 중…</button>
   <button id="me" type="button" title="닉네임 바꾸기">…</button>
+  <div id="roster" hidden></div>
 </header>
 <p id="notice">메시지는 서버에 저장되지 않아요 — 지금 접속한 사람들에게만 전달됩니다.</p>
 <div id="log-wrap">
@@ -157,11 +176,44 @@ function setComposerEnabled(enabled) {
   $("sticker-btn").disabled = !enabled;
 }
 
+const roster = $("roster");
+
+function renderRoster() {
+  const ul = document.createElement("ul");
+  for (const [id, nick] of online) {
+    const li = document.createElement("li");
+    li.textContent = id === myId ? `${nick} (나)` : nick;
+    if (id === myId) li.classList.add("me");
+    ul.append(li);
+  }
+  roster.replaceChildren(ul);
+}
+
+function closeRoster() {
+  roster.hidden = true;
+  $("online").setAttribute("aria-expanded", "false");
+}
+
 function renderOnline() {
   const names = [...online.values()];
   $("online").textContent = `${names.length}명`;
   $("online").title = names.join(", ");
+  if (!roster.hidden) renderRoster();
 }
+
+$("online").addEventListener("click", (event) => {
+  event.stopPropagation();
+  if (roster.hidden) {
+    renderRoster();
+    roster.hidden = false;
+    $("online").setAttribute("aria-expanded", "true");
+  } else {
+    closeRoster();
+  }
+});
+document.addEventListener("click", (event) => {
+  if (!roster.hidden && !roster.contains(event.target)) closeRoster();
+});
 
 function nearBottom() {
   return log.scrollHeight - log.scrollTop - log.clientHeight < 60;
@@ -283,7 +335,9 @@ function connect() {
   ws.addEventListener("message", (event) => {
     let msg;
     try { msg = JSON.parse(event.data); } catch { return; }
-    if (msg.type === "welcome") {
+    if (msg.type === "ping") { // 서버 생존 확인 — 유령 연결 정리용
+      ws.send(JSON.stringify({ type: "pong" }));
+    } else if (msg.type === "welcome") {
       myId = msg.id;
       myNick = msg.nick;
       online = new Map(msg.online.map((user) => [user.id, user.nick]));
@@ -494,18 +548,37 @@ function renderTabs() {
   }
 }
 
+function openPicker() {
+  $("text").blur(); // 모바일: 키보드를 내리고 그 자리를 패널이 차지한다
+  picker.hidden = false;
+  $("sticker-btn").setAttribute("aria-expanded", "true");
+  if (activeTab === "recent" && !recentStickers().length) activeTab = PACKS[0].id;
+  renderTabs();
+  renderGrid();
+  scrollToBottom();
+}
+
+function closePicker() {
+  picker.hidden = true;
+  $("sticker-btn").setAttribute("aria-expanded", "false");
+  clearSelection();
+}
+
 $("sticker-btn").addEventListener("click", () => {
-  const open = picker.hidden;
-  picker.hidden = !open;
-  $("sticker-btn").setAttribute("aria-expanded", String(open));
-  if (open) {
-    if (activeTab === "recent" && !recentStickers().length) activeTab = PACKS[0].id;
-    renderTabs();
-    renderGrid();
-  } else {
-    clearSelection();
-  }
+  if (picker.hidden) openPicker();
+  else closePicker();
 });
+
+// 입력창을 누르면(키보드가 올라오면) 패널을 접는다 — 둘이 겹치지 않게
+$("text").addEventListener("focus", () => { if (!picker.hidden) closePicker(); });
+
+// 키보드 높이를 재서 패널 높이(--kb)로 사용 (visualViewport 지원 브라우저)
+if (window.visualViewport) {
+  visualViewport.addEventListener("resize", () => {
+    const diff = window.innerHeight - visualViewport.height;
+    if (diff > 150) document.documentElement.style.setProperty("--kb", `${diff}px`);
+  });
+}
 
 // 첫 오픈이 느리지 않게 유휴 시간에 미리 데워 둔다:
 // 라벨 전부 + 최근 사용·첫 팩의 누끼 이미지
