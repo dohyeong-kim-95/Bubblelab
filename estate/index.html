@@ -92,10 +92,16 @@ svg text { font-family: inherit; font-size: 12px; fill: light-dark(#5a6b7d, #93a
 .q2 { fill: light-dark(#3b6fd0, #5f95dd); background: light-dark(#3b6fd0, #5f95dd); }
 .q3 { fill: light-dark(#2450a8, #84b0ec); background: light-dark(#2450a8, #84b0ec); }
 .q4 { fill: light-dark(#16337a, #b3ccf6); background: light-dark(#16337a, #b3ccf6); }
-.map-dot { stroke: light-dark(#ffffff, #151e2a); stroke-width: 1; }
+.map-dot { stroke: light-dark(#ffffff, #151e2a); stroke-width: 1.2; }
 .map-dot.dim { opacity: 0.22; }
-.map-ref { fill: var(--c-rent); }
-.map-ref-label { font-weight: 700; fill: light-dark(#7c4a10, #d9a558); }
+.map-ref { fill: var(--c-rent); stroke: light-dark(#ffffff, #0d131c); stroke-width: 1; }
+.map-ref-label { font-weight: 700; fill: light-dark(#7c4a10, #ffc06e);
+  paint-order: stroke; stroke: light-dark(#ffffff, #0d131c); stroke-width: 3px; }
+#mapChart svg { max-height: 640px; margin: 0 auto; }
+/* 다크 모드에서는 밝은 배경지도를 반전해 눈부심을 줄인다 */
+@media (prefers-color-scheme: dark) {
+  .map-base { filter: invert(1) hue-rotate(180deg) brightness(0.9) saturate(0.55); }
+}
 .map-radius { fill: none; stroke: var(--c-rent); stroke-width: 1.5; stroke-dasharray: 5 4; opacity: 0.7; }
 .map-scale { stroke: light-dark(#5a6b7d, #93a5b8); stroke-width: 1.5; }
 
@@ -107,6 +113,8 @@ td.num, th.num { text-align: right; }
 th { font-weight: 700; font-size: 0.75rem; opacity: 0.75; }
 th.sortable { cursor: pointer; }
 th.sortable[aria-sort] { opacity: 1; }
+td a { color: light-dark(#1d4ed8, #7fa6ec); text-decoration: none; }
+td a:hover { text-decoration: underline; }
 tr.canceled td { text-decoration: line-through; opacity: 0.5; }
 .badge { font-size: 0.7rem; border: 1px solid currentColor; border-radius: 6px; padding: 0 5px; margin-left: 5px; }
 .badge.cancel { color: light-dark(#b3261e, #ff8a80); }
@@ -307,7 +315,7 @@ async function fetchMonth(src, type, ym) {
 
 async function ensureData() {
   const seq = ++loadSeq;
-  await Promise.all([loadStaticIndex(), loadGeo()]);
+  await Promise.all([loadStaticIndex(), loadGeo(), loadBasemap()]);
   populateRefs();
   const src = TABS[state.tab].src;
   const jobs = [];
@@ -533,6 +541,15 @@ async function loadGeo() {
   } catch { geoData = false; }
 }
 
+let basemapMeta = null; // null = 미로딩, false = 없음
+async function loadBasemap() {
+  if (basemapMeta !== null) return;
+  try {
+    const res = await fetch("data/basemap.json");
+    basemapMeta = res.ok ? await res.json() : false;
+  } catch { basemapMeta = false; }
+}
+
 const distKm = (a, b) => {
   const rad = Math.PI / 180;
   const dLat = (b.lat - a.lat) * rad, dLng = (b.lng - a.lng) * rad;
@@ -591,47 +608,72 @@ function renderMap() {
   const breaks = [1, 2, 3, 4].map((i) => meds[Math.min(Math.floor(meds.length * i / 5), meds.length - 1)]);
   const quant = (v) => { const i = breaks.findIndex((b) => v < b); return i === -1 ? 4 : i; };
 
-  // km 평면 투영 후 박스에 균등 맞춤 (원 반경이 km 축척과 일치)
+  // 배경지도 스냅샷이 있으면 그 웹 메르카토르 픽셀에 맞추고, 없으면
+  // km 평면 투영으로 폴백. 어느 쪽이든 pxPerKm으로 반경 원·축척을 그린다.
   const refs = Object.entries(geoData.refs).map(([id, r]) => ({ id, ...r }));
-  const all = [...list.map((e) => e.point), ...refs];
-  const lat0 = all.reduce((s, p) => s + p.lat, 0) / all.length;
-  const kx = 111.32 * Math.cos(lat0 * Math.PI / 180), ky = 110.57;
-  const xs = all.map((p) => p.lng * kx), ys = all.map((p) => p.lat * ky);
-  const minX = Math.min(...xs), maxX = Math.max(...xs);
-  const minY = Math.min(...ys), maxY = Math.max(...ys);
-  const scale = Math.min((MAP_W - MAP_PAD * 2) / Math.max(maxX - minX, 1),
-    (MAP_H - MAP_PAD * 2) / Math.max(maxY - minY, 1));
-  const px = (p) => MAP_PAD + (p.lng * kx - minX) * scale + (MAP_W - MAP_PAD * 2 - (maxX - minX) * scale) / 2;
-  const py2 = (p) => MAP_H - MAP_PAD - ((p.lat * ky - minY) * scale + (MAP_H - MAP_PAD * 2 - (maxY - minY) * scale) / 2);
+  const src = TABS[state.tab].src;
+  const base = basemapMeta && basemapMeta.regions?.[src];
+  let px, py2, pxPerKm, VW, VH, baseImg = "";
+  if (base) {
+    const world = 256 * 2 ** base.zoom;
+    const mX = (lng) => (lng + 180) / 360 * world;
+    const mY = (lat) => {
+      const rad = lat * Math.PI / 180;
+      return (1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2 * world;
+    };
+    const ox = mX(base.west), oy = mY(base.north);
+    px = (p) => mX(p.lng) - ox;
+    py2 = (p) => mY(p.lat) - oy;
+    const lat0 = (base.north + base.south) / 2;
+    pxPerKm = 1000 / (156543.03392 * Math.cos(lat0 * Math.PI / 180) / 2 ** base.zoom);
+    VW = base.width; VH = base.height;
+    baseImg = `<image class="map-base" href="basemap-${src}.png" x="0" y="0" width="${VW}" height="${VH}"/>`;
+  } else {
+    const all = [...list.map((e) => e.point), ...refs];
+    const lat0 = all.reduce((s, p) => s + p.lat, 0) / all.length;
+    const kx = 111.32 * Math.cos(lat0 * Math.PI / 180), ky = 110.57;
+    const xs = all.map((p) => p.lng * kx), ys = all.map((p) => p.lat * ky);
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    const minY = Math.min(...ys), maxY = Math.max(...ys);
+    const scale = Math.min((MAP_W - MAP_PAD * 2) / Math.max(maxX - minX, 1),
+      (MAP_H - MAP_PAD * 2) / Math.max(maxY - minY, 1));
+    px = (p) => MAP_PAD + (p.lng * kx - minX) * scale + (MAP_W - MAP_PAD * 2 - (maxX - minX) * scale) / 2;
+    py2 = (p) => MAP_H - MAP_PAD - ((p.lat * ky - minY) * scale + (MAP_H - MAP_PAD * 2 - (maxY - minY) * scale) / 2);
+    pxPerKm = scale;
+    VW = MAP_W; VH = MAP_H;
+  }
+  const ui = VW / 860; // viewBox가 커져도 화면상 점·글자 크기를 유지
 
   const maxCnt = Math.max(...list.map((e) => e.cnt));
   const dots = [...list].sort((a, b) => b.cnt - a.cnt).map((e) => {
-    const r = 3.5 + 8 * Math.sqrt(e.cnt / maxCnt);
+    const r = (3.5 + 8 * Math.sqrt(e.cnt / maxCnt)) * ui;
     return `<circle class="map-dot q${quant(e.med)}${inRadius(e) ? "" : " dim"}" data-i="${list.indexOf(e)}"` +
       ` cx="${px(e.point).toFixed(1)}" cy="${py2(e.point).toFixed(1)}" r="${r.toFixed(1)}"/>`;
   }).join("");
 
   const selRef = state.ref ? geoData.refs[state.ref] : null;
   const radiusCircle = selRef && +state.radius
-    ? `<circle class="map-radius" cx="${px(selRef).toFixed(1)}" cy="${py2(selRef).toFixed(1)}" r="${(+state.radius * scale).toFixed(1)}"/>`
+    ? `<circle class="map-radius" cx="${px(selRef).toFixed(1)}" cy="${py2(selRef).toFixed(1)}" r="${(+state.radius * pxPerKm).toFixed(1)}"/>`
     : "";
   let refMarks = "";
   for (const r of refs) {
     const x = px(r), y = py2(r);
-    refMarks += `<path class="map-ref" d="M${x} ${y - 9} L${x + 6} ${y + 3} L${x - 6} ${y + 3} Z"/>` +
-      `<text class="map-ref-label" x="${x}" y="${y + 16}" text-anchor="middle">${r.label.replace("삼성 ", "")}</text>`;
+    refMarks += `<path class="map-ref" d="M${x} ${y - 9 * ui} L${x + 6 * ui} ${y + 3 * ui} L${x - 6 * ui} ${y + 3 * ui} Z"/>` +
+      `<text class="map-ref-label" x="${x}" y="${y + 16 * ui}" text-anchor="middle" font-size="${Math.round(12 * ui)}">` +
+      `${r.label.replace("삼성 ", "")}</text>`;
   }
-  const sy = MAP_H - 12;
-  const scaleBar = `<line class="map-scale" x1="${MAP_PAD}" x2="${MAP_PAD + 2 * scale}" y1="${sy}" y2="${sy}"/>` +
-    `<text x="${MAP_PAD + scale}" y="${sy - 5}" text-anchor="middle">2km</text>`;
+  const sy = VH - 12 * ui, sx = MAP_PAD * ui;
+  const scaleBar = `<line class="map-scale" x1="${sx}" x2="${sx + 2 * pxPerKm}" y1="${sy}" y2="${sy}"/>` +
+    `<text x="${sx + pxPerKm}" y="${sy - 5 * ui}" text-anchor="middle" font-size="${Math.round(12 * ui)}">2km</text>`;
 
-  chart.innerHTML = `<svg viewBox="0 0 ${MAP_W} ${MAP_H}" role="img" aria-label="단지 위치 지도">` +
-    `${radiusCircle}${dots}${refMarks}${scaleBar}</svg>`;
+  chart.innerHTML = `<svg viewBox="0 0 ${VW} ${VH}" role="img" aria-label="단지 위치 지도">` +
+    `${baseImg}${radiusCircle}${dots}${refMarks}${scaleBar}</svg>`;
 
   $("mapLegend").innerHTML =
     [`~${fmtMan(breaks[0])}`, `~${fmtMan(breaks[1])}`, `~${fmtMan(breaks[2])}`, `~${fmtMan(breaks[3])}`, `${fmtMan(breaks[3])}~`]
       .map((label, i) => `<span><i class="sw q${i}"></i>${label}</span>`).join("") +
-    `<span>만원/평 (중앙값)</span>`;
+    `<span>만원/평 (중앙값)</span>` +
+    (base ? `<span style="margin-left:auto">배경지도 © 브이월드</span>` : "");
   $("mapNote").textContent = state.ref && +state.radius
     ? `반경 내 ${list.filter(inRadius).length}개 단지` : `${list.length}개 단지`;
 
@@ -670,11 +712,13 @@ function renderRank() {
     `<th class="num sortable" data-sort="cnt"${sortAttr("cnt")}>거래${arrow("cnt")}</th>` +
     `<th class="num sortable" data-sort="med"${sortAttr("med")}>중앙 평당가${arrow("med")}</th>` +
     (hasRef ? `<th class="num sortable" data-sort="dist"${sortAttr("dist")}>거리${arrow("dist")}</th>` : "") +
-    `<th class="num">최근 거래</th></tr></thead><tbody>` +
+    `<th class="num">최근 거래</th><th>매물</th></tr></thead><tbody>` +
     list.map((e) => `<tr><td>${e.apt}</td><td>${e.dong}</td><td class="num">${e.cnt}건</td>` +
       `<td class="num">${fmtMan(e.med)}만</td>` +
       (hasRef ? `<td class="num">${e.dist != null ? `${e.dist.toFixed(1)}km` : "—"}</td>` : "") +
-      `<td class="num">${e.last.date.slice(2)} · ${Math.round(e.last.area)}㎡ ${fmtEok(e.last.amt)}</td></tr>`).join("") +
+      `<td class="num">${e.last.date.slice(2)} · ${Math.round(e.last.area)}㎡ ${fmtEok(e.last.amt)}</td>` +
+      `<td><a href="https://new.land.naver.com/search?query=${encodeURIComponent(e.apt)}"` +
+      ` target="_blank" rel="noreferrer">네이버↗</a></td></tr>`).join("") +
     `</tbody>`;
   for (const th of $("rankTable").querySelectorAll("th.sortable")) {
     th.addEventListener("click", () => { rankSort = th.dataset.sort; renderRank(); });
