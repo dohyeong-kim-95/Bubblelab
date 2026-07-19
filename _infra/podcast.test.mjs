@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PodcastDO, hashInviteCode, newInviteCode, validInviteCode, kstToday } from "./podcast.js";
+import { PodcastDO, hashInviteCode, newInviteCode, normalizeInviteCode, validInviteCode, kstToday } from "./podcast.js";
 import { bytesToBase64 } from "./podcast-ai.js";
 
 class MemoryStorage {
@@ -52,6 +52,14 @@ test("초대 코드 형식과 해시", async () => {
   assert.equal(validInviteCode(code), true);
   assert.equal(validInviteCode("ABCD-EFGH-IO01"), false); // 헷갈리는 글자 불허
   assert.equal(await hashInviteCode(code), await hashInviteCode(code));
+});
+
+test("normalizeInviteCode는 대시·소문자·공백 없이도 받아준다", () => {
+  assert.equal(normalizeInviteCode("abcd efgh jklm"), "ABCD-EFGH-JKLM");
+  assert.equal(normalizeInviteCode("ABCDEFGHJKLM"), "ABCD-EFGH-JKLM");
+  assert.equal(normalizeInviteCode("ABCD-EFGH-JKLM"), "ABCD-EFGH-JKLM");
+  assert.equal(normalizeInviteCode("ABCDEFGHJKL"), null);   // 11자
+  assert.equal(normalizeInviteCode("ABCDEFGHJKL0"), null);  // 허용 안 되는 글자 0
 });
 
 test("사용자 생성 → 코드 로그인 → 홈 조회", async () => {

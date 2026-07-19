@@ -28,6 +28,14 @@ export function newInviteCode() {
   return `${chars.slice(0, 4).join("")}-${chars.slice(4, 8).join("")}-${chars.slice(8).join("")}`;
 }
 
+// 사용자가 대시 없이 12자만 치거나 소문자·공백을 섞어도 받아준다.
+export function normalizeInviteCode(raw) {
+  const chars = String(raw ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (chars.length !== 12) return null;
+  const code = `${chars.slice(0, 4)}-${chars.slice(4, 8)}-${chars.slice(8)}`;
+  return validInviteCode(code) ? code : null;
+}
+
 const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
 
 export async function hashInviteCode(code) {
@@ -104,8 +112,8 @@ export async function handlePodcast(request, env, url) {
     });
     if (!limited.allowed) return rateLimitResponse(limited);
     const body = await request.json().catch(() => ({}));
-    const code = String(body.code ?? "").trim().toUpperCase();
-    if (!validInviteCode(code)) return json({ error: "잘못된 코드 형식입니다" }, { status: 400 });
+    const code = normalizeInviteCode(body.code);
+    if (!code) return json({ error: "코드는 12자입니다. 다시 확인해주세요" }, { status: 400 });
     const response = await stub.fetch("https://podcast.internal/login", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ codeHash: await hashInviteCode(code) }),
