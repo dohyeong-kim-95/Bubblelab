@@ -6,6 +6,7 @@
 <meta name="robots" content="noindex, nofollow">
 <title>🎙️ 데일리 팟캐스트</title>
 <link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
 <meta name="theme-color" content="#0d131c">
 <style>
 :root { color-scheme: light dark; }
@@ -95,6 +96,7 @@ footer { text-align: center; }
              accept="application/pdf,image/png,image/jpeg,image/webp">
       <ul id="source-list"></ul>
       <p class="muted" style="margin-bottom:0">파일당 10MB · 하루 20개까지. 다음 생성 때 모두 사용되고 정리됩니다.</p>
+      <p class="muted" id="upload-status" style="margin-bottom:0"></p>
       <p class="error" id="upload-error"></p>
     </div>
 
@@ -244,20 +246,40 @@ $("drop").ondragleave = () => $("drop").classList.remove("hover");
 $("drop").ondrop = (e) => { e.preventDefault(); $("drop").classList.remove("hover"); uploadFiles(e.dataTransfer.files); };
 $("file-input").onchange = () => uploadFiles($("file-input").files);
 
+// 휴대폰 파일은 형식 정보(file.type)가 비어 있을 수 있어 확장자로 보정한다.
+const MIME_BY_EXT = { pdf: "application/pdf", png: "image/png", jpg: "image/jpeg",
+                      jpeg: "image/jpeg", webp: "image/webp" };
+
 async function uploadFiles(files) {
-  $("upload-error").textContent = "";
-  for (const file of files) {
-    const response = await api("upload", {
-      method: "POST",
-      headers: { "Content-Type": file.type || "application/octet-stream", "X-File-Name": encodeURIComponent(file.name) },
-      body: file,
-    }).catch(() => null);
-    if (!response?.ok) {
-      $("upload-error").textContent =
-        (await response?.json().catch(() => ({})))?.error ?? `${file.name} 업로드 실패`;
+  const status = $("upload-status");
+  const errorBox = $("upload-error");
+  errorBox.textContent = "";
+  const queue = [...files];
+  let uploaded = 0;
+  for (const [index, file] of queue.entries()) {
+    status.textContent = `⏳ 올리는 중 (${index + 1}/${queue.length}) — ${file.name}`;
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    const mime = MIME_BY_EXT[ext] ?? file.type ?? "";
+    let response = null;
+    try {
+      response = await api("upload", {
+        method: "POST",
+        headers: { "Content-Type": mime || "application/octet-stream", "X-File-Name": encodeURIComponent(file.name) },
+        body: file,
+      });
+    } catch (error) {
+      errorBox.textContent = `${file.name}: 연결 오류 (${error.message})`;
       break;
     }
+    if (!response.ok) {
+      const detail = (await response.json().catch(() => ({})))?.error;
+      errorBox.textContent = `${file.name}: ${detail ?? `업로드 실패 (HTTP ${response.status})`}`;
+      break;
+    }
+    uploaded += 1;
   }
+  status.textContent = uploaded ? `✅ ${uploaded}개 업로드 완료` : "";
+  if (uploaded) setTimeout(() => { if (status.textContent.startsWith("✅")) status.textContent = ""; }, 4000);
   $("file-input").value = "";
   refresh();
 }
