@@ -15,6 +15,7 @@ class MemoryStorage {
     return new Map(entries);
   }
   async setAlarm(at) { this.alarmAt = at; }
+  async deleteAlarm() { this.alarmAt = null; }
 }
 
 class FakeBucket {
@@ -174,6 +175,109 @@ test("생성 실패 시 소스는 남고 실패 상태·사유가 기록된다",
   // 실패 상태에서는 재생성 허용
   const retry = await podcastDO.fetch(internal(`/generate?uid=${user.id}`, { method: "POST" }));
   assert.equal(retry.status, 200);
+});
+
+test("보관(keep) 소스는 생성에 쓰이되 삭제되지 않는다", async () => {
+  const { podcastDO, bucket } = makeDO();
+  const { user } = await createUser(podcastDO);
+  const addSource = async (name) => {
+    const { source } = await (await podcastDO.fetch(post(`/sources?uid=${user.id}`, {
+      name, mime: "application/pdf", size: 3,
+    }))).json();
+    await bucket.put(source.r2Key, new Uint8Array([1, 2, 3]));
+    return source;
+  };
+  const keptSource = await addSource("보관.pdf");
+  const onceSource = await addSource("일회성.pdf");
+  const patched = await podcastDO.fetch(internal(`/sources?uid=${user.id}&id=${keptSource.id}`, {
+    method: "PATCH", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ keep: true }),
+  }));
+  assert.equal(patched.status, 200);
+
+  await podcastDO.fetch(internal(`/generate?uid=${user.id}`, { method: "POST" }));
+  const pcm = new Uint8Array(24000 * 2);
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url) => geminiResponses(pcm)(url);
+  try { await podcastDO.alarm(); }
+  finally { globalThis.fetch = original; }
+
+  const home = await (await podcastDO.fetch(internal(`/home?uid=${user.id}`))).json();
+  assert.equal(home.todayPodcast.status, "completed");
+  assert.deepEqual(home.todayPodcast.sourceNames, ["보관.pdf", "일회성.pdf"]); // 보관 먼저
+  assert.deepEqual(home.sources.map((s) => s.name), ["보관.pdf"]); // 보관만 남는다
+  assert.equal(bucket.objects.has(keptSource.r2Key), true);
+  assert.equal(bucket.objects.has(onceSource.r2Key), false);
+});
+
+test("보관함 50MB 한도를 강제한다", async () => {
+  const { podcastDO } = makeDO();
+  const { user } = await createUser(podcastDO);
+  const big = await (await podcastDO.fetch(post(`/sources?uid=${user.id}`, {
+    name: "큰자료.pdf", mime: "application/pdf", size: 45 * 1024 * 1024,
+  }))).json();
+  const small = await (await podcastDO.fetch(post(`/sources?uid=${user.id}`, {
+    name: "추가.pdf", mime: "application/pdf", size: 10 * 1024 * 1024,
+  }))).json();
+  const keepBig = await podcastDO.fetch(internal(`/sources?uid=${user.id}&id=${big.source.id}`, {
+    method: "PATCH", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ keep: true }),
+  }));
+  assert.equal(keepBig.status, 200);
+  const keepSmall = await podcastDO.fetch(internal(`/sources?uid=${user.id}&id=${small.source.id}`, {
+    method: "PATCH", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ keep: true }),
+  }));
+  assert.equal(keepSmall.status, 409); // 45 + 10 > 50MB
+});
+
+test("AI 입력 상한(20MB)을 넘는 소스는 삭제되지 않고 남는다", async () => {
+  const { podcastDO, bucket } = makeDO();
+  const { user } = await createUser(podcastDO);
+  const first = await (await podcastDO.fetch(post(`/sources?uid=${user.id}`, {
+    name: "먼저.pdf", mime: "application/pdf", size: 15 * 1024 * 1024,
+  }))).json();
+  const second = await (await podcastDO.fetch(post(`/sources?uid=${user.id}`, {
+    name: "초과.pdf", mime: "application/pdf", size: 10 * 1024 * 1024,
+  }))).json();
+  await bucket.put(first.source.r2Key, new Uint8Array([1]));
+  await bucket.put(second.source.r2Key, new Uint8Array([2]));
+  await podcastDO.fetch(internal(`/generate?uid=${user.id}`, { method: "POST" }));
+
+  const pcm = new Uint8Array(24000 * 2);
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url) => geminiResponses(pcm)(url);
+  try { await podcastDO.alarm(); }
+  finally { globalThis.fetch = original; }
+
+  const home = await (await podcastDO.fetch(internal(`/home?uid=${user.id}`))).json();
+  assert.equal(home.todayPodcast.status, "completed");
+  assert.deepEqual(home.todayPodcast.sourceNames, ["먼저.pdf"]);
+  assert.deepEqual(home.sources.map((s) => s.name), ["초과.pdf"]); // 미사용분은 보존
+  assert.equal(bucket.objects.has(second.source.r2Key), true);
+});
+
+test("작업은 시도 상한을 넘으면 실패 처리되고 큐·알람이 정리된다", async () => {
+  const { podcastDO, storage, bucket } = makeDO();
+  const { user } = await createUser(podcastDO);
+  const { source } = await (await podcastDO.fetch(post(`/sources?uid=${user.id}`, {
+    name: "doc.pdf", mime: "application/pdf", size: 3,
+  }))).json();
+  await bucket.put(source.r2Key, new Uint8Array([1]));
+  await podcastDO.fetch(internal(`/generate?uid=${user.id}`, { method: "POST" }));
+
+  // 처리 중 DO가 반복적으로 죽은 상황을 흉내: 시도 횟수만 상한까지 채운다
+  const jobs = await storage.get("jobs");
+  jobs[0].attempts = 3;
+  await storage.put("jobs", jobs);
+  await podcastDO.alarm();
+
+  const home = await (await podcastDO.fetch(internal(`/home?uid=${user.id}`))).json();
+  assert.equal(home.todayPodcast.status, "failed");
+  assert.match(home.todayPodcast.error, /여러 번/);
+  assert.deepEqual(await storage.get("jobs"), []);
+  assert.equal(storage.alarmAt, null);
+  assert.equal(home.sources.length, 1); // 소스는 보존되어 재시도 가능
 });
 
 test("run-daily는 소스 있는 사용자만 큐잉한다", async () => {

@@ -2,7 +2,11 @@
 const CACHE = "bl-podcast-v1";
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(["./"])).catch(() => {}));
+  // 캐시 실패는 설치를 막지 않되, 조용히 삼키지 않고 로그를 남긴다.
+  event.waitUntil(
+    caches.open(CACHE).then((cache) => cache.addAll(["./"]))
+      .catch((error) => console.warn("앱 셸 캐시 실패:", error)),
+  );
   self.skipWaiting();
 });
 

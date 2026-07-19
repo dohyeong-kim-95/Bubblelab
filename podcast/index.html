@@ -50,9 +50,14 @@ li { display: flex; gap: .6rem; align-items: center; justify-content: space-betw
 li .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 li button { padding: .2rem .55rem; font-size: .75rem; }
 audio { width: 100%; margin-top: .7rem; }
-#drop { border: 2px dashed light-dark(#c8d3de, #2a3646); border-radius: .8rem;
+#drop { display: block; width: 100%; background: none;
+  border: 2px dashed light-dark(#c8d3de, #2a3646); border-radius: .8rem;
   padding: 1.2rem; text-align: center; cursor: pointer; font-size: .85rem; opacity: .8; }
-#drop.hover { border-color: #4f7fdd; opacity: 1; }
+#drop.hover, #drop:focus-visible { border-color: #4f7fdd; opacity: 1; }
+.btn-link { display: inline-block; padding: .65rem 1rem; border-radius: .6rem;
+  border: 1px solid light-dark(#c8d3de, #2a3646); color: inherit; text-decoration: none; }
+li button.keep-on { opacity: 1; border-color: #4f7fdd; }
+li button.keep-off { opacity: .5; }
 details summary { cursor: pointer; font-size: .95rem; opacity: .85; }
 label.toggle { display: flex; gap: .6rem; align-items: center; font-size: .85rem; margin: .8rem 0; }
 [hidden] { display: none !important; }
@@ -71,7 +76,7 @@ footer { text-align: center; }
              spellcheck="false" style="flex:1; text-transform:uppercase" required>
       <button class="primary" type="submit">입장</button>
     </form>
-    <p class="error" id="login-error"></p>
+    <p class="error" id="login-error" aria-live="polite"></p>
   </section>
 
   <section id="view-app" hidden>
@@ -80,24 +85,25 @@ footer { text-align: center; }
         <h2 id="today-title">오늘의 팟캐스트</h2>
         <span id="today-status" class="status" hidden></span>
       </div>
-      <div id="today-body" class="muted">불러오는 중…</div>
+      <div id="today-body" class="muted" aria-live="polite">불러오는 중…</div>
       <audio id="player" controls preload="metadata" hidden></audio>
       <div class="row" style="margin-top:.8rem">
         <button id="generate" class="primary" hidden>지금 팟캐스트 만들기</button>
-        <a id="download" hidden><button type="button">다운로드</button></a>
+        <a id="download" class="btn-link" hidden>다운로드</a>
       </div>
-      <p class="error" id="today-error"></p>
+      <p class="error" id="today-error" aria-live="polite"></p>
     </div>
 
     <div class="card">
       <h2>소스 올리기</h2>
-      <div id="drop">여기를 눌러 PDF·이미지 선택 (또는 끌어다 놓기)</div>
+      <button type="button" id="drop">여기를 눌러 PDF·이미지 선택 (또는 끌어다 놓기)</button>
       <input id="file-input" type="file" hidden multiple
              accept="application/pdf,image/png,image/jpeg,image/webp">
       <ul id="source-list"></ul>
-      <p class="muted" style="margin-bottom:0">파일당 10MB · 하루 20개까지. 다음 생성 때 모두 사용되고 정리됩니다.</p>
-      <p class="muted" id="upload-status" style="margin-bottom:0"></p>
-      <p class="error" id="upload-error"></p>
+      <p class="muted" style="margin-bottom:0">파일당 10MB · 하루 20개까지. 생성에 사용된 자료는 정리되지만,
+        📌 보관으로 표시하면 남아서 매일 사용됩니다 (1인 50MB).</p>
+      <p class="muted" id="upload-status" style="margin-bottom:0" aria-live="polite"></p>
+      <p class="error" id="upload-error" aria-live="polite"></p>
     </div>
 
     <div class="card">
@@ -143,7 +149,10 @@ function showLogin() {
 }
 
 async function init() {
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("sw.js")
+      .catch((error) => console.warn("서비스워커 등록 실패:", error));
+  }
   const session = await (await api("session")).json();
   vapidPublicKey = session.vapidPublicKey;
   if (!session.authenticated) return showLogin();
@@ -153,10 +162,16 @@ async function init() {
   syncPushToggle();
 }
 
+let generatingNow = false; // 마지막으로 알던 "생성 중" 여부 (오류 시 폴링 유지용)
+
 async function refresh() {
-  const response = await api("home");
-  if (!response.ok) return;
-  render(await response.json());
+  clearTimeout(pollTimer);
+  try {
+    const response = await api("home");
+    if (response.ok) { render(await response.json()); return; }
+  } catch {}
+  // 홈 조회가 일시적으로 실패해도 생성 중이면 폴링을 이어간다
+  if (generatingNow) pollTimer = setTimeout(refresh, 8000);
 }
 
 function render(home) {
@@ -196,9 +211,25 @@ function render(home) {
   $("source-list").replaceChildren(...home.sources.map((s) => {
     const li = document.createElement("li");
     const name = Object.assign(document.createElement("span"), { className: "name", textContent: `${s.name} (${fmtSize(s.size)})` });
+    const keep = Object.assign(document.createElement("button"), {
+      textContent: s.keep ? "📌 보관중" : "📌 보관",
+      className: s.keep ? "keep-on" : "keep-off",
+      title: "보관 자료는 생성 후에도 남아 매일 사용됩니다 (1인 50MB)",
+    });
+    keep.onclick = async () => {
+      const response = await api(`source?id=${encodeURIComponent(s.id)}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keep: !s.keep }),
+      }).catch(() => null);
+      if (!response?.ok) {
+        $("upload-error").textContent =
+          (await response?.json().catch(() => ({})))?.error ?? "보관 설정 실패";
+      }
+      refresh();
+    };
     const del = Object.assign(document.createElement("button"), { textContent: "삭제" });
     del.onclick = async () => { await api(`source?id=${encodeURIComponent(s.id)}`, { method: "DELETE" }); refresh(); };
-    li.append(name, del);
+    li.append(name, keep, del);
     return li;
   }));
 
@@ -217,7 +248,8 @@ function render(home) {
   if ($("memory") !== document.activeElement) $("memory").value = home.user.memory;
 
   clearTimeout(pollTimer);
-  if (generating || home.queued) pollTimer = setTimeout(refresh, 8000);
+  generatingNow = Boolean(generating || home.queued);
+  if (generatingNow) pollTimer = setTimeout(refresh, 8000);
 }
 
 // 대시 없이 12자만 붙여넣어도 XXXX-XXXX-XXXX 모양으로 자동 정리
@@ -250,6 +282,24 @@ $("file-input").onchange = () => uploadFiles($("file-input").files);
 const MIME_BY_EXT = { pdf: "application/pdf", png: "image/png", jpg: "image/jpeg",
                       jpeg: "image/jpeg", webp: "image/webp" };
 
+// XHR로 올려 업로드 진행률(%)을 표시한다 (fetch는 업로드 진행률 미지원)
+function uploadOne(file, mime, onProgress) {
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/_podcast/upload");
+    xhr.setRequestHeader("Content-Type", mime);
+    xhr.setRequestHeader("X-File-Name", encodeURIComponent(file.name));
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
+    xhr.onload = () => {
+      let body = {};
+      try { body = JSON.parse(xhr.responseText); } catch {}
+      resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, body });
+    };
+    xhr.onerror = () => resolve(null);
+    xhr.send(file);
+  });
+}
+
 async function uploadFiles(files) {
   const status = $("upload-status");
   const errorBox = $("upload-error");
@@ -257,23 +307,16 @@ async function uploadFiles(files) {
   const queue = [...files];
   let uploaded = 0;
   for (const [index, file] of queue.entries()) {
-    status.textContent = `⏳ 올리는 중 (${index + 1}/${queue.length}) — ${file.name}`;
+    const label = `⏳ 올리는 중 (${index + 1}/${queue.length}) — ${file.name}`;
+    status.textContent = label;
     const ext = file.name.split(".").pop()?.toLowerCase();
-    const mime = MIME_BY_EXT[ext] ?? file.type ?? "";
-    let response = null;
-    try {
-      response = await api("upload", {
-        method: "POST",
-        headers: { "Content-Type": mime || "application/octet-stream", "X-File-Name": encodeURIComponent(file.name) },
-        body: file,
-      });
-    } catch (error) {
-      errorBox.textContent = `${file.name}: 연결 오류 (${error.message})`;
-      break;
-    }
+    const mime = MIME_BY_EXT[ext] ?? file.type ?? "application/octet-stream";
+    const response = await uploadOne(file, mime, (ratio) => {
+      status.textContent = `${label} · ${Math.round(ratio * 100)}%`;
+    });
+    if (!response) { errorBox.textContent = `${file.name}: 연결 오류`; break; }
     if (!response.ok) {
-      const detail = (await response.json().catch(() => ({})))?.error;
-      errorBox.textContent = `${file.name}: ${detail ?? `업로드 실패 (HTTP ${response.status})`}`;
+      errorBox.textContent = `${file.name}: ${response.body?.error ?? `업로드 실패 (HTTP ${response.status})`}`;
       break;
     }
     uploaded += 1;
@@ -294,12 +337,13 @@ $("generate").onclick = async () => {
 };
 
 $("save-memory").onclick = async () => {
-  await api("memory", {
+  const response = await api("memory", {
     method: "PUT", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ memory: $("memory").value }),
-  });
+  }).catch(() => null);
+  $("memory-saved").textContent = response?.ok ? "저장됨" : "⚠️ 저장 실패 — 다시 시도해주세요";
   $("memory-saved").hidden = false;
-  setTimeout(() => { $("memory-saved").hidden = true; }, 1500);
+  setTimeout(() => { $("memory-saved").hidden = true; }, 2500);
 };
 
 async function syncPushToggle() {
@@ -317,10 +361,11 @@ async function syncPushToggle() {
         const subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true, applicationServerKey: vapidKeyBytes(vapidPublicKey),
         });
-        await api("push", {
+        const response = await api("push", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ subscription }),
         });
+        if (!response.ok) throw new Error(`push register failed (${response.status})`);
       } else {
         const subscription = await registration.pushManager.getSubscription();
         if (subscription) {
