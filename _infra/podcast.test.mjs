@@ -123,13 +123,15 @@ test("소스 등록·삭제와 생성 큐잉 규칙", async () => {
   assert.equal(home.queued, true);
 });
 
+const sse = (payload) => new Response(`data: ${JSON.stringify(payload)}\n\n`, { status: 200 });
+
 const geminiResponses = (pcm) => async (url) => {
   if (String(url).includes("preview-tts")) {
-    return Response.json({
+    return sse({
       candidates: [{ content: { parts: [{ inlineData: { mimeType: "audio/L16;rate=24000", data: bytesToBase64(pcm) } }] } }],
     });
   }
-  return Response.json({
+  return sse({
     candidates: [{ content: { parts: [{ text: '{"title":"아침 방송","turns":[{"speaker":"A","text":"안녕하세요"},{"speaker":"B","text":"반갑습니다"}]}' }] } }],
   });
 };

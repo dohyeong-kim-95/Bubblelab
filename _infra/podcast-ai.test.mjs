@@ -81,37 +81,47 @@ const withMockedFetch = async (handler, run) => {
   finally { globalThis.fetch = original; }
 };
 
-test("gemini 대본 프로바이더는 소스를 inlineData로 보내고 응답을 파싱한다", async () => {
+// Gemini 스트리밍(SSE) 응답 형식 헬퍼 — 여러 이벤트로 쪼개 보낸다
+const sse = (...payloads) => new Response(
+  payloads.map((p) => `data: ${JSON.stringify(p)}\n\n`).join(""), { status: 200 },
+);
+
+test("gemini 대본 프로바이더는 소스를 inlineData로 보내고 SSE 응답을 파싱한다", async () => {
   const env = { GEMINI_API_KEY: "test-key" };
   const provider = createScriptProvider(env);
   assert.equal(provider.name, `gemini/${AI_DEFAULTS.llmModel}`);
   const { result, calls } = await withMockedFetch(
-    () => Response.json({
-      candidates: [{ content: { parts: [{ text: '{"title":"T","turns":[{"speaker":"A","text":"hi"}]}' }] } }],
-    }),
+    () => sse(
+      { candidates: [{ content: { parts: [{ text: '{"title":"T","turns":[' }] } }] },
+      { candidates: [{ content: { parts: [{ text: '{"speaker":"A","text":"hi"}]}' }] } }] },
+    ),
     () => provider.generate({
       sources: [{ name: "doc.pdf", mime: "application/pdf", bytes: new Uint8Array([1, 2, 3]) }],
       memory: "", dateKst: "2026-07-18",
     }),
   );
   assert.equal(result.title, "T");
-  assert.ok(calls[0].url.includes(`/models/${AI_DEFAULTS.llmModel}:generateContent`));
+  assert.ok(calls[0].url.includes(`/models/${AI_DEFAULTS.llmModel}:streamGenerateContent`));
   assert.equal(calls[0].init.headers["x-goog-api-key"], "test-key");
   const body = JSON.parse(calls[0].init.body);
   assert.equal(body.contents[0].parts[1].inlineData.mimeType, "application/pdf");
   assert.equal(body.contents[0].parts[1].inlineData.data, bytesToBase64(new Uint8Array([1, 2, 3])));
 });
 
-test("gemini TTS 프로바이더는 멀티스피커 설정을 보내고 PCM을 WAV로 합친다", async () => {
+test("gemini TTS 프로바이더는 멀티스피커 설정을 보내고 SSE PCM 조각을 WAV로 합친다", async () => {
   const env = { GEMINI_API_KEY: "test-key", PODCAST_TTS_VOICE_A: "VoiceA" };
   const provider = createTtsProvider(env);
   const pcm = new Uint8Array(24000 * 2); // 1초
+  const half = pcm.length / 2;
   const { result, calls } = await withMockedFetch(
-    () => Response.json({
-      candidates: [{ content: { parts: [{ inlineData: {
-        mimeType: "audio/L16;rate=24000", data: bytesToBase64(pcm),
-      } }] } }],
-    }),
+    () => sse(
+      { candidates: [{ content: { parts: [{ inlineData: {
+        mimeType: "audio/L16;rate=24000", data: bytesToBase64(pcm.slice(0, half)),
+      } }] } }] },
+      { candidates: [{ content: { parts: [{ inlineData: {
+        mimeType: "audio/L16;rate=24000", data: bytesToBase64(pcm.slice(half)),
+      } }] } }] },
+    ),
     () => provider.synthesize([
       { speaker: "A", text: "안녕하세요" }, { speaker: "B", text: "반갑습니다" },
     ]),

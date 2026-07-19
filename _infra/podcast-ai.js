@@ -22,8 +22,10 @@ export const AI_DEFAULTS = {
   sampleRate: 24000,
   maxTurns: 60,
   maxScriptChars: 9000,   // 한국어 기준 약 10분 분량
-  ttsChunkChars: 2500,    // TTS 1회 호출 상한 (모델 한도보다 보수적으로)
-  maxTtsChunks: 12,       // 폭주 비용 방지 상한
+  // Workers의 외부 fetch는 무응답 ~100초에 끊기므로(오류 524) 호출은
+  // 스트리밍으로 하고, 조각도 한 호출이 짧게 끝나도록 작게 나눈다.
+  ttsChunkChars: 1600,
+  maxTtsChunks: 20,       // 폭주 비용 방지 상한
 };
 
 export const SUPPORTED_SOURCE_TYPES = new Set([
@@ -169,6 +171,35 @@ async function requestJson(url, init, label) {
   return response.json();
 }
 
+// Gemini streamGenerateContent(alt=sse) 호출 — 바이트가 곧바로 흐르기
+// 시작하므로 Cloudflare의 무응답 타임아웃(524)에 걸리지 않는다.
+// 모든 SSE 이벤트의 content parts를 순서대로 모아 반환한다.
+async function requestGeminiStream(url, init, label) {
+  let response = await fetch(url, init);
+  if (response.status === 429 || response.status >= 500) {
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    response = await fetch(url, init);
+  }
+  if (!response.ok) {
+    const detail = (await response.text().catch(() => "")).slice(0, 300);
+    throw new Error(`${label} failed (${response.status}): ${detail}`);
+  }
+  const body = await response.text();
+  const parts = [];
+  for (const line of body.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("data:")) continue;
+    const payload = trimmed.slice(5).trim();
+    if (!payload || payload === "[DONE]") continue;
+    try {
+      const data = JSON.parse(payload);
+      parts.push(...(data.candidates?.[0]?.content?.parts ?? []));
+    } catch { /* 잘린 조각은 무시 */ }
+  }
+  if (parts.length === 0) throw new Error(`${label} returned no content`);
+  return parts;
+}
+
 const llmKey = (env) => env.PODCAST_LLM_API_KEY || env.GEMINI_API_KEY;
 const ttsKey = (env) => env.PODCAST_TTS_API_KEY || env.PODCAST_LLM_API_KEY || env.GEMINI_API_KEY;
 
@@ -195,8 +226,8 @@ export function createScriptProvider(env) {
           }],
           generationConfig: { temperature: 0.8, responseMimeType: "application/json" },
         };
-        const data = await requestJson(
-          `${GEMINI_BASE}/models/${model}:generateContent`,
+        const parts = await requestGeminiStream(
+          `${GEMINI_BASE}/models/${model}:streamGenerateContent?alt=sse`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json", "x-goog-api-key": key },
@@ -204,8 +235,7 @@ export function createScriptProvider(env) {
           },
           "gemini script",
         );
-        const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
-        return parseScript(text);
+        return parseScript(parts.map((p) => p.text ?? "").join(""));
       },
     };
   }
@@ -304,8 +334,8 @@ export function createTtsProvider(env) {
             },
           },
         };
-        const data = await requestJson(
-          `${GEMINI_BASE}/models/${model}:generateContent`,
+        const parts = await requestGeminiStream(
+          `${GEMINI_BASE}/models/${model}:streamGenerateContent?alt=sse`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json", "x-goog-api-key": key },
@@ -313,12 +343,14 @@ export function createTtsProvider(env) {
           },
           "gemini tts",
         );
-        const part = data.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data);
-        if (!part) throw new Error("gemini tts returned no audio");
-        return {
-          pcm: b64ToBytes(part.inlineData.data),
-          sampleRate: parseAudioRate(part.inlineData.mimeType),
-        };
+        const audioParts = parts.filter((p) => p.inlineData?.data);
+        if (audioParts.length === 0) throw new Error("gemini tts returned no audio");
+        const pcmSegments = audioParts.map((p) => b64ToBytes(p.inlineData.data));
+        const total = pcmSegments.reduce((sum, s) => sum + s.length, 0);
+        const pcm = new Uint8Array(total);
+        let offset = 0;
+        for (const segment of pcmSegments) { pcm.set(segment, offset); offset += segment.length; }
+        return { pcm, sampleRate: parseAudioRate(audioParts[0].inlineData.mimeType) };
       },
     };
     geminiProvider.synthesize = wrapFull(geminiProvider);
