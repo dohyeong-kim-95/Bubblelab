@@ -1,6 +1,7 @@
 dist/
 node_modules/
 .wrangler/
+.dev.vars
 .DS_Store
 podcast-preview.json
 podcast-preview.wav

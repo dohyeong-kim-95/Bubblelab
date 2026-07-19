@@ -10,19 +10,25 @@ estate.bubblelab.dev. 국토교통부 실거래가 공개시스템 데이터로 
 - `index.html` — 단일 파일 대시보드. 평당가 추이·거래량·전세가율 차트(SVG 자체
   구현), 단지 랭킹, 최근 거래 표. 지역 탭(동탄2·동탄1·화성 전체·기흥구),
   기간·전용면적·법정동 필터.
-- 서버는 `_infra/estate.js`의 `/_estate/deals` 프록시 하나만 쓴다
-  (data.go.kr은 CORS가 없어 브라우저 직접 호출 불가). 월 단위 응답은 Worker
-  Cache API에 캐싱된다.
+- `data/` — `_infra/estate-import.mjs`가 생성하는 월별 정적 JSON + `index.json`.
+  페이지는 이걸 우선 읽고, 없는 달만 `/_estate/deals` 프록시(`_infra/estate.js`)로
+  받는다.
 
-## 인증키 (필수 1회)
+## 데이터 갱신 (국토부 해외 IP 차단 때문에 수동)
 
-1. data.go.kr에서 **아파트 매매 실거래가 자료**, **아파트 전월세 실거래가 자료**
-   활용신청 (자동승인)
-2. 일반 인증키(Decoding)를 `npx wrangler@4 secret put MOLIT_SERVICE_KEY`로 등록
-3. 로컬 개발은 리포 루트 `.dev.vars`에 `MOLIT_SERVICE_KEY=키` 추가
+국토부 RTMS API는 해외 IP를 차단해 **운영 Cloudflare Worker에서는 403이 난다**
+(같은 요청이 한국 IP 로컬 workerd에서는 정상 — 2026-07 확인). 그래서 운영
+데이터는 한국 IP인 로컬에서 받아 정적 파일로 커밋한다:
 
-키가 없으면 API가 `{ status: "not-configured" }`를 주고 페이지가 설정 안내를
-띄운다 (fail-soft, 배포는 막히지 않음).
+1. (1회) data.go.kr에서 **아파트 매매 실거래가 자료**, **아파트 전월세 실거래가
+   자료** 활용신청 → 일반 인증키(Decoding)를 리포 루트 `.dev.vars`에
+   `MOLIT_SERVICE_KEY=키`로 저장 (.gitignore에 있음 — 커밋 금지)
+2. `node _infra/estate-import.mjs` (기본 36개월. `--months N`, `--force` 지원.
+   최근 3개월은 늘 다시 받고, 그 전은 받아둔 파일을 재사용)
+3. `estate/data/` 커밋·푸시 → 자동 배포
+
+로컬 개발(wrangler dev)은 한국 IP라 `.dev.vars` 키만으로 프록시가 바로 동작한다.
+데이터가 아예 없으면 페이지가 준비 안내를 띄운다 (fail-soft, 배포는 안 막힘).
 
 ## 주의
 

@@ -112,16 +112,21 @@ tr.canceled td { text-decoration: line-through; opacity: 0.5; }
   </header>
 
   <section id="setup" class="card hidden">
-    <h2 style="margin-top:0">인증키 설정이 필요합니다</h2>
-    <p class="sub">서버에 국토교통부 공공데이터 인증키가 아직 없습니다. 한 번만 해두면 됩니다.</p>
+    <h2 style="margin-top:0">데이터 준비가 필요합니다</h2>
+    <p class="sub">국토부 실거래가 API는 해외 IP를 차단해 Cloudflare 서버가 직접 가져올 수 없습니다.
+      한국 IP인 내 컴퓨터에서 받아서 정적 파일로 커밋하는 방식을 씁니다.</p>
     <ol>
       <li><a href="https://www.data.go.kr" target="_blank" rel="noreferrer">data.go.kr</a> 가입 후
         <b>아파트 매매 실거래가 자료</b>, <b>아파트 전월세 실거래가 자료</b> 두 API를 활용신청 (자동승인)</li>
       <li>마이페이지에서 <b>일반 인증키 (Decoding)</b> 복사</li>
-      <li>리포 루트에서 <code>npx wrangler@4 secret put MOLIT_SERVICE_KEY</code> 실행 후 키 붙여넣기</li>
-      <li>로컬 개발이라면 리포 루트 <code>.dev.vars</code> 파일에 <code>MOLIT_SERVICE_KEY=키</code> 한 줄 추가</li>
-      <li>이 페이지 새로고침</li>
+      <li>리포 루트 <code>.dev.vars</code> 파일에 <code>MOLIT_SERVICE_KEY=키</code> 한 줄 추가
+        (.gitignore에 있어 커밋되지 않음)</li>
+      <li><code>node _infra/estate-import.mjs</code> 실행 → <code>estate/data/</code>에 월별 JSON 생성</li>
+      <li><code>estate/data</code>를 커밋·푸시 → 배포 후 이 페이지 새로고침.
+        새 신고분을 반영하려면 가끔 다시 돌려서 커밋</li>
     </ol>
+    <p class="sub">로컬 개발(wrangler dev)은 한국 IP라 <code>.dev.vars</code>의 키만으로
+      프록시가 바로 동작합니다 — 커밋 없이도 화면을 볼 수 있어요.</p>
   </section>
 
   <div id="dash" class="hidden">
@@ -228,13 +233,38 @@ const inBand = (area) =>
   state.band === "mid" ? area > 60 && area <= 85 : area > 85;
 
 // ── 데이터 로드 ──────────────────────────────────────────────
+// 정적 파일(estate-import.mjs 산출물) 우선, 없으면 워커 프록시.
+// 운영 프록시는 국토부의 해외 IP 차단으로 막힐 수 있다 (로컬 dev는 동작).
+let staticIndex = null; // null = 미확인, false = 없음
+let proxyOff = false;
+
+async function loadStaticIndex() {
+  if (staticIndex !== null) return;
+  try {
+    const res = await fetch("data/index.json", { cache: "no-cache" });
+    staticIndex = res.ok ? await res.json() : false;
+  } catch { staticIndex = false; }
+}
+
 async function fetchMonth(src, type, ym) {
   const bucket = store[src][type];
   if (Array.isArray(bucket[ym])) return "ok";
-  const res = await fetch(`/_estate/deals?type=${type}&region=${src}&ym=${ym}`);
+  if (staticIndex && staticIndex.months?.[`${type}:${src}`]?.includes(ym)) {
+    try {
+      const res = await fetch(`data/${type}-${src}-${ym}.json`);
+      if (res.ok) { bucket[ym] = (await res.json()).items; return "ok"; }
+    } catch { /* 프록시로 넘어감 */ }
+  }
+  if (proxyOff) { bucket[ym] = "error"; return "error"; }
+  const res = await fetch(`/_estate/deals?type=${type}&region=${src}&ym=${ym}`).catch(() => null);
+  if (!res) { bucket[ym] = "error"; return "error"; }
   if (res.status === 429) { bucket[ym] = "error"; return "rate-limited"; }
   const body = await res.json().catch(() => ({ status: "unavailable" }));
-  if (body.status === "not-configured") return "not-configured";
+  if (body.status === "not-configured") {
+    proxyOff = true;
+    bucket[ym] = "error";
+    return staticIndex ? "error" : "not-configured";
+  }
   if (body.status !== "ok") { bucket[ym] = "error"; return "error"; }
   bucket[ym] = body.items;
   return "ok";
@@ -242,6 +272,7 @@ async function fetchMonth(src, type, ym) {
 
 async function ensureData() {
   const seq = ++loadSeq;
+  await loadStaticIndex();
   const src = TABS[state.tab].src;
   const jobs = [];
   for (const ym of monthsBack(state.months)) {
@@ -276,6 +307,10 @@ async function ensureData() {
   });
   await Promise.all(workers);
   if (seq !== loadSeq || $("setup").classList.contains("hidden") === false) return;
+  if (failed === jobs.length && !staticIndex && !aborted) {
+    // 정적 데이터도 없고 프록시도 전부 실패 — 준비 안내를 함께 보여준다.
+    $("setup").classList.remove("hidden");
+  }
   status.innerHTML = failed
     ? `<span class="err">${failed}개 달을 불러오지 못했습니다${aborted ? " (요청 한도 — 잠시 후 재시도)" : ""}</span>` +
       `<button id="retryBtn">다시 시도</button>`

@@ -3,6 +3,10 @@
 // 중계한다. 인증키는 MOLIT_SERVICE_KEY secret에서만 읽고 응답에 싣지 않는다.
 // 월 단위 데이터는 신고·해제 정정으로 조금씩 바뀌므로 지난달 이전은 하루,
 // 최근 두 달은 6시간 동안 Cache API에 캐싱해 일일 호출 한도를 아낀다.
+//
+// 주의: 국토부 RTMS API는 해외 IP를 차단해 운영 Cloudflare에서는 403이 난다
+// (같은 요청이 한국 IP의 로컬 workerd에서는 정상 도달함을 확인). 이 프록시는
+// 로컬 개발용이고, 운영 데이터는 estate-import.mjs로 정적 JSON을 커밋한다.
 
 // 법정동코드 앞 5자리 (LAWD_CD). 조회 가능한 지역을 서버가 고정한다.
 export const REGIONS = new Map([
@@ -105,7 +109,7 @@ function serviceKey(raw) {
   try { return decodeURIComponent(value); } catch { return value; }
 }
 
-async function fetchMonth(type, lawd, ym, key) {
+export async function fetchDealsMonth(type, lawd, ym, key) {
   const all = [];
   let total = 0;
   for (let page = 1; page <= MAX_PAGES; page += 1) {
@@ -147,7 +151,7 @@ export async function handleEstateDeals(request, env, url) {
   const cached = await cache?.match(cacheRequest);
   if (cached) return new Response(cached.body, cached);
 
-  const result = await fetchMonth(type, REGIONS.get(region).lawd, ym, key).catch(() => (
+  const result = await fetchDealsMonth(type, REGIONS.get(region).lawd, ym, key).catch(() => (
     { error: "국토부 API에 연결하지 못했습니다." }
   ));
   if (result.error) {

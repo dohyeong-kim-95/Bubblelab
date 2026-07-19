@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { parseDealsXml, validateDealsQuery, REGIONS, handleEstateDeals } from "./estate.js";
+import { monthsBack, shouldFetch } from "./estate-import.mjs";
 
 const TRADE_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <response><header><resultCode>000</resultCode><resultMsg>OK</resultMsg></header>
@@ -77,6 +78,15 @@ test("인증키 미설정이면 not-configured JSON을 준다", async () => {
   const response = await handleEstateDeals(new Request(url), {}, url);
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { status: "not-configured" });
+});
+
+test("가져오기 CLI: 최근 3개월은 늘 다시 받고, 그 전은 파일이 있으면 건너뛴다", () => {
+  assert.deepEqual(monthsBack(3, "202607"), ["202605", "202606", "202607"]);
+  assert.equal(shouldFetch("202607", "202607", true, false), true, "이번 달 재수집");
+  assert.equal(shouldFetch("202605", "202607", true, false), true, "3개월 내 재수집");
+  assert.equal(shouldFetch("202604", "202607", true, false), false, "받아둔 과거 달 건너뜀");
+  assert.equal(shouldFetch("202604", "202607", false, false), true, "없는 달은 받음");
+  assert.equal(shouldFetch("202001", "202607", true, true), true, "--force면 전부 다시");
 });
 
 test("GET 외의 메서드는 거절한다", async () => {
