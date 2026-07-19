@@ -43,6 +43,7 @@ h2 { font-size: 0.95rem; margin: 32px 0 12px; }
   background: light-dark(#ffffff, #151e2a);
 }
 .filters label { font-size: 0.78rem; opacity: 0.7; }
+.filters input[type="checkbox"] { accent-color: light-dark(#1d4ed8, #5b82f0); vertical-align: -2px; }
 #status { font-size: 0.78rem; opacity: 0.7; min-height: 1.4em; margin: 4px 0 0; }
 #status .err { color: light-dark(#b3261e, #ff8a80); opacity: 1; }
 #status button { font: inherit; font-size: 0.75rem; color: inherit; background: none;
@@ -170,6 +171,8 @@ tr.canceled td { text-decoration: line-through; opacity: 0.5; }
         <option value="large">85㎡ 초과</option>
       </select></label>
       <label>법정동 <select id="selDong"><option value="">전체</option></select></label>
+      <label title="매매는 전용 85㎡·25억 이하, 전월세는 전용 85㎡ 이하만">
+        <input type="checkbox" id="capToggle" checked> 85㎡·25억 이하</label>
     </div>
     <p id="status" role="status"></p>
 
@@ -227,7 +230,7 @@ const TABS = {
   giheung:  { src: "giheung", label: "기흥구", dongs: null },
 };
 const MAX_MONTHS = 36;
-const state = { tab: "dongtan2", months: 24, band: "all", dong: "", deals: "trade", ref: "", radius: "3" };
+const state = { tab: "dongtan2", months: 24, band: "all", dong: "", deals: "trade", ref: "", radius: "3", cap: true };
 // store[src][type][ym] = 배열 | "error"
 const store = { dongtan: { trade: {}, rent: {} }, giheung: { trade: {}, rent: {} } };
 let loadSeq = 0;
@@ -373,6 +376,10 @@ async function ensureData() {
 const inTabDongs = (tab, dong) =>
   !tab.dongs || (tab.exclude ? !tab.dongs.has(dong) : tab.dongs.has(dong));
 
+// 실수요 상한: 전용 85㎡, 매매가 25억 (전월세는 면적만 — 보증금엔 캡 무의미)
+const underCap = (r) =>
+  !state.cap || (r.area <= 85 && (r.amt === undefined || r.amt <= 250000));
+
 function monthItems(type, ym) {
   const tab = TABS[state.tab];
   const raw = store[tab.src][type][ym];
@@ -380,7 +387,8 @@ function monthItems(type, ym) {
   return raw.filter((r) =>
     inTabDongs(tab, r.dong) &&
     (!state.dong || r.dong === state.dong) &&
-    inBand(r.area));
+    inBand(r.area) &&
+    underCap(r));
 }
 const liveTrades = (ym) => monthItems("trade", ym).filter((r) => !r.canceled);
 const jeonse = (ym) => monthItems("rent", ym).filter((r) => r.rent === 0);
@@ -829,6 +837,7 @@ function initControls() {
     state.radius = e.target.value;
     renderMap(); renderRank();
   });
+  $("capToggle").addEventListener("change", (e) => { state.cap = e.target.checked; render(); });
 }
 
 initControls();
