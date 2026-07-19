@@ -12,9 +12,14 @@ estate.bubblelab.dev. 국토교통부 실거래가 공개시스템 데이터로 
 - `index.html` — 단일 파일 대시보드. 평당가 추이·거래량·전세가율 차트(SVG 자체
   구현), 단지 랭킹, 최근 거래 표. 지역 탭(동탄2·동탄1·화성 전체·기흥구),
   기간·전용면적·법정동 필터.
-- `data/` — `_infra/estate-import.mjs`가 생성하는 월별 정적 JSON + `index.json`.
-  페이지는 이걸 우선 읽고, 없는 달만 `/_estate/deals` 프록시(`_infra/estate.js`)로
-  받는다.
+- `data/` — `_infra/estate-import.mjs`가 생성하는 월별 정적 JSON + `index.json`,
+  그리고 `_infra/estate-geocode.mjs`가 생성하는 단지 좌표 `geo.json`.
+  페이지는 정적 파일을 우선 읽고, 없는 달만 `/_estate/deals` 프록시로 받는다.
+- 지도 뷰 — 외부 타일 없이 자체 SVG (CSP가 외부 이미지를 막고 있고 키 노출도
+  없음). 원 크기 = 최근 6개월 거래 건수, 색 = 중앙 평당가 5분위. 기준점(삼성
+  화성·기흥캠퍼스, 도로명주소 지오코딩)과 반경 필터를 걸면 단지 랭킹에 직선거리
+  열이 붙는다. 셔틀 정류장 좌표가 생기면 `geo.json`의 `refs`에 항목만 추가하면
+  기준점 목록에 자동으로 뜬다.
 
 ## 데이터 갱신 (국토부 해외 IP 차단 때문에 수동)
 
@@ -27,7 +32,9 @@ estate.bubblelab.dev. 국토교통부 실거래가 공개시스템 데이터로 
    `MOLIT_SERVICE_KEY=키`로 저장 (.gitignore에 있음 — 커밋 금지)
 2. `node _infra/estate-import.mjs` (기본 36개월. `--months N`, `--force` 지원.
    최근 3개월은 늘 다시 받고, 그 전은 받아둔 파일을 재사용)
-3. `estate/data/` 커밋·푸시 → 자동 배포
+3. `node _infra/estate-geocode.mjs` — 새 단지 좌표만 증분 변환 (VWorld 지오코더,
+   `.dev.vars`의 `VWORLD_KEY` 필요. 리포가 공개라 키는 절대 커밋하지 않는다)
+4. `estate/data/` 커밋·푸시 → 자동 배포
 
 로컬 개발(wrangler dev)은 한국 IP라 `.dev.vars` 키만으로 프록시가 바로 동작한다.
 데이터가 아예 없으면 페이지가 준비 안내를 띄운다 (fail-soft, 배포는 안 막힘).

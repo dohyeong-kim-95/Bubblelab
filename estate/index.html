@@ -81,6 +81,24 @@ svg text { font-family: inherit; font-size: 12px; fill: light-dark(#5a6b7d, #93a
 }
 .tooltip b { font-weight: 700; }
 
+/* 지도 (dataviz --ordinal 검증 통과 순차 램프: 밝음=저가 → 진함=고가) */
+.map-controls { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; font-size: 0.78rem; margin-bottom: 6px; }
+.map-controls select { font: inherit; font-size: 0.82rem; color: inherit; padding: 4px 8px;
+  border: 1px solid light-dark(#dce4ec, #263445); border-radius: 8px; background: light-dark(#ffffff, #151e2a); }
+.map-legend { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 0.72rem; opacity: 0.85; margin-top: 6px; }
+.sw { display: inline-block; width: 14px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+.q0 { fill: light-dark(#82b0ea, #3a5f8c); background: light-dark(#82b0ea, #3a5f8c); }
+.q1 { fill: light-dark(#5b90dd, #4a7ab8); background: light-dark(#5b90dd, #4a7ab8); }
+.q2 { fill: light-dark(#3b6fd0, #5f95dd); background: light-dark(#3b6fd0, #5f95dd); }
+.q3 { fill: light-dark(#2450a8, #84b0ec); background: light-dark(#2450a8, #84b0ec); }
+.q4 { fill: light-dark(#16337a, #b3ccf6); background: light-dark(#16337a, #b3ccf6); }
+.map-dot { stroke: light-dark(#ffffff, #151e2a); stroke-width: 1; }
+.map-dot.dim { opacity: 0.22; }
+.map-ref { fill: var(--c-rent); }
+.map-ref-label { font-weight: 700; fill: light-dark(#7c4a10, #d9a558); }
+.map-radius { fill: none; stroke: var(--c-rent); stroke-width: 1.5; stroke-dasharray: 5 4; opacity: 0.7; }
+.map-scale { stroke: light-dark(#5a6b7d, #93a5b8); stroke-width: 1.5; }
+
 /* 표 */
 .table-wrap { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; font-size: 0.8rem; }
@@ -158,6 +176,21 @@ tr.canceled td { text-decoration: line-through; opacity: 0.5; }
     <h2>전세가율 <span class="sub">전세 중앙 평당가 ÷ 매매 중앙 평당가 · 표본 5건 이상인 달만</span></h2>
     <div class="card chart-wrap" id="chartRatio"></div>
 
+    <h2>지도 <span class="sub">최근 6개월 매매 · 원 크기 = 거래 건수, 진할수록 평당가 높음 · 거리는 직선거리</span></h2>
+    <div class="card chart-wrap" id="mapWrap">
+      <div class="map-controls">
+        <label>기준점 <select id="selRef"><option value="">없음</option></select></label>
+        <label id="radiusWrap" class="hidden">반경 <select id="selRadius">
+          <option value="1">1km</option><option value="2">2km</option>
+          <option value="3" selected>3km</option><option value="5">5km</option>
+          <option value="8">8km</option><option value="0">전체</option>
+        </select></label>
+        <span id="mapNote" class="sub"></span>
+      </div>
+      <div id="mapChart" style="position:relative"></div>
+      <div class="map-legend" id="mapLegend"></div>
+    </div>
+
     <h2>단지 랭킹 <span class="sub">최근 6개월 매매 · 정렬할 열을 클릭</span></h2>
     <div class="card table-wrap"><table id="rankTable"></table></div>
 
@@ -186,7 +219,7 @@ const TABS = {
   giheung:  { src: "giheung", label: "기흥구", dongs: null },
 };
 const MAX_MONTHS = 36;
-const state = { tab: "dongtan2", months: 24, band: "all", dong: "", deals: "trade" };
+const state = { tab: "dongtan2", months: 24, band: "all", dong: "", deals: "trade", ref: "", radius: "3" };
 // store[src][type][ym] = 배열 | "error"
 const store = { dongtan: { trade: {}, rent: {} }, giheung: { trade: {}, rent: {} } };
 let loadSeq = 0;
@@ -274,7 +307,8 @@ async function fetchMonth(src, type, ym) {
 
 async function ensureData() {
   const seq = ++loadSeq;
-  await loadStaticIndex();
+  await Promise.all([loadStaticIndex(), loadGeo()]);
+  populateRefs();
   const src = TABS[state.tab].src;
   const jobs = [];
   for (const ym of monthsBack(state.months)) {
@@ -487,31 +521,159 @@ function renderStats(rows) {
   ].map(([k, v, d]) => `<div class="card stat"><div class="k">${k}</div><div class="v">${v}</div>${d}</div>`).join("");
 }
 
-// ── 단지 랭킹 ────────────────────────────────────────────────
+// ── 단지 집계 (지도·랭킹 공용) ───────────────────────────────
 let rankSort = "cnt";
-function renderRank() {
+let geoData = null; // null = 미로딩, false = 없음
+
+async function loadGeo() {
+  if (geoData !== null) return;
+  try {
+    const res = await fetch("data/geo.json");
+    geoData = res.ok ? await res.json() : false;
+  } catch { geoData = false; }
+}
+
+const distKm = (a, b) => {
+  const rad = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * rad, dLng = (b.lng - a.lng) * rad;
+  const h = Math.sin(dLat / 2) ** 2 +
+    Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
+  return 6371 * 2 * Math.asin(Math.sqrt(h));
+};
+
+function complexStats() {
+  const src = TABS[state.tab].src;
+  const ref = state.ref && geoData ? geoData.refs?.[state.ref] : null;
   const byApt = new Map();
   for (const ym of monthsBack(6)) {
     for (const r of liveTrades(ym)) {
       const key = `${r.apt}|${r.dong}`;
-      const entry = byApt.get(key) ?? { apt: r.apt, dong: r.dong, pys: [], deals: [] };
+      const entry = byApt.get(key) ?? { apt: r.apt, dong: r.dong, pys: [], deals: [], point: null };
       entry.pys.push(perPy(r.amt, r.area));
       entry.deals.push(r);
+      if (!entry.point && geoData) entry.point = geoData.points?.[`${src}|${r.dong}|${r.jibun}`] ?? null;
       byApt.set(key, entry);
     }
   }
-  const list = [...byApt.values()].map((e) => {
+  return [...byApt.values()].map((e) => {
     const last = e.deals.sort((a, b) => a.date < b.date ? -1 : 1).at(-1);
-    return { apt: e.apt, dong: e.dong, cnt: e.deals.length, med: median(e.pys), last };
-  }).sort((a, b) => rankSort === "cnt" ? b.cnt - a.cnt : b.med - a.med).slice(0, 20);
+    return {
+      apt: e.apt, dong: e.dong, cnt: e.deals.length, med: median(e.pys), last,
+      point: e.point, dist: ref && e.point ? distKm(ref, e.point) : null,
+    };
+  });
+}
+
+const inRadius = (e) => {
+  if (!state.ref || !+state.radius) return true;
+  return e.dist != null && e.dist <= +state.radius;
+};
+
+// ── 지도 ────────────────────────────────────────────────────
+const MAP_W = 860, MAP_H = 480, MAP_PAD = 34;
+
+function renderMap() {
+  const wrap = $("mapWrap"), chart = $("mapChart");
+  if (!geoData || !geoData.refs) {
+    wrap.classList.add("hidden");
+    wrap.previousElementSibling.classList.add("hidden");
+    return;
+  }
+  const list = complexStats().filter((e) => e.point);
+  if (!list.length) {
+    chart.innerHTML = `<p class="sub">표시할 좌표가 없습니다.</p>`;
+    $("mapLegend").innerHTML = ""; $("mapNote").textContent = "";
+    return;
+  }
+
+  // 5분위 순차 색 (중앙 평당가)
+  const meds = list.map((e) => e.med).sort((a, b) => a - b);
+  const breaks = [1, 2, 3, 4].map((i) => meds[Math.min(Math.floor(meds.length * i / 5), meds.length - 1)]);
+  const quant = (v) => { const i = breaks.findIndex((b) => v < b); return i === -1 ? 4 : i; };
+
+  // km 평면 투영 후 박스에 균등 맞춤 (원 반경이 km 축척과 일치)
+  const refs = Object.entries(geoData.refs).map(([id, r]) => ({ id, ...r }));
+  const all = [...list.map((e) => e.point), ...refs];
+  const lat0 = all.reduce((s, p) => s + p.lat, 0) / all.length;
+  const kx = 111.32 * Math.cos(lat0 * Math.PI / 180), ky = 110.57;
+  const xs = all.map((p) => p.lng * kx), ys = all.map((p) => p.lat * ky);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const scale = Math.min((MAP_W - MAP_PAD * 2) / Math.max(maxX - minX, 1),
+    (MAP_H - MAP_PAD * 2) / Math.max(maxY - minY, 1));
+  const px = (p) => MAP_PAD + (p.lng * kx - minX) * scale + (MAP_W - MAP_PAD * 2 - (maxX - minX) * scale) / 2;
+  const py2 = (p) => MAP_H - MAP_PAD - ((p.lat * ky - minY) * scale + (MAP_H - MAP_PAD * 2 - (maxY - minY) * scale) / 2);
+
+  const maxCnt = Math.max(...list.map((e) => e.cnt));
+  const dots = [...list].sort((a, b) => b.cnt - a.cnt).map((e) => {
+    const r = 3.5 + 8 * Math.sqrt(e.cnt / maxCnt);
+    return `<circle class="map-dot q${quant(e.med)}${inRadius(e) ? "" : " dim"}" data-i="${list.indexOf(e)}"` +
+      ` cx="${px(e.point).toFixed(1)}" cy="${py2(e.point).toFixed(1)}" r="${r.toFixed(1)}"/>`;
+  }).join("");
+
+  const selRef = state.ref ? geoData.refs[state.ref] : null;
+  const radiusCircle = selRef && +state.radius
+    ? `<circle class="map-radius" cx="${px(selRef).toFixed(1)}" cy="${py2(selRef).toFixed(1)}" r="${(+state.radius * scale).toFixed(1)}"/>`
+    : "";
+  let refMarks = "";
+  for (const r of refs) {
+    const x = px(r), y = py2(r);
+    refMarks += `<path class="map-ref" d="M${x} ${y - 9} L${x + 6} ${y + 3} L${x - 6} ${y + 3} Z"/>` +
+      `<text class="map-ref-label" x="${x}" y="${y + 16}" text-anchor="middle">${r.label.replace("삼성 ", "")}</text>`;
+  }
+  const sy = MAP_H - 12;
+  const scaleBar = `<line class="map-scale" x1="${MAP_PAD}" x2="${MAP_PAD + 2 * scale}" y1="${sy}" y2="${sy}"/>` +
+    `<text x="${MAP_PAD + scale}" y="${sy - 5}" text-anchor="middle">2km</text>`;
+
+  chart.innerHTML = `<svg viewBox="0 0 ${MAP_W} ${MAP_H}" role="img" aria-label="단지 위치 지도">` +
+    `${radiusCircle}${dots}${refMarks}${scaleBar}</svg>`;
+
+  $("mapLegend").innerHTML =
+    [`~${fmtMan(breaks[0])}`, `~${fmtMan(breaks[1])}`, `~${fmtMan(breaks[2])}`, `~${fmtMan(breaks[3])}`, `${fmtMan(breaks[3])}~`]
+      .map((label, i) => `<span><i class="sw q${i}"></i>${label}</span>`).join("") +
+    `<span>만원/평 (중앙값)</span>`;
+  $("mapNote").textContent = state.ref && +state.radius
+    ? `반경 내 ${list.filter(inRadius).length}개 단지` : `${list.length}개 단지`;
+
+  const svg = chart.querySelector("svg");
+  const tip = el("div", { class: "tooltip" });
+  chart.appendChild(tip);
+  svg.addEventListener("pointermove", (ev) => {
+    const target = ev.target.closest(".map-dot");
+    if (!target) { tip.style.display = "none"; return; }
+    const e = list[+target.dataset.i];
+    tip.innerHTML = `<b>${e.apt}</b> (${e.dong})<br>거래 ${e.cnt}건 · 중앙 ${fmtMan(e.med)}만/평` +
+      (e.dist != null ? `<br>${geoData.refs[state.ref].label} ${e.dist.toFixed(1)}km` : "");
+    tip.style.display = "block";
+    const rect = chart.getBoundingClientRect();
+    const mx = ev.clientX - rect.left, flip = mx > rect.width * 0.6;
+    tip.style.left = flip ? "" : `${mx + 14}px`;
+    tip.style.right = flip ? `${rect.width - mx + 14}px` : "";
+    tip.style.top = `${ev.clientY - rect.top - 10}px`;
+  });
+  svg.addEventListener("pointerleave", () => { tip.style.display = "none"; });
+}
+
+// ── 단지 랭킹 ────────────────────────────────────────────────
+function renderRank() {
+  const hasRef = Boolean(state.ref && geoData && geoData.refs?.[state.ref]);
+  const list = complexStats().filter(inRadius)
+    .sort((a, b) =>
+      rankSort === "cnt" ? b.cnt - a.cnt :
+      rankSort === "med" ? b.med - a.med :
+      (a.dist ?? Infinity) - (b.dist ?? Infinity))
+    .slice(0, 20);
   const sortAttr = (k) => rankSort === k ? ` aria-sort="descending"` : "";
+  const arrow = (k) => rankSort === k ? " ▾" : "";
   $("rankTable").innerHTML =
     `<thead><tr><th>단지</th><th>법정동</th>` +
-    `<th class="num sortable" data-sort="cnt"${sortAttr("cnt")}>거래 ${rankSort === "cnt" ? "▾" : ""}</th>` +
-    `<th class="num sortable" data-sort="med"${sortAttr("med")}>중앙 평당가 ${rankSort === "med" ? "▾" : ""}</th>` +
+    `<th class="num sortable" data-sort="cnt"${sortAttr("cnt")}>거래${arrow("cnt")}</th>` +
+    `<th class="num sortable" data-sort="med"${sortAttr("med")}>중앙 평당가${arrow("med")}</th>` +
+    (hasRef ? `<th class="num sortable" data-sort="dist"${sortAttr("dist")}>거리${arrow("dist")}</th>` : "") +
     `<th class="num">최근 거래</th></tr></thead><tbody>` +
     list.map((e) => `<tr><td>${e.apt}</td><td>${e.dong}</td><td class="num">${e.cnt}건</td>` +
       `<td class="num">${fmtMan(e.med)}만</td>` +
+      (hasRef ? `<td class="num">${e.dist != null ? `${e.dist.toFixed(1)}km` : "—"}</td>` : "") +
       `<td class="num">${e.last.date.slice(2)} · ${Math.round(e.last.area)}㎡ ${fmtEok(e.last.amt)}</td></tr>`).join("") +
     `</tbody>`;
   for (const th of $("rankTable").querySelectorAll("th.sortable")) {
@@ -573,8 +735,18 @@ function render() {
   renderPriceChart(rows);
   renderVolumeChart(rows);
   renderRatioChart(rows);
+  renderMap();
   renderRank();
   renderDeals();
+}
+
+function populateRefs() {
+  if (!geoData || !geoData.refs) return;
+  const sel = $("selRef");
+  if (sel.options.length > 1) return;
+  for (const [id, r] of Object.entries(geoData.refs)) {
+    sel.appendChild(el("option", { value: id }, r.label));
+  }
 }
 
 function initControls() {
@@ -603,6 +775,16 @@ function initControls() {
   });
   $("selBand").addEventListener("change", (e) => { state.band = e.target.value; render(); });
   $("selDong").addEventListener("change", (e) => { state.dong = e.target.value; render(); });
+  $("selRef").addEventListener("change", (e) => {
+    state.ref = e.target.value;
+    $("radiusWrap").classList.toggle("hidden", !state.ref);
+    if (!state.ref && rankSort === "dist") rankSort = "cnt";
+    renderMap(); renderRank();
+  });
+  $("selRadius").addEventListener("change", (e) => {
+    state.radius = e.target.value;
+    renderMap(); renderRank();
+  });
 }
 
 initControls();
