@@ -30,7 +30,17 @@ export const AI_DEFAULTS = {
 
 export const SUPPORTED_SOURCE_TYPES = new Set([
   "application/pdf", "image/png", "image/jpeg", "image/webp",
+  "text/plain", "text/markdown",
 ]);
+
+const MAX_TEXT_SOURCE_CHARS = 200_000;
+
+// 소스 하나를 Gemini/OpenAI 메시지 파트로 바꾼다. 텍스트는 본문으로 풀고
+// (양쪽 API 모두 확실히 지원), PDF·이미지는 바이너리 첨부로 보낸다.
+function sourceToText(source) {
+  const text = new TextDecoder().decode(source.bytes).slice(0, MAX_TEXT_SOURCE_CHARS);
+  return `\n[자료: ${source.name}]\n${text}\n`;
+}
 
 export function bytesToBase64(bytes) {
   let binary = "";
@@ -221,7 +231,9 @@ export function createScriptProvider(env) {
             role: "user",
             parts: [
               { text: prompt },
-              ...sources.map((s) => ({ inlineData: { mimeType: s.mime, data: bytesToBase64(s.bytes) } })),
+              ...sources.map((s) => s.mime.startsWith("text/")
+                ? { text: sourceToText(s) }
+                : { inlineData: { mimeType: s.mime, data: bytesToBase64(s.bytes) } }),
             ],
           }],
           generationConfig: { temperature: 0.8, responseMimeType: "application/json" },
@@ -259,10 +271,12 @@ export function createScriptProvider(env) {
             role: "user",
             content: [
               { type: "text", text: prompt },
-              ...sources.map((s) => ({
-                type: "image_url",
-                image_url: { url: `data:${s.mime};base64,${bytesToBase64(s.bytes)}` },
-              })),
+              ...sources.map((s) => s.mime.startsWith("text/")
+                ? { type: "text", text: sourceToText(s) }
+                : {
+                    type: "image_url",
+                    image_url: { url: `data:${s.mime};base64,${bytesToBase64(s.bytes)}` },
+                  }),
             ],
           }],
         };

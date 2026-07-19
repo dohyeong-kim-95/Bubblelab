@@ -165,7 +165,7 @@ export async function handlePodcast(request, env, url) {
     if (!limited.allowed) return rateLimitResponse(limited);
     const mime = (request.headers.get("Content-Type") ?? "").split(";")[0].trim();
     if (!SUPPORTED_SOURCE_TYPES.has(mime)) {
-      return json({ error: "PDF 또는 이미지(PNG/JPEG/WebP)만 올릴 수 있습니다" }, { status: 415 });
+      return json({ error: "PDF·이미지(PNG/JPEG/WebP)·텍스트(.txt/.md)만 올릴 수 있습니다" }, { status: 415 });
     }
     const name = decodeURIComponent(request.headers.get("X-File-Name") ?? "")
       .replace(/[\r\n]/g, " ").trim().slice(0, 120) || "이름 없는 파일";

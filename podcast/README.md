@@ -1,7 +1,9 @@
 # podcast — 데일리 팟캐스트 (podcast.bubblelab.dev)
 
-낮에 모은 PDF·이미지를 다음 날 아침 06:40(KST) 한국어 2인 대담 팟캐스트로
-만들어 주는 초대 코드 기반 PWA. 예전 Vercel + Cloud Run + Supabase +
+낮에 모은 PDF·이미지·텍스트(.txt/.md, 붙여넣기 포함)를 다음 날 아침
+06:40(KST) 한국어 2인 대담 팟캐스트로 만들어 주는 초대 코드 기반 PWA.
+플레이어는 ±10초·탐색·다시재생과 Media Session(잠금화면·블루투스 차량
+제어, 백그라운드 재생)을 지원한다. 예전 Vercel + Cloud Run + Supabase +
 NotebookLM 스크래핑 구조를 Bubblelab 워커 하나로 재구축한 것이다.
 외부 의존성은 AI API 키 하나뿐이다.
 
