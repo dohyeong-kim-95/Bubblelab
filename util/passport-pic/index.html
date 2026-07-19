@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🛂 여권사진 도우미</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🛂</text></svg>">
+<style>
+  :root { color-scheme: light dark; --bg: light-dark(#f2f4f7, #0d131c);
+          --panel: light-dark(#fff, #171f2b); --line: light-dark(#d9e0e7, #2a3646);
+          --text: light-dark(#1c2733, #e2e9f0); --muted: light-dark(#6e7985, #91a0b2);
+          --accent: #4f7fdd; --warn: #d08a3a; --ok: #4d9e6a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100dvh; background: var(--bg); color: var(--text);
+         font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; }
+  .app { width: min(34rem, 100%); margin: 0 auto; padding: 1.2rem 1rem 2rem; }
+  h1 { margin: .2rem 0 .3rem; font-size: 1.25rem; }
+  h2 { margin: 1.4rem 0 .5rem; font-size: .95rem; }
+  .desc { margin: 0 0 1.1rem; color: var(--muted); font-size: .78rem; line-height: 1.6; }
+  button { font: inherit; color: inherit; cursor: pointer; border: 1px solid var(--line);
+           background: light-dark(#fff, #111923); border-radius: .6rem; padding: .55rem .9rem; }
+  button:active { transform: scale(.97); }
+  button:disabled { opacity: .42; cursor: default; transform: none; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: bold; }
+  [hidden] { display: none !important; }
+
+  #drop { display: grid; place-items: center; gap: .4rem; padding: 2rem 1rem; text-align: center;
+          border: 2px dashed var(--line); border-radius: 1rem; background: var(--panel);
+          cursor: pointer; transition: border-color .15s, background .15s; }
+  #drop.over { border-color: var(--accent); background: light-dark(#eef3fd, #1a2436); }
+  #drop .big { font-size: 2.2rem; }
+  #drop p { margin: 0; font-size: .8rem; color: var(--muted); line-height: 1.6; }
+  #file { display: none; }
+  .sourceRow { display: flex; gap: .55rem; margin-top: .7rem; }
+  .sourceRow button { flex: 1; font-size: .8rem; }
+
+  .stage { position: relative; width: min(19rem, 100%); margin: 0 auto; aspect-ratio: 35 / 45;
+           border-radius: .8rem; overflow: hidden; border: 1px solid var(--line);
+           background: light-dark(#e8ecf1, #10161f); }
+  .stage video, .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .stage video { object-fit: cover; transform: scaleX(-1); }
+  .stage video.rear { transform: none; }
+  #editCanvas { touch-action: none; cursor: grab; }
+  #editCanvas.dragging { cursor: grabbing; }
+  .guide { position: absolute; inset: 0; pointer-events: none; }
+  .toolRow { display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+             gap: .55rem; margin: .8rem 0; }
+  .toolRow button { font-size: .78rem; padding: .5rem .8rem; }
+  #zoom { accent-color: var(--accent); width: 9rem; }
+  .hint { text-align: center; font-size: .72rem; color: var(--muted); line-height: 1.6; margin: .4rem 0; }
+  .hint.warn { color: var(--warn); }
+  .hint.ok { color: var(--ok); }
+  #camStatus { text-align: center; font-size: .74rem; color: var(--muted); margin: .6rem 0; min-height: 1.2em; }
+
+  .actions { display: flex; flex-direction: column; gap: .55rem; margin-top: .9rem; }
+  .actions button { width: 100%; }
+  .sub { font-size: .68rem; font-weight: normal; opacity: .85; }
+
+  details { background: var(--panel); border: 1px solid var(--line); border-radius: .8rem;
+            padding: .7rem .9rem; margin-top: 1.1rem; }
+  summary { cursor: pointer; font-size: .82rem; font-weight: bold; }
+  .check { list-style: none; margin: .6rem 0 0; padding: 0; }
+  .check li { display: flex; gap: .5rem; align-items: baseline; font-size: .75rem;
+              line-height: 1.65; padding: .28rem 0; border-top: 1px dashed var(--line); }
+  .check input { accent-color: var(--ok); flex-shrink: 0; transform: translateY(.1em); }
+  .check li.done label { color: var(--muted); text-decoration: line-through; }
+  .spec { margin: .6rem 0 0; font-size: .72rem; color: var(--muted); line-height: 1.7; }
+  .spec b { color: var(--text); }
+  .privacy { margin-top: 1.1rem; color: var(--muted); font-size: .68rem; line-height: 1.6; }
+  .privacy a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>🛂 여권사진 도우미</h1>
+  <p class="desc">외교부 여권사진 규격(3.5×4.5cm, 머리 길이 3.2~3.6cm)에 맞춰
+    사진을 자르고, 온라인 신청용 파일(JPG 413×531px·500KB 이하)과
+    인화용 10×15cm 시트를 만들어 드려요.</p>
+
+  <div id="pickView">
+    <div id="drop" role="button" tabindex="0" aria-label="사진 선택">
+      <span class="big">🪪</span>
+      <p>여기를 눌러 사진을 고르거나<br>파일을 끌어다 놓으세요 (붙여넣기도 가능)</p>
+    </div>
+    <input id="file" type="file" accept="image/*">
+    <div class="sourceRow">
+      <button type="button" id="openCam">📷 카메라로 찍기</button>
+    </div>
+  </div>
+
+  <div id="camView" hidden>
+    <div class="stage">
+      <video id="video" autoplay playsinline muted></video>
+      <svg id="camGuide" class="guide" viewBox="0 0 350 450"></svg>
+    </div>
+    <p id="camStatus"></p>
+    <p class="hint">정수리를 위쪽 선에, 턱을 아래 색칠된 범위에 맞추고 정면을 바라보세요.</p>
+    <div class="toolRow">
+      <button type="button" class="primary" id="shoot">촬영</button>
+      <button type="button" id="switchCam">🔄 전·후면</button>
+      <button type="button" id="closeCam">닫기</button>
+    </div>
+  </div>
+
+  <div id="editView" hidden>
+    <div class="stage">
+      <canvas id="editCanvas" width="700" height="900"></canvas>
+      <svg id="editGuide" class="guide" viewBox="0 0 350 450"></svg>
+    </div>
+    <div class="toolRow">
+      <span style="font-size:.72rem;color:var(--muted)">확대</span>
+      <input id="zoom" type="range" min="0" max="100" value="0" aria-label="확대">
+      <button type="button" id="rotate">↻ 회전</button>
+      <button type="button" id="rePick">사진 바꾸기</button>
+    </div>
+    <p class="hint">사진을 끌어서 위치를 옮기고, 휠·핀치·슬라이더로 확대하세요.<br>
+      정수리는 위쪽 선에, 턱은 아래 색칠된 범위 안에 오면 규격에 맞아요.</p>
+    <p class="hint" id="bgHint"></p>
+    <div class="actions">
+      <button type="button" class="primary" id="saveJpg">온라인 신청용 JPG 저장
+        <span class="sub">413×531px · 500KB 이하</span></button>
+      <button type="button" id="saveSheet">인화용 시트 저장
+        <span class="sub">10×15cm 인화지 · 3.5×4.5cm 6장 (300dpi)</span></button>
+    </div>
+  </div>
+
+  <details open>
+    <summary>📋 제출 전 셀프 체크리스트</summary>
+    <ul class="check" id="checklist">
+      <li><input type="checkbox" id="c1"><label for="c1">6개월 이내 촬영한 천연색(컬러) 사진</label></li>
+      <li><input type="checkbox" id="c2"><label for="c2">흰색 무지 배경 — 그림자·사물·다른 사람이 없어야 해요</label></li>
+      <li><input type="checkbox" id="c3"><label for="c3">정면 응시, 얼굴이 기울거나 돌아가지 않고 어깨는 수평</label></li>
+      <li><input type="checkbox" id="c4"><label for="c4">무표정 또는 자연스러운 표정, 입은 다물기 (치아 노출 ✕)</label></li>
+      <li><input type="checkbox" id="c5"><label for="c5">두 눈을 뜨고 눈동자가 선명하게 — 머리카락·안경테가 눈을 가리면 안 돼요</label></li>
+      <li><input type="checkbox" id="c6"><label for="c6">안경은 렌즈 빛 반사가 없어야 하고, 선글라스·미용(컬러) 렌즈는 금지</label></li>
+      <li><input type="checkbox" id="c7"><label for="c7">모자·머리띠 등 장신구로 얼굴 윤곽을 가리지 않기 (종교적 복장은 예외)</label></li>
+      <li><input type="checkbox" id="c8"><label for="c8">제복·군복이 아닌 일상복 차림</label></li>
+      <li><input type="checkbox" id="c9"><label for="c9">과도한 보정 금지 — 실물과 달라 보이면 반려될 수 있어요</label></li>
+      <li><input type="checkbox" id="c10"><label for="c10">유아는 혼자 찍고, 장난감이나 보호자의 손이 보이면 안 돼요</label></li>
+    </ul>
+    <p class="spec">규격 요약 — 사진 <b>3.5×4.5cm</b>, 머리 길이(정수리~턱) <b>3.2~3.6cm</b>,
+      온라인 신청 파일 <b>JPG 413×531px, 500KB 이하</b>.</p>
+  </details>
+
+  <p class="privacy">사진은 전부 이 브라우저 안에서만 처리돼요. 서버로 전송·저장되지 않습니다.
+    최종 적합 여부는 <a href="https://www.passport.go.kr/home/kor/onlinePhotoVerify/index.do?menuPos=33"
+    target="_blank" rel="noopener">외교부 온라인 여권사진 검증</a>에서 무료로 확인할 수 있어요.</p>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+// 규격: 사진 35×45mm를 350×450 좌표계로 다룬다 (1단위 = 0.1mm)
+const PW = 350, PH = 450;
+const CROWN_Y = 40;                      // 정수리 기준선: 위에서 4mm
+const CHIN_MIN = CROWN_Y + 320, CHIN_MAX = CROWN_Y + 360; // 머리 길이 32~36mm
+const OUT_W = 413, OUT_H = 531;          // 온라인 신청용 픽셀 규격
+
+// --- 가이드 오버레이 (카메라·편집 공통) ---
+function drawGuide(svg) {
+  const chinMid = (CHIN_MIN + CHIN_MAX) / 2;
+  const faceH = chinMid - CROWN_Y, faceW = faceH * 0.74;
+  svg.innerHTML = `
+    <rect x="0" y="${CHIN_MIN}" width="${PW}" height="${CHIN_MAX - CHIN_MIN}" fill="#4f7fdd33"/>
+    <line x1="0" y1="${CROWN_Y}" x2="${PW}" y2="${CROWN_Y}" stroke="#4f7fdd" stroke-width="2" stroke-dasharray="8 6"/>
+    <line x1="${PW / 2}" y1="0" x2="${PW / 2}" y2="${PH}" stroke="#4f7fdd55" stroke-width="1.5" stroke-dasharray="4 8"/>
+    <ellipse cx="${PW / 2}" cy="${(CROWN_Y + chinMid) / 2}" rx="${faceW / 2}" ry="${faceH / 2}"
+      fill="none" stroke="#4f7fdd" stroke-width="2" stroke-dasharray="2 7" opacity=".8"/>
+    <text x="6" y="${CROWN_Y - 8}" font-size="15" fill="#4f7fdd">정수리</text>
+    <text x="6" y="${CHIN_MAX - 12}" font-size="15" fill="#4f7fdd">턱 범위</text>`;
+}
+drawGuide($("#camGuide"));
+drawGuide($("#editGuide"));
+
+// --- 화면 전환 ---
+const views = { pick: $("#pickView"), cam: $("#camView"), edit: $("#editView") };
+function show(name) { for (const k in views) views[k].hidden = k !== name; if (name !== "cam") stopCamera(); }
+
+// --- 사진 불러오기 ---
+const drop = $("#drop"), fileInput = $("#file");
+drop.addEventListener("click", () => fileInput.click());
+drop.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInput.click(); } });
+fileInput.addEventListener("change", () => { if (fileInput.files[0]) loadImage(fileInput.files[0]); fileInput.value = ""; });
+["dragover", "dragenter"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", (e) => { const f = e.dataTransfer.files[0]; if (f) loadImage(f); });
+window.addEventListener("paste", (e) => {
+  const f = [...(e.clipboardData?.items ?? [])].map((i) => i.getAsFile()).find(Boolean);
+  if (f) loadImage(f);
+});
+
+async function loadImage(source) {
+  try {
+    setImage(await createImageBitmap(source));
+  } catch {
+    alert("이 형식은 브라우저가 읽지 못해요 (예: HEIC). JPG나 PNG로 변환해 주세요.");
+  }
+}
+
+// --- 카메라 ---
+const video = $("#video");
+let stream = null, facing = "user";
+$("#openCam").addEventListener("click", async () => { show("cam"); await startCamera(); });
+$("#closeCam").addEventListener("click", () => show("pick"));
+$("#switchCam").addEventListener("click", async () => {
+  stopCamera(); facing = facing === "user" ? "environment" : "user"; await startCamera();
+});
+async function startCamera() {
+  if (stream) return;
+  if (!navigator.mediaDevices?.getUserMedia) { $("#camStatus").textContent = "이 브라우저는 카메라를 지원하지 않아요."; return; }
+  $("#camStatus").textContent = "카메라 권한을 확인하는 중…";
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1920 } }, audio: false,
+    });
+    video.srcObject = stream;
+    video.classList.toggle("rear", facing !== "user");
+    await video.play();
+    $("#camStatus").textContent = "";
+  } catch {
+    $("#camStatus").textContent = "카메라를 열지 못했어요. 권한을 확인해 주세요.";
+  }
+}
+function stopCamera() {
+  if (!stream) return;
+  stream.getTracks().forEach((t) => t.stop());
+  stream = null; video.srcObject = null;
+}
+$("#shoot").addEventListener("click", async () => {
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw || !vh) return;
+  // 미리보기(object-fit: cover)와 같은 중앙 35:45 영역을 원본 해상도로 자른다.
+  // 출력은 거울 반전 없이 실제 방향 그대로 담는다 (여권사진은 좌우 반전 불가).
+  let sw = vw, sh = vh, sx = 0, sy = 0;
+  if (vw / vh > PW / PH) { sw = vh * PW / PH; sx = (vw - sw) / 2; }
+  else { sh = vw * PH / PW; sy = (vh - sh) / 2; }
+  const c = document.createElement("canvas");
+  c.width = Math.round(sw); c.height = Math.round(sh);
+  c.getContext("2d").drawImage(video, sx, sy, sw, sh, 0, 0, c.width, c.height);
+  setImage(await createImageBitmap(c));
+});
+
+// --- 크롭 편집기 ---
+const editCanvas = $("#editCanvas"), ectx = editCanvas.getContext("2d");
+const zoomInput = $("#zoom");
+let img = null;              // ImageBitmap
+let s = 1, ox = 0, oy = 0;   // 사진 좌표계에서의 배율·오프셋
+let sMin = 1;
+const S_MAX_FACTOR = 8;
+
+function setImage(bitmap) {
+  img?.close?.();
+  img = bitmap;
+  sMin = Math.max(PW / img.width, PH / img.height); // 프레임을 빈틈없이 덮는 최소 배율
+  s = sMin;
+  ox = (PW - img.width * s) / 2;
+  oy = (PH - img.height * s) / 2;
+  zoomInput.value = 0;
+  show("edit");
+  render();
+}
+
+function clampView() {
+  s = Math.min(Math.max(s, sMin), sMin * S_MAX_FACTOR);
+  ox = Math.min(0, Math.max(ox, PW - img.width * s));
+  oy = Math.min(0, Math.max(oy, PH - img.height * s));
+}
+
+let renderTimer = 0;
+function render() {
+  clampView();
+  const k = editCanvas.width / PW;
+  ectx.fillStyle = "#fff";
+  ectx.fillRect(0, 0, editCanvas.width, editCanvas.height);
+  ectx.imageSmoothingQuality = "high";
+  ectx.drawImage(img, ox * k, oy * k, img.width * s * k, img.height * s * k);
+  clearTimeout(renderTimer);
+  renderTimer = setTimeout(checkBackground, 250);
+}
+
+// 끌어서 이동 + 핀치 확대
+const pointers = new Map();
+let pinchDist = 0;
+const toPhoto = (e) => {
+  const r = editCanvas.getBoundingClientRect();
+  return { x: (e.clientX - r.left) / r.width * PW, y: (e.clientY - r.top) / r.height * PH };
+};
+editCanvas.addEventListener("pointerdown", (e) => {
+  editCanvas.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, toPhoto(e));
+  editCanvas.classList.add("dragging");
+  if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    pinchDist = Math.hypot(a.x - b.x, a.y - b.y);
+  }
+});
+editCanvas.addEventListener("pointermove", (e) => {
+  if (!pointers.has(e.pointerId) || !img) return;
+  const prev = pointers.get(e.pointerId), cur = toPhoto(e);
+  pointers.set(e.pointerId, cur);
+  if (pointers.size === 1) {
+    ox += cur.x - prev.x; oy += cur.y - prev.y;
+  } else if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    const dist = Math.hypot(a.x - b.x, a.y - b.y);
+    if (pinchDist > 0) zoomAt({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, dist / pinchDist);
+    pinchDist = dist;
+  }
+  render();
+  syncZoomSlider();
+});
+["pointerup", "pointercancel"].forEach((t) => editCanvas.addEventListener(t, (e) => {
+  pointers.delete(e.pointerId);
+  pinchDist = 0;
+  if (!pointers.size) editCanvas.classList.remove("dragging");
+}));
+editCanvas.addEventListener("wheel", (e) => {
+  if (!img) return;
+  e.preventDefault();
+  zoomAt(toPhoto(e), Math.exp(-e.deltaY * 0.0015));
+  render();
+  syncZoomSlider();
+}, { passive: false });
+
+function zoomAt(p, factor) {
+  const next = Math.min(Math.max(s * factor, sMin), sMin * S_MAX_FACTOR);
+  const real = next / s;
+  ox = p.x - (p.x - ox) * real;
+  oy = p.y - (p.y - oy) * real;
+  s = next;
+}
+function syncZoomSlider() {
+  zoomInput.value = Math.round(Math.log(s / sMin) / Math.log(S_MAX_FACTOR) * 100);
+}
+zoomInput.addEventListener("input", () => {
+  if (!img) return;
+  const next = sMin * Math.pow(S_MAX_FACTOR, zoomInput.value / 100);
+  const real = next / s;
+  ox = PW / 2 - (PW / 2 - ox) * real;
+  oy = PH / 2 - (PH / 2 - oy) * real;
+  s = next;
+  render();
+});
+$("#rotate").addEventListener("click", async () => {
+  if (!img) return;
+  const c = document.createElement("canvas");
+  c.width = img.height; c.height = img.width;
+  const ctx = c.getContext("2d");
+  ctx.translate(c.width / 2, c.height / 2);
+  ctx.rotate(Math.PI / 2);
+  ctx.drawImage(img, -img.width / 2, -img.height / 2);
+  setImage(await createImageBitmap(c));
+});
+$("#rePick").addEventListener("click", () => show("pick"));
+
+// --- 배경 흰색 힌트: 위쪽 양 모서리 표본으로 참고용 안내만 한다 ---
+function checkBackground() {
+  if (!img || views.edit.hidden) return;
+  const out = renderOutput();
+  const octx = out.getContext("2d");
+  let sum = 0, min = 255, n = 0;
+  for (const x0 of [0, Math.round(OUT_W * 0.82)]) {
+    const d = octx.getImageData(x0, 8, Math.round(OUT_W * 0.18), Math.round(OUT_H * 0.16)).data;
+    for (let i = 0; i < d.length; i += 4) {
+      const lum = (d[i] + d[i + 1] + d[i + 2]) / 3;
+      sum += lum; min = Math.min(min, lum); n++;
+    }
+  }
+  const avg = sum / n;
+  const hint = $("#bgHint");
+  if (avg >= 225 && min >= 150) {
+    hint.textContent = "✓ 배경 위쪽이 밝아요. 그림자·사물이 없는지도 확인해 주세요.";
+    hint.className = "hint ok";
+  } else {
+    hint.textContent = "⚠ 배경이 흰색이 아닌 것 같아요. 흰 벽 앞에서 그림자 없이 찍어야 해요.";
+    hint.className = "hint warn";
+  }
+}
+
+// --- 저장 ---
+function renderOutput() {
+  const c = document.createElement("canvas");
+  c.width = OUT_W; c.height = OUT_H;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, OUT_W, OUT_H);
+  ctx.imageSmoothingQuality = "high";
+  const f = OUT_W / PW;
+  ctx.drawImage(img, ox * f, oy * f, img.width * s * f, img.height * s * f);
+  return c;
+}
+const toBlob = (canvas, quality) => new Promise((r) => canvas.toBlob(r, "image/jpeg", quality));
+async function jpegUnder(canvas, maxBytes) {
+  for (let q = 0.92; q >= 0.5; q -= 0.08) {
+    const blob = await toBlob(canvas, q);
+    if (blob.size <= maxBytes) return blob;
+  }
+  return toBlob(canvas, 0.5);
+}
+function download(blob, name) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
+}
+$("#saveJpg").addEventListener("click", async () => {
+  if (!img) return;
+  download(await jpegUnder(renderOutput(), 500 * 1024), "여권사진-413x531.jpg");
+});
+$("#saveSheet").addEventListener("click", async () => {
+  if (!img) return;
+  // 10×15cm 인화지 = 300dpi 기준 1200×1800px, 3.5×4.5cm 사진(413×531px) 6장
+  const sheet = document.createElement("canvas");
+  sheet.width = 1200; sheet.height = 1800;
+  const ctx = sheet.getContext("2d");
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, sheet.width, sheet.height);
+  const photo = renderOutput();
+  const gx = (sheet.width - OUT_W * 2) / 3, gy = (sheet.height - OUT_H * 3) / 4;
+  ctx.strokeStyle = "#bbb";
+  ctx.lineWidth = 1;
+  for (let row = 0; row < 3; row++) for (let col = 0; col < 2; col++) {
+    const x = gx + col * (OUT_W + gx), y = gy + row * (OUT_H + gy);
+    ctx.drawImage(photo, x, y);
+    ctx.strokeRect(x - .5, y - .5, OUT_W + 1, OUT_H + 1); // 재단선
+  }
+  download(await jpegUnder(sheet, 4 * 1024 * 1024), "여권사진-인화용-10x15.jpg");
+});
+
+// --- 체크리스트 취소선 ---
+$("#checklist").addEventListener("change", (e) => {
+  e.target.closest("li")?.classList.toggle("done", e.target.checked);
+});
+
+window.blShareText = () => "여권사진을 셀프로 준비했어요! 규격(3.5×4.5cm) 크롭부터 온라인 신청용 파일까지 한 번에";
+</script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>
