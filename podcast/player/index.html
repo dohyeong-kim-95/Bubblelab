@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>🎧 플레이어 — 데일리 팟캐스트</title>
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#0d131c">
+<style>
+:root { color-scheme: light dark; }
+* { box-sizing: border-box; }
+body {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  margin: 0; min-height: 100dvh;
+  background: light-dark(#f2f6fa, #0d131c);
+  color: light-dark(#1c2733, #e2e9f0);
+  display: flex; flex-direction: column; align-items: center;
+  padding: 1rem 1.2rem calc(2rem + env(safe-area-inset-bottom));
+}
+main { width: min(26rem, 100%); display: flex; flex-direction: column;
+  align-items: center; flex: 1; }
+nav { width: 100%; padding: .4rem 0 1.2rem; }
+nav a { color: inherit; opacity: .6; text-decoration: none; font-size: .85rem; }
+#art {
+  width: min(58vw, 15rem); height: min(58vw, 15rem); border-radius: 2rem;
+  display: grid; place-items: center; font-size: min(28vw, 7rem);
+  background: light-dark(#e3ecf4, #151e2a);
+  border: 1px solid light-dark(#dce4ec, #263445);
+  box-shadow: 0 18px 50px #0003; margin: 1rem 0 1.6rem;
+  transition: transform .3s;
+}
+body.playing #art { transform: scale(1.03); }
+h1 { font-size: 1.05rem; text-align: center; margin: 0 0 .4rem; line-height: 1.5;
+  overflow-wrap: anywhere; }
+#meta { opacity: .55; font-size: .8rem; margin-bottom: 1.4rem; }
+#seek { width: 100%; accent-color: #4f7fdd; padding: 0; border: 0; margin: 0; }
+.times { width: 100%; display: flex; justify-content: space-between;
+  font-size: .72rem; opacity: .55; margin: .35rem 0 1.2rem; }
+.controls { display: flex; align-items: center; gap: .9rem; }
+.controls button {
+  font: inherit; color: inherit; background: none; cursor: pointer;
+  border: 1px solid light-dark(#c8d3de, #2a3646); border-radius: 999px;
+  width: 3.4rem; height: 3.4rem; font-size: .78rem;
+}
+#play {
+  width: 4.6rem; height: 4.6rem; font-size: 1.6rem;
+  background: #4f7fdd; border-color: #4f7fdd; color: #fff;
+}
+.controls button:active { transform: scale(.95); }
+#status { min-height: 1.2em; margin-top: 1.2rem; font-size: .8rem; opacity: .6;
+  text-align: center; }
+section { width: 100%; margin-top: 2.2rem; }
+section h2 { font-size: .85rem; opacity: .7; margin: 0 0 .6rem; }
+ul { list-style: none; margin: 0; padding: 0; display: grid; gap: .45rem; }
+li button {
+  width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer;
+  font-size: .82rem; padding: .65rem .8rem; border-radius: .6rem;
+  border: 1px dashed light-dark(#d5dee7, #2a3646); background: none;
+  overflow-wrap: anywhere;
+}
+li button.current { border-style: solid; border-color: #4f7fdd; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <nav><a href="../">← 홈으로</a></nav>
+  <div id="art">🎙️</div>
+  <h1 id="title">불러오는 중…</h1>
+  <div id="meta"></div>
+  <audio id="player" preload="metadata" playsinline></audio>
+  <input id="seek" type="range" min="0" max="100" step="0.1" value="0" aria-label="재생 위치">
+  <div class="times"><span id="cur">0:00</span><span id="dur">0:00</span></div>
+  <div class="controls">
+    <button id="restart" title="처음부터 다시재생" aria-label="처음부터">⟲</button>
+    <button id="back" aria-label="10초 뒤로">−10초</button>
+    <button id="play" aria-label="재생">▶</button>
+    <button id="fwd" aria-label="10초 앞으로">+10초</button>
+  </div>
+  <p id="status" aria-live="polite"></p>
+  <section id="episodes-box" hidden>
+    <h2>에피소드</h2>
+    <ul id="episodes"></ul>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const player = $("player");
+const fmtTime = (s) => {
+  const total = Math.max(0, Math.floor(s || 0));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+};
+const fmtDur = (s) => s ? `${Math.floor(s / 60)}분 ${s % 60}초` : "";
+
+let episodes = [];
+let current = null;
+
+function loadEpisode(episode, { autoplay = false } = {}) {
+  current = episode;
+  const src = `/_podcast/audio/${episode.id}`;
+  if (!player.src.endsWith(src)) player.src = src;
+  $("title").textContent = episode.title ?? "데일리 팟캐스트";
+  $("meta").textContent = [episode.date, fmtDur(episode.durationSeconds)].filter(Boolean).join(" · ");
+  history.replaceState(null, "", `?id=${encodeURIComponent(episode.id)}`);
+  renderEpisodeList();
+  setupMediaSession();
+  if (autoplay) player.play().catch(() => {});
+}
+
+function renderEpisodeList() {
+  $("episodes-box").hidden = episodes.length === 0;
+  $("episodes").replaceChildren(...episodes.map((episode) => {
+    const li = document.createElement("li");
+    const button = Object.assign(document.createElement("button"), {
+      textContent: `${episode.date} · ${episode.title}`,
+      className: current?.id === episode.id ? "current" : "",
+    });
+    button.onclick = () => loadEpisode(episode, { autoplay: true });
+    li.append(button);
+    return li;
+  }));
+}
+
+// Media Session: 잠금화면·이어폰·차량 블루투스의 재생/±10초/탐색 버튼 연결
+function setupMediaSession() {
+  if (!("mediaSession" in navigator)) return;
+  navigator.mediaSession.metadata = new MediaMetadata({
+    title: current?.title ?? "데일리 팟캐스트", artist: "데일리 팟캐스트",
+    album: current?.date ?? "bubblelab",
+    artwork: [{ src: "../icon.svg", sizes: "any", type: "image/svg+xml" }],
+  });
+  const actions = {
+    play: () => player.play(),
+    pause: () => player.pause(),
+    stop: () => { player.pause(); player.currentTime = 0; },
+    seekbackward: (d) => { player.currentTime = Math.max(0, player.currentTime - (d?.seekOffset || 10)); },
+    seekforward: (d) => { player.currentTime = player.currentTime + (d?.seekOffset || 10); },
+    seekto: (d) => { if (d?.seekTime != null) player.currentTime = d.seekTime; },
+  };
+  for (const [name, handler] of Object.entries(actions)) {
+    try { navigator.mediaSession.setActionHandler(name, handler); } catch {}
+  }
+}
+
+function syncPositionState() {
+  if (!("mediaSession" in navigator) || !Number.isFinite(player.duration)) return;
+  try {
+    navigator.mediaSession.setPositionState({
+      duration: player.duration, playbackRate: player.playbackRate, position: player.currentTime,
+    });
+  } catch {}
+}
+
+$("play").onclick = () => { if (player.paused) player.play().catch(() => {}); else player.pause(); };
+$("back").onclick = () => { player.currentTime = Math.max(0, player.currentTime - 10); };
+$("fwd").onclick = () => { player.currentTime = player.currentTime + 10; };
+$("restart").onclick = () => { player.currentTime = 0; player.play().catch(() => {}); };
+
+let seeking = false;
+$("seek").oninput = () => {
+  seeking = true;
+  $("cur").textContent = fmtTime($("seek").value / 100 * (player.duration || 0));
+};
+$("seek").onchange = () => {
+  if (Number.isFinite(player.duration)) player.currentTime = $("seek").value / 100 * player.duration;
+  seeking = false;
+};
+player.ontimeupdate = () => {
+  if (!seeking && Number.isFinite(player.duration) && player.duration > 0) {
+    $("seek").value = player.currentTime / player.duration * 100;
+  }
+  $("cur").textContent = fmtTime(player.currentTime);
+  syncPositionState();
+};
+player.onloadedmetadata = () => { $("dur").textContent = fmtTime(player.duration); syncPositionState(); };
+player.onplay = () => {
+  $("play").textContent = "⏸";
+  document.body.classList.add("playing");
+  if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "playing";
+};
+player.onpause = () => {
+  $("play").textContent = "▶";
+  document.body.classList.remove("playing");
+  if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "paused";
+};
+player.onended = () => { $("status").textContent = "끝까지 들었습니다 — ⟲로 다시 들을 수 있어요"; };
+
+async function init() {
+  const session = await (await fetch("/_podcast/session")).json().catch(() => ({}));
+  if (!session.authenticated) { location.href = "../"; return; }
+  const response = await fetch("/_podcast/home");
+  if (!response.ok) { $("title").textContent = "불러오지 못했습니다"; return; }
+  const home = await response.json();
+  episodes = home.podcasts.filter((p) => p.status === "completed");
+  if (episodes.length === 0) {
+    $("title").textContent = "아직 들을 에피소드가 없어요";
+    $("meta").textContent = "홈에서 자료를 올리고 팟캐스트를 만들어보세요";
+    return;
+  }
+  const wanted = new URLSearchParams(location.search).get("id");
+  const episode = episodes.find((p) => p.id === wanted) ?? episodes[0];
+  loadEpisode(episode);
+}
+init().catch(() => { $("title").textContent = "불러오지 못했습니다"; });
+</script>
+</body>
+</html>

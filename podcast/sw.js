@@ -1,10 +1,10 @@
 // 데일리 팟캐스트 PWA 서비스워커 — 푸시 표시와 앱 셸 캐시만 담당한다.
-const CACHE = "bl-podcast-v1";
+const CACHE = "bl-podcast-v2";
 
 self.addEventListener("install", (event) => {
   // 캐시 실패는 설치를 막지 않되, 조용히 삼키지 않고 로그를 남긴다.
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(["./"]))
+    caches.open(CACHE).then((cache) => cache.addAll(["./", "player/"]))
       .catch((error) => console.warn("앱 셸 캐시 실패:", error)),
   );
   self.skipWaiting();
@@ -21,7 +21,8 @@ self.addEventListener("activate", (event) => {
 // 내비게이션만 네트워크 우선 + 오프라인 셸 폴백. API·오디오는 손대지 않는다.
 self.addEventListener("fetch", (event) => {
   if (event.request.mode !== "navigate") return;
-  event.respondWith(fetch(event.request).catch(() => caches.match("./")));
+  event.respondWith(fetch(event.request)
+    .catch(async () => (await caches.match(event.request)) ?? caches.match("./")));
 });
 
 self.addEventListener("push", (event) => {
