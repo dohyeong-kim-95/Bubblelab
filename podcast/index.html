@@ -92,6 +92,9 @@ footer { text-align: center; }
         <button id="generate" class="primary" hidden>지금 팟캐스트 만들기</button>
         <a id="download" class="btn-link" hidden>다운로드</a>
       </div>
+      <p class="muted" id="cost-note" hidden>💰 생성 1회는 AI 호출 5~8번을 사용합니다
+        (10분 에피소드 기준 예상 비용 약 $0.17 ≈ 240원, 무료 한도 내에서는 무료).
+        하루 한 편이면 충분해요!</p>
       <p class="error" id="today-error" aria-live="polite"></p>
     </div>
 
@@ -142,6 +145,13 @@ const api = async (path, options = {}) => {
 };
 const fmtSize = (n) => n > 1e6 ? `${(n / 1e6).toFixed(1)}MB` : `${Math.round(n / 1e3)}KB`;
 const fmtDur = (s) => s ? `${Math.floor(s / 60)}분 ${s % 60}초` : "";
+// 에피소드 길이 기반 예상 비용 (Gemini flash TTS 오디오 토큰 + 대본 여유분,
+// 유료 등급 기준 근사치 — 무료 한도 내에서는 실제 청구 없음)
+const estCostText = (sec) => {
+  if (!sec) return "";
+  const usd = sec * 25 * 10 / 1e6 + 0.02;
+  return `예상 비용 약 $${usd.toFixed(2)} (≈${Math.round(usd * 1400).toLocaleString("ko-KR")}원)`;
+};
 // 재생은 전용 플레이어 페이지(player/)에서 한다
 
 let vapidPublicKey = null;
@@ -200,7 +210,8 @@ function render(home) {
       ? "소스가 준비됐습니다. 내일 아침 6시 40분에 자동 생성되거나, 지금 바로 만들 수 있습니다."
       : "먼저 아래에서 PDF·이미지·텍스트를 올려주세요.";
   } else if (pod.status === "completed") {
-    body.textContent = `${pod.title ?? ""} · ${fmtDur(pod.durationSeconds)}`;
+    body.textContent = [pod.title ?? "", fmtDur(pod.durationSeconds), estCostText(pod.durationSeconds)]
+      .filter(Boolean).join(" · ");
     $("listen").href = `player/?id=${encodeURIComponent(pod.id)}`;
     $("listen").hidden = false;
     download.href = `/_podcast/audio/${pod.id}?download=1`;
@@ -216,6 +227,7 @@ function render(home) {
   $("generate").textContent = (pod && pod.status !== "completed") ? "다시 시도하기" : "지금 팟캐스트 만들기";
   $("generate").hidden = home.queued || home.sources.length === 0 ||
     (pod && pod.status === "completed") || (generating && !stale);
+  $("cost-note").hidden = $("generate").hidden;
 
   $("source-list").replaceChildren(...home.sources.map((s) => {
     const li = document.createElement("li");
