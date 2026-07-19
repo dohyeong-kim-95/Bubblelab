@@ -177,6 +177,8 @@ async function refresh() {
 function render(home) {
   const pod = home.todayPodcast;
   const generating = pod && ["pending", "generating"].includes(pod.status);
+  // 30분 넘게 진행이 없으면 서버가 재시도를 허용한다 → 버튼을 다시 보여준다
+  const stale = generating && !home.queued && Date.now() - (pod.updatedAt ?? 0) > 30 * 60 * 1000;
   const status = $("today-status");
   status.hidden = !pod;
   if (pod) {
@@ -202,11 +204,15 @@ function render(home) {
     download.hidden = false;
   } else if (pod.status === "failed") {
     body.textContent = `생성에 실패했습니다: ${pod.error ?? "알 수 없는 오류"}. 소스는 남아 있으니 다시 시도해주세요.`;
+  } else if (stale) {
+    body.textContent = "생성이 예상보다 오래 걸리고 있어요. 중단된 것 같으면 다시 시도해주세요.";
   } else {
     body.textContent = pod.title ? `"${pod.title}" 만드는 중…` : "팟캐스트를 만드는 중입니다. 몇 분 걸려요.";
+    if (pod.error) body.textContent += ` (일시 오류 후 재시도 중: ${pod.error})`;
   }
-  $("generate").hidden = generating || home.queued || home.sources.length === 0 ||
-    (pod && pod.status === "completed");
+  $("generate").textContent = (pod && pod.status !== "completed") ? "다시 시도하기" : "지금 팟캐스트 만들기";
+  $("generate").hidden = home.queued || home.sources.length === 0 ||
+    (pod && pod.status === "completed") || (generating && !stale);
 
   $("source-list").replaceChildren(...home.sources.map((s) => {
     const li = document.createElement("li");

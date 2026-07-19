@@ -261,69 +261,82 @@ export function createTtsProvider(env) {
   const voiceA = env.PODCAST_TTS_VOICE_A || AI_DEFAULTS.voiceA;
   const voiceB = env.PODCAST_TTS_VOICE_B || AI_DEFAULTS.voiceB;
 
+  // 두 프로바이더 모두 두 가지 메서드를 제공한다:
+  //   synthesizeChunk(turns) → { pcm, sampleRate }  — 조각 하나 (DO가 단계 실행에 사용)
+  //   synthesize(turns)      → { wav, ... }         — 전체 (로컬 CLI 검증용)
+  const wrapFull = (provider) => async (turns) => {
+    const chunks = chunkTurns(turns);
+    if (chunks.length > AI_DEFAULTS.maxTtsChunks) {
+      throw new Error(`script too long for TTS (${chunks.length} chunks)`);
+    }
+    const pcmParts = [];
+    let sampleRate = AI_DEFAULTS.sampleRate;
+    for (const chunk of chunks) {
+      const part = await provider.synthesizeChunk(chunk);
+      sampleRate = part.sampleRate;
+      pcmParts.push(part.pcm);
+    }
+    const wav = pcmToWav(pcmParts, { sampleRate });
+    return { wav, sampleRate, durationSeconds: wavDurationSeconds(wav, { sampleRate }) };
+  };
+
   if (provider === "gemini") {
-    return {
+    const geminiProvider = {
       name: `gemini/${model}`,
-      async synthesize(turns) {
+      async synthesizeChunk(turns) {
         const key = ttsKey(env);
         if (!key) throw new Error("GEMINI_API_KEY (또는 PODCAST_TTS_API_KEY) is not configured");
-        const chunks = chunkTurns(turns);
-        if (chunks.length > AI_DEFAULTS.maxTtsChunks) {
-          throw new Error(`script too long for TTS (${chunks.length} chunks)`);
-        }
-        const pcmParts = [];
-        let sampleRate = AI_DEFAULTS.sampleRate;
-        for (const chunk of chunks) {
-          const dialogue = chunk.map((t) => `${t.speaker}: ${t.text}`).join("\n");
-          const body = {
-            contents: [{
-              role: "user",
-              parts: [{ text: `다음 대화를 자연스러운 한국어 팟캐스트 대담으로 읽어주세요. 밝고 편안한 아침 방송 톤입니다.\n\n${dialogue}` }],
-            }],
-            generationConfig: {
-              responseModalities: ["AUDIO"],
-              speechConfig: {
-                multiSpeakerVoiceConfig: {
-                  speakerVoiceConfigs: [
-                    { speaker: "A", voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceA } } },
-                    { speaker: "B", voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceB } } },
-                  ],
-                },
+        const dialogue = turns.map((t) => `${t.speaker}: ${t.text}`).join("\n");
+        const body = {
+          contents: [{
+            role: "user",
+            parts: [{ text: `다음 대화를 자연스러운 한국어 팟캐스트 대담으로 읽어주세요. 밝고 편안한 아침 방송 톤입니다.\n\n${dialogue}` }],
+          }],
+          generationConfig: {
+            responseModalities: ["AUDIO"],
+            speechConfig: {
+              multiSpeakerVoiceConfig: {
+                speakerVoiceConfigs: [
+                  { speaker: "A", voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceA } } },
+                  { speaker: "B", voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceB } } },
+                ],
               },
             },
-          };
-          const data = await requestJson(
-            `${GEMINI_BASE}/models/${model}:generateContent`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-              body: JSON.stringify(body),
-            },
-            "gemini tts",
-          );
-          const part = data.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data);
-          if (!part) throw new Error("gemini tts returned no audio");
-          sampleRate = parseAudioRate(part.inlineData.mimeType, sampleRate);
-          pcmParts.push(b64ToBytes(part.inlineData.data));
-        }
-        const wav = pcmToWav(pcmParts, { sampleRate });
-        return { wav, sampleRate, durationSeconds: wavDurationSeconds(wav, { sampleRate }) };
+          },
+        };
+        const data = await requestJson(
+          `${GEMINI_BASE}/models/${model}:generateContent`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+            body: JSON.stringify(body),
+          },
+          "gemini tts",
+        );
+        const part = data.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data);
+        if (!part) throw new Error("gemini tts returned no audio");
+        return {
+          pcm: b64ToBytes(part.inlineData.data),
+          sampleRate: parseAudioRate(part.inlineData.mimeType),
+        };
       },
     };
+    geminiProvider.synthesize = wrapFull(geminiProvider);
+    return geminiProvider;
   }
 
   if (provider === "openai") {
     const baseUrl = (env.PODCAST_TTS_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
-    return {
+    const openaiProvider = {
       name: `openai/${model}`,
-      async synthesize(turns) {
+      // OpenAI 호환 TTS는 화자별 단일 보이스 호출 → PCM으로 받아 이어붙인다.
+      async synthesizeChunk(turns) {
         const key = ttsKey(env);
         if (!key) throw new Error("PODCAST_TTS_API_KEY is not configured");
-        // OpenAI 호환 TTS는 화자별 단일 보이스 호출 → PCM으로 받아 이어붙인다.
         const sampleRate = AI_DEFAULTS.sampleRate;
         const gap = new Uint8Array(sampleRate * 2 * 0.3); // 턴 사이 0.3초 무음
         const pcmParts = [];
-        for (const turn of chunkTurns(turns).flat()) {
+        for (const turn of turns) {
           const response = await fetch(`${baseUrl}/audio/speech`, {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
@@ -340,10 +353,15 @@ export function createTtsProvider(env) {
           }
           pcmParts.push(new Uint8Array(await response.arrayBuffer()), gap);
         }
-        const wav = pcmToWav(pcmParts, { sampleRate });
-        return { wav, sampleRate, durationSeconds: wavDurationSeconds(wav, { sampleRate }) };
+        const total = pcmParts.reduce((sum, p) => sum + p.length, 0);
+        const pcm = new Uint8Array(total);
+        let offset = 0;
+        for (const part of pcmParts) { pcm.set(part, offset); offset += part.length; }
+        return { pcm, sampleRate };
       },
     };
+    openaiProvider.synthesize = wrapFull(openaiProvider);
+    return openaiProvider;
   }
 
   throw new Error(`unknown PODCAST_TTS_PROVIDER "${provider}"`);
