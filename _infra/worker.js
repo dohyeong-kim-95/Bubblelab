@@ -10,6 +10,7 @@ const REALTIME_NAMESPACES = new Set(["avalon", "liargame", "yacht"]);
 import { validPlannerCode } from "./planner.js";
 import { handleFortuneChart } from "./fortune.js";
 import { handlePodcast, handlePodcastAdmin, runDailyGeneration, UPLOAD_MAX_BYTES } from "./podcast.js";
+import { handleEstateDeals } from "./estate.js";
 import { serveAssetDownload, serveAssetDownloadCounts } from "./downloads.js";
 import {
   applySecurityHeaders,
@@ -431,6 +432,16 @@ export async function handleRequest(request, env, ctx) {
       return handleFortuneChart(request, env);
     }
 
+    // 국토부 아파트 실거래가 프록시 (estate.bubblelab.dev). 조회 전용이며
+    // 지역·기간은 estate.js가 허용 목록으로 고정하고 응답은 Cache API에 캐싱한다.
+    if (path === "/_estate/deals") {
+      const limited = await enforceRateLimit(request, env, {
+        scope: "estate-deals", limit: 120, windowMs: 60 * 1000,
+      });
+      if (limited) return limited;
+      return handleEstateDeals(request, env, url);
+    }
+
     // 공개 페이지 통계 (카테고리 홈의 접속량순 정렬용). 개인 데이터 없음.
     if (path === "/_stats") {
       if (request.method !== "GET") {
@@ -675,7 +686,7 @@ export async function handleRequest(request, env, ctx) {
     url.pathname = `/${site}${path}`;
     const response = await env.ASSETS.fetch(new Request(url, request));
 
-    if (site === "admin" || site === "work") {
+    if (site === "admin" || site === "work" || site === "estate") {
       const headers = new Headers(response.headers);
       headers.set("Cache-Control", "no-store");
       headers.set("X-Robots-Tag", "noindex, nofollow");
@@ -694,7 +705,7 @@ export async function handleRequest(request, env, ctx) {
     const isBot = !ua ||
       /bot|crawl|spider|scrap|preview|scan|monitor|headless|lighthouse|externalhit|curl|wget|python|java|okhttp|node|undici|axios|libwww|httpclient|ruby|php|perl|postman|insomnia/i.test(ua);
     const isDocument = request.headers.get("Sec-Fetch-Dest") === "document";
-    if (!["admin", "work"].includes(site) && isDocument && !isBot && response.ok &&
+    if (!["admin", "work", "estate"].includes(site) && isDocument && !isBot && response.ok &&
         response.headers.get("Content-Type")?.includes("text/html")) {
       const date = kstDate();
       const jar = cookies(request);

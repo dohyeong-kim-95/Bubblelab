@@ -1,0 +1,573 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>🏙️ estate — 동탄·기흥 아파트 실거래</title>
+<style>
+:root {
+  color-scheme: light dark;
+  /* dataviz 검증 통과 팔레트 (light #fff / dark #151e2a 서피스 기준) */
+  --c-trade: light-dark(#1d4ed8, #5b82f0);
+  --c-rent: light-dark(#b45309, #c1832a);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 14px; line-height: 1.6;
+  background: light-dark(#f2f6fa, #0d131c); color: light-dark(#1c2733, #e2e9f0);
+}
+main { max-width: 960px; margin: 0 auto; padding: 24px 16px 48px; }
+header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+h1 { font-size: 1.15rem; margin: 0; }
+h2 { font-size: 0.95rem; margin: 32px 0 12px; }
+.sub { font-size: 0.78rem; opacity: 0.6; }
+.card {
+  background: light-dark(#ffffff, #151e2a);
+  border: 1px solid light-dark(#dce4ec, #263445); border-radius: 8px;
+}
+
+/* 필터 줄 */
+.filters { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin: 16px 0 8px; }
+.tabs { display: flex; border: 1px solid light-dark(#dce4ec, #263445); border-radius: 8px; overflow: hidden; }
+.tabs button {
+  font: inherit; font-size: 0.82rem; color: inherit; background: none; border: 0;
+  padding: 6px 12px; cursor: pointer; border-right: 1px solid light-dark(#dce4ec, #263445);
+}
+.tabs button:last-child { border-right: 0; }
+.tabs button[aria-pressed="true"] { background: light-dark(#1c2733, #e2e9f0); color: light-dark(#f2f6fa, #0d131c); }
+.filters select {
+  font: inherit; font-size: 0.82rem; color: inherit; padding: 5px 8px;
+  border: 1px solid light-dark(#dce4ec, #263445); border-radius: 8px;
+  background: light-dark(#ffffff, #151e2a);
+}
+.filters label { font-size: 0.78rem; opacity: 0.7; }
+#status { font-size: 0.78rem; opacity: 0.7; min-height: 1.4em; margin: 4px 0 0; }
+#status .err { color: light-dark(#b3261e, #ff8a80); opacity: 1; }
+#status button { font: inherit; font-size: 0.75rem; color: inherit; background: none;
+  border: 1px solid currentColor; border-radius: 6px; padding: 1px 8px; cursor: pointer; margin-left: 6px; }
+
+/* 요약 수치 */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; margin-top: 16px; }
+.stat { padding: 12px 14px; }
+.stat .k { font-size: 0.75rem; opacity: 0.65; }
+.stat .v { font-size: 1.25rem; font-weight: 700; margin-top: 2px; }
+.stat .d { font-size: 0.75rem; margin-top: 2px; opacity: 0.8; }
+.stat .d.up { color: light-dark(#9a3412, #e8956a); }
+.stat .d.down { color: light-dark(#175d9c, #7fb2e8); }
+
+/* 차트 */
+.chart-wrap { position: relative; padding: 14px 14px 8px; }
+.legend { display: flex; gap: 16px; font-size: 0.78rem; margin-bottom: 6px; }
+.leg { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.leg-trade { background: var(--c-trade); }
+.leg-rent { background: var(--c-rent); }
+svg { display: block; width: 100%; height: auto; }
+svg text { font-family: inherit; font-size: 12px; fill: light-dark(#5a6b7d, #93a5b8); }
+.grid line { stroke: light-dark(#e8eef4, #1e2a3a); stroke-width: 1; }
+.axis line { stroke: light-dark(#c6d2de, #35465c); stroke-width: 1; }
+.s-trade { stroke: var(--c-trade); }
+.f-trade { fill: var(--c-trade); }
+.s-rent { stroke: var(--c-rent); }
+.f-rent { fill: var(--c-rent); }
+.line { fill: none; stroke-width: 2; }
+.hover-dot { stroke: light-dark(#ffffff, #151e2a); stroke-width: 2; }
+.crosshair { stroke: light-dark(#c6d2de, #35465c); stroke-width: 1; stroke-dasharray: 3 3; }
+.tooltip {
+  position: absolute; pointer-events: none; z-index: 2; display: none;
+  background: light-dark(#ffffff, #1c2733); border: 1px solid light-dark(#c6d2de, #35465c);
+  border-radius: 8px; padding: 6px 10px; font-size: 0.75rem; line-height: 1.5; white-space: nowrap;
+}
+.tooltip b { font-weight: 700; }
+
+/* 표 */
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.8rem; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid light-dark(#e8eef4, #1e2a3a); white-space: nowrap; }
+td.num, th.num { text-align: right; }
+th { font-weight: 700; font-size: 0.75rem; opacity: 0.75; }
+th.sortable { cursor: pointer; }
+th.sortable[aria-sort] { opacity: 1; }
+tr.canceled td { text-decoration: line-through; opacity: 0.5; }
+.badge { font-size: 0.7rem; border: 1px solid currentColor; border-radius: 6px; padding: 0 5px; margin-left: 5px; }
+.badge.cancel { color: light-dark(#b3261e, #ff8a80); }
+
+/* 설정 안내 */
+#setup { padding: 20px; margin-top: 24px; max-width: 720px; }
+#setup ol { padding-left: 20px; margin: 8px 0; }
+#setup li { margin: 8px 0; }
+#setup code, .note code {
+  background: light-dark(#eef2f7, #1e2a3a); border-radius: 4px; padding: 1px 6px; font-size: 0.8rem;
+}
+.note { font-size: 0.75rem; opacity: 0.65; margin-top: 32px; line-height: 1.7; }
+.hidden { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>🏙️ estate</h1>
+    <span class="sub">동탄·기흥 아파트 실거래 — 국토교통부 실거래가 공개시스템</span>
+  </header>
+
+  <section id="setup" class="card hidden">
+    <h2 style="margin-top:0">인증키 설정이 필요합니다</h2>
+    <p class="sub">서버에 국토교통부 공공데이터 인증키가 아직 없습니다. 한 번만 해두면 됩니다.</p>
+    <ol>
+      <li><a href="https://www.data.go.kr" target="_blank" rel="noreferrer">data.go.kr</a> 가입 후
+        <b>아파트 매매 실거래가 자료</b>, <b>아파트 전월세 실거래가 자료</b> 두 API를 활용신청 (자동승인)</li>
+      <li>마이페이지에서 <b>일반 인증키 (Decoding)</b> 복사</li>
+      <li>리포 루트에서 <code>npx wrangler@4 secret put MOLIT_SERVICE_KEY</code> 실행 후 키 붙여넣기</li>
+      <li>로컬 개발이라면 리포 루트 <code>.dev.vars</code> 파일에 <code>MOLIT_SERVICE_KEY=키</code> 한 줄 추가</li>
+      <li>이 페이지 새로고침</li>
+    </ol>
+  </section>
+
+  <div id="dash" class="hidden">
+    <div class="filters">
+      <div class="tabs" id="regionTabs" role="group" aria-label="지역"></div>
+      <label>기간 <select id="selMonths">
+        <option value="12">12개월</option>
+        <option value="24" selected>24개월</option>
+        <option value="36">36개월</option>
+      </select></label>
+      <label>전용면적 <select id="selBand">
+        <option value="all" selected>전체</option>
+        <option value="small">60㎡ 이하</option>
+        <option value="mid">60~85㎡</option>
+        <option value="large">85㎡ 초과</option>
+      </select></label>
+      <label>법정동 <select id="selDong"><option value="">전체</option></select></label>
+    </div>
+    <p id="status" role="status"></p>
+
+    <div class="stats" id="stats"></div>
+
+    <h2>㎡→평 환산 중앙 평당가 추이 <span class="sub">만원/평 · 월별 중앙값</span></h2>
+    <div class="card chart-wrap" id="chartPrice"></div>
+
+    <h2>월별 거래량 <span class="sub">신고 건수 · 매매 / 전세(월세 제외)</span></h2>
+    <div class="card chart-wrap" id="chartVolume"></div>
+
+    <h2>전세가율 <span class="sub">전세 중앙 평당가 ÷ 매매 중앙 평당가 · 표본 5건 이상인 달만</span></h2>
+    <div class="card chart-wrap" id="chartRatio"></div>
+
+    <h2>단지 랭킹 <span class="sub">최근 6개월 매매 · 정렬할 열을 클릭</span></h2>
+    <div class="card table-wrap"><table id="rankTable"></table></div>
+
+    <h2>최근 거래
+      <span class="tabs" id="dealTabs" style="display:inline-flex;vertical-align:middle;margin-left:8px"></span>
+    </h2>
+    <div class="card table-wrap"><table id="dealTable"></table></div>
+  </div>
+
+  <p class="note">자료: 국토교통부 실거래가 공개시스템 (신고일 기준, 최근 계약은 신고 지연으로 최대 30일
+    늦게 나타남) · 해제신고 거래는 <span class="badge cancel">해제</span>로 표시하고 집계에서 제외 ·
+    평당가는 전용면적을 3.3058㎡로 나눈 값 기준이라 공급면적 기준 시세보다 높게 보임 ·
+    개인 학습용 화면이며 투자 판단의 근거가 아님</p>
+</main>
+
+<script>
+"use strict";
+const DT1 = new Set(["반송동", "석우동", "능동"]);
+const DT2 = new Set(["오산동", "청계동", "영천동", "신동", "중동", "목동", "산척동", "장지동", "송동", "방교동"]);
+const TABS = {
+  dongtan2: { src: "hwaseong", label: "동탄2", dongs: DT2 },
+  dongtan1: { src: "hwaseong", label: "동탄1", dongs: DT1 },
+  hwaseong: { src: "hwaseong", label: "화성 전체", dongs: null },
+  giheung:  { src: "giheung",  label: "기흥구", dongs: null },
+};
+const MAX_MONTHS = 36;
+const state = { tab: "dongtan2", months: 24, band: "all", dong: "", deals: "trade" };
+// store[src][type][ym] = 배열 | "error"
+const store = { hwaseong: { trade: {}, rent: {} }, giheung: { trade: {}, rent: {} } };
+let loadSeq = 0;
+
+const $ = (id) => document.getElementById(id);
+const el = (tag, attrs = {}, html) => {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+  if (html != null) node.innerHTML = html;
+  return node;
+};
+
+function kstNowYm() {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit" })
+    .formatToParts(new Date());
+  const v = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+  return `${v.year}${v.month}`;
+}
+function monthsBack(n) { // 오래된 달 → 이번 달
+  const now = kstNowYm();
+  let y = +now.slice(0, 4), m = +now.slice(4);
+  const list = [];
+  for (let i = 0; i < n; i += 1) {
+    list.unshift(`${y}${String(m).padStart(2, "0")}`);
+    m -= 1; if (m === 0) { m = 12; y -= 1; }
+  }
+  return list;
+}
+const ymLabel = (ym) => `${ym.slice(2, 4)}.${ym.slice(4)}`;
+
+const median = (arr) => {
+  if (!arr.length) return null;
+  const s = [...arr].sort((a, b) => a - b);
+  const mid = s.length >> 1;
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+};
+const perPy = (amt, area) => amt * 3.3058 / area;
+const fmtMan = (v) => Math.round(v).toLocaleString("ko-KR");
+const fmtEok = (man) => {
+  const eok = man / 10000;
+  return eok >= 10 ? `${eok.toFixed(1)}억` : `${eok.toFixed(2)}억`;
+};
+const inBand = (area) =>
+  state.band === "all" ? true :
+  state.band === "small" ? area <= 60 :
+  state.band === "mid" ? area > 60 && area <= 85 : area > 85;
+
+// ── 데이터 로드 ──────────────────────────────────────────────
+async function fetchMonth(src, type, ym) {
+  const bucket = store[src][type];
+  if (Array.isArray(bucket[ym])) return "ok";
+  const res = await fetch(`/_estate/deals?type=${type}&region=${src}&ym=${ym}`);
+  if (res.status === 429) { bucket[ym] = "error"; return "rate-limited"; }
+  const body = await res.json().catch(() => ({ status: "unavailable" }));
+  if (body.status === "not-configured") return "not-configured";
+  if (body.status !== "ok") { bucket[ym] = "error"; return "error"; }
+  bucket[ym] = body.items;
+  return "ok";
+}
+
+async function ensureData() {
+  const seq = ++loadSeq;
+  const src = TABS[state.tab].src;
+  const jobs = [];
+  for (const ym of monthsBack(state.months)) {
+    for (const type of ["trade", "rent"]) {
+      if (!Array.isArray(store[src][type][ym])) jobs.push({ type, ym });
+    }
+  }
+  if (!jobs.length) { render(); return; }
+
+  let done = 0, failed = 0, aborted = false;
+  const status = $("status");
+  const tick = () => {
+    status.textContent = `${TABS[state.tab].label} 실거래 불러오는 중… ${done}/${jobs.length}`;
+  };
+  tick();
+  const queue = [...jobs];
+  const workers = Array.from({ length: 6 }, async () => {
+    while (queue.length && !aborted && seq === loadSeq) {
+      const job = queue.shift();
+      const result = await fetchMonth(src, job.type, job.ym);
+      if (result === "not-configured") {
+        aborted = true;
+        $("setup").classList.remove("hidden");
+        $("dash").classList.add("hidden");
+        return;
+      }
+      if (result === "rate-limited") aborted = true;
+      if (result !== "ok") failed += 1;
+      done += 1;
+      if (seq === loadSeq) { tick(); if (done % 8 === 0) render(); }
+    }
+  });
+  await Promise.all(workers);
+  if (seq !== loadSeq || $("setup").classList.contains("hidden") === false) return;
+  status.innerHTML = failed
+    ? `<span class="err">${failed}개 달을 불러오지 못했습니다${aborted ? " (요청 한도 — 잠시 후 재시도)" : ""}</span>` +
+      `<button id="retryBtn">다시 시도</button>`
+    : "";
+  document.getElementById("retryBtn")?.addEventListener("click", () => {
+    const bucket = store[src];
+    for (const type of ["trade", "rent"]) {
+      for (const [ym, v] of Object.entries(bucket[type])) if (v === "error") delete bucket[type][ym];
+    }
+    ensureData();
+  });
+  render();
+}
+
+// ── 필터·집계 ────────────────────────────────────────────────
+function monthItems(type, ym) {
+  const tab = TABS[state.tab];
+  const raw = store[tab.src][type][ym];
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((r) =>
+    (!tab.dongs || tab.dongs.has(r.dong)) &&
+    (!state.dong || r.dong === state.dong) &&
+    inBand(r.area));
+}
+const liveTrades = (ym) => monthItems("trade", ym).filter((r) => !r.canceled);
+const jeonse = (ym) => monthItems("rent", ym).filter((r) => r.rent === 0);
+
+function monthlySeries() {
+  return monthsBack(state.months).map((ym) => {
+    const trades = liveTrades(ym);
+    const js = jeonse(ym);
+    const tradeMed = median(trades.map((r) => perPy(r.amt, r.area)));
+    const jsMed = median(js.map((r) => perPy(r.dep, r.area)));
+    return {
+      ym, tradeCnt: trades.length, jeonseCnt: js.length,
+      tradeMed, jsMed,
+      ratio: trades.length >= 5 && js.length >= 5 && tradeMed ? jsMed / tradeMed * 100 : null,
+    };
+  });
+}
+
+// ── SVG 차트 ────────────────────────────────────────────────
+const W = 860, H = 300, PAD = { l: 56, r: 16, t: 12, b: 28 };
+function niceTicks(max) {
+  if (!max) return { top: 1, ticks: [0, 1] };
+  const raw = max / 4;
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map((s) => s * mag).find((s) => s >= raw);
+  const top = Math.ceil(max / step) * step;
+  const ticks = [];
+  for (let v = 0; v <= top + 1e-9; v += step) ticks.push(v);
+  return { top, ticks };
+}
+function chartBase(rows, yMax, yFmt) {
+  const { top, ticks } = niceTicks(yMax);
+  const x = (i) => PAD.l + (rows.length === 1 ? 0 : (W - PAD.l - PAD.r) * i / (rows.length - 1));
+  const y = (v) => H - PAD.b - (H - PAD.t - PAD.b) * v / top;
+  let g = `<g class="grid">`;
+  for (const t of ticks) g += `<line x1="${PAD.l}" x2="${W - PAD.r}" y1="${y(t)}" y2="${y(t)}"/>`;
+  g += `</g><g class="axis"><line x1="${PAD.l}" x2="${W - PAD.r}" y1="${y(0)}" y2="${y(0)}"/></g>`;
+  for (const t of ticks) g += `<text x="${PAD.l - 8}" y="${y(t) + 4}" text-anchor="end">${yFmt(t)}</text>`;
+  const every = Math.ceil(rows.length / 12);
+  rows.forEach((r, i) => {
+    if (i % every === 0) g += `<text x="${x(i)}" y="${H - 8}" text-anchor="middle">${ymLabel(r.ym)}</text>`;
+  });
+  return { x, y, g };
+}
+function linePath(rows, x, y, val) {
+  let d = "", pen = false;
+  rows.forEach((r, i) => {
+    const v = val(r);
+    if (v == null) { pen = false; return; }
+    d += `${pen ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`;
+    pen = true;
+  });
+  return d;
+}
+function attachHover(wrap, svg, rows, x, tipHtml, marks) {
+  const tip = el("div", { class: "tooltip" });
+  wrap.appendChild(tip);
+  const cross = svg.querySelector(".crosshair-g");
+  svg.addEventListener("pointermove", (e) => {
+    const rect = svg.getBoundingClientRect();
+    const vx = (e.clientX - rect.left) / rect.width * W;
+    const span = (W - PAD.l - PAD.r) / Math.max(rows.length - 1, 1);
+    const i = Math.max(0, Math.min(rows.length - 1, Math.round((vx - PAD.l) / span)));
+    const html = tipHtml(rows[i]);
+    if (!html) { tip.style.display = "none"; cross.innerHTML = ""; return; }
+    tip.innerHTML = html;
+    tip.style.display = "block";
+    const px = x(i) / W * rect.width;
+    const flip = px > rect.width * 0.62;
+    tip.style.left = flip ? "" : `${px + 14}px`;
+    tip.style.right = flip ? `${rect.width - px + 14}px` : "";
+    tip.style.top = "36px";
+    cross.innerHTML = `<line class="crosshair" x1="${x(i)}" x2="${x(i)}" y1="${PAD.t}" y2="${H - PAD.b}"/>` + marks(rows[i], i);
+  });
+  svg.addEventListener("pointerleave", () => { tip.style.display = "none"; cross.innerHTML = ""; });
+}
+function renderPriceChart(rows) {
+  const wrap = $("chartPrice");
+  const max = Math.max(...rows.map((r) => Math.max(r.tradeMed ?? 0, r.jsMed ?? 0)), 0);
+  const { x, y, g } = chartBase(rows, max, (v) => fmtMan(v));
+  wrap.innerHTML =
+    `<div class="legend"><span><i class="leg leg-trade"></i>매매</span><span><i class="leg leg-rent"></i>전세</span></div>` +
+    `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="월별 중앙 평당가 추이">${g}` +
+    `<path class="line s-trade" d="${linePath(rows, x, y, (r) => r.tradeMed)}"/>` +
+    `<path class="line s-rent" d="${linePath(rows, x, y, (r) => r.jsMed)}"/>` +
+    `<g class="crosshair-g"></g></svg>`;
+  attachHover(wrap, wrap.querySelector("svg"), rows, x,
+    (r) => (r.tradeMed == null && r.jsMed == null) ? "" :
+      `<b>20${ymLabel(r.ym)}</b><br>` +
+      (r.tradeMed != null ? `매매 ${fmtMan(r.tradeMed)}만/평 (${r.tradeCnt}건)<br>` : "") +
+      (r.jsMed != null ? `전세 ${fmtMan(r.jsMed)}만/평 (${r.jeonseCnt}건)` : ""),
+    (r, i) => (r.tradeMed != null ? `<circle class="f-trade hover-dot" cx="${x(i)}" cy="${y(r.tradeMed)}" r="4"/>` : "") +
+      (r.jsMed != null ? `<circle class="f-rent hover-dot" cx="${x(i)}" cy="${y(r.jsMed)}" r="4"/>` : ""));
+}
+function renderVolumeChart(rows) {
+  const wrap = $("chartVolume");
+  const max = Math.max(...rows.map((r) => Math.max(r.tradeCnt, r.jeonseCnt)), 0);
+  const { x, y, g } = chartBase(rows, max, (v) => fmtMan(v));
+  const span = (W - PAD.l - PAD.r) / rows.length;
+  const bw = Math.max(2, Math.min(10, span / 2 - 2));
+  let bars = "";
+  rows.forEach((r, i) => {
+    const cx = x(i);
+    bars += `<rect class="f-trade" x="${cx - bw - 1}" width="${bw}" y="${y(r.tradeCnt)}" height="${y(0) - y(r.tradeCnt)}" rx="1.5"/>`;
+    bars += `<rect class="f-rent" x="${cx + 1}" width="${bw}" y="${y(r.jeonseCnt)}" height="${y(0) - y(r.jeonseCnt)}" rx="1.5"/>`;
+  });
+  wrap.innerHTML =
+    `<div class="legend"><span><i class="leg leg-trade"></i>매매</span><span><i class="leg leg-rent"></i>전세</span></div>` +
+    `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="월별 거래량">${g}${bars}<g class="crosshair-g"></g></svg>`;
+  attachHover(wrap, wrap.querySelector("svg"), rows, x,
+    (r) => `<b>20${ymLabel(r.ym)}</b><br>매매 ${r.tradeCnt}건<br>전세 ${r.jeonseCnt}건`,
+    () => "");
+}
+function renderRatioChart(rows) {
+  const wrap = $("chartRatio");
+  const vals = rows.map((r) => r.ratio).filter((v) => v != null);
+  const max = Math.max(...vals, 0);
+  const { x, y, g } = chartBase(rows, Math.min(Math.max(max, 10), 100), (v) => `${Math.round(v)}%`);
+  wrap.innerHTML =
+    `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="전세가율 추이">${g}` +
+    `<path class="line s-trade" d="${linePath(rows, x, y, (r) => r.ratio)}"/>` +
+    `<g class="crosshair-g"></g></svg>`;
+  attachHover(wrap, wrap.querySelector("svg"), rows, x,
+    (r) => r.ratio == null ? "" : `<b>20${ymLabel(r.ym)}</b><br>전세가율 ${r.ratio.toFixed(1)}%`,
+    (r, i) => r.ratio == null ? "" : `<circle class="f-trade hover-dot" cx="${x(i)}" cy="${y(r.ratio)}" r="4"/>`);
+}
+
+// ── 요약 수치 ────────────────────────────────────────────────
+function renderStats(rows) {
+  const recent = rows.slice(-3), prev = rows.slice(-6, -3);
+  const flat = (part, key) => part.flatMap((r) => r[key] != null ? [r[key]] : []);
+  const medOf = (part) => median(flat(part, "tradeMed"));
+  const cur = medOf(recent), before = medOf(prev);
+  const diff = cur != null && before != null ? (cur / before - 1) * 100 : null;
+  const vol = recent.reduce((s, r) => s + r.tradeCnt, 0);
+  const volPrev = prev.reduce((s, r) => s + r.tradeCnt, 0);
+  const ratio = median(flat(recent, "ratio"));
+  const py84 = cur != null ? cur * (84.9 / 3.3058) : null; // 전용 84.9㎡ 환산가
+  const arrow = (d) => d == null ? "" :
+    `<div class="d ${d >= 0 ? "up" : "down"}">${d >= 0 ? "▲" : "▼"} ${Math.abs(d).toFixed(1)}% (직전 3개월 대비)</div>`;
+  $("stats").innerHTML = [
+    ["매매 중앙 평당가 (3개월)", cur != null ? `${fmtMan(cur)}만` : "—", arrow(diff)],
+    ["전용 84㎡ 환산 중앙가", py84 != null ? fmtEok(py84) : "—", ""],
+    ["매매 거래량 (3개월)", `${vol}건`, arrow(volPrev ? (vol / volPrev - 1) * 100 : null)],
+    ["전세가율 (3개월)", ratio != null ? `${ratio.toFixed(1)}%` : "—", ""],
+  ].map(([k, v, d]) => `<div class="card stat"><div class="k">${k}</div><div class="v">${v}</div>${d}</div>`).join("");
+}
+
+// ── 단지 랭킹 ────────────────────────────────────────────────
+let rankSort = "cnt";
+function renderRank() {
+  const byApt = new Map();
+  for (const ym of monthsBack(6)) {
+    for (const r of liveTrades(ym)) {
+      const key = `${r.apt}|${r.dong}`;
+      const entry = byApt.get(key) ?? { apt: r.apt, dong: r.dong, pys: [], deals: [] };
+      entry.pys.push(perPy(r.amt, r.area));
+      entry.deals.push(r);
+      byApt.set(key, entry);
+    }
+  }
+  const list = [...byApt.values()].map((e) => {
+    const last = e.deals.sort((a, b) => a.date < b.date ? -1 : 1).at(-1);
+    return { apt: e.apt, dong: e.dong, cnt: e.deals.length, med: median(e.pys), last };
+  }).sort((a, b) => rankSort === "cnt" ? b.cnt - a.cnt : b.med - a.med).slice(0, 20);
+  const sortAttr = (k) => rankSort === k ? ` aria-sort="descending"` : "";
+  $("rankTable").innerHTML =
+    `<thead><tr><th>단지</th><th>법정동</th>` +
+    `<th class="num sortable" data-sort="cnt"${sortAttr("cnt")}>거래 ${rankSort === "cnt" ? "▾" : ""}</th>` +
+    `<th class="num sortable" data-sort="med"${sortAttr("med")}>중앙 평당가 ${rankSort === "med" ? "▾" : ""}</th>` +
+    `<th class="num">최근 거래</th></tr></thead><tbody>` +
+    list.map((e) => `<tr><td>${e.apt}</td><td>${e.dong}</td><td class="num">${e.cnt}건</td>` +
+      `<td class="num">${fmtMan(e.med)}만</td>` +
+      `<td class="num">${e.last.date.slice(2)} · ${Math.round(e.last.area)}㎡ ${fmtEok(e.last.amt)}</td></tr>`).join("") +
+    `</tbody>`;
+  for (const th of $("rankTable").querySelectorAll("th.sortable")) {
+    th.addEventListener("click", () => { rankSort = th.dataset.sort; renderRank(); });
+  }
+}
+
+// ── 최근 거래 표 ─────────────────────────────────────────────
+function renderDeals() {
+  const type = state.deals;
+  const rows = [];
+  for (const ym of [...monthsBack(state.months)].reverse()) {
+    const items = type === "trade" ? monthItems("trade", ym) : monthItems("rent", ym);
+    rows.push(...items.sort((a, b) => a.date < b.date ? 1 : -1));
+    if (rows.length >= 150) break;
+  }
+  const cut = rows.slice(0, 150);
+  const head = type === "trade"
+    ? `<tr><th>날짜</th><th>단지</th><th>법정동</th><th class="num">전용</th><th class="num">층</th><th class="num">금액</th><th class="num">평당</th></tr>`
+    : `<tr><th>날짜</th><th>단지</th><th>법정동</th><th class="num">전용</th><th class="num">층</th><th class="num">보증금</th><th class="num">월세</th><th>구분</th></tr>`;
+  $("dealTable").innerHTML = `<thead>${head}</thead><tbody>` + cut.map((r) => {
+    const base = `<td>${r.date.slice(2)}</td><td>${r.apt}` +
+      (r.canceled ? `<span class="badge cancel">해제</span>` : "") +
+      (r.direct ? `<span class="badge">직거래</span>` : "") +
+      `</td><td>${r.dong}</td><td class="num">${r.area.toFixed(1)}㎡</td><td class="num">${r.floor}층</td>`;
+    const tail = type === "trade"
+      ? `<td class="num">${fmtEok(r.amt)}</td><td class="num">${fmtMan(perPy(r.amt, r.area))}만</td>`
+      : `<td class="num">${fmtEok(r.dep)}</td><td class="num">${r.rent ? `${fmtMan(r.rent)}만` : "—"}</td>` +
+        `<td>${r.rent === 0 ? "전세" : "월세"}${r.renewal ? " · 갱신" : ""}</td>`;
+    return `<tr${r.canceled ? ' class="canceled"' : ""}>${base}${tail}</tr>`;
+  }).join("") + `</tbody>`;
+}
+
+// ── 동 셀렉트 ────────────────────────────────────────────────
+function refreshDongOptions() {
+  const tab = TABS[state.tab];
+  const counts = new Map();
+  for (const ym of monthsBack(state.months)) {
+    const raw = store[tab.src].trade[ym];
+    if (!Array.isArray(raw)) continue;
+    for (const r of raw) {
+      if (tab.dongs && !tab.dongs.has(r.dong)) continue;
+      counts.set(r.dong, (counts.get(r.dong) ?? 0) + 1);
+    }
+  }
+  const sel = $("selDong");
+  const current = state.dong;
+  sel.innerHTML = `<option value="">전체</option>` +
+    [...counts.entries()].sort((a, b) => b[1] - a[1])
+      .map(([dong]) => `<option value="${dong}"${dong === current ? " selected" : ""}>${dong}</option>`).join("");
+  if (current && !counts.has(current)) { state.dong = ""; sel.value = ""; }
+}
+
+// ── 조립 ────────────────────────────────────────────────────
+function render() {
+  refreshDongOptions();
+  const rows = monthlySeries();
+  renderStats(rows);
+  renderPriceChart(rows);
+  renderVolumeChart(rows);
+  renderRatioChart(rows);
+  renderRank();
+  renderDeals();
+}
+
+function initControls() {
+  const tabs = $("regionTabs");
+  for (const [key, tab] of Object.entries(TABS)) {
+    const btn = el("button", { type: "button", "aria-pressed": String(key === state.tab) }, tab.label);
+    btn.addEventListener("click", () => {
+      state.tab = key; state.dong = "";
+      for (const b of tabs.children) b.setAttribute("aria-pressed", String(b === btn));
+      ensureData();
+    });
+    tabs.appendChild(btn);
+  }
+  const dealTabs = $("dealTabs");
+  for (const [key, label] of [["trade", "매매"], ["rent", "전월세"]]) {
+    const btn = el("button", { type: "button", "aria-pressed": String(key === state.deals) }, label);
+    btn.addEventListener("click", () => {
+      state.deals = key;
+      for (const b of dealTabs.children) b.setAttribute("aria-pressed", String(b === btn));
+      renderDeals();
+    });
+    dealTabs.appendChild(btn);
+  }
+  $("selMonths").addEventListener("change", (e) => {
+    state.months = Math.min(+e.target.value, MAX_MONTHS); ensureData();
+  });
+  $("selBand").addEventListener("change", (e) => { state.band = e.target.value; render(); });
+  $("selDong").addEventListener("change", (e) => { state.dong = e.target.value; render(); });
+}
+
+initControls();
+$("dash").classList.remove("hidden");
+ensureData();
+</script>
+</body>
+</html>
