@@ -175,18 +175,20 @@ tr.canceled td { text-decoration: line-through; opacity: 0.5; }
 
 <script>
 "use strict";
+// 동탄구(LAWD 41597)가 동탄1·2를 전부 포함한다. 동탄1은 법정동 세 개로
+// 고정하고, 동탄2는 "동탄구에서 동탄1을 뺀 나머지"로 정의해 법정동 명칭
+// 변경(예: 오산동→여울동)에도 목록 관리 없이 안전하게 한다.
 const DT1 = new Set(["반송동", "석우동", "능동"]);
-const DT2 = new Set(["오산동", "청계동", "영천동", "신동", "중동", "목동", "산척동", "장지동", "송동", "방교동"]);
 const TABS = {
-  dongtan2: { src: "hwaseong", label: "동탄2", dongs: DT2 },
-  dongtan1: { src: "hwaseong", label: "동탄1", dongs: DT1 },
-  hwaseong: { src: "hwaseong", label: "화성 전체", dongs: null },
-  giheung:  { src: "giheung",  label: "기흥구", dongs: null },
+  dongtan2: { src: "dongtan", label: "동탄2", dongs: DT1, exclude: true },
+  dongtan1: { src: "dongtan", label: "동탄1", dongs: DT1 },
+  dongtan:  { src: "dongtan", label: "동탄 전체", dongs: null },
+  giheung:  { src: "giheung", label: "기흥구", dongs: null },
 };
 const MAX_MONTHS = 36;
 const state = { tab: "dongtan2", months: 24, band: "all", dong: "", deals: "trade" };
 // store[src][type][ym] = 배열 | "error"
-const store = { hwaseong: { trade: {}, rent: {} }, giheung: { trade: {}, rent: {} } };
+const store = { dongtan: { trade: {}, rent: {} }, giheung: { trade: {}, rent: {} } };
 let loadSeq = 0;
 
 const $ = (id) => document.getElementById(id);
@@ -326,12 +328,15 @@ async function ensureData() {
 }
 
 // ── 필터·집계 ────────────────────────────────────────────────
+const inTabDongs = (tab, dong) =>
+  !tab.dongs || (tab.exclude ? !tab.dongs.has(dong) : tab.dongs.has(dong));
+
 function monthItems(type, ym) {
   const tab = TABS[state.tab];
   const raw = store[tab.src][type][ym];
   if (!Array.isArray(raw)) return [];
   return raw.filter((r) =>
-    (!tab.dongs || tab.dongs.has(r.dong)) &&
+    inTabDongs(tab, r.dong) &&
     (!state.dong || r.dong === state.dong) &&
     inBand(r.area));
 }
@@ -548,7 +553,7 @@ function refreshDongOptions() {
     const raw = store[tab.src].trade[ym];
     if (!Array.isArray(raw)) continue;
     for (const r of raw) {
-      if (tab.dongs && !tab.dongs.has(r.dong)) continue;
+      if (!inTabDongs(tab, r.dong)) continue;
       counts.set(r.dong, (counts.get(r.dong) ?? 0) + 1);
     }
   }

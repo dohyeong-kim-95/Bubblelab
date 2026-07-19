@@ -59,22 +59,22 @@ test("data.go.kr 오류 봉투와 resultCode 오류를 error로 돌려준다", (
 test("쿼리 검증: 허용된 type·region·기간만 통과한다", () => {
   const now = new Date("2026-07-19T00:00:00+09:00");
   const query = (entries) => validateDealsQuery(new URLSearchParams(entries), now);
-  assert.deepEqual(query({ type: "trade", region: "hwaseong", ym: "202607" }),
-    { type: "trade", region: "hwaseong", ym: "202607" });
-  assert.ok(query({ type: "sale", region: "hwaseong", ym: "202607" }).error);
+  assert.deepEqual(query({ type: "trade", region: "dongtan", ym: "202607" }),
+    { type: "trade", region: "dongtan", ym: "202607" });
+  assert.ok(query({ type: "sale", region: "dongtan", ym: "202607" }).error);
   assert.ok(query({ type: "trade", region: "seoul", ym: "202607" }).error);
-  assert.ok(query({ type: "trade", region: "hwaseong", ym: "202608" }).error, "미래 월 거절");
-  assert.ok(query({ type: "trade", region: "hwaseong", ym: "200512" }).error, "너무 오래된 월 거절");
+  assert.ok(query({ type: "trade", region: "dongtan", ym: "202608" }).error, "미래 월 거절");
+  assert.ok(query({ type: "trade", region: "dongtan", ym: "200512" }).error, "너무 오래된 월 거절");
   assert.ok(query({ type: "trade", region: "giheung", ym: "2026-07" }).error);
 });
 
-test("지역 허용 목록은 화성시·기흥구 법정동코드다", () => {
-  assert.equal(REGIONS.get("hwaseong").lawd, "41590");
+test("지역 허용 목록은 동탄구·기흥구 법정동코드다", () => {
+  assert.equal(REGIONS.get("dongtan").lawd, "41597");
   assert.equal(REGIONS.get("giheung").lawd, "41463");
 });
 
 test("인증키 미설정이면 not-configured JSON을 준다", async () => {
-  const url = new URL("https://estate.bubblelab.dev/_estate/deals?type=trade&region=hwaseong&ym=202601");
+  const url = new URL("https://estate.bubblelab.dev/_estate/deals?type=trade&region=dongtan&ym=202601");
   const response = await handleEstateDeals(new Request(url), {}, url);
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { status: "not-configured" });
