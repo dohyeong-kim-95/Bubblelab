@@ -73,7 +73,6 @@ li button.current { border-style: solid; border-color: #4f7fdd; }
   <input id="seek" type="range" min="0" max="100" step="0.1" value="0" aria-label="재생 위치">
   <div class="times"><span id="cur">0:00</span><span id="dur">0:00</span></div>
   <div class="controls">
-    <button id="restart" title="처음부터 다시재생" aria-label="처음부터">⟲</button>
     <button id="back" aria-label="10초 뒤로">−10초</button>
     <button id="play" aria-label="재생">▶</button>
     <button id="fwd" aria-label="10초 앞으로">+10초</button>
@@ -153,10 +152,14 @@ function syncPositionState() {
   } catch {}
 }
 
-$("play").onclick = () => { if (player.paused) player.play().catch(() => {}); else player.pause(); };
+// 가운데 버튼이 상태에 따라 재생(▶)/일시정지(⏸)/다시듣기(⟲)를 겸한다
+$("play").onclick = () => {
+  if (player.ended) { player.currentTime = 0; player.play().catch(() => {}); }
+  else if (player.paused) player.play().catch(() => {});
+  else player.pause();
+};
 $("back").onclick = () => { player.currentTime = Math.max(0, player.currentTime - 10); };
 $("fwd").onclick = () => { player.currentTime = player.currentTime + 10; };
-$("restart").onclick = () => { player.currentTime = 0; player.play().catch(() => {}); };
 
 let seeking = false;
 $("seek").oninput = () => {
@@ -177,15 +180,21 @@ player.ontimeupdate = () => {
 player.onloadedmetadata = () => { $("dur").textContent = fmtTime(player.duration); syncPositionState(); };
 player.onplay = () => {
   $("play").textContent = "⏸";
+  $("play").setAttribute("aria-label", "일시정지");
+  $("status").textContent = "";
   document.body.classList.add("playing");
   if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "playing";
 };
 player.onpause = () => {
-  $("play").textContent = "▶";
+  if (!player.ended) { $("play").textContent = "▶"; $("play").setAttribute("aria-label", "재생"); }
   document.body.classList.remove("playing");
   if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "paused";
 };
-player.onended = () => { $("status").textContent = "끝까지 들었습니다 — ⟲로 다시 들을 수 있어요"; };
+player.onended = () => {
+  $("play").textContent = "⟲";
+  $("play").setAttribute("aria-label", "다시듣기");
+  $("status").textContent = "끝까지 들었습니다";
+};
 
 async function init() {
   const session = await (await fetch("/_podcast/session")).json().catch(() => ({}));
