@@ -378,7 +378,10 @@ export class PodcastDO {
     if (existing.filter((s) => s.date === today).length >= MAX_SOURCES_PER_DAY) {
       return json({ error: `하루 최대 ${MAX_SOURCES_PER_DAY}개까지 올릴 수 있습니다` }, { status: 409 });
     }
-    const id = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+    // 같은 밀리초에 여러 개가 올라와도 업로드 순서가 보장되게 단조 시퀀스를 붙인다
+    const seq = ((await this.storage.get("seq")) ?? 0) + 1;
+    await this.storage.put("seq", seq);
+    const id = `${Date.now()}-${String(seq).padStart(8, "0")}`;
     const source = {
       id,
       name: String(body.name ?? "").slice(0, 120),
