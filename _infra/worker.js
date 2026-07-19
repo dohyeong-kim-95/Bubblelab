@@ -725,7 +725,7 @@ export async function handleRequest(request, env, ctx) {
 export default {
   // 06:40 KST 데일리 팟캐스트 생성 (wrangler.jsonc triggers.crons)
   async scheduled(controller, env, ctx) {
-    if (!featureEnabled(env, "ENABLE_PODCAST")) return;
+    if (!featureEnabled(env, "ENABLE_PODCAST") || !env.PODCAST_BUCKET) return;
     ctx.waitUntil(runDailyGeneration(env));
   },
   async fetch(request, env, ctx) {

@@ -85,6 +85,10 @@ const podcastStub = (env) => env.PODCAST.get(env.PODCAST.idFromName("global"));
 
 // ── 워커 라우트: /_podcast/* ─────────────────────────────────────
 export async function handlePodcast(request, env, url) {
+  // R2 바인딩(wrangler.jsonc r2_buckets)이 없으면 파일을 다룰 수 없다.
+  if (!env.PODCAST_BUCKET) {
+    return new Response("podcast storage is not configured", { status: 503 });
+  }
   const key = await sessionHmacKey(env);
   if (!key) return new Response("podcast session secret is not configured", { status: 503 });
   const stub = podcastStub(env);

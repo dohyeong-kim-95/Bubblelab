@@ -46,7 +46,9 @@ GEMINI_API_KEY=... node _infra/podcast-pipeline.mjs 자료.pdf
 
 ## 운영 셋업 체크리스트
 
-1. R2 버킷 `bubblelab-podcast` — deploy.yml이 자동 생성 시도, 실패 시 수동 생성
+1. Cloudflare 대시보드에서 **R2 활성화** (계정 단위, 미활성 시 배포가 code
+   10042로 실패한다) → `wrangler.jsonc`의 `r2_buckets` 주석 해제.
+   버킷 `bubblelab-podcast`는 deploy.yml이 자동 생성 시도, 실패 시 수동 생성
 2. secrets: `GEMINI_API_KEY`, `PODCAST_SESSION_SECRET`
 3. 푸시(선택): `node _infra/podcast-pipeline.mjs --gen-vapid` →
    `VAPID_PUBLIC_KEY` var + `VAPID_PRIVATE_KEY`·`VAPID_SUBJECT` secret
