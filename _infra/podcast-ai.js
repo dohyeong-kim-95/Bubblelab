@@ -216,6 +216,19 @@ async function requestGeminiStream(url, init, label) {
 const llmKey = (env) => env.PODCAST_LLM_API_KEY || env.GEMINI_API_KEY;
 const ttsKey = (env) => env.PODCAST_TTS_API_KEY || env.PODCAST_LLM_API_KEY || env.GEMINI_API_KEY;
 
+// 호출 자체 집계 훅 — env.recordAiCall(kind, model, ok)이 있으면 기록한다
+// (PodcastDO가 붙여준다; 내부 재시도는 1회로 세는 근사치).
+async function tracked(env, kind, model, fn) {
+  try {
+    const result = await fn();
+    await env.recordAiCall?.(kind, model, true);
+    return result;
+  } catch (error) {
+    await env.recordAiCall?.(kind, model, false)?.catch?.(() => {});
+    throw error;
+  }
+}
+
 // ── 대본 프로바이더 ──────────────────────────────────────────────
 // sources: [{ name, mime, bytes: Uint8Array }]
 export function createScriptProvider(env) {
@@ -241,7 +254,7 @@ export function createScriptProvider(env) {
           }],
           generationConfig: { temperature: 0.8, responseMimeType: "application/json" },
         };
-        const parts = await requestGeminiStream(
+        const parts = await tracked(env, "script", model, () => requestGeminiStream(
           `${GEMINI_BASE}/models/${model}:streamGenerateContent?alt=sse`,
           {
             method: "POST",
@@ -249,7 +262,7 @@ export function createScriptProvider(env) {
             body: JSON.stringify(body),
           },
           "gemini script",
-        );
+        ));
         return parseScript(parts.map((p) => p.text ?? "").join(""));
       },
     };
@@ -283,7 +296,7 @@ export function createScriptProvider(env) {
             ],
           }],
         };
-        const data = await requestJson(
+        const data = await tracked(env, "script", model, () => requestJson(
           `${baseUrl}/chat/completions`,
           {
             method: "POST",
@@ -291,7 +304,7 @@ export function createScriptProvider(env) {
             body: JSON.stringify(body),
           },
           "openai script",
-        );
+        ));
         return parseScript(data.choices?.[0]?.message?.content ?? "");
       },
     };
@@ -329,7 +342,7 @@ export function createTtsProvider(env) {
 
   if (provider === "gemini") {
     const fallbackModel = env.PODCAST_TTS_FALLBACK_MODEL || "gemini-2.5-pro-preview-tts";
-    const callModel = async (ttsModel, turns) => {
+    const callModel = (ttsModel, turns) => tracked(env, "tts", ttsModel, async () => {
       const key = ttsKey(env);
       if (!key) throw new Error("GEMINI_API_KEY (또는 PODCAST_TTS_API_KEY) is not configured");
       const dialogue = turns.map((t) => `${t.speaker}: ${t.text}`).join("\n");
@@ -367,7 +380,7 @@ export function createTtsProvider(env) {
       let offset = 0;
       for (const segment of pcmSegments) { pcm.set(segment, offset); offset += segment.length; }
       return { pcm, sampleRate: parseAudioRate(audioParts[0].inlineData.mimeType) };
-    };
+    });
     const geminiProvider = {
       name: `gemini/${model}`,
       async synthesizeChunk(turns) {
@@ -390,7 +403,7 @@ export function createTtsProvider(env) {
     const openaiProvider = {
       name: `openai/${model}`,
       // OpenAI 호환 TTS는 화자별 단일 보이스 호출 → PCM으로 받아 이어붙인다.
-      async synthesizeChunk(turns) {
+      synthesizeChunk: (turns) => tracked(env, "tts", model, async () => {
         const key = ttsKey(env);
         if (!key) throw new Error("PODCAST_TTS_API_KEY is not configured");
         const sampleRate = AI_DEFAULTS.sampleRate;
@@ -418,7 +431,7 @@ export function createTtsProvider(env) {
         let offset = 0;
         for (const part of pcmParts) { pcm.set(part, offset); offset += part.length; }
         return { pcm, sampleRate };
-      },
+      }),
     };
     openaiProvider.synthesize = wrapFull(openaiProvider);
     return openaiProvider;

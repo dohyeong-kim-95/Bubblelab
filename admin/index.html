@@ -48,7 +48,16 @@
   #top .medal { font-size: 1.3rem; }
   #top .page { flex: 1; font-weight: bold; overflow-wrap: anywhere; }
   #top .users { opacity: .6; font-size: .9rem; font-variant-numeric: tabular-nums; }
-  #top .empty, #engagement .empty, #suggestions .empty, #records .empty, #podcast-users .empty { opacity: .55; justify-content: center; }
+  #top .empty, #engagement .empty, #suggestions .empty, #records .empty, #podcast-users .empty, #podcast-usage .empty { opacity: .55; justify-content: center; }
+  #podcast-usage { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .6rem; }
+  #podcast-usage li { display: flex; flex-wrap: wrap; align-items: baseline; gap: .3rem .8rem;
+                      padding: .85rem 1.1rem; border-radius: 1rem; font-size: .82rem;
+                      background: light-dark(#fff, #151e2a);
+                      border: 1px solid light-dark(#dce4ec, #263445); }
+  #podcast-usage .day { font-weight: bold; }
+  #podcast-usage .today { color: #4f7fdd; }
+  #podcast-usage .item { opacity: .8; }
+  #podcast-usage .fail { color: #d05a5a; }
   .insight-heading { display: flex; align-items: center; justify-content: space-between; gap: .8rem; margin-bottom: .8rem; }
   .insight-heading h2 { margin: 0; }
   .period { display: flex; padding: .2rem; border-radius: .65rem;
@@ -262,8 +271,12 @@
     <h2>👥 사용자 목록</h2>
     <ol id="podcast-users"><li class="empty">불러오는 중…</li></ol>
   </section>
+  <section class="top" aria-label="AI 호출 자체 집계">
+    <h2>📈 AI 호출 집계 <span style="opacity:.5;font-weight:normal;font-size:.8rem">자체 카운트 · 쿼터 기준일(태평양, 오후 4~5시 KST 리셋) · Google 집계와 다를 수 있어요</span></h2>
+    <ol id="podcast-usage"><li class="empty">불러오는 중…</li></ol>
+  </section>
   <section class="top" aria-label="Gemini API 사용량">
-    <h2>🔑 Gemini API <span style="opacity:.5;font-weight:normal;font-size:.8rem">남은 사용량·한도는 Google AI Studio에서 확인해요</span></h2>
+    <h2>🔑 Gemini API <span style="opacity:.5;font-weight:normal;font-size:.8rem">공식 잔여 한도는 Google AI Studio에서 확인해요</span></h2>
     <div class="link-row">
       <a class="ext-link" href="https://aistudio.google.com/usage" target="_blank" rel="noopener">📊 사용량 보기 ↗</a>
       <a class="ext-link" href="https://aistudio.google.com/rate-limits" target="_blank" rel="noopener">⏱️ 비율 제한 보기 ↗</a>
@@ -684,6 +697,48 @@ async function loadPodcastUsers() {
   }
 }
 
+async function loadPodcastUsage() {
+  const list = document.getElementById('podcast-usage');
+  const empty = (text) => {
+    const li = document.createElement('li');
+    li.className = 'empty';
+    li.textContent = text;
+    list.replaceChildren(li);
+  };
+  try {
+    const res = await fetch(`${base}/api/podcast/usage`, { cache: 'no-store' });
+    if (res.status === 503) return empty('팟캐스트가 꺼져 있어요');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const { today, days } = await res.json();
+    if (!days.length) return empty('아직 집계된 호출이 없어요');
+    list.replaceChildren();
+    for (const entry of days) {
+      const li = document.createElement('li');
+      const day = document.createElement('span');
+      day.className = entry.day === today ? 'day today' : 'day';
+      day.textContent = entry.day === today ? `${entry.day} (오늘 쿼터)` : entry.day;
+      li.append(day);
+      for (const [bucket, counts] of Object.entries(entry.calls)) {
+        const [kind, ...modelParts] = bucket.split(':');
+        const label = kind === 'script' ? '대본' : kind === 'tts' ? '음성' : kind;
+        const item = document.createElement('span');
+        item.className = 'item';
+        item.textContent = `${label} ${modelParts.join(':').replace(/^gemini-/, '')} ${counts.ok}회`;
+        li.append(item);
+        if (counts.fail) {
+          const fail = document.createElement('span');
+          fail.className = 'fail';
+          fail.textContent = `실패 ${counts.fail}`;
+          li.append(fail);
+        }
+      }
+      list.append(li);
+    }
+  } catch (err) {
+    empty(`불러오지 못했어요: ${err.message}`);
+  }
+}
+
 document.getElementById('podcast-create').addEventListener('click', async () => {
   const nameInput = document.getElementById('podcast-name');
   const name = nameInput.value.trim();
@@ -729,6 +784,8 @@ loadRecords();
 loadNotice();
 loadChat();
 loadPodcastUsers();
+loadPodcastUsage();
+setInterval(loadPodcastUsage, 60_000);
 setInterval(loadChat, 60_000);
 setInterval(loadStats, 60_000);
 setInterval(loadSuggestions, 60_000);

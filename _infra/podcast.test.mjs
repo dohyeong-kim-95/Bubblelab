@@ -322,6 +322,32 @@ test("30분 넘게 멈춘 생성은 재시도할 수 있다", async () => {
   assert.equal(((await storage.get("jobs")) ?? []).length, 1);
 });
 
+test("생성 시 AI 호출이 쿼터 기준일별로 집계된다", async () => {
+  const { podcastDO, storage, bucket } = makeDO();
+  const { user } = await createUser(podcastDO);
+  const { source } = await (await podcastDO.fetch(post(`/sources?uid=${user.id}`, {
+    name: "doc.pdf", mime: "application/pdf", size: 3,
+  }))).json();
+  await bucket.put(source.r2Key, new Uint8Array([1]));
+  await podcastDO.fetch(internal(`/generate?uid=${user.id}`, { method: "POST" }));
+
+  const pcm = new Uint8Array(24000 * 2);
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url) => geminiResponses(pcm)(url);
+  try { await drainQueue(podcastDO, storage); }
+  finally { globalThis.fetch = original; }
+
+  const { today, days } = await (await podcastDO.fetch(internal("/admin/usage"))).json();
+  assert.equal(days.length, 1);
+  assert.equal(days[0].day, today);
+  const buckets = days[0].calls;
+  const scriptBucket = Object.keys(buckets).find((k) => k.startsWith("script:"));
+  const ttsBucket = Object.keys(buckets).find((k) => k.startsWith("tts:"));
+  assert.equal(buckets[scriptBucket].ok, 1);
+  assert.ok(buckets[ttsBucket].ok >= 1);
+  assert.equal(buckets[scriptBucket].fail, 0);
+});
+
 test("run-daily는 소스 있는 사용자만 큐잉한다", async () => {
   const { podcastDO, storage, bucket } = makeDO();
   const { user: withSource } = await createUser(podcastDO, "가");

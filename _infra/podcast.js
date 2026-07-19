@@ -54,8 +54,21 @@ export function kstToday() {
   }).format(new Date());
 }
 
+// Google 무료 쿼터는 태평양 시간 자정에 리셋되므로 호출 집계도 같은 기준일을 쓴다
+export function quotaDay() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date());
+}
+
 const json = (data, init) => Response.json(data, init);
 const notFound = () => new Response("not found", { status: 404 });
+
+const shiftDays = (day, delta) => {
+  const date = new Date(`${day}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + delta);
+  return date.toISOString().slice(0, 10);
+};
 
 // ── 세션 (planner와 같은 HMAC 서명 토큰, 쿠키 bl_pod) ─────────────
 async function sessionHmacKey(env) {
@@ -272,6 +285,9 @@ async function serveAudio(env, request, url, audioKey, title) {
 // ── admin 라우트: /api/podcast/users (admin 세션 뒤에서 호출됨) ──
 export async function handlePodcastAdmin(request, env, url) {
   const stub = podcastStub(env);
+  if (url.pathname === "/api/podcast/usage" && request.method === "GET") {
+    return stub.fetch("https://podcast.internal/admin/usage");
+  }
   if (url.pathname === "/api/podcast/users") {
     if (request.method === "GET") return stub.fetch("https://podcast.internal/admin/users");
     if (request.method === "POST") {
@@ -318,6 +334,12 @@ export class PodcastDO {
     }
 
     if (url.pathname === "/admin/users") return this.adminUsers(request, url);
+    if (url.pathname === "/admin/usage" && request.method === "GET") {
+      const entries = [...(await this.storage.list({ prefix: "usage:" })).entries()]
+        .map(([key, calls]) => ({ day: key.slice("usage:".length), calls }))
+        .sort((a, b) => (a.day < b.day ? 1 : -1)).slice(0, 14);
+      return json({ today: quotaDay(), days: entries });
+    }
     if (url.pathname === "/run-daily" && request.method === "POST") return this.runDaily();
     if (url.pathname === "/audio-meta" && request.method === "GET") {
       const index = await this.storage.get(`podidx:${url.searchParams.get("pod")}`);
@@ -577,6 +599,26 @@ export class PodcastDO {
     }
   }
 
+  // 프로바이더에 호출 집계 훅을 붙인 env
+  aiEnv() {
+    return { ...this.env, recordAiCall: (kind, model, ok) => this.recordAiCall(kind, model, ok) };
+  }
+
+  // AI 호출 자체 집계 — 쿼터 기준일(태평양)별, 종류·모델별 성공/실패 카운트.
+  // Google 측 집계와 어긋날 수 있는 근사치다 (내부 재시도는 1회로 센다).
+  async recordAiCall(kind, model, ok) {
+    const key = `usage:${quotaDay()}`;
+    const usage = (await this.storage.get(key)) ?? {};
+    const bucket = `${kind}:${model}`;
+    usage[bucket] = usage[bucket] ?? { ok: 0, fail: 0 };
+    usage[bucket][ok ? "ok" : "fail"] += 1;
+    await this.storage.put(key, usage);
+    // 오래된 집계는 정리 (14일 보관)
+    for (const oldKey of (await this.storage.list({ prefix: "usage:" })).keys()) {
+      if (oldKey < `usage:${shiftDays(quotaDay(), -14)}`) await this.storage.delete(oldKey);
+    }
+  }
+
   async updatePod(job, patch) {
     const pod = await this.storage.get(`pod:${job.userId}:${job.date}`);
     if (!pod) return null;
@@ -623,7 +665,7 @@ export class PodcastDO {
       }
       if (sources.length === 0) throw new Error("소스 파일을 읽지 못했습니다");
 
-      const script = await createScriptProvider(this.env).generate({
+      const script = await createScriptProvider(this.aiEnv()).generate({
         sources, memory: user.memory, dateKst: job.date,
       });
       if (chunkTurns(script.turns).length > AI_DEFAULTS.maxTtsChunks) {
@@ -640,7 +682,7 @@ export class PodcastDO {
     const chunks = chunkTurns(pod.script.turns);
     if ((pod.ttsDone ?? 0) < chunks.length) {
       await this.updatePod(job, { stage: "tts" });
-      const part = await createTtsProvider(this.env).synthesizeChunk(chunks[pod.ttsDone]);
+      const part = await createTtsProvider(this.aiEnv()).synthesizeChunk(chunks[pod.ttsDone]);
       const chunkKey = `tmp/${job.userId}/${job.date}-${pod.ttsDone}.pcm`;
       await bucket.put(chunkKey, part.pcm);
       await this.updatePod(job, {
