@@ -6,6 +6,9 @@
 //   PODCAST_LLM_API_KEY   (없으면 GEMINI_API_KEY로 폴백)
 //   PODCAST_TTS_PROVIDER  "gemini"(기본) | "openai"
 //   PODCAST_TTS_MODEL     기본 gemini-2.5-flash-preview-tts
+//   PODCAST_TTS_FALLBACK_MODEL  기본 모델이 쿼터(429)에 걸리면 쓸 예비 모델
+//                         (gemini 전용, 기본 gemini-2.5-pro-preview-tts,
+//                          "none"으로 끔 — 모델별 무료 쿼터가 따로라 유효하다)
 //   PODCAST_TTS_BASE_URL / PODCAST_TTS_API_KEY / PODCAST_TTS_VOICE_A / _B
 // WebCrypto·fetch만 사용하므로 Worker와 Node(로컬 품질 검증) 양쪽에서 돌아간다.
 
@@ -325,46 +328,57 @@ export function createTtsProvider(env) {
   };
 
   if (provider === "gemini") {
+    const fallbackModel = env.PODCAST_TTS_FALLBACK_MODEL || "gemini-2.5-pro-preview-tts";
+    const callModel = async (ttsModel, turns) => {
+      const key = ttsKey(env);
+      if (!key) throw new Error("GEMINI_API_KEY (또는 PODCAST_TTS_API_KEY) is not configured");
+      const dialogue = turns.map((t) => `${t.speaker}: ${t.text}`).join("\n");
+      const body = {
+        contents: [{
+          role: "user",
+          parts: [{ text: `다음 대화를 자연스러운 한국어 팟캐스트 대담으로 읽어주세요. 밝고 편안한 아침 방송 톤입니다.\n\n${dialogue}` }],
+        }],
+        generationConfig: {
+          responseModalities: ["AUDIO"],
+          speechConfig: {
+            multiSpeakerVoiceConfig: {
+              speakerVoiceConfigs: [
+                { speaker: "A", voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceA } } },
+                { speaker: "B", voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceB } } },
+              ],
+            },
+          },
+        },
+      };
+      const parts = await requestGeminiStream(
+        `${GEMINI_BASE}/models/${ttsModel}:streamGenerateContent?alt=sse`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+          body: JSON.stringify(body),
+        },
+        `gemini tts(${ttsModel})`,
+      );
+      const audioParts = parts.filter((p) => p.inlineData?.data);
+      if (audioParts.length === 0) throw new Error(`gemini tts(${ttsModel}) returned no audio`);
+      const pcmSegments = audioParts.map((p) => b64ToBytes(p.inlineData.data));
+      const total = pcmSegments.reduce((sum, s) => sum + s.length, 0);
+      const pcm = new Uint8Array(total);
+      let offset = 0;
+      for (const segment of pcmSegments) { pcm.set(segment, offset); offset += segment.length; }
+      return { pcm, sampleRate: parseAudioRate(audioParts[0].inlineData.mimeType) };
+    };
     const geminiProvider = {
       name: `gemini/${model}`,
       async synthesizeChunk(turns) {
-        const key = ttsKey(env);
-        if (!key) throw new Error("GEMINI_API_KEY (또는 PODCAST_TTS_API_KEY) is not configured");
-        const dialogue = turns.map((t) => `${t.speaker}: ${t.text}`).join("\n");
-        const body = {
-          contents: [{
-            role: "user",
-            parts: [{ text: `다음 대화를 자연스러운 한국어 팟캐스트 대담으로 읽어주세요. 밝고 편안한 아침 방송 톤입니다.\n\n${dialogue}` }],
-          }],
-          generationConfig: {
-            responseModalities: ["AUDIO"],
-            speechConfig: {
-              multiSpeakerVoiceConfig: {
-                speakerVoiceConfigs: [
-                  { speaker: "A", voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceA } } },
-                  { speaker: "B", voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceB } } },
-                ],
-              },
-            },
-          },
-        };
-        const parts = await requestGeminiStream(
-          `${GEMINI_BASE}/models/${model}:streamGenerateContent?alt=sse`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-            body: JSON.stringify(body),
-          },
-          "gemini tts",
-        );
-        const audioParts = parts.filter((p) => p.inlineData?.data);
-        if (audioParts.length === 0) throw new Error("gemini tts returned no audio");
-        const pcmSegments = audioParts.map((p) => b64ToBytes(p.inlineData.data));
-        const total = pcmSegments.reduce((sum, s) => sum + s.length, 0);
-        const pcm = new Uint8Array(total);
-        let offset = 0;
-        for (const segment of pcmSegments) { pcm.set(segment, offset); offset += segment.length; }
-        return { pcm, sampleRate: parseAudioRate(audioParts[0].inlineData.mimeType) };
+        try {
+          return await callModel(model, turns);
+        } catch (error) {
+          // 기본 모델의 일일 쿼터 소진(429) 시 예비 모델로 — 모델별 쿼터가 따로다
+          const quotaHit = /\(429\)|RESOURCE_EXHAUSTED|quota/i.test(String(error?.message ?? ""));
+          if (!quotaHit || !fallbackModel || fallbackModel === "none" || fallbackModel === model) throw error;
+          return callModel(fallbackModel, turns);
+        }
       },
     };
     geminiProvider.synthesize = wrapFull(geminiProvider);
