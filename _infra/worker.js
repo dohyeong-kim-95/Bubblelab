@@ -282,6 +282,19 @@ async function handleAdmin(request, env, url, base = "") {
     return Response.json(data, { headers: { "Cache-Control": "no-store" } });
   }
 
+  // 봇 유입 등으로 오염된 특정 날짜의 방문 통계를 통째로 지운다.
+  if (url.pathname === "/api/stats/reset" && request.method === "POST") {
+    const date = url.searchParams.get("date") ?? "";
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return Response.json({ error: "invalid date" }, { status: 400 });
+    }
+    const id = env.ANALYTICS.idFromName("global");
+    return env.ANALYTICS.get(id).fetch(
+      `https://analytics.internal/reset?date=${date}`,
+      { method: "POST" },
+    );
+  }
+
   if (url.pathname === "/api/records") {
     const id = env.RECORDS.idFromName("global");
     const stub = env.RECORDS.get(id);
@@ -492,6 +505,23 @@ export async function handleRequest(request, env, ctx) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...body, visitorId: currentVisitorId, date: kstDate() }),
+      });
+    }
+
+    // 유효 방문 확정 비콘. 방문 문서에서 발급한 익명 쿠키가 있어야만 기록하므로
+    // 쿠키를 버리는 크롤러·격리 브라우저는 JS를 실행해도 유효 방문자가 못 된다.
+    if (path === "/_visit" && request.method === "POST") {
+      const limited = await enforceRateLimit(request, env, {
+        scope: "visit-qualify", limit: 120, windowMs: 60 * 60 * 1000,
+      });
+      if (limited) return limited;
+      const currentVisitorId = visitorId(request);
+      if (!currentVisitorId) return new Response(null, { status: 204 });
+      const id = env.ANALYTICS.idFromName("global");
+      return env.ANALYTICS.get(id).fetch("https://analytics.internal/qualify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ visitorId: currentVisitorId, date: kstDate() }),
       });
     }
 

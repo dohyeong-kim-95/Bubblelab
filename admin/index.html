@@ -120,6 +120,12 @@
   .notice-actions button { font: inherit; font-size: .85rem; padding: .45rem .9rem;
                  border-radius: .6rem; border: 1px solid currentColor;
                  background: none; color: inherit; cursor: pointer; }
+  .reset-row { display: flex; align-items: center; gap: .6rem; }
+  .reset-row input { font: inherit; color: inherit; padding: .45rem .6rem; border-radius: .6rem;
+                     border: 1px solid light-dark(#dce4ec, #263445); background: none; }
+  .reset-row button { font: inherit; font-size: .85rem; padding: .45rem .9rem; border-radius: .6rem;
+                      border: 1px solid #d05a5a; color: #d05a5a; background: none; cursor: pointer; }
+  #reset-status { opacity: .6; font-size: .78rem; }
   #warning { display: none; margin-top: 1rem; padding: .85rem 1rem; border-radius: .8rem;
              background: light-dark(#fff2c7, #4a3711); color: light-dark(#6a4a00, #ffe49a); }
   .upload-card { padding: 1.15rem; border-radius: 1rem; background: light-dark(#fff, #151e2a);
@@ -180,10 +186,12 @@
   <section class="view" id="view-insights" hidden>
   <h2 class="view-title">📊 Insights</h2>
   <section class="cards" aria-label="순사용자 통계">
-    <article class="card"><span class="label">일간 사용자</span><strong class="value" id="daily">—</strong><span class="range">오늘 · KST</span></article>
-    <article class="card"><span class="label">주간 사용자</span><strong class="value" id="weekly">—</strong><span class="range">최근 7일</span></article>
-    <article class="card"><span class="label">월간 사용자</span><strong class="value" id="monthly">—</strong><span class="range">최근 30일</span></article>
+    <article class="card"><span class="label">일간 유효 방문자</span><strong class="value" id="daily">—</strong><span class="range" id="daily-range">오늘 · KST</span></article>
+    <article class="card"><span class="label">주간 유효 방문자</span><strong class="value" id="weekly">—</strong><span class="range" id="weekly-range">최근 7일</span></article>
+    <article class="card"><span class="label">월간 유효 방문자</span><strong class="value" id="monthly">—</strong><span class="range" id="monthly-range">최근 30일</span></article>
   </section>
+  <p class="insight-note">유효 방문자 = 화면이 실제로 표시된 채 3초 이상 머물거나 클릭·터치·스크롤한 브라우저.
+    전체 브라우저 = 그날 HTML을 연 익명 쿠키 수(단순 크롤러·에이전트 포함 가능).</p>
   <section class="top" aria-label="월간 인기 카드">
     <h2>🏆 월간 인기 카드 TOP 3</h2>
     <ol id="top"><li class="empty">불러오는 중…</li></ol>
@@ -199,6 +207,15 @@
     </div>
     <p class="insight-note">화면에 실제로 표시된 시간 · 세션당 최대 30분 · 중앙값은 방문 세션 기준</p>
     <div id="engagement"><div class="empty">불러오는 중…</div></div>
+  </section>
+  <section class="top" aria-label="날짜별 통계 초기화">
+    <h2>🧹 날짜별 통계 초기화</h2>
+    <p class="insight-note">봇·에이전트 유입으로 오염된 날짜의 방문·페이지·체류 기록을 지웁니다. 되돌릴 수 없어요.</p>
+    <div class="reset-row">
+      <input type="date" id="reset-date" aria-label="초기화할 날짜">
+      <button id="reset-run" type="button">초기화</button>
+      <span id="reset-status"></span>
+    </div>
   </section>
   </section>
   <section class="view" id="view-upload" hidden>
@@ -365,8 +382,11 @@ async function loadStats() {
     const res = await fetch(`${base}/api/stats?days=${engagementDays}`, { cache: 'no-store' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
+    const rangeLabel = { daily: '오늘 · KST', weekly: '최근 7일', monthly: '최근 30일' };
     for (const key of ['daily', 'weekly', 'monthly']) {
-      document.getElementById(key).textContent = data[key].toLocaleString('ko-KR');
+      document.getElementById(key).textContent = (data.qualified?.[key] ?? 0).toLocaleString('ko-KR');
+      document.getElementById(`${key}-range`).textContent =
+        `${rangeLabel[key]} · 전체 브라우저 ${data[key].toLocaleString('ko-KR')}`;
     }
     const top = document.getElementById('top');
     top.replaceChildren();
@@ -392,7 +412,7 @@ async function loadStats() {
     }
     renderEngagement(data.engagement);
     document.getElementById('warning').style.display = data.usingDefaultCredentials ? 'block' : 'none';
-    status.textContent = `${data.date} 기준 · 익명 브라우저 순사용자 · ${new Date(data.generatedAt).toLocaleTimeString('ko-KR')} 갱신`;
+    status.textContent = `${data.date} 기준 · 익명 브라우저 유효/전체 순사용자 · ${new Date(data.generatedAt).toLocaleTimeString('ko-KR')} 갱신`;
   } catch (err) {
     status.textContent = `통계를 불러오지 못했습니다: ${err.message}`;
   }
@@ -410,6 +430,28 @@ for (const button of document.querySelectorAll('.period button')) {
     loadStats();
   });
 }
+
+const resetDate = document.getElementById('reset-date');
+const resetStatus = document.getElementById('reset-status');
+resetDate.value = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date());
+document.getElementById('reset-run').addEventListener('click', async () => {
+  const date = resetDate.value;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    resetStatus.textContent = '날짜를 선택해주세요';
+    return;
+  }
+  if (!confirm(`${date}의 방문·페이지·체류 기록을 모두 지울까요? 되돌릴 수 없습니다.`)) return;
+  resetStatus.textContent = '지우는 중…';
+  try {
+    const res = await fetch(`${base}/api/stats/reset?date=${date}`, { method: 'POST' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const { deleted } = await res.json();
+    resetStatus.textContent = `${date} 기록 ${deleted.toLocaleString('ko-KR')}건을 지웠어요`;
+    loadStats();
+  } catch (err) {
+    resetStatus.textContent = `초기화 실패: ${err.message}`;
+  }
+});
 
 const assetForm = document.getElementById('asset-form');
 const assetFiles = document.getElementById('asset-files');
