@@ -24,8 +24,9 @@ TTS 프로바이더(멀티스피커 PCM → WAV) → R2 저장 → 소스 정리
 
 ## AI 프로바이더 교체 (최저가 운용)
 
-코드 수정 없이 env로 바꾼다. 기본값은 Gemini(대본 `gemini-2.5-flash`,
-음성 `gemini-2.5-flash-preview-tts`, 멀티스피커·한국어 지원).
+코드 수정 없이 env로 바꾼다. 기본값은 Gemini(대본 `gemini-flash-latest`,
+음성 `gemini-2.5-flash-preview-tts`, 멀티스피커·한국어 지원). 더 저렴하게
+가려면 `PODCAST_LLM_MODEL=gemini-flash-lite-latest`.
 
 | var | 값 |
 | --- | --- |

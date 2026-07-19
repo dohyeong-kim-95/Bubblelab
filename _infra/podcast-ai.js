@@ -12,7 +12,9 @@
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
 export const AI_DEFAULTS = {
-  llmModel: "gemini-2.5-flash",
+  // "-latest" 별칭은 Google이 최신 flash로 유지해줘서 신규 계정에서도 404가 안 난다.
+  // 더 저렴하게 가려면 PODCAST_LLM_MODEL=gemini-flash-lite-latest 로 교체.
+  llmModel: "gemini-flash-latest",
   ttsModel: "gemini-2.5-flash-preview-tts",
   // Gemini TTS 프리셋 보이스. openai 프로바이더에서는 해당 서비스의 보이스명을 넣는다.
   voiceA: "Kore",
