@@ -24,7 +24,7 @@
     // 데일리 팟캐스트(podcast/). 켜기 전에 GEMINI_API_KEY·PODCAST_SESSION_SECRET
     // secret과 R2 버킷(bubblelab-podcast)이 준비되어야 한다. 푸시 알림까지
     // 쓰려면 VAPID_PUBLIC_KEY var와 VAPID_PRIVATE_KEY secret도 필요.
-    "ENABLE_PODCAST": "false"
+    "ENABLE_PODCAST": "true"
   },
   // 팟캐스트 소스 파일·생성 오디오 저장소 (계정에 R2 활성화 필요).
   // 바인딩이 없으면 팟캐스트 라우트는 503으로 닫힌다 (fail-closed).
