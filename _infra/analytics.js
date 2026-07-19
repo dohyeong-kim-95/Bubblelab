@@ -126,12 +126,36 @@ export class AnalyticsDO {
         const stored = await this.state.storage.list();
         // 모든 key(seen:/pv:/cleanup:)는 두 번째 조각이 날짜다.
         const stale = [...stored.keys()].filter((k) =>
-          /^(seen|pv|eng|cleanup):/.test(k) && !keep.has(k.split(":")[1]));
+          /^(seen|pv|eng|qseen|cleanup):/.test(k) && !keep.has(k.split(":")[1]));
         if (stale.length) await this.state.storage.delete(stale);
         await this.state.storage.put(cleanupKey, true);
       }
 
       return new Response(null, { status: 204 });
+    }
+
+    // 방문자가 사람처럼 행동했음(수 초 이상 표시되거나 상호작용)을 확정한다.
+    // seen:(HTML을 연 브라우저 전체)과 별개로 qseen:을 저장해 admin에서
+    // 전체/유효를 나란히 볼 수 있게 한다. 방문자별 key라 멱등이다.
+    if (request.method === "POST" && url.pathname === "/qualify") {
+      const { visitorId, date } = await request.json().catch(() => ({}));
+      if (!VISITOR_ID.test(visitorId ?? "") || !DATE_KEY.test(date ?? "")) {
+        return new Response("invalid event", { status: 400 });
+      }
+      await this.state.storage.put(`qseen:${date}:${visitorId}`, true);
+      return new Response(null, { status: 204 });
+    }
+
+    // 오염된 날짜(봇 유입 등)의 방문 통계를 통째로 지운다. admin 인증 뒤에서만
+    // 호출된다. streak:/download:는 날짜 버킷이 아니므로 건드리지 않는다.
+    if (request.method === "POST" && url.pathname === "/reset") {
+      const date = url.searchParams.get("date");
+      if (!DATE_KEY.test(date ?? "")) return new Response("invalid date", { status: 400 });
+      const stored = await this.state.storage.list();
+      const targets = [...stored.keys()].filter((key) =>
+        /^(seen|pv|eng|qseen|cleanup):/.test(key) && key.split(":")[1] === date);
+      if (targets.length) await this.state.storage.delete(targets);
+      return Response.json({ date, deleted: targets.length });
     }
 
     // 한 카드 페이지 세션의 누적 활성화면 시간을 저장한다. 클라이언트가 같은
@@ -192,6 +216,18 @@ export class AnalyticsDO {
         dates.slice(0, count).flatMap((d) => [...visitorsByDate.get(d)]),
       ).size;
 
+      // 유효 방문자(qseen:): 표시 상태로 수 초 이상 머물렀거나 상호작용한
+      // 브라우저만. 단순히 HTML을 연 크롤러·에이전트는 여기 들어오지 않는다.
+      const qualifiedStored = await this.state.storage.list({ prefix: "qseen:" });
+      const qualifiedByDate = new Map(dates.map((d) => [d, new Set()]));
+      for (const key of qualifiedStored.keys()) {
+        const [, day, visitorId] = key.split(":");
+        qualifiedByDate.get(day)?.add(visitorId);
+      }
+      const uniqueQualified = (count) => new Set(
+        dates.slice(0, count).flatMap((d) => [...qualifiedByDate.get(d)]),
+      ).size;
+
       // 최근 30일 페이지별 순방문자 TOP 3. 사이트 홈(슬래시 없는 page)은
       // 카드가 아니므로 제외한다.
       const window = new Set(dates);
@@ -242,6 +278,11 @@ export class AnalyticsDO {
         daily: unique(1),
         weekly: unique(7),
         monthly: unique(30),
+        qualified: {
+          daily: uniqueQualified(1),
+          weekly: uniqueQualified(7),
+          monthly: uniqueQualified(30),
+        },
         top,
         engagementDays,
         engagement,

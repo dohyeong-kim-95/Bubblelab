@@ -40,7 +40,7 @@ Worker는 다음 우선순위로 요청을 처리합니다.
 | `/_planner/login`, `/_planner/data`, `/_planner/logout` | 개인 플래너 세션과 데이터. 기본 비활성 |
 | `/_fortune/chart` | 생년월일시를 명식·오늘 운세 계산용 데이터로 변환 |
 | `/_estate/deals` | 국토부 아파트 매매·전월세 실거래가 프록시 (지역·기간 허용 목록 고정) |
-| `/_stats`, `/_streak`, `/_engagement` | 최근 방문량, Slop 연속 방문, 카드 활성 체류시간 |
+| `/_stats`, `/_streak`, `/_engagement`, `/_visit` | 최근 방문량, Slop 연속 방문, 카드 활성 체류시간, 유효 방문 확정 |
 | `/_suggest` | 익명 토이 아이디어 제출 |
 | `/_records`, `/_personal` | 주간·올타임·개인 기록 조회와 제출 |
 | `/_chat` | 익명 채팅 로비 WebSocket (util/chat). 메시지 미저장 |
@@ -78,9 +78,12 @@ node _infra/build.mjs
   `onDisconnect`, 서버 타임스탬프를 WebSocket 위에 제공합니다. namespace별 JSON
   트리를 통째로 저장하므로 소규모 친구 게임에 맞춘 구조입니다.
 - `AnalyticsDO`: IP와 User-Agent를 저장하지 않고 익명 방문자 쿠키 기준으로 HTML
-  문서 방문을 멱등 집계합니다. 카드 페이지는 화면에 표시된 시간만 세션별 최대
+  문서 방문을 멱등 집계합니다. HTML을 연 브라우저 전체(`seen:`)와 별도로, 화면
+  표시 3초+ 체류 또는 상호작용이 확인된 유효 방문자(`qseen:`)를 함께 셉니다 —
+  일반 Chrome UA로 위장한 크롤러·AI 에이전트가 순사용자에 섞이는 것을 막기
+  위해서입니다. 카드 페이지는 화면에 표시된 시간만 세션별 최대
   30분까지 누적하며 관리자 Insights에서 7일·30일 총 체류, 중앙값과 10초 이상
-  체류율을 확인할 수 있습니다.
+  체류율을 확인할 수 있습니다. 오염된 날짜는 admin의 초기화로 지울 수 있습니다.
 - `RecordsDO`: 월요일 09:00 KST 기준 주간 보드, 브라우저별 최고 기록, 올타임
   기록과 Bubble Pop Idle 시즌 역사를 보관합니다.
 - `PlannerDO`: 개인 코드별로 KST 현재 달 데이터만 유지합니다.

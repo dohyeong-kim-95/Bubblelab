@@ -74,6 +74,7 @@ test("tracks one browser once per day and calculates rolling uniques", async () 
     daily: 1,
     weekly: 2,
     monthly: 3,
+    qualified: { daily: 0, weekly: 0, monthly: 0 },
     top: [{ page: "slop/circle", users: 1 }],
     engagementDays: 30,
     engagement: [],
@@ -81,6 +82,85 @@ test("tracks one browser once per day and calculates rolling uniques", async () 
   });
   assert.equal(Number.isNaN(Date.parse(stats.generatedAt)), false);
   assert.equal([...storage.data.keys()].filter((key) => key === `seen:2026-07-10:${visitorId}`).length, 1);
+});
+
+test("separates qualified visitors from raw browser count", async () => {
+  const vid = (n) => `00000000-0000-4000-8000-00000000000${n}`;
+  const storage = new MemoryStorage([
+    ["seen:2026-07-10:" + vid(1), true],
+    ["seen:2026-07-10:" + vid(2), true],  // HTML만 열고 행동 없음 (봇 유형)
+    ["seen:2026-07-08:" + vid(3), true],
+    ["qseen:2026-07-08:" + vid(3), true], // 지난주 유효 방문
+  ]);
+  const analytics = new AnalyticsDO({ storage });
+
+  for (let i = 0; i < 2; i++) { // 같은 방문자의 중복 확정은 한 번만 센다
+    const response = await analytics.fetch(new Request("https://analytics.internal/qualify", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ visitorId: vid(1), date: "2026-07-10" }),
+    }));
+    assert.equal(response.status, 204);
+  }
+
+  const stats = await analytics.fetch(
+    new Request("https://analytics.internal/stats?date=2026-07-10"),
+  ).then((response) => response.json());
+  assert.equal(stats.daily, 2);
+  assert.deepEqual(stats.qualified, { daily: 1, weekly: 2, monthly: 2 });
+});
+
+test("rejects malformed qualify events", async () => {
+  const analytics = new AnalyticsDO({ storage: new MemoryStorage() });
+  const response = await analytics.fetch(new Request("https://analytics.internal/qualify", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ visitorId: "not-an-id", date: "2026-07-10" }),
+  }));
+  assert.equal(response.status, 400);
+});
+
+test("resets one polluted date without touching other days or non-date keys", async () => {
+  const vid = (n) => `00000000-0000-4000-8000-00000000000${n}`;
+  const storage = new MemoryStorage([
+    ["seen:2026-07-10:" + vid(1), true],
+    ["seen:2026-07-10:" + vid(2), true],
+    ["pv:2026-07-10:slop/circle:" + vid(1), true],
+    ["eng:2026-07-10:slop/circle:" + vid(1) + ":10000000-0000-4000-8000-000000000001", { activeMs: 5000 }],
+    ["qseen:2026-07-10:" + vid(1), true],
+    ["cleanup:2026-07-10", true],
+    ["seen:2026-07-09:" + vid(3), true],
+    ["streak:" + vid(1), { lastDate: "2026-07-10", streak: 3 }],
+    ["download:music:upward-drift:a.mp3", 2],
+  ]);
+  const analytics = new AnalyticsDO({ storage });
+
+  const response = await analytics.fetch(new Request(
+    "https://analytics.internal/reset?date=2026-07-10", { method: "POST" },
+  ));
+  assert.deepEqual(await response.json(), { date: "2026-07-10", deleted: 6 });
+  assert.deepEqual([...storage.data.keys()].sort(), [
+    "download:music:upward-drift:a.mp3",
+    "seen:2026-07-09:" + vid(3),
+    "streak:" + vid(1),
+  ]);
+
+  const invalid = await analytics.fetch(new Request(
+    "https://analytics.internal/reset?date=2026-7-1", { method: "POST" },
+  ));
+  assert.equal(invalid.status, 400);
+});
+
+test("daily cleanup also expires old qualified-visitor keys", async () => {
+  const storage = new MemoryStorage([
+    ["qseen:2026-05-01:00000000-0000-4000-8000-000000000009", true],
+  ]);
+  const analytics = new AnalyticsDO({ storage });
+  await analytics.fetch(new Request("https://analytics.internal/track", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      visitorId: "00000000-0000-4000-8000-000000000001", date: "2026-07-10",
+    }),
+  }));
+  assert.equal([...storage.data.keys()].some((k) => k.startsWith("qseen:2026-05-01")), false);
 });
 
 test("ranks monthly top pages by unique visitors, excluding site homes", async () => {
