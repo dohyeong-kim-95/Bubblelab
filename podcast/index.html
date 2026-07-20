@@ -43,6 +43,10 @@ button:disabled { opacity: .45; cursor: default; }
 .status.generating { color: #b98a2f; }
 .status.completed { color: #3f9d63; }
 .status.failed { color: #d05a5a; }
+.streak { font-size: .82rem; font-weight: bold; color: #e0873a; margin-left: auto; margin-right: .5rem; }
+#tone-picker button { flex: 1; padding: .5rem .3rem; font-size: .78rem; border-radius: .6rem;
+  border: 1px solid light-dark(#c8d3de, #2a3646); background: none; }
+#tone-picker button.on { border-color: #4f7fdd; background: light-dark(#eaf1fc, #1a2740); font-weight: bold; }
 ul { list-style: none; margin: .6rem 0 0; padding: 0; display: grid; gap: .45rem; }
 li { display: flex; gap: .6rem; align-items: center; justify-content: space-between;
   font-size: .82rem; border: 1px dashed light-dark(#d5dee7, #2a3646);
@@ -84,6 +88,7 @@ footer { text-align: center; }
     <div class="card" id="today-card">
       <div class="row" style="justify-content:space-between">
         <h2 id="today-title">오늘의 팟캐스트</h2>
+        <span id="streak" class="streak" hidden></span>
         <span id="today-status" class="status" hidden></span>
       </div>
       <div id="today-body" class="muted" aria-live="polite">불러오는 중…</div>
@@ -128,7 +133,13 @@ footer { text-align: center; }
         </div>
         <label class="toggle"><input type="checkbox" id="push-toggle" style="width:auto">
           생성 완료 푸시 알림 받기</label>
-        <button id="logout" class="danger">로그아웃</button>
+        <p class="muted" style="margin:.2rem 0 .3rem">알림 말투</p>
+        <div class="row" id="tone-picker">
+          <button type="button" data-tone="playful">😜 장난스럽게</button>
+          <button type="button" data-tone="warm">🤍 다정하게</button>
+          <button type="button" data-tone="plain">⚪ 담백하게</button>
+        </div>
+        <button id="logout" class="danger" style="margin-top:.8rem">로그아웃</button>
       </details>
     </div>
   </section>
@@ -268,6 +279,13 @@ function render(home) {
 
   if ($("memory") !== document.activeElement) $("memory").value = home.user.memory;
 
+  const streak = home.user.streak ?? 0;
+  $("streak").hidden = streak < 2;
+  if (streak >= 2) $("streak").textContent = `🔥 ${streak}일 연속`;
+  for (const button of document.querySelectorAll("#tone-picker button")) {
+    button.classList.toggle("on", button.dataset.tone === (home.user.notifyTone ?? "playful"));
+  }
+
   clearTimeout(pollTimer);
   generatingNow = Boolean(generating || home.queued);
   if (generatingNow) pollTimer = setTimeout(refresh, 8000);
@@ -367,6 +385,16 @@ $("generate").onclick = async () => {
   }
   refresh();
 };
+
+for (const button of document.querySelectorAll("#tone-picker button")) {
+  button.onclick = async () => {
+    for (const b of document.querySelectorAll("#tone-picker button")) b.classList.toggle("on", b === button);
+    await api("prefs", {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tone: button.dataset.tone }),
+    }).catch(() => {});
+  };
+}
 
 $("save-memory").onclick = async () => {
   const response = await api("memory", {

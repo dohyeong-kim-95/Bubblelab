@@ -11,7 +11,7 @@ const REALTIME_NAMESPACES = new Set(["avalon", "liargame", "yacht"]);
 const WORK_REVIEW_PROJECTS = ["daonfit"];
 import { validPlannerCode } from "./planner.js";
 import { handleFortuneChart } from "./fortune.js";
-import { handlePodcast, handlePodcastAdmin, runDailyGeneration, UPLOAD_MAX_BYTES } from "./podcast.js";
+import { handlePodcast, handlePodcastAdmin, runDailyGeneration, runEveningReminder, UPLOAD_MAX_BYTES } from "./podcast.js";
 import { handleEstateDeals } from "./estate.js";
 import { serveAssetDownload, serveAssetDownloadCounts } from "./downloads.js";
 import { fetchStoreReviews, REVIEWS_SYNC_VERSION } from "./reviews.js";
@@ -997,11 +997,17 @@ async function syncWorkReviews(env) {
 }
 
 export default {
-  // 06:40 KST: 외주 리뷰 동기화 + 데일리 팟캐스트 생성 (wrangler.jsonc triggers.crons)
+  // cron 처리 (wrangler.jsonc triggers.crons):
+  //  22:00 KST(13:00 UTC) → 팟캐스트 저녁 리마인더
+  //  06:40 KST(21:40 UTC) → 외주 리뷰 동기화 + 데일리 팟캐스트 생성
   async scheduled(controller, env, ctx) {
+    const podcastReady = featureEnabled(env, "ENABLE_PODCAST") && env.PODCAST_BUCKET;
+    if (controller.cron === "0 13 * * *") {
+      if (podcastReady) ctx.waitUntil(runEveningReminder(env));
+      return;
+    }
     ctx.waitUntil(syncWorkReviews(env));
-    if (!featureEnabled(env, "ENABLE_PODCAST") || !env.PODCAST_BUCKET) return;
-    ctx.waitUntil(runDailyGeneration(env));
+    if (podcastReady) ctx.waitUntil(runDailyGeneration(env));
   },
   async fetch(request, env, ctx) {
     try {

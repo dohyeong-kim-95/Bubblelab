@@ -70,6 +70,49 @@ const shiftDays = (day, delta) => {
   return date.toISOString().slice(0, 10);
 };
 
+// 알림 말투 팩. 완성(아침)·리마인더(저녁) 각각 여러 문구를 두고 번갈아 쓴다.
+// 사용자가 설정에서 톤을 고른다 (기본 playful — 듀오링고식 장난).
+export const NOTIFY_TONES = ["playful", "warm", "plain"];
+const NOTIFY_MESSAGES = {
+  playful: {
+    complete: [
+      (t) => ({ title: "🎙️ 나왔어요!", body: `"${t}" — 안 들으면 저 삐져요` }),
+      (t) => ({ title: "☕ 오늘 방송 준비 완료", body: t }),
+      (t) => ({ title: "👂 귀 좀 빌려주세요", body: `"${t}" 도착했습니다` }),
+      (t) => ({ title: "🔔 따끈따끈", body: `"${t}" 방금 구웠어요` }),
+    ],
+    reminder: [
+      { title: "👀 어라, 오늘 조용하시네요", body: "자료를 안 넣으면 내일 아침 방송이 텅 비어요" },
+      { title: "📭 자료함이 비었어요", body: "지금 하나 안 넣으면 내일은 정적입니다…" },
+    ],
+  },
+  warm: {
+    complete: [
+      (t) => ({ title: "🎙️ 좋은 아침이에요", body: `오늘의 이야기 "${t}"를 준비했어요` }),
+      (t) => ({ title: "☀️ 오늘도 함께 시작해요", body: t }),
+      (t) => ({ title: "🍵 방송이 준비됐어요", body: `"${t}", 천천히 들어보세요` }),
+    ],
+    reminder: [
+      { title: "🌙 자기 전에", body: "읽을거리 하나 넣어두면 내일 아침 방송으로 와요" },
+      { title: "💌 오늘 하루 어땠어요?", body: "자료 하나 넣어두면 내일 들려드릴게요" },
+    ],
+  },
+  plain: {
+    complete: [
+      (t) => ({ title: "오늘의 팟캐스트", body: t }),
+      (t) => ({ title: "재생 준비됨", body: t }),
+    ],
+    reminder: [
+      { title: "자료 없음", body: "자료가 없어 내일 아침 생성이 없습니다. 지금 추가할 수 있어요" },
+    ],
+  },
+};
+
+function pickNotify(tone, kind, index) {
+  const pack = NOTIFY_MESSAGES[NOTIFY_TONES.includes(tone) ? tone : "playful"][kind];
+  return pack[index % pack.length];
+}
+
 // ── 세션 (planner와 같은 HMAC 서명 토큰, 쿠키 bl_pod) ─────────────
 async function sessionHmacKey(env) {
   const secret = env.PODCAST_SESSION_SECRET || env.ADMIN_SESSION_SECRET ||
@@ -169,6 +212,18 @@ export async function handlePodcast(request, env, url) {
     return stub.fetch(`https://podcast.internal/memory?uid=${uid}`, {
       method: "PUT", headers: { "Content-Type": "application/json" }, body: await request.text(),
     });
+  }
+
+  if (path === "/_podcast/prefs" && request.method === "PUT") {
+    const contentTypeError = requireJsonRequest(request);
+    if (contentTypeError) return contentTypeError;
+    return stub.fetch(`https://podcast.internal/prefs?uid=${uid}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: await request.text(),
+    });
+  }
+
+  if (path === "/_podcast/listened" && request.method === "POST") {
+    return stub.fetch(`https://podcast.internal/listened?uid=${uid}`, { method: "POST" });
   }
 
   if (path === "/_podcast/upload" && request.method === "POST") {
@@ -311,6 +366,11 @@ export function runDailyGeneration(env) {
   return podcastStub(env).fetch("https://podcast.internal/run-daily", { method: "POST" });
 }
 
+// cron(22:00 KST)에서 호출 — 자료 없는 사용자에게 저녁 넛지 알림
+export function runEveningReminder(env) {
+  return podcastStub(env).fetch("https://podcast.internal/evening-reminder", { method: "POST" });
+}
+
 // ── Durable Object ───────────────────────────────────────────────
 export class PodcastDO {
   constructor(state, env) {
@@ -341,6 +401,7 @@ export class PodcastDO {
       return json({ today: quotaDay(), days: entries });
     }
     if (url.pathname === "/run-daily" && request.method === "POST") return this.runDaily();
+    if (url.pathname === "/evening-reminder" && request.method === "POST") return this.eveningReminder();
     if (url.pathname === "/audio-meta" && request.method === "GET") {
       const index = await this.storage.get(`podidx:${url.searchParams.get("pod")}`);
       if (!index) return notFound();
@@ -359,6 +420,15 @@ export class PodcastDO {
       await this.storage.put(`user:${user.id}`, user);
       return json({ saved: true });
     }
+    if (url.pathname === "/prefs" && request.method === "PUT") {
+      const body = await request.json().catch(() => ({}));
+      if (NOTIFY_TONES.includes(body.tone)) {
+        user.notifyTone = body.tone;
+        await this.storage.put(`user:${user.id}`, user);
+      }
+      return json({ saved: true, notifyTone: user.notifyTone ?? "playful" });
+    }
+    if (url.pathname === "/listened" && request.method === "POST") return this.recordListen(user);
     if (url.pathname === "/sources") {
       if (request.method === "POST") return this.addSource(user, request);
       if (request.method === "DELETE") return this.deleteSource(user, url.searchParams.get("id"));
@@ -384,7 +454,11 @@ export class PodcastDO {
       ({ id, date, status, stage, title, durationSeconds, sizeBytes, error, sourceNames, updatedAt });
     const todayPod = pods.find((p) => p.date === today);
     return json({
-      user: { name: user.name, memory: user.memory ?? "" },
+      user: {
+        name: user.name, memory: user.memory ?? "",
+        notifyTone: user.notifyTone ?? "playful",
+        streak: user.streak ?? 0, longestStreak: user.longestStreak ?? 0,
+      },
       today,
       todayPodcast: todayPod ? project(todayPod) : null,
       queued: jobs.some((job) => job.userId === user.id),
@@ -727,24 +801,64 @@ export class PodcastDO {
     return "done";
   }
 
-  async notifyCompleted(job, title) {
+  // 한 사용자의 등록된 모든 기기로 푸시를 보낸다 (만료 구독은 정리).
+  async sendPush(userId, { title, body, url = "https://podcast.bubblelab.dev/" }) {
     const { VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT } = this.env;
-    if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return;
+    if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return 0;
     const vapid = {
       publicKey: VAPID_PUBLIC_KEY, privateKey: VAPID_PRIVATE_KEY,
       subject: VAPID_SUBJECT || "https://podcast.bubblelab.dev",
     };
-    const payload = JSON.stringify({
-      title: "🎙️ 오늘의 팟캐스트가 준비되었습니다",
-      body: title, url: "https://podcast.bubblelab.dev/",
-    });
-    for (const [key, sub] of await this.storage.list({ prefix: `push:${job.userId}:` })) {
+    const payload = JSON.stringify({ title, body, url });
+    let sent = 0;
+    for (const [key, sub] of await this.storage.list({ prefix: `push:${userId}:` })) {
       try {
         const result = await sendWebPush(sub, payload, vapid);
         if (result.gone) await this.storage.delete(key);
+        else if (result.ok) sent += 1;
       } catch (error) {
         console.error("push send failed", error);
       }
     }
+    return sent;
+  }
+
+  async notifyCompleted(job, title) {
+    const user = await this.storage.get(`user:${job.userId}`);
+    const count = user?.notifyCount ?? 0;
+    const msg = pickNotify(user?.notifyTone, "complete", count)(title);
+    let body = msg.body;
+    if ((user?.streak ?? 0) >= 2) body += ` 🔥${user.streak}일 연속!`;
+    await this.sendPush(job.userId, { title: msg.title, body });
+    if (user) { user.notifyCount = count + 1; await this.storage.put(`user:${user.id}`, user); }
+  }
+
+  // 22:00 KST — 내일 아침 방송에 쓸 소스가 없는(그리고 알림을 켠) 사용자에게 넛지.
+  async eveningReminder() {
+    let notified = 0;
+    for (const user of (await this.storage.list({ prefix: "user:" })).values()) {
+      const subs = await this.storage.list({ prefix: `push:${user.id}:` });
+      if (subs.size === 0) continue;                 // 알림 안 켠 사람은 건너뜀
+      const sources = await this.storage.list({ prefix: `src:${user.id}:` });
+      if (sources.size > 0) continue;                // 이미 자료를 넣어둔 사람은 조용히
+      const count = user.notifyCount ?? 0;
+      const msg = pickNotify(user.notifyTone, "reminder", count);
+      const sent = await this.sendPush(user.id, { title: msg.title, body: msg.body });
+      if (sent > 0) { user.notifyCount = count + 1; await this.storage.put(`user:${user.id}`, user); notified += 1; }
+    }
+    return json({ notified });
+  }
+
+  // 청취 스트릭: 재생할 때마다 그날을 기록하고 연속 일수를 갱신한다.
+  async recordListen(user) {
+    const today = kstToday();
+    if (user.lastListenDate !== today) {
+      const yesterday = shiftDays(today, -1);
+      user.streak = user.lastListenDate === yesterday ? (user.streak ?? 0) + 1 : 1;
+      user.longestStreak = Math.max(user.longestStreak ?? 0, user.streak);
+      user.lastListenDate = today;
+      await this.storage.put(`user:${user.id}`, user);
+    }
+    return json({ streak: user.streak ?? 1, longest: user.longestStreak ?? 1 });
   }
 }

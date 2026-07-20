@@ -39,7 +39,7 @@
     { "binding": "DURI_BUCKET", "bucket_name": "bubblelab-duri" }
   ],
   // 매일 06:40 KST(21:40 UTC) 팟캐스트 자동 생성
-  "triggers": { "crons": ["40 21 * * *"] },
+  "triggers": { "crons": ["40 21 * * *", "0 13 * * *"] },
   "routes": [
     { "pattern": "bubblelab.dev/*", "zone_name": "bubblelab.dev" },
     { "pattern": "*.bubblelab.dev/*", "zone_name": "bubblelab.dev" }

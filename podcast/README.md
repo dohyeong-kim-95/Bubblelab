@@ -16,8 +16,11 @@ NotebookLM 스크래핑 구조를 Bubblelab 워커 하나로 재구축한 것이
 | 데이터 | `PodcastDO` (사용자·소스·에피소드 메타데이터, 생성 큐) |
 | 파일 | R2 `bubblelab-podcast` (소스 파일, 생성 오디오 WAV) |
 | AI | `_infra/podcast-ai.js` — 대본(LLM)·음성(TTS) 프로바이더 계층 |
-| 스케줄 | 워커 cron `40 21 * * *` (= 06:40 KST) |
-| 알림 | `_infra/webpush.js` — VAPID Web Push 자체 구현 |
+| 스케줄 | 워커 cron `40 21 * * *`(06:40 생성) + `0 13 * * *`(22:00 저녁 넛지) |
+| 알림 | `_infra/webpush.js` — VAPID Web Push 자체 구현. 완성 알림은 말투별
+  문구 팩(playful/warm/plain)을 번갈아 쓰고 제목·스트릭을 반영. 자료 없는
+  사용자에겐 22:00 리마인더 |
+| 습관 | 청취 스트릭(`/listened` 재생 기록), 홈·플레이어에 연속 일수 표시 |
 | 인증 | admin이 발급하는 초대 코드 → HMAC 세션 쿠키 (`bl_pod`) |
 
 생성 흐름: 소스(보관분 우선, AI 입력 20MB 한도) → 대본 프로바이더(JSON

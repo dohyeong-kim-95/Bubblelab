@@ -382,3 +382,71 @@ test("사용자 삭제는 데이터·파일·코드를 함께 정리한다", asy
 test("kstToday는 KST 날짜 문자열을 준다", () => {
   assert.match(kstToday(), /^\d{4}-\d{2}-\d{2}$/);
 });
+
+const kstShift = (delta) => {
+  const d = new Date(); d.setUTCDate(d.getUTCDate() + delta);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+};
+
+test("청취 스트릭은 연속 재생으로 늘고 하루 걸러도 리셋된다", async () => {
+  const { podcastDO, storage } = makeDO();
+  const { user } = await createUser(podcastDO);
+  const listen = () => podcastDO.fetch(internal(`/listened?uid=${user.id}`, { method: "POST" }));
+
+  assert.equal((await (await listen()).json()).streak, 1);
+  assert.equal((await (await listen()).json()).streak, 1); // 같은 날 재차 → 그대로
+
+  const stored = await storage.get(`user:${user.id}`);
+  stored.lastListenDate = kstShift(-1); stored.streak = 4;
+  await storage.put(`user:${user.id}`, stored);
+  assert.equal((await (await listen()).json()).streak, 5); // 어제 이어짐 → +1
+
+  const s2 = await storage.get(`user:${user.id}`);
+  s2.lastListenDate = kstShift(-2);
+  await storage.put(`user:${user.id}`, s2);
+  assert.equal((await (await listen()).json()).streak, 1); // 이틀 공백 → 리셋
+});
+
+test("저녁 리마인더는 자료 없고 알림 켠 사용자에게만 보낸다", async () => {
+  const { podcastDO, storage } = makeDO({ VAPID_PUBLIC_KEY: "pub", VAPID_PRIVATE_KEY: "priv" });
+  const sent = [];
+  podcastDO.sendPush = async (userId, msg) => { sent.push({ userId, ...msg }); return 1; };
+
+  const a = (await (await podcastDO.fetch(post("/admin/users", { name: "A" }))).json()).user;
+  await storage.put(`push:${a.id}:x`, { endpoint: "https://p/", keys: { p256dh: "k", auth: "k" } });
+  const b = (await (await podcastDO.fetch(post("/admin/users", { name: "B" }))).json()).user;
+  await storage.put(`push:${b.id}:x`, { endpoint: "https://p/", keys: { p256dh: "k", auth: "k" } });
+  await podcastDO.fetch(post(`/sources?uid=${b.id}`, { name: "d.pdf", mime: "application/pdf", size: 1 }));
+  await podcastDO.fetch(post("/admin/users", { name: "C" })); // 알림 안 켬
+
+  const result = await (await podcastDO.fetch(internal("/evening-reminder", { method: "POST" }))).json();
+  assert.equal(result.notified, 1);
+  assert.deepEqual(sent.map((s) => s.userId), [a.id]);
+  assert.ok(sent[0].title && sent[0].body);
+});
+
+test("완성 알림은 말투·제목·스트릭을 반영하고 문구를 번갈아 쓴다", async () => {
+  const { podcastDO, storage } = makeDO({ VAPID_PUBLIC_KEY: "pub", VAPID_PRIVATE_KEY: "priv" });
+  const sent = [];
+  podcastDO.sendPush = async (userId, msg) => { sent.push(msg); return 1; };
+  const { user } = await createUser(podcastDO);
+  const stored = await storage.get(`user:${user.id}`);
+  stored.notifyTone = "warm"; stored.streak = 3;
+  await storage.put(`user:${user.id}`, stored);
+
+  await podcastDO.notifyCompleted({ userId: user.id, date: "2026-07-20" }, "첫 방송");
+  await podcastDO.notifyCompleted({ userId: user.id, date: "2026-07-21" }, "둘째 방송");
+  assert.ok(sent[0].body.includes("첫 방송"));
+  assert.ok(sent[0].body.includes("🔥3일 연속"));
+  assert.notEqual(sent[0].title, sent[1].title);
+});
+
+test("prefs는 유효한 말투만 저장한다", async () => {
+  const { podcastDO } = makeDO();
+  const { user } = await createUser(podcastDO);
+  const setTone = (tone) => podcastDO.fetch(internal(`/prefs?uid=${user.id}`, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tone }),
+  }));
+  assert.equal((await (await setTone("warm")).json()).notifyTone, "warm");
+  assert.equal((await (await setTone("hacker")).json()).notifyTone, "warm"); // 무효값 무시
+});
