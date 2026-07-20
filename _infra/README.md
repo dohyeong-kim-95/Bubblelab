@@ -41,6 +41,7 @@ Worker는 다음 우선순위로 요청을 처리합니다.
 | `/_fortune/chart` | 생년월일시를 명식·오늘 운세 계산용 데이터로 변환 |
 | `/_estate/deals` | 국토부 아파트 매매·전월세 실거래가 프록시 (지역·기간 허용 목록 고정) |
 | `/_stats`, `/_streak`, `/_engagement`, `/_visit` | 최근 방문량, Slop 연속 방문, 카드 활성 체류시간, 유효 방문 확정 |
+| `/_optout` | 운영자 브라우저 집계 제외 토글 (bl_notrack 쿠키, 브라우저마다 한 번) |
 | `/_suggest` | 익명 토이 아이디어 제출 |
 | `/_records`, `/_personal` | 주간·올타임·개인 기록 조회와 제출 |
 | `/_chat` | 익명 채팅 로비 WebSocket (util/chat). 메시지 미저장 |

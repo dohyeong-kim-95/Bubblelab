@@ -98,3 +98,82 @@ test("work preview stays closed without a password and gates access with one", a
   assert.equal(response.headers.get("X-Robots-Tag"), "noindex, nofollow");
   assert.equal(response.headers.get("Cache-Control"), "no-store");
 });
+
+test("optout page toggles the bl_notrack cookie", async () => {
+  // GET: 현재 상태 안내 페이지
+  let response = await worker.fetch(
+    new Request("https://slop.bubblelab.dev/_optout"), {}, ctx);
+  assert.equal(response.status, 200);
+  assert.match(await response.text(), /통계에 포함되고 있어요/);
+
+  // POST on → 장기 쿠키 심고 같은 화면으로 리다이렉트
+  let form = new FormData();
+  form.set("state", "on");
+  response = await worker.fetch(
+    new Request("https://slop.bubblelab.dev/_optout", { method: "POST", body: form }), {}, ctx);
+  assert.equal(response.status, 303);
+  assert.match(response.headers.get("Set-Cookie"),
+    /^bl_notrack=1; Path=\/; HttpOnly; Max-Age=157680000; SameSite=Lax; Domain=bubblelab\.dev; Secure$/);
+
+  // 켜진 상태의 GET은 제외 중이라고 안내
+  response = await worker.fetch(
+    new Request("https://slop.bubblelab.dev/_optout", {
+      headers: { Cookie: "bl_notrack=1" },
+    }), {}, ctx);
+  assert.match(await response.text(), /제외되고/);
+
+  // POST off → 쿠키 삭제
+  form = new FormData();
+  form.set("state", "off");
+  response = await worker.fetch(
+    new Request("https://slop.bubblelab.dev/_optout", { method: "POST", body: form }), {}, ctx);
+  assert.match(response.headers.get("Set-Cookie"), /^bl_notrack=; .*Max-Age=0/);
+});
+
+test("opted-out browser is excluded from visit, qualify, and engagement tracking", async () => {
+  const analyticsCalls = [];
+  const env = {
+    ASSETS: { fetch: async () => new Response("<p>hi</p>", { headers: { "Content-Type": "text/html" } }) },
+    ANALYTICS: {
+      idFromName: () => "global",
+      get: () => ({ fetch: async (target) => { analyticsCalls.push(new URL(target).pathname); return new Response(null, { status: 204 }); } }),
+    },
+  };
+  const pending = [];
+  const trackingCtx = { waitUntil: (promise) => pending.push(promise) };
+  const chromeHeaders = {
+    "User-Agent": "Mozilla/5.0 (Macintosh) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+    "Sec-Fetch-Dest": "document",
+  };
+  const vid = "bl_vid=00000000-0000-4000-8000-000000000001";
+
+  // 제외 쿠키가 있으면 문서 방문에 bl_vid 발급도 track 호출도 없다
+  let response = await worker.fetch(
+    new Request("https://slop.bubblelab.dev/circle/", {
+      headers: { ...chromeHeaders, Cookie: `${vid}; bl_notrack=1` },
+    }), env, trackingCtx);
+  await Promise.all(pending);
+  assert.equal(response.headers.get("Set-Cookie"), null);
+  assert.deepEqual(analyticsCalls, []);
+
+  // /_visit와 /_engagement도 조용히 무시한다
+  for (const [path, body] of [["/_visit", "{}"], ["/_engagement", '{"activeMs":5000}']]) {
+    response = await worker.fetch(
+      new Request(`https://slop.bubblelab.dev${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: `${vid}; bl_notrack=1` },
+        body,
+      }), env, trackingCtx);
+    assert.equal(response.status, 204);
+  }
+  assert.deepEqual(analyticsCalls, []);
+
+  // 제외 쿠키가 없으면 같은 요청이 정상 집계된다
+  response = await worker.fetch(
+    new Request("https://slop.bubblelab.dev/circle/", {
+      headers: { ...chromeHeaders, Cookie: vid },
+    }), env, trackingCtx);
+  await Promise.all(pending);
+  assert.match(response.headers.get("Set-Cookie") ?? "", /^bl_vid=/);
+  assert.deepEqual(analyticsCalls, ["/track"]);
+});
