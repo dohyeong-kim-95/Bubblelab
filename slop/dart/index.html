@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>다트 서커스</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; overflow: hidden; font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+         background: light-dark(#f2eef7, #120c1c); user-select: none;
+         -webkit-user-select: none; touch-action: manipulation; }
+  canvas { display: block; }
+  #score { position: fixed; top: 1rem; left: 1.25rem; font-size: 1.15rem;
+           color: light-dark(#231a33, #e0d6f0); }
+  #overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+             display: flex; flex-direction: column; align-items: center; gap: 1rem;
+             padding: 1.6rem 2rem; border-radius: 1.25rem; text-align: center;
+             border: 1.5px solid light-dark(rgba(60,40,90,.25), rgba(210,195,235,.25));
+             background: light-dark(rgba(255,255,255,.85), rgba(20,14,30,.85));
+             backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+             color: light-dark(#231a33, #e0d6f0); width: min(80vw, 19rem); }
+  #overlay.hide { display: none; }
+  #overlay h1 { font-size: 1.2rem; margin: 0; opacity: .8; }
+  #msg { margin: 0; opacity: .7; white-space: pre-line; line-height: 1.5; }
+  #result { font-weight: bold; white-space: pre-line; min-height: 0; }
+  #btn { font: inherit; font-size: 1.15rem; padding: .8rem 2.4rem;
+         border-radius: 2rem; border: 2px solid currentColor;
+         background: none; color: inherit; cursor: pointer; }
+  #btn:active { transform: scale(.96); }
+  #btn:disabled { opacity: .4; cursor: default; }
+  #best { opacity: .5; font-size: .85rem; min-height: 1.2em; margin: 0; }
+</style>
+</head>
+<body>
+<div id="score">🎯 0개</div>
+<div id="overlay">
+  <h1>🎯 다트 서커스</h1>
+  <p id="msg">화면 아무 곳이나 누르면
+다트가 돌아가는 원에 꽂힙니다.
+이미 꽂힌 다트에 부딪히면 끝!
+최대한 많이 꽂아보세요.</p>
+  <div id="result"></div>
+  <button id="btn">시작!</button>
+  <p id="best"></p>
+</div>
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+const scoreEl = document.getElementById("score");
+const overlay = document.getElementById("overlay");
+const msg = document.getElementById("msg");
+const result = document.getElementById("result");
+const btn = document.getElementById("btn");
+const bestEl = document.getElementById("best");
+
+let phase = "idle";       // idle | running | done
+let stuck = [];           // 꽂힌 다트: 원 기준 각도(회전과 함께 이동)
+let flying = null;        // 날아가는 중인 다트
+let rot = 0;              // 원의 현재 회전각(라디안)
+let baseSpeed = 0.9;      // 등각속도(라디안/초)
+let dir = 1;              // 회전 방향
+let score = 0;
+let best = null;
+
+let cx = 0, cy = 0, R = 90;
+const NEEDLE = 46;        // 바늘 길이(원 바깥으로 뻗음)
+const HEAD = 8;           // 다트 머리 반지름
+const CONTACT = Math.PI;  // 왼쪽 끝 = 각도 π
+
+window.blWeekly = { game: "dart", dir: "max", fmt: (v) => v + "개" };
+window.blShareText = () => `돌아가는 원에 다트 ${best ?? score}개 꽂음! 도전해보세요`;
+
+// 다트 머리가 서로 닿는 최소 각도. 이보다 가까우면 충돌.
+function collideGap() { return (2 * HEAD * 1.15) / R; }
+
+function resize() {
+  canvas.width = innerWidth;
+  canvas.height = innerHeight;
+  cx = canvas.width / 2;
+  cy = canvas.height / 2;
+  R = Math.max(64, Math.min(140, Math.min(canvas.width, canvas.height) * 0.16));
+}
+addEventListener("resize", resize);
+resize();
+
+// 원 기준 각도 → 화면상 실제 각도
+function worldAngle(a) { return a + rot; }
+// 두 각도의 원형 최소 거리
+function angDist(a, b) {
+  let d = Math.abs(((a - b) % (Math.PI * 2)));
+  if (d > Math.PI) d = Math.PI * 2 - d;
+  return d;
+}
+
+function throwDart() {
+  if (phase !== "running" || flying) return;
+  // 왼쪽 화면 밖에서 원의 왼쪽 끝(cx-R, cy)을 향해 날아온다
+  flying = { x: -HEAD * 2, target: cx - R - NEEDLE };
+}
+
+function landDart() {
+  // 도착 순간의 회전각 기준으로 왼쪽 끝(π)에 꽂는다
+  const rel = CONTACT - rot;
+  const gap = collideGap();
+  let hit = false;
+  for (const a of stuck) {
+    if (angDist(worldAngle(a), CONTACT) < gap) { hit = true; break; }
+  }
+  stuck.push(rel);
+  flying = null;
+  if (hit) { finish(); return; }
+  score++;
+  scoreEl.textContent = "🎯 " + score + "개";
+  // 점수가 오를수록 살짝 빨라지고, 가끔 방향이 바뀐다
+  baseSpeed = 0.9 + score * 0.045;
+  if (score % 6 === 0) dir *= -1;
+}
+
+addEventListener("pointerdown", throwDart);
+for (const ev of ["pointerdown", "click"]) {
+  overlay.addEventListener(ev, (e) => e.stopPropagation());
+}
+
+btn.addEventListener("click", () => {
+  if (phase === "running") return;
+  phase = "running";
+  score = 0;
+  stuck = [];
+  flying = null;
+  rot = 0;
+  dir = 1;
+  baseSpeed = 0.9;
+  scoreEl.textContent = "🎯 0개";
+  overlay.classList.add("hide");
+});
+
+function finish() {
+  phase = "done";
+  if (best === null || score > best) {
+    best = score;
+    bestEl.textContent = `최고 기록: ${best}개`;
+  }
+  const grade =
+    score >= 40 ? "🎪 서커스 단장님" :
+    score >= 28 ? "🤹 곡예의 달인" :
+    score >= 18 ? "🔥 손끝이 매섭네요" :
+    score >= 10 ? "🙂 제법인데요" :
+    score >= 4  ? "😅 조금만 더!" : "🫠 방금 몸 푸셨죠?";
+  result.textContent = `${score}개 꽂음!\n${grade}`;
+  msg.textContent = "";
+  btn.textContent = "다시!";
+  overlay.classList.remove("hide");
+  btn.disabled = true;
+  setTimeout(() => { btn.disabled = false; }, 900);
+  window.blWeeklyReport?.(score);
+}
+
+function drawDart(ang, alpha) {
+  // ang: 화면상 실제 각도. 원 위 접점 → 바깥쪽으로 바늘+머리
+  const dx = Math.cos(ang), dy = Math.sin(ang);
+  const tipX = cx + dx * R, tipY = cy + dy * R;
+  const headX = cx + dx * (R + NEEDLE), headY = cy + dy * (R + NEEDLE);
+  ctx.globalAlpha = alpha;
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "#9a86c4";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(tipX, tipY);
+  ctx.lineTo(headX, headY);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(headX, headY, HEAD, 0, Math.PI * 2);
+  ctx.fillStyle = "#e15b7a";
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = "rgba(255,255,255,.55)";
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+let last = performance.now();
+function tick(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  if (phase === "running") rot += dir * baseSpeed * dt;
+
+  // 날아가는 다트 이동
+  if (flying) {
+    const speed = 2600; // px/s
+    flying.x += speed * dt;
+    if (flying.x >= flying.target) landDart();
+  }
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // 중앙 원판
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, Math.PI * 2);
+  const grad = ctx.createRadialGradient(cx - R * 0.3, cy - R * 0.3, R * 0.2, cx, cy, R);
+  grad.addColorStop(0, "#7c5fd6");
+  grad.addColorStop(1, "#5a3fb0");
+  ctx.fillStyle = grad;
+  ctx.fill();
+  // 중심 표식
+  ctx.beginPath();
+  ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(255,255,255,.75)";
+  ctx.fill();
+
+  // 꽂힌 다트들
+  for (const a of stuck) drawDart(worldAngle(a), 1);
+
+  // 날아가는 다트
+  if (flying) {
+    const headX = flying.x + NEEDLE, headY = cy;
+    ctx.lineCap = "round";
+    ctx.strokeStyle = "#9a86c4";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(flying.x, headY);
+    ctx.lineTo(headX, headY);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(flying.x, headY, HEAD, 0, Math.PI * 2);
+    ctx.fillStyle = "#e15b7a";
+    ctx.fill();
+  }
+
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+</script>
+<script defer src="/_shared/records.js"></script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>
