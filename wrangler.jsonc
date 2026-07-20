@@ -22,9 +22,10 @@
     // 익명 채팅(util/chat). 서버는 메시지를 저장하지 않고 브로드캐스트만 한다.
     "ENABLE_CHAT": "true",
     // 데일리 팟캐스트(podcast/). 켜기 전에 GEMINI_API_KEY·PODCAST_SESSION_SECRET
-    // secret과 R2 버킷(bubblelab-podcast)이 준비되어야 한다. 푸시 알림까지
-    // 쓰려면 VAPID_PUBLIC_KEY var와 VAPID_PRIVATE_KEY secret도 필요.
+    // secret과 R2 버킷(bubblelab-podcast)이 준비되어야 한다.
     "ENABLE_PODCAST": "true",
+    // Web Push 공개키(브라우저로 전달됨). 개인키는 VAPID_PRIVATE_KEY secret에.
+    "VAPID_PUBLIC_KEY": "BKkNKsdp4ZrbI9MX13jktCZQ_KWoKEYamIJbg66cL67IfTuByOCnvJLrhMa2pL5RB-7ZeJxghfPaAYEKQRP8R3Q",
     // Duri 대화·사진 백업(work/duri). 개인 데이터라 fail-closed로 설계.
     // 켜져 있어도 R2 버킷(bubblelab-duri)·WORK_PASSWORD가 없으면 /_duri 는
     // 런타임에서 닫힌다. 싱크 토큰을 별도 키로 서명하려면 DURI_SINK_SECRET 준비.
