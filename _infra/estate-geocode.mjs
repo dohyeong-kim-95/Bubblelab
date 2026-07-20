@@ -20,10 +20,12 @@ const REGION_ADDR = {
   giheung: ["경기도 용인시 기흥구"],
 };
 
-// 통근 기준점. 도로명주소는 공개된 사업장 주소다.
+// 통근·환금성 기준점. 도로명주소는 공개된 주소다.
+// 동탄역은 매도 시 GTX 수요층 관점의 보조축 (실거주 축은 캠퍼스).
 const REFS = [
   { id: "hwaseong-campus", label: "삼성 화성캠퍼스", road: "경기도 화성시 삼성전자로 1" },
   { id: "giheung-campus", label: "삼성 기흥캠퍼스", road: "경기도 용인시 기흥구 삼성로 1" },
+  { id: "dongtan-station", label: "동탄역 (GTX·SRT)", road: "경기도 화성시 동탄역로 151" },
 ];
 
 function readKey() {
