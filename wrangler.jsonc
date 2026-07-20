@@ -55,6 +55,7 @@
       { "name": "PLANNER", "class_name": "PlannerDO" },
       { "name": "RATE_LIMITER", "class_name": "RateLimiterDO" },
       { "name": "WORK_QNA", "class_name": "WorkQnaDO" },
+      { "name": "WORK_REVIEWS", "class_name": "WorkReviewsDO" },
       { "name": "CHAT", "class_name": "ChatDO" },
       { "name": "PODCAST", "class_name": "PodcastDO" }
     ]
@@ -67,6 +68,7 @@
     { "tag": "v5", "new_sqlite_classes": ["RateLimiterDO"] },
     { "tag": "v6", "new_sqlite_classes": ["WorkQnaDO"] },
     { "tag": "v7", "new_sqlite_classes": ["ChatDO"] },
-    { "tag": "v8", "new_sqlite_classes": ["PodcastDO"] }
+    { "tag": "v8", "new_sqlite_classes": ["PodcastDO"] },
+    { "tag": "v9", "new_sqlite_classes": ["WorkReviewsDO"] }
   ]
 }

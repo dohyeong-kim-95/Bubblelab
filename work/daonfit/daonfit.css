@@ -116,3 +116,17 @@
   .product .thumb { display: block; }
   .product h3 a { text-decoration: none; }
   .product h3 a:hover { color: var(--orange-deep); }
+
+  /* 상품 상세페이지 리뷰 */
+  .reviews-section { max-width: 44rem; margin: 2.4rem auto 0; padding: 0; }
+  .rv-summary { display: flex; align-items: baseline; gap: .6rem; margin-bottom: 1rem; }
+  .rv-summary .rv-avg { font-size: 1.4rem; font-weight: 800; color: #f5a623; }
+  .rv-summary .rv-count { font-size: .85rem; color: var(--muted); font-weight: 700; }
+  .rv-item { padding: 1rem 1.1rem; background: #fff; border: 1px solid var(--line);
+             border-radius: 1rem; margin-bottom: .7rem; }
+  .rv-head { display: flex; gap: .5rem; align-items: baseline; flex-wrap: wrap; margin: 0;
+             font-size: .78rem; color: var(--muted); }
+  .rv-head b { color: var(--brown); font-size: .85rem; }
+  .rv-head .rv-stars { color: #f5a623; letter-spacing: .05em; }
+  .rv-text { margin: .5rem 0 0; font-size: .9rem; color: #5c4f45; white-space: pre-wrap; }
+  .rv-empty { text-align: center; color: var(--muted); font-size: .88rem; padding: 1.5rem 0; }

@@ -7,11 +7,14 @@
 
 const ROOT_DOMAIN = "bubblelab.dev";
 const REALTIME_NAMESPACES = new Set(["avalon", "liargame", "yacht"]);
+// cron이 리뷰를 주기적으로 동기화할 외주 프로젝트 목록 (커머스 API, 현재 mock).
+const WORK_REVIEW_PROJECTS = ["daonfit"];
 import { validPlannerCode } from "./planner.js";
 import { handleFortuneChart } from "./fortune.js";
 import { handlePodcast, handlePodcastAdmin, runDailyGeneration, UPLOAD_MAX_BYTES } from "./podcast.js";
 import { handleEstateDeals } from "./estate.js";
 import { serveAssetDownload, serveAssetDownloadCounts } from "./downloads.js";
+import { fetchStoreReviews } from "./reviews.js";
 import {
   applySecurityHeaders,
   consumeRateLimit,
@@ -25,6 +28,7 @@ import {
 export { RealtimeDO } from "./realtime.js";
 export { ChatDO } from "./chat.js";
 export { WorkQnaDO } from "./workqna.js";
+export { WorkReviewsDO } from "./reviews.js";
 export { AnalyticsDO } from "./analytics.js";
 export { RecordsDO } from "./records.js";
 export { PlannerDO } from "./planner.js";
@@ -666,6 +670,40 @@ export async function handleRequest(request, env, ctx) {
       });
     }
 
+    // 외주 프로젝트 상품 리뷰(읽기 전용): 커머스 API에서 동기화된 캐시를 노출.
+    // 품목별 상세페이지가 이 데이터를 읽어 렌더한다. 페이지가 work 게이트
+    // 안에서 동작하므로 동일 세션을 요구한다.
+    if (path.startsWith("/_workreviews/")) {
+      if (!env.WORK_PASSWORD) {
+        return new Response("work preview is not configured", { status: 503 });
+      }
+      const workKey = await crypto.subtle.importKey(
+        "raw", new TextEncoder().encode(`${env.WORK_PASSWORD}\0bl-work-session`),
+        { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
+      );
+      if (!(await validSession(workKey, cookies(request).bl_work))) {
+        return Response.json({ error: "authentication required" }, { status: 401 });
+      }
+      const project = path.slice("/_workreviews/".length).replace(/\/+$/, "");
+      if (!/^[a-z0-9-]{1,32}$/.test(project)) return new Response("not found", { status: 404 });
+      if (request.method !== "GET") {
+        return new Response("method not allowed", { status: 405, headers: { Allow: "GET" } });
+      }
+      const stub = env.WORK_REVIEWS.get(env.WORK_REVIEWS.idFromName(project));
+      let data = await (await stub.fetch("https://workreviews.internal/")).json();
+      // 최초 조회 시 동기화(mock/live)해 즉시 캐시를 채운다. 이후엔 cron이 갱신.
+      if (!data.items || data.items.length === 0) {
+        const synced = await fetchStoreReviews(env, project).catch(() => null);
+        if (synced && synced.items.length) {
+          await stub.fetch("https://workreviews.internal/sync", {
+            method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(synced),
+          });
+          data = synced;
+        }
+      }
+      return Response.json(data, { headers: { "Cache-Control": "no-store" } });
+    }
+
     // 데일리 팟캐스트 (podcast.bubblelab.dev). 초대 코드 로그인 뒤에만
     // 쓸 수 있고, ENABLE_PODCAST가 없으면 fail-closed로 닫힌다.
     if (path.startsWith("/_podcast/")) {
@@ -809,9 +847,28 @@ export async function handleRequest(request, env, ctx) {
     return response;
 }
 
+// 외주 프로젝트 리뷰 동기화 (cron). 판매자 자격증명이 없으면 mock으로 캐시를
+// 채우고, 있으면 커머스 API 결과로 갱신한다. 한 프로젝트가 실패해도 계속 진행.
+async function syncWorkReviews(env) {
+  if (!env.WORK_REVIEWS) return;
+  for (const project of WORK_REVIEW_PROJECTS) {
+    try {
+      const synced = await fetchStoreReviews(env, project);
+      if (!synced.items.length) continue;
+      const stub = env.WORK_REVIEWS.get(env.WORK_REVIEWS.idFromName(project));
+      await stub.fetch("https://workreviews.internal/sync", {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(synced),
+      });
+    } catch (error) {
+      console.error("work review sync failed", project, error);
+    }
+  }
+}
+
 export default {
-  // 06:40 KST 데일리 팟캐스트 생성 (wrangler.jsonc triggers.crons)
+  // 06:40 KST: 외주 리뷰 동기화 + 데일리 팟캐스트 생성 (wrangler.jsonc triggers.crons)
   async scheduled(controller, env, ctx) {
+    ctx.waitUntil(syncWorkReviews(env));
     if (!featureEnabled(env, "ENABLE_PODCAST") || !env.PODCAST_BUCKET) return;
     ctx.waitUntil(runDailyGeneration(env));
   },
