@@ -89,7 +89,8 @@ margin-top:1rem;border-radius:.6rem;border:1px solid currentColor;background:non
 <p>켜면 이 브라우저의 방문·체류·유효방문이 모두 집계에서 빠집니다.
 쿠키로 기억하므로 브라우저(프로필)마다 한 번씩 켜야 하고, 쿠키를 지우면 다시 집계됩니다.</p>
 <form method="post"><input type="hidden" name="state" value="${active ? "off" : "on"}">
-<button type="submit">${active ? "다시 집계에 포함하기" : "이 브라우저 집계 제외 켜기"}</button></form></main></body></html>`;
+<button type="submit">${active ? "다시 집계에 포함하기" : "이 브라우저 집계 제외 켜기"}</button></form>
+<p style="text-align:center;margin-bottom:0"><a href="./" style="color:inherit;opacity:.6;font-size:.8rem">‹ 관리 홈으로</a></p></main></body></html>`;
 
 function cookies(request) {
   return Object.fromEntries(
