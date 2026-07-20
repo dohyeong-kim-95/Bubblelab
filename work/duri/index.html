@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="description" content="Duri — 둘이서 함께 사는 기록을 자동으로 남기고 평생 보존하는 개인 라이프 시스템. 진행 상황 미리보기.">
+<title>💞 Duri — 둘이서 쓰는 기록 시스템 (미리보기)</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+    max-width: 44rem; margin: 0 auto; padding: 0 1.5rem 5rem; line-height: 1.75;
+    color: light-dark(#1c2733, #e2e9f0); background: light-dark(#fafbfc, #10151c);
+  }
+  a { color: inherit; }
+  header {
+    display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+    padding: 1.6rem 0 1.2rem; border-bottom: 1px solid light-dark(#e6eaef, #232c38);
+  }
+  header .mark { font-size: 1.5rem; }
+  header b { font-size: 1.15rem; }
+  header .live {
+    margin-left: auto; font-size: .8rem; text-decoration: none;
+    border: 1px solid light-dark(#c9d3de, #2c3644); border-radius: 999px;
+    padding: .25rem .8rem; opacity: .85;
+  }
+  header .live:hover { opacity: 1; }
+  .hero { padding: 2.4rem 0 1.2rem; }
+  .hero h1 { font-size: 1.55rem; margin: 0 0 .6rem; line-height: 1.35; }
+  .hero h1 em { font-style: normal; color: light-dark(#c0568a, #f0a8ce); }
+  .hero .en { opacity: .55; font-size: .85rem; letter-spacing: .02em; margin: 0; }
+  .lead { font-size: 1rem; margin: 1.4rem 0; }
+  section { margin: 2.6rem 0; }
+  .kicker {
+    display: inline-block; font-size: .7rem; letter-spacing: .18em; text-transform: uppercase;
+    opacity: .5; margin-bottom: .5rem;
+  }
+  h2 { font-size: 1.05rem; margin: .2rem 0 .9rem; }
+  .status {
+    border: 1px solid light-dark(#e6eaef, #232c38); border-radius: .8rem;
+    padding: 1rem 1.2rem; background: light-dark(#ffffff, #161c25);
+  }
+  .status .phase { font-size: 1.1rem; margin: 0 0 .8rem; }
+  .status .phase .dot {
+    display: inline-block; width: .55rem; height: .55rem; border-radius: 50%;
+    background: light-dark(#3aa675, #4fd39c); margin-right: .5rem; vertical-align: middle;
+  }
+  .steps { list-style: none; margin: 0; padding: 0; font-size: .9rem; }
+  .steps li { padding: .15rem 0; opacity: .85; }
+  .steps li.done::before { content: "✓ "; color: light-dark(#3aa675, #4fd39c); }
+  .steps li.now::before  { content: "▸ "; color: light-dark(#c0568a, #f0a8ce); }
+  .steps li.todo { opacity: .5; }
+  .steps li.todo::before { content: "· "; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: .7rem; }
+  .card {
+    border: 1px solid light-dark(#e6eaef, #232c38); border-radius: .7rem;
+    padding: .8rem .9rem; font-size: .88rem; background: light-dark(#ffffff, #161c25);
+  }
+  .card b { display: block; margin-bottom: .15rem; }
+  .card span { opacity: .65; font-size: .82rem; }
+  .stack { display: flex; flex-wrap: wrap; gap: .45rem; }
+  .stack code {
+    font-size: .8rem; padding: .2rem .6rem; border-radius: 999px;
+    border: 1px solid light-dark(#d7dee6, #2c3644); background: light-dark(#f2f5f8, #1b232e);
+  }
+  .note {
+    font-size: .82rem; opacity: .6; border-left: 2px solid light-dark(#d7dee6, #2c3644);
+    padding: .1rem 0 .1rem .9rem; margin: 1rem 0;
+  }
+  footer {
+    margin-top: 3rem; padding-top: 1.2rem; border-top: 1px solid light-dark(#e6eaef, #232c38);
+    font-size: .82rem; opacity: .6;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="mark">💞</span>
+  <b>Duri</b>
+  <a class="live" href="https://duri.bubblelab.dev" target="_blank" rel="noopener">라이브 →</a>
+</header>
+
+<div class="hero">
+  <h1>둘이서 사는 하루를,<br><em>저절로 쌓이는 기록</em>으로.</h1>
+  <p class="en">Live together. Log automatically. Remember forever.</p>
+</div>
+
+<p class="lead">
+  Duri는 메신저가 아니라 <b>두 사람을 위한 개인 라이프 시스템</b>입니다.
+  주고받는 대화와 사진, 일정·장소·메모가 매일의 생활 속에서 자동으로 남고,
+  하나의 타임라인으로 구조화되어 평생 보존됩니다.
+</p>
+
+<section>
+  <span class="kicker">Status</span>
+  <div class="status">
+    <p class="phase"><span class="dot"></span>Phase 4 — 구현 준비 완료 <small style="opacity:.6">(설계 게이트 통과)</small></p>
+    <ul class="steps">
+      <li class="done">설계 확정 — PRD · 데이터 모델 · ADR 001~008</li>
+      <li class="done">저장소 라이터(Storage Writer) 구현 게이트 통과</li>
+      <li class="done">인증/세션(Auth·Session) 구현 게이트 통과</li>
+      <li class="now">HTTP 인증 엔드포인트 · 사진 업로드 영속화</li>
+      <li class="todo">백업/내보내기(Export-as-storage) 마무리</li>
+    </ul>
+  </div>
+  <p class="note">
+    라이브 배포(<code>duri.bubblelab.dev</code>)는 두 사람만 접근하도록 초대 코드와
+    기기 등록으로 통제됩니다. 이 미리보기 페이지는 진행 상황 공유용입니다.
+  </p>
+</section>
+
+<section>
+  <span class="kicker">MVP</span>
+  <h2>지금 만들고 있는 것</h2>
+  <div class="grid">
+    <div class="card"><b>📼 대화 로그</b><span>1:1 메시지를 로그로 저장</span></div>
+    <div class="card"><b>🖼️ 사진 공유</b><span>원본 그대로 함께 보관</span></div>
+    <div class="card"><b>🧵 타임라인</b><span>시간순 단일 흐름(Timeline First)</span></div>
+    <div class="card"><b>🏷️ 메타데이터</b><span>결정론적 추출 · 해석은 유보</span></div>
+    <div class="card"><b>🔎 전문 검색</b><span>남긴 기록을 다시 찾기</span></div>
+    <div class="card"><b>📦 백업·내보내기</b><span>저장소 구조가 곧 내보내기</span></div>
+    <div class="card"><b>🔐 두 사람 인증</b><span>초대 코드 + 기기 등록/해지</span></div>
+  </div>
+</section>
+
+<section>
+  <span class="kicker">Approach</span>
+  <h2>보존을 우선한 설계</h2>
+  <p>
+    모든 데이터는 사람이 읽을 수 있는 형식으로 <code>DuriStorage/</code> 파일시스템에
+    남습니다 — 월별 <code>metadata.json</code>과 원본 미디어. SQLite는 색인·캐시일 뿐,
+    진실의 원천은 파일입니다. 자동 이벤트 묶음이나 AI 분류는 하지 않고(ADR-002·003),
+    기록을 있는 그대로 쌓아 <b>저장소 구조 자체가 내보내기 형식</b>이 되도록 했습니다(ADR-007).
+  </p>
+  <div class="stack">
+    <code>TypeScript</code><code>Next.js</code><code>Python</code><code>FastAPI</code>
+    <code>WebSocket</code><code>SQLite</code><code>Self-hosted JWT</code>
+  </div>
+</section>
+
+<footer>
+  <a href="https://duri.bubblelab.dev" target="_blank" rel="noopener">duri.bubblelab.dev</a>
+  · <a href="/logout">로그아웃</a>
+  · <a href="https://github.com/dohyeong-kim-95/Duri" target="_blank" rel="noopener">소스</a>
+</footer>
+
+</body>
+</html>
