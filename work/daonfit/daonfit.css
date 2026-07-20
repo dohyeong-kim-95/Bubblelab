@@ -154,3 +154,26 @@
   .qa-meta { display: flex; align-items: center; gap: .45rem; margin: .4rem 0 0 1.95rem;
              font-size: .76rem; color: var(--muted); }
   .qa-meta b { color: var(--brown); font-size: .8rem; }
+
+  /* 후기 남기기 */
+  .rv-write { margin: 0 0 1.1rem; }
+  .rv-write-toggle { font: inherit; font-weight: 700; font-size: .86rem; cursor: pointer;
+                     padding: .55rem 1rem; border-radius: 2rem; border: 1.5px solid var(--orange);
+                     background: #fff; color: var(--orange-deep); }
+  .rv-write-toggle:hover { background: var(--cream); }
+  .rv-form { display: grid; gap: .6rem; margin-top: .8rem; padding: 1.1rem; background: #fff;
+             border: 1px solid var(--line); border-radius: 1.1rem; }
+  .rv-form[hidden] { display: none; }
+  .rv-form .rv-nick, .rv-form .rv-textarea { font: inherit; color: inherit; padding: .7rem .85rem;
+             border-radius: .7rem; border: 1px solid var(--line); background: var(--paper); width: 100%; }
+  .rv-form .rv-textarea { min-height: 5.5rem; resize: vertical; }
+  .rv-rate { display: flex; gap: .1rem; }
+  .rv-star { font: inherit; font-size: 1.5rem; line-height: 1; cursor: pointer; border: 0;
+             background: none; padding: 0 .05rem; color: #dcd3c6; }
+  .rv-star.on { color: #f5a623; }
+  .rv-note { font-size: .74rem; color: var(--muted); margin: 0; }
+  .rv-submit { font: inherit; padding: .75rem; border: 0; border-radius: .7rem;
+               background: var(--orange); color: #fff; font-weight: 700; cursor: pointer; }
+  .rv-submit:hover { background: var(--orange-deep); }
+  .rv-submit:disabled { opacity: .5; cursor: default; }
+  .rv-status { min-height: 1.1em; font-size: .82rem; color: var(--orange-deep); margin: 0; }

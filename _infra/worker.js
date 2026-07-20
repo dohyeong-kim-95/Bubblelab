@@ -14,7 +14,7 @@ import { handleFortuneChart } from "./fortune.js";
 import { handlePodcast, handlePodcastAdmin, runDailyGeneration, UPLOAD_MAX_BYTES } from "./podcast.js";
 import { handleEstateDeals } from "./estate.js";
 import { serveAssetDownload, serveAssetDownloadCounts } from "./downloads.js";
-import { fetchStoreReviews } from "./reviews.js";
+import { fetchStoreReviews, REVIEWS_SYNC_VERSION } from "./reviews.js";
 import {
   applySecurityHeaders,
   consumeRateLimit,
@@ -684,21 +684,41 @@ export async function handleRequest(request, env, ctx) {
       if (!(await validSession(workKey, cookies(request).bl_work))) {
         return Response.json({ error: "authentication required" }, { status: 401 });
       }
-      const project = path.slice("/_workreviews/".length).replace(/\/+$/, "");
-      if (!/^[a-z0-9-]{1,32}$/.test(project)) return new Response("not found", { status: 404 });
-      if (request.method !== "GET") {
-        return new Response("method not allowed", { status: 405, headers: { Allow: "GET" } });
+      const [project, action = ""] = path.slice("/_workreviews/".length).split("/");
+      if (!/^[a-z0-9-]{1,32}$/.test(project) || !["", "submit"].includes(action)) {
+        return new Response("not found", { status: 404 });
       }
       const stub = env.WORK_REVIEWS.get(env.WORK_REVIEWS.idFromName(project));
+
+      // 후기 작성: 사용자가 남긴 후기를 DO에 저장한다(동기화분과 분리 보존).
+      if (action === "submit") {
+        if (request.method !== "POST") {
+          return new Response("method not allowed", { status: 405, headers: { Allow: "POST" } });
+        }
+        const contentTypeError = requireJsonRequest(request);
+        if (contentTypeError) return contentTypeError;
+        const limited = await enforceRateLimit(request, env, {
+          scope: "workreviews-write", limit: 10, windowMs: 10 * 60 * 1000,
+        });
+        if (limited) return limited;
+        return stub.fetch("https://workreviews.internal/submit", {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: await request.text(),
+        });
+      }
+
+      if (request.method !== "GET") {
+        return new Response("method not allowed", { status: 405, headers: { Allow: "GET, POST" } });
+      }
       let data = await (await stub.fetch("https://workreviews.internal/")).json();
-      // 최초 조회 시 동기화(mock/live)해 즉시 캐시를 채운다. 이후엔 cron이 갱신.
-      if (!data.syncedAt) {
+      // 최초 조회 또는 캐시 구조가 옛 버전이면 재동기화(mock/live)해 즉시 채운다.
+      // 이후엔 cron이 갱신. (버전 체크로 배포 후 옛 캐시가 남는 문제 방지.)
+      if (data.version !== REVIEWS_SYNC_VERSION) {
         const synced = await fetchStoreReviews(env, project).catch(() => null);
         if (synced && synced.items.length) {
           await stub.fetch("https://workreviews.internal/sync", {
             method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(synced),
           });
-          data = synced;
+          data = { ...synced, submitted: data.submitted ?? [] };
         }
       }
       return Response.json(data, { headers: { "Cache-Control": "no-store" } });

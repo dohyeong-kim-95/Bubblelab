@@ -3,52 +3,59 @@
 // 캐시하고, 품목별 상세페이지가 이 캐시를 읽어 노출한다.
 //
 // 실제 커머스 API 호출부(fetchNaver*)는 판매자 자격증명이 있을 때만 실행되며,
-// 없으면 mock 데이터로 동작한다("mock으로 처리"). 네이버에서 크롤링/동기화된
-// 항목은 source: "naver"를 달아 상세페이지에서 네이버 마크를 붙인다. 실서비스
-// 전환 절차·주의사항은 work/daonfit/REVIEWS.md 참고.
+// 없으면 mock 데이터로 동작한다("mock으로 처리"). 항목별 source로 출처를 구분해
+// 상세페이지에서 네이버 출처(source: "naver")엔 네이버 마크(N), 다온핏 자체
+// 등록분(source: "own")엔 다온핏 배지를 붙인다. 실서비스 전환 절차·주의사항은
+// work/daonfit/REVIEWS.md 참고.
 
 const KEY = "reviews:data";
+const SUB = "reviews:submitted";
 const MAX_ITEMS = 200;
 const NAVER_API = "https://api.commerce.naver.com/external";
 
+// 캐시 데이터 구조 버전. 구조가 바뀌면 올리면, 라우트가 옛 캐시를 감지해 자동
+// 재동기화한다 (syncedAt만으로는 옛 구조가 그대로 남는 문제 방지).
+export const REVIEWS_SYNC_VERSION = 2;
+
 // --- mock 리뷰 ------------------------------------------------------------
 // 스마트스토어 실제 리뷰 톤을 재현한 예시. product 값은 goods/<slug>.html의
-// 품목 slug와 일치해야 상세페이지가 자기 리뷰만 골라 보여준다.
+// 품목 slug와 일치해야 상세페이지가 자기 리뷰만 골라 보여준다. source는 출처
+// 표시용으로, "naver"는 네이버에서 가져온 것, "own"은 다온핏 자체 등록분.
 const MOCK_REVIEWS = {
   daonfit: [
-    { id: "kb1", product: "keybox", nick: "골댕이아빠", rating: 5, text: "차 키를 안에 두고 문을 잠근 적이 있어서 큰맘 먹고 샀는데 견인고리 자리에 딱 맞아요. 이제 마음이 놓입니다.", date: "2025-05-12" },
-    { id: "kb2", product: "keybox", nick: "초보운전서연", rating: 5, text: "차종 알려주니 정확히 맞게 제작해 주셨어요. 눈에 잘 안 띄면서 꺼내긴 쉬워서 만족합니다.", date: "2025-06-03" },
-    { id: "kb3", product: "keybox", nick: "제주한달살이", rating: 5, text: "부모님 차에도 하나 더 주문했어요. 마감이 깔끔하고 튼튼합니다.", date: "2025-06-21" },
-    { id: "kb4", product: "keybox", nick: "출퇴근2시간", rating: 5, text: "주문 제작이라 배송은 조금 걸리지만 그만한 값어치가 있네요. 강추합니다.", date: "2025-07-02" },
-    { id: "pk1", product: "parking-keyring", nick: "마트왕복", rating: 5, text: "지하주차장에서 맨날 헤맸는데 슬라이드 밀어두는 습관 하나로 해결됐어요.", date: "2025-05-28" },
-    { id: "pk2", product: "parking-keyring", nick: "워킹맘하루", rating: 4, text: "아이디어 정말 좋아요. 색상 선택지가 더 많으면 좋겠어요.", date: "2025-06-15" },
-    { id: "pk3", product: "parking-keyring", nick: "주말드라이버", rating: 5, text: "키링이라 항상 들고 다녀서 잊어버릴 일이 없네요. 선물로도 좋아요.", date: "2025-07-05" },
-    { id: "vc1", product: "vent-clip", nick: "방향제덕후", rating: 5, text: "송풍구에 헐렁하던 방향제가 딱 고정됐어요. 덜렁거림 전혀 없습니다.", date: "2025-06-08" },
-    { id: "vc2", product: "vent-clip", nick: "신차오너", rating: 5, text: "작지만 매일 타는 차라 체감이 큽니다. 재구매 의사 있어요.", date: "2025-06-30" },
-    { id: "am1", product: "mini-atm", nick: "조카바보", rating: 5, text: "조카 용돈 줄 때 넣어줬더니 눈이 휘둥그레졌어요. 이벤트 대성공입니다!", date: "2025-05-19" },
-    { id: "am2", product: "mini-atm", nick: "어린이날준비", rating: 5, text: "비밀번호 누르고 돈 나오는 게 신기해서 아이가 계속 저금하네요.", date: "2025-06-10" },
-    { id: "am3", product: "mini-atm", nick: "생일서프라이즈", rating: 4, text: "퀄리티 좋아요. 크기가 생각보다 커서 놀랐지만 만족합니다.", date: "2025-06-27" },
-    { id: "fs1", product: "figure-stand", nick: "티니핑수집가", rating: 5, text: "픽픽 쓰러지던 피규어들이 반듯하게 섰어요. 10개입이라 넉넉합니다.", date: "2025-04-30" },
+    { id: "kb1", product: "keybox", nick: "골댕이아빠", rating: 5, text: "차 키를 안에 두고 문을 잠근 적이 있어서 큰맘 먹고 샀는데 견인고리 자리에 딱 맞아요. 이제 마음이 놓입니다.", date: "2025-05-12", source: "naver" },
+    { id: "kb2", product: "keybox", nick: "초보운전서연", rating: 5, text: "차종 알려주니 정확히 맞게 제작해 주셨어요. 눈에 잘 안 띄면서 꺼내긴 쉬워서 만족합니다.", date: "2025-06-03", source: "naver" },
+    { id: "kb3", product: "keybox", nick: "제주한달살이", rating: 5, text: "부모님 차에도 하나 더 주문했어요. 마감이 깔끔하고 튼튼합니다.", date: "2025-06-21", source: "own" },
+    { id: "kb4", product: "keybox", nick: "출퇴근2시간", rating: 5, text: "주문 제작이라 배송은 조금 걸리지만 그만한 값어치가 있네요. 강추합니다.", date: "2025-07-02", source: "naver" },
+    { id: "pk1", product: "parking-keyring", nick: "마트왕복", rating: 5, text: "지하주차장에서 맨날 헤맸는데 슬라이드 밀어두는 습관 하나로 해결됐어요.", date: "2025-05-28", source: "naver" },
+    { id: "pk2", product: "parking-keyring", nick: "워킹맘하루", rating: 4, text: "아이디어 정말 좋아요. 색상 선택지가 더 많으면 좋겠어요.", date: "2025-06-15", source: "own" },
+    { id: "pk3", product: "parking-keyring", nick: "주말드라이버", rating: 5, text: "키링이라 항상 들고 다녀서 잊어버릴 일이 없네요. 선물로도 좋아요.", date: "2025-07-05", source: "naver" },
+    { id: "vc1", product: "vent-clip", nick: "방향제덕후", rating: 5, text: "송풍구에 헐렁하던 방향제가 딱 고정됐어요. 덜렁거림 전혀 없습니다.", date: "2025-06-08", source: "naver" },
+    { id: "vc2", product: "vent-clip", nick: "신차오너", rating: 5, text: "작지만 매일 타는 차라 체감이 큽니다. 재구매 의사 있어요.", date: "2025-06-30", source: "own" },
+    { id: "am1", product: "mini-atm", nick: "조카바보", rating: 5, text: "조카 용돈 줄 때 넣어줬더니 눈이 휘둥그레졌어요. 이벤트 대성공입니다!", date: "2025-05-19", source: "naver" },
+    { id: "am2", product: "mini-atm", nick: "어린이날준비", rating: 5, text: "비밀번호 누르고 돈 나오는 게 신기해서 아이가 계속 저금하네요.", date: "2025-06-10", source: "own" },
+    { id: "am3", product: "mini-atm", nick: "생일서프라이즈", rating: 4, text: "퀄리티 좋아요. 크기가 생각보다 커서 놀랐지만 만족합니다.", date: "2025-06-27", source: "naver" },
+    { id: "fs1", product: "figure-stand", nick: "티니핑수집가", rating: 5, text: "픽픽 쓰러지던 피규어들이 반듯하게 섰어요. 10개입이라 넉넉합니다.", date: "2025-04-30", source: "naver" },
   ],
 };
 
 // --- mock 상품 문의(Q&A) --------------------------------------------------
-// 네이버 스토어 "상품 문의"(질문 + 판매자 답변) 톤을 재현한 예시.
+// 네이버 스토어 "상품 문의"(source: "naver")와 다온핏 사이트 자체 문의
+// (source: "own", 고객이 사이트에서 남긴 것)를 섞은 예시.
 const MOCK_QNA = {
   daonfit: [
-    { id: "kbq1", product: "keybox", nick: "현대차오너", question: "아반떼CN7도 견인고리 위치에 맞게 제작되나요?", answer: "네, 주문 시 차종을 알려주시면 해당 차종 견인고리 캡 자리에 맞춰 제작해 드립니다.", date: "2025-06-05" },
-    { id: "kbq2", product: "keybox", nick: "안전제일", question: "주행 중에 키가 흔들려 소리 나지는 않나요?", answer: "내부 실리콘 패드로 고정돼 주행 중 흔들림이나 소음이 없습니다.", date: "2025-06-18" },
-    { id: "pkq1", product: "parking-keyring", nick: "지하주차초보", question: "숫자 대신 B1·B2 같은 층수 표기도 가능한가요?", answer: "네, B1~B5 표기 버전으로 제작 가능합니다. 주문 시 요청해 주세요.", date: "2025-06-12" },
-    { id: "vcq1", product: "vent-clip", nick: "방향제고민", question: "원형 송풍구에도 장착되나요?", answer: "원형·수직형 등 송풍구 형태를 알려주시면 맞춰 제작해 드립니다.", date: "2025-06-20" },
-    { id: "amq1", product: "mini-atm", nick: "선물고민중", question: "지폐는 몇 장까지 들어가나요?", answer: "5만원권 기준 약 20장까지 여유 있게 들어갑니다.", date: "2025-06-14" },
-    { id: "amq2", product: "mini-atm", nick: "조카생일", question: "건전지도 포함해서 오나요?", answer: "AA 건전지 2개가 필요하며, 기본 포함해 발송해 드립니다.", date: "2025-06-25" },
-    { id: "fsq1", product: "figure-stand", nick: "재입고문의", question: "재입고는 언제쯤 되나요?", answer: "다음 제작 배치 일정은 스마트스토어 소식·문의로 안내드리고 있습니다.", date: "2025-05-02" },
+    { id: "kbq1", product: "keybox", nick: "현대차오너", question: "아반떼CN7도 견인고리 위치에 맞게 제작되나요?", answer: "네, 주문 시 차종을 알려주시면 해당 차종 견인고리 캡 자리에 맞춰 제작해 드립니다.", date: "2025-06-05", source: "naver" },
+    { id: "kbq2", product: "keybox", nick: "안전제일", question: "주행 중에 키가 흔들려 소리 나지는 않나요?", answer: "내부 실리콘 패드로 고정돼 주행 중 흔들림이나 소음이 없습니다.", date: "2025-06-18", source: "own" },
+    { id: "pkq1", product: "parking-keyring", nick: "지하주차초보", question: "숫자 대신 B1·B2 같은 층수 표기도 가능한가요?", answer: "네, B1~B5 표기 버전으로 제작 가능합니다. 주문 시 요청해 주세요.", date: "2025-06-12", source: "naver" },
+    { id: "pkq2", product: "parking-keyring", nick: "선물포장", question: "선물용 포장도 되나요?", answer: "간단한 선물 포장 가능합니다. 요청사항에 남겨주세요.", date: "2025-06-22", source: "own" },
+    { id: "vcq1", product: "vent-clip", nick: "방향제고민", question: "원형 송풍구에도 장착되나요?", answer: "원형·수직형 등 송풍구 형태를 알려주시면 맞춰 제작해 드립니다.", date: "2025-06-20", source: "naver" },
+    { id: "amq1", product: "mini-atm", nick: "선물고민중", question: "지폐는 몇 장까지 들어가나요?", answer: "5만원권 기준 약 20장까지 여유 있게 들어갑니다.", date: "2025-06-14", source: "naver" },
+    { id: "amq2", product: "mini-atm", nick: "조카생일", question: "건전지도 포함해서 오나요?", answer: "AA 건전지 2개가 필요하며, 기본 포함해 발송해 드립니다.", date: "2025-06-25", source: "own" },
+    { id: "fsq1", product: "figure-stand", nick: "재입고문의", question: "재입고는 언제쯤 되나요?", answer: "다음 제작 배치 일정은 스마트스토어 소식·문의로 안내드리고 있습니다.", date: "2025-05-02", source: "naver" },
   ],
 };
 
-// 네이버 출처 표시(source: "naver")를 달아 반환한다. 상세페이지가 이 값을 보고
-// 네이버 마크를 붙인다.
-const withNaverSource = (list) => (list ?? []).map((entry) => ({ ...entry, source: "naver" }));
+const clone = (list) => (list ?? []).map((entry) => ({ ...entry }));
 
 // 프로바이더 계층: 판매자 자격증명이 있으면 실제 커머스 API, 없으면 mock.
 // worker의 cron·최초 조회가 이 함수를 호출해 DO 캐시를 채운다.
@@ -62,12 +69,13 @@ export async function fetchStoreReviews(env, project) {
     reviews = await fetchNaverReviews(token, productMap);
     questions = await fetchNaverQna(token, productMap);
   } else {
-    reviews = withNaverSource(MOCK_REVIEWS[project]);
-    questions = withNaverSource(MOCK_QNA[project]);
+    reviews = clone(MOCK_REVIEWS[project]);
+    questions = clone(MOCK_QNA[project]);
   }
   return {
     project,
     source: live ? "naver-commerce" : "mock",
+    version: REVIEWS_SYNC_VERSION,
     syncedAt: new Date().toISOString(),
     items: reviews.slice(0, MAX_ITEMS),
     questions: questions.slice(0, MAX_ITEMS),
@@ -159,7 +167,12 @@ function maskNick(name) {
   return `${value[0]}${"*".repeat(value.length - 2)}${value[value.length - 1]}`;
 }
 
+// 닉네임·상품·본문 정리 (공백 정규화 + 길이 제한).
+const clean = (value, max) => String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
+
 // --- 캐시 저장소 (프로젝트당 DO 하나) --------------------------------------
+// 동기화된 리뷰·문의(reviews:data)와 사용자가 남긴 후기(reviews:submitted)를
+// 분리 저장한다. sync는 동기화분만 교체하므로 사용자 후기는 보존된다.
 export class WorkReviewsDO {
   constructor(state) {
     this.storage = state.storage;
@@ -167,10 +180,13 @@ export class WorkReviewsDO {
 
   async fetch(request) {
     const url = new URL(request.url);
+
     if (request.method === "GET") {
-      const data = (await this.storage.get(KEY)) ?? { items: [], questions: [], source: null, syncedAt: null };
-      return Response.json(data, { headers: { "Cache-Control": "no-store" } });
+      const synced = (await this.storage.get(KEY)) ?? { items: [], questions: [], source: null, version: null, syncedAt: null };
+      const submitted = (await this.storage.get(SUB)) ?? [];
+      return Response.json({ ...synced, submitted }, { headers: { "Cache-Control": "no-store" } });
     }
+
     if (request.method === "PUT" && url.pathname === "/sync") {
       const body = await request.json().catch(() => null);
       if (!body || !Array.isArray(body.items)) return new Response("invalid payload", { status: 400 });
@@ -178,11 +194,32 @@ export class WorkReviewsDO {
         items: body.items.slice(0, MAX_ITEMS),
         questions: Array.isArray(body.questions) ? body.questions.slice(0, MAX_ITEMS) : [],
         source: body.source ?? null,
+        version: body.version ?? null,
         syncedAt: body.syncedAt ?? new Date().toISOString(),
       };
       await this.storage.put(KEY, data);
       return Response.json({ saved: true, reviews: data.items.length, questions: data.questions.length });
     }
-    return new Response("method not allowed", { status: 405, headers: { Allow: "GET, PUT" } });
+
+    if (request.method === "POST" && url.pathname === "/submit") {
+      const body = await request.json().catch(() => ({}));
+      const product = clean(body.product, 40);
+      const nick = clean(body.nick, 20);
+      const text = String(body.text ?? "").trim().slice(0, 1000);
+      const rating = Math.round(Number(body.rating));
+      if (!/^[a-z0-9-]{1,40}$/.test(product) || !nick || !text || !(rating >= 1 && rating <= 5)) {
+        return new Response("invalid review", { status: 400 });
+      }
+      const submitted = (await this.storage.get(SUB)) ?? [];
+      const item = {
+        id: crypto.randomUUID(), product, nick, rating, text,
+        date: new Date().toISOString().slice(0, 10), source: "own",
+      };
+      submitted.unshift(item);
+      await this.storage.put(SUB, submitted.slice(0, MAX_ITEMS));
+      return Response.json({ saved: true, item });
+    }
+
+    return new Response("method not allowed", { status: 405, headers: { Allow: "GET, PUT, POST" } });
   }
 }
