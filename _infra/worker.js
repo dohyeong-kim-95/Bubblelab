@@ -34,6 +34,7 @@ export { RecordsDO } from "./records.js";
 export { PlannerDO } from "./planner.js";
 export { PodcastDO } from "./podcast.js";
 export { RateLimiterDO } from "./security.js";
+export { DuriDO } from "./duri.js";
 
 const LOGIN_PAGE = (failed = false, base = "") => `<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -245,6 +246,87 @@ async function handleWork(request, env, url, base = "") {
   }
   if (!isAuthed) return redirect(`${base}/login`);
   return null;
+}
+
+/* Duri 실시간 중계 + 사진 버퍼. 접근은 둘 중 하나로만: work 게이트를 통과한
+ * 브라우저(bl_work 쿠키) 또는 싱크 토큰을 제시한 데스크톱 데몬. 서버는 E2E
+ * 암호블롭만 다루므로 평문·키·신원을 알지 못한다. 판정한 역할을 X-Duri-Role
+ * 헤더로 DO에 넘긴다. */
+const SINK_TOKEN_TTL_MS = 365 * 24 * 60 * 60 * 1000;
+
+async function duriSinkKey(env) {
+  const secret = env.DURI_SINK_SECRET ||
+    (env.WORK_PASSWORD ? `${env.WORK_PASSWORD}\0bl-duri-sink` : null);
+  if (!secret) return null;
+  return crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
+  );
+}
+
+async function issueSinkToken(key) {
+  const payload = `${Date.now() + SINK_TOKEN_TTL_MS}.${crypto.randomUUID()}`;
+  const sig = hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload)));
+  return `${payload}.${sig}`;
+}
+
+function withDuriRole(request, role) {
+  const headers = new Headers(request.headers);
+  headers.set("X-Duri-Role", role);
+  return new Request(request, { headers });
+}
+
+async function handleDuri(request, env, url) {
+  if (!featureEnabled(env, "ENABLE_DURI")) {
+    return Response.json({ error: "duri is temporarily unavailable" }, {
+      status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "86400" },
+    });
+  }
+  // R2 버퍼·게이트 비밀번호가 없으면 fail-closed.
+  if (!env.DURI_BUCKET || !env.WORK_PASSWORD) {
+    return new Response("duri is not configured", { status: 503 });
+  }
+  const path = url.pathname;
+
+  const workKey = await crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(`${env.WORK_PASSWORD}\0bl-work-session`),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
+  );
+  const gated = await validSession(workKey, cookies(request).bl_work);
+  const sinkKey = await duriSinkKey(env);
+  const token = url.searchParams.get("token") ||
+    (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+  const sinkOk = !!(sinkKey && token) && await validSession(sinkKey, token);
+
+  // 소유자(work 게이트)만 싱크 토큰을 발급받는다 → 데스크톱 데몬 설정에 넣는다.
+  if (path === "/_duri/sink-token" && request.method === "POST") {
+    if (!gated) return new Response("authentication required", { status: 401 });
+    if (!sinkKey) return new Response("sink secret not configured", { status: 503 });
+    return Response.json({ token: await issueSinkToken(sinkKey) }, {
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
+
+  if (!gated && !sinkOk) return new Response("authentication required", { status: 401 });
+  const role = sinkOk ? "sink" : "peer";
+  const stub = env.DURI.get(env.DURI.idFromName("main"));
+
+  if (path === "/_duri" && request.headers.get("Upgrade")?.toLowerCase() === "websocket") {
+    if (role === "peer") {
+      const originError = validateWebSocketOrigin(request);
+      if (originError) return originError;
+    }
+    const limited = await enforceRateLimit(request, env, {
+      scope: "duri-connect", limit: 30, windowMs: 60 * 1000,
+    });
+    if (limited) return limited;
+    return stub.fetch(withDuriRole(request, role));
+  }
+
+  if (path === "/_duri/photo" || path.startsWith("/_duri/photo/") || path === "/_duri/status") {
+    return stub.fetch(withDuriRole(request, role));
+  }
+  return new Response("not found", { status: 404 });
 }
 
 function kstDate() {
@@ -776,6 +858,12 @@ export async function handleRequest(request, env, ctx) {
       if (limited) return limited;
       const id = env.REALTIME.idFromName(name);
       return env.REALTIME.get(id).fetch(request);
+    }
+
+    // Duri 실시간 중계 + 사진 버퍼: /_duri (work.bubblelab.dev/duri 전용).
+    // 서버는 E2E 암호블롭만 중계·버퍼링하고, 데스크톱 싱크가 받아 ack 하면 폐기한다.
+    if (path === "/_duri" || path.startsWith("/_duri/")) {
+      return handleDuri(request, env, url);
     }
 
     if (host === ROOT_DOMAIN || host === `www.${ROOT_DOMAIN}`) {
