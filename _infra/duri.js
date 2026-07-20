@@ -27,7 +27,7 @@
 // entry(사진)  : { type:"entry", seq, kind:"photo", at, r2key, imgIv, sha256, bytes, metaIv, metaCt }
 
 export const DURI_MAX_TEXT_BLOB = 16 * 1024; // 암호화된 텍스트 base64 상한
-export const DURI_MAX_PHOTO_BYTES = 25 * 1024 * 1024; // 암호화된 사진 원본 상한
+export const DURI_MAX_PHOTO_BYTES = 96 * 1024 * 1024; // 암호화된 사진 원본 상한(원본 보존이 원칙)
 export const DURI_MAX_META_BLOB = 4 * 1024; // 사진 메타(이름·캡션) 암호블롭 상한
 const MAX_BUFFER_ENTRIES = 5000; // 싱크가 오래 꺼져 있을 때의 상한
 export const DURI_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 미ack 항목 보존 30일
@@ -249,9 +249,15 @@ export class DuriDO {
       metaCt: request.headers.get("X-Duri-Meta"),
     });
     if (!meta) return new Response("invalid photo metadata", { status: 400 });
+    // 큰 업로드는 메모리에 담기 전에 Content-Length 로 먼저 거른다.
+    const declared = Number(request.headers.get("Content-Length") || 0);
+    if (declared > DURI_MAX_PHOTO_BYTES) {
+      return new Response(`photo too large (${declared} bytes, max ${DURI_MAX_PHOTO_BYTES})`, { status: 413 });
+    }
     const body = await request.arrayBuffer();
-    if (body.byteLength === 0 || body.byteLength > DURI_MAX_PHOTO_BYTES) {
-      return new Response("photo too large", { status: 413 });
+    if (body.byteLength === 0) return new Response("empty body", { status: 400 });
+    if (body.byteLength > DURI_MAX_PHOTO_BYTES) {
+      return new Response(`photo too large (${body.byteLength} bytes, max ${DURI_MAX_PHOTO_BYTES})`, { status: 413 });
     }
     const seq = this.head + 1;
     const rand = [...crypto.getRandomValues(new Uint8Array(8))]

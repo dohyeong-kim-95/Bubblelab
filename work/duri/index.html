@@ -34,8 +34,10 @@
   .row.me .bubble { background: light-dark(#fbe6f0, #3a2233); border-color: light-dark(#f2cfe1, #4d2c40); }
   .bubble img { max-width: min(20rem, 70vw); border-radius: .5rem; display: block; }
   .bubble .cap { font-size: .82rem; margin-top: .3rem; color: var(--dim); }
+  /* 스티커는 정사각 자리를 먼저 잡고, 말풍선 배경 없이 투명하게 */
+  .bubble.sticker, .row.me .bubble.sticker { background: none; border: none; padding: .2rem; }
+  .bubble.sticker img { width: clamp(6rem, 30vw, 8.5rem); aspect-ratio: 1 / 1; height: auto; border-radius: 0; }
   .time { font-size: .62rem; color: var(--dim); margin: .1rem .3rem 0; }
-  .sys { align-self: center; font-size: .72rem; color: var(--dim); padding: .2rem .6rem; }
   .broken { color: light-dark(#b4453a, #f0a8a2); font-size: .82rem; }
 
   form { display: flex; gap: .5rem; padding: .6rem; border-top: 1px solid var(--line); background: var(--panel);
@@ -44,9 +46,26 @@
   textarea { flex: 1; resize: none; font: inherit; padding: .55rem .7rem; border-radius: .8rem;
              border: 1px solid var(--line); background: var(--bg); color: inherit; max-height: 8rem; }
   button, label.attach { font: inherit; border: 1px solid var(--line); background: var(--bg); color: inherit;
-           border-radius: .8rem; padding: .55rem .8rem; cursor: pointer; }
+           border-radius: .8rem; padding: .55rem .75rem; cursor: pointer; }
+  #sticker-btn { font-size: 1.1rem; line-height: 1; }
+  #sticker-btn[aria-expanded="true"] { background: light-dark(#f0e3ea, #26202a); }
   button.send { background: var(--pink); color: light-dark(#fff, #1a1016); border-color: transparent; font-weight: 600; }
   button:disabled { opacity: .5; cursor: default; }
+
+  /* 스티커 서랍 */
+  #picker { max-width: 44rem; width: 100%; margin: 0 auto; border-top: 1px solid var(--line); background: var(--panel); }
+  #picker[hidden] { display: none; }
+  #tabs { display: flex; gap: .25rem; padding: .45rem .7rem 0; overflow-x: auto; }
+  #tabs button { font: inherit; font-size: .72rem; padding: .4rem .6rem; border: 0; border-radius: .5rem .5rem 0 0;
+                 background: none; color: inherit; opacity: .55; white-space: nowrap; cursor: pointer; }
+  #tabs button[aria-selected="true"] { opacity: 1; font-weight: 600; background: var(--bg); }
+  #hint { font-size: .68rem; opacity: .55; padding: .4rem .8rem 0; background: var(--bg); min-height: 1.2rem; }
+  #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(4rem, 1fr)); gap: .3rem;
+          padding: .45rem .7rem .7rem; max-height: 42dvh; overflow-y: auto; background: var(--bg); }
+  #grid button { padding: .25rem; background: none; border: 2px solid transparent; border-radius: .6rem; cursor: pointer; }
+  #grid button.selected { border-color: var(--pink); background: light-dark(#c0568a1a, #f0a8ce22); }
+  #grid img { width: 100%; aspect-ratio: 1 / 1; height: auto; display: block; }
+  #grid .empty { grid-column: 1 / -1; text-align: center; font-size: .78rem; opacity: .5; padding: 1.2rem 0; }
 
   .overlay { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 1.5rem; }
   .card { max-width: 24rem; width: 100%; }
@@ -88,8 +107,15 @@
 
 <div id="log" class="hidden"></div>
 
+<div id="picker" hidden>
+  <div id="tabs" role="tablist"></div>
+  <div id="hint">스티커를 누르면 미리보기, 한 번 더 누르면 전송돼요</div>
+  <div id="grid"></div>
+</div>
+
 <form id="composer" class="hidden">
   <label class="attach" title="사진 보내기">🖼️<input id="file" type="file" accept="image/*" hidden></label>
+  <button type="button" id="sticker-btn" aria-expanded="false" title="스티커">🐴</button>
   <textarea id="text" rows="1" placeholder="메시지…" autocomplete="off"></textarea>
   <button type="submit" class="send" id="sendBtn">보내기</button>
 </form>
@@ -106,7 +132,6 @@ const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart
 const fmtTime = (t) => new Date(t).toLocaleString("ko-KR", { hour: "2-digit", minute: "2-digit", month: "numeric", day: "numeric" });
 
 // ── E2E 암호화 (PBKDF2 → AES-GCM 256) ────────────────────────
-// 서버·R2엔 { iv, ct } 불투명 값만 오간다. 키는 이 기기 메모리에만 존재한다.
 const SALT = enc.encode("duri:v1:pbkdf2:shared-passphrase");
 const ITER = 210_000;
 let KEY = null, MY_NAME = "";
@@ -134,39 +159,101 @@ async function decryptJson(ivB64, ctB64) {
   return JSON.parse(dec.decode(await decryptBytes(ivB64, unb64(ctB64))));
 }
 
+// ── 스티커 팩 (util/chat 와 동일: /_assets/catalog.json + 누끼) ─
+const PACKS = [];
+const PACK_IDS = new Map();
+const RECENT_KEY = "duri:recent-stickers";
+
+async function loadPacks() {
+  try {
+    const res = await fetch("/_assets/catalog.json");
+    if (!res.ok) throw new Error();
+    const { items } = await res.json();
+    for (const item of items ?? []) {
+      if (item.category !== "sticker" || !item.chat?.title || !Array.isArray(item.downloads)) continue;
+      const pack = { id: item.id, title: item.chat.title, count: item.downloads.length, cutout: item.chat.cutout !== false };
+      PACKS.push(pack);
+      PACK_IDS.set(pack.id, pack);
+    }
+  } catch { /* 카탈로그 없이도 텍스트·사진은 동작 */ }
+}
+
+const stickerUrl = (pack, n) => `/_assets/sticker/${pack}/${String(n).padStart(2, "0")}.png`;
+const cutoutCache = new Map();
+
+// 흰 배경 누끼 (util/chat 와 동일한 테두리 flood fill)
+function cutoutWhiteBackground(imageData) {
+  const { data, width, height } = imageData;
+  const whiteness = (i) => Math.min(data[i], data[i + 1], data[i + 2]);
+  const visited = new Uint8Array(width * height);
+  const queue = [];
+  for (let x = 0; x < width; x++) queue.push(x, (height - 1) * width + x);
+  for (let y = 0; y < height; y++) queue.push(y * width, y * width + width - 1);
+  while (queue.length) {
+    const p = queue.pop();
+    if (visited[p]) continue;
+    visited[p] = 1;
+    const i = p * 4;
+    const w = whiteness(i);
+    if (w < 208) continue;
+    data[i + 3] = w >= 235 ? 0 : Math.round(((235 - w) / 27) * 255);
+    const x = p % width, y = (p / width) | 0;
+    if (x > 0) queue.push(p - 1);
+    if (x < width - 1) queue.push(p + 1);
+    if (y > 0) queue.push(p - width);
+    if (y < height - 1) queue.push(p + width);
+  }
+}
+function stickerObjectUrl(pack, n) {
+  if (PACK_IDS.get(pack)?.cutout === false) return Promise.resolve(stickerUrl(pack, n));
+  const key = `${pack}/${n}`;
+  if (!cutoutCache.has(key)) {
+    cutoutCache.set(key, (async () => {
+      const source = new Image();
+      source.src = stickerUrl(pack, n);
+      await source.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = source.naturalWidth; canvas.height = source.naturalHeight;
+      const context = canvas.getContext("2d");
+      context.drawImage(source, 0, 0);
+      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+      cutoutWhiteBackground(imageData);
+      context.putImageData(imageData, 0, 0);
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+      if (!blob) throw new Error("cutout failed");
+      return URL.createObjectURL(blob);
+    })().catch(() => stickerUrl(pack, n)));
+  }
+  return cutoutCache.get(key);
+}
+function stickerImg(pack, n, alt) {
+  const img = document.createElement("img");
+  img.alt = alt; img.decoding = "async";
+  stickerObjectUrl(pack, n).then((url) => { img.src = url; });
+  return img;
+}
+
 // ── WebSocket 연결 ───────────────────────────────────────────
 let ws = null, backoff = 1000;
-const seen = new Set(); // 이미 렌더한 seq (백필/실시간 중복 방지)
+const seen = new Set();
 const lastSeqKey = "duri:lastSeq";
 const getLastSeq = () => Number(localStorage.getItem(lastSeqKey) || 0);
 const setLastSeq = (n) => localStorage.setItem(lastSeqKey, String(n));
 
-function setStatus(on, text) {
-  $("dot").classList.toggle("on", on);
-  $("stat").textContent = text;
-}
+function setStatus(on, text) { $("dot").classList.toggle("on", on); $("stat").textContent = text; }
 
 function connect() {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   ws = new WebSocket(`${proto}//${location.host}/_duri`);
-  ws.onopen = () => {
-    backoff = 1000;
-    setStatus(true, "연결됨");
-    ws.send(JSON.stringify({ type: "hello", since: getLastSeq() }));
-  };
+  ws.onopen = () => { backoff = 1000; setStatus(true, "연결됨"); ws.send(JSON.stringify({ type: "hello", since: getLastSeq() })); };
   ws.onmessage = (e) => {
     let m; try { m = JSON.parse(e.data); } catch { return; }
     if (m.type === "ping") { ws.send(JSON.stringify({ type: "pong" })); return; }
-    if (m.type === "welcome") { setStatus(true, m.online > 1 ? "둘 다 접속 중" : "연결됨 (혼자)"); return; }
-    if (m.type === "presence") { setStatus(true, m.online > 1 ? "둘 다 접속 중" : "연결됨 (혼자)"); return; }
+    if (m.type === "welcome" || m.type === "presence") { setStatus(true, m.online > 1 ? "둘 다 접속 중" : "연결됨 (혼자)"); return; }
     if (m.type === "entry") { renderEntry(m); return; }
     if (m.type === "error") { console.warn("duri error", m.error); return; }
   };
-  ws.onclose = () => {
-    setStatus(false, "재연결 중…");
-    setTimeout(connect, backoff);
-    backoff = Math.min(backoff * 2, 15000);
-  };
+  ws.onclose = () => { setStatus(false, "재연결 중…"); setTimeout(connect, backoff); backoff = Math.min(backoff * 2, 15000); };
   ws.onerror = () => { try { ws.close(); } catch {} };
 }
 
@@ -185,7 +272,14 @@ async function renderEntry(m) {
   try {
     if (m.kind === "msg") {
       const p = await decryptJson(m.iv, m.ct);
-      buildBubble(row, p.name, m.at, (b) => { b.textContent = p.text; });
+      buildBubble(row, p.name, m.at, (b) => {
+        if (p.sticker && PACK_IDS.has(p.sticker.pack)) {
+          b.classList.add("sticker");
+          b.appendChild(stickerImg(p.sticker.pack, p.sticker.n, "스티커"));
+        } else {
+          b.textContent = p.text;
+        }
+      });
     } else if (m.kind === "photo") {
       const meta = await decryptJson(m.metaIv, m.metaCt).catch(() => ({}));
       buildBubble(row, meta.name, m.at, (b) => {
@@ -220,8 +314,8 @@ async function loadPhoto(m, img) {
   try {
     const res = await fetch(`/_duri/photo/${m.r2key}`, { cache: "no-store" });
     if (!res.ok) throw new Error("gone");
-    const enc = await res.arrayBuffer();
-    const plain = await decryptBytes(m.imgIv, enc);
+    const encbuf = await res.arrayBuffer();
+    const plain = await decryptBytes(m.imgIv, encbuf);
     img.src = URL.createObjectURL(new Blob([plain]));
   } catch {
     img.replaceWith(Object.assign(document.createElement("span"), {
@@ -235,7 +329,12 @@ async function sendText(text) {
   const frame = await encryptJson({ name: MY_NAME, text, at: Date.now() });
   ws.send(JSON.stringify({ type: "msg", ...frame }));
 }
-
+async function sendSticker(pack, n) {
+  if (!ws || ws.readyState !== 1) return;
+  const frame = await encryptJson({ name: MY_NAME, at: Date.now(), sticker: { pack, n } });
+  ws.send(JSON.stringify({ type: "msg", ...frame }));
+  rememberSticker(pack, n);
+}
 async function sendPhoto(file) {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const sha256 = hex(await crypto.subtle.digest("SHA-256", bytes));
@@ -243,16 +342,92 @@ async function sendPhoto(file) {
   const meta = await encryptJson({ name: MY_NAME, caption: file.name, at: Date.now() });
   const res = await fetch("/_duri/photo", {
     method: "POST",
-    headers: {
-      "X-Duri-Img-Iv": img.iv,
-      "X-Duri-Sha256": sha256,
-      "X-Duri-Meta-Iv": meta.iv,
-      "X-Duri-Meta": meta.ct,
-    },
+    headers: { "X-Duri-Img-Iv": img.iv, "X-Duri-Sha256": sha256, "X-Duri-Meta-Iv": meta.iv, "X-Duri-Meta": meta.ct },
     body: img.ct,
   });
-  if (!res.ok) alert("사진 전송 실패: " + res.status);
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    alert(`사진 전송 실패: ${res.status}\n원본 ${(bytes.length / 1048576).toFixed(1)}MB\n${detail}`);
+  }
 }
+
+// ── 스티커 서랍 ──────────────────────────────────────────────
+const picker = $("picker"), tabs = $("tabs"), grid = $("grid"), hint = $("hint");
+const HINT_DEFAULT = "스티커를 누르면 미리보기, 한 번 더 누르면 전송돼요";
+let activeTab = "recent", selectedKey = null;
+
+function recentStickers() {
+  try {
+    const list = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]");
+    return Array.isArray(list) ? list.filter((key) => {
+      const [pack, n] = String(key).split("/");
+      return PACK_IDS.has(pack) && Number(n) >= 1 && Number(n) <= (PACK_IDS.get(pack)?.count ?? 0);
+    }) : [];
+  } catch { return []; }
+}
+function rememberSticker(pack, n) {
+  const key = `${pack}/${n}`;
+  localStorage.setItem(RECENT_KEY, JSON.stringify([key, ...recentStickers().filter((k) => k !== key)].slice(0, 16)));
+}
+function clearSelection() {
+  selectedKey = null; hint.textContent = HINT_DEFAULT;
+  for (const b of grid.querySelectorAll("button.selected")) b.classList.remove("selected");
+}
+function onStickerClick(button, pack, n) {
+  const key = `${pack}/${n}`;
+  if (selectedKey === key) { clearSelection(); sendSticker(pack, n); closePicker(); return; }
+  clearSelection();
+  selectedKey = key; button.classList.add("selected");
+  hint.textContent = (button.title ? `${button.title} — ` : "") + "한 번 더 누르면 전송";
+}
+function stickerButton(pack, n) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.append(stickerImg(pack, n, `${PACK_IDS.get(pack)?.title ?? ""} ${n}`));
+  button.addEventListener("click", () => onStickerClick(button, pack, n));
+  return button;
+}
+function renderGrid() {
+  clearSelection();
+  if (activeTab === "recent") {
+    const list = recentStickers();
+    if (!list.length) {
+      const empty = document.createElement("div");
+      empty.className = "empty"; empty.textContent = "최근 보낸 스티커가 여기 모여요";
+      grid.replaceChildren(empty); return;
+    }
+    grid.replaceChildren(...list.map((key) => { const [p, n] = key.split("/"); return stickerButton(p, Number(n)); }));
+    return;
+  }
+  const pack = PACK_IDS.get(activeTab);
+  const btns = [];
+  for (let n = 1; n <= (pack?.count ?? 0); n++) btns.push(stickerButton(activeTab, n));
+  grid.replaceChildren(...btns);
+}
+function renderTabs() {
+  tabs.replaceChildren();
+  for (const tab of [{ id: "recent", title: "🕘 최근" }, ...PACKS]) {
+    const button = document.createElement("button");
+    button.type = "button"; button.role = "tab"; button.textContent = tab.title;
+    button.setAttribute("aria-selected", String(tab.id === activeTab));
+    button.addEventListener("click", () => { activeTab = tab.id; renderTabs(); renderGrid(); });
+    tabs.append(button);
+  }
+}
+function openPicker() {
+  if (!PACKS.length) return;
+  $("text").blur();
+  picker.hidden = false;
+  $("sticker-btn").setAttribute("aria-expanded", "true");
+  if (activeTab === "recent" && !recentStickers().length) activeTab = PACKS[0].id;
+  renderTabs(); renderGrid(); scroll();
+}
+function closePicker() {
+  picker.hidden = true;
+  $("sticker-btn").setAttribute("aria-expanded", "false");
+  clearSelection();
+}
+$("sticker-btn").addEventListener("click", () => { if (picker.hidden) openPicker(); else closePicker(); });
 
 // ── 셋업 & 이벤트 ────────────────────────────────────────────
 $("enter").addEventListener("click", async () => {
@@ -265,11 +440,13 @@ $("enter").addEventListener("click", async () => {
   localStorage.setItem("duri:pass", pass); // 이 기기에만 저장 — 서버로 전송되지 않음
   $("setup").classList.add("hidden");
   for (const el of ["bar", "log", "composer"]) $(el).classList.remove("hidden");
+  await loadPacks(); // 백필 스티커 렌더 전에 팩 목록 확보
   connect();
 });
 
 const text = $("text");
 text.addEventListener("input", () => { text.style.height = "auto"; text.style.height = text.scrollHeight + "px"; });
+text.addEventListener("focus", () => { if (!picker.hidden) closePicker(); });
 text.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("composer").requestSubmit(); }
 });
@@ -286,14 +463,11 @@ $("file").addEventListener("change", async (e) => {
   if (file) await sendPhoto(file);
 });
 
-// 이 기기에 저장된 문구·이름이 있으면 곧바로 입장 (아무것도 안 해도 이어짐)
+// 저장된 문구·이름이 있으면 곧바로 입장 (아무것도 안 해도 이어짐)
 (async () => {
   const savedPass = localStorage.getItem("duri:pass");
   const savedName = localStorage.getItem("duri:name");
-  if (savedPass && savedName) {
-    $("pass").value = savedPass; $("name").value = savedName;
-    $("enter").click();
-  }
+  if (savedPass && savedName) { $("pass").value = savedPass; $("name").value = savedName; $("enter").click(); }
 })();
 </script>
 </body>
