@@ -10,8 +10,6 @@
          background: light-dark(#f2eef7, #120c1c); user-select: none;
          -webkit-user-select: none; touch-action: manipulation; }
   canvas { display: block; }
-  #score { position: fixed; top: 1rem; left: 1.25rem; font-size: 1.15rem;
-           color: light-dark(#231a33, #e0d6f0); }
   #overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
              display: flex; flex-direction: column; align-items: center; gap: 1rem;
              padding: 1.6rem 2rem; border-radius: 1.25rem; text-align: center;
@@ -32,7 +30,6 @@
 </style>
 </head>
 <body>
-<div id="score">🎯 0개</div>
 <div id="overlay">
   <h1>🎯 다트 서커스</h1>
   <p id="msg">화면 아무 곳이나 누르면
@@ -47,7 +44,6 @@
 <script>
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
-const scoreEl = document.getElementById("score");
 const overlay = document.getElementById("overlay");
 const msg = document.getElementById("msg");
 const result = document.getElementById("result");
@@ -67,6 +63,15 @@ let cx = 0, cy = 0, R = 90;
 const NEEDLE = 46;        // 바늘 길이(원 바깥으로 뻗음)
 const HEAD = 8;           // 다트 머리 반지름
 const CONTACT = Math.PI;  // 왼쪽 끝 = 각도 π
+
+// 회전 방향별 원판 팔레트. 방향이 바뀔 때마다 번갈아 쓴다.
+const PALETTES = [
+  { a: "#7c5fd6", b: "#5a3fb0", ring: "#c3b0ff" }, // 정방향 — 보라
+  { a: "#28b0a8", b: "#187a72", ring: "#8ff0e6" }, // 역방향 — 청록
+];
+let palIdx = 0;
+let flash = 0;            // 방향 전환 섬광 (1→0 감쇠)
+const rings = [];         // 방향 전환 파문
 
 window.blWeekly = { game: "dart", dir: "max", fmt: (v) => v + "개" };
 window.blShareText = () => `돌아가는 원에 다트 ${best ?? score}개 꽂음! 도전해보세요`;
@@ -111,10 +116,16 @@ function landDart() {
   flying = null;
   if (hit) { finish(); return; }
   score++;
-  scoreEl.textContent = "🎯 " + score + "개";
-  // 점수가 오를수록 살짝 빨라지고, 가끔 방향이 바뀐다
+  // 점수가 오를수록 살짝 빨라지고, 6개마다 방향이 바뀐다
   baseSpeed = 0.9 + score * 0.045;
-  if (score % 6 === 0) dir *= -1;
+  if (score % 6 === 0) reverseDir();
+}
+
+function reverseDir() {
+  dir *= -1;
+  palIdx = palIdx ? 0 : 1;
+  flash = 1;
+  rings.push({ r: R * 0.9, alpha: 0.9 });
 }
 
 addEventListener("pointerdown", throwDart);
@@ -131,7 +142,9 @@ btn.addEventListener("click", () => {
   rot = 0;
   dir = 1;
   baseSpeed = 0.9;
-  scoreEl.textContent = "🎯 0개";
+  palIdx = 0;
+  flash = 0;
+  rings.length = 0;
   overlay.classList.add("hide");
 });
 
@@ -194,19 +207,51 @@ function tick(now) {
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // 중앙 원판
+  // 방향 전환 파문 (원판 밖으로 번져나감)
+  for (let i = rings.length - 1; i >= 0; i--) {
+    const rg = rings[i];
+    rg.r += 340 * dt;
+    rg.alpha -= dt * 1.6;
+    if (rg.alpha <= 0) { rings.splice(i, 1); continue; }
+    ctx.beginPath();
+    ctx.arc(cx, cy, rg.r, 0, Math.PI * 2);
+    ctx.strokeStyle = PALETTES[palIdx].ring;
+    ctx.globalAlpha = rg.alpha;
+    ctx.lineWidth = 5;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  // 중앙 원판 (현재 방향의 팔레트)
+  const pal = PALETTES[palIdx];
   ctx.beginPath();
   ctx.arc(cx, cy, R, 0, Math.PI * 2);
   const grad = ctx.createRadialGradient(cx - R * 0.3, cy - R * 0.3, R * 0.2, cx, cy, R);
-  grad.addColorStop(0, "#7c5fd6");
-  grad.addColorStop(1, "#5a3fb0");
+  grad.addColorStop(0, pal.a);
+  grad.addColorStop(1, pal.b);
   ctx.fillStyle = grad;
   ctx.fill();
-  // 중심 표식
-  ctx.beginPath();
-  ctx.arc(cx, cy, 5, 0, Math.PI * 2);
-  ctx.fillStyle = "rgba(255,255,255,.75)";
-  ctx.fill();
+
+  // 방향 전환 섬광
+  if (flash > 0) {
+    ctx.globalAlpha = flash * 0.6;
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    ctx.fillStyle = "#fff";
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    flash = Math.max(0, flash - dt * 2.2);
+  }
+
+  // 중심에 꽂은 다트 개수
+  ctx.fillStyle = "#fff";
+  ctx.font = `bold ${Math.round(R * 0.85)}px ui-monospace, "SF Mono", Consolas, monospace`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.shadowColor = "rgba(0,0,0,.35)";
+  ctx.shadowBlur = 8;
+  ctx.fillText(String(score), cx, cy);
+  ctx.shadowBlur = 0;
 
   // 꽂힌 다트들
   for (const a of stuck) drawDart(worldAngle(a), 1);
