@@ -518,12 +518,13 @@ text.addEventListener("focus", () => { if (!picker.hidden) closePicker(); });
 text.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("composer").requestSubmit(); }
 });
-$("composer").addEventListener("submit", async (e) => {
+$("composer").addEventListener("submit", (e) => {
   e.preventDefault();
   const val = text.value.trim();
   if (!val || !ws || ws.readyState !== 1) return;
   text.value = ""; text.style.height = "auto";
-  await sendText(val);
+  text.focus(); // 전송 후에도 키보드 유지 — 제스처 안에서 동기로 포커스 유지, await 안 함
+  sendText(val).catch((err) => console.warn("send failed", err));
 });
 $("file").addEventListener("change", async (e) => {
   const file = e.target.files[0];
