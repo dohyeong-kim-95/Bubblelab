@@ -430,7 +430,12 @@ function clearSelection() {
 }
 function onStickerClick(button, pack, n) {
   const key = `${pack}/${n}`;
-  if (selectedKey === key) { clearSelection(); sendSticker(pack, n); closePicker(); return; }
+  if (selectedKey === key) { // 두 번째 탭 → 전송. 서랍은 닫지 않아 계속 보낼 수 있다.
+    clearSelection();
+    sendSticker(pack, n);
+    hint.textContent = "보냈어요 — 계속 골라 보내도 돼요";
+    return;
+  }
   clearSelection();
   selectedKey = key; button.classList.add("selected");
   hint.textContent = (button.title ? `${button.title} — ` : "") + "한 번 더 누르면 전송";
