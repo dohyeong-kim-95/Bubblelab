@@ -1,0 +1,6 @@
+{
+  "url": "https://work.bubblelab.dev",
+  "token": "여기에 /_duri/sink-token 에서 발급받은 싱크 토큰을 붙여넣으세요",
+  "passphrase": "둘이 똑같이 쓰는 암호 문구 (웹앱에 입력한 것과 동일)",
+  "dir": "/home/나/Duri/DuriStorage"
+}
