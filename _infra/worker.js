@@ -70,8 +70,10 @@ button { font: inherit; padding: .65rem; border: 0; border-radius: .6rem;
 <p class="error">${failed ? "비밀번호가 맞지 않습니다." : ""}</p>
 <button type="submit">들어가기</button></form></body></html>`;
 
-// 운영자 브라우저 집계 제외 화면. 켜면 bl_notrack 쿠키가 심어지고 그 브라우저의
-// 방문·체류·유효방문이 모두 통계에서 빠진다. 브라우저(프로필)마다 한 번씩 연다.
+// 운영자 브라우저 집계 제외 화면 (admin 로그인 뒤 /optout). 켜면 전체 서브도메인
+// bl_notrack 쿠키가 심어지고 그 브라우저의 방문·체류·유효방문이 모두 통계에서
+// 빠진다. 브라우저(프로필)마다 admin에 로그인해 한 번씩 켠다 — 방문자가 임의로
+// 자신을 통계에서 빼지 못하도록 인증 뒤에만 둔다.
 const OPTOUT_PAGE = (active) => `<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow"><title>Bubblelab 집계 제외</title>
@@ -289,6 +291,24 @@ async function handleAdmin(request, env, url, base = "") {
     return redirect(`${base}/login`, { "Set-Cookie": "bl_admin=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0" });
   }
   if (!isAuthed) return redirect(`${base}/login`);
+
+  // 로그인한 운영자의 현재 브라우저를 방문 통계에서 제외/복귀시킨다.
+  // bl_notrack은 전체 서브도메인 쿠키라 admin 밖의 모든 방문에 적용된다.
+  if (url.pathname === "/optout") {
+    const host = url.hostname;
+    const domain = host === ROOT_DOMAIN || host.endsWith(`.${ROOT_DOMAIN}`)
+      ? `; Domain=${ROOT_DOMAIN}; Secure` : "";
+    if (request.method === "POST") {
+      const form = await request.formData().catch(() => null);
+      const cookie = form?.get("state") === "on"
+        ? `bl_notrack=1; Path=/; HttpOnly; Max-Age=157680000; SameSite=Lax${domain}`
+        : `bl_notrack=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax${domain}`;
+      return redirect(`${base}/optout`, { "Set-Cookie": cookie });
+    }
+    return new Response(OPTOUT_PAGE(cookies(request).bl_notrack === "1"), {
+      headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+    });
+  }
 
   if (url.pathname === "/api/stats") {
     const days = Math.min(30, Math.max(1, Number(url.searchParams.get("days")) || 30));
@@ -526,30 +546,6 @@ export async function handleRequest(request, env, ctx) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...body, visitorId: currentVisitorId, date: kstDate() }),
-      });
-    }
-
-    // 운영자 브라우저 집계 제외 토글 (bl_notrack 쿠키). 모든 서브도메인 공통.
-    if (path === "/_optout") {
-      const optedOut = cookies(request).bl_notrack === "1";
-      const domain = host === ROOT_DOMAIN || host.endsWith(`.${ROOT_DOMAIN}`)
-        ? `; Domain=${ROOT_DOMAIN}; Secure` : "";
-      if (request.method === "POST") {
-        const limited = await enforceRateLimit(request, env, {
-          scope: "optout", limit: 10, windowMs: 60 * 1000,
-        });
-        if (limited) return limited;
-        const form = await request.formData().catch(() => null);
-        const cookie = form?.get("state") === "on"
-          ? `bl_notrack=1; Path=/; HttpOnly; Max-Age=157680000; SameSite=Lax${domain}`
-          : `bl_notrack=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax${domain}`;
-        return redirect(url.pathname, { "Set-Cookie": cookie });
-      }
-      if (request.method !== "GET") {
-        return new Response("method not allowed", { status: 405, headers: { Allow: "GET, POST" } });
-      }
-      return new Response(OPTOUT_PAGE(optedOut), {
-        headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
       });
     }
 

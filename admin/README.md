@@ -31,6 +31,7 @@
 | --- | --- | --- |
 | `/api/stats` | GET | 방문 통계 (유효/전체 순사용자) |
 | `/api/stats/reset` | POST | 특정 날짜 방문 통계 삭제 (`?date=YYYY-MM-DD`) |
+| `/optout` | GET, POST | 운영자 브라우저 집계 제외 토글 (전체 서브도메인 쿠키) |
 | `/api/records` | GET, DELETE | 주간·올타임 기록 관리 |
 | `/api/notice` | GET, POST, DELETE | 공지 관리 |
 | `/api/suggestions` | GET, DELETE | 아이디어 우편함 관리 |

@@ -99,34 +99,57 @@ test("work preview stays closed without a password and gates access with one", a
   assert.equal(response.headers.get("Cache-Control"), "no-store");
 });
 
-test("optout page toggles the bl_notrack cookie", async () => {
-  // GET: 현재 상태 안내 페이지
+test("optout toggle is admin-gated and sets a domain-wide bl_notrack cookie", async () => {
+  const env = { ADMIN_ID: "boss", ADMIN_PASSWORD: "hunter2" };
+
+  // 미인증 → 로그인으로 리다이렉트, 쿠키 없음
   let response = await worker.fetch(
-    new Request("https://slop.bubblelab.dev/_optout"), {}, ctx);
+    new Request("https://admin.bubblelab.dev/optout"), env, ctx);
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get("Location"), "/login");
+
+  // 로그인해서 admin 세션 획득
+  const form = new FormData();
+  form.set("id", "boss");
+  form.set("password", "hunter2");
+  response = await worker.fetch(
+    new Request("https://admin.bubblelab.dev/login", { method: "POST", body: form }), env, ctx);
+  assert.equal(response.status, 303);
+  const adminCookie = response.headers.get("Set-Cookie").split(";")[0];
+
+  // GET: 현재 상태 안내 페이지
+  response = await worker.fetch(
+    new Request("https://admin.bubblelab.dev/optout", {
+      headers: { Cookie: adminCookie },
+    }), env, ctx);
   assert.equal(response.status, 200);
   assert.match(await response.text(), /통계에 포함되고 있어요/);
 
-  // POST on → 장기 쿠키 심고 같은 화면으로 리다이렉트
-  let form = new FormData();
-  form.set("state", "on");
+  // POST on → 전체 서브도메인 장기 쿠키 심고 같은 화면으로 리다이렉트
+  const toggle = new FormData();
+  toggle.set("state", "on");
   response = await worker.fetch(
-    new Request("https://slop.bubblelab.dev/_optout", { method: "POST", body: form }), {}, ctx);
+    new Request("https://admin.bubblelab.dev/optout", {
+      method: "POST", body: toggle, headers: { Cookie: adminCookie },
+    }), env, ctx);
   assert.equal(response.status, 303);
   assert.match(response.headers.get("Set-Cookie"),
     /^bl_notrack=1; Path=\/; HttpOnly; Max-Age=157680000; SameSite=Lax; Domain=bubblelab\.dev; Secure$/);
 
   // 켜진 상태의 GET은 제외 중이라고 안내
   response = await worker.fetch(
-    new Request("https://slop.bubblelab.dev/_optout", {
-      headers: { Cookie: "bl_notrack=1" },
-    }), {}, ctx);
-  assert.match(await response.text(), /제외되고/);
+    new Request("https://admin.bubblelab.dev/optout", {
+      headers: { Cookie: `${adminCookie}; bl_notrack=1` },
+    }), env, ctx);
+  assert.match(await response.text(), /제외되고 있어요/);
 
   // POST off → 쿠키 삭제
-  form = new FormData();
-  form.set("state", "off");
+  const off = new FormData();
+  off.set("state", "off");
   response = await worker.fetch(
-    new Request("https://slop.bubblelab.dev/_optout", { method: "POST", body: form }), {}, ctx);
+    new Request("https://admin.bubblelab.dev/optout", {
+      method: "POST", body: off, headers: { Cookie: `${adminCookie}; bl_notrack=1` },
+    }), env, ctx);
   assert.match(response.headers.get("Set-Cookie"), /^bl_notrack=; .*Max-Age=0/);
 });
 
