@@ -102,7 +102,9 @@
   <span class="mark">💞</span>
   <b>Duri</b>
   <span class="status"><span class="dot" id="dot"></span><span id="stat">연결 중…</span></span>
-  <a href="/logout" style="margin-left:.8rem">나가기</a>
+  <button id="clear-cache" title="이 기기에 저장된 대화 기록 지우기"
+          style="margin-left:.6rem; font-size:.7rem; padding:.25rem .5rem;">기록지우기</button>
+  <a href="/logout" style="margin-left:.6rem">나가기</a>
 </header>
 
 <div id="log" class="hidden"></div>
@@ -257,46 +259,103 @@ function connect() {
   ws.onerror = () => { try { ws.close(); } catch {} };
 }
 
+// ── 로컬 캐시 (IndexedDB) — 이 기기 표시용. 아카이브는 PC 싱크가 정본. ──
+// 복호화한 항목을 이 기기에 담아 새로고침·재방문에도 대화가 남게 한다. 사진은
+// 복호화한 원본 blob째 담아 서버 R2가 정리된 뒤에도 이 기기에선 계속 보인다.
+// (패스프레이즈가 이미 이 기기에 저장돼 자동입장하므로 보안 수준은 동일하다.)
+let db = null;
+const MAX_CACHE = 2000; // 이 기기에 보관할 최근 항목 수
+function openDB() {
+  return new Promise((resolve) => {
+    let req;
+    try { req = indexedDB.open("duri", 1); } catch { return resolve(null); }
+    req.onupgradeneeded = () => req.result.createObjectStore("entries", { keyPath: "seq" });
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => resolve(null);
+  });
+}
+function putEntry(rec) {
+  if (!db) return;
+  try {
+    const store = db.transaction("entries", "readwrite").objectStore("entries");
+    store.put(rec);
+    if (rec.seq > MAX_CACHE) store.delete(IDBKeyRange.upperBound(rec.seq - MAX_CACHE)); // 오래된 것 정리
+  } catch { /* 캐시는 최선노력 */ }
+}
+function allEntries() {
+  return new Promise((resolve) => {
+    if (!db) return resolve([]);
+    const out = [];
+    try {
+      const cur = db.transaction("entries").objectStore("entries").openCursor();
+      cur.onsuccess = (e) => { const c = e.target.result; if (c) { out.push(c.value); c.continue(); } else resolve(out); };
+      cur.onerror = () => resolve(out);
+    } catch { resolve(out); }
+  });
+}
+function clearCache() {
+  return new Promise((resolve) => {
+    localStorage.removeItem(lastSeqKey);
+    if (!db) return resolve();
+    try { const t = db.transaction("entries", "readwrite"); t.objectStore("entries").clear(); t.oncomplete = resolve; t.onerror = resolve; }
+    catch { resolve(); }
+  });
+}
+
 // ── 렌더 ─────────────────────────────────────────────────────
 const log = () => $("log");
 function atBottom() { const el = log(); return el.scrollHeight - el.scrollTop - el.clientHeight < 80; }
 function scroll() { log().scrollTop = log().scrollHeight; }
 
-async function renderEntry(m) {
-  if (seen.has(m.seq)) return;
-  seen.add(m.seq);
-  if (m.seq > getLastSeq()) setLastSeq(m.seq);
+// 복호화가 끝난 레코드({seq,kind,at,name, text?|sticker?|photo blob|broken})를 그린다.
+function appendRecord(rec) {
+  if (seen.has(rec.seq)) return;
+  seen.add(rec.seq);
+  if (rec.seq > getLastSeq()) setLastSeq(rec.seq);
   const stick = atBottom();
   const row = document.createElement("div");
   row.className = "row";
-  try {
-    if (m.kind === "msg") {
-      const p = await decryptJson(m.iv, m.ct);
-      buildBubble(row, p.name, m.at, (b) => {
-        if (p.sticker && PACK_IDS.has(p.sticker.pack)) {
-          b.classList.add("sticker");
-          b.appendChild(stickerImg(p.sticker.pack, p.sticker.n, "스티커"));
-        } else {
-          b.textContent = p.text;
-        }
-      });
-    } else if (m.kind === "photo") {
-      const meta = await decryptJson(m.metaIv, m.metaCt).catch(() => ({}));
-      buildBubble(row, meta.name, m.at, (b) => {
-        const img = document.createElement("img");
-        img.alt = meta.caption || "사진";
-        b.appendChild(img);
-        if (meta.caption) { const c = document.createElement("div"); c.className = "cap"; c.textContent = meta.caption; b.appendChild(c); }
-        loadPhoto(m, img);
-      });
-    }
-  } catch {
-    buildBubble(row, "🔒", m.at, (b) => {
-      b.innerHTML = '<span class="broken">복호화할 수 없는 메시지 (암호 문구가 다릅니다)</span>';
+  if (rec.kind === "photo" && rec.blob) {
+    buildBubble(row, rec.name, rec.at, (b) => {
+      const img = document.createElement("img");
+      img.alt = rec.caption || "사진";
+      b.appendChild(img);
+      if (rec.caption) { const c = document.createElement("div"); c.className = "cap"; c.textContent = rec.caption; b.appendChild(c); }
+      img.src = URL.createObjectURL(rec.blob);
     });
+  } else if (rec.sticker && PACK_IDS.has(rec.sticker.pack)) {
+    buildBubble(row, rec.name, rec.at, (b) => { b.classList.add("sticker"); b.appendChild(stickerImg(rec.sticker.pack, rec.sticker.n, "스티커")); });
+  } else if (rec.broken) {
+    buildBubble(row, "🔒", rec.at, (b) => { const s = document.createElement("span"); s.className = "broken"; s.textContent = rec.broken; b.appendChild(s); });
+  } else {
+    buildBubble(row, rec.name, rec.at, (b) => { b.textContent = rec.text; });
   }
   log().appendChild(row);
   if (stick) scroll();
+}
+
+// 서버에서 온 암호화 항목: 복호화 → 그리기 → 이 기기 캐시에 저장(broken은 캐시 안 함).
+async function renderEntry(m) {
+  if (seen.has(m.seq)) return;
+  try {
+    if (m.kind === "msg") {
+      const p = await decryptJson(m.iv, m.ct);
+      const rec = { seq: m.seq, kind: "msg", at: p.at ?? m.at, name: p.name };
+      if (p.sticker) rec.sticker = p.sticker; else rec.text = p.text;
+      appendRecord(rec); putEntry(rec);
+    } else if (m.kind === "photo") {
+      const meta = await decryptJson(m.metaIv, m.metaCt);
+      const blob = await fetchPhotoBlob(m); // R2가 정리되기 전에 받아 캐시에 담는다
+      if (blob) {
+        const rec = { seq: m.seq, kind: "photo", at: meta.at ?? m.at, name: meta.name, caption: meta.caption, blob };
+        appendRecord(rec); putEntry(rec);
+      } else {
+        appendRecord({ seq: m.seq, at: m.at, broken: "사진을 불러올 수 없습니다 (이미 백업되어 정리됨)" });
+      }
+    }
+  } catch {
+    appendRecord({ seq: m.seq, at: m.at, broken: "복호화할 수 없는 메시지 (암호 문구가 다릅니다)" });
+  }
 }
 
 function buildBubble(row, name, at, fill) {
@@ -310,18 +369,14 @@ function buildBubble(row, name, at, fill) {
   const t = document.createElement("div"); t.className = "time"; t.textContent = fmtTime(at); row.appendChild(t);
 }
 
-async function loadPhoto(m, img) {
+async function fetchPhotoBlob(m) {
   try {
     const res = await fetch(`/_duri/photo/${m.r2key}`, { cache: "no-store" });
-    if (!res.ok) throw new Error("gone");
+    if (!res.ok) return null;
     const encbuf = await res.arrayBuffer();
     const plain = await decryptBytes(m.imgIv, encbuf);
-    img.src = URL.createObjectURL(new Blob([plain]));
-  } catch {
-    img.replaceWith(Object.assign(document.createElement("span"), {
-      className: "broken", textContent: "사진을 불러올 수 없습니다 (이미 백업되어 정리됨)",
-    }));
-  }
+    return new Blob([plain]);
+  } catch { return null; }
 }
 
 // ── 보내기 ───────────────────────────────────────────────────
@@ -441,7 +496,16 @@ $("enter").addEventListener("click", async () => {
   $("setup").classList.add("hidden");
   for (const el of ["bar", "log", "composer"]) $(el).classList.remove("hidden");
   await loadPacks(); // 백필 스티커 렌더 전에 팩 목록 확보
+  db = await openDB();
+  // 이 기기 캐시부터 그린 뒤(새로고침에도 대화 유지), 마지막 seq 이후만 이어받는다.
+  for (const rec of (await allEntries()).sort((a, b) => a.seq - b.seq)) appendRecord(rec);
   connect();
+});
+
+$("clear-cache").addEventListener("click", async () => {
+  if (!confirm("이 기기에 저장된 대화 기록을 지울까요?\n(상대 기기와 PC 백업은 그대로예요)")) return;
+  await clearCache();
+  location.reload();
 });
 
 const text = $("text");
