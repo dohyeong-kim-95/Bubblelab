@@ -264,7 +264,8 @@ function connect() {
 // 복호화한 원본 blob째 담아 서버 R2가 정리된 뒤에도 이 기기에선 계속 보인다.
 // (패스프레이즈가 이미 이 기기에 저장돼 자동입장하므로 보안 수준은 동일하다.)
 let db = null;
-const MAX_CACHE = 2000; // 이 기기에 보관할 최근 항목 수
+const MAX_CACHE = 2000; // 이 기기에 보관할 최근 항목 수(IndexedDB)
+const MAX_DOM = 300;    // 화면에 유지할 말풍선 수(성능 — 넘으면 위에서부터 제거)
 function openDB() {
   return new Promise((resolve) => {
     let req;
@@ -331,6 +332,12 @@ function appendRecord(rec) {
     buildBubble(row, rec.name, rec.at, (b) => { b.textContent = rec.text; });
   }
   log().appendChild(row);
+  // 화면 노드 수를 제한한다(성능). 지운 사진의 blob URL은 메모리 회수.
+  while (log().children.length > MAX_DOM) {
+    const first = log().firstChild;
+    first.querySelectorAll?.("img[src^='blob:']").forEach((im) => URL.revokeObjectURL(im.src));
+    first.remove();
+  }
   if (stick) scroll();
 }
 
@@ -501,8 +508,9 @@ $("enter").addEventListener("click", async () => {
   for (const el of ["bar", "log", "composer"]) $(el).classList.remove("hidden");
   await loadPacks(); // 백필 스티커 렌더 전에 팩 목록 확보
   db = await openDB();
-  // 이 기기 캐시부터 그린 뒤(새로고침에도 대화 유지), 마지막 seq 이후만 이어받는다.
-  for (const rec of (await allEntries()).sort((a, b) => a.seq - b.seq)) appendRecord(rec);
+  // 이 기기 캐시의 최근 분만 그린 뒤(새로고침에도 대화 유지, 화면은 가볍게),
+  // 마지막 seq 이후만 이어받는다. 나머지 이력은 IndexedDB·PC 백업에 그대로 있다.
+  for (const rec of (await allEntries()).sort((a, b) => a.seq - b.seq).slice(-MAX_DOM)) appendRecord(rec);
   connect();
 });
 
