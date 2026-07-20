@@ -15,6 +15,7 @@ import { handlePodcast, handlePodcastAdmin, runDailyGeneration, UPLOAD_MAX_BYTES
 import { handleEstateDeals } from "./estate.js";
 import { serveAssetDownload, serveAssetDownloadCounts } from "./downloads.js";
 import { fetchStoreReviews, REVIEWS_SYNC_VERSION } from "./reviews.js";
+import { DURI_MAX_PHOTO_BYTES } from "./duri.js";
 import {
   applySecurityHeaders,
   consumeRateLimit,
@@ -504,6 +505,7 @@ export async function handleRequest(request, env, ctx) {
     const mutationError = validateMutationRequest(
       request,
       path === "/_podcast/upload" ? UPLOAD_MAX_BYTES :
+      path === "/_duri/photo" ? DURI_MAX_PHOTO_BYTES :
       path === "/_planner/data" ? 600 * 1024 : 64 * 1024,
     );
     if (mutationError) return mutationError;
