@@ -27,6 +27,7 @@ export const GAMES = {
   "bubble-pop-idle": { dir: "max", min: 0, max: 1e100 }, // 7일 누적 버블 수
   circle:       { dir: "max", min: 0, max: 100 },       // 정확도(%)
   clicker:      { dir: "max", min: 0, max: 300 },       // 10초 클릭 수
+  dart:         { dir: "max", min: 0, max: 1000 },      // 원에 꽂은 다트 수
   flags:        { dir: "max", min: 0, max: 1000 },      // 연속으로 맞춘 국기 수
   reactiontime: { dir: "min", min: 30, max: 60000 },    // 반응속도(ms)
   touch25:      { dir: "min", min: 0, max: 3600 },      // 완주 시간(초)
