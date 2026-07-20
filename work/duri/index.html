@@ -521,7 +521,18 @@ $("clear-cache").addEventListener("click", async () => {
 });
 
 const text = $("text");
-text.addEventListener("input", () => { text.style.height = "auto"; text.style.height = text.scrollHeight + "px"; });
+// 입력창 자동 높이: 키 입력마다 즉시 리플로우하지 않고 프레임당 한 번으로 합친다.
+let resizeScheduled = false;
+function autoGrow() {
+  resizeScheduled = false;
+  text.style.height = "auto";
+  text.style.height = text.scrollHeight + "px";
+}
+text.addEventListener("input", () => {
+  if (resizeScheduled) return;
+  resizeScheduled = true;
+  requestAnimationFrame(autoGrow);
+});
 text.addEventListener("focus", () => { if (!picker.hidden) closePicker(); });
 text.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("composer").requestSubmit(); }
