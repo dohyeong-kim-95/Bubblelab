@@ -26,7 +26,7 @@
   const stars = (n) => "★★★★★☆☆☆☆☆".slice(5 - Math.round(n), 10 - Math.round(n));
   const dateOf = (s) => String(s || "").slice(0, 10).replaceAll("-", ".");
   const naverBadge = '<span class="nv-badge" title="네이버 스토어에서 가져온 항목" aria-label="네이버">N</span>';
-  const ownBadge = '<span class="own-badge">다온핏</span>';
+  const ownBadge = '<img class="own-badge" src="../_work_assets/logo.png" alt="다온핏" title="다온핏 자체 등록">';
   const badgeFor = (isNaver) => (isNaver ? naverBadge : ownBadge);
 
   const jsonOrEmpty = (response) => (response.ok ? response.json() : { items: [], questions: [], submitted: [] });

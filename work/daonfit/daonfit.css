@@ -136,8 +136,8 @@
               width: 1.05rem; height: 1.05rem; border-radius: .28rem; background: #03c75a;
               color: #fff; font-size: .72rem; font-weight: 800; line-height: 1;
               vertical-align: middle; }
-  .own-badge { background: var(--cream); color: var(--orange-deep); font-weight: 700;
-               font-size: .68rem; padding: .08rem .5rem; border-radius: 2rem; }
+  .own-badge { width: 1.25rem; height: 1.25rem; object-fit: contain; vertical-align: middle;
+               display: inline-block; }
 
   /* 상품 문의(Q&A) 리스트 */
   .qna-section { max-width: 44rem; margin: 2.2rem auto 0; }
