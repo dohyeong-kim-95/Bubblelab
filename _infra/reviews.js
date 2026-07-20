@@ -1,9 +1,10 @@
-// work.bubblelab.dev 외주 프로젝트용 상품 리뷰 동기화.
-// 네이버 커머스 API(판매자 인증)에서 리뷰를 주기적으로 받아 DO에 캐시하고,
-// 품목별 상세페이지가 이 캐시를 읽어 노출한다.
+// work.bubblelab.dev 외주 프로젝트용 상품 리뷰·문의(Q&A) 동기화.
+// 네이버 커머스 API(판매자 인증)에서 리뷰와 상품 문의를 주기적으로 받아 DO에
+// 캐시하고, 품목별 상세페이지가 이 캐시를 읽어 노출한다.
 //
-// 실제 커머스 API 호출부(fetchNaverCommerceReviews)는 판매자 자격증명이 있을
-// 때만 실행되며, 없으면 mock 데이터로 동작한다("mock으로 처리"). 실서비스
+// 실제 커머스 API 호출부(fetchNaver*)는 판매자 자격증명이 있을 때만 실행되며,
+// 없으면 mock 데이터로 동작한다("mock으로 처리"). 네이버에서 크롤링/동기화된
+// 항목은 source: "naver"를 달아 상세페이지에서 네이버 마크를 붙인다. 실서비스
 // 전환 절차·주의사항은 work/daonfit/REVIEWS.md 참고.
 
 const KEY = "reviews:data";
@@ -31,31 +32,54 @@ const MOCK_REVIEWS = {
   ],
 };
 
-function mockReviews(project) {
-  return (MOCK_REVIEWS[project] ?? []).map((review) => ({ ...review }));
-}
+// --- mock 상품 문의(Q&A) --------------------------------------------------
+// 네이버 스토어 "상품 문의"(질문 + 판매자 답변) 톤을 재현한 예시.
+const MOCK_QNA = {
+  daonfit: [
+    { id: "kbq1", product: "keybox", nick: "현대차오너", question: "아반떼CN7도 견인고리 위치에 맞게 제작되나요?", answer: "네, 주문 시 차종을 알려주시면 해당 차종 견인고리 캡 자리에 맞춰 제작해 드립니다.", date: "2025-06-05" },
+    { id: "kbq2", product: "keybox", nick: "안전제일", question: "주행 중에 키가 흔들려 소리 나지는 않나요?", answer: "내부 실리콘 패드로 고정돼 주행 중 흔들림이나 소음이 없습니다.", date: "2025-06-18" },
+    { id: "pkq1", product: "parking-keyring", nick: "지하주차초보", question: "숫자 대신 B1·B2 같은 층수 표기도 가능한가요?", answer: "네, B1~B5 표기 버전으로 제작 가능합니다. 주문 시 요청해 주세요.", date: "2025-06-12" },
+    { id: "vcq1", product: "vent-clip", nick: "방향제고민", question: "원형 송풍구에도 장착되나요?", answer: "원형·수직형 등 송풍구 형태를 알려주시면 맞춰 제작해 드립니다.", date: "2025-06-20" },
+    { id: "amq1", product: "mini-atm", nick: "선물고민중", question: "지폐는 몇 장까지 들어가나요?", answer: "5만원권 기준 약 20장까지 여유 있게 들어갑니다.", date: "2025-06-14" },
+    { id: "amq2", product: "mini-atm", nick: "조카생일", question: "건전지도 포함해서 오나요?", answer: "AA 건전지 2개가 필요하며, 기본 포함해 발송해 드립니다.", date: "2025-06-25" },
+    { id: "fsq1", product: "figure-stand", nick: "재입고문의", question: "재입고는 언제쯤 되나요?", answer: "다음 제작 배치 일정은 스마트스토어 소식·문의로 안내드리고 있습니다.", date: "2025-05-02" },
+  ],
+};
+
+// 네이버 출처 표시(source: "naver")를 달아 반환한다. 상세페이지가 이 값을 보고
+// 네이버 마크를 붙인다.
+const withNaverSource = (list) => (list ?? []).map((entry) => ({ ...entry, source: "naver" }));
 
 // 프로바이더 계층: 판매자 자격증명이 있으면 실제 커머스 API, 없으면 mock.
 // worker의 cron·최초 조회가 이 함수를 호출해 DO 캐시를 채운다.
 export async function fetchStoreReviews(env, project) {
   const live = Boolean(env?.NAVER_COMMERCE_CLIENT_ID && env?.NAVER_COMMERCE_CLIENT_SECRET);
-  const items = live ? await fetchNaverCommerceReviews(env, project) : mockReviews(project);
+  let reviews;
+  let questions;
+  if (live) {
+    const token = await issueNaverToken(env);
+    const productMap = JSON.parse(env.NAVER_PRODUCT_MAP || "{}")[project] || {};
+    reviews = await fetchNaverReviews(token, productMap);
+    questions = await fetchNaverQna(token, productMap);
+  } else {
+    reviews = withNaverSource(MOCK_REVIEWS[project]);
+    questions = withNaverSource(MOCK_QNA[project]);
+  }
   return {
     project,
     source: live ? "naver-commerce" : "mock",
     syncedAt: new Date().toISOString(),
-    items: items.slice(0, MAX_ITEMS),
+    items: reviews.slice(0, MAX_ITEMS),
+    questions: questions.slice(0, MAX_ITEMS),
   };
 }
 
 // --- 실제 네이버 커머스 API 경로 (자격증명이 있을 때만 실행) ----------------
 // 절차: (1) client_secret 전자서명으로 OAuth2 토큰 발급
-//       (2) 상품별 리뷰 목록 조회 → 사이트 표시용으로 정규화
+//       (2) 상품별 리뷰·문의 목록 조회 → 사이트 표시용으로 정규화(source: "naver")
 // 이 경로는 지금 배포(mock)에서는 절대 실행되지 않는다. 실서비스 전
 // 토큰 서명·상품ID 매핑·엔드포인트 스키마를 REVIEWS.md 절차대로 검증할 것.
-async function fetchNaverCommerceReviews(env, project) {
-  const token = await issueNaverToken(env);
-  const productMap = JSON.parse(env.NAVER_PRODUCT_MAP || "{}")[project] || {};
+async function fetchNaverReviews(token, productMap) {
   const collected = [];
   for (const [slug, productId] of Object.entries(productMap)) {
     const res = await fetch(`${NAVER_API}/v1/reviews?productId=${encodeURIComponent(productId)}&size=50`, {
@@ -71,6 +95,30 @@ async function fetchNaverCommerceReviews(env, project) {
         rating: Number(review.reviewScore) || 5,
         text: String(review.reviewContent || "").trim().slice(0, 400),
         date: String(review.createDate || "").slice(0, 10),
+        source: "naver",
+      });
+    }
+  }
+  return collected;
+}
+
+async function fetchNaverQna(token, productMap) {
+  const collected = [];
+  for (const [slug, productId] of Object.entries(productMap)) {
+    const res = await fetch(`${NAVER_API}/v1/pay-user/inquiries?productId=${encodeURIComponent(productId)}&size=50`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) continue;
+    const body = await res.json().catch(() => ({}));
+    for (const inquiry of body?.contents ?? []) {
+      collected.push({
+        id: `nv-${inquiry.inquiryNo}`,
+        product: slug,
+        nick: maskNick(inquiry.writerName || "구매자"),
+        question: String(inquiry.inquiryContent || "").trim().slice(0, 500),
+        answer: String(inquiry.answerContent || "").trim().slice(0, 500),
+        date: String(inquiry.inquiryRegistrationDateTime || "").slice(0, 10),
+        source: "naver",
       });
     }
   }
@@ -120,7 +168,7 @@ export class WorkReviewsDO {
   async fetch(request) {
     const url = new URL(request.url);
     if (request.method === "GET") {
-      const data = (await this.storage.get(KEY)) ?? { items: [], source: null, syncedAt: null };
+      const data = (await this.storage.get(KEY)) ?? { items: [], questions: [], source: null, syncedAt: null };
       return Response.json(data, { headers: { "Cache-Control": "no-store" } });
     }
     if (request.method === "PUT" && url.pathname === "/sync") {
@@ -128,11 +176,12 @@ export class WorkReviewsDO {
       if (!body || !Array.isArray(body.items)) return new Response("invalid payload", { status: 400 });
       const data = {
         items: body.items.slice(0, MAX_ITEMS),
+        questions: Array.isArray(body.questions) ? body.questions.slice(0, MAX_ITEMS) : [],
         source: body.source ?? null,
         syncedAt: body.syncedAt ?? new Date().toISOString(),
       };
       await this.storage.put(KEY, data);
-      return Response.json({ saved: true, count: data.items.length });
+      return Response.json({ saved: true, reviews: data.items.length, questions: data.questions.length });
     }
     return new Response("method not allowed", { status: 405, headers: { Allow: "GET, PUT" } });
   }

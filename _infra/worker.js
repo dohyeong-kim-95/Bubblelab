@@ -692,7 +692,7 @@ export async function handleRequest(request, env, ctx) {
       const stub = env.WORK_REVIEWS.get(env.WORK_REVIEWS.idFromName(project));
       let data = await (await stub.fetch("https://workreviews.internal/")).json();
       // 최초 조회 시 동기화(mock/live)해 즉시 캐시를 채운다. 이후엔 cron이 갱신.
-      if (!data.items || data.items.length === 0) {
+      if (!data.syncedAt) {
         const synced = await fetchStoreReviews(env, project).catch(() => null);
         if (synced && synced.items.length) {
           await stub.fetch("https://workreviews.internal/sync", {

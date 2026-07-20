@@ -130,3 +130,27 @@
   .rv-head .rv-stars { color: #f5a623; letter-spacing: .05em; }
   .rv-text { margin: .5rem 0 0; font-size: .9rem; color: #5c4f45; white-space: pre-wrap; }
   .rv-empty { text-align: center; color: var(--muted); font-size: .88rem; padding: 1.5rem 0; }
+
+  /* 출처 배지 — 네이버에서 가져온 항목 표시 */
+  .nv-badge { display: inline-flex; align-items: center; justify-content: center;
+              width: 1.05rem; height: 1.05rem; border-radius: .28rem; background: #03c75a;
+              color: #fff; font-size: .72rem; font-weight: 800; line-height: 1;
+              vertical-align: middle; }
+  .own-badge { background: var(--cream); color: var(--orange-deep); font-weight: 700;
+               font-size: .68rem; padding: .08rem .5rem; border-radius: 2rem; }
+
+  /* 상품 문의(Q&A) 리스트 */
+  .qna-section { max-width: 44rem; margin: 2.2rem auto 0; }
+  .qa-item { padding: .9rem 1.1rem; background: #fff; border: 1px solid var(--line);
+             border-radius: 1rem; margin-bottom: .7rem; }
+  .qa-q, .qa-a { display: flex; gap: .55rem; margin: 0; font-size: .9rem; }
+  .qa-a { margin-top: .55rem; }
+  .qa-mark { flex: none; width: 1.4rem; height: 1.4rem; border-radius: .45rem;
+             display: grid; place-items: center; font-weight: 800; font-size: .82rem;
+             background: var(--cream); color: var(--orange-deep); }
+  .qa-mark.ans { background: var(--orange); color: #fff; }
+  .qa-q .qa-body { font-weight: 600; color: var(--brown); }
+  .qa-a .qa-body { color: #5c4f45; white-space: pre-wrap; }
+  .qa-meta { display: flex; align-items: center; gap: .45rem; margin: .4rem 0 0 1.95rem;
+             font-size: .76rem; color: var(--muted); }
+  .qa-meta b { color: var(--brown); font-size: .8rem; }
