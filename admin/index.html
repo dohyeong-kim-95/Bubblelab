@@ -202,8 +202,8 @@
     <div class="insight-heading">
       <h2>⏱️ 카드별 활성 체류</h2>
       <div class="period" aria-label="체류시간 조회 기간">
-        <button type="button" data-days="1" aria-pressed="false">오늘</button>
-        <button type="button" data-days="7" aria-pressed="true">7일</button>
+        <button type="button" data-days="1" aria-pressed="true">오늘</button>
+        <button type="button" data-days="7" aria-pressed="false">7일</button>
         <button type="button" data-days="30" aria-pressed="false">30일</button>
       </div>
     </div>
@@ -317,7 +317,7 @@ function showView() {
 addEventListener('hashchange', showView);
 document.getElementById('home-btn').addEventListener('click', () => { location.hash = 'home'; });
 
-let engagementDays = 7;
+let engagementDays = 1;
 
 function formatDuration(ms) {
   const seconds = Math.max(0, Math.round(ms / 1000));
