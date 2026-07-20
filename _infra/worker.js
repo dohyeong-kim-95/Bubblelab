@@ -796,7 +796,28 @@ export async function handleRequest(request, env, ctx) {
     }
 
     url.pathname = `/${site}${path}`;
-    const response = await env.ASSETS.fetch(new Request(url, request));
+    let response = await env.ASSETS.fetch(new Request(url, request));
+
+    // host 기반(서브도메인) 요청은 공개 URL에 site 세그먼트가 없다. 에셋 서버가
+    // .html→확장자 제거·트레일링 슬래시 등으로 돌려주는 redirect의 Location에는
+    // 내부 경로(/${site}/…)가 담기므로, 그 프리픽스를 떼지 않으면 브라우저가
+    // /work/work/… 처럼 이중 프리픽스로 이동해 404가 난다. (로컬 경로 기반
+    // 라우팅에서는 site가 URL에 남아 있어 그대로 두어야 한다.)
+    const hostBased = host === ROOT_DOMAIN || host.endsWith(`.${ROOT_DOMAIN}`);
+    if (hostBased && response.status >= 300 && response.status < 400) {
+      const location = response.headers.get("Location");
+      if (location) {
+        const target = new URL(location, url);
+        if (target.host === url.host && target.pathname.startsWith(`/${site}/`)) {
+          target.pathname = target.pathname.slice(`/${site}`.length);
+          const headers = new Headers(response.headers);
+          headers.set("Location", target.pathname + target.search + target.hash);
+          response = new Response(response.body, {
+            status: response.status, statusText: response.statusText, headers,
+          });
+        }
+      }
+    }
 
     if (site === "admin" || site === "work" || site === "estate") {
       const headers = new Headers(response.headers);

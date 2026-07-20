@@ -99,6 +99,44 @@ test("work preview stays closed without a password and gates access with one", a
   assert.equal(response.headers.get("Cache-Control"), "no-store");
 });
 
+test("subdomain .html redirects strip the internal /site prefix from Location", async () => {
+  // 에셋 서버가 .html→확장자 제거로 307을 돌려줄 때 Location에 내부 /work
+  // 프리픽스가 담긴다. 서브도메인 공개 URL에는 site 세그먼트가 없으므로 워커가
+  // 그 프리픽스를 떼어 브라우저가 /work/work/... 이중 프리픽스 404로 가지 않게 한다.
+  const assets = {
+    fetch: async (req) => {
+      const p = new URL(req.url).pathname;
+      if (p.endsWith(".html")) {
+        return new Response(null, { status: 307, headers: { Location: p.replace(/\.html$/, "") } });
+      }
+      return new Response("<p>keybox</p>", { headers: { "Content-Type": "text/html" } });
+    },
+  };
+  const env = { WORK_PASSWORD: "hunter2", ASSETS: assets };
+
+  const form = new FormData();
+  form.set("password", "hunter2");
+  let response = await worker.fetch(
+    new Request("https://work.bubblelab.dev/login", { method: "POST", body: form }), env, ctx);
+  const cookie = response.headers.get("Set-Cookie").split(";")[0];
+
+  // 상품 상세 .html 클릭 → 307이되 Location에서 /work가 제거되어야 한다
+  response = await worker.fetch(
+    new Request("https://work.bubblelab.dev/daonfit/goods/keybox.html", {
+      headers: { Cookie: cookie },
+    }), env, ctx);
+  assert.equal(response.status, 307);
+  assert.equal(response.headers.get("Location"), "/daonfit/goods/keybox");
+
+  // 확장자 없는 최종 경로는 그대로 200으로 서빙된다
+  response = await worker.fetch(
+    new Request("https://work.bubblelab.dev/daonfit/goods/keybox", {
+      headers: { Cookie: cookie },
+    }), env, ctx);
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), "<p>keybox</p>");
+});
+
 test("optout toggle is admin-gated and sets a domain-wide bl_notrack cookie", async () => {
   const env = { ADMIN_ID: "boss", ADMIN_PASSWORD: "hunter2" };
 
