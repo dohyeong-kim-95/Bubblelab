@@ -25,7 +25,7 @@
     // secret과 R2 버킷(bubblelab-podcast)이 준비되어야 한다.
     "ENABLE_PODCAST": "true",
     // Web Push 공개키(브라우저로 전달됨). 개인키는 VAPID_PRIVATE_KEY secret에.
-    "VAPID_PUBLIC_KEY": "BKkNKsdp4ZrbI9MX13jktCZQ_KWoKEYamIJbg66cL67IfTuByOCnvJLrhMa2pL5RB-7ZeJxghfPaAYEKQRP8R3Q",
+    "VAPID_PUBLIC_KEY": "BPtXxH7yViqaAU9lHlCugA07o7hUL22Ft35dMvMnOXRp6q_YN3hrYQ2WAtY5_KRsfmkF-CeZBpfokdb7SmBXKNM",
     // Duri 대화·사진 백업(work/duri). 개인 데이터라 fail-closed로 설계.
     // 켜져 있어도 R2 버킷(bubblelab-duri)·WORK_PASSWORD가 없으면 /_duri 는
     // 런타임에서 닫힌다. 싱크 토큰을 별도 키로 서명하려면 DURI_SINK_SECRET 준비.
