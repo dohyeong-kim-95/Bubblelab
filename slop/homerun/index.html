@@ -307,14 +307,22 @@ function kick(t) {
   o.connect(g).connect(ctx.destination); o.start(t); o.stop(t + 0.19);
 }
 const hat = (t) => noise(t, 0.028, 0.07, 8500, 1);
-// 레벨 내내 깔리는 그루브 — 박자를 '몸으로 느껴서' 치게 만든다(리듬세상 감각)
-function scheduleGroove(t0, nbeats) {
-  for (let i = 0; i < nbeats; i++) {
-    kick(t0 + i * BEAT);
-    hat(t0 + (i + 0.5) * BEAT);
-    if (i < COUNTIN) click(t0 + i * BEAT, i === 0);  // 카운트인 박은 또렷하게
-  }
+// 게임 전체 시간 동안 끊김 없이 깔리는 박자 그루브(킥/하이햇) — 룩어헤드 스케줄러
+let grooveStart = 0, grooveNext = 0, grooveTimer = 0, grooveOn = false;
+function startGroove(at) {
+  stopGroove();
+  grooveStart = at; grooveNext = 0; grooveOn = true;
+  grooveTimer = setInterval(() => {
+    if (!grooveOn) return;
+    const ahead = ctx.currentTime + 0.3;              // 300ms 앞까지 미리 스케줄
+    while (grooveStart + grooveNext * BEAT < ahead) {
+      const t = grooveStart + grooveNext * BEAT;
+      if (t >= ctx.currentTime) { kick(t); hat(t + 0.5 * BEAT); }
+      grooveNext++;
+    }
+  }, 60);
 }
+function stopGroove() { grooveOn = false; if (grooveTimer) { clearInterval(grooveTimer); grooveTimer = 0; } }
 function sCrack()  { const t = ctx.currentTime; noise(t, 0.09, 0.5, 1800, 0.8); tone(880, t, 0.18, 0.22, "triangle"); tone(1320, t, 0.14, 0.12, "sine"); }
 function sHit()    { const t = ctx.currentTime; noise(t, 0.08, 0.35, 1200, 1); tone(520, t, 0.12, 0.16, "triangle"); }
 function sWhiff()  { const t = ctx.currentTime; noise(t, 0.16, 0.22, 700, 0.5); }
@@ -350,13 +358,15 @@ function startLevel(idx) {
   curWP = lv.wp; curWG = lv.wg;
   field.querySelectorAll(".ball, .trail").forEach((el) => el.remove());  // 이전 판 잔상 정리
   balls = []; setStrikes(0); levelClean = true; lastBeat = -1; respCued = false;
-  startTime = ctx.currentTime + 0.45;
+  // 연속 그루브 그리드(grooveStart 기준 정박)에 맞춰 시작점 잡기 — 박자 어긋남 방지
+  const startBeat = Math.max(0, Math.ceil((ctx.currentTime + 0.35 - grooveStart) / BEAT));
+  startTime = grooveStart + startBeat * BEAT;
   const maxBeat = Math.max(...lv.beats);
   // 투수 한 마디(콜) → 타자 한 마디(리스폰스): 정확히 한 마디 뒤에 타격.
-  // 패턴이 한 마디 안에 들어가므로 마지막 투구가 첫 타격보다 먼저 끝난다.
   const OFFSET = MEASURE;
   TRAVEL = OFFSET * BEAT;
-  scheduleGroove(startTime, COUNTIN + OFFSET + Math.ceil(maxBeat) + 1);
+  // 메트로놈(카운트인 클릭)은 1단계 시작 전에만 — 2·3단계엔 그루브만
+  if (idx === 0) for (let i = 0; i < COUNTIN; i++) click(startTime + i * BEAT, i === 0);
   lv.beats.forEach((b, i) => {
     const hit = startTime + (COUNTIN + OFFSET + b) * BEAT;  // 타격 = 콜보다 OFFSET박 뒤
     const note = lv.mel[i];
@@ -376,7 +386,7 @@ function loop() {
   if (beatNo !== lastBeat && now >= startTime) {
     lastBeat = beatNo;
     zone.classList.add("beat"); setTimeout(() => zone.classList.remove("beat"), 110);
-    if (beatNo < COUNTIN) {
+    if (lvIdx === 0 && beatNo < COUNTIN) {          // 카운트인 표시: 1단계에만
       countinEl.textContent = COUNTIN - beatNo;
       countinEl.classList.remove("tick"); void countinEl.offsetWidth; countinEl.classList.add("tick");
       pitcher.classList.add("wind"); setTimeout(() => pitcher.classList.remove("wind"), 140);
@@ -386,7 +396,7 @@ function loop() {
   // 투구(콜)가 끝나고 타격(리스폰스) 차례가 오면 한 번 안내
   if (!respCued && balls.length && now >= balls[0].hit - 0.6) {
     respCued = true;
-    popJudge("🏏 받아쳐!", "#4bae6e");
+    popJudge("🏏 받아쳐!", "#e8b04a");   // 초록 대신 앰버(다크모드 눈부심 완화)
   }
 
   // 공 렌더 + 놓침 판정
@@ -523,7 +533,7 @@ function finishLevel() {
     boardShow(`✅ 클리어! ▶ ${LEVELS[next].name}`, "hr");
     setTimeout(() => { if (state === "over" && !won) startLevel(next); }, 1400);
   } else {
-    won = true; state = "over";
+    won = true; state = "over"; stopGroove();   // 승리 시 그루브 정지
     if (perfectGame)
       overlayScreen("🏆✨", "퍼펙트 게임! 공동 1등", "모든 공을 홈런으로 — 완벽한 타석이었어요!", "다시", restart);
     else
@@ -545,13 +555,14 @@ function overlayScreen(big, title, body, label, onClick) {
   overlay.classList.remove("hidden");
 }
 
-function restart() { perfectGame = true; won = false; homers = 0; maxDist = 0; boardRecords(); startLevel(0); }
+function restart() { perfectGame = true; won = false; homers = 0; maxDist = 0; boardRecords(); startGroove(ctx.currentTime + 0.45); startLevel(0); }
 
 // ── 입력 ───────────────────────────────────────────────
 function firstStart() {
   initAudio(); if (ctx.state === "suspended") ctx.resume();
   overlay.classList.add("hidden");
-  perfectGame = true; won = false; homers = 0; maxDist = 0; boardRecords(); startLevel(0);
+  perfectGame = true; won = false; homers = 0; maxDist = 0; boardRecords();
+  startGroove(ctx.currentTime + 0.45); startLevel(0);
 }
 btn.onclick = firstStart;
 
