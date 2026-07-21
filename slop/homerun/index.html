@@ -162,12 +162,18 @@ const COUNTIN = 4;            // 카운트인 박 수(한 마디)
 const SPAWN_TOP = 15, ZONE_TOP = 78; // 필드 세로 위치(%)
 
 // 한 마디(4박) 안 공의 박 위치 — 못박기식: 꾸준한 연타 → 마지막에 촘촘한 액센트
+// 음이름 → 주파수 (C장조 펜타토닉: 도레미솔라)
+const N = { C4: 261.63, D4: 293.66, E4: 329.63, G4: 392.00, A4: 440.00, C5: 523.25 };
 // blind: 중간 가림막 강도 ("" 없음 / "soft" 반투명 유령 / "hard" 완전 차단)
 // wp/wg: 퍼펙트/안타 판정 창(±초) — 레벨 오를수록 좁아짐
+// mel: 각 공의 음(beats와 같은 길이) — 리듬이 곧 멜로디
 const LEVELS = [
-  { name: "레벨 1", beats: [0, 1, 2], blind: "", wp: 0.090, wg: 0.185 },
-  { name: "레벨 2", beats: [0, 0.5, 1, 1.5, 2, 2.5], blind: "soft", wp: 0.070, wg: 0.150 },
-  { name: "레벨 3", beats: [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.25, 3.5, 3.75], blind: "hard", wp: 0.052, wg: 0.115 },
+  { name: "레벨 1", beats: [0, 1, 2], blind: "", wp: 0.090, wg: 0.185,
+    mel: [N.C4, N.E4, N.G4] },
+  { name: "레벨 2", beats: [0, 0.5, 1, 1.5, 2, 2.5], blind: "soft", wp: 0.070, wg: 0.150,
+    mel: [N.C4, N.E4, N.G4, N.A4, N.G4, N.E4] },
+  { name: "레벨 3", beats: [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.25, 3.5, 3.75], blind: "hard", wp: 0.052, wg: 0.115,
+    mel: [N.C4, N.D4, N.E4, N.G4, N.A4, N.C5, N.A4, N.G4, N.E4, N.C4] },
 ];
 
 // ── DOM ────────────────────────────────────────────────
@@ -214,6 +220,18 @@ function noise(t, dur, gain, freq, q = 1) {
   s.start(t); s.stop(t + dur + 0.02);
 }
 const click = (t, hi) => tone(hi ? 1600 : 1000, t, 0.05, 0.14, "square");
+// 마림바풍 멜로디 음 — 공의 박자에 맞춰 곡을 이룬다
+function bell(freq, t) {
+  const o = ctx.createOscillator(), o2 = ctx.createOscillator();
+  const g = ctx.createGain(), g2 = ctx.createGain();
+  o.type = "triangle"; o.frequency.setValueAtTime(freq, t);
+  o2.type = "sine"; o2.frequency.setValueAtTime(freq * 2, t); // 옥타브 배음(반짝임)
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.24, t + 0.008);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.38);
+  g2.gain.setValueAtTime(0.5, t);
+  o.connect(g); o2.connect(g2).connect(g); g.connect(ctx.destination);
+  o.start(t); o2.start(t); o.stop(t + 0.42); o2.stop(t + 0.42);
+}
 function kick(t) {
   const o = ctx.createOscillator(), g = ctx.createGain();
   o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(48, t + 0.12);
@@ -265,9 +283,10 @@ function startLevel(idx) {
   startTime = ctx.currentTime + 0.45;
   const maxBeat = Math.max(...lv.beats);
   scheduleGroove(startTime, COUNTIN + Math.ceil(maxBeat) + 1);
-  lv.beats.forEach((b) => {
+  lv.beats.forEach((b, i) => {
     const hit = startTime + (COUNTIN + b) * BEAT;
     balls.push({ hit, spawn: hit - TRAVEL, judged: false, node: null });
+    bell(lv.mel[i], hit);   // 공이 홈플레이트에 닿는 순간 = 멜로디 음
   });
   state = "playing";
   cancelAnimationFrame(raf); raf = requestAnimationFrame(loop);
