@@ -26,11 +26,13 @@
          background: none; color: inherit; cursor: pointer; }
   #btn:active { transform: scale(.96); }
   #btn:disabled { opacity: .4; cursor: default; }
+  .endbtns { display: flex; flex-direction: column; align-items: center; gap: .6rem; }
+  .endbtns.hide { display: none; }
   .imgrow { display: flex; gap: .6rem; }
-  .imgrow.hide { display: none; }
   .minibtn { font: inherit; font-size: .9rem; padding: .5rem 1.1rem;
              border-radius: 2rem; border: 1.5px solid currentColor;
-             background: none; color: inherit; cursor: pointer; opacity: .85; }
+             background: none; color: inherit; cursor: pointer; opacity: .85;
+             text-decoration: none; display: inline-block; text-align: center; }
   .minibtn:active { transform: scale(.96); }
   #best { opacity: .5; font-size: .85rem; min-height: 1.2em; margin: 0; }
 </style>
@@ -47,9 +49,12 @@
 부딪히면 끝, 많이 꽂을수록 고득점.</p>
   <div id="result"></div>
   <button id="btn">시작!</button>
-  <div class="imgrow hide" id="imgrow">
-    <button class="minibtn" id="shareimg">🖼️ 이미지 공유</button>
-    <button class="minibtn" id="saveimg">💾 저장</button>
+  <div class="endbtns hide" id="endbtns">
+    <div class="imgrow">
+      <button class="minibtn" id="shareimg">🖼️ 이미지 공유</button>
+      <button class="minibtn" id="saveimg">💾 저장</button>
+    </div>
+    <a class="minibtn" id="more" href="https://slop.bubblelab.dev">🎪 다른 게임도 해보기</a>
   </div>
   <p id="best"></p>
 </div>
@@ -61,7 +66,7 @@ const overlay = document.getElementById("overlay");
 const msg = document.getElementById("msg");
 const result = document.getElementById("result");
 const btn = document.getElementById("btn");
-const imgRow = document.getElementById("imgrow");
+const endBtns = document.getElementById("endbtns");
 const shareImgBtn = document.getElementById("shareimg");
 const saveImgBtn = document.getElementById("saveimg");
 const bestEl = document.getElementById("best");
@@ -234,7 +239,7 @@ btn.addEventListener("click", () => {
   palIdx = 0;
   flash = 0;
   rings.length = 0;
-  imgRow.classList.add("hide");
+  endBtns.classList.add("hide");
   overlay.classList.add("hide");
 });
 
@@ -286,7 +291,7 @@ function finish() {
   result.textContent = `${score}개 꽂음!\n${grade}`;
   msg.textContent = "";
   btn.textContent = "다시!";
-  imgRow.classList.remove("hide");
+  endBtns.classList.remove("hide");
   overlay.classList.remove("hide");
   btn.disabled = true;
   setTimeout(() => { btn.disabled = false; }, 900);
