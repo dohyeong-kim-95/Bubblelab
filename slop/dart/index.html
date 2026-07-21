@@ -77,8 +77,54 @@ const rings = [];         // 방향 전환 파문
 window.blWeekly = { game: "dart", dir: "max", fmt: (v) => v + "개" };
 window.blShareText = () => `돌아가는 원에 다트 ${best ?? score}개 꽂음! 도전해보세요`;
 
-// 다트 깃이 서로 닿는 최소 각도. 이보다 가까우면 충돌. (허용 간격을 살짝 좁힘)
-function collideGap() { return (2 * FLIGHT_W * 0.9) / R; }
+// ---- 픽셀 기반 깃(fletching) 다각형 충돌 ----
+// drawDartSeg가 그리는 깃 모양 그대로의 4점 폴리곤을 만든다.
+function fletchPoly(tipX, tipY, tailX, tailY) {
+  const ax = tailX - tipX, ay = tailY - tipY;
+  const len = Math.hypot(ax, ay) || 1;
+  const ux = ax / len, uy = ay / len;   // tip→tail(바깥)
+  const px = -uy, py = ux;              // 수직
+  return [
+    [tailX - ux * FLIGHT_LEN, tailY - uy * FLIGHT_LEN],               // 밑동(안쪽)
+    [tailX + px * FLIGHT_W, tailY + py * FLIGHT_W],                   // 날개 1
+    [tailX - ux * FLIGHT_LEN * 0.45, tailY - uy * FLIGHT_LEN * 0.45], // 노치
+    [tailX - px * FLIGHT_W, tailY - py * FLIGHT_W],                   // 날개 2
+  ];
+}
+// 원 위 각도 ang에 꽂힌 다트의 깃 폴리곤 (그리는 좌표와 동일)
+function dartPoly(ang) {
+  const dx = Math.cos(ang), dy = Math.sin(ang);
+  return fletchPoly(cx + dx * R, cy + dy * R, cx + dx * (R + NEEDLE), cy + dy * (R + NEEDLE));
+}
+// 선분 pq 기준 점 r의 방향 부호
+function orient(p, q, r) {
+  return (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+}
+// 두 선분이 실제로 교차하는가 (끝점만 스치는 건 제외)
+function segHit(p1, p2, p3, p4) {
+  const d1 = orient(p3, p4, p1), d2 = orient(p3, p4, p2);
+  const d3 = orient(p1, p2, p3), d4 = orient(p1, p2, p4);
+  return (d1 > 0) !== (d2 > 0) && (d3 > 0) !== (d4 > 0);
+}
+// 점이 폴리곤 내부에 있는가 (오목 폴리곤도 정확 — ray casting)
+function pointInPoly(x, y, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+// 두 폴리곤이 겹치는가: 변끼리 교차 or 한쪽이 다른 쪽에 완전히 포함
+function polyHit(A, B) {
+  for (let i = 0; i < A.length; i++) {
+    const a1 = A[i], a2 = A[(i + 1) % A.length];
+    for (let j = 0; j < B.length; j++) {
+      if (segHit(a1, a2, B[j], B[(j + 1) % B.length])) return true;
+    }
+  }
+  return pointInPoly(A[0][0], A[0][1], B) || pointInPoly(B[0][0], B[0][1], A);
+}
 
 function resize() {
   canvas.width = innerWidth;
@@ -92,12 +138,6 @@ resize();
 
 // 원 기준 각도 → 화면상 실제 각도
 function worldAngle(a) { return a + rot; }
-// 두 각도의 원형 최소 거리
-function angDist(a, b) {
-  let d = Math.abs(((a - b) % (Math.PI * 2)));
-  if (d > Math.PI) d = Math.PI * 2 - d;
-  return d;
-}
 
 function throwDart() {
   if (phase !== "running" || flying) return;
@@ -108,10 +148,10 @@ function throwDart() {
 function landDart() {
   // 도착 순간의 회전각 기준으로 왼쪽 끝(π)에 꽂는다
   const rel = CONTACT - rot;
-  const gap = collideGap();
+  const newPoly = dartPoly(CONTACT);   // 새 다트는 항상 π에 꽂힌다
   let hit = false;
   for (const a of stuck) {
-    if (angDist(worldAngle(a), CONTACT) < gap) { hit = true; break; }
+    if (polyHit(newPoly, dartPoly(worldAngle(a)))) { hit = true; break; }
   }
   stuck.push(rel);
   flying = null;
