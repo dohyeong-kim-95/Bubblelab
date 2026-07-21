@@ -138,7 +138,7 @@ function round() {
   const fresh = pool.filter(([code]) => !recent.includes(code));
   const answer = fresh[Math.floor(Math.random() * fresh.length)];
   recent.push(answer[0]);
-  if (recent.length > 16) recent.shift();
+  if (recent.length > 20) recent.shift();
 
   const options = shuffle([
     answer,
