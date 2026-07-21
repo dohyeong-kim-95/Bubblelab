@@ -32,29 +32,13 @@
   #save:active { transform: scale(.96); }
   #save.hide { display: none; }
   #best { opacity: .5; font-size: .85rem; min-height: 1.2em; margin: 0; }
-  /* 파워 게이지 발사대 */
-  #launcher { position: fixed; left: 50%; bottom: 1.4rem; transform: translateX(-50%);
-              display: flex; flex-direction: column; align-items: center; gap: .55rem; z-index: 50; }
-  #launcher.hide { display: none; }
-  #gauge { width: min(62vw, 220px); height: 16px; border-radius: 999px;
-           border: 1.5px solid light-dark(rgba(60,40,90,.4), rgba(210,195,235,.4));
-           background: light-dark(rgba(255,255,255,.5), rgba(20,14,30,.5)); overflow: hidden; }
-  #gfill { height: 100%; width: 0%; border-radius: 999px; }
-  #fire { font: inherit; font-size: 1.15rem; font-weight: bold; padding: .85rem 2.6rem;
-          border-radius: 2rem; border: 2px solid currentColor; cursor: pointer;
-          color: light-dark(#231a33, #e0d6f0);
-          background: light-dark(rgba(255,255,255,.7), rgba(20,14,30,.7));
-          backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
-          touch-action: none; }
-  #fire:active { transform: scale(.96); }
-  #fire:disabled { opacity: .4; cursor: default; }
 </style>
 </head>
 <body>
 <div id="overlay">
   <h1>⚡ 다트 서커스 EX</h1>
-  <p id="msg">아래 <b>발사</b> 버튼을 누르고 있으면
-파워 게이지가 0↔최대로 오르내려요.
+  <p id="msg">화면 아무 곳이나 누르고 있으면
+그 자리에 파워 게이지가 0↔최대로 오르내려요.
 손을 떼는 순간의 세기로 다트가 날아갑니다.
 세면 빠르게, 약하면 느리게 —
 도착 타이밍을 노려 원에 꽂으세요!
@@ -65,10 +49,6 @@
   <p id="best"></p>
 </div>
 <canvas id="c"></canvas>
-<div id="launcher" class="hide">
-  <div id="gauge"><div id="gfill"></div></div>
-  <button id="fire" type="button">발사</button>
-</div>
 <script>
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
@@ -78,9 +58,6 @@ const result = document.getElementById("result");
 const btn = document.getElementById("btn");
 const saveBtn = document.getElementById("save");
 const bestEl = document.getElementById("best");
-const launcher = document.getElementById("launcher");
-const gfill = document.getElementById("gfill");
-const fireBtn = document.getElementById("fire");
 
 let phase = "idle";       // idle | running | done
 let stuck = [];           // 꽂힌 다트: 원 기준 각도(회전과 함께 이동)
@@ -103,6 +80,7 @@ const SPD_MIN = 500;       // 약하게 친 다트 속도(px/s)
 const SPD_MAX = 2600;      // 세게 친 다트 속도(px/s)
 let charging = false;
 let chargeStart = 0;
+let pointer = { x: 0, y: 0 }; // 누른 지점(게이지 표시 위치)
 
 // 회전 방향별 원판 팔레트. 방향이 바뀔 때마다 번갈아 쓴다.
 const PALETTES = [
@@ -217,23 +195,25 @@ function reverseDir() {
   rings.push({ r: R * 0.9, alpha: 0.9 });
 }
 
-// 발사 버튼: 누르는 동안 충전, 떼면 그 세기로 발사
-fireBtn.addEventListener("pointerdown", (e) => {
-  e.stopPropagation();
-  e.preventDefault();
+// 화면 아무 곳이나: 누른 지점에서 게이지가 오르내리고, 떼면 그 세기로 발사
+addEventListener("pointerdown", (e) => {
   if (phase !== "running" || flying) return;
+  pointer.x = e.clientX;
+  pointer.y = e.clientY;
   charging = true;
   chargeStart = performance.now();
-  fireBtn.setPointerCapture?.(e.pointerId);
 });
-fireBtn.addEventListener("pointerup", (e) => {
-  e.stopPropagation();
+addEventListener("pointermove", (e) => {
+  if (charging) { pointer.x = e.clientX; pointer.y = e.clientY; }
+});
+addEventListener("pointerup", () => {
   if (!charging) return;
   charging = false;
   fire();
 });
-fireBtn.addEventListener("pointercancel", () => { charging = false; });
+addEventListener("pointercancel", () => { charging = false; });
 
+// 오버레이/공유 버튼 위 조작은 게이지 충전으로 새지 않게
 for (const ev of ["pointerdown", "click"]) {
   overlay.addEventListener(ev, (e) => e.stopPropagation());
 }
@@ -252,7 +232,6 @@ btn.addEventListener("click", () => {
   flash = 0;
   rings.length = 0;
   saveBtn.classList.add("hide");
-  launcher.classList.remove("hide");
   overlay.classList.add("hide");
 });
 
@@ -274,7 +253,6 @@ saveBtn.addEventListener("click", (e) => {
 function finish() {
   phase = "done";
   charging = false;
-  launcher.classList.add("hide");
   if (best === null || score > best) {
     best = score;
     bestEl.textContent = `최고 기록: ${best}개`;
@@ -382,14 +360,6 @@ function tick(now) {
     if (flying.x >= flying.target) landDart();
   }
 
-  // 게이지 UI 갱신 & 발사 가능 여부
-  if (phase === "running") {
-    fireBtn.disabled = !!flying;
-    const p = charging ? currentPower() : 0;
-    gfill.style.width = (p * 100).toFixed(1) + "%";
-    gfill.style.background = `hsl(${(1 - p) * 155}, 85%, 55%)`;
-  }
-
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   // 방향 전환 파문
@@ -449,7 +419,34 @@ function tick(now) {
     drawDartSeg(flying.x + NEEDLE, cy, flying.x, cy, 1);
   }
 
+  // 누르고 있는 지점의 파워 게이지 링
+  if (phase === "running" && charging) drawGauge(pointer.x, pointer.y, currentPower());
+
   requestAnimationFrame(tick);
+}
+
+// 누른 지점에 뜨는 파워 게이지 링 (12시부터 시계방향으로 채워짐)
+function drawGauge(x, y, p) {
+  const GR = 34;
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.shadowBlur = 0;
+  ctx.beginPath();
+  ctx.arc(x, y, GR, 0, Math.PI * 2);
+  ctx.lineWidth = 7;
+  ctx.strokeStyle = "rgba(255,255,255,.25)";
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(x, y, GR, -Math.PI / 2, -Math.PI / 2 + p * Math.PI * 2);
+  ctx.strokeStyle = `hsl(${(1 - p) * 155}, 85%, 55%)`;
+  ctx.lineWidth = 7;
+  ctx.stroke();
+  ctx.fillStyle = "#fff";
+  ctx.font = 'bold 15px ui-monospace, "SF Mono", Consolas, monospace';
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(Math.round(p * 100), x, y);
+  ctx.restore();
 }
 requestAnimationFrame(tick);
 </script>
