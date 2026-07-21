@@ -64,6 +64,16 @@
   #boardMsg.strike { color: #ff6b6b; text-shadow: 0 0 7px rgba(255,95,95,.45); }
   #strikes span { opacity: .28; transition: opacity .12s, transform .12s; }
   #strikes span.on { opacity: 1; transform: scale(1.15); }
+  /* BGM 음소거 버튼 */
+  #mute {
+    position: absolute; left: .8rem; bottom: .8rem; z-index: 22; cursor: pointer;
+    width: 2.6rem; height: 2.6rem; border-radius: 50%; color: inherit;
+    border: 1.5px solid light-dark(rgba(60,80,110,.4), rgba(180,205,235,.35));
+    background: light-dark(rgba(255,255,255,.55), rgba(20,28,40,.6));
+    font-size: 1.2rem; line-height: 1; display: flex; align-items: center; justify-content: center;
+    -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+  }
+  #mute:active { transform: scale(.92); }
   /* 투수(사이드암, 먼 곳이라 작게) */
   #pitcher {
     position: absolute; top: 30%; left: 44%; transform: translate(-50%,-50%) rotate(10deg);
@@ -164,6 +174,7 @@
     <div id="strikes"><span>❌</span><span>❌</span><span>❌</span></div>
   </div>
   <div id="board"><div id="boardMsg"></div></div>
+  <button id="mute" aria-label="BGM 음소거">🔊</button>
   <div id="pitcher">🤾</div>
   <div id="plate"></div>
   <div id="zone"></div>
@@ -215,7 +226,7 @@
 
 <script>
 // ── 상수 ───────────────────────────────────────────────
-const BPM = 100;
+const BPM = 98;   // BGM(Under the Floodlights ≈98 BPM)과 동기화
 const BEAT = 60 / BPM;        // 한 박 = 0.6초
 const MEASURE = 4;           // 한 마디 = 4박
 let TRAVEL = 2.4;            // 공 비행 시간(초) = 한 마디 (투수 콜 → 타자 리스폰스)
@@ -248,6 +259,7 @@ const batter = document.getElementById("batter");
 const judgeEl = document.getElementById("judge");
 const overlay = document.getElementById("overlay");
 const btn = document.getElementById("btn");
+const muteBtn = document.getElementById("mute");
 const countinEl = document.getElementById("countin");
 const boardMsg = document.getElementById("boardMsg");
 
@@ -307,13 +319,41 @@ function bell(freq, t, gain = 0.24) {
   o.connect(g); o2.connect(g2).connect(g); g.connect(ctx.destination);
   o.start(t); o2.start(t); o.stop(t + 0.42); o2.stop(t + 0.42);
 }
+let grooveVol = 1;   // BGM 켜지면 낮춰서 곡의 리듬과 안 부딪히게
 function kick(t) {
   const o = ctx.createOscillator(), g = ctx.createGain();
   o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(48, t + 0.12);
-  g.gain.setValueAtTime(0.26, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.17);
+  g.gain.setValueAtTime(0.26 * grooveVol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.17);
   o.connect(g).connect(ctx.destination); o.start(t); o.stop(t + 0.19);
 }
-const hat = (t) => noise(t, 0.028, 0.07, 8500, 1);
+const hat = (t) => noise(t, 0.028, 0.07 * grooveVol, 8500, 1);
+
+// ── BGM (Under the Floodlights, 루프) ──────────────────
+const BGM_URL = "/_assets/music/under-the-floodlights/under_the_floodlights.mp3";
+let bgmBuf = null, bgmSrc = null, bgmGain = null, bgmOn = true, bgmStarted = false;
+async function startBGM() {
+  if (bgmStarted || !ctx) return;
+  bgmStarted = true;
+  try {
+    if (!bgmBuf) {
+      const arr = await (await fetch(BGM_URL)).arrayBuffer();
+      bgmBuf = await ctx.decodeAudioData(arr);
+    }
+    bgmGain = ctx.createGain();
+    bgmGain.gain.value = bgmOn ? 0.30 : 0;
+    bgmGain.connect(ctx.destination);
+    bgmSrc = ctx.createBufferSource();
+    bgmSrc.buffer = bgmBuf; bgmSrc.loop = true;
+    bgmSrc.connect(bgmGain); bgmSrc.start();
+    grooveVol = bgmOn ? 0.5 : 1;      // 곡 있으면 그루브 살짝 낮춤
+  } catch (e) { bgmStarted = false; }
+}
+function toggleBGM() {
+  bgmOn = !bgmOn;
+  if (bgmGain) bgmGain.gain.setTargetAtTime(bgmOn ? 0.30 : 0, ctx.currentTime, 0.04);
+  grooveVol = bgmOn ? 0.5 : 1;
+  muteBtn.textContent = bgmOn ? "🔊" : "🔇";
+}
 // 게임 전체 시간 동안 끊김 없이 깔리는 박자 그루브(킥/하이햇) — 룩어헤드 스케줄러
 let grooveStart = 0, grooveNext = 0, grooveTimer = 0, grooveOn = false;
 function startGroove(at) {
@@ -606,9 +646,10 @@ function firstStart() {
   initAudio(); if (ctx.state === "suspended") ctx.resume();
   overlay.classList.add("hidden");
   perfectGame = true; won = false; homers = 0; maxDist = 0; boardRecords();
-  startGroove(ctx.currentTime + 0.45); startLevel(0);
+  startGroove(ctx.currentTime + 0.45); startBGM(); startLevel(0);
 }
 btn.onclick = firstStart;
+muteBtn.addEventListener("pointerdown", (e) => { e.stopPropagation(); toggleBGM(); });
 
 field.addEventListener("pointerdown", () => { if (state === "playing") swing(); });
 window.addEventListener("keydown", (e) => {
