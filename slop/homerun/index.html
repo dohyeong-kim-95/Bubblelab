@@ -30,7 +30,8 @@
     padding: .9rem 1.1rem; pointer-events: none; font-size: .95rem;
   }
   #lv { font-weight: bold; letter-spacing: .02em; }
-  #strikes { display: flex; gap: .35rem; font-size: 1.1rem; }
+  #records { font-size: .72rem; opacity: .7; margin-top: .25rem; }
+  #strikes { display: flex; gap: .35rem; font-size: 1.1rem; align-self: flex-start; }
   #strikes span { opacity: .28; transition: opacity .12s, transform .12s; }
   #strikes span.on { opacity: 1; transform: scale(1.15); }
   /* 투수(사이드암, 먼 곳이라 작게) */
@@ -92,6 +93,35 @@
     25% { opacity: 1; transform: translate(-50%,-42%) scale(1.15); }
     100% { opacity: 0; transform: translate(-50%,-30%) scale(1); }
   }
+  /* 공 꼬리(잔상) */
+  .trail {
+    position: absolute; z-index: 6; transform: translate(-50%,-50%);
+    border-radius: 50%; pointer-events: none; opacity: .5;
+    background: radial-gradient(circle at 40% 35%, #fff, #dcdcdc 68%, rgba(220,220,220,0));
+    transition: opacity .4s ease-out;
+  }
+  /* 홈런 배너 */
+  #hrBanner {
+    position: absolute; top: 33%; left: 50%; transform: translate(-50%,-50%) scale(.4);
+    z-index: 18; text-align: center; opacity: 0; pointer-events: none;
+  }
+  #hrBanner .t {
+    font-size: 13vmin; font-weight: 900; letter-spacing: .04em;
+    color: #ffb02e; -webkit-text-stroke: 2px #7a3e00;
+    text-shadow: 0 4px 0 rgba(120,60,0,.35), 0 8px 14px rgba(0,0,0,.3);
+  }
+  #hrBanner .d {
+    font-size: 5.4vmin; font-weight: 800; margin-top: .1rem;
+    color: light-dark(#c0392b, #ff8a78); text-shadow: 0 2px 6px rgba(0,0,0,.3);
+  }
+  #hrBanner.show { animation: hrpop 1.7s ease-out; }
+  @keyframes hrpop {
+    0%   { opacity: 0; transform: translate(-50%,-50%) scale(.3) rotate(-9deg); }
+    12%  { opacity: 1; transform: translate(-50%,-50%) scale(1.18) rotate(4deg); }
+    26%  { transform: translate(-50%,-50%) scale(1) rotate(0); }
+    78%  { opacity: 1; transform: translate(-50%,-52%) scale(1); }
+    100% { opacity: 0; transform: translate(-50%,-60%) scale(1.06); }
+  }
   #flash {
     position: absolute; inset: 0; z-index: 14; pointer-events: none; opacity: 0;
     background: radial-gradient(60% 45% at 50% 70%, rgba(255,240,180,.7), transparent 70%);
@@ -130,7 +160,10 @@
 <body>
 <div id="field">
   <div id="hud">
-    <div id="lv">⚾ 야구 리듬</div>
+    <div class="hud-l">
+      <div id="lv">⚾ 야구 리듬</div>
+      <div id="records">홈런 0 · 최고비거리 0m</div>
+    </div>
     <div id="strikes"><span>❌</span><span>❌</span><span>❌</span></div>
   </div>
   <div id="pitcher">🤾</div>
@@ -165,6 +198,7 @@
   </div>
   <div id="countin"></div>
   <div id="judge"></div>
+  <div id="hrBanner"><div class="t">⚾ 홈런!!</div><div class="d"></div></div>
   <div id="flash"></div>
 
   <div id="overlay">
@@ -220,6 +254,8 @@ const flash = document.getElementById("flash");
 const overlay = document.getElementById("overlay");
 const btn = document.getElementById("btn");
 const countinEl = document.getElementById("countin");
+const recordsEl = document.getElementById("records");
+const hrBanner = document.getElementById("hrBanner");
 
 // ── 오디오(신스 — 외부 음원 없음) ──────────────────────
 let ctx, noiseBuf;
@@ -251,6 +287,20 @@ function noise(t, dur, gain, freq, q = 1) {
   s.start(t); s.stop(t + dur + 0.02);
 }
 const click = (t, hi) => tone(hi ? 1600 : 1000, t, 0.05, 0.14, "square");
+// 관중 함성 — 필터링된 노이즈가 솟았다 잦아든다
+function sCrowd() {
+  const t = ctx.currentTime;
+  const s = ctx.createBufferSource(); s.buffer = noiseBuf; s.loop = true;
+  const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 650; bp.Q.value = 0.6;
+  const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 2400;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(0.26, t + 0.2);       // 와아아—
+  g.gain.setValueAtTime(0.24, t + 0.75);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 1.6);
+  s.connect(bp).connect(lp).connect(g).connect(ctx.destination);
+  s.start(t); s.stop(t + 1.65);
+}
 // 마림바풍 멜로디 음 — 투수가 던질 때(콜)/타자가 칠 때(리스폰스) 같은 음을 낸다
 function bell(freq, t, gain = 0.24) {
   const o = ctx.createOscillator(), o2 = ctx.createOscillator();
@@ -296,6 +346,7 @@ let levelClean = true;   // 이 레벨 전부 퍼펙트+무스트라이크
 let perfectGame = true;  // 전체 완벽
 let won = false;
 let raf = 0;
+let homers = 0, maxDist = 0;   // 세션 누적 기록(홈런 수 · 최고 비거리)
 
 function setStrikes(n) {
   strikes = n;
@@ -364,6 +415,7 @@ function loop() {
           b.node.style.left = fx.toFixed(2) + "%";
           b.node.style.top = fy.toFixed(2) + "%";
           b.node.style.transform = `translate(-50%,-50%) scale(${fsc.toFixed(3)})`;
+          if (now - (b.lastTrail || 0) > 0.022) { b.lastTrail = now; spawnTrail(fx, fy, 6 * fsc * 0.85); }
         }
       }
       continue;
@@ -406,14 +458,34 @@ function loop() {
   raf = requestAnimationFrame(loop);
 }
 
-// 타격 성공 → 공이 궤적 그리며 날아감(홈런은 펜스 너머, 안타는 필드로)
+// 타격 성공 → 공이 궤적 그리며 날아감
 function launchBall(b, now, homerun) {
-  b.flying = true; b.hitT = now;
+  b.flying = true; b.hitT = now; b.lastTrail = 0;
   b.contactScale = 1.35;
-  b.driftX = (Math.random() - 0.5) * (homerun ? 40 : 24);  // 좌우 방향 랜덤
-  b.topY = homerun ? -18 : 30;                             // 홈런: 화면 위로 사라짐
-  b.arcH = homerun ? 8 : 14;                               // 포물선 높이
-  b.dur = homerun ? 1.5 : 0.95;                            // 비행 시간
+  if (homerun) {                       // 우측 담장 넘어 — 오른쪽 위로 사라짐
+    b.driftX = 26 + Math.random() * 12;
+    b.topY = -20; b.arcH = 10; b.dur = 1.5;
+    b.dist = 108 + Math.round(Math.random() * 40);   // 108~148m
+  } else {                             // 좌중간 안타 — 왼쪽 필드로 낮게
+    b.driftX = -(18 + Math.random() * 10);
+    b.topY = 28; b.arcH = 15; b.dur = 1.0;
+    b.dist = 0;
+  }
+}
+// 공 꼬리(잔상)
+function spawnTrail(xPct, yPct, sizeVmin) {
+  const d = document.createElement("div");
+  d.className = "trail";
+  d.style.left = xPct.toFixed(2) + "%"; d.style.top = yPct.toFixed(2) + "%";
+  d.style.width = d.style.height = sizeVmin.toFixed(2) + "vmin";
+  field.appendChild(d);
+  requestAnimationFrame(() => { d.style.opacity = "0"; });
+  setTimeout(() => d.remove(), 420);
+}
+function updateRecords() { recordsEl.textContent = `홈런 ${homers} · 최고비거리 ${maxDist}m`; }
+function showHR(dist) {
+  hrBanner.querySelector(".d").textContent = `비거리 ${dist}m`;
+  hrBanner.classList.remove("show"); void hrBanner.offsetWidth; hrBanner.classList.add("show");
 }
 
 function addStrike(label) {
@@ -446,13 +518,14 @@ function swing() {
   zone.classList.add("hit"); setTimeout(() => zone.classList.remove("hit"), 120);
   if (bd <= curWP) {
     best.result = "perfect"; bell(best.note, now, 0.34); sCrack();  // 같은 음 재현 = 리스폰스
-    popJudge("💥 홈런!", "#e8a83c");
+    launchBall(best, now, true);   // 홈런: 우측 담장 너머
     flash.classList.remove("on"); void flash.offsetWidth; flash.classList.add("on");
-    launchBall(best, now, true);   // 홈런: 펜스 너머로
+    homers++; if (best.dist > maxDist) maxDist = best.dist; updateRecords();
+    sCrowd(); showHR(best.dist);   // 관중 함성 + 홈런 배너 + 비거리
   } else {
     best.result = "good"; bell(best.note, now, 0.22); sHit(); levelClean = false; perfectGame = false;
     popJudge("안타!", "#4bae6e");
-    launchBall(best, now, false);  // 안타: 필드로
+    launchBall(best, now, false);  // 안타: 좌중간
   }
 }
 
@@ -483,13 +556,13 @@ function overlayScreen(big, title, body, label, onClick) {
   overlay.classList.remove("hidden");
 }
 
-function restart() { perfectGame = true; won = false; startLevel(0); }
+function restart() { perfectGame = true; won = false; homers = 0; maxDist = 0; updateRecords(); startLevel(0); }
 
 // ── 입력 ───────────────────────────────────────────────
 function firstStart() {
   initAudio(); if (ctx.state === "suspended") ctx.resume();
   overlay.classList.add("hidden");
-  perfectGame = true; won = false; startLevel(0);
+  perfectGame = true; won = false; homers = 0; maxDist = 0; updateRecords(); startLevel(0);
 }
 btn.onclick = firstStart;
 
