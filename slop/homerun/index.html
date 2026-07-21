@@ -145,8 +145,9 @@
       투수가 던지는 <b>한 마디</b>의 리듬을 배트로 받아쳐요.<br>
       레벨1 <b>3구</b> → 레벨2 <b>6구</b> → 레벨3 <b>10구</b>.<br>
       공이 홈플레이트(원)에 닿는 순간 <span class="key">스페이스</span> / 화면 탭!<br>
+      투수가 <b>음</b>을 던지면 같은 음으로 <b>받아쳐요</b> (콜 앤 리스폰스).<br>
       헛스윙·놓침은 스트라이크, <b>3스트라이크면 아웃</b>.<br>
-      레벨이 오를수록 공이 <b>중간에 가려지고</b> 판정도 <b>빡세져요</b> — 리듬으로!<br>
+      레벨이 오를수록 공이 <b>중간에 가려지고</b> 판정도 <b>빡세져요</b> — 귀로!<br>
       세 레벨 다 통과하면 <b>🏆 공동 1등</b>.
     </p>
     <button id="btn">플레이</button>
@@ -220,13 +221,13 @@ function noise(t, dur, gain, freq, q = 1) {
   s.start(t); s.stop(t + dur + 0.02);
 }
 const click = (t, hi) => tone(hi ? 1600 : 1000, t, 0.05, 0.14, "square");
-// 마림바풍 멜로디 음 — 공의 박자에 맞춰 곡을 이룬다
-function bell(freq, t) {
+// 마림바풍 멜로디 음 — 투수가 던질 때(콜)/타자가 칠 때(리스폰스) 같은 음을 낸다
+function bell(freq, t, gain = 0.24) {
   const o = ctx.createOscillator(), o2 = ctx.createOscillator();
   const g = ctx.createGain(), g2 = ctx.createGain();
   o.type = "triangle"; o.frequency.setValueAtTime(freq, t);
   o2.type = "sine"; o2.frequency.setValueAtTime(freq * 2, t); // 옥타브 배음(반짝임)
-  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.24, t + 0.008);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gain, t + 0.008);
   g.gain.exponentialRampToValueAtTime(0.0001, t + 0.38);
   g2.gain.setValueAtTime(0.5, t);
   o.connect(g); o2.connect(g2).connect(g); g.connect(ctx.destination);
@@ -285,8 +286,9 @@ function startLevel(idx) {
   scheduleGroove(startTime, COUNTIN + Math.ceil(maxBeat) + 1);
   lv.beats.forEach((b, i) => {
     const hit = startTime + (COUNTIN + b) * BEAT;
-    balls.push({ hit, spawn: hit - TRAVEL, judged: false, node: null });
-    bell(lv.mel[i], hit);   // 공이 홈플레이트에 닿는 순간 = 멜로디 음
+    const note = lv.mel[i];
+    balls.push({ hit, spawn: hit - TRAVEL, note, judged: false, node: null });
+    bell(note, hit - TRAVEL, 0.18);   // 던질 때 = 콜(투수가 음을 불러줌)
   });
   state = "playing";
   cancelAnimationFrame(raf); raf = requestAnimationFrame(loop);
@@ -315,6 +317,7 @@ function loop() {
       b.node = document.createElement("div");
       b.node.className = "ball"; b.node.textContent = "⚾";
       field.appendChild(b.node);
+      pitcher.classList.add("wind"); setTimeout(() => pitcher.classList.remove("wind"), 130); // 투구 모션
     }
     if (b.node) {
       if (b.judged && now > b.hit + 0.28) { b.node.remove(); b.node = null; }
@@ -364,11 +367,11 @@ function swing() {
   best.judged = true;
   zone.classList.add("hit"); setTimeout(() => zone.classList.remove("hit"), 120);
   if (bd <= curWP) {
-    best.result = "perfect"; sCrack();
+    best.result = "perfect"; bell(best.note, now, 0.34); sCrack();  // 같은 음 재현 = 리스폰스
     popJudge("💥 홈런!", "#e8a83c");
     flash.classList.remove("on"); void flash.offsetWidth; flash.classList.add("on");
   } else {
-    best.result = "good"; sHit(); levelClean = false; perfectGame = false;
+    best.result = "good"; bell(best.note, now, 0.22); sHit(); levelClean = false; perfectGame = false;
     popJudge("안타!", "#4bae6e");
   }
 }
