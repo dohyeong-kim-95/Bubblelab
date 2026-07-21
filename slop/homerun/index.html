@@ -145,7 +145,7 @@
       투수가 던지는 <b>한 마디</b>의 리듬을 배트로 받아쳐요.<br>
       레벨1 <b>3구</b> → 레벨2 <b>6구</b> → 레벨3 <b>10구</b>.<br>
       공이 홈플레이트(원)에 닿는 순간 <span class="key">스페이스</span> / 화면 탭!<br>
-      투수가 <b>음</b>을 던지면 같은 음으로 <b>받아쳐요</b> (콜 앤 리스폰스).<br>
+      투수가 한 마디를 <b>다 던진 뒤</b>, 같은 리듬으로 <b>받아쳐요</b> (콜 앤 리스폰스).<br>
       헛스윙·놓침은 스트라이크, <b>3스트라이크면 아웃</b>.<br>
       레벨이 오를수록 공이 <b>중간에 가려지고</b> 판정도 <b>빡세져요</b> — 귀로!<br>
       세 레벨 다 통과하면 <b>🏆 공동 1등</b>.
@@ -158,7 +158,7 @@
 // ── 상수 ───────────────────────────────────────────────
 const BPM = 100;
 const BEAT = 60 / BPM;        // 한 박 = 0.6초
-const TRAVEL = 1.35;          // 공이 날아오는 시간(초)
+let TRAVEL = 1.35;            // 공 비행 시간(초) — 레벨마다 재설정(롱토스)
 const COUNTIN = 4;            // 카운트인 박 수(한 마디)
 const SPAWN_TOP = 15, ZONE_TOP = 78; // 필드 세로 위치(%)
 
@@ -260,6 +260,7 @@ let balls = [];        // {hit, spawn, judged, node}
 let startTime = 0;
 let strikes = 0;
 let lastBeat = -1;
+let respCued = false;             // "받아쳐!" 리스폰스 진입 안내 표시 여부
 let curWP = 0.072, curWG = 0.15;  // 현재 레벨 판정 창(±초)
 let levelClean = true;   // 이 레벨 전부 퍼펙트+무스트라이크
 let perfectGame = true;  // 전체 완벽
@@ -280,15 +281,20 @@ function startLevel(idx) {
   lvEl.textContent = `${lv.name} · ${lv.beats.length}구`;
   curWP = lv.wp; curWG = lv.wg;
   blindEl.className = ""; if (lv.blind) blindEl.classList.add(lv.blind);
-  balls = []; setStrikes(0); levelClean = true; lastBeat = -1;
+  balls = []; setStrikes(0); levelClean = true; lastBeat = -1; respCued = false;
   startTime = ctx.currentTime + 0.45;
   const maxBeat = Math.max(...lv.beats);
-  scheduleGroove(startTime, COUNTIN + Math.ceil(maxBeat) + 1);
+  // 투수가 한 마디를 다 던진 뒤 타자가 친다: 던지기(콜)와 타격(리스폰스)을
+  // OFFSET박 분리 → 공은 그만큼 오래 날아 순서대로 도착(롱토스).
+  // OFFSET > 패턴 길이라 마지막 투구가 첫 타격보다 먼저 끝난다.
+  const OFFSET = Math.ceil(maxBeat) + 1;
+  TRAVEL = OFFSET * BEAT;
+  scheduleGroove(startTime, COUNTIN + OFFSET + Math.ceil(maxBeat) + 1);
   lv.beats.forEach((b, i) => {
-    const hit = startTime + (COUNTIN + b) * BEAT;
+    const hit = startTime + (COUNTIN + OFFSET + b) * BEAT;  // 타격 = 콜보다 OFFSET박 뒤
     const note = lv.mel[i];
     balls.push({ hit, spawn: hit - TRAVEL, note, judged: false, node: null });
-    bell(note, hit - TRAVEL, 0.18);   // 던질 때 = 콜(투수가 음을 불러줌)
+    bell(note, hit - TRAVEL, 0.18);   // 던질 때(spawn) = 콜(투수가 음을 불러줌)
   });
   state = "playing";
   cancelAnimationFrame(raf); raf = requestAnimationFrame(loop);
@@ -308,6 +314,12 @@ function loop() {
       countinEl.classList.remove("tick"); void countinEl.offsetWidth; countinEl.classList.add("tick");
       pitcher.classList.add("wind"); setTimeout(() => pitcher.classList.remove("wind"), 140);
     }
+  }
+
+  // 투구(콜)가 끝나고 타격(리스폰스) 차례가 오면 한 번 안내
+  if (!respCued && balls.length && now >= balls[0].hit - 0.6) {
+    respCued = true;
+    popJudge("🏏 받아쳐!", "#4bae6e");
   }
 
   // 공 렌더 + 놓침 판정
@@ -363,7 +375,13 @@ function swing() {
     const d = Math.abs(now - b.hit);
     if (d <= curWG && d < bd) { bd = d; best = b; }
   }
-  if (!best) { sWhiff(); addStrike("헛스윙!"); return; }
+  if (!best) {
+    sWhiff();
+    // 콜(투구) 단계의 스윙은 연습 스윙 — 스트라이크 아님. 리스폰스 시작 후에만 아웃 카운트.
+    const responseStarted = balls.length && now >= balls[0].hit - curWG - 0.1;
+    if (responseStarted) addStrike("헛스윙!");
+    return;
+  }
   best.judged = true;
   zone.classList.add("hit"); setTimeout(() => zone.classList.remove("hit"), 120);
   if (bd <= curWP) {
