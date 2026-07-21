@@ -97,9 +97,12 @@ const escapeHtml = (s) =>
 function toyEmoji(site, name) {
   try {
     const html = readFileSync(join(ROOT, site, name, "index.html"), "utf8");
-    return html.match(/\p{Extended_Pictographic}/u)?.[0] ?? "🫧";
+    const m = html.match(/\p{Extended_Pictographic}/u);
+    if (!m) return { char: "🫧", badge: "" };
+    // 이모지 바로 뒤에 '+'가 붙어 있으면 카드에 작은 플러스 배지를 단다
+    return { char: m[0], badge: html[m.index + m[0].length] === "+" ? "+" : "" };
   } catch {
-    return "🫧";
+    return { char: "🫧", badge: "" };
   }
 }
 
@@ -128,7 +131,7 @@ function listingPage(site, entries) {
     .map(({ name, emoji }, i) => {
       return `    <a class="card" href="/${escapeHtml(name)}/"
        style="--hue:${hueOf(name)};--i:${i}">
-      <span class="emoji">${emoji}</span>
+      <span class="emoji"${emoji.badge ? ' data-badge="+"' : ""}>${emoji.char}</span>
       <span class="name">${escapeHtml(name)}</span>
       <span class="champ" data-game="${escapeHtml(name)}"></span>
       <span class="mine"></span>
@@ -188,7 +191,12 @@ ${preconnectLinks}
   .card:active { transform: translateY(2px); box-shadow: 0 1px 0
           light-dark(hsl(var(--hue) 55% 78%), hsl(var(--hue) 35% 12%)); }
   @keyframes pop { from { transform: scale(.6); opacity: 0; } }
-  .emoji { font-size: 2.6rem; line-height: 1; }
+  .emoji { font-size: 2.6rem; line-height: 1; position: relative; display: inline-block; }
+  .emoji[data-badge]::after { content: attr(data-badge); position: absolute;
+          top: -.1em; right: -.28em; display: grid; place-items: center;
+          width: 1.15em; height: 1.15em; font-size: .95rem; font-weight: 900;
+          line-height: 1; border-radius: 50%; color: #fff; background: #7c5fd6;
+          box-shadow: 0 1px 2px rgba(0,0,0,.25); }
   .name { font-weight: bold; font-size: 1.02rem; word-break: break-all;
           text-align: center; }
   .champ { opacity: .55; font-size: .72rem; min-height: 1em; max-width: 100%;
