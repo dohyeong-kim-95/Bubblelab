@@ -426,27 +426,42 @@ function tick(now) {
   requestAnimationFrame(tick);
 }
 
-// 누른 지점에 뜨는 파워 게이지 링 (12시부터 시계방향으로 채워짐)
+// 누른 지점의 파워 게이지.
+// 누른 곳 → 다트 원통 방향을 중심각으로, 좌우 60°씩(총 120°) 아크를 그린다.
+// 아크 반지름을 크게 잡아 엄지에 가려지지 않게 한다.
 function drawGauge(x, y, p) {
-  const GR = 34;
+  const aim = Math.atan2(cy - y, cx - x); // 누른 곳 → 원통 방향
+  const half = Math.PI / 3;               // 60°
+  const GR = 60;                          // 게이지 아크 반지름(크게)
+  const a0 = aim - half;
   ctx.save();
   ctx.lineCap = "round";
   ctx.shadowBlur = 0;
+  // 안쪽 앵커 원(현재 크기 유지 — 누른 위치 표시)
   ctx.beginPath();
-  ctx.arc(x, y, GR, 0, Math.PI * 2);
-  ctx.lineWidth = 7;
-  ctx.strokeStyle = "rgba(255,255,255,.25)";
+  ctx.arc(x, y, 34, 0, Math.PI * 2);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = "rgba(255,255,255,.28)";
   ctx.stroke();
+  // 120° 트랙
+  ctx.lineWidth = 12;
   ctx.beginPath();
-  ctx.arc(x, y, GR, -Math.PI / 2, -Math.PI / 2 + p * Math.PI * 2);
+  ctx.arc(x, y, GR, a0, aim + half);
+  ctx.strokeStyle = "rgba(255,255,255,.22)";
+  ctx.stroke();
+  // 파워 채움 (한쪽 끝에서 세기만큼)
+  ctx.beginPath();
+  ctx.arc(x, y, GR, a0, a0 + p * 2 * half);
   ctx.strokeStyle = `hsl(${(1 - p) * 155}, 85%, 55%)`;
-  ctx.lineWidth = 7;
   ctx.stroke();
+  // 파워 % — 아크 중앙 바깥(원통 방향)에 표시
+  const tx = x + Math.cos(aim) * (GR + 22);
+  const ty = y + Math.sin(aim) * (GR + 22);
   ctx.fillStyle = "#fff";
   ctx.font = 'bold 15px ui-monospace, "SF Mono", Consolas, monospace';
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(Math.round(p * 100), x, y);
+  ctx.fillText(Math.round(p * 100), tx, ty);
   ctx.restore();
 }
 requestAnimationFrame(tick);
