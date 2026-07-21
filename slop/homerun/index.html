@@ -100,12 +100,6 @@
     background: radial-gradient(circle at 40% 35%, #fff, #dcdcdc 68%, rgba(220,220,220,0));
     transition: opacity .4s ease-out;
   }
-  #flash {
-    position: absolute; inset: 0; z-index: 14; pointer-events: none; opacity: 0;
-    background: radial-gradient(45% 35% at 50% 60%, rgba(255,238,195,.38), transparent 72%);
-  }
-  #flash.on { animation: fl .35s ease-out; }
-  @keyframes fl { 0% { opacity: .5; } 100% { opacity: 0; } }
   /* 오버레이 */
   #overlay {
     position: absolute; inset: 0; z-index: 30; display: flex; flex-direction: column;
@@ -176,7 +170,6 @@
   </div>
   <div id="countin"></div>
   <div id="judge"></div>
-  <div id="flash"></div>
 
   <div id="overlay">
     <div class="big">⚾</div>
@@ -227,7 +220,6 @@ const pitcher = document.getElementById("pitcher");
 const zone = document.getElementById("zone");
 const batter = document.getElementById("batter");
 const judgeEl = document.getElementById("judge");
-const flash = document.getElementById("flash");
 const overlay = document.getElementById("overlay");
 const btn = document.getElementById("btn");
 const countinEl = document.getElementById("countin");
@@ -491,7 +483,6 @@ function swing() {
   if (bd <= curWP) {
     best.result = "perfect"; bell(best.note, now, 0.34); sCrack();  // 같은 음 재현 = 리스폰스
     launchBall(best, now, true);   // 홈런: 우측 담장 너머
-    flash.classList.remove("on"); void flash.offsetWidth; flash.classList.add("on");
     homers++; if (best.dist > maxDist) maxDist = best.dist; updateRecords();
     sCrowd(); popJudge(`💥 홈런! ${best.dist}m`, "#e8a83c");   // 관중 함성 + 담백한 팝업(비거리)
   } else {
