@@ -61,7 +61,8 @@ let best = null;
 
 let cx = 0, cy = 0, R = 90;
 const NEEDLE = 46;        // 바늘 길이(원 바깥으로 뻗음)
-const HEAD = 8;           // 다트 머리 반지름
+const FLIGHT_LEN = 16;    // 깃(fletching) 길이
+const FLIGHT_W = 9;       // 깃 폭(중심에서 한쪽)
 const CONTACT = Math.PI;  // 왼쪽 끝 = 각도 π
 
 // 회전 방향별 원판 팔레트. 방향이 바뀔 때마다 번갈아 쓴다.
@@ -76,15 +77,15 @@ const rings = [];         // 방향 전환 파문
 window.blWeekly = { game: "dart", dir: "max", fmt: (v) => v + "개" };
 window.blShareText = () => `돌아가는 원에 다트 ${best ?? score}개 꽂음! 도전해보세요`;
 
-// 다트 머리가 서로 닿는 최소 각도. 이보다 가까우면 충돌.
-function collideGap() { return (2 * HEAD * 1.15) / R; }
+// 다트 깃이 서로 닿는 최소 각도. 이보다 가까우면 충돌. (허용 간격을 살짝 좁힘)
+function collideGap() { return (2 * FLIGHT_W * 0.9) / R; }
 
 function resize() {
   canvas.width = innerWidth;
   canvas.height = innerHeight;
   cx = canvas.width / 2;
   cy = canvas.height / 2;
-  R = Math.max(64, Math.min(140, Math.min(canvas.width, canvas.height) * 0.16));
+  R = Math.max(77, Math.min(168, Math.min(canvas.width, canvas.height) * 0.192));
 }
 addEventListener("resize", resize);
 resize();
@@ -101,7 +102,7 @@ function angDist(a, b) {
 function throwDart() {
   if (phase !== "running" || flying) return;
   // 왼쪽 화면 밖에서 원의 왼쪽 끝(cx-R, cy)을 향해 날아온다
-  flying = { x: -HEAD * 2, target: cx - R - NEEDLE };
+  flying = { x: -NEEDLE - FLIGHT_LEN, target: cx - R - NEEDLE };
 }
 
 function landDart() {
@@ -169,26 +170,33 @@ function finish() {
   window.blWeeklyReport?.(score);
 }
 
-function drawDart(ang, alpha) {
-  // ang: 화면상 실제 각도. 원 위 접점 → 바깥쪽으로 바늘+머리
-  const dx = Math.cos(ang), dy = Math.sin(ang);
-  const tipX = cx + dx * R, tipY = cy + dy * R;
-  const headX = cx + dx * (R + NEEDLE), headY = cy + dy * (R + NEEDLE);
+// 바늘(tip=박히는 끝) → 꽁지(tail=바깥 끝)로 이어지는 다트 하나를 그린다.
+// 끝단은 화살 깃(fletching) 모양.
+function drawDartSeg(tipX, tipY, tailX, tailY, alpha) {
+  const ax = tailX - tipX, ay = tailY - tipY;
+  const len = Math.hypot(ax, ay) || 1;
+  const ux = ax / len, uy = ay / len;     // tip→tail(바깥) 방향
+  const px = -uy, py = ux;                 // 수직
   ctx.globalAlpha = alpha;
   ctx.lineCap = "round";
+  // 샤프트
   ctx.strokeStyle = "#9a86c4";
   ctx.lineWidth = 3;
   ctx.beginPath();
   ctx.moveTo(tipX, tipY);
-  ctx.lineTo(headX, headY);
+  ctx.lineTo(tailX, tailY);
   ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(headX, headY, HEAD, 0, Math.PI * 2);
+  // 깃 — 뒤로 갈수록 벌어지고 꽁지 중앙에 V 노치가 파인 화살 꽁지 모양
+  const bx = tailX - ux * FLIGHT_LEN, by = tailY - uy * FLIGHT_LEN;        // 안쪽(좁은) 밑동
+  const nx = tailX - ux * FLIGHT_LEN * 0.45, ny = tailY - uy * FLIGHT_LEN * 0.45; // 노치
   ctx.fillStyle = "#e15b7a";
+  ctx.beginPath();
+  ctx.moveTo(bx, by);
+  ctx.lineTo(tailX + px * FLIGHT_W, tailY + py * FLIGHT_W);
+  ctx.lineTo(nx, ny);
+  ctx.lineTo(tailX - px * FLIGHT_W, tailY - py * FLIGHT_W);
+  ctx.closePath();
   ctx.fill();
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = "rgba(255,255,255,.55)";
-  ctx.stroke();
   ctx.globalAlpha = 1;
 }
 
@@ -254,22 +262,14 @@ function tick(now) {
   ctx.shadowBlur = 0;
 
   // 꽂힌 다트들
-  for (const a of stuck) drawDart(worldAngle(a), 1);
+  for (const a of stuck) {
+    const ang = worldAngle(a), dx = Math.cos(ang), dy = Math.sin(ang);
+    drawDartSeg(cx + dx * R, cy + dy * R, cx + dx * (R + NEEDLE), cy + dy * (R + NEEDLE), 1);
+  }
 
-  // 날아가는 다트
+  // 날아가는 다트 (오른쪽 끝이 바늘 tip, 왼쪽이 꽁지)
   if (flying) {
-    const headX = flying.x + NEEDLE, headY = cy;
-    ctx.lineCap = "round";
-    ctx.strokeStyle = "#9a86c4";
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(flying.x, headY);
-    ctx.lineTo(headX, headY);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(flying.x, headY, HEAD, 0, Math.PI * 2);
-    ctx.fillStyle = "#e15b7a";
-    ctx.fill();
+    drawDartSeg(flying.x + NEEDLE, cy, flying.x, cy, 1);
   }
 
   requestAnimationFrame(tick);
