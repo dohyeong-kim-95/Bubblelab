@@ -76,6 +76,13 @@ const rings = [];         // 방향 전환 파문
 
 window.blWeekly = { game: "dart", dir: "max", fmt: (v) => v + "개" };
 window.blShareText = () => `돌아가는 원에 다트 ${best ?? score}개 꽂음! 도전해보세요`;
+// 다트가 꽂힌 원판 스냅샷 이미지를 함께 공유한다 (모바일 공유 시트/카카오톡 등).
+window.blShareFiles = async () => {
+  if (!stuck.length) return null;
+  const cv = buildSnapshot();
+  const blob = await new Promise((res) => cv.toBlob(res, "image/png"));
+  return blob ? [new File([blob], "dart-circus.png", { type: "image/png" })] : null;
+};
 
 // ---- 픽셀 기반 깃(fletching) 다각형 충돌 ----
 // drawDartSeg가 그리는 깃 모양 그대로의 4점 폴리곤을 만든다.
@@ -210,33 +217,88 @@ function finish() {
   window.blWeeklyReport?.(score);
 }
 
-// 바늘(tip=박히는 끝) → 꽁지(tail=바깥 끝)로 이어지는 다트 하나를 그린다.
-// 끝단은 화살 깃(fletching) 모양.
-function drawDartSeg(tipX, tipY, tailX, tailY, alpha) {
+// 공유용 정사각 스냅샷 — 다트가 꽂힌 원판 + 점수를 별도 캔버스에 그린다.
+function buildSnapshot() {
+  const S = 800;
+  const cv = document.createElement("canvas");
+  cv.width = S; cv.height = S;
+  const g = cv.getContext("2d");
+  // 배경 (공유 시 어디서 봐도 일정하도록 고정 다크)
+  const bg = g.createLinearGradient(0, 0, 0, S);
+  bg.addColorStop(0, "#171226");
+  bg.addColorStop(1, "#0d0918");
+  g.fillStyle = bg;
+  g.fillRect(0, 0, S, S);
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  // 타이틀
+  g.fillStyle = "#e8dcff";
+  g.font = 'bold 40px ui-monospace, "SF Mono", Consolas, monospace';
+  g.fillText("🎯 다트 서커스", S / 2, 80);
+
+  const ox = S / 2, oy = 400, Ri = 150, Ni = 72, fL = 25, fW = 14;
+  const pal = PALETTES[palIdx];
+  // 원판
+  g.beginPath();
+  g.arc(ox, oy, Ri, 0, Math.PI * 2);
+  const grad = g.createRadialGradient(ox - Ri * 0.3, oy - Ri * 0.3, Ri * 0.2, ox, oy, Ri);
+  grad.addColorStop(0, pal.a);
+  grad.addColorStop(1, pal.b);
+  g.fillStyle = grad;
+  g.fill();
+  // 꽂힌 다트들 (게임과 동일한 각도, 스냅샷 비율로 확대)
+  for (const a of stuck) {
+    const ang = a + rot, dx = Math.cos(ang), dy = Math.sin(ang);
+    drawDartOn(g, ox + dx * Ri, oy + dy * Ri, ox + dx * (Ri + Ni), oy + dy * (Ri + Ni), fL, fW, 5);
+  }
+  // 중심 개수
+  g.fillStyle = "#fff";
+  g.font = `bold ${Math.round(Ri * 0.85)}px ui-monospace, "SF Mono", Consolas, monospace`;
+  g.shadowColor = "rgba(0,0,0,.35)";
+  g.shadowBlur = 10;
+  g.fillText(String(score), ox, oy);
+  g.shadowBlur = 0;
+  // 캡션
+  g.fillStyle = "#d3c6ef";
+  g.font = '600 32px ui-monospace, "SF Mono", Consolas, monospace';
+  g.fillText(`다트 ${score}개 꽂았어요!`, S / 2, oy + Ri + 74);
+  g.fillStyle = "rgba(211,198,239,.55)";
+  g.font = '500 22px ui-monospace, "SF Mono", Consolas, monospace';
+  g.fillText("slop.bubblelab.dev/dart", S / 2, S - 46);
+  return cv;
+}
+
+// 바늘(tip=박히는 끝) → 꽁지(tail=바깥 끝) 다트를 임의 ctx/비율로 그린다.
+// 끝단은 뒤로 벌어지며 V 노치가 파인 화살 깃(fletching) 모양.
+function drawDartOn(g, tipX, tipY, tailX, tailY, fLen, fW, shaftW) {
   const ax = tailX - tipX, ay = tailY - tipY;
   const len = Math.hypot(ax, ay) || 1;
   const ux = ax / len, uy = ay / len;     // tip→tail(바깥) 방향
   const px = -uy, py = ux;                 // 수직
-  ctx.globalAlpha = alpha;
-  ctx.lineCap = "round";
+  g.lineCap = "round";
   // 샤프트
-  ctx.strokeStyle = "#9a86c4";
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(tipX, tipY);
-  ctx.lineTo(tailX, tailY);
-  ctx.stroke();
-  // 깃 — 뒤로 갈수록 벌어지고 꽁지 중앙에 V 노치가 파인 화살 꽁지 모양
-  const bx = tailX - ux * FLIGHT_LEN, by = tailY - uy * FLIGHT_LEN;        // 안쪽(좁은) 밑동
-  const nx = tailX - ux * FLIGHT_LEN * 0.45, ny = tailY - uy * FLIGHT_LEN * 0.45; // 노치
-  ctx.fillStyle = "#e15b7a";
-  ctx.beginPath();
-  ctx.moveTo(bx, by);
-  ctx.lineTo(tailX + px * FLIGHT_W, tailY + py * FLIGHT_W);
-  ctx.lineTo(nx, ny);
-  ctx.lineTo(tailX - px * FLIGHT_W, tailY - py * FLIGHT_W);
-  ctx.closePath();
-  ctx.fill();
+  g.strokeStyle = "#9a86c4";
+  g.lineWidth = shaftW;
+  g.beginPath();
+  g.moveTo(tipX, tipY);
+  g.lineTo(tailX, tailY);
+  g.stroke();
+  // 깃
+  const bx = tailX - ux * fLen, by = tailY - uy * fLen;             // 안쪽(좁은) 밑동
+  const nx = tailX - ux * fLen * 0.45, ny = tailY - uy * fLen * 0.45; // 노치
+  g.fillStyle = "#e15b7a";
+  g.beginPath();
+  g.moveTo(bx, by);
+  g.lineTo(tailX + px * fW, tailY + py * fW);
+  g.lineTo(nx, ny);
+  g.lineTo(tailX - px * fW, tailY - py * fW);
+  g.closePath();
+  g.fill();
+}
+// 게임 화면용 래퍼 (본 캔버스, 게임 비율)
+function drawDartSeg(tipX, tipY, tailX, tailY, alpha) {
+  ctx.globalAlpha = alpha;
+  drawDartOn(ctx, tipX, tipY, tailX, tailY, FLIGHT_LEN, FLIGHT_W, 3);
   ctx.globalAlpha = 1;
 }
 
