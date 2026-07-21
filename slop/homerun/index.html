@@ -78,8 +78,6 @@
   #zone::before { width: 28%; height: 2px; transform: translate(-50%,-50%); }
   #zone::after  { width: 2px; height: 28%; transform: translate(-50%,-50%); }
   #zone.beat { border-color: light-dark(rgba(210,55,55,1), rgba(255,120,120,.95)); }
-  #zone.hit  { transform: translate(-50%,-50%) scale(1.18);
-               box-shadow: 0 0 0 .5rem light-dark(rgba(75,175,110,.35), rgba(90,220,140,.3)); }
   /* 홈플레이트(오각형, 아래 중앙) */
   #plate {
     position: absolute; left: 44%; top: 90%; transform: translate(-50%,-50%);
@@ -505,7 +503,6 @@ function swing() {
     return;
   }
   best.judged = true;
-  zone.classList.add("hit"); setTimeout(() => zone.classList.remove("hit"), 120);
   if (bd <= curWP) {
     best.result = "perfect"; bell(best.note, now, 0.34); sCrack();  // 같은 음 재현 = 리스폰스
     launchBall(best, now, true);   // 홈런: 우측 담장 너머
