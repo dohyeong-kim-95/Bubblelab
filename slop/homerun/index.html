@@ -30,8 +30,31 @@
     padding: .9rem 1.1rem; pointer-events: none; font-size: .95rem;
   }
   #lv { font-weight: bold; letter-spacing: .02em; }
-  #records { font-size: .72rem; opacity: .7; margin-top: .25rem; }
   #strikes { display: flex; gap: .35rem; font-size: 1.1rem; align-self: flex-start; }
+  /* 전광판(외야 LED 스코어보드) */
+  #board {
+    position: absolute; top: 13%; left: 50%; transform: translate(-50%,-50%);
+    z-index: 10; padding: .5rem 1.1rem; border-radius: .5rem; pointer-events: none;
+    min-width: 50vmin; max-width: 84vw; text-align: center;
+    background: linear-gradient(#141a24, #0a0e15);
+    border: 3px solid #2c3644;
+    box-shadow: 0 5px 12px rgba(0,0,0,.45), inset 0 0 0 2px #05070b,
+                inset 0 0 14px rgba(0,0,0,.6);
+  }
+  #board::before {  /* LED 도트 질감 */
+    content: ""; position: absolute; inset: 3px; border-radius: .3rem; opacity: .5;
+    background-image: radial-gradient(rgba(255,255,255,.06) 30%, transparent 31%);
+    background-size: 4px 4px;
+  }
+  #boardMsg {
+    position: relative; font-family: ui-monospace, monospace; font-weight: 800;
+    font-size: 3.5vmin; letter-spacing: .1em; line-height: 1.3;
+    color: #7fd6a0; text-shadow: 0 0 5px rgba(120,220,150,.4);
+    transition: color .1s;
+  }
+  #boardMsg.hr     { color: #ffb43a; text-shadow: 0 0 8px rgba(255,160,50,.55); }
+  #boardMsg.hit    { color: #62c9ff; text-shadow: 0 0 8px rgba(90,190,255,.5); }
+  #boardMsg.strike { color: #ff6b6b; text-shadow: 0 0 7px rgba(255,95,95,.45); }
   #strikes span { opacity: .28; transition: opacity .12s, transform .12s; }
   #strikes span.on { opacity: 1; transform: scale(1.15); }
   /* 투수(사이드암, 먼 곳이라 작게) */
@@ -132,12 +155,10 @@
 <body>
 <div id="field">
   <div id="hud">
-    <div class="hud-l">
-      <div id="lv">⚾ 야구 리듬</div>
-      <div id="records">홈런 0 · 최고비거리 0m</div>
-    </div>
+    <div id="lv">⚾ 야구 리듬</div>
     <div id="strikes"><span>❌</span><span>❌</span><span>❌</span></div>
   </div>
+  <div id="board"><div id="boardMsg"></div></div>
   <div id="pitcher">🤾</div>
   <div id="plate"></div>
   <div id="zone"></div>
@@ -223,7 +244,7 @@ const judgeEl = document.getElementById("judge");
 const overlay = document.getElementById("overlay");
 const btn = document.getElementById("btn");
 const countinEl = document.getElementById("countin");
-const recordsEl = document.getElementById("records");
+const boardMsg = document.getElementById("boardMsg");
 
 // ── 오디오(신스 — 외부 음원 없음) ──────────────────────
 let ctx, noiseBuf;
@@ -450,12 +471,17 @@ function spawnTrail(xPct, yPct, sizeVmin) {
   requestAnimationFrame(() => { d.style.opacity = "0"; });
   setTimeout(() => d.remove(), 420);
 }
-function updateRecords() { recordsEl.textContent = `홈런 ${homers} · 최고비거리 ${maxDist}m`; }
+let boardTimer = 0;
+function boardRecords() { boardMsg.textContent = `⚾ 홈런 ${homers}   최고 ${maxDist}m`; boardMsg.className = ""; }
+function boardShow(text, cls) {            // 전광판에 결과 표시 후 기록으로 복귀
+  boardMsg.textContent = text; boardMsg.className = cls;
+  clearTimeout(boardTimer); boardTimer = setTimeout(boardRecords, 1700);
+}
 
 function addStrike(label) {
   levelClean = false; perfectGame = false;
   sStrike();
-  popJudge(label, "#e05a5a");
+  boardShow(label, "strike");
   setStrikes(strikes + 1);
   if (strikes >= 3) { state = "over"; setTimeout(gameOver, 550); }
 }
@@ -483,11 +509,11 @@ function swing() {
   if (bd <= curWP) {
     best.result = "perfect"; bell(best.note, now, 0.34); sCrack();  // 같은 음 재현 = 리스폰스
     launchBall(best, now, true);   // 홈런: 우측 담장 너머
-    homers++; if (best.dist > maxDist) maxDist = best.dist; updateRecords();
-    sCrowd(); popJudge(`💥 홈런! ${best.dist}m`, "#e8a83c");   // 관중 함성 + 담백한 팝업(비거리)
+    homers++; if (best.dist > maxDist) maxDist = best.dist;
+    sCrowd(); boardShow(`⚾ 홈런!  ${best.dist}m`, "hr");   // 관중 함성 + 전광판
   } else {
     best.result = "good"; bell(best.note, now, 0.22); sHit(); levelClean = false; perfectGame = false;
-    popJudge("안타!", "#4bae6e");
+    boardShow("안타!", "hit");
     launchBall(best, now, false);  // 안타: 좌중간
   }
 }
@@ -519,13 +545,13 @@ function overlayScreen(big, title, body, label, onClick) {
   overlay.classList.remove("hidden");
 }
 
-function restart() { perfectGame = true; won = false; homers = 0; maxDist = 0; updateRecords(); startLevel(0); }
+function restart() { perfectGame = true; won = false; homers = 0; maxDist = 0; boardRecords(); startLevel(0); }
 
 // ── 입력 ───────────────────────────────────────────────
 function firstStart() {
   initAudio(); if (ctx.state === "suspended") ctx.resume();
   overlay.classList.add("hidden");
-  perfectGame = true; won = false; homers = 0; maxDist = 0; updateRecords(); startLevel(0);
+  perfectGame = true; won = false; homers = 0; maxDist = 0; boardRecords(); startLevel(0);
 }
 btn.onclick = firstStart;
 
