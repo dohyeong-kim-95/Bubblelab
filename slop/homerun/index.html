@@ -16,12 +16,19 @@
   }
   #field {
     position: relative; width: 100%; height: 100dvh; overflow: hidden; cursor: pointer;
-    /* 등뒤 뷰: 하늘(위·먼 곳) → 잔디 → 흙(아래·타석) */
+    /* 다크 기본값(고정) — light-dark() 리페인트 깜빡임 방지: 다크모드에선 절대 밝은 초록 안 뜸 */
     background:
-      linear-gradient(transparent 22.5%, light-dark(#3f6d44,#1c3a24) 23%, light-dark(#3f6d44,#1c3a24) 27%, transparent 27.5%), /* 외야 펜스 */
-      radial-gradient(80% 45% at 46% 98%, light-dark(#d8c49a, #2c2519) 0%, transparent 55%),  /* 내야 흙 */
-      linear-gradient(light-dark(#cfe0ef, #0d1a29) 0%, light-dark(#bcd3b4, #14251a) 42%,
-                      light-dark(#a9c69f, #17301d) 58%, light-dark(#cbb388, #241d12) 100%);
+      linear-gradient(transparent 22.5%, #1c3a24 23%, #1c3a24 27%, transparent 27.5%),          /* 외야 펜스 */
+      radial-gradient(80% 45% at 46% 98%, #2c2519 0%, transparent 55%),                         /* 내야 흙 */
+      linear-gradient(#0d1a29 0%, #14251a 42%, #17301d 58%, #241d12 100%);                      /* 하늘→잔디→흙 */
+  }
+  @media (prefers-color-scheme: light) {
+    #field {
+      background:
+        linear-gradient(transparent 22.5%, #3f6d44 23%, #3f6d44 27%, transparent 27.5%),
+        radial-gradient(80% 45% at 46% 98%, #d8c49a 0%, transparent 55%),
+        linear-gradient(#cfe0ef 0%, #bcd3b4 42%, #a9c69f 58%, #cbb388 100%);
+    }
   }
   /* HUD */
   #hud {
