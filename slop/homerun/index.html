@@ -330,10 +330,46 @@ function startGroove(at) {
   }, 60);
 }
 function stopGroove() { grooveOn = false; if (grooveTimer) { clearInterval(grooveTimer); grooveTimer = 0; } }
-function sCrack()  { const t = ctx.currentTime; noise(t, 0.09, 0.5, 1800, 0.8); tone(880, t, 0.18, 0.22, "triangle"); tone(1320, t, 0.14, 0.12, "sine"); }
-function sHit()    { const t = ctx.currentTime; noise(t, 0.08, 0.35, 1200, 1); tone(520, t, 0.12, 0.16, "triangle"); }
-function sWhiff()  { const t = ctx.currentTime; noise(t, 0.16, 0.22, 700, 0.5); }
-function sStrike() { const t = ctx.currentTime; tone(180, t, 0.2, 0.2, "sawtooth"); }
+// 투구 바람소리 "슉" — 노이즈 밴드패스 하강 스윕(공이 날아오는 소리)
+function sSwoosh(t) {
+  t = t ?? ctx.currentTime;
+  const s = ctx.createBufferSource(); s.buffer = noiseBuf;
+  const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 1.1;
+  bp.frequency.setValueAtTime(1700, t); bp.frequency.exponentialRampToValueAtTime(520, t + 0.22);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.15, t + 0.05);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.26);
+  s.connect(bp).connect(g).connect(ctx.destination); s.start(t); s.stop(t + 0.28);
+}
+// 홈런 "깡" — 금속 배트(비화성 고음 파셜 + 날카로운 임팩트)
+function sMetal() {
+  const t = ctx.currentTime; noise(t, 0.02, 0.5, 4200, 2);
+  [2050, 3170, 4400, 5900].forEach((f, i) => {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = "triangle"; o.frequency.setValueAtTime(f, t);
+    g.gain.setValueAtTime(0.13 / (i + 1), t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3 - i * 0.05);
+    o.connect(g).connect(ctx.destination); o.start(t); o.stop(t + 0.32);
+  });
+}
+// 안타 "탁" — 나무 배트(드라이 클릭 + 저중역 툭)
+function sWood() {
+  const t = ctx.currentTime; noise(t, 0.03, 0.45, 1400, 1.5);
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = "triangle"; o.frequency.setValueAtTime(430, t); o.frequency.exponentialRampToValueAtTime(230, t + 0.06);
+  g.gain.setValueAtTime(0.22, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+  o.connect(g).connect(ctx.destination); o.start(t); o.stop(t + 0.12);
+}
+// 실책/포구 "퍽" — 미트 캐치(먹먹한 저역 툭)
+function sMitt() {
+  const t = ctx.currentTime; noise(t, 0.06, 0.34, 520, 0.8);
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = "sine"; o.frequency.setValueAtTime(165, t); o.frequency.exponentialRampToValueAtTime(85, t + 0.08);
+  g.gain.setValueAtTime(0.26, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+  o.connect(g).connect(ctx.destination); o.start(t); o.stop(t + 0.14);
+}
+// 헛스윙/연습 스윙 "휙" — 배트가 공기를 가르는 소리
+function sWhiff() { const t = ctx.currentTime; noise(t, 0.11, 0.16, 1800, 0.8); }
 
 // ── 게임 상태 ──────────────────────────────────────────
 let state = "idle";   // idle | playing | over
@@ -378,7 +414,8 @@ function startLevel(idx) {
     const hit = startTime + (COUNTIN + OFFSET + b) * BEAT;  // 타격 = 콜보다 OFFSET박 뒤
     const note = lv.mel[i];
     balls.push({ hit, spawn: hit - TRAVEL, note, judged: false, node: null });
-    bell(note, hit - TRAVEL, 0.18);   // 던질 때(spawn) = 콜(투수가 음을 불러줌)
+    bell(note, hit - TRAVEL, 0.15);   // 콜(멜로디 음, 은은하게)
+    sSwoosh(hit - TRAVEL);            // 투구 바람소리 "슉"
   });
   state = "playing";
   cancelAnimationFrame(raf); raf = requestAnimationFrame(loop);
@@ -496,7 +533,7 @@ function boardShow(text, cls) {            // 전광판에 결과 표시 후 기
 
 function addStrike(label) {
   levelClean = false; perfectGame = false;
-  sStrike();
+  sMitt();   // 실책/포구 "퍽"(미트 캐치)
   boardShow(label, "strike");
   setStrikes(strikes + 1);
   if (strikes >= 3) { state = "over"; setTimeout(gameOver, 550); }
@@ -522,12 +559,12 @@ function swing() {
   }
   best.judged = true;
   if (bd <= curWP) {
-    best.result = "perfect"; bell(best.note, now, 0.34); sCrack();  // 같은 음 재현 = 리스폰스
+    best.result = "perfect"; bell(best.note, now, 0.16); sMetal();  // 홈런 "깡"(금속) + 리스폰스 음
     launchBall(best, now, true);   // 홈런: 우측 담장 너머
     homers++; if (best.dist > maxDist) maxDist = best.dist;
     sCrowd(); boardShow(`⚾ 홈런!  ${best.dist}m`, "hr");   // 관중 함성 + 전광판
   } else {
-    best.result = "good"; bell(best.note, now, 0.22); sHit(); levelClean = false; perfectGame = false;
+    best.result = "good"; bell(best.note, now, 0.15); sWood(); levelClean = false; perfectGame = false;  // 안타 "탁"(나무)
     boardShow("안타!", "hit");
     launchBall(best, now, false);  // 안타: 좌중간
   }
