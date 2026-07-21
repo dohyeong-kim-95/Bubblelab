@@ -59,6 +59,16 @@ export function validateWebSocketOrigin(request) {
   return null;
 }
 
+// 제출 계열 엔드포인트(점수 등록 등)에 쓴다. validateMutationRequest는 Origin이
+// "있을 때만" 검사하므로 Origin/Sec-Fetch-Site를 아예 안 보내는 curl·스크립트는
+// 통과한다. 여기서는 브라우저의 동일 출처 요청임을 적극 요구해 그 구멍을 막는다.
+export function requireBrowserOrigin(request) {
+  const origin = request.headers.get("Origin");
+  const fetchSite = request.headers.get("Sec-Fetch-Site");
+  const sameOrigin = origin === new URL(request.url).origin || fetchSite === "same-origin";
+  return sameOrigin ? null : Response.json({ error: "same-origin request required" }, { status: 403 });
+}
+
 export function requireJsonRequest(request) {
   const type = request.headers.get("Content-Type")?.split(";", 1)[0].trim().toLowerCase();
   return type === "application/json"

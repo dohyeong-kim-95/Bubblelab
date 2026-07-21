@@ -19,8 +19,10 @@ class MemoryStorage {
   }
 }
 
-const postRecord = (records, body) => records.fetch(new Request("https://records.internal/", {
-  method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+// 워커가 제출마다 주입하는 방문자 쿠키(vid)·KST 날짜를 기본값으로 채운다.
+const postRecord = (records, body) => records.fetch(new Request("https://records.internal/_records", {
+  method: "POST", headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ vid: "00000000-0000-4000-8000-000000000001", date: "2026-06-29", ...body }),
 }));
 
 test("bubble idle shares the Monday 09:00 KST weekly season", () => {

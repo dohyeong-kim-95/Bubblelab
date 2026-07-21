@@ -21,6 +21,7 @@ import {
   consumeRateLimit,
   featureEnabled,
   rateLimitResponse,
+  requireBrowserOrigin,
   requireJsonRequest,
   validateMutationRequest,
   validateWebSocketOrigin,
@@ -696,16 +697,31 @@ export async function handleRequest(request, env, ctx) {
       }
       const contentTypeError = requireJsonRequest(request);
       if (contentTypeError) return contentTypeError;
+      // Origin/Sec-Fetch-Site가 없거나 다른 출처면 거절 — 브라우저 밖(curl 등)의
+      // 점수 위조 시도를 차단한다.
+      const originError = requireBrowserOrigin(request);
+      if (originError) return originError;
+      // 서버가 발급한 방문자 쿠키가 있어야 제출 가능(익명 스크립트 차단).
+      // DO는 이 vid로 방문자당 하루 제출 수를 제한해 도배를 막는다.
+      const vid = visitorId(request);
+      if (!vid) return new Response("visitor cookie required", { status: 403 });
       const limited = await enforceRateLimit(request, env, {
         scope: "records", limit: 10, windowMs: 60 * 1000,
       });
       if (limited) return limited;
-      return env.RECORDS.get(id).fetch(request);
+      const body = await request.json().catch(() => ({}));
+      return env.RECORDS.get(id).fetch("https://records.internal/_records", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...body, vid, date: kstDate() }),
+      });
     }
 
     if (path === "/_personal" && request.method === "POST") {
       const contentTypeError = requireJsonRequest(request);
       if (contentTypeError) return contentTypeError;
+      const originError = requireBrowserOrigin(request);
+      if (originError) return originError;
       const limited = await enforceRateLimit(request, env, {
         scope: "personal-record", limit: 20, windowMs: 60 * 1000,
       });

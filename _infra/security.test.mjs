@@ -4,6 +4,7 @@ import {
   applySecurityHeaders,
   featureEnabled,
   RateLimiterDO,
+  requireBrowserOrigin,
   requireJsonRequest,
   validateMutationRequest,
   validateWebSocketOrigin,
@@ -62,6 +63,23 @@ test("requires an exact browser origin for websocket upgrades", () => {
   assert.equal(validateWebSocketOrigin(new Request(allowed.url))?.status, 403);
   assert.equal(validateWebSocketOrigin(new Request(allowed.url, {
     headers: { Origin: "https://attacker.example" },
+  }))?.status, 403);
+});
+
+test("submission endpoints require a same-origin browser request", () => {
+  const url = "https://slop.bubblelab.dev/_records";
+  // 브라우저 fetch: Origin이 동일 출처거나 Sec-Fetch-Site: same-origin이면 통과
+  assert.equal(requireBrowserOrigin(new Request(url, {
+    method: "POST", headers: { Origin: "https://slop.bubblelab.dev" },
+  })), null);
+  assert.equal(requireBrowserOrigin(new Request(url, {
+    method: "POST", headers: { "Sec-Fetch-Site": "same-origin" },
+  })), null);
+  // Origin/Sec-Fetch-Site를 아예 안 보내는 요청(curl 등)은 거절
+  assert.equal(requireBrowserOrigin(new Request(url, { method: "POST" }))?.status, 403);
+  // 다른 출처도 거절
+  assert.equal(requireBrowserOrigin(new Request(url, {
+    method: "POST", headers: { Origin: "https://attacker.example" },
   }))?.status, 403);
 });
 

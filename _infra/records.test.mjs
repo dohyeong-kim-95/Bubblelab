@@ -14,10 +14,13 @@ class MemoryStorage {
   }
 }
 
-const post = (records, body) => records.fetch(new Request("https://records.internal/", {
+// 워커는 제출마다 방문자 쿠키(vid)와 KST 날짜를 주입한다. DO 테스트도 이를
+// 기본값으로 채워 실제 호출 형태를 반영한다(개별 테스트에서 override 가능).
+const VID = "00000000-0000-4000-8000-000000000001";
+const post = (records, body) => records.fetch(new Request("https://records.internal/_records", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
-  body: JSON.stringify(body),
+  body: JSON.stringify({ vid: VID, date: "2026-07-06", ...body }),
 }));
 
 test("weekKey rolls over at Monday 09:00 KST (= Monday 00:00 UTC)", () => {
@@ -278,4 +281,34 @@ test("rejects malformed submissions", async () => {
   // 한글/영문/숫자 6자 + 범위 내 점수는 통과
   const ok = await post(records, { game: "touch25", nick: "김a1나2", score: 1 });
   assert.equal(ok.status, 200);
+});
+
+test("weekly submit requires a valid visitor id and date", async () => {
+  const records = new RecordsDO({ storage: new MemoryStorage() });
+  // vid가 없거나 형식이 틀리면 거절 (익명 스크립트 차단)
+  assert.equal((await post(records, { game: "touch25", nick: "철수", score: 1, vid: undefined })).status, 400);
+  assert.equal((await post(records, { game: "touch25", nick: "철수", score: 1, vid: "not-a-uuid" })).status, 400);
+  // date가 없거나 형식이 틀려도 거절 (하루 상한 버킷을 결정하는 값)
+  assert.equal((await post(records, { game: "touch25", nick: "철수", score: 1, date: "20260706" })).status, 400);
+});
+
+test("weekly submit is capped per visitor per day", async () => {
+  const records = new RecordsDO({ storage: new MemoryStorage() });
+  // 같은 vid로 하루 30건까지만 (점수를 조금씩 낮춰 계속 채택되게 한다)
+  for (let i = 0; i < 30; i++) {
+    const res = await post(records, { game: "clicker", nick: "도배범", score: 300 - i });
+    assert.equal(res.status, 200, `submission ${i}`);
+  }
+  assert.equal((await post(records, { game: "clicker", nick: "도배범", score: 250 })).status, 429);
+  // 다른 vid는 자기 버킷을 새로 쓰므로 계속 제출 가능
+  assert.equal(
+    (await post(records, { game: "clicker", nick: "다른이", score: 250, vid: "00000000-0000-4000-8000-000000000002" })).status,
+    200,
+  );
+  // 형식이 틀린 제출은 상한 검사 전에 400 → 하루 카운터를 소모하지 않는다
+  const other = new RecordsDO({ storage: new MemoryStorage() });
+  for (let i = 0; i < 40; i++) {
+    assert.equal((await post(other, { game: "clicker", nick: "봇", score: 99999 })).status, 400);
+  }
+  assert.equal((await post(other, { game: "clicker", nick: "봇", score: 100 })).status, 200);
 });

@@ -15,6 +15,10 @@ const SUG_TEXT = /^[^\x00-\x1f]{1,200}$/;
 const SUG_MAX = 300;   // 이 이상 쌓이면 오래된 것부터 정리
 const SUG_DAILY = 5;   // 방문자당 하루 제출 수
 
+// 주간 보드 제출: 방문자(vid)당 하루 제출 수 상한. 한 브라우저가 가짜 닉/점수를
+// 도배하는 것을 막는다. 유효한 형태의 제출이면 채택 여부와 무관하게 카운트한다.
+const REC_DAILY = 30;
+
 // 주간 보드를 쓰는 토이는 여기에 한 줄 등록한다. 비교 방향과 점수 범위는
 // 서버가 고정한다 — 클라이언트가 보낸 dir은 무시된다 (dir 바꿔치기·
 // 터무니없는 점수 등록 방지). 등록 안 된 게임의 제출은 거절된다.
@@ -253,13 +257,23 @@ export class RecordsDO {
     }
 
     if (request.method === "POST") {
-      const { game, nick, score, text } = await request.json().catch(() => ({}));
+      const { game, nick, score, text, vid, date } = await request.json().catch(() => ({}));
       const cfg = GAMES[game];
-      if (!cfg || !NICK.test(nick ?? "") ||
+      if (!cfg || !NICK.test(nick ?? "") || !VISITOR_ID.test(vid ?? "") ||
+          !DATE_KEY.test(date ?? "") ||
           typeof score !== "number" || !Number.isFinite(score) ||
           score < cfg.min || score > cfg.max) {
         return new Response("invalid record", { status: 400 });
       }
+      // 방문자당 하루 제출 상한 (도배·위조 완화). 형태가 유효하면 채택 여부와
+      // 무관하게 카운트하고, 지난날 카운터는 정리한다.
+      const dayKey = `recday:${date}:${vid}`;
+      const used = (await this.state.storage.get(dayKey)) ?? 0;
+      if (used >= REC_DAILY) return new Response("daily limit", { status: 429 });
+      await this.state.storage.put(dayKey, used + 1);
+      const days = await this.state.storage.list({ prefix: "recday:" });
+      const staleDays = [...days.keys()].filter((k) => k.split(":")[1] !== date);
+      if (staleDays.length) await this.state.storage.delete(staleDays);
       // 표시용 문자열(토이의 fmt 결과, 예: "12.34초"). 홈 카드처럼 단위를
       // 모르는 화면에서 쓴다. 수상하면 숫자 그대로로 대체.
       const display = typeof text === "string" && /^[^\x00-\x1f<>&"']{1,24}$/.test(text.trim())
