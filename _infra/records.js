@@ -151,7 +151,9 @@ export class RecordsDO {
       const game = url.searchParams.get("game");
       if (!GAME.test(game ?? "")) return new Response("invalid game", { status: 400 });
       await this.state.storage.delete(
-        url.searchParams.has("alltime") ? `alltime:${game}` : `rec:${week}:${game}`,
+        url.searchParams.has("alltime")
+          ? `alltime:${game}`
+          : [`rec:${week}:${game}`, `top3:${week}:${game}`], // 주간 리셋은 top3도 함께
       );
       return new Response(null, { status: 204 });
     }
@@ -219,8 +221,15 @@ export class RecordsDO {
       }
       const game = url.searchParams.get("game");
       if (!GAME.test(game ?? "")) return new Response("invalid game", { status: 400 });
-      const record = presentRecord(game, (await this.state.storage.get(`rec:${week}:${game}`)) ?? null);
-      return Response.json({ week, record, notice }, { headers: { "Cache-Control": "no-store" } });
+      const rawRec = (await this.state.storage.get(`rec:${week}:${game}`)) ?? null;
+      // top3(주간 1~3위). 배포 전 세워진 주는 top3가 없으니 1위 기록으로 시드.
+      const rawTop3 = (await this.state.storage.get(`top3:${week}:${game}`)) ?? (rawRec ? [rawRec] : []);
+      return Response.json({
+        week,
+        record: presentRecord(game, rawRec),
+        top3: rawTop3.map((r) => presentRecord(game, r)),
+        notice,
+      }, { headers: { "Cache-Control": "no-store" } });
     }
 
     if (request.method === "POST" && url.pathname === "/_personal") {
@@ -257,37 +266,57 @@ export class RecordsDO {
         ? text.trim() : String(score);
 
       const key = `rec:${week}:${game}`;
+      const top3Key = `top3:${week}:${game}`;
       const current = await this.state.storage.get(key);
-      if (!beats(cfg.dir, score, current)) {
-        return Response.json({ week, accepted: false, record: presentRecord(game, current) });
-      }
+      // 기존 top3(없으면 1위 기록으로 시드 — 배포 전 기록 호환)
+      let list = (await this.state.storage.get(top3Key)) ?? (current ? [current] : []);
 
       const record = { nick, score, text: display, dir: cfg.dir, at: Date.now() };
-      await this.state.storage.put(key, record);
+      // 같은 닉네임은 더 좋은 기록만 유지 (나쁜 점수 재제출로 자기 순위가 내려가지 않게)
+      const mine = list.find((e) => e.nick === nick);
+      const keepEntry = mine && !beats(cfg.dir, score, mine) ? mine : record;
+      let merged = [...list.filter((e) => e.nick !== nick), keepEntry];
+      merged.sort((a, b) => (cfg.dir === "max" ? b.score - a.score : a.score - b.score));
+      merged = merged.slice(0, 3);
+      // 새 기록이 실제로 3위 안에 들었는지
+      const accepted = keepEntry === record && merged.includes(record);
 
-      // 올타임 명예의 전당도 갱신 (주간 1위보다 좋아야만 여기 도달하므로
-      // 올타임 후보는 항상 이 경로를 지난다)
-      if (beats(cfg.dir, score, await this.state.storage.get(`alltime:${game}`))) {
-        await this.state.storage.put(`alltime:${game}`, record);
+      if (accepted) {
+        await this.state.storage.put(top3Key, merged);
+        const top1 = merged[0];
+        await this.state.storage.put(key, top1); // 1위는 항상 top3[0] (홈/올타임 호환)
+
+        // 올타임 명예의 전당 갱신
+        if (beats(cfg.dir, top1.score, await this.state.storage.get(`alltime:${game}`))) {
+          await this.state.storage.put(`alltime:${game}`, top1);
+        }
+
+        // 지난주 기록 정리(rec + top3). 지우기 전에 올타임/명예의전당에 흡수.
+        const stored = await this.state.storage.list({ prefix: "rec:" });
+        const stale = [...stored].filter(([k]) => k.split(":")[1] !== week);
+        for (const [k, v] of stale) {
+          const g = k.split(":")[2];
+          const oldWeek = k.split(":")[1];
+          if (HISTORICAL_GAMES.has(g)) {
+            await this.state.storage.put(`idlehall:${oldWeek}:${g}`, v);
+          }
+          if (beats(GAMES[g]?.dir ?? v.dir, v.score, await this.state.storage.get(`alltime:${g}`))) {
+            await this.state.storage.put(`alltime:${g}`, v);
+          }
+        }
+        if (stale.length) await this.state.storage.delete(stale.map(([k]) => k));
+        const staleTop3 = [...(await this.state.storage.list({ prefix: "top3:" }))]
+          .filter(([k]) => k.split(":")[1] !== week)
+          .map(([k]) => k);
+        if (staleTop3.length) await this.state.storage.delete(staleTop3);
       }
 
-      // 지난주 기록은 새 기록이 들어올 때 정리한다. 올타임 저장 도입 전에
-      // 세워진 기록이 유실되지 않게, 지우기 전에 올타임에 흡수한다.
-      const stored = await this.state.storage.list({ prefix: "rec:" });
-      const stale = [...stored].filter(([k]) => k.split(":")[1] !== week);
-      for (const [k, v] of stale) {
-        const g = k.split(":")[2];
-        const oldWeek = k.split(":")[1];
-        if (HISTORICAL_GAMES.has(g)) {
-          await this.state.storage.put(`idlehall:${oldWeek}:${g}`, v);
-        }
-        if (beats(GAMES[g]?.dir ?? v.dir, v.score, await this.state.storage.get(`alltime:${g}`))) {
-          await this.state.storage.put(`alltime:${g}`, v);
-        }
-      }
-      if (stale.length) await this.state.storage.delete(stale.map(([k]) => k));
-
-      return Response.json({ week, accepted: true, record: presentRecord(game, record) });
+      return Response.json({
+        week,
+        accepted,
+        record: presentRecord(game, merged[0] ?? null),
+        top3: merged.map((r) => presentRecord(game, r)),
+      });
     }
 
     return new Response("not found", { status: 404 });

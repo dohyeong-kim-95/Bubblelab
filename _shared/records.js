@@ -117,13 +117,13 @@
 
   const css = `
   #bl-weekly { position: fixed; left: 1rem; bottom: 1rem; z-index: 9999;
-    font: bold .85rem ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; padding: .55rem .95rem;
-    border-radius: 2rem; border: 1.5px solid currentColor;
-    color: light-dark(#334, #ccd); max-width: min(60vw, 18rem);
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font: bold .85rem ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; padding: .6rem 1rem;
+    border-radius: 1.1rem; border: 1.5px solid currentColor;
+    color: light-dark(#334, #ccd); max-width: min(72vw, 18rem);
+    white-space: pre-line; line-height: 1.55;
     background: light-dark(rgba(255,255,255,.75), rgba(20,26,36,.75));
     backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
-  #bl-claim { position: fixed; left: 1rem; bottom: 3.6rem; z-index: 9999;
+  #bl-claim { position: fixed; left: 1rem; bottom: 7.4rem; z-index: 9999;
     font: .85rem ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; padding: .9rem 1rem;
     border-radius: 1rem; border: 1.5px solid currentColor;
     color: light-dark(#334, #ccd); width: min(80vw, 17rem);
@@ -147,8 +147,9 @@
 
   const badge = document.createElement("div");
   badge.id = "bl-weekly";
-  badge.textContent = "👑 주간 1위 …";
+  badge.textContent = "👑 주간 순위 …";
   document.body.appendChild(badge);
+  const MEDALS = ["🥇", "🥈", "🥉"];
 
   const claim = document.createElement("div");
   claim.id = "bl-claim";
@@ -174,22 +175,32 @@
   }
 
   let current = null; // 이번 주 1위 { nick, score } | null
+  let top3 = [];      // 이번 주 1~3위 [{ nick, score, text }]
   let pending = null; // 등록 대기 중인 내 기록
 
   const beats = (score, record) =>
     !record || (cfg.dir === "max" ? score > record.score : score < record.score);
 
+  // 이 점수가 주간 3위 안에 들 수 있는가 (자리가 남았거나 현재 3위보다 좋음)
+  const inTop3 = (score) => top3.length < 3 || beats(score, top3[2]);
+
   function renderBadge() {
-    badge.textContent = current
-      ? `👑 ${current.nick} · ${current.text ?? fmt(current.score)}`
-      : "👑 주간 1위 자리가 비어있어요";
-    badge.title = "주간 신기록 보드 — 매주 월요일 09시 초기화";
+    if (top3.length) {
+      badge.textContent =
+        "👑 주간 순위\n" +
+        top3.map((r, i) => `${MEDALS[i]} ${r.nick} · ${r.text ?? fmt(r.score)}`).join("\n");
+      badge.title = "주간 신기록 1~3위 — 매주 월요일 09시 초기화";
+    } else {
+      badge.textContent = "👑 주간 순위 자리가 비어있어요";
+      badge.title = "주간 신기록 보드 — 매주 월요일 09시 초기화";
+    }
   }
 
   fetch(`/_records?game=${cfg.game}`, { cache: "no-store" })
     .then((r) => (r.ok ? r.json() : Promise.reject()))
     .then((data) => {
       current = data.record;
+      top3 = data.top3 ?? (data.record ? [data.record] : []);
       renderBadge();
       window.blWeeklyResetNotice(data.week); // 공지 모달은 홈에서만
 
@@ -205,11 +216,12 @@
       body: JSON.stringify({ game: cfg.game, score, text: fmt(score) }),
       keepalive: true,
     }).catch(() => {});
-    if (!beats(score, current)) return;
+    if (!inTop3(score)) return;
     if (pending && !beats(score, { score: pending })) return; // 이미 더 좋은 게 대기 중
     pending = score;
+    const rank = top3.filter((r) => beats(r.score, { score })).length + 1; // 예상 순위
     claim.querySelector(".score").textContent =
-      `${fmt(score)} — 이번 주 1위예요. 닉네임을 남겨보세요!`;
+      `${fmt(score)} — 주간 ${rank}위예요! 닉네임을 남겨보세요!`;
     msgEl.textContent = "한글/영문/숫자 6자 이내";
     claim.classList.add("show");
     input.focus();
@@ -237,6 +249,7 @@
       if (!res.ok) throw new Error();
       const data = await res.json();
       current = data.record;
+      if (data.top3) top3 = data.top3;
       renderBadge();
       if (data.accepted) {
         claim.classList.remove("show");
