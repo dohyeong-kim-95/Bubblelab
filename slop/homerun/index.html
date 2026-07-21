@@ -520,8 +520,10 @@ function swing() {
 
 function finishLevel() {
   if (lvIdx + 1 < LEVELS.length) {
-    overlayScreen("✅", `${LEVELS[lvIdx].name} 클리어!`,
-      levelClean ? "완벽해요 — 전부 퍼펙트!" : "다음 레벨로!", "다음", () => startLevel(lvIdx + 1));
+    state = "over";                       // 클리어 → 다음 레벨로 자동 연결
+    const next = lvIdx + 1;
+    boardShow(`✅ 클리어! ▶ ${LEVELS[next].name}`, "hr");
+    setTimeout(() => { if (state === "over" && !won) startLevel(next); }, 1400);
   } else {
     won = true; state = "over";
     if (perfectGame)
@@ -531,9 +533,9 @@ function finishLevel() {
   }
 }
 
-function gameOver() {
-  const lv = LEVELS[lvIdx];
-  overlayScreen("⚾ 아웃", "3 스트라이크!", `${lv.name}(${lv.beats.length}구)에서 아웃. 다시 도전!`, "재도전", () => startLevel(lvIdx));
+function gameOver() {                      // 실패(아웃) → 같은 레벨 자동으로 한 번 더
+  boardShow("⚾ 아웃 — 한 번 더!", "strike");
+  setTimeout(() => { if (state === "over" && !won) startLevel(lvIdx); }, 1400);
 }
 
 function overlayScreen(big, title, body, label, onClick) {
