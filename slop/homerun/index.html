@@ -100,34 +100,12 @@
     background: radial-gradient(circle at 40% 35%, #fff, #dcdcdc 68%, rgba(220,220,220,0));
     transition: opacity .4s ease-out;
   }
-  /* 홈런 배너 */
-  #hrBanner {
-    position: absolute; top: 33%; left: 50%; transform: translate(-50%,-50%) scale(.4);
-    z-index: 18; text-align: center; opacity: 0; pointer-events: none;
-  }
-  #hrBanner .t {
-    font-size: 13vmin; font-weight: 900; letter-spacing: .04em;
-    color: #ffb02e; -webkit-text-stroke: 2px #7a3e00;
-    text-shadow: 0 4px 0 rgba(120,60,0,.35), 0 8px 14px rgba(0,0,0,.3);
-  }
-  #hrBanner .d {
-    font-size: 5.4vmin; font-weight: 800; margin-top: .1rem;
-    color: light-dark(#c0392b, #ff8a78); text-shadow: 0 2px 6px rgba(0,0,0,.3);
-  }
-  #hrBanner.show { animation: hrpop 1.7s ease-out; }
-  @keyframes hrpop {
-    0%   { opacity: 0; transform: translate(-50%,-50%) scale(.3) rotate(-9deg); }
-    12%  { opacity: 1; transform: translate(-50%,-50%) scale(1.18) rotate(4deg); }
-    26%  { transform: translate(-50%,-50%) scale(1) rotate(0); }
-    78%  { opacity: 1; transform: translate(-50%,-52%) scale(1); }
-    100% { opacity: 0; transform: translate(-50%,-60%) scale(1.06); }
-  }
   #flash {
     position: absolute; inset: 0; z-index: 14; pointer-events: none; opacity: 0;
-    background: radial-gradient(60% 45% at 50% 70%, rgba(255,240,180,.7), transparent 70%);
+    background: radial-gradient(45% 35% at 50% 60%, rgba(255,238,195,.38), transparent 72%);
   }
-  #flash.on { animation: fl .4s ease-out; }
-  @keyframes fl { 0% { opacity: .9; } 100% { opacity: 0; } }
+  #flash.on { animation: fl .35s ease-out; }
+  @keyframes fl { 0% { opacity: .5; } 100% { opacity: 0; } }
   /* 오버레이 */
   #overlay {
     position: absolute; inset: 0; z-index: 30; display: flex; flex-direction: column;
@@ -198,7 +176,6 @@
   </div>
   <div id="countin"></div>
   <div id="judge"></div>
-  <div id="hrBanner"><div class="t">⚾ 홈런!!</div><div class="d"></div></div>
   <div id="flash"></div>
 
   <div id="overlay">
@@ -255,7 +232,6 @@ const overlay = document.getElementById("overlay");
 const btn = document.getElementById("btn");
 const countinEl = document.getElementById("countin");
 const recordsEl = document.getElementById("records");
-const hrBanner = document.getElementById("hrBanner");
 
 // ── 오디오(신스 — 외부 음원 없음) ──────────────────────
 let ctx, noiseBuf;
@@ -483,10 +459,6 @@ function spawnTrail(xPct, yPct, sizeVmin) {
   setTimeout(() => d.remove(), 420);
 }
 function updateRecords() { recordsEl.textContent = `홈런 ${homers} · 최고비거리 ${maxDist}m`; }
-function showHR(dist) {
-  hrBanner.querySelector(".d").textContent = `비거리 ${dist}m`;
-  hrBanner.classList.remove("show"); void hrBanner.offsetWidth; hrBanner.classList.add("show");
-}
 
 function addStrike(label) {
   levelClean = false; perfectGame = false;
@@ -521,7 +493,7 @@ function swing() {
     launchBall(best, now, true);   // 홈런: 우측 담장 너머
     flash.classList.remove("on"); void flash.offsetWidth; flash.classList.add("on");
     homers++; if (best.dist > maxDist) maxDist = best.dist; updateRecords();
-    sCrowd(); showHR(best.dist);   // 관중 함성 + 홈런 배너 + 비거리
+    sCrowd(); popJudge(`💥 홈런! ${best.dist}m`, "#e8a83c");   // 관중 함성 + 담백한 팝업(비거리)
   } else {
     best.result = "good"; bell(best.note, now, 0.22); sHit(); levelClean = false; perfectGame = false;
     popJudge("안타!", "#4bae6e");
