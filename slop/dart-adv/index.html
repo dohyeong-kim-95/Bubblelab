@@ -94,13 +94,8 @@ const rings = [];         // 방향 전환 파문
 
 window.blWeekly = { game: "dart-adv", dir: "max", fmt: (v) => v + "개" };
 window.blShareText = () => `파워 게이지 다트로 ${best ?? score}개 꽂음! (EX) 도전해보세요`;
-// 다트가 꽂힌 원판 스냅샷 이미지를 함께 공유한다 (모바일 공유 시트/카카오톡 등).
-window.blShareFiles = async () => {
-  if (!stuck.length) return null;
-  const cv = buildSnapshot();
-  const blob = await new Promise((res) => cv.toBlob(res, "image/png"));
-  return blob ? [new File([blob], "dart-circus-ex.png", { type: "image/png" })] : null;
-};
+// 공유 버튼은 문구+링크만 보낸다. (이미지를 첨부하면 카카오톡 등이 링크를
+// 버리고 이미지만 받는다 — 결과 이미지는 아래 "결과 이미지 저장" 버튼으로.)
 
 // ---- 픽셀 기반 깃(fletching) 다각형 충돌 ----
 function fletchPoly(tipX, tipY, tailX, tailY) {
