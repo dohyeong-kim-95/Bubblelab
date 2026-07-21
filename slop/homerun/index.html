@@ -16,9 +16,11 @@
   }
   #field {
     position: relative; width: 100%; height: 100dvh; overflow: hidden; cursor: pointer;
+    /* 등뒤 뷰: 하늘(위·먼 곳) → 잔디 → 흙(아래·타석) */
     background:
-      radial-gradient(120% 80% at 50% 12%, light-dark(#dfeadb, #16261a) 0%, transparent 60%),
-      radial-gradient(140% 90% at 50% 100%, light-dark(#c9ddc4, #12331d) 0%, light-dark(#eaf1f7, #0c1219) 55%);
+      radial-gradient(90% 55% at 50% 100%, light-dark(#d8c49a, #2c2519) 0%, transparent 55%),
+      linear-gradient(light-dark(#cfe0ef, #0d1a29) 0%, light-dark(#bcd3b4, #14251a) 46%,
+                      light-dark(#a9c69f, #17301d) 62%, light-dark(#cbb388, #241d12) 100%);
   }
   /* HUD */
   #hud {
@@ -30,32 +32,35 @@
   #strikes { display: flex; gap: .35rem; font-size: 1.1rem; }
   #strikes span { opacity: .28; transition: opacity .12s, transform .12s; }
   #strikes span.on { opacity: 1; transform: scale(1.15); }
-  /* 투수 / 홈플레이트 */
+  /* 투수(사이드암, 먼 곳이라 작게) */
   #pitcher {
-    position: absolute; top: 15%; left: 50%; transform: translate(-50%,-50%);
-    font-size: 12vmin; z-index: 5; transition: transform .09s;
-    filter: drop-shadow(0 4px 6px rgba(0,0,0,.25));
+    position: absolute; top: 19%; left: 46%; transform: translate(-50%,-50%) rotate(10deg);
+    font-size: 7vmin; z-index: 5; transition: transform .12s;
+    filter: drop-shadow(0 3px 5px rgba(0,0,0,.3));
   }
-  #pitcher.wind { transform: translate(-50%,-58%) scale(1.06); }
+  #pitcher.wind { transform: translate(-50%,-50%) rotate(-24deg) scale(1.12); } /* 사이드암 릴리스 */
+  /* 스트라이크 존(타석 앞, 사각형) */
   #zone {
-    position: absolute; top: 78%; left: 50%; transform: translate(-50%,-50%);
-    width: 26vmin; height: 26vmin; max-width: 190px; max-height: 190px; z-index: 4;
-    border-radius: 50%;
-    border: .4rem solid light-dark(rgba(60,80,110,.35), rgba(160,190,230,.3));
+    position: absolute; top: 66%; left: 50%; transform: translate(-50%,-50%);
+    width: 30vmin; height: 26vmin; max-width: 230px; max-height: 200px; z-index: 4;
+    border-radius: 14%;
+    border: .35rem solid light-dark(rgba(55,75,105,.4), rgba(165,195,235,.32));
+    box-shadow: inset 0 0 0 .12rem light-dark(rgba(255,255,255,.25), rgba(255,255,255,.06));
     transition: border-color .07s, transform .07s, box-shadow .07s;
   }
-  #zone.beat { border-color: light-dark(rgba(60,80,110,.7), rgba(180,210,255,.65)); }
-  #zone.hit  { transform: translate(-50%,-50%) scale(1.12);
+  #zone.beat { border-color: light-dark(rgba(55,75,105,.75), rgba(185,215,255,.7)); }
+  #zone.hit  { transform: translate(-50%,-50%) scale(1.1);
                box-shadow: 0 0 0 .5rem light-dark(rgba(75,175,110,.35), rgba(90,220,140,.3)); }
+  /* 타자(등뒤 — 화면 앞·아래) */
   #batter {
-    position: absolute; top: 88%; left: 50%; transform: translate(-50%,-50%) rotate(0deg);
-    font-size: 13vmin; z-index: 6; transform-origin: 50% 80%; transition: transform .05s;
-    filter: drop-shadow(0 4px 6px rgba(0,0,0,.25));
+    position: absolute; top: 85%; left: 52%; transform: translate(-50%,-50%) rotate(0deg);
+    font-size: 15vmin; z-index: 6; transform-origin: 40% 75%; transition: transform .05s;
+    filter: drop-shadow(0 5px 7px rgba(0,0,0,.3));
   }
-  #batter.swing { transform: translate(-50%,-50%) rotate(-32deg) scale(1.05); }
+  #batter.swing { transform: translate(-50%,-50%) rotate(-38deg) scale(1.06); }
   /* 중간 가림막(블라인드 존) — 공을 덮어 감으로 치게 만든다 */
   #blind {
-    position: absolute; left: 0; right: 0; top: 30%; height: 40%; z-index: 8;
+    position: absolute; left: 0; right: 0; top: 33%; height: 25%; z-index: 8;
     pointer-events: none; opacity: 0; transition: opacity .3s;
     display: flex; align-items: center; justify-content: center;
     border-top: 2px dashed light-dark(rgba(90,110,140,.45), rgba(150,180,220,.4));
@@ -73,9 +78,9 @@
     box-shadow: inset 0 8px 16px rgba(0,0,0,.12), inset 0 -8px 16px rgba(0,0,0,.12); }
   /* 공 */
   .ball {
-    position: absolute; left: 50%; z-index: 7; will-change: top, transform;
+    position: absolute; z-index: 7; will-change: left, top, transform;
     transform: translate(-50%,-50%); pointer-events: none;
-    font-size: 8vmin; filter: drop-shadow(0 3px 4px rgba(0,0,0,.3));
+    font-size: 6vmin; filter: drop-shadow(0 3px 4px rgba(0,0,0,.35));
   }
   /* 판정 팝업 */
   #judge {
@@ -130,7 +135,7 @@
     <div id="lv">⚾ 야구 리듬</div>
     <div id="strikes"><span>❌</span><span>❌</span><span>❌</span></div>
   </div>
-  <div id="pitcher">🧢</div>
+  <div id="pitcher">🤾</div>
   <div id="blind"><span>👀 블라인드 존</span></div>
   <div id="zone"></div>
   <div id="batter">🏏</div>
@@ -142,9 +147,9 @@
     <div class="big">⚾</div>
     <h1>야구 리듬 — 홈런 타이밍</h1>
     <p>
-      투수가 던지는 <b>한 마디</b>의 리듬을 배트로 받아쳐요.<br>
+      사이드암 투수의 공이 <b>뱀처럼 휘며 커져서</b> 날아와요.<br>
       레벨1 <b>3구</b> → 레벨2 <b>6구</b> → 레벨3 <b>10구</b>.<br>
-      공이 홈플레이트(원)에 닿는 순간 <span class="key">스페이스</span> / 화면 탭!<br>
+      공이 <b>스트라이크 존</b>에 들어오는 순간 <span class="key">스페이스</span> / 화면 탭!<br>
       투수가 한 마디를 <b>다 던진 뒤</b>, 같은 리듬으로 <b>받아쳐요</b> (콜 앤 리스폰스).<br>
       헛스윙·놓침은 스트라이크, <b>3스트라이크면 아웃</b>.<br>
       레벨이 오를수록 공이 <b>중간에 가려지고</b> 판정도 <b>빡세져요</b> — 귀로!<br>
@@ -160,7 +165,9 @@ const BPM = 100;
 const BEAT = 60 / BPM;        // 한 박 = 0.6초
 let TRAVEL = 1.35;            // 공 비행 시간(초) — 레벨마다 재설정(롱토스)
 const COUNTIN = 4;            // 카운트인 박 수(한 마디)
-const SPAWN_TOP = 15, ZONE_TOP = 78; // 필드 세로 위치(%)
+// 등뒤 뷰 좌표(%): 투수(먼 곳)·스트라이크 존(앞)
+const PITCH = { x: 46, y: 19 }, ZONE = { x: 50, y: 66 };
+const SNAKE = 3;   // 좌우 웨이브 반주기 수 — 공이 뱀처럼 휨
 
 // 한 마디(4박) 안 공의 박 위치 — 못박기식: 꾸준한 연타 → 마지막에 촘촘한 액센트
 // 음이름 → 주파수 (C장조 펜타토닉: 도레미솔라)
@@ -334,9 +341,13 @@ function loop() {
     if (b.node) {
       if (b.judged && now > b.hit + 0.28) { b.node.remove(); b.node = null; }
       else {
-        const top = SPAWN_TOP + Math.min(p, 1.25) * (ZONE_TOP - SPAWN_TOP);
-        const sc = 0.5 + Math.min(p, 1.2) * 0.95;
-        b.node.style.top = top + "%";
+        const pc = Math.min(p, 1.22);
+        const sc = 0.32 + Math.pow(pc, 1.7) * 1.15;                                  // 다가올수록 커짐(원근)
+        const y = PITCH.y + (ZONE.y - PITCH.y) * pc - 7 * Math.sin(Math.PI * Math.min(pc, 1)); // 살짝 로브
+        const baseX = PITCH.x + (ZONE.x - PITCH.x) * pc;
+        const x = baseX + (3 + pc * 15) * Math.sin(SNAKE * Math.PI * pc);            // 사이드암 + 뱀 웨이브
+        b.node.style.left = x.toFixed(2) + "%";
+        b.node.style.top = y.toFixed(2) + "%";
         b.node.style.transform = `translate(-50%,-50%) scale(${sc.toFixed(3)})`;
         if (b.judged) b.node.style.opacity = "0.35";
       }
