@@ -348,6 +348,7 @@ function startLevel(idx) {
   const lv = LEVELS[idx];
   lvEl.textContent = `${lv.name} · ${lv.beats.length}구`;
   curWP = lv.wp; curWG = lv.wg;
+  field.querySelectorAll(".ball, .trail").forEach((el) => el.remove());  // 이전 판 잔상 정리
   balls = []; setStrikes(0); levelClean = true; lastBeat = -1; respCued = false;
   startTime = ctx.currentTime + 0.45;
   const maxBeat = Math.max(...lv.beats);
