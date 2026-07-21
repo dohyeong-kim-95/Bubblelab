@@ -18,9 +18,10 @@
     position: relative; width: 100%; height: 100dvh; overflow: hidden; cursor: pointer;
     /* 등뒤 뷰: 하늘(위·먼 곳) → 잔디 → 흙(아래·타석) */
     background:
-      radial-gradient(90% 55% at 50% 100%, light-dark(#d8c49a, #2c2519) 0%, transparent 55%),
-      linear-gradient(light-dark(#cfe0ef, #0d1a29) 0%, light-dark(#bcd3b4, #14251a) 46%,
-                      light-dark(#a9c69f, #17301d) 62%, light-dark(#cbb388, #241d12) 100%);
+      linear-gradient(transparent 22.5%, light-dark(#3f6d44,#1c3a24) 23%, light-dark(#3f6d44,#1c3a24) 27%, transparent 27.5%), /* 외야 펜스 */
+      radial-gradient(80% 45% at 46% 98%, light-dark(#d8c49a, #2c2519) 0%, transparent 55%),  /* 내야 흙 */
+      linear-gradient(light-dark(#cfe0ef, #0d1a29) 0%, light-dark(#bcd3b4, #14251a) 42%,
+                      light-dark(#a9c69f, #17301d) 58%, light-dark(#cbb388, #241d12) 100%);
   }
   /* HUD */
   #hud {
@@ -34,30 +35,42 @@
   #strikes span.on { opacity: 1; transform: scale(1.15); }
   /* 투수(사이드암, 먼 곳이라 작게) */
   #pitcher {
-    position: absolute; top: 15%; left: 46%; transform: translate(-50%,-50%) rotate(10deg);
-    font-size: 7vmin; z-index: 5; transition: transform .12s;
+    position: absolute; top: 30%; left: 44%; transform: translate(-50%,-50%) rotate(10deg);
+    font-size: 6vmin; z-index: 5; transition: transform .12s;
     filter: drop-shadow(0 3px 5px rgba(0,0,0,.3));
   }
   #pitcher.wind { transform: translate(-50%,-50%) rotate(-24deg) scale(1.12); } /* 사이드암 릴리스 */
-  /* 스트라이크 존(타석 앞, 사각형) */
+  /* 스트라이크 존(가운데, 빨간 박스 + 십자선) */
   #zone {
-    position: absolute; top: 69%; left: 50%; transform: translate(-50%,-50%);
-    width: 30vmin; height: 26vmin; max-width: 230px; max-height: 200px; z-index: 4;
-    border-radius: 14%;
-    border: .35rem solid light-dark(rgba(55,75,105,.4), rgba(165,195,235,.32));
-    box-shadow: inset 0 0 0 .12rem light-dark(rgba(255,255,255,.25), rgba(255,255,255,.06));
+    position: absolute; top: 60%; left: 46%; transform: translate(-50%,-50%);
+    width: 16vmin; height: 18vmin; max-width: 130px; max-height: 150px; z-index: 4;
+    border-radius: 6%;
+    border: 2.5px solid light-dark(rgba(210,55,55,.72), rgba(240,95,95,.7));
+    box-shadow: 0 0 9px light-dark(rgba(210,55,55,.28), rgba(240,95,95,.28));
     transition: border-color .07s, transform .07s, box-shadow .07s;
   }
-  #zone.beat { border-color: light-dark(rgba(55,75,105,.75), rgba(185,215,255,.7)); }
-  #zone.hit  { transform: translate(-50%,-50%) scale(1.1);
+  #zone::before, #zone::after { content: ""; position: absolute; left: 50%; top: 50%;
+    background: light-dark(rgba(210,55,55,.85), rgba(240,95,95,.85)); }
+  #zone::before { width: 28%; height: 2px; transform: translate(-50%,-50%); }
+  #zone::after  { width: 2px; height: 28%; transform: translate(-50%,-50%); }
+  #zone.beat { border-color: light-dark(rgba(210,55,55,1), rgba(255,120,120,.95)); }
+  #zone.hit  { transform: translate(-50%,-50%) scale(1.18);
                box-shadow: 0 0 0 .5rem light-dark(rgba(75,175,110,.35), rgba(90,220,140,.3)); }
-  /* 타자(등뒤 — 화면 앞·아래) */
-  #batter {
-    position: absolute; top: 85%; left: 52%; transform: translate(-50%,-50%) rotate(0deg);
-    font-size: 15vmin; z-index: 6; transform-origin: 40% 75%; transition: transform .05s;
-    filter: drop-shadow(0 5px 7px rgba(0,0,0,.3));
+  /* 홈플레이트(오각형, 아래 중앙) */
+  #plate {
+    position: absolute; left: 44%; top: 90%; transform: translate(-50%,-50%);
+    width: 16vmin; height: 9vmin; z-index: 3;
+    background: light-dark(#eef1f5, #d7dee7);
+    clip-path: polygon(0 0, 100% 0, 100% 45%, 50% 100%, 0 45%);
+    box-shadow: 0 2px 6px rgba(0,0,0,.25);
   }
-  #batter.swing { transform: translate(-50%,-50%) rotate(-38deg) scale(1.06); }
+  /* 타자(오른쪽 전경 — 크게) */
+  #batter {
+    position: absolute; top: 63%; left: 78%; transform: translate(-50%,-50%) rotate(-8deg);
+    font-size: 30vmin; z-index: 9; transform-origin: 35% 70%; transition: transform .06s;
+    filter: drop-shadow(0 7px 11px rgba(0,0,0,.38));
+  }
+  #batter.swing { transform: translate(-50%,-50%) rotate(-62deg) scale(1.08); }
   /* 공 */
   .ball {
     position: absolute; z-index: 7; will-change: left, top, transform;
@@ -118,6 +131,7 @@
     <div id="strikes"><span>❌</span><span>❌</span><span>❌</span></div>
   </div>
   <div id="pitcher">🤾</div>
+  <div id="plate"></div>
   <div id="zone"></div>
   <div id="batter">🏏</div>
   <div id="countin"></div>
@@ -148,7 +162,7 @@ const MEASURE = 4;           // 한 마디 = 4박
 let TRAVEL = 2.4;            // 공 비행 시간(초) = 한 마디 (투수 콜 → 타자 리스폰스)
 const COUNTIN = MEASURE;      // 카운트인 = 한 마디
 // 등뒤 뷰 좌표(%): 투수(먼 곳, 위)·스트라이크 존(앞, 아래). 세로 구간 길게.
-const PITCH = { x: 46, y: 15 }, ZONE = { x: 50, y: 69 };
+const PITCH = { x: 44, y: 30 }, ZONE = { x: 46, y: 60 };
 const SNAKE = 3;   // 좌우 웨이브 반주기 수 — 공이 뱀처럼 휨
 
 // 한 마디(4박) 안 공의 박 위치 — 못박기식: 꾸준한 연타 → 마지막에 촘촘한 액센트
@@ -321,10 +335,10 @@ function loop() {
       else {
         const pc = Math.min(p, 1.15);
         const e = Math.pow(pc, 1.3);                          // 위치 이징(원근 — 멀 땐 천천히)
-        const sc = 0.16 + Math.pow(pc, 2.3) * 1.6;            // 도착할수록 급팽창 = 화면 쪽으로 다가옴
-        const y = PITCH.y + (ZONE.y - PITCH.y) * e;           // 수직 하강(긴 구간)
-        const amp = 3 + e * 14;                               // 가까울수록 웨이브 진폭 ↑
-        const x = 50 + (PITCH.x - 50) * (1 - e) + amp * Math.sin(SNAKE * Math.PI * e); // 사이드암→센터 + 뱀
+        const sc = 0.14 + Math.pow(pc, 2.2) * 1.2;            // 도착할수록 급팽창 = 화면 쪽으로 다가옴
+        const y = PITCH.y + (ZONE.y - PITCH.y) * e;           // 수직 하강
+        const amp = 3 + e * 12;                               // 가까울수록 웨이브 진폭 ↑
+        const x = ZONE.x + (PITCH.x - ZONE.x) * (1 - e) + amp * Math.sin(SNAKE * Math.PI * e); // 릴리스→존 + 뱀
         b.node.style.left = x.toFixed(2) + "%";
         b.node.style.top = y.toFixed(2) + "%";
         b.node.style.transform = `translate(-50%,-50%) scale(${sc.toFixed(3)})`;
