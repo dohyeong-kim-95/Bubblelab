@@ -26,11 +26,12 @@
          background: none; color: inherit; cursor: pointer; }
   #btn:active { transform: scale(.96); }
   #btn:disabled { opacity: .4; cursor: default; }
-  #save { font: inherit; font-size: .9rem; padding: .5rem 1.3rem;
-          border-radius: 2rem; border: 1.5px solid currentColor;
-          background: none; color: inherit; cursor: pointer; opacity: .8; }
-  #save:active { transform: scale(.96); }
-  #save.hide { display: none; }
+  .imgrow { display: flex; gap: .6rem; }
+  .imgrow.hide { display: none; }
+  .minibtn { font: inherit; font-size: .9rem; padding: .5rem 1.1rem;
+             border-radius: 2rem; border: 1.5px solid currentColor;
+             background: none; color: inherit; cursor: pointer; opacity: .85; }
+  .minibtn:active { transform: scale(.96); }
   #best { opacity: .5; font-size: .85rem; min-height: 1.2em; margin: 0; }
 </style>
 </head>
@@ -43,7 +44,10 @@
 최대한 많이 꽂아보세요.</p>
   <div id="result"></div>
   <button id="btn">시작!</button>
-  <button id="save" class="hide">💾 결과 이미지 저장</button>
+  <div class="imgrow hide" id="imgrow">
+    <button class="minibtn" id="shareimg">🖼️ 이미지 공유</button>
+    <button class="minibtn" id="saveimg">💾 저장</button>
+  </div>
   <p id="best"></p>
 </div>
 <canvas id="c"></canvas>
@@ -54,8 +58,11 @@ const overlay = document.getElementById("overlay");
 const msg = document.getElementById("msg");
 const result = document.getElementById("result");
 const btn = document.getElementById("btn");
-const saveBtn = document.getElementById("save");
+const imgRow = document.getElementById("imgrow");
+const shareImgBtn = document.getElementById("shareimg");
+const saveImgBtn = document.getElementById("saveimg");
 const bestEl = document.getElementById("best");
+const IMG_NAME = "dart-circus.png";
 
 let phase = "idle";       // idle | running | done
 let stuck = [];           // 꽂힌 다트: 원 기준 각도(회전과 함께 이동)
@@ -195,23 +202,40 @@ btn.addEventListener("click", () => {
   palIdx = 0;
   flash = 0;
   rings.length = 0;
-  saveBtn.classList.add("hide");
+  imgRow.classList.add("hide");
   overlay.classList.add("hide");
 });
 
-// 결과 이미지 저장 (데스크톱 포함 어디서든 PNG 다운로드)
-saveBtn.addEventListener("click", (e) => {
+function snapshotBlob() {
+  return new Promise((res) => buildSnapshot().toBlob(res, "image/png"));
+}
+function downloadBlob(blob) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = IMG_NAME;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+// 이미지 공유 (OS 공유 시트로 이미지 전송, 미지원 시 저장으로 폴백)
+shareImgBtn.addEventListener("click", async (e) => {
   e.stopPropagation();
   if (!stuck.length) return;
-  buildSnapshot().toBlob((blob) => {
-    if (!blob) return;
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "dart-circus.png";
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }, "image/png");
+  const blob = await snapshotBlob();
+  if (!blob) return;
+  const file = new File([blob], IMG_NAME, { type: "image/png" });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: document.title }); return; }
+    catch (err) { if (err.name === "AbortError") return; }
+  }
+  downloadBlob(blob);
+});
+// 결과 이미지 저장 (PNG 다운로드)
+saveImgBtn.addEventListener("click", async (e) => {
+  e.stopPropagation();
+  if (!stuck.length) return;
+  const blob = await snapshotBlob();
+  if (blob) downloadBlob(blob);
 });
 
 function finish() {
@@ -229,7 +253,7 @@ function finish() {
   result.textContent = `${score}개 꽂음!\n${grade}`;
   msg.textContent = "";
   btn.textContent = "다시!";
-  saveBtn.classList.remove("hide");
+  imgRow.classList.remove("hide");
   overlay.classList.remove("hide");
   btn.disabled = true;
   setTimeout(() => { btn.disabled = false; }, 900);
