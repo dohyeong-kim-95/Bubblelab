@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>다트 서커스 EX</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; overflow: hidden; font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+         background: light-dark(#f2eef7, #120c1c); user-select: none;
+         -webkit-user-select: none; touch-action: manipulation; }
+  canvas { display: block; }
+  #overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+             display: flex; flex-direction: column; align-items: center; gap: 1rem;
+             padding: 1.6rem 2rem; border-radius: 1.25rem; text-align: center;
+             border: 1.5px solid light-dark(rgba(60,40,90,.25), rgba(210,195,235,.25));
+             background: light-dark(rgba(255,255,255,.85), rgba(20,14,30,.85));
+             backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+             color: light-dark(#231a33, #e0d6f0); width: min(82vw, 20rem); z-index: 60; }
+  #overlay.hide { display: none; }
+  #overlay h1 { font-size: 1.2rem; margin: 0; opacity: .8; }
+  #msg { margin: 0; opacity: .7; white-space: pre-line; line-height: 1.5; }
+  #result { font-weight: bold; white-space: pre-line; min-height: 0; }
+  #btn { font: inherit; font-size: 1.15rem; padding: .8rem 2.4rem;
+         border-radius: 2rem; border: 2px solid currentColor;
+         background: none; color: inherit; cursor: pointer; }
+  #btn:active { transform: scale(.96); }
+  #btn:disabled { opacity: .4; cursor: default; }
+  #save { font: inherit; font-size: .9rem; padding: .5rem 1.3rem;
+          border-radius: 2rem; border: 1.5px solid currentColor;
+          background: none; color: inherit; cursor: pointer; opacity: .8; }
+  #save:active { transform: scale(.96); }
+  #save.hide { display: none; }
+  #best { opacity: .5; font-size: .85rem; min-height: 1.2em; margin: 0; }
+  /* 파워 게이지 발사대 */
+  #launcher { position: fixed; left: 50%; bottom: 1.4rem; transform: translateX(-50%);
+              display: flex; flex-direction: column; align-items: center; gap: .55rem; z-index: 50; }
+  #launcher.hide { display: none; }
+  #gauge { width: min(62vw, 220px); height: 16px; border-radius: 999px;
+           border: 1.5px solid light-dark(rgba(60,40,90,.4), rgba(210,195,235,.4));
+           background: light-dark(rgba(255,255,255,.5), rgba(20,14,30,.5)); overflow: hidden; }
+  #gfill { height: 100%; width: 0%; border-radius: 999px; }
+  #fire { font: inherit; font-size: 1.15rem; font-weight: bold; padding: .85rem 2.6rem;
+          border-radius: 2rem; border: 2px solid currentColor; cursor: pointer;
+          color: light-dark(#231a33, #e0d6f0);
+          background: light-dark(rgba(255,255,255,.7), rgba(20,14,30,.7));
+          backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+          touch-action: none; }
+  #fire:active { transform: scale(.96); }
+  #fire:disabled { opacity: .4; cursor: default; }
+</style>
+</head>
+<body>
+<div id="overlay">
+  <h1>⚡ 다트 서커스 EX</h1>
+  <p id="msg">아래 <b>발사</b> 버튼을 누르고 있으면
+파워 게이지가 0↔최대로 오르내려요.
+손을 떼는 순간의 세기로 다트가 날아갑니다.
+세면 빠르게, 약하면 느리게 —
+도착 타이밍을 노려 원에 꽂으세요!
+부딪히면 끝, 많이 꽂을수록 고득점.</p>
+  <div id="result"></div>
+  <button id="btn">시작!</button>
+  <button id="save" class="hide">💾 결과 이미지 저장</button>
+  <p id="best"></p>
+</div>
+<canvas id="c"></canvas>
+<div id="launcher" class="hide">
+  <div id="gauge"><div id="gfill"></div></div>
+  <button id="fire" type="button">발사</button>
+</div>
+<script>
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+const overlay = document.getElementById("overlay");
+const msg = document.getElementById("msg");
+const result = document.getElementById("result");
+const btn = document.getElementById("btn");
+const saveBtn = document.getElementById("save");
+const bestEl = document.getElementById("best");
+const launcher = document.getElementById("launcher");
+const gfill = document.getElementById("gfill");
+const fireBtn = document.getElementById("fire");
+
+let phase = "idle";       // idle | running | done
+let stuck = [];           // 꽂힌 다트: 원 기준 각도(회전과 함께 이동)
+let flying = null;        // 날아가는 중인 다트 { x, target, speed }
+let rot = 0;              // 원의 현재 회전각(라디안)
+let baseSpeed = 0.9;      // 등각속도(라디안/초)
+let dir = 1;              // 회전 방향
+let score = 0;
+let best = null;
+
+let cx = 0, cy = 0, R = 90;
+const NEEDLE = 46;        // 바늘 길이(원 바깥으로 뻗음)
+const FLIGHT_LEN = 16;    // 깃(fletching) 길이
+const FLIGHT_W = 9;       // 깃 폭(중심에서 한쪽)
+const CONTACT = Math.PI;  // 왼쪽 끝 = 각도 π
+
+// 파워 게이지: 누르고 있는 동안 0→1→0 삼각파로 오르내린다. 떼는 순간 값으로 속도 결정.
+const CHARGE_PERIOD = 1.4; // 0→1→0 한 사이클(초)
+const SPD_MIN = 500;       // 약하게 친 다트 속도(px/s)
+const SPD_MAX = 2600;      // 세게 친 다트 속도(px/s)
+let charging = false;
+let chargeStart = 0;
+
+// 회전 방향별 원판 팔레트. 방향이 바뀔 때마다 번갈아 쓴다.
+const PALETTES = [
+  { a: "#7c5fd6", b: "#5a3fb0", ring: "#c3b0ff" }, // 정방향 — 보라
+  { a: "#28b0a8", b: "#187a72", ring: "#8ff0e6" }, // 역방향 — 청록
+];
+let palIdx = 0;
+let flash = 0;            // 방향 전환 섬광 (1→0 감쇠)
+const rings = [];         // 방향 전환 파문
+
+window.blWeekly = { game: "dart-adv", dir: "max", fmt: (v) => v + "개" };
+window.blShareText = () => `파워 게이지 다트로 ${best ?? score}개 꽂음! (EX) 도전해보세요`;
+// 다트가 꽂힌 원판 스냅샷 이미지를 함께 공유한다 (모바일 공유 시트/카카오톡 등).
+window.blShareFiles = async () => {
+  if (!stuck.length) return null;
+  const cv = buildSnapshot();
+  const blob = await new Promise((res) => cv.toBlob(res, "image/png"));
+  return blob ? [new File([blob], "dart-circus-ex.png", { type: "image/png" })] : null;
+};
+
+// ---- 픽셀 기반 깃(fletching) 다각형 충돌 ----
+function fletchPoly(tipX, tipY, tailX, tailY) {
+  const ax = tailX - tipX, ay = tailY - tipY;
+  const len = Math.hypot(ax, ay) || 1;
+  const ux = ax / len, uy = ay / len;   // tip→tail(바깥)
+  const px = -uy, py = ux;              // 수직
+  return [
+    [tailX - ux * FLIGHT_LEN, tailY - uy * FLIGHT_LEN],               // 밑동(안쪽)
+    [tailX + px * FLIGHT_W, tailY + py * FLIGHT_W],                   // 날개 1
+    [tailX - ux * FLIGHT_LEN * 0.45, tailY - uy * FLIGHT_LEN * 0.45], // 노치
+    [tailX - px * FLIGHT_W, tailY - py * FLIGHT_W],                   // 날개 2
+  ];
+}
+function dartPoly(ang) {
+  const dx = Math.cos(ang), dy = Math.sin(ang);
+  return fletchPoly(cx + dx * R, cy + dy * R, cx + dx * (R + NEEDLE), cy + dy * (R + NEEDLE));
+}
+function orient(p, q, r) {
+  return (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+}
+function segHit(p1, p2, p3, p4) {
+  const d1 = orient(p3, p4, p1), d2 = orient(p3, p4, p2);
+  const d3 = orient(p1, p2, p3), d4 = orient(p1, p2, p4);
+  return (d1 > 0) !== (d2 > 0) && (d3 > 0) !== (d4 > 0);
+}
+function pointInPoly(x, y, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+function polyHit(A, B) {
+  for (let i = 0; i < A.length; i++) {
+    const a1 = A[i], a2 = A[(i + 1) % A.length];
+    for (let j = 0; j < B.length; j++) {
+      if (segHit(a1, a2, B[j], B[(j + 1) % B.length])) return true;
+    }
+  }
+  return pointInPoly(A[0][0], A[0][1], B) || pointInPoly(B[0][0], B[0][1], A);
+}
+
+function resize() {
+  canvas.width = innerWidth;
+  canvas.height = innerHeight;
+  cx = canvas.width / 2;
+  cy = canvas.height / 2;
+  R = Math.max(77, Math.min(168, Math.min(canvas.width, canvas.height) * 0.192));
+}
+addEventListener("resize", resize);
+resize();
+
+// 원 기준 각도 → 화면상 실제 각도
+function worldAngle(a) { return a + rot; }
+
+// 누르고 있는 동안의 현재 파워(0~1) — 삼각파
+function currentPower() {
+  const e = (performance.now() - chargeStart) / 1000;
+  const ph = ((e % CHARGE_PERIOD) / CHARGE_PERIOD) * 2; // 0..2
+  return ph <= 1 ? ph : 2 - ph;                          // 0→1→0
+}
+
+function fire() {
+  if (phase !== "running" || flying) return;
+  const speed = SPD_MIN + currentPower() * (SPD_MAX - SPD_MIN);
+  // 왼쪽 화면 밖에서 원의 왼쪽 끝(cx-R, cy)을 향해 날아온다
+  flying = { x: -NEEDLE - FLIGHT_LEN, target: cx - R - NEEDLE, speed };
+}
+
+function landDart() {
+  // 도착 순간의 회전각 기준으로 왼쪽 끝(π)에 꽂는다
+  const rel = CONTACT - rot;
+  const newPoly = dartPoly(CONTACT);   // 새 다트는 항상 π에 꽂힌다
+  let hit = false;
+  for (const a of stuck) {
+    if (polyHit(newPoly, dartPoly(worldAngle(a)))) { hit = true; break; }
+  }
+  stuck.push(rel);
+  flying = null;
+  if (hit) { finish(); return; }
+  score++;
+  // 점수가 오를수록 살짝 빨라지고, 6개마다 방향이 바뀐다
+  baseSpeed = 0.9 + score * 0.045;
+  if (score % 6 === 0) reverseDir();
+}
+
+function reverseDir() {
+  dir *= -1;
+  palIdx = palIdx ? 0 : 1;
+  flash = 1;
+  rings.push({ r: R * 0.9, alpha: 0.9 });
+}
+
+// 발사 버튼: 누르는 동안 충전, 떼면 그 세기로 발사
+fireBtn.addEventListener("pointerdown", (e) => {
+  e.stopPropagation();
+  e.preventDefault();
+  if (phase !== "running" || flying) return;
+  charging = true;
+  chargeStart = performance.now();
+  fireBtn.setPointerCapture?.(e.pointerId);
+});
+fireBtn.addEventListener("pointerup", (e) => {
+  e.stopPropagation();
+  if (!charging) return;
+  charging = false;
+  fire();
+});
+fireBtn.addEventListener("pointercancel", () => { charging = false; });
+
+for (const ev of ["pointerdown", "click"]) {
+  overlay.addEventListener(ev, (e) => e.stopPropagation());
+}
+
+btn.addEventListener("click", () => {
+  if (phase === "running") return;
+  phase = "running";
+  score = 0;
+  stuck = [];
+  flying = null;
+  charging = false;
+  rot = 0;
+  dir = 1;
+  baseSpeed = 0.9;
+  palIdx = 0;
+  flash = 0;
+  rings.length = 0;
+  saveBtn.classList.add("hide");
+  launcher.classList.remove("hide");
+  overlay.classList.add("hide");
+});
+
+// 결과 이미지 저장 (데스크톱 포함 어디서든 PNG 다운로드)
+saveBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  if (!stuck.length) return;
+  buildSnapshot().toBlob((blob) => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "dart-circus-ex.png";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }, "image/png");
+});
+
+function finish() {
+  phase = "done";
+  charging = false;
+  launcher.classList.add("hide");
+  if (best === null || score > best) {
+    best = score;
+    bestEl.textContent = `최고 기록: ${best}개`;
+  }
+  const grade =
+    score >= 36 ? "🎪 서커스 단장님" :
+    score >= 24 ? "🤹 곡예의 달인" :
+    score >= 15 ? "🔥 파워 조절의 신" :
+    score >= 8  ? "🙂 제법인데요" :
+    score >= 3  ? "😅 조금만 더!" : "🫠 게이지랑 친해지는 중…";
+  result.textContent = `${score}개 꽂음!\n${grade}`;
+  msg.textContent = "";
+  btn.textContent = "다시!";
+  saveBtn.classList.remove("hide");
+  overlay.classList.remove("hide");
+  btn.disabled = true;
+  setTimeout(() => { btn.disabled = false; }, 900);
+  window.blWeeklyReport?.(score);
+}
+
+// 공유용 정사각 스냅샷 — 다트가 꽂힌 원판 + 점수를 별도 캔버스에 그린다.
+function buildSnapshot() {
+  const S = 800;
+  const cv = document.createElement("canvas");
+  cv.width = S; cv.height = S;
+  const g = cv.getContext("2d");
+  const bg = g.createLinearGradient(0, 0, 0, S);
+  bg.addColorStop(0, "#171226");
+  bg.addColorStop(1, "#0d0918");
+  g.fillStyle = bg;
+  g.fillRect(0, 0, S, S);
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.fillStyle = "#e8dcff";
+  g.font = 'bold 40px ui-monospace, "SF Mono", Consolas, monospace';
+  g.fillText("⚡ 다트 서커스 EX", S / 2, 80);
+
+  const ox = S / 2, oy = 400, Ri = 150, Ni = 72, fL = 25, fW = 14;
+  const pal = PALETTES[palIdx];
+  g.beginPath();
+  g.arc(ox, oy, Ri, 0, Math.PI * 2);
+  const grad = g.createRadialGradient(ox - Ri * 0.3, oy - Ri * 0.3, Ri * 0.2, ox, oy, Ri);
+  grad.addColorStop(0, pal.a);
+  grad.addColorStop(1, pal.b);
+  g.fillStyle = grad;
+  g.fill();
+  for (const a of stuck) {
+    const ang = a + rot, dx = Math.cos(ang), dy = Math.sin(ang);
+    drawDartOn(g, ox + dx * Ri, oy + dy * Ri, ox + dx * (Ri + Ni), oy + dy * (Ri + Ni), fL, fW, 5);
+  }
+  g.fillStyle = "#fff";
+  g.font = `bold ${Math.round(Ri * 0.85)}px ui-monospace, "SF Mono", Consolas, monospace`;
+  g.shadowColor = "rgba(0,0,0,.35)";
+  g.shadowBlur = 10;
+  g.fillText(String(score), ox, oy);
+  g.shadowBlur = 0;
+  g.fillStyle = "#d3c6ef";
+  g.font = '600 32px ui-monospace, "SF Mono", Consolas, monospace';
+  g.fillText(`다트 ${score}개 꽂았어요!`, S / 2, oy + Ri + 74);
+  g.fillStyle = "rgba(211,198,239,.55)";
+  g.font = '500 22px ui-monospace, "SF Mono", Consolas, monospace';
+  g.fillText("slop.bubblelab.dev/dart-adv", S / 2, S - 46);
+  return cv;
+}
+
+// 바늘(tip) → 꽁지(tail) 다트를 임의 ctx/비율로 그린다. 끝단은 화살 깃 모양.
+function drawDartOn(g, tipX, tipY, tailX, tailY, fLen, fW, shaftW) {
+  const ax = tailX - tipX, ay = tailY - tipY;
+  const len = Math.hypot(ax, ay) || 1;
+  const ux = ax / len, uy = ay / len;
+  const px = -uy, py = ux;
+  g.lineCap = "round";
+  g.strokeStyle = "#9a86c4";
+  g.lineWidth = shaftW;
+  g.beginPath();
+  g.moveTo(tipX, tipY);
+  g.lineTo(tailX, tailY);
+  g.stroke();
+  const bx = tailX - ux * fLen, by = tailY - uy * fLen;
+  const nx = tailX - ux * fLen * 0.45, ny = tailY - uy * fLen * 0.45;
+  g.fillStyle = "#e15b7a";
+  g.beginPath();
+  g.moveTo(bx, by);
+  g.lineTo(tailX + px * fW, tailY + py * fW);
+  g.lineTo(nx, ny);
+  g.lineTo(tailX - px * fW, tailY - py * fW);
+  g.closePath();
+  g.fill();
+}
+function drawDartSeg(tipX, tipY, tailX, tailY, alpha) {
+  ctx.globalAlpha = alpha;
+  drawDartOn(ctx, tipX, tipY, tailX, tailY, FLIGHT_LEN, FLIGHT_W, 3);
+  ctx.globalAlpha = 1;
+}
+
+let last = performance.now();
+function tick(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  if (phase === "running") rot += dir * baseSpeed * dt;
+
+  // 날아가는 다트 이동 (게이지로 정해진 속도)
+  if (flying) {
+    flying.x += flying.speed * dt;
+    if (flying.x >= flying.target) landDart();
+  }
+
+  // 게이지 UI 갱신 & 발사 가능 여부
+  if (phase === "running") {
+    fireBtn.disabled = !!flying;
+    const p = charging ? currentPower() : 0;
+    gfill.style.width = (p * 100).toFixed(1) + "%";
+    gfill.style.background = `hsl(${(1 - p) * 155}, 85%, 55%)`;
+  }
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // 방향 전환 파문
+  for (let i = rings.length - 1; i >= 0; i--) {
+    const rg = rings[i];
+    rg.r += 340 * dt;
+    rg.alpha -= dt * 1.6;
+    if (rg.alpha <= 0) { rings.splice(i, 1); continue; }
+    ctx.beginPath();
+    ctx.arc(cx, cy, rg.r, 0, Math.PI * 2);
+    ctx.strokeStyle = PALETTES[palIdx].ring;
+    ctx.globalAlpha = rg.alpha;
+    ctx.lineWidth = 5;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  // 중앙 원판 (현재 방향의 팔레트)
+  const pal = PALETTES[palIdx];
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, Math.PI * 2);
+  const grad = ctx.createRadialGradient(cx - R * 0.3, cy - R * 0.3, R * 0.2, cx, cy, R);
+  grad.addColorStop(0, pal.a);
+  grad.addColorStop(1, pal.b);
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // 방향 전환 섬광
+  if (flash > 0) {
+    ctx.globalAlpha = flash * 0.6;
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    ctx.fillStyle = "#fff";
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    flash = Math.max(0, flash - dt * 2.2);
+  }
+
+  // 중심에 꽂은 다트 개수
+  ctx.fillStyle = "#fff";
+  ctx.font = `bold ${Math.round(R * 0.85)}px ui-monospace, "SF Mono", Consolas, monospace`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.shadowColor = "rgba(0,0,0,.35)";
+  ctx.shadowBlur = 8;
+  ctx.fillText(String(score), cx, cy);
+  ctx.shadowBlur = 0;
+
+  // 꽂힌 다트들
+  for (const a of stuck) {
+    const ang = worldAngle(a), dx = Math.cos(ang), dy = Math.sin(ang);
+    drawDartSeg(cx + dx * R, cy + dy * R, cx + dx * (R + NEEDLE), cy + dy * (R + NEEDLE), 1);
+  }
+
+  // 날아가는 다트 (오른쪽 끝이 바늘 tip, 왼쪽이 꽁지)
+  if (flying) {
+    drawDartSeg(flying.x + NEEDLE, cy, flying.x, cy, 1);
+  }
+
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+</script>
+<script defer src="/_shared/records.js"></script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>
