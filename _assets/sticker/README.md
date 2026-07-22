@@ -18,6 +18,7 @@
 | `ribbon-cat` | 리본 핑크후드 고양이 이모티콘 16종 | `01.png`–`16.png` |
 | `couple-cat` | 커플 고양이 이모티콘 16종 | `01.png`–`16.png` |
 | `dog-cat-friends` | 멍냥 단짝 이모티콘 16종 | `01.png`–`16.png` |
+| `day-off-seal` | 오늘은 연차 물범 이모티콘 16종 | `01.png`–`16.png` |
 
 각 팩은 미리보기(`preview.webp` 또는 `preview.png`), 개별 이미지,
 `metadata.json`으로 구성됩니다. 새 팩의 형식과 검증 규칙은
