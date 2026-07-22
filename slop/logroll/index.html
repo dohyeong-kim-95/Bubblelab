@@ -295,9 +295,12 @@ function draw(t) {
   const near = phase === "running" && Math.abs(manAngle) > FALL * 0.6;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  ctx.strokeStyle = near ? "#e05a4a" : "#233";
-  ctx.fillStyle = near ? "#e05a4a" : "#233";
-  ctx.lineWidth = Math.max(3, u * 0.09);
+  // 갈색 통나무·파란 물 어디서든 잘 보이게 밝은 색 + 어두운 그림자 테두리
+  ctx.strokeStyle = near ? "#ff3b30" : "#fafdff";
+  ctx.fillStyle = near ? "#ff3b30" : "#fafdff";
+  ctx.shadowColor = "rgba(0,0,0,.5)";
+  ctx.shadowBlur = Math.max(4, u * 0.12);
+  ctx.lineWidth = Math.max(3, u * 0.11);
   const hip = -u * 0.9, sh = -u * 1.5, head = -u * 1.85;
   // 다리(살짝 벌려 균형)
   ctx.beginPath();
