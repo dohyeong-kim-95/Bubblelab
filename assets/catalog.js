@@ -96,7 +96,10 @@ function render() {
         <p class="description">${esc(item.description || "Bubblelab에서 만든 에셋입니다.")}</p>
         ${playerMarkup(item)}
         <div class="tags">${(item.tags || []).map((tag) => `<span class="tag">#${esc(tag)}</span>`).join("")}</div>
-        <div class="downloads">${item.downloads.map((download) =>
+        <div class="downloads">${
+          category === "sticker" && item.downloads.length > 1
+            ? `<button class="download-all" type="button" data-download-all="${esc(item.id)}">↓ 스티커 팩 모두 받기 (${item.downloads.length}개 ZIP)</button>`
+            : ""}${item.downloads.map((download) =>
           `<div class="download-item">
             <a class="download" href="/_download/${encodeURIComponent(item.category)}/${encodeURIComponent(item.id)}/${encodeURIComponent(download.file)}" download="${esc(download.file)}">↓ ${esc(download.label)}</a>
             <span class="download-count">${numberFormat.format(downloadCounts.files[`${item.category}/${item.id}/${download.file}`] || 0)}회 다운로드</span>
@@ -109,6 +112,43 @@ function render() {
   }
   for (const button of grid.querySelectorAll("[data-repeat-player]")) {
     button.addEventListener("click", () => toggleRepeat(button));
+  }
+  for (const button of grid.querySelectorAll("[data-download-all]")) {
+    button.addEventListener("click", () => downloadAll(button));
+  }
+}
+
+// 팩 전체를 한 번에: 각 파일을 받아 무압축 ZIP 하나로 묶어 내려준다.
+// (모바일 브라우저는 탭당 다운로드 1개만 허용 → 개별 16회 다운로드가 불가)
+async function downloadAll(button) {
+  const item = items.find((entry) => entry.id === button.dataset.downloadAll);
+  if (!item || typeof window.blMakeZip !== "function") return;
+  const original = button.textContent;
+  button.disabled = true;
+  button.textContent = "받는 중…";
+  try {
+    const files = await Promise.all(item.downloads.map(async (download) => {
+      const response = await fetch(
+        `/_download/${encodeURIComponent(item.category)}/${encodeURIComponent(item.id)}/${encodeURIComponent(download.file)}`,
+        { cache: "no-cache" },
+      );
+      if (!response.ok) throw new Error(download.file);
+      return { name: download.file, data: new Uint8Array(await response.arrayBuffer()) };
+    }));
+    const blob = window.blMakeZip(files);
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${item.id}.zip`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    button.textContent = "완료 ✓";
+  } catch {
+    button.textContent = "받기 실패 — 다시 시도";
+  } finally {
+    setTimeout(() => { button.disabled = false; button.textContent = original; }, 1800);
   }
 }
 
