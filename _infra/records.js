@@ -273,14 +273,15 @@ export class RecordsDO {
       let list = (await this.state.storage.get(top3Key)) ?? (current ? [current] : []);
 
       const record = { nick, score, text: display, dir: cfg.dir, at: Date.now() };
-      // 같은 닉네임은 더 좋은 기록만 유지 (나쁜 점수 재제출로 자기 순위가 내려가지 않게)
-      const mine = list.find((e) => e.nick === nick);
-      const keepEntry = mine && !beats(cfg.dir, score, mine) ? mine : record;
-      let merged = [...list.filter((e) => e.nick !== nick), keepEntry];
+      // 같은 닉네임도 서로 다른 점수라면 여러 순위를 동시에 차지할 수 있다.
+      // (동일인의 여러 기록이든, 닉이 우연히 겹친 다른 사람이든 모두 랭크된다.)
+      // 단, 동일 닉·동일 점수의 정확한 중복 제출은 한 번만 반영한다.
+      const dupe = list.some((e) => e.nick === nick && e.score === score);
+      let merged = dupe ? [...list] : [...list, record];
       merged.sort((a, b) => (cfg.dir === "max" ? b.score - a.score : a.score - b.score));
       merged = merged.slice(0, 3);
       // 새 기록이 실제로 3위 안에 들었는지
-      const accepted = keepEntry === record && merged.includes(record);
+      const accepted = !dupe && merged.includes(record);
 
       if (accepted) {
         await this.state.storage.put(top3Key, merged);
