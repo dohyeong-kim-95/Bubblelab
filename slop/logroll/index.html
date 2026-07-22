@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>통나무굴리기</title>
+<style>
+  :root { color-scheme: light dark; }
+  html, body { height: 100%; }
+  body { margin: 0; overflow: hidden; font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+         background: light-dark(#dfeef7, #0b1420); user-select: none;
+         -webkit-user-select: none; touch-action: none; }
+  canvas { display: block; }
+  #time { position: fixed; top: 1rem; left: 50%; transform: translateX(-50%);
+          font-size: 1.6rem; font-weight: bold; font-variant-numeric: tabular-nums;
+          color: light-dark(#123, #cde); text-shadow: 0 1px 2px light-dark(rgba(255,255,255,.5), rgba(0,0,0,.4)); }
+  /* 좌우 조작 힌트 */
+  .hint { position: fixed; top: 0; bottom: 0; width: 50%; display: flex;
+          align-items: center; justify-content: center; font-size: 3rem;
+          color: light-dark(#123, #cde); opacity: 0; pointer-events: none;
+          transition: opacity .08s; }
+  .hint.l { left: 0; } .hint.r { right: 0; }
+  .hint.on { opacity: .28; }
+  #overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+             display: flex; flex-direction: column; align-items: center; gap: 1rem;
+             padding: 1.6rem 2rem; border-radius: 1.25rem; text-align: center;
+             border: 1.5px solid light-dark(rgba(30,50,70,.25), rgba(200,215,235,.25));
+             background: light-dark(rgba(255,255,255,.88), rgba(15,22,32,.88));
+             backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+             color: light-dark(#123, #cde); width: min(82vw, 20rem); z-index: 5; }
+  #overlay.hide { display: none; }
+  #overlay h1 { font-size: 1.2rem; margin: 0; opacity: .8; }
+  #msg { margin: 0; opacity: .72; white-space: pre-line; font-size: .92rem; line-height: 1.5; }
+  #result { font-weight: bold; white-space: pre-line; min-height: 0; }
+  #btn { font: inherit; font-size: 1.15rem; padding: .8rem 2.4rem;
+         border-radius: 2rem; border: 2px solid currentColor;
+         background: none; color: inherit; cursor: pointer; }
+  #btn:active { transform: scale(.96); }
+  #btn:disabled { opacity: .4; cursor: default; }
+  #best { opacity: .5; font-size: .85rem; min-height: 1.2em; margin: 0; }
+</style>
+</head>
+<body>
+<div id="time">0.0초</div>
+<div class="hint l" id="hintL">◀</div>
+<div class="hint r" id="hintR">▶</div>
+<div id="overlay">
+  <h1>🪵 통나무굴리기</h1>
+  <p id="msg">통나무 위 사람이 떨어지지 않게
+균형을 잡으세요!
+
+화면 왼쪽/오른쪽(← →)을 눌러
+통나무를 그 방향으로 굴립니다.
+오래 버틸수록 고득점!</p>
+  <div id="result"></div>
+  <button id="btn">시작!</button>
+  <p id="best"></p>
+</div>
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+const timeEl = document.getElementById("time");
+const overlay = document.getElementById("overlay");
+const msg = document.getElementById("msg");
+const result = document.getElementById("result");
+const btn = document.getElementById("btn");
+const bestEl = document.getElementById("best");
+const hintL = document.getElementById("hintL");
+const hintR = document.getElementById("hintR");
+
+let phase = "idle";          // idle | running | done
+let survived = 0;            // 버틴 시간(초) = 점수
+let best = null;
+
+window.blWeekly = { game: "logroll", dir: "max", fmt: (v) => v.toFixed(1) + "초" };
+window.blShareText = () => `통나무 위에서 ${(best ?? survived).toFixed(1)}초 버팀! 도전해보세요`;
+
+/* ── 물리 상태 ───────────────────────────────────────────
+   통나무: logAngle(굴러간 각), logVel(각속도) — 플레이어가 직접 조종
+   사람:   manAngle(수직 기준 기운 각), manVel — 역진자 밸런싱
+   부호: 오른쪽(+), 왼쪽(-). 통나무를 오른쪽으로 굴리면 발밑 표면이
+         오른쪽으로 밀려 사람은 왼쪽으로 넘어간다 → 반대로 굴려 되돌린다. */
+let logAngle = 0, logVel = 0;
+let manAngle = 0, manVel = 0;
+let wind = 0;                // 잔잔한 교란(랜덤워크) — 가만히 있으면 쓰러지게
+
+// 튜닝 상수 (난이도: 적당히 — 초반 여유, 시간 갈수록 예민)
+const FALL      = 0.82;      // 낙하 임계 각(rad) ≈ 47°
+const G0        = 5.0;       // 초기 전복 계수
+const GRAMP     = 0.06;      // 초당 예민해지는 정도
+const GMAX      = 11;
+const COUPLING  = 0.55;      // 통나무 회전 → 사람에게 전달되는 세기
+const LOG_ACCEL = 9;         // 누르는 동안 통나무 각가속도
+const LOG_MAXV  = 5;         // 통나무 최대 각속도
+const LOG_DAMP  = 1.4;       // 통나무 회전 감쇠(손 떼면 서서히 멈춤)
+const MAN_DAMP  = 0.6;       // 사람 미세 감쇠
+
+// 입력: 여러 손가락 동시 지원 (pointerId → 'l'|'r')
+const pointers = new Map();
+let leftHeld = false, rightHeld = false;
+function refreshHeld() {
+  let l = false, r = false;
+  for (const side of pointers.values()) { if (side === "l") l = true; else r = true; }
+  leftHeld = l || keyL;
+  rightHeld = r || keyR;
+  hintL.classList.toggle("on", leftHeld);
+  hintR.classList.toggle("on", rightHeld);
+}
+let keyL = false, keyR = false;
+
+canvas.addEventListener("pointerdown", (e) => {
+  const side = e.clientX < innerWidth / 2 ? "l" : "r";
+  pointers.set(e.pointerId, side);
+  refreshHeld();
+});
+function release(e) {
+  if (pointers.delete(e.pointerId)) refreshHeld();
+}
+canvas.addEventListener("pointerup", release);
+canvas.addEventListener("pointercancel", release);
+canvas.addEventListener("pointerleave", release);
+addEventListener("keydown", (e) => {
+  if (e.key === "ArrowLeft") { keyL = true; e.preventDefault(); refreshHeld(); }
+  else if (e.key === "ArrowRight") { keyR = true; e.preventDefault(); refreshHeld(); }
+  else if ((e.key === " " || e.key === "Enter") && phase !== "running" && !btn.disabled) start();
+});
+addEventListener("keyup", (e) => {
+  if (e.key === "ArrowLeft") { keyL = false; refreshHeld(); }
+  else if (e.key === "ArrowRight") { keyR = false; refreshHeld(); }
+});
+// 오버레이 조작이 게임 입력으로 새지 않게
+for (const ev of ["pointerdown", "pointerup", "click"]) {
+  overlay.addEventListener(ev, (e) => e.stopPropagation());
+}
+
+btn.addEventListener("click", start);
+function start() {
+  if (phase === "running") return;
+  phase = "running";
+  survived = 0;
+  logAngle = logVel = manAngle = manVel = wind = 0;
+  pointers.clear(); keyL = keyR = false; refreshHeld();
+  overlay.classList.add("hide");
+}
+
+function fall() {
+  phase = "done";
+  if (best === null || survived > best) {
+    best = survived;
+    bestEl.textContent = `최고 기록: ${best.toFixed(1)}초`;
+  }
+  const s = survived;
+  const grade =
+    s >= 60 ? "🌲 통나무의 지배자" :
+    s >= 40 ? "🤸 프로 벌목꾼" :
+    s >= 25 ? "🔥 균형의 달인" :
+    s >= 12 ? "🙂 제법인데요" :
+    s >= 5  ? "🌊 첨벙!" : "💦 순삭…";
+  result.textContent = `${s.toFixed(1)}초 버팀!\n${grade}`;
+  msg.textContent = "";
+  btn.textContent = "다시!";
+  overlay.classList.remove("hide");
+  btn.disabled = true;
+  setTimeout(() => { btn.disabled = false; }, 800);
+  window.blWeeklyReport?.(survived);
+}
+
+/* ── 고정 타임스텝 물리 ─────────────────────────────────── */
+const STEP = 1 / 120;
+function step() {
+  const G = Math.min(GMAX, G0 + survived * GRAMP);
+
+  // 입력 → 통나무 각가속도
+  const input = (rightHeld ? 1 : 0) - (leftHeld ? 1 : 0);
+  logVel += input * LOG_ACCEL * STEP;
+  logVel *= Math.exp(-LOG_DAMP * STEP);
+  if (logVel > LOG_MAXV) logVel = LOG_MAXV;
+  if (logVel < -LOG_MAXV) logVel = -LOG_MAXV;
+  logAngle += logVel * STEP;
+
+  // 잔잔한 바람(랜덤워크, 평균 회귀) — 난이도 따라 조금씩 세짐
+  const gust = 0.35 + survived * 0.012;
+  wind += (Math.random() - 0.5) * gust * STEP;
+  wind *= Math.exp(-0.9 * STEP);
+
+  // 사람: 역진자 + 통나무 표면 끌림 + 바람
+  let acc = G * Math.sin(manAngle);   // 기울수록 더 빨리 넘어감(불안정)
+  acc += -COUPLING * logVel;          // 통나무가 굴러가면 반대로 밀림
+  acc += wind;
+  manVel += acc * STEP;
+  manVel *= Math.exp(-MAN_DAMP * STEP);
+  manAngle += manVel * STEP;
+
+  survived += STEP;
+  if (Math.abs(manAngle) > FALL) fall();
+}
+
+/* ── 렌더링 ─────────────────────────────────────────────── */
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(devicePixelRatio || 1, 2);
+  W = innerWidth; H = innerHeight;
+  canvas.width = W * DPR; canvas.height = H * DPR;
+  canvas.style.width = W + "px"; canvas.style.height = H + "px";
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+addEventListener("resize", resize);
+resize();
+
+function draw(t) {
+  const waterY = H * 0.66;
+  const R = Math.max(48, Math.min(W, H) * 0.15);
+  const cx = W / 2, cy = waterY;           // 통나무 단면 중심(수면 높이)
+  const topY = cy - R;                      // 사람 발 접점(통나무 꼭대기)
+
+  ctx.clearRect(0, 0, W, H);
+
+  // 하늘
+  const sky = ctx.createLinearGradient(0, 0, 0, waterY);
+  sky.addColorStop(0, "rgba(140,190,225,.30)");
+  sky.addColorStop(1, "rgba(180,215,235,.12)");
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, W, waterY);
+
+  // 물
+  const water = ctx.createLinearGradient(0, waterY, 0, H);
+  water.addColorStop(0, "rgba(60,130,175,.55)");
+  water.addColorStop(1, "rgba(30,80,120,.75)");
+  ctx.fillStyle = water;
+  ctx.fillRect(0, waterY, W, H - waterY);
+  // 물결
+  ctx.strokeStyle = "rgba(255,255,255,.18)";
+  ctx.lineWidth = 2;
+  for (let k = 0; k < 3; k++) {
+    ctx.beginPath();
+    const yy = waterY + 14 + k * 22;
+    for (let x = 0; x <= W; x += 12)
+      ctx.lineTo(x, yy + Math.sin(x / 55 + t / 700 + k) * 4);
+    ctx.stroke();
+  }
+
+  // ── 통나무(단면) ──
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, Math.PI * 2);
+  ctx.clip();                              // 무늬를 원 안으로 제한
+  ctx.fillStyle = "#b5814e";
+  ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
+  // 나이테(회전으로 굴러가는 느낌)
+  ctx.translate(cx, cy);
+  ctx.rotate(logAngle);
+  ctx.strokeStyle = "rgba(90,55,25,.55)";
+  ctx.lineWidth = 2;
+  for (let rr = R * 0.18; rr < R; rr += R * 0.16) {
+    ctx.beginPath();
+    ctx.arc(0, 0, rr, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  // 방사형 결 — 회전이 뚜렷이 보이게
+  ctx.strokeStyle = "rgba(90,55,25,.4)";
+  for (let a = 0; a < 6; a++) {
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(Math.cos(a / 6 * Math.PI * 2) * R, Math.sin(a / 6 * Math.PI * 2) * R);
+    ctx.stroke();
+  }
+  // 옹이
+  ctx.fillStyle = "rgba(70,42,18,.6)";
+  ctx.beginPath();
+  ctx.arc(R * 0.32, -R * 0.1, R * 0.1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // 물에 잠긴 아래쪽을 물색으로 덮어 반쯤 잠긴 느낌
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, Math.PI * 2);
+  ctx.clip();
+  ctx.fillStyle = "rgba(40,95,135,.45)";
+  ctx.fillRect(cx - R, cy, R * 2, R);
+  ctx.restore();
+  // 통나무 테두리
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, Math.PI * 2);
+  ctx.strokeStyle = "rgba(70,42,18,.85)";
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // ── 사람(막대 인간, 발끝을 축으로 기움) ──
+  ctx.save();
+  ctx.translate(cx, topY);
+  ctx.rotate(manAngle);                    // +면 오른쪽으로 기움
+  const u = R * 0.9;                        // 사람 크기 단위
+  const near = phase === "running" && Math.abs(manAngle) > FALL * 0.6;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = near ? "#e05a4a" : "#233";
+  ctx.fillStyle = near ? "#e05a4a" : "#233";
+  ctx.lineWidth = Math.max(3, u * 0.09);
+  const hip = -u * 0.9, sh = -u * 1.5, head = -u * 1.85;
+  // 다리(살짝 벌려 균형)
+  ctx.beginPath();
+  ctx.moveTo(-u * 0.22, 0); ctx.lineTo(0, hip); ctx.lineTo(u * 0.22, 0);
+  ctx.stroke();
+  // 몸통
+  ctx.beginPath();
+  ctx.moveTo(0, hip); ctx.lineTo(0, sh);
+  ctx.stroke();
+  // 팔 — 기운 반대로 뻗어 버둥대는 느낌
+  const flail = -manAngle * 1.6 + Math.sin(t / 120) * 0.12;
+  ctx.beginPath();
+  ctx.moveTo(0, sh - u * 0.05);
+  ctx.lineTo(Math.cos(Math.PI + flail) * u * 0.75, sh - u * 0.05 + Math.sin(Math.PI + flail) * u * 0.75);
+  ctx.moveTo(0, sh - u * 0.05);
+  ctx.lineTo(Math.cos(-flail) * u * 0.75, sh - u * 0.05 + Math.sin(-flail) * u * 0.75);
+  ctx.stroke();
+  // 머리
+  ctx.beginPath();
+  ctx.arc(0, head, u * 0.28, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // 물보라(거의 떨어질 때)
+  if (near) {
+    timeEl.style.color = "#e05a4a";
+  } else {
+    timeEl.style.color = "";
+  }
+}
+
+/* ── 메인 루프 ──────────────────────────────────────────── */
+let last = performance.now();
+let acc = 0;
+function loop(t) {
+  let dt = (t - last) / 1000;
+  last = t;
+  if (dt > 0.05) dt = 0.05;                // 탭 전환 등으로 인한 폭주 방지
+  if (phase === "running") {
+    acc += dt;
+    while (acc >= STEP) { acc -= STEP; if (phase === "running") step(); }
+    timeEl.textContent = survived.toFixed(1) + "초";
+  } else {
+    acc = 0;
+  }
+  draw(t);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+<script defer src="/_shared/records.js"></script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>
