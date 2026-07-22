@@ -336,6 +336,78 @@ function draw(t) {
   } else {
     timeEl.style.color = "";
   }
+
+  drawWind(t);
+}
+
+// 왼쪽 위 실시간 바람 게이지 — 방향(◀▶)과 세기를 화살표 길이·색으로 표시
+function drawWind(t) {
+  const px = 14, py = 14, pw = 148, ph = 56, rad = 13;
+  const WIND_REF = 0.06;                 // 이 세기에서 화살표가 가득 참
+  const norm = Math.max(-1, Math.min(1, wind / WIND_REF)); // -1..1
+  const mag = Math.abs(norm);
+  const hue = 200 - mag * 188;           // 잔잔=파랑 → 강함=빨강
+  const col = `hsl(${hue}, 85%, 62%)`;
+  const dir = wind < -0.002 ? "◀" : wind > 0.002 ? "▶" : "·";
+  const word = mag < 0.15 ? "잔잔" : mag < 0.4 ? "약" : mag < 0.7 ? "보통" : "강";
+
+  ctx.save();
+  // 패널
+  ctx.beginPath();
+  roundRect(px, py, pw, ph, rad);
+  ctx.fillStyle = "rgba(18,24,34,.5)";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(200,215,235,.22)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // 제목
+  ctx.fillStyle = "rgba(240,248,255,.92)";
+  ctx.font = "600 12px ui-monospace, monospace";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText(`💨 바람 ${dir} ${word}`, px + 12, py + 16);
+
+  // 게이지 트랙
+  const cx = px + pw / 2, gy = py + 38, half = pw / 2 - 16;
+  ctx.strokeStyle = "rgba(255,255,255,.22)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(cx - half, gy); ctx.lineTo(cx + half, gy);
+  ctx.stroke();
+  // 중앙 눈금
+  ctx.beginPath();
+  ctx.moveTo(cx, gy - 5); ctx.lineTo(cx, gy + 5);
+  ctx.stroke();
+
+  // 방향 막대 + 화살촉
+  const end = cx + norm * half;
+  ctx.strokeStyle = col;
+  ctx.fillStyle = col;
+  ctx.lineCap = "round";
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(cx, gy); ctx.lineTo(end, gy);
+  ctx.stroke();
+  if (mag > 0.05) {
+    const s = Math.sign(norm), ah = 6;
+    ctx.beginPath();
+    ctx.moveTo(end + s * ah, gy);
+    ctx.lineTo(end - s * ah * 0.2, gy - ah);
+    ctx.lineTo(end - s * ah * 0.2, gy + ah);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
 }
 
 /* ── 메인 루프 ──────────────────────────────────────────── */
