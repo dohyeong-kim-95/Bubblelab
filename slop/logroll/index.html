@@ -351,43 +351,17 @@ function draw(t) {
   drawWind(t);
 }
 
-// 왼쪽 위 실시간 바람 게이지 — 지금/다음 바람 방향·세기 + 바뀜 카운트다운
-const WIND_REF = 0.055;                   // 이 세기에서 화살표가 가득 참
-function windWord(mag) {
-  return mag < 0.15 ? "잔잔" : mag < 0.4 ? "약" : mag < 0.7 ? "보통" : "강";
-}
-function drawGauge(cx, gy, half, w, alpha) {
-  const norm = Math.max(-1, Math.min(1, w / WIND_REF));
-  const mag = Math.abs(norm);
-  const hue = 200 - mag * 188;            // 잔잔=파랑 → 강함=빨강
-  // 트랙
-  ctx.strokeStyle = `rgba(255,255,255,${0.22 * alpha})`;
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(cx - half, gy); ctx.lineTo(cx + half, gy);
-  ctx.moveTo(cx, gy - 5); ctx.lineTo(cx, gy + 5);
-  ctx.stroke();
-  // 방향 막대 + 화살촉
-  const end = cx + norm * half;
-  ctx.strokeStyle = `hsla(${hue}, 85%, 62%, ${alpha})`;
-  ctx.fillStyle = `hsla(${hue}, 85%, 62%, ${alpha})`;
-  ctx.lineCap = "round";
-  ctx.lineWidth = 5;
-  ctx.beginPath();
-  ctx.moveTo(cx, gy); ctx.lineTo(end, gy);
-  ctx.stroke();
-  if (mag > 0.05) {
-    const s = Math.sign(norm), ah = 6;
-    ctx.beginPath();
-    ctx.moveTo(end + s * ah, gy);
-    ctx.lineTo(end - s * ah * 0.2, gy - ah);
-    ctx.lineTo(end - s * ah * 0.2, gy + ah);
-    ctx.closePath();
-    ctx.fill();
-  }
+// 왼쪽 위 실시간 바람 표시 — 방향·세기를 기호로 (<< / < / – / > / >>)
+const WIND_REF = 0.055;                   // 이 세기에서 최대(>>>) 단계
+// 세기를 기호로: 잔잔=–, 약=< , 보통=<< , 강=<<< (방향은 좌/우)
+function windSymbol(w) {
+  const mag = Math.abs(w) / WIND_REF;
+  if (mag < 0.12) return "–";
+  const n = mag < 0.4 ? 1 : mag < 0.75 ? 2 : 3;
+  return (w < 0 ? "<" : ">").repeat(n);
 }
 function drawWind() {
-  const px = 14, py = 14, pw = 182, ph = 94, rad = 14;
+  const px = 14, py = 14, pw = 176, ph = 92, rad = 14;
   const running = phase === "running";
   ctx.save();
   // 패널
@@ -400,11 +374,11 @@ function drawWind() {
   ctx.stroke();
 
   ctx.textBaseline = "middle";
-  // 제목 + 현재 세기
+  // 제목
   ctx.fillStyle = "rgba(240,248,255,.92)";
   ctx.font = "600 12px ui-monospace, monospace";
   ctx.textAlign = "left";
-  ctx.fillText(`💨 바람 · ${windWord(Math.abs(wind) / WIND_REF)}`, px + 12, py + 16);
+  ctx.fillText("💨 바람", px + 12, py + 16);
   // 바뀜 카운트다운
   if (running) {
     ctx.fillStyle = "rgba(240,248,255,.65)";
@@ -413,17 +387,25 @@ function drawWind() {
     ctx.fillText(`⟳ ${windTimer.toFixed(1)}s`, px + pw - 12, py + 16);
   }
 
-  const x1 = px + 42, x2 = px + pw - 16, cx = (x1 + x2) / 2, half = (x2 - x1) / 2;
+  const sx = px + 62;   // 기호 시작 x (라벨 오른쪽, 중앙 정렬)
+  // 지금
   ctx.textAlign = "left";
   ctx.font = "11px ui-monospace, monospace";
-  // 지금
   ctx.fillStyle = "rgba(240,248,255,.85)";
   ctx.fillText("지금", px + 12, py + 46);
-  drawGauge(cx, py + 46, half, wind, 1);
+  ctx.textAlign = "center";
+  ctx.font = "bold 24px ui-monospace, monospace";
+  ctx.fillStyle = "rgba(240,248,255,.95)";
+  ctx.fillText(windSymbol(wind), sx + 44, py + 46);
   // 다음 (예고 — 흐리게)
+  ctx.textAlign = "left";
+  ctx.font = "11px ui-monospace, monospace";
   ctx.fillStyle = "rgba(240,248,255,.5)";
-  ctx.fillText("다음", px + 12, py + 74);
-  drawGauge(cx, py + 74, half, nextWind, 0.5);
+  ctx.fillText("다음", px + 12, py + 73);
+  ctx.textAlign = "center";
+  ctx.font = "bold 22px ui-monospace, monospace";
+  ctx.fillStyle = "rgba(240,248,255,.5)";
+  ctx.fillText(windSymbol(nextWind), sx + 44, py + 73);
 
   ctx.restore();
 }
