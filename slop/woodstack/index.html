@@ -11,14 +11,12 @@
   body {
     margin: 0; overflow: hidden; user-select: none; -webkit-user-select: none;
     font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
-    color: #f4ead6;
-    background: #1b2a4a;
-    touch-action: manipulation;
+    color: #f4ead6; background: #1b2a4a; touch-action: manipulation;
   }
   #stage { position: fixed; inset: 0; }
   canvas { display: block; width: 100%; height: 100%; }
 
-  /* 상단 HUD */
+  /* 상단 HUD: Score · Combo · Best */
   #hud {
     position: fixed; top: 0; left: 0; right: 0; z-index: 10;
     display: flex; justify-content: space-between; align-items: flex-start;
@@ -32,22 +30,34 @@
   .chip b { font-size: 1.5rem; font-weight: 800; letter-spacing: .01em; display: block; }
   .chip small { opacity: .8; font-weight: 400; }
   #hiChip { text-align: right; }
+  #comboChip {
+    align-self: center; margin-top: .1rem; font-weight: 800; font-size: .95rem;
+    color: #3a2410; background: linear-gradient(#ffe08a, #f4bd5c);
+    box-shadow: 0 2px 8px rgba(180,120,20,.4); transition: opacity .15s, transform .15s;
+    opacity: 0; transform: scale(.8);
+  }
+  #comboChip.on { opacity: 1; transform: scale(1); }
+  #comboChip.run {
+    color: #fff; background: linear-gradient(#ff9d3a, #ff6a3a);
+    box-shadow: 0 0 14px rgba(255,150,60,.8);
+    animation: runPulse .7s ease-in-out infinite;
+  }
+  @keyframes runPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.08); } }
 
-  /* 콤보 표시(화면 중앙 상단) */
-  #combo {
-    position: fixed; top: 22%; left: 50%; transform: translate(-50%,-50%) scale(.5);
-    z-index: 9; font-weight: 900; font-size: 2rem; opacity: 0; pointer-events: none;
+  /* 판정 텍스트(중앙 상단) */
+  #judge {
+    position: fixed; top: 24%; left: 50%; transform: translate(-50%,-50%) scale(.5);
+    z-index: 9; font-weight: 900; font-size: 2.1rem; opacity: 0; pointer-events: none;
     color: #ffe08a; text-shadow: 0 2px 10px rgba(140,80,0,.55), 0 0 3px rgba(0,0,0,.4);
     white-space: nowrap;
   }
-  #combo.show { animation: comboPop .6s cubic-bezier(.2,1.5,.4,1); }
-  @keyframes comboPop {
+  #judge.show { animation: judgePop .6s cubic-bezier(.2,1.5,.4,1); }
+  @keyframes judgePop {
     0% { opacity: 0; transform: translate(-50%,-40%) scale(.5); }
-    30% { opacity: 1; transform: translate(-50%,-52%) scale(1.1); }
-    100% { opacity: 0; transform: translate(-50%,-62%) scale(1); }
+    30% { opacity: 1; transform: translate(-50%,-54%) scale(1.12); }
+    100% { opacity: 0; transform: translate(-50%,-66%) scale(1); }
   }
 
-  /* 음소거 버튼 */
   #mute {
     position: fixed; right: 1rem; bottom: max(1rem, env(safe-area-inset-bottom)); z-index: 12;
     width: 2.6rem; height: 2.6rem; border-radius: 50%; color: #fff; cursor: pointer;
@@ -57,7 +67,6 @@
   }
   #mute:active { transform: scale(.92); }
 
-  /* 오버레이(시작/게임오버) */
   #overlay {
     position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column;
     align-items: center; justify-content: center; gap: .9rem; text-align: center; padding: 1.4rem;
@@ -93,9 +102,10 @@
 
 <div id="hud">
   <div class="chip" id="scoreChip"><small>SCORE</small><b id="score">0</b></div>
+  <div class="chip" id="comboChip">🔥 PERFECT ×1</div>
   <div class="chip" id="hiChip"><small>BEST</small><b id="hi">0</b></div>
 </div>
-<div id="combo"></div>
+<div id="judge"></div>
 <div class="hint hidden" id="hint">👆 탭해서 통나무 쌓기</div>
 <button id="mute" aria-label="소리 켜기/끄기">🔊</button>
 
@@ -105,7 +115,8 @@
   <p>
     좌우로 움직이는 통나무를 <b>탭</b>해서 쌓아요.<br>
     삐져나온 부분은 <b>잘려 떨어지고</b> 통나무가 가늘어져요.<br>
-    딱 맞추면 <b>Perfect</b> — 콤보가 쌓이고 두께가 조금 회복돼요.<br>
+    딱 맞추면 <b>PERFECT!</b> — 콤보가 쌓이고, 5콤보마다 두께가 회복돼요.<br>
+    <b>10콤보</b>부터는 🔥 <b>PERFECT RUN</b>!<br>
     겹치는 곳이 없으면 <b>게임 오버</b>.<br>
     <span class="key">스페이스</span> 또는 화면 <b>탭</b>!
   </p>
@@ -127,25 +138,25 @@ window.addEventListener("resize", resize);
 resize();
 
 // ── 상수 ───────────────────────────────────────────────
-const LOG_H = 32;          // 통나무 높이(px)
+const LOG_H = 34;          // 통나무 높이(px)
 const PERFECT = 3;         // Perfect 판정 오차(±px)
 const GROUND = 0.16;       // 화면 하단 여백 비율(땅)
-const RECOVER = 0.15;      // Perfect 시 두께 결손분 회복 비율
-const GRAV = 1500;         // 낙하 중력(px/s^2)
+const GRAV = 1600;         // 낙하 중력(px/s^2)
+const ISO_X = 6, ISO_Y = 7; // 약한 pseudo-isometric 윗면(가독성 유지 — x판정 불변)
 function baseW() { return Math.min(W * 0.5, 250); }
 function marginX() { return W * 0.12; }
-// 점수 구간별 이동 속도(px/s) — 0~20 느림 → 60+ 최대
+// Tower가 높아질수록 속도 증가, 최대 속도 제한
 function logSpeed(s) {
   let f;
-  if (s < 20) f = 0.62;
-  else if (s < 40) f = 0.86;
-  else if (s < 60) f = 1.08;
-  else f = 1.28;
+  if (s < 20) f = 0.60;
+  else if (s < 50) f = 0.84;
+  else if (s < 100) f = 1.06;
+  else f = 1.24;               // 최대치 — 더는 빨라지지 않음
   return f * Math.min(W, 520);
 }
 
 // ── 오디오(신스 — 외부 음원 없음) ──────────────────────
-let actx, master, muted = false, ambient = null;
+let actx, master, muted = false, ambient = null, runLayer = null;
 function initAudio() {
   if (actx) return;
   actx = new (window.AudioContext || window.webkitAudioContext)();
@@ -174,19 +185,20 @@ function noiseBurst(dur, gain, freq, q = 1, slideTo) {
   g.gain.setValueAtTime(gain, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   s.connect(bp).connect(g).connect(master); s.start(t); s.stop(t + dur + 0.02);
 }
-const sTap = () => { ping(520, 0.08, 0.16, "triangle", 340); };                 // 톡
-const sCut = () => { noiseBurst(0.12, 0.28, 1500, 1.4, 500); ping(300, 0.09, 0.12, "sine", 180); }; // 탁
-function sPerfect(combo) {                                                       // 찰칵 + 상승음
-  noiseBurst(0.04, 0.2, 3200, 2);
-  const base = 660 * Math.pow(1.06, Math.min(combo, 12));
-  ping(base, 0.12, 0.16, "triangle");
-  ping(base * 1.5, 0.16, 0.1, "sine");
+const sTap = () => { noiseBurst(0.05, 0.14, 260, 1.2); ping(330, 0.08, 0.14, "triangle", 200); }; // 둔탁한 목재
+const sCut = () => { noiseBurst(0.13, 0.3, 1500, 1.4, 480); ping(300, 0.09, 0.12, "sine", 170); }; // 나무 절단
+function sPerfect(combo) {                                                      // 맑은 효과음(콤보만큼 상승)
+  noiseBurst(0.04, 0.22, 3400, 2.2);
+  const base = 660 * Math.pow(1.055, Math.min(combo, 14));
+  ping(base, 0.13, 0.17, "triangle");
+  ping(base * 1.5, 0.17, 0.1, "sine");
+  if (combo % 5 === 0) ping(base * 2, 0.24, 0.09, "sine");
 }
-function sOver() {                                                               // 와르르
-  noiseBurst(0.5, 0.32, 900, 0.7, 180);
-  ping(220, 0.5, 0.14, "sawtooth", 70);
+function sOver() {                                                              // 통나무 붕괴
+  noiseBurst(0.55, 0.34, 900, 0.7, 150);
+  ping(220, 0.55, 0.15, "sawtooth", 60);
+  setTimeout(() => noiseBurst(0.35, 0.2, 500, 0.8, 120), 90);
 }
-// 잔잔한 숲 앰비언스 — 낮게 깔리는 패드 + 이따금 새소리
 function startAmbient() {
   if (!actx || muted || ambient) return;
   const g = actx.createGain(); g.gain.value = 0.045; g.connect(master);
@@ -206,36 +218,59 @@ function startAmbient() {
       setTimeout(() => ping(f * 1.2, 0.07, 0.025, "sine", f), 110);
     }
   }, 4200);
-  ambient = { g, o1, o2, lfo, birdTimer };
+  ambient = { o1, o2, lfo, birdTimer };
 }
 function stopAmbient() {
   if (!ambient) return;
   try { ambient.o1.stop(); ambient.o2.stop(); ambient.lfo.stop(); } catch {}
-  clearInterval(ambient.birdTimer);
-  ambient = null;
+  clearInterval(ambient.birdTimer); ambient = null;
+}
+// Perfect Run 동안 얹히는 반짝이는 상위 레이어
+function startRunLayer() {
+  if (!actx || muted || runLayer) return;
+  const g = actx.createGain(); g.gain.value = 0;
+  g.gain.linearRampToValueAtTime(0.05, actx.currentTime + 0.4); g.connect(master);
+  const o = actx.createOscillator(); o.type = "triangle"; o.frequency.value = 880;
+  const o2 = actx.createOscillator(); o2.type = "sine"; o2.frequency.value = 1320;
+  const lfo = actx.createOscillator(); lfo.frequency.value = 5;
+  const lg = actx.createGain(); lg.gain.value = 7;
+  lfo.connect(lg).connect(o.frequency);
+  o.connect(g); o2.connect(g); o.start(); o2.start(); lfo.start();
+  runLayer = { g, o, o2, lfo };
+}
+function stopRunLayer() {
+  if (!runLayer) return;
+  const { g, o, o2, lfo } = runLayer;
+  try { g.gain.setTargetAtTime(0, actx.currentTime, 0.12); } catch {}
+  setTimeout(() => { try { o.stop(); o2.stop(); lfo.stop(); } catch {} }, 400);
+  runLayer = null;
 }
 
-// ── 배경(시간대 변화: 아침→낮→노을→밤) ────────────────
+// ── 배경(시간대: 0~20 아침 · 20~50 낮 · 50~100 노을 · 100+ 밤) ──────────
 const SKY = [
-  { t: 0,  top: [253,225,192], bot: [247,182,132], sun: [255,240,200], sunY: 0.78 }, // 아침
-  { t: 22, top: [150,205,240], bot: [226,240,250], sun: [255,247,210], sunY: 0.30 }, // 낮
-  { t: 45, top: [255,168,110], bot: [232,110,96],  sun: [255,214,150], sunY: 0.62 }, // 노을
-  { t: 70, top: [24,34,66],    bot: [42,54,92],    sun: [220,228,245], sunY: 0.24 }, // 밤
+  { t: 0,   top: [253,225,192], bot: [247,182,132], sun: [255,240,200], sunY: 0.80 }, // 🌄 아침
+  { t: 20,  top: [150,205,240], bot: [226,240,250], sun: [255,247,210], sunY: 0.28 }, // ☀️ 낮
+  { t: 50,  top: [255,168,110], bot: [232,108,94],  sun: [255,214,150], sunY: 0.64 }, // 🌇 노을
+  { t: 100, top: [22,32,62],    bot: [40,52,90],    sun: [220,228,245], sunY: 0.22 }, // 🌌 밤
 ];
 const lerp = (a, b, u) => a + (b - a) * u;
 const lerpRGB = (a, b, u) => [lerp(a[0],b[0],u), lerp(a[1],b[1],u), lerp(a[2],b[2],u)];
 const rgb = (c) => `rgb(${c[0]|0},${c[1]|0},${c[2]|0})`;
 function skyAt(score) {
-  let a = SKY[0], b = SKY[SKY.length - 1];
+  if (score <= SKY[0].t) return sky(SKY[0], SKY[0], 0, score);
+  if (score >= SKY[SKY.length - 1].t) return sky(SKY[SKY.length - 1], SKY[SKY.length - 1], 0, score);
   for (let i = 0; i < SKY.length - 1; i++) {
-    if (score >= SKY[i].t && score < SKY[i + 1].t) { a = SKY[i]; b = SKY[i + 1]; break; }
-    if (score >= SKY[SKY.length - 1].t) { a = b = SKY[SKY.length - 1]; }
+    if (score >= SKY[i].t && score < SKY[i + 1].t) {
+      return sky(SKY[i], SKY[i + 1], (score - SKY[i].t) / (SKY[i + 1].t - SKY[i].t), score);
+    }
   }
-  const u = a === b ? 0 : (score - a.t) / (b.t - a.t);
+  return sky(SKY[0], SKY[0], 0, score);
+}
+function sky(a, b, u, score) {
   return {
     top: lerpRGB(a.top, b.top, u), bot: lerpRGB(a.bot, b.bot, u),
     sun: lerpRGB(a.sun, b.sun, u), sunY: lerp(a.sunY, b.sunY, u),
-    night: score >= 55,
+    night: score >= 82,
   };
 }
 let curSky = skyAt(0);
@@ -243,36 +278,50 @@ const stars = Array.from({ length: 46 }, () => ({ x: Math.random(), y: Math.rand
 
 // ── 게임 상태 ──────────────────────────────────────────
 let state = "idle";                 // idle | play | over
-let stack = [];                     // 쌓인 통나무 [{x(중심), w}] — 0이 맨 아래
-let moving = null;                  // 움직이는 통나무 {x, w, dir}
-let falling = [];                   // 낙하 조각 [{x,y,w,h,vx,vy,rot,vr,a,cut}]
-let dust = [];                      // 톱밥 파티클
-let score = 0, hi = 0, combo = 0;
-let camY = 0, camTarget = 0;        // 카메라 스크롤(월드 y)
+let stack = [];                     // 쌓인 통나무 [{x,w}] — 0이 맨 아래
+let moving = null;                  // 움직이는 통나무 {x,w,dir}
+let falling = [];                   // 낙하 조각
+let dust = [];                      // 톱밥·조각 파티클
+let score = 0, hi = 0, combo = 0, bestCombo = 0;
+let perfectRun = false;
+let camY = 0, camTarget = 0, camLift = 0;
 let shake = 0, zoom = 0, hitStop = 0;
+let flash = 0, flashColor = "255,255,255";
 let lastT = 0;
 
 try { hi = Math.max(0, parseInt(localStorage.getItem("woodstack-hi") || "0", 10) || 0); } catch {}
 document.getElementById("hi").textContent = hi;
 
 const $ = (id) => document.getElementById(id);
-const overlay = $("overlay"), btn = $("btn"), hint = $("hint"), comboEl = $("combo");
+const overlay = $("overlay"), btn = $("btn"), hint = $("hint"), judgeEl = $("judge"), comboChip = $("comboChip");
 
-// 월드 y(통나무 바닥 높이) → 화면 y(바닥). 위로 쌓일수록 월드 y 증가.
-function screenBottom(worldY) { return H - H * GROUND - (worldY - camY); }
+// 월드 y(통나무 바닥) → 화면 y(바닥). 위로 쌓일수록 월드 y 증가.
+function screenBottom(worldY) { return H - H * GROUND - (worldY - camY) + camLift; }
 
 function reset() {
   stack = []; falling = []; dust = [];
-  score = 0; combo = 0; camY = 0; camTarget = 0; shake = 0; zoom = 0; hitStop = 0;
-  stack.push({ x: W / 2, w: baseW() });         // 맨 아래 받침 통나무
+  score = 0; combo = 0; bestCombo = 0; perfectRun = false;
+  camY = 0; camTarget = 0; camLift = 0; shake = 0; zoom = 0; hitStop = 0; flash = 0;
+  stopRunLayer();
+  stack.push({ x: W / 2, w: baseW() });
   spawnMoving(baseW());
   curSky = skyAt(0);
   $("score").textContent = "0";
+  updateCombo();
 }
 function spawnMoving(w) {
   const level = stack.length;
   const fromLeft = level % 2 === 0;
   moving = { w, x: fromLeft ? marginX() + w / 2 : W - marginX() - w / 2, dir: fromLeft ? 1 : -1 };
+}
+function updateCombo() {
+  if (combo >= 2) {
+    comboChip.textContent = `🔥 PERFECT ×${combo}`;
+    comboChip.classList.add("on");
+    comboChip.classList.toggle("run", perfectRun);
+  } else {
+    comboChip.classList.remove("on", "run");
+  }
 }
 
 function place() {
@@ -286,91 +335,140 @@ function place() {
   const level = stack.length;
   const sb = screenBottom(level * LOG_H);
 
-  if (overlap <= 0) {                            // Miss → 게임 오버
-    falling.push(makeFall(nx, w, sb, moving.dir, true));
+  if (overlap <= 0) {                            // Miss → 게임 오버 + 타워 붕괴
+    falling.push(makeFall(nx, w, sb, moving.dir, false));
     sOver();
     gameOver();
     return;
   }
-  const offset = nx - px;
-  if (Math.abs(offset) <= PERFECT) {             // Perfect
-    const deficit = baseW() - pw;
-    const newW = Math.min(baseW(), pw + deficit * RECOVER);
-    stack.push({ x: px, w: newW });
+
+  if (Math.abs(nx - px) <= PERFECT) {            // ── PERFECT ──
     combo++;
-    zoom = 0.06; hitStop = 0.045; shake = Math.min(shake + 2, 4);
-    spawnDust(px, sb, newW);
+    bestCombo = Math.max(bestCombo, combo);
+    let newW = pw;
+    if (combo % 5 === 0) {                        // Perfect x5 → 폭 10% 회복
+      const deficit = baseW() - pw;
+      if (deficit > 0.5) newW = Math.min(baseW(), pw + deficit * 0.10);
+    }
+    stack.push({ x: px, w: newW });
+
+    const x10 = combo % 10 === 0, x5 = combo % 5 === 0;
+    zoom = x10 ? 0.05 : x5 ? 0.035 : 0.022;       // Camera Punch(≈2%)
+    hitStop = x10 ? 0.09 : 0.045;                 // Hit Stop 40~90ms
+    flash = x10 ? 0.8 : x5 ? 0.45 : 0.3;          // Bright Flash
+    flashColor = combo >= 10 ? "255,214,110" : combo >= 3 ? "255,236,180" : "255,255,255";
+    shake = Math.min(shake + 1.5, 3.5);
+
+    if (combo === 10 && !perfectRun) {            // Perfect Run 진입
+      perfectRun = true; startRunLayer();
+      showJudge("🔥 PERFECT RUN!", true);
+    } else {
+      showJudge(combo > 1 ? `PERFECT ×${combo}` : "PERFECT!", combo >= 10);
+    }
+    spawnDust(px, sb, newW, combo >= 3);          // 콤보 3+부터 금빛 톱밥
+    if (combo >= 3) spawnSpark(px, sb, newW, combo >= 10);
     sPerfect(combo);
-    vibrate(combo > 3 ? [8, 20, 8] : 14);
-    showCombo(combo);
+    vibrate(x10 ? [10, 25, 10, 25, 15] : x5 ? [8, 18, 8] : 14);
     sTap();
-  } else {                                       // Good → 절단
+  } else {                                        // ── GOOD(절단) ──
+    if (perfectRun) { perfectRun = false; stopRunLayer(); }
     combo = 0;
     const newC = (left + right) / 2, newW = overlap;
     stack.push({ x: newC, w: newW });
-    // 삐져나온 조각 낙하
     if (nx > px) falling.push(makeFall((right + nx + w / 2) / 2, nx + w / 2 - right, sb, 1, false));
     else falling.push(makeFall((nx - w / 2 + left) / 2, left - (nx - w / 2), sb, -1, false));
-    shake = Math.min(shake + 1.5, 3);
-    sCut();
-    vibrate(9);
-    sTap();
+    spawnDust(newC + (nx > px ? newW / 2 : -newW / 2), sb, LOG_H, false);
+    shake = Math.min(shake + 1.4, 3);
+    sCut(); vibrate(9); sTap();
   }
+
   score++;
   $("score").textContent = score;
+  updateCombo();
   camTarget = stack.length * LOG_H;
-  spawnMoving(stack[stack.length - 1].w);
 }
 
-function makeFall(cx, w, sb, dir, full) {
+function makeFall(cx, w, sb, dir, collapse) {
   return {
-    x: cx, y: sb - LOG_H / 2, w, h: LOG_H,
-    vx: dir * (60 + Math.random() * 60), vy: -60 - Math.random() * 40,
-    rot: 0, vr: dir * (2.5 + Math.random() * 3), a: 1, full,
+    x: cx, y: sb - LOG_H / 2, w, h: LOG_H, level: stack.length,
+    vx: dir * (collapse ? 40 + Math.random() * 180 : 60 + Math.random() * 70),
+    vy: collapse ? -220 - Math.random() * 220 : -70 - Math.random() * 50,
+    rot: 0, vr: dir * (2 + Math.random() * 3.5) * (collapse ? 1.4 : 1),
+    a: 1, bounces: 0,
   };
 }
-function spawnDust(cx, sb, w) {
-  for (let i = 0; i < 16; i++) {
+function spawnDust(cx, sb, w, gold) {
+  const col = gold ? "255,216,115" : "232,199,154";
+  for (let i = 0; i < (gold ? 20 : 15); i++) {
     const ang = -Math.PI / 2 + (Math.random() - 0.5) * 2.2;
-    const sp = 60 + Math.random() * 160;
+    const sp = 60 + Math.random() * 170;
     dust.push({
       x: cx + (Math.random() - 0.5) * w, y: sb - LOG_H,
       vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp,
-      r: 1 + Math.random() * 2.5, a: 1, life: 0.5 + Math.random() * 0.4,
+      r: 1 + Math.random() * 2.6, a: 1, life: 0.5 + Math.random() * 0.45,
+      col, spark: false, g: 380,
     });
   }
 }
-function showCombo(c) {
-  comboEl.textContent = c > 1 ? `Perfect ×${c}` : "Perfect!";
-  comboEl.classList.remove("show"); void comboEl.offsetWidth; comboEl.classList.add("show");
+function spawnSpark(cx, sb, w, big) {
+  for (let i = 0; i < (big ? 18 : 9); i++) {
+    const ang = Math.random() * 6.28, sp = 120 + Math.random() * (big ? 320 : 180);
+    dust.push({
+      x: cx + (Math.random() - 0.5) * w * 0.6, y: sb - LOG_H / 2,
+      vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 40,
+      r: 1 + Math.random() * 2, a: 1, life: 0.4 + Math.random() * 0.4,
+      col: big ? "255,235,150" : "255,224,138", spark: true, g: 120,
+    });
+  }
+}
+function showJudge(text, gold) {
+  judgeEl.textContent = text;
+  judgeEl.style.color = gold ? "#ffcf5e" : "#ffe08a";
+  judgeEl.classList.remove("show"); void judgeEl.offsetWidth; judgeEl.classList.add("show");
 }
 function vibrate(p) { try { navigator.vibrate?.(p); } catch {} }
 
 function gameOver() {
   state = "over";
-  shake = 6;
+  shake = 7;
   vibrate([20, 40, 60]);
+  if (perfectRun) { perfectRun = false; stopRunLayer(); }
+  // 타워 붕괴 — 위쪽 통나무들이 파편으로 튄다
+  const collapseN = Math.min(stack.length - 1, 11);
+  for (let k = 0; k < collapseN; k++) {
+    const idx = stack.length - 1 - k;
+    const s = stack[idx];
+    const sb = screenBottom(idx * LOG_H);
+    falling.push(makeFall(s.x, s.w, sb, Math.random() < 0.5 ? -1 : 1, true));
+  }
+  stack.splice(Math.max(1, stack.length - collapseN));
   moving = null;
+  combo = 0; updateCombo();
   if (score > hi) { hi = score; try { localStorage.setItem("woodstack-hi", String(hi)); } catch {} }
   $("hi").textContent = hi;
-  window.blWeeklyReport?.(score);       // 주간 신기록 보드
+  window.blWeeklyReport?.(score);
   setTimeout(() => {
     overlay.querySelector(".big").textContent = "🪵";
     overlay.querySelector("h1").textContent = "무너졌어요!";
     overlay.querySelector("p").innerHTML =
       `<div id="scores"><div><b>${score}</b><span>SCORE</span></div>` +
+      `<div><b>${bestCombo}</b><span>BEST COMBO</span></div>` +
       `<div><b>${hi}</b><span>BEST</span></div></div>` +
       (score >= hi && score > 0 ? "🎉 최고 기록 경신!" : "한 판만 더 쌓아볼까요?");
     btn.textContent = "다시";
     overlay.classList.remove("hidden");
     hint.classList.add("hidden");
-  }, 650);
+  }, 750);
 }
 
 // ── 렌더링 ─────────────────────────────────────────────
 function woodColor(level) {
-  const h = 32 + (level % 5) * 4;               // 통나무마다 살짝 다른 색조
-  return { fill: `hsl(${h} 46% 58%)`, dark: `hsl(${h} 44% 44%)`, cut: `hsl(${h} 55% 78%)` };
+  const h = 30 + (level % 6) * 3;
+  return {
+    hi: `hsl(${h} 54% 71%)`, mid: `hsl(${h} 49% 58%)`, lo: `hsl(${h} 46% 42%)`,
+    dark: `hsl(${h} 44% 33%)`, cut: `hsl(${h} 60% 82%)`, cutMid: `hsl(${h} 50% 64%)`,
+    top: `hsl(${h} 56% 76%)`,
+  };
 }
 function roundRectPath(x, y, w, h, r) {
   r = Math.min(r, w / 2, h / 2);
@@ -382,70 +480,77 @@ function roundRectPath(x, y, w, h, r) {
   ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
 }
-function drawLog(cx, bottomY, w, level, cutSide) {
-  const x = cx - w / 2, y = bottomY - LOG_H, r = LOG_H / 2;
+function drawLog(cx, by, w, level, gold) {
+  const r = LOG_H / 2, x = cx - w / 2, y = by - LOG_H;
   const c = woodColor(level);
+  // 약한 iso 윗면(가독성 위해 아주 얕게) — 통나무 위를 살짝 내려다본 느낌
+  if (w > LOG_H) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y);
+    ctx.lineTo(x + w - r + ISO_X, y - ISO_Y); ctx.lineTo(x + r + ISO_X, y - ISO_Y);
+    ctx.closePath(); ctx.fillStyle = c.top; ctx.fill();
+  }
+  // 원통 몸통(세로 그라데이션 = 둥근 느낌)
   ctx.save();
   ctx.shadowColor = "rgba(0,0,0,.22)"; ctx.shadowBlur = 8; ctx.shadowOffsetY = 4;
-  roundRectPath(x, y, w, LOG_H, r); ctx.fillStyle = c.fill; ctx.fill();
+  const grad = ctx.createLinearGradient(0, y, 0, y + LOG_H);
+  grad.addColorStop(0, c.hi); grad.addColorStop(0.45, c.mid); grad.addColorStop(1, c.lo);
+  roundRectPath(x, y, w, LOG_H, r); ctx.fillStyle = grad; ctx.fill();
   ctx.restore();
+  // 나무결
   ctx.save();
   roundRectPath(x, y, w, LOG_H, r); ctx.clip();
-  // 나뭇결
-  ctx.strokeStyle = c.dark; ctx.globalAlpha = 0.5; ctx.lineWidth = 1.4;
+  ctx.strokeStyle = c.dark; ctx.globalAlpha = 0.4; ctx.lineWidth = 1.3;
   for (let i = 1; i <= 3; i++) {
     const gy = y + (LOG_H * i) / 4;
     ctx.beginPath();
     ctx.moveTo(x + 3, gy);
-    ctx.bezierCurveTo(x + w * 0.33, gy - 1.5, x + w * 0.66, gy + 1.5, x + w - 3, gy);
+    ctx.bezierCurveTo(x + w * 0.33, gy - 1.6, x + w * 0.66, gy + 1.6, x + w - 3, gy);
     ctx.stroke();
   }
-  ctx.globalAlpha = 1;
-  // 절단면(밝은 색) — 양 끝 나이테
-  const drawEnd = (ex, side) => {
-    ctx.save();
-    ctx.translate(ex, y + LOG_H / 2);
-    ctx.scale(0.42, 1);
+  ctx.restore();
+  // 절단면(밝은 나이테) — 양 끝
+  const drawEnd = (ex) => {
+    ctx.save(); ctx.translate(ex, y + LOG_H / 2); ctx.scale(0.5, 1);
     for (let k = 0; k < 3; k++) {
-      ctx.beginPath();
-      ctx.arc(0, 0, r * (0.85 - k * 0.26), 0, Math.PI * 2);
-      ctx.fillStyle = k % 2 ? c.cut : c.fill;
-      ctx.globalAlpha = side ? 1 : 0.9;
-      ctx.fill();
+      ctx.beginPath(); ctx.arc(0, 0, r * (0.92 - k * 0.28), 0, 6.28);
+      ctx.fillStyle = k % 2 ? c.cut : c.cutMid; ctx.fill();
     }
     ctx.restore();
   };
-  drawEnd(x + r * 0.55, cutSide === -1);
-  drawEnd(x + w - r * 0.55, cutSide === 1);
-  ctx.restore();
+  drawEnd(x + r * 0.5); drawEnd(x + w - r * 0.5);
+  // 콤보 금빛 테두리
+  if (gold) {
+    ctx.save();
+    roundRectPath(x + 1, y + 1, w - 2, LOG_H - 2, r);
+    ctx.strokeStyle = "rgba(255,214,90,.95)"; ctx.lineWidth = 2.4;
+    ctx.shadowColor = "rgba(255,190,60,.9)"; ctx.shadowBlur = 10; ctx.stroke();
+    ctx.restore();
+  }
 }
 
 function drawBackground(sky) {
   const g = ctx.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, rgb(sky.top)); g.addColorStop(1, rgb(sky.bot));
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-  // 별(밤에만)
   if (sky.night) {
     const tSec = lastT / 1000;
     for (const s of stars) {
-      ctx.globalAlpha = 0.5 + 0.5 * Math.sin(tSec * 2 + s.tw);
+      ctx.globalAlpha = 0.45 + 0.5 * Math.sin(tSec * 2 + s.tw);
       ctx.fillStyle = "#fff";
       ctx.beginPath(); ctx.arc(s.x * W, s.y * H, s.r, 0, 6.28); ctx.fill();
     }
     ctx.globalAlpha = 1;
   }
-  // 해/달
   const sunX = W * 0.5, sunY = H * sky.sunY, sr = Math.min(W, H) * 0.09;
   ctx.save();
-  ctx.shadowColor = rgb(sky.sun); ctx.shadowBlur = 40;
-  ctx.fillStyle = rgb(sky.sun);
+  ctx.shadowColor = rgb(sky.sun); ctx.shadowBlur = 40; ctx.fillStyle = rgb(sky.sun);
   ctx.beginPath(); ctx.arc(sunX, sunY, sr, 0, 6.28); ctx.fill();
   ctx.restore();
-  // 땅
   const groundY = H - H * GROUND;
   const gg = ctx.createLinearGradient(0, groundY, 0, H);
-  const gc = sky.night ? "#1c2a1c" : "#4f7a3a";
-  gg.addColorStop(0, gc); gg.addColorStop(1, sky.night ? "#0f1a10" : "#3a5c2b");
+  gg.addColorStop(0, sky.night ? "#1c2a1c" : "#4f7a3a");
+  gg.addColorStop(1, sky.night ? "#0f1a10" : "#3a5c2b");
   ctx.fillStyle = gg; ctx.fillRect(0, groundY, W, H * GROUND);
 }
 
@@ -453,16 +558,16 @@ function frame(ts) {
   const dt = Math.min(0.05, (ts - lastT) / 1000 || 0);
   lastT = ts;
 
-  // 배경 색 보간
-  curSky = skyAt(state === "play" ? score : (state === "over" ? score : 0));
+  curSky = skyAt(state === "idle" ? 0 : score);
 
-  // 카메라 부드럽게 따라가기
   camY += (camTarget - camY) * Math.min(1, dt * 6);
-  if (zoom > 0) zoom = Math.max(0, zoom - dt * 0.6);
+  const liftTarget = perfectRun ? 8 : 0;
+  camLift += (liftTarget - camLift) * Math.min(1, dt * 4);
+  if (zoom > 0) zoom = Math.max(0, zoom - dt * 0.5);
   if (shake > 0) shake = Math.max(0, shake - dt * 12);
+  if (flash > 0) flash = Math.max(0, flash - dt * 6);
   if (hitStop > 0) hitStop -= dt;
 
-  // 통나무 이동
   if (state === "play" && moving && hitStop <= 0) {
     const v = logSpeed(score) * dt;
     moving.x += v * moving.dir;
@@ -471,15 +576,20 @@ function frame(ts) {
     if (moving.x >= hiB) { moving.x = hiB; moving.dir = -1; }
   }
 
-  // 낙하 조각
+  const groundY = H - H * GROUND;
   for (const f of falling) {
-    f.vy += GRAV * dt; f.x += f.vx * dt; f.y += f.vy * dt;
-    f.rot += f.vr * dt; if (f.y > H + 120) f.a = 0;
+    f.vy += GRAV * dt; f.x += f.vx * dt; f.y += f.vy * dt; f.rot += f.vr * dt;
+    // 바닥 충돌 → Bounce
+    if (f.y + f.h / 2 >= groundY && f.vy > 0) {
+      if (f.bounces < 2) {
+        f.y = groundY - f.h / 2; f.vy = -f.vy * 0.42; f.vx *= 0.6; f.vr *= 0.5; f.bounces++;
+      } else { f.a -= dt * 2.2; f.vx *= 0.9; }  // 잦아들며 사라짐
+    }
+    if (f.y > H + 160) f.a = 0;
   }
   falling = falling.filter((f) => f.a > 0);
-  // 톱밥
   for (const p of dust) {
-    p.vy += 380 * dt; p.x += p.vx * dt; p.y += p.vy * dt;
+    p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt;
     p.life -= dt; p.a = Math.max(0, p.life * 2);
   }
   dust = dust.filter((p) => p.life > 0);
@@ -491,42 +601,49 @@ function frame(ts) {
   ctx.save();
   const sx = shake ? (Math.random() - 0.5) * shake * 2 : 0;
   const sy = shake ? (Math.random() - 0.5) * shake * 2 : 0;
-  if (zoom > 0 || sx || sy) {
-    ctx.translate(W / 2, H / 2); ctx.scale(1 + zoom, 1 + zoom); ctx.translate(-W / 2, -H / 2);
-  }
+  if (zoom > 0) { ctx.translate(W / 2, H / 2); ctx.scale(1 + zoom, 1 + zoom); ctx.translate(-W / 2, -H / 2); }
   ctx.translate(sx, sy);
 
-  // 쌓인 통나무
+  const goldFrom = perfectRun ? 0 : combo >= 3 ? stack.length - Math.min(stack.length, combo) : stack.length;
   for (let i = 0; i < stack.length; i++) {
     const s = stack[i], b = screenBottom(i * LOG_H);
-    if (b < -LOG_H || b - LOG_H > H) continue;
-    drawLog(s.x, b, s.w, i, 0);
+    if (b < -LOG_H - ISO_Y || b - LOG_H > H) continue;
+    drawLog(s.x, b, s.w, i, combo >= 3 && i >= goldFrom);
   }
-  // 움직이는 통나무
   if (state === "play" && moving) {
-    drawLog(moving.x, screenBottom(stack.length * LOG_H), moving.w, stack.length, 0);
-    // 조준 가이드(맨 위 통나무 중심선)
+    drawLog(moving.x, screenBottom(stack.length * LOG_H), moving.w, stack.length, combo >= 3);
     const top = stack[stack.length - 1];
     const gy = screenBottom(stack.length * LOG_H);
     ctx.strokeStyle = "rgba(255,255,255,.28)"; ctx.setLineDash([4, 6]); ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(top.x, gy); ctx.lineTo(top.x, gy - LOG_H * 2.4); ctx.stroke();
     ctx.setLineDash([]);
   }
-  // 낙하 조각
   for (const f of falling) {
-    ctx.save();
-    ctx.globalAlpha = f.a;
+    ctx.save(); ctx.globalAlpha = f.a;
     ctx.translate(f.x, f.y); ctx.rotate(f.rot);
-    drawLog(0, f.h / 2, f.w, stack.length, 0);
+    drawLog(0, f.h / 2, f.w, f.level, false);
     ctx.restore();
   }
-  // 톱밥
   for (const p of dust) {
-    ctx.globalAlpha = p.a; ctx.fillStyle = "#e8c79a";
+    ctx.globalAlpha = p.a; ctx.fillStyle = `rgb(${p.col})`;
+    if (p.spark) { ctx.shadowColor = `rgb(${p.col})`; ctx.shadowBlur = 6; }
     ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 6.28); ctx.fill();
+    ctx.shadowBlur = 0;
   }
   ctx.globalAlpha = 1;
   ctx.restore();
+
+  // Bright Flash (화면 전체, 줌 밖)
+  if (flash > 0) {
+    ctx.fillStyle = `rgba(${flashColor},${(flash * 0.55).toFixed(3)})`;
+    ctx.fillRect(0, 0, W, H);
+  }
+  // Perfect Run 금빛 비네트
+  if (perfectRun) {
+    const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.72);
+    vg.addColorStop(0, "rgba(255,200,80,0)"); vg.addColorStop(1, "rgba(255,180,40,.26)");
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+  }
 
   requestAnimationFrame(frame);
 }
@@ -558,7 +675,8 @@ $("mute").addEventListener("pointerdown", (e) => {
   e.stopPropagation();
   muted = !muted;
   $("mute").textContent = muted ? "🔇" : "🔊";
-  if (muted) stopAmbient(); else { initAudio(); startAmbient(); }
+  if (muted) { stopAmbient(); stopRunLayer(); }
+  else { initAudio(); startAmbient(); if (perfectRun) startRunLayer(); }
 });
 
 // ── Bubblelab 연동 ─────────────────────────────────────
