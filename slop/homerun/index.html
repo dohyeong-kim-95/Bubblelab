@@ -212,7 +212,7 @@
     <div class="big">⚾</div>
     <h1>야구 리듬 — 홈런 타이밍</h1>
     <p>
-      사이드암 투수의 공이 <b>뱀처럼 휘며 커져서</b> 날아와요.<br>
+      사이드암 투수의 <b>투심</b>이 옆으로 <b>크게 휘며(런)</b> 커져서 날아와요.<br>
       레벨1 <b>3구</b> → 레벨2 <b>6구</b> → 레벨3 <b>10구</b>.<br>
       공이 <b>스트라이크 존</b>에 들어오는 순간 <span class="key">스페이스</span> / 화면 탭!<br>
       투수가 <b>한 마디</b>를 던지면(콜), 다음 <b>한 마디</b>에 같은 리듬으로 <b>받아쳐요</b>(리스폰스).<br>
@@ -233,7 +233,9 @@ let TRAVEL = 2.4;            // 공 비행 시간(초) = 한 마디 (투수 콜 
 const COUNTIN = MEASURE;      // 카운트인 = 한 마디
 // 등뒤 뷰 좌표(%): 투수(먼 곳, 위)·스트라이크 존(앞, 아래). 세로 구간 길게.
 const PITCH = { x: 44, y: 30 }, ZONE = { x: 46, y: 60 };
-const SNAKE = 3;   // 좌우 웨이브 반주기 수 — 공이 뱀처럼 휨
+// 사이드암 투심: 한 방향으로 크게 쓸리는 암사이드 런(수평 지배) + 약한 싱크(수직)
+const RUN = 12;    // 암사이드 런 폭(%) — 사이드암이라 크게
+const SINK = 1.8;  // 싱크(%) — 사이드암 투심은 수직 변화 작음
 
 // 한 마디(4박) 안 공의 박 위치 — 못박기식: 꾸준한 연타 → 마지막에 촘촘한 액센트
 // 음이름 → 주파수 (C장조 펜타토닉: 도레미솔라)
@@ -522,9 +524,10 @@ function loop() {
         const pc = Math.min(p, 1.15);
         const e = Math.pow(pc, 1.3);                          // 위치 이징(원근 — 멀 땐 천천히)
         const sc = 0.14 + Math.pow(pc, 2.2) * 1.2;            // 도착할수록 급팽창 = 화면 쪽으로 다가옴
-        const y = PITCH.y + (ZONE.y - PITCH.y) * e;           // 수직 하강
-        const amp = 3 + e * 12;                               // 가까울수록 웨이브 진폭 ↑
-        const x = ZONE.x + (PITCH.x - ZONE.x) * (1 - e) + amp * Math.sin(SNAKE * Math.PI * e); // 릴리스→존 + 뱀
+        const y = PITCH.y + (ZONE.y - PITCH.y) * e + SINK * Math.pow(pc, 2.3);  // 수직 하강 + 약한 late 싱크
+        // 수평: 릴리스→존 + 암사이드 런(단일 방향, 후반 가속=late run, 존으로 타일)
+        const run = RUN * Math.sin(Math.PI * Math.pow(pc, 1.4));
+        const x = ZONE.x + (PITCH.x - ZONE.x) * (1 - e) + run;
         b.node.style.left = x.toFixed(2) + "%";
         b.node.style.top = y.toFixed(2) + "%";
         b.node.style.transform = `translate(-50%,-50%) scale(${sc.toFixed(3)})`;
