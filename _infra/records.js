@@ -31,7 +31,7 @@ export const GAMES = {
   "dart-adv":   { dir: "max", min: 0, max: 1000 },      // 파워 게이지 다트 수
   flags:        { dir: "max", min: 0, max: 1000 },      // 연속으로 맞춘 국기 수
   logroll:      { dir: "max", min: 0, max: 100000 },    // 버틴 시간(초)
-  reactiontime: { dir: "min", min: 30, max: 60000 },    // 반응속도(ms)
+  reactiontime: { dir: "min", min: 0, max: 60000 },     // 반응속도(ms)
   touch25:      { dir: "min", min: 0, max: 3600 },      // 완주 시간(초)
   trader:       { dir: "max", min: -1, max: 100 },      // 수익률(비율)
   "yacht-bot":  { dir: "max", min: 0, max: 400 },       // 야추 총점

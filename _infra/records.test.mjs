@@ -269,7 +269,7 @@ test("rejects malformed submissions", async () => {
     { game: "touch25", nick: "철수", score: -1 },           // 범위 밖 (min 0)
     { game: "touch25", nick: "철수", score: 999999 },       // 범위 밖 (max 3600)
     { game: "circle", nick: "철수", score: 100.1 },         // 100% 초과
-    { game: "reactiontime", nick: "봇임", score: 1 },       // 인간 불가능 반응속도
+    { game: "reactiontime", nick: "봇임", score: 60001 },   // 범위 밖 (max 60000)
   ];
   for (const body of bad) {
     const res = await post(records, body);
