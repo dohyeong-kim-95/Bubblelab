@@ -79,6 +79,7 @@ window.blShareText = () => `통나무 위에서 ${(best ?? survived).toFixed(1)}
 let logAngle = 0, logVel = 0;
 let manAngle = 0, manVel = 0;
 let wind = 0, nextWind = 0, windTimer = 0; // 3초마다 바뀌는 바람 + 다음 예고
+let windScroll = 0;                        // 배경 하이라이트 누적 위치
 
 // 튜닝 상수 (난이도: 적당히 — 초반 여유, 시간 갈수록 예민)
 const FALL      = 0.82;      // 낙하 임계 각(rad) ≈ 47°
@@ -246,6 +247,9 @@ function draw(t) {
     ctx.stroke();
   }
 
+  // ── 바람: 배경 물결 + 흐르는 하이라이트(속도=세기, 방향=바람방향) ──
+  drawWindField(t);
+
   // ── 통나무(단면) ──
   ctx.save();
   ctx.beginPath();
@@ -349,22 +353,54 @@ function draw(t) {
     ctx.restore();
   }
 
-  drawWind(t);
+  drawNextWind();
 }
 
-// 왼쪽 위 실시간 바람 표시 — 방향·세기를 기호로 (<< / < / – / > / >>)
-const WIND_REF = 0.055;                   // 이 세기에서 최대(>>>) 단계
-// 세기를 기호로: 잔잔=–, 약=< , 보통=<< , 강=<<< (방향은 좌/우)
+// 바람 세기를 기호로 (<< / < / – / > / >>), 방향은 좌/우 — 다음 바람 예고용
+const WIND_REF = 0.055;                    // 이 세기에서 최대(>>>) 단계
 function windSymbol(w) {
   const mag = Math.abs(w) / WIND_REF;
   if (mag < 0.12) return "–";
   const n = mag < 0.4 ? 1 : mag < 0.75 ? 2 : 3;
   return (w < 0 ? "<" : ">").repeat(n);
 }
-function drawWind() {
-  const px = 14, py = 14, pw = 176, ph = 92, rad = 14;
+
+// 배경: 반투명 물결 + 바람 따라 흐르는 하이라이트 줄무늬
+// 줄무늬가 흐르는 속도 = 바람 세기, 흐르는 방향 = 바람 방향
+function drawWindField(t) {
+  const intensity = Math.min(1, Math.abs(wind) / WIND_REF);
   ctx.save();
-  // 패널
+  // 반투명 물결 (전체 배경에 옅게)
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = "rgba(255,255,255,.05)";
+  const rows = 8;
+  for (let i = 0; i < rows; i++) {
+    const y = (i + 0.5) / rows * H;
+    ctx.beginPath();
+    for (let x = 0; x <= W; x += 16)
+      ctx.lineTo(x, y + Math.sin(x / 85 + t / 1500 + i * 1.7) * 9);
+    ctx.stroke();
+  }
+  // 흐르는 하이라이트 줄무늬 (바람 방향으로 windScroll 만큼 이동)
+  if (intensity > 0.02) {
+    const gap = 240, bw = 95;
+    const off = ((windScroll % gap) + gap) % gap;
+    for (let hx = off - gap; hx < W + gap; hx += gap) {
+      const g = ctx.createLinearGradient(hx - bw, 0, hx + bw, 0);
+      g.addColorStop(0, "rgba(200,232,255,0)");
+      g.addColorStop(0.5, `rgba(205,235,255,${0.16 * intensity})`);
+      g.addColorStop(1, "rgba(200,232,255,0)");
+      ctx.fillStyle = g;
+      ctx.fillRect(hx - bw, 0, bw * 2, H);
+    }
+  }
+  ctx.restore();
+}
+
+// 중앙 상단: 다음 바람 예고(크게) + 바뀜 카운트다운
+function drawNextWind() {
+  const pw = 172, ph = 66, px = W / 2 - pw / 2, py = 12, rad = 14, cx0 = W / 2;
+  ctx.save();
   ctx.beginPath();
   roundRect(px, py, pw, ph, rad);
   ctx.fillStyle = "rgba(18,24,34,.5)";
@@ -373,40 +409,17 @@ function drawWind() {
   ctx.lineWidth = 1;
   ctx.stroke();
 
+  ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  // 제목
-  ctx.fillStyle = "rgba(240,248,255,.92)";
+  // 라벨 + 카운트다운
+  ctx.fillStyle = "rgba(240,248,255,.8)";
   ctx.font = "600 12px ui-monospace, monospace";
-  ctx.textAlign = "left";
-  ctx.fillText("💨 바람", px + 12, py + 16);
-  // 바뀜 카운트다운 — 패널 안 오른쪽 위
-  if (phase === "running") {
-    ctx.fillStyle = "rgba(240,248,255,.65)";
-    ctx.font = "11px ui-monospace, monospace";
-    ctx.textAlign = "right";
-    ctx.fillText(`⟳ ${windTimer.toFixed(1)}s`, px + pw - 12, py + 16);
-  }
-
-  const sx = px + 62;   // 기호 시작 x (라벨 오른쪽, 중앙 정렬)
-  // 지금
-  ctx.textAlign = "left";
-  ctx.font = "11px ui-monospace, monospace";
-  ctx.fillStyle = "rgba(240,248,255,.85)";
-  ctx.fillText("지금", px + 12, py + 46);
-  ctx.textAlign = "center";
-  ctx.font = "bold 24px ui-monospace, monospace";
+  const cd = phase === "running" ? `   ⟳ ${windTimer.toFixed(1)}s` : "";
+  ctx.fillText("다음 바람" + cd, cx0, py + 18);
+  // 큰 기호
   ctx.fillStyle = "rgba(240,248,255,.95)";
-  ctx.fillText(windSymbol(wind), sx + 44, py + 46);
-  // 다음 (예고 — 흐리게)
-  ctx.textAlign = "left";
-  ctx.font = "11px ui-monospace, monospace";
-  ctx.fillStyle = "rgba(240,248,255,.5)";
-  ctx.fillText("다음", px + 12, py + 73);
-  ctx.textAlign = "center";
-  ctx.font = "bold 22px ui-monospace, monospace";
-  ctx.fillStyle = "rgba(240,248,255,.5)";
-  ctx.fillText(windSymbol(nextWind), sx + 44, py + 73);
-
+  ctx.font = "bold 34px ui-monospace, monospace";
+  ctx.fillText(windSymbol(nextWind), cx0, py + 45);
   ctx.restore();
 }
 
@@ -432,6 +445,7 @@ function loop(t) {
   } else {
     acc = 0;
   }
+  windScroll += wind * 4500 * dt;           // 배경 하이라이트 흐름(속도=바람)
   draw(t);
   requestAnimationFrame(loop);
 }
