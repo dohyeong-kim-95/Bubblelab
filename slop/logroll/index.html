@@ -11,9 +11,6 @@
          background: light-dark(#dfeef7, #0b1420); user-select: none;
          -webkit-user-select: none; touch-action: none; }
   canvas { display: block; }
-  #time { position: fixed; top: 1rem; left: 50%; transform: translateX(-50%);
-          font-size: 1.6rem; font-weight: bold; font-variant-numeric: tabular-nums;
-          color: light-dark(#123, #cde); text-shadow: 0 1px 2px light-dark(rgba(255,255,255,.5), rgba(0,0,0,.4)); }
   /* 좌우 조작 힌트 */
   .hint { position: fixed; top: 0; bottom: 0; width: 50%; display: flex;
           align-items: center; justify-content: center; font-size: 3rem;
@@ -41,7 +38,6 @@
 </style>
 </head>
 <body>
-<div id="time">0.0초</div>
 <div class="hint l" id="hintL">◀</div>
 <div class="hint r" id="hintR">▶</div>
 <div id="overlay">
@@ -60,7 +56,6 @@
 <script>
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
-const timeEl = document.getElementById("time");
 const overlay = document.getElementById("overlay");
 const msg = document.getElementById("msg");
 const result = document.getElementById("result");
@@ -341,11 +336,17 @@ function draw(t) {
   ctx.fillText(face, 0, head);
   ctx.restore();
 
-  // 물보라(거의 떨어질 때)
-  if (near) {
-    timeEl.style.color = "#e05a4a";
-  } else {
-    timeEl.style.color = "";
+  // 버틴 시간 — 통나무 중앙에 (거의 떨어질 땐 빨강)
+  if (phase === "running") {
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = `bold ${Math.round(R * 0.5)}px ui-monospace, monospace`;
+    ctx.fillStyle = near ? "#ff3b30" : "rgba(255,255,255,.96)";
+    ctx.shadowColor = "rgba(0,0,0,.6)";
+    ctx.shadowBlur = 6;
+    ctx.fillText(survived.toFixed(1), cx, cy);
+    ctx.restore();
   }
 
   drawWind(t);
@@ -362,7 +363,6 @@ function windSymbol(w) {
 }
 function drawWind() {
   const px = 14, py = 14, pw = 176, ph = 92, rad = 14;
-  const running = phase === "running";
   ctx.save();
   // 패널
   ctx.beginPath();
@@ -379,8 +379,8 @@ function drawWind() {
   ctx.font = "600 12px ui-monospace, monospace";
   ctx.textAlign = "left";
   ctx.fillText("💨 바람", px + 12, py + 16);
-  // 바뀜 카운트다운
-  if (running) {
+  // 바뀜 카운트다운 — 패널 안 오른쪽 위
+  if (phase === "running") {
     ctx.fillStyle = "rgba(240,248,255,.65)";
     ctx.font = "11px ui-monospace, monospace";
     ctx.textAlign = "right";
@@ -429,7 +429,6 @@ function loop(t) {
   if (phase === "running") {
     acc += dt;
     while (acc >= STEP) { acc -= STEP; if (phase === "running") step(); }
-    timeEl.textContent = survived.toFixed(1) + "초";
   } else {
     acc = 0;
   }
