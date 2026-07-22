@@ -83,7 +83,7 @@ window.blShareText = () => `통나무 위에서 ${(best ?? survived).toFixed(1)}
          오른쪽으로 밀려 사람은 왼쪽으로 넘어간다 → 반대로 굴려 되돌린다. */
 let logAngle = 0, logVel = 0;
 let manAngle = 0, manVel = 0;
-let wind = 0;                // 잔잔한 교란(랜덤워크) — 가만히 있으면 쓰러지게
+let wind = 0, nextWind = 0, windTimer = 0; // 3초마다 바뀌는 바람 + 다음 예고
 
 // 튜닝 상수 (난이도: 적당히 — 초반 여유, 시간 갈수록 예민)
 const FALL      = 0.82;      // 낙하 임계 각(rad) ≈ 47°
@@ -95,6 +95,13 @@ const LOG_ACCEL = 9;         // 누르는 동안 통나무 각가속도
 const LOG_MAXV  = 5;         // 통나무 최대 각속도
 const LOG_DAMP  = 1.4;       // 통나무 회전 감쇠(손 떼면 서서히 멈춤)
 const MAN_DAMP  = 0.6;       // 사람 미세 감쇠
+const WIND_INT  = 3;         // 바람이 바뀌는 간격(초)
+
+// 다음 바람 한 방향 뽑기 — 시간 갈수록 세짐
+function pickWind() {
+  const amp = Math.min(0.055, 0.02 + survived * 0.0011);
+  return (Math.random() < 0.5 ? -1 : 1) * amp * (0.55 + Math.random() * 0.45);
+}
 
 // 입력: 여러 손가락 동시 지원 (pointerId → 'l'|'r')
 const pointers = new Map();
@@ -139,7 +146,8 @@ function start() {
   if (phase === "running") return;
   phase = "running";
   survived = 0;
-  logAngle = logVel = manAngle = manVel = wind = 0;
+  logAngle = logVel = manAngle = manVel = 0;
+  wind = pickWind(); nextWind = pickWind(); windTimer = WIND_INT;
   pointers.clear(); keyL = keyR = false; refreshHeld();
   overlay.classList.add("hide");
 }
@@ -179,10 +187,13 @@ function step() {
   if (logVel < -LOG_MAXV) logVel = -LOG_MAXV;
   logAngle += logVel * STEP;
 
-  // 잔잔한 바람(랜덤워크, 평균 회귀) — 난이도 따라 조금씩 세짐
-  const gust = 0.35 + survived * 0.012;
-  wind += (Math.random() - 0.5) * gust * STEP;
-  wind *= Math.exp(-0.9 * STEP);
+  // 3초마다 바람이 새 값으로 바뀐다 (다음 바람은 게이지에 미리 예고됨)
+  windTimer -= STEP;
+  if (windTimer <= 0) {
+    wind = nextWind;
+    nextWind = pickWind();
+    windTimer += WIND_INT;
+  }
 
   // 사람: 역진자 + 통나무 표면 끌림 + 바람
   let acc = G * Math.sin(manAngle);   // 기울수록 더 빨리 넘어감(불안정)
@@ -340,50 +351,26 @@ function draw(t) {
   drawWind(t);
 }
 
-// 왼쪽 위 실시간 바람 게이지 — 방향(◀▶)과 세기를 화살표 길이·색으로 표시
-function drawWind(t) {
-  const px = 14, py = 14, pw = 148, ph = 56, rad = 13;
-  const WIND_REF = 0.06;                 // 이 세기에서 화살표가 가득 참
-  const norm = Math.max(-1, Math.min(1, wind / WIND_REF)); // -1..1
+// 왼쪽 위 실시간 바람 게이지 — 지금/다음 바람 방향·세기 + 바뀜 카운트다운
+const WIND_REF = 0.055;                   // 이 세기에서 화살표가 가득 참
+function windWord(mag) {
+  return mag < 0.15 ? "잔잔" : mag < 0.4 ? "약" : mag < 0.7 ? "보통" : "강";
+}
+function drawGauge(cx, gy, half, w, alpha) {
+  const norm = Math.max(-1, Math.min(1, w / WIND_REF));
   const mag = Math.abs(norm);
-  const hue = 200 - mag * 188;           // 잔잔=파랑 → 강함=빨강
-  const col = `hsl(${hue}, 85%, 62%)`;
-  const dir = wind < -0.002 ? "◀" : wind > 0.002 ? "▶" : "·";
-  const word = mag < 0.15 ? "잔잔" : mag < 0.4 ? "약" : mag < 0.7 ? "보통" : "강";
-
-  ctx.save();
-  // 패널
-  ctx.beginPath();
-  roundRect(px, py, pw, ph, rad);
-  ctx.fillStyle = "rgba(18,24,34,.5)";
-  ctx.fill();
-  ctx.strokeStyle = "rgba(200,215,235,.22)";
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  // 제목
-  ctx.fillStyle = "rgba(240,248,255,.92)";
-  ctx.font = "600 12px ui-monospace, monospace";
-  ctx.textAlign = "left";
-  ctx.textBaseline = "middle";
-  ctx.fillText(`💨 바람 ${dir} ${word}`, px + 12, py + 16);
-
-  // 게이지 트랙
-  const cx = px + pw / 2, gy = py + 38, half = pw / 2 - 16;
-  ctx.strokeStyle = "rgba(255,255,255,.22)";
+  const hue = 200 - mag * 188;            // 잔잔=파랑 → 강함=빨강
+  // 트랙
+  ctx.strokeStyle = `rgba(255,255,255,${0.22 * alpha})`;
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(cx - half, gy); ctx.lineTo(cx + half, gy);
-  ctx.stroke();
-  // 중앙 눈금
-  ctx.beginPath();
   ctx.moveTo(cx, gy - 5); ctx.lineTo(cx, gy + 5);
   ctx.stroke();
-
   // 방향 막대 + 화살촉
   const end = cx + norm * half;
-  ctx.strokeStyle = col;
-  ctx.fillStyle = col;
+  ctx.strokeStyle = `hsla(${hue}, 85%, 62%, ${alpha})`;
+  ctx.fillStyle = `hsla(${hue}, 85%, 62%, ${alpha})`;
   ctx.lineCap = "round";
   ctx.lineWidth = 5;
   ctx.beginPath();
@@ -398,6 +385,46 @@ function drawWind(t) {
     ctx.closePath();
     ctx.fill();
   }
+}
+function drawWind() {
+  const px = 14, py = 14, pw = 182, ph = 94, rad = 14;
+  const running = phase === "running";
+  ctx.save();
+  // 패널
+  ctx.beginPath();
+  roundRect(px, py, pw, ph, rad);
+  ctx.fillStyle = "rgba(18,24,34,.5)";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(200,215,235,.22)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.textBaseline = "middle";
+  // 제목 + 현재 세기
+  ctx.fillStyle = "rgba(240,248,255,.92)";
+  ctx.font = "600 12px ui-monospace, monospace";
+  ctx.textAlign = "left";
+  ctx.fillText(`💨 바람 · ${windWord(Math.abs(wind) / WIND_REF)}`, px + 12, py + 16);
+  // 바뀜 카운트다운
+  if (running) {
+    ctx.fillStyle = "rgba(240,248,255,.65)";
+    ctx.font = "11px ui-monospace, monospace";
+    ctx.textAlign = "right";
+    ctx.fillText(`⟳ ${windTimer.toFixed(1)}s`, px + pw - 12, py + 16);
+  }
+
+  const x1 = px + 42, x2 = px + pw - 16, cx = (x1 + x2) / 2, half = (x2 - x1) / 2;
+  ctx.textAlign = "left";
+  ctx.font = "11px ui-monospace, monospace";
+  // 지금
+  ctx.fillStyle = "rgba(240,248,255,.85)";
+  ctx.fillText("지금", px + 12, py + 46);
+  drawGauge(cx, py + 46, half, wind, 1);
+  // 다음 (예고 — 흐리게)
+  ctx.fillStyle = "rgba(240,248,255,.5)";
+  ctx.fillText("다음", px + 12, py + 74);
+  drawGauge(cx, py + 74, half, nextWind, 0.5);
+
   ctx.restore();
 }
 
