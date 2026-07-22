@@ -238,14 +238,14 @@ const SNAKE = 3;   // 좌우 웨이브 반주기 수 — 공이 뱀처럼 휨
 // 한 마디(4박) 안 공의 박 위치 — 못박기식: 꾸준한 연타 → 마지막에 촘촘한 액센트
 // 음이름 → 주파수 (C장조 펜타토닉: 도레미솔라)
 const N = { C4: 261.63, D4: 293.66, E4: 329.63, G4: 392.00, A4: 440.00, C5: 523.25 };
-// beats: 한 마디(4박) 안 공의 박 위치 · wp/wg: 퍼펙트/안타 판정 창(±초, 레벨 오를수록 좁아짐)
-// mel: 각 공의 음(beats와 같은 길이) — 리듬이 곧 멜로디
+// beats: 한 마디(4박) 안 공의 박 위치(음악 비트에 정렬) · wp/wg: 퍼펙트/안타 판정 창(±초)
+// mel: 각 공의 음(beats와 같은 길이). 난이도 스킴: L1 강박(정박)만 / L2 강박+약박(8분) / L3 자유(싱코페이션·16분)
 const LEVELS = [
-  { name: "레벨 1", beats: [0, 1, 2], wp: 0.090, wg: 0.185,
+  { name: "레벨 1", beats: [0, 1, 2], wp: 0.090, wg: 0.185,                              // 강박(정박)
     mel: [N.C4, N.E4, N.G4] },
-  { name: "레벨 2", beats: [0, 0.5, 1, 1.5, 2, 2.5], wp: 0.070, wg: 0.150,
+  { name: "레벨 2", beats: [0, 0.5, 1, 1.5, 2, 2.5], wp: 0.070, wg: 0.150,               // 강박+약박(8분)
     mel: [N.C4, N.E4, N.G4, N.A4, N.G4, N.E4] },
-  { name: "레벨 3", beats: [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.25, 3.5, 3.75], wp: 0.052, wg: 0.115,
+  { name: "레벨 3", beats: [0, 0.5, 1, 1.75, 2, 2.5, 3, 3.25, 3.5, 3.75], wp: 0.052, wg: 0.115,  // 자유(싱코페이션+16분)
     mel: [N.C4, N.D4, N.E4, N.G4, N.A4, N.C5, N.A4, N.G4, N.E4, N.C4] },
 ];
 
@@ -342,7 +342,7 @@ async function loadBGM() {
 }
 function playBGM() {
   if (!bgmBuf || bgmSrc) return;
-  bgmGain = ctx.createGain(); bgmGain.gain.value = 0.28; bgmGain.connect(ctx.destination);
+  bgmGain = ctx.createGain(); bgmGain.gain.value = 0.20; bgmGain.connect(ctx.destination);
   bgmSrc = ctx.createBufferSource(); bgmSrc.buffer = bgmBuf;
   bgmSrc.loop = true; bgmSrc.loopStart = BGM_FIRST; bgmSrc.loopEnd = BGM_FIRST + BGM_LOOPLEN;
   bgmSrc.connect(bgmGain);
