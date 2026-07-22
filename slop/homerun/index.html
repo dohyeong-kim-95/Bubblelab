@@ -522,15 +522,16 @@ function loop() {
       if (b.judged && now > b.hit + 0.28) { b.node.remove(); b.node = null; }
       else {
         const pc = Math.min(p, 1.15);
-        const e = Math.pow(pc, 1.3);                          // 위치 이징(원근 — 멀 땐 천천히)
-        const sc = 0.14 + Math.pow(pc, 2.2) * 1.2;            // 도착할수록 급팽창 = 화면 쪽으로 다가옴
+        const e = Math.pow(pc, 1.9);                          // 위치 이징: 멀 땐 거의 정지 → 후반 급가속(빠른 느낌)
+        const sc = 0.09 + Math.pow(pc, 3.0) * 2.0;            // 끝에서 폭발적으로 팽창 = 확 들이닥치는 느낌
         const y = PITCH.y + (ZONE.y - PITCH.y) * e + SINK * Math.pow(pc, 2.3);  // 수직 하강 + 약한 late 싱크
         // 수평: 릴리스→존 + 암사이드 런(단일 방향, 후반 가속=late run, 존으로 타일)
         const run = RUN * Math.sin(Math.PI * Math.pow(pc, 1.4));
         const x = ZONE.x + (PITCH.x - ZONE.x) * (1 - e) + run;
+        const stretch = 1 + Math.pow(pc, 5) * 0.55;           // 후반 진행방향 세로로 늘어남 = 속도감(모션블러)
         b.node.style.left = x.toFixed(2) + "%";
         b.node.style.top = y.toFixed(2) + "%";
-        b.node.style.transform = `translate(-50%,-50%) scale(${sc.toFixed(3)})`;
+        b.node.style.transform = `translate(-50%,-50%) scale(${sc.toFixed(3)}, ${(sc * stretch).toFixed(3)})`;
         if (b.judged) b.node.style.opacity = "0.35";
       }
     }
