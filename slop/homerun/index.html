@@ -174,7 +174,7 @@
     <div id="strikes"><span>❌</span><span>❌</span><span>❌</span></div>
   </div>
   <div id="board"><div id="boardMsg"></div></div>
-  <button id="mute" aria-label="BGM 음소거">🔊</button>
+  <button id="mute" aria-label="BGM 켜기/끄기">🔇</button>
   <div id="pitcher">🤾</div>
   <div id="plate"></div>
   <div id="zone"></div>
@@ -226,7 +226,7 @@
 
 <script>
 // ── 상수 ───────────────────────────────────────────────
-const BPM = 98;   // BGM(Under the Floodlights ≈98 BPM)과 동기화
+const BPM = 98.5;   // BGM(Under the Floodlights ≈98.5 BPM)과 동기화
 const BEAT = 60 / BPM;        // 한 박 = 0.6초
 const MEASURE = 4;           // 한 마디 = 4박
 let TRAVEL = 2.4;            // 공 비행 시간(초) = 한 마디 (투수 콜 → 타자 리스폰스)
@@ -330,29 +330,34 @@ const hat = (t) => noise(t, 0.028, 0.07 * grooveVol, 8500, 1);
 
 // ── BGM (Under the Floodlights, 루프) ──────────────────
 const BGM_URL = "/_assets/music/under-the-floodlights/under_the_floodlights.mp3";
-let bgmBuf = null, bgmSrc = null, bgmGain = null, bgmOn = true, bgmStarted = false;
-async function startBGM() {
-  if (bgmStarted || !ctx) return;
-  bgmStarted = true;
-  try {
-    if (!bgmBuf) {
-      const arr = await (await fetch(BGM_URL)).arrayBuffer();
-      bgmBuf = await ctx.decodeAudioData(arr);
-    }
-    bgmGain = ctx.createGain();
-    bgmGain.gain.value = bgmOn ? 0.30 : 0;
-    bgmGain.connect(ctx.destination);
-    bgmSrc = ctx.createBufferSource();
-    bgmSrc.buffer = bgmBuf; bgmSrc.loop = true;
-    bgmSrc.connect(bgmGain); bgmSrc.start();
-    grooveVol = bgmOn ? 0.5 : 1;      // 곡 있으면 그루브 살짝 낮춤
-  } catch (e) { bgmStarted = false; }
+const BGM_FIRST = 2.473;     // 곡 첫 강박(인트로 뒤) 위치(초)
+const BGM_LOOPLEN = 26.80;   // 11마디(98.5 BPM) 루프 길이(초)
+let bgmBuf = null, bgmSrc = null, bgmGain = null, bgmOn = false, bgmLoading = false;
+async function loadBGM() {
+  if (bgmBuf || bgmLoading || !ctx) return;
+  bgmLoading = true;
+  try { bgmBuf = await ctx.decodeAudioData(await (await fetch(BGM_URL)).arrayBuffer()); }
+  catch (e) {}
+  bgmLoading = false;
 }
-function toggleBGM() {
+function playBGM() {
+  if (!bgmBuf || bgmSrc) return;
+  bgmGain = ctx.createGain(); bgmGain.gain.value = 0.28; bgmGain.connect(ctx.destination);
+  bgmSrc = ctx.createBufferSource(); bgmSrc.buffer = bgmBuf;
+  bgmSrc.loop = true; bgmSrc.loopStart = BGM_FIRST; bgmSrc.loopEnd = BGM_FIRST + BGM_LOOPLEN;
+  bgmSrc.connect(bgmGain);
+  // 곡 첫 강박을 게임 그리드 다운비트에 맞춰 시작 → 박자 싱크
+  const when = grooveStart + Math.ceil((ctx.currentTime + 0.12 - grooveStart) / BEAT) * BEAT;
+  bgmSrc.start(when, BGM_FIRST);
+}
+function stopBGM() { if (bgmSrc) { try { bgmSrc.stop(); } catch (e) {} bgmSrc = null; bgmGain = null; } }
+function resyncBGM() { if (bgmOn) { stopBGM(); playBGM(); } }   // 그리드 리셋(재시작) 시 재정렬
+async function toggleBGM() {
   bgmOn = !bgmOn;
-  if (bgmGain) bgmGain.gain.setTargetAtTime(bgmOn ? 0.30 : 0, ctx.currentTime, 0.04);
-  grooveVol = bgmOn ? 0.5 : 1;
   muteBtn.textContent = bgmOn ? "🔊" : "🔇";
+  grooveVol = bgmOn ? 0.5 : 1;          // 곡 켜지면 그루브 낮춤
+  if (bgmOn) { await loadBGM(); if (bgmOn) playBGM(); }
+  else stopBGM();
 }
 // 게임 전체 시간 동안 끊김 없이 깔리는 박자 그루브(킥/하이햇) — 룩어헤드 스케줄러
 let grooveStart = 0, grooveNext = 0, grooveTimer = 0, grooveOn = false;
@@ -454,7 +459,7 @@ function startLevel(idx) {
     const hit = startTime + (COUNTIN + OFFSET + b) * BEAT;  // 타격 = 콜보다 OFFSET박 뒤
     const note = lv.mel[i];
     balls.push({ hit, spawn: hit - TRAVEL, note, judged: false, node: null });
-    bell(note, hit - TRAVEL, 0.15);   // 콜(멜로디 음, 은은하게)
+    if (!bgmOn) bell(note, hit - TRAVEL, 0.15);   // 콜 멜로디 — 음악 껐을 때만
     sSwoosh(hit - TRAVEL);            // 투구 바람소리 "슉"
   });
   state = "playing";
@@ -599,12 +604,12 @@ function swing() {
   }
   best.judged = true;
   if (bd <= curWP) {
-    best.result = "perfect"; bell(best.note, now, 0.16); sMetal();  // 홈런 "깡"(금속) + 리스폰스 음
+    best.result = "perfect"; if (!bgmOn) bell(best.note, now, 0.16); sMetal();  // 홈런 "깡"(금속), 멜로디는 음악 OFF일 때만
     launchBall(best, now, true);   // 홈런: 우측 담장 너머
     homers++; if (best.dist > maxDist) maxDist = best.dist;
     sCrowd(); boardShow(`⚾ 홈런!  ${best.dist}m`, "hr");   // 관중 함성 + 전광판
   } else {
-    best.result = "good"; bell(best.note, now, 0.15); sWood(); levelClean = false; perfectGame = false;  // 안타 "탁"(나무)
+    best.result = "good"; if (!bgmOn) bell(best.note, now, 0.15); sWood(); levelClean = false; perfectGame = false;  // 안타 "탁"
     boardShow("안타!", "hit");
     launchBall(best, now, false);  // 안타: 좌중간
   }
@@ -639,14 +644,14 @@ function overlayScreen(big, title, body, label, onClick) {
   overlay.classList.remove("hidden");
 }
 
-function restart() { perfectGame = true; won = false; homers = 0; maxDist = 0; boardRecords(); startGroove(ctx.currentTime + 0.45); startLevel(0); }
+function restart() { perfectGame = true; won = false; homers = 0; maxDist = 0; boardRecords(); startGroove(ctx.currentTime + 0.45); resyncBGM(); startLevel(0); }
 
 // ── 입력 ───────────────────────────────────────────────
 function firstStart() {
   initAudio(); if (ctx.state === "suspended") ctx.resume();
   overlay.classList.add("hidden");
   perfectGame = true; won = false; homers = 0; maxDist = 0; boardRecords();
-  startGroove(ctx.currentTime + 0.45); startBGM(); startLevel(0);
+  startGroove(ctx.currentTime + 0.45); loadBGM(); startLevel(0);   // BGM은 프리로드만(기본 OFF)
 }
 btn.onclick = firstStart;
 muteBtn.addEventListener("pointerdown", (e) => { e.stopPropagation(); toggleBGM(); });
