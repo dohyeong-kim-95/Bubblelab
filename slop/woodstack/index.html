@@ -133,9 +133,14 @@ function resize() {
   W = cv.clientWidth; H = cv.clientHeight;
   cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  // 회전/리사이즈 시 현재 통나무를 화면 안으로 보정하고 새 너비 기준 속도로 재계산
+  if (moving) {
+    moving.x = Math.max(marginX() + moving.w / 2, Math.min(W - marginX() - moving.w / 2, moving.x));
+    moving.speed = logSpeed(score, moving.w);
+  }
 }
 window.addEventListener("resize", resize);
-resize();
+// 초기 resize() 호출은 게임 상태 변수(moving/score) 선언 이후로 미룬다(TDZ 회피).
 
 // ── 상수 ───────────────────────────────────────────────
 const LOG_H = 34;          // 통나무 높이(px)
@@ -145,14 +150,27 @@ const GRAV = 1600;         // 낙하 중력(px/s^2)
 const ISO_X = 6, ISO_Y = 7; // 약한 pseudo-isometric 윗면(가독성 유지 — x판정 불변)
 function baseW() { return Math.min(W * 0.5, 250); }
 function marginX() { return W * 0.12; }
-// Tower가 높아질수록 속도 증가, 최대 속도 제한
-function logSpeed(s) {
-  let f;
-  if (s < 20) f = 0.60;
-  else if (s < 50) f = 0.84;
-  else if (s < 100) f = 1.06;
-  else f = 1.24;               // 최대치 — 더는 빨라지지 않음
-  return f * Math.min(W, 520);
+// 이동 속도를 px/s가 아니라 "편도 이동 시간(초)" 기준으로 계산한다. 그래야
+// 화면 너비가 달라도 통나무가 끝에서 끝까지 가는 데 걸리는 시간이 비슷해져
+// 기기별 체감 난이도가 맞춰진다. 편도 시간은 배경 단계와 연동해 부드럽게 감소.
+function oneWayTime(score) {
+  if (score < 20) return lerp(1.45, 1.25, score / 20);          // 🌄 아침
+  if (score < 50) return lerp(1.20, 1.00, (score - 20) / 30);   // ☀️ 낮
+  if (score < 100) return lerp(1.00, 0.82, (score - 50) / 50);  // 🌇 노을
+  return Math.max(0.65, 0.78 - (score - 100) * 0.002);          // 🌌 밤 (최저 0.65초)
+}
+// 통나무 중심의 이동 가능 거리(px) ÷ 편도 시간 = px/s. 좁을수록 이동 범위가 넓다.
+function logSpeed(score, movingWidth) {
+  const travel = Math.max(1, W - marginX() * 2 - movingWidth);
+  return travel / oneWayTime(score);
+}
+// 중앙 가이드라인 알파 — 점수(=배경 단계)에 따라 점진적으로 사라지고 밤엔 0.
+// Perfect 콤보/Perfect Run과 무관하게 오직 점수로만 결정된다.
+function guideAlpha(score) {
+  if (score < 20) return lerp(0.28, 0.18, score / 20);
+  if (score < 50) return lerp(0.16, 0.08, (score - 20) / 30);
+  if (score < 100) return lerp(0.06, 0.015, (score - 50) / 50);
+  return 0;                                                     // 밤: 렌더 생략
 }
 
 // ── 오디오(신스 — 외부 음원 없음) ──────────────────────
@@ -185,7 +203,7 @@ function noiseBurst(dur, gain, freq, q = 1, slideTo) {
   g.gain.setValueAtTime(gain, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   s.connect(bp).connect(g).connect(master); s.start(t); s.stop(t + dur + 0.02);
 }
-const sTap = () => { noiseBurst(0.05, 0.14, 260, 1.2); ping(330, 0.08, 0.14, "triangle", 200); }; // 둔탁한 목재
+// v2.1: 판정당 대표음 1개 — 배치 자체엔 별도 Tap음을 두지 않고 sCut/sPerfect로 통일
 const sCut = () => { noiseBurst(0.13, 0.3, 1500, 1.4, 480); ping(300, 0.09, 0.12, "sine", 170); }; // 나무 절단
 function sPerfect(combo) {                                                      // 맑은 효과음(콤보만큼 상승)
   noiseBurst(0.04, 0.22, 3400, 2.2);
@@ -312,7 +330,12 @@ function reset() {
 function spawnMoving(w) {
   const level = stack.length;
   const fromLeft = level % 2 === 0;
-  moving = { w, x: fromLeft ? marginX() + w / 2 : W - marginX() - w / 2, dir: fromLeft ? 1 : -1 };
+  // 속도는 생성 시점의 점수·폭으로 고정한다 — 배치 중 갑자기 가감속하지 않도록.
+  moving = {
+    w, dir: fromLeft ? 1 : -1,
+    x: fromLeft ? marginX() + w / 2 : W - marginX() - w / 2,
+    speed: logSpeed(score, w),
+  };
 }
 function updateCombo() {
   if (combo >= 2) {
@@ -367,9 +390,8 @@ function place() {
     }
     spawnDust(px, sb, newW, combo >= 3);          // 콤보 3+부터 금빛 톱밥
     if (combo >= 3) spawnSpark(px, sb, newW, combo >= 10);
-    sPerfect(combo);
+    sPerfect(combo);                              // 판정당 대표음 1개 (Tap 중첩 제거)
     vibrate(x10 ? [10, 25, 10, 25, 15] : x5 ? [8, 18, 8] : 14);
-    sTap();
   } else {                                        // ── GOOD(절단) ──
     if (perfectRun) { perfectRun = false; stopRunLayer(); }
     combo = 0;
@@ -379,7 +401,7 @@ function place() {
     else falling.push(makeFall((nx - w / 2 + left) / 2, left - (nx - w / 2), sb, -1, false));
     spawnDust(newC + (nx > px ? newW / 2 : -newW / 2), sb, LOG_H, false);
     shake = Math.min(shake + 1.4, 3);
-    sCut(); vibrate(9); sTap();
+    sCut(); vibrate(9);                           // 절단은 sCut() 하나로 (Tap 중첩 제거)
   }
 
   score++;
@@ -570,8 +592,7 @@ function frame(ts) {
   if (hitStop > 0) hitStop -= dt;
 
   if (state === "play" && moving && hitStop <= 0) {
-    const v = logSpeed(score) * dt;
-    moving.x += v * moving.dir;
+    moving.x += moving.speed * dt * moving.dir;
     const lo = marginX() + moving.w / 2, hiB = W - marginX() - moving.w / 2;
     if (moving.x <= lo) { moving.x = lo; moving.dir = 1; }
     if (moving.x >= hiB) { moving.x = hiB; moving.dir = -1; }
@@ -613,11 +634,16 @@ function frame(ts) {
   }
   if (state === "play" && moving) {
     drawLog(moving.x, screenBottom(stack.length * LOG_H), moving.w, stack.length, combo >= 3);
-    const top = stack[stack.length - 1];
-    const gy = screenBottom(stack.length * LOG_H);
-    ctx.strokeStyle = "rgba(255,255,255,.28)"; ctx.setLineDash([4, 6]); ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(top.x, gy); ctx.lineTo(top.x, gy - LOG_H * 2.4); ctx.stroke();
-    ctx.setLineDash([]);
+    // 중앙 가이드라인 — 점수에 따라 점점 흐려지고 밤(100+)엔 렌더 생략.
+    // 색(흰색)은 고정하고 알파만 변화한다.
+    const ga = guideAlpha(score);
+    if (ga > 0.001) {
+      const top = stack[stack.length - 1];
+      const gy = screenBottom(stack.length * LOG_H);
+      ctx.strokeStyle = `rgba(255,255,255,${ga})`; ctx.setLineDash([4, 6]); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(top.x, gy); ctx.lineTo(top.x, gy - LOG_H * 2.4); ctx.stroke();
+      ctx.setLineDash([]);
+    }
   }
   for (const f of falling) {
     ctx.save(); ctx.globalAlpha = f.a;
@@ -648,6 +674,7 @@ function frame(ts) {
 
   requestAnimationFrame(frame);
 }
+resize();                 // 상태 변수 선언 이후 초기 캔버스 크기 확정
 requestAnimationFrame(frame);
 
 // ── 입력 ───────────────────────────────────────────────
