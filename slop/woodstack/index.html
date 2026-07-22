@@ -386,6 +386,7 @@ function place() {
   $("score").textContent = score;
   updateCombo();
   camTarget = stack.length * LOG_H;
+  spawnMoving(stack[stack.length - 1].w);   // 다음 통나무는 방금 놓인 통나무와 같은 길이
 }
 
 function makeFall(cx, w, sb, dir, collapse) {
