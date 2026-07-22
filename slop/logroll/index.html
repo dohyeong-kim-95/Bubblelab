@@ -318,10 +318,16 @@ function draw(t) {
   ctx.moveTo(0, sh - u * 0.05);
   ctx.lineTo(Math.cos(-flail) * u * 0.75, sh - u * 0.05 + Math.sin(-flail) * u * 0.75);
   ctx.stroke();
-  // 머리
-  ctx.beginPath();
-  ctx.arc(0, head, u * 0.28, 0, Math.PI * 2);
-  ctx.fill();
+  // 머리 — 기운 정도에 따라 표정 변화 (안정 😄 → 기우뚱 😐 → 위태 😰)
+  const tilt = Math.abs(manAngle);
+  const face = phase !== "running" ? "😄"
+    : tilt < FALL * 0.32 ? "😄"
+    : tilt < FALL * 0.6  ? "😐" : "😰";
+  ctx.shadowBlur = 0;
+  ctx.font = `${u * 0.66}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(face, 0, head);
   ctx.restore();
 
   // 물보라(거의 떨어질 때)
