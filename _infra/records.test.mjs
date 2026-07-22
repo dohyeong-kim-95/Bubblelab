@@ -28,7 +28,7 @@ test("weekKey rolls over at Monday 09:00 KST (= Monday 00:00 UTC)", () => {
   assert.equal(weekKey(new Date("2026-07-12T23:59:59Z")), "2026-07-06"); // 일요일 밤
 });
 
-test("weekly board keeps top 3, deduped by nick, best-first", async () => {
+test("weekly board keeps top 3, best-first", async () => {
   const records = new RecordsDO({ storage: new MemoryStorage() });
   const nicks = async (body) => (await body.json()).top3.map((r) => r.nick);
 
@@ -48,14 +48,14 @@ test("weekly board keeps top 3, deduped by nick, best-first", async () => {
   assert.equal(body.accepted, false);
   assert.deepEqual(body.top3.map((r) => r.nick), ["철수", "민수", "영희"]);
 
-  // 같은 닉네임의 더 좋은 기록 → 순위 갱신, 중복 없음
+  // 같은 닉네임의 더 좋은 기록 → 순위 갱신 (기존 나쁜 기록 영희20은 3위 밖으로 밀려남)
   body = await (await post(records, { game: "touch25", nick: "영희", score: 12.01, dir: "min" })).json();
   assert.equal(body.accepted, true);
   assert.equal(body.record.nick, "영희");        // 새 1위
   assert.deepEqual(body.top3.map((r) => r.nick), ["영희", "철수", "민수"]);
-  assert.equal(body.top3.filter((r) => r.nick === "영희").length, 1);
+  assert.equal(body.top3.filter((r) => r.nick === "영희").length, 1); // 나쁜 20은 밀려나 1개만
 
-  // 같은 닉네임의 더 나쁜 기록 재제출 → 순위 불변
+  // 같은 닉네임의 더 나쁜 기록 재제출 → 3위 밖이라 순위 불변
   body = await (await post(records, { game: "touch25", nick: "영희", score: 30, dir: "min" })).json();
   assert.equal(body.accepted, false);
   assert.deepEqual(body.top3.map((r) => r.nick), ["영희", "철수", "민수"]);
@@ -67,6 +67,23 @@ test("weekly board keeps top 3, deduped by nick, best-first", async () => {
   assert.equal(data.record.nick, "영희");
   assert.equal(data.record.score, 12.01);
   assert.deepEqual(data.top3.map((r) => r.nick), ["영희", "철수", "민수"]);
+});
+
+test("same nickname can hold multiple ranks with different scores", async () => {
+  const records = new RecordsDO({ storage: new MemoryStorage() });
+
+  // 같은 닉네임이 서로 다른 점수면 여러 순위를 동시에 차지한다 (max: 클수록 좋음)
+  await post(records, { game: "2048", nick: "철수", score: 100, dir: "max" });
+  await post(records, { game: "2048", nick: "철수", score: 300, dir: "max" });
+  let body = await (await post(records, { game: "2048", nick: "철수", score: 200, dir: "max" })).json();
+  assert.equal(body.accepted, true);
+  assert.deepEqual(body.top3.map((r) => r.score), [300, 200, 100]);
+  assert.equal(body.top3.filter((r) => r.nick === "철수").length, 3); // 1·2·3위 모두 철수
+
+  // 동일 닉·동일 점수의 정확한 중복 제출은 한 번만 반영 (중복 항목 안 생김)
+  body = await (await post(records, { game: "2048", nick: "철수", score: 300, dir: "max" })).json();
+  assert.equal(body.accepted, false);
+  assert.equal(body.top3.filter((r) => r.score === 300).length, 1);
 });
 
 test("games are independent and old weeks are pruned", async () => {

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-<title>2048</title>
+<title>Number Bloom</title>
 <style>
   :root { color-scheme: light dark; }
   html, body { margin: 0; height: 100%; overflow: hidden; touch-action: none; }
@@ -27,19 +27,21 @@
           font-size: clamp(1rem, 6.5vmin, 2rem);
           background: light-dark(#dde5ec, #26344455); color: #17202b; }
   .cell.small { font-size: clamp(.7rem, 4.5vmin, 1.4rem); }
-  .cell.pop { animation: pop .16s ease-out; }
-  @keyframes pop { from { transform: scale(.4); } to { transform: scale(1); } }
-  .v2    { background: #eee4da; } .v4    { background: #ede0c8; }
-  .v8    { background: #f2b179; color: #fff; }
-  .v16   { background: #f59563; color: #fff; }
-  .v32   { background: #f67c5f; color: #fff; }
-  .v64   { background: #f65e3b; color: #fff; }
-  .v128  { background: #edcf72; color: #fff; }
-  .v256  { background: #edcc61; color: #fff; }
-  .v512  { background: #edc850; color: #fff; }
-  .v1024 { background: #edc53f; color: #fff; }
-  .v2048 { background: #edc22e; color: #fff; }
-  .vbig  { background: #3c3a32; color: #fff; }
+  .cell.pop { animation: bloom .18s cubic-bezier(.34,1.56,.64,1); }
+  @keyframes bloom { from { transform: scale(.35) rotate(-8deg); }
+                     to   { transform: scale(1) rotate(0); } }
+  /* Bubblelab 고유 팔레트 — 블루→바이올렛→로즈로 "피어나는" 그라데이션 */
+  .v2    { background: #dbeafe; } .v4    { background: #bfdbfe; }
+  .v8    { background: #93c5fd; color: #fff; }
+  .v16   { background: #60a5fa; color: #fff; }
+  .v32   { background: #3b82f6; color: #fff; }
+  .v64   { background: #6366f1; color: #fff; }
+  .v128  { background: #8b5cf6; color: #fff; }
+  .v256  { background: #a855f7; color: #fff; }
+  .v512  { background: #d946ef; color: #fff; }
+  .v1024 { background: #ec4899; color: #fff; }
+  .v2048 { background: #f43f5e; color: #fff; box-shadow: 0 0 1.2rem #f43f5e88; }
+  .vbig  { background: #1e293b; color: #fff; }
   #over { position: absolute; inset: 0; border-radius: 1rem; display: none;
           flex-direction: column; align-items: center; justify-content: center;
           gap: .8rem; text-align: center; font-weight: bold; font-size: 1.3rem;
@@ -59,7 +61,7 @@
 </style>
 </head>
 <body>
-<h1>🔢 2048</h1>
+<h1>🔢 Number Bloom</h1>
 <div id="hud"><span id="score">점수 0</span><span>·</span><span id="best"></span></div>
 <div id="wrap">
   <div id="board"></div>
@@ -77,8 +79,8 @@ let grid, score, won, playing;
 let best = +localStorage.getItem("bl-2048-best") || 0;
 
 window.blShareText = () =>
-  best ? `2048에서 ${best.toLocaleString("ko-KR")}점! 🔢 도전해보세요`
-       : "🔢 2048 — 도전해보세요!";
+  best ? `Number Bloom에서 ${best.toLocaleString("ko-KR")}점! 🔢 도전해보세요`
+       : "🔢 Number Bloom — 숫자를 합쳐 피워보세요!";
 
 window.blWeekly = { game: "2048", dir: "max",
                     fmt: (v) => v.toLocaleString("ko-KR") + "점" };
@@ -128,7 +130,7 @@ function slideLine(idx) {
       fresh.add(idx[out.length - 1]);
       if (vals[i] * 2 === 2048 && !won) {
         won = true;
-        showOver("🎉 2048 달성!", "계속하기");
+        showOver("🎉 2048 타일 만개!", "계속하기");
       }
       i++;
     } else {
