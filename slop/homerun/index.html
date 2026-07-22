@@ -452,8 +452,8 @@ function startLevel(idx) {
   const startBeat = Math.max(0, Math.ceil((ctx.currentTime + 0.35 - grooveStart) / BEAT));
   startTime = grooveStart + startBeat * BEAT;
   const maxBeat = Math.max(...lv.beats);
-  // 투수 두 마디(콜) → 타자 두 마디(리스폰스): 두 마디(8박) 뒤에 타격.
-  const OFFSET = 2 * MEASURE;
+  // 2마디 패턴을 투수가 던지는 동안, 타자는 1마디(4박) 뒤부터 겹쳐서 받아침(캐논).
+  const OFFSET = MEASURE;
   TRAVEL = OFFSET * BEAT;
   // 메트로놈(카운트인 클릭)은 1단계 시작 전에만 — 2·3단계엔 그루브만
   if (idx === 0) for (let i = 0; i < COUNTIN; i++) click(startTime + i * BEAT, i === 0);
