@@ -34,6 +34,7 @@ export const GAMES = {
   reactiontime: { dir: "min", min: 0, max: 60000 },     // 반응속도(ms)
   touch25:      { dir: "min", min: 0, max: 3600 },      // 완주 시간(초)
   trader:       { dir: "max", min: -1, max: 100 },      // 수익률(비율)
+  woodstack:    { dir: "max", min: 0, max: 100000 },    // 쌓은 통나무 층수
   "yacht-bot":  { dir: "max", min: 0, max: 400 },       // 야추 총점
 };
 const HISTORICAL_GAMES = new Set(["bubble-pop-idle"]);

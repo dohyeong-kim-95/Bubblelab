@@ -1,0 +1,571 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>우드 스택 — 통나무 쌓기</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; overflow: hidden; user-select: none; -webkit-user-select: none;
+    font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+    color: #f4ead6;
+    background: #1b2a4a;
+    touch-action: manipulation;
+  }
+  #stage { position: fixed; inset: 0; }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  /* 상단 HUD */
+  #hud {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding: max(.9rem, env(safe-area-inset-top)) 1.1rem 0; pointer-events: none;
+  }
+  .chip {
+    padding: .4rem .8rem; border-radius: .8rem; font-size: .82rem; line-height: 1.35;
+    background: rgba(20,26,36,.34); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.35);
+  }
+  .chip b { font-size: 1.5rem; font-weight: 800; letter-spacing: .01em; display: block; }
+  .chip small { opacity: .8; font-weight: 400; }
+  #hiChip { text-align: right; }
+
+  /* 콤보 표시(화면 중앙 상단) */
+  #combo {
+    position: fixed; top: 22%; left: 50%; transform: translate(-50%,-50%) scale(.5);
+    z-index: 9; font-weight: 900; font-size: 2rem; opacity: 0; pointer-events: none;
+    color: #ffe08a; text-shadow: 0 2px 10px rgba(140,80,0,.55), 0 0 3px rgba(0,0,0,.4);
+    white-space: nowrap;
+  }
+  #combo.show { animation: comboPop .6s cubic-bezier(.2,1.5,.4,1); }
+  @keyframes comboPop {
+    0% { opacity: 0; transform: translate(-50%,-40%) scale(.5); }
+    30% { opacity: 1; transform: translate(-50%,-52%) scale(1.1); }
+    100% { opacity: 0; transform: translate(-50%,-62%) scale(1); }
+  }
+
+  /* 음소거 버튼 */
+  #mute {
+    position: fixed; right: 1rem; bottom: max(1rem, env(safe-area-inset-bottom)); z-index: 12;
+    width: 2.6rem; height: 2.6rem; border-radius: 50%; color: #fff; cursor: pointer;
+    border: 1.5px solid rgba(255,255,255,.35);
+    background: rgba(20,26,36,.4); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+    font-size: 1.2rem; line-height: 1; display: flex; align-items: center; justify-content: center;
+  }
+  #mute:active { transform: scale(.92); }
+
+  /* 오버레이(시작/게임오버) */
+  #overlay {
+    position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: .9rem; text-align: center; padding: 1.4rem;
+    background: rgba(12,18,30,.55); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+    transition: opacity .25s;
+  }
+  #overlay.hidden { opacity: 0; pointer-events: none; }
+  #overlay .big { font-size: 4rem; line-height: 1; filter: drop-shadow(0 6px 12px rgba(0,0,0,.4)); }
+  #overlay h1 { font-size: clamp(1.5rem, 6.5vmin, 2.4rem); margin: 0; color: #fff; }
+  #overlay p { margin: 0; opacity: .92; line-height: 1.7; font-size: clamp(.85rem, 3.5vmin, 1rem); color: #f0e7d6; }
+  #scores { display: flex; gap: 1.6rem; margin: .2rem 0 .1rem; }
+  #scores div { display: flex; flex-direction: column; gap: .1rem; }
+  #scores b { font-size: 2.3rem; font-weight: 900; color: #ffe08a; text-shadow: 0 2px 8px rgba(0,0,0,.4); }
+  #scores span { font-size: .78rem; opacity: .75; }
+  #btn {
+    margin-top: .4rem; font: 800 1.05rem ui-monospace, monospace; padding: .85rem 2.2rem;
+    border-radius: 2rem; border: none; cursor: pointer; color: #3a2410;
+    background: linear-gradient(#ffd98a, #f0b45c);
+    box-shadow: 0 5px 0 #b9823a, 0 8px 16px rgba(0,0,0,.3);
+  }
+  #btn:active { transform: translateY(3px); box-shadow: 0 2px 0 #b9823a, 0 4px 10px rgba(0,0,0,.3); }
+  .key { display: inline-block; padding: .05rem .5rem; border: 1.5px solid currentColor;
+         border-radius: .4rem; font-size: .85em; opacity: .85; }
+  .hint { position: fixed; left: 0; right: 0; bottom: 18%; z-index: 8; text-align: center;
+          font-size: 1rem; opacity: .9; color: #fff; text-shadow: 0 2px 6px rgba(0,0,0,.4);
+          pointer-events: none; animation: bob 1.6s ease-in-out infinite; }
+  .hint.hidden { display: none; }
+  @keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="cv"></canvas></div>
+
+<div id="hud">
+  <div class="chip" id="scoreChip"><small>SCORE</small><b id="score">0</b></div>
+  <div class="chip" id="hiChip"><small>BEST</small><b id="hi">0</b></div>
+</div>
+<div id="combo"></div>
+<div class="hint hidden" id="hint">👆 탭해서 통나무 쌓기</div>
+<button id="mute" aria-label="소리 켜기/끄기">🔊</button>
+
+<div id="overlay">
+  <div class="big">🪵</div>
+  <h1>우드 스택</h1>
+  <p>
+    좌우로 움직이는 통나무를 <b>탭</b>해서 쌓아요.<br>
+    삐져나온 부분은 <b>잘려 떨어지고</b> 통나무가 가늘어져요.<br>
+    딱 맞추면 <b>Perfect</b> — 콤보가 쌓이고 두께가 조금 회복돼요.<br>
+    겹치는 곳이 없으면 <b>게임 오버</b>.<br>
+    <span class="key">스페이스</span> 또는 화면 <b>탭</b>!
+  </p>
+  <button id="btn">시작</button>
+</div>
+
+<script>
+// ── 캔버스 ─────────────────────────────────────────────
+const cv = document.getElementById("cv");
+const ctx = cv.getContext("2d");
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = cv.clientWidth; H = cv.clientHeight;
+  cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener("resize", resize);
+resize();
+
+// ── 상수 ───────────────────────────────────────────────
+const LOG_H = 32;          // 통나무 높이(px)
+const PERFECT = 3;         // Perfect 판정 오차(±px)
+const GROUND = 0.16;       // 화면 하단 여백 비율(땅)
+const RECOVER = 0.15;      // Perfect 시 두께 결손분 회복 비율
+const GRAV = 1500;         // 낙하 중력(px/s^2)
+function baseW() { return Math.min(W * 0.5, 250); }
+function marginX() { return W * 0.12; }
+// 점수 구간별 이동 속도(px/s) — 0~20 느림 → 60+ 최대
+function logSpeed(s) {
+  let f;
+  if (s < 20) f = 0.62;
+  else if (s < 40) f = 0.86;
+  else if (s < 60) f = 1.08;
+  else f = 1.28;
+  return f * Math.min(W, 520);
+}
+
+// ── 오디오(신스 — 외부 음원 없음) ──────────────────────
+let actx, master, muted = false, ambient = null;
+function initAudio() {
+  if (actx) return;
+  actx = new (window.AudioContext || window.webkitAudioContext)();
+  master = actx.createGain(); master.gain.value = 0.9; master.connect(actx.destination);
+}
+function ping(freq, dur, gain, type = "sine", slideTo) {
+  if (!actx || muted) return;
+  const t = actx.currentTime, o = actx.createOscillator(), g = actx.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, t);
+  if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(gain, t + 0.006);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(master); o.start(t); o.stop(t + dur + 0.02);
+}
+function noiseBurst(dur, gain, freq, q = 1, slideTo) {
+  if (!actx || muted) return;
+  const t = actx.currentTime, n = Math.floor(actx.sampleRate * dur);
+  const buf = actx.createBuffer(1, n, actx.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+  const s = actx.createBufferSource(); s.buffer = buf;
+  const bp = actx.createBiquadFilter(); bp.type = "bandpass";
+  bp.frequency.setValueAtTime(freq, t); bp.Q.value = q;
+  if (slideTo) bp.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+  const g = actx.createGain();
+  g.gain.setValueAtTime(gain, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  s.connect(bp).connect(g).connect(master); s.start(t); s.stop(t + dur + 0.02);
+}
+const sTap = () => { ping(520, 0.08, 0.16, "triangle", 340); };                 // 톡
+const sCut = () => { noiseBurst(0.12, 0.28, 1500, 1.4, 500); ping(300, 0.09, 0.12, "sine", 180); }; // 탁
+function sPerfect(combo) {                                                       // 찰칵 + 상승음
+  noiseBurst(0.04, 0.2, 3200, 2);
+  const base = 660 * Math.pow(1.06, Math.min(combo, 12));
+  ping(base, 0.12, 0.16, "triangle");
+  ping(base * 1.5, 0.16, 0.1, "sine");
+}
+function sOver() {                                                               // 와르르
+  noiseBurst(0.5, 0.32, 900, 0.7, 180);
+  ping(220, 0.5, 0.14, "sawtooth", 70);
+}
+// 잔잔한 숲 앰비언스 — 낮게 깔리는 패드 + 이따금 새소리
+function startAmbient() {
+  if (!actx || muted || ambient) return;
+  const g = actx.createGain(); g.gain.value = 0.045; g.connect(master);
+  const o1 = actx.createOscillator(), o2 = actx.createOscillator();
+  o1.type = "sine"; o1.frequency.value = 110;
+  o2.type = "sine"; o2.frequency.value = 164.8;
+  const lfo = actx.createOscillator(), lg = actx.createGain();
+  lfo.frequency.value = 0.08; lg.gain.value = 0.02;
+  lfo.connect(lg).connect(g.gain);
+  o1.connect(g); o2.connect(g);
+  o1.start(); o2.start(); lfo.start();
+  const birdTimer = setInterval(() => {
+    if (muted || document.hidden) return;
+    if (Math.random() < 0.5) {
+      const f = 1800 + Math.random() * 900;
+      ping(f, 0.09, 0.03, "sine", f * 1.4);
+      setTimeout(() => ping(f * 1.2, 0.07, 0.025, "sine", f), 110);
+    }
+  }, 4200);
+  ambient = { g, o1, o2, lfo, birdTimer };
+}
+function stopAmbient() {
+  if (!ambient) return;
+  try { ambient.o1.stop(); ambient.o2.stop(); ambient.lfo.stop(); } catch {}
+  clearInterval(ambient.birdTimer);
+  ambient = null;
+}
+
+// ── 배경(시간대 변화: 아침→낮→노을→밤) ────────────────
+const SKY = [
+  { t: 0,  top: [253,225,192], bot: [247,182,132], sun: [255,240,200], sunY: 0.78 }, // 아침
+  { t: 22, top: [150,205,240], bot: [226,240,250], sun: [255,247,210], sunY: 0.30 }, // 낮
+  { t: 45, top: [255,168,110], bot: [232,110,96],  sun: [255,214,150], sunY: 0.62 }, // 노을
+  { t: 70, top: [24,34,66],    bot: [42,54,92],    sun: [220,228,245], sunY: 0.24 }, // 밤
+];
+const lerp = (a, b, u) => a + (b - a) * u;
+const lerpRGB = (a, b, u) => [lerp(a[0],b[0],u), lerp(a[1],b[1],u), lerp(a[2],b[2],u)];
+const rgb = (c) => `rgb(${c[0]|0},${c[1]|0},${c[2]|0})`;
+function skyAt(score) {
+  let a = SKY[0], b = SKY[SKY.length - 1];
+  for (let i = 0; i < SKY.length - 1; i++) {
+    if (score >= SKY[i].t && score < SKY[i + 1].t) { a = SKY[i]; b = SKY[i + 1]; break; }
+    if (score >= SKY[SKY.length - 1].t) { a = b = SKY[SKY.length - 1]; }
+  }
+  const u = a === b ? 0 : (score - a.t) / (b.t - a.t);
+  return {
+    top: lerpRGB(a.top, b.top, u), bot: lerpRGB(a.bot, b.bot, u),
+    sun: lerpRGB(a.sun, b.sun, u), sunY: lerp(a.sunY, b.sunY, u),
+    night: score >= 55,
+  };
+}
+let curSky = skyAt(0);
+const stars = Array.from({ length: 46 }, () => ({ x: Math.random(), y: Math.random() * 0.55, r: Math.random() * 1.2 + 0.3, tw: Math.random() * 6.28 }));
+
+// ── 게임 상태 ──────────────────────────────────────────
+let state = "idle";                 // idle | play | over
+let stack = [];                     // 쌓인 통나무 [{x(중심), w}] — 0이 맨 아래
+let moving = null;                  // 움직이는 통나무 {x, w, dir}
+let falling = [];                   // 낙하 조각 [{x,y,w,h,vx,vy,rot,vr,a,cut}]
+let dust = [];                      // 톱밥 파티클
+let score = 0, hi = 0, combo = 0;
+let camY = 0, camTarget = 0;        // 카메라 스크롤(월드 y)
+let shake = 0, zoom = 0, hitStop = 0;
+let lastT = 0;
+
+try { hi = Math.max(0, parseInt(localStorage.getItem("woodstack-hi") || "0", 10) || 0); } catch {}
+document.getElementById("hi").textContent = hi;
+
+const $ = (id) => document.getElementById(id);
+const overlay = $("overlay"), btn = $("btn"), hint = $("hint"), comboEl = $("combo");
+
+// 월드 y(통나무 바닥 높이) → 화면 y(바닥). 위로 쌓일수록 월드 y 증가.
+function screenBottom(worldY) { return H - H * GROUND - (worldY - camY); }
+
+function reset() {
+  stack = []; falling = []; dust = [];
+  score = 0; combo = 0; camY = 0; camTarget = 0; shake = 0; zoom = 0; hitStop = 0;
+  stack.push({ x: W / 2, w: baseW() });         // 맨 아래 받침 통나무
+  spawnMoving(baseW());
+  curSky = skyAt(0);
+  $("score").textContent = "0";
+}
+function spawnMoving(w) {
+  const level = stack.length;
+  const fromLeft = level % 2 === 0;
+  moving = { w, x: fromLeft ? marginX() + w / 2 : W - marginX() - w / 2, dir: fromLeft ? 1 : -1 };
+}
+
+function place() {
+  if (state !== "play" || !moving) return;
+  const top = stack[stack.length - 1];
+  const px = top.x, pw = top.w;
+  const nx = moving.x, w = moving.w;
+  const left = Math.max(nx - w / 2, px - pw / 2);
+  const right = Math.min(nx + w / 2, px + pw / 2);
+  const overlap = right - left;
+  const level = stack.length;
+  const sb = screenBottom(level * LOG_H);
+
+  if (overlap <= 0) {                            // Miss → 게임 오버
+    falling.push(makeFall(nx, w, sb, moving.dir, true));
+    sOver();
+    gameOver();
+    return;
+  }
+  const offset = nx - px;
+  if (Math.abs(offset) <= PERFECT) {             // Perfect
+    const deficit = baseW() - pw;
+    const newW = Math.min(baseW(), pw + deficit * RECOVER);
+    stack.push({ x: px, w: newW });
+    combo++;
+    zoom = 0.06; hitStop = 0.045; shake = Math.min(shake + 2, 4);
+    spawnDust(px, sb, newW);
+    sPerfect(combo);
+    vibrate(combo > 3 ? [8, 20, 8] : 14);
+    showCombo(combo);
+    sTap();
+  } else {                                       // Good → 절단
+    combo = 0;
+    const newC = (left + right) / 2, newW = overlap;
+    stack.push({ x: newC, w: newW });
+    // 삐져나온 조각 낙하
+    if (nx > px) falling.push(makeFall((right + nx + w / 2) / 2, nx + w / 2 - right, sb, 1, false));
+    else falling.push(makeFall((nx - w / 2 + left) / 2, left - (nx - w / 2), sb, -1, false));
+    shake = Math.min(shake + 1.5, 3);
+    sCut();
+    vibrate(9);
+    sTap();
+  }
+  score++;
+  $("score").textContent = score;
+  camTarget = stack.length * LOG_H;
+  spawnMoving(stack[stack.length - 1].w);
+}
+
+function makeFall(cx, w, sb, dir, full) {
+  return {
+    x: cx, y: sb - LOG_H / 2, w, h: LOG_H,
+    vx: dir * (60 + Math.random() * 60), vy: -60 - Math.random() * 40,
+    rot: 0, vr: dir * (2.5 + Math.random() * 3), a: 1, full,
+  };
+}
+function spawnDust(cx, sb, w) {
+  for (let i = 0; i < 16; i++) {
+    const ang = -Math.PI / 2 + (Math.random() - 0.5) * 2.2;
+    const sp = 60 + Math.random() * 160;
+    dust.push({
+      x: cx + (Math.random() - 0.5) * w, y: sb - LOG_H,
+      vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp,
+      r: 1 + Math.random() * 2.5, a: 1, life: 0.5 + Math.random() * 0.4,
+    });
+  }
+}
+function showCombo(c) {
+  comboEl.textContent = c > 1 ? `Perfect ×${c}` : "Perfect!";
+  comboEl.classList.remove("show"); void comboEl.offsetWidth; comboEl.classList.add("show");
+}
+function vibrate(p) { try { navigator.vibrate?.(p); } catch {} }
+
+function gameOver() {
+  state = "over";
+  shake = 6;
+  vibrate([20, 40, 60]);
+  moving = null;
+  if (score > hi) { hi = score; try { localStorage.setItem("woodstack-hi", String(hi)); } catch {} }
+  $("hi").textContent = hi;
+  window.blWeeklyReport?.(score);       // 주간 신기록 보드
+  setTimeout(() => {
+    overlay.querySelector(".big").textContent = "🪵";
+    overlay.querySelector("h1").textContent = "무너졌어요!";
+    overlay.querySelector("p").innerHTML =
+      `<div id="scores"><div><b>${score}</b><span>SCORE</span></div>` +
+      `<div><b>${hi}</b><span>BEST</span></div></div>` +
+      (score >= hi && score > 0 ? "🎉 최고 기록 경신!" : "한 판만 더 쌓아볼까요?");
+    btn.textContent = "다시";
+    overlay.classList.remove("hidden");
+    hint.classList.add("hidden");
+  }, 650);
+}
+
+// ── 렌더링 ─────────────────────────────────────────────
+function woodColor(level) {
+  const h = 32 + (level % 5) * 4;               // 통나무마다 살짝 다른 색조
+  return { fill: `hsl(${h} 46% 58%)`, dark: `hsl(${h} 44% 44%)`, cut: `hsl(${h} 55% 78%)` };
+}
+function roundRectPath(x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function drawLog(cx, bottomY, w, level, cutSide) {
+  const x = cx - w / 2, y = bottomY - LOG_H, r = LOG_H / 2;
+  const c = woodColor(level);
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,.22)"; ctx.shadowBlur = 8; ctx.shadowOffsetY = 4;
+  roundRectPath(x, y, w, LOG_H, r); ctx.fillStyle = c.fill; ctx.fill();
+  ctx.restore();
+  ctx.save();
+  roundRectPath(x, y, w, LOG_H, r); ctx.clip();
+  // 나뭇결
+  ctx.strokeStyle = c.dark; ctx.globalAlpha = 0.5; ctx.lineWidth = 1.4;
+  for (let i = 1; i <= 3; i++) {
+    const gy = y + (LOG_H * i) / 4;
+    ctx.beginPath();
+    ctx.moveTo(x + 3, gy);
+    ctx.bezierCurveTo(x + w * 0.33, gy - 1.5, x + w * 0.66, gy + 1.5, x + w - 3, gy);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  // 절단면(밝은 색) — 양 끝 나이테
+  const drawEnd = (ex, side) => {
+    ctx.save();
+    ctx.translate(ex, y + LOG_H / 2);
+    ctx.scale(0.42, 1);
+    for (let k = 0; k < 3; k++) {
+      ctx.beginPath();
+      ctx.arc(0, 0, r * (0.85 - k * 0.26), 0, Math.PI * 2);
+      ctx.fillStyle = k % 2 ? c.cut : c.fill;
+      ctx.globalAlpha = side ? 1 : 0.9;
+      ctx.fill();
+    }
+    ctx.restore();
+  };
+  drawEnd(x + r * 0.55, cutSide === -1);
+  drawEnd(x + w - r * 0.55, cutSide === 1);
+  ctx.restore();
+}
+
+function drawBackground(sky) {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, rgb(sky.top)); g.addColorStop(1, rgb(sky.bot));
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  // 별(밤에만)
+  if (sky.night) {
+    const tSec = lastT / 1000;
+    for (const s of stars) {
+      ctx.globalAlpha = 0.5 + 0.5 * Math.sin(tSec * 2 + s.tw);
+      ctx.fillStyle = "#fff";
+      ctx.beginPath(); ctx.arc(s.x * W, s.y * H, s.r, 0, 6.28); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+  // 해/달
+  const sunX = W * 0.5, sunY = H * sky.sunY, sr = Math.min(W, H) * 0.09;
+  ctx.save();
+  ctx.shadowColor = rgb(sky.sun); ctx.shadowBlur = 40;
+  ctx.fillStyle = rgb(sky.sun);
+  ctx.beginPath(); ctx.arc(sunX, sunY, sr, 0, 6.28); ctx.fill();
+  ctx.restore();
+  // 땅
+  const groundY = H - H * GROUND;
+  const gg = ctx.createLinearGradient(0, groundY, 0, H);
+  const gc = sky.night ? "#1c2a1c" : "#4f7a3a";
+  gg.addColorStop(0, gc); gg.addColorStop(1, sky.night ? "#0f1a10" : "#3a5c2b");
+  ctx.fillStyle = gg; ctx.fillRect(0, groundY, W, H * GROUND);
+}
+
+function frame(ts) {
+  const dt = Math.min(0.05, (ts - lastT) / 1000 || 0);
+  lastT = ts;
+
+  // 배경 색 보간
+  curSky = skyAt(state === "play" ? score : (state === "over" ? score : 0));
+
+  // 카메라 부드럽게 따라가기
+  camY += (camTarget - camY) * Math.min(1, dt * 6);
+  if (zoom > 0) zoom = Math.max(0, zoom - dt * 0.6);
+  if (shake > 0) shake = Math.max(0, shake - dt * 12);
+  if (hitStop > 0) hitStop -= dt;
+
+  // 통나무 이동
+  if (state === "play" && moving && hitStop <= 0) {
+    const v = logSpeed(score) * dt;
+    moving.x += v * moving.dir;
+    const lo = marginX() + moving.w / 2, hiB = W - marginX() - moving.w / 2;
+    if (moving.x <= lo) { moving.x = lo; moving.dir = 1; }
+    if (moving.x >= hiB) { moving.x = hiB; moving.dir = -1; }
+  }
+
+  // 낙하 조각
+  for (const f of falling) {
+    f.vy += GRAV * dt; f.x += f.vx * dt; f.y += f.vy * dt;
+    f.rot += f.vr * dt; if (f.y > H + 120) f.a = 0;
+  }
+  falling = falling.filter((f) => f.a > 0);
+  // 톱밥
+  for (const p of dust) {
+    p.vy += 380 * dt; p.x += p.vx * dt; p.y += p.vy * dt;
+    p.life -= dt; p.a = Math.max(0, p.life * 2);
+  }
+  dust = dust.filter((p) => p.life > 0);
+
+  // ── 그리기 ──
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  drawBackground(curSky);
+
+  ctx.save();
+  const sx = shake ? (Math.random() - 0.5) * shake * 2 : 0;
+  const sy = shake ? (Math.random() - 0.5) * shake * 2 : 0;
+  if (zoom > 0 || sx || sy) {
+    ctx.translate(W / 2, H / 2); ctx.scale(1 + zoom, 1 + zoom); ctx.translate(-W / 2, -H / 2);
+  }
+  ctx.translate(sx, sy);
+
+  // 쌓인 통나무
+  for (let i = 0; i < stack.length; i++) {
+    const s = stack[i], b = screenBottom(i * LOG_H);
+    if (b < -LOG_H || b - LOG_H > H) continue;
+    drawLog(s.x, b, s.w, i, 0);
+  }
+  // 움직이는 통나무
+  if (state === "play" && moving) {
+    drawLog(moving.x, screenBottom(stack.length * LOG_H), moving.w, stack.length, 0);
+    // 조준 가이드(맨 위 통나무 중심선)
+    const top = stack[stack.length - 1];
+    const gy = screenBottom(stack.length * LOG_H);
+    ctx.strokeStyle = "rgba(255,255,255,.28)"; ctx.setLineDash([4, 6]); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(top.x, gy); ctx.lineTo(top.x, gy - LOG_H * 2.4); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  // 낙하 조각
+  for (const f of falling) {
+    ctx.save();
+    ctx.globalAlpha = f.a;
+    ctx.translate(f.x, f.y); ctx.rotate(f.rot);
+    drawLog(0, f.h / 2, f.w, stack.length, 0);
+    ctx.restore();
+  }
+  // 톱밥
+  for (const p of dust) {
+    ctx.globalAlpha = p.a; ctx.fillStyle = "#e8c79a";
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 6.28); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// ── 입력 ───────────────────────────────────────────────
+function start() {
+  initAudio(); if (actx.state === "suspended") actx.resume();
+  startAmbient();
+  reset();
+  state = "play";
+  overlay.classList.add("hidden");
+  hint.classList.remove("hidden");
+  setTimeout(() => hint.classList.add("hidden"), 2600);
+}
+function onTap() {
+  if (state === "play") place();
+  else if (!overlay.classList.contains("hidden")) start();
+}
+btn.addEventListener("click", (e) => { e.stopPropagation(); start(); });
+document.getElementById("stage").addEventListener("pointerdown", onTap);
+window.addEventListener("keydown", (e) => {
+  if (e.code !== "Space" && e.code !== "Enter") return;
+  e.preventDefault();
+  if (e.repeat) return;
+  onTap();
+});
+$("mute").addEventListener("pointerdown", (e) => {
+  e.stopPropagation();
+  muted = !muted;
+  $("mute").textContent = muted ? "🔇" : "🔊";
+  if (muted) stopAmbient(); else { initAudio(); startAmbient(); }
+});
+
+// ── Bubblelab 연동 ─────────────────────────────────────
+window.blWeekly = { game: "woodstack", dir: "max", fmt: (v) => `${v}층` };
+window.blShareText = () => `🪵 우드 스택에서 ${hi}층까지 쌓았어요! 도전해보세요`;
+</script>
+<script defer src="/_shared/records.js"></script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>

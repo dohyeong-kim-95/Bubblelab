@@ -121,3 +121,13 @@ main push
 - 빌드가 필요한 소스는 `_src/<name>/`, 배포 산출물은 공개 사이트 폴더에 둡니다.
 - `games/avalon/`처럼 생성된 산출물은 직접 수정하지 않습니다.
 - README 파일은 `dist/`에 복사되지 않으므로 운영 문서로 자유롭게 사용할 수 있습니다.
+
+## 브랜치 규칙
+
+- `main`이 배포 브랜치입니다. 대부분의 작업은 `main`에서 직접 합니다.
+- `next-week`는 주간 룰 변경을 모아두는 릴리스 트레인 브랜치입니다(자세한 절차는
+  [`NEXT-WEEK.md`](./NEXT-WEEK.md)).
+- **`next-week`는 항상 `main`과 같거나 그보다 앞서 있어야 합니다.** 즉 `main`의
+  모든 커밋을 `next-week`가 포함해야 합니다(`next-week ⊇ main`). `main`에
+  변경이 들어가면 곧바로 `git merge origin/main`으로 `next-week`를 최신화해
+  이 관계를 유지하세요.
