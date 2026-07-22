@@ -120,9 +120,10 @@
     font: bold .85rem ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; padding: .6rem 1rem;
     border-radius: 1.1rem; border: 1.5px solid currentColor;
     color: light-dark(#334, #ccd); max-width: min(72vw, 18rem);
-    white-space: pre-line; line-height: 1.55;
+    white-space: pre-line; line-height: 1.55; cursor: pointer;
     background: light-dark(rgba(255,255,255,.75), rgba(20,26,36,.75));
     backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+  #bl-weekly.collapsed { padding: .5rem .8rem; }
   #bl-claim { position: fixed; left: 1rem; bottom: 7.4rem; z-index: 9999;
     font: .85rem ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; padding: .9rem 1rem;
     border-radius: 1rem; border: 1.5px solid currentColor;
@@ -177,6 +178,9 @@
   let current = null; // 이번 주 1위 { nick, score } | null
   let top3 = [];      // 이번 주 1~3위 [{ nick, score, text }]
   let pending = null; // 등록 대기 중인 내 기록
+  let collapsed = false; // 배지 접힘 상태(탭으로 토글, 저장됨)
+  try { collapsed = localStorage.getItem("bl-weekly-collapsed") === "1"; } catch {}
+  if (collapsed) { badge.classList.add("collapsed"); badge.textContent = "👑 ▸"; }
 
   const beats = (score, record) =>
     !record || (cfg.dir === "max" ? score > record.score : score < record.score);
@@ -185,16 +189,28 @@
   const inTop3 = (score) => top3.length < 3 || beats(score, top3[2]);
 
   function renderBadge() {
+    badge.classList.toggle("collapsed", collapsed);
+    if (collapsed) {
+      badge.textContent = "👑 ▸";
+      badge.title = "주간 순위 펼치기";
+      return;
+    }
     if (top3.length) {
       badge.textContent =
-        "👑 주간 순위\n" +
+        "👑 주간 순위 ▾\n" +
         top3.map((r, i) => `${MEDALS[i]} ${r.nick} · ${r.text ?? fmt(r.score)}`).join("\n");
-      badge.title = "주간 신기록 1~3위 — 매주 월요일 09시 초기화";
+      badge.title = "주간 신기록 1~3위 — 매주 월요일 09시 초기화 · 탭하면 접기";
     } else {
-      badge.textContent = "👑 주간 순위 자리가 비어있어요";
-      badge.title = "주간 신기록 보드 — 매주 월요일 09시 초기화";
+      badge.textContent = "👑 주간 순위 ▾\n자리가 비어있어요";
+      badge.title = "주간 신기록 보드 — 매주 월요일 09시 초기화 · 탭하면 접기";
     }
   }
+
+  badge.addEventListener("click", () => {
+    collapsed = !collapsed;
+    try { localStorage.setItem("bl-weekly-collapsed", collapsed ? "1" : "0"); } catch {}
+    renderBadge();
+  });
 
   fetch(`/_records?game=${cfg.game}`, { cache: "no-store" })
     .then((r) => (r.ok ? r.json() : Promise.reject()))
