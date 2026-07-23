@@ -378,36 +378,25 @@ addEventListener("keydown", (event) => {
 })();
 
 // 올타임 1위(명예의 전당)를 가장 많이 보유한 3명을 3·1·2 시상대로 보여준다.
+// 계산을 기다리지 않도록: 캐시(localStorage)로 즉시 그리고, 최신값은 백그라운드에서
+// 받아 갱신·재캐시한다. (인기순 카드 정렬과 같은 "즉시 표시 + 다음엔 최신" 패턴)
 (async () => {
   const podium = document.getElementById("hof-podium");
   if (!podium) return;
-  try {
-    const res = await fetch("/_records?alltime=1", { cache: "no-store" });
-    if (!res.ok) throw new Error();
-    const { records } = await res.json();
-    // 게임 → 이모지 맵은 랜딩 카드에서 그대로 뽑아 쓴다 (명예의 전당 카드 제외).
-    const gameEmoji = {};
-    for (const card of document.querySelectorAll(".card")) {
-      const g = card.querySelector(".champ")?.dataset.game;
-      const e = card.querySelector(".emoji")?.textContent?.trim();
-      if (g && e) gameEmoji[g] = e;
-    }
-    const byNick = new Map();                // 닉네임 → { count, at, games:[] }
-    for (const [game, r] of Object.entries(records ?? {})) {
-      if (!r || !r.nick) continue;
-      const cur = byNick.get(r.nick) ?? { count: 0, at: 0, games: [] };
-      cur.count += 1;
-      cur.at = Math.max(cur.at, r.at ?? 0);
-      cur.games.push(game);
-      byNick.set(r.nick, cur);
-    }
-    const ranked = [...byNick.entries()]
-      .map(([nick, v]) => ({ nick, count: v.count, at: v.at, games: v.games }))
-      .sort((a, b) => b.count - a.count || b.at - a.at || a.nick.localeCompare(b.nick))
-      .slice(0, 3);
-    if (!ranked.length) return;             // 기록이 하나도 없으면 표시하지 않음
-    const MEDAL = ["🥇", "🥈", "🥉"];
-    const MAX_EMOJI = 6;                     // 시상대 단에 넣을 이모지 최대 개수
+  const CACHE_KEY = "bl-hof-podium";
+  const MEDAL = ["🥇", "🥈", "🥉"];
+  const MAX_EMOJI = 6;                       // 시상대 단에 넣을 이모지 최대 개수
+
+  // 게임 → 이모지 맵은 랜딩 카드에서 그대로 뽑아 쓴다 (명예의 전당 카드 제외).
+  const gameEmoji = {};
+  for (const card of document.querySelectorAll(".card")) {
+    const g = card.querySelector(".champ")?.dataset.game;
+    const e = card.querySelector(".emoji")?.textContent?.trim();
+    if (g && e) gameEmoji[g] = e;
+  }
+
+  function renderPodium(ranked) {
+    if (!Array.isArray(ranked) || !ranked.length) return false;
     const row = podium.querySelector(".podium-row");
     row.textContent = "";
     for (const pos of [2, 0, 1]) {          // 화면 배치: 3등 · 1등 · 2등
@@ -428,7 +417,7 @@ addEventListener("keydown", (event) => {
       rank.className = "podium-rank"; rank.textContent = String(pos + 1);
       const games = document.createElement("div");
       games.className = "podium-games";
-      const emojis = p.games.map((g) => gameEmoji[g] ?? "🫧");
+      const emojis = (p.games ?? []).map((g) => gameEmoji[g] ?? "🫧");
       for (const e of emojis.slice(0, MAX_EMOJI)) {
         const s = document.createElement("span"); s.textContent = e; games.appendChild(s);
       }
@@ -442,6 +431,37 @@ addEventListener("keydown", (event) => {
       row.appendChild(item);
     }
     podium.hidden = false;
+    return true;
+  }
+
+  // 1) 캐시가 있으면 계산 없이 바로 그린다.
+  let renderedKey = null;
+  try {
+    const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || "null");
+    if (cached && renderPodium(cached.ranked)) renderedKey = JSON.stringify(cached.ranked);
+  } catch {}
+
+  // 2) 최신 데이터를 받아 달라졌을 때만 다시 그리고, 항상 재캐시한다.
+  try {
+    const res = await fetch("/_records?alltime=1", { cache: "no-store" });
+    if (!res.ok) throw new Error();
+    const { records } = await res.json();
+    const byNick = new Map();                // 닉네임 → { count, at, games:[] }
+    for (const [game, r] of Object.entries(records ?? {})) {
+      if (!r || !r.nick) continue;
+      const cur = byNick.get(r.nick) ?? { count: 0, at: 0, games: [] };
+      cur.count += 1;
+      cur.at = Math.max(cur.at, r.at ?? 0);
+      cur.games.push(game);
+      byNick.set(r.nick, cur);
+    }
+    const ranked = [...byNick.entries()]
+      .map(([nick, v]) => ({ nick, count: v.count, at: v.at, games: v.games }))
+      .sort((a, b) => b.count - a.count || b.at - a.at || a.nick.localeCompare(b.nick))
+      .slice(0, 3);
+    const freshKey = JSON.stringify(ranked);
+    if (freshKey !== renderedKey) renderPodium(ranked);   // 캐시와 같으면 다시 안 그림(깜빡임 방지)
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), ranked }));
   } catch {}
 })();
 
