@@ -28,6 +28,7 @@ export const GAMES = {
   circle:       { dir: "max", min: 0, max: 100 },       // 정확도(%)
   clicker:      { dir: "max", min: 0, max: 300 },       // 10초 클릭 수
   dart:         { dir: "max", min: 0, max: 1000 },      // 원에 꽂은 다트 수
+  dino:         { dir: "max", min: 0, max: 1000000 },   // 공룡 점프 주파 거리(m)
   "dart-adv":   { dir: "max", min: 0, max: 1000 },      // 파워 게이지 다트 수
   flags:        { dir: "max", min: 0, max: 1000 },      // 연속으로 맞춘 국기 수
   logroll:      { dir: "max", min: 0, max: 100000 },    // 버틴 시간(초)
