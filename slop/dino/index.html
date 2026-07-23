@@ -86,6 +86,7 @@ const $ = (id) => document.getElementById(id);
 const VW = 600;              // 논리 가로 폭
 let VH = 260;                // 논리 세로(리사이즈 때 계산)
 let DPR = 1;
+let groundMargin = 42;       // 바닥선~화면 하단 여백(논리px) — 리사이즈 때 계산
 
 function resize() {
   const w = cvs.clientWidth, h = cvs.clientHeight;
@@ -95,11 +96,16 @@ function resize() {
   cvs.height = Math.round(VH * DPR);
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.imageSmoothingEnabled = false;
+  // 왼쪽 아래 '주간 순위' 배지(공유 컴포넌트, 화면 하단 고정)에 공룡이 가리지
+  // 않도록, 화면 크기와 무관하게 바닥에 일정한 CSS 여백(≈90px)을 확보한다.
+  const scale = w / VW;                              // 논리→CSS 배율
+  groundMargin = Math.round(Math.min(VH * 0.5, Math.max(42, 90 / scale)));
+  if (typeof dino === "object" && dino && dino.onGround) dino.y = groundY();
 }
 window.addEventListener("resize", resize);
 
 // ── 지면 위치 ─────────────────────────────────────────────
-const groundY = () => VH - 42;   // 공룡이 서는 바닥선
+const groundY = () => VH - groundMargin;   // 공룡이 서는 바닥선
 
 // ── 게임 상태 ─────────────────────────────────────────────
 const STATE = { READY: 0, RUN: 1, OVER: 2 };
