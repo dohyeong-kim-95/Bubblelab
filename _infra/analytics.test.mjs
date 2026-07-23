@@ -174,9 +174,9 @@ test("ranks monthly top pages by unique visitors, excluding site homes", async (
     // games/avalon: 2명
     ["pv:2026-07-08:games/avalon:" + vid(1), true],
     ["pv:2026-07-08:games/avalon:" + vid(4), true],
-    // util/lotto: 1명, slop/yacht: 1명 (4위는 잘림)
+    // util/lotto: 1명, util/planner: 1명 (동점은 이름 앞선 util/lotto가 3위, util/planner는 잘림)
     ["pv:2026-07-07:util/lotto:" + vid(5), true],
-    ["pv:2026-07-07:slop/yacht:" + vid(6), true],
+    ["pv:2026-07-07:util/planner:" + vid(6), true],
     // 사이트 홈과 30일 밖 방문은 제외
     ["pv:2026-07-10:www:" + vid(1), true],
     ["pv:2026-05-01:slop/trader:" + vid(1), true],
