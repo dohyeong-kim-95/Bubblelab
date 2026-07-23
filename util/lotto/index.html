@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>로또번호 추첨기</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; margin: 0; min-height: 100vh;
+         display: flex; flex-direction: column; align-items: center;
+         justify-content: center; gap: 2rem; padding: 1.5rem; box-sizing: border-box; }
+  h1 { font-size: 1.1rem; margin: 0; opacity: .7; }
+  #countdown { text-align: center; display: flex; flex-direction: column;
+               gap: .3rem; margin-top: -1rem; }
+  #cd-main { font-weight: bold; font-variant-numeric: tabular-nums; }
+  #cd-sub { opacity: .5; font-size: .78rem; }
+  #balls { display: flex; gap: .6rem; flex-wrap: wrap; justify-content: center;
+           min-height: 3.4rem; }
+  .ball { width: 3.2rem; height: 3.2rem; border-radius: 50%; display: grid;
+          place-items: center; font-size: 1.15rem; font-weight: bold; color: #fff;
+          text-shadow: 0 1px 2px rgba(0,0,0,.35);
+          box-shadow: inset -4px -6px 10px rgba(0,0,0,.25),
+                      inset 4px 6px 10px rgba(255,255,255,.35),
+                      0 3px 6px rgba(0,0,0,.2);
+          animation: pop .35s cubic-bezier(.2,1.6,.4,1) both; }
+  .ball.bonus { margin-left: 1rem; position: relative; }
+  .ball.bonus::before { content: "+"; position: absolute; left: -1rem;
+                        color: light-dark(#666, #999); font-weight: normal; }
+  @keyframes pop { from { transform: scale(0); } to { transform: scale(1); } }
+  button { font: inherit; font-size: 1.1rem; padding: .8rem 2.2rem;
+           border-radius: 2rem; border: 2px solid currentColor;
+           background: none; color: inherit; cursor: pointer; }
+  button:active { transform: scale(.96); }
+  #history { list-style: none; padding: 0; margin: 0; opacity: .55;
+             font-size: .85rem; text-align: center; }
+  #history li { padding: .15rem 0; }
+  /* 데스크톱: 사용 영역(모바일 폭 스테이지) 밖은 톤을 낮춰 구분 */
+  body::before { content: ""; position: fixed; inset: 0; z-index: -2;
+                 background: light-dark(#dee6ee, #0a0e15); }
+  body::after { content: ""; position: fixed; top: 0; bottom: 0; left: 50%;
+                transform: translateX(-50%); width: min(100vw, 34rem); z-index: -1;
+                background: light-dark(#eef2f6, #10161f);
+                box-shadow: 0 0 1.5rem light-dark(rgba(30,50,70,.14), rgba(0,0,0,.5)); }
+</style>
+</head>
+<body>
+  <h1>🍀 로또번호 추첨기</h1>
+  <div id="countdown">
+    <span id="cd-main"></span>
+    <span id="cd-sub"></span>
+  </div>
+  <div id="balls"></div>
+  <button id="draw">추첨</button>
+  <ul id="history"></ul>
+<script>
+const ballsEl = document.getElementById("balls");
+const historyEl = document.getElementById("history");
+const drawBtn = document.getElementById("draw");
+
+/* ---------- 이번 회차 추첨·구매 마감 카운트다운 ----------
+ * 추첨: 매주 토요일 20:35 KST, 구매 마감: 추첨일 20:00 KST.
+ * 1회 추첨이 2002-12-07이라 회차는 시각만으로 계산된다.
+ * KST는 UTC+9 고정이라 방문자 시간대와 무관하게 정확하다. */
+const WEEK_MS = 7 * 86400e3;
+const FIRST_DRAW = Date.UTC(2002, 11, 7, 11, 35); // 1회 추첨 = KST 20:35
+const CLOSE_BEFORE = 35 * 60e3;                   // 추첨 35분 전 구매 마감
+
+function lottoState(now) {
+  const k = Math.max(1, Math.ceil((now - FIRST_DRAW) / WEEK_MS));
+  const draw = FIRST_DRAW + k * WEEK_MS;
+  return { round: k + 1, draw, close: draw - CLOSE_BEFORE };
+}
+
+function fmtLeft(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const pad = (n) => String(n).padStart(2, "0");
+  const hms = `${pad(Math.floor(s / 3600) % 24)}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`;
+  const d = Math.floor(s / 86400);
+  return d ? `${d}일 ${hms}` : hms;
+}
+
+const cdMain = document.getElementById("cd-main");
+const cdSub = document.getElementById("cd-sub");
+function tickCountdown() {
+  const now = Date.now();
+  const { round, draw, close } = lottoState(now);
+  if (now < close) {
+    cdMain.textContent = `🎯 ${round}회 구매 마감까지 ${fmtLeft(close - now)}`;
+    cdSub.textContent = "구매 마감 토 20:00 · 추첨 토 20:35";
+  } else {
+    cdMain.textContent = `📺 ${round}회 추첨까지 ${fmtLeft(draw - now)}`;
+    cdSub.textContent = "이번 회차 구매는 마감됐어요 · 추첨 토 20:35";
+  }
+}
+tickCountdown();
+setInterval(tickCountdown, 1000);
+
+// 공 색깔은 실제 로또 컬러 규칙
+function color(n) {
+  if (n <= 10) return "#f5a623";
+  if (n <= 20) return "#4a90d9";
+  if (n <= 30) return "#e05252";
+  if (n <= 40) return "#7d7d7d";
+  return "#4caf6d";
+}
+
+function drawNumbers() {
+  const pool = Array.from({ length: 45 }, (_, i) => i + 1);
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return { main: pool.slice(0, 6).sort((a, b) => a - b), bonus: pool[6] };
+}
+
+let drawing = false;
+drawBtn.addEventListener("click", () => {
+  if (drawing) return;
+  drawing = true;
+
+  if (ballsEl.children.length) {
+    const prev = [...ballsEl.children].map((b) => b.textContent);
+    const li = document.createElement("li");
+    li.textContent = prev.slice(0, 6).join(" ") + " + " + prev[6];
+    historyEl.prepend(li);
+    while (historyEl.children.length > 5) historyEl.lastChild.remove();
+  }
+
+  ballsEl.innerHTML = "";
+  const { main, bonus } = drawNumbers();
+  [...main, bonus].forEach((n, i) => {
+    setTimeout(() => {
+      const b = document.createElement("div");
+      b.className = "ball" + (i === 6 ? " bonus" : "");
+      b.style.background = color(n);
+      b.textContent = n;
+      ballsEl.appendChild(b);
+      if (i === 6) drawing = false;
+    }, i * 280);
+  });
+});
+</script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>
