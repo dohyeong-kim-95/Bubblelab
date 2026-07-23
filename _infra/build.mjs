@@ -236,9 +236,16 @@ ${preconnectLinks}
   .podium-nick { font-weight: bold; font-size: .88rem; margin-top: .25rem;
           max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .podium-count { font-size: .7rem; opacity: .72; margin-bottom: .4rem; }
-  .podium-base { width: 100%; display: grid; place-items: center;
-          font-weight: 900; font-size: 1.15rem; color: #fff;
-          border-radius: .55rem .55rem 0 0; text-shadow: 0 1px 2px #0006; }
+  .podium-base { position: relative; width: 100%; overflow: hidden;
+          border-radius: .55rem .55rem 0 0; }
+  .podium-rank { position: absolute; inset: 0; display: grid; place-items: center;
+          font-weight: 900; font-size: 2.4rem; color: #fff; opacity: .3;
+          text-shadow: 0 1px 2px #0004; pointer-events: none; }
+  .podium-games { position: relative; height: 100%; display: flex; flex-wrap: wrap;
+          align-content: center; justify-content: center; gap: .05rem .1rem;
+          padding: .25rem; font-size: .82rem; line-height: 1.05; }
+  .podium-more { align-self: center; font-size: .58rem; font-weight: 800; color: #fff;
+          text-shadow: 0 1px 1px #0006; }
   .rank-1 .podium-base { height: 4.6rem; background: linear-gradient(#f6d979, #dcae32); }
   .rank-2 .podium-base { height: 3.4rem; background: linear-gradient(#dfe6ec, #a8b4c1); }
   .rank-3 .podium-base { height: 2.6rem; background: linear-gradient(#e6b083, #bf7a45); }
@@ -272,7 +279,7 @@ ${categoryLinks}
   </div>
   <div id="crown" title="이번 주 1위를 가장 많이 가진 사람 — 월요일 09시 초기화"></div>
 ${site === "slop" ? '  <div id="streak">🔥 연속 방문 계산 중…</div>' : ""}
-${site === "slop" ? '  <div id="hof-podium" hidden><p class="podium-title">👑 슬롭 3대장</p><div class="podium-row"></div></div>' : ""}
+${site === "slop" ? '  <div id="hof-podium" hidden><p class="podium-title">👑 올타임 slop 삼대장</p><div class="podium-row"></div></div>' : ""}
 ${cards ? `  <div class="grid">\n${cards}\n  </div>` : `  <p class="empty">아직 아무것도 없어요 🫧</p>`}
   <footer><a href="https://bubblelab.dev">bubblelab.dev</a></footer>
 <script>
@@ -378,20 +385,29 @@ addEventListener("keydown", (event) => {
     const res = await fetch("/_records?alltime=1", { cache: "no-store" });
     if (!res.ok) throw new Error();
     const { records } = await res.json();
-    const counts = new Map();               // 닉네임 → { count, at(최근 달성일) }
-    for (const r of Object.values(records ?? {})) {
+    // 게임 → 이모지 맵은 랜딩 카드에서 그대로 뽑아 쓴다 (명예의 전당 카드 제외).
+    const gameEmoji = {};
+    for (const card of document.querySelectorAll(".card")) {
+      const g = card.querySelector(".champ")?.dataset.game;
+      const e = card.querySelector(".emoji")?.textContent?.trim();
+      if (g && e) gameEmoji[g] = e;
+    }
+    const byNick = new Map();                // 닉네임 → { count, at, games:[] }
+    for (const [game, r] of Object.entries(records ?? {})) {
       if (!r || !r.nick) continue;
-      const cur = counts.get(r.nick) ?? { count: 0, at: 0 };
+      const cur = byNick.get(r.nick) ?? { count: 0, at: 0, games: [] };
       cur.count += 1;
       cur.at = Math.max(cur.at, r.at ?? 0);
-      counts.set(r.nick, cur);
+      cur.games.push(game);
+      byNick.set(r.nick, cur);
     }
-    const ranked = [...counts.entries()]
-      .map(([nick, v]) => ({ nick, count: v.count, at: v.at }))
+    const ranked = [...byNick.entries()]
+      .map(([nick, v]) => ({ nick, count: v.count, at: v.at, games: v.games }))
       .sort((a, b) => b.count - a.count || b.at - a.at || a.nick.localeCompare(b.nick))
       .slice(0, 3);
     if (!ranked.length) return;             // 기록이 하나도 없으면 표시하지 않음
     const MEDAL = ["🥇", "🥈", "🥉"];
+    const MAX_EMOJI = 6;                     // 시상대 단에 넣을 이모지 최대 개수
     const row = podium.querySelector(".podium-row");
     row.textContent = "";
     for (const pos of [2, 0, 1]) {          // 화면 배치: 3등 · 1등 · 2등
@@ -405,8 +421,23 @@ addEventListener("keydown", (event) => {
       nick.className = "podium-nick"; nick.textContent = p.nick;
       const cnt = document.createElement("div");
       cnt.className = "podium-count"; cnt.textContent = "👑 " + p.count + "관왕";
+      // 시상대 단: 큰 순위 숫자(워터마크) 위에 1등한 게임 이모지들을 올린다.
       const base = document.createElement("div");
-      base.className = "podium-base"; base.textContent = String(pos + 1);
+      base.className = "podium-base";
+      const rank = document.createElement("span");
+      rank.className = "podium-rank"; rank.textContent = String(pos + 1);
+      const games = document.createElement("div");
+      games.className = "podium-games";
+      const emojis = p.games.map((g) => gameEmoji[g] ?? "🫧");
+      for (const e of emojis.slice(0, MAX_EMOJI)) {
+        const s = document.createElement("span"); s.textContent = e; games.appendChild(s);
+      }
+      if (emojis.length > MAX_EMOJI) {
+        const more = document.createElement("span");
+        more.className = "podium-more"; more.textContent = "+" + (emojis.length - MAX_EMOJI);
+        games.appendChild(more);
+      }
+      base.append(rank, games);
       item.append(fig, nick, cnt, base);
       row.appendChild(item);
     }
