@@ -106,7 +106,7 @@ const STATE = { READY: 0, RUN: 1, OVER: 2 };
 let state = STATE.READY;
 
 let speed, dist, hi = +(localStorage.getItem("dino-hi") || 0);
-let spawnGap, sinceSpawn;
+let sinceSpawn;
 let obstacles, clouds, pandas, hills;
 let dino, night, nightMix, lastMilestone;
 let over_t = 0;   // 게임오버 애니메이션 타이머
@@ -114,8 +114,7 @@ let over_t = 0;   // 게임오버 애니메이션 타이머
 function reset() {
   speed = 3.4;
   dist = 0;
-  spawnGap = 68;
-  sinceSpawn = 40;
+  sinceSpawn = 0;   // 첫 장애물은 gap만큼(~1.2초) 지난 뒤 등장
   obstacles = [];
   clouds = [];
   hills = [];
@@ -306,9 +305,13 @@ function update(dt) {
   }
   if (dino.ducking && !dino.onGround) { dino.vy += 0.35 * dt; } // 공중 급강하
 
-  // 장애물 스폰
+  // 장애물 스폰 — 간격을 '프레임(시간) 기준'으로 둔다.
+  // 점프 체공이 ~41프레임이라, 최소 간격을 그보다 넉넉히(≥46프레임) 잡아야
+  // 착지 후 재점프가 항상 가능하다. 픽셀 기준으로 두면 저속에서 장애물이
+  // 촘촘히 붙어 '어떤 타이밍으로도 못 넘는' 무리가 생겼다.
   sinceSpawn += speed * dt;
-  const gap = Math.max(42, spawnGap - dist * 0.01) + Math.random() * 28;
+  const baseFrames = Math.max(46, 60 - dist * 0.0007);  // 서서히 좁아지되 46 밑으론 안 감
+  const gap = speed * (baseFrames + Math.random() * 22);
   if (sinceSpawn > gap) { sinceSpawn = 0; spawnObstacle(); }
 
   // 장애물 이동/충돌
