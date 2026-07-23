@@ -127,10 +127,21 @@ function listingPage(site, entries) {
       .filter((name) => name !== site)
       .map((name) => `<link rel="preconnect" href="https://${escapeHtml(name)}.bubblelab.dev">`),
   ].join("\n");
-  const cards = entries
+  // 명예의 전당은 게임이 아니라 요약 화면이라, 그리드 맨 위 한 행을 전부
+  // 차지하는 금색 배너로 분리한다 (인기순 재정렬에서도 고정 — card--pinned).
+  const hofEntry = entries.find(({ name }) => name === "hall-of-fame");
+  const gameEntries = entries.filter(({ name }) => name !== "hall-of-fame");
+  const hofCard = hofEntry
+    ? `    <a class="card card--hof card--pinned" href="/hall-of-fame/" style="--hue:45;--i:0">
+      <span class="hof-emoji">🏆</span>
+      <span class="hof-text"><span class="hof-name">명예의 전당</span><span class="hof-desc">전체 게임 올타임 1위 모음</span></span>
+      <span class="hof-arrow" aria-hidden="true">→</span>
+    </a>\n`
+    : "";
+  const gameCards = gameEntries
     .map(({ name, emoji }, i) => {
       return `    <a class="card" href="/${escapeHtml(name)}/"
-       style="--hue:${hueOf(name)};--i:${i}">
+       style="--hue:${hueOf(name)};--i:${i + (hofEntry ? 1 : 0)}">
       <span class="emoji"${emoji.badge ? ' data-badge="+"' : ""}>${emoji.char}</span>
       <span class="name">${escapeHtml(name)}</span>
       <span class="champ" data-game="${escapeHtml(name)}"></span>
@@ -138,6 +149,7 @@ function listingPage(site, entries) {
     </a>`;
     })
     .join("\n");
+  const cards = hofCard + gameCards;
   return `<!doctype html>
 <html lang="ko">
 <head>
@@ -190,6 +202,21 @@ ${preconnectLinks}
           box-shadow: 0 7px 0 light-dark(hsl(var(--hue) 55% 78%), hsl(var(--hue) 35% 12%)); }
   .card:active { transform: translateY(2px); box-shadow: 0 1px 0
           light-dark(hsl(var(--hue) 55% 78%), hsl(var(--hue) 35% 12%)); }
+  /* 명예의 전당: 한 행을 전부 채우는 가로형 금색 배너 (게임 카드와 차별화) */
+  .card--hof { grid-column: 1 / -1; aspect-ratio: auto; flex-direction: row;
+          justify-content: flex-start; gap: 1rem; padding: 1.05rem 1.4rem; text-align: left;
+          color: light-dark(#6a4e14, #ffe4a0);
+          background: light-dark(#fff4d6, #38301a);
+          border-color: light-dark(#ecca6e, #715d24);
+          box-shadow: 0 4px 0 light-dark(#eaca70, #221b0b); }
+  .card--hof:hover { box-shadow: 0 7px 0 light-dark(#eaca70, #221b0b); }
+  .card--hof:active { box-shadow: 0 1px 0 light-dark(#eaca70, #221b0b); }
+  .card--hof .hof-emoji { font-size: 2.3rem; line-height: 1; }
+  .card--hof .hof-text { display: flex; flex-direction: column; gap: .18rem; min-width: 0; }
+  .card--hof .hof-name { font-weight: bold; font-size: 1.1rem; }
+  .card--hof .hof-desc { font-size: .8rem; opacity: .72;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card--hof .hof-arrow { margin-left: auto; font-size: 1.3rem; opacity: .5; }
   @keyframes pop { from { transform: scale(.6); opacity: 0; } }
   .emoji { font-size: 2.6rem; line-height: 1; position: relative; display: inline-block; }
   .emoji[data-badge]::after { content: attr(data-badge); position: absolute;
@@ -323,7 +350,8 @@ addEventListener("keydown", (event) => {
   const grid = document.querySelector(".grid");
   if (!grid) return;
   const cacheKey = \`bl-card-order:\${SITE}\`;
-  const cards = [...grid.children];
+  // 고정 카드(명예의 전당 배너)는 재정렬에서 빼서 항상 맨 위 한 행에 둔다.
+  const cards = [...grid.children].filter((card) => !card.classList.contains("card--pinned"));
   const gameOf = (card) => card.querySelector(".champ")?.dataset.game;
   try {
     const cached = JSON.parse(localStorage.getItem(cacheKey) || "null");
