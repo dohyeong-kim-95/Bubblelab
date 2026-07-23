@@ -26,7 +26,7 @@ export const GAMES = {
   "bubble-pop": { dir: "max", min: 0, max: 300 },       // 20초 터트린 버블 수
   "bubble-pop-idle": { dir: "max", min: 0, max: 1e100 }, // 7일 누적 버블 수
   circle:       { dir: "max", min: 0, max: 100 },       // 정확도(%)
-  clicker:      { dir: "max", min: 0, max: 300 },       // 10초 클릭 수
+  clicker:      { dir: "max", min: 0, max: 2000 },      // 10초 클릭 수
   dart:         { dir: "max", min: 0, max: 1000 },      // 원에 꽂은 다트 수
   dino:         { dir: "max", min: 0, max: 1000000 },   // 공룡 점프 주파 거리(m)
   "dart-adv":   { dir: "max", min: 0, max: 1000 },      // 파워 게이지 다트 수
