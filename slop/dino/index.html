@@ -72,7 +72,7 @@
       <kbd>↓</kbd> 누르는 동안 — 숙이기<br>
       선인장과 익룡을 피하세요
     </div>
-    <div class="pandaline">🐼 500m마다 길가에 판다가 앉아 대나무를 먹어요</div>
+    <div class="pandaline">🐼 500m마다 판다 · 💧 1km마다 음수대 · 🏁 5·10·21.1·42.195km 마라톤 지점</div>
   </div>
 </div>
 
@@ -115,7 +115,20 @@ let speed, dist, hi = +(localStorage.getItem("dino-hi") || 0);
 let sinceSpawn;
 let obstacles, clouds, pandas, hills;
 let dino, night, nightMix, lastMilestone;
+let landmarks, nextKm, markViewIdx, markToastIdx, toast;
 let over_t = 0;   // 게임오버 애니메이션 타이머
+
+// 거리 고정 배치: 월드는 프레임당 speed 이동, 거리는 speed*0.35 증가 →
+// 미터당 월드 픽셀 = 1/0.35 (속도 무관). 랜드마크 x = 공룡중심 + (목표거리-현재거리)*PXPERM.
+const PXPERM = 1 / 0.35;
+const LM_ANCHOR = 77;               // 공룡 중심 x
+// 마라톤 이스터에그 지점(m)
+const MARKS = [
+  { d: 5000,  label: "5K",          sub: "5킬로 통과! 🏃",           big: false },
+  { d: 10000, label: "10K",         sub: "10킬로 통과! 🏃💨",         big: false },
+  { d: 21100, label: "HALF 21.1",   sub: "하프 완주! 21.1km 🎉",      big: true  },
+  { d: 42195, label: "FINISH",      sub: "풀코스 완주! 42.195km 🏁🎉", big: true  },
+];
 
 function reset() {
   speed = 3.4;
@@ -125,6 +138,11 @@ function reset() {
   clouds = [];
   hills = [];
   pandas = [];
+  landmarks = [];
+  nextKm = 1;
+  markViewIdx = 0;
+  markToastIdx = 0;
+  toast = null;
   night = false;
   nightMix = 0;
   lastMilestone = 0;
@@ -301,6 +319,30 @@ function update(dt) {
   const ms = Math.floor(dist / 500);
   if (ms > lastMilestone) { lastMilestone = ms; spawnPanda(ms * 500); }
 
+  // 음수대(1km마다) — 화면에 들어오는 순간 추가
+  while ((nextKm * 1000 - dist) * PXPERM < VW + 40) {
+    landmarks.push({ atDist: nextKm * 1000, type: "water", ph: Math.random() * 6.28 });
+    nextKm++;
+  }
+  // 마라톤 게이트 — 화면에 들어오면 추가
+  while (markViewIdx < MARKS.length && (MARKS[markViewIdx].d - dist) * PXPERM < VW + 40) {
+    const mk = MARKS[markViewIdx++];
+    landmarks.push({ atDist: mk.d, type: "gate", label: mk.label, big: mk.big });
+  }
+  // 지점 통과 순간 축하 토스트
+  while (markToastIdx < MARKS.length && dist >= MARKS[markToastIdx].d) {
+    const mk = MARKS[markToastIdx++];
+    toast = { sub: mk.sub, t: 0, big: mk.big };
+    beep(mk.big ? 880 : 660, 0.12, "square", 0.06);
+    if (mk.big) {
+      setTimeout(() => beep(1040, 0.14, "square", 0.06), 120);
+      setTimeout(() => beep(1245, 0.2, "square", 0.06), 260);
+    }
+  }
+  if (toast) toast.t += dt;
+  // 화면 왼쪽으로 지나간 랜드마크 제거
+  landmarks = landmarks.filter((L) => (L.atDist - dist) * PXPERM > -140);
+
   // 공룡 물리
   const gy = groundY();
   dino.legT += speed * dt * 0.14;
@@ -413,8 +455,20 @@ function draw() {
   }
   ctx.globalAlpha = 1;
 
+  // 마라톤 게이트(아치) — 가장 뒤에, 공룡이 아래로 지나가게
+  for (const L of landmarks) {
+    if (L.type !== "gate") continue;
+    drawGate(LM_ANCHOR + (L.atDist - dist) * PXPERM, L.label, L.big, fg);
+  }
+
   // 판다(길가, 지면 위) — 장애물보다 먼저 그려 뒤에 둔다
   for (const p of pandas) drawPanda(p, fg);
+
+  // 음수대(1km마다)
+  for (const L of landmarks) {
+    if (L.type !== "water") continue;
+    drawWaterStation(LM_ANCHOR + (L.atDist - dist) * PXPERM, L.ph, fg);
+  }
 
   // 지면선 + 자갈
   ctx.strokeStyle = fg; ctx.lineWidth = 2;
@@ -435,6 +489,21 @@ function draw() {
 
   // 공룡
   drawDino(fg);
+
+  // 지점 통과 축하 토스트(상단 중앙, 잠깐 떴다 사라짐)
+  if (toast && toast.t < 165) {
+    const a = toast.t < 12 ? toast.t / 12 : (toast.t > 125 ? Math.max(0, (165 - toast.t) / 40) : 1);
+    const rise = Math.min(1, toast.t / 12);
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.textAlign = "center";
+    ctx.font = `bold ${toast.big ? 24 : 18}px ui-monospace, monospace`;
+    const ty = VH * 0.28 - (1 - rise) * 10;
+    ctx.fillStyle = toast.big ? "#e8b64c" : fg;
+    ctx.fillText(toast.sub, VW / 2, ty);
+    ctx.restore();
+    ctx.textAlign = "left";
+  }
 }
 
 function drawCloud(x, y) {
@@ -444,6 +513,67 @@ function drawCloud(x, y) {
   ctx.arc(x + 22, y, 8, 0, 7);
   ctx.rect(x, y, 22, 8);
   ctx.fill();
+}
+
+// 음수대(1km마다): 파란 표지판 + 물컵 테이블. 컬러라 선인장과 확실히 구분됨.
+function drawWaterStation(lx, ph, fg) {
+  const gy = groundY();
+  const x = Math.round(lx);
+  ctx.save();
+  ctx.translate(x, gy);
+  // 그림자
+  ctx.globalAlpha = 0.14; ctx.fillStyle = "#000";
+  ctx.beginPath(); ctx.ellipse(18, 3, 26, 4, 0, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+  // 표지판 기둥 + 파란 판("음수대")
+  ctx.fillStyle = "#8a939c"; ctx.fillRect(-6, -46, 3, 46);
+  ctx.fillStyle = "#2f7bc4"; roundRect(-22, -62, 38, 16, 3); ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.font = "bold 9px ui-monospace, monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("음수대", -3, -54);
+  ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+  // 테이블
+  ctx.fillStyle = "#c9a06a"; ctx.fillRect(2, -20, 3, 20); ctx.fillRect(33, -20, 3, 20);
+  ctx.fillStyle = "#eceef4"; ctx.fillRect(-2, -24, 42, 6);
+  ctx.fillStyle = "#cfd6de"; ctx.fillRect(-2, -19, 42, 3);
+  // 물컵(흰 컵 + 하늘색 물)
+  for (let i = 0; i < 4; i++) {
+    const cx = 3 + i * 9;
+    ctx.fillStyle = "#fff"; ctx.fillRect(cx, -31, 6, 7);
+    ctx.fillStyle = "#5cc2e6"; ctx.fillRect(cx + 1, -30, 4, 3);
+  }
+  // 살짝 튀는 물방울
+  const dy = (Math.sin(dist * 0.2 + ph) * 0.5 + 0.5) * 3;
+  ctx.fillStyle = "#5cc2e6"; ctx.fillRect(20, -24 + dy, 2, 2);
+  ctx.restore();
+}
+
+// 마라톤 게이트(아치+배너). FINISH는 체커 무늬. 컬러로 눈에 띄게.
+function drawGate(lx, label, big, fg) {
+  const gy = groundY();
+  const x = Math.round(lx);
+  const topY = Math.max(30, gy - (big ? 118 : 96));
+  const bannerH = big ? 24 : 20;
+  const halfW = big ? 66 : 54;
+  const isFinish = label === "FINISH";
+  const accent = isFinish ? "#d9534f" : (big ? "#e8964c" : "#4a90d9");
+  // 기둥 2개
+  ctx.fillStyle = accent;
+  ctx.fillRect(x - halfW, topY, 7, gy - topY);
+  ctx.fillRect(x + halfW - 7, topY, 7, gy - topY);
+  // 배너
+  roundRect(x - halfW - 3, topY, halfW * 2 + 6, bannerH, 3); ctx.fill();
+  if (isFinish) {  // 체커 무늬
+    const bw = halfW * 2 + 6, cell = bannerH / 2;
+    for (let r = 0; r < 2; r++) for (let c = 0; c * 8 < bw; c++) {
+      if ((r + c) % 2) { ctx.fillStyle = "#fff"; ctx.fillRect(x - halfW - 3 + c * 8, topY + r * cell, Math.min(8, bw - c * 8), cell); }
+    }
+  }
+  // 글자
+  ctx.fillStyle = isFinish ? "#111" : "#fff";
+  ctx.font = `bold ${big ? 15 : 14}px ui-monospace, monospace`;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(label, x, topY + bannerH / 2 + 1);
+  ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
 }
 
 function drawCactus(o) {
