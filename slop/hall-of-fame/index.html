@@ -9,15 +9,10 @@
   body { margin: 0; font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; min-height: 100vh;
          display: flex; flex-direction: column; align-items: center;
          justify-content: center; gap: 1.4rem; text-align: center;
-         padding: 2.5rem 1.5rem; box-sizing: border-box;
-         background: light-dark(#eef2f6, #10161f);
-         color: light-dark(#1c2733, #dbe4ee); }
+         padding: 2.5rem 1.5rem; box-sizing: border-box; }
   h1 { font-size: 1.1rem; margin: 0; opacity: .7; }
   #sub { opacity: .5; font-size: .85rem; margin: -0.8rem 0 0; }
-  /* 반응형 타일: 모바일은 1열, PC는 폭에 맞춰 여러 열이 한 행을 꽉 채운다
-     (auto-fit + 1fr → 남는 트랙이 접히고 카드가 늘어나 빈칸 없이 행을 채움) */
-  #board { width: min(100%, 60rem); display: grid;
-           grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+  #board { width: min(100%, 26rem); display: flex; flex-direction: column;
            gap: .55rem; text-align: left; }
   .row { display: grid; grid-template-columns: auto 1fr auto;
          column-gap: .55rem; row-gap: .35rem; align-items: baseline;
@@ -34,6 +29,13 @@
               text-overflow: ellipsis; white-space: nowrap; }
   .row .rec.empty { opacity: .4; }
   #msg { opacity: .6; min-height: 1.2em; font-size: .9rem; }
+  /* 데스크톱: 사용 영역(모바일 폭 스테이지) 밖은 톤을 낮춰 구분 */
+  body::before { content: ""; position: fixed; inset: 0; z-index: -2;
+                 background: light-dark(#dee6ee, #0a0e15); }
+  body::after { content: ""; position: fixed; top: 0; bottom: 0; left: 50%;
+                transform: translateX(-50%); width: min(100vw, 34rem); z-index: -1;
+                background: light-dark(#eef2f6, #10161f);
+                box-shadow: 0 0 1.5rem light-dark(rgba(30,50,70,.14), rgba(0,0,0,.5)); }
 </style>
 </head>
 <body>
