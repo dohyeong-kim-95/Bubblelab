@@ -217,6 +217,31 @@ ${preconnectLinks}
   .card--hof .hof-desc { font-size: .8rem; opacity: .72;
           overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .card--hof .hof-arrow { margin-left: auto; font-size: 1.3rem; opacity: .5; }
+  /* 올타임 1위를 가장 많이 가진 3명 — 3·1·2 시상대 (명예의 전당 카드 위) */
+  #hof-podium { margin: 0 0 1.4rem; }
+  #hof-podium[hidden] { display: none; }
+  .podium-title { text-align: center; font-weight: bold; font-size: .95rem;
+          margin: 0 0 .7rem; letter-spacing: .02em;
+          color: light-dark(#8a6d12, #ffd873); }
+  .podium-row { display: flex; justify-content: center; align-items: flex-end; gap: .55rem;
+          max-width: 30rem; margin: 0 auto; }
+  .podium-item { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column;
+          align-items: center; text-align: center;
+          animation: pop .5s cubic-bezier(.2,1.5,.4,1) both; }
+  .podium-item.rank-3 { animation-delay: .04s; }
+  .podium-item.rank-2 { animation-delay: .09s; }
+  .podium-item.rank-1 { animation-delay: .15s; }
+  .podium-figure { font-size: 2rem; line-height: 1; filter: drop-shadow(0 2px 2px #0003); }
+  .rank-1 .podium-figure { font-size: 2.7rem; }
+  .podium-nick { font-weight: bold; font-size: .88rem; margin-top: .25rem;
+          max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .podium-count { font-size: .7rem; opacity: .72; margin-bottom: .4rem; }
+  .podium-base { width: 100%; display: grid; place-items: center;
+          font-weight: 900; font-size: 1.15rem; color: #fff;
+          border-radius: .55rem .55rem 0 0; text-shadow: 0 1px 2px #0006; }
+  .rank-1 .podium-base { height: 4.6rem; background: linear-gradient(#f6d979, #dcae32); }
+  .rank-2 .podium-base { height: 3.4rem; background: linear-gradient(#dfe6ec, #a8b4c1); }
+  .rank-3 .podium-base { height: 2.6rem; background: linear-gradient(#e6b083, #bf7a45); }
   @keyframes pop { from { transform: scale(.6); opacity: 0; } }
   .emoji { font-size: 2.6rem; line-height: 1; position: relative; display: inline-block; }
   .emoji[data-badge]::after { content: attr(data-badge); position: absolute;
@@ -247,6 +272,7 @@ ${categoryLinks}
   </div>
   <div id="crown" title="이번 주 1위를 가장 많이 가진 사람 — 월요일 09시 초기화"></div>
 ${site === "slop" ? '  <div id="streak">🔥 연속 방문 계산 중…</div>' : ""}
+${site === "slop" ? '  <div id="hof-podium" hidden><p class="podium-title">👑 슬롭 3대장</p><div class="podium-row"></div></div>' : ""}
 ${cards ? `  <div class="grid">\n${cards}\n  </div>` : `  <p class="empty">아직 아무것도 없어요 🫧</p>`}
   <footer><a href="https://bubblelab.dev">bubblelab.dev</a></footer>
 <script>
@@ -342,6 +368,50 @@ addEventListener("keydown", (event) => {
   } catch {
     streak.textContent = "";
   }
+})();
+
+// 올타임 1위(명예의 전당)를 가장 많이 보유한 3명을 3·1·2 시상대로 보여준다.
+(async () => {
+  const podium = document.getElementById("hof-podium");
+  if (!podium) return;
+  try {
+    const res = await fetch("/_records?alltime=1", { cache: "no-store" });
+    if (!res.ok) throw new Error();
+    const { records } = await res.json();
+    const counts = new Map();               // 닉네임 → { count, at(최근 달성일) }
+    for (const r of Object.values(records ?? {})) {
+      if (!r || !r.nick) continue;
+      const cur = counts.get(r.nick) ?? { count: 0, at: 0 };
+      cur.count += 1;
+      cur.at = Math.max(cur.at, r.at ?? 0);
+      counts.set(r.nick, cur);
+    }
+    const ranked = [...counts.entries()]
+      .map(([nick, v]) => ({ nick, count: v.count, at: v.at }))
+      .sort((a, b) => b.count - a.count || b.at - a.at || a.nick.localeCompare(b.nick))
+      .slice(0, 3);
+    if (!ranked.length) return;             // 기록이 하나도 없으면 표시하지 않음
+    const MEDAL = ["🥇", "🥈", "🥉"];
+    const row = podium.querySelector(".podium-row");
+    row.textContent = "";
+    for (const pos of [2, 0, 1]) {          // 화면 배치: 3등 · 1등 · 2등
+      const p = ranked[pos];
+      if (!p) continue;                     // 3명 미만이면 있는 만큼만
+      const item = document.createElement("div");
+      item.className = "podium-item rank-" + (pos + 1);
+      const fig = document.createElement("div");
+      fig.className = "podium-figure"; fig.textContent = MEDAL[pos];
+      const nick = document.createElement("div");
+      nick.className = "podium-nick"; nick.textContent = p.nick;
+      const cnt = document.createElement("div");
+      cnt.className = "podium-count"; cnt.textContent = "👑 " + p.count + "관왕";
+      const base = document.createElement("div");
+      base.className = "podium-base"; base.textContent = String(pos + 1);
+      item.append(fig, nick, cnt, base);
+      row.appendChild(item);
+    }
+    podium.hidden = false;
+  } catch {}
 })();
 
 // 카드는 즉시 보여주고, 최근에 저장한 인기순을 먼저 적용한다. 최신 통계는
