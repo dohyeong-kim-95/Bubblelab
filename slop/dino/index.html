@@ -474,47 +474,67 @@ function drawPtero(o) {
   else { ctx.fillRect(x, y + 16, 20, 6); ctx.fillRect(x + 4, y + 20, 14, 6); }
 }
 
-// 판다: 앉아서 대나무를 먹는 모습(픽셀). 몸/귀/눈은 라인색으로, 배는 파냄.
+// 판다: 앉아서 대나무를 먹는 모습(픽셀). 회색 선인장과 헷갈리지 않도록
+// 실제 색(흑백+분홍 볼+초록 대나무)을 쓰고 발밑에 초록 풀숲을 깐다.
+// 다크모드에선 순검정이 안 보여 밝은 숯색으로 대체한다.
 function drawPanda(p, fg) {
   const bob = Math.sin(p.bob) * 1.5;
   const gx = Math.round(p.x);
   const baseY = groundY() - 2 + bob;
+  const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+
+  // 판다 고정 팔레트(테마 무관하게 컬러로 튀게)
+  const black = dark ? "#4a4a55" : "#26262c";   // 다크모드에선 밝은 숯색
+  const white = dark ? "#eceff5" : "#fbfbfd";
+  const cheek = "#f4a6bb";                        // 분홍 볼
+  const grass = dark ? "#3f7a43" : "#5aa653";     // 풀숲
+  const grassHi = dark ? "#5c9b57" : "#7cc35f";
+
   ctx.save();
   ctx.translate(gx, baseY);
 
-  const black = fg;
+  // 발밑 풀숲(멀리서도 '초록 자리'로 보여 선인장과 구분됨)
+  ctx.fillStyle = grass;
+  ctx.beginPath(); ctx.ellipse(16, 3, 26, 6, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = grassHi;
+  for (const gxp of [-6, 2, 30, 38]) {            // 삐죽 솟은 풀잎
+    ctx.beginPath(); ctx.moveTo(gxp, 3); ctx.lineTo(gxp + 2, -6); ctx.lineTo(gxp + 4, 3); ctx.fill();
+  }
   // 그림자
-  ctx.globalAlpha = 0.18; ctx.fillStyle = fg;
-  ctx.beginPath(); ctx.ellipse(16, 4, 22, 5, 0, 0, 7); ctx.fill();
+  ctx.globalAlpha = 0.16; ctx.fillStyle = fg;
+  ctx.beginPath(); ctx.ellipse(16, 4, 20, 4, 0, 0, 7); ctx.fill();
   ctx.globalAlpha = 1;
-
-  const skyM = nightMix;
-  const dark = matchMedia("(prefers-color-scheme: dark)").matches;
-  const bodyLight = dark ? "#c9c9cf" : "#fafafa";  // 흰 배/얼굴
 
   // 앉은 다리(검정)
   ctx.fillStyle = black;
   ctx.fillRect(-2, -14, 12, 16);
   ctx.fillRect(22, -14, 12, 16);
+  const outline = dark ? "#6a6a76" : "#c2c2cc";   // 흰 부위가 배경에 묻히지 않게
+  ctx.lineWidth = 1.4; ctx.strokeStyle = outline;
   // 흰 몸통
-  ctx.fillStyle = bodyLight;
-  roundRect(2, -34, 28, 26, 8); ctx.fill();
+  ctx.fillStyle = white;
+  roundRect(2, -34, 28, 26, 8); ctx.fill(); ctx.stroke();
   // 검정 어깨/팔
   ctx.fillStyle = black;
   roundRect(-4, -30, 12, 20, 5); ctx.fill();
   roundRect(24, -30, 12, 20, 5); ctx.fill();
   // 머리(흰)
-  ctx.fillStyle = bodyLight;
-  ctx.beginPath(); ctx.arc(16, -40, 14, 0, 7); ctx.fill();
+  ctx.fillStyle = white;
+  ctx.beginPath(); ctx.arc(16, -40, 14, 0, 7); ctx.fill(); ctx.stroke();
   // 귀(검정)
   ctx.fillStyle = black;
   ctx.beginPath(); ctx.arc(6, -50, 5, 0, 7); ctx.fill();
   ctx.beginPath(); ctx.arc(26, -50, 5, 0, 7); ctx.fill();
+  // 분홍 볼
+  ctx.fillStyle = cheek;
+  ctx.beginPath(); ctx.arc(6, -36, 2.6, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.arc(26, -36, 2.6, 0, 7); ctx.fill();
   // 눈 패치(검정)
+  ctx.fillStyle = black;
   ctx.beginPath(); ctx.ellipse(10, -41, 3.4, 4.6, -0.3, 0, 7); ctx.fill();
   ctx.beginPath(); ctx.ellipse(22, -41, 3.4, 4.6, 0.3, 0, 7); ctx.fill();
-  // 눈 반짝(배경색)
-  ctx.fillStyle = bodyLight;
+  // 눈 반짝(흰)
+  ctx.fillStyle = white;
   ctx.fillRect(10, -42, 1.6, 1.6); ctx.fillRect(22, -42, 1.6, 1.6);
   // 코
   ctx.fillStyle = black;
@@ -522,12 +542,12 @@ function drawPanda(p, fg) {
 
   // 대나무(초록) + 오물오물
   const munch = (Math.sin(p.munch * 6) + 1) / 2; // 0..1
-  ctx.fillStyle = "#5fa54a";
   ctx.save();
   ctx.translate(30, -30);
   ctx.rotate(-0.5 - munch * 0.15);
+  ctx.fillStyle = "#5fa54a";
   ctx.fillRect(0, -2, 20, 4);
-  ctx.fillStyle = "#7cc35f";
+  ctx.fillStyle = "#8ed36f";
   ctx.fillRect(14, -8, 8, 5); ctx.fillRect(16, 3, 8, 5);
   ctx.restore();
   // 잡은 손(검정)
