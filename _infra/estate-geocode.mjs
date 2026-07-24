@@ -24,7 +24,9 @@ const REGION_ADDR = {
 // 그대로 쓰고 지오코딩을 건너뛴다 — 역명은 지번 검색이 애매해서 직접 지정).
 // 동탄역은 매도 시 GTX 수요층 관점의 보조축 (실거주 축은 캠퍼스).
 const REFS = [
-  { id: "hwaseong-campus", label: "삼성 화성캠퍼스", road: "경기도 화성시 삼성전자로 1" },
+  // 화성캠퍼스는 DSR타워(삼성전자로 1-1, DS 부문 R타워)로 고정 — 실제 통근
+  // 목적지라 정문(삼성전자로 1)보다 동쪽으로 약 600m 더 정확하다.
+  { id: "hwaseong-campus", label: "삼성 화성캠 DSR", coord: { lat: 37.22528, lng: 127.07024 } },
   { id: "giheung-campus", label: "삼성 기흥캠퍼스", road: "경기도 용인시 기흥구 삼성로 1" },
   { id: "dongtan-station", label: "동탄역 (GTX·SRT)", road: "경기도 화성시 동탄역로 151" },
   { id: "gucheong-station", label: "구성역 (GTX-A)", coord: { lat: 37.2996, lng: 127.1054 } },
@@ -136,8 +138,10 @@ async function main() {
   }));
 
   for (const ref of REFS) {
+    // coord 직접 지정 기준점은 우리가 확정한 값이라 매번 최신 좌표·라벨로 덮어쓴다.
+    if (ref.coord) { geo.refs[ref.id] = { ...ref.coord, label: ref.label }; continue; }
     if (geo.refs[ref.id] && !force) continue;
-    const point = ref.coord ?? await vworldGeocode(key, ref.road, "ROAD").catch(() => null);
+    const point = await vworldGeocode(key, ref.road, "ROAD").catch(() => null);
     if (point) geo.refs[ref.id] = { ...point, label: ref.label };
     else console.error(`  기준점 실패: ${ref.label}`);
   }
