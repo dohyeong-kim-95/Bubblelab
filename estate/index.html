@@ -630,6 +630,12 @@ function complexStats() {
   });
 }
 
+// 네이버 부동산은 search?query= 를 SPA 초기 로드에서 무시해 홈으로 튕긴다.
+// 단지 좌표가 있으면 그 위치 지도(ms=위도,경도,줌)로 바로 열어 매물을 보여준다.
+const naverLink = (e) => e.point
+  ? `https://new.land.naver.com/complexes?ms=${e.point.lat.toFixed(6)},${e.point.lng.toFixed(6)},17&a=APT:PRE:ABYG:JGC&e=RETAIL`
+  : `https://new.land.naver.com/search?query=${encodeURIComponent(e.apt)}`;
+
 const inRadius = (e) => {
   if (!state.ref || !+state.radius) return true;
   return e.dist != null && e.dist <= +state.radius;
@@ -833,7 +839,7 @@ function renderAptCard() {
     `</div>` +
     (refDist ? `<div class="apt-dist">📍 ${refDist}</div>` : "") +
     (nearShuttle ? `<div class="apt-dist">🚌 가장 가까운 셔틀: ${nearShuttle}</div>` : "") +
-    `<div class="apt-links"><a href="https://new.land.naver.com/search?query=${encodeURIComponent(e.apt)}" target="_blank" rel="noreferrer">네이버 부동산 ↗</a></div>`;
+    `<div class="apt-links"><a href="${naverLink(e)}" target="_blank" rel="noreferrer">네이버 부동산에서 현재 매물 보기 ↗</a></div>`;
   body.querySelector(".apt-close").onclick = () => { state.selectedApt = null; renderAptCard(); };
 }
 
@@ -858,8 +864,7 @@ function renderRank() {
       `<td class="num">${fmtMan(e.med)}만</td>` +
       (hasRef ? `<td class="num">${e.dist != null ? `${e.dist.toFixed(1)}km` : "—"}</td>` : "") +
       `<td class="num">${e.last.date.slice(2)} · ${Math.round(e.last.area)}㎡ ${fmtEok(e.last.amt)}</td>` +
-      `<td><a href="https://new.land.naver.com/search?query=${encodeURIComponent(e.apt)}"` +
-      ` target="_blank" rel="noreferrer">네이버↗</a></td></tr>`).join("") +
+      `<td><a href="${naverLink(e)}" target="_blank" rel="noreferrer">네이버↗</a></td></tr>`).join("") +
     `</tbody>`;
   for (const th of $("rankTable").querySelectorAll("th.sortable")) {
     th.addEventListener("click", () => { rankSort = th.dataset.sort; renderRank(); });
