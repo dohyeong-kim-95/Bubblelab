@@ -96,6 +96,10 @@
   #grid button.selected { border-color: var(--pink); background: light-dark(#c0568a1a, #f0a8ce22); }
   #grid img { width: 100%; aspect-ratio: 1 / 1; height: auto; display: block; }
   #grid .empty { grid-column: 1 / -1; text-align: center; font-size: .78rem; opacity: .5; padding: 1.2rem 0; }
+  /* 이모지 탭: 셀을 작게, 글자는 크게 */
+  #grid.emoji-grid { grid-template-columns: repeat(auto-fill, minmax(2.7rem, 1fr)); }
+  #grid .emoji { font-size: 1.7rem; line-height: 1; padding: .3rem 0; border: 0; }
+  #grid .emoji:hover { background: light-dark(#00000010, #ffffff18); }
 
   .overlay { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 1.5rem; }
   .card { max-width: 24rem; width: 100%; }
@@ -489,7 +493,28 @@ async function sendPhoto(file) {
 // ── 스티커 서랍 ──────────────────────────────────────────────
 const picker = $("picker"), tabs = $("tabs"), grid = $("grid"), hint = $("hint");
 const HINT_DEFAULT = "스티커를 누르면 미리보기, 한 번 더 누르면 전송돼요";
+const HINT_EMOJI = "이모지를 누르면 입력창에 담겨요 — 보내기로 전송";
+// 기본 유니코드 이모지(이모지 탭). 누르면 입력창에 담긴다.
+const EMOJIS = ("😀 😁 😂 🤣 🥹 😊 😇 🙂 🙃 😉 😍 🥰 😘 😗 😚 😋 😛 😜 🤪 😝 🤗 " +
+  "🤔 🤭 🫢 🤫 😐 😑 😶 😏 😒 🙄 😬 😌 😔 😪 🤤 😴 🤒 🥵 🥶 😵 🤯 🥳 😎 🤓 🧐 " +
+  "😕 😟 🙁 ☹️ 😮 😯 😲 😳 🥺 😦 😧 😨 😰 😢 😭 😱 😖 😞 😓 😩 😫 🥱 😤 😡 🤬 😈 💀 💩 " +
+  "👍 👎 👏 🙌 🙏 👌 ✌️ 🤞 🤙 👋 💪 🫶 " +
+  "❤️ 🧡 💛 💚 💙 💜 🖤 🤍 💖 💕 💞 💗 💘 💔 🔥 ✨ ⭐ 🎉 💯 ✅ ❗ ❓ 🐴").split(" ");
 let activeTab = "recent", selectedKey = null;
+
+function insertEmoji(ch) {
+  const ta = $("text");
+  ta.value += ch;             // 입력창 끝에 담는다 (서랍은 열어둔 채 계속 고를 수 있게)
+  autoGrow();                 // 높이 갱신. 포커스는 주지 않는다(포커스 시 서랍이 닫힘).
+}
+function emojiButton(ch) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "emoji";
+  button.textContent = ch;
+  button.addEventListener("click", () => insertEmoji(ch));
+  return button;
+}
 
 function recentStickers() {
   try {
@@ -528,6 +553,12 @@ function stickerButton(pack, n) {
 }
 function renderGrid() {
   clearSelection();
+  grid.classList.toggle("emoji-grid", activeTab === "emoji");
+  if (activeTab === "emoji") {
+    hint.textContent = HINT_EMOJI;
+    grid.replaceChildren(...EMOJIS.map(emojiButton));
+    return;
+  }
   if (activeTab === "recent") {
     const list = recentStickers();
     if (!list.length) {
@@ -545,7 +576,7 @@ function renderGrid() {
 }
 function renderTabs() {
   tabs.replaceChildren();
-  for (const tab of [{ id: "recent", title: "🕘 최근" }, ...PACKS]) {
+  for (const tab of [{ id: "recent", title: "🕘 최근" }, { id: "emoji", title: "😀 이모지" }, ...PACKS]) {
     const button = document.createElement("button");
     button.type = "button"; button.role = "tab"; button.textContent = tab.title;
     button.setAttribute("aria-selected", String(tab.id === activeTab));
@@ -554,11 +585,11 @@ function renderTabs() {
   }
 }
 function openPicker() {
-  if (!PACKS.length) return;
+  // 스티커 팩이 없어도 이모지 탭이 있으므로 서랍은 항상 열 수 있다.
   $("text").blur();
   picker.hidden = false;
   $("sticker-btn").setAttribute("aria-expanded", "true");
-  if (activeTab === "recent" && !recentStickers().length) activeTab = PACKS[0].id;
+  if (activeTab === "recent" && !recentStickers().length) activeTab = PACKS[0]?.id ?? "emoji";
   renderTabs(); renderGrid(); scroll();
 }
 function closePicker() {
@@ -641,8 +672,16 @@ text.addEventListener("keydown", (e) => {
 });
 $("composer").addEventListener("submit", (e) => {
   e.preventDefault();
+  if (!ws || ws.readyState !== 1) return;
+  // 스티커를 한 번 눌러 선택(미리보기)한 상태면, 보내기 버튼으로도 그 스티커를 전송한다.
+  if (selectedKey) {
+    const [p, n] = selectedKey.split("/");
+    clearSelection();
+    sendSticker(p, Number(n)).catch((err) => console.warn("send failed", err));
+    return;
+  }
   const val = text.value.trim();
-  if (!val || !ws || ws.readyState !== 1) return;
+  if (!val) return;
   text.value = ""; text.style.height = "auto";
   text.focus(); // 전송 후에도 키보드 유지 — 제스처 안에서 동기로 포커스 유지, await 안 함
   sendText(val).catch((err) => console.warn("send failed", err));
