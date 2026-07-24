@@ -66,6 +66,18 @@ const SHUTTLE_ROUTES = {
       { name: "힐스테이트·호반5차", coord: { lat: 37.18469, lng: 127.12254 } },
     ],
   },
+  // 세 번째 노선: 화성DSR행 (에일린의뜰·반도유보라 6·7·8차 → DSR타워). 노선1도
+  // 화성DSR행이라 구분 위해 초록 계열 다른 톤. 단지가 아닌 정류장(업무복합부지·
+  // 동탄IT타워)은 주소 확인 전까지 제외 — 나머지 4개가 같은 남북 축이라 형태 유지.
+  "eilin-bando-dsr": {
+    label: "화성DSR 셔틀 (에일린·반도유보라)", color: "#37b24d",
+    stops: [
+      { name: "에일린의뜰", match: "동탄역에일린의뜰" },
+      { name: "반도유보라5단지", match: "동탄역 반도유보라 아이비파크5.0" },
+      { name: "반도유보라6차", match: "동탄역 반도유보라 아이비파크6.0" },
+      { name: "화성DSR동", ref: "hwaseong-campus" },
+    ],
+  },
 };
 
 function readKey() {
