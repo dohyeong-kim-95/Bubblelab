@@ -70,6 +70,18 @@
   .time { font-size: .62rem; color: var(--dim); margin: .1rem .3rem 0; }
   .broken { color: light-dark(#b4453a, #f0a8a2); font-size: .82rem; }
 
+  /* 사진 전송 전 미리보기 트레이(카톡 벤치마킹): 여러 장 담아 확인 후 보낸다 */
+  #photo-tray { display: flex; gap: .4rem; overflow-x: auto; padding: .55rem .7rem;
+                border-top: 1px solid var(--line); background: var(--panel);
+                max-width: 44rem; width: 100%; margin: 0 auto; }
+  #photo-tray[hidden] { display: none; }
+  #photo-tray.sending { opacity: .55; pointer-events: none; }
+  #photo-tray .thumb { position: relative; flex: 0 0 auto; }
+  #photo-tray .thumb img { width: 3.6rem; height: 3.6rem; object-fit: cover; border-radius: .55rem;
+                           border: 1px solid var(--line); display: block; }
+  #photo-tray .thumb .rm { position: absolute; top: -.35rem; right: -.35rem; width: 1.25rem; height: 1.25rem;
+                           border-radius: 50%; border: 0; background: light-dark(#000a, #000d); color: #fff;
+                           font-size: .7rem; line-height: 1; cursor: pointer; padding: 0; }
   form { display: flex; gap: .5rem; padding: .6rem; border-top: 1px solid var(--line); background: var(--panel);
          max-width: 44rem; width: 100%; margin: 0 auto; align-items: flex-end;
          padding-bottom: calc(.6rem + env(safe-area-inset-bottom)); }
@@ -154,8 +166,10 @@
   <div id="grid"></div>
 </div>
 
+<div id="photo-tray" hidden></div>
+
 <form id="composer" class="hidden">
-  <label class="attach" title="사진 보내기">🖼️<input id="file" type="file" accept="image/*" hidden></label>
+  <label class="attach" title="사진 보내기">🖼️<input id="file" type="file" accept="image/*" multiple hidden></label>
   <button type="button" id="sticker-btn" aria-expanded="false" title="스티커">🐴</button>
   <textarea id="text" rows="1" placeholder="메시지…" autocomplete="off"></textarea>
   <button type="submit" class="send" id="sendBtn">보내기</button>
@@ -478,7 +492,7 @@ async function sendPhoto(file) {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const sha256 = hex(await crypto.subtle.digest("SHA-256", bytes));
   const img = await encryptBytes(bytes);
-  const meta = await encryptJson({ name: MY_NAME, caption: file.name, at: Date.now() });
+  const meta = await encryptJson({ name: MY_NAME, at: Date.now() }); // 파일명 캡션 없이 원본만
   const res = await fetch("/_duri/photo", {
     method: "POST",
     headers: { "X-Duri-Img-Iv": img.iv, "X-Duri-Sha256": sha256, "X-Duri-Meta-Iv": meta.iv, "X-Duri-Meta": meta.ct },
@@ -487,7 +501,47 @@ async function sendPhoto(file) {
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     alert(`사진 전송 실패: ${res.status}\n원본 ${(bytes.length / 1048576).toFixed(1)}MB\n${detail}`);
+    return false;
   }
+  return true;
+}
+
+// ── 사진 미리보기 트레이 (카톡식: 여러 장 담아 확인 후 보내기) ──
+let pendingPhotos = []; // [{ file, url }]
+let photoSending = false;
+const photoTray = () => $("photo-tray");
+
+function renderTray() {
+  const tray = photoTray();
+  tray.replaceChildren();
+  if (!pendingPhotos.length) { tray.hidden = true; return; }
+  tray.hidden = false;
+  pendingPhotos.forEach((p, i) => {
+    const thumb = document.createElement("div");
+    thumb.className = "thumb";
+    const img = document.createElement("img");
+    img.src = p.url; img.alt = "선택한 사진"; img.decoding = "async";
+    const rm = document.createElement("button");
+    rm.type = "button"; rm.className = "rm"; rm.textContent = "✕"; rm.title = "빼기";
+    rm.addEventListener("click", () => { URL.revokeObjectURL(p.url); pendingPhotos.splice(i, 1); renderTray(); });
+    thumb.append(img, rm);
+    tray.append(thumb);
+  });
+}
+
+async function sendPendingPhotos() {
+  if (photoSending || !pendingPhotos.length) return;
+  photoSending = true;
+  photoTray().classList.add("sending");
+  const sendBtn = $("sendBtn");
+  sendBtn.disabled = true; sendBtn.textContent = "전송 중…";
+  const batch = pendingPhotos.slice();
+  for (const p of batch) { await sendPhoto(p.file); URL.revokeObjectURL(p.url); }
+  pendingPhotos = [];
+  photoTray().classList.remove("sending");
+  sendBtn.disabled = false; sendBtn.textContent = "보내기";
+  photoSending = false;
+  renderTray();
 }
 
 // ── 스티커 서랍 ──────────────────────────────────────────────
@@ -673,6 +727,13 @@ text.addEventListener("keydown", (e) => {
 $("composer").addEventListener("submit", (e) => {
   e.preventDefault();
   if (!ws || ws.readyState !== 1) return;
+  // 미리보기 트레이에 담긴 사진이 있으면 우선 전송한다(함께 입력한 텍스트도 같이).
+  if (pendingPhotos.length) {
+    const cap = text.value.trim();
+    if (cap) { text.value = ""; text.style.height = "auto"; sendText(cap).catch((err) => console.warn("send failed", err)); }
+    sendPendingPhotos();
+    return;
+  }
   // 스티커를 한 번 눌러 선택(미리보기)한 상태면, 보내기 버튼으로도 그 스티커를 전송한다.
   if (selectedKey) {
     const [p, n] = selectedKey.split("/");
@@ -683,13 +744,16 @@ $("composer").addEventListener("submit", (e) => {
   const val = text.value.trim();
   if (!val) return;
   text.value = ""; text.style.height = "auto";
-  text.focus(); // 전송 후에도 키보드 유지 — 제스처 안에서 동기로 포커스 유지, await 안 함
+  // 서랍(이모지 탭)이 열려 있으면 포커스하지 않는다 — 포커스 시 서랍이 닫히고
+  // 키보드가 떠서 이모지를 연속으로 못 보낸다. 키보드로 치던 중이면 포커스 유지.
+  if (picker.hidden) text.focus();
   sendText(val).catch((err) => console.warn("send failed", err));
 });
-$("file").addEventListener("change", async (e) => {
-  const file = e.target.files[0];
+$("file").addEventListener("change", (e) => {
+  // 즉시 전송하지 않고 미리보기 트레이에 담는다(여러 장 가능). 보내기로 확정 전송.
+  for (const file of e.target.files) pendingPhotos.push({ file, url: URL.createObjectURL(file) });
   e.target.value = "";
-  if (file) await sendPhoto(file);
+  renderTray();
 });
 
 // 저장된 문구·이름이 있으면 곧바로 입장 (아무것도 안 해도 이어짐)
