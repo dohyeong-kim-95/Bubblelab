@@ -88,6 +88,46 @@ const SHUTTLE_ROUTES = {
       { name: "화성DSR동", ref: "hwaseong-campus" },
     ],
   },
+  // 다섯 번째: 동탄2신도시2차_H1-DSR (화성DSR행). 무봉초(1번)는 학교라 제외 —
+  // 바로 옆 KCC스위첸이 시작점. 나머지 8개는 모두 청계동 단지에 매칭.
+  "dt2-2cha-dsr": {
+    label: "DSR · 동탄2 2차·청계동", color: "#66a80f",
+    stops: [
+      { name: "KCC스위첸", match: "KCC스위첸아파트" },
+      { name: "시범반도유보라4차", match: "시범반도유보라아이비파크4.0" },
+      { name: "동탄역시범호반써밋", match: "동탄역시범호반써밋" },
+      { name: "대원칸타빌", match: "동탄역시범대원칸타빌아파트" },
+      { name: "한화꿈에그린", match: "동탄역 시범한화 꿈에그린 프레스티지" },
+      { name: "더샵센트럴시티", match: "더샵센트럴시티" },
+      { name: "동탄역센트럴상록", match: "동탄역센트럴상록아파트" },
+      { name: "화성DSR동", ref: "hwaseong-campus" },
+    ],
+  },
+  // 여섯 번째: 화성DSR행. 화성나래학교(3)·리베라CC(5)는 단지 아니라 제외.
+  "dsr-lakeedu": {
+    label: "DSR · 레이크에듀·린스트라우스", color: "#087f5b",
+    stops: [
+      { name: "동탄린스트라우스더레이크", match: "동탄린스트라우스더레이크" },
+      { name: "동탄더샵레이크에듀타운", match: "동탄 더샵 레이크에듀타운" },
+      { name: "반도유보라3차", match: "반도유보라아이비파크3" },
+      { name: "더샵센트럴시티", match: "더샵센트럴시티" },
+      { name: "화성DSR동", ref: "hwaseong-campus" },
+    ],
+  },
+  // 일곱 번째: 화성DSR행. 동탄호수공원 남쪽. 호수공원아이파크(3)는 데이터 없어 제외.
+  "dsr-lakepark-s": {
+    label: "DSR · 호수공원남·부영레이크", color: "#5c940d",
+    stops: [
+      { name: "반도9차", match: "레이크반도유보라아이비파크9.0" },
+      { name: "금호어울림레이크", match: "금호어울림레이크" },
+      { name: "더레이크부영6단지", match: "더레이크시티부영6단지" },
+      { name: "더레이크부영1단지", match: "더레이크시티부영1단지" },
+      { name: "서희스타힐스", match: "서희스타힐스엔에이치에프" },
+      { name: "한신더휴", match: "한신더휴" },
+      { name: "베라체", match: "동탄2신도시 베라체" },
+      { name: "화성DSR동", ref: "hwaseong-campus" },
+    ],
+  },
 };
 
 function readKey() {
