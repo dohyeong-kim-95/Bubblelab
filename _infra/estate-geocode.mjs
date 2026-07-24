@@ -182,6 +182,54 @@ function buildAptCoordIndex(geo) {
   return index;
 }
 
+// 추천 핀: 초록(화성DSR행)·보라(우체국행) 셔틀 정류장이 둘 다 PIN_RADIUS 이내이고
+// 매매 중앙가가 가격대 안, 표본이 충분한 동탄 단지. 조건을 바꾸면 다른 추천이 된다.
+const PIN = { radius: 500, minPrice: 30000, maxPrice: 80000, minDeals: 5,
+  months: ["202602", "202603", "202604", "202605", "202606", "202607"] };
+
+function haversine(a, b) {
+  const R = 6371000, rad = Math.PI / 180;
+  const dLat = (b[0] - a[0]) * rad, dLng = (b[1] - a[1]) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[0] * rad) * Math.cos(b[0] * rad) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.asin(Math.sqrt(h));
+}
+function medianOf(arr) {
+  const s = [...arr].sort((x, y) => x - y), m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+function computeRecommendPins(geo) {
+  const green = [], purple = [];
+  for (const s of Object.values(geo.shuttles ?? {})) {
+    const pts = s.stops.map((st) => [st.lat, st.lng]);
+    (s.color === "#7048e8" ? purple : green).push(...pts);
+  }
+  if (!green.length || !purple.length) return [];
+  const months = new Set(PIN.months);
+  const apt = {};
+  for (const file of readdirSync(DATA_DIR)) {
+    if (!file.startsWith("trade-dongtan-")) continue;
+    const { ym, items } = JSON.parse(readFileSync(join(DATA_DIR, file), "utf8"));
+    if (!months.has(ym)) continue;
+    for (const r of items) {
+      if (r.canceled || !r.jibun) continue;
+      const pt = geo.points[`dongtan|${r.dong}|${r.jibun}`];
+      if (!pt) continue;
+      (apt[r.apt] ??= { amts: [], pt: null }).amts.push(r.amt);
+      apt[r.apt].pt ??= pt;
+    }
+  }
+  const nearest = (pt, arr) => Math.min(...arr.map((s) => haversine([pt.lat, pt.lng], s)));
+  const pins = [];
+  for (const [name, v] of Object.entries(apt)) {
+    if (!v.pt || v.amts.length < PIN.minDeals) continue;
+    const price = medianOf(v.amts);
+    if (price < PIN.minPrice || price >= PIN.maxPrice) continue;
+    if (nearest(v.pt, green) > PIN.radius || nearest(v.pt, purple) > PIN.radius) continue;
+    pins.push({ name, lat: v.pt.lat, lng: v.pt.lng, price, deals: v.amts.length });
+  }
+  return pins.sort((a, b) => b.deals - a.deals);
+}
+
 async function vworldGeocode(key, address, type) {
   const u = new URL("https://api.vworld.kr/req/address");
   u.searchParams.set("service", "address");
@@ -271,6 +319,9 @@ async function main() {
       geo.shuttles[id] = { label: route.label, color: route.color, stops };
     }
   }
+
+  // 추천 핀은 셔틀·좌표가 다 준비된 뒤 계산 (데이터 갱신 때마다 자동 재계산).
+  geo.pins = computeRecommendPins(geo);
 
   geo.generatedAt = new Date().toISOString();
   writeFileSync(GEO_FILE, JSON.stringify(geo));

@@ -100,6 +100,10 @@ svg text { font-family: inherit; font-size: 12px; fill: light-dark(#5a6b7d, #93a
   paint-order: stroke; stroke: light-dark(#ffffff, #0d131c); stroke-width: 3px; }
 #mapChart svg { max-height: 640px; margin: 0 auto; overflow: hidden; }
 .rail-station { stroke: light-dark(#ffffff, #151e2a); }
+.pin-body { fill: #e8590c; stroke: light-dark(#ffffff, #0d131c); stroke-width: 1.5; }
+.pin-dot { fill: light-dark(#ffffff, #fff3e6); }
+.pin-label { fill: light-dark(#c92a2a, #ffa94d); font-weight: 700;
+  paint-order: stroke; stroke: light-dark(#ffffff, #0d131c); stroke-width: 3px; }
 .map-legend .rail { display: inline-block; width: 16px; height: 0; border-top: 3px solid; margin-right: 4px; vertical-align: 4px; }
 .leg-route { cursor: pointer; user-select: none; opacity: 0.55; }
 .leg-route:hover { text-decoration: underline; }
@@ -708,13 +712,28 @@ function renderMap() {
   const scaleBar = `<line class="map-scale" x1="${sx}" x2="${sx + 2 * pxPerKm}" y1="${sy}" y2="${sy}"/>` +
     `<text x="${sx + pxPerKm}" y="${sy - 5 * ui}" text-anchor="middle" font-size="${Math.round(12 * ui)}">2km</text>`;
 
+  // 추천 핀(초록·보라 셔틀 둘 다 도보권 + 8억 미만). 최상단 레이어.
+  let pins = "";
+  for (const p of geoData.pins ?? []) {
+    const x = px(p), y = py2(p), r = 6.5 * ui;
+    const bulb = (y - r * 1.85).toFixed(1);
+    pins += `<g><title>${p.name}\n${(p.price / 10000).toFixed(2)}억 · 최근 6개월 ${p.deals}건</title>` +
+      `<path class="pin-body" d="M${x} ${y.toFixed(1)} C${(x - r * 1.1).toFixed(1)} ${(y - r * 1.2).toFixed(1)} ` +
+      `${(x - r).toFixed(1)} ${(y - r * 2.6).toFixed(1)} ${x} ${(y - r * 2.6).toFixed(1)} ` +
+      `C${(x + r).toFixed(1)} ${(y - r * 2.6).toFixed(1)} ${(x + r * 1.1).toFixed(1)} ${(y - r * 1.2).toFixed(1)} ${x} ${y.toFixed(1)} Z"/>` +
+      `<circle class="pin-dot" cx="${x}" cy="${bulb}" r="${(r * 0.42).toFixed(1)}"/>` +
+      `<text class="pin-label" x="${x}" y="${(y - r * 3.1).toFixed(1)}" text-anchor="middle" font-size="${(9 * ui).toFixed(1)}">` +
+      `${(p.price / 10000).toFixed(1)}억</text></g>`;
+  }
+
   chart.innerHTML = `<svg viewBox="0 0 ${VW} ${VH}" role="img" aria-label="단지 위치 지도">` +
-    `${baseImg}${railLines}${radiusCircle}${dots}${refMarks}${scaleBar}</svg>`;
+    `${baseImg}${railLines}${radiusCircle}${dots}${refMarks}${scaleBar}${pins}</svg>`;
 
   $("mapLegend").innerHTML =
     [`~${fmtMan(breaks[0])}`, `~${fmtMan(breaks[1])}`, `~${fmtMan(breaks[2])}`, `~${fmtMan(breaks[3])}`, `${fmtMan(breaks[3])}~`]
       .map((label, i) => `<span><i class="sw q${i}"></i>${label}</span>`).join("") +
     `<span>만원/평 (중앙값)</span>` +
+    (geoData.pins?.length ? `<span title="초록·보라 셔틀 정류장 둘 다 도보 500m 이내, 매매 8억 미만, 최근 6개월 5건 이상"><b style="color:#e8590c">📍</b> 추천 (셔틀 도보권·8억↓)</span>` : "") +
     Object.entries(geoData.lines ?? {}).map(([id, l]) =>
       `<span class="leg-route${state.emphasized.has(id) ? " on" : ""}" data-route="${id}">` +
       `<i class="rail" style="border-color:${l.color}"></i>${l.label}</span>`).join("") +
