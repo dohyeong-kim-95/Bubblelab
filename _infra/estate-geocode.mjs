@@ -70,7 +70,7 @@ const SHUTTLE_ROUTES = {
   // 화성DSR행이라 구분 위해 초록 계열 다른 톤. 단지가 아닌 정류장(업무복합부지·
   // 동탄IT타워)은 주소 확인 전까지 제외 — 나머지 4개가 같은 남북 축이라 형태 유지.
   "eilin-bando-dsr": {
-    label: "DSR · 에일린·반도유보라", color: "#37b24d",
+    label: "DSR · 에일린·반도유보라", color: "#0ca678",
     stops: [
       { name: "에일린의뜰", match: "동탄역에일린의뜰" },
       { name: "반도유보라5단지", match: "동탄역 반도유보라 아이비파크5.0" },
@@ -81,7 +81,7 @@ const SHUTTLE_ROUTES = {
   // 네 번째: 동탄2신도시1차A_H1-DSR (화성DSR행). LH4단지·동탄IT타워는 아파트가
   // 아니라 주소 확인 전까지 제외 — 확실한 정류장(모아미래도·센트럴상록·DSR)만.
   "dt2-1cha-a-dsr": {
-    label: "DSR · 동탄2 1차A·모아미래도", color: "#2f9e44",
+    label: "DSR · 동탄2 1차A·모아미래도", color: "#0ca678",
     stops: [
       { name: "동탄역모아미래도", match: "동탄역모아미래도" },
       { name: "동탄역센트럴상록", match: "동탄역센트럴상록아파트" },
@@ -91,7 +91,7 @@ const SHUTTLE_ROUTES = {
   // 다섯 번째: 동탄2신도시2차_H1-DSR (화성DSR행). 무봉초(1번)는 학교라 제외 —
   // 바로 옆 KCC스위첸이 시작점. 나머지 8개는 모두 청계동 단지에 매칭.
   "dt2-2cha-dsr": {
-    label: "DSR · 동탄2 2차·청계동", color: "#66a80f",
+    label: "DSR · 동탄2 2차·청계동", color: "#0ca678",
     stops: [
       { name: "KCC스위첸", match: "KCC스위첸아파트" },
       { name: "시범반도유보라4차", match: "시범반도유보라아이비파크4.0" },
@@ -105,7 +105,7 @@ const SHUTTLE_ROUTES = {
   },
   // 여섯 번째: 화성DSR행. 화성나래학교(3)·리베라CC(5)는 단지 아니라 제외.
   "dsr-lakeedu": {
-    label: "DSR · 레이크에듀·린스트라우스", color: "#087f5b",
+    label: "DSR · 레이크에듀·린스트라우스", color: "#0ca678",
     stops: [
       { name: "동탄린스트라우스더레이크", match: "동탄린스트라우스더레이크" },
       { name: "동탄더샵레이크에듀타운", match: "동탄 더샵 레이크에듀타운" },
@@ -116,7 +116,7 @@ const SHUTTLE_ROUTES = {
   },
   // 일곱 번째: 화성DSR행. 동탄호수공원 남쪽. 호수공원아이파크(3)는 데이터 없어 제외.
   "dsr-lakepark-s": {
-    label: "DSR · 호수공원남·부영레이크", color: "#5c940d",
+    label: "DSR · 호수공원남·부영레이크", color: "#0ca678",
     stops: [
       { name: "반도9차", match: "레이크반도유보라아이비파크9.0" },
       { name: "금호어울림레이크", match: "금호어울림레이크" },
@@ -125,6 +125,32 @@ const SHUTTLE_ROUTES = {
       { name: "서희스타힐스", match: "서희스타힐스엔에이치에프" },
       { name: "한신더휴", match: "한신더휴" },
       { name: "베라체", match: "동탄2신도시 베라체" },
+      { name: "화성DSR동", ref: "hwaseong-campus" },
+    ],
+  },
+  // 이하 근거리셔틀(화성캠 서부). 부영사랑으로·예당마을푸르지오·능동휴먼시아·
+  // 오투메종은 데이터에 없어 제외. 한림대병원 노선은 아파트 정류장이 없어 미등록.
+  "dsr-yeongcheon": {
+    label: "DSR · 영천동(파크자이)", color: "#0ca678",
+    stops: [
+      { name: "동탄파크자이", match: "동탄파크자이" },
+      { name: "동탄파크푸르지오", match: "동탄파크푸르지오" },
+      { name: "화성DSR동", ref: "hwaseong-campus" },
+    ],
+  },
+  "dsr-yedang": {
+    label: "DSR · 예당마을(신일유토빌)", color: "#0ca678",
+    stops: [
+      { name: "신일유토빌", match: "신일유토빌" },
+      { name: "화성DSR동", ref: "hwaseong-campus" },
+    ],
+  },
+  "dsr-pureun-daedo": {
+    label: "DSR · 푸른마을·숲속마을", color: "#0ca678",
+    stops: [
+      { name: "푸른마을두산위브", match: "푸른마을두산위브" },
+      { name: "숲속마을자연앤데시앙", match: "자연앤데시앙" },
+      { name: "숲속마을모아미래도", match: "동탄숲속마을 모아미래도1단지" },
       { name: "화성DSR동", ref: "hwaseong-campus" },
     ],
   },
