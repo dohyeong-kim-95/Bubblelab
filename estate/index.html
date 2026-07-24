@@ -674,6 +674,19 @@ function renderMap() {
     }
   }
 
+  // 통근 셔틀 노선: 초록 파선 + 정류장 점 (SVG <title>로 정류장명 툴팁).
+  for (const route of Object.values(geoData.shuttles ?? {})) {
+    const pts = route.stops.map((s) => `${px(s).toFixed(1)},${py2(s).toFixed(1)}`).join(" ");
+    railLines += `<polyline points="${pts}" fill="none" stroke="${route.color}" ` +
+      `stroke-width="${(2.5 * ui).toFixed(1)}" stroke-dasharray="${(6 * ui).toFixed(1)} ${(4 * ui).toFixed(1)}" ` +
+      `stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>`;
+    route.stops.forEach((s, i) => {
+      railLines += `<circle class="rail-station" cx="${px(s).toFixed(1)}" cy="${py2(s).toFixed(1)}" ` +
+        `r="${(2.6 * ui).toFixed(1)}" fill="${route.color}" stroke-width="${(1.2 * ui).toFixed(1)}">` +
+        `<title>${route.label}\n${i + 1}. ${s.name}</title></circle>`;
+    });
+  }
+
   const selRef = state.ref ? geoData.refs[state.ref] : null;
   const radiusCircle = selRef && +state.radius
     ? `<circle class="map-radius" cx="${px(selRef).toFixed(1)}" cy="${py2(selRef).toFixed(1)}" r="${(+state.radius * pxPerKm).toFixed(1)}"/>`
@@ -698,6 +711,8 @@ function renderMap() {
     `<span>만원/평 (중앙값)</span>` +
     Object.values(geoData.lines ?? {}).map((l) =>
       `<span><i class="rail" style="border-color:${l.color}"></i>${l.label}</span>`).join("") +
+    Object.values(geoData.shuttles ?? {}).map((r) =>
+      `<span><i class="rail" style="border-color:${r.color};border-top-style:dashed"></i>${r.label}</span>`).join("") +
     (base ? `<span style="margin-left:auto">배경지도 © 브이월드</span>` : "");
   $("mapNote").textContent = state.ref && +state.radius
     ? `반경 내 ${list.filter(inRadius).length}개 단지` : `${list.length}개 단지`;

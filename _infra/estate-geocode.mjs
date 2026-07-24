@@ -36,6 +36,25 @@ const RAIL_LINES = {
   "gtx-a": { label: "GTX-A", color: "#d6336c", via: ["dongtan-station", "gucheong-station"] },
 };
 
+// 통근 셔틀 노선 (사용자 제공 UVIS BUS 캡처 기반). 정류장은 대부분 아파트
+// 단지라 실거래 좌표(match=정확한 단지명)를 재사용하고, 단지가 아닌 정류장만
+// addr(지오코딩)이나 ref(기존 기준점)로 좌표를 얻는다. 새 노선은 여기에 추가.
+const SHUTTLE_ROUTES = {
+  "h1-dsr-naru1": {
+    label: "화성캠 H1 셔틀 (동탄나루1차)", color: "#0ca678",
+    stops: [
+      { name: "동탄월드반도유보라1차", addr: "경기도 화성시 반송동 442" },
+      { name: "나루마을한화우림", match: "나루마을한화꿈에그린우림필유" },
+      { name: "솔빛마을신도브래뉴", match: "솔빛마을신도브래뉴" },
+      { name: "솔빛마을경남아너스빌", match: "솔빛마을경남아너스빌" },
+      { name: "시범다은포스코더샵", match: "시범다은마을포스코더샵" },
+      { name: "메타폴리스", addr: "경기도 화성시 반송동 96" },
+      { name: "시범한빛동탄아이파크", match: "시범한빛마을동탄아이파크" },
+      { name: "화성캠퍼스", ref: "hwaseong-campus" },
+    ],
+  },
+};
+
 function readKey() {
   if (process.env.VWORLD_KEY?.trim()) return process.env.VWORLD_KEY.trim();
   const devVars = join(ROOT, ".dev.vars");
@@ -44,6 +63,22 @@ function readKey() {
     if (match) return match[1].trim().replace(/^["']|["']$/g, "");
   }
   return null;
+}
+
+// 단지명 → 대표 좌표. 실거래(trade) 파일에서 apt명과 지번을 모아, 이미
+// 지오코딩된 geo.points에 있는 지번의 좌표를 그 단지의 좌표로 삼는다.
+function buildAptCoordIndex(geo) {
+  const index = new Map();
+  for (const file of readdirSync(DATA_DIR)) {
+    if (!file.startsWith("trade-")) continue;
+    const { region, items } = JSON.parse(readFileSync(join(DATA_DIR, file), "utf8"));
+    for (const r of items) {
+      if (!r.jibun || index.has(r.apt)) continue;
+      const pt = geo.points[`${region}|${r.dong}|${r.jibun}`];
+      if (pt) index.set(r.apt, { lat: pt.lat, lng: pt.lng });
+    }
+  }
+  return index;
 }
 
 async function vworldGeocode(key, address, type) {
@@ -112,6 +147,25 @@ async function main() {
   for (const [id, line] of Object.entries(RAIL_LINES)) {
     const coords = line.via.map((v) => geo.refs[v]).filter(Boolean).map((r) => [r.lat, r.lng]);
     if (coords.length >= 2) geo.lines[id] = { label: line.label, color: line.color, coords };
+  }
+
+  // 셔틀 노선: 정류장 좌표를 match(단지명)→실거래 좌표, ref→기준점, addr→지오코딩
+  // 순으로 얻는다. 각 정류장 {name, lat, lng}과 폴리라인 coords를 함께 저장한다.
+  const aptCoord = buildAptCoordIndex(geo);
+  geo.shuttles = {};
+  for (const [id, route] of Object.entries(SHUTTLE_ROUTES)) {
+    const stops = [];
+    for (const s of route.stops) {
+      let pt = null;
+      if (s.match) pt = aptCoord.get(s.match) ?? null;
+      else if (s.ref) pt = geo.refs[s.ref] ? { lat: geo.refs[s.ref].lat, lng: geo.refs[s.ref].lng } : null;
+      else if (s.addr) pt = await vworldGeocode(key, s.addr, "PARCEL").catch(() => null);
+      if (pt) stops.push({ name: s.name, lat: pt.lat, lng: pt.lng });
+      else console.error(`  셔틀 정류장 좌표 실패: ${route.label} / ${s.name}`);
+    }
+    if (stops.length >= 2) {
+      geo.shuttles[id] = { label: route.label, color: route.color, stops };
+    }
   }
 
   geo.generatedAt = new Date().toISOString();
