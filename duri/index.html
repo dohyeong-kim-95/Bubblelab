@@ -17,7 +17,8 @@
 <title>💞 Duri</title>
 <style>
   :root { color-scheme: light dark; --pink: light-dark(#c0568a, #f0a8ce); --line: light-dark(#e6eaef, #232c38);
-          --panel: light-dark(#ffffff, #161c25); --bg: light-dark(#fafbfc, #10151c); --dim: light-dark(#5b6875, #8b97a6); }
+          --panel: light-dark(#ffffff, #161c25); --bg: light-dark(#fafbfc, #10151c); --dim: light-dark(#5b6875, #8b97a6);
+          --kb: 18rem; /* 측정된 키보드 높이(JS가 갱신) — 서랍을 키보드와 같은 높이로 */ }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
   body { font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
@@ -101,16 +102,18 @@
   button.send { background: var(--pink); color: light-dark(#fff, #1a1016); border-color: transparent; font-weight: 600; }
   button:disabled { opacity: .5; cursor: default; }
 
-  /* 스티커 서랍 */
-  #picker { max-width: 44rem; width: 100%; margin: 0 auto; border-top: 1px solid var(--line); background: var(--panel); }
+  /* 스티커/이모지 서랍 — 높이를 측정된 키보드 높이(--kb)와 똑같이 맞춰
+     키보드↔서랍 전환이 1:1 공간 교체로 매끄럽게 되도록 한다(카톡 벤치마킹). */
+  #picker { max-width: 44rem; width: 100%; margin: 0 auto; border-top: 1px solid var(--line); background: var(--panel);
+            height: var(--kb, 18rem); display: flex; flex-direction: column; }
   #picker[hidden] { display: none; }
-  #tabs { display: flex; gap: .25rem; padding: .45rem .7rem 0; overflow-x: auto; }
+  #tabs { flex: none; display: flex; gap: .25rem; padding: .45rem .7rem 0; overflow-x: auto; }
   #tabs button { font: inherit; font-size: .72rem; padding: .4rem .6rem; border: 0; border-radius: .5rem .5rem 0 0;
                  background: none; color: inherit; opacity: .55; white-space: nowrap; cursor: pointer; }
   #tabs button[aria-selected="true"] { opacity: 1; font-weight: 600; background: var(--bg); }
-  #hint { font-size: .68rem; opacity: .55; padding: .4rem .8rem 0; background: var(--bg); min-height: 1.2rem; }
-  #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(4rem, 1fr)); gap: .3rem;
-          padding: .45rem .7rem .7rem; max-height: 42dvh; overflow-y: auto; background: var(--bg); }
+  #hint { flex: none; font-size: .68rem; opacity: .55; padding: .4rem .8rem 0; background: var(--bg); min-height: 1.2rem; }
+  #grid { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(4rem, 1fr)); gap: .3rem;
+          padding: .45rem .7rem .7rem; overflow-y: auto; background: var(--bg); align-content: start; }
   #grid button { padding: .25rem; background: none; border: 2px solid transparent; border-radius: .6rem; cursor: pointer; }
   #grid button.selected { border-color: var(--pink); background: light-dark(#c0568a1a, #f0a8ce22); }
   #grid img { width: 100%; aspect-ratio: 1 / 1; height: auto; display: block; }
@@ -668,6 +671,24 @@ function closePicker() {
   clearSelection();
 }
 $("sticker-btn").addEventListener("click", () => { if (picker.hidden) openPicker(); else closePicker(); });
+
+// 키보드 높이를 재서 서랍(picker)을 딱 그 높이로 맞춘다 → 키보드↔서랍 전환이
+// 같은 공간을 1:1로 바꿔 매끄럽다(카톡식). 측정값은 저장해 다음부터 즉시 적용.
+const KB_KEY = "duri:kbHeight";
+const setKb = (px) => document.documentElement.style.setProperty("--kb", px + "px");
+const savedKb = Number(localStorage.getItem("duri:kbHeight") || 0);
+if (savedKb > 120) setKb(savedKb);
+if (window.visualViewport) {
+  const vv = window.visualViewport;
+  vv.addEventListener("resize", () => {
+    // 레이아웃 뷰포트(innerHeight)는 그대로, 비주얼 뷰포트는 키보드만큼 줄어든다.
+    const kb = Math.round(window.innerHeight - vv.height - vv.offsetTop);
+    if (kb > 120) { // 키보드가 올라온 높이만 캡처(주소창 등 소소한 변동은 무시)
+      setKb(kb);
+      try { localStorage.setItem(KB_KEY, String(kb)); } catch { /* 최선노력 */ }
+    }
+  });
+}
 
 // ── 셋업 & 이벤트 ────────────────────────────────────────────
 $("enter").addEventListener("click", async () => {
