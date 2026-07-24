@@ -1,4 +1,5 @@
 import manseryeok from "manseryeok";
+import { sendWebPush } from "./webpush.js";
 
 const {
   calculateFourPillars,
@@ -415,5 +416,136 @@ export async function handleFortuneChart(request, env) {
     return Response.json({ error: message }, {
       status: 400, headers: { "Cache-Control": "no-store" },
     });
+  }
+}
+
+// ── 매일 오전 8시(KST) 운세 알림 ──────────────────────────────────
+// 운세 페이지는 로그인 없는 공개 유틸이라, 익명 푸시 구독을 FortuneDO 한
+// 인스턴스에 endpoint 해시로 저장한다. 개인 명식은 브라우저에만 있으므로
+// 알림은 "오늘의 운세를 확인하세요" 넛지 + 날짜별 고정 문구만 보낸다.
+const MAX_FORTUNE_SUBS = 20000;
+const FORTUNE_PUSH_URL = "https://util.bubblelab.dev/fortune";
+// 날짜(KST)로 고른다 — 하루 동안 같은 문구가 유지된다.
+const FORTUNE_NUDGES = [
+  "오늘은 어떤 하루가 펼쳐질까요? 운세를 확인해보세요.",
+  "좋은 아침이에요. 오늘의 운세 한 줄 보고 가세요.",
+  "새로운 하루의 기운을 살펴볼 시간이에요.",
+  "오늘의 바이오리듬과 운세가 준비됐어요.",
+  "잠깐, 오늘의 운세부터 확인하고 시작해요.",
+  "오늘 당신에게 찾아올 작은 행운을 미리 만나보세요.",
+  "하루를 여는 운세 한 줄, 지금 확인해보세요.",
+];
+
+const hexDigest = (buffer) =>
+  [...new Uint8Array(buffer)].map((b) => b.toString(16).padStart(2, "0")).join("");
+
+async function endpointKey(endpoint) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(endpoint));
+  return `push:${hexDigest(digest).slice(0, 32)}`;
+}
+
+function kstDateStamp(now = new Date()) {
+  const { year, month, day } = kstToday(now);
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+// 날짜 문자열을 안정적인 정수 시드로 — 날짜마다 다른 문구를 고정 선택한다.
+function stampSeed(stamp) {
+  let hash = 0;
+  for (const char of stamp) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return hash;
+}
+
+const fortuneStub = (env) => env.FORTUNE.get(env.FORTUNE.idFromName("global"));
+
+// 워커 라우트: /_fortune/push (GET 설정 · POST 구독 · DELETE 해지)
+export async function handleFortunePush(request, env) {
+  if (request.method === "GET") {
+    return Response.json(
+      { vapidPublicKey: env.VAPID_PUBLIC_KEY ?? null },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  }
+  if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) {
+    return Response.json({ error: "push is not configured" }, { status: 503 });
+  }
+  if (+(request.headers.get("Content-Length") ?? 0) > 4096) {
+    return Response.json({ error: "요청이 너무 큽니다." }, { status: 413 });
+  }
+  return fortuneStub(env).fetch("https://fortune.internal/push", {
+    method: request.method,
+    headers: { "Content-Type": "application/json" },
+    body: await request.text(),
+  });
+}
+
+// cron(23:00 UTC = 08:00 KST)에서 호출 — 구독한 모든 기기에 알림 발송
+export function sendFortuneDaily(env) {
+  return fortuneStub(env).fetch("https://fortune.internal/notify", { method: "POST" });
+}
+
+export class FortuneDO {
+  constructor(state, env) {
+    this.storage = state.storage;
+    this.env = env;
+  }
+
+  async fetch(request) {
+    const url = new URL(request.url);
+    if (url.pathname === "/push" && request.method === "POST") return this.subscribe(request);
+    if (url.pathname === "/push" && request.method === "DELETE") return this.unsubscribe(request);
+    if (url.pathname === "/notify" && request.method === "POST") return this.notifyDaily();
+    return new Response("not found", { status: 404 });
+  }
+
+  async subscribe(request) {
+    const body = await request.json().catch(() => ({}));
+    const sub = body.subscription ?? body;
+    if (typeof sub?.endpoint !== "string" || !sub.endpoint.startsWith("https://") ||
+        typeof sub?.keys?.p256dh !== "string" || typeof sub?.keys?.auth !== "string") {
+      return Response.json({ error: "invalid subscription" }, { status: 400 });
+    }
+    const key = await endpointKey(sub.endpoint);
+    // 이미 등록된 endpoint면 갱신, 새 endpoint면 전체 상한을 확인한다.
+    if (!(await this.storage.get(key))) {
+      const count = (await this.storage.list({ prefix: "push:", limit: MAX_FORTUNE_SUBS + 1 })).size;
+      if (count >= MAX_FORTUNE_SUBS) {
+        return Response.json({ error: "구독자가 가득 찼습니다" }, { status: 503 });
+      }
+    }
+    await this.storage.put(key, {
+      endpoint: sub.endpoint, keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth },
+    });
+    return Response.json({ subscribed: true });
+  }
+
+  async unsubscribe(request) {
+    const body = await request.json().catch(() => ({}));
+    const endpoint = String(body.endpoint ?? "");
+    if (endpoint) await this.storage.delete(await endpointKey(endpoint));
+    return Response.json({ subscribed: false });
+  }
+
+  async notifyDaily() {
+    const { VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT } = this.env;
+    if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return Response.json({ sent: 0 });
+    const vapid = {
+      publicKey: VAPID_PUBLIC_KEY, privateKey: VAPID_PRIVATE_KEY,
+      subject: VAPID_SUBJECT || "https://util.bubblelab.dev",
+    };
+    const stamp = kstDateStamp();
+    const body = FORTUNE_NUDGES[stampSeed(stamp) % FORTUNE_NUDGES.length];
+    const payload = JSON.stringify({ title: "🔮 오늘의 운세", body, url: FORTUNE_PUSH_URL });
+    let sent = 0;
+    for (const [key, sub] of await this.storage.list({ prefix: "push:" })) {
+      try {
+        const result = await sendWebPush(sub, payload, vapid);
+        if (result.gone) await this.storage.delete(key); // 만료 구독 정리
+        else if (result.ok) sent += 1;
+      } catch (error) {
+        console.error("fortune push send failed", error);
+      }
+    }
+    return Response.json({ sent });
   }
 }

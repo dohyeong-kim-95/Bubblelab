@@ -28,16 +28,25 @@ estate.bubblelab.dev. 국토교통부 실거래가 공개시스템 데이터로 
 
 국토부 RTMS API는 해외 IP를 차단해 **운영 Cloudflare Worker에서는 403이 난다**
 (같은 요청이 한국 IP 로컬 workerd에서는 정상 — 2026-07 확인). 그래서 운영
-데이터는 한국 IP인 로컬에서 받아 정적 파일로 커밋한다:
+데이터는 한국 IP인 로컬에서 받아 정적 파일로 커밋한다.
 
-1. (1회) data.go.kr에서 **아파트 매매 실거래가 자료**, **아파트 전월세 실거래가
-   자료** 활용신청 → 일반 인증키(Decoding)를 리포 루트 `.dev.vars`에
-   `MOLIT_SERVICE_KEY=키`로 저장 (.gitignore에 있음 — 커밋 금지)
-2. `node _infra/estate-import.mjs` (기본 36개월. `--months N`, `--force` 지원.
-   최근 3개월은 늘 다시 받고, 그 전은 받아둔 파일을 재사용)
-3. `node _infra/estate-geocode.mjs` — 새 단지 좌표만 증분 변환 (VWorld 지오코더,
-   `.dev.vars`의 `VWORLD_KEY` 필요. 리포가 공개라 키는 절대 커밋하지 않는다)
-4. `estate/data/` 커밋·푸시 → 자동 배포
+**정기 갱신은 스크립트 하나로 끝난다 (주 1회 권장):**
+
+```bash
+bash _infra/estate-refresh.sh            # 수집 → 지오코딩 → 커밋 → 푸시
+bash _infra/estate-refresh.sh --basemap  # 배경지도 스냅샷까지 재생성
+```
+
+수집(최근 3개월 재수집)·신규 단지 지오코딩·빌드 검증·커밋·푸시를 한 번에 하고,
+새 신고분이 없으면(타임스탬프만 바뀐 경우) 커밋을 생략한다.
+
+인증키는 `.dev.vars`에 한 번만 넣어두면 된다 (`.gitignore`라 커밋 안 됨 — 상주 OK):
+
+- `MOLIT_SERVICE_KEY=…` — data.go.kr **아파트 매매/전월세 실거래가 자료** 인증키
+- `VWORLD_KEY=…` — VWorld 지오코더·배경지도 인증키
+
+수동으로 단계를 나눠 돌리려면 `estate-import.mjs`(`--months N`·`--force`) →
+`estate-geocode.mjs` → 필요 시 `estate-basemap.mjs` 순서다.
 
 로컬 개발(wrangler dev)은 한국 IP라 `.dev.vars` 키만으로 프록시가 바로 동작한다.
 데이터가 아예 없으면 페이지가 준비 안내를 띄운다 (fail-soft, 배포는 안 막힘).

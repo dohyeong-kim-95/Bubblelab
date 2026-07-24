@@ -1,0 +1,14 @@
+{
+  "name": "Duri — 둘이서",
+  "short_name": "Duri",
+  "description": "둘이 주고받은 대화와 사진이 저절로 쌓이는 기록",
+  "lang": "ko",
+  "start_url": "/duri",
+  "scope": "/duri",
+  "display": "standalone",
+  "background_color": "#10151c",
+  "theme_color": "#10151c",
+  "icons": [
+    { "src": "/duri/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

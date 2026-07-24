@@ -1,0 +1,779 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>공룡 점프 — 판다 구경</title>
+<!-- 🦖 크롬 오프라인 공룡 게임 오마주. 일정 거리마다 길가에 판다가 앉아 대나무를 먹는다. -->
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; overflow: hidden; user-select: none; -webkit-user-select: none;
+    font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+    color: light-dark(#2a2a2a, #d9d9d9);
+    background: light-dark(#f7f7f7, #0e0e10);
+  }
+  #stage {
+    position: relative; width: 100%; height: 100dvh; overflow: hidden; cursor: pointer;
+    background: light-dark(#f7f7f7, #0e0e10);
+  }
+  canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+
+  /* HUD */
+  #hud {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 10;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding: .9rem 1.1rem; pointer-events: none;
+    font-size: .95rem; letter-spacing: .08em; font-variant-numeric: tabular-nums;
+  }
+  #hi { opacity: .55; }
+  #score { font-weight: bold; }
+  #mute {
+    position: absolute; top: .7rem; right: 50%; transform: translateX(50%);
+    z-index: 11; pointer-events: auto; cursor: pointer;
+    background: none; border: none; font-size: 1.15rem; padding: .2rem .4rem; opacity: .7;
+  }
+
+  /* 시작/종료 오버레이 */
+  #overlay {
+    position: absolute; inset: 0; z-index: 20;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: .55rem; text-align: center; pointer-events: none;
+    background: light-dark(rgba(247,247,247,.55), rgba(14,14,16,.55));
+    backdrop-filter: blur(1px);
+    transition: opacity .25s;
+  }
+  #overlay.hide { opacity: 0; pointer-events: none; }
+  #bigmsg { font-size: 1.6rem; font-weight: bold; letter-spacing: .04em; }
+  #submsg { font-size: .95rem; opacity: .7; line-height: 1.7; }
+  #finalScore { font-size: 1.05rem; opacity: .85; }
+  kbd {
+    font-family: inherit; font-size: .82em; padding: .05em .45em; border-radius: .35em;
+    border: 1px solid light-dark(#0003, #fff3); background: light-dark(#0000000d, #ffffff12);
+  }
+  .pandaline { font-size: .82rem; opacity: .6; margin-top: .35rem; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="c"></canvas>
+  <div id="hud">
+    <span id="score">0 m</span>
+    <span id="hi"></span>
+  </div>
+  <button id="mute" aria-label="음소거">🔊</button>
+  <div id="overlay">
+    <div id="bigmsg">🦖 공룡 점프</div>
+    <div id="finalScore"></div>
+    <div id="submsg">
+      <kbd>Space</kbd> / <kbd>↑</kbd> / 탭 — 점프<br>
+      <kbd>↓</kbd> 누르는 동안 — 숙이기<br>
+      선인장과 익룡을 피하세요
+    </div>
+    <div class="pandaline">🐼 500m마다 판다 · 💧 1km마다 음수대 · 🏁 5·10·21.1·42.195km 마라톤 지점</div>
+  </div>
+</div>
+
+<script>
+const cvs = document.getElementById("c");
+const ctx = cvs.getContext("2d");
+const $ = (id) => document.getElementById(id);
+
+// ── 논리 해상도(가로 고정, 세로는 화면 비율) ──────────────
+// 픽셀아트 느낌을 위해 저해상도 백버퍼에 그리고 CSS로 확대한다.
+const VW = 600;              // 논리 가로 폭
+let VH = 260;                // 논리 세로(리사이즈 때 계산)
+let DPR = 1;
+let groundMargin = 42;       // 바닥선~화면 하단 여백(논리px) — 리사이즈 때 계산
+
+function resize() {
+  const w = cvs.clientWidth, h = cvs.clientHeight;
+  VH = Math.round(VW * (h / w));
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  cvs.width = Math.round(VW * DPR);
+  cvs.height = Math.round(VH * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  // 왼쪽 아래 '주간 순위' 배지(공유 컴포넌트, 화면 하단 고정)에 공룡이 가리지
+  // 않도록, 화면 크기와 무관하게 바닥에 일정한 CSS 여백(≈90px)을 확보한다.
+  const scale = w / VW;                              // 논리→CSS 배율
+  groundMargin = Math.round(Math.min(VH * 0.5, Math.max(42, 90 / scale)));
+  if (typeof dino === "object" && dino && dino.onGround) dino.y = groundY();
+}
+window.addEventListener("resize", resize);
+
+// ── 지면 위치 ─────────────────────────────────────────────
+const groundY = () => VH - groundMargin;   // 공룡이 서는 바닥선
+
+// ── 게임 상태 ─────────────────────────────────────────────
+const STATE = { READY: 0, RUN: 1, OVER: 2 };
+let state = STATE.READY;
+
+let speed, dist, hi = +(localStorage.getItem("dino-hi") || 0);
+let sinceSpawn;
+let obstacles, clouds, pandas, hills;
+let dino, night, nightMix, lastMilestone;
+let landmarks, nextKm, markViewIdx, markToastIdx, toast;
+let over_t = 0;   // 게임오버 애니메이션 타이머
+
+// 거리 고정 배치: 월드는 프레임당 speed 이동, 거리는 speed*0.35 증가 →
+// 미터당 월드 픽셀 = 1/0.35 (속도 무관). 랜드마크 x = 공룡중심 + (목표거리-현재거리)*PXPERM.
+const PXPERM = 1 / 0.35;
+const LM_ANCHOR = 77;               // 공룡 중심 x
+// 마라톤 이스터에그 지점(m)
+const MARKS = [
+  { d: 5000,  label: "5K",          sub: "5킬로 통과! 🏃",           big: false },
+  { d: 10000, label: "10K",         sub: "10킬로 통과! 🏃💨",         big: false },
+  { d: 21100, label: "HALF 21.1",   sub: "하프 완주! 21.1km 🎉",      big: true  },
+  { d: 42195, label: "FINISH",      sub: "풀코스 완주! 42.195km 🏁🎉", big: true  },
+];
+
+function reset() {
+  speed = 3.4;
+  dist = 0;
+  sinceSpawn = 0;   // 첫 장애물은 gap만큼(~1.2초) 지난 뒤 등장
+  obstacles = [];
+  clouds = [];
+  hills = [];
+  pandas = [];
+  landmarks = [];
+  nextKm = 1;
+  markViewIdx = 0;
+  markToastIdx = 0;
+  toast = null;
+  night = false;
+  nightMix = 0;
+  lastMilestone = 0;
+  over_t = 0;
+  dino = {
+    x: 62, y: groundY(), vy: 0,
+    w: 40, h: 44,
+    ducking: false, onGround: true, legT: 0, dead: false,
+  };
+  // 초기 배경 몇 개
+  for (let i = 0; i < 4; i++) clouds.push(makeCloud(Math.random() * VW));
+  for (let i = 0; i < 3; i++) hills.push(makeHill(Math.random() * VW));
+}
+
+// ── 배경 요소 ─────────────────────────────────────────────
+function makeCloud(x) {
+  return { x, y: 24 + Math.random() * (VH * 0.32), s: 0.32 + Math.random() * 0.25 };
+}
+function makeHill(x) {
+  return { x, w: 120 + Math.random() * 160, h: 26 + Math.random() * 34, s: 0.5 };
+}
+
+// ── 장애물 ────────────────────────────────────────────────
+// 종류: 선인장(작음/큼/무리) 또는 익룡(높/중/낮)
+function spawnObstacle() {
+  const roll = Math.random();
+  if (dist > 260 && roll < 0.28) {
+    // 익룡: 세 높이 중 하나
+    const tier = Math.floor(Math.random() * 3);
+    const gy = groundY();
+    const y = [gy - 78, gy - 46, gy - 20][tier];
+    obstacles.push({ kind: "ptero", x: VW + 20, y, w: 42, h: 30, wingT: 0 });
+  } else {
+    // 선인장 무리
+    const n = 1 + Math.floor(Math.random() * 3);
+    const big = Math.random() < 0.5;
+    const cw = big ? 20 : 15;
+    const ch = big ? 46 : 34;
+    obstacles.push({
+      kind: "cactus", x: VW + 20, big, n,
+      w: cw * n + (n - 1) * 3, h: ch, y: groundY() - ch,
+    });
+  }
+}
+
+// ── 판다: 500m마다 길가에 앉아있음 ────────────────────────
+// 화면 오른쪽에서 등장해 배경 속도로 스크롤되며 지나간다. 장애물 아님(구경용).
+function spawnPanda(atDist) {
+  pandas.push({
+    x: VW + 40, y: groundY(), bob: Math.random() * Math.PI * 2,
+    munch: 0, atDist,
+  });
+}
+
+// ── 입력 ──────────────────────────────────────────────────
+function jump() {
+  if (state === STATE.READY) { start(); return; }
+  if (state === STATE.OVER) { if (over_t > 22) restart(); return; }
+  if (dino.onGround) {
+    dino.vy = -10.6;
+    dino.onGround = false;
+    beep(560, 0.05, "square", 0.05);
+  }
+}
+function duckStart() {
+  if (state === STATE.RUN) dino.ducking = true;
+}
+function duckEnd() { dino.ducking = false; }
+
+addEventListener("keydown", (e) => {
+  if (e.repeat) return;
+  if (e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyW") { e.preventDefault(); jump(); }
+  else if (e.code === "ArrowDown" || e.code === "KeyS") { e.preventDefault(); duckStart(); }
+});
+addEventListener("keyup", (e) => {
+  if (e.code === "ArrowDown" || e.code === "KeyS") duckEnd();
+});
+
+const stage = $("stage");
+stage.addEventListener("pointerdown", (e) => {
+  if (e.target === $("mute")) return;
+  // 화면 아래쪽을 누르면 숙이기, 위쪽은 점프
+  const ry = e.clientY / stage.clientHeight;
+  if (state === STATE.RUN && ry > 0.62) { duckStart(); }
+  else jump();
+});
+addEventListener("pointerup", duckEnd);
+addEventListener("pointercancel", duckEnd);
+
+// ── 오디오(작은 삑) ───────────────────────────────────────
+let AC, muted = false;
+function ac() { if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch {} } return AC; }
+function beep(freq, dur, type = "square", vol = 0.06) {
+  if (muted) return;
+  const a = ac(); if (!a) return;
+  const o = a.createOscillator(), g = a.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.value = vol;
+  o.connect(g); g.connect(a.destination);
+  const t = a.currentTime;
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+$("mute").addEventListener("pointerdown", (e) => {
+  e.stopPropagation();
+  muted = !muted;
+  $("mute").textContent = muted ? "🔇" : "🔊";
+});
+
+// ── 게임 흐름 ─────────────────────────────────────────────
+function start() {
+  reset();
+  state = STATE.RUN;
+  $("overlay").classList.add("hide");
+  ac();
+}
+function restart() { start(); }
+function gameOver() {
+  state = STATE.OVER;
+  dino.dead = true;
+  over_t = 0;
+  beep(200, 0.12, "sawtooth", 0.07);
+  setTimeout(() => beep(140, 0.18, "sawtooth", 0.07), 110);
+
+  const m = Math.floor(dist);
+  if (m > hi) { hi = m; localStorage.setItem("dino-hi", hi); }
+  window.blWeeklyReport?.(m);   // 주간 신기록 보드
+
+  $("finalScore").textContent = `${m.toLocaleString("ko-KR")} m 주파` +
+    (m >= hi ? "  🏅 최고 기록!" : `   (최고 ${hi.toLocaleString("ko-KR")} m)`);
+  $("bigmsg").textContent = "💥 부딪혔어요";
+  $("submsg").innerHTML = "<kbd>Space</kbd> / 탭 — 다시 시작";
+  $("overlay").classList.remove("hide");
+}
+
+// ── 충돌(AABB, 살짝 관대하게) ─────────────────────────────
+function hitbox() {
+  const pad = 5;
+  if (dino.ducking && dino.onGround) {
+    return { x: dino.x + pad, y: groundY() - 24 + pad, w: 52 - pad * 2, h: 24 - pad * 2 };
+  }
+  return { x: dino.x + pad, y: dino.y - dino.h + pad, w: dino.w - pad * 2, h: dino.h - pad * 2 };
+}
+function aabb(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+// ── 업데이트 ──────────────────────────────────────────────
+let last = 0;
+function frame(t) {
+  const dt = Math.min(2.4, (t - last) / 16.67 || 1);
+  last = t;
+  if (state === STATE.RUN) update(dt);
+  else if (state === STATE.OVER) { over_t += dt; dino.legT = 0; }
+  draw();
+  requestAnimationFrame(frame);
+}
+
+function update(dt) {
+  // 속도/거리
+  speed += 0.0016 * dt;
+  dist += speed * dt * 0.35;
+  const scoreM = Math.floor(dist);
+  $("score").textContent = scoreM.toLocaleString("ko-KR") + " m";
+
+  // 낮/밤 전환(원작 오마주) — 300m 주기
+  const phase = (dist % 600) / 600;
+  const targetNight = phase > 0.5 ? 1 : 0;
+  nightMix += (targetNight - nightMix) * 0.02 * dt;
+  night = nightMix > 0.5;
+
+  // 500m 마일스톤마다 판다 소환
+  const ms = Math.floor(dist / 500);
+  if (ms > lastMilestone) { lastMilestone = ms; spawnPanda(ms * 500); }
+
+  // 음수대(1km마다) — 화면에 들어오는 순간 추가
+  while ((nextKm * 1000 - dist) * PXPERM < VW + 40) {
+    landmarks.push({ atDist: nextKm * 1000, type: "water", ph: Math.random() * 6.28 });
+    nextKm++;
+  }
+  // 마라톤 게이트 — 화면에 들어오면 추가
+  while (markViewIdx < MARKS.length && (MARKS[markViewIdx].d - dist) * PXPERM < VW + 40) {
+    const mk = MARKS[markViewIdx++];
+    landmarks.push({ atDist: mk.d, type: "gate", label: mk.label, big: mk.big });
+  }
+  // 지점 통과 순간 축하 토스트
+  while (markToastIdx < MARKS.length && dist >= MARKS[markToastIdx].d) {
+    const mk = MARKS[markToastIdx++];
+    toast = { sub: mk.sub, t: 0, big: mk.big };
+    beep(mk.big ? 880 : 660, 0.12, "square", 0.06);
+    if (mk.big) {
+      setTimeout(() => beep(1040, 0.14, "square", 0.06), 120);
+      setTimeout(() => beep(1245, 0.2, "square", 0.06), 260);
+    }
+  }
+  if (toast) toast.t += dt;
+  // 화면 왼쪽으로 지나간 랜드마크 제거
+  landmarks = landmarks.filter((L) => (L.atDist - dist) * PXPERM > -140);
+
+  // 공룡 물리
+  const gy = groundY();
+  dino.legT += speed * dt * 0.14;
+  if (!dino.onGround) {
+    dino.vy += 0.52 * dt;
+    dino.y += dino.vy * dt;
+    if (dino.y >= gy) { dino.y = gy; dino.vy = 0; dino.onGround = true; }
+  }
+  if (dino.ducking && !dino.onGround) { dino.vy += 0.35 * dt; } // 공중 급강하
+
+  // 장애물 스폰 — 간격을 '프레임(시간) 기준'으로 둔다.
+  // 점프 체공이 ~41프레임이라, 최소 간격을 그보다 넉넉히(≥46프레임) 잡아야
+  // 착지 후 재점프가 항상 가능하다. 픽셀 기준으로 두면 저속에서 장애물이
+  // 촘촘히 붙어 '어떤 타이밍으로도 못 넘는' 무리가 생겼다.
+  sinceSpawn += speed * dt;
+  const baseFrames = Math.max(46, 60 - dist * 0.0007);  // 서서히 좁아지되 46 밑으론 안 감
+  const gap = speed * (baseFrames + Math.random() * 22);
+  if (sinceSpawn > gap) { sinceSpawn = 0; spawnObstacle(); }
+
+  // 장애물 이동/충돌
+  const hb = hitbox();
+  for (const o of obstacles) {
+    o.x -= speed * dt;
+    if (o.kind === "ptero") o.wingT += dt * 0.2;
+    const box = o.kind === "ptero"
+      ? { x: o.x, y: o.y, w: o.w, h: o.h }
+      : { x: o.x, y: o.y, w: o.w, h: o.h };
+    if (aabb(hb, box)) gameOver();
+  }
+  obstacles = obstacles.filter((o) => o.x + o.w > -10);
+
+  // 배경 이동
+  for (const c of clouds) c.x -= speed * c.s * dt * 0.5;
+  clouds = clouds.filter((c) => c.x > -80);
+  while (clouds.length < 5) clouds.push(makeCloud(VW + Math.random() * 120));
+
+  for (const h of hills) h.x -= speed * h.s * dt * 0.35;
+  hills = hills.filter((h) => h.x + h.w > -20);
+  while (hills.length < 3) hills.push(makeHill(VW + Math.random() * 200));
+
+  // 판다 이동(배경 속도)
+  for (const p of pandas) {
+    p.x -= speed * dt * 0.9;
+    p.bob += dt * 0.05;
+    p.munch += dt * 0.12;
+  }
+  pandas = pandas.filter((p) => p.x > -70);
+}
+
+// ── 렌더 ──────────────────────────────────────────────────
+function lerp(a, b, m) { return a + (b - a) * m; }
+function mixCol(a, b, m) {
+  return `rgb(${Math.round(lerp(a[0], b[0], m))},${Math.round(lerp(a[1], b[1], m))},${Math.round(lerp(a[2], b[2], m))})`;
+}
+
+function draw() {
+  const dark = document.documentElement.matches
+    && matchMedia("(prefers-color-scheme: dark)").matches;
+
+  // 밤낮 + 다크모드 조합으로 배경/전경색 결정
+  const m = nightMix;
+  // 낮: 밝은 하늘 / 밤: 어두운 하늘
+  const skyDay = dark ? [22, 24, 30] : [247, 247, 247];
+  const skyNight = dark ? [8, 9, 14] : [40, 42, 58];
+  const ink = dark ? [214, 214, 214] : [70, 70, 70];   // 전경 라인색
+  const inkNight = dark ? [200, 205, 230] : [232, 232, 240];
+  const fg = mixCol(ink, inkNight, m);
+  ctx.fillStyle = mixCol(skyDay, skyNight, m);
+  ctx.fillRect(0, 0, VW, VH);
+
+  // 해/달
+  const cx = VW - 70, cy = 46;
+  ctx.save();
+  if (m < 0.5) {
+    ctx.fillStyle = dark ? "#f2c14e" : "#ffd257"; ctx.globalAlpha = 1 - m * 2;
+    ctx.beginPath(); ctx.arc(cx, cy, 15, 0, 7); ctx.fill();
+  } else {
+    ctx.globalAlpha = (m - 0.5) * 2;
+    ctx.fillStyle = "#e9e9ef";
+    ctx.beginPath(); ctx.arc(cx, cy, 14, 0, 7); ctx.fill();
+    ctx.fillStyle = ctx.canvas.style; // no-op guard
+    ctx.fillStyle = mixCol(skyDay, skyNight, m);
+    ctx.beginPath(); ctx.arc(cx + 6, cy - 4, 13, 0, 7); ctx.fill(); // 초승달 파냄
+  }
+  ctx.restore();
+
+  // 별(밤)
+  if (m > 0.55) {
+    ctx.fillStyle = "#cfd3e6";
+    ctx.globalAlpha = (m - 0.55) * 2;
+    for (let i = 0; i < 14; i++) {
+      const sx = (i * 83 + 20) % VW, sy = 18 + (i * 37) % (VH * 0.4);
+      ctx.fillRect(sx, sy, 2, 2);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // 구름
+  ctx.fillStyle = fg; ctx.globalAlpha = 0.5;
+  for (const c of clouds) drawCloud(c.x, c.y);
+  ctx.globalAlpha = 1;
+
+  // 먼 언덕
+  ctx.fillStyle = fg; ctx.globalAlpha = 0.16;
+  for (const h of hills) {
+    ctx.beginPath();
+    ctx.moveTo(h.x, groundY());
+    ctx.quadraticCurveTo(h.x + h.w / 2, groundY() - h.h, h.x + h.w, groundY());
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // 마라톤 게이트(아치) — 가장 뒤에, 공룡이 아래로 지나가게
+  for (const L of landmarks) {
+    if (L.type !== "gate") continue;
+    drawGate(LM_ANCHOR + (L.atDist - dist) * PXPERM, L.label, L.big, fg);
+  }
+
+  // 판다(길가, 지면 위) — 장애물보다 먼저 그려 뒤에 둔다
+  for (const p of pandas) drawPanda(p, fg);
+
+  // 음수대(1km마다)
+  for (const L of landmarks) {
+    if (L.type !== "water") continue;
+    drawWaterStation(LM_ANCHOR + (L.atDist - dist) * PXPERM, L.ph, fg);
+  }
+
+  // 지면선 + 자갈
+  ctx.strokeStyle = fg; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(0, groundY() + 1); ctx.lineTo(VW, groundY() + 1); ctx.stroke();
+  ctx.fillStyle = fg;
+  const off = (dist * 12) % 24;
+  for (let x = -off; x < VW; x += 24) {
+    const bump = ((x + Math.floor(dist)) % 3 === 0) ? 3 : 1;
+    ctx.fillRect(x, groundY() + 5, bump, 2);
+  }
+
+  // 장애물
+  ctx.fillStyle = fg;
+  for (const o of obstacles) {
+    if (o.kind === "cactus") drawCactus(o);
+    else drawPtero(o);
+  }
+
+  // 공룡
+  drawDino(fg);
+
+  // 지점 통과 축하 토스트(상단 중앙, 잠깐 떴다 사라짐)
+  if (toast && toast.t < 165) {
+    const a = toast.t < 12 ? toast.t / 12 : (toast.t > 125 ? Math.max(0, (165 - toast.t) / 40) : 1);
+    const rise = Math.min(1, toast.t / 12);
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.textAlign = "center";
+    ctx.font = `bold ${toast.big ? 24 : 18}px ui-monospace, monospace`;
+    const ty = VH * 0.28 - (1 - rise) * 10;
+    ctx.fillStyle = toast.big ? "#e8b64c" : fg;
+    ctx.fillText(toast.sub, VW / 2, ty);
+    ctx.restore();
+    ctx.textAlign = "left";
+  }
+}
+
+function drawCloud(x, y) {
+  ctx.beginPath();
+  ctx.arc(x, y, 8, 0, 7);
+  ctx.arc(x + 10, y + 2, 10, 0, 7);
+  ctx.arc(x + 22, y, 8, 0, 7);
+  ctx.rect(x, y, 22, 8);
+  ctx.fill();
+}
+
+// 음수대(1km마다): 파란 표지판 + 물컵 테이블. 컬러라 선인장과 확실히 구분됨.
+function drawWaterStation(lx, ph, fg) {
+  const gy = groundY();
+  const x = Math.round(lx);
+  ctx.save();
+  ctx.translate(x, gy);
+  // 그림자
+  ctx.globalAlpha = 0.14; ctx.fillStyle = "#000";
+  ctx.beginPath(); ctx.ellipse(18, 3, 26, 4, 0, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+  // 표지판 기둥 + 파란 판("음수대")
+  ctx.fillStyle = "#8a939c"; ctx.fillRect(-6, -46, 3, 46);
+  ctx.fillStyle = "#2f7bc4"; roundRect(-22, -62, 38, 16, 3); ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.font = "bold 9px ui-monospace, monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("음수대", -3, -54);
+  ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+  // 테이블
+  ctx.fillStyle = "#c9a06a"; ctx.fillRect(2, -20, 3, 20); ctx.fillRect(33, -20, 3, 20);
+  ctx.fillStyle = "#eceef4"; ctx.fillRect(-2, -24, 42, 6);
+  ctx.fillStyle = "#cfd6de"; ctx.fillRect(-2, -19, 42, 3);
+  // 물컵(흰 컵 + 하늘색 물)
+  for (let i = 0; i < 4; i++) {
+    const cx = 3 + i * 9;
+    ctx.fillStyle = "#fff"; ctx.fillRect(cx, -31, 6, 7);
+    ctx.fillStyle = "#5cc2e6"; ctx.fillRect(cx + 1, -30, 4, 3);
+  }
+  // 살짝 튀는 물방울
+  const dy = (Math.sin(dist * 0.2 + ph) * 0.5 + 0.5) * 3;
+  ctx.fillStyle = "#5cc2e6"; ctx.fillRect(20, -24 + dy, 2, 2);
+  ctx.restore();
+}
+
+// 마라톤 게이트(아치+배너). FINISH는 체커 무늬. 컬러로 눈에 띄게.
+function drawGate(lx, label, big, fg) {
+  const gy = groundY();
+  const x = Math.round(lx);
+  const topY = Math.max(30, gy - (big ? 118 : 96));
+  const bannerH = big ? 24 : 20;
+  const halfW = big ? 66 : 54;
+  const isFinish = label === "FINISH";
+  const accent = isFinish ? "#d9534f" : (big ? "#e8964c" : "#4a90d9");
+  // 기둥 2개
+  ctx.fillStyle = accent;
+  ctx.fillRect(x - halfW, topY, 7, gy - topY);
+  ctx.fillRect(x + halfW - 7, topY, 7, gy - topY);
+  // 배너
+  roundRect(x - halfW - 3, topY, halfW * 2 + 6, bannerH, 3); ctx.fill();
+  if (isFinish) {  // 체커 무늬
+    const bw = halfW * 2 + 6, cell = bannerH / 2;
+    for (let r = 0; r < 2; r++) for (let c = 0; c * 8 < bw; c++) {
+      if ((r + c) % 2) { ctx.fillStyle = "#fff"; ctx.fillRect(x - halfW - 3 + c * 8, topY + r * cell, Math.min(8, bw - c * 8), cell); }
+    }
+  }
+  // 글자
+  ctx.fillStyle = isFinish ? "#111" : "#fff";
+  ctx.font = `bold ${big ? 15 : 14}px ui-monospace, monospace`;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(label, x, topY + bannerH / 2 + 1);
+  ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+}
+
+function drawCactus(o) {
+  const unit = o.big ? 20 : 15;
+  for (let i = 0; i < o.n; i++) {
+    const bx = o.x + i * (unit + 3);
+    const bw = o.big ? 8 : 6;
+    const bh = o.h;
+    ctx.fillRect(bx + (unit - bw) / 2, o.y, bw, bh);              // 기둥
+    // 팔
+    const armY = o.y + bh * 0.35;
+    ctx.fillRect(bx + (unit - bw) / 2 - 5, armY + 6, 5, bw - 1);
+    ctx.fillRect(bx + (unit - bw) / 2 - 5, armY - 6, bw - 2, 12);
+    ctx.fillRect(bx + (unit + bw) / 2, armY + 2, 5, bw - 1);
+    ctx.fillRect(bx + (unit + bw) / 2 + 3, armY - 10, bw - 2, 12);
+  }
+}
+
+function drawPtero(o) {
+  const flap = Math.sin(o.wingT * 6) > 0;
+  const x = o.x, y = o.y;
+  // 몸통
+  ctx.fillRect(x + 10, y + 10, 22, 8);
+  ctx.fillRect(x + 30, y + 6, 8, 8);   // 머리
+  ctx.fillRect(x + 36, y + 9, 6, 3);   // 부리
+  // 날개
+  if (flap) { ctx.fillRect(x, y, 20, 6); ctx.fillRect(x + 4, y - 5, 14, 6); }
+  else { ctx.fillRect(x, y + 16, 20, 6); ctx.fillRect(x + 4, y + 20, 14, 6); }
+}
+
+// 판다: 앉아서 대나무를 먹는 모습(픽셀). 회색 선인장과 헷갈리지 않도록
+// 실제 색(흑백+분홍 볼+초록 대나무)을 쓰고 발밑에 초록 풀숲을 깐다.
+// 다크모드에선 순검정이 안 보여 밝은 숯색으로 대체한다.
+function drawPanda(p, fg) {
+  const bob = Math.sin(p.bob) * 1.5;
+  const gx = Math.round(p.x);
+  const baseY = groundY() - 2 + bob;
+  const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+
+  // 판다 고정 팔레트(테마 무관하게 컬러로 튀게)
+  const black = dark ? "#4a4a55" : "#26262c";   // 다크모드에선 밝은 숯색
+  const white = dark ? "#eceff5" : "#fbfbfd";
+  const cheek = "#f4a6bb";                        // 분홍 볼
+  const grass = dark ? "#3f7a43" : "#5aa653";     // 풀숲
+  const grassHi = dark ? "#5c9b57" : "#7cc35f";
+
+  ctx.save();
+  ctx.translate(gx, baseY);
+
+  // 발밑 풀숲(멀리서도 '초록 자리'로 보여 선인장과 구분됨)
+  ctx.fillStyle = grass;
+  ctx.beginPath(); ctx.ellipse(16, 3, 26, 6, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = grassHi;
+  for (const gxp of [-6, 2, 30, 38]) {            // 삐죽 솟은 풀잎
+    ctx.beginPath(); ctx.moveTo(gxp, 3); ctx.lineTo(gxp + 2, -6); ctx.lineTo(gxp + 4, 3); ctx.fill();
+  }
+  // 그림자
+  ctx.globalAlpha = 0.16; ctx.fillStyle = fg;
+  ctx.beginPath(); ctx.ellipse(16, 4, 20, 4, 0, 0, 7); ctx.fill();
+  ctx.globalAlpha = 1;
+
+  // 앉은 다리(검정)
+  ctx.fillStyle = black;
+  ctx.fillRect(-2, -14, 12, 16);
+  ctx.fillRect(22, -14, 12, 16);
+  const outline = dark ? "#6a6a76" : "#c2c2cc";   // 흰 부위가 배경에 묻히지 않게
+  ctx.lineWidth = 1.4; ctx.strokeStyle = outline;
+  // 흰 몸통
+  ctx.fillStyle = white;
+  roundRect(2, -34, 28, 26, 8); ctx.fill(); ctx.stroke();
+  // 검정 어깨/팔
+  ctx.fillStyle = black;
+  roundRect(-4, -30, 12, 20, 5); ctx.fill();
+  roundRect(24, -30, 12, 20, 5); ctx.fill();
+  // 머리(흰)
+  ctx.fillStyle = white;
+  ctx.beginPath(); ctx.arc(16, -40, 14, 0, 7); ctx.fill(); ctx.stroke();
+  // 귀(검정)
+  ctx.fillStyle = black;
+  ctx.beginPath(); ctx.arc(6, -50, 5, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.arc(26, -50, 5, 0, 7); ctx.fill();
+  // 분홍 볼
+  ctx.fillStyle = cheek;
+  ctx.beginPath(); ctx.arc(6, -36, 2.6, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.arc(26, -36, 2.6, 0, 7); ctx.fill();
+  // 눈 패치(검정)
+  ctx.fillStyle = black;
+  ctx.beginPath(); ctx.ellipse(10, -41, 3.4, 4.6, -0.3, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(22, -41, 3.4, 4.6, 0.3, 0, 7); ctx.fill();
+  // 눈 반짝(흰)
+  ctx.fillStyle = white;
+  ctx.fillRect(10, -42, 1.6, 1.6); ctx.fillRect(22, -42, 1.6, 1.6);
+  // 코
+  ctx.fillStyle = black;
+  ctx.fillRect(15, -35, 3, 2);
+
+  // 대나무(초록) + 오물오물
+  const munch = (Math.sin(p.munch * 6) + 1) / 2; // 0..1
+  ctx.save();
+  ctx.translate(30, -30);
+  ctx.rotate(-0.5 - munch * 0.15);
+  ctx.fillStyle = "#5fa54a";
+  ctx.fillRect(0, -2, 20, 4);
+  ctx.fillStyle = "#8ed36f";
+  ctx.fillRect(14, -8, 8, 5); ctx.fillRect(16, 3, 8, 5);
+  ctx.restore();
+  // 잡은 손(검정)
+  ctx.fillStyle = black;
+  ctx.beginPath(); ctx.arc(30, -30, 4, 0, 7); ctx.fill();
+
+  ctx.restore();
+}
+
+function drawDino(fg) {
+  ctx.fillStyle = fg;
+  const x = dino.x, gy = groundY();
+  const step = Math.floor(dino.legT) % 2 === 0;
+
+  if (dino.ducking && dino.onGround) {
+    // 숙인 자세(납작하게)
+    const y = gy - 24;
+    ctx.fillRect(x, y + 4, 46, 16);          // 몸통
+    ctx.fillRect(x + 40, y, 16, 12);         // 머리
+    ctx.fillRect(x + 52, y + 3, 4, 4);       // 주둥이
+    // 눈(배경색으로 파냄)
+    ctx.save(); ctx.fillStyle = "rgba(0,0,0,0)"; ctx.restore();
+    // 다리
+    if (step) { ctx.fillRect(x + 8, y + 20, 6, 6); ctx.fillRect(x + 26, y + 20, 6, 4); }
+    else { ctx.fillRect(x + 8, y + 20, 6, 4); ctx.fillRect(x + 26, y + 20, 6, 6); }
+    drawDinoEye(x + 48, y + 3, fg);
+    return;
+  }
+
+  // 서있는 자세
+  const bodyTop = dino.y - dino.h;
+  // 꼬리
+  ctx.fillRect(x - 10, bodyTop + 12, 14, 8);
+  ctx.fillRect(x - 6, bodyTop + 8, 10, 8);
+  // 몸통
+  ctx.fillRect(x, bodyTop + 8, 26, 24);
+  // 목/머리
+  ctx.fillRect(x + 20, bodyTop, 20, 20);
+  ctx.fillRect(x + 36, bodyTop + 6, 8, 8);   // 주둥이
+  // 팔
+  ctx.fillRect(x + 24, bodyTop + 22, 8, 4);
+  // 다리(달리기 애니)
+  if (!dino.onGround) {
+    ctx.fillRect(x + 4, bodyTop + 30, 7, 10);
+    ctx.fillRect(x + 16, bodyTop + 30, 7, 10);
+  } else if (step) {
+    ctx.fillRect(x + 4, bodyTop + 30, 7, 12);
+    ctx.fillRect(x + 16, bodyTop + 32, 7, 8);
+  } else {
+    ctx.fillRect(x + 4, bodyTop + 32, 7, 8);
+    ctx.fillRect(x + 16, bodyTop + 30, 7, 12);
+  }
+  drawDinoEye(x + 32, bodyTop + 4, fg);
+}
+
+// 눈: 배경색으로 파낸 점. dead면 X.
+function drawDinoEye(ex, ey, fg) {
+  const sky = ctx.fillStyle;
+  ctx.save();
+  ctx.fillStyle = mixBg();
+  if (dino.dead) {
+    ctx.fillRect(ex, ey, 5, 1.6); ctx.fillRect(ex, ey + 3, 5, 1.6);
+  } else {
+    ctx.fillRect(ex, ey, 3, 3);
+  }
+  ctx.restore();
+  ctx.fillStyle = fg;
+}
+function mixBg() {
+  const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+  const skyDay = dark ? [22, 24, 30] : [247, 247, 247];
+  const skyNight = dark ? [8, 9, 14] : [40, 42, 58];
+  return mixCol(skyDay, skyNight, nightMix);
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+// ── 부팅 ──────────────────────────────────────────────────
+resize();
+reset();
+$("hi").textContent = hi ? `HI ${hi.toLocaleString("ko-KR")}` : "";
+requestAnimationFrame(frame);
+
+// ── Bubblelab 연동 ─────────────────────────────────────
+window.blWeekly = { game: "dino", dir: "max", fmt: (v) => `${(+v).toLocaleString("ko-KR")}m` };
+window.blShareText = () => `🦖 공룡 점프에서 ${Math.floor(hi).toLocaleString("ko-KR")}m 달렸어요! 판다도 보셨나요? 도전해보세요`;
+</script>
+<script defer src="/_shared/records.js"></script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>

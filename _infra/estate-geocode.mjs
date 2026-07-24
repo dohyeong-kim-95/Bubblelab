@@ -20,13 +20,141 @@ const REGION_ADDR = {
   giheung: ["경기도 용인시 기흥구"],
 };
 
-// 통근·환금성 기준점. 도로명주소는 공개된 주소다.
+// 통근·환금성 기준점. 도로명주소는 공개된 주소다 (coord가 있으면 그 좌표를
+// 그대로 쓰고 지오코딩을 건너뛴다 — 역명은 지번 검색이 애매해서 직접 지정).
 // 동탄역은 매도 시 GTX 수요층 관점의 보조축 (실거주 축은 캠퍼스).
 const REFS = [
-  { id: "hwaseong-campus", label: "삼성 화성캠퍼스", road: "경기도 화성시 삼성전자로 1" },
+  // 화성캠퍼스는 DSR타워(삼성전자로 1-1, DS 부문 R타워)로 고정 — 실제 통근
+  // 목적지라 정문(삼성전자로 1)보다 동쪽으로 약 600m 더 정확하다.
+  { id: "hwaseong-campus", label: "삼성 화성캠 DSR", coord: { lat: 37.22528, lng: 127.07024 } },
   { id: "giheung-campus", label: "삼성 기흥캠퍼스", road: "경기도 용인시 기흥구 삼성로 1" },
   { id: "dongtan-station", label: "동탄역 (GTX·SRT)", road: "경기도 화성시 동탄역로 151" },
+  { id: "gucheong-station", label: "구성역 (GTX-A)", coord: { lat: 37.2996, lng: 127.1054 } },
 ];
+
+// 지도에 깔 철도 노선. via의 기준점들을 순서대로 이은 폴리라인이 된다.
+// 현재 지도 범위(동탄구·기흥구) 안의 GTX-A 구간은 동탄역~구성역 하나다.
+const RAIL_LINES = {
+  "gtx-a": { label: "GTX-A", color: "#d6336c", via: ["dongtan-station", "gucheong-station"] },
+};
+
+// 통근 셔틀 노선 (사용자 제공 UVIS BUS 캡처 기반). 정류장은 대부분 아파트
+// 단지라 실거래 좌표(match=정확한 단지명)를 재사용하고, 단지가 아닌 정류장만
+// addr(지오코딩)이나 ref(기존 기준점)로 좌표를 얻는다. 새 노선은 여기에 추가.
+const SHUTTLE_ROUTES = {
+  "h1-dsr-naru1": {
+    label: "DSR · 동탄나루1차·시범단지", color: "#0ca678",
+    stops: [
+      { name: "동탄월드반도유보라1차", addr: "경기도 화성시 반송동 442" },
+      { name: "나루마을한화우림", match: "나루마을한화꿈에그린우림필유" },
+      { name: "솔빛마을신도브래뉴", match: "솔빛마을신도브래뉴" },
+      { name: "솔빛마을경남아너스빌", match: "솔빛마을경남아너스빌" },
+      { name: "시범다은포스코더샵", match: "시범다은마을포스코더샵" },
+      { name: "메타폴리스", addr: "경기도 화성시 반송동 96" },
+      { name: "시범한빛동탄아이파크", match: "시범한빛마을동탄아이파크" },
+      { name: "화성캠퍼스", ref: "hwaseong-campus" },
+    ],
+  },
+  // 두 번째 노선(사용자 확인 주소 기반). 정류장 좌표는 도로명주소 지오코딩값을
+  // 직접 지정(coord). 4번은 힐스테이트·호반5차 두 단지의 중간점.
+  "dongtan-east": {
+    label: "우체국 · 동탄역 동부", color: "#7048e8",
+    stops: [
+      { name: "동탄우체국(노작로240)", coord: { lat: 37.20775, lng: 127.07813 } },
+      { name: "동탄역", ref: "dongtan-station" },
+      { name: "반도유보라·센트럴푸르지오", coord: { lat: 37.19903, lng: 127.11306 } },
+      { name: "힐스테이트·호반5차", coord: { lat: 37.18469, lng: 127.12254 } },
+    ],
+  },
+  // 세 번째 노선: 화성DSR행 (에일린의뜰·반도유보라 6·7·8차 → DSR타워). 노선1도
+  // 화성DSR행이라 구분 위해 초록 계열 다른 톤. 단지가 아닌 정류장(업무복합부지·
+  // 동탄IT타워)은 주소 확인 전까지 제외 — 나머지 4개가 같은 남북 축이라 형태 유지.
+  "eilin-bando-dsr": {
+    label: "DSR · 에일린·반도유보라", color: "#0ca678",
+    stops: [
+      { name: "에일린의뜰", match: "동탄역에일린의뜰" },
+      { name: "반도유보라5단지", match: "동탄역 반도유보라 아이비파크5.0" },
+      { name: "반도유보라6차", match: "동탄역 반도유보라 아이비파크6.0" },
+      { name: "화성DSR동", ref: "hwaseong-campus" },
+    ],
+  },
+  // 네 번째: 동탄2신도시1차A_H1-DSR (화성DSR행). LH4단지·동탄IT타워는 아파트가
+  // 아니라 주소 확인 전까지 제외 — 확실한 정류장(모아미래도·센트럴상록·DSR)만.
+  "dt2-1cha-a-dsr": {
+    label: "DSR · 동탄2 1차A·모아미래도", color: "#0ca678",
+    stops: [
+      { name: "동탄역모아미래도", match: "동탄역모아미래도" },
+      { name: "동탄역센트럴상록", match: "동탄역센트럴상록아파트" },
+      { name: "화성DSR동", ref: "hwaseong-campus" },
+    ],
+  },
+  // 다섯 번째: 동탄2신도시2차_H1-DSR (화성DSR행). 무봉초(1번)는 학교라 제외 —
+  // 바로 옆 KCC스위첸이 시작점. 나머지 8개는 모두 청계동 단지에 매칭.
+  "dt2-2cha-dsr": {
+    label: "DSR · 동탄2 2차·청계동", color: "#0ca678",
+    stops: [
+      { name: "KCC스위첸", match: "KCC스위첸아파트" },
+      { name: "시범반도유보라4차", match: "시범반도유보라아이비파크4.0" },
+      { name: "동탄역시범호반써밋", match: "동탄역시범호반써밋" },
+      { name: "대원칸타빌", match: "동탄역시범대원칸타빌아파트" },
+      { name: "한화꿈에그린", match: "동탄역 시범한화 꿈에그린 프레스티지" },
+      { name: "더샵센트럴시티", match: "더샵센트럴시티" },
+      { name: "동탄역센트럴상록", match: "동탄역센트럴상록아파트" },
+      { name: "화성DSR동", ref: "hwaseong-campus" },
+    ],
+  },
+  // 여섯 번째: 화성DSR행. 화성나래학교(3)·리베라CC(5)는 단지 아니라 제외.
+  "dsr-lakeedu": {
+    label: "DSR · 레이크에듀·린스트라우스", color: "#0ca678",
+    stops: [
+      { name: "동탄린스트라우스더레이크", match: "동탄린스트라우스더레이크" },
+      { name: "동탄더샵레이크에듀타운", match: "동탄 더샵 레이크에듀타운" },
+      { name: "반도유보라3차", match: "반도유보라아이비파크3" },
+      { name: "더샵센트럴시티", match: "더샵센트럴시티" },
+      { name: "화성DSR동", ref: "hwaseong-campus" },
+    ],
+  },
+  // 일곱 번째: 화성DSR행. 동탄호수공원 남쪽. 호수공원아이파크(3)는 데이터 없어 제외.
+  "dsr-lakepark-s": {
+    label: "DSR · 호수공원남·부영레이크", color: "#0ca678",
+    stops: [
+      { name: "반도9차", match: "레이크반도유보라아이비파크9.0" },
+      { name: "금호어울림레이크", match: "금호어울림레이크" },
+      { name: "더레이크부영6단지", match: "더레이크시티부영6단지" },
+      { name: "더레이크부영1단지", match: "더레이크시티부영1단지" },
+      { name: "서희스타힐스", match: "서희스타힐스엔에이치에프" },
+      { name: "한신더휴", match: "한신더휴" },
+      { name: "베라체", match: "동탄2신도시 베라체" },
+      { name: "화성DSR동", ref: "hwaseong-campus" },
+    ],
+  },
+  // 이하 근거리셔틀(화성캠 서부). 부영사랑으로·예당마을푸르지오·능동휴먼시아·
+  // 오투메종은 데이터에 없어 제외. 한림대병원 노선은 아파트 정류장이 없어 미등록.
+  "dsr-yeongcheon": {
+    label: "DSR · 영천동(파크자이)", color: "#0ca678",
+    stops: [
+      { name: "동탄파크자이", match: "동탄파크자이" },
+      { name: "동탄파크푸르지오", match: "동탄파크푸르지오" },
+      { name: "화성DSR동", ref: "hwaseong-campus" },
+    ],
+  },
+  "dsr-yedang": {
+    label: "DSR · 예당마을(신일유토빌)", color: "#0ca678",
+    stops: [
+      { name: "신일유토빌", match: "신일유토빌" },
+      { name: "화성DSR동", ref: "hwaseong-campus" },
+    ],
+  },
+  "dsr-pureun-daedo": {
+    label: "DSR · 푸른마을·숲속마을", color: "#0ca678",
+    stops: [
+      { name: "푸른마을두산위브", match: "푸른마을두산위브" },
+      { name: "숲속마을자연앤데시앙", match: "자연앤데시앙" },
+      { name: "숲속마을모아미래도", match: "동탄숲속마을 모아미래도1단지" },
+      { name: "화성DSR동", ref: "hwaseong-campus" },
+    ],
+  },
+};
 
 function readKey() {
   if (process.env.VWORLD_KEY?.trim()) return process.env.VWORLD_KEY.trim();
@@ -36,6 +164,70 @@ function readKey() {
     if (match) return match[1].trim().replace(/^["']|["']$/g, "");
   }
   return null;
+}
+
+// 단지명 → 대표 좌표. 실거래(trade) 파일에서 apt명과 지번을 모아, 이미
+// 지오코딩된 geo.points에 있는 지번의 좌표를 그 단지의 좌표로 삼는다.
+function buildAptCoordIndex(geo) {
+  const index = new Map();
+  for (const file of readdirSync(DATA_DIR)) {
+    if (!file.startsWith("trade-")) continue;
+    const { region, items } = JSON.parse(readFileSync(join(DATA_DIR, file), "utf8"));
+    for (const r of items) {
+      if (!r.jibun || index.has(r.apt)) continue;
+      const pt = geo.points[`${region}|${r.dong}|${r.jibun}`];
+      if (pt) index.set(r.apt, { lat: pt.lat, lng: pt.lng });
+    }
+  }
+  return index;
+}
+
+// 추천 핀: 초록(화성DSR행)·보라(우체국행) 셔틀 정류장이 둘 다 PIN_RADIUS 이내이고
+// 매매 중앙가가 가격대 안, 표본이 충분한 동탄 단지. 조건을 바꾸면 다른 추천이 된다.
+const PIN = { radius: 500, minPrice: 30000, maxPrice: 80000, minDeals: 5,
+  months: ["202602", "202603", "202604", "202605", "202606", "202607"] };
+
+function haversine(a, b) {
+  const R = 6371000, rad = Math.PI / 180;
+  const dLat = (b[0] - a[0]) * rad, dLng = (b[1] - a[1]) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[0] * rad) * Math.cos(b[0] * rad) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.asin(Math.sqrt(h));
+}
+function medianOf(arr) {
+  const s = [...arr].sort((x, y) => x - y), m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+function computeRecommendPins(geo) {
+  const green = [], purple = [];
+  for (const s of Object.values(geo.shuttles ?? {})) {
+    const pts = s.stops.map((st) => [st.lat, st.lng]);
+    (s.color === "#7048e8" ? purple : green).push(...pts);
+  }
+  if (!green.length || !purple.length) return [];
+  const months = new Set(PIN.months);
+  const apt = {};
+  for (const file of readdirSync(DATA_DIR)) {
+    if (!file.startsWith("trade-dongtan-")) continue;
+    const { ym, items } = JSON.parse(readFileSync(join(DATA_DIR, file), "utf8"));
+    if (!months.has(ym)) continue;
+    for (const r of items) {
+      if (r.canceled || !r.jibun) continue;
+      const pt = geo.points[`dongtan|${r.dong}|${r.jibun}`];
+      if (!pt) continue;
+      (apt[r.apt] ??= { amts: [], pt: null }).amts.push(r.amt);
+      apt[r.apt].pt ??= pt;
+    }
+  }
+  const nearest = (pt, arr) => Math.min(...arr.map((s) => haversine([pt.lat, pt.lng], s)));
+  const pins = [];
+  for (const [name, v] of Object.entries(apt)) {
+    if (!v.pt || v.amts.length < PIN.minDeals) continue;
+    const price = medianOf(v.amts);
+    if (price < PIN.minPrice || price >= PIN.maxPrice) continue;
+    if (nearest(v.pt, green) > PIN.radius || nearest(v.pt, purple) > PIN.radius) continue;
+    pins.push({ name, lat: v.pt.lat, lng: v.pt.lng, price, deals: v.amts.length });
+  }
+  return pins.sort((a, b) => b.deals - a.deals);
 }
 
 async function vworldGeocode(key, address, type) {
@@ -93,11 +285,43 @@ async function main() {
   }));
 
   for (const ref of REFS) {
+    // coord 직접 지정 기준점은 우리가 확정한 값이라 매번 최신 좌표·라벨로 덮어쓴다.
+    if (ref.coord) { geo.refs[ref.id] = { ...ref.coord, label: ref.label }; continue; }
     if (geo.refs[ref.id] && !force) continue;
     const point = await vworldGeocode(key, ref.road, "ROAD").catch(() => null);
     if (point) geo.refs[ref.id] = { ...point, label: ref.label };
     else console.error(`  기준점 실패: ${ref.label}`);
   }
+
+  // 철도 노선 폴리라인을 기준점 좌표로 조립 (force와 무관하게 매번 갱신).
+  geo.lines = {};
+  for (const [id, line] of Object.entries(RAIL_LINES)) {
+    const coords = line.via.map((v) => geo.refs[v]).filter(Boolean).map((r) => [r.lat, r.lng]);
+    if (coords.length >= 2) geo.lines[id] = { label: line.label, color: line.color, coords };
+  }
+
+  // 셔틀 노선: 정류장 좌표를 match(단지명)→실거래 좌표, ref→기준점, addr→지오코딩
+  // 순으로 얻는다. 각 정류장 {name, lat, lng}과 폴리라인 coords를 함께 저장한다.
+  const aptCoord = buildAptCoordIndex(geo);
+  geo.shuttles = {};
+  for (const [id, route] of Object.entries(SHUTTLE_ROUTES)) {
+    const stops = [];
+    for (const s of route.stops) {
+      let pt = null;
+      if (s.coord) pt = s.coord;
+      else if (s.match) pt = aptCoord.get(s.match) ?? null;
+      else if (s.ref) pt = geo.refs[s.ref] ? { lat: geo.refs[s.ref].lat, lng: geo.refs[s.ref].lng } : null;
+      else if (s.addr) pt = await vworldGeocode(key, s.addr, "PARCEL").catch(() => null);
+      if (pt) stops.push({ name: s.name, lat: pt.lat, lng: pt.lng });
+      else console.error(`  셔틀 정류장 좌표 실패: ${route.label} / ${s.name}`);
+    }
+    if (stops.length >= 2) {
+      geo.shuttles[id] = { label: route.label, color: route.color, stops };
+    }
+  }
+
+  // 추천 핀은 셔틀·좌표가 다 준비된 뒤 계산 (데이터 갱신 때마다 자동 재계산).
+  geo.pins = computeRecommendPins(geo);
 
   geo.generatedAt = new Date().toISOString();
   writeFileSync(GEO_FILE, JSON.stringify(geo));

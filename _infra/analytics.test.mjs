@@ -174,9 +174,9 @@ test("ranks monthly top pages by unique visitors, excluding site homes", async (
     // games/avalon: 2명
     ["pv:2026-07-08:games/avalon:" + vid(1), true],
     ["pv:2026-07-08:games/avalon:" + vid(4), true],
-    // slop/lotto: 1명, slop/yacht: 1명 (4위는 잘림)
-    ["pv:2026-07-07:slop/lotto:" + vid(5), true],
-    ["pv:2026-07-07:slop/yacht:" + vid(6), true],
+    // util/lotto: 1명, util/planner: 1명 (동점은 이름 앞선 util/lotto가 3위, util/planner는 잘림)
+    ["pv:2026-07-07:util/lotto:" + vid(5), true],
+    ["pv:2026-07-07:util/planner:" + vid(6), true],
     // 사이트 홈과 30일 밖 방문은 제외
     ["pv:2026-07-10:www:" + vid(1), true],
     ["pv:2026-05-01:slop/trader:" + vid(1), true],
@@ -190,7 +190,7 @@ test("ranks monthly top pages by unique visitors, excluding site homes", async (
   assert.deepEqual(top, [
     { page: "slop/circle", users: 3 },
     { page: "games/avalon", users: 2 },
-    { page: "slop/lotto", users: 1 },
+    { page: "util/lotto", users: 1 },
   ]);
 });
 
@@ -199,7 +199,7 @@ test("serves per-page weekly visitor counts for card sorting", async () => {
   const storage = new MemoryStorage([
     ["pv:2026-07-10:slop/circle:" + vid(1), true],
     ["pv:2026-07-09:slop/circle:" + vid(2), true],
-    ["pv:2026-07-07:slop/lotto:" + vid(3), true],
+    ["pv:2026-07-07:util/lotto:" + vid(3), true],
     ["pv:2026-07-10:slop:" + vid(1), true],          // 홈도 그대로 포함
     ["pv:2026-07-01:slop/trader:" + vid(1), true],   // 7일 밖은 제외
   ]);
@@ -208,7 +208,7 @@ test("serves per-page weekly visitor counts for card sorting", async () => {
     new Request("https://analytics.internal/pages?date=2026-07-10&days=7"),
   );
   const { pages } = await response.json();
-  assert.deepEqual(pages, { "slop/circle": 2, "slop/lotto": 1, "slop": 1 });
+  assert.deepEqual(pages, { "slop/circle": 2, "util/lotto": 1, "slop": 1 });
 });
 
 test("ignores invalid page but still counts the visitor", async () => {

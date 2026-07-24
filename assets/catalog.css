@@ -47,6 +47,11 @@ body[data-category="music"] .preview { aspect-ratio: 1; }
 .download { display: block; padding: .65rem .55rem; border-radius: .65rem; background: var(--text); color: var(--bg); text-align: center; text-decoration: none; font-size: .7rem; font-weight: 700; }
 .download:hover { opacity: .82; }
 .download-count { color: var(--muted); text-align: center; font-size: .58rem; }
+.download-all { grid-column: 1 / -1; margin-bottom: .2rem; padding: .7rem .55rem; border: 1px solid var(--accent);
+  border-radius: .65rem; background: transparent; color: var(--accent); font: inherit; font-size: .72rem;
+  font-weight: 700; cursor: pointer; }
+.download-all:hover:not(:disabled) { background: var(--accent); color: var(--bg); }
+.download-all:disabled { opacity: .6; cursor: default; }
 .state { grid-column: 1 / -1; padding: 5rem 1rem; color: var(--muted); text-align: center; border: 1px dashed var(--line); border-radius: 1rem; font-size: .82rem; line-height: 1.7; }
 footer { margin-top: 3rem; color: var(--muted); text-align: center; font-size: .68rem; }
 @media (max-width: 34rem) {

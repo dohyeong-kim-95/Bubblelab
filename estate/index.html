@@ -83,6 +83,52 @@ svg text { font-family: inherit; font-size: 12px; fill: light-dark(#5a6b7d, #93a
 .tooltip b { font-weight: 700; }
 
 /* 지도 (dataviz --ordinal 검증 통과 순차 램프: 밝음=저가 → 진함=고가) */
+/* 셔틀 토글 카드 */
+.toggle-card, .apt-card { padding: 12px 14px; margin-bottom: 8px; }
+.card-head { font-size: 0.82rem; font-weight: 700; margin-bottom: 8px; }
+.toggle-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.toggle-chip { font: inherit; font-size: 0.75rem; cursor: pointer; user-select: none;
+  border: 1px solid light-dark(#dce4ec, #33465c); border-radius: 999px; padding: 3px 10px;
+  background: light-dark(#f4f7fa, #1a2634); color: inherit; display: inline-flex; align-items: center; gap: 5px; }
+.toggle-chip .sw-line { width: 14px; height: 0; border-top: 3px solid; display: inline-block; }
+.toggle-chip.on { background: light-dark(#e7f5ef, #10382c); border-color: currentColor; font-weight: 700; }
+/* 활성 단지 카드 */
+.apt-card .apt-name { font-size: 1rem; font-weight: 700; }
+.apt-card .apt-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 6px 14px; margin-top: 8px; font-size: 0.8rem; }
+.apt-card .apt-grid .k { opacity: 0.6; font-size: 0.72rem; }
+.apt-card .apt-grid .v { font-weight: 700; }
+.apt-card .apt-dist { margin-top: 8px; font-size: 0.78rem; line-height: 1.7; }
+.apt-card .apt-dist b { color: light-dark(#c05621, #ffa94d); }
+.apt-card .apt-links { margin-top: 8px; }
+.apt-card .apt-close { float: right; cursor: pointer; opacity: 0.5; font-size: 0.85rem; border: 0; background: none; color: inherit; }
+.pin-badge { display: inline-block; font-size: 0.7rem; color: #fff; background: #e8590c; border-radius: 6px; padding: 1px 6px; margin-left: 6px; }
+/* 내 메모 폼 */
+.apt-note { margin-top: 10px; padding-top: 10px; border-top: 1px dashed light-dark(#dce4ec, #33465c); }
+.note-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.fav-btn { font: inherit; font-size: 0.76rem; cursor: pointer; border: 1px solid light-dark(#dce4ec, #33465c);
+  border-radius: 999px; padding: 3px 12px; background: light-dark(#f4f7fa, #1a2634); color: inherit; }
+.fav-btn.on { background: #fff4e0; border-color: #f59f00; color: #b8850b; font-weight: 700; }
+:root[data-theme="dark"] .fav-btn.on, .fav-btn.on { }
+@media (prefers-color-scheme: dark) { .fav-btn.on { background: #3a2f12; color: #ffd43b; } }
+.note-price { font-size: 0.78rem; opacity: 0.8; }
+.note-price input { width: 68px; font: inherit; font-size: 0.82rem; padding: 3px 6px; text-align: right;
+  border: 1px solid light-dark(#dce4ec, #33465c); border-radius: 6px; background: light-dark(#fff, #0f1926); color: inherit; }
+.note-memo { width: 100%; margin-top: 7px; font: inherit; font-size: 0.8rem; padding: 5px 8px;
+  border: 1px solid light-dark(#dce4ec, #33465c); border-radius: 8px; background: light-dark(#fff, #0f1926); color: inherit; box-sizing: border-box; }
+.note-gap { margin-top: 7px; font-size: 0.78rem; opacity: 0.85; }
+.note-gap b { color: light-dark(#c05621, #ffa94d); }
+/* 관심 목록 */
+.fav-item { position: relative; padding: 8px 26px 8px 0; border-bottom: 1px solid light-dark(#eef2f7, #1e2a3a); font-size: 0.82rem; }
+.fav-item:last-child { border-bottom: 0; }
+.fav-item[data-apt] { cursor: pointer; }
+.fav-item[data-apt]:hover b { text-decoration: underline; }
+.fav-line { font-size: 0.78rem; opacity: 0.8; margin-top: 2px; }
+.fav-memo { font-size: 0.76rem; opacity: 0.7; margin-top: 3px; }
+.fav-del { position: absolute; right: 0; top: 7px; border: 0; background: none; cursor: pointer; opacity: 0.4; color: inherit; font-size: 0.8rem; }
+.fav-del:hover { opacity: 0.9; }
+.fav-star { fill: #f59f00; paint-order: stroke; stroke: light-dark(#ffffff, #0d131c); stroke-width: 2.5px; }
+.map-dot, .pin-body { cursor: pointer; }
 .map-controls { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; font-size: 0.78rem; margin-bottom: 6px; }
 .map-controls select { font: inherit; font-size: 0.82rem; color: inherit; padding: 4px 8px;
   border: 1px solid light-dark(#dce4ec, #263445); border-radius: 8px; background: light-dark(#ffffff, #151e2a); }
@@ -98,7 +144,17 @@ svg text { font-family: inherit; font-size: 12px; fill: light-dark(#5a6b7d, #93a
 .map-ref { fill: var(--c-rent); stroke: light-dark(#ffffff, #0d131c); stroke-width: 1; }
 .map-ref-label { font-weight: 700; fill: light-dark(#7c4a10, #ffc06e);
   paint-order: stroke; stroke: light-dark(#ffffff, #0d131c); stroke-width: 3px; }
-#mapChart svg { max-height: 640px; margin: 0 auto; }
+#mapChart svg { max-height: 640px; margin: 0 auto; overflow: hidden; }
+.rail-station { stroke: light-dark(#ffffff, #151e2a); }
+.pin-body { fill: #e8590c; stroke: light-dark(#ffffff, #0d131c); stroke-width: 1.5; }
+.pin-dot { fill: light-dark(#ffffff, #fff3e6); }
+.pin-label { fill: light-dark(#c92a2a, #ffa94d); font-weight: 700;
+  paint-order: stroke; stroke: light-dark(#ffffff, #0d131c); stroke-width: 3px; }
+.map-legend .rail { display: inline-block; width: 16px; height: 0; border-top: 3px solid; margin-right: 4px; vertical-align: 4px; }
+.leg-route { cursor: pointer; user-select: none; opacity: 0.55; }
+.leg-route:hover { text-decoration: underline; }
+.leg-route.on { opacity: 1; font-weight: 700; }
+.leg-hint { opacity: 0.5; font-style: italic; }
 /* 다크 모드에서는 밝은 배경지도를 반전해 눈부심을 줄인다 */
 @media (prefers-color-scheme: dark) {
   .map-base { filter: invert(1) hue-rotate(180deg) brightness(0.9) saturate(0.55); }
@@ -188,6 +244,21 @@ tr.canceled td { text-decoration: line-through; opacity: 0.5; }
     <div class="card chart-wrap" id="chartRatio"></div>
 
     <h2>지도 <span class="sub">최근 6개월 매매 · 원 크기 = 거래 건수, 진할수록 평당가 높음 · 거리는 직선거리</span></h2>
+
+    <div class="card apt-card hidden" id="favCard">
+      <div class="card-head">⭐ 내 관심 단지 <span class="sub">이 브라우저에만 저장됨</span></div>
+      <div id="favList"></div>
+    </div>
+
+    <div class="card toggle-card" id="shuttleCard">
+      <div class="card-head">통근 셔틀 노선 <span class="sub">눌러서 강조 (여러 개 가능)</span></div>
+      <div id="shuttleToggles" class="toggle-row"></div>
+    </div>
+
+    <div class="card apt-card" id="aptCard">
+      <div id="aptCardBody"><span class="sub">지도에서 단지(원)나 📍 핀을 누르면 여기에 단지 정보가 표시됩니다.</span></div>
+    </div>
+
     <div class="card chart-wrap" id="mapWrap">
       <div class="map-controls">
         <label>기준점 <select id="selRef"><option value="">없음</option></select></label>
@@ -230,7 +301,7 @@ const TABS = {
   giheung:  { src: "giheung", label: "기흥구", dongs: null },
 };
 const MAX_MONTHS = 36;
-const state = { tab: "dongtan2", months: 24, band: "all", dong: "", deals: "trade", ref: "", radius: "3", cap: true };
+const state = { tab: "dongtan2", months: 24, band: "all", dong: "", deals: "trade", ref: "", radius: "3", cap: true, emphasized: new Set(), selectedApt: null };
 // store[src][type][ym] = 배열 | "error"
 const store = { dongtan: { trade: {}, rent: {} }, giheung: { trade: {}, rent: {} } };
 let loadSeq = 0;
@@ -589,6 +660,27 @@ function complexStats() {
   });
 }
 
+// 내 메모(즐겨찾기·호가·메모)는 이 브라우저에만 저장한다(localStorage). 서버·계정
+// 없이 개인 기록만 남기며, 한 기기 기준. { "단지명": { fav, price(억), memo, ts } }
+const NOTES_KEY = "estate_notes_v1";
+function loadNotes() { try { return JSON.parse(localStorage.getItem(NOTES_KEY)) || {}; } catch { return {}; } }
+let notes = loadNotes();
+function setNote(apt, patch) {
+  const next = { ...(notes[apt] || {}), ...patch, ts: Date.now() };
+  if (!next.fav && !next.price && !(next.memo || "").trim()) delete notes[apt];
+  else notes[apt] = next;
+  try { localStorage.setItem(NOTES_KEY, JSON.stringify(notes)); } catch { /* 용량 초과 등 무시 */ }
+}
+
+// 네이버 매물 링크는 기기별로 갈린다. 좌표로 매물 지도를 바로 여는 건 모바일
+// (m.land/map/위도:경도:줌/유형/거래)만 가능하다 — PC용 new.land는 단지 고유번호를
+// 요구해서 좌표 URL이 전부 404(2026-07 실측). 그래서 PC는 네이버 지도 검색으로
+// 보내 단지 위치·시세·매물 링크에 닿게 한다. m.land는 데스크탑 UA에선 튕긴다.
+const IS_MOBILE = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+const naverLink = (e) => (IS_MOBILE && e.point)
+  ? `https://m.land.naver.com/map/${e.point.lat.toFixed(6)}:${e.point.lng.toFixed(6)}:17/APT:JGC:ABYG/A1:B1:B2`
+  : `https://map.naver.com/p/search/${encodeURIComponent(e.apt + " 아파트")}`;
+
 const inRadius = (e) => {
   if (!state.ref || !+state.radius) return true;
   return e.dist != null && e.dist <= +state.radius;
@@ -655,9 +747,40 @@ function renderMap() {
   const maxCnt = Math.max(...list.map((e) => e.cnt));
   const dots = [...list].sort((a, b) => b.cnt - a.cnt).map((e) => {
     const r = (3.5 + 8 * Math.sqrt(e.cnt / maxCnt)) * ui;
-    return `<circle class="map-dot q${quant(e.med)}${inRadius(e) ? "" : " dim"}" data-i="${list.indexOf(e)}"` +
-      ` cx="${px(e.point).toFixed(1)}" cy="${py2(e.point).toFixed(1)}" r="${r.toFixed(1)}"/>`;
+    const cx = px(e.point).toFixed(1), cy = py2(e.point).toFixed(1);
+    let s = `<circle class="map-dot q${quant(e.med)}${inRadius(e) ? "" : " dim"}" data-i="${list.indexOf(e)}"` +
+      ` cx="${cx}" cy="${cy}" r="${r.toFixed(1)}"/>`;
+    if (notes[e.apt]?.fav) s += `<text class="fav-star" x="${cx}" y="${(+cy - r - 2 * ui).toFixed(1)}" text-anchor="middle" font-size="${(12 * ui).toFixed(1)}">★</text>`;
+    return s;
   }).join("");
+
+  // 철도 노선 폴리라인 + 역 강조점 (배경 위, 단지 점 아래). viewBox 밖으로
+  // 뻗는 구간은 SVG overflow:hidden으로 잘린다 (탭 범위 밖 역 방향 암시).
+  // 노선은 기본적으로 얕게(단지 탐색이 주). 범례에서 클릭한 노선만 강조되며
+  // 그때 정류장 점·툴팁이 뜬다. GTX는 실선, 셔틀은 파선.
+  let railLines = "";
+  const drawRoute = (id, color, pts, dashed, titles) => {
+    const emph = state.emphasized.has(id);
+    const op = emph ? 0.95 : 0.2;
+    const sw = (emph ? (dashed ? 3 : 4) : (dashed ? 1.8 : 2.2)) * ui;
+    const dash = dashed ? `stroke-dasharray="${(6 * ui).toFixed(1)} ${(4 * ui).toFixed(1)}"` : "";
+    const d = pts.map((p) => `${px(p).toFixed(1)},${py2(p).toFixed(1)}`).join(" ");
+    railLines += `<polyline points="${d}" fill="none" stroke="${color}" stroke-width="${sw.toFixed(1)}" ` +
+      `${dash} stroke-linecap="round" stroke-linejoin="round" opacity="${op}"/>`;
+    if (emph) {
+      pts.forEach((p, i) => {
+        railLines += `<circle class="rail-station" cx="${px(p).toFixed(1)}" cy="${py2(p).toFixed(1)}" ` +
+          `r="${((dashed ? 2.6 : 3.2) * ui).toFixed(1)}" fill="${color}" stroke-width="${((dashed ? 1.2 : 1.4) * ui).toFixed(1)}">` +
+          (titles ? `<title>${titles[i]}</title>` : "") + `</circle>`;
+      });
+    }
+  };
+  for (const [lid, line] of Object.entries(geoData.lines ?? {})) {
+    drawRoute(lid, line.color, line.coords.map(([lat, lng]) => ({ lat, lng })), false, null);
+  }
+  for (const [rid, route] of Object.entries(geoData.shuttles ?? {})) {
+    drawRoute(rid, route.color, route.stops, true, route.stops.map((s, i) => `${route.label}\n${i + 1}. ${s.name}`));
+  }
 
   const selRef = state.ref ? geoData.refs[state.ref] : null;
   const radiusCircle = selRef && +state.radius
@@ -674,34 +797,142 @@ function renderMap() {
   const scaleBar = `<line class="map-scale" x1="${sx}" x2="${sx + 2 * pxPerKm}" y1="${sy}" y2="${sy}"/>` +
     `<text x="${sx + pxPerKm}" y="${sy - 5 * ui}" text-anchor="middle" font-size="${Math.round(12 * ui)}">2km</text>`;
 
-  chart.innerHTML = `<svg viewBox="0 0 ${VW} ${VH}" role="img" aria-label="단지 위치 지도">` +
-    `${baseImg}${radiusCircle}${dots}${refMarks}${scaleBar}</svg>`;
+  // 추천 핀(초록·보라 셔틀 둘 다 도보권 + 8억 미만). 최상단 레이어. 클릭 대상.
+  let pins = "";
+  (geoData.pins ?? []).forEach((p, i) => {
+    const x = px(p), y = py2(p), r = 6.5 * ui;
+    const bulb = (y - r * 1.85).toFixed(1);
+    pins += `<g data-pin="${i}">` +
+      `<path class="pin-body" d="M${x} ${y.toFixed(1)} C${(x - r * 1.1).toFixed(1)} ${(y - r * 1.2).toFixed(1)} ` +
+      `${(x - r).toFixed(1)} ${(y - r * 2.6).toFixed(1)} ${x} ${(y - r * 2.6).toFixed(1)} ` +
+      `C${(x + r).toFixed(1)} ${(y - r * 2.6).toFixed(1)} ${(x + r * 1.1).toFixed(1)} ${(y - r * 1.2).toFixed(1)} ${x} ${y.toFixed(1)} Z"/>` +
+      `<circle class="pin-dot" cx="${x}" cy="${bulb}" r="${(r * 0.42).toFixed(1)}"/>` +
+      `<text class="pin-label" x="${x}" y="${(y - r * 3.1).toFixed(1)}" text-anchor="middle" font-size="${(9 * ui).toFixed(1)}">` +
+      `${(p.price / 10000).toFixed(1)}억</text></g>`;
+  });
 
+  chart.innerHTML = `<svg viewBox="0 0 ${VW} ${VH}" role="img" aria-label="단지 위치 지도">` +
+    `${baseImg}${railLines}${radiusCircle}${dots}${refMarks}${scaleBar}${pins}</svg>`;
+
+  // 색범례·핀 설명만 (노선 토글은 별도 셔틀 카드로 분리됨)
   $("mapLegend").innerHTML =
     [`~${fmtMan(breaks[0])}`, `~${fmtMan(breaks[1])}`, `~${fmtMan(breaks[2])}`, `~${fmtMan(breaks[3])}`, `${fmtMan(breaks[3])}~`]
       .map((label, i) => `<span><i class="sw q${i}"></i>${label}</span>`).join("") +
     `<span>만원/평 (중앙값)</span>` +
+    (geoData.pins?.length ? `<span><b style="color:#e8590c">📍</b> 추천 (셔틀 도보권·8억↓)</span>` : "") +
     (base ? `<span style="margin-left:auto">배경지도 © 브이월드</span>` : "");
   $("mapNote").textContent = state.ref && +state.radius
     ? `반경 내 ${list.filter(inRadius).length}개 단지` : `${list.length}개 단지`;
 
-  const svg = chart.querySelector("svg");
-  const tip = el("div", { class: "tooltip" });
-  chart.appendChild(tip);
-  svg.addEventListener("pointermove", (ev) => {
-    const target = ev.target.closest(".map-dot");
-    if (!target) { tip.style.display = "none"; return; }
-    const e = list[+target.dataset.i];
-    tip.innerHTML = `<b>${e.apt}</b> (${e.dong})<br>거래 ${e.cnt}건 · 중앙 ${fmtMan(e.med)}만/평` +
-      (e.dist != null ? `<br>${geoData.refs[state.ref].label} ${e.dist.toFixed(1)}km` : "");
-    tip.style.display = "block";
-    const rect = chart.getBoundingClientRect();
-    const mx = ev.clientX - rect.left, flip = mx > rect.width * 0.6;
-    tip.style.left = flip ? "" : `${mx + 14}px`;
-    tip.style.right = flip ? `${rect.width - mx + 14}px` : "";
-    tip.style.top = `${ev.clientY - rect.top - 10}px`;
+  // 단지 원·핀 클릭 → 활성 단지 카드에 고정 표시 (hover 대신 토글식)
+  chart.querySelector("svg").addEventListener("click", (ev) => {
+    const dot = ev.target.closest(".map-dot");
+    if (dot) { selectApt(list[+dot.dataset.i]); return; }
+    const pinEl = ev.target.closest("[data-pin]");
+    if (pinEl) {
+      const name = geoData.pins[+pinEl.dataset.pin].name;
+      const found = list.find((e) => e.apt === name);
+      if (found) selectApt(found);
+    }
   });
-  svg.addEventListener("pointerleave", () => { tip.style.display = "none"; });
+}
+
+// ── 셔틀 노선 토글 카드 ──────────────────────────────────────
+function renderShuttleToggles() {
+  const box = $("shuttleToggles");
+  const items = [...Object.entries(geoData?.lines ?? {}), ...Object.entries(geoData?.shuttles ?? {})];
+  if (!items.length) { box.innerHTML = `<span class="sub">셔틀 데이터 없음</span>`; return; }
+  box.innerHTML = items.map(([id, r]) =>
+    `<span class="toggle-chip${state.emphasized.has(id) ? " on" : ""}" data-route="${id}">` +
+    `<i class="sw-line" style="border-color:${r.color}"></i>${r.label}</span>`).join("");
+}
+
+// ── 활성 아파트 단지 설명 카드 ───────────────────────────────
+function selectApt(entry) { state.selectedApt = entry; renderAptCard(); }
+
+function renderAptCard() {
+  const body = $("aptCardBody");
+  const e = state.selectedApt;
+  if (!e) {
+    body.innerHTML = `<span class="sub">지도에서 단지(원)나 📍 핀을 누르면 여기에 단지 정보가 표시됩니다.</span>`;
+    return;
+  }
+  const py84 = e.med * (84.9 / 3.3058);
+  const isPin = (geoData.pins ?? []).some((p) => p.name === e.apt);
+  let refDist = "";
+  if (e.point && geoData?.refs) {
+    refDist = Object.values(geoData.refs)
+      .map((r) => `${r.label.replace("삼성 ", "")} <b>${distKm(r, e.point).toFixed(1)}km</b>`).join(" · ");
+  }
+  let nearShuttle = "";
+  if (e.point && geoData?.shuttles) {
+    let best = null;
+    for (const s of Object.values(geoData.shuttles)) {
+      for (const st of s.stops) {
+        const d = distKm(st, e.point);
+        if (!best || d < best.d) best = { d, route: s.label, stop: st.name };
+      }
+    }
+    if (best) nearShuttle = `<b>${best.route}</b> · ${best.stop} 정류장 ${(best.d * 1000).toFixed(0)}m`;
+  }
+  const note = notes[e.apt] || {};
+  const gap = note.price ? note.price - py84 / 10000 : null;
+  body.innerHTML =
+    `<button class="apt-close" aria-label="닫기">✕</button>` +
+    `<div class="apt-name">${e.apt}${isPin ? '<span class="pin-badge">추천</span>' : ""}</div>` +
+    `<div class="sub">${e.dong}</div>` +
+    `<div class="apt-grid">` +
+    `<div><div class="k">중앙 평당가</div><div class="v">${fmtMan(e.med)}만</div></div>` +
+    `<div><div class="k">전용 84㎡ 환산</div><div class="v">${fmtEok(py84)}</div></div>` +
+    `<div><div class="k">최근 6개월 거래</div><div class="v">${e.cnt}건</div></div>` +
+    `<div><div class="k">최근 실거래</div><div class="v">${e.last.date.slice(2)} · ${Math.round(e.last.area)}㎡ ${fmtEok(e.last.amt)}</div></div>` +
+    `</div>` +
+    (refDist ? `<div class="apt-dist">📍 ${refDist}</div>` : "") +
+    (nearShuttle ? `<div class="apt-dist">🚌 가장 가까운 셔틀: ${nearShuttle}</div>` : "") +
+    // 내 메모: 즐겨찾기·호가·자유메모 (localStorage, 이 브라우저에만 저장)
+    `<div class="apt-note">` +
+    `<div class="note-row">` +
+    `<button class="fav-btn${note.fav ? " on" : ""}" data-act="fav">${note.fav ? "★ 관심 등록됨" : "☆ 관심 등록"}</button>` +
+    `<label class="note-price">내 호가 <input type="number" step="0.1" inputmode="decimal" data-act="price" value="${note.price ?? ""}" placeholder="예: 6.2"> 억</label>` +
+    `</div>` +
+    `<input class="note-memo" data-act="memo" value="${(note.memo ?? "").replace(/"/g, "&quot;")}" placeholder="메모 (예: 84㎡ 로열층 6.2억, 급매 6.0억)">` +
+    (gap != null ? `<div class="note-gap">실거래 84㎡ ${fmtEok(py84)} vs 내 호가 ${note.price}억 · 갭 <b>${gap >= 0 ? "+" : ""}${gap.toFixed(2)}억</b></div>` : "") +
+    `</div>` +
+    `<div class="apt-links"><a href="${naverLink(e)}" target="_blank" rel="noreferrer">네이버에서 현재 매물 보기 ↗</a></div>`;
+  body.querySelector(".apt-close").onclick = () => { state.selectedApt = null; renderAptCard(); };
+  body.querySelector('[data-act="fav"]').onclick = () => { setNote(e.apt, { fav: !note.fav }); renderAptCard(); renderFavList(); renderMap(); };
+  body.querySelector('[data-act="price"]').onchange = (ev) => {
+    const v = parseFloat(ev.target.value);
+    setNote(e.apt, { price: Number.isFinite(v) ? v : null }); renderAptCard(); renderFavList();
+  };
+  body.querySelector('[data-act="memo"]').onchange = (ev) => { setNote(e.apt, { memo: ev.target.value }); renderFavList(); };
+}
+
+// ── 내 관심 단지 목록 (즐겨찾기) ─────────────────────────────
+function renderFavList() {
+  const card = $("favCard"), box = $("favList");
+  const favs = Object.entries(notes).filter(([, n]) => n.fav);
+  if (!favs.length) { card.classList.add("hidden"); return; }
+  card.classList.remove("hidden");
+  const stats = complexStats();
+  box.innerHTML = favs
+    .sort((a, b) => (b[1].ts || 0) - (a[1].ts || 0))
+    .map(([apt, n]) => {
+      const e = stats.find((s) => s.apt === apt);
+      const real = e ? fmtEok(e.med * 84.9 / 3.3058) : "—";
+      const gap = (n.price && e) ? n.price - e.med * 84.9 / 3.3058 / 10000 : null;
+      return `<div class="fav-item"${e ? ` data-apt="${apt}"` : ""}>` +
+        `<button class="fav-del" data-del="${apt}" aria-label="삭제">✕</button>` +
+        `<b>★ ${apt}</b>` +
+        `<div class="fav-line">` +
+        (n.price ? `내 호가 <b>${n.price}억</b> · ` : "") +
+        `실거래 84㎡ ${real}` +
+        (gap != null ? ` · 갭 ${gap >= 0 ? "+" : ""}${gap.toFixed(2)}억` : "") +
+        (e ? "" : ` <span class="sub">(다른 지역/탭)</span>`) +
+        `</div>` +
+        (n.memo ? `<div class="fav-memo">${n.memo}</div>` : "") +
+        `</div>`;
+    }).join("");
 }
 
 // ── 단지 랭킹 ────────────────────────────────────────────────
@@ -725,8 +956,7 @@ function renderRank() {
       `<td class="num">${fmtMan(e.med)}만</td>` +
       (hasRef ? `<td class="num">${e.dist != null ? `${e.dist.toFixed(1)}km` : "—"}</td>` : "") +
       `<td class="num">${e.last.date.slice(2)} · ${Math.round(e.last.area)}㎡ ${fmtEok(e.last.amt)}</td>` +
-      `<td><a href="https://new.land.naver.com/search?query=${encodeURIComponent(e.apt)}"` +
-      ` target="_blank" rel="noreferrer">네이버↗</a></td></tr>`).join("") +
+      `<td><a href="${naverLink(e)}" target="_blank" rel="noreferrer">네이버↗</a></td></tr>`).join("") +
     `</tbody>`;
   for (const th of $("rankTable").querySelectorAll("th.sortable")) {
     th.addEventListener("click", () => { rankSort = th.dataset.sort; renderRank(); });
@@ -787,7 +1017,10 @@ function render() {
   renderPriceChart(rows);
   renderVolumeChart(rows);
   renderRatioChart(rows);
+  renderShuttleToggles();
   renderMap();
+  renderFavList();
+  renderAptCard();
   renderRank();
   renderDeals();
 }
@@ -838,6 +1071,21 @@ function initControls() {
     renderMap(); renderRank();
   });
   $("capToggle").addEventListener("change", (e) => { state.cap = e.target.checked; render(); });
+  // 관심 목록: ✕ 삭제 / 항목 클릭 = 해당 단지 카드 열기
+  $("favList").addEventListener("click", (e) => {
+    const del = e.target.closest("[data-del]");
+    if (del) { setNote(del.dataset.del, { fav: false }); renderFavList(); renderMap(); if (state.selectedApt?.apt === del.dataset.del) renderAptCard(); return; }
+    const item = e.target.closest("[data-apt]");
+    if (item) { const found = complexStats().find((s) => s.apt === item.dataset.apt); if (found) selectApt(found); }
+  });
+  // 셔틀 카드의 칩 클릭 = 노선(GTX·셔틀) 강조 토글
+  $("shuttleToggles").addEventListener("click", (e) => {
+    const item = e.target.closest("[data-route]");
+    if (!item) return;
+    const id = item.dataset.route;
+    if (state.emphasized.has(id)) state.emphasized.delete(id); else state.emphasized.add(id);
+    renderShuttleToggles(); renderMap();
+  });
 }
 
 initControls();

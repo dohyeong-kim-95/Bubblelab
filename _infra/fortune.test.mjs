@@ -1,6 +1,36 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildChart, buildDailyFortune, handleFortuneChart, selectLunarConversion } from "./fortune.js";
+import { buildChart, buildDailyFortune, FortuneDO, handleFortuneChart, selectLunarConversion } from "./fortune.js";
+import { b64uEncode, generateVapidKeys } from "./webpush.js";
+
+class MemoryStorage {
+  constructor() { this.data = new Map(); }
+  async get(key) {
+    const value = this.data.get(key);
+    return value === undefined ? undefined : structuredClone(value);
+  }
+  async put(key, value) { this.data.set(key, structuredClone(value)); }
+  async delete(key) { this.data.delete(key); }
+  async list({ prefix = "" } = {}) {
+    return new Map([...this.data.entries()]
+      .filter(([key]) => key.startsWith(prefix))
+      .sort(([a], [b]) => (a < b ? -1 : 1)));
+  }
+}
+
+const pushReq = (method, body) => new Request("https://fortune.internal/push", {
+  method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+});
+
+// 복호화 가능한(유효한 P-256) 구독 키를 생성한다.
+async function fakeSubscription(endpoint) {
+  const uaPair = await crypto.subtle.generateKey(
+    { name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"],
+  );
+  const p256dh = b64uEncode(new Uint8Array(await crypto.subtle.exportKey("raw", uaPair.publicKey)));
+  const auth = b64uEncode(crypto.getRandomValues(new Uint8Array(16)));
+  return { endpoint, keys: { p256dh, auth } };
+}
 
 test("calculates a known four-pillars example at an exact KST time", () => {
   const chart = buildChart({
@@ -125,4 +155,62 @@ test("converts a lunar birth date before building the chart", async () => {
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("stores and removes an anonymous push subscription", async () => {
+  const storage = new MemoryStorage();
+  const fortune = new FortuneDO({ storage }, {});
+  const sub = await fakeSubscription("https://push.example.com/a");
+
+  const ok = await fortune.fetch(pushReq("POST", { subscription: sub }));
+  assert.equal(ok.status, 200);
+  assert.equal((await storage.list({ prefix: "push:" })).size, 1);
+
+  // 같은 endpoint 재구독은 중복을 만들지 않는다
+  await fortune.fetch(pushReq("POST", { subscription: sub }));
+  assert.equal((await storage.list({ prefix: "push:" })).size, 1);
+
+  const gone = await fortune.fetch(pushReq("DELETE", { endpoint: sub.endpoint }));
+  assert.equal(gone.status, 200);
+  assert.equal((await storage.list({ prefix: "push:" })).size, 0);
+});
+
+test("rejects an invalid subscription", async () => {
+  const storage = new MemoryStorage();
+  const fortune = new FortuneDO({ storage }, {});
+  const bad = await fortune.fetch(pushReq("POST", { subscription: { endpoint: "http://insecure", keys: {} } }));
+  assert.equal(bad.status, 400);
+  assert.equal((await storage.list({ prefix: "push:" })).size, 0);
+});
+
+test("notifyDaily sends to every subscriber and prunes expired ones", async () => {
+  const storage = new MemoryStorage();
+  const vapid = await generateVapidKeys();
+  const fortune = new FortuneDO({ storage }, {
+    VAPID_PUBLIC_KEY: vapid.publicKey, VAPID_PRIVATE_KEY: vapid.privateKey,
+    VAPID_SUBJECT: "https://util.bubblelab.dev",
+  });
+  await fortune.fetch(pushReq("POST", { subscription: await fakeSubscription("https://push.example.com/live") }));
+  await fortune.fetch(pushReq("POST", { subscription: await fakeSubscription("https://push.example.com/expired") }));
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (endpoint) => new Response(null, {
+    status: String(endpoint).endsWith("/expired") ? 410 : 201,
+  });
+  try {
+    const response = await fortune.fetch(new Request("https://fortune.internal/notify", { method: "POST" }));
+    const data = await response.json();
+    assert.equal(data.sent, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  // 410(만료) 구독은 정리되고 살아있는 구독만 남는다
+  assert.equal((await storage.list({ prefix: "push:" })).size, 1);
+});
+
+test("notifyDaily is a no-op without VAPID configuration", async () => {
+  const storage = new MemoryStorage();
+  const fortune = new FortuneDO({ storage }, {});
+  const response = await fortune.fetch(new Request("https://fortune.internal/notify", { method: "POST" }));
+  assert.deepEqual(await response.json(), { sent: 0 });
 });

@@ -10,7 +10,7 @@ const REALTIME_NAMESPACES = new Set(["avalon", "liargame", "yacht"]);
 // cron이 리뷰를 주기적으로 동기화할 외주 프로젝트 목록 (커머스 API, 현재 mock).
 const WORK_REVIEW_PROJECTS = ["daonfit"];
 import { validPlannerCode } from "./planner.js";
-import { handleFortuneChart } from "./fortune.js";
+import { handleFortuneChart, handleFortunePush, sendFortuneDaily } from "./fortune.js";
 import { handlePodcast, handlePodcastAdmin, runDailyGeneration, runEveningReminder, UPLOAD_MAX_BYTES } from "./podcast.js";
 import { handleEstateDeals } from "./estate.js";
 import { serveAssetDownload, serveAssetDownloadCounts } from "./downloads.js";
@@ -36,6 +36,7 @@ export { PlannerDO } from "./planner.js";
 export { PodcastDO } from "./podcast.js";
 export { RateLimiterDO } from "./security.js";
 export { DuriDO } from "./duri.js";
+export { FortuneDO } from "./fortune.js";
 
 const LOGIN_PAGE = (failed = false, base = "") => `<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -573,6 +574,24 @@ export async function handleRequest(request, env, ctx) {
       return handleFortuneChart(request, env);
     }
 
+    // 매일 오전 8시(KST) 운세 알림 구독 — 익명 Web Push. GET은 공개키 조회.
+    if (path === "/_fortune/push") {
+      if (!["GET", "POST", "DELETE"].includes(request.method)) {
+        return new Response("method not allowed", {
+          status: 405, headers: { Allow: "GET, POST, DELETE" },
+        });
+      }
+      if (request.method !== "GET") {
+        const contentTypeError = requireJsonRequest(request);
+        if (contentTypeError) return contentTypeError;
+        const limited = await enforceRateLimit(request, env, {
+          scope: "fortune-push", limit: 20, windowMs: 60 * 1000,
+        });
+        if (limited) return limited;
+      }
+      return handleFortunePush(request, env);
+    }
+
     // 국토부 아파트 실거래가 프록시 (estate.bubblelab.dev). 조회 전용이며
     // 지역·기간은 estate.js가 허용 목록으로 고정하고 응답은 Cache API에 캐싱한다.
     if (path === "/_estate/deals") {
@@ -999,11 +1018,16 @@ async function syncWorkReviews(env) {
 export default {
   // cron 처리 (wrangler.jsonc triggers.crons):
   //  22:00 KST(13:00 UTC) → 팟캐스트 저녁 리마인더
+  //  08:00 KST(23:00 UTC) → 운세 데일리 알림
   //  06:40 KST(21:40 UTC) → 외주 리뷰 동기화 + 데일리 팟캐스트 생성
   async scheduled(controller, env, ctx) {
     const podcastReady = featureEnabled(env, "ENABLE_PODCAST") && env.PODCAST_BUCKET;
     if (controller.cron === "0 13 * * *") {
       if (podcastReady) ctx.waitUntil(runEveningReminder(env));
+      return;
+    }
+    if (controller.cron === "0 23 * * *") {
+      if (env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY) ctx.waitUntil(sendFortuneDaily(env));
       return;
     }
     ctx.waitUntil(syncWorkReviews(env));

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Duri 앱 아이콘. 마스커블 대응: 배경을 전면 채우고 하트는 안전영역 안에 둔다. -->
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f4b6d6"/>
+      <stop offset="1" stop-color="#c0568a"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#g)"/>
+  <!-- 뒤쪽 작은 하트 (💞 느낌) -->
+  <path transform="translate(304 244) scale(1.7)"
+        d="M0 30 C0 30 -26 12 -26 -6 C-26 -17 -18 -22 -11 -22 C-5 -22 -1 -18 0 -13 C1 -18 5 -22 11 -22 C18 -22 26 -17 26 -6 C26 12 0 30 0 30 Z"
+        fill="#ffffff" opacity="0.5"/>
+  <!-- 앞쪽 큰 하트 -->
+  <path transform="translate(222 262) scale(3.1)"
+        d="M0 30 C0 30 -26 12 -26 -6 C-26 -17 -18 -22 -11 -22 C-5 -22 -1 -18 0 -13 C1 -18 5 -22 11 -22 C18 -22 26 -17 26 -6 C26 12 0 30 0 30 Z"
+        fill="#ffffff"/>
+</svg>
