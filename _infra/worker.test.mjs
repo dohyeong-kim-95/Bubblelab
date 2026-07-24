@@ -99,6 +99,66 @@ test("work preview stays closed without a password and gates access with one", a
   assert.equal(response.headers.get("Cache-Control"), "no-store");
 });
 
+test("duri subdomain gates with its own long-lived bl_duri session", async () => {
+  // secret 미설정 → fail-closed
+  let response = await worker.fetch(new Request("https://duri.bubblelab.dev/"), {}, ctx);
+  assert.equal(response.status, 503);
+
+  const assets = { fetch: async () => new Response("<p>duri</p>", { headers: { "Content-Type": "text/html" } }) };
+  const env = { WORK_PASSWORD: "hunter2", ENABLE_DURI: "true", ASSETS: assets };
+
+  // 미인증 → 로그인으로 리다이렉트
+  response = await worker.fetch(new Request("https://duri.bubblelab.dev/"), env, ctx);
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get("Location"), "/login");
+
+  // 잘못된 비밀번호 → 401
+  let form = new FormData();
+  form.set("password", "wrong");
+  response = await worker.fetch(
+    new Request("https://duri.bubblelab.dev/login", { method: "POST", body: form }), env, ctx);
+  assert.equal(response.status, 401);
+
+  // 올바른 비밀번호 → bl_duri 세션 쿠키(1년) 발급
+  form = new FormData();
+  form.set("password", "hunter2");
+  response = await worker.fetch(
+    new Request("https://duri.bubblelab.dev/login", { method: "POST", body: form }), env, ctx);
+  assert.equal(response.status, 303);
+  const cookie = response.headers.get("Set-Cookie");
+  assert.match(cookie, /^bl_duri=/);
+  assert.match(cookie, /Max-Age=31536000/);
+
+  // 세션 쿠키로 접근 → 정적 서빙 + noindex/no-store
+  response = await worker.fetch(
+    new Request("https://duri.bubblelab.dev/", {
+      headers: { Cookie: cookie.split(";")[0] },
+    }), env, ctx);
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), "<p>duri</p>");
+  assert.equal(response.headers.get("X-Robots-Tag"), "noindex, nofollow");
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
+
+  // /_duri 릴레이는 bl_duri 세션(또는 싱크 토큰)을 요구한다: 쿠키 없으면 401
+  const relayEnv = {
+    ...env,
+    DURI_BUCKET: {},
+    DURI: { idFromName: () => "main", get: () => ({ fetch: async () => new Response("relayed") }) },
+  };
+  response = await worker.fetch(
+    new Request("https://duri.bubblelab.dev/_duri", { headers: { Upgrade: "websocket" } }),
+    relayEnv, ctx);
+  assert.equal(response.status, 401);
+
+  // bl_duri 세션이 있으면 work 게이트를 거치지 않고 릴레이 인증을 통과한다
+  // (WebSocket 업그레이드가 아니라면 sink-token 아닌 경로는 404로 떨어짐 — 인증은 통과).
+  response = await worker.fetch(
+    new Request("https://duri.bubblelab.dev/_duri/nope", {
+      headers: { Cookie: cookie.split(";")[0] },
+    }), relayEnv, ctx);
+  assert.equal(response.status, 404);
+});
+
 test("subdomain .html redirects strip the internal /site prefix from Location", async () => {
   // 에셋 서버가 .html→확장자 제거로 307을 돌려줄 때 Location에 내부 /work
   // 프리픽스가 담긴다. 서브도메인 공개 URL에는 site 세그먼트가 없으므로 워커가

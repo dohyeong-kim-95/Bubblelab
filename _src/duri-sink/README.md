@@ -33,10 +33,10 @@ DuriStorage/
 (또는 env `DURI_URL`/`DURI_TOKEN`/`DURI_PASSPHRASE`/`DURI_DIR`). 이 config·데이터는
 `.gitignore`로 커밋되지 않는다.
 
-- **token**: work 비밀번호로 로그인한 브라우저에서 한 번 발급받는다:
+- **token**: duri.bubblelab.dev 에 비밀번호로 로그인한 브라우저에서 한 번 발급받는다:
   ```bash
-  curl -X POST https://work.bubblelab.dev/_duri/sink-token \
-    -H "Cookie: bl_work=<브라우저 개발자도구에서 복사한 값>"
+  curl -X POST https://duri.bubblelab.dev/_duri/sink-token \
+    -H "Cookie: bl_duri=<브라우저 개발자도구에서 복사한 값>"
   ```
   (또는 웹앱에 발급 버튼을 붙일 수 있음 — 다음 개선.)
 - **passphrase**: 웹앱에 입력한 것과 **똑같이**. 서버로 전송되지 않는다.

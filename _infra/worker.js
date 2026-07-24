@@ -77,6 +77,31 @@ button { font: inherit; padding: .65rem; border: 0; border-radius: .6rem;
 <p class="error">${failed ? "비밀번호가 맞지 않습니다." : ""}</p>
 <button type="submit">들어가기</button></form></body></html>`;
 
+// Duri 전용 서브도메인(duri.bubblelab.dev) 로그인 화면. 세션이 1년이라 설치형
+// 앱에선 최초 1회만 보게 된다. E2E 암호 문구는 이 게이트와 별개로 앱 안에서 받는다.
+const DURI_LOGIN_PAGE = (failed, base) => `<!doctype html><html lang="ko"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow"><title>Duri</title><style>
+:root { color-scheme: light dark; }
+body { font-family: ui-monospace, monospace; min-height: 100dvh; margin: 0; display: grid;
+       place-items: center; background: light-dark(#fafbfc, #10151c); color: light-dark(#1c2733, #e2e9f0); }
+form { display: grid; gap: .7rem; width: min(19rem, 88vw); padding: 1.6rem;
+       background: light-dark(#fff, #161c25); border: 1px solid light-dark(#e6eaef, #232c38);
+       border-radius: 1rem; }
+h1 { margin: 0; font-size: 1.05rem; }
+p { margin: 0; font-size: .74rem; opacity: .65; line-height: 1.6; }
+input { font: inherit; color: inherit; padding: .65rem .8rem; border-radius: .6rem;
+        border: 1px solid light-dark(#e6eaef, #232c38); background: transparent; }
+button { font: inherit; padding: .65rem; border: 0; border-radius: .6rem;
+         background: light-dark(#c0568a, #f0a8ce); color: light-dark(#fff, #1a1016); font-weight: bold; cursor: pointer; }
+.error { color: #d05a5a; font-size: .74rem; min-height: 1em; margin: 0; }</style></head>
+<body><form method="post" action="${base}/login">
+<h1>💞 Duri</h1>
+<p>둘만의 비공개 공간입니다. 비밀번호를 입력해주세요. (한 번 입력하면 오래 유지됩니다)</p>
+<input name="password" type="password" autocomplete="current-password" aria-label="비밀번호" required autofocus>
+<p class="error">${failed ? "비밀번호가 맞지 않습니다." : ""}</p>
+<button type="submit">들어가기</button></form></body></html>`;
+
 // 운영자 브라우저 집계 제외 화면 (admin 로그인 뒤 /optout). 켜면 전체 서브도메인
 // bl_notrack 쿠키가 심어지고 그 브라우저의 방문·체류·유효방문이 모두 통계에서
 // 빠진다. 브라우저(프로필)마다 admin에 로그인해 한 번씩 켠다 — 방문자가 임의로
@@ -250,8 +275,56 @@ async function handleWork(request, env, url, base = "") {
   return null;
 }
 
-/* Duri 실시간 중계 + 사진 버퍼. 접근은 둘 중 하나로만: work 게이트를 통과한
- * 브라우저(bl_work 쿠키) 또는 싱크 토큰을 제시한 데스크톱 데몬. 서버는 E2E
+/* Duri 전용 서브도메인(duri.bubblelab.dev) 게이트. 비밀번호는 work과 같은
+ * WORK_PASSWORD를 쓰되 세션은 별도(bl_duri)이고 1년이라, 설치형 앱이 한 번
+ * 로그인하면 사실상 다시 묻지 않는다. 인증되면 null을 돌려 정적 서빙으로
+ * 폴스루한다. E2E 암호 문구는 이 게이트와 무관하게 앱 안에서 받는다. */
+const DURI_SESSION_TTL_MS = 365 * 24 * 60 * 60 * 1000;
+
+async function duriSessionKey(env) {
+  return crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(`${env.WORK_PASSWORD}\0bl-duri-session`),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
+  );
+}
+
+async function issueDuriSession(key) {
+  const payload = `${Date.now() + DURI_SESSION_TTL_MS}.${crypto.randomUUID()}`;
+  const sig = hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload)));
+  return `${payload}.${sig}`;
+}
+
+async function handleDuriGate(request, env, url, base = "") {
+  const key = await duriSessionKey(env);
+  const isAuthed = await validSession(key, cookies(request).bl_duri);
+  const cookieFlags = `Path=/; HttpOnly; SameSite=Strict; Max-Age=${Math.floor(DURI_SESSION_TTL_MS / 1000)}${url.protocol === "https:" ? "; Secure" : ""}`;
+  const htmlHeaders = { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" };
+
+  if (url.pathname === "/login" && request.method === "POST") {
+    const limited = await enforceRateLimit(request, env, {
+      scope: "duri-login", limit: 5, windowMs: 15 * 60 * 1000,
+    });
+    if (limited) return limited;
+    const form = await request.formData();
+    if (await matchesCredential(key, form.get("password"), env.WORK_PASSWORD)) {
+      const token = await issueDuriSession(key);
+      return redirect(`${base}/`, { "Set-Cookie": `bl_duri=${token}; ${cookieFlags}` });
+    }
+    return new Response(DURI_LOGIN_PAGE(true, base), { status: 401, headers: htmlHeaders });
+  }
+  if (url.pathname === "/logout") {
+    return redirect(`${base}/login`, { "Set-Cookie": "bl_duri=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0" });
+  }
+  if (url.pathname === "/login") {
+    if (isAuthed) return redirect(`${base}/`);
+    return new Response(DURI_LOGIN_PAGE(false, base), { headers: htmlHeaders });
+  }
+  if (!isAuthed) return redirect(`${base}/login`);
+  return null;
+}
+
+/* Duri 실시간 중계 + 사진 버퍼. 접근은 둘 중 하나로만: duri 게이트를 통과한
+ * 브라우저(bl_duri 쿠키) 또는 싱크 토큰을 제시한 데스크톱 데몬. 서버는 E2E
  * 암호블롭만 다루므로 평문·키·신원을 알지 못한다. 판정한 역할을 X-Duri-Role
  * 헤더로 DO에 넘긴다. */
 const SINK_TOKEN_TTL_MS = 365 * 24 * 60 * 60 * 1000;
@@ -290,17 +363,14 @@ async function handleDuri(request, env, url) {
   }
   const path = url.pathname;
 
-  const workKey = await crypto.subtle.importKey(
-    "raw", new TextEncoder().encode(`${env.WORK_PASSWORD}\0bl-work-session`),
-    { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
-  );
-  const gated = await validSession(workKey, cookies(request).bl_work);
+  const gateKey = await duriSessionKey(env);
+  const gated = await validSession(gateKey, cookies(request).bl_duri);
   const sinkKey = await duriSinkKey(env);
   const token = url.searchParams.get("token") ||
     (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
   const sinkOk = !!(sinkKey && token) && await validSession(sinkKey, token);
 
-  // 소유자(work 게이트)만 싱크 토큰을 발급받는다 → 데스크톱 데몬 설정에 넣는다.
+  // 소유자(duri 게이트)만 싱크 토큰을 발급받는다 → 데스크톱 데몬 설정에 넣는다.
   if (path === "/_duri/sink-token" && request.method === "POST") {
     if (!gated) return new Response("authentication required", { status: 401 });
     if (!sinkKey) return new Response("sink secret not configured", { status: 503 });
@@ -924,6 +994,19 @@ export async function handleRequest(request, env, ctx) {
       if (workResponse) return workResponse;
     }
 
+    if (site === "duri") {
+      // work과 같은 WORK_PASSWORD로 게이팅하되 세션은 별도(bl_duri)·장수명이다.
+      // 미설정이면 fail-closed. /_duri 릴레이는 위에서 이미 처리되므로 여기 안 온다.
+      if (!env.WORK_PASSWORD) {
+        return new Response("duri is not configured", { status: 503 });
+      }
+      const isProdHost = host === ROOT_DOMAIN || host.endsWith(`.${ROOT_DOMAIN}`);
+      const duriUrl = new URL(url);
+      duriUrl.pathname = path || "/";
+      const duriResponse = await handleDuriGate(request, env, duriUrl, isProdHost ? "" : "/duri");
+      if (duriResponse) return duriResponse;
+    }
+
     url.pathname = `/${site}${path}`;
     let response = await env.ASSETS.fetch(new Request(url, request));
 
@@ -948,7 +1031,7 @@ export async function handleRequest(request, env, ctx) {
       }
     }
 
-    if (site === "admin" || site === "work" || site === "estate") {
+    if (site === "admin" || site === "work" || site === "estate" || site === "duri") {
       const headers = new Headers(response.headers);
       headers.set("Cache-Control", "no-store");
       headers.set("X-Robots-Tag", "noindex, nofollow");
