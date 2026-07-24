@@ -48,11 +48,17 @@
   .menu button:hover { background: var(--bg); }
   .menu button.danger { color: light-dark(#b4453a, #f0a8a2); }
 
-  #log { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: .5rem;
+  #log { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column;
          max-width: 44rem; width: 100%; margin: 0 auto; }
-  .row { display: flex; flex-direction: column; max-width: 78%; }
+  /* 그룹 사이는 넓게, 같은 사람 연속(.cont)은 좁게 — 카톡식 묶어읽기 */
+  .row { display: flex; flex-direction: column; max-width: 78%; margin-top: .5rem; }
+  .row.cont { margin-top: .13rem; }
   .row.me { align-self: flex-end; align-items: flex-end; }
   .row .who { font-size: .68rem; color: var(--dim); margin: 0 .3rem .1rem; }
+  /* 날짜 구분선: 가운데 회색 알약 칩 */
+  .daysep { align-self: center; display: flex; margin: .85rem 0 .2rem; }
+  .daysep span { font-size: .68rem; color: var(--dim); background: light-dark(#eef1f4, #1b232e);
+                 padding: .2rem .7rem; border-radius: 1rem; }
   .bubble { padding: .5rem .75rem; border-radius: .9rem; background: var(--panel); border: 1px solid var(--line);
             white-space: pre-wrap; word-break: break-word; line-height: 1.5; font-size: .92rem; }
   .row.me .bubble { background: light-dark(#fbe6f0, #3a2233); border-color: light-dark(#f2cfe1, #4d2c40); }
@@ -160,7 +166,9 @@ const dec = new TextDecoder();
 const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
 const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
-const fmtTime = (t) => new Date(t).toLocaleString("ko-KR", { hour: "2-digit", minute: "2-digit", month: "numeric", day: "numeric" });
+// 시간은 시:분만 (날짜는 날짜 구분선이 담당). 날짜 구분선용 라벨은 dayLabel.
+const fmtTime = (t) => new Date(t).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+const dayLabel = (t) => new Date(t).toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "short" });
 
 // ── E2E 암호화 (PBKDF2 → AES-GCM 256) ────────────────────────
 const SALT = enc.encode("duri:v1:pbkdf2:shared-passphrase");
@@ -339,29 +347,63 @@ function atBottom() { const el = log(); return el.scrollHeight - el.scrollTop - 
 function scroll() { log().scrollTop = log().scrollHeight; }
 
 // 복호화가 끝난 레코드({seq,kind,at,name, text?|sticker?|photo blob|broken})를 그린다.
+// 말풍선 묶어읽기(카톡 벤치마킹): ① 날짜가 바뀌면 가운데 날짜 구분선 ② 같은
+// 사람의 연속 메시지는 이름 한 번·간격 좁게(그룹화) ③ 같은 사람·같은 분(minute)
+// 연속이면 시간을 마지막 하나에만(직전 시간을 감춘다). 아래 상태로 직전 문맥을 기억.
+let grpSender = null, grpMinute = -1, grpDay = null, grpTimeEl = null;
+
 function appendRecord(rec) {
   if (seen.has(rec.seq)) return;
   seen.add(rec.seq);
   if (rec.seq > getLastSeq()) setLastSeq(rec.seq);
   const stick = atBottom();
+
+  const at = rec.at;
+  const mine = rec.name && rec.name === MY_NAME;
+  const broken = !!rec.broken;
+  const senderKey = broken ? "\0broken" : (mine ? "\0me" : `them:${rec.name ?? ""}`);
+  const day = dayLabel(at);
+  const minute = Math.floor(at / 60000);
+
+  // ① 날짜 구분선: 날짜가 바뀌면 삽입하고 그룹을 새로 시작한다.
+  if (day !== grpDay) {
+    const sep = document.createElement("div");
+    sep.className = "daysep";
+    const label = document.createElement("span");
+    label.textContent = day;
+    sep.appendChild(label);
+    log().appendChild(sep);
+    grpDay = day;
+    grpSender = null;
+  }
+  // ② 같은 사람 연속이면 그룹 이어붙이기(이름 생략·간격 좁게).
+  const cont = senderKey === grpSender;
+  const showName = !mine && !cont;
+
   const row = document.createElement("div");
-  row.className = "row";
+  row.className = cont ? "row cont" : "row";
+  let timeEl;
   if (rec.kind === "photo" && rec.blob) {
-    buildBubble(row, rec.name, rec.at, (b) => {
+    timeEl = buildBubble(row, rec.name, at, (b) => {
       const img = document.createElement("img");
       img.alt = rec.caption || "사진";
       b.appendChild(img);
       if (rec.caption) { const c = document.createElement("div"); c.className = "cap"; c.textContent = rec.caption; b.appendChild(c); }
       img.src = URL.createObjectURL(rec.blob);
-    });
+    }, showName);
   } else if (rec.sticker && PACK_IDS.has(rec.sticker.pack)) {
-    buildBubble(row, rec.name, rec.at, (b) => { b.classList.add("sticker"); b.appendChild(stickerImg(rec.sticker.pack, rec.sticker.n, "스티커")); });
+    timeEl = buildBubble(row, rec.name, at, (b) => { b.classList.add("sticker"); b.appendChild(stickerImg(rec.sticker.pack, rec.sticker.n, "스티커")); }, showName);
   } else if (rec.broken) {
-    buildBubble(row, "🔒", rec.at, (b) => { const s = document.createElement("span"); s.className = "broken"; s.textContent = rec.broken; b.appendChild(s); });
+    timeEl = buildBubble(row, "🔒", at, (b) => { const s = document.createElement("span"); s.className = "broken"; s.textContent = rec.broken; b.appendChild(s); }, showName);
   } else {
-    buildBubble(row, rec.name, rec.at, (b) => { b.textContent = rec.text; });
+    timeEl = buildBubble(row, rec.name, at, (b) => { b.textContent = rec.text; }, showName);
   }
   log().appendChild(row);
+
+  // ③ 시간 묶기: 같은 사람·같은 분의 연속이면 직전 말풍선의 시간을 감춰 마지막만 남긴다.
+  if (cont && minute === grpMinute && grpTimeEl) grpTimeEl.style.display = "none";
+  grpSender = senderKey; grpMinute = minute; grpTimeEl = timeEl;
+
   // 화면 노드 수를 제한한다(성능). 지운 사진의 blob URL은 메모리 회수.
   while (log().children.length > MAX_DOM) {
     const first = log().firstChild;
@@ -395,15 +437,16 @@ async function renderEntry(m) {
   }
 }
 
-function buildBubble(row, name, at, fill) {
+function buildBubble(row, name, at, fill, showName) {
   const mine = name && name === MY_NAME;
   if (mine) row.classList.add("me");
-  if (name && !mine) { const w = document.createElement("div"); w.className = "who"; w.textContent = name; row.appendChild(w); }
+  if (showName && name && !mine) { const w = document.createElement("div"); w.className = "who"; w.textContent = name; row.appendChild(w); }
   const bubble = document.createElement("div");
   bubble.className = "bubble";
   fill(bubble);
   row.appendChild(bubble);
   const t = document.createElement("div"); t.className = "time"; t.textContent = fmtTime(at); row.appendChild(t);
+  return t;
 }
 
 async function fetchPhotoBlob(m) {
