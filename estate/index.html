@@ -83,6 +83,27 @@ svg text { font-family: inherit; font-size: 12px; fill: light-dark(#5a6b7d, #93a
 .tooltip b { font-weight: 700; }
 
 /* 지도 (dataviz --ordinal 검증 통과 순차 램프: 밝음=저가 → 진함=고가) */
+/* 셔틀 토글 카드 */
+.toggle-card, .apt-card { padding: 12px 14px; margin-bottom: 8px; }
+.card-head { font-size: 0.82rem; font-weight: 700; margin-bottom: 8px; }
+.toggle-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.toggle-chip { font: inherit; font-size: 0.75rem; cursor: pointer; user-select: none;
+  border: 1px solid light-dark(#dce4ec, #33465c); border-radius: 999px; padding: 3px 10px;
+  background: light-dark(#f4f7fa, #1a2634); color: inherit; display: inline-flex; align-items: center; gap: 5px; }
+.toggle-chip .sw-line { width: 14px; height: 0; border-top: 3px solid; display: inline-block; }
+.toggle-chip.on { background: light-dark(#e7f5ef, #10382c); border-color: currentColor; font-weight: 700; }
+/* 활성 단지 카드 */
+.apt-card .apt-name { font-size: 1rem; font-weight: 700; }
+.apt-card .apt-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 6px 14px; margin-top: 8px; font-size: 0.8rem; }
+.apt-card .apt-grid .k { opacity: 0.6; font-size: 0.72rem; }
+.apt-card .apt-grid .v { font-weight: 700; }
+.apt-card .apt-dist { margin-top: 8px; font-size: 0.78rem; line-height: 1.7; }
+.apt-card .apt-dist b { color: light-dark(#c05621, #ffa94d); }
+.apt-card .apt-links { margin-top: 8px; }
+.apt-card .apt-close { float: right; cursor: pointer; opacity: 0.5; font-size: 0.85rem; border: 0; background: none; color: inherit; }
+.pin-badge { display: inline-block; font-size: 0.7rem; color: #fff; background: #e8590c; border-radius: 6px; padding: 1px 6px; margin-left: 6px; }
+.map-dot, .pin-body { cursor: pointer; }
 .map-controls { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; font-size: 0.78rem; margin-bottom: 6px; }
 .map-controls select { font: inherit; font-size: 0.82rem; color: inherit; padding: 4px 8px;
   border: 1px solid light-dark(#dce4ec, #263445); border-radius: 8px; background: light-dark(#ffffff, #151e2a); }
@@ -198,6 +219,16 @@ tr.canceled td { text-decoration: line-through; opacity: 0.5; }
     <div class="card chart-wrap" id="chartRatio"></div>
 
     <h2>지도 <span class="sub">최근 6개월 매매 · 원 크기 = 거래 건수, 진할수록 평당가 높음 · 거리는 직선거리</span></h2>
+
+    <div class="card toggle-card" id="shuttleCard">
+      <div class="card-head">통근 셔틀 노선 <span class="sub">눌러서 강조 (여러 개 가능)</span></div>
+      <div id="shuttleToggles" class="toggle-row"></div>
+    </div>
+
+    <div class="card apt-card" id="aptCard">
+      <div id="aptCardBody"><span class="sub">지도에서 단지(원)나 📍 핀을 누르면 여기에 단지 정보가 표시됩니다.</span></div>
+    </div>
+
     <div class="card chart-wrap" id="mapWrap">
       <div class="map-controls">
         <label>기준점 <select id="selRef"><option value="">없음</option></select></label>
@@ -240,7 +271,7 @@ const TABS = {
   giheung:  { src: "giheung", label: "기흥구", dongs: null },
 };
 const MAX_MONTHS = 36;
-const state = { tab: "dongtan2", months: 24, band: "all", dong: "", deals: "trade", ref: "", radius: "3", cap: true, emphasized: new Set() };
+const state = { tab: "dongtan2", months: 24, band: "all", dong: "", deals: "trade", ref: "", radius: "3", cap: true, emphasized: new Set(), selectedApt: null };
 // store[src][type][ym] = 배열 | "error"
 const store = { dongtan: { trade: {}, rent: {} }, giheung: { trade: {}, rent: {} } };
 let loadSeq = 0;
@@ -712,57 +743,98 @@ function renderMap() {
   const scaleBar = `<line class="map-scale" x1="${sx}" x2="${sx + 2 * pxPerKm}" y1="${sy}" y2="${sy}"/>` +
     `<text x="${sx + pxPerKm}" y="${sy - 5 * ui}" text-anchor="middle" font-size="${Math.round(12 * ui)}">2km</text>`;
 
-  // 추천 핀(초록·보라 셔틀 둘 다 도보권 + 8억 미만). 최상단 레이어.
+  // 추천 핀(초록·보라 셔틀 둘 다 도보권 + 8억 미만). 최상단 레이어. 클릭 대상.
   let pins = "";
-  for (const p of geoData.pins ?? []) {
+  (geoData.pins ?? []).forEach((p, i) => {
     const x = px(p), y = py2(p), r = 6.5 * ui;
     const bulb = (y - r * 1.85).toFixed(1);
-    pins += `<g><title>${p.name}\n${(p.price / 10000).toFixed(2)}억 · 최근 6개월 ${p.deals}건</title>` +
+    pins += `<g data-pin="${i}">` +
       `<path class="pin-body" d="M${x} ${y.toFixed(1)} C${(x - r * 1.1).toFixed(1)} ${(y - r * 1.2).toFixed(1)} ` +
       `${(x - r).toFixed(1)} ${(y - r * 2.6).toFixed(1)} ${x} ${(y - r * 2.6).toFixed(1)} ` +
       `C${(x + r).toFixed(1)} ${(y - r * 2.6).toFixed(1)} ${(x + r * 1.1).toFixed(1)} ${(y - r * 1.2).toFixed(1)} ${x} ${y.toFixed(1)} Z"/>` +
       `<circle class="pin-dot" cx="${x}" cy="${bulb}" r="${(r * 0.42).toFixed(1)}"/>` +
       `<text class="pin-label" x="${x}" y="${(y - r * 3.1).toFixed(1)}" text-anchor="middle" font-size="${(9 * ui).toFixed(1)}">` +
       `${(p.price / 10000).toFixed(1)}억</text></g>`;
-  }
+  });
 
   chart.innerHTML = `<svg viewBox="0 0 ${VW} ${VH}" role="img" aria-label="단지 위치 지도">` +
     `${baseImg}${railLines}${radiusCircle}${dots}${refMarks}${scaleBar}${pins}</svg>`;
 
+  // 색범례·핀 설명만 (노선 토글은 별도 셔틀 카드로 분리됨)
   $("mapLegend").innerHTML =
     [`~${fmtMan(breaks[0])}`, `~${fmtMan(breaks[1])}`, `~${fmtMan(breaks[2])}`, `~${fmtMan(breaks[3])}`, `${fmtMan(breaks[3])}~`]
       .map((label, i) => `<span><i class="sw q${i}"></i>${label}</span>`).join("") +
     `<span>만원/평 (중앙값)</span>` +
-    (geoData.pins?.length ? `<span title="초록·보라 셔틀 정류장 둘 다 도보 500m 이내, 매매 8억 미만, 최근 6개월 5건 이상"><b style="color:#e8590c">📍</b> 추천 (셔틀 도보권·8억↓)</span>` : "") +
-    Object.entries(geoData.lines ?? {}).map(([id, l]) =>
-      `<span class="leg-route${state.emphasized.has(id) ? " on" : ""}" data-route="${id}">` +
-      `<i class="rail" style="border-color:${l.color}"></i>${l.label}</span>`).join("") +
-    Object.entries(geoData.shuttles ?? {}).map(([id, r]) =>
-      `<span class="leg-route${state.emphasized.has(id) ? " on" : ""}" data-route="${id}">` +
-      `<i class="rail" style="border-color:${r.color};border-top-style:dashed"></i>${r.label}</span>`).join("") +
-    ((Object.keys(geoData.lines ?? {}).length + Object.keys(geoData.shuttles ?? {}).length)
-      ? `<span class="leg-hint">노선 클릭 = 강조</span>` : "") +
+    (geoData.pins?.length ? `<span><b style="color:#e8590c">📍</b> 추천 (셔틀 도보권·8억↓)</span>` : "") +
     (base ? `<span style="margin-left:auto">배경지도 © 브이월드</span>` : "");
   $("mapNote").textContent = state.ref && +state.radius
     ? `반경 내 ${list.filter(inRadius).length}개 단지` : `${list.length}개 단지`;
 
-  const svg = chart.querySelector("svg");
-  const tip = el("div", { class: "tooltip" });
-  chart.appendChild(tip);
-  svg.addEventListener("pointermove", (ev) => {
-    const target = ev.target.closest(".map-dot");
-    if (!target) { tip.style.display = "none"; return; }
-    const e = list[+target.dataset.i];
-    tip.innerHTML = `<b>${e.apt}</b> (${e.dong})<br>거래 ${e.cnt}건 · 중앙 ${fmtMan(e.med)}만/평` +
-      (e.dist != null ? `<br>${geoData.refs[state.ref].label} ${e.dist.toFixed(1)}km` : "");
-    tip.style.display = "block";
-    const rect = chart.getBoundingClientRect();
-    const mx = ev.clientX - rect.left, flip = mx > rect.width * 0.6;
-    tip.style.left = flip ? "" : `${mx + 14}px`;
-    tip.style.right = flip ? `${rect.width - mx + 14}px` : "";
-    tip.style.top = `${ev.clientY - rect.top - 10}px`;
+  // 단지 원·핀 클릭 → 활성 단지 카드에 고정 표시 (hover 대신 토글식)
+  chart.querySelector("svg").addEventListener("click", (ev) => {
+    const dot = ev.target.closest(".map-dot");
+    if (dot) { selectApt(list[+dot.dataset.i]); return; }
+    const pinEl = ev.target.closest("[data-pin]");
+    if (pinEl) {
+      const name = geoData.pins[+pinEl.dataset.pin].name;
+      const found = list.find((e) => e.apt === name);
+      if (found) selectApt(found);
+    }
   });
-  svg.addEventListener("pointerleave", () => { tip.style.display = "none"; });
+}
+
+// ── 셔틀 노선 토글 카드 ──────────────────────────────────────
+function renderShuttleToggles() {
+  const box = $("shuttleToggles");
+  const items = [...Object.entries(geoData?.lines ?? {}), ...Object.entries(geoData?.shuttles ?? {})];
+  if (!items.length) { box.innerHTML = `<span class="sub">셔틀 데이터 없음</span>`; return; }
+  box.innerHTML = items.map(([id, r]) =>
+    `<span class="toggle-chip${state.emphasized.has(id) ? " on" : ""}" data-route="${id}">` +
+    `<i class="sw-line" style="border-color:${r.color}"></i>${r.label}</span>`).join("");
+}
+
+// ── 활성 아파트 단지 설명 카드 ───────────────────────────────
+function selectApt(entry) { state.selectedApt = entry; renderAptCard(); }
+
+function renderAptCard() {
+  const body = $("aptCardBody");
+  const e = state.selectedApt;
+  if (!e) {
+    body.innerHTML = `<span class="sub">지도에서 단지(원)나 📍 핀을 누르면 여기에 단지 정보가 표시됩니다.</span>`;
+    return;
+  }
+  const py84 = e.med * (84.9 / 3.3058);
+  const isPin = (geoData.pins ?? []).some((p) => p.name === e.apt);
+  let refDist = "";
+  if (e.point && geoData?.refs) {
+    refDist = Object.values(geoData.refs)
+      .map((r) => `${r.label.replace("삼성 ", "")} <b>${distKm(r, e.point).toFixed(1)}km</b>`).join(" · ");
+  }
+  let nearShuttle = "";
+  if (e.point && geoData?.shuttles) {
+    let best = null;
+    for (const s of Object.values(geoData.shuttles)) {
+      for (const st of s.stops) {
+        const d = distKm(st, e.point);
+        if (!best || d < best.d) best = { d, route: s.label, stop: st.name };
+      }
+    }
+    if (best) nearShuttle = `<b>${best.route}</b> · ${best.stop} 정류장 ${(best.d * 1000).toFixed(0)}m`;
+  }
+  body.innerHTML =
+    `<button class="apt-close" aria-label="닫기">✕</button>` +
+    `<div class="apt-name">${e.apt}${isPin ? '<span class="pin-badge">추천</span>' : ""}</div>` +
+    `<div class="sub">${e.dong}</div>` +
+    `<div class="apt-grid">` +
+    `<div><div class="k">중앙 평당가</div><div class="v">${fmtMan(e.med)}만</div></div>` +
+    `<div><div class="k">전용 84㎡ 환산</div><div class="v">${fmtEok(py84)}</div></div>` +
+    `<div><div class="k">최근 6개월 거래</div><div class="v">${e.cnt}건</div></div>` +
+    `<div><div class="k">최근 실거래</div><div class="v">${e.last.date.slice(2)} · ${Math.round(e.last.area)}㎡ ${fmtEok(e.last.amt)}</div></div>` +
+    `</div>` +
+    (refDist ? `<div class="apt-dist">📍 ${refDist}</div>` : "") +
+    (nearShuttle ? `<div class="apt-dist">🚌 가장 가까운 셔틀: ${nearShuttle}</div>` : "") +
+    `<div class="apt-links"><a href="https://new.land.naver.com/search?query=${encodeURIComponent(e.apt)}" target="_blank" rel="noreferrer">네이버 부동산 ↗</a></div>`;
+  body.querySelector(".apt-close").onclick = () => { state.selectedApt = null; renderAptCard(); };
 }
 
 // ── 단지 랭킹 ────────────────────────────────────────────────
@@ -848,7 +920,9 @@ function render() {
   renderPriceChart(rows);
   renderVolumeChart(rows);
   renderRatioChart(rows);
+  renderShuttleToggles();
   renderMap();
+  renderAptCard();
   renderRank();
   renderDeals();
 }
@@ -899,13 +973,13 @@ function initControls() {
     renderMap(); renderRank();
   });
   $("capToggle").addEventListener("change", (e) => { state.cap = e.target.checked; render(); });
-  // 범례 클릭 = 노선(GTX·셔틀) 표시 토글
-  $("mapLegend").addEventListener("click", (e) => {
+  // 셔틀 카드의 칩 클릭 = 노선(GTX·셔틀) 강조 토글
+  $("shuttleToggles").addEventListener("click", (e) => {
     const item = e.target.closest("[data-route]");
     if (!item) return;
     const id = item.dataset.route;
     if (state.emphasized.has(id)) state.emphasized.delete(id); else state.emphasized.add(id);
-    renderMap();
+    renderShuttleToggles(); renderMap();
   });
 }
 
