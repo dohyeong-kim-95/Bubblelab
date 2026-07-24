@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  DuriDO,
   DURI_MAX_TEXT_BLOB,
   DURI_MAX_META_BLOB,
   isBlob,
@@ -8,6 +9,37 @@ import {
   validatePhotoMeta,
   isPhotoKey,
 } from "./duri.js";
+
+// storage.list 가 CF처럼 Map 을 돌려주는 최소 가짜 스토리지.
+function fakeStorage(initial) {
+  const map = new Map(Object.entries(initial));
+  return {
+    map,
+    async get(k) { return map.get(k); },
+    async put(k, v) { map.set(k, v); },
+    async delete(keys) { for (const k of [].concat(keys)) map.delete(k); },
+    async list({ prefix, start, end, limit } = {}) {
+      let ks = [...map.keys()].filter((k) => !prefix || k.startsWith(prefix)).sort();
+      if (start) ks = ks.filter((k) => k >= start);
+      if (end) ks = ks.filter((k) => k < end);
+      if (limit != null) ks = ks.slice(0, limit);
+      return new Map(ks.map((k) => [k, map.get(k)]));
+    },
+  };
+}
+function fakeBucket(keys) {
+  const set = new Set(keys);
+  return {
+    set,
+    async delete(k) { for (const key of [].concat(k)) set.delete(key); },
+    async list({ prefix } = {}) {
+      return {
+        objects: [...set].filter((key) => !prefix || key.startsWith(prefix)).map((key) => ({ key })),
+        truncated: false,
+      };
+    },
+  };
+}
 
 test("isBlob accepts base64 within the length limit only", () => {
   assert.equal(isBlob("YWJjZA==", 32), true);
@@ -43,4 +75,32 @@ test("isPhotoKey accepts only server-minted keys", () => {
   assert.equal(isPhotoKey("../secret"), false);
   assert.equal(isPhotoKey("photo/000000000012-abcd1234/extra"), false);
   assert.equal(isPhotoKey(42), false);
+});
+
+test("handleReset wipes the buffer and R2 photos but keeps seq monotonic", async () => {
+  const photoKey = "photo/000000000002-a1b2c3d4e5f6a7b8";
+  const storage = fakeStorage({
+    seq: 3,
+    ackSeq: 1,
+    "buf:000000000001": { seq: 1, kind: "msg", iv: "aa", ct: "bb" },
+    "buf:000000000002": { seq: 2, kind: "photo", r2key: photoKey },
+    "buf:000000000003": { seq: 3, kind: "msg", iv: "cc", ct: "dd" },
+  });
+  // 참조 사진 + 버퍼엔 없지만 R2엔 남은 고아 사진.
+  const bucket = fakeBucket([photoKey, "photo/000000000009-deadbeefdeadbeef"]);
+  const state = { storage, blockConcurrencyWhile: (fn) => fn() };
+  const room = new DuriDO(state, { DURI_BUCKET: bucket });
+
+  const res = await room.fetch(
+    new Request("https://x/_duri/reset", { method: "POST", headers: { "X-Duri-Role": "peer" } }));
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { ok: true });
+
+  // 버퍼 항목 전부 삭제
+  assert.equal([...storage.map.keys()].filter((k) => k.startsWith("buf:")).length, 0);
+  // seq 는 유지, ackSeq 는 head 로 상승("전부 소비됨")
+  assert.equal(storage.map.get("seq"), 3);
+  assert.equal(storage.map.get("ackSeq"), 3);
+  // 참조·고아 사진 모두 R2에서 삭제
+  assert.equal(bucket.set.size, 0);
 });

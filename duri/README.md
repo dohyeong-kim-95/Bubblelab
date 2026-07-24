@@ -14,10 +14,24 @@
 
 ## 게이트 (bl_duri, 1년 세션)
 
-비밀번호는 work과 같은 `WORK_PASSWORD`를 쓰되 세션 쿠키는 **별도(`bl_duri`)이고
-1년**이라, 설치형 앱은 최초 1회만 로그인하면 사실상 다시 묻지 않는다. 이 게이트는
-E2E 암호 문구와 무관하다(문구는 앱 안에서 따로 받는다). 라우팅·게이트는
-`_infra/worker.js`의 `handleDuriGate`.
+세션 쿠키는 **별도(`bl_duri`)이고 1년**이라, 설치형 앱은 최초 1회만 로그인하면
+사실상 다시 묻지 않는다. 이 게이트는 E2E 암호 문구와 무관하다(문구는 앱 안에서
+따로 받는다). 라우팅·게이트는 `_infra/worker.js`의 `handleDuriGate`·`duriPassword`.
+
+- **비밀번호는 `DURI_PASSWORD` secret**을 쓴다. 없으면 `WORK_PASSWORD`로 폴백한다
+  (설정 전에도 안 끊기게). `DURI_PASSWORD`를 설정하면 duri 접속 비번이 work과
+  **완전히 독립**되고(work 로그인은 영향 없음), 파생 키가 바뀌어 **기존 bl_duri
+  세션·싱크토큰(`DURI_SINK_SECRET` 미설정 시)은 무효화**된다 — 비번만 갈아도
+  "접속 새로 시작"이 된다. 두 사람은 새 비번으로 다시 로그인한다.
+
+## 방 초기화 (새로 시작)
+
+앱 헤더의 **방초기화** 버튼 → `POST /_duri/reset`(소유자=`bl_duri` 세션만, 싱크
+토큰으로는 불가). DuriDO가 서버 버퍼 전체 + 참조/고아 사진(R2)을 비우고 접속자에게
+`reset`을 브로드캐스트해 양쪽 기기가 로컬 캐시를 지우고 재시작한다. **seq 카운터는
+되감지 않고**(초기화 중 오프라인이던 기기의 커서 문제 방지) `ackSeq`를 `head`로
+올려 "전부 소비됨"으로 만든다. **각자 PC 싱크 아카이브(원본)는 서버가 손대지
+못하므로 그대로 남는다** — 정말로 지우려면 각 PC의 `DuriStorage/`를 직접 삭제.
 
 ## 구조 — 엣지는 중계소, 원본은 내 PC
 
@@ -52,8 +66,9 @@ apple/mobile 메타만으로 구성한 **최소 설치형 PWA**다. 최신 Chrom
 
 - `_infra/duri.js` — `DuriDO`: 릴레이 + 버퍼(ack 시 폐기) + 사진 R2 임시 보관.
 - `_infra/worker.js` — `handleDuriGate`(서브도메인 게이트), `/_duri`(WS 중계),
-  `/_duri/photo`(업로드/다운로드), `/_duri/sink-token`(소유자 발급).
-  인증: duri 게이트 세션(`bl_duri`, 브라우저) 또는 싱크 토큰(데몬).
+  `/_duri/photo`(업로드/다운로드), `/_duri/sink-token`(소유자 발급),
+  `/_duri/reset`(소유자 방 초기화). 인증: duri 게이트 세션(`bl_duri`, 브라우저)
+  또는 싱크 토큰(데몬). 비밀번호는 `DURI_PASSWORD`(없으면 `WORK_PASSWORD` 폴백).
 - `wrangler.jsonc` — `DURI` DO 바인딩·마이그v10, `DURI_BUCKET`(R2), `ENABLE_DURI` var.
 
 ## 켜는 법 (fail-closed)
@@ -62,9 +77,10 @@ apple/mobile 메타만으로 구성한 **최소 설치형 PWA**다. 최신 Chrom
 
 ```bash
 npx wrangler@4 r2 bucket create bubblelab-duri
-npx wrangler@4 secret put WORK_PASSWORD      # 이미 있으면 생략
-npx wrangler@4 secret put DURI_SINK_SECRET   # 선택: 싱크 토큰 전용 서명키
+npx wrangler@4 secret put DURI_PASSWORD      # duri 전용 게이트 비번(권장). 없으면 WORK_PASSWORD 폴백
+npx wrangler@4 secret put DURI_SINK_SECRET   # 선택: 싱크 토큰 전용 서명키(비번 갈아도 토큰 유지)
 # wrangler.jsonc 의 ENABLE_DURI 를 "true" 로 바꾼 뒤 배포
 ```
 
-버킷·비밀번호가 없으면 `/_duri`는 503으로 닫힌다.
+버킷·비밀번호(`DURI_PASSWORD`|`WORK_PASSWORD`)가 없으면 `/_duri`는 503으로 닫힌다.
+비번을 갈면서도 데스크톱 싱크를 안 끊으려면 `DURI_SINK_SECRET`을 미리 걸어 둔다.

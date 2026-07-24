@@ -159,6 +159,44 @@ test("duri subdomain gates with its own long-lived bl_duri session", async () =>
   assert.equal(response.status, 404);
 });
 
+test("duri prefers DURI_PASSWORD over WORK_PASSWORD and room reset is owner-only", async () => {
+  const assets = { fetch: async () => new Response("<p>duri</p>", { headers: { "Content-Type": "text/html" } }) };
+  const stub = { fetch: async () => Response.json({ ok: true }) };
+  const env = {
+    DURI_PASSWORD: "duonly", WORK_PASSWORD: "hunter2", ENABLE_DURI: "true",
+    ASSETS: assets, DURI_BUCKET: {}, DURI: { idFromName: () => "main", get: () => stub },
+  };
+
+  // DURI_PASSWORD 가 설정되면 duri 게이트는 work 비번을 더 이상 받지 않는다(독립)
+  let form = new FormData();
+  form.set("password", "hunter2");
+  let response = await worker.fetch(
+    new Request("https://duri.bubblelab.dev/login", { method: "POST", body: form }), env, ctx);
+  assert.equal(response.status, 401);
+
+  // 전용 비번으로 로그인 → bl_duri 세션
+  form = new FormData();
+  form.set("password", "duonly");
+  response = await worker.fetch(
+    new Request("https://duri.bubblelab.dev/login", { method: "POST", body: form }), env, ctx);
+  assert.equal(response.status, 303);
+  const cookie = response.headers.get("Set-Cookie");
+  assert.match(cookie, /^bl_duri=/);
+
+  // 방 초기화: 세션 없으면 인증 실패
+  response = await worker.fetch(
+    new Request("https://duri.bubblelab.dev/_duri/reset", { method: "POST" }), env, ctx);
+  assert.equal(response.status, 401);
+
+  // 소유자 세션이면 DO 로 전달되어 초기화된다
+  response = await worker.fetch(
+    new Request("https://duri.bubblelab.dev/_duri/reset", {
+      method: "POST", headers: { Cookie: cookie.split(";")[0] },
+    }), env, ctx);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true });
+});
+
 test("subdomain .html redirects strip the internal /site prefix from Location", async () => {
   // 에셋 서버가 .html→확장자 제거로 307을 돌려줄 때 Location에 내부 /work
   // 프리픽스가 담긴다. 서브도메인 공개 URL에는 site 세그먼트가 없으므로 워커가

@@ -112,6 +112,8 @@
   <span class="status"><span class="dot" id="dot"></span><span id="stat">연결 중…</span></span>
   <button id="clear-cache" title="이 기기에 저장된 대화 기록 지우기"
           style="margin-left:.6rem; font-size:.7rem; padding:.25rem .5rem;">기록지우기</button>
+  <button id="reset-room" title="서버에 남은 대화·사진을 양쪽 모두에서 지우고 새로 시작"
+          style="margin-left:.4rem; font-size:.7rem; padding:.25rem .5rem;">방초기화</button>
   <a href="/logout" style="margin-left:.6rem">나가기</a>
 </header>
 
@@ -261,6 +263,7 @@ function connect() {
     if (m.type === "ping") { ws.send(JSON.stringify({ type: "pong" })); return; }
     if (m.type === "welcome" || m.type === "presence") { setStatus(true, m.online > 1 ? "둘 다 접속 중" : "연결됨 (혼자)"); return; }
     if (m.type === "entry") { renderEntry(m); return; }
+    if (m.type === "reset") { clearCache().then(() => location.reload()); return; }
     if (m.type === "error") { console.warn("duri error", m.error); return; }
   };
   ws.onclose = () => { setStatus(false, "재연결 중…"); setTimeout(connect, backoff); backoff = Math.min(backoff * 2, 15000); };
@@ -526,6 +529,19 @@ $("clear-cache").addEventListener("click", async () => {
   if (!confirm("이 기기에 저장된 대화 기록을 지울까요?\n(상대 기기와 PC 백업은 그대로예요)")) return;
   await clearCache();
   location.reload();
+});
+
+// 방 초기화: 서버 버퍼·사진을 양쪽에서 지우고 새로 시작. 되돌릴 수 없다.
+// (이미 각자 PC에 백업된 아카이브는 서버가 손대지 못하므로 그대로 남는다.)
+$("reset-room").addEventListener("click", async () => {
+  if (!confirm("서버에 남은 대화·사진을 양쪽 모두에서 지우고 새로 시작할까요?\n되돌릴 수 없어요. (이미 각자 PC에 백업된 기록은 그대로예요)")) return;
+  try {
+    const res = await fetch("/_duri/reset", { method: "POST" });
+    if (!res.ok) { alert(`초기화 실패: ${res.status}`); return; }
+    // 서버가 reset 을 브로드캐스트해 양쪽 기기가 리로드된다. 이 기기도 직접 정리.
+    await clearCache();
+    location.reload();
+  } catch { alert("초기화 요청을 보내지 못했어요."); }
 });
 
 const text = $("text");

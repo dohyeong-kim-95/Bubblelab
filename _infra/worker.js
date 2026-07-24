@@ -281,9 +281,17 @@ async function handleWork(request, env, url, base = "") {
  * 폴스루한다. E2E 암호 문구는 이 게이트와 무관하게 앱 안에서 받는다. */
 const DURI_SESSION_TTL_MS = 365 * 24 * 60 * 60 * 1000;
 
+// duri 게이트/릴레이 비밀번호. 전용 DURI_PASSWORD 가 있으면 그것을, 없으면
+// work 과 공유하던 WORK_PASSWORD 로 폴백한다(설정 전에도 안 끊기게). DURI_PASSWORD
+// 를 설정하는 순간 duri 는 work 과 독립되고, 파생 키가 바뀌므로 기존 bl_duri
+// 세션·싱크토큰(DURI_SINK_SECRET 미설정 시)은 무효화된다 — 새로 시작에 부합.
+function duriPassword(env) {
+  return env.DURI_PASSWORD || env.WORK_PASSWORD || null;
+}
+
 async function duriSessionKey(env) {
   return crypto.subtle.importKey(
-    "raw", new TextEncoder().encode(`${env.WORK_PASSWORD}\0bl-duri-session`),
+    "raw", new TextEncoder().encode(`${duriPassword(env)}\0bl-duri-session`),
     { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
   );
 }
@@ -306,7 +314,7 @@ async function handleDuriGate(request, env, url, base = "") {
     });
     if (limited) return limited;
     const form = await request.formData();
-    if (await matchesCredential(key, form.get("password"), env.WORK_PASSWORD)) {
+    if (await matchesCredential(key, form.get("password"), duriPassword(env))) {
       const token = await issueDuriSession(key);
       return redirect(`${base}/`, { "Set-Cookie": `bl_duri=${token}; ${cookieFlags}` });
     }
@@ -330,8 +338,8 @@ async function handleDuriGate(request, env, url, base = "") {
 const SINK_TOKEN_TTL_MS = 365 * 24 * 60 * 60 * 1000;
 
 async function duriSinkKey(env) {
-  const secret = env.DURI_SINK_SECRET ||
-    (env.WORK_PASSWORD ? `${env.WORK_PASSWORD}\0bl-duri-sink` : null);
+  const pw = duriPassword(env);
+  const secret = env.DURI_SINK_SECRET || (pw ? `${pw}\0bl-duri-sink` : null);
   if (!secret) return null;
   return crypto.subtle.importKey(
     "raw", new TextEncoder().encode(secret),
@@ -358,7 +366,7 @@ async function handleDuri(request, env, url) {
     });
   }
   // R2 버퍼·게이트 비밀번호가 없으면 fail-closed.
-  if (!env.DURI_BUCKET || !env.WORK_PASSWORD) {
+  if (!env.DURI_BUCKET || !duriPassword(env)) {
     return new Response("duri is not configured", { status: 503 });
   }
   const path = url.pathname;
@@ -396,6 +404,17 @@ async function handleDuri(request, env, url) {
   }
 
   if (path === "/_duri/photo" || path.startsWith("/_duri/photo/") || path === "/_duri/status") {
+    return stub.fetch(withDuriRole(request, role));
+  }
+
+  // 방 초기화: 소유자(duri 게이트 세션)만. 싱크 토큰으로는 못 지운다. 서버 버퍼와
+  // 참조 사진(R2)을 비워 "새로 시작"을 만든다. 각자 PC 싱크 아카이브는 손대지 않는다.
+  if (path === "/_duri/reset" && request.method === "POST") {
+    if (!gated) return new Response("owner only", { status: 403 });
+    const limited = await enforceRateLimit(request, env, {
+      scope: "duri-reset", limit: 5, windowMs: 60 * 60 * 1000,
+    });
+    if (limited) return limited;
     return stub.fetch(withDuriRole(request, role));
   }
   return new Response("not found", { status: 404 });
@@ -995,9 +1014,9 @@ export async function handleRequest(request, env, ctx) {
     }
 
     if (site === "duri") {
-      // work과 같은 WORK_PASSWORD로 게이팅하되 세션은 별도(bl_duri)·장수명이다.
-      // 미설정이면 fail-closed. /_duri 릴레이는 위에서 이미 처리되므로 여기 안 온다.
-      if (!env.WORK_PASSWORD) {
+      // DURI_PASSWORD(없으면 WORK_PASSWORD 폴백)로 게이팅하되 세션은 별도(bl_duri)·
+      // 장수명이다. 미설정이면 fail-closed. /_duri 릴레이는 위에서 이미 처리된다.
+      if (!duriPassword(env)) {
         return new Response("duri is not configured", { status: 503 });
       }
       const isProdHost = host === ROOT_DOMAIN || host.endsWith(`.${ROOT_DOMAIN}`);

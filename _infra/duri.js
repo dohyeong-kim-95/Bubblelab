@@ -108,7 +108,50 @@ export class DuriDO {
         pending: this.head - this.ackSeq,
       });
     }
+    if (url.pathname.endsWith("/reset") && request.method === "POST") {
+      return this.handleReset();
+    }
     return new Response("not found", { status: 404 });
+  }
+
+  // ── 방 초기화 ────────────────────────────────────────────────
+  // 서버 버퍼와 참조 사진(R2)을 전부 비워 "새로 시작"을 만든다. 인증(소유자
+  // 판정)은 Worker가 이미 했다. seq 카운터는 되감지 않는다 — 되감으면 초기화
+  // 중 오프라인이던 기기가 재접속할 때 옛 커서(lastSeq)보다 작은 새 메시지를
+  // 건너뛴다. 대신 ackSeq 를 head 로 올려 "전부 소비됨"으로 만들면, 어떤 커서로
+  // 재접속해도 빈 버퍼만 받는다. 각자 PC 싱크 아카이브(원본)는 손대지 않는다.
+  async handleReset() {
+    // 1) 버퍼의 모든 항목 삭제 (+ 참조 R2 사진). 1000개씩 페이지.
+    for (;;) {
+      const entries = await this.state.storage.list({ prefix: BUF_PREFIX, limit: 1000 });
+      if (entries.size === 0) break;
+      const keys = [];
+      for (const [key, value] of entries) {
+        if (value.kind === "photo" && isPhotoKey(value.r2key)) {
+          await this.env.DURI_BUCKET?.delete(value.r2key).catch(() => {});
+        }
+        keys.push(key);
+      }
+      await this.state.storage.delete(keys);
+      if (entries.size < 1000) break;
+    }
+    // 2) 버퍼에서 이미 폐기됐으나 R2엔 남은 고아 사진까지 prefix 전체 정리.
+    if (this.env.DURI_BUCKET) {
+      let cursor;
+      do {
+        const listed = await this.env.DURI_BUCKET.list({ prefix: "photo/", cursor });
+        if (listed.objects.length) {
+          await this.env.DURI_BUCKET.delete(listed.objects.map((o) => o.key)).catch(() => {});
+        }
+        cursor = listed.truncated ? listed.cursor : undefined;
+      } while (cursor);
+    }
+    // 3) 전부 소비됨으로 표시(seq 는 유지).
+    this.ackSeq = this.head;
+    await this.state.storage.put(ACK_KEY, this.head);
+    // 4) 접속자에게 알린다 → 클라가 로컬 기록을 비우고 재시작.
+    this.broadcast({ type: "reset" });
+    return Response.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
   }
 
   // ── WebSocket ────────────────────────────────────────────────
