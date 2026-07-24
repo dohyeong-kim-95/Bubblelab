@@ -14,6 +14,19 @@
   디스크에 기록하고 서버에 ack 한다 → 서버는 버퍼·R2에서 그 항목을 폐기한다.
   소스는 배포에서 제외되는 `_src/duri-sink/`(의존성 0, Node 22+). apk는 다음 단계.
 
+## 앱화 (PWA)
+
+홈 화면에 설치해 앱처럼 쓸 수 있다. `manifest.json` + `icon.svg`와 `<head>`의
+apple/mobile 메타만으로 구성한 **최소 설치형 PWA**다 (인프라 변경 없음). 최신
+Chrome/Android는 매니페스트만으로 설치되고, iOS는 "홈 화면에 추가"로 담는다.
+매니페스트는 work 게이트 뒤라 `crossorigin="use-credentials"`로 받는다.
+
+- **서비스워커(오프라인 셸)는 아직 없음.** 페이지 canonical URL이
+  `/duri`(트레일링 슬래시 없음)라 `/duri/sw.js`의 기본 스코프(`/duri/`)로는
+  최상위 문서를 제어하지 못한다. 오프라인 캐시를 붙이려면 `Service-Worker-Allowed`
+  헤더나 서빙 경로 조정 같은 인프라 결정이 선행돼야 한다 — 다음 단계.
+- 아이콘 PNG(iOS `apple-touch-icon` 고해상도용)는 지금 SVG 하나로 갈음한다.
+
 ## E2E 암호화 (공유 패스프레이즈)
 
 - 두 사람이 **같은 암호 문구**를 각자 최초 1회 입력 → PBKDF2(210k, SHA-256)로
