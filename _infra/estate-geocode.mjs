@@ -20,13 +20,21 @@ const REGION_ADDR = {
   giheung: ["경기도 용인시 기흥구"],
 };
 
-// 통근·환금성 기준점. 도로명주소는 공개된 주소다.
+// 통근·환금성 기준점. 도로명주소는 공개된 주소다 (coord가 있으면 그 좌표를
+// 그대로 쓰고 지오코딩을 건너뛴다 — 역명은 지번 검색이 애매해서 직접 지정).
 // 동탄역은 매도 시 GTX 수요층 관점의 보조축 (실거주 축은 캠퍼스).
 const REFS = [
   { id: "hwaseong-campus", label: "삼성 화성캠퍼스", road: "경기도 화성시 삼성전자로 1" },
   { id: "giheung-campus", label: "삼성 기흥캠퍼스", road: "경기도 용인시 기흥구 삼성로 1" },
   { id: "dongtan-station", label: "동탄역 (GTX·SRT)", road: "경기도 화성시 동탄역로 151" },
+  { id: "gucheong-station", label: "구성역 (GTX-A)", coord: { lat: 37.2996, lng: 127.1054 } },
 ];
+
+// 지도에 깔 철도 노선. via의 기준점들을 순서대로 이은 폴리라인이 된다.
+// 현재 지도 범위(동탄구·기흥구) 안의 GTX-A 구간은 동탄역~구성역 하나다.
+const RAIL_LINES = {
+  "gtx-a": { label: "GTX-A", color: "#d6336c", via: ["dongtan-station", "gucheong-station"] },
+};
 
 function readKey() {
   if (process.env.VWORLD_KEY?.trim()) return process.env.VWORLD_KEY.trim();
@@ -94,9 +102,16 @@ async function main() {
 
   for (const ref of REFS) {
     if (geo.refs[ref.id] && !force) continue;
-    const point = await vworldGeocode(key, ref.road, "ROAD").catch(() => null);
+    const point = ref.coord ?? await vworldGeocode(key, ref.road, "ROAD").catch(() => null);
     if (point) geo.refs[ref.id] = { ...point, label: ref.label };
     else console.error(`  기준점 실패: ${ref.label}`);
+  }
+
+  // 철도 노선 폴리라인을 기준점 좌표로 조립 (force와 무관하게 매번 갱신).
+  geo.lines = {};
+  for (const [id, line] of Object.entries(RAIL_LINES)) {
+    const coords = line.via.map((v) => geo.refs[v]).filter(Boolean).map((r) => [r.lat, r.lng]);
+    if (coords.length >= 2) geo.lines[id] = { label: line.label, color: line.color, coords };
   }
 
   geo.generatedAt = new Date().toISOString();
