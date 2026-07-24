@@ -630,12 +630,14 @@ function complexStats() {
   });
 }
 
-// 네이버 부동산 링크. 데스크탑 new.land는 모바일에서 좌표 인코딩 중 404가 나서,
-// 좌표를 바로 받는 모바일 지도 형식(m.land/map/위도:경도:줌/유형/거래)을 쓴다.
-// 응답 200+REALESTATE 쿠키 확인됨. APT:JGC:ABYG=아파트·재건축·분양권, A1:B1:B2=매매·전세·월세.
-const naverLink = (e) => e.point
+// 네이버 매물 링크는 기기별로 갈린다. 좌표로 매물 지도를 바로 여는 건 모바일
+// (m.land/map/위도:경도:줌/유형/거래)만 가능하다 — PC용 new.land는 단지 고유번호를
+// 요구해서 좌표 URL이 전부 404(2026-07 실측). 그래서 PC는 네이버 지도 검색으로
+// 보내 단지 위치·시세·매물 링크에 닿게 한다. m.land는 데스크탑 UA에선 튕긴다.
+const IS_MOBILE = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+const naverLink = (e) => (IS_MOBILE && e.point)
   ? `https://m.land.naver.com/map/${e.point.lat.toFixed(6)}:${e.point.lng.toFixed(6)}:17/APT:JGC:ABYG/A1:B1:B2`
-  : `https://m.land.naver.com/search/result/${encodeURIComponent(e.apt)}`;
+  : `https://map.naver.com/p/search/${encodeURIComponent(e.apt + " 아파트")}`;
 
 const inRadius = (e) => {
   if (!state.ref || !+state.radius) return true;
