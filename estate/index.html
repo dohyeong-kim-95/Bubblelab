@@ -101,6 +101,9 @@ svg text { font-family: inherit; font-size: 12px; fill: light-dark(#5a6b7d, #93a
 #mapChart svg { max-height: 640px; margin: 0 auto; overflow: hidden; }
 .rail-station { stroke: light-dark(#ffffff, #151e2a); }
 .map-legend .rail { display: inline-block; width: 16px; height: 0; border-top: 3px solid; margin-right: 4px; vertical-align: 4px; }
+.leg-route { cursor: pointer; user-select: none; }
+.leg-route:hover { text-decoration: underline; }
+.leg-hint { opacity: 0.5; font-style: italic; }
 /* 다크 모드에서는 밝은 배경지도를 반전해 눈부심을 줄인다 */
 @media (prefers-color-scheme: dark) {
   .map-base { filter: invert(1) hue-rotate(180deg) brightness(0.9) saturate(0.55); }
@@ -232,7 +235,7 @@ const TABS = {
   giheung:  { src: "giheung", label: "기흥구", dongs: null },
 };
 const MAX_MONTHS = 36;
-const state = { tab: "dongtan2", months: 24, band: "all", dong: "", deals: "trade", ref: "", radius: "3", cap: true };
+const state = { tab: "dongtan2", months: 24, band: "all", dong: "", deals: "trade", ref: "", radius: "3", cap: true, hidden: new Set() };
 // store[src][type][ym] = 배열 | "error"
 const store = { dongtan: { trade: {}, rent: {} }, giheung: { trade: {}, rent: {} } };
 let loadSeq = 0;
@@ -663,8 +666,10 @@ function renderMap() {
 
   // 철도 노선 폴리라인 + 역 강조점 (배경 위, 단지 점 아래). viewBox 밖으로
   // 뻗는 구간은 SVG overflow:hidden으로 잘린다 (탭 범위 밖 역 방향 암시).
+  // 노선은 범례에서 켜고 끈다(state.hidden). GTX는 실선, 셔틀은 파선.
   let railLines = "";
-  for (const line of Object.values(geoData.lines ?? {})) {
+  for (const [lid, line] of Object.entries(geoData.lines ?? {})) {
+    if (state.hidden.has(lid)) continue;
     const pts = line.coords.map(([lat, lng]) => `${px({ lat, lng }).toFixed(1)},${py2({ lat, lng }).toFixed(1)}`).join(" ");
     railLines += `<polyline points="${pts}" fill="none" stroke="${line.color}" ` +
       `stroke-width="${(3.5 * ui).toFixed(1)}" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>`;
@@ -673,9 +678,8 @@ function renderMap() {
         `r="${(3.2 * ui).toFixed(1)}" fill="${line.color}" stroke-width="${(1.4 * ui).toFixed(1)}"/>`;
     }
   }
-
-  // 통근 셔틀 노선: 초록 파선 + 정류장 점 (SVG <title>로 정류장명 툴팁).
-  for (const route of Object.values(geoData.shuttles ?? {})) {
+  for (const [rid, route] of Object.entries(geoData.shuttles ?? {})) {
+    if (state.hidden.has(rid)) continue;
     const pts = route.stops.map((s) => `${px(s).toFixed(1)},${py2(s).toFixed(1)}`).join(" ");
     railLines += `<polyline points="${pts}" fill="none" stroke="${route.color}" ` +
       `stroke-width="${(2.5 * ui).toFixed(1)}" stroke-dasharray="${(6 * ui).toFixed(1)} ${(4 * ui).toFixed(1)}" ` +
@@ -709,10 +713,14 @@ function renderMap() {
     [`~${fmtMan(breaks[0])}`, `~${fmtMan(breaks[1])}`, `~${fmtMan(breaks[2])}`, `~${fmtMan(breaks[3])}`, `${fmtMan(breaks[3])}~`]
       .map((label, i) => `<span><i class="sw q${i}"></i>${label}</span>`).join("") +
     `<span>만원/평 (중앙값)</span>` +
-    Object.values(geoData.lines ?? {}).map((l) =>
-      `<span><i class="rail" style="border-color:${l.color}"></i>${l.label}</span>`).join("") +
-    Object.values(geoData.shuttles ?? {}).map((r) =>
-      `<span><i class="rail" style="border-color:${r.color};border-top-style:dashed"></i>${r.label}</span>`).join("") +
+    Object.entries(geoData.lines ?? {}).map(([id, l]) =>
+      `<span class="leg-route" data-route="${id}" style="opacity:${state.hidden.has(id) ? 0.35 : 1}">` +
+      `<i class="rail" style="border-color:${l.color}"></i>${l.label}</span>`).join("") +
+    Object.entries(geoData.shuttles ?? {}).map(([id, r]) =>
+      `<span class="leg-route" data-route="${id}" style="opacity:${state.hidden.has(id) ? 0.35 : 1}">` +
+      `<i class="rail" style="border-color:${r.color};border-top-style:dashed"></i>${r.label}</span>`).join("") +
+    ((Object.keys(geoData.lines ?? {}).length + Object.keys(geoData.shuttles ?? {}).length)
+      ? `<span class="leg-hint">클릭해서 켜고 끄기</span>` : "") +
     (base ? `<span style="margin-left:auto">배경지도 © 브이월드</span>` : "");
   $("mapNote").textContent = state.ref && +state.radius
     ? `반경 내 ${list.filter(inRadius).length}개 단지` : `${list.length}개 단지`;
@@ -870,6 +878,14 @@ function initControls() {
     renderMap(); renderRank();
   });
   $("capToggle").addEventListener("change", (e) => { state.cap = e.target.checked; render(); });
+  // 범례 클릭 = 노선(GTX·셔틀) 표시 토글
+  $("mapLegend").addEventListener("click", (e) => {
+    const item = e.target.closest("[data-route]");
+    if (!item) return;
+    const id = item.dataset.route;
+    if (state.hidden.has(id)) state.hidden.delete(id); else state.hidden.add(id);
+    renderMap();
+  });
 }
 
 initControls();

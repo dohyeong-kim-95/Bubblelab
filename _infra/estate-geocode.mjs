@@ -43,7 +43,7 @@ const RAIL_LINES = {
 // addr(지오코딩)이나 ref(기존 기준점)로 좌표를 얻는다. 새 노선은 여기에 추가.
 const SHUTTLE_ROUTES = {
   "h1-dsr-naru1": {
-    label: "화성캠 H1 셔틀 (동탄나루1차)", color: "#0ca678",
+    label: "DSR · 동탄나루1차·시범단지", color: "#0ca678",
     stops: [
       { name: "동탄월드반도유보라1차", addr: "경기도 화성시 반송동 442" },
       { name: "나루마을한화우림", match: "나루마을한화꿈에그린우림필유" },
@@ -58,7 +58,7 @@ const SHUTTLE_ROUTES = {
   // 두 번째 노선(사용자 확인 주소 기반). 정류장 좌표는 도로명주소 지오코딩값을
   // 직접 지정(coord). 4번은 힐스테이트·호반5차 두 단지의 중간점.
   "dongtan-east": {
-    label: "셔틀 2 (동탄역 동부)", color: "#7048e8",
+    label: "우체국 · 동탄역 동부", color: "#7048e8",
     stops: [
       { name: "동탄우체국(노작로240)", coord: { lat: 37.20775, lng: 127.07813 } },
       { name: "동탄역", ref: "dongtan-station" },
@@ -70,11 +70,21 @@ const SHUTTLE_ROUTES = {
   // 화성DSR행이라 구분 위해 초록 계열 다른 톤. 단지가 아닌 정류장(업무복합부지·
   // 동탄IT타워)은 주소 확인 전까지 제외 — 나머지 4개가 같은 남북 축이라 형태 유지.
   "eilin-bando-dsr": {
-    label: "화성DSR 셔틀 (에일린·반도유보라)", color: "#37b24d",
+    label: "DSR · 에일린·반도유보라", color: "#37b24d",
     stops: [
       { name: "에일린의뜰", match: "동탄역에일린의뜰" },
       { name: "반도유보라5단지", match: "동탄역 반도유보라 아이비파크5.0" },
       { name: "반도유보라6차", match: "동탄역 반도유보라 아이비파크6.0" },
+      { name: "화성DSR동", ref: "hwaseong-campus" },
+    ],
+  },
+  // 네 번째: 동탄2신도시1차A_H1-DSR (화성DSR행). LH4단지·동탄IT타워는 아파트가
+  // 아니라 주소 확인 전까지 제외 — 확실한 정류장(모아미래도·센트럴상록·DSR)만.
+  "dt2-1cha-a-dsr": {
+    label: "DSR · 동탄2 1차A·모아미래도", color: "#2f9e44",
+    stops: [
+      { name: "동탄역모아미래도", match: "동탄역모아미래도" },
+      { name: "동탄역센트럴상록", match: "동탄역센트럴상록아파트" },
       { name: "화성DSR동", ref: "hwaseong-campus" },
     ],
   },
