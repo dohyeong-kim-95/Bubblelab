@@ -55,6 +55,17 @@ const SHUTTLE_ROUTES = {
       { name: "화성캠퍼스", ref: "hwaseong-campus" },
     ],
   },
+  // 두 번째 노선(사용자 확인 주소 기반). 정류장 좌표는 도로명주소 지오코딩값을
+  // 직접 지정(coord). 4번은 힐스테이트·호반5차 두 단지의 중간점.
+  "dongtan-east": {
+    label: "셔틀 2 (동탄역 동부)", color: "#7048e8",
+    stops: [
+      { name: "동탄우체국(노작로240)", coord: { lat: 37.20775, lng: 127.07813 } },
+      { name: "동탄역", ref: "dongtan-station" },
+      { name: "반도유보라·센트럴푸르지오", coord: { lat: 37.19903, lng: 127.11306 } },
+      { name: "힐스테이트·호반5차", coord: { lat: 37.18469, lng: 127.12254 } },
+    ],
+  },
 };
 
 function readKey() {
@@ -161,7 +172,8 @@ async function main() {
     const stops = [];
     for (const s of route.stops) {
       let pt = null;
-      if (s.match) pt = aptCoord.get(s.match) ?? null;
+      if (s.coord) pt = s.coord;
+      else if (s.match) pt = aptCoord.get(s.match) ?? null;
       else if (s.ref) pt = geo.refs[s.ref] ? { lat: geo.refs[s.ref].lat, lng: geo.refs[s.ref].lng } : null;
       else if (s.addr) pt = await vworldGeocode(key, s.addr, "PARCEL").catch(() => null);
       if (pt) stops.push({ name: s.name, lat: pt.lat, lng: pt.lng });
