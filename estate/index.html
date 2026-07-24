@@ -101,8 +101,9 @@ svg text { font-family: inherit; font-size: 12px; fill: light-dark(#5a6b7d, #93a
 #mapChart svg { max-height: 640px; margin: 0 auto; overflow: hidden; }
 .rail-station { stroke: light-dark(#ffffff, #151e2a); }
 .map-legend .rail { display: inline-block; width: 16px; height: 0; border-top: 3px solid; margin-right: 4px; vertical-align: 4px; }
-.leg-route { cursor: pointer; user-select: none; }
+.leg-route { cursor: pointer; user-select: none; opacity: 0.55; }
 .leg-route:hover { text-decoration: underline; }
+.leg-route.on { opacity: 1; font-weight: 700; }
 .leg-hint { opacity: 0.5; font-style: italic; }
 /* 다크 모드에서는 밝은 배경지도를 반전해 눈부심을 줄인다 */
 @media (prefers-color-scheme: dark) {
@@ -235,7 +236,7 @@ const TABS = {
   giheung:  { src: "giheung", label: "기흥구", dongs: null },
 };
 const MAX_MONTHS = 36;
-const state = { tab: "dongtan2", months: 24, band: "all", dong: "", deals: "trade", ref: "", radius: "3", cap: true, hidden: new Set() };
+const state = { tab: "dongtan2", months: 24, band: "all", dong: "", deals: "trade", ref: "", radius: "3", cap: true, emphasized: new Set() };
 // store[src][type][ym] = 배열 | "error"
 const store = { dongtan: { trade: {}, rent: {} }, giheung: { trade: {}, rent: {} } };
 let loadSeq = 0;
@@ -666,29 +667,30 @@ function renderMap() {
 
   // 철도 노선 폴리라인 + 역 강조점 (배경 위, 단지 점 아래). viewBox 밖으로
   // 뻗는 구간은 SVG overflow:hidden으로 잘린다 (탭 범위 밖 역 방향 암시).
-  // 노선은 범례에서 켜고 끈다(state.hidden). GTX는 실선, 셔틀은 파선.
+  // 노선은 기본적으로 얕게(단지 탐색이 주). 범례에서 클릭한 노선만 강조되며
+  // 그때 정류장 점·툴팁이 뜬다. GTX는 실선, 셔틀은 파선.
   let railLines = "";
-  for (const [lid, line] of Object.entries(geoData.lines ?? {})) {
-    if (state.hidden.has(lid)) continue;
-    const pts = line.coords.map(([lat, lng]) => `${px({ lat, lng }).toFixed(1)},${py2({ lat, lng }).toFixed(1)}`).join(" ");
-    railLines += `<polyline points="${pts}" fill="none" stroke="${line.color}" ` +
-      `stroke-width="${(3.5 * ui).toFixed(1)}" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>`;
-    for (const [lat, lng] of line.coords) {
-      railLines += `<circle class="rail-station" cx="${px({ lat, lng }).toFixed(1)}" cy="${py2({ lat, lng }).toFixed(1)}" ` +
-        `r="${(3.2 * ui).toFixed(1)}" fill="${line.color}" stroke-width="${(1.4 * ui).toFixed(1)}"/>`;
+  const drawRoute = (id, color, pts, dashed, titles) => {
+    const emph = state.emphasized.has(id);
+    const op = emph ? 0.95 : 0.2;
+    const sw = (emph ? (dashed ? 3 : 4) : (dashed ? 1.8 : 2.2)) * ui;
+    const dash = dashed ? `stroke-dasharray="${(6 * ui).toFixed(1)} ${(4 * ui).toFixed(1)}"` : "";
+    const d = pts.map((p) => `${px(p).toFixed(1)},${py2(p).toFixed(1)}`).join(" ");
+    railLines += `<polyline points="${d}" fill="none" stroke="${color}" stroke-width="${sw.toFixed(1)}" ` +
+      `${dash} stroke-linecap="round" stroke-linejoin="round" opacity="${op}"/>`;
+    if (emph) {
+      pts.forEach((p, i) => {
+        railLines += `<circle class="rail-station" cx="${px(p).toFixed(1)}" cy="${py2(p).toFixed(1)}" ` +
+          `r="${((dashed ? 2.6 : 3.2) * ui).toFixed(1)}" fill="${color}" stroke-width="${((dashed ? 1.2 : 1.4) * ui).toFixed(1)}">` +
+          (titles ? `<title>${titles[i]}</title>` : "") + `</circle>`;
+      });
     }
+  };
+  for (const [lid, line] of Object.entries(geoData.lines ?? {})) {
+    drawRoute(lid, line.color, line.coords.map(([lat, lng]) => ({ lat, lng })), false, null);
   }
   for (const [rid, route] of Object.entries(geoData.shuttles ?? {})) {
-    if (state.hidden.has(rid)) continue;
-    const pts = route.stops.map((s) => `${px(s).toFixed(1)},${py2(s).toFixed(1)}`).join(" ");
-    railLines += `<polyline points="${pts}" fill="none" stroke="${route.color}" ` +
-      `stroke-width="${(2.5 * ui).toFixed(1)}" stroke-dasharray="${(6 * ui).toFixed(1)} ${(4 * ui).toFixed(1)}" ` +
-      `stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>`;
-    route.stops.forEach((s, i) => {
-      railLines += `<circle class="rail-station" cx="${px(s).toFixed(1)}" cy="${py2(s).toFixed(1)}" ` +
-        `r="${(2.6 * ui).toFixed(1)}" fill="${route.color}" stroke-width="${(1.2 * ui).toFixed(1)}">` +
-        `<title>${route.label}\n${i + 1}. ${s.name}</title></circle>`;
-    });
+    drawRoute(rid, route.color, route.stops, true, route.stops.map((s, i) => `${route.label}\n${i + 1}. ${s.name}`));
   }
 
   const selRef = state.ref ? geoData.refs[state.ref] : null;
@@ -714,13 +716,13 @@ function renderMap() {
       .map((label, i) => `<span><i class="sw q${i}"></i>${label}</span>`).join("") +
     `<span>만원/평 (중앙값)</span>` +
     Object.entries(geoData.lines ?? {}).map(([id, l]) =>
-      `<span class="leg-route" data-route="${id}" style="opacity:${state.hidden.has(id) ? 0.35 : 1}">` +
+      `<span class="leg-route${state.emphasized.has(id) ? " on" : ""}" data-route="${id}">` +
       `<i class="rail" style="border-color:${l.color}"></i>${l.label}</span>`).join("") +
     Object.entries(geoData.shuttles ?? {}).map(([id, r]) =>
-      `<span class="leg-route" data-route="${id}" style="opacity:${state.hidden.has(id) ? 0.35 : 1}">` +
+      `<span class="leg-route${state.emphasized.has(id) ? " on" : ""}" data-route="${id}">` +
       `<i class="rail" style="border-color:${r.color};border-top-style:dashed"></i>${r.label}</span>`).join("") +
     ((Object.keys(geoData.lines ?? {}).length + Object.keys(geoData.shuttles ?? {}).length)
-      ? `<span class="leg-hint">클릭해서 켜고 끄기</span>` : "") +
+      ? `<span class="leg-hint">노선 클릭 = 강조</span>` : "") +
     (base ? `<span style="margin-left:auto">배경지도 © 브이월드</span>` : "");
   $("mapNote").textContent = state.ref && +state.radius
     ? `반경 내 ${list.filter(inRadius).length}개 단지` : `${list.length}개 단지`;
@@ -883,7 +885,7 @@ function initControls() {
     const item = e.target.closest("[data-route]");
     if (!item) return;
     const id = item.dataset.route;
-    if (state.hidden.has(id)) state.hidden.delete(id); else state.hidden.add(id);
+    if (state.emphasized.has(id)) state.emphasized.delete(id); else state.emphasized.add(id);
     renderMap();
   });
 }
