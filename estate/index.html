@@ -103,6 +103,31 @@ svg text { font-family: inherit; font-size: 12px; fill: light-dark(#5a6b7d, #93a
 .apt-card .apt-links { margin-top: 8px; }
 .apt-card .apt-close { float: right; cursor: pointer; opacity: 0.5; font-size: 0.85rem; border: 0; background: none; color: inherit; }
 .pin-badge { display: inline-block; font-size: 0.7rem; color: #fff; background: #e8590c; border-radius: 6px; padding: 1px 6px; margin-left: 6px; }
+/* 내 메모 폼 */
+.apt-note { margin-top: 10px; padding-top: 10px; border-top: 1px dashed light-dark(#dce4ec, #33465c); }
+.note-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.fav-btn { font: inherit; font-size: 0.76rem; cursor: pointer; border: 1px solid light-dark(#dce4ec, #33465c);
+  border-radius: 999px; padding: 3px 12px; background: light-dark(#f4f7fa, #1a2634); color: inherit; }
+.fav-btn.on { background: #fff4e0; border-color: #f59f00; color: #b8850b; font-weight: 700; }
+:root[data-theme="dark"] .fav-btn.on, .fav-btn.on { }
+@media (prefers-color-scheme: dark) { .fav-btn.on { background: #3a2f12; color: #ffd43b; } }
+.note-price { font-size: 0.78rem; opacity: 0.8; }
+.note-price input { width: 68px; font: inherit; font-size: 0.82rem; padding: 3px 6px; text-align: right;
+  border: 1px solid light-dark(#dce4ec, #33465c); border-radius: 6px; background: light-dark(#fff, #0f1926); color: inherit; }
+.note-memo { width: 100%; margin-top: 7px; font: inherit; font-size: 0.8rem; padding: 5px 8px;
+  border: 1px solid light-dark(#dce4ec, #33465c); border-radius: 8px; background: light-dark(#fff, #0f1926); color: inherit; box-sizing: border-box; }
+.note-gap { margin-top: 7px; font-size: 0.78rem; opacity: 0.85; }
+.note-gap b { color: light-dark(#c05621, #ffa94d); }
+/* 관심 목록 */
+.fav-item { position: relative; padding: 8px 26px 8px 0; border-bottom: 1px solid light-dark(#eef2f7, #1e2a3a); font-size: 0.82rem; }
+.fav-item:last-child { border-bottom: 0; }
+.fav-item[data-apt] { cursor: pointer; }
+.fav-item[data-apt]:hover b { text-decoration: underline; }
+.fav-line { font-size: 0.78rem; opacity: 0.8; margin-top: 2px; }
+.fav-memo { font-size: 0.76rem; opacity: 0.7; margin-top: 3px; }
+.fav-del { position: absolute; right: 0; top: 7px; border: 0; background: none; cursor: pointer; opacity: 0.4; color: inherit; font-size: 0.8rem; }
+.fav-del:hover { opacity: 0.9; }
+.fav-star { fill: #f59f00; paint-order: stroke; stroke: light-dark(#ffffff, #0d131c); stroke-width: 2.5px; }
 .map-dot, .pin-body { cursor: pointer; }
 .map-controls { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; font-size: 0.78rem; margin-bottom: 6px; }
 .map-controls select { font: inherit; font-size: 0.82rem; color: inherit; padding: 4px 8px;
@@ -219,6 +244,11 @@ tr.canceled td { text-decoration: line-through; opacity: 0.5; }
     <div class="card chart-wrap" id="chartRatio"></div>
 
     <h2>지도 <span class="sub">최근 6개월 매매 · 원 크기 = 거래 건수, 진할수록 평당가 높음 · 거리는 직선거리</span></h2>
+
+    <div class="card apt-card hidden" id="favCard">
+      <div class="card-head">⭐ 내 관심 단지 <span class="sub">이 브라우저에만 저장됨</span></div>
+      <div id="favList"></div>
+    </div>
 
     <div class="card toggle-card" id="shuttleCard">
       <div class="card-head">통근 셔틀 노선 <span class="sub">눌러서 강조 (여러 개 가능)</span></div>
@@ -630,6 +660,18 @@ function complexStats() {
   });
 }
 
+// 내 메모(즐겨찾기·호가·메모)는 이 브라우저에만 저장한다(localStorage). 서버·계정
+// 없이 개인 기록만 남기며, 한 기기 기준. { "단지명": { fav, price(억), memo, ts } }
+const NOTES_KEY = "estate_notes_v1";
+function loadNotes() { try { return JSON.parse(localStorage.getItem(NOTES_KEY)) || {}; } catch { return {}; } }
+let notes = loadNotes();
+function setNote(apt, patch) {
+  const next = { ...(notes[apt] || {}), ...patch, ts: Date.now() };
+  if (!next.fav && !next.price && !(next.memo || "").trim()) delete notes[apt];
+  else notes[apt] = next;
+  try { localStorage.setItem(NOTES_KEY, JSON.stringify(notes)); } catch { /* 용량 초과 등 무시 */ }
+}
+
 // 네이버 매물 링크는 기기별로 갈린다. 좌표로 매물 지도를 바로 여는 건 모바일
 // (m.land/map/위도:경도:줌/유형/거래)만 가능하다 — PC용 new.land는 단지 고유번호를
 // 요구해서 좌표 URL이 전부 404(2026-07 실측). 그래서 PC는 네이버 지도 검색으로
@@ -705,8 +747,11 @@ function renderMap() {
   const maxCnt = Math.max(...list.map((e) => e.cnt));
   const dots = [...list].sort((a, b) => b.cnt - a.cnt).map((e) => {
     const r = (3.5 + 8 * Math.sqrt(e.cnt / maxCnt)) * ui;
-    return `<circle class="map-dot q${quant(e.med)}${inRadius(e) ? "" : " dim"}" data-i="${list.indexOf(e)}"` +
-      ` cx="${px(e.point).toFixed(1)}" cy="${py2(e.point).toFixed(1)}" r="${r.toFixed(1)}"/>`;
+    const cx = px(e.point).toFixed(1), cy = py2(e.point).toFixed(1);
+    let s = `<circle class="map-dot q${quant(e.med)}${inRadius(e) ? "" : " dim"}" data-i="${list.indexOf(e)}"` +
+      ` cx="${cx}" cy="${cy}" r="${r.toFixed(1)}"/>`;
+    if (notes[e.apt]?.fav) s += `<text class="fav-star" x="${cx}" y="${(+cy - r - 2 * ui).toFixed(1)}" text-anchor="middle" font-size="${(12 * ui).toFixed(1)}">★</text>`;
+    return s;
   }).join("");
 
   // 철도 노선 폴리라인 + 역 강조점 (배경 위, 단지 점 아래). viewBox 밖으로
@@ -830,6 +875,8 @@ function renderAptCard() {
     }
     if (best) nearShuttle = `<b>${best.route}</b> · ${best.stop} 정류장 ${(best.d * 1000).toFixed(0)}m`;
   }
+  const note = notes[e.apt] || {};
+  const gap = note.price ? note.price - py84 / 10000 : null;
   body.innerHTML =
     `<button class="apt-close" aria-label="닫기">✕</button>` +
     `<div class="apt-name">${e.apt}${isPin ? '<span class="pin-badge">추천</span>' : ""}</div>` +
@@ -842,8 +889,50 @@ function renderAptCard() {
     `</div>` +
     (refDist ? `<div class="apt-dist">📍 ${refDist}</div>` : "") +
     (nearShuttle ? `<div class="apt-dist">🚌 가장 가까운 셔틀: ${nearShuttle}</div>` : "") +
-    `<div class="apt-links"><a href="${naverLink(e)}" target="_blank" rel="noreferrer">네이버 부동산에서 현재 매물 보기 ↗</a></div>`;
+    // 내 메모: 즐겨찾기·호가·자유메모 (localStorage, 이 브라우저에만 저장)
+    `<div class="apt-note">` +
+    `<div class="note-row">` +
+    `<button class="fav-btn${note.fav ? " on" : ""}" data-act="fav">${note.fav ? "★ 관심 등록됨" : "☆ 관심 등록"}</button>` +
+    `<label class="note-price">내 호가 <input type="number" step="0.1" inputmode="decimal" data-act="price" value="${note.price ?? ""}" placeholder="예: 6.2"> 억</label>` +
+    `</div>` +
+    `<input class="note-memo" data-act="memo" value="${(note.memo ?? "").replace(/"/g, "&quot;")}" placeholder="메모 (예: 84㎡ 로열층 6.2억, 급매 6.0억)">` +
+    (gap != null ? `<div class="note-gap">실거래 84㎡ ${fmtEok(py84)} vs 내 호가 ${note.price}억 · 갭 <b>${gap >= 0 ? "+" : ""}${gap.toFixed(2)}억</b></div>` : "") +
+    `</div>` +
+    `<div class="apt-links"><a href="${naverLink(e)}" target="_blank" rel="noreferrer">네이버에서 현재 매물 보기 ↗</a></div>`;
   body.querySelector(".apt-close").onclick = () => { state.selectedApt = null; renderAptCard(); };
+  body.querySelector('[data-act="fav"]').onclick = () => { setNote(e.apt, { fav: !note.fav }); renderAptCard(); renderFavList(); renderMap(); };
+  body.querySelector('[data-act="price"]').onchange = (ev) => {
+    const v = parseFloat(ev.target.value);
+    setNote(e.apt, { price: Number.isFinite(v) ? v : null }); renderAptCard(); renderFavList();
+  };
+  body.querySelector('[data-act="memo"]').onchange = (ev) => { setNote(e.apt, { memo: ev.target.value }); renderFavList(); };
+}
+
+// ── 내 관심 단지 목록 (즐겨찾기) ─────────────────────────────
+function renderFavList() {
+  const card = $("favCard"), box = $("favList");
+  const favs = Object.entries(notes).filter(([, n]) => n.fav);
+  if (!favs.length) { card.classList.add("hidden"); return; }
+  card.classList.remove("hidden");
+  const stats = complexStats();
+  box.innerHTML = favs
+    .sort((a, b) => (b[1].ts || 0) - (a[1].ts || 0))
+    .map(([apt, n]) => {
+      const e = stats.find((s) => s.apt === apt);
+      const real = e ? fmtEok(e.med * 84.9 / 3.3058) : "—";
+      const gap = (n.price && e) ? n.price - e.med * 84.9 / 3.3058 / 10000 : null;
+      return `<div class="fav-item"${e ? ` data-apt="${apt}"` : ""}>` +
+        `<button class="fav-del" data-del="${apt}" aria-label="삭제">✕</button>` +
+        `<b>★ ${apt}</b>` +
+        `<div class="fav-line">` +
+        (n.price ? `내 호가 <b>${n.price}억</b> · ` : "") +
+        `실거래 84㎡ ${real}` +
+        (gap != null ? ` · 갭 ${gap >= 0 ? "+" : ""}${gap.toFixed(2)}억` : "") +
+        (e ? "" : ` <span class="sub">(다른 지역/탭)</span>`) +
+        `</div>` +
+        (n.memo ? `<div class="fav-memo">${n.memo}</div>` : "") +
+        `</div>`;
+    }).join("");
 }
 
 // ── 단지 랭킹 ────────────────────────────────────────────────
@@ -930,6 +1019,7 @@ function render() {
   renderRatioChart(rows);
   renderShuttleToggles();
   renderMap();
+  renderFavList();
   renderAptCard();
   renderRank();
   renderDeals();
@@ -981,6 +1071,13 @@ function initControls() {
     renderMap(); renderRank();
   });
   $("capToggle").addEventListener("change", (e) => { state.cap = e.target.checked; render(); });
+  // 관심 목록: ✕ 삭제 / 항목 클릭 = 해당 단지 카드 열기
+  $("favList").addEventListener("click", (e) => {
+    const del = e.target.closest("[data-del]");
+    if (del) { setNote(del.dataset.del, { fav: false }); renderFavList(); renderMap(); if (state.selectedApt?.apt === del.dataset.del) renderAptCard(); return; }
+    const item = e.target.closest("[data-apt]");
+    if (item) { const found = complexStats().find((s) => s.apt === item.dataset.apt); if (found) selectApt(found); }
+  });
   // 셔틀 카드의 칩 클릭 = 노선(GTX·셔틀) 강조 토글
   $("shuttleToggles").addEventListener("click", (e) => {
     const item = e.target.closest("[data-route]");
