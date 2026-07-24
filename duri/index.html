@@ -48,8 +48,15 @@
   .menu button:hover { background: var(--bg); }
   .menu button.danger { color: light-dark(#b4453a, #f0a8a2); }
 
+  #log-wrap { flex: 1; min-height: 0; position: relative; display: flex; }
   #log { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column;
          max-width: 44rem; width: 100%; margin: 0 auto; }
+  /* 스크롤이 위로 올라가 있을 때만 뜨는 "맨 아래로" 버튼 (util/chat 패턴) */
+  #to-bottom { position: absolute; left: 50%; transform: translateX(-50%); bottom: .8rem;
+               width: 2.6rem; height: 2.6rem; border-radius: 50%; cursor: pointer;
+               border: 1px solid var(--line); background: var(--panel); color: inherit;
+               font-size: 1.05rem; line-height: 1; box-shadow: 0 3px 10px #0003; z-index: 5; }
+  #to-bottom[hidden] { display: none; }
   /* 그룹 사이는 넓게, 같은 사람 연속(.cont)은 좁게 — 카톡식 묶어읽기 */
   .row { display: flex; flex-direction: column; max-width: 78%; margin-top: .5rem; }
   .row.cont { margin-top: .13rem; }
@@ -158,7 +165,10 @@
   <a href="/logout" class="icon-btn" title="나가기" aria-label="나가기">🚪</a>
 </header>
 
-<div id="log" class="hidden"></div>
+<div id="log-wrap" class="hidden">
+  <div id="log"></div>
+  <button id="to-bottom" type="button" hidden aria-label="맨 아래로">⬇</button>
+</div>
 
 <div id="picker" hidden>
   <div id="tabs" role="tablist"></div>
@@ -363,6 +373,11 @@ function clearCache() {
 const log = () => $("log");
 function atBottom() { const el = log(); return el.scrollHeight - el.scrollTop - el.clientHeight < 80; }
 function scroll() { log().scrollTop = log().scrollHeight; }
+function scrollToBottom(smooth) { const el = log(); el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "auto" }); }
+// 스크롤이 위로 올라가 있으면 "맨 아래로" 버튼을 띄운다(바닥 근처면 숨김).
+function updateToBottom() { const b = $("to-bottom"); if (b) b.hidden = atBottom(); }
+log().addEventListener("scroll", updateToBottom, { passive: true });
+$("to-bottom").addEventListener("click", () => scrollToBottom(true));
 
 // 복호화가 끝난 레코드({seq,kind,at,name, text?|sticker?|photo blob|broken})를 그린다.
 // 말풍선 묶어읽기(카톡 벤치마킹): ① 날짜가 바뀌면 가운데 날짜 구분선 ② 같은
@@ -429,6 +444,7 @@ function appendRecord(rec) {
     first.remove();
   }
   if (stick) scroll();
+  updateToBottom(); // 위를 보는 중 새 메시지가 오면 ⬇ 버튼을 띄운다
 }
 
 // 서버에서 온 암호화 항목: 복호화 → 그리기 → 이 기기 캐시에 저장(broken은 캐시 안 함).
@@ -663,7 +679,7 @@ $("enter").addEventListener("click", async () => {
   localStorage.setItem("duri:name", name);
   localStorage.setItem("duri:pass", pass); // 이 기기에만 저장 — 서버로 전송되지 않음
   $("setup").classList.add("hidden");
-  for (const el of ["bar", "log", "composer"]) $(el).classList.remove("hidden");
+  for (const el of ["bar", "log-wrap", "composer"]) $(el).classList.remove("hidden");
   await loadPacks(); // 백필 스티커 렌더 전에 팩 목록 확보
   db = await openDB();
   // 이 기기 캐시의 최근 분만 그린 뒤(새로고침에도 대화 유지, 화면은 가볍게),
