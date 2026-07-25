@@ -94,6 +94,11 @@
               padding: env(safe-area-inset-top, 0px) 1rem env(safe-area-inset-bottom, 0px); }
   #lightbox[hidden] { display: none; }
   #lightbox img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: .3rem; }
+  #lb-save { position: absolute; left: 50%; transform: translateX(-50%);
+             bottom: calc(1.2rem + env(safe-area-inset-bottom, 0px));
+             font: inherit; font-size: .85rem; font-weight: 600; padding: .6rem 1.1rem; border: 0;
+             border-radius: 1.2rem; background: #ffffffee; color: #10151c; cursor: pointer;
+             box-shadow: 0 4px 16px #0006; }
   /* 스티커는 정사각 자리를 먼저 잡고, 말풍선 배경 없이 투명하게 */
   .bubble.sticker, .row.me .bubble.sticker { background: none; border: none; padding: .2rem; }
   .bubble.sticker img { width: 8.5rem; aspect-ratio: 1 / 1; height: auto; border-radius: 0; }
@@ -221,7 +226,10 @@
 
 <div id="toast" hidden></div>
 
-<div id="lightbox" hidden><img alt="사진"></div>
+<div id="lightbox" hidden>
+  <img alt="사진">
+  <button id="lb-save" type="button" title="사진 저장">⬇ 저장</button>
+</div>
 
 <script>
 "use strict";
@@ -417,6 +425,37 @@ function updateToBottom() { const b = $("to-bottom"); if (b) b.hidden = atBottom
 log().addEventListener("scroll", updateToBottom, { passive: true });
 $("to-bottom").addEventListener("click", () => scrollToBottom(true));
 $("lightbox").addEventListener("click", () => { const lb = $("lightbox"); lb.hidden = true; lb.querySelector("img").src = ""; });
+
+// 사진 저장: 매직바이트로 이미지 타입을 판별해 올바른 확장자로. 모바일은 Web Share
+// (공유 시트 → "이미지 저장"), 안 되면 <a download> 폴백(데스크톱).
+async function imageKind(blob) {
+  const b = new Uint8Array(await blob.slice(0, 12).arrayBuffer());
+  if (b[0] === 0x89 && b[1] === 0x50) return { type: "image/png", ext: "png" };
+  if (b[0] === 0xFF && b[1] === 0xD8) return { type: "image/jpeg", ext: "jpg" };
+  if (b[0] === 0x47 && b[1] === 0x49) return { type: "image/gif", ext: "gif" };
+  if (b[0] === 0x52 && b[1] === 0x49 && b[8] === 0x57 && b[9] === 0x45) return { type: "image/webp", ext: "webp" };
+  return { type: "image/jpeg", ext: "jpg" };
+}
+$("lb-save").addEventListener("click", async (e) => {
+  e.stopPropagation(); // 뷰어가 닫히지 않게
+  const src = $("lightbox").querySelector("img").src;
+  if (!src) return;
+  try {
+    const blob = await (await fetch(src)).blob();
+    const { type, ext } = await imageKind(blob);
+    const file = new File([blob], `duri-${Date.now()}.${ext}`, { type });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file] }); // iOS/안드로이드: 시트에서 "이미지 저장"
+    } else {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob); a.download = file.name;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }
+  } catch (err) {
+    if (err?.name !== "AbortError") { console.warn("save failed", err); alert("사진을 저장하지 못했어요."); }
+  }
+});
 
 // 복호화가 끝난 레코드({seq,kind,at,name, text?|sticker?|photo blob|broken})를 그린다.
 // 말풍선 묶어읽기(카톡 벤치마킹): ① 날짜가 바뀌면 가운데 날짜 구분선 ② 같은
