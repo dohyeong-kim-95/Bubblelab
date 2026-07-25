@@ -452,43 +452,42 @@ document.addEventListener("keydown", (e) => {
   else if (e.key === "Escape") closeLb();
 });
 
-// 사진 저장: 매직바이트로 이미지 타입을 판별해 올바른 확장자로. 모바일은 Web Share
-// (공유 시트 → "이미지 저장"), 안 되면 <a download> 폴백(데스크톱). 여러 장이면 한 번에.
-async function imageKind(blob) {
-  const b = new Uint8Array(await blob.slice(0, 12).arrayBuffer());
-  if (b[0] === 0x89 && b[1] === 0x50) return { type: "image/png", ext: "png" };
-  if (b[0] === 0xFF && b[1] === 0xD8) return { type: "image/jpeg", ext: "jpg" };
-  if (b[0] === 0x47 && b[1] === 0x49) return { type: "image/gif", ext: "gif" };
-  if (b[0] === 0x52 && b[1] === 0x49 && b[8] === 0x57 && b[9] === 0x45) return { type: "image/webp", ext: "webp" };
-  return { type: "image/jpeg", ext: "jpg" };
-}
-async function saveImages(urls) {
-  const files = [];
-  for (let i = 0; i < urls.length; i++) {
-    const blob = await (await fetch(urls[i])).blob();
-    const { type, ext } = await imageKind(blob);
-    files.push(new File([blob], `duri-${Date.now()}-${i + 1}.${ext}`, { type }));
-  }
-  if (!files.length) return;
-  if (navigator.canShare && navigator.canShare({ files })) {
-    await navigator.share({ files }); // iOS/안드로이드: 시트에서 "이미지 저장"(여러 장 한 번에)
-  } else {
-    for (const f of files) {
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(f); a.download = f.name;
-      document.body.appendChild(a); a.click(); a.remove();
-      await new Promise((r) => setTimeout(r, 250));
-      URL.revokeObjectURL(a.href);
-    }
-  }
-}
-function runSave(urls) {
-  saveImages(urls).catch((err) => {
-    if (err?.name !== "AbortError") { console.warn("save failed", err); alert("사진을 저장하지 못했어요."); }
+// 사진 저장. iOS는 navigator.share 가 "사용자 탭" 활성화 안에서 동기로 호출돼야
+// 하므로(중간에 await 하면 NotAllowedError), 복호화 시점에 미리 담아둔 blob 으로
+// File 을 동기 생성해 바로 공유한다. 공유 실패/미지원이면 다운로드로 폴백.
+const EXT = { "image/png": "png", "image/gif": "gif", "image/webp": "webp" };
+const toFile = (blob, i) => new File([blob], `duri-${Date.now()}-${i}.${EXT[blob.type] || "jpg"}`,
+  { type: blob.type || "image/jpeg" });
+function downloadFiles(files) {
+  files.forEach((f, k) => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(f); a.download = f.name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1200 + k * 300);
   });
 }
-$("lb-save").addEventListener("click", (e) => { e.stopPropagation(); if (lbUrls[lbIndex]) runSave([lbUrls[lbIndex]]); });
-$("lb-save-all").addEventListener("click", (e) => { e.stopPropagation(); if (lbUrls.length) runSave(lbUrls); });
+function shareOrDownload(files) {
+  if (!files.length) return;
+  try {
+    if (navigator.canShare && navigator.canShare({ files })) {
+      // await 없이 즉시 호출 → 사용자 제스처 활성화 유지. 실패 시 다운로드 폴백.
+      navigator.share({ files }).catch((err) => { if (err?.name !== "AbortError") downloadFiles(files); });
+      return;
+    }
+  } catch { /* canShare 예외 → 다운로드로 */ }
+  downloadFiles(files);
+}
+$("lb-save").addEventListener("click", (e) => {
+  e.stopPropagation();
+  const blob = lbBlobs[lbIndex];
+  if (blob) shareOrDownload([toFile(blob, 1)]);
+  else alert("사진을 저장할 수 없어요. 새로고침 후 다시 시도해 주세요.");
+});
+$("lb-save-all").addEventListener("click", (e) => {
+  e.stopPropagation();
+  const files = lbBlobs.filter(Boolean).map((b, i) => toFile(b, i + 1));
+  if (files.length) shareOrDownload(files);
+});
 
 // 복호화가 끝난 레코드({seq,kind,at,name, text?|sticker?|photo blob|broken})를 그린다.
 // 말풍선 묶어읽기(카톡 벤치마킹): ① 날짜가 바뀌면 가운데 날짜 구분선 ② 같은
@@ -501,13 +500,14 @@ const albumBubbles = new Map();
 const randToken = () => Array.from(crypto.getRandomValues(new Uint8Array(12)),
   (b) => "abcdefghijklmnopqrstuvwxyz0123456789"[b % 36]).join("");
 // 전체화면 뷰어(라이트박스): 앨범이면 좌우 스와이프로 넘기고, 묶음 전체 저장도.
-let lbUrls = [], lbIndex = 0, lbAnimating = false;
+let lbUrls = [], lbBlobs = [], lbIndex = 0, lbAnimating = false;
 function updateLbBar() {
   $("lb-count").textContent = lbUrls.length > 1 ? `${lbIndex + 1} / ${lbUrls.length}` : "";
   $("lb-save-all").hidden = lbUrls.length <= 1;
 }
-function openLightbox(urls, index = 0) {
+function openLightbox(urls, index = 0, blobs = []) {
   lbUrls = Array.isArray(urls) ? urls.slice() : [urls];
+  lbBlobs = blobs.slice();
   lbIndex = Math.max(0, Math.min(index, lbUrls.length - 1));
   const img = $("lightbox").querySelector("img");
   img.style.transition = "none"; img.style.transform = "translateX(0)"; img.style.opacity = "1";
@@ -548,11 +548,12 @@ function closeLb() { const lb = $("lightbox"); lb.hidden = true; lb.querySelecto
 function photoImg(blob, alt) {
   const img = document.createElement("img");
   img.alt = alt || "사진"; img.decoding = "async";
+  img.__blob = blob; // 저장 시 동기적으로 File 을 만들기 위해 원본 blob 을 붙여둔다
   img.src = URL.createObjectURL(blob);
   img.addEventListener("click", () => {
     const album = img.closest(".bubble.album");
     const imgs = album ? [...album.querySelectorAll("img")] : [img];
-    openLightbox(imgs.map((i) => i.src), imgs.indexOf(img));
+    openLightbox(imgs.map((i) => i.src), imgs.indexOf(img), imgs.map((i) => i.__blob));
   });
   return img;
 }
@@ -672,13 +673,22 @@ function buildBubble(row, name, at, fill, showName) {
   return t;
 }
 
+// 매직바이트로 이미지 타입 판별(동기). 저장 시 올바른 확장자·타입에 쓴다.
+function sniffImageType(bytes) {
+  if (bytes[0] === 0x89 && bytes[1] === 0x50) return "image/png";
+  if (bytes[0] === 0xFF && bytes[1] === 0xD8) return "image/jpeg";
+  if (bytes[0] === 0x47 && bytes[1] === 0x49) return "image/gif";
+  if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[8] === 0x57 && bytes[9] === 0x45) return "image/webp";
+  return "image/jpeg";
+}
 async function fetchPhotoBlob(m) {
   try {
     const res = await fetch(`/_duri/photo/${m.r2key}`, { cache: "no-store" });
     if (!res.ok) return null;
     const encbuf = await res.arrayBuffer();
     const plain = await decryptBytes(m.imgIv, encbuf);
-    return new Blob([plain]);
+    // 타입을 블롭에 새겨 둔다(저장 시 동기적으로 File 을 만들 수 있게).
+    return new Blob([plain], { type: sniffImageType(new Uint8Array(plain)) });
   } catch { return null; }
 }
 
