@@ -161,6 +161,7 @@
   <div class="menu-wrap">
     <button id="menu-btn" class="icon-btn" title="설정" aria-haspopup="true" aria-expanded="false">⚙️</button>
     <div id="menu" class="menu" role="menu" hidden>
+      <button id="relogin" role="menuitem" title="암호 문구를 잘못 입력했을 때 다시 입력">🔑 문구 다시 입력</button>
       <button id="clear-cache" role="menuitem" title="이 기기에 저장된 대화 기록만 지우기">🧹 기록 지우기</button>
       <button id="reset-room" class="danger" role="menuitem" title="서버에 남은 대화·사진을 양쪽 모두에서 지우고 새로 시작">🗑️ 방 초기화</button>
     </div>
@@ -723,6 +724,16 @@ document.addEventListener("click", (e) => {
 });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenu(); });
 
+// 문구 다시 입력: 저장된 문구를 지우고 셋업 화면으로 돌아간다(이름은 유지·미리채움).
+// 캐시·커서도 초기화해, 올바른 문구로 처음부터 다시 받아와 복호화되게 한다.
+$("relogin").addEventListener("click", async () => {
+  closeMenu();
+  if (!confirm("암호 문구를 다시 입력할까요?\n이 기기의 임시 기록을 지우고 새 문구로 처음부터 다시 받아옵니다.\n(상대 기기·PC 백업은 그대로예요)")) return;
+  await clearCache();                    // lastSeq + IndexedDB 초기화
+  localStorage.removeItem("duri:pass");  // 저장된 문구만 삭제(이름은 남겨 미리 채운다)
+  location.reload();                     // 저장된 문구가 없어 셋업 화면이 뜬다
+});
+
 $("clear-cache").addEventListener("click", async () => {
   closeMenu();
   if (!confirm("이 기기에 저장된 대화 기록을 지울까요?\n(상대 기기와 PC 백업은 그대로예요)")) return;
@@ -797,7 +808,8 @@ $("file").addEventListener("change", (e) => {
 (async () => {
   const savedPass = localStorage.getItem("duri:pass");
   const savedName = localStorage.getItem("duri:name");
-  if (savedPass && savedName) { $("pass").value = savedPass; $("name").value = savedName; $("enter").click(); }
+  if (savedName) $("name").value = savedName; // 이름은 항상 미리 채운다(문구만 다시 입력 시 편하게)
+  if (savedPass && savedName) { $("pass").value = savedPass; $("enter").click(); }
 })();
 </script>
 </body>
