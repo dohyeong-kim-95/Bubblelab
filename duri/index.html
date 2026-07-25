@@ -20,6 +20,9 @@
           --panel: light-dark(#ffffff, #161c25); --bg: light-dark(#fafbfc, #10151c); --dim: light-dark(#5b6875, #8b97a6);
           --kb: 18rem; /* 측정된 키보드 높이(JS가 갱신) — 서랍을 키보드와 같은 높이로 */ }
   * { box-sizing: border-box; }
+  /* iOS 더블탭-확대 제스처가 스티커 두 번째 탭을 먹지 않게 — 컨트롤은 두 번 탭을
+     두 번 클릭으로 처리한다(핀치 줌은 그대로). */
+  button, a, label, #grid img, #grid button { touch-action: manipulation; }
   html, body { height: 100%; margin: 0; }
   body { font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
          color: light-dark(#1c2733, #e2e9f0); background: var(--bg);
