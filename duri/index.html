@@ -24,7 +24,11 @@
   body { font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
          color: light-dark(#1c2733, #e2e9f0); background: var(--bg);
          display: flex; flex-direction: column; }
-  header { display: flex; align-items: center; gap: .5rem; padding: .7rem 1rem;
+  /* 노치·다이나믹 아일랜드 밑까지 화면이 차므로(standalone + viewport-fit=cover),
+     헤더 상단·좌우에 안전영역 인셋을 더해 버튼이 가려지지 않게 한다. */
+  header { display: flex; align-items: center; gap: .5rem;
+           padding: calc(.7rem + env(safe-area-inset-top, 0px)) calc(1rem + env(safe-area-inset-right, 0px))
+                    .7rem calc(1rem + env(safe-area-inset-left, 0px));
            border-bottom: 1px solid var(--line); background: var(--panel); }
   header .mark { font-size: 1.2rem; }
   header b { font-size: .95rem; }
@@ -90,9 +94,10 @@
   #photo-tray .thumb .rm { position: absolute; top: -.35rem; right: -.35rem; width: 1.25rem; height: 1.25rem;
                            border-radius: 50%; border: 0; background: light-dark(#000a, #000d); color: #fff;
                            font-size: .7rem; line-height: 1; cursor: pointer; padding: 0; }
-  form { display: flex; gap: .5rem; padding: .6rem; border-top: 1px solid var(--line); background: var(--panel);
+  form { display: flex; gap: .5rem; border-top: 1px solid var(--line); background: var(--panel);
          max-width: 44rem; width: 100%; margin: 0 auto; align-items: flex-end;
-         padding-bottom: calc(.6rem + env(safe-area-inset-bottom)); }
+         padding: .6rem calc(.6rem + env(safe-area-inset-right, 0px))
+                  calc(.6rem + env(safe-area-inset-bottom, 0px)) calc(.6rem + env(safe-area-inset-left, 0px)); }
   textarea { flex: 1; resize: none; font: inherit; padding: .55rem .7rem; border-radius: .8rem;
              border: 1px solid var(--line); background: var(--bg); color: inherit; max-height: 8rem; }
   button, label.attach { font: inherit; border: 1px solid var(--line); background: var(--bg); color: inherit;
@@ -123,7 +128,8 @@
   #grid .emoji { font-size: 1.7rem; line-height: 1; padding: .3rem 0; border: 0; }
   #grid .emoji:hover { background: light-dark(#00000010, #ffffff18); }
 
-  .overlay { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 1.5rem; }
+  .overlay { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center;
+             padding: calc(1.5rem + env(safe-area-inset-top, 0px)) 1.5rem calc(1.5rem + env(safe-area-inset-bottom, 0px)); }
   .card { max-width: 24rem; width: 100%; }
   .card h1 { font-size: 1.2rem; }
   .card p { font-size: .85rem; color: var(--dim); line-height: 1.7; }
