@@ -140,6 +140,12 @@
                  color: light-dark(#fff, #1a1016); border: none; border-radius: .7rem; font-weight: 600; }
   .card .warn { font-size: .72rem; color: light-dark(#b4453a, #f0a8a2); margin-top: .8rem; }
   .hidden { display: none !important; }
+  /* 하단 토스트(뒤로가기 종료 안내 등) */
+  #toast { position: fixed; left: 50%; transform: translateX(-50%); z-index: 100; pointer-events: none;
+           bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+           background: light-dark(#1c2733ee, #e2e9f0ee); color: light-dark(#fff, #10151c);
+           font-size: .8rem; padding: .5rem .9rem; border-radius: 1rem; box-shadow: 0 4px 16px #0004; }
+  #toast[hidden] { display: none; }
 </style>
 </head>
 <body>
@@ -194,6 +200,8 @@
   <textarea id="text" rows="1" placeholder="메시지…" autocomplete="off"></textarea>
   <button type="submit" class="send" id="sendBtn">보내기</button>
 </form>
+
+<div id="toast" hidden></div>
 
 <script>
 "use strict";
@@ -729,6 +737,28 @@ document.addEventListener("click", (e) => {
   if (!menu.hidden && !menu.contains(e.target) && e.target !== menuBtn) closeMenu();
 });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenu(); });
+
+// 뒤로가기(안드로이드 하드웨어 백/제스처) 처리: 로그인 화면으로 나가지 않고,
+// 서랍·메뉴가 열려 있으면 그것부터 닫고, 아니면 "한 번 더 누르면 종료" 안내 후
+// 두 번째에 앱을 벗어난다(History API 트랩 — 표준 "두 번 눌러 종료" 패턴).
+const toast = $("toast");
+let toastTimer;
+function showToast(msg, ms = 2000) {
+  toast.textContent = msg; toast.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { toast.hidden = true; }, ms);
+}
+let backArmed = false, backTimer;
+const trapBack = () => history.pushState(null, "", location.href);
+trapBack(); // 초기 방어 상태
+window.addEventListener("popstate", () => {
+  if (!picker.hidden) { closePicker(); trapBack(); return; } // 서랍 먼저 닫기
+  if (!menu.hidden) { closeMenu(); trapBack(); return; }     // 메뉴 먼저 닫기
+  if (backArmed) { backArmed = false; history.back(); return; } // 두 번째 → 앱 종료
+  trapBack();                                                // 앱에 머문다
+  showToast("한 번 더 누르면 종료됩니다");
+  backArmed = true;
+  clearTimeout(backTimer); backTimer = setTimeout(() => { backArmed = false; }, 2000);
+});
 
 // 문구 다시 입력: 저장된 문구를 지우고 셋업 화면으로 돌아간다(이름은 유지·미리채움).
 // 캐시·커서도 초기화해, 올바른 문구로 처음부터 다시 받아와 복호화되게 한다.
