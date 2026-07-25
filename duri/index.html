@@ -23,6 +23,7 @@
   /* iOS 더블탭-확대 제스처가 스티커 두 번째 탭을 먹지 않게 — 컨트롤은 두 번 탭을
      두 번 클릭으로 처리한다(핀치 줌은 그대로). */
   button, a, label, #grid img, #grid button { touch-action: manipulation; }
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; } /* iOS가 rem을 자동확대하지 않게 */
   html, body { height: 100%; margin: 0; }
   body { font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
          color: light-dark(#1c2733, #e2e9f0); background: var(--bg);
@@ -77,11 +78,11 @@
   .bubble { padding: .5rem .75rem; border-radius: .9rem; background: var(--panel); border: 1px solid var(--line);
             white-space: pre-wrap; word-break: break-word; line-height: 1.5; font-size: .92rem; }
   .row.me .bubble { background: light-dark(#fbe6f0, #3a2233); border-color: light-dark(#f2cfe1, #4d2c40); }
-  .bubble img { max-width: min(20rem, 70vw); border-radius: .5rem; display: block; cursor: pointer; }
+  .bubble img { max-width: 18rem; border-radius: .5rem; display: block; cursor: pointer; }
   .bubble .cap { font-size: .82rem; margin-top: .3rem; color: var(--dim); }
   /* 앨범(묶어보내기): 한 말풍선 안 사진 그리드. 사진이 올라오는 대로 채워진다. */
   .bubble.album, .row.me .bubble.album { background: none; border: none; padding: .1rem;
-                                         display: grid; gap: .15rem; max-width: min(20rem, 72vw); }
+                                         display: grid; gap: .15rem; max-width: 18rem; }
   .bubble.album { grid-template-columns: repeat(3, 1fr); } /* 5장+ 기본 3열 */
   .bubble.album[data-n="2"], .bubble.album[data-n="4"] { grid-template-columns: repeat(2, 1fr); }
   .bubble.album[data-n="3"] { grid-template-columns: repeat(3, 1fr); }
@@ -95,7 +96,7 @@
   #lightbox img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: .3rem; }
   /* 스티커는 정사각 자리를 먼저 잡고, 말풍선 배경 없이 투명하게 */
   .bubble.sticker, .row.me .bubble.sticker { background: none; border: none; padding: .2rem; }
-  .bubble.sticker img { width: clamp(6rem, 30vw, 8.5rem); aspect-ratio: 1 / 1; height: auto; border-radius: 0; }
+  .bubble.sticker img { width: 8.5rem; aspect-ratio: 1 / 1; height: auto; border-radius: 0; }
   .time { font-size: .62rem; color: var(--dim); margin: .1rem .3rem 0; }
   .broken { color: light-dark(#b4453a, #f0a8a2); font-size: .82rem; }
 
