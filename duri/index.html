@@ -77,8 +77,22 @@
   .bubble { padding: .5rem .75rem; border-radius: .9rem; background: var(--panel); border: 1px solid var(--line);
             white-space: pre-wrap; word-break: break-word; line-height: 1.5; font-size: .92rem; }
   .row.me .bubble { background: light-dark(#fbe6f0, #3a2233); border-color: light-dark(#f2cfe1, #4d2c40); }
-  .bubble img { max-width: min(20rem, 70vw); border-radius: .5rem; display: block; }
+  .bubble img { max-width: min(20rem, 70vw); border-radius: .5rem; display: block; cursor: pointer; }
   .bubble .cap { font-size: .82rem; margin-top: .3rem; color: var(--dim); }
+  /* 앨범(묶어보내기): 한 말풍선 안 사진 그리드. 사진이 올라오는 대로 채워진다. */
+  .bubble.album, .row.me .bubble.album { background: none; border: none; padding: .1rem;
+                                         display: grid; gap: .15rem; max-width: min(20rem, 72vw); }
+  .bubble.album { grid-template-columns: repeat(3, 1fr); } /* 5장+ 기본 3열 */
+  .bubble.album[data-n="2"], .bubble.album[data-n="4"] { grid-template-columns: repeat(2, 1fr); }
+  .bubble.album[data-n="3"] { grid-template-columns: repeat(3, 1fr); }
+  .bubble.album img { width: 100%; max-width: none; aspect-ratio: 1 / 1; object-fit: cover;
+                      border-radius: .35rem; }
+  /* 사진 전체화면 뷰어(라이트박스) */
+  #lightbox { position: fixed; inset: 0; z-index: 200; background: #000000ee; display: flex;
+              align-items: center; justify-content: center;
+              padding: env(safe-area-inset-top, 0px) 1rem env(safe-area-inset-bottom, 0px); }
+  #lightbox[hidden] { display: none; }
+  #lightbox img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: .3rem; }
   /* 스티커는 정사각 자리를 먼저 잡고, 말풍선 배경 없이 투명하게 */
   .bubble.sticker, .row.me .bubble.sticker { background: none; border: none; padding: .2rem; }
   .bubble.sticker img { width: clamp(6rem, 30vw, 8.5rem); aspect-ratio: 1 / 1; height: auto; border-radius: 0; }
@@ -205,6 +219,8 @@
 </form>
 
 <div id="toast" hidden></div>
+
+<div id="lightbox" hidden><img alt="사진"></div>
 
 <script>
 "use strict";
@@ -399,18 +415,45 @@ function scrollToBottom(smooth) { const el = log(); el.scrollTo({ top: el.scroll
 function updateToBottom() { const b = $("to-bottom"); if (b) b.hidden = atBottom(); }
 log().addEventListener("scroll", updateToBottom, { passive: true });
 $("to-bottom").addEventListener("click", () => scrollToBottom(true));
+$("lightbox").addEventListener("click", () => { const lb = $("lightbox"); lb.hidden = true; lb.querySelector("img").src = ""; });
 
 // 복호화가 끝난 레코드({seq,kind,at,name, text?|sticker?|photo blob|broken})를 그린다.
 // 말풍선 묶어읽기(카톡 벤치마킹): ① 날짜가 바뀌면 가운데 날짜 구분선 ② 같은
 // 사람의 연속 메시지는 이름 한 번·간격 좁게(그룹화) ③ 같은 사람·같은 분(minute)
 // 연속이면 시간을 마지막 하나에만(직전 시간을 감춘다). 아래 상태로 직전 문맥을 기억.
 let grpSender = null, grpMinute = -1, grpDay = null, grpTimeEl = null;
+// 앨범(묶어보내기) 버블 추적: 앨범 id → 그리드 요소. 같은 id의 사진은 이 그리드에
+// 이어붙인다(중간에 텍스트가 끼어도 id로 찾아 같은 앨범에 담는다).
+const albumBubbles = new Map();
+const randToken = () => Array.from(crypto.getRandomValues(new Uint8Array(12)),
+  (b) => "abcdefghijklmnopqrstuvwxyz0123456789"[b % 36]).join("");
+function openLightbox(url) { const lb = $("lightbox"); lb.querySelector("img").src = url; lb.hidden = false; }
+// 탭하면 전체화면으로 열리는 사진 img.
+function photoImg(blob, alt) {
+  const img = document.createElement("img");
+  img.alt = alt || "사진"; img.decoding = "async";
+  img.src = URL.createObjectURL(blob);
+  img.addEventListener("click", () => openLightbox(img.src));
+  return img;
+}
 
 function appendRecord(rec) {
   if (seen.has(rec.seq)) return;
   seen.add(rec.seq);
   if (rec.seq > getLastSeq()) setLastSeq(rec.seq);
   const stick = atBottom();
+
+  // 앨범 사진: 같은 앨범 id 버블이 화면에 있으면 새 말풍선 대신 거기에 이어붙인다.
+  if (rec.album && rec.blob) {
+    const grid = albumBubbles.get(rec.album.id);
+    if (grid && grid.isConnected) {
+      grid.appendChild(photoImg(rec.blob, rec.caption));
+      if (stick) scroll();
+      updateToBottom();
+      return;
+    }
+    if (grid) albumBubbles.delete(rec.album.id);
+  }
 
   const at = rec.at;
   const mine = rec.name && rec.name === MY_NAME;
@@ -437,13 +480,17 @@ function appendRecord(rec) {
   const row = document.createElement("div");
   row.className = cont ? "row cont" : "row";
   let timeEl;
-  if (rec.kind === "photo" && rec.blob) {
+  if (rec.album && rec.blob) {
     timeEl = buildBubble(row, rec.name, at, (b) => {
-      const img = document.createElement("img");
-      img.alt = rec.caption || "사진";
-      b.appendChild(img);
+      b.classList.add("album");
+      b.dataset.n = String(rec.album.n);
+      b.appendChild(photoImg(rec.blob, rec.caption));
+      albumBubbles.set(rec.album.id, b); // 이후 같은 앨범 사진이 이 그리드에 붙는다
+    }, showName);
+  } else if (rec.kind === "photo" && rec.blob) {
+    timeEl = buildBubble(row, rec.name, at, (b) => {
+      b.appendChild(photoImg(rec.blob, rec.caption));
       if (rec.caption) { const c = document.createElement("div"); c.className = "cap"; c.textContent = rec.caption; b.appendChild(c); }
-      img.src = URL.createObjectURL(rec.blob);
     }, showName);
   } else if (rec.sticker && PACK_IDS.has(rec.sticker.pack)) {
     timeEl = buildBubble(row, rec.name, at, (b) => { b.classList.add("sticker"); b.appendChild(stickerImg(rec.sticker.pack, rec.sticker.n, "스티커")); }, showName);
@@ -482,6 +529,7 @@ async function renderEntry(m) {
       const blob = await fetchPhotoBlob(m); // R2가 정리되기 전에 받아 캐시에 담는다
       if (blob) {
         const rec = { seq: m.seq, kind: "photo", at: meta.at ?? m.at, name: meta.name, caption: meta.caption, blob };
+        if (m.album) rec.album = m.album; // 앨범 묶음(평문 그룹정보)
         appendRecord(rec); putEntry(rec);
       } else {
         appendRecord({ seq: m.seq, at: m.at, broken: "사진을 불러올 수 없습니다 (이미 백업되어 정리됨)" });
@@ -525,16 +573,14 @@ async function sendSticker(pack, n) {
   ws.send(JSON.stringify({ type: "msg", ...frame }));
   rememberSticker(pack, n);
 }
-async function sendPhoto(file) {
+async function sendPhoto(file, album) {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const sha256 = hex(await crypto.subtle.digest("SHA-256", bytes));
   const img = await encryptBytes(bytes);
   const meta = await encryptJson({ name: MY_NAME, at: Date.now() }); // 파일명 캡션 없이 원본만
-  const res = await fetch("/_duri/photo", {
-    method: "POST",
-    headers: { "X-Duri-Img-Iv": img.iv, "X-Duri-Sha256": sha256, "X-Duri-Meta-Iv": meta.iv, "X-Duri-Meta": meta.ct },
-    body: img.ct,
-  });
+  const headers = { "X-Duri-Img-Iv": img.iv, "X-Duri-Sha256": sha256, "X-Duri-Meta-Iv": meta.iv, "X-Duri-Meta": meta.ct };
+  if (album) headers["X-Duri-Album"] = `${album.id}.${album.i}.${album.n}`; // 묶어보내기 그룹정보(평문)
+  const res = await fetch("/_duri/photo", { method: "POST", headers, body: img.ct });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     alert(`사진 전송 실패: ${res.status}\n원본 ${(bytes.length / 1048576).toFixed(1)}MB\n${detail}`);
@@ -545,7 +591,6 @@ async function sendPhoto(file) {
 
 // ── 사진 미리보기 트레이 (카톡식: 여러 장 담아 확인 후 보내기) ──
 let pendingPhotos = []; // [{ file, url }]
-let photoSending = false;
 const photoTray = () => $("photo-tray");
 
 function renderTray() {
@@ -566,19 +611,22 @@ function renderTray() {
   });
 }
 
-async function sendPendingPhotos() {
-  if (photoSending || !pendingPhotos.length) return;
-  photoSending = true;
-  photoTray().classList.add("sending");
-  const sendBtn = $("sendBtn");
-  sendBtn.disabled = true; sendBtn.textContent = "전송 중…";
-  const batch = pendingPhotos.slice();
-  for (const p of batch) { await sendPhoto(p.file); URL.revokeObjectURL(p.url); }
+// 백그라운드 전송: 트레이를 즉시 비워 입력창을 계속 쓸 수 있게 하고(업로드 중
+// 채팅 가능 — 카톡식), 사진은 완료되는 대로 채팅에 쌓인다. 2장 이상이면 공유
+// 앨범 id 를 붙여 한 말풍선(그리드)으로 묶인다.
+function sendPendingPhotos() {
+  if (!pendingPhotos.length) return;
+  const batch = pendingPhotos;
   pendingPhotos = [];
-  photoTray().classList.remove("sending");
-  sendBtn.disabled = false; sendBtn.textContent = "보내기";
-  photoSending = false;
-  renderTray();
+  renderTray(); // 트레이 비움 → 입력창 자유
+  const n = batch.length;
+  const albumId = (n >= 2 && n <= 30) ? randToken() : null; // 서버 앨범 상한(n≤30)과 일치
+  (async () => {
+    for (let i = 0; i < n; i++) {
+      await sendPhoto(batch[i].file, albumId ? { id: albumId, i: i + 1, n } : null);
+      URL.revokeObjectURL(batch[i].url);
+    }
+  })();
 }
 
 // ── 스티커 서랍 ──────────────────────────────────────────────
@@ -754,6 +802,8 @@ let backArmed = false, backTimer;
 const trapBack = () => history.pushState(null, "", location.href);
 trapBack(); // 초기 방어 상태
 window.addEventListener("popstate", () => {
+  const lb = $("lightbox");
+  if (!lb.hidden) { lb.hidden = true; lb.querySelector("img").src = ""; trapBack(); return; } // 사진 뷰어 먼저 닫기
   if (!picker.hidden) { closePicker(); trapBack(); return; } // 서랍 먼저 닫기
   if (!menu.hidden) { closeMenu(); trapBack(); return; }     // 메뉴 먼저 닫기
   if (backArmed) { backArmed = false; history.back(); return; } // 두 번째 → 앱 종료

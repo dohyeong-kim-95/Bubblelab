@@ -65,6 +65,17 @@ export function validatePhotoMeta({ imgIv, sha256, metaIv, metaCt }) {
   return { imgIv, sha256, metaIv, metaCt };
 }
 
+// 앨범(묶어보내기) 헤더 "id.i.n" 파싱. 그룹 정보(어느 사진들이 한 묶음인지)만
+// 평문이고 사진 내용·메타는 여전히 암호블롭이다. 형식이 아니면 null.
+export function parseAlbumHeader(value) {
+  if (typeof value !== "string") return null;
+  const m = /^([A-Za-z0-9]{6,32})\.([0-9]{1,2})\.([0-9]{1,2})$/.exec(value);
+  if (!m) return null;
+  const i = Number(m[2]), n = Number(m[3]);
+  if (n < 2 || n > 30 || i < 1 || i > n) return null;
+  return { id: m[1], i, n };
+}
+
 // 안전한 R2 키인지 (버퍼 항목이 참조하는 사진만 다운로드 허용)
 const R2_KEY = /^photo\/[0-9]{12}-[A-Za-z0-9]{8,32}$/;
 export const isPhotoKey = (key) => typeof key === "string" && R2_KEY.test(key);
@@ -309,10 +320,12 @@ export class DuriDO {
     await this.env.DURI_BUCKET.put(r2key, body, {
       httpMetadata: { contentType: "application/octet-stream" },
     });
+    const album = parseAlbumHeader(request.headers.get("X-Duri-Album"));
     const entry = await this.state.blockConcurrencyWhile(() => this.append({
       kind: "photo", at: Date.now(), r2key,
       imgIv: meta.imgIv, sha256: meta.sha256, bytes: body.byteLength,
       metaIv: meta.metaIv, metaCt: meta.metaCt,
+      ...(album ? { album } : {}),
     }));
     return Response.json({ seq: entry.seq, r2key }, { headers: { "Cache-Control": "no-store" } });
   }

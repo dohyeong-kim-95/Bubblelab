@@ -8,6 +8,7 @@ import {
   validateMsgFrame,
   validatePhotoMeta,
   isPhotoKey,
+  parseAlbumHeader,
 } from "./duri.js";
 
 // storage.list 가 CF처럼 Map 을 돌려주는 최소 가짜 스토리지.
@@ -75,6 +76,17 @@ test("isPhotoKey accepts only server-minted keys", () => {
   assert.equal(isPhotoKey("../secret"), false);
   assert.equal(isPhotoKey("photo/000000000012-abcd1234/extra"), false);
   assert.equal(isPhotoKey(42), false);
+});
+
+test("parseAlbumHeader accepts id.i.n within bounds only", () => {
+  assert.deepEqual(parseAlbumHeader("ab12cd34.1.3"), { id: "ab12cd34", i: 1, n: 3 });
+  assert.deepEqual(parseAlbumHeader("ABCdef.2.2"), { id: "ABCdef", i: 2, n: 2 });
+  assert.equal(parseAlbumHeader("ab12cd34.1.1"), null); // n<2 는 앨범 아님(단일)
+  assert.equal(parseAlbumHeader("ab12cd34.4.3"), null); // i>n
+  assert.equal(parseAlbumHeader("ab12cd34.1.99"), null); // n>30
+  assert.equal(parseAlbumHeader("short.1.2"), null); // id 길이 부족(<6)
+  assert.equal(parseAlbumHeader("bad!.1.2"), null); // 잘못된 문자
+  assert.equal(parseAlbumHeader(null), null);
 });
 
 test("handleReset wipes the buffer and R2 photos but keeps seq monotonic", async () => {
