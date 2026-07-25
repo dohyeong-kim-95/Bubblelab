@@ -128,6 +128,7 @@ test("duri subdomain gates with its own long-lived bl_duri session", async () =>
   const cookie = response.headers.get("Set-Cookie");
   assert.match(cookie, /^bl_duri=/);
   assert.match(cookie, /Max-Age=31536000/);
+  assert.match(cookie, /SameSite=Lax/); // PWA 홈 화면 실행에도 세션 유지
 
   // 세션 쿠키로 접근 → 정적 서빙 + noindex/no-store
   response = await worker.fetch(

@@ -305,7 +305,10 @@ async function issueDuriSession(key) {
 async function handleDuriGate(request, env, url, base = "") {
   const key = await duriSessionKey(env);
   const isAuthed = await validSession(key, cookies(request).bl_duri);
-  const cookieFlags = `Path=/; HttpOnly; SameSite=Strict; Max-Age=${Math.floor(DURI_SESSION_TTL_MS / 1000)}${url.protocol === "https:" ? "; Secure" : ""}`;
+  // SameSite=Lax: 홈 화면에서 PWA를 새로 띄우는 top-level 진입에도 쿠키가 실려
+  // 매번 재로그인하지 않게 한다(Strict는 이 진입에서 쿠키가 누락됨). 교차 사이트
+  // 하위요청엔 안 실려 CSRF 보호는 유지된다.
+  const cookieFlags = `Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(DURI_SESSION_TTL_MS / 1000)}${url.protocol === "https:" ? "; Secure" : ""}`;
   const htmlHeaders = { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" };
 
   if (url.pathname === "/login" && request.method === "POST") {
@@ -321,7 +324,7 @@ async function handleDuriGate(request, env, url, base = "") {
     return new Response(DURI_LOGIN_PAGE(true, base), { status: 401, headers: htmlHeaders });
   }
   if (url.pathname === "/logout") {
-    return redirect(`${base}/login`, { "Set-Cookie": "bl_duri=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0" });
+    return redirect(`${base}/login`, { "Set-Cookie": "bl_duri=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0" });
   }
   if (url.pathname === "/login") {
     if (isAuthed) return redirect(`${base}/`);
