@@ -93,12 +93,17 @@
               align-items: center; justify-content: center;
               padding: env(safe-area-inset-top, 0px) 1rem env(safe-area-inset-bottom, 0px); }
   #lightbox[hidden] { display: none; }
-  #lightbox img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: .3rem; }
-  #lb-save { position: absolute; left: 50%; transform: translateX(-50%);
-             bottom: calc(1.2rem + env(safe-area-inset-bottom, 0px));
-             font: inherit; font-size: .85rem; font-weight: 600; padding: .6rem 1.1rem; border: 0;
-             border-radius: 1.2rem; background: #ffffffee; color: #10151c; cursor: pointer;
-             box-shadow: 0 4px 16px #0006; }
+  #lightbox img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: .3rem;
+                  touch-action: pan-y; }
+  #lb-close { position: absolute; top: calc(.7rem + env(safe-area-inset-top, 0px)); right: 1rem;
+              width: 2.4rem; height: 2.4rem; border-radius: 50%; border: 0; background: #ffffff22;
+              color: #fff; font-size: 1.05rem; cursor: pointer; }
+  #lb-bar { position: absolute; left: 50%; transform: translateX(-50%);
+            bottom: calc(1.2rem + env(safe-area-inset-bottom, 0px)); display: flex; align-items: center; gap: .5rem; }
+  #lb-count { color: #fff; font-size: .8rem; opacity: .85; margin-right: .2rem; }
+  #lb-bar button { font: inherit; font-size: .85rem; font-weight: 600; padding: .55rem 1rem; border: 0;
+                   border-radius: 1.2rem; background: #ffffffee; color: #10151c; cursor: pointer;
+                   box-shadow: 0 4px 16px #0006; }
   /* 스티커는 정사각 자리를 먼저 잡고, 말풍선 배경 없이 투명하게 */
   .bubble.sticker, .row.me .bubble.sticker { background: none; border: none; padding: .2rem; }
   .bubble.sticker img { width: 8.5rem; aspect-ratio: 1 / 1; height: auto; border-radius: 0; }
@@ -227,8 +232,13 @@
 <div id="toast" hidden></div>
 
 <div id="lightbox" hidden>
+  <button id="lb-close" type="button" title="닫기" aria-label="닫기">✕</button>
   <img alt="사진">
-  <button id="lb-save" type="button" title="사진 저장">⬇ 저장</button>
+  <div id="lb-bar">
+    <span id="lb-count"></span>
+    <button id="lb-save" type="button">⬇ 저장</button>
+    <button id="lb-save-all" type="button" hidden>⬇ 모두 저장</button>
+  </div>
 </div>
 
 <script>
@@ -424,10 +434,25 @@ function scrollToBottom(smooth) { const el = log(); el.scrollTo({ top: el.scroll
 function updateToBottom() { const b = $("to-bottom"); if (b) b.hidden = atBottom(); }
 log().addEventListener("scroll", updateToBottom, { passive: true });
 $("to-bottom").addEventListener("click", () => scrollToBottom(true));
-$("lightbox").addEventListener("click", () => { const lb = $("lightbox"); lb.hidden = true; lb.querySelector("img").src = ""; });
+$("lightbox").addEventListener("click", (e) => { if (e.target === $("lightbox")) closeLb(); }); // 배경 탭 → 닫기
+$("lb-close").addEventListener("click", (e) => { e.stopPropagation(); closeLb(); });
+// 좌우 스와이프로 앨범 넘기기
+let lbTouchX = null;
+$("lightbox").addEventListener("touchstart", (e) => { lbTouchX = e.touches[0].clientX; }, { passive: true });
+$("lightbox").addEventListener("touchend", (e) => {
+  if (lbTouchX === null) return;
+  const dx = e.changedTouches[0].clientX - lbTouchX; lbTouchX = null;
+  if (Math.abs(dx) > 45) lbGo(dx < 0 ? 1 : -1); // 왼쪽으로 밀면 다음, 오른쪽이면 이전
+});
+document.addEventListener("keydown", (e) => {
+  if ($("lightbox").hidden) return;
+  if (e.key === "ArrowLeft") lbGo(-1);
+  else if (e.key === "ArrowRight") lbGo(1);
+  else if (e.key === "Escape") closeLb();
+});
 
 // 사진 저장: 매직바이트로 이미지 타입을 판별해 올바른 확장자로. 모바일은 Web Share
-// (공유 시트 → "이미지 저장"), 안 되면 <a download> 폴백(데스크톱).
+// (공유 시트 → "이미지 저장"), 안 되면 <a download> 폴백(데스크톱). 여러 장이면 한 번에.
 async function imageKind(blob) {
   const b = new Uint8Array(await blob.slice(0, 12).arrayBuffer());
   if (b[0] === 0x89 && b[1] === 0x50) return { type: "image/png", ext: "png" };
@@ -436,26 +461,33 @@ async function imageKind(blob) {
   if (b[0] === 0x52 && b[1] === 0x49 && b[8] === 0x57 && b[9] === 0x45) return { type: "image/webp", ext: "webp" };
   return { type: "image/jpeg", ext: "jpg" };
 }
-$("lb-save").addEventListener("click", async (e) => {
-  e.stopPropagation(); // 뷰어가 닫히지 않게
-  const src = $("lightbox").querySelector("img").src;
-  if (!src) return;
-  try {
-    const blob = await (await fetch(src)).blob();
+async function saveImages(urls) {
+  const files = [];
+  for (let i = 0; i < urls.length; i++) {
+    const blob = await (await fetch(urls[i])).blob();
     const { type, ext } = await imageKind(blob);
-    const file = new File([blob], `duri-${Date.now()}.${ext}`, { type });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ files: [file] }); // iOS/안드로이드: 시트에서 "이미지 저장"
-    } else {
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob); a.download = file.name;
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-    }
-  } catch (err) {
-    if (err?.name !== "AbortError") { console.warn("save failed", err); alert("사진을 저장하지 못했어요."); }
+    files.push(new File([blob], `duri-${Date.now()}-${i + 1}.${ext}`, { type }));
   }
-});
+  if (!files.length) return;
+  if (navigator.canShare && navigator.canShare({ files })) {
+    await navigator.share({ files }); // iOS/안드로이드: 시트에서 "이미지 저장"(여러 장 한 번에)
+  } else {
+    for (const f of files) {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(f); a.download = f.name;
+      document.body.appendChild(a); a.click(); a.remove();
+      await new Promise((r) => setTimeout(r, 250));
+      URL.revokeObjectURL(a.href);
+    }
+  }
+}
+function runSave(urls) {
+  saveImages(urls).catch((err) => {
+    if (err?.name !== "AbortError") { console.warn("save failed", err); alert("사진을 저장하지 못했어요."); }
+  });
+}
+$("lb-save").addEventListener("click", (e) => { e.stopPropagation(); if (lbUrls[lbIndex]) runSave([lbUrls[lbIndex]]); });
+$("lb-save-all").addEventListener("click", (e) => { e.stopPropagation(); if (lbUrls.length) runSave(lbUrls); });
 
 // 복호화가 끝난 레코드({seq,kind,at,name, text?|sticker?|photo blob|broken})를 그린다.
 // 말풍선 묶어읽기(카톡 벤치마킹): ① 날짜가 바뀌면 가운데 날짜 구분선 ② 같은
@@ -467,13 +499,38 @@ let grpSender = null, grpMinute = -1, grpDay = null, grpTimeEl = null;
 const albumBubbles = new Map();
 const randToken = () => Array.from(crypto.getRandomValues(new Uint8Array(12)),
   (b) => "abcdefghijklmnopqrstuvwxyz0123456789"[b % 36]).join("");
-function openLightbox(url) { const lb = $("lightbox"); lb.querySelector("img").src = url; lb.hidden = false; }
-// 탭하면 전체화면으로 열리는 사진 img.
+// 전체화면 뷰어(라이트박스): 앨범이면 좌우 스와이프로 넘기고, 묶음 전체 저장도.
+let lbUrls = [], lbIndex = 0;
+function showLb() {
+  const lb = $("lightbox");
+  lb.querySelector("img").src = lbUrls[lbIndex] || "";
+  $("lb-count").textContent = lbUrls.length > 1 ? `${lbIndex + 1} / ${lbUrls.length}` : "";
+  $("lb-save-all").hidden = lbUrls.length <= 1;
+  lb.hidden = false;
+}
+function openLightbox(urls, index = 0) {
+  lbUrls = Array.isArray(urls) ? urls.slice() : [urls];
+  lbIndex = Math.max(0, Math.min(index, lbUrls.length - 1));
+  showLb();
+}
+function lbGo(delta) {
+  if (lbUrls.length < 2) return;
+  lbIndex = Math.max(0, Math.min(lbIndex + delta, lbUrls.length - 1));
+  showLb();
+}
+function closeLb() { const lb = $("lightbox"); lb.hidden = true; lb.querySelector("img").src = ""; lbUrls = []; }
+
+// 탭하면 전체화면으로 열리는 사진 img. 앨범(.bubble.album) 안이면 형제 사진들을
+// 함께 넘겨 스와이프로 넘길 수 있게 한다.
 function photoImg(blob, alt) {
   const img = document.createElement("img");
   img.alt = alt || "사진"; img.decoding = "async";
   img.src = URL.createObjectURL(blob);
-  img.addEventListener("click", () => openLightbox(img.src));
+  img.addEventListener("click", () => {
+    const album = img.closest(".bubble.album");
+    const imgs = album ? [...album.querySelectorAll("img")] : [img];
+    openLightbox(imgs.map((i) => i.src), imgs.indexOf(img));
+  });
   return img;
 }
 
@@ -842,8 +899,7 @@ let backArmed = false, backTimer;
 const trapBack = () => history.pushState(null, "", location.href);
 trapBack(); // 초기 방어 상태
 window.addEventListener("popstate", () => {
-  const lb = $("lightbox");
-  if (!lb.hidden) { lb.hidden = true; lb.querySelector("img").src = ""; trapBack(); return; } // 사진 뷰어 먼저 닫기
+  if (!$("lightbox").hidden) { closeLb(); trapBack(); return; } // 사진 뷰어 먼저 닫기
   if (!picker.hidden) { closePicker(); trapBack(); return; } // 서랍 먼저 닫기
   if (!menu.hidden) { closeMenu(); trapBack(); return; }     // 메뉴 먼저 닫기
   if (backArmed) { backArmed = false; history.back(); return; } // 두 번째 → 앱 종료
