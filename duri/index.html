@@ -452,41 +452,42 @@ document.addEventListener("keydown", (e) => {
   else if (e.key === "Escape") closeLb();
 });
 
-// 사진 저장. iOS는 navigator.share 가 "사용자 탭" 활성화 안에서 동기로 호출돼야
-// 하므로(중간에 await 하면 NotAllowedError), 복호화 시점에 미리 담아둔 blob 으로
-// File 을 동기 생성해 바로 공유한다. 공유 실패/미지원이면 다운로드로 폴백.
+// 사진 저장: 안드로이드·데스크톱은 <a download> 로 Download 폴더에 바로 저장한다.
+// iOS(사파리)는 download 속성을 무시하므로 그때만 공유 시트(→ "이미지 저장")로.
+// 미리 담아둔 blob 으로 File 을 동기 생성(iOS 공유는 사용자 제스처 활성화 필요).
 const EXT = { "image/png": "png", "image/gif": "gif", "image/webp": "webp" };
 const toFile = (blob, i) => new File([blob], `duri-${Date.now()}-${i}.${EXT[blob.type] || "jpg"}`,
   { type: blob.type || "image/jpeg" });
+const isIOS = /iP(hone|od|ad)/.test(navigator.userAgent) ||
+  (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1); // iPadOS(맥으로 위장) 포함
 function downloadFiles(files) {
   files.forEach((f, k) => {
+    const url = URL.createObjectURL(f);
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(f); a.download = f.name;
+    a.href = url; a.download = f.name; a.rel = "noopener";
     document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1200 + k * 300);
+    setTimeout(() => URL.revokeObjectURL(url), 1500 + k * 400);
   });
 }
-function shareOrDownload(files) {
+function saveFiles(files) {
   if (!files.length) return;
-  try {
-    if (navigator.canShare && navigator.canShare({ files })) {
-      // await 없이 즉시 호출 → 사용자 제스처 활성화 유지. 실패 시 다운로드 폴백.
-      navigator.share({ files }).catch((err) => { if (err?.name !== "AbortError") downloadFiles(files); });
-      return;
-    }
-  } catch { /* canShare 예외 → 다운로드로 */ }
-  downloadFiles(files);
+  if (isIOS && navigator.canShare && navigator.canShare({ files })) {
+    // iOS: 공유 시트에서 "이미지 저장". await 없이 즉시 호출(활성화 유지), 실패 시 폴백.
+    navigator.share({ files }).catch((err) => { if (err?.name !== "AbortError") downloadFiles(files); });
+  } else {
+    downloadFiles(files); // 안드로이드·데스크톱: Download 폴더로 바로 저장
+  }
 }
 $("lb-save").addEventListener("click", (e) => {
   e.stopPropagation();
   const blob = lbBlobs[lbIndex];
-  if (blob) shareOrDownload([toFile(blob, 1)]);
+  if (blob) saveFiles([toFile(blob, 1)]);
   else alert("사진을 저장할 수 없어요. 새로고침 후 다시 시도해 주세요.");
 });
 $("lb-save-all").addEventListener("click", (e) => {
   e.stopPropagation();
   const files = lbBlobs.filter(Boolean).map((b, i) => toFile(b, i + 1));
-  if (files.length) shareOrDownload(files);
+  if (files.length) saveFiles(files);
 });
 
 // 복호화가 끝난 레코드({seq,kind,at,name, text?|sticker?|photo blob|broken})를 그린다.
