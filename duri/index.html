@@ -90,20 +90,21 @@
                       border-radius: .35rem; }
   /* 사진 전체화면 뷰어(라이트박스) */
   #lightbox { position: fixed; inset: 0; z-index: 200; background: #000000ee; display: flex;
-              align-items: center; justify-content: center;
+              align-items: center; justify-content: center; overflow: hidden;
               padding: env(safe-area-inset-top, 0px) 1rem env(safe-area-inset-bottom, 0px); }
   #lightbox[hidden] { display: none; }
   #lightbox img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: .3rem;
-                  touch-action: pan-y; }
+                  touch-action: pan-y; will-change: transform; }
   #lb-close { position: absolute; top: calc(.7rem + env(safe-area-inset-top, 0px)); right: 1rem;
               width: 2.4rem; height: 2.4rem; border-radius: 50%; border: 0; background: #ffffff22;
-              color: #fff; font-size: 1.05rem; cursor: pointer; }
-  #lb-bar { position: absolute; left: 50%; transform: translateX(-50%);
-            bottom: calc(1.2rem + env(safe-area-inset-bottom, 0px)); display: flex; align-items: center; gap: .5rem; }
-  #lb-count { color: #fff; font-size: .8rem; opacity: .85; margin-right: .2rem; }
-  #lb-bar button { font: inherit; font-size: .85rem; font-weight: 600; padding: .55rem 1rem; border: 0;
-                   border-radius: 1.2rem; background: #ffffffee; color: #10151c; cursor: pointer;
-                   box-shadow: 0 4px 16px #0006; }
+              color: #fff; font-size: 1.05rem; cursor: pointer; z-index: 1; }
+  #lb-bar { position: absolute; left: 50%; transform: translateX(-50%); z-index: 1;
+            bottom: calc(1.2rem + env(safe-area-inset-bottom, 0px)); display: flex; align-items: center;
+            gap: .5rem; flex-wrap: nowrap; max-width: calc(100% - 1.5rem); }
+  #lb-count { color: #fff; font-size: .8rem; opacity: .85; margin-right: .2rem; white-space: nowrap; flex: none; }
+  #lb-bar button { flex: none; white-space: nowrap; font: inherit; font-size: .85rem; font-weight: 600;
+                   padding: .55rem .95rem; border: 0; border-radius: 1.2rem; background: #ffffffee;
+                   color: #10151c; cursor: pointer; box-shadow: 0 4px 16px #0006; }
   /* 스티커는 정사각 자리를 먼저 잡고, 말풍선 배경 없이 투명하게 */
   .bubble.sticker, .row.me .bubble.sticker { background: none; border: none; padding: .2rem; }
   .bubble.sticker img { width: 8.5rem; aspect-ratio: 1 / 1; height: auto; border-radius: 0; }
@@ -500,25 +501,47 @@ const albumBubbles = new Map();
 const randToken = () => Array.from(crypto.getRandomValues(new Uint8Array(12)),
   (b) => "abcdefghijklmnopqrstuvwxyz0123456789"[b % 36]).join("");
 // 전체화면 뷰어(라이트박스): 앨범이면 좌우 스와이프로 넘기고, 묶음 전체 저장도.
-let lbUrls = [], lbIndex = 0;
-function showLb() {
-  const lb = $("lightbox");
-  lb.querySelector("img").src = lbUrls[lbIndex] || "";
+let lbUrls = [], lbIndex = 0, lbAnimating = false;
+function updateLbBar() {
   $("lb-count").textContent = lbUrls.length > 1 ? `${lbIndex + 1} / ${lbUrls.length}` : "";
   $("lb-save-all").hidden = lbUrls.length <= 1;
-  lb.hidden = false;
 }
 function openLightbox(urls, index = 0) {
   lbUrls = Array.isArray(urls) ? urls.slice() : [urls];
   lbIndex = Math.max(0, Math.min(index, lbUrls.length - 1));
-  showLb();
+  const img = $("lightbox").querySelector("img");
+  img.style.transition = "none"; img.style.transform = "translateX(0)"; img.style.opacity = "1";
+  img.src = lbUrls[lbIndex] || "";
+  updateLbBar();
+  $("lightbox").hidden = false;
 }
+// 좌우로 부드럽게 슬라이드하며 넘긴다(현재는 밀려나가고 다음은 반대편에서 들어옴).
 function lbGo(delta) {
-  if (lbUrls.length < 2) return;
-  lbIndex = Math.max(0, Math.min(lbIndex + delta, lbUrls.length - 1));
-  showLb();
+  if (lbAnimating || lbUrls.length < 2) return;
+  const target = Math.max(0, Math.min(lbIndex + delta, lbUrls.length - 1));
+  if (target === lbIndex) return; // 양 끝이면 더 안 넘어감
+  lbAnimating = true;
+  const img = $("lightbox").querySelector("img");
+  const dir = delta > 0 ? -1 : 1;
+  const D = 180;
+  img.style.transition = `transform ${D}ms ease, opacity ${D}ms ease`;
+  img.style.transform = `translateX(${dir * 35}%)`;
+  img.style.opacity = "0";
+  setTimeout(() => {
+    lbIndex = target;
+    img.style.transition = "none";
+    img.style.transform = `translateX(${-dir * 35}%)`;
+    img.src = lbUrls[lbIndex];
+    updateLbBar();
+    requestAnimationFrame(() => {
+      img.style.transition = `transform ${D}ms ease, opacity ${D}ms ease`;
+      img.style.transform = "translateX(0)";
+      img.style.opacity = "1";
+      setTimeout(() => { lbAnimating = false; }, D);
+    });
+  }, D);
 }
-function closeLb() { const lb = $("lightbox"); lb.hidden = true; lb.querySelector("img").src = ""; lbUrls = []; }
+function closeLb() { const lb = $("lightbox"); lb.hidden = true; lb.querySelector("img").src = ""; lbUrls = []; lbAnimating = false; }
 
 // 탭하면 전체화면으로 열리는 사진 img. 앨범(.bubble.album) 안이면 형제 사진들을
 // 함께 넘겨 스와이프로 넘길 수 있게 한다.
