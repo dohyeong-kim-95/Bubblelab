@@ -111,9 +111,76 @@
     font-variant-numeric: tabular-nums;
   }
   .zone span { min-height: 1.2em; font-size: .75rem; opacity: .72; }
+  #result-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: grid;
+    place-items: center;
+    padding: 1.2rem 1.2rem 5rem;
+    background: light-dark(rgba(222,230,238,.82), rgba(7,11,17,.82));
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  #result-overlay.hidden { display: none; }
+  #result-card {
+    width: min(86vw, 20rem);
+    padding: 1.5rem 1.35rem;
+    border: 1.5px solid light-dark(rgba(30,50,70,.22), rgba(200,215,235,.22));
+    border-radius: 1.25rem;
+    background: light-dark(rgba(255,255,255,.9), rgba(20,28,39,.92));
+    box-shadow: 0 1rem 3rem rgba(0,0,0,.2);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .75rem;
+    text-align: center;
+  }
+  #result-icon { font-size: 2.2rem; }
+  #result-title { margin: 0; font-size: 1.1rem; opacity: .78; }
+  #result-average {
+    font-size: 2.35rem;
+    font-weight: bold;
+    font-variant-numeric: tabular-nums;
+  }
+  #result-grade { margin: -.2rem 0 .1rem; font-size: .85rem; opacity: .72; }
+  #result-breakdown {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: .45rem;
+  }
+  .result-item {
+    padding: .6rem .4rem;
+    border-radius: .7rem;
+    background: light-dark(#e9eef3, #182331);
+    display: flex;
+    flex-direction: column;
+    gap: .15rem;
+  }
+  .result-item.penalty { background: light-dark(#f5dfad, #5f4819); }
+  .result-item small { opacity: .55; }
+  .result-item b { font-variant-numeric: tabular-nums; }
+  #result-best { margin: 0; min-height: 1.2em; font-size: .8rem; opacity: .58; }
+  #retry {
+    font: inherit;
+    font-size: 1.05rem;
+    font-weight: bold;
+    padding: .78rem 2rem;
+    border: 2px solid currentColor;
+    border-radius: 2rem;
+    background: none;
+    color: inherit;
+    cursor: pointer;
+  }
+  #retry:active { transform: scale(.96); }
+  #retry:disabled { opacity: .4; cursor: default; transform: none; }
   @media (max-height: 570px) {
     #app { padding-top: .55rem; gap: .5rem; }
     #summary { min-height: 1.2em; }
+    #result-card { padding: 1rem 1.1rem; gap: .5rem; }
+    #result-icon { font-size: 1.6rem; }
+    #result-average { font-size: 1.8rem; }
   }
 </style>
 </head>
@@ -139,10 +206,28 @@
     </button>
   </section>
 </main>
+<div id="result-overlay" class="hidden" role="dialog" aria-modal="true" aria-labelledby="result-title">
+  <section id="result-card">
+    <div id="result-icon">⚡</div>
+    <h2 id="result-title">측정 완료!</h2>
+    <div id="result-average">평균 0ms</div>
+    <p id="result-grade"></p>
+    <div id="result-breakdown"></div>
+    <p id="result-best"></p>
+    <button id="retry" type="button">다시 도전</button>
+  </section>
+</div>
 <script>
 const zones = [...document.querySelectorAll(".zone")];
 const startBtn = document.getElementById("start");
 const summary = document.getElementById("summary");
+const resultOverlay = document.getElementById("result-overlay");
+const resultTitle = document.getElementById("result-title");
+const resultAverage = document.getElementById("result-average");
+const resultGrade = document.getElementById("result-grade");
+const resultBreakdown = document.getElementById("result-breakdown");
+const resultBest = document.getElementById("result-best");
+const retryBtn = document.getElementById("retry");
 const bestKey = "bl-reactiontime-4-best";
 
 let running = false;
@@ -150,6 +235,7 @@ let completed = 0;
 let lastAverage = null;
 let bestAverage = +localStorage.getItem(bestKey) || null;
 let round = [];
+let previousOrder = "";
 
 const fmt = (v) => `${Math.round(v)}ms`;
 
@@ -161,18 +247,23 @@ window.blShareText = () => {
     : "⚡ 4분할 반응속도 테스트 — 도전해보세요!";
 };
 
-function shuffledActivationTimes() {
-  const times = [];
-  let next = 1200 + Math.random() * 800;
-  for (let i = 0; i < zones.length; i++) {
-    times.push(next);
-    next += 650 + Math.random() * 700;
-  }
-  for (let i = times.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [times[i], times[j]] = [times[j], times[i]];
-  }
-  return times;
+function randomActivationPlan() {
+  let order;
+  do {
+    order = zones.map((_, index) => index);
+    for (let i = order.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [order[i], order[j]] = [order[j], order[i]];
+    }
+  } while (order.join("") === previousOrder);
+  previousOrder = order.join("");
+
+  let delay = 1200 + Math.random() * 800;
+  return order.map((zoneIndex) => {
+    const item = { zoneIndex, delay };
+    delay += 650 + Math.random() * 700;
+    return item;
+  });
 }
 
 function renderZone(index, className, mainText, detail) {
@@ -194,6 +285,7 @@ function finishZone(index, score, early) {
   const item = round[index];
   item.state = "done";
   item.score = score;
+  item.early = early;
   completed++;
   renderZone(index, early ? "early" : "done", fmt(score), early ? "조기 클릭" : "완료");
   if (completed === zones.length) finishRound();
@@ -212,11 +304,19 @@ function respond(index) {
   }
 }
 
+function grade(score) {
+  return score < 200 ? "⚡ 번개보다 빠른 손" :
+         score < 250 ? "🔥 아주 빠른데요" :
+         score < 320 ? "👍 평균 이상" :
+         score < 500 ? "🙂 조금만 더 집중!" : "🐢 초록색을 기다려보세요";
+}
+
 function finishRound() {
   running = false;
   const scores = round.map((item) => item.score);
   lastAverage = Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length);
-  if (bestAverage === null || lastAverage < bestAverage) {
+  const isBest = bestAverage === null || lastAverage < bestAverage;
+  if (isBest) {
     bestAverage = lastAverage;
     localStorage.setItem(bestKey, bestAverage);
   }
@@ -225,6 +325,24 @@ function finishRound() {
     scores.map((score, index) => `${index + 1}번 ${fmt(score)}`).join(" / ");
   startBtn.disabled = false;
   startBtn.textContent = "다시";
+  resultTitle.textContent = isBest ? "🎉 최고 기록!" : "측정 완료!";
+  resultAverage.textContent = `평균 ${fmt(lastAverage)}`;
+  resultGrade.textContent = grade(lastAverage);
+  resultBest.textContent = `최고 평균 ${fmt(bestAverage)}`;
+  resultBreakdown.replaceChildren();
+  round.forEach((item, index) => {
+    const box = document.createElement("div");
+    box.className = "result-item" + (item.early ? " penalty" : "");
+    const label = document.createElement("small");
+    label.textContent = `${index + 1}번${item.early ? " · 조기" : ""}`;
+    const value = document.createElement("b");
+    value.textContent = fmt(item.score);
+    box.append(label, value);
+    resultBreakdown.append(box);
+  });
+  resultOverlay.classList.remove("hidden");
+  retryBtn.disabled = true;
+  setTimeout(() => { retryBtn.disabled = false; }, 800);
   window.blWeeklyReport?.(lastAverage);
 }
 
@@ -233,16 +351,18 @@ function startRound() {
   running = true;
   completed = 0;
   round.forEach((item) => clearTimeout(item.timer));
-  round = zones.map(() => ({ state: "wait", timer: null, goAt: 0, score: null }));
+  round = zones.map(() => ({ state: "wait", timer: null, goAt: 0, score: null, early: false }));
+  resultOverlay.classList.add("hidden");
   summary.textContent = "빨간 칸은 기다리고, 초록색으로 바뀐 칸만 누르세요.";
   startBtn.disabled = true;
   startBtn.textContent = "진행 중";
 
-  const activationTimes = shuffledActivationTimes();
   round.forEach((item, index) => {
     renderZone(index, "wait", "기다려…", `${index + 1}번`);
-    item.timer = setTimeout(() => activate(index), activationTimes[index]);
   });
+  for (const { zoneIndex, delay } of randomActivationPlan()) {
+    round[zoneIndex].timer = setTimeout(() => activate(zoneIndex), delay);
+  }
 }
 
 zones.forEach((zone, index) => {
@@ -257,6 +377,10 @@ zones.forEach((zone, index) => {
   });
 });
 startBtn.addEventListener("click", startRound);
+retryBtn.addEventListener("click", startRound);
+for (const eventName of ["pointerdown", "click", "keydown"]) {
+  resultOverlay.addEventListener(eventName, (event) => event.stopPropagation());
+}
 </script>
 <script defer src="/_shared/records.js"></script>
 <script defer src="/_shared/share.js"></script>
