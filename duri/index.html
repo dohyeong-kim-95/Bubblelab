@@ -1223,6 +1223,7 @@ $("file").addEventListener("change", (e) => {
 // 서버 cal:<id> 에 rev 와 함께 저장·동기화된다(LWW). 색상은 기기별 설정으로 매핑.
 const calEvents = new Map(); // id → { id, rev, deleted, date?, title?, owner?, shared? }
 let calView = "month", calCursor = null, calSel = null, calDlgId = null, calDlgDate = null, calDlgCat = "mine";
+let calLastTap = { ds: null, t: 0 }; // 월간 격자 더블탭(같은 날짜 400ms 이내 재클릭) 판정용
 const calOutbox = [];
 const CAL_COLORS_KEY = "duri:calcolors";
 const calColors = Object.assign({ mine: "#c0568a", theirs: "#4f7fdd", shared: "#3aa675" },
@@ -1365,8 +1366,18 @@ function renderMonth(grid, cur) {
       });
       cell.appendChild(dots);
     }
-    cell.addEventListener("click", () => { calSel = ds; renderCal(); });
-    cell.addEventListener("dblclick", () => openCalDialog(ds, null)); // 더블클릭(더블탭)으로 바로 일정 추가
+    // 네이티브 dblclick 은 모바일 PWA 터치에서 잘 안 잡힐 때가 있어, 같은 날짜를
+    // 400ms 안에 두 번 누르면 직접 더블탭으로 판정한다(마우스·터치 동일하게 동작).
+    cell.addEventListener("click", () => {
+      const now = Date.now();
+      if (calLastTap.ds === ds && now - calLastTap.t < 400) {
+        calLastTap = { ds: null, t: 0 };
+        openCalDialog(ds, null);
+        return;
+      }
+      calLastTap = { ds, t: now };
+      calSel = ds; renderCal();
+    });
     month.appendChild(cell);
   }
   grid.appendChild(month);
