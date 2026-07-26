@@ -260,10 +260,18 @@
   .cal-wk span.sun { color: var(--sun); }
   .cal-wk span.sat { color: var(--sat); }
   /* 월간 격자: 세로 칸선 없이 가로 실선만. 날짜 아래 최대 2개 제목 미리보기(작은
-     글씨, 말줄임) + 넘치면 +N. 고른 날의 전체 목록은 아래 패널에서 읽는다. */
-  .cal-month { flex: 1; display: grid; grid-template-columns: repeat(7, 1fr); grid-auto-rows: 1fr; }
+     글씨, 말줄임) + 넘치면 +N. 고른 날의 전체 목록은 아래 패널에서 읽는다.
+     여러 날 일정은 주(week) 단위로 하나의 막대(.cal-week-bars)에 그려서 같은
+     주 안에서는 제목이 한 번만 보이게 한다 — 그래서 한 주 = [막대 레인들 + 날짜
+     7칸]을 담는 .cal-week-row 로 나눠 렌더링한다(달 전체를 한 그리드로 안 그림). */
+  .cal-month { flex: 1; display: flex; flex-direction: column; }
+  .cal-week-row { flex: 1; display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+  .cal-week-bars { flex: none; display: grid; grid-template-columns: repeat(7, 1fr);
+                   grid-auto-rows: 1.05rem; gap: .12rem 0; padding: .16rem .1rem 0; }
+  .cal-bar { margin: 0 .06rem; font-size: .55rem; line-height: 1.05rem; padding: 0 .3rem; }
+  .cal-week-days { flex: 1; display: grid; grid-template-columns: repeat(7, 1fr); }
   .cal-day { padding: .3rem .1rem; display: flex; flex-direction: column; align-items: center; gap: .16rem;
-             overflow: hidden; cursor: pointer; border-top: 1px solid var(--line); min-height: 4rem; }
+             overflow: hidden; cursor: pointer; min-height: 4rem; }
   .cal-day .d { font-size: .72rem; color: var(--dim); flex: none;
                 width: 1.5rem; height: 1.5rem; display: grid; place-items: center; border-radius: 50%; }
   .cal-day.sun .d { color: var(--sun); }
@@ -272,8 +280,8 @@
   .cal-day.sel .d { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--pink) 60%, transparent); }
   .cal-day.today .d { background: var(--pink); color: light-dark(#fff,#1a1016); font-weight: 700; }
   .cal-day-evs { display: flex; flex-direction: column; gap: .1rem; width: 100%; min-width: 0; }
-  .cal-day .cal-ev { font-size: .56rem; line-height: 1.3; padding: .02rem .22rem; }
-  .cal-day .cal-ev.timed { padding-left: .12rem; gap: .16rem; }
+  .cal-day .cal-ev { font-size: .56rem; line-height: 1.3; padding: .02rem .16rem; }
+  .cal-day .cal-ev.timed { padding-left: .08rem; gap: .12rem; }
   .cal-day .cal-ev.timed::before { width: .3rem; height: .3rem; }
   .cal-day .cal-ev.timed .t { display: none; } /* 셀 안은 너무 좁아 시간 텍스트는 생략, 색점+제목만 */
   .cal-more { font-size: .52rem; color: var(--dim); text-align: center; }
@@ -303,11 +311,13 @@
   .cal-monthnav button:last-child { text-align: right; }
   .cal-monthnav button:active { background: var(--bg); }
   /* 종일 일정은 색을 꽉 채운 알약 + 흰 글자(선명하게 눈에 띄게). 시간 일정은
-     아래 .timed 에서 배경 없이 색점만(지금까지와 동일 — 배경과 비슷하게 옅다). */
-  .cal-ev { font-size: .6rem; line-height: 1.35; border-radius: .3rem; padding: .07rem .3rem; cursor: pointer;
+     아래 .timed 에서 배경 없이 색점만(지금까지와 동일 — 배경과 비슷하게 옅다).
+     글자는 굵게 + 자간을 좁혀 좁은 칩 안에 최대한 많은 글자가 보이게 한다. */
+  .cal-ev { font-size: .6rem; line-height: 1.35; font-weight: 800; letter-spacing: -.02em;
+            border-radius: .3rem; padding: .07rem .26rem; cursor: pointer;
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
             background: var(--c); color: #fff; }
-  .cal-ev.timed { background: none; color: inherit; display: flex; align-items: center; gap: .22rem; padding-left: .12rem; }
+  .cal-ev.timed { background: none; color: inherit; display: flex; align-items: center; gap: .16rem; padding-left: .1rem; }
   .cal-ev.timed::before { content: ""; flex: none; width: .34rem; height: .34rem; border-radius: 50%; background: var(--c); }
   .cal-ev.timed .t { flex: none; color: var(--dim); }
   .cal-ev.timed .n { overflow: hidden; text-overflow: ellipsis; }
@@ -1536,7 +1546,9 @@ let calView = "month", calCursor = null, calSel = null, calDlgId = null, calDlgD
 let calLastTap = { ds: null, t: 0 }; // 월간 격자 더블탭(같은 날짜 400ms 이내 재클릭) 판정용
 const calOutbox = [];
 const CAL_COLORS_KEY = "duri:calcolors";
-const calColors = Object.assign({ mine: "#c0568a", theirs: "#4f7fdd", shared: "#3aa675" },
+// 파스텔톤 기본값(더스티 로즈·블루·세이지) — 종일 일정이 이제 배경을 꽉 채워서
+// 너무 쨍하지 않도록 채도를 낮췄다(다만 흰 글자가 읽히게 밝기는 적당히만 낮춤).
+const calColors = Object.assign({ mine: "#b65d7b", theirs: "#5481b6", shared: "#498d6d" },
   (() => { try { return JSON.parse(localStorage.getItem(CAL_COLORS_KEY) || "{}"); } catch { return {}; } })());
 // 헤더 접속 표시 동그라미도 같은 색(캘린더 색상 설정과 통일).
 function applyStatusColors() {
@@ -1686,19 +1698,21 @@ const LUNAR_HOLIDAYS = [
   { date: "2027-05-13", title: "부처님오신날" },
   { date: "2027-09-14", endDate: "2027-09-16", title: "추석" },
 ];
-function lunarHolidayOn(dateStr) {
+// dateStr 이 걸리는 공휴일 항목을 원본 그대로 돌려준다({date, endDate?, title}) —
+// 설날·추석처럼 여러 날인 경우 endDate 가 있어야 월간 뷰의 막대 표시가 판단할 수 있다.
+function holidayEntryOn(dateStr) {
   for (const h of LUNAR_HOLIDAYS) {
-    if (dateStr === h.date || (h.endDate && dateStr > h.date && dateStr <= h.endDate)) return h.title;
+    if (dateStr === h.date || (h.endDate && dateStr > h.date && dateStr <= h.endDate)) return h;
   }
-  return null;
+  const title = fixedHolidayOn(dateStr);
+  return title ? { date: dateStr, title } : null;
 }
-const koreanHolidayOn = (dateStr) => lunarHolidayOn(dateStr) || fixedHolidayOn(dateStr);
 
 function calEventsOn(dateStr) {
   const out = [];
   for (const ev of calEvents.values()) if (!ev.deleted && calEventOnDate(ev, dateStr)) out.push(ev);
-  const holiday = koreanHolidayOn(dateStr);
-  if (holiday) out.push({ id: `holiday:${dateStr}`, date: dateStr, title: `🎌 ${holiday}`, shared: true, holiday: true });
+  const holiday = holidayEntryOn(dateStr);
+  if (holiday) out.push({ id: `holiday:${holiday.date}`, date: holiday.date, endDate: holiday.endDate, title: `🎌 ${holiday.title}`, shared: true, holiday: true });
   // 종일(시간 없음) 먼저, 그다음 시작 시간순, 같으면 제목순.
   return out.sort((a, b) => {
     const as = a.start || "", bs = b.start || "";
@@ -1706,6 +1720,8 @@ function calEventsOn(dateStr) {
     return (a.title || "").localeCompare(b.title || "");
   });
 }
+// 여러 날에 걸친 일정인지(월간 뷰에서 막대로 그릴 대상).
+const isSpanningEvent = (ev) => !!(ev.endDate && ev.endDate > ev.date);
 
 function renderCal() {
   const grid = $("cal-grid");
@@ -1756,6 +1772,47 @@ function evChip(ev, onDate) {
   c.addEventListener("click", (e) => { e.stopPropagation(); openCalDialog(onDate || ev.date, ev); });
   return c;
 }
+// 여러 날 일정의 주간 막대(제목을 그 주 안에서 한 번만 보여준다). 시간 없는
+// 종일 일정 전용이라 evChip 과 달리 시간 텍스트·색점 로직이 필요 없다.
+function evBar(ev) {
+  const c = document.createElement("div"); c.className = "cal-ev cal-bar";
+  c.style.setProperty("--c", calColorOf(ev));
+  const title = ev.title || "(제목 없음)";
+  c.textContent = title;
+  c.title = `${title} (${ev.date} ~ ${ev.endDate})`;
+  if (ev.holiday) { c.addEventListener("click", (e) => { e.stopPropagation(); showToast(ev.title); }); return c; }
+  c.addEventListener("click", (e) => { e.stopPropagation(); openCalDialog(ev.date, ev); });
+  return c;
+}
+const dayDiff = (fromStr, toStr) => Math.round((new Date(toStr + "T00:00:00") - new Date(fromStr + "T00:00:00")) / 86400000);
+// weekStartStr~weekEndStr 과 겹치는 여러 날 일정을 모아 그 주 안에서의 시작·끝
+// 칸(0~6, 일~토)을 계산한다. 사용자 일정 + 여러 날짜 공휴일(설날·추석) 둘 다 포함.
+function collectSpanningEvents(weekStartStr, weekEndStr) {
+  const out = [];
+  for (const ev of calEvents.values()) {
+    if (ev.deleted || !isSpanningEvent(ev)) continue;
+    if (ev.endDate < weekStartStr || ev.date > weekEndStr) continue;
+    out.push({ ev, startCol: Math.max(0, dayDiff(weekStartStr, ev.date)), endCol: Math.min(6, dayDiff(weekStartStr, ev.endDate)) });
+  }
+  for (const h of LUNAR_HOLIDAYS) {
+    if (!h.endDate || h.endDate <= h.date) continue;
+    if (h.endDate < weekStartStr || h.date > weekEndStr) continue;
+    const ev = { id: `holiday:${h.date}`, date: h.date, endDate: h.endDate, title: `🎌 ${h.title}`, shared: true, holiday: true };
+    out.push({ ev, startCol: Math.max(0, dayDiff(weekStartStr, h.date)), endCol: Math.min(6, dayDiff(weekStartStr, h.endDate)) });
+  }
+  return out;
+}
+// 겹치지 않는 막대는 같은 레인(줄)에 욱여넣는 단순 그리디 배치 — 2인용 캘린더라
+// 같은 주에 여러 날 일정이 여럿 겹칠 일은 드물어서 이 정도로 충분하다.
+function assignLanes(spanning) {
+  const lanes = [];
+  for (const item of [...spanning].sort((a, b) => a.startCol - b.startCol)) {
+    let lane = lanes.find((l) => l.every((o) => item.startCol > o.endCol || item.endCol < o.startCol));
+    if (!lane) { lane = []; lanes.push(lane); }
+    lane.push(item);
+  }
+  return lanes;
+}
 function markWeekend(el, dow) { if (dow === 0) el.classList.add("sun"); if (dow === 6) el.classList.add("sat"); }
 const dlgDateLabel = (ds) => {
   const [y, m, dd] = ds.split("-").map(Number);
@@ -1775,35 +1832,61 @@ function renderMonth(grid, cur) {
   if (!calSel || !calSel.startsWith(monthPrefix)) calSel = sameMonth ? tk : monthPrefix + "01";
   grid.replaceChildren(weekHeader());
   const month = document.createElement("div"); month.className = "cal-month";
-  for (let i = 0; i < cells; i++) {
-    const d = new Date(start); d.setDate(start.getDate() + i);
-    const ds = ymd(d);
-    const cell = document.createElement("div"); cell.className = "cal-day";
-    markWeekend(cell, d.getDay());
-    if (d.getMonth() !== cur.getMonth()) cell.classList.add("other");
-    if (ds === tk) cell.classList.add("today");
-    if (ds === calSel) cell.classList.add("sel");
-    const dn = document.createElement("div"); dn.className = "d"; dn.textContent = d.getDate(); cell.appendChild(dn);
-    const evs = calEventsOn(ds);
-    if (evs.length) {
-      const wrap = document.createElement("div"); wrap.className = "cal-day-evs";
-      evs.slice(0, 2).forEach((ev) => wrap.appendChild(evChip(ev, ds)));
-      if (evs.length > 2) { const m = document.createElement("div"); m.className = "cal-more"; m.textContent = `+${evs.length - 2}`; wrap.appendChild(m); }
-      cell.appendChild(wrap);
+  const weeks = cells / 7;
+  for (let w = 0; w < weeks; w++) {
+    const weekStart = new Date(start); weekStart.setDate(start.getDate() + w * 7);
+    const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 6);
+    const weekStartStr = ymd(weekStart), weekEndStr = ymd(weekEnd);
+
+    const weekRow = document.createElement("div"); weekRow.className = "cal-week-row";
+    const lanes = assignLanes(collectSpanningEvents(weekStartStr, weekEndStr));
+    if (lanes.length) {
+      const bars = document.createElement("div"); bars.className = "cal-week-bars";
+      lanes.forEach((lane, li) => {
+        lane.forEach(({ ev, startCol, endCol }) => {
+          const bar = evBar(ev);
+          bar.style.gridColumn = `${startCol + 1} / ${endCol + 2}`;
+          bar.style.gridRow = String(li + 1);
+          bars.appendChild(bar);
+        });
+      });
+      weekRow.appendChild(bars);
     }
-    // 네이티브 dblclick 은 모바일 PWA 터치에서 잘 안 잡힐 때가 있어, 같은 날짜를
-    // 400ms 안에 두 번 누르면 직접 더블탭으로 판정한다(마우스·터치 동일하게 동작).
-    cell.addEventListener("click", () => {
-      const now = Date.now();
-      if (calLastTap.ds === ds && now - calLastTap.t < 400) {
-        calLastTap = { ds: null, t: 0 };
-        openCalDialog(ds, null);
-        return;
+
+    const daysGrid = document.createElement("div"); daysGrid.className = "cal-week-days";
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(weekStart); d.setDate(weekStart.getDate() + i);
+      const ds = ymd(d);
+      const cell = document.createElement("div"); cell.className = "cal-day";
+      markWeekend(cell, d.getDay());
+      if (d.getMonth() !== cur.getMonth()) cell.classList.add("other");
+      if (ds === tk) cell.classList.add("today");
+      if (ds === calSel) cell.classList.add("sel");
+      const dn = document.createElement("div"); dn.className = "d"; dn.textContent = d.getDate(); cell.appendChild(dn);
+      // 여러 날 일정은 위 주간 막대가 이미 보여주므로 칸 안에서는 빼고 그린다.
+      const evs = calEventsOn(ds).filter((ev) => !isSpanningEvent(ev));
+      if (evs.length) {
+        const wrap = document.createElement("div"); wrap.className = "cal-day-evs";
+        evs.slice(0, 2).forEach((ev) => wrap.appendChild(evChip(ev, ds)));
+        if (evs.length > 2) { const m = document.createElement("div"); m.className = "cal-more"; m.textContent = `+${evs.length - 2}`; wrap.appendChild(m); }
+        cell.appendChild(wrap);
       }
-      calLastTap = { ds, t: now };
-      calSel = ds; renderCal();
-    });
-    month.appendChild(cell);
+      // 네이티브 dblclick 은 모바일 PWA 터치에서 잘 안 잡힐 때가 있어, 같은 날짜를
+      // 400ms 안에 두 번 누르면 직접 더블탭으로 판정한다(마우스·터치 동일하게 동작).
+      cell.addEventListener("click", () => {
+        const now = Date.now();
+        if (calLastTap.ds === ds && now - calLastTap.t < 400) {
+          calLastTap = { ds: null, t: 0 };
+          openCalDialog(ds, null);
+          return;
+        }
+        calLastTap = { ds, t: now };
+        calSel = ds; renderCal();
+      });
+      daysGrid.appendChild(cell);
+    }
+    weekRow.appendChild(daysGrid);
+    month.appendChild(weekRow);
   }
   grid.appendChild(month);
 }
