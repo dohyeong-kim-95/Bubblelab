@@ -292,22 +292,33 @@
   .cal-card h3 { margin: 0; font-size: 1rem; }
   #cal-colorbox label { display: flex; align-items: center; justify-content: space-between; font-size: .85rem; }
   .cal-card input[type=color] { width: 3rem; height: 2rem; border: 1px solid var(--line); border-radius: .4rem; background: none; padding: 0; }
-  .cal-dlg-date { font-size: .8rem; font-weight: 600; color: var(--dim); letter-spacing: .01em; }
   #cal-dlg-title { font: inherit; font-size: 1rem; padding: .6rem .7rem; border-radius: .6rem;
                    border: 1px solid var(--line); background: var(--bg); color: inherit; }
   #cal-dlg-title:focus { outline: none; border-color: color-mix(in srgb, var(--pink) 55%, var(--line)); }
-  /* 종일 체크박스는 라벨과 붙어 있어야 한다(색상 설정의 좌우 배치 규칙을 덮는다) */
-  .cal-allday { display: flex; align-items: center; justify-content: flex-start; gap: .4rem; font-size: .85rem; }
+  .cal-daterow { display: flex; flex-wrap: wrap; gap: .5rem .9rem; }
+  .cal-daterow label { display: flex; align-items: center; gap: .35rem; font-size: .82rem; }
+  /* iOS 스타일 on/off 토글 — 체크박스는 숨기고 track+thumb 을 :checked 로 움직인다 */
+  .cal-toggle { display: flex; align-items: center; gap: .5rem; font-size: .85rem; cursor: pointer; }
+  .cal-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .cal-toggle .track { position: relative; flex: none; width: 2.5rem; height: 1.4rem; border-radius: 999px;
+                        background: var(--line); transition: background .15s; }
+  .cal-toggle .thumb { position: absolute; top: .15rem; left: .15rem; width: 1.1rem; height: 1.1rem;
+                        border-radius: 50%; background: var(--panel); box-shadow: 0 1px 2px light-dark(#0f172233, #0007);
+                        transition: transform .15s; }
+  .cal-toggle input:checked + .track { background: var(--pink); }
+  .cal-toggle input:checked + .track > .thumb { transform: translateX(1.1rem); }
   .cal-times { display: flex; gap: .9rem; }
   .cal-times label { display: flex; align-items: center; gap: .35rem; font-size: .82rem; }
   .cal-times input[type=time], .cal-times input[type=date] { font: inherit; padding: .35rem .45rem; border: 1px solid var(--line);
                                 border-radius: .5rem; background: var(--bg); color: inherit; }
   .cal-recur { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem .9rem; font-size: .82rem; }
   .cal-recur label { display: flex; align-items: center; gap: .35rem; }
-  .cal-recur select, .cal-recur input[type=date] { font: inherit; font-size: .8rem; padding: .35rem .45rem;
+  .cal-recur select, .cal-recur input[type=date], .cal-recur input[type=number] { font: inherit; font-size: .8rem; padding: .35rem .45rem;
                                                     border: 1px solid var(--line); border-radius: .5rem;
                                                     background: var(--bg); color: inherit; }
+  .cal-recur input[type=number] { width: 3.6rem; }
   .cal-hint { margin: 0; font-size: .68rem; color: var(--dim); line-height: 1.4; }
+  .cal-dlg-delrow { display: flex; gap: .5rem; }
   .cal-cats { display: flex; gap: .4rem; }
   .cal-cats button { flex: 1; font: inherit; font-size: .78rem; padding: .5rem; border-radius: .6rem;
                      border: 1px solid var(--line); background: var(--bg); color: inherit; cursor: pointer;
@@ -315,11 +326,15 @@
   .cal-cats button::before { content: ""; width: .5rem; height: .5rem; border-radius: 50%; background: var(--c); }
   .cal-cats button[aria-pressed=true] { border-color: color-mix(in srgb, var(--c) 60%, var(--line)); font-weight: 600;
                                         background: color-mix(in srgb, var(--c) 13%, transparent); }
-  .cal-dlg-actions { display: flex; align-items: center; gap: .5rem; }
-  .cal-dlg-actions button { font: inherit; font-size: .82rem; padding: .5rem .9rem; border-radius: .6rem;
+  .cal-dlg-actions, .cal-dlg-delrow { display: flex; align-items: center; gap: .5rem; }
+  .cal-dlg-actions button, .cal-dlg-delrow button { font: inherit; font-size: .82rem; padding: .5rem .9rem; border-radius: .6rem;
                             border: 1px solid var(--line); background: var(--bg); color: inherit; cursor: pointer; }
   .cal-dlg-actions .cal-primary { background: var(--pink); color: light-dark(#fff,#1a1016); border-color: transparent; font-weight: 600; }
-  .cal-dlg-actions .cal-del { color: light-dark(#b4453a,#f0a8a2); border-color: light-dark(#e6b0ab,#5c3330); }
+  .cal-dlg-delrow .cal-del { flex: 1; color: light-dark(#b4453a,#f0a8a2); border-color: light-dark(#e6b0ab,#5c3330); }
+  /* display:flex 를 가진 요소는 hidden 속성만으로 안 감춰진다(author 스타일이
+     UA의 [hidden]{display:none} 보다 우선 적용된다) — 토글되는 자식에는 항상
+     명시적으로 덮어쓴다. */
+  .cal-daterow label[hidden], .cal-times[hidden], .cal-recur[hidden], .cal-recur label[hidden] { display: none; }
   /* 하단 토스트(뒤로가기 종료 안내 등) */
   #toast { position: fixed; left: 50%; transform: translateX(-50%); z-index: 100; pointer-events: none;
            bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
@@ -422,32 +437,44 @@
 <!-- 이벤트 추가/수정 -->
 <div id="cal-dialog" hidden>
   <div class="cal-card">
-    <div id="cal-dlg-date" class="cal-dlg-date"></div>
+    <div class="cal-daterow">
+      <label>시작일 <input type="date" id="cal-dlg-startdate"></label>
+      <label id="cal-dlg-enddate-wrap">종료일 <input type="date" id="cal-dlg-enddate"></label>
+    </div>
     <input id="cal-dlg-title" placeholder="일정 제목" autocomplete="off" maxlength="120">
-    <label class="cal-allday"><input type="checkbox" id="cal-dlg-allday" checked> 종일</label>
+    <label class="cal-toggle"><input type="checkbox" id="cal-dlg-allday" checked><span class="track"><span class="thumb"></span></span>종일</label>
     <div id="cal-dlg-times" class="cal-times" hidden>
       <label>시작 <input type="time" id="cal-dlg-start"></label>
       <label>끝 <input type="time" id="cal-dlg-end"></label>
     </div>
-    <div id="cal-dlg-multiday" class="cal-times" hidden>
-      <label>종료일 <input type="date" id="cal-dlg-enddate"></label>
-    </div>
-    <div class="cal-recur">
-      <label>반복
-        <select id="cal-dlg-recur">
-          <option value="none">안 함</option>
+    <label class="cal-toggle"><input type="checkbox" id="cal-dlg-recur-on"><span class="track"><span class="thumb"></span></span>반복</label>
+    <div id="cal-dlg-recur-body" class="cal-recur" hidden>
+      <label>주기
+        <select id="cal-dlg-recur-freq">
           <option value="daily">매일</option>
           <option value="weekly">매주</option>
           <option value="monthly">매월</option>
           <option value="yearly">매년</option>
         </select>
       </label>
+      <label>종료
+        <select id="cal-dlg-recur-end">
+          <option value="never">계속</option>
+          <option value="until">날짜까지</option>
+          <option value="count">횟수만큼</option>
+        </select>
+      </label>
       <label id="cal-dlg-recur-until-wrap" hidden>까지 <input type="date" id="cal-dlg-recur-until"></label>
+      <label id="cal-dlg-recur-count-wrap" hidden><input type="number" id="cal-dlg-recur-count" min="1" max="999" value="5">번</label>
     </div>
-    <p class="cal-hint">여러 날 종료일과 반복은 함께 쓸 수 없어요 — 반복 설정 시 종료일은 무시됩니다.</p>
+    <p class="cal-hint" id="cal-dlg-hint" hidden>여러 날 종료일과 반복은 함께 쓸 수 없어요 — 반복 설정 시 종료일은 무시됩니다.</p>
     <div id="cal-dlg-cats" class="cal-cats"></div>
-    <div class="cal-dlg-actions">
+    <div id="cal-dlg-delrow" class="cal-dlg-delrow">
       <button id="cal-dlg-del" class="cal-del" hidden>삭제</button>
+      <button id="cal-dlg-del-one" class="cal-del" hidden>이 날짜만 삭제</button>
+      <button id="cal-dlg-del-all" class="cal-del" hidden>전체 삭제</button>
+    </div>
+    <div class="cal-dlg-actions">
       <span style="flex:1"></span>
       <button id="cal-dlg-cancel">취소</button>
       <button id="cal-dlg-save" class="cal-primary">저장</button>
@@ -1328,21 +1355,44 @@ function calDeleteEvent(id) {
   calSend({ type: "cal-del", id, rev });
   renderCal();
 }
-// 반복 규칙(freq: daily|weekly|monthly|yearly, until?: YYYY-MM-DD) 에 dateStr 이
-// 해당하는 회차인지 판정. 반복은 시리즈 하나가 회차 전체를 대표한다(회차별 수정·
-// 삭제 없음 — 편집·삭제는 시리즈 전체에 적용된다).
+// 반복 시리즈에서 "이 날짜만" 뺀다(전체는 그대로 두고 exclude 목록에 추가) —
+// 시리즈 자체를 지우지 않으므로 calSaveEvent 와 달리 새 rev 로 같은 id 를 갱신한다.
+async function calDeleteOccurrence(id, onDate) {
+  const ev = calEvents.get(id);
+  if (!ev || !ev.recur) return;
+  const rev = Date.now();
+  const content = { date: ev.date, title: ev.title, owner: ev.owner, shared: ev.shared };
+  if (ev.start) content.start = ev.start;
+  if (ev.end) content.end = ev.end;
+  content.recur = { ...ev.recur, exclude: [...new Set([...(ev.recur.exclude || []), onDate])] };
+  calEvents.set(id, { id, rev, deleted: false, ...content }); calPersist();
+  const frame = await encryptJson(content);
+  calSend({ type: "cal-put", id, iv: frame.iv, ct: frame.ct, rev });
+  renderCal();
+}
+// 반복 규칙(freq: daily|weekly|monthly|yearly, until?/count?: 둘 중 하나만,
+// exclude?: 회차별로 뺀 날짜들) 에 dateStr 이 해당하는 회차인지 판정. 반복은
+// 시리즈 하나가 회차 전체를 대표한다 — 편집은 시리즈 전체, 삭제만 "이 날짜만"과
+// "전체"를 가른다(exclude 로 개별 회차를 뺀다).
 function recurMatches(ev, ds) {
   if (ds < ev.date) return false;
+  if (ev.recur.exclude && ev.recur.exclude.includes(ds)) return false;
   if (ev.recur.until && ds > ev.recur.until) return false;
   const start = new Date(ev.date + "T00:00:00"), cur = new Date(ds + "T00:00:00");
   const diffDays = Math.round((cur - start) / 86400000);
+  let matches, occurrenceIndex;
   switch (ev.recur.freq) {
-    case "daily": return true;
-    case "weekly": return diffDays % 7 === 0;
-    case "monthly": return start.getDate() === cur.getDate();
-    case "yearly": return start.getMonth() === cur.getMonth() && start.getDate() === cur.getDate();
+    case "daily": matches = true; occurrenceIndex = diffDays; break;
+    case "weekly": matches = diffDays % 7 === 0; occurrenceIndex = diffDays / 7; break;
+    case "monthly": matches = start.getDate() === cur.getDate();
+      occurrenceIndex = (cur.getFullYear() - start.getFullYear()) * 12 + (cur.getMonth() - start.getMonth()); break;
+    case "yearly": matches = start.getMonth() === cur.getMonth() && start.getDate() === cur.getDate();
+      occurrenceIndex = cur.getFullYear() - start.getFullYear(); break;
     default: return false;
   }
+  if (!matches) return false;
+  if (ev.recur.count && occurrenceIndex >= ev.recur.count) return false; // count 는 첫 회차 포함 총 횟수
+  return true;
 }
 function calEventOnDate(ev, ds) {
   if (ev.recur && ev.recur.freq && ev.recur.freq !== "none") return recurMatches(ev, ds);
@@ -1384,7 +1434,10 @@ function weekHeader() {
 // 종일 일정은 옅게 채운 알약, 시간 일정은 색점 + 시간 + 제목 (구글 캘린더 관례).
 // 색은 --c 로 넘겨 CSS 가 배경·글자색을 테마별로 섞는다.
 const RECUR_LABEL = { daily: "매일", weekly: "매주", monthly: "매월", yearly: "매년" };
-function evChip(ev) {
+// onDate: 이 칩이 그려진 실제 날짜(반복/여러 날 일정은 ev.date 가 시리즈 원본일
+// 뿐 이 칩이 보이는 날짜와 다를 수 있다) — "이 날짜만 삭제"가 어느 회차를
+// 가리키는지 알려면 반드시 필요하다.
+function evChip(ev, onDate) {
   const c = document.createElement("div"); c.className = "cal-ev";
   c.style.setProperty("--c", calColorOf(ev));
   const isRecur = !!(ev.recur && ev.recur.freq && ev.recur.freq !== "none");
@@ -1401,7 +1454,7 @@ function evChip(ev) {
   if (isRecur) tip += ` (${RECUR_LABEL[ev.recur.freq] || ev.recur.freq} 반복)`;
   else if (ev.endDate && ev.endDate > ev.date) tip += ` (${ev.date} ~ ${ev.endDate})`;
   c.title = tip;
-  c.addEventListener("click", (e) => { e.stopPropagation(); openCalDialog(ev.date, ev); });
+  c.addEventListener("click", (e) => { e.stopPropagation(); openCalDialog(onDate || ev.date, ev); });
   return c;
 }
 function markWeekend(el, dow) { if (dow === 0) el.classList.add("sun"); if (dow === 6) el.classList.add("sat"); }
@@ -1435,7 +1488,7 @@ function renderMonth(grid, cur) {
     const evs = calEventsOn(ds);
     if (evs.length) {
       const wrap = document.createElement("div"); wrap.className = "cal-day-evs";
-      evs.slice(0, 2).forEach((ev) => wrap.appendChild(evChip(ev)));
+      evs.slice(0, 2).forEach((ev) => wrap.appendChild(evChip(ev, ds)));
       if (evs.length > 2) { const m = document.createElement("div"); m.className = "cal-more"; m.textContent = `+${evs.length - 2}`; wrap.appendChild(m); }
       cell.appendChild(wrap);
     }
@@ -1471,7 +1524,7 @@ function renderDayPanel() {
   hd.append(dt, add);
   const evs = document.createElement("div"); evs.className = "evs";
   const list = calEventsOn(calSel);
-  if (list.length) list.forEach((ev) => evs.appendChild(evChip(ev)));
+  if (list.length) list.forEach((ev) => evs.appendChild(evChip(ev, calSel)));
   else { const e = document.createElement("div"); e.className = "empty"; e.textContent = "일정이 없어요"; evs.appendChild(e); }
   panel.replaceChildren(hd, evs);
 }
@@ -1497,7 +1550,7 @@ function renderWeek(grid, cur) {
     wd.append(wn, ww);
     const wevs = document.createElement("div"); wevs.className = "wevs";
     const evs = calEventsOn(ds);
-    if (evs.length) evs.forEach((ev) => wevs.appendChild(evChip(ev)));
+    if (evs.length) evs.forEach((ev) => wevs.appendChild(evChip(ev, ds)));
     else { const e = document.createElement("div"); e.className = "empty"; e.textContent = "일정 없음"; wevs.appendChild(e); }
     row.append(wd, wevs);
     row.addEventListener("click", () => openCalDialog(ds, null));
@@ -1517,26 +1570,48 @@ function renderCatButtons() {
     box.appendChild(b);
   });
 }
+// 여러 날 종료일 필드는 시작일보다 앞으로 갈 수 없다 + 시작일을 뒤로 옮기면 따라간다.
+$("cal-dlg-startdate").addEventListener("change", () => {
+  const sd = $("cal-dlg-startdate").value;
+  $("cal-dlg-enddate").min = sd;
+  if ($("cal-dlg-enddate").value < sd) $("cal-dlg-enddate").value = sd;
+});
+function updateHint() {
+  const multiday = $("cal-dlg-allday").checked && $("cal-dlg-enddate").value > $("cal-dlg-startdate").value;
+  $("cal-dlg-hint").hidden = !(multiday && $("cal-dlg-recur-on").checked);
+}
+$("cal-dlg-enddate").addEventListener("change", updateHint);
+
 function openCalDialog(dateStr, ev) {
   calDlgId = ev ? ev.id : randToken();
-  calDlgDate = dateStr;
+  calDlgDate = dateStr; // 이 다이얼로그가 "보고 있는" 날짜(반복 회차 중 하나일 수 있음) — 이 날짜만 삭제에 씀
   calDlgCat = ev ? (ev.shared ? "shared" : "mine") : "mine";
-  const lb = dlgDateLabel(dateStr);
-  $("cal-dlg-date").textContent = `${lb.d} (${lb.w})`;
   $("cal-dlg-title").value = ev ? (ev.title || "") : "";
+  $("cal-dlg-startdate").value = ev ? ev.date : dateStr;
   const timed = !!(ev && ev.start);
   $("cal-dlg-allday").checked = !timed;
   $("cal-dlg-start").value = (ev && ev.start) || "09:00";
   $("cal-dlg-end").value = (ev && ev.end) || "";
   $("cal-dlg-times").hidden = !timed;
-  $("cal-dlg-multiday").hidden = timed; // 종일 일정에서만 여러 날 종료일을 받는다
-  $("cal-dlg-enddate").min = dateStr;
-  $("cal-dlg-enddate").value = (ev && ev.endDate) || dateStr;
-  const recurFreq = (ev && ev.recur && ev.recur.freq) || "none";
-  $("cal-dlg-recur").value = recurFreq;
-  $("cal-dlg-recur-until").value = (ev && ev.recur && ev.recur.until) || "";
-  $("cal-dlg-recur-until-wrap").hidden = recurFreq === "none";
-  $("cal-dlg-del").hidden = !ev;
+  $("cal-dlg-enddate-wrap").hidden = timed; // 종일 일정에서만 여러 날 종료일을 받는다
+  $("cal-dlg-enddate").min = ev ? ev.date : dateStr;
+  $("cal-dlg-enddate").value = (ev && ev.endDate) || (ev ? ev.date : dateStr);
+  const recur = ev && ev.recur;
+  const recurOn = !!(recur && recur.freq);
+  $("cal-dlg-recur-on").checked = recurOn;
+  $("cal-dlg-recur-body").hidden = !recurOn;
+  $("cal-dlg-recur-freq").value = (recur && recur.freq) || "weekly";
+  const endMode = recur && recur.count ? "count" : recur && recur.until ? "until" : "never";
+  $("cal-dlg-recur-end").value = endMode;
+  $("cal-dlg-recur-until-wrap").hidden = endMode !== "until";
+  $("cal-dlg-recur-count-wrap").hidden = endMode !== "count";
+  $("cal-dlg-recur-until").value = (recur && recur.until) || "";
+  $("cal-dlg-recur-count").value = (recur && recur.count) || 5;
+  updateHint();
+  // 기존 일정: 반복이면 "이 날짜만/전체 삭제" 둘 다, 아니면 "삭제" 하나. 새 일정은 삭제 자체가 없다.
+  $("cal-dlg-del").hidden = !ev || recurOn;
+  $("cal-dlg-del-one").hidden = !recurOn;
+  $("cal-dlg-del-all").hidden = !recurOn;
   renderCatButtons();
   $("cal-dialog").hidden = false;
   setTimeout(() => $("cal-dlg-title").focus(), 30);
@@ -1544,27 +1619,46 @@ function openCalDialog(dateStr, ev) {
 $("cal-dlg-allday").addEventListener("change", () => {
   const allday = $("cal-dlg-allday").checked;
   $("cal-dlg-times").hidden = allday;
-  $("cal-dlg-multiday").hidden = !allday;
+  $("cal-dlg-enddate-wrap").hidden = !allday;
+  updateHint();
 });
-$("cal-dlg-recur").addEventListener("change", () => {
-  $("cal-dlg-recur-until-wrap").hidden = $("cal-dlg-recur").value === "none";
+$("cal-dlg-recur-on").addEventListener("change", () => {
+  $("cal-dlg-recur-body").hidden = !$("cal-dlg-recur-on").checked;
+  updateHint();
+});
+$("cal-dlg-recur-end").addEventListener("change", () => {
+  const mode = $("cal-dlg-recur-end").value;
+  $("cal-dlg-recur-until-wrap").hidden = mode !== "until";
+  $("cal-dlg-recur-count-wrap").hidden = mode !== "count";
 });
 function closeCalDialog() { $("cal-dialog").hidden = true; calDlgId = null; }
 $("cal-dlg-save").addEventListener("click", async () => {
   const title = $("cal-dlg-title").value.trim();
   if (!title) { $("cal-dlg-title").focus(); return; }
+  const date = $("cal-dlg-startdate").value || calDlgDate;
   const allDay = $("cal-dlg-allday").checked;
   const start = allDay ? undefined : ($("cal-dlg-start").value || undefined);
   const end = allDay ? undefined : ($("cal-dlg-end").value || undefined);
-  const recurFreq = $("cal-dlg-recur").value;
-  const recur = recurFreq !== "none" ? { freq: recurFreq, until: $("cal-dlg-recur-until").value || undefined } : null;
+  let recur = null;
+  if ($("cal-dlg-recur-on").checked) {
+    recur = { freq: $("cal-dlg-recur-freq").value };
+    const mode = $("cal-dlg-recur-end").value;
+    if (mode === "until") recur.until = $("cal-dlg-recur-until").value || undefined;
+    else if (mode === "count") recur.count = Number($("cal-dlg-recur-count").value) || undefined;
+    // 이전에 "이 날짜만 삭제"로 뺀 회차가 있다면 일반 저장(제목 수정 등)으로
+    // 되살아나지 않게 이어서 들고 간다.
+    const prevExclude = calEvents.get(calDlgId)?.recur?.exclude;
+    if (prevExclude && prevExclude.length) recur.exclude = prevExclude;
+  }
   const enddateRaw = allDay ? $("cal-dlg-enddate").value : undefined;
-  const endDate = (!recur && enddateRaw && enddateRaw > calDlgDate) ? enddateRaw : undefined;
-  await calSaveEvent({ id: calDlgId, date: calDlgDate, title, owner: MY_NAME, shared: calDlgCat === "shared", start, end, endDate, recur });
+  const endDate = (!recur && enddateRaw && enddateRaw > date) ? enddateRaw : undefined;
+  await calSaveEvent({ id: calDlgId, date, title, owner: MY_NAME, shared: calDlgCat === "shared", start, end, endDate, recur });
   closeCalDialog();
 });
 $("cal-dlg-cancel").addEventListener("click", closeCalDialog);
 $("cal-dlg-del").addEventListener("click", () => { if (calDlgId) calDeleteEvent(calDlgId); closeCalDialog(); });
+$("cal-dlg-del-one").addEventListener("click", () => { if (calDlgId) calDeleteOccurrence(calDlgId, calDlgDate); closeCalDialog(); });
+$("cal-dlg-del-all").addEventListener("click", () => { if (calDlgId) calDeleteEvent(calDlgId); closeCalDialog(); });
 $("cal-dialog").addEventListener("click", (e) => { if (e.target === $("cal-dialog")) closeCalDialog(); });
 
 function openColorbox() {
