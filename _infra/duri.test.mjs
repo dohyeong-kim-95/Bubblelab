@@ -89,6 +89,31 @@ test("parseAlbumHeader accepts id.i.n within bounds only", () => {
   assert.equal(parseAlbumHeader(null), null);
 });
 
+test("calendar put/del use last-write-wins and reset clears them", async () => {
+  const storage = fakeStorage({ seq: 0, ackSeq: 0 });
+  const state = { storage, blockConcurrencyWhile: (fn) => fn() };
+  const room = new DuriDO(state, { DURI_BUCKET: fakeBucket([]) });
+  await room.load();
+  const sent = [];
+  const conn = { ws: { send: (s) => sent.push(JSON.parse(s)) }, role: "peer", stamps: [], alive: true };
+
+  await room.calPut(null, "evt123abc", "aXY=", "Y2lwaGVy", 100);
+  assert.deepEqual(storage.map.get("cal:evt123abc"), { id: "evt123abc", iv: "aXY=", ct: "Y2lwaGVy", rev: 100, deleted: false });
+  await room.calPut(null, "evt123abc", "b2xk", "b2xk", 50);   // 오래된 rev → 무시
+  assert.equal(storage.map.get("cal:evt123abc").iv, "aXY=");
+  await room.calPut(null, "evt123abc", "bmV3", "bmV3", 200);  // 새 rev → 반영
+  assert.equal(storage.map.get("cal:evt123abc").ct, "bmV3");
+  await room.calDel(null, "evt123abc", 300);                  // 삭제 → 툼스톤
+  assert.deepEqual(storage.map.get("cal:evt123abc"), { id: "evt123abc", rev: 300, deleted: true });
+
+  await room.sendCalState(conn);
+  const st = sent.find((m) => m.type === "cal-state");
+  assert.ok(st && st.events.length === 1 && st.events[0].deleted === true);
+
+  await room.handleReset();
+  assert.equal([...storage.map.keys()].filter((k) => k.startsWith("cal:")).length, 0);
+});
+
 test("handleReset wipes the buffer and R2 photos but keeps seq monotonic", async () => {
   const photoKey = "photo/000000000002-a1b2c3d4e5f6a7b8";
   const storage = fakeStorage({

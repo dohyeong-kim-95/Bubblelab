@@ -39,6 +39,12 @@ const FLOOD_LIMIT = 30; // 사진 연속 전송 여지를 두고 채팅보다 �
 const SEQ_KEY = "seq";
 const ACK_KEY = "ackSeq";
 const BUF_PREFIX = "buf:";
+// 공유 캘린더: 채팅 버퍼(ack 후 폐기)와 달리 지속 상태다. 이벤트별로 cal:<id> 에
+// E2E 암호블롭({iv,ct})을 rev(수정시각)와 함께 저장하고 last-write-wins 로 병합한다.
+export const DURI_MAX_CAL_BLOB = 4 * 1024;
+const CAL_PREFIX = "cal:";
+const MAX_CAL_EVENTS = 2000;
+const CAL_ID = /^[A-Za-z0-9]{6,40}$/;
 
 const bufKey = (seq) => BUF_PREFIX + String(seq).padStart(12, "0");
 
@@ -157,10 +163,17 @@ export class DuriDO {
         cursor = listed.truncated ? listed.cursor : undefined;
       } while (cursor);
     }
-    // 3) 전부 소비됨으로 표시(seq 는 유지).
+    // 3) 공유 캘린더도 비운다.
+    for (;;) {
+      const cal = await this.state.storage.list({ prefix: CAL_PREFIX, limit: 1000 });
+      if (cal.size === 0) break;
+      await this.state.storage.delete([...cal.keys()]);
+      if (cal.size < 1000) break;
+    }
+    // 4) 전부 소비됨으로 표시(seq 는 유지).
     this.ackSeq = this.head;
     await this.state.storage.put(ACK_KEY, this.head);
-    // 4) 접속자에게 알린다 → 클라가 로컬 기록을 비우고 재시작.
+    // 5) 접속자에게 알린다 → 클라가 로컬 기록을 비우고 재시작.
     this.broadcast({ type: "reset" });
     return Response.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
   }
@@ -214,6 +227,12 @@ export class DuriDO {
       return;
     }
 
+    // 캘린더 현재 상태 요청(읽기 전용) → 접속 시 동기화.
+    if (msg.type === "cal-hello") {
+      this.state.blockConcurrencyWhile(() => this.sendCalState(conn));
+      return;
+    }
+
     // 플러드 제한 (ack/pong 제외)
     const now = Date.now();
     conn.stamps = conn.stamps.filter((t) => now - t < FLOOD_WINDOW_MS);
@@ -231,7 +250,48 @@ export class DuriDO {
       conn.stamps.push(now);
       this.state.blockConcurrencyWhile(() =>
         this.append({ kind: "msg", at: now, iv: payload.iv, ct: payload.ct }));
+      return;
     }
+
+    // 캘린더 이벤트 추가/수정: E2E 암호블롭 + rev. LWW 로 병합 후 상대에게 전파.
+    if (msg.type === "cal-put") {
+      if (!CAL_ID.test(msg.id ?? "") || !Number.isFinite(msg.rev)) return;
+      if (!isBlob(msg.iv, 64) || !isBlob(msg.ct, DURI_MAX_CAL_BLOB)) return;
+      conn.stamps.push(now);
+      this.state.blockConcurrencyWhile(() => this.calPut(conn, msg.id, msg.iv, msg.ct, msg.rev));
+      return;
+    }
+    // 캘린더 이벤트 삭제(툼스톤으로 전파).
+    if (msg.type === "cal-del") {
+      if (!CAL_ID.test(msg.id ?? "") || !Number.isFinite(msg.rev)) return;
+      conn.stamps.push(now);
+      this.state.blockConcurrencyWhile(() => this.calDel(conn, msg.id, msg.rev));
+      return;
+    }
+  }
+
+  // ── 공유 캘린더 ──────────────────────────────────────────────
+  async sendCalState(conn) {
+    const entries = await this.state.storage.list({ prefix: CAL_PREFIX, limit: MAX_CAL_EVENTS });
+    this.send(conn, { type: "cal-state", events: [...entries.values()] });
+  }
+  async calPut(conn, id, iv, ct, rev) {
+    const key = CAL_PREFIX + id;
+    const cur = await this.state.storage.get(key);
+    if (cur && cur.rev >= rev) return; // last-write-wins: 오래된 갱신 무시
+    if (!cur) {
+      const count = (await this.state.storage.list({ prefix: CAL_PREFIX, limit: MAX_CAL_EVENTS + 1 })).size;
+      if (count > MAX_CAL_EVENTS) return; // 상한 초과 시 새 이벤트 거부
+    }
+    await this.state.storage.put(key, { id, iv, ct, rev, deleted: false });
+    this.broadcast({ type: "cal-put", id, iv, ct, rev }, conn);
+  }
+  async calDel(conn, id, rev) {
+    const key = CAL_PREFIX + id;
+    const cur = await this.state.storage.get(key);
+    if (cur && cur.rev >= rev) return;
+    await this.state.storage.put(key, { id, rev, deleted: true }); // 툼스톤(삭제 전파용)
+    this.broadcast({ type: "cal-del", id, rev }, conn);
   }
 
   // ── 버퍼 적재/폐기 ───────────────────────────────────────────
