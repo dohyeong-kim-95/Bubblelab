@@ -144,6 +144,8 @@
   button.send { flex: none; background: var(--pink); color: light-dark(#fff, #1a1016); border-color: transparent;
                 width: 2.6rem; height: 2.6rem; padding: 0; display: flex; align-items: center; justify-content: center; }
   button.send svg { width: 1.15rem; height: 1.15rem; }
+  /* "/일정" 미니 달력이 열려 있는 동안엔 보내기 버튼이 잠깐 "추가" 버튼으로 바뀐다 */
+  button.send.addmode { font: inherit; font-size: .8rem; font-weight: 700; }
   button:disabled { opacity: .5; cursor: default; }
 
   /* 스티커/이모지 서랍 — 높이를 측정된 키보드 높이(--kb)와 똑같이 맞춰
@@ -447,10 +449,9 @@
     <button type="button" id="ccp-cancel" class="icon-btn" aria-label="취소">✕</button>
   </div>
   <div id="ccp-months"></div>
-  <div class="ccp-actions">
-    <span id="ccp-range">날짜를 선택하세요</span>
-    <button type="button" id="ccp-confirm" class="cal-primary" disabled>추가</button>
-  </div>
+  <!-- 확정 버튼은 따로 없다 — 채팅 보내기 버튼이 이 순간엔 "추가"로 바뀌어 그 역할을 한다
+       (버튼이 두 개면 헷갈리니까). 아래는 지금 고른 범위를 보여주는 상태 텍스트뿐. -->
+  <div class="ccp-actions"><span id="ccp-range">날짜를 선택하세요</span></div>
 </div>
 
 <div id="photo-tray" hidden></div>
@@ -1376,9 +1377,13 @@ text.addEventListener("keydown", (e) => {
 });
 $("composer").addEventListener("submit", (e) => {
   e.preventDefault();
+  // 미니 달력이 열려 있는 동안엔 보내기 버튼이 "추가" 버튼을 겸한다(버튼 두 개가
+  // 헷갈리지 않게, 달력 안의 확정 버튼은 없앴다) — 눌러도/Enter 쳐도 동일하게 확정.
+  // ws 연결 확인은 confirmCalCmd 안에서 따로(끊겼을 때 이유를 토스트로 보여준다).
+  if (!$("cal-cmd-picker").hidden) { confirmCalCmd(); return; }
   if (!ws || ws.readyState !== 1) return;
   // "/일정 ..." 그대로 Enter 를 쳐도 문자 그대로 보내지 않고 칩과 똑같이 미니
-  // 달력을 연다 — 이 명령을 "보내는" 유일한 경로는 미니 달력의 추가 버튼뿐이다.
+  // 달력을 연다 — 이 명령을 "보내는" 유일한 경로는 미니 달력의 확정(=보내기 버튼)뿐이다.
   if (CAL_CMD_RE.test(text.value)) { $("cal-cmd-chip").click(); return; }
   // 미리보기 트레이에 담긴 사진이 있으면 우선 전송한다(함께 입력한 텍스트도 같이).
   if (pendingPhotos.length) {
@@ -1939,7 +1944,6 @@ function ccpRefreshHighlight() {
   });
 }
 function ccpUpdateFooter() {
-  $("ccp-confirm").disabled = !ccpStart;
   if (!ccpStart) { $("ccp-range").textContent = "날짜를 선택하세요"; return; }
   const s = dlgDateLabel(ccpStart);
   if (!ccpEnd || ccpEnd === ccpStart) $("ccp-range").textContent = `${s.d} (${s.w})`;
@@ -1952,6 +1956,16 @@ function ccpPick(ds) {
   ccpRefreshHighlight();
   ccpUpdateFooter();
 }
+// 보내기 버튼이 미니 달력이 열린 동안엔 "추가" 버튼을 겸한다(버튼 두 개가
+// 헷갈리지 않게 — 달력 안엔 확정 버튼을 따로 두지 않는다).
+function setSendMode(isAdd) {
+  const btn = $("sendBtn");
+  btn.classList.toggle("addmode", isAdd);
+  btn.title = isAdd ? "일정 추가" : "보내기";
+  btn.setAttribute("aria-label", isAdd ? "일정 추가" : "보내기");
+  btn.innerHTML = isAdd ? "추가"
+    : '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M2,21L23,12L2,3V10L17,12L2,14V21Z"/></svg>';
+}
 function openCalCmdPicker() {
   if (!picker.hidden) closePicker();
   ccpStart = null; ccpEnd = null;
@@ -1961,13 +1975,19 @@ function openCalCmdPicker() {
   const next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
   $("ccp-months").replaceChildren(ccpBuildMonth(now.getFullYear(), now.getMonth()), ccpBuildMonth(next.getFullYear(), next.getMonth()));
   ccpUpdateFooter();
+  $("cal-cmd-bar").hidden = true; // 칩은 이미 할 일을 했으니 접어서 버튼이 하나로 보이게
   $("cal-cmd-picker").hidden = false;
+  setSendMode(true);
 }
-function closeCalCmdPicker() { $("cal-cmd-picker").hidden = true; }
+function closeCalCmdPicker() {
+  $("cal-cmd-picker").hidden = true;
+  $("cal-cmd-bar").hidden = !CAL_CMD_RE.test(text.value); // 텍스트가 아직 명령이면 칩을 되살린다
+  setSendMode(false);
+}
 $("cal-cmd-chip").addEventListener("click", openCalCmdPicker);
 $("ccp-cancel").addEventListener("click", closeCalCmdPicker);
-$("ccp-confirm").addEventListener("click", async () => {
-  if (!ccpStart) return;
+async function confirmCalCmd() {
+  if (!ccpStart) { showToast("날짜를 먼저 골라주세요"); return; }
   if (!ws || ws.readyState !== 1) { showToast("연결이 끊겨서 추가하지 못했어요"); return; }
   const endDate = (ccpEnd && ccpEnd > ccpStart) ? ccpEnd : undefined;
   await calSaveEvent({ id: randToken(), date: ccpStart, title: ccpTitle, owner: MY_NAME, shared: true, endDate, recur: null });
@@ -1975,7 +1995,7 @@ $("ccp-confirm").addEventListener("click", async () => {
   await sendSysNotice(`📅 "${ccpTitle}" 일정 추가됨 (${rangeTxt})`);
   closeCalCmdPicker();
   text.value = ""; text.style.height = "auto"; $("cal-cmd-bar").hidden = true;
-});
+}
 
 calRestore();
 
