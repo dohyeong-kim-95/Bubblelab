@@ -410,6 +410,17 @@ async function handleDuri(request, env, url) {
     return stub.fetch(withDuriRole(request, role));
   }
 
+  // 새 메시지 웹 푸시. 공개키 조회는 DO 없이 바로(민감하지 않음), 구독·해지는 DO에
+  // 위임(peer 전용 — DO가 다시 확인한다).
+  if (path === "/_duri/push") {
+    if (request.method === "GET") {
+      return Response.json({ vapidPublicKey: env.VAPID_PUBLIC_KEY ?? null }, { headers: { "Cache-Control": "no-store" } });
+    }
+    if (request.method === "POST" || request.method === "DELETE") {
+      return stub.fetch(withDuriRole(request, role));
+    }
+  }
+
   // 방 초기화: 소유자(duri 게이트 세션)만. 싱크 토큰으로는 못 지운다. 서버 버퍼와
   // 참조 사진(R2)을 비워 "새로 시작"을 만든다. 각자 PC 싱크 아카이브는 손대지 않는다.
   if (path === "/_duri/reset" && request.method === "POST") {

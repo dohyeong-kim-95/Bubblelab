@@ -50,10 +50,9 @@ apple/mobile 메타만으로 구성한 **최소 설치형 PWA**다. 최신 Chrom
 게이트 뒤라 `crossorigin="use-credentials"`로 받는다. `start_url`·`scope`는
 서브도메인 루트(`/`)라 앱을 열면 곧바로 duri 홈이 뜬다(work 홈 경유 없음).
 
-- **서비스워커(오프라인 셸)는 아직 없음.** 이제 앱이 서브도메인 루트(`/`)에
-  있어 `/sw.js`의 기본 스코프(`/`)로 최상위 문서까지 제어할 수 있다 — 승격으로
-  이전의 서브패스 스코프 제약은 풀렸다. 다만 게이트/`no-store` 헤더와의 캐시
-  전략(버전 관리 포함)을 정리한 뒤 붙인다 — 다음 단계.
+- **서비스워커(`sw.js`)는 푸시 알림 표시 전용 — 오프라인 셸 캐싱은 아직 없음.**
+  `fetch` 핸들러가 없어 게이트/`no-store` 헤더와 부딪힐 일이 없다(캐시 전략은
+  여전히 다음 단계). `install`/`activate`/`push`/`notificationclick`만 처리한다.
 - 아이콘 PNG(iOS `apple-touch-icon` 고해상도용)는 지금 SVG 하나로 갈음한다.
 
 ## E2E 암호화 (공유 패스프레이즈)
@@ -149,14 +148,43 @@ Enter를 쳐도 칩을 누른 것과 같다). 누르면 이번달+다음달을 �
 상으로는 평범한 `msg` 항목). 새 일정은 기본 **공통**(양쪽 다 보임)으로 만들어진다
 — 색·소유자를 바꾸려면 캘린더 탭에서 편집.
 
+## 새 메시지 푸시 알림 (기본 꺼짐)
+
+설정(⚙️) 메뉴의 **🔔 푸시 알림** 토글로 기기별로 켠다(기본 꺼짐). 켜면 상대가
+메시지·사진·스티커를 보낼 때 이 기기로 브라우저 알림이 온다(카톡 벤치마킹).
+소리·진동은 따로 켜고 끌 수 없다 — 웹 푸시 API엔 커스텀 사운드가 아예 없고
+진동 패턴도 iOS Safari는 지원하지 않아, 켜고 끄는 옵션 자체가 플랫폼마다
+다르게 동작해 혼란만 커질 것 같아 뺐다(OS 기본 동작을 그대로 따른다).
+
+- **서버는 알림을 보낼 때도 평문을 모른다.** 푸시 페이로드엔 채팅과 똑같은
+  암호블롭(`{iv,ct}` 또는 사진의 `{metaIv,metaCt}`)만 실어 보내고, **`duri/sw.js`가
+  이 기기 안에서 그 자리에 복호화**해서 보낸 사람 이름과 내용을 알림에 채운다.
+  텍스트는 그대로, 사진은 "사진", 스티커는 "(이모티콘)"으로 뜬다(캡션·스티커
+  이미지 자체는 안 보여줌). 브라우저 푸시 중계 서버(FCM 등)는 암호문만 스쳐
+  간다 — 평문이 서버·중계 어디에도 남지 않는다.
+- **복호화 키는 IndexedDB "meta" 스토어**에 있다(로그인 시 저장). `localStorage`는
+  서비스워커에서 못 읽어서 별도로 둔 것 — 신뢰 수준은 기존 localStorage 저장과
+  동일(둘 다 "이 기기에만, 서버로는 안 감"). 문구를 다시 입력하면 여기도 함께
+  지워진다.
+- 페이로드가 너무 크면(긴 텍스트 등, 3KB 초과) 내용 없이 "새 메시지가 도착했어요"
+  일반 알림으로 대체된다(`DuriDO.buildPushPayload`).
+- 구독은 `sink`(데스크톱 데몬)가 아니라 **브라우저(peer)만** 가능하고, 기기당
+  최대 8개까지(두 사람 × 기기 몇 대). 방 초기화는 구독을 건드리지 않는다.
+- VAPID 키는 새로 만들지 않고 리포에 **이미 있는 걸 재사용**한다(`util/fortune`·
+  `podcast`와 공유, `wrangler.jsonc`의 `VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY` secret).
+
 ## 서버 구성 (bubblelab 리포 안에서 자립)
 
 - `_infra/duri.js` — `DuriDO`: 릴레이 + 버퍼(ack 시 폐기) + 사진 R2 임시 보관
-  + 공유 캘린더 지속 상태(`cal:<id>`, LWW).
+  + 공유 캘린더 지속 상태(`cal:<id>`, LWW) + 웹 푸시 구독(`push:<hash>`,
+  `_infra/webpush.js` 재사용, VAPID는 fortune·podcast와 공유).
 - `_infra/worker.js` — `handleDuriGate`(서브도메인 게이트), `/_duri`(WS 중계),
-  `/_duri/photo`(업로드/다운로드), `/_duri/sink-token`(소유자 발급),
-  `/_duri/reset`(소유자 방 초기화). 인증: duri 게이트 세션(`bl_duri`, 브라우저)
-  또는 싱크 토큰(데몬). 비밀번호는 `DURI_PASSWORD`(없으면 `WORK_PASSWORD` 폴백).
+  `/_duri/photo`(업로드/다운로드), `/_duri/push`(GET 공개키 · POST/DELETE 구독,
+  peer 전용), `/_duri/sink-token`(소유자 발급), `/_duri/reset`(소유자 방 초기화).
+  인증: duri 게이트 세션(`bl_duri`, 브라우저) 또는 싱크 토큰(데몬). 비밀번호는
+  `DURI_PASSWORD`(없으면 `WORK_PASSWORD` 폴백).
+- `duri/sw.js` — 푸시 알림 표시 전용 서비스워커(캐싱 없음). 페이로드 복호화는
+  이 파일 안에서 직접(`index.html`의 `deriveKey`/`decryptJson`과 로직 동일해야 함).
 - `wrangler.jsonc` — `DURI` DO 바인딩·마이그v10, `DURI_BUCKET`(R2), `ENABLE_DURI` var.
 
 ## 켜는 법 (fail-closed)

@@ -10,6 +10,20 @@ import {
   isPhotoKey,
   parseAlbumHeader,
 } from "./duri.js";
+import { b64uEncode, generateVapidKeys } from "./webpush.js";
+
+// 복호화 가능한(유효한 P-256) 구독 키를 생성한다(fortune.test.mjs 와 동일 패턴).
+async function fakeSubscription(endpoint) {
+  const uaPair = await crypto.subtle.generateKey(
+    { name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"],
+  );
+  const p256dh = b64uEncode(new Uint8Array(await crypto.subtle.exportKey("raw", uaPair.publicKey)));
+  const auth = b64uEncode(crypto.getRandomValues(new Uint8Array(16)));
+  return { endpoint, keys: { p256dh, auth } };
+}
+const pushReq = (method, body, role = "peer") => new Request("https://x/_duri/push", {
+  method, headers: { "Content-Type": "application/json", "X-Duri-Role": role }, body: JSON.stringify(body),
+});
 
 // storage.list 가 CF처럼 Map 을 돌려주는 최소 가짜 스토리지.
 function fakeStorage(initial) {
@@ -140,4 +154,83 @@ test("handleReset wipes the buffer and R2 photos but keeps seq monotonic", async
   assert.equal(storage.map.get("ackSeq"), 3);
   // 참조·고아 사진 모두 R2에서 삭제
   assert.equal(bucket.set.size, 0);
+});
+
+test("push subscribe/unsubscribe is peer-only, dedupes by endpoint, and caps subscriber count", async () => {
+  const storage = fakeStorage({ seq: 0, ackSeq: 0 });
+  const state = { storage, blockConcurrencyWhile: (fn) => fn() };
+  const room = new DuriDO(state, { DURI_BUCKET: fakeBucket([]) });
+  await room.load();
+  const sub = await fakeSubscription("https://push.example.com/a");
+
+  const sinkRejected = await room.fetch(pushReq("POST", { subscription: sub }, "sink"));
+  assert.equal(sinkRejected.status, 403); // 싱크(데스크톱 데몬)는 알림을 구독할 수 없다
+
+  const ok = await room.fetch(pushReq("POST", { subscription: sub }));
+  assert.equal(ok.status, 200);
+  assert.equal((await storage.list({ prefix: "push:" })).size, 1);
+
+  await room.fetch(pushReq("POST", { subscription: sub })); // 같은 endpoint 재구독은 중복 안 만듦
+  assert.equal((await storage.list({ prefix: "push:" })).size, 1);
+
+  const bad = await room.fetch(pushReq("POST", { subscription: { endpoint: "http://insecure", keys: {} } }));
+  assert.equal(bad.status, 400);
+
+  // 이미 1개(sub) 있으니 7개를 더 채우면 상한(8)에 정확히 닿는다.
+  for (let i = 0; i < 7; i++) {
+    await room.fetch(pushReq("POST", { subscription: await fakeSubscription(`https://push.example.com/extra${i}`) }));
+  }
+  assert.equal((await storage.list({ prefix: "push:" })).size, 8);
+  const full = await room.fetch(pushReq("POST", { subscription: await fakeSubscription("https://push.example.com/one-too-many") }));
+  assert.equal(full.status, 503); // MAX_PUSH_SUBS(8) 상한 — 9번째는 거절
+  assert.equal((await storage.list({ prefix: "push:" })).size, 8);
+
+  const gone = await room.fetch(pushReq("DELETE", { endpoint: sub.endpoint }));
+  assert.equal(gone.status, 200);
+  assert.equal((await storage.list({ prefix: "push:" })).size, 7); // 하나만 해지됨
+});
+
+test("appending a msg/photo entry pushes the opaque blob to subscribers and prunes expired ones", async () => {
+  const vapid = await generateVapidKeys();
+  const storage = fakeStorage({ seq: 0, ackSeq: 0 });
+  const state = { storage, blockConcurrencyWhile: (fn) => fn() };
+  const room = new DuriDO(state, {
+    DURI_BUCKET: fakeBucket([]),
+    VAPID_PUBLIC_KEY: vapid.publicKey, VAPID_PRIVATE_KEY: vapid.privateKey,
+    VAPID_SUBJECT: "https://duri.bubblelab.dev",
+  });
+  await room.load();
+  await room.fetch(pushReq("POST", { subscription: await fakeSubscription("https://push.example.com/live") }));
+  await room.fetch(pushReq("POST", { subscription: await fakeSubscription("https://push.example.com/expired") }));
+
+  // sendWebPush 는 페이로드를 aes128gcm 으로 암호화해 보내므로(웹 표준 자체가
+  // 요구하는 암호화 — webpush.test.mjs 가 그 라운드트립을 이미 검증한다), 여기선
+  // 발송 횟수·상태 코드에 따른 만료 정리만 확인한다. 실제로 어떤 내용이 담겼는지는
+  // buildPushPayload 단위 테스트가 담당한다.
+  let sent = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (endpoint) => {
+    sent += 1;
+    return new Response(null, { status: String(endpoint).endsWith("/expired") ? 410 : 201 });
+  };
+  try {
+    await room.append({ kind: "msg", at: Date.now(), iv: "aXY=", ct: "Y2lwaGVy" });
+    // notifyPush 는 append 안에서 기다리지 않고 발사되므로(fire-and-forget — 실시간
+    // 브로드캐스트를 다음 웹소켓 메시지 처리가 푸시 발송으로 늦어지지 않게), 두
+    // 구독 모두에 실제 fetch(발송)가 끝날 때까지 짧게 기다린다.
+    await new Promise((resolve) => setTimeout(resolve, 60));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  assert.equal(sent, 2);
+  // 410(만료) 구독은 정리되고 살아있는 구독만 남는다
+  assert.equal((await storage.list({ prefix: "push:" })).size, 1);
+});
+
+test("buildPushPayload carries the opaque blob for msg/photo but falls back to generic when oversized", () => {
+  const storage = fakeStorage({ seq: 0, ackSeq: 0 });
+  const room = new DuriDO({ storage, blockConcurrencyWhile: (fn) => fn() }, {});
+  assert.deepEqual(room.buildPushPayload({ kind: "msg", iv: "aXY=", ct: "Y2lwaGVy" }), { kind: "msg", iv: "aXY=", ct: "Y2lwaGVy" });
+  assert.deepEqual(room.buildPushPayload({ kind: "photo", metaIv: "aXY=", metaCt: "bWV0YQ==" }), { kind: "photo", metaIv: "aXY=", metaCt: "bWV0YQ==" });
+  assert.deepEqual(room.buildPushPayload({ kind: "msg", iv: "aXY=", ct: "A".repeat(4000) }), { kind: "generic" });
 });

@@ -26,6 +26,8 @@
 // entry(텍스트): { type:"entry", seq, kind:"msg", at, iv, ct }
 // entry(사진)  : { type:"entry", seq, kind:"photo", at, r2key, imgIv, sha256, bytes, metaIv, metaCt }
 
+import { sendWebPush } from "./webpush.js";
+
 export const DURI_MAX_TEXT_BLOB = 16 * 1024; // 암호화된 텍스트 base64 상한
 export const DURI_MAX_PHOTO_BYTES = 96 * 1024 * 1024; // 암호화된 사진 원본 상한(원본 보존이 원칙)
 export const DURI_MAX_META_BLOB = 4 * 1024; // 사진 메타(이름·캡션) 암호블롭 상한
@@ -45,8 +47,20 @@ export const DURI_MAX_CAL_BLOB = 4 * 1024;
 const CAL_PREFIX = "cal:";
 const MAX_CAL_EVENTS = 2000;
 const CAL_ID = /^[A-Za-z0-9]{6,40}$/;
+// 웹 푸시 구독(브라우저 알림용, peer 전용 — sink 데몬은 알림을 못 받는다/안 받는다).
+// 알림 자체도 암호블롭({iv,ct} 또는 {metaIv,metaCt})을 그대로 실어 보낸다 — 서버는
+// 여전히 평문을 모르고, 기기의 서비스워커가 그 자리에서 복호화해 알림을 그린다.
+const PUSH_PREFIX = "push:";
+const MAX_PUSH_SUBS = 8; // 두 사람 × 기기 몇 대
+const MAX_PUSH_PAYLOAD_BYTES = 3000; // 안전 상한 넘으면 내용 없는 일반 알림으로 대체
 
 const bufKey = (seq) => BUF_PREFIX + String(seq).padStart(12, "0");
+
+async function endpointKey(endpoint) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(endpoint));
+  const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return PUSH_PREFIX + hex.slice(0, 32);
+}
 
 // base64(표준) 문자열인지 + 길이 상한 검사. iv/ct 같은 불투명 값에 쓴다.
 const B64 = /^[A-Za-z0-9+/]+={0,2}$/;
@@ -127,6 +141,10 @@ export class DuriDO {
     }
     if (url.pathname.endsWith("/reset") && request.method === "POST") {
       return this.handleReset();
+    }
+    if (url.pathname.endsWith("/push") && (request.method === "POST" || request.method === "DELETE")) {
+      if (role !== "peer") return new Response("peer only", { status: 403 }); // 알림은 브라우저(peer)만
+      return request.method === "POST" ? this.subscribePush(request) : this.unsubscribePush(request);
     }
     return new Response("not found", { status: 404 });
   }
@@ -303,7 +321,64 @@ export class DuriDO {
     await this.state.storage.put(SEQ_KEY, seq);
     await this.capBuffer();
     this.broadcast({ type: "entry", ...full });
+    // 실시간 접속자는 이미 위 broadcast로 받으므로, 푸시는 앱이 꺼져 있는 기기를
+    // 위한 것이다. 네트워크 호출이라 append 자체를 막지 않게 기다리지 않는다.
+    if (entry.kind === "msg" || entry.kind === "photo") this.notifyPush(full).catch(() => {});
     return full;
+  }
+
+  // ── 웹 푸시 ──────────────────────────────────────────────────
+  async subscribePush(request) {
+    const body = await request.json().catch(() => ({}));
+    const sub = body.subscription ?? body;
+    if (typeof sub?.endpoint !== "string" || !sub.endpoint.startsWith("https://") ||
+        typeof sub?.keys?.p256dh !== "string" || typeof sub?.keys?.auth !== "string") {
+      return Response.json({ error: "invalid subscription" }, { status: 400 });
+    }
+    const key = await endpointKey(sub.endpoint);
+    if (!(await this.state.storage.get(key))) {
+      const count = (await this.state.storage.list({ prefix: PUSH_PREFIX, limit: MAX_PUSH_SUBS + 1 })).size;
+      if (count >= MAX_PUSH_SUBS) return Response.json({ error: "구독 가능한 기기 수를 넘었어요" }, { status: 503 });
+    }
+    await this.state.storage.put(key, {
+      endpoint: sub.endpoint, keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth },
+    });
+    return Response.json({ subscribed: true });
+  }
+  async unsubscribePush(request) {
+    const body = await request.json().catch(() => ({}));
+    const endpoint = String(body.endpoint ?? "");
+    if (endpoint) await this.state.storage.delete(await endpointKey(endpoint));
+    return Response.json({ subscribed: false });
+  }
+  // 새 항목(msg/photo)이 생길 때마다 등록된 모든 기기로 발송(만료 구독은 정리).
+  // 페이로드는 여전히 암호블롭뿐 — 서버는 누가 뭐라고 보냈는지 모른다.
+  async notifyPush(full) {
+    const { VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT } = this.env;
+    if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return;
+    const subs = await this.state.storage.list({ prefix: PUSH_PREFIX });
+    if (subs.size === 0) return;
+    const vapid = {
+      publicKey: VAPID_PUBLIC_KEY, privateKey: VAPID_PRIVATE_KEY,
+      subject: VAPID_SUBJECT || "https://duri.bubblelab.dev",
+    };
+    const body = JSON.stringify(this.buildPushPayload(full));
+    for (const [key, sub] of subs) {
+      try {
+        const result = await sendWebPush(sub, body, vapid);
+        if (result.gone) await this.state.storage.delete(key); // 만료 구독 정리
+      } catch (error) {
+        console.error("duri push send failed", error);
+      }
+    }
+  }
+  buildPushPayload(full) {
+    let content;
+    if (full.kind === "msg") content = { kind: "msg", iv: full.iv, ct: full.ct };
+    else if (full.kind === "photo") content = { kind: "photo", metaIv: full.metaIv, metaCt: full.metaCt };
+    else return { kind: "generic" };
+    // 너무 크면(긴 텍스트 등) 복호화용 블롭 대신 내용 없는 일반 알림으로 대체.
+    return JSON.stringify(content).length > MAX_PUSH_PAYLOAD_BYTES ? { kind: "generic" } : content;
   }
 
   // 싱크가 seq 까지 보존 완료 → 그 이하 버퍼와 사진 R2 객체를 폐기한다.
