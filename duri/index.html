@@ -745,17 +745,22 @@ function renderTray() {
 // 백그라운드 전송: 트레이를 즉시 비워 입력창을 계속 쓸 수 있게 하고(업로드 중
 // 채팅 가능 — 카톡식), 사진은 완료되는 대로 채팅에 쌓인다. 2장 이상이면 공유
 // 앨범 id 를 붙여 한 말풍선(그리드)으로 묶인다.
+const ALBUM_MAX = 30; // 앨범 한 묶음 최대 장수(서버 parseAlbumHeader 의 n≤30 과 일치)
 function sendPendingPhotos() {
   if (!pendingPhotos.length) return;
   const batch = pendingPhotos;
   pendingPhotos = [];
   renderTray(); // 트레이 비움 → 입력창 자유
-  const n = batch.length;
-  const albumId = (n >= 2 && n <= 30) ? randToken() : null; // 서버 앨범 상한(n≤30)과 일치
   (async () => {
-    for (let i = 0; i < n; i++) {
-      await sendPhoto(batch[i].file, albumId ? { id: albumId, i: i + 1, n } : null);
-      URL.revokeObjectURL(batch[i].url);
+    // 30장씩 묶어 각 묶음을 하나의 앨범으로 보낸다(30장 초과도 낱장 대신 뭉텅이로).
+    for (let start = 0; start < batch.length; start += ALBUM_MAX) {
+      const chunk = batch.slice(start, start + ALBUM_MAX);
+      const n = chunk.length;
+      const albumId = n >= 2 ? randToken() : null; // 묶음이 2장 이상이면 앨범
+      for (let i = 0; i < n; i++) {
+        await sendPhoto(chunk[i].file, albumId ? { id: albumId, i: i + 1, n } : null);
+        URL.revokeObjectURL(chunk[i].url);
+      }
     }
   })();
 }
