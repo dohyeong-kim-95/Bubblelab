@@ -292,11 +292,28 @@
   .cal-card h3 { margin: 0; font-size: 1rem; }
   #cal-colorbox label { display: flex; align-items: center; justify-content: space-between; font-size: .85rem; }
   .cal-card input[type=color] { width: 3rem; height: 2rem; border: 1px solid var(--line); border-radius: .4rem; background: none; padding: 0; }
-  #cal-dlg-title { font: inherit; font-size: 1rem; padding: .6rem .7rem; border-radius: .6rem;
-                   border: 1px solid var(--line); background: var(--bg); color: inherit; }
-  #cal-dlg-title:focus { outline: none; border-color: color-mix(in srgb, var(--pink) 55%, var(--line)); }
-  .cal-daterow { display: flex; flex-wrap: wrap; gap: .5rem .9rem; }
-  .cal-daterow label { display: flex; align-items: center; gap: .35rem; font-size: .82rem; }
+  /* 테두리 없는 큰 제목 입력(네이티브 캘린더 앱 벤치마킹) — 박스 대신 큰 글씨로만 존재감 */
+  #cal-dlg-title { font: inherit; font-size: 1.3rem; font-weight: 700; padding: .1rem 0;
+                   border: none; background: none; color: inherit; }
+  #cal-dlg-title::placeholder { color: var(--dim); font-weight: 700; }
+  #cal-dlg-title:focus { outline: none; }
+  /* 시작/종료를 화살표 아이콘 + 전체 날짜 텍스트 행으로(네이티브 캘린더 앱 벤치마킹).
+     실제 <input type=date> 는 투명하게 행 전체를 덮어 어디를 눌러도 네이티브
+     피커가 뜨고, 보이는 글자는 dlgDateLabel 로 포맷한 텍스트다. */
+  .cal-daterow { display: flex; flex-direction: column; }
+  .cal-daterow-item { position: relative; display: flex; align-items: center; gap: .6rem;
+                       padding: .55rem .1rem; border-bottom: 1px solid var(--line); font-size: .88rem; }
+  .cal-daterow-item .arrow { flex: none; color: var(--dim); }
+  .cal-daterow-item .txt { flex: 1; }
+  .cal-daterow-item input[type=date] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  /* 반복을 기본 숨기고 칩으로 진입시킨다(네이티브 캘린더 앱 벤치마킹) — 대부분
+     일정은 반복이 아니라서, 펼쳐진 폼보다 접힌 칩이 기본 화면을 가볍게 한다. */
+  .cal-chips { display: flex; gap: .5rem; }
+  .cal-chip { font: inherit; font-size: .8rem; padding: .45rem .8rem; border-radius: 999px;
+              border: 1px solid var(--line); background: var(--bg); color: inherit; cursor: pointer; }
+  .cal-chip[aria-pressed=true] { background: color-mix(in srgb, var(--pink) 16%, var(--bg));
+                                  border-color: color-mix(in srgb, var(--pink) 55%, var(--line));
+                                  color: var(--pink); font-weight: 600; }
   /* iOS 스타일 on/off 토글 — 체크박스는 숨기고 track+thumb 을 :checked 로 움직인다 */
   .cal-toggle { display: flex; align-items: center; gap: .5rem; font-size: .85rem; cursor: pointer; }
   .cal-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
@@ -334,7 +351,7 @@
   /* display:flex 를 가진 요소는 hidden 속성만으로 안 감춰진다(author 스타일이
      UA의 [hidden]{display:none} 보다 우선 적용된다) — 토글되는 자식에는 항상
      명시적으로 덮어쓴다. */
-  .cal-daterow label[hidden], .cal-times[hidden], .cal-recur[hidden], .cal-recur label[hidden] { display: none; }
+  .cal-daterow-item[hidden], .cal-times[hidden], .cal-recur[hidden], .cal-recur label[hidden] { display: none; }
   /* 하단 토스트(뒤로가기 종료 안내 등) */
   #toast { position: fixed; left: 50%; transform: translateX(-50%); z-index: 100; pointer-events: none;
            bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
@@ -437,17 +454,25 @@
 <!-- 이벤트 추가/수정 -->
 <div id="cal-dialog" hidden>
   <div class="cal-card">
-    <div class="cal-daterow">
-      <label>시작일 <input type="date" id="cal-dlg-startdate"></label>
-      <label id="cal-dlg-enddate-wrap">종료일 <input type="date" id="cal-dlg-enddate"></label>
-    </div>
-    <input id="cal-dlg-title" placeholder="일정 제목" autocomplete="off" maxlength="120">
+    <input id="cal-dlg-title" placeholder="제목" autocomplete="off" maxlength="120">
     <label class="cal-toggle"><input type="checkbox" id="cal-dlg-allday" checked><span class="track"><span class="thumb"></span></span>종일</label>
+    <div class="cal-daterow">
+      <div class="cal-daterow-item">
+        <span class="arrow">→</span><span class="txt" id="cal-dlg-startdate-txt"></span>
+        <input type="date" id="cal-dlg-startdate">
+      </div>
+      <div class="cal-daterow-item" id="cal-dlg-enddate-wrap">
+        <span class="arrow">←</span><span class="txt" id="cal-dlg-enddate-txt"></span>
+        <input type="date" id="cal-dlg-enddate">
+      </div>
+    </div>
     <div id="cal-dlg-times" class="cal-times" hidden>
       <label>시작 <input type="time" id="cal-dlg-start"></label>
       <label>끝 <input type="time" id="cal-dlg-end"></label>
     </div>
-    <label class="cal-toggle"><input type="checkbox" id="cal-dlg-recur-on"><span class="track"><span class="thumb"></span></span>반복</label>
+    <div class="cal-chips">
+      <button type="button" id="cal-dlg-recur-chip" class="cal-chip" aria-pressed="false">🔁 반복</button>
+    </div>
     <div id="cal-dlg-recur-body" class="cal-recur" hidden>
       <label>주기
         <select id="cal-dlg-recur-freq">
@@ -1570,17 +1595,26 @@ function renderCatButtons() {
     box.appendChild(b);
   });
 }
+// 화살표 행에 보이는 텍스트는 실제 <input type=date> 값에서 매번 다시 포맷한다.
+function syncDateTexts() {
+  const sLb = dlgDateLabel($("cal-dlg-startdate").value);
+  $("cal-dlg-startdate-txt").textContent = `${sLb.d} (${sLb.w})`;
+  const eLb = dlgDateLabel($("cal-dlg-enddate").value);
+  $("cal-dlg-enddate-txt").textContent = `${eLb.d} (${eLb.w})`;
+}
 // 여러 날 종료일 필드는 시작일보다 앞으로 갈 수 없다 + 시작일을 뒤로 옮기면 따라간다.
 $("cal-dlg-startdate").addEventListener("change", () => {
   const sd = $("cal-dlg-startdate").value;
   $("cal-dlg-enddate").min = sd;
   if ($("cal-dlg-enddate").value < sd) $("cal-dlg-enddate").value = sd;
+  syncDateTexts();
 });
+function isRecurOn() { return $("cal-dlg-recur-chip").getAttribute("aria-pressed") === "true"; }
 function updateHint() {
   const multiday = $("cal-dlg-allday").checked && $("cal-dlg-enddate").value > $("cal-dlg-startdate").value;
-  $("cal-dlg-hint").hidden = !(multiday && $("cal-dlg-recur-on").checked);
+  $("cal-dlg-hint").hidden = !(multiday && isRecurOn());
 }
-$("cal-dlg-enddate").addEventListener("change", updateHint);
+$("cal-dlg-enddate").addEventListener("change", () => { updateHint(); syncDateTexts(); });
 
 function openCalDialog(dateStr, ev) {
   calDlgId = ev ? ev.id : randToken();
@@ -1596,9 +1630,10 @@ function openCalDialog(dateStr, ev) {
   $("cal-dlg-enddate-wrap").hidden = timed; // 종일 일정에서만 여러 날 종료일을 받는다
   $("cal-dlg-enddate").min = ev ? ev.date : dateStr;
   $("cal-dlg-enddate").value = (ev && ev.endDate) || (ev ? ev.date : dateStr);
+  syncDateTexts();
   const recur = ev && ev.recur;
   const recurOn = !!(recur && recur.freq);
-  $("cal-dlg-recur-on").checked = recurOn;
+  $("cal-dlg-recur-chip").setAttribute("aria-pressed", String(recurOn));
   $("cal-dlg-recur-body").hidden = !recurOn;
   $("cal-dlg-recur-freq").value = (recur && recur.freq) || "weekly";
   const endMode = recur && recur.count ? "count" : recur && recur.until ? "until" : "never";
@@ -1622,8 +1657,12 @@ $("cal-dlg-allday").addEventListener("change", () => {
   $("cal-dlg-enddate-wrap").hidden = !allday;
   updateHint();
 });
-$("cal-dlg-recur-on").addEventListener("change", () => {
-  $("cal-dlg-recur-body").hidden = !$("cal-dlg-recur-on").checked;
+// 반복 칩: 눌러서 켜면 그때부터 주기·종료 옵션이 펼쳐진다(기본 접힘 — 대부분
+// 일정은 반복이 아니라서 폼을 가볍게 유지).
+$("cal-dlg-recur-chip").addEventListener("click", () => {
+  const on = !isRecurOn();
+  $("cal-dlg-recur-chip").setAttribute("aria-pressed", String(on));
+  $("cal-dlg-recur-body").hidden = !on;
   updateHint();
 });
 $("cal-dlg-recur-end").addEventListener("change", () => {
@@ -1640,7 +1679,7 @@ $("cal-dlg-save").addEventListener("click", async () => {
   const start = allDay ? undefined : ($("cal-dlg-start").value || undefined);
   const end = allDay ? undefined : ($("cal-dlg-end").value || undefined);
   let recur = null;
-  if ($("cal-dlg-recur-on").checked) {
+  if (isRecurOn()) {
     recur = { freq: $("cal-dlg-recur-freq").value };
     const mode = $("cal-dlg-recur-end").value;
     if (mode === "until") recur.until = $("cal-dlg-recur-until").value || undefined;
