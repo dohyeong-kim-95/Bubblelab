@@ -76,6 +76,11 @@
   .daysep { align-self: center; display: flex; margin: .85rem 0 .2rem; }
   .daysep span { font-size: .68rem; color: var(--dim); background: light-dark(#eef1f4, #1b232e);
                  padding: .2rem .7rem; border-radius: 1rem; }
+  /* 시스템 알림(오픈카톡 입장 메시지 벤치마킹) — "/일정" 명령으로 만든 일정을
+     상대에게도 알리는 용도. 실제 대화(bubble)와 안 헷갈리게 가운데 정렬 알약. */
+  .sysnotice { align-self: center; display: flex; max-width: 88%; margin: .35rem 0; }
+  .sysnotice span { font-size: .72rem; color: var(--dim); background: light-dark(#eef1f4, #1b232e);
+                    padding: .3rem .8rem; border-radius: 1rem; text-align: center; }
   .bubble { padding: .5rem .75rem; border-radius: .9rem; background: var(--panel); border: 1px solid var(--line);
             white-space: pre-wrap; word-break: break-word; line-height: 1.5; font-size: .92rem; }
   .row.me .bubble { background: light-dark(#fbe6f0, #3a2233); border-color: light-dark(#f2cfe1, #4d2c40); }
@@ -152,6 +157,30 @@
   #grid button { padding: .25rem; background: none; border: 2px solid transparent; border-radius: .6rem; cursor: pointer; }
   #grid button.selected { border-color: var(--pink); background: light-dark(#c0568a1a, #f0a8ce22); }
   #grid img { width: 100%; aspect-ratio: 1 / 1; height: auto; display: block; }
+
+  /* 채팅 "/일정 " 명령 — 칩 + 아고다식 시작~종료일 미니 달력(시간·반복 미지원) */
+  #cal-cmd-bar { display: flex; max-width: 44rem; width: 100%; margin: 0 auto;
+                 padding: .5rem calc(.6rem + env(safe-area-inset-right, 0px)) 0
+                          calc(.6rem + env(safe-area-inset-left, 0px));
+                 background: var(--panel); }
+  #cal-cmd-bar[hidden] { display: none; }
+  #cal-cmd-picker { max-width: 44rem; width: 100%; margin: 0 auto; border-top: 1px solid var(--line);
+                    background: var(--panel); max-height: min(26rem, 70vh); display: flex; flex-direction: column; }
+  #cal-cmd-picker[hidden] { display: none; }
+  .ccp-head { flex: none; display: flex; align-items: center; gap: .5rem; padding: .6rem .8rem; }
+  .ccp-head b { font-size: .9rem; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #ccp-months { flex: 1; min-height: 0; overflow-y: auto; padding: 0 .5rem; }
+  .ccp-mhead { font-size: .78rem; font-weight: 600; color: var(--dim); text-align: center; padding: .3rem 0; }
+  .ccp-grid { grid-auto-rows: 2.6rem; margin-bottom: .4rem; }
+  /* .cal-day 의 4rem min-height 는 이벤트 미리보기 자리용이라 여기선 필요 없다 —
+     .ccp-grid 뒤 스타일시트 순서에 기대지 않도록 더 구체적인 선택자로 덮어쓴다. */
+  .ccp-grid .cal-day { min-height: auto; }
+  .ccp-day.past { opacity: .3; cursor: default; }
+  .ccp-day.range-start .d, .ccp-day.range-end .d { background: var(--pink); color: light-dark(#fff,#1a1016); font-weight: 700; }
+  .ccp-day.in-range { background: color-mix(in srgb, var(--pink) 14%, transparent); }
+  .ccp-actions { flex: none; display: flex; align-items: center; gap: .6rem; padding: .6rem .8rem;
+                 border-top: 1px solid var(--line); }
+  .ccp-actions span { flex: 1; font-size: .82rem; color: var(--dim); }
   #grid .empty { grid-column: 1 / -1; text-align: center; font-size: .78rem; opacity: .5; padding: 1.2rem 0; }
   /* 이모지 탭: 셀을 작게, 글자는 크게 */
   #grid.emoji-grid { grid-template-columns: repeat(auto-fill, minmax(2.7rem, 1fr)); }
@@ -403,6 +432,21 @@
   <div id="tabs" role="tablist"></div>
   <div id="hint">스티커를 누르면 미리보기, 한 번 더 누르면 전송돼요</div>
   <div id="grid"></div>
+</div>
+
+<!-- "/일정 " 을 타이핑하면 뜨는 칩. 누르면 아래 미니 달력에서 시작~종료일을 골라
+     바로 일정을 추가한다(시간·반복 미지원 — 그건 캘린더 탭에서). -->
+<div id="cal-cmd-bar" hidden><button type="button" id="cal-cmd-chip" class="cal-chip">📅 일정</button></div>
+<div id="cal-cmd-picker" hidden>
+  <div class="ccp-head">
+    <b id="ccp-title"></b>
+    <button type="button" id="ccp-cancel" class="icon-btn" aria-label="취소">✕</button>
+  </div>
+  <div id="ccp-months"></div>
+  <div class="ccp-actions">
+    <span id="ccp-range">날짜를 선택하세요</span>
+    <button type="button" id="ccp-confirm" class="cal-primary" disabled>추가</button>
+  </div>
 </div>
 
 <div id="photo-tray" hidden></div>
@@ -860,6 +904,28 @@ function appendRecord(rec) {
     if (grid) albumBubbles.delete(rec.album.id);
   }
 
+  // 시스템 알림("/일정" 명령 등): 이름·말풍선 없이 가운데 정렬 알약 하나로 그린다.
+  if (rec.sys) {
+    const day = dayLabel(rec.at);
+    if (day !== grpDay) {
+      const sep = document.createElement("div"); sep.className = "daysep";
+      const label = document.createElement("span"); label.textContent = day;
+      sep.appendChild(label); log().appendChild(sep); grpDay = day;
+    }
+    const notice = document.createElement("div"); notice.className = "sysnotice";
+    const span = document.createElement("span"); span.textContent = rec.text; notice.appendChild(span);
+    log().appendChild(notice);
+    grpSender = null; // 알림 뒤에 오는 다음 메시지는 이름을 다시 보여준다
+    while (log().children.length > MAX_DOM) {
+      const first = log().firstChild;
+      first.querySelectorAll?.("img[src^='blob:']").forEach((im) => URL.revokeObjectURL(im.src));
+      first.remove();
+    }
+    if (stick) scroll();
+    updateToBottom();
+    return;
+  }
+
   const at = rec.at;
   const mine = rec.name && rec.name === MY_NAME;
   const broken = !!rec.broken;
@@ -927,7 +993,8 @@ async function renderEntry(m) {
     if (m.kind === "msg") {
       const p = await decryptJson(m.iv, m.ct);
       const rec = { seq: m.seq, kind: "msg", at: p.at ?? m.at, name: p.name };
-      if (p.sticker) rec.sticker = p.sticker; else rec.text = p.text;
+      if (p.sticker) rec.sticker = p.sticker;
+      else { rec.text = p.text; if (p.sys) rec.sys = true; }
       appendRecord(rec); putEntry(rec);
     } else if (m.kind === "photo") {
       const meta = await decryptJson(m.metaIv, m.metaCt);
@@ -979,6 +1046,14 @@ async function fetchPhotoBlob(m) {
 // ── 보내기 ───────────────────────────────────────────────────
 async function sendText(text) {
   const frame = await encryptJson({ name: MY_NAME, text, at: Date.now() });
+  ws.send(JSON.stringify({ type: "msg", ...frame }));
+}
+// 오픈카톡 입장 메시지 벤치마킹: 실제 대화가 아니라 "무슨 일이 있었는지" 알리는
+// 문구. 진짜 메시지처럼 E2E 암호화되어 상대·PC 백업에도 남지만, sys 플래그로
+// 렌더링만 가운데 정렬 알약으로 다르게 한다(appendRecord 참고).
+async function sendSysNotice(text) {
+  if (!ws || ws.readyState !== 1) return;
+  const frame = await encryptJson({ name: MY_NAME, text, at: Date.now(), sys: true });
   ws.send(JSON.stringify({ type: "msg", ...frame }));
 }
 async function sendSticker(pack, n) {
@@ -1227,6 +1302,7 @@ window.addEventListener("popstate", () => {
   if (!$("cal-colorbox").hidden) { $("cal-colorbox").hidden = true; trapBack(); return; } // 색상 설정
   if (!$("cal").classList.contains("cal-off")) { closeCal(); trapBack(); return; } // 캘린더 → 채팅
   if (!$("lightbox").hidden) { closeLb(); trapBack(); return; } // 사진 뷰어 먼저 닫기
+  if (!$("cal-cmd-picker").hidden) { closeCalCmdPicker(); trapBack(); return; } // "/일정" 미니 달력 먼저 닫기
   if (!picker.hidden) { closePicker(); trapBack(); return; } // 서랍 먼저 닫기
   if (!menu.hidden) { closeMenu(); trapBack(); return; }     // 메뉴 먼저 닫기
   if (backArmed) { backArmed = false; history.back(); return; } // 두 번째 → 앱 종료
@@ -1275,18 +1351,29 @@ function autoGrow() {
   text.style.height = "auto";
   text.style.height = text.scrollHeight + "px";
 }
+// "/일정 제목" 을 타이핑하면 칩이 뜬다. 눌러(또는 그대로 Enter 를 쳐도) 미니
+// 달력이 열리고, 시작~종료일을 고르면 그 자리에서 바로 일정이 추가된다
+// (시간·반복은 지원하지 않음 — 그건 캘린더 탭에서 편집).
+const CAL_CMD_RE = /^\/일정\s*/;
 text.addEventListener("input", () => {
   if (resizeScheduled) return;
   resizeScheduled = true;
   requestAnimationFrame(autoGrow);
 });
-text.addEventListener("focus", () => { if (!picker.hidden) closePicker(); });
+text.addEventListener("input", () => { $("cal-cmd-bar").hidden = !CAL_CMD_RE.test(text.value); });
+text.addEventListener("focus", () => {
+  if (!picker.hidden) closePicker();
+  if (!$("cal-cmd-picker").hidden) closeCalCmdPicker();
+});
 text.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("composer").requestSubmit(); }
 });
 $("composer").addEventListener("submit", (e) => {
   e.preventDefault();
   if (!ws || ws.readyState !== 1) return;
+  // "/일정 ..." 그대로 Enter 를 쳐도 문자 그대로 보내지 않고 칩과 똑같이 미니
+  // 달력을 연다 — 이 명령을 "보내는" 유일한 경로는 미니 달력의 추가 버튼뿐이다.
+  if (CAL_CMD_RE.test(text.value)) { $("cal-cmd-chip").click(); return; }
   // 미리보기 트레이에 담긴 사진이 있으면 우선 전송한다(함께 입력한 텍스트도 같이).
   if (pendingPhotos.length) {
     const cap = text.value.trim();
@@ -1805,6 +1892,85 @@ $("cal-grid").addEventListener("touchend", (e) => {
   if (dy > 0 && calView === "month") setCalView("week");
   else if (dy < 0 && calView === "week") setCalView("month");
 });
+
+// ── 채팅 "/일정" 명령: 아고다식 시작~종료일 미니 달력 ─────────────
+// 시간·반복은 지원하지 않는다(단순 종일/여러 날 일정만) — 그 이상은 캘린더
+// 탭에서 편집한다. 이번달+다음달 두 장을 보여주고, 첫 탭=시작일, 두 번째
+// 탭=종료일(시작보다 이르면 시작을 그 날짜로 다시 잡는다), 같은 날 두 번째
+// 탭이면 하루짜리로 확정.
+let ccpTitle = "", ccpStart = null, ccpEnd = null;
+function ccpBuildMonth(year, month) {
+  const wrap = document.createElement("div"); wrap.className = "ccp-month";
+  const hd = document.createElement("div"); hd.className = "ccp-mhead"; hd.textContent = `${year}년 ${month + 1}월`;
+  const grid = document.createElement("div"); grid.className = "cal-month ccp-grid";
+  const first = new Date(year, month, 1);
+  const start = new Date(first); start.setDate(1 - first.getDay());
+  const days = new Date(year, month + 1, 0).getDate();
+  const cells = Math.ceil((first.getDay() + days) / 7) * 7;
+  const tk = todayYmd();
+  for (let i = 0; i < cells; i++) {
+    const d = new Date(start); d.setDate(start.getDate() + i);
+    const ds = ymd(d);
+    const cell = document.createElement("div"); cell.className = "cal-day ccp-day"; cell.dataset.date = ds;
+    markWeekend(cell, d.getDay());
+    if (d.getMonth() !== month) cell.classList.add("other");
+    if (ds < tk) cell.classList.add("past"); else cell.addEventListener("click", () => ccpPick(ds));
+    const dn = document.createElement("div"); dn.className = "d"; dn.textContent = d.getDate(); cell.appendChild(dn);
+    grid.appendChild(cell);
+  }
+  wrap.append(hd, weekHeader(), grid);
+  return wrap;
+}
+function ccpRefreshHighlight() {
+  $("ccp-months").querySelectorAll(".ccp-day").forEach((cell) => {
+    const ds = cell.dataset.date;
+    cell.classList.remove("range-start", "range-end", "in-range");
+    if (!ccpStart) return;
+    if (ds === ccpStart) cell.classList.add("range-start");
+    if (ccpEnd && ds === ccpEnd) cell.classList.add("range-end");
+    else if (!ccpEnd && ds === ccpStart) cell.classList.add("range-end"); // 아직 하루뿐이어도 끝처럼 보이게
+    if (ccpEnd && ds > ccpStart && ds < ccpEnd) cell.classList.add("in-range");
+  });
+}
+function ccpUpdateFooter() {
+  $("ccp-confirm").disabled = !ccpStart;
+  if (!ccpStart) { $("ccp-range").textContent = "날짜를 선택하세요"; return; }
+  const s = dlgDateLabel(ccpStart);
+  if (!ccpEnd || ccpEnd === ccpStart) $("ccp-range").textContent = `${s.d} (${s.w})`;
+  else $("ccp-range").textContent = `${s.d} ~ ${dlgDateLabel(ccpEnd).d}`;
+}
+function ccpPick(ds) {
+  if (!ccpStart || ccpEnd) { ccpStart = ds; ccpEnd = null; }
+  else if (ds < ccpStart) { ccpStart = ds; ccpEnd = null; }
+  else { ccpEnd = ds; }
+  ccpRefreshHighlight();
+  ccpUpdateFooter();
+}
+function openCalCmdPicker() {
+  if (!picker.hidden) closePicker();
+  ccpStart = null; ccpEnd = null;
+  ccpTitle = text.value.replace(CAL_CMD_RE, "").trim() || "(제목 없음)";
+  $("ccp-title").textContent = "📅 " + ccpTitle;
+  const now = new Date();
+  const next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  $("ccp-months").replaceChildren(ccpBuildMonth(now.getFullYear(), now.getMonth()), ccpBuildMonth(next.getFullYear(), next.getMonth()));
+  ccpUpdateFooter();
+  $("cal-cmd-picker").hidden = false;
+}
+function closeCalCmdPicker() { $("cal-cmd-picker").hidden = true; }
+$("cal-cmd-chip").addEventListener("click", openCalCmdPicker);
+$("ccp-cancel").addEventListener("click", closeCalCmdPicker);
+$("ccp-confirm").addEventListener("click", async () => {
+  if (!ccpStart) return;
+  if (!ws || ws.readyState !== 1) { showToast("연결이 끊겨서 추가하지 못했어요"); return; }
+  const endDate = (ccpEnd && ccpEnd > ccpStart) ? ccpEnd : undefined;
+  await calSaveEvent({ id: randToken(), date: ccpStart, title: ccpTitle, owner: MY_NAME, shared: true, endDate, recur: null });
+  const rangeTxt = endDate ? `${dlgDateLabel(ccpStart).d} ~ ${dlgDateLabel(endDate).d}` : dlgDateLabel(ccpStart).d;
+  await sendSysNotice(`📅 "${ccpTitle}" 일정 추가됨 (${rangeTxt})`);
+  closeCalCmdPicker();
+  text.value = ""; text.style.height = "auto"; $("cal-cmd-bar").hidden = true;
+});
+
 calRestore();
 
 // 저장된 문구·이름이 있으면 곧바로 입장 (아무것도 안 해도 이어짐)
