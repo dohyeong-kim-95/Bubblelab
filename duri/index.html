@@ -208,12 +208,11 @@
   .cal-wk span { text-align: center; font-size: .62rem; letter-spacing: .08em; color: var(--dim); padding: .15rem 0; }
   .cal-wk span.sun { color: var(--sun); }
   .cal-wk span.sat { color: var(--sat); }
-  /* 월간 격자: 세로 칸선 없이 가로 실선만. 좁은 화면에서 제목을 4글자로 자르는 대신
-     애플 캘린더처럼 날짜 아래 점(종일은 짧은 막대)만 찍고, 고른 날의 일정은 아래
-     패널에 제목까지 보여준다. */
+  /* 월간 격자: 세로 칸선 없이 가로 실선만. 날짜 아래 최대 2개 제목 미리보기(작은
+     글씨, 말줄임) + 넘치면 +N. 고른 날의 전체 목록은 아래 패널에서 읽는다. */
   .cal-month { flex: 1; display: grid; grid-template-columns: repeat(7, 1fr); grid-auto-rows: 1fr; }
-  .cal-day { padding: .3rem .1rem; display: flex; flex-direction: column; align-items: center; gap: .22rem;
-             overflow: hidden; cursor: pointer; border-top: 1px solid var(--line); min-height: 2.9rem; }
+  .cal-day { padding: .3rem .1rem; display: flex; flex-direction: column; align-items: center; gap: .16rem;
+             overflow: hidden; cursor: pointer; border-top: 1px solid var(--line); min-height: 4rem; }
   .cal-day .d { font-size: .72rem; color: var(--dim); flex: none;
                 width: 1.5rem; height: 1.5rem; display: grid; place-items: center; border-radius: 50%; }
   .cal-day.sun .d { color: var(--sun); }
@@ -221,10 +220,13 @@
   .cal-day.other .d { opacity: .38; }
   .cal-day.sel .d { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--pink) 60%, transparent); }
   .cal-day.today .d { background: var(--pink); color: light-dark(#fff,#1a1016); font-weight: 700; }
-  .cal-dots { display: flex; flex-wrap: wrap; justify-content: center; gap: .16rem; }
-  .cal-dot { width: .34rem; height: .34rem; border-radius: 50%; background: var(--c); }
-  .cal-dot.allday { width: .82rem; border-radius: .17rem; }
-  .cal-day.other .cal-dots { opacity: .45; }
+  .cal-day-evs { display: flex; flex-direction: column; gap: .1rem; width: 100%; min-width: 0; }
+  .cal-day .cal-ev { font-size: .56rem; line-height: 1.3; padding: .02rem .22rem; }
+  .cal-day .cal-ev.timed { padding-left: .12rem; gap: .16rem; }
+  .cal-day .cal-ev.timed::before { width: .3rem; height: .3rem; }
+  .cal-day .cal-ev.timed .t { display: none; } /* 셀 안은 너무 좁아 시간 텍스트는 생략, 색점+제목만 */
+  .cal-more { font-size: .52rem; color: var(--dim); text-align: center; }
+  .cal-day.other .cal-day-evs, .cal-day.other .cal-more { opacity: .45; }
   /* 고른 날의 일정 목록(월간 전용) — 격자에서 못 보여준 제목·시간을 여기서 읽는다 */
   .cal-dp { flex: none; display: flex; flex-direction: column; gap: .4rem; max-height: 40%;
             border-top: 1px solid var(--line); background: var(--panel); padding: .55rem .7rem .7rem;
@@ -292,8 +294,14 @@
   .cal-allday { display: flex; align-items: center; justify-content: flex-start; gap: .4rem; font-size: .85rem; }
   .cal-times { display: flex; gap: .9rem; }
   .cal-times label { display: flex; align-items: center; gap: .35rem; font-size: .82rem; }
-  .cal-times input[type=time] { font: inherit; padding: .35rem .45rem; border: 1px solid var(--line);
+  .cal-times input[type=time], .cal-times input[type=date] { font: inherit; padding: .35rem .45rem; border: 1px solid var(--line);
                                 border-radius: .5rem; background: var(--bg); color: inherit; }
+  .cal-recur { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem .9rem; font-size: .82rem; }
+  .cal-recur label { display: flex; align-items: center; gap: .35rem; }
+  .cal-recur select, .cal-recur input[type=date] { font: inherit; font-size: .8rem; padding: .35rem .45rem;
+                                                    border: 1px solid var(--line); border-radius: .5rem;
+                                                    background: var(--bg); color: inherit; }
+  .cal-hint { margin: 0; font-size: .68rem; color: var(--dim); line-height: 1.4; }
   .cal-cats { display: flex; gap: .4rem; }
   .cal-cats button { flex: 1; font: inherit; font-size: .78rem; padding: .5rem; border-radius: .6rem;
                      border: 1px solid var(--line); background: var(--bg); color: inherit; cursor: pointer;
@@ -415,6 +423,22 @@
       <label>시작 <input type="time" id="cal-dlg-start"></label>
       <label>끝 <input type="time" id="cal-dlg-end"></label>
     </div>
+    <div id="cal-dlg-multiday" class="cal-times" hidden>
+      <label>종료일 <input type="date" id="cal-dlg-enddate"></label>
+    </div>
+    <div class="cal-recur">
+      <label>반복
+        <select id="cal-dlg-recur">
+          <option value="none">안 함</option>
+          <option value="daily">매일</option>
+          <option value="weekly">매주</option>
+          <option value="monthly">매월</option>
+          <option value="yearly">매년</option>
+        </select>
+      </label>
+      <label id="cal-dlg-recur-until-wrap" hidden>까지 <input type="date" id="cal-dlg-recur-until"></label>
+    </div>
+    <p class="cal-hint">여러 날 종료일과 반복은 함께 쓸 수 없어요 — 반복 설정 시 종료일은 무시됩니다.</p>
     <div id="cal-dlg-cats" class="cal-cats"></div>
     <div class="cal-dlg-actions">
       <button id="cal-dlg-del" class="cal-del" hidden>삭제</button>
@@ -1276,11 +1300,15 @@ function calSend(frame) {
 }
 function calFlushOutbox() { while (calOutbox.length && ws && ws.readyState === 1) ws.send(JSON.stringify(calOutbox.shift())); }
 
-async function calSaveEvent({ id, date, title, owner, shared, start, end }) {
+// 여러 날 종료일(endDate)과 반복(recur)은 함께 쓰지 않는다(반복이 우선) — 다이얼로그
+// 저장 시점에 이미 정리해서 넘기지만, 방어적으로 여기서도 한 번 더 가른다.
+async function calSaveEvent({ id, date, title, owner, shared, start, end, endDate, recur }) {
   const rev = Date.now();
   const content = { date, title, owner, shared };
   if (start) content.start = start;
   if (end) content.end = end;
+  if (recur && recur.freq && recur.freq !== "none") content.recur = recur;
+  else if (endDate && endDate > date) content.endDate = endDate;
   calEvents.set(id, { id, rev, deleted: false, ...content }); calPersist();
   const frame = await encryptJson(content);
   calSend({ type: "cal-put", id, iv: frame.iv, ct: frame.ct, rev });
@@ -1292,9 +1320,30 @@ function calDeleteEvent(id) {
   calSend({ type: "cal-del", id, rev });
   renderCal();
 }
+// 반복 규칙(freq: daily|weekly|monthly|yearly, until?: YYYY-MM-DD) 에 dateStr 이
+// 해당하는 회차인지 판정. 반복은 시리즈 하나가 회차 전체를 대표한다(회차별 수정·
+// 삭제 없음 — 편집·삭제는 시리즈 전체에 적용된다).
+function recurMatches(ev, ds) {
+  if (ds < ev.date) return false;
+  if (ev.recur.until && ds > ev.recur.until) return false;
+  const start = new Date(ev.date + "T00:00:00"), cur = new Date(ds + "T00:00:00");
+  const diffDays = Math.round((cur - start) / 86400000);
+  switch (ev.recur.freq) {
+    case "daily": return true;
+    case "weekly": return diffDays % 7 === 0;
+    case "monthly": return start.getDate() === cur.getDate();
+    case "yearly": return start.getMonth() === cur.getMonth() && start.getDate() === cur.getDate();
+    default: return false;
+  }
+}
+function calEventOnDate(ev, ds) {
+  if (ev.recur && ev.recur.freq && ev.recur.freq !== "none") return recurMatches(ev, ds);
+  if (ev.endDate && ev.endDate > ev.date) return ds >= ev.date && ds <= ev.endDate; // 여러 날 일정
+  return ev.date === ds;
+}
 function calEventsOn(dateStr) {
   const out = [];
-  for (const ev of calEvents.values()) if (!ev.deleted && ev.date === dateStr) out.push(ev);
+  for (const ev of calEvents.values()) if (!ev.deleted && calEventOnDate(ev, dateStr)) out.push(ev);
   // 종일(시간 없음) 먼저, 그다음 시작 시간순, 같으면 제목순.
   return out.sort((a, b) => {
     const as = a.start || "", bs = b.start || "";
@@ -1326,10 +1375,12 @@ function weekHeader() {
 }
 // 종일 일정은 옅게 채운 알약, 시간 일정은 색점 + 시간 + 제목 (구글 캘린더 관례).
 // 색은 --c 로 넘겨 CSS 가 배경·글자색을 테마별로 섞는다.
+const RECUR_LABEL = { daily: "매일", weekly: "매주", monthly: "매월", yearly: "매년" };
 function evChip(ev) {
   const c = document.createElement("div"); c.className = "cal-ev";
   c.style.setProperty("--c", calColorOf(ev));
-  const title = ev.title || "(제목 없음)";
+  const isRecur = !!(ev.recur && ev.recur.freq && ev.recur.freq !== "none");
+  const title = (isRecur ? "🔁 " : "") + (ev.title || "(제목 없음)");
   if (ev.start) {
     c.classList.add("timed");
     const t = document.createElement("span"); t.className = "t"; t.textContent = ev.start;
@@ -1338,7 +1389,10 @@ function evChip(ev) {
   } else {
     c.textContent = title;
   }
-  c.title = (ev.start ? `${ev.start}${ev.end ? "–" + ev.end : ""} ` : "") + title;
+  let tip = (ev.start ? `${ev.start}${ev.end ? "–" + ev.end : ""} ` : "") + (ev.title || "(제목 없음)");
+  if (isRecur) tip += ` (${RECUR_LABEL[ev.recur.freq] || ev.recur.freq} 반복)`;
+  else if (ev.endDate && ev.endDate > ev.date) tip += ` (${ev.date} ~ ${ev.endDate})`;
+  c.title = tip;
   c.addEventListener("click", (e) => { e.stopPropagation(); openCalDialog(ev.date, ev); });
   return c;
 }
@@ -1372,14 +1426,10 @@ function renderMonth(grid, cur) {
     const dn = document.createElement("div"); dn.className = "d"; dn.textContent = d.getDate(); cell.appendChild(dn);
     const evs = calEventsOn(ds);
     if (evs.length) {
-      const dots = document.createElement("div"); dots.className = "cal-dots";
-      evs.slice(0, 4).forEach((ev) => {
-        const dot = document.createElement("span");
-        dot.className = ev.start ? "cal-dot" : "cal-dot allday";
-        dot.style.setProperty("--c", calColorOf(ev));
-        dots.appendChild(dot);
-      });
-      cell.appendChild(dots);
+      const wrap = document.createElement("div"); wrap.className = "cal-day-evs";
+      evs.slice(0, 2).forEach((ev) => wrap.appendChild(evChip(ev)));
+      if (evs.length > 2) { const m = document.createElement("div"); m.className = "cal-more"; m.textContent = `+${evs.length - 2}`; wrap.appendChild(m); }
+      cell.appendChild(wrap);
     }
     // 네이티브 dblclick 은 모바일 PWA 터치에서 잘 안 잡힐 때가 있어, 같은 날짜를
     // 400ms 안에 두 번 누르면 직접 더블탭으로 판정한다(마우스·터치 동일하게 동작).
@@ -1471,12 +1521,26 @@ function openCalDialog(dateStr, ev) {
   $("cal-dlg-start").value = (ev && ev.start) || "09:00";
   $("cal-dlg-end").value = (ev && ev.end) || "";
   $("cal-dlg-times").hidden = !timed;
+  $("cal-dlg-multiday").hidden = timed; // 종일 일정에서만 여러 날 종료일을 받는다
+  $("cal-dlg-enddate").min = dateStr;
+  $("cal-dlg-enddate").value = (ev && ev.endDate) || dateStr;
+  const recurFreq = (ev && ev.recur && ev.recur.freq) || "none";
+  $("cal-dlg-recur").value = recurFreq;
+  $("cal-dlg-recur-until").value = (ev && ev.recur && ev.recur.until) || "";
+  $("cal-dlg-recur-until-wrap").hidden = recurFreq === "none";
   $("cal-dlg-del").hidden = !ev;
   renderCatButtons();
   $("cal-dialog").hidden = false;
   setTimeout(() => $("cal-dlg-title").focus(), 30);
 }
-$("cal-dlg-allday").addEventListener("change", () => { $("cal-dlg-times").hidden = $("cal-dlg-allday").checked; });
+$("cal-dlg-allday").addEventListener("change", () => {
+  const allday = $("cal-dlg-allday").checked;
+  $("cal-dlg-times").hidden = allday;
+  $("cal-dlg-multiday").hidden = !allday;
+});
+$("cal-dlg-recur").addEventListener("change", () => {
+  $("cal-dlg-recur-until-wrap").hidden = $("cal-dlg-recur").value === "none";
+});
 function closeCalDialog() { $("cal-dialog").hidden = true; calDlgId = null; }
 $("cal-dlg-save").addEventListener("click", async () => {
   const title = $("cal-dlg-title").value.trim();
@@ -1484,7 +1548,11 @@ $("cal-dlg-save").addEventListener("click", async () => {
   const allDay = $("cal-dlg-allday").checked;
   const start = allDay ? undefined : ($("cal-dlg-start").value || undefined);
   const end = allDay ? undefined : ($("cal-dlg-end").value || undefined);
-  await calSaveEvent({ id: calDlgId, date: calDlgDate, title, owner: MY_NAME, shared: calDlgCat === "shared", start, end });
+  const recurFreq = $("cal-dlg-recur").value;
+  const recur = recurFreq !== "none" ? { freq: recurFreq, until: $("cal-dlg-recur-until").value || undefined } : null;
+  const enddateRaw = allDay ? $("cal-dlg-enddate").value : undefined;
+  const endDate = (!recur && enddateRaw && enddateRaw > calDlgDate) ? enddateRaw : undefined;
+  await calSaveEvent({ id: calDlgId, date: calDlgDate, title, owner: MY_NAME, shared: calDlgCat === "shared", start, end, endDate, recur });
   closeCalDialog();
 });
 $("cal-dlg-cancel").addEventListener("click", closeCalDialog);
