@@ -169,63 +169,129 @@
                  color: light-dark(#fff, #1a1016); border: none; border-radius: .7rem; font-weight: 600; }
   .card .warn { font-size: .72rem; color: light-dark(#b4453a, #f0a8a2); margin-top: .8rem; }
   .hidden { display: none !important; }
-  /* ── 공유 캘린더 ── */
+  /* ── 공유 캘린더 ─────────────────────────────────────────────
+     구글·애플 캘린더 벤치마킹: 크롬(테두리)은 최대한 얇게, 오늘은 원형 배지,
+     종일 일정은 옅게 채운 알약 / 시간 일정은 색점 + 시간 + 제목. 주간은
+     하루 한 장의 카드로 보여준다(패스티컬식 어젠다). 화면 순서는 [채팅|캘린더]
+     (채팅이 왼쪽, 캘린더가 오른쪽) — 캘린더는 평소 화면 밖 오른쪽에 있다가 왼쪽
+     으로 끌어오면 열린다. 드래그 중에는 손끝을 그대로 따라가고(JS, 아래 스와이프
+     섹션), 손을 뗀 순간만 이 transition으로 스냅한다. */
   #cal { position: fixed; inset: 0; z-index: 60; background: var(--bg); color: inherit;
-         display: flex; flex-direction: column; transform: translateX(0); transition: transform .22s ease;
-         padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+         display: flex; flex-direction: column; transform: translateX(0);
+         transition: transform .26s cubic-bezier(.32,.72,0,1);
+         padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+         --sun: light-dark(#c2544f, #f0a8a2); --sat: light-dark(#4f6fc2, #a8c0f0); }
   #cal.cal-off { transform: translateX(100%); pointer-events: none; }
-  .cal-head { display: flex; align-items: center; gap: .3rem; padding: .45rem .5rem;
-              padding-left: calc(.5rem + env(safe-area-inset-left,0px)); padding-right: calc(.5rem + env(safe-area-inset-right,0px));
-              border-bottom: 1px solid var(--line); background: var(--panel); }
-  .cal-head #cal-title { font-size: .92rem; margin: 0 .15rem; min-width: 6rem; white-space: nowrap; }
-  .cal-head .cal-nav { display: flex; align-items: center; gap: .05rem; }
-  .cal-head #cal-back { font-size: 1.4rem; line-height: 1; }
-  .cal-head #cal-toggle, .cal-head #cal-today { flex: none; font: inherit; font-size: .72rem; padding: .3rem .5rem;
-              border: 1px solid var(--line); background: var(--bg); color: inherit; border-radius: .5rem; cursor: pointer; white-space: nowrap; }
-  .cal-head #cal-colors { margin-left: auto; }
+  .cal-head { display: flex; align-items: center; gap: .3rem; padding: .5rem .5rem .35rem;
+              padding-left: calc(.35rem + env(safe-area-inset-left,0px)); padding-right: calc(.5rem + env(safe-area-inset-right,0px));
+              background: var(--bg); border: 0; }
+  .cal-head #cal-back { font-size: 1.5rem; line-height: 1; padding: .1rem .3rem; }
+  #cal-title { display: flex; align-items: baseline; gap: .3rem; white-space: nowrap; margin-right: auto; }
+  #cal-title .m { font-size: 1.1rem; font-weight: 700; letter-spacing: -.02em; }
+  #cal-title .y { font-size: .68rem; font-weight: 400; color: var(--dim); }
+  .cal-head .cal-nav { display: flex; align-items: center; gap: 0; }
+  .cal-head .cal-nav button { font-size: .78rem; padding: .35rem .28rem; opacity: .7; }
+  /* 월/주 세그먼티드 컨트롤 — 선택된 쪽만 떠 보인다 */
+  .cal-seg { display: flex; gap: .1rem; padding: .13rem; border-radius: .55rem;
+             background: light-dark(#eceff4, #1b2330); }
+  .cal-seg button { font: inherit; font-size: .68rem; padding: .26rem .48rem; border: 0; border-radius: .42rem;
+                    background: none; color: var(--dim); cursor: pointer; }
+  .cal-seg button[aria-pressed=true] { background: var(--panel); color: inherit; font-weight: 600;
+                                       box-shadow: 0 1px 2px light-dark(#0f172219, #0005); }
+  /* "오늘"은 오늘이 화면 밖에 있을 때만 나타난다(구글 캘린더식) */
+  #cal-today { flex: none; font: inherit; font-size: .66rem; padding: .28rem .5rem; border-radius: 999px;
+               border: 1px solid var(--line); background: var(--panel); color: var(--dim); cursor: pointer; }
+  #cal-today[hidden] { display: none; }
   #cal-grid { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
-  .cal-wk { display: grid; grid-template-columns: repeat(7, 1fr); border-bottom: 1px solid var(--line); flex: none; }
-  .cal-wk span { text-align: center; font-size: .66rem; color: var(--dim); padding: .35rem 0; }
-  .cal-wk span.sun { color: light-dark(#c2544f, #f0a8a2); }
-  .cal-wk span.sat { color: light-dark(#4f6fc2, #a8c0f0); }
-  .cal-month { flex: 1; display: grid; grid-template-columns: repeat(7, 1fr); grid-auto-rows: minmax(3.4rem, 1fr); }
-  .cal-day { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: .12rem;
-             display: flex; flex-direction: column; gap: .1rem; overflow: hidden; cursor: pointer; }
-  .cal-day .d { font-size: .68rem; color: var(--dim); padding: .02rem .15rem; align-self: flex-start; }
-  .cal-day.other .d { opacity: .35; }
-  .cal-day.today .d { background: var(--pink); color: light-dark(#fff,#1a1016); border-radius: .5rem; padding: .02rem .34rem; }
-  .cal-ev { font-size: .62rem; line-height: 1.3; color: #fff; border-radius: .28rem; padding: .03rem .28rem;
-            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
-  .cal-more { font-size: .58rem; color: var(--dim); padding-left: .2rem; }
-  .cal-week { flex: 1; display: flex; flex-direction: column; }
-  .cal-wrow { display: flex; gap: .5rem; align-items: flex-start; padding: .55rem .8rem;
-              border-bottom: 1px solid var(--line); cursor: pointer; }
-  .cal-wrow .wd { width: 2.4rem; flex: none; text-align: center; }
-  .cal-wrow .wd .wn { font-size: 1.05rem; }
-  .cal-wrow .wd .ww { font-size: .58rem; color: var(--dim); }
-  .cal-wrow.today .wd .wn { color: var(--pink); font-weight: bold; }
-  .cal-wrow .wevs { flex: 1; display: flex; flex-direction: column; gap: .22rem; padding-top: .1rem; }
-  .cal-wrow .wevs .cal-ev { font-size: .8rem; padding: .2rem .55rem; }
-  .cal-wrow .wevs .empty { font-size: .72rem; color: var(--dim); opacity: .45; }
-  #cal-dialog, #cal-colorbox { position: fixed; inset: 0; z-index: 70; background: #0007; display: flex;
+  .cal-wk { display: grid; grid-template-columns: repeat(7, 1fr); flex: none; position: sticky; top: 0; z-index: 2;
+            background: var(--bg); padding-bottom: .2rem; }
+  .cal-wk span { text-align: center; font-size: .62rem; letter-spacing: .08em; color: var(--dim); padding: .15rem 0; }
+  .cal-wk span.sun { color: var(--sun); }
+  .cal-wk span.sat { color: var(--sat); }
+  /* 월간 격자: 세로 칸선 없이 가로 실선만. 좁은 화면에서 제목을 4글자로 자르는 대신
+     애플 캘린더처럼 날짜 아래 점(종일은 짧은 막대)만 찍고, 고른 날의 일정은 아래
+     패널에 제목까지 보여준다. */
+  .cal-month { flex: 1; display: grid; grid-template-columns: repeat(7, 1fr); grid-auto-rows: 1fr; }
+  .cal-day { padding: .3rem .1rem; display: flex; flex-direction: column; align-items: center; gap: .22rem;
+             overflow: hidden; cursor: pointer; border-top: 1px solid var(--line); min-height: 2.9rem; }
+  .cal-day .d { font-size: .72rem; color: var(--dim); flex: none;
+                width: 1.5rem; height: 1.5rem; display: grid; place-items: center; border-radius: 50%; }
+  .cal-day.sun .d { color: var(--sun); }
+  .cal-day.sat .d { color: var(--sat); }
+  .cal-day.other .d { opacity: .38; }
+  .cal-day.sel .d { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--pink) 60%, transparent); }
+  .cal-day.today .d { background: var(--pink); color: light-dark(#fff,#1a1016); font-weight: 700; }
+  .cal-dots { display: flex; flex-wrap: wrap; justify-content: center; gap: .16rem; }
+  .cal-dot { width: .34rem; height: .34rem; border-radius: 50%; background: var(--c); }
+  .cal-dot.allday { width: .82rem; border-radius: .17rem; }
+  .cal-day.other .cal-dots { opacity: .45; }
+  /* 고른 날의 일정 목록(월간 전용) — 격자에서 못 보여준 제목·시간을 여기서 읽는다 */
+  .cal-dp { flex: none; display: flex; flex-direction: column; gap: .4rem; max-height: 40%;
+            border-top: 1px solid var(--line); background: var(--panel); padding: .55rem .7rem .7rem;
+            padding-left: calc(.7rem + env(safe-area-inset-left,0px)); padding-right: calc(.7rem + env(safe-area-inset-right,0px)); }
+  .cal-dp[hidden] { display: none; }
+  .cal-dp .hd { display: flex; align-items: center; gap: .5rem; }
+  .cal-dp .hd .dt { font-size: .82rem; font-weight: 600; }
+  .cal-dp .hd .dt .wd { color: var(--dim); font-weight: 400; }
+  .cal-dp .hd .add { margin-left: auto; flex: none; font: inherit; font-size: .72rem; padding: .3rem .65rem;
+                     border-radius: 999px; border: 1px solid var(--line); background: var(--bg); color: inherit; cursor: pointer; }
+  .cal-dp .evs { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: .3rem; }
+  .cal-dp .evs .cal-ev { font-size: .8rem; line-height: 1.45; padding: .28rem .6rem; border-radius: .5rem; }
+  .cal-dp .evs .cal-ev.timed { padding: .12rem .12rem; gap: .4rem; }
+  .cal-dp .evs .cal-ev.timed::before { width: .42rem; height: .42rem; }
+  .cal-dp .evs .empty { font-size: .74rem; color: var(--dim); opacity: .45; padding: .1rem; }
+  .cal-ev { font-size: .6rem; line-height: 1.35; border-radius: .3rem; padding: .07rem .3rem; cursor: pointer;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            background: color-mix(in srgb, var(--c) 20%, transparent);
+            color: light-dark(color-mix(in srgb, var(--c) 78%, #1c2733), color-mix(in srgb, var(--c) 60%, #ffffff)); }
+  .cal-ev.timed { background: none; color: inherit; display: flex; align-items: center; gap: .22rem; padding-left: .12rem; }
+  .cal-ev.timed::before { content: ""; flex: none; width: .34rem; height: .34rem; border-radius: 50%; background: var(--c); }
+  .cal-ev.timed .t { flex: none; color: var(--dim); }
+  .cal-ev.timed .n { overflow: hidden; text-overflow: ellipsis; }
+  .cal-week { flex: 1; display: flex; flex-direction: column; gap: .4rem; padding: .1rem .6rem .9rem;
+              padding-left: calc(.6rem + env(safe-area-inset-left,0px)); padding-right: calc(.6rem + env(safe-area-inset-right,0px)); }
+  .cal-wrow { display: flex; gap: .7rem; align-items: flex-start; padding: .55rem .7rem; cursor: pointer;
+              background: var(--panel); border: 1px solid var(--line); border-radius: .85rem; }
+  .cal-wrow.today { border-color: color-mix(in srgb, var(--pink) 40%, var(--line));
+                    background: color-mix(in srgb, var(--pink) 7%, var(--panel)); }
+  .cal-wrow .wd { width: 2.1rem; flex: none; display: flex; flex-direction: column; align-items: center; gap: .06rem; }
+  .cal-wrow .wd .wn { font-size: 1rem; width: 1.85rem; height: 1.85rem; display: grid; place-items: center; border-radius: 50%; }
+  .cal-wrow .wd .ww { font-size: .56rem; letter-spacing: .05em; color: var(--dim); }
+  .cal-wrow.sun .wd .wn { color: var(--sun); }
+  .cal-wrow.sat .wd .wn { color: var(--sat); }
+  .cal-wrow.today .wd .wn { background: var(--pink); color: light-dark(#fff,#1a1016); font-weight: 700; }
+  .cal-wrow .wevs { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .3rem; padding-top: .2rem; }
+  .cal-wrow .wevs .cal-ev { font-size: .78rem; line-height: 1.4; padding: .24rem .55rem; border-radius: .45rem; }
+  .cal-wrow .wevs .cal-ev.timed { padding: .1rem .1rem; gap: .4rem; }
+  .cal-wrow .wevs .cal-ev.timed::before { width: .42rem; height: .42rem; }
+  .cal-wrow .wevs .empty { font-size: .72rem; color: var(--dim); opacity: .4; padding: .1rem .1rem; }
+  #cal-dialog, #cal-colorbox { position: fixed; inset: 0; z-index: 70; display: flex;
+                               background: light-dark(#0f17223d, #000000a8); backdrop-filter: blur(2px);
                                align-items: center; justify-content: center; padding: 1rem; }
   #cal-dialog[hidden], #cal-colorbox[hidden] { display: none; }
   .cal-card { width: min(22rem, 92vw); background: var(--panel); border: 1px solid var(--line);
-              border-radius: 1rem; padding: 1.1rem; display: flex; flex-direction: column; gap: .7rem; }
+              border-radius: 1.1rem; padding: 1.1rem; display: flex; flex-direction: column; gap: .7rem;
+              box-shadow: 0 18px 44px light-dark(#0f172226, #0009); }
   .cal-card h3 { margin: 0; font-size: 1rem; }
-  .cal-card > label { display: flex; align-items: center; justify-content: space-between; font-size: .85rem; }
+  #cal-colorbox label { display: flex; align-items: center; justify-content: space-between; font-size: .85rem; }
   .cal-card input[type=color] { width: 3rem; height: 2rem; border: 1px solid var(--line); border-radius: .4rem; background: none; padding: 0; }
-  .cal-dlg-date { font-size: .85rem; color: var(--dim); }
-  #cal-dlg-title { font: inherit; padding: .6rem .7rem; border-radius: .6rem; border: 1px solid var(--line); background: var(--bg); color: inherit; }
-  .cal-allday { display: flex; align-items: center; gap: .4rem; font-size: .85rem; }
+  .cal-dlg-date { font-size: .8rem; font-weight: 600; color: var(--dim); letter-spacing: .01em; }
+  #cal-dlg-title { font: inherit; font-size: 1rem; padding: .6rem .7rem; border-radius: .6rem;
+                   border: 1px solid var(--line); background: var(--bg); color: inherit; }
+  #cal-dlg-title:focus { outline: none; border-color: color-mix(in srgb, var(--pink) 55%, var(--line)); }
+  /* 종일 체크박스는 라벨과 붙어 있어야 한다(색상 설정의 좌우 배치 규칙을 덮는다) */
+  .cal-allday { display: flex; align-items: center; justify-content: flex-start; gap: .4rem; font-size: .85rem; }
   .cal-times { display: flex; gap: .9rem; }
   .cal-times label { display: flex; align-items: center; gap: .35rem; font-size: .82rem; }
   .cal-times input[type=time] { font: inherit; padding: .35rem .45rem; border: 1px solid var(--line);
                                 border-radius: .5rem; background: var(--bg); color: inherit; }
   .cal-cats { display: flex; gap: .4rem; }
   .cal-cats button { flex: 1; font: inherit; font-size: .78rem; padding: .5rem; border-radius: .6rem;
-                     border: 2px solid var(--line); background: var(--bg); color: inherit; cursor: pointer; }
-  .cal-cats button[aria-pressed=true] { border-color: currentColor; font-weight: 600; }
+                     border: 1px solid var(--line); background: var(--bg); color: inherit; cursor: pointer;
+                     display: flex; align-items: center; justify-content: center; gap: .35rem; }
+  .cal-cats button::before { content: ""; width: .5rem; height: .5rem; border-radius: 50%; background: var(--c); }
+  .cal-cats button[aria-pressed=true] { border-color: color-mix(in srgb, var(--c) 60%, var(--line)); font-weight: 600;
+                                        background: color-mix(in srgb, var(--c) 13%, transparent); }
   .cal-dlg-actions { display: flex; align-items: center; gap: .5rem; }
   .cal-dlg-actions button { font: inherit; font-size: .82rem; padding: .5rem .9rem; border-radius: .6rem;
                             border: 1px solid var(--line); background: var(--bg); color: inherit; cursor: pointer; }
@@ -310,15 +376,19 @@
   <header class="cal-head">
     <button id="cal-back" class="icon-btn" title="채팅으로" aria-label="채팅으로">‹</button>
     <b id="cal-title"></b>
+    <button id="cal-today" title="오늘로" hidden>오늘</button>
     <span class="cal-nav">
       <button id="cal-prev" class="icon-btn" aria-label="이전">◀</button>
-      <button id="cal-today" title="오늘">오늘</button>
       <button id="cal-next" class="icon-btn" aria-label="다음">▶</button>
     </span>
-    <button id="cal-toggle" title="월간/주간">주간</button>
+    <span class="cal-seg" role="group" aria-label="보기 전환">
+      <button id="cal-seg-month" type="button" aria-pressed="true">월</button>
+      <button id="cal-seg-week" type="button" aria-pressed="false">주</button>
+    </span>
     <button id="cal-colors" class="icon-btn" title="색상 설정">🎨</button>
   </header>
   <div id="cal-grid"></div>
+  <div id="cal-day" class="cal-dp" hidden></div>
 </section>
 
 <!-- 이벤트 추가/수정 -->
@@ -1152,7 +1222,7 @@ $("file").addEventListener("change", (e) => {
 // 이벤트는 각자 만든 사람(owner)과 공통(shared) 플래그를 담고, E2E 암호블롭으로
 // 서버 cal:<id> 에 rev 와 함께 저장·동기화된다(LWW). 색상은 기기별 설정으로 매핑.
 const calEvents = new Map(); // id → { id, rev, deleted, date?, title?, owner?, shared? }
-let calView = "month", calCursor = null, calDlgId = null, calDlgDate = null, calDlgCat = "mine";
+let calView = "month", calCursor = null, calSel = null, calDlgId = null, calDlgDate = null, calDlgCat = "mine";
 const calOutbox = [];
 const CAL_COLORS_KEY = "duri:calcolors";
 const calColors = Object.assign({ mine: "#c0568a", theirs: "#4f7fdd", shared: "#3aa675" },
@@ -1222,57 +1292,128 @@ function renderCal() {
   const grid = $("cal-grid");
   if (!calCursor) calCursor = new Date();
   if (calView === "month") renderMonth(grid, calCursor); else renderWeek(grid, calCursor);
+  renderDayPanel();
+}
+// 제목은 "7월" 크게 + 연도 작게 (구글 캘린더식). 오늘이 현재 화면 범위를 벗어나면
+// "오늘" 버튼을 띄운다 — 늘 자리를 차지하지 않아 헤더가 가볍다.
+function setCalTitle(main, year, inRange) {
+  const t = $("cal-title"); t.replaceChildren();
+  const m = document.createElement("span"); m.className = "m"; m.textContent = main;
+  const y = document.createElement("span"); y.className = "y"; y.textContent = year;
+  t.append(m, y);
+  $("cal-today").hidden = inRange;
 }
 function weekHeader() {
   const wk = document.createElement("div"); wk.className = "cal-wk";
   WEEKDAYS.forEach((w, i) => { const s = document.createElement("span"); s.textContent = w; if (i === 0) s.className = "sun"; if (i === 6) s.className = "sat"; wk.appendChild(s); });
   return wk;
 }
+// 종일 일정은 옅게 채운 알약, 시간 일정은 색점 + 시간 + 제목 (구글 캘린더 관례).
+// 색은 --c 로 넘겨 CSS 가 배경·글자색을 테마별로 섞는다.
 function evChip(ev) {
-  const c = document.createElement("div"); c.className = "cal-ev"; c.style.background = calColorOf(ev);
-  c.textContent = (ev.start ? ev.start + " " : "") + (ev.title || "(제목 없음)");
+  const c = document.createElement("div"); c.className = "cal-ev";
+  c.style.setProperty("--c", calColorOf(ev));
+  const title = ev.title || "(제목 없음)";
+  if (ev.start) {
+    c.classList.add("timed");
+    const t = document.createElement("span"); t.className = "t"; t.textContent = ev.start;
+    const n = document.createElement("span"); n.className = "n"; n.textContent = title;
+    c.append(t, n);
+  } else {
+    c.textContent = title;
+  }
+  c.title = (ev.start ? `${ev.start}${ev.end ? "–" + ev.end : ""} ` : "") + title;
   c.addEventListener("click", (e) => { e.stopPropagation(); openCalDialog(ev.date, ev); });
   return c;
 }
+function markWeekend(el, dow) { if (dow === 0) el.classList.add("sun"); if (dow === 6) el.classList.add("sat"); }
+const dlgDateLabel = (ds) => {
+  const [y, m, dd] = ds.split("-").map(Number);
+  return { d: `${m}월 ${dd}일`, w: WEEKDAYS[new Date(y, m - 1, dd).getDay()] };
+};
 function renderMonth(grid, cur) {
-  $("cal-title").textContent = `${cur.getFullYear()}년 ${cur.getMonth() + 1}월`;
-  grid.replaceChildren(weekHeader());
-  const month = document.createElement("div"); month.className = "cal-month";
   const first = new Date(cur.getFullYear(), cur.getMonth(), 1);
   const start = new Date(first); start.setDate(1 - first.getDay());
+  const days = new Date(cur.getFullYear(), cur.getMonth() + 1, 0).getDate();
+  const cells = Math.ceil((first.getDay() + days) / 7) * 7; // 5주 달은 5줄만 — 칸이 넓어진다
+  const today = new Date();
+  const sameMonth = today.getFullYear() === cur.getFullYear() && today.getMonth() === cur.getMonth();
+  setCalTitle(`${cur.getMonth() + 1}월`, String(cur.getFullYear()), sameMonth);
   const tk = todayYmd();
-  for (let i = 0; i < 42; i++) {
+  // 고른 날이 이 달 밖이면 오늘(같은 달일 때)이나 1일로 옮긴다.
+  const monthPrefix = `${cur.getFullYear()}-${pad2(cur.getMonth() + 1)}-`;
+  if (!calSel || !calSel.startsWith(monthPrefix)) calSel = sameMonth ? tk : monthPrefix + "01";
+  grid.replaceChildren(weekHeader());
+  const month = document.createElement("div"); month.className = "cal-month";
+  for (let i = 0; i < cells; i++) {
     const d = new Date(start); d.setDate(start.getDate() + i);
     const ds = ymd(d);
     const cell = document.createElement("div"); cell.className = "cal-day";
+    markWeekend(cell, d.getDay());
     if (d.getMonth() !== cur.getMonth()) cell.classList.add("other");
     if (ds === tk) cell.classList.add("today");
+    if (ds === calSel) cell.classList.add("sel");
     const dn = document.createElement("div"); dn.className = "d"; dn.textContent = d.getDate(); cell.appendChild(dn);
     const evs = calEventsOn(ds);
-    evs.slice(0, 3).forEach((ev) => cell.appendChild(evChip(ev)));
-    if (evs.length > 3) { const m = document.createElement("div"); m.className = "cal-more"; m.textContent = `+${evs.length - 3}`; cell.appendChild(m); }
-    cell.addEventListener("click", () => openCalDialog(ds, null));
+    if (evs.length) {
+      const dots = document.createElement("div"); dots.className = "cal-dots";
+      evs.slice(0, 4).forEach((ev) => {
+        const dot = document.createElement("span");
+        dot.className = ev.start ? "cal-dot" : "cal-dot allday";
+        dot.style.setProperty("--c", calColorOf(ev));
+        dots.appendChild(dot);
+      });
+      cell.appendChild(dots);
+    }
+    cell.addEventListener("click", () => { calSel = ds; renderCal(); });
     month.appendChild(cell);
   }
   grid.appendChild(month);
 }
+// 월간에서 고른 하루의 일정 목록. 격자가 점으로만 보여주는 것을 여기서 읽고 누른다.
+function renderDayPanel() {
+  const panel = $("cal-day");
+  if (calView !== "month") { panel.hidden = true; return; }
+  panel.hidden = false;
+  const { d, w } = dlgDateLabel(calSel);
+  const hd = document.createElement("div"); hd.className = "hd";
+  const dt = document.createElement("span"); dt.className = "dt";
+  dt.append(d + " ");
+  const wd = document.createElement("span"); wd.className = "wd"; wd.textContent = `(${w})`;
+  dt.appendChild(wd);
+  const add = document.createElement("button"); add.type = "button"; add.className = "add"; add.textContent = "＋ 일정";
+  add.addEventListener("click", () => openCalDialog(calSel, null));
+  hd.append(dt, add);
+  const evs = document.createElement("div"); evs.className = "evs";
+  const list = calEventsOn(calSel);
+  if (list.length) list.forEach((ev) => evs.appendChild(evChip(ev)));
+  else { const e = document.createElement("div"); e.className = "empty"; e.textContent = "일정이 없어요"; evs.appendChild(e); }
+  panel.replaceChildren(hd, evs);
+}
+// 주간은 하루 한 장의 카드(어젠다). 좁은 화면에서 시간 격자보다 읽기 쉽다.
 function renderWeek(grid, cur) {
   const start = new Date(cur); start.setDate(cur.getDate() - cur.getDay());
   const end = new Date(start); end.setDate(start.getDate() + 6);
-  $("cal-title").textContent = `${start.getMonth() + 1}.${start.getDate()}–${end.getMonth() + 1}.${end.getDate()}`;
-  grid.replaceChildren(weekHeader());
-  const wk = document.createElement("div"); wk.className = "cal-week";
   const tk = todayYmd();
+  const inRange = tk >= ymd(start) && tk <= ymd(end);
+  setCalTitle(`${start.getMonth() + 1}.${start.getDate()} – ${end.getMonth() + 1}.${end.getDate()}`,
+    String(start.getFullYear()), inRange);
+  grid.replaceChildren();
+  const wk = document.createElement("div"); wk.className = "cal-week";
   for (let i = 0; i < 7; i++) {
     const d = new Date(start); d.setDate(start.getDate() + i);
     const ds = ymd(d);
-    const row = document.createElement("div"); row.className = "cal-wrow"; if (ds === tk) row.classList.add("today");
+    const row = document.createElement("div"); row.className = "cal-wrow";
+    markWeekend(row, d.getDay());
+    if (ds === tk) row.classList.add("today");
     const wd = document.createElement("div"); wd.className = "wd";
-    wd.innerHTML = `<div class="wn">${d.getDate()}</div><div class="ww">${WEEKDAYS[i]}</div>`;
+    const wn = document.createElement("div"); wn.className = "wn"; wn.textContent = d.getDate();
+    const ww = document.createElement("div"); ww.className = "ww"; ww.textContent = WEEKDAYS[i];
+    wd.append(wn, ww);
     const wevs = document.createElement("div"); wevs.className = "wevs";
     const evs = calEventsOn(ds);
     if (evs.length) evs.forEach((ev) => wevs.appendChild(evChip(ev)));
-    else { const e = document.createElement("div"); e.className = "empty"; e.textContent = "—"; wevs.appendChild(e); }
+    else { const e = document.createElement("div"); e.className = "empty"; e.textContent = "일정 없음"; wevs.appendChild(e); }
     row.append(wd, wevs);
     row.addEventListener("click", () => openCalDialog(ds, null));
     wk.appendChild(row);
@@ -1285,7 +1426,7 @@ function renderCatButtons() {
   const box = $("cal-dlg-cats"); box.replaceChildren();
   CATS.forEach(({ k, label }) => {
     const b = document.createElement("button"); b.type = "button"; b.textContent = label;
-    b.style.color = k === "shared" ? calColors.shared : calColors.mine;
+    b.style.setProperty("--c", k === "shared" ? calColors.shared : calColors.mine);
     b.setAttribute("aria-pressed", String(k === calDlgCat));
     b.addEventListener("click", () => { calDlgCat = k; renderCatButtons(); });
     box.appendChild(b);
@@ -1295,8 +1436,8 @@ function openCalDialog(dateStr, ev) {
   calDlgId = ev ? ev.id : randToken();
   calDlgDate = dateStr;
   calDlgCat = ev ? (ev.shared ? "shared" : "mine") : "mine";
-  const d = dateStr.split("-");
-  $("cal-dlg-date").textContent = `${d[0]}. ${d[1]}. ${d[2]}`;
+  const lb = dlgDateLabel(dateStr);
+  $("cal-dlg-date").textContent = `${lb.d} (${lb.w})`;
   $("cal-dlg-title").value = ev ? (ev.title || "") : "";
   const timed = !!(ev && ev.start);
   $("cal-dlg-allday").checked = !timed;
@@ -1344,32 +1485,67 @@ function calShift(dir) {
 $("cal-prev").addEventListener("click", () => calShift(-1));
 $("cal-next").addEventListener("click", () => calShift(1));
 $("cal-today").addEventListener("click", () => { calCursor = new Date(); renderCal(); });
-$("cal-toggle").addEventListener("click", () => {
-  calView = calView === "month" ? "week" : "month";
-  $("cal-toggle").textContent = calView === "month" ? "주간" : "월간";
+function setCalView(view) {
+  calView = view;
+  $("cal-seg-month").setAttribute("aria-pressed", String(view === "month"));
+  $("cal-seg-week").setAttribute("aria-pressed", String(view === "week"));
   renderCal();
-});
+}
+$("cal-seg-month").addEventListener("click", () => setCalView("month"));
+$("cal-seg-week").addEventListener("click", () => setCalView("week"));
 function openCal() { if (!calCursor) calCursor = new Date(); $("cal").classList.remove("cal-off"); renderCal(); }
 function closeCal() { $("cal").classList.add("cal-off"); }
 $("cal-open").addEventListener("click", openCal);
 $("cal-back").addEventListener("click", closeCal);
 
-// 채팅 로그에서 오른쪽으로 스와이프 → 캘린더 열기 / 캘린더에서 왼쪽으로 → 채팅
-let chatSwX = null, chatSwY = null;
-log().addEventListener("touchstart", (e) => { chatSwX = e.touches[0].clientX; chatSwY = e.touches[0].clientY; }, { passive: true });
-log().addEventListener("touchend", (e) => {
-  if (chatSwX === null) return;
-  const dx = e.changedTouches[0].clientX - chatSwX, dy = e.changedTouches[0].clientY - chatSwY;
-  chatSwX = null;
-  if (dx > 65 && Math.abs(dx) > Math.abs(dy) * 1.5) openCal(); // 오른쪽으로 슬라이드 → 캘린더
-});
-let calSwX = null;
-$("cal").addEventListener("touchstart", (e) => { calSwX = e.touches[0].clientX; }, { passive: true });
-$("cal").addEventListener("touchend", (e) => {
-  if (calSwX === null) return;
-  const dx = e.changedTouches[0].clientX - calSwX; calSwX = null;
-  if (dx < -65 && $("cal-dialog").hidden && $("cal-colorbox").hidden) closeCal(); // 왼쪽으로 → 채팅
-});
+// 좌우 스와이프로 화면 전환, 실시간 드래그(손끝을 그대로 따라간다 — 탭을 당겨오는
+// 느낌). 순서는 [채팅|캘린더](채팅이 왼쪽, 캘린더가 오른쪽 화면 밖에서 대기).
+// touchmove 마다 translateX 를 손가락 위치로 직접 갱신하고(transition 끔),
+// 손을 뗀 순간에만 남은 진행률로 열지/닫을지 정해 CSS 스냅 애니메이션으로 마무리한다.
+const CAL_DRAG_OPEN_AT = .3; // 화면 폭의 30% 이상 끌면 그 방향으로 스냅
+let calDrag = null; // { startX, startY, fromOpen, w, moved, progress }
+function calDragStart(e) {
+  if (!$("cal-dialog").hidden || !$("cal-colorbox").hidden) return; // 다이얼로그 위에서는 드래그 안 함
+  const t = e.touches[0];
+  calDrag = { startX: t.clientX, startY: t.clientY, fromOpen: !$("cal").classList.contains("cal-off"), w: innerWidth, moved: false };
+}
+function calDragMove(e) {
+  if (!calDrag) return;
+  const t = e.touches[0];
+  const dx = t.clientX - calDrag.startX, dy = t.clientY - calDrag.startY;
+  if (!calDrag.moved) {
+    if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return; // 방향 판정 전
+    const horizontal = Math.abs(dx) > Math.abs(dy) * 1.3;
+    const rightDir = calDrag.fromOpen ? dx > 0 : dx < 0; // 열림→오른쪽으로 닫기 / 닫힘→왼쪽으로 열기
+    if (!horizontal || !rightDir) { calDrag = null; return; } // 세로 스크롤이거나 반대 방향 — 평소대로 둔다
+    calDrag.moved = true;
+    $("cal").style.transition = "none";
+  }
+  e.preventDefault();
+  const progress = calDrag.fromOpen ? Math.max(0, 1 - dx / calDrag.w) : Math.min(1, -dx / calDrag.w);
+  calDrag.progress = progress;
+  $("cal").style.transform = `translateX(${(1 - progress) * 100}%)`;
+}
+function calDragEnd() {
+  if (!calDrag) return;
+  const { moved, fromOpen, progress = fromOpen ? 1 : 0 } = calDrag;
+  calDrag = null;
+  if (!moved) return;
+  const open = progress > CAL_DRAG_OPEN_AT;
+  const cal = $("cal");
+  cal.style.transition = "transform .26s cubic-bezier(.32,.72,0,1)";
+  cal.style.transform = open ? "translateX(0%)" : "translateX(100%)";
+  cal.addEventListener("transitionend", () => { cal.style.transition = ""; cal.style.transform = ""; }, { once: true });
+  if (open) openCal(); else closeCal(); // 클래스·렌더링은 기존 함수에 위임(위 인라인 값과 동일해 튀지 않음)
+}
+log().addEventListener("touchstart", calDragStart, { passive: true });
+log().addEventListener("touchmove", calDragMove, { passive: false });
+log().addEventListener("touchend", calDragEnd);
+log().addEventListener("touchcancel", calDragEnd);
+$("cal").addEventListener("touchstart", calDragStart, { passive: true });
+$("cal").addEventListener("touchmove", calDragMove, { passive: false });
+$("cal").addEventListener("touchend", calDragEnd);
+$("cal").addEventListener("touchcancel", calDragEnd);
 calRestore();
 
 // 저장된 문구·이름이 있으면 곧바로 입장 (아무것도 안 해도 이어짐)

@@ -83,6 +83,17 @@ util/chat 클라이언트는 `catalog.json`의 `chat.title` 팩을 자동으로 
 (env로 모델·업체 교체). `ENABLE_PODCAST` var는 fail-closed. 셋업·운영은
 `podcast/README.md` 참고.
 
+## 둘만의 기록 (duri/)
+
+`duri/`도 토이가 아니라 두 사람만 쓰는 비공개 서비스다 — 토이 관례(share.js, 주간
+기록)를 적용하지 않고, 랜딩·풀다운에도 노출되지 않는다(`CONFIDENTIAL_SUBDOMAINS`).
+대화·사진·공유 캘린더를 공유 패스프레이즈로 **E2E 암호화**해서 주고받고, 엣지는
+암호블롭만 중계·버퍼링한다: `_infra/duri.js`(DuriDO + R2), 게이트·라우팅은
+`_infra/worker.js`(`bl_duri` 쿠키·`DURI_PASSWORD`), `ENABLE_DURI` var는 fail-closed.
+**원본은 각자 PC** — 배포에서 제외되는 `_src/duri-sink/` 데몬이 디스크에 쓰고 ack
+하면 서버가 그 항목을 버린다. 화면은 [채팅 | 캘린더] 두 장을 좌우 실시간 드래그
+스와이프로 넘긴다. 셋업·프로토콜·한계는 `duri/README.md` 참고.
+
 ## 더 읽을 것 (필요할 때만)
 
 - 배포/워커/빌드 파이프라인 내부: `_infra/README.md`
