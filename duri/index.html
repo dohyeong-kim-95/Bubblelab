@@ -22,7 +22,7 @@
   * { box-sizing: border-box; }
   /* iOS 더블탭-확대 제스처가 스티커 두 번째 탭을 먹지 않게 — 컨트롤은 두 번 탭을
      두 번 클릭으로 처리한다(핀치 줌은 그대로). */
-  button, a, label, #grid img, #grid button { touch-action: manipulation; }
+  button, a, label, #grid img, #grid button, .cal-day { touch-action: manipulation; }
   html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; } /* iOS가 rem을 자동확대하지 않게 */
   html, body { height: 100%; margin: 0; }
   body { font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
@@ -1366,6 +1366,7 @@ function renderMonth(grid, cur) {
       cell.appendChild(dots);
     }
     cell.addEventListener("click", () => { calSel = ds; renderCal(); });
+    cell.addEventListener("dblclick", () => openCalDialog(ds, null)); // 더블클릭(더블탭)으로 바로 일정 추가
     month.appendChild(cell);
   }
   grid.appendChild(month);
