@@ -23,7 +23,7 @@
   * { box-sizing: border-box; }
   /* iOS 더블탭-확대 제스처가 스티커 두 번째 탭을 먹지 않게 — 컨트롤은 두 번 탭을
      두 번 클릭으로 처리한다(핀치 줌은 그대로). */
-  button, a, label, #grid img, #grid button, .cal-day { touch-action: manipulation; }
+  button, a, label, #grid img, #grid button, .cal-date-cell, .cal-day-body { touch-action: manipulation; }
   html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; } /* iOS가 rem을 자동확대하지 않게 */
   html, body { height: 100%; margin: 0; }
   body { font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
@@ -192,10 +192,7 @@
   .ccp-head b { font-size: .9rem; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #ccp-months { flex: 1; min-height: 0; overflow-y: auto; padding: 0 .5rem; }
   .ccp-mhead { font-size: .78rem; font-weight: 600; color: var(--dim); text-align: center; padding: .3rem 0; }
-  .ccp-grid { grid-auto-rows: 2.6rem; margin-bottom: .4rem; }
-  /* .cal-day 의 4rem min-height 는 이벤트 미리보기 자리용이라 여기선 필요 없다 —
-     .ccp-grid 뒤 스타일시트 순서에 기대지 않도록 더 구체적인 선택자로 덮어쓴다. */
-  .ccp-grid .cal-day { min-height: auto; }
+  .ccp-grid { display: grid; grid-template-columns: repeat(7, 1fr); grid-auto-rows: 2.6rem; margin-bottom: .4rem; }
   .ccp-day.past { opacity: .3; cursor: default; }
   .ccp-day.range-start .d, .ccp-day.range-end .d { background: var(--pink); color: light-dark(#fff,#1a1016); font-weight: 700; }
   .ccp-day.in-range { background: color-mix(in srgb, var(--pink) 14%, transparent); }
@@ -262,30 +259,34 @@
   /* 월간 격자: 세로 칸선 없이 가로 실선만. 날짜 아래 최대 2개 제목 미리보기(작은
      글씨, 말줄임) + 넘치면 +N. 고른 날의 전체 목록은 아래 패널에서 읽는다.
      여러 날 일정은 주(week) 단위로 하나의 막대(.cal-week-bars)에 그려서 같은
-     주 안에서는 제목이 한 번만 보이게 한다 — 그래서 한 주 = [막대 레인들 + 날짜
-     7칸]을 담는 .cal-week-row 로 나눠 렌더링한다(달 전체를 한 그리드로 안 그림). */
+     주 안에서는 제목이 한 번만 보이게 한다. 한 주는 [날짜 숫자 7칸 → 막대 레인들
+     → 일정 칩 7칸] 세 줄(.cal-week-dates/.cal-week-bars/.cal-week-days)로 나눠
+     그린다 — 막대가 날짜 숫자보다 위로 올라오지 않게 순서를 고정한다. */
   .cal-month { flex: 1; display: flex; flex-direction: column; }
   .cal-week-row { flex: 1; display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+  .cal-week-dates { flex: none; display: grid; grid-template-columns: repeat(7, 1fr); padding-top: .2rem; }
+  .cal-date-cell { display: flex; align-items: center; justify-content: center; gap: .06rem; cursor: pointer; }
+  .cal-date-cell .d { font-size: .72rem; color: var(--dim); flex: none;
+                       width: 1.5rem; height: 1.5rem; display: grid; place-items: center; border-radius: 50%; }
+  .cal-date-cell .marker { font-size: .68rem; line-height: 1; }
+  .cal-date-cell.sun .d { color: var(--sun); }
+  .cal-date-cell.sat .d { color: var(--sat); }
+  .cal-date-cell.other .d { opacity: .38; }
+  .cal-date-cell.sel .d { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--pink) 60%, transparent); }
+  .cal-date-cell.today .d { background: var(--pink); color: light-dark(#fff,#1a1016); font-weight: 700; }
   .cal-week-bars { flex: none; display: grid; grid-template-columns: repeat(7, 1fr);
                    grid-auto-rows: 1.05rem; gap: .12rem 0; padding: .16rem .1rem 0; }
   .cal-bar { margin: 0 .06rem; font-size: .55rem; line-height: 1.05rem; padding: 0 .3rem; }
   .cal-week-days { flex: 1; display: grid; grid-template-columns: repeat(7, 1fr); }
-  .cal-day { padding: .3rem .1rem; display: flex; flex-direction: column; align-items: center; gap: .16rem;
-             overflow: hidden; cursor: pointer; min-height: 4rem; }
-  .cal-day .d { font-size: .72rem; color: var(--dim); flex: none;
-                width: 1.5rem; height: 1.5rem; display: grid; place-items: center; border-radius: 50%; }
-  .cal-day.sun .d { color: var(--sun); }
-  .cal-day.sat .d { color: var(--sat); }
-  .cal-day.other .d { opacity: .38; }
-  .cal-day.sel .d { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--pink) 60%, transparent); }
-  .cal-day.today .d { background: var(--pink); color: light-dark(#fff,#1a1016); font-weight: 700; }
+  .cal-day-body { padding: .15rem .1rem .3rem; display: flex; flex-direction: column; align-items: center;
+                  gap: .16rem; overflow: hidden; cursor: pointer; min-height: 2.2rem; }
   .cal-day-evs { display: flex; flex-direction: column; gap: .1rem; width: 100%; min-width: 0; }
-  .cal-day .cal-ev { font-size: .56rem; line-height: 1.3; padding: .02rem .16rem; }
-  .cal-day .cal-ev.timed { padding-left: .08rem; gap: .12rem; }
-  .cal-day .cal-ev.timed::before { width: .3rem; height: .3rem; }
-  .cal-day .cal-ev.timed .t { display: none; } /* 셀 안은 너무 좁아 시간 텍스트는 생략, 색점+제목만 */
+  .cal-day-body .cal-ev { font-size: .56rem; line-height: 1.3; padding: .02rem .16rem; }
+  .cal-day-body .cal-ev.timed { padding-left: .08rem; gap: .12rem; }
+  .cal-day-body .cal-ev.timed::before { width: .3rem; height: .3rem; }
+  .cal-day-body .cal-ev.timed .t { display: none; } /* 셀 안은 너무 좁아 시간 텍스트는 생략, 색점+제목만 */
   .cal-more { font-size: .52rem; color: var(--dim); text-align: center; }
-  .cal-day.other .cal-day-evs, .cal-day.other .cal-more { opacity: .45; }
+  .cal-day-body.other .cal-day-evs, .cal-day-body.other .cal-more { opacity: .45; }
   /* 고른 날의 일정 목록(월간 전용) — 격자에서 못 보여준 제목·시간을 여기서 읽는다 */
   .cal-dp { flex: none; display: flex; flex-direction: column; gap: .4rem; max-height: 40%;
             border-top: 1px solid var(--line); background: var(--panel); padding: .55rem .7rem .7rem;
@@ -354,10 +355,17 @@
   #cal-colorbox label { display: flex; align-items: center; justify-content: space-between; font-size: .85rem; }
   .cal-card input[type=color] { width: 3rem; height: 2rem; border: 1px solid var(--line); border-radius: .4rem; background: none; padding: 0; }
   /* 테두리 없는 큰 제목 입력(네이티브 캘린더 앱 벤치마킹) — 박스 대신 큰 글씨로만 존재감 */
-  #cal-dlg-title { font: inherit; font-size: 1.3rem; font-weight: 700; padding: .1rem 0;
+  .cal-title-row { display: flex; align-items: center; gap: .5rem; }
+  #cal-dlg-title { flex: 1; min-width: 0; font: inherit; font-size: 1.3rem; font-weight: 700; padding: .1rem 0;
                    border: none; background: none; color: inherit; }
   #cal-dlg-title::placeholder { color: var(--dim); font-weight: 700; }
   #cal-dlg-title:focus { outline: none; }
+  /* 표식(스티커/이모지) — "생리"처럼 글로 남기기 애매한 걸 이모지 하나로. 날짜
+     옆에 작게 뜬다(cal-date-cell .marker). 필수 아님, 제목 없이 이것만 있어도 저장. */
+  .cal-marker-input { flex: none; width: 2.6rem; font: inherit; font-size: 1.1rem; text-align: center;
+                       padding: .3rem 0; border: 1px solid var(--line); border-radius: .6rem;
+                       background: var(--bg); color: inherit; }
+  .cal-marker-input:focus { outline: none; border-color: color-mix(in srgb, var(--pink) 55%, var(--line)); }
   /* 시작/종료를 화살표 아이콘 + 전체 날짜 텍스트 행으로(네이티브 캘린더 앱 벤치마킹).
      실제 <input type=date> 는 투명하게 행 전체를 덮어 어디를 눌러도 네이티브
      피커가 뜨고, 보이는 글자는 dlgDateLabel 로 포맷한 텍스트다. */
@@ -415,7 +423,7 @@
   .cal-daterow-item[hidden], .cal-times[hidden], .cal-recur[hidden], .cal-recur label[hidden] { display: none; }
   /* 하단 토스트(뒤로가기 종료 안내 등) */
   #toast { position: fixed; left: 50%; transform: translateX(-50%); z-index: 100; pointer-events: none;
-           bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+           bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px)); max-width: 90vw; white-space: nowrap;
            background: light-dark(#1c2733ee, #e2e9f0ee); color: light-dark(#fff, #10151c);
            font-size: .8rem; padding: .5rem .9rem; border-radius: 1rem; box-shadow: 0 4px 16px #0004; }
   #toast[hidden] { display: none; }
@@ -537,7 +545,11 @@
 <!-- 이벤트 추가/수정 -->
 <div id="cal-dialog" hidden>
   <div class="cal-card">
-    <input id="cal-dlg-title" placeholder="제목" autocomplete="off" maxlength="120">
+    <div class="cal-title-row">
+      <input id="cal-dlg-title" placeholder="제목" autocomplete="off" maxlength="120">
+      <input id="cal-dlg-marker" class="cal-marker-input" maxlength="4" placeholder="🩸"
+             title="표식(선택) — 글로 남기기 애매한 건 이모지 하나로. 날짜 옆에 뜬다">
+    </div>
     <label class="cal-toggle"><input type="checkbox" id="cal-dlg-allday" checked><span class="track"><span class="thumb"></span></span>종일</label>
     <div class="cal-daterow">
       <div class="cal-daterow-item">
@@ -1592,11 +1604,12 @@ function calFlushOutbox() { while (calOutbox.length && ws && ws.readyState === 1
 
 // 여러 날 종료일(endDate)과 반복(recur)은 함께 쓰지 않는다(반복이 우선) — 다이얼로그
 // 저장 시점에 이미 정리해서 넘기지만, 방어적으로 여기서도 한 번 더 가른다.
-async function calSaveEvent({ id, date, title, owner, shared, start, end, endDate, recur }) {
+async function calSaveEvent({ id, date, title, owner, shared, start, end, endDate, recur, marker }) {
   const rev = Date.now();
   const content = { date, title, owner, shared };
   if (start) content.start = start;
   if (end) content.end = end;
+  if (marker) content.marker = marker;
   if (recur && recur.freq && recur.freq !== "none") content.recur = recur;
   else if (endDate && endDate > date) content.endDate = endDate;
   calEvents.set(id, { id, rev, deleted: false, ...content }); calPersist();
@@ -1754,7 +1767,7 @@ function evChip(ev, onDate) {
   const c = document.createElement("div"); c.className = "cal-ev";
   c.style.setProperty("--c", calColorOf(ev));
   const isRecur = !!(ev.recur && ev.recur.freq && ev.recur.freq !== "none");
-  const title = (isRecur ? "🔁 " : "") + (ev.title || "(제목 없음)");
+  const title = (isRecur ? "🔁 " : "") + (ev.title || ev.marker || "(제목 없음)");
   if (ev.start) {
     c.classList.add("timed");
     const t = document.createElement("span"); t.className = "t"; t.textContent = ev.start;
@@ -1763,7 +1776,7 @@ function evChip(ev, onDate) {
   } else {
     c.textContent = title;
   }
-  let tip = (ev.start ? `${ev.start}${ev.end ? "–" + ev.end : ""} ` : "") + (ev.title || "(제목 없음)");
+  let tip = (ev.start ? `${ev.start}${ev.end ? "–" + ev.end : ""} ` : "") + (ev.title || ev.marker || "(제목 없음)");
   if (isRecur) tip += ` (${RECUR_LABEL[ev.recur.freq] || ev.recur.freq} 반복)`;
   else if (ev.endDate && ev.endDate > ev.date) tip += ` (${ev.date} ~ ${ev.endDate})`;
   c.title = tip;
@@ -1777,7 +1790,7 @@ function evChip(ev, onDate) {
 function evBar(ev) {
   const c = document.createElement("div"); c.className = "cal-ev cal-bar";
   c.style.setProperty("--c", calColorOf(ev));
-  const title = ev.title || "(제목 없음)";
+  const title = ev.title || ev.marker || "(제목 없음)";
   c.textContent = title;
   c.title = `${title} (${ev.date} ~ ${ev.endDate})`;
   if (ev.holiday) { c.addEventListener("click", (e) => { e.stopPropagation(); showToast(ev.title); }); return c; }
@@ -1839,6 +1852,55 @@ function renderMonth(grid, cur) {
     const weekStartStr = ymd(weekStart), weekEndStr = ymd(weekEnd);
 
     const weekRow = document.createElement("div"); weekRow.className = "cal-week-row";
+    // ① 날짜 숫자 줄을 먼저 그린다 — 막대가 날짜보다 위로 올라오면 안 되므로 순서 고정.
+    const dateRow = document.createElement("div"); dateRow.className = "cal-week-dates";
+    const daysGrid = document.createElement("div"); daysGrid.className = "cal-week-days";
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(weekStart); d.setDate(weekStart.getDate() + i);
+      const ds = ymd(d);
+      const isOther = d.getMonth() !== cur.getMonth();
+      const dayEvs = calEventsOn(ds);
+
+      const dcell = document.createElement("div"); dcell.className = "cal-date-cell";
+      markWeekend(dcell, d.getDay());
+      if (isOther) dcell.classList.add("other");
+      if (ds === tk) dcell.classList.add("today");
+      if (ds === calSel) dcell.classList.add("sel");
+      const dn = document.createElement("div"); dn.className = "d"; dn.textContent = d.getDate(); dcell.appendChild(dn);
+      // 표식(스티커/이모지) — 글로 남기기 애매한 것(예: 생리)을 이모지 하나로.
+      const markers = [...new Set(dayEvs.map((ev) => ev.marker).filter(Boolean))].slice(0, 2);
+      if (markers.length) { const ms = document.createElement("span"); ms.className = "marker"; ms.textContent = markers.join(""); dcell.appendChild(ms); }
+
+      const bodyCell = document.createElement("div"); bodyCell.className = "cal-day-body";
+      if (isOther) bodyCell.classList.add("other");
+      // 여러 날 일정은 위 주간 막대가 이미 보여주므로 칸 안에서는 빼고 그린다.
+      const evs = dayEvs.filter((ev) => !isSpanningEvent(ev));
+      if (evs.length) {
+        const wrap = document.createElement("div"); wrap.className = "cal-day-evs";
+        evs.slice(0, 2).forEach((ev) => wrap.appendChild(evChip(ev, ds)));
+        if (evs.length > 2) { const m = document.createElement("div"); m.className = "cal-more"; m.textContent = `+${evs.length - 2}`; wrap.appendChild(m); }
+        bodyCell.appendChild(wrap);
+      }
+      // 네이티브 dblclick 은 모바일 PWA 터치에서 잘 안 잡힐 때가 있어, 같은 날짜를
+      // 400ms 안에 두 번 누르면 직접 더블탭으로 판정한다(마우스·터치 동일하게 동작).
+      // 날짜 숫자·칩 영역 둘 중 어디를 눌러도 같은 하루로 취급한다.
+      const onTap = () => {
+        const now = Date.now();
+        if (calLastTap.ds === ds && now - calLastTap.t < 400) {
+          calLastTap = { ds: null, t: 0 };
+          openCalDialog(ds, null);
+          return;
+        }
+        calLastTap = { ds, t: now };
+        calSel = ds; renderCal();
+      };
+      dcell.addEventListener("click", onTap);
+      bodyCell.addEventListener("click", onTap);
+      dateRow.appendChild(dcell);
+      daysGrid.appendChild(bodyCell);
+    }
+    weekRow.appendChild(dateRow);
+    // ② 여러 날 일정 막대 — 날짜 줄 다음, 일반 칩 줄 이전.
     const lanes = assignLanes(collectSpanningEvents(weekStartStr, weekEndStr));
     if (lanes.length) {
       const bars = document.createElement("div"); bars.className = "cal-week-bars";
@@ -1852,39 +1914,7 @@ function renderMonth(grid, cur) {
       });
       weekRow.appendChild(bars);
     }
-
-    const daysGrid = document.createElement("div"); daysGrid.className = "cal-week-days";
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(weekStart); d.setDate(weekStart.getDate() + i);
-      const ds = ymd(d);
-      const cell = document.createElement("div"); cell.className = "cal-day";
-      markWeekend(cell, d.getDay());
-      if (d.getMonth() !== cur.getMonth()) cell.classList.add("other");
-      if (ds === tk) cell.classList.add("today");
-      if (ds === calSel) cell.classList.add("sel");
-      const dn = document.createElement("div"); dn.className = "d"; dn.textContent = d.getDate(); cell.appendChild(dn);
-      // 여러 날 일정은 위 주간 막대가 이미 보여주므로 칸 안에서는 빼고 그린다.
-      const evs = calEventsOn(ds).filter((ev) => !isSpanningEvent(ev));
-      if (evs.length) {
-        const wrap = document.createElement("div"); wrap.className = "cal-day-evs";
-        evs.slice(0, 2).forEach((ev) => wrap.appendChild(evChip(ev, ds)));
-        if (evs.length > 2) { const m = document.createElement("div"); m.className = "cal-more"; m.textContent = `+${evs.length - 2}`; wrap.appendChild(m); }
-        cell.appendChild(wrap);
-      }
-      // 네이티브 dblclick 은 모바일 PWA 터치에서 잘 안 잡힐 때가 있어, 같은 날짜를
-      // 400ms 안에 두 번 누르면 직접 더블탭으로 판정한다(마우스·터치 동일하게 동작).
-      cell.addEventListener("click", () => {
-        const now = Date.now();
-        if (calLastTap.ds === ds && now - calLastTap.t < 400) {
-          calLastTap = { ds: null, t: 0 };
-          openCalDialog(ds, null);
-          return;
-        }
-        calLastTap = { ds, t: now };
-        calSel = ds; renderCal();
-      });
-      daysGrid.appendChild(cell);
-    }
+    // ③ 일반(하루짜리) 일정 칩 줄.
     weekRow.appendChild(daysGrid);
     month.appendChild(weekRow);
   }
@@ -1978,6 +2008,7 @@ function openCalDialog(dateStr, ev) {
   calDlgDate = dateStr; // 이 다이얼로그가 "보고 있는" 날짜(반복 회차 중 하나일 수 있음) — 이 날짜만 삭제에 씀
   calDlgCat = ev ? (ev.shared ? "shared" : "mine") : "mine";
   $("cal-dlg-title").value = ev ? (ev.title || "") : "";
+  $("cal-dlg-marker").value = (ev && ev.marker) || "";
   $("cal-dlg-startdate").value = ev ? ev.date : dateStr;
   const timed = !!(ev && ev.start);
   $("cal-dlg-allday").checked = !timed;
@@ -2030,7 +2061,9 @@ $("cal-dlg-recur-end").addEventListener("change", () => {
 function closeCalDialog() { $("cal-dialog").hidden = true; calDlgId = null; }
 $("cal-dlg-save").addEventListener("click", async () => {
   const title = $("cal-dlg-title").value.trim();
-  if (!title) { $("cal-dlg-title").focus(); return; }
+  const marker = $("cal-dlg-marker").value.trim();
+  // 표식만 찍고 제목은 비워도 저장할 수 있다("생리" 같은 걸 굳이 글로 안 써도 되게).
+  if (!title && !marker) { $("cal-dlg-title").focus(); return; }
   const date = $("cal-dlg-startdate").value || calDlgDate;
   const allDay = $("cal-dlg-allday").checked;
   const start = allDay ? undefined : ($("cal-dlg-start").value || undefined);
@@ -2048,7 +2081,7 @@ $("cal-dlg-save").addEventListener("click", async () => {
   }
   const enddateRaw = allDay ? $("cal-dlg-enddate").value : undefined;
   const endDate = (!recur && enddateRaw && enddateRaw > date) ? enddateRaw : undefined;
-  await calSaveEvent({ id: calDlgId, date, title, owner: MY_NAME, shared: calDlgCat === "shared", start, end, endDate, recur });
+  await calSaveEvent({ id: calDlgId, date, title, owner: MY_NAME, shared: calDlgCat === "shared", start, end, endDate, recur, marker });
   closeCalDialog();
 });
 $("cal-dlg-cancel").addEventListener("click", closeCalDialog);
@@ -2173,7 +2206,7 @@ let ccpTitle = "", ccpStart = null, ccpEnd = null;
 function ccpBuildMonth(year, month) {
   const wrap = document.createElement("div"); wrap.className = "ccp-month";
   const hd = document.createElement("div"); hd.className = "ccp-mhead"; hd.textContent = `${year}년 ${month + 1}월`;
-  const grid = document.createElement("div"); grid.className = "cal-month ccp-grid";
+  const grid = document.createElement("div"); grid.className = "ccp-grid";
   const first = new Date(year, month, 1);
   const start = new Date(first); start.setDate(1 - first.getDay());
   const days = new Date(year, month + 1, 0).getDate();
@@ -2182,7 +2215,7 @@ function ccpBuildMonth(year, month) {
   for (let i = 0; i < cells; i++) {
     const d = new Date(start); d.setDate(start.getDate() + i);
     const ds = ymd(d);
-    const cell = document.createElement("div"); cell.className = "cal-day ccp-day"; cell.dataset.date = ds;
+    const cell = document.createElement("div"); cell.className = "cal-date-cell ccp-day"; cell.dataset.date = ds;
     markWeekend(cell, d.getDay());
     if (d.getMonth() !== month) cell.classList.add("other");
     if (ds < tk) cell.classList.add("past"); else cell.addEventListener("click", () => ccpPick(ds));
