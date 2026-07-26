@@ -2,94 +2,261 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>반응속도 테스트</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>4분할 반응속도 테스트</title>
 <style>
   :root { color-scheme: light dark; }
-  body { margin: 0; font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; }
-  #stage { min-height: 100vh; display: flex; flex-direction: column;
-           align-items: center; justify-content: center; gap: 1rem;
-           cursor: pointer; user-select: none; -webkit-user-select: none;
-           transition: background .15s; text-align: center; padding: 1.5rem;
-           box-sizing: border-box; }
-  #stage.idle { background: light-dark(#eef2f6, #10161f); }
-  #stage.wait { background: light-dark(#e05252, #7a2020); color: #fff; }
-  #stage.go   { background: light-dark(#3fae5f, #1d6b38); color: #fff; }
-  #main { font-size: 2rem; font-weight: bold; }
-  #sub  { opacity: .7; }
-  #stats { position: fixed; top: 1rem; left: 0; right: 0; text-align: center;
-           opacity: .6; font-size: .9rem; pointer-events: none; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overscroll-behavior: none; }
+  body {
+    font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+    background: light-dark(#dce5ed, #090d13);
+    color: light-dark(#17202b, #dbe5ef);
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  #app {
+    position: relative;
+    z-index: 1;
+    width: min(100%, 34rem);
+    height: 100svh;
+    margin: auto;
+    padding: .9rem .9rem 4.7rem;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: .8rem;
+    background: light-dark(#eef2f6, #10161f);
+    box-shadow: 0 0 1.5rem light-dark(rgba(30,50,70,.14), rgba(0,0,0,.5));
+  }
+  header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: .35rem .8rem;
+    align-items: center;
+  }
+  h1 { margin: 0; font-size: 1.15rem; }
+  #summary {
+    grid-column: 1 / -1;
+    min-height: 2.6em;
+    margin: 0;
+    opacity: .7;
+    font-size: .78rem;
+    line-height: 1.4;
+  }
+  #start {
+    grid-column: 2;
+    grid-row: 1;
+    font: inherit;
+    font-size: .85rem;
+    font-weight: bold;
+    padding: .55rem .9rem;
+    border: 1.5px solid currentColor;
+    border-radius: 999px;
+    background: light-dark(#fff, #1c2735);
+    color: inherit;
+    cursor: pointer;
+  }
+  #start:active { transform: scale(.96); }
+  #start:disabled { cursor: default; opacity: .45; transform: none; }
+  #grid {
+    min-height: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    gap: .65rem;
+  }
+  .zone {
+    min-width: 0;
+    min-height: 0;
+    padding: .5rem;
+    border: 2px solid light-dark(rgba(23,32,43,.16), rgba(219,229,239,.18));
+    border-radius: 1rem;
+    display: grid;
+    place-content: center;
+    gap: .35rem;
+    text-align: center;
+    touch-action: manipulation;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    transition: background .12s, transform .12s, border-color .12s;
+  }
+  .zone:active { transform: scale(.98); }
+  .zone.idle {
+    background: light-dark(#dde5ec, #1c2735);
+    cursor: default;
+  }
+  .zone.wait {
+    background: light-dark(#d94f58, #762128);
+    border-color: transparent;
+    color: #fff;
+  }
+  .zone.go {
+    background: light-dark(#35a85b, #1c6d39);
+    border-color: light-dark(#147e38, #68e38d);
+    color: #fff;
+    transform: scale(1.015);
+  }
+  .zone.done {
+    background: light-dark(#d9e8f5, #21344a);
+    cursor: default;
+  }
+  .zone.early {
+    background: light-dark(#f1c76e, #735515);
+    color: light-dark(#3d2a00, #fff3c4);
+    cursor: default;
+  }
+  .zone strong {
+    font-size: clamp(1.25rem, 7vw, 2.25rem);
+    font-variant-numeric: tabular-nums;
+  }
+  .zone span { min-height: 1.2em; font-size: .75rem; opacity: .72; }
+  @media (max-height: 570px) {
+    #app { padding-top: .55rem; gap: .5rem; }
+    #summary { min-height: 1.2em; }
+  }
 </style>
 </head>
 <body>
-<div id="stats"></div>
-<div id="stage" class="idle">
-  <div id="main">⚡ 반응속도 테스트</div>
-  <div id="sub">화면이 초록색이 되면 최대한 빨리 클릭!<br>클릭해서 시작</div>
-</div>
+<main id="app">
+  <header>
+    <h1>⚡ 4분할 반응속도</h1>
+    <button id="start" type="button">시작</button>
+    <p id="summary">네 칸이 각각 초록색으로 바뀌는 순간 누르세요.<br>미리 누른 칸은 1000ms로 계산됩니다.</p>
+  </header>
+  <section id="grid" aria-label="반응속도 측정 영역">
+    <button class="zone idle" type="button" aria-label="1번 반응속도 영역">
+      <strong>1</strong><span>대기</span>
+    </button>
+    <button class="zone idle" type="button" aria-label="2번 반응속도 영역">
+      <strong>2</strong><span>대기</span>
+    </button>
+    <button class="zone idle" type="button" aria-label="3번 반응속도 영역">
+      <strong>3</strong><span>대기</span>
+    </button>
+    <button class="zone idle" type="button" aria-label="4번 반응속도 영역">
+      <strong>4</strong><span>대기</span>
+    </button>
+  </section>
+</main>
 <script>
-const stage = document.getElementById("stage");
-const main = document.getElementById("main");
-const sub = document.getElementById("sub");
-const stats = document.getElementById("stats");
+const zones = [...document.querySelectorAll(".zone")];
+const startBtn = document.getElementById("start");
+const summary = document.getElementById("summary");
+const bestKey = "bl-reactiontime-4-best";
 
-let state = "idle"; // idle | wait | go | result
-let timer = null;
-let goTime = 0;
-const results = [];
+let running = false;
+let completed = 0;
+let lastAverage = null;
+let bestAverage = +localStorage.getItem(bestKey) || null;
+let round = [];
 
-function updateStats() {
-  if (!results.length) return;
-  const best = Math.min(...results);
-  const avg = Math.round(results.reduce((a, b) => a + b) / results.length);
-  stats.textContent = `최고 ${best}ms · 평균 ${avg}ms · ${results.length}회`;
-}
+const fmt = (v) => `${Math.round(v)}ms`;
 
-// 공유 버튼(_shared/share.js)용 자랑 문구
+window.blWeekly = { game: "reactiontime", dir: "min", fmt };
 window.blShareText = () => {
-  if (!results.length) return "⚡ 반응속도 테스트 — 도전해보세요!";
-  const best = Math.min(...results);
-  return `내 반응속도는 ${best}ms! ⚡ 도전해보세요`;
+  const score = bestAverage ?? lastAverage;
+  return score
+    ? `4분할 반응속도 평균 ${fmt(score)}! ⚡ 도전해보세요`
+    : "⚡ 4분할 반응속도 테스트 — 도전해보세요!";
 };
 
-window.blWeekly = { game: "reactiontime", dir: "min", fmt: (v) => v + "ms" };
-
-function arm() {
-  state = "wait";
-  stage.className = "wait";
-  main.textContent = "기다려…";
-  sub.textContent = "초록색이 되면 클릭";
-  timer = setTimeout(() => {
-    state = "go";
-    stage.className = "go";
-    main.textContent = "클릭!";
-    sub.textContent = "";
-    goTime = performance.now();
-  }, 1500 + Math.random() * 3000);
+function shuffledActivationTimes() {
+  const times = [];
+  let next = 1200 + Math.random() * 800;
+  for (let i = 0; i < zones.length; i++) {
+    times.push(next);
+    next += 650 + Math.random() * 700;
+  }
+  for (let i = times.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [times[i], times[j]] = [times[j], times[i]];
+  }
+  return times;
 }
 
-stage.addEventListener("pointerdown", () => {
-  if (state === "idle" || state === "result") {
-    arm();
-  } else if (state === "wait") {
-    clearTimeout(timer);
-    state = "result";
-    stage.className = "idle";
-    main.textContent = "🐇 너무 빨라요";
-    sub.textContent = "초록색이 되기 전에 클릭했어요. 클릭해서 다시";
-  } else if (state === "go") {
-    const ms = Math.round(performance.now() - goTime);
-    results.push(ms);
-    updateStats();
-    state = "result";
-    stage.className = "idle";
-    main.textContent = `${ms}ms`;
-    sub.textContent =
-      (ms < 200 ? "⚡ 미쳤다" : ms < 250 ? "🔥 빠른데요" :
-       ms < 320 ? "👍 평범" : "🐢 커피 한잔 하세요") + " · 클릭해서 다시";
-    window.blWeeklyReport?.(ms);
+function renderZone(index, className, mainText, detail) {
+  const zone = zones[index];
+  zone.className = `zone ${className}`;
+  zone.querySelector("strong").textContent = mainText;
+  zone.querySelector("span").textContent = detail;
+}
+
+function activate(index) {
+  const item = round[index];
+  if (!running || item.state !== "wait") return;
+  item.state = "go";
+  item.goAt = performance.now();
+  renderZone(index, "go", "지금!", "클릭");
+}
+
+function finishZone(index, score, early) {
+  const item = round[index];
+  item.state = "done";
+  item.score = score;
+  completed++;
+  renderZone(index, early ? "early" : "done", fmt(score), early ? "조기 클릭" : "완료");
+  if (completed === zones.length) finishRound();
+}
+
+function respond(index) {
+  if (!running) return;
+  const item = round[index];
+  if (item.state === "wait") {
+    clearTimeout(item.timer);
+    finishZone(index, 1000, true);
+    return;
   }
+  if (item.state === "go") {
+    finishZone(index, Math.round(performance.now() - item.goAt), false);
+  }
+}
+
+function finishRound() {
+  running = false;
+  const scores = round.map((item) => item.score);
+  lastAverage = Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length);
+  if (bestAverage === null || lastAverage < bestAverage) {
+    bestAverage = lastAverage;
+    localStorage.setItem(bestKey, bestAverage);
+  }
+  summary.textContent =
+    `평균 ${fmt(lastAverage)} · 최고 평균 ${fmt(bestAverage)} · ` +
+    scores.map((score, index) => `${index + 1}번 ${fmt(score)}`).join(" / ");
+  startBtn.disabled = false;
+  startBtn.textContent = "다시";
+  window.blWeeklyReport?.(lastAverage);
+}
+
+function startRound() {
+  if (running) return;
+  running = true;
+  completed = 0;
+  round.forEach((item) => clearTimeout(item.timer));
+  round = zones.map(() => ({ state: "wait", timer: null, goAt: 0, score: null }));
+  summary.textContent = "빨간 칸은 기다리고, 초록색으로 바뀐 칸만 누르세요.";
+  startBtn.disabled = true;
+  startBtn.textContent = "진행 중";
+
+  const activationTimes = shuffledActivationTimes();
+  round.forEach((item, index) => {
+    renderZone(index, "wait", "기다려…", `${index + 1}번`);
+    item.timer = setTimeout(() => activate(index), activationTimes[index]);
+  });
+}
+
+zones.forEach((zone, index) => {
+  zone.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    respond(index);
+  });
+  zone.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    respond(index);
+  });
 });
+startBtn.addEventListener("click", startRound);
 </script>
 <script defer src="/_shared/records.js"></script>
 <script defer src="/_shared/share.js"></script>
