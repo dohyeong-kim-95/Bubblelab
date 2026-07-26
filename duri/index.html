@@ -18,7 +18,8 @@
 <style>
   :root { color-scheme: light dark; --pink: light-dark(#c0568a, #f0a8ce); --line: light-dark(#e6eaef, #232c38);
           --panel: light-dark(#ffffff, #161c25); --bg: light-dark(#fafbfc, #10151c); --dim: light-dark(#5b6875, #8b97a6);
-          --kb: 18rem; /* 측정된 키보드 높이(JS가 갱신) — 서랍을 키보드와 같은 높이로 */ }
+          --kb: 18rem; /* 측정된 키보드 높이(JS가 갱신) — 서랍을 키보드와 같은 높이로 */
+          --kb-live: 0px; /* 지금 이 순간 키보드가 차지한 높이(0=닫힘) — 다이얼로그 위치 보정용 */ }
   * { box-sizing: border-box; }
   /* iOS 더블탭-확대 제스처가 스티커 두 번째 탭을 먹지 않게 — 컨트롤은 두 번 탭을
      두 번 클릭으로 처리한다(핀치 줌은 그대로). */
@@ -276,13 +277,18 @@
   .cal-wrow .wevs .cal-ev.timed { padding: .1rem .1rem; gap: .4rem; }
   .cal-wrow .wevs .cal-ev.timed::before { width: .42rem; height: .42rem; }
   .cal-wrow .wevs .empty { font-size: .72rem; color: var(--dim); opacity: .4; padding: .1rem .1rem; }
+  /* 키보드가 올라오면 --kb-live 만큼 아래 여백을 더해, 가운데 정렬 기준이 키보드
+     위 보이는 영역으로 좁혀지게 한다(전체 화면 기준 가운데 정렬이면 다이얼로그가
+     키보드에 가려질 수 있다). */
   #cal-dialog, #cal-colorbox { position: fixed; inset: 0; z-index: 70; display: flex;
                                background: light-dark(#0f17223d, #000000a8); backdrop-filter: blur(2px);
-                               align-items: center; justify-content: center; padding: 1rem; }
+                               align-items: center; justify-content: center; padding: 1rem;
+                               padding-bottom: calc(1rem + var(--kb-live, 0px));
+                               transition: padding-bottom .18s ease; }
   #cal-dialog[hidden], #cal-colorbox[hidden] { display: none; }
-  .cal-card { width: min(22rem, 92vw); background: var(--panel); border: 1px solid var(--line);
-              border-radius: 1.1rem; padding: 1.1rem; display: flex; flex-direction: column; gap: .7rem;
-              box-shadow: 0 18px 44px light-dark(#0f172226, #0009); }
+  .cal-card { width: min(22rem, 92vw); max-height: 100%; overflow-y: auto; background: var(--panel);
+              border: 1px solid var(--line); border-radius: 1.1rem; padding: 1.1rem; display: flex;
+              flex-direction: column; gap: .7rem; box-shadow: 0 18px 44px light-dark(#0f172226, #0009); }
   .cal-card h3 { margin: 0; font-size: 1rem; }
   #cal-colorbox label { display: flex; align-items: center; justify-content: space-between; font-size: .85rem; }
   .cal-card input[type=color] { width: 3rem; height: 2rem; border: 1px solid var(--line); border-radius: .4rem; background: none; padding: 0; }
@@ -1110,7 +1116,9 @@ if (window.visualViewport) {
   vv.addEventListener("resize", () => {
     // 레이아웃 뷰포트(innerHeight)는 그대로, 비주얼 뷰포트는 키보드만큼 줄어든다.
     const kb = Math.round(window.innerHeight - vv.height - vv.offsetTop);
-    if (kb > 120) { // 키보드가 올라온 높이만 캡처(주소창 등 소소한 변동은 무시)
+    // 지금 이 순간의 실제 값(0=닫힘) — 캘린더 다이얼로그가 키보드를 피해 위치를 잡는 데 쓴다.
+    document.documentElement.style.setProperty("--kb-live", Math.max(0, kb) + "px");
+    if (kb > 120) { // 서랍 높이 기억용은 유의미하게 올라온 경우만 캡처(주소창 등 소소한 변동은 무시)
       setKb(kb);
       try { localStorage.setItem(KB_KEY, String(kb)); } catch { /* 최선노력 */ }
     }
