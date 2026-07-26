@@ -240,6 +240,15 @@
   .cal-dp .evs .cal-ev.timed { padding: .12rem .12rem; gap: .4rem; }
   .cal-dp .evs .cal-ev.timed::before { width: .42rem; height: .42rem; }
   .cal-dp .evs .empty { font-size: .74rem; color: var(--dim); opacity: .45; padding: .1rem; }
+  /* 월 이동 하단 바 — 세로 스와이프가 월/주 전환에 쓰여서 엄지로 누르는 버튼으로 대체 */
+  .cal-monthnav { flex: none; display: flex; border-top: 1px solid var(--line); background: var(--panel);
+                  padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .cal-monthnav[hidden] { display: none; }
+  .cal-monthnav button { flex: 1; font: inherit; font-size: .85rem; padding: .8rem .9rem; border: 0;
+                         background: none; color: inherit; cursor: pointer; }
+  .cal-monthnav button:first-child { text-align: left; border-right: 1px solid var(--line); }
+  .cal-monthnav button:last-child { text-align: right; }
+  .cal-monthnav button:active { background: var(--bg); }
   .cal-ev { font-size: .6rem; line-height: 1.35; border-radius: .3rem; padding: .07rem .3rem; cursor: pointer;
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
             background: color-mix(in srgb, var(--c) 20%, transparent);
@@ -389,6 +398,11 @@
   </header>
   <div id="cal-grid"></div>
   <div id="cal-day" class="cal-dp" hidden></div>
+  <!-- 세로 스와이프가 월/주 전환에 쓰이므로, 월 이동은 엄지로 누르기 쉬운 하단 버튼으로 -->
+  <div id="cal-monthnav" class="cal-monthnav" hidden>
+    <button id="cal-mprev" type="button">‹ 저번달</button>
+    <button id="cal-mnext" type="button">다음달 ›</button>
+  </div>
 </section>
 
 <!-- 이벤트 추가/수정 -->
@@ -1294,6 +1308,7 @@ function renderCal() {
   if (!calCursor) calCursor = new Date();
   if (calView === "month") renderMonth(grid, calCursor); else renderWeek(grid, calCursor);
   renderDayPanel();
+  $("cal-monthnav").hidden = calView !== "month";
 }
 // 제목은 "7월" 크게 + 연도 작게 (구글 캘린더식). 오늘이 현재 화면 범위를 벗어나면
 // "오늘" 버튼을 띄운다 — 늘 자리를 차지하지 않아 헤더가 가볍다.
@@ -1496,6 +1511,8 @@ function calShift(dir) {
 }
 $("cal-prev").addEventListener("click", () => calShift(-1));
 $("cal-next").addEventListener("click", () => calShift(1));
+$("cal-mprev").addEventListener("click", () => calShift(-1));
+$("cal-mnext").addEventListener("click", () => calShift(1));
 $("cal-today").addEventListener("click", () => { calCursor = new Date(); renderCal(); });
 function setCalView(view) {
   calView = view;
