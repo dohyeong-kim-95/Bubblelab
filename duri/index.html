@@ -25,7 +25,9 @@
      두 번 클릭으로 처리한다(핀치 줌은 그대로). */
   button, a, label, #grid img, #grid button, .cal-date-cell, .cal-day-body { touch-action: manipulation; }
   html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; } /* iOS가 rem을 자동확대하지 않게 */
-  html, body { height: 100%; margin: 0; }
+  /* overscroll-behavior-y:contain — 안드로이드 Chrome의 당겨서 새로고침이 우리
+     세로 스와이프 제스처(캘린더 월/주 전환 등)와 안 겹치게 문서 레벨에서도 막는다. */
+  html, body { height: 100%; margin: 0; overscroll-behavior-y: contain; }
   body { font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
          color: light-dark(#1c2733, #e2e9f0); background: var(--bg);
          display: flex; flex-direction: column; }
@@ -250,7 +252,11 @@
   #cal-today { flex: none; font: inherit; font-size: .66rem; padding: .28rem .5rem; border-radius: 999px;
                border: 1px solid var(--line); background: var(--panel); color: var(--dim); cursor: pointer; }
   #cal-today[hidden] { display: none; }
-  #cal-grid { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
+  /* overscroll-behavior-y:contain — 월/주 전환 스와이프(위→아래)가 스크롤 맨
+     위에서 시작할 때 브라우저 당겨서 새로고침(pull-to-refresh)으로 새는 것을
+     막는다. 우리 터치 핸들러가 먼저 처리하게 해야 하므로. */
+  #cal-grid { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column;
+              overscroll-behavior-y: contain; }
   .cal-wk { display: grid; grid-template-columns: repeat(7, 1fr); flex: none; position: sticky; top: 0; z-index: 2;
             background: var(--bg); padding-bottom: .2rem; }
   .cal-wk span { text-align: center; font-size: .62rem; letter-spacing: .08em; color: var(--dim); padding: .15rem 0; }
@@ -268,7 +274,7 @@
   .cal-date-cell { display: flex; align-items: center; justify-content: center; gap: .06rem; cursor: pointer; }
   .cal-date-cell .d { font-size: .72rem; color: var(--dim); flex: none;
                        width: 1.5rem; height: 1.5rem; display: grid; place-items: center; border-radius: 50%; }
-  .cal-date-cell .marker { font-size: .68rem; line-height: 1; }
+  .cal-date-cell .marker { font-size: .8rem; line-height: 1; }
   .cal-date-cell.sun .d { color: var(--sun); }
   .cal-date-cell.sat .d { color: var(--sat); }
   .cal-date-cell.other .d { opacity: .38; }
@@ -277,10 +283,11 @@
   /* 일정 막대 레인 — 하루짜리든 여러 날이든 같은 레인 시스템에 함께 놓여
      위계가 같아진다(막대 하나가 자기 칸 폭만큼만 넓이를 차지). 레인이 상한을
      넘으면 그 요일에 "+N"만 남는다. */
+  /* 막대 한 줄 높이를 낮춰서(전엔 1.05rem) 같은 공간에 더 많은 줄이 들어가게 한다 */
   .cal-week-bars { flex: none; display: grid; grid-template-columns: repeat(7, 1fr);
-                   grid-auto-rows: 1.05rem; gap: .14rem 0; padding: .16rem .1rem .1rem; }
-  .cal-bar { margin: 0 .06rem; font-size: .55rem; line-height: 1.05rem; padding: 0 .3rem; }
-  .cal-bar-more { margin: 0 .06rem; font-size: .55rem; line-height: 1.05rem; text-align: center; color: var(--dim); }
+                   grid-auto-rows: .82rem; gap: .08rem 0; padding: .12rem .1rem .08rem; }
+  .cal-bar { margin: 0 .06rem; font-size: .52rem; line-height: .82rem; padding: 0 .26rem; }
+  .cal-bar-more { margin: 0 .06rem; font-size: .52rem; line-height: .82rem; text-align: center; color: var(--dim); }
   .cal-week-days { flex: 1; display: grid; grid-template-columns: repeat(7, 1fr); }
   /* 칩은 위 공통 레인이 그리므로 이 칸은 탭 영역(빈 스페이서)만 남는다 —
      막대가 없는 주도 칸이 너무 얇아지지 않게 최소 높이만 둔다. */
@@ -1809,6 +1816,9 @@ function collectWeekEvents(weekStartStr, weekEndStr) {
   const out = [];
   for (const ev of calEvents.values()) {
     if (ev.deleted) continue;
+    // 제목 없이 표식만 있는 일정은 막대(레인)를 차지하지 않는다 — 날짜 옆 배지로만
+    // 보여준다. 그래야 표식이 다른 일정들과 자리다툼을 안 하고, 늘 눈에 띈다.
+    if (!ev.title && ev.marker) continue;
     if (ev.recur && ev.recur.freq && ev.recur.freq !== "none") {
       for (let c = 0; c < 7; c++) {
         const ds = addDays(weekStartStr, c);
@@ -1916,7 +1926,7 @@ function renderMonth(grid, cur) {
     // 통일). 레인이 상한(MAX_LANES)을 넘으면 그 아래는 요일별 "+N"으로 접는다.
     const items = collectWeekEvents(weekStartStr, weekEndStr);
     const lanes = assignLanes(items);
-    const MAX_LANES = 3;
+    const MAX_LANES = 4; // 막대 한 줄이 낮아진 만큼(.82rem) 한 줄 더 보이게
     if (lanes.length) {
       const bars = document.createElement("div"); bars.className = "cal-week-bars";
       lanes.slice(0, MAX_LANES).forEach((lane, li) => {
