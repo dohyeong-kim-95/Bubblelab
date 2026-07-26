@@ -37,10 +37,12 @@
            border-bottom: 1px solid var(--line); background: var(--panel); }
   header .mark { font-size: 1.2rem; }
   header b { font-size: .95rem; }
-  header .status { margin-left: auto; font-size: .72rem; color: var(--dim); display: flex;
-                   align-items: center; gap: .35rem; white-space: nowrap; flex-shrink: 0; }
-  header .dot { width: .5rem; height: .5rem; border-radius: 50%; background: var(--dim); flex-shrink: 0; }
-  header .dot.on { background: light-dark(#3aa675, #4fd39c); }
+  /* 접속 표시: 텍스트 대신 나·상대 색 동그라미 두 개(캘린더 색상 설정과 같은 색).
+     꺼져 있으면 옅게, 접속 중이면 꽉 채운 색으로 — 둘 다 접속 중인지 한눈에. */
+  header .status { margin-left: auto; display: flex; align-items: center; gap: .3rem; flex-shrink: 0; }
+  header .dot { width: .55rem; height: .55rem; border-radius: 50%; background: var(--dim);
+                opacity: .3; flex-shrink: 0; transition: opacity .15s, background .15s; }
+  header .dot.on { opacity: 1; }
   /* 헤더 우측 아이콘 버튼(설정·나가기) — 텍스트 대신 이모지 한 글자라 줄바꿈이 없다 */
   header .icon-btn { flex-shrink: 0; font: inherit; font-size: 1.15rem; line-height: 1; background: none;
                      border: 0; color: inherit; cursor: pointer; padding: .3rem; border-radius: .5rem;
@@ -429,7 +431,9 @@
 <header class="hidden" id="bar">
   <span class="mark">💞</span>
   <b>Duri</b>
-  <span class="status"><span class="dot" id="dot"></span><span id="stat">연결 중…</span></span>
+  <span class="status" id="status" title="나 · 상대 접속 여부">
+    <span class="dot" id="dot-mine"></span><span class="dot" id="dot-theirs"></span>
+  </span>
   <button id="cal-open" class="icon-btn" title="캘린더">📅</button>
   <div class="menu-wrap">
     <button id="menu-btn" class="icon-btn" title="설정" aria-haspopup="true" aria-expanded="false">⚙️</button>
@@ -708,13 +712,19 @@ const lastSeqKey = "duri:lastSeq";
 const getLastSeq = () => Number(localStorage.getItem(lastSeqKey) || 0);
 const setLastSeq = (n) => localStorage.setItem(lastSeqKey, String(n));
 
-function setStatus(on, text) { $("dot").classList.toggle("on", on); $("stat").textContent = text; }
+// 나·상대 동그라미. online 은 서버가 아는 "총 접속 수"일 뿐(신원 모름)이라, 상대
+// 동그라미는 정확히 "그 사람"이 아니라 "나 말고 접속한 무언가가 있다"는 뜻이다
+// (내 다른 기기일 수도 있음) — 서버가 평문·신원을 모르는 설계상 어쩔 수 없다.
+function setStatus(mineOn, theirsOn) {
+  $("dot-mine").classList.toggle("on", mineOn);
+  $("dot-theirs").classList.toggle("on", theirsOn);
+}
 
 function connect() {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   ws = new WebSocket(`${proto}//${location.host}/_duri`);
   ws.onopen = () => {
-    backoff = 1000; setStatus(true, "연결됨");
+    backoff = 1000; setStatus(true, false); // 상대 여부는 welcome/presence 로 곧 갱신
     ws.send(JSON.stringify({ type: "hello", since: getLastSeq() }));
     ws.send(JSON.stringify({ type: "cal-hello" })); // 캘린더 현재 상태 동기화
     calFlushOutbox();                                // 오프라인 중 쌓인 캘린더 변경 전송
@@ -722,14 +732,14 @@ function connect() {
   ws.onmessage = (e) => {
     let m; try { m = JSON.parse(e.data); } catch { return; }
     if (m.type === "ping") { ws.send(JSON.stringify({ type: "pong" })); return; }
-    if (m.type === "welcome" || m.type === "presence") { setStatus(true, m.online > 1 ? "둘 다 접속 중" : "연결됨 (혼자)"); return; }
+    if (m.type === "welcome" || m.type === "presence") { setStatus(true, m.online > 1); return; }
     if (m.type === "entry") { renderEntry(m); return; }
     if (m.type === "cal-state") { for (const ev of m.events || []) applyCalEntry(ev); return; }
     if (m.type === "cal-put" || m.type === "cal-del") { applyCalEntry(m); return; }
     if (m.type === "reset") { localStorage.removeItem("duri:cal"); clearCache().then(() => location.reload()); return; }
     if (m.type === "error") { console.warn("duri error", m.error); return; }
   };
-  ws.onclose = () => { setStatus(false, "재연결 중…"); setTimeout(connect, backoff); backoff = Math.min(backoff * 2, 15000); };
+  ws.onclose = () => { setStatus(false, false); setTimeout(connect, backoff); backoff = Math.min(backoff * 2, 15000); };
   ws.onerror = () => { try { ws.close(); } catch {} };
 }
 
@@ -1527,6 +1537,12 @@ const calOutbox = [];
 const CAL_COLORS_KEY = "duri:calcolors";
 const calColors = Object.assign({ mine: "#c0568a", theirs: "#4f7fdd", shared: "#3aa675" },
   (() => { try { return JSON.parse(localStorage.getItem(CAL_COLORS_KEY) || "{}"); } catch { return {}; } })());
+// 헤더 접속 표시 동그라미도 같은 색(캘린더 색상 설정과 통일).
+function applyStatusColors() {
+  $("dot-mine").style.background = calColors.mine;
+  $("dot-theirs").style.background = calColors.theirs;
+}
+applyStatusColors();
 
 const pad2 = (n) => String(n).padStart(2, "0");
 const ymd = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
@@ -1909,6 +1925,7 @@ $("cal-colors").addEventListener("click", openColorbox);
 $("cal-col-done").addEventListener("click", () => {
   calColors.mine = $("cal-col-mine").value; calColors.theirs = $("cal-col-theirs").value; calColors.shared = $("cal-col-shared").value;
   localStorage.setItem(CAL_COLORS_KEY, JSON.stringify(calColors));
+  applyStatusColors();
   $("cal-colorbox").hidden = true; renderCal();
 });
 $("cal-colorbox").addEventListener("click", (e) => { if (e.target === $("cal-colorbox")) $("cal-colorbox").hidden = true; });
