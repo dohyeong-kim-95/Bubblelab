@@ -143,16 +143,18 @@
      따로 박스를 두지 않고 하나의 넓은 바처럼 보이게. 보내기 버튼만 바 바깥에
      별도 강조 버튼으로 남긴다. */
   .inputbar { flex: 1; display: flex; align-items: flex-end; gap: .1rem; min-width: 0;
-              border: 1px solid var(--line); background: var(--bg); border-radius: 1.3rem; padding: .2rem .3rem; }
+              border: 1px solid var(--line); background: var(--bg); border-radius: 999px; padding: .2rem .3rem; }
   .inputbar:focus-within { border-color: color-mix(in srgb, var(--pink) 45%, var(--line)); }
   .inputbar textarea { border: none; background: none; padding: .5rem .3rem; }
+  .inputbar textarea:focus { outline: none; } /* 바 테두리 강조만으로 충분 — 브라우저 기본 포커스 링(하얀 하이라이트)은 끈다 */
   .inputbar label.attach, .inputbar #sticker-btn { border: none; background: none; padding: 0;
               width: 2.2rem; height: 2.2rem; flex: none; display: flex; align-items: center; justify-content: center; }
   .inputbar #sticker-btn[aria-expanded="true"] { background: light-dark(#f0e3ea, #26202a); border-radius: 50%; }
   /* 종이비행기 아이콘 — 이모지는 테마 무관 풀컬러라 색이 안 맞아서, currentColor 로
-     버튼 글자색을 그대로 따라가는 인라인 SVG를 쓴다(추가 이미지·의존성 없음). */
+     버튼 글자색을 그대로 따라가는 인라인 SVG를 쓴다(추가 이미지·의존성 없음).
+     입력창 바(알약)와 굴곡이 맞도록 완전한 원형으로. */
   button.send { flex: none; background: var(--pink); color: light-dark(#fff, #1a1016); border-color: transparent;
-                width: 2.6rem; height: 2.6rem; padding: 0; display: flex; align-items: center; justify-content: center; }
+                width: 2.6rem; height: 2.6rem; padding: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
   button.send svg { width: 1.15rem; height: 1.15rem; }
   /* "/일정" 미니 달력이 열려 있는 동안엔 보내기 버튼이 잠깐 "추가" 버튼으로 바뀐다 */
   button.send.addmode { font: inherit; font-size: .8rem; font-weight: 700; }
