@@ -217,6 +217,11 @@
   .cal-card input[type=color] { width: 3rem; height: 2rem; border: 1px solid var(--line); border-radius: .4rem; background: none; padding: 0; }
   .cal-dlg-date { font-size: .85rem; color: var(--dim); }
   #cal-dlg-title { font: inherit; padding: .6rem .7rem; border-radius: .6rem; border: 1px solid var(--line); background: var(--bg); color: inherit; }
+  .cal-allday { display: flex; align-items: center; gap: .4rem; font-size: .85rem; }
+  .cal-times { display: flex; gap: .9rem; }
+  .cal-times label { display: flex; align-items: center; gap: .35rem; font-size: .82rem; }
+  .cal-times input[type=time] { font: inherit; padding: .35rem .45rem; border: 1px solid var(--line);
+                                border-radius: .5rem; background: var(--bg); color: inherit; }
   .cal-cats { display: flex; gap: .4rem; }
   .cal-cats button { flex: 1; font: inherit; font-size: .78rem; padding: .5rem; border-radius: .6rem;
                      border: 2px solid var(--line); background: var(--bg); color: inherit; cursor: pointer; }
@@ -321,6 +326,11 @@
   <div class="cal-card">
     <div id="cal-dlg-date" class="cal-dlg-date"></div>
     <input id="cal-dlg-title" placeholder="일정 제목" autocomplete="off" maxlength="120">
+    <label class="cal-allday"><input type="checkbox" id="cal-dlg-allday" checked> 종일</label>
+    <div id="cal-dlg-times" class="cal-times" hidden>
+      <label>시작 <input type="time" id="cal-dlg-start"></label>
+      <label>끝 <input type="time" id="cal-dlg-end"></label>
+    </div>
     <div id="cal-dlg-cats" class="cal-cats"></div>
     <div class="cal-dlg-actions">
       <button id="cal-dlg-del" class="cal-del" hidden>삭제</button>
@@ -1181,10 +1191,13 @@ function calSend(frame) {
 }
 function calFlushOutbox() { while (calOutbox.length && ws && ws.readyState === 1) ws.send(JSON.stringify(calOutbox.shift())); }
 
-async function calSaveEvent({ id, date, title, owner, shared }) {
+async function calSaveEvent({ id, date, title, owner, shared, start, end }) {
   const rev = Date.now();
-  calEvents.set(id, { id, rev, deleted: false, date, title, owner, shared }); calPersist();
-  const frame = await encryptJson({ date, title, owner, shared });
+  const content = { date, title, owner, shared };
+  if (start) content.start = start;
+  if (end) content.end = end;
+  calEvents.set(id, { id, rev, deleted: false, ...content }); calPersist();
+  const frame = await encryptJson(content);
   calSend({ type: "cal-put", id, iv: frame.iv, ct: frame.ct, rev });
   renderCal();
 }
@@ -1197,7 +1210,12 @@ function calDeleteEvent(id) {
 function calEventsOn(dateStr) {
   const out = [];
   for (const ev of calEvents.values()) if (!ev.deleted && ev.date === dateStr) out.push(ev);
-  return out.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+  // 종일(시간 없음) 먼저, 그다음 시작 시간순, 같으면 제목순.
+  return out.sort((a, b) => {
+    const as = a.start || "", bs = b.start || "";
+    if (as !== bs) return as < bs ? -1 : 1;
+    return (a.title || "").localeCompare(b.title || "");
+  });
 }
 
 function renderCal() {
@@ -1212,7 +1230,7 @@ function weekHeader() {
 }
 function evChip(ev) {
   const c = document.createElement("div"); c.className = "cal-ev"; c.style.background = calColorOf(ev);
-  c.textContent = ev.title || "(제목 없음)";
+  c.textContent = (ev.start ? ev.start + " " : "") + (ev.title || "(제목 없음)");
   c.addEventListener("click", (e) => { e.stopPropagation(); openCalDialog(ev.date, ev); });
   return c;
 }
@@ -1280,16 +1298,25 @@ function openCalDialog(dateStr, ev) {
   const d = dateStr.split("-");
   $("cal-dlg-date").textContent = `${d[0]}. ${d[1]}. ${d[2]}`;
   $("cal-dlg-title").value = ev ? (ev.title || "") : "";
+  const timed = !!(ev && ev.start);
+  $("cal-dlg-allday").checked = !timed;
+  $("cal-dlg-start").value = (ev && ev.start) || "09:00";
+  $("cal-dlg-end").value = (ev && ev.end) || "";
+  $("cal-dlg-times").hidden = !timed;
   $("cal-dlg-del").hidden = !ev;
   renderCatButtons();
   $("cal-dialog").hidden = false;
   setTimeout(() => $("cal-dlg-title").focus(), 30);
 }
+$("cal-dlg-allday").addEventListener("change", () => { $("cal-dlg-times").hidden = $("cal-dlg-allday").checked; });
 function closeCalDialog() { $("cal-dialog").hidden = true; calDlgId = null; }
 $("cal-dlg-save").addEventListener("click", async () => {
   const title = $("cal-dlg-title").value.trim();
   if (!title) { $("cal-dlg-title").focus(); return; }
-  await calSaveEvent({ id: calDlgId, date: calDlgDate, title, owner: MY_NAME, shared: calDlgCat === "shared" });
+  const allDay = $("cal-dlg-allday").checked;
+  const start = allDay ? undefined : ($("cal-dlg-start").value || undefined);
+  const end = allDay ? undefined : ($("cal-dlg-end").value || undefined);
+  await calSaveEvent({ id: calDlgId, date: calDlgDate, title, owner: MY_NAME, shared: calDlgCat === "shared", start, end });
   closeCalDialog();
 });
 $("cal-dlg-cancel").addEventListener("click", closeCalDialog);
