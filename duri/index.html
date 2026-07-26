@@ -1502,7 +1502,10 @@ $("cal-back").addEventListener("click", closeCal);
 // 느낌). 순서는 [채팅|캘린더](채팅이 왼쪽, 캘린더가 오른쪽 화면 밖에서 대기).
 // touchmove 마다 translateX 를 손가락 위치로 직접 갱신하고(transition 끔),
 // 손을 뗀 순간에만 남은 진행률로 열지/닫을지 정해 CSS 스냅 애니메이션으로 마무리한다.
-const CAL_DRAG_OPEN_AT = .3; // 화면 폭의 30% 이상 끌면 그 방향으로 스냅
+// 열 때(닫힘→왼쪽 드래그)는 30% 를 확실히 끌어야 열리지만, 돌아갈 때(열림→오른쪽
+// 드래그)는 그보다 훨씬 가볍게(15%) 반응한다 — 뒤로가기는 적은 스와이프로 충분해야 한다.
+const CAL_OPEN_AT = .3;
+const CAL_CLOSE_AT = 1 - .15;
 let calDrag = null; // { startX, startY, fromOpen, w, moved, progress }
 function calDragStart(e) {
   if (!$("cal-dialog").hidden || !$("cal-colorbox").hidden) return; // 다이얼로그 위에서는 드래그 안 함
@@ -1531,7 +1534,7 @@ function calDragEnd() {
   const { moved, fromOpen, progress = fromOpen ? 1 : 0 } = calDrag;
   calDrag = null;
   if (!moved) return;
-  const open = progress > CAL_DRAG_OPEN_AT;
+  const open = progress > (fromOpen ? CAL_CLOSE_AT : CAL_OPEN_AT);
   const cal = $("cal");
   cal.style.transition = "transform .26s cubic-bezier(.32,.72,0,1)";
   cal.style.transform = open ? "translateX(0%)" : "translateX(100%)";
