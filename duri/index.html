@@ -302,10 +302,11 @@
   .cal-monthnav button:first-child { text-align: left; border-right: 1px solid var(--line); }
   .cal-monthnav button:last-child { text-align: right; }
   .cal-monthnav button:active { background: var(--bg); }
+  /* 종일 일정은 색을 꽉 채운 알약 + 흰 글자(선명하게 눈에 띄게). 시간 일정은
+     아래 .timed 에서 배경 없이 색점만(지금까지와 동일 — 배경과 비슷하게 옅다). */
   .cal-ev { font-size: .6rem; line-height: 1.35; border-radius: .3rem; padding: .07rem .3rem; cursor: pointer;
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-            background: color-mix(in srgb, var(--c) 20%, transparent);
-            color: light-dark(color-mix(in srgb, var(--c) 78%, #1c2733), color-mix(in srgb, var(--c) 60%, #ffffff)); }
+            background: var(--c); color: #fff; }
   .cal-ev.timed { background: none; color: inherit; display: flex; align-items: center; gap: .22rem; padding-left: .12rem; }
   .cal-ev.timed::before { content: ""; flex: none; width: .34rem; height: .34rem; border-radius: 50%; background: var(--c); }
   .cal-ev.timed .t { flex: none; color: var(--dim); }
@@ -1641,9 +1642,63 @@ function calEventOnDate(ev, ds) {
   if (ev.endDate && ev.endDate > ev.date) return ds >= ev.date && ds <= ev.endDate; // 여러 날 일정
   return ev.date === ds;
 }
+
+// ── 한국 공휴일(가상 이벤트, 서버에 저장 안 함) ──────────────────
+// 공개 정보라 굳이 암호화·동기화할 필요 없이 양쪽 기기가 각자 계산해서 똑같이
+// 보여준다. 고정일(양력)은 연도 상관없이 대체공휴일까지 "쭉" 계산되지만, 음력
+// 기반(설날·추석·부처님오신날)은 변환 로직이 없어 확인된 연도만 넣는다("아니면 말고").
+// [월, 일, 이름, 대체공휴일 대상 여부] — 신정·현충일은 대체공휴일 제외 대상(2026 기준 법령).
+const FIXED_HOLIDAYS = [
+  [1, 1, "신정", false],
+  [3, 1, "삼일절", true],
+  [5, 1, "노동절", true],
+  [5, 5, "어린이날", true],
+  [6, 6, "현충일", false],
+  [7, 17, "제헌절", true],
+  [8, 15, "광복절", true],
+  [10, 3, "개천절", true],
+  [10, 9, "한글날", true],
+  [12, 25, "크리스마스", true],
+];
+// 겹치는 당일(토/일) 다음날부터 평일을 찾는다(다른 공휴일과의 중복까지는 다루지 않음).
+function substituteDate(year, month, day) {
+  const date = new Date(year, month - 1, day);
+  while (date.getDay() === 0 || date.getDay() === 6) date.setDate(date.getDate() + 1);
+  return ymd(date);
+}
+function fixedHolidayOn(dateStr) {
+  const year = Number(dateStr.slice(0, 4));
+  for (const [month, day, title, hasSub] of FIXED_HOLIDAYS) {
+    const date = new Date(year, month - 1, day);
+    if (ymd(date) === dateStr) return title;
+    if (hasSub && (date.getDay() === 0 || date.getDay() === 6) &&
+        substituteDate(year, month, day + 1) === dateStr) return `${title} 대체공휴일`;
+  }
+  return null;
+}
+// 확인된 연도(2026~2027)만 — 설날·추석은 연휴 전체를 한 덩어리(여러 날 일정)로.
+const LUNAR_HOLIDAYS = [
+  { date: "2026-02-16", endDate: "2026-02-18", title: "설날" },
+  { date: "2026-05-24", title: "부처님오신날" },
+  { date: "2026-05-25", title: "부처님오신날 대체공휴일" },
+  { date: "2026-09-24", endDate: "2026-09-26", title: "추석" },
+  { date: "2027-02-06", endDate: "2027-02-09", title: "설날" }, // 대체공휴일(2/9) 포함 연속 연휴
+  { date: "2027-05-13", title: "부처님오신날" },
+  { date: "2027-09-14", endDate: "2027-09-16", title: "추석" },
+];
+function lunarHolidayOn(dateStr) {
+  for (const h of LUNAR_HOLIDAYS) {
+    if (dateStr === h.date || (h.endDate && dateStr > h.date && dateStr <= h.endDate)) return h.title;
+  }
+  return null;
+}
+const koreanHolidayOn = (dateStr) => lunarHolidayOn(dateStr) || fixedHolidayOn(dateStr);
+
 function calEventsOn(dateStr) {
   const out = [];
   for (const ev of calEvents.values()) if (!ev.deleted && calEventOnDate(ev, dateStr)) out.push(ev);
+  const holiday = koreanHolidayOn(dateStr);
+  if (holiday) out.push({ id: `holiday:${dateStr}`, date: dateStr, title: `🎌 ${holiday}`, shared: true, holiday: true });
   // 종일(시간 없음) 먼저, 그다음 시작 시간순, 같으면 제목순.
   return out.sort((a, b) => {
     const as = a.start || "", bs = b.start || "";
@@ -1696,6 +1751,8 @@ function evChip(ev, onDate) {
   if (isRecur) tip += ` (${RECUR_LABEL[ev.recur.freq] || ev.recur.freq} 반복)`;
   else if (ev.endDate && ev.endDate > ev.date) tip += ` (${ev.date} ~ ${ev.endDate})`;
   c.title = tip;
+  // 공휴일은 가상 이벤트라 수정·삭제 다이얼로그를 열지 않는다 — 이름만 토스트로.
+  if (ev.holiday) { c.addEventListener("click", (e) => { e.stopPropagation(); showToast(ev.title); }); return c; }
   c.addEventListener("click", (e) => { e.stopPropagation(); openCalDialog(onDate || ev.date, ev); });
   return c;
 }
