@@ -420,7 +420,7 @@
     <section id="card" role="dialog" aria-modal="true" aria-labelledby="title">
       <h1 id="title">🏭 분류반장</h1>
       <p id="message">컨베이어를 타고 오는 캐릭터를 분류하세요.
-기다려주지 않고, 15초마다 빨라집니다!</p>
+기다려주지 않고, 12초마다 빨라집니다!</p>
       <div id="legend">
         <div class="legend-item"><span class="legend-shape">● ←</span>동글이는<br>왼쪽</div>
         <div class="legend-item"><span class="legend-shape">■ →</span>네모미는<br>오른쪽</div>
@@ -485,6 +485,7 @@ let spawnIn = .35;
 let lastFrame = performance.now();
 let feedbackTimer = 0;
 let typeHistory = [];
+let visitorAnnounced = false;
 let best = 0;
 try { best = Number(localStorage.getItem(BEST_KEY)) || 0; } catch {}
 let audioCtx = null;
@@ -500,15 +501,15 @@ function updateHud() {
   livesEl.textContent = `${"♥ ".repeat(lives)}${"♡ ".repeat(3 - lives)}`.trim();
   queueEl.textContent = `대기 ${items.length}`;
   rejectSign.classList.toggle("show", elapsed >= 15 || phase === "idle" || phase === "done");
-  app.style.setProperty("--belt-time", `${Math.max(.38, 1.15 - elapsed * .011)}s`);
+  app.style.setProperty("--belt-time", `${Math.max(.24, 1.15 * Math.pow(.84, level - 1))}s`);
 }
 
 function currentSpeed() {
-  return 128 * Math.pow(1.12, Math.max(0, level - 1));
+  return 128 * Math.pow(1.18, Math.max(0, level - 1));
 }
 
 function currentSpawnInterval() {
-  const base = Math.max(.28, 1.65 * Math.pow(.87, Math.max(0, level - 1)));
+  const base = Math.max(.28, 1.65 * Math.pow(.84, Math.max(0, level - 1)));
   return base * (.85 + Math.random() * .3);
 }
 
@@ -677,7 +678,7 @@ function clearItems() {
 function showStart() {
   phase = "idle";
   titleEl.textContent = "🏭 분류반장";
-  messageEl.textContent = "컨베이어를 타고 오는 캐릭터를 분류하세요.\n기다려주지 않고, 15초마다 빨라집니다!";
+  messageEl.textContent = "컨베이어를 타고 오는 캐릭터를 분류하세요.\n기다려주지 않고, 12초마다 빨라집니다!";
   legendEl.style.display = "grid";
   resultScoreEl.style.display = "none";
   resultDetailEl.style.display = "none";
@@ -699,6 +700,7 @@ function startGame() {
   level = 1;
   spawnIn = .25;
   typeHistory = [];
+  visitorAnnounced = false;
   lastFrame = performance.now();
   overlay.classList.add("hide");
   playBtn.disabled = false;
@@ -815,11 +817,16 @@ function tick(now) {
   lastFrame = now;
   if (phase === "running") {
     elapsed += dt;
-    const nextLevel = Math.floor(elapsed / 15) + 1;
+    const nextLevel = Math.floor(elapsed / 12) + 1;
     if (nextLevel !== level) {
       level = nextLevel;
-      showFeedback(level === 2 ? "낯선 손님 등장!" : `속도 ${level}!`, true);
+      showFeedback(`속도 ${level}!`, true);
       beep(620, .09, "square", .025);
+    }
+    if (elapsed >= 15 && !visitorAnnounced) {
+      visitorAnnounced = true;
+      showFeedback("낯선 손님 등장!", true);
+      beep(710, .09, "square", .025);
     }
 
     spawnIn -= dt;
