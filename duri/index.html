@@ -631,8 +631,7 @@
 <div id="cal-colorbox" hidden>
   <div class="cal-card">
     <h3>일정 색상</h3>
-    <p class="cal-col-note">이름별 색은 양쪽 기기에 동기화돼요 — 누가 바꾸든 같은 사람은 항상 같은
-      색으로 보여요.</p>
+    <p class="cal-col-note">여기서 고른 색은 전부 양쪽 기기에 동기화돼요 — 누가 바꾸든 똑같이 보여요.</p>
     <div id="cal-col-names"></div>
     <label>공통 일정 <input type="color" id="cal-col-shared"></label>
     <div class="cal-dlg-actions"><span style="flex:1"></span><button id="cal-col-done" class="cal-primary">확인</button></div>
@@ -1678,17 +1677,19 @@ const calEvents = new Map(); // id → { id, rev, deleted, date?, title?, owner?
 let calView = "month", calCursor = null, calSel = null, calDlgId = null, calDlgDate = null, calDlgCat = "mine";
 let calLastTap = { ds: null, t: 0 }; // 월간 격자 더블탭(같은 날짜 400ms 이내 재클릭) 판정용
 const calOutbox = [];
-const CAL_COLORS_KEY = "duri:calcolors";
 // 파스텔톤 기본값(세이지) — 종일 일정이 이제 배경을 꽉 채워서 너무 쨍하지
 // 않도록 채도를 낮췄다(다만 흰 글자가 읽히게 밝기는 적당히만 낮춤).
 // holiday는 요일 헤더의 일요일 빨강(--sun)과 같은 톤 — "쉬는 날"이라는 인상을 통일한다.
-const calColors = Object.assign({ shared: "#498d6d", holiday: "#c2544f" },
-  (() => { try { return JSON.parse(localStorage.getItem(CAL_COLORS_KEY) || "{}"); } catch { return {}; } })());
-// 개인 일정 색은 예전엔 "내 색/상대 색"을 기기마다 따로 골랐는데, 그러면 같은
-// 일정이 내 화면·상대 화면에서 서로 다른 색으로 보이는 문제가 있었다(내 기기
-// 기준 mine/theirs는 보는 사람마다 뒤바뀌므로). 대신 이름별 색을 "고른 적
-// 없으면 이름 해시로 기본값, 골랐으면 그 값"으로 정하고, 고른 값은 markers와
-// 같은 cal:<id> 저장소로 동기화한다 — 누가 바꾸든 양쪽 기기가 같은 색을 본다.
+// (공휴일 색은 커스터마이즈 대상이 아니라 로컬 상수로만 둔다.)
+const HOLIDAY_COLOR = "#c2544f";
+const DEFAULT_SHARED_COLOR = "#498d6d";
+// 개인·공통 일정 색은 예전엔 기기마다 따로("내 색/상대 색"·"공통 색") 골랐는데,
+// 그러면 같은 일정이 내 화면·상대 화면에서 서로 다른 색으로 보이는 문제가
+// 있었다(내 기기 기준 mine/theirs는 보는 사람마다 뒤바뀌고, 공통 색도 각자
+// 로컬 설정이라 서로 다르게 고를 수 있었다). 대신 markers와 같은 cal:<id>
+// 저장소에 팔레트 레코드 하나(고정 id, kind:"palette")를 동기화해 — 누가
+// 바꾸든 byName(이름별 색)·shared(공통 색) 둘 다 양쪽 기기가 같은 값을 본다.
+// 아직 아무도 안 고른 이름은 문자열 해시로 기본값을 낸다(OWNER_PALETTE).
 const OWNER_PALETTE = ["#b65d7b", "#5481b6", "#6f8347", "#a0703e", "#6a5b9e", "#458484", "#af5a4a", "#5d7a3e"];
 const PALETTE_ID = "palettecolors";
 function paletteRecord() {
@@ -1703,11 +1704,15 @@ function colorForOwner(name) {
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
   return OWNER_PALETTE[h % OWNER_PALETTE.length];
 }
-async function calSetOwnerColors(updates) { // { 이름: "#hex", ... } — 한 번에 묶어서 동기화 1회만 보낸다
+const sharedColor = () => paletteRecord()?.shared || DEFAULT_SHARED_COLOR;
+async function calSetPalette({ byName, shared } = {}) { // 이름별 색·공통 색을 한 번에 묶어 동기화 1회만 보낸다
   const cur = paletteRecord();
-  const byName = { ...(cur?.byName || {}), ...updates };
+  const content = {
+    kind: "palette",
+    byName: { ...(cur?.byName || {}), ...(byName || {}) },
+    shared: shared ?? cur?.shared ?? DEFAULT_SHARED_COLOR,
+  };
   const rev = Date.now();
-  const content = { kind: "palette", byName };
   calEvents.set(PALETTE_ID, { id: PALETTE_ID, rev, deleted: false, ...content }); calPersist();
   const frame = await encryptJson(content);
   calSend({ type: "cal-put", id: PALETTE_ID, iv: frame.iv, ct: frame.ct, rev });
@@ -1738,7 +1743,7 @@ const pad2 = (n) => String(n).padStart(2, "0");
 const ymd = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 const todayYmd = () => ymd(new Date());
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
-const calColorOf = (ev) => ev.holiday ? calColors.holiday : ev.shared ? calColors.shared : colorForOwner(ev.owner);
+const calColorOf = (ev) => ev.holiday ? HOLIDAY_COLOR : ev.shared ? sharedColor() : colorForOwner(ev.owner);
 
 function calPersist() {
   try { const o = {}; for (const [id, ev] of calEvents) o[id] = ev; localStorage.setItem("duri:cal", JSON.stringify(o)); }
@@ -2219,7 +2224,7 @@ function renderCatButtons() {
   const box = $("cal-dlg-cats"); box.replaceChildren();
   CATS.forEach(({ k, label }) => {
     const b = document.createElement("button"); b.type = "button"; b.textContent = label;
-    b.style.setProperty("--c", k === "shared" ? calColors.shared : colorForOwner(MY_NAME));
+    b.style.setProperty("--c", k === "shared" ? sharedColor() : colorForOwner(MY_NAME));
     b.setAttribute("aria-pressed", String(k === calDlgCat));
     b.addEventListener("click", () => { calDlgCat = k; renderCatButtons(); });
     box.appendChild(b);
@@ -2340,16 +2345,14 @@ function openColorbox() {
     label.append(span, input);
     box.appendChild(label);
   }
-  $("cal-col-shared").value = calColors.shared;
+  $("cal-col-shared").value = sharedColor();
   $("cal-colorbox").hidden = false;
 }
 $("cal-colors").addEventListener("click", openColorbox);
 $("cal-col-done").addEventListener("click", async () => {
-  calColors.shared = $("cal-col-shared").value;
-  localStorage.setItem(CAL_COLORS_KEY, JSON.stringify(calColors));
-  const updates = {};
-  for (const input of $("cal-col-names").querySelectorAll("input[type=color]")) updates[input.dataset.name] = input.value;
-  await calSetOwnerColors(updates);
+  const byName = {};
+  for (const input of $("cal-col-names").querySelectorAll("input[type=color]")) byName[input.dataset.name] = input.value;
+  await calSetPalette({ byName, shared: $("cal-col-shared").value });
   applyStatusColors();
   $("cal-colorbox").hidden = true; renderCal();
 });
