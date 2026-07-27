@@ -631,8 +631,9 @@
 <div id="cal-colorbox" hidden>
   <div class="cal-card">
     <h3>일정 색상</h3>
-    <p class="cal-col-note">내 일정·상대 일정 색은 이름으로 자동 결정돼요(누가 보든 같은 사람은
-      항상 같은 색). 공통 일정 색만 고를 수 있어요.</p>
+    <p class="cal-col-note">이름별 색은 양쪽 기기에 동기화돼요 — 누가 바꾸든 같은 사람은 항상 같은
+      색으로 보여요.</p>
+    <div id="cal-col-names"></div>
     <label>공통 일정 <input type="color" id="cal-col-shared"></label>
     <div class="cal-dlg-actions"><span style="flex:1"></span><button id="cal-col-done" class="cal-primary">확인</button></div>
   </div>
@@ -984,6 +985,7 @@ function appendRecord(rec) {
   if (seen.has(rec.seq)) return;
   seen.add(rec.seq);
   if (rec.seq > getLastSeq()) setLastSeq(rec.seq);
+  if (rec.name) notePeerName(rec.name); // 상대 이름을 알아야 색상 설정에 상대 칸을 보여줄 수 있다
   const stick = atBottom();
 
   // 앨범 사진: 같은 앨범 id 버블이 화면에 있으면 새 말풍선 대신 거기에 이어붙인다.
@@ -1438,6 +1440,9 @@ $("enter").addEventListener("click", async () => {
   KEY = await deriveKey(pass);
   MY_NAME = name;
   applyStatusColors(); // 접속 표시 동그라미의 "내 색"이 이름 해시라 로그인 후 다시 계산
+  // 이미 로컬에 복원된 일정 중 상대가 만든 게 있으면 그 이름을 바로 기억해 둔다
+  // (메시지가 새로 오길 기다리지 않아도 색상 설정에 상대 칸이 뜨게).
+  for (const ev of calEvents.values()) if (!ev.deleted && ev.owner) notePeerName(ev.owner);
   localStorage.setItem("duri:name", name);
   localStorage.setItem("duri:pass", pass); // 이 기기에만 저장 — 서버로 전송되지 않음
   $("setup").classList.add("hidden");
@@ -1681,14 +1686,45 @@ const calColors = Object.assign({ shared: "#498d6d", holiday: "#c2544f" },
   (() => { try { return JSON.parse(localStorage.getItem(CAL_COLORS_KEY) || "{}"); } catch { return {}; } })());
 // 개인 일정 색은 예전엔 "내 색/상대 색"을 기기마다 따로 골랐는데, 그러면 같은
 // 일정이 내 화면·상대 화면에서 서로 다른 색으로 보이는 문제가 있었다(내 기기
-// 기준 mine/theirs는 보는 사람마다 뒤바뀌므로). 대신 이름 문자열을 해시해
-// 고정 팔레트에서 고른다 — 어느 기기에서 보든 같은 이름은 항상 같은 색.
+// 기준 mine/theirs는 보는 사람마다 뒤바뀌므로). 대신 이름별 색을 "고른 적
+// 없으면 이름 해시로 기본값, 골랐으면 그 값"으로 정하고, 고른 값은 markers와
+// 같은 cal:<id> 저장소로 동기화한다 — 누가 바꾸든 양쪽 기기가 같은 색을 본다.
 const OWNER_PALETTE = ["#b65d7b", "#5481b6", "#6f8347", "#a0703e", "#6a5b9e", "#458484", "#af5a4a", "#5d7a3e"];
+const PALETTE_ID = "palettecolors";
+function paletteRecord() {
+  const ev = calEvents.get(PALETTE_ID);
+  return (ev && !ev.deleted && ev.kind === "palette") ? ev : null;
+}
 function colorForOwner(name) {
+  const custom = name && paletteRecord()?.byName?.[name];
+  if (custom) return custom;
   if (!name) return OWNER_PALETTE[0];
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
   return OWNER_PALETTE[h % OWNER_PALETTE.length];
+}
+async function calSetOwnerColors(updates) { // { 이름: "#hex", ... } — 한 번에 묶어서 동기화 1회만 보낸다
+  const cur = paletteRecord();
+  const byName = { ...(cur?.byName || {}), ...updates };
+  const rev = Date.now();
+  const content = { kind: "palette", byName };
+  calEvents.set(PALETTE_ID, { id: PALETTE_ID, rev, deleted: false, ...content }); calPersist();
+  const frame = await encryptJson(content);
+  calSend({ type: "cal-put", id: PALETTE_ID, iv: frame.iv, ct: frame.ct, rev });
+}
+// 상대 이름은 서버가 몰라도 되는 정보라 딱히 안 물어본다 — 상대가 만든 일정이나
+// 메시지가 한 번이라도 오면 그때 이름을 기억해 뒀다가 색상 설정에 보여준다.
+const PEER_NAME_KEY = "duri:peername";
+let peerName = localStorage.getItem(PEER_NAME_KEY) || null;
+function notePeerName(name) {
+  if (!name || name === MY_NAME || name === peerName) return;
+  peerName = name;
+  try { localStorage.setItem(PEER_NAME_KEY, name); } catch { /* 최선노력 */ }
+}
+function knownNames() {
+  const names = [MY_NAME];
+  if (peerName && peerName !== MY_NAME) names.push(peerName);
+  return names;
 }
 // 헤더 접속 표시 동그라미 — 이건 "이 화면 기준 나/상대"라는 역할 표시라
 // 일정 색과 달리 기기마다 달라 보여도 문제없다(서로 비교할 대상이 아님).
@@ -1721,6 +1757,7 @@ async function applyCalEntry(entry) {
     calEvents.set(id, { id, rev: entry.rev, deleted: true });
   } else {
     let content; try { content = await decryptJson(entry.iv, entry.ct); } catch { return; }
+    if (content.owner) notePeerName(content.owner); // 상대가 만든 일정에서도 이름을 알 수 있다
     calEvents.set(id, { id, rev: entry.rev, deleted: false, ...content });
   }
   calPersist();
@@ -1878,7 +1915,7 @@ function holidayEntryOn(dateStr) {
 
 function calEventsOn(dateStr) {
   const out = [];
-  for (const ev of calEvents.values()) if (!ev.deleted && ev.kind !== "marker" && calEventOnDate(ev, dateStr)) out.push(ev);
+  for (const ev of calEvents.values()) if (!ev.deleted && !ev.kind && calEventOnDate(ev, dateStr)) out.push(ev);
   const holiday = holidayEntryOn(dateStr);
   if (holiday) out.push({ id: `holiday:${holiday.date}`, date: holiday.date, endDate: holiday.endDate, title: `🇰🇷 ${holiday.title}`, shared: true, holiday: true });
   // 종일(시간 없음) 먼저, 그다음 시작 시간순, 같으면 제목순.
@@ -1897,6 +1934,7 @@ function renderCal() {
   if (calView === "month") renderMonth(grid, calCursor); else renderWeek(grid, calCursor);
   renderDayPanel();
   $("cal-monthnav").hidden = calView !== "month";
+  applyStatusColors(); // 상대가 색상 팔레트를 동기화해 왔을 수도 있으니 매번 다시 반영
 }
 // 제목은 "7월" 크게 + 연도 작게 (구글 캘린더식). 오늘이 현재 화면 범위를 벗어나면
 // "오늘" 버튼을 띄운다 — 늘 자리를 차지하지 않아 헤더가 가볍다.
@@ -1965,7 +2003,7 @@ const addDays = (dateStr, n) => { const d = new Date(dateStr + "T00:00:00"); d.s
 function collectWeekEvents(weekStartStr, weekEndStr) {
   const out = [];
   for (const ev of calEvents.values()) {
-    if (ev.deleted || ev.kind === "marker") continue; // 표식은 날짜 배지 전용, 막대를 차지하지 않는다
+    if (ev.deleted || ev.kind) continue; // kind가 있는 건 일정이 아니다(표식·색상 팔레트 등) — 막대를 차지하지 않는다
     if (ev.recur && ev.recur.freq && ev.recur.freq !== "none") {
       for (let c = 0; c < 7; c++) {
         const ds = addDays(weekStartStr, c);
@@ -2293,13 +2331,26 @@ $("cal-dlg-del-all").addEventListener("click", () => { if (calDlgId) calDeleteEv
 $("cal-dialog").addEventListener("click", (e) => { if (e.target === $("cal-dialog")) closeCalDialog(); });
 
 function openColorbox() {
+  const box = $("cal-col-names"); box.replaceChildren();
+  for (const name of knownNames()) {
+    const label = document.createElement("label");
+    const span = document.createElement("span"); span.textContent = `${name} 색`;
+    const input = document.createElement("input"); input.type = "color";
+    input.value = colorForOwner(name); input.dataset.name = name;
+    label.append(span, input);
+    box.appendChild(label);
+  }
   $("cal-col-shared").value = calColors.shared;
   $("cal-colorbox").hidden = false;
 }
 $("cal-colors").addEventListener("click", openColorbox);
-$("cal-col-done").addEventListener("click", () => {
+$("cal-col-done").addEventListener("click", async () => {
   calColors.shared = $("cal-col-shared").value;
   localStorage.setItem(CAL_COLORS_KEY, JSON.stringify(calColors));
+  const updates = {};
+  for (const input of $("cal-col-names").querySelectorAll("input[type=color]")) updates[input.dataset.name] = input.value;
+  await calSetOwnerColors(updates);
+  applyStatusColors();
   $("cal-colorbox").hidden = true; renderCal();
 });
 $("cal-colorbox").addEventListener("click", (e) => { if (e.target === $("cal-colorbox")) $("cal-colorbox").hidden = true; });
