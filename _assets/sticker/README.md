@@ -23,6 +23,7 @@
 | `black-hoodie-boy` | 까만 후드 소년 이모티콘 16종 | `01.png`–`16.png` |
 | `cream-hoodie-girl` | 크림 후드 소녀 이모티콘 16종 | `01.png`–`16.png` |
 | `hoodie-couple` | 후드 커플 이모티콘 16종 | `01.png`–`16.png` |
+| `jeju-cat` | 제주냥이 이모티콘 16종 | `01.png`–`16.png` |
 
 각 팩은 미리보기(`preview.webp` 또는 `preview.png`), 개별 이미지,
 `metadata.json`으로 구성됩니다. 새 팩의 형식과 검증 규칙은
