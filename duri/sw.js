@@ -21,18 +21,19 @@ function openDB() {
     req.onerror = () => resolve(null);
   });
 }
-// 패스프레이즈는 index.html이 로그인 때 IndexedDB "meta" 스토어에도 저장해 둔다
+// 패스프레이즈·이름은 index.html이 로그인 때 IndexedDB "meta" 스토어에도 저장해 둔다
 // (localStorage는 이 기기의 페이지에서만 보이고 서비스워커에선 못 읽는다).
-function readPassphrase(db) {
+function readMeta(db, id) {
   return new Promise((resolve) => {
     if (!db || !db.objectStoreNames.contains("meta")) return resolve(null);
     try {
-      const req = db.transaction("meta").objectStore("meta").get("pass");
+      const req = db.transaction("meta").objectStore("meta").get(id);
       req.onsuccess = () => resolve(req.result?.value ?? null);
       req.onerror = () => resolve(null);
     } catch { resolve(null); }
   });
 }
+const readPassphrase = (db) => readMeta(db, "pass");
 async function deriveKey(passphrase) {
   const base = await crypto.subtle.importKey("raw", enc.encode(passphrase), "PBKDF2", false, ["deriveKey"]);
   return crypto.subtle.deriveKey(
@@ -54,12 +55,15 @@ async function buildNotification(data) {
     const pass = await readPassphrase(db);
     if (!pass) return GENERIC; // 이 기기에 문구가 없으면(로그인 전) 내용 없이만 알린다
     const key = await deriveKey(pass);
+    const myName = await readMeta(db, "name"); // 내가 보낸 메시지는 내 기기에 알리지 않는다
     if (data.kind === "msg") {
       const p = await decryptJson(key, data.iv, data.ct);
+      if (myName && p.name === myName) return null;
       return { title: p.name || "💞 Duri", body: p.sticker ? "(이모티콘)" : (p.text || "") };
     }
     if (data.kind === "photo") {
       const p = await decryptJson(key, data.metaIv, data.metaCt);
+      if (myName && p.name === myName) return null;
       return { title: p.name || "💞 Duri", body: "사진" };
     }
   } catch { /* 문구가 다르거나 복호화 실패 — 내용 없이만 알린다 */ }
@@ -73,7 +77,9 @@ self.addEventListener("push", (event) => {
   event.waitUntil((async () => {
     let data = null;
     try { data = event.data?.json() ?? null; } catch { /* 형식이 다르면 일반 알림으로 */ }
-    const { title, body } = await buildNotification(data);
+    const result = await buildNotification(data);
+    if (!result) return; // 내가 보낸 메시지 — 알리지 않는다
+    const { title, body } = result;
     await self.registration.showNotification(title, {
       body, icon: "icon.svg", tag: "duri-msg", renotify: true,
       data: { url: "/" },

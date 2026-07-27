@@ -1333,6 +1333,7 @@ $("enter").addEventListener("click", async () => {
   await loadPacks(); // 백필 스티커 렌더 전에 팩 목록 확보
   db = await openDB();
   putMeta("pass", pass); // 서비스워커가 푸시 도착 시 같은 문구로 복호화할 수 있게
+  putMeta("name", name); // 내가 보낸 메시지는 내 기기에 푸시 알림을 띄우지 않게 비교용
   // 이 기기 캐시의 최근 분만 그린 뒤(새로고침에도 대화 유지, 화면은 가볍게),
   // 마지막 seq 이후만 이어받는다. 나머지 이력은 IndexedDB·PC 백업에 그대로 있다.
   for (const rec of (await allEntries()).sort((a, b) => a.seq - b.seq).slice(-MAX_DOM)) appendRecord(rec);
