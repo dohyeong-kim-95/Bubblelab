@@ -1,0 +1,854 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>분류반장</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🏭</text></svg>">
+<style>
+  :root {
+    color-scheme: light dark;
+    --ink: light-dark(#183039, #dceff0);
+    --muted: light-dark(#62777d, #86a0a5);
+    --panel: light-dark(#f7fbf8, #101b20);
+    --belt: light-dark(#c7d4d0, #26363a);
+    --belt-edge: light-dark(#718782, #526b6d);
+    --left: #25a899;
+    --right: #ed835c;
+    --reject: #7c6bd7;
+    --danger: #df4e5b;
+  }
+  * { box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; }
+  body {
+    margin: 0;
+    overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+    color: var(--ink);
+    background:
+      radial-gradient(circle at 15% 10%, light-dark(#e5f5ed, #173029), transparent 34%),
+      radial-gradient(circle at 85% 16%, light-dark(#fff0df, #35251f), transparent 31%),
+      light-dark(#dfeae6, #091216);
+  }
+  button { font: inherit; }
+  #app {
+    position: relative;
+    width: min(100%, 31rem);
+    height: 100svh;
+    margin: auto;
+    overflow: hidden;
+    background: light-dark(rgba(247,251,248,.72), rgba(12,22,26,.76));
+    box-shadow: 0 0 2.5rem light-dark(rgba(27,60,55,.16), rgba(0,0,0,.5));
+  }
+
+  /* HUD */
+  #hud {
+    position: absolute;
+    inset: .8rem .85rem auto;
+    z-index: 20;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: start;
+    gap: .5rem;
+    pointer-events: none;
+  }
+  .hud-box {
+    min-width: 0;
+    padding: .55rem .68rem;
+    border: 1px solid light-dark(rgba(39,74,72,.16), rgba(210,235,232,.13));
+    border-radius: .8rem;
+    background: light-dark(rgba(255,255,255,.68), rgba(17,29,34,.72));
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+  }
+  #score { font-size: 1.18rem; font-weight: 900; font-variant-numeric: tabular-nums; }
+  #combo { min-height: 1.2em; margin-top: .12rem; color: #df8b18; font-size: .72rem; }
+  #level { text-align: center; font-weight: 800; font-size: .82rem; }
+  #time { margin-top: .16rem; text-align: center; color: var(--muted); font-size: .7rem; }
+  #lives { text-align: right; letter-spacing: .08rem; color: var(--danger); font-size: 1.05rem; }
+  #queue { margin-top: .14rem; text-align: right; color: var(--muted); font-size: .68rem; }
+
+  /* 공장과 컨베이어 */
+  #factory {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    cursor: pointer;
+  }
+  #factory::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 4.8rem;
+    bottom: 7.6rem;
+    width: min(37vw, 10.5rem);
+    transform: translateX(-50%);
+    border-inline: .65rem solid var(--belt-edge);
+    border-radius: 1rem;
+    background:
+      repeating-linear-gradient(
+        180deg,
+        transparent 0 2.2rem,
+        light-dark(rgba(61,83,79,.18), rgba(228,245,242,.12)) 2.2rem 2.75rem
+      ),
+      var(--belt);
+    box-shadow:
+      inset .45rem 0 light-dark(rgba(255,255,255,.24), rgba(255,255,255,.04)),
+      inset -.45rem 0 light-dark(rgba(15,41,38,.10), rgba(0,0,0,.2));
+    animation: belt-roll var(--belt-time, 1.15s) linear infinite;
+  }
+  @keyframes belt-roll {
+    to { background-position: 0 2.75rem, 0 0; }
+  }
+  #factory::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: 7.25rem;
+    width: min(49vw, 14.2rem);
+    height: 1.65rem;
+    transform: translateX(-50%);
+    border: .5rem solid var(--belt-edge);
+    border-radius: 999px;
+    background: radial-gradient(circle, #9baaa5 0 35%, #536965 38% 58%, transparent 60%) 0 50% / 2rem 2rem repeat-x;
+  }
+  #decision-line {
+    position: absolute;
+    left: 50%;
+    bottom: 9.7rem;
+    z-index: 4;
+    width: min(43vw, 12rem);
+    transform: translateX(-50%);
+    border-top: 2px dashed light-dark(rgba(39,71,67,.45), rgba(202,231,226,.45));
+    text-align: center;
+    color: var(--muted);
+    font-size: .62rem;
+    letter-spacing: .08em;
+  }
+  #decision-line span {
+    position: relative;
+    top: -.7em;
+    padding: 0 .35rem;
+    background: var(--panel);
+  }
+
+  /* 출구 표지 */
+  .gate {
+    position: absolute;
+    bottom: 3.5rem;
+    z-index: 5;
+    width: 7.3rem;
+    height: 4.5rem;
+    display: grid;
+    place-items: center;
+    border: 2px solid currentColor;
+    border-radius: 1rem;
+    font-weight: 900;
+    font-size: .82rem;
+    transition: transform .12s, filter .12s, background .12s;
+  }
+  .gate small { display: block; margin-top: .12rem; font-size: .62rem; opacity: .68; }
+  #gate-left {
+    left: max(.75rem, calc(50% - 14.7rem));
+    color: light-dark(#08796d, #6fe2d4);
+    background: light-dark(rgba(103,220,204,.24), rgba(29,118,108,.22));
+  }
+  #gate-right {
+    right: max(.75rem, calc(50% - 14.7rem));
+    color: light-dark(#b34c29, #ffac8e);
+    background: light-dark(rgba(255,170,137,.25), rgba(154,66,38,.22));
+  }
+  .gate.flash { transform: scale(1.08); filter: brightness(1.18); }
+  .gate.bad { background: rgba(223,78,91,.38) !important; color: light-dark(#8f1622, #ffb1b8) !important; }
+  #reject-sign {
+    position: absolute;
+    top: 5.25rem;
+    right: max(.65rem, calc(50% - 14.4rem));
+    z-index: 5;
+    padding: .42rem .5rem;
+    border: 1.5px dashed var(--reject);
+    border-radius: .65rem;
+    color: light-dark(#5542b0, #b8acf7);
+    background: light-dark(rgba(232,228,255,.78), rgba(51,42,98,.7));
+    font-size: .65rem;
+    line-height: 1.25;
+    text-align: center;
+    opacity: 0;
+    transform: translateY(.4rem);
+    transition: opacity .3s, transform .3s;
+  }
+  #reject-sign.show { opacity: 1; transform: none; }
+
+  /* 캐릭터 */
+  #items { position: absolute; inset: 0; z-index: 9; pointer-events: none; }
+  .cargo {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    width: 4.5rem;
+    height: 4.8rem;
+    display: grid;
+    place-items: center;
+    will-change: transform;
+    filter: drop-shadow(0 .35rem .32rem rgba(20,40,38,.2));
+  }
+  .cargo.active .body { outline: 3px solid light-dark(rgba(255,255,255,.9), rgba(255,255,255,.72)); }
+  .cargo.active::after {
+    content: "▼";
+    position: absolute;
+    top: -1rem;
+    color: light-dark(#304d4b, #cbe3df);
+    font-size: .8rem;
+    animation: point .55s ease-in-out infinite alternate;
+  }
+  @keyframes point { to { transform: translateY(.2rem); } }
+  .body {
+    position: relative;
+    width: 4rem;
+    height: 4rem;
+    display: grid;
+    place-items: center;
+    border: .2rem solid rgba(18,45,43,.32);
+    box-shadow: inset .35rem .35rem rgba(255,255,255,.2);
+  }
+  .round .body { border-radius: 50% 50% 45% 45%; background: #3cc2ae; }
+  .round .body::before {
+    content: "";
+    position: absolute;
+    top: -.72rem;
+    width: 1.35rem;
+    height: .9rem;
+    border-radius: 100% 0 100% 0;
+    background: #168876;
+    transform: rotate(-24deg);
+  }
+  .square .body { border-radius: .85rem .85rem .55rem .55rem; background: #f08b63; }
+  .square .body::before {
+    content: "";
+    position: absolute;
+    top: -.7rem;
+    width: 0;
+    height: 0;
+    border-left: .72rem solid transparent;
+    border-right: .72rem solid transparent;
+    border-bottom: .95rem solid #ca5837;
+  }
+  .visitor .body {
+    width: 3.6rem;
+    height: 4.15rem;
+    border-radius: 48% 48% 22% 22%;
+    border-style: dashed;
+    background: #8173d8;
+    transform: rotate(3deg);
+  }
+  .visitor .body::before {
+    content: "?";
+    position: absolute;
+    top: -.72rem;
+    right: -.58rem;
+    width: 1.45rem;
+    height: 1.45rem;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: #41357d;
+    color: #fff;
+    font-weight: 900;
+    transform: rotate(-8deg);
+  }
+  .eyes { display: flex; gap: .65rem; margin-top: -.25rem; }
+  .eyes i {
+    width: .48rem;
+    height: .6rem;
+    border-radius: 50%;
+    background: #183b3a;
+  }
+  .visitor .eyes { gap: .38rem; }
+  .visitor .eyes i { width: .35rem; background: #f7f1ff; }
+  .mouth {
+    position: absolute;
+    left: 50%;
+    bottom: .72rem;
+    width: .72rem;
+    height: .35rem;
+    transform: translateX(-50%);
+    border-bottom: .14rem solid rgba(20,44,42,.7);
+    border-radius: 50%;
+  }
+  .visitor .mouth { width: .45rem; border-bottom-color: #f7f1ff; }
+  .feet {
+    position: absolute;
+    bottom: .08rem;
+    width: 3rem;
+    display: flex;
+    justify-content: space-between;
+  }
+  .feet i {
+    width: .85rem;
+    height: .42rem;
+    border-radius: 50%;
+    background: rgba(22,48,46,.75);
+  }
+  .cargo.wrong .body { outline-color: #ff7984; filter: grayscale(.25); }
+
+  /* 짧은 판정 피드백 */
+  #feedback {
+    position: absolute;
+    left: 50%;
+    top: 44%;
+    z-index: 15;
+    transform: translate(-50%, -50%);
+    font-size: 1.2rem;
+    font-weight: 1000;
+    pointer-events: none;
+    opacity: 0;
+  }
+  #feedback.pop { animation: feedback .52s ease-out; }
+  #feedback.good { color: light-dark(#08796d, #75e5d6); }
+  #feedback.bad { color: light-dark(#b91f32, #ff8590); }
+  @keyframes feedback {
+    0% { opacity: 0; transform: translate(-50%, -25%) scale(.75); }
+    25% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
+    100% { opacity: 0; transform: translate(-50%, -95%) scale(1); }
+  }
+
+  /* 시작·종료·일시정지 */
+  #overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 50;
+    display: grid;
+    place-items: center;
+    padding: 1rem 1rem 5.2rem;
+    background: light-dark(rgba(225,237,232,.78), rgba(5,13,16,.78));
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  #overlay.hide { display: none; }
+  #card {
+    width: min(90vw, 22rem);
+    max-height: calc(100svh - 6.4rem);
+    overflow: auto;
+    padding: 1.35rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .8rem;
+    border: 1.5px solid light-dark(rgba(34,73,69,.22), rgba(210,235,232,.2));
+    border-radius: 1.25rem;
+    background: light-dark(rgba(255,255,255,.92), rgba(16,28,33,.94));
+    box-shadow: 0 1rem 3rem rgba(0,0,0,.2);
+    text-align: center;
+  }
+  #card h1 { margin: 0; font-size: 1.28rem; }
+  #message { margin: 0; color: var(--muted); font-size: .78rem; line-height: 1.55; white-space: pre-line; }
+  #legend {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: .45rem;
+  }
+  .legend-item {
+    padding: .6rem .25rem;
+    border-radius: .75rem;
+    background: light-dark(#edf4f1, #17262b);
+    font-size: .72rem;
+    line-height: 1.45;
+  }
+  .legend-shape { display: block; margin-bottom: .2rem; font-size: 1.6rem; font-weight: 1000; }
+  .legend-item:nth-child(1) .legend-shape { color: var(--left); }
+  .legend-item:nth-child(2) .legend-shape { color: var(--right); }
+  .legend-item:nth-child(3) .legend-shape { color: var(--reject); }
+  #result-score { display: none; font-size: 2.5rem; font-weight: 1000; font-variant-numeric: tabular-nums; }
+  #result-detail { display: none; width: 100%; grid-template-columns: repeat(3, 1fr); gap: .42rem; }
+  .result-cell { padding: .58rem .2rem; border-radius: .65rem; background: light-dark(#edf3f1, #17262b); }
+  .result-cell small { display: block; margin-bottom: .18rem; color: var(--muted); font-size: .62rem; }
+  .result-cell b { font-size: .85rem; font-variant-numeric: tabular-nums; }
+  #best { min-height: 1.2em; margin: 0; color: var(--muted); font-size: .75rem; }
+  #play {
+    min-width: 9.5rem;
+    padding: .78rem 1.7rem;
+    border: 2px solid currentColor;
+    border-radius: 999px;
+    background: none;
+    color: inherit;
+    font-size: 1rem;
+    font-weight: 900;
+    cursor: pointer;
+  }
+  #play:active { transform: scale(.96); }
+  #play:disabled { opacity: .45; cursor: default; transform: none; }
+  #anti-slow { margin: -.25rem 0 0; color: var(--muted); font-size: .64rem; }
+
+  @media (max-height: 620px) {
+    #hud { top: .4rem; }
+    .hud-box { padding: .4rem .55rem; }
+    #factory::before { top: 3.8rem; bottom: 6.8rem; }
+    #factory::after { bottom: 6.45rem; }
+    #decision-line { bottom: 8.85rem; }
+    .gate { bottom: 2.8rem; height: 3.8rem; }
+    #reject-sign { top: 4.05rem; }
+    #card { gap: .52rem; padding: 1rem; }
+    #card h1 { font-size: 1.1rem; }
+    #legend { gap: .3rem; }
+    .legend-item { padding: .4rem .15rem; }
+  }
+</style>
+</head>
+<body>
+<main id="app">
+  <section id="hud" aria-label="게임 현황">
+    <div class="hud-box"><div id="score">0명</div><div id="combo"></div></div>
+    <div class="hud-box"><div id="level">속도 1</div><div id="time">0.0초</div></div>
+    <div class="hud-box"><div id="lives">♥ ♥ ♥</div><div id="queue">대기 0</div></div>
+  </section>
+
+  <section id="factory" role="application" aria-label="컨베이어 분류 게임">
+    <div id="decision-line"><span>이 선을 넘기 전에 분류</span></div>
+    <div id="reject-sign">↑ 낯선 손님<br>위로 보내기</div>
+    <div id="items"></div>
+    <div id="feedback" aria-live="polite"></div>
+    <div id="gate-left" class="gate">● 동글이 <small>화면 왼쪽 · ←</small></div>
+    <div id="gate-right" class="gate">■ 네모미 <small>화면 오른쪽 · →</small></div>
+  </section>
+
+  <div id="overlay">
+    <section id="card" role="dialog" aria-modal="true" aria-labelledby="title">
+      <h1 id="title">🏭 분류반장</h1>
+      <p id="message">컨베이어를 타고 오는 캐릭터를 분류하세요.
+기다려주지 않고, 15초마다 빨라집니다!</p>
+      <div id="legend">
+        <div class="legend-item"><span class="legend-shape">● ←</span>동글이는<br>왼쪽</div>
+        <div class="legend-item"><span class="legend-shape">■ →</span>네모미는<br>오른쪽</div>
+        <div class="legend-item"><span class="legend-shape">? ↑</span>낯선 손님은<br>위로 퇴장</div>
+      </div>
+      <div id="result-score"></div>
+      <div id="result-detail">
+        <div class="result-cell"><small>최고 콤보</small><b id="max-combo">0</b></div>
+        <div class="result-cell"><small>정확도</small><b id="accuracy">0%</b></div>
+        <div class="result-cell"><small>생존 시간</small><b id="survived">0초</b></div>
+      </div>
+      <p id="best"></p>
+      <button id="play" type="button">시작!</button>
+      <p id="anti-slow">터치: 화면 좌·우 / 위로 스와이프 · 키보드: ← ↑ →</p>
+    </section>
+  </div>
+</main>
+
+<script>
+const app = document.getElementById("app");
+const factory = document.getElementById("factory");
+const itemsEl = document.getElementById("items");
+const overlay = document.getElementById("overlay");
+const titleEl = document.getElementById("title");
+const messageEl = document.getElementById("message");
+const legendEl = document.getElementById("legend");
+const resultScoreEl = document.getElementById("result-score");
+const resultDetailEl = document.getElementById("result-detail");
+const maxComboEl = document.getElementById("max-combo");
+const accuracyEl = document.getElementById("accuracy");
+const survivedEl = document.getElementById("survived");
+const bestEl = document.getElementById("best");
+const playBtn = document.getElementById("play");
+const scoreEl = document.getElementById("score");
+const comboEl = document.getElementById("combo");
+const levelEl = document.getElementById("level");
+const timeEl = document.getElementById("time");
+const livesEl = document.getElementById("lives");
+const queueEl = document.getElementById("queue");
+const feedbackEl = document.getElementById("feedback");
+const rejectSign = document.getElementById("reject-sign");
+const gates = {
+  left: document.getElementById("gate-left"),
+  right: document.getElementById("gate-right"),
+};
+
+const BEST_KEY = "bl-sort-line-best";
+const TYPE_ACTION = { round: "left", square: "right", visitor: "up" };
+const ACTION_LABEL = { left: "왼쪽", right: "오른쪽", up: "위" };
+const ITEM_NAMES = { round: "동글이", square: "네모미", visitor: "낯선 손님" };
+
+let phase = "idle"; // idle | running | paused | done
+let items = [];
+let score = 0;
+let lives = 3;
+let combo = 0;
+let maxCombo = 0;
+let mistakes = 0;
+let elapsed = 0;
+let level = 1;
+let spawnIn = .35;
+let lastFrame = performance.now();
+let feedbackTimer = 0;
+let typeHistory = [];
+let best = 0;
+try { best = Number(localStorage.getItem(BEST_KEY)) || 0; } catch {}
+let audioCtx = null;
+
+window.blWeekly = { game: "sort-line", dir: "max", fmt: (v) => `${Math.round(v)}명` };
+window.blShareText = () => `분류반장에서 ${best || score}명 정확히 분류! 🏭 도전해보세요`;
+
+function updateHud() {
+  scoreEl.textContent = `${score}명`;
+  comboEl.textContent = combo >= 2 ? `⚡ ${combo} 콤보` : "";
+  levelEl.textContent = `속도 ${level}`;
+  timeEl.textContent = `${elapsed.toFixed(1)}초`;
+  livesEl.textContent = `${"♥ ".repeat(lives)}${"♡ ".repeat(3 - lives)}`.trim();
+  queueEl.textContent = `대기 ${items.length}`;
+  rejectSign.classList.toggle("show", elapsed >= 15 || phase === "idle" || phase === "done");
+  app.style.setProperty("--belt-time", `${Math.max(.38, 1.15 - elapsed * .011)}s`);
+}
+
+function currentSpeed() {
+  return 128 * Math.pow(1.12, Math.max(0, level - 1));
+}
+
+function currentSpawnInterval() {
+  const base = Math.max(.28, 1.65 * Math.pow(.87, Math.max(0, level - 1)));
+  return base * (.85 + Math.random() * .3);
+}
+
+function visitorChance() {
+  if (elapsed < 15) return 0;
+  return Math.min(.25, .10 + (elapsed - 15) * .0025);
+}
+
+function chooseType() {
+  let type;
+  const rejectChance = visitorChance();
+  if (Math.random() < rejectChance) {
+    type = "visitor";
+  } else {
+    type = Math.random() < .5 ? "round" : "square";
+  }
+  if (typeHistory.length >= 3 && typeHistory.slice(-3).every((v) => v === type)) {
+    type = type === "round" ? "square" : "round";
+  }
+  typeHistory.push(type);
+  if (typeHistory.length > 5) typeHistory.shift();
+  return type;
+}
+
+function characterMarkup() {
+  return '<div class="body"><span class="eyes"><i></i><i></i></span><span class="mouth"></span></div><span class="feet"><i></i><i></i></span>';
+}
+
+function spawnItem() {
+  const type = chooseType();
+  const el = document.createElement("div");
+  el.className = `cargo ${type}`;
+  el.setAttribute("role", "img");
+  el.setAttribute("aria-label", ITEM_NAMES[type]);
+  el.innerHTML = characterMarkup();
+  itemsEl.appendChild(el);
+  items.push({ type, el, y: 64, done: false });
+  refreshActive();
+}
+
+function refreshActive() {
+  for (const item of items) item.el.classList.remove("active");
+  items[0]?.el.classList.add("active");
+  queueEl.textContent = `대기 ${items.length}`;
+}
+
+function beep(frequency, duration = .055, kind = "sine", volume = .035) {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    oscillator.type = kind;
+    oscillator.frequency.value = frequency;
+    gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(.0001, audioCtx.currentTime + duration);
+    oscillator.connect(gain).connect(audioCtx.destination);
+    oscillator.start();
+    oscillator.stop(audioCtx.currentTime + duration);
+  } catch {}
+}
+
+function showFeedback(text, good) {
+  clearTimeout(feedbackTimer);
+  feedbackEl.className = good ? "good" : "bad";
+  feedbackEl.textContent = text;
+  void feedbackEl.offsetWidth;
+  feedbackEl.classList.add("pop");
+  feedbackTimer = setTimeout(() => feedbackEl.classList.remove("pop"), 540);
+}
+
+function flashGate(action, good) {
+  if (action === "up") {
+    rejectSign.classList.add(good ? "show" : "show");
+    rejectSign.style.filter = good ? "brightness(1.35)" : "hue-rotate(105deg) saturate(1.8)";
+    setTimeout(() => { rejectSign.style.filter = ""; }, 180);
+    return;
+  }
+  const gate = gates[action];
+  gate.classList.toggle("bad", !good);
+  gate.classList.add("flash");
+  setTimeout(() => gate.classList.remove("flash", "bad"), 180);
+}
+
+function flyAway(item, action, good) {
+  const width = app.clientWidth;
+  const from = item.el.style.transform || `translate3d(-50%, ${item.y}px, 0)`;
+  const to = action === "left"
+    ? `translate3d(${-width * .58}px, ${item.y + 34}px, 0) rotate(-22deg) scale(.82)`
+    : action === "right"
+      ? `translate3d(${width * .43}px, ${item.y + 34}px, 0) rotate(22deg) scale(.82)`
+      : `translate3d(-50%, ${Math.max(-100, item.y - 230)}px, 0) rotate(16deg) scale(.68)`;
+  if (!good) item.el.classList.add("wrong");
+  const animation = item.el.animate(
+    [
+      { transform: from, opacity: 1 },
+      { transform: to, opacity: good ? 0 : .18, filter: good ? "none" : "grayscale(.5)" },
+    ],
+    { duration: action === "up" ? 360 : 300, easing: "cubic-bezier(.2,.8,.3,1)", fill: "forwards" },
+  );
+  animation.finished.catch(() => {}).finally(() => item.el.remove());
+}
+
+function removeItem(item) {
+  const index = items.indexOf(item);
+  if (index >= 0) items.splice(index, 1);
+  item.el.classList.remove("active");
+  refreshActive();
+}
+
+function loseLife(reason) {
+  if (phase !== "running") return;
+  mistakes++;
+  lives--;
+  combo = 0;
+  updateHud();
+  showFeedback(reason, false);
+  beep(118, .16, "sawtooth", .045);
+  navigator.vibrate?.([35, 30, 35]);
+  if (lives <= 0) finishGame(reason);
+}
+
+function act(action) {
+  if (phase !== "running") return;
+  const item = items[0];
+  if (!item || item.y < 74) {
+    showFeedback("아직!", false);
+    return;
+  }
+
+  removeItem(item);
+  const good = TYPE_ACTION[item.type] === action;
+  flashGate(action, good);
+  flyAway(item, action, good);
+
+  if (good) {
+    score++;
+    combo++;
+    maxCombo = Math.max(maxCombo, combo);
+    const text = combo >= 10 && combo % 5 === 0 ? `${combo} 콤보!` : "정답!";
+    showFeedback(text, true);
+    beep(Math.min(880, 430 + combo * 14), .05, "sine", .03);
+    updateHud();
+  } else {
+    loseLife(`${ITEM_NAMES[item.type]}는 ${ACTION_LABEL[TYPE_ACTION[item.type]]}!`);
+  }
+}
+
+function missItem(item) {
+  removeItem(item);
+  item.el.animate(
+    [
+      { transform: item.el.style.transform, opacity: 1 },
+      { transform: `translate3d(-50%, ${item.y + 90}px, 0)`, opacity: 0 },
+    ],
+    { duration: 240, easing: "ease-in", fill: "forwards" },
+  ).finished.catch(() => {}).finally(() => item.el.remove());
+  loseLife("놓쳤어요!");
+}
+
+function clearItems() {
+  for (const item of items) item.el.remove();
+  items = [];
+  refreshActive();
+}
+
+function showStart() {
+  phase = "idle";
+  titleEl.textContent = "🏭 분류반장";
+  messageEl.textContent = "컨베이어를 타고 오는 캐릭터를 분류하세요.\n기다려주지 않고, 15초마다 빨라집니다!";
+  legendEl.style.display = "grid";
+  resultScoreEl.style.display = "none";
+  resultDetailEl.style.display = "none";
+  bestEl.textContent = best ? `내 최고 기록: ${best}명` : "오답 또는 놓침 3번이면 종료";
+  playBtn.textContent = "시작!";
+  overlay.classList.remove("hide");
+  updateHud();
+}
+
+function startGame() {
+  clearItems();
+  phase = "running";
+  score = 0;
+  lives = 3;
+  combo = 0;
+  maxCombo = 0;
+  mistakes = 0;
+  elapsed = 0;
+  level = 1;
+  spawnIn = .25;
+  typeHistory = [];
+  lastFrame = performance.now();
+  overlay.classList.add("hide");
+  playBtn.disabled = false;
+  audioCtx?.resume?.();
+  updateHud();
+}
+
+function finishGame(reason) {
+  if (phase !== "running") return;
+  phase = "done";
+  const finalScore = score;
+  const attempts = score + mistakes;
+  const accuracy = attempts ? Math.round(score / attempts * 100) : 0;
+  if (finalScore > best) {
+    best = finalScore;
+    try { localStorage.setItem(BEST_KEY, String(best)); } catch {}
+  }
+  playBtn.disabled = true;
+  setTimeout(() => {
+    clearItems();
+    titleEl.textContent =
+      finalScore >= 60 ? "🏆 완벽한 분류반장!" :
+      finalScore >= 35 ? "⚡ 눈보다 빠른 손!" :
+      finalScore >= 18 ? "👏 제법 능숙해요!" : "🏭 교대 종료!";
+    messageEl.textContent = reason === "놓쳤어요!"
+      ? "컨베이어 끝에서 마지막 손님을 놓쳤어요."
+      : "마지막 손님을 다른 출구로 보냈어요.";
+    legendEl.style.display = "none";
+    resultScoreEl.textContent = `${finalScore}명`;
+    resultScoreEl.style.display = "block";
+    resultDetailEl.style.display = "grid";
+    maxComboEl.textContent = `${maxCombo}`;
+    accuracyEl.textContent = `${accuracy}%`;
+    survivedEl.textContent = `${elapsed.toFixed(1)}초`;
+    bestEl.textContent = `내 최고 기록: ${best}명`;
+    playBtn.textContent = "다시 도전";
+    playBtn.disabled = false;
+    overlay.classList.remove("hide");
+  }, 420);
+  window.blWeeklyReport?.(finalScore);
+}
+
+function pauseGame() {
+  if (phase !== "running") return;
+  phase = "paused";
+  titleEl.textContent = "⏸ 잠깐 멈춤";
+  messageEl.textContent = "플레이 시간과 컨베이어가 함께 멈췄어요.";
+  legendEl.style.display = "none";
+  resultScoreEl.style.display = "none";
+  resultDetailEl.style.display = "none";
+  bestEl.textContent = `현재 ${score}명 · 목숨 ${lives}개`;
+  playBtn.textContent = "계속하기";
+  overlay.classList.remove("hide");
+}
+
+function resumeGame() {
+  phase = "running";
+  lastFrame = performance.now();
+  overlay.classList.add("hide");
+  audioCtx?.resume?.();
+}
+
+playBtn.addEventListener("click", () => {
+  if (phase === "paused") resumeGame();
+  else startGame();
+});
+
+addEventListener("keydown", (event) => {
+  if (event.repeat) return;
+  const action =
+    event.key === "ArrowLeft" ? "left" :
+    event.key === "ArrowRight" ? "right" :
+    event.key === "ArrowUp" ? "up" : null;
+  if (action) {
+    event.preventDefault();
+    act(action);
+  } else if ((event.key === "Enter" || event.key === " ") && phase !== "running") {
+    event.preventDefault();
+    playBtn.click();
+  }
+});
+
+let pointerStart = null;
+factory.addEventListener("pointerdown", (event) => {
+  if (phase !== "running") return;
+  pointerStart = { id: event.pointerId, x: event.clientX, y: event.clientY };
+  factory.setPointerCapture?.(event.pointerId);
+});
+factory.addEventListener("pointerup", (event) => {
+  if (phase !== "running" || !pointerStart || pointerStart.id !== event.pointerId) return;
+  const dx = event.clientX - pointerStart.x;
+  const dy = event.clientY - pointerStart.y;
+  pointerStart = null;
+  if (dy < -48 && Math.abs(dy) > Math.abs(dx) * 1.05) {
+    act("up");
+  } else if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy)) {
+    act(dx < 0 ? "left" : "right");
+  } else {
+    const rect = app.getBoundingClientRect();
+    act(event.clientX < rect.left + rect.width / 2 ? "left" : "right");
+  }
+});
+factory.addEventListener("pointercancel", () => { pointerStart = null; });
+
+for (const eventName of ["pointerdown", "pointerup", "click"]) {
+  overlay.addEventListener(eventName, (event) => event.stopPropagation());
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) pauseGame();
+});
+
+function tick(now) {
+  const dt = Math.min(.05, Math.max(0, (now - lastFrame) / 1000));
+  lastFrame = now;
+  if (phase === "running") {
+    elapsed += dt;
+    const nextLevel = Math.floor(elapsed / 15) + 1;
+    if (nextLevel !== level) {
+      level = nextLevel;
+      showFeedback(level === 2 ? "낯선 손님 등장!" : `속도 ${level}!`, true);
+      beep(620, .09, "square", .025);
+    }
+
+    spawnIn -= dt;
+    if (spawnIn <= 0) {
+      spawnItem();
+      spawnIn += currentSpawnInterval();
+    }
+
+    const speed = currentSpeed();
+    const missY = app.clientHeight - 128;
+    const missed = [];
+    for (const item of items) {
+      item.y += speed * dt;
+      item.el.style.transform = `translate3d(-50%, ${item.y}px, 0)`;
+      if (item.y >= missY) missed.push(item);
+    }
+    for (const item of missed) {
+      if (phase !== "running") break;
+      missItem(item);
+    }
+    updateHud();
+  }
+  requestAnimationFrame(tick);
+}
+
+showStart();
+requestAnimationFrame(tick);
+</script>
+<script defer src="/_shared/records.js"></script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>
