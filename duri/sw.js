@@ -80,8 +80,16 @@ async function buildNotification(data) {
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
 
+// 이 기기에서 이미 앱 화면을 보고 있으면(포커스 중) 시스템 알림을 띄우지
+// 않는다 — 어차피 웹소켓으로 화면에 바로 뜨는데 알림까지 겹칠 필요가 없다.
+async function isAppFocused() {
+  const list = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+  return list.some((c) => c.focused || c.visibilityState === "visible");
+}
+
 self.addEventListener("push", (event) => {
   event.waitUntil((async () => {
+    if (await isAppFocused()) return;
     let data = null;
     try { data = event.data?.json() ?? null; } catch { /* 형식이 다르면 일반 알림으로 */ }
     const result = await buildNotification(data);

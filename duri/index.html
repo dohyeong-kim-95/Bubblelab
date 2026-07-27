@@ -220,6 +220,10 @@
   .card label { display: block; font-size: .78rem; margin: 1rem 0 .3rem; }
   .card input { width: 100%; font: inherit; padding: .55rem .7rem; border-radius: .7rem;
                 border: 1px solid var(--line); background: var(--panel); color: inherit; }
+  /* type="password"는 일부 한국어 키보드 앱이 "보안 키보드"로 인식해 영문 전환
+     키 자체를 빼버린다 — type="text" + -webkit-text-security로 화면엔 그대로
+     점(•)만 보이게 가리면서 키보드는 평범한 전체 키보드가 뜨게 한다. */
+  #pass { -webkit-text-security: disc; }
   .card button { width: 100%; margin-top: 1.1rem; padding: .65rem; background: var(--pink);
                  color: light-dark(#fff, #1a1016); border: none; border-radius: .7rem; font-weight: 600; }
   .card .warn { font-size: .72rem; color: light-dark(#b4453a, #f0a8a2); margin-top: .8rem; }
@@ -459,7 +463,7 @@
        대화·사진은 문구로 암호화되어 서버는 절대 내용을 볼 수 없습니다. 상대도
        <b>같은 문구</b>를 입력해야 서로의 메시지가 열립니다.</p>
     <label>암호 문구 (둘이 똑같이)</label>
-    <input id="pass" type="password" autocomplete="off" placeholder="예: 우리만아는긴문장">
+    <input id="pass" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="예: 우리만아는긴문장">
     <label>내 이름</label>
     <input id="name" autocomplete="off" placeholder="예: 도경">
     <button id="enter">시작</button>
