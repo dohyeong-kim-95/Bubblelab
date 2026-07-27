@@ -279,9 +279,7 @@
   .cal-date-cell { display: flex; align-items: center; justify-content: center; gap: .12rem; cursor: pointer; }
   .cal-date-cell .d { font-size: .72rem; color: var(--dim); flex: none;
                        width: 1.5rem; height: 1.5rem; display: grid; place-items: center; border-radius: 50%; }
-  /* 배지는 날짜 숫자 못지않게 눈에 띄어야 한다(스티커를 붙인 느낌) — 작은
-     보조 표시가 아니라 숫자보다 확실히 큰 이모지로 강조한다. */
-  .cal-date-cell .marker { font-size: 1.4rem; line-height: 1; }
+  .cal-date-cell .marker { font-size: 1rem; line-height: 1; }
   .cal-date-cell.sun .d { color: var(--sun); }
   .cal-date-cell.sat .d { color: var(--sat); }
   .cal-date-cell.other .d { opacity: .38; }
@@ -307,10 +305,24 @@
   .cal-dp .hd { display: flex; align-items: center; gap: .5rem; }
   .cal-dp .hd .dt { font-size: .82rem; font-weight: 600; }
   .cal-dp .hd .dt .wd { color: var(--dim); font-weight: 400; }
+  .cal-dp .hd .marker-wrap { position: relative; flex: none; }
   .cal-dp .hd .marker-input { flex: none; width: 2.1rem; font: inherit; font-size: .95rem; text-align: center;
                                padding: .25rem 0; border: 1px solid var(--line); border-radius: .5rem;
-                               background: var(--bg); color: inherit; }
+                               background: var(--bg); color: inherit; cursor: pointer; }
+  .cal-dp .hd .marker-input.placeholder { opacity: .55; }
   .cal-dp .hd .marker-input:focus { outline: none; border-color: color-mix(in srgb, var(--pink) 55%, var(--line)); }
+  /* 별을 누르면 근처에 뜨는 이모지 8개 팝업 — 직접 타이핑하지 않고 골라서 담는다 */
+  .cal-dp .hd .marker-popup { position: absolute; top: calc(100% + .3rem); left: 0; background: var(--panel);
+                               border: 1px solid var(--line); border-radius: .6rem; padding: .35rem;
+                               display: flex; flex-wrap: wrap; gap: .15rem; width: 9.4rem; z-index: 20;
+                               box-shadow: 0 8px 24px light-dark(#0002, #0007); }
+  .cal-dp .hd .marker-popup[hidden] { display: none; }
+  .cal-dp .hd .marker-popup button { font-size: 1.3rem; line-height: 1; width: 2rem; height: 2rem;
+                                      padding: 0; border: 0; border-radius: .4rem; background: none;
+                                      color: inherit; cursor: pointer; display: grid; place-items: center; }
+  .cal-dp .hd .marker-popup button:hover { background: var(--bg); }
+  .cal-dp .hd .marker-popup button.clear { font-size: .68rem; width: auto; height: auto; flex: 1 0 100%;
+                                            padding: .3rem 0; color: var(--dim); }
   .cal-dp .hd .add { margin-left: auto; flex: none; font: inherit; font-size: .72rem; padding: .3rem .65rem;
                      border-radius: 999px; border: 1px solid var(--line); background: var(--bg); color: inherit; cursor: pointer; }
   .cal-dp .evs { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: .3rem; }
@@ -1439,6 +1451,9 @@ function toggleMenu() {
 menuBtn.addEventListener("click", (e) => { e.stopPropagation(); toggleMenu(); });
 document.addEventListener("click", (e) => {
   if (!menu.hidden && !menu.contains(e.target) && e.target !== menuBtn) closeMenu();
+  // 날짜 표식 이모지 팝업도 바깥을 누르면 닫는다(렌더될 때마다 새로 생기므로 매번 찾는다).
+  const mp = $("cal-day").querySelector(".marker-popup");
+  if (mp && !mp.hidden && !mp.parentElement.contains(e.target)) mp.hidden = true;
 });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenu(); });
 
@@ -1457,6 +1472,8 @@ trapBack(); // 초기 방어 상태
 window.addEventListener("popstate", () => {
   if (!$("cal-dialog").hidden) { closeCalDialog(); trapBack(); return; }     // 이벤트 다이얼로그
   if (!$("cal-colorbox").hidden) { $("cal-colorbox").hidden = true; trapBack(); return; } // 색상 설정
+  { const mp = $("cal-day").querySelector(".marker-popup");
+    if (mp && !mp.hidden) { mp.hidden = true; trapBack(); return; } } // 표식 이모지 팝업 먼저 닫기
   if (!$("cal").classList.contains("cal-off")) { closeCal(); trapBack(); return; } // 캘린더 → 채팅
   if (!$("lightbox").hidden) { closeLb(); trapBack(); return; } // 사진 뷰어 먼저 닫기
   if (!$("cal-cmd-picker").hidden) { closeCalCmdPicker(); trapBack(); return; } // "/일정" 미니 달력 먼저 닫기
@@ -1715,6 +1732,7 @@ function calDeleteEvent(id) {
 // 재사용하되(같은 LWW·방초기화·오프라인 큐 로직을 공짜로 얻는다), id를 날짜에서
 // 결정적으로 만들어(무작위 아님) 날짜당 표식이 하나만 존재하게 하고, kind:"marker"
 // 로 표시해 일반 일정 목록·막대·반복 계산에서 전부 제외되게 한다.
+const MARKER_EMOJIS = ["⭐", "❤️", "🌸", "🎂", "✈️", "💊", "🍺", "🏃"];
 const markerId = (dateStr) => "mk" + dateStr.replace(/-/g, "");
 function markerOn(dateStr) {
   const ev = calEvents.get(markerId(dateStr));
@@ -2071,14 +2089,30 @@ function renderDayPanel() {
   dt.append(d + " ");
   const wd = document.createElement("span"); wd.className = "wd"; wd.textContent = `(${w})`;
   dt.appendChild(wd);
-  // 날짜 표식(선택) — 일정과 별개로 그 날짜 자체에 이모지 하나. 비우면 지워진다.
-  const markerInput = document.createElement("input"); markerInput.className = "marker-input";
-  markerInput.maxLength = 4; markerInput.placeholder = "⭐"; markerInput.value = markerOn(calSel) || "";
-  markerInput.title = "이 날짜 표식(선택) — 글로 남기기 애매한 걸 이모지 하나로";
-  markerInput.addEventListener("change", () => calSetMarker(calSel, markerInput.value.trim()));
+  // 날짜 표식(선택) — 일정과 별개로 그 날짜 자체에 이모지 하나. 별을 누르면
+  // 미리 골라 둔 이모지 풀이 팝업으로 뜨고, 그중 하나를 눌러 담는다(직접 타이핑 안 함).
+  const markerWrap = document.createElement("div"); markerWrap.className = "marker-wrap";
+  const curMarker = markerOn(calSel);
+  const markerBtn = document.createElement("button"); markerBtn.type = "button"; markerBtn.className = "marker-input";
+  if (!curMarker) markerBtn.classList.add("placeholder");
+  markerBtn.textContent = curMarker || "⭐";
+  markerBtn.title = "이 날짜 표식(선택) — 글로 남기기 애매한 걸 이모지 하나로";
+  const markerPopup = document.createElement("div"); markerPopup.className = "marker-popup"; markerPopup.hidden = true;
+  for (const em of MARKER_EMOJIS) {
+    const b = document.createElement("button"); b.type = "button"; b.textContent = em;
+    b.addEventListener("click", () => { markerPopup.hidden = true; calSetMarker(calSel, em); });
+    markerPopup.appendChild(b);
+  }
+  if (curMarker) {
+    const clearBtn = document.createElement("button"); clearBtn.type = "button"; clearBtn.className = "clear"; clearBtn.textContent = "표식 지우기";
+    clearBtn.addEventListener("click", () => { markerPopup.hidden = true; calSetMarker(calSel, ""); });
+    markerPopup.appendChild(clearBtn);
+  }
+  markerBtn.addEventListener("click", (e) => { e.stopPropagation(); markerPopup.hidden = !markerPopup.hidden; });
+  markerWrap.append(markerBtn, markerPopup);
   const add = document.createElement("button"); add.type = "button"; add.className = "add"; add.textContent = "＋ 일정";
   add.addEventListener("click", () => openCalDialog(calSel, null));
-  hd.append(dt, markerInput, add);
+  hd.append(dt, markerWrap, add);
   const evs = document.createElement("div"); evs.className = "evs";
   const list = calEventsOn(calSel);
   if (list.length) list.forEach((ev) => evs.appendChild(evChip(ev, calSel)));
