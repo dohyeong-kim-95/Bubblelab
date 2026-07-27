@@ -321,8 +321,7 @@
                                       padding: 0; border: 0; border-radius: .4rem; background: none;
                                       color: inherit; cursor: pointer; display: grid; place-items: center; }
   .cal-dp .hd .marker-popup button:hover { background: var(--bg); }
-  .cal-dp .hd .marker-popup button.clear { font-size: .68rem; width: auto; height: auto; flex: 1 0 100%;
-                                            padding: .3rem 0; color: var(--dim); }
+  .cal-dp .hd .marker-popup button.clear { font-size: 1rem; color: var(--dim); }
   .cal-dp .hd .add { margin-left: auto; flex: none; font: inherit; font-size: .72rem; padding: .3rem .65rem;
                      border-radius: 999px; border: 1px solid var(--line); background: var(--bg); color: inherit; cursor: pointer; }
   .cal-dp .evs { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: .3rem; }
@@ -1732,7 +1731,8 @@ function calDeleteEvent(id) {
 // 재사용하되(같은 LWW·방초기화·오프라인 큐 로직을 공짜로 얻는다), id를 날짜에서
 // 결정적으로 만들어(무작위 아님) 날짜당 표식이 하나만 존재하게 하고, kind:"marker"
 // 로 표시해 일반 일정 목록·막대·반복 계산에서 전부 제외되게 한다.
-const MARKER_EMOJIS = ["⭐", "❤️", "🌸", "🎂", "✈️", "💊", "🍺", "🏃"];
+// 팝업은 8칸 — 첫 칸은 지우기(✕), 나머지 7칸이 이 이모지들이다.
+const MARKER_EMOJIS = ["⭐", "❤️", "🌸", "🎂", "✈️", "💊", "🏃"];
 const markerId = (dateStr) => "mk" + dateStr.replace(/-/g, "");
 function markerOn(dateStr) {
   const ev = calEvents.get(markerId(dateStr));
@@ -2097,16 +2097,17 @@ function renderDayPanel() {
   if (!curMarker) markerBtn.classList.add("placeholder");
   markerBtn.textContent = curMarker || "⭐";
   markerBtn.title = "이 날짜 표식(선택) — 글로 남기기 애매한 걸 이모지 하나로";
+  // 8칸 중 첫 칸은 이모지가 아니라 "지우기"(✕) — 항상 보이게 둬서 표식을
+  // 없애고 싶을 때 바로 누를 수 있게 한다(있을 때만 뜨는 별도 버튼 대신).
   const markerPopup = document.createElement("div"); markerPopup.className = "marker-popup"; markerPopup.hidden = true;
+  const clearBtn = document.createElement("button"); clearBtn.type = "button"; clearBtn.className = "clear";
+  clearBtn.textContent = "✕"; clearBtn.title = "표식 지우기";
+  clearBtn.addEventListener("click", () => { markerPopup.hidden = true; calSetMarker(calSel, ""); });
+  markerPopup.appendChild(clearBtn);
   for (const em of MARKER_EMOJIS) {
     const b = document.createElement("button"); b.type = "button"; b.textContent = em;
     b.addEventListener("click", () => { markerPopup.hidden = true; calSetMarker(calSel, em); });
     markerPopup.appendChild(b);
-  }
-  if (curMarker) {
-    const clearBtn = document.createElement("button"); clearBtn.type = "button"; clearBtn.className = "clear"; clearBtn.textContent = "표식 지우기";
-    clearBtn.addEventListener("click", () => { markerPopup.hidden = true; calSetMarker(calSel, ""); });
-    markerPopup.appendChild(clearBtn);
   }
   markerBtn.addEventListener("click", (e) => { e.stopPropagation(); markerPopup.hidden = !markerPopup.hidden; });
   markerWrap.append(markerBtn, markerPopup);
