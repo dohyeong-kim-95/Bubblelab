@@ -170,16 +170,20 @@
   #picker { max-width: 44rem; width: 100%; margin: 0 auto; border-top: 1px solid var(--line); background: var(--panel);
             height: var(--kb, 18rem); display: flex; flex-direction: column; }
   #picker[hidden] { display: none; }
-  #tabs { flex: none; display: flex; gap: .25rem; padding: .45rem .7rem 0; overflow-x: auto; }
-  #tabs button { font: inherit; font-size: .72rem; padding: .4rem .6rem; border: 0; border-radius: .5rem .5rem 0 0;
+  #tabs { flex: none; display: flex; gap: .25rem; padding: .65rem .7rem 0; overflow-x: auto; }
+  #tabs button { font: inherit; font-size: .72rem; padding: .55rem .6rem; border: 0; border-radius: .5rem .5rem 0 0;
                  background: none; color: inherit; opacity: .55; white-space: nowrap; cursor: pointer; }
   #tabs button[aria-selected="true"] { opacity: 1; font-weight: 600; background: var(--bg); }
-  /* 팩 탭은 꾹 눌러서 드래그로 순서를 바꿀 수 있다 — 드래그 중엔 브라우저의
-     좌우 스크롤 제스처와 부딪히지 않게 touch-action을 꺼 둔다. */
-  #tabs button[data-pack] { touch-action: none; }
+  /* 팩 탭은 꾹 눌러서 드래그로 순서를 바꿀 수 있다. touch-action은 기본값
+     (manipulation)을 그대로 둬서 짧게 끄는 제스처는 여전히 탭 목록을 좌우로
+     스크롤한다 — 길게 눌러 실제로 드래그가 시작된 뒤에만 pointermove의
+     preventDefault로 그 순간의 스크롤을 가로챈다(타이머가 뜨기 전에 8px
+     넘게 움직이면 스크롤 의도로 보고 꾹 누르기를 취소하므로 서로 안 부딪힌다). */
   #tabs button.dragging { position: relative; z-index: 3; opacity: .9; background: var(--bg);
                            box-shadow: 0 2px 10px rgba(0,0,0,.28); transition: none; }
-  #hint { flex: none; font-size: .68rem; opacity: .55; padding: .4rem .8rem 0; background: var(--bg); min-height: 1.2rem; }
+  /* 탭 이름 영역과 스티커 그리드 영역을 선 하나로 확실히 나눈다 */
+  #hint { flex: none; font-size: .68rem; opacity: .55; padding: .4rem .8rem; background: var(--bg);
+          min-height: 1.2rem; border-bottom: 1px solid var(--line); }
   #grid { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(4rem, 1fr)); gap: .3rem;
           padding: .45rem .7rem .7rem; overflow-y: auto; background: var(--bg); align-content: start; }
   #grid button { padding: .25rem; background: none; border: 2px solid transparent; border-radius: .6rem; cursor: pointer; }
@@ -1328,11 +1332,13 @@ function renderTabs() {
 const TAB_LONGPRESS_MS = 420, TAB_MOVE_CANCEL_PX = 8;
 let tabDragged = false; // 드래그 직후 곧바로 오는 click을 한 번 무시하기 위한 플래그
 function attachTabDrag(button, packId) {
-  let timer = null, startX = 0, startY = 0, dragging = false, siblingsInfo = [];
+  let timer = null, startX = 0, startY = 0, dragging = false, siblingsInfo = [], pointerId = null;
   const clearTimer = () => { if (timer) { clearTimeout(timer); timer = null; } };
   const beginDrag = () => {
     dragging = true; tabDragged = true;
     button.classList.add("dragging");
+    button.style.touchAction = "none"; // 이 시점부턴 진짜 드래그 — 좌우 스크롤과 안 겹치게 잠깐 끈다
+    if (pointerId != null) button.setPointerCapture?.(pointerId);
     if (navigator.vibrate) navigator.vibrate(12); // 집었다는 촉각 피드백(지원 기기만, 실패해도 무시)
     // 자기 자신은 기준에서 빼야 targetIndex가 packOrder()에서 자기를 뺀 배열과
     // 같은 길이·순서로 맞아떨어진다(안 그러면 원래 자리 근처에서 잘못 튄다).
@@ -1345,10 +1351,11 @@ function attachTabDrag(button, packId) {
     dragging = false;
     button.classList.remove("dragging");
     button.style.transform = "";
+    button.style.touchAction = ""; // 기본값(manipulation)으로 복귀 — 평소엔 탭 목록이 좌우로 스크롤돼야 한다
   };
   button.addEventListener("pointerdown", (e) => {
     if (e.button != null && e.button !== 0) return; // 마우스 왼쪽 버튼(또는 터치)만
-    startX = e.clientX; startY = e.clientY;
+    startX = e.clientX; startY = e.clientY; pointerId = e.pointerId;
     clearTimer();
     timer = setTimeout(beginDrag, TAB_LONGPRESS_MS);
   });
