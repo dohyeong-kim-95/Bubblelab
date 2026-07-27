@@ -1645,7 +1645,8 @@ const calOutbox = [];
 const CAL_COLORS_KEY = "duri:calcolors";
 // 파스텔톤 기본값(더스티 로즈·블루·세이지) — 종일 일정이 이제 배경을 꽉 채워서
 // 너무 쨍하지 않도록 채도를 낮췄다(다만 흰 글자가 읽히게 밝기는 적당히만 낮춤).
-const calColors = Object.assign({ mine: "#b65d7b", theirs: "#5481b6", shared: "#498d6d" },
+// holiday는 요일 헤더의 일요일 빨강(--sun)과 같은 톤 — "쉬는 날"이라는 인상을 통일한다.
+const calColors = Object.assign({ mine: "#b65d7b", theirs: "#5481b6", shared: "#498d6d", holiday: "#c2544f" },
   (() => { try { return JSON.parse(localStorage.getItem(CAL_COLORS_KEY) || "{}"); } catch { return {}; } })());
 // 헤더 접속 표시 동그라미도 같은 색(캘린더 색상 설정과 통일).
 function applyStatusColors() {
@@ -1658,7 +1659,7 @@ const pad2 = (n) => String(n).padStart(2, "0");
 const ymd = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 const todayYmd = () => ymd(new Date());
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
-const calColorOf = (ev) => ev.shared ? calColors.shared : (ev.owner === MY_NAME ? calColors.mine : calColors.theirs);
+const calColorOf = (ev) => ev.holiday ? calColors.holiday : ev.shared ? calColors.shared : (ev.owner === MY_NAME ? calColors.mine : calColors.theirs);
 
 function calPersist() {
   try { const o = {}; for (const [id, ev] of calEvents) o[id] = ev; localStorage.setItem("duri:cal", JSON.stringify(o)); }
