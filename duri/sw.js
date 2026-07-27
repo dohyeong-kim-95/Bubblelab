@@ -15,8 +15,15 @@ const ITER = 210_000;
 function openDB() {
   return new Promise((resolve) => {
     let req;
-    try { req = indexedDB.open("duri", 1); } catch { return resolve(null); }
-    req.onupgradeneeded = () => { if (!req.result.objectStoreNames.contains("entries")) req.result.createObjectStore("entries", { keyPath: "seq" }); };
+    // index.html과 버전이 반드시 같아야 한다 — 여기 버전이 더 낮으면 실제 DB가
+    // 이미 그보다 높은 버전으로 올라가 있어 VersionError로 열기 자체가 실패하고,
+    // readMeta()가 항상 null을 돌려줘 미리보기·본인 메시지 제외가 조용히 죽는다.
+    try { req = indexedDB.open("duri", 2); } catch { return resolve(null); }
+    req.onupgradeneeded = () => {
+      const d = req.result;
+      if (!d.objectStoreNames.contains("entries")) d.createObjectStore("entries", { keyPath: "seq" });
+      if (!d.objectStoreNames.contains("meta")) d.createObjectStore("meta", { keyPath: "id" });
+    };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => resolve(null);
   });
