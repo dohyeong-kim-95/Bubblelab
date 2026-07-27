@@ -1297,6 +1297,22 @@ function closePicker() {
   $("sticker-btn").setAttribute("aria-expanded", "false");
   clearSelection();
 }
+// 좌우 스와이프로 탭(최근/이모지/스티커 팩)을 넘긴다 — 탭 순서와 동일하게 순환.
+function tabOrder() { return ["recent", "emoji", ...PACKS.map((p) => p.id)]; }
+function gridGo(dir) {
+  const order = tabOrder();
+  const i = order.indexOf(activeTab);
+  if (i === -1) return;
+  activeTab = order[(i + dir + order.length) % order.length];
+  renderTabs(); renderGrid();
+}
+let gridTouchX = null;
+grid.addEventListener("touchstart", (e) => { gridTouchX = e.touches[0].clientX; }, { passive: true });
+grid.addEventListener("touchend", (e) => {
+  if (gridTouchX === null) return;
+  const dx = e.changedTouches[0].clientX - gridTouchX; gridTouchX = null;
+  if (Math.abs(dx) > 45) gridGo(dx < 0 ? 1 : -1); // 왼쪽으로 밀면 다음 팩, 오른쪽이면 이전 팩
+});
 $("sticker-btn").addEventListener("click", () => { if (picker.hidden) openPicker(); else closePicker(); });
 
 // 키보드 높이를 재서 서랍(picker)을 딱 그 높이로 맞춘다 → 키보드↔서랍 전환이
