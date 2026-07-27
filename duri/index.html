@@ -389,6 +389,7 @@
   .cal-card h3 { margin: 0; font-size: 1rem; }
   #cal-colorbox label { display: flex; align-items: center; justify-content: space-between; font-size: .85rem; }
   .cal-card input[type=color] { width: 3rem; height: 2rem; border: 1px solid var(--line); border-radius: .4rem; background: none; padding: 0; }
+  .cal-col-note { font-size: .78rem; color: var(--dim); line-height: 1.6; margin: .2rem 0 1rem; }
   /* 테두리 없는 큰 제목 입력(네이티브 캘린더 앱 벤치마킹) — 박스 대신 큰 글씨로만 존재감 */
   #cal-dlg-title { font: inherit; font-size: 1.3rem; font-weight: 700; padding: .1rem 0;
                    border: none; background: none; color: inherit; }
@@ -630,8 +631,8 @@
 <div id="cal-colorbox" hidden>
   <div class="cal-card">
     <h3>일정 색상</h3>
-    <label>내 일정 <input type="color" id="cal-col-mine"></label>
-    <label>상대 일정 <input type="color" id="cal-col-theirs"></label>
+    <p class="cal-col-note">내 일정·상대 일정 색은 이름으로 자동 결정돼요(누가 보든 같은 사람은
+      항상 같은 색). 공통 일정 색만 고를 수 있어요.</p>
     <label>공통 일정 <input type="color" id="cal-col-shared"></label>
     <div class="cal-dlg-actions"><span style="flex:1"></span><button id="cal-col-done" class="cal-primary">확인</button></div>
   </div>
@@ -1436,6 +1437,7 @@ $("enter").addEventListener("click", async () => {
   if (!pass || !name) { $("setupWarn").textContent = "문구와 이름을 모두 입력하세요."; return; }
   KEY = await deriveKey(pass);
   MY_NAME = name;
+  applyStatusColors(); // 접속 표시 동그라미의 "내 색"이 이름 해시라 로그인 후 다시 계산
   localStorage.setItem("duri:name", name);
   localStorage.setItem("duri:pass", pass); // 이 기기에만 저장 — 서버로 전송되지 않음
   $("setup").classList.add("hidden");
@@ -1672,15 +1674,27 @@ let calView = "month", calCursor = null, calSel = null, calDlgId = null, calDlgD
 let calLastTap = { ds: null, t: 0 }; // 월간 격자 더블탭(같은 날짜 400ms 이내 재클릭) 판정용
 const calOutbox = [];
 const CAL_COLORS_KEY = "duri:calcolors";
-// 파스텔톤 기본값(더스티 로즈·블루·세이지) — 종일 일정이 이제 배경을 꽉 채워서
-// 너무 쨍하지 않도록 채도를 낮췄다(다만 흰 글자가 읽히게 밝기는 적당히만 낮춤).
+// 파스텔톤 기본값(세이지) — 종일 일정이 이제 배경을 꽉 채워서 너무 쨍하지
+// 않도록 채도를 낮췄다(다만 흰 글자가 읽히게 밝기는 적당히만 낮춤).
 // holiday는 요일 헤더의 일요일 빨강(--sun)과 같은 톤 — "쉬는 날"이라는 인상을 통일한다.
-const calColors = Object.assign({ mine: "#b65d7b", theirs: "#5481b6", shared: "#498d6d", holiday: "#c2544f" },
+const calColors = Object.assign({ shared: "#498d6d", holiday: "#c2544f" },
   (() => { try { return JSON.parse(localStorage.getItem(CAL_COLORS_KEY) || "{}"); } catch { return {}; } })());
-// 헤더 접속 표시 동그라미도 같은 색(캘린더 색상 설정과 통일).
+// 개인 일정 색은 예전엔 "내 색/상대 색"을 기기마다 따로 골랐는데, 그러면 같은
+// 일정이 내 화면·상대 화면에서 서로 다른 색으로 보이는 문제가 있었다(내 기기
+// 기준 mine/theirs는 보는 사람마다 뒤바뀌므로). 대신 이름 문자열을 해시해
+// 고정 팔레트에서 고른다 — 어느 기기에서 보든 같은 이름은 항상 같은 색.
+const OWNER_PALETTE = ["#b65d7b", "#5481b6", "#6f8347", "#a0703e", "#6a5b9e", "#458484", "#af5a4a", "#5d7a3e"];
+function colorForOwner(name) {
+  if (!name) return OWNER_PALETTE[0];
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return OWNER_PALETTE[h % OWNER_PALETTE.length];
+}
+// 헤더 접속 표시 동그라미 — 이건 "이 화면 기준 나/상대"라는 역할 표시라
+// 일정 색과 달리 기기마다 달라 보여도 문제없다(서로 비교할 대상이 아님).
 function applyStatusColors() {
-  $("dot-mine").style.background = calColors.mine;
-  $("dot-theirs").style.background = calColors.theirs;
+  $("dot-mine").style.background = colorForOwner(MY_NAME);
+  $("dot-theirs").style.background = "#5481b6";
 }
 applyStatusColors();
 
@@ -1688,7 +1702,7 @@ const pad2 = (n) => String(n).padStart(2, "0");
 const ymd = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 const todayYmd = () => ymd(new Date());
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
-const calColorOf = (ev) => ev.holiday ? calColors.holiday : ev.shared ? calColors.shared : (ev.owner === MY_NAME ? calColors.mine : calColors.theirs);
+const calColorOf = (ev) => ev.holiday ? calColors.holiday : ev.shared ? calColors.shared : colorForOwner(ev.owner);
 
 function calPersist() {
   try { const o = {}; for (const [id, ev] of calEvents) o[id] = ev; localStorage.setItem("duri:cal", JSON.stringify(o)); }
@@ -2167,7 +2181,7 @@ function renderCatButtons() {
   const box = $("cal-dlg-cats"); box.replaceChildren();
   CATS.forEach(({ k, label }) => {
     const b = document.createElement("button"); b.type = "button"; b.textContent = label;
-    b.style.setProperty("--c", k === "shared" ? calColors.shared : calColors.mine);
+    b.style.setProperty("--c", k === "shared" ? calColors.shared : colorForOwner(MY_NAME));
     b.setAttribute("aria-pressed", String(k === calDlgCat));
     b.addEventListener("click", () => { calDlgCat = k; renderCatButtons(); });
     box.appendChild(b);
@@ -2279,14 +2293,13 @@ $("cal-dlg-del-all").addEventListener("click", () => { if (calDlgId) calDeleteEv
 $("cal-dialog").addEventListener("click", (e) => { if (e.target === $("cal-dialog")) closeCalDialog(); });
 
 function openColorbox() {
-  $("cal-col-mine").value = calColors.mine; $("cal-col-theirs").value = calColors.theirs; $("cal-col-shared").value = calColors.shared;
+  $("cal-col-shared").value = calColors.shared;
   $("cal-colorbox").hidden = false;
 }
 $("cal-colors").addEventListener("click", openColorbox);
 $("cal-col-done").addEventListener("click", () => {
-  calColors.mine = $("cal-col-mine").value; calColors.theirs = $("cal-col-theirs").value; calColors.shared = $("cal-col-shared").value;
+  calColors.shared = $("cal-col-shared").value;
   localStorage.setItem(CAL_COLORS_KEY, JSON.stringify(calColors));
-  applyStatusColors();
   $("cal-colorbox").hidden = true; renderCal();
 });
 $("cal-colorbox").addEventListener("click", (e) => { if (e.target === $("cal-colorbox")) $("cal-colorbox").hidden = true; });
