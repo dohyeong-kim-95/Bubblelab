@@ -300,6 +300,10 @@
   .cal-dp .hd { display: flex; align-items: center; gap: .5rem; }
   .cal-dp .hd .dt { font-size: .82rem; font-weight: 600; }
   .cal-dp .hd .dt .wd { color: var(--dim); font-weight: 400; }
+  .cal-dp .hd .marker-input { flex: none; width: 2.1rem; font: inherit; font-size: .95rem; text-align: center;
+                               padding: .25rem 0; border: 1px solid var(--line); border-radius: .5rem;
+                               background: var(--bg); color: inherit; }
+  .cal-dp .hd .marker-input:focus { outline: none; border-color: color-mix(in srgb, var(--pink) 55%, var(--line)); }
   .cal-dp .hd .add { margin-left: auto; flex: none; font: inherit; font-size: .72rem; padding: .3rem .65rem;
                      border-radius: 999px; border: 1px solid var(--line); background: var(--bg); color: inherit; cursor: pointer; }
   .cal-dp .evs { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: .3rem; }
@@ -360,17 +364,10 @@
   #cal-colorbox label { display: flex; align-items: center; justify-content: space-between; font-size: .85rem; }
   .cal-card input[type=color] { width: 3rem; height: 2rem; border: 1px solid var(--line); border-radius: .4rem; background: none; padding: 0; }
   /* 테두리 없는 큰 제목 입력(네이티브 캘린더 앱 벤치마킹) — 박스 대신 큰 글씨로만 존재감 */
-  .cal-title-row { display: flex; align-items: center; gap: .5rem; }
-  #cal-dlg-title { flex: 1; min-width: 0; font: inherit; font-size: 1.3rem; font-weight: 700; padding: .1rem 0;
+  #cal-dlg-title { font: inherit; font-size: 1.3rem; font-weight: 700; padding: .1rem 0;
                    border: none; background: none; color: inherit; }
   #cal-dlg-title::placeholder { color: var(--dim); font-weight: 700; }
   #cal-dlg-title:focus { outline: none; }
-  /* 표식(스티커/이모지) — "생리"처럼 글로 남기기 애매한 걸 이모지 하나로. 날짜
-     옆에 작게 뜬다(cal-date-cell .marker). 필수 아님, 제목 없이 이것만 있어도 저장. */
-  .cal-marker-input { flex: none; width: 2.6rem; font: inherit; font-size: 1.1rem; text-align: center;
-                       padding: .3rem 0; border: 1px solid var(--line); border-radius: .6rem;
-                       background: var(--bg); color: inherit; }
-  .cal-marker-input:focus { outline: none; border-color: color-mix(in srgb, var(--pink) 55%, var(--line)); }
   /* 시작/종료를 화살표 아이콘 + 전체 날짜 텍스트 행으로(네이티브 캘린더 앱 벤치마킹).
      실제 <input type=date> 는 투명하게 행 전체를 덮어 어디를 눌러도 네이티브
      피커가 뜨고, 보이는 글자는 dlgDateLabel 로 포맷한 텍스트다. */
@@ -550,11 +547,7 @@
 <!-- 이벤트 추가/수정 -->
 <div id="cal-dialog" hidden>
   <div class="cal-card">
-    <div class="cal-title-row">
-      <input id="cal-dlg-title" placeholder="제목" autocomplete="off" maxlength="120">
-      <input id="cal-dlg-marker" class="cal-marker-input" maxlength="4" placeholder="⭐"
-             title="표식(선택) — 글로 남기기 애매한 건 이모지 하나로. 날짜 옆에 뜬다">
-    </div>
+    <input id="cal-dlg-title" placeholder="제목" autocomplete="off" maxlength="120">
     <label class="cal-toggle"><input type="checkbox" id="cal-dlg-allday" checked><span class="track"><span class="thumb"></span></span>종일</label>
     <div class="cal-daterow">
       <div class="cal-daterow-item">
@@ -1609,12 +1602,11 @@ function calFlushOutbox() { while (calOutbox.length && ws && ws.readyState === 1
 
 // 여러 날 종료일(endDate)과 반복(recur)은 함께 쓰지 않는다(반복이 우선) — 다이얼로그
 // 저장 시점에 이미 정리해서 넘기지만, 방어적으로 여기서도 한 번 더 가른다.
-async function calSaveEvent({ id, date, title, owner, shared, start, end, endDate, recur, marker }) {
+async function calSaveEvent({ id, date, title, owner, shared, start, end, endDate, recur }) {
   const rev = Date.now();
   const content = { date, title, owner, shared };
   if (start) content.start = start;
   if (end) content.end = end;
-  if (marker) content.marker = marker;
   if (recur && recur.freq && recur.freq !== "none") content.recur = recur;
   else if (endDate && endDate > date) content.endDate = endDate;
   calEvents.set(id, { id, rev, deleted: false, ...content }); calPersist();
@@ -1626,6 +1618,31 @@ function calDeleteEvent(id) {
   const rev = Date.now();
   calEvents.set(id, { id, rev, deleted: true }); calPersist();
   calSend({ type: "cal-del", id, rev });
+  renderCal();
+}
+// ── 날짜 표식(스티커/이모지) — 일정이 아니라 "그 날짜 자체"에 붙는다 ─────────
+// 글로 남기기 애매한 것(예: 생리)을 이모지 하나로. 같은 cal:<id> 저장소를
+// 재사용하되(같은 LWW·방초기화·오프라인 큐 로직을 공짜로 얻는다), id를 날짜에서
+// 결정적으로 만들어(무작위 아님) 날짜당 표식이 하나만 존재하게 하고, kind:"marker"
+// 로 표시해 일반 일정 목록·막대·반복 계산에서 전부 제외되게 한다.
+const markerId = (dateStr) => "mk" + dateStr.replace(/-/g, "");
+function markerOn(dateStr) {
+  const ev = calEvents.get(markerId(dateStr));
+  return (ev && !ev.deleted && ev.marker) || null;
+}
+async function calSetMarker(dateStr, marker) {
+  const id = markerId(dateStr);
+  const rev = Date.now();
+  if (!marker) {
+    calEvents.set(id, { id, rev, deleted: true }); calPersist();
+    calSend({ type: "cal-del", id, rev });
+    renderCal();
+    return;
+  }
+  const content = { date: dateStr, marker, kind: "marker" };
+  calEvents.set(id, { id, rev, deleted: false, ...content }); calPersist();
+  const frame = await encryptJson(content);
+  calSend({ type: "cal-put", id, iv: frame.iv, ct: frame.ct, rev });
   renderCal();
 }
 // 반복 시리즈에서 "이 날짜만" 뺀다(전체는 그대로 두고 exclude 목록에 추가) —
@@ -1728,7 +1745,7 @@ function holidayEntryOn(dateStr) {
 
 function calEventsOn(dateStr) {
   const out = [];
-  for (const ev of calEvents.values()) if (!ev.deleted && calEventOnDate(ev, dateStr)) out.push(ev);
+  for (const ev of calEvents.values()) if (!ev.deleted && ev.kind !== "marker" && calEventOnDate(ev, dateStr)) out.push(ev);
   const holiday = holidayEntryOn(dateStr);
   if (holiday) out.push({ id: `holiday:${holiday.date}`, date: holiday.date, endDate: holiday.endDate, title: `🎌 ${holiday.title}`, shared: true, holiday: true });
   // 종일(시간 없음) 먼저, 그다음 시작 시간순, 같으면 제목순.
@@ -1772,7 +1789,7 @@ function evChip(ev, onDate) {
   const c = document.createElement("div"); c.className = "cal-ev";
   c.style.setProperty("--c", calColorOf(ev));
   const isRecur = !!(ev.recur && ev.recur.freq && ev.recur.freq !== "none");
-  const title = (isRecur ? "🔁 " : "") + (ev.title || ev.marker || "(제목 없음)");
+  const title = (isRecur ? "🔁 " : "") + (ev.title || "(제목 없음)");
   if (ev.start) {
     c.classList.add("timed");
     const t = document.createElement("span"); t.className = "t"; t.textContent = ev.start;
@@ -1781,7 +1798,7 @@ function evChip(ev, onDate) {
   } else {
     c.textContent = title;
   }
-  let tip = (ev.start ? `${ev.start}${ev.end ? "–" + ev.end : ""} ` : "") + (ev.title || ev.marker || "(제목 없음)");
+  let tip = (ev.start ? `${ev.start}${ev.end ? "–" + ev.end : ""} ` : "") + (ev.title || "(제목 없음)");
   if (isRecur) tip += ` (${RECUR_LABEL[ev.recur.freq] || ev.recur.freq} 반복)`;
   else if (ev.endDate && ev.endDate > ev.date) tip += ` (${ev.date} ~ ${ev.endDate})`;
   c.title = tip;
@@ -1797,7 +1814,7 @@ function evBar(ev, onDate) {
   const c = document.createElement("div"); c.className = "cal-ev cal-bar";
   c.style.setProperty("--c", calColorOf(ev));
   const isRecur = !!(ev.recur && ev.recur.freq && ev.recur.freq !== "none");
-  const base = ev.title || ev.marker || "(제목 없음)";
+  const base = ev.title || "(제목 없음)";
   const title = (isRecur ? "🔁 " : "") + base;
   c.textContent = title;
   c.title = (ev.endDate && ev.endDate > ev.date) ? `${base} (${ev.date} ~ ${ev.endDate})` : base;
@@ -1815,10 +1832,7 @@ const addDays = (dateStr, n) => { const d = new Date(dateStr + "T00:00:00"); d.s
 function collectWeekEvents(weekStartStr, weekEndStr) {
   const out = [];
   for (const ev of calEvents.values()) {
-    if (ev.deleted) continue;
-    // 제목 없이 표식만 있는 일정은 막대(레인)를 차지하지 않는다 — 날짜 옆 배지로만
-    // 보여준다. 그래야 표식이 다른 일정들과 자리다툼을 안 하고, 늘 눈에 띈다.
-    if (!ev.title && ev.marker) continue;
+    if (ev.deleted || ev.kind === "marker") continue; // 표식은 날짜 배지 전용, 막대를 차지하지 않는다
     if (ev.recur && ev.recur.freq && ev.recur.freq !== "none") {
       for (let c = 0; c < 7; c++) {
         const ds = addDays(weekStartStr, c);
@@ -1888,7 +1902,6 @@ function renderMonth(grid, cur) {
       const d = new Date(weekStart); d.setDate(weekStart.getDate() + i);
       const ds = ymd(d);
       const isOther = d.getMonth() !== cur.getMonth();
-      const dayEvs = calEventsOn(ds);
 
       const dcell = document.createElement("div"); dcell.className = "cal-date-cell";
       markWeekend(dcell, d.getDay());
@@ -1896,9 +1909,9 @@ function renderMonth(grid, cur) {
       if (ds === tk) dcell.classList.add("today");
       if (ds === calSel) dcell.classList.add("sel");
       const dn = document.createElement("div"); dn.className = "d"; dn.textContent = d.getDate(); dcell.appendChild(dn);
-      // 표식(스티커/이모지) — 글로 남기기 애매한 것(예: 생리)을 이모지 하나로.
-      const markers = [...new Set(dayEvs.map((ev) => ev.marker).filter(Boolean))].slice(0, 2);
-      if (markers.length) { const ms = document.createElement("span"); ms.className = "marker"; ms.textContent = markers.join(""); dcell.appendChild(ms); }
+      // 표식(스티커/이모지) — 날짜 자체에 붙는 것이라 일정과 별도로 조회한다.
+      const marker = markerOn(ds);
+      if (marker) { const ms = document.createElement("span"); ms.className = "marker"; ms.textContent = marker; dcell.appendChild(ms); }
 
       // 일정 칩은 이제 이 칸 안에서 안 그린다 — 아래 공통 레인(하루짜리+여러
       // 날 같은 위계)이 대신 그리므로, 여기는 탭 영역(빈 스페이서)만 남는다.
@@ -1968,9 +1981,14 @@ function renderDayPanel() {
   dt.append(d + " ");
   const wd = document.createElement("span"); wd.className = "wd"; wd.textContent = `(${w})`;
   dt.appendChild(wd);
+  // 날짜 표식(선택) — 일정과 별개로 그 날짜 자체에 이모지 하나. 비우면 지워진다.
+  const markerInput = document.createElement("input"); markerInput.className = "marker-input";
+  markerInput.maxLength = 4; markerInput.placeholder = "⭐"; markerInput.value = markerOn(calSel) || "";
+  markerInput.title = "이 날짜 표식(선택) — 글로 남기기 애매한 걸 이모지 하나로";
+  markerInput.addEventListener("change", () => calSetMarker(calSel, markerInput.value.trim()));
   const add = document.createElement("button"); add.type = "button"; add.className = "add"; add.textContent = "＋ 일정";
   add.addEventListener("click", () => openCalDialog(calSel, null));
-  hd.append(dt, add);
+  hd.append(dt, markerInput, add);
   const evs = document.createElement("div"); evs.className = "evs";
   const list = calEventsOn(calSel);
   if (list.length) list.forEach((ev) => evs.appendChild(evChip(ev, calSel)));
@@ -2045,7 +2063,6 @@ function openCalDialog(dateStr, ev) {
   calDlgDate = dateStr; // 이 다이얼로그가 "보고 있는" 날짜(반복 회차 중 하나일 수 있음) — 이 날짜만 삭제에 씀
   calDlgCat = ev ? (ev.shared ? "shared" : "mine") : "mine";
   $("cal-dlg-title").value = ev ? (ev.title || "") : "";
-  $("cal-dlg-marker").value = (ev && ev.marker) || "";
   $("cal-dlg-startdate").value = ev ? ev.date : dateStr;
   const timed = !!(ev && ev.start);
   $("cal-dlg-allday").checked = !timed;
@@ -2098,9 +2115,7 @@ $("cal-dlg-recur-end").addEventListener("change", () => {
 function closeCalDialog() { $("cal-dialog").hidden = true; calDlgId = null; }
 $("cal-dlg-save").addEventListener("click", async () => {
   const title = $("cal-dlg-title").value.trim();
-  const marker = $("cal-dlg-marker").value.trim();
-  // 표식만 찍고 제목은 비워도 저장할 수 있다("생리" 같은 걸 굳이 글로 안 써도 되게).
-  if (!title && !marker) { $("cal-dlg-title").focus(); return; }
+  if (!title) { $("cal-dlg-title").focus(); return; }
   const date = $("cal-dlg-startdate").value || calDlgDate;
   const allDay = $("cal-dlg-allday").checked;
   const start = allDay ? undefined : ($("cal-dlg-start").value || undefined);
@@ -2118,7 +2133,7 @@ $("cal-dlg-save").addEventListener("click", async () => {
   }
   const enddateRaw = allDay ? $("cal-dlg-enddate").value : undefined;
   const endDate = (!recur && enddateRaw && enddateRaw > date) ? enddateRaw : undefined;
-  await calSaveEvent({ id: calDlgId, date, title, owner: MY_NAME, shared: calDlgCat === "shared", start, end, endDate, recur, marker });
+  await calSaveEvent({ id: calDlgId, date, title, owner: MY_NAME, shared: calDlgCat === "shared", start, end, endDate, recur });
   closeCalDialog();
 });
 $("cal-dlg-cancel").addEventListener("click", closeCalDialog);
