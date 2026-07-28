@@ -366,9 +366,9 @@
     {x:   0, y:-620, r: 26, s:1.0, t0:0.16, t1:0.50},  // 가운데 팔
     {x: 700, y:-360, r: 70, s:1.0, t0:0.22, t1:0.56},  // 오른쪽 팔
     {x:-700, y:-360, r:-70, s:1.0, t0:0.22, t1:0.56},  // 왼쪽 팔
-    {x: 240, y:-560, r:  0, s:2.2, t0:0.44, t1:0.68},  // 점
-    {x:-420, y:-260, r:  0, s:2.2, t0:0.46, t1:0.70},
-    {x: 460, y: 180, r:  0, s:2.2, t0:0.48, t1:0.72}
+    {x: 240, y:-560, r:  0, s:2.2, t0:0.40, t1:0.58},  // 점 — '다 온다' 앵커(0.63) 전에 정착
+    {x:-420, y:-260, r:  0, s:2.2, t0:0.42, t1:0.60},
+    {x: 460, y: 180, r:  0, s:2.2, t0:0.44, t1:0.62}
   ];
 
   parts.forEach(function(el){
@@ -466,13 +466,25 @@
       }
       snapRaf = requestAnimationFrame(step);
     }
+    // 정착 앵커: 첫 화면(0) / 로고 완성+'다 온다'(0.63) / 워드마크 완성(1).
+    // 구간 진행 25% 미만이면 이전 앵커로, 이상이면 다음 앵커로.
+    var ANCHORS = [0, 0.63, 1];
+    function snapTargetP(p){
+      for(var i = 1; i < ANCHORS.length; i++){
+        var a = ANCHORS[i-1], b = ANCHORS[i];
+        if(p <= b) return (p - a) / (b - a) < 0.25 ? a : b;
+      }
+      return 1;
+    }
     function armSnap(){
       clearTimeout(snapTimer);
       snapTimer = setTimeout(function(){
         var b = stageBounds();
         var p = clamp((window.scrollY - b.start) / (b.end - b.start), 0, 1);
-        if(p <= 0.02 || p >= 0.98) return;
-        snapTo(p < 0.12 ? b.start : b.end);
+        if(p >= 0.98) return;
+        var atAnchor = ANCHORS.some(function(a){ return Math.abs(p - a) < 0.02; });
+        if(atAnchor) return;
+        snapTo(b.start + snapTargetP(p) * (b.end - b.start));
       }, 550);
     }
     ['wheel','touchstart','pointerdown','keydown'].forEach(function(ev){
