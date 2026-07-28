@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>문제 풀이 — 데이터랩</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+         background: light-dark(#eef2f6, #10161f); color: light-dark(#1c2733, #d7e0ea);
+         min-height: 100vh; }
+  a { color: light-dark(#2563eb, #7fb0ff); text-decoration: none; }
+  header { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: .8rem;
+           padding: .7rem 1rem; background: light-dark(#e2e9f0, #0a0e15);
+           border-bottom: 1px solid light-dark(#c9d4e0, #232d3a); flex-wrap: wrap; }
+  header h1 { font-size: 1rem; margin: 0; flex: 1; min-width: 12rem; }
+  #status { font-size: .78rem; opacity: .75; }
+  #status[data-kind="busy"]::before { content: "⏳ "; }
+  #status[data-kind="ok"]::before { content: "🟢 "; }
+  #status[data-kind="warn"]::before { content: "⚠️ "; }
+  main { display: grid; grid-template-columns: minmax(20rem, 30rem) 1fr; gap: 1rem;
+         padding: 1rem; max-width: 90rem; margin: 0 auto; align-items: start; }
+  @media (max-width: 60rem) { main { grid-template-columns: 1fr; } }
+  .panel { background: light-dark(#f7fafc, #161e2a); border: 1px solid light-dark(#d6dfe8, #232d3a);
+           border-radius: .8rem; padding: 1rem; }
+  #p-meta { display: flex; gap: .4rem; flex-wrap: wrap; margin: .5rem 0 .8rem; }
+  .badge { font-size: .72rem; padding: .15rem .5rem; border-radius: 1rem;
+           border: 1px solid light-dark(#b9c7d6, #334153); opacity: .85; }
+  .badge.tag { opacity: .6; }
+  #p-progress { font-size: .82rem; opacity: .8; margin-bottom: .6rem; }
+  #p-intro { font-size: .85rem; line-height: 1.6; opacity: .9; }
+  #steps { list-style: none; margin: 1rem 0 0; padding: 0; display: grid; gap: .7rem; }
+  .step { border: 1px solid light-dark(#d6dfe8, #232d3a); border-radius: .6rem; padding: .7rem .8rem; }
+  .step-head { display: flex; gap: .5rem; align-items: baseline; font-size: .85rem; }
+  .step-state[data-state="done"] { filter: none; }
+  .step-body { font-size: .82rem; line-height: 1.65; }
+  .step-body p { margin: .5rem 0; }
+  .tmpl { opacity: .75; word-break: break-all; }
+  details summary { cursor: pointer; opacity: .7; font-size: .78rem; }
+  code { background: light-dark(#e4ebf2, #0d1420); padding: .1em .35em; border-radius: .3em;
+         font-size: .92em; }
+  #notebook { display: grid; gap: .8rem; }
+  .nb-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+  button { font: inherit; font-size: .8rem; padding: .35rem .8rem; border-radius: .5rem;
+           border: 1px solid light-dark(#b9c7d6, #334153); background: light-dark(#fff, #1b2532);
+           color: inherit; cursor: pointer; }
+  button:hover { border-color: light-dark(#7d93ab, #4d617c); }
+  button:active { transform: scale(.97); }
+  .cell { border: 1px solid light-dark(#d6dfe8, #232d3a); border-radius: .7rem; overflow: hidden;
+          background: light-dark(#f7fafc, #161e2a); }
+  .cell.running { border-color: light-dark(#2563eb, #7fb0ff); }
+  .cell.readonly textarea { opacity: .75; }
+  .cell-head { display: flex; justify-content: space-between; align-items: center;
+               padding: .3rem .6rem; font-size: .72rem; opacity: .85;
+               background: light-dark(#e9eff5, #121a26);
+               border-bottom: 1px solid light-dark(#dde5ee, #202a38); }
+  .cell-actions { display: flex; gap: .3rem; }
+  .cell-actions button { font-size: .72rem; padding: .15rem .55rem; }
+  textarea { width: 100%; border: 0; resize: none; padding: .7rem .8rem; font: inherit;
+             font-size: .84rem; line-height: 1.55; background: transparent; color: inherit;
+             display: block; tab-size: 4; }
+  textarea:focus { outline: none; background: light-dark(#fdfefe, #131c29); }
+  .cell-output { border-top: 1px dashed light-dark(#cdd8e3, #2a3648); padding: .6rem .8rem;
+                 display: grid; gap: .5rem; font-size: .8rem; }
+  .cell-output pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
+  .cell-output pre.error { color: light-dark(#b91c1c, #ff8a8a); }
+  .cell-output pre.result { opacity: .9; }
+  .cell-output img { max-width: 100%; border-radius: .4rem; background: #fff; }
+  .df-html { overflow-x: auto; }
+  .df-html table { border-collapse: collapse; font-size: .78rem; }
+  .df-html th, .df-html td { border: 1px solid light-dark(#d6dfe8, #2a3648); padding: .15rem .5rem; }
+  .df-html thead th { background: light-dark(#e9eff5, #121a26); }
+</style>
+</head>
+<body>
+  <header>
+    <a href="./">← 목록</a>
+    <h1 id="p-title">…</h1>
+    <span id="status" data-kind="info">준비 중…</span>
+  </header>
+  <main>
+    <aside class="panel">
+      <div id="p-progress"></div>
+      <div id="p-meta"></div>
+      <div id="p-intro"></div>
+      <ol id="steps"></ol>
+    </aside>
+    <section id="notebook">
+      <div class="nb-actions">
+        <button id="add-cell">＋ 셀 추가</button>
+        <button id="run-all">⏩ 전체 실행</button>
+        <button id="restart">🔄 커널 재시작</button>
+        <button id="reset-code">🧹 코드 초기화</button>
+      </div>
+      <div id="cells"></div>
+    </section>
+  </main>
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.js"></script>
+  <script src="problems.js"></script>
+  <script src="runtime.js"></script>
+</body>
+</html>

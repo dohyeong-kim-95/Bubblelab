@@ -76,6 +76,27 @@ test("adds browser hardening headers without replacing response metadata", () =>
   assert.equal(response.headers.get("Cache-Control"), "public, max-age=60");
 });
 
+test("test subdomain relaxes CSP for Pyodide CDN and wasm only there", () => {
+  const relaxed = applySecurityHeaders(
+    new Response("ok"),
+    new Request("https://test.bubblelab.dev/"),
+  ).headers.get("Content-Security-Policy");
+  assert.match(relaxed, /script-src [^;]*'wasm-unsafe-eval' https:\/\/cdn\.jsdelivr\.net/);
+  assert.match(relaxed, /connect-src [^;]*https:\/\/cdn\.jsdelivr\.net/);
+
+  const localRelaxed = applySecurityHeaders(
+    new Response("ok"),
+    new Request("http://localhost:8787/test/solve.html"),
+  ).headers.get("Content-Security-Policy");
+  assert.match(localRelaxed, /wasm-unsafe-eval/);
+
+  const strict = applySecurityHeaders(
+    new Response("ok"),
+    new Request("https://slop.bubblelab.dev/"),
+  ).headers.get("Content-Security-Policy");
+  assert.doesNotMatch(strict, /jsdelivr|wasm-unsafe-eval/);
+});
+
 test("admin responses are never cached or indexed", () => {
   const response = applySecurityHeaders(
     new Response(null, { status: 303, headers: { Location: "/login" } }),
