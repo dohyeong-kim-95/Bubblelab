@@ -52,7 +52,8 @@
     transition:border-color .3s;
   }
   .bar.solid{border-bottom-color:var(--line)}
-  .bar .mark{display:flex;align-items:center;gap:9px;font-weight:900;letter-spacing:-.02em;font-size:17px}
+  .bar .mark{display:flex;align-items:center;gap:9px;font-weight:900;letter-spacing:-.02em;font-size:17px;
+             background:none;border:0;padding:0;color:inherit;font-family:inherit;cursor:pointer}
   .bar .mark svg{width:26px;height:auto}
   .bar a.cta{
     font-size:13px;font-weight:700;text-decoration:none;
@@ -191,7 +192,8 @@
 <body>
 
 <div class="bar" id="bar">
-  <div class="mark">
+  <!-- 로고 탭 = 맨 위로 (완주 후엔 워드마크 페이지) — 관례형 to-top, 별도 버튼 없음 -->
+  <button class="mark" type="button" aria-label="맨 위로 이동">
     <svg viewBox="200 110 680 390" aria-hidden="true">
       <g fill="#F2661F">
         <path d="M503,470 L503,194 L578,194 L578,470 Z"/>
@@ -204,7 +206,7 @@
       </g>
     </svg>
     다온핏
-  </div>
+  </button>
   <a class="cta" href="#store">스토어 가기</a>
 </div>
 
@@ -466,7 +468,10 @@
     });
   }
 
-  if(reduce){ render(1); }
+  if(reduce){
+    render(1);
+    document.querySelector('.bar .mark').addEventListener('click', function(){ window.scrollTo(0, 0); });
+  }
   else{
     window.addEventListener('scroll', onScroll, {passive:true});
     window.addEventListener('resize', onScroll);
@@ -616,6 +621,12 @@
       }
     }, {passive:false});
     window.addEventListener('touchend', function(){ touchY = null; }, {passive:true});
+
+    // 상단 바 로고 = 맨 위로 (완주 후엔 워드마크 페이지가 맨 위)
+    document.querySelector('.bar .mark').addEventListener('click', function(){
+      cancelSnap();
+      snapTo(introDone ? stageBounds().end : 0, 'page');
+    });
   }
 
   // 고정 CTA 바 — 인트로가 끝나면 나타나고, 하단 CTA 섹션이 보이면 숨긴다
