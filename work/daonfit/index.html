@@ -435,6 +435,50 @@
     window.addEventListener('scroll', onScroll, {passive:true});
     window.addEventListener('resize', onScroll);
     onScroll();
+
+    // 인트로 중간에 멈추면 로고가 조립 중 상태로 얼어붙는다 — 멈춤을 감지해
+    // 가까운 완성 상태로 자동 스크롤(거의 시작이면 처음으로, 아니면 끝까지).
+    // 사용자 입력(휠·터치·키)이 오면 즉시 양보한다.
+    var snapTimer = null, snapping = false, snapRaf = null;
+    function stageBounds(){
+      var top = stage.offsetTop;
+      return { start: top, end: top + stage.offsetHeight - window.innerHeight };
+    }
+    function cancelSnap(){
+      if(snapRaf) cancelAnimationFrame(snapRaf);
+      snapRaf = null; snapping = false;
+      document.documentElement.style.scrollBehavior = '';
+    }
+    function snapTo(targetY){
+      var fromY = window.scrollY, dist = targetY - fromY;
+      if(Math.abs(dist) < 2) return;
+      snapping = true;
+      document.documentElement.style.scrollBehavior = 'auto';
+      var dur = clamp(Math.abs(dist) / window.innerHeight * 550, 500, 1500);
+      var t0 = null;
+      function step(ts){
+        if(!snapping) return;
+        if(t0 === null) t0 = ts;
+        var k = clamp((ts - t0) / dur, 0, 1);
+        window.scrollTo(0, fromY + dist * ease(k));
+        if(k < 1){ snapRaf = requestAnimationFrame(step); }
+        else { cancelSnap(); }
+      }
+      snapRaf = requestAnimationFrame(step);
+    }
+    function armSnap(){
+      clearTimeout(snapTimer);
+      snapTimer = setTimeout(function(){
+        var b = stageBounds();
+        var p = clamp((window.scrollY - b.start) / (b.end - b.start), 0, 1);
+        if(p <= 0.02 || p >= 0.98) return;
+        snapTo(p < 0.12 ? b.start : b.end);
+      }, 550);
+    }
+    ['wheel','touchstart','pointerdown','keydown'].forEach(function(ev){
+      window.addEventListener(ev, cancelSnap, {passive:true});
+    });
+    window.addEventListener('scroll', function(){ if(!snapping) armSnap(); }, {passive:true});
   }
 
   // 고정 CTA 바 — 인트로가 끝나면 나타나고, 하단 CTA 섹션이 보이면 숨긴다
