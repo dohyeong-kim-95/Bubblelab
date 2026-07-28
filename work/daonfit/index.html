@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <meta name="description" content="다온핏 — 좋은 것들이 다 온다. 3D프린팅으로 만드는 생활 맞춤 소품.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="다온핏 — 좋은 것들이 다 온다">
+<meta property="og:description" content="3D프린팅으로 만드는 생활 맞춤 소품. 하나하나 주문받아 당신에게 맞게 출력합니다.">
+<!-- 정식 오픈 시 실제 도메인으로 교체 -->
+<meta property="og:image" content="https://work.bubblelab.dev/daonfit/_work_assets/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
 <title>다온핏 — 좋은 것들이 다 온다</title>
 <link rel="icon" href="_work_assets/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -74,9 +82,9 @@
   }
 
   .lines{position:absolute;bottom:13vh;left:0;right:0;text-align:center;pointer-events:none;padding:0 24px}
-  .line{position:absolute;left:0;right:0;font-size:clamp(20px,5.4vw,30px);letter-spacing:-.02em;opacity:0}
-  .line em{font-style:normal;color:var(--flame)}
-  .line .sub{
+  .lines .line{position:absolute;left:0;right:0;font-size:clamp(20px,5.4vw,30px);letter-spacing:-.02em;opacity:0}
+  .lines .line em{font-style:normal;color:var(--flame)}
+  .lines .line .sub{
     display:block;margin-top:10px;font-family:'Gothic A1',sans-serif;
     font-size:13px;font-weight:400;letter-spacing:0;color:var(--ink-soft);
   }
@@ -125,17 +133,15 @@
   .card{margin-top:42px;background:var(--paper-2);border-radius:24px;padding:30px 26px}
   .card .top{display:flex;gap:18px;align-items:center}
   .photo{
-    width:76px;height:76px;border-radius:50%;flex:0 0 auto;
+    width:76px;height:76px;border-radius:50%;flex:0 0 auto;overflow:hidden;
     background:linear-gradient(150deg,var(--amber),var(--flame));
-    display:flex;align-items:center;justify-content:center;
-    color:#fff;font-size:11px;font-weight:700;text-align:center;line-height:1.4;
   }
+  .photo svg{display:block;width:100%;height:100%}
   .card .name{font-size:20px;font-weight:900;letter-spacing:-.02em}
   .card .role{margin-top:5px;font-size:13px;color:var(--ink-soft)}
   .card blockquote{margin-top:24px;padding-left:16px;border-left:2px solid var(--flame);font-size:15.5px;line-height:1.9}
   .facts{margin-top:26px;display:flex;flex-wrap:wrap;gap:8px}
   .facts li{list-style:none;font-size:12.5px;font-weight:500;background:rgba(42,24,16,.06);border-radius:999px;padding:7px 13px}
-  .editnote{margin-top:18px;font-size:12px;color:var(--ember);background:rgba(242,102,31,.08);border-radius:10px;padding:10px 12px;line-height:1.6}
 
   /* ---------- 마지막 ---------- */
   .end{text-align:center;background:var(--paper-2);border-top:1px solid var(--line)}
@@ -271,7 +277,13 @@
 
     <div class="card reveal">
       <div class="top">
-        <div class="photo">사진<br>자리</div>
+        <!-- mock 아바타 — 인계 전 실제 대표 사진으로 교체 -->
+        <div class="photo" aria-hidden="true">
+          <svg viewBox="0 0 76 76">
+            <circle cx="38" cy="29" r="13" fill="rgba(255,255,255,.92)"/>
+            <path d="M13 70c2.5-15.5 12-23 25-23s22.5 7.5 25 23Z" fill="rgba(255,255,255,.92)"/>
+          </svg>
+        </div>
         <div>
           <div class="name">정선용</div>
           <div class="role">다온핏 대표 · 설계 및 제작</div>
@@ -281,7 +293,6 @@
       <ul class="facts">
         <li>제조 현장 엔지니어</li><li>3D 설계 · FDM 출력</li><li>차량용품 전문</li><li>문의는 인스타 DM</li>
       </ul>
-      <p class="editnote">시안 메모 — 사진, 소개 문구, 태그는 실제 내용으로 교체 필요. 인용문은 임시로 채운 것.</p>
     </div>
   </div>
 </section>
@@ -300,9 +311,11 @@
 </section>
 
 <footer>
-  다온핏 DAONFIT<br>
-  로고 및 상품 사진의 권리는 다온핏에 있습니다<br>
-  <span style="opacity:.6">사업자 정보 표기 자리</span>
+  다온핏 DAONFIT · 대표 정선용<br>
+  <!-- mock 사업자 정보 — 인계 전 실제 정보로 교체 -->
+  사업자등록번호 000-00-00000 · 통신판매업신고 제0000-서울OO-0000호<br>
+  문의 인스타그램 <a href="https://www.instagram.com/daonfit/" target="_blank" rel="noopener" style="color:inherit">@daonfit</a><br>
+  로고 및 상품 사진의 권리는 다온핏에 있습니다
 </footer>
 
 <script>
