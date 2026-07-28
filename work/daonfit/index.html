@@ -358,6 +358,7 @@
   var hint  = document.getElementById('hint');
   var bar   = document.getElementById('bar');
   var L = [document.getElementById('l1'),document.getElementById('l2'),document.getElementById('l3')];
+  var introDone = false; // 완주 후엔 인트로 역재생 없음 (재생은 새로고침으로)
 
   // 조각별 출발 위치(화면 밖) — 받침이 먼저 자리잡고 팔 셋이 모여든 뒤 점이 뜬다
   // t0/t1 = 각 조각이 이동하는 스크롤 구간
@@ -417,6 +418,7 @@
     });
 
     hint.style.opacity = (1-seg(p,0,0.10)).toFixed(3);
+    if(p >= 0.999) introDone = true; // 인트로 완주 — 이후 위로는 워드마크 페이지까지만
   }
 
   var ticking = false;
@@ -487,6 +489,7 @@
         var b = stageBounds();
         var p = clamp((window.scrollY - b.start) / (b.end - b.start), 0, 1);
         if(p >= 0.98) return;
+        if(introDone){ snapTo(b.end, 'idle'); return; } // 완주 후 무대 안은 완성 상태로만
         var atAnchor = ANCHORS.some(function(a){ return Math.abs(p - a) < 0.02; });
         if(atAnchor) return;
         snapTo(b.start + snapTargetP(p) * (b.end - b.start), 'idle');
@@ -527,7 +530,8 @@
       if(dir > 0){
         for(var i = 0; i < t.length; i++) if(t[i] > y + 2) return snapTo(t[i]);
       }else{
-        for(var j = t.length - 1; j >= 0; j--) if(t[j] < y - 2) return snapTo(t[j]);
+        var floor = introDone ? stageBounds().end : 0; // 완주 후엔 워드마크 페이지가 맨 위
+        for(var j = t.length - 1; j >= 0; j--) if(t[j] < y - 2 && t[j] >= floor) return snapTo(t[j]);
       }
     }
     // 뒤로 가기는 확실한 제스처만: 위 방향 휠은 300ms 안에 누적 -80px를
