@@ -412,7 +412,7 @@
 
   function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
   function ease(t){return 1-Math.pow(1-t,3);}
-  function easeInOut(t){return t<.5 ? 4*t*t*t : 1-Math.pow(-2*t+2,3)/2;}
+  function easeInOut(t){return .5*(1-Math.cos(Math.PI*t));} // sine — 가장 완만한 가감속
   function seg(p,a,b){return clamp((p-a)/(b-a),0,1);}
   function pulse(p,a,b,c,d){
     if(p<a||p>d) return 0;
@@ -434,9 +434,10 @@
 
     glow.style.opacity = pulse(p,0.60,0.72,0.80,0.95).toFixed(3);
 
-    var w = seg(p,0.65,0.73);
+    // 워드마크는 2→3 전환 구간 대부분(0.48~0.73)에 걸쳐 천천히 떠오른다
+    var w = seg(p,0.48,0.73);
     word.style.opacity = w.toFixed(3);
-    word.style.transform = 'translateY('+((1-w)*14).toFixed(1)+'px)';
+    word.style.transform = 'translateY('+((1-w)*38).toFixed(1)+'px)';
 
     // 첫 문장은 스크롤 전(p=0)부터 보인다 — 첫 화면에 핵심 메시지 노출.
     // 각 앵커(0 / 0.45 / 0.75 / 1)에서 문장·워드마크가 깨끗한 상태가 되도록 배치.
@@ -484,12 +485,12 @@
       snapRaf = null; snapping = false;
       document.documentElement.style.scrollBehavior = '';
     }
-    function snapTo(targetY, kind){
+    function snapTo(targetY, kind, durOverride){
       var fromY = window.scrollY, dist = targetY - fromY;
       if(Math.abs(dist) < 2) return;
       snapping = true; snapKind = kind || 'page';
       document.documentElement.style.scrollBehavior = 'auto';
-      var dur = clamp(Math.abs(dist) / window.innerHeight * 650, 500, 1100);
+      var dur = durOverride || clamp(Math.abs(dist) / window.innerHeight * 650, 500, 1100);
       var t0 = null;
       function step(ts){
         if(!snapping) return;
@@ -556,10 +557,12 @@
       t.push(b.end + window.innerHeight);
       return t;
     }
+    // 순방향 페이지별 전환 시간: 조립(→2)은 길게, 워드마크 부상(→3)은 여유 있게
+    var PAGE_DUR = [0, 1250, 950, 700, 650];
     function pageStep(dir){
       var t = pageTargets(), y = window.scrollY;
       if(dir > 0){
-        for(var i = 0; i < t.length; i++) if(t[i] > y + 2) return snapTo(t[i]);
+        for(var i = 0; i < t.length; i++) if(t[i] > y + 2) return snapTo(t[i], 'page', PAGE_DUR[i]);
       }else{
         var floor = introDone ? stageBounds().end : 0; // 완주 후엔 워드마크 페이지가 맨 위
         for(var j = t.length - 1; j >= 0; j--) if(t[j] < y - 2 && t[j] >= floor) return snapTo(t[j]);
