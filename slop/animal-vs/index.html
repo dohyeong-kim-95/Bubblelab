@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>누가 더 무거울까</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+         min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+         justify-content: center; gap: .9rem; text-align: center;
+         padding: 1.5rem; box-sizing: border-box; user-select: none;
+         -webkit-user-select: none; touch-action: manipulation; }
+  h1 { font-size: 1.1rem; margin: 0; opacity: .7; }
+  #streak { font-size: .9rem; opacity: .55; font-variant-numeric: tabular-nums; }
+  #stage { display: flex; flex-direction: column; align-items: center; gap: .35rem;
+           width: min(80vw, 20rem); }
+  .card { width: 100%; box-sizing: border-box; padding: .9rem 1rem;
+          border-radius: 1.1rem; border: 2px solid currentColor;
+          display: flex; flex-direction: column; gap: .25rem; }
+  .card .name { font-size: 1.25rem; font-weight: bold; }
+  .card .val { font-size: 1.6rem; font-variant-numeric: tabular-nums; line-height: 1.1; }
+  #anchor { opacity: .75; }
+  #chal { animation: rise .3s cubic-bezier(.2,1.3,.4,1); }
+  @keyframes rise { from { transform: translateY(1.2rem); opacity: 0; } }
+  .vs { font-size: .8rem; opacity: .4; letter-spacing: .1em; }
+  #choices { display: flex; flex-direction: column; gap: .5rem; width: min(80vw, 20rem); }
+  #choices button { font: inherit; font-size: 1.05rem; padding: .85rem;
+                    border-radius: 1rem; border: 2px solid currentColor;
+                    background: none; color: inherit; cursor: pointer; }
+  #choices button:active { transform: scale(.98); }
+  #choices button:disabled { cursor: default; opacity: .35; }
+  #choices button.right { background: light-dark(#c8f0d0, #1d4429); opacity: 1; }
+  #choices button.wrong { background: light-dark(#f5cdcd, #4a1f22); opacity: 1; }
+  #msg { opacity: .75; min-height: 2.6em; white-space: pre-line; font-size: .92rem; }
+  #again { font: inherit; font-size: 1rem; padding: .6rem 1.4rem; border-radius: 1rem;
+           border: 2px solid currentColor; background: none; color: inherit;
+           cursor: pointer; display: none; }
+  #again.show { display: block; }
+  #best { opacity: .5; font-size: .85rem; min-height: 1.2em; }
+  #note { opacity: .35; font-size: .72rem; margin-top: .3rem; }
+  /* 데스크톱: 사용 영역(모바일 폭 스테이지) 밖은 톤을 낮춰 구분 */
+  body::before { content: ""; position: fixed; inset: 0; z-index: -2;
+                 background: light-dark(#dee6ee, #0a0e15); }
+  body::after { content: ""; position: fixed; top: 0; bottom: 0; left: 50%;
+                transform: translateX(-50%); width: min(100vw, 34rem); z-index: -1;
+                background: light-dark(#eef2f6, #10161f);
+                box-shadow: 0 0 1.5rem light-dark(rgba(30,50,70,.14), rgba(0,0,0,.5)); }
+</style>
+</head>
+<body>
+  <h1>🐋 누가 더 무거울까</h1>
+  <div id="streak">연속 0개</div>
+  <div id="stage">
+    <div class="card" id="anchor">
+      <span class="name" id="anchor-name">—</span>
+      <span class="val" id="anchor-val">—</span>
+    </div>
+    <div class="vs">VS</div>
+    <div class="card" id="chal">
+      <span class="name" id="chal-name">—</span>
+      <span class="val" id="chal-val">???</span>
+    </div>
+  </div>
+  <div id="choices">
+    <button type="button" data-dir="up">🔼 더 무겁다</button>
+    <button type="button" data-dir="down">🔽 더 가볍다</button>
+  </div>
+  <div id="msg"></div>
+  <button id="again" type="button">다시!</button>
+  <div id="best"></div>
+  <div id="note">성체 평균 몸무게 기준 · 종·개체에 따라 차이가 있어요</div>
+<script>
+// [이름, 성체 평균 몸무게(kg)] — 개체 편차를 감안해 페어는 항상 1.5배 이상 차이
+const ANIMALS = [
+  ["에트루리아땃쥐", 0.0018], ["꿀벌벌새", 0.002], ["뒤영벌박쥐", 0.002],
+  ["벌새", 0.004], ["사마귀", 0.005], ["청개구리", 0.008], ["집박쥐", 0.008],
+  ["박새", 0.018], ["생쥐", 0.02], ["카나리아", 0.02], ["참새", 0.03],
+  ["사랑앵무", 0.035], ["종달새", 0.04], ["도마뱀붙이", 0.05],
+  ["딱따구리", 0.07], ["찌르레기", 0.08], ["두더지", 0.09],
+  ["다람쥐", 0.1], ["카멜레온", 0.1], ["골든햄스터", 0.13],
+  ["슈가글라이더", 0.13], ["두꺼비", 0.2], ["까치", 0.22],
+  ["청설모", 0.28], ["시궁쥐", 0.3], ["비둘기", 0.35], ["족제비", 0.35],
+  ["황소개구리", 0.5], ["까마귀", 0.5], ["큰부리새", 0.6], ["올빼미", 0.6],
+  ["친칠라", 0.6], ["미어캣", 0.73], ["고슴도치", 0.8], ["기니피그", 0.9],
+  ["갈매기", 0.9], ["다람쥐원숭이", 0.9], ["프레리도그", 1.0], ["매", 1.0],
+  ["청둥오리", 1.1], ["페럿", 1.2], ["사막여우", 1.2], ["슬로로리스", 1.2],
+  ["몽구스", 1.5], ["담비", 1.5], ["오리너구리", 1.5], ["토끼", 2.0],
+  ["여우원숭이", 2.2], ["닭", 2.5], ["수리부엉이", 2.6], ["플라밍고", 3.0],
+  ["바닷가재", 3.0], ["북극여우", 3.5], ["황새", 3.5], ["삵", 4.0],
+  ["공작", 4.5], ["아르마딜로", 4.5], ["집고양이", 4.5], ["나무늘보", 4.5],
+  ["거위", 5.0], ["킹크랩", 5.0], ["레서판다", 5.0], ["젠투펭귄", 5.5],
+  ["라쿤", 5.5], ["참수리", 6.0], ["긴팔원숭이", 6.0], ["여우", 6.5],
+  ["펠리컨", 7.0], ["붉은털원숭이", 7.7], ["수달", 8.0], ["두루미", 8.0],
+  ["칠면조", 8.0], ["재칼", 8.0], ["태즈메이니아데블", 8.0], ["코알라", 8.5],
+  ["오소리", 9.0], ["비글", 10.0], ["고니", 11.0], ["콘도르", 11.0],
+  ["오셀롯", 12.0], ["서벌", 12.0], ["코요테", 13.0], ["울버린", 14.0],
+  ["왈라비", 15.0], ["문어", 15.0], ["천산갑", 15.0], ["딩고", 15.0],
+  ["카라칼", 15.0], ["비버", 20.0], ["스라소니", 20.0],
+  ["아프리카들개", 22.0], ["가젤", 25.0], ["개코원숭이", 25.0],
+  ["맨드릴", 25.0], ["웜뱃", 26.0], ["해달", 27.0], ["황제펭귄", 30.0],
+  ["골든리트리버", 30.0], ["자이언트아르마딜로", 30.0], ["개미핥기", 30.0],
+  ["늑대", 40.0], ["설표", 40.0], ["침팬지", 45.0], ["임팔라", 55.0],
+  ["카피바라", 55.0], ["치타", 55.0], ["하이에나", 55.0], ["염소", 55.0],
+  ["표범", 60.0], ["인간", 62.0], ["캥거루", 65.0], ["알파카", 65.0],
+  ["퓨마", 68.0], ["흰꼬리사슴", 70.0], ["아나콘다", 70.0],
+  ["오랑우탄", 75.0], ["비단뱀", 75.0], ["양", 80.0],
+  ["코모도왕도마뱀", 80.0], ["순록", 90.0], ["아이벡스", 90.0],
+  ["자이언트판다", 100.0], ["재규어", 100.0], ["타조", 110.0],
+  ["돼지", 120.0], ["바다표범", 130.0], ["흑곰", 150.0], ["라마", 150.0],
+  ["고릴라", 160.0], ["사자", 190.0], ["큰돌고래", 200.0],
+  ["대왕오징어", 200.0], ["호랑이", 220.0], ["참다랑어", 250.0],
+  ["당나귀", 250.0], ["코끼리거북", 250.0], ["얼룩말", 300.0],
+  ["사향소", 300.0], ["엘크", 320.0], ["바다사자", 350.0], ["듀공", 400.0],
+  ["불곰", 400.0], ["무스", 450.0], ["북극곰", 450.0], ["매너티", 480.0],
+  ["말", 500.0], ["낙타", 500.0], ["나일악어", 500.0], ["야크", 500.0],
+  ["장수거북", 550.0], ["소", 700.0], ["들소", 700.0], ["물소", 800.0],
+  ["아메리카들소", 900.0], ["개복치", 1000.0], ["바다악어", 1000.0],
+  ["백상아리", 1100.0], ["검은코뿔소", 1100.0], ["기린", 1200.0],
+  ["바다코끼리", 1200.0], ["벨루가", 1500.0], ["하마", 1500.0],
+  ["일각고래", 1600.0], ["흰코뿔소", 2300.0], ["코끼리물범", 2500.0],
+  ["인도코끼리", 4000.0], ["아프리카코끼리", 5000.0], ["범고래", 5500.0],
+  ["고래상어", 11000.0], ["혹등고래", 30000.0], ["귀신고래", 30000.0],
+  ["향유고래", 40000.0], ["참고래", 70000.0], ["북극고래", 80000.0],
+  ["대왕고래", 150000.0],
+].sort((a, b) => a[1] - b[1]);
+
+const streakEl = document.getElementById("streak");
+const anchorName = document.getElementById("anchor-name");
+const anchorVal = document.getElementById("anchor-val");
+const chalCard = document.getElementById("chal");
+const chalName = document.getElementById("chal-name");
+const chalVal = document.getElementById("chal-val");
+const choices = document.getElementById("choices");
+const msg = document.getElementById("msg");
+const again = document.getElementById("again");
+const bestEl = document.getElementById("best");
+
+let streak = 0;
+let best = null;
+let locked = false;
+let anchor = null;
+let chal = null;
+const recent = []; // 최근 출제 (반복 방지)
+
+window.blWeekly = { game: "animal-vs", dir: "max", fmt: (v) => v + "개 연속" };
+window.blShareText = () =>
+  `동물 몸무게 대결 ${best ?? streak}개 연속 정답! 도전해보세요`;
+
+// 2g부터 150t까지 다루므로 단위를 g·kg·t로 갈아 끼운다
+function fmtW(kg) {
+  if (kg >= 1000) {
+    const t = kg / 1000;
+    return (t >= 10 ? Math.round(t) : +t.toFixed(1)) + " t";
+  }
+  if (kg >= 1) {
+    return (kg >= 100 ? Math.round(kg) : +kg.toFixed(1)) + " kg";
+  }
+  const g = kg * 1000;
+  return (g >= 10 ? Math.round(g) : +g.toFixed(1)) + " g";
+}
+
+// 연속 정답이 쌓일수록 두 동물의 몸무게 차이를 좁힌다.
+// 1.5배 미만은 개체차로 뒤집힐 수 있어 아예 출제하지 않는다.
+const minRatio = (s) => (s < 5 ? 6 : s < 15 ? 3 : s < 30 ? 2 : 1.5);
+
+const pickFrom = (list) => list[Math.floor(Math.random() * list.length)];
+
+// 도전자를 고른다. 방향(무겁다/가볍다)을 먼저 정해 50:50을 유지한다 —
+// 그러지 않으면 대왕고래 같은 극단값이 기준일 때 답이 뻔해진다.
+function pickChallenger(base) {
+  const r = minRatio(streak);
+  const fresh = (a) => a !== base && !recent.includes(a[0]);
+  const heavier = ANIMALS.filter((a) => fresh(a) && a[1] / base[1] >= r);
+  const lighter = ANIMALS.filter((a) => fresh(a) && base[1] / a[1] >= r);
+  if (!heavier.length && !lighter.length) return null;
+  const up = !lighter.length || (heavier.length && Math.random() < 0.5);
+  return pickFrom(up ? heavier : lighter);
+}
+
+function round() {
+  locked = false;
+  streakEl.textContent = `연속 ${streak}개`;
+  chal = pickChallenger(anchor);
+  if (!chal) { // 후보가 마르면 기준을 새로 뽑는다 (사실상 발생하지 않음)
+    recent.length = 0;
+    anchor = pickFrom(ANIMALS);
+    chal = pickChallenger(anchor);
+  }
+  recent.push(chal[0]);
+  if (recent.length > 25) recent.shift();
+
+  anchorName.textContent = anchor[0];
+  anchorVal.textContent = fmtW(anchor[1]);
+  chalName.textContent = chal[0];
+  chalVal.textContent = "???";
+  chalCard.style.animation = "none";
+  void chalCard.offsetWidth; // 리플로우로 등장 애니메이션 재생
+  chalCard.style.animation = "";
+  for (const b of choices.children) {
+    b.disabled = false;
+    b.classList.remove("right", "wrong");
+  }
+}
+
+// 가려져 있던 몸무게를 0부터 굴려 올린다 — 이 장르의 핵심 연출
+function countUp(target) {
+  const dur = 600;
+  const t0 = performance.now();
+  (function step(now) {
+    const p = Math.min(1, (now - t0) / dur);
+    const eased = 1 - Math.pow(1 - p, 3);
+    chalVal.textContent = fmtW(target * eased);
+    if (p < 1) requestAnimationFrame(step);
+    else chalVal.textContent = fmtW(target);
+  })(t0);
+}
+
+function pick(dir) {
+  if (locked) return;
+  locked = true;
+  const correct = chal[1] > anchor[1] ? "up" : "down";
+  countUp(chal[1]);
+  for (const b of choices.children) {
+    b.disabled = true;
+    if (b.dataset.dir === dir) b.classList.add(dir === correct ? "right" : "wrong");
+  }
+
+  if (dir === correct) {
+    streak++;
+    setTimeout(() => { anchor = chal; round(); }, 800);
+    return;
+  }
+  // 게임 오버
+  const grade =
+    streak >= 40 ? "🐋 동물학자세요?" :
+    streak >= 25 ? "🦁 야생의 감각" :
+    streak >= 15 ? "🔥 대단한데요" :
+    streak >= 7  ? "🙂 나쁘지 않아요" : "🫠 동물원 다녀오세요…";
+  msg.textContent =
+    `${chal[0]} ${fmtW(chal[1])} · ${anchor[0]} ${fmtW(anchor[1])}\n연속 ${streak}개 ${grade}`;
+  if (best === null || streak > best) {
+    best = streak;
+    bestEl.textContent = `최고 기록: 연속 ${best}개`;
+  }
+  if (streak > 0) window.blWeeklyReport?.(streak);
+  again.classList.add("show");
+}
+
+choices.addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (b) pick(b.dataset.dir);
+});
+
+again.addEventListener("click", () => {
+  streak = 0;
+  msg.textContent = "";
+  again.classList.remove("show");
+  recent.length = 0;
+  anchor = pickFrom(ANIMALS);
+  round();
+});
+
+anchor = pickFrom(ANIMALS);
+round();
+</script>
+<script defer src="/_shared/records.js"></script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>

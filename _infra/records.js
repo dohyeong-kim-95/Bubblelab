@@ -20,6 +20,7 @@ const SUG_DAILY = 5;   // 방문자당 하루 제출 수
 // 터무니없는 점수 등록 방지). 등록 안 된 게임의 제출은 거절된다.
 export const GAMES = {
   "10sec":      { dir: "min", min: 0, max: 60 },        // 10초 오차(초)
+  "animal-vs":  { dir: "max", min: 0, max: 1000 },      // 몸무게 대결 연속 정답 수
   beer:         { dir: "min", min: 0, max: 501 },       // 500cc 오차(cc)+시간 타이브레이커
   "2048":       { dir: "max", min: 0, max: 1000000 },   // 점수
   fruitmerge:   { dir: "max", min: 0, max: 1000000000 }, // 합체 점수
