@@ -454,7 +454,7 @@
       if(Math.abs(dist) < 2) return;
       snapping = true;
       document.documentElement.style.scrollBehavior = 'auto';
-      var dur = clamp(Math.abs(dist) / window.innerHeight * 550, 500, 1500);
+      var dur = clamp(Math.abs(dist) / window.innerHeight * 450, 260, 850);
       var t0 = null;
       function step(ts){
         if(!snapping) return;
@@ -485,7 +485,7 @@
         var atAnchor = ANCHORS.some(function(a){ return Math.abs(p - a) < 0.02; });
         if(atAnchor) return;
         snapTo(b.start + snapTargetP(p) * (b.end - b.start));
-      }, 550);
+      }, 180);
     }
     ['wheel','touchstart','pointerdown','keydown'].forEach(function(ev){
       window.addEventListener(ev, cancelSnap, {passive:true});
