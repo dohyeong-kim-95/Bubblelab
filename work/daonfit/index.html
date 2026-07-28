@@ -109,7 +109,10 @@
   .meaning{border-top:1px solid var(--line)}
   .glyphs{margin-top:44px;display:flex;flex-direction:column;gap:18px}
   .glyph{display:flex;gap:20px;align-items:flex-start;padding:26px 24px;border-radius:20px;background:var(--paper-2)}
-  .glyph .ch{font-size:42px;font-weight:700;line-height:.95;color:var(--flame);flex:0 0 96px}
+  .glyph .side{flex:0 0 96px;display:flex;flex-direction:column;gap:16px}
+  .glyph .ch{font-size:42px;font-weight:700;line-height:.95;color:var(--flame)}
+  .glyph .mini{width:78px;height:auto;overflow:visible}
+  .glyph .mini .dim{opacity:.16}
   .glyph h3{font-size:16px;font-weight:700;letter-spacing:-.01em}
   .glyph p{margin-top:8px;font-size:14.5px;line-height:1.8;color:var(--ink-soft)}
   .glyph .tag{
@@ -248,7 +251,21 @@
 
     <div class="glyphs">
       <div class="glyph reveal">
-        <div class="ch serif">다온</div>
+        <div class="side">
+          <div class="ch serif">다온</div>
+          <!-- 세 갈래 강조 — 모여드는 좋은 것들 -->
+          <svg class="mini" viewBox="200 110 680 390" aria-hidden="true">
+            <g fill="var(--flame)" class="dim"><rect x="285" y="405" width="515" height="85"/></g>
+            <g fill="var(--dot)" class="dim">
+              <circle cx="712" cy="155" r="36"/><circle cx="248" cy="310" r="34"/><circle cx="805" cy="345" r="34"/>
+            </g>
+            <g fill="var(--flame)">
+              <path d="M497,470 L497,230 L541,190 L585,230 L585,470 Z"/>
+              <path d="M497,470 L497,230 L541,190 L585,230 L585,470 Z" transform="rotate(48 541 470)"/>
+              <path d="M497,470 L497,230 L541,190 L585,230 L585,470 Z" transform="rotate(-48 541 470)"/>
+            </g>
+          </svg>
+        </div>
         <div>
           <h3>좋은 모든 것이 다 온다</h3>
           <p>한자어가 아닌 순우리말입니다. 사방에 흩어져 있던 좋은 것들이 한자리로 모여든다는 뜻. 로고에서 세 갈래가 한 받침으로 모이는 이유이기도 합니다.</p>
@@ -256,7 +273,21 @@
         </div>
       </div>
       <div class="glyph reveal">
-        <div class="ch serif">핏</div>
+        <div class="side">
+          <div class="ch serif">핏</div>
+          <!-- 받침 강조 — 꼭 맞게 받아주는 자리 -->
+          <svg class="mini" viewBox="200 110 680 390" aria-hidden="true">
+            <g fill="var(--flame)" class="dim">
+              <path d="M497,470 L497,230 L541,190 L585,230 L585,470 Z"/>
+              <path d="M497,470 L497,230 L541,190 L585,230 L585,470 Z" transform="rotate(48 541 470)"/>
+              <path d="M497,470 L497,230 L541,190 L585,230 L585,470 Z" transform="rotate(-48 541 470)"/>
+            </g>
+            <g fill="var(--dot)" class="dim">
+              <circle cx="712" cy="155" r="36"/><circle cx="248" cy="310" r="34"/><circle cx="805" cy="345" r="34"/>
+            </g>
+            <g fill="var(--flame)"><rect x="285" y="405" width="515" height="85"/></g>
+          </svg>
+        </div>
         <div>
           <h3>당신에게 꼭 맞게</h3>
           <p>좋은 물건도 내 차, 내 생활에 안 맞으면 소용이 없죠. 다온핏은 만들어 두고 파는 게 아니라, 주문을 받은 뒤 그 사람에게 맞춰 출력합니다.</p>
