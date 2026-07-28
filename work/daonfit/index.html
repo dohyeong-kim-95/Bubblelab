@@ -17,7 +17,7 @@
 <link rel="icon" href="_work_assets/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Gothic+A1:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Gothic+A1:wght@400;700;900&display=swap" rel="stylesheet">
 <style>
   :root{
     --paper:#FBF3E4;
@@ -62,9 +62,9 @@
   .bar a.cta:hover{background:var(--ember)}
 
   /* ---------- 무대 ---------- */
-  .stage{height:440vh;position:relative}
+  .stage{height:300vh;position:relative}
   .stage-inner{
-    position:sticky;top:0;height:100vh;
+    position:sticky;top:0;height:100vh;height:100dvh;
     display:flex;flex-direction:column;align-items:center;justify-content:center;
     overflow:hidden;
   }
@@ -77,11 +77,11 @@
   .word{margin-top:22px;text-align:center;opacity:0}
   .word .ko{font-size:clamp(30px,9vw,44px);font-weight:900;letter-spacing:-.03em;line-height:1}
   .word .en{
-    margin-top:10px;font-size:11px;font-weight:500;
+    margin-top:10px;font-size:11px;font-weight:400;
     letter-spacing:.44em;color:var(--ink-soft);text-indent:.44em;
   }
 
-  .lines{position:absolute;bottom:13vh;left:0;right:0;text-align:center;pointer-events:none;padding:0 24px}
+  .lines{position:absolute;bottom:17vh;left:0;right:0;text-align:center;pointer-events:none;padding:0 24px}
   .lines .line{position:absolute;left:0;right:0;font-size:clamp(20px,5.4vw,30px);letter-spacing:-.02em;opacity:0}
   .lines .line em{font-style:normal;color:var(--flame)}
   .lines .line .sub{
@@ -141,12 +141,14 @@
   .card .role{margin-top:5px;font-size:13px;color:var(--ink-soft)}
   .card blockquote{margin-top:24px;padding-left:16px;border-left:2px solid var(--flame);font-size:15.5px;line-height:1.9}
   .facts{margin-top:26px;display:flex;flex-wrap:wrap;gap:8px}
-  .facts li{list-style:none;font-size:12.5px;font-weight:500;background:rgba(42,24,16,.06);border-radius:999px;padding:7px 13px}
+  .facts li{list-style:none;font-size:12.5px;font-weight:400;background:rgba(42,24,16,.06);border-radius:999px;padding:7px 13px}
 
   /* ---------- 마지막 ---------- */
   .end{text-align:center;background:var(--paper-2);border-top:1px solid var(--line)}
   .end h2{max-width:14em;margin:0 auto}
-  .btns{margin-top:34px;display:flex;flex-direction:column;gap:11px;max-width:320px;margin-left:auto;margin-right:auto}
+  .proof{margin-top:26px;font-size:13px;font-weight:700;color:var(--ink-soft)}
+  .proof .star{color:var(--flame)}
+  .btns{margin-top:16px;display:flex;flex-direction:column;gap:11px;max-width:320px;margin-left:auto;margin-right:auto}
   .btn{display:block;text-decoration:none;text-align:center;padding:16px;border-radius:999px;font-size:15px;font-weight:700;transition:transform .15s,background .2s}
   .btn:active{transform:scale(.98)}
   .btn.fill{background:var(--flame);color:var(--paper)}
@@ -155,6 +157,27 @@
   .btn.line:hover{background:var(--ink);color:var(--paper)}
 
   footer{padding:34px 22px 46px;text-align:center;font-size:12px;color:var(--ink-soft);line-height:1.9;border-top:1px solid var(--line)}
+
+  /* ---------- 고정 CTA 바 (인트로 이후 노출) ---------- */
+  .dock{
+    position:fixed;left:0;right:0;bottom:0;z-index:40;
+    display:flex;align-items:center;justify-content:center;gap:14px;
+    padding:10px 16px calc(10px + env(safe-area-inset-bottom));
+    background:rgba(251,243,228,.92);backdrop-filter:blur(10px);
+    border-top:1px solid var(--line);
+    transform:translateY(110%);visibility:hidden;
+    transition:transform .35s cubic-bezier(.2,.7,.3,1),visibility 0s .35s;
+  }
+  .dock.show{transform:none;visibility:visible;transition-delay:0s}
+  .dock .dock-note{font-size:12px;font-weight:700;color:var(--ink-soft);white-space:nowrap}
+  .dock .dock-note .star{color:var(--flame)}
+  .dock .dock-btn{
+    text-decoration:none;font-size:14px;font-weight:700;white-space:nowrap;
+    color:var(--paper);background:var(--flame);padding:11px 22px;border-radius:999px;
+    transition:background .2s;
+  }
+  .dock .dock-btn:hover{background:var(--ember)}
+  @media (prefers-reduced-motion:reduce){.dock{transition:none}}
 
   @media (prefers-reduced-motion:reduce){
     .reveal{opacity:1;transform:none;transition:none}
@@ -303,12 +326,18 @@
     <p class="eyebrow reveal">다음</p>
     <h2 class="reveal serif">당신에게 맞는 것도<br>만들 수 있습니다</h2>
     <p class="lead reveal">지금 파는 물건 중에 없다면, 말만 걸어주세요.</p>
+    <p class="proof reveal">네이버 스마트스토어 구매 만족도 <span class="star">★ 5.0</span></p>
     <div class="btns">
-      <a class="btn fill reveal" href="https://smartstore.naver.com/samyong_2" target="_blank" rel="noopener">네이버 스마트스토어에서 보기</a>
+      <a class="btn fill reveal" href="https://smartstore.naver.com/samyong_2?utm_source=daonfit-landing&utm_medium=referral&utm_campaign=brand" target="_blank" rel="noopener">네이버 스마트스토어에서 보기</a>
       <a class="btn line reveal" href="https://www.instagram.com/daonfit/" target="_blank" rel="noopener">인스타그램 DM 보내기</a>
     </div>
   </div>
 </section>
+
+<div class="dock" id="dock" aria-hidden="true">
+  <span class="dock-note">구매 만족도 <span class="star">★ 5.0</span></span>
+  <a class="dock-btn" href="https://smartstore.naver.com/samyong_2?utm_source=daonfit-landing&utm_medium=referral&utm_campaign=brand-dock" target="_blank" rel="noopener">스마트스토어에서 보기</a>
+</div>
 
 <footer>
   다온핏 DAONFIT · 대표 정선용<br>
@@ -376,7 +405,8 @@
     word.style.opacity = w.toFixed(3);
     word.style.transform = 'translateY('+((1-w)*14).toFixed(1)+'px)';
 
-    var o = [ pulse(p,0.00,0.06,0.26,0.36),
+    // 첫 문장은 스크롤 전(p=0)부터 보인다 — 첫 화면에 핵심 메시지 노출
+    var o = [ pulse(p,-1,0.00,0.26,0.36),
               pulse(p,0.38,0.46,0.64,0.72),
               pulse(p,0.76,0.84,0.97,1.00) ];
     L.forEach(function(el,i){
@@ -406,6 +436,26 @@
     window.addEventListener('resize', onScroll);
     onScroll();
   }
+
+  // 고정 CTA 바 — 인트로가 끝나면 나타나고, 하단 CTA 섹션이 보이면 숨긴다
+  var dock = document.getElementById('dock');
+  var storeSec = document.getElementById('store');
+  var dockTick = false;
+  function onDockScroll(){
+    if(dockTick) return;
+    dockTick = true;
+    requestAnimationFrame(function(){
+      var stageDone = stage.getBoundingClientRect().bottom <= window.innerHeight;
+      var storeVisible = storeSec.getBoundingClientRect().top < window.innerHeight;
+      var show = stageDone && !storeVisible;
+      dock.classList.toggle('show', show);
+      dock.setAttribute('aria-hidden', show ? 'false' : 'true');
+      dockTick = false;
+    });
+  }
+  window.addEventListener('scroll', onDockScroll, {passive:true});
+  window.addEventListener('resize', onDockScroll);
+  onDockScroll();
 
   var io = new IntersectionObserver(function(es){
     es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} });
