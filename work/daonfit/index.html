@@ -1,122 +1,407 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<meta name="description" content="다온핏 — 좋은 것들이 모여, 너에게 꼭 맞게. 3D프린팅으로 만드는 생활 맞춤 소품.">
-<title>다온핏 DAONFIT — 좋은 것들이 모여, 너에게 꼭 맞게</title>
+<meta name="description" content="다온핏 — 좋은 것들이 다 온다. 3D프린팅으로 만드는 생활 맞춤 소품.">
+<title>다온핏 — 좋은 것들이 다 온다</title>
 <link rel="icon" href="_work_assets/logo.png">
-<link rel="stylesheet" href="daonfit.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Gothic+A1:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FBF3E4;
+    --paper-2:#F5E9D2;
+    --ink:#2A1810;
+    --ink-soft:#6B5645;
+    --flame:#F2661F;
+    --ember:#C4551A;
+    --dot:#F7EFC4;
+    --amber:#FFC94A;
+    --line:rgba(42,24,16,.14);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Gothic A1','Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  .serif{font-family:'Gowun Batang','Nanum Myeongjo',serif}
+
+  /* ---------- 상단 바 ---------- */
+  .bar{
+    position:fixed;top:0;left:0;right:0;z-index:50;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:13px 20px;
+    background:rgba(251,243,228,.85);
+    backdrop-filter:blur(10px);
+    border-bottom:1px solid transparent;
+    transition:border-color .3s;
+  }
+  .bar.solid{border-bottom-color:var(--line)}
+  .bar .mark{display:flex;align-items:center;gap:9px;font-weight:900;letter-spacing:-.02em;font-size:17px}
+  .bar .mark svg{width:26px;height:auto}
+  .bar a.cta{
+    font-size:13px;font-weight:700;text-decoration:none;
+    color:var(--paper);background:var(--flame);
+    padding:9px 16px;border-radius:999px;transition:background .2s;
+  }
+  .bar a.cta:hover{background:var(--ember)}
+
+  /* ---------- 무대 ---------- */
+  .stage{height:440vh;position:relative}
+  .stage-inner{
+    position:sticky;top:0;height:100vh;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    overflow:hidden;
+  }
+  .glow{
+    position:absolute;width:130vmin;height:130vmin;border-radius:50%;
+    background:radial-gradient(circle,rgba(242,102,31,.22) 0%,rgba(242,102,31,0) 60%);
+    opacity:0;pointer-events:none;
+  }
+  #logo{width:min(74vw,340px);height:auto;overflow:visible}
+  .word{margin-top:22px;text-align:center;opacity:0}
+  .word .ko{font-size:clamp(30px,9vw,44px);font-weight:900;letter-spacing:-.03em;line-height:1}
+  .word .en{
+    margin-top:10px;font-size:11px;font-weight:500;
+    letter-spacing:.44em;color:var(--ink-soft);text-indent:.44em;
+  }
+
+  .lines{position:absolute;bottom:13vh;left:0;right:0;text-align:center;pointer-events:none;padding:0 24px}
+  .line{position:absolute;left:0;right:0;font-size:clamp(20px,5.4vw,30px);letter-spacing:-.02em;opacity:0}
+  .line em{font-style:normal;color:var(--flame)}
+  .line .sub{
+    display:block;margin-top:10px;font-family:'Gothic A1',sans-serif;
+    font-size:13px;font-weight:400;letter-spacing:0;color:var(--ink-soft);
+  }
+  .hint{
+    position:absolute;bottom:34px;left:50%;transform:translateX(-50%);
+    font-size:11px;letter-spacing:.24em;color:var(--ink-soft);
+    display:flex;flex-direction:column;align-items:center;gap:7px;
+  }
+  .hint span{width:1px;height:26px;background:linear-gradient(var(--ink-soft),transparent);animation:drop 1.9s infinite}
+  @keyframes drop{0%{transform:scaleY(0);transform-origin:top}50%{transform:scaleY(1);transform-origin:top}51%{transform-origin:bottom}100%{transform:scaleY(0);transform-origin:bottom}}
+
+  /* ---------- 공통 ---------- */
+  section{padding:104px 22px}
+  .wrap{max-width:660px;margin:0 auto}
+  .eyebrow{font-size:11px;font-weight:700;letter-spacing:.28em;color:var(--flame);margin-bottom:18px}
+  h2{font-size:clamp(26px,7vw,38px);font-weight:700;letter-spacing:-.03em;line-height:1.34}
+  .lead{margin-top:20px;font-size:16px;line-height:1.85;color:var(--ink-soft)}
+  .reveal{opacity:0;transform:translateY(26px);transition:opacity .8s ease,transform .8s cubic-bezier(.2,.7,.3,1)}
+  .reveal.in{opacity:1;transform:none}
+
+  /* ---------- 이름의 뜻 ---------- */
+  .meaning{border-top:1px solid var(--line)}
+  .glyphs{margin-top:44px;display:flex;flex-direction:column;gap:18px}
+  .glyph{display:flex;gap:20px;align-items:flex-start;padding:26px 24px;border-radius:20px;background:var(--paper-2)}
+  .glyph .ch{font-size:42px;font-weight:700;line-height:.95;color:var(--flame);flex:0 0 auto;min-width:60px}
+  .glyph h3{font-size:16px;font-weight:700;letter-spacing:-.01em}
+  .glyph p{margin-top:8px;font-size:14.5px;line-height:1.8;color:var(--ink-soft)}
+  .glyph .tag{
+    display:inline-block;margin-top:12px;font-size:11px;font-weight:700;letter-spacing:.08em;
+    color:var(--ember);border:1px solid rgba(196,85,26,.32);border-radius:999px;padding:4px 10px;
+  }
+
+  /* ---------- 만드는 방식 ---------- */
+  .how{background:var(--ink);color:var(--paper)}
+  .how .eyebrow{color:var(--amber)}
+  .how .lead{color:rgba(251,243,228,.66)}
+  .steps{margin-top:46px}
+  .step{display:flex;gap:22px;padding:24px 0;border-top:1px solid rgba(251,243,228,.16)}
+  .step:last-child{border-bottom:1px solid rgba(251,243,228,.16)}
+  .step .num{font-size:12px;font-weight:700;letter-spacing:.1em;color:var(--amber);flex:0 0 34px;padding-top:4px}
+  .step h3{font-size:17px;font-weight:700;letter-spacing:-.01em}
+  .step p{margin-top:7px;font-size:14px;line-height:1.75;color:rgba(251,243,228,.62)}
+
+  /* ---------- 만드는 사람 ---------- */
+  .maker{border-top:1px solid var(--line)}
+  .card{margin-top:42px;background:var(--paper-2);border-radius:24px;padding:30px 26px}
+  .card .top{display:flex;gap:18px;align-items:center}
+  .photo{
+    width:76px;height:76px;border-radius:50%;flex:0 0 auto;
+    background:linear-gradient(150deg,var(--amber),var(--flame));
+    display:flex;align-items:center;justify-content:center;
+    color:#fff;font-size:11px;font-weight:700;text-align:center;line-height:1.4;
+  }
+  .card .name{font-size:20px;font-weight:900;letter-spacing:-.02em}
+  .card .role{margin-top:5px;font-size:13px;color:var(--ink-soft)}
+  .card blockquote{margin-top:24px;padding-left:16px;border-left:2px solid var(--flame);font-size:15.5px;line-height:1.9}
+  .facts{margin-top:26px;display:flex;flex-wrap:wrap;gap:8px}
+  .facts li{list-style:none;font-size:12.5px;font-weight:500;background:rgba(42,24,16,.06);border-radius:999px;padding:7px 13px}
+  .editnote{margin-top:18px;font-size:12px;color:var(--ember);background:rgba(242,102,31,.08);border-radius:10px;padding:10px 12px;line-height:1.6}
+
+  /* ---------- 마지막 ---------- */
+  .end{text-align:center;background:var(--paper-2);border-top:1px solid var(--line)}
+  .end h2{max-width:14em;margin:0 auto}
+  .btns{margin-top:34px;display:flex;flex-direction:column;gap:11px;max-width:320px;margin-left:auto;margin-right:auto}
+  .btn{display:block;text-decoration:none;text-align:center;padding:16px;border-radius:999px;font-size:15px;font-weight:700;transition:transform .15s,background .2s}
+  .btn:active{transform:scale(.98)}
+  .btn.fill{background:var(--flame);color:var(--paper)}
+  .btn.fill:hover{background:var(--ember)}
+  .btn.line{border:1.5px solid var(--ink);color:var(--ink)}
+  .btn.line:hover{background:var(--ink);color:var(--paper)}
+
+  footer{padding:34px 22px 46px;text-align:center;font-size:12px;color:var(--ink-soft);line-height:1.9;border-top:1px solid var(--line)}
+
+  @media (prefers-reduced-motion:reduce){
+    .reveal{opacity:1;transform:none;transition:none}
+    .hint{display:none}
+  }
+</style>
 </head>
 <body>
 
-<header>
-  <div class="wrap nav">
-    <img src="_work_assets/logo.png" alt="">
-    <b>다온핏</b>
-    <a class="store-btn" href="https://smartstore.naver.com/samyong_2" target="_blank" rel="noopener">스토어 가기</a>
+<div class="bar" id="bar">
+  <div class="mark">
+    <svg viewBox="200 110 680 390" aria-hidden="true">
+      <g fill="#F2661F">
+        <path d="M497,470 L497,230 L541,190 L585,230 L585,470 Z"/>
+        <path d="M497,470 L497,230 L541,190 L585,230 L585,470 Z" transform="rotate(48 541 470)"/>
+        <path d="M497,470 L497,230 L541,190 L585,230 L585,470 Z" transform="rotate(-48 541 470)"/>
+        <rect x="285" y="405" width="515" height="85"/>
+      </g>
+      <g fill="#F7EFC4">
+        <circle cx="712" cy="155" r="36"/><circle cx="248" cy="310" r="34"/><circle cx="805" cy="345" r="34"/>
+      </g>
+    </svg>
+    다온핏
   </div>
-</header>
+  <a class="cta" href="#store">스토어 가기</a>
+</div>
 
-<div class="hero">
+<!-- ================= 무대 ================= -->
+<div class="stage" id="stage">
+  <div class="stage-inner">
+    <div class="glow" id="glow"></div>
+
+    <svg id="logo" viewBox="200 110 680 390" aria-label="다온핏 로고">
+      <g fill="var(--flame)">
+        <path class="pc" data-i="0" d="M285,405 H800 V490 H285 Z"/>
+        <path class="pc" data-i="1" d="M497,470 L497,230 L541,190 L585,230 L585,470 Z"/>
+        <path class="pc" data-i="2" d="M497,470 L497,230 L541,190 L585,230 L585,470 Z" transform="rotate(48 541 470)"/>
+        <path class="pc" data-i="3" d="M497,470 L497,230 L541,190 L585,230 L585,470 Z" transform="rotate(-48 541 470)"/>
+      </g>
+      <g fill="var(--dot)">
+        <circle class="pc" data-i="4" cx="712" cy="155" r="36"/>
+        <circle class="pc" data-i="5" cx="248" cy="310" r="34"/>
+        <circle class="pc" data-i="6" cx="805" cy="345" r="34"/>
+      </g>
+    </svg>
+
+    <div class="word" id="word">
+      <div class="ko">다온핏</div>
+      <div class="en">DAONFIT</div>
+    </div>
+
+    <div class="lines">
+      <p class="line serif" id="l1">흩어져 있던 좋은 것들이</p>
+      <p class="line serif" id="l2"><em>다 온다</em><span class="sub">순우리말 '다온' — 좋은 모든 것이 다 온다</span></p>
+      <p class="line serif" id="l3">그리고 <em>너에게 꼭 맞게</em><span class="sub">핏 — 하나하나 주문받아 맞춰 만듭니다</span></p>
+    </div>
+
+    <div class="hint" id="hint">SCROLL<span></span></div>
+  </div>
+</div>
+
+<!-- ================= 이름의 뜻 ================= -->
+<section class="meaning">
   <div class="wrap">
-    <img src="_work_assets/logo.png" alt="다온핏 로고">
-    <h1>좋은 것들이 모여,<br><em>너에게 꼭 맞게</em></h1>
-    <p>다온핏은 생활 속 불편을 3D프린팅으로 해결하는 맞춤 소품 브랜드입니다.
-       하나하나 주문받아 정성껏 출력해 보내드려요.</p>
-    <div class="hero-actions">
-      <a class="btn primary" href="https://smartstore.naver.com/samyong_2" target="_blank" rel="noopener">네이버 스마트스토어</a>
-      <a class="btn ghost" href="https://www.instagram.com/daonfit/" target="_blank" rel="noopener">인스타그램</a>
+    <p class="eyebrow reveal">이름</p>
+    <h2 class="reveal serif">두 글자에 담은 것</h2>
+    <p class="lead reveal">브랜드 이름을 짓는 데 오래 걸렸습니다. 결국 남은 건 아주 단순한 두 마디였어요.</p>
+
+    <div class="glyphs">
+      <div class="glyph reveal">
+        <div class="ch serif">다온</div>
+        <div>
+          <h3>좋은 모든 것이 다 온다</h3>
+          <p>한자어가 아닌 순우리말입니다. 사방에 흩어져 있던 좋은 것들이 한자리로 모여든다는 뜻. 로고에서 세 갈래가 한 받침으로 모이는 이유이기도 합니다.</p>
+          <span class="tag">순우리말</span>
+        </div>
+      </div>
+      <div class="glyph reveal">
+        <div class="ch serif">핏</div>
+        <div>
+          <h3>당신에게 꼭 맞게</h3>
+          <p>좋은 물건도 내 차, 내 생활에 안 맞으면 소용이 없죠. 다온핏은 만들어 두고 파는 게 아니라, 주문을 받은 뒤 그 사람에게 맞춰 출력합니다.</p>
+          <span class="tag">주문 제작</span>
+        </div>
+      </div>
     </div>
   </div>
-</div>
+</section>
 
-<div class="wrap">
-  <div class="custom">
-    <h2>이런 것도 만들어줘!</h2>
-    <p>"이런 게 있으면 좋겠는데…" 하는 물건이 있나요?
-       다온핏은 아이디어를 3D프린팅으로 현실로 만듭니다. 편하게 말 걸어주세요.</p>
-    <a class="btn" href="https://www.instagram.com/daonfit/" target="_blank" rel="noopener">인스타그램 DM 보내기</a>
-  </div>
-</div>
-
-<div class="strip">
-  <div class="wrap usp">
-    <div><span class="big">⭐ 5.0</span><b>구매 만족도</b><span>리뷰 전원 별 다섯 개</span></div>
-    <div><span class="big">🖨️</span><b>주문 제작</b><span>주문 후 정성껏 출력</span></div>
-    <div><span class="big">💡</span><b>생활 아이디어</b><span>불편함에서 태어난 소품</span></div>
-  </div>
-</div>
-
-<section id="products">
+<!-- ================= 만드는 방식 ================= -->
+<section class="how">
   <div class="wrap">
-    <span class="kicker">PRODUCTS</span>
-    <h2>지금 판매 중인 다온핏</h2>
-    <div class="grid">
+    <p class="eyebrow reveal">만드는 방식</p>
+    <h2 class="reveal serif">불편함에서 시작해<br>물건으로 끝납니다</h2>
+    <p class="lead reveal">다온핏의 모든 제품은 "이런 게 있으면 좋겠는데"라는 말 한마디에서 출발했습니다. 재고를 쌓아두지 않고, 주문이 들어오면 그때부터 만듭니다.</p>
 
-      <article class="product">
-        <a class="thumb" href="goods/keybox.html"><img src="_work_assets/p1.jpg" alt="차량용 견인고리 비상키함"></a>
-        <div class="body">
-          <h3><a href="goods/keybox.html">차량용 견인고리 비상키함</a></h3>
-          <p class="meta"><span class="star">★ 5.0</span> · 리뷰 35 — 스페어키를 차 밖에, 안전하게</p>
-          <p class="price">15,000원 <small>배송 3,000원</small></p>
-          <a class="buy" href="https://naver.me/FvTi2944" target="_blank" rel="noopener">스마트스토어에서 보기</a>
+    <div class="steps">
+      <div class="step reveal"><div class="num">01</div><div>
+        <h3>불편함을 듣습니다</h3>
+        <p>직접 겪은 불편, 또는 DM으로 들어온 아이디어에서 시작합니다.</p></div></div>
+      <div class="step reveal"><div class="num">02</div><div>
+        <h3>치수를 재고 설계합니다</h3>
+        <p>차종마다 범퍼 캡 자리도, 송풍구 깊이도 다릅니다. 실측한 값으로 3D 모델을 그립니다.</p></div></div>
+      <div class="step reveal"><div class="num">03</div><div>
+        <h3>몇 번이고 다시 뽑습니다</h3>
+        <p>한 번에 맞는 경우는 거의 없습니다. 끼워보고, 깎고, 다시 출력하기를 반복합니다.</p></div></div>
+      <div class="step reveal"><div class="num">04</div><div>
+        <h3>주문받은 뒤 출력합니다</h3>
+        <p>그래서 배송이 조금 걸립니다. 대신 당신 차에 맞는 한 개를 보냅니다.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 만드는 사람 ================= -->
+<section class="maker">
+  <div class="wrap">
+    <p class="eyebrow reveal">만드는 사람</p>
+    <h2 class="reveal serif">혼자 다 합니다</h2>
+    <p class="lead reveal">설계도, 출력도, 포장도, 답장도 한 사람이 합니다. 그래서 조금 느리지만 어디에 무엇이 들어갔는지 다 압니다.</p>
+
+    <div class="card reveal">
+      <div class="top">
+        <div class="photo">사진<br>자리</div>
+        <div>
+          <div class="name">정선용</div>
+          <div class="role">다온핏 대표 · 설계 및 제작</div>
         </div>
-      </article>
+      </div>
+      <blockquote class="serif">차 키를 안에 두고 문을 잠근 날, 이런 게 왜 없지 싶었습니다. 없으면 만들면 되니까 — 그렇게 시작했습니다.</blockquote>
+      <ul class="facts">
+        <li>제조 현장 엔지니어</li><li>3D 설계 · FDM 출력</li><li>차량용품 전문</li><li>문의는 인스타 DM</li>
+      </ul>
+      <p class="editnote">시안 메모 — 사진, 소개 문구, 태그는 실제 내용으로 교체 필요. 인용문은 임시로 채운 것.</p>
+    </div>
+  </div>
+</section>
 
-      <article class="product">
-        <a class="thumb" href="goods/parking-keyring.html"><img src="_work_assets/p5.jpg" alt="주차위치 표시 키링"></a>
-        <div class="body">
-          <h3><a href="goods/parking-keyring.html">주차위치 표시 슬라이드 키링</a></h3>
-          <p class="meta">B1? B2? 이제 안 헷갈려요 — 슬라이드로 주차층 기록</p>
-          <p class="price">9,000원 <small>배송 3,000원</small></p>
-          <a class="buy" href="https://naver.me/x1uMl0OZ" target="_blank" rel="noopener">스마트스토어에서 보기</a>
-        </div>
-      </article>
-
-      <article class="product">
-        <a class="thumb" href="goods/vent-clip.html"><img src="_work_assets/p2.jpg" alt="차량용 방향제 연장 클립"></a>
-        <div class="body">
-          <h3><a href="goods/vent-clip.html">차량용 방향제 연장 클립</a></h3>
-          <p class="meta"><span class="star">★ 5.0</span> · 리뷰 2 — 송풍구 깊이를 딱 맞게 보정</p>
-          <p class="price">5,000원 <small>배송 3,000원</small></p>
-          <a class="buy" href="https://naver.me/FbVI5jrD" target="_blank" rel="noopener">스마트스토어에서 보기</a>
-        </div>
-      </article>
-
-      <article class="product">
-        <a class="thumb" href="goods/mini-atm.html"><img src="_work_assets/p3.jpg" alt="3D프린팅 미니 ATM 저금통"></a>
-        <div class="body">
-          <h3><a href="goods/mini-atm.html">미니 ATM 저금통</a></h3>
-          <p class="meta">용돈 이벤트·서프라이즈 선물로 인기 만점</p>
-          <p class="price">40,000원 <small>배송 3,000원</small></p>
-          <a class="buy" href="https://naver.me/G0pY9IzE" target="_blank" rel="noopener">스마트스토어에서 보기</a>
-        </div>
-      </article>
-
-      <article class="product soldout">
-        <a class="thumb" href="goods/figure-stand.html"><img src="_work_assets/p4.jpg" alt="티니핑 피규어 받침대"></a>
-        <div class="body">
-          <h3><a href="goods/figure-stand.html">티니핑 피규어 받침대 10개입</a></h3>
-          <p class="meta"><span class="star">★ 5.0</span> · 리뷰 1 — 전 캐릭터 호환 거치대</p>
-          <p class="price">7,000원 <small>배송 3,000원</small></p>
-          <a class="buy" href="https://naver.me/Gzda3giH" target="_blank" rel="noopener">재입고 소식 보러 가기</a>
-        </div>
-      </article>
-
+<!-- ================= 마지막 ================= -->
+<section class="end" id="store">
+  <div class="wrap">
+    <p class="eyebrow reveal">다음</p>
+    <h2 class="reveal serif">당신에게 맞는 것도<br>만들 수 있습니다</h2>
+    <p class="lead reveal">지금 파는 물건 중에 없다면, 말만 걸어주세요.</p>
+    <div class="btns">
+      <a class="btn fill reveal" href="https://smartstore.naver.com/samyong_2" target="_blank" rel="noopener">네이버 스마트스토어에서 보기</a>
+      <a class="btn line reveal" href="https://www.instagram.com/daonfit/" target="_blank" rel="noopener">인스타그램 DM 보내기</a>
     </div>
   </div>
 </section>
 
 <footer>
-  <nav>
-    <a href="qna.html">문의 Q&amp;A</a>
-    <a href="https://smartstore.naver.com/samyong_2" target="_blank" rel="noopener">스마트스토어</a>
-    <a href="https://www.instagram.com/daonfit/" target="_blank" rel="noopener">인스타그램</a>
-  </nav>
-  ⓒ 다온핏 DAONFIT. 로고와 상품 사진의 권리는 다온핏에 있습니다.
+  다온핏 DAONFIT<br>
+  로고 및 상품 사진의 권리는 다온핏에 있습니다<br>
+  <span style="opacity:.6">사업자 정보 표기 자리</span>
 </footer>
 
+<script>
+(function(){
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var stage = document.getElementById('stage');
+  var parts = Array.prototype.slice.call(document.querySelectorAll('#logo .pc'));
+  var word  = document.getElementById('word');
+  var glow  = document.getElementById('glow');
+  var hint  = document.getElementById('hint');
+  var bar   = document.getElementById('bar');
+  var L = [document.getElementById('l1'),document.getElementById('l2'),document.getElementById('l3')];
+
+  // 조각별 출발 위치(화면 밖) — 받침이 먼저 자리잡고 팔 셋이 모여든 뒤 점이 뜬다
+  // t0/t1 = 각 조각이 이동하는 스크롤 구간
+  var start = [
+    {x:   0, y: 520, r:  0, s:1.0, t0:0.02, t1:0.30},  // 받침
+    {x:   0, y:-620, r: 26, s:1.0, t0:0.16, t1:0.50},  // 가운데 팔
+    {x: 700, y:-360, r: 70, s:1.0, t0:0.22, t1:0.56},  // 오른쪽 팔
+    {x:-700, y:-360, r:-70, s:1.0, t0:0.22, t1:0.56},  // 왼쪽 팔
+    {x: 240, y:-560, r:  0, s:2.2, t0:0.44, t1:0.68},  // 점
+    {x:-420, y:-260, r:  0, s:2.2, t0:0.46, t1:0.70},
+    {x: 460, y: 180, r:  0, s:2.2, t0:0.48, t1:0.72}
+  ];
+
+  parts.forEach(function(el){
+    var g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    el.parentNode.insertBefore(g, el);
+    g.appendChild(el);
+    el.__g = g;
+  });
+
+  function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+  function ease(t){return 1-Math.pow(1-t,3);}
+  function seg(p,a,b){return clamp((p-a)/(b-a),0,1);}
+  function pulse(p,a,b,c,d){
+    if(p<a||p>d) return 0;
+    if(p<b) return seg(p,a,b);
+    if(p>c) return 1-seg(p,c,d);
+    return 1;
+  }
+
+  function render(p){
+    parts.forEach(function(el,i){
+      var s = start[i];
+      var t = ease(seg(p, s.t0, s.t1));
+      var x = s.x*(1-t), y = s.y*(1-t), r = s.r*(1-t);
+      var sc = 1 + (s.s-1)*(1-t);
+      el.__g.setAttribute('transform',
+        'translate('+(541+x)+','+(400+y)+') rotate('+r.toFixed(2)+') scale('+sc.toFixed(3)+') translate(-541,-400)');
+      el.style.opacity = (0.10 + 0.90*t).toFixed(3);
+    });
+
+    glow.style.opacity = pulse(p,0.62,0.74,0.82,0.94).toFixed(3);
+
+    var w = seg(p,0.74,0.86);
+    word.style.opacity = w.toFixed(3);
+    word.style.transform = 'translateY('+((1-w)*14).toFixed(1)+'px)';
+
+    var o = [ pulse(p,0.00,0.06,0.26,0.36),
+              pulse(p,0.38,0.46,0.64,0.72),
+              pulse(p,0.76,0.84,0.97,1.00) ];
+    L.forEach(function(el,i){
+      el.style.opacity = o[i].toFixed(3);
+      el.style.transform = 'translateY('+((1-o[i])*10).toFixed(1)+'px)';
+    });
+
+    hint.style.opacity = (1-seg(p,0,0.10)).toFixed(3);
+  }
+
+  var ticking = false;
+  function onScroll(){
+    if(ticking) return;
+    ticking = true;
+    requestAnimationFrame(function(){
+      var rect = stage.getBoundingClientRect();
+      var total = stage.offsetHeight - window.innerHeight;
+      render(clamp(-rect.top/total, 0, 1));
+      bar.classList.toggle('solid', window.scrollY > 40);
+      ticking = false;
+    });
+  }
+
+  if(reduce){ render(1); }
+  else{
+    window.addEventListener('scroll', onScroll, {passive:true});
+    window.addEventListener('resize', onScroll);
+    onScroll();
+  }
+
+  var io = new IntersectionObserver(function(es){
+    es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} });
+  },{threshold:.18});
+  document.querySelectorAll('.reveal').forEach(function(el,i){
+    el.style.transitionDelay = (i%4)*70 + 'ms';
+    io.observe(el);
+  });
+})();
+</script>
 </body>
 </html>
