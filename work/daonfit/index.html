@@ -362,13 +362,13 @@
   // 조각별 출발 위치(화면 밖) — 받침이 먼저 자리잡고 팔 셋이 모여든 뒤 점이 뜬다
   // t0/t1 = 각 조각이 이동하는 스크롤 구간
   var start = [
-    {x:   0, y: 520, r:  0, s:1.0, t0:0.02, t1:0.30},  // 받침
-    {x:   0, y:-620, r: 26, s:1.0, t0:0.16, t1:0.50},  // 가운데 팔
-    {x: 700, y:-360, r: 70, s:1.0, t0:0.22, t1:0.56},  // 오른쪽 팔
-    {x:-700, y:-360, r:-70, s:1.0, t0:0.22, t1:0.56},  // 왼쪽 팔
-    {x: 240, y:-560, r:  0, s:2.2, t0:0.40, t1:0.58},  // 점 — '다 온다' 앵커(0.63) 전에 정착
-    {x:-420, y:-260, r:  0, s:2.2, t0:0.42, t1:0.60},
-    {x: 460, y: 180, r:  0, s:2.2, t0:0.44, t1:0.62}
+    {x:   0, y: 520, r:  0, s:1.0, t0:0.02, t1:0.22},  // 받침
+    {x:   0, y:-620, r: 26, s:1.0, t0:0.10, t1:0.34},  // 가운데 팔
+    {x: 700, y:-360, r: 70, s:1.0, t0:0.15, t1:0.40},  // 오른쪽 팔
+    {x:-700, y:-360, r:-70, s:1.0, t0:0.15, t1:0.40},  // 왼쪽 팔
+    {x: 240, y:-560, r:  0, s:2.2, t0:0.28, t1:0.40},  // 점 — '다 온다' 앵커(0.45) 전에 정착
+    {x:-420, y:-260, r:  0, s:2.2, t0:0.30, t1:0.42},
+    {x: 460, y: 180, r:  0, s:2.2, t0:0.32, t1:0.44}
   ];
 
   parts.forEach(function(el){
@@ -400,16 +400,17 @@
       el.style.opacity = (0.17 + 0.83*t).toFixed(3);
     });
 
-    glow.style.opacity = pulse(p,0.62,0.74,0.82,0.94).toFixed(3);
+    glow.style.opacity = pulse(p,0.60,0.72,0.80,0.95).toFixed(3);
 
-    var w = seg(p,0.74,0.86);
+    var w = seg(p,0.65,0.73);
     word.style.opacity = w.toFixed(3);
     word.style.transform = 'translateY('+((1-w)*14).toFixed(1)+'px)';
 
-    // 첫 문장은 스크롤 전(p=0)부터 보인다 — 첫 화면에 핵심 메시지 노출
-    var o = [ pulse(p,-1,0.00,0.26,0.36),
-              pulse(p,0.38,0.46,0.64,0.72),
-              pulse(p,0.76,0.84,0.97,1.00) ];
+    // 첫 문장은 스크롤 전(p=0)부터 보인다 — 첫 화면에 핵심 메시지 노출.
+    // 각 앵커(0 / 0.45 / 0.75 / 1)에서 문장·워드마크가 깨끗한 상태가 되도록 배치.
+    var o = [ pulse(p,-1,0.00,0.18,0.28),
+              pulse(p,0.36,0.44,0.55,0.65),
+              pulse(p,0.66,0.74,0.85,0.97) ];
     L.forEach(function(el,i){
       el.style.opacity = o[i].toFixed(3);
       el.style.transform = 'translateY('+((1-o[i])*10).toFixed(1)+'px)';
@@ -470,9 +471,9 @@
       }
       snapRaf = requestAnimationFrame(step);
     }
-    // 정착 앵커: 첫 화면(0) / 로고 완성+'다 온다'(0.63) / 워드마크 완성(1).
-    // 구간 진행 25% 미만이면 이전 앵커로, 이상이면 다음 앵커로.
-    var ANCHORS = [0, 0.63, 1];
+    // 정착 앵커: 첫 문장(0) / 로고+'다 온다'(0.45) / 워드마크+'너에게 꼭 맞게'(0.75)
+    // / 워드마크만(1). 구간 진행 25% 미만이면 이전 앵커로, 이상이면 다음 앵커로.
+    var ANCHORS = [0, 0.45, 0.75, 1];
     function snapTargetP(p){
       for(var i = 1; i < ANCHORS.length; i++){
         var a = ANCHORS[i-1], b = ANCHORS[i];
@@ -514,33 +515,36 @@
       var b = stageBounds();
       return (window.scrollY - b.start) / (b.end - b.start);
     }
-    function anchorIndexFrom(p, dir){
-      if(dir > 0){
-        for(var i = 0; i < ANCHORS.length; i++) if(ANCHORS[i] > p + 0.01) return i;
-        return ANCHORS.length - 1;
-      }
-      for(var j = ANCHORS.length - 1; j >= 0; j--) if(ANCHORS[j] < p - 0.01) return j;
-      return 0;
+    // 페이지 목표 지점: 인트로 앵커 4곳 + 본문 첫 화면('이름' 섹션) = 총 5페이지
+    function pageTargets(){
+      var b = stageBounds();
+      var t = ANCHORS.map(function(a){ return Math.round(b.start + a * (b.end - b.start)); });
+      t.push(b.end + window.innerHeight);
+      return t;
     }
     function pageStep(dir){
-      var b = stageBounds();
-      snapTo(b.start + ANCHORS[anchorIndexFrom(stageP(), dir)] * (b.end - b.start));
+      var t = pageTargets(), y = window.scrollY;
+      if(dir > 0){
+        for(var i = 0; i < t.length; i++) if(t[i] > y + 2) return snapTo(t[i]);
+      }else{
+        for(var j = t.length - 1; j >= 0; j--) if(t[j] < y - 2) return snapTo(t[j]);
+      }
     }
     // 뒤로 가기는 확실한 제스처만: 위 방향 휠은 300ms 안에 누적 -80px를
     // 넘어야 한 칸 되돌린다(작은 드리프트는 삼킴). 앞으로는 가볍게 넘어간다.
     var wheelAcc = 0, wheelAccT = 0;
     window.addEventListener('wheel', function(e){
-      var p = stageP();
-      if(p > 1.001) return;                                  // 본문 — 일반 스크롤
+      var t = pageTargets(), y = window.scrollY, last = t[t.length - 1];
+      if(y > last + 2) return;                               // 5페이지 아래 본문 — 일반 스크롤
       if(!yieldToGesture(e)) return;
       var d = e.deltaY * (e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? window.innerHeight : 1);
       if(Math.abs(d) < 2) return;
       if(d > 0){
         wheelAcc = 0;
-        if(p >= 0.98) return;                                // 마지막 앵커 → 본문으로 풀림
+        if(y >= last - 2) return;                            // 마지막 페이지 → 본문으로 풀림
         e.preventDefault(); pageStep(1);
       }else{
-        if(p <= 0.02) return;                                // 맨 위 → 그대로
+        if(y <= 2) return;                                   // 맨 위 → 그대로
         e.preventDefault();
         var now = performance.now();
         if(now - wheelAccT > 300 || wheelAcc > 0) wheelAcc = 0;
@@ -556,16 +560,16 @@
     }, {passive:true});
     window.addEventListener('touchmove', function(e){
       if(touchY === null) return;
-      var p = stageP();
-      if(p > 1.001 && !touchCaptured) return;                // 본문 — 일반 스크롤
+      var t = pageTargets(), y = window.scrollY, last = t[t.length - 1];
+      if(y > last + 2 && !touchCaptured) return;             // 5페이지 아래 본문 — 일반 스크롤
       if(!yieldToGesture(e)) return;
       var dy = touchY - e.touches[0].clientY;                // >0 = 위로 스와이프(다음)
       if(!touchDecided){
         // 앞으로는 12px면 넘어가지만, 뒤로는 48px 이상 확실히 끌어야 되돌린다
         if(dy < 12 && dy > -48) return;                      // 판정 전 — 개입하지 않음
         touchDecided = true;
-        if(dy > 0 && p >= 0.98) return;                      // 마지막 앵커 → 본문으로 풀림
-        if(dy < 0 && p <= 0.02) return;
+        if(dy > 0 && y >= last - 2) return;                  // 마지막 페이지 → 본문으로 풀림
+        if(dy < 0 && y <= 2) return;
         touchCaptured = true;
         e.preventDefault();
         pageStep(dy > 0 ? 1 : -1);
