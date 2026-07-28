@@ -782,7 +782,7 @@ function connect() {
     if (m.type === "ping") { ws.send(JSON.stringify({ type: "pong" })); return; }
     if (m.type === "welcome" || m.type === "presence") { setStatus(true, m.online > 1); return; }
     if (m.type === "entry") { renderEntry(m); return; }
-    if (m.type === "cal-state") { for (const ev of m.events || []) applyCalEntry(ev); return; }
+    if (m.type === "cal-state") { applyCalEntries(m.events || []); return; }
     if (m.type === "cal-put" || m.type === "cal-del") { applyCalEntry(m); return; }
     if (m.type === "reset") { localStorage.removeItem("duri:cal"); clearCache().then(() => location.reload()); return; }
     if (m.type === "error") { console.warn("duri error", m.error); return; }
@@ -980,12 +980,16 @@ function photoImg(blob, alt) {
   return img;
 }
 
-function appendRecord(rec) {
+function appendRecord(rec, { silent = false } = {}) {
   if (seen.has(rec.seq)) return;
   seen.add(rec.seq);
   if (rec.seq > getLastSeq()) setLastSeq(rec.seq);
   if (rec.name) notePeerName(rec.name); // 상대 이름을 알아야 색상 설정에 상대 칸을 보여줄 수 있다
-  const stick = atBottom();
+  // silent(초기 히스토리 대량 로드)일 땐 스크롤 위치를 매번 재지 않는다 —
+  // atBottom()·scroll() 둘 다 레이아웃을 강제로 다시 계산시키는 연산이라
+  // 수백 개를 한 번에 그릴 때 그만큼 강제 리플로우가 쌓인다. 다 그린 뒤
+  // 호출자가 한 번만 바닥으로 스크롤한다.
+  const stick = silent ? false : atBottom();
 
   // 앨범 사진: 같은 앨범 id 버블이 화면에 있으면 새 말풍선 대신 거기에 이어붙인다.
   if (rec.album && rec.blob) {
@@ -993,7 +997,7 @@ function appendRecord(rec) {
     if (grid && grid.isConnected) {
       grid.appendChild(photoImg(rec.blob, rec.caption));
       if (stick) scroll();
-      updateToBottom();
+      if (!silent) updateToBottom();
       return;
     }
     if (grid) albumBubbles.delete(rec.album.id);
@@ -1017,7 +1021,7 @@ function appendRecord(rec) {
       first.remove();
     }
     if (stick) scroll();
-    updateToBottom();
+    if (!silent) updateToBottom();
     return;
   }
 
@@ -1078,7 +1082,7 @@ function appendRecord(rec) {
     first.remove();
   }
   if (stick) scroll();
-  updateToBottom(); // 위를 보는 중 새 메시지가 오면 ⬇ 버튼을 띄운다
+  if (!silent) updateToBottom(); // 위를 보는 중 새 메시지가 오면 ⬇ 버튼을 띄운다
 }
 
 // 서버에서 온 암호화 항목: 복호화 → 그리기 → 이 기기 캐시에 저장(broken은 캐시 안 함).
@@ -1452,7 +1456,8 @@ $("enter").addEventListener("click", async () => {
   putMeta("name", name); // 내가 보낸 메시지는 내 기기에 푸시 알림을 띄우지 않게 비교용
   // 이 기기 캐시의 최근 분만 그린 뒤(새로고침에도 대화 유지, 화면은 가볍게),
   // 마지막 seq 이후만 이어받는다. 나머지 이력은 IndexedDB·PC 백업에 그대로 있다.
-  for (const rec of (await allEntries()).sort((a, b) => a.seq - b.seq).slice(-MAX_DOM)) appendRecord(rec);
+  for (const rec of (await allEntries()).sort((a, b) => a.seq - b.seq).slice(-MAX_DOM)) appendRecord(rec, { silent: true });
+  scroll(); updateToBottom(); // 대량으로 그린 뒤 한 번만 바닥으로 스크롤
   connect();
 });
 
@@ -1754,7 +1759,11 @@ function calRestore() {
   catch { /* */ }
 }
 // 서버 항목 적용(LWW). put: {id,iv,ct,rev,deleted:false} / del: {id,rev,deleted:true}
-async function applyCalEntry(entry) {
+// calEvents에 병합만 하고 저장·리렌더는 하지 않는다 — 대량 동기화(cal-state)
+// 때 항목마다 전체 맵을 저장·전체 그리드를 다시 그리면 이벤트 수만큼 비용이
+// 곱절로 늘어나(사실상 O(n²)) 접속 직후 버벅임의 원인이 된다. 저장·렌더는
+// scheduleCalFlush()로 모아서 한 번만 한다.
+async function mergeCalEntry(entry) {
   const id = entry?.id; if (!id) return;
   const cur = calEvents.get(id);
   if (cur && cur.rev >= entry.rev) return;
@@ -1765,8 +1774,25 @@ async function applyCalEntry(entry) {
     if (content.owner) notePeerName(content.owner); // 상대가 만든 일정에서도 이름을 알 수 있다
     calEvents.set(id, { id, rev: entry.rev, deleted: false, ...content });
   }
-  calPersist();
-  if (!$("cal").classList.contains("cal-off")) renderCal();
+}
+// 짧은 시간 안에 여러 건이 연달아 와도(대량 동기화·반복일정 여러 건·연타 편집)
+// 저장·리렌더는 한 번만 — 기능은 그대로, 낭비만 줄인다.
+let calFlushTimer = null;
+function scheduleCalFlush() {
+  if (calFlushTimer) return;
+  calFlushTimer = setTimeout(() => {
+    calFlushTimer = null;
+    calPersist();
+    if (!$("cal").classList.contains("cal-off")) renderCal();
+  }, 30);
+}
+async function applyCalEntry(entry) { // 실시간으로 한 건씩 오는 cal-put/cal-del
+  await mergeCalEntry(entry);
+  scheduleCalFlush();
+}
+async function applyCalEntries(entries) { // cal-state(접속 시 전체 동기화) 전용 — 한 번에 묶어 처리
+  for (const entry of entries) await mergeCalEntry(entry);
+  scheduleCalFlush();
 }
 function calSend(frame) {
   if (ws && ws.readyState === 1) ws.send(JSON.stringify(frame)); else calOutbox.push(frame);
