@@ -27,6 +27,33 @@ const SECURITY_HEADERS = {
   "X-Frame-Options": "DENY",
 };
 
+// test 서브도메인은 Pyodide(WebAssembly Python)를 jsDelivr CDN에서 로드해야 해서
+// 이 호스트에 한해 script/connect에 CDN 출처와 wasm 실행을 허용한다.
+const PYODIDE_CDN = "https://cdn.jsdelivr.net";
+const PYODIDE_CSP = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+  "form-action 'self'",
+  `script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' ${PYODIDE_CDN}`,
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https://*.bubblelab.dev",
+  "media-src 'self' blob: https://*.bubblelab.dev",
+  "font-src 'self' data:",
+  `connect-src 'self' https://*.bubblelab.dev wss://*.bubblelab.dev ${PYODIDE_CDN}`,
+  "worker-src 'self' blob:",
+  "manifest-src 'self'",
+  "upgrade-insecure-requests",
+].join("; ");
+
+function isPyodideSite(url) {
+  if (url.hostname === "test.bubblelab.dev") return true;
+  // 로컬 wrangler dev는 첫 경로 세그먼트가 사이트다 (localhost:8787/test/…)
+  const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  return local && (url.pathname === "/test" || url.pathname.startsWith("/test/"));
+}
+
 export function featureEnabled(env, name) {
   return env?.[name] === "true";
 }
@@ -75,6 +102,9 @@ export function applySecurityHeaders(response, request) {
     if (!headers.has(name)) headers.set(name, value);
   }
   const url = new URL(request.url);
+  if (isPyodideSite(url)) {
+    headers.set("Content-Security-Policy", PYODIDE_CSP);
+  }
   if (url.protocol === "https:") {
     headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   }

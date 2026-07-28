@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🧪 데이터랩 — 데이터사이언스 문제은행</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+         background: light-dark(#eef2f6, #10161f); color: light-dark(#1c2733, #d7e0ea);
+         min-height: 100vh; padding: 1.2rem; }
+  main { max-width: 62rem; margin: 0 auto; }
+  h1 { font-size: 1.3rem; margin: .4rem 0 .2rem; }
+  .sub { font-size: .85rem; opacity: .7; margin-bottom: 1rem; line-height: 1.6; }
+  #summary { font-size: .85rem; margin-bottom: 1rem; opacity: .85; }
+  #filters { display: flex; gap: .4rem; flex-wrap: wrap; margin-bottom: 1.2rem; }
+  #filters button { font: inherit; font-size: .76rem; padding: .3rem .7rem; border-radius: 1rem;
+                    border: 1px solid light-dark(#b9c7d6, #334153);
+                    background: light-dark(#fff, #1b2532); color: inherit; cursor: pointer; }
+  #filters button[aria-pressed="true"] { border-color: light-dark(#2563eb, #7fb0ff);
+                                         color: light-dark(#2563eb, #7fb0ff); }
+  h2 { font-size: .95rem; margin: 1.4rem 0 .6rem; opacity: .8; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: .8rem; }
+  a.card { display: block; text-decoration: none; color: inherit;
+           background: light-dark(#f7fafc, #161e2a);
+           border: 1px solid light-dark(#d6dfe8, #232d3a); border-radius: .8rem;
+           padding: .9rem 1rem; transition: border-color .15s; }
+  a.card:hover { border-color: light-dark(#7d93ab, #4d617c); }
+  .card h3 { font-size: .9rem; margin: 0 0 .4rem; }
+  .card .meta { display: flex; gap: .4rem; flex-wrap: wrap; font-size: .7rem; opacity: .75; }
+  .card .prog { margin-top: .55rem; font-size: .74rem; opacity: .85; }
+  .card .done { color: light-dark(#059669, #4ade80); }
+  .badge { padding: .1rem .45rem; border-radius: 1rem;
+           border: 1px solid light-dark(#b9c7d6, #334153); }
+  footer { margin-top: 2rem; font-size: .74rem; opacity: .5; line-height: 1.6; }
+</style>
+</head>
+<body>
+<main>
+  <h1>🧪 데이터랩</h1>
+  <p class="sub">브라우저에서 파이썬(Pyodide/WebAssembly)으로 푸는 데이터사이언스 문제은행.
+     pandas · numpy · scipy · scikit-learn · statsmodels 지원 —
+     설치 없이 노트북처럼 셀을 실행하고, 마지막 셀에서 <code>check.step()</code>으로 채점하세요.</p>
+  <div id="summary"></div>
+  <div id="filters"></div>
+  <div id="list"></div>
+  <footer>진행 상황은 이 브라우저(localStorage)에만 저장됩니다.
+    첫 문제 로드시 파이썬 런타임(수십 MB)을 내려받으니 잠시 기다려주세요.</footer>
+</main>
+<script src="problems.js"></script>
+<script>
+"use strict";
+const PROGRESS_KEY = "bl-ds-progress-v1";
+let progress = {};
+try { progress = JSON.parse(localStorage.getItem(PROGRESS_KEY)) || {}; } catch { /* 무시 */ }
+
+const problems = window.DS_PROBLEMS;
+const categories = [...new Set(problems.map((p) => p.category))];
+let active = "전체";
+
+function esc(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function passedCount(p) {
+  return (progress[p.id] || []).filter((sid) => p.steps.some((s) => s.id === sid)).length;
+}
+
+function render() {
+  const filtered = active === "전체" ? problems : problems.filter((p) => p.category === active);
+  const byCat = new Map();
+  for (const p of filtered) {
+    if (!byCat.has(p.category)) byCat.set(p.category, []);
+    byCat.get(p.category).push(p);
+  }
+  document.getElementById("list").innerHTML = [...byCat.entries()].map(([cat, items]) => `
+    <h2>${esc(cat)}</h2>
+    <div class="grid">
+      ${items.map((p) => {
+        const passed = passedCount(p);
+        const total = p.steps.length;
+        const done = passed === total;
+        return `
+        <a class="card" href="solve.html?id=${encodeURIComponent(p.id)}">
+          <h3>${done ? "✅ " : ""}${esc(p.title)}</h3>
+          <div class="meta">
+            <span class="badge">난이도 ${"●".repeat(p.level)}${"○".repeat(3 - p.level)}</span>
+            ${p.tags.slice(0, 3).map((t) => `<span class="badge">${esc(t)}</span>`).join("")}
+          </div>
+          <div class="prog ${done ? "done" : ""}">${passed}/${total} 단계 통과</div>
+        </a>`;
+      }).join("")}
+    </div>`).join("");
+
+  const solved = problems.filter((p) => passedCount(p) === p.steps.length).length;
+  document.getElementById("summary").textContent =
+    `총 ${problems.length}문제 중 ${solved}문제 완료`;
+
+  document.getElementById("filters").innerHTML =
+    ["전체", ...categories].map((c) =>
+      `<button aria-pressed="${c === active}" data-cat="${esc(c)}">${esc(c)}</button>`).join("");
+}
+
+document.getElementById("filters").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-cat]");
+  if (!btn) return;
+  active = btn.dataset.cat;
+  render();
+});
+render();
+</script>
+</body>
+</html>
