@@ -380,6 +380,7 @@
 
   function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
   function ease(t){return 1-Math.pow(1-t,3);}
+  function easeInOut(t){return t<.5 ? 4*t*t*t : 1-Math.pow(-2*t+2,3)/2;}
   function seg(p,a,b){return clamp((p-a)/(b-a),0,1);}
   function pulse(p,a,b,c,d){
     if(p<a||p>d) return 0;
@@ -454,13 +455,13 @@
       if(Math.abs(dist) < 2) return;
       snapping = true; snapKind = kind || 'page';
       document.documentElement.style.scrollBehavior = 'auto';
-      var dur = clamp(Math.abs(dist) / window.innerHeight * 450, 260, 850);
+      var dur = clamp(Math.abs(dist) / window.innerHeight * 650, 500, 1100);
       var t0 = null;
       function step(ts){
         if(!snapping) return;
         if(t0 === null) t0 = ts;
         var k = clamp((ts - t0) / dur, 0, 1);
-        window.scrollTo(0, fromY + dist * ease(k));
+        window.scrollTo(0, fromY + dist * easeInOut(k)); // 가속→감속: 페이지 넘김 감각
         if(k < 1){ snapRaf = requestAnimationFrame(step); }
         else {
           if(snapKind === 'page') gestureLock = performance.now() + 250; // 관성 꼬리 흡수
@@ -525,17 +526,27 @@
       var b = stageBounds();
       snapTo(b.start + ANCHORS[anchorIndexFrom(stageP(), dir)] * (b.end - b.start));
     }
+    // 뒤로 가기는 확실한 제스처만: 위 방향 휠은 300ms 안에 누적 -80px를
+    // 넘어야 한 칸 되돌린다(작은 드리프트는 삼킴). 앞으로는 가볍게 넘어간다.
+    var wheelAcc = 0, wheelAccT = 0;
     window.addEventListener('wheel', function(e){
       var p = stageP();
       if(p > 1.001) return;                                  // 본문 — 일반 스크롤
       if(!yieldToGesture(e)) return;
-      if(Math.abs(e.deltaY) < 2) return;
-      if(e.deltaY > 0){
+      var d = e.deltaY * (e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? window.innerHeight : 1);
+      if(Math.abs(d) < 2) return;
+      if(d > 0){
+        wheelAcc = 0;
         if(p >= 0.98) return;                                // 마지막 앵커 → 본문으로 풀림
         e.preventDefault(); pageStep(1);
       }else{
         if(p <= 0.02) return;                                // 맨 위 → 그대로
-        e.preventDefault(); pageStep(-1);
+        e.preventDefault();
+        var now = performance.now();
+        if(now - wheelAccT > 300 || wheelAcc > 0) wheelAcc = 0;
+        wheelAccT = now;
+        wheelAcc += d;
+        if(wheelAcc <= -80){ wheelAcc = 0; pageStep(-1); }
       }
     }, {passive:false});
     var touchY = null, touchCaptured = false, touchDecided = false;
@@ -550,7 +561,8 @@
       if(!yieldToGesture(e)) return;
       var dy = touchY - e.touches[0].clientY;                // >0 = 위로 스와이프(다음)
       if(!touchDecided){
-        if(Math.abs(dy) < 10) return;                        // 방향 판정 전엔 개입하지 않음
+        // 앞으로는 12px면 넘어가지만, 뒤로는 48px 이상 확실히 끌어야 되돌린다
+        if(dy < 12 && dy > -48) return;                      // 판정 전 — 개입하지 않음
         touchDecided = true;
         if(dy > 0 && p >= 0.98) return;                      // 마지막 앵커 → 본문으로 풀림
         if(dy < 0 && p <= 0.02) return;
