@@ -683,19 +683,35 @@ async function decryptJson(ivB64, ctB64) {
 const PACKS = [];
 const PACK_IDS = new Map();
 const RECENT_KEY = "duri:recent-stickers";
+const PACKS_CACHE_KEY = "duri:packs";
 
+function setPacks(list) {
+  PACKS.length = 0; PACK_IDS.clear();
+  for (const pack of list) { PACKS.push(pack); PACK_IDS.set(pack.id, pack); }
+}
+// 지난번에 받아 둔 팩 목록을 캐시에서 즉시 채운다 — 네트워크를 기다리지 않아야
+// 채팅 히스토리 렌더(로컬 데이터)가 카탈로그 fetch에 발목 잡히지 않는다.
+function hydratePacksFromCache() {
+  try {
+    const cached = JSON.parse(localStorage.getItem(PACKS_CACHE_KEY) || "null");
+    if (Array.isArray(cached)) setPacks(cached);
+  } catch { /* 최선노력 — 캐시가 없으면 그냥 빈 채로 시작 */ }
+}
+// 최신 목록은 네트워크로 조용히 받아 갱신한다(로그인 흐름을 막지 않도록 await 안 함
+// — 호출부 참고). 다음 번 시작할 때 쓸 수 있게 로컬에도 다시 저장해 둔다.
 async function loadPacks() {
   try {
     const res = await fetch("/_assets/catalog.json");
     if (!res.ok) throw new Error();
     const { items } = await res.json();
+    const fresh = [];
     for (const item of items ?? []) {
       if (item.category !== "sticker" || !item.chat?.title || !Array.isArray(item.downloads)) continue;
-      const pack = { id: item.id, title: item.chat.title, count: item.downloads.length, cutout: item.chat.cutout !== false };
-      PACKS.push(pack);
-      PACK_IDS.set(pack.id, pack);
+      fresh.push({ id: item.id, title: item.chat.title, count: item.downloads.length, cutout: item.chat.cutout !== false });
     }
-  } catch { /* 카탈로그 없이도 텍스트·사진은 동작 */ }
+    setPacks(fresh);
+    try { localStorage.setItem(PACKS_CACHE_KEY, JSON.stringify(fresh)); } catch { /* 최선노력 */ }
+  } catch { /* 카탈로그 없이도 텍스트·사진은 동작 — 캐시가 있으면 그걸로 계속 동작 */ }
 }
 
 const stickerUrl = (pack, n) => `/_assets/sticker/${pack}/${String(n).padStart(2, "0")}.png`;
@@ -1450,7 +1466,10 @@ $("enter").addEventListener("click", async () => {
   localStorage.setItem("duri:pass", pass); // 이 기기에만 저장 — 서버로 전송되지 않음
   $("setup").classList.add("hidden");
   for (const el of ["bar", "log-wrap", "composer"]) $(el).classList.remove("hidden");
-  await loadPacks(); // 백필 스티커 렌더 전에 팩 목록 확보
+  // 팩 목록은 캐시로 즉시 채우고, 최신화는 네트워크로 백그라운드에서(await 안 함) —
+  // 로컬에 이미 있는 채팅 히스토리 렌더가 이 fetch 하나 때문에 늦어지면 안 된다.
+  hydratePacksFromCache();
+  loadPacks();
   db = await openDB();
   putMeta("pass", pass); // 서비스워커가 푸시 도착 시 같은 문구로 복호화할 수 있게
   putMeta("name", name); // 내가 보낸 메시지는 내 기기에 푸시 알림을 띄우지 않게 비교용
@@ -1539,12 +1558,25 @@ $("reset-room").addEventListener("click", async () => {
   } catch { alert("초기화 요청을 보내지 못했어요."); }
 });
 
+// 서비스워커 등록 — 앱 셸 캐싱(sw.js의 fetch 핸들러) + 푸시 알림 표시, 두 용도
+// 모두에 쓰인다. 푸시 지원 여부와 무관하게 항상 등록해야 캐싱도 그 자체로
+// 동작한다(예전엔 이 등록이 푸시 가능 여부 체크 뒤에 있어서, 서버에 VAPID
+// 키가 없으면 캐싱까지 덩달아 켜지지 않는 문제가 있었다).
+const swReady = (async () => {
+  if (!("serviceWorker" in navigator) || !isSecureContext) return null;
+  try {
+    const registration = await navigator.serviceWorker.register("sw.js");
+    await navigator.serviceWorker.ready;
+    return registration;
+  } catch { return null; }
+})();
+
 // ── 새 메시지 푸시 알림 (기본 꺼짐) ──────────────────────────────
 // 서버는 여전히 평문을 모른다 — 페이로드는 암호블롭뿐이고, sw.js가 이 기기 안에서
 // 복호화해서 알림을 그린다(위 IndexedDB "meta" 스토어의 패스프레이즈로).
 (function setupPush() {
   const btn = $("push-toggle");
-  const supported = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  const supported = "PushManager" in window && "Notification" in window;
   if (!supported || !isSecureContext) return; // 미지원 브라우저·http 에선 노출하지 않음
 
   function vapidKeyBytes(base64url) {
@@ -1603,8 +1635,8 @@ $("reset-room").addEventListener("click", async () => {
       const res = await fetch("/_duri/push", { method: "GET" });
       vapidPublicKey = res.ok ? (await res.json()).vapidPublicKey : null;
       if (!vapidPublicKey) return; // 서버에 푸시 미설정 시 버튼 숨김 유지(기본 꺼짐과 별개로 기능 자체가 없음)
-      registration = await navigator.serviceWorker.register("sw.js");
-      await navigator.serviceWorker.ready;
+      registration = await swReady;
+      if (!registration) return; // 이 브라우저에선 서비스워커 자체가 안 됨
       setState(Boolean(await registration.pushManager.getSubscription()));
       btn.hidden = false;
     } catch { /* 조용히 미노출 */ }

@@ -1,4 +1,4 @@
-// Duri 서비스워커 — 푸시 알림 표시만 담당한다(캐싱은 하지 않음, fetch 핸들러 없음).
+// Duri 서비스워커 — 푸시 알림 표시 + 앱 셸(HTML·manifest·아이콘) 캐싱.
 // 페이로드는 서버가 여전히 평문을 모르는 암호블롭({iv,ct} 또는 {metaIv,metaCt})뿐이라,
 // 이 기기 안에서 직접 복호화한 뒤에만 알림에 진짜 내용(보낸 사람·문자)을 띄운다 —
 // 그래야 브라우저 푸시 중계 서버도 절대 평문을 보지 않는 duri의 E2E 원칙이 유지된다.
@@ -79,6 +79,40 @@ async function buildNotification(data) {
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
+
+// ── 앱 셸 캐싱 ───────────────────────────────────────────────
+// 문서(내비게이션)·manifest·아이콘만 대상 — 네이티브 앱처럼 다음 실행 때
+// 네트워크 없이 즉시 뜨게 한다("캐시 먼저 보여주고, 최신본은 백그라운드로").
+// /_duri·/_rt(실시간·게이트 API)는 항상 최신이어야 하므로 손대지 않는다 —
+// 실제 데이터·인증은 이 캐시와 무관하게 매번 쿠키·E2E 패스프레이즈로 따로
+// 검증되므로, 셸(빈 껍데기 마크업)을 캐싱해도 보안엔 영향이 없다.
+const SHELL_CACHE = "duri-shell-v1";
+async function staleWhileRevalidate(request) {
+  const cache = await caches.open(SHELL_CACHE);
+  const cached = await cache.match(request);
+  const network = fetch(request).then((res) => {
+    // 게이트를 안 넘겨(bl_duri 쿠키 만료 등) /login으로 리다이렉트된 응답은
+    // fetch가 자동으로 따라가 버려서, 캐싱하면 원래 URL 밑에 로그인 페이지가
+    // 깔려버린다(다음에 로그인 성공해도 그 캐시부터 보임) — redirected면 skip.
+    if (res.ok && !res.redirected) cache.put(request, res.clone());
+    return res;
+  }).catch(() => null);
+  return { cached, network };
+}
+self.addEventListener("fetch", (event) => {
+  const req = event.request;
+  if (req.method !== "GET") return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+  if (url.pathname.startsWith("/_duri/") || url.pathname.startsWith("/_rt/")) return;
+  if (req.mode !== "navigate" && url.pathname !== "/manifest.json" && !url.pathname.endsWith("icon.svg")) return;
+
+  event.respondWith((async () => {
+    const { cached, network } = await staleWhileRevalidate(req);
+    event.waitUntil(network); // 캐시를 바로 돌려준 뒤에도 백그라운드 최신화가 끝까지 실행되게
+    return cached || (await network) || Response.error();
+  })());
+});
 
 // 이 기기에서 이미 앱 화면을 보고 있으면(포커스 중) 시스템 알림을 띄우지
 // 않는다 — 어차피 웹소켓으로 화면에 바로 뜨는데 알림까지 겹칠 필요가 없다.
