@@ -185,12 +185,12 @@
     else { addMe(when.label); answers.when = when.value; }
 
     step('3 / 3');
-    await addBot('생각하시는 예산 규모가 있을까요? 미정이어도 괜찮습니다 — 규모에 맞는 안을 제안드리는 용도예요.', 'Q3 · 예산');
+    await addBot('생각하시는 예산 규모가 있을까요? 작아도, 미정이어도 괜찮습니다 — 지금은 오픈 기념 특별가로 진행 중이라, 규모에 맞춰 제안드려요.', 'Q3 · 예산');
     var budget = await addChips([
       { label: '아직 미정', value: '미정' },
-      { label: '~100만원', value: '~100만원' },
-      { label: '100~300만원', value: '100~300만원' },
-      { label: '300만원 이상', value: '300만원 이상' },
+      { label: '50만원 이하', value: '50만원 이하' },
+      { label: '50~150만원', value: '50~150만원' },
+      { label: '150만원 이상', value: '150만원 이상' },
       { label: '직접 입력', value: null },
     ]);
     if(budget.value === null){ answers.budget = await ask('예산 범위를 적어주세요', false, 60); }
