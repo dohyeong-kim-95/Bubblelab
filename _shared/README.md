@@ -12,6 +12,8 @@
 | `records.js` | 주간 기록 배지, 닉네임 등록, 개인 최고 기록, 주간 리셋·공지 UI |
 | `share.js` | Web Share API 또는 클립보드 기반 공유 버튼과 공유 이미지 지원 |
 | `suggest.js` | 자동 생성 카테고리 홈의 토이 아이디어 우편함 |
+| `home.js` | 카드 페이지의 "← 홈" 버튼 (빌드가 자동 주입) |
+| `engagement.js` | 유효 방문 비콘과 표시 시간 누적 (빌드가 자동 주입) |
 | `TwemojiCountryFlags.woff2` | 국기 게임용 Twemoji Country Flags 폰트 |
 
 ## 공유 버튼
@@ -26,6 +28,22 @@ window.blShareText = () => `내 최고 기록은 ${best}점!`;
 
 `window.blShareText`는 함수 또는 문자열을 받을 수 있습니다. 모바일에서는 OS 공유
 시트를 열고, 지원하지 않는 환경에서는 `문구\nURL`을 클립보드에 복사합니다.
+
+## 홈 버튼
+
+`home.js`와 `engagement.js`는 **토이가 직접 챙기지 않습니다.** `_infra/build.mjs`의
+`injectShared`가 `</body>` 앞에 자동으로 넣습니다.
+
+- 홈 버튼은 **자동 생성 홈을 가진 카테고리**(slop·util·games·assets)의 **카드
+  페이지에만** 붙습니다. 카테고리 홈 자신과 `podcast`·`duri` 같은 자체 index.html을
+  가진 서비스에는 붙지 않습니다.
+- 자리는 **좌하단**입니다. 상단은 거의 모든 토이가 점수·타이머 HUD로 쓰고 있어
+  (실측: 상단 배치는 21개 중 7~9개에서 UI를 가렸고, 하단은 3개) 공용 버튼이 이미
+  모여 있는 아래쪽을 씁니다. 주간 기록 배지가 있으면 `body:has(#bl-weekly)`로 그
+  위에 쌓입니다 — `suggest.js`가 공유 버튼을 피하는 방식과 같습니다.
+- **새 공용 고정 UI를 추가할 때는 네 모서리의 기존 점유를 먼저 확인하세요.**
+  좌하단 `#bl-weekly`·`#bl-home`, 우하단 `#bl-share`, 그 위 `#bl-suggest`,
+  좌하단 위쪽 `#bl-claim`이 이미 자리를 씁니다.
 
 ## 기록 보드
 
