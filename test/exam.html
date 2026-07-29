@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>⏱ 실전 모드 — 데이터랩</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+         background: light-dark(#eef2f6, #10161f); color: light-dark(#1c2733, #d7e0ea);
+         min-height: 100vh; padding: 1.2rem; }
+  main { max-width: 46rem; margin: 0 auto; }
+  a { color: light-dark(#2563eb, #7fb0ff); text-decoration: none; }
+  h1 { font-size: 1.3rem; margin: .4rem 0 1rem; }
+  .panel { background: light-dark(#f7fafc, #161e2a); border: 1px solid light-dark(#d6dfe8, #232d3a);
+           border-radius: .8rem; padding: 1.2rem; margin-bottom: 1rem; }
+  .rules { font-size: .85rem; line-height: 1.8; margin: 0; padding-left: 1.2rem; }
+  button { font: inherit; font-size: .9rem; padding: .55rem 1.4rem; border-radius: .6rem;
+           border: 1px solid light-dark(#b9c7d6, #334153); background: light-dark(#fff, #1b2532);
+           color: inherit; cursor: pointer; }
+  button:hover { border-color: light-dark(#7d93ab, #4d617c); }
+  button:active { transform: scale(.97); }
+  button.primary { border-color: light-dark(#2563eb, #7fb0ff); color: light-dark(#2563eb, #7fb0ff);
+                   font-weight: bold; }
+  button.danger { border-color: light-dark(#b91c1c, #ff8a8a); color: light-dark(#b91c1c, #ff8a8a); }
+  #timer { font-size: 2.6rem; font-weight: bold; font-variant-numeric: tabular-nums;
+           text-align: center; margin: .2rem 0 .6rem; }
+  #timer[data-zone="warn"] { color: light-dark(#b45309, #fbbf24); }
+  #timer[data-zone="danger"] { color: light-dark(#b91c1c, #ff8a8a); }
+  .timer-sub { text-align: center; font-size: .78rem; opacity: .65; margin-bottom: .4rem; }
+  .plist { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; }
+  .plist a.prow { display: flex; align-items: center; gap: .7rem; color: inherit;
+        border: 1px solid light-dark(#d6dfe8, #232d3a); border-radius: .6rem;
+        padding: .7rem .9rem; font-size: .85rem;
+        background: light-dark(#fdfefe, #131c29); }
+  .plist a.prow:hover { border-color: light-dark(#7d93ab, #4d617c); }
+  .prow .no { opacity: .5; }
+  .prow .ttl { flex: 1; min-width: 0; }
+  .prow .cat { font-size: .7rem; opacity: .6; display: block; }
+  .prow .steps { font-variant-numeric: tabular-nums; letter-spacing: .15em; }
+  .actions { display: flex; gap: .6rem; justify-content: center; margin-top: 1rem; flex-wrap: wrap; }
+  .score { font-size: 3rem; font-weight: bold; text-align: center; margin: .4rem 0 0; }
+  .verdict { text-align: center; font-size: 1.05rem; margin: .3rem 0 1rem; }
+  .verdict.pass { color: light-dark(#059669, #4ade80); }
+  .verdict.fail { color: light-dark(#b91c1c, #ff8a8a); }
+  table.report { width: 100%; border-collapse: collapse; font-size: .82rem; }
+  table.report th, table.report td { border-bottom: 1px solid light-dark(#dde5ee, #232d3a);
+        padding: .5rem .4rem; text-align: left; }
+  table.report td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .muted { opacity: .65; font-size: .78rem; line-height: 1.6; }
+</style>
+</head>
+<body>
+<main>
+  <p><a href="./">← 문제 목록</a></p>
+  <h1>⏱ 실전 모드</h1>
+  <div id="view"></div>
+</main>
+<script src="problems.js"></script>
+<script>
+"use strict";
+const EXAM_KEY = "bl-ds-exam-v1";
+const DURATION_MS = 180 * 60 * 1000;
+const PASS_SCORE = 60;
+// 실제 시험처럼 영역을 나눠 무작위 출제한다: 전처리 2 + 통계 2 + 모델링 2
+const GROUPS = [
+  { name: "전처리", pick: 2, cats: ["데이터 클렌징", "변환·스케일링", "피처 엔지니어링", "문자열 전처리", "탐색적 데이터 분석"] },
+  { name: "통계", pick: 2, cats: ["확률과 분포", "추정과 검정", "시계열 분석"] },
+  { name: "모델링", pick: 2, cats: ["회귀", "분류", "군집", "피처 선택", "연관규칙"] },
+];
+
+const problems = window.DS_PROBLEMS;
+const byId = new Map(problems.map((p) => [p.id, p]));
+const view = document.getElementById("view");
+let tick = null;
+
+function esc(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function loadExam() {
+  try {
+    const ex = JSON.parse(localStorage.getItem(EXAM_KEY));
+    if (ex && Array.isArray(ex.problems) && ex.problems.every((id) => byId.has(id))) return ex;
+  } catch { /* 무시 */ }
+  return null;
+}
+
+function saveExam(ex) {
+  try { localStorage.setItem(EXAM_KEY, JSON.stringify(ex)); } catch { /* 무시 */ }
+}
+
+function clearExam() {
+  localStorage.removeItem(EXAM_KEY);
+  for (const key of Object.keys(localStorage)) {
+    if (key.startsWith("bl-ds-exam-cells-")) localStorage.removeItem(key);
+  }
+}
+
+function drawProblems() {
+  const chosen = [];
+  for (const group of GROUPS) {
+    const pool = problems.filter((p) => group.cats.includes(p.category)).map((p) => p.id);
+    for (let k = 0; k < group.pick && pool.length; k += 1) {
+      const i = Math.floor(Math.random() * pool.length);
+      chosen.push(pool.splice(i, 1)[0]);
+    }
+  }
+  return chosen;
+}
+
+function totalSteps(ex) {
+  return ex.problems.reduce((sum, id) => sum + byId.get(id).steps.length, 0);
+}
+
+function passedSteps(ex, id) {
+  const p = byId.get(id);
+  return (ex.passed[id] || []).filter((sid) => p.steps.some((s) => s.id === sid)).length;
+}
+
+function scoreOf(ex) {
+  const total = totalSteps(ex);
+  const passed = ex.problems.reduce((sum, id) => sum + passedSteps(ex, id), 0);
+  return { passed, total, score: total ? Math.round((passed / total) * 1000) / 10 : 0 };
+}
+
+function fmtClock(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(s / 3600);
+  const m = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
+  const sec = String(s % 60).padStart(2, "0");
+  return `${h}:${m}:${sec}`;
+}
+
+function fmtUsed(ms) {
+  const m = Math.round(ms / 60000);
+  return `${Math.floor(m / 60)}시간 ${m % 60}분`;
+}
+
+function stopTick() {
+  clearInterval(tick);
+  tick = null;
+}
+
+// ---------- 화면들 ----------
+
+function renderIntro() {
+  stopTick();
+  view.innerHTML = `
+    <div class="panel">
+      <ul class="rules">
+        <li>무작위 <strong>6문제</strong> (전처리 2 · 통계 2 · 모델링 2), 제한시간 <strong>180분</strong></li>
+        <li>총점 <strong>100점</strong> — 단계별 균등 배점, <strong>${PASS_SCORE}점 이상 합격</strong></li>
+        <li>각 문제의 마지막 셀에서 <code>check.step()</code> 통과가 곧 제출입니다</li>
+        <li>시험용 코드는 연습 기록과 분리 저장되고, 시간이 끝나면 자동 종료됩니다</li>
+        <li>탭을 닫아도 시험은 계속 진행됩니다 (남은 시간 기준)</li>
+      </ul>
+      <div class="actions"><button class="primary" id="start">시험 시작</button></div>
+    </div>
+    <p class="muted">시작하면 문제 구성이 고정됩니다. 문제 페이지를 여러 탭으로 띄워도 되지만,
+       파이썬 런타임은 탭마다 새로 준비됩니다.</p>`;
+  document.getElementById("start").addEventListener("click", () => {
+    clearExam();
+    const now = Date.now();
+    saveExam({
+      startedAt: now,
+      endsAt: now + DURATION_MS,
+      problems: drawProblems(),
+      passed: {},
+      finishedAt: null,
+    });
+    render();
+  });
+}
+
+function renderActive(ex) {
+  const rows = ex.problems.map((id, i) => {
+    const p = byId.get(id);
+    const marks = p.steps.map((s) => ((ex.passed[id] || []).includes(s.id) ? "●" : "○")).join("");
+    return `
+      <li><a class="prow" href="solve.html?id=${encodeURIComponent(id)}&exam=1">
+        <span class="no">${i + 1}</span>
+        <span class="ttl">${esc(p.title)}<span class="cat">${esc(p.category)}</span></span>
+        <span class="steps" title="통과한 단계">${marks}</span>
+      </a></li>`;
+  }).join("");
+  const { passed, total } = scoreOf(ex);
+  view.innerHTML = `
+    <div class="panel">
+      <div id="timer" data-zone="ok">--:--:--</div>
+      <div class="timer-sub">남은 시간 · 제출 ${passed}/${total} 단계</div>
+      <ul class="plist">${rows}</ul>
+      <div class="actions"><button class="danger" id="finish">시험 종료 (채점)</button></div>
+    </div>
+    <p class="muted">문제를 눌러 풀이 화면으로 이동하세요. 통과한 단계는 이 화면에 ●로 표시됩니다
+       (화면을 새로고침하면 갱신).</p>`;
+  const timerEl = document.getElementById("timer");
+  const update = () => {
+    const current = loadExam();
+    if (!current || current.finishedAt) { render(); return; }
+    const left = current.endsAt - Date.now();
+    if (left <= 0) {
+      current.finishedAt = current.endsAt;
+      saveExam(current);
+      render();
+      return;
+    }
+    timerEl.textContent = fmtClock(left);
+    timerEl.dataset.zone = left <= 10 * 60 * 1000 ? "danger" : left <= 30 * 60 * 1000 ? "warn" : "ok";
+  };
+  update();
+  stopTick();
+  tick = setInterval(update, 1000);
+  document.getElementById("finish").addEventListener("click", () => {
+    if (!confirm("시험을 종료하고 채점할까요? 종료 후에는 제출이 반영되지 않습니다.")) return;
+    const current = loadExam() || ex;
+    current.finishedAt = Date.now();
+    saveExam(current);
+    render();
+  });
+}
+
+function renderReport(ex) {
+  stopTick();
+  const { passed, total, score } = scoreOf(ex);
+  const pass = score >= PASS_SCORE;
+  const rows = ex.problems.map((id, i) => {
+    const p = byId.get(id);
+    const n = passedSteps(ex, id);
+    const pts = Math.round((n / total) * 1000) / 10;
+    return `<tr><td>${i + 1}. ${esc(p.title)}<span class="cat" style="opacity:.55;font-size:.72rem"> — ${esc(p.category)}</span></td>
+      <td class="num">${n}/${p.steps.length}</td><td class="num">${pts}점</td></tr>`;
+  }).join("");
+  view.innerHTML = `
+    <div class="panel">
+      <div class="score">${score}점</div>
+      <div class="verdict ${pass ? "pass" : "fail"}">${pass ? "🎉 합격" : "불합격"} (기준 ${PASS_SCORE}점)</div>
+      <table class="report">
+        <thead><tr><th>문제</th><th style="text-align:right">단계</th><th style="text-align:right">점수</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <p class="muted" style="margin-bottom:0">제출 ${passed}/${total} 단계 ·
+        사용 시간 ${fmtUsed(Math.min((ex.finishedAt || ex.endsAt) - ex.startedAt, 180 * 60 * 1000))}</p>
+      <div class="actions">
+        <button class="primary" id="retry">새 시험 시작</button>
+        <button id="close">결과 지우기</button>
+      </div>
+    </div>
+    <p class="muted">문제별 풀이는 목록에서 같은 문제를 연습 모드로 다시 열어 복습할 수 있습니다.</p>`;
+  document.getElementById("retry").addEventListener("click", () => {
+    if (!confirm("이전 시험 기록을 지우고 새로 시작할까요?")) return;
+    clearExam();
+    const now = Date.now();
+    saveExam({
+      startedAt: now,
+      endsAt: now + DURATION_MS,
+      problems: drawProblems(),
+      passed: {},
+      finishedAt: null,
+    });
+    render();
+  });
+  document.getElementById("close").addEventListener("click", () => {
+    if (!confirm("시험 기록을 지울까요?")) return;
+    clearExam();
+    render();
+  });
+}
+
+function render() {
+  const ex = loadExam();
+  if (!ex) { renderIntro(); return; }
+  if (!ex.finishedAt && Date.now() > ex.endsAt) {
+    ex.finishedAt = ex.endsAt;
+    saveExam(ex);
+  }
+  if (ex.finishedAt) { renderReport(ex); return; }
+  renderActive(ex);
+}
+
+render();
+// 다른 탭에서 제출하면 이 화면도 갱신
+window.addEventListener("storage", (e) => {
+  if (e.key === EXAM_KEY) render();
+});
+</script>
+</body>
+</html>

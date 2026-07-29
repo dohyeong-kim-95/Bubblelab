@@ -11,9 +11,10 @@ test.bubblelab.dev. **비공개 서브도메인**(`CONFIDENTIAL_SUBDOMAINS`) —
 | 파일 | 역할 |
 | --- | --- |
 | `index.html` | 문제 목록 (카테고리 필터, 진행 상황 표시) |
-| `solve.html` | 노트북 풀이 화면 (`?id=<문제id>`) |
+| `solve.html` | 노트북 풀이 화면 (`?id=<문제id>`, 실전 모드는 `&exam=1`) |
+| `exam.html` | 실전 모드 (무작위 6문제 · 180분 · 100점 만점 · 60점 합격) |
 | `problems.js` | 문제은행 데이터 (`window.DS_PROBLEMS`) |
-| `runtime.js` | Pyodide 부팅, 셀 실행, 채점 엔진 |
+| `runtime.js` | Pyodide 부팅, 셀 실행, 채점 엔진, 실전 모드 연동 |
 
 ## 동작 방식
 
@@ -27,6 +28,18 @@ test.bubblelab.dev. **비공개 서브도메인**(`CONFIDENTIAL_SUBDOMAINS`) —
   런타임이 setup + 모범답안 체인을 **별도 네임스페이스**에서 실행해 기대값을 만들고
   변수별로 비교한다(수치는 rel 1e-3/abs 1e-4 허용, DataFrame/Series/ndarray 지원).
   기대값 자체는 출력하지 않고 타입/shape/값 불일치 사유만 알려준다.
+
+## 실전 모드
+
+`exam.html`이 영역별로 무작위 출제한다: 전처리군 2 + 통계군 2 + 모델링군 2
+(카테고리→군 매핑은 `exam.html`의 `GROUPS`). 시험 상태는 `bl-ds-exam-v1` 키 하나에
+저장(시작/종료 시각, 문제 6개, 통과 단계)되고, 풀이는 `solve.html?...&exam=1`로 연다.
+
+- 시험 중 `check.step()` 통과가 곧 제출 — `runtime.js`가 제한시간 안의 통과만
+  시험 기록에 반영한다(연습 진행상황에는 항상 누적).
+- 시험용 셀 코드는 `bl-ds-exam-cells-*`로 분리 저장돼 연습 코드가 보이지 않는다.
+- 시간이 끝나면 자동 종료·채점(단계별 균등 배점, 총 100점). 새 시험 시작 시
+  이전 시험 기록·셀을 지운다.
 
 ## 문제 추가
 
