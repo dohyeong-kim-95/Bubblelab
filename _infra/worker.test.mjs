@@ -108,6 +108,8 @@ test("work root is public and client sessions are scoped to their project", asyn
   assert.equal(response.status, 200);
   response = await worker.fetch(new Request("https://work.bubblelab.dev/request"), env, ctx);
   assert.equal(response.status, 200);
+  response = await worker.fetch(new Request("https://work.bubblelab.dev/showcase/avalon"), env, ctx);
+  assert.equal(response.status, 200);
 
   // 의뢰 ID + 비밀번호 로그인 → 자기 프로젝트로 리다이렉트
   const form = new FormData();

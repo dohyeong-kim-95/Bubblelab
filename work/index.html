@@ -54,6 +54,19 @@
   h2 { margin: 0 0 .8rem; font-size: .8rem; letter-spacing: .18em; color: var(--bubble);
        text-transform: uppercase; }
   section { margin-bottom: 2.6rem; }
+
+  .works { display: grid; grid-template-columns: repeat(2, 1fr); gap: .9rem; }
+  @media (min-width: 560px) { .works { grid-template-columns: repeat(4, 1fr); } }
+  .work { display: block; text-decoration: none; color: inherit; border-radius: .8rem;
+          overflow: hidden; background: var(--surface); border: 1px solid var(--line);
+          transition: transform .15s ease, border-color .15s ease; }
+  .work:hover { transform: translateY(-2px); border-color: var(--bubble); }
+  .work img { display: block; width: 100%; aspect-ratio: 2/3; object-fit: cover;
+              border-bottom: 1px solid var(--line); }
+  .work .cap { padding: .6rem .75rem .7rem; }
+  .work .cap b { display: block; font-size: .82rem; }
+  .work .cap span { font-size: .7rem; color: var(--soft); }
+  .works-note { margin: .8rem 0 0; font-size: .76rem; color: var(--soft); }
   ul.things { margin: 0; padding: 0; list-style: none; display: grid; gap: .55rem; }
   ul.things li { font-size: .88rem; padding: .7rem .95rem; border-radius: .6rem;
                  background: var(--surface); border: 1px solid var(--line); }
@@ -94,6 +107,30 @@
       <span>발급받은 의뢰 ID로 진행 중인 프로젝트 확인</span>
     </a>
   </div>
+
+  <section>
+    <h2>Selected work</h2>
+    <div class="works">
+      <a class="work" href="showcase/avalon">
+        <img src="showcase/img/avalon.png" alt="아발론 온라인" loading="lazy">
+        <div class="cap"><b>아발론 온라인</b><span>실시간 웹 서비스</span></div>
+      </a>
+      <a class="work" href="showcase/fruitmerge">
+        <img src="showcase/img/fruitmerge.png" alt="Fruit Merge" loading="lazy">
+        <div class="cap"><b>Fruit Merge</b><span>웹 게임 · 물리 퍼즐</span></div>
+      </a>
+      <a class="work" href="showcase/woodstack">
+        <img src="showcase/img/woodstack.png" alt="우드 스택" loading="lazy">
+        <div class="cap"><b>우드 스택</b><span>웹 게임 · 아케이드</span></div>
+      </a>
+      <a class="work" href="showcase/passport-pic">
+        <img src="showcase/img/passport-pic.png" alt="여권사진 도우미" loading="lazy">
+        <div class="cap"><b>여권사진 도우미</b><span>웹 도구</span></div>
+      </a>
+    </div>
+    <p class="works-note">모두 직접 기획·디자인·개발한 실서비스입니다 — 카드를 눌러
+    소개를 보고, 라이브로 바로 열 수 있습니다.</p>
+  </section>
 
   <section>
     <h2>Services</h2>

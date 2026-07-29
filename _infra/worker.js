@@ -285,7 +285,7 @@ async function handlePlanner(request, env, url) {
  * 프로젝트 폴더(/<의뢰ID>/…)만 로그인 뒤 접근된다. 의뢰 ID/비밀번호는
  * WORK_CLIENTS secret(JSON), WORK_PASSWORD 는 운영자 마스터(모든 프로젝트).
  * 인증되면 null을 돌려 정적 서빙으로 폴스루한다. */
-const WORK_PUBLIC_PAGES = new Set(["request"]); // 확장자 없는 공개 루트 페이지
+const WORK_PUBLIC_PAGES = new Set(["request", "showcase"]); // 확장자 없는 공개 루트 경로(폴더 포함)
 
 async function handleWork(request, env, url, base = "") {
   const key = await workKeyOf(env);

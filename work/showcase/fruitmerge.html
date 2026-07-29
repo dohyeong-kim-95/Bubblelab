@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Fruit Merge — bubblelab works</title>
+<style>
+  :root { color-scheme: light dark;
+    --ground: light-dark(#fafbfc, #10151c);
+    --ink: light-dark(#1c2733, #e2e9f0);
+    --soft: light-dark(#5d6b7a, #93a3b5);
+    --surface: light-dark(#fff, #171f2b);
+    --line: light-dark(#e3e8ee, #263140);
+    --bubble: light-dark(#4f7fdd, #7ea3ec);
+    --bubble-ink: light-dark(#fff, #0d131c);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100dvh; background: var(--ground); color: var(--ink);
+         font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+         line-height: 1.8; word-break: keep-all; }
+  main { max-width: 38rem; margin: 0 auto; padding: 3.2rem 1.4rem 4rem; }
+  .crumb { font-size: .78rem; margin: 0 0 2rem; }
+  .crumb a { color: var(--soft); text-decoration: none; }
+  .crumb a:hover { color: var(--ink); }
+  .tag { display: inline-block; font-size: .7rem; letter-spacing: .12em; color: var(--bubble);
+         border: 1px solid var(--bubble); border-radius: 2rem; padding: .1rem .7rem;
+         margin-bottom: .7rem; }
+  h1 { margin: 0 0 .4rem; font-size: 1.5rem; letter-spacing: -.02em; }
+  .lead { margin: 0 0 1.8rem; color: var(--soft); font-size: .9rem; }
+  .shot { display: block; max-width: 20rem; margin: 0 0 1.8rem; border-radius: .9rem;
+          border: 1px solid var(--line); overflow: hidden; background: var(--surface); }
+  .shot img { display: block; width: 100%; }
+  .live { display: inline-block; padding: .8rem 1.5rem; border-radius: .6rem; margin-bottom: 2.4rem;
+          background: var(--bubble); color: var(--bubble-ink); font-weight: 700;
+          font-size: .92rem; text-decoration: none; }
+  h2 { margin: 0 0 .8rem; font-size: .8rem; letter-spacing: .18em; color: var(--bubble);
+       text-transform: uppercase; }
+  section { margin-bottom: 2.2rem; }
+  p, li { font-size: .9rem; }
+  ul { margin: 0; padding: 0 0 0 1.1rem; }
+  li { margin: .3rem 0; }
+  li small { color: var(--soft); }
+</style>
+</head>
+<body>
+<main>
+  <p class="crumb"><a href="../">← bubblelab works</a> / Selected work</p>
+  <span class="tag">웹 게임</span>
+  <h1>Fruit Merge</h1>
+  <p class="lead">같은 과일을 합쳐 더 큰 과일로 키우는 물리 퍼즐 게임.</p>
+
+  <a class="shot" href="https://slop.bubblelab.dev/fruitmerge/" target="_blank" rel="noopener"><img src="img/fruitmerge.png" alt="Fruit Merge 화면"></a>
+  <a class="live" href="https://slop.bubblelab.dev/fruitmerge/" target="_blank" rel="noopener">라이브로 열기 →</a>
+
+  <section>
+    <h2>Overview</h2>
+    <p>떨어뜨린 과일이 굴러가고 부딪히는 물리 시뮬레이션 위에서, 같은 과일끼리 닿으면 합쳐지는 규칙으로 진행됩니다. 프레임워크 없이 Canvas와 바닐라 JavaScript만으로 구현했습니다.</p>
+  </section>
+
+  <section>
+    <h2>Notes</h2>
+    <ul>
+      <li><b>자체 물리 시뮬레이션</b> — <small>중력·충돌·병합 판정을 직접 구현</small></li>
+      <li><b>모바일 터치 조작</b> — <small>이동·놓기 두 동작으로 단순화</small></li>
+      <li><b>주간 신기록 보드</b> — <small>서버 검증을 거치는 기록 제출</small></li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>
