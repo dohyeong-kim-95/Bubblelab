@@ -1,122 +1,662 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<meta name="description" content="다온핏 — 좋은 것들이 모여, 너에게 꼭 맞게. 3D프린팅으로 만드는 생활 맞춤 소품.">
-<title>다온핏 DAONFIT — 좋은 것들이 모여, 너에게 꼭 맞게</title>
+<meta name="description" content="다온핏 — 좋은 것들이 다 온다. 3D프린팅으로 만드는 생활 맞춤 소품.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="다온핏 — 좋은 것들이 다 온다">
+<meta property="og:description" content="3D프린팅으로 만드는 생활 맞춤 소품. 하나하나 주문받아 당신에게 맞게 출력합니다.">
+<!-- 정식 오픈 시 실제 도메인으로 교체 -->
+<meta property="og:image" content="https://work.bubblelab.dev/daonfit/_work_assets/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<title>다온핏 — 좋은 것들이 다 온다</title>
 <link rel="icon" href="_work_assets/logo.png">
-<link rel="stylesheet" href="daonfit.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Gothic+A1:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FBF3E4;
+    --paper-2:#F5E9D2;
+    --ink:#2A1810;
+    --ink-soft:#6B5645;
+    --flame:#F2661F;
+    --ember:#C4551A;
+    --dot:#F7EFC4;
+    --amber:#FFC94A;
+    --line:rgba(42,24,16,.14);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Gothic A1','Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  .serif{font-family:'Gowun Batang','Nanum Myeongjo',serif}
+
+  /* ---------- 상단 바 ---------- */
+  .bar{
+    position:fixed;top:0;left:0;right:0;z-index:50;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:13px 20px;
+    background:rgba(251,243,228,.85);
+    backdrop-filter:blur(10px);
+    border-bottom:1px solid transparent;
+    transition:border-color .3s;
+  }
+  .bar.solid{border-bottom-color:var(--line)}
+  .bar .mark{display:flex;align-items:center;gap:9px;font-weight:900;letter-spacing:-.02em;font-size:17px;
+             background:none;border:0;padding:0;color:inherit;font-family:inherit;cursor:pointer}
+  .bar .mark svg{width:26px;height:auto}
+  .bar a.cta{
+    font-size:13px;font-weight:700;text-decoration:none;
+    color:var(--paper);background:var(--flame);
+    padding:9px 16px;border-radius:999px;transition:background .2s;
+  }
+  .bar a.cta:hover{background:var(--ember)}
+
+  /* ---------- 무대 ---------- */
+  .stage{height:300vh;position:relative}
+  .stage-inner{
+    position:sticky;top:0;height:100vh;height:100dvh;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    overflow:hidden;
+  }
+  .glow{
+    position:absolute;width:130vmin;height:130vmin;border-radius:50%;
+    background:radial-gradient(circle,rgba(242,102,31,.22) 0%,rgba(242,102,31,0) 60%);
+    opacity:0;pointer-events:none;
+  }
+  #logo{width:min(74vw,340px);height:auto;overflow:visible}
+  .word{margin-top:22px;text-align:center;opacity:0}
+  .word .ko{font-size:clamp(30px,9vw,44px);font-weight:900;letter-spacing:-.03em;line-height:1}
+  .word .en{
+    margin-top:10px;font-size:11px;font-weight:400;
+    letter-spacing:.44em;color:var(--ink-soft);text-indent:.44em;
+  }
+
+  .lines{position:absolute;bottom:17vh;left:0;right:0;text-align:center;pointer-events:none;padding:0 24px}
+  .lines .line{position:absolute;left:0;right:0;font-size:clamp(20px,5.4vw,30px);letter-spacing:-.02em;opacity:0}
+  .lines .line em{font-style:normal;color:var(--flame)}
+  .lines .line .sub{
+    display:block;margin-top:10px;font-family:'Gothic A1',sans-serif;
+    font-size:13px;font-weight:400;letter-spacing:0;color:var(--ink-soft);
+  }
+  .hint{
+    position:absolute;bottom:34px;left:50%;transform:translateX(-50%);
+    font-size:11px;letter-spacing:.24em;color:var(--ink-soft);
+    display:flex;flex-direction:column;align-items:center;gap:7px;
+  }
+  .hint span{width:1px;height:26px;background:linear-gradient(var(--ink-soft),transparent);animation:drop 1.9s infinite}
+  @keyframes drop{0%{transform:scaleY(0);transform-origin:top}50%{transform:scaleY(1);transform-origin:top}51%{transform-origin:bottom}100%{transform:scaleY(0);transform-origin:bottom}}
+
+  /* ---------- 공통 ---------- */
+  section{padding:104px 22px}
+  .wrap{max-width:660px;margin:0 auto}
+  .eyebrow{font-size:11px;font-weight:700;letter-spacing:.28em;color:var(--flame);margin-bottom:18px}
+  h2{font-size:clamp(26px,7vw,38px);font-weight:700;letter-spacing:-.03em;line-height:1.34}
+  .lead{margin-top:20px;font-size:16px;line-height:1.85;color:var(--ink-soft)}
+  .reveal{opacity:0;transform:translateY(26px);transition:opacity .8s ease,transform .8s cubic-bezier(.2,.7,.3,1)}
+  .reveal.in{opacity:1;transform:none}
+
+  /* ---------- 이름의 뜻 ---------- */
+  .meaning{border-top:1px solid var(--line)}
+  .glyphs{margin-top:44px;display:flex;flex-direction:column;gap:18px}
+  .glyph{display:flex;gap:20px;align-items:flex-start;padding:26px 24px;border-radius:20px;background:var(--paper-2)}
+  .glyph .side{flex:0 0 96px;display:flex;flex-direction:column;gap:16px}
+  .glyph .ch{font-size:42px;font-weight:700;line-height:.95;color:var(--flame)}
+  .glyph .mini{width:78px;height:auto;overflow:visible}
+  .glyph .mini .dim{opacity:.16}
+  .glyph h3{font-size:16px;font-weight:700;letter-spacing:-.01em}
+  .glyph p{margin-top:8px;font-size:14.5px;line-height:1.8;color:var(--ink-soft)}
+  .glyph .tag{
+    display:inline-block;margin-top:12px;font-size:11px;font-weight:700;letter-spacing:.08em;
+    color:var(--ember);border:1px solid rgba(196,85,26,.32);border-radius:999px;padding:4px 10px;
+  }
+
+  /* ---------- 만드는 방식 ---------- */
+  .how{background:var(--ink);color:var(--paper)}
+  .how .eyebrow{color:var(--amber)}
+  .how .lead{color:rgba(251,243,228,.66)}
+  .steps{margin-top:46px}
+  .step{display:flex;gap:22px;padding:24px 0;border-top:1px solid rgba(251,243,228,.16)}
+  .step:last-child{border-bottom:1px solid rgba(251,243,228,.16)}
+  .step .num{font-size:12px;font-weight:700;letter-spacing:.1em;color:var(--amber);flex:0 0 34px;padding-top:4px}
+  .step h3{font-size:17px;font-weight:700;letter-spacing:-.01em}
+  .step p{margin-top:7px;font-size:14px;line-height:1.75;color:rgba(251,243,228,.62)}
+
+  /* ---------- 만드는 사람 ---------- */
+  .maker{border-top:1px solid var(--line)}
+  .card{margin-top:42px;background:var(--paper-2);border-radius:24px;padding:30px 26px}
+  .card .top{display:flex;gap:18px;align-items:center}
+  .photo{
+    width:76px;height:76px;border-radius:50%;flex:0 0 auto;overflow:hidden;
+    background:linear-gradient(150deg,var(--amber),var(--flame));
+  }
+  .photo svg{display:block;width:100%;height:100%}
+  .card .name{font-size:20px;font-weight:900;letter-spacing:-.02em}
+  .card .role{margin-top:5px;font-size:13px;color:var(--ink-soft)}
+  .card blockquote{margin-top:24px;padding-left:16px;border-left:2px solid var(--flame);font-size:15.5px;line-height:1.9}
+  .facts{margin-top:26px;display:flex;flex-wrap:wrap;gap:8px}
+  .facts li{list-style:none;font-size:12.5px;font-weight:400;background:rgba(42,24,16,.06);border-radius:999px;padding:7px 13px}
+
+  /* ---------- 마지막 ---------- */
+  .end{text-align:center;background:var(--paper-2);border-top:1px solid var(--line)}
+  .end h2{max-width:14em;margin:0 auto}
+  .proof{margin-top:26px;font-size:13px;font-weight:700;color:var(--ink-soft)}
+  .proof .star{color:var(--flame)}
+  .btns{margin-top:16px;display:flex;flex-direction:column;gap:11px;max-width:320px;margin-left:auto;margin-right:auto}
+  .btn{display:block;text-decoration:none;text-align:center;padding:16px;border-radius:999px;font-size:15px;font-weight:700;transition:transform .15s,background .2s}
+  .btn:active{transform:scale(.98)}
+  .btn.fill{background:var(--flame);color:var(--paper)}
+  .btn.fill:hover{background:var(--ember)}
+  .btn.line{border:1.5px solid var(--ink);color:var(--ink)}
+  .btn.line:hover{background:var(--ink);color:var(--paper)}
+
+  footer{padding:34px 22px 46px;text-align:center;font-size:12px;color:var(--ink-soft);line-height:1.9;border-top:1px solid var(--line)}
+
+  /* ---------- 고정 CTA 바 (인트로 이후 노출) ---------- */
+  .dock{
+    position:fixed;left:0;right:0;bottom:0;z-index:40;
+    display:flex;align-items:center;justify-content:center;gap:14px;
+    padding:10px 16px calc(10px + env(safe-area-inset-bottom));
+    background:rgba(251,243,228,.92);backdrop-filter:blur(10px);
+    border-top:1px solid var(--line);
+    transform:translateY(110%);visibility:hidden;
+    transition:transform .35s cubic-bezier(.2,.7,.3,1),visibility 0s .35s;
+  }
+  .dock.show{transform:none;visibility:visible;transition-delay:0s}
+  .dock .dock-note{font-size:12px;font-weight:700;color:var(--ink-soft);white-space:nowrap}
+  .dock .dock-note .star{color:var(--flame)}
+  .dock .dock-btn{
+    text-decoration:none;font-size:14px;font-weight:700;white-space:nowrap;
+    color:var(--paper);background:var(--flame);padding:11px 22px;border-radius:999px;
+    transition:background .2s;
+  }
+  .dock .dock-btn:hover{background:var(--ember)}
+  @media (prefers-reduced-motion:reduce){.dock{transition:none}}
+
+  @media (prefers-reduced-motion:reduce){
+    .reveal{opacity:1;transform:none;transition:none}
+    .hint{display:none}
+  }
+</style>
 </head>
 <body>
 
-<header>
-  <div class="wrap nav">
-    <img src="_work_assets/logo.png" alt="">
-    <b>다온핏</b>
-    <a class="store-btn" href="https://smartstore.naver.com/samyong_2" target="_blank" rel="noopener">스토어 가기</a>
-  </div>
-</header>
+<div class="bar" id="bar">
+  <!-- 로고 탭 = 맨 위로 (완주 후엔 워드마크 페이지) — 관례형 to-top, 별도 버튼 없음 -->
+  <button class="mark" type="button" aria-label="맨 위로 이동">
+    <svg viewBox="200 110 680 390" aria-hidden="true">
+      <g fill="#F2661F">
+        <path d="M503,470 L503,194 L578,194 L578,470 Z"/>
+        <path d="M502,445 L502,203 L580,203 L580,445 Z" transform="rotate(41 541 470)"/>
+        <path d="M502,445 L502,203 L580,203 L580,445 Z" transform="rotate(-41 541 470)"/>
+        <rect x="284" y="411" width="512" height="75"/>
+      </g>
+      <g fill="#F7EFC4">
+        <circle cx="709" cy="161" r="33"/><circle cx="251" cy="308" r="33"/><circle cx="805" cy="340" r="33"/>
+      </g>
+    </svg>
+    다온핏
+  </button>
+  <a class="cta" href="#store">스토어 가기</a>
+</div>
 
-<div class="hero">
-  <div class="wrap">
-    <img src="_work_assets/logo.png" alt="다온핏 로고">
-    <h1>좋은 것들이 모여,<br><em>너에게 꼭 맞게</em></h1>
-    <p>다온핏은 생활 속 불편을 3D프린팅으로 해결하는 맞춤 소품 브랜드입니다.
-       하나하나 주문받아 정성껏 출력해 보내드려요.</p>
-    <div class="hero-actions">
-      <a class="btn primary" href="https://smartstore.naver.com/samyong_2" target="_blank" rel="noopener">네이버 스마트스토어</a>
-      <a class="btn ghost" href="https://www.instagram.com/daonfit/" target="_blank" rel="noopener">인스타그램</a>
+<!-- ================= 무대 ================= -->
+<div class="stage" id="stage">
+  <div class="stage-inner">
+    <div class="glow" id="glow"></div>
+
+    <svg id="logo" viewBox="200 110 680 390" aria-label="다온핏 로고">
+      <g fill="var(--flame)">
+        <path class="pc" data-i="0" d="M284,411 H796 V486 H284 Z"/>
+        <path class="pc" data-i="1" d="M503,470 L503,194 L578,194 L578,470 Z"/>
+        <path class="pc" data-i="2" d="M502,445 L502,203 L580,203 L580,445 Z" transform="rotate(41 541 470)"/>
+        <path class="pc" data-i="3" d="M502,445 L502,203 L580,203 L580,445 Z" transform="rotate(-41 541 470)"/>
+      </g>
+      <g fill="var(--dot)">
+        <circle class="pc" data-i="4" cx="709" cy="161" r="33"/>
+        <circle class="pc" data-i="5" cx="251" cy="308" r="33"/>
+        <circle class="pc" data-i="6" cx="805" cy="340" r="33"/>
+      </g>
+    </svg>
+
+    <div class="word" id="word">
+      <div class="ko">다온핏</div>
+      <div class="en">DAONFIT</div>
     </div>
+
+    <div class="lines">
+      <p class="line serif" id="l1">흩어져 있던 좋은 것들이</p>
+      <p class="line serif" id="l2"><em>다 온다</em><span class="sub">순우리말 '다온' — 좋은 모든 것이 다 온다</span></p>
+      <p class="line serif" id="l3">그리고 <em>너에게 꼭 맞게</em><span class="sub">핏 — 하나하나 주문받아 맞춰 만듭니다</span></p>
+    </div>
+
+    <div class="hint" id="hint">SCROLL<span></span></div>
   </div>
 </div>
 
-<div class="wrap">
-  <div class="custom">
-    <h2>이런 것도 만들어줘!</h2>
-    <p>"이런 게 있으면 좋겠는데…" 하는 물건이 있나요?
-       다온핏은 아이디어를 3D프린팅으로 현실로 만듭니다. 편하게 말 걸어주세요.</p>
-    <a class="btn" href="https://www.instagram.com/daonfit/" target="_blank" rel="noopener">인스타그램 DM 보내기</a>
-  </div>
-</div>
-
-<div class="strip">
-  <div class="wrap usp">
-    <div><span class="big">⭐ 5.0</span><b>구매 만족도</b><span>리뷰 전원 별 다섯 개</span></div>
-    <div><span class="big">🖨️</span><b>주문 제작</b><span>주문 후 정성껏 출력</span></div>
-    <div><span class="big">💡</span><b>생활 아이디어</b><span>불편함에서 태어난 소품</span></div>
-  </div>
-</div>
-
-<section id="products">
+<!-- ================= 이름의 뜻 ================= -->
+<section class="meaning">
   <div class="wrap">
-    <span class="kicker">PRODUCTS</span>
-    <h2>지금 판매 중인 다온핏</h2>
-    <div class="grid">
+    <p class="eyebrow reveal">이름</p>
+    <h2 class="reveal serif">두 글자에 담은 것</h2>
+    <p class="lead reveal">브랜드 이름을 짓는 데 오래 걸렸습니다. 결국 남은 건 아주 단순한 두 마디였어요.</p>
 
-      <article class="product">
-        <a class="thumb" href="goods/keybox.html"><img src="_work_assets/p1.jpg" alt="차량용 견인고리 비상키함"></a>
-        <div class="body">
-          <h3><a href="goods/keybox.html">차량용 견인고리 비상키함</a></h3>
-          <p class="meta"><span class="star">★ 5.0</span> · 리뷰 35 — 스페어키를 차 밖에, 안전하게</p>
-          <p class="price">15,000원 <small>배송 3,000원</small></p>
-          <a class="buy" href="https://naver.me/FvTi2944" target="_blank" rel="noopener">스마트스토어에서 보기</a>
+    <div class="glyphs">
+      <div class="glyph reveal">
+        <div class="side">
+          <div class="ch serif">다온</div>
+          <!-- 세 갈래 강조 — 모여드는 좋은 것들 -->
+          <svg class="mini" viewBox="200 110 680 390" aria-hidden="true">
+            <g fill="var(--flame)" class="dim"><rect x="284" y="411" width="512" height="75"/></g>
+            <g fill="var(--dot)" class="dim">
+              <circle cx="709" cy="161" r="33"/><circle cx="251" cy="308" r="33"/><circle cx="805" cy="340" r="33"/>
+            </g>
+            <g fill="var(--flame)">
+              <path d="M503,470 L503,194 L578,194 L578,470 Z"/>
+              <path d="M502,445 L502,203 L580,203 L580,445 Z" transform="rotate(41 541 470)"/>
+              <path d="M502,445 L502,203 L580,203 L580,445 Z" transform="rotate(-41 541 470)"/>
+            </g>
+          </svg>
         </div>
-      </article>
-
-      <article class="product">
-        <a class="thumb" href="goods/parking-keyring.html"><img src="_work_assets/p5.jpg" alt="주차위치 표시 키링"></a>
-        <div class="body">
-          <h3><a href="goods/parking-keyring.html">주차위치 표시 슬라이드 키링</a></h3>
-          <p class="meta">B1? B2? 이제 안 헷갈려요 — 슬라이드로 주차층 기록</p>
-          <p class="price">9,000원 <small>배송 3,000원</small></p>
-          <a class="buy" href="https://naver.me/x1uMl0OZ" target="_blank" rel="noopener">스마트스토어에서 보기</a>
+        <div>
+          <h3>좋은 모든 것이 다 온다</h3>
+          <p>한자어가 아닌 순우리말입니다. 사방에 흩어져 있던 좋은 것들이 한자리로 모여든다는 뜻. 로고에서 세 갈래가 한 받침으로 모이는 이유이기도 합니다.</p>
+          <span class="tag">순우리말</span>
         </div>
-      </article>
-
-      <article class="product">
-        <a class="thumb" href="goods/vent-clip.html"><img src="_work_assets/p2.jpg" alt="차량용 방향제 연장 클립"></a>
-        <div class="body">
-          <h3><a href="goods/vent-clip.html">차량용 방향제 연장 클립</a></h3>
-          <p class="meta"><span class="star">★ 5.0</span> · 리뷰 2 — 송풍구 깊이를 딱 맞게 보정</p>
-          <p class="price">5,000원 <small>배송 3,000원</small></p>
-          <a class="buy" href="https://naver.me/FbVI5jrD" target="_blank" rel="noopener">스마트스토어에서 보기</a>
+      </div>
+      <div class="glyph reveal">
+        <div class="side">
+          <div class="ch serif">핏</div>
+          <!-- 받침 강조 — 꼭 맞게 받아주는 자리 -->
+          <svg class="mini" viewBox="200 110 680 390" aria-hidden="true">
+            <g fill="var(--flame)" class="dim">
+              <path d="M503,470 L503,194 L578,194 L578,470 Z"/>
+              <path d="M502,445 L502,203 L580,203 L580,445 Z" transform="rotate(41 541 470)"/>
+              <path d="M502,445 L502,203 L580,203 L580,445 Z" transform="rotate(-41 541 470)"/>
+            </g>
+            <g fill="var(--dot)" class="dim">
+              <circle cx="709" cy="161" r="33"/><circle cx="251" cy="308" r="33"/><circle cx="805" cy="340" r="33"/>
+            </g>
+            <g fill="var(--flame)"><rect x="284" y="411" width="512" height="75"/></g>
+          </svg>
         </div>
-      </article>
-
-      <article class="product">
-        <a class="thumb" href="goods/mini-atm.html"><img src="_work_assets/p3.jpg" alt="3D프린팅 미니 ATM 저금통"></a>
-        <div class="body">
-          <h3><a href="goods/mini-atm.html">미니 ATM 저금통</a></h3>
-          <p class="meta">용돈 이벤트·서프라이즈 선물로 인기 만점</p>
-          <p class="price">40,000원 <small>배송 3,000원</small></p>
-          <a class="buy" href="https://naver.me/G0pY9IzE" target="_blank" rel="noopener">스마트스토어에서 보기</a>
+        <div>
+          <h3>당신에게 꼭 맞게</h3>
+          <p>좋은 물건도 내 차, 내 생활에 안 맞으면 소용이 없죠. 다온핏은 만들어 두고 파는 게 아니라, 주문을 받은 뒤 그 사람에게 맞춰 출력합니다.</p>
+          <span class="tag">주문 제작</span>
         </div>
-      </article>
-
-      <article class="product soldout">
-        <a class="thumb" href="goods/figure-stand.html"><img src="_work_assets/p4.jpg" alt="티니핑 피규어 받침대"></a>
-        <div class="body">
-          <h3><a href="goods/figure-stand.html">티니핑 피규어 받침대 10개입</a></h3>
-          <p class="meta"><span class="star">★ 5.0</span> · 리뷰 1 — 전 캐릭터 호환 거치대</p>
-          <p class="price">7,000원 <small>배송 3,000원</small></p>
-          <a class="buy" href="https://naver.me/Gzda3giH" target="_blank" rel="noopener">재입고 소식 보러 가기</a>
-        </div>
-      </article>
-
+      </div>
     </div>
   </div>
 </section>
 
+<!-- ================= 만드는 방식 ================= -->
+<section class="how">
+  <div class="wrap">
+    <p class="eyebrow reveal">만드는 방식</p>
+    <h2 class="reveal serif">불편함에서 시작해<br>물건으로 끝납니다</h2>
+    <p class="lead reveal">다온핏의 모든 제품은 "이런 게 있으면 좋겠는데"라는 말 한마디에서 출발했습니다. 재고를 쌓아두지 않고, 주문이 들어오면 그때부터 만듭니다.</p>
+
+    <div class="steps">
+      <div class="step reveal"><div class="num">01</div><div>
+        <h3>불편함을 듣습니다</h3>
+        <p>직접 겪은 불편, 또는 DM으로 들어온 아이디어에서 시작합니다.</p></div></div>
+      <div class="step reveal"><div class="num">02</div><div>
+        <h3>치수를 재고 설계합니다</h3>
+        <p>차종마다 범퍼 캡 자리도, 송풍구 깊이도 다릅니다. 실측한 값으로 3D 모델을 그립니다.</p></div></div>
+      <div class="step reveal"><div class="num">03</div><div>
+        <h3>몇 번이고 다시 뽑습니다</h3>
+        <p>한 번에 맞는 경우는 거의 없습니다. 끼워보고, 깎고, 다시 출력하기를 반복합니다.</p></div></div>
+      <div class="step reveal"><div class="num">04</div><div>
+        <h3>주문받은 뒤 출력합니다</h3>
+        <p>그래서 배송이 조금 걸립니다. 대신 당신 차에 맞는 한 개를 보냅니다.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 만드는 사람 ================= -->
+<section class="maker">
+  <div class="wrap">
+    <p class="eyebrow reveal">만드는 사람</p>
+    <h2 class="reveal serif">혼자 다 합니다</h2>
+    <p class="lead reveal">설계도, 출력도, 포장도, 답장도 한 사람이 합니다. 그래서 조금 느리지만 어디에 무엇이 들어갔는지 다 압니다.</p>
+
+    <div class="card reveal">
+      <div class="top">
+        <!-- mock 아바타 — 인계 전 실제 대표 사진으로 교체 -->
+        <div class="photo" aria-hidden="true">
+          <svg viewBox="0 0 76 76">
+            <circle cx="38" cy="29" r="13" fill="rgba(255,255,255,.92)"/>
+            <path d="M13 70c2.5-15.5 12-23 25-23s22.5 7.5 25 23Z" fill="rgba(255,255,255,.92)"/>
+          </svg>
+        </div>
+        <div>
+          <div class="name">정선용</div>
+          <div class="role">다온핏 대표 · 설계 및 제작</div>
+        </div>
+      </div>
+      <blockquote class="serif">차 키를 안에 두고 문을 잠근 날, 이런 게 왜 없지 싶었습니다. 없으면 만들면 되니까 — 그렇게 시작했습니다.</blockquote>
+      <ul class="facts">
+        <li>제조 현장 엔지니어</li><li>3D 설계 · FDM 출력</li><li>차량용품 전문</li><li>문의는 인스타 DM</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 마지막 ================= -->
+<section class="end" id="store">
+  <div class="wrap">
+    <p class="eyebrow reveal">다음</p>
+    <h2 class="reveal serif">당신에게 맞는 것도<br>만들 수 있습니다</h2>
+    <p class="lead reveal">지금 파는 물건 중에 없다면, 말만 걸어주세요.</p>
+    <p class="proof reveal">네이버 스마트스토어 구매 만족도 <span class="star">★ 5.0</span></p>
+    <div class="btns">
+      <a class="btn fill reveal" href="https://smartstore.naver.com/samyong_2?utm_source=daonfit-landing&utm_medium=referral&utm_campaign=brand" target="_blank" rel="noopener">네이버 스마트스토어에서 보기</a>
+      <a class="btn line reveal" href="https://www.instagram.com/daonfit/" target="_blank" rel="noopener">인스타그램 DM 보내기</a>
+    </div>
+  </div>
+</section>
+
+<div class="dock" id="dock" aria-hidden="true">
+  <span class="dock-note">구매 만족도 <span class="star">★ 5.0</span></span>
+  <a class="dock-btn" href="https://smartstore.naver.com/samyong_2?utm_source=daonfit-landing&utm_medium=referral&utm_campaign=brand-dock" target="_blank" rel="noopener">스마트스토어에서 보기</a>
+</div>
+
 <footer>
-  <nav>
-    <a href="qna.html">문의 Q&amp;A</a>
-    <a href="https://smartstore.naver.com/samyong_2" target="_blank" rel="noopener">스마트스토어</a>
-    <a href="https://www.instagram.com/daonfit/" target="_blank" rel="noopener">인스타그램</a>
-  </nav>
-  ⓒ 다온핏 DAONFIT. 로고와 상품 사진의 권리는 다온핏에 있습니다.
+  다온핏 DAONFIT · 대표 정선용<br>
+  <!-- mock 사업자 정보 — 인계 전 실제 정보로 교체 -->
+  사업자등록번호 000-00-00000 · 통신판매업신고 제0000-서울OO-0000호<br>
+  문의 인스타그램 <a href="https://www.instagram.com/daonfit/" target="_blank" rel="noopener" style="color:inherit">@daonfit</a><br>
+  로고 및 상품 사진의 권리는 다온핏에 있습니다
 </footer>
 
+<script>
+(function(){
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var stage = document.getElementById('stage');
+  var parts = Array.prototype.slice.call(document.querySelectorAll('#logo .pc'));
+  var word  = document.getElementById('word');
+  var glow  = document.getElementById('glow');
+  var hint  = document.getElementById('hint');
+  var bar   = document.getElementById('bar');
+  var L = [document.getElementById('l1'),document.getElementById('l2'),document.getElementById('l3')];
+  var introDone = false; // 완주 후엔 인트로 역재생 없음 (재생은 새로고침으로)
+
+  // 조각별 출발 위치(화면 밖) — 받침이 먼저 자리잡고 팔 셋이 모여든 뒤 점이 뜬다
+  // t0/t1 = 각 조각이 이동하는 스크롤 구간
+  var start = [
+    {x:   0, y: 520, r:  0, s:1.0, t0:0.02, t1:0.22},  // 받침
+    {x:   0, y:-620, r: 26, s:1.0, t0:0.10, t1:0.34},  // 가운데 팔
+    {x: 700, y:-360, r: 70, s:1.0, t0:0.15, t1:0.40},  // 오른쪽 팔
+    {x:-700, y:-360, r:-70, s:1.0, t0:0.15, t1:0.40},  // 왼쪽 팔
+    {x: 240, y:-560, r:  0, s:2.2, t0:0.28, t1:0.40},  // 점 — '다 온다' 앵커(0.45) 전에 정착
+    {x:-420, y:-260, r:  0, s:2.2, t0:0.30, t1:0.42},
+    {x: 460, y: 180, r:  0, s:2.2, t0:0.32, t1:0.44}
+  ];
+
+  parts.forEach(function(el){
+    var g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    el.parentNode.insertBefore(g, el);
+    g.appendChild(el);
+    el.__g = g;
+  });
+
+  function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+  function ease(t){return 1-Math.pow(1-t,3);}
+  function easeInOut(t){return .5*(1-Math.cos(Math.PI*t));} // sine — 가장 완만한 가감속
+  function seg(p,a,b){return clamp((p-a)/(b-a),0,1);}
+  function pulse(p,a,b,c,d){
+    if(p<a||p>d) return 0;
+    if(p<b) return seg(p,a,b);
+    if(p>c) return 1-seg(p,c,d);
+    return 1;
+  }
+
+  function render(p){
+    parts.forEach(function(el,i){
+      var s = start[i];
+      var t = ease(seg(p, s.t0, s.t1));
+      var x = s.x*(1-t), y = s.y*(1-t), r = s.r*(1-t);
+      var sc = 1 + (s.s-1)*(1-t);
+      el.__g.setAttribute('transform',
+        'translate('+(541+x)+','+(400+y)+') rotate('+r.toFixed(2)+') scale('+sc.toFixed(3)+') translate(-541,-400)');
+      el.style.opacity = (0.17 + 0.83*t).toFixed(3);
+    });
+
+    glow.style.opacity = pulse(p,0.60,0.72,0.80,0.95).toFixed(3);
+
+    // 워드마크는 2→3 전환 구간 대부분(0.48~0.73)에 걸쳐 천천히 떠오른다
+    var w = seg(p,0.48,0.73);
+    word.style.opacity = w.toFixed(3);
+    word.style.transform = 'translateY('+((1-w)*38).toFixed(1)+'px)';
+
+    // 첫 문장은 스크롤 전(p=0)부터 보인다 — 첫 화면에 핵심 메시지 노출.
+    // 각 앵커(0 / 0.45 / 0.75 / 1)에서 문장·워드마크가 깨끗한 상태가 되도록 배치.
+    var o = [ pulse(p,-1,0.00,0.18,0.28),
+              pulse(p,0.36,0.44,0.55,0.65),
+              pulse(p,0.66,0.74,0.85,0.97) ];
+    L.forEach(function(el,i){
+      el.style.opacity = o[i].toFixed(3);
+      el.style.transform = 'translateY('+((1-o[i])*10).toFixed(1)+'px)';
+    });
+
+    hint.style.opacity = (1-seg(p,0,0.10)).toFixed(3);
+    if(p >= 0.999) introDone = true; // 인트로 완주 — 이후 위로는 워드마크 페이지까지만
+  }
+
+  var ticking = false;
+  function onScroll(){
+    if(ticking) return;
+    ticking = true;
+    requestAnimationFrame(function(){
+      var rect = stage.getBoundingClientRect();
+      var total = stage.offsetHeight - window.innerHeight;
+      render(clamp(-rect.top/total, 0, 1));
+      bar.classList.toggle('solid', window.scrollY > 40);
+      ticking = false;
+    });
+  }
+
+  if(reduce){
+    render(1);
+    document.querySelector('.bar .mark').addEventListener('click', function(){ window.scrollTo(0, 0); });
+  }
+  else{
+    window.addEventListener('scroll', onScroll, {passive:true});
+    window.addEventListener('resize', onScroll);
+    onScroll();
+
+    // 인트로 중간에 멈추면 로고가 조립 중 상태로 얼어붙는다 — 멈춤을 감지해
+    // 가까운 완성 상태로 자동 스크롤(거의 시작이면 처음으로, 아니면 끝까지).
+    // 사용자 입력(휠·터치·키)이 오면 즉시 양보한다.
+    var snapTimer = null, snapping = false, snapRaf = null;
+    function stageBounds(){
+      var top = stage.offsetTop;
+      return { start: top, end: top + stage.offsetHeight - window.innerHeight };
+    }
+    function cancelSnap(){
+      if(snapRaf) cancelAnimationFrame(snapRaf);
+      snapRaf = null; snapping = false;
+      document.documentElement.style.scrollBehavior = '';
+    }
+    function snapTo(targetY, kind, durOverride){
+      var fromY = window.scrollY, dist = targetY - fromY;
+      if(Math.abs(dist) < 2) return;
+      snapping = true; snapKind = kind || 'page';
+      document.documentElement.style.scrollBehavior = 'auto';
+      var dur = durOverride || clamp(Math.abs(dist) / window.innerHeight * 650, 500, 1100);
+      var t0 = null;
+      function step(ts){
+        if(!snapping) return;
+        if(t0 === null) t0 = ts;
+        var k = clamp((ts - t0) / dur, 0, 1);
+        window.scrollTo(0, fromY + dist * easeInOut(k)); // 가속→감속: 페이지 넘김 감각
+        if(k < 1){ snapRaf = requestAnimationFrame(step); }
+        else {
+          if(snapKind === 'page') gestureLock = performance.now() + 250; // 관성 꼬리 흡수
+          cancelSnap();
+        }
+      }
+      snapRaf = requestAnimationFrame(step);
+    }
+    // 정착 앵커: 첫 문장(0) / 로고+'다 온다'(0.45) / 워드마크+'너에게 꼭 맞게'(0.75)
+    // / 워드마크만(1). 구간 진행 25% 미만이면 이전 앵커로, 이상이면 다음 앵커로.
+    var ANCHORS = [0, 0.45, 0.75, 1];
+    function snapTargetP(p){
+      for(var i = 1; i < ANCHORS.length; i++){
+        var a = ANCHORS[i-1], b = ANCHORS[i];
+        if(p <= b) return (p - a) / (b - a) < 0.25 ? a : b;
+      }
+      return 1;
+    }
+    function armSnap(){
+      clearTimeout(snapTimer);
+      snapTimer = setTimeout(function(){
+        var b = stageBounds();
+        var p = clamp((window.scrollY - b.start) / (b.end - b.start), 0, 1);
+        if(p >= 0.98) return;
+        if(introDone){ snapTo(b.end, 'idle'); return; } // 완주 후 무대 안은 완성 상태로만
+        var atAnchor = ANCHORS.some(function(a){ return Math.abs(p - a) < 0.02; });
+        if(atAnchor) return;
+        snapTo(b.start + snapTargetP(p) * (b.end - b.start), 'idle');
+      }, 180);
+    }
+    ['pointerdown','keydown'].forEach(function(ev){
+      window.addEventListener(ev, function(){
+        if(snapping){ cancelSnap(); armSnap(); }             // 취소돼도 idle 스냅이 수습
+      }, {passive:true});
+    });
+    window.addEventListener('scroll', function(){ if(!snapping) armSnap(); }, {passive:true});
+
+    // 풀페이지 스크롤(섹션 페이징): 인트로 안에서는 휠 한 틱·스와이프 한 번이
+    // 앵커 한 칸이다. 전환 중 입력은 삼키고(관성 흡수 잠금 250ms 포함),
+    // 마지막 앵커에서 아래로 넘기면 본문 일반 스크롤로 풀려난다.
+    // 스크롤바 드래그·키보드 등 제스처 밖 이동은 위의 idle 스냅이 수습한다.
+    var gestureLock = 0, snapKind = null;
+    // 제스처 페이징('page') 전환 중 입력은 삼키지만, idle 수습 스냅('idle')은
+    // 사용자 제스처가 항상 이긴다.
+    function yieldToGesture(e){
+      if(!snapping) return performance.now() < gestureLock ? (e.preventDefault(), false) : true;
+      if(snapKind === 'idle'){ cancelSnap(); return true; }
+      e.preventDefault(); return false;
+    }
+    function stageP(){
+      var b = stageBounds();
+      return (window.scrollY - b.start) / (b.end - b.start);
+    }
+    // 페이지 목표 지점: 인트로 앵커 4곳 + 본문 첫 화면('이름' 섹션) = 총 5페이지
+    function pageTargets(){
+      var b = stageBounds();
+      var t = ANCHORS.map(function(a){ return Math.round(b.start + a * (b.end - b.start)); });
+      t.push(b.end + window.innerHeight);
+      return t;
+    }
+    // 순방향 페이지별 전환 시간: 조립(→2)은 길게, 워드마크 부상(→3)은 여유 있게
+    var PAGE_DUR = [0, 1250, 950, 700, 650];
+    function pageStep(dir){
+      var t = pageTargets(), y = window.scrollY;
+      if(dir > 0){
+        for(var i = 0; i < t.length; i++) if(t[i] > y + 2) return snapTo(t[i], 'page', PAGE_DUR[i]);
+      }else{
+        var floor = introDone ? stageBounds().end : 0; // 완주 후엔 워드마크 페이지가 맨 위
+        for(var j = t.length - 1; j >= 0; j--) if(t[j] < y - 2 && t[j] >= floor) return snapTo(t[j]);
+      }
+    }
+    // 뒤로 가기는 확실한 제스처만: 위 방향 휠은 300ms 안에 누적 -80px를
+    // 넘어야 한 칸 되돌린다(작은 드리프트는 삼킴). 앞으로는 가볍게 넘어간다.
+    var wheelAcc = 0, wheelAccT = 0;
+    window.addEventListener('wheel', function(e){
+      var t = pageTargets(), y = window.scrollY, last = t[t.length - 1];
+      if(y > last + 2) return;                               // 5페이지 아래 본문 — 일반 스크롤
+      if(!yieldToGesture(e)) return;
+      var d = e.deltaY * (e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? window.innerHeight : 1);
+      if(Math.abs(d) < 2) return;
+      if(d > 0){
+        wheelAcc = 0;
+        if(y >= last - 2) return;                            // 마지막 페이지 → 본문으로 풀림
+        e.preventDefault(); pageStep(1);
+      }else{
+        if(y <= 2) return;                                   // 맨 위 → 그대로
+        e.preventDefault();
+        var now = performance.now();
+        if(now - wheelAccT > 300 || wheelAcc > 0) wheelAcc = 0;
+        wheelAccT = now;
+        wheelAcc += d;
+        if(wheelAcc <= -80){ wheelAcc = 0; pageStep(-1); }
+      }
+    }, {passive:false});
+    var touchY = null, touchCaptured = false, touchDecided = false;
+    window.addEventListener('touchstart', function(e){
+      touchY = e.touches[0].clientY;
+      touchCaptured = false; touchDecided = false;
+    }, {passive:true});
+    window.addEventListener('touchmove', function(e){
+      if(touchY === null) return;
+      var t = pageTargets(), y = window.scrollY, last = t[t.length - 1];
+      if(y > last + 2 && !touchCaptured) return;             // 5페이지 아래 본문 — 일반 스크롤
+      if(!yieldToGesture(e)) return;
+      var dy = touchY - e.touches[0].clientY;                // >0 = 위로 스와이프(다음)
+      if(!touchDecided){
+        // 앞으로는 12px면 넘어가지만, 뒤로는 48px 이상 확실히 끌어야 되돌린다
+        if(dy < 12 && dy > -48) return;                      // 판정 전 — 개입하지 않음
+        touchDecided = true;
+        if(dy > 0 && y >= last - 2) return;                  // 마지막 페이지 → 본문으로 풀림
+        if(dy < 0 && y <= 2) return;
+        touchCaptured = true;
+        e.preventDefault();
+        pageStep(dy > 0 ? 1 : -1);
+      }else if(touchCaptured){
+        e.preventDefault();
+      }
+    }, {passive:false});
+    window.addEventListener('touchend', function(){ touchY = null; }, {passive:true});
+
+    // 상단 바 로고 = 맨 위로 (완주 후엔 워드마크 페이지가 맨 위)
+    document.querySelector('.bar .mark').addEventListener('click', function(){
+      cancelSnap();
+      snapTo(introDone ? stageBounds().end : 0, 'page');
+    });
+  }
+
+  // 고정 CTA 바 — 인트로가 끝나면 나타나고, 하단 CTA 섹션이 보이면 숨긴다
+  var dock = document.getElementById('dock');
+  var storeSec = document.getElementById('store');
+  var dockTick = false;
+  function onDockScroll(){
+    if(dockTick) return;
+    dockTick = true;
+    requestAnimationFrame(function(){
+      var stageDone = stage.getBoundingClientRect().bottom <= window.innerHeight;
+      var storeVisible = storeSec.getBoundingClientRect().top < window.innerHeight;
+      var show = stageDone && !storeVisible;
+      dock.classList.toggle('show', show);
+      dock.setAttribute('aria-hidden', show ? 'false' : 'true');
+      dockTick = false;
+    });
+  }
+  window.addEventListener('scroll', onDockScroll, {passive:true});
+  window.addEventListener('resize', onDockScroll);
+  onDockScroll();
+
+  var io = new IntersectionObserver(function(es){
+    es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} });
+  },{threshold:.18});
+  document.querySelectorAll('.reveal').forEach(function(el,i){
+    el.style.transitionDelay = (i%4)*70 + 'ms';
+    io.observe(el);
+  });
+})();
+</script>
 </body>
 </html>
