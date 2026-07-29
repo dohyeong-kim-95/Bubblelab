@@ -53,44 +53,33 @@ ${failed ? '<p class="error">ID 또는 비밀번호가 맞지 않습니다.</p>'
 <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required>
 <button type="submit">로그인</button></form></body></html>`;
 
-// 외주 작업(work.bubblelab.dev) 의뢰 조회 로그인 — IDE 터미널 무드
+// 외주 작업(work.bubblelab.dev) 의뢰 조회 로그인 화면
 const WORK_LOGIN_PAGE = (failed, base) => `<!doctype html><html lang="ko"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex, nofollow"><title>login.sh — bubblelab works</title><style>
-:root { color-scheme: dark; }
-body { font-family: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace; min-height: 100dvh;
-       margin: 0; display: grid; place-items: center; background: #161a21; color: #c3cad6;
-       font-size: 13.5px; }
-form { width: min(23rem, 92vw); background: #1b1f27; border: 1px solid #2a303c;
-       border-radius: .6rem; overflow: hidden; }
-.bar { display: flex; align-items: center; gap: .5rem; padding: .5rem .8rem;
-       background: #21252e; border-bottom: 1px solid #2a303c; font-size: .74rem; color: #667084; }
-.bar i { width: .66rem; height: .66rem; border-radius: 50%; }
-.body { display: grid; gap: .65rem; padding: 1.2rem 1.2rem 1.35rem; }
-p { margin: 0; font-size: .76rem; color: #667084; line-height: 1.7; }
-p .ps { color: #98c379; }
-label { display: flex; align-items: center; gap: .6rem; font-size: .8rem; color: #667084; }
-label b { font-weight: 400; color: #e5c07b; min-width: 5.2em; }
-input { flex: 1; min-width: 0; font: inherit; color: #c3cad6; padding: .55rem .7rem;
-        border-radius: .4rem; border: 1px solid #2a303c; background: #161a21; }
-input:focus { outline: 1px solid #61afef; }
-button { font: inherit; padding: .6rem; border: 0; border-radius: .4rem; margin-top: .2rem;
-         background: #3d6fd0; color: #eaf1ff; font-weight: bold; cursor: pointer; }
-.error { color: #e5655e; font-size: .74rem; min-height: 1em; margin: 0; }
-.back { font-size: .74rem; }
-.back a { color: #667084; text-decoration: none; }
-.back a:hover { color: #c3cad6; }</style></head>
+<meta name="robots" content="noindex, nofollow"><title>의뢰 조회 — bubblelab works</title><style>
+:root { color-scheme: light dark; }
+body { font-family: ui-monospace, monospace; min-height: 100dvh; margin: 0; display: grid;
+       place-items: center; background: light-dark(#f2f4f7, #0d131c); color: light-dark(#1c2733, #e2e9f0); }
+form { display: grid; gap: .7rem; width: min(19rem, 88vw); padding: 1.6rem;
+       background: light-dark(#fff, #171f2b); border: 1px solid light-dark(#d9e0e7, #2a3646);
+       border-radius: 1rem; }
+h1 { margin: 0; font-size: 1.05rem; }
+p { margin: 0; font-size: .74rem; opacity: .65; line-height: 1.6; }
+input { font: inherit; color: inherit; padding: .65rem .8rem; border-radius: .6rem;
+        border: 1px solid light-dark(#d9e0e7, #2a3646); background: transparent; }
+button { font: inherit; padding: .65rem; border: 0; border-radius: .6rem;
+         background: #4f7fdd; color: #fff; font-weight: bold; cursor: pointer; }
+.error { color: #d05a5a; font-size: .74rem; min-height: 1em; margin: 0; }
+.back { font-size: .74rem; text-align: center; }
+.back a { color: inherit; opacity: .65; }</style></head>
 <body><form method="post" action="${base}/login">
-<div class="bar"><i style="background:#e5655e"></i><i style="background:#e0b954"></i><i style="background:#67c26b"></i>
-&nbsp;login.sh — 의뢰 조회</div>
-<div class="body">
-<p><span class="ps">$</span> works open — 발급받은 의뢰 ID와 비밀번호를 입력하세요.</p>
-<label><b>id:</b><input name="id" autocomplete="username" autocapitalize="none" spellcheck="false" aria-label="의뢰 ID" required autofocus></label>
-<label><b>password:</b><input name="password" type="password" autocomplete="current-password" aria-label="비밀번호" required></label>
-<p class="error">${failed ? "error: 의뢰 ID 또는 비밀번호가 맞지 않습니다." : ""}</p>
-<button type="submit">./login.sh 실행</button>
-<p class="back"><a href="${base}/">← cd .. (bubblelab works)</a></p>
-</div></form></body></html>`;
+<h1>의뢰 조회</h1>
+<p>발급받은 의뢰 ID와 비밀번호를 입력하면 진행 중인 프로젝트를 확인할 수 있습니다.</p>
+<input name="id" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="의뢰 ID" aria-label="의뢰 ID" required autofocus>
+<input name="password" type="password" autocomplete="current-password" placeholder="비밀번호" aria-label="비밀번호" required>
+<p class="error">${failed ? "의뢰 ID 또는 비밀번호가 맞지 않습니다." : ""}</p>
+<button type="submit">들어가기</button>
+<p class="back"><a href="${base}/">← bubblelab works 홈</a></p></form></body></html>`;
 
 // Duri 전용 서브도메인(duri.bubblelab.dev) 로그인 화면. 세션이 1년이라 설치형
 // 앱에선 최초 1회만 보게 된다. E2E 암호 문구는 이 게이트와 별개로 앱 안에서 받는다.

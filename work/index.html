@@ -5,176 +5,121 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <meta name="description" content="bubblelab works — 웹 기획·디자인·개발. 소규모 웹 프로젝트를 전 과정 담당합니다.">
-<title>works.ts — bubblelab works</title>
+<title>bubblelab works — 웹 기획·디자인·개발</title>
 <style>
-  :root { color-scheme: dark;
-    --chrome: #21252e;        /* 타이틀바·탭바 */
-    --panel: #1b1f27;         /* 사이드바·터미널 */
-    --editor: #161a21;        /* 에디터 배경 */
-    --line: #2a303c;
-    --text: #c3cad6;
-    --dim: #667084;
-    --comment: #5f6b80;
-    --keyword: #c678dd;
-    --string: #98c379;
-    --func: #61afef;
-    --type: #e5c07b;
-    --accent: #3d6fd0;        /* 상태바 */
+  :root { color-scheme: light dark;
+    --ground: light-dark(#fafbfc, #10151c);
+    --ink: light-dark(#1c2733, #e2e9f0);
+    --soft: light-dark(#5d6b7a, #93a3b5);
+    --surface: light-dark(#fff, #171f2b);
+    --line: light-dark(#e3e8ee, #263140);
+    --bubble: light-dark(#4f7fdd, #7ea3ec);
+    --bubble-ink: light-dark(#fff, #0d131c);
   }
-  * { box-sizing: border-box; margin: 0; }
-  html, body { height: 100%; }
-  body { background: var(--editor); color: var(--text);
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100dvh; background: var(--ground); color: var(--ink);
          font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
-         font-size: 13.5px; line-height: 1.75; }
-  a { color: inherit; }
+         line-height: 1.8; word-break: keep-all; overflow-x: hidden; }
+  main { position: relative; max-width: 38rem; margin: 0 auto; padding: 4.5rem 1.4rem 4rem; }
 
-  .ide { display: flex; flex-direction: column; min-height: 100dvh; }
+  /* 배경 장식 — 은은한 원 */
+  .bubbles { position: fixed; inset: 0; pointer-events: none; z-index: -1; }
+  .bubbles i { position: absolute; border-radius: 50%; border: 1.5px solid var(--bubble); opacity: .1; }
+  .bubbles i:nth-child(1) { width: 9rem; height: 9rem; left: -3rem; top: 16%; }
+  .bubbles i:nth-child(2) { width: 4.5rem; height: 4.5rem; right: 8%; top: 8%; }
+  .bubbles i:nth-child(3) { width: 6.5rem; height: 6.5rem; right: -2rem; bottom: 18%; }
 
-  /* ── 타이틀바 ─────────────────────────── */
-  .titlebar { display: flex; align-items: center; gap: .55rem; padding: .55rem .9rem;
-              background: var(--chrome); border-bottom: 1px solid var(--line);
-              font-size: .78rem; color: var(--dim); }
-  .titlebar .dot { width: .72rem; height: .72rem; border-radius: 50%; flex: none; }
-  .titlebar .dot.r { background: #e5655e; }
-  .titlebar .dot.y { background: #e0b954; }
-  .titlebar .dot.g { background: #67c26b; }
-  .titlebar .name { margin: 0 auto; transform: translateX(-2rem); white-space: nowrap;
-                    overflow: hidden; text-overflow: ellipsis; }
+  .hero { margin-bottom: 2.8rem; }
+  .hero .sig { display: inline-block; width: 2.2rem; height: 2.2rem; border-radius: 50%;
+               border: 2px solid var(--bubble); position: relative; }
+  .hero .sig::after { content: ""; position: absolute; right: -0.72rem; top: -0.35rem;
+                      width: .72rem; height: .72rem; border-radius: 50%;
+                      border: 2px solid var(--bubble); opacity: .55; }
+  h1 { margin: .8rem 0 .3rem; font-size: 1.65rem; letter-spacing: -.02em; }
+  .tagline { margin: 0; color: var(--soft); font-size: .92rem; }
+  .hero p.desc { margin: 1.1rem 0 0; font-size: .9rem; color: var(--soft); max-width: 32rem; }
+  .hero p.desc b { color: var(--ink); font-weight: 600; }
 
-  .main { display: flex; flex: 1; min-height: 0; }
+  .doors { display: grid; gap: .9rem; margin: 0 0 3rem; }
+  @media (min-width: 560px) { .doors { grid-template-columns: 1fr 1fr; } }
+  .door { display: block; padding: 1.25rem 1.3rem 1.35rem; border-radius: .8rem; text-decoration: none;
+          color: inherit; background: var(--surface); border: 1px solid var(--line);
+          transition: transform .15s ease, border-color .15s ease; }
+  .door:hover { transform: translateY(-2px); border-color: var(--bubble); }
+  .door b { display: block; font-size: 1.02rem; margin-bottom: .25rem; }
+  .door span { font-size: .78rem; color: var(--soft); }
+  .door.primary { background: var(--bubble); border-color: var(--bubble); color: var(--bubble-ink); }
+  .door.primary span { color: var(--bubble-ink); opacity: .85; }
 
-  /* ── 탐색기 ─────────────────────────── */
-  .explorer { width: 15.5rem; flex: none; background: var(--panel);
-              border-right: 1px solid var(--line); padding: .8rem 0 1rem; font-size: .8rem; }
-  .explorer .label { padding: 0 1rem .5rem; font-size: .68rem; letter-spacing: .14em;
-                     color: var(--dim); }
-  .explorer .item { display: block; padding: .18rem 1rem .18rem 1.7rem; color: var(--text);
-                    text-decoration: none; white-space: nowrap; }
-  .explorer .item:hover { background: #232936; }
-  .explorer .item.active { background: #2b3342; }
-  .explorer .item.dir { padding-left: 1rem; color: var(--dim); }
-  .explorer .item.lock { color: var(--dim); }
-  .explorer .item .ext { color: var(--dim); }
-  @media (max-width: 760px) { .explorer { display: none; } }
+  h2 { margin: 0 0 .8rem; font-size: .8rem; letter-spacing: .18em; color: var(--bubble);
+       text-transform: uppercase; }
+  section { margin-bottom: 2.6rem; }
+  ul.things { margin: 0; padding: 0; list-style: none; display: grid; gap: .55rem; }
+  ul.things li { font-size: .88rem; padding: .7rem .95rem; border-radius: .6rem;
+                 background: var(--surface); border: 1px solid var(--line); }
+  ul.things li small { display: block; color: var(--soft); font-size: .76rem; }
 
-  /* ── 에디터 ─────────────────────────── */
-  .editor { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-  .tabs { display: flex; background: var(--chrome); border-bottom: 1px solid var(--line);
-          font-size: .8rem; overflow-x: auto; }
-  .tab { padding: .5rem 1.1rem; color: var(--dim); text-decoration: none; white-space: nowrap;
-         border-right: 1px solid var(--line); }
-  .tab.active { background: var(--editor); color: var(--text);
-                box-shadow: inset 0 2px 0 var(--func); }
-  .tab:hover:not(.active) { color: var(--text); }
+  ol.flow { margin: 0; padding: 0; list-style: none; display: grid; gap: .55rem; counter-reset: n; }
+  ol.flow li { counter-increment: n; display: flex; gap: .8rem; align-items: baseline; font-size: .88rem; }
+  ol.flow li::before { content: counter(n, decimal-leading-zero); flex: none;
+                       font-size: .72rem; font-weight: 700; color: var(--bubble); letter-spacing: .08em; }
+  ol.flow li b { font-weight: 600; }
+  ol.flow li small { color: var(--soft); }
 
-  .code { flex: 1; overflow-x: auto; padding: 1rem 0 1.4rem; counter-reset: ln; }
-  .code .row { display: flex; min-width: max-content; padding: 0 1.4rem 0 0; }
-  .code .row::before { counter-increment: ln; content: counter(ln); flex: none; width: 3.2rem;
-                       padding-right: 1.1rem; text-align: right; color: #454e5f; user-select: none; }
-  .c { color: var(--comment); } .k { color: var(--keyword); } .s { color: var(--string); }
-  .f { color: var(--func); } .t { color: var(--type); } .p { color: var(--dim); }
-  .lens { font-size: .72rem; color: var(--func); }
-  .lens a { color: inherit; text-decoration: none; opacity: .85; }
-  .lens a:hover { text-decoration: underline; opacity: 1; }
-
-  /* ── 터미널 ─────────────────────────── */
-  .term { border-top: 1px solid var(--line); background: var(--panel); font-size: .84rem; }
-  .term .bar { display: flex; gap: 1.2rem; padding: .45rem 1.2rem; font-size: .68rem;
-               letter-spacing: .12em; color: var(--dim); border-bottom: 1px solid var(--line); }
-  .term .bar b { color: var(--text); font-weight: 400; box-shadow: 0 1px 0 var(--func); }
-  .term .cmd { display: block; padding: .5rem 1.2rem; text-decoration: none; }
-  .term .cmd:hover { background: #232936; }
-  .term .cmd .ps { color: var(--string); }
-  .term .cmd .arg { color: var(--type); }
-  .term .cmd .note { color: var(--dim); }
-  .term .cmd b { color: var(--func); font-weight: 600; }
-  .term .idle { padding: .1rem 1.2rem .8rem; color: var(--dim); }
-  .cursor { display: inline-block; width: .55em; height: 1.05em; background: var(--text);
-            vertical-align: -0.18em; animation: blink 1.1s steps(1) infinite; }
-  @keyframes blink { 50% { opacity: 0; } }
-  @media (prefers-reduced-motion: reduce) { .cursor { animation: none; } }
-
-  /* ── 상태바 ─────────────────────────── */
-  .status { display: flex; gap: 1.1rem; padding: .3rem 1rem; background: var(--accent);
-            color: #eaf1ff; font-size: .72rem; white-space: nowrap; overflow: hidden; }
-  .status .right { margin-left: auto; display: flex; gap: 1.1rem; }
-  .status a { text-decoration: none; }
-  @media (max-width: 560px) { .status .hide-s { display: none; } }
+  footer { border-top: 1px solid var(--line); padding-top: 1.4rem; font-size: .74rem;
+           color: var(--soft); display: flex; gap: 1rem; flex-wrap: wrap; }
+  footer a { color: inherit; }
 </style>
 </head>
 <body>
-<div class="ide">
-  <div class="titlebar">
-    <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-    <span class="name">works.ts — bubblelab works</span>
+<div class="bubbles" aria-hidden="true"><i></i><i></i><i></i></div>
+
+<main>
+  <div class="hero">
+    <span class="sig" aria-hidden="true"></span>
+    <h1>bubblelab works</h1>
+    <p class="tagline">웹 기획 · 디자인 · 개발</p>
+    <p class="desc">브랜드 웹사이트부터 소규모 웹 서비스까지, <b>기획 — 디자인 — 개발 —
+    배포 — 인계</b> 전 과정을 담당합니다. 모든 프로젝트는 전용 미리보기 환경에서
+    진행 상황을 확인하며 진행됩니다.</p>
   </div>
 
-  <div class="main">
-    <aside class="explorer" aria-label="파일 탐색기">
-      <div class="label">EXPLORER</div>
-      <span class="item dir">▾ bubblelab-works</span>
-      <span class="item active">works.ts</span>
-      <a class="item" href="request">request.md</a>
-      <a class="item" href="login">login.sh</a>
-      <span class="item dir">&nbsp;&nbsp;▸ projects/ <span class="ext">— 의뢰별 비공개</span></span>
-      <a class="item lock" href="login" title="의뢰 조회 로그인">&nbsp;&nbsp;&nbsp;&nbsp;🔒 &lt;의뢰ID&gt;/</a>
-    </aside>
-
-    <div class="editor">
-      <nav class="tabs">
-        <span class="tab active">works.ts</span>
-        <a class="tab" href="request">request.md</a>
-        <a class="tab" href="login">login.sh</a>
-      </nav>
-
-      <div class="code" role="main">
-        <div class="row"><span><span class="c">/**</span></span></div>
-        <div class="row"><span><span class="c"> * bubblelab works — 웹 기획 · 디자인 · 개발</span></span></div>
-        <div class="row"><span><span class="c"> * 브랜드 웹사이트부터 소규모 웹 서비스까지 전 과정을 담당합니다.</span></span></div>
-        <div class="row"><span><span class="c"> * 모든 프로젝트는 전용 미리보기 환경에서 확인하며 진행됩니다.</span></span></div>
-        <div class="row"><span><span class="c"> */</span></span></div>
-        <div class="row"><span>&nbsp;</span></div>
-        <div class="row"><span><span class="k">export const</span> <span class="t">services</span> <span class="p">= [</span></span></div>
-        <div class="row"><span>&nbsp;&nbsp;<span class="s">"브랜드 웹사이트 · 랜딩 페이지"</span><span class="p">,</span>&nbsp;&nbsp;<span class="c">// 기업·브랜드 소개, 제품 프로모션</span></span></div>
-        <div class="row"><span>&nbsp;&nbsp;<span class="s">"인터랙티브 웹 콘텐츠"</span><span class="p">,</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="c">// 스크롤 연출 · 웹 게임 · 캠페인</span></span></div>
-        <div class="row"><span>&nbsp;&nbsp;<span class="s">"소규모 웹 서비스 · 내부 도구"</span><span class="p">,</span>&nbsp;&nbsp;<span class="c">// 예약·조회·기록 등 단일 목적</span></span></div>
-        <div class="row"><span>&nbsp;&nbsp;<span class="s">"기존 웹사이트 개선"</span><span class="p">,</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="c">// 성능 · 모바일 대응 · 리뉴얼</span></span></div>
-        <div class="row"><span><span class="p">];</span></span></div>
-        <div class="row"><span>&nbsp;</span></div>
-        <div class="row"><span><span class="k">export const</span> <span class="t">process</span> <span class="p">= {</span></span></div>
-        <div class="row"><span>&nbsp;&nbsp;<span class="f">문의</span><span class="p">:</span> <span class="s">"요구사항과 참고 자료 접수 — 영업일 1~2일 내 회신"</span><span class="p">,</span></span></div>
-        <div class="row"><span>&nbsp;&nbsp;<span class="f">협의</span><span class="p">:</span> <span class="s">"범위·일정·견적 확정 후 계약, 미리보기 환경 발급"</span><span class="p">,</span></span></div>
-        <div class="row"><span>&nbsp;&nbsp;<span class="f">제작</span><span class="p">:</span> <span class="s">"시안 검토와 피드백 반영 반복"</span><span class="p">,</span></span></div>
-        <div class="row"><span>&nbsp;&nbsp;<span class="f">인계</span><span class="p">:</span> <span class="s">"소스 코드 포함 산출물 전체 이관"</span><span class="p">,</span></span></div>
-        <div class="row"><span><span class="p">};</span></span></div>
-        <div class="row"><span>&nbsp;</span></div>
-        <div class="row"><span><span class="lens">▷ <a href="request">신규 의뢰하기</a>&nbsp;&nbsp;|&nbsp;&nbsp;▷ <a href="login">의뢰 조회하기</a></span></span></div>
-        <div class="row"><span><span class="k">export function</span> <span class="f">startProject</span><span class="p">(</span><span class="t">idea</span><span class="p">) {</span></span></div>
-        <div class="row"><span>&nbsp;&nbsp;<span class="k">return</span> <span class="f">build</span><span class="p">(</span><span class="t">idea</span><span class="p">)</span> <span class="c">// 기획 → 디자인 → 개발 → 배포 → 인계</span></span></div>
-        <div class="row"><span><span class="p">}</span></span></div>
-      </div>
-
-      <div class="term" aria-label="터미널">
-        <div class="bar"><b>TERMINAL</b><span>OUTPUT</span><span>PROBLEMS <span style="opacity:.7">0</span></span></div>
-        <a class="cmd" href="request"><span class="ps">$</span> works <b>request</b> <span class="arg">--new</span>
-          <span class="note">&nbsp;# 신규 의뢰하기 — 수행 범위·진행 절차 안내</span></a>
-        <a class="cmd" href="login"><span class="ps">$</span> works <b>open</b> <span class="arg">&lt;의뢰ID&gt;</span>
-          <span class="note">&nbsp;# 의뢰 조회하기 — 진행 중인 프로젝트 확인</span></a>
-        <div class="idle"><span class="ps">$</span> <span class="cursor" aria-hidden="true"></span></div>
-      </div>
-    </div>
+  <div class="doors">
+    <a class="door primary" href="request">
+      <b>신규 의뢰하기</b>
+      <span>수행 범위와 진행 절차 안내, 프로젝트 문의</span>
+    </a>
+    <a class="door" href="login">
+      <b>의뢰 조회하기</b>
+      <span>발급받은 의뢰 ID로 진행 중인 프로젝트 확인</span>
+    </a>
   </div>
 
-  <div class="status">
-    <span>⎇ main</span>
-    <span class="hide-s">✓ deploy: green</span>
-    <span class="right">
-      <a href="mailto:boson95@gmail.com?subject=%5B%EC%9D%98%EB%A2%B0%5D%20">✉ boson95@gmail.com</a>
-      <a href="https://bubblelab.dev" class="hide-s">bubblelab.dev</a>
-      <span class="hide-s">UTF-8</span>
-      <span>TS</span>
-    </span>
-  </div>
-</div>
+  <section>
+    <h2>Services</h2>
+    <ul class="things">
+      <li>브랜드 웹사이트 · 랜딩 페이지 <small>기업·브랜드 소개, 제품 프로모션</small></li>
+      <li>인터랙티브 웹 콘텐츠 <small>스크롤 연출, 웹 게임, 캠페인 페이지</small></li>
+      <li>소규모 웹 서비스 · 내부 도구 <small>예약·조회·기록 등 단일 목적 서비스</small></li>
+      <li>기존 웹사이트 개선 <small>성능·모바일 대응·디자인 리뉴얼</small></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Process</h2>
+    <ol class="flow">
+      <li><span><b>문의</b> — 요구사항과 참고 자료를 접수합니다</span></li>
+      <li><span><b>협의</b> — 범위·일정·견적을 확정하고 전용 미리보기 환경을 발급합니다</span></li>
+      <li><span><b>제작</b> — 시안 검토와 피드백 반영을 반복하며 완성도를 높입니다</span></li>
+      <li><span><b>인계</b> — 소스 코드를 포함한 산출물 전체를 이관하고 종료합니다</span></li>
+    </ol>
+  </section>
+
+  <footer>
+    <span>ⓒ bubblelab works</span>
+    <a href="https://bubblelab.dev">bubblelab.dev</a>
+    <a href="logout">로그아웃</a>
+  </footer>
+</main>
 </body>
 </html>
