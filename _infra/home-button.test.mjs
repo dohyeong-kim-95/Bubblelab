@@ -112,9 +112,27 @@ test("독은 아래를 축으로 위로 자란다", () => {
   assert.match(js, /sort\(\(a, b\) => \(b\.order \?\? 50\) - \(a\.order \?\? 50\)\)/);
 });
 
-test("woodstack 음소거가 독으로 옮겨져 공유 버튼에 덮이지 않는다", () => {
-  const toy = readFileSync(join(ROOT, "slop/woodstack/index.html"), "utf8");
-  assert.match(toy, /id:\s*"bl-mute"/, "음소거가 독에 등록되지 않았다");
-  assert.doesNotMatch(toy, /#mute\s*\{[^}]*position:\s*fixed/, "옛 고정 배치가 남아 있다");
-  assert.doesNotMatch(toy, /<button id="mute"/, "옛 버튼 마크업이 남아 있다");
+// 토이가 소리 토글을 직접 배치하면 공용 UI에 덮인다 — 우드 스택은 공유 버튼에,
+// 홈런은 시작 오버레이에 가려 눌리지 않았다. 전부 독으로 옮겼다.
+for (const toy of ["woodstack", "dino", "homerun", "fruitmerge"]) {
+  test(`${toy}의 소리 토글이 독에 등록돼 있다`, () => {
+    const html = readFileSync(join(ROOT, `slop/${toy}/index.html`), "utf8");
+    assert.match(html, /id:\s*"bl-mute"/, "독에 등록되지 않았다");
+    assert.doesNotMatch(html, /<button[^>]*id="(mute|sound)"/, "옛 버튼 마크업이 남아 있다");
+    assert.doesNotMatch(html, /#(mute|sound)\s*\{[^}]*position:\s*(fixed|absolute)/,
+      "옛 고정 배치가 남아 있다");
+  });
+}
+
+test("소리 토글을 쓰는 토이가 빠짐없이 독을 쓴다", () => {
+  // 새 토이가 자기 버튼을 직접 배치하면 여기서 걸린다
+  const missed = [];
+  for (const toy of readdirSync(join(ROOT, "slop"), { withFileTypes: true })
+    .filter((d) => d.isDirectory()).map((d) => d.name)) {
+    const p = join(ROOT, "slop", toy, "index.html");
+    if (!existsSync(p)) continue;
+    const html = readFileSync(p, "utf8");
+    if (/<button[^>]*id="(mute|sound)"/.test(html)) missed.push(toy);
+  }
+  assert.deepEqual(missed, [], `독을 쓰지 않고 직접 배치한 토이: ${missed.join(", ")}`);
 });

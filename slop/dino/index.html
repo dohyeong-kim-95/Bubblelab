@@ -30,11 +30,6 @@
   }
   #hi { opacity: .55; }
   #score { font-weight: bold; }
-  #mute {
-    position: absolute; top: .7rem; right: 50%; transform: translateX(50%);
-    z-index: 11; pointer-events: auto; cursor: pointer;
-    background: none; border: none; font-size: 1.15rem; padding: .2rem .4rem; opacity: .7;
-  }
 
   /* 시작/종료 오버레이 */
   #overlay {
@@ -63,7 +58,6 @@
     <span id="score">0 m</span>
     <span id="hi"></span>
   </div>
-  <button id="mute" aria-label="음소거">🔊</button>
   <div id="overlay">
     <div id="bigmsg">🦖 공룡 점프</div>
     <div id="finalScore"></div>
@@ -223,7 +217,6 @@ addEventListener("keyup", (e) => {
 
 const stage = $("stage");
 stage.addEventListener("pointerdown", (e) => {
-  if (e.target === $("mute")) return;
   // 화면 아래쪽을 누르면 숙이기, 위쪽은 점프
   const ry = e.clientY / stage.clientHeight;
   if (state === STATE.RUN && ry > 0.62) { duckStart(); }
@@ -247,10 +240,10 @@ function beep(freq, dur, type = "square", vol = 0.06) {
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   o.start(t); o.stop(t + dur + 0.02);
 }
-$("mute").addEventListener("pointerdown", (e) => {
-  e.stopPropagation();
-  muted = !muted;
-  $("mute").textContent = muted ? "🔇" : "🔊";
+// 음소거는 우하단 공용 유틸 독에 등록한다 (배치·탭 전파 차단은 독이 맡는다)
+(window.blDock = window.blDock || []).push({
+  id: "bl-mute", icon: "🔊", label: "음소거", order: 50,
+  onClick: (el) => { muted = !muted; el.textContent = muted ? "🔇" : "🔊"; },
 });
 
 // ── 게임 흐름 ─────────────────────────────────────────────

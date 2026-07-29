@@ -65,15 +65,6 @@
   #strikes span { opacity: .28; transition: opacity .12s, transform .12s; }
   #strikes span.on { opacity: 1; transform: scale(1.15); }
   /* BGM 음소거 버튼 */
-  #mute {
-    position: absolute; left: .8rem; bottom: .8rem; z-index: 22; cursor: pointer;
-    width: 2.6rem; height: 2.6rem; border-radius: 50%; color: inherit;
-    border: 1.5px solid light-dark(rgba(60,80,110,.4), rgba(180,205,235,.35));
-    background: light-dark(rgba(255,255,255,.55), rgba(20,28,40,.6));
-    font-size: 1.2rem; line-height: 1; display: flex; align-items: center; justify-content: center;
-    -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
-  }
-  #mute:active { transform: scale(.92); }
   /* 투수(사이드암, 먼 곳이라 작게) */
   #pitcher {
     position: absolute; top: 30%; left: 44%; transform: translate(-50%,-50%) rotate(10deg);
@@ -174,7 +165,6 @@
     <div id="strikes"><span>❌</span><span>❌</span><span>❌</span></div>
   </div>
   <div id="board"><div id="boardMsg"></div></div>
-  <button id="mute" aria-label="BGM 켜기/끄기">🔇</button>
   <div id="pitcher">🤾</div>
   <div id="plate"></div>
   <div id="zone"></div>
@@ -263,7 +253,7 @@ const batter = document.getElementById("batter");
 const judgeEl = document.getElementById("judge");
 const overlay = document.getElementById("overlay");
 const btn = document.getElementById("btn");
-const muteBtn = document.getElementById("mute");
+let muteBtn = null;   // 우하단 유틸 독이 만들어 넘겨준다
 const countinEl = document.getElementById("countin");
 const boardMsg = document.getElementById("boardMsg");
 
@@ -358,7 +348,7 @@ function stopBGM() { if (bgmSrc) { try { bgmSrc.stop(); } catch (e) {} bgmSrc = 
 function resyncBGM() { if (bgmOn) { stopBGM(); playBGM(); } }   // 그리드 리셋(재시작) 시 재정렬
 async function toggleBGM() {
   bgmOn = !bgmOn;
-  muteBtn.textContent = bgmOn ? "🔊" : "🔇";
+  if (muteBtn) muteBtn.textContent = bgmOn ? "🔊" : "🔇";
   grooveVol = bgmOn ? 0.5 : 1;          // 곡 켜지면 그루브 낮춤
   if (bgmOn) { await loadBGM(); if (bgmOn) playBGM(); }
   else stopBGM();
@@ -660,7 +650,13 @@ function firstStart() {
   startGroove(ctx.currentTime + 0.45); loadBGM(); startLevel(0);   // BGM은 프리로드만(기본 OFF)
 }
 btn.onclick = firstStart;
-muteBtn.addEventListener("pointerdown", (e) => { e.stopPropagation(); toggleBGM(); });
+// BGM 토글은 우하단 공용 유틸 독에 등록한다. 직접 고정 배치하면 같은 자리를
+// 쓰는 공용 UI에 덮인다 — 이 버튼도 시작 오버레이에 가려 눌리지 않았다.
+(window.blDock = window.blDock || []).push({
+  id: "bl-mute", icon: "🔇", label: "BGM 켜기/끄기", order: 50,
+  ready: (el) => { muteBtn = el; el.textContent = bgmOn ? "🔊" : "🔇"; },
+  onClick: () => toggleBGM(),
+});
 
 field.addEventListener("pointerdown", () => { if (state === "playing") swing(); });
 window.addEventListener("keydown", (e) => {
