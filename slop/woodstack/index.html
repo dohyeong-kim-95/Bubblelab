@@ -58,15 +58,6 @@
     100% { opacity: 0; transform: translate(-50%,-66%) scale(1); }
   }
 
-  #mute {
-    position: fixed; right: 1rem; bottom: max(1rem, env(safe-area-inset-bottom)); z-index: 12;
-    width: 2.6rem; height: 2.6rem; border-radius: 50%; color: #fff; cursor: pointer;
-    border: 1.5px solid rgba(255,255,255,.35);
-    background: rgba(20,26,36,.4); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
-    font-size: 1.2rem; line-height: 1; display: flex; align-items: center; justify-content: center;
-  }
-  #mute:active { transform: scale(.92); }
-
   #overlay {
     position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column;
     align-items: center; justify-content: center; gap: .9rem; text-align: center; padding: 1.4rem;
@@ -107,7 +98,6 @@
 </div>
 <div id="judge"></div>
 <div class="hint hidden" id="hint">👆 탭해서 통나무 쌓기</div>
-<button id="mute" aria-label="소리 켜기/끄기">🔊</button>
 
 <div id="overlay">
   <div class="big">🪵</div>
@@ -699,12 +689,19 @@ window.addEventListener("keydown", (e) => {
   if (e.repeat) return;
   onTap();
 });
-$("mute").addEventListener("pointerdown", (e) => {
-  e.stopPropagation();
-  muted = !muted;
-  $("mute").textContent = muted ? "🔇" : "🔊";
-  if (muted) { stopAmbient(); stopRunLayer(); }
-  else { initAudio(); startAmbient(); if (perfectRun) startRunLayer(); }
+// 음소거는 우하단 공용 유틸 독에 등록한다. 직접 고정 배치하면 같은 자리를 쓰는
+// 공유 버튼에 덮여 눌리지 않는다(실제로 그랬다).
+(window.blDock = window.blDock || []).push({
+  id: "bl-mute",
+  icon: "🔊",
+  label: "소리 켜기/끄기",
+  order: 50,
+  onClick: (el) => {
+    muted = !muted;
+    el.textContent = muted ? "🔇" : "🔊";
+    if (muted) { stopAmbient(); stopRunLayer(); }
+    else { initAudio(); startAmbient(); if (perfectRun) startRunLayer(); }
+  },
 });
 
 // ── Bubblelab 연동 ─────────────────────────────────────

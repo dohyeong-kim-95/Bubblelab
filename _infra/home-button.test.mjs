@@ -62,26 +62,44 @@ test("중복 주입되지 않는다", () => {
   assert.equal(page.split(SRC).length - 1, 1);
 });
 
-test("홈 버튼 스크립트가 기존 공용 UI와 자리를 다투지 않는다", () => {
-  const js = readFileSync(join(ROOT, "_shared/home.js"), "utf8");
-  // 공유 버튼이 우하단 끝을 쓰므로 그 왼쪽으로 비켜서야 한다
-  assert.match(js, /body:has\(#bl-share\)\s*#bl-home\s*\{\s*right:/);
-  // 좌하단은 주간 기록 배지 몫이다 — 배지는 폭도 높이도 가변이라 침범당한다
-  assert.match(js, /#bl-home\s*\{[^}]*right:\s*1rem/);
-  assert.doesNotMatch(js, /#bl-home\s*\{[^}]*left:\s*1rem/);
-  // 전면 탭 토이에 탭이 새지 않도록 막아야 한다
-  assert.match(js, /stopPropagation/);
+test("유틸 버튼은 스스로 자리를 잡지 않고 독에 등록한다", () => {
+  // 각자 position:fixed로 자리를 잡으면 서로 덮는다 — 실제로 woodstack의 음소거
+  // 버튼이 공유 버튼에 완전히 가려 눌리지 않았다. 배치는 독이 전담한다.
+  for (const f of ["_shared/home.js", "_shared/share.js"]) {
+    const js = readFileSync(join(ROOT, f), "utf8");
+    assert.match(js, /window\.blDock\s*=\s*window\.blDock\s*\|\|\s*\[\]/,
+      `${f}가 로드 순서에 안전한 큐 방식으로 등록하지 않는다`);
+    assert.doesNotMatch(js, /#bl-(home|share)\s*\{[^}]*position:\s*fixed/,
+      `${f}가 아직 스스로 고정 배치한다`);
+  }
 });
 
-test("우하단 아이콘 두 개가 예전 공유 버튼 하나 수준의 폭을 유지한다", () => {
-  const home = readFileSync(join(ROOT, "_shared/home.js"), "utf8");
-  const share = readFileSync(join(ROOT, "_shared/share.js"), "utf8");
-  // 둘 다 같은 크기의 원형 아이콘 버튼이어야 나란히 섰을 때 정돈돼 보인다
-  for (const [name, js] of [["home.js", home], ["share.js", share]]) {
-    assert.match(js, /width:\s*2\.8rem;\s*height:\s*2\.8rem/, `${name}에 아이콘 크기 지정이 없다`);
-    assert.match(js, /border-radius:\s*50%/, `${name}가 원형이 아니다`);
-  }
-  // 공유 버튼에서 글자를 뺐다면 스크린리더용 이름이 반드시 남아야 한다
-  assert.match(share, /aria-label/, "공유 버튼에 aria-label이 없다");
-  assert.match(home, /aria-label/, "홈 버튼에 aria-label이 없다");
+test("독이 배치·접기·탭 차단을 전담한다", () => {
+  const js = readFileSync(join(ROOT, "_shared/dock.js"), "utf8");
+  // 우하단 알약 — 좌하단·하단 중앙은 주간 기록 배지가 폭·높이 모두 가변이라 못 쓴다
+  assert.match(js, /#bl-dock\s*\{[^}]*position:\s*fixed[^}]*right:\s*1rem[^}]*bottom:\s*1rem/);
+  assert.doesNotMatch(js, /#bl-dock\s*\{[^}]*left:\s*1rem/);
+  // 버튼이 많아지면 접히고, 누르면 다시 펼쳐진다
+  assert.match(js, /crowded/);
+  assert.match(js, /collapsed/);
+  // 화면 전체를 탭 영역으로 쓰는 토이에 탭이 새면 안 된다
+  assert.match(js, /stopPropagation/);
+  // 글자 없는 아이콘이므로 스크린리더용 이름이 필수
+  assert.match(js, /aria-label/);
+});
+
+test("독은 홈·공유가 닿는 모든 페이지에 깔린다", () => {
+  const page = readFileSync(join(DIST, "slop/woodstack/index.html"), "utf8");
+  assert.ok(page.includes("/_shared/dock.js"), "토이에 독이 없다");
+  assert.ok(page.includes("/_shared/home.js"), "토이에 홈 버튼이 없다");
+  // 카테고리 홈에는 홈 버튼이 없지만 공유 버튼이 있으므로 독은 필요하다
+  const home = readFileSync(join(DIST, "slop/index.html"), "utf8");
+  assert.ok(home.includes("/_shared/dock.js"), "카테고리 홈에 독이 없다");
+});
+
+test("woodstack 음소거가 독으로 옮겨져 공유 버튼에 덮이지 않는다", () => {
+  const toy = readFileSync(join(ROOT, "slop/woodstack/index.html"), "utf8");
+  assert.match(toy, /id:\s*"bl-mute"/, "음소거가 독에 등록되지 않았다");
+  assert.doesNotMatch(toy, /#mute\s*\{[^}]*position:\s*fixed/, "옛 고정 배치가 남아 있다");
+  assert.doesNotMatch(toy, /<button id="mute"/, "옛 버튼 마크업이 남아 있다");
 });
