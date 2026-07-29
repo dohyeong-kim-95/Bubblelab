@@ -4,22 +4,120 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>🔒 bubblelab works</title>
+<meta name="description" content="bubblelab works — 작은 웹을 만드는 실험실의 외주 작업실">
+<title>bubblelab works — 작은 웹을 만드는 작업실</title>
 <style>
-  :root { color-scheme: light dark; }
-  body { font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
-         max-width: 36rem; margin: 4rem auto; padding: 0 1.5rem; line-height: 1.8;
-         color: light-dark(#1c2733, #e2e9f0); background: light-dark(#fafbfc, #10151c); }
-  h1 { font-size: 1.3rem; }
-  .sub { opacity: .6; font-size: .85rem; }
-  a { color: inherit; }
+  :root { color-scheme: light dark;
+    --ground: light-dark(#fafbfc, #10151c);
+    --ink: light-dark(#1c2733, #e2e9f0);
+    --soft: light-dark(#5d6b7a, #93a3b5);
+    --surface: light-dark(#fff, #171f2b);
+    --line: light-dark(#e3e8ee, #263140);
+    --bubble: light-dark(#4f7fdd, #7ea3ec);
+    --bubble-ink: light-dark(#fff, #0d131c);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100dvh; background: var(--ground); color: var(--ink);
+         font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+         line-height: 1.8; word-break: keep-all; overflow-x: hidden; }
+  main { position: relative; max-width: 38rem; margin: 0 auto; padding: 4.5rem 1.4rem 4rem; }
+
+  /* 떠다니는 거품 — 은은한 배경 장식 */
+  .bubbles { position: fixed; inset: 0; pointer-events: none; z-index: -1; }
+  .bubbles i { position: absolute; border-radius: 50%; border: 1.5px solid var(--bubble);
+               opacity: .13; animation: float 14s ease-in-out infinite; }
+  .bubbles i:nth-child(1) { width: 9rem; height: 9rem; left: -3rem; top: 16%; }
+  .bubbles i:nth-child(2) { width: 4.5rem; height: 4.5rem; right: 8%; top: 8%; animation-delay: -4s; }
+  .bubbles i:nth-child(3) { width: 6.5rem; height: 6.5rem; right: -2rem; bottom: 18%; animation-delay: -8s; }
+  .bubbles i:nth-child(4) { width: 3rem; height: 3rem; left: 12%; bottom: 9%; animation-delay: -11s; }
+  @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-1.4rem); } }
+  @media (prefers-reduced-motion: reduce) { .bubbles i { animation: none; } }
+
+  .hero { margin-bottom: 2.8rem; }
+  .hero .mark { font-size: 2.6rem; line-height: 1; }
+  h1 { margin: .55rem 0 .3rem; font-size: 1.65rem; letter-spacing: -.02em; }
+  .tagline { margin: 0; color: var(--soft); font-size: .92rem; }
+  .hero p.desc { margin: 1.1rem 0 0; font-size: .9rem; color: var(--soft); max-width: 32rem; }
+  .hero p.desc b { color: var(--ink); font-weight: 600; }
+
+  .doors { display: grid; gap: .9rem; margin: 0 0 3rem; }
+  @media (min-width: 560px) { .doors { grid-template-columns: 1fr 1fr; } }
+  .door { display: block; padding: 1.25rem 1.3rem 1.35rem; border-radius: 1rem; text-decoration: none;
+          color: inherit; background: var(--surface); border: 1px solid var(--line);
+          transition: transform .15s ease, border-color .15s ease; }
+  .door:hover { transform: translateY(-2px); border-color: var(--bubble); }
+  .door b { display: block; font-size: 1.02rem; margin-bottom: .25rem; }
+  .door span { font-size: .78rem; color: var(--soft); }
+  .door.primary { background: var(--bubble); border-color: var(--bubble); color: var(--bubble-ink); }
+  .door.primary span { color: var(--bubble-ink); opacity: .8; }
+
+  h2 { margin: 0 0 .8rem; font-size: .8rem; letter-spacing: .18em; color: var(--bubble);
+       text-transform: uppercase; }
+  section { margin-bottom: 2.6rem; }
+  ul.things { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: .5rem; }
+  ul.things li { font-size: .8rem; padding: .4rem .85rem; border-radius: 2rem;
+                 background: var(--surface); border: 1px solid var(--line); }
+
+  ol.flow { margin: 0; padding: 0; list-style: none; display: grid; gap: .55rem; counter-reset: n; }
+  ol.flow li { counter-increment: n; display: flex; gap: .8rem; align-items: baseline; font-size: .88rem; }
+  ol.flow li::before { content: counter(n, decimal-leading-zero); flex: none;
+                       font-size: .72rem; font-weight: 700; color: var(--bubble); letter-spacing: .08em; }
+  ol.flow li small { color: var(--soft); }
+
+  footer { border-top: 1px solid var(--line); padding-top: 1.4rem; font-size: .74rem;
+           color: var(--soft); display: flex; gap: 1rem; flex-wrap: wrap; }
+  footer a { color: inherit; }
 </style>
 </head>
 <body>
-  <h1>🔒 bubblelab works</h1>
-  <p class="sub">클라이언트 미리보기 공간입니다. 진행 중인 작업은 전달받은
-  주소(<code>/프로젝트명</code>)로 바로 들어가주세요. 확인이 끝난 작업은 코드가
-  인계된 뒤 이곳에서 내려갑니다.</p>
-  <p class="sub"><a href="/logout">로그아웃</a> · <a href="https://bubblelab.dev">bubblelab.dev</a></p>
+<div class="bubbles" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+
+<main>
+  <div class="hero">
+    <div class="mark" aria-hidden="true">🫧</div>
+    <h1>bubblelab works</h1>
+    <p class="tagline">작은 웹을 만드는 실험실, bubblelab의 작업실</p>
+    <p class="desc">브랜드 홈페이지부터 웹 토이까지 — <b>기획, 디자인, 개발, 인계</b>를
+    한 사람이 처음부터 끝까지 만듭니다. 진행 중인 작업은 의뢰마다 전용
+    미리보기 주소에서 실시간으로 확인할 수 있어요.</p>
+  </div>
+
+  <div class="doors">
+    <a class="door primary" href="request">
+      <b>✉️ 신규 의뢰하기</b>
+      <span>무엇을 만들 수 있는지, 어떻게 진행되는지 안내</span>
+    </a>
+    <a class="door" href="login">
+      <b>🔑 의뢰 조회하기</b>
+      <span>전달받은 의뢰 ID로 진행 중인 작업 확인</span>
+    </a>
+  </div>
+
+  <section>
+    <h2>Made here</h2>
+    <ul class="things">
+      <li>브랜드 홈페이지 · 랜딩</li>
+      <li>웹 토이 · 미니게임</li>
+      <li>소규모 웹 서비스</li>
+      <li>기존 사이트 손보기</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>How it works</h2>
+    <ol class="flow">
+      <li>의뢰 — 아이디어와 참고자료를 보내주세요 <small>(형식 자유)</small></li>
+      <li>확인 — 범위·일정을 상의하고 전용 미리보기 주소를 드려요</li>
+      <li>제작 — 시안을 보면서 피드백을 주고받아요</li>
+      <li>인계 — 완성물을 통째로 드리고 여기선 내립니다</li>
+    </ol>
+  </section>
+
+  <footer>
+    <span>ⓒ bubblelab works</span>
+    <a href="https://bubblelab.dev">bubblelab.dev</a>
+    <a href="logout">로그아웃</a>
+  </footer>
+</main>
 </body>
 </html>

@@ -99,6 +99,44 @@ test("work preview stays closed without a password and gates access with one", a
   assert.equal(response.headers.get("Cache-Control"), "no-store");
 });
 
+test("work root is public and client sessions are scoped to their project", async () => {
+  const assets = { fetch: async () => new Response("ok", { headers: { "Content-Type": "text/html" } }) };
+  const env = { WORK_PASSWORD: "master", WORK_CLIENTS: '{"daonfit":"fitpw"}', ASSETS: assets };
+
+  // 루트 브랜딩·의뢰 안내 페이지는 로그인 없이 공개
+  let response = await worker.fetch(new Request("https://work.bubblelab.dev/"), env, ctx);
+  assert.equal(response.status, 200);
+  response = await worker.fetch(new Request("https://work.bubblelab.dev/request"), env, ctx);
+  assert.equal(response.status, 200);
+
+  // 의뢰 ID + 비밀번호 로그인 → 자기 프로젝트로 리다이렉트
+  const form = new FormData();
+  form.set("id", "daonfit");
+  form.set("password", "fitpw");
+  response = await worker.fetch(
+    new Request("https://work.bubblelab.dev/login", { method: "POST", body: form }), env, ctx);
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get("Location"), "/daonfit/");
+  const cookie = response.headers.get("Set-Cookie").split(";")[0];
+
+  // 자기 프로젝트는 열리고, 남의 프로젝트는 로그인으로 돌려보낸다
+  response = await worker.fetch(
+    new Request("https://work.bubblelab.dev/daonfit/", { headers: { Cookie: cookie } }), env, ctx);
+  assert.equal(response.status, 200);
+  response = await worker.fetch(
+    new Request("https://work.bubblelab.dev/other/", { headers: { Cookie: cookie } }), env, ctx);
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get("Location"), "/login");
+
+  // 남의 ID + 남의 비밀번호 조합은 401
+  const bad = new FormData();
+  bad.set("id", "other");
+  bad.set("password", "fitpw");
+  response = await worker.fetch(
+    new Request("https://work.bubblelab.dev/login", { method: "POST", body: bad }), env, ctx);
+  assert.equal(response.status, 401);
+});
+
 test("duri subdomain gates with its own long-lived bl_duri session", async () => {
   // secret 미설정 → fail-closed
   let response = await worker.fetch(new Request("https://duri.bubblelab.dev/"), {}, ctx);

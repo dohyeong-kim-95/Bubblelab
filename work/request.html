@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>신규 의뢰하기 — bubblelab works</title>
+<style>
+  :root { color-scheme: light dark;
+    --ground: light-dark(#fafbfc, #10151c);
+    --ink: light-dark(#1c2733, #e2e9f0);
+    --soft: light-dark(#5d6b7a, #93a3b5);
+    --surface: light-dark(#fff, #171f2b);
+    --line: light-dark(#e3e8ee, #263140);
+    --bubble: light-dark(#4f7fdd, #7ea3ec);
+    --bubble-ink: light-dark(#fff, #0d131c);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100dvh; background: var(--ground); color: var(--ink);
+         font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+         line-height: 1.8; word-break: keep-all; }
+  main { max-width: 38rem; margin: 0 auto; padding: 3.2rem 1.4rem 4rem; }
+  .crumb { font-size: .78rem; margin: 0 0 2rem; }
+  .crumb a { color: var(--soft); text-decoration: none; }
+  .crumb a:hover { color: var(--ink); }
+  h1 { margin: 0 0 .4rem; font-size: 1.5rem; letter-spacing: -.02em; }
+  .lead { margin: 0 0 2.4rem; color: var(--soft); font-size: .9rem; }
+
+  h2 { margin: 0 0 .8rem; font-size: .8rem; letter-spacing: .18em; color: var(--bubble);
+       text-transform: uppercase; }
+  section { margin-bottom: 2.4rem; }
+  p, li { font-size: .9rem; }
+
+  ul.plain { margin: 0; padding: 0 0 0 1.1rem; }
+  ul.plain li { margin: .3rem 0; }
+  ul.plain li small { color: var(--soft); }
+
+  .send { padding: 1.3rem 1.35rem 1.45rem; border-radius: 1rem; background: var(--surface);
+          border: 1px solid var(--line); }
+  .send p { margin: 0 0 1rem; font-size: .86rem; color: var(--soft); }
+  .send .mail { display: inline-block; padding: .8rem 1.4rem; border-radius: .7rem;
+                background: var(--bubble); color: var(--bubble-ink); font-weight: 700;
+                font-size: .92rem; text-decoration: none; }
+  .send .addr { display: block; margin-top: .7rem; font-size: .78rem; color: var(--soft);
+                user-select: all; }
+</style>
+</head>
+<body>
+<main>
+  <p class="crumb"><a href="./">← bubblelab works</a></p>
+  <h1>✉️ 신규 의뢰하기</h1>
+  <p class="lead">"이런 게 있으면 좋겠는데"에서 시작하면 충분합니다.
+  형식 갖춘 기획서는 필요 없어요.</p>
+
+  <section>
+    <h2>What we build</h2>
+    <ul class="plain">
+      <li>브랜드 홈페이지 · 제품 랜딩 페이지</li>
+      <li>웹 토이 · 미니게임 · 인터랙티브 콘텐츠</li>
+      <li>소규모 웹 서비스 <small>(예약·기록·조회 같은 한 가지 일을 하는 도구)</small></li>
+      <li>기존 사이트 개선 <small>(속도·모바일·디자인 손보기)</small></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Nice to include</h2>
+    <ul class="plain">
+      <li>만들고 싶은 것 한두 문장</li>
+      <li>참고가 될 링크·이미지 <small>(있으면)</small></li>
+      <li>원하는 분위기나 꼭 들어가야 할 내용</li>
+      <li>희망 일정과 대략의 예산 <small>(정해지지 않았어도 괜찮아요)</small></li>
+    </ul>
+  </section>
+
+  <section class="send">
+    <h2>Contact</h2>
+    <p>아래 메일로 보내주시면 하루 이틀 안에 답장드립니다.
+    범위와 일정이 정해지면 전용 미리보기 주소(의뢰 ID)를 만들어드려요.</p>
+    <a class="mail" href="mailto:boson95@gmail.com?subject=%5B%EC%9D%98%EB%A2%B0%5D%20">메일 보내기</a>
+    <span class="addr">boson95@gmail.com</span>
+  </section>
+</main>
+</body>
+</html>

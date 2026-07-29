@@ -53,10 +53,10 @@ ${failed ? '<p class="error">ID 또는 비밀번호가 맞지 않습니다.</p>'
 <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required>
 <button type="submit">로그인</button></form></body></html>`;
 
-// 외주 작업 미리보기(work.bubblelab.dev) 로그인 화면
+// 외주 작업(work.bubblelab.dev) 의뢰 조회 로그인 화면
 const WORK_LOGIN_PAGE = (failed, base) => `<!doctype html><html lang="ko"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex, nofollow"><title>bubblelab works</title><style>
+<meta name="robots" content="noindex, nofollow"><title>의뢰 조회 — bubblelab works</title><style>
 :root { color-scheme: light dark; }
 body { font-family: ui-monospace, monospace; min-height: 100dvh; margin: 0; display: grid;
        place-items: center; background: light-dark(#f2f4f7, #0d131c); color: light-dark(#1c2733, #e2e9f0); }
@@ -69,13 +69,17 @@ input { font: inherit; color: inherit; padding: .65rem .8rem; border-radius: .6r
         border: 1px solid light-dark(#d9e0e7, #2a3646); background: transparent; }
 button { font: inherit; padding: .65rem; border: 0; border-radius: .6rem;
          background: #4f7fdd; color: #fff; font-weight: bold; cursor: pointer; }
-.error { color: #d05a5a; font-size: .74rem; min-height: 1em; margin: 0; }</style></head>
+.error { color: #d05a5a; font-size: .74rem; min-height: 1em; margin: 0; }
+.back { font-size: .74rem; text-align: center; }
+.back a { color: inherit; opacity: .65; }</style></head>
 <body><form method="post" action="${base}/login">
-<h1>🔒 bubblelab works</h1>
-<p>클라이언트 미리보기 공간입니다. 전달받은 비밀번호를 입력해주세요.</p>
-<input name="password" type="password" autocomplete="current-password" aria-label="비밀번호" required autofocus>
-<p class="error">${failed ? "비밀번호가 맞지 않습니다." : ""}</p>
-<button type="submit">들어가기</button></form></body></html>`;
+<h1>🔑 의뢰 조회</h1>
+<p>전달받은 의뢰 ID와 비밀번호를 입력하면 진행 중인 작업을 볼 수 있습니다.</p>
+<input name="id" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="의뢰 ID" aria-label="의뢰 ID" required autofocus>
+<input name="password" type="password" autocomplete="current-password" placeholder="비밀번호" aria-label="비밀번호" required>
+<p class="error">${failed ? "의뢰 ID 또는 비밀번호가 맞지 않습니다." : ""}</p>
+<button type="submit">들어가기</button>
+<p class="back"><a href="${base}/">← bubblelab works 홈</a></p></form></body></html>`;
 
 // Duri 전용 서브도메인(duri.bubblelab.dev) 로그인 화면. 세션이 1년이라 설치형
 // 앱에선 최초 1회만 보게 된다. E2E 암호 문구는 이 게이트와 별개로 앱 안에서 받는다.
@@ -182,6 +186,43 @@ async function matchesCredential(key, supplied, expected) {
   );
 }
 
+/* work 의뢰 세션: 만료.의뢰ID.난수 에 HMAC 서명. 의뢰 ID가 payload 에 들어가
+ * 프로젝트별 접근 범위를 갖는다. 운영자 마스터는 ID "*" (모든 프로젝트). */
+async function issueWorkSession(key, client) {
+  const payload = `${Date.now() + SESSION_TTL_MS}.${client}.${crypto.randomUUID()}`;
+  const sig = hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload)));
+  return `${payload}.${sig}`;
+}
+
+async function workSessionClient(key, token) {
+  const [expiry, client, nonce, sig] = token?.split(".") ?? [];
+  if (!expiry || !client || !nonce || !/^[0-9a-f]{64}$/.test(sig ?? "")) return null;
+  if (!Number.isFinite(+expiry) || Date.now() > +expiry) return null;
+  const sigBytes = Uint8Array.from(sig.match(/../g) ?? [], (h) => parseInt(h, 16));
+  const valid = await crypto.subtle.verify(
+    "HMAC", key, sigBytes, new TextEncoder().encode(`${expiry}.${client}.${nonce}`),
+  );
+  return valid ? client : null;
+}
+
+// 의뢰 계정: WORK_CLIENTS secret 에 JSON 으로 { "의뢰ID": "비밀번호" }.
+// ID는 프로젝트 폴더명과 같다 (예: {"daonfit": "..."}).
+function workClients(env) {
+  try {
+    const parsed = JSON.parse(env.WORK_CLIENTS || "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+async function workKeyOf(env) {
+  return crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(`${env.WORK_PASSWORD}\0bl-work-session`),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
+  );
+}
+
 async function issuePlannerSession(key, userId) {
   const payload = `${Date.now() + 30 * 24 * 60 * 60 * 1000}.${userId}.${crypto.randomUUID()}`;
   const sig = hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload)));
@@ -240,17 +281,18 @@ async function handlePlanner(request, env, url) {
   return new Response("not found", { status: 404 });
 }
 
-/* 외주 작업 미리보기 게이트. 비밀번호는 WORK_PASSWORD secret 하나로,
- * 세션은 admin과 같은 HMAC 서명 토큰을 쓴다. 인증되면 null을 돌려
- * 정적 서빙으로 폴스루한다. */
+/* 외주 작업 게이트. 루트(브랜딩·의뢰 안내 등 루트 파일)는 공개하고,
+ * 프로젝트 폴더(/<의뢰ID>/…)만 로그인 뒤 접근된다. 의뢰 ID/비밀번호는
+ * WORK_CLIENTS secret(JSON), WORK_PASSWORD 는 운영자 마스터(모든 프로젝트).
+ * 인증되면 null을 돌려 정적 서빙으로 폴스루한다. */
+const WORK_PUBLIC_PAGES = new Set(["request"]); // 확장자 없는 공개 루트 페이지
+
 async function handleWork(request, env, url, base = "") {
-  const key = await crypto.subtle.importKey(
-    "raw", new TextEncoder().encode(`${env.WORK_PASSWORD}\0bl-work-session`),
-    { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
-  );
-  const isAuthed = await validSession(key, cookies(request).bl_work);
+  const key = await workKeyOf(env);
+  const client = await workSessionClient(key, cookies(request).bl_work);
   const cookieFlags = `Path=/; HttpOnly; SameSite=Strict; Max-Age=86400${url.protocol === "https:" ? "; Secure" : ""}`;
   const htmlHeaders = { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" };
+  const homeOf = (grant) => (grant === "*" ? `${base}/` : `${base}/${grant}/`);
 
   if (url.pathname === "/login" && request.method === "POST") {
     const limited = await enforceRateLimit(request, env, {
@@ -258,20 +300,37 @@ async function handleWork(request, env, url, base = "") {
     });
     if (limited) return limited;
     const form = await request.formData();
-    if (await matchesCredential(key, form.get("password"), env.WORK_PASSWORD)) {
-      const token = await issueSession(key);
-      return redirect(`${base}/`, { "Set-Cookie": `bl_work=${token}; ${cookieFlags}` });
+    const id = String(form.get("id") ?? "").trim().toLowerCase();
+    const password = form.get("password");
+    const accounts = workClients(env);
+    let grant = null;
+    if (/^[a-z0-9-]{1,32}$/.test(id) && accounts[id]
+      && await matchesCredential(key, password, accounts[id])) {
+      grant = id;
+    } else if (await matchesCredential(key, password, env.WORK_PASSWORD)) {
+      grant = "*"; // 운영자 마스터 — ID 무관
+    }
+    if (grant) {
+      const token = await issueWorkSession(key, grant);
+      return redirect(homeOf(grant), { "Set-Cookie": `bl_work=${token}; ${cookieFlags}` });
     }
     return new Response(WORK_LOGIN_PAGE(true, base), { status: 401, headers: htmlHeaders });
   }
   if (url.pathname === "/logout") {
-    return redirect(`${base}/login`, { "Set-Cookie": "bl_work=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0" });
+    return redirect(`${base}/`, { "Set-Cookie": "bl_work=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0" });
   }
   if (url.pathname === "/login") {
-    if (isAuthed) return redirect(`${base}/`);
+    if (client) return redirect(homeOf(client));
     return new Response(WORK_LOGIN_PAGE(false, base), { headers: htmlHeaders });
   }
-  if (!isAuthed) return redirect(`${base}/login`);
+
+  // 공개 영역: 루트("/")·확장자 있는 루트 파일(에셋)·공개 페이지 목록.
+  const first = url.pathname.split("/").filter(Boolean)[0] ?? "";
+  if (first === "" || WORK_PUBLIC_PAGES.has(first) || /\.[a-z0-9]+$/i.test(first)) return null;
+
+  // 프로젝트 폴더 — 해당 의뢰 세션(또는 마스터)만
+  if (!client) return redirect(`${base}/login`);
+  if (client !== "*" && client !== first) return redirect(`${base}/login`);
   return null;
 }
 
@@ -841,21 +900,25 @@ export async function handleRequest(request, env, ctx) {
       });
     }
 
-    // 외주 프로젝트 QnA: work 게이트 세션이 있어야만 읽고 쓸 수 있다.
+    // 외주 프로젝트 QnA: 해당 의뢰 세션(또는 마스터)만 읽고 쓸 수 있고,
+    // 답변·삭제는 운영자(마스터) 전용이다.
     if (path.startsWith("/_workqna/")) {
       if (!env.WORK_PASSWORD) {
         return new Response("work preview is not configured", { status: 503 });
       }
-      const workKey = await crypto.subtle.importKey(
-        "raw", new TextEncoder().encode(`${env.WORK_PASSWORD}\0bl-work-session`),
-        { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
-      );
-      if (!(await validSession(workKey, cookies(request).bl_work))) {
+      const client = await workSessionClient(await workKeyOf(env), cookies(request).bl_work);
+      if (!client) {
         return Response.json({ error: "authentication required" }, { status: 401 });
       }
       const [project, action = ""] = path.slice("/_workqna/".length).split("/");
       if (!/^[a-z0-9-]{1,32}$/.test(project) || !["", "ask", "answer", "delete"].includes(action)) {
         return new Response("not found", { status: 404 });
+      }
+      if (client !== "*" && client !== project) {
+        return Response.json({ error: "forbidden" }, { status: 403 });
+      }
+      if (["answer", "delete"].includes(action) && client !== "*") {
+        return Response.json({ error: "forbidden" }, { status: 403 });
       }
       if (request.method === "POST") {
         const contentTypeError = requireJsonRequest(request);
@@ -883,16 +946,16 @@ export async function handleRequest(request, env, ctx) {
       if (!env.WORK_PASSWORD) {
         return new Response("work preview is not configured", { status: 503 });
       }
-      const workKey = await crypto.subtle.importKey(
-        "raw", new TextEncoder().encode(`${env.WORK_PASSWORD}\0bl-work-session`),
-        { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
-      );
-      if (!(await validSession(workKey, cookies(request).bl_work))) {
+      const client = await workSessionClient(await workKeyOf(env), cookies(request).bl_work);
+      if (!client) {
         return Response.json({ error: "authentication required" }, { status: 401 });
       }
       const [project, action = ""] = path.slice("/_workreviews/".length).split("/");
       if (!/^[a-z0-9-]{1,32}$/.test(project) || !["", "submit"].includes(action)) {
         return new Response("not found", { status: 404 });
+      }
+      if (client !== "*" && client !== project) {
+        return Response.json({ error: "forbidden" }, { status: 403 });
       }
       const stub = env.WORK_REVIEWS.get(env.WORK_REVIEWS.idFromName(project));
 

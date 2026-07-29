@@ -1,26 +1,33 @@
-# work — 외주 작업 미리보기
+# work — 외주 작업실 (브랜딩 + 의뢰별 미리보기)
 
-상태: **Restricted**. `WORK_PASSWORD` Worker secret을 아는 사람만 접근할 수 있습니다.
+<https://work.bubblelab.dev>는 외주 작업 공간입니다. 구조가 두 층입니다:
 
-<https://work.bubblelab.dev>는 클라이언트에게 진행 중인 작업을 보여주는 비공개
-공간입니다. 프로젝트 하나 = 폴더 하나(`work/<프로젝트명>/index.html`)이며, 다른
-카테고리와 달리 카드 목록을 자동 생성하지 않습니다(루트 `index.html` 고정).
+- **루트(공개)**: 브랜딩 메인(`index.html`) + 신규 의뢰 안내(`request.html`).
+  게이트 없이 누구나 볼 수 있고, 루트의 확장자 있는 파일(에셋)도 공개됩니다.
+  확장자 없는 공개 페이지는 `_infra/worker.js`의 `WORK_PUBLIC_PAGES`에 등록.
+- **프로젝트 폴더(비공개)**: 의뢰 하나 = 폴더 하나(`work/<의뢰ID>/`).
+  "의뢰 조회하기"(`/login`)에서 **의뢰 ID + 비밀번호**로 로그인해야 자기
+  프로젝트만 볼 수 있습니다. 카드 목록 자동 생성은 없습니다.
 
 ## 접근 제어
 
-- 서브도메인 전체가 워커의 비밀번호 게이트 뒤에 있습니다. 비밀번호는
-  `WORK_PASSWORD` Worker secret 하나이고, 세션은 admin과 같은 HMAC 서명
-  쿠키(24시간)입니다. 로그인은 15분당 5회로 제한됩니다.
-- secret이 설정되지 않았으면 503으로 잠깁니다(fail-closed).
-  `npx wrangler secret put WORK_PASSWORD`로 설정합니다.
+- 의뢰 계정: `WORK_CLIENTS` Worker secret에 JSON — `{"의뢰ID": "비밀번호"}`.
+  의뢰 ID는 프로젝트 폴더명과 같아야 한다(`[a-z0-9-]{1,32}`).
+  `npx wrangler secret put WORK_CLIENTS`
+- 운영자 마스터: `WORK_PASSWORD` secret. 로그인 폼에 아무 ID + 마스터
+  비밀번호를 넣으면 모든 프로젝트 접근(`*` 세션).
+- 세션은 HMAC 서명 쿠키(`bl_work`, 24시간)에 의뢰 ID가 들어가며, 다른
+  프로젝트 폴더에 가면 로그인으로 돌려보낸다. 로그인은 15분당 5회 제한.
+- `WORK_PASSWORD` 미설정이면 서브도메인 전체 503(fail-closed).
 - 모든 응답에 `X-Robots-Tag: noindex`와 `Cache-Control: no-store`가 붙고 방문
   통계에서도 제외됩니다.
 
-## QnA API
+## QnA·리뷰 API
 
-프로젝트별 문의 보드가 필요하면 `/_workqna/<프로젝트>` API를 씁니다
-(GET 목록 / POST ask·answer·delete). work 게이트 세션 쿠키가 있어야만 접근되고,
-쓰기는 10분당 10회로 제한되며 `WorkQnaDO`에 프로젝트당 최근 500건을 보관합니다.
+- `/_workqna/<프로젝트>`: 해당 의뢰 세션(또는 마스터)만 접근. 읽기·질문(ask)은
+  의뢰 세션으로 가능, 답변(answer)·삭제(delete)는 마스터 전용. 쓰기는 10분당
+  10회 제한, `WorkQnaDO`에 프로젝트당 최근 500건.
+- `/_workreviews/<프로젝트>`: 동일한 스코프 규칙 (현재 사용하는 프로젝트 없음).
 
 ## 주의
 
@@ -29,3 +36,5 @@
   에셋을 쓰거나 별도 private 리포로 작업합니다.
 - 클라이언트 브랜드 로고·사진 등 에셋은 해당 프로젝트 폴더 README에 권리자를
   명시하고, 인계·서비스 종료 시 폴더를 삭제합니다.
+- 신규 의뢰 연락처는 `request.html`의 메일 주소 — 채널을 바꾸면 그 파일만
+  수정하면 됩니다.
