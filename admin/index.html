@@ -163,15 +163,17 @@
   .asset-row button { border: 0; background: none; color: inherit; opacity: .55; cursor: pointer; font: inherit; }
   .asset-empty { padding: 2.5rem; text-align: center; opacity: .5; border: 1px dashed light-dark(#dce4ec, #263445); border-radius: .8rem; }
   #intake { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .6rem; }
-  #intake li { display: flex; gap: .8rem; padding: .95rem 1.1rem; border-radius: 1rem;
-               background: light-dark(#fff, #151e2a); border: 1px solid light-dark(#dce4ec, #263445); }
-  #intake .text { flex: 1; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .9rem; line-height: 1.7; }
-  #intake .text b { display: block; margin-bottom: .3rem; }
-  #intake .meta { opacity: .5; font-size: .78rem; white-space: nowrap; }
+  #intake li { display: flex; flex-direction: column; gap: .45rem; padding: .95rem 1.1rem;
+               border-radius: 1rem; background: light-dark(#fff, #151e2a);
+               border: 1px solid light-dark(#dce4ec, #263445); }
+  #intake .head { display: flex; align-items: baseline; gap: .7rem; }
+  #intake .head b { font-size: .92rem; }
+  #intake .meta { margin-left: auto; opacity: .5; font-size: .76rem; white-space: nowrap; }
+  #intake .text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .9rem; line-height: 1.7; }
   #intake .del { border: 0; background: none; color: inherit; opacity: .45; cursor: pointer;
-                 font: inherit; padding: 0 .2rem; align-self: flex-start; }
+                 font: inherit; padding: 0 .2rem; }
   #intake .del:hover { opacity: 1; }
-  #intake .empty { opacity: .55; justify-content: center; }
+  #intake .empty { flex-direction: row; opacity: .55; justify-content: center; }
   footer { margin-top: 2rem; opacity: .5; font-size: .78rem; line-height: 1.7; }
   @media (max-width: 38rem) {
     .cards, .hub-grid { grid-template-columns: 1fr; }
@@ -656,14 +658,13 @@ async function loadIntake() {
     list.replaceChildren();
     for (const item of items) {
       const li = document.createElement('li');
-      const text = document.createElement('span');
-      text.className = 'text';
-      const head = document.createElement('b');
-      head.textContent = `👤 ${item.nick}`;
-      text.append(head, item.question);
+      const head = document.createElement('div');
+      head.className = 'head';
+      const nick = document.createElement('b');
+      nick.textContent = `👤 ${item.nick}`;
       const meta = document.createElement('span');
       meta.className = 'meta';
-      meta.textContent = new Date(item.askedAt).toLocaleString('ko-KR');
+      meta.textContent = new Date(item.askedAt).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' });
       const del = document.createElement('button');
       del.className = 'del';
       del.textContent = '✕';
@@ -674,7 +675,11 @@ async function loadIntake() {
         li.remove();
         if (!list.children.length) empty('아직 접수된 의뢰가 없어요');
       });
-      li.append(text, meta, del);
+      head.append(nick, meta, del);
+      const text = document.createElement('span');
+      text.className = 'text';
+      text.textContent = item.question;
+      li.append(head, text);
       list.append(li);
     }
   } catch (err) {
