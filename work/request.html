@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
 <meta name="robots" content="noindex, nofollow">
 <title>신규 의뢰 — bubblelab works</title>
 <style>
@@ -91,6 +91,22 @@
   var answers = { what: '', when: '', budget: '', note: '', name: '', contact: '' };
 
   function scrollDown(){ chat.scrollTop = chat.scrollHeight; }
+
+  // 모바일 키보드 대응: 키보드가 열리면 보이는 영역(visualViewport) 높이에
+  // 페이지를 맞춰 입력창이 키보드 위로 올라오고, 최신 질문이 가려지지 않게
+  // 아래로 스크롤한다. (안드로이드 크롬은 viewport meta의
+  // interactive-widget=resizes-content 로도 처리되지만 iOS는 이 방법뿐)
+  var vv = window.visualViewport;
+  if(vv){
+    var fitViewport = function(){
+      document.body.style.height = vv.height + 'px';
+      window.scrollTo(0, 0);
+      scrollDown();
+    };
+    vv.addEventListener('resize', fitViewport);
+    vv.addEventListener('scroll', fitViewport);
+  }
+  input.addEventListener('focus', function(){ setTimeout(scrollDown, 300); });
   function addMe(text){
     var el = document.createElement('div');
     el.className = 'msg me'; el.textContent = text;
