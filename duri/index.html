@@ -119,6 +119,7 @@
   /* 스티커는 정사각 자리를 먼저 잡고, 말풍선 배경 없이 투명하게 */
   .bubble.sticker, .row.me .bubble.sticker { background: none; border: none; padding: .2rem; }
   .bubble.sticker img { width: 8.5rem; aspect-ratio: 1 / 1; height: auto; border-radius: 0; }
+  .sticker-anim { will-change: transform; } /* 움직이는 스티커: 합성 힌트 */
   .time { font-size: .62rem; color: var(--dim); margin: .1rem .3rem 0; }
   .broken { color: light-dark(#b4453a, #f0a8a2); font-size: .82rem; }
 
@@ -762,10 +763,71 @@ function stickerObjectUrl(pack, n) {
   }
   return cutoutCache.get(key);
 }
+// ── 움직이는 스티커 (v1) ─────────────────────────────────────
+// "파일을 굽지 않고 데이터로" — 투명 PNG 1장 + 키프레임 명세를 Web Animations 로
+// 재생한다. 명세의 시간은 정규화(at: 0~1)라 해상도·프레임수와 무관하므로, 나중에
+// 같은 명세를 캔버스로 프레임 렌더해 GIF/APNG/WebP(카카오·라인)로 구우면 재작업이
+// 없다. 작업 캔버스 720² → 최종 270~360, 12~20프레임, 1~2초 루프가 두 플랫폼 교집합.
+const ANIM_PRESETS = {
+  bounce:   { duration: 850,  origin: "center bottom", keyframes: [{at:0,translateY:0},{at:.35,translateY:-16},{at:.55,translateY:-16},{at:.8,translateY:0},{at:.9,scaleX:1.06,scaleY:.94},{at:1,translateY:0}] },
+  float:    { duration: 2600, origin: "center",        keyframes: [{at:0,translateY:0},{at:.5,translateY:-9},{at:1,translateY:0}] },
+  pulse:    { duration: 1100, origin: "center",        keyframes: [{at:0,scale:1},{at:.5,scale:1.09},{at:1,scale:1}] },
+  wobble:   { duration: 1000, origin: "center bottom", keyframes: [{at:0,rotate:0},{at:.2,rotate:-7},{at:.4,rotate:6},{at:.6,rotate:-4},{at:.8,rotate:3},{at:1,rotate:0}] },
+  shake:    { duration: 700,  origin: "center",        keyframes: [{at:0,translateX:0},{at:.2,translateX:-7},{at:.4,translateX:7},{at:.6,translateX:-5},{at:.8,translateX:5},{at:1,translateX:0}] },
+  jelly:    { duration: 900,  origin: "center bottom", keyframes: [{at:0,scaleX:1,scaleY:1},{at:.3,scaleX:1.12,scaleY:.88},{at:.5,scaleX:.9,scaleY:1.1},{at:.7,scaleX:1.05,scaleY:.95},{at:1,scaleX:1,scaleY:1}] },
+  tada:     { duration: 1200, origin: "center",        keyframes: [{at:0,scale:1,rotate:0},{at:.1,scale:.92,rotate:-3},{at:.3,scale:1.1,rotate:3},{at:.5,scale:1.1,rotate:-3},{at:.7,scale:1.1,rotate:3},{at:.9,scale:1.1,rotate:-3},{at:1,scale:1,rotate:0}] },
+  swing:    { duration: 1400, origin: "top center",    keyframes: [{at:0,rotate:0},{at:.25,rotate:8},{at:.5,rotate:-6},{at:.75,rotate:4},{at:1,rotate:0}] },
+  heartbeat:{ duration: 1100, origin: "center",        keyframes: [{at:0,scale:1},{at:.15,scale:1.12},{at:.3,scale:1},{at:.45,scale:1.12},{at:.6,scale:1},{at:1,scale:1}] },
+};
+// 어떤 스티커에 어떤 움직임을 줄지(데이터). v1은 여기서 실험 — 값만 바꿔 재배포하면
+// 즉시 반영된다. 나중엔 팩 metadata/catalog 로 옮겨 팩이 스스로 움직임을 갖게 한다.
+// pack: 팩 전체 기본, "pack/n": 개별 override, { cycle:[...] }: 장별로 순환 배정.
+const STICKER_ANIM = {
+  "couple-cat": { cycle: ["bounce", "float", "pulse", "wobble", "jelly", "tada", "swing", "heartbeat"] },
+};
+function animFor(pack, n) {
+  const s = STICKER_ANIM[`${pack}/${n}`] || STICKER_ANIM[pack];
+  if (!s) return null;
+  if (s.cycle) return { preset: s.cycle[(n - 1) % s.cycle.length] };
+  return s;
+}
+function resolveAnim(spec) {
+  const base = spec.preset ? ANIM_PRESETS[spec.preset] : spec;
+  if (!base || !base.keyframes) return null;
+  return {
+    duration: spec.duration || base.duration || 1200,
+    easing: spec.easing || base.easing || "ease-in-out",
+    iterations: spec.iterations ?? base.iterations ?? "infinite",
+    origin: spec.origin || base.origin || "center bottom",
+    keyframes: base.keyframes,
+  };
+}
+const prefersReducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+const animObserver = "IntersectionObserver" in window
+  ? new IntersectionObserver((es) => { for (const e of es) { const a = e.target.__anim; if (a) (e.isIntersecting ? a.play() : a.pause()); } })
+  : null;
+function playAnim(el, spec) {
+  if (prefersReducedMotion || !el.animate) return; // 접근성: 모션 최소화 켜면 정지
+  const r = resolveAnim(spec);
+  if (!r) return;
+  el.style.transformOrigin = r.origin;
+  const kf = r.keyframes.map((k) => ({
+    offset: k.at,
+    transform: `translate(${k.translateX || 0}%, ${k.translateY || 0}%) rotate(${k.rotate || 0}deg) scale(${k.scaleX ?? k.scale ?? 1}, ${k.scaleY ?? k.scale ?? 1})`,
+    ...(k.opacity != null ? { opacity: k.opacity } : {}),
+  }));
+  el.__anim = el.animate(kf, {
+    duration: r.duration, easing: r.easing,
+    iterations: r.iterations === "infinite" ? Infinity : r.iterations,
+  });
+  animObserver?.observe(el); // 화면 밖이면 자동 일시정지(성능·배터리)
+}
 function stickerImg(pack, n, alt) {
   const img = document.createElement("img");
   img.alt = alt; img.decoding = "async";
   stickerObjectUrl(pack, n).then((url) => { img.src = url; });
+  const spec = animFor(pack, n);
+  if (spec) { img.classList.add("sticker-anim"); playAnim(img, spec); }
   return img;
 }
 
