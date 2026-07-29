@@ -181,7 +181,13 @@
     else { addMe(budget.label); answers.budget = budget.value; }
 
     step('마무리');
-    await addBot('세 가지 끝! 추가로 하고 싶은 말이 있다면 남겨주세요. (참고 링크, 원하는 분위기 등)', '+ 하고 싶은 말');
+    await addBot('세 가지 끝! 이제 회신받을 곳만 남았어요. 어떻게 불러드리면 될까요? (성함 또는 호칭)');
+    answers.name = await ask('예: 홍길동', false, 20);
+
+    await addBot('회신받으실 연락처를 남겨주세요. 이메일·전화·인스타 어느 것이든 좋습니다.');
+    answers.contact = await ask('예: hello@example.com', false, 80);
+
+    await addBot('마지막으로, 기타 하고 싶은 말이 있다면 남겨주세요. (참고 링크, 원하는 분위기 등)', '+ 하고 싶은 말');
     var skipped = false;
     var noteResult = await Promise.race([
       addChips([{ label: '건너뛰기', value: '__skip__' }]).then(function(){ skipped = true; return ''; }),
@@ -190,12 +196,6 @@
     if(skipped){ addMe('건너뛰기'); lockInput(); }
     else { clearChips(); }
     answers.note = skipped ? '' : noteResult;
-
-    await addBot('어떻게 불러드리면 될까요? (성함 또는 호칭)');
-    answers.name = await ask('예: 홍길동', false, 20);
-
-    await addBot('마지막으로, 회신받으실 연락처를 남겨주세요. 이메일·전화·인스타 어느 것이든 좋습니다.');
-    answers.contact = await ask('예: hello@example.com', false, 80);
 
     await addBot('접수 내용을 확인해주세요.\n\n' +
       '📦 만들고 싶은 것: ' + answers.what + '\n' +
