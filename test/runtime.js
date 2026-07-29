@@ -5,7 +5,7 @@
 
 const PYODIDE_INDEX_URL = "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/";
 const PROGRESS_KEY = "bl-ds-progress-v1";
-const cellsKey = (pid) => `bl-ds-cells-v1-${pid}`;
+const EXAM_KEY = "bl-ds-exam-v1";
 
 const BOOTSTRAP = String.raw`
 import ast, base64, io, json, math, os, sys, traceback
@@ -268,10 +268,47 @@ function saveProgress(progress) {
   } catch { /* 프라이빗 모드 등 */ }
 }
 
+function loadExamState() {
+  try {
+    return JSON.parse(localStorage.getItem(EXAM_KEY));
+  } catch {
+    return null;
+  }
+}
+
 // ---------- 페이지 상태 ----------
 
 const params = new URLSearchParams(location.search);
 const problem = (window.DS_PROBLEMS || []).find((p) => p.id === params.get("id"));
+
+// 실전 모드(exam.html에서 진입): 진행 중인 시험에 포함된 문제일 때만 켜진다.
+// 시험 기록·셀 저장을 연습 모드와 분리하고, 시간 안의 통과만 시험 점수로 집계한다.
+const EXAM = (() => {
+  if (!params.has("exam") || !problem) return null;
+  const ex = loadExamState();
+  const valid = ex && !ex.finishedAt && Array.isArray(ex.problems) &&
+    ex.problems.includes(problem.id);
+  return valid ? ex : null;
+})();
+const cellsKey = (pid) => (EXAM ? `bl-ds-exam-cells-${pid}` : `bl-ds-cells-v1-${pid}`);
+
+function currentPassed() {
+  if (EXAM) {
+    const ex = loadExamState();
+    return (ex && ex.passed && ex.passed[problem.id]) || [];
+  }
+  return loadProgress()[problem.id] || [];
+}
+
+function recordExamPass(passedIds) {
+  if (!EXAM) return;
+  const ex = loadExamState();
+  if (!ex || ex.finishedAt || !ex.problems.includes(problem.id) || Date.now() > ex.endsAt) return;
+  ex.passed[problem.id] = [...new Set([...(ex.passed[problem.id] || []), ...passedIds])];
+  try {
+    localStorage.setItem(EXAM_KEY, JSON.stringify(ex));
+  } catch { /* 무시 */ }
+}
 
 const $ = (sel) => document.querySelector(sel);
 const statusEl = $("#status");
@@ -358,7 +395,7 @@ function renderProblem() {
 }
 
 function refreshStepStates() {
-  const passed = new Set((loadProgress()[problem.id] || []));
+  const passed = new Set(currentPassed());
   for (const step of problem.steps) {
     const el = $(`#step-${step.id} .step-state`);
     const done = passed.has(step.id);
@@ -479,9 +516,12 @@ async function runCell(cell) {
     renderOutput(cell, res);
     const passedInfo = JSON.parse(takePassedPy());
     if (passedInfo.just.length) {
+      // 연습 진행상황은 항상 누적하고, 실전 모드면 시험 기록에도 반영한다
       const progress = loadProgress();
-      progress[problem.id] = passedInfo.passed;
+      progress[problem.id] =
+        [...new Set([...(progress[problem.id] || []), ...passedInfo.passed])];
       saveProgress(progress);
+      recordExamPass(passedInfo.passed);
       refreshStepStates();
     }
     setStatus("준비 완료 — Shift+Enter로 셀을 실행하세요.", "ok");
@@ -505,8 +545,7 @@ async function restartKernel(keepCode = true) {
   if (!pyodide || busy) return;
   const spec = specJson();
   pyodide.runPython("_bl_init")(spec);
-  const passed = loadProgress()[problem.id] || [];
-  pyodide.runPython("_bl_mark_passed")(JSON.stringify(passed));
+  pyodide.runPython("_bl_mark_passed")(JSON.stringify(currentPassed()));
   for (const out of cellsEl.querySelectorAll(".cell-output")) {
     out.innerHTML = "";
     out.hidden = true;
@@ -531,9 +570,39 @@ function specJson() {
   });
 }
 
+function setupExamHeader() {
+  const back = document.querySelector("header a");
+  back.href = "exam.html";
+  back.textContent = "← 시험";
+  const timer = document.createElement("span");
+  timer.id = "exam-timer";
+  statusEl.before(timer);
+  const update = () => {
+    const ex = loadExamState();
+    if (!ex || ex.finishedAt) {
+      timer.textContent = "⏱ 시험 종료";
+      timer.dataset.zone = "over";
+      return;
+    }
+    const left = ex.endsAt - Date.now();
+    if (left <= 0) {
+      timer.textContent = "⏱ 시간 종료 — 이후 제출은 점수 미반영";
+      timer.dataset.zone = "over";
+      return;
+    }
+    const s = Math.floor(left / 1000);
+    timer.textContent = `⏱ ${Math.floor(s / 3600)}:` +
+      `${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+    timer.dataset.zone = left <= 10 * 60 * 1000 ? "danger" : left <= 30 * 60 * 1000 ? "warn" : "ok";
+  };
+  update();
+  setInterval(update, 1000);
+}
+
 async function boot() {
   renderProblem();
   refreshStepStates();
+  if (EXAM) setupExamHeader();
 
   cellsEl.appendChild(makeCell(problem.setup, { readonly: true, label: "데이터 준비 (자동 실행)" }));
   for (const src of loadCells()) cellsEl.appendChild(makeCell(src));
@@ -571,8 +640,7 @@ async function boot() {
   }
   pyodide.runPython(BOOTSTRAP);
   pyodide.runPython("_bl_init")(specJson());
-  const passed = loadProgress()[problem.id] || [];
-  pyodide.runPython("_bl_mark_passed")(JSON.stringify(passed));
+  pyodide.runPython("_bl_mark_passed")(JSON.stringify(currentPassed()));
   runCellPy = pyodide.runPython("_bl_run_cell");
   takePassedPy = pyodide.runPython("_bl_take_passed");
 

@@ -19,6 +19,9 @@
   #status[data-kind="busy"]::before { content: "⏳ "; }
   #status[data-kind="ok"]::before { content: "🟢 "; }
   #status[data-kind="warn"]::before { content: "⚠️ "; }
+  #exam-timer { font-size: .82rem; font-weight: bold; font-variant-numeric: tabular-nums; }
+  #exam-timer[data-zone="warn"] { color: light-dark(#b45309, #fbbf24); }
+  #exam-timer[data-zone="danger"], #exam-timer[data-zone="over"] { color: light-dark(#b91c1c, #ff8a8a); }
   main { display: grid; grid-template-columns: minmax(20rem, 30rem) 1fr; gap: 1rem;
          padding: 1rem; max-width: 90rem; margin: 0 auto; align-items: start; }
   @media (max-width: 60rem) { main { grid-template-columns: 1fr; } }
