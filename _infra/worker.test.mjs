@@ -139,6 +139,41 @@ test("work root is public and client sessions are scoped to their project", asyn
   assert.equal(response.status, 401);
 });
 
+test("work intake accepts public chat submissions and validates required fields", async () => {
+  const calls = [];
+  const env = {
+    WORK_QNA: {
+      idFromName: (name) => name,
+      get: (id) => ({
+        fetch: async (target, init) => {
+          calls.push({ id, target, body: JSON.parse(init.body) });
+          return Response.json({ saved: true });
+        },
+      }),
+    },
+  };
+  let response = await worker.fetch(new Request("https://work.bubblelab.dev/_workintake", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "홍길동", contact: "a@b.c", what: "브랜드 랜딩", when: "1개월 안", budget: "미정", note: "" }),
+  }), env, ctx);
+  assert.equal(response.status, 200);
+  assert.equal(calls[0].id, "__intake__");
+  assert.match(calls[0].body.question, /브랜드 랜딩/);
+  assert.match(calls[0].body.question, /a@b\.c/);
+  assert.equal(calls[0].body.nick, "홍길동");
+
+  // 필수값 누락 → 400, DO 호출 없음
+  response = await worker.fetch(new Request("https://work.bubblelab.dev/_workintake", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+  }), env, ctx);
+  assert.equal(response.status, 400);
+  assert.equal(calls.length, 1);
+
+  // GET은 허용하지 않는다 (조회는 admin 전용)
+  response = await worker.fetch(new Request("https://work.bubblelab.dev/_workintake"), env, ctx);
+  assert.equal(response.status, 405);
+});
+
 test("duri subdomain gates with its own long-lived bl_duri session", async () => {
   // secret 미설정 → fail-closed
   let response = await worker.fetch(new Request("https://duri.bubblelab.dev/"), {}, ctx);

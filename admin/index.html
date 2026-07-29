@@ -162,6 +162,16 @@
   .asset-row small { margin-top: .25rem; opacity: .5; }
   .asset-row button { border: 0; background: none; color: inherit; opacity: .55; cursor: pointer; font: inherit; }
   .asset-empty { padding: 2.5rem; text-align: center; opacity: .5; border: 1px dashed light-dark(#dce4ec, #263445); border-radius: .8rem; }
+  #intake { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .6rem; }
+  #intake li { display: flex; gap: .8rem; padding: .95rem 1.1rem; border-radius: 1rem;
+               background: light-dark(#fff, #151e2a); border: 1px solid light-dark(#dce4ec, #263445); }
+  #intake .text { flex: 1; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .9rem; line-height: 1.7; }
+  #intake .text b { display: block; margin-bottom: .3rem; }
+  #intake .meta { opacity: .5; font-size: .78rem; white-space: nowrap; }
+  #intake .del { border: 0; background: none; color: inherit; opacity: .45; cursor: pointer;
+                 font: inherit; padding: 0 .2rem; align-self: flex-start; }
+  #intake .del:hover { opacity: 1; }
+  #intake .empty { opacity: .55; justify-content: center; }
   footer { margin-top: 2rem; opacity: .5; font-size: .78rem; line-height: 1.7; }
   @media (max-width: 38rem) {
     .cards, .hub-grid { grid-template-columns: 1fr; }
@@ -179,6 +189,7 @@
     <div class="hub-grid">
       <a class="hub-card" href="#insights"><span class="hub-icon">📊</span><span><strong>Insights</strong><small>방문자와 인기 서비스 통계</small></span></a>
       <a class="hub-card" href="#slop"><span class="hub-icon">🎮</span><span><strong>Slop</strong><small>기록·공지·아이디어 관리</small></span></a>
+      <a class="hub-card" href="#work"><span class="hub-icon">🧾</span><span><strong>Work</strong><small>신규 의뢰 접수함</small></span></a>
       <a class="hub-card" href="#chat"><span class="hub-icon">💬</span><span><strong>Chat</strong><small>익명 채팅 정원 관리</small></span></a>
       <a class="hub-card" href="#podcast"><span class="hub-icon">🎙️</span><span><strong>Podcast</strong><small>데일리 팟캐스트 사용자 관리</small></span></a>
       <a class="hub-card" href="optout"><span class="hub-icon">🫥</span><span><strong>집계 제외</strong><small>이 브라우저를 방문 통계에서 빼기</small></span></a>
@@ -258,6 +269,13 @@
     <ol id="suggestions"><li class="empty">불러오는 중…</li></ol>
   </section>
   </section>
+  <section class="view" id="view-work" hidden>
+  <h2 class="view-title">🧾 Work</h2>
+  <section class="top" aria-label="신규 의뢰 접수함">
+    <h2>📥 신규 의뢰 접수함 <span style="opacity:.5;font-weight:normal;font-size:.8rem">work.bubblelab.dev 채팅 접수 · 최근 500건</span></h2>
+    <ol id="intake"><li class="empty">불러오는 중…</li></ol>
+  </section>
+  </section>
   <section class="view" id="view-chat" hidden>
   <h2 class="view-title">💬 Chat</h2>
   <section class="top" aria-label="익명 채팅 설정">
@@ -307,7 +325,7 @@
   <footer id="status">불러오는 중…</footer>
 </main>
 <script>
-const views = ['home', 'insights', 'slop', 'chat', 'podcast'];
+const views = ['home', 'insights', 'slop', 'work', 'chat', 'podcast'];
 function showView() {
   const selected = views.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'home';
   document.body.dataset.view = selected;
@@ -622,6 +640,48 @@ async function loadRecords() {
   }
 }
 
+async function loadIntake() {
+  const list = document.getElementById('intake');
+  const empty = (text) => {
+    const li = document.createElement('li');
+    li.className = 'empty';
+    li.textContent = text;
+    list.replaceChildren(li);
+  };
+  try {
+    const res = await fetch(`${base}/api/work`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const { items } = await res.json();
+    if (!items.length) return empty('아직 접수된 의뢰가 없어요');
+    list.replaceChildren();
+    for (const item of items) {
+      const li = document.createElement('li');
+      const text = document.createElement('span');
+      text.className = 'text';
+      const head = document.createElement('b');
+      head.textContent = `👤 ${item.nick}`;
+      text.append(head, item.question);
+      const meta = document.createElement('span');
+      meta.className = 'meta';
+      meta.textContent = new Date(item.askedAt).toLocaleString('ko-KR');
+      const del = document.createElement('button');
+      del.className = 'del';
+      del.textContent = '✕';
+      del.title = '접수 삭제';
+      del.addEventListener('click', async () => {
+        if (!confirm(`${item.nick} 님의 접수를 삭제할까요?`)) return;
+        await fetch(`${base}/api/work?id=${encodeURIComponent(item.id)}`, { method: 'DELETE' });
+        li.remove();
+        if (!list.children.length) empty('아직 접수된 의뢰가 없어요');
+      });
+      li.append(text, meta, del);
+      list.append(li);
+    }
+  } catch (err) {
+    empty(`불러오지 못했어요: ${err.message}`);
+  }
+}
+
 const noticeText = document.getElementById('notice-text');
 const noticeMeta = document.getElementById('notice-meta');
 
@@ -827,8 +887,10 @@ loadSuggestions();
 loadRecords();
 loadNotice();
 loadChat();
+loadIntake();
 loadPodcastUsers();
 loadPodcastUsage();
+setInterval(loadIntake, 60_000);
 setInterval(loadPodcastUsage, 60_000);
 setInterval(loadChat, 60_000);
 setInterval(loadStats, 60_000);

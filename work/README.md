@@ -2,7 +2,9 @@
 
 <https://work.bubblelab.dev>는 외주 작업 공간입니다. 구조가 두 층입니다:
 
-- **루트(공개)**: 브랜딩 메인(`index.html`) + 신규 의뢰 안내(`request.html`) +
+- **루트(공개)**: 브랜딩 메인(`index.html`) + 신규 의뢰 채팅 접수(`request.html`
+  — 질문 3개(+하고 싶은 말)·호칭·연락처를 챗봇 흐름으로 받아 `/_workintake`에
+  제출, admin 허브의 🧾 Work 접수함에서 확인·삭제) +
   포트폴리오(`showcase/` — 카드 그리드는 메인의 Selected work 섹션, 프로젝트별
   상세 페이지에서 라이브 링크로 연결. 썸네일은 `showcase/img/`, 아발론은 로컬
   렌더 불가라 디자인 타일). 게이트 없이 누구나 볼 수 있고(디자인은 다크 고정), 루트의 확장자 있는
@@ -27,7 +29,11 @@
 - 모든 응답에 `X-Robots-Tag: noindex`와 `Cache-Control: no-store`가 붙고 방문
   통계에서도 제외됩니다.
 
-## QnA·리뷰 API
+## 접수·QnA·리뷰 API
+
+- `/_workintake`: 신규 의뢰 접수(공개 POST, 10분당 5회). `WorkQnaDO`의
+  `__intake__` 보관함에 쌓이며 — 이름이 의뢰 ID 규칙 밖이라 클라이언트
+  QnA 경로로는 접근 불가 — 조회·삭제는 admin `/api/work` 전용.
 
 - `/_workqna/<프로젝트>`: 해당 의뢰 세션(또는 마스터)만 접근. 읽기·질문(ask)은
   의뢰 세션으로 가능, 답변(answer)·삭제(delete)는 마스터 전용. 쓰기는 10분당

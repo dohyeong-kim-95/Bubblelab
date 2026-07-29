@@ -615,6 +615,21 @@ async function handleAdmin(request, env, url, base = "") {
     }
   }
 
+  // 신규 의뢰 채팅 접수 확인함 — work의 /_workintake가 쌓은 항목을 조회·삭제
+  if (url.pathname === "/api/work") {
+    const stub = env.WORK_QNA.get(env.WORK_QNA.idFromName("__intake__"));
+    if (request.method === "GET") {
+      return stub.fetch("https://workqna.internal/");
+    }
+    if (request.method === "DELETE") {
+      const intakeId = url.searchParams.get("id") ?? "";
+      return stub.fetch("https://workqna.internal/delete", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: intakeId }),
+      });
+    }
+  }
+
   if (url.pathname === "/api/suggestions") {
     const id = env.RECORDS.idFromName("global");
     const stub = env.RECORDS.get(id);
@@ -897,6 +912,44 @@ export async function handleRequest(request, env, ctx) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...body, vid: visitorId(request) }),
+      });
+    }
+
+    // 신규 의뢰 채팅 접수(공개 POST): work의 request 채팅이 보낸 답변을
+    // WorkQnaDO("__intake__")에 쌓는다. 이름은 의뢰 ID 규칙([a-z0-9-]) 밖이라
+    // 클라이언트 QnA 경로로는 절대 접근되지 않고, 조회는 admin(/api/work)만.
+    if (path === "/_workintake") {
+      if (request.method !== "POST") {
+        return new Response("method not allowed", { status: 405, headers: { Allow: "POST" } });
+      }
+      const contentTypeError = requireJsonRequest(request);
+      if (contentTypeError) return contentTypeError;
+      const limited = await enforceRateLimit(request, env, {
+        scope: "work-intake", limit: 5, windowMs: 10 * 60 * 1000,
+      });
+      if (limited) return limited;
+      const body = await request.json().catch(() => ({}));
+      const field = (value, max) => String(value ?? "").trim().slice(0, max);
+      const name = field(body.name, 20);
+      const contact = field(body.contact, 80);
+      const what = field(body.what, 450);
+      const when = field(body.when, 60);
+      const budget = field(body.budget, 60);
+      const note = field(body.note, 200);
+      if (!name || !contact || !what) {
+        return Response.json({ error: "name, contact, what are required" }, { status: 400 });
+      }
+      const question = [
+        `📦 만들고 싶은 것: ${what}`,
+        `🗓️ 희망 일정: ${when || "미정"}`,
+        `💰 예산: ${budget || "미정"}`,
+        note && `💬 하고 싶은 말: ${note}`,
+        `📮 연락처: ${contact}`,
+      ].filter(Boolean).join("\n");
+      const stub = env.WORK_QNA.get(env.WORK_QNA.idFromName("__intake__"));
+      return stub.fetch("https://workqna.internal/ask", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nick: name, product: "신규 의뢰", question }),
       });
     }
 
