@@ -233,8 +233,10 @@ ${preconnectLinks}
   .podium-item.rank-1 { animation-delay: .15s; }
   .podium-figure { font-size: 2rem; line-height: 1; filter: drop-shadow(0 2px 2px #0003); }
   .rank-1 .podium-figure { font-size: 2.7rem; }
+  /* 동점이면 한 단에 여러 이름이 올라가므로 두 줄까지 접어서 보여준다 */
   .podium-nick { font-weight: bold; font-size: .88rem; margin-top: .25rem;
-          max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+          max-width: 100%; overflow: hidden; overflow-wrap: anywhere;
+          display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
   .podium-count { font-size: .7rem; opacity: .72; margin-bottom: .4rem; }
   .podium-base { position: relative; width: 100%; overflow: hidden;
           border-radius: .55rem .55rem 0 0; }
@@ -383,7 +385,7 @@ addEventListener("keydown", (event) => {
 (async () => {
   const podium = document.getElementById("hof-podium");
   if (!podium) return;
-  const CACHE_KEY = "bl-hof-podium";
+  const CACHE_KEY = "bl-hof-podium-v2";   // v1은 등수 단 없이 사람 3명만 담았다
   const MEDAL = ["🥇", "🥈", "🥉"];
   const MAX_EMOJI = 6;                       // 시상대 단에 넣을 이모지 최대 개수
 
@@ -395,29 +397,39 @@ addEventListener("keydown", (event) => {
     if (g && e) gameEmoji[g] = e;
   }
 
+  // ranked는 등수 단(tier) 배열이다: [{ rank, count, members:[{nick, games}] }, …]
+  // 관왕 수가 같으면 한 단에 함께 올라간다.
   function renderPodium(ranked) {
     if (!Array.isArray(ranked) || !ranked.length) return false;
+    if (!ranked.every((t) => t && Array.isArray(t.members) && t.rank)) return false; // 옛 캐시 방어
     const row = podium.querySelector(".podium-row");
     row.textContent = "";
-    for (const pos of [2, 0, 1]) {          // 화면 배치: 3등 · 1등 · 2등
-      const p = ranked[pos];
-      if (!p) continue;                     // 3명 미만이면 있는 만큼만
+    const byRank = new Map(ranked.map((t) => [t.rank, t]));
+    // 세 단이 다 있으면 1등을 가운데 두는 고전 배치(3·1·2). 동점 때문에 단이
+    // 빠지면(공동 1위 둘이면 2등 단이 없다) 1등이 끝으로 밀리므로 등수 순으로 둔다.
+    const full = [1, 2, 3].every((r) => byRank.has(r));
+    for (const pos of full ? [3, 1, 2] : [...byRank.keys()].sort((a, b) => a - b)) {
+      const t = byRank.get(pos);
+      if (!t) continue;
       const item = document.createElement("div");
-      item.className = "podium-item rank-" + (pos + 1);
+      item.className = "podium-item rank-" + pos;
       const fig = document.createElement("div");
-      fig.className = "podium-figure"; fig.textContent = MEDAL[pos];
+      fig.className = "podium-figure"; fig.textContent = MEDAL[pos - 1];
       const nick = document.createElement("div");
-      nick.className = "podium-nick"; nick.textContent = p.nick;
+      nick.className = "podium-nick";
+      nick.textContent = t.members.map((m) => m.nick).join(" · ");
       const cnt = document.createElement("div");
-      cnt.className = "podium-count"; cnt.textContent = "👑 " + p.count + "관왕";
+      cnt.className = "podium-count";
+      cnt.textContent = (t.members.length > 1 ? "공동 " : "") + "👑 " + t.count + "관왕";
       // 시상대 단: 큰 순위 숫자(워터마크) 위에 1등한 게임 이모지들을 올린다.
+      // 동점이면 그 단에 선 사람들의 게임을 모두 합쳐 얹는다.
       const base = document.createElement("div");
       base.className = "podium-base";
       const rank = document.createElement("span");
-      rank.className = "podium-rank"; rank.textContent = String(pos + 1);
+      rank.className = "podium-rank"; rank.textContent = String(pos);
       const games = document.createElement("div");
       games.className = "podium-games";
-      const emojis = (p.games ?? []).map((g) => gameEmoji[g] ?? "🫧");
+      const emojis = t.members.flatMap((m) => m.games ?? []).map((g) => gameEmoji[g] ?? "🫧");
       for (const e of emojis.slice(0, MAX_EMOJI)) {
         const s = document.createElement("span"); s.textContent = e; games.appendChild(s);
       }
@@ -455,10 +467,19 @@ addEventListener("keydown", (event) => {
       cur.games.push(game);
       byNick.set(r.nick, cur);
     }
-    const ranked = [...byNick.entries()]
+    const people = [...byNick.entries()]
       .map(([nick, v]) => ({ nick, count: v.count, at: v.at, games: v.games }))
-      .sort((a, b) => b.count - a.count || b.at - a.at || a.nick.localeCompare(b.nick))
-      .slice(0, 3);
+      .sort((a, b) => b.count - a.count || b.at - a.at || a.nick.localeCompare(b.nick));
+    // 관왕 수가 같으면 같은 등수(경쟁 순위). 공동 1위가 둘이면 다음 사람은 3위다.
+    const tiers = [];
+    let placed = 0;
+    for (const p of people) {
+      const last = tiers[tiers.length - 1];
+      if (last && last.count === p.count) last.members.push(p);
+      else tiers.push({ rank: placed + 1, count: p.count, members: [p] });
+      placed += 1;
+    }
+    const ranked = tiers.filter((t) => t.rank <= 3);
     const freshKey = JSON.stringify(ranked);
     if (freshKey !== renderedKey) renderPodium(ranked);   // 캐시와 같으면 다시 안 그림(깜빡임 방지)
     localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), ranked }));
