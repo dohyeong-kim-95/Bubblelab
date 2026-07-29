@@ -548,8 +548,12 @@ function injectShared(dir, src) {
   }
 }
 // 체류 측정기는 admin을 뺀 모든 페이지에. (카테고리 홈은 클라이언트에서 제외된다)
+// 유틸 독은 홈·공유 버튼이 등록해 들어가는 그릇이라 같은 범위에 깔아둔다.
+// 등록이 하나도 없으면 독은 아예 그려지지 않는다.
 for (const site of sites) {
-  if (site.name !== "admin") injectShared(join(DIST, site.name), "/_shared/engagement.js");
+  if (site.name === "admin") continue;
+  injectShared(join(DIST, site.name), "/_shared/engagement.js");
+  injectShared(join(DIST, site.name), "/_shared/dock.js");
 }
 // 홈 버튼은 카드 카테고리의 카드 페이지에만 — 카테고리 홈 자신은 갈 곳이 없다.
 let homeButtons = 0;
