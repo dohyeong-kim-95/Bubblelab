@@ -88,13 +88,28 @@ test("독이 배치·접기·탭 차단을 전담한다", () => {
   assert.match(js, /aria-label/);
 });
 
-test("독은 홈·공유가 닿는 모든 페이지에 깔린다", () => {
+test("독 스크립트는 넓게 깔되, 등록이 없으면 그려지지 않는다", () => {
   const page = readFileSync(join(DIST, "slop/woodstack/index.html"), "utf8");
   assert.ok(page.includes("/_shared/dock.js"), "토이에 독이 없다");
   assert.ok(page.includes("/_shared/home.js"), "토이에 홈 버튼이 없다");
-  // 카테고리 홈에는 홈 버튼이 없지만 공유 버튼이 있으므로 독은 필요하다
+  // 카테고리 홈은 홈 버튼도 공유 버튼도 없어 등록이 0건이다. 스크립트는 깔리되
+  // 독은 나타나지 않아야 한다 — 빈 알약이 떠 있으면 곤란하다.
   const home = readFileSync(join(DIST, "slop/index.html"), "utf8");
-  assert.ok(home.includes("/_shared/dock.js"), "카테고리 홈에 독이 없다");
+  assert.ok(home.includes("/_shared/dock.js"), "카테고리 홈에 독 스크립트가 없다");
+  assert.ok(!home.includes("/_shared/home.js"), "카테고리 홈에 홈 버튼이 붙었다");
+  const dock = readFileSync(join(ROOT, "_shared/dock.js"), "utf8");
+  assert.match(dock, /if \(!dock\.isConnected && items\.length\)/,
+    "등록이 없어도 독을 붙이는 코드로 바뀌었다");
+});
+
+test("독은 아래를 축으로 위로 자란다", () => {
+  const js = readFileSync(join(ROOT, "_shared/dock.js"), "utf8");
+  // bottom 고정 + 세로 배치 = 버튼이 늘면 위로 자란다 (가로로 늘면 좌하단
+  // 주간 기록 배지 쪽으로 번진다)
+  assert.match(js, /#bl-dock\s*\{[^}]*bottom:\s*1rem/);
+  assert.match(js, /flex-direction:\s*column/);
+  // order가 작을수록 아래(토글 쪽) — DOM은 위→아래라 내림차순으로 넣어야 한다
+  assert.match(js, /sort\(\(a, b\) => \(b\.order \?\? 50\) - \(a\.order \?\? 50\)\)/);
 });
 
 test("woodstack 음소거가 독으로 옮겨져 공유 버튼에 덮이지 않는다", () => {
