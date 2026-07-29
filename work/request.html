@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>신규 의뢰하기 — bubblelab works</title>
+<title>신규 의뢰 — bubblelab works</title>
 <style>
   :root { color-scheme: light dark;
     --ground: light-dark(#fafbfc, #10151c);
@@ -35,10 +35,16 @@
   ul.plain li { margin: .3rem 0; }
   ul.plain li small { color: var(--soft); }
 
-  .send { padding: 1.3rem 1.35rem 1.45rem; border-radius: 1rem; background: var(--surface);
+  ol.flow { margin: 0; padding: 0; list-style: none; display: grid; gap: .5rem; counter-reset: n; }
+  ol.flow li { counter-increment: n; display: flex; gap: .8rem; align-items: baseline; font-size: .88rem; }
+  ol.flow li::before { content: counter(n, decimal-leading-zero); flex: none;
+                       font-size: .72rem; font-weight: 700; color: var(--bubble); letter-spacing: .08em; }
+  ol.flow li b { font-weight: 600; }
+
+  .send { padding: 1.3rem 1.35rem 1.45rem; border-radius: .8rem; background: var(--surface);
           border: 1px solid var(--line); }
   .send p { margin: 0 0 1rem; font-size: .86rem; color: var(--soft); }
-  .send .mail { display: inline-block; padding: .8rem 1.4rem; border-radius: .7rem;
+  .send .mail { display: inline-block; padding: .8rem 1.4rem; border-radius: .6rem;
                 background: var(--bubble); color: var(--bubble-ink); font-weight: 700;
                 font-size: .92rem; text-decoration: none; }
   .send .addr { display: block; margin-top: .7rem; font-size: .78rem; color: var(--soft);
@@ -48,35 +54,45 @@
 <body>
 <main>
   <p class="crumb"><a href="./">← bubblelab works</a></p>
-  <h1>✉️ 신규 의뢰하기</h1>
-  <p class="lead">"이런 게 있으면 좋겠는데"에서 시작하면 충분합니다.
-  형식 갖춘 기획서는 필요 없어요.</p>
+  <h1>신규 의뢰</h1>
+  <p class="lead">프로젝트 개요를 보내주시면 수행 가능 여부와 함께
+  범위·일정·견적을 회신드립니다.</p>
 
   <section>
-    <h2>What we build</h2>
+    <h2>Services</h2>
     <ul class="plain">
-      <li>브랜드 홈페이지 · 제품 랜딩 페이지</li>
-      <li>웹 토이 · 미니게임 · 인터랙티브 콘텐츠</li>
-      <li>소규모 웹 서비스 <small>(예약·기록·조회 같은 한 가지 일을 하는 도구)</small></li>
-      <li>기존 사이트 개선 <small>(속도·모바일·디자인 손보기)</small></li>
+      <li>브랜드 웹사이트 · 제품 랜딩 페이지</li>
+      <li>인터랙티브 웹 콘텐츠 <small>(스크롤 연출 · 웹 게임 · 캠페인 페이지)</small></li>
+      <li>소규모 웹 서비스 · 내부 도구 <small>(예약·조회·기록 등 단일 목적 서비스)</small></li>
+      <li>기존 웹사이트 개선 <small>(성능 · 모바일 대응 · 디자인 리뉴얼)</small></li>
     </ul>
   </section>
 
   <section>
-    <h2>Nice to include</h2>
+    <h2>Briefing</h2>
+    <p style="margin:0 0 .6rem">문의 시 아래 항목이 포함되면 정확한 회신이 가능합니다.</p>
     <ul class="plain">
-      <li>만들고 싶은 것 한두 문장</li>
-      <li>참고가 될 링크·이미지 <small>(있으면)</small></li>
-      <li>원하는 분위기나 꼭 들어가야 할 내용</li>
-      <li>희망 일정과 대략의 예산 <small>(정해지지 않았어도 괜찮아요)</small></li>
+      <li>프로젝트 목적과 요구사항 개요</li>
+      <li>참고 자료 <small>(유사 사이트 링크, 보유 브랜드 에셋 등)</small></li>
+      <li>희망 일정</li>
+      <li>예산 범위 <small>(미정이어도 무방)</small></li>
     </ul>
+  </section>
+
+  <section>
+    <h2>Process</h2>
+    <ol class="flow">
+      <li><span><b>문의 접수</b> — 영업일 기준 1~2일 내 회신</span></li>
+      <li><span><b>협의</b> — 범위·일정·견적 확정 후 계약</span></li>
+      <li><span><b>제작</b> — 전용 미리보기 환경(의뢰 ID 발급)에서 시안 검토·피드백</span></li>
+      <li><span><b>인계</b> — 검수 완료 후 소스 코드 포함 산출물 전체 이관</span></li>
+    </ol>
   </section>
 
   <section class="send">
     <h2>Contact</h2>
-    <p>아래 메일로 보내주시면 하루 이틀 안에 답장드립니다.
-    범위와 일정이 정해지면 전용 미리보기 주소(의뢰 ID)를 만들어드려요.</p>
-    <a class="mail" href="mailto:boson95@gmail.com?subject=%5B%EC%9D%98%EB%A2%B0%5D%20">메일 보내기</a>
+    <p>아래 메일로 프로젝트 개요를 보내주십시오.</p>
+    <a class="mail" href="mailto:boson95@gmail.com?subject=%5B%EC%9D%98%EB%A2%B0%5D%20">메일로 문의하기</a>
     <span class="addr">boson95@gmail.com</span>
   </section>
 </main>

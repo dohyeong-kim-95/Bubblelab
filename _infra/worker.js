@@ -73,8 +73,8 @@ button { font: inherit; padding: .65rem; border: 0; border-radius: .6rem;
 .back { font-size: .74rem; text-align: center; }
 .back a { color: inherit; opacity: .65; }</style></head>
 <body><form method="post" action="${base}/login">
-<h1>🔑 의뢰 조회</h1>
-<p>전달받은 의뢰 ID와 비밀번호를 입력하면 진행 중인 작업을 볼 수 있습니다.</p>
+<h1>의뢰 조회</h1>
+<p>발급받은 의뢰 ID와 비밀번호를 입력하면 진행 중인 프로젝트를 확인할 수 있습니다.</p>
 <input name="id" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="의뢰 ID" aria-label="의뢰 ID" required autofocus>
 <input name="password" type="password" autocomplete="current-password" placeholder="비밀번호" aria-label="비밀번호" required>
 <p class="error">${failed ? "의뢰 ID 또는 비밀번호가 맞지 않습니다." : ""}</p>

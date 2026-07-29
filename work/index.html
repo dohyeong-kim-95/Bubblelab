@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<meta name="description" content="bubblelab works — 작은 웹을 만드는 실험실의 외주 작업실">
-<title>bubblelab works — 작은 웹을 만드는 작업실</title>
+<meta name="description" content="bubblelab works — 웹 기획·디자인·개발. 소규모 웹 프로젝트를 전 과정 담당합니다.">
+<title>bubblelab works — 웹 기획·디자인·개발</title>
 <style>
   :root { color-scheme: light dark;
     --ground: light-dark(#fafbfc, #10151c);
@@ -22,46 +22,48 @@
          line-height: 1.8; word-break: keep-all; overflow-x: hidden; }
   main { position: relative; max-width: 38rem; margin: 0 auto; padding: 4.5rem 1.4rem 4rem; }
 
-  /* 떠다니는 거품 — 은은한 배경 장식 */
+  /* 배경 장식 — 은은한 원 */
   .bubbles { position: fixed; inset: 0; pointer-events: none; z-index: -1; }
-  .bubbles i { position: absolute; border-radius: 50%; border: 1.5px solid var(--bubble);
-               opacity: .13; animation: float 14s ease-in-out infinite; }
+  .bubbles i { position: absolute; border-radius: 50%; border: 1.5px solid var(--bubble); opacity: .1; }
   .bubbles i:nth-child(1) { width: 9rem; height: 9rem; left: -3rem; top: 16%; }
-  .bubbles i:nth-child(2) { width: 4.5rem; height: 4.5rem; right: 8%; top: 8%; animation-delay: -4s; }
-  .bubbles i:nth-child(3) { width: 6.5rem; height: 6.5rem; right: -2rem; bottom: 18%; animation-delay: -8s; }
-  .bubbles i:nth-child(4) { width: 3rem; height: 3rem; left: 12%; bottom: 9%; animation-delay: -11s; }
-  @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-1.4rem); } }
-  @media (prefers-reduced-motion: reduce) { .bubbles i { animation: none; } }
+  .bubbles i:nth-child(2) { width: 4.5rem; height: 4.5rem; right: 8%; top: 8%; }
+  .bubbles i:nth-child(3) { width: 6.5rem; height: 6.5rem; right: -2rem; bottom: 18%; }
 
   .hero { margin-bottom: 2.8rem; }
-  .hero .mark { font-size: 2.6rem; line-height: 1; }
-  h1 { margin: .55rem 0 .3rem; font-size: 1.65rem; letter-spacing: -.02em; }
+  .hero .sig { display: inline-block; width: 2.2rem; height: 2.2rem; border-radius: 50%;
+               border: 2px solid var(--bubble); position: relative; }
+  .hero .sig::after { content: ""; position: absolute; right: -0.72rem; top: -0.35rem;
+                      width: .72rem; height: .72rem; border-radius: 50%;
+                      border: 2px solid var(--bubble); opacity: .55; }
+  h1 { margin: .8rem 0 .3rem; font-size: 1.65rem; letter-spacing: -.02em; }
   .tagline { margin: 0; color: var(--soft); font-size: .92rem; }
   .hero p.desc { margin: 1.1rem 0 0; font-size: .9rem; color: var(--soft); max-width: 32rem; }
   .hero p.desc b { color: var(--ink); font-weight: 600; }
 
   .doors { display: grid; gap: .9rem; margin: 0 0 3rem; }
   @media (min-width: 560px) { .doors { grid-template-columns: 1fr 1fr; } }
-  .door { display: block; padding: 1.25rem 1.3rem 1.35rem; border-radius: 1rem; text-decoration: none;
+  .door { display: block; padding: 1.25rem 1.3rem 1.35rem; border-radius: .8rem; text-decoration: none;
           color: inherit; background: var(--surface); border: 1px solid var(--line);
           transition: transform .15s ease, border-color .15s ease; }
   .door:hover { transform: translateY(-2px); border-color: var(--bubble); }
   .door b { display: block; font-size: 1.02rem; margin-bottom: .25rem; }
   .door span { font-size: .78rem; color: var(--soft); }
   .door.primary { background: var(--bubble); border-color: var(--bubble); color: var(--bubble-ink); }
-  .door.primary span { color: var(--bubble-ink); opacity: .8; }
+  .door.primary span { color: var(--bubble-ink); opacity: .85; }
 
   h2 { margin: 0 0 .8rem; font-size: .8rem; letter-spacing: .18em; color: var(--bubble);
        text-transform: uppercase; }
   section { margin-bottom: 2.6rem; }
-  ul.things { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: .5rem; }
-  ul.things li { font-size: .8rem; padding: .4rem .85rem; border-radius: 2rem;
+  ul.things { margin: 0; padding: 0; list-style: none; display: grid; gap: .55rem; }
+  ul.things li { font-size: .88rem; padding: .7rem .95rem; border-radius: .6rem;
                  background: var(--surface); border: 1px solid var(--line); }
+  ul.things li small { display: block; color: var(--soft); font-size: .76rem; }
 
   ol.flow { margin: 0; padding: 0; list-style: none; display: grid; gap: .55rem; counter-reset: n; }
   ol.flow li { counter-increment: n; display: flex; gap: .8rem; align-items: baseline; font-size: .88rem; }
   ol.flow li::before { content: counter(n, decimal-leading-zero); flex: none;
                        font-size: .72rem; font-weight: 700; color: var(--bubble); letter-spacing: .08em; }
+  ol.flow li b { font-weight: 600; }
   ol.flow li small { color: var(--soft); }
 
   footer { border-top: 1px solid var(--line); padding-top: 1.4rem; font-size: .74rem;
@@ -70,46 +72,46 @@
 </style>
 </head>
 <body>
-<div class="bubbles" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+<div class="bubbles" aria-hidden="true"><i></i><i></i><i></i></div>
 
 <main>
   <div class="hero">
-    <div class="mark" aria-hidden="true">🫧</div>
+    <span class="sig" aria-hidden="true"></span>
     <h1>bubblelab works</h1>
-    <p class="tagline">작은 웹을 만드는 실험실, bubblelab의 작업실</p>
-    <p class="desc">브랜드 홈페이지부터 웹 토이까지 — <b>기획, 디자인, 개발, 인계</b>를
-    한 사람이 처음부터 끝까지 만듭니다. 진행 중인 작업은 의뢰마다 전용
-    미리보기 주소에서 실시간으로 확인할 수 있어요.</p>
+    <p class="tagline">웹 기획 · 디자인 · 개발</p>
+    <p class="desc">브랜드 웹사이트부터 소규모 웹 서비스까지, <b>기획 — 디자인 — 개발 —
+    배포 — 인계</b> 전 과정을 담당합니다. 모든 프로젝트는 전용 미리보기 환경에서
+    진행 상황을 확인하며 진행됩니다.</p>
   </div>
 
   <div class="doors">
     <a class="door primary" href="request">
-      <b>✉️ 신규 의뢰하기</b>
-      <span>무엇을 만들 수 있는지, 어떻게 진행되는지 안내</span>
+      <b>신규 의뢰하기</b>
+      <span>수행 범위와 진행 절차 안내, 프로젝트 문의</span>
     </a>
     <a class="door" href="login">
-      <b>🔑 의뢰 조회하기</b>
-      <span>전달받은 의뢰 ID로 진행 중인 작업 확인</span>
+      <b>의뢰 조회하기</b>
+      <span>발급받은 의뢰 ID로 진행 중인 프로젝트 확인</span>
     </a>
   </div>
 
   <section>
-    <h2>Made here</h2>
+    <h2>Services</h2>
     <ul class="things">
-      <li>브랜드 홈페이지 · 랜딩</li>
-      <li>웹 토이 · 미니게임</li>
-      <li>소규모 웹 서비스</li>
-      <li>기존 사이트 손보기</li>
+      <li>브랜드 웹사이트 · 랜딩 페이지 <small>기업·브랜드 소개, 제품 프로모션</small></li>
+      <li>인터랙티브 웹 콘텐츠 <small>스크롤 연출, 웹 게임, 캠페인 페이지</small></li>
+      <li>소규모 웹 서비스 · 내부 도구 <small>예약·조회·기록 등 단일 목적 서비스</small></li>
+      <li>기존 웹사이트 개선 <small>성능·모바일 대응·디자인 리뉴얼</small></li>
     </ul>
   </section>
 
   <section>
-    <h2>How it works</h2>
+    <h2>Process</h2>
     <ol class="flow">
-      <li>의뢰 — 아이디어와 참고자료를 보내주세요 <small>(형식 자유)</small></li>
-      <li>확인 — 범위·일정을 상의하고 전용 미리보기 주소를 드려요</li>
-      <li>제작 — 시안을 보면서 피드백을 주고받아요</li>
-      <li>인계 — 완성물을 통째로 드리고 여기선 내립니다</li>
+      <li><span><b>문의</b> — 요구사항과 참고 자료를 접수합니다</span></li>
+      <li><span><b>협의</b> — 범위·일정·견적을 확정하고 전용 미리보기 환경을 발급합니다</span></li>
+      <li><span><b>제작</b> — 시안 검토와 피드백 반영을 반복하며 완성도를 높입니다</span></li>
+      <li><span><b>인계</b> — 소스 코드를 포함한 산출물 전체를 이관하고 종료합니다</span></li>
     </ol>
   </section>
 
