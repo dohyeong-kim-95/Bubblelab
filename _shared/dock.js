@@ -1,5 +1,6 @@
-// 우하단 공용 유틸 독(dock). 홈·공유처럼 토이 바깥에서 붙는 버튼들을 알약 모양
-// 한 덩어리로 모은다. 버튼이 늘어나면 원형으로 접히고, 누르면 알약으로 펼쳐진다.
+// 우하단 공용 유틸 독(dock). 홈·공유처럼 토이 바깥에서 붙는 버튼들을 세로 알약
+// 하나로 모은다. 아래 끝의 토글을 축으로 위로 자라고, 버튼이 늘어나면 원형으로
+// 접혔다가 누르면 다시 위로 펼쳐진다.
 //
 // 등록 방법 — 로드 순서를 신경 쓸 필요가 없다. 독보다 먼저 실행돼도 큐에 쌓였다가
 // 독이 생길 때 함께 그려진다:
@@ -9,15 +10,19 @@
 //     onClick: (el) => { ... el.textContent = "🔇"; },
 //   });
 //
-// 필드: id(필수) · icon(필수) · label(스크린리더/툴팁) · order(작을수록 왼쪽)
+// 필드: id(필수) · icon(필수) · label(스크린리더/툴팁) · order(작을수록 아래쪽)
 //       href(링크로 만들 때) · onClick(버튼으로 만들 때) · ready(el)(생성 직후 콜백)
 (() => {
   const MAX_INLINE = 3; // 이보다 많아지면 접기 토글이 붙는다
   const STORE = "bl-dock-collapsed";
 
   const css = `
+  /* 아래를 축으로 위로 자란다 — 토글은 늘 맨 아래(엄지 자리)에 붙어 있고
+     버튼이 그 위로 쌓인다. 가로로 늘리면 좌하단 주간 기록 배지 쪽으로
+     번져 부딪히므로 세로를 택했다. */
   #bl-dock { position: fixed; right: 1rem; bottom: 1rem; z-index: 9999;
-    display: flex; align-items: center; gap: .25rem; padding: .25rem;
+    display: flex; flex-direction: column; align-items: center;
+    gap: .25rem; padding: .25rem;
     border-radius: 2rem; border: 1.5px solid currentColor;
     color: light-dark(#334, #ccd);
     background: light-dark(rgba(255,255,255,.75), rgba(20,26,36,.75));
@@ -67,8 +72,9 @@
     toggle.title = crowded && collapsed ? "유틸 펼치기" : "유틸 접기";
     toggle.setAttribute("aria-label", toggle.title);
     toggle.setAttribute("aria-expanded", String(!(crowded && collapsed)));
-    // order 오름차순으로 다시 배열 (토글은 항상 오른쪽 끝)
-    for (const it of [...items].sort((a, b) => (a.order ?? 50) - (b.order ?? 50))) {
+    // 세로 배치라 order가 작을수록 아래(토글 쪽)에 와야 손이 먼저 닿는다.
+    // DOM은 위→아래 순서이므로 내림차순으로 넣고 토글을 맨 끝(=맨 아래)에 붙인다.
+    for (const it of [...items].sort((a, b) => (b.order ?? 50) - (a.order ?? 50))) {
       dock.appendChild(it.el);
     }
     dock.appendChild(toggle);
