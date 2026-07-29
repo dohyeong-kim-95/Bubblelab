@@ -57,7 +57,7 @@ ${failed ? '<p class="error">ID 또는 비밀번호가 맞지 않습니다.</p>'
 const WORK_LOGIN_PAGE = (failed, base) => `<!doctype html><html lang="ko"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow"><title>의뢰 조회 — bubblelab works</title><style>
-:root { color-scheme: light dark; }
+:root { color-scheme: dark; }
 body { font-family: ui-monospace, monospace; min-height: 100dvh; margin: 0; display: grid;
        place-items: center; background: light-dark(#f2f4f7, #0d131c); color: light-dark(#1c2733, #e2e9f0); }
 form { display: grid; gap: .7rem; width: min(19rem, 88vw); padding: 1.6rem;
@@ -86,7 +86,7 @@ button { font: inherit; padding: .65rem; border: 0; border-radius: .6rem;
 const DURI_LOGIN_PAGE = (failed, base) => `<!doctype html><html lang="ko"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow"><title>Duri</title><style>
-:root { color-scheme: light dark; }
+:root { color-scheme: dark; }
 body { font-family: ui-monospace, monospace; min-height: 100dvh; margin: 0; display: grid;
        place-items: center; background: light-dark(#fafbfc, #10151c); color: light-dark(#1c2733, #e2e9f0); }
 form { display: grid; gap: .7rem; width: min(19rem, 88vw); padding: 1.6rem;
