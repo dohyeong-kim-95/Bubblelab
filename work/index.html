@@ -17,19 +17,43 @@
     --bubble-ink: light-dark(#fff, #0d131c);
   }
   * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
   body { margin: 0; min-height: 100dvh; background: var(--ground); color: var(--ink);
          font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
          line-height: 1.8; word-break: keep-all; overflow-x: hidden; }
-  main { position: relative; max-width: 38rem; margin: 0 auto; padding: 4.5rem 1.4rem 4rem; }
 
-  /* 배경 장식 — 은은한 원 */
+  /* 상단 고정 바 — 신규 의뢰 버튼 상시 노출 */
+  .bar { position: fixed; top: 0; left: 0; right: 0; z-index: 40;
+         display: flex; align-items: center; justify-content: space-between;
+         padding: .6rem 1.1rem;
+         background: color-mix(in srgb, var(--ground) 86%, transparent);
+         backdrop-filter: blur(9px); border-bottom: 1px solid transparent;
+         transition: border-color .3s; }
+  .bar.solid { border-bottom-color: var(--line); }
+  .bar .brand { display: flex; align-items: center; gap: .5rem; font-weight: 700;
+                font-size: .88rem; text-decoration: none; color: inherit; }
+  .bar .brand i { width: .95rem; height: .95rem; border-radius: 50%;
+                  border: 2px solid var(--bubble); }
+  .bar .cta { font-size: .8rem; font-weight: 700; text-decoration: none;
+              color: var(--bubble-ink); background: var(--bubble);
+              padding: .5rem 1rem; border-radius: 2rem; }
+
+  /* 배경 장식 */
   .bubbles { position: fixed; inset: 0; pointer-events: none; z-index: -1; }
   .bubbles i { position: absolute; border-radius: 50%; border: 1.5px solid var(--bubble); opacity: .1; }
   .bubbles i:nth-child(1) { width: 9rem; height: 9rem; left: -3rem; top: 16%; }
   .bubbles i:nth-child(2) { width: 4.5rem; height: 4.5rem; right: 8%; top: 8%; }
   .bubbles i:nth-child(3) { width: 6.5rem; height: 6.5rem; right: -2rem; bottom: 18%; }
 
-  .hero { margin-bottom: 2.8rem; }
+  /* 페이지(앵커) — 한 화면 = 한 장 */
+  .page { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column;
+          justify-content: center; padding: 4.2rem 1.4rem 2.2rem; }
+  .page > .inner { width: 100%; max-width: 38rem; margin: 0 auto; }
+
+  h2 { margin: 0 0 .9rem; font-size: .8rem; letter-spacing: .18em; color: var(--bubble);
+       text-transform: uppercase; }
+
+  /* 1페이지 — 히어로 */
   .hero .sig { display: inline-block; width: 2.2rem; height: 2.2rem; border-radius: 50%;
                border: 2px solid var(--bubble); position: relative; }
   .hero .sig::after { content: ""; position: absolute; right: -0.72rem; top: -0.35rem;
@@ -37,12 +61,11 @@
                       border: 2px solid var(--bubble); opacity: .55; }
   h1 { margin: .8rem 0 .3rem; font-size: 1.65rem; letter-spacing: -.02em; }
   .tagline { margin: 0; color: var(--soft); font-size: .92rem; }
-  .hero p.desc { margin: 1.1rem 0 0; font-size: .9rem; color: var(--soft); max-width: 32rem; }
+  .hero p.desc { margin: 1.1rem 0 1.8rem; font-size: .9rem; color: var(--soft); max-width: 32rem; }
   .hero p.desc b { color: var(--ink); font-weight: 600; }
-
-  .doors { display: grid; gap: .9rem; margin: 0 0 3rem; }
+  .doors { display: grid; gap: .9rem; }
   @media (min-width: 560px) { .doors { grid-template-columns: 1fr 1fr; } }
-  .door { display: block; padding: 1.25rem 1.3rem 1.35rem; border-radius: .8rem; text-decoration: none;
+  .door { display: block; padding: 1.2rem 1.3rem 1.3rem; border-radius: .8rem; text-decoration: none;
           color: inherit; background: var(--surface); border: 1px solid var(--line);
           transition: transform .15s ease, border-color .15s ease; }
   .door:hover { transform: translateY(-2px); border-color: var(--bubble); }
@@ -50,65 +73,73 @@
   .door span { font-size: .78rem; color: var(--soft); }
   .door.primary { background: var(--bubble); border-color: var(--bubble); color: var(--bubble-ink); }
   .door.primary span { color: var(--bubble-ink); opacity: .85; }
+  .more { margin-top: 1.6rem; font-size: .74rem; color: var(--soft); text-align: center; }
+  .more i { display: block; width: 1px; height: 1.4rem; margin: .4rem auto 0;
+            background: linear-gradient(var(--soft), transparent); }
 
-  h2 { margin: 0 0 .8rem; font-size: .8rem; letter-spacing: .18em; color: var(--bubble);
-       text-transform: uppercase; }
-  section { margin-bottom: 2.6rem; }
-
-  .works { display: grid; grid-template-columns: repeat(2, 1fr); gap: .9rem; }
+  /* 2페이지 — Selected work */
+  .works { display: grid; grid-template-columns: repeat(2, 1fr); gap: .8rem; }
   @media (min-width: 560px) { .works { grid-template-columns: repeat(4, 1fr); } }
   .work { display: block; text-decoration: none; color: inherit; border-radius: .8rem;
           overflow: hidden; background: var(--surface); border: 1px solid var(--line);
           transition: transform .15s ease, border-color .15s ease; }
   .work:hover { transform: translateY(-2px); border-color: var(--bubble); }
-  .work img { display: block; width: 100%; aspect-ratio: 2/3; object-fit: cover;
-              border-bottom: 1px solid var(--line); }
-  .work .cap { padding: .6rem .75rem .7rem; }
-  .work .cap b { display: block; font-size: .82rem; }
-  .work .cap span { font-size: .7rem; color: var(--soft); }
-  .works-note { margin: .8rem 0 0; font-size: .76rem; color: var(--soft); }
-  ul.things { margin: 0; padding: 0; list-style: none; display: grid; gap: .55rem; }
-  ul.things li { font-size: .88rem; padding: .7rem .95rem; border-radius: .6rem;
-                 background: var(--surface); border: 1px solid var(--line); }
-  ul.things li small { display: block; color: var(--soft); font-size: .76rem; }
+  .work img { display: block; width: 100%; aspect-ratio: 3/4; object-fit: cover;
+              object-position: top; border-bottom: 1px solid var(--line); }
+  .work .cap { padding: .5rem .7rem .6rem; }
+  .work .cap b { display: block; font-size: .8rem; line-height: 1.4; }
+  .work .cap span { font-size: .68rem; color: var(--soft); }
+  .works-note { margin: .9rem 0 0; font-size: .74rem; color: var(--soft); }
 
-  ol.flow { margin: 0; padding: 0; list-style: none; display: grid; gap: .55rem; counter-reset: n; }
-  ol.flow li { counter-increment: n; display: flex; gap: .8rem; align-items: baseline; font-size: .88rem; }
+  /* 3페이지 — Services + Process */
+  .svc { margin: 0 0 1.9rem; padding: 0; list-style: none; display: grid; gap: .5rem; }
+  .svc li { font-size: .85rem; padding: .55rem .9rem; border-radius: .6rem;
+            background: var(--surface); border: 1px solid var(--line); }
+  .svc li small { display: block; color: var(--soft); font-size: .72rem; }
+  ol.flow { margin: 0; padding: 0; list-style: none; display: grid; gap: .45rem; counter-reset: n; }
+  ol.flow li { counter-increment: n; display: flex; gap: .8rem; align-items: baseline; font-size: .85rem; }
   ol.flow li::before { content: counter(n, decimal-leading-zero); flex: none;
-                       font-size: .72rem; font-weight: 700; color: var(--bubble); letter-spacing: .08em; }
+                       font-size: .7rem; font-weight: 700; color: var(--bubble); letter-spacing: .08em; }
   ol.flow li b { font-weight: 600; }
-  ol.flow li small { color: var(--soft); }
 
-  footer { border-top: 1px solid var(--line); padding-top: 1.4rem; font-size: .74rem;
-           color: var(--soft); display: flex; gap: 1rem; flex-wrap: wrap; }
+  footer { border-top: 1px solid var(--line); padding: 1.4rem 1.4rem 2rem; font-size: .74rem;
+           color: var(--soft); }
+  footer .inner { max-width: 38rem; margin: 0 auto; display: flex; gap: 1rem; flex-wrap: wrap; }
   footer a { color: inherit; }
 </style>
 </head>
 <body>
 <div class="bubbles" aria-hidden="true"><i></i><i></i><i></i></div>
 
-<main>
-  <div class="hero">
+<nav class="bar" id="bar">
+  <a class="brand" href="./"><i aria-hidden="true"></i>bubblelab works</a>
+  <a class="cta" href="request">신규 의뢰하기</a>
+</nav>
+
+<section class="page">
+  <div class="inner hero">
     <span class="sig" aria-hidden="true"></span>
     <h1>bubblelab works</h1>
     <p class="tagline">웹 기획 · 디자인 · 개발</p>
     <p class="desc">브랜드 웹사이트부터 소규모 웹 서비스까지, <b>기획 — 디자인 — 개발 —
     배포 — 인계</b> 전 과정을 담당합니다. 모든 프로젝트는 전용 미리보기 환경에서
     진행 상황을 확인하며 진행됩니다.</p>
+    <div class="doors">
+      <a class="door primary" href="request">
+        <b>신규 의뢰하기</b>
+        <span>수행 범위와 진행 절차 안내, 프로젝트 문의</span>
+      </a>
+      <a class="door" href="login">
+        <b>의뢰 조회하기</b>
+        <span>발급받은 의뢰 ID로 진행 중인 프로젝트 확인</span>
+      </a>
+    </div>
+    <p class="more">SCROLL<i aria-hidden="true"></i></p>
   </div>
+</section>
 
-  <div class="doors">
-    <a class="door primary" href="request">
-      <b>신규 의뢰하기</b>
-      <span>수행 범위와 진행 절차 안내, 프로젝트 문의</span>
-    </a>
-    <a class="door" href="login">
-      <b>의뢰 조회하기</b>
-      <span>발급받은 의뢰 ID로 진행 중인 프로젝트 확인</span>
-    </a>
-  </div>
-
-  <section>
+<section class="page">
+  <div class="inner">
     <h2>Selected work</h2>
     <div class="works">
       <a class="work" href="showcase/mindfulness">
@@ -130,19 +161,18 @@
     </div>
     <p class="works-note">모두 직접 기획·디자인·개발한 실서비스입니다 — 카드를 눌러
     소개를 보고, 라이브로 바로 열 수 있습니다.</p>
-  </section>
+  </div>
+</section>
 
-  <section>
+<section class="page">
+  <div class="inner">
     <h2>Services</h2>
-    <ul class="things">
+    <ul class="svc">
       <li>브랜드 웹사이트 · 랜딩 페이지 <small>기업·브랜드 소개, 제품 프로모션</small></li>
       <li>인터랙티브 웹 콘텐츠 <small>스크롤 연출, 웹 게임, 캠페인 페이지</small></li>
       <li>소규모 웹 서비스 · 내부 도구 <small>예약·조회·기록 등 단일 목적 서비스</small></li>
       <li>기존 웹사이트 개선 <small>성능·모바일 대응·디자인 리뉴얼</small></li>
     </ul>
-  </section>
-
-  <section>
     <h2>Process</h2>
     <ol class="flow">
       <li><span><b>문의</b> — 요구사항과 참고 자료를 접수합니다</span></li>
@@ -150,13 +180,135 @@
       <li><span><b>제작</b> — 시안 검토와 피드백 반영을 반복하며 완성도를 높입니다</span></li>
       <li><span><b>인계</b> — 소스 코드를 포함한 산출물 전체를 이관하고 종료합니다</span></li>
     </ol>
-  </section>
+  </div>
+</section>
 
-  <footer>
+<footer>
+  <div class="inner">
     <span>ⓒ bubblelab works</span>
     <a href="https://bubblelab.dev">bubblelab.dev</a>
+    <a href="mailto:boson95@gmail.com?subject=%5B%EC%9D%98%EB%A2%B0%5D%20">boson95@gmail.com</a>
     <a href="logout">로그아웃</a>
-  </footer>
-</main>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var bar = document.getElementById('bar');
+  window.addEventListener('scroll', function(){
+    bar.classList.toggle('solid', window.scrollY > 24);
+  }, {passive: true});
+
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(reduce) return; // 모션 최소화 환경은 일반 스크롤
+
+  // 다온핏과 같은 섹션 페이징: 제스처 하나 = 페이지 하나. 콘텐츠 페이지라
+  // 앞뒤 모두 가벼운 제스처로 넘어가고, 마지막 페이지 아래(footer)는 자유 스크롤.
+  var pages = Array.prototype.slice.call(document.querySelectorAll('.page'));
+  function targets(){ return pages.map(function(p){ return Math.round(p.offsetTop); }); }
+
+  function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+  function easeInOut(t){ return .5*(1-Math.cos(Math.PI*t)); }
+
+  var snapping=false, snapRaf=null, snapKind=null, snapTimer=null, gestureLock=0;
+  function cancelSnap(){
+    if(snapRaf) cancelAnimationFrame(snapRaf);
+    snapRaf=null; snapping=false;
+    document.documentElement.style.scrollBehavior='';
+  }
+  function snapTo(targetY, kind){
+    var fromY=window.scrollY, dist=targetY-fromY;
+    if(Math.abs(dist)<2) return;
+    snapping=true; snapKind=kind||'page';
+    document.documentElement.style.scrollBehavior='auto';
+    var dur=clamp(Math.abs(dist)/window.innerHeight*600, 450, 900);
+    var t0=null;
+    function step(ts){
+      if(!snapping) return;
+      if(t0===null) t0=ts;
+      var k=clamp((ts-t0)/dur, 0, 1);
+      window.scrollTo(0, fromY+dist*easeInOut(k));
+      if(k<1){ snapRaf=requestAnimationFrame(step); }
+      else {
+        if(snapKind==='page') gestureLock=performance.now()+230;
+        cancelSnap();
+      }
+    }
+    snapRaf=requestAnimationFrame(step);
+  }
+  function pageStep(dir){
+    var t=targets(), y=window.scrollY;
+    if(dir>0){ for(var i=0;i<t.length;i++) if(t[i]>y+2) return snapTo(t[i]); }
+    else { for(var j=t.length-1;j>=0;j--) if(t[j]<y-2) return snapTo(t[j]); }
+  }
+  function yieldToGesture(e){
+    if(!snapping) return performance.now()<gestureLock ? (e.preventDefault(), false) : true;
+    if(snapKind==='idle'){ cancelSnap(); return true; }
+    e.preventDefault(); return false;
+  }
+
+  // 제스처 밖 이동(스크롤바·키보드)은 idle 스냅이 가까운 페이지로 수습
+  function armSnap(){
+    clearTimeout(snapTimer);
+    snapTimer=setTimeout(function(){
+      var t=targets(), y=window.scrollY, last=t[t.length-1];
+      if(y>last-2) return; // 마지막 페이지 이하는 자유 구간
+      for(var i=0;i<t.length;i++) if(Math.abs(y-t[i])<16) return;
+      for(var s=t.length-2;s>=0;s--){
+        if(y>=t[s]){
+          var frac=(y-t[s])/(t[s+1]-t[s]);
+          return snapTo(frac<0.25 ? t[s] : t[s+1], 'idle');
+        }
+      }
+    }, 180);
+  }
+  window.addEventListener('scroll', function(){ if(!snapping) armSnap(); }, {passive:true});
+
+  window.addEventListener('wheel', function(e){
+    var t=targets(), y=window.scrollY, last=t[t.length-1];
+    if(y>last+2) return; // footer 자유 스크롤
+    if(!yieldToGesture(e)) return;
+    var d=e.deltaY*(e.deltaMode===1?33:e.deltaMode===2?window.innerHeight:1);
+    if(Math.abs(d)<2) return;
+    if(d>0){
+      if(y>=last-2) return; // 마지막 페이지 → footer로 풀림
+      e.preventDefault(); pageStep(1);
+    }else{
+      if(y<=2) return;
+      e.preventDefault(); pageStep(-1);
+    }
+  }, {passive:false});
+
+  var touchY=null, touchCaptured=false, touchDecided=false;
+  window.addEventListener('touchstart', function(e){
+    touchY=e.touches[0].clientY; touchCaptured=false; touchDecided=false;
+  }, {passive:true});
+  window.addEventListener('touchmove', function(e){
+    if(touchY===null) return;
+    var t=targets(), y=window.scrollY, last=t[t.length-1];
+    if(y>last+2 && !touchCaptured) return; // footer 자유 스크롤
+    if(!yieldToGesture(e)) return;
+    var dy=touchY-e.touches[0].clientY; // >0 = 다음 페이지
+    if(!touchDecided){
+      if(Math.abs(dy)<12) return;
+      touchDecided=true;
+      if(dy>0 && y>=last-2) return;
+      if(dy<0 && y<=2) return;
+      touchCaptured=true;
+      e.preventDefault();
+      pageStep(dy>0?1:-1);
+    }else if(touchCaptured){
+      e.preventDefault();
+    }
+  }, {passive:false});
+  window.addEventListener('touchend', function(){ touchY=null; }, {passive:true});
+
+  ['pointerdown','keydown'].forEach(function(ev){
+    window.addEventListener(ev, function(){
+      if(snapping){ cancelSnap(); armSnap(); }
+    }, {passive:true});
+  });
+})();
+</script>
 </body>
 </html>
