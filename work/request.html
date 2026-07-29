@@ -4,97 +4,164 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>신규 의뢰 — bubblelab works</title>
+<title>request.md — bubblelab works</title>
 <style>
-  :root { color-scheme: light dark;
-    --ground: light-dark(#fafbfc, #10151c);
-    --ink: light-dark(#1c2733, #e2e9f0);
-    --soft: light-dark(#5d6b7a, #93a3b5);
-    --surface: light-dark(#fff, #171f2b);
-    --line: light-dark(#e3e8ee, #263140);
-    --bubble: light-dark(#4f7fdd, #7ea3ec);
-    --bubble-ink: light-dark(#fff, #0d131c);
+  :root { color-scheme: dark;
+    --chrome: #21252e;
+    --panel: #1b1f27;
+    --editor: #161a21;
+    --line: #2a303c;
+    --text: #c3cad6;
+    --dim: #667084;
+    --comment: #5f6b80;
+    --keyword: #c678dd;
+    --string: #98c379;
+    --func: #61afef;
+    --type: #e5c07b;
+    --accent: #3d6fd0;
   }
-  * { box-sizing: border-box; }
-  body { margin: 0; min-height: 100dvh; background: var(--ground); color: var(--ink);
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body { background: var(--editor); color: var(--text);
          font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
-         line-height: 1.8; word-break: keep-all; }
-  main { max-width: 38rem; margin: 0 auto; padding: 3.2rem 1.4rem 4rem; }
-  .crumb { font-size: .78rem; margin: 0 0 2rem; }
-  .crumb a { color: var(--soft); text-decoration: none; }
-  .crumb a:hover { color: var(--ink); }
-  h1 { margin: 0 0 .4rem; font-size: 1.5rem; letter-spacing: -.02em; }
-  .lead { margin: 0 0 2.4rem; color: var(--soft); font-size: .9rem; }
+         font-size: 13.5px; line-height: 1.75; }
+  a { color: inherit; }
 
-  h2 { margin: 0 0 .8rem; font-size: .8rem; letter-spacing: .18em; color: var(--bubble);
-       text-transform: uppercase; }
-  section { margin-bottom: 2.4rem; }
-  p, li { font-size: .9rem; }
+  .ide { display: flex; flex-direction: column; min-height: 100dvh; }
+  .titlebar { display: flex; align-items: center; gap: .55rem; padding: .55rem .9rem;
+              background: var(--chrome); border-bottom: 1px solid var(--line);
+              font-size: .78rem; color: var(--dim); }
+  .titlebar .dot { width: .72rem; height: .72rem; border-radius: 50%; flex: none; }
+  .titlebar .dot.r { background: #e5655e; }
+  .titlebar .dot.y { background: #e0b954; }
+  .titlebar .dot.g { background: #67c26b; }
+  .titlebar .name { margin: 0 auto; transform: translateX(-2rem); white-space: nowrap;
+                    overflow: hidden; text-overflow: ellipsis; }
 
-  ul.plain { margin: 0; padding: 0 0 0 1.1rem; }
-  ul.plain li { margin: .3rem 0; }
-  ul.plain li small { color: var(--soft); }
+  .main { display: flex; flex: 1; min-height: 0; }
+  .explorer { width: 15.5rem; flex: none; background: var(--panel);
+              border-right: 1px solid var(--line); padding: .8rem 0 1rem; font-size: .8rem; }
+  .explorer .label { padding: 0 1rem .5rem; font-size: .68rem; letter-spacing: .14em; color: var(--dim); }
+  .explorer .item { display: block; padding: .18rem 1rem .18rem 1.7rem; color: var(--text);
+                    text-decoration: none; white-space: nowrap; }
+  .explorer .item:hover { background: #232936; }
+  .explorer .item.active { background: #2b3342; }
+  .explorer .item.dir { padding-left: 1rem; color: var(--dim); }
+  .explorer .item.lock { color: var(--dim); }
+  .explorer .item .ext { color: var(--dim); }
+  @media (max-width: 760px) { .explorer { display: none; } }
 
-  ol.flow { margin: 0; padding: 0; list-style: none; display: grid; gap: .5rem; counter-reset: n; }
-  ol.flow li { counter-increment: n; display: flex; gap: .8rem; align-items: baseline; font-size: .88rem; }
-  ol.flow li::before { content: counter(n, decimal-leading-zero); flex: none;
-                       font-size: .72rem; font-weight: 700; color: var(--bubble); letter-spacing: .08em; }
-  ol.flow li b { font-weight: 600; }
+  .editor { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .tabs { display: flex; background: var(--chrome); border-bottom: 1px solid var(--line);
+          font-size: .8rem; overflow-x: auto; }
+  .tab { padding: .5rem 1.1rem; color: var(--dim); text-decoration: none; white-space: nowrap;
+         border-right: 1px solid var(--line); }
+  .tab.active { background: var(--editor); color: var(--text); box-shadow: inset 0 2px 0 var(--func); }
+  .tab:hover:not(.active) { color: var(--text); }
 
-  .send { padding: 1.3rem 1.35rem 1.45rem; border-radius: .8rem; background: var(--surface);
-          border: 1px solid var(--line); }
-  .send p { margin: 0 0 1rem; font-size: .86rem; color: var(--soft); }
-  .send .mail { display: inline-block; padding: .8rem 1.4rem; border-radius: .6rem;
-                background: var(--bubble); color: var(--bubble-ink); font-weight: 700;
-                font-size: .92rem; text-decoration: none; }
-  .send .addr { display: block; margin-top: .7rem; font-size: .78rem; color: var(--soft);
-                user-select: all; }
+  .code { flex: 1; overflow-x: auto; padding: 1rem 0 1.4rem; counter-reset: ln; }
+  .code .row { display: flex; min-width: max-content; padding: 0 1.4rem 0 0; }
+  .code .row::before { counter-increment: ln; content: counter(ln); flex: none; width: 3.2rem;
+                       padding-right: 1.1rem; text-align: right; color: #454e5f; user-select: none; }
+  .h { color: var(--func); font-weight: 600; }
+  .c { color: var(--comment); } .li { color: var(--keyword); } .s { color: var(--string); }
+  .t { color: var(--type); } .p { color: var(--dim); }
+
+  .term { border-top: 1px solid var(--line); background: var(--panel); font-size: .84rem; }
+  .term .bar { display: flex; gap: 1.2rem; padding: .45rem 1.2rem; font-size: .68rem;
+               letter-spacing: .12em; color: var(--dim); border-bottom: 1px solid var(--line); }
+  .term .bar b { color: var(--text); font-weight: 400; box-shadow: 0 1px 0 var(--func); }
+  .term .cmd { display: block; padding: .5rem 1.2rem; text-decoration: none; }
+  .term .cmd:hover { background: #232936; }
+  .term .cmd .ps { color: var(--string); }
+  .term .cmd .arg { color: var(--type); }
+  .term .cmd .note { color: var(--dim); }
+  .term .cmd b { color: var(--func); font-weight: 600; }
+  .term .idle { padding: .1rem 1.2rem .8rem; color: var(--dim); }
+  .cursor { display: inline-block; width: .55em; height: 1.05em; background: var(--text);
+            vertical-align: -0.18em; animation: blink 1.1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .cursor { animation: none; } }
+
+  .status { display: flex; gap: 1.1rem; padding: .3rem 1rem; background: var(--accent);
+            color: #eaf1ff; font-size: .72rem; white-space: nowrap; overflow: hidden; }
+  .status .right { margin-left: auto; display: flex; gap: 1.1rem; }
+  .status a { text-decoration: none; }
+  @media (max-width: 560px) { .status .hide-s { display: none; } }
 </style>
 </head>
 <body>
-<main>
-  <p class="crumb"><a href="./">← bubblelab works</a></p>
-  <h1>신규 의뢰</h1>
-  <p class="lead">프로젝트 개요를 보내주시면 수행 가능 여부와 함께
-  범위·일정·견적을 회신드립니다.</p>
+<div class="ide">
+  <div class="titlebar">
+    <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+    <span class="name">request.md — bubblelab works</span>
+  </div>
 
-  <section>
-    <h2>Services</h2>
-    <ul class="plain">
-      <li>브랜드 웹사이트 · 제품 랜딩 페이지</li>
-      <li>인터랙티브 웹 콘텐츠 <small>(스크롤 연출 · 웹 게임 · 캠페인 페이지)</small></li>
-      <li>소규모 웹 서비스 · 내부 도구 <small>(예약·조회·기록 등 단일 목적 서비스)</small></li>
-      <li>기존 웹사이트 개선 <small>(성능 · 모바일 대응 · 디자인 리뉴얼)</small></li>
-    </ul>
-  </section>
+  <div class="main">
+    <aside class="explorer" aria-label="파일 탐색기">
+      <div class="label">EXPLORER</div>
+      <span class="item dir">▾ bubblelab-works</span>
+      <a class="item" href="./">works.ts</a>
+      <span class="item active">request.md</span>
+      <a class="item" href="login">login.sh</a>
+      <span class="item dir">&nbsp;&nbsp;▸ projects/ <span class="ext">— 의뢰별 비공개</span></span>
+      <a class="item lock" href="login" title="의뢰 조회 로그인">&nbsp;&nbsp;&nbsp;&nbsp;🔒 &lt;의뢰ID&gt;/</a>
+    </aside>
 
-  <section>
-    <h2>Briefing</h2>
-    <p style="margin:0 0 .6rem">문의 시 아래 항목이 포함되면 정확한 회신이 가능합니다.</p>
-    <ul class="plain">
-      <li>프로젝트 목적과 요구사항 개요</li>
-      <li>참고 자료 <small>(유사 사이트 링크, 보유 브랜드 에셋 등)</small></li>
-      <li>희망 일정</li>
-      <li>예산 범위 <small>(미정이어도 무방)</small></li>
-    </ul>
-  </section>
+    <div class="editor">
+      <nav class="tabs">
+        <a class="tab" href="./">works.ts</a>
+        <span class="tab active">request.md</span>
+        <a class="tab" href="login">login.sh</a>
+      </nav>
 
-  <section>
-    <h2>Process</h2>
-    <ol class="flow">
-      <li><span><b>문의 접수</b> — 영업일 기준 1~2일 내 회신</span></li>
-      <li><span><b>협의</b> — 범위·일정·견적 확정 후 계약</span></li>
-      <li><span><b>제작</b> — 전용 미리보기 환경(의뢰 ID 발급)에서 시안 검토·피드백</span></li>
-      <li><span><b>인계</b> — 검수 완료 후 소스 코드 포함 산출물 전체 이관</span></li>
-    </ol>
-  </section>
+      <div class="code" role="main">
+        <div class="row"><span><span class="h"># 신규 의뢰</span></span></div>
+        <div class="row"><span>&nbsp;</span></div>
+        <div class="row"><span>프로젝트 개요를 보내주시면 수행 가능 여부와 함께</span></div>
+        <div class="row"><span>범위·일정·견적을 회신드립니다.</span></div>
+        <div class="row"><span>&nbsp;</span></div>
+        <div class="row"><span><span class="h">## Services</span></span></div>
+        <div class="row"><span>&nbsp;</span></div>
+        <div class="row"><span><span class="li">-</span> 브랜드 웹사이트 · 제품 랜딩 페이지</span></div>
+        <div class="row"><span><span class="li">-</span> 인터랙티브 웹 콘텐츠 <span class="c">(스크롤 연출 · 웹 게임 · 캠페인)</span></span></div>
+        <div class="row"><span><span class="li">-</span> 소규모 웹 서비스 · 내부 도구 <span class="c">(예약·조회·기록 등 단일 목적)</span></span></div>
+        <div class="row"><span><span class="li">-</span> 기존 웹사이트 개선 <span class="c">(성능 · 모바일 대응 · 디자인 리뉴얼)</span></span></div>
+        <div class="row"><span>&nbsp;</span></div>
+        <div class="row"><span><span class="h">## Briefing</span> <span class="c">&lt;!-- 문의 시 포함하면 정확한 회신이 가능합니다 --&gt;</span></span></div>
+        <div class="row"><span>&nbsp;</span></div>
+        <div class="row"><span><span class="li">- [ ]</span> 프로젝트 목적과 요구사항 개요</span></div>
+        <div class="row"><span><span class="li">- [ ]</span> 참고 자료 <span class="c">(유사 사이트 링크, 보유 브랜드 에셋)</span></span></div>
+        <div class="row"><span><span class="li">- [ ]</span> 희망 일정</span></div>
+        <div class="row"><span><span class="li">- [ ]</span> 예산 범위 <span class="c">(미정이어도 무방)</span></span></div>
+        <div class="row"><span>&nbsp;</span></div>
+        <div class="row"><span><span class="h">## Process</span></span></div>
+        <div class="row"><span>&nbsp;</span></div>
+        <div class="row"><span><span class="li">1.</span> <span class="t">문의 접수</span> — 영업일 기준 1~2일 내 회신</span></div>
+        <div class="row"><span><span class="li">2.</span> <span class="t">협의</span> — 범위·일정·견적 확정 후 계약</span></div>
+        <div class="row"><span><span class="li">3.</span> <span class="t">제작</span> — 전용 미리보기 환경(의뢰 ID 발급)에서 시안 검토·피드백</span></div>
+        <div class="row"><span><span class="li">4.</span> <span class="t">인계</span> — 검수 완료 후 소스 코드 포함 산출물 전체 이관</span></div>
+      </div>
 
-  <section class="send">
-    <h2>Contact</h2>
-    <p>아래 메일로 프로젝트 개요를 보내주십시오.</p>
-    <a class="mail" href="mailto:boson95@gmail.com?subject=%5B%EC%9D%98%EB%A2%B0%5D%20">메일로 문의하기</a>
-    <span class="addr">boson95@gmail.com</span>
-  </section>
-</main>
+      <div class="term" aria-label="터미널">
+        <div class="bar"><b>TERMINAL</b><span>OUTPUT</span></div>
+        <a class="cmd" href="mailto:boson95@gmail.com?subject=%5B%EC%9D%98%EB%A2%B0%5D%20"><span class="ps">$</span> mail <b>boson95@gmail.com</b> <span class="arg">--subject "[의뢰]"</span>
+          <span class="note">&nbsp;# 프로젝트 개요 보내기</span></a>
+        <a class="cmd" href="./"><span class="ps">$</span> cd <b>..</b>
+          <span class="note">&nbsp;# bubblelab works 홈으로</span></a>
+        <div class="idle"><span class="ps">$</span> <span class="cursor" aria-hidden="true"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="status">
+    <span>⎇ main</span>
+    <span class="hide-s">Markdown</span>
+    <span class="right">
+      <a href="mailto:boson95@gmail.com?subject=%5B%EC%9D%98%EB%A2%B0%5D%20">✉ boson95@gmail.com</a>
+      <span class="hide-s">UTF-8</span>
+    </span>
+  </div>
+</div>
 </body>
 </html>
