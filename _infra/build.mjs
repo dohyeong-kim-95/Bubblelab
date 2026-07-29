@@ -507,8 +507,13 @@ addEventListener("keydown", (event) => {
 `;
 }
 
+// 자동 생성 홈을 가진 카테고리 = 카드로 이루어진 서브도메인. 홈 버튼은 여기에만 단다
+// (podcast·duri처럼 자체 index.html을 가진 서비스는 카드 구조가 아니라 제외된다).
+const cardSites = [];
+
 for (const site of sites) {
   if (existsSync(join(DIST, site.name, "index.html"))) continue;
+  cardSites.push(site.name);
 
   // 기본 순서는 가나다순. 접속량 데이터가 있으면 클라이언트에서 재정렬한다.
   const entries = readdirSync(join(DIST, site.name), { withFileTypes: true })
@@ -526,26 +531,36 @@ for (const site of sites) {
   console.log(`generated index for ${site.name} (${entries.length} entries)`);
 }
 
-// 모든 공개 카드 페이지에 체류 측정기를 한 번만 삽입한다. 개별 토이가 공용
-// 스크립트를 직접 챙길 필요가 없고, admin과 카테고리 홈은 클라이언트에서 제외된다.
-function injectEngagement(dir) {
+// 공용 스크립트를 페이지에 한 번만 삽입한다. 개별 토이가 직접 챙길 필요가 없다.
+function injectShared(dir, src) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const path = join(dir, entry.name);
     if (entry.isDirectory()) {
-      injectEngagement(path);
+      injectShared(path, src);
     } else if (entry.name.endsWith(".html")) {
       const html = readFileSync(path, "utf8");
-      if (html.includes('/_shared/engagement.js') || !/<\/body>/i.test(html)) continue;
+      if (html.includes(src) || !/<\/body>/i.test(html)) continue;
       writeFileSync(path, html.replace(
         /<\/body>/i,
-        '<script defer src="/_shared/engagement.js"></script>\n</body>',
+        `<script defer src="${src}"></script>\n</body>`,
       ));
     }
   }
 }
+// 체류 측정기는 admin을 뺀 모든 페이지에. (카테고리 홈은 클라이언트에서 제외된다)
 for (const site of sites) {
-  if (site.name !== "admin") injectEngagement(join(DIST, site.name));
+  if (site.name !== "admin") injectShared(join(DIST, site.name), "/_shared/engagement.js");
 }
+// 홈 버튼은 카드 카테고리의 카드 페이지에만 — 카테고리 홈 자신은 갈 곳이 없다.
+let homeButtons = 0;
+for (const name of cardSites) {
+  for (const entry of readdirSync(join(DIST, name), { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    injectShared(join(DIST, name, entry.name), "/_shared/home.js");
+    homeButtons++;
+  }
+}
+console.log(`injected home button into ${homeButtons} card pages`);
 
 writeFileSync(
   join(DIST, "404.html"),
