@@ -5,8 +5,10 @@
 (() => {
   const css = `
   #bl-share { position: fixed; right: 1rem; bottom: 1rem; z-index: 9999;
-    font: bold .85rem ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; padding: .55rem .95rem;
-    border-radius: 2rem; border: 1.5px solid currentColor; cursor: pointer;
+    font: bold 1.1rem ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+    width: 2.8rem; height: 2.8rem; padding: 0; display: inline-flex;
+    align-items: center; justify-content: center; line-height: 1;
+    border-radius: 50%; border: 1.5px solid currentColor; cursor: pointer;
     color: light-dark(#334, #ccd);
     background: light-dark(rgba(255,255,255,.75), rgba(20,26,36,.75));
     backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
@@ -67,7 +69,12 @@
   const btn = document.createElement("button");
   btn.id = "bl-share";
   btn.type = "button";
-  btn.textContent = "📤 공유";
+  // 아이콘만 — 홈 버튼(#bl-home)과 우하단에 나란히 서기 때문에, 글자를 빼서
+  // 둘을 합쳐도 예전 "📤 공유" 하나와 비슷한 폭을 유지한다. 좌하단 주간 기록
+  // 배지가 펼쳐지면 이 영역까지 넘어오므로 폭을 늘리면 침범이 커진다.
+  btn.textContent = "📤";
+  btn.title = "공유하기";
+  btn.setAttribute("aria-label", "공유하기");
   // 전체 화면을 클릭 영역으로 쓰는 토이(반응속도 등)에 이벤트가 새지 않게
   btn.addEventListener("pointerdown", (e) => e.stopPropagation());
   btn.addEventListener("click", async (e) => {
