@@ -866,4 +866,817 @@ assoc = bool(lift_ab > 1)`,
       },
     ],
   },
+
+  {
+    id: "clean-dupes",
+    title: "회원 명부 중복 정리",
+    category: "데이터 클렌징",
+    level: 2,
+    tags: ["duplicated", "drop_duplicates", "transform"],
+    intro: "중복 등록된 회원 명부를 정리하고, 그룹별 평균으로 결측을 대치한 뒤 조건 필터링합니다.",
+    setup: String.raw`import numpy as np
+import pandas as pd
+
+rng = np.random.default_rng(71)
+n = 150
+df = pd.DataFrame({
+    "member_id": rng.choice(np.arange(1000, 1100), n),
+    "plan": rng.choice(["basic", "pro", "enterprise"], n, p=[0.5, 0.35, 0.15]),
+    "age": rng.integers(18, 70, n).astype(float),
+    "monthly_fee": rng.choice([9900.0, 19900.0, 49900.0], n),
+})
+df.loc[rng.choice(n, 10, replace=False), "age"] = np.nan
+df.head()`,
+    steps: [
+      {
+        id: "s1",
+        title: "중복 진단",
+        prompt: "`member_id` 기준으로 중복인 행 수(첫 등장 제외)를 `n_dup`에, 고유 회원 수를 `n_members`에 담으세요.",
+        expect: ["n_dup", "n_members"],
+        hint: "df.duplicated(subset=['member_id']).sum(), nunique()",
+        solution: String.raw`n_dup = int(df.duplicated(subset=["member_id"]).sum())
+n_members = int(df["member_id"].nunique())`,
+      },
+      {
+        id: "s2",
+        title: "중복 제거",
+        prompt: "`member_id` 기준 **첫 등장만** 남긴 `df_u`를 만들고(`keep='first'`, `reset_index(drop=True)`), 행 수를 `n_rows_u`에 담으세요.",
+        expect: ["df_u", "n_rows_u"],
+        hint: "drop_duplicates(subset=['member_id'], keep='first')",
+        solution: String.raw`df_u = df.drop_duplicates(subset=["member_id"], keep="first").reset_index(drop=True)
+n_rows_u = len(df_u)`,
+      },
+      {
+        id: "s3",
+        title: "그룹 대치와 필터",
+        prompt: "`df_u`의 `age` 결측을 **plan별 평균**으로 대치한 뒤 전체 평균을 `age_mean`에, `pro` 플랜이면서 `age >= 40`인 회원 수를 `n_pro40`에 담으세요.",
+        expect: ["age_mean", "n_pro40"],
+        hint: "groupby('plan')['age'].transform(lambda s: s.fillna(s.mean()))",
+        solution: String.raw`df_u["age"] = df_u.groupby("plan")["age"].transform(lambda s: s.fillna(s.mean()))
+age_mean = float(df_u["age"].mean())
+n_pro40 = int(((df_u["plan"] == "pro") & (df_u["age"] >= 40)).sum())`,
+      },
+    ],
+  },
+
+  {
+    id: "merge-join",
+    title: "주문·고객 테이블 병합",
+    category: "피처 엔지니어링",
+    level: 2,
+    tags: ["merge", "isin", "fillna"],
+    intro: "주문 로그와 고객 명부를 merge로 결합합니다. 명부에 없는 주문(비회원)도 존재합니다.",
+    setup: String.raw`import numpy as np
+import pandas as pd
+
+rng = np.random.default_rng(73)
+customers = pd.DataFrame({
+    "cust_id": np.arange(1, 41),
+    "grade": rng.choice(["silver", "gold", "vip"], 40, p=[0.5, 0.35, 0.15]),
+    "city": rng.choice(["서울", "부산", "대구"], 40),
+})
+orders = pd.DataFrame({
+    "order_id": np.arange(1, 201),
+    "cust_id": rng.integers(1, 51, 200),
+    "amount": rng.integers(10, 200, 200) * 1000,
+})
+orders.head()`,
+    steps: [
+      {
+        id: "s1",
+        title: "inner 병합",
+        prompt: "두 테이블을 `cust_id` 기준 **inner** merge한 `df_m`을 만들고 행 수를 `n_matched`에, 고객 명부에 **없는** 주문 수를 `n_orphan`에 담으세요.",
+        expect: ["n_matched", "n_orphan"],
+        hint: "~orders['cust_id'].isin(customers['cust_id'])",
+        solution: String.raw`df_m = orders.merge(customers, on="cust_id", how="inner")
+n_matched = len(df_m)
+n_orphan = int((~orders["cust_id"].isin(customers["cust_id"])).sum())`,
+      },
+      {
+        id: "s2",
+        title: "left 병합과 대치",
+        prompt: "**left** merge 후 `grade` 결측을 `'guest'`로 대치하고, 등급별 주문 **건수**를 내림차순 Series `cnt_by_grade`에 담으세요.",
+        expect: ["cnt_by_grade"],
+        hint: "value_counts()는 기본이 내림차순입니다",
+        solution: String.raw`df_l = orders.merge(customers, on="cust_id", how="left")
+df_l["grade"] = df_l["grade"].fillna("guest")
+cnt_by_grade = df_l["grade"].value_counts()`,
+      },
+      {
+        id: "s3",
+        title: "집계 후 조인",
+        prompt: "고객별 총 주문금액을 집계해 `customers`에 left 조인(주문 없으면 0)하세요. **명부에 있는 고객 중** 총액 1위의 `cust_id`를 `top_cust`(int)에, vip 고객들의 총액 합을 `vip_total`에 담으세요.",
+        expect: ["top_cust", "vip_total"],
+        hint: "orders.groupby('cust_id')['amount'].sum() 을 merge 후 fillna(0)",
+        solution: String.raw`totals = orders.groupby("cust_id")["amount"].sum()
+cust2 = customers.merge(totals.rename("total"), how="left", left_on="cust_id", right_index=True)
+cust2["total"] = cust2["total"].fillna(0)
+top_cust = int(cust2.loc[cust2["total"].idxmax(), "cust_id"])
+vip_total = float(cust2.loc[cust2["grade"] == "vip", "total"].sum())`,
+      },
+    ],
+  },
+
+  {
+    id: "pivot-melt",
+    title: "매출표 피벗과 melt",
+    category: "변환·스케일링",
+    level: 2,
+    tags: ["pivot_table", "melt", "crosstab"],
+    intro: "long 형태의 지점×월 매출을 wide로 피벗했다가 다시 long으로 되돌리고, 비율 교차표를 만듭니다.",
+    setup: String.raw`import numpy as np
+import pandas as pd
+
+rng = np.random.default_rng(79)
+months = ["1월", "2월", "3월", "4월"]
+branches = ["강남", "홍대", "판교"]
+rows = [(b, m, float(rng.integers(50, 200) * 10)) for b in branches for m in months]
+df = pd.DataFrame(rows, columns=["branch", "month", "sales"])
+extra = pd.DataFrame([("강남", "1월", 1300.0), ("판교", "3월", 900.0)],
+                     columns=["branch", "month", "sales"])
+df = pd.concat([df, extra], ignore_index=True)
+df.head()`,
+    steps: [
+      {
+        id: "s1",
+        title: "wide 피벗",
+        prompt: "`pivot_table(index='branch', columns='month', values='sales', aggfunc='mean')`으로 `wide`를 만드세요(중복 기록은 평균 처리됨). 강남 1월 값을 `gn_jan`에, 셀 개수(`wide.size`)를 `n_cells`에 담으세요.",
+        expect: ["gn_jan", "n_cells"],
+        hint: "wide.loc['강남', '1월']",
+        solution: String.raw`wide = df.pivot_table(index="branch", columns="month", values="sales", aggfunc="mean")
+gn_jan = float(wide.loc["강남", "1월"])
+n_cells = int(wide.size)`,
+      },
+      {
+        id: "s2",
+        title: "다시 long으로",
+        prompt: "`wide.reset_index()`를 `melt(id_vars='branch', var_name='month', value_name='sales')`로 long 형태 `long_df`로 되돌리세요. 행 수를 `n_long`에, 홍대 4월 값을 `hd_apr`에 담으세요.",
+        expect: ["n_long", "hd_apr"],
+        hint: "long_df에서 불리언 인덱싱으로 홍대·4월 행을 찾으세요",
+        solution: String.raw`long_df = wide.reset_index().melt(id_vars="branch", var_name="month", value_name="sales")
+n_long = len(long_df)
+hd_apr = float(long_df.loc[(long_df["branch"] == "홍대") & (long_df["month"] == "4월"), "sales"].iloc[0])`,
+      },
+      {
+        id: "s3",
+        title: "비율 교차표",
+        prompt: "원본 `df`로 `pd.crosstab(df['branch'], df['month'], values=df['sales'], aggfunc='sum', normalize='index')`를 만들어, 강남 행에서 비중이 가장 큰 월을 `gn_top_month`에, 그 비율을 `gn_top_ratio`에 담으세요.",
+        expect: ["gn_top_month", "gn_top_ratio"],
+        hint: "ct.loc['강남'].idxmax(), ct.loc['강남'].max()",
+        solution: String.raw`ct = pd.crosstab(df["branch"], df["month"], values=df["sales"], aggfunc="sum", normalize="index")
+gn_top_month = ct.loc["강남"].idxmax()
+gn_top_ratio = float(ct.loc["강남"].max())`,
+      },
+    ],
+  },
+
+  {
+    id: "eda-group",
+    title: "편의점 그룹 집계 심화",
+    category: "탐색적 데이터 분석",
+    level: 2,
+    tags: ["agg", "transform", "idxmax"],
+    intro: "지점·카테고리별 매출을 다중 집계하고, 행 단위 비중과 지점별 1위 카테고리를 구합니다.",
+    setup: String.raw`import numpy as np
+import pandas as pd
+
+rng = np.random.default_rng(83)
+n = 300
+df = pd.DataFrame({
+    "store": rng.choice(["A", "B", "C", "D"], n),
+    "category": rng.choice(["음료", "스낵", "도시락", "생활용품"], n, p=[0.35, 0.3, 0.2, 0.15]),
+    "sales": rng.integers(1, 50, n) * 100,
+})
+df.head()`,
+    steps: [
+      {
+        id: "s1",
+        title: "다중 집계",
+        prompt: "지점별 `sales`의 합·평균·건수를 담은 DataFrame `stats_df`(`agg(['sum', 'mean', 'count'])`)를 만들고, 합계가 가장 큰 지점을 `best_store`에 담으세요.",
+        expect: ["stats_df", "best_store"],
+        hint: "stats_df['sum'].idxmax()",
+        solution: String.raw`stats_df = df.groupby("store")["sales"].agg(["sum", "mean", "count"])
+best_store = stats_df["sum"].idxmax()`,
+      },
+      {
+        id: "s2",
+        title: "행 단위 비중",
+        prompt: "`transform`으로 각 행의 매출이 자기 지점 총매출에서 차지하는 비중 `share` 컬럼을 만들고, 그 최댓값을 `max_share`에 담으세요.",
+        expect: ["max_share"],
+        hint: "df['sales'] / df.groupby('store')['sales'].transform('sum')",
+        solution: String.raw`df["share"] = df["sales"] / df.groupby("store")["sales"].transform("sum")
+max_share = float(df["share"].max())`,
+      },
+      {
+        id: "s3",
+        title: "지점별 1위 카테고리",
+        prompt: "지점×카테고리 매출 합계 피벗(`fill_value=0`)에서 지점별 1위 카테고리 Series `top_cat`(`idxmax(axis=1)`)을 만들고, D 지점의 음료 매출 합을 `d_bev`에 담으세요.",
+        expect: ["top_cat", "d_bev"],
+        hint: "pivot_table(..., aggfunc='sum', fill_value=0)",
+        solution: String.raw`pv = df.pivot_table(index="store", columns="category", values="sales", aggfunc="sum", fill_value=0)
+top_cat = pv.idxmax(axis=1)
+d_bev = float(pv.loc["D", "음료"])`,
+      },
+    ],
+  },
+
+  {
+    id: "strings-regex",
+    title: "웹 로그 정규식 파싱",
+    category: "문자열 전처리",
+    level: 2,
+    tags: ["extract", "contains", "정규식"],
+    intro: "접속 로그 문자열에서 IP·페이지·상태코드·지연시간을 정규식으로 뽑아 분석합니다.",
+    setup: String.raw`import numpy as np
+import pandas as pd
+
+rng = np.random.default_rng(89)
+n = 150
+ips = [f"192.168.{int(a)}.{int(b)}" for a, b in zip(rng.integers(0, 5, n), rng.integers(1, 255, n))]
+pages = rng.choice(["/home", "/items/", "/items/view", "/cart", "/checkout"], n, p=[0.3, 0.2, 0.2, 0.2, 0.1])
+codes = rng.choice([200, 200, 200, 404, 500], n)
+ms = rng.integers(10, 900, n)
+df = pd.DataFrame({"log": [f"{ip} GET {pg} {c} {m}ms" for ip, pg, c, m in zip(ips, pages, codes, ms)]})
+df.head()`,
+    steps: [
+      {
+        id: "s1",
+        title: "다중 그룹 추출",
+        prompt: "정규식 `^(\\S+) GET (\\S+) (\\d{3}) (\\d+)ms$` 로 `ip, page, status, latency` 컬럼을 만들고(`status`·`latency`는 정수형), 에러(상태코드 400 이상) 수를 `n_error`에, 평균 지연을 `mean_latency`에 담으세요.",
+        expect: ["n_error", "mean_latency"],
+        hint: "df['log'].str.extract(...) 는 그룹 수만큼 컬럼을 돌려줍니다",
+        solution: String.raw`parts = df["log"].str.extract(r"^(\S+) GET (\S+) (\d{3}) (\d+)ms$")
+parts.columns = ["ip", "page", "status", "latency"]
+df[["ip", "page"]] = parts[["ip", "page"]]
+df["status"] = parts["status"].astype(int)
+df["latency"] = parts["latency"].astype(int)
+n_error = int((df["status"] >= 400).sum())
+mean_latency = float(df["latency"].mean())`,
+      },
+      {
+        id: "s2",
+        title: "포함 검색과 부분 추출",
+        prompt: "`page`에 `items`가 포함된 요청 수를 `n_items`에, `ip`의 **마지막 옥텟**을 정수로 뽑아 최댓값을 `max_octet`에 담으세요.",
+        expect: ["n_items", "max_octet"],
+        hint: "str.contains('items'), str.extract(r'\\.(\\d+)$', expand=False)",
+        solution: String.raw`n_items = int(df["page"].str.contains("items").sum())
+max_octet = int(df["ip"].str.extract(r"\.(\d+)$", expand=False).astype(int).max())`,
+      },
+      {
+        id: "s3",
+        title: "상태코드별 지연",
+        prompt: "상태코드별 평균 지연 Series `lat_by_status`(인덱스 오름차순 정렬)를 만들고, 500 에러의 평균 지연을 `lat_500`에 담으세요.",
+        expect: ["lat_by_status", "lat_500"],
+        hint: "groupby('status')['latency'].mean().sort_index()",
+        solution: String.raw`lat_by_status = df.groupby("status")["latency"].mean().sort_index()
+lat_500 = float(lat_by_status.loc[500])`,
+      },
+    ],
+  },
+
+  {
+    id: "apply-derive",
+    title: "BMI 구간화와 조건 파생",
+    category: "피처 엔지니어링",
+    level: 1,
+    tags: ["cut", "np.where", "map"],
+    intro: "키·몸무게로 BMI를 계산하고 pd.cut 구간화, map 인코딩으로 파생변수를 만듭니다.",
+    setup: String.raw`import numpy as np
+import pandas as pd
+
+rng = np.random.default_rng(97)
+n = 200
+df = pd.DataFrame({
+    "height_cm": rng.normal(168, 8, n).round(1),
+    "weight_kg": rng.normal(65, 12, n).round(1),
+    "smoker": rng.choice(["yes", "no"], n, p=[0.25, 0.75]),
+})
+df.head()`,
+    steps: [
+      {
+        id: "s1",
+        title: "BMI 계산",
+        prompt: "`bmi` 컬럼(= 몸무게kg ÷ (키m)², 반올림하지 않음)을 만들고 평균을 `bmi_mean`에, `bmi >= 25`인 인원을 `n_obese`에 담으세요.",
+        expect: ["bmi_mean", "n_obese"],
+        hint: "키는 100으로 나눠 미터로",
+        solution: String.raw`df["bmi"] = df["weight_kg"] / (df["height_cm"] / 100) ** 2
+bmi_mean = float(df["bmi"].mean())
+n_obese = int((df["bmi"] >= 25).sum())`,
+      },
+      {
+        id: "s2",
+        title: "구간화",
+        prompt: "`pd.cut(df['bmi'], bins=[0, 18.5, 23, 25, 100], labels=['저체중', '정상', '과체중', '비만'])`으로 `bmi_grp` 컬럼을 만들고, 최다 그룹 이름을 `top_group`에, '정상' 인원을 `n_normal`에 담으세요.",
+        expect: ["top_group", "n_normal"],
+        hint: "value_counts().idxmax() — 결과를 str()로 감싸면 안전합니다",
+        solution: String.raw`df["bmi_grp"] = pd.cut(df["bmi"], bins=[0, 18.5, 23, 25, 100],
+                       labels=["저체중", "정상", "과체중", "비만"])
+counts = df["bmi_grp"].value_counts()
+top_group = str(counts.idxmax())
+n_normal = int(counts.loc["정상"])`,
+      },
+      {
+        id: "s3",
+        title: "map 인코딩과 그룹 비교",
+        prompt: "`map`으로 `smoker`를 yes→1, no→0인 `smoke_flag` 컬럼으로 인코딩하고, 흡연자 평균 BMI에서 비흡연자 평균 BMI를 뺀 값을 `diff_bmi`에 담으세요.",
+        expect: ["diff_bmi"],
+        hint: "df['smoker'].map({'yes': 1, 'no': 0})",
+        solution: String.raw`df["smoke_flag"] = df["smoker"].map({"yes": 1, "no": 0})
+diff_bmi = float(df.loc[df["smoke_flag"] == 1, "bmi"].mean() - df.loc[df["smoke_flag"] == 0, "bmi"].mean())`,
+      },
+    ],
+  },
+
+  {
+    id: "sampling",
+    title: "표본추출 3종",
+    category: "확률과 분포",
+    level: 2,
+    tags: ["sample", "층화추출", "계통추출"],
+    intro: "단순 무작위·복원·층화·계통 추출을 고정 시드로 수행하고 표본 통계를 비교합니다.",
+    setup: String.raw`import numpy as np
+import pandas as pd
+
+rng = np.random.default_rng(101)
+n = 400
+df = pd.DataFrame({
+    "cust_id": np.arange(1, n + 1),
+    "segment": rng.choice(["A", "B", "C"], n, p=[0.6, 0.3, 0.1]),
+    "spend": rng.gamma(2, 30000, n).round(-2),
+})
+df.head()`,
+    steps: [
+      {
+        id: "s1",
+        title: "단순·복원 추출",
+        prompt: "① `sample(n=80, random_state=42)`(비복원)의 `spend` 평균을 `srs_mean` ② `sample(n=100, replace=True, random_state=7)`(복원)의 평균을 `boot_mean`에 담으세요.",
+        expect: ["srs_mean", "boot_mean"],
+        hint: "random_state 값을 정확히 지키세요",
+        solution: String.raw`srs_mean = float(df.sample(n=80, random_state=42)["spend"].mean())
+boot_mean = float(df.sample(n=100, replace=True, random_state=7)["spend"].mean())`,
+      },
+      {
+        id: "s2",
+        title: "층화추출",
+        prompt: "세그먼트별로 20%씩 뽑는 층화추출을 `df.groupby('segment', group_keys=False).sample(frac=0.2, random_state=42)`로 수행해 표본 크기를 `n_strat`에, 표본 중 A 세그먼트 비중을 `ratio_a`에 담으세요.",
+        expect: ["n_strat", "ratio_a"],
+        hint: "(strat['segment'] == 'A').mean()",
+        solution: String.raw`strat = df.groupby("segment", group_keys=False).sample(frac=0.2, random_state=42)
+n_strat = len(strat)
+ratio_a = float((strat["segment"] == "A").mean())`,
+      },
+      {
+        id: "s3",
+        title: "계통추출",
+        prompt: "행 순서 그대로 4번째 행(위치 인덱스 3)부터 10칸 간격으로 뽑는 계통추출(`df.iloc[3::10]`)로 표본 크기를 `n_sys`에, `spend` 평균을 `sys_mean`에 담으세요.",
+        expect: ["n_sys", "sys_mean"],
+        hint: "iloc 슬라이싱 [시작::간격]",
+        solution: String.raw`sys_df = df.iloc[3::10]
+n_sys = len(sys_df)
+sys_mean = float(sys_df["spend"].mean())`,
+      },
+    ],
+  },
+
+  {
+    id: "prob-cond",
+    title: "조건부확률과 포아송",
+    category: "확률과 분포",
+    level: 2,
+    tags: ["조건부확률", "베이즈", "poisson"],
+    intro: "관측 데이터로 조건부확률을 계산하고, 포아송 분포로 사건 발생 확률을 구합니다.",
+    setup: String.raw`import numpy as np
+import pandas as pd
+
+rng = np.random.default_rng(103)
+n = 500
+spam = rng.random(n) < 0.3
+link = rng.random(n) < np.where(spam, 0.8, 0.2)
+df = pd.DataFrame({"spam": spam.astype(int), "link": link.astype(int)})
+df.head()`,
+    steps: [
+      {
+        id: "s1",
+        title: "기본 확률",
+        prompt: "관측 비율로 ① 스팸 확률 `p_spam` ② 링크 포함 확률 `p_link_all` ③ 스팸이면서 링크 포함인 확률 `p_both`를 담으세요.",
+        expect: ["p_spam", "p_link_all", "p_both"],
+        hint: "0/1 컬럼의 mean()이 곧 비율입니다",
+        solution: String.raw`p_spam = float(df["spam"].mean())
+p_link_all = float(df["link"].mean())
+p_both = float(((df["spam"] == 1) & (df["link"] == 1)).mean())`,
+      },
+      {
+        id: "s2",
+        title: "조건부확률",
+        prompt: "① 링크가 있을 때 스팸일 확률 `p_spam_given_link`(= p_both ÷ p_link_all) ② 스팸일 때 링크가 있을 확률 `p_link_given_spam`(= p_both ÷ p_spam)을 담으세요.",
+        expect: ["p_spam_given_link", "p_link_given_spam"],
+        hint: "조건부확률 정의를 그대로",
+        solution: String.raw`p_spam_given_link = p_both / p_link_all
+p_link_given_spam = p_both / p_spam`,
+      },
+      {
+        id: "s3",
+        title: "포아송 분포",
+        prompt: "시간당 평균 3건 문의가 포아송 분포를 따를 때 ① 한 건도 없을 확률 `p0` ② 5건 이상일 확률 `p_ge5`를 담으세요.",
+        expect: ["p0", "p_ge5"],
+        hint: "scipy.stats.poisson.pmf(0, 3), poisson.sf(4, 3)",
+        solution: String.raw`from scipy import stats
+p0 = float(stats.poisson.pmf(0, 3))
+p_ge5 = float(stats.poisson.sf(4, 3))`,
+      },
+    ],
+  },
+
+  {
+    id: "anova-test",
+    title: "정규성·ANOVA·상관 유의성",
+    category: "추정과 검정",
+    level: 3,
+    tags: ["shapiro", "f_oneway", "pearsonr"],
+    intro: "정규성 검정, 세 그룹 일원분산분석, 상관계수의 유의성 검정을 수행합니다. 유의수준 0.05.",
+    setup: String.raw`import numpy as np
+import pandas as pd
+
+rng = np.random.default_rng(107)
+df = pd.DataFrame({
+    "class": ["A"] * 30 + ["B"] * 30 + ["C"] * 30,
+    "score": np.concatenate([
+        rng.normal(70, 8, 30), rng.normal(74, 8, 30), rng.normal(69, 9, 30),
+    ]).round(1),
+})
+df_xy = pd.DataFrame({"ad": rng.uniform(10, 100, 40).round(1)})
+df_xy["rev"] = (2 * df_xy["ad"] + rng.normal(0, 25, 40)).round(1)
+df.head()`,
+    steps: [
+      {
+        id: "s1",
+        title: "정규성 검정",
+        prompt: "A반 점수에 샤피로-윌크 검정을 적용해 통계량을 `w_stat`, p값을 `p_norm`에 담고, 정규성 가정을 기각하는지(`p < 0.05`) `normal_reject`에 담으세요.",
+        expect: ["w_stat", "p_norm", "normal_reject"],
+        hint: "scipy.stats.shapiro(a_scores)",
+        solution: String.raw`from scipy import stats
+a_sc = df.loc[df["class"] == "A", "score"]
+sh = stats.shapiro(a_sc)
+w_stat = float(sh.statistic)
+p_norm = float(sh.pvalue)
+normal_reject = bool(p_norm < 0.05)`,
+      },
+      {
+        id: "s2",
+        title: "일원분산분석",
+        prompt: "세 반 평균이 모두 같은지 `f_oneway`로 검정하세요. F통계량 `f_stat`, p값 `p_anova`, 기각 여부 `reject_anova`.",
+        expect: ["f_stat", "p_anova", "reject_anova"],
+        hint: "stats.f_oneway(a, b, c)",
+        solution: String.raw`b_sc = df.loc[df["class"] == "B", "score"]
+c_sc = df.loc[df["class"] == "C", "score"]
+an = stats.f_oneway(a_sc, b_sc, c_sc)
+f_stat = float(an.statistic)
+p_anova = float(an.pvalue)
+reject_anova = bool(p_anova < 0.05)`,
+      },
+      {
+        id: "s3",
+        title: "상관 유의성",
+        prompt: "`df_xy`의 `ad`와 `rev`에 `pearsonr`을 적용해 상관계수를 `r_val`, p값을 `p_r`에 담고, 상관이 유의한지 `corr_sig`에 담으세요.",
+        expect: ["r_val", "p_r", "corr_sig"],
+        hint: "stats.pearsonr(df_xy['ad'], df_xy['rev'])",
+        solution: String.raw`pr = stats.pearsonr(df_xy["ad"], df_xy["rev"])
+r_val = float(pr.statistic)
+p_r = float(pr.pvalue)
+corr_sig = bool(p_r < 0.05)`,
+      },
+    ],
+  },
+
+  {
+    id: "conf-interval",
+    title: "신뢰구간 추정",
+    category: "추정과 검정",
+    level: 2,
+    tags: ["표준오차", "t.interval", "비율"],
+    intro: "평균의 t 신뢰구간과 비율의 z 신뢰구간을 계산합니다.",
+    setup: String.raw`import numpy as np
+import pandas as pd
+
+rng = np.random.default_rng(109)
+df = pd.DataFrame({"hours": rng.normal(1200, 100, 40).round(1)})
+df.describe()`,
+    steps: [
+      {
+        id: "s1",
+        title: "평균과 표준오차",
+        prompt: "배터리 수명 표본의 평균을 `mean_h`에, 표준오차(표본표준편차 ddof=1 ÷ √n)를 `se`에 담으세요.",
+        expect: ["mean_h", "se"],
+        hint: "df['hours'].std() / np.sqrt(len(df))",
+        solution: String.raw`mean_h = float(df["hours"].mean())
+se = float(df["hours"].std() / np.sqrt(len(df)))`,
+      },
+      {
+        id: "s2",
+        title: "평균의 95% 신뢰구간",
+        prompt: "`stats.t.interval(0.95, df=n-1, loc=평균, scale=표준오차)`로 95% 신뢰구간을 구해 하한을 `ci_low`, 상한을 `ci_high`에 담으세요.",
+        expect: ["ci_low", "ci_high"],
+        hint: "자유도는 표본 수 - 1",
+        solution: String.raw`from scipy import stats
+ci = stats.t.interval(0.95, df=len(df) - 1, loc=mean_h, scale=se)
+ci_low = float(ci[0])
+ci_high = float(ci[1])`,
+      },
+      {
+        id: "s3",
+        title: "비율의 신뢰구간",
+        prompt: "400명 중 268명이 만족했습니다. 표본비율을 `p_hat`에 담고, z값 `stats.norm.ppf(0.975)`를 써서 95% 신뢰구간 하한 `p_low`, 상한 `p_high`를 구하세요. (표준오차 = √(p̂(1-p̂)/n))",
+        expect: ["p_hat", "p_low", "p_high"],
+        hint: "p_hat ± z * se_p",
+        solution: String.raw`p_hat = 268 / 400
+z = float(stats.norm.ppf(0.975))
+se_p = (p_hat * (1 - p_hat) / 400) ** 0.5
+p_low = p_hat - z * se_p
+p_high = p_hat + z * se_p`,
+      },
+    ],
+  },
+
+  {
+    id: "ts-features",
+    title: "방문자 시계열 리샘플·자기상관",
+    category: "시계열 분석",
+    level: 2,
+    tags: ["resample", "pct_change", "autocorr"],
+    intro: "일별 방문자 수를 주 단위로 리샘플하고 변화율·이동표준편차·자기상관으로 주기성을 확인합니다.",
+    setup: String.raw`import numpy as np
+import pandas as pd
+
+rng = np.random.default_rng(113)
+idx = pd.date_range("2024-01-01", periods=120, freq="D")
+base = 200 + 40 * np.sin(2 * np.pi * np.arange(120) / 7)
+s = pd.Series((base + rng.normal(0, 15, 120)).round(0), index=idx, name="visitors")
+s.head()`,
+    steps: [
+      {
+        id: "s1",
+        title: "주 단위 리샘플",
+        prompt: "`resample('W').sum()`으로 주간 합계 `weekly`를 만들고 최대 주간 방문자를 `max_week`에, 주 개수를 `n_weeks`에 담으세요.",
+        expect: ["max_week", "n_weeks"],
+        hint: "weekly.max(), len(weekly)",
+        solution: String.raw`weekly = s.resample("W").sum()
+max_week = float(weekly.max())
+n_weeks = len(weekly)`,
+      },
+      {
+        id: "s2",
+        title: "변화율과 변동성",
+        prompt: "전일 대비 변화율(`pct_change()`)의 최댓값을 `max_pct`에, 7일 이동 표준편차(`rolling(7).std()`)의 평균을 `mean_std7`에 담으세요.",
+        expect: ["max_pct", "mean_std7"],
+        hint: "결측은 mean()/max()가 알아서 제외합니다",
+        solution: String.raw`max_pct = float(s.pct_change().max())
+mean_std7 = float(s.rolling(7).std().mean())`,
+      },
+      {
+        id: "s3",
+        title: "자기상관과 주기성",
+        prompt: "lag 1 자기상관을 `ac1`, lag 7 자기상관을 `ac7`에 담고(`s.autocorr(lag=...)`), 주간 주기성이 있는지 `weekly_pattern = ac7 > ac1`(bool)로 판단하세요.",
+        expect: ["ac1", "ac7", "weekly_pattern"],
+        hint: "7일 주기 신호라면 lag 7 상관이 커야 합니다",
+        solution: String.raw`ac1 = float(s.autocorr(lag=1))
+ac7 = float(s.autocorr(lag=7))
+weekly_pattern = bool(ac7 > ac1)`,
+      },
+    ],
+  },
+
+  {
+    id: "ridge-poly",
+    title: "다항 특징과 릿지 회귀",
+    category: "회귀",
+    level: 3,
+    tags: ["PolynomialFeatures", "Ridge", "r2"],
+    intro: "비선형 데이터에 다항 특징을 만들어 선형·릿지 회귀 성능을 비교합니다.",
+    setup: String.raw`import numpy as np
+import pandas as pd
+
+rng = np.random.default_rng(127)
+n = 150
+x = rng.uniform(-3, 3, n)
+df = pd.DataFrame({
+    "x": x.round(3),
+    "y": (0.5 * x ** 3 - 2 * x + 4 + rng.normal(0, 2, n)).round(3),
+})
+df.head()`,
+    steps: [
+      {
+        id: "s1",
+        title: "선형 기준선",
+        prompt: "`X = df[['x']]`, `y = df['y']`를 `train_test_split(test_size=0.3, random_state=42)`로 나누고, `LinearRegression`의 테스트 R²을 `r2_lin`에 담으세요.",
+        expect: ["r2_lin"],
+        hint: "r2_score 또는 model.score(X_test, y_test)",
+        solution: String.raw`from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+X = df[["x"]]
+y = df["y"]
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+r2_lin = float(LinearRegression().fit(X_train, y_train).score(X_test, y_test))`,
+      },
+      {
+        id: "s2",
+        title: "다항 특징",
+        prompt: "`PolynomialFeatures(degree=3, include_bias=False)`를 **훈련 데이터로만 fit**해 훈련·테스트를 변환하세요. 변환 후 특징 수를 `n_feat`에, 그 위에서 학습한 선형회귀의 테스트 R²을 `r2_poly`에 담으세요.",
+        expect: ["n_feat", "r2_poly"],
+        hint: "poly.fit_transform(X_train), poly.transform(X_test)",
+        solution: String.raw`from sklearn.preprocessing import PolynomialFeatures
+poly = PolynomialFeatures(degree=3, include_bias=False)
+Xtr_p = poly.fit_transform(X_train)
+Xte_p = poly.transform(X_test)
+n_feat = Xtr_p.shape[1]
+r2_poly = float(LinearRegression().fit(Xtr_p, y_train).score(Xte_p, y_test))`,
+      },
+      {
+        id: "s3",
+        title: "릿지 규제",
+        prompt: "같은 3차 다항 특징에 `Ridge(alpha=1.0)`을 학습해 테스트 R²을 `r2_ridge`에 담고, 다항 모델이 선형보다 나은지 `poly_better`(bool)에 담으세요.",
+        expect: ["r2_ridge", "poly_better"],
+        hint: "from sklearn.linear_model import Ridge",
+        solution: String.raw`from sklearn.linear_model import Ridge
+r2_ridge = float(Ridge(alpha=1.0).fit(Xtr_p, y_train).score(Xte_p, y_test))
+poly_better = bool(r2_poly > r2_lin)`,
+      },
+    ],
+  },
+
+  {
+    id: "model-tuning",
+    title: "교차검증과 그리드서치",
+    category: "모델 최적화",
+    level: 3,
+    tags: ["cross_val_score", "GridSearchCV", "KNN"],
+    intro: "교차검증으로 모델을 평가하고 GridSearchCV로 하이퍼파라미터를 탐색합니다.",
+    setup: String.raw`import numpy as np
+import pandas as pd
+
+rng = np.random.default_rng(131)
+n = 300
+x1 = rng.normal(0, 1, n)
+x2 = rng.normal(0, 1, n)
+x3 = rng.normal(0, 1, n)
+df = pd.DataFrame({
+    "x1": x1, "x2": x2, "x3": x3,
+    "y": ((1.5 * x1 - x2 + 0.5 * x3 + rng.normal(0, 1, n)) > 0).astype(int),
+})
+df.head()`,
+    steps: [
+      {
+        id: "s1",
+        title: "교차검증",
+        prompt: "`X = df[['x1','x2','x3']]`, `y = df['y']`에 대해 `cross_val_score(LogisticRegression(max_iter=1000), X, y, cv=5, scoring='accuracy')`의 평균을 `cv_mean`, 표준편차를 `cv_std`에 담으세요.",
+        expect: ["cv_mean", "cv_std"],
+        hint: "scores.mean(), scores.std()",
+        solution: String.raw`from sklearn.model_selection import cross_val_score
+from sklearn.linear_model import LogisticRegression
+X = df[["x1", "x2", "x3"]]
+y = df["y"]
+scores = cross_val_score(LogisticRegression(max_iter=1000), X, y, cv=5, scoring="accuracy")
+cv_mean = float(scores.mean())
+cv_std = float(scores.std())`,
+      },
+      {
+        id: "s2",
+        title: "그리드서치",
+        prompt: "`GridSearchCV(DecisionTreeClassifier(random_state=42), {'max_depth': [2, 3, 4, 5], 'min_samples_split': [2, 10]}, cv=5)`를 학습해 최적 `max_depth`를 `best_depth`(int)에, 최고 교차검증 점수를 `gs_best`에 담으세요.",
+        expect: ["best_depth", "gs_best"],
+        hint: "gs.best_params_['max_depth'], gs.best_score_",
+        solution: String.raw`from sklearn.model_selection import GridSearchCV
+from sklearn.tree import DecisionTreeClassifier
+gs = GridSearchCV(DecisionTreeClassifier(random_state=42),
+                  {"max_depth": [2, 3, 4, 5], "min_samples_split": [2, 10]}, cv=5)
+gs.fit(X, y)
+best_depth = int(gs.best_params_["max_depth"])
+gs_best = float(gs.best_score_)`,
+      },
+      {
+        id: "s3",
+        title: "KNN k 탐색",
+        prompt: "k ∈ [3, 5, 7, 9]의 `KNeighborsClassifier`를 각각 `cross_val_score(..., cv=5)` 평균으로 비교해, 가장 좋은 k를 `best_k`(int)에, 그 평균 점수를 `best_knn_score`에 담으세요.",
+        expect: ["best_k", "best_knn_score"],
+        hint: "dict에 k별 평균을 모아 max(d, key=d.get)",
+        solution: String.raw`from sklearn.neighbors import KNeighborsClassifier
+knn_scores = {}
+for k in [3, 5, 7, 9]:
+    knn_scores[k] = float(cross_val_score(KNeighborsClassifier(n_neighbors=k), X, y, cv=5).mean())
+best_k = int(max(knn_scores, key=knn_scores.get))
+best_knn_score = knn_scores[best_k]`,
+      },
+    ],
+  },
+
+  {
+    id: "cluster-hier",
+    title: "계층적 군집과 k-means 비교",
+    category: "군집",
+    level: 3,
+    tags: ["linkage", "fcluster", "AgglomerativeClustering"],
+    intro: "와드 연결 계층적 군집을 수행하고 k-means와 실루엣 계수로 비교합니다.",
+    setup: String.raw`import numpy as np
+import pandas as pd
+
+rng = np.random.default_rng(137)
+a = rng.normal((0.0, 0.0), 0.7, (40, 2))
+b = rng.normal((4.0, 0.0), 0.7, (40, 2))
+c = rng.normal((2.0, 3.5), 0.7, (40, 2))
+df = pd.DataFrame(np.vstack([a, b, c]).round(3), columns=["f1", "f2"])
+df.head()`,
+    steps: [
+      {
+        id: "s1",
+        title: "와드 연결",
+        prompt: "`scipy.cluster.hierarchy.linkage(df, method='ward')`로 연결행렬 `Z`를 만들고, 마지막 병합 거리(`Z[-1, 2]`)를 `last_merge`에, 병합 횟수(`len(Z)`)를 `n_merges`에 담으세요.",
+        expect: ["last_merge", "n_merges"],
+        hint: "from scipy.cluster.hierarchy import linkage",
+        solution: String.raw`from scipy.cluster.hierarchy import linkage
+Z = linkage(df, method="ward")
+last_merge = float(Z[-1, 2])
+n_merges = len(Z)`,
+      },
+      {
+        id: "s2",
+        title: "군집 자르기",
+        prompt: "`fcluster(Z, t=3, criterion='maxclust')`로 3개 군집 라벨을 얻어, 군집 크기를 **내림차순 정렬한 리스트** `sizes_h`에 담으세요.",
+        expect: ["sizes_h"],
+        hint: "np.bincount는 라벨이 1부터라 [1:]를 쓰거나 pd.Series(labels).value_counts()",
+        solution: String.raw`from scipy.cluster.hierarchy import fcluster
+labels_h = fcluster(Z, t=3, criterion="maxclust")
+sizes_h = sorted((int(v) for v in pd.Series(labels_h).value_counts()), reverse=True)`,
+      },
+      {
+        id: "s3",
+        title: "실루엣 비교",
+        prompt: "`AgglomerativeClustering(n_clusters=3, linkage='ward')`와 `KMeans(n_clusters=3, random_state=42, n_init=10)`의 실루엣 계수를 각각 `sil_h`, `sil_k`에 담고, 더 좋은 방법 이름(`'hier'` 또는 `'kmeans'`)을 `better`에 담으세요.",
+        expect: ["sil_h", "sil_k", "better"],
+        hint: "silhouette_score(df, labels)",
+        solution: String.raw`from sklearn.cluster import AgglomerativeClustering, KMeans
+from sklearn.metrics import silhouette_score
+agg_labels = AgglomerativeClustering(n_clusters=3, linkage="ward").fit_predict(df)
+km_labels = KMeans(n_clusters=3, random_state=42, n_init=10).fit_predict(df)
+sil_h = float(silhouette_score(df, agg_labels))
+sil_k = float(silhouette_score(df, km_labels))
+better = "hier" if sil_h > sil_k else "kmeans"`,
+      },
+    ],
+  },
+
+  {
+    id: "tree-interpret",
+    title: "결정트리 분기조건 해석",
+    category: "분류",
+    level: 2,
+    tags: ["DecisionTree", "분기조건", "feature_importances_"],
+    intro: "대출 승인 결정트리를 학습해 루트 분기조건과 변수 중요도를 해석합니다.",
+    setup: String.raw`import numpy as np
+import pandas as pd
+
+rng = np.random.default_rng(139)
+n = 250
+income = rng.normal(400, 120, n).round(0)
+credit = rng.integers(300, 1000, n)
+debt = np.clip(rng.normal(150, 80, n), 0, None).round(0)
+approve = (((credit > 600) & (income - debt > 150)) | (rng.random(n) < 0.05)).astype(int)
+df = pd.DataFrame({"income": income, "credit": credit, "debt": debt, "approve": approve})
+df.head()`,
+    steps: [
+      {
+        id: "s1",
+        title: "학습과 과적합 확인",
+        prompt: "`X = df[['income','credit','debt']]`, `y = df['approve']`를 `train_test_split(test_size=0.3, random_state=42)`로 나누고 `DecisionTreeClassifier(max_depth=3, random_state=42)`를 학습하세요. 테스트 정확도를 `acc_tree`, 훈련 정확도를 `acc_train`에 담으세요.",
+        expect: ["acc_tree", "acc_train"],
+        hint: "model.score(X_train, y_train)도 정확도입니다",
+        solution: String.raw`from sklearn.model_selection import train_test_split
+from sklearn.tree import DecisionTreeClassifier
+feat_names = ["income", "credit", "debt"]
+X = df[feat_names]
+y = df["approve"]
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+tree = DecisionTreeClassifier(max_depth=3, random_state=42).fit(X_train, y_train)
+acc_tree = float(tree.score(X_test, y_test))
+acc_train = float(tree.score(X_train, y_train))`,
+      },
+      {
+        id: "s2",
+        title: "루트 분기조건",
+        prompt: "트리의 **루트 노드** 분기 변수 이름을 `root_feat`에, 분기 임계값을 `root_thr`에 담으세요. (`tree.tree_.feature[0]`, `tree.tree_.threshold[0]`)",
+        expect: ["root_feat", "root_thr"],
+        hint: "feature[0]은 변수 인덱스 — 이름 리스트로 변환",
+        solution: String.raw`root_feat = feat_names[int(tree.tree_.feature[0])]
+root_thr = float(tree.tree_.threshold[0])`,
+      },
+      {
+        id: "s3",
+        title: "중요도와 잎 노드",
+        prompt: "`feature_importances_`가 가장 큰 변수 이름을 `top_imp_feat`에, 그 중요도를 `top_imp`에, 잎 노드 수(`get_n_leaves()`)를 `n_leaves`에 담으세요.",
+        expect: ["top_imp_feat", "top_imp", "n_leaves"],
+        hint: "np.argmax(tree.feature_importances_)",
+        solution: String.raw`top_imp_feat = feat_names[int(np.argmax(tree.feature_importances_))]
+top_imp = float(tree.feature_importances_.max())
+n_leaves = int(tree.get_n_leaves())`,
+      },
+    ],
+  },
 ];

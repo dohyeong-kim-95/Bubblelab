@@ -12,7 +12,12 @@ import ast, base64, io, json, math, os, sys, traceback
 
 os.environ.setdefault("MPLBACKEND", "Agg")
 
-_BL_STATE = {"spec": None, "ns": None, "passed": set(), "just": []}
+_BL_STATE = {"spec": None, "ns": None, "passed": set(), "just": [], "strict": False}
+
+
+def _bl_set_strict(flag):
+    """엄격 모드(실전): 채점 결과를 숨기고 제출 접수만 알린다."""
+    _BL_STATE["strict"] = bool(flag)
 
 
 class _BlCheck:
@@ -50,6 +55,17 @@ class _BlCheck:
             results.append((name, ok, why))
         extra = [k for k in answers if k not in st["expect"]]
         npass = sum(1 for _, ok, _ in results if ok)
+        if npass == len(results) and step_id not in _BL_STATE["passed"]:
+            _BL_STATE["passed"].add(step_id)
+            _BL_STATE["just"].append(step_id)
+        if _BL_STATE["strict"]:
+            print(f"[채점] {step_id} · {st['title']} — 제출 접수 (엄격 모드: 결과는 시험 종료 후 공개)")
+            for name, ok, why in results:
+                if not ok and why == "답안 dict에 이 키가 없습니다":
+                    print(f"  ❗ {name} — 답안 dict에 이 키가 없습니다")
+            if extra:
+                print(f"  (참고: 채점 대상이 아닌 키가 있습니다: {extra})")
+            return
         print(f"[채점] {step_id} · {st['title']} — {npass}/{len(results)} 통과")
         for name, ok, why in results:
             mark = "✅" if ok else "❌"
@@ -57,9 +73,6 @@ class _BlCheck:
         if extra:
             print(f"  (참고: 채점 대상이 아닌 키가 있습니다: {extra})")
         if npass == len(results):
-            if step_id not in _BL_STATE["passed"]:
-                _BL_STATE["passed"].add(step_id)
-                _BL_STATE["just"].append(step_id)
             if len(_BL_STATE["passed"]) == len(ids):
                 print("🎉 모든 단계를 통과했습니다!")
             else:
@@ -300,6 +313,14 @@ function currentPassed() {
   return loadProgress()[problem.id] || [];
 }
 
+// 엄격 모드 여부는 대시보드에서 도중에 토글될 수 있으니 매번 새로 읽는다.
+// 시험이 끝났거나 시간이 지나면 더 숨길 이유가 없으므로 일반 모드로 돌아간다.
+function strictNow() {
+  if (!EXAM) return false;
+  const ex = loadExamState();
+  return !!(ex && !ex.finishedAt && ex.strict && Date.now() <= ex.endsAt);
+}
+
 function recordExamPass(passedIds) {
   if (!EXAM) return;
   const ex = loadExamState();
@@ -317,6 +338,7 @@ const cellsEl = $("#cells");
 let pyodide = null;
 let runCellPy = null;
 let takePassedPy = null;
+let setStrictPy = null;
 let busy = false;
 
 function setStatus(text, kind) {
@@ -395,15 +417,18 @@ function renderProblem() {
 }
 
 function refreshStepStates() {
+  const strict = strictNow();
   const passed = new Set(currentPassed());
   for (const step of problem.steps) {
     const el = $(`#step-${step.id} .step-state`);
     const done = passed.has(step.id);
-    el.textContent = done ? "✅" : "○";
-    el.dataset.state = done ? "done" : "todo";
+    el.textContent = strict ? "🔒" : done ? "✅" : "○";
+    el.dataset.state = !strict && done ? "done" : "todo";
   }
   const total = problem.steps.length;
-  $("#p-progress").textContent = `${passed.size}/${total} 단계 통과${passed.size === total ? " 🎉" : ""}`;
+  $("#p-progress").textContent = strict
+    ? "🔒 엄격 모드 — 결과는 시험 종료 후 공개"
+    : `${passed.size}/${total} 단계 통과${passed.size === total ? " 🎉" : ""}`;
 }
 
 function autoSize(textarea) {
@@ -512,15 +537,20 @@ async function runCell(cell) {
     try {
       await pyodide.loadPackagesFromImports(code);
     } catch { /* 사용자가 없는 패키지를 임포트하면 파이썬 에러로 드러난다 */ }
+    if (setStrictPy) setStrictPy(strictNow());
     const res = JSON.parse(runCellPy(code));
     renderOutput(cell, res);
     const passedInfo = JSON.parse(takePassedPy());
     if (passedInfo.just.length) {
-      // 연습 진행상황은 항상 누적하고, 실전 모드면 시험 기록에도 반영한다
-      const progress = loadProgress();
-      progress[problem.id] =
-        [...new Set([...(progress[problem.id] || []), ...passedInfo.passed])];
-      saveProgress(progress);
+      // 시험 기록에는 항상 반영. 연습 진행상황은 엄격 모드가 아닐 때만 바로
+      // 누적한다 (엄격 모드 통과분은 시험 종료 시 exam.html이 합산 — 목록
+      // 화면으로 결과가 새는 것을 막기 위해).
+      if (!strictNow()) {
+        const progress = loadProgress();
+        progress[problem.id] =
+          [...new Set([...(progress[problem.id] || []), ...passedInfo.passed])];
+        saveProgress(progress);
+      }
       recordExamPass(passedInfo.passed);
       refreshStepStates();
     }
@@ -602,7 +632,15 @@ function setupExamHeader() {
 async function boot() {
   renderProblem();
   refreshStepStates();
-  if (EXAM) setupExamHeader();
+  if (EXAM) {
+    setupExamHeader();
+    // 대시보드(다른 탭)에서 엄격 모드를 토글하거나 시험을 종료하면 즉시 반영
+    window.addEventListener("storage", (e) => {
+      if (e.key !== EXAM_KEY) return;
+      if (setStrictPy) setStrictPy(strictNow());
+      refreshStepStates();
+    });
+  }
 
   cellsEl.appendChild(makeCell(problem.setup, { readonly: true, label: "데이터 준비 (자동 실행)" }));
   for (const src of loadCells()) cellsEl.appendChild(makeCell(src));
@@ -643,6 +681,8 @@ async function boot() {
   pyodide.runPython("_bl_mark_passed")(JSON.stringify(currentPassed()));
   runCellPy = pyodide.runPython("_bl_run_cell");
   takePassedPy = pyodide.runPython("_bl_take_passed");
+  setStrictPy = pyodide.runPython("_bl_set_strict");
+  setStrictPy(strictNow());
 
   await runCell(cellsEl.querySelector(".cell.readonly"));
   setStatus("준비 완료 — Shift+Enter로 셀을 실행하세요.", "ok");
