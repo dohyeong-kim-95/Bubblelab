@@ -64,10 +64,24 @@ test("중복 주입되지 않는다", () => {
 
 test("홈 버튼 스크립트가 기존 공용 UI와 자리를 다투지 않는다", () => {
   const js = readFileSync(join(ROOT, "_shared/home.js"), "utf8");
-  // 주간 기록 배지가 좌하단을 먼저 쓰므로 그 위로 쌓여야 한다
-  assert.match(js, /body:has\(#bl-weekly\)\s*#bl-home\s*\{\s*bottom:/);
-  // 공유 버튼(우하단)과 반대편에 있어야 한다
-  assert.match(js, /#bl-home\s*\{[^}]*left:\s*1rem/);
+  // 공유 버튼이 우하단 끝을 쓰므로 그 왼쪽으로 비켜서야 한다
+  assert.match(js, /body:has\(#bl-share\)\s*#bl-home\s*\{\s*right:/);
+  // 좌하단은 주간 기록 배지 몫이다 — 배지는 폭도 높이도 가변이라 침범당한다
+  assert.match(js, /#bl-home\s*\{[^}]*right:\s*1rem/);
+  assert.doesNotMatch(js, /#bl-home\s*\{[^}]*left:\s*1rem/);
   // 전면 탭 토이에 탭이 새지 않도록 막아야 한다
   assert.match(js, /stopPropagation/);
+});
+
+test("우하단 아이콘 두 개가 예전 공유 버튼 하나 수준의 폭을 유지한다", () => {
+  const home = readFileSync(join(ROOT, "_shared/home.js"), "utf8");
+  const share = readFileSync(join(ROOT, "_shared/share.js"), "utf8");
+  // 둘 다 같은 크기의 원형 아이콘 버튼이어야 나란히 섰을 때 정돈돼 보인다
+  for (const [name, js] of [["home.js", home], ["share.js", share]]) {
+    assert.match(js, /width:\s*2\.8rem;\s*height:\s*2\.8rem/, `${name}에 아이콘 크기 지정이 없다`);
+    assert.match(js, /border-radius:\s*50%/, `${name}가 원형이 아니다`);
+  }
+  // 공유 버튼에서 글자를 뺐다면 스크린리더용 이름이 반드시 남아야 한다
+  assert.match(share, /aria-label/, "공유 버튼에 aria-label이 없다");
+  assert.match(home, /aria-label/, "홈 버튼에 aria-label이 없다");
 });
