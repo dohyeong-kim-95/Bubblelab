@@ -899,6 +899,36 @@ export async function handleRequest(request, env, ctx) {
       return env.RECORDS.get(id).fetch(request);
     }
 
+    // puzzle 명예의 전당: 전체 스테이지 총합 랭킹 (조회 공개, 등록은 닉네임 제출)
+    if (path === "/_puzzletotal") {
+      const id = env.RECORDS.idFromName("global");
+      if (request.method === "GET") {
+        const limited = await enforceRateLimit(request, env, {
+          scope: "puzzletotal-read", limit: 60, windowMs: 60 * 1000,
+        });
+        if (limited) return limited;
+        const vid = visitorId(request);
+        return env.RECORDS.get(id).fetch(
+          `https://records.internal/_puzzletotal${vid ? `?vid=${encodeURIComponent(vid)}` : ""}`,
+        );
+      }
+      if (request.method === "POST") {
+        const contentTypeError = requireJsonRequest(request);
+        if (contentTypeError) return contentTypeError;
+        const limited = await enforceRateLimit(request, env, {
+          scope: "puzzletotal", limit: 10, windowMs: 60 * 1000,
+        });
+        if (limited) return limited;
+        const { nick } = await request.json().catch(() => ({}));
+        return env.RECORDS.get(id).fetch("https://records.internal/_puzzletotal", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ nick, vid: visitorId(request) }),
+        });
+      }
+      return new Response("method not allowed", { status: 405 });
+    }
+
     // 게임 추천(좋아요): 방문자당 게임별 1회. 집계는 공개 조회.
     if (path === "/_like") {
       const id = env.RECORDS.idFromName("global");

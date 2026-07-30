@@ -52,6 +52,11 @@ export const GAMES = {
 };
 const HISTORICAL_GAMES = new Set(["bubble-pop-idle"]);
 
+// puzzle 서브도메인 게임들 — 명예의 전당(전체 스테이지 총합) 집계 대상
+const PUZZLE_GAMES = ["pullpin", "watersort", "gaterunner", "savedog", "parkmaster",
+                      "screwout", "icebreak", "trafficjam", "picklock", "fillfridge"];
+const PUZZLE_SET = new Set(PUZZLE_GAMES);
+
 const beats = (dir, score, record) =>
   !record || (dir === "max" ? score > record.score : score < record.score);
 
@@ -74,9 +79,47 @@ export class RecordsDO {
     this.state = state;
   }
 
+  // puzzle 개인 최고 기록의 스테이지 총합
+  async puzzleTotal(vid) {
+    let total = 0, games = 0;
+    for (const g of PUZZLE_GAMES) {
+      const r = await this.state.storage.get(`personal:${vid}:${g}`);
+      if (r) { total += r.score; games++; }
+    }
+    return { total, games };
+  }
+
   async fetch(request) {
     const url = new URL(request.url);
     const week = weekKey();
+
+    // ---------- puzzle 명예의 전당: 전체 스테이지 총합 랭킹 ----------
+    if (url.pathname === "/_puzzletotal") {
+      if (request.method === "GET") {
+        const entries = [];
+        for (const [k, v] of await this.state.storage.list({ prefix: "ptotal:" })) {
+          entries.push({ vid: k.slice("ptotal:".length), ...v });
+        }
+        entries.sort((a, b) => b.total - a.total || a.at - b.at);
+        const vid = url.searchParams.get("vid");
+        const meIdx = VISITOR_ID.test(vid ?? "") ? entries.findIndex((e) => e.vid === vid) : -1;
+        const pub = ({ nick, total, games }) => ({ nick, total, games });
+        return Response.json({
+          board: entries.slice(0, 50).map(pub),
+          me: meIdx >= 0 ? { rank: meIdx + 1, ...pub(entries[meIdx]) } : null,
+        }, { headers: { "Cache-Control": "no-store" } });
+      }
+      if (request.method === "POST") {
+        const { vid, nick } = await request.json().catch(() => ({}));
+        if (!VISITOR_ID.test(vid ?? "") || !NICK.test(nick ?? "")) {
+          return new Response("invalid entry", { status: 400 });
+        }
+        const { total, games } = await this.puzzleTotal(vid);
+        if (total < 1) return new Response("no records yet", { status: 400 });
+        await this.state.storage.put(`ptotal:${vid}`, { nick, total, games, at: Date.now() });
+        return Response.json({ total, games }, { status: 201 });
+      }
+    }
 
     // ---------- 게임 추천(좋아요): 방문자당 게임별 1회 ----------
     if (url.pathname === "/_like" && request.method === "GET") {
@@ -287,6 +330,14 @@ export class RecordsDO {
       }
       const record = { score, text: display, dir: cfg.dir, at: Date.now() };
       await this.state.storage.put(key, record);
+      // 전당 등록자는 개인 기록이 갱신될 때 총합도 따라 갱신된다
+      if (PUZZLE_SET.has(game)) {
+        const entry = await this.state.storage.get(`ptotal:${vid}`);
+        if (entry) {
+          const { total, games } = await this.puzzleTotal(vid);
+          await this.state.storage.put(`ptotal:${vid}`, { ...entry, total, games, at: Date.now() });
+        }
+      }
       return Response.json({ accepted: true, record: presentRecord(game, record) });
     }
 
