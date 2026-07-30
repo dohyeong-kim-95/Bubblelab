@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>물 소팅 — 광고에서 본 그 게임</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>💧</text></svg>">
 <style>
@@ -25,6 +25,7 @@
            align-content: center; justify-content: center; gap: 1.1rem 0.85rem;
            padding: 0 .8rem; }
   .tube { position: relative; width: 50px; height: 152px; cursor: pointer;
+          touch-action: manipulation;
           border: 3px solid light-dark(#8a5a33, #6e4522); border-top: none;
           border-radius: 0 0 24px 24px; background: light-dark(rgba(255,255,255,.45), rgba(255,255,255,.05));
           transition: transform .12s; }
@@ -198,7 +199,7 @@ function render() {
       s.className = "seg"; s.style.background = PAL[c];
       el.appendChild(s);
     }
-    el.addEventListener("pointerdown", () => tap(i));
+    el.addEventListener("pointerdown", (e) => { e.preventDefault(); tap(i); });
     board.appendChild(el);
   });
   $("stuck").classList.toggle("on", phase === "play" && !isWin(tubes) && !anyMove());

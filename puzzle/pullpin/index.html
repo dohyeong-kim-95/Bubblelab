@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>광고에서 본 그 게임 — 핀 뽑기 구출</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>📌</text></svg>">
 <style>
@@ -12,7 +12,7 @@
          touch-action: none; font-family: ui-monospace, "SF Mono", "Cascadia Mono",
          "Roboto Mono", Consolas, monospace;
          background: light-dark(#f6ead8, #1a1626); color: light-dark(#3a2b18, #e8ddcb); }
-  canvas { display: block; }
+  canvas { display: block; touch-action: none; }
   #hud { position: fixed; top: 0; left: 0; right: 0; display: flex; gap: .55rem;
          align-items: center; padding: .5rem .7rem; font-size: .78rem; z-index: 3;
          pointer-events: none; white-space: nowrap; }
@@ -411,6 +411,7 @@ $("btn").addEventListener("click", () => {
 $("retry").addEventListener("click", () => { if (phase === "play") loadStage(); });
 
 addEventListener("pointerdown", (e) => {
+  if (e.target === cv) e.preventDefault();   // 모바일 더블탭 줌·고스트 클릭 방지
   if (phase !== "play") return;
   const x = (e.clientX - ox) / scale, y = (e.clientY - oy) / scale;
   let bestPin = null, bestD = 26;
