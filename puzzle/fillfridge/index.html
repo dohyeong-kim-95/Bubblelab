@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>냉장고 채우기 — 광고에서 본 그 게임</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🧊</text></svg>">
+<style>
+  :root { color-scheme: light dark; }
+  html, body { height: 100%; }
+  body { margin: 0; overflow: hidden; user-select: none; -webkit-user-select: none;
+         touch-action: none; font-family: ui-monospace, "SF Mono", "Cascadia Mono",
+         "Roboto Mono", Consolas, monospace;
+         background: light-dark(#f6ead8, #1a1626); color: light-dark(#3a2b18, #e8ddcb); }
+  canvas { display: block; touch-action: none; }
+  #hud { position: fixed; top: 0; left: 0; right: 0; display: flex; gap: .55rem;
+         align-items: center; padding: .5rem .7rem; font-size: .78rem; z-index: 3;
+         pointer-events: none; white-space: nowrap; }
+  #hud .sp { flex: 1; }
+  #retry { pointer-events: auto; font: inherit; border: 1.5px solid currentColor;
+           background: none; color: inherit; border-radius: 1rem; padding: .15rem .7rem;
+           cursor: pointer; opacity: .75; }
+  #retry:active { transform: scale(.95); }
+  #overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+             display: flex; flex-direction: column; align-items: center; gap: .9rem;
+             width: min(84vw, 21rem); padding: 1.5rem 1.6rem; border-radius: 1.25rem;
+             text-align: center; z-index: 5;
+             border: 1.5px solid light-dark(rgba(90,60,20,.3), rgba(230,215,190,.25));
+             background: light-dark(rgba(255,250,240,.92), rgba(26,20,38,.92));
+             backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  #overlay.hide { display: none; }
+  #overlay h1 { margin: 0; font-size: 1.15rem; }
+  #overlay p { margin: 0; font-size: .88rem; line-height: 1.55; opacity: .75;
+               white-space: pre-line; }
+  #overlay .big { font-size: 2.2rem; margin: 0; }
+  #btn { font: inherit; font-size: 1.05rem; padding: .75rem 2.2rem; border-radius: 2rem;
+         border: 2px solid currentColor; background: none; color: inherit; cursor: pointer; }
+  #btn:active { transform: scale(.96); }
+  #best { margin: 0; font-size: .8rem; opacity: .5; min-height: 1.1em; }
+</style>
+</head>
+<body>
+<div id="hud">
+  <span>🧊 <b>냉장고 채우기 (진짜임)</b></span>
+  <span class="sp"></span>
+  <span id="hStage"></span>
+  <button id="retry" title="다시 시작">↻</button>
+</div>
+<div id="overlay">
+  <p class="big" id="oEmoji">🧊</p>
+  <h1 id="oTitle">냉장고 채우기</h1>
+  <p id="oMsg">틱톡 광고에서 하루 종일 나오던 그 정리 게임.
+근데 이건 진짜로 그 게임임.
+
+장 본 것들을 끌어서 냉장고에 넣으세요.
+전부 딱 맞게 들어갑니다 — 진짜로요.
+넣은 건 다시 눌러 빼낼 수 있어요.</p>
+  <button id="btn">시작</button>
+  <p id="best"></p>
+</div>
+<canvas id="cv"></canvas>
+<script>
+"use strict";
+/* ── 상수/난수 ────────────────────────────────────────── */
+const W = 360, H = 640, CELL = 46, GYF = 92;
+const dark = matchMedia("(prefers-color-scheme: dark)");
+const mulberry32 = (a) => () => {
+  a |= 0; a = (a + 0x6D2B79F5) | 0;
+  let t = Math.imul(a ^ (a >>> 15), 1 | a);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+const FOODS = {
+  "1x1": ["🥚", "🍎", "🧀", "🥤", "🥫", "🍊", "🍓"],
+  "2x1": ["🥖", "🌭", "🥒", "🍌"],
+  "1x2": ["🍾", "🥛", "🌽"],
+  "2x2": ["🍉", "🎂", "🍕"],
+};
+
+/* ── 스테이지 생성 (빈칸을 조각으로 분할 → 항상 딱 맞음) ── */
+function gen(stage) {
+  const rnd = mulberry32(stage * 61403 + 41);
+  const C = stage < 3 ? 4 : 5;
+  const R = Math.min(4 + ((stage - 1) / 2 | 0), 6);
+  const taken = Array.from({ length: R }, () => Array(C).fill(false));
+  const pieces = [];
+  for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
+    if (taken[r][c]) continue;
+    const canH = c + 1 < C && !taken[r][c + 1];
+    const canV = r + 1 < R && !taken[r + 1][c];
+    const canSq = canH && canV && !taken[r + 1][c + 1];
+    let w2 = 1, h2 = 1;
+    const roll = rnd();
+    if (canSq && roll < 0.16) { w2 = 2; h2 = 2; }
+    else if (canH && roll < 0.5) { w2 = 2; }
+    else if (canV && roll < 0.8) { h2 = 2; }
+    for (let dr = 0; dr < h2; dr++) for (let dc = 0; dc < w2; dc++) taken[r + dr][c + dc] = true;
+    const bank = FOODS[`${w2}x${h2}`];
+    pieces.push({ id: pieces.length, w: w2, h: h2, home: [r, c],
+                  emoji: bank[(rnd() * bank.length) | 0], placed: null });
+  }
+  // 트레이 순서 섞기 (표시 순서만)
+  const order = pieces.map((p) => p.id);
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = (rnd() * (i + 1)) | 0;
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  return { C, R, pieces, order };
+}
+
+/* ── 상태 ─────────────────────────────────────────────── */
+let stage = 1, best = +localStorage.getItem("fillfridge.best") || 0;
+let phase = "title";
+let C = 4, R = 4, GXF = 68, pieces = [], order = [], traySlots = new Map();
+let drag = null;                                     // {id, px, py}
+
+function layoutTray() {
+  traySlots.clear();
+  const trayTop = GYF + R * CELL + 22;
+  let x = 18, y = trayTop, rowH = 0;
+  for (const id of order) {
+    const p = pieces[id];
+    const w2 = p.w * 25 + 12, h2 = p.h * 25 + 12;
+    if (x + w2 > W - 14) { x = 18; y += rowH + 8; rowH = 0; }
+    traySlots.set(id, [x + w2 / 2, y + h2 / 2, w2, h2]);
+    x += w2 + 8; rowH = Math.max(rowH, h2);
+  }
+}
+
+function loadStage() {
+  const g = gen(stage);
+  C = g.C; R = g.R; GXF = (W - C * CELL) / 2;
+  pieces = g.pieces; order = g.order;
+  layoutTray();
+  drag = null; phase = "play";
+  window.__ff = {                                    // 테스트/디버그용
+    pieces: () => pieces.map((p) => ({ id: p.id, w: p.w, h: p.h, home: p.home,
+                                       placed: p.placed })),
+    trayXY: (id) => traySlots.get(id).slice(0, 2),
+    homeCenter: (id) => {
+      const p = pieces[id];
+      return [GXF + (p.home[1] + p.w / 2) * CELL, GYF + (p.home[0] + p.h / 2) * CELL];
+    },
+    cellCenter: (r, c) => [GXF + (c + 0.5) * CELL, GYF + (r + 0.5) * CELL],
+    state: () => ({ left: pieces.filter((p) => !p.placed).length, phase }),
+  };
+  hud();
+}
+
+const occupied = (r, c, exceptId) => pieces.some((p) =>
+  p.placed && p.id !== exceptId &&
+  r >= p.placed[0] && r < p.placed[0] + p.h &&
+  c >= p.placed[1] && c < p.placed[1] + p.w);
+
+function tryPlace(p, px, py) {
+  const r = Math.round((py - p.h * CELL / 2 - GYF) / CELL);
+  const c = Math.round((px - p.w * CELL / 2 - GXF) / CELL);
+  if (r < 0 || c < 0 || r + p.h > R || c + p.w > C) return false;
+  for (let dr = 0; dr < p.h; dr++) for (let dc = 0; dc < p.w; dc++) {
+    if (occupied(r + dr, c + dc, p.id)) return false;
+  }
+  p.placed = [r, c];
+  return true;
+}
+
+function win() {
+  phase = "win";
+  if (stage > best) { best = stage; localStorage.setItem("fillfridge.best", best); }
+  window.blWeeklyReport?.(stage);
+  show("🎉", `스테이지 ${stage} 클리어!`,
+       "냉장고 만석! 이 뿌듯함이 광고의 그 뿌듯함입니다.", "다음 장보기");
+}
+
+/* ── 그리기 ───────────────────────────────────────────── */
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+let scale = 1, ox = 0, oy = 0;
+function resize() {
+  const dpr = devicePixelRatio || 1;
+  cv.width = innerWidth * dpr; cv.height = innerHeight * dpr;
+  cv.style.width = innerWidth + "px"; cv.style.height = innerHeight + "px";
+  scale = Math.min(innerWidth / W, innerHeight / H);
+  ox = (innerWidth - W * scale) / 2; oy = (innerHeight - H * scale) / 2;
+}
+addEventListener("resize", resize); resize();
+
+function rr(x, y, w2, h2, r2) {
+  ctx.beginPath();
+  ctx.moveTo(x + r2, y);
+  ctx.arcTo(x + w2, y, x + w2, y + h2, r2);
+  ctx.arcTo(x + w2, y + h2, x, y + h2, r2);
+  ctx.arcTo(x, y + h2, x, y, r2);
+  ctx.arcTo(x, y, x + w2, y, r2);
+  ctx.closePath();
+}
+
+function drawPiece(p, x, y, s, ghost) {
+  const w2 = p.w * s, h2 = p.h * s;
+  ctx.globalAlpha = ghost ? 0.65 : 1;
+  ctx.fillStyle = dark.matches ? "rgba(255,255,255,.12)" : "rgba(255,255,255,.72)";
+  rr(x - w2 / 2 + 2, y - h2 / 2 + 2, w2 - 4, h2 - 4, 9);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,.18)"; ctx.lineWidth = 2; ctx.stroke();
+  ctx.font = `${Math.min(w2, h2) * 0.62}px system-ui`;
+  ctx.textAlign = "center";
+  ctx.fillText(p.emoji, x, y + Math.min(w2, h2) * 0.22);
+  ctx.globalAlpha = 1;
+}
+
+function draw() {
+  const D = dark.matches, dpr = devicePixelRatio || 1;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = D ? "#1a1626" : "#f6ead8";
+  ctx.fillRect(0, 0, innerWidth, innerHeight);
+  ctx.setTransform(dpr * scale, 0, 0, dpr * scale, dpr * ox, dpr * oy);
+  if (phase === "title") return;
+
+  // 냉장고 본체
+  ctx.fillStyle = D ? "#2b2440" : "#eef3f6";
+  rr(GXF - 12, GYF - 12, C * CELL + 24, R * CELL + 24, 16); ctx.fill();
+  ctx.strokeStyle = D ? "#5a5378" : "#b8c4cc"; ctx.lineWidth = 4; ctx.stroke();
+  // 선반 라인
+  ctx.strokeStyle = D ? "rgba(232,221,203,.12)" : "rgba(58,43,24,.12)";
+  ctx.lineWidth = 1.5;
+  for (let i = 1; i < R; i++) {
+    ctx.beginPath(); ctx.moveTo(GXF - 6, GYF + i * CELL);
+    ctx.lineTo(GXF + C * CELL + 6, GYF + i * CELL); ctx.stroke();
+  }
+  for (let i = 1; i < C; i++) {
+    ctx.beginPath(); ctx.moveTo(GXF + i * CELL, GYF - 4);
+    ctx.lineTo(GXF + i * CELL, GYF + R * CELL + 4); ctx.stroke();
+  }
+
+  // 놓인 조각
+  for (const p of pieces) {
+    if (!p.placed || (drag && drag.id === p.id)) continue;
+    drawPiece(p, GXF + (p.placed[1] + p.w / 2) * CELL,
+              GYF + (p.placed[0] + p.h / 2) * CELL, CELL, false);
+  }
+  // 트레이(장바구니)
+  ctx.font = "13px ui-monospace, monospace"; ctx.textAlign = "left";
+  ctx.fillStyle = D ? "rgba(232,221,203,.55)" : "rgba(58,43,24,.5)";
+  ctx.fillText("🛒 장 본 것들", 18, GYF + R * CELL + 14);
+  for (const id of order) {
+    const p = pieces[id];
+    if (p.placed || (drag && drag.id === id)) continue;
+    const [tx, ty] = traySlots.get(id);
+    drawPiece(p, tx, ty, 25, false);
+  }
+  // 드래그 중인 조각
+  if (drag) {
+    const p = pieces[drag.id];
+    drawPiece(p, drag.px, drag.py, CELL, true);
+  }
+}
+
+let last = performance.now();
+function loop(t) {
+  last = t;
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+/* ── 입력/UI ──────────────────────────────────────────── */
+const $ = (id) => document.getElementById(id);
+function hud() {
+  const left = pieces.filter((p) => !p.placed).length;
+  $("hStage").textContent = `스테이지 ${stage} · 🛒 ${left}개 남음`;
+}
+function show(emoji, title, msg, btnText) {
+  $("oEmoji").textContent = emoji; $("oTitle").textContent = title;
+  $("oMsg").textContent = msg; $("btn").textContent = btnText;
+  $("best").textContent = best ? `최고 기록: 스테이지 ${best}` : "";
+  $("overlay").classList.remove("hide");
+}
+$("btn").addEventListener("click", () => {
+  if (phase === "win") stage++;
+  $("overlay").classList.add("hide");
+  loadStage();
+});
+$("retry").addEventListener("click", () => { if (phase === "play") loadStage(); });
+
+const toPt = (e) => [(e.clientX - ox) / scale, (e.clientY - oy) / scale];
+cv.addEventListener("pointerdown", (e) => {
+  e.preventDefault();                        // 모바일 더블탭 줌·고스트 클릭 방지
+  if (phase !== "play") return;
+  const [x, y] = toPt(e);
+  // 냉장고 안 조각 집어 올리기
+  const r = Math.floor((y - GYF) / CELL), c = Math.floor((x - GXF) / CELL);
+  for (const p of pieces) {
+    if (!p.placed) continue;
+    if (r >= p.placed[0] && r < p.placed[0] + p.h &&
+        c >= p.placed[1] && c < p.placed[1] + p.w) {
+      p.placed = null;
+      drag = { id: p.id, px: x, py: y };
+      hud();
+      return;
+    }
+  }
+  // 트레이에서 집기
+  for (const id of order) {
+    const p = pieces[id];
+    if (p.placed) continue;
+    const [tx, ty, w2, h2] = traySlots.get(id);
+    if (Math.abs(x - tx) < w2 / 2 + 4 && Math.abs(y - ty) < h2 / 2 + 4) {
+      drag = { id, px: x, py: y };
+      return;
+    }
+  }
+});
+addEventListener("pointermove", (e) => {
+  if (!drag || phase !== "play") return;
+  const [x, y] = toPt(e);
+  drag.px = x; drag.py = y;
+});
+addEventListener("pointerup", () => {
+  if (!drag || phase !== "play") { drag = null; return; }
+  const p = pieces[drag.id];
+  tryPlace(p, drag.px, drag.py);                     // 실패 시 트레이로 자동 복귀
+  drag = null;
+  hud();
+  if (pieces.every((k) => k.placed)) win();
+});
+
+window.blShareText = () => `냉장고 채우기 스테이지 ${best}까지 만석! 광고에서 본 그 게임, 진짜임 🧊`;
+window.blWeekly = { game: "fillfridge", dir: "max", fmt: (v) => `스테이지 ${v}` };
+</script>
+<script defer src="/_shared/records.js"></script>
+<script defer src="/_shared/share.js"></script>
+<script defer src="/_shared/like.js"></script>
+</body>
+</html>

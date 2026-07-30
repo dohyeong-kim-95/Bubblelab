@@ -40,6 +40,9 @@ export const GAMES = {
   parkmaster:   { dir: "max", min: 1, max: 10000 },     // 주차 마스터 클리어 스테이지
   screwout:     { dir: "max", min: 1, max: 10000 },     // 나사 풀기 클리어 스테이지
   icebreak:     { dir: "max", min: 1, max: 10000 },     // 얼음 깨기 클리어 스테이지
+  trafficjam:   { dir: "max", min: 1, max: 10000 },     // 트래픽 잼 클리어 스테이지
+  picklock:     { dir: "max", min: 1, max: 10000 },     // 자물쇠 따기 클리어 스테이지
+  fillfridge:   { dir: "max", min: 1, max: 10000 },     // 냉장고 채우기 클리어 스테이지
   reactiontime: { dir: "min", min: 0, max: 60000 },     // 반응속도(ms)
   "sort-line":  { dir: "max", min: 0, max: 100000 },    // 컨베이어 분류 정답 수
   touch25:      { dir: "min", min: 0, max: 3600 },      // 완주 시간(초)
