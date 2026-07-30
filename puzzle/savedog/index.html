@@ -80,33 +80,143 @@
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
 const starsOf = (d) => "\u2605".repeat(Math.max(1, Math.min(5, Math.ceil(d / 20))));
 let dScore = 0;
+const targetD = (s) => Math.min(90, 5 + 4.7 * s);
 
 /* ── 상수 ─────────────────────────────────────────────── */
 const W = 360, H = 640, DOG_R = 14, BEE_R = 5, SURVIVE = 5;
 const dark = matchMedia("(prefers-color-scheme: dark)");
 
-/* ── 스테이지 (전부 손제작, 테스트로 클리어 검증됨) ──── */
-// dog:[x,y] / hives:[[x,y,마리수]] / walls: 기존 벽 / ink: 잉크(px)
-const STAGES = [
-  { dog: [180, 490], hives: [[180, 80, 8]], walls: [], ink: 420,
-    tip: "화면 끝까지 막으세요. 빈틈이 있으면 돌아 들어와요!" },
-  { dog: [80, 520], hives: [[300, 90, 8]], walls: [[160, 640, 160, 420]], ink: 200,
-    tip: "이미 있는 벽에 이어 붙이세요" },
-  { dog: [180, 500], hives: [[60, 90, 5], [300, 90, 5]],
-    walls: [[110, 430, 250, 430]], ink: 260 },
-  { dog: [180, 470], hives: [[60, 80, 6], [300, 80, 6]],
-    walls: [[0, 560, 360, 560], [60, 640, 60, 430], [300, 640, 300, 430]], ink: 290 },
-  { dog: [180, 300], hives: [[40, 560, 4], [320, 560, 4], [180, 60, 4]],
-    walls: [[140, 320, 220, 320], [120, 340, 120, 260], [240, 340, 240, 260]], ink: 210,
-    tip: "구멍이 세 개…" },
-  { dog: [180, 500], hives: [[30, 240, 10]],
-    walls: [[0, 200, 280, 200], [0, 280, 280, 280]], ink: 120,
-    tip: "잉크가 부족해요. 짧고 굵게!" },
-  { dog: [180, 550], hives: [[30, 300, 6], [330, 300, 6]],
-    walls: [[0, 480, 120, 480], [240, 480, 360, 480]], ink: 160 },
-  { dog: [180, 318], hives: [[30, 60, 4], [330, 60, 4], [30, 600, 4], [330, 600, 4]],
-    walls: [[120, 340, 240, 340]], ink: 240, tip: "사방이 벌…" },
-];
+/* ── 자동 레벨 제너레이터 ─────────────────────────────── */
+// 구성적 풀이 보장: 강아지를 두른 사각 방을 먼저 짓고 일부러 틈을 N개 낸다.
+// 정답은 "각 틈을 직선으로 막기"로 정해져 있고 잉크 = Σ(틈+겹침) × 슬랙이라
+// 풀이 존재가 보장된다. 벌집은 각 틈을 정조준하도록 배치해 "안 막으면
+// 반드시 물리는" 것도 함께 보장한다. salt까지 시드 고정 — 모두 같은 판.
+const mulberry32 = (a) => () => {
+  a |= 0; a = (a + 0x6D2B79F5) | 0;
+  let t = Math.imul(a ^ (a >>> 15), 1 | a);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+function segPointDist2(a, b, p) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy || 1;
+  let t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  return Math.hypot(p[0] - (a[0] + dx * t), p[1] - (a[1] + dy * t));
+}
+
+function gen(stage, salt = 0, forceGaps = 0) {
+  const nGaps = forceGaps || 1 + Math.min(4, Math.floor((stage - 1) / 3));
+  const spd = Math.min(190, 95 + stage * 1.1);
+  const perBees = 3 + Math.min(12, Math.floor(stage / 2));
+  const slack = Math.max(1.06, 1.34 - stage * 0.012);
+  const nHives = Math.min(6, nGaps + (stage >= 10 ? 1 : 0) + (stage >= 25 ? 1 : 0));
+  for (let attempt = 0; attempt < 800; attempt++) {
+    const rnd = mulberry32(stage * 91193 + attempt * 887 + salt * 41221 + 3);
+    const rw = 62 + rnd() * 55, rh = 62 + rnd() * 55;
+    const dgx = 14 + rw + rnd() * (346 - 14 - 2 * rw);
+    const dgy = 78 + rh + rnd() * (556 - 78 - 2 * rh);  // 하단 출발 버튼 영역 회피
+    const x1 = dgx - rw, x2 = dgx + rw, y1 = dgy - rh, y2 = dgy + rh;
+    const sides = [
+      { a: [x1, y1], d: [1, 0], L: x2 - x1, n: [0, -1], horiz: true },
+      { a: [x1, y2], d: [1, 0], L: x2 - x1, n: [0, 1], horiz: true },
+      { a: [x1, y1], d: [0, 1], L: y2 - y1, n: [-1, 0], horiz: false },
+      { a: [x2, y1], d: [0, 1], L: y2 - y1, n: [1, 0], horiz: false },
+    ];
+    // 틈 배치 (변마다 최대 2개, 코너에서 14px 이상)
+    const gaps = [];
+    let ok = true;
+    for (let gi = 0; gi < nGaps && ok; gi++) {
+      let placed = false;
+      for (let t2 = 0; t2 < 40 && !placed; t2++) {
+        const side = sides[(rnd() * 4) | 0];
+        const gw = 46 + rnd() * 40;
+        if (side.L < gw + 36) continue;
+        const off = 14 + rnd() * (side.L - gw - 28);
+        if (gaps.filter((g2) => g2.side === side).length >= 2) continue;
+        if (gaps.some((g2) => g2.side === side &&
+            !(off + gw + 26 < g2.off || g2.off + g2.gw + 26 < off))) continue;
+        const A = [side.a[0] + side.d[0] * off, side.a[1] + side.d[1] * off];
+        const B = [A[0] + side.d[0] * gw, A[1] + side.d[1] * gw];
+        const SA = [A[0] - side.d[0] * 12, A[1] - side.d[1] * 12];
+        const SB = [B[0] + side.d[0] * 12, B[1] + side.d[1] * 12];
+        if (segPointDist2(SA, SB, [dgx, dgy]) < 30) continue;   // 그리기 금지 반경 회피
+        gaps.push({ side, off, gw, A, B, SA, SB });
+        placed = true;
+      }
+      if (!placed) ok = false;
+    }
+    if (!ok) continue;
+    // 벌집: 각 틈의 바깥 법선 방향에 배치해 틈을 정조준
+    const hives = [];
+    for (let hi = 0; hi < nHives && ok; hi++) {
+      const g2 = gaps[hi % nGaps];
+      let placed = false;
+      for (let t2 = 0; t2 < 50 && !placed; t2++) {
+        const mid = [(g2.A[0] + g2.B[0]) / 2, (g2.A[1] + g2.B[1]) / 2];
+        const d3 = 70 + rnd() * 100;
+        const lat = (rnd() - 0.5) * Math.min(30, g2.gw - 30);
+        const hx = mid[0] + g2.side.n[0] * d3 + g2.side.d[0] * lat;
+        const hy = mid[1] + g2.side.n[1] * d3 + g2.side.d[1] * lat;
+        if (hx < 24 || hx > 336 || hy < 76 || hy > 604) continue;
+        if (hx > 104 && hx < 256 && hy > 548) continue;   // 하단 출발 버튼 영역 회피
+        if (hives.some((o) => Math.hypot(hx - o[0], hy - o[1]) < 56)) continue;
+        // 벌집→강아지 직선이 자기 틈 안을 지나는지 (막지 않으면 반드시 진입)
+        const sideCoord = g2.side.horiz ? g2.side.a[1] : g2.side.a[0];
+        const hCoord = g2.side.horiz ? hy : hx, dCoord = g2.side.horiz ? dgy : dgx;
+        const tt = (sideCoord - hCoord) / (dCoord - hCoord || 1);
+        if (tt <= 0 || tt >= 1) continue;
+        const cross = g2.side.horiz ? hx + (dgx - hx) * tt : hy + (dgy - hy) * tt;
+        const lo = Math.min(g2.side.horiz ? g2.A[0] : g2.A[1], g2.side.horiz ? g2.B[0] : g2.B[1]);
+        const hi2 = Math.max(g2.side.horiz ? g2.A[0] : g2.A[1], g2.side.horiz ? g2.B[0] : g2.B[1]);
+        if (cross < lo + 9 || cross > hi2 - 9) continue;
+        hives.push([hx, hy, perBees]);
+        placed = true;
+      }
+      if (!placed) ok = false;
+    }
+    if (!ok) continue;
+    // 벽 = 각 변에서 틈을 뺀 구간들
+    const walls = [];
+    for (const side of sides) {
+      const cuts = gaps.filter((g2) => g2.side === side)
+        .map((g2) => [g2.off, g2.off + g2.gw]).sort((p, q) => p[0] - q[0]);
+      let cur = 0;
+      for (const [o1, o2] of cuts) {
+        if (o1 > cur + 1) walls.push([side.a[0] + side.d[0] * cur, side.a[1] + side.d[1] * cur,
+                                      side.a[0] + side.d[0] * o1, side.a[1] + side.d[1] * o1]);
+        cur = o2;
+      }
+      if (cur < side.L - 1) walls.push([side.a[0] + side.d[0] * cur, side.a[1] + side.d[1] * cur,
+                                        side.a[0] + side.d[0] * side.L, side.a[1] + side.d[1] * side.L]);
+    }
+    const ink2 = Math.round(gaps.reduce((k, g2) => k + g2.gw + 24, 0) * slack);
+    return { dog: [dgx, dgy], hives, walls, ink: ink2, spd,
+             solution: gaps.map((g2) => [g2.SA, g2.SB]),
+             feats: { nGaps, bees: hives.length * perBees, spd, slack } };
+  }
+  // 실패 시 틈 하나 줄여 재시도 (우아한 강등)
+  if (nGaps > 1) return gen(stage, salt, nGaps - 1);
+  return gen(1, salt + 97, 1);
+}
+
+const diffOf = (g) => 100 * clamp01((g.feats.nGaps - 1) / 4 * 0.35 +
+  (g.feats.bees - 8) / 45 * 0.25 + (g.feats.spd - 95) / 95 * 0.2 +
+  (1.34 - g.feats.slack) / 0.28 * 0.2);
+
+// 레벨 자동 재배치: 후보 판을 몇 개 만들어 목표 난이도 곡선(targetD)에
+// 가장 가까운 판을 채택한다.
+function genTuned(stage) {
+  const T = targetD(stage);
+  let best2 = null, bestGap = Infinity;
+  for (let v = 0; v < 4; v++) {
+    const g = gen(stage, v);
+    const gap = Math.abs(diffOf(g) - T);
+    if (gap < bestGap) { bestGap = gap; best2 = g; }
+    if (bestGap <= 5) break;
+  }
+  return best2;
+}
+window.blDiffAt = (s) => diffOf(genTuned(s));
 
 /* ── 상태 ─────────────────────────────────────────────── */
 let stage = 1, best = +localStorage.getItem("savedog.best") || 0;
@@ -117,39 +227,32 @@ let beeSpd = 95, lastPt = null;
 
 const seg = (x1, y1, x2, y2, r = 5) => ({ x1, y1, x2, y2, r });
 
-function levelFor(s) {
-  const lv = STAGES[(s - 1) % STAGES.length];
-  const loop = Math.floor((s - 1) / STAGES.length);
-  return { ...lv, spd: 95 * (1 + loop * 0.18), extra: loop * 2 };
-}
-
-function diffFor(s) {
-  const lv = levelFor(s);
-  const bees = lv.hives.reduce((k, h) => k + h[2] + lv.extra, 0);
-  return 100 * clamp01((bees - 8) / 20 * 0.4 + (lv.spd - 95) / 80 * 0.3 +
-    ((s - 1) % STAGES.length) / 7 * 0.3);
-}
-window.blDiffAt = diffFor;
-
 function loadStage() {
-  const lv = levelFor(stage);
-  dog = lv.dog; hives = lv.hives; tip = lv.tip ?? "";
-  dScore = diffFor(stage);
-  walls = lv.walls.map((w) => seg(...w));
+  const g = genTuned(stage);
+  dog = g.dog; hives = g.hives;
+  tip = stage === 1 ? "울타리의 틈을 직선으로 막으세요!"
+      : stage === 2 ? "잉크가 아슬아슬 — 틈만 정확히" : "";
+  dScore = diffOf(g);
+  walls = g.walls.map((w) => seg(...w));
   stroke = []; lastPt = null;
-  ink = inkMax = lv.ink; beeSpd = lv.spd;
+  ink = inkMax = g.ink; beeSpd = g.spd;
   bees = []; timer = 0; dogFace = "🐶";
   spawnQueue = [];
   hives.forEach(([hx, hy, n], hi) => {
-    for (let i = 0; i < n + lv.extra; i++) {
+    for (let i = 0; i < n; i++) {
       spawnQueue.push({ at: 0.5 + i * 0.09 + hi * 0.03, x: hx, y: hy });
     }
   });
   phase = "draw";
   document.getElementById("go").classList.remove("hide");
   document.getElementById("inkbar").classList.remove("hide");
+  window.__sd = { solution: g.solution, ink: g.ink,
+                  state: () => ({ phase, timer, ink }) };
+  window.__sdGen = (s2) => gen(s2);
   hud(); inkUi();
 }
+window.__sdJump = (s2) => { stage = s2;
+  document.getElementById("overlay").classList.add("hide"); loadStage(); };
 
 /* ── 물리 ─────────────────────────────────────────────── */
 function pushOut(b, s) {
