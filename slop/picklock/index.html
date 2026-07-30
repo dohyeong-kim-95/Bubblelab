@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>자물쇠 러시 — 스코어 어택</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🔓</text></svg>">
+<style>
+  :root { color-scheme: light dark; }
+  html, body { height: 100%; }
+  body { margin: 0; overflow: hidden; user-select: none; -webkit-user-select: none;
+         touch-action: none; font-family: ui-monospace, "SF Mono", "Cascadia Mono",
+         "Roboto Mono", Consolas, monospace;
+         background: light-dark(#f6ead8, #1a1626); color: light-dark(#3a2b18, #e8ddcb); }
+  canvas { display: block; touch-action: none; }
+  #hud { position: fixed; top: 0; left: 0; right: 0; display: flex; gap: .55rem;
+         align-items: center; padding: .5rem .7rem; font-size: .78rem; z-index: 3;
+         pointer-events: none; white-space: nowrap; }
+  #hud b { font-weight: bold; }
+  #hud .sp { flex: 1; }
+  #hud > span:first-child { flex: 0 1 auto; min-width: 0; overflow: hidden;
+                            text-overflow: ellipsis; }
+  #retry { pointer-events: auto; font: inherit; border: 1.5px solid currentColor;
+           background: none; color: inherit; border-radius: 1rem; padding: .15rem .7rem;
+           cursor: pointer; opacity: .75; }
+  #retry:active { transform: scale(.95); }
+  #overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+             display: flex; flex-direction: column; align-items: center; gap: .9rem;
+             width: min(84vw, 21rem); padding: 1.5rem 1.6rem; border-radius: 1.25rem;
+             text-align: center; z-index: 5;
+             border: 1.5px solid light-dark(rgba(90,60,20,.3), rgba(230,215,190,.25));
+             background: light-dark(rgba(255,250,240,.92), rgba(26,20,38,.92));
+             backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  #overlay.hide { display: none; }
+  #overlay h1 { margin: 0; font-size: 1.15rem; }
+  #overlay p { margin: 0; font-size: .88rem; line-height: 1.55; opacity: .75;
+               white-space: pre-line; }
+  #overlay .big { font-size: 2.2rem; margin: 0; }
+  #btn { font: inherit; font-size: 1.05rem; padding: .75rem 2.2rem; border-radius: 2rem;
+         border: 2px solid currentColor; background: none; color: inherit; cursor: pointer; }
+  #btn:active { transform: scale(.96); }
+  #best { margin: 0; font-size: .8rem; opacity: .5; min-height: 1.1em; }
+</style>
+</head>
+<body>
+<div id="hud">
+  <span>🔓 <b>자물쇠 러시</b></span>
+  <span class="sp"></span>
+  <span id="hScore"></span>
+  <button id="retry" title="다시 시작">↻</button>
+</div>
+<div id="overlay">
+  <p class="big" id="oEmoji">🔓</p>
+  <h1 id="oTitle">자물쇠 러시</h1>
+  <p id="oMsg">바늘이 금색 구간에 들어왔을 때 탭!
+
+구간 한가운데를 맞추면 PERFECT —
+콤보가 쌓여 점수가 ×8까지 커져요.
+자물쇠 하나를 다 따면 보너스, 그리고
+더 빠르고 좁은 다음 자물쇠.
+
+한 번이라도 빗나가면 그대로 끝.</p>
+  <button id="btn">시작</button>
+  <p id="best"></p>
+</div>
+<canvas id="cv"></canvas>
+<script>
+"use strict";
+/* ── 상수 ─────────────────────────────────────────────── */
+const W = 360, H = 640, CX = 180, CY = 340, R = 112;
+const dark = matchMedia("(prefers-color-scheme: dark)");
+const D2R = Math.PI / 180;
+const angDiff = (a, b) => ((a - b + 540) % 360) - 180;
+const MULT_CAP = 8;
+
+/* ── 상태 ─────────────────────────────────────────────── */
+let best = +localStorage.getItem("picklock.hiscore") || 0;
+let phase = "title";              // title | play | over
+let score = 0, combo = 0, lock = 1, picks = 0;   // picks: 이번 자물쇠에서 딴 핀
+let need = 0, ang = 0, dir = 1, spd = 0, half = 0, notch = 0;
+let flash = 0, breakT = 0, shackleT = 0, pops = [];
+
+const mult = () => 1 + Math.min(combo, MULT_CAP - 1);
+
+// 다음 노치: 직전 위치에서 충분히 떨어진 곳 (아케이드 — 매 판 무작위)
+function nextNotch() { notch = (notch + 70 + Math.random() * 220) % 360; }
+
+function lockParams() {
+  need = Math.min(5 + lock, 12);                  // 자물쇠당 핀 수
+  spd = Math.min(210 + (lock - 1) * 26, 480);     // 도/초 (자물쇠 기본 속도)
+  half = Math.max(7.5, 19 - (lock - 1) * 1.1);    // 노치 반각(도)
+}
+
+function startRun() {
+  score = 0; combo = 0; lock = 1; picks = 0; pops = [];
+  lockParams();
+  notch = 90 + Math.random() * 180;
+  ang = 200; dir = 1;
+  flash = 0; breakT = 0; shackleT = 0;
+  phase = "play";
+  hud();
+}
+
+function pop(text, col, big = false) {
+  pops.push({ text, col, x: CX, y: CY - R - 26, life: 1, big });
+}
+
+function tap() {
+  if (phase !== "play") return;
+  const diff = Math.abs(angDiff(ang, notch));
+  if (diff > half + 1.5) { breakT = 1; return gameOver(); }   // 살짝 관용
+  const perfect = diff <= half * 0.38;
+  combo = perfect ? combo + 1 : 0;
+  const pts = 10 * mult();
+  score += pts;
+  pop(perfect ? `PERFECT +${pts}` : `+${pts}`, perfect ? "#e0a72e" : "#7bd88f", perfect);
+  flash = 1; dir *= -1; picks++;
+  spd += 6;                                       // 핀마다 조금씩 가속
+  if (picks >= need) {                            // 자물쇠 해제!
+    const bonus = 50 * mult();
+    score += bonus;
+    pop(`자물쇠 +${bonus}`, "#e0a72e", true);
+    shackleT = 0.001;
+    lock++; picks = 0;
+    lockParams();
+  } else {
+    nextNotch();
+  }
+  hud();
+}
+
+function gameOver() {
+  phase = "over";
+  if (score > best) { best = score; localStorage.setItem("picklock.hiscore", best); }
+  if (score > 0) window.blWeeklyReport?.(score);
+  const quips = ["자물쇠는 원래 열쇠로 여는 겁니다.",
+                 "콤보가 아까웠다면 이미 중독입니다.",
+                 "괜찮아요, 진짜 도둑도 첫 핀에서 부러뜨려요."];
+  show("🔒", "부러졌다…", `최종 ${score.toLocaleString("ko-KR")}점` +
+       ` · 자물쇠 ${lock - 1}개 해제\n\n` +
+       quips[(Math.random() * quips.length) | 0], "다시 도전");
+}
+
+/* ── 그리기 ───────────────────────────────────────────── */
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+let scale = 1, ox = 0, oy = 0;
+function resize() {
+  const dpr = devicePixelRatio || 1;
+  cv.width = innerWidth * dpr; cv.height = innerHeight * dpr;
+  cv.style.width = innerWidth + "px"; cv.style.height = innerHeight + "px";
+  scale = Math.min(innerWidth / W, innerHeight / H);
+  ox = (innerWidth - W * scale) / 2; oy = (innerHeight - H * scale) / 2;
+}
+addEventListener("resize", resize); resize();
+
+function rr(x, y, w, h, r2) {
+  ctx.beginPath();
+  ctx.moveTo(x + r2, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r2);
+  ctx.arcTo(x + w, y + h, x, y + h, r2);
+  ctx.arcTo(x, y + h, x, y, r2);
+  ctx.arcTo(x, y, x + w, y, r2);
+  ctx.closePath();
+}
+
+function draw(dt) {
+  const D = dark.matches, dpr = devicePixelRatio || 1;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = D ? "#1a1626" : "#f6ead8";
+  ctx.fillRect(0, 0, innerWidth, innerHeight);
+  ctx.setTransform(dpr * scale, 0, 0, dpr * scale, dpr * ox, dpr * oy);
+  if (phase === "title") return;
+
+  const steel = D ? "#9fb0c2" : "#8494a4";
+  const goldC = "#e0a72e";
+
+  // 걸쇠(위 고리) — 자물쇠 해제 시 튀어 오른다
+  const pop2 = shackleT > 0 ? Math.sin(Math.min(1, shackleT) * Math.PI) * 26 : 0;
+  ctx.lineWidth = 16; ctx.strokeStyle = steel; ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.arc(CX, 175 - pop2, 52, Math.PI, 0);
+  ctx.moveTo(CX - 52, 175 - pop2); ctx.lineTo(CX - 52, 195 - pop2 * 0.4);
+  ctx.moveTo(CX + 52, 175 - pop2); ctx.lineTo(CX + 52, 195);
+  ctx.stroke();
+
+  // 몸통
+  const shake = breakT > 0 ? Math.sin(breakT * 55) * 4 * breakT : 0;
+  ctx.save();
+  ctx.translate(shake, 0);
+  ctx.fillStyle = D ? "#3a3050" : "#d9b46a";
+  rr(CX - 118, 195, 236, 290, 26); ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,.2)"; ctx.lineWidth = 3; ctx.stroke();
+
+  // 다이얼 링
+  ctx.beginPath(); ctx.arc(CX, CY, R, 0, 7);
+  ctx.lineWidth = 15; ctx.strokeStyle = D ? "#241d33" : "#fff7e8"; ctx.stroke();
+
+  // 노치(금색 구간) — PERFECT 중심부는 진하게
+  if (phase === "play") {
+    ctx.beginPath();
+    ctx.arc(CX, CY, R, (notch - half) * D2R, (notch + half) * D2R);
+    ctx.lineWidth = 15; ctx.strokeStyle = goldC; ctx.lineCap = "butt"; ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(CX, CY, R, (notch - half * 0.38) * D2R, (notch + half * 0.38) * D2R);
+    ctx.lineWidth = 15; ctx.strokeStyle = D ? "#ffd465" : "#b8860b"; ctx.stroke();
+  }
+
+  // 바늘
+  const a2 = ang * D2R;
+  ctx.beginPath();
+  ctx.moveTo(CX + Math.cos(a2) * 24, CY + Math.sin(a2) * 24);
+  ctx.lineTo(CX + Math.cos(a2) * (R + 9), CY + Math.sin(a2) * (R + 9));
+  ctx.lineWidth = 5; ctx.lineCap = "round";
+  ctx.strokeStyle = phase === "over" ? "#e5484d" : (D ? "#e8ddcb" : "#3a2b18");
+  ctx.stroke();
+
+  // 중앙: 콤보 배수
+  ctx.beginPath(); ctx.arc(CX, CY, 15, 0, 7);
+  ctx.fillStyle = D ? "#14101f" : "#6a4e14"; ctx.fill();
+  ctx.fillRect(CX - 4.5, CY + 6, 9, 22);
+  if (combo > 0) {
+    ctx.textAlign = "center"; ctx.font = "bold 17px ui-monospace, monospace";
+    ctx.fillStyle = goldC;
+    ctx.fillText(`×${mult()}`, CX, CY - 34);
+  }
+
+  // 성공 플래시
+  if (flash > 0) {
+    ctx.globalAlpha = flash * 0.5;
+    ctx.beginPath(); ctx.arc(CX, CY, R, 0, 7);
+    ctx.lineWidth = 22; ctx.strokeStyle = "#7bd88f"; ctx.stroke();
+    ctx.globalAlpha = 1;
+    flash -= dt * 3;
+  }
+  ctx.restore();
+
+  // 이번 자물쇠 핀 진행
+  ctx.textAlign = "center";
+  for (let i = 0; i < need; i++) {
+    const px = CX + (i - (need - 1) / 2) * 22;
+    ctx.beginPath(); ctx.arc(px, 545, 7, 0, 7);
+    if (i < picks) { ctx.fillStyle = "#7bd88f"; ctx.fill(); }
+    else { ctx.lineWidth = 2; ctx.strokeStyle = D ? "rgba(232,221,203,.4)" : "rgba(58,43,24,.4)"; ctx.stroke(); }
+  }
+
+  // 점수 팝
+  ctx.textAlign = "center";
+  for (const p of pops) {
+    ctx.globalAlpha = Math.min(1, p.life * 1.6);
+    ctx.font = `bold ${p.big ? 21 : 16}px ui-monospace, monospace`;
+    ctx.fillStyle = p.col;
+    ctx.fillText(p.text, p.x, p.y - (1 - p.life) * 42);
+    p.life -= dt * 1.1;
+  }
+  ctx.globalAlpha = 1;
+  pops = pops.filter((p) => p.life > 0);
+
+  if (breakT > 0) breakT -= dt * 1.6;
+  if (shackleT > 0) { shackleT += dt * 2.4; if (shackleT > 1.3) shackleT = 0; }
+}
+
+let last = performance.now();
+function loop(t) {
+  let dt = (t - last) / 1000; last = t;
+  if (dt > 0.05) dt = 0.05;
+  if (phase === "play") ang = (ang + dir * spd * dt + 360) % 360;
+  draw(dt);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+/* ── 입력/UI ──────────────────────────────────────────── */
+const $ = (id) => document.getElementById(id);
+function hud() {
+  $("hScore").textContent =
+    `${score.toLocaleString("ko-KR")}점 · ×${mult()} · 🔒 ${lock}`;
+}
+function show(emoji, title, msg, btnText) {
+  $("oEmoji").textContent = emoji; $("oTitle").textContent = title;
+  $("oMsg").textContent = msg; $("btn").textContent = btnText;
+  $("best").textContent = best ? `최고 기록: ${best.toLocaleString("ko-KR")}점` : "";
+  $("overlay").classList.remove("hide");
+}
+$("btn").addEventListener("click", () => {
+  $("overlay").classList.add("hide");
+  startRun();
+});
+$("retry").addEventListener("click", () => { if (phase === "play") startRun(); });
+
+addEventListener("pointerdown", (e) => {
+  if (e.target === cv) e.preventDefault();   // 모바일 더블탭 줌·고스트 클릭 방지
+  if (e.target === cv) tap();
+});
+addEventListener("keydown", (e) => { if (e.key === " ") tap(); });
+
+window.__pl = {                                  // 테스트/디버그용
+  state: () => ({ score, combo, lock, picks, need, ang, notch, half, spd, dir, phase }),
+  aligned: (m = 3) => Math.abs(angDiff(ang, notch)) <= Math.max(2, half - m),
+  perfectAligned: () => Math.abs(angDiff(ang, notch)) <= half * 0.3,
+  misaligned: () => Math.abs(angDiff(ang, notch)) > half + 25,
+};
+
+window.blShareText = () =>
+  `자물쇠 러시 ${best.toLocaleString("ko-KR")}점! 콤보 끊기 전에 도전해보세요 🔓`;
+window.blWeekly = { game: "picklock", dir: "max",
+                    fmt: (v) => `${(+v).toLocaleString("ko-KR")}점` };
+</script>
+<script defer src="/_shared/records.js"></script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>
