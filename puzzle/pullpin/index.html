@@ -68,6 +68,13 @@
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
 const starsOf = (d) => "\u2605".repeat(Math.max(1, Math.min(5, Math.ceil(d / 20))));
 let dScore = 0;
+const targetD = (s) => Math.min(90, 5 + 4.7 * s);
+const mulberry32 = (a) => () => {
+  a |= 0; a = (a + 0x6D2B79F5) | 0;
+  let t = Math.imul(a ^ (a >>> 15), 1 | a);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
 
 /* ── 상수 ─────────────────────────────────────────────── */
 const W = 360, H = 640, R = 9, GRAV = 1600, STEP = 1 / 120;
@@ -122,21 +129,16 @@ const LEVELS = [
             { t: "g", x: 252, y: 287, n: 5 }] },
 ];
 const totalGold = (lv) => lv.balls.filter(b => b.t === "g").reduce((s, b) => s + b.n, 0);
-function diffFor(s) {
-  const lv = levelFor(s);
+function diffHand(s) {                              // 손제작 1~10 정적 계측
+  const lv = { ...LEVELS[s - 1] };
   const lava = lv.balls.filter((b) => b.t === "l").reduce((k, b) => k + b.n, 0);
-  const loop = s > LEVELS.length ? Math.floor((s - LEVELS.length - 1) / 8) + 1 : 0;
-  return Math.min(100, 100 * clamp01((lv.pins.length - 1) / 4 * 0.3 +
-    lava / 12 * 0.3 + (lv.need / totalGold(lv)) * 0.35) + Math.min(20, loop * 8));
+  return 100 * clamp01((lv.pins.length - 1) / 4 * 0.23 +
+    lava / 12 * 0.23 + (lv.need / totalGold(lv)) * 0.27);
 }
-window.blDiffAt = diffFor;
-function levelFor(stage) {
+window.blDiffAt = (s) => (s <= LEVELS.length ? diffHand(s) : genTuned(s).meta.d);
+function levelFor(stage) {                          // 1~10 손제작 시그니처, 11+ 생성
   if (stage <= LEVELS.length) return { ...LEVELS[stage - 1] };
-  const idx = (stage - LEVELS.length - 1) % 8 + 2;      // 3~10번 레벨 순환
-  const loop = Math.floor((stage - LEVELS.length - 1) / 8) + 1;
-  const lv = { ...LEVELS[idx] };
-  lv.need = Math.min(totalGold(lv), lv.need + loop);    // 돌수록 빡빡해짐
-  return lv;
+  return genTuned(stage).lv;
 }
 
 /* ── 상태 ─────────────────────────────────────────────── */
@@ -148,7 +150,7 @@ let heroFace = "🤠";
 
 const seg = (x1, y1, x2, y2, r = 5) => ({ x1, y1, x2, y2, r });
 
-function buildWalls(lv) {
+function buildWalls(lv, sk = null) {
   const out = [];
   const side = (x, gaps) => {
     let cur = 70;
@@ -157,10 +159,10 @@ function buildWalls(lv) {
   };
   side(XL, lv.gaps.L); side(XR, lv.gaps.R);
   for (const [g1, g2] of lv.gaps.L ?? []) {           // 왼쪽 배수 미끄럼틀
-    out.push(seg(XL - 2, g2 + 2, 16, g2 + 42)); skulls.push([14, g2 + 66]);
+    out.push(seg(XL - 2, g2 + 2, 16, g2 + 42)); if (sk) sk.push([14, g2 + 66]);
   }
   for (const [g1, g2] of lv.gaps.R ?? []) {
-    out.push(seg(XR + 2, g2 + 2, 344, g2 + 42)); skulls.push([346, g2 + 66]);
+    out.push(seg(XR + 2, g2 + 2, 344, g2 + 42)); if (sk) sk.push([346, g2 + 66]);
   }
   out.push(seg(XL, 470, POT.x1, POT.top), seg(XR, 470, POT.x2, POT.top));
   out.push(seg(POT.x1, POT.top, POT.x1, POT.bot), seg(POT.x2, POT.top, POT.x2, POT.bot),
@@ -169,37 +171,187 @@ function buildWalls(lv) {
   return out;
 }
 
-function spawn(c) {
+function spawn(c, arr) {
   const cols = c.n <= 4 ? 2 : c.n <= 9 ? 3 : 4, dx = 19;
   for (let i = 0; i < c.n; i++) {
     const row = Math.floor(i / cols), col = i % cols;
-    balls.push({ t: c.t, x: c.x + (col - (cols - 1) / 2) * dx + (row % 2 ? 2 : -2),
-                 y: c.y - row * 19, vx: 0, vy: 0, dead: false });
+    arr.push({ t: c.t, x: c.x + (col - (cols - 1) / 2) * dx + (row % 2 ? 2 : -2),
+               y: c.y - row * 19, vx: 0, vy: 0, dead: false });
   }
 }
 
+function pinObj(p) {
+  const [x1, y1, x2, y2] = p;
+  let hx, hy;
+  if (Math.abs(x2 - x1) < Math.abs(y2 - y1)) { hx = 0; hy = -1; }
+  else {
+    const toRight = Math.min(360 - x1, 360 - x2) < Math.min(x1, x2);
+    const len = Math.hypot(x2 - x1, y2 - y1);
+    hx = (x2 - x1) / len * (toRight ? 1 : -1);
+    hy = (y2 - y1) / len * (toRight ? 1 : -1);
+    if ((toRight && x2 < x1) || (!toRight && x2 > x1)) { hx = -hx; hy = -hy; }
+  }
+  return { x1, y1, x2, y2, r: 3.5, hx, hy, pulled: false, anim: 0 };
+}
+
+// 게임 런타임과 헤드리스 시뮬레이션이 같은 물리를 쓴다 (기획 P7: 단일 소스)
+function makeWorld(lv, sk = null) {
+  const w = { segs: buildWalls(lv, sk), pins: lv.pins.map(pinObj), balls: [],
+              need: lv.need, total: totalGold(lv), collected: 0, result: null };
+  lv.balls.forEach((c) => spawn(c, w.balls));
+  return w;
+}
+
+
+/* ── 자동 레벨 제너레이터 (스테이지 11+) ─────────────────
+   기획 결정 사항:
+   P1/P7 물리 실증: 모듈 문법으로 후보를 만들고, 게임과 동일한 stepWorld로
+     헤드리스 시뮬레이션해 "아래→위 순서(배수구 먼저)" 솔루션이 실제로
+     통하는 판만 채택한다.
+   P3 타이밍 강건성: 솔루션은 "공이 정착한 뒤 다음 핀"으로 정의 — 정착
+     후에는 언제 뽑아도 결과가 같아 사람이 재현 가능하다.
+   P4 간발 성공 차단: need는 시뮬 수집량 - 2로 역산 — 수집 부족 실패가
+     구조적으로 불가능.
+   P5 모듈 간섭(위층 보물이 아래 배수구로 누출)은 시뮬이 최종 심판.
+   P6 함정은 격리 칸 + 깔때기 직결 기하만 사용(뽑으면 반드시 용암 입수).
+   P9 1~10 손제작 시그니처 유지, 11+부터 생성.
+   P10 시드 결정론: mulberry32만 사용. */
+function gen(stage, salt = 0) {
+  const mWant = 3 + (stage >= 18 ? 1 : 0) + (stage >= 40 ? 1 : 0);
+  for (let m = mWant; m >= 2; m--) {                 // 우아한 강등
+    const dY = Math.min(120, 340 / m + 8);
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const rnd = mulberry32(stage * 104729 + attempt * 6151 + salt * 28657 + 5);
+      const lv = { need: 0, gaps: {}, walls: [], pins: [], balls: [] };
+      const solution = [];
+      let vents = 0, traps = 0, gold = 0;
+      let prevSide = rnd() < 0.5 ? "L" : "R";
+      const rows = [];
+      const pA = Math.max(0.22, 0.5 - (stage - 11) * 0.01);   // 갈수록 배수·함정 비중↑
+      const pB = 0.36 + Math.min(0.22, (stage - 11) * 0.006);
+      for (let i = 0; i < m; i++) {
+        const roll = rnd();
+        let t2 = roll < pA ? "A" : roll < pA + pB ? "B" : "C";
+        if (t2 === "C" && i !== 0) t2 = "B";   // 함정은 깔때기 직결인 맨 아래만 (P6)
+        rows.push(t2);
+      }
+      if (!rows.some((t2) => t2 !== "B")) rows[0] = "A";   // 보물 모듈 최소 1개
+      for (let i = 0; i < m; i++) {                  // i=0 = 맨 아래 모듈
+        const y = 430 - i * dY;
+        if (rows[i] === "A") {
+          const pi = lv.pins.push([74, y, 286, y]) - 1;
+          const n = 6 + ((rnd() * 4) | 0);
+          lv.balls.push({ t: "g", x: 150 + rnd() * 60, y: y - 13, n });
+          gold += n; solution.push(pi);
+        } else if (rows[i] === "B") {
+          const side = prevSide === "L" ? "R" : "L";
+          prevSide = side; vents++;
+          const shelf = side === "L" ? [72, y, 288, y - 14] : [72, y - 14, 288, y];
+          const pi = lv.pins.push(shelf) - 1;
+          const wx = side === "L" ? XL : XR;
+          const vi = lv.pins.push([wx, y - 40, wx, y + 4]) - 1;
+          (lv.gaps[side] = lv.gaps[side] ?? []).push([y - 40, y + 4]);
+          lv.balls.push({ t: "l", x: side === "L" ? 112 : 248, y: y - 16,
+                          n: 4 + ((rnd() * 3) | 0) });
+          solution.push(vi, pi);                     // 배수구 먼저, 그다음 선반
+        } else {                                     // C: 격리 함정 + 보물 선반
+          lv.walls.push([230, y - dY + 16, 230, y]);
+          lv.pins.push([232, y, 288, y]);            // 함정 핀 — 솔루션 제외
+          lv.balls.push({ t: "l", x: 260, y: y - 13, n: 3 + ((rnd() * 2) | 0) });
+          const pi = lv.pins.push([74, y, 228, y]) - 1;
+          const n = 5 + ((rnd() * 3) | 0);
+          lv.balls.push({ t: "g", x: 140 + rnd() * 30, y: y - 13, n });
+          gold += n; traps++; solution.push(pi);
+        }
+      }
+      for (const k2 of ["L", "R"]) lv.gaps[k2]?.sort((a, b) => a[0] - b[0]);
+      const sim = simulate(lv, solution);
+      if (!sim.ok) continue;
+      const ratio = Math.min(0.85, 0.58 + (stage - 11) * 0.004);
+      const need = Math.min(Math.ceil(gold * ratio), sim.collected - 2);
+      if (need < 4) continue;
+      lv.need = need;
+      const d = 100 * clamp01((m - 2) / 3 * 0.3 + vents / 4 * 0.24 +
+        traps * 0.12 + (need / gold - 0.45) / 0.4 * 0.34);
+      return { lv, meta: { m, vents, traps, gold, collected: sim.collected,
+                           solution, d } };
+    }
+  }
+  // 이론상 도달 희박 — 손제작 최종판 폴백
+  return { lv: { ...LEVELS[LEVELS.length - 1] },
+           meta: { m: 0, vents: 0, traps: 1, gold: 10, collected: 10,
+                   solution: null, d: 70 } };
+}
+
+// 헤드리스 시뮬: 정착 대기 → 핀 뽑기 반복 → 최종 정산 (P1·P3)
+function simulate(lv, script) {
+  const w = makeWorld(lv);
+  w.need = Infinity;
+  const settle = () => {
+    let calm = 0;
+    for (let s2 = 0; s2 < 1100; s2++) {
+      stepWorld(w);
+      if (w.result === "lava") return false;
+      let vmax = 0;
+      for (const b of w.balls) {
+        if (!b.dead) vmax = Math.max(vmax, Math.abs(b.vx) + Math.abs(b.vy));
+      }
+      calm = vmax < 7 ? calm + 1 : 0;
+      if (calm >= 30) return true;
+    }
+    return true;
+  };
+  if (!settle()) return { ok: false };
+  for (const idx of script) {
+    w.pins[idx].pulled = true;
+    if (!settle()) return { ok: false };
+  }
+  for (let s2 = 0; s2 < 1500 && w.result !== "lava"; s2++) stepWorld(w);
+  return w.result === "lava" ? { ok: false } : { ok: true, collected: w.collected };
+}
+
+// 레벨 자동 재배치 (스테이지별 캐시 — 시뮬 비용 절약, P2)
+const genCache = new Map();
+function genTuned(stage) {
+  if (genCache.has(stage)) return genCache.get(stage);
+  const T = targetD(stage);
+  let bestR = null, bestGap = Infinity;
+  for (let v = 0; v < 4; v++) {
+    const r2 = gen(stage, v);
+    const gap = Math.abs(r2.meta.d - T);
+    if (gap < bestGap) { bestGap = gap; bestR = r2; }
+    if (bestGap <= 6) break;
+  }
+  genCache.set(stage, bestR);
+  return bestR;
+}
+
+let G = null;
 function loadStage() {
   const lv = levelFor(stage);
-  skulls = []; segs = buildWalls(lv); parts = [];
-  pins = lv.pins.map(p => {
-    const [x1, y1, x2, y2] = p;
-    // 뽑히는 방향: 세로 핀은 위로, 가로 핀은 가까운 바깥쪽으로
-    let hx, hy;
-    if (Math.abs(x2 - x1) < Math.abs(y2 - y1)) { hx = 0; hy = -1; }
-    else {
-      const toRight = Math.min(360 - x1, 360 - x2) < Math.min(x1, x2);
-      const len = Math.hypot(x2 - x1, y2 - y1);
-      hx = (x2 - x1) / len * (toRight ? 1 : -1);
-      hy = (y2 - y1) / len * (toRight ? 1 : -1);
-      if ((toRight && x2 < x1) || (!toRight && x2 > x1)) { hx = -hx; hy = -hy; }
-    }
-    return { x1, y1, x2, y2, r: 3.5, hx, hy, pulled: false, anim: 0 };
-  });
-  balls = []; lv.balls.forEach(spawn);
-  need = lv.need; collected = 0; tip = lv.tip ?? ""; heroFace = "🤠";
-  dScore = diffFor(stage);
+  skulls = []; parts = [];
+  G = makeWorld(lv, skulls);
+  segs = G.segs; pins = G.pins; balls = G.balls;
+  need = lv.need; tip = lv.tip ?? ""; heroFace = "🤠";
+  dScore = stage <= LEVELS.length ? diffHand(stage) : genTuned(stage).meta.d;
+  window.__pp = {
+    solution: stage > LEVELS.length ? genTuned(stage).meta.solution : null,
+    nPins: G.pins.length,
+    pinPos: (i) => [(G.pins[i].x1 + G.pins[i].x2) / 2, (G.pins[i].y1 + G.pins[i].y2) / 2],
+    state: () => ({ collected: G.collected, need: G.need,
+      maxSpeed: Math.max(0, ...G.balls.filter((b) => !b.dead)
+        .map((b) => Math.abs(b.vx) + Math.abs(b.vy))) }),
+  };
   hud();
 }
+window.__ppJump = (s2) => { stage = s2;
+  document.getElementById("overlay").classList.add("hide");
+  phase = "play"; loadStage(); };
+window.__ppVerify = (s2) => {
+  const r2 = genTuned(s2);
+  return { need: r2.lv.need, gold: r2.meta.gold, collected: r2.meta.collected,
+           m: r2.meta.m, vents: r2.meta.vents, traps: r2.meta.traps, d: r2.meta.d };
+};
 
 /* ── 물리 ─────────────────────────────────────────────── */
 function hitSeg(b, s) {
@@ -240,27 +392,28 @@ function win() {
   if (stage > best) { best = stage; localStorage.setItem("pullpin.best", best); }
   window.blWeeklyReport?.(stage);
   show("🏆", `스테이지 ${stage} 클리어!`,
-       collected >= totalGold(levelFor(stage)) ? "보물을 전부 담았어요. 완벽!" :
-       `보물 ${collected}개 획득. 다음 스테이지로!`, "다음 스테이지");
+       G.collected >= G.total ? "보물을 전부 담았어요. 완벽!" :
+       `보물 ${G.collected}개 획득. 다음 스테이지로!`, "다음 스테이지");
 }
 
-function step() {
-  for (const b of balls) {
+// 물리 한 스텝 — 게임 런타임과 헤드리스 시뮬이 이 함수 하나를 공유한다 (P7)
+function stepWorld(w, fx = null) {
+  for (const b of w.balls) {
     if (b.dead) continue;
     b.vy += GRAV * STEP;
     b.x += b.vx * STEP; b.y += b.vy * STEP;
   }
   // 공-공 (보물+용암 접촉 = 보물 소실)
-  for (let i = 0; i < balls.length; i++) {
-    const a = balls[i]; if (a.dead) continue;
-    for (let j = i + 1; j < balls.length; j++) {
-      const c = balls[j]; if (c.dead) continue;
+  for (let i = 0; i < w.balls.length; i++) {
+    const a = w.balls[i]; if (a.dead) continue;
+    for (let j = i + 1; j < w.balls.length; j++) {
+      const c = w.balls[j]; if (c.dead) continue;
       let nx = c.x - a.x, ny = c.y - a.y;
       const d = Math.hypot(nx, ny);
       if (d >= R * 2 || d < 1e-6) continue;
       if (a.t !== c.t) {                       // 용암이 보물을 태움
         const g = a.t === "g" ? a : c;
-        g.dead = true; poof(g.x, g.y, "#888");
+        g.dead = true; fx?.poof?.(g.x, g.y, "#888");
         continue;
       }
       nx /= d; ny /= d;
@@ -273,28 +426,40 @@ function step() {
       }
     }
   }
-  for (const b of balls) {
+  for (const b of w.balls) {
     if (b.dead) continue;
-    for (const s of segs) hitSeg(b, s);
-    for (const p of pins) if (!p.pulled) hitSeg(b, p);
+    for (const s2 of w.segs) hitSeg(b, s2);
+    for (const p of w.pins) if (!p.pulled) hitSeg(b, p);
   }
   // 냄비 판정 + 화면 밖 제거
-  for (const b of balls) {
+  for (const b of w.balls) {
     if (b.dead) continue;
     if (b.x > POT.x1 + 2 && b.x < POT.x2 - 2 && b.y > POT.top + 15) {
       b.dead = true;
       if (b.t === "g") {
-        collected++; poof(b.x, b.y, "#ffd75e", 6); hud();
-        if (collected >= need) win();
-      } else fail("용암이 냄비에 들어갔어요!");
+        w.collected++; fx?.poof?.(b.x, b.y, "#ffd75e", 6);
+        if (w.need !== Infinity && w.collected >= w.need && !w.result) w.result = "win";
+      } else if (!w.result) w.result = "lava";
       continue;
     }
     if (b.x < -20 || b.x > 380 || b.y > 660) { b.dead = true; }
   }
-  if (phase === "play") {
-    const goldLeft = balls.filter(b => !b.dead && b.t === "g").length;
-    if (collected + goldLeft < need) fail("보물을 너무 많이 잃었어요…");
+  if (w.need !== Infinity && !w.result) {
+    const goldLeft = w.balls.filter((b) => !b.dead && b.t === "g").length;
+    if (w.collected + goldLeft < w.need) w.result = "lost";
   }
+}
+
+function step() {
+  if (!G) return;
+  const before = G.collected;
+  stepWorld(G, { poof });
+  if (G.collected !== before) hud();
+  if (!G.result) return;
+  const r2 = G.result; G.result = null;
+  if (r2 === "win") win();
+  else if (r2 === "lava") fail("용암이 냄비에 들어갔어요!");
+  else if (r2 === "lost") fail("보물을 너무 많이 잃었어요…");
 }
 
 /* ── 그리기 ───────────────────────────────────────────── */
@@ -327,8 +492,8 @@ function draw() {
   for (const s of segs) capsule(s.x1, s.y1, s.x2, s.y2, s.r, wood);
 
   // 냄비 속 보물 더미
-  if (collected > 0) {
-    const h = Math.min(40, collected * 4);
+  if (G && G.collected > 0) {
+    const h = Math.min(40, G.collected * 4);
     ctx.fillStyle = "#e8b23a";
     ctx.beginPath();
     ctx.ellipse((POT.x1 + POT.x2) / 2, POT.bot - 6 - h / 2, 26, h / 2 + 4, 0, 0, 7);
@@ -411,7 +576,7 @@ requestAnimationFrame(loop);
 const $ = (id) => document.getElementById(id);
 function hud() {
   $("hStage").textContent = `스테이지 ${stage} ${starsOf(dScore)}`;
-  $("hGold").textContent = `💰 ${collected}/${need}`;
+  $("hGold").textContent = `💰 ${G ? G.collected : 0}/${need}`;
 }
 function show(emoji, title, msg, btnText) {
   $("oEmoji").textContent = emoji; $("oTitle").textContent = title;
