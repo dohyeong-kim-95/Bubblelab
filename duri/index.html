@@ -488,7 +488,7 @@
     <button id="menu-btn" class="icon-btn" title="설정" aria-haspopup="true" aria-expanded="false">⚙️</button>
     <div id="menu" class="menu" role="menu" hidden>
       <button id="push-toggle" role="menuitem" hidden aria-checked="false"
-              title="새 메시지가 오면 이 기기로 알림을 받습니다(기본 꺼짐)">🔔 푸시 알림: 꺼짐</button>
+              title="새 메시지가 오면 이 기기로 알림을 받습니다(기본 켜짐)">🔔 푸시 알림: 꺼짐</button>
       <button id="relogin" role="menuitem" title="암호 문구를 잘못 입력했을 때 다시 입력">🔑 문구 다시 입력</button>
       <button id="clear-cache" role="menuitem" title="이 기기에 저장된 대화 기록만 지우기">🧹 기록 지우기</button>
       <button id="reset-room" class="danger" role="menuitem" title="서버에 남은 대화·사진을 양쪽 모두에서 지우고 새로 시작">🗑️ 방 초기화</button>
@@ -1684,12 +1684,15 @@ const swReady = (async () => {
     return false;
   }
 
+  const PREF_KEY = "duri:pushPref"; // "on"|"off" — 미설정이면 기본 켜짐. 명시적 off 는 존중.
+
   btn.addEventListener("click", async () => {
     if (busy || !vapidPublicKey || !registration) return;
     busy = true;
     const turningOn = btn.getAttribute("aria-checked") !== "true";
     try {
       const on = turningOn ? await enable() : await disable();
+      localStorage.setItem(PREF_KEY, on ? "on" : "off"); // 사용자의 명시적 선택 기억
       setState(on);
       showToast(on ? "🔔 푸시 알림을 켰어요" : "푸시 알림을 껐어요");
     } catch {
@@ -1704,11 +1707,29 @@ const swReady = (async () => {
     try {
       const res = await fetch("/_duri/push", { method: "GET" });
       vapidPublicKey = res.ok ? (await res.json()).vapidPublicKey : null;
-      if (!vapidPublicKey) return; // 서버에 푸시 미설정 시 버튼 숨김 유지(기본 꺼짐과 별개로 기능 자체가 없음)
+      if (!vapidPublicKey) return; // 서버에 푸시 미설정 시 버튼 숨김 유지(기능 자체가 없음)
       registration = await swReady;
       if (!registration) return; // 이 브라우저에선 서비스워커 자체가 안 됨
-      setState(Boolean(await registration.pushManager.getSubscription()));
+      const sub = await registration.pushManager.getSubscription();
+      setState(Boolean(sub));
       btn.hidden = false;
+
+      // 기본값: 켜짐. 이미 구독 중이거나 사용자가 직접 껐으면(pref==="off") 그대로 둔다.
+      if (sub || localStorage.getItem(PREF_KEY) === "off") return;
+      if (Notification.permission === "granted") {
+        // 권한이 이미 있으면 조용히 자동 구독.
+        try { setState(await enable()); } catch { /* 실패 시 토글로 수동 */ }
+      } else if (Notification.permission === "default") {
+        // 아직 안 물어봤으면 다음 사용자 탭에서 한 번만 요청(제스처 안에서 — iOS 대응).
+        window.addEventListener("pointerdown", async function ask() {
+          if (busy) return;
+          busy = true;
+          try {
+            const on = await enable();
+            if (on) { localStorage.setItem(PREF_KEY, "on"); setState(true); }
+          } catch { /* 무시 */ } finally { busy = false; }
+        }, { once: true });
+      }
     } catch { /* 조용히 미노출 */ }
   })();
 })();
