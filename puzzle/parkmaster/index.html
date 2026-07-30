@@ -122,16 +122,26 @@ function segSegDist(a, b, c, d) {
   return m;
 }
 const carsFor = (stage) =>
-  1 + (stage >= 2 ? 1 : 0) + (stage >= 5 ? 1 : 0) + (stage >= 9 ? 1 : 0) + (stage >= 14 ? 1 : 0);
+  1 + (stage >= 2 ? 1 : 0) + (stage >= 5 ? 1 : 0) + (stage >= 9 ? 1 : 0) +
+  (stage >= 14 ? 1 : 0) + (stage >= 40 ? 1 : 0);
 
-function gen(stage, salt = 0) {
-  const nCars = carsFor(stage);
-  // 5대는 화면이 비좁아 존을 줄이고 간격 요구를 완화한다 (전략 성립엔 충분)
-  const half = nCars >= 5 ? 36 : 46;
-  const startGap = nCars >= 5 ? 82 : 90;
-  const spotGap = nCars >= 5 ? 72 : 80;
-  for (const needCross of [nCars < 2 ? 0 : (stage >= 5 ? nCars - 1 : 1), 0]) {
-    for (let attempt = 0; attempt < 1500; attempt++) {
+function gen(stage, salt = 0, forceCars = 0) {
+  const nCars = forceCars || carsFor(stage);
+  // 대수가 늘수록 화면이 비좁아 존·간격 요구를 단계적으로 완화한다
+  // (충돌 안전에 필요한 최소 여유(차 지름 30px)는 항상 지킨다)
+  const half = nCars >= 6 ? 28 : nCars >= 5 ? 36 : 46;
+  const startGap = nCars >= 6 ? 66 : nCars >= 5 ? 82 : 90;
+  const spotGap = nCars >= 6 ? 58 : nCars >= 5 ? 72 : 80;
+  const spotStart = nCars >= 6 ? 52 : 60;
+  const driveMin = nCars >= 6 ? 185 : 220;
+  const boxGap = nCars >= 6 ? 32 : 34;
+  const lineSpot = nCars >= 6 ? 34 : 36;
+  const lineBox = nCars >= 6 ? 31 : 30;
+  const maxPairs = nCars * (nCars - 1) / 2;
+  const baseCross = nCars < 2 ? 0 : stage < 5 ? 1
+    : Math.min(maxPairs - 1, nCars - 1 + Math.max(0, Math.floor((stage - 14) / 12)));
+  for (const needCross of [baseCross, Math.floor(baseCross / 2), 0]) {
+    for (let attempt = 0; attempt < 2200; attempt++) {
       const rnd = mulberry32(stage * 70241 + attempt * 449 + needCross * 131 + salt * 15877 + 7);
       const P = () => [50 + rnd() * 260, 85 + rnd() * 510];
       const starts = [], spots = [];
@@ -141,14 +151,14 @@ function gen(stage, salt = 0) {
         for (let t = 0; t < 60 && !s; t++) {
           const c = P();
           if (starts.every((o) => dist2(c, o) >= startGap) &&
-              spots.every((o) => dist2(c, o) >= 60)) s = c;
+              spots.every((o) => dist2(c, o) >= spotStart)) s = c;
         }
         if (!s) { ok = false; break; }
         starts.push(s);
         for (let t = 0; t < 60 && !g; t++) {
           const c = P();
-          if (dist2(c, s) >= 220 && spots.every((o) => dist2(c, o) >= spotGap) &&
-              starts.every((o) => dist2(c, o) >= 60)) g = c;
+          if (dist2(c, s) >= driveMin && spots.every((o) => dist2(c, o) >= spotGap) &&
+              starts.every((o) => dist2(c, o) >= spotStart)) g = c;
         }
         if (!g) { ok = false; break; }
         spots.push(g);
@@ -159,9 +169,9 @@ function gen(stage, salt = 0) {
       for (let k = 1; k < nCars && ok; k++) {
         const b = { x1: Math.max(16, starts[k][0] - half), y1: Math.max(70, starts[k][1] - half),
                     x2: Math.min(344, starts[k][0] + half), y2: Math.min(624, starts[k][1] + half) };
-        if (boxes.some((o) => o && rectGap(b, o) < 34)) ok = false;
-        if (rectPointDist(b, starts[0]) < 34) ok = false;
-        for (const g of spots) if (rectPointDist(b, g) < 34) ok = false;
+        if (boxes.some((o) => o && rectGap(b, o) < boxGap)) ok = false;
+        if (rectPointDist(b, starts[0]) < boxGap) ok = false;
+        for (const g of spots) if (rectPointDist(b, g) < boxGap) ok = false;
         boxes.push(b);
       }
       if (!ok) continue;
@@ -170,10 +180,10 @@ function gen(stage, salt = 0) {
         const from = k === 0 ? starts[0]
           : [(boxes[k].x1 + boxes[k].x2) / 2, (boxes[k].y1 + boxes[k].y2) / 2];
         for (let j = 0; j < k && ok; j++) {
-          if (segPointDist(from, spots[k], spots[j]) < 36) ok = false;
+          if (segPointDist(from, spots[k], spots[j]) < lineSpot) ok = false;
         }
         for (let j = k + 1; j < nCars && ok; j++) {
-          if (segRectDist(from, spots[k], boxes[j]) < 30) ok = false;
+          if (segRectDist(from, spots[k], boxes[j]) < lineBox) ok = false;
         }
       }
       if (!ok) continue;
@@ -188,7 +198,8 @@ function gen(stage, salt = 0) {
       return { defs: starts.map((s, i) => [s[0], s[1], spots[i][0], spots[i][1]]), boxes, cross };
     }
   }
-  // 이론상 도달 불가 폴백 (제약 전부 실패 시 1대짜리)
+  // 그래도 실패하면 한 대 줄여 재시도 (1대 더미 대신 우아한 강등)
+  if (nCars > 1) return gen(stage, salt, nCars - 1);
   return { defs: [[80, 520, 280, 120]], boxes: [null], cross: 0 };
 }
 const diffOf = (g) => 100 * clamp01((g.defs.length - 1) / 4 * 0.7 +
@@ -382,6 +393,7 @@ $("btn").addEventListener("click", () => {
 $("retry").addEventListener("click", () => {
   if (phase === "draw" || phase === "run") loadStage();
 });
+window.__pmJump = (s) => { stage = s; $("overlay").classList.add("hide"); loadStage(); };
 $("go").addEventListener("click", () => {
   if (phase !== "draw" || !cars.every((c) => c.path)) return;
   phase = "run"; timer = 0; $("go").classList.add("hide");
