@@ -302,7 +302,9 @@ window.__pl = {                                  // 테스트/디버그용
 
 window.blShareText = () =>
   `자물쇠 러시 ${best.toLocaleString("ko-KR")}점! 콤보 끊기 전에 도전해보세요 🔓`;
-window.blWeekly = { game: "picklock", dir: "max",
+// 키를 "lockrush"로 새로 시작 — 구 puzzle picklock(스테이지 단위) 기록과
+// 단위가 달라 올타임 보드에서 섞이면 안 된다
+window.blWeekly = { game: "lockrush", dir: "max",
                     fmt: (v) => `${(+v).toLocaleString("ko-KR")}점` };
 </script>
 <script defer src="/_shared/records.js"></script>

@@ -46,14 +46,15 @@
 <script>
 const EMOJI = {
   "10sec": "⏱", "2048": "🔢", beer: "🍺", "bubble-pop": "🫧", circle: "⭕", clicker: "👆",
-  flags: "🌍", fruitmerge: "🍉", logroll: "🪵", reactiontime: "⚡", touch25: "👆", trader: "📈", "yacht-bot": "🤖",
+  flags: "🌍", fruitmerge: "🍉", lockrush: "🔓", logroll: "🪵", reactiontime: "⚡",
+  touch25: "👆", trader: "📈", "yacht-bot": "🤖",
 };
 const board = document.getElementById("board");
 const msg = document.getElementById("msg");
 
 (async () => {
   try {
-    const res = await fetch("/_records?alltime=1", { cache: "no-store" });
+    const res = await fetch("/_records?alltime=1&scope=slop", { cache: "no-store" });
     if (!res.ok) throw new Error();
     const { records } = await res.json();
     // 기록 있는 게임 먼저(달성일 최신순), 그 뒤에 아직 빈 게임들

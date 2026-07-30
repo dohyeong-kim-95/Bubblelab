@@ -253,6 +253,8 @@
   <section class="top" aria-label="주간 신기록 보드">
     <h2>👑 주간 신기록 보드 <span id="recweek" style="opacity:.5;font-weight:normal;font-size:.8rem"></span></h2>
     <ol id="records"><li class="empty">불러오는 중…</li></ol>
+    <h2>🏆 올타임 보드</h2>
+    <ol id="alltimeList"><li class="empty">불러오는 중…</li></ol>
   </section>
   <section class="top" aria-label="공지">
     <h2>📢 공지 <span style="opacity:.5;font-weight:normal;font-size:.8rem">카테고리 홈에서만, "다시 보지 않기" 전까지 계속 보여요</span></h2>
@@ -633,6 +635,51 @@ async function loadRecords() {
         if (!confirm(`${game}의 이번 주 기록(${r.nick})을 리셋할까요?`)) return;
         await fetch(`${base}/api/records?game=${encodeURIComponent(game)}`, { method: 'DELETE' });
         loadRecords();
+        loadAlltime();   // 올타임 표시는 이번 주 기록과 병합이라 함께 갱신
+      });
+      li.append(text, meta, del);
+      list.append(li);
+    }
+  } catch (err) {
+    empty(`불러오지 못했어요: ${err.message}`);
+  }
+}
+
+// 올타임 보드 — 주간과 달리 리셋이 없어서, 게임 개편으로 단위가 바뀌면
+// 여기서 낡은 항목을 지워야 한다 (예: picklock 스테이지제 → lockrush 점수제)
+async function loadAlltime() {
+  const list = document.getElementById('alltimeList');
+  const empty = (text) => {
+    const li = document.createElement('li');
+    li.className = 'empty';
+    li.textContent = text;
+    list.replaceChildren(li);
+  };
+  try {
+    const res = await fetch(`${base}/api/records?alltime=1`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const { records } = await res.json();
+    const games = Object.keys(records).sort();
+    if (!games.length) return empty('올타임 기록이 아직 없어요');
+    list.replaceChildren();
+    for (const game of games) {
+      const r = records[game];
+      const li = document.createElement('li');
+      const text = document.createElement('span');
+      text.className = 'text';
+      text.textContent = `${game} — 🏆 ${r.nick} · ${r.text ?? r.score}`;
+      const meta = document.createElement('span');
+      meta.className = 'meta';
+      meta.textContent = new Date(r.at).toLocaleDateString('ko-KR');
+      const del = document.createElement('button');
+      del.className = 'del';
+      del.textContent = '✕';
+      del.title = `${game} 올타임 기록 삭제`;
+      del.addEventListener('click', async () => {
+        if (!confirm(`${game}의 올타임 기록(${r.nick})을 삭제할까요? 되돌릴 수 없어요.`)) return;
+        await fetch(`${base}/api/records?game=${encodeURIComponent(game)}&alltime=1`,
+                    { method: 'DELETE' });
+        loadAlltime();
       });
       li.append(text, meta, del);
       list.append(li);
@@ -890,6 +937,7 @@ document.getElementById('podcast-create').addEventListener('click', async () => 
 loadStats();
 loadSuggestions();
 loadRecords();
+loadAlltime();
 loadNotice();
 loadChat();
 loadIntake();

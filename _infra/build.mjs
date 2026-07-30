@@ -385,7 +385,7 @@ addEventListener("keydown", (event) => {
 (async () => {
   const podium = document.getElementById("hof-podium");
   if (!podium) return;
-  const CACHE_KEY = "bl-hof-podium-v2";   // v1은 등수 단 없이 사람 3명만 담았다
+  const CACHE_KEY = "bl-hof-podium-v3";   // v2까지는 puzzle 게임 올타임도 섞여 집계됐다
   const MEDAL = ["🥇", "🥈", "🥉"];
   const MAX_EMOJI = 6;                       // 시상대 단에 넣을 이모지 최대 개수
 
@@ -455,7 +455,7 @@ addEventListener("keydown", (event) => {
 
   // 2) 최신 데이터를 받아 달라졌을 때만 다시 그리고, 항상 재캐시한다.
   try {
-    const res = await fetch("/_records?alltime=1", { cache: "no-store" });
+    const res = await fetch("/_records?alltime=1&scope=slop", { cache: "no-store" });
     if (!res.ok) throw new Error();
     const { records } = await res.json();
     const byNick = new Map();                // 닉네임 → { count, at, games:[] }

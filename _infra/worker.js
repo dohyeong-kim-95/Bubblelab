@@ -589,7 +589,9 @@ async function handleAdmin(request, env, url, base = "") {
     const id = env.RECORDS.idFromName("global");
     const stub = env.RECORDS.get(id);
     if (request.method === "GET") {
-      return stub.fetch("https://records.internal/_allrecords");
+      return stub.fetch(url.searchParams.has("alltime")
+        ? "https://records.internal/_records?alltime=1"
+        : "https://records.internal/_allrecords");
     }
     if (request.method === "DELETE") {
       const game = url.searchParams.get("game") ?? "";

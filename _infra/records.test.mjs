@@ -200,6 +200,25 @@ test("all-time hall of fame: updates on accept, survives weekly pruning", async 
   assert.equal((await alltime()).touch25.nick, "신기록");
   await records.fetch(new Request("https://records.internal/?game=touch25&alltime=1", { method: "DELETE" }));
   assert.equal("touch25" in (await alltime()), false);
+
+  // scope 분리: slop 보드에는 puzzle 게임·은퇴 키가 안 보이고, puzzle 보드에는
+  // puzzle 게임만 보인다 (기본 무스코프는 admin용 — 전부 노출)
+  await post(records, { game: "watersort", nick: "퍼즐러", score: 42 });
+  await storage.put("alltime:picklock", { nick: "유령", score: 999, at: 1 }); // 은퇴 키 잔재
+  const scoped = async (scope) => {
+    const res = await records.fetch(
+      new Request(`https://records.internal/?alltime=1&scope=${scope}`));
+    return (await res.json()).records;
+  };
+  const slop = await scoped("slop");
+  assert.equal("watersort" in slop, false);
+  assert.equal("picklock" in slop, false);
+  assert.equal(slop.circle.nick, "동글이");
+  const puzzle = await scoped("puzzle");
+  assert.equal(puzzle.watersort.nick, "퍼즐러");
+  assert.equal("circle" in puzzle, false);
+  assert.equal("picklock" in puzzle, false);
+  assert.equal((await alltime()).picklock.nick, "유령");  // admin(무스코프)엔 보인다
 });
 
 test("notice: set, piggybacks on record reads, delete, validation", async () => {

@@ -33,7 +33,7 @@ export const GAMES = {
   "dart-adv":   { dir: "max", min: 0, max: 1000 },      // 파워 게이지 다트 수
   flags:        { dir: "max", min: 0, max: 1000 },      // 연속으로 맞춘 국기 수
   logroll:      { dir: "max", min: 0, max: 100000 },    // 버틴 시간(초)
-  picklock:     { dir: "max", min: 1, max: 1000000 },   // 자물쇠 러시 점수 (구 puzzle 스테이지제에서 승격)
+  lockrush:     { dir: "max", min: 1, max: 1000000 },   // 자물쇠 러시 점수 (구 picklock 스테이지제에서 승격 — 단위가 달라 새 키)
   pullpin:      { dir: "max", min: 1, max: 1000 },      // 핀 뽑기 클리어 스테이지
   watersort:    { dir: "max", min: 1, max: 10000 },     // 물 소팅 클리어 스테이지
   gaterunner:   { dir: "max", min: 1, max: 10000 },     // 게이트 러너 클리어 스테이지
@@ -56,6 +56,8 @@ const HISTORICAL_GAMES = new Set(["bubble-pop-idle"]);
 const PUZZLE_GAMES = ["pullpin", "watersort", "gaterunner", "savedog", "parkmaster",
                       "screwout", "icebreak", "trafficjam", "fillfridge"];
 const PUZZLE_SET = new Set(PUZZLE_GAMES);
+// 개편으로 은퇴한 키 — 어느 보드에도 안 보이고(스코프 필터), 삭제만 가능
+const RETIRED_SET = new Set(["picklock"]);   // 스테이지제 → lockrush 점수제로 승격
 
 const beats = (dir, score, record) =>
   !record || (dir === "max" ? score > record.score : score < record.score);
@@ -262,13 +264,21 @@ export class RecordsDO {
       }
       // 올타임 명예의 전당: 저장된 올타임 + 이번 주 기록의 병합.
       // (올타임 저장 기능 도입 전에 세워진 이번 주 기록도 보이게 한다)
+      // scope=slop|puzzle 로 서브도메인별 보드를 분리한다 (기본은 전부 — admin용).
       if (url.searchParams.has("alltime")) {
+        const scope = url.searchParams.get("scope");
+        const inScope = (g) =>
+          scope === "slop" ? !PUZZLE_SET.has(g) && !RETIRED_SET.has(g)
+          : scope === "puzzle" ? PUZZLE_SET.has(g)
+          : true;
         const records = {};
         for (const [k, v] of await this.state.storage.list({ prefix: "alltime:" })) {
-          records[k.slice("alltime:".length)] = v;
+          const game = k.slice("alltime:".length);
+          if (inScope(game)) records[game] = v;
         }
         for (const [k, v] of await this.state.storage.list({ prefix: `rec:${week}:` })) {
           const game = k.split(":")[2];
+          if (!inScope(game)) continue;
           if (beats(GAMES[game]?.dir ?? v.dir, v.score, records[game])) records[game] = v;
         }
         for (const game of Object.keys(records)) records[game] = presentRecord(game, records[game]);
