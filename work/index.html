@@ -17,7 +17,7 @@
     --bubble-ink: light-dark(#fff, #0d131c);
   }
   * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
+  html { scroll-behavior: smooth; scroll-snap-type: y mandatory; }
   body { margin: 0; min-height: 100dvh; background: var(--ground); color: var(--ink);
          font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
          line-height: 1.8; word-break: keep-all; overflow-x: hidden; }
@@ -47,7 +47,8 @@
 
   /* 페이지(앵커) — 한 화면 = 한 장 */
   .page { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column;
-          justify-content: center; padding: 4.2rem 1.4rem 2.2rem; }
+          justify-content: center; padding: 4.2rem 1.4rem 2.2rem;
+          scroll-snap-align: start; scroll-snap-stop: always; }
   .page > .inner { width: 100%; max-width: 38rem; margin: 0 auto; }
 
   h2 { margin: 0 0 .9rem; font-size: .8rem; letter-spacing: .18em; color: var(--bubble);
@@ -103,7 +104,7 @@
   ol.flow li b { font-weight: 600; }
 
   footer { border-top: 1px solid var(--line); padding: 1.4rem 1.4rem 2rem; font-size: .74rem;
-           color: var(--soft); }
+           color: var(--soft); scroll-snap-align: end; }
   footer .inner { max-width: 38rem; margin: 0 auto; display: flex; gap: 1rem; flex-wrap: wrap; }
   footer a { color: inherit; }
 </style>
@@ -193,121 +194,13 @@
 </footer>
 
 <script>
+// 페이징은 네이티브 CSS Scroll Snap(scroll-snap-stop: always)이 담당한다.
+// JS로 스크롤을 흉내 내면 컴포지터와 메인 스레드가 충돌해 모바일에서 떨린다.
 (function(){
   var bar = document.getElementById('bar');
   window.addEventListener('scroll', function(){
     bar.classList.toggle('solid', window.scrollY > 24);
   }, {passive: true});
-
-  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if(reduce) return; // 모션 최소화 환경은 일반 스크롤
-
-  // 다온핏과 같은 섹션 페이징: 제스처 하나 = 페이지 하나. 콘텐츠 페이지라
-  // 앞뒤 모두 가벼운 제스처로 넘어가고, 마지막 페이지 아래(footer)는 자유 스크롤.
-  var pages = Array.prototype.slice.call(document.querySelectorAll('.page'));
-  function targets(){ return pages.map(function(p){ return Math.round(p.offsetTop); }); }
-
-  function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
-  function easeInOut(t){ return .5*(1-Math.cos(Math.PI*t)); }
-
-  var snapping=false, snapRaf=null, snapKind=null, snapTimer=null, gestureLock=0;
-  function cancelSnap(){
-    if(snapRaf) cancelAnimationFrame(snapRaf);
-    snapRaf=null; snapping=false;
-    document.documentElement.style.scrollBehavior='';
-  }
-  function snapTo(targetY, kind){
-    var fromY=window.scrollY, dist=targetY-fromY;
-    if(Math.abs(dist)<2) return;
-    snapping=true; snapKind=kind||'page';
-    document.documentElement.style.scrollBehavior='auto';
-    var dur=clamp(Math.abs(dist)/window.innerHeight*600, 450, 900);
-    var t0=null;
-    function step(ts){
-      if(!snapping) return;
-      if(t0===null) t0=ts;
-      var k=clamp((ts-t0)/dur, 0, 1);
-      window.scrollTo(0, fromY+dist*easeInOut(k));
-      if(k<1){ snapRaf=requestAnimationFrame(step); }
-      else {
-        if(snapKind==='page') gestureLock=performance.now()+230;
-        cancelSnap();
-      }
-    }
-    snapRaf=requestAnimationFrame(step);
-  }
-  function pageStep(dir){
-    var t=targets(), y=window.scrollY;
-    if(dir>0){ for(var i=0;i<t.length;i++) if(t[i]>y+2) return snapTo(t[i]); }
-    else { for(var j=t.length-1;j>=0;j--) if(t[j]<y-2) return snapTo(t[j]); }
-  }
-  function yieldToGesture(e){
-    if(!snapping) return performance.now()<gestureLock ? (e.preventDefault(), false) : true;
-    if(snapKind==='idle'){ cancelSnap(); return true; }
-    e.preventDefault(); return false;
-  }
-
-  // 제스처 밖 이동(스크롤바·키보드)은 idle 스냅이 가까운 페이지로 수습
-  function armSnap(){
-    clearTimeout(snapTimer);
-    snapTimer=setTimeout(function(){
-      var t=targets(), y=window.scrollY, last=t[t.length-1];
-      if(y>last-2) return; // 마지막 페이지 이하는 자유 구간
-      for(var i=0;i<t.length;i++) if(Math.abs(y-t[i])<16) return;
-      for(var s=t.length-2;s>=0;s--){
-        if(y>=t[s]){
-          var frac=(y-t[s])/(t[s+1]-t[s]);
-          return snapTo(frac<0.25 ? t[s] : t[s+1], 'idle');
-        }
-      }
-    }, 180);
-  }
-  window.addEventListener('scroll', function(){ if(!snapping) armSnap(); }, {passive:true});
-
-  window.addEventListener('wheel', function(e){
-    var t=targets(), y=window.scrollY, last=t[t.length-1];
-    if(y>last+2) return; // footer 자유 스크롤
-    if(!yieldToGesture(e)) return;
-    var d=e.deltaY*(e.deltaMode===1?33:e.deltaMode===2?window.innerHeight:1);
-    if(Math.abs(d)<2) return;
-    if(d>0){
-      if(y>=last-2) return; // 마지막 페이지 → footer로 풀림
-      e.preventDefault(); pageStep(1);
-    }else{
-      if(y<=2) return;
-      e.preventDefault(); pageStep(-1);
-    }
-  }, {passive:false});
-
-  var touchY=null, touchCaptured=false, touchDecided=false;
-  window.addEventListener('touchstart', function(e){
-    touchY=e.touches[0].clientY; touchCaptured=false; touchDecided=false;
-  }, {passive:true});
-  window.addEventListener('touchmove', function(e){
-    if(touchY===null) return;
-    var t=targets(), y=window.scrollY, last=t[t.length-1];
-    if(y>last+2 && !touchCaptured) return; // footer 자유 스크롤
-    if(!yieldToGesture(e)) return;
-    var dy=touchY-e.touches[0].clientY; // >0 = 다음 페이지
-    if(!touchDecided){
-      if(Math.abs(dy)<12) return;
-      touchDecided=true;
-      if(dy>0 && y>=last-2) return;
-      if(dy<0 && y<=2) return;
-      touchCaptured=true;
-      e.preventDefault();
-      pageStep(dy>0?1:-1);
-    }else if(touchCaptured){
-      e.preventDefault();
-    }
-  }, {passive:false});
-  window.addEventListener('touchend', function(){ touchY=null; }, {passive:true});
-
-  ['pointerdown','keydown'].forEach(function(ev){
-    window.addEventListener(ev, function(){
-      if(snapping){ cancelSnap(); armSnap(); }
-    }, {passive:true});
-  });
 })();
 </script>
 </body>
