@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>얼음 깨서 보석 꺼내기 — 광고에서 본 그 게임</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>💎</text></svg>">
+<style>
+  :root { color-scheme: light dark; }
+  html, body { height: 100%; }
+  body { margin: 0; overflow: hidden; user-select: none; -webkit-user-select: none;
+         touch-action: manipulation; font-family: ui-monospace, "SF Mono",
+         "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+         background: light-dark(#f6ead8, #1a1626); color: light-dark(#3a2b18, #e8ddcb); }
+  canvas { display: block; }
+  #hud { position: fixed; top: 0; left: 0; right: 0; display: flex; gap: .55rem;
+         align-items: center; padding: .5rem .7rem; font-size: .78rem; z-index: 3;
+         pointer-events: none; white-space: nowrap; }
+  #hud .sp { flex: 1; }
+  #retry { pointer-events: auto; font: inherit; border: 1.5px solid currentColor;
+           background: none; color: inherit; border-radius: 1rem; padding: .15rem .7rem;
+           cursor: pointer; opacity: .75; }
+  #retry:active { transform: scale(.95); }
+  #overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+             display: flex; flex-direction: column; align-items: center; gap: .9rem;
+             width: min(84vw, 21rem); padding: 1.5rem 1.6rem; border-radius: 1.25rem;
+             text-align: center; z-index: 5;
+             border: 1.5px solid light-dark(rgba(90,60,20,.3), rgba(230,215,190,.25));
+             background: light-dark(rgba(255,250,240,.92), rgba(26,20,38,.92));
+             backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  #overlay.hide { display: none; }
+  #overlay h1 { margin: 0; font-size: 1.15rem; }
+  #overlay p { margin: 0; font-size: .88rem; line-height: 1.55; opacity: .75;
+               white-space: pre-line; }
+  #overlay .big { font-size: 2.2rem; margin: 0; }
+  #btn { font: inherit; font-size: 1.05rem; padding: .75rem 2.2rem; border-radius: 2rem;
+         border: 2px solid currentColor; background: none; color: inherit; cursor: pointer; }
+  #btn:active { transform: scale(.96); }
+  #best { margin: 0; font-size: .8rem; opacity: .5; min-height: 1.1em; }
+</style>
+</head>
+<body>
+<div id="hud">
+  <span>💎 <b>얼음 깨기 (진짜임)</b></span>
+  <span class="sp"></span>
+  <span id="hStage"></span>
+  <button id="retry" title="다시 시작">↻</button>
+</div>
+<div id="overlay">
+  <p class="big" id="oEmoji">💎</p>
+  <h1 id="oTitle">얼음 깨서 보석 꺼내기</h1>
+  <p id="oMsg">광고에서 보던 바로 그 얼음 깨기.
+근데 이건 진짜로 그 게임임.
+
+곡괭이는 찍은 칸에 2, 옆 칸에 1 데미지.
+보석은 전부 캐고, 폭탄 위 얼음은
+깨지 않게 조심하세요. 곡괭이는 한정판!</p>
+  <button id="btn">시작</button>
+  <p id="best"></p>
+</div>
+<canvas id="cv"></canvas>
+<script>
+"use strict";
+/* ── 상수/난수 ────────────────────────────────────────── */
+const W = 360, H = 640, COLS = 6, ROWS = 7, CELL = 48, GX = 36, GY = 140;
+const dark = matchMedia("(prefers-color-scheme: dark)");
+const mulberry32 = (a) => () => {
+  a |= 0; a = (a + 0x6D2B79F5) | 0;
+  let t = Math.imul(a ^ (a >>> 15), 1 | a);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+const NB = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+const inGrid = (c, r) => c >= 0 && c < COLS && r >= 0 && r < ROWS;
+
+/* ── 스테이지 생성 ────────────────────────────────────── */
+// 보장: 모든 폭탄에 대해 (인접 보석들의 직격 필요 횟수 합) < 폭탄 얼음 3
+// → 보석 칸만 정확히 직격하는 플레이는 절대 폭탄을 안 터뜨린다.
+// 곡괭이 = 그 전략의 필요 횟수 + 약간의 여유.
+function gen(stage) {
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const rnd = mulberry32(stage * 26041 + attempt * 379 + 11);
+    const grid = [];
+    for (let r = 0; r < ROWS; r++) {
+      grid.push([]);
+      for (let c = 0; c < COLS; c++) {
+        grid[r].push({ c, r, hp: 2 + (rnd() < 0.5 ? 1 : 0), max: 0, what: null });
+      }
+    }
+    const nGems = 3 + Math.min(stage - 1, 6);
+    const nBombs = Math.min(2 + stage, 12);
+    const cells = grid.flat();
+    const freeCells = () => cells.filter((k) => !k.what);
+    let bad = false;
+    for (let i = 0; i < nGems; i++) {
+      const f = freeCells();
+      if (!f.length) { bad = true; break; }
+      const cell = f[(rnd() * f.length) | 0];
+      cell.what = "gem";
+      cell.hp = 2 + (rnd() < 0.4 ? 1 : 0);
+    }
+    if (bad) continue;
+    const gemCost = (cell) => Math.ceil(cell.hp / 2);
+    for (let i = 0; i < nBombs; i++) {
+      const ok = freeCells().filter((cell) => {
+        let splash = 0;
+        for (const [dc, dr] of NB) {
+          if (!inGrid(cell.c + dc, cell.r + dr)) continue;
+          const nb = grid[cell.r + dr][cell.c + dc];
+          if (nb.what === "gem") splash += gemCost(nb);
+        }
+        return splash <= 2;                      // 폭탄 얼음 3 > 스플래시 합
+      });
+      if (!ok.length) { bad = true; break; }
+      const cell = ok[(rnd() * ok.length) | 0];
+      cell.what = "bomb"; cell.hp = 3;
+    }
+    if (bad) continue;
+    for (const cell of cells) cell.max = cell.hp;
+    const gems = cells.filter((k) => k.what === "gem");
+    const picks = gems.reduce((s, k) => s + gemCost(k), 0) + 1 + Math.floor(nGems / 4);
+    const solution = gems.flatMap((k) => Array(gemCost(k)).fill([k.c, k.r]));
+    return { grid, picks, gems: nGems, solution };
+  }
+  return null; // 도달 불가(제약이 느슨함)
+}
+
+/* ── 상태 ─────────────────────────────────────────────── */
+let stage = 1, best = +localStorage.getItem("icebreak.best") || 0;
+let phase = "title";
+let grid = [], picks = 0, gemsLeft = 0, parts = [], shakeT = 0;
+
+function loadStage() {
+  const g = gen(stage);
+  grid = g.grid; picks = g.picks; gemsLeft = g.gems;
+  parts = []; phase = "play";
+  window.__ic = {                                    // 테스트/디버그용
+    solution: g.solution,
+    cellPos: (c, r) => [GX + c * CELL + CELL / 2, GY + r * CELL + CELL / 2],
+    state: () => ({ picks, gemsLeft }),
+  };
+  hud();
+}
+
+function poof(x, y, col, n = 10) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, sp = 50 + Math.random() * 110;
+    parts.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 60, life: 0.7, col });
+  }
+}
+
+function hitCell(cell, dmg) {
+  if (cell.hp <= 0) return null;
+  cell.hp -= dmg;
+  if (cell.hp > 0) return null;
+  cell.hp = 0;
+  const [x, y] = window.__ic.cellPos(cell.c, cell.r);
+  poof(x, y, cell.what === "gem" ? "#ffd75e" : "#bde3f5");
+  return cell.what;                                 // 열렸을 때 내용물
+}
+
+function tap(c, r) {
+  if (phase !== "play" || !inGrid(c, r)) return;
+  const cell = grid[r][c];
+  if (cell.hp <= 0 || picks <= 0) return;
+  picks--; shakeT = 0.18;
+  const opened = [hitCell(cell, 2)];
+  for (const [dc, dr] of NB) {
+    if (inGrid(c + dc, r + dr)) opened.push(hitCell(grid[r + dr][c + dc], 1));
+  }
+  let boom = false;
+  for (let i = 0; i < opened.length; i++) {
+    if (opened[i] === "gem") { gemsLeft--; }
+    if (opened[i] === "bomb") boom = true;
+  }
+  hud();
+  if (boom) return fail("폭탄 위 얼음이 깨졌어요. 💥");
+  if (gemsLeft === 0) return win();
+  if (picks === 0) return fail("곡괭이가 다 닳았어요.");
+}
+
+function fail(msg) {
+  phase = "fail";
+  const quips = ["광고 속 그 사람도 맨날 폭탄부터 찍던데요.",
+                 "괜찮아요. 얼음은 내년 겨울에 또 얼어요.",
+                 "보석은 원래 남 주기 아까워서 얼려둔 겁니다."];
+  show("💥", "발굴 실패…", msg + "\n\n" + quips[(Math.random() * quips.length) | 0],
+       "다시 도전");
+}
+function win() {
+  phase = "win";
+  if (stage > best) { best = stage; localStorage.setItem("icebreak.best", best); }
+  window.blWeeklyReport?.(stage);
+  show("🏆", `스테이지 ${stage} 클리어!`,
+       `보석 전부 발굴! 곡괭이 ${picks}개 남기고 성공.`, "다음 스테이지");
+}
+
+/* ── 그리기 ───────────────────────────────────────────── */
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+let scale = 1, ox = 0, oy = 0;
+function resize() {
+  const dpr = devicePixelRatio || 1;
+  cv.width = innerWidth * dpr; cv.height = innerHeight * dpr;
+  cv.style.width = innerWidth + "px"; cv.style.height = innerHeight + "px";
+  scale = Math.min(innerWidth / W, innerHeight / H);
+  ox = (innerWidth - W * scale) / 2; oy = (innerHeight - H * scale) / 2;
+}
+addEventListener("resize", resize); resize();
+
+// 셀별 고정 크랙 무늬(시드: 좌표)
+function crackLines(cell, x, y, level) {
+  const rnd = mulberry32(cell.c * 73 + cell.r * 179 + 5);
+  ctx.strokeStyle = "rgba(30,60,90,.4)"; ctx.lineWidth = 1.5;
+  const n = level * 3;
+  for (let i = 0; i < n; i++) {
+    const a = rnd() * Math.PI * 2, l = 8 + rnd() * 14;
+    const sx = x + (rnd() - 0.5) * 30, sy = y + (rnd() - 0.5) * 30;
+    ctx.beginPath(); ctx.moveTo(sx, sy);
+    ctx.lineTo(sx + Math.cos(a) * l, sy + Math.sin(a) * l);
+    ctx.lineTo(sx + Math.cos(a + 0.8) * l * 0.6, sy + Math.sin(a + 0.8) * l * 0.6);
+    ctx.stroke();
+  }
+}
+
+function draw(dt) {
+  const D = dark.matches, dpr = devicePixelRatio || 1;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = D ? "#1a1626" : "#f6ead8";
+  ctx.fillRect(0, 0, innerWidth, innerHeight);
+  const sh = shakeT > 0 ? Math.sin(shakeT * 90) * 3 * scale : 0;
+  if (shakeT > 0) shakeT -= dt;
+  ctx.setTransform(dpr * scale, 0, 0, dpr * scale, dpr * (ox + sh), dpr * oy);
+  if (phase === "title") return;
+
+  for (const row of grid) for (const cell of row) {
+    const x = GX + cell.c * CELL, y = GY + cell.r * CELL;
+    const cx2 = x + CELL / 2, cy2 = y + CELL / 2;
+    // 바닥(뚫린 칸)
+    ctx.fillStyle = D ? "#14101f" : "#e7d7bd";
+    ctx.beginPath(); ctx.roundRect(x + 2, y + 2, CELL - 4, CELL - 4, 8); ctx.fill();
+    // 얼음
+    if (cell.hp > 0) {
+      const g = ctx.createLinearGradient(x, y, x + CELL, y + CELL);
+      if (D) { g.addColorStop(0, "rgba(140,190,235,.82)"); g.addColorStop(1, "rgba(80,120,180,.82)"); }
+      else { g.addColorStop(0, "rgba(190,228,252,.86)"); g.addColorStop(1, "rgba(130,180,225,.86)"); }
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.roundRect(x + 2, y + 2, CELL - 4, CELL - 4, 8); ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,.5)"; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.roundRect(x + 3.5, y + 3.5, CELL - 7, CELL - 7, 7); ctx.stroke();
+      if (cell.hp < cell.max) crackLines(cell, cx2, cy2, cell.max - cell.hp);
+      // 얼음 속 내용물 실루엣 — 깨질수록 선명해진다
+      if (cell.what) {
+        ctx.globalAlpha = 0.5 + 0.22 * (cell.max - cell.hp);
+        ctx.font = "22px system-ui"; ctx.textAlign = "center";
+        ctx.fillText(cell.what === "gem" ? "💎" : "💣", cx2, cy2 + 8);
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
+
+  for (const pt of parts) {
+    pt.life -= dt; pt.x += pt.vx * dt; pt.y += pt.vy * dt; pt.vy += 500 * dt;
+    ctx.globalAlpha = Math.max(0, pt.life / 0.7);
+    ctx.beginPath(); ctx.arc(pt.x, pt.y, 3, 0, 7);
+    ctx.fillStyle = pt.col; ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  parts = parts.filter((pt) => pt.life > 0);
+}
+
+let last = performance.now();
+function loop(t) {
+  let dt = (t - last) / 1000; last = t;
+  if (dt > 0.05) dt = 0.05;
+  draw(dt);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+/* ── 입력/UI ──────────────────────────────────────────── */
+const $ = (id) => document.getElementById(id);
+function hud() {
+  $("hStage").textContent =
+    `스테이지 ${stage} · 💎 ${gemsLeft} · ⛏️ ${picks}`;
+}
+function show(emoji, title, msg, btnText) {
+  $("oEmoji").textContent = emoji; $("oTitle").textContent = title;
+  $("oMsg").textContent = msg; $("btn").textContent = btnText;
+  $("best").textContent = best ? `최고 기록: 스테이지 ${best}` : "";
+  $("overlay").classList.remove("hide");
+}
+$("btn").addEventListener("click", () => {
+  if (phase === "win") stage++;
+  $("overlay").classList.add("hide");
+  loadStage();
+});
+$("retry").addEventListener("click", () => { if (phase === "play") loadStage(); });
+
+addEventListener("pointerdown", (e) => {
+  if (phase !== "play") return;
+  const x = (e.clientX - ox) / scale, y = (e.clientY - oy) / scale;
+  tap(Math.floor((x - GX) / CELL), Math.floor((y - GY) / CELL));
+});
+
+window.blShareText = () => `얼음 깨기 스테이지 ${best}까지 발굴 완료! 광고에서 본 그 게임, 진짜임 💎`;
+window.blWeekly = { game: "icebreak", dir: "max", fmt: (v) => `스테이지 ${v}` };
+</script>
+<script defer src="/_shared/records.js"></script>
+<script defer src="/_shared/share.js"></script>
+<script defer src="/_shared/like.js"></script>
+</body>
+</html>

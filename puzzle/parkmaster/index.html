@@ -21,12 +21,11 @@
            background: none; color: inherit; border-radius: 1rem; padding: .15rem .7rem;
            cursor: pointer; opacity: .75; }
   #retry:active { transform: scale(.95); }
-  #go { position: fixed; bottom: 1rem; right: 1rem;
-        font: inherit; font-size: .95rem; padding: .55rem 1.3rem; border-radius: 2rem;
-        border: 2px solid currentColor; background: light-dark(rgba(255,250,240,.9), rgba(26,20,38,.9));
-        color: inherit; cursor: pointer; z-index: 3; }
-  #go:disabled { opacity: .35; cursor: default; }
-  #go:active:not(:disabled) { transform: scale(.96); }
+  #go { pointer-events: auto; font: inherit; border: 1.5px solid currentColor;
+        background: none; color: inherit; border-radius: 1rem; padding: .15rem .8rem;
+        cursor: pointer; font-weight: bold; }
+  #go:disabled { opacity: .3; cursor: default; }
+  #go:active:not(:disabled) { transform: scale(.95); }
   #go.hide { display: none; }
   #overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
              display: flex; flex-direction: column; align-items: center; gap: .9rem;
@@ -51,9 +50,9 @@
   <span>🚗 <b>주차 마스터 (진짜임)</b></span>
   <span class="sp"></span>
   <span id="hStage"></span>
+  <button id="go" class="hide" disabled>출발!</button>
   <button id="retry" title="다시 시작">↻</button>
 </div>
-<button id="go" class="hide" disabled>🚗 출발!</button>
 <div id="overlay">
   <p class="big" id="oEmoji">🚗</p>
   <h1 id="oTitle">주차 마스터</h1>
@@ -292,5 +291,6 @@ window.blWeekly = { game: "parkmaster", dir: "max", fmt: (v) => `스테이지 ${
 </script>
 <script defer src="/_shared/records.js"></script>
 <script defer src="/_shared/share.js"></script>
+<script defer src="/_shared/like.js"></script>
 </body>
 </html>
