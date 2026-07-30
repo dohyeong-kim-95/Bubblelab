@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>명예의 전당 — 광고에서 본 그 게임들</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🏆</text></svg>">
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; padding: 1rem 1rem 5rem; font-family: ui-monospace, "SF Mono",
+         "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+         background: light-dark(#f6ead8, #1a1626); color: light-dark(#3a2b18, #e8ddcb);
+         max-width: 26rem; margin-inline: auto; }
+  h1 { font-size: 1.15rem; margin: .4rem 0 .2rem; }
+  .sub { font-size: .8rem; opacity: .6; margin: 0 0 1.1rem; line-height: 1.6; }
+  .panel { border: 1.5px solid light-dark(rgba(90,60,20,.25), rgba(230,215,190,.22));
+           border-radius: 1rem; padding: .9rem 1rem; margin-bottom: 1rem;
+           background: light-dark(rgba(255,250,240,.6), rgba(255,255,255,.04)); }
+  .panel h2 { font-size: .92rem; margin: 0 0 .6rem; }
+  #myGrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: .4rem; }
+  #myGrid .g { text-align: center; font-size: .68rem; opacity: .85; line-height: 1.5;
+               border-radius: .6rem; padding: .35rem .1rem;
+               background: light-dark(rgba(58,43,24,.05), rgba(232,221,203,.06)); }
+  #myGrid .g b { display: block; font-size: 1.05rem; }
+  #myTotal { font-size: 1.05rem; font-weight: bold; margin: .7rem 0 .2rem; }
+  #regRow { display: flex; gap: .5rem; margin-top: .6rem; }
+  #nick { flex: 1; min-width: 0; font: inherit; font-size: .9rem; padding: .5rem .7rem;
+          border-radius: .7rem; border: 1.5px solid light-dark(rgba(90,60,20,.35), rgba(230,215,190,.3));
+          background: none; color: inherit; }
+  #reg { font: inherit; font-size: .9rem; padding: .5rem 1rem; border-radius: .7rem;
+         border: 2px solid currentColor; background: none; color: inherit; cursor: pointer;
+         font-weight: bold; }
+  #reg:active { transform: scale(.96); }
+  #reg:disabled { opacity: .4; }
+  #regMsg { font-size: .75rem; opacity: .65; margin: .4rem 0 0; min-height: 1em; }
+  ol { list-style: none; padding: 0; margin: 0; }
+  ol li { display: flex; align-items: baseline; gap: .6rem; padding: .45rem .2rem;
+          border-bottom: 1px dashed light-dark(rgba(90,60,20,.15), rgba(230,215,190,.13));
+          font-size: .9rem; }
+  ol li:last-child { border-bottom: 0; }
+  .rank { width: 2rem; text-align: center; flex: none; }
+  .nick2 { font-weight: bold; flex: 1; overflow: hidden; text-overflow: ellipsis; }
+  .tot { font-variant-numeric: tabular-nums; }
+  .cnt { font-size: .72rem; opacity: .55; }
+  li.me { background: light-dark(rgba(224,167,46,.14), rgba(224,167,46,.12));
+          border-radius: .5rem; }
+  .empty { font-size: .82rem; opacity: .6; padding: .6rem 0; }
+</style>
+</head>
+<body>
+<h1>🏆 명예의 전당</h1>
+<p class="sub">광고에서 본 그 게임들 — 열 개 게임 최고 스테이지의 <b>총합</b> 랭킹.
+게임에서 기록을 내면 자동으로 총합에 반영됩니다.</p>
+
+<div class="panel">
+  <h2>내 총합</h2>
+  <div id="myGrid"></div>
+  <p id="myTotal">집계 중…</p>
+  <div id="regRow">
+    <input id="nick" maxlength="6" placeholder="닉네임 (한/영/숫자 6자)" autocomplete="off">
+    <button id="reg">전당 등록</button>
+  </div>
+  <p id="regMsg"></p>
+</div>
+
+<div class="panel">
+  <h2>총합 랭킹</h2>
+  <ol id="board"><li class="empty">불러오는 중…</li></ol>
+</div>
+
+<script>
+"use strict";
+const GAMES = [
+  ["pullpin", "📌"], ["watersort", "💧"], ["gaterunner", "🏃"], ["savedog", "🐶"],
+  ["parkmaster", "🚗"], ["screwout", "🔩"], ["icebreak", "💎"], ["trafficjam", "🚕"],
+  ["picklock", "🔓"], ["fillfridge", "🧊"],
+];
+const $ = (id) => document.getElementById(id);
+const NICK_RE = /^[가-힣a-zA-Z0-9]{1,6}$/;
+let myTotal = 0;
+
+try { $("nick").value = localStorage.getItem("bl-hof-nick") ?? ""; } catch {}
+
+async function loadMine() {
+  const grid = $("myGrid");
+  grid.textContent = "";
+  let total = 0, cnt = 0, personal = {};
+  try {
+    const res = await fetch(`/_records?games=${GAMES.map(([g]) => g).join(",")}`,
+                            { cache: "no-store" });
+    if (res.ok) personal = (await res.json()).personal ?? {};
+  } catch {}
+  for (const [g, emo] of GAMES) {
+    const cell = document.createElement("div");
+    cell.className = "g";
+    const b = document.createElement("b");
+    b.textContent = emo;
+    cell.appendChild(b);
+    const v = personal[g]?.score;
+    cell.appendChild(document.createTextNode(v ? `${v}` : "–"));
+    if (v) { total += v; cnt++; }
+    grid.appendChild(cell);
+  }
+  myTotal = total;
+  $("myTotal").textContent = total
+    ? `총 ${total} 스테이지 (${cnt}/${GAMES.length} 게임)`
+    : "아직 기록이 없어요 — 아무 게임이나 한 판!";
+  $("reg").disabled = !total;
+}
+
+async function loadBoard() {
+  const ol = $("board");
+  try {
+    const res = await fetch("/_puzzletotal", { cache: "no-store" });
+    if (!res.ok) throw 0;
+    const { board, me } = await res.json();
+    ol.textContent = "";
+    if (!board.length) {
+      const li = document.createElement("li");
+      li.className = "empty";
+      li.textContent = "아직 아무도 없어요. 첫 번째 전설이 되어보세요.";
+      ol.appendChild(li);
+    }
+    board.forEach((e, i) => {
+      const li = document.createElement("li");
+      if (me && me.rank === i + 1 && me.nick === e.nick) li.className = "me";
+      const rank = document.createElement("span");
+      rank.className = "rank";
+      rank.textContent = i < 3 ? ["🥇", "🥈", "🥉"][i] : `${i + 1}`;
+      const nick = document.createElement("span");
+      nick.className = "nick2";
+      nick.textContent = e.nick;
+      const tot = document.createElement("span");
+      tot.className = "tot";
+      tot.textContent = `${e.total}`;
+      const cnt = document.createElement("span");
+      cnt.className = "cnt";
+      cnt.textContent = `${e.games}게임`;
+      li.append(rank, nick, tot, cnt);
+      ol.appendChild(li);
+    });
+    if (me && me.rank > board.length) {
+      const li = document.createElement("li");
+      li.className = "me";
+      li.textContent = `… ${me.rank}위 ${me.nick} — ${me.total}`;
+      ol.appendChild(li);
+    }
+  } catch {
+    ol.textContent = "";
+    const li = document.createElement("li");
+    li.className = "empty";
+    li.textContent = "랭킹 보드 연결 실패 — 잠시 후 다시 열어보세요.";
+    ol.appendChild(li);
+  }
+}
+
+$("reg").addEventListener("click", async () => {
+  const nick = $("nick").value.trim();
+  if (!NICK_RE.test(nick)) {
+    $("regMsg").textContent = "닉네임은 한글/영문/숫자 1~6자예요.";
+    return;
+  }
+  $("reg").disabled = true;
+  $("regMsg").textContent = "등록 중…";
+  try {
+    const res = await fetch("/_puzzletotal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nick }),
+    });
+    if (res.ok) {
+      try { localStorage.setItem("bl-hof-nick", nick); } catch {}
+      const { total } = await res.json();
+      $("regMsg").textContent = `등록 완료! 총 ${total} 스테이지. 이후 기록은 자동 반영됩니다.`;
+      await loadBoard();
+    } else {
+      $("regMsg").textContent = res.status === 400
+        ? "등록하려면 먼저 게임 기록이 하나는 있어야 해요."
+        : "등록 실패 — 잠시 후 다시 시도해주세요.";
+    }
+  } catch {
+    $("regMsg").textContent = "등록 실패 — 연결을 확인해주세요.";
+  }
+  $("reg").disabled = false;
+});
+
+loadMine(); loadBoard();
+
+window.blShareText = () => myTotal
+  ? `광고에서 본 그 게임들, 총 ${myTotal} 스테이지 정복! 전당에서 겨뤄보실?`
+  : "광고에서 본 그 게임들 명예의 전당 — 총합으로 겨루는 곳";
+</script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>

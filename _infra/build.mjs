@@ -134,7 +134,7 @@ function listingPage(site, entries) {
   const hofCard = hofEntry
     ? `    <a class="card card--hof card--pinned" href="/hall-of-fame/" style="--hue:45;--i:0">
       <span class="hof-emoji">🏆</span>
-      <span class="hof-text"><span class="hof-name">명예의 전당</span><span class="hof-desc">전체 게임 올타임 1위 모음</span></span>
+      <span class="hof-text"><span class="hof-name">명예의 전당</span><span class="hof-desc">${site === "puzzle" ? "전체 게임 스테이지 총합 랭킹" : "전체 게임 올타임 1위 모음"}</span></span>
       <span class="hof-arrow" aria-hidden="true">→</span>
     </a>\n`
     : "";
