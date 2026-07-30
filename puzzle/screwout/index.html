@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>나사 풀기 — 광고에서 본 그 게임</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🔩</text></svg>">
+<style>
+  :root { color-scheme: light dark; }
+  html, body { height: 100%; }
+  body { margin: 0; overflow: hidden; user-select: none; -webkit-user-select: none;
+         touch-action: manipulation; font-family: ui-monospace, "SF Mono",
+         "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+         background: light-dark(#f6ead8, #1a1626); color: light-dark(#3a2b18, #e8ddcb); }
+  canvas { display: block; }
+  #hud { position: fixed; top: 0; left: 0; right: 0; display: flex; gap: .55rem;
+         align-items: center; padding: .5rem .7rem; font-size: .78rem; z-index: 3;
+         pointer-events: none; white-space: nowrap; }
+  #hud .sp { flex: 1; }
+  #retry { pointer-events: auto; font: inherit; border: 1.5px solid currentColor;
+           background: none; color: inherit; border-radius: 1rem; padding: .15rem .7rem;
+           cursor: pointer; opacity: .75; }
+  #retry:active { transform: scale(.95); }
+  #overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+             display: flex; flex-direction: column; align-items: center; gap: .9rem;
+             width: min(84vw, 21rem); padding: 1.5rem 1.6rem; border-radius: 1.25rem;
+             text-align: center; z-index: 5;
+             border: 1.5px solid light-dark(rgba(90,60,20,.3), rgba(230,215,190,.25));
+             background: light-dark(rgba(255,250,240,.92), rgba(26,20,38,.92));
+             backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  #overlay.hide { display: none; }
+  #overlay h1 { margin: 0; font-size: 1.15rem; }
+  #overlay p { margin: 0; font-size: .88rem; line-height: 1.55; opacity: .75;
+               white-space: pre-line; }
+  #overlay .big { font-size: 2.2rem; margin: 0; }
+  #btn { font: inherit; font-size: 1.05rem; padding: .75rem 2.2rem; border-radius: 2rem;
+         border: 2px solid currentColor; background: none; color: inherit; cursor: pointer; }
+  #btn:active { transform: scale(.96); }
+  #best { margin: 0; font-size: .8rem; opacity: .5; min-height: 1.1em; }
+</style>
+</head>
+<body>
+<div id="hud">
+  <span>🔩 <b>나사 풀기 (진짜임)</b></span>
+  <span class="sp"></span>
+  <span id="hStage"></span>
+  <button id="retry" title="다시 시작">↻</button>
+</div>
+<div id="overlay">
+  <p class="big" id="oEmoji">🔩</p>
+  <h1 id="oTitle">나사 풀기</h1>
+  <p id="oMsg">광고에서 보던 바로 그 나사 게임.
+근데 이건 진짜로 그 게임임.
+
+위에 판자가 없는 나사만 풀 수 있어요.
+상자 색에 맞춰 3개씩 담고,
+안 맞는 나사는 임시 트레이(5칸)로.
+트레이가 넘치면 끝장!</p>
+  <button id="btn">시작</button>
+  <p id="best"></p>
+</div>
+<canvas id="cv"></canvas>
+<script>
+"use strict";
+/* ── 상수/난수 ────────────────────────────────────────── */
+const W = 360, H = 640, SCREW_R = 11, TRAY_CAP = 5;
+const PAL = ["#e5484d", "#3b82f6", "#46a758", "#f79009", "#8e4ec6", "#12a594", "#e93d82"];
+const WOODS = ["#c9974f", "#b9834a", "#d2a55e", "#aa7840", "#c08d52"];
+const dark = matchMedia("(prefers-color-scheme: dark)");
+const mulberry32 = (a) => () => {
+  a |= 0; a = (a + 0x6D2B79F5) | 0;
+  let t = Math.imul(a ^ (a >>> 15), 1 | a);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+
+/* ── 스테이지 생성 (역방향: 추출 순서 → 상자 색 배정) ── */
+function gen(stage) {
+  const rnd = mulberry32(stage * 15013 + 3);
+  const nB = Math.min(3 + stage, 9);
+  const C = Math.min(3 + Math.floor(stage / 2), 7);
+  const boards = [], screws = [];
+  for (let z = 0; z < nB; z++) {
+    const w = 140 + rnd() * 60, h = 40 + rnd() * 12;
+    const b = { z, w, h, ang: (rnd() - 0.5) * 1.3,
+                cx: 90 + rnd() * 180, cy: 170 + rnd() * 280,
+                col: WOODS[(rnd() * WOODS.length) | 0], dead: false, fall: 0 };
+    boards.push(b);
+    const n = 2 + (rnd() < 0.45 ? 1 : 0);
+    const offs = n === 2 ? [-(w / 2 - 24), w / 2 - 24] : [-(w / 2 - 24), 0, w / 2 - 24];
+    for (const ox of offs) screws.push({ id: screws.length, bz: z, ox, state: "on" });
+  }
+  // 나사 수를 3의 배수로 (3개짜리 판의 가운데 나사부터 제거)
+  while (screws.filter((s) => s.state === "on").length % 3 !== 0) {
+    const mid = screws.find((s) => s.state === "on" && s.ox === 0 &&
+      screws.filter((k) => k.state === "on" && k.bz === s.bz).length === 3);
+    if (mid) { mid.state = "cut"; continue; }
+    const bz = boards.filter((b) => screws.some((s) => s.bz === b.z && s.state === "on"))
+                     .slice(-1)[0].z;
+    for (const s of screws) if (s.bz === bz) s.state = "cut";
+  }
+  const live = screws.filter((s) => s.state === "on");
+  for (const b of boards) b.ghost = !live.some((s) => s.bz === b.z);   // 나사 없는 판은 없는 셈
+  // 추출 가능 순서 시뮬레이션 (판 위에 다른 판이 없으면 풀 수 있음)
+  const posOf = (s) => {
+    const b = boards[s.bz];
+    return [b.cx + Math.cos(b.ang) * s.ox, b.cy + Math.sin(b.ang) * s.ox];
+  };
+  const inBoard = (b, x, y) => {
+    const dx = x - b.cx, dy = y - b.cy;
+    const lx = dx * Math.cos(-b.ang) - dy * Math.sin(-b.ang);
+    const ly = dx * Math.sin(-b.ang) + dy * Math.cos(-b.ang);
+    return Math.abs(lx) < b.w / 2 - 4 && Math.abs(ly) < b.h / 2 - 4;
+  };
+  const taken = new Set(), order = [];
+  while (order.length < live.length) {
+    const aliveZ = new Set(live.filter((s) => !taken.has(s.id)).map((s) => s.bz));
+    const free = live.filter((s) => {
+      if (taken.has(s.id)) return false;
+      const [x, y] = posOf(s);
+      return !boards.some((b) => b.z > s.bz && aliveZ.has(b.z) && inBoard(b, x, y));
+    });
+    const pick = free[(rnd() * free.length) | 0];
+    taken.add(pick.id); order.push(pick.id);
+  }
+  // 3개씩 끊어 상자 색 배정 (연속 같은 색 회피)
+  const queue = [];
+  let prev = -1;
+  for (let i = 0; i < order.length / 3; i++) {
+    let c = (rnd() * C) | 0;
+    if (c === prev) c = (c + 1) % C;
+    prev = c; queue.push(c);
+    for (let k = 0; k < 3; k++) {
+      live.find((s) => s.id === order[i * 3 + k]).col = c;
+    }
+  }
+  return { boards, screws: live.map((s) => ({ ...s, state: "on" })), queue,
+           solution: order, posOf, inBoard };
+}
+
+/* ── 상태 ─────────────────────────────────────────────── */
+let stage = 1, best = +localStorage.getItem("screwout.best") || 0;
+let phase = "title";
+let G = null, qi = 0, boxFill = 0, tray = [], anims = [], denyId = -1, denyT = 0;
+
+function loadStage() {
+  G = gen(stage);
+  for (const b of G.boards) { b.dead = b.ghost; b.fall = b.ghost ? 99 : 0; }
+  qi = 0; boxFill = 0; tray = []; anims = []; denyId = -1;
+  phase = "play";
+  window.__sw = {                                      // 테스트/디버그용
+    solution: G.solution,
+    pos: (id) => G.posOf(G.screws.find((s) => s.id === id)),
+    state: () => ({ qi, boxFill, active: activeColor(), tray: tray.map((s) => s.col) }),
+    list: () => G.screws.map((s) => ({ id: s.id, col: s.col, state: s.state,
+                                       acc: accessible(s) })),
+  };
+  hud();
+}
+
+const aliveBoards = () => G.boards.filter((b) => !b.dead);
+function accessible(s) {
+  if (s.state !== "on") return false;
+  const [x, y] = G.posOf(s);
+  return !aliveBoards().some((b) => b.z > s.bz && G.inBoard(b, x, y));
+}
+function checkBoardDeath(bz) {
+  if (!G.screws.some((s) => s.bz === bz && s.state === "on")) {
+    G.boards[bz].dead = true;
+  }
+}
+function activeColor() { return G.queue[qi]; }
+
+function autoMove() {
+  let moved = true;
+  while (moved) {
+    moved = false;
+    const i = tray.findIndex((s) => s.col === activeColor());
+    if (i >= 0 && boxFill < 3) {
+      tray.splice(i, 1)[0].state = "boxed";
+      boxFill++; moved = true;
+    }
+    if (boxFill === 3) { qi++; boxFill = 0; moved = qi < G.queue.length; }
+  }
+  hud();
+}
+
+function tap(id) {
+  if (phase !== "play") return;
+  const s = G.screws.find((k) => k.id === id);
+  if (!s || s.state !== "on") return;
+  if (!accessible(s)) { denyId = id; denyT = 0.5; return; }
+  const [x, y] = G.posOf(s);
+  s.state = "moving";
+  if (s.col === activeColor() && boxFill < 3) {
+    boxFill++; s.state = "boxed";
+    anims.push({ x, y, tx: 120, ty: 62, col: PAL[s.col], t: 0 });
+    if (boxFill === 3) { qi++; boxFill = 0; autoMove(); }
+  } else {
+    s.state = "tray"; tray.push(s);
+    anims.push({ x, y, tx: 80 + (tray.length - 1) * 50, ty: 545, col: PAL[s.col], t: 0 });
+    if (tray.length > TRAY_CAP) return fail("트레이가 넘쳤어요!");
+  }
+  checkBoardDeath(s.bz);
+  if (G.screws.every((k) => k.state !== "on" && k.state !== "tray")) return win();
+  // 데드락: 트레이 만석 + 꺼낼 수 있는 나사 중 상자 색이 없음
+  if (tray.length === TRAY_CAP && qi < G.queue.length &&
+      !G.screws.some((k) => k.state === "on" && k.col === activeColor() && accessible(k)) &&
+      !tray.some((k) => k.col === activeColor())) {
+    return fail("트레이가 꽉 차서 손이 묶였어요.");
+  }
+  hud();
+}
+
+function fail(msg) {
+  phase = "fail";
+  const quips = ["광고 속 그 사람도 트레이부터 채우더라고요.",
+                 "괜찮아요. 나사는 원래 풀라고 있는 건데 뭐.",
+                 "드라이버 탓을 해봅시다."];
+  show("🧰", "나사 지옥…", msg + "\n\n" + quips[(Math.random() * quips.length) | 0],
+       "다시 도전");
+}
+function win() {
+  phase = "win";
+  if (stage > best) { best = stage; localStorage.setItem("screwout.best", best); }
+  window.blWeeklyReport?.(stage);
+  show("🏆", `스테이지 ${stage} 클리어!`, "모든 나사를 풀었습니다. 판자 전량 해체!",
+       "다음 스테이지");
+}
+
+/* ── 그리기 ───────────────────────────────────────────── */
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+let scale = 1, ox = 0, oy = 0;
+function resize() {
+  const dpr = devicePixelRatio || 1;
+  cv.width = innerWidth * dpr; cv.height = innerHeight * dpr;
+  cv.style.width = innerWidth + "px"; cv.style.height = innerHeight + "px";
+  scale = Math.min(innerWidth / W, innerHeight / H);
+  ox = (innerWidth - W * scale) / 2; oy = (innerHeight - H * scale) / 2;
+}
+addEventListener("resize", resize); resize();
+
+function drawScrew(x, y, col, dim) {
+  ctx.beginPath(); ctx.arc(x, y, SCREW_R, 0, 7);
+  ctx.fillStyle = col; ctx.fill();
+  ctx.lineWidth = 2; ctx.strokeStyle = "rgba(0,0,0,.35)"; ctx.stroke();
+  ctx.beginPath(); ctx.lineWidth = 2.5; ctx.strokeStyle = "rgba(255,255,255,.75)";
+  ctx.moveTo(x - 5, y); ctx.lineTo(x + 5, y);
+  ctx.moveTo(x, y - 5); ctx.lineTo(x, y + 5); ctx.stroke();
+  if (dim) { ctx.beginPath(); ctx.arc(x, y, SCREW_R, 0, 7);
+             ctx.fillStyle = "rgba(0,0,0,.28)"; ctx.fill(); }
+}
+
+function draw(dt) {
+  const D = dark.matches, dpr = devicePixelRatio || 1;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = D ? "#1a1626" : "#f6ead8";
+  ctx.fillRect(0, 0, innerWidth, innerHeight);
+  ctx.setTransform(dpr * scale, 0, 0, dpr * scale, dpr * ox, dpr * oy);
+  if (phase === "title" || !G) return;
+
+  // 상자(진행) UI
+  const ac = activeColor();
+  if (qi < G.queue.length) {
+    ctx.fillStyle = D ? "#241d33" : "#fff7e8";
+    ctx.strokeStyle = PAL[ac]; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.roundRect(60, 42, 120, 40, 10); ctx.fill(); ctx.stroke();
+    for (let k = 0; k < 3; k++) {
+      ctx.beginPath(); ctx.arc(90 + k * 30, 62, 10, 0, 7);
+      if (k < boxFill) { ctx.fillStyle = PAL[ac]; ctx.fill(); }
+      else { ctx.strokeStyle = PAL[ac]; ctx.lineWidth = 2; ctx.setLineDash([3, 3]);
+             ctx.stroke(); ctx.setLineDash([]); }
+    }
+    for (let k = 1; k <= 2 && qi + k < G.queue.length; k++) {
+      ctx.beginPath(); ctx.arc(206 + k * 26, 62, 8, 0, 7);
+      ctx.fillStyle = PAL[G.queue[qi + k]]; ctx.globalAlpha = 0.5; ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // 판자 + 나사 (z 낮은 것부터)
+  for (const b of G.boards) {
+    if (b.dead && b.fall > 1.2) continue;
+    if (b.dead) b.fall += dt * 2.2;
+    const fy = b.dead ? b.fall * b.fall * 220 : 0;
+    ctx.save();
+    ctx.globalAlpha = b.dead ? Math.max(0, 1 - b.fall) : 1;
+    ctx.translate(b.cx, b.cy + fy); ctx.rotate(b.ang);
+    ctx.fillStyle = b.col;
+    ctx.strokeStyle = "rgba(0,0,0,.25)"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(-b.w / 2, -b.h / 2, b.w, b.h, 12);
+    ctx.fill(); ctx.stroke();
+    ctx.restore();
+    for (const s of G.screws) {
+      if (s.bz !== b.z || s.state !== "on") continue;
+      const [x, y] = G.posOf(s);
+      const shake = s.id === denyId && denyT > 0 ? Math.sin(denyT * 60) * 3 : 0;
+      drawScrew(x + shake, y, PAL[s.col], !accessible(s));
+    }
+  }
+  if (denyT > 0) denyT -= dt;
+
+  // 트레이
+  ctx.fillStyle = D ? "#241d33" : "#fff7e8";
+  ctx.strokeStyle = D ? "rgba(232,221,203,.3)" : "rgba(58,43,24,.3)";
+  ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.roundRect(52, 522, 256, 46, 12); ctx.fill(); ctx.stroke();
+  for (let k = 0; k < TRAY_CAP; k++) {
+    const tx2 = 80 + k * 50;
+    if (k < tray.length) drawScrew(tx2, 545, PAL[tray[k].col], false);
+    else { ctx.beginPath(); ctx.arc(tx2, 545, 10, 0, 7);
+           ctx.strokeStyle = D ? "rgba(232,221,203,.25)" : "rgba(58,43,24,.25)";
+           ctx.lineWidth = 2; ctx.setLineDash([3, 3]); ctx.stroke(); ctx.setLineDash([]); }
+  }
+
+  // 날아가는 나사 애니메이션
+  for (const a of anims) {
+    a.t += dt * 2.6;
+    const f = Math.min(1, a.t), e = 1 - (1 - f) * (1 - f);
+    drawScrew(a.x + (a.tx - a.x) * e, a.y + (a.ty - a.y) * e, a.col, false);
+  }
+  anims = anims.filter((a) => a.t < 1);
+}
+
+let last = performance.now();
+function loop(t) {
+  let dt = (t - last) / 1000; last = t;
+  if (dt > 0.05) dt = 0.05;
+  draw(dt);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+/* ── 입력/UI ──────────────────────────────────────────── */
+const $ = (id) => document.getElementById(id);
+function hud() {
+  const left = G ? G.screws.filter((s) => s.state === "on").length : 0;
+  $("hStage").textContent = `스테이지 ${stage} · 🔩 ${left}`;
+}
+function show(emoji, title, msg, btnText) {
+  $("oEmoji").textContent = emoji; $("oTitle").textContent = title;
+  $("oMsg").textContent = msg; $("btn").textContent = btnText;
+  $("best").textContent = best ? `최고 기록: 스테이지 ${best}` : "";
+  $("overlay").classList.remove("hide");
+}
+$("btn").addEventListener("click", () => {
+  if (phase === "win") stage++;
+  $("overlay").classList.add("hide");
+  loadStage();
+});
+$("retry").addEventListener("click", () => { if (phase === "play") loadStage(); });
+
+addEventListener("pointerdown", (e) => {
+  if (phase !== "play") return;
+  const x = (e.clientX - ox) / scale, y = (e.clientY - oy) / scale;
+  let hit = null, hd = 22;
+  for (const s of G.screws) {
+    if (s.state !== "on") continue;
+    const [sx, sy] = G.posOf(s);
+    const d = Math.hypot(x - sx, y - sy);
+    if (d < hd) { hd = d; hit = s; }
+  }
+  if (hit) tap(hit.id);
+});
+
+window.blShareText = () => `나사 풀기 스테이지 ${best}까지 해체 완료! 광고에서 본 그 게임, 진짜임 🔩`;
+window.blWeekly = { game: "screwout", dir: "max", fmt: (v) => `스테이지 ${v}` };
+</script>
+<script defer src="/_shared/records.js"></script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>
