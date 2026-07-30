@@ -60,8 +60,9 @@
   <p id="best"></p>
 </div>
 <canvas id="cv"></canvas>
-<script>
-"use strict";
+<script type="module">
+// three.js는 CDN 없이 셀프호스팅(/_shared/vendor/ — 빌드 도구 불필요)
+import * as THREE from "/_shared/vendor/three.module.min.js";
 // 정적 난이도(0~100)와 별점 — DIFFICULTY.md Phase 1
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
 const starsOf = (d) => "\u2605".repeat(Math.max(1, Math.min(5, Math.ceil(d / 20))));
@@ -281,7 +282,7 @@ function step(dt) {
       const side = crowdX < MID ? 0 : 1;
       const chosen = g.p[side];
       count = apply(count, chosen);
-      pop((isGood(chosen) ? "+" : "") + label(chosen), crowdX, CROWD_Y - 60,
+      pop(label(chosen), crowdX, CROWD_Y - 60,
           isGood(chosen) ? "#46a758" : "#e5484d");
       hud();
       if (count <= 0) { count = 0; endStage(false); return; }
@@ -345,102 +346,218 @@ function step(dt) {
   }
 }
 
-/* ── 그리기 ───────────────────────────────────────────── */
-const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
-let scale = 1, ox = 0, oy = 0;
+/* ── 그리기 (three.js — 광고처럼 진짜 3D) ─────────────────
+   게임 로직 좌표(x 40~320, y 아래로, 군중 y=505)는 그대로 두고
+   월드로 사상만 한다: 36px = 1유닛, y → -z(전방). */
+const cv = document.getElementById("cv");
+const wX = (x) => (x - MID) / 36;
+const wZ = (y) => (y - CROWD_Y) / 36;
+const px = (v) => v / 36;
+const themeOf = () => dark.matches
+  ? { bg: 0x1a1626, track: 0x241d33, wall: 0x6e4522, dash: 0x4a4062, ink: "#e8ddcb" }
+  : { bg: 0xf6ead8, track: 0xefe0c8, wall: 0x8a5a33, dash: 0xd8c5a5, ink: "#3a2b18" };
+
+let renderer = null;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+} catch {
+  document.getElementById("oMsg").textContent =
+    "이 기기는 WebGL(3D)을 지원하지 않아 게임을 표시할 수 없어요.";
+}
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 60);
+camera.position.set(0, 5.4, 6.2);
+scene.add(new THREE.AmbientLight(0xffffff, 1.15));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+sun.position.set(3, 8, 4);
+scene.add(sun);
+
+const trackMat = new THREE.MeshLambertMaterial();
+const track = new THREE.Mesh(new THREE.PlaneGeometry(7.8, 96), trackMat);
+track.rotation.x = -Math.PI / 2;
+track.position.set(0, 0, -32);
+scene.add(track);
+const wallMat = new THREE.MeshLambertMaterial();
+for (const sx of [-1, 1]) {
+  const wall = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.5, 96), wallMat);
+  wall.position.set(sx * 4.0, 0.25, -32);
+  scene.add(wall);
+}
+const dashMat = new THREE.MeshBasicMaterial();
+const DASHES = Array.from({ length: 50 }, () => {
+  const d = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.015, 0.55), dashMat);
+  scene.add(d);
+  return d;
+});
+
+// 텍스트 스프라이트 (캔버스 텍스처 — 폰트는 게임과 동일 톤)
+function textSprite(fontPx = 46, w2 = 2.4, h2 = 0.6) {
+  const c2 = document.createElement("canvas");
+  c2.width = 256; c2.height = 64;
+  const x2 = c2.getContext("2d");
+  const tex = new THREE.CanvasTexture(c2);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial(
+    { map: tex, transparent: true, depthTest: false }));
+  spr.scale.set(w2, h2, 1);
+  spr.renderOrder = 5;
+  return { spr, draw(text, col) {
+    x2.clearRect(0, 0, 256, 64);
+    x2.font = `bold ${fontPx}px ui-monospace, monospace`;
+    x2.textAlign = "center"; x2.textBaseline = "middle";
+    x2.lineWidth = 8; x2.strokeStyle = "rgba(0,0,0,.35)";
+    x2.strokeText(text, 128, 34);
+    x2.fillStyle = col;
+    x2.fillText(text, 128, 34);
+    tex.needsUpdate = true;
+  } };
+}
+
+// 군중(수를 가진 무리) — 인스턴스 캡슐 + 머리 위 숫자
+const M4 = new THREE.Matrix4();
+function crowdViz(color, cap = 64) {
+  const grp = new THREE.Group();
+  const inst = new THREE.InstancedMesh(
+    new THREE.CapsuleGeometry(0.11, 0.2, 3, 10),
+    new THREE.MeshLambertMaterial({ color, transparent: true }), cap);
+  inst.frustumCulled = false;
+  const label = textSprite(48, 2.1, 0.55);
+  grp.add(inst, label.spr);
+  grp.visible = false;
+  scene.add(grp);
+  const viz = {
+    grp, lastN: -1, lastShown: -1,
+    set(n, x, z, alpha = 1) {
+      grp.visible = n > 0;
+      grp.position.set(x, 0, z);
+      const m = Math.min(n, cap);
+      if (m !== viz.lastShown) {
+        for (let k = 0; k < m; k++) {
+          const r2 = px(5.2 * Math.sqrt(k)), a2 = k * 2.39996;
+          M4.makeTranslation(Math.cos(a2) * r2, 0.26, Math.sin(a2) * r2 * 0.75);
+          inst.setMatrixAt(k, M4);
+        }
+        inst.count = m; inst.instanceMatrix.needsUpdate = true;
+        viz.lastShown = m;
+      }
+      inst.material.opacity = alpha;
+      if (n !== viz.lastN) { viz.lastN = n; label.draw(String(n), themeOf().ink); }
+      label.spr.position.set(0, 0.75 + px(Math.sqrt(m) * 5), 0);
+    },
+    hide() { grp.visible = false; },
+  };
+  return viz;
+}
+const meViz = crowdViz(0x3b82f6);
+const bossViz = crowdViz(0xe5484d);
+let midViz = [];
+
+// 탄막·팝업 풀
+const BULLETS3 = Array.from({ length: 16 }, () => {
+  const b = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 10),
+    new THREE.MeshLambertMaterial({ color: 0xe5484d, emissive: 0x991111 }));
+  b.visible = false; scene.add(b);
+  return b;
+});
+const POPS3 = Array.from({ length: 8 }, () => {
+  const t2 = textSprite(44, 2.2, 0.55);
+  t2.spr.visible = false; t2.text = null; scene.add(t2.spr);
+  return t2;
+});
+
+// 스테이지가 바뀌면(gates 배열 교체) 게이트·중간보스 메시를 다시 만든다
+let gatesRef = null, gateObjs = [];
+function rebuild3D() {
+  gatesRef = gates;
+  for (const o of gateObjs) scene.remove(o.grp);
+  gateObjs = gates.map((g) => {
+    const grp = new THREE.Group();
+    for (let s = 0; s < 2; s++) {
+      const gd = isGood(g.p[s]);
+      const col = gd ? 0x46a758 : 0xe5484d;
+      const geo = new THREE.BoxGeometry(3.5, 1.5, 0.1);
+      const panel = new THREE.Mesh(geo,
+        new THREE.MeshLambertMaterial({ color: col, transparent: true, opacity: 0.4 }));
+      panel.position.set(s === 0 ? -1.95 : 1.95, 1.0, 0);
+      const frame = new THREE.LineSegments(new THREE.EdgesGeometry(geo),
+        new THREE.LineBasicMaterial({ color: col }));
+      frame.position.copy(panel.position);
+      const lb = textSprite(56, 2.6, 0.65);
+      lb.draw(label(g.p[s]), gd ? "#bff0c6" : "#ffd6d6");
+      lb.spr.position.set(panel.position.x, 1.05, 0.2);
+      grp.add(panel, frame, lb.spr);
+    }
+    grp.visible = false;
+    scene.add(grp);
+    return { grp, g };
+  });
+  for (const v of midViz) scene.remove(v.grp);
+  midViz = mids.map(() => crowdViz(0xe5484d));
+  bossViz.lastN = -1;                      // 새 판 숫자 다시 그리기
+  meViz.lastN = -1;
+}
+
+function applyTheme() {
+  const th = themeOf();
+  scene.background = new THREE.Color(th.bg);
+  scene.fog = new THREE.Fog(th.bg, 17, 40);
+  trackMat.color.set(th.track);
+  wallMat.color.set(th.wall);
+  dashMat.color.set(th.dash);
+  meViz.lastN = -1; bossViz.lastN = -1;    // 잉크색 라벨 다시 그리기
+  for (const v of midViz) v.lastN = -1;
+}
+dark.addEventListener?.("change", applyTheme);
+applyTheme();
+
 function resize() {
-  const dpr = devicePixelRatio || 1;
-  cv.width = innerWidth * dpr; cv.height = innerHeight * dpr;
-  cv.style.width = innerWidth + "px"; cv.style.height = innerHeight + "px";
-  scale = Math.min(innerWidth / W, innerHeight / H);
-  ox = (innerWidth - W * scale) / 2; oy = (innerHeight - H * scale) / 2;
+  renderer?.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
 }
 addEventListener("resize", resize); resize();
 
-function drawCrowd(x, y, n, col) {
-  const m = Math.min(n, 54);
-  ctx.fillStyle = col;
-  for (let k = 0; k < m; k++) {
-    const r = 5.2 * Math.sqrt(k), a = k * 2.39996;
-    ctx.beginPath();
-    ctx.arc(x + Math.cos(a) * r, y + Math.sin(a) * r * 0.75, 4.2, 0, 7);
-    ctx.fill();
-  }
-  ctx.font = "bold 17px ui-monospace, monospace";
-  ctx.textAlign = "center";
-  ctx.fillStyle = dark.matches ? "#e8ddcb" : "#3a2b18";
-  ctx.fillText(n, x, y - Math.sqrt(m) * 5 - 12);
-}
-
 function draw() {
-  const D = dark.matches, dpr = devicePixelRatio || 1;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.fillStyle = D ? "#1a1626" : "#f6ead8";
-  ctx.fillRect(0, 0, innerWidth, innerHeight);
-  ctx.setTransform(dpr * scale, 0, 0, dpr * scale, dpr * ox, dpr * oy);
-
-  // 트랙
-  ctx.fillStyle = D ? "#241d33" : "#efe0c8";
-  ctx.fillRect(LANE_L, -10, LANE_R - LANE_L, H + 20);
-  ctx.strokeStyle = D ? "#6e4522" : "#8a5a33"; ctx.lineWidth = 5;
-  ctx.beginPath(); ctx.moveTo(LANE_L, -10); ctx.lineTo(LANE_L, H + 10);
-  ctx.moveTo(LANE_R, -10); ctx.lineTo(LANE_R, H + 10); ctx.stroke();
-  ctx.strokeStyle = D ? "rgba(232,221,203,.12)" : "rgba(58,43,24,.12)";
-  ctx.lineWidth = 3; ctx.setLineDash([18, 30]); ctx.lineDashOffset = -scroll;
-  ctx.beginPath(); ctx.moveTo(MID, -10); ctx.lineTo(MID, H + 10); ctx.stroke();
-  ctx.setLineDash([]);
-
-  // 게이트
-  for (const g of gates) {
-    if (g.done || g.y < -60) continue;
-    for (let s = 0; s < 2; s++) {
-      const gd = isGood(g.p[s]);
-      const x0 = s === 0 ? LANE_L : MID, x1 = s === 0 ? MID : LANE_R;
-      ctx.fillStyle = gd ? (D ? "rgba(70,167,88,.28)" : "rgba(70,167,88,.22)")
-                         : (D ? "rgba(229,72,77,.28)" : "rgba(229,72,77,.2)");
-      ctx.fillRect(x0 + 4, g.y - 44, x1 - x0 - 8, 44);
-      ctx.strokeStyle = gd ? "#46a758" : "#e5484d"; ctx.lineWidth = 2.5;
-      ctx.strokeRect(x0 + 4, g.y - 44, x1 - x0 - 8, 44);
-      ctx.font = "bold 21px ui-monospace, monospace"; ctx.textAlign = "center";
-      ctx.fillStyle = gd ? "#46a758" : "#e5484d";
-      ctx.fillText(label(g.p[s]), (x0 + x1) / 2, g.y - 14);
-    }
+  if (!renderer) return;
+  if (gatesRef !== gates) rebuild3D();
+  const cx = wX(crowdX);
+  camera.position.x = cx * 0.35;
+  camera.lookAt(cx * 0.5, 0.7, -7);
+  for (let k = 0; k < DASHES.length; k++) {
+    DASHES[k].position.set(0, 0.01, wZ(-1800 + k * 48 + scroll));
   }
-
-  // 중간 보스 군단
-  for (const m of mids) {
-    if (m.done || m.y < -60) continue;
-    drawCrowd(MID, m.y, m.n, "#e5484d");
+  for (const o of gateObjs) {
+    o.grp.visible = !o.g.done && o.g.y > -1400;
+    o.grp.position.z = wZ(o.g.y);
   }
-  // 탄막
-  for (const b of bullets) {
-    ctx.beginPath(); ctx.arc(b.x, b.y, 6, 0, 7);
-    ctx.fillStyle = "#e5484d"; ctx.fill();
-    ctx.beginPath(); ctx.arc(b.x, b.y - 9, 3.5, 0, 7);
-    ctx.fillStyle = "rgba(229,72,77,.4)"; ctx.fill();
-  }
-  // 보스 군단
-  if (boss && boss.y > -80) {
+  mids.forEach((m, i) => {
+    if (m.done || m.y < -1400) midViz[i].hide();
+    else midViz[i].set(m.n, 0, wZ(m.y));
+  });
+  if (boss && boss.y > -1300) {
     const b = battle ?? { me: count, foe: boss.n };
-    if (b.foe > 0) drawCrowd(MID, Math.min(boss.y, CROWD_Y - 130), b.foe, "#e5484d");
-  }
-
-  // 내 군중 (피격 무적 동안 깜박임)
+    if (b.foe > 0) bossViz.set(b.foe, 0, wZ(Math.min(boss.y, CROWD_Y - 130)));
+    else bossViz.hide();
+  } else bossViz.hide();
   const me = battle ? battle.me : count;
   if (phase !== "title" && me > 0) {
-    if (invuln > 0) ctx.globalAlpha = 0.45 + 0.35 * Math.sin(invuln * 40);
-    drawCrowd(crowdX, CROWD_Y, me, "#3b82f6");
-    ctx.globalAlpha = 1;
+    meViz.set(me, cx, 0, invuln > 0 ? 0.45 + 0.35 * Math.sin(invuln * 40) : 1);
+  } else meViz.hide();
+  for (let i = 0; i < BULLETS3.length; i++) {
+    const b = bullets[i];
+    BULLETS3[i].visible = !!b;
+    if (b) BULLETS3[i].position.set(wX(b.x), 0.34, wZ(b.y));
   }
-
-  // 팝업 텍스트
-  for (const p of pops) {
-    ctx.globalAlpha = Math.max(0, p.life);
-    ctx.font = "bold 19px ui-monospace, monospace"; ctx.textAlign = "center";
-    ctx.fillStyle = p.col;
-    ctx.fillText(p.text, p.x, p.y - (1 - p.life) * 30);
+  for (let i = 0; i < POPS3.length; i++) {
+    const p = pops[i];
+    POPS3[i].spr.visible = !!p;
+    if (!p) continue;
+    if (POPS3[i].text !== p.text) { POPS3[i].text = p.text; POPS3[i].draw(p.text, p.col); }
+    POPS3[i].spr.material.opacity = Math.max(0, p.life);
+    POPS3[i].spr.position.set(wX(p.x), 1.5 + (1 - p.life) * 0.9, wZ(p.y));
   }
-  ctx.globalAlpha = 1;
+  renderer.render(scene, camera);
 }
 
 /* ── 루프 ─────────────────────────────────────────────── */
@@ -475,7 +592,7 @@ $("retry").addEventListener("click", () => {
 });
 
 let dragging = false;
-const toX = (e) => (e.clientX - ox) / scale;
+const toX = (e) => LANE_L + (e.clientX / innerWidth) * (LANE_R - LANE_L);
 addEventListener("pointerdown", (e) => {
   if (e.target === cv) e.preventDefault();   // 모바일 더블탭 줌·고스트 클릭 방지
   dragging = true; targetX = toX(e);
