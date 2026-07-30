@@ -35,6 +35,7 @@ export const GAMES = {
   logroll:      { dir: "max", min: 0, max: 100000 },    // 버틴 시간(초)
   pullpin:      { dir: "max", min: 1, max: 1000 },      // 핀 뽑기 클리어 스테이지
   watersort:    { dir: "max", min: 1, max: 10000 },     // 물 소팅 클리어 스테이지
+  gaterunner:   { dir: "max", min: 1, max: 10000 },     // 게이트 러너 클리어 스테이지
   reactiontime: { dir: "min", min: 0, max: 60000 },     // 반응속도(ms)
   "sort-line":  { dir: "max", min: 0, max: 100000 },    // 컨베이어 분류 정답 수
   touch25:      { dir: "min", min: 0, max: 3600 },      // 완주 시간(초)
