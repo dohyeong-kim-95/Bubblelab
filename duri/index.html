@@ -804,7 +804,15 @@ function resolveAnim(spec) {
 }
 const prefersReducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 const animObserver = "IntersectionObserver" in window
-  ? new IntersectionObserver((es) => { for (const e of es) { const a = e.target.__anim; if (a) (e.isIntersecting ? a.play() : a.pause()); } })
+  ? new IntersectionObserver((es) => {
+      for (const e of es) {
+        const a = e.target.__anim; if (!a) continue;
+        // 화면 안이면 재생, 화면 밖이면 정지 — 단 아직 DOM 에 안 붙은(분리된) 요소는
+        // 정지시키지 않는다(생성 직후 일시정지된 채 안 풀리는 경우 방지).
+        if (e.isIntersecting) a.play();
+        else if (e.target.isConnected) a.pause();
+      }
+    })
   : null;
 function playAnim(el, spec) {
   if (prefersReducedMotion || !el.animate) return; // 접근성: 모션 최소화 켜면 정지
