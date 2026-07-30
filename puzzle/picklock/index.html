@@ -88,6 +88,48 @@ function diffFor(s) {
 }
 window.blDiffAt = diffFor;
 
+/* ── 스테이지 생성 + 유사도 검출 ─────────────────────── */
+// 난이도(속도·노치 폭)는 스테이지의 순수 함수라, 후보 노치 배열 중
+// 직전 두 스테이지 지문과 자카드 유사도가 가장 낮은 배열만 고른다.
+// salt 0이 기존 시드와 동일해 예전 판과도 호환된다.
+function gen(stage2, salt = 0) {
+  const rnd = mulberry32(stage2 * 40093 + salt * 77617 + 17);
+  const n = Math.min(3 + stage2, 12);
+  const ns = [];
+  let prev = 90;
+  for (let i = 0; i < n; i++) {                   // 직전 위치에서 충분히 떨어진 곳
+    const a2 = (prev + 70 + rnd() * 220) % 360;
+    ns.push(a2); prev = a2;
+  }
+  return { notches: ns };
+}
+const fpOf = (g) => g.notches.map((a2, i) => `${i}:${Math.round(a2 / 20) % 18}`);
+const simFp = (a, b) => {
+  const A = new Set(a), B = new Set(b);
+  let hit = 0;
+  for (const x of A) if (B.has(x)) hit++;
+  return hit / Math.max(1, Math.max(A.size, B.size));
+};
+const fpCache = new Map();
+const structFp = (s2) => {
+  if (s2 < 1) return [];
+  if (!fpCache.has(s2)) fpCache.set(s2, fpOf(gen(s2, 0)));
+  return fpCache.get(s2);
+};
+function genTuned(stage2) {
+  const p1 = structFp(stage2 - 1), p2 = structFp(stage2 - 2);
+  let best2 = null, bestScore = Infinity;
+  for (let v = 0; v < 4; v++) {
+    const g = gen(stage2, v);
+    const fp = fpOf(g);
+    const score = Math.max(simFp(fp, p1), simFp(fp, p2));
+    if (score < bestScore) { bestScore = score; best2 = g; }
+    if (bestScore <= 0.15) break;
+  }
+  return best2;
+}
+window.blSimAt = (s) => s < 2 ? 0 : simFp(fpOf(genTuned(s)), fpOf(genTuned(s - 1)));
+
 /* ── 상태 ─────────────────────────────────────────────── */
 let stage = 1, best = +localStorage.getItem("picklock.best") || 0;
 let phase = "title";
@@ -95,16 +137,10 @@ let need = 0, hits = 0, ang = 0, dir = 1, spd = 0, half = 0;
 let notches = [], flash = 0, breakT = 0, shackleT = 0;
 
 function loadStage() {
-  const rnd = mulberry32(stage * 40093 + 17);
   need = Math.min(3 + stage, 12);
   spd = Math.min(200 + stage * 22, 500);          // 도/초
   half = Math.max(9, 21 - stage);                 // 노치 반각(도)
-  notches = [];
-  let prev = 90;
-  for (let i = 0; i < need; i++) {                // 직전 위치에서 충분히 떨어진 곳
-    let a2 = (prev + 70 + rnd() * 220) % 360;
-    notches.push(a2); prev = a2;
-  }
+  notches = genTuned(stage).notches.slice();
   hits = 0; ang = 200; dir = 1;
   dScore = diffFor(stage);
   flash = 0; breakT = 0; shackleT = 0;

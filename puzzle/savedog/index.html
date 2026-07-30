@@ -203,20 +203,46 @@ const diffOf = (g) => 100 * clamp01((g.feats.nGaps - 1) / 4 * 0.35 +
   (g.feats.bees - 8) / 45 * 0.25 + (g.feats.spd - 95) / 95 * 0.2 +
   (1.34 - g.feats.slack) / 0.28 * 0.2);
 
-// 레벨 자동 재배치: 후보 판을 몇 개 만들어 목표 난이도 곡선(targetD)에
-// 가장 가까운 판을 채택한다.
+// 유사도 지문: 강아지 자리·틈 위치(솔루션 선분)·벌집 자리 양자화 토큰
+const fpOf = (g) => [
+  `d:${Math.round(g.dog[0] / 40)},${Math.round(g.dog[1] / 40)}`,
+  ...g.solution.map(([A, B]) =>
+    `s:${Math.round(A[0] / 30)},${Math.round(A[1] / 30)},${Math.round(B[0] / 30)},${Math.round(B[1] / 30)}`),
+  ...g.hives.map((h) => `h:${Math.round(h[0] / 40)},${Math.round(h[1] / 40)}`),
+];
+const simFp = (a, b) => {
+  const A = new Set(a), B = new Set(b);
+  let hit = 0;
+  for (const x of A) if (B.has(x)) hit++;
+  return hit / Math.max(1, Math.max(A.size, B.size));
+};
+const fpCache = new Map();
+const structFp = (s2) => {
+  if (s2 < 1) return [];
+  if (!fpCache.has(s2)) fpCache.set(s2, fpOf(gen(s2, 0)));
+  return fpCache.get(s2);
+};
+
+// 레벨 자동 재배치 + 유사도 검출: 후보 판마다 (목표 난이도와의 거리) +
+// (직전 두 스테이지 구조 지문과의 자카드 유사도 × 30) 점수가 가장 낮은
+// 판을 채택한다. 이웃 지문은 살트0 구조라 스테이지의 순수 함수 —
+// 시드 고정 결정론(모두 같은 판)이 그대로 유지된다.
 function genTuned(stage) {
   const T = targetD(stage);
-  let best2 = null, bestGap = Infinity;
+  const p1 = structFp(stage - 1), p2 = structFp(stage - 2);
+  let best2 = null, bestScore = Infinity;
   for (let v = 0; v < 4; v++) {
     const g = gen(stage, v);
-    const gap = Math.abs(diffOf(g) - T);
-    if (gap < bestGap) { bestGap = gap; best2 = g; }
-    if (bestGap <= 5) break;
+    const fp = fpOf(g);
+    const score = Math.abs(diffOf(g) - T) +
+      30 * Math.max(simFp(fp, p1), simFp(fp, p2));
+    if (score < bestScore) { bestScore = score; best2 = g; }
+    if (bestScore <= 6) break;
   }
   return best2;
 }
 window.blDiffAt = (s) => diffOf(genTuned(s));
+window.blSimAt = (s) => s < 2 ? 0 : simFp(fpOf(genTuned(s)), fpOf(genTuned(s - 1)));
 
 /* ── 상태 ─────────────────────────────────────────────── */
 let stage = 1, best = +localStorage.getItem("savedog.best") || 0;
