@@ -84,6 +84,11 @@
 </div>
 <script>
 "use strict";
+// 정적 난이도(0~100)와 별점 — DIFFICULTY.md Phase 1
+const clamp01 = (x) => Math.max(0, Math.min(1, x));
+const starsOf = (d) => "\u2605".repeat(Math.max(1, Math.min(5, Math.ceil(d / 20))));
+let dScore = 0;
+
 /* ── 시드 고정 난수 (모두가 같은 스테이지를 받는다) ──── */
 const mulberry32 = (a) => () => {
   a |= 0; a = (a + 0x6D2B79F5) | 0;
@@ -170,6 +175,12 @@ function gen(stage) {
   return { tubes: [[0, 0, 0, 1], [1, 1, 1, 0], [], []], solution: [[0, 2], [1, 0], [2, 1]] };
 }
 
+const diffOf = (g) => {
+  const C = g.tubes.length - 2;
+  return 100 * clamp01((g.solution.length - C * 2) / (C * 3) * 0.5 + (C - 3) / 6 * 0.5);
+};
+window.blDiffAt = (s) => diffOf(gen(s));
+
 /* ── 상태 ─────────────────────────────────────────────── */
 let stage = Math.max(1, +localStorage.getItem("watersort.stage") || 1);
 let best = +localStorage.getItem("watersort.best") || 0;
@@ -180,12 +191,13 @@ const $ = (id) => document.getElementById(id);
 function loadStage() {
   const g = gen(stage);
   tubes = g.tubes; moves = 0; sel = -1; undoStack = [];
+  dScore = diffOf(g);
   window.__ws = { solution: g.solution, tubes: () => tubes };   // 테스트/디버그용
   render();
 }
 
 function render() {
-  $("hStage").textContent = `스테이지 ${stage}`;
+  $("hStage").textContent = `스테이지 ${stage} ${starsOf(dScore)}`;
   $("hMoves").textContent = `이동 ${moves}`;
   $("undo").disabled = !undoStack.length;
   const board = $("board");

@@ -68,6 +68,11 @@
 <canvas id="cv"></canvas>
 <script>
 "use strict";
+// 정적 난이도(0~100)와 별점 — DIFFICULTY.md Phase 1
+const clamp01 = (x) => Math.max(0, Math.min(1, x));
+const starsOf = (d) => "\u2605".repeat(Math.max(1, Math.min(5, Math.ceil(d / 20))));
+let dScore = 0;
+
 /* ── 상수 ─────────────────────────────────────────────── */
 const W = 360, H = 640, CAR_R = 15, CRASH_D = 30, BASE_SPD = 130;
 const PAL = ["#e5484d", "#3b82f6", "#46a758", "#f79009", "#8e4ec6"];
@@ -177,12 +182,15 @@ function gen(stage) {
         }
       }
       if (cross < needCross) continue;
-      return { defs: starts.map((s, i) => [s[0], s[1], spots[i][0], spots[i][1]]), boxes };
+      return { defs: starts.map((s, i) => [s[0], s[1], spots[i][0], spots[i][1]]), boxes, cross };
     }
   }
   // 이론상 도달 불가 폴백 (제약 전부 실패 시 1대짜리)
-  return { defs: [[80, 520, 280, 120]], boxes: [null] };
+  return { defs: [[80, 520, 280, 120]], boxes: [null], cross: 0 };
 }
+const diffOf = (g) => 100 * clamp01((g.defs.length - 1) / 4 * 0.7 +
+  (g.cross ?? 0) / Math.max(1, g.defs.length * (g.defs.length - 1) / 2) * 0.3);
+window.blDiffAt = (s) => diffOf(gen(s));
 
 /* ── 상태 ─────────────────────────────────────────────── */
 let stage = 1, best = +localStorage.getItem("parkmaster.best") || 0;
@@ -193,6 +201,7 @@ let drawingCar = -1, curPath = [];
 function loadStage() {
   const g = gen(stage);
   spd = BASE_SPD;
+  dScore = diffOf(g);
   tip = stage === 1 ? "차를 누른 채 P까지 길을 그리세요"
       : stage === 2 ? "직선끼리는 부딪혀요. 길이로 타이밍을 벌리세요" : "";
   cars = g.defs.map(([sx, sy, tx, ty], i) => ({
@@ -340,7 +349,7 @@ requestAnimationFrame(loop);
 
 /* ── 입력/UI ──────────────────────────────────────────── */
 const $ = (id) => document.getElementById(id);
-function hud() { $("hStage").textContent = `스테이지 ${stage} · 🚗 ${cars.length}대`; }
+function hud() { $("hStage").textContent = `스테이지 ${stage} ${starsOf(dScore)} · 🚗 ${cars.length}대`; }
 function show(emoji, title, msg, btnText) {
   $("oEmoji").textContent = emoji; $("oTitle").textContent = title;
   $("oMsg").textContent = msg; $("btn").textContent = btnText;

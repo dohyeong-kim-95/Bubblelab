@@ -61,6 +61,11 @@
 <canvas id="cv"></canvas>
 <script>
 "use strict";
+// 정적 난이도(0~100)와 별점 — DIFFICULTY.md Phase 1
+const clamp01 = (x) => Math.max(0, Math.min(1, x));
+const starsOf = (d) => "\u2605".repeat(Math.max(1, Math.min(5, Math.ceil(d / 20))));
+let dScore = 0;
+
 /* ── 상수/난수 ────────────────────────────────────────── */
 const W = 360, H = 640, CX = 180, CY = 340, R = 112;
 const dark = matchMedia("(prefers-color-scheme: dark)");
@@ -72,6 +77,14 @@ const mulberry32 = (a) => () => {
 };
 const D2R = Math.PI / 180;
 const angDiff = (a, b) => ((a - b + 540) % 360) - 180;
+
+function diffFor(s) {
+  const need2 = Math.min(3 + s, 12);
+  const spd2 = Math.min(200 + s * 22, 500) + 7 * need2;  // 중반 속도 기준
+  const windowMs = (2 * Math.max(9, 21 - s)) / spd2 * 1000;
+  return 100 * clamp01((170 - windowMs) / 130 * 0.7 + (need2 - 4) / 8 * 0.3);
+}
+window.blDiffAt = diffFor;
 
 /* ── 상태 ─────────────────────────────────────────────── */
 let stage = 1, best = +localStorage.getItem("picklock.best") || 0;
@@ -90,7 +103,8 @@ function loadStage() {
     let a2 = (prev + 70 + rnd() * 220) % 360;
     notches.push(a2); prev = a2;
   }
-  hits = 0; ang = prev === notches[0] ? 200 : 200; dir = 1;
+  hits = 0; ang = 200; dir = 1;
+  dScore = diffFor(stage);
   flash = 0; breakT = 0; shackleT = 0;
   phase = "play";
   window.__pl = {                                  // 테스트/디버그용
@@ -240,7 +254,7 @@ requestAnimationFrame(loop);
 
 /* ── 입력/UI ──────────────────────────────────────────── */
 const $ = (id) => document.getElementById(id);
-function hud() { $("hStage").textContent = `스테이지 ${stage} · 🔑 ${hits}/${need}`; }
+function hud() { $("hStage").textContent = `스테이지 ${stage} ${starsOf(dScore)} · 🔑 ${hits}/${need}`; }
 function show(emoji, title, msg, btnText) {
   $("oEmoji").textContent = emoji; $("oTitle").textContent = title;
   $("oMsg").textContent = msg; $("btn").textContent = btnText;

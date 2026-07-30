@@ -62,6 +62,11 @@
 <canvas id="cv"></canvas>
 <script>
 "use strict";
+// 정적 난이도(0~100)와 별점 — DIFFICULTY.md Phase 1
+const clamp01 = (x) => Math.max(0, Math.min(1, x));
+const starsOf = (d) => "\u2605".repeat(Math.max(1, Math.min(5, Math.ceil(d / 20))));
+let dScore = 0;
+
 // 구형 모바일 브라우저(iOS 15 이하 등)엔 roundRect가 없다 — 없으면 폴리필
 if (!CanvasRenderingContext2D.prototype.roundRect) {
   CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
@@ -151,6 +156,12 @@ function gen(stage) {
            solution: order, posOf, inBoard };
 }
 
+const diffOf = (g) => {
+  const uniq = new Set(g.queue).size;
+  return 100 * clamp01((g.queue.length - 3) / 8 * 0.6 + (uniq - 3) / 4 * 0.4);
+};
+window.blDiffAt = (s) => diffOf(gen(s));
+
 /* ── 상태 ─────────────────────────────────────────────── */
 let stage = 1, best = +localStorage.getItem("screwout.best") || 0;
 let phase = "title";
@@ -160,6 +171,7 @@ function loadStage() {
   G = gen(stage);
   for (const b of G.boards) { b.dead = b.ghost; b.fall = b.ghost ? 99 : 0; }
   qi = 0; boxFill = 0; tray = []; anims = []; denyId = -1;
+  dScore = diffOf(G);
   phase = "play";
   window.__sw = {                                      // 테스트/디버그용
     solution: G.solution,
@@ -348,7 +360,7 @@ requestAnimationFrame(loop);
 const $ = (id) => document.getElementById(id);
 function hud() {
   const left = G ? G.screws.filter((s) => s.state === "on").length : 0;
-  $("hStage").textContent = `스테이지 ${stage} · 🔩 ${left}`;
+  $("hStage").textContent = `스테이지 ${stage} ${starsOf(dScore)} · 🔩 ${left}`;
 }
 function show(emoji, title, msg, btnText) {
   $("oEmoji").textContent = emoji; $("oTitle").textContent = title;

@@ -62,6 +62,11 @@
 <canvas id="cv"></canvas>
 <script>
 "use strict";
+// 정적 난이도(0~100)와 별점 — DIFFICULTY.md Phase 1
+const clamp01 = (x) => Math.max(0, Math.min(1, x));
+const starsOf = (d) => "\u2605".repeat(Math.max(1, Math.min(5, Math.ceil(d / 20))));
+let dScore = 0;
+
 /* ── 상수 ─────────────────────────────────────────────── */
 const W = 360, H = 640, R = 9, GRAV = 1600, STEP = 1 / 120;
 const XL = 70, XR = 290;                    // 통(샤프트) 좌우 벽
@@ -115,6 +120,14 @@ const LEVELS = [
             { t: "g", x: 252, y: 287, n: 5 }] },
 ];
 const totalGold = (lv) => lv.balls.filter(b => b.t === "g").reduce((s, b) => s + b.n, 0);
+function diffFor(s) {
+  const lv = levelFor(s);
+  const lava = lv.balls.filter((b) => b.t === "l").reduce((k, b) => k + b.n, 0);
+  const loop = s > LEVELS.length ? Math.floor((s - LEVELS.length - 1) / 8) + 1 : 0;
+  return Math.min(100, 100 * clamp01((lv.pins.length - 1) / 4 * 0.3 +
+    lava / 12 * 0.3 + (lv.need / totalGold(lv)) * 0.35) + Math.min(20, loop * 8));
+}
+window.blDiffAt = diffFor;
 function levelFor(stage) {
   if (stage <= LEVELS.length) return { ...LEVELS[stage - 1] };
   const idx = (stage - LEVELS.length - 1) % 8 + 2;      // 3~10번 레벨 순환
@@ -182,6 +195,7 @@ function loadStage() {
   });
   balls = []; lv.balls.forEach(spawn);
   need = lv.need; collected = 0; tip = lv.tip ?? ""; heroFace = "🤠";
+  dScore = diffFor(stage);
   hud();
 }
 
@@ -394,7 +408,7 @@ requestAnimationFrame(loop);
 /* ── 입력/UI ──────────────────────────────────────────── */
 const $ = (id) => document.getElementById(id);
 function hud() {
-  $("hStage").textContent = `스테이지 ${stage}`;
+  $("hStage").textContent = `스테이지 ${stage} ${starsOf(dScore)}`;
   $("hGold").textContent = `💰 ${collected}/${need}`;
 }
 function show(emoji, title, msg, btnText) {

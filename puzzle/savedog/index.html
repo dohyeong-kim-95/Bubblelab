@@ -74,6 +74,11 @@
 <canvas id="cv"></canvas>
 <script>
 "use strict";
+// 정적 난이도(0~100)와 별점 — DIFFICULTY.md Phase 1
+const clamp01 = (x) => Math.max(0, Math.min(1, x));
+const starsOf = (d) => "\u2605".repeat(Math.max(1, Math.min(5, Math.ceil(d / 20))));
+let dScore = 0;
+
 /* ── 상수 ─────────────────────────────────────────────── */
 const W = 360, H = 640, DOG_R = 14, BEE_R = 5, SURVIVE = 5;
 const dark = matchMedia("(prefers-color-scheme: dark)");
@@ -116,9 +121,18 @@ function levelFor(s) {
   return { ...lv, spd: 95 * (1 + loop * 0.18), extra: loop * 2 };
 }
 
+function diffFor(s) {
+  const lv = levelFor(s);
+  const bees = lv.hives.reduce((k, h) => k + h[2] + lv.extra, 0);
+  return 100 * clamp01((bees - 8) / 20 * 0.4 + (lv.spd - 95) / 80 * 0.3 +
+    ((s - 1) % STAGES.length) / 7 * 0.3);
+}
+window.blDiffAt = diffFor;
+
 function loadStage() {
   const lv = levelFor(stage);
   dog = lv.dog; hives = lv.hives; tip = lv.tip ?? "";
+  dScore = diffFor(stage);
   walls = lv.walls.map((w) => seg(...w));
   stroke = []; lastPt = null;
   ink = inkMax = lv.ink; beeSpd = lv.spd;
@@ -267,7 +281,7 @@ requestAnimationFrame(loop);
 
 /* ── 입력/UI ──────────────────────────────────────────── */
 const $ = (id) => document.getElementById(id);
-function hud() { $("hStage").textContent = `스테이지 ${stage}`; }
+function hud() { $("hStage").textContent = `스테이지 ${stage} ${starsOf(dScore)}`; }
 function inkUi() { $("ink").style.width = (ink / inkMax * 100) + "%"; }
 function show(emoji, title, msg, btnText) {
   $("oEmoji").textContent = emoji; $("oTitle").textContent = title;
