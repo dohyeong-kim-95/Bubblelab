@@ -17,6 +17,8 @@
          align-items: center; padding: .5rem .7rem; font-size: .78rem; z-index: 3;
          pointer-events: none; white-space: nowrap; }
   #hud .sp { flex: 1; }
+  #hud > span:first-child { flex: 0 1 auto; min-width: 0; overflow: hidden;
+                            text-overflow: ellipsis; }
   #retry { pointer-events: auto; font: inherit; border: 1.5px solid currentColor;
            background: none; color: inherit; border-radius: 1rem; padding: .15rem .7rem;
            cursor: pointer; opacity: .75; }
@@ -65,6 +67,7 @@
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
 const starsOf = (d) => "\u2605".repeat(Math.max(1, Math.min(5, Math.ceil(d / 20))));
 let dScore = 0;
+const targetD = (s) => Math.min(90, 5 + 4.7 * s);
 
 /* ── 상수/난수 ────────────────────────────────────────── */
 const W = 360, H = 640, CELL = 46, GYF = 92;
@@ -83,8 +86,8 @@ const FOODS = {
 };
 
 /* ── 스테이지 생성 (빈칸을 조각으로 분할 → 항상 딱 맞음) ── */
-function gen(stage) {
-  const rnd = mulberry32(stage * 61403 + 41);
+function gen(stage, salt = 0) {
+  const rnd = mulberry32(stage * 61403 + salt * 24107 + 41);
   const C = stage < 3 ? 4 : 5;
   const R = Math.min(4 + ((stage - 1) / 2 | 0), 6);
   const taken = Array.from({ length: R }, () => Array(C).fill(false));
@@ -118,7 +121,21 @@ const diffOf = (g) => {
   return 100 * clamp01((g.C * g.R - 16) / 14 * 0.5 + big * 0.3 +
     (g.pieces.length - 10) / 12 * 0.2);
 };
-window.blDiffAt = (s) => diffOf(gen(s));
+
+// 레벨 자동 재배치: 후보 판을 몇 개 만들어 목표 난이도 곡선(targetD)에
+// 가장 가까운 판을 채택한다. salt까지 시드 고정이라 모두 같은 판을 받는다.
+function genTuned(stage) {
+  const T = targetD(stage);
+  let best = null, bestGap = Infinity;
+  for (let v = 0; v < 6; v++) {
+    const g = gen(stage, v);
+    const gap = Math.abs(diffOf(g) - T);
+    if (gap < bestGap) { bestGap = gap; best = g; }
+    if (bestGap <= 5) break;
+  }
+  return best;
+}
+window.blDiffAt = (s) => diffOf(genTuned(s));
 
 /* ── 상태 ─────────────────────────────────────────────── */
 let stage = 1, best = +localStorage.getItem("fillfridge.best") || 0;
@@ -140,7 +157,7 @@ function layoutTray() {
 }
 
 function loadStage() {
-  const g = gen(stage);
+  const g = genTuned(stage);
   C = g.C; R = g.R; GXF = (W - C * CELL) / 2;
   pieces = g.pieces; order = g.order;
   dScore = diffOf(g);

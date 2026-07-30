@@ -17,6 +17,8 @@
          align-items: center; padding: .5rem .7rem; font-size: .78rem; z-index: 3;
          pointer-events: none; white-space: nowrap; }
   #hud .sp { flex: 1; }
+  #hud > span:first-child { flex: 0 1 auto; min-width: 0; overflow: hidden;
+                            text-overflow: ellipsis; }
   #retry { pointer-events: auto; font: inherit; border: 1.5px solid currentColor;
            background: none; color: inherit; border-radius: 1rem; padding: .15rem .7rem;
            cursor: pointer; opacity: .75; }
@@ -66,6 +68,7 @@
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
 const starsOf = (d) => "\u2605".repeat(Math.max(1, Math.min(5, Math.ceil(d / 20))));
 let dScore = 0;
+const targetD = (s) => Math.min(90, 5 + 4.7 * s);
 
 // 구형 모바일 브라우저(iOS 15 이하 등)엔 roundRect가 없다 — 없으면 폴리필
 if (!CanvasRenderingContext2D.prototype.roundRect) {
@@ -93,8 +96,8 @@ const mulberry32 = (a) => () => {
 };
 
 /* ── 스테이지 생성 (역방향: 추출 순서 → 상자 색 배정) ── */
-function gen(stage) {
-  const rnd = mulberry32(stage * 15013 + 3);
+function gen(stage, salt = 0) {
+  const rnd = mulberry32(stage * 15013 + salt * 50333 + 3);
   const nB = Math.min(3 + stage, 9);
   const C = Math.min(3 + Math.floor(stage / 2), 7);
   const boards = [], screws = [];
@@ -160,7 +163,21 @@ const diffOf = (g) => {
   const uniq = new Set(g.queue).size;
   return 100 * clamp01((g.queue.length - 3) / 8 * 0.6 + (uniq - 3) / 4 * 0.4);
 };
-window.blDiffAt = (s) => diffOf(gen(s));
+
+// 레벨 자동 재배치: 후보 판을 몇 개 만들어 목표 난이도 곡선(targetD)에
+// 가장 가까운 판을 채택한다. salt까지 시드 고정이라 모두 같은 판을 받는다.
+function genTuned(stage) {
+  const T = targetD(stage);
+  let best = null, bestGap = Infinity;
+  for (let v = 0; v < 6; v++) {
+    const g = gen(stage, v);
+    const gap = Math.abs(diffOf(g) - T);
+    if (gap < bestGap) { bestGap = gap; best = g; }
+    if (bestGap <= 5) break;
+  }
+  return best;
+}
+window.blDiffAt = (s) => diffOf(genTuned(s));
 
 /* ── 상태 ─────────────────────────────────────────────── */
 let stage = 1, best = +localStorage.getItem("screwout.best") || 0;
@@ -168,7 +185,7 @@ let phase = "title";
 let G = null, qi = 0, boxFill = 0, tray = [], anims = [], denyId = -1, denyT = 0;
 
 function loadStage() {
-  G = gen(stage);
+  G = genTuned(stage);
   for (const b of G.boards) { b.dead = b.ghost; b.fall = b.ghost ? 99 : 0; }
   qi = 0; boxFill = 0; tray = []; anims = []; denyId = -1;
   dScore = diffOf(G);

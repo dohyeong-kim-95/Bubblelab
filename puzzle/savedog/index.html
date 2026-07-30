@@ -17,6 +17,8 @@
          align-items: center; padding: .5rem .7rem; font-size: .78rem; z-index: 3;
          pointer-events: none; white-space: nowrap; }
   #hud .sp { flex: 1; }
+  #hud > span:first-child { flex: 0 1 auto; min-width: 0; overflow: hidden;
+                            text-overflow: ellipsis; }
   #retry { pointer-events: auto; font: inherit; border: 1.5px solid currentColor;
            background: none; color: inherit; border-radius: 1rem; padding: .15rem .7rem;
            cursor: pointer; opacity: .75; }

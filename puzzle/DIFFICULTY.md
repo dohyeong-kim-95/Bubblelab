@@ -1,8 +1,12 @@
 # puzzle 난이도 측정기 — 기획
 
-상태: **Phase 1 구현됨** (정적 측정기 + HUD 별점, 10종 전체). 각 게임은
-`window.blDiffAt(stage)`로 0~100 점수를 노출하고 HUD에 ★~★★★★★를
-표시한다. Phase 2(실측 텔레메트리)·3(대시보드)은 아래 기획대로 남아 있음.
+상태: **Phase 1 + 자동 재배치 구현됨**. 10종 전체가 `window.blDiffAt(stage)`
+로 0~100 점수를 노출하고 HUD에 ★~★★★★★를 표시한다. 생성형 7종
+(watersort·screwout·icebreak·trafficjam·fillfridge·parkmaster·gaterunner)은
+`genTuned()`가 후보 판(salt 시드)을 몇 개 만들어 공통 목표 곡선
+`targetD(s) = min(90, 5 + 4.7s)`에 가장 가까운 판을 채택한다 — 난이도
+기반 레벨 자동 재배치. Phase 2(실측 텔레메트리)·3(대시보드)은 아래
+기획대로 남아 있음. 실측이 쌓이면 targetD와 게임별 가중치를 보정한다.
 
 생성된 레벨의 난이도를 숫자로 만들어
 ① 스테이지 커브를 의도대로 제어하고 ② 플레이어에게 별점으로 보여주고

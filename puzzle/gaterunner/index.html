@@ -17,6 +17,8 @@
          align-items: center; padding: .5rem .7rem; font-size: .78rem; z-index: 3;
          pointer-events: none; white-space: nowrap; }
   #hud .sp { flex: 1; }
+  #hud > span:first-child { flex: 0 1 auto; min-width: 0; overflow: hidden;
+                            text-overflow: ellipsis; }
   #retry { pointer-events: auto; font: inherit; border: 1.5px solid currentColor;
            background: none; color: inherit; border-radius: 1rem; padding: .15rem .7rem;
            cursor: pointer; opacity: .75; }
@@ -64,6 +66,7 @@
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
 const starsOf = (d) => "\u2605".repeat(Math.max(1, Math.min(5, Math.ceil(d / 20))));
 let dScore = 0;
+const targetD = (s) => Math.min(90, 5 + 4.7 * s);
 
 /* ── 상수/난수 ────────────────────────────────────────── */
 const W = 360, H = 640, LANE_L = 40, LANE_R = 320, MID = 180, CROWD_Y = 505;
@@ -83,9 +86,9 @@ const label = (g) => (g.op === "x" ? "×" : g.op === "/" ? "÷" : g.op) + g.v;
 const isGood = (g) => g.op === "+" || g.op === "x";
 
 /* ── 스테이지 생성 (그리디로 이길 수 있는 판만) ───────── */
-function gen(stage) {
+function gen(stage, salt = 0) {
   for (let attempt = 0; attempt < 80; attempt++) {
-    const rnd = mulberry32(stage * 8009 + attempt * 50021 + 7);
+    const rnd = mulberry32(stage * 8009 + attempt * 50021 + salt * 30467 + 7);
     const n = Math.min(6 + stage, 14);
     const plus = () => ({ op: "+", v: 2 + ((rnd() * (8 + stage * 2)) | 0) });
     const minus = () => ({ op: "-", v: 3 + ((rnd() * (6 + stage * 3)) | 0) });
@@ -113,7 +116,22 @@ function gen(stage) {
 }
 const diffOf = (g, spd2) => 100 * clamp01((g.pairs.length - 7) / 7 * 0.5 +
   (spd2 - 160) / 120 * 0.3 + g.bad / 3 * 0.2);
-window.blDiffAt = (s) => diffOf(gen(s), Math.min(150 + s * 10, 280));
+const spdFor = (s) => Math.min(150 + s * 10, 280);
+
+// 레벨 자동 재배치: 후보 판을 몇 개 만들어 목표 난이도 곡선(targetD)에
+// 가장 가까운 판을 채택한다. salt까지 시드 고정이라 모두 같은 판을 받는다.
+function genTuned(stage) {
+  const T = targetD(stage);
+  let best = null, bestGap = Infinity;
+  for (let v = 0; v < 6; v++) {
+    const g = gen(stage, v);
+    const gap = Math.abs(diffOf(g, spdFor(stage)) - T);
+    if (gap < bestGap) { bestGap = gap; best = g; }
+    if (bestGap <= 5) break;
+  }
+  return best;
+}
+window.blDiffAt = (s) => diffOf(genTuned(s), spdFor(s));
 
 /* ── 상태 ─────────────────────────────────────────────── */
 let stage = 1, best = +localStorage.getItem("gaterunner.best") || 0;
@@ -124,7 +142,7 @@ let pops = [];                    // {text,x,y,life,col}
 let battle = null;                // {me, foe, t}
 
 function loadStage() {
-  const g = gen(stage);
+  const g = genTuned(stage);
   pairs = g.pairs;
   const spacing = 250;
   gates = g.pairs.map((p, i) => ({ p, y: -120 - i * spacing, done: false }));

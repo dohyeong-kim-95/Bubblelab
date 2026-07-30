@@ -17,6 +17,8 @@
          align-items: center; padding: .5rem .7rem; font-size: .78rem; z-index: 3;
          pointer-events: none; white-space: nowrap; }
   #hud .sp { flex: 1; }
+  #hud > span:first-child { flex: 0 1 auto; min-width: 0; overflow: hidden;
+                            text-overflow: ellipsis; }
   #retry { pointer-events: auto; font: inherit; border: 1.5px solid currentColor;
            background: none; color: inherit; border-radius: 1rem; padding: .15rem .7rem;
            cursor: pointer; opacity: .75; }
@@ -65,6 +67,7 @@
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
 const starsOf = (d) => "\u2605".repeat(Math.max(1, Math.min(5, Math.ceil(d / 20))));
 let dScore = 0;
+const targetD = (s) => Math.min(90, 5 + 4.7 * s);
 
 /* ── 상수/난수 ────────────────────────────────────────── */
 const W = 360, H = 640, N = 6, CELL = 50, GX = 30, GY = 170, EXIT_ROW = 2;
@@ -125,11 +128,11 @@ function solve(cars, capStates = 150000) {
 }
 
 /* ── 스테이지 생성 ────────────────────────────────────── */
-function gen(stage) {
+function gen(stage, salt = 0) {
   const target = Math.min(3 + stage, 14);           // 목표 최소 이동 수
   let bestPick = null;
   for (let attempt = 0; attempt < 350; attempt++) {
-    const rnd = mulberry32(stage * 52501 + attempt * 613 + 29);
+    const rnd = mulberry32(stage * 52501 + attempt * 613 + salt * 35617 + 29);
     const cars = [{ r: EXIT_ROW, c: (rnd() * 2) | 0, len: 2, h: true }];
     const occ = new Int8Array(N * N);
     const mark = (k2, on) => {
@@ -166,7 +169,21 @@ function gen(stage) {
 
 const diffOf = (g) => 100 * clamp01((g.optimal - 2) / 16 * 0.7 +
   (g.cars.length - 6) / 7 * 0.3);
-window.blDiffAt = (s) => diffOf(gen(s));
+
+// 레벨 자동 재배치: 후보 판을 몇 개 만들어 목표 난이도 곡선(targetD)에
+// 가장 가까운 판을 채택한다. salt까지 시드 고정이라 모두 같은 판을 받는다.
+function genTuned(stage) {
+  const T = targetD(stage);
+  let best = null, bestGap = Infinity;
+  for (let v = 0; v < 4; v++) {
+    const g = gen(stage, v);
+    const gap = Math.abs(diffOf(g) - T);
+    if (gap < bestGap) { bestGap = gap; best = g; }
+    if (bestGap <= 5) break;
+  }
+  return best;
+}
+window.blDiffAt = (s) => diffOf(genTuned(s));
 
 /* ── 상태 ─────────────────────────────────────────────── */
 let stage = 1, best = +localStorage.getItem("trafficjam.best") || 0;
@@ -175,7 +192,7 @@ let cars = [], moves = 0, optimal = 0, exitAnim = 0;
 let drag = null;                                     // {i, grabOff, pos(float), lo, hi, startPos}
 
 function loadStage() {
-  const g = gen(stage);
+  const g = genTuned(stage);
   cars = g.cars.map((k, i) => ({ ...k, col: PAL[i % PAL.length] }));
   optimal = g.optimal; moves = 0; exitAnim = 0; drag = null;
   dScore = diffOf(g);
