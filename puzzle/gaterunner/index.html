@@ -109,13 +109,63 @@ function gen(stage, salt = 0) {
       if (c <= 0) { dead = true; break; }
     }
     if (dead || c < 6) continue;
-    const boss = Math.max(3, Math.floor(c * 0.62));
-    return { pairs, boss, bad };
+
+    // 중간 보스: 그리디 군중의 일부를 요구하는 벽. 탄막 최대 피격을
+    // 가정해도 넘을 수 있는 크기만 허용 (풀이 보장 유지)
+    const dmg = 1 + (stage / 8 | 0);              // 탄막 피격당 손실
+    const hitsBudget = 3 + (stage / 8 | 0);       // 가정하는 최대 피격 수
+    const M = stage >= 4 ? Math.min(3, 1 + ((stage - 4) / 8 | 0)) : 0;
+    const midIdx = Array.from({ length: M },
+      (_, j) => Math.max(1, Math.round(n * (j + 1) / (M + 1)) - 1));
+    const mids = [];
+    let cur = 5, dead2 = false;
+    for (let i = 0; i < n; i++) {
+      cur = Math.max(apply(cur, pairs[i][0]), apply(cur, pairs[i][1]));
+      if (midIdx.includes(i)) {
+        const size = Math.max(2, Math.floor(cur * (0.24 + rnd() * 0.12)));
+        // 피격 예산을 다 써도 보스를 넘고 25% 헤드룸이 남아야 채택
+        if (cur - hitsBudget * dmg - size < Math.max(4, cur * 0.25)) { dead2 = true; break; }
+        mids.push({ gateIdx: i, n: size });
+        cur -= size;
+      }
+    }
+    if (dead2) continue;
+    const worstFinal = cur - hitsBudget * dmg;
+    if (worstFinal < 6) continue;
+    const boss = Math.max(3, Math.floor(worstFinal * 0.62));
+
+    // 탄막 스케줄: 5개 차선 중 k개에 발사 — 항상 빈 차선이 있어 회피 가능
+    const volleys = [];
+    if (stage >= 3) {
+      const LANES = [70, 125, 180, 235, 290];
+      const interval = Math.max(1.1, 2.3 - stage * 0.025);
+      const k = Math.min(3, 1 + (stage >= 12 ? 1 : 0) + (stage >= 30 ? 1 : 0));
+      const spdC = Math.min(150 + stage * 10, 280);
+      const courseT = (120 + n * 250 + 320) / spdC;
+      // 패턴 제약: 왼편(70·125)·오른편(235·290)에서 각각 최대 1발만 —
+      // 어느 편에 있든 항상 피할 자리가 남는다 (회피 가능 보장)
+      const leftL = [70, 125], rightL = [235, 290];
+      for (let t3 = 1.4; t3 < courseT; t3 += interval) {
+        const xs = [];
+        const first = rnd() < 0.5 ? leftL[(rnd() * 2) | 0] : rightL[(rnd() * 2) | 0];
+        xs.push(first);
+        if (k >= 2) {
+          const other = first < 180 ? rightL : leftL;
+          xs.push(other[(rnd() * 2) | 0]);
+        }
+        if (k >= 3) xs.push(180);
+        volleys.push({ at: t3, xs });
+      }
+    }
+    return { pairs, boss, bad, mids, volleys, dmg,
+             bps: volleys.length ? (volleys[0] ? (stage >= 3 ? 1 / Math.max(1.1, 2.3 - stage * 0.025) : 0) : 0) : 0 };
   }
-  return { pairs: [[{ op: "+", v: 5 }, { op: "-", v: 3 }]], boss: 4, bad: 0 };
+  return { pairs: [[{ op: "+", v: 5 }, { op: "-", v: 3 }]], boss: 4, bad: 0,
+           mids: [], volleys: [], dmg: 1, bps: 0 };
 }
-const diffOf = (g, spd2) => 100 * clamp01((g.pairs.length - 7) / 7 * 0.5 +
-  (spd2 - 160) / 120 * 0.3 + g.bad / 3 * 0.2);
+const diffOf = (g, spd2) => 100 * clamp01((g.pairs.length - 7) / 7 * 0.3 +
+  (spd2 - 160) / 120 * 0.15 + g.bad / 3 * 0.1 + g.mids.length / 3 * 0.2 +
+  clamp01(g.bps / 0.9) * 0.15 + (g.dmg - 1) / 4 * 0.1);
 const spdFor = (s) => Math.min(150 + s * 10, 280);
 
 // 레벨 자동 재배치: 후보 판을 몇 개 만들어 목표 난이도 곡선(targetD)에
@@ -137,9 +187,11 @@ window.blDiffAt = (s) => diffOf(genTuned(s), spdFor(s));
 let stage = 1, best = +localStorage.getItem("gaterunner.best") || 0;
 let phase = "title";              // title | play | boss | win | fail
 let pairs = [], gates = [], boss = null, count = 5;
+let mids = [], bullets = [], volleys = [], tRun = 0, invuln = 0, bulletSpd = 240;
 let crowdX = MID, targetX = MID, speed = 150, scroll = 0;
 let pops = [];                    // {text,x,y,life,col}
 let battle = null;                // {me, foe, t}
+let failMsg = null;
 
 function loadStage() {
   const g = genTuned(stage);
@@ -147,14 +199,28 @@ function loadStage() {
   const spacing = 250;
   gates = g.pairs.map((p, i) => ({ p, y: -120 - i * spacing, done: false }));
   boss = { n: g.boss, y: -120 - g.pairs.length * spacing - 320, done: false };
+  mids = g.mids.map((m) => ({ n: m.n, y: -120 - m.gateIdx * spacing - 125, done: false }));
+  volleys = g.volleys.map((v) => ({ ...v, fired: false }));
+  bullets = []; tRun = 0; invuln = 0;
+  bulletSpd = Math.min(380, 230 + stage * 2.5);
+  window.__grDmg = g.dmg;
   count = 5; crowdX = MID; targetX = MID; battle = null; pops = [];
   speed = Math.min(150 + stage * 10, 280);
   dScore = diffOf(g, speed);
   window.__gr = {                          // 테스트/디버그용
     pairs: g.pairs, boss: g.boss,
-    state: () => ({ count, x: crowdX, next: gates.findIndex((gt) => !gt.done) }),
+    state: () => {
+      const next = gates.findIndex((gt) => !gt.done);
+      return { count, x: crowdX, next,
+               nextY: next >= 0 ? gates[next].y : -999,
+               bullets: bullets.map((b) => [b.x, b.y]),
+               mids: mids.filter((m) => !m.done).map((m) => [m.y, m.n]) };
+    },
     steer: (x) => { targetX = x; },
   };
+  window.__grJump = (s2) => { stage = s2;
+    document.getElementById("overlay").classList.add("hide");
+    phase = "play"; loadStage(); };
   hud();
 }
 
@@ -172,9 +238,10 @@ function endStage(ok) {
     const quips = ["광고 속 그 사람도 맨날 -30 문으로 들어가던데요.",
                    "괜찮아요. 광고는 원래 지는 장면만 보여줘요.",
                    "이게 바로 광고에서 보던 그 발컨입니다."];
-    show("💀", "전멸…", (count <= 0 ? "군중이 다 사라졌어요." :
-         `${count}명 vs ${boss.n}명. 역부족이었습니다.`) +
+    show("💀", "전멸…", (failMsg ?? (count <= 0 ? "군중이 다 사라졌어요." :
+         `${count}명 vs ${boss.n}명. 역부족이었습니다.`)) +
          "\n\n" + quips[(Math.random() * quips.length) | 0], "다시 도전");
+    failMsg = null;
   }
 }
 
@@ -197,6 +264,44 @@ function step(dt) {
       if (count <= 0) { count = 0; endStage(false); return; }
     }
   }
+  // 중간 보스: 군중이 더 많아야 뚫는다
+  for (const m of mids) {
+    m.y += speed * dt;
+    if (!m.done && m.y >= CROWD_Y - 30) {
+      m.done = true;
+      if (count > m.n) {
+        count -= m.n;
+        pop(`-${m.n}`, crowdX, CROWD_Y - 70, "#e5484d");
+        hud();
+      } else {
+        count = Math.max(0, count - m.n);
+        failMsg = `중간 보스 군단(${m.n}명)에 밀렸습니다.`;
+        endStage(false); return;
+      }
+    }
+  }
+  // 탄막: 시드 스케줄대로 발사, 맞으면 dmg만큼 손실 (짧은 무적)
+  tRun += dt;
+  if (invuln > 0) invuln -= dt;
+  for (const v of volleys) {
+    if (!v.fired && tRun >= v.at) {
+      v.fired = true;
+      for (const x of v.xs) bullets.push({ x, y: -24 });
+    }
+  }
+  for (const b of bullets) {
+    b.y += bulletSpd * dt;
+    if (invuln <= 0 && Math.abs(b.y - CROWD_Y) < 22 && Math.abs(b.x - crowdX) < 26) {
+      b.y = H + 99;
+      count -= window.__gr ? (window.__grDmg ?? 1) : 1;
+      invuln = 0.6;
+      pop(`-${window.__grDmg ?? 1}`, crowdX, CROWD_Y - 50, "#e5484d");
+      hud();
+      if (count <= 0) { count = 0; endStage(false); return; }
+    }
+  }
+  bullets = bullets.filter((b) => b.y < H + 40);
+
   boss.y += speed * dt;
   if (!boss.done && boss.y >= CROWD_Y - 90) {
     boss.done = true; phase = "boss";
@@ -279,15 +384,31 @@ function draw() {
     }
   }
 
+  // 중간 보스 군단
+  for (const m of mids) {
+    if (m.done || m.y < -60) continue;
+    drawCrowd(MID, m.y, m.n, "#e5484d");
+  }
+  // 탄막
+  for (const b of bullets) {
+    ctx.beginPath(); ctx.arc(b.x, b.y, 6, 0, 7);
+    ctx.fillStyle = "#e5484d"; ctx.fill();
+    ctx.beginPath(); ctx.arc(b.x, b.y - 9, 3.5, 0, 7);
+    ctx.fillStyle = "rgba(229,72,77,.4)"; ctx.fill();
+  }
   // 보스 군단
   if (boss && boss.y > -80) {
     const b = battle ?? { me: count, foe: boss.n };
     if (b.foe > 0) drawCrowd(MID, Math.min(boss.y, CROWD_Y - 130), b.foe, "#e5484d");
   }
 
-  // 내 군중
+  // 내 군중 (피격 무적 동안 깜박임)
   const me = battle ? battle.me : count;
-  if (phase !== "title" && me > 0) drawCrowd(crowdX, CROWD_Y, me, "#3b82f6");
+  if (phase !== "title" && me > 0) {
+    if (invuln > 0) ctx.globalAlpha = 0.45 + 0.35 * Math.sin(invuln * 40);
+    drawCrowd(crowdX, CROWD_Y, me, "#3b82f6");
+    ctx.globalAlpha = 1;
+  }
 
   // 팝업 텍스트
   for (const p of pops) {
