@@ -65,7 +65,9 @@ test("렌더러가 등수 단 구조를 그리고 옛 캐시를 막는다", () =
   assert.match(BUILD, /t\.members\.length > 1 \? "공동 " : ""/);
   // 단이 빠졌을 때 1등이 끝으로 밀리지 않게 배치를 바꾼다
   assert.match(BUILD, /const full = \[1, 2, 3\]\.every\(\(r\) => byRank\.has\(r\)\)/);
-  // v1 캐시(사람 3명 배열)를 그대로 그리면 빈 시상대가 뜬다 — 키를 갈랐고 형태도 검사한다
-  assert.match(BUILD, /bl-hof-podium-v2/);
+  // 옛 캐시를 그대로 그리면 안 된다 — 키를 갈랐고(v3: puzzle 오염 집계 무효화)
+  // 형태도 검사한다. 집계는 slop 스코프만 (puzzle 올타임과 분리).
+  assert.match(BUILD, /bl-hof-podium-v3/);
+  assert.match(BUILD, /alltime=1&scope=slop/);
   assert.match(BUILD, /Array\.isArray\(t\.members\) && t\.rank/);
 });
