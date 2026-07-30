@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>광고에서 본 그 게임 — 핀 뽑기 구출</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>📌</text></svg>">
+<style>
+  :root { color-scheme: light dark; }
+  html, body { height: 100%; }
+  body { margin: 0; overflow: hidden; user-select: none; -webkit-user-select: none;
+         touch-action: none; font-family: ui-monospace, "SF Mono", "Cascadia Mono",
+         "Roboto Mono", Consolas, monospace;
+         background: light-dark(#f6ead8, #1a1626); color: light-dark(#3a2b18, #e8ddcb); }
+  canvas { display: block; }
+  #hud { position: fixed; top: 0; left: 0; right: 0; display: flex; gap: .55rem;
+         align-items: center; padding: .5rem .7rem; font-size: .78rem; z-index: 3;
+         pointer-events: none; white-space: nowrap; }
+  #hud b { font-weight: bold; }
+  #hud .sp { flex: 1; }
+  #retry { pointer-events: auto; font: inherit; border: 1.5px solid currentColor;
+           background: none; color: inherit; border-radius: 1rem; padding: .15rem .7rem;
+           cursor: pointer; opacity: .75; }
+  #retry:active { transform: scale(.95); }
+  #overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+             display: flex; flex-direction: column; align-items: center; gap: .9rem;
+             width: min(84vw, 21rem); padding: 1.5rem 1.6rem; border-radius: 1.25rem;
+             text-align: center; z-index: 5;
+             border: 1.5px solid light-dark(rgba(90,60,20,.3), rgba(230,215,190,.25));
+             background: light-dark(rgba(255,250,240,.92), rgba(26,20,38,.92));
+             backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  #overlay.hide { display: none; }
+  #overlay h1 { margin: 0; font-size: 1.15rem; }
+  #overlay p { margin: 0; font-size: .88rem; line-height: 1.55; opacity: .75;
+               white-space: pre-line; }
+  #overlay .big { font-size: 2.2rem; margin: 0; }
+  #btn { font: inherit; font-size: 1.05rem; padding: .75rem 2.2rem; border-radius: 2rem;
+         border: 2px solid currentColor; background: none; color: inherit; cursor: pointer; }
+  #btn:active { transform: scale(.96); }
+  #best { margin: 0; font-size: .8rem; opacity: .5; min-height: 1.1em; }
+</style>
+</head>
+<body>
+<div id="hud">
+  <span>📌 <b>그 게임 (진짜임)</b></span>
+  <span class="sp"></span>
+  <span id="hStage"></span>
+  <span id="hGold"></span>
+  <button id="retry" title="다시 시작">↻</button>
+</div>
+<div id="overlay">
+  <p class="big" id="oEmoji">🤠</p>
+  <h1 id="oTitle">핀 뽑기 구출</h1>
+  <p id="oMsg">광고에서 보던 바로 그 게임.
+근데 이건 진짜로 그 게임임.
+
+핀을 뽑아 보물💰을 냄비에 담고,
+용암🔥은 절대 냄비에 넣지 마세요.</p>
+  <button id="btn">시작</button>
+  <p id="best"></p>
+</div>
+<canvas id="cv"></canvas>
+<script>
+"use strict";
+/* ── 상수 ─────────────────────────────────────────────── */
+const W = 360, H = 640, R = 9, GRAV = 1600, STEP = 1 / 120;
+const XL = 70, XR = 290;                    // 통(샤프트) 좌우 벽
+const POT = { x1: 150, x2: 210, top: 545, bot: 610 };
+const dark = matchMedia("(prefers-color-scheme: dark)");
+
+/* ── 레벨 데이터 ──────────────────────────────────────── */
+// walls: 추가 정적 벽 [x1,y1,x2,y2] / gaps: 좌우 벽의 구멍(배수구) [y1,y2]
+// pins: 뽑을 수 있는 핀 / balls: {t:'g'(보물)|'l'(용암), x,y(맨 아랫줄 중심), n}
+const LEVELS = [
+  { need: 7, gaps: {}, walls: [],
+    pins: [[74,280,286,280]],
+    balls: [{ t: "g", x: 180, y: 267, n: 10 }],
+    tip: "핀을 눌러서 뽑으세요!" },
+  { need: 7, gaps: {}, walls: [[230,70,230,300]],
+    pins: [[74,300,228,300],[232,300,288,300]],
+    balls: [{ t: "g", x: 150, y: 287, n: 10 }, { t: "l", x: 260, y: 287, n: 5 }],
+    tip: "용암이 냄비에 닿으면 끝장. 안 뽑아도 되는 핀도 있어요." },
+  { need: 7, gaps: { L: [[352,396]] }, walls: [],
+    pins: [[74,200,286,200],[72,392,288,378],[70,352,70,396]],
+    balls: [{ t: "g", x: 180, y: 187, n: 10 }, { t: "l", x: 112, y: 377, n: 6 }],
+    tip: "용암은 옆 배수구로 먼저 흘려보내면 사라져요. 순서가 중요!" },
+  { need: 6, gaps: { R: [[304,348]] }, walls: [[180,70,180,430]],
+    pins: [[74,340,178,340],[182,332,288,346],[290,304,290,348]],
+    balls: [{ t: "g", x: 125, y: 327, n: 8 }, { t: "l", x: 250, y: 326, n: 5 }] },
+  { need: 10, gaps: { L: [[272,316]] }, walls: [],
+    pins: [[74,180,286,180],[72,314,288,300],[74,420,286,420],[70,272,70,316]],
+    balls: [{ t: "g", x: 180, y: 167, n: 8 }, { t: "l", x: 115, y: 296, n: 6 },
+            { t: "g", x: 180, y: 407, n: 6 }] },
+  { need: 8, gaps: {}, walls: [[125,70,125,430],[235,70,235,430]],
+    pins: [[72,380,123,380],[127,380,233,380],[237,380,288,380]],
+    balls: [{ t: "l", x: 98, y: 367, n: 4 }, { t: "g", x: 180, y: 367, n: 12 },
+            { t: "l", x: 262, y: 367, n: 4 }] },
+  { need: 8, gaps: { L: [[332,376]] }, walls: [],
+    pins: [[74,190,286,190],[72,374,288,360],[70,332,70,376]],
+    balls: [{ t: "l", x: 180, y: 177, n: 6 }, { t: "g", x: 150, y: 355, n: 10 }],
+    tip: "배수구로 나간 보물은 영영 안 돌아와요…" },
+  { need: 7, gaps: { R: [[242,286]], L: [[372,416]] }, walls: [],
+    pins: [[74,150,286,150],[72,268,288,282],[72,414,288,400],
+           [290,242,290,286],[70,372,70,416]],
+    balls: [{ t: "g", x: 180, y: 137, n: 10 }, { t: "l", x: 245, y: 266, n: 5 },
+            { t: "l", x: 115, y: 397, n: 5 }] },
+  { need: 10, gaps: { L: [[172,216]], R: [[264,308]] }, walls: [[180,70,180,430]],
+    pins: [[72,214,178,200],[74,360,178,360],[182,290,288,306],
+           [70,172,70,216],[290,264,290,308]],
+    balls: [{ t: "l", x: 100, y: 196, n: 4 }, { t: "g", x: 125, y: 347, n: 8 },
+            { t: "g", x: 245, y: 286, n: 6 }] },
+  { need: 8, gaps: {}, walls: [[145,70,145,300],[215,70,215,300]],
+    pins: [[72,300,143,300],[147,300,213,300],[217,300,288,300],[74,430,286,430]],
+    balls: [{ t: "g", x: 107, y: 287, n: 5 }, { t: "l", x: 180, y: 287, n: 5 },
+            { t: "g", x: 252, y: 287, n: 5 }] },
+];
+const totalGold = (lv) => lv.balls.filter(b => b.t === "g").reduce((s, b) => s + b.n, 0);
+function levelFor(stage) {
+  if (stage <= LEVELS.length) return { ...LEVELS[stage - 1] };
+  const idx = (stage - LEVELS.length - 1) % 8 + 2;      // 3~10번 레벨 순환
+  const loop = Math.floor((stage - LEVELS.length - 1) / 8) + 1;
+  const lv = { ...LEVELS[idx] };
+  lv.need = Math.min(totalGold(lv), lv.need + loop);    // 돌수록 빡빡해짐
+  return lv;
+}
+
+/* ── 상태 ─────────────────────────────────────────────── */
+let stage = 1, best = +localStorage.getItem("pullpin.best") || 0;
+let phase = "title";              // title | play | win | fail
+let segs = [], pins = [], balls = [], parts = [], skulls = [];
+let need = 0, collected = 0, tip = "";
+let heroFace = "🤠";
+
+const seg = (x1, y1, x2, y2, r = 5) => ({ x1, y1, x2, y2, r });
+
+function buildWalls(lv) {
+  const out = [];
+  const side = (x, gaps) => {
+    let cur = 70;
+    for (const [g1, g2] of gaps ?? []) { out.push(seg(x, cur, x, g1)); cur = g2; }
+    out.push(seg(x, cur, x, 470));
+  };
+  side(XL, lv.gaps.L); side(XR, lv.gaps.R);
+  for (const [g1, g2] of lv.gaps.L ?? []) {           // 왼쪽 배수 미끄럼틀
+    out.push(seg(XL - 2, g2 + 2, 16, g2 + 42)); skulls.push([14, g2 + 66]);
+  }
+  for (const [g1, g2] of lv.gaps.R ?? []) {
+    out.push(seg(XR + 2, g2 + 2, 344, g2 + 42)); skulls.push([346, g2 + 66]);
+  }
+  out.push(seg(XL, 470, POT.x1, POT.top), seg(XR, 470, POT.x2, POT.top));
+  out.push(seg(POT.x1, POT.top, POT.x1, POT.bot), seg(POT.x2, POT.top, POT.x2, POT.bot),
+           seg(POT.x1, POT.bot, POT.x2, POT.bot));
+  for (const w of lv.walls) out.push(seg(...w));
+  return out;
+}
+
+function spawn(c) {
+  const cols = c.n <= 4 ? 2 : c.n <= 9 ? 3 : 4, dx = 19;
+  for (let i = 0; i < c.n; i++) {
+    const row = Math.floor(i / cols), col = i % cols;
+    balls.push({ t: c.t, x: c.x + (col - (cols - 1) / 2) * dx + (row % 2 ? 2 : -2),
+                 y: c.y - row * 19, vx: 0, vy: 0, dead: false });
+  }
+}
+
+function loadStage() {
+  const lv = levelFor(stage);
+  skulls = []; segs = buildWalls(lv); parts = [];
+  pins = lv.pins.map(p => {
+    const [x1, y1, x2, y2] = p;
+    // 뽑히는 방향: 세로 핀은 위로, 가로 핀은 가까운 바깥쪽으로
+    let hx, hy;
+    if (Math.abs(x2 - x1) < Math.abs(y2 - y1)) { hx = 0; hy = -1; }
+    else {
+      const toRight = Math.min(360 - x1, 360 - x2) < Math.min(x1, x2);
+      const len = Math.hypot(x2 - x1, y2 - y1);
+      hx = (x2 - x1) / len * (toRight ? 1 : -1);
+      hy = (y2 - y1) / len * (toRight ? 1 : -1);
+      if ((toRight && x2 < x1) || (!toRight && x2 > x1)) { hx = -hx; hy = -hy; }
+    }
+    return { x1, y1, x2, y2, r: 3.5, hx, hy, pulled: false, anim: 0 };
+  });
+  balls = []; lv.balls.forEach(spawn);
+  need = lv.need; collected = 0; tip = lv.tip ?? ""; heroFace = "🤠";
+  hud();
+}
+
+/* ── 물리 ─────────────────────────────────────────────── */
+function hitSeg(b, s) {
+  const dx = s.x2 - s.x1, dy = s.y2 - s.y1, l2 = dx * dx + dy * dy || 1;
+  let t = ((b.x - s.x1) * dx + (b.y - s.y1) * dy) / l2;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const px = s.x1 + dx * t, py = s.y1 + dy * t;
+  let nx = b.x - px, ny = b.y - py;
+  const d = Math.hypot(nx, ny), rr = R + s.r;
+  if (d >= rr || d < 1e-6) return;
+  nx /= d; ny /= d;
+  b.x += nx * (rr - d); b.y += ny * (rr - d);
+  const vn = b.vx * nx + b.vy * ny;
+  if (vn < 0) { b.vx -= nx * vn * 1.15; b.vy -= ny * vn * 1.15; }
+  b.vx *= 0.996; b.vy *= 0.996;
+}
+
+function poof(x, y, col, n = 8) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, sp = 40 + Math.random() * 90;
+    parts.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 40,
+                 life: 0.6, col });
+  }
+}
+
+function fail(msg) {
+  if (phase !== "play") return;
+  phase = "fail"; heroFace = "😵";
+  const quips = ["광고 속 게임은 원래 지라고 만든 겁니다.",
+                 "괜찮아요, 광고 속 그 사람도 맨날 지던데요.",
+                 "이래서 광고에서 그렇게 실패하던 거였군요."];
+  show("💀", "실패…", msg + "\n\n" + quips[(Math.random() * quips.length) | 0], "다시 도전");
+}
+
+function win() {
+  if (phase !== "play") return;
+  phase = "win"; heroFace = "🤩";
+  if (stage > best) { best = stage; localStorage.setItem("pullpin.best", best); }
+  window.blWeeklyReport?.(stage);
+  show("🏆", `스테이지 ${stage} 클리어!`,
+       collected >= totalGold(levelFor(stage)) ? "보물을 전부 담았어요. 완벽!" :
+       `보물 ${collected}개 획득. 다음 스테이지로!`, "다음 스테이지");
+}
+
+function step() {
+  for (const b of balls) {
+    if (b.dead) continue;
+    b.vy += GRAV * STEP;
+    b.x += b.vx * STEP; b.y += b.vy * STEP;
+  }
+  // 공-공 (보물+용암 접촉 = 보물 소실)
+  for (let i = 0; i < balls.length; i++) {
+    const a = balls[i]; if (a.dead) continue;
+    for (let j = i + 1; j < balls.length; j++) {
+      const c = balls[j]; if (c.dead) continue;
+      let nx = c.x - a.x, ny = c.y - a.y;
+      const d = Math.hypot(nx, ny);
+      if (d >= R * 2 || d < 1e-6) continue;
+      if (a.t !== c.t) {                       // 용암이 보물을 태움
+        const g = a.t === "g" ? a : c;
+        g.dead = true; poof(g.x, g.y, "#888");
+        continue;
+      }
+      nx /= d; ny /= d;
+      const push = (R * 2 - d) / 2;
+      a.x -= nx * push; a.y -= ny * push; c.x += nx * push; c.y += ny * push;
+      const rv = (c.vx - a.vx) * nx + (c.vy - a.vy) * ny;
+      if (rv < 0) {
+        const imp = rv * 0.55;
+        a.vx += nx * imp; a.vy += ny * imp; c.vx -= nx * imp; c.vy -= ny * imp;
+      }
+    }
+  }
+  for (const b of balls) {
+    if (b.dead) continue;
+    for (const s of segs) hitSeg(b, s);
+    for (const p of pins) if (!p.pulled) hitSeg(b, p);
+  }
+  // 냄비 판정 + 화면 밖 제거
+  for (const b of balls) {
+    if (b.dead) continue;
+    if (b.x > POT.x1 + 2 && b.x < POT.x2 - 2 && b.y > POT.top + 15) {
+      b.dead = true;
+      if (b.t === "g") {
+        collected++; poof(b.x, b.y, "#ffd75e", 6); hud();
+        if (collected >= need) win();
+      } else fail("용암이 냄비에 들어갔어요!");
+      continue;
+    }
+    if (b.x < -20 || b.x > 380 || b.y > 660) { b.dead = true; }
+  }
+  if (phase === "play") {
+    const goldLeft = balls.filter(b => !b.dead && b.t === "g").length;
+    if (collected + goldLeft < need) fail("보물을 너무 많이 잃었어요…");
+  }
+}
+
+/* ── 그리기 ───────────────────────────────────────────── */
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+let scale = 1, ox = 0, oy = 0;
+function resize() {
+  const dpr = devicePixelRatio || 1;
+  cv.width = innerWidth * dpr; cv.height = innerHeight * dpr;
+  cv.style.width = innerWidth + "px"; cv.style.height = innerHeight + "px";
+  scale = Math.min(innerWidth / W, innerHeight / H);
+  ox = (innerWidth - W * scale) / 2; oy = (innerHeight - H * scale) / 2;
+}
+addEventListener("resize", resize); resize();
+
+function capsule(x1, y1, x2, y2, r, fill) {
+  ctx.beginPath();
+  ctx.lineWidth = r * 2; ctx.lineCap = "round"; ctx.strokeStyle = fill;
+  ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+}
+
+function draw() {
+  const D = dark.matches;
+  const dpr = devicePixelRatio || 1;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = D ? "#1a1626" : "#f6ead8";
+  ctx.fillRect(0, 0, innerWidth, innerHeight);
+  ctx.setTransform(dpr * scale, 0, 0, dpr * scale, dpr * ox, dpr * oy);
+
+  const wood = D ? "#6e4522" : "#8a5a33";
+  for (const s of segs) capsule(s.x1, s.y1, s.x2, s.y2, s.r, wood);
+
+  // 냄비 속 보물 더미
+  if (collected > 0) {
+    const h = Math.min(40, collected * 4);
+    ctx.fillStyle = "#e8b23a";
+    ctx.beginPath();
+    ctx.ellipse((POT.x1 + POT.x2) / 2, POT.bot - 6 - h / 2, 26, h / 2 + 4, 0, 0, 7);
+    ctx.fill();
+  }
+
+  ctx.font = "22px system-ui"; ctx.textAlign = "center";
+  for (const [sx, sy] of skulls) ctx.fillText("☠️", sx, sy);
+  ctx.font = "34px system-ui";
+  ctx.fillText(heroFace, 248, 602);
+
+  for (const p of pins) {
+    if (p.pulled && p.anim >= 1) continue;
+    const off = p.pulled ? (1 - (1 - p.anim) ** 2) * 320 : 0;
+    const x1 = p.x1 + p.hx * off, y1 = p.y1 + p.hy * off;
+    const x2 = p.x2 + p.hx * off, y2 = p.y2 + p.hy * off;
+    ctx.globalAlpha = p.pulled ? 1 - p.anim : 1;
+    capsule(x1, y1, x2, y2, p.r, D ? "#9fb0c2" : "#aab8c6");
+    // 핀 머리(잡는 쪽): 뽑히는 방향 endpoint
+    const headAtEnd2 = (p.x2 - p.x1) * p.hx + (p.y2 - p.y1) * p.hy > 0;
+    const hx = headAtEnd2 ? x2 : x1, hy = headAtEnd2 ? y2 : y1;
+    ctx.beginPath(); ctx.arc(hx, hy, 7.5, 0, 7);
+    ctx.fillStyle = D ? "#c8d4e0" : "#8494a4"; ctx.fill();
+    ctx.beginPath(); ctx.arc(hx, hy, 3.4, 0, 7);
+    ctx.fillStyle = D ? "#1a1626" : "#f6ead8"; ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  for (const b of balls) {
+    if (b.dead) continue;
+    const g = ctx.createRadialGradient(b.x - 3, b.y - 3, 1, b.x, b.y, R);
+    if (b.t === "g") { g.addColorStop(0, "#ffe89a"); g.addColorStop(1, "#d99a1b"); }
+    else { g.addColorStop(0, "#ff8a5c"); g.addColorStop(1, "#c81e00"); }
+    ctx.beginPath(); ctx.arc(b.x, b.y, R, 0, 7); ctx.fillStyle = g; ctx.fill();
+  }
+
+  for (const pt of parts) {
+    ctx.globalAlpha = Math.max(0, pt.life / 0.6);
+    ctx.beginPath(); ctx.arc(pt.x, pt.y, 3, 0, 7);
+    ctx.fillStyle = pt.col; ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  if (tip && phase === "play") {
+    ctx.font = "12px ui-monospace, monospace";
+    ctx.fillStyle = D ? "rgba(232,221,203,.65)" : "rgba(58,43,24,.6)";
+    // 화면 폭에 맞춰 단어 단위 줄바꿈
+    const words = tip.split(" "), lines = [];
+    let line = "";
+    for (const w2 of words) {
+      const t2 = line ? line + " " + w2 : w2;
+      if (ctx.measureText(t2).width > 330 && line) { lines.push(line); line = w2; }
+      else line = t2;
+    }
+    lines.push(line);
+    lines.forEach((l, i) => ctx.fillText(l, W / 2, 48 + i * 16));
+  }
+}
+
+/* ── 루프 ─────────────────────────────────────────────── */
+let last = performance.now(), acc = 0;
+function loop(t) {
+  let dt = (t - last) / 1000; last = t;
+  if (dt > 0.05) dt = 0.05;
+  if (phase === "play" || phase === "win" || phase === "fail") {
+    acc += dt;
+    while (acc >= STEP) { acc -= STEP; if (phase === "play") step(); }
+  }
+  for (const p of pins) if (p.pulled && p.anim < 1) p.anim = Math.min(1, p.anim + dt * 3.2);
+  for (const pt of parts) {
+    pt.life -= dt; pt.x += pt.vx * dt; pt.y += pt.vy * dt; pt.vy += 500 * dt;
+  }
+  parts = parts.filter(pt => pt.life > 0);
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+/* ── 입력/UI ──────────────────────────────────────────── */
+const $ = (id) => document.getElementById(id);
+function hud() {
+  $("hStage").textContent = `스테이지 ${stage}`;
+  $("hGold").textContent = `💰 ${collected}/${need}`;
+}
+function show(emoji, title, msg, btnText) {
+  $("oEmoji").textContent = emoji; $("oTitle").textContent = title;
+  $("oMsg").textContent = msg; $("btn").textContent = btnText;
+  $("best").textContent = best ? `최고 기록: 스테이지 ${best}` : "";
+  $("overlay").classList.remove("hide");
+}
+$("btn").addEventListener("click", () => {
+  if (phase === "win") stage++;
+  $("overlay").classList.add("hide");
+  phase = "play"; loadStage();
+});
+$("retry").addEventListener("click", () => { if (phase === "play") loadStage(); });
+
+addEventListener("pointerdown", (e) => {
+  if (phase !== "play") return;
+  const x = (e.clientX - ox) / scale, y = (e.clientY - oy) / scale;
+  let bestPin = null, bestD = 26;
+  for (const p of pins) {
+    if (p.pulled) continue;
+    const dx = p.x2 - p.x1, dy = p.y2 - p.y1, l2 = dx * dx + dy * dy || 1;
+    let t = ((x - p.x1) * dx + (y - p.y1) * dy) / l2;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const d = Math.hypot(x - (p.x1 + dx * t), y - (p.y1 + dy * t));
+    if (d < bestD) { bestD = d; bestPin = p; }
+  }
+  if (bestPin) bestPin.pulled = true;
+});
+
+window.blShareText = () => `핀뽑기 스테이지 ${best}까지 깼음! 광고에서 본 그 게임, 이건 진짜임 📌`;
+window.blWeekly = { game: "pullpin", dir: "max", fmt: (v) => `스테이지 ${v}` };
+</script>
+<script defer src="/_shared/records.js"></script>
+<script defer src="/_shared/share.js"></script>
+<script defer src="/_shared/like.js"></script>
+</body>
+</html>

@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>물 소팅 — 광고에서 본 그 게임</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>💧</text></svg>">
+<style>
+  :root { color-scheme: light dark; }
+  html, body { height: 100%; }
+  body { margin: 0; overflow: hidden; user-select: none; -webkit-user-select: none;
+         touch-action: manipulation; font-family: ui-monospace, "SF Mono",
+         "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+         background: light-dark(#f6ead8, #1a1626); color: light-dark(#3a2b18, #e8ddcb); }
+  #hud { position: fixed; top: 0; left: 0; right: 0; display: flex; gap: .55rem;
+         align-items: center; padding: .5rem .7rem; font-size: .78rem; z-index: 3;
+         white-space: nowrap; }
+  #hud .sp { flex: 1; }
+  #hud button { font: inherit; border: 1.5px solid currentColor; background: none;
+                color: inherit; border-radius: 1rem; padding: .15rem .6rem;
+                cursor: pointer; opacity: .75; }
+  #hud button:active { transform: scale(.95); }
+  #hud button:disabled { opacity: .25; }
+  #board { position: fixed; inset: 3.2rem 0 2.5rem; display: flex; flex-wrap: wrap;
+           align-content: center; justify-content: center; gap: 1.1rem 0.85rem;
+           padding: 0 .8rem; }
+  .tube { position: relative; width: 50px; height: 152px; cursor: pointer;
+          border: 3px solid light-dark(#8a5a33, #6e4522); border-top: none;
+          border-radius: 0 0 24px 24px; background: light-dark(rgba(255,255,255,.45), rgba(255,255,255,.05));
+          transition: transform .12s; }
+  .tube.sel { transform: translateY(-12px); }
+  .tube.done { border-color: light-dark(#c9a227, #a8871f);
+               box-shadow: 0 0 0 2px light-dark(rgba(201,162,39,.35), rgba(201,162,39,.3)); }
+  .seg { position: absolute; left: 0; right: 0; height: 25%; }
+  .seg:nth-child(1) { bottom: 0; border-radius: 0 0 21px 21px; }
+  .seg:nth-child(2) { bottom: 25%; }
+  .seg:nth-child(3) { bottom: 50%; }
+  .seg:nth-child(4) { bottom: 75%; }
+  #stuck { position: fixed; bottom: .6rem; left: 50%; transform: translateX(-50%);
+           font-size: .8rem; padding: .35rem .9rem; border-radius: 1rem;
+           border: 1.5px solid currentColor; opacity: 0; transition: opacity .2s;
+           pointer-events: none; }
+  #stuck.on { opacity: .8; }
+  #overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+             display: flex; flex-direction: column; align-items: center; gap: .9rem;
+             width: min(84vw, 21rem); padding: 1.5rem 1.6rem; border-radius: 1.25rem;
+             text-align: center; z-index: 5;
+             border: 1.5px solid light-dark(rgba(90,60,20,.3), rgba(230,215,190,.25));
+             background: light-dark(rgba(255,250,240,.92), rgba(26,20,38,.92));
+             backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  #overlay.hide { display: none; }
+  #overlay h1 { margin: 0; font-size: 1.15rem; }
+  #overlay p { margin: 0; font-size: .88rem; line-height: 1.55; opacity: .75;
+               white-space: pre-line; }
+  #overlay .big { font-size: 2.2rem; margin: 0; }
+  #btn { font: inherit; font-size: 1.05rem; padding: .75rem 2.2rem; border-radius: 2rem;
+         border: 2px solid currentColor; background: none; color: inherit; cursor: pointer; }
+  #btn:active { transform: scale(.96); }
+  #best { margin: 0; font-size: .8rem; opacity: .5; min-height: 1.1em; }
+</style>
+</head>
+<body>
+<div id="hud">
+  <span>💧 <b>물 소팅 (진짜임)</b></span>
+  <span class="sp"></span>
+  <span id="hStage"></span>
+  <span id="hMoves"></span>
+  <button id="undo" title="되돌리기">↩</button>
+  <button id="retry" title="다시 시작">↻</button>
+</div>
+<div id="board"></div>
+<div id="stuck">막혔어요! ↩ 되돌리거나 ↻ 다시 시작하세요</div>
+<div id="overlay">
+  <p class="big" id="oEmoji">🧪</p>
+  <h1 id="oTitle">물 소팅</h1>
+  <p id="oMsg">광고에서 보던 바로 그 물 붓기 게임.
+근데 이건 진짜로 그 게임임.
+
+같은 색 위나 빈 시험관에만 부을 수 있어요.
+시험관마다 한 색으로 정리하면 클리어!</p>
+  <button id="btn">시작</button>
+  <p id="best"></p>
+</div>
+<script>
+"use strict";
+/* ── 시드 고정 난수 (모두가 같은 스테이지를 받는다) ──── */
+const mulberry32 = (a) => () => {
+  a |= 0; a = (a + 0x6D2B79F5) | 0;
+  let t = Math.imul(a ^ (a >>> 15), 1 | a);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+
+const CAP = 4;
+const PAL = ["#e5484d", "#f79009", "#f7d23e", "#46a758", "#12a594",
+             "#3b82f6", "#8e4ec6", "#e93d82", "#99d52a"];
+
+const topRun = (t) => {
+  if (!t.length) return 0;
+  let n = 1;
+  while (n < t.length && t[t.length - 1 - n] === t[t.length - 1]) n++;
+  return n;
+};
+const isDone = (t) => t.length === CAP && topRun(t) === CAP;
+const isWin = (ts) => ts.every((t) => !t.length || isDone(t));
+const canPour = (ts, i, j) =>
+  i !== j && ts[i].length > 0 && ts[j].length < CAP &&
+  (!ts[j].length || ts[j][ts[j].length - 1] === ts[i][ts[i].length - 1]);
+function pour(ts, i, j) {
+  const n = Math.min(topRun(ts[i]), CAP - ts[j].length);
+  for (let k = 0; k < n; k++) ts[j].push(ts[i].pop());
+}
+
+/* ── 솔버 (생성된 판이 풀리는지 검증) ─────────────────── */
+function solve(start) {
+  const key = (ts) => ts.map((t) => t.join(",")).sort().join("|");
+  const seen = new Set([key(start)]);
+  const stack = [{ ts: start.map((t) => [...t]), path: [] }];
+  let budget = 120000;
+  while (stack.length && budget-- > 0) {
+    const { ts, path } = stack.pop();
+    if (isWin(ts)) return path;
+    const moves = [];
+    let firstEmpty = -1;
+    for (let j = 0; j < ts.length; j++) if (!ts[j].length) { firstEmpty = j; break; }
+    for (let i = 0; i < ts.length; i++) {
+      if (!ts[i].length || isDone(ts[i])) continue;
+      const uniform = topRun(ts[i]) === ts[i].length;
+      for (let j = 0; j < ts.length; j++) {
+        if (!canPour(ts, i, j)) continue;
+        if (!ts[j].length) {
+          if (uniform || j !== firstEmpty) continue;  // 의미 없는/대칭 이동 가지치기
+        }
+        moves.push([i, j, ts[j].length ? 1 : 0]);
+      }
+    }
+    moves.sort((a, b) => a[2] - b[2]);                // 빈 관 이동은 나중에 시도
+    for (const [i, j] of moves) {
+      const nts = ts.map((t) => [...t]);
+      pour(nts, i, j);
+      const k = key(nts);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      stack.push({ ts: nts, path: [...path, [i, j]] });
+    }
+  }
+  return null;
+}
+
+/* ── 스테이지 생성 ────────────────────────────────────── */
+function gen(stage) {
+  const C = Math.min(3 + Math.floor((stage - 1) / 2), PAL.length);
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const rnd = mulberry32(stage * 7919 + attempt * 104729 + 13);
+    const pool = [];
+    for (let c = 0; c < C; c++) for (let k = 0; k < CAP; k++) pool.push(c);
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = (rnd() * (i + 1)) | 0;
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    const ts = [];
+    for (let c = 0; c < C; c++) ts.push(pool.slice(c * CAP, c * CAP + CAP));
+    ts.push([], []);
+    if (ts.some(isDone)) continue;                    // 시작부터 완성된 관 금지
+    const sol = solve(ts);
+    if (sol) return { tubes: ts, solution: sol };
+  }
+  // 이론상 도달 불가. 혹시 모를 때는 아주 쉬운 판으로 대체
+  return { tubes: [[0, 0, 0, 1], [1, 1, 1, 0], [], []], solution: [[0, 2], [1, 0], [2, 1]] };
+}
+
+/* ── 상태 ─────────────────────────────────────────────── */
+let stage = Math.max(1, +localStorage.getItem("watersort.stage") || 1);
+let best = +localStorage.getItem("watersort.best") || 0;
+let tubes = [], moves = 0, sel = -1, undoStack = [], phase = "title";
+
+const $ = (id) => document.getElementById(id);
+
+function loadStage() {
+  const g = gen(stage);
+  tubes = g.tubes; moves = 0; sel = -1; undoStack = [];
+  window.__ws = { solution: g.solution, tubes: () => tubes };   // 테스트/디버그용
+  render();
+}
+
+function render() {
+  $("hStage").textContent = `스테이지 ${stage}`;
+  $("hMoves").textContent = `이동 ${moves}`;
+  $("undo").disabled = !undoStack.length;
+  const board = $("board");
+  board.textContent = "";
+  tubes.forEach((t, i) => {
+    const el = document.createElement("div");
+    el.className = "tube" + (i === sel ? " sel" : "") + (isDone(t) ? " done" : "");
+    el.dataset.i = i;
+    for (const c of t) {
+      const s = document.createElement("div");
+      s.className = "seg"; s.style.background = PAL[c];
+      el.appendChild(s);
+    }
+    el.addEventListener("pointerdown", () => tap(i));
+    board.appendChild(el);
+  });
+  $("stuck").classList.toggle("on", phase === "play" && !isWin(tubes) && !anyMove());
+}
+
+const anyMove = () => {
+  for (let i = 0; i < tubes.length; i++)
+    for (let j = 0; j < tubes.length; j++)
+      if (canPour(tubes, i, j)) return true;
+  return false;
+};
+
+function tap(i) {
+  if (phase !== "play") return;
+  if (sel === -1) {
+    if (tubes[i].length && !isDone(tubes[i])) sel = i;
+  } else if (sel === i) {
+    sel = -1;
+  } else if (canPour(tubes, sel, i)) {
+    undoStack.push(tubes.map((t) => [...t]));
+    if (undoStack.length > 200) undoStack.shift();
+    pour(tubes, sel, i);
+    moves++; sel = -1;
+    if (isWin(tubes)) return win();
+  } else {
+    sel = tubes[i].length && !isDone(tubes[i]) ? i : -1;
+  }
+  render();
+}
+
+function win() {
+  phase = "win";
+  render();
+  if (stage > best) { best = stage; localStorage.setItem("watersort.best", best); }
+  window.blWeeklyReport?.(stage);
+  localStorage.setItem("watersort.stage", stage + 1);
+  show("🏆", `스테이지 ${stage} 클리어!`, `${moves}번 만에 정리 완료.\n다음 판은 더 알록달록해집니다…`, "다음 스테이지");
+}
+
+function show(emoji, title, msg, btnText) {
+  $("oEmoji").textContent = emoji; $("oTitle").textContent = title;
+  $("oMsg").textContent = msg; $("btn").textContent = btnText;
+  $("best").textContent = best ? `최고 기록: 스테이지 ${best}` : "";
+  $("overlay").classList.remove("hide");
+}
+
+$("btn").addEventListener("click", () => {
+  if (phase === "win") stage++;
+  $("overlay").classList.add("hide");
+  phase = "play"; loadStage();
+});
+$("undo").addEventListener("click", () => {
+  if (phase !== "play" || !undoStack.length) return;
+  tubes = undoStack.pop(); moves++; sel = -1; render();
+});
+$("retry").addEventListener("click", () => { if (phase === "play") loadStage(); });
+
+loadStage();
+
+window.blShareText = () => `물 소팅 스테이지 ${best}까지 정리했음! 광고 말고 진짜로 해보실? 💧`;
+window.blWeekly = { game: "watersort", dir: "max", fmt: (v) => `스테이지 ${v}` };
+</script>
+<script defer src="/_shared/records.js"></script>
+<script defer src="/_shared/share.js"></script>
+<script defer src="/_shared/like.js"></script>
+</body>
+</html>

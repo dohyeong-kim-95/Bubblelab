@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>게이트 러너 — 광고에서 본 그 게임</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🏃</text></svg>">
+<style>
+  :root { color-scheme: light dark; }
+  html, body { height: 100%; }
+  body { margin: 0; overflow: hidden; user-select: none; -webkit-user-select: none;
+         touch-action: none; font-family: ui-monospace, "SF Mono", "Cascadia Mono",
+         "Roboto Mono", Consolas, monospace;
+         background: light-dark(#f6ead8, #1a1626); color: light-dark(#3a2b18, #e8ddcb); }
+  canvas { display: block; }
+  #hud { position: fixed; top: 0; left: 0; right: 0; display: flex; gap: .55rem;
+         align-items: center; padding: .5rem .7rem; font-size: .78rem; z-index: 3;
+         pointer-events: none; white-space: nowrap; }
+  #hud .sp { flex: 1; }
+  #retry { pointer-events: auto; font: inherit; border: 1.5px solid currentColor;
+           background: none; color: inherit; border-radius: 1rem; padding: .15rem .7rem;
+           cursor: pointer; opacity: .75; }
+  #retry:active { transform: scale(.95); }
+  #overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+             display: flex; flex-direction: column; align-items: center; gap: .9rem;
+             width: min(84vw, 21rem); padding: 1.5rem 1.6rem; border-radius: 1.25rem;
+             text-align: center; z-index: 5;
+             border: 1.5px solid light-dark(rgba(90,60,20,.3), rgba(230,215,190,.25));
+             background: light-dark(rgba(255,250,240,.92), rgba(26,20,38,.92));
+             backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  #overlay.hide { display: none; }
+  #overlay h1 { margin: 0; font-size: 1.15rem; }
+  #overlay p { margin: 0; font-size: .88rem; line-height: 1.55; opacity: .75;
+               white-space: pre-line; }
+  #overlay .big { font-size: 2.2rem; margin: 0; }
+  #btn { font: inherit; font-size: 1.05rem; padding: .75rem 2.2rem; border-radius: 2rem;
+         border: 2px solid currentColor; background: none; color: inherit; cursor: pointer; }
+  #btn:active { transform: scale(.96); }
+  #best { margin: 0; font-size: .8rem; opacity: .5; min-height: 1.1em; }
+</style>
+</head>
+<body>
+<div id="hud">
+  <span>🏃 <b>게이트 러너 (진짜임)</b></span>
+  <span class="sp"></span>
+  <span id="hStage"></span>
+  <button id="retry" title="다시 시작">↻</button>
+</div>
+<div id="overlay">
+  <p class="big" id="oEmoji">🏃</p>
+  <h1 id="oTitle">게이트 러너</h1>
+  <p id="oMsg">광고에서 보던 바로 그 문 고르기 게임.
+근데 이건 진짜로 그 게임임.
+
+좌우로 드래그해서 좋은 문을 고르고,
+군중을 불려서 마지막 빨간 군단을 이기세요!</p>
+  <button id="btn">시작</button>
+  <p id="best"></p>
+</div>
+<canvas id="cv"></canvas>
+<script>
+"use strict";
+/* ── 상수/난수 ────────────────────────────────────────── */
+const W = 360, H = 640, LANE_L = 40, LANE_R = 320, MID = 180, CROWD_Y = 505;
+const dark = matchMedia("(prefers-color-scheme: dark)");
+const mulberry32 = (a) => () => {
+  a |= 0; a = (a + 0x6D2B79F5) | 0;
+  let t = Math.imul(a ^ (a >>> 15), 1 | a);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+
+const apply = (c, g) =>
+  g.op === "+" ? c + g.v :
+  g.op === "-" ? c - g.v :
+  g.op === "x" ? Math.min(9999, c * g.v) : Math.floor(c / g.v);
+const label = (g) => (g.op === "x" ? "×" : g.op === "/" ? "÷" : g.op) + g.v;
+const isGood = (g) => g.op === "+" || g.op === "x";
+
+/* ── 스테이지 생성 (그리디로 이길 수 있는 판만) ───────── */
+function gen(stage) {
+  for (let attempt = 0; attempt < 80; attempt++) {
+    const rnd = mulberry32(stage * 8009 + attempt * 50021 + 7);
+    const n = Math.min(6 + stage, 14);
+    const plus = () => ({ op: "+", v: 2 + ((rnd() * (8 + stage * 2)) | 0) });
+    const minus = () => ({ op: "-", v: 3 + ((rnd() * (6 + stage * 3)) | 0) });
+    const mul = () => ({ op: "x", v: 2 });
+    const div = () => ({ op: "/", v: 2 });
+    const pairs = [];
+    let c = 5, dead = false;
+    for (let i = 0; i < n; i++) {
+      const r = rnd();
+      let a, b;
+      if (r < 0.5) { a = plus(); b = minus(); }
+      else if (r < 0.68) { a = mul(); b = rnd() < 0.5 ? minus() : div(); }
+      else if (r < 0.88) { a = plus(); b = div(); }
+      else { a = minus(); b = div(); }          // 둘 다 나쁨: 덜 나쁜 쪽 고르기
+      if (rnd() < 0.5) [a, b] = [b, a];
+      pairs.push([a, b]);
+      c = Math.max(apply(c, a), apply(c, b));   // 그리디(매번 더 좋은 문)
+      if (c <= 0) { dead = true; break; }
+    }
+    if (dead || c < 6) continue;
+    const boss = Math.max(3, Math.floor(c * 0.62));
+    return { pairs, boss };
+  }
+  return { pairs: [[{ op: "+", v: 5 }, { op: "-", v: 3 }]], boss: 4 };
+}
+
+/* ── 상태 ─────────────────────────────────────────────── */
+let stage = 1, best = +localStorage.getItem("gaterunner.best") || 0;
+let phase = "title";              // title | play | boss | win | fail
+let pairs = [], gates = [], boss = null, count = 5;
+let crowdX = MID, targetX = MID, speed = 150, scroll = 0;
+let pops = [];                    // {text,x,y,life,col}
+let battle = null;                // {me, foe, t}
+
+function loadStage() {
+  const g = gen(stage);
+  pairs = g.pairs;
+  const spacing = 250;
+  gates = g.pairs.map((p, i) => ({ p, y: -120 - i * spacing, done: false }));
+  boss = { n: g.boss, y: -120 - g.pairs.length * spacing - 320, done: false };
+  count = 5; crowdX = MID; targetX = MID; battle = null; pops = [];
+  speed = Math.min(150 + stage * 10, 280);
+  window.__gr = {                          // 테스트/디버그용
+    pairs: g.pairs, boss: g.boss,
+    state: () => ({ count, x: crowdX, next: gates.findIndex((gt) => !gt.done) }),
+    steer: (x) => { targetX = x; },
+  };
+  hud();
+}
+
+function pop(text, x, y, col) { pops.push({ text, x, y, life: 1, col }); }
+
+function endStage(ok) {
+  if (ok) {
+    phase = "win";
+    if (stage > best) { best = stage; localStorage.setItem("gaterunner.best", best); }
+    window.blWeeklyReport?.(stage);
+    show("🏆", `스테이지 ${stage} 클리어!`,
+         `${count}명으로 ${boss.n}명 군단을 밀어버렸습니다.`, "다음 스테이지");
+  } else {
+    phase = "fail";
+    const quips = ["광고 속 그 사람도 맨날 -30 문으로 들어가던데요.",
+                   "괜찮아요. 광고는 원래 지는 장면만 보여줘요.",
+                   "이게 바로 광고에서 보던 그 발컨입니다."];
+    show("💀", "전멸…", (count <= 0 ? "군중이 다 사라졌어요." :
+         `${count}명 vs ${boss.n}명. 역부족이었습니다.`) +
+         "\n\n" + quips[(Math.random() * quips.length) | 0], "다시 도전");
+  }
+}
+
+/* ── 진행 ─────────────────────────────────────────────── */
+function step(dt) {
+  scroll = (scroll + speed * dt) % 48;
+  crowdX += (targetX - crowdX) * Math.min(1, dt * 10);
+  crowdX = Math.max(LANE_L + 24, Math.min(LANE_R - 24, crowdX));
+
+  for (const g of gates) {
+    g.y += speed * dt;
+    if (!g.done && g.y >= CROWD_Y) {
+      g.done = true;
+      const side = crowdX < MID ? 0 : 1;
+      const chosen = g.p[side];
+      count = apply(count, chosen);
+      pop((isGood(chosen) ? "+" : "") + label(chosen), crowdX, CROWD_Y - 60,
+          isGood(chosen) ? "#46a758" : "#e5484d");
+      hud();
+      if (count <= 0) { count = 0; endStage(false); return; }
+    }
+  }
+  boss.y += speed * dt;
+  if (!boss.done && boss.y >= CROWD_Y - 90) {
+    boss.done = true; phase = "boss";
+    battle = { me: count, foe: boss.n, t: 0 };
+  }
+  if (phase === "boss" && battle) {
+    battle.t += dt;
+    const drain = Math.ceil(Math.max(battle.me, battle.foe) * dt / 0.9);
+    if (battle.t > 0.35) {
+      battle.me -= drain; battle.foe -= drain;
+      if (battle.foe <= 0 || battle.me <= 0) {
+        const ok = count > boss.n;
+        battle.me = Math.max(0, ok ? count - boss.n : 0);
+        battle.foe = Math.max(0, ok ? 0 : boss.n - count);
+        endStage(ok);
+      }
+    }
+  }
+}
+
+/* ── 그리기 ───────────────────────────────────────────── */
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+let scale = 1, ox = 0, oy = 0;
+function resize() {
+  const dpr = devicePixelRatio || 1;
+  cv.width = innerWidth * dpr; cv.height = innerHeight * dpr;
+  cv.style.width = innerWidth + "px"; cv.style.height = innerHeight + "px";
+  scale = Math.min(innerWidth / W, innerHeight / H);
+  ox = (innerWidth - W * scale) / 2; oy = (innerHeight - H * scale) / 2;
+}
+addEventListener("resize", resize); resize();
+
+function drawCrowd(x, y, n, col) {
+  const m = Math.min(n, 54);
+  ctx.fillStyle = col;
+  for (let k = 0; k < m; k++) {
+    const r = 5.2 * Math.sqrt(k), a = k * 2.39996;
+    ctx.beginPath();
+    ctx.arc(x + Math.cos(a) * r, y + Math.sin(a) * r * 0.75, 4.2, 0, 7);
+    ctx.fill();
+  }
+  ctx.font = "bold 17px ui-monospace, monospace";
+  ctx.textAlign = "center";
+  ctx.fillStyle = dark.matches ? "#e8ddcb" : "#3a2b18";
+  ctx.fillText(n, x, y - Math.sqrt(m) * 5 - 12);
+}
+
+function draw() {
+  const D = dark.matches, dpr = devicePixelRatio || 1;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = D ? "#1a1626" : "#f6ead8";
+  ctx.fillRect(0, 0, innerWidth, innerHeight);
+  ctx.setTransform(dpr * scale, 0, 0, dpr * scale, dpr * ox, dpr * oy);
+
+  // 트랙
+  ctx.fillStyle = D ? "#241d33" : "#efe0c8";
+  ctx.fillRect(LANE_L, -10, LANE_R - LANE_L, H + 20);
+  ctx.strokeStyle = D ? "#6e4522" : "#8a5a33"; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.moveTo(LANE_L, -10); ctx.lineTo(LANE_L, H + 10);
+  ctx.moveTo(LANE_R, -10); ctx.lineTo(LANE_R, H + 10); ctx.stroke();
+  ctx.strokeStyle = D ? "rgba(232,221,203,.12)" : "rgba(58,43,24,.12)";
+  ctx.lineWidth = 3; ctx.setLineDash([18, 30]); ctx.lineDashOffset = -scroll;
+  ctx.beginPath(); ctx.moveTo(MID, -10); ctx.lineTo(MID, H + 10); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // 게이트
+  for (const g of gates) {
+    if (g.done || g.y < -60) continue;
+    for (let s = 0; s < 2; s++) {
+      const gd = isGood(g.p[s]);
+      const x0 = s === 0 ? LANE_L : MID, x1 = s === 0 ? MID : LANE_R;
+      ctx.fillStyle = gd ? (D ? "rgba(70,167,88,.28)" : "rgba(70,167,88,.22)")
+                         : (D ? "rgba(229,72,77,.28)" : "rgba(229,72,77,.2)");
+      ctx.fillRect(x0 + 4, g.y - 44, x1 - x0 - 8, 44);
+      ctx.strokeStyle = gd ? "#46a758" : "#e5484d"; ctx.lineWidth = 2.5;
+      ctx.strokeRect(x0 + 4, g.y - 44, x1 - x0 - 8, 44);
+      ctx.font = "bold 21px ui-monospace, monospace"; ctx.textAlign = "center";
+      ctx.fillStyle = gd ? "#46a758" : "#e5484d";
+      ctx.fillText(label(g.p[s]), (x0 + x1) / 2, g.y - 14);
+    }
+  }
+
+  // 보스 군단
+  if (boss && boss.y > -80) {
+    const b = battle ?? { me: count, foe: boss.n };
+    if (b.foe > 0) drawCrowd(MID, Math.min(boss.y, CROWD_Y - 130), b.foe, "#e5484d");
+  }
+
+  // 내 군중
+  const me = battle ? battle.me : count;
+  if (phase !== "title" && me > 0) drawCrowd(crowdX, CROWD_Y, me, "#3b82f6");
+
+  // 팝업 텍스트
+  for (const p of pops) {
+    ctx.globalAlpha = Math.max(0, p.life);
+    ctx.font = "bold 19px ui-monospace, monospace"; ctx.textAlign = "center";
+    ctx.fillStyle = p.col;
+    ctx.fillText(p.text, p.x, p.y - (1 - p.life) * 30);
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* ── 루프 ─────────────────────────────────────────────── */
+let last = performance.now();
+function loop(t) {
+  let dt = (t - last) / 1000; last = t;
+  if (dt > 0.05) dt = 0.05;
+  if (phase === "play" || phase === "boss") step(dt);
+  for (const p of pops) p.life -= dt * 1.4;
+  pops = pops.filter((p) => p.life > 0);
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+/* ── 입력/UI ──────────────────────────────────────────── */
+const $ = (id) => document.getElementById(id);
+function hud() { $("hStage").textContent = `스테이지 ${stage} · 👥 ${count}`; }
+function show(emoji, title, msg, btnText) {
+  $("oEmoji").textContent = emoji; $("oTitle").textContent = title;
+  $("oMsg").textContent = msg; $("btn").textContent = btnText;
+  $("best").textContent = best ? `최고 기록: 스테이지 ${best}` : "";
+  $("overlay").classList.remove("hide");
+}
+$("btn").addEventListener("click", () => {
+  if (phase === "win") stage++;
+  $("overlay").classList.add("hide");
+  phase = "play"; loadStage();
+});
+$("retry").addEventListener("click", () => {
+  if (phase === "play" || phase === "boss") { phase = "play"; loadStage(); }
+});
+
+let dragging = false;
+const toX = (e) => (e.clientX - ox) / scale;
+addEventListener("pointerdown", (e) => { dragging = true; targetX = toX(e); });
+addEventListener("pointermove", (e) => { if (dragging) targetX = toX(e); });
+addEventListener("pointerup", () => { dragging = false; });
+addEventListener("keydown", (e) => {
+  if (e.key === "ArrowLeft") targetX = MID - 70;
+  if (e.key === "ArrowRight") targetX = MID + 70;
+});
+
+window.blShareText = () => `게이트 러너 스테이지 ${best}까지 뚫었음! 광고에서 본 그 게임, 진짜로 있음 🏃`;
+window.blWeekly = { game: "gaterunner", dir: "max", fmt: (v) => `스테이지 ${v}` };
+</script>
+<script defer src="/_shared/records.js"></script>
+<script defer src="/_shared/share.js"></script>
+<script defer src="/_shared/like.js"></script>
+</body>
+</html>

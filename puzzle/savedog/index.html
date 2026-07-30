@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>벌떼에서 강아지 구하기 — 광고에서 본 그 게임</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🐶</text></svg>">
+<style>
+  :root { color-scheme: light dark; }
+  html, body { height: 100%; }
+  body { margin: 0; overflow: hidden; user-select: none; -webkit-user-select: none;
+         touch-action: none; font-family: ui-monospace, "SF Mono", "Cascadia Mono",
+         "Roboto Mono", Consolas, monospace;
+         background: light-dark(#f6ead8, #1a1626); color: light-dark(#3a2b18, #e8ddcb); }
+  canvas { display: block; }
+  #hud { position: fixed; top: 0; left: 0; right: 0; display: flex; gap: .55rem;
+         align-items: center; padding: .5rem .7rem; font-size: .78rem; z-index: 3;
+         pointer-events: none; white-space: nowrap; }
+  #hud .sp { flex: 1; }
+  #retry { pointer-events: auto; font: inherit; border: 1.5px solid currentColor;
+           background: none; color: inherit; border-radius: 1rem; padding: .15rem .7rem;
+           cursor: pointer; opacity: .75; }
+  #retry:active { transform: scale(.95); }
+  #inkbar { position: fixed; top: 2.2rem; left: 50%; transform: translateX(-50%);
+            width: min(60vw, 220px); height: 7px; border-radius: 4px; z-index: 3;
+            background: light-dark(rgba(58,43,24,.15), rgba(232,221,203,.15)); }
+  #ink { height: 100%; border-radius: 4px; background: #e93d82; width: 100%;
+         transition: width .1s; }
+  #go { position: fixed; bottom: 3.4rem; left: 50%; transform: translateX(-50%);
+        font: inherit; font-size: 1rem; padding: .6rem 1.8rem; border-radius: 2rem;
+        border: 2px solid currentColor; background: light-dark(rgba(255,250,240,.9), rgba(26,20,38,.9));
+        color: inherit; cursor: pointer; z-index: 3; }
+  #go:active { transform: translateX(-50%) scale(.96); }
+  #go.hide, #inkbar.hide { display: none; }
+  #overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+             display: flex; flex-direction: column; align-items: center; gap: .9rem;
+             width: min(84vw, 21rem); padding: 1.5rem 1.6rem; border-radius: 1.25rem;
+             text-align: center; z-index: 5;
+             border: 1.5px solid light-dark(rgba(90,60,20,.3), rgba(230,215,190,.25));
+             background: light-dark(rgba(255,250,240,.92), rgba(26,20,38,.92));
+             backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  #overlay.hide { display: none; }
+  #overlay h1 { margin: 0; font-size: 1.15rem; }
+  #overlay p { margin: 0; font-size: .88rem; line-height: 1.55; opacity: .75;
+               white-space: pre-line; }
+  #overlay .big { font-size: 2.2rem; margin: 0; }
+  #btn { font: inherit; font-size: 1.05rem; padding: .75rem 2.2rem; border-radius: 2rem;
+         border: 2px solid currentColor; background: none; color: inherit; cursor: pointer; }
+  #btn:active { transform: scale(.96); }
+  #best { margin: 0; font-size: .8rem; opacity: .5; min-height: 1.1em; }
+</style>
+</head>
+<body>
+<div id="hud">
+  <span>🐶 <b>강아지 구하기 (진짜임)</b></span>
+  <span class="sp"></span>
+  <span id="hStage"></span>
+  <button id="retry" title="다시 시작">↻</button>
+</div>
+<div id="inkbar"><div id="ink"></div></div>
+<button id="go" class="hide">🐝 출발!</button>
+<div id="overlay">
+  <p class="big" id="oEmoji">🐶</p>
+  <h1 id="oTitle">강아지를 구하세요</h1>
+  <p id="oMsg">광고에서 보던 바로 그 선 긋기 게임.
+근데 이건 진짜로 그 게임임.
+
+분홍 잉크로 벽을 그려서
+벌떼로부터 강아지를 5초 동안 지키세요.
+빈틈이 있으면 벌이 돌아 들어옵니다!</p>
+  <button id="btn">시작</button>
+  <p id="best"></p>
+</div>
+<canvas id="cv"></canvas>
+<script>
+"use strict";
+/* ── 상수 ─────────────────────────────────────────────── */
+const W = 360, H = 640, DOG_R = 14, BEE_R = 5, SURVIVE = 5;
+const dark = matchMedia("(prefers-color-scheme: dark)");
+
+/* ── 스테이지 (전부 손제작, 테스트로 클리어 검증됨) ──── */
+// dog:[x,y] / hives:[[x,y,마리수]] / walls: 기존 벽 / ink: 잉크(px)
+const STAGES = [
+  { dog: [180, 490], hives: [[180, 80, 8]], walls: [], ink: 420,
+    tip: "화면 끝까지 막으세요. 빈틈이 있으면 돌아 들어와요!" },
+  { dog: [80, 520], hives: [[300, 90, 8]], walls: [[160, 640, 160, 420]], ink: 200,
+    tip: "이미 있는 벽에 이어 붙이세요" },
+  { dog: [180, 500], hives: [[60, 90, 5], [300, 90, 5]],
+    walls: [[110, 430, 250, 430]], ink: 260 },
+  { dog: [180, 470], hives: [[60, 80, 6], [300, 80, 6]],
+    walls: [[0, 560, 360, 560], [60, 640, 60, 430], [300, 640, 300, 430]], ink: 290 },
+  { dog: [180, 300], hives: [[40, 560, 4], [320, 560, 4], [180, 60, 4]],
+    walls: [[140, 320, 220, 320], [120, 340, 120, 260], [240, 340, 240, 260]], ink: 210,
+    tip: "구멍이 세 개…" },
+  { dog: [180, 500], hives: [[30, 240, 10]],
+    walls: [[0, 200, 280, 200], [0, 280, 280, 280]], ink: 120,
+    tip: "잉크가 부족해요. 짧고 굵게!" },
+  { dog: [180, 550], hives: [[30, 300, 6], [330, 300, 6]],
+    walls: [[0, 480, 120, 480], [240, 480, 360, 480]], ink: 160 },
+  { dog: [180, 318], hives: [[30, 60, 4], [330, 60, 4], [30, 600, 4], [330, 600, 4]],
+    walls: [[120, 340, 240, 340]], ink: 240, tip: "사방이 벌…" },
+];
+
+/* ── 상태 ─────────────────────────────────────────────── */
+let stage = 1, best = +localStorage.getItem("savedog.best") || 0;
+let phase = "title";       // title | draw | run | win | fail
+let dog, hives, walls = [], stroke = [], ink = 0, inkMax = 1, tip = "";
+let bees = [], timer = 0, spawnQueue = [], dogFace = "🐶";
+let beeSpd = 95, lastPt = null;
+
+const seg = (x1, y1, x2, y2, r = 5) => ({ x1, y1, x2, y2, r });
+
+function levelFor(s) {
+  const lv = STAGES[(s - 1) % STAGES.length];
+  const loop = Math.floor((s - 1) / STAGES.length);
+  return { ...lv, spd: 95 * (1 + loop * 0.18), extra: loop * 2 };
+}
+
+function loadStage() {
+  const lv = levelFor(stage);
+  dog = lv.dog; hives = lv.hives; tip = lv.tip ?? "";
+  walls = lv.walls.map((w) => seg(...w));
+  stroke = []; lastPt = null;
+  ink = inkMax = lv.ink; beeSpd = lv.spd;
+  bees = []; timer = 0; dogFace = "🐶";
+  spawnQueue = [];
+  hives.forEach(([hx, hy, n], hi) => {
+    for (let i = 0; i < n + lv.extra; i++) {
+      spawnQueue.push({ at: 0.5 + i * 0.09 + hi * 0.03, x: hx, y: hy });
+    }
+  });
+  phase = "draw";
+  document.getElementById("go").classList.remove("hide");
+  document.getElementById("inkbar").classList.remove("hide");
+  hud(); inkUi();
+}
+
+/* ── 물리 ─────────────────────────────────────────────── */
+function pushOut(b, s) {
+  const dx = s.x2 - s.x1, dy = s.y2 - s.y1, l2 = dx * dx + dy * dy || 1;
+  let t = ((b.x - s.x1) * dx + (b.y - s.y1) * dy) / l2;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const px = s.x1 + dx * t, py = s.y1 + dy * t;
+  let nx = b.x - px, ny = b.y - py;
+  const d = Math.hypot(nx, ny), rr = BEE_R + s.r;
+  if (d >= rr || d < 1e-6) return;
+  b.x += (nx / d) * (rr - d); b.y += (ny / d) * (rr - d);
+}
+
+function step(dt) {
+  timer += dt;
+  for (const q of spawnQueue) {
+    if (!q.done && timer >= q.at) {
+      q.done = true;
+      bees.push({ x: q.x + (Math.random() - 0.5) * 14, y: q.y + (Math.random() - 0.5) * 14,
+                  t: Math.random() * 9, ph: Math.random() * 9 });
+    }
+  }
+  for (const b of bees) {
+    b.t += dt;
+    let dx = dog[0] - b.x, dy = dog[1] - b.y;
+    const d = Math.hypot(dx, dy) || 1;
+    dx /= d; dy /= d;
+    const wob = Math.sin(b.t * 6 + b.ph) * 0.45;
+    let vx = dx - dy * wob, vy = dy + dx * wob;
+    const vl = Math.hypot(vx, vy) || 1;
+    b.x += (vx / vl) * beeSpd * dt;
+    b.y += (vy / vl) * beeSpd * dt;
+    b.x = Math.max(6, Math.min(354, b.x));
+    b.y = Math.max(6, Math.min(634, b.y));
+    for (let it = 0; it < 2; it++) {
+      for (const s of walls) pushOut(b, s);
+      for (const s of stroke) pushOut(b, s);
+    }
+    if (Math.hypot(b.x - dog[0], b.y - dog[1]) < DOG_R + BEE_R + 1) return fail();
+  }
+  if (timer >= SURVIVE) win();
+}
+
+function fail() {
+  phase = "fail"; dogFace = "😵";
+  const quips = ["광고 속 그 사람은 일부러 못 그리는 거였는데, 이건 진심이네요.",
+                 "괜찮아요. 광고에서도 맨날 물리던데요.",
+                 "벌도 놀랐을 겁니다. 이렇게 큰 빈틈은 처음이라."];
+  show("🐝", "물렸다…", "벌이 강아지에게 도달했어요.\n\n" +
+       quips[(Math.random() * quips.length) | 0], "다시 도전");
+}
+function win() {
+  phase = "win"; dogFace = "🥰";
+  if (stage > best) { best = stage; localStorage.setItem("savedog.best", best); }
+  window.blWeeklyReport?.(stage);
+  show("🏆", `스테이지 ${stage} 클리어!`,
+       `5초 버티기 성공. 강아지가 무사합니다.\n남은 잉크 ${Math.round(ink)}px`, "다음 스테이지");
+}
+function endDrawUi() {
+  document.getElementById("go").classList.add("hide");
+  document.getElementById("inkbar").classList.add("hide");
+}
+
+/* ── 그리기 ───────────────────────────────────────────── */
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+let scale = 1, ox = 0, oy = 0;
+function resize() {
+  const dpr = devicePixelRatio || 1;
+  cv.width = innerWidth * dpr; cv.height = innerHeight * dpr;
+  cv.style.width = innerWidth + "px"; cv.style.height = innerHeight + "px";
+  scale = Math.min(innerWidth / W, innerHeight / H);
+  ox = (innerWidth - W * scale) / 2; oy = (innerHeight - H * scale) / 2;
+}
+addEventListener("resize", resize); resize();
+
+function capsule(s, col) {
+  ctx.beginPath(); ctx.lineWidth = s.r * 2; ctx.lineCap = "round";
+  ctx.strokeStyle = col;
+  ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2); ctx.stroke();
+}
+
+function draw(now) {
+  const D = dark.matches, dpr = devicePixelRatio || 1;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = D ? "#1a1626" : "#f6ead8";
+  ctx.fillRect(0, 0, innerWidth, innerHeight);
+  ctx.setTransform(dpr * scale, 0, 0, dpr * scale, dpr * ox, dpr * oy);
+  if (phase === "title") return;
+
+  const wood = D ? "#6e4522" : "#8a5a33";
+  for (const s of walls) capsule(s, wood);
+  for (const s of stroke) capsule(s, "#e93d82");
+
+  ctx.textAlign = "center";
+  ctx.font = "22px system-ui";
+  for (const [hx, hy] of hives) ctx.fillText("🍯", hx, hy + 8);
+  ctx.font = "28px system-ui";
+  ctx.fillText(dogFace, dog[0], dog[1] + 10);
+  ctx.font = "13px system-ui";
+  for (const b of bees) ctx.fillText("🐝", b.x, b.y + 4.5);
+
+  if (phase === "run") {
+    ctx.font = "bold 26px ui-monospace, monospace";
+    ctx.fillStyle = D ? "#e8ddcb" : "#3a2b18";
+    ctx.fillText(Math.max(0, SURVIVE - timer).toFixed(1), W / 2, 150);
+  }
+  if (tip && phase === "draw") {
+    ctx.font = "12px ui-monospace, monospace";
+    ctx.fillStyle = D ? "rgba(232,221,203,.65)" : "rgba(58,43,24,.6)";
+    const words = tip.split(" "), lines = [];
+    let line = "";
+    for (const w2 of words) {
+      const t2 = line ? line + " " + w2 : w2;
+      if (ctx.measureText(t2).width > 330 && line) { lines.push(line); line = w2; }
+      else line = t2;
+    }
+    lines.push(line);
+    lines.forEach((l, i) => ctx.fillText(l, W / 2, 78 + i * 16));
+  }
+}
+
+let last = performance.now();
+function loop(t) {
+  let dt = (t - last) / 1000; last = t;
+  if (dt > 0.05) dt = 0.05;
+  if (phase === "run") step(dt);
+  draw(t);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+/* ── 입력/UI ──────────────────────────────────────────── */
+const $ = (id) => document.getElementById(id);
+function hud() { $("hStage").textContent = `스테이지 ${stage}`; }
+function inkUi() { $("ink").style.width = (ink / inkMax * 100) + "%"; }
+function show(emoji, title, msg, btnText) {
+  $("oEmoji").textContent = emoji; $("oTitle").textContent = title;
+  $("oMsg").textContent = msg; $("btn").textContent = btnText;
+  $("best").textContent = best ? `최고 기록: 스테이지 ${best}` : "";
+  $("overlay").classList.remove("hide");
+  endDrawUi();
+}
+$("btn").addEventListener("click", () => {
+  if (phase === "win") stage++;
+  $("overlay").classList.add("hide");
+  loadStage();
+});
+$("retry").addEventListener("click", () => {
+  if (phase === "draw" || phase === "run") loadStage();
+});
+$("go").addEventListener("click", () => {
+  if (phase !== "draw") return;
+  phase = "run"; timer = 0; endDrawUi();
+});
+
+const toPt = (e) => [(e.clientX - ox) / scale, (e.clientY - oy) / scale];
+const nearEntity = (x, y) =>
+  Math.hypot(x - dog[0], y - dog[1]) < DOG_R + 12 ||
+  hives.some(([hx, hy]) => Math.hypot(x - hx, y - hy) < 30);
+let drawing = false;
+cv.addEventListener("pointerdown", (e) => {
+  if (phase !== "draw" || ink <= 0) return;
+  drawing = true; lastPt = null;
+  addPt(...toPt(e));
+});
+addEventListener("pointermove", (e) => {
+  if (drawing && phase === "draw") addPt(...toPt(e));
+});
+addEventListener("pointerup", () => { drawing = false; lastPt = null; });
+
+function addPt(x, y) {
+  x = Math.max(0, Math.min(W, x)); y = Math.max(0, Math.min(H, y));
+  if (nearEntity(x, y)) { lastPt = null; return; }   // 강아지·벌집 위엔 못 그림
+  if (!lastPt) { lastPt = [x, y]; return; }
+  const len = Math.hypot(x - lastPt[0], y - lastPt[1]);
+  if (len < 7) return;
+  const use = Math.min(len, ink);
+  const f = use / len;
+  const nx = lastPt[0] + (x - lastPt[0]) * f, ny = lastPt[1] + (y - lastPt[1]) * f;
+  stroke.push(seg(lastPt[0], lastPt[1], nx, ny, 4.5));
+  ink -= use; inkUi();
+  if (ink <= 0.5) { ink = 0; drawing = false; lastPt = null; inkUi(); return; }
+  lastPt = [nx, ny];
+}
+
+window.blShareText = () => `벌떼에서 강아지를 스테이지 ${best}까지 지켜냈음! 광고 말고 진짜로 있는 게임 🐶`;
+window.blWeekly = { game: "savedog", dir: "max", fmt: (v) => `스테이지 ${v}` };
+</script>
+<script defer src="/_shared/records.js"></script>
+<script defer src="/_shared/share.js"></script>
+<script defer src="/_shared/like.js"></script>
+</body>
+</html>

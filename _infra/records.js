@@ -33,6 +33,13 @@ export const GAMES = {
   "dart-adv":   { dir: "max", min: 0, max: 1000 },      // 파워 게이지 다트 수
   flags:        { dir: "max", min: 0, max: 1000 },      // 연속으로 맞춘 국기 수
   logroll:      { dir: "max", min: 0, max: 100000 },    // 버틴 시간(초)
+  pullpin:      { dir: "max", min: 1, max: 1000 },      // 핀 뽑기 클리어 스테이지
+  watersort:    { dir: "max", min: 1, max: 10000 },     // 물 소팅 클리어 스테이지
+  gaterunner:   { dir: "max", min: 1, max: 10000 },     // 게이트 러너 클리어 스테이지
+  savedog:      { dir: "max", min: 1, max: 10000 },     // 강아지 구하기 클리어 스테이지
+  parkmaster:   { dir: "max", min: 1, max: 10000 },     // 주차 마스터 클리어 스테이지
+  screwout:     { dir: "max", min: 1, max: 10000 },     // 나사 풀기 클리어 스테이지
+  icebreak:     { dir: "max", min: 1, max: 10000 },     // 얼음 깨기 클리어 스테이지
   reactiontime: { dir: "min", min: 0, max: 60000 },     // 반응속도(ms)
   "sort-line":  { dir: "max", min: 0, max: 100000 },    // 컨베이어 분류 정답 수
   touch25:      { dir: "min", min: 0, max: 3600 },      // 완주 시간(초)
@@ -67,6 +74,29 @@ export class RecordsDO {
   async fetch(request) {
     const url = new URL(request.url);
     const week = weekKey();
+
+    // ---------- 게임 추천(좋아요): 방문자당 게임별 1회 ----------
+    if (url.pathname === "/_like" && request.method === "GET") {
+      const game = url.searchParams.get("game") ?? "";
+      const likes = (await this.state.storage.get("likes")) ?? {};
+      if (game === "__all__") return Response.json(likes);
+      if (!GAMES[game]) return new Response("unknown game", { status: 400 });
+      return Response.json({ game, n: likes[game] ?? 0 });
+    }
+    if (url.pathname === "/_like" && request.method === "POST") {
+      const { game, vid } = await request.json().catch(() => ({}));
+      if (!GAMES[game]) return new Response("unknown game", { status: 400 });
+      if (!VISITOR_ID.test(vid ?? "")) return new Response("no visitor", { status: 400 });
+      const likes = (await this.state.storage.get("likes")) ?? {};
+      const dedupeKey = `liked:${game}:${vid}`;
+      if (await this.state.storage.get(dedupeKey)) {
+        return Response.json({ game, n: likes[game] ?? 0, dup: true });
+      }
+      await this.state.storage.put(dedupeKey, 1);
+      likes[game] = (likes[game] ?? 0) + 1;
+      await this.state.storage.put("likes", likes);
+      return Response.json({ game, n: likes[game] }, { status: 201 });
+    }
 
     // ---------- 토이 아이디어 우편함 ----------
     if (url.pathname === "/_suggest" && request.method === "POST") {

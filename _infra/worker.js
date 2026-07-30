@@ -899,6 +899,36 @@ export async function handleRequest(request, env, ctx) {
       return env.RECORDS.get(id).fetch(request);
     }
 
+    // 게임 추천(좋아요): 방문자당 게임별 1회. 집계는 공개 조회.
+    if (path === "/_like") {
+      const id = env.RECORDS.idFromName("global");
+      if (request.method === "GET") {
+        const limited = await enforceRateLimit(request, env, {
+          scope: "like-read", limit: 60, windowMs: 60 * 1000,
+        });
+        if (limited) return limited;
+        const game = new URL(request.url).searchParams.get("game") ?? "";
+        return env.RECORDS.get(id).fetch(
+          `https://records.internal/_like?game=${encodeURIComponent(game)}`,
+        );
+      }
+      if (request.method === "POST") {
+        const contentTypeError = requireJsonRequest(request);
+        if (contentTypeError) return contentTypeError;
+        const limited = await enforceRateLimit(request, env, {
+          scope: "like", limit: 10, windowMs: 60 * 1000,
+        });
+        if (limited) return limited;
+        const { game } = await request.json().catch(() => ({}));
+        return env.RECORDS.get(id).fetch("https://records.internal/_like", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ game, vid: visitorId(request) }),
+        });
+      }
+      return new Response("method not allowed", { status: 405 });
+    }
+
     if (path === "/_personal" && request.method === "POST") {
       const contentTypeError = requireJsonRequest(request);
       if (contentTypeError) return contentTypeError;
