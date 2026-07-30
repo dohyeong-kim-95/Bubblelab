@@ -73,21 +73,116 @@ const W = 360, H = 640, CAR_R = 15, CRASH_D = 30, BASE_SPD = 130;
 const PAL = ["#e5484d", "#3b82f6", "#46a758", "#f79009", "#8e4ec6"];
 const dark = matchMedia("(prefers-color-scheme: dark)");
 
-/* ── 스테이지: [시작x, 시작y, 주차x, 주차y] × 차 수 ──── */
-const STAGES = [
-  [[80, 520, 280, 120]],
-  [[60, 520, 300, 120], [300, 520, 60, 120]],
-  [[60, 540, 300, 100], [300, 540, 60, 100], [180, 560, 180, 80]],
-  [[60, 560, 300, 140], [300, 560, 60, 140], [60, 80, 300, 500], [300, 80, 60, 500]],
-  [[60, 200, 300, 520], [60, 360, 300, 360], [60, 520, 300, 200]],
-  [[60, 560, 300, 140], [300, 560, 60, 140], [60, 80, 300, 500], [300, 80, 60, 500],
-   [180, 600, 180, 60]],
-];
-const TIPS = [
-  "차를 누른 채 P까지 길을 그리세요",
-  "직선끼리는 한가운데서 꽝. 한 대는 돌아가게 하세요",
-  null, null, "길이가 곧 타이밍입니다", "다섯 대 동시 출발…",
-];
+/* ── 자동 레벨 제너레이터 ─────────────────────────────── */
+// 구성적 풀이 보장: k번째 차는 자기 전용 스톨 존(사각 구역)에서 앞선 차들이
+// 전부 주차할 때까지 맴돌다가 존 중심 → 주차칸 직선으로 출발하면 항상 성공.
+// 생성 시 그 전략이 성립하는 기하 여유(존끼리·존-주차칸·경로-존 거리)를
+// 검사하고, 난이도는 "직선끼리 가까이 지나가는 쌍" 수로 강제한다.
+const mulberry32 = (a) => () => {
+  a |= 0; a = (a + 0x6D2B79F5) | 0;
+  let t = Math.imul(a ^ (a >>> 15), 1 | a);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+const dist2 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+function segPointDist(a, b, p) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy || 1;
+  let t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  return Math.hypot(p[0] - (a[0] + dx * t), p[1] - (a[1] + dy * t));
+}
+const rectPointDist = (bx, p) => Math.hypot(
+  Math.max(bx.x1 - p[0], 0, p[0] - bx.x2), Math.max(bx.y1 - p[1], 0, p[1] - bx.y2));
+const rectGap = (a, b) => Math.hypot(
+  Math.max(a.x1 - b.x2, 0, b.x1 - a.x2), Math.max(a.y1 - b.y2, 0, b.y1 - a.y2));
+function segRectDist(a, b, bx) {                    // 샘플링 근사(8px 간격)
+  const n = Math.max(2, Math.ceil(dist2(a, b) / 8));
+  let m = Infinity;
+  for (let i = 0; i <= n; i++) {
+    m = Math.min(m, rectPointDist(bx, [a[0] + (b[0] - a[0]) * i / n,
+                                       a[1] + (b[1] - a[1]) * i / n]));
+  }
+  return m;
+}
+function segSegDist(a, b, c, d) {
+  const n = Math.max(2, Math.ceil(dist2(a, b) / 10));
+  let m = Infinity;
+  for (let i = 0; i <= n; i++) {
+    m = Math.min(m, segPointDist(c, d, [a[0] + (b[0] - a[0]) * i / n,
+                                        a[1] + (b[1] - a[1]) * i / n]));
+  }
+  return m;
+}
+const carsFor = (stage) =>
+  1 + (stage >= 2 ? 1 : 0) + (stage >= 5 ? 1 : 0) + (stage >= 9 ? 1 : 0) + (stage >= 14 ? 1 : 0);
+
+function gen(stage) {
+  const nCars = carsFor(stage);
+  // 5대는 화면이 비좁아 존을 줄이고 간격 요구를 완화한다 (전략 성립엔 충분)
+  const half = nCars >= 5 ? 36 : 46;
+  const startGap = nCars >= 5 ? 82 : 90;
+  const spotGap = nCars >= 5 ? 72 : 80;
+  for (const needCross of [nCars < 2 ? 0 : (stage >= 5 ? nCars - 1 : 1), 0]) {
+    for (let attempt = 0; attempt < 1500; attempt++) {
+      const rnd = mulberry32(stage * 70241 + attempt * 449 + needCross * 131 + 7);
+      const P = () => [50 + rnd() * 260, 85 + rnd() * 510];
+      const starts = [], spots = [];
+      let ok = true;
+      for (let i = 0; i < nCars && ok; i++) {
+        let s = null, g = null;
+        for (let t = 0; t < 60 && !s; t++) {
+          const c = P();
+          if (starts.every((o) => dist2(c, o) >= startGap) &&
+              spots.every((o) => dist2(c, o) >= 60)) s = c;
+        }
+        if (!s) { ok = false; break; }
+        starts.push(s);
+        for (let t = 0; t < 60 && !g; t++) {
+          const c = P();
+          if (dist2(c, s) >= 220 && spots.every((o) => dist2(c, o) >= spotGap) &&
+              starts.every((o) => dist2(c, o) >= 60)) g = c;
+        }
+        if (!g) { ok = false; break; }
+        spots.push(g);
+      }
+      if (!ok) continue;
+      // 스톨 존 (1번 차부터)
+      const boxes = [null];
+      for (let k = 1; k < nCars && ok; k++) {
+        const b = { x1: Math.max(16, starts[k][0] - half), y1: Math.max(70, starts[k][1] - half),
+                    x2: Math.min(344, starts[k][0] + half), y2: Math.min(624, starts[k][1] + half) };
+        if (boxes.some((o) => o && rectGap(b, o) < 34)) ok = false;
+        if (rectPointDist(b, starts[0]) < 34) ok = false;
+        for (const g of spots) if (rectPointDist(b, g) < 34) ok = false;
+        boxes.push(b);
+      }
+      if (!ok) continue;
+      // 출발 경로(존 중심 → 주차칸): 먼저 주차된 칸·아직 대기 중인 존과 여유
+      for (let k = 0; k < nCars && ok; k++) {
+        const from = k === 0 ? starts[0]
+          : [(boxes[k].x1 + boxes[k].x2) / 2, (boxes[k].y1 + boxes[k].y2) / 2];
+        for (let j = 0; j < k && ok; j++) {
+          if (segPointDist(from, spots[k], spots[j]) < 36) ok = false;
+        }
+        for (let j = k + 1; j < nCars && ok; j++) {
+          if (segRectDist(from, spots[k], boxes[j]) < 30) ok = false;
+        }
+      }
+      if (!ok) continue;
+      // 난이도: 순진한 동시 직진이 위험해지는(가까이 지나는) 쌍 수
+      let cross = 0;
+      for (let i = 0; i < nCars; i++) {
+        for (let j = i + 1; j < nCars; j++) {
+          if (segSegDist(starts[i], spots[i], starts[j], spots[j]) < 42) cross++;
+        }
+      }
+      if (cross < needCross) continue;
+      return { defs: starts.map((s, i) => [s[0], s[1], spots[i][0], spots[i][1]]), boxes };
+    }
+  }
+  // 이론상 도달 불가 폴백 (제약 전부 실패 시 1대짜리)
+  return { defs: [[80, 520, 280, 120]], boxes: [null] };
+}
 
 /* ── 상태 ─────────────────────────────────────────────── */
 let stage = 1, best = +localStorage.getItem("parkmaster.best") || 0;
@@ -95,16 +190,12 @@ let phase = "title";           // title | draw | run | win | fail
 let cars = [], timer = 0, spd = BASE_SPD, tip = "", boom = null;
 let drawingCar = -1, curPath = [];
 
-function levelFor(s) {
-  const idx = (s - 1) % STAGES.length;
-  const loop = Math.floor((s - 1) / STAGES.length);
-  return { defs: STAGES[idx], spd: BASE_SPD * (1 + loop * 0.15), tip: TIPS[idx] };
-}
-
 function loadStage() {
-  const lv = levelFor(stage);
-  spd = lv.spd; tip = lv.tip ?? "";
-  cars = lv.defs.map(([sx, sy, tx, ty], i) => ({
+  const g = gen(stage);
+  spd = BASE_SPD;
+  tip = stage === 1 ? "차를 누른 채 P까지 길을 그리세요"
+      : stage === 2 ? "직선끼리는 부딪혀요. 길이로 타이밍을 벌리세요" : "";
+  cars = g.defs.map(([sx, sy, tx, ty], i) => ({
     sx, sy, tx, ty, col: PAL[i % PAL.length],
     path: null, len: 0, cum: [], x: sx, y: sy, hx: 0, hy: -1, parked: false,
   }));
@@ -112,6 +203,14 @@ function loadStage() {
   phase = "draw";
   const go = document.getElementById("go");
   go.classList.remove("hide"); go.disabled = true;
+  window.__pm = {                                    // 테스트/디버그용
+    defs: g.defs, boxes: g.boxes,
+    state: () => ({ moves, phase }),
+  };
+  window.__pmGen = (s) => {                          // 생성기 대량 검사용
+    const r = gen(s);
+    return { n: r.defs.length, defs: r.defs, boxes: r.boxes };
+  };
   hud();
 }
 
