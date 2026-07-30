@@ -33,6 +33,7 @@ export const GAMES = {
   "dart-adv":   { dir: "max", min: 0, max: 1000 },      // 파워 게이지 다트 수
   flags:        { dir: "max", min: 0, max: 1000 },      // 연속으로 맞춘 국기 수
   logroll:      { dir: "max", min: 0, max: 100000 },    // 버틴 시간(초)
+  pullpin:      { dir: "max", min: 1, max: 1000 },      // 핀 뽑기 클리어 스테이지
   reactiontime: { dir: "min", min: 0, max: 60000 },     // 반응속도(ms)
   "sort-line":  { dir: "max", min: 0, max: 100000 },    // 컨베이어 분류 정답 수
   touch25:      { dir: "min", min: 0, max: 3600 },      // 완주 시간(초)
