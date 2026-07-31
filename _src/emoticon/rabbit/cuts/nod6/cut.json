@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 2,
+  "cliVersion": 2,
+  "promptVersion": "2026-07-keys-v1",
+  "mode": "keys",
+  "specHash": "5219c235e07c3a3ad7652fa38970d8e3a84ae35460ff606866ab0f798b45426b",
+  "sheetHash": "b9692d48a1a77ec19249b8cb0f9f86e7cf358cf605dc9902b31219340aaffcc9",
+  "referenceHashes": [
+    "b9692d48a1a77ec19249b8cb0f9f86e7cf358cf605dc9902b31219340aaffcc9"
+  ],
+  "provider": "gemini/gemini-2.5-flash-image",
+  "status": "complete",
+  "createdAt": "2026-07-31T15:02:56.572Z",
+  "updatedAt": "2026-07-31T15:04:09.489Z",
+  "completedAt": "2026-07-31T15:04:09.489Z",
+  "calls": 3,
+  "unitCostUsd": 0.039,
+  "estimatedCostUsd": 0.117,
+  "runs": [
+    {
+      "runId": "3efea5ee-5648-4fbb-aed6-37997ebc27d9",
+      "startedAt": "2026-07-31T15:02:56.572Z",
+      "provider": "gemini/gemini-2.5-flash-image",
+      "gitCommit": "c82be91a3c0d2de1f4d2d45be39c7d03b7c7a841",
+      "calls": 3,
+      "estimatedCostUsd": 0.117,
+      "status": "complete",
+      "completedAt": "2026-07-31T15:04:09.489Z"
+    }
+  ],
+  "motion": "bobbing the head down in a happy nod",
+  "fps": 12,
+  "keys": [
+    {
+      "pose": "standing upright and facing the viewer, the head held high, both short arms hanging at the sides of the body, eyes open, a gentle closed-mouth smile, both ears standing straight up",
+      "hold": 4
+    },
+    {
+      "pose": "the head sinks downward into the shoulders and the round body settles with it, so the whole character is 0.92 times as tall and 1.08 times as wide, its volume preserved; the feet stay planted on the same baseline; both ears keep their full length and their bases stay on top of the head, and only the top third of each ear tips forward; both short arms stay hanging at the sides of the body; the eyes close into happy upward arcs; a small open smile",
+      "hold": 2
+    }
+  ],
+  "breakdowns": 1,
+  "assembly": "pingpong",
+  "invariants": "two long upright ears whose bases sit on top of the head, two eyes, one mouth, two short arms, two feet; the paws are the same plain white surface as the body; two pink oval inner ears; two round pink cheek blushes; the canvas holds only this one character",
+  "repeat": 3,
+  "characterRef": "_src/emoticon/rabbit/cuts/nod/frames-raw/key-1.png",
+  "frames": 3,
+  "sequence": [
+    {
+      "type": "key",
+      "key": 0
+    },
+    {
+      "type": "bd",
+      "pair": [
+        0,
+        1
+      ]
+    },
+    {
+      "type": "key",
+      "key": 1
+    }
+  ],
+  "timeline": [
+    {
+      "frame": 0,
+      "delayMs": 333
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 2,
+      "delayMs": 167
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 0,
+      "delayMs": 333
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 2,
+      "delayMs": 167
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 0,
+      "delayMs": 333
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 2,
+      "delayMs": 167
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    }
+  ]
+}
