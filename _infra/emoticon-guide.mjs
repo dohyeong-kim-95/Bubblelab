@@ -12,15 +12,20 @@
 // 순수 함수라 무료·결정론적이고, 테스트로 검증된다.
 import { decodePng, encodePng } from "./png.mjs";
 
-const BG = 250;      // 이 값 이상이면 배경(흰색)으로 본다
+// 임계값이 두 개인 이유: 머리 원 피팅은 **구조**(굵은 외곽선)를 봐야 하므로
+// 느슨하게 잡으면 안티에일리어싱 가장자리까지 머리로 세어 원이 틀어진다.
+// 반면 얼굴 마스크는 **부드러운 그라디언트**(볼 홍조)의 옅은 꼬리까지 잡아야
+// 하고, 250으로 두면 251~254인 꼬리가 원위치에 유령으로 남아 띠 자국이 된다.
+const STRUCT_BG = 250;
+const FACE_BG = 254;
 // 얼굴 부위만 담는 창. 넓게 잡으면 귀뿌리 선과 머리·몸 경계선까지 딸려
 // 내려간다(1차 시도에서 이마에 유령 아크가 생겼다). 실측 기준:
 // 머리 중심 대비 눈 −0.17R · 볼 +0.2R · 입 +0.16R, 귀뿌리 −0.8R,
 // 머리·몸 경계 +0.37R. 그 사이를 넉넉히 비켜 잡는다.
-const FACE_WINDOW = { up: 0.45, down: 0.28, side: 0.92, inner: 0.82 };
+const FACE_WINDOW = { up: 0.45, down: 0.42, side: 0.92, inner: 0.82 };
 
-function isInk(data, i) {
-  return data[i] < BG || data[i + 1] < BG || data[i + 2] < BG;
+function isInk(data, i, threshold = STRUCT_BG) {
+  return data[i] < threshold || data[i + 1] < threshold || data[i + 2] < threshold;
 }
 
 // 머리 원 피팅: 얼굴 영역에서 잉크 폭이 최대인 행을 지름으로 본다.
@@ -56,7 +61,7 @@ function facePixels(image, head, window = FACE_WINDOW) {
     for (let x = Math.max(0, Math.round(cx - xr)); x <= Math.min(width - 1, Math.round(cx + xr)); x++) {
       if ((x - cx) ** 2 + (y - cy) ** 2 > inner * inner) continue;  // 외곽선은 건드리지 않는다
       const i = (y * width + x) * 4;
-      if (isInk(data, i)) pixels.push({ x, y, i });
+      if (isInk(data, i, FACE_BG)) pixels.push({ x, y, i });
     }
   }
   return pixels;
@@ -110,6 +115,29 @@ export function faceDropRatio(image) {
   if (!eyes.length) return null;
   const eyeY = eyes.reduce((sum, p) => sum + p.y, 0) / eyes.length;
   return (eyeY - head.top) / (2 * head.radius);
+}
+
+// 목표 비율에 맞춰 drop을 역산한다. 생성된 프레임마다 얼굴 위치가 조금씩
+// 다르므로(모델이 정규화하는 정도가 프레임마다 다르다) 고정 오프셋을 쓰면
+// 프레임 간 간격이 들쭉날쭉해진다. 측정 → 보정을 반복해 목표에 맞춘다.
+// 순수 계산이라 비용이 없다.
+export function nodGuideToRatio(image, target, { tolerance = 0.002, maxSteps = 12, ...options } = {}) {
+  const current = faceDropRatio(image);
+  if (current === null) throw new Error("얼굴 하강 비율을 잴 수 없습니다 — 눈을 찾지 못했습니다");
+  if (target <= current) return { image, head: fitHead(image), moved: 0, dropPx: 0, drop: 0, ratio: current };
+  // 초기 추정: 비율 차이 × 머리 지름 = 필요한 픽셀 이동량, drop은 반지름 기준
+  let drop = (target - current) * 2;
+  let best = null;
+  for (let step = 0; step < maxSteps; step++) {
+    const result = nodGuide(image, { ...options, drop });
+    const ratio = faceDropRatio(result.image);
+    best = { ...result, drop, ratio };
+    const error = target - ratio;
+    if (Math.abs(error) <= tolerance) break;
+    drop += error * 2;                     // 같은 선형 관계로 보정
+    if (drop <= 0) break;
+  }
+  return best;
 }
 
 export function encodeGuide(result) {
