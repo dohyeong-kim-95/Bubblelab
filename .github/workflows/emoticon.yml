@@ -1,0 +1,105 @@
+# AI 이모티콘 생성 잡 (work/emoticon).
+# Cloudflare Workers의 이그레스 IP는 Gemini API 미지원 지역으로 잡히는 경우가
+# 있어("User location is not supported") 생성은 GitHub Actions 러너(지원 지역)
+# 에서 돌린다. 산출물(시트·프레임·APNG)은 _src/emoticon/에 커밋되어 에이전트가
+# 리포에서 직접 리뷰할 수 있다.
+# 필요 secret: GEMINI_STICKER_KEY (Actions secret — Cloudflare secret과 같은 값)
+name: Emoticon
+
+on:
+  workflow_dispatch:
+    inputs:
+      character:
+        description: "캐릭터(작업폴더) 이름 — _src/emoticon/<이름>"
+        required: true
+      step:
+        description: "실행 단계"
+        required: true
+        type: choice
+        options: [sheet, cut]
+      prompt:
+        description: "sheet: 캐릭터 설명 / cut: 동작 설명"
+        required: true
+      cut_id:
+        description: "cut 단계의 컷 이름 (영소문자·숫자·하이픈)"
+        required: false
+        default: ""
+      frames:
+        description: "cut 프레임 수 (2–24)"
+        required: false
+        default: "12"
+      fps:
+        description: "cut fps"
+        required: false
+        default: "12"
+      force:
+        description: "기존 시트/컷 덮어쓰기"
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: emoticon-generate
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate
+        env:
+          EMOTICON_IMAGE_PROVIDER: gemini
+          GEMINI_API_KEY: ${{ secrets.GEMINI_STICKER_KEY }}
+          CHARACTER: ${{ inputs.character }}
+          STEP: ${{ inputs.step }}
+          PROMPT: ${{ inputs.prompt }}
+          CUT_ID: ${{ inputs.cut_id }}
+          FRAMES: ${{ inputs.frames }}
+          FPS: ${{ inputs.fps }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          [[ "$CHARACTER" =~ ^[a-z0-9-]{1,32}$ ]] || { echo "캐릭터 이름은 영소문자·숫자·하이픈"; exit 1; }
+          WORKDIR="_src/emoticon/$CHARACTER"
+          FORCE_FLAG=""; [[ "$FORCE" == "true" ]] && FORCE_FLAG="--force"
+          if [[ "$STEP" == "sheet" ]]; then
+            node _infra/emoticon.mjs sheet "$WORKDIR" --prompt "$PROMPT" $FORCE_FLAG
+          else
+            [[ -n "$CUT_ID" ]] || { echo "cut 단계에는 cut_id가 필요합니다"; exit 1; }
+            node _infra/emoticon.mjs cut "$WORKDIR" "$CUT_ID" --motion "$PROMPT" \
+              --frames "$FRAMES" --fps "$FPS" $FORCE_FLAG
+            node _infra/emoticon.mjs build "$WORKDIR" "$CUT_ID"
+            node _infra/emoticon.mjs check "$WORKDIR" "$CUT_ID"
+          fi
+
+      - name: Commit outputs
+        env:
+          CHARACTER: ${{ inputs.character }}
+          STEP: ${{ inputs.step }}
+          CUT_ID: ${{ inputs.cut_id }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "_src/emoticon/$CHARACTER"
+          git diff --cached --quiet && { echo "변경 없음"; exit 0; }
+          git commit -m "emoticon: $CHARACTER $STEP ${CUT_ID:+$CUT_ID }생성 (actions)"
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push origin HEAD:main && break
+            sleep $((i * 2))
+          done

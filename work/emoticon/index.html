@@ -129,9 +129,22 @@ async function generate(prompt, references = []) {
   });
   if (res.status === 401) throw new Error("인증 만료 — work 마스터로 다시 로그인하세요 (/login)");
   if (res.status === 503) throw new Error("서버에 GEMINI_STICKER_KEY 또는 WORK_PASSWORD가 설정되지 않았습니다");
-  if (!res.ok) throw new Error(`생성 실패 (${res.status}): ${(await res.text()).slice(0, 200)}`);
+  if (!res.ok) throw new Error(`생성 실패 (${res.status}): ${(await res.text()).slice(0, 2000)}`);
   bumpCost();
   return new Uint8Array(await res.arrayBuffer());
+}
+// 오류 표시 + 전체 메시지 복사 버튼 (실패 코드를 그대로 전달받기 위함)
+function fail(el, message) {
+  el.className = "status err";
+  el.textContent = message;
+  const btn = document.createElement("button");
+  btn.textContent = "오류 복사";
+  btn.className = "ghost";
+  btn.style.cssText = "margin:.3rem 0 0;padding:.15rem .6rem;font-size:.72rem;display:block";
+  btn.onclick = () => navigator.clipboard.writeText(message)
+    .then(() => { btn.textContent = "복사됨 ✓"; })
+    .catch(() => { btn.textContent = "복사 실패 — 직접 드래그"; });
+  el.append(btn);
 }
 
 /* ── 픽셀 유틸 (CLI와 동일 알고리즘) ── */
@@ -303,7 +316,7 @@ $("sheet-gen").onclick = async () => {
     await setSheet(bytes, prompt);
     st.textContent = "완료 — 마음에 안 들면 설명을 다듬어 다시 생성하세요 (기존 컷과의 일관성은 시트 교체 시 깨짐)";
     st.className = "status ok";
-  } catch (e) { st.textContent = e.message; st.className = "status err"; }
+  } catch (e) { fail(st, e.message); }
   $("sheet-gen").disabled = false;
 };
 $("sheet-upload").onclick = () => $("sheet-file").click();
@@ -353,7 +366,7 @@ $("cut-gen").onclick = async () => {
     st.textContent = `완료 — ③에서 APNG로 구우세요`;
     st.className = "status ok";
     renderCuts();
-  } catch (e) { st.textContent = e.message; st.className = "status err"; }
+  } catch (e) { fail(st, e.message); }
   $("cut-gen").disabled = false;
 };
 
@@ -406,7 +419,12 @@ async function buildCut(id, cut, button) {
       html += `<span class="status">LINE 변환은 5~20프레임에서만 (현재 ${frames.length})</span>`;
     }
     out.innerHTML = html;
-  } catch (e) { out.innerHTML = `<div class="status err">${e.message}</div>`; }
+  } catch (e) {
+    out.innerHTML = "";
+    const div = document.createElement("div");
+    out.append(div);
+    fail(div, e.message);
+  }
   button.disabled = false;
 }
 

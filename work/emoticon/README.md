@@ -30,9 +30,28 @@
   (세션 쿠키로 프록시 호출, 픽셀 처리·APNG 인코딩은 클라이언트, 생성물은
   IndexedDB 보존). CLI와 같은 알고리즘·프롬프트를 쓴다.
 
-## CLI 사용법
+## 생성 실행 경로 — 기본은 GitHub Actions
 
-작업폴더는 `_src/emoticon/<캐릭터명>/` — 배포·커밋 모두 제외된다(.gitignore).
+**Cloudflare Workers → Gemini 직접 호출은 지역 차단으로 실패할 수 있다**
+("User location is not supported" — CF 이그레스 IP가 미지원 지역으로
+geolocate 되는 경우). 그래서 기본 생성 경로는 **GitHub Actions 잡**이다
+(러너가 지원 지역·미국 IP):
+
+- 워크플로: `.github/workflows/emoticon.yml` (`Emoticon`, workflow_dispatch)
+- 입력: character(작업폴더) · step(sheet|cut) · prompt · cut_id · frames · fps
+- 산출물(시트·프레임·APNG)은 **`_src/emoticon/<캐릭터>/`에 자동 커밋**되어
+  에이전트가 리포에서 직접 리뷰·반복할 수 있다 (배포에는 안 들어간다).
+- cut 단계는 생성 후 build·check(APNG·루프·투명도 검증)까지 이어 돌린다.
+
+브라우저 툴(`index.html`)의 직접 생성은 워커 프록시를 타므로 지역 차단에
+걸릴 수 있다 — 실패 시 오류 복사 버튼으로 코드를 전달하고 Actions 경로를
+쓴다. 페이지의 시트 업로드·APNG 빌드·리뷰 기능은 생성 경로와 무관하게
+동작한다.
+
+## CLI 사용법 (로컬)
+
+작업폴더는 `_src/emoticon/<캐릭터명>/` — 산출물은 커밋한다(Actions 잡과
+같은 규칙, 배포에는 미포함).
 
 ```bash
 # 기본(edge): 배포 워커의 /_emoticon/generate 프록시 경유 —
@@ -62,8 +81,9 @@ node _infra/emoticon.mjs check _src/emoticon/토끼 hello
 
 | 키 | 위치 | 용도 |
 |---|---|---|
-| `GEMINI_STICKER_KEY` | **Worker secret** | 엣지 프록시(`/_emoticon/generate`)가 쓰는 Gemini 키 (`gemini-2.5-flash-image`, $0.039/장). `npx wrangler secret put GEMINI_STICKER_KEY` — podcast의 `GEMINI_API_KEY`와 별도 |
-| `EMOTICON_EDGE_TOKEN` | 로컬 env | 프록시 인증 = work 마스터 비밀번호 (edge 프로바이더 필수) |
+| `GEMINI_STICKER_KEY` | **GitHub Actions secret** | 기본 생성 경로(Emoticon 워크플로)가 쓰는 Gemini 키 (`gemini-2.5-flash-image`, $0.039/장). 리포 Settings → Secrets and variables → Actions에 등록 — podcast의 `GEMINI_API_KEY`와 별도 |
+| `GEMINI_STICKER_KEY` | Worker secret | 엣지 프록시(`/_emoticon/generate`)용 같은 키 — 단 지역 차단 가능성 있음(위 참조). `npx wrangler secret put GEMINI_STICKER_KEY` |
+| `EMOTICON_EDGE_TOKEN` | 로컬 env | 프록시 인증 = work 마스터 비밀번호 (edge 프로바이더용) |
 | `GEMINI_API_KEY` | 로컬 env | `EMOTICON_IMAGE_PROVIDER=gemini`로 API 직접 호출할 때의 대안 경로 |
 | Kling/Runway 등 I2V | — | 히어로 컷용 영상 생성 — CLI 미연동, `import`로 수동 반입 (추후) |
 
@@ -82,9 +102,10 @@ node _infra/emoticon.mjs check _src/emoticon/토끼 hello
 4. **2차 목표**: LINE 제안(8종 세트부터). 카카오는 AI 정책 해제 또는
    비-AI 워크플로(손그림 원화 + 리깅) 전환 시점에 제안.
 
-## 주의 — 상업용 원본 커밋 금지
+## 주의 — 공개 리포와 산출물
 
-리포는 public이다. duri·assets용 팩은 기존 관례대로 커밋해도 되지만,
-**카카오/LINE 제안용 최종 원본(시안·납품 파일)은 커밋하지 않는다** — 심사
+리포는 public이다. 작업 산출물(`_src/emoticon/`)과 duri·assets용 팩은
+리뷰·반복을 위해 커밋한다. 단 **카카오/LINE에 제안하는 최종 세트는 제안
+직전에 리포에서 제거하고 로컬(또는 별도 private 저장소)로 옮긴다** — 심사
 전 선공개·유출은 미승인 사유가 될 수 있고, 입점 후에는 무단 배포 문제가
-된다. 제안용 산출물은 로컬(또는 별도 private 저장소)에 보관한다.
+된다.
