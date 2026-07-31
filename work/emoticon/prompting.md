@@ -94,6 +94,29 @@ primary operation"*. 연구(arXiv 2506.01929): 충돌 시 **먼저 언급된 속
 | 정체성(불변) | 부품 개수, 색, 선 굵기, 머리:몸통 비율, 화풍, 캔버스, 카메라 |
 | 변형(가변) | 실루엣 스쿼시, 관절 각도, 표정, 무게중심 |
 
+## 4-1. 실측 보강 — 열린 형용사와 부위 종류 교체 (nod5)
+
+규약을 실제로 돌려서 얻은 두 가지 추가 규칙이다(`lesson_learned.md` §33~34, 36).
+
+**① 변형은 숫자로 못박는다.** 열린 형용사는 상한 없는 지시로 읽힌다.
+
+- ❌ `the body spreads wider as it compresses` → 가로 **+33%** (부피 보존이면 +22%)
+- ✅ `the whole character is 0.92 times as tall and 1.08 times as wide, its
+  volume preserved`
+
+**② 부위의 "움직임"에는 밑동·길이 고정을 긍정문으로 동반한다.** 부위를 움직이라고만
+하면 모델이 **그 부위를 다른 종류로 교체**해 버린다.
+
+- ❌ `both ears swing forward over the forehead` → 선 귀가 **처진 귀(lop)**로 교체
+- ✅ `both ears keep their full length and their bases stay on top of the head,
+  and only the top third of each ear tips forward`
+
+**③ 부품 개수는 CANON이, 부품 위치는 POSE가 지킨다.** invariants에 `two arms`가
+있어도 앞발이 배 위로 접히고 덩어리가 늘어났다. 위치는 POSE 블록에 긍정문으로
+써야 한다 — `both short arms stay hanging at the sides of the body`. 이건
+"불변을 앞에 두지 마라"(§3)에 어긋나지 않는다. 금지가 아니라 **이 프레임에서
+그 부위가 어디에 있는지**를 말하는 포즈 서술이기 때문이다.
+
 ## 5. 레퍼런스 사용법
 
 - **`gemini-2.5-flash-image`는 입력 이미지 3장이 권장 상한.** (Gemini 3 Pro

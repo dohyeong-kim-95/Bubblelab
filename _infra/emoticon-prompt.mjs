@@ -21,6 +21,11 @@ const NEGATION_PATTERNS = [
 const FIXED_SIZE = /((body|character|silhouette|몸통|캐릭터)[^.\n]{0,40}(exactly the same|identical|same)\s+(size|shape|silhouette|scale)|(exactly the same|identical|same)\s+(body |character )?(size|shape|silhouette|scale)[^.\n]{0,20}(body|character|몸통)|몸통[^.\n]{0,20}크기[^.\n]{0,10}(동일|그대로|고정))/i;
 const DEFORMATION = /(squash|stretch|compress|flatten|눌리|찌그|늘어)/i;
 
+// 변형·크기 지시는 배율을 숫자로 못박아야 한다. 열린 형용사("spreads wider")는
+// 상한 없는 지시로 읽혀 실측에서 가로가 +33% 퍼졌다 (prompting.md §4-1).
+const OPEN_SCALE = /\b(wider|taller|shorter|bigger|larger|smaller|thinner|flatter|narrower)\b/i;
+const RATIO = /\b\d+\.\d+\b|\b\d+\s*(times|배|%|x)\b/i;
+
 export function findNegations(text) {
   return NEGATION_PATTERNS.filter((re) => re.test(text)).map((re) => String(re));
 }
@@ -42,6 +47,19 @@ export function assertPromptRules(text, label = "프롬프트") {
     );
   }
   return text;
+}
+
+// 포즈 문장 전용 검사. 캔버스·레이아웃 서술("smaller side views")에 걸리지
+// 않도록 조립된 프롬프트 전체가 아니라 포즈 문장에만 적용한다.
+export function assertPoseScale(pose, label = "포즈") {
+  if ((OPEN_SCALE.test(pose) || DEFORMATION.test(pose)) && !RATIO.test(pose)) {
+    throw new Error(
+      `${label}에 배율 없는 변형 지시가 있습니다 — "wider/squash" 같은 열린 표현은 ` +
+      '상한 없이 읽힙니다(실측 가로 +33%). "0.92 times as tall and 1.08 times as ' +
+      'wide, its volume preserved"처럼 숫자로 쓰세요 (work/emoticon/prompting.md §4-1)',
+    );
+  }
+  return pose;
 }
 
 // 캐릭터 공통 블록. 프레임마다 **바이트 단위로 동일**해야 한다 —
@@ -73,21 +91,27 @@ export function sheetPrompt(description) {
 }
 
 // 키 포즈: 변화(POSE) → 불변(CANON) 순서. prompting.md §3.
-export function keyPrompt({ motion, index, total, pose, canon }) {
-  return assertPromptRules([
+export function keyPrompt({ motion, index, total, pose, constants = "", canon }) {
+  const text = assertPromptRules([
     "Redraw the character from Image 1 in a new pose.",
     "",
     `POSE — the only thing that differs in this frame (key ${index} of ${total} in "${motion}"):`,
     `  ${pose}`,
     "  Exaggerate this pose so the silhouette reads at a glance.",
+    ...(constants ? [`  Throughout "${motion}", in every frame: ${constants}`] : []),
     "",
     canon,
   ].join("\n"), `키 ${index} 프롬프트`);
+  assertPoseScale(pose, `키 ${index} 포즈`);
+  return text;
 }
 
 // 브레이크다운: 두 키 사이의 중간. 시트·키A·키B 3장이 입력이며
 // gemini-2.5-flash-image의 권장 상한(3장)에 정확히 맞는다.
-export function breakdownPrompt({ motion, poseA, poseB, canon, percent = 50 }) {
+// constants는 두 키에서 **똑같이 참인 포즈 사실**이다. "A와 B의 중간"만으로는
+// 사양이 약해서, 두 키 어디에도 없는 형태를 브레이크다운이 지어낸다 —
+// 실측(nod6): 두 키 모두 귀가 서 있는데 브레이크다운만 처진 귀를 그렸다.
+export function breakdownPrompt({ motion, poseA, poseB, constants = "", canon, percent = 50 }) {
   return assertPromptRules([
     "Draw the in-between frame between Image 2 and Image 3.",
     "",
@@ -97,6 +121,7 @@ export function breakdownPrompt({ motion, poseA, poseB, canon, percent = 50 }) {
     `  Image 3 shows: ${poseB}`,
     "  Draw the halfway state between them. Hands and head travel along a natural arc,",
     "  so this frame sits slightly off the straight line between the two.",
+    ...(constants ? [`  Both Image 2 and Image 3 hold this, and so does this frame: ${constants}`] : []),
     "",
     canon,
   ].join("\n"), "브레이크다운 프롬프트");

@@ -262,11 +262,15 @@ const FRAME_PROMPT = (motion, index, total, pose = "") =>
 // keys 모드 — 변화 먼저, 불변 나중 (work/emoticon/prompting.md §3).
 // invariants는 "부품 인벤토리"로 쓴다: 있는 것을 개수와 함께 열거하면
 // 부정어 없이 여분의 귀·발바닥 패드를 함께 막을 수 있다 (§2).
-const KEY_PROMPT = (motion, index, total, pose, invariants = "") =>
-  keyPrompt({ motion, index, total, pose, canon: canonBlock({ parts: invariants }) });
+// poseConstants는 부품 목록(invariants)과 다르다. invariants는 "무엇이 몇 개
+// 있는가"(CANON), poseConstants는 "그것들이 매 프레임 어디에 어떤 모양으로
+// 있는가"(POSE)다. 개수는 CANON이 지키지만 위치·형태는 POSE에서 말해야 한다
+// (prompting.md §4-1 ③).
+const KEY_PROMPT = (motion, index, total, pose, invariants = "", constants = "") =>
+  keyPrompt({ motion, index, total, pose, constants, canon: canonBlock({ parts: invariants }) });
 
-const BREAKDOWN_PROMPT = (motion, poseA, poseB, invariants = "") =>
-  breakdownPrompt({ motion, poseA, poseB, canon: canonBlock({ parts: invariants }) });
+const BREAKDOWN_PROMPT = (motion, poseA, poseB, invariants = "", constants = "") =>
+  breakdownPrompt({ motion, poseA, poseB, constants, canon: canonBlock({ parts: invariants }) });
 
 // ── 명령 구현 ───────────────────────────────────────────────────────────
 
@@ -478,6 +482,7 @@ async function cmdCutKeys(workdir, cutId, options) {
   const assembly = spec.assembly ?? "pingpong";
   if (!["pingpong", "loop"].includes(assembly)) throw new Error('assembly는 "pingpong" 또는 "loop"');
   const invariants = String(spec.invariants ?? "").trim();
+  const poseConstants = String(spec.poseConstants ?? "").trim();
   // repeat: 같은 타임라인을 N번 반복한다. 생성 비용은 그대로 두고 길이만 늘리는
   // 리미티드 애니메이션식 재사용 — 2초 안에 여러 번 끄덕이려면 필요하다.
   const repeat = Number(spec.repeat ?? 1);
@@ -491,7 +496,7 @@ async function cmdCutKeys(workdir, cutId, options) {
   for (let i = 0; i < keys.length - 1; i++) pairs.push([i, i + 1]);
   if (assembly === "loop") pairs.push([keys.length - 1, 0]);
   const totalCalls = keys.length + (breakdowns ? pairs.length : 0);
-  const input = { motion, fps, keys, breakdowns, assembly, invariants, repeat };
+  const input = { motion, fps, keys, breakdowns, assembly, invariants, poseConstants, repeat };
   const base = provenance("keys", input, [sheet]);
   checkPlanTarget(cutDir, options, base);
   const rawNames = [
@@ -535,7 +540,7 @@ async function cmdCutKeys(workdir, cutId, options) {
     for (let i = 0; i < keys.length; i++) {
       const references = [sheet, ...(keyRaw.length ? [keyRaw[0]] : []), ...(keyRaw.length > 1 ? [keyRaw[keyRaw.length - 1]] : [])];
       const { bytes, keyed } = await generateKeyed(
-        KEY_PROMPT(motion, i + 1, keys.length, keys[i].pose.trim(), invariants), references,
+        KEY_PROMPT(motion, i + 1, keys.length, keys[i].pose.trim(), invariants, poseConstants), references,
         `키 ${i + 1}`, `key-${i + 1}.png`,
       );
       keyRaw.push(bytes);
@@ -549,7 +554,7 @@ async function cmdCutKeys(workdir, cutId, options) {
       const label = `브레이크다운 ${a + 1}→${b + 1}`;
       const rawName = `bd-${a + 1}-${b + 1}.png`;
       const gen = (allowReuse = true) => generateKeyed(
-        BREAKDOWN_PROMPT(motion, keys[a].pose.trim(), keys[b].pose.trim(), invariants),
+        BREAKDOWN_PROMPT(motion, keys[a].pose.trim(), keys[b].pose.trim(), invariants, poseConstants),
         [sheet, keyRaw[a], keyRaw[b]], label, rawName, allowReuse,
       );
       const midDiff = ({ keyed }) =>
@@ -728,6 +733,7 @@ async function cmdPlan(workdir, cutId, options) {
     if (![0, 1].includes(breakdowns)) throw new Error("breakdowns는 0 또는 1만 지원합니다 (v1)");
     if (!["pingpong", "loop"].includes(assembly)) throw new Error('assembly는 "pingpong" 또는 "loop"');
     const invariants = String(spec.invariants ?? "").trim();
+    const poseConstants = String(spec.poseConstants ?? "").trim();
     const repeat = Number(spec.repeat ?? 1);
     if (!Number.isInteger(repeat) || repeat < 1 || repeat > 8) throw new Error("repeat은 1~8 정수여야 합니다");
     const fps = Number(options.fps ?? spec.fps ?? 12);
@@ -740,7 +746,7 @@ async function cmdPlan(workdir, cutId, options) {
       ...keys.map((_, i) => `key-${i + 1}.png`),
       ...(breakdowns ? pairs.map(([a, b]) => `bd-${a + 1}-${b + 1}.png`) : []),
     ];
-    const input = { motion, fps, keys, breakdowns, assembly, invariants, repeat };
+    const input = { motion, fps, keys, breakdowns, assembly, invariants, poseConstants, repeat };
     const base = provenance("keys", input, [sheet]);
     checkPlanTarget(cutDir, options, base);
     let reusable = 0;
@@ -839,13 +845,13 @@ async function cmdRedo(workdir, cutId, frameArg) {
   if (el.type === "key") {
     label = `키 ${el.key + 1}`;
     rawName = `key-${el.key + 1}.png`;
-    prompt = KEY_PROMPT(meta.motion, el.key + 1, meta.keys.length, meta.keys[el.key].pose, meta.invariants ?? "");
+    prompt = KEY_PROMPT(meta.motion, el.key + 1, meta.keys.length, meta.keys[el.key].pose, meta.invariants ?? "", meta.poseConstants ?? "");
     references = [sheet, ...(el.key > 0 ? [rawOf("key-1.png")] : [])];
   } else {
     const [a, b] = el.pair;
     label = `브레이크다운 ${a + 1}→${b + 1}`;
     rawName = `bd-${a + 1}-${b + 1}.png`;
-    prompt = BREAKDOWN_PROMPT(meta.motion, meta.keys[a].pose, meta.keys[b].pose, meta.invariants ?? "");
+    prompt = BREAKDOWN_PROMPT(meta.motion, meta.keys[a].pose, meta.keys[b].pose, meta.invariants ?? "", meta.poseConstants ?? "");
     references = [sheet, rawOf(`key-${a + 1}.png`), rawOf(`key-${b + 1}.png`)];
   }
 

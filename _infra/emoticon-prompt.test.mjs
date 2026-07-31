@@ -58,7 +58,27 @@ test("캔버스 크기 고정은 모순이 아니다 (오탐 방지)", () => {
   // squash 지시와 함께 와도 막히면 안 된다.
   assert.doesNotThrow(() => keyPrompt({
     motion: "bounce", index: 1, total: 1,
-    pose: "the body squashes flat on landing, volume preserved",
+    pose: "the body squashes to 0.8 vertically on landing, volume preserved",
+    canon,
+  }));
+});
+
+test("배율 없는 열린 변형 지시는 막는다", () => {
+  // 실측(nod5): "spreads wider as it compresses" → 가로 +33% (부피 보존이면 +22%)
+  for (const bad of [
+    "the body spreads wider as it compresses",
+    "the character gets shorter and flatter",
+    "the body squashes on landing",
+  ]) {
+    assert.throws(
+      () => keyPrompt({ motion: "x", index: 1, total: 1, pose: bad, canon }),
+      /배율/,
+      `차단되어야 함: ${bad}`,
+    );
+  }
+  assert.doesNotThrow(() => keyPrompt({
+    motion: "nod", index: 2, total: 2,
+    pose: "the whole character is 0.92 times as tall and 1.08 times as wide, its volume preserved",
     canon,
   }));
 });
@@ -92,6 +112,20 @@ test("시트 프롬프트도 부정어 없이 흰 배경을 지정한다", () =>
   const sheet = sheetPrompt("a round white rabbit");
   assert.deepEqual(findNegations(sheet), []);
   assert.match(sheet, /background is a solid white surface/);
+});
+
+test("poseConstants는 키와 브레이크다운 양쪽에 같이 실린다", () => {
+  // 실측(nod6): 두 키 모두 귀가 서 있는데 브레이크다운만 처진 귀를 그렸다.
+  // "A와 B의 중간"만으로는 사양이 약해서, 매 프레임 참인 포즈 사실을 같이 준다.
+  const constants = "both ears keep their full length with their bases on top of the head";
+  const key = keyPrompt({ motion: "nod", index: 2, total: 2, pose: "the head sinks", constants, canon });
+  const bd = breakdownPrompt({ motion: "nod", poseA: "up", poseB: "down", constants, canon });
+  assert.ok(key.includes(constants) && bd.includes(constants));
+  // POSE/MOTION 블록 안(= IDENTITY 앞)에 있어야 한다
+  assert.ok(key.indexOf(constants) < key.indexOf("IDENTITY"));
+  assert.ok(bd.indexOf(constants) < bd.indexOf("IDENTITY"));
+  // 없으면 줄 자체가 붙지 않는다
+  assert.ok(!keyPrompt({ motion: "nod", index: 1, total: 1, pose: "p", canon }).includes("in every frame"));
 });
 
 test("assertPromptRules는 통과 시 원문을 그대로 돌려준다", () => {
