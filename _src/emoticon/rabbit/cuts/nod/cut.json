@@ -1,0 +1,55 @@
+{
+  "motion": "nodding yes, head bobbing down and up",
+  "fps": 12,
+  "mode": "keys",
+  "keys": [
+    {
+      "pose": "standing upright facing front, head level, both arms resting at the sides, gentle smile, eyes open",
+      "hold": 2
+    },
+    {
+      "pose": "head tilted far down in a deep nod, chin tucked toward the chest, eyes closed happily, body squashed slightly shorter, arms still at the sides",
+      "hold": 3
+    }
+  ],
+  "breakdowns": 1,
+  "assembly": "pingpong",
+  "frames": 3,
+  "sequence": [
+    {
+      "type": "key",
+      "key": 0
+    },
+    {
+      "type": "bd",
+      "pair": [
+        0,
+        1
+      ]
+    },
+    {
+      "type": "key",
+      "key": 1
+    }
+  ],
+  "timeline": [
+    {
+      "frame": 0,
+      "delayMs": 167
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 2,
+      "delayMs": 250
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    }
+  ],
+  "provider": "gemini/gemini-2.5-flash-image",
+  "createdAt": "2026-07-31"
+}
