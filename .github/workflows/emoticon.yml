@@ -106,13 +106,19 @@ jobs:
             node _infra/emoticon.mjs sheet "$WORKDIR" --prompt "$PROMPT" $FORCE_FLAG
           elif [[ "$STEP" == "cut" ]]; then
             [[ -n "$CUT_ID" ]] || { echo "cut 단계에는 cut_id가 필요합니다"; exit 1; }
-            POSES_FLAG=""
-            if [[ -f "$JOB" ]] && node -e "process.exit(Array.isArray(require('./$JOB').poses) ? 0 : 1)"; then
-              node -e "require('fs').writeFileSync('/tmp/poses.txt', require('./$JOB').poses.join('\n'))"
-              POSES_FLAG="--poses /tmp/poses.txt"
+            if [[ -f "$JOB" ]] && node -e "process.exit(Array.isArray(require('./$JOB').keys) ? 0 : 1)"; then
+              # pose-to-pose 모드 (권장): job.json의 keys/breakdowns/assembly를 spec으로
+              node -e "const j = require('./$JOB'); require('fs').writeFileSync('/tmp/keys.json', JSON.stringify({ motion: j.prompt, keys: j.keys, breakdowns: j.breakdowns, assembly: j.assembly }))"
+              node _infra/emoticon.mjs cut "$WORKDIR" "$CUT_ID" --keys /tmp/keys.json --fps "$FPS" $FORCE_FLAG
+            else
+              POSES_FLAG=""
+              if [[ -f "$JOB" ]] && node -e "process.exit(Array.isArray(require('./$JOB').poses) ? 0 : 1)"; then
+                node -e "require('fs').writeFileSync('/tmp/poses.txt', require('./$JOB').poses.join('\n'))"
+                POSES_FLAG="--poses /tmp/poses.txt"
+              fi
+              node _infra/emoticon.mjs cut "$WORKDIR" "$CUT_ID" --motion "$PROMPT" \
+                --frames "$FRAMES" --fps "$FPS" $POSES_FLAG $FORCE_FLAG
             fi
-            node _infra/emoticon.mjs cut "$WORKDIR" "$CUT_ID" --motion "$PROMPT" \
-              --frames "$FRAMES" --fps "$FPS" $POSES_FLAG $FORCE_FLAG
             node _infra/emoticon.mjs build "$WORKDIR" "$CUT_ID"
             node _infra/emoticon.mjs check "$WORKDIR" "$CUT_ID"
           else

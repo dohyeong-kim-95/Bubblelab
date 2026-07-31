@@ -88,10 +88,12 @@ function mockProvider() {
   return {
     name: "mock",
     async generate({ prompt }) {
-      const match = /프레임\s+(\d+)\s*\/\s*(\d+)/.exec(prompt);
+      const match = /(?:프레임|키 포즈)\s+(\d+)\s*\/\s*(\d+)/.exec(prompt);
       const scene = match
         ? drawScene({ background: [0, 255, 0, 255], frame: { index: Number(match[1]), total: Number(match[2]) } })
-        : drawScene({ background: [255, 255, 255, 255] });
+        : /중간 자세|브레이크다운/.test(prompt)
+          ? drawScene({ background: [0, 255, 0, 255], frame: { index: 2, total: 8 } })
+          : drawScene({ background: [255, 255, 255, 255] });
       return new Uint8Array(encodePng(scene));
     },
   };

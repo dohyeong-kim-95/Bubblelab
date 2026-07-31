@@ -39,8 +39,13 @@ function compressFrame({ width, height, data }) {
 
 // frames: [{ width, height, data(RGBA) }, ...] 전부 같은 크기여야 한다.
 // fps → 프레임당 delay(1/1000초 단위). loops 0 = 무한 반복.
-export function encodeApng(frames, { fps = 12, loops = 0 } = {}) {
+// delaysMs: 프레임별 지속시간(ms) 배열 — 홀드·ease(타이밍 차트)를 프레임
+// 복제 없이 구현한다. 주면 fps보다 우선한다.
+export function encodeApng(frames, { fps = 12, loops = 0, delaysMs = null } = {}) {
   if (!frames?.length) throw new Error("encodeApng: 프레임이 없습니다");
+  if (delaysMs && delaysMs.length !== frames.length) {
+    throw new Error(`encodeApng: delaysMs 길이(${delaysMs.length})가 프레임 수(${frames.length})와 다릅니다`);
+  }
   const { width, height } = frames[0];
   for (const [i, f] of frames.entries()) {
     if (f.width !== width || f.height !== height) {
@@ -61,20 +66,20 @@ export function encodeApng(frames, { fps = 12, loops = 0 } = {}) {
   actl.writeUInt32BE(loops, 4);
 
   let seq = 0;
-  const fctl = () => {
+  const fctl = (frameIndex) => {
     const buf = Buffer.alloc(26);
     buf.writeUInt32BE(seq++, 0);
     buf.writeUInt32BE(width, 4);
     buf.writeUInt32BE(height, 8);
     // x/y offset 0, delay num/den, dispose 0(none), blend 0(source)
-    buf.writeUInt16BE(delayNum, 20);
+    buf.writeUInt16BE(delaysMs ? Math.max(1, Math.round(delaysMs[frameIndex])) : delayNum, 20);
     buf.writeUInt16BE(1000, 22);
     return buf;
   };
 
   const parts = [SIGNATURE, chunk("IHDR", ihdr), chunk("acTL", actl)];
   frames.forEach((frame, i) => {
-    parts.push(chunk("fcTL", fctl()));
+    parts.push(chunk("fcTL", fctl(i)));
     const compressed = compressFrame(frame);
     if (i === 0) parts.push(chunk("IDAT", compressed));
     else {

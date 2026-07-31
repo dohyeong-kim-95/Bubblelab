@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -76,6 +76,14 @@ test("encodeApng: 크기 다른 프레임은 거부", () => {
   assert.throws(() => encodeApng([makeImage(8, 8), makeImage(4, 4)]), /크기가 다릅니다/);
 });
 
+test("encodeApng: delaysMs로 프레임별 지속시간(홀드·ease)을 기록한다", () => {
+  const frames = [makeImage(4, 4, [255, 0, 0, 255]), makeImage(4, 4, [0, 0, 255, 255])];
+  const info = inspectApng(encodeApng(frames, { fps: 10, delaysMs: [250, 83] }));
+  assert.ok(Math.abs(info.delays[0] - 0.25) < 0.002);
+  assert.ok(Math.abs(info.delays[1] - 0.083) < 0.002);
+  assert.throws(() => encodeApng(frames, { delaysMs: [100] }), /delaysMs 길이/);
+});
+
 test("fitFrames: 공통 경계 하나로 잘라 프레임 간 상대 위치를 보존한다", () => {
   // 점이 (2,2) → (6,6)으로 움직이는 두 프레임: 프레임별 트리밍이면 둘 다
   // 중앙에 붙어 움직임이 사라진다 — 공통 경계라면 서로 다른 위치에 남는다.
@@ -135,7 +143,7 @@ test("CLI E2E (mock): sheet → cut → build --line → check", () => {
     run("cut", workdir, "bounce", "--motion", "통통 튀기", "--frames", "8", "--fps", "8");
     assert.ok(existsSync(join(workdir, "cuts", "bounce", "frames", "08.png")));
     const out = run("build", workdir, "bounce", "--line");
-    assert.match(out, /8프레임 @8fps/);
+    assert.match(out, /유니크 8장\/타임라인 8프레임 \(1\.00초\)/);
     const master = inspectApng(readFileSync(join(workdir, "out", "bounce.png")));
     assert.deepEqual([master.width, master.frames, master.loops], [360, 8, 0]);
     const line = inspectApng(readFileSync(join(workdir, "out", "bounce-line.png")));
@@ -228,6 +236,42 @@ test("edge provider: Bearer 토큰으로 프록시를 호출하고 바이트를 
     imageProvider({ EMOTICON_IMAGE_PROVIDER: "edge" }).generate({ prompt: "x" }),
     /EMOTICON_EDGE_TOKEN/,
   );
+});
+
+test("CLI E2E (mock): keys 모드 — 키·브레이크다운 생성 + 핑퐁 타임라인 조립", () => {
+  const workdir = mkdtempSync(join(tmpdir(), "emoticon-"));
+  const env = { ...process.env, EMOTICON_IMAGE_PROVIDER: "mock" };
+  const run = (...args) => execFileSync(process.execPath, [CLI, ...args], { env, encoding: "utf8" });
+  try {
+    run("sheet", workdir, "--prompt", "테스트 캐릭터");
+    const spec = {
+      motion: "고개 끄덕임",
+      keys: [
+        { pose: "고개를 똑바로 든 기본 자세", hold: 2 },
+        { pose: "고개를 아래로 깊이 숙임", hold: 3 },
+      ],
+      breakdowns: 1,
+      assembly: "pingpong",
+    };
+    const specPath = join(workdir, "nod-keys.json");
+    writeFileSync(specPath, JSON.stringify(spec));
+    const out = run("cut", workdir, "nod", "--keys", specPath, "--fps", "12");
+    assert.match(out, /유니크 3장 → 타임라인 4프레임, pingpong/); // 키2+bd1, 핑퐁 역순 +1
+
+    const meta = JSON.parse(readFileSync(join(workdir, "cuts", "nod", "cut.json"), "utf8"));
+    assert.equal(meta.mode, "keys");
+    assert.deepEqual(meta.timeline.map((t) => t.frame), [0, 1, 2, 1]);   // k1, bd, k2, bd(역순)
+    assert.deepEqual(meta.timeline.map((t) => t.delayMs), [167, 83, 250, 83]); // hold 2/1/3 @12fps
+
+    const built = run("build", workdir, "nod");
+    assert.match(built, /유니크 3장\/타임라인 4프레임/);
+    assert.match(built, /인접 diff 최대/);
+    const info = inspectApng(readFileSync(join(workdir, "out", "nod.png")));
+    assert.equal(info.frames, 4);
+    assert.ok(Math.abs(info.delays[2] - 0.25) < 0.002); // k2 hold 3 @12fps = 250ms
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
 });
 
 test("CLI: 시트 없이 cut은 실패, 잘못된 명령은 usage 안내", () => {

@@ -186,6 +186,22 @@ const FRAME_PROMPT = (motion, index, total, pose = "") =>
   "배경은 순수한 흰색 단색, 캐릭터의 외곽선은 끊김 없이 닫혀 있어야 한다. " +
   "그림자·소품·텍스트 등 캐릭터 외 요소 금지.";
 
+// pose-to-pose 모드 프롬프트 (animation-techniques.md §1·§7)
+const KEY_PROMPT = (motion, index, total, pose) =>
+  `첨부 이미지는 이 캐릭터의 레퍼런스 시트(첫 장)${index > 1 ? "와 이 동작의 앞선 키 포즈" : ""}다. ` +
+  `정확히 같은 캐릭터(색·비율·장식 동일)로, "${motion}" 동작의 키 포즈 ${index}/${total}을 그려줘.\n` +
+  `이 키 포즈(정확히 따를 것): ${pose}\n` +
+  "규칙: 동작의 극단을 과장되게, 한눈에 읽히는 실루엣으로. 캐릭터는 캔버스 중앙, 크기 동일. " +
+  "배경은 순수한 흰색 단색, 외곽선은 끊김 없이 닫혀 있어야 한다. 그림자·소품·텍스트 금지.";
+
+const BREAKDOWN_PROMPT = (motion, poseA, poseB) =>
+  `첨부 이미지는 캐릭터 시트, 그리고 "${motion}" 동작의 연속된 두 키 포즈 A·B다. ` +
+  `정확히 같은 캐릭터로, A에서 B로 넘어가는 정확히 중간 자세(브레이크다운) 한 장을 그려줘.\n` +
+  `A: ${poseA}\nB: ${poseB}\n` +
+  "규칙: 손·머리의 이동 경로는 직선이 아니라 자연스러운 호를 따른다. " +
+  "캐릭터의 크기·위치는 두 키 포즈와 동일. 배경은 순수한 흰색 단색, " +
+  "외곽선은 닫혀 있게. 그림자·소품·텍스트 금지.";
+
 // ── 명령 구현 ───────────────────────────────────────────────────────────
 
 async function toRgba(bytes) {
@@ -208,6 +224,7 @@ async function cmdSheet(workdir, options) {
 }
 
 async function cmdCut(workdir, cutId, options) {
+  if (options.keys) return cmdCutKeys(workdir, cutId, options);
   if (!CUT_ID_RE.test(cutId ?? "")) throw new Error(`컷 id는 영소문자·숫자·하이픈만 가능합니다: ${cutId}`);
   if (!options.motion?.trim()) throw new Error("--motion (동작 설명)은 필수입니다");
   const total = Number(options.frames ?? 12);
@@ -264,6 +281,102 @@ async function cmdCut(workdir, cutId, options) {
   console.log(`다음 단계: node _infra/emoticon.mjs build ${workdir} ${cutId}`);
 }
 
+// pose-to-pose 모드: 키 포즈(극단) 먼저 생성 → 키 쌍 양쪽을 레퍼런스로
+// 브레이크다운 생성 → 핑퐁/홀드/프레임별 delay로 조립 타임라인 작성.
+// 순차 생성(1→N)의 드리프트 누적을 구조적으로 피한다.
+// spec(JSON): { motion?, keys: [{pose, hold?}], breakdowns?: 0|1,
+//               assembly?: "pingpong"|"loop", fps? }
+async function cmdCutKeys(workdir, cutId, options) {
+  if (!CUT_ID_RE.test(cutId ?? "")) throw new Error(`컷 id는 영소문자·숫자·하이픈만 가능합니다: ${cutId}`);
+  const spec = JSON.parse(readFileSync(options.keys, "utf8"));
+  const motion = String(options.motion ?? spec.motion ?? "").trim();
+  if (!motion) throw new Error("동작 설명이 필요합니다 (--motion 또는 spec.motion)");
+  const keys = spec.keys;
+  if (!Array.isArray(keys) || keys.length < 2 || keys.length > 6 || keys.some((k) => !k?.pose?.trim())) {
+    throw new Error("keys는 pose 문장을 가진 2~6개의 키 포즈여야 합니다");
+  }
+  const breakdowns = Number(spec.breakdowns ?? 1);
+  if (![0, 1].includes(breakdowns)) throw new Error("breakdowns는 0 또는 1만 지원합니다 (v1)");
+  const assembly = spec.assembly ?? "pingpong";
+  if (!["pingpong", "loop"].includes(assembly)) throw new Error('assembly는 "pingpong" 또는 "loop"');
+  const fps = Number(options.fps ?? spec.fps ?? 12);
+  const sheetPath = join(workdir, "sheet.png");
+  if (!existsSync(sheetPath)) throw new Error(`캐릭터 시트가 없습니다 — 먼저: emoticon.mjs sheet ${workdir} --prompt "..."`);
+  const cutDir = join(workdir, "cuts", cutId);
+  if (existsSync(cutDir) && !options.force) throw new Error(`이미 존재하는 컷입니다: ${cutDir} (덮어쓰려면 --force)`);
+
+  const provider = imageProvider();
+  const sheet = readFileSync(sheetPath);
+  mkdirSync(join(cutDir, "frames"), { recursive: true });
+  mkdirSync(join(cutDir, "frames-raw"), { recursive: true });
+
+  const keyAndValidate = async (bytes, label, rawName) => {
+    writeFileSync(join(cutDir, "frames-raw", rawName), Buffer.from(bytes));
+    const keyed = autoCutout(await toRgba(bytes));
+    const ratio = transparencyRatio(keyed);
+    if (ratio < 0.05) {
+      throw new Error(`${label} 누끼 실패 (투명 ${Math.round(ratio * 100)}%) — frames-raw/${rawName} 확인 후 --force로 재시도`);
+    }
+    return keyed;
+  };
+
+  // ① 키 포즈 — 시트(+앞선 키)를 레퍼런스로 극단만 생성
+  const keyRaw = [];
+  const keyImages = [];
+  for (let i = 0; i < keys.length; i++) {
+    const references = [sheet, ...(keyRaw.length ? [keyRaw[0]] : []), ...(keyRaw.length > 1 ? [keyRaw[keyRaw.length - 1]] : [])];
+    const bytes = await provider.generate({ prompt: KEY_PROMPT(motion, i + 1, keys.length, keys[i].pose.trim()), references });
+    keyRaw.push(bytes);
+    keyImages.push(await keyAndValidate(bytes, `키 ${i + 1}`, `key-${i + 1}.png`));
+    console.log(`  키 포즈 ${i + 1}/${keys.length}`);
+  }
+
+  // ② 브레이크다운 — 키 쌍의 양쪽 이미지를 함께 레퍼런스로
+  const pairs = [];
+  for (let i = 0; i < keys.length - 1; i++) pairs.push([i, i + 1]);
+  if (assembly === "loop") pairs.push([keys.length - 1, 0]);
+  const bdImages = new Map();
+  if (breakdowns === 1) {
+    for (const [a, b] of pairs) {
+      const bytes = await provider.generate({
+        prompt: BREAKDOWN_PROMPT(motion, keys[a].pose.trim(), keys[b].pose.trim()),
+        references: [sheet, keyRaw[a], keyRaw[b]],
+      });
+      bdImages.set(`${a}-${b}`, await keyAndValidate(bytes, `브레이크다운 ${a + 1}→${b + 1}`, `bd-${a + 1}-${b + 1}.png`));
+      console.log(`  브레이크다운 ${a + 1}→${b + 1}`);
+    }
+  }
+
+  // ③ 조립 — 유니크 프레임 나열 + 타임라인(홀드는 delay로, 핑퐁은 역순 항목으로)
+  const unique = [];   // { image, delayFrames }
+  const keyIndex = []; // 키 i의 unique 위치 (핑퐁 역순 계산용)
+  for (let i = 0; i < keys.length; i++) {
+    keyIndex.push(unique.length);
+    unique.push({ image: keyImages[i], delayFrames: Math.max(1, Number(keys[i].hold ?? 1)) });
+    const pairKey = `${i}-${i + 1}`;
+    if (bdImages.has(pairKey)) unique.push({ image: bdImages.get(pairKey), delayFrames: 1 });
+  }
+  if (assembly === "loop" && bdImages.has(`${keys.length - 1}-0`)) {
+    unique.push({ image: bdImages.get(`${keys.length - 1}-0`), delayFrames: 1 });
+  }
+  const frameDelay = 1000 / fps;
+  const timeline = unique.map((u, index) => ({ frame: index, delayMs: Math.round(u.delayFrames * frameDelay) }));
+  if (assembly === "pingpong") {
+    for (let i = unique.length - 2; i >= 1; i--) {
+      timeline.push({ frame: i, delayMs: Math.round(unique[i].delayFrames * frameDelay) });
+    }
+  }
+
+  unique.forEach((u, i) => writeFileSync(join(cutDir, "frames", `${pad2(i + 1)}.png`), encodePng(u.image)));
+  writeFileSync(join(cutDir, "cut.json"), JSON.stringify({
+    motion, fps, mode: "keys", keys, breakdowns, assembly,
+    frames: unique.length, timeline,
+    provider: provider.name, createdAt: new Date().toISOString().slice(0, 10),
+  }, null, 2) + "\n");
+  console.log(`✓ ${cutId} 컷 생성 (유니크 ${unique.length}장 → 타임라인 ${timeline.length}프레임, ${assembly})`);
+  console.log(`다음 단계: node _infra/emoticon.mjs build ${workdir} ${cutId}`);
+}
+
 async function cmdImport(workdir, cutId, srcDir, options) {
   if (!CUT_ID_RE.test(cutId ?? "")) throw new Error(`컷 id는 영소문자·숫자·하이픈만 가능합니다: ${cutId}`);
   if (!srcDir || !existsSync(srcDir)) throw new Error(`프레임 폴더가 없습니다: ${srcDir}`);
@@ -309,22 +422,34 @@ async function cmdBuild(workdir, cutId, options) {
 
   const outDir = join(workdir, "out");
   mkdirSync(outDir, { recursive: true });
+  // keys 모드는 타임라인(프레임 재사용 + 프레임별 delay)으로 전개한다
+  const timeline = Array.isArray(meta.timeline) && meta.timeline.length ? meta.timeline : null;
+  const expand = (fitted) => timeline ? timeline.map((t) => fitted[t.frame]) : fitted;
+  const delaysMs = timeline ? timeline.map((t) => t.delayMs) : null;
+
   const fitted = fitFrames(frames, size);
-  const apng = encodeApng(fitted, { fps });
+  const sequence = expand(fitted);
+  const apng = encodeApng(sequence, { fps, delaysMs });
   const outPath = join(outDir, `${cutId}.png`);
   writeFileSync(outPath, apng);
 
-  const diff = loopDiff(fitted[0], fitted[fitted.length - 1]);
-  const duration = files.length / fps;
-  console.log(`✓ ${outPath} — ${size}², ${files.length}프레임 @${fps}fps (${duration.toFixed(2)}초), ${(apng.length / 1024).toFixed(0)}KB`);
+  const diff = loopDiff(sequence[0], sequence[sequence.length - 1]);
+  let adjacent = 0;
+  for (let i = 1; i < sequence.length; i++) adjacent = Math.max(adjacent, loopDiff(sequence[i - 1], sequence[i]));
+  const duration = delaysMs ? delaysMs.reduce((a, b) => a + b, 0) / 1000 : files.length / fps;
+  console.log(
+    `✓ ${outPath} — ${size}², 유니크 ${files.length}장/타임라인 ${sequence.length}프레임 ` +
+    `(${duration.toFixed(2)}초), ${(apng.length / 1024).toFixed(0)}KB`,
+  );
   console.log(`  루프 diff ${(diff * 100).toFixed(1)}% ${diff > 0.12 ? "⚠ 루프가 튈 수 있습니다 — 첫/끝 프레임을 확인하세요" : "(양호)"}`);
+  console.log(`  인접 diff 최대 ${(adjacent * 100).toFixed(1)}% ${adjacent > 0.2 ? "⚠ 프레임 간 점프가 큽니다" : "(양호)"}`);
   if (duration > 4) console.log("  ⚠ 4초 초과 — LINE 재생시간 상한(4초)을 넘습니다");
 
   if (options.line) {
-    if (files.length < LINE_FRAMES[0] || files.length > LINE_FRAMES[1]) {
-      throw new Error(`LINE 변환은 ${LINE_FRAMES[0]}~${LINE_FRAMES[1]}프레임이어야 합니다 (현재 ${files.length})`);
+    if (sequence.length < LINE_FRAMES[0] || sequence.length > LINE_FRAMES[1]) {
+      throw new Error(`LINE 변환은 ${LINE_FRAMES[0]}~${LINE_FRAMES[1]}프레임이어야 합니다 (현재 ${sequence.length})`);
     }
-    const lineApng = encodeApng(fitFrames(frames, LINE_SIZE), { fps, loops: 4 });
+    const lineApng = encodeApng(expand(fitFrames(frames, LINE_SIZE)), { fps, delaysMs, loops: 4 });
     const linePath = join(outDir, `${cutId}-line.png`);
     writeFileSync(linePath, lineApng);
     const ok = lineApng.length <= LINE_MAX_BYTES;
@@ -336,7 +461,7 @@ async function cmdBuild(workdir, cutId, options) {
       );
     }
   }
-  return { outPath, frames: files.length, fps, diff };
+  return { outPath, frames: sequence.length, fps, diff, adjacent };
 }
 
 function cmdCheck(workdir, cutId) {
@@ -373,7 +498,9 @@ const USAGE =
   'usage: node _infra/emoticon.mjs <명령> <작업폴더> ...\n' +
   '  sheet  <작업폴더> --prompt "캐릭터 설명" [--force]\n' +
   '  cut    <작업폴더> <컷id> --motion "동작 설명" [--frames 12] [--fps 12] [--poses 파일] [--force]\n' +
-  '         (--poses: 줄당 포즈 1개 = 프레임당 1개 — 프레임 간 튐을 줄이는 권장 옵션)\n' +
+  '         (--poses: 줄당 포즈 1개 = 프레임당 1개 — 프레임 간 튐을 줄이는 옵션)\n' +
+  '  cut    <작업폴더> <컷id> --keys <spec.json> [--fps 12] [--force]  ← 권장 (pose-to-pose)\n' +
+  '         spec: {"motion":"...","keys":[{"pose":"...","hold":2},...],"breakdowns":1,"assembly":"pingpong|loop"}\n' +
   '  import <작업폴더> <컷id> <프레임폴더> [--fps 12] [--chroma] [--force]\n' +
   '  build  <작업폴더> <컷id> [--size 360] [--fps N] [--line]\n' +
   '  check  <작업폴더> <컷id>\n' +
