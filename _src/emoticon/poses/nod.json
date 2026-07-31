@@ -1,0 +1,10 @@
+{
+  "name": "nod",
+  "description": "고개를 아래로 깊게 끄덕임 (몸은 고정)",
+  "steps": 1,
+  "loop": "pingpong",
+  "keys": [
+    { "angles": { "neck": -90, "head": -90 } },
+    { "angles": { "neck": -70, "head": -40 } }
+  ]
+}

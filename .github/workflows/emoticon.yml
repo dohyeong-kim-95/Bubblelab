@@ -106,7 +106,14 @@ jobs:
             node _infra/emoticon.mjs sheet "$WORKDIR" --prompt "$PROMPT" $FORCE_FLAG
           elif [[ "$STEP" == "cut" ]]; then
             [[ -n "$CUT_ID" ]] || { echo "cut 단계에는 cut_id가 필요합니다"; exit 1; }
-            if [[ -f "$JOB" ]] && node -e "process.exit(Array.isArray(require('./$JOB').keys) ? 0 : 1)"; then
+            if [[ -f "$JOB" ]] && node -e "process.exit(require('./$JOB').skeletons ? 0 : 1)"; then
+              # 스켈레톤 조건화: job.json의 skeletons = 포즈 시퀀스 경로, grid = 단일 호출
+              SEQ=$(node -p "require('./$JOB').skeletons")
+              GRID_FLAG=""
+              node -e "process.exit(require('./$JOB').grid ? 0 : 1)" && GRID_FLAG="--grid"
+              node _infra/emoticon.mjs cut "$WORKDIR" "$CUT_ID" --skeletons "$SEQ" \
+                --fps "$FPS" $GRID_FLAG $FORCE_FLAG
+            elif [[ -f "$JOB" ]] && node -e "process.exit(Array.isArray(require('./$JOB').keys) ? 0 : 1)"; then
               # pose-to-pose 모드 (권장): job.json의 keys/breakdowns/assembly를 spec으로
               node -e "const j = require('./$JOB'); require('fs').writeFileSync('/tmp/keys.json', JSON.stringify({ motion: j.prompt, keys: j.keys, breakdowns: j.breakdowns, assembly: j.assembly }))"
               node _infra/emoticon.mjs cut "$WORKDIR" "$CUT_ID" --keys /tmp/keys.json --fps "$FPS" $FORCE_FLAG

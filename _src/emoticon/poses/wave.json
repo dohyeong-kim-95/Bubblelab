@@ -1,0 +1,11 @@
+{
+  "name": "wave",
+  "description": "캐릭터의 오른팔(화면 왼쪽)을 머리 위로 들어 좌우로 흔들며 인사",
+  "steps": 1,
+  "loop": "pingpong",
+  "keys": [
+    { "angles": { "upperArmR": 100, "foreArmR": 95 } },
+    { "angles": { "upperArmR": -75, "foreArmR": -60 } },
+    { "angles": { "upperArmR": -75, "foreArmR": -100 } }
+  ]
+}

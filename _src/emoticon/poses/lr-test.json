@@ -1,0 +1,12 @@
+{
+  "name": "lr-test",
+  "description": "좌우 판별 검증용 — 캐릭터 오른팔만 위 / 왼팔만 위 / 양팔 위 / 차렷",
+  "steps": 0,
+  "loop": "none",
+  "keys": [
+    { "angles": { "upperArmR": 100, "foreArmR": 95, "upperArmL": 80, "foreArmL": 85 } },
+    { "angles": { "upperArmR": -80, "foreArmR": -85, "upperArmL": 80, "foreArmL": 85 } },
+    { "angles": { "upperArmR": 100, "foreArmR": 95, "upperArmL": -100, "foreArmL": -95 } },
+    { "angles": { "upperArmR": -80, "foreArmR": -85, "upperArmL": -100, "foreArmL": -95 } }
+  ]
+}

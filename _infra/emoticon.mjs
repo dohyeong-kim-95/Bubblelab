@@ -25,7 +25,9 @@ import { fileURLToPath } from "node:url";
 import { decodePng, encodePng } from "./png.mjs";
 import { encodeApng, inspectApng } from "./apng.mjs";
 import { imageProvider } from "./emoticon-ai.mjs";
-import { cutoutBackground, decodeSheet } from "./sticker-pack.mjs";
+import { cutoutBackground, decodeSheet, sliceGrid } from "./sticker-pack.mjs";
+import { renderGrid, renderPose } from "./skeleton.mjs";
+import { loadSequence } from "./skeleton-cli.mjs";
 
 const CUT_ID_RE = /^[a-z0-9][a-z0-9-]*$/;
 const MAX_FRAMES = 24;        // 카카오 납품 상한
@@ -241,6 +243,36 @@ const BREAKDOWN_PROMPT = (motion, poseA, poseB) =>
   "Same character size and position as both keys. Pure solid white background, closed outlines. " +
   "No shadows, props, or text.";
 
+// 스켈레톤 조건화 프롬프트 (pose-conditioning.md §5의 원칙 1~9).
+// 역할 명명 / 스켈레톤을 그리지 말 것 / 비율은 시트 우선 / 좌우 색 규약 /
+// 불변 요소 고정 — 각 문장이 우리가 겪은 실패에 하나씩 대응한다.
+const SKELETON_RULES =
+  "Rules:\n" +
+  "- NEVER draw the skeleton lines or dots in the output. They are instructions, not content.\n" +
+  "- The skeleton dictates joint angles and limb directions ONLY. Body proportions must follow " +
+  "the CHARACTER SHEET, not the skeleton — do not stretch or lengthen the character to match it.\n" +
+  "- In the skeleton, warm colors (red/orange/yellow) mark the character's RIGHT arm and leg; " +
+  "cool colors (green/cyan/blue) mark the character's LEFT arm and leg.\n" +
+  "- The character faces the viewer.\n" +
+  "- Keep the camera, canvas, character size and background identical in every frame.\n" +
+  "- Pure solid white background; outlines fully closed. No shadows, props, or text.";
+
+const SKELETON_FRAME_PROMPT = (motion, index, total) =>
+  "Image 1 is the CHARACTER SHEET — the only source of appearance, colors, style and body proportions.\n" +
+  "Image 2 is a POSE SKELETON — the only source of body pose.\n" +
+  `Draw the character from Image 1 in the exact pose shown by the skeleton, as frame ${index}/${total} ` +
+  `of the motion "${motion}".\n` + SKELETON_RULES;
+
+const SKELETON_GRID_PROMPT = (motion, cols, rows) =>
+  "Image 1 is the CHARACTER SHEET — the only source of appearance, colors, style and body proportions.\n" +
+  `Image 2 is a ${cols}x${rows} GRID of POSE SKELETONS, read left to right, top to bottom — ` +
+  "the only source of body pose.\n" +
+  `Output ONE image laid out as the SAME ${cols}x${rows} grid. In each cell draw the character from ` +
+  `Image 1 in the pose of the corresponding skeleton cell. Together the cells form the motion "${motion}".\n` +
+  SKELETON_RULES + "\n" +
+  "- Every cell must use the same character size, the same camera and the same white background, " +
+  "so the cells can be played back as animation frames.";
+
 // ── 명령 구현 ───────────────────────────────────────────────────────────
 
 async function toRgba(bytes) {
@@ -263,6 +295,7 @@ async function cmdSheet(workdir, options) {
 }
 
 async function cmdCut(workdir, cutId, options) {
+  if (options.skeletons) return cmdCutSkeleton(workdir, cutId, options);
   if (options.keys) return cmdCutKeys(workdir, cutId, options);
   if (!CUT_ID_RE.test(cutId ?? "")) throw new Error(`컷 id는 영소문자·숫자·하이픈만 가능합니다: ${cutId}`);
   if (!options.motion?.trim()) throw new Error("--motion (동작 설명)은 필수입니다");
@@ -443,6 +476,75 @@ async function cmdCutKeys(workdir, cutId, options) {
   console.log(`다음 단계: node _infra/emoticon.mjs build ${workdir} ${cutId}`);
 }
 
+// 스켈레톤 조건화 모드: 재사용 포즈 시퀀스(_src/emoticon/poses/*.json)를
+// 스켈레톤 이미지로 렌더해 프레임별(또는 그리드 1회) 조건으로 준다.
+// 텍스트로 못 잡던 좌우·각도를 픽셀 기하로 지시한다 — pose-conditioning.md.
+async function cmdCutSkeleton(workdir, cutId, options) {
+  if (!CUT_ID_RE.test(cutId ?? "")) throw new Error(`컷 id는 영소문자·숫자·하이픈만 가능합니다: ${cutId}`);
+  const sheetPath = join(workdir, "sheet.png");
+  if (!existsSync(sheetPath)) throw new Error(`캐릭터 시트가 없습니다 — 먼저: emoticon.mjs sheet ${workdir} --prompt "..."`);
+  const cutDir = join(workdir, "cuts", cutId);
+  if (existsSync(cutDir) && !options.force) throw new Error(`이미 존재하는 컷입니다: ${cutDir} (덮어쓰려면 --force)`);
+
+  const { spec, frames: poses } = loadSequence(options.skeletons);
+  const motion = String(options.motion ?? spec.description ?? spec.name).trim();
+  const fps = Number(options.fps ?? spec.fps ?? 12);
+  const cell = Number(options.cell ?? 512);
+  const cols = Math.min(4, poses.length);
+  const rows = Math.ceil(poses.length / cols);
+  if (poses.length > MAX_FRAMES) throw new Error(`프레임 ${poses.length}장 — 상한 ${MAX_FRAMES}장`);
+
+  const provider = imageProvider();
+  const sheet = readFileSync(sheetPath);
+  mkdirSync(join(cutDir, "frames"), { recursive: true });
+  mkdirSync(join(cutDir, "frames-raw"), { recursive: true });
+  mkdirSync(join(cutDir, "skeletons"), { recursive: true });
+
+  const keep = async (rgba, index) => {
+    const keyed = autoCutout(rgba);
+    const ratio = transparencyRatio(keyed);
+    if (ratio < 0.05) {
+      throw new Error(`프레임 ${pad2(index)} 누끼 실패 (투명 ${Math.round(ratio * 100)}%) — frames-raw 확인 후 --force로 재시도`);
+    }
+    writeFileSync(join(cutDir, "frames", `${pad2(index)}.png`), encodePng(keyed));
+  };
+
+  if (options.grid) {
+    // 그리드 단일 호출 — 모든 프레임이 한 번의 샘플링을 공유한다 (FramePrompt)
+    const grid = encodePng(renderGrid(poses, { cols, cell }));
+    writeFileSync(join(cutDir, "skeletons", "grid.png"), grid);
+    const bytes = await provider.generate({
+      prompt: SKELETON_GRID_PROMPT(motion, cols, rows),
+      references: [sheet, grid],
+    });
+    writeFileSync(join(cutDir, "frames-raw", "grid.png"), Buffer.from(bytes));
+    const sheetImage = await toRgba(bytes);
+    const cells = sliceGrid(sheetImage, cols, rows).slice(0, poses.length);
+    for (const [i, cellImage] of cells.entries()) await keep(cellImage, i + 1);
+    console.log(`  그리드 1회 호출 → ${cells.length}프레임 슬라이스`);
+  } else {
+    for (const [i, pose] of poses.entries()) {
+      const skeleton = encodePng(renderPose(pose, { width: cell, height: cell }));
+      writeFileSync(join(cutDir, "skeletons", `${pad2(i + 1)}.png`), skeleton);
+      const bytes = await provider.generate({
+        prompt: SKELETON_FRAME_PROMPT(motion, i + 1, poses.length),
+        references: [sheet, skeleton],
+      });
+      writeFileSync(join(cutDir, "frames-raw", `${pad2(i + 1)}.png`), Buffer.from(bytes));
+      await keep(await toRgba(bytes), i + 1);
+      console.log(`  프레임 ${pad2(i + 1)}/${pad2(poses.length)}`);
+    }
+  }
+
+  writeFileSync(join(cutDir, "cut.json"), JSON.stringify({
+    motion, fps, mode: "skeleton", sequence: spec.name, grid: Boolean(options.grid),
+    frames: poses.length, provider: provider.name,
+    createdAt: new Date().toISOString().slice(0, 10),
+  }, null, 2) + "\n");
+  console.log(`✓ ${cutId} 컷 생성 (${poses.length}프레임, 스켈레톤 조건화) → ${cutDir}`);
+  console.log(`다음 단계: node _infra/emoticon.mjs build ${workdir} ${cutId}`);
+}
+
 // 선별 재작업: keys 모드 컷의 특정 유니크 프레임 하나만 같은 프롬프트·
 // 레퍼런스로 재생성한다 (프레임당 ≈$0.04 — 전체 재생성 대신 튄 것만).
 // build 출력의 인접 diff로 튄 프레임을 찾고, redo 후 build를 다시 돌린다.
@@ -616,8 +718,10 @@ const USAGE =
   '  sheet  <작업폴더> --prompt "캐릭터 설명" [--force]\n' +
   '  cut    <작업폴더> <컷id> --motion "동작 설명" [--frames 12] [--fps 12] [--poses 파일] [--force]\n' +
   '         (--poses: 줄당 포즈 1개 = 프레임당 1개 — 프레임 간 튐을 줄이는 옵션)\n' +
-  '  cut    <작업폴더> <컷id> --keys <spec.json> [--fps 12] [--force]  ← 권장 (pose-to-pose)\n' +
+  '  cut    <작업폴더> <컷id> --keys <spec.json> [--fps 12] [--force]  ← pose-to-pose\n' +
   '         spec: {"motion":"...","keys":[{"pose":"...","hold":2},...],"breakdowns":1,"assembly":"pingpong|loop"}\n' +
+  '  cut    <작업폴더> <컷id> --skeletons <포즈시퀀스.json> [--grid] [--cell 512] [--force]\n' +
+  '         스켈레톤 조건화 — _src/emoticon/poses/*.json 재사용. --grid는 단일 호출\n' +
   '  import <작업폴더> <컷id> <프레임폴더> [--fps 12] [--chroma] [--force]\n' +
   '  build  <작업폴더> <컷id> [--size 360] [--fps N] [--line]\n' +
   '  redo   <작업폴더> <컷id> <프레임번호>   ← keys 컷에서 튄 프레임만 재생성 ($0.04)\n' +
