@@ -22,7 +22,7 @@ on:
         description: "실행 단계"
         required: true
         type: choice
-        options: [sheet, cut]
+        options: [sheet, cut, redo]
       prompt:
         description: "sheet: 캐릭터 설명 / cut: 동작 설명"
         required: true
@@ -31,7 +31,7 @@ on:
         required: false
         default: ""
       frames:
-        description: "cut 프레임 수 (2–24)"
+        description: "cut 프레임 수 (2–24) / redo에서는 재생성할 프레임 번호"
         required: false
         default: "12"
       fps:
@@ -119,6 +119,12 @@ jobs:
               node _infra/emoticon.mjs cut "$WORKDIR" "$CUT_ID" --motion "$PROMPT" \
                 --frames "$FRAMES" --fps "$FPS" $POSES_FLAG $FORCE_FLAG
             fi
+            node _infra/emoticon.mjs build "$WORKDIR" "$CUT_ID"
+            node _infra/emoticon.mjs check "$WORKDIR" "$CUT_ID"
+          elif [[ "$STEP" == "redo" ]]; then
+            # 선별 재작업: 튄 프레임(frames = 프레임 번호) 하나만 재생성 후 다시 굽는다
+            [[ -n "$CUT_ID" ]] || { echo "redo 단계에는 cut_id가 필요합니다"; exit 1; }
+            node _infra/emoticon.mjs redo "$WORKDIR" "$CUT_ID" "$FRAMES"
             node _infra/emoticon.mjs build "$WORKDIR" "$CUT_ID"
             node _infra/emoticon.mjs check "$WORKDIR" "$CUT_ID"
           else

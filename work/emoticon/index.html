@@ -320,21 +320,21 @@ async function pngBlob(img) {
   return canvas.convertToBlob({ type: "image/png" });
 }
 
-/* ── 프롬프트 (CLI와 동일 — 실측하며 CLI와 함께 다듬는다) ── */
+/* ── 프롬프트 (CLI _infra/emoticon.mjs와 동일 — 함께 다듬는다)
+   지시 골격은 영어(지시 추종이 더 정확), 사용자 입력 문장은 그대로 삽입 ── */
 const SHEET_PROMPT = (desc) =>
-  `이모티콘 캐릭터 레퍼런스 시트를 그려줘. 캐릭터: ${desc}\n` +
-  "구성: 정면 전신 크게 1개 + 측면·뒷면 작게 + 대표 표정(기쁨/슬픔/화남/놀람) 4개.\n" +
-  "스타일: 두꺼운 깔끔한 외곽선의 플랫 스티커 일러스트, 순수한 흰색 배경, 텍스트 없음.\n" +
-  "이 시트는 이후 모든 프레임 생성의 레퍼런스이므로 색·비율·장식이 명확해야 한다.";
+  `Draw a character reference sheet for a sticker/emoticon character. Character: ${desc}\n` +
+  "Layout: one large full-body front view + smaller side and back views + 4 key expressions (happy / sad / angry / surprised).\n" +
+  "Style: flat sticker illustration with clean thick outlines, pure white background, no text.\n" +
+  "This sheet is the reference for all future frames, so colors, proportions and accessories must be clear and consistent.";
 const FRAME_PROMPT = (motion, index, total, pose = "") =>
-  `첨부 이미지는 이 캐릭터의 레퍼런스 시트(첫 장)와 직전 프레임들이다. ` +
-  `정확히 같은 캐릭터(색·비율·장식 동일)로, "${motion}" 동작의 ${total}프레임 루프 애니메이션 중 ` +
-  `프레임 ${index}/${total}을 그려줘.\n` +
-  (pose ? `이 프레임의 포즈(정확히 따를 것): ${pose}\n` : "") +
-  "규칙: 마지막 프레임은 첫 프레임으로 자연스럽게 이어지는 루프여야 한다. " +
-  "캐릭터는 캔버스 중앙, 프레임 간 크기와 위치를 유지하고 직전 프레임에서 조금만 움직인다. " +
-  "배경은 순수한 흰색 단색, 캐릭터의 외곽선은 끊김 없이 닫혀 있어야 한다. " +
-  "그림자·소품·텍스트 등 캐릭터 외 요소 금지.";
+  `The attached images are this character's reference sheet (first image) and previous frames. ` +
+  `Draw frame ${index}/${total} of a ${total}-frame looping animation of this exact same character ` +
+  `(same colors, proportions, accessories) performing: ${motion}.\n` +
+  (pose ? `Pose for this frame (follow exactly): ${pose}\n` : "") +
+  "Rules: the last frame must flow naturally back into the first frame. " +
+  "Keep the character centered at the same size and position, moving only slightly from the previous frame. " +
+  "Pure solid white background; outlines must be fully closed. No shadows, props, or text.";
 
 /* ── ① 시트 ── */
 async function setSheet(bytes, prompt) {

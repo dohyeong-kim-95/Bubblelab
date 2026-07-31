@@ -125,11 +125,12 @@ test("resize: 알파 가중 축소에서 투명 배경색이 번지지 않는다
   assert.equal(small.data[3 * 4 + 3], 0);                           // 우하단은 투명
 });
 
+// 내부 프롬프트는 영어로 쓴다(지시 추종 정확도) — mock도 영어 문구로 분기한다
 test("mock provider: 시트는 흰 배경, 프레임 요청은 초록 배경", async () => {
   const provider = imageProvider({ EMOTICON_IMAGE_PROVIDER: "mock" });
-  const sheet = decodePng(await provider.generate({ prompt: "캐릭터 시트" }));
+  const sheet = decodePng(await provider.generate({ prompt: "Draw a character reference sheet" }));
   assert.deepEqual([...sheet.data.slice(0, 4)], [255, 255, 255, 255]);
-  const frame = decodePng(await provider.generate({ prompt: "프레임 3/12 ..." }));
+  const frame = decodePng(await provider.generate({ prompt: "Draw frame 3/12 of a 12-frame loop" }));
   assert.deepEqual([...frame.data.slice(0, 3)], [0, 255, 0]);
 });
 
@@ -269,6 +270,27 @@ test("CLI E2E (mock): keys 모드 — 키·브레이크다운 생성 + 핑퐁 �
     const info = inspectApng(readFileSync(join(workdir, "out", "nod.png")));
     assert.equal(info.frames, 4);
     assert.ok(Math.abs(info.delays[2] - 0.25) < 0.002); // k2 hold 3 @12fps = 250ms
+
+    // 선별 재작업: 튄 프레임 하나만 같은 프롬프트·레퍼런스로 다시 생성한다
+    const before = readFileSync(join(workdir, "cuts", "nod", "frames", "02.png"));
+    const redo = run("redo", workdir, "nod", "2");
+    assert.match(redo, /프레임 02 \(브레이크다운 1→2\) 재생성/);
+    assert.ok(readFileSync(join(workdir, "cuts", "nod", "frames", "02.png")).length > 0);
+    assert.equal(before.length > 0, true);
+    assert.throws(() => run("redo", workdir, "nod", "9"), /프레임 번호는 1~3/);
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("redo: 순차 생성(poses) 컷은 거부한다", () => {
+  const workdir = mkdtempSync(join(tmpdir(), "emoticon-"));
+  const env = { ...process.env, EMOTICON_IMAGE_PROVIDER: "mock" };
+  const run = (...args) => execFileSync(process.execPath, [CLI, ...args], { env, encoding: "utf8" });
+  try {
+    run("sheet", workdir, "--prompt", "테스트 캐릭터");
+    run("cut", workdir, "seq", "--motion", "인사", "--frames", "3", "--fps", "8");
+    assert.throws(() => run("redo", workdir, "seq", "1"), /keys 모드 컷만 지원/);
   } finally {
     rmSync(workdir, { recursive: true, force: true });
   }

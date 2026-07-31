@@ -169,38 +169,43 @@ export function loopDiff(a, b) {
 }
 
 // ── 프롬프트 (실측하며 다듬는 지점 — SKILL.md §1·§2) ────────────────────
+// 지시 골격은 영어(이미지 모델의 지시 추종이 더 정확), 사용자가 쓴 캐릭터
+// 설명·포즈 문장은 받은 언어 그대로 삽입한다. 수정 시 페이지(index.html)와 동기화.
 
 const SHEET_PROMPT = (desc) =>
-  `이모티콘 캐릭터 레퍼런스 시트를 그려줘. 캐릭터: ${desc}\n` +
-  "구성: 정면 전신 크게 1개 + 측면·뒷면 작게 + 대표 표정(기쁨/슬픔/화남/놀람) 4개.\n" +
-  "스타일: 두꺼운 깔끔한 외곽선의 플랫 스티커 일러스트, 순수한 흰색 배경, 텍스트 없음.\n" +
-  "이 시트는 이후 모든 프레임 생성의 레퍼런스이므로 색·비율·장식이 명확해야 한다.";
+  `Draw a character reference sheet for a sticker/emoticon character. Character: ${desc}\n` +
+  "Layout: one large full-body front view + smaller side and back views + 4 key expressions (happy / sad / angry / surprised).\n" +
+  "Style: flat sticker illustration with clean thick outlines, pure white background, no text.\n" +
+  "This sheet is the reference for all future frames, so colors, proportions and accessories must be clear and consistent.";
 
 const FRAME_PROMPT = (motion, index, total, pose = "") =>
-  `첨부 이미지는 이 캐릭터의 레퍼런스 시트(첫 장)와 직전 프레임들이다. ` +
-  `정확히 같은 캐릭터(색·비율·장식 동일)로, "${motion}" 동작의 ${total}프레임 루프 애니메이션 중 ` +
-  `프레임 ${index}/${total}을 그려줘.\n` +
-  (pose ? `이 프레임의 포즈(정확히 따를 것): ${pose}\n` : "") +
-  "규칙: 마지막 프레임은 첫 프레임으로 자연스럽게 이어지는 루프여야 한다. " +
-  "캐릭터는 캔버스 중앙, 프레임 간 크기와 위치를 유지하고 직전 프레임에서 조금만 움직인다. " +
-  "배경은 순수한 흰색 단색, 캐릭터의 외곽선은 끊김 없이 닫혀 있어야 한다. " +
-  "그림자·소품·텍스트 등 캐릭터 외 요소 금지.";
+  `The attached images are this character's reference sheet (first image) and previous frames. ` +
+  `Draw frame ${index}/${total} of a ${total}-frame looping animation of this exact same character ` +
+  `(same colors, proportions, accessories) performing: ${motion}.\n` +
+  (pose ? `Pose for this frame (follow exactly): ${pose}\n` : "") +
+  "Rules: the last frame must flow naturally back into the first frame. " +
+  "Keep the character centered at the same size and position, moving only slightly from the previous frame. " +
+  "Pure solid white background; outlines must be fully closed. No shadows, props, or text.";
 
 // pose-to-pose 모드 프롬프트 (animation-techniques.md §1·§7)
 const KEY_PROMPT = (motion, index, total, pose) =>
-  `첨부 이미지는 이 캐릭터의 레퍼런스 시트(첫 장)${index > 1 ? "와 이 동작의 앞선 키 포즈" : ""}다. ` +
-  `정확히 같은 캐릭터(색·비율·장식 동일)로, "${motion}" 동작의 키 포즈 ${index}/${total}을 그려줘.\n` +
-  `이 키 포즈(정확히 따를 것): ${pose}\n` +
-  "규칙: 동작의 극단을 과장되게, 한눈에 읽히는 실루엣으로. 캐릭터는 캔버스 중앙, 크기 동일. " +
-  "배경은 순수한 흰색 단색, 외곽선은 끊김 없이 닫혀 있어야 한다. 그림자·소품·텍스트 금지.";
+  `The attached images are this character's reference sheet (first image)` +
+  `${index > 1 ? " and earlier key poses of this motion" : ""}. ` +
+  `Draw key pose ${index}/${total} of the motion "${motion}" with this exact same character ` +
+  `(same colors, proportions, accessories).\n` +
+  `Key pose (follow exactly): ${pose}\n` +
+  "Rules: exaggerate the extreme of the motion with a clear, readable silhouette. " +
+  "Character centered at the same size. Pure solid white background, fully closed outlines. " +
+  "No shadows, props, or text.";
 
 const BREAKDOWN_PROMPT = (motion, poseA, poseB) =>
-  `첨부 이미지는 캐릭터 시트, 그리고 "${motion}" 동작의 연속된 두 키 포즈 A·B다. ` +
-  `정확히 같은 캐릭터로, A에서 B로 넘어가는 정확히 중간 자세(브레이크다운) 한 장을 그려줘.\n` +
+  `The attached images are the character reference sheet and two consecutive key poses A and B ` +
+  `of the motion "${motion}". Draw the exact in-between (breakdown) pose halfway between A and B ` +
+  `with the same character.\n` +
   `A: ${poseA}\nB: ${poseB}\n` +
-  "규칙: 손·머리의 이동 경로는 직선이 아니라 자연스러운 호를 따른다. " +
-  "캐릭터의 크기·위치는 두 키 포즈와 동일. 배경은 순수한 흰색 단색, " +
-  "외곽선은 닫혀 있게. 그림자·소품·텍스트 금지.";
+  "Rules: hands and head travel along a natural arc, not a straight line. " +
+  "Same character size and position as both keys. Pure solid white background, closed outlines. " +
+  "No shadows, props, or text.";
 
 // ── 명령 구현 ───────────────────────────────────────────────────────────
 
@@ -310,54 +315,81 @@ async function cmdCutKeys(workdir, cutId, options) {
   mkdirSync(join(cutDir, "frames"), { recursive: true });
   mkdirSync(join(cutDir, "frames-raw"), { recursive: true });
 
-  const keyAndValidate = async (bytes, label, rawName) => {
+  const generateKeyed = async (prompt, references, label, rawName) => {
+    const bytes = await provider.generate({ prompt, references });
     writeFileSync(join(cutDir, "frames-raw", rawName), Buffer.from(bytes));
     const keyed = autoCutout(await toRgba(bytes));
     const ratio = transparencyRatio(keyed);
     if (ratio < 0.05) {
       throw new Error(`${label} 누끼 실패 (투명 ${Math.round(ratio * 100)}%) — frames-raw/${rawName} 확인 후 --force로 재시도`);
     }
-    return keyed;
+    return { bytes, keyed };
   };
+  const sameSize = (x, y) => x.width === y.width && x.height === y.height;
 
   // ① 키 포즈 — 시트(+앞선 키)를 레퍼런스로 극단만 생성
   const keyRaw = [];
   const keyImages = [];
   for (let i = 0; i < keys.length; i++) {
     const references = [sheet, ...(keyRaw.length ? [keyRaw[0]] : []), ...(keyRaw.length > 1 ? [keyRaw[keyRaw.length - 1]] : [])];
-    const bytes = await provider.generate({ prompt: KEY_PROMPT(motion, i + 1, keys.length, keys[i].pose.trim()), references });
+    const { bytes, keyed } = await generateKeyed(
+      KEY_PROMPT(motion, i + 1, keys.length, keys[i].pose.trim()), references,
+      `키 ${i + 1}`, `key-${i + 1}.png`,
+    );
     keyRaw.push(bytes);
-    keyImages.push(await keyAndValidate(bytes, `키 ${i + 1}`, `key-${i + 1}.png`));
+    keyImages.push(keyed);
     console.log(`  키 포즈 ${i + 1}/${keys.length}`);
   }
 
-  // ② 브레이크다운 — 키 쌍의 양쪽 이미지를 함께 레퍼런스로
+  // ② 브레이크다운 — 키 쌍의 양쪽 이미지를 함께 레퍼런스로.
+  // 중간 프레임이 어느 한쪽 키와의 diff가 "키끼리의 diff"보다 크면 중간이
+  // 아니라 튄 것 — 1회 자동 재생성 후 덜 튀는 쪽을 채택한다 (선별 재작업).
   const pairs = [];
   for (let i = 0; i < keys.length - 1; i++) pairs.push([i, i + 1]);
   if (assembly === "loop") pairs.push([keys.length - 1, 0]);
   const bdImages = new Map();
   if (breakdowns === 1) {
     for (const [a, b] of pairs) {
-      const bytes = await provider.generate({
-        prompt: BREAKDOWN_PROMPT(motion, keys[a].pose.trim(), keys[b].pose.trim()),
-        references: [sheet, keyRaw[a], keyRaw[b]],
-      });
-      bdImages.set(`${a}-${b}`, await keyAndValidate(bytes, `브레이크다운 ${a + 1}→${b + 1}`, `bd-${a + 1}-${b + 1}.png`));
-      console.log(`  브레이크다운 ${a + 1}→${b + 1}`);
+      const label = `브레이크다운 ${a + 1}→${b + 1}`;
+      const rawName = `bd-${a + 1}-${b + 1}.png`;
+      const gen = () => generateKeyed(
+        BREAKDOWN_PROMPT(motion, keys[a].pose.trim(), keys[b].pose.trim()),
+        [sheet, keyRaw[a], keyRaw[b]], label, rawName,
+      );
+      const midDiff = ({ keyed }) =>
+        sameSize(keyed, keyImages[a]) && sameSize(keyed, keyImages[b])
+          ? Math.max(loopDiff(keyImages[a], keyed), loopDiff(keyed, keyImages[b]))
+          : null;
+      let best = await gen();
+      const dAB = sameSize(keyImages[a], keyImages[b]) ? loopDiff(keyImages[a], keyImages[b]) : null;
+      const d1 = midDiff(best);
+      if (dAB !== null && d1 !== null && d1 > dAB) {
+        console.log(`  ${label} 튐 (중간 diff ${(d1 * 100).toFixed(1)}% > 키 간 ${(dAB * 100).toFixed(1)}%) — 1회 재생성`);
+        const retry = await gen();
+        const d2 = midDiff(retry);
+        if (d2 !== null && d2 < d1) best = retry;
+        else writeFileSync(join(cutDir, "frames-raw", rawName), Buffer.from(best.bytes)); // 원본 유지
+      }
+      bdImages.set(`${a}-${b}`, best.keyed);
+      console.log(`  ${label}`);
     }
   }
 
   // ③ 조립 — 유니크 프레임 나열 + 타임라인(홀드는 delay로, 핑퐁은 역순 항목으로)
-  const unique = [];   // { image, delayFrames }
-  const keyIndex = []; // 키 i의 unique 위치 (핑퐁 역순 계산용)
+  const unique = [];       // { image, delayFrames }
+  const sequenceMeta = []; // redo가 프레임 번호 → 생성 재현에 쓰는 구성 기록
   for (let i = 0; i < keys.length; i++) {
-    keyIndex.push(unique.length);
     unique.push({ image: keyImages[i], delayFrames: Math.max(1, Number(keys[i].hold ?? 1)) });
+    sequenceMeta.push({ type: "key", key: i });
     const pairKey = `${i}-${i + 1}`;
-    if (bdImages.has(pairKey)) unique.push({ image: bdImages.get(pairKey), delayFrames: 1 });
+    if (bdImages.has(pairKey)) {
+      unique.push({ image: bdImages.get(pairKey), delayFrames: 1 });
+      sequenceMeta.push({ type: "bd", pair: [i, i + 1] });
+    }
   }
   if (assembly === "loop" && bdImages.has(`${keys.length - 1}-0`)) {
     unique.push({ image: bdImages.get(`${keys.length - 1}-0`), delayFrames: 1 });
+    sequenceMeta.push({ type: "bd", pair: [keys.length - 1, 0] });
   }
   const frameDelay = 1000 / fps;
   const timeline = unique.map((u, index) => ({ frame: index, delayMs: Math.round(u.delayFrames * frameDelay) }));
@@ -370,10 +402,56 @@ async function cmdCutKeys(workdir, cutId, options) {
   unique.forEach((u, i) => writeFileSync(join(cutDir, "frames", `${pad2(i + 1)}.png`), encodePng(u.image)));
   writeFileSync(join(cutDir, "cut.json"), JSON.stringify({
     motion, fps, mode: "keys", keys, breakdowns, assembly,
-    frames: unique.length, timeline,
+    frames: unique.length, sequence: sequenceMeta, timeline,
     provider: provider.name, createdAt: new Date().toISOString().slice(0, 10),
   }, null, 2) + "\n");
   console.log(`✓ ${cutId} 컷 생성 (유니크 ${unique.length}장 → 타임라인 ${timeline.length}프레임, ${assembly})`);
+  console.log(`다음 단계: node _infra/emoticon.mjs build ${workdir} ${cutId}`);
+}
+
+// 선별 재작업: keys 모드 컷의 특정 유니크 프레임 하나만 같은 프롬프트·
+// 레퍼런스로 재생성한다 (프레임당 ≈$0.04 — 전체 재생성 대신 튄 것만).
+// build 출력의 인접 diff로 튄 프레임을 찾고, redo 후 build를 다시 돌린다.
+async function cmdRedo(workdir, cutId, frameArg) {
+  const cutDir = join(workdir, "cuts", cutId);
+  const metaPath = join(cutDir, "cut.json");
+  if (!existsSync(metaPath)) throw new Error(`컷이 없습니다: ${cutDir}`);
+  const meta = JSON.parse(readFileSync(metaPath, "utf8"));
+  if (meta.mode !== "keys" || !Array.isArray(meta.sequence)) {
+    throw new Error("redo는 keys 모드 컷만 지원합니다 (cut --keys로 생성한 컷)");
+  }
+  const n = Number(frameArg);
+  if (!Number.isInteger(n) || n < 1 || n > meta.sequence.length) {
+    throw new Error(`프레임 번호는 1~${meta.sequence.length} 입니다`);
+  }
+  const el = meta.sequence[n - 1];
+  const sheet = readFileSync(join(workdir, "sheet.png"));
+  const rawOf = (name) => readFileSync(join(cutDir, "frames-raw", name));
+
+  let prompt, references, rawName, label;
+  if (el.type === "key") {
+    label = `키 ${el.key + 1}`;
+    rawName = `key-${el.key + 1}.png`;
+    prompt = KEY_PROMPT(meta.motion, el.key + 1, meta.keys.length, meta.keys[el.key].pose);
+    references = [sheet, ...(el.key > 0 ? [rawOf("key-1.png")] : [])];
+  } else {
+    const [a, b] = el.pair;
+    label = `브레이크다운 ${a + 1}→${b + 1}`;
+    rawName = `bd-${a + 1}-${b + 1}.png`;
+    prompt = BREAKDOWN_PROMPT(meta.motion, meta.keys[a].pose, meta.keys[b].pose);
+    references = [sheet, rawOf(`key-${a + 1}.png`), rawOf(`key-${b + 1}.png`)];
+  }
+
+  const provider = imageProvider();
+  const bytes = await provider.generate({ prompt, references });
+  writeFileSync(join(cutDir, "frames-raw", rawName), Buffer.from(bytes));
+  const keyed = autoCutout(await toRgba(bytes));
+  const ratio = transparencyRatio(keyed);
+  if (ratio < 0.05) {
+    throw new Error(`${label} 누끼 실패 (투명 ${Math.round(ratio * 100)}%) — frames-raw/${rawName} 확인 후 다시 redo`);
+  }
+  writeFileSync(join(cutDir, "frames", `${pad2(n)}.png`), encodePng(keyed));
+  console.log(`✓ 프레임 ${pad2(n)} (${label}) 재생성 (${provider.name})`);
   console.log(`다음 단계: node _infra/emoticon.mjs build ${workdir} ${cutId}`);
 }
 
@@ -503,6 +581,7 @@ const USAGE =
   '         spec: {"motion":"...","keys":[{"pose":"...","hold":2},...],"breakdowns":1,"assembly":"pingpong|loop"}\n' +
   '  import <작업폴더> <컷id> <프레임폴더> [--fps 12] [--chroma] [--force]\n' +
   '  build  <작업폴더> <컷id> [--size 360] [--fps N] [--line]\n' +
+  '  redo   <작업폴더> <컷id> <프레임번호>   ← keys 컷에서 튄 프레임만 재생성 ($0.04)\n' +
   '  check  <작업폴더> <컷id>\n' +
   '작업폴더 권장 위치: _src/emoticon/<캐릭터명> (배포·커밋 제외)\n' +
   'env: EMOTICON_IMAGE_PROVIDER=edge(기본)|gemini|mock\n' +
@@ -518,6 +597,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     else if (command === "cut") await cmdCut(workdir, rest[0], options);
     else if (command === "import") await cmdImport(workdir, rest[0], rest[1], options);
     else if (command === "build") await cmdBuild(workdir, rest[0], options);
+    else if (command === "redo") await cmdRedo(workdir, rest[0], rest[1]);
     else if (command === "check") cmdCheck(workdir, rest[0]);
     else throw new Error(`알 수 없는 명령: ${command}\n${USAGE}`);
   } catch (error) {

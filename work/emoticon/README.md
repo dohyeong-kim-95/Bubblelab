@@ -65,7 +65,11 @@ export EMOTICON_EDGE_TOKEN=...   # work 마스터 비밀번호(WORK_PASSWORD)
 # ① 캐릭터 시트 — 마음에 들 때까지 --force로 재생성 (이후 모든 생성의 축)
 node _infra/emoticon.mjs sheet _src/emoticon/토끼 --prompt "동그란 흰 토끼, 분홍 볼"
 
-# ② 컷 생성 — 초록 배경으로 프레임을 뽑아 자동 크로마키 (컷당 약 $0.5)
+# ② 컷 생성 (권장: pose-to-pose) — 키 포즈 → 브레이크다운 → 핑퐁·홀드 조립
+#    spec: {"motion":"…","keys":[{"pose":"…","hold":2},…],"breakdowns":1,"assembly":"pingpong"}
+node _infra/emoticon.mjs cut _src/emoticon/토끼 nod --keys nod-keys.json --fps 12
+
+# ②' 순차 생성 (구식 — 프레임 간 튐이 크다, lesson_learned §12)
 node _infra/emoticon.mjs cut _src/emoticon/토끼 hello --motion "손 흔들며 인사" --frames 12 --fps 12
 
 # ②' 또는 I2V 영상에서 가져오기 (초록 배경으로 생성한 클립)
@@ -75,6 +79,9 @@ node _infra/emoticon.mjs import _src/emoticon/토끼 hello frames --chroma
 # ③ APNG 굽기 — out/hello.png(360², 카카오·duri) + --line이면 270²·300KB 검증
 node _infra/emoticon.mjs build _src/emoticon/토끼 hello --line
 node _infra/emoticon.mjs check _src/emoticon/토끼 hello
+
+# ④ 선별 재작업 — build가 알려준 "인접 diff가 튄" 프레임만 다시 뽑는다 ($0.04)
+node _infra/emoticon.mjs redo _src/emoticon/토끼 nod 2 && node _infra/emoticon.mjs build _src/emoticon/토끼 nod
 ```
 
 프레임별 트리밍 없이 컷 전체 공통 경계로 잘라 떨림을 막고, 루프 diff·투명도
