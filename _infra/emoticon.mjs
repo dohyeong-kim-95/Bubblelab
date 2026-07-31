@@ -249,6 +249,8 @@ const BREAKDOWN_PROMPT = (motion, poseA, poseB) =>
 const SKELETON_RULES =
   "Rules:\n" +
   "- NEVER draw the skeleton lines or dots in the output. They are instructions, not content.\n" +
+  "- Output exactly ONE character in ONE pose, centered. Never output a reference sheet, " +
+  "a grid, multiple views, or expression icons — even if the character reference image contains them.\n" +
   "- The skeleton dictates joint angles and limb directions ONLY. Body proportions must follow " +
   "the CHARACTER SHEET, not the skeleton — do not stretch or lengthen the character to match it.\n" +
   "- In the skeleton, warm colors (red/orange/yellow) mark the character's RIGHT arm and leg; " +
@@ -481,8 +483,11 @@ async function cmdCutKeys(workdir, cutId, options) {
 // 텍스트로 못 잡던 좌우·각도를 픽셀 기하로 지시한다 — pose-conditioning.md.
 async function cmdCutSkeleton(workdir, cutId, options) {
   if (!CUT_ID_RE.test(cutId ?? "")) throw new Error(`컷 id는 영소문자·숫자·하이픈만 가능합니다: ${cutId}`);
-  const sheetPath = join(workdir, "sheet.png");
-  if (!existsSync(sheetPath)) throw new Error(`캐릭터 시트가 없습니다 — 먼저: emoticon.mjs sheet ${workdir} --prompt "..."`);
+  // 캐릭터 레퍼런스: 기본은 시트지만, 여러 컷이 든 시트는 모델이 "시트를
+  // 복제하라"로 해석해 스켈레톤을 무시하는 사고가 있었다(lesson_learned §23).
+  // --ref로 단일 정면 컷을 주는 쪽이 안전하다.
+  const refPath = options.ref ?? join(workdir, "sheet.png");
+  if (!existsSync(refPath)) throw new Error(`캐릭터 레퍼런스가 없습니다: ${refPath}`);
   const cutDir = join(workdir, "cuts", cutId);
   if (existsSync(cutDir) && !options.force) throw new Error(`이미 존재하는 컷입니다: ${cutDir} (덮어쓰려면 --force)`);
 
@@ -495,7 +500,7 @@ async function cmdCutSkeleton(workdir, cutId, options) {
   if (poses.length > MAX_FRAMES) throw new Error(`프레임 ${poses.length}장 — 상한 ${MAX_FRAMES}장`);
 
   const provider = imageProvider();
-  const sheet = readFileSync(sheetPath);
+  const characterRef = readFileSync(refPath);
   mkdirSync(join(cutDir, "frames"), { recursive: true });
   mkdirSync(join(cutDir, "frames-raw"), { recursive: true });
   mkdirSync(join(cutDir, "skeletons"), { recursive: true });
@@ -515,7 +520,7 @@ async function cmdCutSkeleton(workdir, cutId, options) {
     writeFileSync(join(cutDir, "skeletons", "grid.png"), grid);
     const bytes = await provider.generate({
       prompt: SKELETON_GRID_PROMPT(motion, cols, rows),
-      references: [sheet, grid],
+      references: [characterRef, grid],
     });
     writeFileSync(join(cutDir, "frames-raw", "grid.png"), Buffer.from(bytes));
     const sheetImage = await toRgba(bytes);
@@ -528,7 +533,7 @@ async function cmdCutSkeleton(workdir, cutId, options) {
       writeFileSync(join(cutDir, "skeletons", `${pad2(i + 1)}.png`), skeleton);
       const bytes = await provider.generate({
         prompt: SKELETON_FRAME_PROMPT(motion, i + 1, poses.length),
-        references: [sheet, skeleton],
+        references: [characterRef, skeleton],
       });
       writeFileSync(join(cutDir, "frames-raw", `${pad2(i + 1)}.png`), Buffer.from(bytes));
       await keep(await toRgba(bytes), i + 1);
@@ -538,6 +543,7 @@ async function cmdCutSkeleton(workdir, cutId, options) {
 
   writeFileSync(join(cutDir, "cut.json"), JSON.stringify({
     motion, fps, mode: "skeleton", sequence: spec.name, grid: Boolean(options.grid),
+    characterRef: options.ref ?? "sheet.png",
     frames: poses.length, provider: provider.name,
     createdAt: new Date().toISOString().slice(0, 10),
   }, null, 2) + "\n");
