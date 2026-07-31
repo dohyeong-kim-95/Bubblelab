@@ -1690,7 +1690,7 @@ n_leaves = int(tree.get_n_leaves())`,
     kind: "big",
     level: 3,
     tags: ["필터링", "집계", "정제"],
-    intro: "주문 2,000건 데이터셋 하나로 중문제 3개를 풉니다. 각 중문제는 데이터의 일부를 조건으로 걸러낸 뒤 변수를 차례로 만듭니다.",
+    intro: "주문 2,000건 데이터셋 하나로 중문제 3개를 풉니다. 중문제 1·2는 데이터프레임 처리, 중문제 3은 가변수 생성 + 모델 학습입니다.",
     setup: String.raw`import numpy as np
 import pandas as pd
 
@@ -1780,11 +1780,11 @@ df_b = df.dropna(subset=["rating"]).copy()`,
           {
             id: "b3",
             title: "평점 표준화",
-            prompt: "`df_b`의 평점을 z-score(`ddof=0`)로 표준화해 `|z| > 1.5`인 주문 수를 `b_extreme`에 담으세요.",
+            prompt: "`df_b`의 평점을 z-score(`ddof=0`)로 표준화해 `|z| > 1.3`인 주문 수를 `b_extreme`에 담으세요.",
             expect: ["b_extreme"],
             hint: "(rating - mean) / std(ddof=0)",
             solution: String.raw`z_b = (df_b["rating"] - df_b["rating"].mean()) / df_b["rating"].std(ddof=0)
-b_extreme = int((z_b.abs() > 1.5).sum())`,
+b_extreme = int((z_b.abs() > 1.3).sum())`,
           },
           {
             id: "b4",
@@ -1807,43 +1807,66 @@ b_best_val = float(cat_rating.max())`,
         ],
       },
       {
-        title: "중문제 3 · VIP 고객 분석",
-        cond: "조건: `member_grade == 'vip'` 인 주문만.",
+        title: "중문제 3 · 주문금액 예측 모델링",
+        cond: "조건: `qty >= 2` 인 주문만. 가변수를 만들어 주문금액을 예측합니다.",
         steps: [
           {
             id: "c1",
-            title: "필터와 비중",
-            prompt: "vip 주문만 담은 `df_c`를 만들어 행 수를 `c_rows`에, 전체 주문 대비 비중을 `c_ratio`에 담으세요.",
-            expect: ["c_rows", "c_ratio"],
-            hint: "len(df_c) / len(df)",
-            solution: String.raw`df_c = df[df["member_grade"] == "vip"].copy()
+            title: "필터와 타깃",
+            prompt: "`qty >= 2`인 주문만 담은 `df_c`를 만들고 `amount`(= `price * qty`) 컬럼을 추가하세요. 행 수를 `c_rows`에, 평균 주문금액을 `c_mean_amt`에 담으세요.",
+            expect: ["c_rows", "c_mean_amt"],
+            hint: "df[df['qty'] >= 2].copy() 후 amount 파생",
+            solution: String.raw`df_c = df[df["qty"] >= 2].copy()
+df_c["amount"] = df_c["price"] * df_c["qty"]
 c_rows = len(df_c)
-c_ratio = c_rows / len(df)`,
+c_mean_amt = float(df_c["amount"].mean())`,
           },
           {
             id: "c2",
-            title: "선호 카테고리",
-            prompt: "vip가 가장 많이 주문한 카테고리를 `c_top_cat`에 담으세요. (주문 건수 기준)",
-            expect: ["c_top_cat"],
-            hint: "value_counts().idxmax()",
-            solution: String.raw`c_top_cat = df_c["category"].value_counts().idxmax()`,
+            title: "가변수 생성",
+            prompt: "`df_c[['qty', 'coupon', 'category', 'region']]`에 `pd.get_dummies(columns=['category', 'region'])`를 적용한 `df_e`를 만드세요. 더미 컬럼 수(`category_`/`region_`으로 시작)를 `c_dummy_cols`에, 전체 컬럼 수를 `c_ncols`에 담으세요.",
+            expect: ["c_dummy_cols", "c_ncols"],
+            hint: "더미 컬럼 수 = 카테고리 5종 + 지역 5종",
+            solution: String.raw`df_e = pd.get_dummies(df_c[["qty", "coupon", "category", "region"]],
+                      columns=["category", "region"])
+c_dummy_cols = sum(1 for c in df_e.columns if c.startswith("category_") or c.startswith("region_"))
+c_ncols = int(df_e.shape[1])`,
           },
           {
             id: "c3",
-            title: "vip 대 비vip",
-            prompt: "주문금액(`price * qty`) 기준으로 vip 평균에서 비vip 평균을 뺀 값을 `c_diff`에 담으세요. (전체 `df`에서 계산)",
-            expect: ["c_diff"],
-            hint: "amt = df['price'] * df['qty'] 후 불리언 마스크로 나눠 평균",
-            solution: String.raw`amt_all = df["price"] * df["qty"]
-c_diff = float(amt_all[df["member_grade"] == "vip"].mean() - amt_all[df["member_grade"] != "vip"].mean())`,
+            title: "선형회귀",
+            prompt: "`X = df_e`, `y = df_c['amount']`를 `train_test_split(test_size=0.3, random_state=42)`로 나누고 `LinearRegression`의 테스트 R²을 `c_r2`에, RMSE(`np.sqrt(mean_squared_error)`)를 `c_rmse`에 담으세요.",
+            expect: ["c_r2", "c_rmse"],
+            hint: "가변수 덕분에 카테고리 정보가 모델에 들어갑니다",
+            solution: String.raw`from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score, mean_squared_error
+X_s = df_e
+y_s = df_c["amount"]
+Xs_tr, Xs_te, ys_tr, ys_te = train_test_split(X_s, y_s, test_size=0.3, random_state=42)
+lr_s = LinearRegression().fit(Xs_tr, ys_tr)
+pred_s = lr_s.predict(Xs_te)
+c_r2 = float(r2_score(ys_te, pred_s))
+c_rmse = float(np.sqrt(mean_squared_error(ys_te, pred_s)))`,
           },
           {
             id: "c4",
-            title: "vip 지역 매출",
-            prompt: "vip 주문의 지역별 주문금액 합계를 **내림차순 Series** `c_sales`에 담으세요.",
-            expect: ["c_sales"],
-            hint: "(df_c['price'] * df_c['qty'])를 df_c['region']으로 groupby",
-            solution: String.raw`c_sales = (df_c["price"] * df_c["qty"]).groupby(df_c["region"]).sum().sort_values(ascending=False)`,
+            title: "트리 비교",
+            prompt: "`DecisionTreeRegressor(max_depth=5, random_state=42)`의 테스트 RMSE를 `c_rmse_dt`에 담고, 선형회귀보다 나은지 `c_tree_better`(bool)에 담으세요.",
+            expect: ["c_rmse_dt", "c_tree_better"],
+            hint: "같은 분할 데이터를 재사용",
+            solution: String.raw`from sklearn.tree import DecisionTreeRegressor
+dt_s = DecisionTreeRegressor(max_depth=5, random_state=42).fit(Xs_tr, ys_tr)
+c_rmse_dt = float(np.sqrt(mean_squared_error(ys_te, dt_s.predict(Xs_te))))
+c_tree_better = bool(c_rmse_dt < c_rmse)`,
+          },
+          {
+            id: "c5",
+            title: "중요 변수",
+            prompt: "트리의 `feature_importances_`가 가장 큰 변수 이름을 `c_top_feat`에 담으세요. (`df_e.columns` 기준)",
+            expect: ["c_top_feat"],
+            hint: "df_e.columns[np.argmax(...)]",
+            solution: String.raw`c_top_feat = str(df_e.columns[int(np.argmax(dt_s.feature_importances_))])`,
           },
         ],
       },
@@ -1857,7 +1880,7 @@ c_diff = float(amt_all[df["member_grade"] == "vip"].mean() - amt_all[df["member_
     kind: "big",
     level: 3,
     tags: ["구간화", "이직률", "회귀"],
-    intro: "직원 1,200명 인사 데이터셋 하나로 중문제 3개를 풉니다. 부서 필터 → 이직자 분석 → 연봉 모델링 순서입니다.",
+    intro: "직원 1,200명 인사 데이터셋 하나로 중문제 3개를 풉니다. 중문제 1·2는 데이터프레임 처리(부서 필터·이직자 분석), 중문제 3은 가변수 생성 + 연봉 모델링입니다.",
     setup: String.raw`import numpy as np
 import pandas as pd
 
@@ -2048,7 +2071,7 @@ c_tree_better = bool(c_rmse_dt < c_rmse)`,
     kind: "big",
     level: 3,
     tags: ["between", "카이제곱", "군집"],
-    intro: "회원 1,500명 이용 데이터셋 하나로 중문제 3개를 풉니다. 연령대 필터 → 장기권 이탈 → 감량자 분석 순서입니다.",
+    intro: "회원 1,500명 이용 데이터셋 하나로 중문제 3개를 풉니다. 중문제 1·2는 데이터프레임 처리(연령대 필터·장기권 이탈), 중문제 3은 가변수 생성 + 이탈 예측 모델링입니다.",
     setup: String.raw`import numpy as np
 import pandas as pd
 
@@ -2056,7 +2079,7 @@ rng = np.random.default_rng(227)
 n = 1500
 visits = np.clip(rng.normal(2.5, 1.2, n), 0, 7).round(1)
 pt = rng.choice([0, 0, 0, 4, 8, 12], n)
-churn_p = 1 / (1 + np.exp(-(-0.8 * visits - 0.05 * pt + 0.8)))
+churn_p = 1 / (1 + np.exp(-(-0.8 * visits - 0.05 * pt + 2.2)))
 df = pd.DataFrame({
     "member_id": np.arange(1, n + 1),
     "age": rng.integers(18, 65, n),
@@ -2112,7 +2135,7 @@ a_pt_effect = float(df_a.loc[has_pt, "weight_change"].mean() - df_a.loc[~has_pt,
       },
       {
         title: "중문제 2 · 12개월권 이탈 분석",
-        cond: "조건: `plan == '12개월'` 인 회원만.",
+        cond: "조건: `plan == '12개월'` 인 회원만. (데이터프레임 처리)",
         steps: [
           {
             id: "b1",
@@ -2135,43 +2158,30 @@ b_visit_gap = float(cv.loc[0] - cv.loc[1])`,
           },
           {
             id: "b3",
-            title: "성별-이탈 독립성",
-            prompt: "`pd.crosstab(df_b['gender'], df_b['churn'])`에 카이제곱 독립성 검정을 적용해 p값을 `b_p_chi`에, 유의수준 0.05에서 연관이 있다고 볼지 `b_dep`(bool)에 담으세요.",
-            expect: ["b_p_chi", "b_dep"],
-            hint: "scipy.stats.chi2_contingency",
-            solution: String.raw`from scipy import stats
-chi_b = stats.chi2_contingency(pd.crosstab(df_b["gender"], df_b["churn"]))
-b_p_chi = float(chi_b[1])
-b_dep = bool(b_p_chi < 0.05)`,
+            title: "성별 이탈률 차이",
+            prompt: "성별 이탈률을 구해 남성(M) 이탈률에서 여성(F) 이탈률을 뺀 값을 `b_gender_gap`에 담으세요.",
+            expect: ["b_gender_gap"],
+            hint: "groupby('gender')['churn'].mean()",
+            solution: String.raw`gr = df_b.groupby("gender")["churn"].mean()
+b_gender_gap = float(gr.loc["M"] - gr.loc["F"])`,
           },
           {
             id: "b4",
-            title: "이탈 예측",
-            prompt: "`X = df_b[['visits_per_week', 'pt_sessions', 'age']]`, `y = df_b['churn']`을 `train_test_split(test_size=0.3, random_state=42, stratify=y)`로 나누고 `LogisticRegression(max_iter=1000)`의 테스트 정확도를 `b_acc`에 담으세요.",
-            expect: ["b_acc"],
-            hint: "accuracy_score 또는 model.score",
-            solution: String.raw`from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LogisticRegression
-X_b = df_b[["visits_per_week", "pt_sessions", "age"]]
-y_b = df_b["churn"]
-Xb_tr, Xb_te, yb_tr, yb_te = train_test_split(X_b, y_b, test_size=0.3, random_state=42, stratify=y_b)
-b_acc = float(LogisticRegression(max_iter=1000).fit(Xb_tr, yb_tr).score(Xb_te, yb_te))`,
-          },
-          {
-            id: "b5",
-            title: "재현율 확인",
-            prompt: "같은 모델의 테스트 재현율(recall)을 `b_rec`에 담으세요.",
-            expect: ["b_rec"],
-            hint: "recall_score(y_test, pred)",
-            solution: String.raw`from sklearn.metrics import recall_score
-logit_b = LogisticRegression(max_iter=1000).fit(Xb_tr, yb_tr)
-b_rec = float(recall_score(yb_te, logit_b.predict(Xb_te)))`,
+            title: "연령대별 이탈률",
+            prompt: "`pd.cut(df_b['age'], bins=[17, 29, 39, 49, 64], labels=['18-29', '30대', '40대', '50-64'])`로 연령대 컬럼을 만들고, 연령대별 이탈률이 가장 높은 구간 이름을 `b_worst_age`에, 그 이탈률을 `b_worst_age_rate`에 담으세요.",
+            expect: ["b_worst_age", "b_worst_age_rate"],
+            hint: "groupby(연령대, observed=False)['churn'].mean() 후 idxmax()를 str()로",
+            solution: String.raw`df_b["age_band"] = pd.cut(df_b["age"], bins=[17, 29, 39, 49, 64],
+                          labels=["18-29", "30대", "40대", "50-64"])
+band_rate = df_b.groupby("age_band", observed=False)["churn"].mean()
+b_worst_age = str(band_rate.idxmax())
+b_worst_age_rate = float(band_rate.max())`,
           },
         ],
       },
       {
-        title: "중문제 3 · 감량 회원 분석",
-        cond: "조건: `weight_change < 0` (체중이 줄어든 회원)만.",
+        title: "중문제 3 · 이탈 예측 모델링",
+        cond: "조건: `weight_change < 0` (체중이 줄어든 회원)만. 가변수를 만들어 이탈을 예측합니다.",
         steps: [
           {
             id: "c1",
@@ -2193,14 +2203,34 @@ c_mean_loss = float(df_c["weight_change"].mean())`,
           },
           {
             id: "c3",
-            title: "최다 감량 10명",
-            prompt: "가장 많이 감량한 10명의 `weight_change` 합을 `c_top10`에 담으세요. (`nsmallest` 사용)",
-            expect: ["c_top10"],
-            hint: "nsmallest(10).sum() — 가장 작은(음수 큰) 값들",
-            solution: String.raw`c_top10 = float(df_c["weight_change"].nsmallest(10).sum())`,
+            title: "가변수 생성",
+            prompt: "`df_c[['visits_per_week', 'pt_sessions', 'age', 'gender', 'plan']]`에 `pd.get_dummies(columns=['gender', 'plan'])`를 적용한 `df_g`를 만드세요. 더미 컬럼 수(`gender_`/`plan_`으로 시작)를 `c_dummy_cols`에, 전체 컬럼 수를 `c_ncols`에 담으세요.",
+            expect: ["c_dummy_cols", "c_ncols"],
+            hint: "성별 2종 + 이용권 3종 → 더미 5개",
+            solution: String.raw`df_g = pd.get_dummies(df_c[["visits_per_week", "pt_sessions", "age", "gender", "plan"]],
+                      columns=["gender", "plan"])
+c_dummy_cols = sum(1 for c in df_g.columns if c.startswith("gender_") or c.startswith("plan_"))
+c_ncols = int(df_g.shape[1])`,
           },
           {
             id: "c4",
+            title: "로지스틱 회귀",
+            prompt: "`X = df_g`, `y = df_c['churn']`을 `train_test_split(test_size=0.3, random_state=42, stratify=y)`로 나누고 `LogisticRegression(max_iter=1000)`의 테스트 정확도를 `c_acc`에, 재현율을 `c_rec`에 담으세요.",
+            expect: ["c_acc", "c_rec"],
+            hint: "accuracy_score, recall_score",
+            solution: String.raw`from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, recall_score
+X_g = df_g
+y_g = df_c["churn"]
+Xg_tr, Xg_te, yg_tr, yg_te = train_test_split(X_g, y_g, test_size=0.3, random_state=42, stratify=y_g)
+logit_g = LogisticRegression(max_iter=1000).fit(Xg_tr, yg_tr)
+pred_g = logit_g.predict(Xg_te)
+c_acc = float(accuracy_score(yg_te, pred_g))
+c_rec = float(recall_score(yg_te, pred_g))`,
+          },
+          {
+            id: "c5",
             title: "회원 군집화",
             prompt: "`df_c[['visits_per_week', 'pt_sessions', 'weight_change']]`를 `StandardScaler`로 표준화하고 `KMeans(n_clusters=3, random_state=42, n_init=10)`으로 군집화해 실루엣 계수를 `c_sil`에 담으세요.",
             expect: ["c_sil"],
@@ -2208,9 +2238,9 @@ c_mean_loss = float(df_c["weight_change"].mean())`,
             solution: String.raw`from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
-Xg = StandardScaler().fit_transform(df_c[["visits_per_week", "pt_sessions", "weight_change"]])
-km_g = KMeans(n_clusters=3, random_state=42, n_init=10).fit(Xg)
-c_sil = float(silhouette_score(Xg, km_g.labels_))`,
+Xk = StandardScaler().fit_transform(df_c[["visits_per_week", "pt_sessions", "weight_change"]])
+km_g = KMeans(n_clusters=3, random_state=42, n_init=10).fit(Xk)
+c_sil = float(silhouette_score(Xk, km_g.labels_))`,
           },
         ],
       },
