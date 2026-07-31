@@ -25,6 +25,9 @@
   읽고, 반복 후에 추가한다.**
 - [`animation-techniques.md`](animation-techniques.md) — 사람 애니메이터의
   기법(pose-to-pose·타이밍 차트·리미티드 등)과 AI 파이프라인 적용법.
+- [`pose-conditioning.md`](pose-conditioning.md) — 스켈레톤 조건화
+  (Kling·바이트댄스 계열). **포즈 준수·프레임 튐의 구조적 해법**과
+  그리드 단일 호출 전략, 게이트 방식 로드맵.
 - **CLI** — `_infra/emoticon.mjs` (+ `emoticon-ai.mjs` 프로바이더,
   `apng.mjs` 인코더). 페이지가 아니라 CLI가 본체다. **API 키는 로컬 env로만
   쓰고 리포·워커에 절대 넣지 않는다** (리포는 public).
