@@ -685,6 +685,12 @@ const PACKS = [];
 const PACK_IDS = new Map();
 const RECENT_KEY = "duri:recent-stickers";
 const PACKS_CACHE_KEY = "duri:packs";
+// assets 카탈로그에서 비공개(active:false)로 내린 뒤에도 duri에서만 계속 쓰는 팩.
+// 파일은 dist/_assets/sticker/ 에 그대로 배포되므로 목록만 여기서 보강한다.
+const DURI_ONLY_PACKS = [
+  { id: "dageudangseu-1", title: "다그당스1", count: 16, cutout: true },
+  { id: "dageudangseu-2", title: "다그당스2", count: 16, cutout: true },
+];
 
 function setPacks(list) {
   PACKS.length = 0; PACK_IDS.clear();
@@ -710,8 +716,12 @@ async function loadPacks() {
       if (item.category !== "sticker" || !item.chat?.title || !Array.isArray(item.downloads)) continue;
       fresh.push({ id: item.id, title: item.chat.title, count: item.downloads.length, cutout: item.chat.cutout !== false });
     }
-    setPacks(fresh);
-    try { localStorage.setItem(PACKS_CACHE_KEY, JSON.stringify(fresh)); } catch { /* 최선노력 */ }
+    const merged = [
+      ...DURI_ONLY_PACKS.filter((p) => !fresh.some((f) => f.id === p.id)),
+      ...fresh,
+    ];
+    setPacks(merged);
+    try { localStorage.setItem(PACKS_CACHE_KEY, JSON.stringify(merged)); } catch { /* 최선노력 */ }
   } catch { /* 카탈로그 없이도 텍스트·사진은 동작 — 캐시가 있으면 그걸로 계속 동작 */ }
 }
 
