@@ -351,7 +351,9 @@ const USAGE =
   '  build  <작업폴더> <컷id> [--size 360] [--fps N] [--line]\n' +
   '  check  <작업폴더> <컷id>\n' +
   '작업폴더 권장 위치: _src/emoticon/<캐릭터명> (배포·커밋 제외)\n' +
-  'env: GEMINI_API_KEY (필수) · EMOTICON_IMAGE_PROVIDER=gemini|mock · EMOTICON_IMAGE_MODEL';
+  'env: EMOTICON_IMAGE_PROVIDER=edge(기본)|gemini|mock\n' +
+  '  edge:   EMOTICON_EDGE_TOKEN=<work 마스터 비밀번호> (키는 GEMINI_STICKER_KEY Worker secret)\n' +
+  '  gemini: GEMINI_API_KEY 또는 EMOTICON_IMAGE_API_KEY (로컬 직접 호출)';
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { positional, options } = parseArgs(process.argv.slice(2));

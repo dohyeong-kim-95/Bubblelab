@@ -1,75 +1,56 @@
-// 움직이는 이모티콘 이미지 생성 AI 계층 (work/emoticon 툴).
-// podcast-ai.js와 같은 방식으로 프로바이더를 env로 교체한다:
-//   EMOTICON_IMAGE_PROVIDER  "gemini"(기본) | "mock"
-//   EMOTICON_IMAGE_MODEL     기본 gemini-2.5-flash-image (Nano Banana)
-//   EMOTICON_IMAGE_API_KEY   (없으면 GEMINI_API_KEY로 폴백)
-// mock은 API 키 없이 파이프라인 전체를 검증하기 위한 합성 이미지 생성기다
-// (테스트와 드라이런 전용 — 실제 산출물 품질과 무관).
+// 움직이는 이모티콘 이미지 생성 AI 계층 (work/emoticon 툴, CLI 전용 — Worker는
+// emoticon-gen.js만 임포트한다). 프로바이더는 env로 교체:
+//   EMOTICON_IMAGE_PROVIDER  "edge"(기본) | "gemini" | "mock"
+//   edge   — 배포된 워커 프록시(/_emoticon/generate) 경유. API 키가 Worker
+//            secret(GEMINI_STICKER_KEY)에만 있을 때 쓴다.
+//            EMOTICON_EDGE_TOKEN (work 마스터 비밀번호, 필수)
+//            EMOTICON_EDGE_URL   (기본 https://work.bubblelab.dev/_emoticon/generate)
+//   gemini — Gemini API 직접 호출. EMOTICON_IMAGE_API_KEY 또는 GEMINI_API_KEY.
+//            EMOTICON_IMAGE_MODEL (기본 gemini-2.5-flash-image)
+//   mock   — API 키 없이 파이프라인 전체를 검증하는 합성 이미지 생성기
+//            (테스트·드라이런 전용, 실제 산출물 품질과 무관).
 import { encodePng } from "./png.mjs";
+import { bytesToBase64, DEFAULT_IMAGE_MODEL, geminiGenerate } from "./emoticon-gen.js";
 
-const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
-export const DEFAULT_IMAGE_MODEL = "gemini-2.5-flash-image";
-
-function apiKey(env) {
-  return env.EMOTICON_IMAGE_API_KEY || env.GEMINI_API_KEY || "";
-}
-
-function toBase64(bytes) {
-  return Buffer.from(bytes).toString("base64");
-}
-
-async function fetchWithRetry(url, init, label, retries = 3) {
-  for (let attempt = 0; ; attempt++) {
-    const res = await fetch(url, init);
-    if (res.ok) return res;
-    const body = await res.text().catch(() => "");
-    const retryable = res.status === 429 || res.status >= 500;
-    if (!retryable || attempt >= retries) {
-      throw new Error(`${label} 실패 (${res.status}): ${body.slice(0, 300)}`);
-    }
-    await new Promise((r) => setTimeout(r, 2000 * 2 ** attempt));
-  }
-}
+export { DEFAULT_IMAGE_MODEL };
+const DEFAULT_EDGE_URL = "https://work.bubblelab.dev/_emoticon/generate";
 
 // 프로바이더 인터페이스: generate({ prompt, references }) → 이미지 바이트(Uint8Array).
 // references는 PNG/JPEG 바이트 배열 — 캐릭터 시트·이전 프레임을 넣어 일관성을 지킨다.
 export function imageProvider(env = process.env) {
-  const provider = env.EMOTICON_IMAGE_PROVIDER || "gemini";
-  const model = env.EMOTICON_IMAGE_MODEL || DEFAULT_IMAGE_MODEL;
+  const provider = env.EMOTICON_IMAGE_PROVIDER || "edge";
 
   if (provider === "mock") return mockProvider();
 
   if (provider === "gemini") {
+    const model = env.EMOTICON_IMAGE_MODEL || DEFAULT_IMAGE_MODEL;
     return {
       name: `gemini/${model}`,
       async generate({ prompt, references = [] }) {
-        const key = apiKey(env);
-        if (!key) throw new Error("GEMINI_API_KEY(또는 EMOTICON_IMAGE_API_KEY)가 설정되지 않았습니다");
-        const parts = [
-          ...references.map((bytes) => ({
-            inlineData: { mimeType: bytes[0] === 0xff ? "image/jpeg" : "image/png", data: toBase64(bytes) },
-          })),
-          { text: prompt },
-        ];
-        const res = await fetchWithRetry(
-          `${GEMINI_BASE}/models/${model}:generateContent`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-            body: JSON.stringify({
-              contents: [{ parts }],
-              generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
-            }),
-          },
-          `gemini image(${model})`,
-        );
-        const json = await res.json();
-        const image = json.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data);
-        if (!image) {
-          const text = json.candidates?.[0]?.content?.parts?.map((p) => p.text).join(" ") ?? "";
-          throw new Error(`gemini image(${model})가 이미지를 반환하지 않았습니다: ${text.slice(0, 200)}`);
+        const apiKey = env.EMOTICON_IMAGE_API_KEY || env.GEMINI_API_KEY;
+        if (!apiKey) throw new Error("GEMINI_API_KEY(또는 EMOTICON_IMAGE_API_KEY)가 설정되지 않았습니다");
+        return geminiGenerate({ apiKey, model, prompt, referencesB64: references.map(bytesToBase64) });
+      },
+    };
+  }
+
+  if (provider === "edge") {
+    const url = env.EMOTICON_EDGE_URL || DEFAULT_EDGE_URL;
+    return {
+      name: `edge(${new URL(url).hostname})`,
+      async generate({ prompt, references = [] }) {
+        const token = env.EMOTICON_EDGE_TOKEN;
+        if (!token) throw new Error("EMOTICON_EDGE_TOKEN(work 마스터 비밀번호)이 설정되지 않았습니다");
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ prompt, references: references.map(bytesToBase64) }),
+        });
+        if (!res.ok) {
+          const body = await res.text().catch(() => "");
+          throw new Error(`edge 생성 실패 (${res.status}): ${body.slice(0, 300)}`);
         }
-        return new Uint8Array(Buffer.from(image.inlineData.data, "base64"));
+        return new Uint8Array(await res.arrayBuffer());
       },
     };
   }

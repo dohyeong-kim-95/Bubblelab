@@ -8,7 +8,9 @@ import { fileURLToPath } from "node:url";
 import { decodePng } from "./png.mjs";
 import { encodeApng, inspectApng } from "./apng.mjs";
 import { imageProvider } from "./emoticon-ai.mjs";
+import { bytesToBase64 } from "./emoticon-gen.js";
 import { chromaKeyGreen, fitFrames, loopDiff, resize, transparencyRatio, unionBounds } from "./emoticon.mjs";
+import worker from "./worker.js";
 
 const INFRA = dirname(fileURLToPath(import.meta.url));
 const CLI = join(INFRA, "emoticon.mjs");
@@ -124,6 +126,89 @@ test("CLI E2E (mock): sheet → cut → build --line → check", () => {
   } finally {
     rmSync(workdir, { recursive: true, force: true });
   }
+});
+
+const ctx = { waitUntil() {} };
+const generateRequest = (init = {}) =>
+  new Request("https://work.bubblelab.dev/_emoticon/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...init.headers },
+    body: JSON.stringify(init.payload ?? { prompt: "테스트", references: [] }),
+  });
+
+test("/_emoticon/generate: 키·비밀번호 없으면 503, 인증 없거나 틀리면 401", async () => {
+  const closed = await worker.fetch(generateRequest(), {}, ctx);
+  assert.equal(closed.status, 503);
+
+  const env = { WORK_PASSWORD: "master-pw", GEMINI_STICKER_KEY: "sk" };
+  const anonymous = await worker.fetch(generateRequest(), env, ctx);
+  assert.equal(anonymous.status, 401);
+  const wrong = await worker.fetch(
+    generateRequest({ headers: { Authorization: "Bearer nope" } }), env, ctx,
+  );
+  assert.equal(wrong.status, 401);
+});
+
+test("/_emoticon/generate: 마스터 인증 시 Gemini를 대신 호출해 이미지를 돌려준다", async () => {
+  const env = { WORK_PASSWORD: "master-pw", GEMINI_STICKER_KEY: "sk" };
+  const auth = { Authorization: "Bearer master-pw" };
+
+  const invalid = await worker.fetch(
+    generateRequest({ headers: auth, payload: { prompt: "" } }), env, ctx,
+  );
+  assert.equal(invalid.status, 400);
+
+  const image = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+  const seen = {};
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    seen.url = String(url);
+    seen.body = JSON.parse(init.body);
+    seen.key = init.headers["x-goog-api-key"];
+    return new Response(JSON.stringify({
+      candidates: [{ content: { parts: [{ inlineData: { data: bytesToBase64(image) } }] } }],
+    }), { status: 200 });
+  };
+  try {
+    const res = await worker.fetch(
+      generateRequest({ headers: auth, payload: { prompt: "캐릭터", references: [bytesToBase64(image)] } }),
+      env, ctx,
+    );
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get("Content-Type"), "image/png");
+    assert.deepEqual(new Uint8Array(await res.arrayBuffer()), image);
+    assert.equal(seen.key, "sk");                              // Worker secret이 쓰였다
+    assert.match(seen.url, /gemini-2\.5-flash-image:generateContent/);
+    assert.equal(seen.body.contents[0].parts.length, 2);       // 레퍼런스 1 + 프롬프트
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test("edge provider: Bearer 토큰으로 프록시를 호출하고 바이트를 돌려받는다", async () => {
+  const provider = imageProvider({ EMOTICON_IMAGE_PROVIDER: "edge", EMOTICON_EDGE_TOKEN: "master-pw" });
+  const image = new Uint8Array([1, 2, 3, 4]);
+  const seen = {};
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    seen.url = String(url);
+    seen.auth = init.headers.Authorization;
+    seen.body = JSON.parse(init.body);
+    return new Response(image, { status: 200 });
+  };
+  try {
+    const bytes = await provider.generate({ prompt: "x", references: [new Uint8Array([9])] });
+    assert.deepEqual(bytes, image);
+    assert.equal(seen.url, "https://work.bubblelab.dev/_emoticon/generate");
+    assert.equal(seen.auth, "Bearer master-pw");
+    assert.equal(seen.body.references.length, 1);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  await assert.rejects(
+    imageProvider({ EMOTICON_IMAGE_PROVIDER: "edge" }).generate({ prompt: "x" }),
+    /EMOTICON_EDGE_TOKEN/,
+  );
 });
 
 test("CLI: 시트 없이 cut은 실패, 잘못된 명령은 usage 안내", () => {

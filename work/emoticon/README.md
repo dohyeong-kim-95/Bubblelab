@@ -33,7 +33,9 @@
 작업폴더는 `_src/emoticon/<캐릭터명>/` — 배포·커밋 모두 제외된다(.gitignore).
 
 ```bash
-export GEMINI_API_KEY=...   # 필수 (Google AI Studio)
+# 기본(edge): 배포 워커의 /_emoticon/generate 프록시 경유 —
+# Gemini 키는 GEMINI_STICKER_KEY Worker secret에만 있고 밖으로 나오지 않는다.
+export EMOTICON_EDGE_TOKEN=...   # work 마스터 비밀번호(WORK_PASSWORD)
 
 # ① 캐릭터 시트 — 마음에 들 때까지 --force로 재생성 (이후 모든 생성의 축)
 node _infra/emoticon.mjs sheet _src/emoticon/토끼 --prompt "동그란 흰 토끼, 분홍 볼"
@@ -54,13 +56,18 @@ node _infra/emoticon.mjs check _src/emoticon/토끼 hello
 검증이 자동으로 돈다. 키 없이 파이프라인만 돌려보려면
 `EMOTICON_IMAGE_PROVIDER=mock`. 테스트: `node --test _infra/emoticon.test.mjs`.
 
-### 필요한 API 키
+### 필요한 키
 
-| env | 용도 | 상태 |
+| 키 | 위치 | 용도 |
 |---|---|---|
-| `GEMINI_API_KEY` | 시트·프레임 이미지 생성 (`gemini-2.5-flash-image`, $0.039/장) | **필수** |
-| `EMOTICON_IMAGE_MODEL` / `EMOTICON_IMAGE_API_KEY` | 모델·키 교체용 | 선택 |
-| Kling/Runway 등 I2V | 히어로 컷용 영상 생성 — CLI 미연동, `import`로 수동 반입 | 선택(추후) |
+| `GEMINI_STICKER_KEY` | **Worker secret** | 엣지 프록시(`/_emoticon/generate`)가 쓰는 Gemini 키 (`gemini-2.5-flash-image`, $0.039/장). `npx wrangler secret put GEMINI_STICKER_KEY` — podcast의 `GEMINI_API_KEY`와 별도 |
+| `EMOTICON_EDGE_TOKEN` | 로컬 env | 프록시 인증 = work 마스터 비밀번호 (edge 프로바이더 필수) |
+| `GEMINI_API_KEY` | 로컬 env | `EMOTICON_IMAGE_PROVIDER=gemini`로 API 직접 호출할 때의 대안 경로 |
+| Kling/Runway 등 I2V | — | 히어로 컷용 영상 생성 — CLI 미연동, `import`로 수동 반입 (추후) |
+
+프록시는 work 마스터만 통과(비밀번호 Bearer 또는 마스터 세션 쿠키),
+60회/10분 레이트리밋, `GEMINI_STICKER_KEY`·`WORK_PASSWORD` 미설정이면
+503(fail-closed). 호출당 과금이므로 Google 콘솔 예산 한도도 걸어둘 것.
 
 ## 로드맵
 

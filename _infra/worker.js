@@ -16,6 +16,7 @@ import { handleEstateDeals } from "./estate.js";
 import { serveAssetDownload, serveAssetDownloadCounts } from "./downloads.js";
 import { fetchStoreReviews, REVIEWS_SYNC_VERSION } from "./reviews.js";
 import { DURI_MAX_PHOTO_BYTES } from "./duri.js";
+import { EMOTICON_MAX_BODY, EMOTICON_MAX_PROMPT, EMOTICON_MAX_REFERENCES, geminiGenerate } from "./emoticon-gen.js";
 import {
   applySecurityHeaders,
   consumeRateLimit,
@@ -686,6 +687,7 @@ export async function handleRequest(request, env, ctx) {
       request,
       path === "/_podcast/upload" ? UPLOAD_MAX_BYTES :
       path === "/_duri/photo" ? DURI_MAX_PHOTO_BYTES :
+      path === "/_emoticon/generate" ? EMOTICON_MAX_BODY :
       path === "/_planner/data" ? 600 * 1024 : 64 * 1024,
     );
     if (mutationError) return mutationError;
@@ -1052,6 +1054,67 @@ export async function handleRequest(request, env, ctx) {
           headers: { "Content-Type": "application/json" }, body: await request.text(),
         }),
       });
+    }
+
+    // AI 이모티콘 생성 프록시 (work/emoticon CLI의 edge 프로바이더 전용).
+    // Gemini 키가 GEMINI_STICKER_KEY Worker secret에만 있으므로 엣지가 대신
+    // 호출한다. work 마스터(비밀번호 Bearer 또는 마스터 세션 쿠키)만 쓸 수
+    // 있고, 키·비밀번호 미설정이면 fail-closed. 키는 응답에 노출되지 않는다.
+    if (path === "/_emoticon/generate") {
+      if (!env.WORK_PASSWORD || !env.GEMINI_STICKER_KEY) {
+        return new Response("emoticon generator is not configured", {
+          status: 503, headers: { "Cache-Control": "no-store" },
+        });
+      }
+      if (request.method !== "POST") {
+        return new Response("method not allowed", { status: 405, headers: { Allow: "POST" } });
+      }
+      const contentTypeError = requireJsonRequest(request);
+      if (contentTypeError) return contentTypeError;
+      const key = await workKeyOf(env);
+      const bearer = (request.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
+      const master = bearer
+        ? await matchesCredential(key, bearer, env.WORK_PASSWORD)
+        : (await workSessionClient(key, cookies(request).bl_work)) === "*";
+      if (!master) {
+        return Response.json({ error: "authentication required" }, {
+          status: 401, headers: { "Cache-Control": "no-store" },
+        });
+      }
+      // 호출당 과금이므로 마스터 인증 뒤에도 폭주를 막는다 (60회/10분 ≈ 컷 5개)
+      const limited = await enforceRateLimit(request, env, {
+        scope: "emoticon-generate", limit: 60, windowMs: 10 * 60 * 1000,
+      });
+      if (limited) return limited;
+      let payload;
+      try { payload = await request.json(); } catch {
+        return Response.json({ error: "invalid json" }, { status: 400 });
+      }
+      const prompt = String(payload?.prompt ?? "").trim();
+      const references = Array.isArray(payload?.references) ? payload.references : [];
+      if (!prompt || prompt.length > EMOTICON_MAX_PROMPT
+        || references.length > EMOTICON_MAX_REFERENCES
+        || references.some((r) => typeof r !== "string" || !/^[A-Za-z0-9+/=]+$/.test(r))) {
+        return Response.json({ error: "invalid payload" }, { status: 400 });
+      }
+      try {
+        const bytes = await geminiGenerate({
+          apiKey: env.GEMINI_STICKER_KEY,
+          model: env.EMOTICON_IMAGE_MODEL || undefined,
+          prompt,
+          referencesB64: references,
+        });
+        return new Response(bytes, {
+          headers: {
+            "Content-Type": bytes[0] === 0xff ? "image/jpeg" : "image/png",
+            "Cache-Control": "no-store",
+          },
+        });
+      } catch (error) {
+        return Response.json({ error: String(error?.message ?? error) }, {
+          status: 502, headers: { "Cache-Control": "no-store" },
+        });
+      }
     }
 
     // 외주 프로젝트 상품 리뷰(읽기 전용): 커머스 API에서 동기화된 캐시를 노출.
