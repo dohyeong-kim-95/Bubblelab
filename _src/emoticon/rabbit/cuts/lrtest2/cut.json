@@ -1,0 +1,11 @@
+{
+  "motion": "좌우 판별 검증용 — 캐릭터 오른팔만 위 / 왼팔만 위 / 양팔 위 / 차렷",
+  "fps": 4,
+  "mode": "skeleton",
+  "sequence": "lr-test",
+  "grid": false,
+  "characterRef": "_src/emoticon/rabbit/cuts/nod/frames-raw/key-1.png",
+  "frames": 4,
+  "provider": "gemini/gemini-2.5-flash-image",
+  "createdAt": "2026-07-31"
+}

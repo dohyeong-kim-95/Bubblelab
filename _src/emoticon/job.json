@@ -1,8 +1,0 @@
-{
-  "character": "rabbit",
-  "step": "cut",
-  "cut_id": "lrtest2",
-  "skeletons": "_src/emoticon/poses/lr-test.json",
-  "ref": "_src/emoticon/rabbit/cuts/nod/frames-raw/key-1.png",
-  "fps": "4"
-}
