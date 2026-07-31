@@ -173,7 +173,14 @@ test("CLI E2E (mock): sheet → cut → build --line → check", () => {
 
 test("CLI 게이트: plan·예산 상한·provenance·resume·force 정리", () => {
   const workdir = mkdtempSync(join(tmpdir(), "emoticon-gates-"));
-  const env = { ...process.env, EMOTICON_IMAGE_PROVIDER: "mock", BUBBLELAB_COMMIT: "test-commit" };
+  // gitCommit은 GITHUB_SHA를 먼저 본다. Actions에는 그 값이 항상 있으므로
+  // 비워서 BUBBLELAB_COMMIT으로 떨어지게 해야 로컬·CI 결과가 같다.
+  const env = {
+    ...process.env,
+    EMOTICON_IMAGE_PROVIDER: "mock",
+    GITHUB_SHA: "",
+    BUBBLELAB_COMMIT: "test-commit",
+  };
   const run = (...args) => execFileSync(process.execPath, [CLI, ...args], { env, encoding: "utf8" });
   const cutDir = join(workdir, "cuts", "wave");
   try {
