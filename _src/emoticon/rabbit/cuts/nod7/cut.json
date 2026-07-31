@@ -1,0 +1,117 @@
+{
+  "schemaVersion": 2,
+  "cliVersion": 2,
+  "promptVersion": "2026-07-keys-v1",
+  "mode": "keys",
+  "specHash": "fe1aca7de1e58d40f62d2a95bf388c4d5891a4cab89541e34b0a03dafc0ffd74",
+  "sheetHash": "b9692d48a1a77ec19249b8cb0f9f86e7cf358cf605dc9902b31219340aaffcc9",
+  "referenceHashes": [
+    "b9692d48a1a77ec19249b8cb0f9f86e7cf358cf605dc9902b31219340aaffcc9"
+  ],
+  "provider": "gemini/gemini-2.5-flash-image",
+  "status": "complete",
+  "createdAt": "2026-07-31T15:09:11.954Z",
+  "updatedAt": "2026-07-31T15:09:44.797Z",
+  "completedAt": "2026-07-31T15:09:44.797Z",
+  "calls": 4,
+  "unitCostUsd": 0.039,
+  "estimatedCostUsd": 0.156,
+  "runs": [
+    {
+      "runId": "2a029509-6359-4ae2-992c-01a9ae8fb97e",
+      "startedAt": "2026-07-31T15:09:11.954Z",
+      "provider": "gemini/gemini-2.5-flash-image",
+      "gitCommit": "b14eaa4e097af41d8e33c7a2cf85ce9c651054b8",
+      "calls": 4,
+      "estimatedCostUsd": 0.156,
+      "status": "complete",
+      "completedAt": "2026-07-31T15:09:44.797Z"
+    }
+  ],
+  "motion": "bobbing the head down in a happy nod",
+  "fps": 12,
+  "keys": [
+    {
+      "pose": "standing upright and facing the viewer, the head held high, eyes open, a gentle closed-mouth smile",
+      "hold": 4
+    },
+    {
+      "pose": "the head sinks down into the shoulders so the tips of the ears are 0.85 times as high above the feet as before, and the chin comes close to the chest; the body settles and is 1.06 times as wide, its volume preserved; the eyes close into happy upward arcs; a small open smile",
+      "hold": 2
+    }
+  ],
+  "breakdowns": 1,
+  "assembly": "pingpong",
+  "invariants": "two long upright ears whose bases sit on top of the head, two eyes, one mouth, two short arms, two feet; the paws are the same plain white surface as the body; two pink oval inner ears; two round pink cheek blushes; the canvas holds only this one character",
+  "poseConstants": "both ears keep their full length and their bases stay on top of the head, pointing upward; each short arm is a small rounded nub on the outer edge of the body silhouette, level with the middle of the belly; both feet stay planted on the same baseline",
+  "repeat": 3,
+  "characterRef": "_src/emoticon/rabbit/cuts/nod/frames-raw/key-1.png",
+  "frames": 3,
+  "sequence": [
+    {
+      "type": "key",
+      "key": 0
+    },
+    {
+      "type": "bd",
+      "pair": [
+        0,
+        1
+      ]
+    },
+    {
+      "type": "key",
+      "key": 1
+    }
+  ],
+  "timeline": [
+    {
+      "frame": 0,
+      "delayMs": 333
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 2,
+      "delayMs": 167
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 0,
+      "delayMs": 333
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 2,
+      "delayMs": 167
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 0,
+      "delayMs": 333
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 2,
+      "delayMs": 167
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    }
+  ]
+}
