@@ -70,7 +70,12 @@ node _infra/emoticon.mjs sheet _src/emoticon/토끼 --prompt "동그란 흰 토�
 
 # ② 컷 생성 (권장: pose-to-pose) — 키 포즈 → 브레이크다운 → 핑퐁·홀드 조립
 #    spec: {"motion":"…","keys":[{"pose":"…","hold":2},…],"breakdowns":1,"assembly":"pingpong"}
+node _infra/emoticon.mjs plan _src/emoticon/토끼 nod --keys nod-keys.json --fps 12 --max-calls 8 --max-cost 0.32
 node _infra/emoticon.mjs cut _src/emoticon/토끼 nod --keys nod-keys.json --fps 12
+
+# 중단 뒤에는 입력 해시가 같은 raw만 재사용한다. 사라지거나 깨진 장만 다시 호출한다.
+node _infra/emoticon.mjs plan _src/emoticon/토끼 nod --keys nod-keys.json --fps 12 --resume
+node _infra/emoticon.mjs cut _src/emoticon/토끼 nod --keys nod-keys.json --fps 12 --resume --max-calls 2
 
 # ②' 순차 생성 (구식 — 프레임 간 튐이 크다, lesson_learned §12)
 node _infra/emoticon.mjs cut _src/emoticon/토끼 hello --motion "손 흔들며 인사" --frames 12 --fps 12
@@ -90,6 +95,16 @@ node _infra/emoticon.mjs redo _src/emoticon/토끼 nod 2 && node _infra/emoticon
 프레임별 트리밍 없이 컷 전체 공통 경계로 잘라 떨림을 막고, 루프 diff·투명도
 검증이 자동으로 돈다. 키 없이 파이프라인만 돌려보려면
 `EMOTICON_IMAGE_PROVIDER=mock`. 테스트: `node --test _infra/emoticon.test.mjs`.
+
+`plan`은 파일 생성이나 API 호출 없이 총 호출 수, 재사용 가능한 원본 수, 예상
+비용과 출력 시간을 계산한다. `--max-calls`와 `--max-cost`는 생성 전에 계획을
+검사하고 실행 중 자동 재시도에도 같은 상한을 적용한다. 생성 파일과 `cut.json`은
+임시 파일을 같은 디렉터리에 완전히 쓴 뒤 rename하는 방식으로 교체된다.
+
+`cut.json` schema v2에는 CLI·프롬프트 버전, 입력 spec·시트·레퍼런스 SHA-256,
+프로바이더, 커밋 SHA, 실행별 시작·완료 시각, 상태, 누적 호출 수와 비용 추정치가
+남는다. `--resume`은 이 provenance가 현재 입력과 일치하지 않으면 거부하고,
+`--force`는 기존 컷 디렉터리를 통째로 교체해 오래된 프레임을 남기지 않는다.
 
 ### 필요한 키
 
