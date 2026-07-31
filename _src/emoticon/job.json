@@ -1,0 +1,27 @@
+{
+  "character": "rabbit",
+  "step": "cut",
+  "cut_id": "nod8",
+  "prompt": "nodding: the face is drawn low on the head, then high again",
+  "assembly": "pingpong",
+  "breakdowns": 2,
+  "repeat": 2,
+  "fps": "12",
+  "profile": "master-2s",
+  "ref": "_src/emoticon/rabbit/cuts/nod/frames-raw/key-1.png",
+  "max_calls": "6",
+  "max_cost": "0.30",
+  "invariants": "two long upright ears whose bases sit on top of the head, two eyes, one mouth, two short arms, two feet; the paws are the same plain white surface as the body; two pink oval inner ears; two round pink cheek blushes; the canvas holds only this one character",
+  "poseConstants": "the head outline, the body and the feet are drawn at the same place and the same size as Image 1; each short arm is a small rounded nub on the outer edge of the body silhouette, level with the middle of the belly; the character faces the viewer straight on and both sides of the head stay level with each other",
+  "breakdownNote": "The ears lag behind the head: they are still close to where Image 2 has them, about one quarter of the way toward Image 3, and they lean back.",
+  "keys": [
+    {
+      "pose": "the eyes, nose and mouth are drawn in the middle of the head circle exactly as in Image 1, the eyes open and round, a gentle closed-mouth smile, both ears standing straight up",
+      "hold": 6
+    },
+    {
+      "pose": "the eyes, nose and mouth are drawn low on the head circle, one third of the head's radius lower than in Image 1, so the forehead above the eyes is twice as tall as before and the crown of the head reads as a wide empty dome; the eyes, nose and mouth line up along a downward-bowing arc; the eyes are closed into happy upward arcs and the mouth is a small open smile close to the bottom edge of the head; the ear bases stay near the top of the head circle and sit only one quarter as low as the eyes, and both ears lean back about 10 degrees while keeping their full length",
+      "hold": 2
+    }
+  ]
+}

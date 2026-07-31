@@ -111,7 +111,7 @@ export function keyPrompt({ motion, index, total, pose, constants = "", canon })
 // constants는 두 키에서 **똑같이 참인 포즈 사실**이다. "A와 B의 중간"만으로는
 // 사양이 약해서, 두 키 어디에도 없는 형태를 브레이크다운이 지어낸다 —
 // 실측(nod6): 두 키 모두 귀가 서 있는데 브레이크다운만 처진 귀를 그렸다.
-export function breakdownPrompt({ motion, poseA, poseB, constants = "", canon, percent = 50 }) {
+export function breakdownPrompt({ motion, poseA, poseB, constants = "", note = "", canon, percent = 50 }) {
   return assertPromptRules([
     "Draw the in-between frame between Image 2 and Image 3.",
     "",
@@ -121,6 +121,8 @@ export function breakdownPrompt({ motion, poseA, poseB, constants = "", canon, p
     `  Image 3 shows: ${poseB}`,
     "  Draw the halfway state between them. Hands and head travel along a natural arc,",
     "  so this frame sits slightly off the straight line between the two.",
+    // 오버래핑 액션은 브레이크다운에서만 참이다 — 키에 쓰면 최하점이 흐려진다.
+    ...(note ? [`  ${note}`] : []),
     ...(constants ? [`  Both Image 2 and Image 3 hold this, and so does this frame: ${constants}`] : []),
     "",
     canon,

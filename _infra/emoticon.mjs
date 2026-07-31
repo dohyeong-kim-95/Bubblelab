@@ -269,8 +269,8 @@ const FRAME_PROMPT = (motion, index, total, pose = "") =>
 const KEY_PROMPT = (motion, index, total, pose, invariants = "", constants = "") =>
   keyPrompt({ motion, index, total, pose, constants, canon: canonBlock({ parts: invariants }) });
 
-const BREAKDOWN_PROMPT = (motion, poseA, poseB, invariants = "", constants = "", percent = 50) =>
-  breakdownPrompt({ motion, poseA, poseB, constants, percent, canon: canonBlock({ parts: invariants }) });
+const BREAKDOWN_PROMPT = (motion, poseA, poseB, invariants = "", constants = "", percent = 50, note = "") =>
+  breakdownPrompt({ motion, poseA, poseB, constants, note, percent, canon: canonBlock({ parts: invariants }) });
 
 // ── 명령 구현 ───────────────────────────────────────────────────────────
 
@@ -494,6 +494,7 @@ async function cmdCutKeys(workdir, cutId, options) {
   if (!["pingpong", "loop"].includes(assembly)) throw new Error('assembly는 "pingpong" 또는 "loop"');
   const invariants = String(spec.invariants ?? "").trim();
   const poseConstants = String(spec.poseConstants ?? "").trim();
+  const breakdownNote = String(spec.breakdownNote ?? "").trim();
   // repeat: 같은 타임라인을 N번 반복한다. 생성 비용은 그대로 두고 길이만 늘리는
   // 리미티드 애니메이션식 재사용 — 2초 안에 여러 번 끄덕이려면 필요하다.
   const repeat = Number(spec.repeat ?? 1);
@@ -507,7 +508,7 @@ async function cmdCutKeys(workdir, cutId, options) {
   for (let i = 0; i < keys.length - 1; i++) pairs.push([i, i + 1]);
   if (assembly === "loop") pairs.push([keys.length - 1, 0]);
   const totalCalls = keys.length + breakdowns * pairs.length;
-  const input = { motion, fps, keys, breakdowns, assembly, invariants, poseConstants, repeat };
+  const input = { motion, fps, keys, breakdowns, assembly, invariants, poseConstants, breakdownNote, repeat };
   const base = provenance("keys", input, [sheet]);
   checkPlanTarget(cutDir, options, base);
   const rawNames = [
@@ -566,7 +567,7 @@ async function cmdCutKeys(workdir, cutId, options) {
       const label = `브레이크다운 ${a + 1}→${b + 1} (${percent}%)`;
       const rawName = bdName(a, b, k, breakdowns);
       const gen = (allowReuse = true) => generateKeyed(
-        BREAKDOWN_PROMPT(motion, keys[a].pose.trim(), keys[b].pose.trim(), invariants, poseConstants, percent),
+        BREAKDOWN_PROMPT(motion, keys[a].pose.trim(), keys[b].pose.trim(), invariants, poseConstants, percent, breakdownNote),
         [sheet, keyRaw[a], keyRaw[b]], label, rawName, allowReuse,
       );
       const midDiff = ({ keyed }) =>
@@ -749,6 +750,7 @@ async function cmdPlan(workdir, cutId, options) {
     if (!["pingpong", "loop"].includes(assembly)) throw new Error('assembly는 "pingpong" 또는 "loop"');
     const invariants = String(spec.invariants ?? "").trim();
     const poseConstants = String(spec.poseConstants ?? "").trim();
+    const breakdownNote = String(spec.breakdownNote ?? "").trim();
     const repeat = Number(spec.repeat ?? 1);
     if (!Number.isInteger(repeat) || repeat < 1 || repeat > 8) throw new Error("repeat은 1~8 정수여야 합니다");
     const fps = Number(options.fps ?? spec.fps ?? 12);
@@ -761,7 +763,7 @@ async function cmdPlan(workdir, cutId, options) {
       ...keys.map((_, i) => `key-${i + 1}.png`),
       ...pairs.flatMap(([a, b]) => Array.from({ length: breakdowns }, (_, k) => bdName(a, b, k, breakdowns))),
     ];
-    const input = { motion, fps, keys, breakdowns, assembly, invariants, poseConstants, repeat };
+    const input = { motion, fps, keys, breakdowns, assembly, invariants, poseConstants, breakdownNote, repeat };
     const base = provenance("keys", input, [sheet]);
     checkPlanTarget(cutDir, options, base);
     let reusable = 0;
@@ -869,7 +871,7 @@ async function cmdRedo(workdir, cutId, frameArg) {
     const percent = bdPercent(slot, of);
     label = `브레이크다운 ${a + 1}→${b + 1} (${percent}%)`;
     rawName = bdName(a, b, slot, of);
-    prompt = BREAKDOWN_PROMPT(meta.motion, meta.keys[a].pose, meta.keys[b].pose, meta.invariants ?? "", meta.poseConstants ?? "", percent);
+    prompt = BREAKDOWN_PROMPT(meta.motion, meta.keys[a].pose, meta.keys[b].pose, meta.invariants ?? "", meta.poseConstants ?? "", percent, meta.breakdownNote ?? "");
     references = [sheet, rawOf(`key-${a + 1}.png`), rawOf(`key-${b + 1}.png`)];
   }
 
