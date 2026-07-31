@@ -642,7 +642,8 @@ async function cmdCutKeys(workdir, cutId, options) {
     }
     unique.forEach((u, i) => atomicWriteFile(join(cutDir, "frames", `${pad2(i + 1)}.png`), encodePng(u.image)));
     finishCutRun(state, "complete", null, {
-      ...input, ...base, frames: unique.length, sequence: sequenceMeta, timeline,
+      ...input, ...base, characterRef: options.ref ?? "sheet.png",
+      frames: unique.length, sequence: sequenceMeta, timeline,
     });
     console.log(`✓ ${cutId} 컷 생성 (유니크 ${unique.length}장 → 타임라인 ${timeline.length}프레임, ${assembly})`);
   } catch (error) {

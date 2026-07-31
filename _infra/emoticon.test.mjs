@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -389,6 +390,40 @@ test("redo: 순차 생성(poses) 컷은 거부한다", () => {
     run("sheet", workdir, "--prompt", "테스트 캐릭터");
     run("cut", workdir, "seq", "--motion", "인사", "--frames", "3", "--fps", "8");
     assert.throws(() => run("redo", workdir, "seq", "1"), /keys 모드 컷만 지원/);
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+// --ref를 plan에만 기록하고 cut.json에 빠뜨려서, 생성은 됐는데 build가
+// sheet.png와 해시를 비교하다 막힌 적이 있다 (wave 컷 1차).
+test("keys --ref: cut.json에 characterRef를 남겨 build가 같은 레퍼런스를 검증한다", () => {
+  const workdir = mkdtempSync(join(tmpdir(), "emoticon-ref-"));
+  const env = { ...process.env, EMOTICON_IMAGE_PROVIDER: "mock" };
+  const run = (...args) => execFileSync(process.execPath, [CLI, ...args], { env, encoding: "utf8" });
+  try {
+    run("sheet", workdir, "--prompt", "테스트 캐릭터");
+    // 시트가 아닌 단일 컷을 레퍼런스로 준다
+    const refPath = join(workdir, "ref.png");
+    run("cut", workdir, "seed", "--motion", "기준", "--frames", "2", "--fps", "8");
+    writeFileSync(refPath, readFileSync(join(workdir, "cuts", "seed", "frames-raw", "01.png")));
+
+    const spec = join(workdir, "keys.json");
+    writeFileSync(spec, JSON.stringify({
+      motion: "끄덕", breakdowns: 1, assembly: "pingpong",
+      keys: [{ pose: "정면", hold: 2 }, { pose: "숙임", hold: 2 }],
+    }));
+    run("cut", workdir, "nod", "--keys", spec, "--fps", "12", "--ref", refPath);
+
+    const meta = JSON.parse(readFileSync(join(workdir, "cuts", "nod", "cut.json"), "utf8"));
+    assert.equal(meta.characterRef, refPath);
+    assert.equal(meta.sheetHash, createHash("sha256").update(readFileSync(refPath)).digest("hex"));
+    run("build", workdir, "nod");   // 레퍼런스 검증을 통과해야 한다
+    assert.ok(existsSync(join(workdir, "out", "nod.png")));
+
+    // 레퍼런스가 바뀌면 build가 막는다
+    writeFileSync(refPath, readFileSync(join(workdir, "sheet.png")));
+    assert.throws(() => run("build", workdir, "nod"), /캐릭터 레퍼런스가 현재 파일과 다릅니다/);
   } finally {
     rmSync(workdir, { recursive: true, force: true });
   }
