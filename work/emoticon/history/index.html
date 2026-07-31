@@ -43,12 +43,16 @@
   .gate.none { color: var(--soft); }
   details.rest > summary { cursor: pointer; color: var(--accent); font-size: .85rem;
                            padding: .5rem 0; margin-top: .6rem; border-top: 1px dashed var(--line); }
+  .band { border: 1px solid #5c4a2f; border-radius: 10px; padding: .2rem .8rem .8rem;
+          margin: .8rem 0 1.2rem; background: rgba(200, 150, 60, .06); }
+  .bandtitle { color: var(--warn); font-size: .9rem; margin: .7rem 0 .2rem; }
+  .bandtitle small { color: var(--soft); font-weight: 400; font-size: .78rem; }
 </style>
 </head>
 <body>
 <main>
   <h1>🎬 이모티콘 히스토리
-    <small><b>게이트 성적순</b>으로 상위 3개만 펼칩니다 (빌드 시점의 <code>_src/emoticon</code> 스냅샷) — <a href="/emoticon/">← 생성 툴로</a><br>공유·전달은 <b>GIF</b>를 쓰세요. APNG는 첫 프레임이 평범한 PNG라 메신저가 재인코딩하면 정지 이미지가 됩니다.</small>
+    <small><b>사람 검수가 필요한 컷이 맨 위</b>, 그 아래는 게이트 성적순 상위 3개만 펼칩니다 (빌드 시점의 <code>_src/emoticon</code> 스냅샷) — <a href="/emoticon/">← 생성 툴로</a><br>공유·전달은 <b>GIF</b>를 쓰세요. APNG는 첫 프레임이 평범한 PNG라 메신저가 재인코딩하면 정지 이미지가 됩니다.</small>
   </h1>
   <div id="list"><p class="status">불러오는 중…</p></div>
 </main>
@@ -116,13 +120,29 @@
   for (const ch of manifest.characters) {
     const section = document.createElement("section");
     const cuts = [...ch.cuts].sort(byGate);
+    // 사람 검수가 필요한 컷을 맨 위로. △ REVIEW는 자동 게이트가 판정을 못 내린
+    // 것이라 정의상 사람이 봐야 하고, 판정 없는 옛 컷도 같이 올린다. 최신순.
+    const needsReview = cuts
+      .filter((c) => !c.gate || c.gate.verdict === "review")
+      .sort((a, b) => String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")) || a.id.localeCompare(b.id));
+    const pinned = new Set(needsReview.map((c) => c.id));
     section.innerHTML = `
       <h2>${ch.id}</h2>
       ${ch.sheetPrompt ? `<p class="prompt">시트 프롬프트: ${ch.sheetPrompt}</p>` : ""}
       ${ch.sheet ? `<img class="sheet" src="${ch.sheet}" alt="${ch.id} 캐릭터 시트">` : '<p class="status">시트 없음</p>'}
     `;
-    for (const cut of cuts.slice(0, TOP)) section.append(renderCut(cut));
-    const rest = cuts.slice(TOP);
+    if (needsReview.length) {
+      const band = document.createElement("div");
+      band.className = "band";
+      band.innerHTML = `<h3 class="bandtitle">사람 검수 필요 · ${needsReview.length}개`
+        + ` <small>자동 게이트가 판정을 못 내린 컷 — 최신순</small></h3>`;
+      for (const cut of needsReview) band.append(renderCut(cut));
+      section.append(band);
+    }
+    // 검수 대기 컷은 이미 위에 있으니 상위 3개에서는 뺀다
+    const ranked = cuts.filter((c) => !pinned.has(c.id));
+    for (const cut of ranked.slice(0, TOP)) section.append(renderCut(cut));
+    const rest = ranked.slice(TOP);
     if (rest.length) {
       const details = document.createElement("details");
       details.className = "rest";
