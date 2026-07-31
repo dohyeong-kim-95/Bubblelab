@@ -29,7 +29,8 @@ import { imageProvider } from "./emoticon-ai.mjs";
 import { cutoutBackground, decodeSheet, sliceGrid } from "./sticker-pack.mjs";
 import { renderGrid, renderPose } from "./skeleton.mjs";
 import { PROFILES, buildReport, formatJudgement, judgeReport } from "./emoticon-gate.mjs";
-import { breakdownPrompt, canonBlock, keyPrompt, sheetPrompt } from "./emoticon-prompt.mjs";
+import { breakdownPrompt, canonBlock, guidedKeyPrompt, keyPrompt, sheetPrompt } from "./emoticon-prompt.mjs";
+import { encodeGuide, nodGuide } from "./emoticon-guide.mjs";
 import { loadSequence } from "./skeleton-cli.mjs";
 import {
   IMAGE_COST_USD,
@@ -268,6 +269,22 @@ const FRAME_PROMPT = (motion, index, total, pose = "") =>
 // (prompting.md §4-1 ③).
 const KEY_PROMPT = (motion, index, total, pose, invariants = "", constants = "") =>
   keyPrompt({ motion, index, total, pose, constants, canon: canonBlock({ parts: invariants }) });
+
+// 가이드 프레임이 있는 키는 텍스트 대신 합성 이미지가 배치를 지시한다.
+const GUIDED_KEY_PROMPT = (motion, index, total, pose, invariants = "", constants = "") =>
+  guidedKeyPrompt({ motion, index, total, pose, constants, canon: canonBlock({ parts: invariants }) });
+
+// 키의 guide 스펙 → 합성 이미지 바이트. 현재 type은 "nod" 하나다.
+function buildGuide(referenceImage, guide) {
+  const type = guide.type ?? "nod";
+  if (type !== "nod") throw new Error(`알 수 없는 guide.type: ${type} (현재 "nod"만 지원)`);
+  const { drop, bow, squash } = guide;
+  return new Uint8Array(encodeGuide(nodGuide(referenceImage, {
+    ...(drop === undefined ? {} : { drop: Number(drop) }),
+    ...(bow === undefined ? {} : { bow: Number(bow) }),
+    ...(squash === undefined ? {} : { squash: Number(squash) }),
+  })));
+}
 
 const BREAKDOWN_PROMPT = (motion, poseA, poseB, invariants = "", constants = "", percent = 50, note = "") =>
   breakdownPrompt({ motion, poseA, poseB, constants, note, percent, canon: canonBlock({ parts: invariants }) });
@@ -549,11 +566,19 @@ async function cmdCutKeys(workdir, cutId, options) {
     // ① 키 포즈 — 시트(+앞선 키)를 레퍼런스로 극단만 생성
     const keyRaw = [];
     const keyImages = [];
+    let sheetImage = null;
     for (let i = 0; i < keys.length; i++) {
-      const references = [sheet, ...(keyRaw.length ? [keyRaw[0]] : []), ...(keyRaw.length > 1 ? [keyRaw[keyRaw.length - 1]] : [])];
+      const guide = keys[i].guide;
+      if (guide) sheetImage ??= await toRgba(sheet);
+      // 가이드가 있으면 [레퍼런스, 합성 배치도] 두 장만 준다 — 다른 키를 섞으면
+      // 모델이 그쪽 배치를 따라가 가이드가 무력해진다 (스타 토폴로지).
+      const references = guide
+        ? [sheet, buildGuide(sheetImage, guide)]
+        : [sheet, ...(keyRaw.length ? [keyRaw[0]] : []), ...(keyRaw.length > 1 ? [keyRaw[keyRaw.length - 1]] : [])];
+      const assemble = guide ? GUIDED_KEY_PROMPT : KEY_PROMPT;
       const { bytes, keyed } = await generateKeyed(
-        KEY_PROMPT(motion, i + 1, keys.length, keys[i].pose.trim(), invariants, poseConstants), references,
-        `키 ${i + 1}`, `key-${i + 1}.png`,
+        assemble(motion, i + 1, keys.length, keys[i].pose.trim(), invariants, poseConstants), references,
+        `키 ${i + 1}${guide ? " (가이드)" : ""}`, `key-${i + 1}.png`,
       );
       keyRaw.push(bytes);
       keyImages.push(keyed);

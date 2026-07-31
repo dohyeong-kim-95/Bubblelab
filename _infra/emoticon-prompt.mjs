@@ -106,6 +106,31 @@ export function keyPrompt({ motion, index, total, pose, constants = "", canon })
   return text;
 }
 
+// 가이드 프레임이 붙은 키. 룰베이스로 합성한 배치도(Image 2)를 같이 주고
+// "설득"이 아니라 "정리"를 시킨다 — 여덟 번의 실측에서 이 모델은 얼굴 부위의
+// 세로 위치를 텍스트로는 바꾸지 못했지만, 이미지로 보여주면 따라 그린다.
+// 합성본은 잘라 붙인 자국이 남아 있으므로 그걸 다듬는 게 이 호출의 일이다.
+export function guidedKeyPrompt({ motion, index, total, pose, constants = "", canon }) {
+  const text = assertPromptRules([
+    "Image 2 is a rough layout guide: it is Image 1 with the face cut out and pasted",
+    "lower on the head. Redraw it as one clean finished drawing.",
+    "",
+    `LAYOUT — copy this from Image 2 exactly (key ${index} of ${total} in "${motion}"):`,
+    "  where the eyes, nose, mouth and cheek blushes sit on the head,",
+    "  and how much empty forehead there is above them",
+    "",
+    "CLEAN UP — Image 2 is a paste-up, so this frame differs from it here:",
+    "  the cut edges and seams are gone, and every shape is closed with the same",
+    "  smooth outline as Image 1",
+    ...(pose ? ["", "POSE — this frame also differs from Image 2 here:", `  ${pose}`] : []),
+    ...(constants ? [`  Throughout "${motion}", in every frame: ${constants}`] : []),
+    "",
+    canon,
+  ].join("\n"), `가이드 키 ${index} 프롬프트`);
+  if (pose) assertPoseScale(pose, `가이드 키 ${index} 포즈`);
+  return text;
+}
+
 // 브레이크다운: 두 키 사이의 중간. 시트·키A·키B 3장이 입력이며
 // gemini-2.5-flash-image의 권장 상한(3장)에 정확히 맞는다.
 // constants는 두 키에서 **똑같이 참인 포즈 사실**이다. "A와 B의 중간"만으로는
