@@ -15,7 +15,7 @@ const CRC_TABLE = new Uint32Array(256).map((_, n) => {
   return c >>> 0;
 });
 
-function crc32(...buffers) {
+export function crc32(...buffers) {
   let c = 0xffffffff;
   for (const buf of buffers) {
     for (const byte of buf) c = CRC_TABLE[(c ^ byte) & 0xff] ^ (c >>> 8);
@@ -135,7 +135,7 @@ export function decodePng(input) {
   return { width, height, data: rgba };
 }
 
-function chunk(type, data) {
+export function chunk(type, data) {
   const head = Buffer.alloc(8);
   head.writeUInt32BE(data.length, 0);
   head.write(type, 4, "latin1");

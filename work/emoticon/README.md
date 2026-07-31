@@ -21,12 +21,46 @@
   움직이는 이모티콘 32개. 모든 작업의 판정 기준.
 - [`SKILL.md`](SKILL.md) — 제작 방법론. 플랫폼 규격, AI 파이프라인, 비용,
   정책 리스크, duri 통합까지. **작업 전 반드시 먼저 읽는다.**
-- 생성 파이프라인(계획)은 페이지가 아니라 **CLI**다 — `_infra/sticker-pack.mjs`
-  계보의 `_infra/emoticon-*.mjs`. **API 키는 로컬 env로만 쓰고 리포·워커에
-  절대 넣지 않는다** (리포는 public, work 게이트는 배포 화면만 가린다).
+- **CLI** — `_infra/emoticon.mjs` (+ `emoticon-ai.mjs` 프로바이더,
+  `apng.mjs` 인코더). 페이지가 아니라 CLI가 본체다. **API 키는 로컬 env로만
+  쓰고 리포·워커에 절대 넣지 않는다** (리포는 public).
 - 페이지(`index.html`)는 이후 단계: 생성된 후보 프레임·루프를 나란히 보고
   선별하는 리뷰 대시보드. work 프로젝트 폴더 규칙 그대로 비공개(마스터
   비밀번호)로 둔다.
+
+## CLI 사용법
+
+작업폴더는 `_src/emoticon/<캐릭터명>/` — 배포·커밋 모두 제외된다(.gitignore).
+
+```bash
+export GEMINI_API_KEY=...   # 필수 (Google AI Studio)
+
+# ① 캐릭터 시트 — 마음에 들 때까지 --force로 재생성 (이후 모든 생성의 축)
+node _infra/emoticon.mjs sheet _src/emoticon/토끼 --prompt "동그란 흰 토끼, 분홍 볼"
+
+# ② 컷 생성 — 초록 배경으로 프레임을 뽑아 자동 크로마키 (컷당 약 $0.5)
+node _infra/emoticon.mjs cut _src/emoticon/토끼 hello --motion "손 흔들며 인사" --frames 12 --fps 12
+
+# ②' 또는 I2V 영상에서 가져오기 (초록 배경으로 생성한 클립)
+#    ffmpeg -i clip.mp4 -vf fps=12 frames/%02d.png
+node _infra/emoticon.mjs import _src/emoticon/토끼 hello frames --chroma
+
+# ③ APNG 굽기 — out/hello.png(360², 카카오·duri) + --line이면 270²·300KB 검증
+node _infra/emoticon.mjs build _src/emoticon/토끼 hello --line
+node _infra/emoticon.mjs check _src/emoticon/토끼 hello
+```
+
+프레임별 트리밍 없이 컷 전체 공통 경계로 잘라 떨림을 막고, 루프 diff·투명도
+검증이 자동으로 돈다. 키 없이 파이프라인만 돌려보려면
+`EMOTICON_IMAGE_PROVIDER=mock`. 테스트: `node --test _infra/emoticon.test.mjs`.
+
+### 필요한 API 키
+
+| env | 용도 | 상태 |
+|---|---|---|
+| `GEMINI_API_KEY` | 시트·프레임 이미지 생성 (`gemini-2.5-flash-image`, $0.039/장) | **필수** |
+| `EMOTICON_IMAGE_MODEL` / `EMOTICON_IMAGE_API_KEY` | 모델·키 교체용 | 선택 |
+| Kling/Runway 등 I2V | 히어로 컷용 영상 생성 — CLI 미연동, `import`로 수동 반입 | 선택(추후) |
 
 ## 로드맵
 

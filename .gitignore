@@ -5,3 +5,4 @@ node_modules/
 .DS_Store
 podcast-preview.json
 podcast-preview.wav
+_src/emoticon/
