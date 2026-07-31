@@ -176,12 +176,13 @@ const SHEET_PROMPT = (desc) =>
   "스타일: 두꺼운 깔끔한 외곽선의 플랫 스티커 일러스트, 순수한 흰색 배경, 텍스트 없음.\n" +
   "이 시트는 이후 모든 프레임 생성의 레퍼런스이므로 색·비율·장식이 명확해야 한다.";
 
-const FRAME_PROMPT = (motion, index, total) =>
+const FRAME_PROMPT = (motion, index, total, pose = "") =>
   `첨부 이미지는 이 캐릭터의 레퍼런스 시트(첫 장)와 직전 프레임들이다. ` +
   `정확히 같은 캐릭터(색·비율·장식 동일)로, "${motion}" 동작의 ${total}프레임 루프 애니메이션 중 ` +
   `프레임 ${index}/${total}을 그려줘.\n` +
+  (pose ? `이 프레임의 포즈(정확히 따를 것): ${pose}\n` : "") +
   "규칙: 마지막 프레임은 첫 프레임으로 자연스럽게 이어지는 루프여야 한다. " +
-  "캐릭터는 캔버스 중앙, 프레임 간 크기와 위치를 유지한다. " +
+  "캐릭터는 캔버스 중앙, 프레임 간 크기와 위치를 유지하고 직전 프레임에서 조금만 움직인다. " +
   "배경은 순수한 흰색 단색, 캐릭터의 외곽선은 끊김 없이 닫혀 있어야 한다. " +
   "그림자·소품·텍스트 등 캐릭터 외 요소 금지.";
 
@@ -218,6 +219,15 @@ async function cmdCut(workdir, cutId, options) {
   if (!existsSync(sheetPath)) throw new Error(`캐릭터 시트가 없습니다 — 먼저: emoticon.mjs sheet ${workdir} --prompt "..."`);
   const cutDir = join(workdir, "cuts", cutId);
   if (existsSync(cutDir) && !options.force) throw new Error(`이미 존재하는 컷입니다: ${cutDir} (덮어쓰려면 --force)`);
+  // 포즈 스크립트(선택): 줄당 1개 = 프레임당 1개. 프레임 간 튐(보일링)을
+  // 줄이는 핵심 수단 — 동작 진행을 프레임 번호가 아니라 포즈 문장으로 고정한다.
+  let poses = null;
+  if (options.poses) {
+    poses = readFileSync(options.poses, "utf8").split("\n").map((l) => l.trim()).filter(Boolean);
+    if (poses.length !== total) {
+      throw new Error(`포즈 스크립트는 프레임 수와 같아야 합니다 (포즈 ${poses.length}줄 ≠ ${total}프레임)`);
+    }
+  }
 
   const provider = imageProvider();
   const sheet = readFileSync(sheetPath);
@@ -227,7 +237,10 @@ async function cmdCut(workdir, cutId, options) {
   const rawFrames = [];
   for (let i = 1; i <= total; i++) {
     const references = [sheet, ...(rawFrames.length ? [rawFrames[0]] : []), ...(rawFrames.length > 1 ? [rawFrames[rawFrames.length - 1]] : [])];
-    const bytes = await provider.generate({ prompt: FRAME_PROMPT(options.motion.trim(), i, total), references });
+    const bytes = await provider.generate({
+      prompt: FRAME_PROMPT(options.motion.trim(), i, total, poses?.[i - 1] ?? ""),
+      references,
+    });
     rawFrames.push(bytes);
     // 원본을 먼저 저장해 실패해도 디버깅 근거가 남게 한다
     writeFileSync(join(cutDir, "frames-raw", `${pad2(i)}.png`), Buffer.from(bytes));
@@ -244,6 +257,7 @@ async function cmdCut(workdir, cutId, options) {
   }
   writeFileSync(join(cutDir, "cut.json"), JSON.stringify({
     motion: options.motion.trim(), frames: total, fps,
+    ...(poses ? { poses } : {}),
     provider: provider.name, createdAt: new Date().toISOString().slice(0, 10),
   }, null, 2) + "\n");
   console.log(`✓ ${cutId} 컷 생성 (${total}프레임) → ${cutDir}`);
@@ -358,7 +372,8 @@ function parseArgs(argv) {
 const USAGE =
   'usage: node _infra/emoticon.mjs <명령> <작업폴더> ...\n' +
   '  sheet  <작업폴더> --prompt "캐릭터 설명" [--force]\n' +
-  '  cut    <작업폴더> <컷id> --motion "동작 설명" [--frames 12] [--fps 12] [--force]\n' +
+  '  cut    <작업폴더> <컷id> --motion "동작 설명" [--frames 12] [--fps 12] [--poses 파일] [--force]\n' +
+  '         (--poses: 줄당 포즈 1개 = 프레임당 1개 — 프레임 간 튐을 줄이는 권장 옵션)\n' +
   '  import <작업폴더> <컷id> <프레임폴더> [--fps 12] [--chroma] [--force]\n' +
   '  build  <작업폴더> <컷id> [--size 360] [--fps N] [--line]\n' +
   '  check  <작업폴더> <컷id>\n' +

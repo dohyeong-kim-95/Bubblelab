@@ -78,6 +78,8 @@
     </div>
     <label for="cut-motion">동작 설명</label>
     <textarea id="cut-motion" placeholder="예: 두 팔을 들고 신나게 손을 흔들며 인사"></textarea>
+    <label for="cut-poses">포즈 스크립트 (선택 — 줄당 1개 = 프레임당 1개, 프레임 간 튐을 크게 줄임)</label>
+    <textarea id="cut-poses" placeholder="예:&#10;양팔을 몸 옆에 두고 정면 미소&#10;오른팔을 어깨 높이까지 올림&#10;…(프레임 수만큼)"></textarea>
     <button id="cut-gen">컷 생성</button>
     <div class="status" id="cut-status"></div>
     <div class="frames" id="cut-frames-view"></div>
@@ -323,12 +325,13 @@ const SHEET_PROMPT = (desc) =>
   "구성: 정면 전신 크게 1개 + 측면·뒷면 작게 + 대표 표정(기쁨/슬픔/화남/놀람) 4개.\n" +
   "스타일: 두꺼운 깔끔한 외곽선의 플랫 스티커 일러스트, 순수한 흰색 배경, 텍스트 없음.\n" +
   "이 시트는 이후 모든 프레임 생성의 레퍼런스이므로 색·비율·장식이 명확해야 한다.";
-const FRAME_PROMPT = (motion, index, total) =>
+const FRAME_PROMPT = (motion, index, total, pose = "") =>
   `첨부 이미지는 이 캐릭터의 레퍼런스 시트(첫 장)와 직전 프레임들이다. ` +
   `정확히 같은 캐릭터(색·비율·장식 동일)로, "${motion}" 동작의 ${total}프레임 루프 애니메이션 중 ` +
   `프레임 ${index}/${total}을 그려줘.\n` +
+  (pose ? `이 프레임의 포즈(정확히 따를 것): ${pose}\n` : "") +
   "규칙: 마지막 프레임은 첫 프레임으로 자연스럽게 이어지는 루프여야 한다. " +
-  "캐릭터는 캔버스 중앙, 프레임 간 크기와 위치를 유지한다. " +
+  "캐릭터는 캔버스 중앙, 프레임 간 크기와 위치를 유지하고 직전 프레임에서 조금만 움직인다. " +
   "배경은 순수한 흰색 단색, 캐릭터의 외곽선은 끊김 없이 닫혀 있어야 한다. " +
   "그림자·소품·텍스트 등 캐릭터 외 요소 금지.";
 
@@ -373,6 +376,8 @@ $("cut-gen").onclick = async () => {
     if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) throw new Error("컷 이름은 영소문자·숫자·하이픈만");
     if (!motion) throw new Error("동작 설명을 입력하세요");
     if (!Number.isInteger(total) || total < 2 || total > MAX_FRAMES) throw new Error(`프레임 수는 2~${MAX_FRAMES}`);
+    const poses = $("cut-poses").value.split("\n").map((l) => l.trim()).filter(Boolean);
+    if (poses.length && poses.length !== total) throw new Error(`포즈 스크립트는 프레임 수와 같아야 합니다 (${poses.length}줄 ≠ ${total})`);
     const sheet = await kv.get("sheet");
     if (!sheet) throw new Error("먼저 ① 캐릭터 시트를 준비하세요");
     $("cut-gen").disabled = true;
@@ -383,7 +388,7 @@ $("cut-gen").onclick = async () => {
     for (let i = 1; i <= total; i++) {
       st.textContent = `프레임 ${i}/${total} 생성 중… (예상 잔여 비용 $${((total - i + 1) * 0.039).toFixed(2)})`;
       const refs = [sheetB64, ...(rawB64.length ? [rawB64[0]] : []), ...(rawB64.length > 1 ? [rawB64[rawB64.length - 1]] : [])];
-      const bytes = await generate(FRAME_PROMPT(motion, i, total), refs);
+      const bytes = await generate(FRAME_PROMPT(motion, i, total, poses[i - 1] ?? ""), refs);
       const keyed = autoCutout(await toImageData(bytes));
       const ratio = transparencyRatio(keyed);
       if (ratio < 0.05) throw new Error(`프레임 ${i} 누끼 실패(투명 ${Math.round(ratio * 100)}%) — 다시 생성하세요`);
