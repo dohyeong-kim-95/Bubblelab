@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 2,
+  "cliVersion": 2,
+  "promptVersion": "2026-07-keys-v1",
+  "mode": "keys",
+  "specHash": "54c23daf54a6afd98bb61954d200bd2c541c2e1659abd911b7cfd85b5cfb5e34",
+  "sheetHash": "b9692d48a1a77ec19249b8cb0f9f86e7cf358cf605dc9902b31219340aaffcc9",
+  "referenceHashes": [
+    "b9692d48a1a77ec19249b8cb0f9f86e7cf358cf605dc9902b31219340aaffcc9"
+  ],
+  "provider": "gemini/gemini-2.5-flash-image",
+  "status": "complete",
+  "createdAt": "2026-07-31T15:55:42.038Z",
+  "updatedAt": "2026-07-31T15:56:14.428Z",
+  "completedAt": "2026-07-31T15:56:14.428Z",
+  "calls": 4,
+  "unitCostUsd": 0.039,
+  "estimatedCostUsd": 0.156,
+  "runs": [
+    {
+      "runId": "290ca6cf-a474-408a-af5a-55e6a54950cf",
+      "startedAt": "2026-07-31T15:55:42.038Z",
+      "provider": "gemini/gemini-2.5-flash-image",
+      "gitCommit": "e65f428a42eb00828a220fd5343d1b348bd5a8ca",
+      "calls": 4,
+      "estimatedCostUsd": 0.156,
+      "status": "complete",
+      "completedAt": "2026-07-31T15:56:14.428Z"
+    }
+  ],
+  "motion": "a happy nod",
+  "fps": 12,
+  "keys": [
+    {
+      "pose": "the eyes are open and round with a gentle closed-mouth smile, both ears standing straight up",
+      "hold": 6
+    },
+    {
+      "pose": "the eyes are half closed and the smile stays closed",
+      "hold": 1,
+      "guide": {
+        "type": "nod",
+        "drop": 0.09
+      }
+    },
+    {
+      "pose": "the eyes are almost closed, thin curved slits, and the mouth begins to open",
+      "hold": 1,
+      "guide": {
+        "type": "nod",
+        "drop": 0.18
+      }
+    },
+    {
+      "pose": "the eyes are closed into happy upward arcs and the mouth is a small open smile",
+      "hold": 2,
+      "guide": {
+        "type": "nod",
+        "drop": 0.26
+      }
+    }
+  ],
+  "breakdowns": 0,
+  "assembly": "pingpong",
+  "invariants": "two long upright ears whose bases sit on top of the head, two eyes, one mouth, two short arms, two feet; two pink oval inner ears; two round pink cheek blushes; the canvas holds only this one character",
+  "poseConstants": "the head outline, the body and the feet are drawn where Image 1 has them; the character faces the viewer straight on and the two ears stay symmetric left and right",
+  "breakdownNote": "",
+  "repeat": 2,
+  "characterRef": "_src/emoticon/rabbit/cuts/nod/frames-raw/key-1.png",
+  "frames": 4,
+  "sequence": [
+    {
+      "type": "key",
+      "key": 0
+    },
+    {
+      "type": "key",
+      "key": 1
+    },
+    {
+      "type": "key",
+      "key": 2
+    },
+    {
+      "type": "key",
+      "key": 3
+    }
+  ],
+  "timeline": [
+    {
+      "frame": 0,
+      "delayMs": 500
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 2,
+      "delayMs": 83
+    },
+    {
+      "frame": 3,
+      "delayMs": 167
+    },
+    {
+      "frame": 2,
+      "delayMs": 83
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 0,
+      "delayMs": 500
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 2,
+      "delayMs": 83
+    },
+    {
+      "frame": 3,
+      "delayMs": 167
+    },
+    {
+      "frame": 2,
+      "delayMs": 83
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    }
+  ]
+}
