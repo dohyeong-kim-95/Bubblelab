@@ -21,6 +21,10 @@
   움직이는 이모티콘 32개. 모든 작업의 판정 기준.
 - [`SKILL.md`](SKILL.md) — 제작 방법론. 플랫폼 규격, AI 파이프라인, 비용,
   정책 리스크, duri 통합까지. **작업 전 반드시 먼저 읽는다.**
+- [`lesson_learned.md`](lesson_learned.md) — 파일럿 실측 교훈. **반복 전에
+  읽고, 반복 후에 추가한다.**
+- [`animation-techniques.md`](animation-techniques.md) — 사람 애니메이터의
+  기법(pose-to-pose·타이밍 차트·리미티드 등)과 AI 파이프라인 적용법.
 - **CLI** — `_infra/emoticon.mjs` (+ `emoticon-ai.mjs` 프로바이더,
   `apng.mjs` 인코더). 페이지가 아니라 CLI가 본체다. **API 키는 로컬 env로만
   쓰고 리포·워커에 절대 넣지 않는다** (리포는 public).
