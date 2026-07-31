@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 2,
+  "cliVersion": 2,
+  "promptVersion": "2026-07-keys-v1",
+  "mode": "keys",
+  "specHash": "ee14e6cd5cbaeb493968a8565d16f1a84d49d49fbf13ad4e430489f4f832f15e",
+  "sheetHash": "b9692d48a1a77ec19249b8cb0f9f86e7cf358cf605dc9902b31219340aaffcc9",
+  "referenceHashes": [
+    "b9692d48a1a77ec19249b8cb0f9f86e7cf358cf605dc9902b31219340aaffcc9"
+  ],
+  "provider": "gemini/gemini-2.5-flash-image",
+  "status": "complete",
+  "createdAt": "2026-07-31T14:08:27.389Z",
+  "updatedAt": "2026-07-31T14:08:50.952Z",
+  "completedAt": "2026-07-31T14:08:50.952Z",
+  "calls": 3,
+  "unitCostUsd": 0.039,
+  "estimatedCostUsd": 0.117,
+  "runs": [
+    {
+      "runId": "3ef9ddf8-9276-4c42-a86a-ea192f31cdf3",
+      "startedAt": "2026-07-31T14:08:27.389Z",
+      "provider": "gemini/gemini-2.5-flash-image",
+      "gitCommit": "076f7d51ed2adcfb9305fc174cccc639ad53ed60",
+      "calls": 3,
+      "estimatedCostUsd": 0.117,
+      "status": "complete",
+      "completedAt": "2026-07-31T14:08:50.952Z"
+    }
+  ],
+  "motion": "bobbing the head down in a happy nod",
+  "fps": 12,
+  "keys": [
+    {
+      "pose": "standing upright facing front, head up and level, both short arms resting down at the sides, gentle closed-mouth smile, eyes open, ears pointing straight up",
+      "hold": 4
+    },
+    {
+      "pose": "the whole head and round body bob straight DOWN as one piece, squashed slightly shorter and wider, still facing the viewer head-on with no sideways tilt and no rotation, both ears flopping forward over the forehead from the downward momentum, eyes closed in happy arcs, small open smile, arms still down at the sides",
+      "hold": 2
+    }
+  ],
+  "breakdowns": 1,
+  "assembly": "pingpong",
+  "invariants": "the character is drawn at exactly the same size and fills the same area of the canvas in every frame; plain white paws with NO paw pads, NO jelly beans and NO toes; exactly two pink oval inner ears; exactly two round pink cheek blushes; both ears stay the same length and shape; no other markings or accessories",
+  "repeat": 3,
+  "characterRef": "_src/emoticon/rabbit/cuts/nod/frames-raw/key-1.png",
+  "frames": 3,
+  "sequence": [
+    {
+      "type": "key",
+      "key": 0
+    },
+    {
+      "type": "bd",
+      "pair": [
+        0,
+        1
+      ]
+    },
+    {
+      "type": "key",
+      "key": 1
+    }
+  ],
+  "timeline": [
+    {
+      "frame": 0,
+      "delayMs": 333
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 2,
+      "delayMs": 167
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 0,
+      "delayMs": 333
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 2,
+      "delayMs": 167
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 0,
+      "delayMs": 333
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 2,
+      "delayMs": 167
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    }
+  ]
+}
