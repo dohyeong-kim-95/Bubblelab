@@ -24,6 +24,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { decodePng, encodePng } from "./png.mjs";
 import { encodeApng, inspectApng } from "./apng.mjs";
+import { encodeGif } from "./gif.mjs";
 import { imageProvider } from "./emoticon-ai.mjs";
 import { cutoutBackground, decodeSheet, sliceGrid } from "./sticker-pack.mjs";
 import { renderGrid, renderPose } from "./skeleton.mjs";
@@ -1006,6 +1007,16 @@ async function cmdBuild(workdir, cutId, options) {
     `${motion.mean < 0.03 ? "⚠ 거의 정지 — 애니메이션으로 읽히지 않습니다" : "(있음)"}`,
   );
   if (duration > 4) console.log("  ⚠ 4초 초과 — LINE 재생시간 상한(4초)을 넘습니다");
+
+  // GIF: 메신저 공유가 실제로 되는 형식이자 카카오 제안 규격(흰 배경 애니 GIF)
+  let gifBytes = null;
+  if (options.gif !== false) {
+    const gif = encodeGif(sequence, { fps, delaysMs });
+    const gifPath = join(outDir, `${cutId}.gif`);
+    atomicWriteFile(gifPath, gif);
+    gifBytes = gif.length;
+    console.log(`✓ ${gifPath} — ${(gif.length / 1024).toFixed(0)}KB (공유·카카오 제안용, 흰 배경)`);
+  }
 
   let lineBytes = null;
   if (options.line) {

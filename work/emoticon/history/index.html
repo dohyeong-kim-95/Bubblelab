@@ -40,7 +40,7 @@
 <body>
 <main>
   <h1>🎬 이모티콘 히스토리
-    <small>지금까지 생성된 시트·컷 전부 (빌드 시점의 <code>_src/emoticon</code> 스냅샷) — <a href="/emoticon/">← 생성 툴로</a></small>
+    <small>지금까지 생성된 시트·컷 전부 (빌드 시점의 <code>_src/emoticon</code> 스냅샷) — <a href="/emoticon/">← 생성 툴로</a><br>공유·전달은 <b>GIF</b>를 쓰세요. APNG는 첫 프레임이 평범한 PNG라 메신저가 재인코딩하면 정지 이미지가 됩니다.</small>
   </h1>
   <div id="list"><p class="status">불러오는 중…</p></div>
 </main>
@@ -83,7 +83,7 @@
         <h3>${cut.id}</h3>
         <p class="meta">${meta}</p>
         <div class="media">
-          ${cut.apng ? `<figure><img class="apng" src="${cut.apng}" alt="${cut.id} APNG"><figcaption><a href="${cut.apng}" download style="color:inherit">${cut.id}.png (360²)</a>${cut.line ? ` · <a href="${cut.line}" download style="color:inherit">LINE 270²</a>` : ""}</figcaption></figure>` : ""}
+          ${cut.apng ? `<figure><img class="apng" src="${cut.apng}" alt="${cut.id} APNG"><figcaption><a href="${cut.apng}" download style="color:inherit">${cut.id}.png (APNG)</a>${cut.gif ? ` · <a href="${cut.gif}" download style="color:inherit"><b>GIF (공유용)</b></a>` : ""}${cut.line ? ` · <a href="${cut.line}" download style="color:inherit">LINE</a>` : ""}</figcaption></figure>` : ""}
           ${cut.grid ? `<a class="grid" href="${cut.grid}" target="_blank" rel="noopener"><img src="${cut.grid}" alt="${cut.id} 프레임 그리드" loading="lazy"></a>` : ""}
         </div>
         ${Array.isArray(cut.poses) && cut.poses.length ? `<details><summary>포즈 스크립트 (${cut.poses.length})</summary><ol>${cut.poses.map((p) => `<li>${p}</li>`).join("")}</ol></details>` : ""}

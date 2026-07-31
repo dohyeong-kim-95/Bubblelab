@@ -69,7 +69,7 @@ export function emitEmoticonHistory(root, dist) {
         try { meta = JSON.parse(readFileSync(join(cutDir, "cut.json"), "utf8")); } catch { /* 메타 없이도 노출 */ }
         const item = { id: cut.name, ...meta };
 
-        for (const [key, file] of [["apng", `${cut.name}.png`], ["line", `${cut.name}-line.png`]]) {
+        for (const [key, file] of [["apng", `${cut.name}.png`], ["gif", `${cut.name}.gif`], ["line", `${cut.name}-line.png`]]) {
           const path = join(charDir, "out", file);
           if (existsSync(path)) {
             copyFileSync(path, join(dataDir, file));
