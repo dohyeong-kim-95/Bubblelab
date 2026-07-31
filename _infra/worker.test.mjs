@@ -67,10 +67,10 @@ test("work preview stays closed without a password and gates access with one", a
   const assets = { fetch: async () => new Response("<p>brand</p>", { headers: { "Content-Type": "text/html" } }) };
   const env = { WORK_PASSWORD: "hunter2", ASSETS: assets };
 
-  // 미인증 → 로그인으로 리다이렉트
+  // 미인증 → 로그인으로 리다이렉트 (목적지를 next로 보존)
   response = await worker.fetch(new Request("https://work.bubblelab.dev/brand/"), env, ctx);
   assert.equal(response.status, 303);
-  assert.equal(response.headers.get("Location"), "/login");
+  assert.equal(response.headers.get("Location"), "/login?next=brand");
 
   // 잘못된 비밀번호 → 401
   let form = new FormData();
@@ -128,7 +128,29 @@ test("work root is public and client sessions are scoped to their project", asyn
   response = await worker.fetch(
     new Request("https://work.bubblelab.dev/other/", { headers: { Cookie: cookie } }), env, ctx);
   assert.equal(response.status, 303);
-  assert.equal(response.headers.get("Location"), "/login");
+  assert.equal(response.headers.get("Location"), "/login?next=other");
+
+  // 접근 못 하는 목적지의 로그인 페이지는 홈으로 튕기지 않고 폼을 보여준다
+  // (예전에는 daonfit 세션이 /emoticon → /login → /daonfit/ 루프로 끌려갔다)
+  response = await worker.fetch(
+    new Request("https://work.bubblelab.dev/login?next=other", { headers: { Cookie: cookie } }), env, ctx);
+  assert.equal(response.status, 200);
+  assert.match(await response.text(), /action="\/login\?next=other"/);
+
+  // next가 자기 프로젝트면 로그인 페이지는 그리로 보낸다
+  response = await worker.fetch(
+    new Request("https://work.bubblelab.dev/login?next=daonfit", { headers: { Cookie: cookie } }), env, ctx);
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get("Location"), "/daonfit/");
+
+  // 마스터로 next 로그인 → 원래 가려던 폴더로
+  const master = new FormData();
+  master.set("id", "whatever");
+  master.set("password", "master");
+  response = await worker.fetch(
+    new Request("https://work.bubblelab.dev/login?next=emoticon", { method: "POST", body: master }), env, ctx);
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get("Location"), "/emoticon/");
 
   // 남의 ID + 남의 비밀번호 조합은 401
   const bad = new FormData();

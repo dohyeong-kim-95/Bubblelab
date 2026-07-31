@@ -55,7 +55,7 @@ ${failed ? '<p class="error">ID 또는 비밀번호가 맞지 않습니다.</p>'
 <button type="submit">로그인</button></form></body></html>`;
 
 // 외주 작업(work.bubblelab.dev) 의뢰 조회 로그인 화면
-const WORK_LOGIN_PAGE = (failed, base) => `<!doctype html><html lang="ko"><head>
+const WORK_LOGIN_PAGE = (failed, base, next = "") => `<!doctype html><html lang="ko"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow"><title>의뢰 조회 — bubblelab works</title><style>
 :root { color-scheme: dark; }
@@ -73,7 +73,7 @@ button { font: inherit; padding: .65rem; border: 0; border-radius: .6rem;
 .error { color: #d05a5a; font-size: .74rem; min-height: 1em; margin: 0; }
 .back { font-size: .74rem; text-align: center; }
 .back a { color: inherit; opacity: .65; }</style></head>
-<body><form method="post" action="${base}/login">
+<body><form method="post" action="${base}/login${next ? `?next=${next}` : ""}">
 <h1>의뢰 조회</h1>
 <p>발급받은 의뢰 ID와 비밀번호를 입력하면 진행 중인 프로젝트를 확인할 수 있습니다.</p>
 <input name="id" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="의뢰 ID" aria-label="의뢰 ID" required autofocus>
@@ -294,6 +294,9 @@ async function handleWork(request, env, url, base = "") {
   const cookieFlags = `Path=/; HttpOnly; SameSite=Strict; Max-Age=86400${url.protocol === "https:" ? "; Secure" : ""}`;
   const htmlHeaders = { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" };
   const homeOf = (grant) => (grant === "*" ? `${base}/` : `${base}/${grant}/`);
+  // 목적지 폴더(next): 접근 부족으로 로그인에 온 경우 로그인 후 그리로 보낸다.
+  const nextRaw = url.searchParams.get("next") ?? "";
+  const next = /^[a-z0-9-]{1,32}$/.test(nextRaw) ? nextRaw : "";
 
   if (url.pathname === "/login" && request.method === "POST") {
     const limited = await enforceRateLimit(request, env, {
@@ -313,25 +316,31 @@ async function handleWork(request, env, url, base = "") {
     }
     if (grant) {
       const token = await issueWorkSession(key, grant);
-      return redirect(homeOf(grant), { "Set-Cookie": `bl_work=${token}; ${cookieFlags}` });
+      const dest = next && (grant === "*" || grant === next) ? `${base}/${next}/` : homeOf(grant);
+      return redirect(dest, { "Set-Cookie": `bl_work=${token}; ${cookieFlags}` });
     }
-    return new Response(WORK_LOGIN_PAGE(true, base), { status: 401, headers: htmlHeaders });
+    return new Response(WORK_LOGIN_PAGE(true, base, next), { status: 401, headers: htmlHeaders });
   }
   if (url.pathname === "/logout") {
     return redirect(`${base}/`, { "Set-Cookie": "bl_work=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0" });
   }
   if (url.pathname === "/login") {
-    if (client) return redirect(homeOf(client));
-    return new Response(WORK_LOGIN_PAGE(false, base), { headers: htmlHeaders });
+    // 세션이 목적지에 못 들어가는 경우(예: daonfit 세션으로 emoticon 접근)는
+    // 홈으로 튕기지 말고 로그인 폼을 보여 계정을 바꿀 수 있게 한다.
+    if (client && (client === "*" || client === next)) return redirect(next ? `${base}/${next}/` : homeOf(client));
+    if (client && !next) return redirect(homeOf(client));
+    return new Response(WORK_LOGIN_PAGE(false, base, next), { headers: htmlHeaders });
   }
 
   // 공개 영역: 루트("/")·확장자 있는 루트 파일(에셋)·공개 페이지 목록.
   const first = url.pathname.split("/").filter(Boolean)[0] ?? "";
   if (first === "" || WORK_PUBLIC_PAGES.has(first) || /\.[a-z0-9]+$/i.test(first)) return null;
 
-  // 프로젝트 폴더 — 해당 의뢰 세션(또는 마스터)만
-  if (!client) return redirect(`${base}/login`);
-  if (client !== "*" && client !== first) return redirect(`${base}/login`);
+  // 프로젝트 폴더 — 해당 의뢰 세션(또는 마스터)만. 목적지를 next로 넘겨
+  // 로그인 후 원래 가려던 폴더로 돌아오게 한다.
+  const loginUrl = /^[a-z0-9-]{1,32}$/.test(first) ? `${base}/login?next=${first}` : `${base}/login`;
+  if (!client) return redirect(loginUrl);
+  if (client !== "*" && client !== first) return redirect(loginUrl);
   return null;
 }
 
