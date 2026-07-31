@@ -28,6 +28,8 @@
 - [`pose-conditioning.md`](pose-conditioning.md) — 스켈레톤 조건화
   (Kling·바이트댄스 계열). **포즈 준수·프레임 튐의 구조적 해법**과
   그리드 단일 호출 전략, 게이트 방식 로드맵.
+- [`skeleton-rigs.md`](skeleton-rigs.md) — body plan별 리그 설계(버스트·
+  치비이족·사족·블롭). 1차 실패 후속 리서치이며 **현재 실행 우선순위는 아니다.**
 - **CLI** — `_infra/emoticon.mjs` (+ `emoticon-ai.mjs` 프로바이더,
   `apng.mjs` 인코더). 페이지가 아니라 CLI가 본체다. **API 키는 로컬 env로만
   쓰고 리포·워커에 절대 넣지 않는다** (리포는 public).
@@ -85,8 +87,12 @@ node _infra/emoticon.mjs cut _src/emoticon/토끼 hello --motion "손 흔들며 
 node _infra/emoticon.mjs import _src/emoticon/토끼 hello frames --chroma
 
 # ③ APNG 굽기 — out/hello.png(360², 카카오·duri) + --line이면 270²·300KB 검증
+#    build가 cuts/<컷>/report.json(모든 인접 diff·드리프트·움직임)을 남긴다
 node _infra/emoticon.mjs build _src/emoticon/토끼 hello --line
-node _infra/emoticon.mjs check _src/emoticon/토끼 hello
+
+# ③' 품질 판정 — FAIL이면 exit 1 (불량이 Actions 성공으로 커밋되지 않게 한다)
+#    draft=구조만 · master-2s=2초 납품 규격 · line=LINE 규격
+node _infra/emoticon.mjs check _src/emoticon/토끼 hello --profile master-2s
 
 # ④ 선별 재작업 — build가 알려준 "인접 diff가 튄" 프레임만 다시 뽑는다 ($0.04)
 node _infra/emoticon.mjs redo _src/emoticon/토끼 nod 2 && node _infra/emoticon.mjs build _src/emoticon/토끼 nod
@@ -133,8 +139,11 @@ node _infra/emoticon.mjs redo _src/emoticon/토끼 nod 2 && node _infra/emoticon
 
 ## 주의 — 공개 리포와 산출물
 
-리포는 public이다. 작업 산출물(`_src/emoticon/`)과 duri·assets용 팩은
-리뷰·반복을 위해 커밋한다. 단 **카카오/LINE에 제안하는 최종 세트는 제안
-직전에 리포에서 제거하고 로컬(또는 별도 private 저장소)로 옮긴다** — 심사
-전 선공개·유출은 미승인 사유가 될 수 있고, 입점 후에는 무단 배포 문제가
-된다.
+리포는 public이다. 파일럿 산출물(`_src/emoticon/`)은 에이전트 리뷰·반복을
+위해 커밋한다 — 실험용이라 공개돼도 무방한 것들이다.
+
+**단 마켓 제출용 최종 세트는 처음부터 여기에 두지 않는다.** "제출 직전에
+리포에서 지운다"는 방식은 **보호가 되지 않는다 — 삭제 전 커밋의 Git 기록에
+파일이 그대로 남기 때문이다.** 카카오/LINE 제안본과 그 raw 프레임은 처음부터
+로컬 또는 별도 private 저장소에 보관하고, public 리포에는 **레시피·지표·
+리뷰용 저해상 자료만** 남긴다.

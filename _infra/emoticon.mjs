@@ -27,12 +27,14 @@ import { encodeApng, inspectApng } from "./apng.mjs";
 import { imageProvider } from "./emoticon-ai.mjs";
 import { cutoutBackground, decodeSheet, sliceGrid } from "./sticker-pack.mjs";
 import { renderGrid, renderPose } from "./skeleton.mjs";
+import { PROFILES, buildReport, formatJudgement, judgeReport } from "./emoticon-gate.mjs";
 import { loadSequence } from "./skeleton-cli.mjs";
 import {
   IMAGE_COST_USD,
   assertPlannedBudget,
   assertResumeCompatible,
   atomicWriteFile,
+  atomicWriteJson,
   budgetedProvider,
   finishCutRun,
   planCost,
@@ -950,8 +952,9 @@ async function cmdBuild(workdir, cutId, options) {
   atomicWriteFile(outPath, apng);
 
   const diff = loopDiff(sequence[0], sequence[sequence.length - 1]);
-  let adjacent = 0;
-  for (let i = 1; i < sequence.length; i++) adjacent = Math.max(adjacent, loopDiff(sequence[i - 1], sequence[i]));
+  const adjacentDiffs = [];
+  for (let i = 1; i < sequence.length; i++) adjacentDiffs.push(loopDiff(sequence[i - 1], sequence[i]));
+  const adjacent = adjacentDiffs.length ? Math.max(...adjacentDiffs) : 0;
   const duration = delaysMs ? delaysMs.reduce((a, b) => a + b, 0) / 1000 : files.length / fps;
   console.log(
     `✓ ${outPath} — ${size}², 유니크 ${files.length}장/타임라인 ${sequence.length}프레임 ` +
@@ -971,6 +974,7 @@ async function cmdBuild(workdir, cutId, options) {
   );
   if (duration > 4) console.log("  ⚠ 4초 초과 — LINE 재생시간 상한(4초)을 넘습니다");
 
+  let lineBytes = null;
   if (options.line) {
     if (sequence.length < LINE_FRAMES[0] || sequence.length > LINE_FRAMES[1]) {
       throw new Error(`LINE 변환은 ${LINE_FRAMES[0]}~${LINE_FRAMES[1]}프레임이어야 합니다 (현재 ${sequence.length})`);
@@ -978,6 +982,7 @@ async function cmdBuild(workdir, cutId, options) {
     const lineApng = encodeApng(expand(fitFrames(frames, LINE_SIZE)), { fps, delaysMs, loops: 4 });
     const linePath = join(outDir, `${cutId}-line.png`);
     atomicWriteFile(linePath, lineApng);
+    lineBytes = lineApng.length;
     const ok = lineApng.length <= LINE_MAX_BYTES;
     console.log(`✓ ${linePath} — ${LINE_SIZE}², ${(lineApng.length / 1024).toFixed(0)}KB ${ok ? "(≤300KB)" : ""}`);
     if (!ok) {
@@ -987,10 +992,23 @@ async function cmdBuild(workdir, cutId, options) {
       );
     }
   }
-  return { outPath, frames: sequence.length, fps, diff, adjacent };
+
+  // 판정에 필요한 원자료를 남긴다 — check가 이걸 읽어 프로필 기준으로 실패시킨다
+  const report = buildReport({
+    cutId, mode: meta.mode, size,
+    uniqueFrames: files.length, timelineFrames: sequence.length, fps,
+    durationSec: duration, bytes: apng.length, lineBytes,
+    frameDelays: delaysMs ? delaysMs.map((ms) => ms / 1000) : sequence.map(() => 1 / fps),
+    loopDiff: diff, adjacentDiffs, scaleDrift: drift, motion,
+    transparency: frames.map(transparencyRatio),
+  });
+  atomicWriteJson(join(cutDir, "report.json"), report);
+  console.log(`  report.json 저장 — 판정: node _infra/emoticon.mjs check ${workdir} ${cutId} --profile master-2s`);
+  return { outPath, frames: sequence.length, fps, diff, adjacent, report };
 }
 
-function cmdCheck(workdir, cutId) {
+// 판정 게이트. FAIL이면 exit 1 — 불량 산출물이 Actions "성공"으로 커밋되는 것을 막는다.
+function cmdCheck(workdir, cutId, options = {}) {
   const outPath = join(workdir, "out", `${cutId}.png`);
   if (!existsSync(outPath)) throw new Error(`산출물이 없습니다: ${outPath} — 먼저 build를 실행하세요`);
   for (const path of [outPath, join(workdir, "out", `${cutId}-line.png`)]) {
@@ -1003,6 +1021,21 @@ function cmdCheck(workdir, cutId) {
       `${info.animated ? "" : "⚠ 애니메이션 청크 없음"}`,
     );
   }
+
+  const profileName = options.profile ?? "draft";
+  const reportPath = join(workdir, "cuts", cutId, "report.json");
+  if (!existsSync(reportPath)) {
+    throw new Error(`report.json이 없습니다: ${reportPath} — 먼저 build를 다시 실행하세요`);
+  }
+  const report = JSON.parse(readFileSync(reportPath, "utf8"));
+  const profileFile = PROFILES[profileName]?.file === "line" ? `${cutId}-line.png` : `${cutId}.png`;
+  const judgedPath = join(workdir, "out", profileFile);
+  const info = existsSync(judgedPath) ? inspectApng(readFileSync(judgedPath)) : null;
+  const judgement = judgeReport(report, profileName, info);
+
+  if (options.json) console.log(JSON.stringify({ ...judgement, report }, null, 2));
+  else console.log(formatJudgement(judgement, `${workdir} ${cutId}`));
+  return judgement;
 }
 
 // ── CLI ────────────────────────────────────────────────────────────────
@@ -1036,7 +1069,7 @@ const USAGE =
   '  import <작업폴더> <컷id> <프레임폴더> [--fps 12] [--chroma] [--force]\n' +
   '  build  <작업폴더> <컷id> [--size 360] [--fps N] [--line]\n' +
   '  redo   <작업폴더> <컷id> <프레임번호>   ← keys 컷에서 튄 프레임만 재생성 ($0.04)\n' +
-  '  check  <작업폴더> <컷id>\n' +
+  '  check  <작업폴더> <컷id> [--profile draft|master-2s|line] [--json]  ← FAIL이면 exit 1\n' +
   '작업폴더 권장 위치: _src/emoticon/<캐릭터명> (배포·커밋 제외)\n' +
   'env: EMOTICON_IMAGE_PROVIDER=edge(기본)|gemini|mock\n' +
   '  edge:   EMOTICON_EDGE_TOKEN=<work 마스터 비밀번호> (키는 GEMINI_STICKER_KEY Worker secret)\n' +
@@ -1053,7 +1086,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     else if (command === "import") await cmdImport(workdir, rest[0], rest[1], options);
     else if (command === "build") await cmdBuild(workdir, rest[0], options);
     else if (command === "redo") await cmdRedo(workdir, rest[0], rest[1]);
-    else if (command === "check") cmdCheck(workdir, rest[0]);
+    else if (command === "check") {
+      const judgement = cmdCheck(workdir, rest[0], options);
+      if (judgement.verdict === "fail") process.exit(1);
+    }
     else throw new Error(`알 수 없는 명령: ${command}\n${USAGE}`);
   } catch (error) {
     console.error(`✗ ${error.message}`);
