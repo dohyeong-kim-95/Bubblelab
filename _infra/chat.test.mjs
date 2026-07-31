@@ -50,19 +50,19 @@ test("accepts only registered sticker pack references", () => {
     /unknown sticker pack/,
   );
   assert.throws(
-    () => validateChatMessage({ type: "sticker", pack: "brown-horse", n: 0 }),
+    () => validateChatMessage({ type: "sticker", pack: "dageudangseu-1", n: 0 }),
     /invalid sticker/,
   );
   assert.throws(
-    () => validateChatMessage({ type: "sticker", pack: "brown-horse", n: 17 }),
+    () => validateChatMessage({ type: "sticker", pack: "dageudangseu-1", n: 17 }),
     /invalid sticker/,
   );
   assert.throws(
-    () => validateChatMessage({ type: "sticker", pack: "brown-horse", n: 1.5 }),
+    () => validateChatMessage({ type: "sticker", pack: "dageudangseu-1", n: 1.5 }),
     /invalid sticker/,
   );
   assert.throws(
-    () => validateChatMessage({ type: "sticker", pack: "brown-horse", n: "3" }),
+    () => validateChatMessage({ type: "sticker", pack: "dageudangseu-1", n: "3" }),
     /invalid sticker/,
   );
 });

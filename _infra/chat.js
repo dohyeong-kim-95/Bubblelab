@@ -38,9 +38,10 @@ const PING_INTERVAL_MS = 30_000;
 export const CHAT_STICKER_PACKS = new Map([
   ["black-hoodie-boy", 16],
   ["blonde-horse", 16],
-  ["brown-horse", 16],
   ["couple-cat", 16],
   ["cream-hoodie-girl", 16],
+  ["dageudangseu-1", 16],
+  ["dageudangseu-2", 16],
   ["day-off-seal", 16],
   ["dog-cat-friends", 16],
   ["golden-retriever", 16],

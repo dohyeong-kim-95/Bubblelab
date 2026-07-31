@@ -8,7 +8,6 @@
 
 | ID | 제목 | 파일 |
 | --- | --- | --- |
-| `brown-horse` | 손그림 갈색 말 이모티콘 16종 | `01.png`–`16.png` |
 | `golden-retriever` | 골댕이 이모티콘 16종 | `01.png`–`16.png` |
 | `pink-horse` | 핑크 말 이모티콘 16종 | `01.png`–`16.png` |
 | `simple-horse` | 심플 손그림 말 이모티콘 16종 | `01.png`–`16.png` |
@@ -24,6 +23,8 @@
 | `cream-hoodie-girl` | 크림 후드 소녀 이모티콘 16종 | `01.png`–`16.png` |
 | `hoodie-couple` | 후드 커플 이모티콘 16종 | `01.png`–`16.png` |
 | `jeju-cat` | 제주냥이 이모티콘 16종 | `01.png`–`16.png` |
+| `dageudangseu-1` | 다그당스 1 이모티콘 16종 | `01.png`–`16.png` |
+| `dageudangseu-2` | 다그당스 2 이모티콘 16종 | `01.png`–`16.png` |
 
 각 팩은 미리보기(`preview.webp` 또는 `preview.png`), 개별 이미지,
 `metadata.json`으로 구성됩니다. 새 팩의 형식과 검증 규칙은
