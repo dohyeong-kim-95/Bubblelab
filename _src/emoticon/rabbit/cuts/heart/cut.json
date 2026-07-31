@@ -1,0 +1,55 @@
+{
+  "motion": "holding a heart with both hands, the heart pulsing bigger with love",
+  "fps": 12,
+  "mode": "keys",
+  "keys": [
+    {
+      "pose": "standing upright facing front, both hands held together in front of the chest holding a small pink heart, gentle closed-mouth smile, eyes open, body at normal height",
+      "hold": 2
+    },
+    {
+      "pose": "same standing pose and same body size, both hands still in front of the chest, but the pink heart is now much larger and glowing, eyes closed in a happy arc, cheeks blushing more",
+      "hold": 3
+    }
+  ],
+  "breakdowns": 1,
+  "assembly": "pingpong",
+  "frames": 3,
+  "sequence": [
+    {
+      "type": "key",
+      "key": 0
+    },
+    {
+      "type": "bd",
+      "pair": [
+        0,
+        1
+      ]
+    },
+    {
+      "type": "key",
+      "key": 1
+    }
+  ],
+  "timeline": [
+    {
+      "frame": 0,
+      "delayMs": 167
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 2,
+      "delayMs": 250
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    }
+  ],
+  "provider": "gemini/gemini-2.5-flash-image",
+  "createdAt": "2026-07-31"
+}
