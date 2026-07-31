@@ -1,15 +1,15 @@
-// 가이드 프레임 합성 — 룰베이스로 Gemini를 돕는 장치.
+// 리그 — 생성된 작화에 기하를 입히는 변형 계층.
 //
-// 왜 필요한가: 여덟 번의 실측(nod2~nod8)에서 이 모델은 **얼굴 부위의 세로
-// 위치를 레퍼런스에서 떼어내지 못했다.** 표정(눈 모양·입 열림)과 귀 각도는
-// 바꾸지만, 눈·코·입의 좌표는 레퍼런스 그대로 다시 그린다. "전체를 내려라"도
-// "머리 안에서 낮게 그려라"도 통하지 않았다 (work/emoticon/nod-anatomy.md §5).
+// 왜 필요한가: 아홉 번의 실측(nod2~nod9)에서 이 모델은 **얼굴 부위의 세로
+// 위치를 레퍼런스에서 떼어내지 못했다.** 표정(눈 모양·입 열림)은 매번 정확히
+// 그렸지만 좌표는 항상 원래 자리로 되돌렸다 — 텍스트로 지시해도, 배치도를
+// 이미지로 보여줘도 마찬가지였다 (work/emoticon/nod-anatomy.md §5).
 //
-// 그래서 설득을 포기하고 **기하를 픽셀로 직접 만들어 보여준다.** 레퍼런스에서
-// 얼굴 부위만 잘라 아래로 옮긴 거친 합성본을 만들고, 모델에게는 "이 배치대로
-// 깔끔하게 다시 그려라"만 시킨다. 리터칭은 이미지 모델이 원래 잘하는 일이다.
+// 그래서 역할을 나눈다: **표정은 모델이, 기하는 리그가.** 모델이 그린 프레임을
+// 받아 얼굴 부위를 계측하고 목표 위치로 변형한다. 전통적인 리깅과 같은 구조다 —
+// 아트는 사람(여기서는 모델)이 그리고, 움직임은 리그가 만든다.
 //
-// 순수 함수라 무료·결정론적이고, 테스트로 검증된다.
+// 순수 함수라 비용이 없고 결정론적이며, 테스트로 검증된다.
 import { decodePng, encodePng } from "./png.mjs";
 
 // 임계값이 두 개인 이유: 머리 원 피팅은 **구조**(굵은 외곽선)를 봐야 하므로
@@ -67,11 +67,11 @@ function facePixels(image, head, window = FACE_WINDOW) {
   return pixels;
 }
 
-// 끄덕임 가이드: 얼굴 부위를 머리 반지름의 drop배만큼 아래로 옮긴다.
+// 끄덕임 리그: 얼굴 부위를 머리 반지름의 drop배만큼 아래로 옮긴다.
 // 부위는 직선이 아니라 아래로 볼록한 호를 그린다(nod-anatomy.md §3) —
 // 중앙일수록 더 내려가고 가장자리는 덜 내려간다. bow가 그 곡률이다.
 // squash는 눈-입 간격을 cosθ만큼 좁히는 전단축(foreshortening)이다.
-export function nodGuide(image, { drop = 0.33, bow = 0.25, squash = 0.94 } = {}) {
+export function nodRig(image, { drop = 0.33, bow = 0.25, squash = 0.94 } = {}) {
   const head = fitHead(image);
   const { width, height, data } = image;
   const face = facePixels(image, head);
@@ -121,7 +121,7 @@ export function faceDropRatio(image) {
 // 다르므로(모델이 정규화하는 정도가 프레임마다 다르다) 고정 오프셋을 쓰면
 // 프레임 간 간격이 들쭉날쭉해진다. 측정 → 보정을 반복해 목표에 맞춘다.
 // 순수 계산이라 비용이 없다.
-export function nodGuideToRatio(image, target, { tolerance = 0.002, maxSteps = 12, ...options } = {}) {
+export function rigToRatio(image, target, { tolerance = 0.002, maxSteps = 12, ...options } = {}) {
   const current = faceDropRatio(image);
   if (current === null) throw new Error("얼굴 하강 비율을 잴 수 없습니다 — 눈을 찾지 못했습니다");
   if (target <= current) return { image, head: fitHead(image), moved: 0, dropPx: 0, drop: 0, ratio: current };
@@ -129,7 +129,7 @@ export function nodGuideToRatio(image, target, { tolerance = 0.002, maxSteps = 1
   let drop = (target - current) * 2;
   let best = null;
   for (let step = 0; step < maxSteps; step++) {
-    const result = nodGuide(image, { ...options, drop });
+    const result = nodRig(image, { ...options, drop });
     const ratio = faceDropRatio(result.image);
     best = { ...result, drop, ratio };
     const error = target - ratio;
@@ -140,8 +140,22 @@ export function nodGuideToRatio(image, target, { tolerance = 0.002, maxSteps = 1
   return best;
 }
 
-export function encodeGuide(result) {
+export function encodeRig(result) {
   return encodePng(result.image);
+}
+
+// 리그 스펙 → 변형된 이미지. 현재 type은 "nod" 하나이며, 눈깜빡임처럼
+// 기하 변형이 없는 동작은 리그 없이(표정만으로) 간다.
+export function applyRig(image, rig) {
+  const type = rig?.type ?? "nod";
+  if (type !== "nod") throw new Error(`알 수 없는 rig.type: ${type} (현재 "nod"만 지원)`);
+  const { ratio, drop, bow, squash } = rig;
+  const options = {
+    ...(bow === undefined ? {} : { bow: Number(bow) }),
+    ...(squash === undefined ? {} : { squash: Number(squash) }),
+  };
+  if (ratio !== undefined) return rigToRatio(image, Number(ratio), options);
+  return nodRig(image, { ...options, ...(drop === undefined ? {} : { drop: Number(drop) }) });
 }
 
 export function loadPng(bytes) {

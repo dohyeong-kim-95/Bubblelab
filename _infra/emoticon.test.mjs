@@ -142,12 +142,15 @@ test("resize: 알파 가중 축소에서 투명 배경색이 번지지 않는다
 });
 
 // 내부 프롬프트는 영어로 쓴다(지시 추종 정확도) — mock도 영어 문구로 분기한다
-test("mock provider: 시트는 흰 배경, 프레임 요청은 초록 배경", async () => {
+test("mock provider: 시트·프레임 모두 흰 배경이고 서로 구별된다", async () => {
+  // 실제 프롬프트가 흰 배경을 지정하고 autoCutout이 그걸 처리한다. mock도 같아야
+  // 리그(머리 원 피팅)까지 파이프라인 전체가 mock으로 검증된다.
   const provider = imageProvider({ EMOTICON_IMAGE_PROVIDER: "mock" });
-  const sheet = decodePng(await provider.generate({ prompt: "Draw a character reference sheet" }));
-  assert.deepEqual([...sheet.data.slice(0, 4)], [255, 255, 255, 255]);
-  const frame = decodePng(await provider.generate({ prompt: "Draw frame 3/12 of a 12-frame loop" }));
-  assert.deepEqual([...frame.data.slice(0, 3)], [0, 255, 0]);
+  const sheet = await provider.generate({ prompt: "Draw a character reference sheet" });
+  const frame = await provider.generate({ prompt: "Draw frame 3/12 of a 12-frame loop" });
+  assert.deepEqual([...decodePng(sheet).data.slice(0, 4)], [255, 255, 255, 255]);
+  assert.deepEqual([...decodePng(frame).data.slice(0, 4)], [255, 255, 255, 255]);
+  assert.notDeepEqual(Buffer.from(sheet), Buffer.from(frame));
 });
 
 test("CLI E2E (mock): sheet → cut → build --line → check", () => {
@@ -479,6 +482,37 @@ test("CLI E2E (mock): breakdowns 2 — 유니크 4장, 핑퐁 타임라인 7프�
     }
     // 순서 메타에 슬롯이 기록돼 redo가 같은 퍼센트로 재생성할 수 있다
     assert.deepEqual(meta.sequence[1], { type: "bd", pair: [0, 1], slot: 0, of: 2 });
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("CLI E2E (mock): rig — 모델 작화에 기하를 코드로 입힌다", () => {
+  // 아홉 번의 실측에서 모델은 표정은 정확히 그렸지만 얼굴 위치는 항상
+  // 원위치로 되돌렸다. 그래서 위치는 리그가 만든다 (work/emoticon/nod-anatomy.md §5).
+  const workdir = mkdtempSync(join(tmpdir(), "emoticon-rig-"));
+  const env = { ...process.env, EMOTICON_IMAGE_PROVIDER: "mock" };
+  const run = (...args) => execFileSync(process.execPath, [CLI, ...args], { env, encoding: "utf8" });
+  try {
+    run("sheet", workdir, "--prompt", "테스트 캐릭터");
+    const spec = join(workdir, "keys.json");
+    writeFileSync(spec, JSON.stringify({
+      motion: "끄덕", breakdowns: 0, assembly: "pingpong",
+      keys: [
+        { pose: "정면", hold: 2 },
+        { pose: "눈 감음", hold: 2, rig: { type: "nod", drop: 0.2 } },
+      ],
+    }));
+    const out = run("cut", workdir, "nod", "--keys", spec, "--fps", "12");
+    assert.match(out, /키 2 리그: 얼굴 [\d.]+ → [\d.]+/);
+
+    const meta = JSON.parse(readFileSync(join(workdir, "cuts", "nod", "cut.json"), "utf8"));
+    assert.deepEqual(meta.keys[1].rig, { type: "nod", drop: 0.2 });
+
+    // 리그가 적용된 프레임은 리그 없는 프레임과 달라야 한다 (mock은 두 포즈가 같은 그림)
+    const f1 = readFileSync(join(workdir, "cuts", "nod", "frames", "01.png"));
+    const f2 = readFileSync(join(workdir, "cuts", "nod", "frames", "02.png"));
+    assert.notDeepEqual(f1, f2, "리그가 적용되지 않았습니다");
   } finally {
     rmSync(workdir, { recursive: true, force: true });
   }

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { encodePng } from "./png.mjs";
-import { faceDropRatio, fitHead, loadPng, nodGuide } from "./emoticon-guide.mjs";
+import { faceDropRatio, fitHead, loadPng, nodRig } from "./emoticon-rig.mjs";
 
 const REF = "_src/emoticon/rabbit/cuts/nod/frames-raw/key-1.png";
 
@@ -38,13 +38,13 @@ test("빈 이미지는 명확한 에러로 실패한다", () => {
   assert.throws(() => fitHead(blank), /머리 원을 찾지 못했습니다/);
 });
 
-test("nodGuide는 얼굴 하강 비율을 실제로 올린다 (실제 레퍼런스)", () => {
+test("nodRig는 얼굴 하강 비율을 실제로 올린다 (실제 레퍼런스)", () => {
   const ref = loadPng(readFileSync(REF));
   const before = faceDropRatio(ref);
   assert.ok(before > 0.3 && before < 0.45, `기준선이 예상 밖: ${before}`);
   let prev = before;
   for (const drop of [0.14, 0.26, 0.38]) {
-    const after = faceDropRatio(nodGuide(ref, { drop }).image);
+    const after = faceDropRatio(nodRig(ref, { drop }).image);
     assert.ok(after > prev, `drop=${drop}에서 더 내려가야 함 (${prev} → ${after})`);
     prev = after;
   }
@@ -54,7 +54,7 @@ test("머리 외곽선과 귀는 손대지 않는다", () => {
   // 실패 이력: 창을 넓게 잡아 귀뿌리 선과 머리·몸 경계선이 딸려 내려가
   // 이마에 유령 아크가 생겼다. 창 위쪽(귀 영역)은 바이트 단위로 같아야 한다.
   const ref = loadPng(readFileSync(REF));
-  const { image, head } = nodGuide(ref, { drop: 0.26 });
+  const { image, head } = nodRig(ref, { drop: 0.26 });
   const guardBottom = Math.round(head.cy - head.radius * 0.45) - 1;
   for (let y = 0; y <= guardBottom; y++) {
     for (let x = 0; x < ref.width; x++) {
@@ -68,15 +68,15 @@ test("머리 외곽선과 귀는 손대지 않는다", () => {
 
 test("합성은 결정론적이다", () => {
   const ref = loadPng(readFileSync(REF));
-  const a = encodePng(nodGuide(ref, { drop: 0.26 }).image);
-  const b = encodePng(nodGuide(ref, { drop: 0.26 }).image);
+  const a = encodePng(nodRig(ref, { drop: 0.26 }).image);
+  const b = encodePng(nodRig(ref, { drop: 0.26 }).image);
   assert.deepEqual(Buffer.from(a), Buffer.from(b));
 });
 
 test("호(bow)는 중앙을 가장자리보다 더 내린다", () => {
   const ref = loadPng(readFileSync(REF));
-  const flat = nodGuide(ref, { drop: 0.26, bow: 0 }).image;
-  const bowed = nodGuide(ref, { drop: 0.26, bow: 0.5 }).image;
+  const flat = nodRig(ref, { drop: 0.26, bow: 0 }).image;
+  const bowed = nodRig(ref, { drop: 0.26, bow: 0.5 }).image;
   // 곡률을 주면 가장자리(볼)가 덜 내려가므로 두 결과가 달라야 한다
   assert.notDeepEqual(Buffer.from(encodePng(flat)), Buffer.from(encodePng(bowed)));
 });

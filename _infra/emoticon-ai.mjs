@@ -64,7 +64,7 @@ export function imageProvider(env = process.env) {
 function drawScene({ size = 512, background, frame = null }) {
   const data = new Uint8Array(size * size * 4);
   for (let i = 0; i < size * size; i++) data.set(background, i * 4);
-  const radius = size * 0.22;
+  const radius = size * (frame ? 0.22 : 0.18);   // 시트는 프레임과 구별되는 그림
   const cx = size / 2;
   let cy = size * 0.55;
   if (frame) {
@@ -89,15 +89,18 @@ function mockProvider() {
     name: "mock",
     async generate({ prompt }) {
       // 프롬프트 규약(emoticon-prompt.mjs)의 문구와 맞춰야 한다 — 문구가 바뀌면
-      // 여기도 같이 고친다. 시트는 흰 배경, 프레임은 포즈에 따라 다른 그림.
+      // 여기도 같이 고친다. 배경은 시트·프레임 모두 흰색이다: 실제 프롬프트가
+      // 흰 배경을 지정하고 autoCutout이 그걸 처리하므로, mock도 같아야
+      // 리그(머리 원 피팅)까지 파이프라인 전체를 검증할 수 있다.
       const match = /key\s+(\d+)\s+of\s+(\d+)|(?:frame|key pose)\s+(\d+)\s*\/\s*(\d+)/i.exec(prompt);
       const index = match ? Number(match[1] ?? match[3]) : null;
       const total = match ? Number(match[2] ?? match[4]) : null;
+      const white = [255, 255, 255, 255];
       const scene = index
-        ? drawScene({ background: [0, 255, 0, 255], frame: { index, total } })
+        ? drawScene({ background: white, frame: { index, total } })
         : /in-between|breakdown/i.test(prompt)
-          ? drawScene({ background: [0, 255, 0, 255], frame: { index: 2, total: 8 } })
-          : drawScene({ background: [255, 255, 255, 255] });
+          ? drawScene({ background: white, frame: { index: 2, total: 8 } })
+          : drawScene({ background: white });
       return new Uint8Array(encodePng(scene));
     },
   };
