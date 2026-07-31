@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 2,
+  "cliVersion": 2,
+  "promptVersion": "2026-07-keys-v1",
+  "mode": "keys",
+  "specHash": "8db28dc8cb0b082e101b376e0234eec8e8943460dd521141ebd7fcf309d71521",
+  "sheetHash": "b9692d48a1a77ec19249b8cb0f9f86e7cf358cf605dc9902b31219340aaffcc9",
+  "referenceHashes": [
+    "b9692d48a1a77ec19249b8cb0f9f86e7cf358cf605dc9902b31219340aaffcc9"
+  ],
+  "provider": "gemini/gemini-2.5-flash-image",
+  "status": "complete",
+  "createdAt": "2026-07-31T13:38:36.487Z",
+  "updatedAt": "2026-07-31T13:39:58.954Z",
+  "completedAt": "2026-07-31T13:39:58.954Z",
+  "calls": 9,
+  "unitCostUsd": 0.039,
+  "estimatedCostUsd": 0.351,
+  "runs": [
+    {
+      "runId": "478f1a90-a2dd-4281-8a41-ac466794af71",
+      "startedAt": "2026-07-31T13:38:36.487Z",
+      "provider": "gemini/gemini-2.5-flash-image",
+      "gitCommit": "7664b53e676407a91c2822d1ad13feff1a56569f",
+      "calls": 9,
+      "estimatedCostUsd": 0.351,
+      "status": "complete",
+      "completedAt": "2026-07-31T13:39:58.954Z"
+    }
+  ],
+  "motion": "waving hello with one paw raised beside the head",
+  "fps": 12,
+  "keys": [
+    {
+      "pose": "standing upright facing front, both short arms resting down at the sides, gentle closed-mouth smile, eyes open, body at normal height",
+      "hold": 6
+    },
+    {
+      "pose": "identical body, size and position, but the arm on the LEFT side of the image is lifted up beside the head with the paw open, mouth opening into a happy smile",
+      "hold": 1
+    },
+    {
+      "pose": "identical body, size and position, the arm on the LEFT side of the image stays up beside the head but the paw tilts outward away from the head, eyes closed in a happy arc, wide open smile",
+      "hold": 3
+    },
+    {
+      "pose": "identical body, size and position, the arm on the LEFT side of the image stays up but the paw tilts inward toward the head, eyes closed in a happy arc, wide open smile",
+      "hold": 3
+    }
+  ],
+  "breakdowns": 1,
+  "assembly": "pingpong",
+  "frames": 7,
+  "sequence": [
+    {
+      "type": "key",
+      "key": 0
+    },
+    {
+      "type": "bd",
+      "pair": [
+        0,
+        1
+      ]
+    },
+    {
+      "type": "key",
+      "key": 1
+    },
+    {
+      "type": "bd",
+      "pair": [
+        1,
+        2
+      ]
+    },
+    {
+      "type": "key",
+      "key": 2
+    },
+    {
+      "type": "bd",
+      "pair": [
+        2,
+        3
+      ]
+    },
+    {
+      "type": "key",
+      "key": 3
+    }
+  ],
+  "timeline": [
+    {
+      "frame": 0,
+      "delayMs": 500
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 2,
+      "delayMs": 83
+    },
+    {
+      "frame": 3,
+      "delayMs": 83
+    },
+    {
+      "frame": 4,
+      "delayMs": 250
+    },
+    {
+      "frame": 5,
+      "delayMs": 83
+    },
+    {
+      "frame": 6,
+      "delayMs": 250
+    },
+    {
+      "frame": 5,
+      "delayMs": 83
+    },
+    {
+      "frame": 4,
+      "delayMs": 250
+    },
+    {
+      "frame": 3,
+      "delayMs": 83
+    },
+    {
+      "frame": 2,
+      "delayMs": 83
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    }
+  ]
+}
