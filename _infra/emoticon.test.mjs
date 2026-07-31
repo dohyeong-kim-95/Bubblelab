@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -166,6 +166,82 @@ test("CLI E2E (mock): sheet → cut → build --line → check", () => {
     assert.deepEqual([line.width, line.frames, line.loops], [270, 8, 4]);
     assert.ok(readFileSync(join(workdir, "out", "bounce-line.png")).length <= 300 * 1024);
     assert.match(run("check", workdir, "bounce"), /무한/);
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("CLI 게이트: plan·예산 상한·provenance·resume·force 정리", () => {
+  const workdir = mkdtempSync(join(tmpdir(), "emoticon-gates-"));
+  const env = { ...process.env, EMOTICON_IMAGE_PROVIDER: "mock", BUBBLELAB_COMMIT: "test-commit" };
+  const run = (...args) => execFileSync(process.execPath, [CLI, ...args], { env, encoding: "utf8" });
+  const cutDir = join(workdir, "cuts", "wave");
+  try {
+    run("sheet", workdir, "--prompt", "테스트 캐릭터");
+
+    const initialPlan = JSON.parse(run(
+      "plan", workdir, "wave", "--motion", "손 흔들기", "--frames", "4", "--fps", "8", "--json",
+    ));
+    assert.deepEqual(
+      [initialPlan.totalCalls, initialPlan.remainingCalls, initialPlan.estimatedCostUsd, initialPlan.frames],
+      [4, 4, 0.156, 4],
+    );
+    assert.equal(existsSync(cutDir), false); // plan은 파일을 만들지 않는다
+
+    assert.throws(
+      () => run("cut", workdir, "wave", "--motion", "손 흔들기", "--frames", "4", "--max-calls", "3"),
+      /예상 호출 4회가 --max-calls 3회를 넘습니다/,
+    );
+    assert.equal(existsSync(cutDir), false); // 예산 게이트는 생성 전에 닫힌다
+
+    run("cut", workdir, "wave", "--motion", "손 흔들기", "--frames", "4", "--fps", "8", "--max-cost", "0.156");
+    let meta = JSON.parse(readFileSync(join(cutDir, "cut.json"), "utf8"));
+    assert.equal(meta.schemaVersion, 2);
+    assert.equal(meta.status, "complete");
+    assert.equal(meta.mode, "sequential");
+    assert.equal(meta.calls, 4);
+    assert.equal(meta.estimatedCostUsd, 0.156);
+    assert.equal(meta.runs[0].gitCommit, "test-commit");
+    assert.match(meta.createdAt, /^\d{4}-\d{2}-\d{2}T/);
+    for (const key of ["specHash", "sheetHash"]) assert.match(meta[key], /^[a-f0-9]{64}$/);
+
+    // 가공 프레임만 사라졌다면 raw를 재사용하므로 API 호출 없이 복원한다.
+    unlinkSync(join(cutDir, "frames", "02.png"));
+    run("cut", workdir, "wave", "--motion", "손 흔들기", "--frames", "4", "--fps", "8", "--resume", "--max-calls", "0");
+    assert.ok(existsSync(join(cutDir, "frames", "02.png")));
+    meta = JSON.parse(readFileSync(join(cutDir, "cut.json"), "utf8"));
+    assert.equal(meta.calls, 4);
+    assert.equal(meta.runs.at(-1).calls, 0);
+
+    // raw까지 사라진 한 장만 다시 호출한다.
+    unlinkSync(join(cutDir, "frames-raw", "04.png"));
+    unlinkSync(join(cutDir, "frames", "04.png"));
+    const resumePlan = JSON.parse(run(
+      "plan", workdir, "wave", "--motion", "손 흔들기", "--frames", "4", "--fps", "8", "--resume", "--json",
+    ));
+    assert.deepEqual([resumePlan.remainingCalls, resumePlan.reusedCalls], [1, 3]);
+    run("cut", workdir, "wave", "--motion", "손 흔들기", "--frames", "4", "--fps", "8", "--resume", "--max-calls", "1");
+    meta = JSON.parse(readFileSync(join(cutDir, "cut.json"), "utf8"));
+    assert.equal(meta.calls, 5);
+    assert.equal(meta.runs.at(-1).calls, 1);
+
+    // --force는 컷 디렉터리를 통째로 교체해 줄어든 프레임의 찌꺼기를 남기지 않는다.
+    run("cut", workdir, "wave", "--motion", "손 흔들기", "--frames", "3", "--fps", "8", "--force");
+    assert.equal(existsSync(join(cutDir, "frames", "04.png")), false);
+    assert.equal(existsSync(join(cutDir, "frames-raw", "04.png")), false);
+    const files = readdirSync(cutDir, { recursive: true }).map(String);
+    assert.equal(files.some((name) => name.includes(".partial-")), false);
+
+    // 입력 축이 달라지면 조용히 이어 붙이지 않는다.
+    writeFileSync(join(workdir, "sheet.png"), Buffer.concat([readFileSync(join(workdir, "sheet.png")), Buffer.from([0])]));
+    assert.throws(
+      () => run("plan", workdir, "wave", "--motion", "손 흔들기", "--frames", "3", "--fps", "8", "--resume"),
+      /sheetHash가 기존 컷과 다릅니다/,
+    );
+    assert.throws(
+      () => run("build", workdir, "wave"),
+      /캐릭터 레퍼런스가 현재 파일과 다릅니다/,
+    );
   } finally {
     rmSync(workdir, { recursive: true, force: true });
   }

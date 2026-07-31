@@ -19,7 +19,7 @@
 //
 // 작업폴더는 배포·커밋에서 제외되는 _src/emoticon/<캐릭터명>/ 을 쓴다.
 // API 키는 GEMINI_API_KEY env로만 전달한다 (리포는 public — 커밋 금지).
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { decodePng, encodePng } from "./png.mjs";
@@ -28,6 +28,19 @@ import { imageProvider } from "./emoticon-ai.mjs";
 import { cutoutBackground, decodeSheet, sliceGrid } from "./sticker-pack.mjs";
 import { renderGrid, renderPose } from "./skeleton.mjs";
 import { loadSequence } from "./skeleton-cli.mjs";
+import {
+  IMAGE_COST_USD,
+  assertPlannedBudget,
+  assertResumeCompatible,
+  atomicWriteFile,
+  budgetedProvider,
+  finishCutRun,
+  planCost,
+  prepareCutRun,
+  readJson,
+  sha256,
+  specHash,
+} from "./emoticon-run.mjs";
 
 const CUT_ID_RE = /^[a-z0-9][a-z0-9-]*$/;
 const MAX_FRAMES = 24;        // 카카오 납품 상한
@@ -309,6 +322,89 @@ async function toRgba(bytes) {
   return decodeSheet(Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes));
 }
 
+async function reusableRaw(path) {
+  if (!existsSync(path)) return null;
+  try {
+    const bytes = readFileSync(path);
+    const keyed = autoCutout(await toRgba(bytes));
+    return transparencyRatio(keyed) >= 0.05 ? { bytes, keyed } : null;
+  } catch {
+    return null;
+  }
+}
+
+async function reusableGridRaw(path, cols, rows, count) {
+  if (!existsSync(path)) return null;
+  try {
+    const bytes = readFileSync(path);
+    const cells = sliceGrid(await toRgba(bytes), cols, rows).slice(0, count);
+    if (cells.length !== count || cells.some((cell) => transparencyRatio(autoCutout(cell)) < 0.05)) return null;
+    return bytes;
+  } catch {
+    return null;
+  }
+}
+
+function keyTiming(keys, pairs, breakdowns, assembly, fps) {
+  const delays = [];
+  for (let i = 0; i < keys.length; i++) {
+    delays.push(Math.max(1, Number(keys[i].hold ?? 1)));
+    if (breakdowns && pairs.some(([a, b]) => a === i && b === i + 1)) delays.push(1);
+  }
+  if (breakdowns && assembly === "loop") delays.push(1);
+  const timeline = assembly === "pingpong" ? [...delays, ...delays.slice(1, -1).reverse()] : delays;
+  return {
+    uniqueFrames: delays.length,
+    timelineFrames: timeline.length,
+    durationSeconds: timeline.reduce((sum, delay) => sum + delay, 0) / fps,
+  };
+}
+
+function provenance(mode, input, referenceBytes) {
+  const referenceHashes = referenceBytes.map(sha256);
+  return {
+    mode,
+    specHash: specHash(input),
+    sheetHash: referenceHashes[0],
+    referenceHashes,
+  };
+}
+
+function assertCurrentReference(meta, workdir) {
+  if (!meta.sheetHash || meta.mode === "import") return;
+  const path = meta.mode === "skeleton" && meta.characterRef && meta.characterRef !== "sheet.png"
+    ? meta.characterRef
+    : join(workdir, "sheet.png");
+  if (!existsSync(path) || sha256(readFileSync(path)) !== meta.sheetHash) {
+    throw new Error(`컷의 캐릭터 레퍼런스가 현재 파일과 다릅니다: ${path} — 원래 레퍼런스를 복원하거나 컷을 --force로 재생성하세요`);
+  }
+}
+
+function checkPlanTarget(cutDir, options, base) {
+  if (options.force && options.resume) throw new Error("--force와 --resume은 함께 사용할 수 없습니다");
+  if (existsSync(cutDir) && !options.force && !options.resume) {
+    throw new Error(`이미 존재하는 컷입니다: ${cutDir} (이어하려면 --resume, 교체하려면 --force)`);
+  }
+  if (options.resume) {
+    const metaPath = join(cutDir, "cut.json");
+    if (!existsSync(metaPath)) throw new Error(`--resume 메타가 없습니다: ${metaPath} — --force로 새로 생성하세요`);
+    assertResumeCompatible(readJson(metaPath), base);
+  }
+}
+
+function printPlan(plan, options) {
+  assertPlannedBudget(plan, options);
+  if (options.json) {
+    console.log(JSON.stringify(plan, null, 2));
+    return;
+  }
+  console.log(`모드: ${plan.mode}, 프로바이더: ${plan.provider}`);
+  console.log(`호출: ${plan.remainingCalls}/${plan.totalCalls}회 (재사용 ${plan.reusedCalls}회)`);
+  if (plan.possibleRetryCalls) console.log(`추가 재시도 가능: 최대 ${plan.possibleRetryCalls}회 (런타임 상한 적용)`);
+  console.log(`예상 비용: $${plan.estimatedCostUsd.toFixed(3)} (호출당 $${IMAGE_COST_USD})`);
+  console.log(`출력: ${plan.frames}프레임, ${plan.durationSeconds.toFixed(2)}초`);
+}
+
 async function cmdSheet(workdir, options) {
   if (!options.prompt?.trim()) throw new Error("--prompt (캐릭터 설명)은 필수입니다");
   const path = join(workdir, "sheet.png");
@@ -318,8 +414,8 @@ async function cmdSheet(workdir, options) {
   const provider = imageProvider();
   const bytes = await provider.generate({ prompt: SHEET_PROMPT(options.prompt.trim()) });
   mkdirSync(workdir, { recursive: true });
-  writeFileSync(path, encodePng(await toRgba(bytes)));
-  writeFileSync(join(workdir, "sheet-prompt.txt"), options.prompt.trim() + "\n");
+  atomicWriteFile(path, encodePng(await toRgba(bytes)));
+  atomicWriteFile(join(workdir, "sheet-prompt.txt"), options.prompt.trim() + "\n");
   console.log(`✓ 캐릭터 시트 저장 (${provider.name}) → ${path}`);
   console.log("시트가 마음에 들 때까지 --force로 다시 뽑은 뒤 cut을 시작하세요.");
 }
@@ -337,7 +433,6 @@ async function cmdCut(workdir, cutId, options) {
   const sheetPath = join(workdir, "sheet.png");
   if (!existsSync(sheetPath)) throw new Error(`캐릭터 시트가 없습니다 — 먼저: emoticon.mjs sheet ${workdir} --prompt "..."`);
   const cutDir = join(workdir, "cuts", cutId);
-  if (existsSync(cutDir) && !options.force) throw new Error(`이미 존재하는 컷입니다: ${cutDir} (덮어쓰려면 --force)`);
   // 포즈 스크립트(선택): 줄당 1개 = 프레임당 1개. 프레임 간 튐(보일링)을
   // 줄이는 핵심 수단 — 동작 진행을 프레임 번호가 아니라 포즈 문장으로 고정한다.
   let poses = null;
@@ -348,37 +443,52 @@ async function cmdCut(workdir, cutId, options) {
     }
   }
 
-  const provider = imageProvider();
   const sheet = readFileSync(sheetPath);
+  const provider = imageProvider();
+  const input = { motion: options.motion.trim(), frames: total, fps, poses };
+  const base = provenance("sequential", input, [sheet]);
+  checkPlanTarget(cutDir, options, base);
+  let reusable = 0;
+  if (options.resume) {
+    for (let i = 1; i <= total; i++) if (await reusableRaw(join(cutDir, "frames-raw", `${pad2(i)}.png`))) reusable++;
+  }
+  const plan = {
+    mode: "sequential", provider: provider.name, totalCalls: total,
+    remainingCalls: total - reusable, reusedCalls: reusable, possibleRetryCalls: 0,
+    estimatedCostUsd: planCost(total - reusable), frames: total, durationSeconds: total / fps,
+  };
+  assertPlannedBudget(plan, options);
+  const state = prepareCutRun({ cutDir, options, base, provider: provider.name });
+  const metered = budgetedProvider(provider, options, plan, state);
   mkdirSync(join(cutDir, "frames"), { recursive: true });
   mkdirSync(join(cutDir, "frames-raw"), { recursive: true });
 
-  const rawFrames = [];
-  for (let i = 1; i <= total; i++) {
-    const references = [sheet, ...(rawFrames.length ? [rawFrames[0]] : []), ...(rawFrames.length > 1 ? [rawFrames[rawFrames.length - 1]] : [])];
-    const bytes = await provider.generate({
-      prompt: FRAME_PROMPT(options.motion.trim(), i, total, poses?.[i - 1] ?? ""),
-      references,
-    });
-    rawFrames.push(bytes);
-    // 원본을 먼저 저장해 실패해도 디버깅 근거가 남게 한다
-    writeFileSync(join(cutDir, "frames-raw", `${pad2(i)}.png`), Buffer.from(bytes));
-    const keyed = autoCutout(await toRgba(bytes));
-    const ratio = transparencyRatio(keyed);
-    if (ratio < 0.05) {
-      throw new Error(
-        `프레임 ${pad2(i)} 누끼 실패 (투명 ${Math.round(ratio * 100)}%) — ` +
-        `frames-raw/${pad2(i)}.png 확인 후 --force로 재시도`,
-      );
+  try {
+    const rawFrames = [];
+    for (let i = 1; i <= total; i++) {
+      const rawPath = join(cutDir, "frames-raw", `${pad2(i)}.png`);
+      let item = options.resume ? await reusableRaw(rawPath) : null;
+      const reused = Boolean(item);
+      if (!item) {
+        const references = [sheet, ...(rawFrames.length ? [rawFrames[0]] : []), ...(rawFrames.length > 1 ? [rawFrames[rawFrames.length - 1]] : [])];
+        const bytes = await metered.generate({
+          prompt: FRAME_PROMPT(options.motion.trim(), i, total, poses?.[i - 1] ?? ""),
+          references,
+        });
+        atomicWriteFile(rawPath, Buffer.from(bytes));
+        item = await reusableRaw(rawPath);
+        if (!item) throw new Error(`프레임 ${pad2(i)} 누끼 실패 — frames-raw/${pad2(i)}.png 확인 후 --resume으로 재시도`);
+      }
+      rawFrames.push(item.bytes);
+      const ratio = transparencyRatio(item.keyed);
+      atomicWriteFile(join(cutDir, "frames", `${pad2(i)}.png`), encodePng(item.keyed));
+      console.log(`  프레임 ${pad2(i)}/${pad2(total)} (투명 ${Math.round(ratio * 100)}%${reused ? ", raw 재사용" : ""})`);
     }
-    writeFileSync(join(cutDir, "frames", `${pad2(i)}.png`), encodePng(keyed));
-    console.log(`  프레임 ${pad2(i)}/${pad2(total)} (투명 ${Math.round(ratio * 100)}%)`);
+    finishCutRun(state, "complete", null, { ...input, ...base });
+  } catch (error) {
+    finishCutRun(state, "failed", error);
+    throw error;
   }
-  writeFileSync(join(cutDir, "cut.json"), JSON.stringify({
-    motion: options.motion.trim(), frames: total, fps,
-    ...(poses ? { poses } : {}),
-    provider: provider.name, createdAt: new Date().toISOString().slice(0, 10),
-  }, null, 2) + "\n");
   console.log(`✓ ${cutId} 컷 생성 (${total}프레임) → ${cutDir}`);
   console.log(`다음 단계: node _infra/emoticon.mjs build ${workdir} ${cutId}`);
 }
@@ -405,53 +515,71 @@ async function cmdCutKeys(workdir, cutId, options) {
   const sheetPath = join(workdir, "sheet.png");
   if (!existsSync(sheetPath)) throw new Error(`캐릭터 시트가 없습니다 — 먼저: emoticon.mjs sheet ${workdir} --prompt "..."`);
   const cutDir = join(workdir, "cuts", cutId);
-  if (existsSync(cutDir) && !options.force) throw new Error(`이미 존재하는 컷입니다: ${cutDir} (덮어쓰려면 --force)`);
-
-  const provider = imageProvider();
   const sheet = readFileSync(sheetPath);
-  mkdirSync(join(cutDir, "frames"), { recursive: true });
-  mkdirSync(join(cutDir, "frames-raw"), { recursive: true });
-
-  const generateKeyed = async (prompt, references, label, rawName) => {
-    const bytes = await provider.generate({ prompt, references });
-    writeFileSync(join(cutDir, "frames-raw", rawName), Buffer.from(bytes));
-    const keyed = autoCutout(await toRgba(bytes));
-    const ratio = transparencyRatio(keyed);
-    if (ratio < 0.05) {
-      throw new Error(`${label} 누끼 실패 (투명 ${Math.round(ratio * 100)}%) — frames-raw/${rawName} 확인 후 --force로 재시도`);
-    }
-    return { bytes, keyed };
-  };
-  const sameSize = (x, y) => x.width === y.width && x.height === y.height;
-
-  // ① 키 포즈 — 시트(+앞선 키)를 레퍼런스로 극단만 생성
-  const keyRaw = [];
-  const keyImages = [];
-  for (let i = 0; i < keys.length; i++) {
-    const references = [sheet, ...(keyRaw.length ? [keyRaw[0]] : []), ...(keyRaw.length > 1 ? [keyRaw[keyRaw.length - 1]] : [])];
-    const { bytes, keyed } = await generateKeyed(
-      KEY_PROMPT(motion, i + 1, keys.length, keys[i].pose.trim()), references,
-      `키 ${i + 1}`, `key-${i + 1}.png`,
-    );
-    keyRaw.push(bytes);
-    keyImages.push(keyed);
-    console.log(`  키 포즈 ${i + 1}/${keys.length}`);
-  }
-
-  // ② 브레이크다운 — 키 쌍의 양쪽 이미지를 함께 레퍼런스로.
-  // 중간 프레임이 어느 한쪽 키와의 diff가 "키끼리의 diff"보다 크면 중간이
-  // 아니라 튄 것 — 1회 자동 재생성 후 덜 튀는 쪽을 채택한다 (선별 재작업).
+  const provider = imageProvider();
   const pairs = [];
   for (let i = 0; i < keys.length - 1; i++) pairs.push([i, i + 1]);
   if (assembly === "loop") pairs.push([keys.length - 1, 0]);
-  const bdImages = new Map();
-  if (breakdowns === 1) {
-    for (const [a, b] of pairs) {
+  const totalCalls = keys.length + (breakdowns ? pairs.length : 0);
+  const input = { motion, fps, keys, breakdowns, assembly };
+  const base = provenance("keys", input, [sheet]);
+  checkPlanTarget(cutDir, options, base);
+  const rawNames = [
+    ...keys.map((_, i) => `key-${i + 1}.png`),
+    ...(breakdowns ? pairs.map(([a, b]) => `bd-${a + 1}-${b + 1}.png`) : []),
+  ];
+  let reusable = 0;
+  if (options.resume) for (const name of rawNames) if (await reusableRaw(join(cutDir, "frames-raw", name))) reusable++;
+  const timing = keyTiming(keys, pairs, breakdowns, assembly, fps);
+  const plan = {
+    mode: "keys", provider: provider.name, totalCalls, remainingCalls: totalCalls - reusable,
+    reusedCalls: reusable, possibleRetryCalls: breakdowns ? pairs.length : 0,
+    estimatedCostUsd: planCost(totalCalls - reusable), frames: timing.uniqueFrames,
+    timelineFrames: timing.timelineFrames, durationSeconds: timing.durationSeconds,
+  };
+  assertPlannedBudget(plan, options);
+  const state = prepareCutRun({ cutDir, options, base, provider: provider.name });
+  const metered = budgetedProvider(provider, options, plan, state);
+  mkdirSync(join(cutDir, "frames"), { recursive: true });
+  mkdirSync(join(cutDir, "frames-raw"), { recursive: true });
+
+  const generateKeyed = async (prompt, references, label, rawName, allowReuse = true) => {
+    const rawPath = join(cutDir, "frames-raw", rawName);
+    const cached = options.resume && allowReuse ? await reusableRaw(rawPath) : null;
+    if (cached) return { ...cached, reused: true };
+    const bytes = await metered.generate({ prompt, references });
+    atomicWriteFile(rawPath, Buffer.from(bytes));
+    const item = await reusableRaw(rawPath);
+    if (!item) {
+      throw new Error(`${label} 누끼 실패 — frames-raw/${rawName} 확인 후 --resume으로 재시도`);
+    }
+    return { ...item, reused: false };
+  };
+  const sameSize = (x, y) => x.width === y.width && x.height === y.height;
+
+  try {
+    // ① 키 포즈 — 시트(+앞선 키)를 레퍼런스로 극단만 생성
+    const keyRaw = [];
+    const keyImages = [];
+    for (let i = 0; i < keys.length; i++) {
+      const references = [sheet, ...(keyRaw.length ? [keyRaw[0]] : []), ...(keyRaw.length > 1 ? [keyRaw[keyRaw.length - 1]] : [])];
+      const { bytes, keyed } = await generateKeyed(
+        KEY_PROMPT(motion, i + 1, keys.length, keys[i].pose.trim()), references,
+        `키 ${i + 1}`, `key-${i + 1}.png`,
+      );
+      keyRaw.push(bytes);
+      keyImages.push(keyed);
+      console.log(`  키 포즈 ${i + 1}/${keys.length}`);
+    }
+
+    // ② 브레이크다운 — 키 쌍의 양쪽 이미지를 함께 레퍼런스로.
+    const bdImages = new Map();
+    if (breakdowns === 1) for (const [a, b] of pairs) {
       const label = `브레이크다운 ${a + 1}→${b + 1}`;
       const rawName = `bd-${a + 1}-${b + 1}.png`;
-      const gen = () => generateKeyed(
+      const gen = (allowReuse = true) => generateKeyed(
         BREAKDOWN_PROMPT(motion, keys[a].pose.trim(), keys[b].pose.trim()),
-        [sheet, keyRaw[a], keyRaw[b]], label, rawName,
+        [sheet, keyRaw[a], keyRaw[b]], label, rawName, allowReuse,
       );
       const midDiff = ({ keyed }) =>
         sameSize(keyed, keyImages[a]) && sameSize(keyed, keyImages[b])
@@ -460,49 +588,52 @@ async function cmdCutKeys(workdir, cutId, options) {
       let best = await gen();
       const dAB = sameSize(keyImages[a], keyImages[b]) ? loopDiff(keyImages[a], keyImages[b]) : null;
       const d1 = midDiff(best);
-      if (dAB !== null && d1 !== null && d1 > dAB) {
+      if (!best.reused && dAB !== null && d1 !== null && d1 > dAB) {
         console.log(`  ${label} 튐 (중간 diff ${(d1 * 100).toFixed(1)}% > 키 간 ${(dAB * 100).toFixed(1)}%) — 1회 재생성`);
-        const retry = await gen();
-        const d2 = midDiff(retry);
-        if (d2 !== null && d2 < d1) best = retry;
-        else writeFileSync(join(cutDir, "frames-raw", rawName), Buffer.from(best.bytes)); // 원본 유지
+        try {
+          const retry = await gen(false);
+          const d2 = midDiff(retry);
+          if (d2 !== null && d2 < d1) best = retry;
+          else atomicWriteFile(join(cutDir, "frames-raw", rawName), Buffer.from(best.bytes));
+        } catch (error) {
+          if (!/--max-(calls|cost)/.test(String(error.message))) throw error;
+          console.log(`  ${label} 재시도 생략 (${error.message})`);
+        }
       }
       bdImages.set(`${a}-${b}`, best.keyed);
       console.log(`  ${label}`);
     }
-  }
 
-  // ③ 조립 — 유니크 프레임 나열 + 타임라인(홀드는 delay로, 핑퐁은 역순 항목으로)
-  const unique = [];       // { image, delayFrames }
-  const sequenceMeta = []; // redo가 프레임 번호 → 생성 재현에 쓰는 구성 기록
-  for (let i = 0; i < keys.length; i++) {
-    unique.push({ image: keyImages[i], delayFrames: Math.max(1, Number(keys[i].hold ?? 1)) });
-    sequenceMeta.push({ type: "key", key: i });
-    const pairKey = `${i}-${i + 1}`;
-    if (bdImages.has(pairKey)) {
-      unique.push({ image: bdImages.get(pairKey), delayFrames: 1 });
-      sequenceMeta.push({ type: "bd", pair: [i, i + 1] });
+    // ③ 조립 — 유니크 프레임 나열 + 타임라인
+    const unique = [];
+    const sequenceMeta = [];
+    for (let i = 0; i < keys.length; i++) {
+      unique.push({ image: keyImages[i], delayFrames: Math.max(1, Number(keys[i].hold ?? 1)) });
+      sequenceMeta.push({ type: "key", key: i });
+      const pairKey = `${i}-${i + 1}`;
+      if (bdImages.has(pairKey)) {
+        unique.push({ image: bdImages.get(pairKey), delayFrames: 1 });
+        sequenceMeta.push({ type: "bd", pair: [i, i + 1] });
+      }
     }
-  }
-  if (assembly === "loop" && bdImages.has(`${keys.length - 1}-0`)) {
-    unique.push({ image: bdImages.get(`${keys.length - 1}-0`), delayFrames: 1 });
-    sequenceMeta.push({ type: "bd", pair: [keys.length - 1, 0] });
-  }
-  const frameDelay = 1000 / fps;
-  const timeline = unique.map((u, index) => ({ frame: index, delayMs: Math.round(u.delayFrames * frameDelay) }));
-  if (assembly === "pingpong") {
-    for (let i = unique.length - 2; i >= 1; i--) {
+    if (assembly === "loop" && bdImages.has(`${keys.length - 1}-0`)) {
+      unique.push({ image: bdImages.get(`${keys.length - 1}-0`), delayFrames: 1 });
+      sequenceMeta.push({ type: "bd", pair: [keys.length - 1, 0] });
+    }
+    const frameDelay = 1000 / fps;
+    const timeline = unique.map((u, index) => ({ frame: index, delayMs: Math.round(u.delayFrames * frameDelay) }));
+    if (assembly === "pingpong") for (let i = unique.length - 2; i >= 1; i--) {
       timeline.push({ frame: i, delayMs: Math.round(unique[i].delayFrames * frameDelay) });
     }
+    unique.forEach((u, i) => atomicWriteFile(join(cutDir, "frames", `${pad2(i + 1)}.png`), encodePng(u.image)));
+    finishCutRun(state, "complete", null, {
+      ...input, ...base, frames: unique.length, sequence: sequenceMeta, timeline,
+    });
+    console.log(`✓ ${cutId} 컷 생성 (유니크 ${unique.length}장 → 타임라인 ${timeline.length}프레임, ${assembly})`);
+  } catch (error) {
+    finishCutRun(state, "failed", error);
+    throw error;
   }
-
-  unique.forEach((u, i) => writeFileSync(join(cutDir, "frames", `${pad2(i + 1)}.png`), encodePng(u.image)));
-  writeFileSync(join(cutDir, "cut.json"), JSON.stringify({
-    motion, fps, mode: "keys", keys, breakdowns, assembly,
-    frames: unique.length, sequence: sequenceMeta, timeline,
-    provider: provider.name, createdAt: new Date().toISOString().slice(0, 10),
-  }, null, 2) + "\n");
-  console.log(`✓ ${cutId} 컷 생성 (유니크 ${unique.length}장 → 타임라인 ${timeline.length}프레임, ${assembly})`);
   console.log(`다음 단계: node _infra/emoticon.mjs build ${workdir} ${cutId}`);
 }
 
@@ -517,7 +648,6 @@ async function cmdCutSkeleton(workdir, cutId, options) {
   const refPath = options.ref ?? join(workdir, "sheet.png");
   if (!existsSync(refPath)) throw new Error(`캐릭터 레퍼런스가 없습니다: ${refPath}`);
   const cutDir = join(workdir, "cuts", cutId);
-  if (existsSync(cutDir) && !options.force) throw new Error(`이미 존재하는 컷입니다: ${cutDir} (덮어쓰려면 --force)`);
 
   const { spec, frames: poses } = loadSequence(options.skeletons);
   const motion = String(options.motion ?? spec.description ?? spec.name).trim();
@@ -527,8 +657,31 @@ async function cmdCutSkeleton(workdir, cutId, options) {
   const rows = Math.ceil(poses.length / cols);
   if (poses.length > MAX_FRAMES) throw new Error(`프레임 ${poses.length}장 — 상한 ${MAX_FRAMES}장`);
 
-  const provider = imageProvider();
   const characterRef = readFileSync(refPath);
+  const provider = imageProvider();
+  const input = {
+    motion, fps, sequence: spec.name, sequenceSpec: spec, grid: Boolean(options.grid),
+    characterRef: options.ref ?? "sheet.png", frames: poses.length, cell,
+  };
+  const base = provenance("skeleton", input, [characterRef]);
+  checkPlanTarget(cutDir, options, base);
+  const rawPaths = options.grid
+    ? [join(cutDir, "frames-raw", "grid.png")]
+    : poses.map((_, i) => join(cutDir, "frames-raw", `${pad2(i + 1)}.png`));
+  let reusable = 0;
+  if (options.resume) {
+    if (options.grid) reusable = await reusableGridRaw(rawPaths[0], cols, rows, poses.length) ? 1 : 0;
+    else for (const path of rawPaths) if (await reusableRaw(path)) reusable++;
+  }
+  const totalCalls = options.grid ? 1 : poses.length;
+  const plan = {
+    mode: "skeleton", provider: provider.name, totalCalls, remainingCalls: totalCalls - reusable,
+    reusedCalls: reusable, possibleRetryCalls: 0, estimatedCostUsd: planCost(totalCalls - reusable),
+    frames: poses.length, durationSeconds: poses.length / fps,
+  };
+  assertPlannedBudget(plan, options);
+  const state = prepareCutRun({ cutDir, options, base, provider: provider.name });
+  const metered = budgetedProvider(provider, options, plan, state);
   mkdirSync(join(cutDir, "frames"), { recursive: true });
   mkdirSync(join(cutDir, "frames-raw"), { recursive: true });
   mkdirSync(join(cutDir, "skeletons"), { recursive: true });
@@ -539,44 +692,147 @@ async function cmdCutSkeleton(workdir, cutId, options) {
     if (ratio < 0.05) {
       throw new Error(`프레임 ${pad2(index)} 누끼 실패 (투명 ${Math.round(ratio * 100)}%) — frames-raw 확인 후 --force로 재시도`);
     }
-    writeFileSync(join(cutDir, "frames", `${pad2(index)}.png`), encodePng(keyed));
+    atomicWriteFile(join(cutDir, "frames", `${pad2(index)}.png`), encodePng(keyed));
   };
 
-  if (options.grid) {
-    // 그리드 단일 호출 — 모든 프레임이 한 번의 샘플링을 공유한다 (FramePrompt)
-    const grid = encodePng(renderGrid(poses, { cols, cell }));
-    writeFileSync(join(cutDir, "skeletons", "grid.png"), grid);
-    const bytes = await provider.generate({
-      prompt: SKELETON_GRID_PROMPT(motion, cols, rows),
-      references: [characterRef, grid],
-    });
-    writeFileSync(join(cutDir, "frames-raw", "grid.png"), Buffer.from(bytes));
-    const sheetImage = await toRgba(bytes);
-    const cells = sliceGrid(sheetImage, cols, rows).slice(0, poses.length);
-    for (const [i, cellImage] of cells.entries()) await keep(cellImage, i + 1);
-    console.log(`  그리드 1회 호출 → ${cells.length}프레임 슬라이스`);
-  } else {
-    for (const [i, pose] of poses.entries()) {
-      const skeleton = encodePng(renderPose(pose, { width: cell, height: cell }));
-      writeFileSync(join(cutDir, "skeletons", `${pad2(i + 1)}.png`), skeleton);
-      const bytes = await provider.generate({
-        prompt: SKELETON_FRAME_PROMPT(motion, i + 1, poses.length),
-        references: [characterRef, skeleton],
-      });
-      writeFileSync(join(cutDir, "frames-raw", `${pad2(i + 1)}.png`), Buffer.from(bytes));
-      await keep(await toRgba(bytes), i + 1);
-      console.log(`  프레임 ${pad2(i + 1)}/${pad2(poses.length)}`);
+  try {
+    if (options.grid) {
+      // 그리드 단일 호출 — 모든 프레임이 한 번의 샘플링을 공유한다 (FramePrompt)
+      const grid = encodePng(renderGrid(poses, { cols, cell }));
+      atomicWriteFile(join(cutDir, "skeletons", "grid.png"), grid);
+      const rawPath = join(cutDir, "frames-raw", "grid.png");
+      let bytes = options.resume ? await reusableGridRaw(rawPath, cols, rows, poses.length) : null;
+      if (!bytes) {
+        bytes = await metered.generate({ prompt: SKELETON_GRID_PROMPT(motion, cols, rows), references: [characterRef, grid] });
+        atomicWriteFile(rawPath, Buffer.from(bytes));
+      }
+      const sheetImage = await toRgba(bytes);
+      const cells = sliceGrid(sheetImage, cols, rows).slice(0, poses.length);
+      for (const [i, cellImage] of cells.entries()) await keep(cellImage, i + 1);
+      console.log(`  그리드 1회 호출 → ${cells.length}프레임 슬라이스`);
+    } else {
+      for (const [i, pose] of poses.entries()) {
+        const skeleton = encodePng(renderPose(pose, { width: cell, height: cell }));
+        atomicWriteFile(join(cutDir, "skeletons", `${pad2(i + 1)}.png`), skeleton);
+        const rawPath = join(cutDir, "frames-raw", `${pad2(i + 1)}.png`);
+        let bytes = options.resume ? (await reusableRaw(rawPath))?.bytes ?? null : null;
+        if (!bytes) {
+          bytes = await metered.generate({ prompt: SKELETON_FRAME_PROMPT(motion, i + 1, poses.length), references: [characterRef, skeleton] });
+          atomicWriteFile(rawPath, Buffer.from(bytes));
+        }
+        await keep(await toRgba(bytes), i + 1);
+        console.log(`  프레임 ${pad2(i + 1)}/${pad2(poses.length)}`);
+      }
     }
+    finishCutRun(state, "complete", null, { ...input, ...base });
+  } catch (error) {
+    finishCutRun(state, "failed", error);
+    throw error;
   }
-
-  writeFileSync(join(cutDir, "cut.json"), JSON.stringify({
-    motion, fps, mode: "skeleton", sequence: spec.name, grid: Boolean(options.grid),
-    characterRef: options.ref ?? "sheet.png",
-    frames: poses.length, provider: provider.name,
-    createdAt: new Date().toISOString().slice(0, 10),
-  }, null, 2) + "\n");
   console.log(`✓ ${cutId} 컷 생성 (${poses.length}프레임, 스켈레톤 조건화) → ${cutDir}`);
   console.log(`다음 단계: node _infra/emoticon.mjs build ${workdir} ${cutId}`);
+}
+
+// 실제 파일이나 API를 건드리지 않고 호출 수·비용·출력 규모와 resume 호환성을 계산한다.
+async function cmdPlan(workdir, cutId, options) {
+  if (!CUT_ID_RE.test(cutId ?? "")) throw new Error(`컷 id는 영소문자·숫자·하이픈만 가능합니다: ${cutId}`);
+  const provider = imageProvider();
+  const cutDir = join(workdir, "cuts", cutId);
+
+  if (options.keys) {
+    const spec = readJson(options.keys);
+    const motion = String(options.motion ?? spec.motion ?? "").trim();
+    const keys = spec.keys;
+    if (!motion) throw new Error("동작 설명이 필요합니다 (--motion 또는 spec.motion)");
+    if (!Array.isArray(keys) || keys.length < 2 || keys.length > 6 || keys.some((key) => !key?.pose?.trim())) {
+      throw new Error("keys는 pose 문장을 가진 2~6개의 키 포즈여야 합니다");
+    }
+    const breakdowns = Number(spec.breakdowns ?? 1);
+    const assembly = spec.assembly ?? "pingpong";
+    if (![0, 1].includes(breakdowns)) throw new Error("breakdowns는 0 또는 1만 지원합니다 (v1)");
+    if (!["pingpong", "loop"].includes(assembly)) throw new Error('assembly는 "pingpong" 또는 "loop"');
+    const fps = Number(options.fps ?? spec.fps ?? 12);
+    const sheetPath = join(workdir, "sheet.png");
+    if (!existsSync(sheetPath)) throw new Error(`캐릭터 시트가 없습니다: ${sheetPath}`);
+    const sheet = readFileSync(sheetPath);
+    const pairs = [];
+    for (let i = 0; i < keys.length - 1; i++) pairs.push([i, i + 1]);
+    if (assembly === "loop") pairs.push([keys.length - 1, 0]);
+    const names = [
+      ...keys.map((_, i) => `key-${i + 1}.png`),
+      ...(breakdowns ? pairs.map(([a, b]) => `bd-${a + 1}-${b + 1}.png`) : []),
+    ];
+    const input = { motion, fps, keys, breakdowns, assembly };
+    const base = provenance("keys", input, [sheet]);
+    checkPlanTarget(cutDir, options, base);
+    let reusable = 0;
+    if (options.resume) for (const name of names) if (await reusableRaw(join(cutDir, "frames-raw", name))) reusable++;
+    const timing = keyTiming(keys, pairs, breakdowns, assembly, fps);
+    return printPlan({
+      mode: "keys", provider: provider.name, totalCalls: names.length,
+      remainingCalls: names.length - reusable, reusedCalls: reusable,
+      possibleRetryCalls: breakdowns ? pairs.length : 0,
+      estimatedCostUsd: planCost(names.length - reusable), frames: timing.uniqueFrames,
+      timelineFrames: timing.timelineFrames, durationSeconds: timing.durationSeconds,
+    }, options);
+  }
+
+  if (options.skeletons) {
+    const refPath = options.ref ?? join(workdir, "sheet.png");
+    if (!existsSync(refPath)) throw new Error(`캐릭터 레퍼런스가 없습니다: ${refPath}`);
+    const { spec, frames: poses } = loadSequence(options.skeletons);
+    const motion = String(options.motion ?? spec.description ?? spec.name).trim();
+    const fps = Number(options.fps ?? spec.fps ?? 12);
+    const cell = Number(options.cell ?? 512);
+    const characterRef = readFileSync(refPath);
+    const input = {
+      motion, fps, sequence: spec.name, sequenceSpec: spec, grid: Boolean(options.grid),
+      characterRef: options.ref ?? "sheet.png", frames: poses.length, cell,
+    };
+    const base = provenance("skeleton", input, [characterRef]);
+    checkPlanTarget(cutDir, options, base);
+    const paths = options.grid
+      ? [join(cutDir, "frames-raw", "grid.png")]
+      : poses.map((_, i) => join(cutDir, "frames-raw", `${pad2(i + 1)}.png`));
+    let reusable = 0;
+    const cols = Math.min(4, poses.length);
+    const rows = Math.ceil(poses.length / cols);
+    if (options.resume) {
+      if (options.grid) reusable = await reusableGridRaw(paths[0], cols, rows, poses.length) ? 1 : 0;
+      else for (const path of paths) if (await reusableRaw(path)) reusable++;
+    }
+    return printPlan({
+      mode: "skeleton", provider: provider.name, totalCalls: paths.length,
+      remainingCalls: paths.length - reusable, reusedCalls: reusable, possibleRetryCalls: 0,
+      estimatedCostUsd: planCost(paths.length - reusable), frames: poses.length,
+      durationSeconds: poses.length / fps,
+    }, options);
+  }
+
+  if (!options.motion?.trim()) throw new Error("--motion (동작 설명)은 필수입니다");
+  const total = Number(options.frames ?? 12);
+  const fps = Number(options.fps ?? 12);
+  if (!Number.isInteger(total) || total < 2 || total > MAX_FRAMES) throw new Error(`--frames 는 2~${MAX_FRAMES} 정수여야 합니다`);
+  const sheetPath = join(workdir, "sheet.png");
+  if (!existsSync(sheetPath)) throw new Error(`캐릭터 시트가 없습니다: ${sheetPath}`);
+  let poses = null;
+  if (options.poses) {
+    poses = readFileSync(options.poses, "utf8").split("\n").map((line) => line.trim()).filter(Boolean);
+    if (poses.length !== total) throw new Error(`포즈 ${poses.length}줄 ≠ ${total}프레임`);
+  }
+  const sheet = readFileSync(sheetPath);
+  const input = { motion: options.motion.trim(), frames: total, fps, poses };
+  const base = provenance("sequential", input, [sheet]);
+  checkPlanTarget(cutDir, options, base);
+  let reusable = 0;
+  if (options.resume) for (let i = 1; i <= total; i++) {
+    if (await reusableRaw(join(cutDir, "frames-raw", `${pad2(i)}.png`))) reusable++;
+  }
+  printPlan({
+    mode: "sequential", provider: provider.name, totalCalls: total,
+    remainingCalls: total - reusable, reusedCalls: reusable, possibleRetryCalls: 0,
+    estimatedCostUsd: planCost(total - reusable), frames: total, durationSeconds: total / fps,
+  }, options);
 }
 
 // 선별 재작업: keys 모드 컷의 특정 유니크 프레임 하나만 같은 프롬프트·
@@ -590,6 +846,7 @@ async function cmdRedo(workdir, cutId, frameArg) {
   if (meta.mode !== "keys" || !Array.isArray(meta.sequence)) {
     throw new Error("redo는 keys 모드 컷만 지원합니다 (cut --keys로 생성한 컷)");
   }
+  assertCurrentReference(meta, workdir);
   const n = Number(frameArg);
   if (!Number.isInteger(n) || n < 1 || n > meta.sequence.length) {
     throw new Error(`프레임 번호는 1~${meta.sequence.length} 입니다`);
@@ -614,13 +871,13 @@ async function cmdRedo(workdir, cutId, frameArg) {
 
   const provider = imageProvider();
   const bytes = await provider.generate({ prompt, references });
-  writeFileSync(join(cutDir, "frames-raw", rawName), Buffer.from(bytes));
+  atomicWriteFile(join(cutDir, "frames-raw", rawName), Buffer.from(bytes));
   const keyed = autoCutout(await toRgba(bytes));
   const ratio = transparencyRatio(keyed);
   if (ratio < 0.05) {
     throw new Error(`${label} 누끼 실패 (투명 ${Math.round(ratio * 100)}%) — frames-raw/${rawName} 확인 후 다시 redo`);
   }
-  writeFileSync(join(cutDir, "frames", `${pad2(n)}.png`), encodePng(keyed));
+  atomicWriteFile(join(cutDir, "frames", `${pad2(n)}.png`), encodePng(keyed));
   console.log(`✓ 프레임 ${pad2(n)} (${label}) 재생성 (${provider.name})`);
   console.log(`다음 단계: node _infra/emoticon.mjs build ${workdir} ${cutId}`);
 }
@@ -635,25 +892,35 @@ async function cmdImport(workdir, cutId, srcDir, options) {
   }
   const fps = Number(options.fps ?? 12);
   const cutDir = join(workdir, "cuts", cutId);
-  if (existsSync(cutDir) && !options.force) throw new Error(`이미 존재하는 컷입니다: ${cutDir} (덮어쓰려면 --force)`);
+  const sourceBytes = files.map((file) => readFileSync(join(srcDir, file)));
+  const input = { motion: options.motion?.trim() || `import:${srcDir}`, frames: files.length, fps, chroma: Boolean(options.chroma) };
+  const base = {
+    mode: "import",
+    specHash: specHash(input),
+    sheetHash: null,
+    referenceHashes: sourceBytes.map(sha256),
+  };
+  const state = prepareCutRun({ cutDir, options, base, provider: "import" });
   mkdirSync(join(cutDir, "frames"), { recursive: true });
 
-  for (const [i, file] of files.entries()) {
-    let rgba = await toRgba(readFileSync(join(srcDir, file)));
-    if (options.chroma) rgba = chromaKeyGreen(rgba);
-    const ratio = transparencyRatio(rgba);
-    if (ratio < 0.05) {
-      throw new Error(
-        `프레임 ${file} 이 불투명합니다 (투명 ${Math.round(ratio * 100)}%) — ` +
-        "초록 배경 영상이면 --chroma, 이미 투명한 프레임이면 원본을 확인하세요",
-      );
+  try {
+    for (const [i, file] of files.entries()) {
+      let rgba = await toRgba(sourceBytes[i]);
+      if (options.chroma) rgba = chromaKeyGreen(rgba);
+      const ratio = transparencyRatio(rgba);
+      if (ratio < 0.05) {
+        throw new Error(
+          `프레임 ${file} 이 불투명합니다 (투명 ${Math.round(ratio * 100)}%) — ` +
+          "초록 배경 영상이면 --chroma, 이미 투명한 프레임이면 원본을 확인하세요",
+        );
+      }
+      atomicWriteFile(join(cutDir, "frames", `${pad2(i + 1)}.png`), encodePng(rgba));
     }
-    writeFileSync(join(cutDir, "frames", `${pad2(i + 1)}.png`), encodePng(rgba));
+    finishCutRun(state, "complete", null, { ...input, ...base });
+  } catch (error) {
+    finishCutRun(state, "failed", error);
+    throw error;
   }
-  writeFileSync(join(cutDir, "cut.json"), JSON.stringify({
-    motion: options.motion?.trim() || `import:${srcDir}`, frames: files.length, fps,
-    provider: "import", createdAt: new Date().toISOString().slice(0, 10),
-  }, null, 2) + "\n");
   console.log(`✓ ${cutId} 컷 가져옴 (${files.length}프레임) → ${cutDir}`);
 }
 
@@ -662,6 +929,7 @@ async function cmdBuild(workdir, cutId, options) {
   const framesDir = join(cutDir, "frames");
   if (!existsSync(framesDir)) throw new Error(`컷이 없습니다: ${cutDir} — 먼저 cut 또는 import를 실행하세요`);
   const meta = JSON.parse(readFileSync(join(cutDir, "cut.json"), "utf8"));
+  assertCurrentReference(meta, workdir);
   const fps = Number(options.fps ?? meta.fps ?? 12);
   const size = Number(options.size ?? 360);
   const files = readdirSync(framesDir).filter((f) => /^\d{2}\.png$/.test(f)).sort();
@@ -679,7 +947,7 @@ async function cmdBuild(workdir, cutId, options) {
   const sequence = expand(fitted);
   const apng = encodeApng(sequence, { fps, delaysMs });
   const outPath = join(outDir, `${cutId}.png`);
-  writeFileSync(outPath, apng);
+  atomicWriteFile(outPath, apng);
 
   const diff = loopDiff(sequence[0], sequence[sequence.length - 1]);
   let adjacent = 0;
@@ -709,7 +977,7 @@ async function cmdBuild(workdir, cutId, options) {
     }
     const lineApng = encodeApng(expand(fitFrames(frames, LINE_SIZE)), { fps, delaysMs, loops: 4 });
     const linePath = join(outDir, `${cutId}-line.png`);
-    writeFileSync(linePath, lineApng);
+    atomicWriteFile(linePath, lineApng);
     const ok = lineApng.length <= LINE_MAX_BYTES;
     console.log(`✓ ${linePath} — ${LINE_SIZE}², ${(lineApng.length / 1024).toFixed(0)}KB ${ok ? "(≤300KB)" : ""}`);
     if (!ok) {
@@ -742,11 +1010,14 @@ function cmdCheck(workdir, cutId) {
 function parseArgs(argv) {
   const positional = [];
   const options = {};
-  const flags = new Set(["force", "line", "chroma"]);
+  const flags = new Set(["force", "resume", "line", "chroma", "grid", "json"]);
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg.startsWith("--") && flags.has(arg.slice(2))) options[arg.slice(2)] = true;
-    else if (arg.startsWith("--")) options[arg.slice(2)] = argv[++i];
+    else if (arg.startsWith("--")) {
+      if (i + 1 >= argv.length || argv[i + 1].startsWith("--")) throw new Error(`${arg} 값이 필요합니다`);
+      options[arg.slice(2)] = argv[++i];
+    }
     else positional.push(arg);
   }
   return { positional, options };
@@ -755,11 +1026,12 @@ function parseArgs(argv) {
 const USAGE =
   'usage: node _infra/emoticon.mjs <명령> <작업폴더> ...\n' +
   '  sheet  <작업폴더> --prompt "캐릭터 설명" [--force]\n' +
-  '  cut    <작업폴더> <컷id> --motion "동작 설명" [--frames 12] [--fps 12] [--poses 파일] [--force]\n' +
+  '  plan   <작업폴더> <컷id> <cut과 같은 옵션> [--resume] [--max-calls N] [--max-cost USD] [--json]\n' +
+  '  cut    <작업폴더> <컷id> --motion "동작 설명" [--frames 12] [--fps 12] [--poses 파일] [--force|--resume]\n' +
   '         (--poses: 줄당 포즈 1개 = 프레임당 1개 — 프레임 간 튐을 줄이는 옵션)\n' +
-  '  cut    <작업폴더> <컷id> --keys <spec.json> [--fps 12] [--force]  ← pose-to-pose\n' +
+  '  cut    <작업폴더> <컷id> --keys <spec.json> [--fps 12] [--force|--resume]  ← pose-to-pose\n' +
   '         spec: {"motion":"...","keys":[{"pose":"...","hold":2},...],"breakdowns":1,"assembly":"pingpong|loop"}\n' +
-  '  cut    <작업폴더> <컷id> --skeletons <포즈시퀀스.json> [--grid] [--cell 512] [--force]\n' +
+  '  cut    <작업폴더> <컷id> --skeletons <포즈시퀀스.json> [--grid] [--cell 512] [--force|--resume]\n' +
   '         스켈레톤 조건화 — _src/emoticon/poses/*.json 재사용. --grid는 단일 호출\n' +
   '  import <작업폴더> <컷id> <프레임폴더> [--fps 12] [--chroma] [--force]\n' +
   '  build  <작업폴더> <컷id> [--size 360] [--fps N] [--line]\n' +
@@ -771,11 +1043,12 @@ const USAGE =
   '  gemini: GEMINI_API_KEY 또는 EMOTICON_IMAGE_API_KEY (로컬 직접 호출)';
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { positional, options } = parseArgs(process.argv.slice(2));
-  const [command, workdir, ...rest] = positional;
   try {
+    const { positional, options } = parseArgs(process.argv.slice(2));
+    const [command, workdir, ...rest] = positional;
     if (!command || !workdir) throw new Error(USAGE);
     if (command === "sheet") await cmdSheet(workdir, options);
+    else if (command === "plan") await cmdPlan(workdir, rest[0], options);
     else if (command === "cut") await cmdCut(workdir, rest[0], options);
     else if (command === "import") await cmdImport(workdir, rest[0], rest[1], options);
     else if (command === "build") await cmdBuild(workdir, rest[0], options);
