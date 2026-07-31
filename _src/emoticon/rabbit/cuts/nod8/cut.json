@@ -1,0 +1,129 @@
+{
+  "schemaVersion": 2,
+  "cliVersion": 2,
+  "promptVersion": "2026-07-keys-v1",
+  "mode": "keys",
+  "specHash": "f4bfe001021f9529d8d1b041aedb97d9fa3faf5747eab4ca5f95ac5acea81c14",
+  "sheetHash": "b9692d48a1a77ec19249b8cb0f9f86e7cf358cf605dc9902b31219340aaffcc9",
+  "referenceHashes": [
+    "b9692d48a1a77ec19249b8cb0f9f86e7cf358cf605dc9902b31219340aaffcc9"
+  ],
+  "provider": "gemini/gemini-2.5-flash-image",
+  "status": "complete",
+  "createdAt": "2026-07-31T15:37:29.992Z",
+  "updatedAt": "2026-07-31T15:38:17.339Z",
+  "completedAt": "2026-07-31T15:38:17.339Z",
+  "calls": 6,
+  "unitCostUsd": 0.039,
+  "estimatedCostUsd": 0.234,
+  "runs": [
+    {
+      "runId": "cdf8645b-513f-4410-bbcb-c07ad6f825b2",
+      "startedAt": "2026-07-31T15:37:29.992Z",
+      "provider": "gemini/gemini-2.5-flash-image",
+      "gitCommit": "2d69ff382ed7c4e3380b985ba9c81bb592685bbe",
+      "calls": 6,
+      "estimatedCostUsd": 0.234,
+      "status": "complete",
+      "completedAt": "2026-07-31T15:38:17.339Z"
+    }
+  ],
+  "motion": "nodding: the face is drawn low on the head, then high again",
+  "fps": 12,
+  "keys": [
+    {
+      "pose": "the eyes, nose and mouth are drawn in the middle of the head circle exactly as in Image 1, the eyes open and round, a gentle closed-mouth smile, both ears standing straight up",
+      "hold": 6
+    },
+    {
+      "pose": "the eyes, nose and mouth are drawn low on the head circle, one third of the head's radius lower than in Image 1, so the forehead above the eyes is twice as tall as before and the crown of the head reads as a wide empty dome; the eyes, nose and mouth line up along a downward-bowing arc; the eyes are closed into happy upward arcs and the mouth is a small open smile close to the bottom edge of the head; the ear bases stay near the top of the head circle and sit only one quarter as low as the eyes, and both ears lean back about 10 degrees while keeping their full length",
+      "hold": 2
+    }
+  ],
+  "breakdowns": 2,
+  "assembly": "pingpong",
+  "invariants": "two long upright ears whose bases sit on top of the head, two eyes, one mouth, two short arms, two feet; the paws are the same plain white surface as the body; two pink oval inner ears; two round pink cheek blushes; the canvas holds only this one character",
+  "poseConstants": "the head outline, the body and the feet are drawn at the same place and the same size as Image 1; each short arm is a small rounded nub on the outer edge of the body silhouette, level with the middle of the belly; the character faces the viewer straight on and both sides of the head stay level with each other",
+  "breakdownNote": "The ears lag behind the head: they are still close to where Image 2 has them, about one quarter of the way toward Image 3, and they lean back.",
+  "repeat": 2,
+  "characterRef": "_src/emoticon/rabbit/cuts/nod/frames-raw/key-1.png",
+  "frames": 4,
+  "sequence": [
+    {
+      "type": "key",
+      "key": 0
+    },
+    {
+      "type": "bd",
+      "pair": [
+        0,
+        1
+      ],
+      "slot": 0,
+      "of": 2
+    },
+    {
+      "type": "bd",
+      "pair": [
+        0,
+        1
+      ],
+      "slot": 1,
+      "of": 2
+    },
+    {
+      "type": "key",
+      "key": 1
+    }
+  ],
+  "timeline": [
+    {
+      "frame": 0,
+      "delayMs": 500
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 2,
+      "delayMs": 83
+    },
+    {
+      "frame": 3,
+      "delayMs": 167
+    },
+    {
+      "frame": 2,
+      "delayMs": 83
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 0,
+      "delayMs": 500
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 2,
+      "delayMs": 83
+    },
+    {
+      "frame": 3,
+      "delayMs": 167
+    },
+    {
+      "frame": 2,
+      "delayMs": 83
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    }
+  ]
+}
