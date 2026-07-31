@@ -150,6 +150,40 @@ export function fitFrames(frames, size) {
   });
 }
 
+// 프레임별 캐릭터 경계 상자 → 크기·위치 드리프트 측정.
+// 픽셀 diff는 "의도한 움직임"과 "원치 않는 드리프트"를 구분하지 못한다.
+// 캐릭터 높이가 프레임마다 출렁이면 재생 시 펄스처럼 보이는데, 그건
+// 동작이 아니라 결함이다 — 이 지표가 둘을 갈라준다.
+export function frameBounds({ width, height, data }) {
+  let left = width, top = height, right = -1, bottom = -1;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (data[(y * width + x) * 4 + 3] === 0) continue;
+      if (x < left) left = x;
+      if (x > right) right = x;
+      if (y < top) top = y;
+      if (y > bottom) bottom = y;
+    }
+  }
+  if (right < 0) return null;
+  return {
+    height: bottom - top + 1,
+    width: right - left + 1,
+    centerX: (left + right) / 2,
+    centerY: (top + bottom) / 2,
+  };
+}
+
+// 프레임 시퀀스의 크기 드리프트: 캐릭터 높이의 (최대-최소)/중앙값.
+// 0.15(15%)를 넘으면 재생 시 캐릭터가 커졌다 작아졌다 하는 게 보인다.
+export function scaleDrift(frames) {
+  const heights = frames.map(frameBounds).filter(Boolean).map((b) => b.height);
+  if (heights.length < 2) return 0;
+  const sorted = [...heights].sort((a, b) => a - b);
+  const median = sorted[sorted.length >> 1];
+  return median ? (sorted[sorted.length - 1] - sorted[0]) / median : 0;
+}
+
 export function transparencyRatio({ width, height, data }) {
   let transparent = 0;
   for (let i = 3; i < data.length; i += 4) if (data[i] === 0) transparent++;
@@ -521,6 +555,11 @@ async function cmdBuild(workdir, cutId, options) {
   );
   console.log(`  루프 diff ${(diff * 100).toFixed(1)}% ${diff > 0.12 ? "⚠ 루프가 튈 수 있습니다 — 첫/끝 프레임을 확인하세요" : "(양호)"}`);
   console.log(`  인접 diff 최대 ${(adjacent * 100).toFixed(1)}% ${adjacent > 0.2 ? "⚠ 프레임 간 점프가 큽니다" : "(양호)"}`);
+  const drift = scaleDrift(frames);
+  console.log(
+    `  크기 드리프트 ${(drift * 100).toFixed(1)}% ` +
+    `${drift > 0.15 ? "⚠ 프레임마다 캐릭터 크기가 달라 재생 시 펄스처럼 보입니다" : "(양호)"}`,
+  );
   if (duration > 4) console.log("  ⚠ 4초 초과 — LINE 재생시간 상한(4초)을 넘습니다");
 
   if (options.line) {

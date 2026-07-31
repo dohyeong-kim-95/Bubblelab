@@ -9,7 +9,10 @@ import { decodePng } from "./png.mjs";
 import { encodeApng, inspectApng } from "./apng.mjs";
 import { imageProvider } from "./emoticon-ai.mjs";
 import { bytesToBase64 } from "./emoticon-gen.js";
-import { autoCutout, chromaKeyGreen, fitFrames, loopDiff, resize, transparencyRatio, unionBounds } from "./emoticon.mjs";
+import {
+  autoCutout, chromaKeyGreen, fitFrames, loopDiff, resize, scaleDrift,
+  transparencyRatio, unionBounds,
+} from "./emoticon.mjs";
 import worker from "./worker.js";
 
 const INFRA = dirname(fileURLToPath(import.meta.url));
@@ -115,6 +118,18 @@ test("unionBounds/loopDiff 기본 동작", () => {
   const b = makeImage(8, 8);
   setPixel(b, 1, 1, [255, 255, 255, 255]);
   assert.ok(loopDiff(a, b) > 0.1);
+});
+
+test("scaleDrift: 위치 이동은 무시하고 캐릭터 크기 변동만 잡는다", () => {
+  // 같은 크기(높이 4)의 사각형이 위치만 이동 — 드리프트 0
+  const box = (top, height) => {
+    const img = makeImage(16, 16);
+    for (let y = top; y < top + height; y++) for (let x = 2; x < 6; x++) setPixel(img, x, y, [0, 0, 0, 255]);
+    return img;
+  };
+  assert.equal(scaleDrift([box(2, 4), box(8, 4)]), 0);
+  // 높이 4 → 6으로 커짐: (6-4)/중앙값 = 50% 드리프트
+  assert.ok(scaleDrift([box(2, 4), box(2, 6)]) > 0.3);
 });
 
 test("resize: 알파 가중 축소에서 투명 배경색이 번지지 않는다", () => {
