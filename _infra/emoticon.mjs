@@ -29,6 +29,7 @@ import { imageProvider } from "./emoticon-ai.mjs";
 import { cutoutBackground, decodeSheet, sliceGrid } from "./sticker-pack.mjs";
 import { renderGrid, renderPose } from "./skeleton.mjs";
 import { PROFILES, buildReport, formatJudgement, judgeReport } from "./emoticon-gate.mjs";
+import { breakdownPrompt, canonBlock, keyPrompt, sheetPrompt } from "./emoticon-prompt.mjs";
 import { loadSequence } from "./skeleton-cli.mjs";
 import {
   IMAGE_COST_USD,
@@ -252,77 +253,20 @@ export function loopDiff(a, b) {
 // 지시 골격은 영어(이미지 모델의 지시 추종이 더 정확), 사용자가 쓴 캐릭터
 // 설명·포즈 문장은 받은 언어 그대로 삽입한다. 수정 시 페이지(index.html)와 동기화.
 
-const SHEET_PROMPT = (desc) =>
-  `Draw a character reference sheet for a sticker/emoticon character. Character: ${desc}\n` +
-  "Layout: one large full-body front view + smaller side and back views + 4 key expressions (happy / sad / angry / surprised).\n" +
-  "Style: flat sticker illustration with clean thick outlines, pure white background, no text.\n" +
-  "This sheet is the reference for all future frames, so colors, proportions and accessories must be clear and consistent.";
+const SHEET_PROMPT = (desc) => sheetPrompt(desc);
 
+// 순차 생성(구식) 프롬프트. keys 모드가 표준이라 여기는 유지만 한다.
 const FRAME_PROMPT = (motion, index, total, pose = "") =>
-  `The attached images are this character's reference sheet (first image) and previous frames. ` +
-  `Draw frame ${index}/${total} of a ${total}-frame looping animation of this exact same character ` +
-  `(same colors, proportions, accessories) performing: ${motion}.\n` +
-  (pose ? `Pose for this frame (follow exactly): ${pose}\n` : "") +
-  "Rules: the last frame must flow naturally back into the first frame. " +
-  "Keep the character centered at the same size and position, moving only slightly from the previous frame. " +
-  "Pure solid white background; outlines must be fully closed. No shadows, props, or text.";
+  keyPrompt({ motion, index, total, pose: pose || `frame ${index} of the motion`, canon: canonBlock() });
 
-// pose-to-pose 모드 프롬프트 (animation-techniques.md §1·§7)
-// 캐릭터 불변 명세: 프레임마다 생겼다 사라지는 디테일(앞발 젤리 등)을 막는다.
-// wave 컷에서 브레이크다운 한 장에만 앞발 패드가 나타난 사례가 있었다.
-const invariantLine = (invariants) =>
-  invariants ? `Details that must be IDENTICAL in every frame: ${invariants}\n` : "";
-
+// keys 모드 — 변화 먼저, 불변 나중 (work/emoticon/prompting.md §3).
+// invariants는 "부품 인벤토리"로 쓴다: 있는 것을 개수와 함께 열거하면
+// 부정어 없이 여분의 귀·발바닥 패드를 함께 막을 수 있다 (§2).
 const KEY_PROMPT = (motion, index, total, pose, invariants = "") =>
-  `The attached images are this character's reference sheet (first image)` +
-  `${index > 1 ? " and earlier key poses of this motion" : ""}. ` +
-  `Draw key pose ${index}/${total} of the motion "${motion}" with this exact same character ` +
-  `(same colors, proportions, accessories).\n` +
-  `Key pose (follow exactly): ${pose}\n` + invariantLine(invariants) +
-  "Rules: exaggerate the extreme of the motion with a clear, readable silhouette. " +
-  "Character centered at the same size. Pure solid white background, fully closed outlines. " +
-  "No shadows, props, or text.";
+  keyPrompt({ motion, index, total, pose, canon: canonBlock({ parts: invariants }) });
 
 const BREAKDOWN_PROMPT = (motion, poseA, poseB, invariants = "") =>
-  `The attached images are the character reference sheet and two consecutive key poses A and B ` +
-  `of the motion "${motion}". Draw the exact in-between (breakdown) pose halfway between A and B ` +
-  `with the same character.\n` +
-  `A: ${poseA}\nB: ${poseB}\n` + invariantLine(invariants) +
-  "Rules: hands and head travel along a natural arc, not a straight line. " +
-  "Same character size and position as both keys. Pure solid white background, closed outlines. " +
-  "No shadows, props, or text.";
-
-// 스켈레톤 조건화 프롬프트 (pose-conditioning.md §5의 원칙 1~9).
-// 역할 명명 / 스켈레톤을 그리지 말 것 / 비율은 시트 우선 / 좌우 색 규약 /
-// 불변 요소 고정 — 각 문장이 우리가 겪은 실패에 하나씩 대응한다.
-const SKELETON_RULES =
-  "Rules:\n" +
-  "- NEVER draw the skeleton lines or dots in the output. They are instructions, not content.\n" +
-  "- Output exactly ONE character in ONE pose, centered. Never output a reference sheet, " +
-  "a grid, multiple views, or expression icons — even if the character reference image contains them.\n" +
-  "- The skeleton dictates joint angles and limb directions ONLY. Body proportions must follow " +
-  "the CHARACTER SHEET, not the skeleton — do not stretch or lengthen the character to match it.\n" +
-  "- In the skeleton, warm colors (red/orange/yellow) mark the character's RIGHT arm and leg; " +
-  "cool colors (green/cyan/blue) mark the character's LEFT arm and leg.\n" +
-  "- The character faces the viewer.\n" +
-  "- Keep the camera, canvas, character size and background identical in every frame.\n" +
-  "- Pure solid white background; outlines fully closed. No shadows, props, or text.";
-
-const SKELETON_FRAME_PROMPT = (motion, index, total) =>
-  "Image 1 is the CHARACTER SHEET — the only source of appearance, colors, style and body proportions.\n" +
-  "Image 2 is a POSE SKELETON — the only source of body pose.\n" +
-  `Draw the character from Image 1 in the exact pose shown by the skeleton, as frame ${index}/${total} ` +
-  `of the motion "${motion}".\n` + SKELETON_RULES;
-
-const SKELETON_GRID_PROMPT = (motion, cols, rows) =>
-  "Image 1 is the CHARACTER SHEET — the only source of appearance, colors, style and body proportions.\n" +
-  `Image 2 is a ${cols}x${rows} GRID of POSE SKELETONS, read left to right, top to bottom — ` +
-  "the only source of body pose.\n" +
-  `Output ONE image laid out as the SAME ${cols}x${rows} grid. In each cell draw the character from ` +
-  `Image 1 in the pose of the corresponding skeleton cell. Together the cells form the motion "${motion}".\n` +
-  SKELETON_RULES + "\n" +
-  "- Every cell must use the same character size, the same camera and the same white background, " +
-  "so the cells can be played back as animation frames.";
+  breakdownPrompt({ motion, poseA, poseB, canon: canonBlock({ parts: invariants }) });
 
 // ── 명령 구현 ───────────────────────────────────────────────────────────
 

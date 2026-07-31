@@ -25,6 +25,8 @@
   읽고, 반복 후에 추가한다.**
 - [`animation-techniques.md`](animation-techniques.md) — 사람 애니메이터의
   기법(pose-to-pose·타이밍 차트·리미티드 등)과 AI 파이프라인 적용법.
+- [`prompting.md`](prompting.md) — **프롬프트 규약**. 부정어 금지, 변화 먼저,
+  부품 인벤토리, 스타 토폴로지. 프롬프트를 고치기 전에 읽는다.
 - [`pose-conditioning.md`](pose-conditioning.md) — 스켈레톤 조건화
   (Kling·바이트댄스 계열). **포즈 준수·프레임 튐의 구조적 해법**과
   그리드 단일 호출 전략, 게이트 방식 로드맵.

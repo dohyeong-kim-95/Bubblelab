@@ -88,9 +88,13 @@ function mockProvider() {
   return {
     name: "mock",
     async generate({ prompt }) {
-      const match = /(?:frame|key pose)\s+(\d+)\s*\/\s*(\d+)/i.exec(prompt);
-      const scene = match
-        ? drawScene({ background: [0, 255, 0, 255], frame: { index: Number(match[1]), total: Number(match[2]) } })
+      // 프롬프트 규약(emoticon-prompt.mjs)의 문구와 맞춰야 한다 — 문구가 바뀌면
+      // 여기도 같이 고친다. 시트는 흰 배경, 프레임은 포즈에 따라 다른 그림.
+      const match = /key\s+(\d+)\s+of\s+(\d+)|(?:frame|key pose)\s+(\d+)\s*\/\s*(\d+)/i.exec(prompt);
+      const index = match ? Number(match[1] ?? match[3]) : null;
+      const total = match ? Number(match[2] ?? match[4]) : null;
+      const scene = index
+        ? drawScene({ background: [0, 255, 0, 255], frame: { index, total } })
         : /in-between|breakdown/i.test(prompt)
           ? drawScene({ background: [0, 255, 0, 255], frame: { index: 2, total: 8 } })
           : drawScene({ background: [255, 255, 255, 255] });
