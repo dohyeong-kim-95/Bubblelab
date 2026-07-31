@@ -14,6 +14,7 @@ import {
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { generateAssetCatalog } from "./assets.js";
+import { emitEmoticonHistory } from "./emoticon-history.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const DIST = join(ROOT, "dist");
@@ -88,6 +89,14 @@ if (existsSync(join(ROOT, "_assets"))) {
     JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), items: catalog }, null, 2),
   );
   console.log(`generated asset catalog (${catalog.length} items)`);
+}
+
+// work/emoticon 생성 산출물(_src/emoticon)을 history 페이지가 읽을 수 있게 내보낸다
+{
+  const history = emitEmoticonHistory(ROOT, DIST);
+  if (history) {
+    console.log(`generated emoticon history (${history.characters} characters, ${history.cuts} cuts)`);
+  }
 }
 
 const escapeHtml = (s) =>

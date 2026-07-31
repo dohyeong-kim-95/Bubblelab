@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>🎬 이모티콘 히스토리</title>
+<style>
+  :root { color-scheme: dark;
+    --ground: #10151c; --ink: #e2e9f0; --soft: #93a3b5;
+    --surface: #171f2b; --line: #263140; --accent: #7ea3ec; --warn: #e8a86a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100dvh; background: var(--ground); color: var(--ink);
+         font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+         line-height: 1.7; word-break: keep-all; }
+  main { max-width: 980px; margin: 0 auto; padding: 2rem 1rem 5rem; }
+  h1 { font-size: 1.3rem; } h1 small { color: var(--soft); font-weight: 400; font-size: .8rem; display: block; }
+  h1 a { color: var(--accent); }
+  section { background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+            padding: 1.1rem 1.2rem; margin: 1rem 0; }
+  h2 { font-size: 1.05rem; margin: 0 0 .3rem; }
+  .prompt { font-size: .8rem; color: var(--soft); margin: 0 0 .8rem; }
+  .sheet { max-width: 260px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+  .cut { border-top: 1px dashed var(--line); margin-top: 1rem; padding-top: 1rem; }
+  .cut h3 { font-size: .95rem; margin: 0 0 .4rem; }
+  .cut .meta { font-size: .8rem; color: var(--soft); margin: 0 0 .6rem; }
+  .media { display: flex; gap: .9rem; flex-wrap: wrap; align-items: flex-start; }
+  .media figure { margin: 0; }
+  .media figcaption { font-size: .72rem; color: var(--soft); margin-top: .25rem; }
+  .media img.apng { width: 180px; height: 180px; border: 1px solid var(--line); border-radius: 10px;
+    background: repeating-conic-gradient(#1c2530 0% 25%, #10151c 0% 50%) 0 0/16px 16px; }
+  .media a.grid img { max-width: 420px; width: 100%; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+  details { font-size: .8rem; color: var(--soft); margin-top: .4rem; }
+  details ol { margin: .3rem 0 0 1.2rem; padding: 0; }
+  .status { color: var(--soft); font-size: .85rem; }
+  .status.err { color: var(--warn); }
+</style>
+</head>
+<body>
+<main>
+  <h1>🎬 이모티콘 히스토리
+    <small>지금까지 생성된 시트·컷 전부 (빌드 시점의 <code>_src/emoticon</code> 스냅샷) — <a href="/emoticon/">← 생성 툴로</a></small>
+  </h1>
+  <div id="list"><p class="status">불러오는 중…</p></div>
+</main>
+<script>
+"use strict";
+(async () => {
+  const list = document.getElementById("list");
+  let manifest;
+  try {
+    const res = await fetch("manifest.json");
+    if (!res.ok) throw new Error(`manifest.json ${res.status}`);
+    manifest = await res.json();
+  } catch (e) {
+    list.innerHTML = `<p class="status err">히스토리를 불러오지 못했습니다: ${e.message}</p>`;
+    return;
+  }
+  if (!manifest.characters?.length) {
+    list.innerHTML = '<p class="status">아직 생성된 산출물이 없습니다.</p>';
+    return;
+  }
+  list.innerHTML = "";
+  for (const ch of manifest.characters) {
+    const section = document.createElement("section");
+    const cuts = [...ch.cuts].sort((a, b) => String(a.createdAt ?? "").localeCompare(String(b.createdAt ?? "")) || a.id.localeCompare(b.id));
+    section.innerHTML = `
+      <h2>${ch.id}</h2>
+      ${ch.sheetPrompt ? `<p class="prompt">시트 프롬프트: ${ch.sheetPrompt}</p>` : ""}
+      ${ch.sheet ? `<img class="sheet" src="${ch.sheet}" alt="${ch.id} 캐릭터 시트">` : '<p class="status">시트 없음</p>'}
+    `;
+    for (const cut of cuts) {
+      const div = document.createElement("div");
+      div.className = "cut";
+      const meta = [
+        cut.motion,
+        cut.frameCount ? `${cut.frameCount}프레임` : null,
+        cut.fps ? `@${cut.fps}fps` : null,
+        cut.provider, cut.createdAt,
+      ].filter(Boolean).join(" · ");
+      div.innerHTML = `
+        <h3>${cut.id}</h3>
+        <p class="meta">${meta}</p>
+        <div class="media">
+          ${cut.apng ? `<figure><img class="apng" src="${cut.apng}" alt="${cut.id} APNG"><figcaption><a href="${cut.apng}" download style="color:inherit">${cut.id}.png (360²)</a>${cut.line ? ` · <a href="${cut.line}" download style="color:inherit">LINE 270²</a>` : ""}</figcaption></figure>` : ""}
+          ${cut.grid ? `<a class="grid" href="${cut.grid}" target="_blank" rel="noopener"><img src="${cut.grid}" alt="${cut.id} 프레임 그리드" loading="lazy"></a>` : ""}
+        </div>
+        ${Array.isArray(cut.poses) && cut.poses.length ? `<details><summary>포즈 스크립트 (${cut.poses.length})</summary><ol>${cut.poses.map((p) => `<li>${p}</li>`).join("")}</ol></details>` : ""}
+      `;
+      section.append(div);
+    }
+    list.append(section);
+  }
+})();
+</script>
+</body>
+</html>
