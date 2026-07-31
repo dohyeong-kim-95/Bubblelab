@@ -43,6 +43,19 @@ on:
         required: false
         type: boolean
         default: false
+      resume:
+        description: "중단된 컷의 검증된 frames-raw를 재사용"
+        required: false
+        type: boolean
+        default: false
+      max_calls:
+        description: "이번 실행의 이미지 API 최대 호출 수 (비우면 제한 없음)"
+        required: false
+        default: ""
+      max_cost:
+        description: "이번 실행의 예상 최대 비용 USD (비우면 제한 없음)"
+        required: false
+        default: ""
   push:
     branches: [main]
     paths: ["_src/emoticon/job.json"]
@@ -70,6 +83,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Validate repository
+        run: |
+          node --test _infra/*.test.mjs
+          node _infra/build.mjs
+
       - name: Generate
         env:
           EMOTICON_IMAGE_PROVIDER: gemini
@@ -81,6 +99,9 @@ jobs:
           IN_FRAMES: ${{ inputs.frames }}
           IN_FPS: ${{ inputs.fps }}
           IN_FORCE: ${{ inputs.force }}
+          IN_RESUME: ${{ inputs.resume }}
+          IN_MAX_CALLS: ${{ inputs.max_calls }}
+          IN_MAX_COST: ${{ inputs.max_cost }}
         run: |
           set -euo pipefail
           JOB=_src/emoticon/job.json
@@ -93,15 +114,23 @@ jobs:
             FRAMES=$(read_job frames "12")
             FPS=$(read_job fps "12")
             FORCE=$(read_job force "false")
+            RESUME=$(read_job resume "false")
+            MAX_CALLS=$(read_job max_calls "")
+            MAX_COST=$(read_job max_cost "")
           elif [[ -n "$IN_CHARACTER" ]]; then
             CHARACTER="$IN_CHARACTER"; STEP="$IN_STEP"; PROMPT="$IN_PROMPT"
             CUT_ID="$IN_CUT_ID"; FRAMES="$IN_FRAMES"; FPS="$IN_FPS"; FORCE="$IN_FORCE"
+            RESUME="$IN_RESUME"; MAX_CALLS="$IN_MAX_CALLS"; MAX_COST="$IN_MAX_COST"
           else
             echo "잡 파일도 입력도 없음 — 종료 (job.json 삭제 커밋의 후속 런)"; exit 0
           fi
           [[ "$CHARACTER" =~ ^[a-z0-9-]{1,32}$ ]] || { echo "캐릭터 이름은 영소문자·숫자·하이픈"; exit 1; }
           WORKDIR="_src/emoticon/$CHARACTER"
           FORCE_FLAG=""; [[ "$FORCE" == "true" ]] && FORCE_FLAG="--force"
+          RESUME_FLAG=""; [[ "$RESUME" == "true" ]] && RESUME_FLAG="--resume"
+          BUDGET_FLAGS=()
+          [[ -n "$MAX_CALLS" ]] && BUDGET_FLAGS+=(--max-calls "$MAX_CALLS")
+          [[ -n "$MAX_COST" ]] && BUDGET_FLAGS+=(--max-cost "$MAX_COST")
           if [[ "$STEP" == "sheet" ]]; then
             node _infra/emoticon.mjs sheet "$WORKDIR" --prompt "$PROMPT" $FORCE_FLAG
           elif [[ "$STEP" == "cut" ]]; then
@@ -115,11 +144,12 @@ jobs:
               node -e "process.exit(require('./$JOB').ref ? 0 : 1)" \
                 && REF_FLAG="--ref $(node -p "require('./$JOB').ref || ''")"
               node _infra/emoticon.mjs cut "$WORKDIR" "$CUT_ID" --skeletons "$SEQ" \
-                --fps "$FPS" $GRID_FLAG $REF_FLAG $FORCE_FLAG
+                --fps "$FPS" $GRID_FLAG $REF_FLAG $FORCE_FLAG $RESUME_FLAG "${BUDGET_FLAGS[@]}"
             elif [[ -f "$JOB" ]] && node -e "process.exit(Array.isArray(require('./$JOB').keys) ? 0 : 1)"; then
               # pose-to-pose 모드 (권장): job.json의 keys/breakdowns/assembly를 spec으로
               node -e "const j = require('./$JOB'); require('fs').writeFileSync('/tmp/keys.json', JSON.stringify({ motion: j.prompt, keys: j.keys, breakdowns: j.breakdowns, assembly: j.assembly }))"
-              node _infra/emoticon.mjs cut "$WORKDIR" "$CUT_ID" --keys /tmp/keys.json --fps "$FPS" $FORCE_FLAG
+              node _infra/emoticon.mjs cut "$WORKDIR" "$CUT_ID" --keys /tmp/keys.json --fps "$FPS" \
+                $FORCE_FLAG $RESUME_FLAG "${BUDGET_FLAGS[@]}"
             else
               POSES_FLAG=""
               if [[ -f "$JOB" ]] && node -e "process.exit(Array.isArray(require('./$JOB').poses) ? 0 : 1)"; then
@@ -127,7 +157,7 @@ jobs:
                 POSES_FLAG="--poses /tmp/poses.txt"
               fi
               node _infra/emoticon.mjs cut "$WORKDIR" "$CUT_ID" --motion "$PROMPT" \
-                --frames "$FRAMES" --fps "$FPS" $POSES_FLAG $FORCE_FLAG
+                --frames "$FRAMES" --fps "$FPS" $POSES_FLAG $FORCE_FLAG $RESUME_FLAG "${BUDGET_FLAGS[@]}"
             fi
             node _infra/emoticon.mjs build "$WORKDIR" "$CUT_ID"
             node _infra/emoticon.mjs check "$WORKDIR" "$CUT_ID"
