@@ -1,0 +1,7 @@
+{
+  "character": "rabbit",
+  "step": "cut",
+  "cut_id": "lrtest",
+  "skeletons": "_src/emoticon/poses/lr-test.json",
+  "fps": "4"
+}
