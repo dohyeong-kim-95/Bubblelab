@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "cut": "lrtest",
+  "mode": "skeleton",
+  "size": 360,
+  "uniqueFrames": 4,
+  "timelineFrames": 4,
+  "fps": 4,
+  "durationSec": 1,
+  "bytes": 180273,
+  "lineBytes": null,
+  "loops": 0,
+  "frameDelays": [
+    0.25,
+    0.25,
+    0.25,
+    0.25
+  ],
+  "loopDiff": 0.26143586551234044,
+  "adjacentDiffs": [
+    0.7223534417525938,
+    0.7129652588330567,
+    0.36372107789328684
+  ],
+  "adjacentMedian": 0.7129652588330567,
+  "adjacentMax": 0.7223534417525938,
+  "seamRatio": 0.36668808511125023,
+  "scaleDrift": 0.7418244406196214,
+  "motionMean": 0.38854050052480854,
+  "motionMax": 0.553218209535825,
+  "transparency": [
+    0.8496732711791992,
+    0.6751375198364258,
+    0.8352193832397461,
+    0.8833951950073242
+  ]
+}
