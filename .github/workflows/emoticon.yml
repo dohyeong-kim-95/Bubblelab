@@ -3,6 +3,12 @@
 # 있어("User location is not supported") 생성은 GitHub Actions 러너(지원 지역)
 # 에서 돌린다. 산출물(시트·프레임·APNG)은 _src/emoticon/에 커밋되어 에이전트가
 # 리포에서 직접 리뷰할 수 있다.
+#
+# 트리거 두 가지:
+#  - _src/emoticon/job.json 커밋(push) — 에이전트용. 예:
+#    {"character":"rabbit","step":"sheet","prompt":"..."} (cut이면 cut_id·frames·fps·force 추가)
+#    잡 완료 시 job.json은 삭제 커밋된다(그 삭제 push로 한 번 더 뜨는 런은 잡이 없어 조용히 종료).
+#  - workflow_dispatch — 사람이 Actions 탭에서 직접 실행.
 # 필요 secret: GEMINI_STICKER_KEY (Actions secret — Cloudflare secret과 같은 값)
 name: Emoticon
 
@@ -37,6 +43,9 @@ on:
         required: false
         type: boolean
         default: false
+  push:
+    branches: [main]
+    paths: ["_src/emoticon/job.json"]
 
 concurrency:
   group: emoticon-generate
@@ -65,40 +74,55 @@ jobs:
         env:
           EMOTICON_IMAGE_PROVIDER: gemini
           GEMINI_API_KEY: ${{ secrets.GEMINI_STICKER_KEY }}
-          CHARACTER: ${{ inputs.character }}
-          STEP: ${{ inputs.step }}
-          PROMPT: ${{ inputs.prompt }}
-          CUT_ID: ${{ inputs.cut_id }}
-          FRAMES: ${{ inputs.frames }}
-          FPS: ${{ inputs.fps }}
-          FORCE: ${{ inputs.force }}
+          IN_CHARACTER: ${{ inputs.character }}
+          IN_STEP: ${{ inputs.step }}
+          IN_PROMPT: ${{ inputs.prompt }}
+          IN_CUT_ID: ${{ inputs.cut_id }}
+          IN_FRAMES: ${{ inputs.frames }}
+          IN_FPS: ${{ inputs.fps }}
+          IN_FORCE: ${{ inputs.force }}
         run: |
           set -euo pipefail
+          JOB=_src/emoticon/job.json
+          if [[ -f "$JOB" ]]; then
+            read_job() { node -p "require('./$JOB').$1 ?? '$2'"; }
+            CHARACTER=$(read_job character "")
+            STEP=$(read_job step "")
+            PROMPT=$(read_job prompt "")
+            CUT_ID=$(read_job cut_id "")
+            FRAMES=$(read_job frames "12")
+            FPS=$(read_job fps "12")
+            FORCE=$(read_job force "false")
+          elif [[ -n "$IN_CHARACTER" ]]; then
+            CHARACTER="$IN_CHARACTER"; STEP="$IN_STEP"; PROMPT="$IN_PROMPT"
+            CUT_ID="$IN_CUT_ID"; FRAMES="$IN_FRAMES"; FPS="$IN_FPS"; FORCE="$IN_FORCE"
+          else
+            echo "잡 파일도 입력도 없음 — 종료 (job.json 삭제 커밋의 후속 런)"; exit 0
+          fi
           [[ "$CHARACTER" =~ ^[a-z0-9-]{1,32}$ ]] || { echo "캐릭터 이름은 영소문자·숫자·하이픈"; exit 1; }
           WORKDIR="_src/emoticon/$CHARACTER"
           FORCE_FLAG=""; [[ "$FORCE" == "true" ]] && FORCE_FLAG="--force"
           if [[ "$STEP" == "sheet" ]]; then
             node _infra/emoticon.mjs sheet "$WORKDIR" --prompt "$PROMPT" $FORCE_FLAG
-          else
+          elif [[ "$STEP" == "cut" ]]; then
             [[ -n "$CUT_ID" ]] || { echo "cut 단계에는 cut_id가 필요합니다"; exit 1; }
             node _infra/emoticon.mjs cut "$WORKDIR" "$CUT_ID" --motion "$PROMPT" \
               --frames "$FRAMES" --fps "$FPS" $FORCE_FLAG
             node _infra/emoticon.mjs build "$WORKDIR" "$CUT_ID"
             node _infra/emoticon.mjs check "$WORKDIR" "$CUT_ID"
+          else
+            echo "알 수 없는 step: $STEP"; exit 1
           fi
+          rm -f "$JOB"
 
       - name: Commit outputs
-        env:
-          CHARACTER: ${{ inputs.character }}
-          STEP: ${{ inputs.step }}
-          CUT_ID: ${{ inputs.cut_id }}
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "_src/emoticon/$CHARACTER"
+          git add -A _src/emoticon
           git diff --cached --quiet && { echo "변경 없음"; exit 0; }
-          git commit -m "emoticon: $CHARACTER $STEP ${CUT_ID:+$CUT_ID }생성 (actions)"
+          git commit -m "emoticon: 생성 산출물 (actions)"
           for i in 1 2 3; do
             git pull --rebase origin main && git push origin HEAD:main && break
             sleep $((i * 2))
