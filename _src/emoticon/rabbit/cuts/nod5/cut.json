@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 2,
+  "cliVersion": 2,
+  "promptVersion": "2026-07-keys-v1",
+  "mode": "keys",
+  "specHash": "0cfbd05f3f998c25a05c8586dc6e1caf207e2f4efcb4173c496f621dd4a1e69e",
+  "sheetHash": "b9692d48a1a77ec19249b8cb0f9f86e7cf358cf605dc9902b31219340aaffcc9",
+  "referenceHashes": [
+    "b9692d48a1a77ec19249b8cb0f9f86e7cf358cf605dc9902b31219340aaffcc9"
+  ],
+  "provider": "gemini/gemini-2.5-flash-image",
+  "status": "complete",
+  "createdAt": "2026-07-31T14:59:02.232Z",
+  "updatedAt": "2026-07-31T14:59:31.342Z",
+  "completedAt": "2026-07-31T14:59:31.342Z",
+  "calls": 3,
+  "unitCostUsd": 0.039,
+  "estimatedCostUsd": 0.117,
+  "runs": [
+    {
+      "runId": "4cf88d7f-63ec-4eeb-8499-66044145a4f5",
+      "startedAt": "2026-07-31T14:59:02.232Z",
+      "provider": "gemini/gemini-2.5-flash-image",
+      "gitCommit": "e0a66f0cb7539e1af221ce6fcbd2c23426b7fb7a",
+      "calls": 3,
+      "estimatedCostUsd": 0.117,
+      "status": "complete",
+      "completedAt": "2026-07-31T14:59:31.342Z"
+    }
+  ],
+  "motion": "bobbing the head down in a happy nod",
+  "fps": 12,
+  "keys": [
+    {
+      "pose": "standing upright and facing the viewer, the head held high, both short arms hanging at the sides, eyes open, a gentle closed-mouth smile, both ears pointing straight up",
+      "hold": 4
+    },
+    {
+      "pose": "the head and the round body sink downward together as one piece and the body spreads wider as it compresses, its volume preserved; both ears swing forward over the forehead; the eyes close into happy arcs; a small open smile",
+      "hold": 2
+    }
+  ],
+  "breakdowns": 1,
+  "assembly": "pingpong",
+  "invariants": "two ears, two eyes, one mouth, two arms, two legs; the paws are the same plain white surface as the body; two pink oval inner ears; two round pink cheek blushes; the canvas holds only this one character",
+  "repeat": 3,
+  "characterRef": "_src/emoticon/rabbit/cuts/nod/frames-raw/key-1.png",
+  "frames": 3,
+  "sequence": [
+    {
+      "type": "key",
+      "key": 0
+    },
+    {
+      "type": "bd",
+      "pair": [
+        0,
+        1
+      ]
+    },
+    {
+      "type": "key",
+      "key": 1
+    }
+  ],
+  "timeline": [
+    {
+      "frame": 0,
+      "delayMs": 333
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 2,
+      "delayMs": 167
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 0,
+      "delayMs": 333
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 2,
+      "delayMs": 167
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 0,
+      "delayMs": 333
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 2,
+      "delayMs": 167
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    }
+  ]
+}
