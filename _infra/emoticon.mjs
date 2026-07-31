@@ -186,6 +186,34 @@ export function scaleDrift(frames) {
   return median ? (sorted[sorted.length - 1] - sorted[0]) / median : 0;
 }
 
+// 정렬 후 움직임량: 각 프레임을 자기 경계 상자로 잘라 같은 크기로 맞춘 뒤
+// 인접 프레임 차이를 잰다. 크기·위치 드리프트가 제거되므로 남는 것은
+// **실제 자세 변화**뿐이다.
+//
+// 이 지표가 없으면 "거의 정지한 컷"이 드리프트·인접 diff 모두 좋게 나와
+// 최고 품질로 오판된다 (heart 사례). 좋은 컷 = 움직임 크고 드리프트 작음.
+export function alignedMotion(frames, size = 96) {
+  const norm = frames.map((frame) => {
+    const b = frameBounds(frame);
+    if (!b) return null;
+    const left = Math.max(0, Math.round(b.centerX - b.width / 2));
+    const top = Math.max(0, Math.round(b.centerY - b.height / 2));
+    const data = new Uint8Array(b.width * b.height * 4);
+    for (let y = 0; y < b.height; y++) {
+      const src = ((top + y) * frame.width + left) * 4;
+      data.set(frame.data.subarray(src, src + b.width * 4), y * b.width * 4);
+    }
+    return resize({ width: b.width, height: b.height, data }, size, size);
+  }).filter(Boolean);
+  if (norm.length < 2) return { mean: 0, max: 0 };
+  const diffs = [];
+  for (let i = 1; i < norm.length; i++) diffs.push(loopDiff(norm[i - 1], norm[i]));
+  return {
+    mean: diffs.reduce((a, b) => a + b, 0) / diffs.length,
+    max: Math.max(...diffs),
+  };
+}
+
 export function transparencyRatio({ width, height, data }) {
   let transparent = 0;
   for (let i = 3; i < data.length; i += 4) if (data[i] === 0) transparent++;
@@ -667,6 +695,11 @@ async function cmdBuild(workdir, cutId, options) {
   console.log(
     `  크기 드리프트 ${(drift * 100).toFixed(1)}% ` +
     `${drift > 0.15 ? "⚠ 프레임마다 캐릭터 크기가 달라 재생 시 펄스처럼 보입니다" : "(양호)"}`,
+  );
+  const motion = alignedMotion(frames);
+  console.log(
+    `  움직임(정렬 후) 평균 ${(motion.mean * 100).toFixed(1)}% / 최대 ${(motion.max * 100).toFixed(1)}% ` +
+    `${motion.mean < 0.03 ? "⚠ 거의 정지 — 애니메이션으로 읽히지 않습니다" : "(있음)"}`,
   );
   if (duration > 4) console.log("  ⚠ 4초 초과 — LINE 재생시간 상한(4초)을 넘습니다");
 
