@@ -372,9 +372,22 @@ function provenance(mode, input, referenceBytes) {
   };
 }
 
+// 캐릭터 레퍼런스: --ref로 단일 정면 컷을 줄 수 있다.
+// 여러 컷이 든 시트를 주면 모델이 "시트를 복제하라"로 해석하는 사고가 있었고,
+// 단일 컷으로 바꾸자 크기 드리프트가 74.2%→0.6%로 떨어졌다 (lesson_learned §23).
+function characterReferencePath(workdir, options = {}) {
+  const path = options.ref ?? join(workdir, "sheet.png");
+  if (!existsSync(path)) {
+    throw new Error(options.ref
+      ? `캐릭터 레퍼런스가 없습니다: ${path}`
+      : `캐릭터 시트가 없습니다 — 먼저: emoticon.mjs sheet ${workdir} --prompt "..."`);
+  }
+  return path;
+}
+
 function assertCurrentReference(meta, workdir) {
   if (!meta.sheetHash || meta.mode === "import") return;
-  const path = meta.mode === "skeleton" && meta.characterRef && meta.characterRef !== "sheet.png"
+  const path = meta.characterRef && meta.characterRef !== "sheet.png"
     ? meta.characterRef
     : join(workdir, "sheet.png");
   if (!existsSync(path) || sha256(readFileSync(path)) !== meta.sheetHash) {
@@ -514,8 +527,7 @@ async function cmdCutKeys(workdir, cutId, options) {
   const assembly = spec.assembly ?? "pingpong";
   if (!["pingpong", "loop"].includes(assembly)) throw new Error('assembly는 "pingpong" 또는 "loop"');
   const fps = Number(options.fps ?? spec.fps ?? 12);
-  const sheetPath = join(workdir, "sheet.png");
-  if (!existsSync(sheetPath)) throw new Error(`캐릭터 시트가 없습니다 — 먼저: emoticon.mjs sheet ${workdir} --prompt "..."`);
+  const sheetPath = characterReferencePath(workdir, options);
   const cutDir = join(workdir, "cuts", cutId);
   const sheet = readFileSync(sheetPath);
   const provider = imageProvider();
@@ -534,7 +546,8 @@ async function cmdCutKeys(workdir, cutId, options) {
   if (options.resume) for (const name of rawNames) if (await reusableRaw(join(cutDir, "frames-raw", name))) reusable++;
   const timing = keyTiming(keys, pairs, breakdowns, assembly, fps);
   const plan = {
-    mode: "keys", provider: provider.name, totalCalls, remainingCalls: totalCalls - reusable,
+    mode: "keys", characterRef: options.ref ?? "sheet.png",
+    provider: provider.name, totalCalls, remainingCalls: totalCalls - reusable,
     reusedCalls: reusable, possibleRetryCalls: breakdowns ? pairs.length : 0,
     estimatedCostUsd: planCost(totalCalls - reusable), frames: timing.uniqueFrames,
     timelineFrames: timing.timelineFrames, durationSeconds: timing.durationSeconds,
@@ -754,8 +767,7 @@ async function cmdPlan(workdir, cutId, options) {
     if (![0, 1].includes(breakdowns)) throw new Error("breakdowns는 0 또는 1만 지원합니다 (v1)");
     if (!["pingpong", "loop"].includes(assembly)) throw new Error('assembly는 "pingpong" 또는 "loop"');
     const fps = Number(options.fps ?? spec.fps ?? 12);
-    const sheetPath = join(workdir, "sheet.png");
-    if (!existsSync(sheetPath)) throw new Error(`캐릭터 시트가 없습니다: ${sheetPath}`);
+    const sheetPath = characterReferencePath(workdir, options);
     const sheet = readFileSync(sheetPath);
     const pairs = [];
     for (let i = 0; i < keys.length - 1; i++) pairs.push([i, i + 1]);
@@ -854,7 +866,9 @@ async function cmdRedo(workdir, cutId, frameArg) {
     throw new Error(`프레임 번호는 1~${meta.sequence.length} 입니다`);
   }
   const el = meta.sequence[n - 1];
-  const sheet = readFileSync(join(workdir, "sheet.png"));
+  const sheet = readFileSync(meta.characterRef && meta.characterRef !== "sheet.png"
+    ? meta.characterRef
+    : join(workdir, "sheet.png"));
   const rawOf = (name) => readFileSync(join(cutDir, "frames-raw", name));
 
   let prompt, references, rawName, label;

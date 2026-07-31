@@ -1,0 +1,19 @@
+{
+  "character": "rabbit",
+  "step": "cut",
+  "cut_id": "wave",
+  "prompt": "waving hello with one paw raised beside the head",
+  "fps": "12",
+  "profile": "master-2s",
+  "ref": "_src/emoticon/rabbit/cuts/nod/frames-raw/key-1.png",
+  "assembly": "pingpong",
+  "breakdowns": 1,
+  "max_calls": "10",
+  "max_cost": "0.40",
+  "keys": [
+    { "pose": "standing upright facing front, both short arms resting down at the sides, gentle closed-mouth smile, eyes open, body at normal height", "hold": 6 },
+    { "pose": "identical body, size and position, but the arm on the LEFT side of the image is lifted up beside the head with the paw open, mouth opening into a happy smile", "hold": 1 },
+    { "pose": "identical body, size and position, the arm on the LEFT side of the image stays up beside the head but the paw tilts outward away from the head, eyes closed in a happy arc, wide open smile", "hold": 3 },
+    { "pose": "identical body, size and position, the arm on the LEFT side of the image stays up but the paw tilts inward toward the head, eyes closed in a happy arc, wide open smile", "hold": 3 }
+  ]
+}
