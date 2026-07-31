@@ -269,8 +269,8 @@ const FRAME_PROMPT = (motion, index, total, pose = "") =>
 const KEY_PROMPT = (motion, index, total, pose, invariants = "", constants = "") =>
   keyPrompt({ motion, index, total, pose, constants, canon: canonBlock({ parts: invariants }) });
 
-const BREAKDOWN_PROMPT = (motion, poseA, poseB, invariants = "", constants = "") =>
-  breakdownPrompt({ motion, poseA, poseB, constants, canon: canonBlock({ parts: invariants }) });
+const BREAKDOWN_PROMPT = (motion, poseA, poseB, invariants = "", constants = "", percent = 50) =>
+  breakdownPrompt({ motion, poseA, poseB, constants, percent, canon: canonBlock({ parts: invariants }) });
 
 // ── 명령 구현 ───────────────────────────────────────────────────────────
 
@@ -301,13 +301,24 @@ async function reusableGridRaw(path, cols, rows, count) {
   }
 }
 
+// 브레이크다운 파일명. N=1은 옛 이름(bd-1-2.png)을 유지해 기존 컷의
+// resume·redo가 그대로 돈다. N>1이면 슬롯 번호를 붙인다.
+function bdName(a, b, slot, total) {
+  return total === 1 ? `bd-${a + 1}-${b + 1}.png` : `bd-${a + 1}-${b + 1}-${slot + 1}.png`;
+}
+
+// 슬롯 k(0-based)가 두 키 사이 몇 %에 놓이는가. N=1→50, N=2→33·67, N=3→25·50·75.
+function bdPercent(slot, total) {
+  return Math.round(((slot + 1) / (total + 1)) * 100);
+}
+
 function keyTiming(keys, pairs, breakdowns, assembly, fps, repeat = 1) {
   const delays = [];
   for (let i = 0; i < keys.length; i++) {
     delays.push(Math.max(1, Number(keys[i].hold ?? 1)));
-    if (breakdowns && pairs.some(([a, b]) => a === i && b === i + 1)) delays.push(1);
+    if (pairs.some(([a, b]) => a === i && b === i + 1)) for (let k = 0; k < breakdowns; k++) delays.push(1);
   }
-  if (breakdowns && assembly === "loop") delays.push(1);
+  if (assembly === "loop") for (let k = 0; k < breakdowns; k++) delays.push(1);
   const cycle = assembly === "pingpong" ? [...delays, ...delays.slice(1, -1).reverse()] : delays;
   const timeline = Array.from({ length: repeat }, () => cycle).flat();
   return {
@@ -478,7 +489,7 @@ async function cmdCutKeys(workdir, cutId, options) {
     throw new Error("keys는 pose 문장을 가진 2~6개의 키 포즈여야 합니다");
   }
   const breakdowns = Number(spec.breakdowns ?? 1);
-  if (![0, 1].includes(breakdowns)) throw new Error("breakdowns는 0 또는 1만 지원합니다 (v1)");
+  if (![0, 1, 2, 3].includes(breakdowns)) throw new Error("breakdowns는 0~3만 지원합니다");
   const assembly = spec.assembly ?? "pingpong";
   if (!["pingpong", "loop"].includes(assembly)) throw new Error('assembly는 "pingpong" 또는 "loop"');
   const invariants = String(spec.invariants ?? "").trim();
@@ -495,13 +506,13 @@ async function cmdCutKeys(workdir, cutId, options) {
   const pairs = [];
   for (let i = 0; i < keys.length - 1; i++) pairs.push([i, i + 1]);
   if (assembly === "loop") pairs.push([keys.length - 1, 0]);
-  const totalCalls = keys.length + (breakdowns ? pairs.length : 0);
+  const totalCalls = keys.length + breakdowns * pairs.length;
   const input = { motion, fps, keys, breakdowns, assembly, invariants, poseConstants, repeat };
   const base = provenance("keys", input, [sheet]);
   checkPlanTarget(cutDir, options, base);
   const rawNames = [
     ...keys.map((_, i) => `key-${i + 1}.png`),
-    ...(breakdowns ? pairs.map(([a, b]) => `bd-${a + 1}-${b + 1}.png`) : []),
+    ...pairs.flatMap(([a, b]) => Array.from({ length: breakdowns }, (_, k) => bdName(a, b, k, breakdowns))),
   ];
   let reusable = 0;
   if (options.resume) for (const name of rawNames) if (await reusableRaw(join(cutDir, "frames-raw", name))) reusable++;
@@ -509,7 +520,7 @@ async function cmdCutKeys(workdir, cutId, options) {
   const plan = {
     mode: "keys", characterRef: options.ref ?? "sheet.png",
     provider: provider.name, totalCalls, remainingCalls: totalCalls - reusable,
-    reusedCalls: reusable, possibleRetryCalls: breakdowns ? pairs.length : 0,
+    reusedCalls: reusable, possibleRetryCalls: breakdowns * pairs.length,
     estimatedCostUsd: planCost(totalCalls - reusable), frames: timing.uniqueFrames,
     timelineFrames: timing.timelineFrames, durationSeconds: timing.durationSeconds,
   };
@@ -550,11 +561,12 @@ async function cmdCutKeys(workdir, cutId, options) {
 
     // ② 브레이크다운 — 키 쌍의 양쪽 이미지를 함께 레퍼런스로.
     const bdImages = new Map();
-    if (breakdowns === 1) for (const [a, b] of pairs) {
-      const label = `브레이크다운 ${a + 1}→${b + 1}`;
-      const rawName = `bd-${a + 1}-${b + 1}.png`;
+    for (const [a, b] of pairs) for (let k = 0; k < breakdowns; k++) {
+      const percent = bdPercent(k, breakdowns);
+      const label = `브레이크다운 ${a + 1}→${b + 1} (${percent}%)`;
+      const rawName = bdName(a, b, k, breakdowns);
       const gen = (allowReuse = true) => generateKeyed(
-        BREAKDOWN_PROMPT(motion, keys[a].pose.trim(), keys[b].pose.trim(), invariants, poseConstants),
+        BREAKDOWN_PROMPT(motion, keys[a].pose.trim(), keys[b].pose.trim(), invariants, poseConstants, percent),
         [sheet, keyRaw[a], keyRaw[b]], label, rawName, allowReuse,
       );
       const midDiff = ({ keyed }) =>
@@ -576,7 +588,7 @@ async function cmdCutKeys(workdir, cutId, options) {
           console.log(`  ${label} 재시도 생략 (${error.message})`);
         }
       }
-      bdImages.set(`${a}-${b}`, best.keyed);
+      bdImages.set(`${a}-${b}-${k}`, best.keyed);
       console.log(`  ${label}`);
     }
 
@@ -586,15 +598,18 @@ async function cmdCutKeys(workdir, cutId, options) {
     for (let i = 0; i < keys.length; i++) {
       unique.push({ image: keyImages[i], delayFrames: Math.max(1, Number(keys[i].hold ?? 1)) });
       sequenceMeta.push({ type: "key", key: i });
-      const pairKey = `${i}-${i + 1}`;
-      if (bdImages.has(pairKey)) {
-        unique.push({ image: bdImages.get(pairKey), delayFrames: 1 });
-        sequenceMeta.push({ type: "bd", pair: [i, i + 1] });
+      for (let k = 0; k < breakdowns; k++) {
+        const image = bdImages.get(`${i}-${i + 1}-${k}`);
+        if (!image) continue;
+        unique.push({ image, delayFrames: 1 });
+        sequenceMeta.push({ type: "bd", pair: [i, i + 1], slot: k, of: breakdowns });
       }
     }
-    if (assembly === "loop" && bdImages.has(`${keys.length - 1}-0`)) {
-      unique.push({ image: bdImages.get(`${keys.length - 1}-0`), delayFrames: 1 });
-      sequenceMeta.push({ type: "bd", pair: [keys.length - 1, 0] });
+    if (assembly === "loop") for (let k = 0; k < breakdowns; k++) {
+      const image = bdImages.get(`${keys.length - 1}-0-${k}`);
+      if (!image) continue;
+      unique.push({ image, delayFrames: 1 });
+      sequenceMeta.push({ type: "bd", pair: [keys.length - 1, 0], slot: k, of: breakdowns });
     }
     const frameDelay = 1000 / fps;
     const timeline = unique.map((u, index) => ({ frame: index, delayMs: Math.round(u.delayFrames * frameDelay) }));
@@ -730,7 +745,7 @@ async function cmdPlan(workdir, cutId, options) {
     }
     const breakdowns = Number(spec.breakdowns ?? 1);
     const assembly = spec.assembly ?? "pingpong";
-    if (![0, 1].includes(breakdowns)) throw new Error("breakdowns는 0 또는 1만 지원합니다 (v1)");
+    if (![0, 1, 2, 3].includes(breakdowns)) throw new Error("breakdowns는 0~3만 지원합니다");
     if (!["pingpong", "loop"].includes(assembly)) throw new Error('assembly는 "pingpong" 또는 "loop"');
     const invariants = String(spec.invariants ?? "").trim();
     const poseConstants = String(spec.poseConstants ?? "").trim();
@@ -744,7 +759,7 @@ async function cmdPlan(workdir, cutId, options) {
     if (assembly === "loop") pairs.push([keys.length - 1, 0]);
     const names = [
       ...keys.map((_, i) => `key-${i + 1}.png`),
-      ...(breakdowns ? pairs.map(([a, b]) => `bd-${a + 1}-${b + 1}.png`) : []),
+      ...pairs.flatMap(([a, b]) => Array.from({ length: breakdowns }, (_, k) => bdName(a, b, k, breakdowns))),
     ];
     const input = { motion, fps, keys, breakdowns, assembly, invariants, poseConstants, repeat };
     const base = provenance("keys", input, [sheet]);
@@ -755,7 +770,7 @@ async function cmdPlan(workdir, cutId, options) {
     return printPlan({
       mode: "keys", provider: provider.name, totalCalls: names.length,
       remainingCalls: names.length - reusable, reusedCalls: reusable,
-      possibleRetryCalls: breakdowns ? pairs.length : 0,
+      possibleRetryCalls: breakdowns * pairs.length,
       estimatedCostUsd: planCost(names.length - reusable), frames: timing.uniqueFrames,
       timelineFrames: timing.timelineFrames, durationSeconds: timing.durationSeconds,
     }, options);
@@ -849,9 +864,12 @@ async function cmdRedo(workdir, cutId, frameArg) {
     references = [sheet, ...(el.key > 0 ? [rawOf("key-1.png")] : [])];
   } else {
     const [a, b] = el.pair;
-    label = `브레이크다운 ${a + 1}→${b + 1}`;
-    rawName = `bd-${a + 1}-${b + 1}.png`;
-    prompt = BREAKDOWN_PROMPT(meta.motion, meta.keys[a].pose, meta.keys[b].pose, meta.invariants ?? "", meta.poseConstants ?? "");
+    const slot = el.slot ?? 0;
+    const of = el.of ?? 1;
+    const percent = bdPercent(slot, of);
+    label = `브레이크다운 ${a + 1}→${b + 1} (${percent}%)`;
+    rawName = bdName(a, b, slot, of);
+    prompt = BREAKDOWN_PROMPT(meta.motion, meta.keys[a].pose, meta.keys[b].pose, meta.invariants ?? "", meta.poseConstants ?? "", percent);
     references = [sheet, rawOf(`key-${a + 1}.png`), rawOf(`key-${b + 1}.png`)];
   }
 

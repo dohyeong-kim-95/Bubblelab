@@ -373,7 +373,7 @@ test("CLI E2E (mock): keys 모드 — 키·브레이크다운 생성 + 핑퐁 �
     // 선별 재작업: 튄 프레임 하나만 같은 프롬프트·레퍼런스로 다시 생성한다
     const before = readFileSync(join(workdir, "cuts", "nod", "frames", "02.png"));
     const redo = run("redo", workdir, "nod", "2");
-    assert.match(redo, /프레임 02 \(브레이크다운 1→2\) 재생성/);
+    assert.match(redo, /프레임 02 \(브레이크다운 1→2 \(50%\)\) 재생성/);
     assert.ok(readFileSync(join(workdir, "cuts", "nod", "frames", "02.png")).length > 0);
     assert.equal(before.length > 0, true);
     assert.throws(() => run("redo", workdir, "nod", "9"), /프레임 번호는 1~3/);
@@ -441,6 +441,44 @@ test("CLI: 시트 없이 cut은 실패, 잘못된 명령은 usage 안내", () =>
       () => execFileSync(process.execPath, [CLI, "wat", workdir], { env, encoding: "utf8" }),
       /알 수 없는 명령/,
     );
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("CLI E2E (mock): breakdowns 2 — 유니크 4장, 핑퐁 타임라인 7프레임", () => {
+  // 왕복 3프레임으로는 결함이 안 보인다는 실사용 피드백 → 브레이크다운을
+  // 키 쌍당 N장으로 늘린다. 대칭 재사용이라 4장 생성으로 7프레임이 나온다.
+  const workdir = mkdtempSync(join(tmpdir(), "emoticon-"));
+  const env = { ...process.env, EMOTICON_IMAGE_PROVIDER: "mock" };
+  const run = (...args) => execFileSync(process.execPath, [CLI, ...args], { env, encoding: "utf8" });
+  try {
+    run("sheet", workdir, "--prompt", "테스트 캐릭터");
+    const spec = {
+      motion: "고개 끄덕임",
+      breakdowns: 2,
+      assembly: "pingpong",
+      keys: [{ pose: "고개를 든 자세", hold: 2 }, { pose: "고개를 숙인 자세", hold: 2 }],
+    };
+    const specPath = join(workdir, "keys.json");
+    writeFileSync(specPath, JSON.stringify(spec));
+
+    const plan = run("plan", workdir, "nod", "--keys", specPath, "--fps", "12");
+    assert.match(plan, /호출: 4\/4회/);
+    assert.match(plan, /출력: 4프레임/);
+
+    run("cut", workdir, "nod", "--keys", specPath, "--fps", "12");
+    const meta = JSON.parse(readFileSync(join(workdir, "cuts", "nod", "cut.json"), "utf8"));
+    assert.equal(meta.frames, 4);
+    // 키1 · bd(33%) · bd(67%) · 키2 · bd(67%) · bd(33%) = 6, 루프백 포함 7번째가 키1
+    assert.equal(meta.timeline.length, 6);
+    assert.deepEqual(meta.timeline.map((t) => t.frame), [0, 1, 2, 3, 2, 1]);
+    // 슬롯별 파일이 따로 남는다
+    for (const name of ["bd-1-2-1.png", "bd-1-2-2.png"]) {
+      assert.ok(existsSync(join(workdir, "cuts", "nod", "frames-raw", name)), name);
+    }
+    // 순서 메타에 슬롯이 기록돼 redo가 같은 퍼센트로 재생성할 수 있다
+    assert.deepEqual(meta.sequence[1], { type: "bd", pair: [0, 1], slot: 0, of: 2 });
   } finally {
     rmSync(workdir, { recursive: true, force: true });
   }

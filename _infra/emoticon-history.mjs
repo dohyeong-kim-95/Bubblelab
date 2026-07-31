@@ -6,6 +6,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFi
 import { join } from "node:path";
 import { decodePng, encodePng } from "./png.mjs";
 import { resize } from "./emoticon.mjs";
+import { judgeReport } from "./emoticon-gate.mjs";
 
 const GRID_CELL = 192;
 const GRID_COLS = 4;
@@ -76,6 +77,21 @@ export function emitEmoticonHistory(root, dist) {
             item[key] = `data/${id}/${file}`;
           }
         }
+
+        // 게이트 판정을 미리 계산해 manifest에 넣는다 — 페이지가 이 값으로
+        // 정렬해 상위 몇 개만 펼치고 나머지는 접는다 (컷이 계속 쌓이므로).
+        try {
+          const report = JSON.parse(readFileSync(join(cutDir, "report.json"), "utf8"));
+          const judged = judgeReport(report, "master-2s");
+          item.gate = {
+            verdict: judged.verdict,
+            hard: judged.hard.length,
+            soft: judged.soft.length,
+            drift: report.scaleDrift,
+            motion: report.motionMean,
+            seam: report.seamRatio,
+          };
+        } catch { /* report 없는 옛 컷은 판정 없이 노출 */ }
 
         const framesDir = join(cutDir, "frames");
         if (existsSync(framesDir)) {

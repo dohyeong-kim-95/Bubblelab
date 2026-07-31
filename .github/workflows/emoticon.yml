@@ -70,6 +70,7 @@ concurrency:
 
 permissions:
   contents: write
+  actions: write   # 산출물 커밋 후 Deploy를 workflow_dispatch로 직접 부른다
 
 jobs:
   generate:
@@ -195,3 +196,14 @@ jobs:
             git pull --rebase origin main && git push origin HEAD:main && break
             sleep $((i * 2))
           done
+          # GITHUB_TOKEN으로 만든 push는 다른 워크플로의 push 트리거를 **발동시키지
+          # 않는다**(재귀 방지). 그래서 생성 산출물만 커밋되면 Deploy가 안 돌아
+          # history 페이지가 한 세대씩 뒤처졌다. workflow_dispatch는 같은 토큰으로도
+          # 발동하므로 여기서 직접 부른다.
+          curl -sS -X POST -o /dev/null -w "deploy dispatch: %{http_code}\n" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/workflows/deploy.yml/dispatches" \
+            -d '{"ref":"main"}'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
