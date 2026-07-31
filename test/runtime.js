@@ -366,7 +366,9 @@ function checkTemplate(step) {
 
 function defaultCells() {
   return problem.steps.map((step, i) =>
-    `# [${i + 1}단계] ${step.title}\n# 여기에 코드를 작성하세요.\n\n\n` +
+    `# [${STEP_LABELS[i]}] ${step.title}` +
+    (step.section ? ` — ${step.section}` : "") +
+    `\n# 여기에 코드를 작성하세요.\n\n\n` +
     `# 다 풀었으면 아래 주석을 풀고 실행해 채점하세요.\n# ${checkTemplate(step)}\n`);
 }
 
@@ -393,6 +395,31 @@ function persistCells() {
 
 // ---------- 렌더링 ----------
 
+// 대문제(sections)는 "중문제1-2", 일반 문제는 "3단계" 식의 라벨을 쓴다
+const STEP_LABELS = (() => {
+  if (!problem) return [];
+  if (!problem.sections) return problem.steps.map((s, i) => `${i + 1}단계`);
+  const labels = [];
+  problem.sections.forEach((sec, si) =>
+    sec.steps.forEach((s, j) => labels.push(`중문제${si + 1}-${j + 1}`)));
+  return labels;
+})();
+
+function stepItem(step, label) {
+  return `
+    <li class="step" id="step-${step.id}">
+      <div class="step-head">
+        <span class="step-state" data-state="todo">○</span>
+        <strong>${label} · ${escapeHtml(step.title)}</strong>
+      </div>
+      <div class="step-body">
+        <p>${renderProse(step.prompt)}</p>
+        <p class="tmpl">채점: <code>${escapeHtml(checkTemplate(step))}</code></p>
+        <details><summary>힌트</summary><p>${renderProse(step.hint)}</p></details>
+      </div>
+    </li>`;
+}
+
 function renderProblem() {
   document.title = `${problem.title} — 데이터랩`;
   $("#p-title").textContent = problem.title;
@@ -402,18 +429,20 @@ function renderProblem() {
     problem.tags.map((t) => `<span class="badge tag">${escapeHtml(t)}</span>`).join("");
   $("#p-intro").innerHTML = renderProse(problem.intro);
 
-  $("#steps").innerHTML = problem.steps.map((step, i) => `
-    <li class="step" id="step-${step.id}">
-      <div class="step-head">
-        <span class="step-state" data-state="todo">○</span>
-        <strong>${i + 1}단계 · ${escapeHtml(step.title)}</strong>
-      </div>
-      <div class="step-body">
-        <p>${renderProse(step.prompt)}</p>
-        <p class="tmpl">채점: <code>${escapeHtml(checkTemplate(step))}</code></p>
-        <details><summary>힌트</summary><p>${renderProse(step.hint)}</p></details>
-      </div>
-    </li>`).join("");
+  if (problem.sections) {
+    let i = 0;
+    $("#steps").innerHTML = problem.sections.map((sec) => {
+      const head = `
+        <li class="sec-head">
+          <strong>${escapeHtml(sec.title)}</strong>
+          <p>${renderProse(sec.cond)}</p>
+        </li>`;
+      return head + sec.steps.map((step) => stepItem(step, STEP_LABELS[i++])).join("");
+    }).join("");
+  } else {
+    $("#steps").innerHTML =
+      problem.steps.map((step, i) => stepItem(step, STEP_LABELS[i])).join("");
+  }
 }
 
 function refreshStepStates() {

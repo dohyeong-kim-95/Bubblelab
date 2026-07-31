@@ -1679,4 +1679,552 @@ n_leaves = int(tree.get_n_leaves())`,
       },
     ],
   },
+
+  // ---------- 실전 대문제 (kind: "big") ----------
+  // 실제 시험 구조: 큰 데이터셋 1개 + 중문제 3개(조건 필터), 중문제당 3~7단계로
+  // 변수를 차례로 만든다. 실전 모드는 이 중 2개를 무작위 출제한다.
+  {
+    id: "big-shop",
+    title: "대문제 · 온라인 쇼핑몰 주문 분석",
+    category: "실전 대문제",
+    kind: "big",
+    level: 3,
+    tags: ["필터링", "집계", "정제"],
+    intro: "주문 2,000건 데이터셋 하나로 중문제 3개를 풉니다. 각 중문제는 데이터의 일부를 조건으로 걸러낸 뒤 변수를 차례로 만듭니다.",
+    setup: String.raw`import numpy as np
+import pandas as pd
+
+rng = np.random.default_rng(211)
+n = 2000
+cats = rng.choice(["전자", "패션", "식품", "뷰티", "가구"], n, p=[0.25, 0.25, 0.2, 0.18, 0.12])
+base = {"전자": 180000, "패션": 60000, "식품": 25000, "뷰티": 40000, "가구": 250000}
+rating = rng.integers(1, 6, n).astype(float)
+rating[rng.choice(n, 260, replace=False)] = np.nan
+df = pd.DataFrame({
+    "order_id": np.arange(1, n + 1),
+    "order_date": pd.Timestamp("2024-03-01") + pd.to_timedelta(rng.integers(0, 90, n), unit="D"),
+    "category": cats,
+    "region": rng.choice(["수도권", "영남", "호남", "충청", "강원"], n, p=[0.45, 0.25, 0.12, 0.12, 0.06]),
+    "price": (np.array([base[c] for c in cats]) * rng.uniform(0.5, 1.8, n)).round(-2),
+    "qty": rng.integers(1, 5, n),
+    "coupon": rng.choice([0, 1], n, p=[0.7, 0.3]),
+    "member_grade": rng.choice(["bronze", "silver", "gold", "vip"], n, p=[0.4, 0.3, 0.2, 0.1]),
+    "rating": rating,
+})
+df.head()`,
+    sections: [
+      {
+        title: "중문제 1 · 수도권 전자제품 주문",
+        cond: "조건: `region == '수도권'` 이고 `category == '전자'` 인 주문만.",
+        steps: [
+          {
+            id: "a1",
+            title: "필터링",
+            prompt: "조건에 맞는 행만 추려 `df_a`를 만들고(`copy()` 권장) 행 수를 `a_rows`에 담으세요.",
+            expect: ["a_rows"],
+            hint: "df[(조건1) & (조건2)].copy()",
+            solution: String.raw`df_a = df[(df["region"] == "수도권") & (df["category"] == "전자")].copy()
+a_rows = len(df_a)`,
+          },
+          {
+            id: "a2",
+            title: "주문금액",
+            prompt: "`df_a`에 `amount`(= `price * qty`) 컬럼을 만들고 총매출을 `a_total`에, 평균 주문금액을 `a_mean`에 담으세요.",
+            expect: ["a_total", "a_mean"],
+            hint: "sum(), mean()",
+            solution: String.raw`df_a["amount"] = df_a["price"] * df_a["qty"]
+a_total = float(df_a["amount"].sum())
+a_mean = float(df_a["amount"].mean())`,
+          },
+          {
+            id: "a3",
+            title: "쿠폰 효과",
+            prompt: "쿠폰 사용(1) 주문의 평균 `amount`에서 미사용(0) 평균을 뺀 값을 `a_coupon_diff`에 담으세요.",
+            expect: ["a_coupon_diff"],
+            hint: "groupby('coupon')['amount'].mean() 후 빼기",
+            solution: String.raw`cm = df_a.groupby("coupon")["amount"].mean()
+a_coupon_diff = float(cm.loc[1] - cm.loc[0])`,
+          },
+          {
+            id: "a4",
+            title: "상위 매출일",
+            prompt: "일자별(`order_date`의 날짜 단위) `amount` 합계에서 상위 3일의 합을 `a_top3`에 담으세요.",
+            expect: ["a_top3"],
+            hint: "groupby(dt.date) 후 nlargest(3).sum()",
+            solution: String.raw`daily_a = df_a.groupby(df_a["order_date"].dt.date)["amount"].sum()
+a_top3 = float(daily_a.nlargest(3).sum())`,
+          },
+        ],
+      },
+      {
+        title: "중문제 2 · 평점 데이터 정제",
+        cond: "조건: `rating`이 결측이 아닌 주문만.",
+        steps: [
+          {
+            id: "b1",
+            title: "결측 제거",
+            prompt: "전체에서 `rating` 결측 비율을 `b_na_ratio`에 담고, 결측을 제거한 `df_b`를 만드세요.",
+            expect: ["b_na_ratio"],
+            hint: "isna().mean(), dropna(subset=['rating'])",
+            solution: String.raw`b_na_ratio = float(df["rating"].isna().mean())
+df_b = df.dropna(subset=["rating"]).copy()`,
+          },
+          {
+            id: "b2",
+            title: "등급별 평점",
+            prompt: "`df_b`에서 회원 등급별 평균 평점을 **내림차순 Series** `b_grade_rating`에 담으세요.",
+            expect: ["b_grade_rating"],
+            hint: "groupby('member_grade')['rating'].mean().sort_values(ascending=False)",
+            solution: String.raw`b_grade_rating = df_b.groupby("member_grade")["rating"].mean().sort_values(ascending=False)`,
+          },
+          {
+            id: "b3",
+            title: "평점 표준화",
+            prompt: "`df_b`의 평점을 z-score(`ddof=0`)로 표준화해 `|z| > 1.5`인 주문 수를 `b_extreme`에 담으세요.",
+            expect: ["b_extreme"],
+            hint: "(rating - mean) / std(ddof=0)",
+            solution: String.raw`z_b = (df_b["rating"] - df_b["rating"].mean()) / df_b["rating"].std(ddof=0)
+b_extreme = int((z_b.abs() > 1.5).sum())`,
+          },
+          {
+            id: "b4",
+            title: "카테고리 평점 1위",
+            prompt: "카테고리별 평균 평점이 가장 높은 카테고리를 `b_best_cat`에, 그 값을 `b_best_val`에 담으세요.",
+            expect: ["b_best_cat", "b_best_val"],
+            hint: "idxmax(), max()",
+            solution: String.raw`cat_rating = df_b.groupby("category")["rating"].mean()
+b_best_cat = cat_rating.idxmax()
+b_best_val = float(cat_rating.max())`,
+          },
+          {
+            id: "b5",
+            title: "고평점 비율",
+            prompt: "`df_b`에서 평점 4점 이상 주문의 비율을 `b_high_ratio`에 담으세요.",
+            expect: ["b_high_ratio"],
+            hint: "(df_b['rating'] >= 4).mean()",
+            solution: String.raw`b_high_ratio = float((df_b["rating"] >= 4).mean())`,
+          },
+        ],
+      },
+      {
+        title: "중문제 3 · VIP 고객 분석",
+        cond: "조건: `member_grade == 'vip'` 인 주문만.",
+        steps: [
+          {
+            id: "c1",
+            title: "필터와 비중",
+            prompt: "vip 주문만 담은 `df_c`를 만들어 행 수를 `c_rows`에, 전체 주문 대비 비중을 `c_ratio`에 담으세요.",
+            expect: ["c_rows", "c_ratio"],
+            hint: "len(df_c) / len(df)",
+            solution: String.raw`df_c = df[df["member_grade"] == "vip"].copy()
+c_rows = len(df_c)
+c_ratio = c_rows / len(df)`,
+          },
+          {
+            id: "c2",
+            title: "선호 카테고리",
+            prompt: "vip가 가장 많이 주문한 카테고리를 `c_top_cat`에 담으세요. (주문 건수 기준)",
+            expect: ["c_top_cat"],
+            hint: "value_counts().idxmax()",
+            solution: String.raw`c_top_cat = df_c["category"].value_counts().idxmax()`,
+          },
+          {
+            id: "c3",
+            title: "vip 대 비vip",
+            prompt: "주문금액(`price * qty`) 기준으로 vip 평균에서 비vip 평균을 뺀 값을 `c_diff`에 담으세요. (전체 `df`에서 계산)",
+            expect: ["c_diff"],
+            hint: "amt = df['price'] * df['qty'] 후 불리언 마스크로 나눠 평균",
+            solution: String.raw`amt_all = df["price"] * df["qty"]
+c_diff = float(amt_all[df["member_grade"] == "vip"].mean() - amt_all[df["member_grade"] != "vip"].mean())`,
+          },
+          {
+            id: "c4",
+            title: "vip 지역 매출",
+            prompt: "vip 주문의 지역별 주문금액 합계를 **내림차순 Series** `c_sales`에 담으세요.",
+            expect: ["c_sales"],
+            hint: "(df_c['price'] * df_c['qty'])를 df_c['region']으로 groupby",
+            solution: String.raw`c_sales = (df_c["price"] * df_c["qty"]).groupby(df_c["region"]).sum().sort_values(ascending=False)`,
+          },
+        ],
+      },
+    ],
+  },
+
+  {
+    id: "big-hr",
+    title: "대문제 · 직원 인사 데이터 분석",
+    category: "실전 대문제",
+    kind: "big",
+    level: 3,
+    tags: ["구간화", "이직률", "회귀"],
+    intro: "직원 1,200명 인사 데이터셋 하나로 중문제 3개를 풉니다. 부서 필터 → 이직자 분석 → 연봉 모델링 순서입니다.",
+    setup: String.raw`import numpy as np
+import pandas as pd
+
+rng = np.random.default_rng(223)
+n = 1200
+dept = rng.choice(["개발", "영업", "마케팅", "인사", "재무"], n, p=[0.35, 0.25, 0.15, 0.12, 0.13])
+years = rng.integers(0, 26, n)
+edu = rng.choice(["고졸", "학사", "석사", "박사"], n, p=[0.1, 0.6, 0.25, 0.05])
+edu_bonus = {"고졸": 0, "학사": 400, "석사": 900, "박사": 1600}
+overtime = np.clip(rng.normal(20, 12, n), 0, None).round(1)
+satisfaction = np.clip(rng.normal(3.2, 0.8, n) - overtime * 0.02, 1, 5).round(2)
+left_p = 1 / (1 + np.exp(-(0.05 * overtime - 0.8 * (satisfaction - 3) - 0.04 * years - 0.5)))
+df = pd.DataFrame({
+    "emp_id": np.arange(1, n + 1),
+    "dept": dept,
+    "years": years,
+    "edu": edu,
+    "salary": (3000 + years * 180 + np.array([edu_bonus[e] for e in edu]) + rng.normal(0, 400, n)).round(0),
+    "overtime_h": overtime,
+    "satisfaction": satisfaction,
+    "left": (rng.random(n) < left_p).astype(int),
+})
+df.head()`,
+    sections: [
+      {
+        title: "중문제 1 · 개발 부서 분석",
+        cond: "조건: `dept == '개발'` 인 직원만.",
+        steps: [
+          {
+            id: "a1",
+            title: "필터링",
+            prompt: "개발 부서만 담은 `df_a`를 만들고 행 수를 `a_rows`에 담으세요.",
+            expect: ["a_rows"],
+            hint: "df[df['dept'] == '개발'].copy()",
+            solution: String.raw`df_a = df[df["dept"] == "개발"].copy()
+a_rows = len(df_a)`,
+          },
+          {
+            id: "a2",
+            title: "연차 구간화",
+            prompt: "`pd.cut(df_a['years'], bins=[-1, 3, 7, 15, 26], labels=['신입', '주니어', '시니어', '베테랑'])`으로 구간화해 최다 구간 이름을 `a_top_band`에 담으세요.",
+            expect: ["a_top_band"],
+            hint: "value_counts().idxmax()를 str()로",
+            solution: String.raw`band = pd.cut(df_a["years"], bins=[-1, 3, 7, 15, 26],
+              labels=["신입", "주니어", "시니어", "베테랑"])
+a_top_band = str(band.value_counts().idxmax())`,
+          },
+          {
+            id: "a3",
+            title: "연차-연봉 상관",
+            prompt: "개발 부서에서 `years`와 `salary`의 pearson 상관계수를 `a_corr`에 담으세요.",
+            expect: ["a_corr"],
+            hint: "Series.corr(other)",
+            solution: String.raw`a_corr = float(df_a["years"].corr(df_a["salary"]))`,
+          },
+          {
+            id: "a4",
+            title: "초과근무 상위 10%",
+            prompt: "초과근무의 90백분위수를 `a_p90`에 담고, 그보다 **큰** 직원 수를 `a_over90`에 담으세요.",
+            expect: ["a_p90", "a_over90"],
+            hint: "quantile(0.9)",
+            solution: String.raw`a_p90 = float(df_a["overtime_h"].quantile(0.9))
+a_over90 = int((df_a["overtime_h"] > a_p90).sum())`,
+          },
+          {
+            id: "a5",
+            title: "학력별 연봉",
+            prompt: "개발 부서의 학력별 평균 연봉을 **내림차순 Series** `a_sal_by_edu`에 담으세요.",
+            expect: ["a_sal_by_edu"],
+            hint: "groupby('edu')['salary'].mean().sort_values(ascending=False)",
+            solution: String.raw`a_sal_by_edu = df_a.groupby("edu")["salary"].mean().sort_values(ascending=False)`,
+          },
+        ],
+      },
+      {
+        title: "중문제 2 · 이직자 분석",
+        cond: "조건: `left == 1` (이직자)만. 비교 기준은 전체 `df`.",
+        steps: [
+          {
+            id: "b1",
+            title: "이직 규모",
+            prompt: "이직자만 담은 `df_b`를 만들어 행 수를 `b_rows`에, 전체 이직률을 `b_ratio`에 담으세요.",
+            expect: ["b_rows", "b_ratio"],
+            hint: "df['left'].mean()이 곧 이직률",
+            solution: String.raw`df_b = df[df["left"] == 1].copy()
+b_rows = len(df_b)
+b_ratio = float(df["left"].mean())`,
+          },
+          {
+            id: "b2",
+            title: "만족도 차이",
+            prompt: "재직자(`left == 0`) 평균 만족도에서 이직자 평균 만족도를 뺀 값을 `b_sat_diff`에 담으세요.",
+            expect: ["b_sat_diff"],
+            hint: "groupby('left')['satisfaction'].mean()",
+            solution: String.raw`sat = df.groupby("left")["satisfaction"].mean()
+b_sat_diff = float(sat.loc[0] - sat.loc[1])`,
+          },
+          {
+            id: "b3",
+            title: "부서별 이직률",
+            prompt: "부서별 이직률이 가장 높은 부서를 `b_worst_dept`에, 그 이직률을 `b_worst_rate`에 담으세요.",
+            expect: ["b_worst_dept", "b_worst_rate"],
+            hint: "groupby('dept')['left'].mean() 후 idxmax()",
+            solution: String.raw`dept_rate = df.groupby("dept")["left"].mean()
+b_worst_dept = dept_rate.idxmax()
+b_worst_rate = float(dept_rate.max())`,
+          },
+          {
+            id: "b4",
+            title: "초과근무 비교",
+            prompt: "이직자의 평균 초과근무를 `b_ot_mean`에, 이직자 평균에서 재직자 평균을 뺀 값을 `b_ot_diff`에 담으세요.",
+            expect: ["b_ot_mean", "b_ot_diff"],
+            hint: "df_b와 df[df['left'] == 0]을 비교",
+            solution: String.raw`b_ot_mean = float(df_b["overtime_h"].mean())
+b_ot_diff = float(b_ot_mean - df.loc[df["left"] == 0, "overtime_h"].mean())`,
+          },
+        ],
+      },
+      {
+        title: "중문제 3 · 연봉 모델링",
+        cond: "조건: `years >= 1` 인 직원만으로 연봉 예측 모델을 만듭니다.",
+        steps: [
+          {
+            id: "c1",
+            title: "필터링",
+            prompt: "`years >= 1`인 직원만 담은 `df_c`를 만들고 행 수를 `c_rows`에 담으세요.",
+            expect: ["c_rows"],
+            hint: "df[df['years'] >= 1].copy()",
+            solution: String.raw`df_c = df[df["years"] >= 1].copy()
+c_rows = len(df_c)`,
+          },
+          {
+            id: "c2",
+            title: "가변수 준비",
+            prompt: "`df_c[['years', 'overtime_h', 'satisfaction', 'dept', 'edu']]`에 `pd.get_dummies(columns=['dept', 'edu'])`를 적용한 `df_d`를 만들고 컬럼 수를 `c_ncols`에 담으세요.",
+            expect: ["c_ncols"],
+            hint: "df_d.shape[1]",
+            solution: String.raw`df_d = pd.get_dummies(df_c[["years", "overtime_h", "satisfaction", "dept", "edu"]],
+                      columns=["dept", "edu"])
+c_ncols = int(df_d.shape[1])`,
+          },
+          {
+            id: "c3",
+            title: "선형회귀",
+            prompt: "`X = df_d`, `y = df_c['salary']`를 `train_test_split(test_size=0.3, random_state=42)`로 나누고 `LinearRegression`의 테스트 R²을 `c_r2`에, RMSE(`np.sqrt(mean_squared_error)`)를 `c_rmse`에 담으세요.",
+            expect: ["c_r2", "c_rmse"],
+            hint: "sklearn.metrics의 r2_score, mean_squared_error",
+            solution: String.raw`from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score, mean_squared_error
+X_c = df_d
+y_c = df_c["salary"]
+Xc_tr, Xc_te, yc_tr, yc_te = train_test_split(X_c, y_c, test_size=0.3, random_state=42)
+lr_c = LinearRegression().fit(Xc_tr, yc_tr)
+pred_c = lr_c.predict(Xc_te)
+c_r2 = float(r2_score(yc_te, pred_c))
+c_rmse = float(np.sqrt(mean_squared_error(yc_te, pred_c)))`,
+          },
+          {
+            id: "c4",
+            title: "핵심 변수",
+            prompt: "수치 변수(`years`, `overtime_h`, `satisfaction`) 중 `salary`와 상관(절댓값)이 가장 높은 변수 이름을 `c_best_feat`에 담으세요. (`df_c` 기준)",
+            expect: ["c_best_feat"],
+            hint: "corr()['salary'].drop('salary').abs().idxmax()",
+            solution: String.raw`num_corr = df_c[["years", "overtime_h", "satisfaction", "salary"]].corr()["salary"].drop("salary")
+c_best_feat = num_corr.abs().idxmax()`,
+          },
+          {
+            id: "c5",
+            title: "트리 비교",
+            prompt: "`DecisionTreeRegressor(max_depth=4, random_state=42)`의 테스트 RMSE를 `c_rmse_dt`에 담고, 선형회귀보다 나은지 `c_tree_better`(bool)에 담으세요.",
+            expect: ["c_rmse_dt", "c_tree_better"],
+            hint: "같은 분할 데이터를 재사용",
+            solution: String.raw`from sklearn.tree import DecisionTreeRegressor
+dt_c = DecisionTreeRegressor(max_depth=4, random_state=42).fit(Xc_tr, yc_tr)
+c_rmse_dt = float(np.sqrt(mean_squared_error(yc_te, dt_c.predict(Xc_te))))
+c_tree_better = bool(c_rmse_dt < c_rmse)`,
+          },
+        ],
+      },
+    ],
+  },
+
+  {
+    id: "big-gym",
+    title: "대문제 · 헬스장 회원 이용 분석",
+    category: "실전 대문제",
+    kind: "big",
+    level: 3,
+    tags: ["between", "카이제곱", "군집"],
+    intro: "회원 1,500명 이용 데이터셋 하나로 중문제 3개를 풉니다. 연령대 필터 → 장기권 이탈 → 감량자 분석 순서입니다.",
+    setup: String.raw`import numpy as np
+import pandas as pd
+
+rng = np.random.default_rng(227)
+n = 1500
+visits = np.clip(rng.normal(2.5, 1.2, n), 0, 7).round(1)
+pt = rng.choice([0, 0, 0, 4, 8, 12], n)
+churn_p = 1 / (1 + np.exp(-(-0.8 * visits - 0.05 * pt + 0.8)))
+df = pd.DataFrame({
+    "member_id": np.arange(1, n + 1),
+    "age": rng.integers(18, 65, n),
+    "gender": rng.choice(["M", "F"], n),
+    "plan": rng.choice(["1개월", "6개월", "12개월"], n, p=[0.3, 0.35, 0.35]),
+    "visits_per_week": visits,
+    "pt_sessions": pt,
+    "weight_change": (-0.6 * visits - 0.45 * (pt > 0) + rng.normal(1.5, 2.0, n)).round(1),
+    "churn": (rng.random(n) < churn_p).astype(int),
+})
+df.head()`,
+    sections: [
+      {
+        title: "중문제 1 · 20~30대 회원",
+        cond: "조건: `age`가 20 이상 39 이하인 회원만.",
+        steps: [
+          {
+            id: "a1",
+            title: "필터링",
+            prompt: "20~39세 회원만 담은 `df_a`를 만들고(`between(20, 39)`) 행 수를 `a_rows`에 담으세요.",
+            expect: ["a_rows"],
+            hint: "df[df['age'].between(20, 39)].copy()",
+            solution: String.raw`df_a = df[df["age"].between(20, 39)].copy()
+a_rows = len(df_a)`,
+          },
+          {
+            id: "a2",
+            title: "성별 방문 차이",
+            prompt: "남성(M) 평균 주간 방문에서 여성(F) 평균을 뺀 값을 `a_visit_diff`에 담으세요.",
+            expect: ["a_visit_diff"],
+            hint: "groupby('gender')['visits_per_week'].mean()",
+            solution: String.raw`gv = df_a.groupby("gender")["visits_per_week"].mean()
+a_visit_diff = float(gv.loc["M"] - gv.loc["F"])`,
+          },
+          {
+            id: "a3",
+            title: "PT 효과",
+            prompt: "PT 세션이 있는(`pt_sessions > 0`) 회원의 평균 체중변화에서 없는 회원 평균을 뺀 값을 `a_pt_effect`에 담으세요.",
+            expect: ["a_pt_effect"],
+            hint: "불리언 마스크 두 개로 평균 비교",
+            solution: String.raw`has_pt = df_a["pt_sessions"] > 0
+a_pt_effect = float(df_a.loc[has_pt, "weight_change"].mean() - df_a.loc[~has_pt, "weight_change"].mean())`,
+          },
+          {
+            id: "a4",
+            title: "상위 방문 경계",
+            prompt: "주간 방문 빈도의 75백분위수(상위 25% 경계)를 `a_q75`에 담으세요.",
+            expect: ["a_q75"],
+            hint: "quantile(0.75)",
+            solution: String.raw`a_q75 = float(df_a["visits_per_week"].quantile(0.75))`,
+          },
+        ],
+      },
+      {
+        title: "중문제 2 · 12개월권 이탈 분석",
+        cond: "조건: `plan == '12개월'` 인 회원만.",
+        steps: [
+          {
+            id: "b1",
+            title: "필터와 이탈률",
+            prompt: "12개월권 회원만 담은 `df_b`를 만들어 행 수를 `b_rows`에, 이탈률을 `b_churn_rate`에 담으세요.",
+            expect: ["b_rows", "b_churn_rate"],
+            hint: "df_b['churn'].mean()",
+            solution: String.raw`df_b = df[df["plan"] == "12개월"].copy()
+b_rows = len(df_b)
+b_churn_rate = float(df_b["churn"].mean())`,
+          },
+          {
+            id: "b2",
+            title: "방문 격차",
+            prompt: "유지 회원(`churn == 0`)의 평균 방문에서 이탈 회원 평균을 뺀 값을 `b_visit_gap`에 담으세요.",
+            expect: ["b_visit_gap"],
+            hint: "groupby('churn')['visits_per_week'].mean()",
+            solution: String.raw`cv = df_b.groupby("churn")["visits_per_week"].mean()
+b_visit_gap = float(cv.loc[0] - cv.loc[1])`,
+          },
+          {
+            id: "b3",
+            title: "성별-이탈 독립성",
+            prompt: "`pd.crosstab(df_b['gender'], df_b['churn'])`에 카이제곱 독립성 검정을 적용해 p값을 `b_p_chi`에, 유의수준 0.05에서 연관이 있다고 볼지 `b_dep`(bool)에 담으세요.",
+            expect: ["b_p_chi", "b_dep"],
+            hint: "scipy.stats.chi2_contingency",
+            solution: String.raw`from scipy import stats
+chi_b = stats.chi2_contingency(pd.crosstab(df_b["gender"], df_b["churn"]))
+b_p_chi = float(chi_b[1])
+b_dep = bool(b_p_chi < 0.05)`,
+          },
+          {
+            id: "b4",
+            title: "이탈 예측",
+            prompt: "`X = df_b[['visits_per_week', 'pt_sessions', 'age']]`, `y = df_b['churn']`을 `train_test_split(test_size=0.3, random_state=42, stratify=y)`로 나누고 `LogisticRegression(max_iter=1000)`의 테스트 정확도를 `b_acc`에 담으세요.",
+            expect: ["b_acc"],
+            hint: "accuracy_score 또는 model.score",
+            solution: String.raw`from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+X_b = df_b[["visits_per_week", "pt_sessions", "age"]]
+y_b = df_b["churn"]
+Xb_tr, Xb_te, yb_tr, yb_te = train_test_split(X_b, y_b, test_size=0.3, random_state=42, stratify=y_b)
+b_acc = float(LogisticRegression(max_iter=1000).fit(Xb_tr, yb_tr).score(Xb_te, yb_te))`,
+          },
+          {
+            id: "b5",
+            title: "재현율 확인",
+            prompt: "같은 모델의 테스트 재현율(recall)을 `b_rec`에 담으세요.",
+            expect: ["b_rec"],
+            hint: "recall_score(y_test, pred)",
+            solution: String.raw`from sklearn.metrics import recall_score
+logit_b = LogisticRegression(max_iter=1000).fit(Xb_tr, yb_tr)
+b_rec = float(recall_score(yb_te, logit_b.predict(Xb_te)))`,
+          },
+        ],
+      },
+      {
+        title: "중문제 3 · 감량 회원 분석",
+        cond: "조건: `weight_change < 0` (체중이 줄어든 회원)만.",
+        steps: [
+          {
+            id: "c1",
+            title: "필터와 평균 감량",
+            prompt: "감량 회원만 담은 `df_c`를 만들어 행 수를 `c_rows`에, 평균 체중변화(음수)를 `c_mean_loss`에 담으세요.",
+            expect: ["c_rows", "c_mean_loss"],
+            hint: "df[df['weight_change'] < 0].copy()",
+            solution: String.raw`df_c = df[df["weight_change"] < 0].copy()
+c_rows = len(df_c)
+c_mean_loss = float(df_c["weight_change"].mean())`,
+          },
+          {
+            id: "c2",
+            title: "방문-감량 상관",
+            prompt: "감량 회원에서 `visits_per_week`와 `weight_change`의 상관계수를 `c_corr`에 담으세요.",
+            expect: ["c_corr"],
+            hint: "Series.corr — 많이 올수록 더 빠지면 음수",
+            solution: String.raw`c_corr = float(df_c["visits_per_week"].corr(df_c["weight_change"]))`,
+          },
+          {
+            id: "c3",
+            title: "최다 감량 10명",
+            prompt: "가장 많이 감량한 10명의 `weight_change` 합을 `c_top10`에 담으세요. (`nsmallest` 사용)",
+            expect: ["c_top10"],
+            hint: "nsmallest(10).sum() — 가장 작은(음수 큰) 값들",
+            solution: String.raw`c_top10 = float(df_c["weight_change"].nsmallest(10).sum())`,
+          },
+          {
+            id: "c4",
+            title: "회원 군집화",
+            prompt: "`df_c[['visits_per_week', 'pt_sessions', 'weight_change']]`를 `StandardScaler`로 표준화하고 `KMeans(n_clusters=3, random_state=42, n_init=10)`으로 군집화해 실루엣 계수를 `c_sil`에 담으세요.",
+            expect: ["c_sil"],
+            hint: "silhouette_score(X_scaled, labels)",
+            solution: String.raw`from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
+Xg = StandardScaler().fit_transform(df_c[["visits_per_week", "pt_sessions", "weight_change"]])
+km_g = KMeans(n_clusters=3, random_state=42, n_init=10).fit(Xg)
+c_sil = float(silhouette_score(Xg, km_g.labels_))`,
+          },
+        ],
+      },
+    ],
+  },
 ];
+
+// 대문제(sections)는 단계를 평탄화해 기존 런타임(steps 기반)과 호환시킨다.
+// 각 단계에 소속 중문제 제목을 남겨 풀이 화면에서 구역을 표시한다.
+for (const p of window.DS_PROBLEMS) {
+  if (p.sections) {
+    for (const sec of p.sections) {
+      for (const st of sec.steps) st.section = sec.title;
+    }
+    p.steps = p.sections.flatMap((sec) => sec.steps);
+  }
+}

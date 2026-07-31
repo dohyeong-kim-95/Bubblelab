@@ -72,12 +72,6 @@ const PROGRESS_KEY = "bl-ds-progress-v1";
 const STRICT_PREF_KEY = "bl-ds-exam-strict-pref";
 const DURATION_MS = 180 * 60 * 1000;
 const PASS_SCORE = 60;
-// 실제 시험처럼 영역을 나눠 무작위 출제한다: 전처리 2 + 통계 2 + 모델링 2
-const GROUPS = [
-  { name: "전처리", pick: 2, cats: ["데이터 클렌징", "변환·스케일링", "피처 엔지니어링", "문자열 전처리", "탐색적 데이터 분석"] },
-  { name: "통계", pick: 2, cats: ["확률과 분포", "추정과 검정", "시계열 분석"] },
-  { name: "모델링", pick: 2, cats: ["회귀", "분류", "군집", "피처 선택", "연관규칙", "모델 최적화"] },
-];
 
 const problems = window.DS_PROBLEMS;
 const byId = new Map(problems.map((p) => [p.id, p]));
@@ -134,16 +128,22 @@ function startExam(strict) {
   render();
 }
 
+// 실제 시험 형식: 대문제(큰 데이터셋 + 중문제 3개) 2개를 무작위로 뽑는다
 function drawProblems() {
+  const pool = problems.filter((p) => p.kind === "big").map((p) => p.id);
   const chosen = [];
-  for (const group of GROUPS) {
-    const pool = problems.filter((p) => group.cats.includes(p.category)).map((p) => p.id);
-    for (let k = 0; k < group.pick && pool.length; k += 1) {
-      const i = Math.floor(Math.random() * pool.length);
-      chosen.push(pool.splice(i, 1)[0]);
-    }
+  for (let k = 0; k < 2 && pool.length; k += 1) {
+    chosen.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
   }
   return chosen;
+}
+
+function sectionCounts(ex, id) {
+  const p = byId.get(id);
+  if (!p.sections) return null;
+  const passed = new Set(ex.passed[id] || []);
+  return p.sections.map((sec) =>
+    `${sec.steps.filter((s) => passed.has(s.id)).length}/${sec.steps.length}`);
 }
 
 function totalSteps(ex) {
@@ -186,9 +186,10 @@ function renderIntro() {
   view.innerHTML = `
     <div class="panel">
       <ul class="rules">
-        <li>무작위 <strong>6문제</strong> (전처리 2 · 통계 2 · 모델링 2), 제한시간 <strong>180분</strong></li>
+        <li><strong>대문제 2개</strong> (각각 큰 데이터셋 1개 + 조건 필터 <strong>중문제 3개</strong>), 제한시간 <strong>180분</strong></li>
+        <li>중문제마다 3~7단계로 <strong>변수를 차례로</strong> 만들어 갑니다</li>
         <li>총점 <strong>100점</strong> — 단계별 균등 배점, <strong>${PASS_SCORE}점 이상 합격</strong></li>
-        <li>각 문제의 마지막 셀에서 <code>check.step()</code> 통과가 곧 제출입니다</li>
+        <li>각 단계는 <code>check.step()</code> 통과가 곧 제출입니다</li>
         <li>시험용 코드는 연습 기록과 분리 저장되고, 시간이 끝나면 자동 종료됩니다</li>
         <li>탭을 닫아도 시험은 계속 진행됩니다 (남은 시간 기준)</li>
       </ul>
@@ -209,14 +210,17 @@ function renderActive(ex) {
   const strict = !!ex.strict;
   const rows = ex.problems.map((id, i) => {
     const p = byId.get(id);
+    const secs = sectionCounts(ex, id);
     const marks = strict
       ? "🔒"
-      : p.steps.map((s) => ((ex.passed[id] || []).includes(s.id) ? "●" : "○")).join("");
+      : secs
+        ? secs.map((c, si) => `중${si + 1} ${c}`).join(" · ")
+        : p.steps.map((s) => ((ex.passed[id] || []).includes(s.id) ? "●" : "○")).join("");
     return `
       <li><a class="prow" href="solve.html?id=${encodeURIComponent(id)}&exam=1">
         <span class="no">${i + 1}</span>
-        <span class="ttl">${esc(p.title)}<span class="cat">${esc(p.category)}</span></span>
-        <span class="steps" title="${strict ? "엄격 모드: 결과 비공개" : "통과한 단계"}">${marks}</span>
+        <span class="ttl">${esc(p.title)}<span class="cat">${esc(p.category)} · ${p.steps.length}단계</span></span>
+        <span class="steps" title="${strict ? "엄격 모드: 결과 비공개" : "중문제별 통과 단계"}">${marks}</span>
       </a></li>`;
   }).join("");
   const { passed, total } = scoreOf(ex);
@@ -275,7 +279,11 @@ function renderReport(ex) {
     const p = byId.get(id);
     const n = passedSteps(ex, id);
     const pts = Math.round((n / total) * 1000) / 10;
-    return `<tr><td>${i + 1}. ${esc(p.title)}<span class="cat" style="opacity:.55;font-size:.72rem"> — ${esc(p.category)}</span></td>
+    const secs = sectionCounts(ex, id);
+    const detail = secs
+      ? `<br><span style="opacity:.55;font-size:.72rem">${secs.map((c, si) => `중문제${si + 1} ${c}`).join(" · ")}</span>`
+      : "";
+    return `<tr><td>${i + 1}. ${esc(p.title)}${detail}</td>
       <td class="num">${n}/${p.steps.length}</td><td class="num">${pts}점</td></tr>`;
   }).join("");
   view.innerHTML = `
