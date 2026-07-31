@@ -166,6 +166,38 @@ function chromaKeyGreen(img, full = 120, soft = 48) {
   }
   return img;
 }
+// 흰 배경 플러드필 누끼 (_infra/sticker-pack.mjs cutoutBackground 포팅)
+function cutoutBackground(img, full = 248, soft = 235) {
+  const { width, height, data } = img;
+  const visited = new Uint8Array(width * height);
+  const queue = [];
+  for (let x = 0; x < width; x++) queue.push(x, (height - 1) * width + x);
+  for (let y = 0; y < height; y++) queue.push(y * width, y * width + width - 1);
+  while (queue.length) {
+    const p = queue.pop();
+    if (visited[p]) continue;
+    visited[p] = 1;
+    const i = p * 4;
+    const whiteness = Math.min(data[i], data[i + 1], data[i + 2]);
+    if (whiteness < soft) continue;
+    data[i + 3] = whiteness >= full ? 0 : Math.round(((full - whiteness) / (full - soft)) * 255);
+    const x = p % width, y = (p / width) | 0;
+    if (x > 0) queue.push(p - 1);
+    if (x < width - 1) queue.push(p + 1);
+    if (y > 0) queue.push(p - width);
+    if (y < height - 1) queue.push(p + width);
+  }
+  return img;
+}
+// 모서리 색으로 배경 판별: 초록이면 크로마키, 아니면 흰 배경 플러드필 (CLI autoCutout과 동일)
+function autoCutout(img) {
+  const { width, height, data } = img;
+  let r = 0, g = 0, b = 0;
+  for (const i of [0, (width - 1) * 4, (height - 1) * width * 4, (width * height - 1) * 4]) {
+    r += data[i]; g += data[i + 1]; b += data[i + 2];
+  }
+  return g / 4 - Math.max(r / 4, b / 4) > 60 ? chromaKeyGreen(img) : cutoutBackground(img);
+}
 const transparencyRatio = (img) => {
   let t = 0; for (let i = 3; i < img.data.length; i += 4) if (img.data[i] === 0) t++;
   return t / (img.width * img.height);
@@ -297,7 +329,7 @@ const FRAME_PROMPT = (motion, index, total) =>
   `프레임 ${index}/${total}을 그려줘.\n` +
   "규칙: 마지막 프레임은 첫 프레임으로 자연스럽게 이어지는 루프여야 한다. " +
   "캐릭터는 캔버스 중앙, 프레임 간 크기와 위치를 유지한다. " +
-  "배경은 순수한 초록 단색(#00FF00)이며 캐릭터에 초록색을 쓰지 않는다. " +
+  "배경은 순수한 흰색 단색, 캐릭터의 외곽선은 끊김 없이 닫혀 있어야 한다. " +
   "그림자·소품·텍스트 등 캐릭터 외 요소 금지.";
 
 /* ── ① 시트 ── */
@@ -352,9 +384,9 @@ $("cut-gen").onclick = async () => {
       st.textContent = `프레임 ${i}/${total} 생성 중… (예상 잔여 비용 $${((total - i + 1) * 0.039).toFixed(2)})`;
       const refs = [sheetB64, ...(rawB64.length ? [rawB64[0]] : []), ...(rawB64.length > 1 ? [rawB64[rawB64.length - 1]] : [])];
       const bytes = await generate(FRAME_PROMPT(motion, i, total), refs);
-      const keyed = chromaKeyGreen(await toImageData(bytes));
+      const keyed = autoCutout(await toImageData(bytes));
       const ratio = transparencyRatio(keyed);
-      if (ratio < 0.05) throw new Error(`프레임 ${i} 크로마키 실패(투명 ${Math.round(ratio * 100)}%) — 다시 생성하세요`);
+      if (ratio < 0.05) throw new Error(`프레임 ${i} 누끼 실패(투명 ${Math.round(ratio * 100)}%) — 다시 생성하세요`);
       rawB64.push(b64(bytes));
       const blob = await pngBlob(keyed);
       keyedBlobs.push(blob);

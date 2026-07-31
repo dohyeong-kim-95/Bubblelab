@@ -4,5 +4,6 @@
   "cut_id": "hello",
   "prompt": "한쪽 팔을 높이 들고 좌우로 흔들며 밝게 인사, 몸이 살짝 들썩임",
   "frames": "12",
-  "fps": "12"
+  "fps": "12",
+  "force": "true"
 }

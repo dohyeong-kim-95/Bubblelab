@@ -25,7 +25,7 @@ import { fileURLToPath } from "node:url";
 import { decodePng, encodePng } from "./png.mjs";
 import { encodeApng, inspectApng } from "./apng.mjs";
 import { imageProvider } from "./emoticon-ai.mjs";
-import { decodeSheet } from "./sticker-pack.mjs";
+import { cutoutBackground, decodeSheet } from "./sticker-pack.mjs";
 
 const CUT_ID_RE = /^[a-z0-9][a-z0-9-]*$/;
 const MAX_FRAMES = 24;        // 카카오 납품 상한
@@ -49,6 +49,18 @@ export function chromaKeyGreen(image, { full = 120, soft = 48 } = {}) {
     data[i + 1] = spill; // 경계 초록 잔광 제거
   }
   return { width: image.width, height: image.height, data };
+}
+
+// 배경 자동 판별 누끼: 모서리 표본이 초록이면 크로마키, 아니면 흰 배경
+// 플러드필(sticker-pack의 cutoutBackground — 기존 팩들로 검증된 경로).
+// AI가 배경 지시를 어기고 흰 배경으로 생성해도 파이프라인이 계속 간다.
+export function autoCutout(image) {
+  const { width, height, data } = image;
+  let r = 0, g = 0, b = 0;
+  const corners = [0, (width - 1) * 4, (height - 1) * width * 4, (width * height - 1) * 4];
+  for (const i of corners) { r += data[i]; g += data[i + 1]; b += data[i + 2]; }
+  const greenish = g / 4 - Math.max(r / 4, b / 4) > 60;
+  return greenish ? chromaKeyGreen(image) : cutoutBackground(image);
 }
 
 // 박스 평균 리샘플 (알파 가중 — 반투명 경계에서 배경색이 번지지 않게)
@@ -170,7 +182,7 @@ const FRAME_PROMPT = (motion, index, total) =>
   `프레임 ${index}/${total}을 그려줘.\n` +
   "규칙: 마지막 프레임은 첫 프레임으로 자연스럽게 이어지는 루프여야 한다. " +
   "캐릭터는 캔버스 중앙, 프레임 간 크기와 위치를 유지한다. " +
-  "배경은 순수한 초록 단색(#00FF00)이며 캐릭터에 초록색을 쓰지 않는다. " +
+  "배경은 순수한 흰색 단색, 캐릭터의 외곽선은 끊김 없이 닫혀 있어야 한다. " +
   "그림자·소품·텍스트 등 캐릭터 외 요소 금지.";
 
 // ── 명령 구현 ───────────────────────────────────────────────────────────
@@ -217,16 +229,16 @@ async function cmdCut(workdir, cutId, options) {
     const references = [sheet, ...(rawFrames.length ? [rawFrames[0]] : []), ...(rawFrames.length > 1 ? [rawFrames[rawFrames.length - 1]] : [])];
     const bytes = await provider.generate({ prompt: FRAME_PROMPT(options.motion.trim(), i, total), references });
     rawFrames.push(bytes);
-    const rgba = await toRgba(bytes);
-    const keyed = chromaKeyGreen(rgba);
+    // 원본을 먼저 저장해 실패해도 디버깅 근거가 남게 한다
+    writeFileSync(join(cutDir, "frames-raw", `${pad2(i)}.png`), Buffer.from(bytes));
+    const keyed = autoCutout(await toRgba(bytes));
     const ratio = transparencyRatio(keyed);
     if (ratio < 0.05) {
       throw new Error(
-        `프레임 ${pad2(i)} 크로마키 실패 (투명 ${Math.round(ratio * 100)}%) — ` +
-        `배경이 초록으로 생성되지 않았습니다. frames-raw/${pad2(i)}.png 확인 후 --force로 재시도`,
+        `프레임 ${pad2(i)} 누끼 실패 (투명 ${Math.round(ratio * 100)}%) — ` +
+        `frames-raw/${pad2(i)}.png 확인 후 --force로 재시도`,
       );
     }
-    writeFileSync(join(cutDir, "frames-raw", `${pad2(i)}.png`), Buffer.from(bytes));
     writeFileSync(join(cutDir, "frames", `${pad2(i)}.png`), encodePng(keyed));
     console.log(`  프레임 ${pad2(i)}/${pad2(total)} (투명 ${Math.round(ratio * 100)}%)`);
   }

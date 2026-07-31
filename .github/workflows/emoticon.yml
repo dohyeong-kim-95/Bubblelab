@@ -116,6 +116,7 @@ jobs:
           rm -f "$JOB"
 
       - name: Commit outputs
+        if: always()   # 실패해도 frames-raw 등 부분 산출물을 커밋해 디버깅 근거를 남긴다
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"

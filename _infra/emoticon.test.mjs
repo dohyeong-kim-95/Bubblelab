@@ -9,7 +9,7 @@ import { decodePng } from "./png.mjs";
 import { encodeApng, inspectApng } from "./apng.mjs";
 import { imageProvider } from "./emoticon-ai.mjs";
 import { bytesToBase64 } from "./emoticon-gen.js";
-import { chromaKeyGreen, fitFrames, loopDiff, resize, transparencyRatio, unionBounds } from "./emoticon.mjs";
+import { autoCutout, chromaKeyGreen, fitFrames, loopDiff, resize, transparencyRatio, unionBounds } from "./emoticon.mjs";
 import worker from "./worker.js";
 
 const INFRA = dirname(fileURLToPath(import.meta.url));
@@ -35,6 +35,25 @@ test("chromaKeyGreen: 초록 배경은 투명, 캐릭터 색은 보존", () => {
   assert.equal(keyed.data[4], 255);
   assert.equal(keyed.data[8 + 3], 0);                // keyness 160 → 투명 (전신 초록 캐릭터는 금지 규칙)
   assert.ok(transparencyRatio(keyed) > 0.4);
+});
+
+test("autoCutout: 배경색을 보고 크로마키/흰배경 플러드필을 자동 선택", () => {
+  // 초록 배경 → 크로마키 경로
+  const green = makeImage(8, 8, [0, 255, 0, 255]);
+  setPixel(green, 4, 4, [255, 176, 32, 255]);
+  const keyedGreen = autoCutout(green);
+  assert.equal(keyedGreen.data[3], 0);
+  assert.equal(keyedGreen.data[(4 * 8 + 4) * 4 + 3], 255);
+
+  // 흰 배경 + 닫힌 외곽선(어두운 사각 테두리) → 플러드필 경로:
+  // 바깥 흰색은 투명, 테두리 안쪽 흰색은 보존된다 (흰 캐릭터 몸통 시나리오)
+  const white = makeImage(12, 12, [255, 255, 255, 255]);
+  for (let x = 3; x <= 8; x++) for (let y = 3; y <= 8; y++) {
+    if (x === 3 || x === 8 || y === 3 || y === 8) setPixel(white, x, y, [30, 30, 30, 255]);
+  }
+  const keyedWhite = autoCutout(white);
+  assert.equal(keyedWhite.data[3], 0);                              // 바깥 배경 투명
+  assert.equal(keyedWhite.data[(5 * 12 + 5) * 4 + 3], 255);         // 외곽선 안 흰색 보존
 });
 
 test("encodeApng/inspectApng: 프레임 수·delay·루프가 기록되고 첫 프레임은 PNG로 읽힌다", () => {
