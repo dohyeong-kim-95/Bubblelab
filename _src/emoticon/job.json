@@ -1,0 +1,19 @@
+{
+  "character": "rabbit",
+  "step": "cut",
+  "cut_id": "nod2",
+  "prompt": "nodding yes",
+  "fps": "12",
+  "profile": "master-2s",
+  "ref": "_src/emoticon/rabbit/cuts/nod/frames-raw/key-1.png",
+  "assembly": "pingpong",
+  "breakdowns": 1,
+  "repeat": 3,
+  "max_calls": "6",
+  "max_cost": "0.25",
+  "invariants": "plain white paws with NO paw pads, NO jelly beans and NO toes; exactly two pink oval inner ears; exactly two round pink cheek blushes; simple solid black dot eyes; no other markings, patches or accessories anywhere",
+  "keys": [
+    { "pose": "standing upright facing front, head level and looking straight at the viewer, both short arms resting down at the sides, gentle closed-mouth smile, eyes open", "hold": 4 },
+    { "pose": "identical body, size, position and arms, but the head is tilted far down in a deep nod with the chin tucked toward the chest, eyes closed in happy arcs, small open smile", "hold": 2 }
+  ]
+}

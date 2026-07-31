@@ -154,7 +154,7 @@ jobs:
                 --fps "$FPS" $GRID_FLAG $REF_FLAG $FORCE_FLAG $RESUME_FLAG "${BUDGET_FLAGS[@]}"
             elif [[ -f "$JOB" ]] && node -e "process.exit(Array.isArray(require('./$JOB').keys) ? 0 : 1)"; then
               # pose-to-pose 모드 (권장): job.json의 keys/breakdowns/assembly를 spec으로
-              node -e "const j = require('./$JOB'); require('fs').writeFileSync('/tmp/keys.json', JSON.stringify({ motion: j.prompt, keys: j.keys, breakdowns: j.breakdowns, assembly: j.assembly }))"
+              node -e "const j = require('./$JOB'); require('fs').writeFileSync('/tmp/keys.json', JSON.stringify({ motion: j.prompt, keys: j.keys, breakdowns: j.breakdowns, assembly: j.assembly, invariants: j.invariants, repeat: j.repeat }))"
               KEYS_REF_FLAG=""
               node -e "process.exit(require('./$JOB').ref ? 0 : 1)" \
                 && KEYS_REF_FLAG="--ref $(node -p "require('./$JOB').ref || ''")"

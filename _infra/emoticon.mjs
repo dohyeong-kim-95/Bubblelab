@@ -267,21 +267,26 @@ const FRAME_PROMPT = (motion, index, total, pose = "") =>
   "Pure solid white background; outlines must be fully closed. No shadows, props, or text.";
 
 // pose-to-pose 모드 프롬프트 (animation-techniques.md §1·§7)
-const KEY_PROMPT = (motion, index, total, pose) =>
+// 캐릭터 불변 명세: 프레임마다 생겼다 사라지는 디테일(앞발 젤리 등)을 막는다.
+// wave 컷에서 브레이크다운 한 장에만 앞발 패드가 나타난 사례가 있었다.
+const invariantLine = (invariants) =>
+  invariants ? `Details that must be IDENTICAL in every frame: ${invariants}\n` : "";
+
+const KEY_PROMPT = (motion, index, total, pose, invariants = "") =>
   `The attached images are this character's reference sheet (first image)` +
   `${index > 1 ? " and earlier key poses of this motion" : ""}. ` +
   `Draw key pose ${index}/${total} of the motion "${motion}" with this exact same character ` +
   `(same colors, proportions, accessories).\n` +
-  `Key pose (follow exactly): ${pose}\n` +
+  `Key pose (follow exactly): ${pose}\n` + invariantLine(invariants) +
   "Rules: exaggerate the extreme of the motion with a clear, readable silhouette. " +
   "Character centered at the same size. Pure solid white background, fully closed outlines. " +
   "No shadows, props, or text.";
 
-const BREAKDOWN_PROMPT = (motion, poseA, poseB) =>
+const BREAKDOWN_PROMPT = (motion, poseA, poseB, invariants = "") =>
   `The attached images are the character reference sheet and two consecutive key poses A and B ` +
   `of the motion "${motion}". Draw the exact in-between (breakdown) pose halfway between A and B ` +
   `with the same character.\n` +
-  `A: ${poseA}\nB: ${poseB}\n` +
+  `A: ${poseA}\nB: ${poseB}\n` + invariantLine(invariants) +
   "Rules: hands and head travel along a natural arc, not a straight line. " +
   "Same character size and position as both keys. Pure solid white background, closed outlines. " +
   "No shadows, props, or text.";
@@ -347,14 +352,15 @@ async function reusableGridRaw(path, cols, rows, count) {
   }
 }
 
-function keyTiming(keys, pairs, breakdowns, assembly, fps) {
+function keyTiming(keys, pairs, breakdowns, assembly, fps, repeat = 1) {
   const delays = [];
   for (let i = 0; i < keys.length; i++) {
     delays.push(Math.max(1, Number(keys[i].hold ?? 1)));
     if (breakdowns && pairs.some(([a, b]) => a === i && b === i + 1)) delays.push(1);
   }
   if (breakdowns && assembly === "loop") delays.push(1);
-  const timeline = assembly === "pingpong" ? [...delays, ...delays.slice(1, -1).reverse()] : delays;
+  const cycle = assembly === "pingpong" ? [...delays, ...delays.slice(1, -1).reverse()] : delays;
+  const timeline = Array.from({ length: repeat }, () => cycle).flat();
   return {
     uniqueFrames: delays.length,
     timelineFrames: timeline.length,
@@ -526,6 +532,11 @@ async function cmdCutKeys(workdir, cutId, options) {
   if (![0, 1].includes(breakdowns)) throw new Error("breakdowns는 0 또는 1만 지원합니다 (v1)");
   const assembly = spec.assembly ?? "pingpong";
   if (!["pingpong", "loop"].includes(assembly)) throw new Error('assembly는 "pingpong" 또는 "loop"');
+  const invariants = String(spec.invariants ?? "").trim();
+  // repeat: 같은 타임라인을 N번 반복한다. 생성 비용은 그대로 두고 길이만 늘리는
+  // 리미티드 애니메이션식 재사용 — 2초 안에 여러 번 끄덕이려면 필요하다.
+  const repeat = Number(spec.repeat ?? 1);
+  if (!Number.isInteger(repeat) || repeat < 1 || repeat > 8) throw new Error("repeat은 1~8 정수여야 합니다");
   const fps = Number(options.fps ?? spec.fps ?? 12);
   const sheetPath = characterReferencePath(workdir, options);
   const cutDir = join(workdir, "cuts", cutId);
@@ -535,7 +546,7 @@ async function cmdCutKeys(workdir, cutId, options) {
   for (let i = 0; i < keys.length - 1; i++) pairs.push([i, i + 1]);
   if (assembly === "loop") pairs.push([keys.length - 1, 0]);
   const totalCalls = keys.length + (breakdowns ? pairs.length : 0);
-  const input = { motion, fps, keys, breakdowns, assembly };
+  const input = { motion, fps, keys, breakdowns, assembly, invariants, repeat };
   const base = provenance("keys", input, [sheet]);
   checkPlanTarget(cutDir, options, base);
   const rawNames = [
@@ -544,7 +555,7 @@ async function cmdCutKeys(workdir, cutId, options) {
   ];
   let reusable = 0;
   if (options.resume) for (const name of rawNames) if (await reusableRaw(join(cutDir, "frames-raw", name))) reusable++;
-  const timing = keyTiming(keys, pairs, breakdowns, assembly, fps);
+  const timing = keyTiming(keys, pairs, breakdowns, assembly, fps, repeat);
   const plan = {
     mode: "keys", characterRef: options.ref ?? "sheet.png",
     provider: provider.name, totalCalls, remainingCalls: totalCalls - reusable,
@@ -579,7 +590,7 @@ async function cmdCutKeys(workdir, cutId, options) {
     for (let i = 0; i < keys.length; i++) {
       const references = [sheet, ...(keyRaw.length ? [keyRaw[0]] : []), ...(keyRaw.length > 1 ? [keyRaw[keyRaw.length - 1]] : [])];
       const { bytes, keyed } = await generateKeyed(
-        KEY_PROMPT(motion, i + 1, keys.length, keys[i].pose.trim()), references,
+        KEY_PROMPT(motion, i + 1, keys.length, keys[i].pose.trim(), invariants), references,
         `키 ${i + 1}`, `key-${i + 1}.png`,
       );
       keyRaw.push(bytes);
@@ -593,7 +604,7 @@ async function cmdCutKeys(workdir, cutId, options) {
       const label = `브레이크다운 ${a + 1}→${b + 1}`;
       const rawName = `bd-${a + 1}-${b + 1}.png`;
       const gen = (allowReuse = true) => generateKeyed(
-        BREAKDOWN_PROMPT(motion, keys[a].pose.trim(), keys[b].pose.trim()),
+        BREAKDOWN_PROMPT(motion, keys[a].pose.trim(), keys[b].pose.trim(), invariants),
         [sheet, keyRaw[a], keyRaw[b]], label, rawName, allowReuse,
       );
       const midDiff = ({ keyed }) =>
@@ -639,6 +650,10 @@ async function cmdCutKeys(workdir, cutId, options) {
     const timeline = unique.map((u, index) => ({ frame: index, delayMs: Math.round(u.delayFrames * frameDelay) }));
     if (assembly === "pingpong") for (let i = unique.length - 2; i >= 1; i--) {
       timeline.push({ frame: i, delayMs: Math.round(unique[i].delayFrames * frameDelay) });
+    }
+    if (repeat > 1) {
+      const cycle = [...timeline];
+      for (let r = 1; r < repeat; r++) timeline.push(...cycle.map((t) => ({ ...t })));
     }
     unique.forEach((u, i) => atomicWriteFile(join(cutDir, "frames", `${pad2(i + 1)}.png`), encodePng(u.image)));
     finishCutRun(state, "complete", null, {
@@ -767,6 +782,9 @@ async function cmdPlan(workdir, cutId, options) {
     const assembly = spec.assembly ?? "pingpong";
     if (![0, 1].includes(breakdowns)) throw new Error("breakdowns는 0 또는 1만 지원합니다 (v1)");
     if (!["pingpong", "loop"].includes(assembly)) throw new Error('assembly는 "pingpong" 또는 "loop"');
+    const invariants = String(spec.invariants ?? "").trim();
+    const repeat = Number(spec.repeat ?? 1);
+    if (!Number.isInteger(repeat) || repeat < 1 || repeat > 8) throw new Error("repeat은 1~8 정수여야 합니다");
     const fps = Number(options.fps ?? spec.fps ?? 12);
     const sheetPath = characterReferencePath(workdir, options);
     const sheet = readFileSync(sheetPath);
@@ -777,12 +795,12 @@ async function cmdPlan(workdir, cutId, options) {
       ...keys.map((_, i) => `key-${i + 1}.png`),
       ...(breakdowns ? pairs.map(([a, b]) => `bd-${a + 1}-${b + 1}.png`) : []),
     ];
-    const input = { motion, fps, keys, breakdowns, assembly };
+    const input = { motion, fps, keys, breakdowns, assembly, invariants, repeat };
     const base = provenance("keys", input, [sheet]);
     checkPlanTarget(cutDir, options, base);
     let reusable = 0;
     if (options.resume) for (const name of names) if (await reusableRaw(join(cutDir, "frames-raw", name))) reusable++;
-    const timing = keyTiming(keys, pairs, breakdowns, assembly, fps);
+    const timing = keyTiming(keys, pairs, breakdowns, assembly, fps, repeat);
     return printPlan({
       mode: "keys", provider: provider.name, totalCalls: names.length,
       remainingCalls: names.length - reusable, reusedCalls: reusable,
@@ -876,13 +894,13 @@ async function cmdRedo(workdir, cutId, frameArg) {
   if (el.type === "key") {
     label = `키 ${el.key + 1}`;
     rawName = `key-${el.key + 1}.png`;
-    prompt = KEY_PROMPT(meta.motion, el.key + 1, meta.keys.length, meta.keys[el.key].pose);
+    prompt = KEY_PROMPT(meta.motion, el.key + 1, meta.keys.length, meta.keys[el.key].pose, meta.invariants ?? "");
     references = [sheet, ...(el.key > 0 ? [rawOf("key-1.png")] : [])];
   } else {
     const [a, b] = el.pair;
     label = `브레이크다운 ${a + 1}→${b + 1}`;
     rawName = `bd-${a + 1}-${b + 1}.png`;
-    prompt = BREAKDOWN_PROMPT(meta.motion, meta.keys[a].pose, meta.keys[b].pose);
+    prompt = BREAKDOWN_PROMPT(meta.motion, meta.keys[a].pose, meta.keys[b].pose, meta.invariants ?? "");
     references = [sheet, rawOf(`key-${a + 1}.png`), rawOf(`key-${b + 1}.png`)];
   }
 
