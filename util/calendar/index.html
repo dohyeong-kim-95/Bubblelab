@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>달력</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>📅</text></svg>">
 <style>
@@ -11,6 +11,7 @@
          margin: 0; min-height: 100dvh; display: flex; align-items: center; justify-content: center;
          background: light-dark(#eef2f6, #10161f);
          color: light-dark(#1c2733, #dbe4ee); }
+  body.editing { overflow: hidden; }
   main { padding: 1.5rem; width: min(26rem, 100%); box-sizing: border-box;
          /* 저장 이미지와 같은 비례: 셀 폭 기준으로 모든 크기를 계산 */
          --cell: calc((min(26rem, 100vw) - 3rem) / 7); }
@@ -43,45 +44,20 @@
                    background: light-dark(#1c2733, #dbe4ee); }
   #actions { text-align: center; margin-top: 1.6rem;
              display: flex; flex-direction: column; align-items: center; gap: .5rem; }
-  #decorate[aria-expanded="true"], #save[aria-expanded="true"] {
-    background: light-dark(#1c273312, #dbe4ee18); }
   button { font: inherit; color: inherit; background: none; cursor: pointer;
            padding: .55rem 1.1rem; border-radius: .5rem;
            border: 1px solid light-dark(#1c273355, #dbe4ee55); }
   button:hover:not(:disabled) { background: light-dark(#1c273310, #dbe4ee14); }
   button:disabled { opacity: .4; cursor: default; }
+  #save[aria-expanded="true"] { background: light-dark(#1c273312, #dbe4ee18); }
   #panel { margin-top: .7rem; width: 100%; box-sizing: border-box;
            display: flex; flex-direction: column; gap: .9rem;
            align-items: center; padding: 1.1rem;
            border: 1px solid light-dark(#1c273322, #dbe4ee22); border-radius: .75rem; }
   #panel[hidden] { display: none; }
-  #simple-ctl, #decorate-ctl { width: 100%; display: flex; flex-direction: column; gap: .7rem; }
-  #simple-ctl[hidden], #decorate-ctl[hidden] { display: none; }
-
-  /* 편집 무대: 캔버스(배경+달력) 위에 스티커 DOM을 얹어 손으로 직접 옮긴다.
-     꾸미기 모드에서만 손가락 제스처를 받는다(그 외에는 페이지 스크롤 우선). */
-  #stage { position: relative; height: min(52dvh, 26rem); width: auto; margin: 0 auto;
-           border-radius: .6rem; overflow: hidden;
-           border: 1px solid light-dark(#1c273333, #dbe4ee33); }
-  #stage.editing { touch-action: none; }
-  #stage:not(.editing) #sticker-layer { pointer-events: none; }
-  #preview, #sticker-layer { position: absolute; inset: 0; width: 100%; height: 100%; }
-  #preview { display: block; }
-  #sticker-layer { overflow: hidden; }
-  .sticker { position: absolute; transform-origin: center; height: auto; max-width: none;
-             border: 2px solid transparent; border-radius: .2rem; touch-action: none;
-             -webkit-user-drag: none; user-select: none; }
-  .sticker.selected { border-color: light-dark(#fff, #10161f);
-                      outline: 2px solid light-dark(#2563ab, #8ab8ff); }
-  /* 시계·알림이 겹치는 상단 영역 안내 — 미리보기에만 있고 PNG에는 들어가지 않는다 */
-  #safe-guide { position: absolute; inset: 0 0 auto; height: 20%; pointer-events: none;
-                display: grid; place-items: start end;
-                border-bottom: 1px dashed light-dark(#1c273355, #dbe4ee55); }
-  #safe-guide span { font-size: .58rem; opacity: .45; padding: .25rem .35rem; }
-  #stage.cal-active { outline: 2px solid light-dark(#2563ab55, #8ab8ff55); outline-offset: -2px; }
-
-  .ctl { display: flex; align-items: center; gap: .7rem; width: 100%;
-         font-size: .85rem; }
+  #preview { width: 9.5rem; height: auto; border-radius: .6rem; display: block;
+             border: 1px solid light-dark(#1c273333, #dbe4ee33); }
+  .ctl { display: flex; align-items: center; gap: .7rem; width: 100%; font-size: .85rem; }
   .ctl > label { width: 4.5rem; text-align: right; opacity: .6; flex: none; }
   .ctl > select, .ctl > input[type=range] { flex: 1; min-width: 0; }
   input[type=range] { accent-color: light-dark(#1c2733, #dbe4ee); }
@@ -89,11 +65,6 @@
            background: light-dark(#eef2f6, #10161f);
            border: 1px solid light-dark(#1c273355, #dbe4ee55);
            border-radius: .4rem; padding: .3rem .4rem; }
-  .toolbar { display: grid; grid-template-columns: repeat(3, 1fr); gap: .35rem; width: 100%; }
-  .toolbar button { min-width: 0; padding: .5rem .2rem; font-size: .72rem; }
-  #pick-asset { grid-column: span 3; }
-  #cal-reset { grid-column: span 3; }
-  #edit-hint { margin: 0; font-size: .72rem; opacity: .6; text-align: center; line-height: 1.6; }
   #err { min-height: 1.2em; margin: 0; font-size: .85rem;
          color: light-dark(#c0392b, #ff8a7a); }
   /* 실패가 아닌 진행 안내는 경고색 대신 본문색으로 (같은 자리에 표시) */
@@ -102,13 +73,66 @@
                text-align: center; line-height: 1.5; }
   #save-hint[hidden] { display: none; }
 
+  /* ── 전체화면 꾸미기: 화면 자체가 배경화면이 되고 그 위에서 바로 편집한다 ── */
+  #editor { position: fixed; inset: 0; z-index: 30; background: #05080c;
+            display: grid; place-items: center; overscroll-behavior: contain; }
+  #editor[hidden] { display: none; }
+  #edit-stage { position: relative; overflow: hidden; touch-action: none;
+                box-shadow: 0 0 0 1px #ffffff1f; }
+  #edit-canvas, #edit-stickers, #edit-safe { position: absolute; inset: 0;
+                                             width: 100%; height: 100%; }
+  #edit-canvas { display: block; }
+  #edit-stickers { overflow: hidden; }
+  .sticker { position: absolute; transform-origin: center; height: auto; max-width: none;
+             border: 2px solid transparent; border-radius: .2rem; touch-action: none;
+             -webkit-user-drag: none; user-select: none; }
+  .sticker.selected { border-color: #fff; outline: 2px solid #8ab8ff; }
+  /* 시계·알림이 겹치는 상단 영역 안내 — 화면에만 있고 저장 PNG에는 안 들어간다 */
+  /* 라벨은 띠 아래쪽 끝에 — 위쪽은 도구 막대가 덮는다 */
+  #edit-safe { pointer-events: none; display: grid; place-items: end end;
+               height: 20%; inset: 0 0 auto;
+               border-bottom: 1px dashed light-dark(#1c273366, #dbe4ee55); }
+  #edit-safe span { font-size: .6rem; opacity: .5; padding: .3rem .4rem;
+                    color: light-dark(#1c2733, #dbe4ee); }
+  /* 지금 잡고 있는 대상(기본값 = 달력)을 점선으로 표시한다 */
+  #cal-frame { position: absolute; pointer-events: none; border-radius: .35rem;
+               border: 1.5px dashed #8ab8ff; }
+  #cal-frame[hidden] { display: none; }
+  /* 라벨은 테두리 안쪽에 — 달력을 화면 맨 위로 올려도 잘리지 않게 */
+  #cal-frame::after { content: "달력"; position: absolute; top: .2rem; left: .2rem;
+                      font-size: .62rem; padding: .1rem .35rem; border-radius: .3rem;
+                      background: #8ab8ff; color: #06121f; }
+
+  .edit-bar { position: absolute; left: 0; right: 0; z-index: 3; display: flex;
+              flex-direction: column; gap: .45rem; padding: .55rem .7rem; color: #fff; }
+  .edit-bar.top { top: 0; background: linear-gradient(#000000b0, #0000);
+                  flex-direction: row; align-items: center; }
+  .edit-bar.bottom { bottom: 0; padding-bottom: max(.7rem, env(safe-area-inset-bottom));
+                     background: linear-gradient(#0000, #000000cc 22%, #000000ee); }
+  /* 공용 독(홈·공유)은 편집 중에 도구 막대를 가린다 */
+  body.editing #bl-dock { display: none; }
+  .edit-bar button { color: #fff; border-color: #ffffff44; background: #ffffff14;
+                     backdrop-filter: blur(4px); }
+  .edit-bar button:hover:not(:disabled) { background: #ffffff2b; }
+  .edit-bar.top select { flex: 1; min-width: 0; color: #fff; background: #1b232ee0;
+                         border-color: #ffffff44; }
+  .edit-bar.top button { padding: .45rem .7rem; font-size: .8rem; flex: none; }
+  .edit-tools { display: grid; grid-template-columns: repeat(4, 1fr); gap: .35rem; }
+  .edit-tools button { min-width: 0; padding: .55rem .2rem; font-size: .72rem; }
+  #edit-save { grid-column: span 4; background: #ffffff26; font-size: .82rem; }
+  #edit-hint { margin: 0 auto; font-size: .68rem; line-height: 1.45; text-align: center;
+               color: #fff; background: #000000a6; border-radius: .5rem;
+               padding: .3rem .6rem; max-width: 22rem; }
+  #edit-err { margin: 0; min-height: 1em; font-size: .72rem; text-align: center; color: #ffb0a4; }
+
   /* 스티커 고르기 시트 (util/photo의 에셋 픽커와 같은 구성) */
-  #asset-picker { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column;
+  #asset-picker { position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column;
                   justify-content: flex-end; background: #0007; }
   #asset-picker[hidden] { display: none; }
   .picker-sheet { max-height: 72dvh; overflow-y: auto; padding: .9rem 1rem 1.2rem;
                   border-radius: 1rem 1rem 0 0;
                   background: light-dark(#fff, #141d28);
+                  color: light-dark(#1c2733, #dbe4ee);
                   border-top: 1px solid light-dark(#dce3ea, #2a3747); }
   .picker-head { display: flex; justify-content: space-between; align-items: center; gap: .6rem; }
   .picker-head h3 { margin: 0; font-size: .92rem; }
@@ -156,42 +180,22 @@
   <div id="actions">
     <button id="save" type="button" aria-expanded="false" aria-controls="panel"
             aria-label="휴대폰 배경화면 저장 열기">휴대폰 배경화면 저장</button>
-    <button id="decorate" type="button" aria-expanded="false" aria-controls="panel"
-            aria-label="휴대폰 배경화면 꾸미기 시작">🎨 휴대폰 배경화면 꾸미기</button>
+    <button id="decorate" type="button">🎨 휴대폰 배경화면 꾸미기</button>
     <div id="panel" hidden>
+      <canvas id="preview" role="img" aria-label="배경화면 미리보기"></canvas>
       <div class="ctl">
         <label for="device">기종</label>
         <select id="device" aria-label="휴대폰 기종 선택"></select>
       </div>
-      <div id="stage">
-        <canvas id="preview" role="img" aria-label="배경화면 미리보기"></canvas>
-        <div id="sticker-layer" aria-label="스티커 편집 영역"></div>
-        <div id="safe-guide"><span>시계·알림 영역</span></div>
+      <div class="ctl">
+        <label for="cal-size">달력 크기</label>
+        <input type="range" id="cal-size" min="40" max="95" value="60"
+               aria-label="달력 크기 조절">
       </div>
-      <div id="simple-ctl">
-        <div class="ctl">
-          <label for="cal-size">달력 크기</label>
-          <input type="range" id="cal-size" min="40" max="95" value="60"
-                 aria-label="달력 크기 조절">
-        </div>
-        <div class="ctl">
-          <label for="cal-pos">세로 위치</label>
-          <input type="range" id="cal-pos" min="30" max="80" value="55"
-                 aria-label="달력 세로 위치 조절">
-        </div>
-      </div>
-      <div id="decorate-ctl" hidden>
-        <p id="edit-hint"></p>
-        <div class="toolbar">
-          <button id="pick-asset" type="button">🐶 스티커 붙이기</button>
-          <button id="smaller" type="button">－ 크기</button>
-          <button id="larger" type="button">＋ 크기</button>
-          <button id="rotate" type="button" disabled>↻ 회전</button>
-          <button id="duplicate" type="button" disabled>복제</button>
-          <button id="remove" type="button" disabled>삭제</button>
-          <button id="deselect" type="button" disabled>선택 해제</button>
-          <button id="cal-reset" type="button">달력 위치·크기 초기화</button>
-        </div>
+      <div class="ctl">
+        <label for="cal-pos">세로 위치</label>
+        <input type="range" id="cal-pos" min="30" max="80" value="55"
+               aria-label="달력 세로 위치 조절">
       </div>
       <button id="download" type="button"
               aria-label="배경화면 PNG 이미지 다운로드">PNG 다운로드</button>
@@ -200,6 +204,35 @@
     </div>
   </div>
 </main>
+
+<!-- 화면 전체가 배경화면이 되는 편집기. 열면 달력이 기본으로 잡혀 있다. -->
+<div id="editor" hidden aria-label="배경화면 꾸미기">
+  <div id="edit-stage">
+    <canvas id="edit-canvas" role="img" aria-label="배경화면 편집 화면"></canvas>
+    <div id="edit-stickers"></div>
+    <div id="edit-safe"><span>시계·알림 영역</span></div>
+    <div id="cal-frame"></div>
+    <div class="edit-bar top">
+      <button id="edit-close" type="button" aria-label="꾸미기 닫기">✕</button>
+      <select id="edit-device" aria-label="휴대폰 기종 선택"></select>
+    </div>
+    <div class="edit-bar bottom">
+      <p id="edit-hint"></p>
+      <div class="edit-tools">
+        <button id="edit-asset" type="button">🐶 스티커</button>
+        <button id="edit-smaller" type="button">－ 크기</button>
+        <button id="edit-larger" type="button">＋ 크기</button>
+        <button id="edit-rotate" type="button" disabled>↻ 회전</button>
+        <button id="edit-duplicate" type="button" disabled>복제</button>
+        <button id="edit-remove" type="button" disabled>삭제</button>
+        <button id="edit-cal" type="button">📅 달력 잡기</button>
+        <button id="edit-reset" type="button">되돌리기</button>
+        <button id="edit-save" type="button">💾 배경화면 저장</button>
+      </div>
+      <p id="edit-err" role="alert"></p>
+    </div>
+  </div>
+</div>
 
 <div id="asset-picker" hidden>
   <div class="picker-sheet">
@@ -274,6 +307,7 @@ function renderCalendar() {
     });
   }
   renderPreview();
+  renderEditor();
 }
 
 function shiftMonth(delta) {
@@ -289,6 +323,7 @@ todayBtn.addEventListener("click", () => {
   renderCalendar();
 });
 addEventListener("keydown", (event) => {
+  if (!editor.hidden && event.key === "Escape") { closeEditor(); return; }
   if (event.target.closest("input, select, button")) return;
   if (event.key === "ArrowLeft") shiftMonth(-1);
   if (event.key === "ArrowRight") shiftMonth(1);
@@ -321,7 +356,7 @@ document.addEventListener("visibilitychange", () => {
   renderCalendar();
 });
 
-// ---- 배경화면 PNG ----
+// ---- 배경화면 ----
 // 기종 해상도 자동 인식: 모바일 세로 화면일 때만 신뢰한다
 function detectDevice() {
   const dpr = devicePixelRatio || 1;
@@ -338,27 +373,26 @@ const DEVICE_PRESETS = [
   ["iPhone / Pro", 1179, 2556],
 ];
 
-// 달력 블록의 위치·크기 (0~1 정규화). 손가락으로 직접 옮기고 키운다.
+// 달력 블록의 위치·크기 (0~1 정규화). 꾸미기 화면에서 손으로 직접 옮기고 키운다.
 const CAL_DEFAULT = { x: .5, y: .55, scale: .6 };
 const calState = { ...CAL_DEFAULT };
 
 // 달력 블록 배치 계산. 셀 크기에 모든 치수가 비례한다
 // (연도 .55 + 월 1.15 + 요일 .85 + 주당 1.05).
-// opt.free(꾸미기 모드)면 화면 안에서 자유롭게, 아니면 상단 20%(시계·알림)를
-// 비우고 하단 4% 여백을 남기는 기존 저장 모드 규칙을 그대로 지킨다.
+// opt.free(꾸미기)면 화면 안에서 자유롭게, 아니면 상단 20%(시계·알림)를 비우고
+// 하단 4% 여백을 남기는 저장 패널의 규칙을 지킨다.
 function calGeometry(W, H, data, opt) {
   const cellToBlock = 0.55 + 1.15 + 0.85 + 1.05 * data.weeks.length;
   // 폴더블처럼 화면이 넓으면 W 기준 폭이 화면 높이를 넘어선다 — 잘리지 않게 함께 줄인다.
   const limit = opt.free ? H * 0.96 : H * 0.76;
   const cell = Math.min(W * opt.scale / 7, limit / cellToBlock);
   const bw = cell * 7, blockH = cell * cellToBlock;
-  const wanted = opt.y * H - blockH / 2;
   const minTop = opt.free ? 0 : H * 0.2;
   const maxTop = opt.free ? Math.max(0, H - blockH) : Math.max(minTop, H - blockH - H * 0.04);
   return {
     cell, bw, blockH,
     left: clamp(opt.x * W - bw / 2, 0, Math.max(0, W - bw)),
-    top: clamp(wanted, minTop, maxTop),
+    top: clamp(opt.y * H - blockH / 2, minTop, maxTop),
   };
 }
 
@@ -411,7 +445,7 @@ function drawWallpaper(canvas, data, c, opt) {
   });
 }
 
-// 스티커는 화면에서 DOM으로 조작하고, 저장할 때만 캔버스에 합성한다.
+// 스티커는 화면에서 DOM으로 조작하고, 그릴 때만 캔버스에 합성한다.
 function drawStickers(ctx, W, H) {
   for (const item of stickers) {
     const width = item.size * W;
@@ -424,10 +458,24 @@ function drawStickers(ctx, W, H) {
   }
 }
 
+function deviceSize() {
+  const [w, h] = deviceSel.value.split("x").map(Number);
+  return { w, h };
+}
+
+function wallpaperOpt(free, shrinkTo = 0) {
+  const { w, h } = deviceSize();
+  // 미리보기는 화면 크기만큼만 그린다 — 드래그·핀치 중 매 프레임 4백만 픽셀을
+  // 새로 칠하지 않게. 레이아웃이 W·H에 비례하므로 구도는 저장본과 같다.
+  const shrink = shrinkTo ? Math.min(1, shrinkTo / h) : 1;
+  return { w: Math.round(w * shrink), h: Math.round(h * shrink),
+           x: calState.x, y: calState.y, scale: calState.scale, free };
+}
+
 // 저장용 캔버스: 배경+달력 위에 스티커까지 합성한 최종 이미지
-function composeWallpaper() {
+function composeWallpaper(free) {
   const canvas = document.createElement("canvas");
-  drawWallpaper(canvas, cal, themeColors(), currentOpt());
+  drawWallpaper(canvas, cal, themeColors(), wallpaperOpt(free));
   drawStickers(canvas.getContext("2d"), canvas.width, canvas.height);
   return canvas;
 }
@@ -473,25 +521,65 @@ function canShareFile(file) {
   }
 }
 
-// ---- 미리보기 패널 ----
-const saveBtn = document.getElementById("save");
-const decorateBtn = document.getElementById("decorate");
-const panel = document.getElementById("panel");
-const simpleCtl = document.getElementById("simple-ctl");
-const decorateCtl = document.getElementById("decorate-ctl");
-const sizeInput = document.getElementById("cal-size");
-const posInput = document.getElementById("cal-pos");
-const stage = document.getElementById("stage");
-const previewCv = document.getElementById("preview");
-const stickerLayer = document.getElementById("sticker-layer");
-const deviceSel = document.getElementById("device");
-const dlBtn = document.getElementById("download");
-const saveHintEl = document.getElementById("save-hint");
-const editHint = document.getElementById("edit-hint");
-const errEl = document.getElementById("err");
 const mobileDevice = isMobileDevice();
 const mobileFileShare = mobileDevice
   && canShareFile(new File([""], "calendar.png", { type: "image/png" }));
+
+// 저장은 두 화면이 같은 경로를 쓴다. free는 각 화면의 배치 규칙.
+function saveWallpaper(free, button, errTarget, done) {
+  const idleLabel = button.textContent;
+  button.disabled = true;
+  button.textContent = "이미지 생성 중...";
+  errTarget.textContent = "";
+  errTarget.classList.remove("info");
+  const restore = () => { button.disabled = false; button.textContent = idleLabel; done?.(); };
+
+  try {
+    const canvas = composeWallpaper(free);
+    const name = `calendar-${cal.y}-${String(cal.m + 1).padStart(2, "0")}-mobile.png`;
+
+    if (mobileFileShare) {
+      const file = canvasPngFile(canvas, name);
+      if (canShareFile(file)) {
+        navigator.share({ title: `${cal.y}년 ${cal.m + 1}월 달력`, files: [file] })
+          .catch((err) => {
+            if (err?.name !== "AbortError") {
+              errTarget.textContent = "공유 메뉴를 열지 못했습니다. 다시 시도해주세요.";
+            }
+          })
+          .finally(restore);
+        return;
+      }
+    }
+
+    // 공유 파일을 지원하지 않는 브라우저는 파일 앱 다운로드로 대체한다.
+    setTimeout(() => {
+      downloadCanvasPng(canvas, name, (err) => {
+        if (err) errTarget.textContent = "배경화면을 생성하지 못했습니다.";
+        else if (mobileDevice) {
+          errTarget.textContent = "다운로드를 요청했습니다. 파일 앱에서 확인해주세요.";
+          errTarget.classList.add("info");
+        }
+        restore();
+      });
+    }, 30);
+  } catch (e) {
+    errTarget.textContent = "배경화면을 생성하지 못했습니다.";
+    restore();
+  }
+}
+
+// ---- 저장 패널 (슬라이더로 크기·위치만 정하는 간단한 흐름) ----
+const saveBtn = document.getElementById("save");
+const panel = document.getElementById("panel");
+const previewCv = document.getElementById("preview");
+const deviceSel = document.getElementById("device");
+const editDeviceSel = document.getElementById("edit-device");
+const sizeInput = document.getElementById("cal-size");
+const posInput = document.getElementById("cal-pos");
+const dlBtn = document.getElementById("download");
+const saveHintEl = document.getElementById("save-hint");
+const errEl = document.getElementById("err");
 
 if (mobileFileShare) {
   dlBtn.textContent = "이미지 저장 / 공유";
@@ -503,49 +591,111 @@ if (mobileFileShare) {
   saveHintEl.hidden = false;
 }
 
+// 기종 목록은 저장 패널과 꾸미기 화면이 같은 값을 공유한다
 const detected = detectDevice();
-if (detected) {
-  const opt = document.createElement("option");
-  opt.value = `${detected.w}x${detected.h}`;
-  opt.textContent = `내 기기 (${detected.w}×${detected.h})`;
-  deviceSel.appendChild(opt);
-}
-for (const [name, w, h] of DEVICE_PRESETS) {
-  const opt = document.createElement("option");
-  opt.value = `${w}x${h}`;
-  opt.textContent = `${name} (${w}×${h})`;
-  deviceSel.appendChild(opt);
-}
-if (!detected) deviceSel.value = "1080x2340"; // 인식 실패 시 기본값: Galaxy S26
-
-function currentOpt() {
-  const [w, h] = deviceSel.value.split("x").map(Number);
-  return { w, h, x: calState.x, y: calState.y, scale: calState.scale, free: mode === "decorate" };
+for (const select of [deviceSel, editDeviceSel]) {
+  if (detected) {
+    const opt = document.createElement("option");
+    opt.value = `${detected.w}x${detected.h}`;
+    opt.textContent = `내 기기 (${detected.w}×${detected.h})`;
+    select.appendChild(opt);
+  }
+  for (const [name, w, h] of DEVICE_PRESETS) {
+    const opt = document.createElement("option");
+    opt.value = `${w}x${h}`;
+    opt.textContent = `${name} (${w}×${h})`;
+    select.appendChild(opt);
+  }
+  if (!detected) select.value = "1080x2340"; // 인식 실패 시 기본값: Galaxy S26
 }
 
-let rafPending = false;
+function syncDevice(from, to) {
+  to.value = from.value;
+  layoutEditStage();
+  renderPreview();
+  renderEditor();
+}
+deviceSel.addEventListener("change", () => syncDevice(deviceSel, editDeviceSel));
+editDeviceSel.addEventListener("change", () => syncDevice(editDeviceSel, deviceSel));
+
+let previewPending = false;
 function renderPreview() {
-  if (panel.hidden || rafPending) return;
-  rafPending = true;
+  if (panel.hidden || previewPending) return;
+  previewPending = true;
   requestAnimationFrame(() => {
-    rafPending = false;
-    const opt = currentOpt();
-    stage.style.aspectRatio = `${opt.w} / ${opt.h}`;
-    // 미리보기는 화면 크기만큼만 그린다 — 드래그·핀치 중 매 프레임 4백만 픽셀을
-    // 새로 칠하지 않게. 레이아웃이 W·H에 비례하므로 결과 구도는 저장본과 같다.
-    const shrink = Math.min(1, 1000 / opt.h);
-    drawWallpaper(previewCv, cal, themeColors(),
-      { ...opt, w: Math.round(opt.w * shrink), h: Math.round(opt.h * shrink) });
+    previewPending = false;
+    drawWallpaper(previewCv, cal, themeColors(), wallpaperOpt(false, 900));
+    drawStickers(previewCv.getContext("2d"), previewCv.width, previewCv.height);
   });
 }
 
-// ---- 스티커 ----
+saveBtn.addEventListener("click", () => {
+  const open = panel.hidden;
+  panel.hidden = !open;
+  saveBtn.setAttribute("aria-expanded", String(open));
+  if (!open) return;
+  // 꾸미기에서 옮겨 놓은 값을 저장 패널의 규칙(가운데 정렬·슬라이더 범위)으로 되돌린다
+  calState.x = .5;
+  calState.scale = clamp(calState.scale, .4, .95);
+  calState.y = clamp(calState.y, .3, .8);
+  sizeInput.value = String(Math.round(calState.scale * 100));
+  posInput.value = String(Math.round(calState.y * 100));
+  renderPreview();
+});
+
+function applySliders() {
+  calState.scale = sizeInput.value / 100;
+  calState.y = posInput.value / 100;
+  renderPreview();
+}
+sizeInput.addEventListener("input", applySliders);
+posInput.addEventListener("input", applySliders);
+dlBtn.addEventListener("click", () => {
+  if (!dlBtn.disabled) saveWallpaper(false, dlBtn, errEl);
+});
+
+// ---- 전체화면 꾸미기 ----
+const editor = document.getElementById("editor");
+const editStage = document.getElementById("edit-stage");
+const editCv = document.getElementById("edit-canvas");
+const stickerLayer = document.getElementById("edit-stickers");
+const calFrame = document.getElementById("cal-frame");
+const editHint = document.getElementById("edit-hint");
+const editErr = document.getElementById("edit-err");
+const editSaveBtn = document.getElementById("edit-save");
+
 const MAX_STICKERS = 12;
 const stickers = [];
-let selectedSticker = -1;          // -1 = 달력이 조작 대상
+let selectedSticker = -1;          // -1 = 달력이 조작 대상 (열면 기본값)
 let stickerId = 0;
 
 const currentSticker = () => stickers[selectedSticker] || null;
+
+// 화면(뷰포트) 안에 기종 비율 그대로 최대 크기로 무대를 앉힌다.
+// 브라우저 주소창 때문에 뷰포트가 실제 화면보다 짧으므로 비율을 기준으로 맞춘다.
+function layoutEditStage() {
+  const { w, h } = deviceSize();
+  const scale = Math.min(innerWidth / w, innerHeight / h);
+  editStage.style.width = `${Math.floor(w * scale)}px`;
+  editStage.style.height = `${Math.floor(h * scale)}px`;
+}
+
+let editorPending = false;
+function renderEditor() {
+  if (editor.hidden || editorPending) return;
+  editorPending = true;
+  requestAnimationFrame(() => {
+    editorPending = false;
+    const opt = wallpaperOpt(true, 1200);
+    drawWallpaper(editCv, cal, themeColors(), opt);
+    // 달력 선택 테두리는 방금 그린 배치를 그대로 %로 옮긴다
+    const g = calGeometry(opt.w, opt.h, cal, opt);
+    calFrame.style.left = `${g.left / opt.w * 100}%`;
+    calFrame.style.top = `${g.top / opt.h * 100}%`;
+    calFrame.style.width = `${g.bw / opt.w * 100}%`;
+    calFrame.style.height = `${g.blockH / opt.h * 100}%`;
+  });
+}
 
 function positionSticker(item) {
   item.el.style.left = `${item.x * 100}%`;
@@ -556,20 +706,51 @@ function positionSticker(item) {
 
 function updateControls() {
   const item = currentSticker();
-  for (const id of ["rotate", "duplicate", "remove", "deselect"]) {
+  for (const id of ["edit-rotate", "edit-duplicate", "edit-remove"]) {
     document.getElementById(id).disabled = !item;
   }
+  document.getElementById("edit-cal").disabled = !item;
   stickers.forEach((s, index) => s.el.classList.toggle("selected", index === selectedSticker));
-  stage.classList.toggle("cal-active", !item && mode === "decorate");
+  calFrame.hidden = !!item;
   editHint.textContent = item
-    ? `스티커 ${selectedSticker + 1}/${stickers.length} 선택됨 · 끌어서 이동 · 두 손가락으로 크기와 각도`
-    : "달력을 끌어서 옮기고 두 손가락으로 크기를 조절하세요 · 스티커를 누르면 스티커가 선택됩니다";
+    ? `스티커 ${selectedSticker + 1}/${stickers.length} · 끌어서 이동 · 두 손가락으로 크기와 각도`
+    : "달력이 잡혀 있어요 · 끌어서 이동 · 두 손가락으로 크기 · 스티커를 누르면 스티커로 바뀝니다";
 }
 
 function selectSticker(index) {
   selectedSticker = index;
   updateControls();
 }
+
+function openEditor() {
+  editor.hidden = false;
+  document.body.classList.add("editing");
+  panel.hidden = true;
+  saveBtn.setAttribute("aria-expanded", "false");
+  layoutEditStage();
+  selectSticker(-1);               // 달력이 기본으로 잡혀 있다
+  renderEditor();
+  // 주소창까지 감추면 진짜 배경화면처럼 보인다. 지원 안 하면 그냥 넘어간다.
+  document.documentElement.requestFullscreen?.({ navigationUI: "hide" }).catch(() => {});
+}
+
+function closeEditor() {
+  editor.hidden = true;
+  document.body.classList.remove("editing");
+  if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+  renderPreview();
+}
+
+document.getElementById("decorate").addEventListener("click", openEditor);
+document.getElementById("edit-close").addEventListener("click", closeEditor);
+addEventListener("resize", () => {
+  if (editor.hidden) return;
+  layoutEditStage();
+  renderEditor();
+});
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+  renderPreview(); renderEditor();
+});
 
 // 새 스티커가 서로 겹치지 않게 화면 전체에 흩어 놓는다
 const STICKER_SPOTS = [
@@ -578,7 +759,7 @@ const STICKER_SPOTS = [
 ];
 
 function addStickerImage(image, url) {
-  if (stickers.length >= MAX_STICKERS) { return false; }
+  if (stickers.length >= MAX_STICKERS) return false;
   const spot = STICKER_SPOTS[stickers.length % STICKER_SPOTS.length];
   const item = { id: ++stickerId, image, el: image, url,
     x: spot[0], y: spot[1], size: .22, rotation: (stickers.length % 5 - 2) * 6 };
@@ -592,14 +773,14 @@ function addStickerImage(image, url) {
   return true;
 }
 
-document.getElementById("remove").addEventListener("click", () => {
+document.getElementById("edit-remove").addEventListener("click", () => {
   const item = currentSticker();
   if (!item) return;
   item.el.remove();
   stickers.splice(selectedSticker, 1);
   selectSticker(-1);
 });
-document.getElementById("duplicate").addEventListener("click", () => {
+document.getElementById("edit-duplicate").addEventListener("click", () => {
   const source = currentSticker();
   if (!source || stickers.length >= MAX_STICKERS) return;
   const image = new Image();
@@ -614,20 +795,23 @@ document.getElementById("duplicate").addEventListener("click", () => {
   }, { once: true });
   image.src = source.url;
 });
-document.getElementById("rotate").addEventListener("click", () => {
+document.getElementById("edit-rotate").addEventListener("click", () => {
   const item = currentSticker();
   if (!item) return;
   item.rotation += 15;
   positionSticker(item);
 });
-document.getElementById("deselect").addEventListener("click", () => selectSticker(-1));
-document.getElementById("cal-reset").addEventListener("click", () => {
+document.getElementById("edit-cal").addEventListener("click", () => selectSticker(-1));
+document.getElementById("edit-reset").addEventListener("click", () => {
   Object.assign(calState, CAL_DEFAULT);
   selectSticker(-1);
-  renderPreview();
+  renderEditor();
+});
+editSaveBtn.addEventListener("click", () => {
+  if (!editSaveBtn.disabled) saveWallpaper(true, editSaveBtn, editErr);
 });
 
-// ＋/－ 크기는 선택된 스티커에, 선택이 없으면 달력에 적용된다
+// ＋/－ 크기는 잡고 있는 대상(달력 또는 선택한 스티커)에 적용된다
 function resize(factor) {
   const item = currentSticker();
   if (item) {
@@ -635,27 +819,23 @@ function resize(factor) {
     positionSticker(item);
   } else {
     calState.scale = clamp(calState.scale * factor, .25, 1);
-    renderPreview();
+    renderEditor();
   }
 }
-document.getElementById("smaller").addEventListener("click", () => resize(1 / 1.12));
-document.getElementById("larger").addEventListener("click", () => resize(1.12));
+document.getElementById("edit-smaller").addEventListener("click", () => resize(1 / 1.12));
+document.getElementById("edit-larger").addEventListener("click", () => resize(1.12));
 
-// ---- 무대 제스처: 한 손가락 이동, 두 손가락 크기(+스티커는 회전) ----
+// ---- 제스처: 한 손가락 이동, 두 손가락 크기(스티커는 회전까지) ----
 const activePointers = new Map();
 let gesture = null;
-
-function gestureTargetState() {
-  const item = currentSticker();
-  return item
-    ? { x: item.x, y: item.y, size: item.size, rotation: item.rotation }
-    : { x: calState.x, y: calState.y, size: calState.scale, rotation: 0 };
-}
 
 function beginGesture() {
   const points = [...activePointers.values()];
   if (!points.length) { gesture = null; return; }
-  const base = gestureTargetState();
+  const item = currentSticker();
+  const base = item
+    ? { x: item.x, y: item.y, size: item.size, rotation: item.rotation }
+    : { x: calState.x, y: calState.y, size: calState.scale, rotation: 0 };
   if (points.length === 1) { gesture = { count: 1, base, point: points[0] }; return; }
   const [a, b] = points;
   gesture = { count: 2, base,
@@ -664,22 +844,22 @@ function beginGesture() {
     angle: Math.atan2(b.y - a.y, b.x - a.x) };
 }
 
-stage.addEventListener("pointerdown", (event) => {
-  if (mode !== "decorate") return;
+editStage.addEventListener("pointerdown", (event) => {
+  if (event.target.closest(".edit-bar")) return;   // 도구 막대는 버튼으로 동작
   event.preventDefault();
   const sticker = stickers.findIndex((item) => item.el === event.target);
   if (activePointers.size === 0) selectSticker(sticker);   // 첫 손가락이 대상을 정한다
   activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-  try { stage.setPointerCapture(event.pointerId); } catch (_) {}
+  try { editStage.setPointerCapture(event.pointerId); } catch (_) {}
   beginGesture();
 });
 
-stage.addEventListener("pointermove", (event) => {
+editStage.addEventListener("pointermove", (event) => {
   if (!activePointers.has(event.pointerId)) return;
   event.preventDefault();
   activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
   const points = [...activePointers.values()].slice(0, 2);
-  const rect = stage.getBoundingClientRect();
+  const rect = editStage.getBoundingClientRect();
   if (!gesture || gesture.count !== points.length) beginGesture();
   const item = currentSticker();
   let { x, y, size, rotation } = gesture.base;
@@ -707,7 +887,7 @@ stage.addEventListener("pointermove", (event) => {
     calState.x = clamp(x, 0, 1);
     calState.y = clamp(y, 0, 1);
     calState.scale = clamp(size, .25, 1);
-    renderPreview();
+    renderEditor();
   }
 });
 
@@ -715,55 +895,14 @@ function endPointer(event) {
   activePointers.delete(event.pointerId);
   beginGesture();
 }
-stage.addEventListener("pointerup", endPointer);
-stage.addEventListener("pointercancel", endPointer);
+editStage.addEventListener("pointerup", endPointer);
+editStage.addEventListener("pointercancel", endPointer);
 // 데스크톱: 휠로 크기 조절
-stage.addEventListener("wheel", (event) => {
-  if (mode !== "decorate") return;
+editStage.addEventListener("wheel", (event) => {
+  if (editor.hidden) return;
   event.preventDefault();
   resize(event.deltaY < 0 ? 1.06 : 1 / 1.06);
 }, { passive: false });
-
-// 패널은 하나지만 모드가 둘이다. "저장"은 슬라이더로 크기·위치만 정하는 기존 흐름,
-// "꾸미기"는 무대에서 직접 끌고 핀치하며 스티커까지 붙이는 편집 모드.
-let mode = null;                    // null(닫힘) | "save" | "decorate"
-
-function setMode(next) {
-  mode = mode === next ? null : next;
-  panel.hidden = mode === null;
-  saveBtn.setAttribute("aria-expanded", String(mode === "save"));
-  decorateBtn.setAttribute("aria-expanded", String(mode === "decorate"));
-  simpleCtl.hidden = mode !== "save";
-  decorateCtl.hidden = mode !== "decorate";
-  stage.classList.toggle("editing", mode === "decorate");
-  if (mode === null) { selectSticker(-1); return; }
-  if (mode === "save") {
-    // 저장 모드는 가운데 정렬 + 슬라이더 범위가 규칙이다. 꾸미기에서 옮겨 놓은
-    // 값을 그 범위로 되돌리고 슬라이더에도 반영해 둘이 어긋나지 않게 한다.
-    calState.x = .5;
-    calState.scale = clamp(calState.scale, .4, .95);
-    calState.y = clamp(calState.y, .3, .8);
-    sizeInput.value = String(Math.round(calState.scale * 100));
-    posInput.value = String(Math.round(calState.y * 100));
-    selectSticker(-1);
-  }
-  updateControls();
-  renderPreview();
-}
-
-saveBtn.addEventListener("click", () => setMode("save"));
-decorateBtn.addEventListener("click", () => setMode("decorate"));
-
-function applySliders() {
-  calState.scale = sizeInput.value / 100;
-  calState.y = posInput.value / 100;
-  renderPreview();
-}
-sizeInput.addEventListener("input", applySliders);
-posInput.addEventListener("input", applySliders);
-deviceSel.addEventListener("change", renderPreview);
-matchMedia("(prefers-color-scheme: dark)")
-  .addEventListener("change", () => renderPreview());
 
 // ---- 스티커 고르기: /_assets 카탈로그의 스티커를 배경 제거 후 붙인다 ----
 const escapeText = (value) => String(value).replace(/[&<>'"]/g, (char) => ({
@@ -890,7 +1029,7 @@ pickerTabs.addEventListener("click", (event) => {
   activePack = Number(tab.dataset.pack);
   renderPickerPack();
 });
-document.getElementById("pick-asset").addEventListener("click", openAssetPicker);
+document.getElementById("edit-asset").addEventListener("click", openAssetPicker);
 document.getElementById("close-picker").addEventListener("click", () => { assetPicker.hidden = true; });
 assetPicker.addEventListener("click", (event) => {
   if (event.target === assetPicker) assetPicker.hidden = true;
@@ -910,52 +1049,6 @@ pickerBody.addEventListener("click", async (event) => {
     pickerStatus.textContent = "이 스티커는 불러오지 못했습니다.";
   } finally {
     button.disabled = false;
-  }
-});
-
-// ---- 저장 ----
-dlBtn.addEventListener("click", () => {
-  if (dlBtn.disabled) return;
-  dlBtn.disabled = true;
-  const idleLabel = dlBtn.textContent;
-  dlBtn.textContent = "이미지 생성 중...";
-  errEl.textContent = "";
-  errEl.classList.remove("info");
-  const restore = () => { dlBtn.disabled = false; dlBtn.textContent = idleLabel; };
-
-  try {
-    const canvas = composeWallpaper();
-    const name = `calendar-${cal.y}-${String(cal.m + 1).padStart(2, "0")}-mobile.png`;
-
-    if (mobileFileShare) {
-      const file = canvasPngFile(canvas, name);
-      if (canShareFile(file)) {
-        navigator.share({
-          title: `${cal.y}년 ${cal.m + 1}월 달력`,
-          files: [file],
-        }).catch((err) => {
-          if (err?.name !== "AbortError") {
-            errEl.textContent = "공유 메뉴를 열지 못했습니다. 다시 시도해주세요.";
-          }
-        }).finally(restore);
-        return;
-      }
-    }
-
-    // 공유 파일을 지원하지 않는 브라우저는 파일 앱 다운로드로 대체한다.
-    setTimeout(() => {
-      downloadCanvasPng(canvas, name, (err) => {
-        if (err) errEl.textContent = "배경화면을 생성하지 못했습니다.";
-        else if (mobileDevice) {
-          errEl.textContent = "다운로드를 요청했습니다. 파일 앱에서 확인해주세요.";
-          errEl.classList.add("info");
-        }
-        restore();
-      });
-    }, 30);
-  } catch (e) {
-    errEl.textContent = "배경화면을 생성하지 못했습니다.";
-    restore();
   }
 });
 
