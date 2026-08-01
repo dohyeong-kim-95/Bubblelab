@@ -11,8 +11,8 @@
   "provider": "gemini/gemini-2.5-flash-image",
   "status": "complete",
   "createdAt": "2026-08-01T17:22:31.254Z",
-  "updatedAt": "2026-08-01T17:36:20.240Z",
-  "completedAt": "2026-08-01T17:36:20.240Z",
+  "updatedAt": "2026-08-01T17:38:22.240Z",
+  "completedAt": "2026-08-01T17:38:22.240Z",
   "calls": 6,
   "unitCostUsd": 0.039,
   "estimatedCostUsd": 0.234,
@@ -67,6 +67,16 @@
       "estimatedCostUsd": 0,
       "status": "complete",
       "completedAt": "2026-08-01T17:36:20.240Z"
+    },
+    {
+      "runId": "68fe25b8-9034-42cf-a36a-66a0cb982b2f",
+      "startedAt": "2026-08-01T17:38:14.836Z",
+      "provider": "gemini/gemini-2.5-flash-image",
+      "gitCommit": "ab437e0303c2fa8ef0f9f3928e71025c3e4ff682",
+      "calls": 0,
+      "estimatedCostUsd": 0,
+      "status": "complete",
+      "completedAt": "2026-08-01T17:38:22.240Z"
     }
   ],
   "keys": [
