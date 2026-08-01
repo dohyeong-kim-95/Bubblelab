@@ -47,7 +47,7 @@
       "lift": 0.16
     },
     {
-      "pose": "the body keeps its normal proportions and both ears trail a little behind, tipping back about 12 degrees while their bases stay on top of the head; the eyes are wide open and round; the mouth is a wide open smile",
+      "pose": "the body keeps its normal proportions in mid-air, both ears standing straight up; the eyes are wide open and round; the mouth is a wide open smile",
       "hold": 1,
       "lift": 0.2
     },
@@ -60,7 +60,7 @@
   "breakdowns": 0,
   "assembly": "pingpong",
   "invariants": "two long upright ears whose bases sit on top of the head, two eyes, one mouth, two short arms, two feet; two pink oval inner ears; two round pink cheek blushes; the canvas holds only this one character",
-  "poseConstants": "the character is drawn at the same place on the canvas as Image 1 and its feet rest on the same baseline; the character faces the viewer straight on, the two ears stay symmetric left and right, and both eyes are always mirror images of each other; each short arm is a small rounded nub on the outer edge of the body silhouette",
+  "poseConstants": "the character is drawn at the same place on the canvas as Image 1 and its feet rest on the same baseline; the character faces the viewer straight on, the two ears stay symmetric left and right, and both eyes are always mirror images of each other; each short arm is a small rounded nub on the outer edge of the body silhouette; the whole canvas outside the character is one flat white surface",
   "breakdownNote": "",
   "repeat": 2,
   "characterRef": "_src/emoticon/rabbit/cuts/nod/frames-raw/key-1.png",

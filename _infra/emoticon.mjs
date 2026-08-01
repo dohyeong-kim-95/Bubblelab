@@ -995,7 +995,17 @@ async function redoFrame(workdir, cutId, frameNumber) {
   const provider = imageProvider();
   const bytes = await provider.generate({ prompt, references });
   atomicWriteFile(join(cutDir, "frames-raw", rawName), Buffer.from(bytes));
-  const keyed = autoCutout(await toRgba(bytes));
+  // 원래 컷에 걸려 있던 리그·들어올림을 그대로 다시 적용한다. 빠뜨리면 그
+  // 프레임만 점프가 사라져 컷 전체가 튄다.
+  const spec = el.type === "key" ? (meta.keys?.[el.key] ?? {}) : {};
+  let keyed = spec.rig
+    ? applyRig(await toRgba(bytes), spec.rig).image
+    : await toRgba(bytes);
+  keyed = autoCutout(keyed);
+  if (spec.lift) {
+    keyed = liftFrame(keyed, Number(spec.lift));
+    console.log(`  들어올림 재적용: ${(Number(spec.lift) * 100).toFixed(0)}%`);
+  }
   const ratio = transparencyRatio(keyed);
   if (ratio < 0.05) {
     throw new Error(`${label} 누끼 실패 (투명 ${Math.round(ratio * 100)}%) — frames-raw/${rawName} 확인 후 다시 redo`);

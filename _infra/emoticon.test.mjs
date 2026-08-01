@@ -633,3 +633,38 @@ test("guide: 카탈로그가 동작 → 문서를 매핑한다", async () => {
     }
   }
 });
+
+test("redo는 그 키의 lift를 다시 적용한다 (빠뜨리면 그 프레임만 점프가 사라진다)", () => {
+  const workdir = mkdtempSync(join(tmpdir(), "emoticon-lift-"));
+  const env = { ...process.env, EMOTICON_IMAGE_PROVIDER: "mock" };
+  const run = (...args) => execFileSync(process.execPath, [CLI, ...args], { env, encoding: "utf8" });
+  const topOf = (path) => {
+    const im = decodePng(readFileSync(path));
+    for (let y = 0; y < im.height; y++) {
+      for (let x = 0; x < im.width; x++) if (im.data[(y * im.width + x) * 4 + 3] > 128) return y;
+    }
+    return -1;
+  };
+  try {
+    run("sheet", workdir, "--prompt", "테스트");
+    const spec = join(workdir, "keys.json");
+    writeFileSync(spec, JSON.stringify({
+      motion: "점프", breakdowns: 0,
+      keys: [{ pose: "웅크림", hold: 2 }, { pose: "최고점", hold: 2, lift: 0.3 }],
+    }));
+    run("cut", workdir, "j", "--keys", spec, "--fps", "12");
+    // lift가 있으면 build가 몸 정렬로 점프를 지우지 않도록 anchor를 끈다
+    const meta = JSON.parse(readFileSync(join(workdir, "cuts", "j", "cut.json"), "utf8"));
+    assert.equal(meta.anchor, "none");
+
+    const path = join(workdir, "cuts", "j", "frames", "02.png");
+    const lifted = topOf(path);
+    assert.ok(lifted < topOf(join(workdir, "cuts", "j", "frames", "01.png")), "2번이 위로 올라가야 함");
+
+    const out = run("redo", workdir, "j", "2");
+    assert.match(out, /들어올림 재적용: 30%/);
+    assert.equal(topOf(path), lifted, "재작업 후에도 같은 높이여야 함");
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
