@@ -16,10 +16,18 @@
          --cell: calc((min(26rem, 100vw) - 3rem) / 7); }
   header { text-align: center; margin-bottom: calc(var(--cell) * .45); }
   #year { margin: 0; opacity: .6; font-size: calc(var(--cell) * .3); }
+  .month-nav { display: flex; align-items: center; justify-content: center;
+               gap: calc(var(--cell) * .12); }
   #month { margin: 0; font-weight: bold; font-size: calc(var(--cell) * .62);
-           letter-spacing: .02em; }
+           letter-spacing: .02em; min-width: 6.5em; }
+  .nav-arrow { border: 0; background: none; color: inherit; cursor: pointer; opacity: .45;
+               font-size: calc(var(--cell) * .3); line-height: 1; padding: .5rem .35rem;
+               border-radius: .5rem; }
+  .nav-arrow:hover { opacity: 1; background: light-dark(#1c273310, #dbe4ee14); }
+  #today-btn { margin-top: .35rem; padding: .25rem .7rem; font-size: .72rem; opacity: .8; }
+  #today-btn[hidden] { display: none; }
   table { width: 100%; border-collapse: collapse; table-layout: fixed;
-          font-variant-numeric: tabular-nums; }
+          font-variant-numeric: tabular-nums; touch-action: pan-y; }
   th { font-weight: normal; opacity: .5; font-size: calc(var(--cell) * .21);
        padding-bottom: calc(var(--cell) * .3); }
   th.sun, th.sat { opacity: .9; }
@@ -33,27 +41,59 @@
                    width: 2.1em; height: 2.1em; border-radius: 50%;
                    transform: translate(-50%, -50%); z-index: -1;
                    background: light-dark(#1c2733, #dbe4ee); }
-  #actions { text-align: center; margin-top: 1.6rem; }
+  #actions { text-align: center; margin-top: 1.6rem;
+             display: flex; flex-direction: column; align-items: center; gap: .5rem; }
+  #decorate[aria-expanded="true"], #save[aria-expanded="true"] {
+    background: light-dark(#1c273312, #dbe4ee18); }
   button { font: inherit; color: inherit; background: none; cursor: pointer;
            padding: .55rem 1.1rem; border-radius: .5rem;
            border: 1px solid light-dark(#1c273355, #dbe4ee55); }
   button:hover:not(:disabled) { background: light-dark(#1c273310, #dbe4ee14); }
-  button:disabled { opacity: .5; cursor: default; }
-  #panel { margin-top: 1.2rem; display: flex; flex-direction: column; gap: .9rem;
+  button:disabled { opacity: .4; cursor: default; }
+  #panel { margin-top: .7rem; width: 100%; box-sizing: border-box;
+           display: flex; flex-direction: column; gap: .9rem;
            align-items: center; padding: 1.1rem;
            border: 1px solid light-dark(#1c273322, #dbe4ee22); border-radius: .75rem; }
   #panel[hidden] { display: none; }
-  #preview { width: 9.5rem; height: auto; border-radius: .6rem;
-             border: 1px solid light-dark(#1c273333, #dbe4ee33); }
+  #simple-ctl, #decorate-ctl { width: 100%; display: flex; flex-direction: column; gap: .7rem; }
+  #simple-ctl[hidden], #decorate-ctl[hidden] { display: none; }
+
+  /* 편집 무대: 캔버스(배경+달력) 위에 스티커 DOM을 얹어 손으로 직접 옮긴다.
+     꾸미기 모드에서만 손가락 제스처를 받는다(그 외에는 페이지 스크롤 우선). */
+  #stage { position: relative; height: min(52dvh, 26rem); width: auto; margin: 0 auto;
+           border-radius: .6rem; overflow: hidden;
+           border: 1px solid light-dark(#1c273333, #dbe4ee33); }
+  #stage.editing { touch-action: none; }
+  #stage:not(.editing) #sticker-layer { pointer-events: none; }
+  #preview, #sticker-layer { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #preview { display: block; }
+  #sticker-layer { overflow: hidden; }
+  .sticker { position: absolute; transform-origin: center; height: auto; max-width: none;
+             border: 2px solid transparent; border-radius: .2rem; touch-action: none;
+             -webkit-user-drag: none; user-select: none; }
+  .sticker.selected { border-color: light-dark(#fff, #10161f);
+                      outline: 2px solid light-dark(#2563ab, #8ab8ff); }
+  /* 시계·알림이 겹치는 상단 영역 안내 — 미리보기에만 있고 PNG에는 들어가지 않는다 */
+  #safe-guide { position: absolute; inset: 0 0 auto; height: 20%; pointer-events: none;
+                display: grid; place-items: start end;
+                border-bottom: 1px dashed light-dark(#1c273355, #dbe4ee55); }
+  #safe-guide span { font-size: .58rem; opacity: .45; padding: .25rem .35rem; }
+  #stage.cal-active { outline: 2px solid light-dark(#2563ab55, #8ab8ff55); outline-offset: -2px; }
+
   .ctl { display: flex; align-items: center; gap: .7rem; width: 100%;
          font-size: .85rem; }
   .ctl > label { width: 4.5rem; text-align: right; opacity: .6; flex: none; }
   .ctl > select, .ctl > input[type=range] { flex: 1; min-width: 0; }
+  input[type=range] { accent-color: light-dark(#1c2733, #dbe4ee); }
   select { font: inherit; font-size: .85rem; color: inherit;
            background: light-dark(#eef2f6, #10161f);
            border: 1px solid light-dark(#1c273355, #dbe4ee55);
            border-radius: .4rem; padding: .3rem .4rem; }
-  input[type=range] { accent-color: light-dark(#1c2733, #dbe4ee); }
+  .toolbar { display: grid; grid-template-columns: repeat(3, 1fr); gap: .35rem; width: 100%; }
+  .toolbar button { min-width: 0; padding: .5rem .2rem; font-size: .72rem; }
+  #pick-asset { grid-column: span 3; }
+  #cal-reset { grid-column: span 3; }
+  #edit-hint { margin: 0; font-size: .72rem; opacity: .6; text-align: center; line-height: 1.6; }
   #err { min-height: 1.2em; margin: 0; font-size: .85rem;
          color: light-dark(#c0392b, #ff8a7a); }
   /* 실패가 아닌 진행 안내는 경고색 대신 본문색으로 (같은 자리에 표시) */
@@ -61,13 +101,47 @@
   #save-hint { margin: -.25rem 0 0; font-size: .78rem; opacity: .65;
                text-align: center; line-height: 1.5; }
   #save-hint[hidden] { display: none; }
+
+  /* 스티커 고르기 시트 (util/photo의 에셋 픽커와 같은 구성) */
+  #asset-picker { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column;
+                  justify-content: flex-end; background: #0007; }
+  #asset-picker[hidden] { display: none; }
+  .picker-sheet { max-height: 72dvh; overflow-y: auto; padding: .9rem 1rem 1.2rem;
+                  border-radius: 1rem 1rem 0 0;
+                  background: light-dark(#fff, #141d28);
+                  border-top: 1px solid light-dark(#dce3ea, #2a3747); }
+  .picker-head { display: flex; justify-content: space-between; align-items: center; gap: .6rem; }
+  .picker-head h3 { margin: 0; font-size: .92rem; }
+  .picker-head button { padding: .4rem .8rem; font-size: .75rem; }
+  .picker-status { margin: .5rem 0; opacity: .6; font-size: .72rem; line-height: 1.5; }
+  .picker-tabs { display: flex; gap: .35rem; overflow-x: auto; padding: .55rem 0 .45rem;
+                 scrollbar-width: none; }
+  .picker-tabs::-webkit-scrollbar { display: none; }
+  .picker-tabs button { flex: none; width: 3rem; height: 3rem; padding: .28rem;
+                        display: grid; place-items: center; border-radius: .6rem; }
+  .picker-tabs button.on { outline: 2px solid light-dark(#2563ab, #8ab8ff); }
+  /* minmax(0,1fr) — 이미지 고유 폭이 트랙을 밀어내 가로로 넘치는 것 방지 */
+  .picker-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .45rem;
+                 min-height: 30dvh; align-content: start; touch-action: pan-y; }
+  .picker-grid button { min-width: 0; padding: .3rem; aspect-ratio: 1; display: grid; place-items: center; }
+  .picker-grid img { width: 100%; height: 100%; object-fit: contain; }
+  .picker-tabs img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .picker-grid.swap-left { animation: packSwapL .16s ease-out; }
+  .picker-grid.swap-right { animation: packSwapR .16s ease-out; }
+  @keyframes packSwapL { from { opacity: .3; transform: translateX(14px); } }
+  @keyframes packSwapR { from { opacity: .3; transform: translateX(-14px); } }
 </style>
 </head>
 <body>
 <main>
   <header>
     <p id="year"></p>
-    <h1 id="month">📅</h1>
+    <div class="month-nav">
+      <button class="nav-arrow" id="prev" type="button" aria-label="이전 달">◀</button>
+      <h1 id="month">📅</h1>
+      <button class="nav-arrow" id="next" type="button" aria-label="다음 달">▶</button>
+    </div>
+    <button id="today-btn" type="button" hidden>오늘로</button>
   </header>
   <table>
     <thead>
@@ -81,22 +155,43 @@
   </table>
   <div id="actions">
     <button id="save" type="button" aria-expanded="false" aria-controls="panel"
-            aria-label="휴대폰 배경화면 만들기 열기">휴대폰 배경화면 저장</button>
+            aria-label="휴대폰 배경화면 저장 열기">휴대폰 배경화면 저장</button>
+    <button id="decorate" type="button" aria-expanded="false" aria-controls="panel"
+            aria-label="휴대폰 배경화면 꾸미기 시작">🎨 휴대폰 배경화면 꾸미기</button>
     <div id="panel" hidden>
-      <canvas id="preview" role="img" aria-label="배경화면 미리보기"></canvas>
       <div class="ctl">
         <label for="device">기종</label>
         <select id="device" aria-label="휴대폰 기종 선택"></select>
       </div>
-      <div class="ctl">
-        <label for="cal-size">달력 크기</label>
-        <input type="range" id="cal-size" min="40" max="95" value="60"
-               aria-label="달력 크기 조절">
+      <div id="stage">
+        <canvas id="preview" role="img" aria-label="배경화면 미리보기"></canvas>
+        <div id="sticker-layer" aria-label="스티커 편집 영역"></div>
+        <div id="safe-guide"><span>시계·알림 영역</span></div>
       </div>
-      <div class="ctl">
-        <label for="cal-pos">세로 위치</label>
-        <input type="range" id="cal-pos" min="30" max="80" value="55"
-               aria-label="달력 세로 위치 조절">
+      <div id="simple-ctl">
+        <div class="ctl">
+          <label for="cal-size">달력 크기</label>
+          <input type="range" id="cal-size" min="40" max="95" value="60"
+                 aria-label="달력 크기 조절">
+        </div>
+        <div class="ctl">
+          <label for="cal-pos">세로 위치</label>
+          <input type="range" id="cal-pos" min="30" max="80" value="55"
+                 aria-label="달력 세로 위치 조절">
+        </div>
+      </div>
+      <div id="decorate-ctl" hidden>
+        <p id="edit-hint"></p>
+        <div class="toolbar">
+          <button id="pick-asset" type="button">🐶 스티커 붙이기</button>
+          <button id="smaller" type="button">－ 크기</button>
+          <button id="larger" type="button">＋ 크기</button>
+          <button id="rotate" type="button" disabled>↻ 회전</button>
+          <button id="duplicate" type="button" disabled>복제</button>
+          <button id="remove" type="button" disabled>삭제</button>
+          <button id="deselect" type="button" disabled>선택 해제</button>
+          <button id="cal-reset" type="button">달력 위치·크기 초기화</button>
+        </div>
       </div>
       <button id="download" type="button"
               aria-label="배경화면 PNG 이미지 다운로드">PNG 다운로드</button>
@@ -105,8 +200,21 @@
     </div>
   </div>
 </main>
+
+<div id="asset-picker" hidden>
+  <div class="picker-sheet">
+    <div class="picker-head">
+      <h3>🖼️ 스티커</h3>
+      <button id="close-picker" type="button">닫기</button>
+    </div>
+    <div class="picker-tabs" id="picker-tabs" hidden></div>
+    <p class="picker-status" id="picker-status">assets.bubblelab.dev의 스티커입니다. 누르면 배경을 지우고 붙여드려요.</p>
+    <div class="picker-grid" id="picker-body"></div>
+  </div>
+</div>
+
 <script>
-const now = new Date();
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 // 월별 날짜 데이터: 7칸짜리 주 배열 (빈 칸은 null)
 function monthData(y, m) {
@@ -134,28 +242,84 @@ const MONTHS_EN = ["JANUARY","FEBRUARY","MARCH","APRIL","MAY","JUNE",
                    "JULY","AUGUST","SEPTEMBER","OCTOBER","NOVEMBER","DECEMBER"];
 const DOW_EN = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
 
-const cal = monthData(now.getFullYear(), now.getMonth());
-const today = now.getDate();
+// today = 기기의 오늘, view = 보고 있는 달. cal은 view의 날짜 배열.
+let today = new Date();
+let view = { y: today.getFullYear(), m: today.getMonth() };
+let cal = monthData(view.y, view.m);
+
+const yearEl = document.getElementById("year");
+const monthEl = document.getElementById("month");
+const todayBtn = document.getElementById("today-btn");
+const tbody = document.getElementById("days");
 
 // ---- 화면 달력 (저장 이미지와 같은 구성: 연도 / 영문 월 / 영문 요일) ----
-document.getElementById("year").textContent = cal.y;
-document.getElementById("month").textContent = MONTHS_EN[cal.m];
-document.title = `${cal.y}년 ${cal.m + 1}월 달력`;
+function renderCalendar() {
+  cal = monthData(view.y, view.m);
+  yearEl.textContent = cal.y;
+  monthEl.textContent = MONTHS_EN[cal.m];
+  document.title = `${cal.y}년 ${cal.m + 1}월 달력`;
+  const isThisMonth = cal.y === today.getFullYear() && cal.m === today.getMonth();
+  todayBtn.hidden = isThisMonth;
 
-const tbody = document.getElementById("days");
-for (const week of cal.weeks) {
-  const row = tbody.insertRow();
-  week.forEach((d, dow) => {
-    const cell = row.insertCell();
-    if (d === null) return;
-    cell.textContent = d;
-    if (dow === 0) cell.classList.add("sun");
-    if (dow === 6) cell.classList.add("sat");
-    if (d === today) cell.classList.add("today");
-  });
+  tbody.textContent = "";
+  for (const week of cal.weeks) {
+    const row = tbody.insertRow();
+    week.forEach((d, dow) => {
+      const cell = row.insertCell();
+      if (d === null) return;
+      cell.textContent = d;
+      if (dow === 0) cell.classList.add("sun");
+      if (dow === 6) cell.classList.add("sat");
+      if (isThisMonth && d === today.getDate()) cell.classList.add("today");
+    });
+  }
+  renderPreview();
 }
 
+function shiftMonth(delta) {
+  const d = new Date(view.y, view.m + delta, 1);
+  view = { y: d.getFullYear(), m: d.getMonth() };
+  renderCalendar();
+}
+
+document.getElementById("prev").addEventListener("click", () => shiftMonth(-1));
+document.getElementById("next").addEventListener("click", () => shiftMonth(1));
+todayBtn.addEventListener("click", () => {
+  view = { y: today.getFullYear(), m: today.getMonth() };
+  renderCalendar();
+});
+addEventListener("keydown", (event) => {
+  if (event.target.closest("input, select, button")) return;
+  if (event.key === "ArrowLeft") shiftMonth(-1);
+  if (event.key === "ArrowRight") shiftMonth(1);
+});
+// 모바일: 달력 위에서 좌우로 밀어 월 이동 (세로 스크롤과 구분)
+let monthSwipe = null;
+const table = document.querySelector("table");
+table.addEventListener("touchstart", (event) => {
+  monthSwipe = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+}, { passive: true });
+table.addEventListener("touchend", (event) => {
+  if (!monthSwipe) return;
+  const dx = event.changedTouches[0].clientX - monthSwipe.x;
+  const dy = event.changedTouches[0].clientY - monthSwipe.y;
+  monthSwipe = null;
+  if (Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy) * 1.6) return;
+  shiftMonth(dx < 0 ? 1 : -1);
+}, { passive: true });
+
 window.blShareText = () => `📅 ${cal.y}년 ${cal.m + 1}월 달력 — util.bubblelab.dev/calendar`;
+
+// 탭을 열어둔 채 자정을 넘기면 오늘 표시가 어제로 남는다. 다시 볼 때 갱신한다.
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) return;
+  const now = new Date();
+  if (now.toDateString() === today.toDateString()) return;
+  const wasThisMonth = view.y === today.getFullYear() && view.m === today.getMonth();
+  today = now;
+  if (wasThisMonth) view = { y: now.getFullYear(), m: now.getMonth() };
+  renderCalendar();
+});
 
 // ---- 배경화면 PNG ----
 // 기종 해상도 자동 인식: 모바일 세로 화면일 때만 신뢰한다
@@ -174,9 +338,31 @@ const DEVICE_PRESETS = [
   ["iPhone / Pro", 1179, 2556],
 ];
 
+// 달력 블록의 위치·크기 (0~1 정규화). 손가락으로 직접 옮기고 키운다.
+const CAL_DEFAULT = { x: .5, y: .55, scale: .6 };
+const calState = { ...CAL_DEFAULT };
+
+// 달력 블록 배치 계산. 셀 크기에 모든 치수가 비례한다
+// (연도 .55 + 월 1.15 + 요일 .85 + 주당 1.05).
+// opt.free(꾸미기 모드)면 화면 안에서 자유롭게, 아니면 상단 20%(시계·알림)를
+// 비우고 하단 4% 여백을 남기는 기존 저장 모드 규칙을 그대로 지킨다.
+function calGeometry(W, H, data, opt) {
+  const cellToBlock = 0.55 + 1.15 + 0.85 + 1.05 * data.weeks.length;
+  // 폴더블처럼 화면이 넓으면 W 기준 폭이 화면 높이를 넘어선다 — 잘리지 않게 함께 줄인다.
+  const limit = opt.free ? H * 0.96 : H * 0.76;
+  const cell = Math.min(W * opt.scale / 7, limit / cellToBlock);
+  const bw = cell * 7, blockH = cell * cellToBlock;
+  const wanted = opt.y * H - blockH / 2;
+  const minTop = opt.free ? 0 : H * 0.2;
+  const maxTop = opt.free ? Math.max(0, H - blockH) : Math.max(minTop, H - blockH - H * 0.04);
+  return {
+    cell, bw, blockH,
+    left: clamp(opt.x * W - bw / 2, 0, Math.max(0, W - bw)),
+    top: clamp(wanted, minTop, maxTop),
+  };
+}
+
 // 배경화면 렌더링. 오늘 날짜 강조 없음(정적 이미지이므로).
-// opt: { w, h, scale(달력 폭 비율 0~1), pos(달력 세로 중심 0~1) }
-// 상단 20%는 시계·알림용 안전 영역으로 항상 비워 둔다.
 function drawWallpaper(canvas, data, c, opt) {
   const W = opt.w, H = opt.h;
   canvas.width = W; canvas.height = H;
@@ -188,33 +374,22 @@ function drawWallpaper(canvas, data, c, opt) {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
-  // 블록 높이는 셀 크기에 비례한다 (연도 .55 + 월 1.15 + 요일 .85 + 주당 1.05).
-  const rows = data.weeks.length;
-  const cellToBlock = 0.55 + 1.15 + 0.85 + 1.05 * rows;
-  // 상단 20%(시계·알림)와 하단 4% 여백을 뺀 만큼만 쓸 수 있다. 폴더블처럼 화면이
-  // 넓으면 W 기준 폭이 이 높이를 넘어서므로, 잘리지 않게 셀 크기를 함께 줄인다.
-  const minTop = H * 0.2;
-  const cell = Math.min(W * opt.scale / 7, H * 0.76 / cellToBlock);
-  const bw = cell * 7;               // 달력 블록 너비
+  const { cell, bw, left, top } = calGeometry(W, H, data, opt);
   const rowH = cell * 1.05;
   const yearH = cell * 0.55, monthH = cell * 1.15, dowH = cell * 0.85;
-  const blockH = cell * cellToBlock;
-
-  const maxTop = Math.max(minTop, H - blockH - H * 0.04);
-  const top = Math.min(Math.max(H * opt.pos - blockH / 2, minTop), maxTop);
-  const left = (W - bw) / 2;
   const colX = (i) => left + cell * (i + .5);
+  const center = left + bw / 2;
 
   let y = top;
   ctx.fillStyle = c.fg;
   ctx.globalAlpha = .6;
   ctx.font = `${cell * 0.30}px ${mono}`;
-  ctx.fillText(String(data.y), W / 2, y + yearH / 2);
+  ctx.fillText(String(data.y), center, y + yearH / 2);
   y += yearH;
 
   ctx.globalAlpha = 1;
   ctx.font = `bold ${cell * 0.62}px ${mono}`;
-  ctx.fillText(MONTHS_EN[data.m], W / 2, y + monthH / 2);
+  ctx.fillText(MONTHS_EN[data.m], center, y + monthH / 2);
   y += monthH;
 
   ctx.font = `${cell * 0.21}px ${mono}`;
@@ -234,6 +409,27 @@ function drawWallpaper(canvas, data, c, opt) {
       ctx.fillText(String(d), colX(i), y + rowH * r + rowH / 2);
     });
   });
+}
+
+// 스티커는 화면에서 DOM으로 조작하고, 저장할 때만 캔버스에 합성한다.
+function drawStickers(ctx, W, H) {
+  for (const item of stickers) {
+    const width = item.size * W;
+    const height = width * item.image.naturalHeight / item.image.naturalWidth;
+    ctx.save();
+    ctx.translate(item.x * W, item.y * H);
+    ctx.rotate(item.rotation * Math.PI / 180);
+    ctx.drawImage(item.image, -width / 2, -height / 2, width, height);
+    ctx.restore();
+  }
+}
+
+// 저장용 캔버스: 배경+달력 위에 스티커까지 합성한 최종 이미지
+function composeWallpaper() {
+  const canvas = document.createElement("canvas");
+  drawWallpaper(canvas, cal, themeColors(), currentOpt());
+  drawStickers(canvas.getContext("2d"), canvas.width, canvas.height);
+  return canvas;
 }
 
 function downloadCanvasPng(canvas, filename, done) {
@@ -279,13 +475,19 @@ function canShareFile(file) {
 
 // ---- 미리보기 패널 ----
 const saveBtn = document.getElementById("save");
+const decorateBtn = document.getElementById("decorate");
 const panel = document.getElementById("panel");
-const previewCv = document.getElementById("preview");
-const deviceSel = document.getElementById("device");
+const simpleCtl = document.getElementById("simple-ctl");
+const decorateCtl = document.getElementById("decorate-ctl");
 const sizeInput = document.getElementById("cal-size");
 const posInput = document.getElementById("cal-pos");
+const stage = document.getElementById("stage");
+const previewCv = document.getElementById("preview");
+const stickerLayer = document.getElementById("sticker-layer");
+const deviceSel = document.getElementById("device");
 const dlBtn = document.getElementById("download");
 const saveHintEl = document.getElementById("save-hint");
+const editHint = document.getElementById("edit-hint");
 const errEl = document.getElementById("err");
 const mobileDevice = isMobileDevice();
 const mobileFileShare = mobileDevice
@@ -318,42 +520,400 @@ if (!detected) deviceSel.value = "1080x2340"; // 인식 실패 시 기본값: Ga
 
 function currentOpt() {
   const [w, h] = deviceSel.value.split("x").map(Number);
-  return { w, h, scale: sizeInput.value / 100, pos: posInput.value / 100 };
+  return { w, h, x: calState.x, y: calState.y, scale: calState.scale, free: mode === "decorate" };
 }
 
 let rafPending = false;
 function renderPreview() {
-  if (rafPending) return;
+  if (panel.hidden || rafPending) return;
   rafPending = true;
   requestAnimationFrame(() => {
     rafPending = false;
-    drawWallpaper(previewCv, cal, themeColors(), currentOpt());
+    const opt = currentOpt();
+    stage.style.aspectRatio = `${opt.w} / ${opt.h}`;
+    // 미리보기는 화면 크기만큼만 그린다 — 드래그·핀치 중 매 프레임 4백만 픽셀을
+    // 새로 칠하지 않게. 레이아웃이 W·H에 비례하므로 결과 구도는 저장본과 같다.
+    const shrink = Math.min(1, 1000 / opt.h);
+    drawWallpaper(previewCv, cal, themeColors(),
+      { ...opt, w: Math.round(opt.w * shrink), h: Math.round(opt.h * shrink) });
   });
 }
 
-saveBtn.addEventListener("click", () => {
-  const open = panel.hidden;
-  panel.hidden = !open;
-  saveBtn.setAttribute("aria-expanded", String(open));
-  if (open) renderPreview();
-});
-deviceSel.addEventListener("change", renderPreview);
-sizeInput.addEventListener("input", renderPreview);
-posInput.addEventListener("input", renderPreview);
-matchMedia("(prefers-color-scheme: dark)")
-  .addEventListener("change", () => { if (!panel.hidden) renderPreview(); });
+// ---- 스티커 ----
+const MAX_STICKERS = 12;
+const stickers = [];
+let selectedSticker = -1;          // -1 = 달력이 조작 대상
+let stickerId = 0;
 
-// 달력은 로드 시점의 날짜로 한 번만 그려진다. 탭을 열어둔 채 자정을 넘기면
-// 오늘 표시와 월이 어긋나므로, 다시 볼 때 날짜가 바뀌었으면 새로 그린다.
-// (배경화면 패널을 만지는 중에는 조작을 끊지 않도록 미룬다.)
-document.addEventListener("visibilitychange", () => {
-  if (document.hidden || !panel.hidden) return;
-  const d = new Date();
-  if (d.getDate() !== today || d.getMonth() !== cal.m || d.getFullYear() !== cal.y) {
-    location.reload();
+const currentSticker = () => stickers[selectedSticker] || null;
+
+function positionSticker(item) {
+  item.el.style.left = `${item.x * 100}%`;
+  item.el.style.top = `${item.y * 100}%`;
+  item.el.style.width = `${item.size * 100}%`;
+  item.el.style.transform = `translate(-50%, -50%) rotate(${item.rotation}deg)`;
+}
+
+function updateControls() {
+  const item = currentSticker();
+  for (const id of ["rotate", "duplicate", "remove", "deselect"]) {
+    document.getElementById(id).disabled = !item;
+  }
+  stickers.forEach((s, index) => s.el.classList.toggle("selected", index === selectedSticker));
+  stage.classList.toggle("cal-active", !item && mode === "decorate");
+  editHint.textContent = item
+    ? `스티커 ${selectedSticker + 1}/${stickers.length} 선택됨 · 끌어서 이동 · 두 손가락으로 크기와 각도`
+    : "달력을 끌어서 옮기고 두 손가락으로 크기를 조절하세요 · 스티커를 누르면 스티커가 선택됩니다";
+}
+
+function selectSticker(index) {
+  selectedSticker = index;
+  updateControls();
+}
+
+// 새 스티커가 서로 겹치지 않게 화면 전체에 흩어 놓는다
+const STICKER_SPOTS = [
+  [.26, .12], [.74, .2], [.28, .3], [.72, .38], [.24, .84], [.76, .9],
+  [.5, .14], [.3, .92], [.7, .12], [.22, .46], [.78, .74], [.5, .95],
+];
+
+function addStickerImage(image, url) {
+  if (stickers.length >= MAX_STICKERS) { return false; }
+  const spot = STICKER_SPOTS[stickers.length % STICKER_SPOTS.length];
+  const item = { id: ++stickerId, image, el: image, url,
+    x: spot[0], y: spot[1], size: .22, rotation: (stickers.length % 5 - 2) * 6 };
+  image.className = "sticker";
+  image.alt = "붙인 스티커";
+  image.draggable = false;
+  stickers.push(item);
+  stickerLayer.appendChild(image);
+  positionSticker(item);
+  selectSticker(stickers.length - 1);
+  return true;
+}
+
+document.getElementById("remove").addEventListener("click", () => {
+  const item = currentSticker();
+  if (!item) return;
+  item.el.remove();
+  stickers.splice(selectedSticker, 1);
+  selectSticker(-1);
+});
+document.getElementById("duplicate").addEventListener("click", () => {
+  const source = currentSticker();
+  if (!source || stickers.length >= MAX_STICKERS) return;
+  const image = new Image();
+  image.addEventListener("load", () => {
+    if (!addStickerImage(image, source.url)) return;
+    const item = currentSticker();
+    item.x = clamp(source.x + .06, 0, 1);
+    item.y = clamp(source.y + .03, 0, 1);
+    item.size = source.size;
+    item.rotation = source.rotation;
+    positionSticker(item);
+  }, { once: true });
+  image.src = source.url;
+});
+document.getElementById("rotate").addEventListener("click", () => {
+  const item = currentSticker();
+  if (!item) return;
+  item.rotation += 15;
+  positionSticker(item);
+});
+document.getElementById("deselect").addEventListener("click", () => selectSticker(-1));
+document.getElementById("cal-reset").addEventListener("click", () => {
+  Object.assign(calState, CAL_DEFAULT);
+  selectSticker(-1);
+  renderPreview();
+});
+
+// ＋/－ 크기는 선택된 스티커에, 선택이 없으면 달력에 적용된다
+function resize(factor) {
+  const item = currentSticker();
+  if (item) {
+    item.size = clamp(item.size * factor, .06, .8);
+    positionSticker(item);
+  } else {
+    calState.scale = clamp(calState.scale * factor, .25, 1);
+    renderPreview();
+  }
+}
+document.getElementById("smaller").addEventListener("click", () => resize(1 / 1.12));
+document.getElementById("larger").addEventListener("click", () => resize(1.12));
+
+// ---- 무대 제스처: 한 손가락 이동, 두 손가락 크기(+스티커는 회전) ----
+const activePointers = new Map();
+let gesture = null;
+
+function gestureTargetState() {
+  const item = currentSticker();
+  return item
+    ? { x: item.x, y: item.y, size: item.size, rotation: item.rotation }
+    : { x: calState.x, y: calState.y, size: calState.scale, rotation: 0 };
+}
+
+function beginGesture() {
+  const points = [...activePointers.values()];
+  if (!points.length) { gesture = null; return; }
+  const base = gestureTargetState();
+  if (points.length === 1) { gesture = { count: 1, base, point: points[0] }; return; }
+  const [a, b] = points;
+  gesture = { count: 2, base,
+    mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+    distance: Math.hypot(b.x - a.x, b.y - a.y),
+    angle: Math.atan2(b.y - a.y, b.x - a.x) };
+}
+
+stage.addEventListener("pointerdown", (event) => {
+  if (mode !== "decorate") return;
+  event.preventDefault();
+  const sticker = stickers.findIndex((item) => item.el === event.target);
+  if (activePointers.size === 0) selectSticker(sticker);   // 첫 손가락이 대상을 정한다
+  activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  try { stage.setPointerCapture(event.pointerId); } catch (_) {}
+  beginGesture();
+});
+
+stage.addEventListener("pointermove", (event) => {
+  if (!activePointers.has(event.pointerId)) return;
+  event.preventDefault();
+  activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  const points = [...activePointers.values()].slice(0, 2);
+  const rect = stage.getBoundingClientRect();
+  if (!gesture || gesture.count !== points.length) beginGesture();
+  const item = currentSticker();
+  let { x, y, size, rotation } = gesture.base;
+
+  if (points.length === 1) {
+    x += (points[0].x - gesture.point.x) / rect.width;
+    y += (points[0].y - gesture.point.y) / rect.height;
+  } else {
+    const [a, b] = points, mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const distance = Math.max(1, Math.hypot(b.x - a.x, b.y - a.y));
+    x += (mid.x - gesture.mid.x) / rect.width;
+    y += (mid.y - gesture.mid.y) / rect.height;
+    size *= distance / Math.max(1, gesture.distance);
+    if (item) rotation += (Math.atan2(b.y - a.y, b.x - a.x) - gesture.angle) * 180 / Math.PI;
+  }
+
+  if (item) {
+    item.x = clamp(x, -.1, 1.1);
+    item.y = clamp(y, -.05, 1.05);
+    item.size = clamp(size, .06, .8);
+    item.rotation = rotation;
+    positionSticker(item);
+  } else {
+    // 달력은 화면 밖으로 나가지 않는다 (calGeometry가 최종 클램프도 한 번 더 한다)
+    calState.x = clamp(x, 0, 1);
+    calState.y = clamp(y, 0, 1);
+    calState.scale = clamp(size, .25, 1);
+    renderPreview();
   }
 });
 
+function endPointer(event) {
+  activePointers.delete(event.pointerId);
+  beginGesture();
+}
+stage.addEventListener("pointerup", endPointer);
+stage.addEventListener("pointercancel", endPointer);
+// 데스크톱: 휠로 크기 조절
+stage.addEventListener("wheel", (event) => {
+  if (mode !== "decorate") return;
+  event.preventDefault();
+  resize(event.deltaY < 0 ? 1.06 : 1 / 1.06);
+}, { passive: false });
+
+// 패널은 하나지만 모드가 둘이다. "저장"은 슬라이더로 크기·위치만 정하는 기존 흐름,
+// "꾸미기"는 무대에서 직접 끌고 핀치하며 스티커까지 붙이는 편집 모드.
+let mode = null;                    // null(닫힘) | "save" | "decorate"
+
+function setMode(next) {
+  mode = mode === next ? null : next;
+  panel.hidden = mode === null;
+  saveBtn.setAttribute("aria-expanded", String(mode === "save"));
+  decorateBtn.setAttribute("aria-expanded", String(mode === "decorate"));
+  simpleCtl.hidden = mode !== "save";
+  decorateCtl.hidden = mode !== "decorate";
+  stage.classList.toggle("editing", mode === "decorate");
+  if (mode === null) { selectSticker(-1); return; }
+  if (mode === "save") {
+    // 저장 모드는 가운데 정렬 + 슬라이더 범위가 규칙이다. 꾸미기에서 옮겨 놓은
+    // 값을 그 범위로 되돌리고 슬라이더에도 반영해 둘이 어긋나지 않게 한다.
+    calState.x = .5;
+    calState.scale = clamp(calState.scale, .4, .95);
+    calState.y = clamp(calState.y, .3, .8);
+    sizeInput.value = String(Math.round(calState.scale * 100));
+    posInput.value = String(Math.round(calState.y * 100));
+    selectSticker(-1);
+  }
+  updateControls();
+  renderPreview();
+}
+
+saveBtn.addEventListener("click", () => setMode("save"));
+decorateBtn.addEventListener("click", () => setMode("decorate"));
+
+function applySliders() {
+  calState.scale = sizeInput.value / 100;
+  calState.y = posInput.value / 100;
+  renderPreview();
+}
+sizeInput.addEventListener("input", applySliders);
+posInput.addEventListener("input", applySliders);
+deviceSel.addEventListener("change", renderPreview);
+matchMedia("(prefers-color-scheme: dark)")
+  .addEventListener("change", () => renderPreview());
+
+// ---- 스티커 고르기: /_assets 카탈로그의 스티커를 배경 제거 후 붙인다 ----
+const escapeText = (value) => String(value).replace(/[&<>'"]/g, (char) => ({
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;",
+})[char]);
+const assetPicker = document.getElementById("asset-picker");
+const pickerBody = document.getElementById("picker-body");
+const pickerTabs = document.getElementById("picker-tabs");
+const pickerStatus = document.getElementById("picker-status");
+const cutoutCache = new Map();
+let stickerPacks = null, activePack = 0;
+
+// 테두리에서 시작하는 flood fill로 흰 배경만 투명 처리 (그림 속 흰색은 유지)
+// — util/photo, util/chat과 같은 방식
+function cutoutWhiteBackground(imageData) {
+  const { data, width, height } = imageData;
+  const whiteness = (i) => Math.min(data[i], data[i + 1], data[i + 2]);
+  const visited = new Uint8Array(width * height);
+  const queue = [];
+  for (let x = 0; x < width; x++) queue.push(x, (height - 1) * width + x);
+  for (let y = 0; y < height; y++) queue.push(y * width, y * width + width - 1);
+  while (queue.length) {
+    const p = queue.pop();
+    if (visited[p]) continue;
+    visited[p] = 1;
+    const i = p * 4;
+    const w = whiteness(i);
+    if (w < 208) continue;
+    // 235 이상은 완전 투명, 208~235는 경계 안티앨리어싱을 살려 반투명 처리
+    data[i + 3] = w >= 235 ? 0 : Math.round(((235 - w) / 27) * 255);
+    const x = p % width, y = (p / width) | 0;
+    if (x > 0) queue.push(p - 1);
+    if (x < width - 1) queue.push(p + 1);
+    if (y > 0) queue.push(p - width);
+    if (y < height - 1) queue.push(p + width);
+  }
+}
+
+async function addAssetSticker(src) {
+  let url = cutoutCache.get(src);
+  if (!url) {
+    const source = new Image();
+    source.src = src;
+    await source.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = source.naturalWidth; canvas.height = source.naturalHeight;
+    const context = canvas.getContext("2d");
+    context.drawImage(source, 0, 0);
+    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+    cutoutWhiteBackground(imageData);
+    context.putImageData(imageData, 0, 0);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!blob) throw new Error("cutout failed");
+    url = URL.createObjectURL(blob);
+    cutoutCache.set(src, url);
+  }
+  const image = new Image();
+  image.src = url;
+  await image.decode();
+  return addStickerImage(image, url);
+}
+
+// 카카오톡 이모티콘 픽커처럼 팩 탭을 두고 현재 팩의 스티커만 로드한다
+function renderPickerPack(direction = 0) {
+  const pack = stickerPacks[activePack];
+  [...pickerTabs.children].forEach((tab, index) => {
+    tab.classList.toggle("on", index === activePack);
+    if (index === activePack) tab.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+  });
+  pickerStatus.textContent = `${pack.title} · 누르면 배경을 지우고 붙여드려요.`;
+  pickerBody.innerHTML = pack.downloads
+    .filter((download) => /\.(png|webp|jpe?g)$/i.test(download.file))
+    .map((download) => `<button type="button" data-src="${escapeText(download.url)}" aria-label="${escapeText(download.label)}">
+      <img src="${escapeText(download.url)}" alt="" loading="lazy" decoding="async"></button>`).join("");
+  pickerBody.classList.remove("swap-left", "swap-right");
+  if (direction) {
+    void pickerBody.offsetWidth;
+    pickerBody.classList.add(direction > 0 ? "swap-left" : "swap-right");
+  }
+}
+
+// 그리드에서 좌우 스와이프로 이웃 팩으로 이동 (세로 스크롤과 구분)
+let packSwipe = null;
+pickerBody.addEventListener("touchstart", (event) => {
+  packSwipe = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+}, { passive: true });
+pickerBody.addEventListener("touchend", (event) => {
+  if (!packSwipe || !stickerPacks) return;
+  const dx = event.changedTouches[0].clientX - packSwipe.x;
+  const dy = event.changedTouches[0].clientY - packSwipe.y;
+  packSwipe = null;
+  if (Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy) * 1.6) return;
+  const next = activePack + (dx < 0 ? 1 : -1);
+  if (next < 0 || next >= stickerPacks.length) return;
+  activePack = next;
+  renderPickerPack(dx < 0 ? 1 : -1);
+}, { passive: true });
+
+async function openAssetPicker() {
+  assetPicker.hidden = false;
+  if (stickerPacks) return;
+  pickerStatus.textContent = "스티커를 불러오는 중…";
+  try {
+    const response = await fetch("/_assets/catalog.json", { cache: "no-cache" });
+    if (!response.ok) throw new Error("catalog unavailable");
+    const catalog = await response.json();
+    const packs = (catalog.items || []).filter((item) => item.category === "sticker"
+      && item.downloads.some((download) => /\.(png|webp|jpe?g)$/i.test(download.file)));
+    if (!packs.length) { pickerStatus.textContent = "아직 등록된 스티커가 없습니다."; return; }
+    stickerPacks = packs;
+    pickerTabs.hidden = false;
+    pickerTabs.innerHTML = packs.map((pack, index) =>
+      `<button type="button" data-pack="${index}" aria-label="${escapeText(pack.title)}">
+        <img src="${escapeText(pack.preview)}" alt="" decoding="async"></button>`).join("");
+    renderPickerPack();
+  } catch (_) {
+    pickerStatus.textContent = "스티커 목록을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.";
+  }
+}
+
+pickerTabs.addEventListener("click", (event) => {
+  const tab = event.target.closest("button[data-pack]");
+  if (!tab) return;
+  activePack = Number(tab.dataset.pack);
+  renderPickerPack();
+});
+document.getElementById("pick-asset").addEventListener("click", openAssetPicker);
+document.getElementById("close-picker").addEventListener("click", () => { assetPicker.hidden = true; });
+assetPicker.addEventListener("click", (event) => {
+  if (event.target === assetPicker) assetPicker.hidden = true;
+});
+pickerBody.addEventListener("click", async (event) => {
+  const button = event.target.closest("button[data-src]");
+  if (!button) return;
+  if (stickers.length >= MAX_STICKERS) {
+    pickerStatus.textContent = `스티커는 최대 ${MAX_STICKERS}개까지 붙일 수 있습니다.`;
+    return;
+  }
+  button.disabled = true;
+  try {
+    await addAssetSticker(button.dataset.src);
+    pickerStatus.textContent = `붙였어요! (${stickers.length}/${MAX_STICKERS}) 계속 고르거나 닫기를 눌러주세요.`;
+  } catch (_) {
+    pickerStatus.textContent = "이 스티커는 불러오지 못했습니다.";
+  } finally {
+    button.disabled = false;
+  }
+});
+
+// ---- 저장 ----
 dlBtn.addEventListener("click", () => {
   if (dlBtn.disabled) return;
   dlBtn.disabled = true;
@@ -364,11 +924,11 @@ dlBtn.addEventListener("click", () => {
   const restore = () => { dlBtn.disabled = false; dlBtn.textContent = idleLabel; };
 
   try {
-    drawWallpaper(previewCv, cal, themeColors(), currentOpt());
+    const canvas = composeWallpaper();
     const name = `calendar-${cal.y}-${String(cal.m + 1).padStart(2, "0")}-mobile.png`;
 
     if (mobileFileShare) {
-      const file = canvasPngFile(previewCv, name);
+      const file = canvasPngFile(canvas, name);
       if (canShareFile(file)) {
         navigator.share({
           title: `${cal.y}년 ${cal.m + 1}월 달력`,
@@ -384,7 +944,7 @@ dlBtn.addEventListener("click", () => {
 
     // 공유 파일을 지원하지 않는 브라우저는 파일 앱 다운로드로 대체한다.
     setTimeout(() => {
-      downloadCanvasPng(previewCv, name, (err) => {
+      downloadCanvasPng(canvas, name, (err) => {
         if (err) errEl.textContent = "배경화면을 생성하지 못했습니다.";
         else if (mobileDevice) {
           errEl.textContent = "다운로드를 요청했습니다. 파일 앱에서 확인해주세요.";
@@ -398,6 +958,9 @@ dlBtn.addEventListener("click", () => {
     restore();
   }
 });
+
+renderCalendar();
+updateControls();
 </script>
 <script defer src="/_shared/share.js"></script>
 </body>
