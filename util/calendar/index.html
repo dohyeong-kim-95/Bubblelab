@@ -17,7 +17,18 @@
   /* 보기 = 휴대폰 목업 미리보기, 꾸미기 = 화면을 꽉 채우는 편집. 무대는 두 상태
      모두 기종 비율을 그대로 지키고, 크기와 테두리만 달라진다. */
   #app { position: fixed; inset: 0; display: flex; flex-direction: column; }
-  #stage-wrap { flex: 1; min-height: 0; display: grid; place-items: center; }
+  /* 월 이동 화살표는 목업 옆에 "띄워" 둔다. 레이아웃 폭을 먹지 않으므로 위아래
+     줄이 사라진 만큼 목업이 그대로 커진다. */
+  #stage-wrap { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; }
+  #stage-slot { flex: 1; min-width: 0; height: 100%; display: grid; place-items: center; }
+  .side-nav { position: absolute; top: 50%; transform: translateY(-50%); z-index: 4;
+              width: 2.5rem; height: 2.5rem; border: 0; border-radius: 50%;
+              background: #00000073; color: #fff; opacity: .8; cursor: pointer;
+              font: inherit; font-size: .95rem; display: grid; place-items: center; }
+  .side-nav:hover { opacity: 1; background: #000000ad; }
+  #prev { left: .3rem; }
+  #next { right: .3rem; }
+  body.editing .side-nav { display: none; }
   #stage { position: relative; overflow: hidden; touch-action: none; }
   /* 미리보기: 여백이 "프레임 바깥"으로 읽히도록 베젤을 두른다 */
   body:not(.editing) #stage { border-radius: 1.5rem;
@@ -87,18 +98,17 @@
   #view-bar button { color: #fff; border: 1px solid #ffffff33; background: #ffffff14;
                      font: inherit; border-radius: .5rem; cursor: pointer; padding: .5rem .8rem; }
   #view-bar button:hover { background: #ffffff2b; }
-  .month-nav { display: flex; align-items: center; gap: .2rem; }
-  .month-nav button { border: 0; background: none; opacity: .6; padding: .45rem .55rem;
-                      font-size: .95rem; }
-  .month-nav button:hover { opacity: 1; background: #ffffff1f; }
-  .month-label { min-width: 7rem; text-align: center; font-size: .82rem; opacity: .85; }
-  .view-actions { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap;
+  /* 줄바꿈이 생기면 "오늘로" 유무에 따라 높이가 달라진다 — 한 줄로 고정 */
+  .view-actions { display: flex; gap: .4rem; align-items: center; flex-wrap: nowrap;
                   justify-content: center; }
   .view-actions button { font-size: .8rem; }
   #view-save { background: #ffffff2e; font-weight: bold; }
   #today-btn { font-size: .74rem; padding: .4rem .6rem; }
   #today-btn[hidden] { display: none; }
-  #view-note { margin: 0; font-size: .63rem; color: #ffffff9e; text-align: center; }
+  /* 목업 위에 겹쳐 두어 달을 옮겨도 목업 크기가 흔들리지 않게 한다 */
+  #view-note { position: absolute; z-index: 3; left: 50%; transform: translateX(-50%);
+               bottom: .5rem; margin: 0; padding: .25rem .6rem; border-radius: 999px;
+               background: #00000094; color: #fff; font-size: .6rem; white-space: nowrap; }
   #view-note[hidden] { display: none; }
   /* 저장 결과 안내는 두 상태 모두에서 같은 자리(화면 가운데)에 잠깐 뜬다 */
   #err { position: absolute; z-index: 5; left: 50%; top: 50%; transform: translate(-50%, -50%);
@@ -143,6 +153,8 @@
 <body>
 <div id="app">
   <div id="stage-wrap">
+    <button id="prev" class="side-nav" type="button" aria-label="이전 달">◀</button>
+    <div id="stage-slot">
     <div id="stage">
       <canvas id="wallpaper" role="img" aria-label="달력 배경화면"></canvas>
       <div id="stickers" aria-label="스티커 편집 영역"></div>
@@ -168,24 +180,23 @@
         <button id="edit-reset" type="button" aria-label="되돌리기" title="되돌리기">↺</button>
       </div>
       <p id="edit-hint" hidden></p>
+      <!-- 이번 달 표시 안내는 목업 위에 겹쳐 둔다 — 달을 옮겨도 목업 크기가 변하지 않게 -->
+      <p id="view-note" hidden>● 오늘 표시는 화면에서만 보여요</p>
       <p id="err" role="alert"></p>
     </div>
+    </div>
+    <button id="next" class="side-nav" type="button" aria-label="다음 달">▶</button>
   </div>
 
   <!-- 보기 상태: 목업 아래의 조작부 (배경화면 위에 겹치지 않는다) -->
   <div id="view-bar">
-    <div class="month-nav">
-      <button id="prev" type="button" aria-label="이전 달">◀</button>
-      <!-- 배경화면 자체가 큰 월 제목을 갖고 있으므로 여기는 작게 (중복 인상 방지) -->
-      <div class="month-label"><span id="month-label">달력</span></div>
-      <button id="next" type="button" aria-label="다음 달">▶</button>
-    </div>
+    <!-- 달 이름은 배경화면 자체가 크게 보여준다. 여기선 읽기 도구용으로만 남긴다. -->
+    <span id="month-label" class="sr-only" aria-live="polite"></span>
     <div class="view-actions">
       <button id="today-btn" type="button" hidden>오늘로</button>
       <button id="decorate" type="button">🎨 꾸미기</button>
       <button id="view-save" type="button">💾 저장</button>
     </div>
-    <p id="view-note" hidden>● 오늘 표시는 화면에서만 보여요</p>
   </div>
 </div>
 
@@ -429,7 +440,7 @@ const safeGuide = document.getElementById("safe-guide");
 const calFrame = document.getElementById("cal-frame");
 const editTop = document.getElementById("edit-top");
 const editDock = document.getElementById("edit-dock");
-const stageWrap = document.getElementById("stage-wrap");
+const stageWrap = document.getElementById("stage-slot");
 const viewBar = document.getElementById("view-bar");
 const editHint = document.getElementById("edit-hint");
 const viewNote = document.getElementById("view-note");
@@ -444,8 +455,8 @@ const errEl = document.getElementById("err");
 function layoutStage() {
   const { w, h } = deviceSize();
   const box = stageWrap.getBoundingClientRect();
-  const availW = editing ? box.width : box.width - 36;
-  const availH = editing ? box.height : box.height - 24;
+  const availW = editing ? box.width : box.width - 10;
+  const availH = editing ? box.height : box.height - 20;
   const scale = Math.min(availW / w, availH / h);
   stage.style.width = `${Math.floor(w * scale)}px`;
   stage.style.height = `${Math.floor(h * scale)}px`;
