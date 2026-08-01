@@ -15,6 +15,10 @@
     {
       "label": "01. 눈 감고 웃기 (blink v0)",
       "file": "01.png"
+    },
+    {
+      "label": "02. 손 흔들며 인사 (wave2)",
+      "file": "02.png"
     }
   ]
 }

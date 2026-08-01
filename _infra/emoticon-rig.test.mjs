@@ -80,3 +80,28 @@ test("호(bow)는 중앙을 가장자리보다 더 내린다", () => {
   // 곡률을 주면 가장자리(볼)가 덜 내려가므로 두 결과가 달라야 한다
   assert.notDeepEqual(Buffer.from(encodePng(flat)), Buffer.from(encodePng(bowed)));
 });
+
+test("liftFrame: 캐릭터 높이 비율만큼 올리고, 캔버스를 넘으면 실패한다", async () => {
+  // 점프 높이는 코드가 만든다 — 모델은 전신 이동을 그리지 못한다.
+  const { liftFrame } = await import("./emoticon-rig.mjs");
+  const box = (top, h, size = 60) => {
+    const data = new Uint8Array(size * size * 4);
+    for (let y = top; y < top + h; y++) {
+      for (let x = 20; x < 40; x++) { const i = (y * size + x) * 4; data[i + 3] = 255; }
+    }
+    return { width: size, height: size, data };
+  };
+  const topOf = (im) => {
+    for (let y = 0; y < im.height; y++) {
+      for (let x = 0; x < im.width; x++) if (im.data[(y * im.width + x) * 4 + 3] > 128) return y;
+    }
+    return -1;
+  };
+  const image = box(30, 20);              // 위쪽 여유 30px, 캐릭터 높이 20px
+  assert.equal(topOf(liftFrame(image, 0.5)), 20);   // 10px 위로
+  assert.equal(topOf(liftFrame(image, 0)), 30);     // 0이면 그대로
+  // 여유(30px)를 넘는 요청은 조용히 자르지 않고 실패시킨다 — 머리 잘린 프레임이
+  // 게이트를 통과하면 안 된다
+  assert.throws(() => liftFrame(image, 2), /캔버스를 넘습니다/);
+  assert.throws(() => liftFrame(box(0, 0), 0.5), /빈 프레임/);
+});

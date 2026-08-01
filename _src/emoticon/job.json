@@ -1,0 +1,43 @@
+{
+  "character": "rabbit",
+  "step": "cut",
+  "cut_id": "bounce1",
+  "prompt": "bouncing up and down with excitement",
+  "assembly": "pingpong",
+  "breakdowns": 0,
+  "repeat": 2,
+  "fps": "12",
+  "profile": "master-2s",
+  "ref": "_src/emoticon/rabbit/cuts/nod/frames-raw/key-1.png",
+  "max_calls": "7",
+  "max_cost": "0.30",
+  "invariants": "two long upright ears whose bases sit on top of the head, two eyes, one mouth, two short arms, two feet; two pink oval inner ears; two round pink cheek blushes; the canvas holds only this one character",
+  "poseConstants": "the character is drawn at the same place on the canvas as Image 1 and its feet rest on the same baseline; the character faces the viewer straight on, the two ears stay symmetric left and right, and both eyes are always mirror images of each other; each short arm is a small rounded nub on the outer edge of the body silhouette",
+  "keys": [
+    {
+      "pose": "crouching to spring: the whole character is 0.88 times as tall and 1.10 times as wide, its volume preserved; the eyes are shut and curve upward into gentle happy arcs; a gentle closed-mouth smile",
+      "hold": 4,
+      "lift": 0
+    },
+    {
+      "pose": "stretching upward off the ground: the whole character is 1.08 times as tall and 0.94 times as wide, its volume preserved; the eyes are wide open and round; the mouth is a small open smile",
+      "hold": 1,
+      "lift": 0.09
+    },
+    {
+      "pose": "the body is back to its normal proportions in mid-air; the eyes are wide open and round; the mouth is a wide open smile",
+      "hold": 1,
+      "lift": 0.16
+    },
+    {
+      "pose": "the body keeps its normal proportions and both ears trail a little behind, tipping back about 12 degrees while their bases stay on top of the head; the eyes are wide open and round; the mouth is a wide open smile",
+      "hold": 1,
+      "lift": 0.2
+    },
+    {
+      "pose": "hanging at the top of the jump with normal proportions; the eyes are squeezed into deep happy arcs; the mouth is a wide open smile with a small pink tongue",
+      "hold": 2,
+      "lift": 0.22
+    }
+  ]
+}

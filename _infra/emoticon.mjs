@@ -30,7 +30,7 @@ import { cutoutBackground, decodeSheet, sliceGrid } from "./sticker-pack.mjs";
 import { renderGrid, renderPose } from "./skeleton.mjs";
 import { PROFILES, buildReport, formatJudgement, judgeReport } from "./emoticon-gate.mjs";
 import { breakdownPrompt, canonBlock, keyPrompt, sheetPrompt } from "./emoticon-prompt.mjs";
-import { applyRig, faceDropRatio } from "./emoticon-rig.mjs";
+import { applyRig, faceDropRatio, liftFrame } from "./emoticon-rig.mjs";
 import { RABBIT_PARTS, inspectParts } from "./emoticon-vision.mjs";
 import { bytesToBase64, geminiAsk, resolveVisionModel } from "./emoticon-gen.js";
 import { loadSequence } from "./skeleton-cli.mjs";
@@ -630,7 +630,12 @@ async function cmdCutKeys(workdir, cutId, options) {
       );
       // 리그: 모델이 그린 표정에 기하를 입힌다. 누끼 전 원본(흰 배경)에 적용해야
       // 머리 원 피팅이 맞는다 — 투명 배경에서는 RGB가 0이라 계측이 깨진다.
-      const keyed = keys[i].rig ? rigKey(await toRgba(bytes), keys[i].rig, i + 1) : drawn;
+      let keyed = keys[i].rig ? rigKey(await toRgba(bytes), keys[i].rig, i + 1) : drawn;
+      // lift: 점프 높이는 코드가 만든다. 모델은 표정·스쿼시만 그린다.
+      if (keys[i].lift) {
+        keyed = liftFrame(keyed, Number(keys[i].lift));
+        console.log(`  키 ${i + 1} 들어올림: 캐릭터 높이의 ${(Number(keys[i].lift) * 100).toFixed(0)}%`);
+      }
       keyRaw.push(bytes);
       keyImages.push(keyed);
       console.log(`  키 포즈 ${i + 1}/${keys.length}`);
@@ -700,6 +705,8 @@ async function cmdCutKeys(workdir, cutId, options) {
     unique.forEach((u, i) => atomicWriteFile(join(cutDir, "frames", `${pad2(i + 1)}.png`), encodePng(u.image)));
     finishCutRun(state, "complete", null, {
       ...input, ...base, characterRef: options.ref ?? "sheet.png",
+      // 몸이 실제로 움직이는 컷은 build의 몸 정렬이 그 움직임을 지운다.
+      ...(keys.some((k) => k.lift) ? { anchor: "none" } : {}),
       frames: unique.length, sequence: sequenceMeta, timeline,
     });
     console.log(`✓ ${cutId} 컷 생성 (유니크 ${unique.length}장 → 타임라인 ${timeline.length}프레임, ${assembly})`);

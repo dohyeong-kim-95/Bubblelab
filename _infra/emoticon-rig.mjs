@@ -140,6 +140,35 @@ export function rigToRatio(image, target, { tolerance = 0.002, maxSteps = 12, ..
   return best;
 }
 
+// 세로 이동 — 통통튀기용. 모델은 전신 이동을 그리지 못하므로(리컴포지션이
+// 지운다, guide-by-movement/nod.md §5) 점프 높이는 코드가 만든다.
+// fraction은 캐릭터 높이 대비 비율이며, 캔버스 위쪽 여유를 넘으면 실패시킨다 —
+// 조용히 잘라내면 머리가 잘린 프레임이 게이트를 통과해 버린다.
+export function liftFrame(image, fraction) {
+  const { width, height, data } = image;
+  let top = height;
+  let bottom = -1;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (data[(y * width + x) * 4 + 3] > 128) { if (y < top) top = y; if (y > bottom) bottom = y; break; }
+    }
+  }
+  if (bottom < 0) throw new Error("빈 프레임은 들어올릴 수 없습니다");
+  const dy = Math.round((bottom - top + 1) * fraction);
+  if (dy <= 0) return image;
+  if (dy > top) {
+    throw new Error(
+      `lift ${fraction}는 캔버스를 넘습니다 (필요 ${dy}px, 위쪽 여유 ${top}px) — ` +
+      "lift를 줄이거나 레퍼런스를 더 아래에 두세요",
+    );
+  }
+  const out = new Uint8Array(data.length);
+  for (let y = 0; y < height - dy; y++) {
+    out.set(data.subarray((y + dy) * width * 4, (y + dy + 1) * width * 4), y * width * 4);
+  }
+  return { width, height, data: out };
+}
+
 export function encodeRig(result) {
   return encodePng(result.image);
 }

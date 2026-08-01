@@ -16,38 +16,73 @@
   "movements": [
     {
       "id": "blink",
-      "ko": ["눈깜빡임", "깜빡임", "눈감기", "웃기"],
+      "ko": [
+        "눈깜빡임",
+        "깜빡임",
+        "눈감기",
+        "웃기"
+      ],
       "emotionSlot": "웃음·기쁨",
       "channel": "face",
       "status": "done",
-      "cuts": ["blink1"],
+      "cuts": [
+        "blink1"
+      ],
       "verdict": "지금까지 중에 제일 좋아요",
       "guide": "doc/guide-by-movement/blink.md",
       "shipped": "_assets/sticker/emoticon-anim/01.png"
     },
     {
       "id": "wave",
-      "ko": ["인사", "손흔들기", "안녕"],
+      "ko": [
+        "인사",
+        "손흔들기",
+        "안녕"
+      ],
       "emotionSlot": "인사",
       "channel": "arm",
-      "status": "revise",
-      "cuts": ["wave", "wave2"],
-      "verdict": "몸이 갑자기 translation, 겨드랑이 위치가 튀어서 다른 그림을 붙여놓은 느낌",
-      "guide": "doc/guide-by-movement/wave.md"
+      "status": "done",
+      "cuts": [
+        "wave",
+        "wave2"
+      ],
+      "verdict": "이정도면 좋은것 같습니다 (몸 정렬 후)",
+      "guide": "doc/guide-by-movement/wave.md",
+      "shipped": "_assets/sticker/emoticon-anim/02.png"
     },
     {
       "id": "nod",
-      "ko": ["끄덕임", "끄덕", "공감"],
+      "ko": [
+        "끄덕임",
+        "끄덕",
+        "공감"
+      ],
       "emotionSlot": "공감·동의",
       "channel": "rig",
       "status": "failed",
-      "cuts": ["nod", "nod2", "nod3", "nod4", "nod5", "nod6", "nod7", "nod8", "nod9", "nod10", "nod11"],
+      "cuts": [
+        "nod",
+        "nod2",
+        "nod3",
+        "nod4",
+        "nod5",
+        "nod6",
+        "nod7",
+        "nod8",
+        "nod9",
+        "nod10",
+        "nod11"
+      ],
       "verdict": "아홉 번 실패. 텍스트로도 배치도 이미지로도 얼굴 세로 위치를 못 바꾼다",
       "guide": "doc/guide-by-movement/nod.md"
     },
     {
       "id": "bounce",
-      "ko": ["통통튀기", "점프", "신남"],
+      "ko": [
+        "통통튀기",
+        "점프",
+        "신남"
+      ],
       "emotionSlot": "신남·기대",
       "channel": "rig",
       "status": "todo",
@@ -56,11 +91,17 @@
     },
     {
       "id": "heart",
-      "ko": ["하트", "사랑", "좋아"],
+      "ko": [
+        "하트",
+        "사랑",
+        "좋아"
+      ],
       "emotionSlot": "애정",
       "channel": "effect",
       "status": "revise",
-      "cuts": ["heart"],
+      "cuts": [
+        "heart"
+      ],
       "verdict": "움직임이 없어서 아쉽",
       "guide": null
     }
