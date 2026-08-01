@@ -51,6 +51,9 @@ import {
 
 const CUT_ID_RE = /^[a-z0-9][a-z0-9-]*$/;
 const MAX_FRAMES = 24;        // 카카오 납품 상한
+// 키 상한. 사람 검수가 "프레임이 적다"를 반복 지적했고 "편도 8프레임으로 가능"
+// 이라는 구체적 요구가 있었다 (lesson_learned §39). 비용은 --max-calls로 막는다.
+const MAX_KEYS = 12;
 const LINE_FRAMES = [5, 20];  // LINE 애니메이션 스티커 프레임 범위
 const LINE_SIZE = 270;        // 320x270 이내 + 한 변 ≥270 → 정사각 270
 const LINE_MAX_BYTES = 300 * 1024;
@@ -489,8 +492,8 @@ async function cmdCutKeys(workdir, cutId, options) {
   const motion = String(options.motion ?? spec.motion ?? "").trim();
   if (!motion) throw new Error("동작 설명이 필요합니다 (--motion 또는 spec.motion)");
   const keys = spec.keys;
-  if (!Array.isArray(keys) || keys.length < 2 || keys.length > 6 || keys.some((k) => !k?.pose?.trim())) {
-    throw new Error("keys는 pose 문장을 가진 2~6개의 키 포즈여야 합니다");
+  if (!Array.isArray(keys) || keys.length < 2 || keys.length > MAX_KEYS || keys.some((k) => !k?.pose?.trim())) {
+    throw new Error(`keys는 pose 문장을 가진 2~${MAX_KEYS}개의 키 포즈여야 합니다`);
   }
   const breakdowns = Number(spec.breakdowns ?? 1);
   if (![0, 1, 2, 3].includes(breakdowns)) throw new Error("breakdowns는 0~3만 지원합니다");
@@ -758,8 +761,8 @@ async function cmdPlan(workdir, cutId, options) {
     const motion = String(options.motion ?? spec.motion ?? "").trim();
     const keys = spec.keys;
     if (!motion) throw new Error("동작 설명이 필요합니다 (--motion 또는 spec.motion)");
-    if (!Array.isArray(keys) || keys.length < 2 || keys.length > 6 || keys.some((key) => !key?.pose?.trim())) {
-      throw new Error("keys는 pose 문장을 가진 2~6개의 키 포즈여야 합니다");
+    if (!Array.isArray(keys) || keys.length < 2 || keys.length > MAX_KEYS || keys.some((key) => !key?.pose?.trim())) {
+      throw new Error(`keys는 pose 문장을 가진 2~${MAX_KEYS}개의 키 포즈여야 합니다`);
     }
     const breakdowns = Number(spec.breakdowns ?? 1);
     const assembly = spec.assembly ?? "pingpong";
