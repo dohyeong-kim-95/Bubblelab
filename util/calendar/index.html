@@ -7,115 +7,57 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>📅</text></svg>">
 <style>
   :root { color-scheme: light dark; }
+  html, body { height: 100%; }
   body { font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
-         margin: 0; min-height: 100dvh; display: flex; align-items: center; justify-content: center;
-         background: light-dark(#eef2f6, #10161f);
+         margin: 0; overflow: hidden; background: #05080c;
          color: light-dark(#1c2733, #dbe4ee); }
-  body.editing { overflow: hidden; }
-  main { padding: 1.5rem; width: min(26rem, 100%); box-sizing: border-box;
-         /* 저장 이미지와 같은 비례: 셀 폭 기준으로 모든 크기를 계산 */
-         --cell: calc((min(26rem, 100vw) - 3rem) / 7); }
-  header { text-align: center; margin-bottom: calc(var(--cell) * .45); }
-  #year { margin: 0; opacity: .6; font-size: calc(var(--cell) * .3); }
-  .month-nav { display: flex; align-items: center; justify-content: center;
-               gap: calc(var(--cell) * .12); }
-  #month { margin: 0; font-weight: bold; font-size: calc(var(--cell) * .62);
-           letter-spacing: .02em; min-width: 6.5em; }
-  .nav-arrow { border: 0; background: none; color: inherit; cursor: pointer; opacity: .45;
-               font-size: calc(var(--cell) * .3); line-height: 1; padding: .5rem .35rem;
-               border-radius: .5rem; }
-  .nav-arrow:hover { opacity: 1; background: light-dark(#1c273310, #dbe4ee14); }
-  #today-btn { margin-top: .35rem; padding: .25rem .7rem; font-size: .72rem; opacity: .8; }
-  #today-btn[hidden] { display: none; }
-  table { width: 100%; border-collapse: collapse; table-layout: fixed;
-          font-variant-numeric: tabular-nums; touch-action: pan-y; }
-  th { font-weight: normal; opacity: .5; font-size: calc(var(--cell) * .21);
-       padding-bottom: calc(var(--cell) * .3); }
-  th.sun, th.sat { opacity: .9; }
-  td { text-align: center; padding: 0; height: calc(var(--cell) * 1.05);
-       font-size: calc(var(--cell) * .3); position: relative; z-index: 0; }
-  .sun { color: light-dark(#c0392b, #ff8a7a); }
-  .sat { color: light-dark(#2563ab, #8ab8ff); }
-  .today { position: relative; font-weight: bold;
-           color: light-dark(#fff, #10161f); }
-  .today::before { content: ""; position: absolute; inset: 50% auto auto 50%;
-                   width: 2.1em; height: 2.1em; border-radius: 50%;
-                   transform: translate(-50%, -50%); z-index: -1;
-                   background: light-dark(#1c2733, #dbe4ee); }
-  #actions { text-align: center; margin-top: 1.6rem;
-             display: flex; flex-direction: column; align-items: center; gap: .5rem; }
-  button { font: inherit; color: inherit; background: none; cursor: pointer;
-           padding: .55rem 1.1rem; border-radius: .5rem;
-           border: 1px solid light-dark(#1c273355, #dbe4ee55); }
-  button:hover:not(:disabled) { background: light-dark(#1c273310, #dbe4ee14); }
-  button:disabled { opacity: .4; cursor: default; }
-  #save[aria-expanded="true"] { background: light-dark(#1c273312, #dbe4ee18); }
-  #panel { margin-top: .7rem; width: 100%; box-sizing: border-box;
-           display: flex; flex-direction: column; gap: .9rem;
-           align-items: center; padding: 1.1rem;
-           border: 1px solid light-dark(#1c273322, #dbe4ee22); border-radius: .75rem; }
-  #panel[hidden] { display: none; }
-  #preview { width: 9.5rem; height: auto; border-radius: .6rem; display: block;
-             border: 1px solid light-dark(#1c273333, #dbe4ee33); }
-  .ctl { display: flex; align-items: center; gap: .7rem; width: 100%; font-size: .85rem; }
-  .ctl > label { width: 4.5rem; text-align: right; opacity: .6; flex: none; }
-  .ctl > select, .ctl > input[type=range] { flex: 1; min-width: 0; }
-  input[type=range] { accent-color: light-dark(#1c2733, #dbe4ee); }
-  select { font: inherit; font-size: .85rem; color: inherit;
-           background: light-dark(#eef2f6, #10161f);
-           border: 1px solid light-dark(#1c273355, #dbe4ee55);
-           border-radius: .4rem; padding: .3rem .4rem; }
-  #err { min-height: 1.2em; margin: 0; font-size: .85rem;
-         color: light-dark(#c0392b, #ff8a7a); }
-  /* 실패가 아닌 진행 안내는 경고색 대신 본문색으로 (같은 자리에 표시) */
-  #err.info { color: inherit; opacity: .65; }
-  #save-hint { margin: -.25rem 0 0; font-size: .78rem; opacity: .65;
-               text-align: center; line-height: 1.5; }
-  #save-hint[hidden] { display: none; }
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+             overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 
-  /* ── 전체화면 꾸미기: 화면 자체가 배경화면이 되고 그 위에서 바로 편집한다 ── */
-  #editor { position: fixed; inset: 0; z-index: 30; background: #05080c;
-            display: grid; place-items: center; overscroll-behavior: contain; }
-  #editor[hidden] { display: none; }
-  #edit-stage { position: relative; overflow: hidden; touch-action: none;
-                box-shadow: 0 0 0 1px #ffffff1f; }
-  #edit-canvas, #edit-stickers, #edit-safe { position: absolute; inset: 0;
-                                             width: 100%; height: 100%; }
-  #edit-canvas { display: block; }
-  #edit-stickers { overflow: hidden; }
+  /* 화면 자체가 배경화면이다. 무대는 기종 비율 그대로 화면에 최대 크기로 앉는다. */
+  #app { position: fixed; inset: 0; display: grid; place-items: center; }
+  #stage { position: relative; overflow: hidden; touch-action: none;
+           box-shadow: 0 0 0 1px #ffffff1f; }
+  #wallpaper, #stickers { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #wallpaper { display: block; }
+  #stickers { overflow: hidden; }
+  body:not(.editing) #stickers { pointer-events: none; }
   .sticker { position: absolute; transform-origin: center; height: auto; max-width: none;
              border: 2px solid transparent; border-radius: .2rem; touch-action: none;
              -webkit-user-drag: none; user-select: none; }
   .sticker.selected { border-color: #fff; outline: 2px solid #8ab8ff; }
   /* 시계·알림이 겹치는 상단 영역 안내 — 화면에만 있고 저장 PNG에는 안 들어간다 */
-  /* 라벨은 띠 아래쪽 끝에 — 위쪽은 도구 막대가 덮는다 */
-  #edit-safe { pointer-events: none; display: grid; place-items: end end;
-               height: 20%; inset: 0 0 auto;
-               border-bottom: 1px dashed light-dark(#1c273366, #dbe4ee55); }
-  #edit-safe span { font-size: .6rem; opacity: .5; padding: .3rem .4rem;
-                    color: light-dark(#1c2733, #dbe4ee); }
-  /* 지금 잡고 있는 대상(기본값 = 달력)을 점선으로 표시한다 */
+  #safe-guide { position: absolute; inset: 0 0 auto; height: 20%; pointer-events: none;
+                display: grid; place-items: end end;
+                border-bottom: 1px dashed light-dark(#1c273366, #dbe4ee55); }
+  #safe-guide[hidden] { display: none; }
+  #safe-guide span { font-size: .6rem; opacity: .5; padding: .3rem .4rem;
+                     color: light-dark(#1c2733, #dbe4ee); }
+  /* 지금 잡고 있는 대상(기본값 = 달력) */
   #cal-frame { position: absolute; pointer-events: none; border-radius: .35rem;
                border: 1.5px dashed #8ab8ff; }
   #cal-frame[hidden] { display: none; }
-  /* 라벨은 테두리 안쪽에 — 달력을 화면 맨 위로 올려도 잘리지 않게 */
   #cal-frame::after { content: "달력"; position: absolute; top: .2rem; left: .2rem;
                       font-size: .62rem; padding: .1rem .35rem; border-radius: .3rem;
                       background: #8ab8ff; color: #06121f; }
 
-  .edit-bar.top { position: absolute; inset: 0 0 auto; z-index: 3; display: flex;
-                  flex-direction: column; gap: .35rem; color: #fff;
-                  padding: max(.5rem, env(safe-area-inset-top)) .6rem .6rem;
-                  background: linear-gradient(#000000e8, #000000cc 62%, #0000); }
-  /* 공용 독(홈·공유)은 편집 중에 도구 막대를 가린다 */
-  body.editing #bl-dock { display: none; }
+  .bar { position: absolute; left: 0; right: 0; z-index: 3; color: #fff;
+         display: flex; flex-direction: column; gap: .35rem; }
+  .bar[hidden] { display: none; }
+  .bar button { color: #fff; border: 1px solid #ffffff44; background: #ffffff14;
+                font: inherit; border-radius: .5rem; cursor: pointer; padding: .5rem .8rem; }
+  .bar button:hover:not(:disabled) { background: #ffffff2b; }
+  .bar button:disabled { opacity: .4; cursor: default; }
+
+  /* 편집 도구는 위쪽 — 시계·알림 자리라 어차피 오브젝트를 놓지 않는다 */
+  .bar.top { top: 0; padding: max(.5rem, env(safe-area-inset-top)) .6rem .6rem;
+             background: linear-gradient(#000000e8, #000000cc 62%, #0000); }
   .edit-row { display: flex; align-items: center; gap: .4rem; }
-  .edit-row #edit-device-label { flex: 1; min-width: 0; font-size: .72rem; opacity: .75;
-                                 overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .edit-bar button { color: #fff; border-color: #ffffff44; background: #ffffff14; }
-  .edit-bar button:hover:not(:disabled) { background: #ffffff2b; }
-  .edit-row select { flex: 1; min-width: 0; color: #fff; background: #1b232ef2;
-                     border-color: #ffffff44; font-size: .78rem; }
+  #edit-device-label { flex: 1; min-width: 0; font-size: .72rem; opacity: .75;
+                       overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .edit-row select { flex: 1; min-width: 0; font: inherit; font-size: .78rem; color: #fff;
+                     background: #1b232ef2; border: 1px solid #ffffff44; border-radius: .4rem;
+                     padding: .3rem .4rem; }
   .edit-row button { padding: .4rem .6rem; font-size: .76rem; flex: none; }
   #edit-device-change { font-size: .68rem; padding: .3rem .45rem; }
   #edit-save { background: #ffffff2e; font-weight: bold; }
@@ -124,10 +66,31 @@
   .edit-tools button { min-width: 0; padding: .45rem .15rem; font-size: .68rem;
                        white-space: nowrap; overflow: hidden; }
   #edit-hint { margin: 0; font-size: .66rem; line-height: 1.35; text-align: center;
-               color: #ffffffcc; white-space: nowrap; overflow: hidden;
-               text-overflow: ellipsis; }
-  #edit-err { margin: 0; font-size: .72rem; text-align: center; color: #ffb0a4; }
-  #edit-err:empty { display: none; }
+               color: #ffffffcc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* 보기 상태의 아래 막대: 월 이동 + 꾸미기 + 저장 */
+  .bar.bottom { bottom: 0; align-items: center; gap: .5rem;
+                padding: 1.4rem .6rem max(.7rem, env(safe-area-inset-bottom));
+                background: linear-gradient(#0000, #000000cc 38%, #000000ee); }
+  .month-nav { display: flex; align-items: center; gap: .2rem; }
+  .month-nav button { border: 0; background: none; opacity: .6; padding: .45rem .55rem;
+                      font-size: .95rem; }
+  .month-nav button:hover { opacity: 1; background: #ffffff1f; }
+  .month-label { min-width: 7rem; text-align: center; font-size: .82rem; opacity: .85; }
+  .view-actions { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap;
+                  justify-content: center; padding-right: 3.4rem; }
+  .view-actions button { font-size: .8rem; }
+  #view-save { background: #ffffff2e; font-weight: bold; }
+  #today-btn { font-size: .74rem; padding: .4rem .6rem; }
+  #today-btn[hidden] { display: none; }
+  #view-note { margin: 0; font-size: .63rem; color: #ffffff9e; text-align: center; }
+  #view-note[hidden] { display: none; }
+  /* 저장 결과 안내는 두 상태 모두에서 같은 자리(화면 가운데)에 잠깐 뜬다 */
+  #err { position: absolute; z-index: 5; left: 50%; top: 50%; transform: translate(-50%, -50%);
+         margin: 0; max-width: 82%; padding: .5rem .8rem; border-radius: .6rem;
+         background: #000000cc; color: #ffb0a4; font-size: .75rem; text-align: center; }
+  #err:empty { display: none; }
+  #err.info { color: #fff; }
 
   /* 스티커 고르기 시트 (util/photo의 에셋 픽커와 같은 구성) */
   #asset-picker { position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column;
@@ -140,6 +103,8 @@
                   border-top: 1px solid light-dark(#dce3ea, #2a3747); }
   .picker-head { display: flex; justify-content: space-between; align-items: center; gap: .6rem; }
   .picker-head h3 { margin: 0; font-size: .92rem; }
+  .picker-sheet button { font: inherit; color: inherit; cursor: pointer; border-radius: .5rem;
+                         background: none; border: 1px solid light-dark(#1c273355, #dbe4ee55); }
   .picker-head button { padding: .4rem .8rem; font-size: .75rem; }
   .picker-status { margin: .5rem 0; opacity: .6; font-size: .72rem; line-height: 1.5; }
   .picker-tabs { display: flex; gap: .35rem; overflow-x: auto; padding: .55rem 0 .45rem;
@@ -161,69 +126,19 @@
 </style>
 </head>
 <body>
-<main>
-  <header>
-    <p id="year"></p>
-    <div class="month-nav">
-      <button class="nav-arrow" id="prev" type="button" aria-label="이전 달">◀</button>
-      <h1 id="month">📅</h1>
-      <button class="nav-arrow" id="next" type="button" aria-label="다음 달">▶</button>
-    </div>
-    <button id="today-btn" type="button" hidden>오늘로</button>
-  </header>
-  <table>
-    <thead>
-      <tr>
-        <th class="sun" scope="col">SUN</th><th scope="col">MON</th>
-        <th scope="col">TUE</th><th scope="col">WED</th><th scope="col">THU</th>
-        <th scope="col">FRI</th><th class="sat" scope="col">SAT</th>
-      </tr>
-    </thead>
-    <tbody id="days"></tbody>
-  </table>
-  <div id="actions">
-    <button id="save" type="button" aria-expanded="false" aria-controls="panel"
-            aria-label="휴대폰 배경화면 저장 열기">휴대폰 배경화면 저장</button>
-    <button id="decorate" type="button">🎨 휴대폰 배경화면 꾸미기</button>
-    <div id="panel" hidden>
-      <canvas id="preview" role="img" aria-label="배경화면 미리보기"></canvas>
-      <div class="ctl">
-        <label for="device">기종</label>
-        <span id="device-label"></span>
-        <select id="device" aria-label="휴대폰 기종 선택" hidden></select>
-        <button id="device-change" type="button" hidden>바꾸기</button>
-      </div>
-      <div class="ctl">
-        <label for="cal-size">달력 크기</label>
-        <input type="range" id="cal-size" min="40" max="95" value="60"
-               aria-label="달력 크기 조절">
-      </div>
-      <div class="ctl">
-        <label for="cal-pos">세로 위치</label>
-        <input type="range" id="cal-pos" min="30" max="80" value="55"
-               aria-label="달력 세로 위치 조절">
-      </div>
-      <button id="download" type="button"
-              aria-label="배경화면 PNG 이미지 다운로드">PNG 다운로드</button>
-      <p id="save-hint" hidden>공유 메뉴에서 ‘이미지 저장’을 선택하세요.</p>
-      <p id="err" role="alert"></p>
-    </div>
-  </div>
-</main>
+<div id="app">
+  <div id="stage">
+    <canvas id="wallpaper" role="img" aria-label="달력 배경화면"></canvas>
+    <div id="stickers" aria-label="스티커 편집 영역"></div>
+    <div id="safe-guide" hidden><span>시계·알림 영역</span></div>
+    <div id="cal-frame" hidden></div>
 
-<!-- 화면 전체가 배경화면이 되는 편집기. 열면 달력이 기본으로 잡혀 있다. -->
-<div id="editor" hidden aria-label="배경화면 꾸미기">
-  <div id="edit-stage">
-    <canvas id="edit-canvas" role="img" aria-label="배경화면 편집 화면"></canvas>
-    <div id="edit-stickers"></div>
-    <div id="edit-safe"><span>시계·알림 영역</span></div>
-    <div id="cal-frame"></div>
-    <!-- 도구는 위쪽(시계·알림 영역)에 둔다 — 어차피 오브젝트를 놓지 않는 자리다 -->
-    <div class="edit-bar top">
+    <!-- 꾸미기 상태: 도구 막대 -->
+    <div class="bar top" id="edit-bar" hidden>
       <div class="edit-row">
-        <button id="edit-close" type="button" aria-label="꾸미기 닫기">✕</button>
+        <button id="edit-close" type="button" aria-label="꾸미기 끝내기">✕</button>
         <span id="edit-device-label"></span>
-        <select id="edit-device" aria-label="휴대폰 기종 선택" hidden></select>
+        <select id="device" aria-label="휴대폰 기종 선택" hidden></select>
         <button id="edit-device-change" type="button" hidden>기종 바꾸기</button>
         <button id="edit-save" type="button">💾 저장</button>
       </div>
@@ -238,10 +153,39 @@
         <button id="edit-reset" type="button">되돌리기</button>
       </div>
       <p id="edit-hint"></p>
-      <p id="edit-err" role="alert"></p>
     </div>
+
+    <!-- 보기 상태: 월 이동과 시작 버튼 -->
+    <div class="bar bottom" id="view-bar">
+      <div class="month-nav">
+        <button id="prev" type="button" aria-label="이전 달">◀</button>
+        <!-- 배경화면 자체가 큰 월 제목을 갖고 있으므로 여기는 작게 (중복 인상 방지) -->
+        <div class="month-label"><span id="month-label">달력</span></div>
+        <button id="next" type="button" aria-label="다음 달">▶</button>
+      </div>
+      <div class="view-actions">
+        <button id="today-btn" type="button" hidden>오늘로</button>
+        <button id="decorate" type="button">🎨 꾸미기</button>
+        <button id="view-save" type="button">💾 배경화면 저장</button>
+      </div>
+      <p id="view-note" hidden>● 오늘 표시는 화면에서만 보여요</p>
+    </div>
+
+    <p id="err" role="alert"></p>
   </div>
 </div>
+
+<!-- 화면은 캔버스라 읽히지 않는다. 스크린리더와 텍스트 선택을 위한 같은 내용의 표. -->
+<table id="a11y-cal" class="sr-only">
+  <caption id="a11y-caption"></caption>
+  <thead>
+    <tr>
+      <th scope="col">일</th><th scope="col">월</th><th scope="col">화</th><th scope="col">수</th>
+      <th scope="col">목</th><th scope="col">금</th><th scope="col">토</th>
+    </tr>
+  </thead>
+  <tbody id="a11y-body"></tbody>
+</table>
 
 <div id="asset-picker" hidden>
   <div class="picker-sheet">
@@ -272,7 +216,7 @@ function monthData(y, m) {
   return { y, m, weeks };
 }
 
-// 현재 활성 테마의 색상 (CSS의 light-dark() 값과 동일하게 유지)
+// 현재 활성 테마의 색상 (배경화면 = 이 페이지의 배경색)
 function themeColors() {
   const dark = matchMedia("(prefers-color-scheme: dark)").matches;
   return dark
@@ -288,128 +232,30 @@ const DOW_EN = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
 let today = new Date();
 let view = { y: today.getFullYear(), m: today.getMonth() };
 let cal = monthData(view.y, view.m);
+let editing = false;
 
-const yearEl = document.getElementById("year");
-const monthEl = document.getElementById("month");
-const todayBtn = document.getElementById("today-btn");
-const tbody = document.getElementById("days");
+const isThisMonth = () => cal.y === today.getFullYear() && cal.m === today.getMonth();
+// 오늘 강조는 화면에서만. 정적 이미지에 넣으면 내일부터 틀린 표시가 된다.
+const screenToday = () => (isThisMonth() && !editing ? today.getDate() : 0);
 
-// ---- 화면 달력 (저장 이미지와 같은 구성: 연도 / 영문 월 / 영문 요일) ----
-function renderCalendar() {
-  cal = monthData(view.y, view.m);
-  yearEl.textContent = cal.y;
-  monthEl.textContent = MONTHS_EN[cal.m];
-  document.title = `${cal.y}년 ${cal.m + 1}월 달력`;
-  const isThisMonth = cal.y === today.getFullYear() && cal.m === today.getMonth();
-  todayBtn.hidden = isThisMonth;
-
-  tbody.textContent = "";
-  for (const week of cal.weeks) {
-    const row = tbody.insertRow();
-    week.forEach((d, dow) => {
-      const cell = row.insertCell();
-      if (d === null) return;
-      cell.textContent = d;
-      if (dow === 0) cell.classList.add("sun");
-      if (dow === 6) cell.classList.add("sat");
-      if (isThisMonth && d === today.getDate()) cell.classList.add("today");
-    });
-  }
-  renderPreview();
-  renderEditor();
-}
-
-function shiftMonth(delta) {
-  const d = new Date(view.y, view.m + delta, 1);
-  view = { y: d.getFullYear(), m: d.getMonth() };
-  renderCalendar();
-}
-
-document.getElementById("prev").addEventListener("click", () => shiftMonth(-1));
-document.getElementById("next").addEventListener("click", () => shiftMonth(1));
-todayBtn.addEventListener("click", () => {
-  view = { y: today.getFullYear(), m: today.getMonth() };
-  renderCalendar();
-});
-addEventListener("keydown", (event) => {
-  if (!editor.hidden && event.key === "Escape") { closeEditor(); return; }
-  if (event.target.closest("input, select, button")) return;
-  if (event.key === "ArrowLeft") shiftMonth(-1);
-  if (event.key === "ArrowRight") shiftMonth(1);
-});
-// 모바일: 달력 위에서 좌우로 밀어 월 이동 (세로 스크롤과 구분)
-let monthSwipe = null;
-const table = document.querySelector("table");
-table.addEventListener("touchstart", (event) => {
-  monthSwipe = { x: event.touches[0].clientX, y: event.touches[0].clientY };
-}, { passive: true });
-table.addEventListener("touchend", (event) => {
-  if (!monthSwipe) return;
-  const dx = event.changedTouches[0].clientX - monthSwipe.x;
-  const dy = event.changedTouches[0].clientY - monthSwipe.y;
-  monthSwipe = null;
-  if (Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy) * 1.6) return;
-  shiftMonth(dx < 0 ? 1 : -1);
-}, { passive: true });
-
-window.blShareText = () => `📅 ${cal.y}년 ${cal.m + 1}월 달력 — util.bubblelab.dev/calendar`;
-
-// 탭을 열어둔 채 자정을 넘기면 오늘 표시가 어제로 남는다. 다시 볼 때 갱신한다.
-document.addEventListener("visibilitychange", () => {
-  if (document.hidden) return;
-  const now = new Date();
-  if (now.toDateString() === today.toDateString()) return;
-  const wasThisMonth = view.y === today.getFullYear() && view.m === today.getMonth();
-  today = now;
-  if (wasThisMonth) view = { y: now.getFullYear(), m: now.getMonth() };
-  renderCalendar();
-});
-
-// ---- 배경화면 ----
-// 기종 해상도 자동 인식. screen(CSS px) × DPR = 실제 패널 픽셀이고, 실측해 보면
-// 대부분 정확히 맞는다(예: S24 1080×2340, iPhone 15 Pro Max 1290×2796).
-// DPR이 정수가 아닌 기기는 1~2px 어긋날 수 있어 짝수로 맞춘다 — 배경화면에는 영향 없다.
-// 가로로 들고 있어도 세로 배경화면을 만들 수 있게 긴 쪽을 높이로 본다.
-function detectDevice() {
-  const dpr = devicePixelRatio || 1;
-  const a = Math.round(screen.width * dpr), b = Math.round(screen.height * dpr);
-  const w = Math.min(a, b) & ~1, h = Math.max(a, b) & ~1;
-  const mobile = /Android|iPhone|iPod|iPad|Mobile/i.test(navigator.userAgent);
-  if (mobile && w >= 640 && w <= 2400 && h <= 4400) return { w, h };
-  return null;
-}
-
-const DEVICE_PRESETS = [
-  ["Galaxy S26", 1080, 2340],
-  ["Galaxy S26+ / Ultra", 1440, 3120],
-  ["iPhone Pro Max", 1290, 2796],
-  ["iPhone / Pro", 1179, 2556],
-];
-
-// 달력 블록의 위치·크기 (0~1 정규화). 꾸미기 화면에서 손으로 직접 옮기고 키운다.
+// ---- 배경화면 그리기 ----
+// 달력 블록의 위치·크기 (0~1 정규화). 화면에서 손으로 직접 옮기고 키운다.
 const CAL_DEFAULT = { x: .5, y: .55, scale: .6 };
 const calState = { ...CAL_DEFAULT };
 
-// 달력 블록 배치 계산. 셀 크기에 모든 치수가 비례한다
-// (연도 .55 + 월 1.15 + 요일 .85 + 주당 1.05).
-// opt.free(꾸미기)면 화면 안에서 자유롭게, 아니면 상단 20%(시계·알림)를 비우고
-// 하단 4% 여백을 남기는 저장 패널의 규칙을 지킨다.
+// 셀 크기에 모든 치수가 비례한다 (연도 .55 + 월 1.15 + 요일 .85 + 주당 1.05).
 function calGeometry(W, H, data, opt) {
   const cellToBlock = 0.55 + 1.15 + 0.85 + 1.05 * data.weeks.length;
   // 폴더블처럼 화면이 넓으면 W 기준 폭이 화면 높이를 넘어선다 — 잘리지 않게 함께 줄인다.
-  const limit = opt.free ? H * 0.96 : H * 0.76;
-  const cell = Math.min(W * opt.scale / 7, limit / cellToBlock);
+  const cell = Math.min(W * opt.scale / 7, H * 0.96 / cellToBlock);
   const bw = cell * 7, blockH = cell * cellToBlock;
-  const minTop = opt.free ? 0 : H * 0.2;
-  const maxTop = opt.free ? Math.max(0, H - blockH) : Math.max(minTop, H - blockH - H * 0.04);
   return {
     cell, bw, blockH,
     left: clamp(opt.x * W - bw / 2, 0, Math.max(0, W - bw)),
-    top: clamp(opt.y * H - blockH / 2, minTop, maxTop),
+    top: clamp(opt.y * H - blockH / 2, 0, Math.max(0, H - blockH)),
   };
 }
 
-// 배경화면 렌더링. 오늘 날짜 강조 없음(정적 이미지이므로).
 function drawWallpaper(canvas, data, c, opt) {
   const W = opt.w, H = opt.h;
   canvas.width = W; canvas.height = H;
@@ -452,8 +298,18 @@ function drawWallpaper(canvas, data, c, opt) {
   data.weeks.forEach((week, r) => {
     week.forEach((d, i) => {
       if (d === null) return;
-      ctx.fillStyle = i === 0 ? c.sun : i === 6 ? c.sat : c.fg;
-      ctx.fillText(String(d), colX(i), y + rowH * r + rowH / 2);
+      const cx = colX(i), cy = y + rowH * r + rowH / 2;
+      if (d === opt.todayDate) {
+        // 화면 전용 오늘 강조 (CSS의 .today와 같은 지름 2.1em)
+        ctx.fillStyle = c.fg;
+        ctx.beginPath();
+        ctx.arc(cx, cy, cell * 0.315, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = c.bg;
+      } else {
+        ctx.fillStyle = i === 0 ? c.sun : i === 6 ? c.sat : c.fg;
+      }
+      ctx.fillText(String(d), cx, cy);
     });
   });
 }
@@ -471,28 +327,186 @@ function drawStickers(ctx, W, H) {
   }
 }
 
+// ---- 기종 ----
+// screen(CSS px) × DPR = 실제 패널 픽셀. 실측해 보면 대부분 정확히 맞는다
+// (S24 1080×2340, iPhone 15 Pro Max 1290×2796). DPR이 정수가 아닌 기기는 1~2px
+// 어긋날 수 있어 짝수로 맞춘다 — 배경화면에는 영향 없다.
+function detectDevice() {
+  const dpr = devicePixelRatio || 1;
+  const a = Math.round(screen.width * dpr), b = Math.round(screen.height * dpr);
+  const w = Math.min(a, b) & ~1, h = Math.max(a, b) & ~1;
+  const mobile = /Android|iPhone|iPod|iPad|Mobile/i.test(navigator.userAgent);
+  if (mobile && w >= 640 && w <= 2400 && h <= 4400) return { w, h };
+  return null;
+}
+
+const DEVICE_PRESETS = [
+  ["Galaxy S26", 1080, 2340],
+  ["Galaxy S26+ / Ultra", 1440, 3120],
+  ["iPhone Pro Max", 1290, 2796],
+  ["iPhone / Pro", 1179, 2556],
+];
+
+const deviceSel = document.getElementById("device");
+const deviceLabel = document.getElementById("edit-device-label");
+const deviceChangeBtn = document.getElementById("edit-device-change");
+const detected = detectDevice();
+
+if (detected) {
+  const opt = document.createElement("option");
+  opt.value = `${detected.w}x${detected.h}`;
+  opt.textContent = `내 기기 (${detected.w}×${detected.h})`;
+  deviceSel.appendChild(opt);
+}
+for (const [name, w, h] of DEVICE_PRESETS) {
+  const opt = document.createElement("option");
+  opt.value = `${w}x${h}`;
+  opt.textContent = `${name} (${w}×${h})`;
+  deviceSel.appendChild(opt);
+}
+if (!detected) deviceSel.value = "1080x2340"; // 인식 실패 시 기본값: Galaxy S26
+
+// 자동 인식되면 고를 게 없으므로 선택창을 숨기고 해상도만 알려준다.
+// (폴더블 커버화면처럼 어긋나는 경우를 위해 "기종 바꾸기"로 다시 꺼낼 수 있다.)
+let devicePickerOpen = !detected;
+
 function deviceSize() {
   const [w, h] = deviceSel.value.split("x").map(Number);
   return { w, h };
 }
 
-function wallpaperOpt(free, shrinkTo = 0) {
+function refreshDeviceUi() {
   const { w, h } = deviceSize();
-  // 미리보기는 화면 크기만큼만 그린다 — 드래그·핀치 중 매 프레임 4백만 픽셀을
+  deviceLabel.textContent = detected && deviceSel.selectedIndex === 0
+    ? `내 기기 ${w}×${h}` : `${w}×${h}`;
+  deviceLabel.hidden = devicePickerOpen;
+  deviceChangeBtn.hidden = devicePickerOpen || !detected;
+  deviceSel.hidden = !devicePickerOpen;
+}
+deviceChangeBtn.addEventListener("click", () => { devicePickerOpen = true; refreshDeviceUi(); });
+deviceSel.addEventListener("change", () => {
+  refreshDeviceUi();
+  layoutStage();
+  render();
+});
+
+function wallpaperOpt(shrinkTo = 0, todayDate = 0) {
+  const { w, h } = deviceSize();
+  // 화면에 그릴 때는 표시 크기만큼만 — 드래그·핀치 중 매 프레임 4백만 픽셀을
   // 새로 칠하지 않게. 레이아웃이 W·H에 비례하므로 구도는 저장본과 같다.
   const shrink = shrinkTo ? Math.min(1, shrinkTo / h) : 1;
   return { w: Math.round(w * shrink), h: Math.round(h * shrink),
-           x: calState.x, y: calState.y, scale: calState.scale, free };
+           x: calState.x, y: calState.y, scale: calState.scale, todayDate };
 }
 
-// 저장용 캔버스: 배경+달력 위에 스티커까지 합성한 최종 이미지
-function composeWallpaper(free) {
+// 저장용 캔버스: 배경+달력 위에 스티커까지 합성한 최종 이미지 (오늘 강조 없음)
+function composeWallpaper() {
   const canvas = document.createElement("canvas");
-  drawWallpaper(canvas, cal, themeColors(), wallpaperOpt(free));
+  drawWallpaper(canvas, cal, themeColors(), wallpaperOpt());
   drawStickers(canvas.getContext("2d"), canvas.width, canvas.height);
   return canvas;
 }
 
+// ---- 화면 ----
+const stage = document.getElementById("stage");
+const wallpaperCv = document.getElementById("wallpaper");
+const stickerLayer = document.getElementById("stickers");
+const safeGuide = document.getElementById("safe-guide");
+const calFrame = document.getElementById("cal-frame");
+const editBar = document.getElementById("edit-bar");
+const viewBar = document.getElementById("view-bar");
+const editHint = document.getElementById("edit-hint");
+const viewNote = document.getElementById("view-note");
+const monthLabel = document.getElementById("month-label");
+const todayBtn = document.getElementById("today-btn");
+const errEl = document.getElementById("err");
+
+// 화면(뷰포트) 안에 기종 비율 그대로 최대 크기로 무대를 앉힌다.
+// 브라우저 주소창 때문에 뷰포트가 실제 화면보다 짧을 수 있어 비율을 기준으로 맞춘다.
+function layoutStage() {
+  const { w, h } = deviceSize();
+  const scale = Math.min(innerWidth / w, innerHeight / h);
+  stage.style.width = `${Math.floor(w * scale)}px`;
+  stage.style.height = `${Math.floor(h * scale)}px`;
+}
+
+let renderPending = false;
+function render() {
+  if (renderPending) return;
+  renderPending = true;
+  requestAnimationFrame(() => {
+    renderPending = false;
+    const opt = wallpaperOpt(1200, screenToday());
+    drawWallpaper(wallpaperCv, cal, themeColors(), opt);
+    // 달력 선택 테두리는 방금 그린 배치를 그대로 %로 옮긴다
+    const g = calGeometry(opt.w, opt.h, cal, opt);
+    calFrame.style.left = `${g.left / opt.w * 100}%`;
+    calFrame.style.top = `${g.top / opt.h * 100}%`;
+    calFrame.style.width = `${g.bw / opt.w * 100}%`;
+    calFrame.style.height = `${g.blockH / opt.h * 100}%`;
+  });
+}
+
+function renderA11yTable() {
+  document.getElementById("a11y-caption").textContent =
+    `${cal.y}년 ${cal.m + 1}월 달력`;
+  const body = document.getElementById("a11y-body");
+  body.textContent = "";
+  for (const week of cal.weeks) {
+    const row = body.insertRow();
+    for (const d of week) {
+      const cell = row.insertCell();
+      if (d === null) continue;
+      cell.textContent = isThisMonth() && d === today.getDate() ? `${d} (오늘)` : d;
+    }
+  }
+}
+
+function renderMonth() {
+  cal = monthData(view.y, view.m);
+  monthLabel.textContent = `${cal.y}. ${cal.m + 1}월`;
+  document.title = `${cal.y}년 ${cal.m + 1}월 달력`;
+  todayBtn.hidden = isThisMonth();
+  viewNote.hidden = !isThisMonth() || editing;
+  renderA11yTable();
+  render();
+}
+
+function shiftMonth(delta) {
+  const d = new Date(view.y, view.m + delta, 1);
+  view = { y: d.getFullYear(), m: d.getMonth() };
+  renderMonth();
+}
+
+document.getElementById("prev").addEventListener("click", () => shiftMonth(-1));
+document.getElementById("next").addEventListener("click", () => shiftMonth(1));
+todayBtn.addEventListener("click", () => {
+  view = { y: today.getFullYear(), m: today.getMonth() };
+  renderMonth();
+});
+addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && editing) { closeEditor(); return; }
+  if (event.target.closest("input, select, button")) return;
+  if (event.key === "ArrowLeft") shiftMonth(-1);
+  if (event.key === "ArrowRight") shiftMonth(1);
+});
+addEventListener("resize", () => { layoutStage(); render(); });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
+
+window.blShareText = () => `📅 ${cal.y}년 ${cal.m + 1}월 달력 — util.bubblelab.dev/calendar`;
+
+// 탭을 열어둔 채 자정을 넘기면 오늘 표시가 어제로 남는다. 다시 볼 때 갱신한다.
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) return;
+  const now = new Date();
+  if (now.toDateString() === today.toDateString()) return;
+  const wasThisMonth = isThisMonth();
+  today = now;
+  if (wasThisMonth) view = { y: now.getFullYear(), m: now.getMonth() };
+  renderMonth();
+});
+
+// ---- 저장 ----
 function downloadCanvasPng(canvas, filename, done) {
   canvas.toBlob((blob) => {
     if (!blob) { done(new Error("PNG 인코딩 실패")); return; }
@@ -538,17 +552,17 @@ const mobileDevice = isMobileDevice();
 const mobileFileShare = mobileDevice
   && canShareFile(new File([""], "calendar.png", { type: "image/png" }));
 
-// 저장은 두 화면이 같은 경로를 쓴다. free는 각 화면의 배치 규칙.
-function saveWallpaper(free, button, errTarget, done) {
+function saveWallpaper(button) {
+  if (button.disabled) return;
   const idleLabel = button.textContent;
   button.disabled = true;
   button.textContent = "이미지 생성 중...";
-  errTarget.textContent = "";
-  errTarget.classList.remove("info");
-  const restore = () => { button.disabled = false; button.textContent = idleLabel; done?.(); };
+  errEl.textContent = "";
+  errEl.classList.remove("info");
+  const restore = () => { button.disabled = false; button.textContent = idleLabel; };
 
   try {
-    const canvas = composeWallpaper(free);
+    const canvas = composeWallpaper();
     const name = `calendar-${cal.y}-${String(cal.m + 1).padStart(2, "0")}-mobile.png`;
 
     if (mobileFileShare) {
@@ -557,7 +571,7 @@ function saveWallpaper(free, button, errTarget, done) {
         navigator.share({ title: `${cal.y}년 ${cal.m + 1}월 달력`, files: [file] })
           .catch((err) => {
             if (err?.name !== "AbortError") {
-              errTarget.textContent = "공유 메뉴를 열지 못했습니다. 다시 시도해주세요.";
+              errEl.textContent = "공유 메뉴를 열지 못했습니다. 다시 시도해주세요.";
             }
           })
           .finally(restore);
@@ -568,168 +582,36 @@ function saveWallpaper(free, button, errTarget, done) {
     // 공유 파일을 지원하지 않는 브라우저는 파일 앱 다운로드로 대체한다.
     setTimeout(() => {
       downloadCanvasPng(canvas, name, (err) => {
-        if (err) errTarget.textContent = "배경화면을 생성하지 못했습니다.";
+        if (err) errEl.textContent = "배경화면을 생성하지 못했습니다.";
         else if (mobileDevice) {
-          errTarget.textContent = "다운로드를 요청했습니다. 파일 앱에서 확인해주세요.";
-          errTarget.classList.add("info");
+          errEl.textContent = "다운로드를 요청했습니다. 파일 앱에서 확인해주세요.";
+          errEl.classList.add("info");
         }
         restore();
       });
     }, 30);
   } catch (e) {
-    errTarget.textContent = "배경화면을 생성하지 못했습니다.";
+    errEl.textContent = "배경화면을 생성하지 못했습니다.";
     restore();
   }
 }
 
-// ---- 저장 패널 (슬라이더로 크기·위치만 정하는 간단한 흐름) ----
-const saveBtn = document.getElementById("save");
-const panel = document.getElementById("panel");
-const previewCv = document.getElementById("preview");
-const deviceSel = document.getElementById("device");
-const editDeviceSel = document.getElementById("edit-device");
-const sizeInput = document.getElementById("cal-size");
-const posInput = document.getElementById("cal-pos");
-const dlBtn = document.getElementById("download");
-const saveHintEl = document.getElementById("save-hint");
-const errEl = document.getElementById("err");
+const viewSaveBtn = document.getElementById("view-save");
+const editSaveBtn = document.getElementById("edit-save");
+viewSaveBtn.addEventListener("click", () => saveWallpaper(viewSaveBtn));
+editSaveBtn.addEventListener("click", () => saveWallpaper(editSaveBtn));
 
 if (mobileFileShare) {
-  dlBtn.textContent = "이미지 저장 / 공유";
-  dlBtn.setAttribute("aria-label", "배경화면 PNG 이미지 저장 또는 공유");
-  saveHintEl.textContent = "공유 메뉴에서 갤러리, 포토 또는 내 파일을 선택하세요.";
-  saveHintEl.hidden = false;
-} else if (mobileDevice) {
-  saveHintEl.textContent = "다운로드 후 파일 앱의 다운로드 폴더에서 확인하세요.";
-  saveHintEl.hidden = false;
+  viewSaveBtn.textContent = "💾 저장 / 공유";
 }
 
-// 기종 목록은 저장 패널과 꾸미기 화면이 같은 값을 공유한다.
-// 자동 인식되면 고를 게 없으므로 선택 창을 숨기고 인식된 해상도만 알려준다.
-// (폴더블 커버화면처럼 어긋나는 경우를 위해 "바꾸기"로 다시 꺼낼 수 있다.)
-const detected = detectDevice();
-for (const select of [deviceSel, editDeviceSel]) {
-  if (detected) {
-    const opt = document.createElement("option");
-    opt.value = `${detected.w}x${detected.h}`;
-    opt.textContent = `내 기기 (${detected.w}×${detected.h})`;
-    select.appendChild(opt);
-  }
-  for (const [name, w, h] of DEVICE_PRESETS) {
-    const opt = document.createElement("option");
-    opt.value = `${w}x${h}`;
-    opt.textContent = `${name} (${w}×${h})`;
-    select.appendChild(opt);
-  }
-  if (!detected) select.value = "1080x2340"; // 인식 실패 시 기본값: Galaxy S26
-}
-
-const deviceLabels = [document.getElementById("device-label"),
-                      document.getElementById("edit-device-label")];
-const deviceChangeBtns = [document.getElementById("device-change"),
-                          document.getElementById("edit-device-change")];
-let devicePickerOpen = !detected;
-
-function refreshDeviceUi() {
-  const { w, h } = deviceSize();
-  const text = detected && deviceSel.selectedIndex === 0
-    ? `내 기기 ${w}×${h}` : `${w}×${h}`;
-  for (const el of deviceLabels) { el.textContent = text; el.hidden = devicePickerOpen; }
-  for (const el of deviceChangeBtns) el.hidden = devicePickerOpen || !detected;
-  for (const el of [deviceSel, editDeviceSel]) el.hidden = !devicePickerOpen;
-}
-for (const btn of deviceChangeBtns) {
-  btn.addEventListener("click", () => { devicePickerOpen = true; refreshDeviceUi(); });
-}
-
-function syncDevice(from, to) {
-  to.value = from.value;
-  refreshDeviceUi();
-  layoutEditStage();
-  renderPreview();
-  renderEditor();
-}
-deviceSel.addEventListener("change", () => syncDevice(deviceSel, editDeviceSel));
-editDeviceSel.addEventListener("change", () => syncDevice(editDeviceSel, deviceSel));
-
-let previewPending = false;
-function renderPreview() {
-  if (panel.hidden || previewPending) return;
-  previewPending = true;
-  requestAnimationFrame(() => {
-    previewPending = false;
-    drawWallpaper(previewCv, cal, themeColors(), wallpaperOpt(false, 900));
-    drawStickers(previewCv.getContext("2d"), previewCv.width, previewCv.height);
-  });
-}
-
-saveBtn.addEventListener("click", () => {
-  const open = panel.hidden;
-  panel.hidden = !open;
-  saveBtn.setAttribute("aria-expanded", String(open));
-  if (!open) return;
-  // 꾸미기에서 옮겨 놓은 값을 저장 패널의 규칙(가운데 정렬·슬라이더 범위)으로 되돌린다
-  calState.x = .5;
-  calState.scale = clamp(calState.scale, .4, .95);
-  calState.y = clamp(calState.y, .3, .8);
-  sizeInput.value = String(Math.round(calState.scale * 100));
-  posInput.value = String(Math.round(calState.y * 100));
-  renderPreview();
-});
-
-function applySliders() {
-  calState.scale = sizeInput.value / 100;
-  calState.y = posInput.value / 100;
-  renderPreview();
-}
-sizeInput.addEventListener("input", applySliders);
-posInput.addEventListener("input", applySliders);
-dlBtn.addEventListener("click", () => {
-  if (!dlBtn.disabled) saveWallpaper(false, dlBtn, errEl);
-});
-
-// ---- 전체화면 꾸미기 ----
-const editor = document.getElementById("editor");
-const editStage = document.getElementById("edit-stage");
-const editCv = document.getElementById("edit-canvas");
-const stickerLayer = document.getElementById("edit-stickers");
-const calFrame = document.getElementById("cal-frame");
-const editHint = document.getElementById("edit-hint");
-const editErr = document.getElementById("edit-err");
-const editSaveBtn = document.getElementById("edit-save");
-
+// ---- 꾸미기 상태 ----
 const MAX_STICKERS = 12;
 const stickers = [];
 let selectedSticker = -1;          // -1 = 달력이 조작 대상 (열면 기본값)
 let stickerId = 0;
 
 const currentSticker = () => stickers[selectedSticker] || null;
-
-// 화면(뷰포트) 안에 기종 비율 그대로 최대 크기로 무대를 앉힌다.
-// 브라우저 주소창 때문에 뷰포트가 실제 화면보다 짧으므로 비율을 기준으로 맞춘다.
-function layoutEditStage() {
-  const { w, h } = deviceSize();
-  const scale = Math.min(innerWidth / w, innerHeight / h);
-  editStage.style.width = `${Math.floor(w * scale)}px`;
-  editStage.style.height = `${Math.floor(h * scale)}px`;
-}
-
-let editorPending = false;
-function renderEditor() {
-  if (editor.hidden || editorPending) return;
-  editorPending = true;
-  requestAnimationFrame(() => {
-    editorPending = false;
-    const opt = wallpaperOpt(true, 1200);
-    drawWallpaper(editCv, cal, themeColors(), opt);
-    // 달력 선택 테두리는 방금 그린 배치를 그대로 %로 옮긴다
-    const g = calGeometry(opt.w, opt.h, cal, opt);
-    calFrame.style.left = `${g.left / opt.w * 100}%`;
-    calFrame.style.top = `${g.top / opt.h * 100}%`;
-    calFrame.style.width = `${g.bw / opt.w * 100}%`;
-    calFrame.style.height = `${g.blockH / opt.h * 100}%`;
-  });
-}
 
 function positionSticker(item) {
   item.el.style.left = `${item.x * 100}%`;
@@ -740,12 +622,11 @@ function positionSticker(item) {
 
 function updateControls() {
   const item = currentSticker();
-  for (const id of ["edit-rotate", "edit-duplicate", "edit-remove"]) {
+  for (const id of ["edit-rotate", "edit-duplicate", "edit-remove", "edit-cal"]) {
     document.getElementById(id).disabled = !item;
   }
-  document.getElementById("edit-cal").disabled = !item;
   stickers.forEach((s, index) => s.el.classList.toggle("selected", index === selectedSticker));
-  calFrame.hidden = !!item;
+  calFrame.hidden = !editing || !!item;
   // 도구 막대가 상단 안전영역을 넘지 않게 안내는 한 줄로 유지한다
   editHint.textContent = item
     ? `스티커 ${selectedSticker + 1}/${stickers.length} · 끌어서 이동 · 두 손가락 크기·회전`
@@ -758,34 +639,33 @@ function selectSticker(index) {
 }
 
 function openEditor() {
-  editor.hidden = false;
+  editing = true;
   document.body.classList.add("editing");
-  panel.hidden = true;
-  saveBtn.setAttribute("aria-expanded", "false");
-  layoutEditStage();
+  editBar.hidden = false;
+  viewBar.hidden = true;
+  safeGuide.hidden = false;
+  viewNote.hidden = true;
+  refreshDeviceUi();
   selectSticker(-1);               // 달력이 기본으로 잡혀 있다
-  renderEditor();
+  render();                        // 오늘 강조를 빼고 저장본과 똑같이 보여준다
   // 주소창까지 감추면 진짜 배경화면처럼 보인다. 지원 안 하면 그냥 넘어간다.
   document.documentElement.requestFullscreen?.({ navigationUI: "hide" }).catch(() => {});
 }
 
 function closeEditor() {
-  editor.hidden = true;
+  editing = false;
   document.body.classList.remove("editing");
+  editBar.hidden = true;
+  viewBar.hidden = false;
+  safeGuide.hidden = true;
+  calFrame.hidden = true;
+  viewNote.hidden = !isThisMonth();
   if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
-  renderPreview();
+  render();
 }
 
 document.getElementById("decorate").addEventListener("click", openEditor);
 document.getElementById("edit-close").addEventListener("click", closeEditor);
-addEventListener("resize", () => {
-  if (editor.hidden) return;
-  layoutEditStage();
-  renderEditor();
-});
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
-  renderPreview(); renderEditor();
-});
 
 // 새 스티커가 서로 겹치지 않게 화면 전체에 흩어 놓는다
 const STICKER_SPOTS = [
@@ -840,10 +720,7 @@ document.getElementById("edit-cal").addEventListener("click", () => selectSticke
 document.getElementById("edit-reset").addEventListener("click", () => {
   Object.assign(calState, CAL_DEFAULT);
   selectSticker(-1);
-  renderEditor();
-});
-editSaveBtn.addEventListener("click", () => {
-  if (!editSaveBtn.disabled) saveWallpaper(true, editSaveBtn, editErr);
+  render();
 });
 
 // ＋/－ 크기는 잡고 있는 대상(달력 또는 선택한 스티커)에 적용된다
@@ -854,15 +731,16 @@ function resize(factor) {
     positionSticker(item);
   } else {
     calState.scale = clamp(calState.scale * factor, .25, 1);
-    renderEditor();
+    render();
   }
 }
 document.getElementById("edit-smaller").addEventListener("click", () => resize(1 / 1.12));
 document.getElementById("edit-larger").addEventListener("click", () => resize(1.12));
 
-// ---- 제스처: 한 손가락 이동, 두 손가락 크기(스티커는 회전까지) ----
+// ---- 제스처: 꾸미기 중엔 이동·크기, 보기 중엔 좌우로 밀어 월 이동 ----
 const activePointers = new Map();
 let gesture = null;
+let viewSwipe = null;
 
 function beginGesture() {
   const points = [...activePointers.values()];
@@ -879,22 +757,23 @@ function beginGesture() {
     angle: Math.atan2(b.y - a.y, b.x - a.x) };
 }
 
-editStage.addEventListener("pointerdown", (event) => {
-  if (event.target.closest(".edit-bar")) return;   // 도구 막대는 버튼으로 동작
+stage.addEventListener("pointerdown", (event) => {
+  if (event.target.closest(".bar")) return;   // 막대는 버튼으로 동작
+  if (!editing) { viewSwipe = { x: event.clientX, y: event.clientY }; return; }
   event.preventDefault();
   const sticker = stickers.findIndex((item) => item.el === event.target);
   if (activePointers.size === 0) selectSticker(sticker);   // 첫 손가락이 대상을 정한다
   activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-  try { editStage.setPointerCapture(event.pointerId); } catch (_) {}
+  try { stage.setPointerCapture(event.pointerId); } catch (_) {}
   beginGesture();
 });
 
-editStage.addEventListener("pointermove", (event) => {
+stage.addEventListener("pointermove", (event) => {
   if (!activePointers.has(event.pointerId)) return;
   event.preventDefault();
   activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
   const points = [...activePointers.values()].slice(0, 2);
-  const rect = editStage.getBoundingClientRect();
+  const rect = stage.getBoundingClientRect();
   if (!gesture || gesture.count !== points.length) beginGesture();
   const item = currentSticker();
   let { x, y, size, rotation } = gesture.base;
@@ -922,19 +801,26 @@ editStage.addEventListener("pointermove", (event) => {
     calState.x = clamp(x, 0, 1);
     calState.y = clamp(y, 0, 1);
     calState.scale = clamp(size, .25, 1);
-    renderEditor();
+    render();
   }
 });
 
 function endPointer(event) {
+  // 보기 상태에서 좌우로 크게 밀면 월을 넘긴다 (세로 움직임과 구분)
+  if (!editing && viewSwipe) {
+    const dx = event.clientX - viewSwipe.x, dy = event.clientY - viewSwipe.y;
+    viewSwipe = null;
+    if (Math.abs(dx) >= 56 && Math.abs(dx) >= Math.abs(dy) * 1.6) shiftMonth(dx < 0 ? 1 : -1);
+    return;
+  }
   activePointers.delete(event.pointerId);
   beginGesture();
 }
-editStage.addEventListener("pointerup", endPointer);
-editStage.addEventListener("pointercancel", endPointer);
-// 데스크톱: 휠로 크기 조절
-editStage.addEventListener("wheel", (event) => {
-  if (editor.hidden) return;
+stage.addEventListener("pointerup", endPointer);
+stage.addEventListener("pointercancel", endPointer);
+// 데스크톱: 꾸미기 중 휠로 크기 조절
+stage.addEventListener("wheel", (event) => {
+  if (!editing) return;
   event.preventDefault();
   resize(event.deltaY < 0 ? 1.06 : 1 / 1.06);
 }, { passive: false });
@@ -1088,7 +974,8 @@ pickerBody.addEventListener("click", async (event) => {
 });
 
 refreshDeviceUi();
-renderCalendar();
+layoutStage();
+renderMonth();
 updateControls();
 </script>
 <script defer src="/_shared/share.js"></script>
