@@ -1160,7 +1160,8 @@ export async function handleRequest(request, env, ctx) {
         scope: "emoticon-review-write", limit: 30, windowMs: 10 * 60 * 1000,
       });
       if (limited) return limited;
-      const action = new URL(request.url).searchParams.get("action") === "delete" ? "delete" : "add";
+      const requested = new URL(request.url).searchParams.get("action");
+      const action = ["delete", "verdict"].includes(requested) ? requested : "add";
       return stub.fetch(`https://emoticon-review.internal/${action}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

@@ -55,6 +55,17 @@ export class EmoticonReviewDO {
       await this.storage.put(KEY, items.slice(0, MAX_ITEMS));
       return Response.json({ saved: true, item });
     }
+    // 판정만 바꾸기 — 처음 남길 때와 다시 볼 때의 판단이 달라진다.
+    // 지우고 새로 쓰면 남긴 시각이 사라지므로 제자리에서 고친다.
+    if (url.pathname === "/verdict") {
+      const index = items.findIndex((item) => item.id === body?.id);
+      if (index < 0) return new Response("review not found", { status: 404 });
+      const verdict = String(body?.verdict ?? "").trim();
+      if (!REVIEW_VERDICTS.has(verdict)) return new Response("invalid verdict", { status: 400 });
+      items[index] = { ...items[index], verdict, editedAt: new Date().toISOString() };
+      await this.storage.put(KEY, items);
+      return Response.json({ saved: true, item: items[index] });
+    }
     if (url.pathname === "/delete") {
       const index = items.findIndex((item) => item.id === body?.id);
       if (index < 0) return new Response("review not found", { status: 404 });

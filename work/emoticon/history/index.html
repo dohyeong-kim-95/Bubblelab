@@ -51,7 +51,9 @@
   .fb ul { list-style: none; padding: 0; margin: 0 0 .5rem; }
   .fb li { font-size: .85rem; padding: .35rem .5rem; border-left: 3px solid var(--line);
            margin-bottom: .35rem; background: rgba(128,128,128,.08); border-radius: 0 6px 6px 0; }
-  .fb li .v { font-weight: 700; margin-right: .35rem; }
+  .fb li select.v { font: inherit; font-size: .78rem; font-weight: 700; margin-right: .4rem;
+                    background: rgba(128,128,128,.12); border: 1px solid var(--line);
+                    border-radius: 5px; padding: 0 .2rem; cursor: pointer; }
   .fb li .when { color: var(--soft); font-size: .74rem; margin-left: .35rem; }
   .fb li button { float: right; background: none; border: 0; color: var(--soft); cursor: pointer; font-size: .8rem; }
   .v-good { color: #7fd6a2; } .v-revise { color: var(--warn); }
@@ -124,8 +126,10 @@
     const mine = reviewsOf(chId, cut.id);
     box.innerHTML = `
       <ul>${mine.map((r) => `<li data-id="${r.id}"><button title="삭제">✕</button>`
-        + `<span class="v v-${r.verdict}">${VERDICTS[r.verdict] ?? r.verdict}</span>`
-        + `${esc(r.note)}<span class="when">${esc((r.at ?? "").slice(0, 16).replace("T", " "))}</span></li>`).join("")}</ul>
+        + `<select class="v v-${r.verdict}" title="판정 바꾸기">${Object.entries(VERDICTS)
+            .map(([k, v]) => `<option value="${k}"${k === r.verdict ? " selected" : ""}>${v}</option>`).join("")}</select>`
+        + `${esc(r.note)}<span class="when">${esc((r.at ?? "").slice(0, 16).replace("T", " "))}`
+        + `${r.editedAt ? " (수정됨)" : ""}</span></li>`).join("")}</ul>
       <form>
         <select name="verdict">${Object.entries(VERDICTS)
           .map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select>
@@ -166,6 +170,24 @@
         say.className = "say err";
         say.textContent = `저장 실패: ${error.message}`;
       }
+    });
+
+    // 판정만 바꾸기 — 다시 보면 판단이 달라진다. 메모와 남긴 시각은 그대로 둔다.
+    box.querySelectorAll("li select").forEach((select) => {
+      select.addEventListener("change", async () => {
+        const id = select.closest("li").dataset.id;
+        const previous = reviews.find((r) => r.id === id)?.verdict;
+        say.className = "say"; say.textContent = "판정 저장 중…";
+        try {
+          const { item } = await post({ id, verdict: select.value }, "?action=verdict");
+          reviews = reviews.map((r) => (r.id === id ? item : r));
+          box.replaceWith(renderFeedback(chId, cut));
+        } catch (error) {
+          select.value = previous ?? select.value;
+          say.className = "say err";
+          say.textContent = `판정 저장 실패: ${error.message}`;
+        }
+      });
     });
 
     box.querySelectorAll("li button").forEach((button) => {

@@ -40,3 +40,11 @@ test("2000자를 넘는 메모는 거절한다", () => {
   assert.doesNotThrow(() => buildReviewItem({ ...ok, note: "가".repeat(2000) }, NOW));
   assert.throws(() => buildReviewItem({ ...ok, note: "가".repeat(2001) }, NOW), /note too long/);
 });
+
+test("판정 변경은 허용 목록만 받는다", () => {
+  // 처음 남길 때와 다시 볼 때의 판단이 달라진다 — 지우고 새로 쓰는 대신
+  // 제자리에서 고쳐야 남긴 시각이 보존된다.
+  assert.ok(REVIEW_VERDICTS.has("good") && REVIEW_VERDICTS.has("reject"));
+  assert.ok(!REVIEW_VERDICTS.has("awesome"));
+  assert.equal(REVIEW_VERDICTS.size, 4);
+});
