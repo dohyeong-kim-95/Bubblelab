@@ -1,0 +1,8 @@
+{
+  "character": "rabbit",
+  "step": "redo",
+  "cut_id": "blink1",
+  "prompt": "a slow happy blink into a smile",
+  "frames": "2,3",
+  "profile": "master-2s"
+}

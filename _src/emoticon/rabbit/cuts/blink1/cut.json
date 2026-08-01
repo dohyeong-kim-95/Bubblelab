@@ -67,7 +67,7 @@
   "breakdowns": 0,
   "assembly": "pingpong",
   "invariants": "two long upright ears whose bases sit on top of the head, two eyes, one mouth, two short arms, two feet; two pink oval inner ears; two round pink cheek blushes; the canvas holds only this one character",
-  "poseConstants": "the head outline, the body and the feet are drawn where Image 1 has them; the character faces the viewer straight on and the two ears stay symmetric left and right",
+  "poseConstants": "the head outline, the body and the feet are drawn where Image 1 has them; the character faces the viewer straight on and the two ears stay symmetric left and right; both eyes close by the same amount at the same time, and the two eyes are always mirror images of each other",
   "breakdownNote": "",
   "repeat": 1,
   "characterRef": "_src/emoticon/rabbit/cuts/nod/frames-raw/key-1.png",
