@@ -489,7 +489,7 @@ test("CLI E2E (mock): breakdowns 2 — 유니크 4장, 핑퐁 타임라인 7프�
 
 test("CLI E2E (mock): rig — 모델 작화에 기하를 코드로 입힌다", () => {
   // 아홉 번의 실측에서 모델은 표정은 정확히 그렸지만 얼굴 위치는 항상
-  // 원위치로 되돌렸다. 그래서 위치는 리그가 만든다 (work/emoticon/nod-anatomy.md §5).
+  // 원위치로 되돌렸다. 그래서 위치는 리그가 만든다 (doc/guide-by-movement/nod.md §5).
   const workdir = mkdtempSync(join(tmpdir(), "emoticon-rig-"));
   const env = { ...process.env, EMOTICON_IMAGE_PROVIDER: "mock" };
   const run = (...args) => execFileSync(process.execPath, [CLI, ...args], { env, encoding: "utf8" });
@@ -611,4 +611,25 @@ test("alignFrames: 몸 기준점으로 평행이동해 흔들림을 없앤다", 
   };
   assert.deepEqual(spread(frames), [5, 3]);          // 정렬 전에는 흔들린다
   assert.deepEqual(spread(alignFrames(frames)), [0, 0]);  // 정렬 후 기준점 일치
+});
+
+test("guide: 카탈로그가 동작 → 문서를 매핑한다", async () => {
+  // 문서가 열두 개까지 늘어서, 동작 하나 만들려고 전부 읽는 건 컨텍스트 낭비다.
+  const { findMovement } = await import("./emoticon.mjs");
+  const catalog = JSON.parse(readFileSync("work/emoticon/doc/movement_catalog.json", "utf8"));
+
+  // 한국어 이름·영문 id 양쪽으로 찾힌다
+  assert.equal(findMovement(catalog, "인사")?.id, "wave");
+  assert.equal(findMovement(catalog, "wave")?.id, "wave");
+  assert.equal(findMovement(catalog, "끄덕임")?.id, "nod");
+  assert.equal(findMovement(catalog, "없는동작"), null);
+
+  // 카탈로그가 가리키는 guide 파일이 실제로 있어야 한다 (링크 썩음 방지)
+  for (const m of catalog.movements) {
+    assert.ok(catalog.channels[m.channel], `${m.id}: 알 수 없는 channel ${m.channel}`);
+    assert.ok(catalog.statuses[m.status], `${m.id}: 알 수 없는 status ${m.status}`);
+    if (m.guide) {
+      assert.ok(existsSync(join("work/emoticon", m.guide)), `${m.id}: guide 파일 없음 ${m.guide}`);
+    }
+  }
 });

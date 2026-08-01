@@ -30,7 +30,7 @@ export const PROFILES = {
     file: "master",
     size: 360,
   },
-  // goal.md의 북극성: 각 2초짜리 (12fps × 24프레임 = 2.0초)
+  // README의 북극성: 각 2초짜리 (12fps × 24프레임 = 2.0초)
   "master-2s": {
     label: "master-2s (카카오 납품 기준)",
     file: "master",

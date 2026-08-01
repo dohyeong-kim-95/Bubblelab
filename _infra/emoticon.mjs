@@ -321,7 +321,7 @@ const SHEET_PROMPT = (desc) => sheetPrompt(desc);
 const FRAME_PROMPT = (motion, index, total, pose = "") =>
   keyPrompt({ motion, index, total, pose: pose || `frame ${index} of the motion`, canon: canonBlock() });
 
-// keys 모드 — 변화 먼저, 불변 나중 (work/emoticon/prompting.md §3).
+// keys 모드 — 변화 먼저, 불변 나중 (work/emoticon/doc/prompting.md §3).
 // invariants는 "부품 인벤토리"로 쓴다: 있는 것을 개수와 함께 열거하면
 // 부정어 없이 여분의 귀·발바닥 패드를 함께 막을 수 있다 (§2).
 // poseConstants는 부품 목록(invariants)과 다르다. invariants는 "무엇이 몇 개
@@ -959,7 +959,7 @@ async function redoFrame(workdir, cutId, frameNumber) {
       `프레임 ${n}은 이미 ${attempts}번 재작업했습니다 (상한 ${MAX_REDO_PER_FRAME}). ` +
       "같은 프레임이 계속 실패하면 운이 아니라 포즈 문장이 틀린 것입니다 — " +
       "cut.json의 keys[].pose를 고치고 --force-redo로 다시 시도하세요 " +
-      "(work/emoticon/pose-library.md §0)",
+      "(work/emoticon/doc/prompting.md §10 §0)",
     );
   }
   const el = meta.sequence[n - 1];
@@ -1194,6 +1194,50 @@ function parseArgs(argv) {
   return { positional, options };
 }
 
+// 동작 카탈로그 조회 — 새 컷을 시작할 때 **읽을 문서만** 알려준다.
+//
+// 왜: work/emoticon 문서가 열두 개까지 늘었다. 동작 하나 만들려고 전부 읽는 건
+// 컨텍스트 낭비이고, 정작 그 동작의 실패 이력은 한 파일에만 있다. 카탈로그가
+// 동작 → 문서를 매핑해서 필요한 것만 열게 한다.
+const CATALOG_PATH = "work/emoticon/doc/movement_catalog.json";
+
+export function findMovement(catalog, query) {
+  const needle = String(query ?? "").trim().toLowerCase();
+  if (!needle) return null;
+  return catalog.movements.find((m) =>
+    m.id === needle || m.ko.some((k) => k.toLowerCase() === needle)) ?? null;
+}
+
+function cmdGuide(query) {
+  if (!existsSync(CATALOG_PATH)) throw new Error(`카탈로그가 없습니다: ${CATALOG_PATH}`);
+  const catalog = JSON.parse(readFileSync(CATALOG_PATH, "utf8"));
+  const found = findMovement(catalog, query);
+  const always = [
+    "work/emoticon/README.md            (인수인계·현재 상태)",
+    "work/emoticon/doc/prompting.md     (프롬프트 규약 + 부위별 문장)",
+  ];
+  if (!found) {
+    console.log(`카탈로그에 "${query}"가 없습니다 — 새 동작입니다.`);
+    console.log("\n읽을 문서:");
+    for (const line of always) console.log(`  ${line}`);
+    console.log("  work/emoticon/doc/animation-craft.md  (감정 채널·타이밍)");
+    console.log(`\n등록된 동작: ${catalog.movements.map((m) => `${m.id}(${m.ko[0]})`).join(" · ")}`);
+    console.log(`작업을 마치면 ${CATALOG_PATH}에 한 줄 추가할 것.`);
+    return null;
+  }
+  const label = { done: "✓ 통과", revise: "△ 수정 요청", failed: "✗ 실패 확정", todo: "· 미착수" };
+  console.log(`${found.id} (${found.ko.join("·")}) — ${label[found.status] ?? found.status}`);
+  console.log(`  감정 칸: ${found.emotionSlot} · 채널: ${found.channel} (${catalog.channels[found.channel]})`);
+  if (found.cuts?.length) console.log(`  기존 컷: ${found.cuts.join(" ")}`);
+  if (found.verdict) console.log(`  사람 판정: ${found.verdict}`);
+  if (found.shipped) console.log(`  납품됨: ${found.shipped}`);
+  console.log("\n읽을 문서:");
+  if (found.guide) console.log(`  ${found.guide}   ← 이 동작 전용. 먼저 읽는다`);
+  for (const line of always) console.log(`  ${line}`);
+  if (found.channel === "rig") console.log("  work/emoticon/doc/archive/skeleton-rigs.md  (rig 채널이라 참고)");
+  return found;
+}
+
 // 좌우 반전 — 든 팔이 프레임마다 좌우로 뛰는 문제를 공짜로 고친다.
 //
 // 이 캐릭터군은 정면 뷰에서 **좌우 대칭**이라(귀·볼·얼굴 모두 중앙 정렬)
@@ -1271,6 +1315,7 @@ async function cmdParts(workdir, cutId, options = {}) {
 
 const USAGE =
   'usage: node _infra/emoticon.mjs <명령> <작업폴더> ...\n' +
+  '  guide  <동작>   ← 그 동작에서 읽을 문서만 알려준다 (컨텍스트 절약, 작업 시작점)\n' +
   '  sheet  <작업폴더> --prompt "캐릭터 설명" [--force]\n' +
   '  plan   <작업폴더> <컷id> <cut과 같은 옵션> [--resume] [--max-calls N] [--max-cost USD] [--json]\n' +
   '  cut    <작업폴더> <컷id> --motion "동작 설명" [--frames 12] [--fps 12] [--poses 파일] [--force|--resume]\n' +
@@ -1295,6 +1340,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     const { positional, options } = parseArgs(process.argv.slice(2));
     const [command, workdir, ...rest] = positional;
+    if (command === "guide") { cmdGuide(workdir); process.exit(0); }
     if (!command || !workdir) throw new Error(USAGE);
     if (command === "sheet") await cmdSheet(workdir, options);
     else if (command === "plan") await cmdPlan(workdir, rest[0], options);

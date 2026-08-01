@@ -3,7 +3,7 @@
 // 왜 필요한가: 아홉 번의 실측(nod2~nod9)에서 이 모델은 **얼굴 부위의 세로
 // 위치를 레퍼런스에서 떼어내지 못했다.** 표정(눈 모양·입 열림)은 매번 정확히
 // 그렸지만 좌표는 항상 원래 자리로 되돌렸다 — 텍스트로 지시해도, 배치도를
-// 이미지로 보여줘도 마찬가지였다 (work/emoticon/nod-anatomy.md §5).
+// 이미지로 보여줘도 마찬가지였다 (doc/guide-by-movement/nod.md §5).
 //
 // 그래서 역할을 나눈다: **표정은 모델이, 기하는 리그가.** 모델이 그린 프레임을
 // 받아 얼굴 부위를 계측하고 목표 위치로 변형한다. 전통적인 리깅과 같은 구조다 —
@@ -68,7 +68,7 @@ function facePixels(image, head, window = FACE_WINDOW) {
 }
 
 // 끄덕임 리그: 얼굴 부위를 머리 반지름의 drop배만큼 아래로 옮긴다.
-// 부위는 직선이 아니라 아래로 볼록한 호를 그린다(nod-anatomy.md §3) —
+// 부위는 직선이 아니라 아래로 볼록한 호를 그린다(guide-by-movement/nod.md §3) —
 // 중앙일수록 더 내려가고 가장자리는 덜 내려간다. bow가 그 곡률이다.
 // squash는 눈-입 간격을 cosθ만큼 좁히는 전단축(foreshortening)이다.
 export function nodRig(image, { drop = 0.33, bow = 0.25, squash = 0.94 } = {}) {
@@ -98,7 +98,7 @@ export function nodRig(image, { drop = 0.33, bow = 0.25, squash = 0.94 } = {}) {
 }
 
 // 합성 결과가 실제로 얼굴을 내렸는지 스스로 검증한다.
-// nod-anatomy.md §6의 지표: (눈 y − 머리 위 끝 y) / 머리 지름.
+// guide-by-movement/nod.md §6의 지표: (눈 y − 머리 위 끝 y) / 머리 지름.
 export function faceDropRatio(image) {
   const head = fitHead(image);
   const { width, data } = image;

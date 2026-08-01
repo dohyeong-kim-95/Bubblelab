@@ -1,4 +1,4 @@
-// 이모티콘 프롬프트 조립 + 자동 검사 (규약은 work/emoticon/prompting.md).
+// 이모티콘 프롬프트 조립 + 자동 검사 (규약은 work/emoticon/doc/prompting.md).
 //
 // 세 가지 규칙을 코드로 강제한다:
 //  1. 부정어 0개 — Gemini는 "그리지 마라"를 "그려라"로 읽는 경향이 있고
@@ -36,14 +36,14 @@ export function assertPromptRules(text, label = "프롬프트") {
     throw new Error(
       `${label}에 부정 표현이 있습니다: ${negations.join(", ")} — ` +
       "부정어는 오히려 그 대상을 불러옵니다. 원하는 상태를 긍정으로 쓰거나 " +
-      "부품 인벤토리로 대체하세요 (work/emoticon/prompting.md §2)",
+      "부품 인벤토리로 대체하세요 (work/emoticon/doc/prompting.md §2)",
     );
   }
   if (FIXED_SIZE.test(text) && DEFORMATION.test(text)) {
     throw new Error(
       `${label}에 모순이 있습니다: 크기 고정 지시와 변형 지시가 함께 있습니다 — ` +
       '"부피감은 보존되고 세로 0.85배·가로 1.12배로 퍼진다"처럼 부피 보존으로 ' +
-      "표현하세요 (work/emoticon/prompting.md §4)",
+      "표현하세요 (work/emoticon/doc/prompting.md §4)",
     );
   }
   return text;
@@ -56,7 +56,7 @@ export function assertPoseScale(pose, label = "포즈") {
     throw new Error(
       `${label}에 배율 없는 변형 지시가 있습니다 — "wider/squash" 같은 열린 표현은 ` +
       '상한 없이 읽힙니다(실측 가로 +33%). "0.92 times as tall and 1.08 times as ' +
-      'wide, its volume preserved"처럼 숫자로 쓰세요 (work/emoticon/prompting.md §4-1)',
+      'wide, its volume preserved"처럼 숫자로 쓰세요 (work/emoticon/doc/prompting.md §4-1)',
     );
   }
   return pose;
