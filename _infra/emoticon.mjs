@@ -859,7 +859,15 @@ async function cmdPlan(workdir, cutId, options) {
 // 선별 재작업: keys 모드 컷의 특정 유니크 프레임 하나만 같은 프롬프트·
 // 레퍼런스로 재생성한다 (프레임당 ≈$0.04 — 전체 재생성 대신 튄 것만).
 // build 출력의 인접 diff로 튄 프레임을 찾고, redo 후 build를 다시 돌린다.
+// 여러 프레임을 한 번에 다시 뽑는다 — 사람 검수가 "2프레임·3프레임이 불량,
+// 나머진 괜찮다"처럼 짚어주므로 그 장만 골라 재작업하는 게 기본 경로다.
 async function cmdRedo(workdir, cutId, frameArg) {
+  const numbers = String(frameArg ?? "").split(/[\s,]+/).filter(Boolean).map(Number);
+  if (!numbers.length) throw new Error("재생성할 프레임 번호가 필요합니다 (예: 2 또는 \"2,3\")");
+  for (const n of numbers) await redoFrame(workdir, cutId, n);
+}
+
+async function redoFrame(workdir, cutId, frameNumber) {
   const cutDir = join(workdir, "cuts", cutId);
   const metaPath = join(cutDir, "cut.json");
   if (!existsSync(metaPath)) throw new Error(`컷이 없습니다: ${cutDir}`);
@@ -868,7 +876,7 @@ async function cmdRedo(workdir, cutId, frameArg) {
     throw new Error("redo는 keys 모드 컷만 지원합니다 (cut --keys로 생성한 컷)");
   }
   assertCurrentReference(meta, workdir);
-  const n = Number(frameArg);
+  const n = frameNumber;
   if (!Number.isInteger(n) || n < 1 || n > meta.sequence.length) {
     throw new Error(`프레임 번호는 1~${meta.sequence.length} 입니다`);
   }
@@ -1145,7 +1153,7 @@ const USAGE =
   '         스켈레톤 조건화 — _src/emoticon/poses/*.json 재사용. --grid는 단일 호출\n' +
   '  import <작업폴더> <컷id> <프레임폴더> [--fps 12] [--chroma] [--force]\n' +
   '  build  <작업폴더> <컷id> [--size 360] [--fps N] [--line]\n' +
-  '  redo   <작업폴더> <컷id> <프레임번호>   ← keys 컷에서 튄 프레임만 재생성 ($0.04)\n' +
+  '  redo   <작업폴더> <컷id> "<프레임번호…>"  ← 불량 프레임만 재생성 (장당 $0.04, "2,3" 가능)\n' +
   '  parts  <작업폴더> <컷id> [--expect \'{"ears":2}\']   ← 비전 부품 검사, report.json에 기록\n' +
   '  check  <작업폴더> <컷id> [--profile draft|master-2s|line] [--json]  ← FAIL이면 exit 1\n' +
   '작업폴더 권장 위치: _src/emoticon/<캐릭터명> (배포·커밋 제외)\n' +

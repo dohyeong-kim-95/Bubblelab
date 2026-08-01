@@ -195,6 +195,7 @@ jobs:
             [[ -n "$CUT_ID" ]] || { echo "redo 단계에는 cut_id가 필요합니다"; exit 1; }
             node _infra/emoticon.mjs redo "$WORKDIR" "$CUT_ID" "$FRAMES"
             node _infra/emoticon.mjs build "$WORKDIR" "$CUT_ID"
+            node _infra/emoticon.mjs parts "$WORKDIR" "$CUT_ID" || true
             node _infra/emoticon.mjs check "$WORKDIR" "$CUT_ID" --profile "${PROFILE:-draft}"
           else
             echo "알 수 없는 step: $STEP"; exit 1
