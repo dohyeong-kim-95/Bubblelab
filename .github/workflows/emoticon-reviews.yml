@@ -1,0 +1,51 @@
+# 이모티콘 컷별 사람 검수 댓글을 리포로 끌어온다.
+#
+# 에이전트는 배포 사이트에 직접 접근할 수 없어(프록시 차단) 리포에 커밋된
+# _src/emoticon/reviews.json이 피드백을 읽는 유일한 경로다. Emoticon 워크플로도
+# 생성 전에 같은 일을 하지만, 생성 없이 댓글만 가져오고 싶을 때 이걸 돌린다.
+# /_emoticon/review의 GET은 공개라 secret이 필요 없다.
+name: Emoticon Reviews
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 */6 * * *"   # 6시간마다 (놓친 댓글이 오래 묵지 않게)
+
+concurrency:
+  group: emoticon-reviews
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  pull:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Pull review notes
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 20 https://work.bubblelab.dev/_emoticon/review -o /tmp/reviews.json
+          node -e "
+            const fs = require('fs');
+            const data = JSON.parse(fs.readFileSync('/tmp/reviews.json', 'utf8'));
+            if (!Array.isArray(data.items)) throw new Error('예상 밖 응답 형식');
+            fs.writeFileSync('_src/emoticon/reviews.json', JSON.stringify(data, null, 2) + '\n');
+            console.log(\`검수 댓글 \${data.items.length}개\`);
+          "
+
+      - name: Commit
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A _src/emoticon/reviews.json
+          git diff --cached --quiet && { echo "새 댓글 없음"; exit 0; }
+          git commit -m "emoticon: 검수 댓글 동기화 (actions)"
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push origin HEAD:main && break
+            sleep $((i * 2))
+          done
