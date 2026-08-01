@@ -47,6 +47,23 @@
           margin: .8rem 0 1.2rem; background: rgba(200, 150, 60, .06); }
   .bandtitle { color: var(--warn); font-size: .9rem; margin: .7rem 0 .2rem; }
   .bandtitle small { color: var(--soft); font-weight: 400; font-size: .78rem; }
+  .fb { border-top: 1px dashed var(--line); margin-top: .7rem; padding-top: .6rem; }
+  .fb ul { list-style: none; padding: 0; margin: 0 0 .5rem; }
+  .fb li { font-size: .85rem; padding: .35rem .5rem; border-left: 3px solid var(--line);
+           margin-bottom: .35rem; background: rgba(128,128,128,.08); border-radius: 0 6px 6px 0; }
+  .fb li .v { font-weight: 700; margin-right: .35rem; }
+  .fb li .when { color: var(--soft); font-size: .74rem; margin-left: .35rem; }
+  .fb li button { float: right; background: none; border: 0; color: var(--soft); cursor: pointer; font-size: .8rem; }
+  .v-good { color: #7fd6a2; } .v-revise { color: var(--warn); }
+  .v-reject { color: #e88a8a; } .v-note { color: var(--accent); }
+  .fb form { display: flex; gap: .4rem; flex-wrap: wrap; align-items: flex-start; }
+  .fb select, .fb textarea, .fb button[type=submit] {
+    font: inherit; font-size: .85rem; background: rgba(128,128,128,.1);
+    color: inherit; border: 1px solid var(--line); border-radius: 6px; padding: .35rem .5rem; }
+  .fb textarea { flex: 1 1 14rem; min-height: 2.2rem; resize: vertical; }
+  .fb button[type=submit] { cursor: pointer; }
+  .fb .say { font-size: .78rem; color: var(--soft); margin: .3rem 0 0; }
+  .fb .say.err { color: var(--warn); }
 </style>
 </head>
 <body>
@@ -89,8 +106,74 @@
   };
 
   const pct = (v) => (typeof v === "number" ? `${(v * 100).toFixed(1)}%` : "—");
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
-  function renderCut(cut) {
+  // 컷별 검수 댓글. 읽기는 공개, 쓰기는 work 마스터 세션(이 페이지가 이미 그 뒤).
+  const VERDICTS = { good: "좋음", revise: "수정 필요", reject: "불합격", note: "메모" };
+  let reviews = [];
+  try {
+    const res = await fetch("/_emoticon/review", { headers: { Accept: "application/json" } });
+    if (res.ok) reviews = (await res.json()).items ?? [];
+  } catch { /* 댓글은 없어도 히스토리는 보여준다 */ }
+  const reviewsOf = (ch, cut) => reviews.filter((r) => r.character === ch && r.cut === cut);
+
+  function renderFeedback(chId, cut) {
+    const box = document.createElement("div");
+    box.className = "fb";
+    const mine = reviewsOf(chId, cut.id);
+    box.innerHTML = `
+      <ul>${mine.map((r) => `<li data-id="${r.id}"><button title="삭제">✕</button>`
+        + `<span class="v v-${r.verdict}">${VERDICTS[r.verdict] ?? r.verdict}</span>`
+        + `${esc(r.note)}<span class="when">${esc((r.at ?? "").slice(0, 16).replace("T", " "))}</span></li>`).join("")}</ul>
+      <form>
+        <select name="verdict">${Object.entries(VERDICTS)
+          .map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select>
+        <textarea name="note" rows="1" placeholder="이 컷에 대한 피드백 (예: 귀가 세 개, 끄덕임이 아니라 갸우뚱)"></textarea>
+        <button type="submit">남기기</button>
+      </form>
+      <p class="say"></p>`;
+
+    const say = box.querySelector(".say");
+    const post = async (body, action = "") => {
+      const res = await fetch(`/_emoticon/review${action}`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(`${res.status} ${(await res.text()).slice(0, 120)}`);
+      return res.json();
+    };
+
+    box.querySelector("form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = event.target;
+      const note = form.note.value.trim();
+      say.className = "say"; say.textContent = "저장 중…";
+      try {
+        const { item } = await post({ character: chId, cut: cut.id, verdict: form.verdict.value, note });
+        reviews.unshift(item);
+        box.replaceWith(renderFeedback(chId, cut));
+      } catch (error) {
+        say.className = "say err";
+        say.textContent = `저장 실패: ${error.message}`;
+      }
+    });
+
+    box.querySelectorAll("li button").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const id = button.closest("li").dataset.id;
+        try {
+          await post({ id }, "?action=delete");
+          reviews = reviews.filter((r) => r.id !== id);
+          box.replaceWith(renderFeedback(chId, cut));
+        } catch (error) {
+          say.className = "say err";
+          say.textContent = `삭제 실패: ${error.message}`;
+        }
+      });
+    });
+    return box;
+  }
+
+  function renderCut(cut, chId) {
     const div = document.createElement("div");
     div.className = "cut";
     const meta = [
@@ -113,6 +196,7 @@
         </div>
         ${Array.isArray(cut.poses) && cut.poses.length ? `<details><summary>포즈 스크립트 (${cut.poses.length})</summary><ol>${cut.poses.map((p) => `<li>${p}</li>`).join("")}</ol></details>` : ""}
       `;
+    div.append(renderFeedback(chId, cut));
     return div;
   }
 
@@ -122,8 +206,10 @@
     const cuts = [...ch.cuts].sort(byGate);
     // 사람 검수가 필요한 컷을 맨 위로. △ REVIEW는 자동 게이트가 판정을 못 내린
     // 것이라 정의상 사람이 봐야 하고, 판정 없는 옛 컷도 같이 올린다. 최신순.
+    // 검수 대기 = 아직 댓글이 없는 컷. 자동 게이트가 PASS를 줘도 사람 눈은
+    // 따로 필요하다 — nod2(귀 3개)·nod7(갸우뚱) 둘 다 PASS였다 (§31).
     const needsReview = cuts
-      .filter((c) => !c.gate || c.gate.verdict === "review")
+      .filter((c) => reviewsOf(ch.id, c.id).length === 0)
       .sort((a, b) => String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")) || a.id.localeCompare(b.id));
     const pinned = new Set(needsReview.map((c) => c.id));
     section.innerHTML = `
@@ -135,13 +221,13 @@
       const band = document.createElement("div");
       band.className = "band";
       band.innerHTML = `<h3 class="bandtitle">사람 검수 필요 · ${needsReview.length}개`
-        + ` <small>자동 게이트가 판정을 못 내린 컷 — 최신순</small></h3>`;
-      for (const cut of needsReview) band.append(renderCut(cut));
+        + ` <small>아직 댓글이 없는 컷 — 최신순. 댓글을 남기면 아래로 내려갑니다</small></h3>`;
+      for (const cut of needsReview) band.append(renderCut(cut, ch.id));
       section.append(band);
     }
     // 검수 대기 컷은 이미 위에 있으니 상위 3개에서는 뺀다
     const ranked = cuts.filter((c) => !pinned.has(c.id));
-    for (const cut of ranked.slice(0, TOP)) section.append(renderCut(cut));
+    for (const cut of ranked.slice(0, TOP)) section.append(renderCut(cut, ch.id));
     const rest = ranked.slice(TOP);
     if (rest.length) {
       const details = document.createElement("details");
@@ -149,7 +235,7 @@
       const summary = document.createElement("summary");
       summary.textContent = `나머지 ${rest.length}개 펼치기 (게이트 성적순)`;
       details.append(summary);
-      for (const cut of rest) details.append(renderCut(cut));
+      for (const cut of rest) details.append(renderCut(cut, ch.id));
       section.append(details);
     }
     list.append(section);

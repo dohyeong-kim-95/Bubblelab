@@ -66,6 +66,7 @@
       { "name": "CHAT", "class_name": "ChatDO" },
       { "name": "PODCAST", "class_name": "PodcastDO" },
       { "name": "DURI", "class_name": "DuriDO" },
+      { "name": "EMOTICON_REVIEW", "class_name": "EmoticonReviewDO" },
       { "name": "FORTUNE", "class_name": "FortuneDO" }
     ]
   },
@@ -80,6 +81,7 @@
     { "tag": "v8", "new_sqlite_classes": ["PodcastDO"] },
     { "tag": "v9", "new_sqlite_classes": ["WorkReviewsDO"] },
     { "tag": "v10", "new_sqlite_classes": ["DuriDO"] },
-    { "tag": "v11", "new_sqlite_classes": ["FortuneDO"] }
+    { "tag": "v11", "new_sqlite_classes": ["FortuneDO"] },
+    { "tag": "v12", "new_sqlite_classes": ["EmoticonReviewDO"] }
   ]
 }

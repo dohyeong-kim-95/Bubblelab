@@ -31,6 +31,7 @@ export { RealtimeDO } from "./realtime.js";
 export { ChatDO } from "./chat.js";
 export { WorkQnaDO } from "./workqna.js";
 export { WorkReviewsDO } from "./reviews.js";
+export { EmoticonReviewDO } from "./emoticon-review.js";
 export { AnalyticsDO } from "./analytics.js";
 export { RecordsDO } from "./records.js";
 export { PlannerDO } from "./planner.js";
@@ -1124,6 +1125,47 @@ export async function handleRequest(request, env, ctx) {
           status: 502, headers: { "Cache-Control": "no-store" },
         });
       }
+    }
+
+    // 컷별 사람 검수 댓글. 자동 게이트가 못 잡는 "지시대로 움직였는가"를
+    // 컷 id에 붙여 남긴다. 읽기는 공개(Actions가 secret 없이 끌어가 리포에
+    // 커밋한다), 쓰기는 work 마스터만.
+    if (path === "/_emoticon/review") {
+      const id = env.EMOTICON_REVIEW.idFromName("board");
+      const stub = env.EMOTICON_REVIEW.get(id);
+      if (request.method === "GET") {
+        const limited = await enforceRateLimit(request, env, {
+          scope: "emoticon-review-read", limit: 120, windowMs: 60 * 1000,
+        });
+        if (limited) return limited;
+        return stub.fetch("https://emoticon-review.internal/");
+      }
+      if (request.method !== "POST") {
+        return new Response("method not allowed", { status: 405, headers: { Allow: "GET, POST" } });
+      }
+      if (!env.WORK_PASSWORD) {
+        return new Response("emoticon review board is not configured", {
+          status: 503, headers: { "Cache-Control": "no-store" },
+        });
+      }
+      const contentTypeError = requireJsonRequest(request);
+      if (contentTypeError) return contentTypeError;
+      const key = await workKeyOf(env);
+      if ((await workSessionClient(key, cookies(request).bl_work)) !== "*") {
+        return Response.json({ error: "authentication required" }, {
+          status: 401, headers: { "Cache-Control": "no-store" },
+        });
+      }
+      const limited = await enforceRateLimit(request, env, {
+        scope: "emoticon-review-write", limit: 30, windowMs: 10 * 60 * 1000,
+      });
+      if (limited) return limited;
+      const action = new URL(request.url).searchParams.get("action") === "delete" ? "delete" : "add";
+      return stub.fetch(`https://emoticon-review.internal/${action}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: await request.text(),
+      });
     }
 
     // 외주 프로젝트 상품 리뷰(읽기 전용): 커머스 API에서 동기화된 캐시를 노출.

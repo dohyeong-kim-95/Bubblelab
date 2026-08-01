@@ -93,6 +93,21 @@ jobs:
           node --test _infra/*.test.mjs
           node _infra/build.mjs
 
+      # 사람 검수 댓글을 리포로 끌어온다. 에이전트는 배포 사이트에 직접 접근할 수
+      # 없으므로(프록시 차단) 이 파일이 피드백을 읽는 유일한 경로다. 읽기는 공개라
+      # secret이 필요 없고, 실패해도 생성은 계속한다.
+      - name: Pull review notes
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          curl -fsS --max-time 20 https://work.bubblelab.dev/_emoticon/review \
+            -o /tmp/reviews.json && node -e "
+            const fs = require('fs');
+            const data = JSON.parse(fs.readFileSync('/tmp/reviews.json', 'utf8'));
+            fs.writeFileSync('_src/emoticon/reviews.json', JSON.stringify(data, null, 2) + '\n');
+            console.log(\`검수 댓글 \${data.items?.length ?? 0}개\`);
+          "
+
       - name: Generate
         env:
           EMOTICON_IMAGE_PROVIDER: gemini
