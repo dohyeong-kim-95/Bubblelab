@@ -31,6 +31,8 @@ import { renderGrid, renderPose } from "./skeleton.mjs";
 import { PROFILES, buildReport, formatJudgement, judgeReport } from "./emoticon-gate.mjs";
 import { breakdownPrompt, canonBlock, keyPrompt, sheetPrompt } from "./emoticon-prompt.mjs";
 import { applyRig, faceDropRatio } from "./emoticon-rig.mjs";
+import { RABBIT_PARTS, inspectParts } from "./emoticon-vision.mjs";
+import { DEFAULT_VISION_MODEL, bytesToBase64, geminiAsk } from "./emoticon-gen.js";
 import { loadSequence } from "./skeleton-cli.mjs";
 import {
   IMAGE_COST_USD,
@@ -1085,6 +1087,48 @@ function parseArgs(argv) {
   return { positional, options };
 }
 
+// 비전 부품 검사 — 프레임마다 "귀가 몇 개인가"를 모델에게 묻고 report.json에
+// 기록한다. 이미지 생성이 아니라 텍스트 응답이라 컷 하나에 몇 원 수준이다.
+// 기하 검출이 두 설계 모두 실패해서 온 경로다 (lesson_learned §42~44).
+async function cmdParts(workdir, cutId, options = {}) {
+  const cutDir = join(workdir, "cuts", cutId);
+  const framesDir = join(cutDir, "frames");
+  if (!existsSync(framesDir)) throw new Error(`프레임이 없습니다: ${framesDir}`);
+  const files = readdirSync(framesDir).filter((f) => /^\d{2}\.png$/.test(f)).sort();
+  if (!files.length) throw new Error(`프레임이 없습니다: ${framesDir}`);
+
+  let parts = RABBIT_PARTS;
+  if (options.expect) {
+    const expect = JSON.parse(options.expect);
+    parts = RABBIT_PARTS.map((p) => (p.key in expect ? { ...p, expected: expect[p.key] } : p))
+      .filter((p) => !(p.key in expect) || expect[p.key] !== null);
+  }
+
+  const apiKey = process.env.EMOTICON_IMAGE_API_KEY || process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("GEMINI_API_KEY가 필요합니다 (비전 검사는 엣지 프록시를 쓰지 않습니다)");
+  const model = process.env.EMOTICON_VISION_MODEL || DEFAULT_VISION_MODEL;
+  const ask = (imageB64, prompt) => geminiAsk({ apiKey, model, prompt, imagesB64: [imageB64] });
+
+  const framesB64 = files.map((f) => bytesToBase64(readFileSync(join(framesDir, f))));
+  const result = await inspectParts({ framesB64, parts, ask });
+  result.counts.forEach((counts, i) => {
+    console.log(`  ${files[i]}  ${Object.entries(counts).map(([k, v]) => `${k} ${v}`).join(" · ")}`);
+  });
+
+  const reportPath = join(cutDir, "report.json");
+  if (existsSync(reportPath)) {
+    const report = JSON.parse(readFileSync(reportPath, "utf8"));
+    report.parts = { model, expected: Object.fromEntries(parts.map((p) => [p.key, p.expected ?? null])), ...result };
+    atomicWriteFile(reportPath, Buffer.from(JSON.stringify(report, null, 2) + "\n"));
+  }
+  if (result.violations.length) {
+    for (const v of result.violations) console.log(`✗ 프레임 ${v.frame}: ${v.part} ${v.found}개 (기대 ${v.expected}개)`);
+  } else {
+    console.log("✓ 부품 개수 이상 없음");
+  }
+  return result;
+}
+
 const USAGE =
   'usage: node _infra/emoticon.mjs <명령> <작업폴더> ...\n' +
   '  sheet  <작업폴더> --prompt "캐릭터 설명" [--force]\n' +
@@ -1098,6 +1142,7 @@ const USAGE =
   '  import <작업폴더> <컷id> <프레임폴더> [--fps 12] [--chroma] [--force]\n' +
   '  build  <작업폴더> <컷id> [--size 360] [--fps N] [--line]\n' +
   '  redo   <작업폴더> <컷id> <프레임번호>   ← keys 컷에서 튄 프레임만 재생성 ($0.04)\n' +
+  '  parts  <작업폴더> <컷id> [--expect \'{"ears":2}\']   ← 비전 부품 검사, report.json에 기록\n' +
   '  check  <작업폴더> <컷id> [--profile draft|master-2s|line] [--json]  ← FAIL이면 exit 1\n' +
   '작업폴더 권장 위치: _src/emoticon/<캐릭터명> (배포·커밋 제외)\n' +
   'env: EMOTICON_IMAGE_PROVIDER=edge(기본)|gemini|mock\n' +
@@ -1115,6 +1160,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     else if (command === "import") await cmdImport(workdir, rest[0], rest[1], options);
     else if (command === "build") await cmdBuild(workdir, rest[0], options);
     else if (command === "redo") await cmdRedo(workdir, rest[0], rest[1]);
+    else if (command === "parts") await cmdParts(workdir, rest[0], options);
     else if (command === "check") {
       const judgement = cmdCheck(workdir, rest[0], options);
       if (judgement.verdict === "fail") process.exit(1);

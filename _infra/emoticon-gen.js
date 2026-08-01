@@ -69,3 +69,34 @@ export async function geminiGenerate({ apiKey, model = DEFAULT_IMAGE_MODEL, prom
   }
   return base64ToBytes(image.inlineData.data);
 }
+
+// 텍스트 응답용 호출 (이미지 생성이 아니라 이미지에 대한 질문).
+// 부품 개수 검사에 쓴다 — 기하로는 두 설계 모두 실패했고(lesson_learned §42~43)
+// "귀가 몇 개인가"는 VLM이 잘하는 일이다. 이미지 생성보다 훨씬 싸다.
+export const DEFAULT_VISION_MODEL = "gemini-2.5-flash";
+
+export async function geminiAsk({ apiKey, model = DEFAULT_VISION_MODEL, prompt, imagesB64 = [] }) {
+  if (!apiKey) throw new Error("Gemini API 키가 없습니다");
+  const parts = [
+    ...imagesB64.map((data) => ({
+      inlineData: { mimeType: data.startsWith("/9j") ? "image/jpeg" : "image/png", data },
+    })),
+    { text: prompt },
+  ];
+  const res = await fetchWithRetry(
+    `${GEMINI_BASE}/models/${model}:generateContent`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+      body: JSON.stringify({
+        contents: [{ parts }],
+        generationConfig: { responseMimeType: "application/json", temperature: 0 },
+      }),
+    },
+    `gemini ask(${model})`,
+  );
+  const json = await res.json();
+  const text = json.candidates?.[0]?.content?.parts?.map((p) => p.text).filter(Boolean).join("") ?? "";
+  if (!text) throw new Error(`gemini ask(${model})가 빈 응답을 반환했습니다`);
+  return text;
+}

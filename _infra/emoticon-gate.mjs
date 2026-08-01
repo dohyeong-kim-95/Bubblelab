@@ -4,9 +4,20 @@
 // Actions "성공"으로 커밋될 수 있었다. 판정을 데이터(report.json)와 규칙
 // (프로필)로 분리해서 check가 실제로 실패하게 만든다.
 //
-// Hard  — 규격·구조 위반. 자동 실패시켜도 안전하다 (동작 크기와 무관).
-// Soft  — 인접 diff·움직임·루프 이음새. **동작이 클수록 같이 커지는 값이라
-//         단일 임계값으로 실패시키면 안 된다.** 경고와 재작업 추천만 한다.
+// Hard  — **객관적 납품 규격 + 부품 개수**만. 사람 검수 13건에 대조해보니
+//         픽셀 지표를 hard로 쓰면 틀린다 (아래 §재조정).
+// Soft  — 나머지 전부. 경고와 재작업 추천만 한다.
+//
+// §재조정 (사람 검수 13건 대조, lesson_learned §37~44)
+//   scaleDrift를 hard에서 뺐다. 사람이 "좋음"이라 한 nod6을 16%로 자동
+//   실패시켰고, 13건 전체에서 분리력이 **전혀** 없다:
+//     좋음   0% · 6% · 16% · 0%
+//     불합격 19% · 14% · 0% · 0% · 22% · 0%
+//   motionMean도 마찬가지다. 사람이 "아주 맘에 듭니다"라 한 nod9가 2%,
+//   불합격 nod2가 41%다. 실제로 합격/불합격을 가른 것은 **여분 사지**
+//   (불합격 6건 중 5건)와 **동작이 의도한 동작인가**였고, 둘 다 픽셀
+//   지표로는 안 잡힌다. 그래서 부품 개수는 비전 검사로 재서 hard에 넣고,
+//   나머지 픽셀 값은 경고로 내린다.
 //
 // 루프 판정은 loopDiff 절대값을 쓰지 않는다. 핑퐁 타임라인은 마지막→첫
 // 전환이 원래 한 걸음 차이라 절대값이 크게 나오는 게 정상이다. 그 전환이
@@ -40,13 +51,16 @@ export const PROFILES = {
   },
 };
 
-// 동작이 커도 정당화되지 않는, 순수 결함 임계값
+// 경고 임계값. 어느 것도 단독으로 합격/불합격을 가르지 못한다(위 §재조정).
 export const DRIFT_LIMIT = 0.15;      // 캐릭터 크기가 프레임마다 출렁임
 // 실측 보정: heart(3.8%)는 눈으로 봐도 정지, 그다음으로 낮은 lrtest2가 15%다.
 // 표본이 적으니 정지 사례가 더 쌓이면 재조정할 것.
 export const MIN_MOTION = 0.08;       // 이 아래는 "정지"라 애니메이션이 아님
 export const SEAM_RATIO_LIMIT = 2.0;  // 루프 이음새가 보통 전환의 2배 넘게 튐
 export const SUSPECT_RATIO = 2.5;     // 이 배수를 넘는 인접 구간 = 재작업 후보
+// 편도 프레임 기준선. 사람 피드백이 반복해서 요구한 값이다 — nod6·nod9·nod11에
+// "프레임이 적다", nod10에 "같은 내용을 8프레임(편도)로 가능".
+export const MIN_ONEWAY_FRAMES = 8;
 
 const median = (values) => {
   if (!values.length) return 0;
@@ -60,11 +74,11 @@ const median = (values) => {
 export function buildReport({
   cutId, mode, size, uniqueFrames, timelineFrames, fps, durationSec,
   bytes, lineBytes = null, loops = 0, frameDelays = [],
-  loopDiff, adjacentDiffs, scaleDrift, motion, transparency = [],
+  loopDiff, adjacentDiffs, scaleDrift, motion, transparency = [], parts = null,
 }) {
   const adjacentMedian = median(adjacentDiffs);
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     cut: cutId,
     mode: mode ?? "sequential",
     size,
@@ -86,6 +100,8 @@ export function buildReport({
     motionMean: motion.mean,
     motionMax: motion.max,
     transparency,
+    // 비전 부품 검사 결과. build 시점에는 없고 `parts` 명령이 채운다.
+    parts,
   };
 }
 
@@ -130,12 +146,19 @@ export function judgeReport(report, profileName = "draft", info = null) {
   // 누끼 실패·빈 프레임은 동작 크기와 무관한 결함
   const emptyFrames = report.transparency.filter((t) => t < 0.05).length;
   if (emptyFrames) hard.push(`누끼 실패 또는 빈 프레임 ${emptyFrames}장 (투명 5% 미만)`);
-  // 캐릭터 크기가 프레임마다 달라지는 것은 동작이 아니라 결함이다
-  if (report.scaleDrift > DRIFT_LIMIT) {
-    hard.push(`크기 드리프트 ${pct(report.scaleDrift)} — 상한 ${pct(DRIFT_LIMIT)} (재생 시 펄스처럼 보임)`);
+  // 부품 개수: 사람 검수에서 불합격 6건 중 5건이 여분 사지였다. 픽셀 지표로는
+  // 잡히지 않고 육안으로도 반복해서 놓쳤으므로 비전 검사 결과를 hard로 쓴다.
+  for (const v of report.parts?.violations ?? []) {
+    hard.push(`프레임 ${v.frame}: ${v.part} ${v.found}개 — 기대 ${v.expected}개`);
   }
 
-  // ── Soft: 동작이 크면 같이 커지는 값 — 경고만 ─────────────────────
+  // ── Soft: 경고만 ─────────────────────────────────────────────────
+  if (report.scaleDrift > DRIFT_LIMIT) {
+    soft.push(`크기 드리프트 ${pct(report.scaleDrift)} — 기준 ${pct(DRIFT_LIMIT)} (재생 시 펄스처럼 보일 수 있음)`);
+  }
+  if (report.uniqueFrames && report.uniqueFrames < MIN_ONEWAY_FRAMES) {
+    soft.push(`유니크 ${report.uniqueFrames}장 — 편도 기준선 ${MIN_ONEWAY_FRAMES}장. 사람 검수가 반복해서 "프레임이 적다"고 지적한 구간입니다`);
+  }
   if (report.motionMean < MIN_MOTION) {
     soft.push(`움직임 ${pct(report.motionMean)} — 거의 정지라 애니메이션으로 읽히지 않습니다`);
   }

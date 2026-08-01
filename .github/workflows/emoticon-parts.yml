@@ -1,0 +1,79 @@
+# 비전 부품 검사를 여러 컷에 한 번에 돌린다 (검증·백필용).
+#
+# 기하 검출이 두 설계 모두 실패해서(lesson_learned §42~43) 부품 개수는 모델에게
+# 직접 묻는다. 게이트에 넣기 전에 **사람 검수 판정과 맞는지** 기존 컷 전체로
+# 먼저 확인해야 해서, 생성과 분리된 워크플로로 둔다.
+# 텍스트 응답이라 프레임 1장에 이미지 생성($0.039)의 몇십 분의 일이다.
+name: Emoticon Parts
+
+on:
+  workflow_dispatch:
+    inputs:
+      character:
+        description: "캐릭터(작업폴더) 이름"
+        required: false
+        default: "rabbit"
+      cuts:
+        description: "컷 id 공백 구분 (비우면 전체)"
+        required: false
+        default: ""
+  # 에이전트는 workflow_dispatch 권한이 없다(403). 이 파일을 건드려 push하면 돈다.
+  push:
+    branches: [main]
+    paths: [".github/workflows/emoticon-parts.yml"]
+
+concurrency:
+  group: emoticon-parts
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+
+      - name: Inspect parts
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_STICKER_KEY }}
+          IN_CHARACTER: ${{ inputs.character }}
+          IN_CUTS: ${{ inputs.cuts }}
+        run: |
+          set -uo pipefail
+          CHARACTER="${IN_CHARACTER:-rabbit}"
+          WORKDIR="_src/emoticon/$CHARACTER"
+          CUTS="${IN_CUTS:-}"
+          if [[ -z "$CUTS" ]]; then
+            CUTS=$(ls "$WORKDIR/cuts" | tr '\n' ' ')
+          fi
+          fail=0
+          for cut in $CUTS; do
+            echo "── $cut ──"
+            node _infra/emoticon.mjs parts "$WORKDIR" "$cut" || fail=1
+          done
+          # 검증 단계에서는 위반이 있어도 잡을 실패시키지 않는다 — 결과를 커밋해
+          # 사람 판정과 대조하는 게 목적이다.
+          echo "완료 (오류 발생: $fail)"
+
+      - name: Commit
+        if: always()
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A _src/emoticon
+          git diff --cached --quiet && { echo "변경 없음"; exit 0; }
+          git commit -m "emoticon: 비전 부품 검사 결과 (actions)"
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push origin HEAD:main && break
+            sleep $((i * 2))
+          done

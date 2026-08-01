@@ -5,13 +5,13 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DRIFT_LIMIT, MIN_MOTION, buildReport, judgeReport } from "./emoticon-gate.mjs";
+import { DRIFT_LIMIT, MIN_MOTION, MIN_ONEWAY_FRAMES, buildReport, judgeReport } from "./emoticon-gate.mjs";
 
 const CLI = join(dirname(fileURLToPath(import.meta.url)), "emoticon.mjs");
 
 const baseReport = (overrides = {}) => buildReport({
   cutId: "x", mode: "keys", size: 360,
-  uniqueFrames: 4, timelineFrames: 8, fps: 12, durationSec: 2.0,
+  uniqueFrames: MIN_ONEWAY_FRAMES, timelineFrames: 8, fps: 12, durationSec: 2.0,
   bytes: 100_000, loops: 0,
   loopDiff: 0.1, adjacentDiffs: [0.1, 0.1, 0.1], scaleDrift: 0.02,
   motion: { mean: 0.2, max: 0.3 }, transparency: [0.5, 0.5, 0.5, 0.5],
@@ -32,12 +32,36 @@ test("buildReport: 인접 diff를 전부 보존하고 seamRatio를 계산한다"
   assert.equal(report.seamRatio, 2);   // 0.4 / 0.2
 });
 
-test("Hard: 크기 드리프트·빈 프레임은 자동 실패", () => {
-  assert.equal(judgeReport(baseReport({ scaleDrift: DRIFT_LIMIT + 0.01 }), "draft").verdict, "fail");
-  assert.equal(judgeReport(baseReport({ scaleDrift: DRIFT_LIMIT - 0.01 }), "draft").verdict, "pass");
+test("Hard: 누끼 실패·빈 프레임은 자동 실패", () => {
   const empty = judgeReport(baseReport({ transparency: [0.5, 0.0, 0.5] }), "draft");
   assert.equal(empty.verdict, "fail");
   assert.match(empty.hard.join(), /누끼 실패 또는 빈 프레임/);
+});
+
+test("크기 드리프트는 hard가 아니라 soft다 (사람 검수 대조)", () => {
+  // 사람이 "좋음"이라 한 nod6을 드리프트 16%로 자동 실패시켰다. 13건 전체에서
+  // 좋음(0·6·16·0%)과 불합격(19·14·0·0·22·0%)이 전혀 분리되지 않는다.
+  const drifty = judgeReport(baseReport({ scaleDrift: DRIFT_LIMIT + 0.01 }), "draft");
+  assert.equal(drifty.verdict, "review");
+  assert.match(drifty.soft.join(), /크기 드리프트/);
+  assert.equal(drifty.hard.length, 0);
+});
+
+test("Hard: 부품 개수 위반은 자동 실패 (여분 사지)", () => {
+  // 사람 검수 불합격 6건 중 5건이 이것이었고 픽셀 지표로는 하나도 안 잡혔다.
+  const extra = judgeReport(baseReport({
+    parts: { violations: [{ frame: 2, part: "ears", found: 4, expected: 2 }] },
+  }), "draft");
+  assert.equal(extra.verdict, "fail");
+  assert.match(extra.hard.join(), /프레임 2: ears 4개 — 기대 2개/);
+  // 위반이 없으면 통과
+  assert.equal(judgeReport(baseReport({ parts: { counts: [], violations: [] } }), "draft").verdict, "pass");
+});
+
+test("Soft: 편도 기준선보다 프레임이 적으면 경고", () => {
+  const few = judgeReport(baseReport({ uniqueFrames: 3 }), "draft");
+  assert.equal(few.verdict, "review");
+  assert.match(few.soft.join(), /유니크 3장 — 편도 기준선 8장/);
 });
 
 test("Hard: master-2s는 2초 규격을 강제한다", () => {
