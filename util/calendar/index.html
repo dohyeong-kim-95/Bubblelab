@@ -59,6 +59,12 @@
                       font-size: .62rem; padding: .1rem .35rem; border-radius: .3rem;
                       background: #8ab8ff; color: #06121f; }
 
+  #guide-v, #guide-h { position: absolute; z-index: 2; pointer-events: none;
+                       background: #ff3ea5; box-shadow: 0 0 4px #ff3ea5; }
+  #guide-v { top: 0; bottom: 0; width: 1px; }
+  #guide-h { left: 0; right: 0; height: 1px; }
+  #guide-v[hidden], #guide-h[hidden] { display: none; }
+
   /* 공용 독(홈·공유)은 꾸미기 중에 배경화면 위를 가린다 — 편집 중에는 감춘다 */
   body.editing #bl-dock { display: none; }
 
@@ -160,6 +166,9 @@
       <div id="stickers" aria-label="스티커 편집 영역"></div>
       <div id="safe-guide" hidden><span>시계·알림</span></div>
       <div id="cal-frame" hidden></div>
+      <!-- 스마트 가이드: 스냅이 걸린 동안에만 보이는 정렬선 (저장 PNG에는 없음) -->
+      <div id="guide-v" hidden></div>
+      <div id="guide-h" hidden></div>
 
       <!-- 꾸미기 상태: 화면을 가리지 않는 떠 있는 도구들 (스토리 편집기 방식) -->
       <div class="edit-top" id="edit-top" hidden>
@@ -685,6 +694,7 @@ function setEditing(on) {
   viewBar.hidden = on;
   viewNote.hidden = on || !isThisMonth();
   if (!on) calFrame.hidden = true;
+  clearGuides();
   layoutStage();                   // 목업 ↔ 전체화면으로 무대 크기가 바뀐다
   render();                        // 꾸미기에서는 오늘 강조를 빼 저장본과 같아진다
 }
@@ -775,6 +785,63 @@ function resize(factor) {
 document.getElementById("edit-smaller").addEventListener("click", () => resize(1 / 1.12));
 document.getElementById("edit-larger").addEventListener("click", () => resize(1.12));
 
+// ---- 스마트 가이드: 끌던 오브젝트를 정렬선에 자석처럼 붙인다 ----
+// 임계값은 화면 픽셀 기준이라 목업이든 전체화면이든 손끝 감각이 같다.
+const SNAP_PX = 8;
+const guideV = document.getElementById("guide-v");
+const guideH = document.getElementById("guide-h");
+
+// 실제로 그려진 달력 블록의 정규화된 중심·높이 (calGeometry의 클램프까지 반영)
+function calBox() {
+  const opt = wallpaperOpt();
+  const g = calGeometry(opt.w, opt.h, cal, opt);
+  return { cx: (g.left + g.bw / 2) / opt.w, cy: (g.top + g.blockH / 2) / opt.h,
+           halfH: g.blockH / 2 / opt.h };
+}
+
+// 후보는 { pos, guide } — pos는 붙을 중심 좌표, guide는 그 순간 그릴 선의 위치.
+// (달력 윗변을 시계 영역 경계에 붙일 때는 붙는 중심과 보여줄 선이 다르다)
+function snapCandidates(item) {
+  const vs = [{ pos: .5, guide: .5 }];          // 화면 가로 중앙
+  const hs = [{ pos: .5, guide: .5 }];          // 화면 세로 중앙
+  for (const other of stickers) {
+    if (other === item) continue;
+    vs.push({ pos: other.x, guide: other.x });
+    hs.push({ pos: other.y, guide: other.y });
+  }
+  const box = calBox();
+  if (item) {                                    // 스티커 이동 중 → 달력 중심에 맞춤
+    vs.push({ pos: box.cx, guide: box.cx });
+    hs.push({ pos: box.cy, guide: box.cy });
+  } else {                                       // 달력 이동 중 → 윗변을 시계 영역 경계에
+    hs.push({ pos: .2 + box.halfH, guide: .2 });
+  }
+  return { vs, hs };
+}
+
+function nearest(value, candidates, tol) {
+  let best = null;
+  for (const c of candidates) {
+    const d = Math.abs(value - c.pos);
+    if (d <= tol && (!best || d < best.d)) best = { d, ...c };
+  }
+  return best;
+}
+
+// x/y를 스냅된 값으로 바꾸고 가이드선을 그린다
+function applySnap(x, y, item, rect) {
+  const { vs, hs } = snapCandidates(item);
+  const v = nearest(x, vs, SNAP_PX / rect.width);
+  const h = nearest(y, hs, SNAP_PX / rect.height);
+  guideV.hidden = !v;
+  guideH.hidden = !h;
+  if (v) guideV.style.left = `${v.guide * 100}%`;
+  if (h) guideH.style.top = `${h.guide * 100}%`;
+  return { x: v ? v.pos : x, y: h ? h.pos : y };
+}
+
+function clearGuides() { guideV.hidden = true; guideH.hidden = true; }
+
 // ---- 제스처: 꾸미기 중엔 이동·크기, 보기 중엔 좌우로 밀어 월 이동 ----
 const activePointers = new Map();
 let gesture = null;
@@ -829,6 +896,8 @@ stage.addEventListener("pointermove", (event) => {
     if (item) rotation += (Math.atan2(b.y - a.y, b.x - a.x) - gesture.angle) * 180 / Math.PI;
   }
 
+  ({ x, y } = applySnap(x, y, item, rect));
+
   if (item) {
     item.x = clamp(x, -.1, 1.1);
     item.y = clamp(y, -.05, 1.05);
@@ -845,6 +914,7 @@ stage.addEventListener("pointermove", (event) => {
 });
 
 function endPointer(event) {
+  clearGuides();
   // 보기 상태에서 좌우로 크게 밀면 월을 넘긴다 (세로 움직임과 구분)
   if (!editing && viewSwipe) {
     const dx = event.clientX - viewSwipe.x, dy = event.clientY - viewSwipe.y;
