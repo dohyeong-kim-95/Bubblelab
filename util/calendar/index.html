@@ -46,13 +46,21 @@
              -webkit-user-drag: none; user-select: none; -webkit-touch-callout: none; }
   .sticker.selected { border-color: #fff; outline: 2px solid #8ab8ff; }
   .sticker.rot-snapped { outline-color: #ff3ea5; }
-  /* 시계·알림이 겹치는 상단 영역 안내 — 화면에만 있고 저장 PNG에는 안 들어간다 */
-  #safe-guide { position: absolute; inset: 0 0 auto; height: 20%; pointer-events: none;
-                display: grid; place-items: end end;
-                border-bottom: 1px dashed light-dark(#1c273366, #dbe4ee55); }
-  #safe-guide[hidden] { display: none; }
-  #safe-guide span { font-size: .6rem; opacity: .5; padding: .3rem .4rem;
-                     color: light-dark(#1c2733, #dbe4ee); }
+  /* 잠금화면 UI가 덮는 자리. 스토리 편집기처럼 "끄는 동안에만" 반투명으로 떠서
+     평소 화면은 깨끗하게 둔다. 화면에만 있고 저장 PNG에는 안 들어간다.
+     밝은 배경화면에서 흰 밴드는 안 보이므로 배경 밝기에 따라 뒤집는다. */
+  .ui-band { position: absolute; left: 0; right: 0; pointer-events: none;
+             opacity: 0; transition: opacity .12s ease-out;
+             background: light-dark(#1c273322, #dbe4ee1f);
+             display: grid; align-content: center; }
+  .ui-band[hidden] { display: none; }
+  body.dragging .ui-band { opacity: 1; }
+  #band-top { top: 0; height: 25%; border-bottom: 1px dashed light-dark(#1c273366, #dbe4ee66);
+              justify-items: end; }
+  #band-bottom { bottom: 0; height: 12%; border-top: 1px dashed light-dark(#1c273366, #dbe4ee66);
+                 justify-items: end; }
+  .ui-band span { font-size: .6rem; opacity: .6; padding: .3rem .45rem;
+                  color: light-dark(#1c2733, #dbe4ee); }
   /* 지금 잡고 있는 대상(기본값 = 달력) */
   #cal-frame { position: absolute; pointer-events: none; border-radius: .35rem;
                border: 1.5px dashed #8ab8ff; }
@@ -166,7 +174,8 @@
     <div id="stage">
       <canvas id="wallpaper" role="img" aria-label="달력 배경화면"></canvas>
       <div id="stickers" aria-label="스티커 편집 영역"></div>
-      <div id="safe-guide" hidden><span>시계·알림</span></div>
+      <div class="ui-band" id="band-top" hidden><span>잠금화면 시계·위젯</span></div>
+      <div class="ui-band" id="band-bottom" hidden><span>단축 아이콘</span></div>
       <div id="cal-frame" hidden></div>
       <!-- 스마트 가이드: 스냅이 걸린 동안에만 보이는 정렬선 (저장 PNG에는 없음) -->
       <div id="guide-v" hidden></div>
@@ -447,7 +456,8 @@ function composeWallpaper() {
 const stage = document.getElementById("stage");
 const wallpaperCv = document.getElementById("wallpaper");
 const stickerLayer = document.getElementById("stickers");
-const safeGuide = document.getElementById("safe-guide");
+const bandTop = document.getElementById("band-top");
+const bandBottom = document.getElementById("band-bottom");
 const calFrame = document.getElementById("cal-frame");
 const editTop = document.getElementById("edit-top");
 const editDock = document.getElementById("edit-dock");
@@ -692,7 +702,8 @@ function setEditing(on) {
   editTop.hidden = !on;
   editDock.hidden = !on;
   editHint.hidden = !on;
-  safeGuide.hidden = !on;
+  bandTop.hidden = !on;
+  bandBottom.hidden = !on;
   viewBar.hidden = on;
   viewNote.hidden = on || !isThisMonth();
   if (!on) calFrame.hidden = true;
@@ -793,6 +804,9 @@ const SNAP_PX = 4;
 // 회전은 90° 배수(0·90·180·270)에 붙인다. 스티커를 똑바로 세우거나 정확히
 // 눕히는 게 대부분이라 45°는 넣지 않았다 — 넣으면 그 사이가 다 끈적해진다.
 const SNAP_DEG = 90, SNAP_DEG_TOL = 6;
+// 잠금화면 UI가 덮는 자리(정규화). 기기·런처마다 다르므로 근사치이며,
+// 밴드 그리기와 스냅 기준이 어긋나지 않게 여기 한 곳에서만 정한다.
+const UI_TOP = .25, UI_BOTTOM = .88;
 
 // 두 손가락 각도가 ±180°를 넘어가면 누적값이 360° 단위로 튄다(화면상 회전은 같다).
 // 값을 (-180, 180]로 접어 두면 저장·표시가 사람 눈에 맞고 스냅 계산도 단순해진다.
@@ -826,8 +840,9 @@ function snapCandidates(item) {
   if (item) {                                    // 스티커 이동 중 → 달력 중심에 맞춤
     vs.push({ pos: box.cx, guide: box.cx });
     hs.push({ pos: box.cy, guide: box.cy });
-  } else {                                       // 달력 이동 중 → 윗변을 시계 영역 경계에
-    hs.push({ pos: .2 + box.halfH, guide: .2 });
+  } else {                                       // 달력 이동 중 → UI 밴드에 딱 붙이기
+    hs.push({ pos: UI_TOP + box.halfH, guide: UI_TOP });
+    hs.push({ pos: UI_BOTTOM - box.halfH, guide: UI_BOTTOM });
   }
   return { vs, hs };
 }
@@ -854,6 +869,7 @@ function applySnap(x, y, item, rect) {
 }
 
 function clearGuides() {
+  document.body.classList.remove("dragging");
   guideV.hidden = true;
   guideH.hidden = true;
   for (const s of stickers) s.el.classList.remove("rot-snapped");
@@ -890,6 +906,7 @@ stage.addEventListener("pointerdown", (event) => {
   if (activePointers.size === 0) selectSticker(sticker);   // 첫 손가락이 대상을 정한다
   activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
   try { stage.setPointerCapture(event.pointerId); } catch (_) {}
+  document.body.classList.add("dragging");   // 끄는 동안에만 UI 밴드를 보여준다
   beginGesture();
 });
 
