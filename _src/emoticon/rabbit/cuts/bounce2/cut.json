@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 2,
+  "cliVersion": 2,
+  "promptVersion": "2026-07-keys-v1",
+  "mode": "keys",
+  "specHash": "17c0966165b1e335da5daa01ffc4d13f62a9f64901e03915154ec84cd85391e1",
+  "sheetHash": "b9692d48a1a77ec19249b8cb0f9f86e7cf358cf605dc9902b31219340aaffcc9",
+  "referenceHashes": [
+    "b9692d48a1a77ec19249b8cb0f9f86e7cf358cf605dc9902b31219340aaffcc9"
+  ],
+  "provider": "gemini/gemini-2.5-flash-image",
+  "status": "failed",
+  "createdAt": "2026-08-01T17:22:31.254Z",
+  "updatedAt": "2026-08-01T17:23:10.684Z",
+  "completedAt": null,
+  "calls": 6,
+  "unitCostUsd": 0.039,
+  "estimatedCostUsd": 0.234,
+  "runs": [
+    {
+      "runId": "157b1a50-8325-4853-a088-910736e7b147",
+      "startedAt": "2026-08-01T17:22:31.254Z",
+      "provider": "gemini/gemini-2.5-flash-image",
+      "gitCommit": "b57bff768704817742681d128d97fe76f4c4d974",
+      "calls": 6,
+      "estimatedCostUsd": 0.234,
+      "status": "failed",
+      "completedAt": "2026-08-01T17:23:10.684Z",
+      "error": "lift 0.22는 캔버스를 넘습니다 (필요 156px, 위쪽 여유 121px) — lift를 줄이거나 레퍼런스를 더 아래에 두세요"
+    }
+  ]
+}
