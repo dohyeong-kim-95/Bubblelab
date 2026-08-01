@@ -56,6 +56,8 @@
   input[type=range] { accent-color: light-dark(#1c2733, #dbe4ee); }
   #err { min-height: 1.2em; margin: 0; font-size: .85rem;
          color: light-dark(#c0392b, #ff8a7a); }
+  /* 실패가 아닌 진행 안내는 경고색 대신 본문색으로 (같은 자리에 표시) */
+  #err.info { color: inherit; opacity: .65; }
   #save-hint { margin: -.25rem 0 0; font-size: .78rem; opacity: .65;
                text-align: center; line-height: 1.5; }
   #save-hint[hidden] { display: none; }
@@ -70,8 +72,9 @@
   <table>
     <thead>
       <tr>
-        <th class="sun">SUN</th><th>MON</th><th>TUE</th><th>WED</th><th>THU</th>
-        <th>FRI</th><th class="sat">SAT</th>
+        <th class="sun" scope="col">SUN</th><th scope="col">MON</th>
+        <th scope="col">TUE</th><th scope="col">WED</th><th scope="col">THU</th>
+        <th scope="col">FRI</th><th class="sat" scope="col">SAT</th>
       </tr>
     </thead>
     <tbody id="days"></tbody>
@@ -185,14 +188,18 @@ function drawWallpaper(canvas, data, c, opt) {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
-  const bw = W * opt.scale;          // 달력 블록 너비
-  const cell = bw / 7;
+  // 블록 높이는 셀 크기에 비례한다 (연도 .55 + 월 1.15 + 요일 .85 + 주당 1.05).
   const rows = data.weeks.length;
+  const cellToBlock = 0.55 + 1.15 + 0.85 + 1.05 * rows;
+  // 상단 20%(시계·알림)와 하단 4% 여백을 뺀 만큼만 쓸 수 있다. 폴더블처럼 화면이
+  // 넓으면 W 기준 폭이 이 높이를 넘어서므로, 잘리지 않게 셀 크기를 함께 줄인다.
+  const minTop = H * 0.2;
+  const cell = Math.min(W * opt.scale / 7, H * 0.76 / cellToBlock);
+  const bw = cell * 7;               // 달력 블록 너비
   const rowH = cell * 1.05;
   const yearH = cell * 0.55, monthH = cell * 1.15, dowH = cell * 0.85;
-  const blockH = yearH + monthH + dowH + rowH * rows;
+  const blockH = cell * cellToBlock;
 
-  const minTop = H * 0.2;
   const maxTop = Math.max(minTop, H - blockH - H * 0.04);
   const top = Math.min(Math.max(H * opt.pos - blockH / 2, minTop), maxTop);
   const left = (W - bw) / 2;
@@ -227,8 +234,6 @@ function drawWallpaper(canvas, data, c, opt) {
       ctx.fillText(String(d), colX(i), y + rowH * r + rowH / 2);
     });
   });
-
-  return { cell, colX, gridTop: y, rowH, top, blockH };
 }
 
 function downloadCanvasPng(canvas, filename, done) {
@@ -338,12 +343,24 @@ posInput.addEventListener("input", renderPreview);
 matchMedia("(prefers-color-scheme: dark)")
   .addEventListener("change", () => { if (!panel.hidden) renderPreview(); });
 
+// 달력은 로드 시점의 날짜로 한 번만 그려진다. 탭을 열어둔 채 자정을 넘기면
+// 오늘 표시와 월이 어긋나므로, 다시 볼 때 날짜가 바뀌었으면 새로 그린다.
+// (배경화면 패널을 만지는 중에는 조작을 끊지 않도록 미룬다.)
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden || !panel.hidden) return;
+  const d = new Date();
+  if (d.getDate() !== today || d.getMonth() !== cal.m || d.getFullYear() !== cal.y) {
+    location.reload();
+  }
+});
+
 dlBtn.addEventListener("click", () => {
   if (dlBtn.disabled) return;
   dlBtn.disabled = true;
   const idleLabel = dlBtn.textContent;
   dlBtn.textContent = "이미지 생성 중...";
   errEl.textContent = "";
+  errEl.classList.remove("info");
   const restore = () => { dlBtn.disabled = false; dlBtn.textContent = idleLabel; };
 
   try {
@@ -369,7 +386,10 @@ dlBtn.addEventListener("click", () => {
     setTimeout(() => {
       downloadCanvasPng(previewCv, name, (err) => {
         if (err) errEl.textContent = "배경화면을 생성하지 못했습니다.";
-        else if (mobileDevice) errEl.textContent = "다운로드를 요청했습니다. 파일 앱에서 확인해주세요.";
+        else if (mobileDevice) {
+          errEl.textContent = "다운로드를 요청했습니다. 파일 앱에서 확인해주세요.";
+          errEl.classList.add("info");
+        }
         restore();
       });
     }, 30);
