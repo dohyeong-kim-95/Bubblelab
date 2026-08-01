@@ -103,27 +103,31 @@
                       font-size: .62rem; padding: .1rem .35rem; border-radius: .3rem;
                       background: #8ab8ff; color: #06121f; }
 
-  .edit-bar { position: absolute; left: 0; right: 0; z-index: 3; display: flex;
-              flex-direction: column; gap: .45rem; padding: .55rem .7rem; color: #fff; }
-  .edit-bar.top { top: 0; background: linear-gradient(#000000b0, #0000);
-                  flex-direction: row; align-items: center; }
-  .edit-bar.bottom { bottom: 0; padding-bottom: max(.7rem, env(safe-area-inset-bottom));
-                     background: linear-gradient(#0000, #000000cc 22%, #000000ee); }
+  .edit-bar.top { position: absolute; inset: 0 0 auto; z-index: 3; display: flex;
+                  flex-direction: column; gap: .35rem; color: #fff;
+                  padding: max(.5rem, env(safe-area-inset-top)) .6rem .6rem;
+                  background: linear-gradient(#000000e8, #000000cc 62%, #0000); }
   /* 공용 독(홈·공유)은 편집 중에 도구 막대를 가린다 */
   body.editing #bl-dock { display: none; }
-  .edit-bar button { color: #fff; border-color: #ffffff44; background: #ffffff14;
-                     backdrop-filter: blur(4px); }
+  .edit-row { display: flex; align-items: center; gap: .4rem; }
+  .edit-row #edit-device-label { flex: 1; min-width: 0; font-size: .72rem; opacity: .75;
+                                 overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .edit-bar button { color: #fff; border-color: #ffffff44; background: #ffffff14; }
   .edit-bar button:hover:not(:disabled) { background: #ffffff2b; }
-  .edit-bar.top select { flex: 1; min-width: 0; color: #fff; background: #1b232ee0;
-                         border-color: #ffffff44; }
-  .edit-bar.top button { padding: .45rem .7rem; font-size: .8rem; flex: none; }
-  .edit-tools { display: grid; grid-template-columns: repeat(4, 1fr); gap: .35rem; }
-  .edit-tools button { min-width: 0; padding: .55rem .2rem; font-size: .72rem; }
-  #edit-save { grid-column: span 4; background: #ffffff26; font-size: .82rem; }
-  #edit-hint { margin: 0 auto; font-size: .68rem; line-height: 1.45; text-align: center;
-               color: #fff; background: #000000a6; border-radius: .5rem;
-               padding: .3rem .6rem; max-width: 22rem; }
-  #edit-err { margin: 0; min-height: 1em; font-size: .72rem; text-align: center; color: #ffb0a4; }
+  .edit-row select { flex: 1; min-width: 0; color: #fff; background: #1b232ef2;
+                     border-color: #ffffff44; font-size: .78rem; }
+  .edit-row button { padding: .4rem .6rem; font-size: .76rem; flex: none; }
+  #edit-device-change { font-size: .68rem; padding: .3rem .45rem; }
+  #edit-save { background: #ffffff2e; font-weight: bold; }
+  .edit-tools { display: grid; grid-template-columns: repeat(4, 1fr); gap: .3rem; }
+  /* 좁은 무대에서도 한 줄로 — 줄바꿈되면 막대가 안전영역을 넘는다 */
+  .edit-tools button { min-width: 0; padding: .45rem .15rem; font-size: .68rem;
+                       white-space: nowrap; overflow: hidden; }
+  #edit-hint { margin: 0; font-size: .66rem; line-height: 1.35; text-align: center;
+               color: #ffffffcc; white-space: nowrap; overflow: hidden;
+               text-overflow: ellipsis; }
+  #edit-err { margin: 0; font-size: .72rem; text-align: center; color: #ffb0a4; }
+  #edit-err:empty { display: none; }
 
   /* 스티커 고르기 시트 (util/photo의 에셋 픽커와 같은 구성) */
   #asset-picker { position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column;
@@ -185,7 +189,9 @@
       <canvas id="preview" role="img" aria-label="배경화면 미리보기"></canvas>
       <div class="ctl">
         <label for="device">기종</label>
-        <select id="device" aria-label="휴대폰 기종 선택"></select>
+        <span id="device-label"></span>
+        <select id="device" aria-label="휴대폰 기종 선택" hidden></select>
+        <button id="device-change" type="button" hidden>바꾸기</button>
       </div>
       <div class="ctl">
         <label for="cal-size">달력 크기</label>
@@ -212,12 +218,15 @@
     <div id="edit-stickers"></div>
     <div id="edit-safe"><span>시계·알림 영역</span></div>
     <div id="cal-frame"></div>
+    <!-- 도구는 위쪽(시계·알림 영역)에 둔다 — 어차피 오브젝트를 놓지 않는 자리다 -->
     <div class="edit-bar top">
-      <button id="edit-close" type="button" aria-label="꾸미기 닫기">✕</button>
-      <select id="edit-device" aria-label="휴대폰 기종 선택"></select>
-    </div>
-    <div class="edit-bar bottom">
-      <p id="edit-hint"></p>
+      <div class="edit-row">
+        <button id="edit-close" type="button" aria-label="꾸미기 닫기">✕</button>
+        <span id="edit-device-label"></span>
+        <select id="edit-device" aria-label="휴대폰 기종 선택" hidden></select>
+        <button id="edit-device-change" type="button" hidden>기종 바꾸기</button>
+        <button id="edit-save" type="button">💾 저장</button>
+      </div>
       <div class="edit-tools">
         <button id="edit-asset" type="button">🐶 스티커</button>
         <button id="edit-smaller" type="button">－ 크기</button>
@@ -225,10 +234,10 @@
         <button id="edit-rotate" type="button" disabled>↻ 회전</button>
         <button id="edit-duplicate" type="button" disabled>복제</button>
         <button id="edit-remove" type="button" disabled>삭제</button>
-        <button id="edit-cal" type="button">📅 달력 잡기</button>
+        <button id="edit-cal" type="button">📅 달력</button>
         <button id="edit-reset" type="button">되돌리기</button>
-        <button id="edit-save" type="button">💾 배경화면 저장</button>
       </div>
+      <p id="edit-hint"></p>
       <p id="edit-err" role="alert"></p>
     </div>
   </div>
@@ -357,12 +366,16 @@ document.addEventListener("visibilitychange", () => {
 });
 
 // ---- 배경화면 ----
-// 기종 해상도 자동 인식: 모바일 세로 화면일 때만 신뢰한다
+// 기종 해상도 자동 인식. screen(CSS px) × DPR = 실제 패널 픽셀이고, 실측해 보면
+// 대부분 정확히 맞는다(예: S24 1080×2340, iPhone 15 Pro Max 1290×2796).
+// DPR이 정수가 아닌 기기는 1~2px 어긋날 수 있어 짝수로 맞춘다 — 배경화면에는 영향 없다.
+// 가로로 들고 있어도 세로 배경화면을 만들 수 있게 긴 쪽을 높이로 본다.
 function detectDevice() {
   const dpr = devicePixelRatio || 1;
-  const w = Math.round(screen.width * dpr), h = Math.round(screen.height * dpr);
-  const mobile = /Android|iPhone|iPod|Mobile/i.test(navigator.userAgent);
-  if (mobile && h > w && w >= 640 && w <= 2200 && h <= 4400) return { w, h };
+  const a = Math.round(screen.width * dpr), b = Math.round(screen.height * dpr);
+  const w = Math.min(a, b) & ~1, h = Math.max(a, b) & ~1;
+  const mobile = /Android|iPhone|iPod|iPad|Mobile/i.test(navigator.userAgent);
+  if (mobile && w >= 640 && w <= 2400 && h <= 4400) return { w, h };
   return null;
 }
 
@@ -591,7 +604,9 @@ if (mobileFileShare) {
   saveHintEl.hidden = false;
 }
 
-// 기종 목록은 저장 패널과 꾸미기 화면이 같은 값을 공유한다
+// 기종 목록은 저장 패널과 꾸미기 화면이 같은 값을 공유한다.
+// 자동 인식되면 고를 게 없으므로 선택 창을 숨기고 인식된 해상도만 알려준다.
+// (폴더블 커버화면처럼 어긋나는 경우를 위해 "바꾸기"로 다시 꺼낼 수 있다.)
 const detected = detectDevice();
 for (const select of [deviceSel, editDeviceSel]) {
   if (detected) {
@@ -609,8 +624,27 @@ for (const select of [deviceSel, editDeviceSel]) {
   if (!detected) select.value = "1080x2340"; // 인식 실패 시 기본값: Galaxy S26
 }
 
+const deviceLabels = [document.getElementById("device-label"),
+                      document.getElementById("edit-device-label")];
+const deviceChangeBtns = [document.getElementById("device-change"),
+                          document.getElementById("edit-device-change")];
+let devicePickerOpen = !detected;
+
+function refreshDeviceUi() {
+  const { w, h } = deviceSize();
+  const text = detected && deviceSel.selectedIndex === 0
+    ? `내 기기 ${w}×${h}` : `${w}×${h}`;
+  for (const el of deviceLabels) { el.textContent = text; el.hidden = devicePickerOpen; }
+  for (const el of deviceChangeBtns) el.hidden = devicePickerOpen || !detected;
+  for (const el of [deviceSel, editDeviceSel]) el.hidden = !devicePickerOpen;
+}
+for (const btn of deviceChangeBtns) {
+  btn.addEventListener("click", () => { devicePickerOpen = true; refreshDeviceUi(); });
+}
+
 function syncDevice(from, to) {
   to.value = from.value;
+  refreshDeviceUi();
   layoutEditStage();
   renderPreview();
   renderEditor();
@@ -712,9 +746,10 @@ function updateControls() {
   document.getElementById("edit-cal").disabled = !item;
   stickers.forEach((s, index) => s.el.classList.toggle("selected", index === selectedSticker));
   calFrame.hidden = !!item;
+  // 도구 막대가 상단 안전영역을 넘지 않게 안내는 한 줄로 유지한다
   editHint.textContent = item
-    ? `스티커 ${selectedSticker + 1}/${stickers.length} · 끌어서 이동 · 두 손가락으로 크기와 각도`
-    : "달력이 잡혀 있어요 · 끌어서 이동 · 두 손가락으로 크기 · 스티커를 누르면 스티커로 바뀝니다";
+    ? `스티커 ${selectedSticker + 1}/${stickers.length} · 끌어서 이동 · 두 손가락 크기·회전`
+    : "달력을 끌어서 이동 · 두 손가락으로 크기";
 }
 
 function selectSticker(index) {
@@ -1052,6 +1087,7 @@ pickerBody.addEventListener("click", async (event) => {
   }
 });
 
+refreshDeviceUi();
 renderCalendar();
 updateControls();
 </script>
