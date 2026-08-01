@@ -2,6 +2,14 @@
   "version": 1,
   "items": [
     {
+      "id": "2fa0686a-8153-426b-b7c5-97bb6ed2287e",
+      "character": "rabbit",
+      "cut": "wave2",
+      "verdict": "revise",
+      "note": "몸이 갑자기 translation하네요 그거 맞춰야하고, 팔이 갈라지는 위치(겨드랑이) 위치가 계속 튀어서 다른 그림을 붙여놓은 느낌이 나요. 이부분은 개선해야 움직이는 이모티콘의 느낌이 납니다.",
+      "at": "2026-08-01T16:18:28.880Z"
+    },
+    {
       "id": "0ccb390d-15bf-4f4a-b9c2-60f3f31a7f37",
       "character": "rabbit",
       "cut": "blink1",
