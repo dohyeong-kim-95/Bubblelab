@@ -517,3 +517,33 @@ test("CLI E2E (mock): rig — 모델 작화에 기하를 코드로 입힌다", (
     rmSync(workdir, { recursive: true, force: true });
   }
 });
+
+test("CLI: redo는 프레임당 2회까지, --force-redo로 다시 연다", () => {
+  // 같은 프레임이 계속 실패하면 운이 아니라 포즈 문장이 틀린 것이다.
+  // 상한이 세션 기억이 아니라 cut.json에 있어야 다음 실행도 같은 규칙을 받는다.
+  const workdir = mkdtempSync(join(tmpdir(), "emoticon-redo-"));
+  const env = { ...process.env, EMOTICON_IMAGE_PROVIDER: "mock" };
+  const run = (...args) => execFileSync(process.execPath, [CLI, ...args], { env, encoding: "utf8" });
+  const meta = () => JSON.parse(readFileSync(join(workdir, "cuts", "b", "cut.json"), "utf8"));
+  try {
+    run("sheet", workdir, "--prompt", "테스트");
+    const spec = join(workdir, "keys.json");
+    writeFileSync(spec, JSON.stringify({
+      motion: "깜빡", breakdowns: 0, keys: [{ pose: "뜸", hold: 2 }, { pose: "감음", hold: 2 }],
+    }));
+    run("cut", workdir, "b", "--keys", spec, "--fps", "12");
+
+    assert.match(run("redo", workdir, "b", "2"), /재생성 1\/2/);
+    assert.match(run("redo", workdir, "b", "2"), /재생성 2\/2/);
+    assert.equal(meta().redoCounts["2"], 2);
+    assert.throws(() => run("redo", workdir, "b", "2"), /이미 2번 재작업/);
+
+    // 다른 프레임은 상한과 무관하다
+    assert.match(run("redo", workdir, "b", "1"), /재생성 1\/2/);
+    // 포즈를 고친 뒤에는 다시 열린다
+    assert.match(run("redo", workdir, "b", "2", "--force-redo"), /재생성 1\/2/);
+    assert.equal(meta().redoCounts["2"], 1);
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});

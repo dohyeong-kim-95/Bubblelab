@@ -1,0 +1,50 @@
+{
+  "character": "rabbit",
+  "step": "cut",
+  "cut_id": "wave2",
+  "prompt": "waving hello with one paw raised beside the head",
+  "assembly": "pingpong",
+  "breakdowns": 0,
+  "repeat": 1,
+  "fps": "12",
+  "profile": "master-2s",
+  "ref": "_src/emoticon/rabbit/cuts/nod/frames-raw/key-1.png",
+  "max_calls": "10",
+  "max_cost": "0.40",
+  "invariants": "two long upright ears whose bases sit on top of the head, two eyes, one mouth, two short arms, two feet; two pink oval inner ears; two round pink cheek blushes; the canvas holds only this one character",
+  "poseConstants": "the head outline, the body and the feet are drawn where Image 1 has them; the character faces the viewer straight on and the two ears stay symmetric left and right; both eyes are always mirror images of each other; the arm on the right side of the image stays a small rounded nub at the side of the body, level with the middle of the belly",
+  "keys": [
+    {
+      "pose": "standing upright, both short arms are small rounded nubs at the sides of the body, the eyes are wide open and round, a gentle closed-mouth smile",
+      "hold": 3
+    },
+    {
+      "pose": "the arm on the left side of the image is lifted so the paw sits level with the shoulder, the paw pointing up and away from the body, the eyes are wide open and round, the mouth is a small open smile",
+      "hold": 1
+    },
+    {
+      "pose": "the arm on the left side of the image is raised so the paw sits beside the cheek, the paw open and pointing straight up, the eyes are shut and curve upward into gentle happy arcs, the mouth is a wide open smile",
+      "hold": 1
+    },
+    {
+      "pose": "the arm on the left side of the image stays raised beside the cheek and the whole paw tips outward away from the head by about 25 degrees, the eyes stay in gentle happy arcs, the mouth is a wide open smile",
+      "hold": 2
+    },
+    {
+      "pose": "the arm on the left side of the image stays raised beside the cheek and the whole paw stands straight up again, the eyes stay in gentle happy arcs, the mouth is a wide open smile",
+      "hold": 1
+    },
+    {
+      "pose": "the arm on the left side of the image stays raised beside the cheek and the whole paw tips inward toward the head by about 20 degrees, the eyes are squeezed into deep happy arcs, the mouth is a wide open smile",
+      "hold": 2
+    },
+    {
+      "pose": "the arm on the left side of the image stays raised beside the cheek and the whole paw tips outward away from the head by about 25 degrees, the eyes stay in deep happy arcs, the mouth is a wide open smile with a small pink tongue",
+      "hold": 2
+    },
+    {
+      "pose": "the arm on the left side of the image stays raised beside the cheek and the whole paw stands straight up, the eyes stay in deep happy arcs, the mouth is a wide open smile with a small pink tongue",
+      "hold": 3
+    }
+  ]
+}

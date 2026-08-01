@@ -859,12 +859,29 @@ async function cmdPlan(workdir, cutId, options) {
 // 선별 재작업: keys 모드 컷의 특정 유니크 프레임 하나만 같은 프롬프트·
 // 레퍼런스로 재생성한다 (프레임당 ≈$0.04 — 전체 재생성 대신 튄 것만).
 // build 출력의 인접 diff로 튄 프레임을 찾고, redo 후 build를 다시 돌린다.
+// 프레임당 재작업 상한. 같은 프레임을 계속 다시 뽑는 건 프롬프트가 틀렸다는
+// 신호이지 운이 나쁜 게 아니다 — 두 번 실패하면 멈추고 포즈 문장을 고쳐야 한다.
+// (blink1 프레임 3: 1차 눈꺼풀 덩어리 → 2차 윙크 → 문장을 고치자 한 번에 해결)
+const MAX_REDO_PER_FRAME = 2;
+
 // 여러 프레임을 한 번에 다시 뽑는다 — 사람 검수가 "2프레임·3프레임이 불량,
 // 나머진 괜찮다"처럼 짚어주므로 그 장만 골라 재작업하는 게 기본 경로다.
-async function cmdRedo(workdir, cutId, frameArg) {
+async function cmdRedo(workdir, cutId, frameArg, options = {}) {
   const numbers = String(frameArg ?? "").split(/[\s,]+/).filter(Boolean).map(Number);
   if (!numbers.length) throw new Error("재생성할 프레임 번호가 필요합니다 (예: 2 또는 \"2,3\")");
+  if (options["force-redo"]) resetRedoCounts(workdir, cutId, numbers);
   for (const n of numbers) await redoFrame(workdir, cutId, n);
+}
+
+// 포즈 문장을 고친 뒤에는 상한을 다시 연다 — 상한의 목적은 "같은 프롬프트로
+// 반복해서 긁지 마라"이지 "그 프레임을 영원히 포기하라"가 아니다.
+function resetRedoCounts(workdir, cutId, numbers) {
+  const metaPath = join(workdir, "cuts", cutId, "cut.json");
+  if (!existsSync(metaPath)) return;
+  const meta = JSON.parse(readFileSync(metaPath, "utf8"));
+  if (!meta.redoCounts) return;
+  for (const n of numbers) delete meta.redoCounts[String(n)];
+  atomicWriteFile(metaPath, Buffer.from(JSON.stringify(meta, null, 2) + "\n"));
 }
 
 async function redoFrame(workdir, cutId, frameNumber) {
@@ -879,6 +896,15 @@ async function redoFrame(workdir, cutId, frameNumber) {
   const n = frameNumber;
   if (!Number.isInteger(n) || n < 1 || n > meta.sequence.length) {
     throw new Error(`프레임 번호는 1~${meta.sequence.length} 입니다`);
+  }
+  const attempts = meta.redoCounts?.[String(n)] ?? 0;
+  if (attempts >= MAX_REDO_PER_FRAME) {
+    throw new Error(
+      `프레임 ${n}은 이미 ${attempts}번 재작업했습니다 (상한 ${MAX_REDO_PER_FRAME}). ` +
+      "같은 프레임이 계속 실패하면 운이 아니라 포즈 문장이 틀린 것입니다 — " +
+      "cut.json의 keys[].pose를 고치고 --force-redo로 다시 시도하세요 " +
+      "(work/emoticon/pose-library.md §0)",
+    );
   }
   const el = meta.sequence[n - 1];
   const sheet = readFileSync(meta.characterRef && meta.characterRef !== "sheet.png"
@@ -912,7 +938,11 @@ async function redoFrame(workdir, cutId, frameNumber) {
     throw new Error(`${label} 누끼 실패 (투명 ${Math.round(ratio * 100)}%) — frames-raw/${rawName} 확인 후 다시 redo`);
   }
   atomicWriteFile(join(cutDir, "frames", `${pad2(n)}.png`), encodePng(keyed));
-  console.log(`✓ 프레임 ${pad2(n)} (${label}) 재생성 (${provider.name})`);
+  // 재작업 횟수를 컷 메타에 남긴다 — 상한이 세션 기억이 아니라 파일에 있어야
+  // 다음 실행·다른 사람도 같은 규칙을 받는다.
+  meta.redoCounts = { ...(meta.redoCounts ?? {}), [String(n)]: attempts + 1 };
+  atomicWriteFile(metaPath, Buffer.from(JSON.stringify(meta, null, 2) + "\n"));
+  console.log(`✓ 프레임 ${pad2(n)} (${label}) 재생성 ${attempts + 1}/${MAX_REDO_PER_FRAME} (${provider.name})`);
   console.log(`다음 단계: node _infra/emoticon.mjs build ${workdir} ${cutId}`);
 }
 
@@ -1085,7 +1115,7 @@ function cmdCheck(workdir, cutId, options = {}) {
 function parseArgs(argv) {
   const positional = [];
   const options = {};
-  const flags = new Set(["force", "resume", "line", "chroma", "grid", "json"]);
+  const flags = new Set(["force", "resume", "line", "chroma", "grid", "json", "force-redo"]);
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg.startsWith("--") && flags.has(arg.slice(2))) options[arg.slice(2)] = true;
@@ -1153,7 +1183,8 @@ const USAGE =
   '         스켈레톤 조건화 — _src/emoticon/poses/*.json 재사용. --grid는 단일 호출\n' +
   '  import <작업폴더> <컷id> <프레임폴더> [--fps 12] [--chroma] [--force]\n' +
   '  build  <작업폴더> <컷id> [--size 360] [--fps N] [--line]\n' +
-  '  redo   <작업폴더> <컷id> "<프레임번호…>"  ← 불량 프레임만 재생성 (장당 $0.04, "2,3" 가능)\n' +
+  '  redo   <작업폴더> <컷id> "<프레임번호…>" [--force-redo]  ← 불량 프레임만 재생성\n' +
+  '         장당 $0.04, "2,3" 가능. 프레임당 2회까지 — 넘으면 포즈 문장을 고치고 --force-redo\n' +
   '  parts  <작업폴더> <컷id> [--expect \'{"ears":2}\']   ← 비전 부품 검사, report.json에 기록\n' +
   '  check  <작업폴더> <컷id> [--profile draft|master-2s|line] [--json]  ← FAIL이면 exit 1\n' +
   '작업폴더 권장 위치: _src/emoticon/<캐릭터명> (배포·커밋 제외)\n' +
@@ -1171,7 +1202,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     else if (command === "cut") await cmdCut(workdir, rest[0], options);
     else if (command === "import") await cmdImport(workdir, rest[0], rest[1], options);
     else if (command === "build") await cmdBuild(workdir, rest[0], options);
-    else if (command === "redo") await cmdRedo(workdir, rest[0], rest[1]);
+    else if (command === "redo") await cmdRedo(workdir, rest[0], rest[1], options);
     else if (command === "parts") await cmdParts(workdir, rest[0], options);
     else if (command === "check") {
       const judgement = cmdCheck(workdir, rest[0], options);
