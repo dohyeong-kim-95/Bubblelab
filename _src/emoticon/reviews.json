@@ -2,6 +2,22 @@
   "version": 1,
   "items": [
     {
+      "id": "479e4ed2-ba0b-456b-aa2a-b7e6404fa2e6",
+      "character": "rabbit",
+      "cut": "bounce1",
+      "verdict": "revise",
+      "note": "공중에 떠있는 동안은 눈 뜨기/감기 상태가 동일해야할거같아요",
+      "at": "2026-08-01T17:17:09.200Z"
+    },
+    {
+      "id": "6b21e348-e448-4860-87b2-c5bc05d90143",
+      "character": "rabbit",
+      "cut": "bounce1",
+      "verdict": "revise",
+      "note": "1. 시작컷은 스퀴즈면 안될거같아요 2프레임을 1프레임 앞에 복사해서 껴두면 좋을거같음\n2. 4프레임 안광이 없어서 무서워요",
+      "at": "2026-08-01T17:15:32.128Z"
+    },
+    {
       "id": "0ccb390d-15bf-4f4a-b9c2-60f3f31a7f37",
       "character": "rabbit",
       "cut": "blink1",
