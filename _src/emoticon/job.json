@@ -27,22 +27,23 @@
     {
       "pose": "stretching upward off the ground: the whole character is 1.08 times as tall and 0.94 times as wide, its volume preserved; the mouth is a small open smile",
       "hold": 1,
-      "lift": 0.09
+      "lift": 0.069
     },
     {
       "pose": "rising through the air with normal proportions; the mouth is a wide open smile",
       "hold": 1,
-      "lift": 0.16
+      "lift": 0.127
     },
     {
       "pose": "still rising with normal proportions, the feet tucked up under the body; the mouth is a wide open smile",
       "hold": 1,
-      "lift": 0.2
+      "lift": 0.161
     },
     {
       "pose": "hanging at the top of the jump with normal proportions, the feet tucked up under the body; the mouth is a wide open smile with a small pink tongue",
       "hold": 2,
-      "lift": 0.22
+      "lift": 0.167
     }
-  ]
+  ],
+  "resume": true
 }

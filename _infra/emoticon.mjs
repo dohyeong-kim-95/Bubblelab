@@ -89,6 +89,90 @@ export function autoCutout(image) {
 }
 
 // 박스 평균 리샘플 (알파 가중 — 반투명 경계에서 배경색이 번지지 않게)
+// 캐릭터에서 떨어져 나온 잉크를 지운다 — 바닥선·그림자·부스러기.
+//
+// 왜: 모델이 지시하지 않은 바닥선을 그린다(bounce2는 6장 전부). 스티커는 배경이
+// 투명해야 하고, 게다가 점프로 프레임을 올리면 "바닥"까지 같이 올라가 우스워진다.
+// 누끼된 프레임에서 캐릭터는 하나의 연결 덩어리이므로 가장 큰 덩어리만 남긴다.
+//
+// **효과 기호(하트·땀방울)를 쓰는 컷에서는 꺼야 한다** — 그것들도 떨어진
+// 덩어리라 같이 지워진다. cut.json의 strays:"keep".
+// 모델이 지시하지 않고 그려 넣는 **바닥선**을 지운다.
+//
+// 실측 신호가 뚜렷하다(bounce2): 맨 아래 몇 줄의 잉크 폭이 275 → 484px로 튀고
+// 바닥까지 그 폭을 유지한다. 캐릭터 실루엣은 아래로 갈수록 좁아지므로 이런
+// "끝까지 넓은 얇은 띠"는 바닥선뿐이다. 발이 땅에 닿아 붙어 있어도 잡힌다
+// (연결요소 필터로는 못 잡는 이유가 이것).
+// widthJump 1.30: bounce2 6/6을 잡고 기존 합격 컷(blink1·wave2·heart·nod9,
+// 총 25프레임)에서 오탐 0건. 1.20까지 내려도 오탐은 없었지만 여유를 남긴다.
+export function dropGroundLine(image, { widthJump = 1.30, maxBandRatio = 0.06 } = {}) {
+  const { width, height, data } = image;
+  const span = new Int32Array(height);
+  let top = -1;
+  let bottom = -1;
+  for (let y = 0; y < height; y++) {
+    let a = -1;
+    let b = -1;
+    for (let x = 0; x < width; x++) if (data[(y * width + x) * 4 + 3] > 16) { if (a < 0) a = x; b = x; }
+    span[y] = a < 0 ? 0 : b - a + 1;
+    if (span[y] > 0) { if (top < 0) top = y; bottom = y; }
+  }
+  if (bottom < 0) return { image, removed: 0 };
+  let bandTop = bottom;
+  while (bandTop > top && span[bandTop - 1] >= span[bottom] * 0.95) bandTop--;
+  const bandHeight = bottom - bandTop + 1;
+  const above = bandTop > top ? span[bandTop - 1] : span[bottom];
+  if (above * widthJump > span[bottom] || bandHeight > (bottom - top + 1) * maxBandRatio) {
+    return { image, removed: 0 };
+  }
+  // 띠 전체를 지운다. 캐릭터 폭 바깥만 지워봤더니 발 사이에 검은 막대가
+  // 남아 더 나빴다 — 발바닥 외곽선이 살짝 평평해지는 쪽이 낫다(360px 출력에서
+  // 거의 보이지 않는다).
+  const out = new Uint8Array(data);
+  let removed = 0;
+  for (let y = bandTop; y <= bottom; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4 + 3;
+      if (out[i] > 0) { out[i] = 0; removed++; }
+    }
+  }
+  return { image: { width, height, data: out }, removed, bandHeight };
+}
+
+export function dropStrays(image) {
+  const { width, height, data } = image;
+  const label = new Int32Array(width * height).fill(-1);
+  const sizes = [];
+  const stack = [];
+  for (let start = 0; start < width * height; start++) {
+    if (label[start] >= 0 || data[start * 4 + 3] <= 16) continue;
+    const id = sizes.length;
+    let count = 0;
+    label[start] = id;
+    stack.push(start);
+    while (stack.length) {
+      const p = stack.pop();
+      count++;
+      const x = p % width;
+      const y = (p / width) | 0;
+      for (const q of [x > 0 ? p - 1 : -1, x < width - 1 ? p + 1 : -1,
+        y > 0 ? p - width : -1, y < height - 1 ? p + width : -1]) {
+        if (q >= 0 && label[q] < 0 && data[q * 4 + 3] > 16) { label[q] = id; stack.push(q); }
+      }
+    }
+    sizes.push(count);
+  }
+  if (sizes.length <= 1) return image;
+  let main = 0;
+  for (let i = 1; i < sizes.length; i++) if (sizes[i] > sizes[main]) main = i;
+  const out = new Uint8Array(data);
+  let removed = 0;
+  for (let p = 0; p < width * height; p++) {
+    if (label[p] >= 0 && label[p] !== main) { out[p * 4 + 3] = 0; removed++; }
+  }
+  return { image: { width, height, data: out }, removed };
+}
+
 export function resize(image, width, height) {
   if (image.width === width && image.height === height) return image;
   const data = new Uint8Array(width * height * 4);
@@ -571,7 +655,11 @@ async function cmdCutKeys(workdir, cutId, options) {
   for (let i = 0; i < keys.length - 1; i++) pairs.push([i, i + 1]);
   if (assembly === "loop") pairs.push([keys.length - 1, 0]);
   const totalCalls = keys.length + breakdowns * pairs.length;
-  const input = { motion, fps, keys, breakdowns, assembly, invariants, poseConstants, breakdownNote, repeat };
+  // lift·rig는 생성 뒤에 적용하는 후처리라 **모델에게 보내는 것을 바꾸지 않는다.**
+  // 해시에 넣으면 값을 조금 손볼 때마다 이미 뽑은 raw를 버리게 된다(실측: lift가
+  // 캔버스를 넘어 멈췄을 때 6장을 다시 뽑을 뻔했다). 저장은 하되 해시에서는 뺀다.
+  const generationKeys = keys.map(({ lift, rig, ...rest }) => rest);
+  const input = { motion, fps, keys: generationKeys, breakdowns, assembly, invariants, poseConstants, breakdownNote, repeat };
   const base = provenance("keys", input, [sheet]);
   checkPlanTarget(cutDir, options, base);
   const rawNames = [
@@ -607,6 +695,17 @@ async function cmdCutKeys(workdir, cutId, options) {
     return { ...item, reused: false };
   };
   const sameSize = (x, y) => x.width === y.width && x.height === y.height;
+  const meta0 = { strays: spec.strays };
+  // 모델이 지시하지 않고 그려 넣는 바닥선·부스러기를 지운다. 효과 기호를 쓰는
+  // 컷은 스펙에 strays:"keep"을 넣어 끈다(하트·땀방울도 떨어진 덩어리다).
+  const tidy = (image, label, options = {}) => {
+    if (options.strays === "keep") return image;
+    const line = dropGroundLine(image);
+    if (line.removed) console.log(`  ${label}: 바닥선 ${line.bandHeight}줄 제거`);
+    const strays = dropStrays(line.image);
+    if (strays.removed) console.log(`  ${label}: 떨어진 잉크 ${strays.removed}px 제거`);
+    return strays.image ?? line.image;
+  };
   // 리그 적용 + 실측 로그. 목표를 못 맞추면 조용히 넘어가지 않고 남긴다.
   const rigKey = (image, rig, index) => {
     const before = faceDropRatio(image);
@@ -631,6 +730,7 @@ async function cmdCutKeys(workdir, cutId, options) {
       // 리그: 모델이 그린 표정에 기하를 입힌다. 누끼 전 원본(흰 배경)에 적용해야
       // 머리 원 피팅이 맞는다 — 투명 배경에서는 RGB가 0이라 계측이 깨진다.
       let keyed = keys[i].rig ? rigKey(await toRgba(bytes), keys[i].rig, i + 1) : drawn;
+      keyed = tidy(keyed, `키 ${i + 1}`, meta0);
       // lift: 점프 높이는 코드가 만든다. 모델은 표정·스쿼시만 그린다.
       if (keys[i].lift) {
         keyed = liftFrame(keyed, Number(keys[i].lift));
@@ -705,8 +805,12 @@ async function cmdCutKeys(workdir, cutId, options) {
     unique.forEach((u, i) => atomicWriteFile(join(cutDir, "frames", `${pad2(i + 1)}.png`), encodePng(u.image)));
     finishCutRun(state, "complete", null, {
       ...input, ...base, characterRef: options.ref ?? "sheet.png",
+      // 해시에는 뺐지만 메타에는 원본 keys를 남긴다 — redo가 lift·rig를 다시
+      // 적용하려면 필요하다.
+      keys,
       // 몸이 실제로 움직이는 컷은 build의 몸 정렬이 그 움직임을 지운다.
       ...(keys.some((k) => k.lift) ? { anchor: "none" } : {}),
+      ...(spec.strays ? { strays: spec.strays } : {}),
       frames: unique.length, sequence: sequenceMeta, timeline,
     });
     console.log(`✓ ${cutId} 컷 생성 (유니크 ${unique.length}장 → 타임라인 ${timeline.length}프레임, ${assembly})`);
@@ -846,7 +950,11 @@ async function cmdPlan(workdir, cutId, options) {
       ...keys.map((_, i) => `key-${i + 1}.png`),
       ...pairs.flatMap(([a, b]) => Array.from({ length: breakdowns }, (_, k) => bdName(a, b, k, breakdowns))),
     ];
-    const input = { motion, fps, keys, breakdowns, assembly, invariants, poseConstants, breakdownNote, repeat };
+    // lift·rig는 생성 뒤에 적용하는 후처리라 **모델에게 보내는 것을 바꾸지 않는다.**
+  // 해시에 넣으면 값을 조금 손볼 때마다 이미 뽑은 raw를 버리게 된다(실측: lift가
+  // 캔버스를 넘어 멈췄을 때 6장을 다시 뽑을 뻔했다). 저장은 하되 해시에서는 뺀다.
+  const generationKeys = keys.map(({ lift, rig, ...rest }) => rest);
+  const input = { motion, fps, keys: generationKeys, breakdowns, assembly, invariants, poseConstants, breakdownNote, repeat };
     const base = provenance("keys", input, [sheet]);
     checkPlanTarget(cutDir, options, base);
     let reusable = 0;
@@ -1002,6 +1110,14 @@ async function redoFrame(workdir, cutId, frameNumber) {
     ? applyRig(await toRgba(bytes), spec.rig).image
     : await toRgba(bytes);
   keyed = autoCutout(keyed);
+  keyed = ((image) => {
+    if (meta.strays === "keep") return image;
+    const line = dropGroundLine(image);
+    if (line.removed) console.log(`  바닥선 ${line.bandHeight}줄 제거`);
+    const strays = dropStrays(line.image);
+    if (strays.removed) console.log(`  떨어진 잉크 ${strays.removed}px 제거`);
+    return strays.image ?? line.image;
+  })(keyed);
   if (spec.lift) {
     keyed = liftFrame(keyed, Number(spec.lift));
     console.log(`  들어올림 재적용: ${(Number(spec.lift) * 100).toFixed(0)}%`);

@@ -3,16 +3,16 @@
   "cliVersion": 2,
   "promptVersion": "2026-07-keys-v1",
   "mode": "keys",
-  "specHash": "17c0966165b1e335da5daa01ffc4d13f62a9f64901e03915154ec84cd85391e1",
+  "specHash": "379a1154bf051006d11cfcfa1bcd8307e1a4368410c2cbe95bbe48a2c5f03a31",
   "sheetHash": "b9692d48a1a77ec19249b8cb0f9f86e7cf358cf605dc9902b31219340aaffcc9",
   "referenceHashes": [
     "b9692d48a1a77ec19249b8cb0f9f86e7cf358cf605dc9902b31219340aaffcc9"
   ],
   "provider": "gemini/gemini-2.5-flash-image",
-  "status": "failed",
+  "status": "complete",
   "createdAt": "2026-08-01T17:22:31.254Z",
-  "updatedAt": "2026-08-01T17:23:10.684Z",
-  "completedAt": null,
+  "updatedAt": "2026-08-01T17:36:20.240Z",
+  "completedAt": "2026-08-01T17:36:20.240Z",
   "calls": 6,
   "unitCostUsd": 0.039,
   "estimatedCostUsd": 0.234,
@@ -27,6 +27,197 @@
       "status": "failed",
       "completedAt": "2026-08-01T17:23:10.684Z",
       "error": "lift 0.22는 캔버스를 넘습니다 (필요 156px, 위쪽 여유 121px) — lift를 줄이거나 레퍼런스를 더 아래에 두세요"
+    },
+    {
+      "runId": "da774aae-79e8-4053-8db0-a0d65829c803",
+      "startedAt": "2026-08-01T17:30:01.324Z",
+      "provider": "edge(work.bubblelab.dev)",
+      "gitCommit": null,
+      "calls": 0,
+      "estimatedCostUsd": 0,
+      "status": "complete",
+      "completedAt": "2026-08-01T17:30:09.720Z"
+    },
+    {
+      "runId": "453225ff-a62f-4dea-8cd2-ad535ecb1155",
+      "startedAt": "2026-08-01T17:34:14.513Z",
+      "provider": "edge(work.bubblelab.dev)",
+      "gitCommit": null,
+      "calls": 0,
+      "estimatedCostUsd": 0,
+      "status": "complete",
+      "completedAt": "2026-08-01T17:34:22.664Z"
+    },
+    {
+      "runId": "2b5f53c1-a0ff-4c8a-8d35-621249e914fd",
+      "startedAt": "2026-08-01T17:35:26.496Z",
+      "provider": "edge(work.bubblelab.dev)",
+      "gitCommit": null,
+      "calls": 0,
+      "estimatedCostUsd": 0,
+      "status": "complete",
+      "completedAt": "2026-08-01T17:35:34.557Z"
+    },
+    {
+      "runId": "782aebce-ac9e-4910-9e6a-51c72588d658",
+      "startedAt": "2026-08-01T17:36:12.100Z",
+      "provider": "edge(work.bubblelab.dev)",
+      "gitCommit": null,
+      "calls": 0,
+      "estimatedCostUsd": 0,
+      "status": "complete",
+      "completedAt": "2026-08-01T17:36:20.240Z"
+    }
+  ],
+  "keys": [
+    {
+      "pose": "standing still at rest with normal proportions, both feet on the ground, a gentle closed-mouth smile",
+      "hold": 2,
+      "lift": 0
+    },
+    {
+      "pose": "crouching to spring: the whole character is 0.88 times as tall and 1.10 times as wide, its volume preserved; a gentle closed-mouth smile",
+      "hold": 1,
+      "lift": 0
+    },
+    {
+      "pose": "stretching upward off the ground: the whole character is 1.08 times as tall and 0.94 times as wide, its volume preserved; the mouth is a small open smile",
+      "hold": 1,
+      "lift": 0.069
+    },
+    {
+      "pose": "rising through the air with normal proportions; the mouth is a wide open smile",
+      "hold": 1,
+      "lift": 0.127
+    },
+    {
+      "pose": "still rising with normal proportions, the feet tucked up under the body; the mouth is a wide open smile",
+      "hold": 1,
+      "lift": 0.161
+    },
+    {
+      "pose": "hanging at the top of the jump with normal proportions, the feet tucked up under the body; the mouth is a wide open smile with a small pink tongue",
+      "hold": 2,
+      "lift": 0.167
+    }
+  ],
+  "motion": "bouncing up and down with excitement",
+  "fps": 12,
+  "breakdowns": 0,
+  "assembly": "pingpong",
+  "invariants": "two long upright ears whose bases sit on top of the head, two eyes, one mouth, two short arms, two feet; two pink oval inner ears; two round pink cheek blushes; the canvas holds only this one character",
+  "poseConstants": "each eye is a large round dark eye with a small white highlight near its top, exactly as in Image 1; the character faces the viewer straight on, the two ears stand straight up and stay symmetric left and right, and both eyes are always mirror images of each other; each short arm is a small rounded nub on the outer edge of the body silhouette; the whole canvas outside the character is one flat white surface",
+  "breakdownNote": "",
+  "repeat": 2,
+  "characterRef": "_src/emoticon/rabbit/cuts/nod/frames-raw/key-1.png",
+  "anchor": "none",
+  "frames": 6,
+  "sequence": [
+    {
+      "type": "key",
+      "key": 0
+    },
+    {
+      "type": "key",
+      "key": 1
+    },
+    {
+      "type": "key",
+      "key": 2
+    },
+    {
+      "type": "key",
+      "key": 3
+    },
+    {
+      "type": "key",
+      "key": 4
+    },
+    {
+      "type": "key",
+      "key": 5
+    }
+  ],
+  "timeline": [
+    {
+      "frame": 0,
+      "delayMs": 167
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 2,
+      "delayMs": 83
+    },
+    {
+      "frame": 3,
+      "delayMs": 83
+    },
+    {
+      "frame": 4,
+      "delayMs": 83
+    },
+    {
+      "frame": 5,
+      "delayMs": 167
+    },
+    {
+      "frame": 4,
+      "delayMs": 83
+    },
+    {
+      "frame": 3,
+      "delayMs": 83
+    },
+    {
+      "frame": 2,
+      "delayMs": 83
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 0,
+      "delayMs": 167
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 2,
+      "delayMs": 83
+    },
+    {
+      "frame": 3,
+      "delayMs": 83
+    },
+    {
+      "frame": 4,
+      "delayMs": 83
+    },
+    {
+      "frame": 5,
+      "delayMs": 167
+    },
+    {
+      "frame": 4,
+      "delayMs": 83
+    },
+    {
+      "frame": 3,
+      "delayMs": 83
+    },
+    {
+      "frame": 2,
+      "delayMs": 83
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
     }
   ]
 }

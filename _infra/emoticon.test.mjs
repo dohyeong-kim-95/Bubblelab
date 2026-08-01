@@ -668,3 +668,60 @@ test("redo는 그 키의 lift를 다시 적용한다 (빠뜨리면 그 프레임
     rmSync(workdir, { recursive: true, force: true });
   }
 });
+
+test("lift·rig를 손봐도 이미 뽑은 raw를 재사용한다 (후처리는 해시 밖)", () => {
+  // 실측: lift가 캔버스를 넘어 멈췄을 때 lift만 낮추면 되는데 해시가 달라져
+  // 6장을 다시 뽑을 뻔했다. 후처리 값은 모델에게 보내는 것을 바꾸지 않는다.
+  const workdir = mkdtempSync(join(tmpdir(), "emoticon-hash-"));
+  const env = { ...process.env, EMOTICON_IMAGE_PROVIDER: "mock" };
+  const run = (...args) => execFileSync(process.execPath, [CLI, ...args], { env, encoding: "utf8" });
+  try {
+    run("sheet", workdir, "--prompt", "테스트");
+    const spec = join(workdir, "keys.json");
+    const write = (lift) => writeFileSync(spec, JSON.stringify({
+      motion: "점프", breakdowns: 0,
+      keys: [{ pose: "서기", hold: 2 }, { pose: "점프", hold: 2, lift }],
+    }));
+    write(0.3);
+    run("cut", workdir, "j", "--keys", spec, "--fps", "12");
+
+    write(0.1);   // lift만 바꾼다
+    const plan = run("plan", workdir, "j", "--keys", spec, "--fps", "12", "--resume");
+    assert.match(plan, /재사용 2회/, "lift만 바뀌면 전부 재사용되어야 한다");
+
+    // 포즈를 바꾸면 재사용되지 않는다 (해시가 제 역할을 하는지)
+    writeFileSync(spec, JSON.stringify({
+      motion: "점프", breakdowns: 0,
+      keys: [{ pose: "서기", hold: 2 }, { pose: "다른 포즈", hold: 2, lift: 0.1 }],
+    }));
+    // 포즈가 바뀌면 resume 자체가 거부된다 (재사용이 아니라 아예 막는다)
+    assert.throws(() => run("plan", workdir, "j", "--keys", spec, "--fps", "12", "--resume"),
+      /specHash가 기존 컷과 다릅니다/);
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("dropGroundLine: 끝까지 넓은 얇은 띠만 지운다", async () => {
+  // 모델이 지시하지 않고 바닥선을 그린다(bounce2 6/6). 발이 땅에 닿아 붙어
+  // 있어도 잡아야 하므로 연결요소가 아니라 폭 프로파일로 본다.
+  const { dropGroundLine } = await import("./emoticon.mjs");
+  const make = (withLine) => {
+    const size = 120;
+    const data = new Uint8Array(size * size * 4);
+    const put = (x, y) => { data[(y * size + x) * 4 + 3] = 255; };
+    for (let y = 20; y < 100; y++) {                 // 아래로 갈수록 좁아지는 몸
+      const half = Math.round(30 - (y - 20) * 0.2);
+      for (let x = 60 - half; x <= 60 + half; x++) put(x, y);
+    }
+    if (withLine) for (let y = 100; y < 104; y++) for (let x = 10; x < 110; x++) put(x, y);
+    return { width: size, height: size, data };
+  };
+  const cleaned = dropGroundLine(make(true));
+  assert.ok(cleaned.removed > 0, "바닥선을 지워야 한다");
+  assert.equal(cleaned.bandHeight, 4);
+  // 선이 없으면 손대지 않는다
+  assert.equal(dropGroundLine(make(false)).removed, 0);
+  // 몸이 차지하는 큰 영역을 "띠"로 오인하지 않는다
+  assert.equal(dropGroundLine(make(false), { maxBandRatio: 0.9 }).removed, 0);
+});

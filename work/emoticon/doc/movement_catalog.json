@@ -87,7 +87,8 @@
       "channel": "rig",
       "status": "revise",
       "cuts": [
-        "bounce1"
+        "bounce1",
+        "bounce2"
       ],
       "guide": "doc/guide-by-movement/bounce.md",
       "verdict": "공중에서 눈 상태가 달라짐 · 시작컷이 스퀴즈 · 4프레임 안광 없음"
