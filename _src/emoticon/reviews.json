@@ -2,6 +2,30 @@
   "version": 1,
   "items": [
     {
+      "id": "cdce0c8d-5f83-4694-9632-426dd69e5fa3",
+      "character": "rabbit",
+      "cut": "lrtest2",
+      "verdict": "reject",
+      "note": "Fail",
+      "at": "2026-08-01T08:31:10.266Z"
+    },
+    {
+      "id": "d53f4358-7578-44c1-9d9c-91dd646f806f",
+      "character": "rabbit",
+      "cut": "lrtest",
+      "verdict": "reject",
+      "note": "Fail",
+      "at": "2026-08-01T08:31:01.566Z"
+    },
+    {
+      "id": "98501984-179e-45e7-b9ec-43d34802a4f1",
+      "character": "rabbit",
+      "cut": "nod7",
+      "verdict": "revise",
+      "note": "2프레임이 3프레임이랑 겹쳐보여 이상하게보임",
+      "at": "2026-08-01T06:06:22.726Z"
+    },
+    {
       "id": "45c582e6-82b7-4437-a721-ac25f2ba8712",
       "character": "rabbit",
       "cut": "blink1",
