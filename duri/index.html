@@ -1553,7 +1553,10 @@ $("enter").addEventListener("click", async () => {
   // 팩 목록은 캐시로 즉시 채우고, 최신화는 네트워크로 백그라운드에서(await 안 함) —
   // 로컬에 이미 있는 채팅 히스토리 렌더가 이 fetch 하나 때문에 늦어지면 안 된다.
   hydratePacksFromCache();
-  loadPacks();
+  // 캐시로 먼저 그리므로, 새 팩이 추가된 뒤 첫 방문에서는 목록이 옛것이다.
+  // 네트워크 목록이 도착하면 열려 있는 서랍을 다시 그려야 그 자리에서 보인다
+  // (안 그리면 서랍을 닫았다 다시 열 때까지 새 팩이 안 뜬다).
+  loadPacks().then(() => { if (!picker.hidden) { renderTabs(); renderGrid(); } });
   db = await openDB();
   putMeta("pass", pass); // 서비스워커가 푸시 도착 시 같은 문구로 복호화할 수 있게
   putMeta("name", name); // 내가 보낸 메시지는 내 기기에 푸시 알림을 띄우지 않게 비교용
