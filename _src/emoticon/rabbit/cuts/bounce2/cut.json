@@ -239,5 +239,8 @@
       "frame": 1,
       "delayMs": 83
     }
-  ]
+  ],
+  "redoCounts": {
+    "2": 1
+  }
 }

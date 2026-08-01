@@ -2,6 +2,31 @@
   "version": 1,
   "items": [
     {
+      "id": "d07e4be0-f32d-4258-9362-73faaea04863",
+      "character": "rabbit",
+      "cut": "bounce2",
+      "verdict": "revise",
+      "note": "5프레임-6프레임 발가락 젤리 색깔도 달라져요.",
+      "at": "2026-08-01T17:55:53.175Z",
+      "editedAt": "2026-08-01T17:55:55.065Z"
+    },
+    {
+      "id": "d8648433-93db-4714-ab5c-90a0663c8168",
+      "character": "rabbit",
+      "cut": "bounce2",
+      "verdict": "revise",
+      "note": "2프레임  손위치가 1프레임과 3프레임 사이였으면 좋겠어요",
+      "at": "2026-08-01T17:51:02.727Z"
+    },
+    {
+      "id": "5c058979-b37e-49db-aec2-70a81d873b17",
+      "character": "rabbit",
+      "cut": "bounce2",
+      "verdict": "revise",
+      "note": "시트에는 수평으로 잘랐는데 애니메이션에는 아직 수평선이 남아있어요.",
+      "at": "2026-08-01T17:45:38.260Z"
+    },
+    {
       "id": "cff0d542-8c97-4e60-9f5f-45c8a007dcee",
       "character": "rabbit",
       "cut": "wave2",
