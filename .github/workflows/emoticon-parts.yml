@@ -55,6 +55,12 @@ jobs:
           if [[ -z "$CUTS" ]]; then
             CUTS=$(ls "$WORKDIR/cuts" | tr '\n' ' ')
           fi
+          node -e "
+            const { listGeminiModels, pickVisionModel } = await import('./_infra/emoticon-gen.js');
+            const names = await listGeminiModels(process.env.GEMINI_API_KEY);
+            console.log('사용 가능:', names.map(n => n.replace(/^models\//, '')).join(' '));
+            console.log('선택:', pickVisionModel(names));
+          " --input-type=module || true
           fail=0
           for cut in $CUTS; do
             echo "── $cut ──"

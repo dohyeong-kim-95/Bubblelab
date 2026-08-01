@@ -32,7 +32,7 @@ import { PROFILES, buildReport, formatJudgement, judgeReport } from "./emoticon-
 import { breakdownPrompt, canonBlock, keyPrompt, sheetPrompt } from "./emoticon-prompt.mjs";
 import { applyRig, faceDropRatio } from "./emoticon-rig.mjs";
 import { RABBIT_PARTS, inspectParts } from "./emoticon-vision.mjs";
-import { DEFAULT_VISION_MODEL, bytesToBase64, geminiAsk } from "./emoticon-gen.js";
+import { bytesToBase64, geminiAsk, resolveVisionModel } from "./emoticon-gen.js";
 import { loadSequence } from "./skeleton-cli.mjs";
 import {
   IMAGE_COST_USD,
@@ -1106,7 +1106,8 @@ async function cmdParts(workdir, cutId, options = {}) {
 
   const apiKey = process.env.EMOTICON_IMAGE_API_KEY || process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY가 필요합니다 (비전 검사는 엣지 프록시를 쓰지 않습니다)");
-  const model = process.env.EMOTICON_VISION_MODEL || DEFAULT_VISION_MODEL;
+  const model = await resolveVisionModel(apiKey, process.env.EMOTICON_VISION_MODEL || "");
+  console.log(`  비전 모델: ${model}`);
   const ask = (imageB64, prompt) => geminiAsk({ apiKey, model, prompt, imagesB64: [imageB64] });
 
   const framesB64 = files.map((f) => bytesToBase64(readFileSync(join(framesDir, f))));

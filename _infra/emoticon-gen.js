@@ -73,10 +73,47 @@ export async function geminiGenerate({ apiKey, model = DEFAULT_IMAGE_MODEL, prom
 // 텍스트 응답용 호출 (이미지 생성이 아니라 이미지에 대한 질문).
 // 부품 개수 검사에 쓴다 — 기하로는 두 설계 모두 실패했고(lesson_learned §42~43)
 // "귀가 몇 개인가"는 VLM이 잘하는 일이다. 이미지 생성보다 훨씬 싸다.
-export const DEFAULT_VISION_MODEL = "gemini-2.5-flash";
+// 모델 이름을 상수로 박으면 안 된다 — gemini-2.5-flash는 "신규 사용자에게 더
+// 이상 제공되지 않는다"는 404로 죽었다. 실제 사용 가능한 목록을 조회해 고른다.
+export const DEFAULT_VISION_MODEL = "";   // 비우면 자동 선택
 
-export async function geminiAsk({ apiKey, model = DEFAULT_VISION_MODEL, prompt, imagesB64 = [] }) {
+// generateContent를 지원하는 모델 중 텍스트 응답에 맞는 것을 고른다.
+// 이미지 생성·TTS·임베딩 전용은 제외하고, 싸고 빠른 flash 계열을 우선한다.
+export function pickVisionModel(names) {
+  const usable = names
+    .map((n) => n.replace(/^models\//, ""))
+    .filter((n) => !/(image|tts|embedding|audio|live|native-audio)/i.test(n));
+  const score = (n) => (
+    (/flash/i.test(n) ? 0 : /pro/i.test(n) ? 1 : 2) * 1000
+    - (Number(/(\d+(?:\.\d+)?)/.exec(n)?.[1] ?? 0) * 10)
+    + (/(preview|exp)/i.test(n) ? 5 : 0)     // 안정판 우선
+    + (/latest/i.test(n) ? -1 : 0)
+  );
+  const sorted = usable.sort((a, b) => score(a) - score(b) || a.localeCompare(b));
+  if (!sorted.length) throw new Error("사용 가능한 텍스트 모델을 찾지 못했습니다");
+  return sorted[0];
+}
+
+export async function listGeminiModels(apiKey) {
+  const res = await fetchWithRetry(`${GEMINI_BASE}/models?pageSize=200`, {
+    headers: { "x-goog-api-key": apiKey },
+  }, "gemini models");
+  const json = await res.json();
+  return (json.models ?? [])
+    .filter((m) => (m.supportedGenerationMethods ?? []).includes("generateContent"))
+    .map((m) => m.name);
+}
+
+let cachedVisionModel = null;
+export async function resolveVisionModel(apiKey, override = "") {
+  if (override) return override;
+  if (!cachedVisionModel) cachedVisionModel = pickVisionModel(await listGeminiModels(apiKey));
+  return cachedVisionModel;
+}
+
+export async function geminiAsk({ apiKey, model, prompt, imagesB64 = [] }) {
   if (!apiKey) throw new Error("Gemini API 키가 없습니다");
+  if (!model) throw new Error("비전 모델이 지정되지 않았습니다 (resolveVisionModel 사용)");
   const parts = [
     ...imagesB64.map((data) => ({
       inlineData: { mimeType: data.startsWith("/9j") ? "image/jpeg" : "image/png", data },

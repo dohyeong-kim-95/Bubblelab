@@ -45,3 +45,18 @@ test("expected가 없는 부품은 세기만 하고 판정하지 않는다", asy
   assert.deepEqual(result.counts, [{ ears: 5 }]);
   assert.deepEqual(result.violations, []);
 });
+
+test("비전 모델은 목록에서 고른다 (이름 하드코딩 금지)", async () => {
+  // gemini-2.5-flash를 상수로 박았다가 "신규 사용자에게 제공되지 않는다" 404로
+  // 죽었다. 실제 사용 가능한 목록에서 골라야 한다.
+  const { pickVisionModel } = await import("./emoticon-gen.js");
+  const catalog = [
+    "models/gemini-2.5-flash-image", "models/gemini-3-pro-preview", "models/gemini-3-flash",
+    "models/gemini-2.5-pro", "models/text-embedding-004", "models/gemini-2.5-flash-preview-tts",
+  ];
+  assert.equal(pickVisionModel(catalog), "gemini-3-flash");
+  // 이미지·TTS·임베딩 전용은 후보에서 빠진다
+  assert.throws(() => pickVisionModel(["models/imagen-4", "models/text-embedding-004"]), /찾지 못했습니다/);
+  // flash가 없으면 pro로 내려간다
+  assert.equal(pickVisionModel(["models/gemini-2.5-pro"]), "gemini-2.5-pro");
+});
