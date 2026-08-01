@@ -1,0 +1,167 @@
+{
+  "schemaVersion": 2,
+  "cliVersion": 2,
+  "promptVersion": "2026-07-keys-v1",
+  "mode": "keys",
+  "specHash": "38d9cfc6647db4f5dd107158c7709330557e968d4d7721ba5775f5f1721a7a6d",
+  "sheetHash": "b9692d48a1a77ec19249b8cb0f9f86e7cf358cf605dc9902b31219340aaffcc9",
+  "referenceHashes": [
+    "b9692d48a1a77ec19249b8cb0f9f86e7cf358cf605dc9902b31219340aaffcc9"
+  ],
+  "provider": "gemini/gemini-2.5-flash-image",
+  "status": "complete",
+  "createdAt": "2026-08-01T05:55:51.950Z",
+  "updatedAt": "2026-08-01T05:56:58.733Z",
+  "completedAt": "2026-08-01T05:56:58.733Z",
+  "calls": 8,
+  "unitCostUsd": 0.039,
+  "estimatedCostUsd": 0.312,
+  "runs": [
+    {
+      "runId": "49eab601-d6e1-4485-b6cd-6fd2d7ceda68",
+      "startedAt": "2026-08-01T05:55:51.950Z",
+      "provider": "gemini/gemini-2.5-flash-image",
+      "gitCommit": "7515af660279a555d539f741ab2b2c0d37d4c54b",
+      "calls": 8,
+      "estimatedCostUsd": 0.312,
+      "status": "complete",
+      "completedAt": "2026-08-01T05:56:58.733Z"
+    }
+  ],
+  "motion": "a slow happy blink into a smile",
+  "fps": 12,
+  "keys": [
+    {
+      "pose": "the eyes are wide open and round with a gentle closed-mouth smile, both ears standing straight up",
+      "hold": 7
+    },
+    {
+      "pose": "the upper eyelids have come down over the top quarter of each eye, the smile still closed",
+      "hold": 1
+    },
+    {
+      "pose": "the eyes are half covered by the upper eyelids, so each eye is a wide flat oval, the smile still closed",
+      "hold": 1
+    },
+    {
+      "pose": "the eyes are narrow curved slits with only a sliver of the dark iris showing, and the mouth has just parted",
+      "hold": 1
+    },
+    {
+      "pose": "the eyes are shut, drawn as two short downward-curving lines, and the mouth is a small open smile",
+      "hold": 1
+    },
+    {
+      "pose": "the eyes are shut and curve upward into gentle happy arcs, and the mouth is an open smile",
+      "hold": 1
+    },
+    {
+      "pose": "the eyes are squeezed into deep happy arcs and the mouth is a wide open smile",
+      "hold": 1
+    },
+    {
+      "pose": "the eyes stay in deep happy arcs, the mouth is a wide open smile with a small pink tongue, and the cheek blushes are at their strongest",
+      "hold": 5
+    }
+  ],
+  "breakdowns": 0,
+  "assembly": "pingpong",
+  "invariants": "two long upright ears whose bases sit on top of the head, two eyes, one mouth, two short arms, two feet; two pink oval inner ears; two round pink cheek blushes; the canvas holds only this one character",
+  "poseConstants": "the head outline, the body and the feet are drawn where Image 1 has them; the character faces the viewer straight on and the two ears stay symmetric left and right",
+  "breakdownNote": "",
+  "repeat": 1,
+  "characterRef": "_src/emoticon/rabbit/cuts/nod/frames-raw/key-1.png",
+  "frames": 8,
+  "sequence": [
+    {
+      "type": "key",
+      "key": 0
+    },
+    {
+      "type": "key",
+      "key": 1
+    },
+    {
+      "type": "key",
+      "key": 2
+    },
+    {
+      "type": "key",
+      "key": 3
+    },
+    {
+      "type": "key",
+      "key": 4
+    },
+    {
+      "type": "key",
+      "key": 5
+    },
+    {
+      "type": "key",
+      "key": 6
+    },
+    {
+      "type": "key",
+      "key": 7
+    }
+  ],
+  "timeline": [
+    {
+      "frame": 0,
+      "delayMs": 583
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 2,
+      "delayMs": 83
+    },
+    {
+      "frame": 3,
+      "delayMs": 83
+    },
+    {
+      "frame": 4,
+      "delayMs": 83
+    },
+    {
+      "frame": 5,
+      "delayMs": 83
+    },
+    {
+      "frame": 6,
+      "delayMs": 83
+    },
+    {
+      "frame": 7,
+      "delayMs": 417
+    },
+    {
+      "frame": 6,
+      "delayMs": 83
+    },
+    {
+      "frame": 5,
+      "delayMs": 83
+    },
+    {
+      "frame": 4,
+      "delayMs": 83
+    },
+    {
+      "frame": 3,
+      "delayMs": 83
+    },
+    {
+      "frame": 2,
+      "delayMs": 83
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    }
+  ]
+}
