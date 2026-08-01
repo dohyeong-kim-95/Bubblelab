@@ -91,7 +91,7 @@
   ],
   "keys": [
     {
-      "pose": "standing still at rest with normal proportions, both feet on the ground, a gentle closed-mouth smile",
+      "pose": "standing still at rest with normal proportions, the two feet side by side directly under the body, a gentle closed-mouth smile",
       "hold": 2,
       "lift": 0
     },
@@ -101,7 +101,7 @@
       "lift": 0
     },
     {
-      "pose": "stretching upward off the ground: the whole character is 1.08 times as tall and 0.94 times as wide, its volume preserved; the mouth is a small open smile",
+      "pose": "stretching upward: the whole character is 1.08 times as tall and 0.94 times as wide, its volume preserved; the mouth is a small open smile",
       "hold": 1,
       "lift": 0.069
     },
@@ -126,7 +126,7 @@
   "breakdowns": 0,
   "assembly": "pingpong",
   "invariants": "two long upright ears whose bases sit on top of the head, two eyes, one mouth, two short arms, two feet; two pink oval inner ears; two round pink cheek blushes; the canvas holds only this one character",
-  "poseConstants": "each eye is a large round dark eye with a small white highlight near its top, exactly as in Image 1; the character faces the viewer straight on, the two ears stand straight up and stay symmetric left and right, and both eyes are always mirror images of each other; each short arm is a small rounded nub on the outer edge of the body silhouette; the whole canvas outside the character is one flat white surface; each foot is one smooth rounded shape in the same plain white surface as the body",
+  "poseConstants": "each eye is a large round dark eye with a small white highlight near its top, exactly as in Image 1; the character faces the viewer straight on, the two ears stand straight up and stay symmetric left and right, and both eyes are always mirror images of each other; each short arm is a small rounded nub on the outer edge of the body silhouette; the whole canvas outside the character is one flat white surface; each foot is one smooth rounded shape in the same plain white surface as the body; the underside of the body between the two feet is a smooth downward curve",
   "breakdownNote": "",
   "repeat": 2,
   "characterRef": "_src/emoticon/rabbit/cuts/nod/frames-raw/key-1.png",

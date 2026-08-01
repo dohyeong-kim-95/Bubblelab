@@ -3,6 +3,6 @@
   "step": "redo",
   "cut_id": "bounce2",
   "prompt": "bouncing up and down with excitement",
-  "frames": "6",
+  "frames": "1,2,3",
   "profile": "master-2s"
 }
