@@ -139,11 +139,12 @@ jobs:
             MAX_CALLS=$(read_job max_calls "")
             MAX_COST=$(read_job max_cost "")
             PROFILE=$(read_job profile "draft")
+            FORCE_REDO=$(read_job force_redo "false")
           elif [[ -n "$IN_CHARACTER" ]]; then
             CHARACTER="$IN_CHARACTER"; STEP="$IN_STEP"; PROMPT="$IN_PROMPT"
             CUT_ID="$IN_CUT_ID"; FRAMES="$IN_FRAMES"; FPS="$IN_FPS"; FORCE="$IN_FORCE"
             RESUME="$IN_RESUME"; MAX_CALLS="$IN_MAX_CALLS"; MAX_COST="$IN_MAX_COST"
-            PROFILE="${IN_PROFILE:-draft}"
+            PROFILE="${IN_PROFILE:-draft}"; FORCE_REDO="false"
           else
             echo "잡 파일도 입력도 없음 — 종료 (job.json 삭제 커밋의 후속 런)"; exit 0
           fi
@@ -151,6 +152,8 @@ jobs:
           WORKDIR="_src/emoticon/$CHARACTER"
           FORCE_FLAG=""; [[ "$FORCE" == "true" ]] && FORCE_FLAG="--force"
           RESUME_FLAG=""; [[ "$RESUME" == "true" ]] && RESUME_FLAG="--resume"
+          # 프레임당 2회 상한을 넘겨 다시 굽는 경우 — 포즈 문장을 고친 뒤에만 쓴다
+          FORCE_REDO_FLAG=""; [[ "${FORCE_REDO:-false}" == "true" ]] && FORCE_REDO_FLAG="--force-redo"
           BUDGET_FLAGS=()
           [[ -n "$MAX_CALLS" ]] && BUDGET_FLAGS+=(--max-calls "$MAX_CALLS")
           [[ -n "$MAX_COST" ]] && BUDGET_FLAGS+=(--max-cost "$MAX_COST")
@@ -193,7 +196,7 @@ jobs:
           elif [[ "$STEP" == "redo" ]]; then
             # 선별 재작업: 튄 프레임(frames = 프레임 번호) 하나만 재생성 후 다시 굽는다
             [[ -n "$CUT_ID" ]] || { echo "redo 단계에는 cut_id가 필요합니다"; exit 1; }
-            node _infra/emoticon.mjs redo "$WORKDIR" "$CUT_ID" "$FRAMES"
+            node _infra/emoticon.mjs redo "$WORKDIR" "$CUT_ID" "$FRAMES" $FORCE_REDO_FLAG
             node _infra/emoticon.mjs build "$WORKDIR" "$CUT_ID"
             node _infra/emoticon.mjs parts "$WORKDIR" "$CUT_ID" || true
             node _infra/emoticon.mjs check "$WORKDIR" "$CUT_ID" --profile "${PROFILE:-draft}"

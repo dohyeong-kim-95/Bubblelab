@@ -1,0 +1,9 @@
+{
+  "character": "rabbit",
+  "step": "redo",
+  "cut_id": "bounce2",
+  "prompt": "bouncing up and down with excitement",
+  "frames": "2",
+  "profile": "master-2s",
+  "force_redo": true
+}
