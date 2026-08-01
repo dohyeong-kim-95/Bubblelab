@@ -48,5 +48,31 @@
     0.8083877563476562,
     0.8085708618164062,
     0.8059120178222656
-  ]
+  ],
+  "parts": {
+    "model": "gemini-3.6-flash",
+    "expected": {
+      "ears": 2,
+      "arms": 2,
+      "eyes": 2
+    },
+    "counts": [
+      {
+        "ears": 2,
+        "arms": 2,
+        "eyes": 2
+      },
+      {
+        "ears": 2,
+        "arms": 2,
+        "eyes": 2
+      },
+      {
+        "ears": 2,
+        "arms": 2,
+        "eyes": 2
+      }
+    ],
+    "violations": []
+  }
 }

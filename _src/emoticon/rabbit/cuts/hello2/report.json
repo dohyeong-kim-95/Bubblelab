@@ -57,5 +57,95 @@
     0.8248720169067383,
     0.8477382659912109,
     0.849492073059082
-  ]
+  ],
+  "parts": {
+    "model": "gemini-3.6-flash",
+    "expected": {
+      "ears": 2,
+      "arms": 2,
+      "eyes": 2
+    },
+    "counts": [
+      {
+        "ears": 2,
+        "arms": 2,
+        "eyes": 2
+      },
+      {
+        "ears": 2,
+        "arms": 2,
+        "eyes": 2
+      },
+      {
+        "ears": 2,
+        "arms": 2,
+        "eyes": 2
+      },
+      {
+        "ears": 2,
+        "arms": 2,
+        "eyes": 2
+      },
+      {
+        "ears": 2,
+        "arms": 2,
+        "eyes": 2
+      },
+      {
+        "ears": 2,
+        "arms": 2,
+        "eyes": 2
+      },
+      {
+        "ears": 2,
+        "arms": 2,
+        "eyes": 2
+      },
+      {
+        "ears": 2,
+        "arms": 1,
+        "eyes": 2
+      },
+      {
+        "ears": 2,
+        "arms": 2,
+        "eyes": 2
+      },
+      {
+        "ears": 2,
+        "arms": 1,
+        "eyes": 2
+      },
+      {
+        "ears": 2,
+        "arms": 2,
+        "eyes": 2
+      },
+      {
+        "ears": 2,
+        "arms": 4,
+        "eyes": 2
+      }
+    ],
+    "violations": [
+      {
+        "frame": 8,
+        "part": "arms",
+        "found": 1,
+        "expected": 2
+      },
+      {
+        "frame": 10,
+        "part": "arms",
+        "found": 1,
+        "expected": 2
+      },
+      {
+        "frame": 12,
+        "part": "arms",
+        "found": 4,
+        "expected": 2
+      }
+    ]
+  }
 }
