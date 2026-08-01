@@ -2,6 +2,22 @@
   "version": 1,
   "items": [
     {
+      "id": "45c582e6-82b7-4437-a721-ac25f2ba8712",
+      "character": "rabbit",
+      "cut": "blink1",
+      "verdict": "reject",
+      "note": "2프레임은 눈꺼풀이 부자연스럽고 3프레임은 얼굴에 이상한 선이 생겼어요 나머진 괜찮은거같음",
+      "at": "2026-08-01T05:59:55.614Z"
+    },
+    {
+      "id": "ce78f96f-32d2-42c8-8512-5d7a17a5d236",
+      "character": "rabbit",
+      "cut": "blink1",
+      "verdict": "reject",
+      "note": "2프레임은 눈꺼풀이 부자연스럽고 3프레임은 얼굴에 이상한 선이 생겼어요 나머진 괜찮은거같음",
+      "at": "2026-08-01T05:59:55.360Z"
+    },
+    {
       "id": "c82f62c8-eda5-4b51-8dba-378a501634b0",
       "character": "rabbit",
       "cut": "hello2",
