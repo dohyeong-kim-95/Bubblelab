@@ -1,0 +1,167 @@
+{
+  "schemaVersion": 2,
+  "cliVersion": 2,
+  "promptVersion": "2026-07-keys-v1",
+  "mode": "keys",
+  "specHash": "f5321b721d423ccc50bc61be210edc582a3e37315977f2e1bcda277ee078f6c0",
+  "sheetHash": "b9692d48a1a77ec19249b8cb0f9f86e7cf358cf605dc9902b31219340aaffcc9",
+  "referenceHashes": [
+    "b9692d48a1a77ec19249b8cb0f9f86e7cf358cf605dc9902b31219340aaffcc9"
+  ],
+  "provider": "gemini/gemini-2.5-flash-image",
+  "status": "complete",
+  "createdAt": "2026-08-01T16:03:31.312Z",
+  "updatedAt": "2026-08-01T16:04:35.371Z",
+  "completedAt": "2026-08-01T16:04:35.371Z",
+  "calls": 8,
+  "unitCostUsd": 0.039,
+  "estimatedCostUsd": 0.312,
+  "runs": [
+    {
+      "runId": "debd61a2-a962-4ad9-a6f2-c149cb8894af",
+      "startedAt": "2026-08-01T16:03:31.312Z",
+      "provider": "gemini/gemini-2.5-flash-image",
+      "gitCommit": "437a5841e25561f1629ab57bbf54efc42a3f4342",
+      "calls": 8,
+      "estimatedCostUsd": 0.312,
+      "status": "complete",
+      "completedAt": "2026-08-01T16:04:35.371Z"
+    }
+  ],
+  "motion": "waving hello with one paw raised beside the head",
+  "fps": 12,
+  "keys": [
+    {
+      "pose": "standing upright, both short arms are small rounded nubs at the sides of the body, the eyes are wide open and round, a gentle closed-mouth smile",
+      "hold": 3
+    },
+    {
+      "pose": "the arm on the left side of the image is lifted so the paw sits level with the shoulder, the paw pointing up and away from the body, the eyes are wide open and round, the mouth is a small open smile",
+      "hold": 1
+    },
+    {
+      "pose": "the arm on the left side of the image is raised so the paw sits beside the cheek, the paw open and pointing straight up, the eyes are shut and curve upward into gentle happy arcs, the mouth is a wide open smile",
+      "hold": 1
+    },
+    {
+      "pose": "the arm on the left side of the image stays raised beside the cheek and the whole paw tips outward away from the head by about 25 degrees, the eyes stay in gentle happy arcs, the mouth is a wide open smile",
+      "hold": 2
+    },
+    {
+      "pose": "the arm on the left side of the image stays raised beside the cheek and the whole paw stands straight up again, the eyes stay in gentle happy arcs, the mouth is a wide open smile",
+      "hold": 1
+    },
+    {
+      "pose": "the arm on the left side of the image stays raised beside the cheek and the whole paw tips inward toward the head by about 20 degrees, the eyes are squeezed into deep happy arcs, the mouth is a wide open smile",
+      "hold": 2
+    },
+    {
+      "pose": "the arm on the left side of the image stays raised beside the cheek and the whole paw tips outward away from the head by about 25 degrees, the eyes stay in deep happy arcs, the mouth is a wide open smile with a small pink tongue",
+      "hold": 2
+    },
+    {
+      "pose": "the arm on the left side of the image stays raised beside the cheek and the whole paw stands straight up, the eyes stay in deep happy arcs, the mouth is a wide open smile with a small pink tongue",
+      "hold": 3
+    }
+  ],
+  "breakdowns": 0,
+  "assembly": "pingpong",
+  "invariants": "two long upright ears whose bases sit on top of the head, two eyes, one mouth, two short arms, two feet; two pink oval inner ears; two round pink cheek blushes; the canvas holds only this one character",
+  "poseConstants": "the head outline, the body and the feet are drawn where Image 1 has them; the character faces the viewer straight on and the two ears stay symmetric left and right; both eyes are always mirror images of each other; the arm on the right side of the image stays a small rounded nub at the side of the body, level with the middle of the belly",
+  "breakdownNote": "",
+  "repeat": 1,
+  "characterRef": "_src/emoticon/rabbit/cuts/nod/frames-raw/key-1.png",
+  "frames": 8,
+  "sequence": [
+    {
+      "type": "key",
+      "key": 0
+    },
+    {
+      "type": "key",
+      "key": 1
+    },
+    {
+      "type": "key",
+      "key": 2
+    },
+    {
+      "type": "key",
+      "key": 3
+    },
+    {
+      "type": "key",
+      "key": 4
+    },
+    {
+      "type": "key",
+      "key": 5
+    },
+    {
+      "type": "key",
+      "key": 6
+    },
+    {
+      "type": "key",
+      "key": 7
+    }
+  ],
+  "timeline": [
+    {
+      "frame": 0,
+      "delayMs": 250
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 2,
+      "delayMs": 83
+    },
+    {
+      "frame": 3,
+      "delayMs": 167
+    },
+    {
+      "frame": 4,
+      "delayMs": 83
+    },
+    {
+      "frame": 5,
+      "delayMs": 167
+    },
+    {
+      "frame": 6,
+      "delayMs": 167
+    },
+    {
+      "frame": 7,
+      "delayMs": 250
+    },
+    {
+      "frame": 6,
+      "delayMs": 167
+    },
+    {
+      "frame": 5,
+      "delayMs": 167
+    },
+    {
+      "frame": 4,
+      "delayMs": 83
+    },
+    {
+      "frame": 3,
+      "delayMs": 167
+    },
+    {
+      "frame": 2,
+      "delayMs": 83
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    }
+  ]
+}
