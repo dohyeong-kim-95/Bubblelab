@@ -803,7 +803,7 @@ document.getElementById("edit-larger").addEventListener("click", () => resize(1.
 const SNAP_PX = 4;
 // 회전은 90° 배수(0·90·180·270)에 붙인다. 스티커를 똑바로 세우거나 정확히
 // 눕히는 게 대부분이라 45°는 넣지 않았다 — 넣으면 그 사이가 다 끈적해진다.
-const SNAP_DEG = 90, SNAP_DEG_TOL = 6;
+const SNAP_DEG = 90, SNAP_DEG_TOL = 3;
 // 잠금화면 UI가 덮는 자리(정규화). 기기·런처마다 다르므로 근사치이며,
 // 밴드 그리기와 스냅 기준이 어긋나지 않게 여기 한 곳에서만 정한다.
 const UI_TOP = .25, UI_BOTTOM = .88;
