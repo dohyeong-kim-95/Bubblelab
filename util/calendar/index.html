@@ -14,10 +14,17 @@
   .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
              overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 
-  /* 화면 자체가 배경화면이다. 무대는 기종 비율 그대로 화면에 최대 크기로 앉는다. */
-  #app { position: fixed; inset: 0; display: grid; place-items: center; }
-  #stage { position: relative; overflow: hidden; touch-action: none;
-           box-shadow: 0 0 0 1px #ffffff1f; }
+  /* 보기 = 휴대폰 목업 미리보기, 꾸미기 = 화면을 꽉 채우는 편집. 무대는 두 상태
+     모두 기종 비율을 그대로 지키고, 크기와 테두리만 달라진다. */
+  #app { position: fixed; inset: 0; display: flex; flex-direction: column; }
+  #stage-wrap { flex: 1; min-height: 0; display: grid; place-items: center; }
+  #stage { position: relative; overflow: hidden; touch-action: none; }
+  /* 미리보기: 여백이 "프레임 바깥"으로 읽히도록 베젤을 두른다 */
+  body:not(.editing) #stage { border-radius: 1.5rem;
+    box-shadow: 0 0 0 5px #10151c, 0 0 0 6px #ffffff2e, 0 16px 40px #000a; }
+  /* 꾸미기: 화면 끝까지 배경화면 색으로 채우고, 실제 배경화면 영역만 선으로 표시 */
+  body.editing #app { background: var(--wp-bg, #05080c); }
+  body.editing #stage { outline: 1px dashed #8888; outline-offset: 0; }
   #wallpaper, #stickers { position: absolute; inset: 0; width: 100%; height: 100%; }
   #wallpaper { display: block; }
   #stickers { overflow: hidden; }
@@ -41,44 +48,52 @@
                       font-size: .62rem; padding: .1rem .35rem; border-radius: .3rem;
                       background: #8ab8ff; color: #06121f; }
 
-  .bar { position: absolute; left: 0; right: 0; z-index: 3; color: #fff;
-         display: flex; flex-direction: column; gap: .35rem; }
-  .bar[hidden] { display: none; }
-  .bar button { color: #fff; border: 1px solid #ffffff44; background: #ffffff14;
-                font: inherit; border-radius: .5rem; cursor: pointer; padding: .5rem .8rem; }
-  .bar button:hover:not(:disabled) { background: #ffffff2b; }
-  .bar button:disabled { opacity: .4; cursor: default; }
+  /* 공용 독(홈·공유)은 꾸미기 중에 배경화면 위를 가린다 — 편집 중에는 감춘다 */
+  body.editing #bl-dock { display: none; }
 
-  /* 편집 도구는 위쪽 — 시계·알림 자리라 어차피 오브젝트를 놓지 않는다 */
-  .bar.top { top: 0; padding: max(.5rem, env(safe-area-inset-top)) .6rem .6rem;
-             background: linear-gradient(#000000e8, #000000cc 62%, #0000); }
-  .edit-row { display: flex; align-items: center; gap: .4rem; }
-  #edit-device-label { flex: 1; min-width: 0; font-size: .72rem; opacity: .75;
-                       overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .edit-row select { flex: 1; min-width: 0; font: inherit; font-size: .78rem; color: #fff;
-                     background: #1b232ef2; border: 1px solid #ffffff44; border-radius: .4rem;
+  /* 꾸미기 도구는 화면을 가리지 않게 떠 있는 알약·독 형태로 (스토리 편집기 방식) */
+  .edit-top, .edit-dock { position: absolute; z-index: 3; color: #fff; }
+  .edit-top[hidden], .edit-dock[hidden] { display: none; }
+  .edit-top button, .edit-dock button { color: #fff; font: inherit; cursor: pointer;
+    border: 1px solid #ffffff30; background: #000000a6; backdrop-filter: blur(6px); }
+  .edit-top button:hover:not(:disabled), .edit-dock button:hover:not(:disabled) { background: #000000d9; }
+  .edit-top button:disabled, .edit-dock button:disabled { opacity: .35; cursor: default; }
+  .edit-top { top: max(.55rem, env(safe-area-inset-top)); left: .55rem; right: .55rem;
+              display: flex; align-items: center; gap: .4rem; }
+  .edit-top button { padding: .4rem .7rem; font-size: .76rem; border-radius: 999px; flex: none; }
+  #edit-device-label { flex: 1; min-width: 0; font-size: .68rem; text-align: center;
+                       color: #ffffffb0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .edit-top select { flex: 1; min-width: 0; font: inherit; font-size: .74rem; color: #fff;
+                     background: #000000d9; border: 1px solid #ffffff30; border-radius: .5rem;
                      padding: .3rem .4rem; }
-  .edit-row button { padding: .4rem .6rem; font-size: .76rem; flex: none; }
-  #edit-device-change { font-size: .68rem; padding: .3rem .45rem; }
-  #edit-save { background: #ffffff2e; font-weight: bold; }
-  .edit-tools { display: grid; grid-template-columns: repeat(4, 1fr); gap: .3rem; }
-  /* 좁은 무대에서도 한 줄로 — 줄바꿈되면 막대가 안전영역을 넘는다 */
-  .edit-tools button { min-width: 0; padding: .45rem .15rem; font-size: .68rem;
-                       white-space: nowrap; overflow: hidden; }
-  #edit-hint { margin: 0; font-size: .66rem; line-height: 1.35; text-align: center;
-               color: #ffffffcc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #edit-save { font-weight: bold; }
+  /* 세로 독 — 오른쪽 가장자리에만 붙어서 화면 대부분을 비워 둔다 */
+  .edit-dock { top: 50%; right: .5rem; transform: translateY(-50%);
+               display: flex; flex-direction: column; gap: .3rem;
+               padding: .3rem; border-radius: 999px; background: #00000059; }
+  .edit-dock button { width: 2.5rem; height: 2.5rem; padding: 0; border-radius: 50%;
+                      font-size: .95rem; display: grid; place-items: center; }
+  #edit-hint { position: absolute; z-index: 3; left: 50%; transform: translateX(-50%);
+               bottom: max(.6rem, env(safe-area-inset-bottom)); margin: 0;
+               padding: .3rem .7rem; border-radius: 999px; background: #000000a6;
+               color: #fff; font-size: .66rem; white-space: nowrap; }
+  #edit-hint[hidden] { display: none; }
 
-  /* 보기 상태의 아래 막대: 월 이동 + 꾸미기 + 저장 */
-  .bar.bottom { bottom: 0; align-items: center; gap: .5rem;
-                padding: 1.4rem .6rem max(.7rem, env(safe-area-inset-bottom));
-                background: linear-gradient(#0000, #000000cc 38%, #000000ee); }
+  /* 보기 상태의 조작부: 목업 아래에 놓여 배경화면을 가리지 않는다 */
+  #view-bar { flex: none; display: flex; flex-direction: column; align-items: center;
+              gap: .5rem; color: #fff;
+              padding: .8rem .6rem max(.8rem, env(safe-area-inset-bottom)); }
+  #view-bar[hidden] { display: none; }
+  #view-bar button { color: #fff; border: 1px solid #ffffff33; background: #ffffff14;
+                     font: inherit; border-radius: .5rem; cursor: pointer; padding: .5rem .8rem; }
+  #view-bar button:hover { background: #ffffff2b; }
   .month-nav { display: flex; align-items: center; gap: .2rem; }
   .month-nav button { border: 0; background: none; opacity: .6; padding: .45rem .55rem;
                       font-size: .95rem; }
   .month-nav button:hover { opacity: 1; background: #ffffff1f; }
   .month-label { min-width: 7rem; text-align: center; font-size: .82rem; opacity: .85; }
   .view-actions { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap;
-                  justify-content: center; padding-right: 3.4rem; }
+                  justify-content: center; }
   .view-actions button { font-size: .8rem; }
   #view-save { background: #ffffff2e; font-weight: bold; }
   #today-btn { font-size: .74rem; padding: .4rem .6rem; }
@@ -127,51 +142,50 @@
 </head>
 <body>
 <div id="app">
-  <div id="stage">
-    <canvas id="wallpaper" role="img" aria-label="달력 배경화면"></canvas>
-    <div id="stickers" aria-label="스티커 편집 영역"></div>
-    <div id="safe-guide" hidden><span>시계·알림 영역</span></div>
-    <div id="cal-frame" hidden></div>
+  <div id="stage-wrap">
+    <div id="stage">
+      <canvas id="wallpaper" role="img" aria-label="달력 배경화면"></canvas>
+      <div id="stickers" aria-label="스티커 편집 영역"></div>
+      <div id="safe-guide" hidden><span>시계·알림</span></div>
+      <div id="cal-frame" hidden></div>
 
-    <!-- 꾸미기 상태: 도구 막대 -->
-    <div class="bar top" id="edit-bar" hidden>
-      <div class="edit-row">
-        <button id="edit-close" type="button" aria-label="꾸미기 끝내기">✕</button>
+      <!-- 꾸미기 상태: 화면을 가리지 않는 떠 있는 도구들 (스토리 편집기 방식) -->
+      <div class="edit-top" id="edit-top" hidden>
+        <button id="edit-close" type="button">✕ 미리보기</button>
         <span id="edit-device-label"></span>
         <select id="device" aria-label="휴대폰 기종 선택" hidden></select>
-        <button id="edit-device-change" type="button" hidden>기종 바꾸기</button>
+        <button id="edit-device-change" type="button" hidden>기종</button>
         <button id="edit-save" type="button">💾 저장</button>
       </div>
-      <div class="edit-tools">
-        <button id="edit-asset" type="button">🐶 스티커</button>
-        <button id="edit-smaller" type="button">－ 크기</button>
-        <button id="edit-larger" type="button">＋ 크기</button>
-        <button id="edit-rotate" type="button" disabled>↻ 회전</button>
-        <button id="edit-duplicate" type="button" disabled>복제</button>
-        <button id="edit-remove" type="button" disabled>삭제</button>
-        <button id="edit-cal" type="button">📅 달력</button>
-        <button id="edit-reset" type="button">되돌리기</button>
+      <div class="edit-dock" id="edit-dock" hidden>
+        <button id="edit-asset" type="button" aria-label="스티커 붙이기" title="스티커">🐶</button>
+        <button id="edit-larger" type="button" aria-label="크게" title="크게">＋</button>
+        <button id="edit-smaller" type="button" aria-label="작게" title="작게">－</button>
+        <button id="edit-rotate" type="button" aria-label="회전" title="회전" disabled>↻</button>
+        <button id="edit-duplicate" type="button" aria-label="복제" title="복제" disabled>⧉</button>
+        <button id="edit-remove" type="button" aria-label="삭제" title="삭제" disabled>🗑</button>
+        <button id="edit-cal" type="button" aria-label="달력 잡기" title="달력 잡기" disabled>📅</button>
+        <button id="edit-reset" type="button" aria-label="되돌리기" title="되돌리기">↺</button>
       </div>
-      <p id="edit-hint"></p>
+      <p id="edit-hint" hidden></p>
+      <p id="err" role="alert"></p>
     </div>
+  </div>
 
-    <!-- 보기 상태: 월 이동과 시작 버튼 -->
-    <div class="bar bottom" id="view-bar">
-      <div class="month-nav">
-        <button id="prev" type="button" aria-label="이전 달">◀</button>
-        <!-- 배경화면 자체가 큰 월 제목을 갖고 있으므로 여기는 작게 (중복 인상 방지) -->
-        <div class="month-label"><span id="month-label">달력</span></div>
-        <button id="next" type="button" aria-label="다음 달">▶</button>
-      </div>
-      <div class="view-actions">
-        <button id="today-btn" type="button" hidden>오늘로</button>
-        <button id="decorate" type="button">🎨 꾸미기</button>
-        <button id="view-save" type="button">💾 배경화면 저장</button>
-      </div>
-      <p id="view-note" hidden>● 오늘 표시는 화면에서만 보여요</p>
+  <!-- 보기 상태: 목업 아래의 조작부 (배경화면 위에 겹치지 않는다) -->
+  <div id="view-bar">
+    <div class="month-nav">
+      <button id="prev" type="button" aria-label="이전 달">◀</button>
+      <!-- 배경화면 자체가 큰 월 제목을 갖고 있으므로 여기는 작게 (중복 인상 방지) -->
+      <div class="month-label"><span id="month-label">달력</span></div>
+      <button id="next" type="button" aria-label="다음 달">▶</button>
     </div>
-
-    <p id="err" role="alert"></p>
+    <div class="view-actions">
+      <button id="today-btn" type="button" hidden>오늘로</button>
+      <button id="decorate" type="button">🎨 꾸미기</button>
+      <button id="view-save" type="button">💾 저장</button>
+    </div>
+    <p id="view-note" hidden>● 오늘 표시는 화면에서만 보여요</p>
   </div>
 </div>
 
@@ -413,7 +427,9 @@ const wallpaperCv = document.getElementById("wallpaper");
 const stickerLayer = document.getElementById("stickers");
 const safeGuide = document.getElementById("safe-guide");
 const calFrame = document.getElementById("cal-frame");
-const editBar = document.getElementById("edit-bar");
+const editTop = document.getElementById("edit-top");
+const editDock = document.getElementById("edit-dock");
+const stageWrap = document.getElementById("stage-wrap");
 const viewBar = document.getElementById("view-bar");
 const editHint = document.getElementById("edit-hint");
 const viewNote = document.getElementById("view-note");
@@ -421,11 +437,16 @@ const monthLabel = document.getElementById("month-label");
 const todayBtn = document.getElementById("today-btn");
 const errEl = document.getElementById("err");
 
-// 화면(뷰포트) 안에 기종 비율 그대로 최대 크기로 무대를 앉힌다.
-// 브라우저 주소창 때문에 뷰포트가 실제 화면보다 짧을 수 있어 비율을 기준으로 맞춘다.
+// 무대는 두 상태 모두 기종 비율을 그대로 지킨다. 다만 보기에서는 조작부를 뺀
+// 자리에 여백을 두고 앉혀 "휴대폰 목업"으로 읽히게 하고, 꾸미기에서는 뷰포트를
+// 꽉 채운다. 브라우저 주소창 때문에 뷰포트 비율이 기기와 달라 남는 자리는
+// 배경화면과 같은 색으로 채우고, 실제 배경화면 영역은 점선으로 표시한다.
 function layoutStage() {
   const { w, h } = deviceSize();
-  const scale = Math.min(innerWidth / w, innerHeight / h);
+  const box = stageWrap.getBoundingClientRect();
+  const availW = editing ? box.width : box.width - 36;
+  const availH = editing ? box.height : box.height - 24;
+  const scale = Math.min(availW / w, availH / h);
   stage.style.width = `${Math.floor(w * scale)}px`;
   stage.style.height = `${Math.floor(h * scale)}px`;
 }
@@ -436,8 +457,10 @@ function render() {
   renderPending = true;
   requestAnimationFrame(() => {
     renderPending = false;
+    const colors = themeColors();
+    document.documentElement.style.setProperty("--wp-bg", colors.bg);
     const opt = wallpaperOpt(1200, screenToday());
-    drawWallpaper(wallpaperCv, cal, themeColors(), opt);
+    drawWallpaper(wallpaperCv, cal, colors, opt);
     // 달력 선택 테두리는 방금 그린 배치를 그대로 %로 옮긴다
     const g = calGeometry(opt.w, opt.h, cal, opt);
     calFrame.style.left = `${g.left / opt.w * 100}%`;
@@ -491,6 +514,9 @@ addEventListener("keydown", (event) => {
   if (event.key === "ArrowRight") shiftMonth(1);
 });
 addEventListener("resize", () => { layoutStage(); render(); });
+// 조작부 높이는 글꼴·줄바꿈·"오늘로" 버튼 유무로 달라진다. 무대가 들어갈 자리가
+// 바뀌면 목업 크기를 다시 잡는다 (첫 렌더에서 여백이 사라지는 것 방지).
+new ResizeObserver(() => { layoutStage(); render(); }).observe(stageWrap);
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
 
 window.blShareText = () => `📅 ${cal.y}년 ${cal.m + 1}월 달력 — util.bubblelab.dev/calendar`;
@@ -602,7 +628,7 @@ viewSaveBtn.addEventListener("click", () => saveWallpaper(viewSaveBtn));
 editSaveBtn.addEventListener("click", () => saveWallpaper(editSaveBtn));
 
 if (mobileFileShare) {
-  viewSaveBtn.textContent = "💾 저장 / 공유";
+  viewSaveBtn.textContent = "💾 저장/공유";
 }
 
 // ---- 꾸미기 상태 ----
@@ -638,30 +664,31 @@ function selectSticker(index) {
   updateControls();
 }
 
+function setEditing(on) {
+  editing = on;
+  document.body.classList.toggle("editing", on);
+  editTop.hidden = !on;
+  editDock.hidden = !on;
+  editHint.hidden = !on;
+  safeGuide.hidden = !on;
+  viewBar.hidden = on;
+  viewNote.hidden = on || !isThisMonth();
+  if (!on) calFrame.hidden = true;
+  layoutStage();                   // 목업 ↔ 전체화면으로 무대 크기가 바뀐다
+  render();                        // 꾸미기에서는 오늘 강조를 빼 저장본과 같아진다
+}
+
 function openEditor() {
-  editing = true;
-  document.body.classList.add("editing");
-  editBar.hidden = false;
-  viewBar.hidden = true;
-  safeGuide.hidden = false;
-  viewNote.hidden = true;
+  setEditing(true);
   refreshDeviceUi();
   selectSticker(-1);               // 달력이 기본으로 잡혀 있다
-  render();                        // 오늘 강조를 빼고 저장본과 똑같이 보여준다
   // 주소창까지 감추면 진짜 배경화면처럼 보인다. 지원 안 하면 그냥 넘어간다.
   document.documentElement.requestFullscreen?.({ navigationUI: "hide" }).catch(() => {});
 }
 
 function closeEditor() {
-  editing = false;
-  document.body.classList.remove("editing");
-  editBar.hidden = true;
-  viewBar.hidden = false;
-  safeGuide.hidden = true;
-  calFrame.hidden = true;
-  viewNote.hidden = !isThisMonth();
+  setEditing(false);
   if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
-  render();
 }
 
 document.getElementById("decorate").addEventListener("click", openEditor);
@@ -758,7 +785,8 @@ function beginGesture() {
 }
 
 stage.addEventListener("pointerdown", (event) => {
-  if (event.target.closest(".bar")) return;   // 막대는 버튼으로 동작
+  // 떠 있는 도구(위 알약 줄·오른쪽 독)는 제스처가 아니라 버튼으로 동작한다
+  if (event.target.closest(".edit-top, .edit-dock, #edit-hint, #err")) return;
   if (!editing) { viewSwipe = { x: event.clientX, y: event.clientY }; return; }
   event.preventDefault();
   const sticker = stickers.findIndex((item) => item.el === event.target);
