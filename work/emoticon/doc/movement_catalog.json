@@ -85,9 +85,12 @@
       ],
       "emotionSlot": "신남·기대",
       "channel": "rig",
-      "status": "todo",
-      "cuts": [],
-      "guide": "doc/guide-by-movement/bounce.md"
+      "status": "revise",
+      "cuts": [
+        "bounce1"
+      ],
+      "guide": "doc/guide-by-movement/bounce.md",
+      "verdict": "공중에서 눈 상태가 달라짐 · 시작컷이 스퀴즈 · 4프레임 안광 없음"
     },
     {
       "id": "heart",
