@@ -2,6 +2,38 @@
   "version": 1,
   "items": [
     {
+      "id": "0ccb390d-15bf-4f4a-b9c2-60f3f31a7f37",
+      "character": "rabbit",
+      "cut": "blink1",
+      "verdict": "good",
+      "note": "지금까지 중에 제일 좋아요! 이건 다른사람 리뷰를 받아봐도 좋을듯.\nDuri 이모티콘으로 쓰면서 개선점을 파악해도 괜찮을듯",
+      "at": "2026-08-01T15:33:25.106Z"
+    },
+    {
+      "id": "c0157226-b913-45c1-90a8-46f7e68141c4",
+      "character": "rabbit",
+      "cut": "hello3",
+      "verdict": "revise",
+      "note": "좌우 안맞음",
+      "at": "2026-08-01T15:31:24.702Z"
+    },
+    {
+      "id": "ee5c4fae-b74c-4ecf-b20e-4732ba684292",
+      "character": "rabbit",
+      "cut": "nod",
+      "verdict": "revise",
+      "note": "좌우안맞음",
+      "at": "2026-08-01T15:30:54.968Z"
+    },
+    {
+      "id": "22fe8cb3-0fc3-4c03-94aa-2dad37484ca2",
+      "character": "rabbit",
+      "cut": "nod",
+      "verdict": "note",
+      "note": "좌우안맞음",
+      "at": "2026-08-01T15:30:45.829Z"
+    },
+    {
       "id": "cdce0c8d-5f83-4694-9632-426dd69e5fa3",
       "character": "rabbit",
       "cut": "lrtest2",
@@ -24,22 +56,6 @@
       "verdict": "revise",
       "note": "2프레임이 3프레임이랑 겹쳐보여 이상하게보임",
       "at": "2026-08-01T06:06:22.726Z"
-    },
-    {
-      "id": "45c582e6-82b7-4437-a721-ac25f2ba8712",
-      "character": "rabbit",
-      "cut": "blink1",
-      "verdict": "reject",
-      "note": "2프레임은 눈꺼풀이 부자연스럽고 3프레임은 얼굴에 이상한 선이 생겼어요 나머진 괜찮은거같음",
-      "at": "2026-08-01T05:59:55.614Z"
-    },
-    {
-      "id": "ce78f96f-32d2-42c8-8512-5d7a17a5d236",
-      "character": "rabbit",
-      "cut": "blink1",
-      "verdict": "reject",
-      "note": "2프레임은 눈꺼풀이 부자연스럽고 3프레임은 얼굴에 이상한 선이 생겼어요 나머진 괜찮은거같음",
-      "at": "2026-08-01T05:59:55.360Z"
     },
     {
       "id": "c82f62c8-eda5-4b51-8dba-378a501634b0",
