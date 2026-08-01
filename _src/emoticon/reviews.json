@@ -1,0 +1,109 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "id": "c82f62c8-eda5-4b51-8dba-378a501634b0",
+      "character": "rabbit",
+      "cut": "hello2",
+      "verdict": "reject",
+      "note": "바둥바둥2",
+      "at": "2026-08-01T04:37:48.480Z"
+    },
+    {
+      "id": "5cc303e4-579d-451c-901f-75c2dd4d333f",
+      "character": "rabbit",
+      "cut": "hello",
+      "verdict": "revise",
+      "note": "버둥버둥으로 이름바꾸면 잘팔릴듯",
+      "at": "2026-08-01T04:37:34.285Z"
+    },
+    {
+      "id": "5c4f3818-5300-4f3f-bd73-1dbfc919f737",
+      "character": "rabbit",
+      "cut": "heart",
+      "verdict": "good",
+      "note": "움직임이 없어서 아쉽",
+      "at": "2026-08-01T04:37:19.965Z"
+    },
+    {
+      "id": "5a591a76-22a4-4c0a-84d7-130979e84869",
+      "character": "rabbit",
+      "cut": "wave",
+      "verdict": "good",
+      "note": "지금까지중 제일좋음",
+      "at": "2026-08-01T04:37:08.493Z"
+    },
+    {
+      "id": "5e30143e-eb09-483f-a48a-6698cee2c3dc",
+      "character": "rabbit",
+      "cut": "nod2",
+      "verdict": "reject",
+      "note": "귀가 3개 됨",
+      "at": "2026-08-01T04:37:01.037Z"
+    },
+    {
+      "id": "2a8f080e-4bce-4375-8541-ae0e6e44c03e",
+      "character": "rabbit",
+      "cut": "nod3",
+      "verdict": "reject",
+      "note": "귀가 4개 됨",
+      "at": "2026-08-01T04:36:51.897Z"
+    },
+    {
+      "id": "d3b5cb7c-01c8-4bc1-9c92-2167c508f22b",
+      "character": "rabbit",
+      "cut": "nod4",
+      "verdict": "reject",
+      "note": "귀가 4개됨",
+      "at": "2026-08-01T04:36:38.834Z"
+    },
+    {
+      "id": "a22fa535-79b2-439a-b925-218b1f12c3bd",
+      "character": "rabbit",
+      "cut": "nod5",
+      "verdict": "reject",
+      "note": "완전 망가지고 손도 4개생김",
+      "at": "2026-08-01T04:36:30.735Z"
+    },
+    {
+      "id": "bbd745ba-1bf7-4204-98e4-437b0a0312c2",
+      "character": "rabbit",
+      "cut": "nod6",
+      "verdict": "good",
+      "note": "이것도 맘에들긴함 프레임이 적음",
+      "at": "2026-08-01T04:36:14.714Z"
+    },
+    {
+      "id": "03a071be-61ff-491e-9245-5d5673475383",
+      "character": "rabbit",
+      "cut": "nod8",
+      "verdict": "revise",
+      "note": "Nod로는 불합격인데 귀엽긴하네요",
+      "at": "2026-08-01T04:35:40.686Z"
+    },
+    {
+      "id": "ae374cd8-d88e-400b-bc4c-8c2beff87271",
+      "character": "rabbit",
+      "cut": "nod9",
+      "verdict": "good",
+      "note": "아주 맘에 듭니다. 프레임만 늘리면 두리이모티콘정도로 쓸수있을지도??",
+      "at": "2026-08-01T04:35:16.684Z"
+    },
+    {
+      "id": "629c12c0-6024-4d72-82ac-0fc0a772d7d5",
+      "character": "rabbit",
+      "cut": "nod10",
+      "verdict": "reject",
+      "note": "좋은데 프레임 낭비가 심한거같아요 같은 내용을 8 프레임(편도) 로 해결 가능할듯 그리고 얼굴이 턱밑까지 내려왔아요 이건 고쳐야함",
+      "at": "2026-08-01T01:06:52.588Z"
+    },
+    {
+      "id": "dd17e794-1549-4923-8ddb-0e86e9959ebd",
+      "character": "rabbit",
+      "cut": "nod11",
+      "verdict": "revise",
+      "note": "프레임 4에 팔이 4개고 끄덕임보다는 표정바뀜(깜빡이)에 가깝네요 표정의 부드러움은 프레임을 늘리면 해결될거같긴 함",
+      "at": "2026-08-01T01:05:37.313Z"
+    }
+  ]
+}
