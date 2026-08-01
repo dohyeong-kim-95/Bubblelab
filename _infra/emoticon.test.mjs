@@ -547,3 +547,44 @@ test("CLI: redo는 프레임당 2회까지, --force-redo로 다시 연다", () =
     rmSync(workdir, { recursive: true, force: true });
   }
 });
+
+test("mirror: 좌우 반전은 무손실이고 두 번 하면 원본이다", async () => {
+  // 든 팔이 프레임마다 좌우로 뛰는 문제를 재생성 없이 고치는 경로다.
+  const { mirrorImage } = await import("./emoticon.mjs");
+  const image = {
+    width: 3, height: 2,
+    data: Uint8Array.from([
+      1, 2, 3, 255, 4, 5, 6, 255, 7, 8, 9, 255,
+      10, 11, 12, 255, 13, 14, 15, 255, 16, 17, 18, 200,
+    ]),
+  };
+  const flipped = mirrorImage(image);
+  assert.deepEqual([...flipped.data.slice(0, 4)], [7, 8, 9, 255]);   // 첫 픽셀 ← 마지막
+  assert.deepEqual([...flipped.data.slice(12, 16)], [16, 17, 18, 200]); // 알파도 함께
+  assert.deepEqual([...mirrorImage(flipped).data], [...image.data]);
+});
+
+test("CLI: mirror가 프레임 파일을 실제로 뒤집는다", () => {
+  const workdir = mkdtempSync(join(tmpdir(), "emoticon-mirror-"));
+  const env = { ...process.env, EMOTICON_IMAGE_PROVIDER: "mock" };
+  const run = (...args) => execFileSync(process.execPath, [CLI, ...args], { env, encoding: "utf8" });
+  try {
+    run("sheet", workdir, "--prompt", "테스트");
+    const spec = join(workdir, "keys.json");
+    writeFileSync(spec, JSON.stringify({
+      motion: "인사", breakdowns: 0, keys: [{ pose: "차렷", hold: 2 }, { pose: "손 들기", hold: 2 }],
+    }));
+    run("cut", workdir, "m", "--keys", spec, "--fps", "12");
+    const path = join(workdir, "cuts", "m", "frames", "02.png");
+    const before = readFileSync(path);
+    assert.match(run("mirror", workdir, "m", "2"), /프레임 02 좌우 반전/);
+    const after = readFileSync(path);
+    // mock은 좌우대칭 원이라 픽셀은 같을 수 있다 — 파일이 정상 PNG로 남는지 확인
+    assert.ok(after.length > 0);
+    assert.doesNotThrow(() => run("build", workdir, "m"));
+    assert.throws(() => run("mirror", workdir, "m", "99"), /프레임이 없습니다/);
+    assert.ok(before.length > 0);
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});

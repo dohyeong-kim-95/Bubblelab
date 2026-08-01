@@ -1128,6 +1128,38 @@ function parseArgs(argv) {
   return { positional, options };
 }
 
+// 좌우 반전 — 든 팔이 프레임마다 좌우로 뛰는 문제를 공짜로 고친다.
+//
+// 이 캐릭터군은 정면 뷰에서 **좌우 대칭**이라(귀·볼·얼굴 모두 중앙 정렬)
+// 프레임을 통째로 뒤집으면 든 팔의 방향만 바뀌고 나머지는 그대로다.
+// 텍스트로 좌우를 못 박는 건 열 번 넘게 실패했다(lesson_learned §9·§12·§22) —
+// 통제되지 않는 축은 프롬프트가 아니라 코드로 잡는다. 재생성비 0원, 결정론적.
+export function mirrorImage({ width, height, data }) {
+  const out = new Uint8Array(data.length);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const from = (y * width + x) * 4;
+      const to = (y * width + (width - 1 - x)) * 4;
+      for (let c = 0; c < 4; c++) out[to + c] = data[from + c];
+    }
+  }
+  return { width, height, data: out };
+}
+
+async function cmdMirror(workdir, cutId, frameArg) {
+  const numbers = String(frameArg ?? "").split(/[\s,]+/).filter(Boolean).map(Number);
+  if (!numbers.length) throw new Error('반전할 프레임 번호가 필요합니다 (예: 2 또는 "2,8")');
+  const framesDir = join(workdir, "cuts", cutId, "frames");
+  if (!existsSync(framesDir)) throw new Error(`프레임이 없습니다: ${framesDir}`);
+  for (const n of numbers) {
+    const path = join(framesDir, `${pad2(n)}.png`);
+    if (!existsSync(path)) throw new Error(`프레임이 없습니다: ${path}`);
+    atomicWriteFile(path, Buffer.from(encodePng(mirrorImage(decodePng(readFileSync(path))))));
+    console.log(`✓ 프레임 ${pad2(n)} 좌우 반전`);
+  }
+  console.log(`다음 단계: node _infra/emoticon.mjs build ${workdir} ${cutId}`);
+}
+
 // 비전 부품 검사 — 프레임마다 "귀가 몇 개인가"를 모델에게 묻고 report.json에
 // 기록한다. 이미지 생성이 아니라 텍스트 응답이라 컷 하나에 몇 원 수준이다.
 // 기하 검출이 두 설계 모두 실패해서 온 경로다 (lesson_learned §42~44).
@@ -1185,6 +1217,7 @@ const USAGE =
   '  build  <작업폴더> <컷id> [--size 360] [--fps N] [--line]\n' +
   '  redo   <작업폴더> <컷id> "<프레임번호…>" [--force-redo]  ← 불량 프레임만 재생성\n' +
   '         장당 $0.04, "2,3" 가능. 프레임당 2회까지 — 넘으면 포즈 문장을 고치고 --force-redo\n' +
+  '  mirror <작업폴더> <컷id> "<프레임번호…>"  ← 좌우 반전 (든 팔 방향 정렬, 무료)\n' +
   '  parts  <작업폴더> <컷id> [--expect \'{"ears":2}\']   ← 비전 부품 검사, report.json에 기록\n' +
   '  check  <작업폴더> <컷id> [--profile draft|master-2s|line] [--json]  ← FAIL이면 exit 1\n' +
   '작업폴더 권장 위치: _src/emoticon/<캐릭터명> (배포·커밋 제외)\n' +
@@ -1204,6 +1237,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     else if (command === "build") await cmdBuild(workdir, rest[0], options);
     else if (command === "redo") await cmdRedo(workdir, rest[0], rest[1], options);
     else if (command === "parts") await cmdParts(workdir, rest[0], options);
+    else if (command === "mirror") await cmdMirror(workdir, rest[0], rest[1]);
     else if (command === "check") {
       const judgement = cmdCheck(workdir, rest[0], options);
       if (judgement.verdict === "fail") process.exit(1);
