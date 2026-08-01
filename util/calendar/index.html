@@ -29,7 +29,8 @@
   #prev { left: .3rem; }
   #next { right: .3rem; }
   body.editing .side-nav { display: none; }
-  #stage { position: relative; overflow: hidden; touch-action: none; }
+  #stage { position: relative; overflow: hidden; touch-action: none;
+           -webkit-touch-callout: none; }
   /* 미리보기: 여백이 "프레임 바깥"으로 읽히도록 베젤을 두른다 */
   body:not(.editing) #stage { border-radius: 1.5rem;
     box-shadow: 0 0 0 5px #10151c, 0 0 0 6px #ffffff2e, 0 16px 40px #000a; }
@@ -42,7 +43,7 @@
   body:not(.editing) #stickers { pointer-events: none; }
   .sticker { position: absolute; transform-origin: center; height: auto; max-width: none;
              border: 2px solid transparent; border-radius: .2rem; touch-action: none;
-             -webkit-user-drag: none; user-select: none; }
+             -webkit-user-drag: none; user-select: none; -webkit-touch-callout: none; }
   .sticker.selected { border-color: #fff; outline: 2px solid #8ab8ff; }
   /* 시계·알림이 겹치는 상단 영역 안내 — 화면에만 있고 저장 PNG에는 안 들어간다 */
   #safe-guide { position: absolute; inset: 0 0 auto; height: 20%; pointer-events: none;
@@ -861,6 +862,8 @@ function beginGesture() {
     distance: Math.hypot(b.x - a.x, b.y - a.y),
     angle: Math.atan2(b.y - a.y, b.x - a.x) };
 }
+
+stage.addEventListener("contextmenu", (event) => event.preventDefault());
 
 stage.addEventListener("pointerdown", (event) => {
   // 떠 있는 도구(위 알약 줄·오른쪽 독)는 제스처가 아니라 버튼으로 동작한다
