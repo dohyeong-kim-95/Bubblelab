@@ -588,3 +588,27 @@ test("CLI: mirror가 프레임 파일을 실제로 뒤집는다", () => {
     rmSync(workdir, { recursive: true, force: true });
   }
 });
+
+test("alignFrames: 몸 기준점으로 평행이동해 흔들림을 없앤다", async () => {
+  // 모델이 프레임마다 몸을 몇 px씩 옮겨 그린다 — 재생하면 "갑자기 translation"
+  // 한다는 검수 지적으로 드러났다(wave2 하체 중심 502~517px).
+  const { alignFrames, bodyAnchor } = await import("./emoticon.mjs");
+  const blob = (dx, dy, size = 40) => {
+    const data = new Uint8Array(size * size * 4);
+    for (let y = 20; y < 34; y++) {
+      for (let x = 14; x < 26; x++) {
+        const i = ((y + dy) * size + (x + dx)) * 4;
+        data[i] = 20; data[i + 1] = 20; data[i + 2] = 20; data[i + 3] = 255;
+      }
+    }
+    return { width: size, height: size, data };
+  };
+  const frames = [blob(0, 0), blob(3, -2), blob(-2, 1)];
+  const spread = (list) => {
+    const xs = list.map((f) => bodyAnchor(f).x);
+    const ys = list.map((f) => bodyAnchor(f).y);
+    return [Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)];
+  };
+  assert.deepEqual(spread(frames), [5, 3]);          // 정렬 전에는 흔들린다
+  assert.deepEqual(spread(alignFrames(frames)), [0, 0]);  // 정렬 후 기준점 일치
+});

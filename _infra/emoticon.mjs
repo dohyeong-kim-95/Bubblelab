@@ -156,6 +156,62 @@ function cropAll(frames, { left, top, right, bottom }) {
 }
 
 // 공통 경계로 자른 프레임들을 size² 투명 캔버스에 비율 유지로 맞춰 중앙 배치
+// 몸 기준점 — 발 바닥선과 하체 가로 중심. 팔을 들면 실루엣 폭이 바뀌므로
+// 전체 bbox는 기준이 될 수 없고, **동작과 무관하게 고정되어야 하는 부위**로
+// 잡아야 한다. 하체(아래 22%)는 우리 포즈 규약상 항상 제자리다.
+export function bodyAnchor(image) {
+  const { width, height, data } = image;
+  let bottom = -1;
+  let top = height;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (data[(y * width + x) * 4 + 3] > 128) { if (y > bottom) bottom = y; if (y < top) top = y; break; }
+    }
+  }
+  if (bottom < 0) return null;
+  const from = Math.round(bottom - (bottom - top) * 0.22);
+  let sum = 0;
+  let count = 0;
+  for (let y = Math.max(0, from); y <= bottom; y++) {
+    for (let x = 0; x < width; x++) if (data[(y * width + x) * 4 + 3] > 128) { sum += x; count++; }
+  }
+  return count ? { x: sum / count, y: bottom } : null;
+}
+
+// 프레임을 공통 몸 기준점으로 평행이동한다.
+//
+// 왜: 모델은 프레임마다 캐릭터를 새로 그리므로 몸이 몇 px씩 움직인다. 실측
+// (wave2) 하체 중심 502~517px — 재생하면 "몸이 갑자기 translation"하고
+// "다른 그림을 붙여놓은" 느낌이 난다는 검수 지적으로 드러났다. 이 축도 좌우
+// 방향처럼 텍스트로 통제할 수 없으니 코드로 잡는다. 무손실 평행이동이다.
+//
+// 통통튀기처럼 **몸이 실제로 움직여야 하는 컷은 끄고 쓴다**(anchor: "none").
+export function alignFrames(frames) {
+  const anchors = frames.map(bodyAnchor);
+  if (anchors.some((a) => !a)) return frames;
+  const mid = (values) => [...values].sort((a, b) => a - b)[values.length >> 1];
+  const target = { x: mid(anchors.map((a) => a.x)), y: mid(anchors.map((a) => a.y)) };
+  return frames.map((frame, i) => {
+    const dx = Math.round(target.x - anchors[i].x);
+    const dy = Math.round(target.y - anchors[i].y);
+    if (!dx && !dy) return frame;
+    const { width, height, data } = frame;
+    const out = new Uint8Array(data.length);
+    for (let y = 0; y < height; y++) {
+      const sy = y - dy;
+      if (sy < 0 || sy >= height) continue;
+      for (let x = 0; x < width; x++) {
+        const sx = x - dx;
+        if (sx < 0 || sx >= width) continue;
+        const to = (y * width + x) * 4;
+        const src = (sy * width + sx) * 4;
+        for (let c = 0; c < 4; c++) out[to + c] = data[src + c];
+      }
+    }
+    return { width, height, data: out };
+  });
+}
+
 export function fitFrames(frames, size) {
   const bounds = unionBounds(frames);
   if (!bounds) throw new Error("모든 프레임이 비어 있습니다 — 크로마키 결과를 확인하세요");
@@ -998,7 +1054,17 @@ async function cmdBuild(workdir, cutId, options) {
   const size = Number(options.size ?? 360);
   const files = readdirSync(framesDir).filter((f) => /^\d{2}\.png$/.test(f)).sort();
   if (files.length < 2) throw new Error(`프레임이 2장 미만입니다: ${framesDir}`);
-  const frames = files.map((f) => decodePng(readFileSync(join(framesDir, f))));
+  const raw = files.map((f) => decodePng(readFileSync(join(framesDir, f))));
+  // 몸 정렬이 기본이다 — 모델이 프레임마다 몸을 몇 px씩 옮겨 그려서 재생하면
+  // 튄다. 몸이 실제로 움직여야 하는 컷만 cut.json에 anchor:"none"을 둔다.
+  const frames = meta.anchor === "none" ? raw : alignFrames(raw);
+  if (meta.anchor !== "none") {
+    const before = raw.map(bodyAnchor).filter(Boolean);
+    if (before.length === raw.length) {
+      const spread = (get) => Math.max(...before.map(get)) - Math.min(...before.map(get));
+      console.log(`  몸 정렬: 가로 ${spread((a) => a.x).toFixed(0)}px · 세로 ${spread((a) => a.y).toFixed(0)}px 흔들림 보정`);
+    }
+  }
 
   const outDir = join(workdir, "out");
   mkdirSync(outDir, { recursive: true });

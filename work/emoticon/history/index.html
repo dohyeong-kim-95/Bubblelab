@@ -60,7 +60,8 @@
   .fb select, .fb textarea, .fb button[type=submit] {
     font: inherit; font-size: .85rem; background: rgba(128,128,128,.1);
     color: inherit; border: 1px solid var(--line); border-radius: 6px; padding: .35rem .5rem; }
-  .fb textarea { flex: 1 1 14rem; min-height: 2.2rem; resize: vertical; }
+  .fb textarea { flex: 1 1 14rem; min-height: 2.2rem; max-height: 40vh; resize: vertical;
+                 overflow-y: hidden; line-height: 1.5; }
   .fb button[type=submit] { cursor: pointer; }
   .fb .say { font-size: .78rem; color: var(--soft); margin: .3rem 0 0; }
   .fb .say.err { color: var(--warn); }
@@ -141,6 +142,16 @@
       if (!res.ok) throw new Error(`${res.status} ${(await res.text()).slice(0, 120)}`);
       return res.json();
     };
+
+    // 줄이 늘면 입력창도 같이 자란다 (scrollHeight로 재측정 — 먼저 높이를 비워야
+    // 줄어들 때도 따라온다). max-height를 넘으면 그때부터 스크롤.
+    const note = box.querySelector("textarea");
+    const grow = () => {
+      note.style.height = "auto";
+      note.style.height = `${note.scrollHeight}px`;
+      note.style.overflowY = note.scrollHeight > window.innerHeight * 0.4 ? "auto" : "hidden";
+    };
+    note.addEventListener("input", grow);
 
     box.querySelector("form").addEventListener("submit", async (event) => {
       event.preventDefault();
