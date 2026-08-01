@@ -151,6 +151,9 @@ export function judgeReport(report, profileName = "draft", info = null) {
   for (const v of report.parts?.violations ?? []) {
     hard.push(`프레임 ${v.frame}: ${v.part} ${v.found}개 — 기대 ${v.expected}개`);
   }
+  for (const w of report.parts?.warnings ?? []) {
+    soft.push(`프레임 ${w.frame}: ${w.part}이 ${w.found}개로 보입니다 (기대 ${w.expected}개) — 겹쳐 가려진 것일 수 있습니다`);
+  }
 
   // ── Soft: 경고만 ─────────────────────────────────────────────────
   if (report.scaleDrift > DRIFT_LIMIT) {

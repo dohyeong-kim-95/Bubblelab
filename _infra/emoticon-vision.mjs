@@ -46,20 +46,25 @@ export function parseCounts(text, parts) {
 
 // parts: [{ key, what, expected }]
 // ask: (imageB64) => Promise<string>  — 프로바이더 주입 (테스트에서 대체)
+// 초과와 부족을 나눈다 — 13컷 82프레임 실측에서 성격이 완전히 달랐다:
+//   초과(4개·3개)는 **전부 진짜 결함**이었다 (nod2·nod3·nod4의 귀, nod11의 팔).
+//   부족(1개)은 **전부 겹침**이었다 (wave가 팔을 들어 몸에 겹친 프레임).
+// 그래서 초과만 hard로 올리고 부족은 경고로 둔다.
 export async function inspectParts({ framesB64, parts, ask }) {
   const counts = [];
   const violations = [];
+  const warnings = [];
   for (const [index, imageB64] of framesB64.entries()) {
     const text = await ask(imageB64, partsPrompt(parts));
     const found = parseCounts(text, parts);
     counts.push(found);
     for (const part of parts) {
-      if (typeof part.expected === "number" && found[part.key] !== part.expected) {
-        violations.push({ frame: index + 1, part: part.key, found: found[part.key], expected: part.expected });
-      }
+      if (typeof part.expected !== "number" || found[part.key] === part.expected) continue;
+      const item = { frame: index + 1, part: part.key, found: found[part.key], expected: part.expected };
+      (found[part.key] > part.expected ? violations : warnings).push(item);
     }
   }
-  return { counts, violations };
+  return { counts, violations, warnings };
 }
 
 // 우리 토끼 기본값. 캐릭터마다 다르면 컷 스펙에서 덮어쓴다.

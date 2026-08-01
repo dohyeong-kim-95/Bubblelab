@@ -186,6 +186,9 @@ jobs:
                 --frames "$FRAMES" --fps "$FPS" $POSES_FLAG $FORCE_FLAG $RESUME_FLAG "${BUDGET_FLAGS[@]}"
             fi
             node _infra/emoticon.mjs build "$WORKDIR" "$CUT_ID"
+            # 부품 검사(여분 사지)를 판정 전에 돌려 report.json에 싣는다 —
+            # 사람 검수 불합격의 최다 원인이고 픽셀 지표로는 안 잡힌다.
+            node _infra/emoticon.mjs parts "$WORKDIR" "$CUT_ID" || true
             node _infra/emoticon.mjs check "$WORKDIR" "$CUT_ID" --profile "${PROFILE:-draft}"
           elif [[ "$STEP" == "redo" ]]; then
             # 선별 재작업: 튄 프레임(frames = 프레임 번호) 하나만 재생성 후 다시 굽는다
