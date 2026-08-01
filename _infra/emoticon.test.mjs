@@ -702,9 +702,10 @@ test("lift·rig를 손봐도 이미 뽑은 raw를 재사용한다 (후처리는 
   }
 });
 
-test("dropGroundLine: 끝까지 넓은 얇은 띠만 지운다", async () => {
+test("dropGroundLine: 열별 두께의 최빈값으로 바닥선만 지운다", async () => {
   // 모델이 지시하지 않고 바닥선을 그린다(bounce2 6/6). 발이 땅에 닿아 붙어
-  // 있어도 잡아야 하므로 연결요소가 아니라 폭 프로파일로 본다.
+  // 있어도 잡아야 하므로 연결요소가 아니라 **열별 바닥 두께**로 본다 —
+  // 선만 있는 열은 전부 같은 두께이고 몸·발이 얹힌 열은 훨씬 두껍다.
   const { dropGroundLine } = await import("./emoticon.mjs");
   const make = (withLine) => {
     const size = 120;
@@ -719,9 +720,12 @@ test("dropGroundLine: 끝까지 넓은 얇은 띠만 지운다", async () => {
   };
   const cleaned = dropGroundLine(make(true));
   assert.ok(cleaned.removed > 0, "바닥선을 지워야 한다");
-  assert.equal(cleaned.bandHeight, 4);
+  assert.equal(cleaned.bandHeight, 4, "선의 두께를 정확히 재야 한다");
+  // 몸통 아래에서도 선 두께만큼만 걷어낸다 — 발 외곽선은 남는다
+  const body = dropGroundLine(make(true)).image;
+  let bottomInk = 0;
+  for (let x = 0; x < 120; x++) if (body.data[(99 * 120 + x) * 4 + 3] > 16) bottomInk++;
+  assert.ok(bottomInk > 0, "선 위의 몸통은 남아 있어야 한다");
   // 선이 없으면 손대지 않는다
   assert.equal(dropGroundLine(make(false)).removed, 0);
-  // 몸이 차지하는 큰 영역을 "띠"로 오인하지 않는다
-  assert.equal(dropGroundLine(make(false), { maxBandRatio: 0.9 }).removed, 0);
 });

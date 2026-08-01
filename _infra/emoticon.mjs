@@ -99,44 +99,73 @@ export function autoCutout(image) {
 // 덩어리라 같이 지워진다. cut.json의 strays:"keep".
 // 모델이 지시하지 않고 그려 넣는 **바닥선**을 지운다.
 //
-// 실측 신호가 뚜렷하다(bounce2): 맨 아래 몇 줄의 잉크 폭이 275 → 484px로 튀고
-// 바닥까지 그 폭을 유지한다. 캐릭터 실루엣은 아래로 갈수록 좁아지므로 이런
-// "끝까지 넓은 얇은 띠"는 바닥선뿐이다. 발이 땅에 닿아 붙어 있어도 잡힌다
-// (연결요소 필터로는 못 잡는 이유가 이것).
-// widthJump 1.30: bounce2 6/6을 잡고 기존 합격 컷(blink1·wave2·heart·nod9,
-// 총 25프레임)에서 오탐 0건. 1.20까지 내려도 오탐은 없었지만 여유를 남긴다.
-export function dropGroundLine(image, { widthJump = 1.30, maxBandRatio = 0.06 } = {}) {
+// 방법: **열별 두께**를 본다. 바닥에서 위로 이어지는 불투명 길이를 열마다 재면
+// 바닥선만 있는 열은 전부 같은 값이고(실측 bounce2: 11px가 203열로 압도적),
+// 몸·발이 위에 얹힌 열은 훨씬 크다. 그 최빈 두께가 곧 선의 두께다.
+//
+// 폭 비율로 잡던 이전 방식은 임계값에 의존했고(1.35에서 한 프레임을 놓쳐
+// 1.30으로 낮춰야 했다) 두께는 선 자체를 직접 재므로 임계값이 필요 없다.
+// 발이 땅에 붙어 있어도 잡힌다 — 발 아래 선만 걷어내고 발 외곽선은 남는다
+// (확대 검증 완료).
+export function dropGroundLine(image, { maxThicknessRatio = 0.06, minSpan = 0.7, minColumns = 20 } = {}) {
   const { width, height, data } = image;
-  const span = new Int32Array(height);
-  let top = -1;
+  const opaque = (x, y) => data[(y * width + x) * 4 + 3] > 16;
+  let top = height;
   let bottom = -1;
+  let left = width;
+  let right = -1;
   for (let y = 0; y < height; y++) {
-    let a = -1;
-    let b = -1;
-    for (let x = 0; x < width; x++) if (data[(y * width + x) * 4 + 3] > 16) { if (a < 0) a = x; b = x; }
-    span[y] = a < 0 ? 0 : b - a + 1;
-    if (span[y] > 0) { if (top < 0) top = y; bottom = y; }
+    for (let x = 0; x < width; x++) {
+      if (!opaque(x, y)) continue;
+      if (y < top) top = y;
+      if (y > bottom) bottom = y;
+      if (x < left) left = x;
+      if (x > right) right = x;
+    }
   }
   if (bottom < 0) return { image, removed: 0 };
-  let bandTop = bottom;
-  while (bandTop > top && span[bandTop - 1] >= span[bottom] * 0.95) bandTop--;
-  const bandHeight = bottom - bandTop + 1;
-  const above = bandTop > top ? span[bandTop - 1] : span[bottom];
-  if (above * widthJump > span[bottom] || bandHeight > (bottom - top + 1) * maxBandRatio) {
+  const characterHeight = bottom - top + 1;
+  const maxThickness = Math.round(characterHeight * maxThicknessRatio);
+
+  // 열별 바닥 두께 → 얇은 열들의 최빈값이 선의 두께
+  const runs = new Int32Array(right - left + 1);
+  const tally = new Map();
+  for (let x = left; x <= right; x++) {
+    let n = 0;
+    for (let y = bottom; y >= 0 && opaque(x, y); y--) n++;
+    runs[x - left] = n;
+    if (n > 0 && n <= maxThickness) tally.set(n, (tally.get(n) ?? 0) + 1);
+  }
+  let thickness = 0;
+  let best = 0;
+  for (const [value, count] of tally) if (count > best) { best = count; thickness = value; }
+  if (!thickness) return { image, removed: 0 };
+  // 선이라면 **가로로 걸쳐 있어야** 한다. 개수로 보면 안 된다 — 발이 넓게
+  // 깔리면 순수 선 열이 확 줄기 때문이다(실측: 웅크린 프레임에서 203열 → 80열).
+  // 걸친 범위로 보면 웅크림 99%·공중 75%다(공중에서는 팔이 선보다 넓게 벌어져
+  // 분모가 커진다). 0.7이면 6/6을 잡고 기존 60프레임에서 오탐 0건 —
+  // 0.5까지 내려도 오탐은 없었지만 여유를 남긴다.
+  let first = -1;
+  let last = -1;
+  for (let x = left; x <= right; x++) {
+    if (runs[x - left] !== thickness) continue;
+    if (first < 0) first = x;
+    last = x;
+  }
+  if (best < minColumns || last - first + 1 < (right - left + 1) * minSpan) {
     return { image, removed: 0 };
   }
-  // 띠 전체를 지운다. 캐릭터 폭 바깥만 지워봤더니 발 사이에 검은 막대가
-  // 남아 더 나빴다 — 발바닥 외곽선이 살짝 평평해지는 쪽이 낫다(360px 출력에서
-  // 거의 보이지 않는다).
+
   const out = new Uint8Array(data);
   let removed = 0;
-  for (let y = bandTop; y <= bottom; y++) {
-    for (let x = 0; x < width; x++) {
+  for (let x = left; x <= right; x++) {
+    if (!runs[x - left]) continue;
+    for (let y = bottom; y > bottom - thickness; y--) {
       const i = (y * width + x) * 4 + 3;
       if (out[i] > 0) { out[i] = 0; removed++; }
     }
   }
-  return { image: { width, height, data: out }, removed, bandHeight };
+  return { image: { width, height, data: out }, removed, bandHeight: thickness };
 }
 
 export function dropStrays(image) {
