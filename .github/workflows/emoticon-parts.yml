@@ -52,6 +52,11 @@ jobs:
           CHARACTER="${IN_CHARACTER:-rabbit}"
           WORKDIR="_src/emoticon/$CHARACTER"
           CUTS="${IN_CUTS:-}"
+          # push 트리거(입력 없음)로 돌 때는 방금 만든 컷 하나만 본다 — 전체 백필은
+          # workflow_dispatch에서 cuts를 비워 부르면 된다.
+          if [[ -z "$CUTS" && -f _src/emoticon/job.json ]]; then
+            CUTS=$(node -e "console.log(require('./_src/emoticon/job.json').cut_id || '')")
+          fi
           if [[ -z "$CUTS" ]]; then
             CUTS=$(ls "$WORKDIR/cuts" | tr '\n' ' ')
           fi
