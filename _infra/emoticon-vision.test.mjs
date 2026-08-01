@@ -24,21 +24,24 @@ test("이상한 개수는 조용히 넘기지 않고 실패시킨다", () => {
   assert.throws(() => parseCounts("설명만 있고 JSON이 없음", RABBIT_PARTS), /JSON으로 읽을 수 없습니다/);
 });
 
-test("초과는 위반, 부족은 경고로 나눈다 (실측 근거)", async () => {
-  // 13컷 82프레임: 초과(귀 3·4, 팔 4)는 전부 진짜 결함이었고,
-  // 부족(팔 1)은 전부 겹침이었다(wave가 팔을 들어 몸에 겹친 프레임).
+test("초과는 항상 위반, 부족은 가려질 수 있는 부위만 경고", async () => {
+  // 초과(귀 3·4, 팔 4)는 실측에서 전부 진짜 결함이었다.
+  // 부족은 팔만 겹침일 수 있다(wave가 팔을 들면 1개로 세어진다).
+  // 눈 부족을 경고로 흘렸다가 blink1의 불량 프레임을 통과시켰다 — 이제 위반이다.
   const replies = [
     '{"ears":2,"arms":2,"eyes":2}', '{"ears":4,"arms":2,"eyes":2}',
     '{"ears":2,"arms":4,"eyes":2}', '{"ears":2,"arms":1,"eyes":2}',
+    '{"ears":2,"arms":2,"eyes":1}', '{"ears":1,"arms":2,"eyes":2}',
   ];
   let i = 0;
   const result = await inspectParts({
-    framesB64: ["a", "b", "c", "d"], parts: RABBIT_PARTS, ask: async () => replies[i++],
+    framesB64: ["a", "b", "c", "d", "e", "f"], parts: RABBIT_PARTS, ask: async () => replies[i++],
   });
-  assert.equal(result.counts.length, 4);
   assert.deepEqual(result.violations, [
     { frame: 2, part: "ears", found: 4, expected: 2 },
     { frame: 3, part: "arms", found: 4, expected: 2 },
+    { frame: 5, part: "eyes", found: 1, expected: 2 },   // 눈 부족 = 결함
+    { frame: 6, part: "ears", found: 1, expected: 2 },   // 귀 부족 = 결함
   ]);
   assert.deepEqual(result.warnings, [{ frame: 4, part: "arms", found: 1, expected: 2 }]);
 });

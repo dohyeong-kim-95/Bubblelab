@@ -46,10 +46,14 @@ export function parseCounts(text, parts) {
 
 // parts: [{ key, what, expected }]
 // ask: (imageB64) => Promise<string>  — 프로바이더 주입 (테스트에서 대체)
-// 초과와 부족을 나눈다 — 13컷 82프레임 실측에서 성격이 완전히 달랐다:
-//   초과(4개·3개)는 **전부 진짜 결함**이었다 (nod2·nod3·nod4의 귀, nod11의 팔).
-//   부족(1개)은 **전부 겹침**이었다 (wave가 팔을 들어 몸에 겹친 프레임).
-// 그래서 초과만 hard로 올리고 부족은 경고로 둔다.
+// 초과는 항상 결함이다 — 13컷 82프레임에서 초과(귀 3·4개, 팔 4개)는 전부
+// 진짜 결함이었다.
+//
+// 부족은 **부위에 따라 다르다.** 처음엔 "부족 = 겹침"으로 뭉뚱그려 경고로
+// 내렸는데, 그건 팔에서 뽑은 결론이었고 blink1에서 틀린 게 드러났다:
+// 눈 1개 경고를 흘려보냈더니 실제로는 눈꺼풀이 얼굴 전체를 덮은 불량
+// 프레임이었다. 정면 뷰에서 **눈·귀는 가려질 일이 없고**(occludable: false)
+// 팔만 몸에 겹쳐 가려질 수 있다(occludable: true).
 export async function inspectParts({ framesB64, parts, ask }) {
   const counts = [];
   const violations = [];
@@ -61,7 +65,8 @@ export async function inspectParts({ framesB64, parts, ask }) {
     for (const part of parts) {
       if (typeof part.expected !== "number" || found[part.key] === part.expected) continue;
       const item = { frame: index + 1, part: part.key, found: found[part.key], expected: part.expected };
-      (found[part.key] > part.expected ? violations : warnings).push(item);
+      const soft = found[part.key] < part.expected && part.occludable;
+      (soft ? warnings : violations).push(item);
     }
   }
   return { counts, violations, warnings };
@@ -70,6 +75,7 @@ export async function inspectParts({ framesB64, parts, ask }) {
 // 우리 토끼 기본값. 캐릭터마다 다르면 컷 스펙에서 덮어쓴다.
 export const RABBIT_PARTS = [
   { key: "ears", what: "long rabbit ear shapes attached to the head (upright, drooping, or behind)", expected: 2 },
-  { key: "arms", what: "arm or paw shapes attached to the body (a folded pair on the belly counts as two)", expected: 2 },
+  // 팔만 몸에 겹쳐 가려질 수 있다 — wave가 팔을 들면 실제로 1개로 세어진다.
+  { key: "arms", what: "arm or paw shapes attached to the body (a folded pair on the belly counts as two)", expected: 2, occludable: true },
   { key: "eyes", what: "eye shapes on the face (open circles or closed arcs both count)", expected: 2 },
 ];
