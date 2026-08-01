@@ -145,6 +145,29 @@ node _infra/emoticon.mjs redo _src/emoticon/토끼 nod 2 && node _infra/emoticon
 4. **2차 목표**: LINE 제안(8종 세트부터). 카카오는 AI 정책 해제 또는
    비-AI 워크플로(손그림 원화 + 리깅) 전환 시점에 제안.
 
+## duri 등록 (비공개 팩)
+
+**16장을 채울 필요가 없다.** duri는 팩 장수를 `downloads.length`(또는
+`DURI_ONLY_PACKS`의 `count`)로 읽으므로 1장짜리 팩도 그대로 뜬다. 16이라는 수는
+`_infra/sticker-pack.mjs`(4×4 시트 슬라이서)에만 있는 제약이고, 우리는 그 CLI를
+쓰지 않는다.
+
+비공개 유지 방법은 이미 있는 경로를 쓴다:
+
+1. `_assets/sticker/<팩>/`에 `NN.png`(APNG 가능) + `preview.png` + `metadata.json`
+2. metadata에 **`"active": false`** → `catalog.json`에서 빠져 assets 목록·랜딩에
+   안 나온다. **파일 자체는 `dist/_assets/`로 그대로 배포된다.**
+3. `duri/index.html`의 **`DURI_ONLY_PACKS`**에 `{id, title, count, cutout}` 추가
+4. **`cutout: false` 필수.** duri의 클라이언트 누끼는 캔버스로 다시 그리는
+   방식이라 **APNG를 첫 프레임짜리 정지 이미지로 만들어 버린다.** 우리 산출물은
+   이미 투명 배경이라 누끼도 불필요하다.
+5. metadata에 **`chat` 필드를 넣지 않는다** — 넣으면 `util/chat`(공개 익명 채팅)
+   등록이 강제되고(테스트가 잡는다) 시험판이 공개 채팅에 노출된다.
+
+현재 등록: `emoticon-anim` = "애니메이션" 1장 (blink v0, 360², 14프레임, 2.00초).
+장수가 늘면 `NN.png`를 추가하고 metadata의 downloads와 `DURI_ONLY_PACKS`의
+`count`만 올린다.
+
 ## 주의 — 공개 리포와 산출물
 
 리포는 public이다. 파일럿 산출물(`_src/emoticon/`)은 에이전트 리뷰·반복을

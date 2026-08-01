@@ -1,0 +1,20 @@
+{
+  "title": "애니메이션 (움직이는 이모티콘 시험판)",
+  "description": "work/emoticon 파이프라인이 만든 움직이는 이모티콘. duri에서 실사용하며 개선점을 찾는 중이라 비공개(active:false)이며, 파일은 배포되지만 assets 목록·랜딩에는 나오지 않는다.",
+  "preview": "preview.png",
+  "active": false,
+  "tags": [
+    "토끼",
+    "움직이는",
+    "APNG",
+    "시험판"
+  ],
+  "createdAt": "2026-08-01",
+  "_note": "chat 필드를 일부러 두지 않는다 — chat이 있으면 util/chat(공개 익명 채팅)에 등록해야 하고, 이 팩은 duri 전용 시험판이다. duri는 duri/index.html의 DURI_ONLY_PACKS에서 제목·장수·cutout을 직접 갖는다.",
+  "downloads": [
+    {
+      "label": "01. 눈 감고 웃기 (blink v0)",
+      "file": "01.png"
+    }
+  ]
+}
