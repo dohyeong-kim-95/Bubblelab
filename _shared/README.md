@@ -11,6 +11,7 @@
 | `multiplayer-room.js` | 방 생성·입장·퇴장·강퇴·방장 승계·온라인 상태 |
 | `records.js` | 주간 기록 배지, 닉네임 등록, 개인 최고 기록, 주간 리셋·공지 UI |
 | `share.js` | Web Share API 또는 클립보드 기반 공유 버튼과 공유 이미지 지원 |
+| `tts.js` | 브라우저 내장 음성으로 텍스트 읽어주기 — 🔊 독 버튼과 `blTTS` API |
 | `suggest.js` | 자동 생성 카테고리 홈의 토이 아이디어 우편함 |
 | `dock.js` | 우하단 유틸 독 — 위로 자라는 세로 알약, 많아지면 접힘 (빌드가 자동 주입) |
 | `home.js` | 카드 페이지의 🏠 홈 버튼 (빌드가 자동 주입) |
@@ -29,6 +30,49 @@ window.blShareText = () => `내 최고 기록은 ${best}점!`;
 
 `window.blShareText`는 함수 또는 문자열을 받을 수 있습니다. 모바일에서는 OS 공유
 시트를 열고, 지원하지 않는 환경에서는 `문구\nURL`을 클립보드에 복사합니다.
+
+## 읽어주기 (TTS)
+
+```html
+<script>
+  window.blSpeakText = () => document.getElementById("brief").textContent;
+  window.blTTSConfig = { lang: "ko-KR", rate: 1 };   // 전부 선택
+</script>
+<script defer src="/_shared/tts.js"></script>
+```
+
+브라우저 내장 음성(Web Speech API)을 씁니다 — API 키·할당량·서버 부하가 없고
+오프라인에서도 동작합니다. 대신 목소리는 기기가 가진 것을 쓰므로 품질이 제각각이고
+음성 파일로 저장할 수는 없습니다.
+
+`window.blSpeakText`는 `blShareText`와 같은 규약으로 함수 또는 문자열을 받습니다.
+선언돼 있으면 독에 🔊 버튼이 생기고(order 40 — 홈 10 · 공유 20 · **읽어주기 40** ·
+토이 50~), 재생 중에는 ⏹로 바뀌어 누르면 멈춥니다. 버튼이 필요 없으면
+`blTTSConfig.dock = false`.
+
+프로그램에서 직접 부를 때: `blTTS.speak(text, opts?)`는
+`"end" | "stopped" | "error" | "unsupported" | "empty"`로 resolve 하고,
+`stop()` · `pause()` · `resume()` · `speaking` · `paused` ·
+`on("start" | "chunk" | "end" | "error", cb)`를 함께 제공합니다.
+
+- **목소리가 없는 기기가 있습니다.** 일부 데스크톱 리눅스에는 한국어 음성이 아예
+  설치돼 있지 않습니다. 조용히 실패하면 "왜 안 되지?"가 되므로,
+  `await blTTS.ready` 뒤 `blTTS.hasVoice("ko")`를 확인해 안내 문구를 띄우세요.
+  독 버튼은 읽을 내용이 없거나 기기에 목소리가 하나도 없으면 토스트로 알려줍니다
+  (`share.js`와 같은 `#bl-toast`를 재사용합니다).
+- **iOS는 첫 재생이 사용자 제스처 안에서 일어나야 합니다.** 클릭 핸들러에서
+  `speak()` 앞에 `await`를 두지 마세요(독 버튼은 이미 그렇게 돼 있습니다).
+- 크롬의 15초 절단·큐 멎음, 첫 `getVoices()` 빈 배열, 페이지 이탈 후 소리 지속은
+  모듈이 처리합니다. 토이가 `speechSynthesis`를 직접 만지지 마세요.
+
+### 네트워크 목소리 주의 (개인정보)
+
+플랫폼에 따라 **일부 목소리는 기기가 아니라 서버에서 합성**됩니다(크롬의 "Google
+한국의" 계열). 즉 읽어주는 텍스트가 기기 밖으로 나갈 수 있습니다. 모듈은 조건이
+같으면 기기 내장 목소리(`voice.localService`)를 우선 고르고, 지금 고른 목소리가
+내장인지 `blTTS.isLocal("ko-KR")`로 노출합니다. **민감한 자유 입력을 읽어주는
+토이**(예: `mindfulness/thought-bubble`의 생각 문구)는 이 값이 `false`면 읽기를
+거절하거나 최소한 사용자에게 알려야 합니다.
 
 ## 우하단 유틸 독
 
