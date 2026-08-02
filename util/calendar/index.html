@@ -205,7 +205,8 @@
         <button id="edit-duplicate" type="button" aria-label="복제" title="복제" disabled>⧉</button>
         <button id="edit-remove" type="button" aria-label="삭제" title="삭제" disabled>🗑</button>
         <button id="edit-cal" type="button" aria-label="달력 잡기" title="달력 잡기" disabled>📅</button>
-        <button id="edit-depth" type="button" aria-label="앞뒤 바꾸기" title="앞뒤" disabled>⇅</button>
+        <button id="edit-up" type="button" aria-label="한 단계 앞으로" title="앞으로" disabled>⬆</button>
+        <button id="edit-down" type="button" aria-label="한 단계 뒤로" title="뒤로" disabled>⬇</button>
         <button id="edit-reset" type="button" aria-label="되돌리기" title="되돌리기">↺</button>
       </div>
       <p id="edit-hint" hidden></p>
@@ -695,7 +696,41 @@ const stickers = [];
 let selectedSticker = -1;          // -1 = 달력이 조작 대상 (열면 기본값)
 let stickerId = 0;
 
+// stickers 배열이 곧 그리는 순서(뒤 → 앞)다. 달력은 그 사이의 한 자리를 차지하며
+// calIndex 앞의 항목은 달력 뒤에, 그 뒤의 항목은 달력 앞에 그려진다.
+let calIndex = 0;
+
 const currentSticker = () => stickers[selectedSticker] || null;
+
+// 배열 순서를 DOM(레이어별 자식 순서)에 반영한다. appendChild는 이동이라
+// 배열 순서대로 부르면 각 레이어 안의 순서가 그대로 맞는다.
+function reflowLayers() {
+  stickers.forEach((item, i) => {
+    item.back = i < calIndex;
+    layerOf(item).appendChild(item.el);
+  });
+}
+
+// dir +1 = 한 단계 앞으로, -1 = 한 단계 뒤로. 달력 경계를 넘을 때는 항목을
+// 옮기는 대신 경계(calIndex)를 옮긴다 — 그래야 다른 항목의 순서가 안 흔들린다.
+function moveDepth(dir) {
+  const item = currentSticker();
+  if (!item) return;
+  const i = stickers.indexOf(item);
+  const swap = (a, b) => { [stickers[a], stickers[b]] = [stickers[b], stickers[a]]; };
+  if (dir > 0) {
+    if (i < calIndex) { if (i === calIndex - 1) calIndex--; else swap(i, i + 1); }
+    else if (i < stickers.length - 1) swap(i, i + 1);
+    else return;
+  } else {
+    if (i >= calIndex) { if (i === calIndex) calIndex++; else swap(i, i - 1); }
+    else if (i > 0) swap(i, i - 1);
+    else return;
+  }
+  selectedSticker = stickers.indexOf(item);
+  reflowLayers();
+  updateControls();
+}
 const sizeRange = (item) => (item.kind === "photo" ? [.1, 8] : [.06, .8]);
 
 function positionSticker(item) {
@@ -707,14 +742,22 @@ function positionSticker(item) {
 
 function updateControls() {
   const item = currentSticker();
-  for (const id of ["edit-rotate", "edit-duplicate", "edit-remove", "edit-cal", "edit-depth"]) {
+  for (const id of ["edit-rotate", "edit-duplicate", "edit-remove", "edit-cal"]) {
     document.getElementById(id).disabled = !item;
   }
+  // 더 갈 곳이 없으면 끈다 — 버튼의 활성 상태가 곧 깊이 표시가 된다
+  const at = item ? stickers.indexOf(item) : -1;
+  document.getElementById("edit-up").disabled =
+    !item || (at === stickers.length - 1 && at >= calIndex);
+  document.getElementById("edit-down").disabled = !item || (at === 0 && calIndex > 0);
   stickers.forEach((s, index) => s.el.classList.toggle("selected", index === selectedSticker));
   calFrame.hidden = !editing || !!item;
   // 도구 막대가 상단 안전영역을 넘지 않게 안내는 한 줄로 유지한다
+  const depth = item
+    ? `${item.back ? "달력 뒤" : "달력 앞"} ${item.back ? at + 1 : at - calIndex + 1}/${item.back ? calIndex : stickers.length - calIndex}`
+    : "";
   editHint.textContent = item
-    ? `${item.kind === "photo" ? "사진" : "스티커"}${item.back ? " (뒤)" : ""} · 끌어서 이동 · 두 손가락 크기·회전`
+    ? `${item.kind === "photo" ? "사진" : "스티커"} · ${depth} · 끌어서 이동 · ⬆⬇ 순서`
     : "달력을 끌어서 이동 · 두 손가락으로 크기";
 }
 
@@ -774,10 +817,11 @@ function addStickerImage(image, url, kind = "sticker") {
   image.className = "sticker";
   image.alt = photo ? "올린 사진" : "붙인 스티커";
   image.draggable = false;
-  stickers.push(item);
-  layerOf(item).appendChild(image);
+  if (photo) { stickers.unshift(item); calIndex++; }   // 사진은 맨 뒤
+  else stickers.push(item);                            // 스티커는 맨 앞
+  reflowLayers();
   positionSticker(item);
-  selectSticker(stickers.length - 1);
+  selectSticker(stickers.indexOf(item));
   return true;
 }
 
@@ -792,6 +836,7 @@ document.getElementById("edit-remove").addEventListener("click", () => {
   const item = currentSticker();
   if (!item) return;
   item.el.remove();
+  if (selectedSticker < calIndex) calIndex--;
   stickers.splice(selectedSticker, 1);
   // 사진은 이 항목만 쓰는 blob이라 회수한다 (스티커 누끼 URL은 캐시라 남겨 둔다)
   if (item.kind === "photo" && !stickers.some((other) => other.url === item.url)) {
@@ -822,15 +867,8 @@ document.getElementById("edit-rotate").addEventListener("click", () => {
 });
 document.getElementById("edit-cal").addEventListener("click", () => selectSticker(-1));
 
-// 앞뒤 바꾸기: 같은 배열 안에서 소속 레이어만 옮긴다 (그리는 순서도 레이어를 따른다)
-document.getElementById("edit-depth").addEventListener("click", () => {
-  const item = currentSticker();
-  if (!item) return;
-  item.back = !item.back;
-  layerOf(item).appendChild(item.el);
-  positionSticker(item);
-  updateControls();
-});
+document.getElementById("edit-up").addEventListener("click", () => moveDepth(1));
+document.getElementById("edit-down").addEventListener("click", () => moveDepth(-1));
 
 // ── 내 사진 올리기 ──
 const photoInput = document.getElementById("photo-input");
