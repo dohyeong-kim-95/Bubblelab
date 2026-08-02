@@ -85,7 +85,7 @@
       ],
       "emotionSlot": "신남·기대",
       "channel": "rig",
-      "status": "revise",
+      "status": "done",
       "cuts": [
         "bounce1",
         "bounce2",
@@ -93,7 +93,7 @@
         "bounce4"
       ],
       "guide": "doc/guide-by-movement/bounce.md",
-      "verdict": "bounce2 good — duri 03번 납품. bounce4는 편도 루프 + 코드 스쿼시로 다리 사이클을 만든 최신본(검수 대기). 핑퐁으로는 다리 탄성이 원리적으로 불가(guide 참고)",
+      "verdict": "bounce2 채택 (사람 판정: duri에 넣고 쓸만한 수준). bounce3·4는 다리 탄성을 얻었지만 팔을 벌려 실루엣이 동그래져 불합격 — 다시 만들 땐 팔 30~45도 유지",
       "shipped": "_assets/sticker/emoticon-anim/03.png"
     },
     {
