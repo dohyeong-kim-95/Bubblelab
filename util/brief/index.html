@@ -60,6 +60,17 @@
            background: light-dark(#247b5f12, #6fd4ac14); }
   #speak:hover:not(:disabled) { background: light-dark(#247b5f22, #6fd4ac22); }
 
+  /* 환율 */
+  #rates { margin-top: 1.1rem; padding-top: 1rem;
+           border-top: 1px solid light-dark(#1c273315, #dbe4ee15); }
+  .rate-row { display: flex; align-items: baseline; gap: .5rem; padding: .28rem 0; font-size: .84rem; }
+  .rate-row .name { flex: none; width: 4.6rem; opacity: .6; font-size: .76rem; }
+  .rate-row .val { font-weight: bold; }
+  .rate-row .chg { font-size: .72rem; }
+  .rate-row .chg.up { color: light-dark(#b6483d, #ff8a7a); }
+  .rate-row .chg.down { color: light-dark(#2b6cb0, #7cb8f0); }
+  #rates .basis { margin: .5rem 0 0; font-size: .62rem; line-height: 1.45; opacity: .42; }
+
   /* 운세 총평 */
   #fortune { margin-top: 1.1rem; padding-top: 1rem;
              border-top: 1px solid light-dark(#1c273315, #dbe4ee15);
@@ -165,6 +176,11 @@
         <span>🌤️ 날씨 · 미세먼지</span>
       </div>
       <div class="set-row">
+        <button type="button" id="set-rates" class="notify-toggle" role="switch"
+                aria-checked="true" aria-label="환율 넣기"></button>
+        <span>💱 환율</span>
+      </div>
+      <div class="set-row">
         <button type="button" id="set-fortune" class="notify-toggle" role="switch"
                 aria-checked="true" aria-label="오늘의 운세 넣기"></button>
         <span>🔮 오늘의 운세</span>
@@ -223,6 +239,12 @@
     <p class="source">날씨·대기질 데이터: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0)</p>
     </div><!-- /weather-block -->
 
+    <!-- 환율 (ECB 고시 기준) -->
+    <div id="rates" hidden>
+      <div id="rate-list"></div>
+      <p class="basis" id="rate-basis"></p>
+    </div>
+
     <!-- 오늘의 운세 총평 (바이오리듬·분야별은 util/fortune에서) -->
     <div id="fortune" hidden>
       <span class="icon" id="fo-icon">🔮</span>
@@ -274,7 +296,8 @@
   // 화면과 읽어주기에 똑같이 적용된다. 8시 푸시는 서버가 보내는 것이라
   // 개인 명식을 모르고, 여기 설정과 무관하게 날씨 요약만 간다.
   const SET_KEY = "bl-brief-sections";
-  const settings = { weather: true, fortune: true, ...readSettings() };
+  const TOGGLES = [["weather", "set-weather"], ["rates", "set-rates"], ["fortune", "set-fortune"]];
+  const settings = { weather: true, rates: true, fortune: true, ...readSettings() };
   function readSettings() {
     try { return JSON.parse(localStorage.getItem(SET_KEY)) || {}; } catch (e) { return {}; }
   }
@@ -285,6 +308,7 @@
   // 읽어주기(_shared/tts.js)가 읽을 문장. 켜 둔 항목만, 화면과 같은 순서로 읽는다.
   window.blSpeakText = () => [
     settings.weather ? brief?.text : "",
+    settings.rates ? rates?.text : "",
     settings.fortune ? fortuneSpeech() : "",
   ].filter(Boolean).join("\n");
 
@@ -328,6 +352,58 @@
       $("now-icon").textContent = "❔";
     }
     applySettings();     // 날씨가 실패해도 운세만으로 읽을 수 있다
+  }
+
+  // ── 환율 ─────────────────────────────────────────────────────
+  // 지역과 달리 전 세계 공통이라 지역을 바꿔도 다시 부르지 않는다.
+  let rates = null;
+
+  function showRates() {
+    const box = $("rates");
+    if (!settings.rates || !rates?.items?.length) { box.hidden = true; return; }
+    const list = $("rate-list");
+    list.replaceChildren();
+    for (const item of rates.items) {
+      const row = document.createElement("div");
+      row.className = "rate-row";
+      const name = document.createElement("span");
+      name.className = "name";
+      name.textContent = `${item.unit === 100 ? "100" : ""}${item.code}`;
+      const val = document.createElement("span");
+      val.className = "val";
+      val.textContent = `${item.value.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}원`;
+      row.append(name, val);
+      if (item.change !== null && item.change !== 0) {
+        const chg = document.createElement("span");
+        chg.className = `chg ${item.change > 0 ? "up" : "down"}`;
+        chg.textContent = `${item.change > 0 ? "▲" : "▼"} ${Math.abs(item.change).toFixed(2)}`;
+        row.append(chg);
+      }
+      list.append(row);
+    }
+    // 기준일을 반드시 적는다 — ECB는 하루 한 번 고시라 아침에는 전 영업일 값이다.
+    const basis = $("rate-basis");
+    basis.replaceChildren(document.createTextNode(rates.stale
+      ? `${rates.date} 유럽중앙은행(ECB) 고시 · 최신 고시가 늦어지고 있어요 · `
+      : `${rates.date} 유럽중앙은행(ECB) 고시 기준 · 은행 매매기준율과 다를 수 있어요 · `));
+    const link = document.createElement("a");
+    link.href = "https://frankfurter.dev/";
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = "Frankfurter";
+    basis.append(link);
+    box.hidden = false;
+  }
+
+  async function loadRates() {
+    try {
+      const res = await fetch("/_brief/rates");
+      if (!res.ok) throw new Error(`http ${res.status}`);
+      rates = await res.json();
+    } catch (e) {
+      rates = null;              // 실패하면 섹션을 아예 그리지 않는다(빈 칸 금지)
+    }
+    showRates();
   }
 
   // ── 오늘의 운세 총평 ─────────────────────────────────────────
@@ -475,9 +551,9 @@
   function applySettings() {
     $("birth").hidden = !settings.fortune;        // 운세를 꺼 두면 입력할 이유가 없다
     $("weather-block").hidden = !settings.weather;
-    $("set-weather").setAttribute("aria-checked", String(settings.weather));
-    $("set-fortune").setAttribute("aria-checked", String(settings.fortune));
-    $("set-warn").hidden = settings.weather || settings.fortune;
+    for (const [key, id] of TOGGLES) $(id).setAttribute("aria-checked", String(settings[key]));
+    $("set-warn").hidden = TOGGLES.some(([key]) => settings[key]);
+    showRates();
     showFortune();
     // 읽을 게 없으면 버튼을 눌러도 아무 일이 없다 — 미리 꺼 둔다.
     $("speak").disabled = !window.blSpeakText();
@@ -490,7 +566,7 @@
     $("settings").hidden = !open;
     $("settings-btn").setAttribute("aria-expanded", String(open));
   });
-  for (const [key, id] of [["weather", "set-weather"], ["fortune", "set-fortune"]]) {
+  for (const [key, id] of TOGGLES) {
     $(id).addEventListener("click", () => {
       settings[key] = !settings[key];
       saveSettings();
@@ -521,6 +597,7 @@
 
   applySettings();
   load();
+  loadRates().then(applySettings);
   loadFortune().then(applySettings);
 
   // ── 매일 오전 8시(KST) 알림 ────────────────────────────────────

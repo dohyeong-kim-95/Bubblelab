@@ -166,6 +166,103 @@ export function buildBrief({ region, weather, air, now = new Date() }) {
   };
 }
 
+// ── 환율 ──────────────────────────────────────────────────────
+// Frankfurter(api.frankfurter.dev)는 유럽중앙은행 고시환율을 그대로 서빙하는
+// 오픈소스 API다 — API 키 없음, 등록 없음, 호출 한도 없음(MIT).
+// 뉴스와 달리 저작권 협상이 필요 없는 것이 이 소스를 고른 이유다.
+//
+// 주의: ECB는 유로 기준으로 매 영업일 16:00 CET에 한 번 고시한다. 따라서
+// ① 원/달러는 EUR/USD와 EUR/KRW로 만든 **교차환율**이라 은행 매매기준율과 다르고
+// ② 한국 아침 8시에는 전 영업일 고시가 최신이다. 화면에 기준일을 함께 적는다.
+export const RATE_SYMBOLS = [
+  { code: "USD", label: "달러", unit: 1 },
+  { code: "JPY", label: "엔", unit: 100 },      // 엔은 100엔 단위가 관례
+  { code: "EUR", label: "유로", unit: 1 },
+  { code: "CNY", label: "위안", unit: 1 },
+];
+
+const won = (unit, rate) => (Number.isFinite(rate) && rate > 0 ? unit / rate : null);
+
+// Frankfurter 기간 응답 → 최신 고시일과 그 직전 고시일
+export function buildRates({ series, now = new Date() }) {
+  const byDate = series?.rates && typeof series.rates === "object" ? series.rates : {};
+  const dates = Object.keys(byDate).sort();                 // 오름차순 = 과거 → 최신
+  const latest = dates[dates.length - 1];
+  const previous = dates[dates.length - 2];
+  if (!latest) return { date: null, items: [], text: "", stale: true };
+
+  const items = [];
+  for (const symbol of RATE_SYMBOLS) {
+    const value = won(symbol.unit, +byDate[latest]?.[symbol.code]);
+    if (value === null) continue;                           // 못 받은 통화는 빼고 그린다
+    const before = previous ? won(symbol.unit, +byDate[previous]?.[symbol.code]) : null;
+    items.push({
+      code: symbol.code,
+      label: symbol.label,
+      unit: symbol.unit,
+      value: Math.round(value * 100) / 100,
+      change: before === null ? null : Math.round((value - before) * 100) / 100,
+    });
+  }
+
+  // 기준일이 오늘(KST)보다 이틀 넘게 예전이면 연휴 등으로 밀린 것이다 — 숨기지 않고 알린다.
+  const ageDays = Math.round((Date.parse(kstStamp(now)) - Date.parse(latest)) / 86400000);
+  const dollar = items.find((i) => i.code === "USD");
+  const lines = [];
+  if (dollar) {
+    const moved = dollar.change === null || dollar.change === 0 ? ""
+      : ` 어제보다 ${Math.abs(dollar.change).toFixed(1)}원 ${dollar.change > 0 ? "올랐습니다" : "내렸습니다"}.`;
+    lines.push(`달러 환율은 ${Math.round(dollar.value)}원입니다.${moved}`);
+  }
+  const rest = items.filter((i) => i.code !== "USD")
+    .map((i) => `${i.unit === 100 ? "백 " : ""}${i.label}은 ${Math.round(i.value)}원`);
+  if (rest.length) lines.push(`${rest.join(", ")}입니다.`);
+
+  return {
+    date: latest,
+    previousDate: previous ?? null,
+    stale: ageDays > 2,
+    items,
+    text: lines.join(" "),
+  };
+}
+
+const RATES_URL = "https://api.frankfurter.dev/v1";
+
+export async function fetchRates(now = new Date()) {
+  // 최신 고시일을 모르므로 최근 열흘을 받아 마지막 두 영업일을 쓴다
+  // (연휴가 길어도 직전 고시가 들어오도록 넉넉히 잡는다).
+  const end = kstStamp(now);
+  const start = new Date(Date.parse(end) - 10 * 86400000).toISOString().slice(0, 10);
+  const symbols = RATE_SYMBOLS.map((s) => s.code).join(",");
+  const series = await getJson(`${RATES_URL}/${start}..${end}?base=KRW&symbols=${symbols}`);
+  return buildRates({ series, now });
+}
+
+export async function handleBriefRates(request, env) {
+  const cache = typeof caches === "undefined" ? null : caches.default;
+  const cacheRequest = new Request("https://brief-cache.bubblelab.dev/v1/rates");
+  const cached = await cache?.match(cacheRequest);
+  if (cached) return new Response(cached.body, cached);
+
+  let rates;
+  try {
+    rates = await fetchRates();
+  } catch (error) {
+    console.error("brief rates upstream failed", error);
+    return Response.json(
+      { error: "환율 정보를 불러오지 못했어요." },
+      { status: 502, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+  // ECB는 하루 한 번 고시라 자주 물을 이유가 없다.
+  const response = Response.json(rates, {
+    headers: { "Cache-Control": "public, max-age=1800" },
+  });
+  await cache?.put(cacheRequest, response.clone());
+  return response;
+}
+
 // ── 상류 조회 ─────────────────────────────────────────────────
 const FORECAST_URL = "https://api.open-meteo.com/v1/forecast";
 const AIR_URL = "https://air-quality-api.open-meteo.com/v1/air-quality";

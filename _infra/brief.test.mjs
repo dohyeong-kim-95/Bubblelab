@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  airGrade, BRIEF_REGIONS, BriefDO, buildBrief, findRegion, handleBriefToday, skyOf,
+  airGrade, BRIEF_REGIONS, BriefDO, buildBrief, buildRates, findRegion,
+  handleBriefRates, handleBriefToday, RATE_SYMBOLS, skyOf,
 } from "./brief.js";
 import { b64uEncode, generateVapidKeys } from "./webpush.js";
 
@@ -442,4 +443,102 @@ test("brief의 생년월일 폼이 fortune과 같은 키·같은 형태를 쓴�
   assert.match(page, /window\.blFortuneBranches/, "시진 목록을 따로 들고 있다");
   // fortune에서 시각으로 넣어 둔 값을 시진 입력이 지우지 않는다
   assert.match(page, /keepClock/);
+});
+
+// ── 환율 ──────────────────────────────────────────────────────
+// Frankfurter는 "1 KRW = x 외화"로 준다. 뒤집어서 원화 표시로 바꾸는 계산과
+// 전 영업일 대비를 여기서 검증한다 (상류는 이 환경에서 막혀 있어 mock).
+const ratesFixture = (rates) => ({ amount: 1, base: "KRW", rates });
+
+test("KRW 기준 응답을 원화 표시로 뒤집고 전 영업일과 비교한다", () => {
+  const out = buildRates({
+    series: ratesFixture({
+      "2026-07-31": { USD: 1 / 1385, JPY: 100 / 900, EUR: 1 / 1500, CNY: 1 / 190 },
+      "2026-08-01": { USD: 1 / 1390, JPY: 100 / 905, EUR: 1 / 1510, CNY: 1 / 191 },
+    }),
+    now: NOON_KST,
+  });
+  assert.equal(out.date, "2026-08-01");
+  assert.equal(out.previousDate, "2026-07-31");
+  const usd = out.items.find((i) => i.code === "USD");
+  assert.equal(usd.value, 1390);
+  assert.equal(usd.change, 5);              // 1385 → 1390
+  const jpy = out.items.find((i) => i.code === "JPY");
+  assert.equal(jpy.unit, 100);
+  assert.equal(jpy.value, 905);             // 100엔 기준
+  assert.match(out.text, /달러 환율은 1390원입니다\. 어제보다 5.0원 올랐습니다\./);
+  assert.match(out.text, /백 엔은 905원/);
+  assert.doesNotMatch(out.text, /[▲▼]/);    // TTS가 읽을 문장에는 기호를 넣지 않는다
+});
+
+test("내린 날은 내렸다고 말한다", () => {
+  const out = buildRates({
+    series: ratesFixture({
+      "2026-07-31": { USD: 1 / 1400 },
+      "2026-08-01": { USD: 1 / 1390 },
+    }),
+    now: NOON_KST,
+  });
+  assert.match(out.text, /어제보다 10.0원 내렸습니다/);
+  assert.equal(out.items[0].change, -10);
+});
+
+test("고시가 하루뿐이면 대비를 만들어내지 않는다", () => {
+  const out = buildRates({ series: ratesFixture({ "2026-08-01": { USD: 1 / 1390 } }), now: NOON_KST });
+  assert.equal(out.previousDate, null);
+  assert.equal(out.items[0].change, null);
+  assert.doesNotMatch(out.text, /어제보다/);
+});
+
+test("고시가 며칠째 밀리면 stale로 알린다 (조용히 옛 값 금지)", () => {
+  const fresh = buildRates({ series: ratesFixture({ "2026-08-01": { USD: 1 / 1390 } }), now: NOON_KST });
+  assert.equal(fresh.stale, false);         // 2026-08-02 기준 하루 전 = 정상
+  const old = buildRates({ series: ratesFixture({ "2026-07-20": { USD: 1 / 1390 } }), now: NOON_KST });
+  assert.equal(old.stale, true);
+});
+
+test("깨진 상류 응답에도 화면에 쓰레기가 새지 않는다", () => {
+  for (const series of [null, {}, { rates: null }, { rates: {} },
+                        ratesFixture({ "2026-08-01": { USD: 0 } }),
+                        ratesFixture({ "2026-08-01": { USD: "없음" } })]) {
+    const out = buildRates({ series, now: NOON_KST });
+    assert.ok(Array.isArray(out.items));
+    assert.doesNotMatch(out.text, /null|undefined|NaN|Infinity/);
+    for (const item of out.items) assert.ok(Number.isFinite(item.value));
+  }
+});
+
+test("/_brief/rates는 상류 실패를 502로 알린다", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("nope", { status: 500 });
+  try {
+    const response = await handleBriefRates(new Request("https://util.bubblelab.dev/_brief/rates"), {});
+    assert.equal(response.status, 502);
+    assert.equal(response.headers.get("Cache-Control"), "no-store");
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("/_brief/rates는 KRW 기준으로 최근 구간을 묻는다", async () => {
+  const seen = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    seen.push(String(url));
+    return Response.json(ratesFixture({ "2026-08-01": { USD: 1 / 1390 } }));
+  };
+  try {
+    const response = await handleBriefRates(new Request("https://util.bubblelab.dev/_brief/rates"), {});
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("Cache-Control"), /max-age=1800/);
+  } finally { globalThis.fetch = originalFetch; }
+  assert.match(seen[0], /api\.frankfurter\.dev\/v1\/\d{4}-\d{2}-\d{2}\.\.\d{4}-\d{2}-\d{2}/);
+  assert.match(seen[0], /base=KRW/);
+  for (const s of RATE_SYMBOLS) assert.match(seen[0], new RegExp(s.code));
+});
+
+test("화면 설정에 환율 항목이 있고 읽어주기에 포함된다", async () => {
+  const page = await pageSource();
+  assert.match(page, /id="set-rates"/);
+  assert.match(page, /settings\.rates \? rates\?\.text : ""/);
+  // 기준일을 반드시 적는다 — ECB는 하루 한 번 고시라 아침엔 전 영업일 값이다
+  assert.match(page, /ECB\) 고시/);
 });

@@ -283,3 +283,15 @@ Licensed under the Creative Commons Attribution 4.0 International License
 (CC BY 4.0) — https://creativecommons.org/licenses/by/4.0/
 
 표기는 `util/brief` 화면 하단에 링크와 함께 노출합니다.
+
+## Frankfurter / 유럽중앙은행(ECB) 환율
+
+util/brief가 표시하는 환율의 출처입니다. Frankfurter는 ECB 고시환율을 서빙하는
+오픈소스 API이며 API 키 없이 무료로 호출합니다.
+
+Frankfurter — https://frankfurter.dev/ (MIT License)
+Exchange rate data: European Central Bank euro foreign exchange reference rates
+https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/
+
+ECB는 매 영업일 16:00 CET에 유로 기준으로 한 번 고시합니다. 따라서 원/달러 등은
+교차환율이며 은행 매매기준율과 다를 수 있습니다 — 화면에 기준일과 함께 밝힙니다.

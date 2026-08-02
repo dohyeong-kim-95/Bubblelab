@@ -11,7 +11,7 @@ const REALTIME_NAMESPACES = new Set(["avalon", "liargame", "yacht"]);
 const WORK_REVIEW_PROJECTS = ["daonfit"];
 import { validPlannerCode } from "./planner.js";
 import { handleFortuneChart, handleFortunePush, sendFortuneDaily } from "./fortune.js";
-import { handleBriefPush, handleBriefToday, sendBriefDaily } from "./brief.js";
+import { handleBriefPush, handleBriefRates, handleBriefToday, sendBriefDaily } from "./brief.js";
 import { handlePodcast, handlePodcastAdmin, runDailyGeneration, runEveningReminder, UPLOAD_MAX_BYTES } from "./podcast.js";
 import { handleEstateDeals } from "./estate.js";
 import { serveAssetDownload, serveAssetDownloadCounts } from "./downloads.js";
@@ -796,6 +796,18 @@ export async function handleRequest(request, env, ctx) {
       });
       if (limited) return limited;
       return handleBriefToday(request, env, url);
+    }
+
+    // 아침 브리핑 환율 (util/brief). ECB 고시환율을 30분 캐싱해 그대로 넘긴다.
+    if (path === "/_brief/rates") {
+      if (request.method !== "GET") {
+        return new Response("method not allowed", { status: 405, headers: { Allow: "GET" } });
+      }
+      const limited = await enforceRateLimit(request, env, {
+        scope: "brief-rates", limit: 60, windowMs: 60 * 1000,
+      });
+      if (limited) return limited;
+      return handleBriefRates(request, env);
     }
 
     // 매일 오전 8시(KST) 날씨 알림 구독 — 익명 Web Push. GET은 공개키 조회.
