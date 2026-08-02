@@ -88,10 +88,12 @@
       "status": "revise",
       "cuts": [
         "bounce1",
-        "bounce2"
+        "bounce2",
+        "bounce3"
       ],
       "guide": "doc/guide-by-movement/bounce.md",
-      "verdict": "공중에서 눈 상태가 달라짐 · 시작컷이 스퀴즈 · 4프레임 안광 없음"
+      "verdict": "bounce2 good — duri 03번 납품 (발 일관성 지적). bounce3은 접지 프레임을 없앤 공중 부양 — 게이트 첫 완전 PASS, 검수 대기",
+      "shipped": "_assets/sticker/emoticon-anim/03.png"
     },
     {
       "id": "heart",
