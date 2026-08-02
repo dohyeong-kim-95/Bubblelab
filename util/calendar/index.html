@@ -30,17 +30,22 @@
   #next { right: .3rem; }
   body.editing .side-nav { display: none; }
   #stage { position: relative; overflow: hidden; touch-action: none;
-           -webkit-touch-callout: none; }
+           -webkit-touch-callout: none; background: var(--wp-bg, #10161f); }
   /* 미리보기: 여백이 "프레임 바깥"으로 읽히도록 베젤을 두른다 */
   body:not(.editing) #stage { border-radius: 1.5rem;
     box-shadow: 0 0 0 5px #10151c, 0 0 0 6px #ffffff2e, 0 16px 40px #000a; }
   /* 꾸미기: 화면 끝까지 배경화면 색으로 채우고, 실제 배경화면 영역만 선으로 표시 */
   body.editing #app { background: var(--wp-bg, #05080c); }
   body.editing #stage { outline: 1px dashed #8888; outline-offset: 0; }
-  #wallpaper, #stickers { position: absolute; inset: 0; width: 100%; height: 100%; }
-  #wallpaper { display: block; }
-  #stickers { overflow: hidden; }
-  body:not(.editing) #stickers { pointer-events: none; }
+  /* 뒤 레이어(내 사진) → 캔버스(달력) → 앞 레이어(스티커) 순으로 쌓는다.
+     배경색은 무대가 칠하고 캔버스는 투명이라 캔버스 아래에도 그림을 놓을 수 있다.
+     캔버스는 포인터를 통과시켜야 뒤 레이어의 사진을 집을 수 있다. */
+  #stickers-back, #wallpaper, #stickers-front { position: absolute; inset: 0;
+                                                width: 100%; height: 100%; }
+  #wallpaper { display: block; pointer-events: none; }
+  #stickers-back, #stickers-front { overflow: hidden; }
+  body:not(.editing) #stickers-back,
+  body:not(.editing) #stickers-front { pointer-events: none; }
   .sticker { position: absolute; transform-origin: center; height: auto; max-width: none;
              border: 2px solid transparent; border-radius: .2rem; touch-action: none;
              -webkit-user-drag: none; user-select: none; -webkit-touch-callout: none; }
@@ -98,8 +103,9 @@
   .edit-dock { top: 50%; right: .5rem; transform: translateY(-50%);
                display: flex; flex-direction: column; gap: .3rem;
                padding: .3rem; border-radius: 999px; background: #00000059; }
-  .edit-dock button { width: 2.5rem; height: 2.5rem; padding: 0; border-radius: 50%;
-                      font-size: .95rem; display: grid; place-items: center; }
+  /* 버튼이 10개라 조금 작게 — 그래도 무대 세로의 절반 남짓만 쓴다 */
+  .edit-dock button { width: 2.3rem; height: 2.3rem; padding: 0; border-radius: 50%;
+                      font-size: .9rem; display: grid; place-items: center; }
   #edit-hint { position: absolute; z-index: 3; left: 50%; transform: translateX(-50%);
                bottom: max(.6rem, env(safe-area-inset-bottom)); margin: 0;
                padding: .3rem .7rem; border-radius: 999px; background: #000000a6;
@@ -172,8 +178,9 @@
     <button id="prev" class="side-nav" type="button" aria-label="이전 달">◀</button>
     <div id="stage-slot">
     <div id="stage">
+      <div id="stickers-back" aria-label="뒤 레이어 — 내 사진"></div>
       <canvas id="wallpaper" role="img" aria-label="달력 배경화면"></canvas>
-      <div id="stickers" aria-label="스티커 편집 영역"></div>
+      <div id="stickers-front" aria-label="앞 레이어 — 스티커"></div>
       <div class="ui-band" id="band-top" hidden><span>잠금화면 시계·위젯</span></div>
       <div class="ui-band" id="band-bottom" hidden><span>단축 아이콘</span></div>
       <div id="cal-frame" hidden></div>
@@ -191,12 +198,14 @@
       </div>
       <div class="edit-dock" id="edit-dock" hidden>
         <button id="edit-asset" type="button" aria-label="스티커 붙이기" title="스티커">🐶</button>
+        <button id="edit-photo" type="button" aria-label="내 사진 올리기" title="내 사진">🖼</button>
         <button id="edit-larger" type="button" aria-label="크게" title="크게">＋</button>
         <button id="edit-smaller" type="button" aria-label="작게" title="작게">－</button>
         <button id="edit-rotate" type="button" aria-label="회전" title="회전" disabled>↻</button>
         <button id="edit-duplicate" type="button" aria-label="복제" title="복제" disabled>⧉</button>
         <button id="edit-remove" type="button" aria-label="삭제" title="삭제" disabled>🗑</button>
         <button id="edit-cal" type="button" aria-label="달력 잡기" title="달력 잡기" disabled>📅</button>
+        <button id="edit-depth" type="button" aria-label="앞뒤 바꾸기" title="앞뒤" disabled>⇅</button>
         <button id="edit-reset" type="button" aria-label="되돌리기" title="되돌리기">↺</button>
       </div>
       <p id="edit-hint" hidden></p>
@@ -231,6 +240,8 @@
   </thead>
   <tbody id="a11y-body"></tbody>
 </table>
+
+<input id="photo-input" type="file" accept="image/*" multiple hidden>
 
 <div id="asset-picker" hidden>
   <div class="picker-sheet">
@@ -301,14 +312,20 @@ function calGeometry(W, H, data, opt) {
   };
 }
 
+// 화면에서는 배경색을 무대 CSS가 칠하고 캔버스는 투명하게 둔다. 그래야 캔버스
+// 아래에 "뒤 레이어"(사진)를 깔 수 있다. 저장할 때만 캔버스에 배경을 직접 칠한다.
 function drawWallpaper(canvas, data, c, opt) {
   const W = opt.w, H = opt.h;
-  canvas.width = W; canvas.height = H;
+  canvas.width = W; canvas.height = H;          // 크기 지정이 곧 투명 초기화
   const ctx = canvas.getContext("2d");
+  if (opt.fillBg) { ctx.fillStyle = c.bg; ctx.fillRect(0, 0, W, H); }
+  drawCalendar(ctx, data, c, opt);
+}
+
+function drawCalendar(ctx, data, c, opt) {
+  const W = opt.w, H = opt.h;
   const mono = 'ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace';
 
-  ctx.fillStyle = c.bg;
-  ctx.fillRect(0, 0, W, H);
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
@@ -360,8 +377,9 @@ function drawWallpaper(canvas, data, c, opt) {
 }
 
 // 스티커는 화면에서 DOM으로 조작하고, 그릴 때만 캔버스에 합성한다.
-function drawStickers(ctx, W, H) {
+function drawStickers(ctx, W, H, back) {
   for (const item of stickers) {
+    if (!!item.back !== back) continue;
     const width = item.size * W;
     const height = width * item.image.naturalHeight / item.image.naturalWidth;
     ctx.save();
@@ -447,15 +465,23 @@ function wallpaperOpt(shrinkTo = 0, todayDate = 0) {
 // 저장용 캔버스: 배경+달력 위에 스티커까지 합성한 최종 이미지 (오늘 강조 없음)
 function composeWallpaper() {
   const canvas = document.createElement("canvas");
-  drawWallpaper(canvas, cal, themeColors(), wallpaperOpt());
-  drawStickers(canvas.getContext("2d"), canvas.width, canvas.height);
+  const opt = wallpaperOpt(), c = themeColors();
+  canvas.width = opt.w; canvas.height = opt.h;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = c.bg;
+  ctx.fillRect(0, 0, opt.w, opt.h);
+  drawStickers(ctx, opt.w, opt.h, true);        // 뒤 레이어(사진)
+  drawCalendar(ctx, cal, c, opt);
+  drawStickers(ctx, opt.w, opt.h, false);       // 앞 레이어(스티커)
   return canvas;
 }
 
 // ---- 화면 ----
 const stage = document.getElementById("stage");
 const wallpaperCv = document.getElementById("wallpaper");
-const stickerLayer = document.getElementById("stickers");
+const layerBack = document.getElementById("stickers-back");
+const layerFront = document.getElementById("stickers-front");
+const layerOf = (item) => (item.back ? layerBack : layerFront);
 const bandTop = document.getElementById("band-top");
 const bandBottom = document.getElementById("band-bottom");
 const calFrame = document.getElementById("cal-frame");
@@ -670,6 +696,7 @@ let selectedSticker = -1;          // -1 = 달력이 조작 대상 (열면 기�
 let stickerId = 0;
 
 const currentSticker = () => stickers[selectedSticker] || null;
+const sizeRange = (item) => (item.kind === "photo" ? [.1, 8] : [.06, .8]);
 
 function positionSticker(item) {
   item.el.style.left = `${item.x * 100}%`;
@@ -680,14 +707,14 @@ function positionSticker(item) {
 
 function updateControls() {
   const item = currentSticker();
-  for (const id of ["edit-rotate", "edit-duplicate", "edit-remove", "edit-cal"]) {
+  for (const id of ["edit-rotate", "edit-duplicate", "edit-remove", "edit-cal", "edit-depth"]) {
     document.getElementById(id).disabled = !item;
   }
   stickers.forEach((s, index) => s.el.classList.toggle("selected", index === selectedSticker));
   calFrame.hidden = !editing || !!item;
   // 도구 막대가 상단 안전영역을 넘지 않게 안내는 한 줄로 유지한다
   editHint.textContent = item
-    ? `스티커 ${selectedSticker + 1}/${stickers.length} · 끌어서 이동 · 두 손가락 크기·회전`
+    ? `${item.kind === "photo" ? "사진" : "스티커"}${item.back ? " (뒤)" : ""} · 끌어서 이동 · 두 손가락 크기·회전`
     : "달력을 끌어서 이동 · 두 손가락으로 크기";
 }
 
@@ -734,19 +761,31 @@ const STICKER_SPOTS = [
   [.5, .14], [.3, .92], [.7, .12], [.22, .46], [.78, .74], [.5, .95],
 ];
 
-function addStickerImage(image, url) {
+// kind: "sticker"(앞) | "photo"(뒤). 내 사진은 배경처럼 쓰는 경우가 대부분이라
+// 기본으로 맨 뒤(달력 아래)에 화면을 덮는 크기로 들어간다.
+function addStickerImage(image, url, kind = "sticker") {
   if (stickers.length >= MAX_STICKERS) return false;
+  const photo = kind === "photo";
   const spot = STICKER_SPOTS[stickers.length % STICKER_SPOTS.length];
-  const item = { id: ++stickerId, image, el: image, url,
-    x: spot[0], y: spot[1], size: .22, rotation: (stickers.length % 5 - 2) * 6 };
+  const item = { id: ++stickerId, image, el: image, url, kind, back: photo,
+    x: photo ? .5 : spot[0], y: photo ? .5 : spot[1],
+    size: photo ? coverSize(image) : .22,
+    rotation: photo ? 0 : (stickers.length % 5 - 2) * 6 };
   image.className = "sticker";
-  image.alt = "붙인 스티커";
+  image.alt = photo ? "올린 사진" : "붙인 스티커";
   image.draggable = false;
   stickers.push(item);
-  stickerLayer.appendChild(image);
+  layerOf(item).appendChild(image);
   positionSticker(item);
   selectSticker(stickers.length - 1);
   return true;
+}
+
+// 화면을 꽉 덮는 크기(background-size: cover와 같은 계산). 폭 비율로 돌려준다.
+function coverSize(image) {
+  const { w, h } = deviceSize();
+  const ratio = image.naturalWidth / image.naturalHeight;
+  return Math.min(8, Math.max(1, (h / w) * ratio));   // 제스처 상한과 같은 범위 안에서
 }
 
 document.getElementById("edit-remove").addEventListener("click", () => {
@@ -754,6 +793,10 @@ document.getElementById("edit-remove").addEventListener("click", () => {
   if (!item) return;
   item.el.remove();
   stickers.splice(selectedSticker, 1);
+  // 사진은 이 항목만 쓰는 blob이라 회수한다 (스티커 누끼 URL은 캐시라 남겨 둔다)
+  if (item.kind === "photo" && !stickers.some((other) => other.url === item.url)) {
+    URL.revokeObjectURL(item.url);
+  }
   selectSticker(-1);
 });
 document.getElementById("edit-duplicate").addEventListener("click", () => {
@@ -761,7 +804,7 @@ document.getElementById("edit-duplicate").addEventListener("click", () => {
   if (!source || stickers.length >= MAX_STICKERS) return;
   const image = new Image();
   image.addEventListener("load", () => {
-    if (!addStickerImage(image, source.url)) return;
+    if (!addStickerImage(image, source.url, source.kind)) return;
     const item = currentSticker();
     item.x = clamp(source.x + .06, 0, 1);
     item.y = clamp(source.y + .03, 0, 1);
@@ -778,6 +821,58 @@ document.getElementById("edit-rotate").addEventListener("click", () => {
   positionSticker(item);
 });
 document.getElementById("edit-cal").addEventListener("click", () => selectSticker(-1));
+
+// 앞뒤 바꾸기: 같은 배열 안에서 소속 레이어만 옮긴다 (그리는 순서도 레이어를 따른다)
+document.getElementById("edit-depth").addEventListener("click", () => {
+  const item = currentSticker();
+  if (!item) return;
+  item.back = !item.back;
+  layerOf(item).appendChild(item.el);
+  positionSticker(item);
+  updateControls();
+});
+
+// ── 내 사진 올리기 ──
+const photoInput = document.getElementById("photo-input");
+document.getElementById("edit-photo").addEventListener("click", () => photoInput.click());
+photoInput.addEventListener("change", async (event) => {
+  const files = [...event.target.files];
+  const remaining = Math.max(0, MAX_STICKERS - stickers.length);
+  for (const file of files.slice(0, remaining)) await addPhotoFile(file);
+  if (files.length > remaining) {
+    errEl.textContent = `사진·스티커는 합쳐서 최대 ${MAX_STICKERS}개까지 올릴 수 있습니다.`;
+  }
+  event.target.value = "";                     // 같은 파일을 다시 골라도 change가 뜨게
+});
+
+// 원본이 크면 화면·저장 모두에 과하다. photo/와 같은 기준(긴 변 1600px)으로 줄인다.
+async function addPhotoFile(file) {
+  if (!file?.type.startsWith("image/")) return false;
+  let url = URL.createObjectURL(file), image = new Image();
+  image.src = url;
+  try {
+    await image.decode();
+    const longest = Math.max(image.naturalWidth, image.naturalHeight);
+    if (longest > 1600) {
+      const scale = 1600 / longest, canvas = document.createElement("canvas");
+      canvas.width = Math.round(image.naturalWidth * scale);
+      canvas.height = Math.round(image.naturalHeight * scale);
+      canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
+      const type = file.type === "image/png" ? "image/png" : "image/webp";
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, type, .9));
+      if (!blob) throw new Error("resize failed");
+      URL.revokeObjectURL(url);
+      url = URL.createObjectURL(blob);
+      image = new Image(); image.src = url;
+      await image.decode();
+    }
+    return addStickerImage(image, url, "photo");
+  } catch (_) {
+    URL.revokeObjectURL(url);
+    errEl.textContent = "이 사진은 불러오지 못했습니다.";
+    return false;
+  }
+}
 document.getElementById("edit-reset").addEventListener("click", () => {
   Object.assign(calState, CAL_DEFAULT);
   selectSticker(-1);
@@ -788,7 +883,8 @@ document.getElementById("edit-reset").addEventListener("click", () => {
 function resize(factor) {
   const item = currentSticker();
   if (item) {
-    item.size = clamp(item.size * factor, .06, .8);
+    const [minSize, maxSize] = sizeRange(item);
+    item.size = clamp(item.size * factor, minSize, maxSize);
     positionSticker(item);
   } else {
     calState.scale = clamp(calState.scale * factor, .25, 1);
@@ -938,7 +1034,8 @@ stage.addEventListener("pointermove", (event) => {
     const snappedRot = snapRotation(rotation);
     item.x = clamp(x, -.1, 1.1);
     item.y = clamp(y, -.05, 1.05);
-    item.size = clamp(size, .06, .8);
+    const [minSize, maxSize] = sizeRange(item);
+    item.size = clamp(size, minSize, maxSize);
     item.rotation = snappedRot;
     item.el.classList.toggle("rot-snapped", snappedRot % SNAP_DEG === 0);
     positionSticker(item);
