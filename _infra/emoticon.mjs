@@ -38,6 +38,7 @@ import {
   IMAGE_COST_USD,
   assertPlannedBudget,
   assertResumeCompatible,
+  resumeKind,
   atomicWriteFile,
   atomicWriteJson,
   budgetedProvider,
@@ -504,11 +505,14 @@ function keyTiming(keys, pairs, breakdowns, assembly, fps, repeat = 1) {
   };
 }
 
-function provenance(mode, input, referenceBytes) {
+function provenance(mode, input, referenceBytes, keysInput = null) {
   const referenceHashes = referenceBytes.map(sha256);
   return {
     mode,
     specHash: specHash(input),
+    // 키 그림만 결정하는 입력의 해시. 조립(브레이크다운 장수·assembly·fps·repeat)만
+    // 바뀐 재개에서 이미 뽑은 key raw를 살리는 데 쓴다.
+    ...(keysInput ? { keysHash: specHash(keysInput) } : {}),
     sheetHash: referenceHashes[0],
     referenceHashes,
   };
@@ -689,14 +693,27 @@ async function cmdCutKeys(workdir, cutId, options) {
   // 캔버스를 넘어 멈췄을 때 6장을 다시 뽑을 뻔했다). 저장은 하되 해시에서는 뺀다.
   const generationKeys = keys.map(({ lift, rig, ...rest }) => rest);
   const input = { motion, fps, keys: generationKeys, breakdowns, assembly, invariants, poseConstants, breakdownNote, repeat };
-  const base = provenance("keys", input, [sheet]);
+  // keysHash에서는 hold까지 뺀다 — 홀드는 타임라인 길이일 뿐 그림을 바꾸지 않는다.
+  const drawingKeys = generationKeys.map(({ hold, ...rest }) => rest);
+  const base = provenance("keys", input, [sheet], { motion, keys: drawingKeys, invariants, poseConstants });
   checkPlanTarget(cutDir, options, base);
   const rawNames = [
     ...keys.map((_, i) => `key-${i + 1}.png`),
     ...pairs.flatMap(([a, b]) => Array.from({ length: breakdowns }, (_, k) => bdName(a, b, k, breakdowns))),
   ];
+  // 조립만 바뀐 재개(브레이크다운 장수 등)에서는 **키만** 재사용한다.
+  // 브레이크다운은 breakdownNote·이웃 키 조합에 딸린 그림이라 같이 살리면 위험하다.
+  const metaPath0 = join(cutDir, "cut.json");
+  const priorMeta = options.resume && existsSync(metaPath0) ? readJson(metaPath0) : null;
+  const keysOnly = priorMeta ? resumeKind(priorMeta, base) === "keys-only" : false;
+  if (keysOnly) console.log("조립만 바뀌었습니다 — 키 그림은 재사용하고 브레이크다운만 새로 뽑습니다");
+  const canReuse = (name) => !keysOnly || name.startsWith("key-");
   let reusable = 0;
-  if (options.resume) for (const name of rawNames) if (await reusableRaw(join(cutDir, "frames-raw", name))) reusable++;
+  if (options.resume) {
+    for (const name of rawNames) {
+      if (canReuse(name) && await reusableRaw(join(cutDir, "frames-raw", name))) reusable++;
+    }
+  }
   const timing = keyTiming(keys, pairs, breakdowns, assembly, fps, repeat);
   const plan = {
     mode: "keys", characterRef: options.ref ?? "sheet.png",
@@ -713,7 +730,7 @@ async function cmdCutKeys(workdir, cutId, options) {
 
   const generateKeyed = async (prompt, references, label, rawName, allowReuse = true) => {
     const rawPath = join(cutDir, "frames-raw", rawName);
-    const cached = options.resume && allowReuse ? await reusableRaw(rawPath) : null;
+    const cached = options.resume && allowReuse && canReuse(rawName) ? await reusableRaw(rawPath) : null;
     if (cached) return { ...cached, reused: true };
     const bytes = await metered.generate({ prompt, references });
     atomicWriteFile(rawPath, Buffer.from(bytes));
@@ -984,10 +1001,18 @@ async function cmdPlan(workdir, cutId, options) {
   // 캔버스를 넘어 멈췄을 때 6장을 다시 뽑을 뻔했다). 저장은 하되 해시에서는 뺀다.
   const generationKeys = keys.map(({ lift, rig, ...rest }) => rest);
   const input = { motion, fps, keys: generationKeys, breakdowns, assembly, invariants, poseConstants, breakdownNote, repeat };
-    const base = provenance("keys", input, [sheet]);
+    const drawingKeys = generationKeys.map(({ hold, ...rest }) => rest);
+    const base = provenance("keys", input, [sheet], { motion, keys: drawingKeys, invariants, poseConstants });
     checkPlanTarget(cutDir, options, base);
+    const priorPath = join(cutDir, "cut.json");
+    const prior = options.resume && existsSync(priorPath) ? readJson(priorPath) : null;
+    const planKeysOnly = prior ? resumeKind(prior, base) === "keys-only" : false;
     let reusable = 0;
-    if (options.resume) for (const name of names) if (await reusableRaw(join(cutDir, "frames-raw", name))) reusable++;
+    if (options.resume) {
+      for (const name of names) {
+        if ((!planKeysOnly || name.startsWith("key-")) && await reusableRaw(join(cutDir, "frames-raw", name))) reusable++;
+      }
+    }
     const timing = keyTiming(keys, pairs, breakdowns, assembly, fps, repeat);
     return printPlan({
       mode: "keys", provider: provider.name, totalCalls: names.length,

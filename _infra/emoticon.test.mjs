@@ -703,6 +703,44 @@ test("lift·rig를 손봐도 이미 뽑은 raw를 재사용한다 (후처리는 
   }
 });
 
+test("조립만 바뀐 재개는 키 그림을 살린다", async () => {
+  // bounce4에서 홀드·repeat·브레이크다운 장수를 손보려다 검증된 키 8장을
+  // 통째로 다시 뽑을 뻔했다. 키 그림을 정하는 것은 motion·포즈·invariants·
+  // poseConstants뿐이므로 조립만 달라졌으면 raw는 그대로 유효하다.
+  const { resumeKind } = await import("./emoticon-run.mjs");
+  const same = { mode: "keys", sheetHash: "s", keysHash: "K", referenceHashes: ["s"] };
+  assert.equal(resumeKind({ ...same, specHash: "A" }, { ...same, specHash: "A" }), "same");
+  assert.equal(resumeKind({ ...same, specHash: "A" }, { ...same, specHash: "B" }), "keys-only");
+  assert.equal(resumeKind({ ...same, specHash: "A" }, { ...same, specHash: "B", keysHash: "L" }), "different");
+  // keysHash가 없던 옛 컷은 예전처럼 거부된다 (안전한 기본값)
+  assert.equal(resumeKind({ mode: "keys", specHash: "A" }, { ...same, specHash: "B" }), "different");
+});
+
+test("홀드·repeat만 바꾸면 생성 없이 다시 조립된다", async () => {
+  // 사람 검수: "같은 fps인데 더 느려 보인다" — 편도 루프로 바꾸면서 유니크
+  // 장수를 그대로 두면 초당 그림 바뀜이 절반으로 떨어진다. 타이밍만 손보는
+  // 반복이 **무료**여야 이 조정을 마음껏 할 수 있다.
+  const workdir = mkdtempSync(join(tmpdir(), "asm-"));
+  const env = { ...process.env, EMOTICON_IMAGE_PROVIDER: "mock" };
+  const run = (...args) => execFileSync(process.execPath, [CLI, ...args], { env, encoding: "utf8" });
+  try {
+    run("sheet", workdir, "--prompt", "테스트");
+    const spec = join(workdir, "keys.json");
+    const body = (hold, repeat) => JSON.stringify({
+      motion: "점프", breakdowns: 0, assembly: "loop", repeat,
+      keys: [{ pose: "아래", hold }, { pose: "위", hold }],
+    });
+    writeFileSync(spec, body(2, 1));
+    run("cut", workdir, "j", "--keys", spec, "--fps", "12");
+    writeFileSync(spec, body(1, 2));
+    const plan = run("plan", workdir, "j", "--keys", spec, "--fps", "12", "--resume");
+    assert.match(plan, /재사용 2회/, "타이밍만 바꿨는데 재생성하려 합니다");
+    assert.match(plan, /\$0\.000/, "타이밍 조정이 무료가 아닙니다");
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
 test("dropGroundLine: 열별 두께의 최빈값으로 바닥선만 지운다", async () => {
   // 모델이 지시하지 않고 바닥선을 그린다(bounce2 6/6). 발이 땅에 닿아 붙어
   // 있어도 잡아야 하므로 연결요소가 아니라 **열별 바닥 두께**로 본다 —

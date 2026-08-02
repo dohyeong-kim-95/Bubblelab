@@ -41,6 +41,16 @@ function sameArray(a, b) {
     && a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
+// 조립만 바꿨는지(브레이크다운 장수·assembly·fps·repeat) 아니면 그림 자체가
+// 바뀌었는지를 구분한다. 키 그림을 정하는 것은 motion·키 포즈·invariants·
+// poseConstants뿐이므로, 그것만 같으면 이미 뽑아 둔 key raw는 여전히 유효하다.
+// 실측: bounce4에서 브레이크다운을 0→1로 올리려다 검증된 키 8장을 버릴 뻔했다.
+export function resumeKind(existing, expected) {
+  if (existing.specHash === expected.specHash) return "same";
+  if (existing.keysHash && expected.keysHash && existing.keysHash === expected.keysHash) return "keys-only";
+  return "different";
+}
+
 export function assertResumeCompatible(existing, expected) {
   if (existing.schemaVersion !== EMOTICON_SCHEMA_VERSION) {
     throw new Error(
@@ -48,10 +58,13 @@ export function assertResumeCompatible(existing, expected) {
       `(현재 ${existing.schemaVersion ?? "없음"}) — --force로 새로 생성하세요`,
     );
   }
-  for (const key of ["mode", "specHash", "sheetHash"]) {
+  for (const key of ["mode", "sheetHash"]) {
     if (existing[key] !== expected[key]) {
       throw new Error(`--resume 입력 불일치: ${key}가 기존 컷과 다릅니다 — --force로 새로 생성하세요`);
     }
+  }
+  if (resumeKind(existing, expected) === "different") {
+    throw new Error("--resume 입력 불일치: specHash가 기존 컷과 다릅니다 — --force로 새로 생성하세요");
   }
   if (!sameArray(existing.referenceHashes, expected.referenceHashes)) {
     throw new Error("--resume 입력 불일치: 캐릭터 레퍼런스가 기존 컷과 다릅니다 — --force로 새로 생성하세요");

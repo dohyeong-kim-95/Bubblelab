@@ -3,7 +3,7 @@
   "cliVersion": 2,
   "promptVersion": "2026-07-keys-v1",
   "mode": "keys",
-  "specHash": "476836ae1ca4efbd4863d0d271623dcd8d2250617d7e20acd6756ed63cf689e6",
+  "specHash": "870bbe18eaf9b615c768e17bdded771c4c7f585abded1650b6d3911a5cf3ad3f",
   "sheetHash": "c396e10ff4b905d349508f0d1b0f97d4b9b28124d8d75e73a54f488c9f6939fa",
   "referenceHashes": [
     "c396e10ff4b905d349508f0d1b0f97d4b9b28124d8d75e73a54f488c9f6939fa"
@@ -11,8 +11,8 @@
   "provider": "gemini/gemini-2.5-flash-image",
   "status": "complete",
   "createdAt": "2026-08-02T04:26:05.128Z",
-  "updatedAt": "2026-08-02T04:27:02.013Z",
-  "completedAt": "2026-08-02T04:27:02.013Z",
+  "updatedAt": "2026-08-02T04:52:01.678Z",
+  "completedAt": "2026-08-02T04:52:01.678Z",
   "calls": 8,
   "unitCostUsd": 0.039,
   "estimatedCostUsd": 0.312,
@@ -26,6 +26,16 @@
       "estimatedCostUsd": 0.312,
       "status": "complete",
       "completedAt": "2026-08-02T04:27:02.013Z"
+    },
+    {
+      "runId": "ac76c67e-f8f8-427a-a672-1621ff157a62",
+      "startedAt": "2026-08-02T04:51:52.149Z",
+      "provider": "mock",
+      "gitCommit": null,
+      "calls": 0,
+      "estimatedCostUsd": 0,
+      "status": "complete",
+      "completedAt": "2026-08-02T04:52:01.678Z"
     }
   ],
   "motion": "bouncing up and down with excitement",
@@ -38,37 +48,37 @@
     },
     {
       "pose": "pushing off; the two feet reach straight down below the body, hanging well clear of the belly; both short arms are out and downward at about 45 degrees from the sides of the body; a small open smile",
-      "hold": 2,
+      "hold": 1,
       "lift": 0.02
     },
     {
       "pose": "rising; the two feet still reach down below the body, trailing under the rising body; both short arms are out at about 70 degrees from the sides of the body; a wide open smile",
-      "hold": 2,
+      "hold": 1,
       "lift": 0.09
     },
     {
       "pose": "rising and slowing; the two feet are drawn part way up under the body, bent at the middle; both short arms are out at about 90 degrees from the sides of the body, level with the shoulders; a wide open smile",
-      "hold": 3,
+      "hold": 2,
       "lift": 0.14
     },
     {
       "pose": "at the very top of the bounce; the two feet are tucked up close under the body, almost touching the belly; both short arms are up and outward at about 100 degrees from the sides of the body; a wide open smile with a small pink tongue",
-      "hold": 6,
+      "hold": 2,
       "lift": 0.165
     },
     {
       "pose": "beginning to fall; the two feet are still tucked up close under the body; both short arms are out at about 90 degrees from the sides of the body, level with the shoulders; a wide open smile",
-      "hold": 4,
+      "hold": 2,
       "lift": 0.155
     },
     {
       "pose": "falling; the two feet swing down below the body, half extended; both short arms are out at about 70 degrees from the sides of the body; a small open smile",
-      "hold": 3,
+      "hold": 1,
       "lift": 0.1
     },
     {
       "pose": "about to land; the two feet reach straight down below the body, hanging well clear of the belly; both short arms are out and downward at about 45 degrees from the sides of the body; a gentle closed-mouth smile",
-      "hold": 2,
+      "hold": 1,
       "lift": 0.035
     }
   ],
@@ -77,7 +87,7 @@
   "invariants": "two long upright ears whose bases sit on top of the head, two eyes, one mouth, two short arms, two feet; two pink oval inner ears; two round pink cheek blushes; the canvas holds only this one character",
   "poseConstants": "each eye is a large round dark eye with a small white highlight near its top, exactly as in Image 1; the character faces the viewer straight on, the two ears stand straight up and stay symmetric left and right, and both eyes are always mirror images of each other; each short arm is a small rounded nub on the outer edge of the body silhouette; below the body there are exactly two feet, side by side and close together, each foot one smooth rounded oval in the same plain white surface as the body; the body keeps normal proportions in every frame; the whole canvas outside the character is one flat white surface",
   "breakdownNote": "",
-  "repeat": 1,
+  "repeat": 2,
   "characterRef": "sheet.png",
   "anchor": "none",
   "frames": 8,
@@ -122,34 +132,67 @@
     },
     {
       "frame": 1,
-      "delayMs": 167
+      "delayMs": 83
     },
     {
       "frame": 2,
-      "delayMs": 167
+      "delayMs": 83
     },
     {
       "frame": 3,
-      "delayMs": 250
+      "delayMs": 167
     },
     {
       "frame": 4,
-      "delayMs": 500
+      "delayMs": 167
     },
     {
       "frame": 5,
-      "delayMs": 333
+      "delayMs": 167
     },
     {
       "frame": 6,
-      "delayMs": 250
+      "delayMs": 83
     },
     {
       "frame": 7,
+      "delayMs": 83
+    },
+    {
+      "frame": 0,
       "delayMs": 167
+    },
+    {
+      "frame": 1,
+      "delayMs": 83
+    },
+    {
+      "frame": 2,
+      "delayMs": 83
+    },
+    {
+      "frame": 3,
+      "delayMs": 167
+    },
+    {
+      "frame": 4,
+      "delayMs": 167
+    },
+    {
+      "frame": 5,
+      "delayMs": 167
+    },
+    {
+      "frame": 6,
+      "delayMs": 83
+    },
+    {
+      "frame": 7,
+      "delayMs": 83
     }
   ],
   "redoCounts": {
     "8": 1
-  }
+  },
+  "keysHash": "806ea23be21c4d67a3939a7e73820d2223fee847602cba95c99e36706eb037ca"
 }
