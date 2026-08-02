@@ -284,14 +284,38 @@ test("VAPID 설정이 없으면 알림은 조용히 넘어간다 (fail-closed)",
   assert.deepEqual(await response.json(), { sent: 0 });
 });
 
-// 화면과 서버가 같은 지역 목록을 봐야 한다 — 한쪽만 고치면 여기서 걸린다
-test("화면의 지역 목록이 서버 허용 목록과 일치한다", async () => {
+const pageSource = async () => {
   const { readFileSync } = await import("node:fs");
   const { dirname, join } = await import("node:path");
   const { fileURLToPath } = await import("node:url");
-  const page = readFileSync(
+  return readFileSync(
     join(dirname(fileURLToPath(import.meta.url)), "../util/brief/index.html"), "utf8");
+};
+
+// 화면과 서버가 같은 지역 목록을 봐야 한다 — 한쪽만 고치면 여기서 걸린다
+test("화면의 지역 목록이 서버 허용 목록과 일치한다", async () => {
+  const page = await pageSource();
   const block = page.slice(page.indexOf("const REGIONS = ["), page.indexOf("const STORE_KEY"));
   const ids = [...block.matchAll(/\["([a-z]+)",\s*"([^"]+)"\]/g)].map((m) => [m[1], m[2]]);
   assert.deepEqual(ids, BRIEF_REGIONS.map((r) => [r.id, r.name]));
+});
+
+// 우하단은 공용 독(#bl-dock)이 fixed로 차지한다. 알림 토글이 그 코너에 놓였을 때
+// 360x740에서 토글을 눌러도 독의 🔊가 눌렸다 — 우드 스택 음소거 버튼이 공유
+// 버튼에 가려 안 눌리던 것과 같은 유형이다. 자리를 되돌리면 여기서 걸린다.
+test("알림 토글이 독의 코너를 피해 배치돼 있다", async () => {
+  const page = await pageSource();
+  const row = page.slice(page.indexOf('class="notify-row"'), page.indexOf('class="notify-help"'));
+  assert.ok(row.indexOf('id="notify-btn"') < row.indexOf('class="notify-title"'),
+    "토글이 행의 오른쪽으로 돌아갔다 — 우하단 독과 겹친다");
+  assert.doesNotMatch(row, /justify-content:\s*space-between/);
+
+  // 독은 fixed라 문서 흐름을 밀어내지 않는다. 아래 여백으로 직접 비켜줘야 한다.
+  const bodyRule = page.slice(page.indexOf("body {"), page.indexOf("main {")).replace(/\s+/g, " ");
+  const declaration = /padding:([^;]+);/.exec(bodyRule);
+  assert.ok(declaration, "본문에 padding 선언이 없다");
+  const sides = declaration[1].trim().split(" ");          // 위 좌우 아래 (3값 표기)
+  const bottom = parseFloat(sides[sides.length - 1]);
+  assert.ok(bottom >= 9,
+    `본문 아래 여백이 ${sides[sides.length - 1]} — 독(버튼 3개 ≈ 149px)을 못 비킨다`);
 });

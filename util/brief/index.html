@@ -10,7 +10,10 @@
   * { box-sizing: border-box; }
   body { font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
          margin: 0; min-height: 100dvh; display: flex; align-items: center; justify-content: center;
-         padding: 1.5rem;
+         /* 우하단 독은 fixed라 문서 흐름을 밀어내지 않는다. 독이 차지하는 높이
+            (버튼 3개 ≈ 133px + 아래 여백 16px)만큼 아래를 비워 카드가 그 위로
+            올라오게 한다 — 짧은 화면에서 안내 문구가 독에 가리던 문제. */
+         padding: 1.5rem 1.5rem 10rem;
          background: light-dark(#eef2f6, #10161f);
          color: light-dark(#1c2733, #dbe4ee); }
   main { width: min(30rem, 100%); }
@@ -59,9 +62,14 @@
   button:disabled { opacity: .45; cursor: default; }
   #speak { flex: 1; font-size: .85rem; }
 
-  /* 데일리 알림 (토글 스위치) — fortune과 같은 모양 */
-  #notify { margin-top: 1.1rem; }
-  .notify-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+  /* 데일리 알림 (토글 스위치) — fortune과 같은 모양이되 자리가 다르다.
+     우하단은 공용 독(#bl-dock)이 fixed로 차지한다. 이 페이지는 짧아서 세로 중앙
+     정렬을 하면 알림 행이 정확히 그 코너에 놓이고, 360px 화면에서는 토글을 눌러도
+     독의 버튼이 눌렸다. 그래서 ① 알림을 카드 안으로 넣고 ② 토글을 행의 왼쪽에
+     둔다 — 조작 요소가 오른쪽 코너에 없으면 독과 구조적으로 겹칠 수 없다. */
+  #notify { margin-top: 1.1rem; padding-top: 1rem;
+            border-top: 1px solid light-dark(#1c273315, #dbe4ee15); }
+  .notify-row { display: flex; align-items: center; justify-content: flex-start; gap: .7rem; }
   .notify-title { font-size: .88rem; font-weight: bold; }
   .notify-toggle { position: relative; flex: none; width: 3rem; height: 1.7rem; padding: 0;
                    border-radius: 1rem; border: 1px solid light-dark(#1c273333, #dbe4ee33);
@@ -124,18 +132,18 @@
     <div class="actions">
       <button type="button" id="speak">🔊 브리핑 읽어주기</button>
     </div>
+
+    <!-- 데일리 알림 (푸시 지원 시에만 노출). 토글이 행의 왼쪽인 이유는 위 CSS 주석 참고 -->
+    <section id="notify" hidden>
+      <div class="notify-row">
+        <button type="button" id="notify-btn" class="notify-toggle" role="switch" aria-checked="false" aria-label="매일 오전 8시 날씨 알림"></button>
+        <span class="notify-title">🔔 매일 오전 8시 알림 받기</span>
+      </div>
+      <p class="notify-help" id="notify-help">브라우저 알림으로 매일 오전 8시(KST)에 선택한 지역의 날씨를 받아보세요.</p>
+    </section>
   </div>
 
   <p id="err" hidden></p>
-
-  <!-- 데일리 알림 (푸시 지원 시에만 노출) -->
-  <section id="notify" hidden>
-    <div class="notify-row">
-      <span class="notify-title">🔔 매일 오전 8시 알림 받기</span>
-      <button type="button" id="notify-btn" class="notify-toggle" role="switch" aria-checked="false" aria-label="매일 오전 8시 날씨 알림"></button>
-    </div>
-    <p class="notify-help" id="notify-help">브라우저 알림으로 매일 오전 8시(KST)에 선택한 지역의 날씨를 받아보세요.</p>
-  </section>
 </main>
 
 <script>
