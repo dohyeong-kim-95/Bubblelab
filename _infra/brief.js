@@ -227,7 +227,89 @@ export function buildRates({ series, now = new Date() }) {
   };
 }
 
+// ── 지수 ──────────────────────────────────────────────────────
+// 코스피·코스닥은 키 없이 쓸 수 있는 최신 소스가 없어서(공공데이터포털은 기준일
+// 다음 영업일 13시 갱신, KRX는 키 필요) 미국 지수를 쓴다. Stooq는 키 없이 일별
+// 시세를 CSV로 준다. 지수값은 사실이지만 소스 약관은 개인·비상업 이용 기준이다.
+export const INDEX_SYMBOLS = [
+  { id: "^dji", label: "다우", name: "다우존스" },
+  { id: "^ndq", label: "나스닥", name: "나스닥 종합" },
+];
+
+// Stooq 일별 CSV: "Date,Open,High,Low,Close,Volume" 헤더 + 날짜 오름차순 행
+export function parseStooqDaily(csv) {
+  const lines = String(csv ?? "").trim().split(/\r?\n/);
+  if (lines.length < 2) return [];
+  const header = lines[0].toLowerCase().split(",");
+  const dateAt = header.indexOf("date");
+  const closeAt = header.indexOf("close");
+  if (dateAt < 0 || closeAt < 0) return [];
+  const rows = [];
+  for (const line of lines.slice(1)) {
+    const cells = line.split(",");
+    const close = Number(cells[closeAt]);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(cells[dateAt] ?? "") || !Number.isFinite(close)) continue;
+    rows.push({ date: cells[dateAt], close });
+  }
+  return rows.sort((a, b) => (a.date < b.date ? -1 : 1));
+}
+
+export function buildIndex(symbol, rows) {
+  const latest = rows[rows.length - 1];
+  const previous = rows[rows.length - 2];
+  if (!latest) return null;
+  const change = previous ? latest.close - previous.close : null;
+  return {
+    id: symbol.id,
+    label: symbol.label,
+    name: symbol.name,
+    date: latest.date,
+    value: Math.round(latest.close * 100) / 100,
+    change: change === null ? null : Math.round(change * 100) / 100,
+    changePct: change === null || !previous.close
+      ? null : Math.round((change / previous.close) * 10000) / 100,
+  };
+}
+
+export function indexSpeech(indices) {
+  const parts = [];
+  for (const index of indices) {
+    if (index.changePct === null || index.changePct === 0) {
+      parts.push(`${index.label}지수는 ${Math.round(index.value)}입니다`);
+      continue;
+    }
+    parts.push(`${index.label}지수는 ${Math.round(index.value)}으로`
+      + ` ${Math.abs(index.changePct).toFixed(2)}퍼센트 ${index.changePct > 0 ? "올랐습니다" : "내렸습니다"}`);
+  }
+  return parts.length ? `${parts.join(", ")}.` : "";
+}
+
 const RATES_URL = "https://api.frankfurter.dev/v1";
+const INDEX_URL = "https://stooq.com/q/d/l/";
+
+async function getText(url) {
+  const response = await fetch(url, { signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS) });
+  if (!response.ok) throw new Error(`upstream ${response.status}`);
+  return response.text();
+}
+
+export async function fetchIndices(now = new Date()) {
+  const end = kstStamp(now).replace(/-/g, "");
+  const start = new Date(Date.parse(kstStamp(now)) - 14 * 86400000)
+    .toISOString().slice(0, 10).replace(/-/g, "");
+  // 지수 하나가 실패해도 나머지는 보여준다.
+  const results = await Promise.all(INDEX_SYMBOLS.map(async (symbol) => {
+    try {
+      const csv = await getText(
+        `${INDEX_URL}?s=${encodeURIComponent(symbol.id)}&i=d&d1=${start}&d2=${end}`);
+      return buildIndex(symbol, parseStooqDaily(csv));
+    } catch (error) {
+      console.error("brief index failed", symbol.id, error);
+      return null;
+    }
+  }));
+  return results.filter(Boolean);
+}
 
 export async function fetchRates(now = new Date()) {
   // 최신 고시일을 모르므로 최근 열흘을 받아 마지막 두 영업일을 쓴다
@@ -245,18 +327,24 @@ export async function handleBriefRates(request, env) {
   const cached = await cache?.match(cacheRequest);
   if (cached) return new Response(cached.body, cached);
 
-  let rates;
-  try {
-    rates = await fetchRates();
-  } catch (error) {
-    console.error("brief rates upstream failed", error);
+  // 환율과 지수는 서로 다른 상류다 — 한쪽이 죽어도 다른 쪽은 보여준다.
+  const [rates, indices] = await Promise.all([
+    fetchRates().catch((error) => {
+      console.error("brief rates upstream failed", error);
+      return null;
+    }),
+    fetchIndices().catch(() => []),
+  ]);
+  if (!rates && !indices.length) {
     return Response.json(
-      { error: "환율 정보를 불러오지 못했어요." },
+      { error: "환율·지수를 불러오지 못했어요." },
       { status: 502, headers: { "Cache-Control": "no-store" } },
     );
   }
+  const payload = { ...(rates ?? { date: null, items: [], text: "", stale: false }), indices };
+  payload.text = [rates?.text, indexSpeech(indices)].filter(Boolean).join(" ");
   // ECB는 하루 한 번 고시라 자주 물을 이유가 없다.
-  const response = Response.json(rates, {
+  const response = Response.json(payload, {
     headers: { "Cache-Control": "public, max-age=1800" },
   });
   await cache?.put(cacheRequest, response.clone());

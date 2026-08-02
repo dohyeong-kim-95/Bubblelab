@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  airGrade, BRIEF_REGIONS, BriefDO, buildBrief, buildRates, findRegion,
-  handleBriefRates, handleBriefToday, RATE_SYMBOLS, skyOf,
+  airGrade, BRIEF_REGIONS, BriefDO, buildBrief, buildIndex, buildRates, findRegion,
+  handleBriefRates, handleBriefToday, indexSpeech, INDEX_SYMBOLS, parseStooqDaily,
+  RATE_SYMBOLS, skyOf,
 } from "./brief.js";
 import { b64uEncode, generateVapidKeys } from "./webpush.js";
 
@@ -541,4 +542,95 @@ test("화면 설정에 환율 항목이 있고 읽어주기에 포함된다", as
   assert.match(page, /settings\.rates \? rates\?\.text : ""/);
   // 기준일을 반드시 적는다 — ECB는 하루 한 번 고시라 아침엔 전 영업일 값이다
   assert.match(page, /ECB\) 고시/);
+});
+
+// ── 지수 (다우·나스닥) ─────────────────────────────────────────
+const STOOQ_CSV = `Date,Open,High,Low,Close,Volume
+2026-07-30,44000.10,44200.00,43900.00,44050.55,120000
+2026-07-31,44050.00,44400.00,44000.00,44280.90,131000`;
+
+test("Stooq 일별 CSV를 날짜 오름차순으로 읽는다", () => {
+  const rows = parseStooqDaily(STOOQ_CSV);
+  assert.equal(rows.length, 2);
+  assert.deepEqual({ ...rows[1] }, { date: "2026-07-31", close: 44280.9 });
+  // 헤더 순서가 바뀌어도 이름으로 찾는다
+  const swapped = parseStooqDaily("Close,Date\n44280.90,2026-07-31");
+  assert.equal(swapped[0].close, 44280.9);
+});
+
+test("깨진 CSV에서 숫자가 아닌 값이 새지 않는다", () => {
+  for (const csv of ["", "Date,Close", "그냥 오류 문자열", null, undefined,
+                     "Date,Close\nN/A,N/A", "<html>403</html>"]) {
+    const rows = parseStooqDaily(csv);
+    assert.ok(Array.isArray(rows));
+    for (const row of rows) assert.ok(Number.isFinite(row.close));
+  }
+  assert.equal(buildIndex(INDEX_SYMBOLS[0], []), null);   // 행이 없으면 지수도 없다
+});
+
+test("지수는 전 거래일 종가와 비교해 등락률을 낸다", () => {
+  const dow = buildIndex(INDEX_SYMBOLS[0], parseStooqDaily(STOOQ_CSV));
+  assert.equal(dow.label, "다우");
+  assert.equal(dow.date, "2026-07-31");
+  assert.equal(dow.value, 44280.9);
+  assert.equal(dow.change, 230.35);
+  assert.equal(dow.changePct, 0.52);
+  // 하루치뿐이면 등락을 지어내지 않는다
+  const one = buildIndex(INDEX_SYMBOLS[0], parseStooqDaily("Date,Close\n2026-07-31,44280.90"));
+  assert.equal(one.change, null);
+  assert.equal(one.changePct, null);
+});
+
+test("지수 읽어주기 문장에는 기호 대신 말을 쓴다", () => {
+  const up = buildIndex(INDEX_SYMBOLS[0], parseStooqDaily(STOOQ_CSV));
+  const down = buildIndex(INDEX_SYMBOLS[1], parseStooqDaily(
+    "Date,Close\n2026-07-30,20000.00\n2026-07-31,19800.00"));
+  const speech = indexSpeech([up, down]);
+  assert.match(speech, /다우지수는 44281으로 0.52퍼센트 올랐습니다/);
+  assert.match(speech, /나스닥지수는 19800으로 1.00퍼센트 내렸습니다/);
+  assert.doesNotMatch(speech, /[▲▼%]/);
+  assert.equal(indexSpeech([]), "");
+});
+
+test("/_brief/rates는 환율과 지수를 함께 주고, 한쪽이 죽어도 나머지를 준다", async () => {
+  const originalFetch = globalThis.fetch;
+  // 환율만 실패
+  globalThis.fetch = async (url) => (String(url).includes("frankfurter")
+    ? new Response("nope", { status: 500 })
+    : new Response(STOOQ_CSV));
+  try {
+    const res = await handleBriefRates(new Request("https://util.bubblelab.dev/_brief/rates"), {});
+    assert.equal(res.status, 200, "지수가 살아 있는데 502를 냈다");
+    const data = await res.json();
+    assert.equal(data.items.length, 0);
+    assert.equal(data.indices.length, 2);
+    assert.match(data.text, /다우지수는/);
+    assert.doesNotMatch(data.text, /달러 환율/);
+  } finally { globalThis.fetch = originalFetch; }
+
+  // 지수만 실패
+  globalThis.fetch = async (url) => (String(url).includes("frankfurter")
+    ? Response.json(ratesFixture({ "2026-08-01": { USD: 1 / 1390 } }))
+    : new Response("nope", { status: 500 }));
+  try {
+    const res = await handleBriefRates(new Request("https://util.bubblelab.dev/_brief/rates"), {});
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.deepEqual(data.indices, []);
+    assert.match(data.text, /달러 환율/);
+  } finally { globalThis.fetch = originalFetch; }
+
+  // 둘 다 실패해야 502
+  globalThis.fetch = async () => new Response("nope", { status: 500 });
+  try {
+    const res = await handleBriefRates(new Request("https://util.bubblelab.dev/_brief/rates"), {});
+    assert.equal(res.status, 502);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("화면이 지수를 그리고 소스를 밝힌다", async () => {
+  const page = await pageSource();
+  assert.match(page, /id="index-list"/);
+  assert.match(page, /rates\.indices/);
+  assert.match(page, /Stooq/);
 });

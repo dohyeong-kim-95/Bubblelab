@@ -177,8 +177,8 @@
       </div>
       <div class="set-row">
         <button type="button" id="set-rates" class="notify-toggle" role="switch"
-                aria-checked="true" aria-label="환율 넣기"></button>
-        <span>💱 환율</span>
+                aria-checked="true" aria-label="환율과 지수 넣기"></button>
+        <span>💱 환율 · 지수</span>
       </div>
       <div class="set-row">
         <button type="button" id="set-fortune" class="notify-toggle" role="switch"
@@ -242,6 +242,7 @@
     <!-- 환율 (ECB 고시 기준) -->
     <div id="rates" hidden>
       <div id="rate-list"></div>
+      <div id="index-list"></div>
       <p class="basis" id="rate-basis"></p>
     </div>
 
@@ -360,7 +361,8 @@
 
   function showRates() {
     const box = $("rates");
-    if (!settings.rates || !rates?.items?.length) { box.hidden = true; return; }
+    const hasAny = rates && ((rates.items?.length ?? 0) + (rates.indices?.length ?? 0)) > 0;
+    if (!settings.rates || !hasAny) { box.hidden = true; return; }
     const list = $("rate-list");
     list.replaceChildren();
     for (const item of rates.items) {
@@ -381,8 +383,35 @@
       }
       list.append(row);
     }
+
+    // 지수 (다우·나스닥). 환율과 상류가 달라 한쪽만 있을 수도 있다.
+    const indexList = $("index-list");
+    indexList.replaceChildren();
+    for (const index of rates.indices ?? []) {
+      const row = document.createElement("div");
+      row.className = "rate-row";
+      const name = document.createElement("span");
+      name.className = "name";
+      name.textContent = index.label;
+      const val = document.createElement("span");
+      val.className = "val";
+      val.textContent = index.value.toLocaleString("ko-KR", { maximumFractionDigits: 2 });
+      row.append(name, val);
+      if (index.changePct !== null && index.changePct !== 0) {
+        const chg = document.createElement("span");
+        chg.className = `chg ${index.changePct > 0 ? "up" : "down"}`;
+        chg.textContent = `${index.changePct > 0 ? "▲" : "▼"} ${Math.abs(index.changePct).toFixed(2)}%`;
+        row.append(chg);
+      }
+      indexList.append(row);
+    }
     // 기준일을 반드시 적는다 — ECB는 하루 한 번 고시라 아침에는 전 영업일 값이다.
     const basis = $("rate-basis");
+    if (!rates.items?.length) {                 // 지수만 받은 경우
+      basis.textContent = "지수 종가 · Stooq";
+      box.hidden = false;
+      return;
+    }
     basis.replaceChildren(document.createTextNode(rates.stale
       ? `${rates.date} 유럽중앙은행(ECB) 고시 · 최신 고시가 늦어지고 있어요 · `
       : `${rates.date} 유럽중앙은행(ECB) 고시 기준 · 은행 매매기준율과 다를 수 있어요 · `));
@@ -392,6 +421,7 @@
     link.rel = "noopener";
     link.textContent = "Frankfurter";
     basis.append(link);
+    if (rates.indices?.length) basis.append(document.createTextNode(" · 지수 종가 Stooq"));
     box.hidden = false;
   }
 
