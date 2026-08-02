@@ -1660,7 +1660,7 @@ const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
 
 async function cmdFit(workdir, cutId, frameArg, options = {}) {
   const numbers = String(frameArg ?? "").split(/[\s,]+/).filter(Boolean).map(Number);
-  if (!numbers.length) throw new Error('크기를 맞출 프레임 번호가 필요합니다 (예: 3)');
+  if (!numbers.length && !options.ratios) throw new Error('크기를 맞출 프레임 번호가 필요합니다 (예: 3)');
   const framesDir = join(workdir, "cuts", cutId, "frames");
   if (!existsSync(framesDir)) throw new Error(`프레임이 없습니다: ${framesDir}`);
   const files = readdirSync(framesDir).filter((f) => /^\d{2}\.png$/.test(f)).sort();
@@ -1669,6 +1669,26 @@ async function cmdFit(workdir, cutId, frameArg, options = {}) {
   // --ratio가 있으면 **전체 중앙값(중립 크기) × 배율**이다. 모델이 무시한
   // 스쿼시·스트레치를 코드가 넣는 용도 — 시작 크기와 무관하게 결과가 고정되므로
   // 이미 부분적으로 늘어난 프레임에 이중 적용될 걱정이 없다.
+  // --ratios: 프레임별 배율표 {"1":[1.10,0.90],...}. 스쿼시·스트레치 스케줄을
+  // **한 번의 호출로** 적용해야 한다 — 프레임마다 따로 부르면 중립 크기(중앙값)를
+  // 매번 이미 고친 프레임들 위에서 다시 계산해 기준이 흘러간다.
+  let schedule = null, fixedBase = null;
+  if (options.ratios) {
+    const raw = existsSync(options.ratios) ? readFileSync(options.ratios, "utf8") : options.ratios;
+    const parsed = JSON.parse(raw);
+    // {"base":[w,h],"ratios":{...}} 형태면 중립 크기를 파일이 고정한다.
+    // 이게 있어야 **다시 돌려도 결과가 같다** — 목표가 base×배율이라 이미
+    // 스쿼시된 프레임에 다시 적용해도 같은 값이 나오고, 한 프레임만 재생성한
+    // 뒤 스케줄 전체를 다시 돌려도 나머지가 밀리지 않는다.
+    const isWrapped = parsed && !Array.isArray(parsed) && Array.isArray(parsed.base) && parsed.ratios;
+    if (isWrapped) fixedBase = parsed.base.map(Number);
+    schedule = new Map(Object.entries(isWrapped ? parsed.ratios : parsed).map(([k, v]) => [Number(k), v]));
+    for (const [n, v] of schedule) {
+      if (!Array.isArray(v) || v.length !== 2 || !v.every((x) => Number.isFinite(x) && x > 0)) {
+        throw new Error(`--ratios의 ${n}번 값은 [가로, 세로] 양수 두 개여야 합니다`);
+      }
+    }
+  }
   let ratio = null;
   if (options.ratio) {
     const [rw, rh] = String(options.ratio).split(",").map(Number);
@@ -1677,20 +1697,30 @@ async function cmdFit(workdir, cutId, frameArg, options = {}) {
     }
     ratio = [rw, rh];
   }
-  const basis = files
-    .map((f, i) => ({ f, n: i + 1 }))
-    .filter(({ n }) => ratio || !numbers.includes(n))
-    .map(({ f }) => silhouetteBox(decodePng(readFileSync(join(framesDir, f)))))
-    .filter(Boolean);
-  if (!basis.length) throw new Error("기준으로 삼을 프레임이 없습니다");
-  const baseW = median(basis.map((b) => b[0])), baseH = median(basis.map((b) => b[1]));
-  const targetW = Math.round(baseW * (ratio?.[0] ?? 1));
-  const targetH = Math.round(baseH * (ratio?.[1] ?? 1));
+  const targets = schedule ? [...schedule.keys()] : numbers;
+  if (!targets.length) throw new Error("맞출 프레임이 없습니다");
 
-  for (const n of numbers) {
+  // 기준은 **손대기 전 상태**에서 한 번만 잰다.
+  let baseW, baseH;
+  if (fixedBase) {
+    [baseW, baseH] = fixedBase;
+    console.log(`중립 크기(파일 고정) ${baseW}x${baseH}`);
+  } else {
+    const basis = files
+      .map((f, i) => ({ f, n: i + 1 }))
+      .filter(({ n }) => ratio || schedule || !targets.includes(n))
+      .map(({ f }) => silhouetteBox(decodePng(readFileSync(join(framesDir, f)))))
+      .filter(Boolean);
+    if (!basis.length) throw new Error("기준으로 삼을 프레임이 없습니다");
+    baseW = median(basis.map((b) => b[0])); baseH = median(basis.map((b) => b[1]));
+    console.log(`중립 크기(중앙값) ${baseW}x${baseH}`);
+  }
+
+  for (const n of targets) {
     const path = join(framesDir, `${pad2(n)}.png`);
     if (!existsSync(path)) throw new Error(`프레임이 없습니다: ${path}`);
-    const r = fitFrameBox(decodePng(readFileSync(path)), targetW, targetH);
+    const [rw, rh] = schedule?.get(n) ?? ratio ?? [1, 1];
+    const r = fitFrameBox(decodePng(readFileSync(path)), Math.round(baseW * rw), Math.round(baseH * rh));
     atomicWriteFile(path, Buffer.from(encodePng(r.image)));
     console.log(`✓ 프레임 ${pad2(n)} 실루엣 ${r.from[0]}x${r.from[1]} → ${r.to[0]}x${r.to[1]} (배율 ${r.scaleX.toFixed(3)}/${r.scaleY.toFixed(3)})`);
   }
@@ -1818,6 +1848,7 @@ const USAGE =
   '  fit    <작업폴더> <컷id> "<프레임번호…>"  ← 혼자 커진 프레임을 나머지 중앙값 크기로 (무료)\n' +
   '         가로·세로를 따로 맞춘다. 의도한 스쿼시·스트레치 프레임에는 쓰지 말 것\n' +
   '         --ratio 1.10,0.90 ← 중립 크기 대비 배율로 스쿼시·스트레치를 코드가 넣는다\n' +
+  '         --ratios <json|파일> ← 프레임별 배율표. 스케줄은 반드시 한 번에 적용할 것\n' +
   '  parts  <작업폴더> <컷id> [--expect \'{"ears":2}\']   ← 비전 부품 검사, report.json에 기록\n' +
   '  check  <작업폴더> <컷id> [--profile draft|master-2s|line] [--json]  ← FAIL이면 exit 1\n' +
   '작업폴더 권장 위치: _src/emoticon/<캐릭터명> (배포·커밋 제외)\n' +

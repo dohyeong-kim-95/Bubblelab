@@ -2,12 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { decodePng } from "./png.mjs";
 import { encodeApng, inspectApng } from "./apng.mjs";
+import { encodePng } from "./png.mjs";
 import { imageProvider } from "./emoticon-ai.mjs";
 import { bytesToBase64 } from "./emoticon-gen.js";
 import {
@@ -877,4 +878,64 @@ test("fit은 홀쭉한 프레임의 폭도 되돌린다", () => {
   }
   assert.equal(x1 - x0 + 1, 24, "폭이 목표와 다릅니다");
   assert.equal(y1 - y0 + 1, 44, "높이가 목표와 다릅니다");
+});
+
+test("fit --ratios는 기준을 한 번만 재고 프레임별 배율을 적용한다", () => {
+  // 프레임마다 따로 부르면 중립 크기(중앙값)를 이미 고친 프레임들 위에서
+  // 다시 계산해 기준이 흘러간다. 스케줄은 한 번의 호출로 적용해야 한다.
+  const dir = mkdtempSync(join(tmpdir(), "fit-"));
+  const framesDir = join(dir, "cuts", "c", "frames");
+  mkdirSync(framesDir, { recursive: true });
+  const box = (w, h) => {
+    const width = 200, height = 200;
+    const data = new Uint8Array(width * height * 4);
+    const x0 = (width - w) >> 1, y0 = (height - h) >> 1;
+    for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) data[(y * width + x) * 4 + 3] = 255;
+    return encodePng({ width, height, data });
+  };
+  for (let n = 1; n <= 4; n++) writeFileSync(join(framesDir, `0${n}.png`), Buffer.from(box(100, 100)));
+
+  execFileSync(process.execPath, [
+    CLI, "fit", dir, "c", "", "--ratios", '{"1":[1.10,0.90],"2":[0.94,1.08]}',
+  ], { encoding: "utf8" });
+
+  const measure = (n) => {
+    const { width, height, data } = decodePng(readFileSync(join(framesDir, `0${n}.png`)));
+    let x0 = width, y0 = height, x1 = 0, y1 = 0;
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+      if (data[(y * width + x) * 4 + 3] > 16) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    }
+    return [x1 - x0 + 1, y1 - y0 + 1];
+  };
+  // 둘 다 손대기 전 중앙값 100x100 기준이어야 한다 — 1번을 고친 뒤 2번이
+  // 기준을 다시 재면 110x90 쪽으로 끌려가 값이 달라진다.
+  assert.deepEqual(measure(1), [110, 90]);
+  assert.deepEqual(measure(2), [94, 108]);
+  assert.deepEqual(measure(3), [100, 100]);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("fit --ratios는 base가 고정돼 있으면 다시 돌려도 결과가 같다", () => {
+  // 한 프레임만 재생성한 뒤 스케줄 전체를 다시 돌리는 게 정상 흐름이다.
+  // base가 없으면 이미 스쿼시된 프레임들에서 중앙값을 다시 재어 기준이 밀린다.
+  const dir = mkdtempSync(join(tmpdir(), "fit2-"));
+  const framesDir = join(dir, "cuts", "c", "frames");
+  mkdirSync(framesDir, { recursive: true });
+  const box = (w, h) => {
+    const width = 200, height = 200;
+    const data = new Uint8Array(width * height * 4);
+    const x0 = (width - w) >> 1, y0 = (height - h) >> 1;
+    for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) data[(y * width + x) * 4 + 3] = 255;
+    return encodePng({ width, height, data });
+  };
+  for (let n = 1; n <= 4; n++) writeFileSync(join(framesDir, `0${n}.png`), Buffer.from(box(100, 100)));
+  const schedule = JSON.stringify({ base: [100, 100], ratios: { 1: [1.10, 0.90], 2: [0.94, 1.08] } });
+
+  const run = () => execFileSync(process.execPath, [CLI, "fit", dir, "c", "", "--ratios", schedule], { encoding: "utf8" });
+  run();
+  const after1 = readFileSync(join(framesDir, "01.png"));
+  const second = run();
+  assert.match(second, /배율 1\.000\/1\.000/, "두 번째 적용이 무변경이 아닙니다");
+  assert.deepEqual(readFileSync(join(framesDir, "01.png")), after1, "두 번 돌리니 결과가 달라졌습니다");
+  rmSync(dir, { recursive: true, force: true });
 });
