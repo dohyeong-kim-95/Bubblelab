@@ -2,6 +2,14 @@
   "version": 1,
   "items": [
     {
+      "id": "e4b63e4b-c4cc-4980-bb3f-a00ccd3adc59",
+      "character": "rabbit",
+      "cut": "bounce3",
+      "verdict": "revise",
+      "note": "3프레임이 튀는거같은데 상대적 얼굴 위치가 달라서 그런거같아요 겹쳐놓고 비교하면 보일듯 그리고 발바닥은 통일성이 생겼는데 점프할때의 발 움직임이 아니예요. 그 부분은 bounce2가 더 좋았음. 프레임 순서 재배열하고 높이조절하면 해결될거같기도하고.. 일단 한번 시도해보고 다시 볼까요",
+      "at": "2026-08-02T02:25:35.124Z"
+    },
+    {
       "id": "1b757767-dfdf-4d48-b68f-53d8c2a63cab",
       "character": "rabbit",
       "cut": "bounce2",
