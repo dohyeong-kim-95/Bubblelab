@@ -7,7 +7,7 @@
   "timelineFrames": 8,
   "fps": 12,
   "durationSec": 2.001,
-  "bytes": 438852,
+  "bytes": 438572,
   "lineBytes": null,
   "loops": 0,
   "frameDelays": [
@@ -20,7 +20,7 @@
     0.25,
     0.167
   ],
-  "loopDiff": 0.25046222192580736,
+  "loopDiff": 0.1980695822437611,
   "adjacentDiffs": [
     0.2540205467661925,
     0.29427687430682176,
@@ -28,13 +28,13 @@
     0.15384120411488264,
     0.16844306214836746,
     0.2538433943875625,
-    0.2605201284625064
+    0.2648714419643748
   ],
   "adjacentMedian": 0.2538433943875625,
   "adjacentMax": 0.29427687430682176,
-  "seamRatio": 0.986680084900721,
-  "scaleDrift": 0.17364341085271318,
-  "motionMean": 0.15129429634609662,
+  "seamRatio": 0.7802825940049983,
+  "scaleDrift": 0.18006430868167203,
+  "motionMean": 0.15304230006218608,
   "motionMax": 0.19950179366844462,
   "transparency": [
     0.8094625473022461,
@@ -44,7 +44,67 @@
     0.7996330261230469,
     0.7999458312988281,
     0.8031949996948242,
-    0.800532341003418
+    0.8035345077514648
   ],
-  "parts": null
+  "parts": {
+    "model": "gemini-3.6-flash",
+    "expected": {
+      "ears": 2,
+      "arms": 2,
+      "feet": 2,
+      "eyes": 2
+    },
+    "counts": [
+      {
+        "ears": 2,
+        "arms": 2,
+        "feet": 2,
+        "eyes": 2
+      },
+      {
+        "ears": 2,
+        "arms": 2,
+        "feet": 2,
+        "eyes": 2
+      },
+      {
+        "ears": 2,
+        "arms": 2,
+        "feet": 2,
+        "eyes": 2
+      },
+      {
+        "ears": 2,
+        "arms": 2,
+        "feet": 2,
+        "eyes": 2
+      },
+      {
+        "ears": 2,
+        "arms": 2,
+        "feet": 2,
+        "eyes": 2
+      },
+      {
+        "ears": 2,
+        "arms": 2,
+        "feet": 2,
+        "eyes": 2
+      },
+      {
+        "ears": 2,
+        "arms": 2,
+        "feet": 2,
+        "eyes": 2
+      },
+      {
+        "ears": 2,
+        "arms": 2,
+        "feet": 2,
+        "eyes": 2
+      }
+    ],
+    "violations": [],
+    "warnings": []
+  }
 }
