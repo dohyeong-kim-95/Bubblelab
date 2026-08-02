@@ -20,6 +20,7 @@ Bubblelab의 정적 빌드, 단일 Cloudflare Worker, Durable Object 저장소�
 | `podcast-pipeline.mjs` | 생성 파이프라인 로컬 품질 검증 CLI, VAPID 키 생성 |
 | `webpush.js` | 표준 Web Push 발송기 (RFC 8291/8292, WebCrypto 자체 구현) |
 | `fortune.js` | KASI 양력·음력 변환과 사주 명식 응답 |
+| `brief.js` | 아침 브리핑 날씨·미세먼지(Open-Meteo)와 매일 8시 알림 `BriefDO` |
 | `estate.js` | 국토부 아파트 실거래가 프록시 (estate 서브도메인용, 로컬 dev 위주) |
 | `estate-import.mjs` | 실거래가를 estate/data/ 정적 JSON으로 내려받는 CLI (운영 데이터 경로) |
 | `estate-geocode.mjs` | 단지 지번을 VWorld 지오코더로 좌표 변환해 estate/data/geo.json 생성 |

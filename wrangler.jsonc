@@ -38,7 +38,8 @@
     // Duri 사진 임시 버퍼. 싱크가 받아 ack 하면 폐기된다(영구 저장은 사용자 PC).
     { "binding": "DURI_BUCKET", "bucket_name": "bubblelab-duri" }
   ],
-  // 매일 06:40 KST(21:40 UTC) 팟캐스트 자동 생성 · 08:00 KST(23:00 UTC) 운세 알림
+  // 매일 06:40 KST(21:40 UTC) 팟캐스트 자동 생성
+  // · 08:00 KST(23:00 UTC) 운세 알림 + 아침 브리핑(날씨) 알림
   "triggers": { "crons": ["40 21 * * *", "0 13 * * *", "0 23 * * *"] },
   "routes": [
     { "pattern": "bubblelab.dev/*", "zone_name": "bubblelab.dev" },
@@ -67,7 +68,8 @@
       { "name": "PODCAST", "class_name": "PodcastDO" },
       { "name": "DURI", "class_name": "DuriDO" },
       { "name": "EMOTICON_REVIEW", "class_name": "EmoticonReviewDO" },
-      { "name": "FORTUNE", "class_name": "FortuneDO" }
+      { "name": "FORTUNE", "class_name": "FortuneDO" },
+      { "name": "BRIEF", "class_name": "BriefDO" }
     ]
   },
   "migrations": [
@@ -82,6 +84,7 @@
     { "tag": "v9", "new_sqlite_classes": ["WorkReviewsDO"] },
     { "tag": "v10", "new_sqlite_classes": ["DuriDO"] },
     { "tag": "v11", "new_sqlite_classes": ["FortuneDO"] },
-    { "tag": "v12", "new_sqlite_classes": ["EmoticonReviewDO"] }
+    { "tag": "v12", "new_sqlite_classes": ["EmoticonReviewDO"] },
+    { "tag": "v13", "new_sqlite_classes": ["BriefDO"] }
   ]
 }

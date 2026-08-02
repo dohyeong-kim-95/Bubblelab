@@ -434,3 +434,25 @@ test("opted-out browser is excluded from visit, qualify, and engagement tracking
   assert.match(response.headers.get("Set-Cookie") ?? "", /^bl_vid=/);
   assert.deepEqual(analyticsCalls, ["/track"]);
 });
+
+test("brief routes are wired and closed without VAPID configuration", async () => {
+  // 라우트 경로·메서드는 핸들러 테스트(brief.test.mjs)가 못 잡는 얇은 층이라
+  // 여기서 확인한다 — 경로 한 글자만 틀려도 404가 조용히 배포된다.
+  const env = {};
+  const notAllowed = await worker.fetch(
+    new Request("https://util.bubblelab.dev/_brief/today", { method: "POST" }), env, ctx);
+  assert.equal(notAllowed.status, 405);
+
+  // GET은 공개키 조회 — 미설정이면 null을 준다(버튼이 뜨지 않는 fail-closed 신호)
+  const config = await worker.fetch(
+    new Request("https://util.bubblelab.dev/_brief/push"), env, ctx);
+  assert.equal(config.status, 200);
+  assert.deepEqual(await config.json(), { vapidPublicKey: null });
+
+  // 구독은 VAPID가 없으면 503 — DO를 건드리기 전에 막힌다(env.BRIEF 바인딩 없음)
+  const subscribe = await worker.fetch(
+    new Request("https://util.bubblelab.dev/_brief/push", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+    }), env, ctx);
+  assert.equal(subscribe.status, 503);
+});

@@ -272,3 +272,14 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## Open-Meteo (날씨·대기질 데이터)
+
+util/brief가 표시하는 날씨·대기질 데이터의 출처입니다. 코드가 아닌 **데이터**
+이용이며 API 키 없이 무료로 호출합니다.
+
+Weather and air-quality data by Open-Meteo — https://open-meteo.com/
+Licensed under the Creative Commons Attribution 4.0 International License
+(CC BY 4.0) — https://creativecommons.org/licenses/by/4.0/
+
+표기는 `util/brief` 화면 하단에 링크와 함께 노출합니다.
