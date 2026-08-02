@@ -11,7 +11,7 @@ import { encodeApng, inspectApng } from "./apng.mjs";
 import { imageProvider } from "./emoticon-ai.mjs";
 import { bytesToBase64 } from "./emoticon-gen.js";
 import {
-  autoCutout, chromaKeyGreen, eraseInkBlobs, fitFrames, loopDiff, resize, scaleDrift,
+  autoCutout, chromaKeyGreen, dropOutsideShadow, eraseInkBlobs, fitFrames, loopDiff, resize, scaleDrift,
   transparencyRatio, unionBounds,
 } from "./emoticon.mjs";
 import worker from "./worker.js";
@@ -791,4 +791,43 @@ test("erase는 안티에일리어싱 테두리까지 지운다", () => {
   let darkest = 255;
   for (let y = 15; y < 26; y++) for (let x = 15; x < 26; x++) darkest = Math.min(darkest, pixelAt(image, x, y));
   assert.equal(darkest, 255, "테두리 잔상이 남았습니다");
+});
+
+// ── unshadow: 외곽선 바깥 드롭섀도 제거 ───────────────────
+// bounce3 3·4번에 발밑 회색 타원이 생겼고 재생성해도 같은 자리에 다시 나왔다.
+// 발과 이어져 있어 연결요소로는 못 뗀다 — "닫힌 외곽선 바깥"이라는 성질을 쓴다.
+test("unshadow는 외곽선 바깥 회색만 지우고 몸통 안은 지키지 않는다", () => {
+  const width = 60, height = 60;
+  const data = new Uint8Array(width * height * 4);
+  const set = (x, y, v, a = 255) => {
+    const i = (y * width + x) * 4;
+    data[i] = data[i + 1] = data[i + 2] = v; data[i + 3] = a;
+  };
+  // 20..40 정사각형: 테두리는 잉크, 안은 흰 몸통. 안쪽 한 점은 회색(안티에일리어싱 흉내).
+  for (let y = 20; y <= 40; y++) for (let x = 20; x <= 40; x++) {
+    const edge = x === 20 || x === 40 || y === 20 || y === 40;
+    set(x, y, edge ? 20 : 255);
+  }
+  set(30, 30, 190);                       // 몸통 **안쪽** 회색 — 살아남아야 한다
+  for (let x = 24; x <= 36; x++) set(x, 48, 190);  // 몸통 **바깥** 회색 띠 = 그림자
+
+  const { image, removed } = dropOutsideShadow({ width, height, data });
+  assert.equal(removed, 13, "바깥 회색 띠 13px가 지워져야 합니다");
+  assert.equal(image.data[(48 * width + 30) * 4 + 3], 0, "그림자가 남았습니다");
+  assert.equal(image.data[(30 * width + 30) * 4 + 3], 255, "몸통 안쪽 회색을 지웠습니다");
+  assert.equal(image.data[(20 * width + 30) * 4 + 3], 255, "외곽선을 지웠습니다");
+});
+
+test("unshadow는 외곽선 바로 바깥의 안티에일리어싱을 지킨다", () => {
+  // 선 둘레까지 걷어내면 외곽선이 계단처럼 딱딱해진다.
+  const width = 60, height = 60;
+  const data = new Uint8Array(width * height * 4);
+  const set = (x, y, v) => { const i = (y * width + x) * 4; data[i]=data[i+1]=data[i+2]=v; data[i+3]=255; };
+  for (let y = 20; y <= 40; y++) for (let x = 20; x <= 40; x++) {
+    set(x, y, x === 20 || x === 40 || y === 20 || y === 40 ? 20 : 255);
+  }
+  set(30, 19, 190);   // 선에 딱 붙은 바깥 회색 = 안티에일리어싱
+  const { image, removed } = dropOutsideShadow({ width, height, data });
+  assert.equal(removed, 0);
+  assert.equal(image.data[(19 * width + 30) * 4 + 3], 255);
 });

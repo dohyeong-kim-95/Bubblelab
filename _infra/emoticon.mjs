@@ -1543,6 +1543,82 @@ export function eraseInkBlobs(image, seeds, {
   return { image: { width, height, data: out }, erased: report };
 }
 
+// ── 외곽선 바깥의 드롭섀도 제거 ──────────────────────────
+// 모델이 "떠 있는 캐릭터"를 그릴 때 발밑에 회색 타원 그림자를 얹는 경우가 있다.
+// bounce3에서 여덟 장 중 3·4번에만 생겼고 재생성해도 같은 자리에 다시 나왔다 —
+// 운이 아니라 그 포즈의 관용구다. 프레임마다 있다 없다 하니 재생 중에 깜빡인다.
+//
+// 그림자는 발과 이어져 있어 연결요소로는 못 뗀다. 대신 **닫힌 검은 외곽선의
+// 바깥**에 있다는 성질을 쓴다: 캔버스 가장자리에서 잉크를 넘지 않고 흘러 닿는
+// 영역이 바깥이고, 그 중 무채색 중간 밝기 픽셀이 그림자다. 몸통 안쪽 회색
+// (외곽선 안티에일리어싱)은 바깥에서 닿지 않으므로 안전하고, 외곽선 바로 바깥의
+// 안티에일리어싱은 protectRadius로 지킨다(안 지키면 선이 계단처럼 딱딱해진다).
+export function dropOutsideShadow(image, {
+  inkThreshold = 110, grayTolerance = 14, minValue = 130, maxValue = 242, protectRadius = 2,
+} = {}) {
+  const { width, height, data } = image;
+  const ink = new Uint8Array(width * height);
+  for (let p = 0; p < width * height; p++) if (isInkPixel(data, p * 4, inkThreshold)) ink[p] = 1;
+
+  // 가장자리에서 잉크를 넘지 않고 흘러 닿는 곳 = 캐릭터 바깥
+  const outside = new Uint8Array(width * height);
+  const stack = [];
+  const push = (p) => { if (!outside[p] && !ink[p]) { outside[p] = 1; stack.push(p); } };
+  for (let x = 0; x < width; x++) { push(x); push((height - 1) * width + x); }
+  for (let y = 0; y < height; y++) { push(y * width); push(y * width + width - 1); }
+  while (stack.length) {
+    const p = stack.pop();
+    const px = p % width, py = (p / width) | 0;
+    if (px > 0) push(p - 1);
+    if (px < width - 1) push(p + 1);
+    if (py > 0) push(p - width);
+    if (py < height - 1) push(p + width);
+  }
+
+  // 외곽선 둘레 protectRadius 안은 건드리지 않는다
+  const protectedPx = new Uint8Array(width * height);
+  for (let p = 0; p < width * height; p++) {
+    if (!ink[p]) continue;
+    const px = p % width, py = (p / width) | 0;
+    for (let dy = -protectRadius; dy <= protectRadius; dy++) {
+      for (let dx = -protectRadius; dx <= protectRadius; dx++) {
+        const nx = px + dx, ny = py + dy;
+        if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+        protectedPx[ny * width + nx] = 1;
+      }
+    }
+  }
+
+  const out = new Uint8Array(data);
+  let removed = 0;
+  for (let p = 0; p < width * height; p++) {
+    if (!outside[p] || protectedPx[p]) continue;
+    const i = p * 4;
+    if (out[i + 3] === 0) continue;
+    const mx = Math.max(out[i], out[i + 1], out[i + 2]);
+    const mn = Math.min(out[i], out[i + 1], out[i + 2]);
+    if (mx - mn > grayTolerance || mx < minValue || mx > maxValue) continue;
+    out[i + 3] = 0;
+    removed++;
+  }
+  return { image: { width, height, data: out }, removed };
+}
+
+async function cmdUnshadow(workdir, cutId, frameArg) {
+  const numbers = String(frameArg ?? "").split(/[\s,]+/).filter(Boolean).map(Number);
+  if (!numbers.length) throw new Error('그림자를 지울 프레임 번호가 필요합니다 (예: "3,4")');
+  const framesDir = join(workdir, "cuts", cutId, "frames");
+  if (!existsSync(framesDir)) throw new Error(`프레임이 없습니다: ${framesDir}`);
+  for (const n of numbers) {
+    const path = join(framesDir, `${pad2(n)}.png`);
+    if (!existsSync(path)) throw new Error(`프레임이 없습니다: ${path}`);
+    const { image, removed } = dropOutsideShadow(decodePng(readFileSync(path)));
+    atomicWriteFile(path, Buffer.from(encodePng(image)));
+    console.log(`✓ 프레임 ${pad2(n)} 바깥 그림자 ${removed}px 제거`);
+  }
+  console.log(`다음 단계: node _infra/emoticon.mjs build ${workdir} ${cutId}`);
+}
+
 async function cmdErase(workdir, cutId, frameArg, options = {}) {
   const n = Number(frameArg);
   if (!Number.isInteger(n) || n < 1) throw new Error("지울 프레임 번호가 필요합니다 (예: 2)");
@@ -1645,6 +1721,7 @@ const USAGE =
   '  mirror <작업폴더> <컷id> "<프레임번호…>"  ← 좌우 반전 (든 팔 방향 정렬, 무료)\n' +
   '  erase  <작업폴더> <컷id> <프레임> --blob x,y [--blob x,y …]  ← 몸통 안 군더더기 획 제거 (무료)\n' +
   '         외곽선과 떨어진 독립 잉크 덩어리만 지운다. 가장자리에 닿거나 너무 크면 거부\n' +
+  '  unshadow <작업폴더> <컷id> "<프레임번호…>"  ← 외곽선 바깥 드롭섀도 제거 (무료)\n' +
   '  parts  <작업폴더> <컷id> [--expect \'{"ears":2}\']   ← 비전 부품 검사, report.json에 기록\n' +
   '  check  <작업폴더> <컷id> [--profile draft|master-2s|line] [--json]  ← FAIL이면 exit 1\n' +
   '작업폴더 권장 위치: _src/emoticon/<캐릭터명> (배포·커밋 제외)\n' +
@@ -1667,6 +1744,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     else if (command === "parts") await cmdParts(workdir, rest[0], options);
     else if (command === "mirror") await cmdMirror(workdir, rest[0], rest[1]);
     else if (command === "erase") await cmdErase(workdir, rest[0], rest[1], options);
+    else if (command === "unshadow") await cmdUnshadow(workdir, rest[0], rest[1]);
     else if (command === "check") {
       const judgement = cmdCheck(workdir, rest[0], options);
       if (judgement.verdict === "fail") process.exit(1);
