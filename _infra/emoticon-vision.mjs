@@ -75,7 +75,13 @@ export async function inspectParts({ framesB64, parts, ask }) {
 // 우리 토끼 기본값. 캐릭터마다 다르면 컷 스펙에서 덮어쓴다.
 export const RABBIT_PARTS = [
   { key: "ears", what: "long rabbit ear shapes attached to the head (upright, drooping, or behind)", expected: 2 },
-  // 팔만 몸에 겹쳐 가려질 수 있다 — wave가 팔을 들면 실제로 1개로 세어진다.
-  { key: "arms", what: "arm or paw shapes attached to the body (a folded pair on the belly counts as two)", expected: 2, occludable: true },
+  // 팔·발은 몸에 겹쳐 가려질 수 있다 — wave가 팔을 들면 실제로 1개로 세어지고,
+  // 점프 프레임에서 발을 몸 아래로 접으면 발이 안 보인다.
+  //
+  // arms와 feet를 반드시 나눠서 묻는다. 예전에는 arms 설명이 "arm or paw"라
+  // 웅크린 자세에서 **발까지 팔로 세어** arms 4를 신고했고, 그걸 오탐으로
+  // 기각했다가 진짜 다리 과다를 놓칠 뻔했다(lesson_learned §56).
+  { key: "arms", what: "arm shapes attached to the upper half of the body, at or above the waist (a folded pair on the belly counts as two)", expected: 2, occludable: true },
+  { key: "feet", what: "foot or leg shapes hanging below the body at the bottom of the silhouette", expected: 2, occludable: true },
   { key: "eyes", what: "eye shapes on the face (open circles or closed arcs both count)", expected: 2 },
 ];

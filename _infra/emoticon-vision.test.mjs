@@ -7,18 +7,27 @@ test("프롬프트는 '형태 단위로 세라'를 명시한다", () => {
   const prompt = partsPrompt(RABBIT_PARTS);
   assert.match(prompt, /by SHAPE/);
   assert.match(prompt, /including duplicates/);
-  assert.match(prompt, /"ears": 0, "arms": 0, "eyes": 0/);
+  assert.match(prompt, /"ears": 0, "arms": 0, "feet": 0, "eyes": 0/);
+});
+
+test("팔과 발을 따로 묻는다", () => {
+  // arms 설명이 "arm or paw"였을 때 웅크린 자세의 발까지 팔로 세어 arms 4를
+  // 신고했다. 그걸 오탐으로 기각했다가 진짜 다리 과다를 놓칠 뻔했다 (§56).
+  const prompt = partsPrompt(RABBIT_PARTS);
+  assert.match(prompt, /at or above the waist/);   // arms = 상체에 붙은 것만
+  assert.match(prompt, /hanging below the body/);  // feet = 아래로 늘어진 것만
+  assert.doesNotMatch(prompt, /arm or paw/);
 });
 
 test("JSON이 산문에 섞여 와도 읽어낸다", () => {
   assert.deepEqual(
-    parseCounts('여기 있습니다:\n```json\n{"ears":4,"arms":2,"eyes":2}\n```', RABBIT_PARTS),
-    { ears: 4, arms: 2, eyes: 2 },
+    parseCounts('여기 있습니다:\n```json\n{"ears":4,"arms":2,"feet":2,"eyes":2}\n```', RABBIT_PARTS),
+    { ears: 4, arms: 2, feet: 2, eyes: 2 },
   );
 });
 
 test("이상한 개수는 조용히 넘기지 않고 실패시킨다", () => {
-  for (const bad of ['{"ears":"둘","arms":2,"eyes":2}', '{"ears":-1,"arms":2,"eyes":2}', '{"arms":2,"eyes":2}']) {
+  for (const bad of ['{"ears":"둘","arms":2,"feet":2,"eyes":2}', '{"ears":-1,"arms":2,"feet":2,"eyes":2}', '{"arms":2,"feet":2,"eyes":2}']) {
     assert.throws(() => parseCounts(bad, RABBIT_PARTS), /개수가 이상합니다/);
   }
   assert.throws(() => parseCounts("설명만 있고 JSON이 없음", RABBIT_PARTS), /JSON으로 읽을 수 없습니다/);
@@ -29,9 +38,9 @@ test("초과는 항상 위반, 부족은 가려질 수 있는 부위만 경고",
   // 부족은 팔만 겹침일 수 있다(wave가 팔을 들면 1개로 세어진다).
   // 눈 부족을 경고로 흘렸다가 blink1의 불량 프레임을 통과시켰다 — 이제 위반이다.
   const replies = [
-    '{"ears":2,"arms":2,"eyes":2}', '{"ears":4,"arms":2,"eyes":2}',
-    '{"ears":2,"arms":4,"eyes":2}', '{"ears":2,"arms":1,"eyes":2}',
-    '{"ears":2,"arms":2,"eyes":1}', '{"ears":1,"arms":2,"eyes":2}',
+    '{"ears":2,"arms":2,"feet":2,"eyes":2}', '{"ears":4,"arms":2,"feet":2,"eyes":2}',
+    '{"ears":2,"arms":4,"feet":2,"eyes":2}', '{"ears":2,"arms":1,"feet":2,"eyes":2}',
+    '{"ears":2,"arms":2,"feet":2,"eyes":1}', '{"ears":1,"arms":2,"feet":0,"eyes":2}',
   ];
   let i = 0;
   const result = await inspectParts({
@@ -43,7 +52,11 @@ test("초과는 항상 위반, 부족은 가려질 수 있는 부위만 경고",
     { frame: 5, part: "eyes", found: 1, expected: 2 },   // 눈 부족 = 결함
     { frame: 6, part: "ears", found: 1, expected: 2 },   // 귀 부족 = 결함
   ]);
-  assert.deepEqual(result.warnings, [{ frame: 4, part: "arms", found: 1, expected: 2 }]);
+  // 발 부족은 경고 — 점프 프레임에서 몸 아래로 접으면 실제로 안 보인다.
+  assert.deepEqual(result.warnings, [
+    { frame: 4, part: "arms", found: 1, expected: 2 },
+    { frame: 6, part: "feet", found: 0, expected: 2 },
+  ]);
 });
 
 test("expected가 없는 부품은 세기만 하고 판정하지 않는다", async () => {
