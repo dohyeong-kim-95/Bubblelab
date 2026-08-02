@@ -1407,14 +1407,17 @@ function renderGrid() {
   grid.replaceChildren(...btns);
 }
 // 스티커 팩 탭 순서(기기별 로컬 기억) — 팩 글자를 꾹 눌러 드래그하면 바뀐다.
-// 새로 추가된 팩은 저장된 순서에 없으므로 카탈로그 순서 그대로 뒤에 붙는다.
+// 저장된 순서는 "이미 본 팩들 사이의 선호"일 뿐이라, 새 팩은 **앞에** 붙인다.
+// 뒤에 붙이면 팩이 18개인 지금은 가로 스크롤 오른쪽 끝으로 밀려 사실상 안 보인다
+// (순서를 한 번도 안 바꾼 기기에서만 보이고, 바꾼 기기에서는 안 보이는 차이가 났다).
+// 드래그하면 전체 순서가 저장되므로 그 순간부터 원하는 자리에 고정된다.
 const PACK_ORDER_KEY = "duri:pack-order";
 function packOrder() {
   let saved = [];
   try { saved = JSON.parse(localStorage.getItem(PACK_ORDER_KEY) ?? "[]"); } catch { /* 최선노력 */ }
   const ids = PACKS.map((p) => p.id);
   const known = saved.filter((id) => ids.includes(id));
-  return [...known, ...ids.filter((id) => !known.includes(id))];
+  return [...ids.filter((id) => !known.includes(id)), ...known];
 }
 function orderedPacks() { return packOrder().map((id) => PACK_IDS.get(id)).filter(Boolean); }
 function savePackOrder(order) { try { localStorage.setItem(PACK_ORDER_KEY, JSON.stringify(order)); } catch { /* 최선노력 */ } }
