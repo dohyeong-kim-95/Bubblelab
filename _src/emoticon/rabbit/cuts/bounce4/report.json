@@ -46,5 +46,65 @@
     0.8031949996948242,
     0.7920122146606445
   ],
-  "parts": null
+  "parts": {
+    "model": "gemini-3.6-flash",
+    "expected": {
+      "ears": 2,
+      "arms": 2,
+      "feet": 2,
+      "eyes": 2
+    },
+    "counts": [
+      {
+        "ears": 2,
+        "arms": 2,
+        "feet": 2,
+        "eyes": 2
+      },
+      {
+        "ears": 2,
+        "arms": 2,
+        "feet": 2,
+        "eyes": 2
+      },
+      {
+        "ears": 2,
+        "arms": 2,
+        "feet": 2,
+        "eyes": 2
+      },
+      {
+        "ears": 2,
+        "arms": 2,
+        "feet": 2,
+        "eyes": 2
+      },
+      {
+        "ears": 2,
+        "arms": 2,
+        "feet": 2,
+        "eyes": 2
+      },
+      {
+        "ears": 2,
+        "arms": 2,
+        "feet": 2,
+        "eyes": 2
+      },
+      {
+        "ears": 2,
+        "arms": 2,
+        "feet": 2,
+        "eyes": 2
+      },
+      {
+        "ears": 2,
+        "arms": 2,
+        "feet": 2,
+        "eyes": 2
+      }
+    ],
+    "violations": [],
+    "warnings": []
+  }
 }
