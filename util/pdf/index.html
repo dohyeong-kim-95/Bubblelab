@@ -1,0 +1,1224 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>📕 PDF 도구</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>📕</text></svg>">
+<style>
+  :root { color-scheme: light dark; --bg: light-dark(#f2f4f7, #0d131c);
+          --panel: light-dark(#fff, #171f2b); --line: light-dark(#d9e0e7, #2a3646);
+          --text: light-dark(#1c2733, #e2e9f0); --muted: light-dark(#6e7985, #91a0b2);
+          --accent: #4f7fdd; --paper: light-dark(#fff, #e8eaee); }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100dvh; background: var(--bg); color: var(--text);
+         font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; }
+  .app { width: min(60rem, 100%); margin: 0 auto; padding: 1.2rem .75rem 4rem; }
+  h1 { margin: .2rem 0 .3rem; font-size: 1.25rem; }
+  .desc { margin: 0 0 1rem; color: var(--muted); font-size: .78rem; line-height: 1.6; }
+
+  button, select, input[type=text], input[type=number] {
+    font: inherit; color: inherit; border: 1px solid var(--line);
+    background: light-dark(#fff, #111923); border-radius: .6rem; padding: .5rem .8rem; }
+  button { cursor: pointer; }
+  button:active { transform: scale(.97); }
+  button:disabled { opacity: .4; cursor: default; transform: none; }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: bold; }
+  .tiny { padding: .35rem .55rem; font-size: .75rem; }
+
+  /* 탭 */
+  .tabs { display: flex; gap: .3rem; border-bottom: 1px solid var(--line); margin-bottom: .9rem; }
+  .tabs button { border: 0; background: none; border-radius: .5rem .5rem 0 0; padding: .6rem .9rem;
+                 font-size: .82rem; color: var(--muted); border-bottom: 2px solid transparent; }
+  .tabs button[aria-selected=true] { color: var(--text); font-weight: bold; border-bottom-color: var(--accent); }
+  section[hidden] { display: none; }
+
+  /* 파일 표시줄 */
+  .filebar { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: .8rem;
+             padding: .55rem .7rem; background: var(--panel); border: 1px solid var(--line); border-radius: .7rem; }
+  .filebar .nm { font-size: .78rem; font-weight: bold; overflow: hidden; text-overflow: ellipsis;
+                 white-space: nowrap; min-width: 0; flex: 1; }
+  .filebar .mt { font-size: .7rem; color: var(--muted); white-space: nowrap; }
+
+  /* 드롭존 */
+  .drop { display: grid; place-items: center; gap: .4rem; padding: 2.4rem 1rem; text-align: center;
+          border: 2px dashed var(--line); border-radius: 1rem; background: var(--panel); cursor: pointer; }
+  .drop.over { border-color: var(--accent); background: light-dark(#eef3fd, #1a2436); }
+  .drop .big { font-size: 2.2rem; }
+  .drop p { margin: 0; font-size: .8rem; color: var(--muted); line-height: 1.6; }
+  input[type=file] { display: none; }
+
+  /* 도구 막대 */
+  .bar { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; margin-bottom: .8rem; }
+  .bar .sp { flex: 1; }
+  .bar .label { font-size: .72rem; color: var(--muted); }
+  .grp { display: inline-flex; align-items: center; gap: .3rem; border: 1px solid var(--line);
+         border-radius: .6rem; padding: .2rem; background: var(--panel); }
+  .grp button { border: 0; background: none; padding: .3rem .5rem; font-size: .8rem; }
+  #pageNum { width: 3.2rem; text-align: center; padding: .3rem; font-size: .78rem; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: .6rem; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; padding: .45rem .9rem; font-size: .78rem; }
+  .seg button.on { background: var(--accent); color: #fff; font-weight: bold; }
+
+  /* 검색 */
+  .search { display: flex; align-items: center; gap: .3rem; }
+  .search input { width: 8rem; padding: .4rem .6rem; font-size: .78rem; }
+  .search .hits { font-size: .72rem; color: var(--muted); min-width: 3.4rem; text-align: center; }
+
+  /* 보기 */
+  #viewport { background: light-dark(#e3e7ee, #0a0f16); border: 1px solid var(--line);
+              border-radius: .7rem; padding: .7rem 0; height: 72dvh; min-height: 20rem;
+              overflow: auto; overscroll-behavior: contain; }
+  .pageBox { position: relative; margin: 0 auto .7rem; background: var(--paper);
+             box-shadow: 0 1px 6px #0003; }
+  .pageBox:last-child { margin-bottom: 0; }
+  .pageBox canvas { display: block; width: 100%; height: 100%; }
+  .pageBox .ph { display: grid; place-items: center; height: 100%; color: var(--muted); font-size: .75rem; }
+  .pageBox .no { position: absolute; right: .3rem; bottom: .3rem; background: #0009; color: #fff;
+                 font-size: .62rem; padding: .1rem .35rem; border-radius: .3rem; }
+  .hl { position: absolute; inset: 0; pointer-events: none; }
+  .hl i { position: absolute; background: #ffd54a80; border-radius: 1px; }
+  .hl i.cur { background: #ff8a3d99; outline: 1px solid #ff8a3d; }
+
+  /* 페이지 썸네일 */
+  #thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr)); gap: .55rem; }
+  .thumb { position: relative; background: var(--panel); border: 1px solid var(--line);
+           border-radius: .6rem; padding: .35rem; cursor: pointer; }
+  .thumb.sel { border-color: var(--accent); box-shadow: 0 0 0 2px light-dark(#4f7fdd44, #4f7fdd55); }
+  .thumb .sheet { background: var(--paper); display: grid; place-items: center; overflow: hidden; }
+  .thumb canvas { display: block; max-width: 100%; max-height: 100%; }
+  .thumb .cap { display: flex; justify-content: space-between; align-items: center;
+                margin-top: .25rem; font-size: .62rem; color: var(--muted); }
+  .thumb .src { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 4.5rem; }
+  .thumb .tick { position: absolute; top: .5rem; left: .5rem; width: 1.1rem; height: 1.1rem;
+                 border-radius: .3rem; border: 1px solid var(--line); background: light-dark(#fff, #0d131c);
+                 display: grid; place-items: center; font-size: .7rem; color: transparent; }
+  .thumb.sel .tick { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  /* 목록 (변환) */
+  .item { display: grid; grid-template-columns: 3rem 1fr auto; gap: .6rem; align-items: center;
+          padding: .5rem; margin-bottom: .45rem; background: var(--panel);
+          border: 1px solid var(--line); border-radius: .7rem; }
+  .item img { width: 3rem; height: 3rem; object-fit: cover; border-radius: .4rem;
+              background: repeating-conic-gradient(#8883 0% 25%, transparent 0% 50%) 0 0/.8rem .8rem; }
+  .item .meta { min-width: 0; font-size: .7rem; line-height: 1.5; }
+  .item .name { font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item .info { color: var(--muted); }
+  .item .err { color: #d05a5a; }
+  .item .ops { display: flex; gap: .25rem; }
+
+  .row { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: .7rem; font-size: .75rem; }
+  .row .label { color: var(--muted); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: .8rem;
+          padding: .8rem; margin-bottom: .9rem; }
+  .empty { text-align: center; color: var(--muted); font-size: .78rem; padding: 2rem 1rem; line-height: 1.7; }
+  .note { color: var(--muted); font-size: .68rem; line-height: 1.6; margin: .5rem 0 0; }
+  .privacy { margin-top: 1.2rem; color: var(--muted); font-size: .68rem; line-height: 1.6; }
+  .err { color: #d05a5a; font-size: .74rem; }
+  #toast { position: fixed; left: 50%; bottom: 1.2rem; transform: translateX(-50%);
+           background: light-dark(#1c2733, #e2e9f0); color: light-dark(#fff, #101821);
+           padding: .55rem .9rem; border-radius: .6rem; font-size: .76rem; z-index: 50;
+           box-shadow: 0 3px 12px #0004; max-width: 90vw; text-align: center; }
+  #toast[hidden] { display: none; }
+
+  @media (max-width: 30rem) {
+    .search input { width: 5.5rem; }
+    #viewport { height: 68dvh; }
+    #thumbs { grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr)); }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>📕 PDF 도구</h1>
+  <p class="desc">PDF를 열어 보고, 페이지를 합치거나 나누고, 이미지와 서로 바꿉니다. 전부 이 브라우저 안에서만 처리해요.</p>
+
+  <div class="filebar" id="filebar" hidden>
+    <span class="nm" id="fileName"></span>
+    <span class="mt" id="fileMeta"></span>
+    <button class="tiny" id="changeFile">다른 PDF</button>
+    <button class="tiny" id="closeFile">닫기</button>
+  </div>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" id="tabView" aria-controls="paneView" aria-selected="true">📄 보기</button>
+    <button role="tab" id="tabPages" aria-controls="panePages" aria-selected="false">📑 페이지</button>
+    <button role="tab" id="tabConv" aria-controls="paneConv" aria-selected="false">🔄 변환</button>
+  </nav>
+
+  <!-- ── 보기 ── -->
+  <section id="paneView" role="tabpanel" aria-labelledby="tabView">
+    <div id="viewEmpty">
+      <div class="drop" id="drop" role="button" tabindex="0" aria-label="PDF 열기">
+        <span class="big">📄</span>
+        <p>여기를 눌러 PDF를 고르거나<br>파일을 끌어다 놓으세요</p>
+      </div>
+      <p class="note">여러 개를 한 번에 올리면 순서대로 이어 붙여 엽니다.</p>
+    </div>
+
+    <div id="viewMain" hidden>
+      <div class="bar">
+        <span class="grp">
+          <button id="prevPage" aria-label="이전 페이지">◀</button>
+          <input id="pageNum" type="text" inputmode="numeric" aria-label="페이지 번호">
+          <span class="label" id="pageTotal"></span>
+          <button id="nextPage" aria-label="다음 페이지">▶</button>
+        </span>
+        <span class="grp">
+          <button id="zoomOut" aria-label="축소">−</button>
+          <span class="label" id="zoomVal">100%</span>
+          <button id="zoomIn" aria-label="확대">＋</button>
+          <button id="zoomFit" class="tiny">맞춤</button>
+        </span>
+        <span class="sp"></span>
+        <span class="search">
+          <input id="q" type="text" placeholder="문서 내 검색" aria-label="문서 내 검색">
+          <span class="hits" id="hits"></span>
+          <button id="prevHit" class="tiny" aria-label="이전 검색 결과" disabled>‹</button>
+          <button id="nextHit" class="tiny" aria-label="다음 검색 결과" disabled>›</button>
+        </span>
+      </div>
+      <div id="viewport" tabindex="0"></div>
+    </div>
+  </section>
+
+  <!-- ── 페이지 ── -->
+  <section id="panePages" role="tabpanel" aria-labelledby="tabPages" hidden>
+    <div id="pagesEmpty" class="empty">
+      먼저 PDF를 열어주세요.<br><br>
+      <button class="primary" id="pagesOpen">PDF 열기</button>
+    </div>
+
+    <div id="pagesMain" hidden>
+      <div class="bar">
+        <button class="tiny" id="selAll">전체 선택</button>
+        <button class="tiny" id="selNone">선택 해제</button>
+        <span class="label" id="selCount">0장 선택</span>
+        <span class="sp"></span>
+        <button class="tiny" id="rotL" disabled aria-label="왼쪽으로 회전">↺</button>
+        <button class="tiny" id="rotR" disabled aria-label="오른쪽으로 회전">↻</button>
+        <button class="tiny" id="moveL" disabled aria-label="앞으로 이동">←</button>
+        <button class="tiny" id="moveR" disabled aria-label="뒤로 이동">→</button>
+        <button class="tiny" id="delSel" disabled>삭제</button>
+      </div>
+      <div class="bar">
+        <button class="tiny" id="addPdf">＋ PDF 합치기</button>
+        <span class="sp"></span>
+        <button class="tiny" id="saveSel" disabled>선택만 저장</button>
+        <button class="primary tiny" id="saveAll">저장</button>
+      </div>
+      <div id="thumbs"></div>
+      <p class="note">썸네일을 눌러 고른 뒤 회전·이동·삭제하세요. 저장을 눌러야 파일로 만들어집니다.</p>
+    </div>
+  </section>
+
+  <!-- ── 변환 ── -->
+  <section id="paneConv" role="tabpanel" aria-labelledby="tabConv" hidden>
+    <div class="seg" role="group" aria-label="변환 방향" style="margin-bottom:.9rem">
+      <button type="button" id="dirI2P" class="on">이미지 → PDF</button>
+      <button type="button" id="dirP2I">PDF → 이미지</button>
+    </div>
+
+    <!-- 이미지 → PDF -->
+    <div id="i2p">
+      <div class="drop" id="imgDrop" role="button" tabindex="0" aria-label="이미지 선택">
+        <span class="big">🖼️</span>
+        <p>여기를 눌러 이미지를 고르거나<br>파일을 끌어다 놓으세요 (붙여넣기도 가능)</p>
+      </div>
+      <div class="card" id="i2pOpts" hidden>
+        <div class="row">
+          <span class="label">페이지 크기</span>
+          <select id="paper">
+            <option value="fit">이미지 크기 그대로</option>
+            <option value="a4">A4</option>
+            <option value="letter">Letter</option>
+          </select>
+          <span class="label">방향</span>
+          <select id="orient">
+            <option value="auto">자동</option>
+            <option value="portrait">세로</option>
+            <option value="landscape">가로</option>
+          </select>
+          <span class="label">여백</span>
+          <select id="margin">
+            <option value="0">없음</option>
+            <option value="10">10mm</option>
+            <option value="20">20mm</option>
+          </select>
+        </div>
+        <div class="row">
+          <span class="sp"></span>
+          <button class="tiny" id="imgClear">비우기</button>
+          <button class="primary tiny" id="makePdf">PDF 만들기</button>
+        </div>
+      </div>
+      <div id="imgList"></div>
+    </div>
+
+    <!-- PDF → 이미지 -->
+    <div id="p2i" hidden>
+      <div id="p2iEmpty" class="empty">
+        먼저 PDF를 열어주세요.<br><br>
+        <button class="primary" id="p2iOpen">PDF 열기</button>
+      </div>
+      <div id="p2iMain" hidden>
+        <div class="card">
+          <div class="row">
+            <span class="label">형식</span>
+            <div class="seg" role="group" aria-label="출력 형식">
+              <button type="button" data-imgfmt="png" class="on">PNG</button>
+              <button type="button" data-imgfmt="jpg">JPG</button>
+            </div>
+            <span class="label">해상도</span>
+            <select id="p2iScale">
+              <option value="1">1× (72dpi)</option>
+              <option value="2" selected>2× (144dpi)</option>
+              <option value="3">3× (216dpi)</option>
+              <option value="4">4× (288dpi)</option>
+            </select>
+          </div>
+          <div class="row">
+            <span class="label">범위</span>
+            <input id="p2iRange" type="text" placeholder="예: 1-3, 7 (비우면 전체)" aria-label="페이지 범위" style="flex:1;min-width:9rem">
+          </div>
+          <div class="row">
+            <span class="sp"></span>
+            <span class="label" id="p2iStatus"></span>
+            <button class="primary tiny" id="p2iGo">이미지로 저장</button>
+          </div>
+        </div>
+        <p class="note">2장 이상이면 ZIP 하나로 묶어 내려받습니다.</p>
+      </div>
+    </div>
+  </section>
+
+  <p class="privacy">PDF와 이미지는 이 브라우저 안에서만 열리고 만들어집니다. Bubblelab 서버로 올라가거나 저장되지 않아요.</p>
+</div>
+
+<input id="pdfInput" type="file" accept="application/pdf,.pdf" multiple>
+<input id="imgInput" type="file" accept="image/*" multiple>
+<div id="toast" hidden role="status"></div>
+
+<script type="module">
+// ── 경로 기준 ─────────────────────────────────────────────────────────────
+// 이 페이지는 서브도메인마다 다른 경로에 놓인다 (util.bubblelab.dev/pdf/ ·
+// localhost:8787/util/pdf/). 벤더 파일은 폴더 기준 절대 URL로 잡아야 워커
+// 안에서 cmap·폰트를 되짚을 때도 어긋나지 않는다.
+let dir = location.pathname;
+if (!dir.endsWith("/")) dir = /\.[^/]*$/.test(dir) ? dir.replace(/\/[^/]*$/, "/") : dir + "/";
+const BASE = new URL(dir, location.origin).href;
+
+// pdf.js는 legacy 빌드를 벤더링했다. 최신 빌드는 Map.prototype.getOrInsertComputed
+// 같은 갓 나온 API를 그대로 쓰기 때문에 조금만 오래된 브라우저에서 render()가
+// 통째로 죽는다. legacy 빌드는 같은 기능에 폴리필이 들어 있다.
+import * as pdfjsLib from "./vendor/pdf.min.mjs";
+pdfjsLib.GlobalWorkerOptions.workerSrc = BASE + "vendor/pdf.worker.min.mjs";
+
+// CSP에 'wasm-unsafe-eval'이 없으므로 WebAssembly를 끄고 pdf.js가 함께 배포하는
+// 순수 JS 폴백(JBIG2·JPEG2000)을 쓴다. 폴백은 해당 이미지를 만났을 때만 받아온다.
+const DOC_OPTS = {
+  cMapUrl: BASE + "vendor/cmaps/", cMapPacked: true,
+  standardFontDataUrl: BASE + "vendor/standard_fonts/",
+  wasmUrl: BASE + "vendor/wasm/", useWasm: false,
+  isEvalSupported: false,
+};
+
+const $ = (s) => document.querySelector(s);
+const el = (tag, cls) => { const n = document.createElement(tag); if (cls) n.className = cls; return n; };
+const fmtSize = (n) => n < 1024 * 1024 ? (n / 1024).toFixed(1) + "KB" : (n / 1024 / 1024).toFixed(2) + "MB";
+const baseName = (name) => name.replace(/\.[^.]+$/, "") || "document";
+
+// 저장 이름. 한글은 그대로 두고 파일명에 못 쓰는 글자만 걸러낸다
+// (윈도우가 막는 \ / : * ? " < > | 와 제어문자, 앞뒤 점·공백).
+function safeName(base, suffix, ext) {
+  const cleaned = base.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, "-").replace(/^[\s.]+|[\s.]+$/g, "");
+  return `${cleaned || "bubblelab-pdf"}${suffix}.${ext}`;
+}
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+let toastTimer;
+function toast(message) {
+  const box = $("#toast");
+  box.textContent = message;
+  box.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { box.hidden = true; }, 2600);
+}
+
+function download(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = el("a");
+  a.href = url; a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+// pdf-lib은 저장·합치기에만 필요해서 그때 처음 받아온다 (보기만 하면 안 받는다).
+let pdfLibPromise = null;
+function loadPdfLib() {
+  pdfLibPromise ??= new Promise((resolve, reject) => {
+    const script = el("script");
+    script.src = BASE + "vendor/pdf-lib.min.js";
+    script.onload = () => resolve(window.PDFLib);
+    script.onerror = () => reject(new Error("pdf-lib 로드 실패"));
+    document.head.append(script);
+  });
+  return pdfLibPromise;
+}
+
+// ── 작업 문서 ─────────────────────────────────────────────────────────────
+// sources: 열어 둔 원본 PDF들. pages: 지금 편집 중인 페이지 순서.
+// 보기 탭과 페이지 탭이 같은 pages를 본다 — 페이지 탭에서 돌리거나 지우면
+// 보기 화면에도 바로 반영된다.
+const store = { sources: [], pages: [], name: "" };
+const hasDoc = () => store.pages.length > 0;
+
+async function addPdfFiles(files) {
+  const list = [...files].filter((f) => /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name));
+  if (!list.length) { toast("PDF 파일이 아니에요"); return false; }
+  let added = 0;
+  for (const file of list) {
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      // pdf.js가 버퍼를 가져가므로(transfer) 저장·복사용 원본을 따로 남긴다.
+      const doc = await pdfjsLib.getDocument({ data: bytes.slice(), ...DOC_OPTS }).promise;
+      const index = store.sources.length;
+      store.sources.push({ name: file.name, size: file.size, bytes, doc, lib: null });
+      for (let p = 0; p < doc.numPages; p++) store.pages.push({ s: index, p, rot: 0 });
+      if (!store.name) store.name = baseName(file.name);
+      added++;
+    } catch (error) {
+      const locked = /password/i.test(String(error?.message ?? error));
+      toast(locked ? `${file.name}: 암호가 걸린 PDF는 아직 못 열어요` : `${file.name}: 열지 못했어요`);
+    }
+  }
+  if (!added) return false;
+  refreshDoc();
+  return true;
+}
+
+function closeDoc() {
+  for (const src of store.sources) src.doc.destroy?.();
+  store.sources = []; store.pages = []; store.name = "";
+  search.reset();
+  refreshDoc();
+}
+
+function refreshDoc() {
+  const open = hasDoc();
+  $("#filebar").hidden = !open;
+  $("#viewEmpty").hidden = open;
+  $("#viewMain").hidden = !open;
+  $("#pagesEmpty").hidden = open;
+  $("#pagesMain").hidden = !open;
+  $("#p2iEmpty").hidden = open;
+  $("#p2iMain").hidden = !open;
+  if (open) {
+    const total = store.sources.reduce((sum, s) => sum + s.size, 0);
+    $("#fileName").textContent = store.sources.length === 1
+      ? store.sources[0].name
+      : `${store.sources[0].name} 외 ${store.sources.length - 1}개`;
+    $("#fileMeta").textContent = `${store.pages.length}쪽 · ${fmtSize(total)}`;
+    viewer.layout();
+    thumbs.render();
+  } else {
+    viewer.clear();
+    thumbs.clear();
+  }
+}
+
+// 원본 페이지 프록시. 같은 페이지를 여러 번 그리므로 캐시해 둔다.
+const pageCache = new Map();
+function getPage(entry) {
+  const key = `${entry.s}:${entry.p}`;
+  if (!pageCache.has(key)) pageCache.set(key, store.sources[entry.s].doc.getPage(entry.p + 1));
+  return pageCache.get(key);
+}
+const totalRotation = (page, entry) => ((page.rotate + entry.rot) % 360 + 360) % 360;
+
+// 동시에 여러 캔버스를 그리면 모바일에서 메모리가 터진다. 두 개씩만 돌린다.
+function makeQueue(concurrency) {
+  const waiting = [];
+  let running = 0;
+  const pump = () => {
+    while (running < concurrency && waiting.length) {
+      const job = waiting.shift();
+      running++;
+      job().catch((error) => console.warn("렌더 실패", error))
+        .finally(() => { running--; pump(); });
+    }
+  };
+  return (job) => { waiting.push(job); pump(); };
+}
+const renderQueue = makeQueue(2);
+
+// ── 탭 ────────────────────────────────────────────────────────────────────
+const TABS = [
+  { button: "#tabView", pane: "#paneView" },
+  { button: "#tabPages", pane: "#panePages" },
+  { button: "#tabConv", pane: "#paneConv" },
+];
+function showTab(name) {
+  for (const tab of TABS) {
+    const on = tab.button === name;
+    $(tab.button).setAttribute("aria-selected", String(on));
+    $(tab.pane).hidden = !on;
+  }
+  if (name === "#tabView") viewer.layout();
+  if (name === "#tabPages") thumbs.render();
+}
+for (const tab of TABS) $(tab.button).addEventListener("click", () => showTab(tab.button));
+
+// ── 파일 입력 ─────────────────────────────────────────────────────────────
+const pdfInput = $("#pdfInput");
+let pdfPick = null;
+function pickPdf(after) { pdfPick = after ?? null; pdfInput.click(); }
+pdfInput.addEventListener("change", async () => {
+  // input.files는 살아 있는 목록이라 value를 비우면 같이 비워진다. 먼저 복사한다.
+  const files = [...pdfInput.files];
+  pdfInput.value = "";
+  const after = pdfPick; pdfPick = null;
+  if (files.length && await addPdfFiles(files)) after?.();
+});
+
+$("#drop").addEventListener("click", () => pickPdf());
+$("#drop").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pickPdf(); }
+});
+$("#pagesOpen").addEventListener("click", () => pickPdf());
+$("#p2iOpen").addEventListener("click", () => pickPdf());
+$("#changeFile").addEventListener("click", () => { closeDoc(); pickPdf(); });
+$("#closeFile").addEventListener("click", () => { closeDoc(); showTab("#tabView"); });
+$("#addPdf").addEventListener("click", () => pickPdf());
+
+// 드래그 앤 드롭은 화면 어디서 놓아도 받는다. 지금 보고 있는 탭에 맞춰 처리한다.
+for (const type of ["dragover", "dragenter"]) {
+  document.addEventListener(type, (e) => {
+    e.preventDefault();
+    const zone = e.target.closest?.(".drop");
+    if (zone) zone.classList.add("over");
+  });
+}
+for (const type of ["dragleave", "drop"]) {
+  document.addEventListener(type, (e) => {
+    if (type === "drop") e.preventDefault();
+    e.target.closest?.(".drop")?.classList.remove("over");
+  });
+}
+document.addEventListener("drop", async (e) => {
+  const files = [...(e.dataTransfer?.files ?? [])];
+  if (!files.length) return;
+  const images = files.filter((f) => f.type.startsWith("image/"));
+  const pdfs = files.filter((f) => /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name));
+  if (pdfs.length) await addPdfFiles(pdfs);
+  if (images.length) { addImages(images); showTab("#tabConv"); setDirection("i2p"); }
+});
+
+// ── 보기 ──────────────────────────────────────────────────────────────────
+const viewer = (() => {
+  const host = $("#viewport");
+  let zoom = 1, fitMode = true;
+  let boxes = [];               // { node, canvas, entry, width, height, task, done }
+  let current = 1;
+  let observer = null;
+
+  function clear() {
+    for (const box of boxes) box.task?.cancel();
+    boxes = [];
+    observer?.disconnect();
+    observer = null;
+    host.replaceChildren();
+  }
+
+  async function layout() {
+    if (!hasDoc() || $("#paneView").hidden) return;
+    clear();
+    const avail = Math.max(160, host.clientWidth - 24);
+    if (fitMode) zoom = 1;
+    const nodes = [];
+    for (const [i, entry] of store.pages.entries()) {
+      const page = await getPage(entry);
+      const unit = page.getViewport({ scale: 1, rotation: totalRotation(page, entry) });
+      const scale = (avail / unit.width) * zoom;
+      const width = Math.round(unit.width * scale);
+      const height = Math.round(unit.height * scale);
+      const node = el("div", "pageBox");
+      node.style.width = width + "px";
+      node.style.height = height + "px";
+      const ph = el("div", "ph");
+      ph.textContent = `${i + 1} / ${store.pages.length}`;
+      node.append(ph);
+      const no = el("span", "no");
+      no.textContent = i + 1;
+      node.append(no);
+      nodes.push(node);
+      boxes.push({ node, entry, width, height, scale, index: i, done: false, task: null });
+    }
+    host.replaceChildren(...nodes);
+    $("#pageTotal").textContent = `/ ${store.pages.length}`;
+    $("#zoomVal").textContent = Math.round(zoom * 100) + "%";
+    setCurrent(clamp(current, 1, store.pages.length));
+
+    // 화면 근처에 온 페이지만 그린다. 멀어지면 캔버스를 버려 메모리를 돌려준다.
+    observer = new IntersectionObserver((entries) => {
+      for (const record of entries) {
+        const box = boxes[Number(record.target.dataset.i)];
+        if (!box) continue;
+        if (record.isIntersecting) draw(box);
+        else if (box.done && boxes.length > 6) drop(box);
+      }
+    }, { root: host, rootMargin: "250% 0px" });
+    for (const [i, box] of boxes.entries()) {
+      box.node.dataset.i = String(i);
+      observer.observe(box.node);
+    }
+    watchCurrent();
+  }
+
+  function draw(box) {
+    if (box.done || box.drawing) return;
+    box.drawing = true;
+    renderQueue(async () => {
+      const page = await getPage(box.entry);
+      const dpr = Math.min(2, globalThis.devicePixelRatio || 1);
+      const viewport = page.getViewport({
+        scale: box.scale * dpr, rotation: totalRotation(page, box.entry),
+      });
+      const canvas = el("canvas");
+      canvas.width = Math.round(viewport.width);
+      canvas.height = Math.round(viewport.height);
+      canvas.setAttribute("role", "img");
+      canvas.setAttribute("aria-label", `${box.index + 1}쪽`);
+      try {
+        box.task = page.render({ canvasContext: canvas.getContext("2d"), viewport });
+        await box.task.promise;
+        box.node.querySelector(".ph")?.remove();
+        box.node.prepend(canvas);
+        box.canvas = canvas;
+        box.done = true;
+        search.paint(box);
+      } catch (error) {
+        if (error?.name !== "RenderingCancelledException") {
+          const ph = box.node.querySelector(".ph");
+          if (ph) ph.textContent = "이 쪽은 그리지 못했어요";
+        }
+      } finally {
+        box.drawing = false;
+        box.task = null;
+      }
+    });
+  }
+
+  function drop(box) {
+    box.task?.cancel();
+    box.canvas?.remove();
+    box.canvas = null;
+    box.done = false;
+    if (!box.node.querySelector(".ph")) {
+      const ph = el("div", "ph");
+      ph.textContent = `${box.index + 1} / ${boxes.length}`;
+      box.node.prepend(ph);
+    }
+  }
+
+  function setCurrent(n) {
+    current = clamp(n, 1, Math.max(1, store.pages.length));
+    if (document.activeElement !== $("#pageNum")) $("#pageNum").value = String(current);
+  }
+
+  let scrollTimer;
+  function watchCurrent() {
+    host.onscroll = () => {
+      clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(() => {
+        const mid = host.scrollTop + host.clientHeight / 2;
+        let best = 1;
+        for (const box of boxes) {
+          if (box.node.offsetTop <= mid) best = box.index + 1; else break;
+        }
+        setCurrent(best);
+      }, 90);
+    };
+  }
+
+  function goto(n, smooth = true) {
+    const box = boxes[clamp(n, 1, boxes.length) - 1];
+    if (!box) return;
+    host.scrollTo({ top: box.node.offsetTop - 8, behavior: smooth ? "smooth" : "auto" });
+    setCurrent(n);
+  }
+
+  function setZoom(next) {
+    fitMode = false;
+    zoom = clamp(next, 0.25, 5);
+    const at = current;
+    layout().then(() => goto(at, false));
+  }
+
+  return {
+    layout, clear, goto, setCurrent, boxes: () => boxes,
+    get current() { return current; },
+    zoomIn: () => setZoom(zoom * 1.25),
+    zoomOut: () => setZoom(zoom / 1.25),
+    fit: () => { fitMode = true; const at = current; layout().then(() => goto(at, false)); },
+  };
+})();
+
+$("#prevPage").addEventListener("click", () => viewer.goto(viewer.current - 1));
+$("#nextPage").addEventListener("click", () => viewer.goto(viewer.current + 1));
+$("#pageNum").addEventListener("change", () => {
+  const n = Number($("#pageNum").value);
+  if (Number.isFinite(n) && n >= 1) viewer.goto(Math.floor(n));
+  else viewer.setCurrent(viewer.current);
+});
+$("#zoomIn").addEventListener("click", () => viewer.zoomIn());
+$("#zoomOut").addEventListener("click", () => viewer.zoomOut());
+$("#zoomFit").addEventListener("click", () => viewer.fit());
+$("#viewport").addEventListener("keydown", (e) => {
+  if (e.key === "PageDown" || e.key === "ArrowRight") { e.preventDefault(); viewer.goto(viewer.current + 1); }
+  if (e.key === "PageUp" || e.key === "ArrowLeft") { e.preventDefault(); viewer.goto(viewer.current - 1); }
+});
+
+let resizeTimer;
+globalThis.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => viewer.layout(), 200);
+});
+
+// ── 문서 내 검색 ──────────────────────────────────────────────────────────
+// 페이지마다 텍스트 조각을 이어 붙여 찾고, 맞은 구간을 조각별 사각형으로 되돌려
+// 캔버스 위에 덧그린다. 가로쓰기 기준의 근사치라 세로쓰기·회전 텍스트는 위치가
+// 어긋날 수 있다 (찾기 자체와 쪽 이동은 정확하다).
+const search = (() => {
+  const cache = new Map();     // pageIndex → { text, items }
+  let hits = [];               // { page, rects: [{x,y,w,h}] }
+  let at = -1;
+  let token = 0;
+
+  function reset() {
+    cache.clear(); hits = []; at = -1; token++;
+    $("#hits").textContent = "";
+    $("#prevHit").disabled = $("#nextHit").disabled = true;
+    for (const box of viewer.boxes()) box.node.querySelector(".hl")?.remove();
+  }
+
+  async function pageText(index) {
+    if (cache.has(index)) return cache.get(index);
+    const entry = store.pages[index];
+    const page = await getPage(entry);
+    const content = await page.getTextContent();
+    const items = [];
+    let text = "";
+    for (const item of content.items) {
+      if (typeof item.str !== "string") continue;
+      items.push({ start: text.length, str: item.str, item });
+      text += item.str;
+      if (item.hasEOL) text += "\n";
+    }
+    const value = { text, lower: text.toLowerCase(), items };
+    cache.set(index, value);
+    return value;
+  }
+
+  // 텍스트 조각 하나 안에서 [from, to) 구간이 차지하는 화면 사각형.
+  function rectFor(record, from, to, page, entry) {
+    const { item } = record;
+    const viewport = page.getViewport({ scale: 1, rotation: totalRotation(page, entry) });
+    const m = pdfjsLib.Util.transform(viewport.transform, item.transform);
+    const height = Math.hypot(m[2], m[3]) || item.height || 10;
+    const length = item.str.length || 1;
+    const x = m[4] + (item.width * from) / length;
+    const width = (item.width * (to - from)) / length;
+    return {
+      x: x / viewport.width, y: (m[5] - height) / viewport.height,
+      w: width / viewport.width, h: height / viewport.height,
+    };
+  }
+
+  async function run(query) {
+    reset();
+    const needle = query.trim().toLowerCase();
+    if (needle.length < 1) return;
+    const mine = ++token;
+    $("#hits").textContent = "찾는 중…";
+    for (let index = 0; index < store.pages.length; index++) {
+      const { lower, items } = await pageText(index);
+      if (mine !== token) return;
+      const entry = store.pages[index];
+      const page = await getPage(entry);
+      let from = lower.indexOf(needle);
+      while (from !== -1) {
+        const to = from + needle.length;
+        const rects = [];
+        for (const record of items) {
+          const s = Math.max(from, record.start);
+          const e = Math.min(to, record.start + record.str.length);
+          if (e > s) rects.push(rectFor(record, s - record.start, e - record.start, page, entry));
+        }
+        if (rects.length) hits.push({ page: index, rects });
+        from = lower.indexOf(needle, to);
+      }
+      if (hits.length) {
+        $("#hits").textContent = `${Math.max(at + 1, 1)}/${hits.length}`;
+        if (at === -1) { at = 0; jump(); }
+      }
+      repaint();
+    }
+    if (mine !== token) return;
+    $("#hits").textContent = hits.length ? `${at + 1}/${hits.length}` : "결과 없음";
+    $("#prevHit").disabled = $("#nextHit").disabled = hits.length === 0;
+  }
+
+  function jump() {
+    const hit = hits[at];
+    if (!hit) return;
+    viewer.goto(hit.page + 1);
+    $("#hits").textContent = `${at + 1}/${hits.length}`;
+    repaint();
+  }
+
+  function step(delta) {
+    if (!hits.length) return;
+    at = (at + delta + hits.length) % hits.length;
+    jump();
+  }
+
+  // 한 페이지 박스에 지금까지 찾은 표시를 덧그린다 (캔버스는 건드리지 않는다).
+  function paint(box) {
+    box.node.querySelector(".hl")?.remove();
+    const mine = hits.filter((hit) => hit.page === box.index);
+    if (!mine.length) return;
+    const layer = el("div", "hl");
+    for (const hit of mine) {
+      const isCurrent = hits[at] === hit;
+      for (const rect of hit.rects) {
+        const mark = el("i", isCurrent ? "cur" : "");
+        mark.style.left = (rect.x * 100) + "%";
+        mark.style.top = (rect.y * 100) + "%";
+        mark.style.width = (rect.w * 100) + "%";
+        mark.style.height = (rect.h * 100) + "%";
+        layer.append(mark);
+      }
+    }
+    box.node.append(layer);
+  }
+  const repaint = () => { for (const box of viewer.boxes()) if (box.done) paint(box); };
+
+  return { run, reset, step, paint };
+})();
+
+let searchTimer;
+$("#q").addEventListener("input", () => {
+  clearTimeout(searchTimer);
+  const value = $("#q").value;
+  searchTimer = setTimeout(() => value.trim() ? search.run(value) : search.reset(), 320);
+});
+$("#q").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); search.step(1); } });
+$("#prevHit").addEventListener("click", () => search.step(-1));
+$("#nextHit").addEventListener("click", () => search.step(1));
+
+// ── 페이지 편집 ───────────────────────────────────────────────────────────
+const thumbs = (() => {
+  const host = $("#thumbs");
+  const selected = new Set();
+  let observer = null;
+
+  const clear = () => { observer?.disconnect(); observer = null; host.replaceChildren(); selected.clear(); sync(); };
+
+  function sync() {
+    const n = selected.size;
+    $("#selCount").textContent = `${n}장 선택`;
+    for (const id of ["#rotL", "#rotR", "#moveL", "#moveR", "#delSel", "#saveSel"]) $(id).disabled = n === 0;
+    $("#saveAll").disabled = store.pages.length === 0;
+  }
+
+  function render() {
+    if (!hasDoc() || $("#panePages").hidden) return;
+    observer?.disconnect();
+    for (const id of [...selected]) if (id >= store.pages.length) selected.delete(id);
+    const nodes = store.pages.map((entry, i) => {
+      const node = el("div", "thumb" + (selected.has(i) ? " sel" : ""));
+      node.dataset.i = String(i);
+      node.tabIndex = 0;
+      node.setAttribute("role", "checkbox");
+      node.setAttribute("aria-checked", String(selected.has(i)));
+      node.setAttribute("aria-label", `${i + 1}쪽`);
+      const sheet = el("div", "sheet");
+      sheet.style.height = "8rem";
+      node.append(sheet);
+      const tick = el("span", "tick");
+      tick.textContent = "✓";
+      node.append(tick);
+      const cap = el("span", "cap");
+      const no = el("span");
+      no.textContent = `${i + 1}쪽`;
+      const src = el("span", "src");
+      src.textContent = store.sources.length > 1 ? store.sources[entry.s].name : "";
+      src.title = src.textContent;
+      cap.append(no, src);
+      node.append(cap);
+      return node;
+    });
+    host.replaceChildren(...nodes);
+    sync();
+
+    observer = new IntersectionObserver((records) => {
+      for (const record of records) {
+        if (!record.isIntersecting) continue;
+        observer.unobserve(record.target);
+        drawThumb(record.target);
+      }
+    }, { rootMargin: "300px" });
+    for (const node of nodes) observer.observe(node);
+  }
+
+  function drawThumb(node) {
+    const index = Number(node.dataset.i);
+    renderQueue(async () => {
+      const entry = store.pages[index];
+      if (!entry) return;
+      const page = await getPage(entry);
+      const rotation = totalRotation(page, entry);
+      const unit = page.getViewport({ scale: 1, rotation });
+      const scale = Math.min(160 / unit.width, 128 / unit.height);
+      const viewport = page.getViewport({ scale, rotation });
+      const canvas = el("canvas");
+      canvas.width = Math.max(1, Math.round(viewport.width));
+      canvas.height = Math.max(1, Math.round(viewport.height));
+      await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+      node.querySelector(".sheet")?.replaceChildren(canvas);
+    });
+  }
+
+  function toggle(index, node) {
+    if (selected.has(index)) selected.delete(index); else selected.add(index);
+    node.classList.toggle("sel", selected.has(index));
+    node.setAttribute("aria-checked", String(selected.has(index)));
+    sync();
+  }
+
+  host.addEventListener("click", (e) => {
+    const node = e.target.closest(".thumb");
+    if (node) toggle(Number(node.dataset.i), node);
+  });
+  host.addEventListener("keydown", (e) => {
+    const node = e.target.closest(".thumb");
+    if (node && (e.key === " " || e.key === "Enter")) { e.preventDefault(); toggle(Number(node.dataset.i), node); }
+  });
+
+  return {
+    render, clear, sync,
+    selection: () => [...selected].sort((a, b) => a - b),
+    setSelection: (list) => { selected.clear(); for (const i of list) selected.add(i); },
+    all: () => { for (let i = 0; i < store.pages.length; i++) selected.add(i); render(); },
+    none: () => { selected.clear(); render(); },
+  };
+})();
+
+$("#selAll").addEventListener("click", () => thumbs.all());
+$("#selNone").addEventListener("click", () => thumbs.none());
+
+function afterEdit(nextSelection) {
+  thumbs.setSelection(nextSelection);
+  pageCache.clear();
+  search.reset();
+  thumbs.render();
+  viewer.layout();
+  $("#fileMeta").textContent = `${store.pages.length}쪽`;
+}
+
+function rotate(delta) {
+  const picked = thumbs.selection();
+  for (const i of picked) store.pages[i].rot = (((store.pages[i].rot + delta) % 360) + 360) % 360;
+  afterEdit(picked);
+}
+$("#rotL").addEventListener("click", () => rotate(-90));
+$("#rotR").addEventListener("click", () => rotate(90));
+
+function move(delta) {
+  const picked = thumbs.selection();
+  if (!picked.length) return;
+  const order = delta < 0 ? picked : [...picked].reverse();
+  const next = new Set();
+  for (const i of order) {
+    const to = i + delta;
+    if (to < 0 || to >= store.pages.length || next.has(to)) { next.add(i); continue; }
+    [store.pages[i], store.pages[to]] = [store.pages[to], store.pages[i]];
+    next.add(to);
+  }
+  afterEdit([...next]);
+}
+$("#moveL").addEventListener("click", () => move(-1));
+$("#moveR").addEventListener("click", () => move(1));
+
+$("#delSel").addEventListener("click", () => {
+  const picked = new Set(thumbs.selection());
+  if (picked.size === store.pages.length) { toast("전부 지울 수는 없어요"); return; }
+  store.pages = store.pages.filter((_, i) => !picked.has(i));
+  afterEdit([]);
+});
+
+// ── 저장 (pdf-lib) ────────────────────────────────────────────────────────
+async function libDoc(index, PDFLib) {
+  const source = store.sources[index];
+  source.lib ??= await PDFLib.PDFDocument.load(source.bytes, { ignoreEncryption: true });
+  return source.lib;
+}
+
+async function buildPdf(entries) {
+  const PDFLib = await loadPdfLib();
+  const out = await PDFLib.PDFDocument.create();
+  for (const entry of entries) {
+    const source = await libDoc(entry.s, PDFLib);
+    const [copied] = await out.copyPages(source, [entry.p]);
+    if (entry.rot) copied.setRotation(PDFLib.degrees((copied.getRotation().angle + entry.rot) % 360));
+    out.addPage(copied);
+  }
+  return new Blob([await out.save()], { type: "application/pdf" });
+}
+
+async function savePages(entries, suffix) {
+  if (!entries.length) return;
+  const button = suffix ? $("#saveSel") : $("#saveAll");
+  button.disabled = true;
+  const was = button.textContent;
+  button.textContent = "만드는 중…";
+  try {
+    const blob = await buildPdf(entries);
+    download(blob, safeName(store.name, suffix, "pdf"));
+    toast(`${entries.length}쪽을 저장했어요`);
+  } catch (error) {
+    toast("저장하지 못했어요 — " + (error?.message ?? "알 수 없는 오류"));
+  } finally {
+    button.textContent = was;
+    button.disabled = false;
+    thumbs.sync();
+  }
+}
+$("#saveAll").addEventListener("click", () => savePages(store.pages, ""));
+$("#saveSel").addEventListener("click", () =>
+  savePages(thumbs.selection().map((i) => store.pages[i]), "-일부"));
+
+// ── 변환: 방향 전환 ───────────────────────────────────────────────────────
+function setDirection(which) {
+  $("#dirI2P").classList.toggle("on", which === "i2p");
+  $("#dirP2I").classList.toggle("on", which === "p2i");
+  $("#i2p").hidden = which !== "i2p";
+  $("#p2i").hidden = which !== "p2i";
+}
+$("#dirI2P").addEventListener("click", () => setDirection("i2p"));
+$("#dirP2I").addEventListener("click", () => setDirection("p2i"));
+
+// ── 변환: 이미지 → PDF ────────────────────────────────────────────────────
+const images = [];   // { file, bytes, kind, width, height, row, url }
+const imgInput = $("#imgInput");
+$("#imgDrop").addEventListener("click", () => imgInput.click());
+$("#imgDrop").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); imgInput.click(); }
+});
+imgInput.addEventListener("change", () => {
+  const files = [...imgInput.files];
+  imgInput.value = "";
+  addImages(files);
+});
+globalThis.addEventListener("paste", (e) => {
+  if ($("#paneConv").hidden || $("#i2p").hidden) return;
+  const files = [...(e.clipboardData?.items ?? [])].map((i) => i.getAsFile()).filter(Boolean);
+  if (files.length) addImages(files);
+});
+
+function drawImageRows() {
+  $("#imgList").replaceChildren(...images.map((it) => it.row));
+  $("#i2pOpts").hidden = images.length === 0;
+  for (const [i, it] of images.entries()) {
+    it.row.querySelector('[data-op="up"]').disabled = i === 0;
+    it.row.querySelector('[data-op="down"]').disabled = i === images.length - 1;
+  }
+}
+
+async function addImages(fileList) {
+  for (const file of [...fileList]) {
+    if (!file.type.startsWith("image/") && !/\.(heic|heif|avif|webp|bmp|gif|tiff?)$/i.test(file.name)) continue;
+    const row = el("div", "item");
+    row.innerHTML = `<img alt=""><div class="meta"><div class="name"></div><div class="info">읽는 중…</div></div>
+      <span class="ops"><button class="tiny" data-op="up" aria-label="위로">↑</button>
+      <button class="tiny" data-op="down" aria-label="아래로">↓</button>
+      <button class="tiny" data-op="del" aria-label="빼기">✕</button></span>`;
+    row.querySelector(".name").textContent = file.name;
+    const item = { file, row };
+    images.push(item);
+    drawImageRows();
+    try {
+      const bitmap = await createImageBitmap(file);
+      item.width = bitmap.width; item.height = bitmap.height;
+      bitmap.close?.();
+      item.url = URL.createObjectURL(file);
+      row.querySelector("img").src = item.url;
+      row.querySelector(".info").textContent = `${item.width}×${item.height} · ${fmtSize(file.size)}`;
+      item.ready = true;
+    } catch {
+      const info = row.querySelector(".info");
+      info.className = "err";
+      info.textContent = "이 형식은 브라우저가 읽지 못해요 (예: HEIC)";
+    }
+  }
+  drawImageRows();
+}
+
+$("#imgList").addEventListener("click", (e) => {
+  const button = e.target.closest("button[data-op]");
+  if (!button) return;
+  const row = button.closest(".item");
+  const index = images.findIndex((it) => it.row === row);
+  if (index === -1) return;
+  const op = button.dataset.op;
+  if (op === "del") { images[index].url && URL.revokeObjectURL(images[index].url); images.splice(index, 1); }
+  if (op === "up" && index > 0) [images[index - 1], images[index]] = [images[index], images[index - 1]];
+  if (op === "down" && index < images.length - 1) [images[index + 1], images[index]] = [images[index], images[index + 1]];
+  drawImageRows();
+});
+$("#imgClear").addEventListener("click", () => {
+  for (const it of images) it.url && URL.revokeObjectURL(it.url);
+  images.length = 0;
+  drawImageRows();
+});
+
+// pdf-lib은 JPEG와 PNG만 품는다. 나머지(webp·gif·bmp…)는 캔버스로 한 번 굽는다.
+async function imageBytes(item) {
+  const head = new Uint8Array(await item.file.slice(0, 8).arrayBuffer());
+  const isJpg = head[0] === 0xff && head[1] === 0xd8;
+  const isPng = head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47;
+  if (isJpg || isPng) {
+    return { bytes: new Uint8Array(await item.file.arrayBuffer()), kind: isJpg ? "jpg" : "png" };
+  }
+  const bitmap = await createImageBitmap(item.file);
+  const canvas = el("canvas");
+  canvas.width = bitmap.width; canvas.height = bitmap.height;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(bitmap, 0, 0);
+  bitmap.close?.();
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
+  return { bytes: new Uint8Array(await blob.arrayBuffer()), kind: "jpg" };
+}
+
+const PAPERS = { a4: [595.28, 841.89], letter: [612, 792] };
+const MM = 72 / 25.4;
+
+$("#makePdf").addEventListener("click", async () => {
+  const usable = images.filter((it) => it.ready);
+  if (!usable.length) { toast("넣을 수 있는 이미지가 없어요"); return; }
+  const button = $("#makePdf");
+  button.disabled = true;
+  const was = button.textContent;
+  button.textContent = "만드는 중…";
+  try {
+    const PDFLib = await loadPdfLib();
+    const doc = await PDFLib.PDFDocument.create();
+    const paper = $("#paper").value;
+    const orient = $("#orient").value;
+    const margin = Number($("#margin").value) * MM;
+    for (const item of usable) {
+      const { bytes, kind } = await imageBytes(item);
+      const embedded = kind === "jpg" ? await doc.embedJpg(bytes) : await doc.embedPng(bytes);
+      let pw, ph;
+      if (paper === "fit") {
+        pw = embedded.width + margin * 2;
+        ph = embedded.height + margin * 2;
+      } else {
+        const [a, b] = PAPERS[paper];
+        const landscape = orient === "landscape"
+          || (orient === "auto" && embedded.width > embedded.height);
+        [pw, ph] = landscape ? [b, a] : [a, b];
+      }
+      const page = doc.addPage([pw, ph]);
+      const scale = Math.min((pw - margin * 2) / embedded.width, (ph - margin * 2) / embedded.height);
+      const width = embedded.width * scale;
+      const height = embedded.height * scale;
+      page.drawImage(embedded, { x: (pw - width) / 2, y: (ph - height) / 2, width, height });
+    }
+    download(new Blob([await doc.save()], { type: "application/pdf" }),
+      safeName(baseName(usable[0].file.name), "", "pdf"));
+    toast(`${usable.length}장을 PDF로 만들었어요`);
+  } catch (error) {
+    toast("만들지 못했어요 — " + (error?.message ?? "알 수 없는 오류"));
+  } finally {
+    button.textContent = was;
+    button.disabled = false;
+  }
+});
+
+// ── 변환: PDF → 이미지 ────────────────────────────────────────────────────
+let outFormat = "png";
+for (const button of document.querySelectorAll("[data-imgfmt]")) {
+  button.addEventListener("click", () => {
+    outFormat = button.dataset.imgfmt;
+    for (const other of document.querySelectorAll("[data-imgfmt]")) other.classList.toggle("on", other === button);
+  });
+}
+
+// "1-3, 7" 같은 입력을 0부터 세는 쪽 번호 배열로. 비우면 전체.
+function parseRange(text, total) {
+  const trimmed = text.trim();
+  if (!trimmed) return [...Array(total).keys()];
+  const picked = new Set();
+  for (const part of trimmed.split(",")) {
+    const match = part.trim().match(/^(\d+)\s*(?:-\s*(\d+))?$/);
+    if (!match) continue;
+    const from = clamp(Number(match[1]), 1, total);
+    const to = clamp(Number(match[2] ?? match[1]), 1, total);
+    for (let i = Math.min(from, to); i <= Math.max(from, to); i++) picked.add(i - 1);
+  }
+  return [...picked].sort((a, b) => a - b);
+}
+
+$("#p2iGo").addEventListener("click", async () => {
+  const indexes = parseRange($("#p2iRange").value, store.pages.length);
+  if (!indexes.length) { toast("쪽 범위를 확인해주세요"); return; }
+  const button = $("#p2iGo");
+  const status = $("#p2iStatus");
+  button.disabled = true;
+  try {
+    const scale = Number($("#p2iScale").value);
+    const mime = outFormat === "png" ? "image/png" : "image/jpeg";
+    const files = [];
+    for (const [n, index] of indexes.entries()) {
+      status.textContent = `${n + 1}/${indexes.length}`;
+      const entry = store.pages[index];
+      const page = await getPage(entry);
+      const viewport = page.getViewport({ scale, rotation: totalRotation(page, entry) });
+      const canvas = el("canvas");
+      canvas.width = Math.round(viewport.width);
+      canvas.height = Math.round(viewport.height);
+      const ctx = canvas.getContext("2d");
+      if (outFormat === "jpg") { ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, mime, 0.92));
+      files.push({ name: safeName(store.name, `-${String(index + 1).padStart(3, "0")}`, outFormat), blob });
+    }
+    if (files.length === 1) {
+      download(files[0].blob, files[0].name);
+    } else {
+      status.textContent = "묶는 중…";
+      const zipped = await Promise.all(files.map(async (f) => (
+        { name: f.name, data: new Uint8Array(await f.blob.arrayBuffer()) }
+      )));
+      download(globalThis.blMakeZip(zipped), safeName(store.name, "-이미지", "zip"));
+    }
+    toast(`${files.length}장을 저장했어요`);
+  } catch (error) {
+    toast("변환하지 못했어요 — " + (error?.message ?? "알 수 없는 오류"));
+  } finally {
+    status.textContent = "";
+    button.disabled = false;
+  }
+});
+
+globalThis.blShareText = () => "PDF 보기·합치기·나누기·이미지 변환을 브라우저 안에서 한 번에!";
+</script>
+<script src="/_shared/zip.js"></script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>
