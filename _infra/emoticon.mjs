@@ -1609,7 +1609,7 @@ export function dropOutsideShadow(image, {
 // 줘도 한 장만 몇 % 크게 나오는 일이 있다. bounce3 3번이 실루엣 높이 582px로
 // 이웃 546px보다 7% 컸고, 사람 눈에는 "얼굴 위치가 튄다"로 보였다.
 // 배율은 프롬프트로 통제되지 않는 축이므로(§22) 코드가 리샘플링해서 맞춘다.
-export function fitFrameHeight(image, targetHeight) {
+export function fitFrameBox(image, targetWidth, targetHeight) {
   const { width, height, data } = image;
   let x0 = width, y0 = height, x1 = 0, y1 = 0;
   for (let y = 0; y < height; y++) {
@@ -1620,37 +1620,43 @@ export function fitFrameHeight(image, targetHeight) {
     }
   }
   if (x1 < x0) throw new Error("빈 프레임입니다");
-  const bh = y1 - y0 + 1;
-  const scale = targetHeight / bh;
-  if (Math.abs(scale - 1) > 0.25) {
-    throw new Error(`배율 ${scale.toFixed(2)}는 너무 큽니다 — 프레임을 잘못 지목했는지 확인하세요`);
+  const bw = x1 - x0 + 1, bh = y1 - y0 + 1;
+  // 가로·세로를 **따로** 맞춘다. 한 배율로 줄이면 원래 홀쭉했던 프레임이
+  // 높이만 맞고 폭은 더 홀쭉해진다 — bounce3 3번이 실제로 그랬다.
+  const scaleX = targetWidth / bw, scaleY = targetHeight / bh;
+  for (const [axis, s] of [["가로", scaleX], ["세로", scaleY]]) {
+    if (Math.abs(s - 1) > 0.25) {
+      throw new Error(`${axis} 배율 ${s.toFixed(2)}는 너무 큽니다 — 프레임을 잘못 지목했는지 확인하세요`);
+    }
   }
   const cx = (x0 + x1 + 1) / 2, cy = (y0 + y1 + 1) / 2;
   const out = new Uint8Array(width * height * 4);
   // 실루엣 중심을 고정한 채 축소·확대한다 — lift가 잡아 놓은 세로 위치를 지킨다.
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      const sxf = cx + (x + 0.5 - cx) / scale, syf = cy + (y + 0.5 - cy) / scale;
+      const sxf = cx + (x + 0.5 - cx) / scaleX, syf = cy + (y + 0.5 - cy) / scaleY;
       const sx = Math.floor(sxf), sy = Math.floor(syf);
       if (sx < 0 || sy < 0 || sx >= width || sy >= height) continue;
       const si = (sy * width + sx) * 4, di = (y * width + x) * 4;
       for (let c = 0; c < 4; c++) out[di + c] = data[si + c];
     }
   }
-  return { image: { width, height, data: out }, scale, from: bh, to: targetHeight };
+  return { image: { width, height, data: out }, scaleX, scaleY, from: [bw, bh], to: [targetWidth, targetHeight] };
 }
 
-const silhouetteHeight = (image) => {
+const silhouetteBox = (image) => {
   const { width, height, data } = image;
-  let y0 = height, y1 = 0;
+  let x0 = width, y0 = height, x1 = 0, y1 = 0;
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       if (data[(y * width + x) * 4 + 3] <= 16) continue;
-      if (y < y0) y0 = y; if (y > y1) y1 = y; break;
+      if (x < x0) x0 = x; if (x > x1) x1 = x;
+      if (y < y0) y0 = y; if (y > y1) y1 = y;
     }
   }
-  return y1 >= y0 ? y1 - y0 + 1 : 0;
+  return x1 >= x0 ? [x1 - x0 + 1, y1 - y0 + 1] : null;
 };
+const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
 
 async function cmdFit(workdir, cutId, frameArg) {
   const numbers = String(frameArg ?? "").split(/[\s,]+/).filter(Boolean).map(Number);
@@ -1663,18 +1669,17 @@ async function cmdFit(workdir, cutId, frameArg) {
   const others = files
     .map((f, i) => ({ f, n: i + 1 }))
     .filter(({ n }) => !numbers.includes(n))
-    .map(({ f }) => silhouetteHeight(decodePng(readFileSync(join(framesDir, f)))))
-    .filter(Boolean)
-    .sort((a, b) => a - b);
+    .map(({ f }) => silhouetteBox(decodePng(readFileSync(join(framesDir, f)))))
+    .filter(Boolean);
   if (!others.length) throw new Error("기준으로 삼을 다른 프레임이 없습니다");
-  const target = others[Math.floor(others.length / 2)];
+  const targetW = median(others.map((b) => b[0])), targetH = median(others.map((b) => b[1]));
 
   for (const n of numbers) {
     const path = join(framesDir, `${pad2(n)}.png`);
     if (!existsSync(path)) throw new Error(`프레임이 없습니다: ${path}`);
-    const r = fitFrameHeight(decodePng(readFileSync(path)), target);
+    const r = fitFrameBox(decodePng(readFileSync(path)), targetW, targetH);
     atomicWriteFile(path, Buffer.from(encodePng(r.image)));
-    console.log(`✓ 프레임 ${pad2(n)} 실루엣 높이 ${r.from}px → ${r.to}px (배율 ${r.scale.toFixed(3)})`);
+    console.log(`✓ 프레임 ${pad2(n)} 실루엣 ${r.from[0]}x${r.from[1]} → ${r.to[0]}x${r.to[1]} (배율 ${r.scaleX.toFixed(3)}/${r.scaleY.toFixed(3)})`);
   }
   console.log(`다음 단계: node _infra/emoticon.mjs build ${workdir} ${cutId}`);
 }
@@ -1798,6 +1803,7 @@ const USAGE =
   '         외곽선과 떨어진 독립 잉크 덩어리만 지운다. 가장자리에 닿거나 너무 크면 거부\n' +
   '  unshadow <작업폴더> <컷id> "<프레임번호…>"  ← 외곽선 바깥 드롭섀도 제거 (무료)\n' +
   '  fit    <작업폴더> <컷id> "<프레임번호…>"  ← 혼자 커진 프레임을 나머지 중앙값 크기로 (무료)\n' +
+  '         가로·세로를 따로 맞춘다. 의도한 스쿼시·스트레치 프레임에는 쓰지 말 것\n' +
   '  parts  <작업폴더> <컷id> [--expect \'{"ears":2}\']   ← 비전 부품 검사, report.json에 기록\n' +
   '  check  <작업폴더> <컷id> [--profile draft|master-2s|line] [--json]  ← FAIL이면 exit 1\n' +
   '작업폴더 권장 위치: _src/emoticon/<캐릭터명> (배포·커밋 제외)\n' +

@@ -11,7 +11,7 @@ import { encodeApng, inspectApng } from "./apng.mjs";
 import { imageProvider } from "./emoticon-ai.mjs";
 import { bytesToBase64 } from "./emoticon-gen.js";
 import {
-  autoCutout, chromaKeyGreen, dropOutsideShadow, eraseInkBlobs, fitFrameHeight, fitFrames, loopDiff, resize, scaleDrift,
+  autoCutout, chromaKeyGreen, dropOutsideShadow, eraseInkBlobs, fitFrameBox, fitFrames, loopDiff, resize, scaleDrift,
   transparencyRatio, unionBounds,
 } from "./emoticon.mjs";
 import worker from "./worker.js";
@@ -835,16 +835,17 @@ test("unshadow는 외곽선 바로 바깥의 안티에일리어싱을 지킨다"
 // ── fit: 혼자 커진 프레임을 이웃 크기에 맞춘다 ────────────
 // bounce3 3번이 실루엣 높이 582px로 이웃 546px보다 7% 컸다. 같은
 // "normal proportions"를 줘도 모델이 매번 다시 정규화해서 생기는 편차다.
-test("fit은 실루엣 높이를 목표치에 맞추고 중심을 지킨다", () => {
+test("fit은 가로·세로를 따로 맞추고 중심을 지킨다", () => {
   const width = 100, height = 100;
   const data = new Uint8Array(width * height * 4);
   for (let y = 30; y < 70; y++) for (let x = 40; x < 60; x++) {   // 높이 40, 중심 y=50
     const i = (y * width + x) * 4;
     data[i] = data[i + 1] = data[i + 2] = 20; data[i + 3] = 255;
   }
-  const r = fitFrameHeight({ width, height, data }, 36);   // 40 → 36 (bounce3와 같은 정도의 편차)
-  assert.equal(r.from, 40);
-  assert.equal(r.scale, 0.9);
+  const r = fitFrameBox({ width, height, data }, 20, 36);   // 40 → 36 (bounce3와 같은 정도의 편차)
+  assert.deepEqual(r.from, [20, 40]);
+  assert.equal(r.scaleY, 0.9);
+  assert.equal(r.scaleX, 1);
   let y0 = height, y1 = 0;
   for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
     if (r.image.data[(y * width + x) * 4 + 3] > 16) { if (y < y0) y0 = y; if (y > y1) y1 = y; }
@@ -857,5 +858,23 @@ test("fit은 말이 안 되는 배율을 거부한다", () => {
   const width = 40, height = 40;
   const data = new Uint8Array(width * height * 4);
   for (let y = 10; y < 30; y++) for (let x = 10; x < 30; x++) data[(y * width + x) * 4 + 3] = 255;
-  assert.throws(() => fitFrameHeight({ width, height, data }, 5), /너무 큽니다/);
+  assert.throws(() => fitFrameBox({ width, height, data }, 20, 5), /너무 큽니다/);
+});
+
+test("fit은 홀쭉한 프레임의 폭도 되돌린다", () => {
+  // 한 배율로만 줄이면 원래 홀쭉했던 프레임이 높이만 맞고 폭은 더 홀쭉해진다.
+  // bounce3 3번이 582x453(홀쭉)이라 균일 축소 후 폭이 이웃보다 4% 좁아졌다.
+  const width = 100, height = 100;
+  const data = new Uint8Array(width * height * 4);
+  for (let y = 25; y < 75; y++) for (let x = 45; x < 65; x++) data[(y * width + x) * 4 + 3] = 255;
+  const r = fitFrameBox({ width, height, data }, 24, 44);   // 20x50 → 24x44
+  assert.deepEqual(r.from, [20, 50]);
+  let x0 = width, y0 = height, x1 = 0, y1 = 0;
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    if (r.image.data[(y * width + x) * 4 + 3] > 16) {
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+    }
+  }
+  assert.equal(x1 - x0 + 1, 24, "폭이 목표와 다릅니다");
+  assert.equal(y1 - y0 + 1, 44, "높이가 목표와 다릅니다");
 });
