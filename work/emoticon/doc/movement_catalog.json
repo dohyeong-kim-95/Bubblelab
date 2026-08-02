@@ -89,10 +89,11 @@
       "cuts": [
         "bounce1",
         "bounce2",
-        "bounce3"
+        "bounce3",
+        "bounce4"
       ],
       "guide": "doc/guide-by-movement/bounce.md",
-      "verdict": "bounce2 good — duri 03번 납품 (발 일관성 지적). bounce3은 접지 프레임을 없앤 공중 부양 — 게이트 첫 완전 PASS, 검수 대기",
+      "verdict": "bounce2 good — duri 03번 납품. bounce4는 편도 루프 + 코드 스쿼시로 다리 사이클을 만든 최신본(검수 대기). 핑퐁으로는 다리 탄성이 원리적으로 불가(guide 참고)",
       "shipped": "_assets/sticker/emoticon-anim/03.png"
     },
     {
