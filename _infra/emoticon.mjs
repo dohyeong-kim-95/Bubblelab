@@ -1159,6 +1159,14 @@ async function redoFrame(workdir, cutId, frameNumber) {
   // 재작업 횟수를 컷 메타에 남긴다 — 상한이 세션 기억이 아니라 파일에 있어야
   // 다음 실행·다른 사람도 같은 규칙을 받는다.
   meta.redoCounts = { ...(meta.redoCounts ?? {}), [String(n)]: attempts + 1 };
+  // erase는 그 그림의 특정 좌표를 지운 일회성 편집이다. 다시 구우면 그림이
+  // 달라져 좌표가 무의미해지므로 기록을 지운다 — 남겨두면 "이미 지웠다"고
+  // 착각해서 새로 생긴 군더더기를 놓친다.
+  if (meta.erased?.[String(n)]) {
+    delete meta.erased[String(n)];
+    if (!Object.keys(meta.erased).length) delete meta.erased;
+    console.log(`  이전 erase 기록 삭제 — 새 그림이므로 다시 확인하세요`);
+  }
   atomicWriteFile(metaPath, Buffer.from(JSON.stringify(meta, null, 2) + "\n"));
   console.log(`✓ 프레임 ${pad2(n)} (${label}) 재생성 ${attempts + 1}/${MAX_REDO_PER_FRAME} (${provider.name})`);
   console.log(`다음 단계: node _infra/emoticon.mjs build ${workdir} ${cutId}`);
@@ -1344,12 +1352,16 @@ function parseArgs(argv) {
   const positional = [];
   const options = {};
   const flags = new Set(["force", "resume", "line", "chroma", "grid", "json", "force-redo"]);
+  // 여러 번 줄 수 있는 옵션 — 마지막 값으로 덮어쓰지 않고 배열로 모은다.
+  const repeatable = new Set(["blob"]);
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg.startsWith("--") && flags.has(arg.slice(2))) options[arg.slice(2)] = true;
     else if (arg.startsWith("--")) {
       if (i + 1 >= argv.length || argv[i + 1].startsWith("--")) throw new Error(`${arg} 값이 필요합니다`);
-      options[arg.slice(2)] = argv[++i];
+      const key = arg.slice(2);
+      if (repeatable.has(key)) (options[key] ??= []).push(argv[++i]);
+      else options[key] = argv[++i];
     }
     else positional.push(arg);
   }
@@ -1416,6 +1428,146 @@ export function mirrorImage({ width, height, data }) {
     }
   }
   return { width, height, data: out };
+}
+
+// ── 몸통 안 군더더기 획 지우기 ────────────────────────────
+// 모델이 실루엣 **안쪽**에 그려 넣은 여분의 획(bounce2 2번의 "안쪽 손" 한 쌍)은
+// 외곽선과 닿지 않는 독립 잉크 덩어리다 — 좌표로 집어 지우고 주변 몸통 색으로
+// 메우면 된다. 재생성비 0원, 결정론적. 포즈 문장으로 없애려는 시도는 실패했다
+// (lesson_learned §55·§57) — 통제 안 되는 축은 코드로 잡는 §22 원칙 그대로다.
+//
+// 재생성하면 그림 자체가 바뀌어 좌표가 무의미해지므로, 이 편집은 그 프레임의
+// **일회성**이다. redo가 그 프레임을 다시 구우면 기록을 지운다.
+const isInkPixel = (data, i, threshold) => data[i + 3] > 128 && Math.max(data[i], data[i + 1], data[i + 2]) < threshold;
+
+export function inkBlobAt(image, seedX, seedY, { threshold = 110 } = {}) {
+  const { width, height, data } = image;
+  if (seedX < 0 || seedY < 0 || seedX >= width || seedY >= height) {
+    throw new Error(`좌표가 캔버스 밖입니다: (${seedX},${seedY}) / ${width}x${height}`);
+  }
+  const start = seedY * width + seedX;
+  if (!isInkPixel(data, start * 4, threshold)) {
+    throw new Error(`(${seedX},${seedY})는 잉크가 아닙니다 — 지울 획 위의 좌표를 주세요`);
+  }
+  const seen = new Set([start]);
+  const stack = [start];
+  let touchesBorder = false;
+  while (stack.length) {
+    const p = stack.pop();
+    const px = p % width, py = (p / width) | 0;
+    if (px === 0 || py === 0 || px === width - 1 || py === height - 1) touchesBorder = true;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const nx = px + dx, ny = py + dy;
+        if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+        const q = ny * width + nx;
+        if (seen.has(q) || !isInkPixel(data, q * 4, threshold)) continue;
+        seen.add(q); stack.push(q);
+      }
+    }
+  }
+  return { pixels: seen, touchesBorder };
+}
+
+// 지운 자리는 "주변 몸통 색"으로 메운다 — 바깥에서 안쪽으로 한 겹씩 좁혀 들어가며
+// 잉크가 아닌 불투명 이웃의 평균을 쓴다. 획이 얇고 주변이 평평한 흰 면이라 몇 겹이면 끝난다.
+// halo: 획의 안티에일리어싱 테두리(잉크 문턱보다는 밝지만 몸통 흰색보다는 어두운
+// 픽셀)까지 함께 지운다. 코어만 지우면 회색 잔상이 유령처럼 남는다 — 실제로 처음
+// 구현이 그랬다. 평평한 흰 면에서 멈추도록 haloThreshold를 높게(245) 두고,
+// 그늘진 영역에서 폭주하지 않게 haloRadius로 번지는 겹 수를 묶는다.
+export function eraseInkBlobs(image, seeds, {
+  threshold = 110, maxInkRatio = 0.15, haloThreshold = 245, haloRadius = 4,
+} = {}) {
+  const { width, height, data } = image;
+  let totalInk = 0;
+  for (let p = 0; p < width * height; p++) if (isInkPixel(data, p * 4, threshold)) totalInk++;
+
+  const remove = new Set();
+  const report = [];
+  for (const [sx, sy] of seeds) {
+    const { pixels, touchesBorder } = inkBlobAt(image, sx, sy, { threshold });
+    if (touchesBorder) throw new Error(`(${sx},${sy}) 덩어리가 캔버스 가장자리에 닿습니다 — 외곽선일 수 있어 거부합니다`);
+    const ratio = pixels.size / (totalInk || 1);
+    if (ratio > maxInkRatio) {
+      throw new Error(`(${sx},${sy}) 덩어리가 전체 잉크의 ${(ratio * 100).toFixed(0)}%입니다 — 외곽선을 지울 위험이 있어 거부합니다`);
+    }
+    for (const p of pixels) remove.add(p);
+    report.push({ x: sx, y: sy, px: pixels.size });
+  }
+
+  let frontier = new Set(remove);
+  for (let ring = 0; ring < haloRadius && frontier.size; ring++) {
+    const next = new Set();
+    for (const p of frontier) {
+      const px = p % width, py = (p / width) | 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = px + dx, ny = py + dy;
+          if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+          const q = ny * width + nx;
+          if (remove.has(q) || data[q * 4 + 3] === 0) continue;
+          if (Math.max(data[q * 4], data[q * 4 + 1], data[q * 4 + 2]) >= haloThreshold) continue;
+          remove.add(q); next.add(q);
+        }
+      }
+    }
+    frontier = next;
+  }
+
+  const out = new Uint8Array(data);
+  let pending = new Set(remove);
+  while (pending.size) {
+    const filled = [];
+    for (const p of pending) {
+      const px = p % width, py = (p / width) | 0;
+      let r = 0, g = 0, b = 0, a = 0, n = 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = px + dx, ny = py + dy;
+          if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+          const q = ny * width + nx;
+          // 메울 색은 "아직 안 지운 · 불투명 · 잉크가 아닌" 이웃에서만 가져온다.
+          // 잉크를 재료로 쓰면 검정이 번져 획이 흐릿하게 남는다.
+          if (pending.has(q) || out[q * 4 + 3] === 0 || isInkPixel(out, q * 4, threshold)) continue;
+          r += out[q * 4]; g += out[q * 4 + 1]; b += out[q * 4 + 2]; a += out[q * 4 + 3]; n++;
+        }
+      }
+      if (!n) continue;
+      out[p * 4] = Math.round(r / n); out[p * 4 + 1] = Math.round(g / n);
+      out[p * 4 + 2] = Math.round(b / n); out[p * 4 + 3] = Math.round(a / n);
+      filled.push(p);
+    }
+    if (!filled.length) break; // 사방이 전부 잉크·투명 — 더 좁힐 수 없다
+    for (const p of filled) pending.delete(p);
+  }
+  return { image: { width, height, data: out }, erased: report };
+}
+
+async function cmdErase(workdir, cutId, frameArg, options = {}) {
+  const n = Number(frameArg);
+  if (!Number.isInteger(n) || n < 1) throw new Error("지울 프레임 번호가 필요합니다 (예: 2)");
+  const seeds = [].concat(options.blob ?? []).map((s) => {
+    const [x, y] = String(s).split(",").map(Number);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) throw new Error(`--blob 형식은 x,y 입니다: ${s}`);
+    return [Math.round(x), Math.round(y)];
+  });
+  if (!seeds.length) throw new Error('지울 획 위의 좌표가 필요합니다 (예: --blob 450,700 --blob 565,700)');
+
+  const cutDir = join(workdir, "cuts", cutId);
+  const path = join(cutDir, "frames", `${pad2(n)}.png`);
+  if (!existsSync(path)) throw new Error(`프레임이 없습니다: ${path}`);
+  const { image, erased } = eraseInkBlobs(decodePng(readFileSync(path)), seeds);
+  atomicWriteFile(path, Buffer.from(encodePng(image)));
+  for (const e of erased) console.log(`✓ 프레임 ${pad2(n)} (${e.x},${e.y}) 획 ${e.px}px 지움`);
+
+  // 어떤 프레임을 손댔는지 남긴다 — 재생성하면 좌표가 무의미해지므로 redo가 지운다.
+  const cutPath = join(cutDir, "cut.json");
+  if (existsSync(cutPath)) {
+    const cut = JSON.parse(readFileSync(cutPath, "utf8"));
+    cut.erased = { ...(cut.erased ?? {}), [n]: [...(cut.erased?.[n] ?? []), ...erased] };
+    atomicWriteFile(cutPath, JSON.stringify(cut, null, 2) + "\n");
+  }
+  console.log(`다음 단계: node _infra/emoticon.mjs build ${workdir} ${cutId}`);
 }
 
 async function cmdMirror(workdir, cutId, frameArg) {
@@ -1491,6 +1643,8 @@ const USAGE =
   '  redo   <작업폴더> <컷id> "<프레임번호…>" [--force-redo]  ← 불량 프레임만 재생성\n' +
   '         장당 $0.04, "2,3" 가능. 프레임당 2회까지 — 넘으면 포즈 문장을 고치고 --force-redo\n' +
   '  mirror <작업폴더> <컷id> "<프레임번호…>"  ← 좌우 반전 (든 팔 방향 정렬, 무료)\n' +
+  '  erase  <작업폴더> <컷id> <프레임> --blob x,y [--blob x,y …]  ← 몸통 안 군더더기 획 제거 (무료)\n' +
+  '         외곽선과 떨어진 독립 잉크 덩어리만 지운다. 가장자리에 닿거나 너무 크면 거부\n' +
   '  parts  <작업폴더> <컷id> [--expect \'{"ears":2}\']   ← 비전 부품 검사, report.json에 기록\n' +
   '  check  <작업폴더> <컷id> [--profile draft|master-2s|line] [--json]  ← FAIL이면 exit 1\n' +
   '작업폴더 권장 위치: _src/emoticon/<캐릭터명> (배포·커밋 제외)\n' +
@@ -1512,6 +1666,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     else if (command === "redo") await cmdRedo(workdir, rest[0], rest[1], options);
     else if (command === "parts") await cmdParts(workdir, rest[0], options);
     else if (command === "mirror") await cmdMirror(workdir, rest[0], rest[1]);
+    else if (command === "erase") await cmdErase(workdir, rest[0], rest[1], options);
     else if (command === "check") {
       const judgement = cmdCheck(workdir, rest[0], options);
       if (judgement.verdict === "fail") process.exit(1);

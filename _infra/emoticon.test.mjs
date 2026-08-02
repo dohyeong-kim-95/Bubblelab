@@ -11,7 +11,7 @@ import { encodeApng, inspectApng } from "./apng.mjs";
 import { imageProvider } from "./emoticon-ai.mjs";
 import { bytesToBase64 } from "./emoticon-gen.js";
 import {
-  autoCutout, chromaKeyGreen, fitFrames, loopDiff, resize, scaleDrift,
+  autoCutout, chromaKeyGreen, eraseInkBlobs, fitFrames, loopDiff, resize, scaleDrift,
   transparencyRatio, unionBounds,
 } from "./emoticon.mjs";
 import worker from "./worker.js";
@@ -728,4 +728,67 @@ test("dropGroundLine: 열별 두께의 최빈값으로 바닥선만 지운다", 
   assert.ok(bottomInk > 0, "선 위의 몸통은 남아 있어야 한다");
   // 선이 없으면 손대지 않는다
   assert.equal(dropGroundLine(make(false)).removed, 0);
+});
+
+// ── erase: 몸통 안 군더더기 획 제거 ────────────────────────
+// bounce2 2번 프레임의 "안쪽 손" 한 쌍처럼 실루엣 안에 떠 있는 여분의 획은
+// 포즈 문장으로 세 번 못 없앴다. 외곽선과 닿지 않는 독립 덩어리라 코드로 지운다.
+function inkCanvas() {
+  // 40x40 흰 사각형 안에 5x5 검은 점 하나. 테두리 한 줄은 검정(외곽선 역할).
+  const width = 40, height = 40;
+  const data = new Uint8Array(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      const edge = x === 0 || y === 0 || x === width - 1 || y === height - 1;
+      const blob = x >= 18 && x < 23 && y >= 18 && y < 23;
+      const v = edge || blob ? 20 : 255;
+      data[i] = data[i + 1] = data[i + 2] = v;
+      data[i + 3] = 255;
+    }
+  }
+  return { width, height, data };
+}
+const pixelAt = ({ width, data }, x, y) => data[(y * width + x) * 4];
+
+test("erase는 지정한 획만 지우고 주변 색으로 메운다", () => {
+  const { image, erased } = eraseInkBlobs(inkCanvas(), [[20, 20]]);
+  assert.deepEqual(erased, [{ x: 20, y: 20, px: 25 }]);
+  assert.equal(pixelAt(image, 20, 20), 255);       // 획이 흰 몸통 색으로 메워졌다
+  assert.equal(pixelAt(image, 0, 20), 20);         // 외곽선은 그대로
+});
+
+test("erase는 외곽선(가장자리에 닿는 덩어리)을 거부한다", () => {
+  // 실수로 외곽선 좌표를 주면 캐릭터가 통째로 지워진다 — 막아야 한다.
+  assert.throws(() => eraseInkBlobs(inkCanvas(), [[0, 20]]), /가장자리에 닿습니다/);
+});
+
+test("erase는 잉크가 아닌 좌표를 거부한다", () => {
+  assert.throws(() => eraseInkBlobs(inkCanvas(), [[10, 10]]), /잉크가 아닙니다/);
+});
+
+test("erase는 전체 잉크의 큰 비중을 차지하는 덩어리를 거부한다", () => {
+  assert.throws(() => eraseInkBlobs(inkCanvas(), [[20, 20]], { maxInkRatio: 0.01 }), /지울 위험이 있어 거부/);
+});
+
+test("erase는 안티에일리어싱 테두리까지 지운다", () => {
+  // 처음 구현은 잉크 문턱(<110)만 지워서 회색 유령이 남았다 — bounce2 2번에서
+  // 실제로 그랬다. 획 둘레의 중간 밝기 픽셀까지 함께 걷어내야 한다.
+  const width = 40, height = 40;
+  const data = new Uint8Array(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      const edge = x === 0 || y === 0 || x === width - 1 || y === height - 1;
+      const core = x >= 18 && x < 23 && y >= 18 && y < 23;
+      const fringe = x >= 17 && x < 24 && y >= 17 && y < 24;
+      const v = edge || core ? 20 : fringe ? 160 : 255;   // 160 = 반투명 테두리
+      data[i] = data[i + 1] = data[i + 2] = v;
+      data[i + 3] = 255;
+    }
+  }
+  const { image } = eraseInkBlobs({ width, height, data }, [[20, 20]]);
+  let darkest = 255;
+  for (let y = 15; y < 26; y++) for (let x = 15; x < 26; x++) darkest = Math.min(darkest, pixelAt(image, x, y));
+  assert.equal(darkest, 255, "테두리 잔상이 남았습니다");
 });
