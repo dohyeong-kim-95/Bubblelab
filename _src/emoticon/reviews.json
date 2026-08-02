@@ -2,6 +2,14 @@
   "version": 1,
   "items": [
     {
+      "id": "9ea56239-07ae-4adf-9445-19467d8547a2",
+      "character": "rabbit",
+      "cut": "bounce4",
+      "verdict": "revise",
+      "note": "체형이 너무 동그래졌어요 체형은 bounce2에 가까운게 좋겠어요 캐릭터시트를 참조해야될거같아요",
+      "at": "2026-08-02T04:56:24.943Z"
+    },
+    {
       "id": "e4b63e4b-c4cc-4980-bb3f-a00ccd3adc59",
       "character": "rabbit",
       "cut": "bounce3",
