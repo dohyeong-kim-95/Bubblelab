@@ -32,42 +32,42 @@
   "fps": 12,
   "keys": [
     {
-      "pose": "floating at the top of the hover with normal proportions; both short arms are raised up and outward at about 90 degrees from the sides of the body, level with the shoulders; a wide open smile with a small pink tongue",
+      "pose": "floating at the top of the hover with normal proportions; both short arms are raised up and outward at about 90 degrees from the sides of the body, level with the shoulders; the two feet are tucked up close under the body; a wide open smile with a small pink tongue",
       "hold": 5,
       "lift": 0.165
     },
     {
-      "pose": "still floating near the top with normal proportions; both short arms are raised up and outward at about 85 degrees from the sides of the body; a wide open smile",
+      "pose": "still floating near the top with normal proportions; both short arms are raised up and outward at about 85 degrees from the sides of the body; the two feet are tucked up close under the body; a wide open smile",
       "hold": 2,
       "lift": 0.161
     },
     {
-      "pose": "beginning to sink with normal proportions; both short arms are out and downward at about 75 degrees from the sides of the body; a wide open smile",
+      "pose": "beginning to sink with normal proportions; both short arms are out and downward at about 75 degrees from the sides of the body; the two feet are tucked under the body; a wide open smile",
       "hold": 1,
       "lift": 0.15
     },
     {
-      "pose": "sinking with normal proportions; both short arms are out and downward at about 65 degrees from the sides of the body; a wide open smile",
+      "pose": "sinking with normal proportions; both short arms are out and downward at about 65 degrees from the sides of the body; the two feet are tucked under the body; a wide open smile",
       "hold": 1,
       "lift": 0.132
     },
     {
-      "pose": "sinking faster: the whole character is 1.04 times as tall and 0.97 times as wide, its volume preserved; both short arms are out and downward at about 55 degrees from the sides of the body; a small open smile",
+      "pose": "sinking faster: the whole character is 1.04 times as tall and 0.97 times as wide, its volume preserved; both short arms are out and downward at about 55 degrees from the sides of the body; the two feet hang just below the body; a small open smile",
       "hold": 1,
       "lift": 0.108
     },
     {
-      "pose": "sinking fast and stretched: the whole character is 1.08 times as tall and 0.94 times as wide, its volume preserved; both short arms are out and downward at about 45 degrees from the sides of the body; a small open smile",
+      "pose": "sinking fast and stretched: the whole character is 1.08 times as tall and 0.94 times as wide, its volume preserved; both short arms are out and downward at about 45 degrees from the sides of the body; the two feet hang down below the body; a small open smile",
       "hold": 1,
       "lift": 0.078
     },
     {
-      "pose": "settling at the bottom: the whole character is 0.96 times as tall and 1.03 times as wide, its volume preserved; both short arms are out and downward at about 35 degrees from the sides of the body; a gentle closed-mouth smile",
+      "pose": "settling at the bottom: the whole character is 0.96 times as tall and 1.03 times as wide, its volume preserved; both short arms are out and downward at about 35 degrees from the sides of the body; the two feet reach down below the body; a gentle closed-mouth smile",
       "hold": 2,
       "lift": 0.041
     },
     {
-      "pose": "at the lowest point of the hover, gathered to spring back up: the whole character is 0.90 times as tall and 1.10 times as wide, its volume preserved; both short arms are out and downward at about 30 degrees from the sides of the body; a gentle closed-mouth smile",
+      "pose": "at the lowest point of the hover, gathered to spring back up: the whole character is 0.90 times as tall and 1.10 times as wide, its volume preserved; both short arms are out and downward at about 30 degrees from the sides of the body; the two feet reach straight down below the body; a gentle closed-mouth smile",
       "hold": 3,
       "lift": 0
     }
@@ -75,7 +75,7 @@
   "breakdowns": 0,
   "assembly": "pingpong",
   "invariants": "two long upright ears whose bases sit on top of the head, two eyes, one mouth, two short arms, two feet; two pink oval inner ears; two round pink cheek blushes; the canvas holds only this one character",
-  "poseConstants": "each eye is a large round dark eye with a small white highlight near its top, exactly as in Image 1; the character faces the viewer straight on, the two ears stand straight up and stay symmetric left and right, and both eyes are always mirror images of each other; each short arm is a small rounded nub on the outer edge of the body silhouette; below the body there are exactly two feet, tucked up close under the body, side by side and close together, each foot one smooth rounded oval in the same plain white surface as the body; the whole underside of the body is one smooth curve; the whole canvas outside the character is one flat white surface",
+  "poseConstants": "each eye is a large round dark eye with a small white highlight near its top, exactly as in Image 1; the character faces the viewer straight on, the two ears stand straight up and stay symmetric left and right, and both eyes are always mirror images of each other; each short arm is a small rounded nub on the outer edge of the body silhouette; below the body there are exactly two feet, side by side and close together, each foot one smooth rounded oval in the same plain white surface as the body; the whole underside of the body is one smooth curve; the whole canvas outside the character is one flat white surface",
   "breakdownNote": "",
   "repeat": 1,
   "characterRef": "sheet.png",

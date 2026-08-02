@@ -1604,6 +1604,81 @@ export function dropOutsideShadow(image, {
   return { image: { width, height, data: out }, removed };
 }
 
+// ── 한 프레임만 커진 것을 이웃 크기에 맞춘다 ─────────────
+// 모델은 매 호출 피사체를 다시 배치·정규화하므로 같은 "normal proportions"를
+// 줘도 한 장만 몇 % 크게 나오는 일이 있다. bounce3 3번이 실루엣 높이 582px로
+// 이웃 546px보다 7% 컸고, 사람 눈에는 "얼굴 위치가 튄다"로 보였다.
+// 배율은 프롬프트로 통제되지 않는 축이므로(§22) 코드가 리샘플링해서 맞춘다.
+export function fitFrameHeight(image, targetHeight) {
+  const { width, height, data } = image;
+  let x0 = width, y0 = height, x1 = 0, y1 = 0;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (data[(y * width + x) * 4 + 3] <= 16) continue;
+      if (x < x0) x0 = x; if (x > x1) x1 = x;
+      if (y < y0) y0 = y; if (y > y1) y1 = y;
+    }
+  }
+  if (x1 < x0) throw new Error("빈 프레임입니다");
+  const bh = y1 - y0 + 1;
+  const scale = targetHeight / bh;
+  if (Math.abs(scale - 1) > 0.25) {
+    throw new Error(`배율 ${scale.toFixed(2)}는 너무 큽니다 — 프레임을 잘못 지목했는지 확인하세요`);
+  }
+  const cx = (x0 + x1 + 1) / 2, cy = (y0 + y1 + 1) / 2;
+  const out = new Uint8Array(width * height * 4);
+  // 실루엣 중심을 고정한 채 축소·확대한다 — lift가 잡아 놓은 세로 위치를 지킨다.
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const sxf = cx + (x + 0.5 - cx) / scale, syf = cy + (y + 0.5 - cy) / scale;
+      const sx = Math.floor(sxf), sy = Math.floor(syf);
+      if (sx < 0 || sy < 0 || sx >= width || sy >= height) continue;
+      const si = (sy * width + sx) * 4, di = (y * width + x) * 4;
+      for (let c = 0; c < 4; c++) out[di + c] = data[si + c];
+    }
+  }
+  return { image: { width, height, data: out }, scale, from: bh, to: targetHeight };
+}
+
+const silhouetteHeight = (image) => {
+  const { width, height, data } = image;
+  let y0 = height, y1 = 0;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (data[(y * width + x) * 4 + 3] <= 16) continue;
+      if (y < y0) y0 = y; if (y > y1) y1 = y; break;
+    }
+  }
+  return y1 >= y0 ? y1 - y0 + 1 : 0;
+};
+
+async function cmdFit(workdir, cutId, frameArg) {
+  const numbers = String(frameArg ?? "").split(/[\s,]+/).filter(Boolean).map(Number);
+  if (!numbers.length) throw new Error('크기를 맞출 프레임 번호가 필요합니다 (예: 3)');
+  const framesDir = join(workdir, "cuts", cutId, "frames");
+  if (!existsSync(framesDir)) throw new Error(`프레임이 없습니다: ${framesDir}`);
+  const files = readdirSync(framesDir).filter((f) => /^\d{2}\.png$/.test(f)).sort();
+
+  // 목표는 **나머지 프레임의 중앙값** — 내가 숫자를 고르지 않는다.
+  const others = files
+    .map((f, i) => ({ f, n: i + 1 }))
+    .filter(({ n }) => !numbers.includes(n))
+    .map(({ f }) => silhouetteHeight(decodePng(readFileSync(join(framesDir, f)))))
+    .filter(Boolean)
+    .sort((a, b) => a - b);
+  if (!others.length) throw new Error("기준으로 삼을 다른 프레임이 없습니다");
+  const target = others[Math.floor(others.length / 2)];
+
+  for (const n of numbers) {
+    const path = join(framesDir, `${pad2(n)}.png`);
+    if (!existsSync(path)) throw new Error(`프레임이 없습니다: ${path}`);
+    const r = fitFrameHeight(decodePng(readFileSync(path)), target);
+    atomicWriteFile(path, Buffer.from(encodePng(r.image)));
+    console.log(`✓ 프레임 ${pad2(n)} 실루엣 높이 ${r.from}px → ${r.to}px (배율 ${r.scale.toFixed(3)})`);
+  }
+  console.log(`다음 단계: node _infra/emoticon.mjs build ${workdir} ${cutId}`);
+}
+
 async function cmdUnshadow(workdir, cutId, frameArg) {
   const numbers = String(frameArg ?? "").split(/[\s,]+/).filter(Boolean).map(Number);
   if (!numbers.length) throw new Error('그림자를 지울 프레임 번호가 필요합니다 (예: "3,4")');
@@ -1722,6 +1797,7 @@ const USAGE =
   '  erase  <작업폴더> <컷id> <프레임> --blob x,y [--blob x,y …]  ← 몸통 안 군더더기 획 제거 (무료)\n' +
   '         외곽선과 떨어진 독립 잉크 덩어리만 지운다. 가장자리에 닿거나 너무 크면 거부\n' +
   '  unshadow <작업폴더> <컷id> "<프레임번호…>"  ← 외곽선 바깥 드롭섀도 제거 (무료)\n' +
+  '  fit    <작업폴더> <컷id> "<프레임번호…>"  ← 혼자 커진 프레임을 나머지 중앙값 크기로 (무료)\n' +
   '  parts  <작업폴더> <컷id> [--expect \'{"ears":2}\']   ← 비전 부품 검사, report.json에 기록\n' +
   '  check  <작업폴더> <컷id> [--profile draft|master-2s|line] [--json]  ← FAIL이면 exit 1\n' +
   '작업폴더 권장 위치: _src/emoticon/<캐릭터명> (배포·커밋 제외)\n' +
@@ -1745,6 +1821,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     else if (command === "mirror") await cmdMirror(workdir, rest[0], rest[1]);
     else if (command === "erase") await cmdErase(workdir, rest[0], rest[1], options);
     else if (command === "unshadow") await cmdUnshadow(workdir, rest[0], rest[1]);
+    else if (command === "fit") await cmdFit(workdir, rest[0], rest[1]);
     else if (command === "check") {
       const judgement = cmdCheck(workdir, rest[0], options);
       if (judgement.verdict === "fail") process.exit(1);

@@ -11,7 +11,7 @@ import { encodeApng, inspectApng } from "./apng.mjs";
 import { imageProvider } from "./emoticon-ai.mjs";
 import { bytesToBase64 } from "./emoticon-gen.js";
 import {
-  autoCutout, chromaKeyGreen, dropOutsideShadow, eraseInkBlobs, fitFrames, loopDiff, resize, scaleDrift,
+  autoCutout, chromaKeyGreen, dropOutsideShadow, eraseInkBlobs, fitFrameHeight, fitFrames, loopDiff, resize, scaleDrift,
   transparencyRatio, unionBounds,
 } from "./emoticon.mjs";
 import worker from "./worker.js";
@@ -830,4 +830,32 @@ test("unshadow는 외곽선 바로 바깥의 안티에일리어싱을 지킨다"
   const { image, removed } = dropOutsideShadow({ width, height, data });
   assert.equal(removed, 0);
   assert.equal(image.data[(19 * width + 30) * 4 + 3], 255);
+});
+
+// ── fit: 혼자 커진 프레임을 이웃 크기에 맞춘다 ────────────
+// bounce3 3번이 실루엣 높이 582px로 이웃 546px보다 7% 컸다. 같은
+// "normal proportions"를 줘도 모델이 매번 다시 정규화해서 생기는 편차다.
+test("fit은 실루엣 높이를 목표치에 맞추고 중심을 지킨다", () => {
+  const width = 100, height = 100;
+  const data = new Uint8Array(width * height * 4);
+  for (let y = 30; y < 70; y++) for (let x = 40; x < 60; x++) {   // 높이 40, 중심 y=50
+    const i = (y * width + x) * 4;
+    data[i] = data[i + 1] = data[i + 2] = 20; data[i + 3] = 255;
+  }
+  const r = fitFrameHeight({ width, height, data }, 36);   // 40 → 36 (bounce3와 같은 정도의 편차)
+  assert.equal(r.from, 40);
+  assert.equal(r.scale, 0.9);
+  let y0 = height, y1 = 0;
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    if (r.image.data[(y * width + x) * 4 + 3] > 16) { if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  }
+  assert.equal(y1 - y0 + 1, 36, "목표 높이가 아닙니다");
+  assert.equal(Math.round((y0 + y1) / 2), 50, "중심이 움직였습니다");
+});
+
+test("fit은 말이 안 되는 배율을 거부한다", () => {
+  const width = 40, height = 40;
+  const data = new Uint8Array(width * height * 4);
+  for (let y = 10; y < 30; y++) for (let x = 10; x < 30; x++) data[(y * width + x) * 4 + 3] = 255;
+  assert.throws(() => fitFrameHeight({ width, height, data }, 5), /너무 큽니다/);
 });
