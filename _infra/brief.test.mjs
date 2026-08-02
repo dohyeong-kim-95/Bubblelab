@@ -319,3 +319,73 @@ test("알림 토글이 독의 코너를 피해 배치돼 있다", async () => {
   assert.ok(bottom >= 9,
     `본문 아래 여백이 ${sides[sides.length - 1]} — 독(버튼 3개 ≈ 149px)을 못 비킨다`);
 });
+
+// ── 오늘의 운세 총평 (brief ↔ fortune 공유) ──────────────────────
+test("운세 문구 목록이 공용 모듈 한 곳에만 있다", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { dirname, join } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+  const shared = readFileSync(join(root, "_shared/fortune-lines.js"), "utf8");
+  const fortunePage = readFileSync(join(root, "util/fortune/index.html"), "utf8");
+
+  // 두 페이지가 같은 문구를 보여주므로 목록을 복사해 두면 언젠가 갈라진다
+  assert.match(shared, /서두르지 않아도 괜찮아요/);
+  assert.doesNotMatch(fortunePage, /서두르지 않아도 괜찮아요/,
+    "fortune 페이지에 문구 목록이 다시 박혔다 — 공용 모듈을 쓰라");
+
+  // 두 페이지 모두 defer 없이, 자기 인라인 스크립트보다 먼저 불러야 한다.
+  // defer면 첫 화면을 그릴 때 window.blFortuneLine이 아직 없다.
+  for (const [name, page] of [["fortune", fortunePage],
+                              ["brief", readFileSync(join(root, "util/brief/index.html"), "utf8")]]) {
+    const tag = /<script src="\/_shared\/fortune-lines\.js"><\/script>/.exec(page);
+    assert.ok(tag, `${name}이 공용 문구 모듈을 불러오지 않는다(또는 defer가 붙었다)`);
+    assert.ok(tag.index < page.indexOf('<script>\n  "use strict"') + 1 || tag.index < page.indexOf("const $ ="),
+      `${name}에서 공용 모듈이 인라인 스크립트보다 늦게 로드된다`);
+  }
+});
+
+test("공용 운세 문구는 씨앗으로 고르고 범위를 벗어나지 않는다", async () => {
+  const vm = await import("node:vm");
+  const { readFileSync } = await import("node:fs");
+  const { dirname, join } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const source = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), "../_shared/fortune-lines.js"), "utf8");
+  const win = {};
+  win.window = win;
+  vm.createContext(win);
+  vm.runInContext(source, win);
+
+  assert.equal(win.blFortuneLines.length, 24);
+  // 같은 씨앗이면 같은 문구 — 하루 동안 문구가 바뀌면 안 된다
+  assert.deepEqual(win.blFortuneLine(12345), win.blFortuneLine(12345));
+  for (const seed of [0, -1, 1, 999999, 20300.5, NaN]) {
+    const line = win.blFortuneLine(seed);
+    assert.ok(line.emoji && line.text, `씨앗 ${seed}에서 빈 문구가 나왔다`);
+  }
+  // 날짜 씨앗은 하루에 하나씩 증가한다
+  const a = win.blFortuneDaySeed(new Date("2026-08-02T10:00:00Z"));
+  const b = win.blFortuneDaySeed(new Date("2026-08-03T10:00:00Z"));
+  assert.equal(b - a, 1);
+});
+
+test("brief에 운세 총평과 항목 설정이 있다", async () => {
+  const page = await pageSource();
+  // 총평만 — 바이오리듬·분야별은 fortune에 둔다. "여기서 안 한다"는 주석에도
+  // 그 말이 나오므로, 실제로 그려지는 마크업(주석 제외)만 본다.
+  const markup = page.slice(0, page.indexOf("<script")).replace(/<!--[\s\S]*?-->/g, "");
+  assert.match(markup, /id="fo-text"/);
+  assert.doesNotMatch(markup, /바이오리듬/);
+  assert.doesNotMatch(markup, /f-categories|fortune-category/, "분야별 운세까지 옮겨왔다");
+
+  // 설정 두 개가 화면과 읽어주기에 함께 적용돼야 한다
+  assert.match(page, /id="set-weather"/);
+  assert.match(page, /id="set-fortune"/);
+  assert.match(page, /settings\.weather \? brief\?\.text : ""/);
+  assert.match(page, /settings\.fortune \? fortuneSpeech\(\) : ""/);
+
+  // 생년월일은 읽기만 하고 brief가 따로 저장하지 않는다
+  assert.match(page, /localStorage\.getItem\(BIRTH_KEY\)/);
+  assert.doesNotMatch(page, /setItem\(BIRTH_KEY/, "brief가 생년월일을 따로 저장한다");
+});

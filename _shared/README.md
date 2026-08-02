@@ -12,6 +12,7 @@
 | `records.js` | 주간 기록 배지, 닉네임 등록, 개인 최고 기록, 주간 리셋·공지 UI |
 | `share.js` | Web Share API 또는 클립보드 기반 공유 버튼과 공유 이미지 지원 |
 | `tts.js` | 브라우저 내장 음성으로 텍스트 읽어주기 — 🔊 독 버튼과 `blTTS` API |
+| `fortune-lines.js` | 생년월일 없이 쓰는 "오늘의 한 줄" 운세 문구 (fortune·brief 공용) |
 | `suggest.js` | 자동 생성 카테고리 홈의 토이 아이디어 우편함 |
 | `dock.js` | 우하단 유틸 독 — 위로 자라는 세로 알약, 많아지면 접힘 (빌드가 자동 주입) |
 | `home.js` | 카드 페이지의 🏠 홈 버튼 (빌드가 자동 주입) |
@@ -73,6 +74,24 @@ window.blShareText = () => `내 최고 기록은 ${best}점!`;
 내장인지 `blTTS.isLocal("ko-KR")`로 노출합니다. **민감한 자유 입력을 읽어주는
 토이**(예: `mindfulness/thought-bubble`의 생각 문구)는 이 값이 `false`면 읽기를
 거절하거나 최소한 사용자에게 알려야 합니다.
+
+## 오늘의 한 줄 운세 문구
+
+```html
+<!-- defer가 아니다: 페이지 자기 인라인 스크립트보다 먼저 -->
+<script src="/_shared/fortune-lines.js"></script>
+```
+
+```js
+blFortuneLine(blFortuneDaySeed())   // → { emoji, text }
+```
+
+`util/fortune`과 `util/brief`가 같은 문구를 보여주므로 목록을 여기 한 번만 둡니다.
+씨앗으로 고르기 때문에 하루 동안 같은 문구가 유지되고, 씨앗에 생년월일을 섞으면
+사람마다 다른 문구가 나옵니다(`fortune`이 그렇게 씁니다).
+
+**이 파일만 `defer`를 쓰지 않습니다.** 두 페이지 모두 인라인 스크립트에서 첫 화면을
+즉시 그리는데, `defer`면 그 시점에 `window.blFortuneLine`이 아직 없습니다.
 
 ## 우하단 유틸 독
 
