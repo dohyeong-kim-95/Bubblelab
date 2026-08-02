@@ -90,3 +90,4 @@ jobs:
             git pull --rebase origin main && git push origin HEAD:main && break
             sleep $((i * 2))
           done
+# (erase 후 재검사)
