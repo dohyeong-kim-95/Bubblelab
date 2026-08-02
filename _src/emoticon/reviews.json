@@ -2,6 +2,14 @@
   "version": 1,
   "items": [
     {
+      "id": "1b757767-dfdf-4d48-b68f-53d8c2a63cab",
+      "character": "rabbit",
+      "cut": "bounce2",
+      "verdict": "good",
+      "note": "Duri에 넣고 쓸만한 수준은 되는것 같아요. 하지만 여전히 발의 일관성은 개선해야합니다",
+      "at": "2026-08-02T02:03:30.204Z"
+    },
+    {
       "id": "d07e4be0-f32d-4258-9362-73faaea04863",
       "character": "rabbit",
       "cut": "bounce2",
