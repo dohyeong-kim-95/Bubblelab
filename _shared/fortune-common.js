@@ -1,10 +1,11 @@
-// 생년월일 없이 보여주는 "오늘의 한 줄" 운세 문구.
-// util/fortune과 util/brief가 같은 문구를 써야 해서 여기 한 곳에 둔다.
+// util/fortune과 util/brief가 함께 쓰는 운세 상수.
+// 두 페이지가 같은 문구·같은 시진 목록을 보여야 해서 여기 한 곳에 둔다.
 //
 // 이 파일은 defer가 아니라 **일반 스크립트로, 페이지 자기 스크립트보다 먼저**
 // 넣는다. 두 페이지 모두 인라인 스크립트에서 즉시 첫 화면을 그리기 때문이다.
-//   <script src="/_shared/fortune-lines.js"></script>
+//   <script src="/_shared/fortune-common.js"></script>
 //   blFortuneLine(seed) → { emoji, text }
+//   blFortuneBranches   → 12지시 목록
 (() => {
   const LINES = [
     ["🌤️", "서두르지 않아도 괜찮아요. 오늘은 천천히 가도 도착합니다."],
@@ -39,6 +40,35 @@
     const x = Math.sin(Number(seed) || 0) * 10000;
     return LINES[Math.floor((x - Math.floor(x)) * LINES.length)];
   }
+
+  // 12지시. 생년월일시를 fortune에서 넣든 brief에서 넣든 같은 목록·같은 순서라야
+  // 저장값(h = 이 배열의 인덱스)이 두 화면에서 같은 뜻을 갖는다.
+  window.blFortuneBranches = [
+    { k: "자", c: "子", range: "23~01시" },
+    { k: "축", c: "丑", range: "01~03시" },
+    { k: "인", c: "寅", range: "03~05시" },
+    { k: "묘", c: "卯", range: "05~07시" },
+    { k: "진", c: "辰", range: "07~09시" },
+    { k: "사", c: "巳", range: "09~11시" },
+    { k: "오", c: "午", range: "11~13시" },
+    { k: "미", c: "未", range: "13~15시" },
+    { k: "신", c: "申", range: "15~17시" },
+    { k: "유", c: "酉", range: "17~19시" },
+    { k: "술", c: "戌", range: "19~21시" },
+    { k: "해", c: "亥", range: "21~23시" },
+  ];
+
+  // 저장된 생년월일 → /_fortune/chart 요청 본문. 두 페이지가 같은 방식으로
+  // 물어봐야 같은 답이 나온다 (형식이 어긋나면 서버가 400으로 거절한다).
+  window.blFortuneChartBody = (birth) => ({
+    year: birth.y, month: birth.m, day: birth.d,
+    calendar: birth.calendar === "lunar" ? "lunar" : "solar",
+    lunarLeap: birth.lunarLeap === true,
+    gender: birth.gender,
+    timeMode: birth.timeMode === "clock" ? "clock" : "branch",
+    time: birth.time ?? null,
+    branch: birth.h ?? null,
+  });
 
   window.blFortuneLines = LINES;
   window.blFortuneLine = (seed) => {

@@ -326,7 +326,7 @@ test("운세 문구 목록이 공용 모듈 한 곳에만 있다", async () => {
   const { dirname, join } = await import("node:path");
   const { fileURLToPath } = await import("node:url");
   const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-  const shared = readFileSync(join(root, "_shared/fortune-lines.js"), "utf8");
+  const shared = readFileSync(join(root, "_shared/fortune-common.js"), "utf8");
   const fortunePage = readFileSync(join(root, "util/fortune/index.html"), "utf8");
 
   // 두 페이지가 같은 문구를 보여주므로 목록을 복사해 두면 언젠가 갈라진다
@@ -338,7 +338,7 @@ test("운세 문구 목록이 공용 모듈 한 곳에만 있다", async () => {
   // defer면 첫 화면을 그릴 때 window.blFortuneLine이 아직 없다.
   for (const [name, page] of [["fortune", fortunePage],
                               ["brief", readFileSync(join(root, "util/brief/index.html"), "utf8")]]) {
-    const tag = /<script src="\/_shared\/fortune-lines\.js"><\/script>/.exec(page);
+    const tag = /<script src="\/_shared\/fortune-common\.js"><\/script>/.exec(page);
     assert.ok(tag, `${name}이 공용 문구 모듈을 불러오지 않는다(또는 defer가 붙었다)`);
     assert.ok(tag.index < page.indexOf('<script>\n  "use strict"') + 1 || tag.index < page.indexOf("const $ ="),
       `${name}에서 공용 모듈이 인라인 스크립트보다 늦게 로드된다`);
@@ -351,7 +351,7 @@ test("공용 운세 문구는 씨앗으로 고르고 범위를 벗어나지 않�
   const { dirname, join } = await import("node:path");
   const { fileURLToPath } = await import("node:url");
   const source = readFileSync(
-    join(dirname(fileURLToPath(import.meta.url)), "../_shared/fortune-lines.js"), "utf8");
+    join(dirname(fileURLToPath(import.meta.url)), "../_shared/fortune-common.js"), "utf8");
   const win = {};
   win.window = win;
   vm.createContext(win);
@@ -385,7 +385,61 @@ test("brief에 운세 총평과 항목 설정이 있다", async () => {
   assert.match(page, /settings\.weather \? brief\?\.text : ""/);
   assert.match(page, /settings\.fortune \? fortuneSpeech\(\) : ""/);
 
-  // 생년월일은 읽기만 하고 brief가 따로 저장하지 않는다
+  // 생년월일은 fortune과 같은 키를 읽고 쓴다 — brief 전용 사본을 만들지 않는다
   assert.match(page, /localStorage\.getItem\(BIRTH_KEY\)/);
-  assert.doesNotMatch(page, /setItem\(BIRTH_KEY/, "brief가 생년월일을 따로 저장한다");
+  assert.doesNotMatch(page, /"bl-brief-birth"/, "brief 전용 생년월일 사본을 만들었다");
+});
+
+// 이 테스트가 없어서 brief가 /_fortune/chart에 잘못된 형식을 보내고도 배포됐다.
+// mock으로만 확인하면 400을 못 본다 — 진짜 핸들러에 통과시킨다.
+test("brief가 저장한 생년월일이 실제 /_fortune/chart를 통과한다", async () => {
+  const vm = await import("node:vm");
+  const { readFileSync } = await import("node:fs");
+  const { dirname, join } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const { handleFortuneChart } = await import("./fortune.js");
+  const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+  const win = {};
+  win.window = win;
+  vm.createContext(win);
+  vm.runInContext(readFileSync(join(root, "_shared/fortune-common.js"), "utf8"), win);
+
+  // brief의 생년월일 폼이 저장하는 모양 그대로 (util/brief/index.html birth-save)
+  const saved = [
+    { y: 1990, m: 5, d: 3, calendar: "solar", lunarLeap: false, gender: "male",
+      timeMode: "branch", h: 6, time: null },
+    { y: 1990, m: 5, d: 3, calendar: "solar", lunarLeap: false, gender: "unspecified",
+      timeMode: "branch", h: null, time: null },                    // 시 모름
+    { y: 1988, m: 3, d: 12, calendar: "lunar", lunarLeap: false, gender: "female",
+      timeMode: "clock", h: 6, time: "12:00" },                     // fortune이 넣은 시각
+  ];
+  for (const birth of saved) {
+    const body = win.blFortuneChartBody(birth);
+    const request = new Request("https://util.bubblelab.dev/_fortune/chart", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    // 음력 변환은 KASI 키가 필요하므로 양력만 200을 요구하고, 음력은 형식 오류가
+    // 아닌지(=시간 입력 방식 오류가 아닌지)만 본다.
+    const response = await handleFortuneChart(request, {});
+    const data = await response.json();
+    assert.doesNotMatch(String(data.error ?? ""), /시간 입력 방식/,
+      `${JSON.stringify(birth)} → 서버가 형식을 거절했다`);
+    if (birth.calendar === "solar") {
+      assert.equal(response.status, 200, `${JSON.stringify(birth)} → ${data.error}`);
+      assert.ok(data.dailyFortunes?.[0]?.text, "총평이 비어 있다");
+    }
+  }
+});
+
+test("brief의 생년월일 폼이 fortune과 같은 키·같은 형태를 쓴다", async () => {
+  const page = await pageSource();
+  assert.match(page, /const BIRTH_KEY = "bl-fortune-birth"/);
+  assert.match(page, /localStorage\.setItem\(BIRTH_KEY/, "brief에서 저장할 수 없다");
+  // 요청 본문은 공용 함수로 만든다 — 페이지마다 손으로 만들면 또 어긋난다
+  assert.match(page, /window\.blFortuneChartBody\(birth\)/);
+  assert.match(page, /window\.blFortuneBranches/, "시진 목록을 따로 들고 있다");
+  // fortune에서 시각으로 넣어 둔 값을 시진 입력이 지우지 않는다
+  assert.match(page, /keepClock/);
 });
