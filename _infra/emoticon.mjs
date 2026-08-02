@@ -1658,21 +1658,34 @@ const silhouetteBox = (image) => {
 };
 const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
 
-async function cmdFit(workdir, cutId, frameArg) {
+async function cmdFit(workdir, cutId, frameArg, options = {}) {
   const numbers = String(frameArg ?? "").split(/[\s,]+/).filter(Boolean).map(Number);
   if (!numbers.length) throw new Error('크기를 맞출 프레임 번호가 필요합니다 (예: 3)');
   const framesDir = join(workdir, "cuts", cutId, "frames");
   if (!existsSync(framesDir)) throw new Error(`프레임이 없습니다: ${framesDir}`);
   const files = readdirSync(framesDir).filter((f) => /^\d{2}\.png$/.test(f)).sort();
 
-  // 목표는 **나머지 프레임의 중앙값** — 내가 숫자를 고르지 않는다.
-  const others = files
+  // --ratio가 없으면 목표는 **나머지 프레임의 중앙값** — 내가 숫자를 고르지 않는다.
+  // --ratio가 있으면 **전체 중앙값(중립 크기) × 배율**이다. 모델이 무시한
+  // 스쿼시·스트레치를 코드가 넣는 용도 — 시작 크기와 무관하게 결과가 고정되므로
+  // 이미 부분적으로 늘어난 프레임에 이중 적용될 걱정이 없다.
+  let ratio = null;
+  if (options.ratio) {
+    const [rw, rh] = String(options.ratio).split(",").map(Number);
+    if (!Number.isFinite(rw) || !Number.isFinite(rh) || rw <= 0 || rh <= 0) {
+      throw new Error(`--ratio 형식은 가로,세로 입니다 (예: 1.10,0.90): ${options.ratio}`);
+    }
+    ratio = [rw, rh];
+  }
+  const basis = files
     .map((f, i) => ({ f, n: i + 1 }))
-    .filter(({ n }) => !numbers.includes(n))
+    .filter(({ n }) => ratio || !numbers.includes(n))
     .map(({ f }) => silhouetteBox(decodePng(readFileSync(join(framesDir, f)))))
     .filter(Boolean);
-  if (!others.length) throw new Error("기준으로 삼을 다른 프레임이 없습니다");
-  const targetW = median(others.map((b) => b[0])), targetH = median(others.map((b) => b[1]));
+  if (!basis.length) throw new Error("기준으로 삼을 프레임이 없습니다");
+  const baseW = median(basis.map((b) => b[0])), baseH = median(basis.map((b) => b[1]));
+  const targetW = Math.round(baseW * (ratio?.[0] ?? 1));
+  const targetH = Math.round(baseH * (ratio?.[1] ?? 1));
 
   for (const n of numbers) {
     const path = join(framesDir, `${pad2(n)}.png`);
@@ -1804,6 +1817,7 @@ const USAGE =
   '  unshadow <작업폴더> <컷id> "<프레임번호…>"  ← 외곽선 바깥 드롭섀도 제거 (무료)\n' +
   '  fit    <작업폴더> <컷id> "<프레임번호…>"  ← 혼자 커진 프레임을 나머지 중앙값 크기로 (무료)\n' +
   '         가로·세로를 따로 맞춘다. 의도한 스쿼시·스트레치 프레임에는 쓰지 말 것\n' +
+  '         --ratio 1.10,0.90 ← 중립 크기 대비 배율로 스쿼시·스트레치를 코드가 넣는다\n' +
   '  parts  <작업폴더> <컷id> [--expect \'{"ears":2}\']   ← 비전 부품 검사, report.json에 기록\n' +
   '  check  <작업폴더> <컷id> [--profile draft|master-2s|line] [--json]  ← FAIL이면 exit 1\n' +
   '작업폴더 권장 위치: _src/emoticon/<캐릭터명> (배포·커밋 제외)\n' +
@@ -1827,7 +1841,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     else if (command === "mirror") await cmdMirror(workdir, rest[0], rest[1]);
     else if (command === "erase") await cmdErase(workdir, rest[0], rest[1], options);
     else if (command === "unshadow") await cmdUnshadow(workdir, rest[0], rest[1]);
-    else if (command === "fit") await cmdFit(workdir, rest[0], rest[1]);
+    else if (command === "fit") await cmdFit(workdir, rest[0], rest[1], options);
     else if (command === "check") {
       const judgement = cmdCheck(workdir, rest[0], options);
       if (judgement.verdict === "fail") process.exit(1);
