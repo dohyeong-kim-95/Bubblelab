@@ -91,3 +91,4 @@ jobs:
             sleep $((i * 2))
           done
 # (erase 후 재검사)
+# (bounce4 부품 검사)
