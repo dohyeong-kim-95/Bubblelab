@@ -634,3 +634,18 @@ test("화면이 지수를 그리고 소스를 밝힌다", async () => {
   assert.match(page, /rates\.indices/);
   assert.match(page, /Stooq/);
 });
+
+test("운세 총평 아래 유도 버튼이 두 상태로 갈린다", async () => {
+  const page = await pageSource();
+  // 안 넣은 사람 → 입력 유도, 넣은 사람 → fortune으로
+  assert.match(page, /id="fo-setup"[^>]*hidden>맞춤 정보 입력/);
+  assert.match(page, /id="fo-more" href="\/fortune"[^>]*hidden>자세히 보기/);
+  assert.match(page, /\$\("fo-setup"\)\.hidden = hasBirth/);
+  assert.match(page, /\$\("fo-more"\)\.hidden = !hasBirth/);
+  // 눌렀을 때 설정을 열고 폼까지 데려간다
+  assert.match(page, /scrollIntoView/);
+  // 브리핑 흐름을 깨지 않도록 카드 본문보다 작게 (본문 .84rem)
+  const rule = /\.fo-action \{[\s\S]*?\}/.exec(page)?.[0] ?? "";
+  const size = /font-size:\s*\.(\d+)rem/.exec(rule);
+  assert.ok(size && +`0.${size[1]}` <= 0.76, `유도 버튼 글자가 ${size?.[0]} — 너무 크다`);
+});
