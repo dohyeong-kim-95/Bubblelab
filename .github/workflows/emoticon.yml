@@ -205,34 +205,37 @@ jobs:
           fi
           rm -f "$JOB"
 
-      # 실패한 산출물은 main에 커밋하지 않는다. 예전에는 if: always()로 부분
-      # 산출물까지 밀어 넣어서 ① 저장소가 불량 프레임으로 계속 불어나고
-      # ② 합격 산출물과 구분되지 않았다. 디버깅 근거는 이번 실행이 만든 변경분만
-      # 골라 Actions artifact로 남긴다 (보존 14일 — 저장소에는 안 남는다).
-      - name: Collect partial outputs
-        if: failure()
+      # 이번 실행이 만든 파일을 통째로 artifact로 남긴다 (보존 14일).
+      # ① 실패했을 때의 디버깅 근거이자, ② 저장소에 두지 않는 누끼 전 원본
+      # (cuts/*/frames-raw — .gitignore 대상)을 다시 꺼내 쓸 수 있는 유일한 경로다.
+      # --exclude-standard 를 붙이지 않는 이유가 그것 — 무시된 raw까지 담아야 한다.
+      - name: Collect run outputs
+        if: always()
         run: |
           set -uo pipefail
-          # 추적 안 되는 새 파일 + 수정된 파일 = 이번 실행이 만든 것
-          git ls-files --others --modified --exclude-standard -- _src/emoticon > /tmp/partial.txt
-          if [[ ! -s /tmp/partial.txt ]]; then echo "부분 산출물 없음"; exit 0; fi
+          # 추적 안 되는 새 파일(무시 대상 포함) + 수정된 파일 = 이번 실행이 만든 것
+          git ls-files --others --modified -- _src/emoticon > /tmp/outputs.txt
+          if [[ ! -s /tmp/outputs.txt ]]; then echo "산출물 없음"; exit 0; fi
           while IFS= read -r f; do
             [[ -f "$f" ]] || continue                       # 삭제된 경로는 건너뛴다
-            mkdir -p "/tmp/emoticon-partial/$(dirname "$f")"
-            cp "$f" "/tmp/emoticon-partial/$f"
-          done < /tmp/partial.txt
-          echo "부분 산출물 $(wc -l < /tmp/partial.txt)개 · $(du -sh /tmp/emoticon-partial | cut -f1)"
+            mkdir -p "/tmp/emoticon-run/$(dirname "$f")"
+            cp "$f" "/tmp/emoticon-run/$f"
+          done < /tmp/outputs.txt
+          echo "산출물 $(wc -l < /tmp/outputs.txt)개 · $(du -sh /tmp/emoticon-run | cut -f1)"
 
-      - name: Upload partial outputs
-        if: failure()
+      - name: Upload run outputs
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: emoticon-partial-${{ github.run_id }}
-          path: /tmp/emoticon-partial
+          name: emoticon-run-${{ github.run_id }}
+          path: /tmp/emoticon-run
           retention-days: 14
           if-no-files-found: ignore
 
-      # 여기까지 왔다는 것은 check가 exit 0으로 끝났다는 뜻 — 합격 산출물만 커밋된다.
+      # 실패한 산출물은 main에 커밋하지 않는다. 예전에는 if: always()로 부분
+      # 산출물까지 밀어 넣어서 ① 저장소가 불량 프레임으로 계속 불어나고
+      # ② 합격 산출물과 구분되지 않았다. 여기까지 왔다는 것은 check가 exit 0으로
+      # 끝났다는 뜻 — 합격 산출물만, 그중에서도 추적 대상만 커밋된다.
       - name: Commit outputs
         run: |
           set -euo pipefail

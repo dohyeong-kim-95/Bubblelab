@@ -4,7 +4,9 @@ import { readFileSync } from "node:fs";
 import { encodePng } from "./png.mjs";
 import { faceDropRatio, fitHead, loadPng, nodRig } from "./emoticon-rig.mjs";
 
-const REF = "_src/emoticon/rabbit/cuts/nod/frames-raw/key-1.png";
+// 캐릭터 레퍼런스(정면 컷). 생성 중간 산출물(cuts/*/frames-raw)은 저장소에
+// 두지 않으므로, 계속 참조하는 이 이미지만 <캐릭터>/refs/ 에 추적한다.
+const REF = "_src/emoticon/rabbit/refs/key-1.png";
 
 // 흰 배경 + 검은 원(머리) + 그 안 검은 점 두 개(눈) 합성 이미지
 function synth({ size = 400, cx = 200, cy = 200, r = 100 } = {}) {

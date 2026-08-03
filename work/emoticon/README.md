@@ -95,14 +95,17 @@ node _infra/emoticon.mjs guide 인사      # 또는 wave / 끄덕임 / nod / 통
 ("User location is not supported"). 그래서 생성은 **Actions 러너**에서 돈다.
 
 `_src/emoticon/job.json`을 커밋·푸시하면 `Emoticon` 워크플로가 돌고,
-산출물이 `_src/emoticon/<캐릭터>/`에 자동 커밋된다(배포 제외).
+합격 산출물이 `_src/emoticon/<캐릭터>/`에 자동 커밋된다(배포 제외).
+**실패한 실행은 아무것도 커밋하지 않는다** — check가 FAIL이면 커밋 단계까지
+가지 않고, 그 실행이 만든 파일은 Actions artifact(`emoticon-run-<run_id>`,
+보존 14일)로만 남는다.
 
 ```json
 {
   "character": "rabbit", "step": "cut", "cut_id": "wave3",
   "prompt": "동작 설명", "assembly": "pingpong", "breakdowns": 0,
   "fps": "12", "profile": "master-2s",
-  "ref": "_src/emoticon/rabbit/cuts/nod/frames-raw/key-1.png",
+  "ref": "_src/emoticon/rabbit/refs/key-1.png",
   "max_calls": "10", "max_cost": "0.40",
   "invariants": "부품 인벤토리",
   "poseConstants": "매 프레임 참인 포즈 사실",
@@ -172,6 +175,17 @@ node _infra/emoticon.mjs redo   <작업폴더> <컷> "3" [--force-redo]
 ## 주의 — 공개 리포와 산출물
 
 리포는 public이다. 실험 산출물(`_src/emoticon/`)은 리뷰·반복을 위해 커밋한다.
+
+**누끼 전 원본(`cuts/*/frames-raw/`)은 저장소에 두지 않는다**(`.gitignore`).
+프레임 하나가 1MB 가까이 되는 데다 매 실행마다 쌓여서, 한때 저장소 추적 용량의
+절반(56MB)을 이것만으로 차지했다. 지금 저장소에 남는 것은 최종 APNG·GIF(`out/`),
+누끼 후 프레임(`cuts/*/frames/`), 메타·판정 근거(`cut.json`·`report.json`)다.
+
+- 계속 참조하는 이미지(캐릭터 레퍼런스 등)는 `<캐릭터>/refs/` 에 둔다 — 여기는
+  추적 대상이다. 컷 대부분이 쓰는 정면 컷이 `rabbit/refs/key-1.png`.
+- 어떤 실행의 raw가 필요하면 그 run의 artifact를 내려받아 워크스페이스에 풀면
+  된다(14일). 그 뒤에는 재생성해야 한다 — Actions 재실행 시 raw 재사용
+  (`--resume`의 프레임 건너뛰기)은 같은 실행 안에서만 동작한다.
 
 **단 마켓 제출용 최종 세트는 처음부터 여기에 두지 않는다.** "제출 직전에
 지운다"는 **보호가 되지 않는다 — 삭제 전 커밋의 Git 기록에 파일이 남는다.**

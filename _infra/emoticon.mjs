@@ -10,7 +10,8 @@
 // sheet:  캐릭터 시트 1장을 생성해 <작업폴더>/sheet.png 저장. 이후 모든 생성의
 //         레퍼런스가 된다 (일관성의 축 — goal.md 판정 기준 1).
 // cut:    시트를 레퍼런스로 초록(#00FF00) 배경 프레임을 순차 생성하고 크로마키로
-//         투명화해 cuts/<컷id>/frames/NN.png 저장 (원본은 frames-raw/에 보존).
+//         투명화해 cuts/<컷id>/frames/NN.png 저장 (원본은 frames-raw/에 보존 —
+//         작업 폴더 안에만 남고 저장소에는 커밋하지 않는다, .gitignore 참고).
 // import: 외부에서 만든 프레임(예: I2V 영상을 ffmpeg로 추출)을 같은 구조로 가져온다.
 //         ffmpeg -i clip.mp4 -vf fps=12 f/%02d.png  →  import <작업폴더> <컷id> f --chroma
 // build:  프레임 전체의 공통 경계로 잘라(프레임별 트리밍 금지 — 떨림 방지) 정사각
