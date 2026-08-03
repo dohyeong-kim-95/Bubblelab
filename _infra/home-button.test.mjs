@@ -136,3 +136,21 @@ test("소리 토글을 쓰는 토이가 빠짐없이 독을 쓴다", () => {
   }
   assert.deepEqual(missed, [], `독을 쓰지 않고 직접 배치한 토이: ${missed.join(", ")}`);
 });
+
+// 비공개 카드는 목록에서 빠지되 주소로는 열려야 한다. 한쪽만 걸면 어중간해진다.
+test("비공개 카드는 카테고리 홈에 없지만 페이지는 살아 있다", () => {
+  for (const [site, names] of [["util", ["passport-pic"]], ["games", ["avalon", "liargame", "yacht"]]]) {
+    const home = readFileSync(join(DIST, site, "index.html"), "utf8");
+    for (const name of names) {
+      assert.ok(!home.includes(`href="/${name}/"`), `${site} 홈에 ${name} 카드가 다시 나왔다`);
+      assert.ok(existsSync(join(DIST, site, name, "index.html")),
+        `${site}/${name} 페이지가 사라졌다 — 목록에서만 빼야 한다`);
+    }
+  }
+});
+
+test("비공개 카드는 검색에도 걸리지 않는다", () => {
+  // 목록에서만 빼면 검색으로 발견된다 — noindex를 함께 건다.
+  const page = readFileSync(join(DIST, "util/passport-pic/index.html"), "utf8");
+  assert.match(page, /<meta name="robots" content="noindex, nofollow">/);
+});

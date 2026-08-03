@@ -23,10 +23,14 @@ const SKIP = new Set(["dist", "node_modules"]);
 // 노출되고, confidential은 주소를 직접 쳐야만 들어갈 수 있다(어디에도 링크 없음).
 // 새 폴더는 기본 퍼블릭이며, 빌드가 www 랜딩 카드 존재 여부를 검사한다.
 const CONFIDENTIAL_SUBDOMAINS = new Set(["admin", "work", "podcast", "estate", "duri", "test"]);
-// 백엔드가 보안상 닫혀 있는 동안 카테고리 홈에서 발견되지 않게 한다.
-// 소스와 직접 URL은 유지되며, 인증/ACL 검토 후 이 목록에서 제거한다.
+// 카테고리 홈 카드 목록에서 감춘다. 소스와 직접 URL은 그대로 살아 있고,
+// 공개할 준비가 되면 이 목록에서 빼면 된다. (서브도메인 단위 비공개는
+// CONFIDENTIAL_SUBDOMAINS 쪽이다 — 여기는 카테고리 안의 개별 카드용.)
 const UNLISTED_ENTRIES = new Map([
+  // 백엔드가 보안상 닫혀 있는 동안 발견되지 않게 한다(인증/ACL 검토 후 해제).
   ["games", new Set(["avalon", "liargame", "yacht"])],
+  // 여권사진은 비공개 요청으로 목록에서 내렸다.
+  ["util", new Set(["passport-pic"])],
 ]);
 
 const isSite = (d) =>
