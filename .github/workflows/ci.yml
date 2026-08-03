@@ -42,3 +42,12 @@ jobs:
 
       - name: Test and build Avalon
         run: npm run test:ci --prefix _src/avalon
+
+      - name: Verify games/avalon matches the source build
+        run: node _infra/check-avalon-sync.mjs
+
+      - name: Install Chromium for smoke tests
+        run: npx playwright install --with-deps chromium
+
+      - name: Mobile smoke test
+        run: npx playwright test

@@ -183,6 +183,23 @@ export const RATE_SYMBOLS = [
 
 const won = (unit, rate) => (Number.isFinite(rate) && rate > 0 ? unit / rate : null);
 
+// ECB는 TARGET 영업일(월~금)에만 고시한다. 달력 일수로 재면 금요일 고시가 월요일
+// 아침에 "3일 전 값"이 되어 **매주 월요일마다** 정상값이 stale로 뜬다. 주말을
+// 빼고 영업일로 센다 (공휴일 달력은 없으므로 아래 임계값에서 하루치 여유를 둔다).
+// from 다음 날부터 to까지의 월~금 일수 — 같은 날이거나 역순이면 0.
+export function businessDaysBetween(from, to) {
+  const start = Date.parse(from);
+  const end = Date.parse(to);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
+  if (end - start > 400 * 86400000) return Number.MAX_SAFE_INTEGER;  // 망가진 입력에 루프 금지
+  let days = 0;
+  for (let t = start + 86400000; t <= end; t += 86400000) {
+    const weekday = new Date(t).getUTCDay();
+    if (weekday !== 0 && weekday !== 6) days++;
+  }
+  return days;
+}
+
 // Frankfurter 기간 응답 → 최신 고시일과 그 직전 고시일
 export function buildRates({ series, now = new Date() }) {
   const byDate = series?.rates && typeof series.rates === "object" ? series.rates : {};
@@ -205,8 +222,8 @@ export function buildRates({ series, now = new Date() }) {
     });
   }
 
-  // 기준일이 오늘(KST)보다 이틀 넘게 예전이면 연휴 등으로 밀린 것이다 — 숨기지 않고 알린다.
-  const ageDays = Math.round((Date.parse(kstStamp(now)) - Date.parse(latest)) / 86400000);
+  // 기준일이 영업일로 이틀 넘게 예전이면 연휴 등으로 밀린 것이다 — 숨기지 않고 알린다.
+  const ageDays = businessDaysBetween(latest, kstStamp(now));
   const dollar = items.find((i) => i.code === "USD");
   const lines = [];
   if (dollar) {
@@ -302,7 +319,12 @@ export async function fetchIndices(now = new Date()) {
     try {
       const csv = await getText(
         `${INDEX_URL}?s=${encodeURIComponent(symbol.id)}&i=d&d1=${start}&d2=${end}`);
-      return buildIndex(symbol, parseStooqDaily(csv));
+      // 상류가 CSV 대신 안내·차단 HTML을 200으로 돌려주는 일이 있다. 그냥 파싱하면
+      // 빈 배열이 되어 "지수가 원래 없는 것"과 구분되지 않으므로 여기서 걸러 로그를 남긴다.
+      if (/^\s*</.test(csv)) throw new Error("non-CSV response (HTML?)");
+      const index = buildIndex(symbol, parseStooqDaily(csv));
+      if (!index) throw new Error("no usable rows");
+      return index;
     } catch (error) {
       console.error("brief index failed", symbol.id, error);
       return null;
@@ -342,10 +364,15 @@ export async function handleBriefRates(request, env) {
     );
   }
   const payload = { ...(rates ?? { date: null, items: [], text: "", stale: false }), indices };
+  // 상류가 죽었을 때 지수 줄만 조용히 빠지면 아무도 고장을 모른다 — 화면이 알리도록 넘긴다.
+  payload.indicesFailed = indices.length < INDEX_SYMBOLS.length;
+  payload.ratesFailed = !rates;
   payload.text = [rates?.text, indexSpeech(indices)].filter(Boolean).join(" ");
-  // ECB는 하루 한 번 고시라 자주 물을 이유가 없다.
+  // ECB는 하루 한 번 고시라 자주 물을 이유가 없다. 다만 한쪽이 실패한 응답을
+  // 30분씩 물고 있으면 복구도 30분 늦어지므로 그때는 짧게 잡는다.
+  const maxAge = payload.indicesFailed || payload.ratesFailed ? 300 : 1800;
   const response = Response.json(payload, {
-    headers: { "Cache-Control": "public, max-age=1800" },
+    headers: { "Cache-Control": `public, max-age=${maxAge}` },
   });
   await cache?.put(cacheRequest, response.clone());
   return response;

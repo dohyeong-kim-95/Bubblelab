@@ -28,7 +28,7 @@ function openDB() {
     req.onerror = () => resolve(null);
   });
 }
-// 패스프레이즈·이름은 index.html이 로그인 때 IndexedDB "meta" 스토어에도 저장해 둔다
+// 키 객체·이름은 index.html이 로그인 때 IndexedDB "meta" 스토어에 담아 둔다
 // (localStorage는 이 기기의 페이지에서만 보이고 서비스워커에선 못 읽는다).
 function readMeta(db, id) {
   return new Promise((resolve) => {
@@ -40,7 +40,15 @@ function readMeta(db, id) {
     } catch { resolve(null); }
   });
 }
-const readPassphrase = (db) => readMeta(db, "pass");
+// 페이지가 로그인 때 담아 둔 **키 객체**(추출 불가 CryptoKey)를 그대로 쓴다.
+// 옛 기기는 아직 평문 문구("pass")만 갖고 있을 수 있어서, 그 경우에만 유도한다
+// (페이지를 한 번 열면 index.html이 키로 바꿔 담고 문구를 지운다).
+async function readKey(db) {
+  const key = await readMeta(db, "key");
+  if (key) return key;
+  const pass = await readMeta(db, "pass");
+  return pass ? deriveKey(pass) : null;
+}
 async function deriveKey(passphrase) {
   const base = await crypto.subtle.importKey("raw", enc.encode(passphrase), "PBKDF2", false, ["deriveKey"]);
   return crypto.subtle.deriveKey(
@@ -59,9 +67,8 @@ async function buildNotification(data) {
   if (!data || data.kind === "generic") return GENERIC;
   try {
     const db = await openDB();
-    const pass = await readPassphrase(db);
-    if (!pass) return GENERIC; // 이 기기에 문구가 없으면(로그인 전) 내용 없이만 알린다
-    const key = await deriveKey(pass);
+    const key = await readKey(db);
+    if (!key) return GENERIC; // 이 기기에 키가 없으면(로그인 전) 내용 없이만 알린다
     const myName = await readMeta(db, "name"); // 내가 보낸 메시지는 내 기기에 알리지 않는다
     if (data.kind === "msg") {
       const p = await decryptJson(key, data.iv, data.ct);

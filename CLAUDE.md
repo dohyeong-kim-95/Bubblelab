@@ -36,13 +36,23 @@
 ## 검증 방법
 
 ```bash
+npm test                     # 인프라 단위 테스트
 node _infra/build.mjs        # 빌드 (dist/ 생성, 에러 없어야 함)
+npm run test:e2e             # 핵심 화면 모바일 스모크 (빌드 후 Playwright)
 npx wrangler@4 dev --local --local-upstream localhost   # 로컬 서빙
 # http://localhost:8787/slop/이름  (첫 경로 세그먼트 = 서브도메인)
 ```
 
 `--local-upstream localhost` 필수. 배포 결과는 GitHub Actions run의
 conclusion으로 확인한다.
+
+스모크 테스트는 화면이 깨지는 세 가지(스크립트 예외·가로 넘침·빈 화면)만 본다 —
+대상 화면은 `_infra/e2e/smoke.spec.mjs`의 `SCREENS`. 컨테이너에 크로미움이 이미
+있으면 `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium`을 앞에 붙인다.
+
+아발론을 고쳤으면 `_src/avalon/rebuild.sh` 실행 후 산출물까지 커밋해야 한다 —
+Deploy·CI가 `_infra/check-avalon-sync.mjs`로 `games/avalon`이 소스 빌드와
+같은지 확인하고, 다르면 배포가 멈춘다.
 
 ## 멀티플레이어가 필요하면
 

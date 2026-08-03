@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  airGrade, BRIEF_REGIONS, BriefDO, buildBrief, buildIndex, buildRates, findRegion,
+  airGrade, BRIEF_REGIONS, BriefDO, buildBrief, buildIndex, buildRates, businessDaysBetween, findRegion,
   handleBriefRates, handleBriefToday, indexSpeech, INDEX_SYMBOLS, parseStooqDaily,
   RATE_SYMBOLS, skyOf,
 } from "./brief.js";
@@ -498,6 +498,34 @@ test("고시가 며칠째 밀리면 stale로 알린다 (조용히 옛 값 금지
   assert.equal(old.stale, true);
 });
 
+// ECB는 금요일 16시(CET) 다음 고시가 월요일 16시다. 달력 일수로 재던 시절에는
+// 이 정상 상태가 매주 월요일 아침마다 "고시가 늦어지고 있어요"로 표시됐다.
+test("금요일 고시는 주말과 월요일 아침에 stale이 아니다", () => {
+  const friday = ratesFixture({
+    "2026-07-30": { USD: 1 / 1385 },        // 목
+    "2026-07-31": { USD: 1 / 1390 },        // 금 — 마지막 고시
+  });
+  //           토           일           월(=다음 고시 전 아침)
+  for (const day of ["2026-08-01", "2026-08-02", "2026-08-03"]) {
+    const out = buildRates({ series: friday, now: new Date(`${day}T00:00:00Z`) });
+    assert.equal(out.date, "2026-07-31");
+    assert.equal(out.stale, false, `${day}에 금요일 고시가 stale로 잘못 표시된다`);
+  }
+  // 수요일까지 금요일 값이면 영업일로 3일 — 이때는 실제로 밀린 것이다.
+  const wednesday = buildRates({ series: friday, now: new Date("2026-08-05T00:00:00Z") });
+  assert.equal(wednesday.stale, true);
+});
+
+test("영업일 계산은 주말을 빼고 센다", () => {
+  assert.equal(businessDaysBetween("2026-07-31", "2026-07-31"), 0);   // 같은 날
+  assert.equal(businessDaysBetween("2026-07-31", "2026-08-01"), 0);   // 금 → 토
+  assert.equal(businessDaysBetween("2026-07-31", "2026-08-02"), 0);   // 금 → 일
+  assert.equal(businessDaysBetween("2026-07-31", "2026-08-03"), 1);   // 금 → 월
+  assert.equal(businessDaysBetween("2026-07-31", "2026-08-07"), 5);   // 금 → 다음 금
+  assert.equal(businessDaysBetween("2026-08-03", "2026-07-31"), 0);   // 역순
+  assert.equal(businessDaysBetween("없는날", "2026-08-03"), 0);        // 깨진 입력
+});
+
 test("깨진 상류 응답에도 화면에 쓰레기가 새지 않는다", () => {
   for (const series of [null, {}, { rates: null }, { rates: {} },
                         ratesFixture({ "2026-08-01": { USD: 0 } }),
@@ -519,16 +547,40 @@ test("/_brief/rates는 상류 실패를 502로 알린다", async () => {
   } finally { globalThis.fetch = originalFetch; }
 });
 
+// 상류가 CSV 대신 차단 HTML을 200으로 주면 지수가 통째로 빈다. 예전에는 그
+// 실패가 응답에도 화면에도 남지 않아 아무도 눈치채지 못했다.
+test("지수 상류가 HTML을 200으로 돌려주면 실패를 응답에 표시한다", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => (String(url).includes("stooq.com")
+    ? new Response("<!DOCTYPE html><html><body>verify you are human</body></html>")
+    : Response.json(ratesFixture({ "2026-08-01": { USD: 1 / 1390 } })));
+  try {
+    const response = await handleBriefRates(new Request("https://util.bubblelab.dev/_brief/rates"), {});
+    const body = await response.json();
+    assert.equal(response.status, 200);          // 환율은 살아 있으니 화면은 그린다
+    assert.deepEqual(body.indices, []);
+    assert.equal(body.indicesFailed, true);      // 다만 지수가 없다는 사실을 숨기지 않는다
+    assert.doesNotMatch(body.text, /지수/);       // 읽어주기에도 없는 값을 지어내지 않는다
+    // 실패한 응답을 30분씩 물고 있으면 복구도 30분 늦어진다
+    assert.match(response.headers.get("Cache-Control"), /max-age=300/);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
 test("/_brief/rates는 KRW 기준으로 최근 구간을 묻는다", async () => {
   const seen = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url) => {
     seen.push(String(url));
-    return Response.json(ratesFixture({ "2026-08-01": { USD: 1 / 1390 } }));
+    return String(url).includes("stooq.com")
+      ? new Response(STOOQ_CSV)
+      : Response.json(ratesFixture({ "2026-08-01": { USD: 1 / 1390 } }));
   };
   try {
     const response = await handleBriefRates(new Request("https://util.bubblelab.dev/_brief/rates"), {});
     assert.equal(response.status, 200);
+    const body = await response.clone().json();
+    assert.equal(body.indicesFailed, false);
+    assert.equal(body.ratesFailed, false);
     assert.match(response.headers.get("Cache-Control"), /max-age=1800/);
   } finally { globalThis.fetch = originalFetch; }
   assert.match(seen[0], /api\.frankfurter\.dev\/v1\/\d{4}-\d{2}-\d{2}\.\.\d{4}-\d{2}-\d{2}/);

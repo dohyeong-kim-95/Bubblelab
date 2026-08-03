@@ -653,6 +653,12 @@ const fmtTime = (t) => new Date(t).toLocaleTimeString("ko-KR", { hour: "2-digit"
 const dayLabel = (t) => new Date(t).toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "short" });
 
 // ── E2E 암호화 (PBKDF2 → AES-GCM 256) ────────────────────────
+// 저장하는 것은 **패스프레이즈가 아니라 유도된 키 객체**다. deriveKey의
+// extractable=false 로 만든 CryptoKey는 IndexedDB에 구조화 복제로 담을 수 있고,
+// 담긴 뒤에도 원문 바이트를 다시 꺼낼 수 없다 — 브라우저가 encrypt/decrypt에만
+// 쓰게 해 준다. 예전에는 문구를 localStorage에 평문으로 두어서, 기기를 잠깐
+// 빌려주거나 XSS 한 번이면 문구 자체가 그대로 노출됐다(CSP가 script-src에
+// 'unsafe-inline'을 허용하므로 XSS를 막아 주는 층도 없다).
 const SALT = enc.encode("duri:v1:pbkdf2:shared-passphrase");
 const ITER = 210_000;
 let KEY = null, MY_NAME = "";
@@ -894,17 +900,17 @@ function connect() {
 // ── 로컬 캐시 (IndexedDB) — 이 기기 표시용. 아카이브는 PC 싱크가 정본. ──
 // 복호화한 항목을 이 기기에 담아 새로고침·재방문에도 대화가 남게 한다. 사진은
 // 복호화한 원본 blob째 담아 서버 R2가 정리된 뒤에도 이 기기에선 계속 보인다.
-// (패스프레이즈가 이미 이 기기에 저장돼 자동입장하므로 보안 수준은 동일하다.)
+// (복호화 키가 이미 이 기기에 담겨 자동입장하므로 보안 수준은 동일하다.)
 let db = null;
 const MAX_CACHE = 2000; // 이 기기에 보관할 최근 항목 수(IndexedDB)
 const MAX_DOM = 300;    // 화면에 유지할 말풍선 수(성능 — 넘으면 위에서부터 제거)
 function openDB() {
   return new Promise((resolve) => {
     let req;
-    // v2: "meta" 스토어 추가 — 패스프레이즈를 넣어 서비스워커(sw.js)가 푸시 도착 시
-    // 같은 IndexedDB에서 읽어 그 자리에서 복호화할 수 있게 한다(localStorage는
-    // 서비스워커에서 못 읽는다). 저장 위치만 늘 뿐 신뢰 수준은 그대로다(패스프레이즈는
-    // 이미 localStorage에도 있다).
+    // v2: "meta" 스토어 추가 — 유도된 키 객체(추출 불가 CryptoKey)를 넣어
+    // 서비스워커(sw.js)가 푸시 도착 시 같은 IndexedDB에서 읽어 그 자리에서
+    // 복호화할 수 있게 한다(localStorage는 서비스워커에서 못 읽는다).
+    // 키 객체는 담긴 뒤에도 원문 바이트를 다시 꺼낼 수 없다 — 문구는 어디에도 안 남는다.
     try { req = indexedDB.open("duri", 2); } catch { return resolve(null); }
     req.onupgradeneeded = () => {
       const d = req.result;
@@ -919,6 +925,21 @@ function putMeta(id, value) {
   if (!db) return;
   try { db.transaction("meta", "readwrite").objectStore("meta").put({ id, value }); } catch { /* 최선노력 */ }
 }
+function getMeta(id) {
+  return new Promise((resolve) => {
+    if (!db || !db.objectStoreNames.contains("meta")) return resolve(null);
+    try {
+      const req = db.transaction("meta").objectStore("meta").get(id);
+      req.onsuccess = () => resolve(req.result?.value ?? null);
+      req.onerror = () => resolve(null);
+    } catch { resolve(null); }
+  });
+}
+function delMeta(id) {
+  if (!db) return;
+  try { db.transaction("meta", "readwrite").objectStore("meta").delete(id); } catch { /* 최선노력 */ }
+}
+const ensureDB = async () => (db ??= await openDB());
 function putEntry(rec) {
   if (!db) return;
   try {
@@ -1543,14 +1564,20 @@ $("enter").addEventListener("click", async () => {
   const pass = $("pass").value;
   const name = $("name").value.trim();
   if (!pass || !name) { $("setupWarn").textContent = "문구와 이름을 모두 입력하세요."; return; }
-  KEY = await deriveKey(pass);
+  $("pass").value = "";                      // 입력칸에 문구를 남겨 두지 않는다
+  await enterWith(await deriveKey(pass), name);
+});
+
+// 입장 절차. 문구를 새로 입력했을 때와 이 기기에 저장된 키로 자동 입장할 때가
+// 같은 경로를 타도록 키·이름만 받는다 — 문구 문자열은 여기까지 오지 않는다.
+async function enterWith(key, name) {
+  KEY = key;
   MY_NAME = name;
   applyStatusColors(); // 접속 표시 동그라미의 "내 색"이 이름 해시라 로그인 후 다시 계산
   // 이미 로컬에 복원된 일정 중 상대가 만든 게 있으면 그 이름을 바로 기억해 둔다
   // (메시지가 새로 오길 기다리지 않아도 색상 설정에 상대 칸이 뜨게).
   for (const ev of calEvents.values()) if (!ev.deleted && ev.owner) notePeerName(ev.owner);
   localStorage.setItem("duri:name", name);
-  localStorage.setItem("duri:pass", pass); // 이 기기에만 저장 — 서버로 전송되지 않음
   $("setup").classList.add("hidden");
   for (const el of ["bar", "log-wrap", "composer"]) $(el).classList.remove("hidden");
   // 팩 목록은 캐시로 즉시 채우고, 최신화는 네트워크로 백그라운드에서(await 안 함) —
@@ -1560,15 +1587,20 @@ $("enter").addEventListener("click", async () => {
   // 네트워크 목록이 도착하면 열려 있는 서랍을 다시 그려야 그 자리에서 보인다
   // (안 그리면 서랍을 닫았다 다시 열 때까지 새 팩이 안 뜬다).
   loadPacks().then(() => { if (!picker.hidden) { renderTabs(); renderGrid(); } });
-  db = await openDB();
-  putMeta("pass", pass); // 서비스워커가 푸시 도착 시 같은 문구로 복호화할 수 있게
+  await ensureDB();
+  // 키 객체(추출 불가)를 담는다 — 서비스워커(sw.js)가 푸시 도착 시 같은 키로
+  // 그 자리에서 복호화하고, 페이지는 새로고침 뒤에도 문구 없이 이어 들어간다.
+  putMeta("key", KEY);
   putMeta("name", name); // 내가 보낸 메시지는 내 기기에 푸시 알림을 띄우지 않게 비교용
+  // 예전 버전이 남긴 평문 문구는 보이는 대로 지운다(마이그레이션).
+  localStorage.removeItem("duri:pass");
+  delMeta("pass");
   // 이 기기 캐시의 최근 분만 그린 뒤(새로고침에도 대화 유지, 화면은 가볍게),
   // 마지막 seq 이후만 이어받는다. 나머지 이력은 IndexedDB·PC 백업에 그대로 있다.
   for (const rec of (await allEntries()).sort((a, b) => a.seq - b.seq).slice(-MAX_DOM)) appendRecord(rec, { silent: true });
   scroll(); updateToBottom(); // 대량으로 그린 뒤 한 번만 바닥으로 스크롤
   connect();
-});
+}
 
 // 설정(⚙️) 드롭다운: 기록 지우기·방 초기화를 담는다. 헤더를 한 줄로 유지한다.
 const menuBtn = $("menu-btn"), menu = $("menu");
@@ -1622,9 +1654,11 @@ $("relogin").addEventListener("click", async () => {
   closeMenu();
   if (!confirm("암호 문구를 다시 입력할까요?\n이 기기의 임시 기록을 지우고 새 문구로 처음부터 다시 받아옵니다.\n(상대 기기·PC 백업은 그대로예요)")) return;
   await clearCache();                    // lastSeq + IndexedDB 초기화
-  localStorage.removeItem("duri:pass");  // 저장된 문구만 삭제(이름은 남겨 미리 채운다)
-  if (db) { try { db.transaction("meta", "readwrite").objectStore("meta").delete("pass"); } catch { /* 최선노력 */ } }
-  location.reload();                     // 저장된 문구가 없어 셋업 화면이 뜬다
+  await ensureDB();
+  delMeta("key");                        // 저장된 키만 삭제(이름은 남겨 미리 채운다)
+  delMeta("pass");                       // 옛 버전이 남긴 평문 문구도 함께
+  localStorage.removeItem("duri:pass");
+  location.reload();                     // 저장된 키가 없어 셋업 화면이 뜬다
 });
 
 $("clear-cache").addEventListener("click", async () => {
@@ -1663,7 +1697,7 @@ const swReady = (async () => {
 
 // ── 새 메시지 푸시 알림 (기본 꺼짐) ──────────────────────────────
 // 서버는 여전히 평문을 모른다 — 페이로드는 암호블롭뿐이고, sw.js가 이 기기 안에서
-// 복호화해서 알림을 그린다(위 IndexedDB "meta" 스토어의 패스프레이즈로).
+// 복호화해서 알림을 그린다(위 IndexedDB "meta" 스토어의 키 객체로).
 (function setupPush() {
   const btn = $("push-toggle");
   const supported = "PushManager" in window && "Notification" in window;
@@ -2716,12 +2750,21 @@ async function confirmCalCmd() {
 
 calRestore();
 
-// 저장된 문구·이름이 있으면 곧바로 입장 (아무것도 안 해도 이어짐)
+// 저장된 키·이름이 있으면 곧바로 입장 (아무것도 안 해도 이어짐)
 (async () => {
-  const savedPass = localStorage.getItem("duri:pass");
   const savedName = localStorage.getItem("duri:name");
   if (savedName) $("name").value = savedName; // 이름은 항상 미리 채운다(문구만 다시 입력 시 편하게)
-  if (savedPass && savedName) { $("pass").value = savedPass; $("enter").click(); }
+  if (!savedName) return;
+
+  await ensureDB();
+  const savedKey = await getMeta("key");
+  if (savedKey) { await enterWith(savedKey, savedName); return; }
+
+  // 마이그레이션: 예전 버전이 남긴 평문 문구가 있으면 이번 한 번만 읽어서 키로
+  // 바꿔 담고 문구는 지운다(enterWith가 처리). 다음 방문부터는 키만 남는다.
+  const legacyPass = localStorage.getItem("duri:pass") ?? await getMeta("pass");
+  if (legacyPass) { await enterWith(await deriveKey(legacyPass), savedName); return; }
+  // 키도 문구도 없으면 셋업 화면 그대로 — 문구를 다시 받는다.
 })();
 </script>
 </body>
