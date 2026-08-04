@@ -152,6 +152,15 @@ const state = {
 if (Number.isNaN(state.date.getTime())) state.date = new Date();
 const frozenTime = params.has("t");
 
+// 주소로 좌표를 받았으면 지명도 거기에 맞춘다 — 좌표는 부산인데 "서울"이라고
+// 새겨지면 결과물이 거짓말을 한다. 아는 도시가 없으면 지명 없이 방향만 적는다.
+if (params.has("lat") || params.has("lon")) {
+  const near = PLACES.find((p) =>
+    Math.abs(p.lat - state.lat) < 0.4 && Math.abs(p.lon - state.lon) < 0.4);
+  state.place = near ?? state.place;
+  state.placeLabel = near ? near.name : "";
+}
+
 // ── 방향 계산 ────────────────────────────────────────────────
 // 화면이 겨눈 지평좌표(고도·방위) → 그 방향의 하늘(적경·적위)과 투영 함수.
 // 화면 위쪽이 하늘의 위(천정)가 되도록 회전각을 맞춘다 — 안 맞추면 별자리가
@@ -171,7 +180,7 @@ const compass = (az) => {
   const names = ["북", "북동", "동", "남동", "남", "남서", "서", "북서"];
   return names[Math.round(((az % 360) + 360) % 360 / 45) % 8];
 };
-const heightWord = (alt) => (alt > 60 ? "머리 위" : alt > 15 ? "하늘" : alt >= 0 ? "지평선 근처" : "발밑");
+const heightWord = (alt) => (alt > 60 ? "머리 위" : alt > 15 ? "하늘" : alt >= 0 ? "지평선 근처" : "땅 아래");
 
 // ── 그리기 ───────────────────────────────────────────────────
 // 입체투영에서 각거리 c는 화면 반지름 2·tan(c/2)에 대응한다. 세로 화각으로 배율을 정한다.
@@ -292,52 +301,111 @@ function drawSky(ctx, W, H, view, opts = {}) {
     const x = left ? p.x - gap - w : p.x + gap;
     const box = { x, y: p.y - h / 2, w, h };
     if (x < 12 * unit || x + w > W - 12 * unit) continue;
-    if (p.y < 40 * unit || p.y > H * 0.80) continue;             // 제목·날짜 구역은 비운다
+    if (p.y < 40 * unit || p.y > H * 0.78) continue;             // 아래 새김 구역은 비운다
     if (overlaps(box)) continue;
     boxes.push(box);
     ctx.textAlign = "left";
     ctx.fillText(star.name, x, p.y);
   }
 
-  // 대표 별자리 이름 — 그림 위에 겹치지 않도록 아래쪽 제목 자리에 앉힌다.
-  if (lead) {
-    const band = ctx.createLinearGradient(0, H * 0.72, 0, H);
-    band.addColorStop(0, "rgba(4,6,14,0)");
-    band.addColorStop(1, "rgba(4,6,14,0.75)");
-    ctx.fillStyle = band;
-    ctx.fillRect(0, H * 0.72, W, H * 0.28);
-
-    ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
-    ctx.font = `${Math.round(72 * unit)}px ui-monospace, monospace`;
-    ctx.shadowBlur = 28 * unit; ctx.shadowColor = "rgba(16,32,74,0.95)";
-    ctx.fillStyle = "rgba(234,242,255,0.94)";
-    ctx.fillText(lead.ko, W / 2, H * 0.865);
-    ctx.shadowBlur = 0;
-    ctx.font = `${Math.round(26 * unit)}px ui-monospace, monospace`;
-    ctx.fillStyle = "rgba(190,208,235,0.5)";
-    ctx.fillText(lead.la, W / 2, H * 0.865 + 44 * unit);
-  }
   return lead;
+}
+
+// ── 아래쪽 새김 ──────────────────────────────────────────────
+// 별자리 이름 · 좌표 · 시각을 판에 새기듯 앉힌다. 이 토이의 목적이 정확도가
+// 아니라 "그날 그 자리의 하늘"을 남기는 것이라, 이 블록이 결과물의 절반이다.
+
+// 자간을 준 가운데 정렬. 캔버스의 letterSpacing은 기기별 지원이 갈려서 직접 그린다.
+function spaced(ctx, text, cx, y, gap) {
+  const chars = [...text];
+  const widths = chars.map((c) => ctx.measureText(c).width);
+  const total = widths.reduce((a, b) => a + b, 0) + gap * (chars.length - 1);
+  let x = cx - total / 2;
+  const align = ctx.textAlign;
+  ctx.textAlign = "left";
+  chars.forEach((c, i) => { ctx.fillText(c, x, y); x += widths[i] + gap; });
+  ctx.textAlign = align;
+}
+
+// 도·분 표기 — 소수점보다 이쪽이 좌표답게 보인다. 37.5665 → 37° 34′ N
+function dms(value, positive, negative) {
+  const side = value < 0 ? negative : positive;
+  const abs = Math.abs(value);
+  let deg = Math.floor(abs);
+  let min = Math.round((abs - deg) * 60);
+  if (min === 60) { deg += 1; min = 0; }
+  return `${deg}° ${String(min).padStart(2, "0")}′ ${side}`;
+}
+
+// 네 갈래로 뻗는 작은 빛 — 이모지를 쓰면 카드 아이콘 추출이 흔들려서 직접 그린다.
+function sparkle(ctx, x, y, r) {
+  ctx.beginPath();
+  ctx.moveTo(x, y - r);
+  ctx.quadraticCurveTo(x + r * 0.16, y - r * 0.16, x + r, y);
+  ctx.quadraticCurveTo(x + r * 0.16, y + r * 0.16, x, y + r);
+  ctx.quadraticCurveTo(x - r * 0.16, y + r * 0.16, x - r, y);
+  ctx.quadraticCurveTo(x - r * 0.16, y - r * 0.16, x, y - r);
+  ctx.fill();
 }
 
 function drawCaption(ctx, W, H, lead) {
   const unit = H / 2400;
   const d = state.date;
-  const when = `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 `
-    + `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  const where = `${state.placeLabel} · ${compass(state.az)}쪽 ${heightWord(state.alt)}`;
+  const pad = (n) => String(n).padStart(2, "0");
+
+  const band = ctx.createLinearGradient(0, H * 0.70, 0, H);
+  band.addColorStop(0, "rgba(4,6,14,0)");
+  band.addColorStop(0.55, "rgba(4,6,14,0.55)");
+  band.addColorStop(1, "rgba(4,6,14,0.86)");
+  ctx.fillStyle = band;
+  ctx.fillRect(0, H * 0.70, W, H * 0.30);
+
   ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
-  ctx.font = `${Math.round(30 * unit)}px ui-monospace, monospace`;
-  ctx.fillStyle = "rgba(219,232,255,0.62)";
-  ctx.fillText(when, W / 2, H - 132 * unit);
-  ctx.font = `${Math.round(26 * unit)}px ui-monospace, monospace`;
-  ctx.fillStyle = "rgba(219,232,255,0.4)";
-  ctx.fillText(where, W / 2, H - 90 * unit);
-  if (!lead) {
-    ctx.font = `${Math.round(26 * unit)}px ui-monospace, monospace`;
-    ctx.fillStyle = "rgba(219,232,255,0.35)";
-    ctx.fillText("이 방향엔 이름난 별자리가 없어요", W / 2, H * 0.5);
+
+  if (lead) {
+    ctx.font = `${Math.round(74 * unit)}px ui-monospace, monospace`;
+    ctx.shadowBlur = 30 * unit; ctx.shadowColor = "rgba(18,36,82,0.95)";
+    ctx.fillStyle = "rgba(236,243,255,0.95)";
+    spaced(ctx, lead.ko, W / 2, H - 386 * unit, 6 * unit);
+    ctx.shadowBlur = 0;
+    ctx.font = `${Math.round(25 * unit)}px ui-monospace, monospace`;
+    ctx.fillStyle = "rgba(186,206,238,0.52)";
+    spaced(ctx, lead.la.toUpperCase(), W / 2, H - 338 * unit, 7 * unit);
+  } else {
+    ctx.font = `${Math.round(40 * unit)}px ui-monospace, monospace`;
+    ctx.fillStyle = "rgba(226,236,255,0.72)";
+    spaced(ctx, "이름 없는 하늘", W / 2, H - 350 * unit, 5 * unit);
   }
+
+  // 가는 선 사이에 작은 빛 하나
+  const midY = H - 276 * unit, half = W * 0.30, gap = 22 * unit;
+  ctx.strokeStyle = "rgba(178,202,240,0.34)";
+  ctx.lineWidth = Math.max(1, 1.1 * unit);
+  ctx.beginPath();
+  ctx.moveTo(W / 2 - half, midY); ctx.lineTo(W / 2 - gap, midY);
+  ctx.moveTo(W / 2 + gap, midY); ctx.lineTo(W / 2 + half, midY);
+  ctx.stroke();
+  ctx.fillStyle = "rgba(214,230,255,0.72)";
+  sparkle(ctx, W / 2, midY, 9 * unit);
+
+  // 좌표 — 이 하늘을 본 자리
+  ctx.font = `${Math.round(31 * unit)}px ui-monospace, monospace`;
+  ctx.fillStyle = "rgba(222,234,255,0.78)";
+  spaced(ctx, `${dms(state.lat, "N", "S")}   ${dms(state.lon, "E", "W")}`,
+    W / 2, H - 210 * unit, 2.5 * unit);
+
+  // 시각 — 이 하늘을 본 때
+  ctx.font = `${Math.round(28 * unit)}px ui-monospace, monospace`;
+  ctx.fillStyle = "rgba(216,230,255,0.6)";
+  spaced(ctx, `${d.getFullYear()}. ${pad(d.getMonth() + 1)}. ${pad(d.getDate())}.   `
+    + `${pad(d.getHours())}:${pad(d.getMinutes())}`, W / 2, H - 162 * unit, 3 * unit);
+
+  // 어디서 어느 쪽을 보았는지
+  ctx.font = `${Math.round(24 * unit)}px ui-monospace, monospace`;
+  ctx.fillStyle = "rgba(198,214,242,0.42)";
+  const facing = `${compass(state.az)}쪽 ${heightWord(state.alt)}`;
+  spaced(ctx, state.placeLabel ? `${state.placeLabel} · ${facing}` : facing,
+    W / 2, H - 118 * unit, 2.5 * unit);
 }
 
 // ── 조준 화면의 실시간 미리보기 ──────────────────────────────
