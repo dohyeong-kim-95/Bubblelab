@@ -534,11 +534,14 @@ $("viewer").addEventListener("pointerdown", (e) => {
   drag = { x: e.clientX, y: e.clientY, az: state.az, alt: state.alt };
   $("viewer").setPointerCapture(e.pointerId);
 });
+// 끄는 방향 = 겨누는 방향. 오른쪽으로 밀면 오른쪽을 보고, 아래로 밀면 아래를 본다
+// (하늘을 잡아끄는 반대 방식으로 두었더니 손 감각과 어긋났다 — 이 화면은 지도가
+// 아니라 뷰파인더라, 폰을 그쪽으로 돌리는 것과 같게 움직여야 한다).
 $("viewer").addEventListener("pointermove", (e) => {
   if (!drag) return;
   const rect = $("viewer").getBoundingClientRect();
-  state.az = ((drag.az - (e.clientX - drag.x) / rect.width * 120) % 360 + 360) % 360;
-  state.alt = clamp(drag.alt + (e.clientY - drag.y) / rect.height * 120, -90, 90);
+  state.az = ((drag.az + (e.clientX - drag.x) / rect.width * 120) % 360 + 360) % 360;
+  state.alt = clamp(drag.alt - (e.clientY - drag.y) / rect.height * 120, -90, 90);
   azInput.value = String(Math.round(state.az));
   altInput.value = String(Math.round(state.alt));
   queueLive();
