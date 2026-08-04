@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>🔁 이미지 변환</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🔁</text></svg>">
+<title>🖼️ 이미지 형식 변환</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🖼️</text></svg>">
 <style>
   :root { color-scheme: light dark; --bg: light-dark(#f2f4f7, #0d131c);
           --panel: light-dark(#fff, #171f2b); --line: light-dark(#d9e0e7, #2a3646);
@@ -60,11 +60,11 @@
 </head>
 <body>
 <div class="app">
-  <h1>🔁 이미지 변환</h1>
-  <p class="desc">이미지를 올리면 JPG나 PNG로 바꿔서 내려받을 수 있어요. 여러 장도 한 번에 됩니다.</p>
+  <h1>🖼️ 이미지 형식 변환</h1>
+  <p class="desc">이미지 파일의 형식을 JPG·PNG로 바꿔 내려받습니다. HEIC·WebP·BMP 등
+    브라우저가 읽을 수 있는 형식이면 무엇이든 넣어도 되고, 여러 장도 한 번에 됩니다.</p>
 
   <div id="drop" role="button" tabindex="0" aria-label="이미지 선택">
-    <span class="big">🖼️</span>
     <p>여기를 눌러 이미지를 고르거나<br>파일을 끌어다 놓으세요 (붙여넣기도 가능)</p>
   </div>
   <input id="file" type="file" accept="image/*" multiple>

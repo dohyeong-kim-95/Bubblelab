@@ -6,6 +6,13 @@
 //   localhost:8787/slop/foo → dist/slop/foo
 
 const ROOT_DOMAIN = "bubblelab.dev";
+
+// 이름이 바뀐 폴더의 옛 주소 → 새 주소. 키는 `<서브도메인>:<경로>`(끝 슬래시 없음).
+// 폴더 이름은 곧 카드 라벨이자 URL이라, 하는 일을 못 알리는 이름은 바꾸는 게 맞다.
+// 다만 바꾸는 순간 예전 링크가 죽으므로 여기 한 줄을 함께 남긴다.
+const MOVED_PATHS = new Map([
+  ["util:/convert", "/image-convert/"],   // 2026-08: "convert"만으로는 이미지 도구인 줄 모른다
+]);
 const REALTIME_NAMESPACES = new Set(["avalon", "liargame", "yacht"]);
 // cron이 리뷰를 주기적으로 동기화할 외주 프로젝트 목록 (커머스 API, 현재 mock).
 const WORK_REVIEW_PROJECTS = ["daonfit"];
@@ -1338,6 +1345,19 @@ export async function handleRequest(request, env, ctx) {
       path = "/" + segments.slice(1).join("/");
       // 트레일링 슬래시 보존 (없으면 에셋 서버의 canonical 리다이렉트와 루프)
       if (url.pathname.endsWith("/") && !path.endsWith("/")) path += "/";
+    }
+
+    // 폴더 이름을 바꾸면 예전 주소로 온 사람(북마크·공유 링크)이 404를 만난다.
+    // 옮긴 자리만 알려주고 끝낸다 — 페이지를 남겨 두면 두 벌을 관리하게 된다.
+    const moved = MOVED_PATHS.get(`${site}:${path.replace(/\/+$/, "") || "/"}`);
+    if (moved) {
+      // 서브도메인 접속은 공개 URL에 site 세그먼트가 없고, 로컬 경로 라우팅은 있다.
+      const hostBased = host === ROOT_DOMAIN || host.endsWith(`.${ROOT_DOMAIN}`);
+      // 301 — 자리가 영구히 바뀐 것이라 브라우저·검색엔진이 기억해도 된다.
+      return new Response(null, {
+        status: 301,
+        headers: { Location: hostBased ? moved : `/${site}${moved}` },
+      });
     }
 
     if (site === "admin") {

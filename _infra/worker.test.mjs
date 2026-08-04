@@ -456,3 +456,27 @@ test("brief routes are wired and closed without VAPID configuration", async () =
     }), env, ctx);
   assert.equal(subscribe.status, 503);
 });
+
+// 폴더 이름을 바꾸면 예전 링크가 죽는다. 옮긴 자리만 알려주고 페이지는 남기지 않는다.
+test("이름이 바뀐 폴더의 옛 주소는 새 주소로 안내한다", async () => {
+  const assets = { fetch: async () => new Response("<p>page</p>", { headers: { "Content-Type": "text/html" } }) };
+  const env = { ASSETS: assets };
+
+  // 서브도메인 접속 — 공개 URL에 site 세그먼트가 없다
+  for (const from of ["https://util.bubblelab.dev/convert", "https://util.bubblelab.dev/convert/"]) {
+    const response = await worker.fetch(new Request(from), env, ctx);
+    assert.equal(response.status, 301, `${from} 이 옮겨가지 않았다`);
+    assert.equal(response.headers.get("Location"), "/image-convert/");
+  }
+
+  // 로컬 경로 라우팅 — site 세그먼트를 붙여 준다
+  const local = await worker.fetch(new Request("http://localhost:8787/util/convert/"), env, ctx);
+  assert.equal(local.status, 301);
+  assert.equal(local.headers.get("Location"), "/util/image-convert/");
+
+  // 새 주소와 무관한 경로는 건드리지 않는다
+  const fresh = await worker.fetch(new Request("https://util.bubblelab.dev/image-convert/"), env, ctx);
+  assert.equal(fresh.status, 200);
+  const other = await worker.fetch(new Request("https://slop.bubblelab.dev/convert/"), env, ctx);
+  assert.equal(other.status, 200, "다른 서브도메인의 같은 이름까지 옮기면 안 된다");
+});
