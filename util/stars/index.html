@@ -95,6 +95,7 @@
     <div class="panel">
       <h2>내 위치</h2>
       <select id="place"></select>
+      <p class="note" id="place-note"></p>
       <p class="note">별자리는 보는 위치와 시각에 따라 달라집니다. 위치는 이 브라우저 안에서만
         쓰이고 서버로 보내지 않아요.</p>
     </div>
@@ -411,19 +412,39 @@ const gpsOption = document.createElement("option");
 gpsOption.value = "gps"; gpsOption.textContent = "현재 위치 쓰기";
 placeSelect.append(gpsOption);
 
+const placeNote = $("place-note");
+// 위치를 못 받았을 때 드롭다운만 "현재 위치 쓰기"에 머물러 있으면 성공한 것처럼
+// 보인다 — 고른 도시로 되돌리고 이유를 적는다. 응답이 몇 초 걸리므로 대기도 알린다.
+function fallBackToCity(reason) {
+  placeSelect.value = state.place.id;
+  placeSelect.disabled = false;
+  placeNote.textContent = `${reason} ${state.place.name} 기준으로 그립니다.`;
+}
+
 placeSelect.addEventListener("change", () => {
   if (placeSelect.value === "gps") {
-    navigator.geolocation?.getCurrentPosition((pos) => {
+    if (!navigator.geolocation) {
+      fallBackToCity("이 브라우저는 위치를 알려주지 않아요.");
+      return;
+    }
+    placeSelect.disabled = true;
+    placeNote.textContent = "위치 확인 중… (권한을 물어보면 허용해 주세요)";
+    navigator.geolocation.getCurrentPosition((pos) => {
       state.lat = pos.coords.latitude;
       state.lon = pos.coords.longitude;
-      state.placeLabel = `${state.lat.toFixed(1)}°, ${state.lon.toFixed(1)}°`;
-      $("hud-place").textContent = state.placeLabel;
+      state.placeLabel = "현재 위치";
+      placeSelect.disabled = false;
+      placeNote.textContent = `현재 위치를 씁니다 (${state.lat.toFixed(1)}°, ${state.lon.toFixed(1)}°).`;
+      $("hud-place").textContent = `현재 위치 ${state.lat.toFixed(1)}°, ${state.lon.toFixed(1)}°`;
       queueLive();
-    }, () => {
-      placeSelect.value = state.place.id;                 // 거부되면 고른 도시로 되돌린다
-    }, { timeout: 8000 });
+    }, (error) => {
+      fallBackToCity(error.code === error.PERMISSION_DENIED
+        ? "위치 접근이 거부됐어요."
+        : "위치를 못 받았어요(신호가 약하거나 시간이 초과됐어요).");
+    }, { timeout: 8000, maximumAge: 300000 });
     return;
   }
+  placeNote.textContent = "";
   state.place = PLACES.find((p) => p.id === placeSelect.value) ?? PLACES[0];
   state.lat = state.place.lat; state.lon = state.place.lon; state.placeLabel = state.place.name;
   $("hud-place").textContent = state.placeLabel;
