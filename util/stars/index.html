@@ -76,7 +76,7 @@
       <div class="reticle"></div>
       <div class="hud">
         <div><b id="hud-con">하늘을 찾는 중</b><div class="dir" id="hud-dir"></div></div>
-        <div class="dir" id="hud-place"></div>
+        <div class="dir"><span id="hud-mode"></span><div id="hud-place"></div></div>
       </div>
     </div>
 
@@ -153,6 +153,7 @@ const state = {
   alt: num("alt") ?? 35,
   sensors: false,
   absoluteHeading: false,
+  follow: false,
   invertY: false,
 };
 if (Number.isNaN(state.date.getTime())) state.date = new Date();
@@ -430,6 +431,7 @@ function renderLive() {
   const lead = drawSky(liveCtx, W, H, view, { detail: "live", zoom: 0.62 });
   $("hud-con").textContent = lead ? lead.ko : "이름난 별자리 없음";
   $("hud-dir").textContent = `${compass(state.az)} ${Math.round(state.az)}° · 고도 ${Math.round(state.alt)}°`;
+  $("hud-mode").textContent = !sensorsLive() ? "" : state.follow ? "따라가는 중" : "직접 겨누는 중";
   $("az-out").textContent = `${compass(state.az)} ${Math.round(state.az)}°`;
   $("alt-out").textContent = `${Math.round(state.alt)}°`;
 }
@@ -530,12 +532,13 @@ $("hud-place").textContent = state.placeLabel;
 const azInput = $("az"), altInput = $("alt");
 azInput.value = String(Math.round(state.az));
 altInput.value = String(Math.round(state.alt));
-azInput.addEventListener("input", () => { state.az = Number(azInput.value); queueLive(); });
-altInput.addEventListener("input", () => { state.alt = Number(altInput.value); queueLive(); });
+azInput.addEventListener("input", () => { setFollow(false); state.az = Number(azInput.value); queueLive(); });
+altInput.addEventListener("input", () => { setFollow(false); state.alt = Number(altInput.value); queueLive(); });
 
 // 뷰파인더를 끌어서도 돌릴 수 있게 — 슬라이더보다 이쪽이 손에 붙는다.
 let drag = null;
 $("viewer").addEventListener("pointerdown", (e) => {
+  setFollow(false);                          // 손이 닿는 순간 카메라에서 떨어진다
   drag = { x: e.clientX, y: e.clientY, az: state.az, alt: state.alt };
   $("viewer").setPointerCapture(e.pointerId);
 });
@@ -598,6 +601,18 @@ function onOrientation(event) {
   if (alpha == null || event.beta == null || event.gamma == null) return;
 
   const dir = directionFrom(alpha, event.beta, event.gamma);
+  state.sensors = true;
+  state.absoluteHeading = absolute;
+  sensorSeen = Date.now();
+
+  // 손으로 겨누는 중이면 센서 값으로 덮지 않는다. 다만 기준점은 계속 따라가
+  // 둬야, 다시 맞출 때 그동안 움직인 만큼 튀지 않는다.
+  if (!state.follow) {
+    lastRelativeAz = absolute ? null : dir.az;
+    updateFollowUi();
+    return;
+  }
+
   if (absolute) {
     state.az = dir.az;
     lastRelativeAz = null;
@@ -611,12 +626,34 @@ function onOrientation(event) {
     lastRelativeAz = dir.az;
   }
   state.alt = dir.alt;
-  state.sensors = true;
-  state.absoluteHeading = absolute;
-  sensorSeen = Date.now();
   azInput.value = String(Math.round(state.az));
   altInput.value = String(Math.round(state.alt));
   queueLive();
+}
+
+// 따라가기 ↔ 직접 겨누기. 손으로 움직이는 순간 따라가기가 풀리고, 맞추기를
+// 누르면 다시 붙는다 — 센서가 매 프레임 덮어쓰면 손으로는 아무것도 못 옮긴다.
+function setFollow(on) {
+  if (state.follow === on) return;
+  state.follow = on;
+  // 다시 붙을 때 첫 이벤트는 기준점만 잡게 한다. 상대 방위에서 그동안의 차이가
+  // 한꺼번에 더해지면 화면이 홱 돌아간다.
+  if (on) lastRelativeAz = null;
+  updateFollowUi();
+}
+
+const sensorsLive = () => state.sensors && Date.now() - sensorSeen < 3000;
+
+function updateFollowUi() {
+  const live = sensorsLive();
+  $("manual").hidden = live && state.follow;
+  if (!live) return;                       // 실패 안내는 enableAiming이 쓴다
+  sensorBtn.hidden = state.follow;         // 따라가는 동안은 맞출 것이 없다
+  sensorBtn.disabled = false;
+  sensorBtn.textContent = "카메라에 다시 맞추기";
+  $("manual-why").textContent = state.absoluteHeading
+    ? "손으로 겨누는 중이에요. 위 버튼을 누르면 다시 카메라를 따라갑니다."
+    : "나침반이 없어 북쪽 기준이 어긋날 수 있어요 — 방위를 한 번 맞춘 뒤 따라가게 하면 그 값이 유지됩니다.";
 }
 
 // iOS는 사용자 제스처 안에서 requestPermission()을 불러야 하고, 한 번 거부하면
@@ -652,24 +689,23 @@ async function enableAiming() {
   sensorBtn.disabled = true;
   sensorBtn.textContent = "권한 확인 중…";
   const sensors = await startSensors();
+  if (sensors === "on") state.follow = true;   // 켜자마자 따라간다
 
   // 센서 상태 판정은 카메라와 묶지 않는다. 카메라 권한 팝업을 사람이 누를 때까지
   // getUserMedia가 몇 초씩 매달려 있는데, 그동안 방향 안내가 멈춰 있으면
   // 실제로는 잘 도는 화면을 두고 "아무 반응 없다"고 읽게 된다.
   setTimeout(() => {
-    const working = state.sensors && Date.now() - sensorSeen < 3000;
-    $("manual").hidden = working && state.absoluteHeading;
-    sensorBtn.hidden = working;
+    if (sensorsLive()) { updateFollowUi(); return; }
+    state.follow = false;
+    $("manual").hidden = false;
+    sensorBtn.hidden = false;
     sensorBtn.disabled = false;
     sensorBtn.textContent = "방향 센서 다시 시도";
-    $("manual-why").textContent = !working
-      ? (sensors === "denied"
-        ? "방향 접근이 거부됐어요. iOS는 설정 → Safari → 동작 및 방향 접근을 켠 뒤 다시 시도하세요."
-        : sensors === "unsupported"
-          ? "이 기기·브라우저는 방향 센서를 지원하지 않아요. 화면을 끌어 겨누세요."
-          : "방향 값이 안 들어와요. 나침반 보정(폰을 8자로 흔들기) 후 다시 시도하거나, 화면을 끌어 겨누세요.")
-      : state.absoluteHeading ? ""
-        : "폰을 따라 움직이지만 나침반이 없어 북쪽 기준이 어긋날 수 있어요 — 아래 방위를 한 번만 맞춰 주세요.";
+    $("manual-why").textContent = sensors === "denied"
+      ? "방향 접근이 거부됐어요. iOS는 설정 → Safari → 동작 및 방향 접근을 켠 뒤 다시 시도하세요."
+      : sensors === "unsupported"
+        ? "이 기기·브라우저는 방향 센서를 지원하지 않아요. 화면을 끌어 겨누세요."
+        : "방향 값이 안 들어와요. 나침반 보정(폰을 8자로 흔들기) 후 다시 시도하거나, 화면을 끌어 겨누세요.";
   }, 1200);
 
   if (!await startCamera()) $("cam").hidden = true;
@@ -677,7 +713,12 @@ async function enableAiming() {
 
 $("manual").hidden = false;
 $("manual-why").textContent = "손으로 겨누는 중이에요. 폰을 돌려서 겨누려면 위 버튼을 누르세요.";
-sensorBtn.addEventListener("click", enableAiming);
+// 같은 버튼이 상황에 따라 두 가지 일을 한다 — 아직 안 켰으면 권한부터,
+// 이미 켜져 있으면 카메라에 다시 맞추기(sync).
+sensorBtn.addEventListener("click", () => {
+  if (sensorsLive()) { setFollow(true); queueLive(); return; }
+  enableAiming();
+});
 
 window.addEventListener("resize", queueLive);
 renderLive();
