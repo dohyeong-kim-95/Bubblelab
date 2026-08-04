@@ -1,0 +1,538 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>별자리 배경화면</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🌌</text></svg>">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+         margin: 0; min-height: 100dvh; background: #05070f; color: #dbe4ee;
+         display: flex; flex-direction: column; align-items: center;
+         padding: max(.9rem, env(safe-area-inset-top)) .9rem max(.9rem, env(safe-area-inset-bottom)); }
+  main { width: min(26rem, 100%); flex: 1; display: flex; flex-direction: column; gap: .8rem; }
+
+  header { text-align: center; }
+  h1 { margin: 0; font-size: 1.05rem; letter-spacing: .02em; }
+  .lede { margin: .35rem 0 0; font-size: .72rem; line-height: 1.6; opacity: .5; }
+
+  /* ── 조준 화면 ── */
+  .viewer { position: relative; width: 100%; aspect-ratio: 3 / 4; border-radius: .9rem;
+            overflow: hidden; background: #0a0f1c; border: 1px solid #dbe4ee1f;
+            touch-action: none; }
+  .viewer video { position: absolute; inset: 0; width: 100%; height: 100%;
+                  object-fit: cover; opacity: .5; }
+  .viewer canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .hud { position: absolute; inset: auto 0 0; padding: .55rem .7rem;
+         display: flex; justify-content: space-between; align-items: flex-end; gap: .5rem;
+         font-size: .66rem; background: linear-gradient(transparent, #05070fcc); }
+  .hud b { font-weight: bold; font-size: .82rem; letter-spacing: .04em; }
+  .hud .dir { opacity: .62; }
+  .reticle { position: absolute; left: 50%; top: 50%; width: 3.4rem; height: 3.4rem;
+             transform: translate(-50%, -50%); border: 1px solid #9fc4ff55; border-radius: 50%; }
+  .reticle::before, .reticle::after { content: ""; position: absolute; background: #9fc4ff55; }
+  .reticle::before { left: 50%; top: -.5rem; bottom: -.5rem; width: 1px; }
+  .reticle::after { top: 50%; left: -.5rem; right: -.5rem; height: 1px; }
+
+  button, .btn { font: inherit; font-size: .8rem; color: inherit; cursor: pointer;
+                 padding: .72rem 1rem; border-radius: .7rem; border: 1px solid #dbe4ee2e;
+                 background: #182230; text-align: center; text-decoration: none; }
+  button:disabled { opacity: .45; cursor: default; }
+  .primary { background: #24406b; border-color: #6f9de0aa; font-weight: bold; }
+  .row { display: flex; gap: .5rem; }
+  .row > * { flex: 1; }
+
+  .panel { border: 1px solid #dbe4ee1c; border-radius: .8rem; padding: .75rem .8rem;
+           background: #0d1420; display: grid; gap: .55rem; }
+  .panel h2 { margin: 0; font-size: .72rem; opacity: .55; font-weight: normal; letter-spacing: .04em; }
+  label { display: grid; gap: .28rem; font-size: .68rem; opacity: .75; }
+  input[type=range] { width: 100%; accent-color: #6f9de0; }
+  select { font: inherit; font-size: .75rem; color: inherit; background: #182230;
+           border: 1px solid #dbe4ee2e; border-radius: .5rem; padding: .45rem .5rem; width: 100%; }
+  .note { margin: 0; font-size: .64rem; line-height: 1.6; opacity: .45; }
+  .warn { color: #ffb4a2; opacity: .8; }
+
+  /* ── 결과 화면 ── */
+  #result img { width: 100%; border-radius: .9rem; border: 1px solid #dbe4ee1f; display: block; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>별자리 배경화면</h1>
+    <p class="lede">휴대폰을 아무 데나 겨누세요. 그 방향의 하늘을 그려 드려요<br>
+      — 바닥을 겨누면 지구 반대편 하늘이 나옵니다.</p>
+  </header>
+
+  <section id="aim">
+    <div class="viewer" id="viewer">
+      <video id="cam" playsinline muted autoplay></video>
+      <canvas id="live"></canvas>
+      <div class="reticle"></div>
+      <div class="hud">
+        <div><b id="hud-con">하늘을 찾는 중</b><div class="dir" id="hud-dir"></div></div>
+        <div class="dir" id="hud-place"></div>
+      </div>
+    </div>
+
+    <div class="row">
+      <button class="primary" id="shoot">이 방향 찍기</button>
+    </div>
+
+    <div class="panel" id="manual" hidden>
+      <h2>방향 직접 맞추기</h2>
+      <label>방위 <span id="az-out"></span>
+        <input type="range" id="az" min="0" max="359" step="1" value="180"></label>
+      <label>고도 <span id="alt-out"></span>
+        <input type="range" id="alt" min="-90" max="90" step="1" value="35"></label>
+      <p class="note" id="manual-why"></p>
+    </div>
+
+    <div class="panel">
+      <h2>내 위치</h2>
+      <select id="place"></select>
+      <p class="note">별자리는 보는 위치와 시각에 따라 달라집니다. 위치는 이 브라우저 안에서만
+        쓰이고 서버로 보내지 않아요.</p>
+    </div>
+  </section>
+
+  <section id="result" hidden>
+    <img id="shot" alt="만들어진 별자리 배경화면">
+    <div class="row" style="margin-top:.7rem">
+      <a class="btn primary" id="save" download>저장</a>
+      <button id="again">다시 찍기</button>
+    </div>
+    <p class="note" style="margin-top:.55rem">저장이 안 되면 이미지를 길게 눌러 저장하세요.</p>
+  </section>
+
+  <p class="note">별 위치는 J2000 기준 밝은 별 목록이고, 별자리 선은 직접 이은 것입니다.
+    맨눈으로 형태를 알아볼 수 있는 별자리만 담았습니다.</p>
+</main>
+
+<script type="module">
+import {
+  SEGMENTS, dominantConstellation, equatorialToHorizontal, horizontalToEquatorial,
+  makeProjection, starsInView,
+} from "./sky.js";
+
+const $ = (id) => document.getElementById(id);
+const D2R = Math.PI / 180, R2D = 180 / Math.PI;
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+// 테스트·데스크톱에서 화면을 고정하려고 주소로 상태를 받는다.
+const params = new URLSearchParams(location.search);
+const num = (key) => (params.has(key) ? Number(params.get(key)) : null);
+
+const PLACES = [
+  { id: "seoul", name: "서울", lat: 37.5665, lon: 126.9780 },
+  { id: "busan", name: "부산", lat: 35.1796, lon: 129.0756 },
+  { id: "daegu", name: "대구", lat: 35.8714, lon: 128.6014 },
+  { id: "incheon", name: "인천", lat: 37.4563, lon: 126.7052 },
+  { id: "gwangju", name: "광주", lat: 35.1595, lon: 126.8526 },
+  { id: "daejeon", name: "대전", lat: 36.3504, lon: 127.3845 },
+  { id: "gangneung", name: "강릉", lat: 37.7519, lon: 128.8761 },
+  { id: "jeju", name: "제주", lat: 33.4996, lon: 126.5312 },
+];
+
+const state = {
+  place: PLACES[0],
+  lat: num("lat") ?? PLACES[0].lat,
+  lon: num("lon") ?? PLACES[0].lon,
+  placeLabel: PLACES[0].name,
+  date: params.has("t") ? new Date(params.get("t")) : new Date(),
+  az: num("az") ?? 180,
+  alt: num("alt") ?? 35,
+  sensors: false,
+};
+if (Number.isNaN(state.date.getTime())) state.date = new Date();
+const frozenTime = params.has("t");
+
+// ── 방향 계산 ────────────────────────────────────────────────
+// 화면이 겨눈 지평좌표(고도·방위) → 그 방향의 하늘(적경·적위)과 투영 함수.
+// 화면 위쪽이 하늘의 위(천정)가 되도록 회전각을 맞춘다 — 안 맞추면 별자리가
+// 누운 채로 그려져서 "내가 본 하늘"처럼 보이지 않는다.
+function viewFor(alt, az) {
+  const { lat, lon, date } = state;
+  const center = horizontalToEquatorial(alt, az, lat, lon, date);
+  const flip = alt > 89 ? -1 : 1;
+  const probe = horizontalToEquatorial(clamp(alt + flip, -90, 90), az, lat, lon, date);
+  const flat = makeProjection(center.ra, center.dec, 0);
+  const p = flat(probe.ra, probe.dec);
+  const roll = p ? Math.atan2(p.x, p.y) * R2D * flip : 0;
+  return { center, project: makeProjection(center.ra, center.dec, -roll) };
+}
+
+const compass = (az) => {
+  const names = ["북", "북동", "동", "남동", "남", "남서", "서", "북서"];
+  return names[Math.round(((az % 360) + 360) % 360 / 45) % 8];
+};
+const heightWord = (alt) => (alt > 60 ? "머리 위" : alt > 15 ? "하늘" : alt >= 0 ? "지평선 근처" : "발밑");
+
+// ── 그리기 ───────────────────────────────────────────────────
+// 입체투영에서 각거리 c는 화면 반지름 2·tan(c/2)에 대응한다. 세로 화각으로 배율을 정한다.
+const FOV_V = 104;                       // 배경화면 한 장에 별자리 하나가 시원하게 담기는 정도
+const scaleFor = (height) => (height / 2) / (2 * Math.tan((FOV_V / 4) * D2R));
+
+const mulberry32 = (seed) => () => {
+  seed = (seed + 0x6d2b79f5) | 0;
+  let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+
+const STAR_TINT = { w: [255, 208, 168], b: [186, 214, 255] };
+const tintOf = (star) => STAR_TINT[star.color] ?? [255, 252, 246];
+
+function drawSky(ctx, W, H, view, opts = {}) {
+  const { detail = "full" } = opts;
+  const scale = scaleFor(H) * (opts.zoom ?? 1);
+  // 배경화면이라 아래쪽은 제목·날짜가 앉을 자리로 비워 둔다 — 그림은 위쪽 2/3에.
+  const cx = W / 2, cy = H * (detail === "full" ? 0.44 : 0.5);
+  const rand = mulberry32(Math.round(view.center.ra * 3600) * 31 + Math.round(view.center.dec * 60));
+
+  if (detail === "full") {
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, "#04060e");
+    sky.addColorStop(0.45, "#0a1024");
+    sky.addColorStop(1, "#12182c");
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, H);
+
+    // 옅은 성운 — 밋밋한 검정 대신 깊이를 준다
+    for (let i = 0; i < 3; i++) {
+      const gx = rand() * W, gy = H * (0.2 + rand() * 0.6), gr = W * (0.35 + rand() * 0.4);
+      const hue = [[120, 140, 220], [180, 140, 210], [110, 170, 200]][i];
+      const neb = ctx.createRadialGradient(gx, gy, 0, gx, gy, gr);
+      neb.addColorStop(0, `rgba(${hue.join(",")},0.075)`);
+      neb.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = neb;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    // 배경 잔별 — 카탈로그에 없는 어두운 별들의 자리
+    for (let i = 0; i < Math.round(W * H / 3200); i++) {
+      const x = rand() * W, y = rand() * H, r = rand() * 1.1 + 0.25;
+      ctx.globalAlpha = 0.12 + rand() * 0.5;
+      ctx.fillStyle = "#dfe8ff";
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  const place = (star) => {
+    const p = view.project(star.ra, star.dec);
+    return p ? { x: cx + p.x * scale, y: cy - p.y * scale, cosC: p.cosC } : null;
+  };
+
+  const visible = starsInView(view.center.ra, view.center.dec, 80, detail === "full" ? 4.6 : 3.6);
+  const shown = new Map();
+  for (const star of visible) {
+    const p = place(star);
+    if (p) shown.set(star.id, p);
+  }
+
+  const lead = dominantConstellation(view.center.ra, view.center.dec, 32);
+
+  // 별자리 선. 대표 별자리는 밝게, 나머지는 은은하게 — 화면이 어수선해지지 않게.
+  ctx.lineCap = "round";
+  for (const seg of SEGMENTS) {
+    const a = shown.get(seg.a.id), b = shown.get(seg.b.id);
+    if (!a || !b || a.cosC < 0.1 || b.cosC < 0.1) continue;
+    const main = lead && seg.con === lead.id;
+    ctx.strokeStyle = main ? "rgba(178,208,255,0.62)" : "rgba(150,185,240,0.2)";
+    ctx.lineWidth = (main ? 1.9 : 1.2) * (H / 2400);
+    ctx.shadowBlur = main && detail === "full" ? 10 * (H / 2400) : 0;
+    ctx.shadowColor = "rgba(120,170,255,0.6)";
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+  }
+  ctx.shadowBlur = 0;
+
+  // 별
+  const unit = H / 2400;
+  for (const star of visible) {
+    const p = shown.get(star.id);
+    if (!p || p.cosC < 0.05) continue;
+    const r = Math.max(1.1, (5.0 - star.mag) * 1.55) * unit;
+    const [cr, cg, cb] = tintOf(star);
+    if (detail === "full") {
+      const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 5.5);
+      glow.addColorStop(0, `rgba(${cr},${cg},${cb},0.55)`);
+      glow.addColorStop(0.35, `rgba(${cr},${cg},${cb},0.13)`);
+      glow.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.arc(p.x, p.y, r * 5.5, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.fillStyle = `rgb(${cr},${cg},${cb})`;
+    ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
+  }
+
+  if (detail !== "full") return lead;
+
+  // 밝은 별의 이름. 화면 밖으로 잘리거나 서로 겹치면 아예 안 적는 게 낫다 —
+  // 배경화면에서 글자가 잘려 있으면 그것만 눈에 띈다.
+  ctx.font = `${Math.round(23 * unit)}px ui-monospace, monospace`;
+  ctx.fillStyle = "rgba(219,232,255,0.5)";
+  ctx.textBaseline = "middle";
+  const boxes = [];
+  const overlaps = (box) => boxes.some((b) =>
+    box.x < b.x + b.w && box.x + box.w > b.x && box.y < b.y + b.h && box.y + box.h > b.y);
+  const named = visible.filter((s) => s.name && s.mag <= 1.9).sort((a, b) => a.mag - b.mag);
+  for (const star of named) {
+    const p = shown.get(star.id);
+    if (!p || p.cosC < 0.05) continue;
+    const w = ctx.measureText(star.name).width, h = 30 * unit;
+    const gap = 15 * unit;
+    // 오른쪽이 좁으면 왼쪽에 적는다
+    const left = p.x + gap + w > W - 12 * unit;
+    const x = left ? p.x - gap - w : p.x + gap;
+    const box = { x, y: p.y - h / 2, w, h };
+    if (x < 12 * unit || x + w > W - 12 * unit) continue;
+    if (p.y < 40 * unit || p.y > H * 0.80) continue;             // 제목·날짜 구역은 비운다
+    if (overlaps(box)) continue;
+    boxes.push(box);
+    ctx.textAlign = "left";
+    ctx.fillText(star.name, x, p.y);
+  }
+
+  // 대표 별자리 이름 — 그림 위에 겹치지 않도록 아래쪽 제목 자리에 앉힌다.
+  if (lead) {
+    const band = ctx.createLinearGradient(0, H * 0.72, 0, H);
+    band.addColorStop(0, "rgba(4,6,14,0)");
+    band.addColorStop(1, "rgba(4,6,14,0.75)");
+    ctx.fillStyle = band;
+    ctx.fillRect(0, H * 0.72, W, H * 0.28);
+
+    ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+    ctx.font = `${Math.round(72 * unit)}px ui-monospace, monospace`;
+    ctx.shadowBlur = 28 * unit; ctx.shadowColor = "rgba(16,32,74,0.95)";
+    ctx.fillStyle = "rgba(234,242,255,0.94)";
+    ctx.fillText(lead.ko, W / 2, H * 0.865);
+    ctx.shadowBlur = 0;
+    ctx.font = `${Math.round(26 * unit)}px ui-monospace, monospace`;
+    ctx.fillStyle = "rgba(190,208,235,0.5)";
+    ctx.fillText(lead.la, W / 2, H * 0.865 + 44 * unit);
+  }
+  return lead;
+}
+
+function drawCaption(ctx, W, H, lead) {
+  const unit = H / 2400;
+  const d = state.date;
+  const when = `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 `
+    + `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  const where = `${state.placeLabel} · ${compass(state.az)}쪽 ${heightWord(state.alt)}`;
+  ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+  ctx.font = `${Math.round(30 * unit)}px ui-monospace, monospace`;
+  ctx.fillStyle = "rgba(219,232,255,0.62)";
+  ctx.fillText(when, W / 2, H - 132 * unit);
+  ctx.font = `${Math.round(26 * unit)}px ui-monospace, monospace`;
+  ctx.fillStyle = "rgba(219,232,255,0.4)";
+  ctx.fillText(where, W / 2, H - 90 * unit);
+  if (!lead) {
+    ctx.font = `${Math.round(26 * unit)}px ui-monospace, monospace`;
+    ctx.fillStyle = "rgba(219,232,255,0.35)";
+    ctx.fillText("이 방향엔 이름난 별자리가 없어요", W / 2, H * 0.5);
+  }
+}
+
+// ── 조준 화면의 실시간 미리보기 ──────────────────────────────
+const live = $("live");
+const liveCtx = live.getContext("2d");
+let liveQueued = false;
+
+function renderLive() {
+  liveQueued = false;
+  const rect = live.getBoundingClientRect();
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const W = Math.max(1, Math.round(rect.width * dpr)), H = Math.max(1, Math.round(rect.height * dpr));
+  if (live.width !== W || live.height !== H) { live.width = W; live.height = H; }
+  liveCtx.clearRect(0, 0, W, H);
+  const view = viewFor(state.alt, state.az);
+  const lead = drawSky(liveCtx, W, H, view, { detail: "live", zoom: 0.62 });
+  $("hud-con").textContent = lead ? lead.ko : "이름난 별자리 없음";
+  $("hud-dir").textContent = `${compass(state.az)} ${Math.round(state.az)}° · 고도 ${Math.round(state.alt)}°`;
+  $("az-out").textContent = `${compass(state.az)} ${Math.round(state.az)}°`;
+  $("alt-out").textContent = `${Math.round(state.alt)}°`;
+}
+const queueLive = () => {
+  if (liveQueued) return;
+  liveQueued = true;
+  requestAnimationFrame(renderLive);
+};
+
+// ── 배경화면 만들기 ──────────────────────────────────────────
+function renderWallpaper() {
+  const screenW = window.screen?.width || window.innerWidth || 393;
+  const screenH = window.screen?.height || window.innerHeight || 852;
+  const aspect = clamp(screenH / screenW, 1.5, 2.4);
+  const W = clamp(Math.round(screenW * (window.devicePixelRatio || 2)), 900, 1440);
+  const H = Math.round(W * aspect);
+  const canvas = document.createElement("canvas");
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext("2d");
+  const lead = drawSky(ctx, W, H, viewFor(state.alt, state.az));
+  drawCaption(ctx, W, H, lead);
+  return canvas;
+}
+
+function showResult() {
+  if (!frozenTime) state.date = new Date();
+  const canvas = renderWallpaper();
+  const url = canvas.toDataURL("image/png");
+  $("shot").src = url;
+  const d = state.date;
+  const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+  $("save").href = url;
+  $("save").download = `bubblelab-stars-${stamp}.png`;
+  $("aim").hidden = true;
+  $("result").hidden = false;
+  window.scrollTo({ top: 0 });
+}
+
+$("shoot").addEventListener("click", showResult);
+$("again").addEventListener("click", () => {
+  $("result").hidden = true;
+  $("aim").hidden = false;
+  queueLive();
+});
+
+// ── 위치 ─────────────────────────────────────────────────────
+const placeSelect = $("place");
+for (const p of PLACES) {
+  const option = document.createElement("option");
+  option.value = p.id; option.textContent = p.name;
+  placeSelect.append(option);
+}
+const gpsOption = document.createElement("option");
+gpsOption.value = "gps"; gpsOption.textContent = "현재 위치 쓰기";
+placeSelect.append(gpsOption);
+
+placeSelect.addEventListener("change", () => {
+  if (placeSelect.value === "gps") {
+    navigator.geolocation?.getCurrentPosition((pos) => {
+      state.lat = pos.coords.latitude;
+      state.lon = pos.coords.longitude;
+      state.placeLabel = `${state.lat.toFixed(1)}°, ${state.lon.toFixed(1)}°`;
+      $("hud-place").textContent = state.placeLabel;
+      queueLive();
+    }, () => {
+      placeSelect.value = state.place.id;                 // 거부되면 고른 도시로 되돌린다
+    }, { timeout: 8000 });
+    return;
+  }
+  state.place = PLACES.find((p) => p.id === placeSelect.value) ?? PLACES[0];
+  state.lat = state.place.lat; state.lon = state.place.lon; state.placeLabel = state.place.name;
+  $("hud-place").textContent = state.placeLabel;
+  queueLive();
+});
+$("hud-place").textContent = state.placeLabel;
+
+// ── 손으로 겨누기 (센서가 없거나 거부됐을 때의 기본 경로) ────
+const azInput = $("az"), altInput = $("alt");
+azInput.value = String(Math.round(state.az));
+altInput.value = String(Math.round(state.alt));
+azInput.addEventListener("input", () => { state.az = Number(azInput.value); queueLive(); });
+altInput.addEventListener("input", () => { state.alt = Number(altInput.value); queueLive(); });
+
+// 뷰파인더를 끌어서도 돌릴 수 있게 — 슬라이더보다 이쪽이 손에 붙는다.
+let drag = null;
+$("viewer").addEventListener("pointerdown", (e) => {
+  drag = { x: e.clientX, y: e.clientY, az: state.az, alt: state.alt };
+  $("viewer").setPointerCapture(e.pointerId);
+});
+$("viewer").addEventListener("pointermove", (e) => {
+  if (!drag) return;
+  const rect = $("viewer").getBoundingClientRect();
+  state.az = ((drag.az - (e.clientX - drag.x) / rect.width * 120) % 360 + 360) % 360;
+  state.alt = clamp(drag.alt + (e.clientY - drag.y) / rect.height * 120, -90, 90);
+  azInput.value = String(Math.round(state.az));
+  altInput.value = String(Math.round(state.alt));
+  queueLive();
+});
+const endDrag = () => { drag = null; };
+$("viewer").addEventListener("pointerup", endDrag);
+$("viewer").addEventListener("pointercancel", endDrag);
+
+// ── 기기 방향 센서 ───────────────────────────────────────────
+// alpha·beta·gamma(Z-X'-Y'' 내재 회전)로 회전행렬을 만들고, 뒷면 카메라가 보는
+// -Z축을 세계좌표(X=동, Y=북, Z=위)로 옮겨 방위·고도를 얻는다.
+function directionFrom(alpha, beta, gamma) {
+  const a = alpha * D2R, b = beta * D2R, g = gamma * D2R;
+  const cA = Math.cos(a), sA = Math.sin(a), cB = Math.cos(b);
+  const sB = Math.sin(b), cG = Math.cos(g), sG = Math.sin(g);
+  const east = -(cA * sG + sA * sB * cG);
+  const north = -(sA * sG - cA * sB * cG);
+  const up = -(cB * cG);
+  const len = Math.hypot(east, north, up) || 1;
+  return {
+    az: ((Math.atan2(east, north) * R2D) % 360 + 360) % 360,
+    alt: Math.asin(clamp(up / len, -1, 1)) * R2D,
+  };
+}
+
+let sensorSeen = 0;
+function onOrientation(event) {
+  const alpha = event.webkitCompassHeading != null ? 360 - event.webkitCompassHeading : event.alpha;
+  if (alpha == null || event.beta == null || event.gamma == null) return;
+  if (event.absolute === false && event.webkitCompassHeading == null) return;   // 상대값은 방위가 무의미
+  const dir = directionFrom(alpha, event.beta, event.gamma);
+  state.az = dir.az; state.alt = dir.alt;
+  state.sensors = true;
+  sensorSeen = Date.now();
+  azInput.value = String(Math.round(state.az));
+  altInput.value = String(Math.round(state.alt));
+  queueLive();
+}
+
+async function startSensors() {
+  const need = typeof DeviceOrientationEvent !== "undefined"
+    && typeof DeviceOrientationEvent.requestPermission === "function";
+  try {
+    if (need && await DeviceOrientationEvent.requestPermission() !== "granted") return false;
+  } catch { return false; }
+  window.addEventListener("deviceorientationabsolute", onOrientation);
+  window.addEventListener("deviceorientation", onOrientation);
+  return true;
+}
+
+async function startCamera() {
+  if (!navigator.mediaDevices?.getUserMedia) return false;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" } }, audio: false });
+    $("cam").srcObject = stream;
+    return true;
+  } catch { return false; }
+}
+
+// 센서·카메라는 사용자 제스처가 있어야 열리는 기기가 있다. 화면을 먼저 쓸 수 있게
+// 손으로 겨누기를 기본으로 두고, 첫 탭에서 권한을 청한다.
+async function enableAiming() {
+  const [camera, sensors] = await Promise.all([startCamera(), startSensors()]);
+  setTimeout(() => {
+    const working = state.sensors && Date.now() - sensorSeen < 3000;
+    $("manual").hidden = working;
+    $("manual-why").textContent = working ? ""
+      : sensors ? "기기 방향을 못 읽어서 손으로 맞추는 중이에요. 화면을 끌어도 돌아갑니다."
+        : "방향 센서를 쓸 수 없어요. 화면을 끌거나 아래 값을 움직여 겨누세요.";
+    if (!camera) $("cam").hidden = true;
+  }, 900);
+}
+
+$("manual").hidden = false;
+$("manual-why").textContent = "화면을 한 번 누르면 카메라와 방향 센서를 켭니다.";
+window.addEventListener("pointerdown", function once() {
+  window.removeEventListener("pointerdown", once);
+  enableAiming();
+}, { once: true });
+
+window.addEventListener("resize", queueLive);
+renderLive();
+if (params.get("auto") === "1") showResult();
+</script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>

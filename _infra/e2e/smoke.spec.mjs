@@ -17,6 +17,7 @@ const SCREENS = [
   { name: "아침 브리핑", path: "/util/brief/" },
   { name: "달력", path: "/util/calendar/" },
   { name: "운세", path: "/util/fortune/" },
+  { name: "별자리 배경화면", path: "/util/stars/" },
 ];
 
 for (const screen of SCREENS) {

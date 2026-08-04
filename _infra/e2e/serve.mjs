@@ -9,7 +9,7 @@
 //   node _infra/e2e/serve.mjs [포트]
 import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
-import { join, extname, normalize, dirname } from "node:path";
+import { join, extname, normalize, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const DIST = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "dist");
@@ -54,5 +54,8 @@ export function createStaticServer() {
   });
 }
 
-const port = Number(process.argv[2] ?? 8788);
-createStaticServer().listen(port, () => console.log(`dist/ → http://localhost:${port}`));
+// CLI로 부를 때만 뜬다 — import 한 것만으로 포트를 잡으면 안 된다.
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+  const port = Number(process.argv[2] ?? 8788);
+  createStaticServer().listen(port, () => console.log(`dist/ → http://localhost:${port}`));
+}
