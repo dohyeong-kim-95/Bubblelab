@@ -79,6 +79,7 @@
     </div>
 
     <div class="row">
+      <button id="sensor-btn">폰 돌려서 겨누기</button>
       <button class="primary" id="shoot">이 방향 찍기</button>
     </div>
 
@@ -487,15 +488,19 @@ function onOrientation(event) {
   queueLive();
 }
 
+// iOS는 사용자 제스처 안에서 requestPermission()을 불러야 하고, 한 번 거부하면
+// 다시 묻지 않는다. 그래서 "눌러서 다시 시도"할 수 있는 버튼에 묶어 둔다.
+// 반환값: "on" | "denied" | "unsupported"
 async function startSensors() {
-  const need = typeof DeviceOrientationEvent !== "undefined"
-    && typeof DeviceOrientationEvent.requestPermission === "function";
-  try {
-    if (need && await DeviceOrientationEvent.requestPermission() !== "granted") return false;
-  } catch { return false; }
+  if (typeof DeviceOrientationEvent === "undefined") return "unsupported";
+  if (typeof DeviceOrientationEvent.requestPermission === "function") {
+    try {
+      if (await DeviceOrientationEvent.requestPermission() !== "granted") return "denied";
+    } catch { return "denied"; }
+  }
   window.addEventListener("deviceorientationabsolute", onOrientation);
   window.addEventListener("deviceorientation", onOrientation);
-  return true;
+  return "on";
 }
 
 async function startCamera() {
@@ -508,26 +513,36 @@ async function startCamera() {
   } catch { return false; }
 }
 
-// 센서·카메라는 사용자 제스처가 있어야 열리는 기기가 있다. 화면을 먼저 쓸 수 있게
-// 손으로 겨누기를 기본으로 두고, 첫 탭에서 권한을 청한다.
+// 손으로 겨누기를 기본으로 두고, 센서·카메라는 버튼을 눌렀을 때만 청한다.
+// 두 권한을 한꺼번에 띄우면 iOS에서 팝업이 겹쳐 한쪽이 묻히므로 방향 → 카메라 순서로,
+// 방향 쪽 결과를 받은 뒤에 카메라를 청한다.
+const sensorBtn = $("sensor-btn");
 async function enableAiming() {
-  const [camera, sensors] = await Promise.all([startCamera(), startSensors()]);
+  sensorBtn.disabled = true;
+  sensorBtn.textContent = "권한 확인 중…";
+  const sensors = await startSensors();
+  const camera = await startCamera();
+  if (!camera) $("cam").hidden = true;
+
+  // 권한을 받아도 값이 실제로 들어오는지는 별개다(자기 센서 없는 기기 등) — 잠깐 지켜본다.
   setTimeout(() => {
     const working = state.sensors && Date.now() - sensorSeen < 3000;
     $("manual").hidden = working;
+    sensorBtn.hidden = working;
+    sensorBtn.disabled = false;
+    sensorBtn.textContent = "방향 센서 다시 시도";
     $("manual-why").textContent = working ? ""
-      : sensors ? "기기 방향을 못 읽어서 손으로 맞추는 중이에요. 화면을 끌어도 돌아갑니다."
-        : "방향 센서를 쓸 수 없어요. 화면을 끌거나 아래 값을 움직여 겨누세요.";
-    if (!camera) $("cam").hidden = true;
-  }, 900);
+      : sensors === "denied"
+        ? "방향 접근이 거부됐어요. iOS는 설정 → Safari → 동작 및 방향 접근을 켠 뒤 다시 시도하세요."
+        : sensors === "unsupported"
+          ? "이 기기·브라우저는 방향 센서를 지원하지 않아요. 화면을 끌어 겨누세요."
+          : "방향 값이 안 들어와요. 나침반 보정(폰을 8자로 흔들기) 후 다시 시도하거나, 화면을 끌어 겨누세요.";
+  }, 1200);
 }
 
 $("manual").hidden = false;
-$("manual-why").textContent = "화면을 한 번 누르면 카메라와 방향 센서를 켭니다.";
-window.addEventListener("pointerdown", function once() {
-  window.removeEventListener("pointerdown", once);
-  enableAiming();
-}, { once: true });
+$("manual-why").textContent = "손으로 겨누는 중이에요. 폰을 돌려서 겨누려면 위 버튼을 누르세요.";
+sensorBtn.addEventListener("click", enableAiming);
 
 window.addEventListener("resize", queueLive);
 renderLive();
