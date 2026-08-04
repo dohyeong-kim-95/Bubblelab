@@ -85,6 +85,9 @@
       <button class="primary" id="shoot">이 방향 찍기</button>
     </div>
 
+    <label class="check"><input type="checkbox" id="with-skyline" checked>
+      <span>지평선에 건물 실루엣 넣기 (카메라가 본 스카이라인)</span></label>
+
     <div class="panel" id="manual" hidden>
       <h2>방향 직접 맞추기</h2>
       <label>방위 <span id="az-out"></span>
@@ -111,7 +114,8 @@
       <a class="btn primary" id="save" download>저장</a>
       <button id="again">다시 찍기</button>
     </div>
-    <p class="note" style="margin-top:.55rem">저장이 안 되면 이미지를 길게 눌러 저장하세요.</p>
+    <p class="note" id="result-note" style="margin-top:.55rem" hidden></p>
+    <p class="note" style="margin-top:.35rem">저장이 안 되면 이미지를 길게 눌러 저장하세요.</p>
   </section>
 
   <p class="note">별 위치는 J2000 기준 밝은 별 목록이고, 별자리 선은 직접 이은 것입니다.
@@ -123,6 +127,9 @@ import {
   SEGMENTS, dominantConstellation, equatorialToHorizontal, horizontalToEquatorial,
   makeProjection, starsInView,
 } from "./sky.js";
+import {
+  bandAltitudes, downsampleLuma, extractSkyline, profileAzimuth,
+} from "./skyline.js";
 
 const $ = (id) => document.getElementById(id);
 const D2R = Math.PI / 180, R2D = 180 / Math.PI;
@@ -155,6 +162,7 @@ const state = {
   absoluteHeading: false,
   follow: false,
   invertY: false,
+  skyline: null,        // { profile, confidence } — 찍는 순간의 스카이라인
 };
 if (Number.isNaN(state.date.getTime())) state.date = new Date();
 const frozenTime = params.has("t");
@@ -318,6 +326,78 @@ function drawSky(ctx, W, H, view, opts = {}) {
   return lead;
 }
 
+// ── 지평선의 건물 실루엣 ─────────────────────────────────────
+// 카메라가 본 스카이라인을 고도 0~10° 띠에 앉힌다. 사진이 아니라 열별 높이
+// 숫자만 쓰므로 결과물에는 창문도 간판도 남지 않는다 — 검은 윤곽뿐이다.
+const SKYLINE_TOP_ALT = 10;
+
+// 찍는 순간의 카메라 한 장에서 스카이라인을 뽑는다. 카메라가 없거나 경계가
+// 뚜렷하지 않으면 null — 억지로 그리면 배경화면에 얼룩이 생긴다.
+function readSkyline() {
+  const video = $("cam");
+  if (!video.srcObject || video.videoWidth < 8) return null;
+  const w = 240, h = Math.max(8, Math.round(240 * video.videoHeight / video.videoWidth));
+  const scratch = document.createElement("canvas");
+  scratch.width = w; scratch.height = h;
+  const sctx = scratch.getContext("2d", { willReadFrequently: true });
+  try {
+    sctx.drawImage(video, 0, 0, w, h);
+    const found = extractSkyline(downsampleLuma(sctx.getImageData(0, 0, w, h)));
+    return found.confidence >= 0.35 ? found : null;
+  } catch { return null; }         // 다른 출처 프레임 등 — 조용히 건너뛴다
+}
+
+function drawSkyline(ctx, W, H, view, scale, cx, cy, skyline) {
+  const { profile } = skyline;
+  const place = (alt, az) => {
+    const eq = horizontalToEquatorial(alt, az, state.lat, state.lon, state.date);
+    const p = view.project(eq.ra, eq.dec);
+    return p && p.cosC > 0 ? { x: cx + p.x * scale, y: cy - p.y * scale } : null;
+  };
+
+  // 가장 낮은 지점을 지평선에 앉히고 높이차만 0~10°에 담는다(skyline.js 참고).
+  const band = bandAltitudes(profile, state.alt, SKYLINE_TOP_ALT);
+  const tops = [];
+  for (let i = 0; i < profile.length; i++) {
+    const point = place(band[i], profileAzimuth(i, profile.length, state.az));
+    if (point) tops.push(point);
+  }
+  // 지평선이 화면 밖이면(하늘만 겨눔) 그릴 것이 없다
+  if (tops.length < profile.length * 0.6) return false;
+  if (tops.every((p) => p.y < 0 || p.y > H)) return false;
+
+  // 카메라 화각(약 45°)이 배경화면 폭(약 51°)보다 좁아서, 그대로 두면 양옆에
+  // 지평선이 없는 빈틈이 생겨 실루엣이 공중에 뜬 판처럼 보인다. 양 끝 높이를
+  // 화면 끝까지 이어 준다 — 못 본 구간은 "이대로 이어진다"로 두는 셈이다.
+  const first = tops[0], last = tops[tops.length - 1];
+  const edged = [{ x: -2, y: first.y }, ...tops, { x: W + 2, y: last.y }];
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(edged[0].x, edged[0].y);
+  for (const p of edged.slice(1)) ctx.lineTo(p.x, p.y);
+  ctx.lineTo(W + 2, H + 2);
+  ctx.lineTo(-2, H + 2);
+  ctx.closePath();
+
+  const top = Math.min(...edged.map((p) => p.y));
+  const fill = ctx.createLinearGradient(0, top, 0, H);
+  fill.addColorStop(0, "rgba(2,4,10,0.42)");     // 하늘과 만나는 윗선은 투명하게
+  fill.addColorStop(1, "rgba(2,4,10,0.82)");
+  ctx.fillStyle = fill;
+  ctx.fill();
+
+  // 윤곽선 한 줄 — 실루엣이 배경에 녹아 사라지지 않게
+  ctx.strokeStyle = "rgba(150,180,230,0.22)";
+  ctx.lineWidth = Math.max(1, 1.4 * (H / 2400));
+  ctx.beginPath();
+  ctx.moveTo(edged[0].x, edged[0].y);
+  for (const p of edged.slice(1)) ctx.lineTo(p.x, p.y);
+  ctx.stroke();
+  ctx.restore();
+  return true;
+}
+
 // ── 아래쪽 새김 ──────────────────────────────────────────────
 // 별자리 이름 · 좌표 · 시각을 판에 새기듯 앉힌다. 이 토이의 목적이 정확도가
 // 아니라 "그날 그 자리의 하늘"을 남기는 것이라, 이 블록이 결과물의 절반이다.
@@ -451,13 +531,25 @@ function renderWallpaper() {
   const canvas = document.createElement("canvas");
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext("2d");
-  const lead = drawSky(ctx, W, H, viewFor(state.alt, state.az));
+  const view = viewFor(state.alt, state.az);
+  const lead = drawSky(ctx, W, H, view);
+  // 별 위, 새김 아래. 아래 새김의 어두운 띠가 실루엣을 한 겹 눌러 줘서 글씨가 뜬다.
+  if (state.skyline) drawSkyline(ctx, W, H, view, scaleFor(H), W / 2, H * 0.44, state.skyline);
   drawCaption(ctx, W, H, lead);
   return canvas;
 }
 
 function showResult() {
   if (!frozenTime) state.date = new Date();
+  // 찍는 순간의 카메라 한 장에서 스카이라인을 읽는다. 사진 자체는 버린다.
+  state.skyline = skylineInput.checked ? (demoSkyline ?? readSkyline()) : null;
+  // 실루엣을 켜 뒀는데 안 들어갔으면 이유를 적는다 — 조용히 빠지면 고장으로 읽힌다.
+  const note = $("result-note");
+  note.hidden = !skylineInput.checked || Boolean(state.skyline);
+  note.textContent = note.hidden ? ""
+    : $("cam").srcObject
+      ? "건물 실루엣은 넣지 않았어요 — 하늘과 건물의 경계가 뚜렷하지 않았습니다."
+      : "건물 실루엣은 넣지 않았어요 — 카메라가 꺼져 있습니다.";
   const canvas = renderWallpaper();
   const url = canvas.toDataURL("image/png");
   $("shot").src = url;
@@ -555,6 +647,24 @@ $("viewer").addEventListener("pointermove", (e) => {
   altInput.value = String(Math.round(state.alt));
   queueLive();
 });
+
+// 실루엣 넣기 여부도 기억해 둔다.
+const SKYLINE_KEY = "bl-stars-skyline";
+const skylineInput = $("with-skyline");
+try { skylineInput.checked = localStorage.getItem(SKYLINE_KEY) !== "0"; } catch { /* 최선노력 */ }
+skylineInput.addEventListener("change", () => {
+  try { localStorage.setItem(SKYLINE_KEY, skylineInput.checked ? "1" : "0"); } catch { /* 최선노력 */ }
+});
+
+// 개발용: 카메라 없이 실루엣 배치를 확인한다 (?demo-skyline=1).
+const demoSkyline = params.get("demo-skyline") === "1"
+  ? { confidence: 1, profile: Array.from({ length: 96 }, (_, i) => {
+      // 6~10칸짜리 건물이 늘어선 모양 — 칸 안에서는 높이가 같다
+      const block = Math.floor(i / 7);
+      const heights = [0.70, 0.62, 0.66, 0.55, 0.68, 0.60, 0.72, 0.58, 0.65, 0.69, 0.61, 0.67, 0.71, 0.63];
+      return heights[block % heights.length];
+    }) }
+  : null;
 
 // 이 취향은 기기마다 한 번 정하면 바뀌지 않는다 — 이 브라우저에 기억해 둔다.
 const INVERT_KEY = "bl-stars-invert-y";
