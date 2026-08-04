@@ -54,6 +54,22 @@ function isPyodideSite(url) {
   return local && (url.pathname === "/test" || url.pathname.startsWith("/test/"));
 }
 
+// util/stars는 폰이 겨눈 방향으로 하늘을 그린다 — 기기 방향(가속도·자이로·지자기)과
+// 위치가 필요하다. 기본 정책은 이 넷을 빈 목록으로 잠가 두는데, 그러면 브라우저가
+// **권한을 묻기도 전에** 이벤트를 아예 안 보내서 "값이 안 들어온다"로 보인다.
+// (카메라만 (self)로 열려 있어 카메라는 되고 나머지는 죽는 증상이 여기서 나왔다.)
+// 이 페이지에 한해 self로 연다 — 열어도 사용자 권한 확인은 그대로 거친다.
+const SENSOR_POLICY = "accelerometer=(self), camera=(self), geolocation=(self), "
+  + "gyroscope=(self), magnetometer=(self), microphone=(), payment=(), usb=()";
+
+function isSkyPage(url) {
+  const path = url.pathname;
+  const onUtil = url.hostname === "util.bubblelab.dev";
+  const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  const at = (prefix) => path === prefix || path.startsWith(`${prefix}/`);
+  return (onUtil && at("/stars")) || (local && at("/util/stars"));
+}
+
 export function featureEnabled(env, name) {
   return env?.[name] === "true";
 }
@@ -104,6 +120,9 @@ export function applySecurityHeaders(response, request) {
   const url = new URL(request.url);
   if (isPyodideSite(url)) {
     headers.set("Content-Security-Policy", PYODIDE_CSP);
+  }
+  if (isSkyPage(url)) {
+    headers.set("Permissions-Policy", SENSOR_POLICY);
   }
   if (url.protocol === "https:") {
     headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");

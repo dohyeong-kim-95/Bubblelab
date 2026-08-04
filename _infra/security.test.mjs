@@ -120,3 +120,30 @@ test("durable rate limiter persists a fixed-window limit", async () => {
   assert.equal(blocked.allowed, false);
   assert.ok(blocked.retryAfter >= 1 && blocked.retryAfter <= 60);
 });
+
+// 별자리 화면은 기기 방향과 위치를 쓴다. 기본 정책이 이 넷을 빈 목록으로 잠가 두면
+// 브라우저가 권한을 묻기도 전에 이벤트를 안 보내서 "값이 안 들어온다"가 된다.
+test("별자리 화면만 방향·위치 기능을 self로 연다", () => {
+  const policyOf = (url) => applySecurityHeaders(new Response("ok"), new Request(url))
+    .headers.get("Permissions-Policy");
+
+  for (const url of ["https://util.bubblelab.dev/stars/", "https://util.bubblelab.dev/stars",
+                     "http://localhost:8787/util/stars/"]) {
+    const policy = policyOf(url);
+    for (const feature of ["accelerometer", "gyroscope", "magnetometer", "geolocation", "camera"]) {
+      assert.match(policy, new RegExp(`${feature}=\\(self\\)`), `${url} 에서 ${feature}가 막혀 있다`);
+    }
+    // 열어 준 것만 연다 — 마이크·결제·USB는 그대로 잠근 채로 둔다
+    for (const feature of ["microphone", "payment", "usb"]) {
+      assert.match(policy, new RegExp(`${feature}=\\(\\)`), `${url} 에서 ${feature}가 열렸다`);
+    }
+  }
+
+  // 다른 화면은 기본 정책 그대로 — 이 완화가 사이트 전체로 새면 안 된다
+  for (const url of ["https://util.bubblelab.dev/", "https://util.bubblelab.dev/fortune/",
+                     "https://bubblelab.dev/", "https://slop.bubblelab.dev/stars/"]) {
+    const policy = policyOf(url);
+    assert.match(policy, /geolocation=\(\)/, `${url} 에서 위치가 열렸다`);
+    assert.match(policy, /accelerometer=\(\)/, `${url} 에서 방향 센서가 열렸다`);
+  }
+});
