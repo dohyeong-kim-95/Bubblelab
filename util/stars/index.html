@@ -48,6 +48,8 @@
            background: #0d1420; display: grid; gap: .55rem; }
   .panel h2 { margin: 0; font-size: .72rem; opacity: .55; font-weight: normal; letter-spacing: .04em; }
   label { display: grid; gap: .28rem; font-size: .68rem; opacity: .75; }
+  label.check { display: flex; align-items: center; gap: .45rem; cursor: pointer; }
+  label.check input { accent-color: #6f9de0; width: 1rem; height: 1rem; flex: none; }
   input[type=range] { width: 100%; accent-color: #6f9de0; }
   select { font: inherit; font-size: .75rem; color: inherit; background: #182230;
            border: 1px solid #dbe4ee2e; border-radius: .5rem; padding: .45rem .5rem; width: 100%; }
@@ -89,6 +91,8 @@
         <input type="range" id="az" min="0" max="359" step="1" value="180"></label>
       <label>고도 <span id="alt-out"></span>
         <input type="range" id="alt" min="-90" max="90" step="1" value="35"></label>
+      <label class="check"><input type="checkbox" id="invert-y">
+        <span>위아래 반대로 밀기 (위로 밀면 위를 봄)</span></label>
       <p class="note" id="manual-why"></p>
     </div>
 
@@ -149,6 +153,7 @@ const state = {
   alt: num("alt") ?? 35,
   sensors: false,
   absoluteHeading: false,
+  invertY: false,
 };
 if (Number.isNaN(state.date.getTime())) state.date = new Date();
 const frozenTime = params.has("t");
@@ -534,17 +539,28 @@ $("viewer").addEventListener("pointerdown", (e) => {
   drag = { x: e.clientX, y: e.clientY, az: state.az, alt: state.alt };
   $("viewer").setPointerCapture(e.pointerId);
 });
-// 끄는 방향 = 겨누는 방향. 오른쪽으로 밀면 오른쪽을 보고, 아래로 밀면 아래를 본다
-// (하늘을 잡아끄는 반대 방식으로 두었더니 손 감각과 어긋났다 — 이 화면은 지도가
-// 아니라 뷰파인더라, 폰을 그쪽으로 돌리는 것과 같게 움직여야 한다).
+// 좌우는 끄는 방향이 곧 겨누는 방향이다 — 오른쪽으로 밀면 오른쪽을 본다.
+// 위아래는 취향이 갈리는 축이라 설정으로 뺐다. 기본은 위로 밀면 고도가 내려가는 쪽
+// (화면을 위로 밀어 올려 아래 하늘을 끌어오는 감각), 체크하면 반대가 된다.
 $("viewer").addEventListener("pointermove", (e) => {
   if (!drag) return;
   const rect = $("viewer").getBoundingClientRect();
+  const upSign = state.invertY ? -1 : 1;
   state.az = ((drag.az + (e.clientX - drag.x) / rect.width * 120) % 360 + 360) % 360;
-  state.alt = clamp(drag.alt - (e.clientY - drag.y) / rect.height * 120, -90, 90);
+  state.alt = clamp(drag.alt + upSign * (e.clientY - drag.y) / rect.height * 120, -90, 90);
   azInput.value = String(Math.round(state.az));
   altInput.value = String(Math.round(state.alt));
   queueLive();
+});
+
+// 이 취향은 기기마다 한 번 정하면 바뀌지 않는다 — 이 브라우저에 기억해 둔다.
+const INVERT_KEY = "bl-stars-invert-y";
+const invertInput = $("invert-y");
+try { state.invertY = localStorage.getItem(INVERT_KEY) === "1"; } catch { /* 최선노력 */ }
+invertInput.checked = state.invertY;
+invertInput.addEventListener("change", () => {
+  state.invertY = invertInput.checked;
+  try { localStorage.setItem(INVERT_KEY, state.invertY ? "1" : "0"); } catch { /* 최선노력 */ }
 });
 const endDrag = () => { drag = null; };
 $("viewer").addEventListener("pointerup", endDrag);
