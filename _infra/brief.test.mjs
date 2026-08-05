@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   airGrade, BRIEF_REGIONS, BriefDO, buildBrief, buildIndex, buildRates, businessDaysBetween, findRegion,
   handleBriefRates, handleBriefToday, indexSpeech, INDEX_SYMBOLS, parseStooqDaily,
-  parseYahooChart, RATE_SYMBOLS, skyOf,
+  parseTwelveSeries, parseYahooChart, RATE_SYMBOLS, skyOf,
 } from "./brief.js";
 import { b64uEncode, generateVapidKeys } from "./webpush.js";
 
@@ -829,4 +829,75 @@ test("화면이 지수 기준일과 장중 여부를 밝힌다", async () => {
   assert.match(page, /rates\?\.indexLive \? "장중" : "종가"/);
   // "종가"를 아무 데서나 단정하지 않는다
   assert.doesNotMatch(page, /지수 종가 \$\{rates/);
+});
+
+// ── Twelve Data (정식 경로) ────────────────────────────────────
+const TWELVE_OK = JSON.stringify({
+  status: "ok",
+  values: [                                   // 최신이 먼저 온다
+    { datetime: "2026-08-04", close: "44280.90" },
+    { datetime: "2026-08-03", close: "44050.55" },
+  ],
+});
+
+test("Twelve Data 응답을 오름차순 행으로 읽는다", () => {
+  const rows = parseTwelveSeries(JSON.parse(TWELVE_OK));
+  assert.deepEqual(rows.map((r) => r.date), ["2026-08-03", "2026-08-04"]);
+  assert.equal(rows[1].close, 44280.9);
+  // 실패가 HTTP 200 + status:"error"로 오는 경우가 있다 — 본문을 봐야 한다
+  assert.deepEqual(parseTwelveSeries({ status: "error", code: 401, message: "bad key" }), []);
+  for (const bad of [null, {}, { values: null }, { status: "ok", values: [{ close: "" }] },
+                     { status: "ok", values: [{ datetime: "2026-08-04", close: null }] }]) {
+    assert.deepEqual(parseTwelveSeries(bad), []);
+  }
+});
+
+test("키가 있으면 Twelve Data만 쓰고 다른 상류는 건드리지 않는다", async () => {
+  const tried = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const href = String(url);
+    tried.push(href.includes("twelvedata") ? "TwelveData" : href.includes("stooq") ? "Stooq" : "Yahoo");
+    return new Response(TWELVE_OK);
+  };
+  try {
+    const { fetchIndices } = await import("./brief.js");
+    const result = await fetchIndices({ TWELVEDATA_API_KEY: "test-key" });
+    assert.equal(result.source, "TwelveData");
+    assert.equal(result.items.length, 2);
+    assert.deepEqual([...new Set(tried)], ["TwelveData"], `예비 상류까지 불렀다: ${tried}`);
+    // 키가 URL에 실려 나가므로 응답 본문에는 절대 담기지 않아야 한다
+    assert.doesNotMatch(JSON.stringify(result), /test-key/);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("키가 없으면 Twelve Data를 조용히 건너뛴다 (fail-closed)", async () => {
+  const tried = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    tried.push(String(url).includes("twelvedata") ? "TwelveData" : "기타");
+    return new Response(YAHOO_JSON([44000, 44280.9]));
+  };
+  try {
+    const { fetchIndices } = await import("./brief.js");
+    const result = await fetchIndices({});
+    assert.ok(!tried.includes("TwelveData"), "키가 없는데 호출했다");
+    assert.equal(result.source, "Yahoo");
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("Twelve Data가 죽어도 예비 상류로 지수가 살아 있다", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const href = String(url);
+    if (href.includes("twelvedata")) return new Response('{"status":"error","message":"limit"}');
+    if (href.includes("stooq")) return new Response("");
+    return new Response(YAHOO_JSON([44000, 44280.9]));
+  };
+  try {
+    const { fetchIndices } = await import("./brief.js");
+    const result = await fetchIndices({ TWELVEDATA_API_KEY: "test-key" });
+    assert.equal(result.source, "Yahoo", "정식 경로가 막혔는데 예비로 안 넘어갔다");
+    assert.equal(result.items.length, 2);
+  } finally { globalThis.fetch = originalFetch; }
 });

@@ -314,3 +314,14 @@ Yahoo Finance — https://finance.yahoo.com/
 
 공식 문서화된 API가 아니며 개인 이용 기준입니다. Stooq와 마찬가지로 상업적
 이용이 필요해지면 정식 시세 공급 계약을 검토해야 합니다.
+
+## Twelve Data (주가지수 — 정식 경로)
+
+util/brief가 다우존스·나스닥 종가를 가져오는 기본 경로입니다. 문서와 이용약관이
+있는 상용 API이며 `TWELVEDATA_API_KEY` secret으로 인증합니다.
+
+Twelve Data — https://twelvedata.com/
+
+지수 자체의 권리는 S&P Dow Jones Indices(다우존스)와 Nasdaq, Inc.(나스닥 종합)에
+있습니다. 무료 티어의 재배포·공개 표시 허용 범위는 제공자 약관을 따르며, 이
+브리핑을 상업적으로 쓰게 되면 티어와 약관을 다시 확인해야 합니다.

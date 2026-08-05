@@ -52,7 +52,10 @@
       "ADMIN_SESSION_SECRET",
       "PLANNER_SESSION_SECRET",
       "KASI_SERVICE_KEY"
-    ]
+    ],
+    // 선택: 있으면 util/brief 지수를 정식 경로(Twelve Data)로 받고,
+    // 없으면 조용히 예비 상류(Yahoo → Stooq)로 내려간다.
+    "optional": ["TWELVEDATA_API_KEY"]
   },
   // /_rt/<이름> 실시간 데이터 서버 (아발론 등 멀티플레이어 토이용)
   "durable_objects": {

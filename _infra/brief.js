@@ -249,8 +249,8 @@ export function buildRates({ series, now = new Date() }) {
 // 다음 영업일 13시 갱신, KRX는 키 필요) 미국 지수를 쓴다. Stooq는 키 없이 일별
 // 시세를 CSV로 준다. 지수값은 사실이지만 소스 약관은 개인·비상업 이용 기준이다.
 export const INDEX_SYMBOLS = [
-  { id: "dow", label: "다우", name: "다우존스", stooq: "^dji", yahoo: "^DJI" },
-  { id: "nasdaq", label: "나스닥", name: "나스닥 종합", stooq: "^ndq", yahoo: "^IXIC" },
+  { id: "dow", label: "다우", name: "다우존스", twelve: "DJI", yahoo: "^DJI", stooq: "^dji" },
+  { id: "nasdaq", label: "나스닥", name: "나스닥 종합", twelve: "IXIC", yahoo: "^IXIC", stooq: "^ndq" },
 ];
 
 // Number(null)도 Number("")도 0이다. 휴장일·빈 칸을 그대로 통과시키면 지수가
@@ -293,6 +293,21 @@ export function parseYahooChart(json) {
     const at = Number(stamps[i]);
     if (close === null || !Number.isFinite(at)) continue;
     rows.push({ date: new Date(at * 1000).toISOString().slice(0, 10), close });
+  }
+  return rows.sort((a, b) => (a.date < b.date ? -1 : 1));
+}
+
+// Twelve Data time_series 응답 → {date, close} 행. values는 **최신이 먼저** 온다.
+// 실패해도 HTTP 200에 status:"error"로 오는 경우가 있어 본문을 봐야 한다.
+export function parseTwelveSeries(json) {
+  if (!json || json.status === "error") return [];
+  const values = Array.isArray(json.values) ? json.values : [];
+  const rows = [];
+  for (const row of values) {
+    const close = closeOf(row?.close);
+    const date = String(row?.datetime ?? "").slice(0, 10);
+    if (close === null || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    rows.push({ date, close });
   }
   return rows.sort((a, b) => (a.date < b.date ? -1 : 1));
 }
@@ -346,6 +361,18 @@ const UA = "Mozilla/5.0 (compatible; BubblelabBrief/1.0; +https://util.bubblelab
 
 const INDEX_PROVIDERS = [
   {
+    // 문서·약관이 있는 정식 경로. 키가 없으면 통째로 건너뛰므로(fail-closed)
+    // 키를 넣기 전에도 아래 상류로 그대로 동작한다.
+    name: "TwelveData",
+    enabled: (env) => Boolean(env?.TWELVEDATA_API_KEY),
+    async rows(symbol, { env }) {
+      const url = "https://api.twelvedata.com/time_series"
+        + `?symbol=${encodeURIComponent(symbol.twelve)}&interval=1day&outputsize=5`
+        + `&apikey=${encodeURIComponent(env.TWELVEDATA_API_KEY)}`;
+      return parseTwelveSeries(JSON.parse(await getText(url)));
+    },
+  },
+  {
     name: "Yahoo",
     async rows(symbol) {
       const url = `https://query1.finance.yahoo.com/v8/finance/chart/`
@@ -376,16 +403,17 @@ async function getText(url) {
 }
 
 // 반환: { items, source } — 어느 상류가 답했는지 화면에 밝히고, 디버깅에도 쓴다.
-export async function fetchIndices(now = new Date()) {
+export async function fetchIndices(env = {}, now = new Date()) {
   const end = kstStamp(now).replace(/-/g, "");
   const start = new Date(Date.parse(kstStamp(now)) - 21 * 86400000)
     .toISOString().slice(0, 10).replace(/-/g, "");
 
   for (const provider of INDEX_PROVIDERS) {
+    if (provider.enabled && !provider.enabled(env)) continue;   // 키 없으면 조용히 건너뛴다
     // 지수 하나가 실패해도 나머지는 보여주되, 전부 실패하면 다음 상류로 넘어간다.
     const items = (await Promise.all(INDEX_SYMBOLS.map(async (symbol) => {
       try {
-        const index = buildIndex(symbol, await provider.rows(symbol, { start, end }));
+        const index = buildIndex(symbol, await provider.rows(symbol, { start, end, env }));
         // 행은 받았는데 쓸 수 있는 종가가 없으면 "지수가 원래 없는 것"과 구분해야 한다
         if (!index) throw new Error("no usable rows");
         return index;
@@ -421,7 +449,7 @@ export async function handleBriefRates(request, env) {
       console.error("brief rates upstream failed", error);
       return null;
     }),
-    fetchIndices().catch(() => ({ items: [], source: null })),
+    fetchIndices(env).catch(() => ({ items: [], source: null })),
   ]);
   if (!rates && !indices.items.length) {
     return Response.json(
