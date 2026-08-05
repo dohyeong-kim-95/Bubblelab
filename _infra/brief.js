@@ -314,6 +314,13 @@ export function buildIndex(symbol, rows) {
   };
 }
 
+// 미국 동부 기준 오늘. Yahoo 일봉은 장이 열려 있는 동안 **오늘치 미완성 봉**을
+// 포함하므로, 마지막 행의 날짜가 오늘이면 그건 종가가 아니라 장중 현재가다.
+// 한국 아침 8시에는 미국장이 닫혀 있어 항상 종가지만, 화면은 아무 때나 열린다.
+export function easternStamp(now = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(now);
+}
+
 export function indexSpeech(indices) {
   const parts = [];
   for (const index of indices) {
@@ -422,10 +429,14 @@ export async function handleBriefRates(request, env) {
       { status: 502, headers: { "Cache-Control": "no-store" } },
     );
   }
+  const today = easternStamp();
   const payload = {
     ...(rates ?? { date: null, items: [], text: "", stale: false }),
     indices: indices.items,
     indexSource: indices.source,
+    // 어느 장의 값인지, 그리고 그게 확정 종가인지 장중값인지 화면이 밝히도록 넘긴다
+    indexDate: indices.items.map((i) => i.date).sort().at(-1) ?? null,
+    indexLive: indices.items.some((i) => i.date === today),
   };
   // 상류가 죽었을 때 지수 줄만 조용히 빠지면 아무도 고장을 모른다 — 화면이 알리도록 넘긴다.
   payload.indicesFailed = indices.items.length < INDEX_SYMBOLS.length;

@@ -687,7 +687,7 @@ test("화면이 지수를 그리고 어느 상류가 답했는지 밝힌다", as
   assert.match(page, /id="index-list"/);
   assert.match(page, /rates\.indices/);
   // 상류가 바뀔 수 있으므로 이름을 박지 않고 서버가 준 값을 쓴다
-  assert.match(page, /지수 종가 \$\{rates\.indexSource/);
+  assert.match(page, /\$\{indexBasis\(\)\} \$\{rates\.indexSource/);
 });
 
 test("운세 총평 아래 유도 버튼이 두 상태로 갈린다", async () => {
@@ -789,4 +789,44 @@ test("실패가 확정된 상류를 먼저 부르지 않는다", async () => {
     assert.equal(result.source, "Yahoo");
     assert.ok(!order.includes("Stooq"), "앞 상류가 성공했는데 예비까지 불렀다");
   } finally { globalThis.fetch = originalFetch; }
+});
+
+// Yahoo 일봉은 미국장이 열려 있는 동안 오늘치 **미완성 봉**을 포함한다.
+// 그걸 "종가"라고 부르면 틀린 말이 된다 — 어느 장의 값인지 함께 넘긴다.
+test("장중 값과 확정 종가를 구분해 넘긴다", async () => {
+  const { easternStamp } = await import("./brief.js");
+  const today = easternStamp();
+  const yesterday = new Date(Date.parse(today) - 86400000).toISOString().slice(0, 10);
+  const chart = (last) => JSON.stringify({
+    chart: { result: [{
+      timestamp: [Date.parse(yesterday) / 1000, Date.parse(last) / 1000],
+      indicators: { quote: [{ close: [44000, 44280.9] }] },
+    }] },
+  });
+
+  const originalFetch = globalThis.fetch;
+  const call = async (last) => {
+    globalThis.fetch = async (url) => (String(url).includes("frankfurter")
+      ? new Response("nope", { status: 500 })
+      : new Response(chart(last)));
+    const res = await handleBriefRates(new Request("https://util.bubblelab.dev/_brief/rates"), {});
+    return res.json();
+  };
+  try {
+    const live = await call(today);
+    assert.equal(live.indexLive, true, "장중 값인데 확정 종가로 표시된다");
+    assert.equal(live.indexDate, today);
+
+    const closed = await call(yesterday);
+    assert.equal(closed.indexLive, false, "확정 종가인데 장중으로 표시된다");
+    assert.equal(closed.indexDate, yesterday);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("화면이 지수 기준일과 장중 여부를 밝힌다", async () => {
+  const page = await pageSource();
+  assert.match(page, /rates\?\.indexDate/);
+  assert.match(page, /rates\?\.indexLive \? "장중" : "종가"/);
+  // "종가"를 아무 데서나 단정하지 않는다
+  assert.doesNotMatch(page, /지수 종가 \$\{rates/);
 });

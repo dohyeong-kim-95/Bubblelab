@@ -370,6 +370,13 @@
   // 지역과 달리 전 세계 공통이라 지역을 바꿔도 다시 부르지 않는다.
   let rates = null;
 
+  // 미국장이 열려 있는 동안 Yahoo 일봉의 마지막 행은 오늘치 미완성 봉이다.
+  // 그걸 "종가"라고 부르면 틀린 말이 되므로 서버가 준 indexLive로 갈라 적는다.
+  function indexBasis() {
+    const when = rates?.indexDate ? `${rates.indexDate} ` : "";
+    return `${when}${rates?.indexLive ? "장중" : "종가"}`;
+  }
+
   function showRates() {
     const box = $("rates");
     const hasAny = rates && ((rates.items?.length ?? 0) + (rates.indices?.length ?? 0)) > 0;
@@ -439,7 +446,7 @@
     // 기준일을 반드시 적는다 — ECB는 하루 한 번 고시라 아침에는 전 영업일 값이다.
     const basis = $("rate-basis");
     if (!rates.items?.length) {                 // 지수만 받은 경우
-      basis.textContent = `지수 종가 · ${rates.indexSource ?? "출처 미상"}`;
+      basis.textContent = `${indexBasis()} · ${rates.indexSource ?? "출처 미상"}`;
       box.hidden = false;
       return;
     }
@@ -455,7 +462,7 @@
     // 어느 상류가 답했는지 밝힌다(상류가 막히면 다음 상류로 넘어가므로 고정이 아니다).
     // 실패 안내는 위의 #rate-note가 이미 하므로 여기서 다시 말하지 않는다.
     if (rates.indices?.length) {
-      basis.append(document.createTextNode(` · 지수 종가 ${rates.indexSource ?? ""}`.trimEnd()));
+      basis.append(document.createTextNode(` · ${indexBasis()} ${rates.indexSource ?? ""}`.trimEnd()));
     }
     box.hidden = false;
   }
