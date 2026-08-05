@@ -1422,7 +1422,7 @@ export async function handleRequest(request, env, ctx) {
       }
     }
 
-    if (site === "admin" || site === "work" || site === "estate" || site === "duri") {
+    if (["admin", "work", "estate", "duri", "invest"].includes(site)) {
       const headers = new Headers(response.headers);
       headers.set("Cache-Control", "no-store");
       headers.set("X-Robots-Tag", "noindex, nofollow");

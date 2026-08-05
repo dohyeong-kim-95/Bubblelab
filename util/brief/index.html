@@ -439,7 +439,7 @@
     // 기준일을 반드시 적는다 — ECB는 하루 한 번 고시라 아침에는 전 영업일 값이다.
     const basis = $("rate-basis");
     if (!rates.items?.length) {                 // 지수만 받은 경우
-      basis.textContent = "지수 종가 · Stooq";
+      basis.textContent = `지수 종가 · ${rates.indexSource ?? "출처 미상"}`;
       box.hidden = false;
       return;
     }
@@ -452,7 +452,11 @@
     link.rel = "noopener";
     link.textContent = "Frankfurter";
     basis.append(link);
-    if (rates.indices?.length) basis.append(document.createTextNode(" · 지수 종가 Stooq"));
+    // 어느 상류가 답했는지 밝힌다(상류가 막히면 다음 상류로 넘어가므로 고정이 아니다).
+    // 실패 안내는 위의 #rate-note가 이미 하므로 여기서 다시 말하지 않는다.
+    if (rates.indices?.length) {
+      basis.append(document.createTextNode(` · 지수 종가 ${rates.indexSource ?? ""}`.trimEnd()));
+    }
     box.hidden = false;
   }
 

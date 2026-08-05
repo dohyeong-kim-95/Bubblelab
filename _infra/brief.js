@@ -249,9 +249,17 @@ export function buildRates({ series, now = new Date() }) {
 // 다음 영업일 13시 갱신, KRX는 키 필요) 미국 지수를 쓴다. Stooq는 키 없이 일별
 // 시세를 CSV로 준다. 지수값은 사실이지만 소스 약관은 개인·비상업 이용 기준이다.
 export const INDEX_SYMBOLS = [
-  { id: "^dji", label: "다우", name: "다우존스" },
-  { id: "^ndq", label: "나스닥", name: "나스닥 종합" },
+  { id: "dow", label: "다우", name: "다우존스", stooq: "^dji", yahoo: "^DJI" },
+  { id: "nasdaq", label: "나스닥", name: "나스닥 종합", stooq: "^ndq", yahoo: "^IXIC" },
 ];
+
+// Number(null)도 Number("")도 0이다. 휴장일·빈 칸을 그대로 통과시키면 지수가
+// 0으로 찍히고 등락률이 -100%가 된다 — 숫자로 쓰기 전에 반드시 여기를 거친다.
+const closeOf = (value) => {
+  if (value === null || value === undefined || String(value).trim() === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
 
 // Stooq 일별 CSV: "Date,Open,High,Low,Close,Volume" 헤더 + 날짜 오름차순 행
 export function parseStooqDaily(csv) {
@@ -264,9 +272,27 @@ export function parseStooqDaily(csv) {
   const rows = [];
   for (const line of lines.slice(1)) {
     const cells = line.split(",");
-    const close = Number(cells[closeAt]);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(cells[dateAt] ?? "") || !Number.isFinite(close)) continue;
+    const close = closeOf(cells[closeAt]);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(cells[dateAt] ?? "") || close === null) continue;
     rows.push({ date: cells[dateAt], close });
+  }
+  return rows.sort((a, b) => (a.date < b.date ? -1 : 1));
+}
+
+// Yahoo 차트 응답 → {date, close} 행. 장중에는 마지막 행이 미확정 종가라
+// 그대로 쓰면 "전일 대비"가 아니라 "현재가 대비"가 되지만, 아침 브리핑에는
+// 미국장이 이미 닫혀 있어 마지막 행이 곧 종가다.
+export function parseYahooChart(json) {
+  const result = json?.chart?.result?.[0];
+  const stamps = result?.timestamp;
+  const closes = result?.indicators?.quote?.[0]?.close;
+  if (!Array.isArray(stamps) || !Array.isArray(closes)) return [];
+  const rows = [];
+  for (let i = 0; i < stamps.length; i++) {
+    const close = closeOf(closes[i]);                 // 휴장일은 null이 온다
+    const at = Number(stamps[i]);
+    if (close === null || !Number.isFinite(at)) continue;
+    rows.push({ date: new Date(at * 1000).toISOString().slice(0, 10), close });
   }
   return rows.sort((a, b) => (a.date < b.date ? -1 : 1));
 }
@@ -302,35 +328,64 @@ export function indexSpeech(indices) {
 }
 
 const RATES_URL = "https://api.frankfurter.dev/v1";
-const INDEX_URL = "https://stooq.com/q/d/l/";
+// 상류를 하나만 쓰면 그 하나가 막힐 때 지수가 통째로 사라진다 — 실제로 Stooq가
+// Cloudflare Worker에서 빈 응답을 줘서 배포 후에야 알았다. 순서대로 시도한다.
+// 브라우저가 아닌 곳에서 오는 요청을 막는 상류가 있어 User-Agent를 붙인다.
+const UA = "Mozilla/5.0 (compatible; BubblelabBrief/1.0; +https://util.bubblelab.dev/brief)";
+
+const INDEX_PROVIDERS = [
+  {
+    name: "Stooq",
+    async rows(symbol, { start, end }) {
+      const url = `https://stooq.com/q/d/l/?s=${encodeURIComponent(symbol.stooq)}`
+        + `&i=d&d1=${start}&d2=${end}`;
+      const csv = await getText(url);
+      // 상류가 CSV 대신 안내·차단 HTML을 200으로 돌려주는 일이 있다.
+      if (/^\s*</.test(csv)) throw new Error("non-CSV response (HTML?)");
+      return parseStooqDaily(csv);
+    },
+  },
+  {
+    name: "Yahoo",
+    async rows(symbol) {
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/`
+        + `${encodeURIComponent(symbol.yahoo)}?range=1mo&interval=1d`;
+      return parseYahooChart(JSON.parse(await getText(url)));
+    },
+  },
+];
 
 async function getText(url) {
-  const response = await fetch(url, { signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS) });
+  const response = await fetch(url, {
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+    headers: { "User-Agent": UA, Accept: "*/*" },
+  });
   if (!response.ok) throw new Error(`upstream ${response.status}`);
   return response.text();
 }
 
+// 반환: { items, source } — 어느 상류가 답했는지 화면에 밝히고, 디버깅에도 쓴다.
 export async function fetchIndices(now = new Date()) {
   const end = kstStamp(now).replace(/-/g, "");
-  const start = new Date(Date.parse(kstStamp(now)) - 14 * 86400000)
+  const start = new Date(Date.parse(kstStamp(now)) - 21 * 86400000)
     .toISOString().slice(0, 10).replace(/-/g, "");
-  // 지수 하나가 실패해도 나머지는 보여준다.
-  const results = await Promise.all(INDEX_SYMBOLS.map(async (symbol) => {
-    try {
-      const csv = await getText(
-        `${INDEX_URL}?s=${encodeURIComponent(symbol.id)}&i=d&d1=${start}&d2=${end}`);
-      // 상류가 CSV 대신 안내·차단 HTML을 200으로 돌려주는 일이 있다. 그냥 파싱하면
-      // 빈 배열이 되어 "지수가 원래 없는 것"과 구분되지 않으므로 여기서 걸러 로그를 남긴다.
-      if (/^\s*</.test(csv)) throw new Error("non-CSV response (HTML?)");
-      const index = buildIndex(symbol, parseStooqDaily(csv));
-      if (!index) throw new Error("no usable rows");
-      return index;
-    } catch (error) {
-      console.error("brief index failed", symbol.id, error);
-      return null;
-    }
-  }));
-  return results.filter(Boolean);
+
+  for (const provider of INDEX_PROVIDERS) {
+    // 지수 하나가 실패해도 나머지는 보여주되, 전부 실패하면 다음 상류로 넘어간다.
+    const items = (await Promise.all(INDEX_SYMBOLS.map(async (symbol) => {
+      try {
+        const index = buildIndex(symbol, await provider.rows(symbol, { start, end }));
+        // 행은 받았는데 쓸 수 있는 종가가 없으면 "지수가 원래 없는 것"과 구분해야 한다
+        if (!index) throw new Error("no usable rows");
+        return index;
+      } catch (error) {
+        console.error("brief index failed", provider.name, symbol.id, error);
+        return null;
+      }
+    }))).filter(Boolean);
+    if (items.length) return { items, source: provider.name };
+  }
+  return { items: [], source: null };
 }
 
 export async function fetchRates(now = new Date()) {
@@ -355,19 +410,23 @@ export async function handleBriefRates(request, env) {
       console.error("brief rates upstream failed", error);
       return null;
     }),
-    fetchIndices().catch(() => []),
+    fetchIndices().catch(() => ({ items: [], source: null })),
   ]);
-  if (!rates && !indices.length) {
+  if (!rates && !indices.items.length) {
     return Response.json(
       { error: "환율·지수를 불러오지 못했어요." },
       { status: 502, headers: { "Cache-Control": "no-store" } },
     );
   }
-  const payload = { ...(rates ?? { date: null, items: [], text: "", stale: false }), indices };
+  const payload = {
+    ...(rates ?? { date: null, items: [], text: "", stale: false }),
+    indices: indices.items,
+    indexSource: indices.source,
+  };
   // 상류가 죽었을 때 지수 줄만 조용히 빠지면 아무도 고장을 모른다 — 화면이 알리도록 넘긴다.
-  payload.indicesFailed = indices.length < INDEX_SYMBOLS.length;
+  payload.indicesFailed = indices.items.length < INDEX_SYMBOLS.length;
   payload.ratesFailed = !rates;
-  payload.text = [rates?.text, indexSpeech(indices)].filter(Boolean).join(" ");
+  payload.text = [rates?.text, indexSpeech(indices.items)].filter(Boolean).join(" ");
   // ECB는 하루 한 번 고시라 자주 물을 이유가 없다. 다만 한쪽이 실패한 응답을
   // 30분씩 물고 있으면 복구도 30분 늦어지므로 그때는 짧게 잡는다.
   const maxAge = payload.indicesFailed || payload.ratesFailed ? 300 : 1800;

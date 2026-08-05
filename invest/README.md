@@ -1,6 +1,15 @@
 # invest — Bubble Invest
 
-상태: **Experiment**. Bubblelab 대표 공개 프로젝트나 실제 금융 서비스가 아닙니다.
+상태: **Experiment · 비공개**. www 랜딩과 카테고리 홈 풀다운에 노출되지 않고
+(`_infra/build.mjs`의 `CONFIDENTIAL_SUBDOMAINS`), 검색에도 걸리지 않습니다
+(worker가 `X-Robots-Tag: noindex, nofollow`). 주소를 직접 아는 사람만 들어옵니다.
+공개로 되돌릴 때는 그 두 곳과 **www 랜딩 카드 추가**까지 함께 해야 합니다 —
+퍼블릭인데 랜딩 카드가 없으면 빌드가 실패합니다.
+
+시세가 전부 데모 데이터라(아래 "중요한 제한") 투자 화면으로 오해될 여지가 있어
+비공개로 두었습니다.
+
+상태 상세: **Experiment**. Bubblelab 대표 공개 프로젝트나 실제 금융 서비스가 아닙니다.
 
 <https://invest.bubblelab.dev>에서 제공하는 Bloomberg Terminal풍 개인 투자 화면
 프로토타입입니다. PC에서는 넓은 HTS 레이아웃, 모바일에서는 하단 5개 탭의 MTS

@@ -154,3 +154,18 @@ test("비공개 카드는 검색에도 걸리지 않는다", () => {
   const page = readFileSync(join(DIST, "util/passport-pic/index.html"), "utf8");
   assert.match(page, /<meta name="robots" content="noindex, nofollow">/);
 });
+
+// 비공개 서브도메인은 랜딩·풀다운·검색 어디에도 나오면 안 된다.
+// (빌드가 랜딩 링크는 검사하지만 풀다운과 noindex는 검사하지 않는다)
+test("비공개 서브도메인은 풀다운 메뉴에도 나오지 않는다", () => {
+  const menuOf = (site) => readFileSync(join(DIST, site, "index.html"), "utf8");
+  for (const site of ["slop", "util", "games"]) {
+    const home = menuOf(site);
+    for (const hidden of ["invest", "admin", "work", "estate", "duri", "podcast", "test"]) {
+      assert.ok(!home.includes(`https://${hidden}.bubblelab.dev`),
+        `${site} 홈 풀다운에 비공개 ${hidden}이 나온다`);
+    }
+  }
+  // 페이지 자체는 살아 있어야 한다 (주소를 아는 사람은 들어간다)
+  assert.ok(existsSync(join(DIST, "invest/index.html")));
+});

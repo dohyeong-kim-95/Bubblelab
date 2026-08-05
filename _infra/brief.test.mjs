@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   airGrade, BRIEF_REGIONS, BriefDO, buildBrief, buildIndex, buildRates, businessDaysBetween, findRegion,
   handleBriefRates, handleBriefToday, indexSpeech, INDEX_SYMBOLS, parseStooqDaily,
-  RATE_SYMBOLS, skyOf,
+  parseYahooChart, RATE_SYMBOLS, skyOf,
 } from "./brief.js";
 import { b64uEncode, generateVapidKeys } from "./webpush.js";
 
@@ -612,7 +612,8 @@ test("Stooq 일별 CSV를 날짜 오름차순으로 읽는다", () => {
 
 test("깨진 CSV에서 숫자가 아닌 값이 새지 않는다", () => {
   for (const csv of ["", "Date,Close", "그냥 오류 문자열", null, undefined,
-                     "Date,Close\nN/A,N/A", "<html>403</html>"]) {
+                     "Date,Close\nN/A,N/A", "<html>403</html>",
+                     "Date,Close\n2026-07-31,", "Date,Close\n2026-07-31,0"]) {
     const rows = parseStooqDaily(csv);
     assert.ok(Array.isArray(rows));
     for (const row of rows) assert.ok(Number.isFinite(row.close));
@@ -656,6 +657,7 @@ test("/_brief/rates는 환율과 지수를 함께 주고, 한쪽이 죽어도 �
     const data = await res.json();
     assert.equal(data.items.length, 0);
     assert.equal(data.indices.length, 2);
+    assert.equal(data.indexSource, "Stooq");
     assert.match(data.text, /다우지수는/);
     assert.doesNotMatch(data.text, /달러 환율/);
   } finally { globalThis.fetch = originalFetch; }
@@ -680,11 +682,12 @@ test("/_brief/rates는 환율과 지수를 함께 주고, 한쪽이 죽어도 �
   } finally { globalThis.fetch = originalFetch; }
 });
 
-test("화면이 지수를 그리고 소스를 밝힌다", async () => {
+test("화면이 지수를 그리고 어느 상류가 답했는지 밝힌다", async () => {
   const page = await pageSource();
   assert.match(page, /id="index-list"/);
   assert.match(page, /rates\.indices/);
-  assert.match(page, /Stooq/);
+  // 상류가 바뀔 수 있으므로 이름을 박지 않고 서버가 준 값을 쓴다
+  assert.match(page, /지수 종가 \$\{rates\.indexSource/);
 });
 
 test("운세 총평 아래 유도 버튼이 두 상태로 갈린다", async () => {
@@ -700,4 +703,72 @@ test("운세 총평 아래 유도 버튼이 두 상태로 갈린다", async () =
   const rule = /\.fo-action \{[\s\S]*?\}/.exec(page)?.[0] ?? "";
   const size = /font-size:\s*\.(\d+)rem/.exec(rule);
   assert.ok(size && +`0.${size[1]}` <= 0.76, `유도 버튼 글자가 ${size?.[0]} — 너무 크다`);
+});
+
+// 상류를 하나만 쓰면 그게 막힐 때 지수가 통째로 사라진다 — 실제로 Stooq가
+// Cloudflare Worker에서 빈 응답을 줘서 배포 후에야 알았다.
+const YAHOO_JSON = (closes) => JSON.stringify({
+  chart: { result: [{
+    timestamp: [1785628800, 1785715200, 1785801600],
+    indicators: { quote: [{ close: closes }] },
+  }] },
+});
+
+test("Yahoo 차트 응답을 같은 행 형태로 읽는다", () => {
+  const rows = parseYahooChart(JSON.parse(YAHOO_JSON([44000, null, 44280.9])));
+  assert.equal(rows.length, 2, "휴장일(null)은 버려야 한다");
+  assert.equal(rows[1].close, 44280.9);
+  assert.match(rows[1].date, /^\d{4}-\d{2}-\d{2}$/);
+  // 깨진 응답에서 숫자가 아닌 값이 새지 않는다
+  for (const bad of [null, {}, { chart: {} }, { chart: { result: [] } },
+                     { chart: { result: [{ timestamp: null }] } }]) {
+    assert.deepEqual(parseYahooChart(bad), []);
+  }
+});
+
+test("첫 상류가 막히면 다음 상류로 넘어간다", async () => {
+  const tried = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const href = String(url);
+    if (href.includes("frankfurter")) return new Response("nope", { status: 500 });
+    tried.push(href.includes("stooq") ? "stooq" : "yahoo");
+    // Stooq가 200에 빈 본문을 주는 상황(실제 증상)까지 재현한다
+    if (href.includes("stooq")) return new Response("");
+    return new Response(YAHOO_JSON([44000, 44280.9, 44500]));
+  };
+  try {
+    const res = await handleBriefRates(new Request("https://util.bubblelab.dev/_brief/rates"), {});
+    const data = await res.json();
+    assert.equal(res.status, 200);
+    assert.equal(data.indices.length, 2, "대체 상류에서도 못 받았다");
+    assert.equal(data.indexSource, "Yahoo");
+    assert.ok(tried.includes("stooq") && tried.includes("yahoo"), `시도 순서: ${tried}`);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("모든 상류가 막히면 지수는 비고, 어느 상류인지도 비운다", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => (String(url).includes("frankfurter")
+    ? Response.json(ratesFixture({ "2026-08-01": { USD: 1 / 1390 } }))
+    : new Response("nope", { status: 403 }));
+  try {
+    const res = await handleBriefRates(new Request("https://util.bubblelab.dev/_brief/rates"), {});
+    const data = await res.json();
+    assert.equal(res.status, 200);            // 환율은 살아 있다
+    assert.deepEqual(data.indices, []);
+    assert.equal(data.indexSource, null);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("지수를 못 받으면 화면이 그 사실을 말한다 (조용히 사라지지 않기)", async () => {
+  const page = await pageSource();
+  assert.match(page, /rates\.indicesFailed/);
+  assert.match(page, /불러오지 못했어요/);
+  assert.match(page, /rates\.indexSource/);
+  // 실패 안내는 #rate-note가 전담한다 — 기준일 줄이 같은 말을 겹쳐 하면 안 된다
+  const basisBlock = page.slice(page.indexOf("기준일을 반드시 적는다"),
+                                page.indexOf("async function loadRates"));
+  assert.doesNotMatch(basisBlock, /불러오지 못했어요/,
+    "기준일 줄이 #rate-note와 같은 실패 문구를 중복해서 말한다");
 });
