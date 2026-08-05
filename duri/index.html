@@ -30,7 +30,12 @@
   html, body { height: 100%; margin: 0; overscroll-behavior-y: contain; }
   body { font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
          color: light-dark(#1c2733, #e2e9f0); background: var(--bg);
-         display: flex; flex-direction: column; }
+         display: flex; flex-direction: column;
+         /* 앱을 '보이는 영역(비주얼 뷰포트)'에 딱 맞춰 고정한다. 키보드가 뜨면 그만큼
+            높이가 줄어 입력창이 항상 키보드 바로 위에 놓인다 — iOS 표준 PWA에서
+            문서가 스크롤되며(특히 보낸 직후) 입력창이 키보드와 겹치던 문제를 없앤다.
+            visualViewport 미지원 브라우저는 100%(전체 뷰포트)로 폴백. */
+         position: fixed; left: 0; right: 0; top: var(--vvt, 0px); height: var(--vvh, 100%); }
   /* 노치·다이나믹 아일랜드 밑까지 화면이 차므로(standalone + viewport-fit=cover),
      헤더 상단·좌우에 안전영역 인셋을 더해 버튼이 가려지지 않게 한다. */
   header { display: flex; align-items: center; gap: .5rem;
@@ -1550,7 +1555,10 @@ const savedKb = Number(localStorage.getItem("duri:kbHeight") || 0);
 if (savedKb > 120) setKb(savedKb);
 if (window.visualViewport) {
   const vv = window.visualViewport;
-  vv.addEventListener("resize", () => {
+  const syncViewport = () => {
+    // 앱 높이·위치를 '보이는 영역'에 맞춘다 → 입력창이 항상 키보드 위에 고정된다.
+    document.documentElement.style.setProperty("--vvh", vv.height + "px");
+    document.documentElement.style.setProperty("--vvt", vv.offsetTop + "px");
     // 레이아웃 뷰포트(innerHeight)는 그대로, 비주얼 뷰포트는 키보드만큼 줄어든다.
     const kb = Math.round(window.innerHeight - vv.height - vv.offsetTop);
     // 지금 이 순간의 실제 값(0=닫힘) — 캘린더 다이얼로그가 키보드를 피해 위치를 잡는 데 쓴다.
@@ -1559,7 +1567,10 @@ if (window.visualViewport) {
       setKb(kb);
       try { localStorage.setItem(KB_KEY, String(kb)); } catch { /* 최선노력 */ }
     }
-  });
+  };
+  vv.addEventListener("resize", syncViewport);
+  vv.addEventListener("scroll", syncViewport); // iOS: 키보드로 문서가 밀릴 때 위치 재동기화
+  syncViewport(); // 초기값(키보드 없는 상태의 실제 높이)
 }
 
 // ── 셋업 & 이벤트 ────────────────────────────────────────────
