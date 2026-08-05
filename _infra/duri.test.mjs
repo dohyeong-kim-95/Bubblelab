@@ -310,6 +310,38 @@ test("notifyPush skips devices that are currently connected (no silent push to a
   assert.deepEqual(hits, [away]); // 접속 중인 online 은 건너뛰고, 자리 비운 away 에만 발송
 });
 
+test("push subscriptions survive a redeploy (DO restart) — messages still push to away devices", async () => {
+  const vapid = await generateVapidKeys();
+  // 재배포 = Worker 재기동 → DO 인스턴스가 새로 만들어지지만 storage(구독)는 영속된다.
+  const storage = fakeStorage({ seq: 0, ackSeq: 0 });
+  const mkRoom = () => new DuriDO({ storage, blockConcurrencyWhile: (fn) => fn() }, {
+    DURI_BUCKET: fakeBucket([]),
+    VAPID_PUBLIC_KEY: vapid.publicKey, VAPID_PRIVATE_KEY: vapid.privateKey,
+    VAPID_SUBJECT: "https://duri.bubblelab.dev",
+  });
+
+  const before = mkRoom();
+  await before.load();
+  await before.fetch(pushReq("POST", { subscription: await fakeSubscription("https://push.example.com/away") }));
+  assert.equal((await storage.list({ prefix: "push:" })).size, 1);
+
+  // 재배포: 새 DO 인스턴스(메모리상 conns 비어 있음), 같은 storage 로 load.
+  const after = mkRoom();
+  await after.load();
+  assert.equal((await storage.list({ prefix: "push:" })).size, 1); // 구독은 그대로 남아 있다
+
+  const hits = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (endpoint) => { hits.push(String(endpoint)); return new Response(null, { status: 201 }); };
+  try {
+    await after.append({ kind: "msg", at: Date.now(), iv: "aXY=", ct: "Y2lwaGVy" });
+    await new Promise((resolve) => setTimeout(resolve, 60));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  assert.deepEqual(hits, ["https://push.example.com/away"]); // 재배포 뒤에도 알림 정상 발송
+});
+
 test("buildPushPayload carries the opaque blob for msg/photo but falls back to generic when oversized", () => {
   const storage = fakeStorage({ seq: 0, ackSeq: 0 });
   const room = new DuriDO({ storage, blockConcurrencyWhile: (fn) => fn() }, {});

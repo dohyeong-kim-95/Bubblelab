@@ -171,6 +171,36 @@ self.addEventListener("push", (event) => {
   })());
 });
 
+// 브라우저·푸시 서비스가 구독을 회전·무효화하면(재배포·SW 업데이트·키 만료 등)
+// 이 이벤트가 뜬다. 재구독하고 새 엔드포인트를 서버에 알려야 알림이 안 끊긴다 —
+// 이게 없으면 서버가 죽은 옛 구독으로 계속 보내 알림이 조용히 사라진다.
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil((async () => {
+    try {
+      // 옛 구독이 쓰던 서버 키를 그대로 재사용(없으면 서버에서 공개키를 받아온다).
+      let appServerKey = event.oldSubscription?.options?.applicationServerKey;
+      if (!appServerKey) {
+        const res = await fetch("/_duri/push", { method: "GET" });
+        const key = res.ok ? (await res.json()).vapidPublicKey : null;
+        if (!key) return;
+        const b64 = key.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(key.length / 4) * 4, "=");
+        appServerKey = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      }
+      const sub = await self.registration.pushManager.subscribe({
+        userVisibleOnly: true, applicationServerKey: appServerKey,
+      });
+      const headers = { "Content-Type": "application/json" };
+      // 옛 엔드포인트는 서버에서 지우고(있으면), 새 구독을 등록한다.
+      if (event.oldSubscription) {
+        await fetch("/_duri/push", { method: "DELETE", headers,
+          body: JSON.stringify({ endpoint: event.oldSubscription.endpoint }) }).catch(() => {});
+      }
+      await fetch("/_duri/push", { method: "POST", headers,
+        body: JSON.stringify({ subscription: sub.toJSON() }) });
+    } catch { /* 최선 노력 — 다음 앱 실행 때 init 의 재등록이 다시 시도한다 */ }
+  })());
+});
+
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const url = event.notification.data?.url ?? "/";

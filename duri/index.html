@@ -1823,7 +1823,13 @@ const swReady = (async () => {
       if (!registration) return; // 이 브라우저에선 서비스워커 자체가 안 됨
       const sub = await registration.pushManager.getSubscription();
       setState(Boolean(sub));
-      if (sub) setMyEndpoint(sub.endpoint); // 이미 켜져 있으면 hello 가 실을 수 있게 미리 등록
+      if (sub) {
+        setMyEndpoint(sub.endpoint); // 접속 시 hello 가 실을 수 있게 미리 등록
+        // 매 실행마다 현재 구독을 서버에 다시 등록(중복은 서버가 무시). 브라우저가
+        // 구독을 회전시켰는데(재배포·키 회전 등) 서버는 옛 엔드포인트만 알아 알림이
+        // 끊기는 걸 이 재등록이 복구한다 — endpoint 가 바뀌었으면 새 걸 알리게 된다.
+        api("POST", { subscription: sub }).catch(() => {});
+      }
       btn.hidden = false;
       if (testBtn) testBtn.hidden = false;
 
