@@ -1132,7 +1132,9 @@ function appendRecord(rec, { silent = false } = {}) {
   // atBottom()·scroll() 둘 다 레이아웃을 강제로 다시 계산시키는 연산이라
   // 수백 개를 한 번에 그릴 때 그만큼 강제 리플로우가 쌓인다. 다 그린 뒤
   // 호출자가 한 번만 바닥으로 스크롤한다.
-  const stick = silent ? false : atBottom();
+  // 내가 보낸 메시지는 항상 맨 아래로 따라간다(채팅앱 기본). 상대가 보낸 메시지는
+  // 내가 위로 올려 옛 대화를 읽는 중이면 끌어내리지 않는다(맨 아래였을 때만 따라감).
+  const stick = silent ? false : (atBottom() || rec.name === MY_NAME);
 
   // 앨범 사진: 같은 앨범 id 버블이 화면에 있으면 새 말풍선 대신 거기에 이어붙인다.
   if (rec.album && rec.blob) {
