@@ -1553,9 +1553,10 @@ const KB_KEY = "duri:kbHeight";
 const setKb = (px) => document.documentElement.style.setProperty("--kb", px + "px");
 const savedKb = Number(localStorage.getItem("duri:kbHeight") || 0);
 if (savedKb > 120) setKb(savedKb);
+let syncViewport = () => {}; // 입력창 포커스 핸들러 등 다른 곳에서도 부를 수 있게 모듈 스코프
 if (window.visualViewport) {
   const vv = window.visualViewport;
-  const syncViewport = () => {
+  syncViewport = () => {
     // 앱 높이·위치를 '보이는 영역'에 맞춘다 → 입력창이 항상 키보드 위에 고정된다.
     document.documentElement.style.setProperty("--vvh", vv.height + "px");
     document.documentElement.style.setProperty("--vvt", vv.offsetTop + "px");
@@ -1570,6 +1571,9 @@ if (window.visualViewport) {
   };
   vv.addEventListener("resize", syncViewport);
   vv.addEventListener("scroll", syncViewport); // iOS: 키보드로 문서가 밀릴 때 위치 재동기화
+  // 일부 안드로이드는 키보드 전환 시 visualViewport resize가 늦거나 누락돼 입력창이
+  // 키보드에 가려진다 — window resize·입력창 포커스에도 한 번 더 동기화해 보정한다.
+  window.addEventListener("resize", syncViewport);
   syncViewport(); // 초기값(키보드 없는 상태의 실제 높이)
 }
 
@@ -1864,6 +1868,9 @@ text.addEventListener("input", () => { $("cal-cmd-bar").hidden = !CAL_CMD_RE.tes
 text.addEventListener("focus", () => {
   if (!picker.hidden) closePicker();
   if (!$("cal-cmd-picker").hidden) closeCalCmdPicker();
+  // 키보드가 올라오는 애니메이션(약 250~350ms)이 끝난 뒤 한 번 더 높이를 맞춰,
+  // 안드로이드에서 입력창이 키보드에 가려진 채 남는 걸 보정한다.
+  setTimeout(syncViewport, 350);
 });
 text.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("composer").requestSubmit(); }
