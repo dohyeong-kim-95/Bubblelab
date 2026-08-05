@@ -209,7 +209,7 @@ export class DuriDO {
     const [client, server] = [pair[0], pair[1]];
     server.accept();
 
-    const conn = { ws: server, role, stamps: [], alive: true };
+    const conn = { ws: server, role, stamps: [], alive: true, endpoint: null };
     this.conns.add(conn);
     this.scheduleAlarm();
 
@@ -237,9 +237,19 @@ export class DuriDO {
 
     if (msg.type === "hello") {
       const since = Number.isInteger(msg.since) && msg.since >= 0 ? msg.since : this.head;
+      // 이 기기의 푸시 endpoint 를 기억해 둔다 → 접속 중(=화면을 보고 있는)인 기기에는
+      // 푸시를 보내지 않는다. iOS는 "받았는데 알림을 안 띄운 푸시(silent push)"를
+      // 예산으로 계산해, 반복되면 구독을 조여버린다(결국 백그라운드 알림까지 끊김).
+      conn.endpoint = typeof msg.endpoint === "string" ? msg.endpoint : null;
       this.send(conn, { type: "welcome", head: this.head, online: this.conns.size });
       this.broadcast({ type: "presence", online: this.conns.size }, conn);
       this.backfill(conn, since);
+      return;
+    }
+
+    // 접속 중 알림을 켜고/끄면 endpoint 가 생기거나 사라진다 → 갱신.
+    if (msg.type === "presence-endpoint") {
+      conn.endpoint = typeof msg.endpoint === "string" ? msg.endpoint : null;
       return;
     }
 
@@ -362,12 +372,19 @@ export class DuriDO {
     if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return;
     const subs = await this.state.storage.list({ prefix: PUSH_PREFIX });
     if (subs.size === 0) return;
+    // 지금 접속 중(=앱을 보고 있는)인 기기의 endpoint 는 건너뛴다. 그 기기는 어차피
+    // 웹소켓으로 방금 실시간 수신했으니 알림이 필요 없고, 보내봐야 화면이 켜져 있어
+    // 알림이 안 뜨는 "silent push"가 되어 iOS 예산만 깎는다. 백그라운드로 내려가면
+    // 곧(핑 주기 내) 접속이 끊겨 이 집합에서 빠지고 정상적으로 푸시를 받는다.
+    const activeEndpoints = new Set();
+    for (const c of this.conns) if (c.endpoint) activeEndpoints.add(c.endpoint);
     const vapid = {
       publicKey: VAPID_PUBLIC_KEY, privateKey: VAPID_PRIVATE_KEY,
       subject: VAPID_SUBJECT || "https://duri.bubblelab.dev",
     };
     const body = JSON.stringify(this.buildPushPayload(full));
     for (const [key, sub] of subs) {
+      if (activeEndpoints.has(sub.endpoint)) continue; // 접속 중인 기기엔 안 보냄
       try {
         const result = await sendWebPush(sub, body, vapid);
         if (result.gone) await this.state.storage.delete(key); // 만료 구독 정리

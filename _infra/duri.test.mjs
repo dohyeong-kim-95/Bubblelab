@@ -280,6 +280,36 @@ test("appending a msg/photo entry pushes the opaque blob to subscribers and prun
   assert.equal((await storage.list({ prefix: "push:" })).size, 1);
 });
 
+test("notifyPush skips devices that are currently connected (no silent push to active viewers)", async () => {
+  const vapid = await generateVapidKeys();
+  const storage = fakeStorage({ seq: 0, ackSeq: 0 });
+  const room = new DuriDO({ storage, blockConcurrencyWhile: (fn) => fn() }, {
+    DURI_BUCKET: fakeBucket([]),
+    VAPID_PUBLIC_KEY: vapid.publicKey, VAPID_PRIVATE_KEY: vapid.privateKey,
+    VAPID_SUBJECT: "https://duri.bubblelab.dev",
+  });
+  await room.load();
+  const online = "https://push.example.com/online";
+  const away = "https://push.example.com/away";
+  await room.fetch(pushReq("POST", { subscription: await fakeSubscription(online) }));
+  await room.fetch(pushReq("POST", { subscription: await fakeSubscription(away) }));
+
+  // "online" 기기는 지금 접속 중(웹소켓)이라고 표시 → 그 기기엔 푸시가 가면 안 된다.
+  // (append 가 broadcast 하며 conn.ws.send 를 부르므로 no-op ws 를 붙여둔다.)
+  room.conns.add({ endpoint: online, ws: { send() {} }, role: "peer", stamps: [], alive: true });
+
+  const hits = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (endpoint) => { hits.push(String(endpoint)); return new Response(null, { status: 201 }); };
+  try {
+    await room.append({ kind: "msg", at: Date.now(), iv: "aXY=", ct: "Y2lwaGVy" });
+    await new Promise((resolve) => setTimeout(resolve, 60));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  assert.deepEqual(hits, [away]); // 접속 중인 online 은 건너뛰고, 자리 비운 away 에만 발송
+});
+
 test("buildPushPayload carries the opaque blob for msg/photo but falls back to generic when oversized", () => {
   const storage = fakeStorage({ seq: 0, ackSeq: 0 });
   const room = new DuriDO({ storage, blockConcurrencyWhile: (fn) => fn() }, {});

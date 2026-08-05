@@ -880,7 +880,9 @@ function connect() {
   ws = new WebSocket(`${proto}//${location.host}/_duri`);
   ws.onopen = () => {
     backoff = 1000; setStatus(true, false); // 상대 여부는 welcome/presence 로 곧 갱신
-    ws.send(JSON.stringify({ type: "hello", since: getLastSeq() }));
+    // 내 푸시 endpoint 를 함께 알린다 → 접속 중인 내 기기엔 서버가 푸시를 안 보낸다
+    // (silent push 방지 — iOS 알림 예산 보호). 없으면(알림 끔) null.
+    ws.send(JSON.stringify({ type: "hello", since: getLastSeq(), endpoint: window.__duriPushEndpoint ?? null }));
     ws.send(JSON.stringify({ type: "cal-hello" })); // 캘린더 현재 상태 동기화
     calFlushOutbox();                                // 오프라인 중 쌓인 캘린더 변경 전송
   };
@@ -1717,6 +1719,13 @@ const swReady = (async () => {
   const api = (method, body) => fetch("/_duri/push", {
     method, ...(body && { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   });
+  // 내 endpoint 를 전역에 두고(connect 의 hello 가 읽음), 접속 중 바뀌면 서버에 알린다.
+  function setMyEndpoint(endpoint) {
+    window.__duriPushEndpoint = endpoint || null;
+    if (typeof ws !== "undefined" && ws && ws.readyState === 1) {
+      ws.send(JSON.stringify({ type: "presence-endpoint", endpoint: window.__duriPushEndpoint }));
+    }
+  }
 
   async function enable() {
     if ((await Notification.requestPermission()) !== "granted") {
@@ -1728,6 +1737,7 @@ const swReady = (async () => {
     });
     const res = await api("POST", { subscription });
     if (!res.ok) { await subscription.unsubscribe().catch(() => {}); throw new Error("subscribe failed"); }
+    setMyEndpoint(subscription.endpoint);
     return true;
   }
   async function disable() {
@@ -1736,6 +1746,7 @@ const swReady = (async () => {
       await api("DELETE", { endpoint: subscription.endpoint }).catch(() => {});
       await subscription.unsubscribe().catch(() => {});
     }
+    setMyEndpoint(null);
     return false;
   }
 
@@ -1797,6 +1808,7 @@ const swReady = (async () => {
       if (!registration) return; // 이 브라우저에선 서비스워커 자체가 안 됨
       const sub = await registration.pushManager.getSubscription();
       setState(Boolean(sub));
+      if (sub) setMyEndpoint(sub.endpoint); // 이미 켜져 있으면 hello 가 실을 수 있게 미리 등록
       btn.hidden = false;
       if (testBtn) testBtn.hidden = false;
 
