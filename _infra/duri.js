@@ -142,6 +142,10 @@ export class DuriDO {
     if (url.pathname.endsWith("/reset") && request.method === "POST") {
       return this.handleReset();
     }
+    if (url.pathname.endsWith("/push/test") && request.method === "POST") {
+      if (role !== "peer") return new Response("peer only", { status: 403 });
+      return this.testPush(request); // 자가진단: 내 기기로 테스트 알림 발송 + 결과 반환
+    }
     if (url.pathname.endsWith("/push") && (request.method === "POST" || request.method === "DELETE")) {
       if (role !== "peer") return new Response("peer only", { status: 403 }); // 알림은 브라우저(peer)만
       return request.method === "POST" ? this.subscribePush(request) : this.unsubscribePush(request);
@@ -371,6 +375,32 @@ export class DuriDO {
         console.error("duri push send failed", error);
       }
     }
+  }
+  // 자가진단용 테스트 알림. endpoint 를 주면 그 기기(내 기기)로만, 없으면 전체로.
+  // 결과(구독 수·발송·만료·실패, VAPID 미설정 여부)를 돌려줘 어디서 막히는지 알린다.
+  async testPush(request) {
+    const { VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT } = this.env;
+    if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
+      return Response.json({ ok: false, reason: "no-vapid" }); // 서버에 푸시 개인키 미설정
+    }
+    const body = await request.json().catch(() => ({}));
+    const onlyEndpoint = typeof body.endpoint === "string" ? body.endpoint : null;
+    const subs = await this.state.storage.list({ prefix: PUSH_PREFIX });
+    const vapid = {
+      publicKey: VAPID_PUBLIC_KEY, privateKey: VAPID_PRIVATE_KEY,
+      subject: VAPID_SUBJECT || "https://duri.bubblelab.dev",
+    };
+    const payload = JSON.stringify({ kind: "test" });
+    let sent = 0, gone = 0, failed = 0, targeted = 0;
+    for (const [key, sub] of subs) {
+      if (onlyEndpoint && sub.endpoint !== onlyEndpoint) continue;
+      targeted++;
+      try {
+        const result = await sendWebPush(sub, payload, vapid);
+        if (result.gone) { await this.state.storage.delete(key); gone++; } else sent++;
+      } catch { failed++; }
+    }
+    return Response.json({ ok: true, subs: subs.size, targeted, sent, gone, failed });
   }
   buildPushPayload(full) {
     let content;

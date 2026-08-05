@@ -64,6 +64,9 @@ async function decryptJson(key, ivB64, ctB64) {
 const GENERIC = { title: "💞 Duri", body: "새 메시지가 도착했어요" };
 
 async function buildNotification(data) {
+  if (data && data.kind === "test") { // 자가진단: 앱을 보고 있어도 무조건 뜬다
+    return { title: "🔔 Duri 테스트 알림", body: "알림이 정상 동작해요!" };
+  }
   if (!data || data.kind === "generic") return GENERIC;
   try {
     const db = await openDB();
@@ -85,7 +88,14 @@ async function buildNotification(data) {
 }
 
 self.addEventListener("install", () => self.skipWaiting());
-self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
+self.addEventListener("activate", (event) => event.waitUntil((async () => {
+  // 셸 캐시 버전을 올리면 옛 캐시는 지운다 — 새 배포가 "두 번째 실행"이 아니라
+  // 바로 다음 실행에 반영되게(빈 새 캐시 → 첫 로드는 네트워크 최신본).
+  for (const name of await caches.keys()) {
+    if (name.startsWith("duri-shell-") && name !== SHELL_CACHE) await caches.delete(name);
+  }
+  await self.clients.claim();
+})()));
 
 // ── 앱 셸 캐싱 ───────────────────────────────────────────────
 // 문서(내비게이션)·manifest·아이콘만 대상 — 네이티브 앱처럼 다음 실행 때
@@ -93,7 +103,7 @@ self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim(
 // /_duri·/_rt(실시간·게이트 API)는 항상 최신이어야 하므로 손대지 않는다 —
 // 실제 데이터·인증은 이 캐시와 무관하게 매번 쿠키·E2E 패스프레이즈로 따로
 // 검증되므로, 셸(빈 껍데기 마크업)을 캐싱해도 보안엔 영향이 없다.
-const SHELL_CACHE = "duri-shell-v1";
+const SHELL_CACHE = "duri-shell-v2";
 async function staleWhileRevalidate(request) {
   const cache = await caches.open(SHELL_CACHE);
   const cached = await cache.match(request);
@@ -130,9 +140,10 @@ async function isAppFocused() {
 
 self.addEventListener("push", (event) => {
   event.waitUntil((async () => {
-    if (await isAppFocused()) return;
     let data = null;
     try { data = event.data?.json() ?? null; } catch { /* 형식이 다르면 일반 알림으로 */ }
+    // 테스트 알림은 앱을 보고 있어도 띄운다(자가진단 목적). 그 외에는 포커스 중이면 생략.
+    if (data?.kind !== "test" && await isAppFocused()) return;
     const result = await buildNotification(data);
     if (!result) return; // 내가 보낸 메시지 — 알리지 않는다
     const { title, body } = result;

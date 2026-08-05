@@ -489,6 +489,7 @@
     <div id="menu" class="menu" role="menu" hidden>
       <button id="push-toggle" role="menuitem" hidden aria-checked="false"
               title="새 메시지가 오면 이 기기로 알림을 받습니다(기본 켜짐)">🔔 푸시 알림: 꺼짐</button>
+      <button id="push-test" role="menuitem" hidden title="이 기기로 테스트 알림을 보내 알림이 실제로 오는지 확인">🔔 테스트 알림 보내기</button>
       <button id="relogin" role="menuitem" title="암호 문구를 잘못 입력했을 때 다시 입력">🔑 문구 다시 입력</button>
       <button id="clear-cache" role="menuitem" title="이 기기에 저장된 대화 기록만 지우기">🧹 기록 지우기</button>
       <button id="reset-room" class="danger" role="menuitem" title="서버에 남은 대화·사진을 양쪽 모두에서 지우고 새로 시작">🗑️ 방 초기화</button>
@@ -1757,6 +1758,36 @@ const swReady = (async () => {
     }
   });
 
+  // 자가진단: 내 기기로 테스트 알림을 쏴 어디서 막히는지 알려준다.
+  const testBtn = $("push-test");
+  testBtn?.addEventListener("click", async () => {
+    if (busy || !registration) return;
+    busy = true;
+    try {
+      const sub = await registration.pushManager.getSubscription();
+      if (!sub) {
+        showToast("먼저 위에서 푸시 알림을 켜주세요.");
+        return;
+      }
+      const res = await fetch("/_duri/push/test", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endpoint: sub.endpoint }),
+      });
+      const r = await res.json().catch(() => ({}));
+      if (!res.ok) showToast("테스트에 실패했어요. 잠시 후 다시 시도해주세요.");
+      else if (r.reason === "no-vapid") showToast("서버에 알림 키가 설정되지 않았어요(운영자 확인 필요).");
+      else if (r.targeted === 0) showToast("이 기기의 구독을 서버가 못 찾았어요. 알림을 껐다 켜보세요.");
+      else if (r.sent > 0) showToast("보냈어요! 몇 초 안에 알림이 오지 않으면 기기 알림 설정을 확인해주세요.");
+      else if (r.gone > 0) showToast("구독이 만료됐어요. 알림을 껐다 켜서 다시 등록해주세요.");
+      else showToast("발송에 실패했어요(네트워크·푸시 서비스 문제).");
+    } catch {
+      showToast("테스트에 실패했어요. 잠시 후 다시 시도해주세요.");
+    } finally {
+      busy = false;
+      closeMenu();
+    }
+  });
+
   (async function init() {
     try {
       const res = await fetch("/_duri/push", { method: "GET" });
@@ -1767,6 +1798,7 @@ const swReady = (async () => {
       const sub = await registration.pushManager.getSubscription();
       setState(Boolean(sub));
       btn.hidden = false;
+      if (testBtn) testBtn.hidden = false;
 
       // 기본값: 켜짐. 이미 구독 중이거나 사용자가 직접 껐으면(pref==="off") 그대로 둔다.
       if (sub || localStorage.getItem(PREF_KEY) === "off") return;

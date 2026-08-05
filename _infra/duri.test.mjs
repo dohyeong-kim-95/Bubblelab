@@ -190,6 +190,59 @@ test("push subscribe/unsubscribe is peer-only, dedupes by endpoint, and caps sub
   assert.equal((await storage.list({ prefix: "push:" })).size, 7); // 하나만 해지됨
 });
 
+test("push/test self-diagnostic reports no-vapid, targets only my endpoint, and prunes expired", async () => {
+  const testReq = (body, role = "peer") => new Request("https://x/_duri/push/test", {
+    method: "POST", headers: { "Content-Type": "application/json", "X-Duri-Role": role },
+    body: JSON.stringify(body),
+  });
+
+  // VAPID 미설정 → no-vapid 로 어디서 막혔는지 알린다.
+  {
+    const storage = fakeStorage({ seq: 0, ackSeq: 0 });
+    const room = new DuriDO({ storage, blockConcurrencyWhile: (fn) => fn() }, { DURI_BUCKET: fakeBucket([]) });
+    await room.load();
+    const res = await room.fetch(testReq({}));
+    assert.deepEqual(await res.json(), { ok: false, reason: "no-vapid" });
+  }
+
+  // 싱크(데스크톱 데몬)는 테스트 알림을 쏠 수 없다.
+  {
+    const storage = fakeStorage({ seq: 0, ackSeq: 0 });
+    const room = new DuriDO({ storage, blockConcurrencyWhile: (fn) => fn() }, { DURI_BUCKET: fakeBucket([]) });
+    await room.load();
+    const rejected = await room.fetch(testReq({}, "sink"));
+    assert.equal(rejected.status, 403);
+  }
+
+  // VAPID 설정 + 여러 구독 → endpoint 를 준 내 기기 하나에만 발송, 410 은 정리.
+  const vapid = await generateVapidKeys();
+  const storage = fakeStorage({ seq: 0, ackSeq: 0 });
+  const room = new DuriDO({ storage, blockConcurrencyWhile: (fn) => fn() }, {
+    DURI_BUCKET: fakeBucket([]),
+    VAPID_PUBLIC_KEY: vapid.publicKey, VAPID_PRIVATE_KEY: vapid.privateKey,
+    VAPID_SUBJECT: "https://duri.bubblelab.dev",
+  });
+  await room.load();
+  const mine = "https://push.example.com/mine";
+  await room.fetch(pushReq("POST", { subscription: await fakeSubscription(mine) }));
+  await room.fetch(pushReq("POST", { subscription: await fakeSubscription("https://push.example.com/other") }));
+
+  let hit = null;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (endpoint) => { hit = String(endpoint); return new Response(null, { status: 201 }); };
+  try {
+    const res = await room.fetch(testReq({ endpoint: mine }));
+    const r = await res.json();
+    assert.equal(r.ok, true);
+    assert.equal(r.subs, 2);      // 두 구독이 있지만
+    assert.equal(r.targeted, 1);  // endpoint 를 준 내 기기 하나에만
+    assert.equal(r.sent, 1);
+    assert.equal(hit, mine);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("appending a msg/photo entry pushes the opaque blob to subscribers and prunes expired ones", async () => {
   const vapid = await generateVapidKeys();
   const storage = fakeStorage({ seq: 0, ackSeq: 0 });

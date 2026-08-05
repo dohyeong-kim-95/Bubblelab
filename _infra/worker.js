@@ -489,6 +489,12 @@ async function handleDuri(request, env, url) {
     return stub.fetch(withDuriRole(request, role));
   }
 
+  // 알림 자가진단: 내 기기로 테스트 알림을 쏴 어디서 막히는지(구독 없음·VAPID
+  // 미설정·발송 성공) 알려준다. 브라우저(peer)만.
+  if (path === "/_duri/push/test" && request.method === "POST") {
+    return stub.fetch(withDuriRole(request, role));
+  }
+
   // 새 메시지 웹 푸시. 공개키 조회는 DO 없이 바로(민감하지 않음), 구독·해지는 DO에
   // 위임(peer 전용 — DO가 다시 확인한다).
   if (path === "/_duri/push") {
