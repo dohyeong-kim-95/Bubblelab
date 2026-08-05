@@ -909,6 +909,16 @@ function connect() {
   ws.onerror = () => { try { ws.close(); } catch {} };
 }
 
+// 접속 중인 기기엔 서버가 푸시를 건너뛴다(화면을 보고 있으니 실시간 수신 — silent push
+// 방지). 그런데 백그라운드로 내려가도 웹소켓이 잠깐(핑 주기까지) 살아 있어, 그 사이엔
+// 푸시가 안 와 알림이 늦었다. 화면 전환 즉시 서버에 알린다: 보일 때는 endpoint 를 줘
+// "나 보는 중"(스킵), 숨을 때는 null 로 "나 안 봄"(바로 푸시) 로 만든다.
+document.addEventListener("visibilitychange", () => {
+  if (!ws || ws.readyState !== 1) return;
+  const endpoint = document.visibilityState === "visible" ? (window.__duriPushEndpoint ?? null) : null;
+  ws.send(JSON.stringify({ type: "presence-endpoint", endpoint }));
+});
+
 // ── 로컬 캐시 (IndexedDB) — 이 기기 표시용. 아카이브는 PC 싱크가 정본. ──
 // 복호화한 항목을 이 기기에 담아 새로고침·재방문에도 대화가 남게 한다. 사진은
 // 복호화한 원본 blob째 담아 서버 R2가 정리된 뒤에도 이 기기에선 계속 보인다.
@@ -1921,6 +1931,14 @@ $("composer").addEventListener("submit", (e) => {
   // 키보드가 떠서 이모지를 연속으로 못 보낸다. 키보드로 치던 중이면 포커스 유지.
   if (picker.hidden) text.focus();
   sendText(val).catch((err) => console.warn("send failed", err));
+});
+// 보내기 버튼을 눌러도 입력창이 포커스를 잃지 않게 한다. 포커스를 잃으면 키보드가
+// 내려가는데, position:fixed + visualViewport 레이아웃에선 높이가 출렁이며 안드로이드가
+// 키보드를 다시 안 올려버린다(=보내면 키보드가 내려감). 버튼이 포커스를 가져가는 기본
+// 동작(pointerdown)만 막으면 입력창이 계속 포커스를 쥐고 있어 키보드가 유지된다 —
+// 클릭(=폼 제출)은 그대로 발생한다. 키보드로 치던 중(입력창 포커스)일 때만 적용.
+$("sendBtn").addEventListener("pointerdown", (e) => {
+  if (document.activeElement === text) e.preventDefault();
 });
 $("file").addEventListener("change", (e) => {
   // 즉시 전송하지 않고 미리보기 트레이에 담는다(여러 장 가능). 보내기로 확정 전송.
