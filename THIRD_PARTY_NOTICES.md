@@ -296,20 +296,19 @@ https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchang
 ECB는 매 영업일 16:00 CET에 유로 기준으로 한 번 고시합니다. 따라서 원/달러 등은
 교차환율이며 은행 매매기준율과 다를 수 있습니다 — 화면에 기준일과 함께 밝힙니다.
 
-## Stooq (주가지수 시세)
+## Stooq (주가지수 예비 상류)
 
-util/brief가 표시하는 다우존스·나스닥 종합지수 종가의 출처입니다. API 키 없이
-일별 CSV를 호출합니다.
+Yahoo가 응답하지 않을 때 util/brief가 다우존스·나스닥 종가를 가져오는 예비
+경로입니다. API 키 없이 일별 CSV를 호출합니다.
 
 Stooq — https://stooq.com/
 
 지수값 자체는 사실 정보이지만 Stooq의 제공 조건은 개인·비상업 이용 기준입니다.
 상업적 이용이 필요해지면 정식 시세 공급 계약을 검토해야 합니다.
 
-## Yahoo Finance (주가지수 대체 상류)
+## Yahoo Finance (주가지수)
 
-Stooq가 응답하지 않을 때 util/brief가 다우존스·나스닥 종가를 가져오는 대체 경로
-입니다. 공개 차트 엔드포인트를 키 없이 호출합니다.
+util/brief가 다우존스·나스닥 종가를 가져오는 기본 경로입니다(Stooq는 예비). 공개 차트 엔드포인트를 키 없이 호출합니다.
 
 Yahoo Finance — https://finance.yahoo.com/
 

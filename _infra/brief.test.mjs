@@ -657,7 +657,7 @@ test("/_brief/rates는 환율과 지수를 함께 주고, 한쪽이 죽어도 �
     const data = await res.json();
     assert.equal(data.items.length, 0);
     assert.equal(data.indices.length, 2);
-    assert.equal(data.indexSource, "Stooq");
+    assert.ok(data.indexSource, "어느 상류가 답했는지 비어 있다");
     assert.match(data.text, /다우지수는/);
     assert.doesNotMatch(data.text, /달러 환율/);
   } finally { globalThis.fetch = originalFetch; }
@@ -726,24 +726,25 @@ test("Yahoo 차트 응답을 같은 행 형태로 읽는다", () => {
   }
 });
 
-test("첫 상류가 막히면 다음 상류로 넘어간다", async () => {
+test("첫 상류가 막히면 예비 상류로 넘어간다", async () => {
   const tried = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url) => {
     const href = String(url);
     if (href.includes("frankfurter")) return new Response("nope", { status: 500 });
-    tried.push(href.includes("stooq") ? "stooq" : "yahoo");
-    // Stooq가 200에 빈 본문을 주는 상황(실제 증상)까지 재현한다
-    if (href.includes("stooq")) return new Response("");
-    return new Response(YAHOO_JSON([44000, 44280.9, 44500]));
+    const which = href.includes("stooq") ? "stooq" : "yahoo";
+    tried.push(which);
+    // 앞 상류(Yahoo)가 200에 빈 본문을 주는 상황까지 재현한다
+    if (which === "yahoo") return new Response("");
+    return new Response(STOOQ_CSV);
   };
   try {
     const res = await handleBriefRates(new Request("https://util.bubblelab.dev/_brief/rates"), {});
     const data = await res.json();
     assert.equal(res.status, 200);
-    assert.equal(data.indices.length, 2, "대체 상류에서도 못 받았다");
-    assert.equal(data.indexSource, "Yahoo");
-    assert.ok(tried.includes("stooq") && tried.includes("yahoo"), `시도 순서: ${tried}`);
+    assert.equal(data.indices.length, 2, "예비 상류에서도 못 받았다");
+    assert.equal(data.indexSource, "Stooq");
+    assert.ok(tried.includes("yahoo") && tried.includes("stooq"), `시도: ${tried}`);
   } finally { globalThis.fetch = originalFetch; }
 });
 
@@ -771,4 +772,21 @@ test("지수를 못 받으면 화면이 그 사실을 말한다 (조용히 사�
                                 page.indexOf("async function loadRates"));
   assert.doesNotMatch(basisBlock, /불러오지 못했어요/,
     "기준일 줄이 #rate-note와 같은 실패 문구를 중복해서 말한다");
+});
+
+test("실패가 확정된 상류를 먼저 부르지 않는다", async () => {
+  // Stooq는 Cloudflare Worker에서 항상 막히는 것으로 실측됐다. 앞에 두면 캐시가
+  // 만료될 때마다 실패를 기다렸다가 넘어가서 첫 응답이 그만큼 늦어진다.
+  const order = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    order.push(String(url).includes("stooq") ? "Stooq" : "Yahoo");
+    return new Response(YAHOO_JSON([44000, 44280.9]));
+  };
+  try {
+    const result = await (await import("./brief.js")).fetchIndices();
+    assert.equal(order[0], "Yahoo", `첫 상류가 ${order[0]} — 순서가 뒤집혔다`);
+    assert.equal(result.source, "Yahoo");
+    assert.ok(!order.includes("Stooq"), "앞 상류가 성공했는데 예비까지 불렀다");
+  } finally { globalThis.fetch = originalFetch; }
 });

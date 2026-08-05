@@ -330,10 +330,22 @@ export function indexSpeech(indices) {
 const RATES_URL = "https://api.frankfurter.dev/v1";
 // 상류를 하나만 쓰면 그 하나가 막힐 때 지수가 통째로 사라진다 — 실제로 Stooq가
 // Cloudflare Worker에서 빈 응답을 줘서 배포 후에야 알았다. 순서대로 시도한다.
+//
+// Yahoo가 먼저인 이유: Stooq는 Worker에서 **항상** 막히는 것으로 확인됐다(배포 후
+// 실측). 그대로 두면 캐시가 만료될 때마다 실패가 확정된 호출을 기다렸다가 넘어가서
+// 첫 응답이 그만큼 늦어진다. Stooq는 Yahoo가 막힐 때를 위한 예비로만 남긴다.
 // 브라우저가 아닌 곳에서 오는 요청을 막는 상류가 있어 User-Agent를 붙인다.
 const UA = "Mozilla/5.0 (compatible; BubblelabBrief/1.0; +https://util.bubblelab.dev/brief)";
 
 const INDEX_PROVIDERS = [
+  {
+    name: "Yahoo",
+    async rows(symbol) {
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/`
+        + `${encodeURIComponent(symbol.yahoo)}?range=1mo&interval=1d`;
+      return parseYahooChart(JSON.parse(await getText(url)));
+    },
+  },
   {
     name: "Stooq",
     async rows(symbol, { start, end }) {
@@ -343,14 +355,6 @@ const INDEX_PROVIDERS = [
       // 상류가 CSV 대신 안내·차단 HTML을 200으로 돌려주는 일이 있다.
       if (/^\s*</.test(csv)) throw new Error("non-CSV response (HTML?)");
       return parseStooqDaily(csv);
-    },
-  },
-  {
-    name: "Yahoo",
-    async rows(symbol) {
-      const url = `https://query1.finance.yahoo.com/v8/finance/chart/`
-        + `${encodeURIComponent(symbol.yahoo)}?range=1mo&interval=1d`;
-      return parseYahooChart(JSON.parse(await getText(url)));
     },
   },
 ];
