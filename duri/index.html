@@ -19,7 +19,10 @@
   :root { color-scheme: light dark; --pink: light-dark(#c0568a, #f0a8ce); --line: light-dark(#e6eaef, #232c38);
           --panel: light-dark(#ffffff, #161c25); --bg: light-dark(#fafbfc, #10151c); --dim: light-dark(#5b6875, #8b97a6);
           --kb: 18rem; /* 측정된 키보드 높이(JS가 갱신) — 서랍을 키보드와 같은 높이로 */
-          --kb-live: 0px; /* 지금 이 순간 키보드가 차지한 높이(0=닫힘) — 다이얼로그 위치 보정용 */ }
+          --kb-live: 0px; /* 지금 이 순간 키보드가 차지한 높이(0=닫힘) — 다이얼로그 위치 보정용 */
+          /* 채팅 본문·입력창은 비례폭 폰트. UI 껍데기(헤더·버튼·시각)는 monospace 유지하되,
+             실제 대화 글은 고정폭이면 공백(띄어쓰기)이 한 글자만큼 벌어져 거북하다. */
+          --chat-font: system-ui, -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif; }
   * { box-sizing: border-box; }
   /* iOS 더블탭-확대 제스처가 스티커 두 번째 탭을 먹지 않게 — 컨트롤은 두 번 탭을
      두 번 클릭으로 처리한다(핀치 줌은 그대로). */
@@ -92,7 +95,8 @@
   .sysnotice span { font-size: .72rem; color: var(--dim); background: light-dark(#eef1f4, #1b232e);
                     padding: .3rem .8rem; border-radius: 1rem; text-align: center; }
   .bubble { padding: .5rem .75rem; border-radius: .9rem; background: var(--panel); border: 1px solid var(--line);
-            white-space: pre-wrap; word-break: break-word; line-height: 1.5; font-size: .92rem; }
+            white-space: pre-wrap; word-break: break-word; line-height: 1.5; font-size: .95rem;
+            font-family: var(--chat-font); }
   .row.me .bubble { background: light-dark(#fbe6f0, #3a2233); border-color: light-dark(#f2cfe1, #4d2c40); }
   .bubble img { max-width: 18rem; border-radius: .5rem; display: block; cursor: pointer; }
   .bubble .cap { font-size: .82rem; margin-top: .3rem; color: var(--dim); }
@@ -144,8 +148,8 @@
          max-width: 44rem; width: 100%; margin: 0 auto; align-items: flex-end;
          padding: .6rem calc(.6rem + env(safe-area-inset-right, 0px))
                   calc(.6rem + env(safe-area-inset-bottom, 0px)) calc(.6rem + env(safe-area-inset-left, 0px)); }
-  textarea { flex: 1; resize: none; font: inherit; padding: .55rem .7rem; border-radius: .8rem;
-             border: 1px solid var(--line); background: var(--bg); color: inherit; max-height: 8rem; }
+  textarea { flex: 1; resize: none; font: inherit; font-family: var(--chat-font); padding: .55rem .7rem;
+             border-radius: .8rem; border: 1px solid var(--line); background: var(--bg); color: inherit; max-height: 8rem; }
   button, label.attach { font: inherit; border: 1px solid var(--line); background: var(--bg); color: inherit;
            border-radius: .8rem; padding: .55rem .75rem; cursor: pointer; }
   #sticker-btn { font-size: 1.1rem; line-height: 1; }
@@ -1568,6 +1572,9 @@ if (window.visualViewport) {
       setKb(kb);
       try { localStorage.setItem(KB_KEY, String(kb)); } catch { /* 최선노력 */ }
     }
+    // 키보드로 화면(로그)이 줄면 맨 아래 메시지가 입력창에 가려질 수 있다 — 맨 아래를
+    // 보고 있었으면 계속 붙여둬 마지막 메시지가 안 잘리게 한다(위로 읽는 중이면 건드리지 않음).
+    if (atBottom()) scroll();
   };
   vv.addEventListener("resize", syncViewport);
   vv.addEventListener("scroll", syncViewport); // iOS: 키보드로 문서가 밀릴 때 위치 재동기화
@@ -1858,8 +1865,10 @@ const text = $("text");
 let resizeScheduled = false;
 function autoGrow() {
   resizeScheduled = false;
+  const stick = atBottom(); // 입력창이 커지면 로그가 그만큼 줄어든다 — 맨 아래였으면 계속 붙여둔다
   text.style.height = "auto";
   text.style.height = text.scrollHeight + "px";
+  if (stick) scroll();
 }
 // "/일정 제목" 을 타이핑하면 칩이 뜬다. 눌러(또는 그대로 Enter 를 쳐도) 미니
 // 달력이 열리고, 시작~종료일을 고르면 그 자리에서 바로 일정이 추가된다
