@@ -169,7 +169,10 @@ function wallpaperPage(item) {
       </button>
     </div>
     <p class="panel-note" id="view-note"></p>
-    <button class="download" id="case-save" type="button" hidden>↓ 목업 이미지 저장</button>
+    <div class="case-actions" id="case-actions" hidden>
+      <button class="flip" id="case-flip" type="button" aria-pressed="false">⇄ 좌우 반전</button>
+      <button class="download" id="case-save" type="button">↓ 목업 이미지 저장</button>
+    </div>
   </section>
 
   <section class="panel">

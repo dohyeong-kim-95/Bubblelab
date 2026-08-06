@@ -25,6 +25,8 @@ const cropResize = document.getElementById("crop-resize");
 const deviceSelect = document.getElementById("device-select");
 const caseCanvas = document.getElementById("case-canvas");
 const caseSave = document.getElementById("case-save");
+const caseFlip = document.getElementById("case-flip");
+const caseActions = document.getElementById("case-actions");
 
 // 화면에 띄우고 잘라낼 원본: 가장 픽셀이 많은 규격. 크기를 모르는 항목(손으로
 // 쓴 metadata)은 맨 앞을 쓴다.
@@ -85,7 +87,7 @@ function showView(index) {
   const current = VIEWS[view];
   viewImage.hidden = current.id !== "image";
   caseCanvas.hidden = current.id !== "case";
-  caseSave.hidden = current.id !== "case";
+  caseActions.hidden = current.id !== "case";
   viewNote.textContent = current.note;
   for (const tab of thumbs.querySelectorAll("[data-view]")) {
     tab.setAttribute("aria-selected", String(tab.dataset.view === current.id));
@@ -390,6 +392,10 @@ function roundedRect(context, x, y, width, height, radius) {
   context.closePath();
 }
 
+// 카메라 섬이 왼쪽 위에 있어서, 주인공이 왼쪽에 있는 그림은 렌즈에 가린다.
+// 좌우를 뒤집으면 반대쪽으로 넘어간다. 목업에만 적용되고 원본 저장에는 관여하지 않는다.
+let caseFlipped = false;
+
 function drawCase(image) {
   const context = caseCanvas.getContext("2d");
   const { width, height } = caseCanvas;
@@ -413,6 +419,11 @@ function drawCase(image) {
   context.save();
   roundedRect(context, pad, pad, bodyWidth, bodyHeight, radius);
   context.clip();
+  // 몸통 세로 중심선 기준 거울 반사 (클립은 변환 전에 잡혀 그대로 남는다)
+  if (caseFlipped) {
+    context.translate(pad * 2 + bodyWidth, 0);
+    context.scale(-1, 1);
+  }
   const box = coverCrop(image.naturalWidth, image.naturalHeight, bodyWidth, bodyHeight);
   context.drawImage(image, box.x, box.y, box.width, box.height, pad, pad, bodyWidth, bodyHeight);
   context.restore();
@@ -478,6 +489,11 @@ async function saveCase() {
 }
 
 // ── 시작 ────────────────────────────────────────────────────────────────
+caseFlip.addEventListener("click", async () => {
+  caseFlipped = !caseFlipped;
+  caseFlip.setAttribute("aria-pressed", String(caseFlipped));
+  await renderCase();
+});
 for (const tab of thumbs.querySelectorAll("[data-view]")) {
   tab.addEventListener("click", () => showView(VIEWS.findIndex((entry) => entry.id === tab.dataset.view)));
 }
