@@ -73,6 +73,9 @@ for (const site of sites) {
   });
 }
 
+const escapeHtml = (s) =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
 // 공용 에셋은 dist 루트로 (worker가 /_shared/* 를 프리픽스 없이 서빙)
 if (existsSync(join(ROOT, "_shared"))) {
   cpSync(join(ROOT, "_shared"), join(DIST, "_shared"), {
@@ -94,6 +97,17 @@ if (existsSync(join(ROOT, "_assets"))) {
     JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), items: catalog }, null, 2),
   );
   console.log(`generated asset catalog (${catalog.length} items)`);
+
+  // 배경화면은 항목마다 상세페이지를 만든다 (/assets/wallpaper/<id>/).
+  // 목록 카드로는 못 하는 것 — 원본 크기로 보기, 내 화면 해상도에 맞춰
+  // 잘라 저장하기, 폰 케이스 목업 — 이 여기에 있다.
+  const wallpapers = catalog.filter((item) => item.category === "wallpaper");
+  for (const item of wallpapers) {
+    const dir = join(DIST, "assets", "wallpaper", item.id);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "index.html"), wallpaperPage(item));
+  }
+  if (wallpapers.length) console.log(`generated ${wallpapers.length} wallpaper detail pages`);
 }
 
 // work/emoticon 생성 산출물(_src/emoticon)을 history 페이지가 읽을 수 있게 내보낸다
@@ -104,8 +118,80 @@ if (existsSync(join(ROOT, "_assets"))) {
   }
 }
 
-const escapeHtml = (s) =>
-  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+// 배경화면 상세페이지. 항목 데이터를 통째로 심어 두고(추가 요청 없이 바로
+// 그린다) 나머지 동작은 /assets/item.js 가 맡는다.
+function wallpaperPage(item) {
+  const title = escapeHtml(item.title);
+  const description = escapeHtml(item.description || `Bubblelab에서 만든 배경화면 ${item.title}`);
+  const tags = (item.tags || []).map((tag) => `<span class="tag">#${escapeHtml(tag)}</span>`).join("");
+  const downloads = item.downloads
+    .map((download) => `<div class="download-item">
+          <a class="download" href="/_download/wallpaper/${encodeURIComponent(item.id)}/${encodeURIComponent(download.file)}" download="${escapeHtml(download.file)}">↓ ${escapeHtml(download.label)}</a>
+        </div>`)
+    .join("\n        ");
+  // </script> 가 데이터 안에 있으면 스크립트 블록이 끊긴다
+  const data = JSON.stringify(item).replace(/</g, "\\u003c");
+  return `<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="${description}">
+<title>${title} · Bubblelab 배경화면</title>
+<link rel="stylesheet" href="/assets/catalog.css">
+<link rel="stylesheet" href="/assets/item.css">
+</head>
+<body data-category="wallpaper">
+<main class="wrap item-wrap">
+  <header>
+    <a class="back" href="/assets/wallpaper/">← 배경화면 목록</a>
+    <p class="eyebrow">BUBBLELAB ASSETS</p>
+    <h1 class="item-title">${title}</h1>
+    <p class="intro">${description}</p>
+    <div class="tags">${tags}</div>
+  </header>
+
+  <section class="stage"><img id="stage-image" src="${escapeHtml(item.preview)}" alt="${title}"></section>
+
+  <section class="panel">
+    <h2>내 기기에 맞게 잘라서 저장</h2>
+    <p class="panel-note" id="fit-note">화면 크기를 확인하는 중…</p>
+    <div class="fit-inputs">
+      <label>가로 <input id="fit-width" type="number" min="120" max="8000" step="1" inputmode="numeric"></label>
+      <span class="times">×</span>
+      <label>세로 <input id="fit-height" type="number" min="120" max="8000" step="1" inputmode="numeric"></label>
+    </div>
+    <div class="fit-focus" role="group" aria-label="잘라낼 때 남길 쪽">
+      <button class="chip" type="button" data-focus="center" aria-pressed="true">가운데</button>
+      <button class="chip" type="button" data-focus="top" aria-pressed="false">위쪽</button>
+      <button class="chip" type="button" data-focus="bottom" aria-pressed="false">아래쪽</button>
+    </div>
+    <button class="download fit-go" id="fit-save" type="button">↓ 잘라서 저장</button>
+    <p class="panel-note" id="fit-result"></p>
+  </section>
+
+  <section class="panel">
+    <h2>폰 케이스 목업</h2>
+    <p class="panel-note">이 배경화면을 폰 케이스에 얹으면 어떻게 보이는지 그려 봅니다. 인쇄용 파일이 아니라 미리보기입니다.</p>
+    <canvas id="case-canvas" width="600" height="1200" aria-label="${title} 폰 케이스 목업"></canvas>
+    <button class="download" id="case-save" type="button">↓ 목업 이미지 저장</button>
+  </section>
+
+  <section class="panel">
+    <h2>규격별 원본 받기</h2>
+    <div class="downloads">
+        ${downloads}
+    </div>
+  </section>
+
+  <footer>© Bubblelab Assets</footer>
+</main>
+<script type="application/json" id="item-data">${data}</script>
+<script type="module" src="/assets/item.js"></script>
+</body>
+</html>
+`;
+}
 
 // 토이의 index.html에서 이모지(카드 아이콘용)를 뽑아온다.
 function toyEmoji(site, name) {

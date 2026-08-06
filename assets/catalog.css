@@ -102,3 +102,6 @@ footer { margin-top: 3rem; color: var(--muted); text-align: center; font-size: .
   .description { min-height: 0; }
 }
 @media (max-width: 24rem) { .grid { grid-template-columns: 1fr; } }
+.item-link { text-decoration: none; }
+.item-link:hover { text-decoration: underline; }
+.zoom-detail { color: #fff; font-size: .74rem; }

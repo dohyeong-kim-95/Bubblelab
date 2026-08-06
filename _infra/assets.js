@@ -54,11 +54,19 @@ export function readAssetMetadata(root, category, itemDir) {
     if (download.device && download.device !== "mobile" && download.device !== "desktop") {
       throw new Error(`${category}/${id}: download device must be "mobile" or "desktop": ${download.device}`);
     }
+    // 선택 필드: 파일의 픽셀 크기. 상세페이지가 "내 기기에 맞게 저장"의
+    // 원본으로 가장 큰 규격을 고르는 데 쓴다. 반쪽 값은 거른다.
+    const sized = Number.isInteger(download.width) && download.width > 0
+      && Number.isInteger(download.height) && download.height > 0;
+    if ((download.width || download.height) && !sized) {
+      throw new Error(`${category}/${id}: download width/height must both be positive integers: ${download.file}`);
+    }
     return {
       label: String(download.label || "다운로드"),
       file: download.file,
       url: assetUrl(category, id, download.file),
       ...(download.device ? { device: download.device } : {}),
+      ...(sized ? { width: download.width, height: download.height } : {}),
     };
   });
 

@@ -21,6 +21,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, wri
 import { basename, dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { encodePng } from "./png.mjs";
+import { coverCrop } from "../_shared/crop.js";
 import { decodeSheet as decodeImage } from "./sticker-pack.mjs";
 import { readAssetMetadata } from "./assets.js";
 
@@ -66,23 +67,9 @@ export function slugify(name) {
     .slice(0, 48);
 }
 
-// 대상 비율로 "채우기" 잘라내기 상자. 원본 안에서 가능한 가장 큰 상자를 잡고
-// focus 로 남는 축의 위치를 정한다.
-export function coverCrop(width, height, targetWidth, targetHeight, focus = "center") {
-  let cropWidth = width;
-  let cropHeight = Math.round((width * targetHeight) / targetWidth);
-  if (cropHeight > height) {
-    cropHeight = height;
-    cropWidth = Math.round((height * targetWidth) / targetHeight);
-  }
-  cropWidth = Math.min(width, Math.max(1, cropWidth));
-  cropHeight = Math.min(height, Math.max(1, cropHeight));
-  const spareX = width - cropWidth;
-  const spareY = height - cropHeight;
-  const x = focus === "left" ? 0 : focus === "right" ? spareX : Math.round(spareX / 2);
-  const y = focus === "top" ? 0 : focus === "bottom" ? spareY : Math.round(spareY / 2);
-  return { x, y, width: cropWidth, height: cropHeight };
-}
+// 잘라내기 계산은 `_shared/crop.js` 하나만 쓴다 — 클라이언트의
+// "내 기기에 맞게 저장"이 같은 결과를 내야 한다.
+export { coverCrop };
 
 export function crop(image, { x, y, width, height }) {
   const data = new Uint8Array(width * height * 4);
@@ -274,7 +261,15 @@ export async function buildWallpaper({
     previewSize: { width: preview.width, height: preview.height },
     tags: tags.map((tag) => String(tag).trim()).filter(Boolean),
     createdAt: createdAt ?? new Date().toISOString().slice(0, 10),
-    downloads: variants.map(({ label, file, device }) => ({ label, file, ...(device ? { device } : {}) })),
+    // width/height 는 상세페이지가 "내 기기에 맞게 저장"의 원본으로 가장 큰
+    // 규격을 고르는 데 쓴다 (라벨 문자열을 파싱하지 않게).
+    downloads: variants.map(({ label, file, device, image }) => ({
+      label,
+      file,
+      ...(device ? { device } : {}),
+      width: image.width,
+      height: image.height,
+    })),
   };
   writeFileSync(join(itemDir, "metadata.json"), JSON.stringify(metadata, null, 2) + "\n");
 

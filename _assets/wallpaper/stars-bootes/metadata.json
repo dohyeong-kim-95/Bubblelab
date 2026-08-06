@@ -18,7 +18,9 @@
     {
       "label": "모바일 1080×2340",
       "file": "mobile.png",
-      "device": "mobile"
+      "device": "mobile",
+      "width": 1080,
+      "height": 2340
     }
   ]
 }

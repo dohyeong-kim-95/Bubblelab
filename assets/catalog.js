@@ -131,7 +131,9 @@ function render() {
         : ""}>${previewMarkup(item)}${zoomable ? '<span class="zoom-hint" aria-hidden="true">⤢</span>' : ""}</div>
       <div class="info">
         <div class="title-row">
-          <h2>${esc(item.title)}</h2>
+          <h2>${zoomable
+            ? `<a class="item-link" href="/assets/wallpaper/${encodeURIComponent(item.id)}/">${esc(item.title)}</a>`
+            : esc(item.title)}</h2>
           <span class="item-download-count">총 ${numberFormat.format(downloadCounts.items[`${item.category}/${item.id}`] || 0)}회</span>
         </div>
         <p class="description">${esc(item.description || "Bubblelab에서 만든 에셋입니다.")}</p>
@@ -191,7 +193,7 @@ function ensureZoom() {
     <button class="zoom-step" data-step="-1" type="button" aria-label="이전 배경화면">‹</button>
     <img alt="">
     <button class="zoom-step" data-step="1" type="button" aria-label="다음 배경화면">›</button>
-    <div class="zoom-bar"><span class="zoom-title"></span><a class="download zoom-download" download>↓</a></div>`;
+    <div class="zoom-bar"><span class="zoom-title"></span><a class="zoom-detail" href="#">자세히 →</a><a class="download zoom-download" download>↓</a></div>`;
   zoom.addEventListener("click", (event) => {
     const step = event.target.closest("[data-step]");
     if (step) return showZoom(zoomIndex + Number(step.dataset.step));
@@ -212,6 +214,7 @@ function showZoom(index) {
   image.src = download ? download.url : item.preview;
   image.alt = `${item.title} 크게 보기`;
   layer.querySelector(".zoom-title").textContent = item.title;
+  layer.querySelector(".zoom-detail").href = `/assets/wallpaper/${encodeURIComponent(item.id)}/`;
   const link = layer.querySelector(".zoom-download");
   link.hidden = !download;
   if (download) {

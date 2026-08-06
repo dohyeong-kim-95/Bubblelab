@@ -106,6 +106,12 @@ node _infra/wallpaper.mjs 이미지.png <id> --title "제목" \
 재인코딩이라 EXIF(위치·기기)는 자동으로 지워진다. 디코더는 스티커와 같아
 PNG·JPEG를 모두 받고, JPEG는 `npm ci` 필요. 검증은 `_infra/wallpaper.test.mjs`.
 
+항목마다 `/assets/wallpaper/<id>/` 상세페이지가 빌드에서 자동 생성된다
+(`build.mjs`의 `wallpaperPage` + `assets/item.js`) — 크게 보기, 내 화면 해상도에
+맞춰 잘라 저장(캔버스), 폰 케이스 목업. 잘라내기 계산은 CLI와 클라이언트가
+`_shared/crop.js` 하나를 같이 쓴다. 빌드 산출물 검사는 `_infra/home-button.test.mjs`
+한 곳에 모아 둔다(테스트가 병렬이라 dist를 두 번 빌드하면 경합한다).
+
 ## 데일리 팟캐스트 (podcast/)
 
 `podcast/`는 토이가 아니라 초대 코드 기반 서비스다 — 토이 관례(share.js,

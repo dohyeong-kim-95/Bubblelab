@@ -9,7 +9,9 @@
 - `catalog.js`: `/_assets/catalog.json`을 읽어 항목 카드, 미디어와 다운로드 버튼 생성
 - `catalog.css`: 모든 카테고리가 함께 사용하는 반응형 스타일
 - `sticker/index.html`: 스티커 목록
-- `wallpaper/index.html`: 배경화면 목록
+- `wallpaper/index.html`: 배경화면 목록 ([전체 | 모바일 | PC] 탭)
+- `item.js`, `item.css`: 배경화면 상세페이지 동작·스타일. 페이지 자체는
+  `_infra/build.mjs`가 항목마다 `/assets/wallpaper/<id>/`로 생성합니다
 - `music/index.html`: 음악 재생 및 다운로드 목록
 - `photo-frame/index.html`: 네컷사진 공용 프레임 목록 (`util/photo`에서 자동 사용)
 

@@ -10,6 +10,8 @@ const DIST = join(ROOT, "dist");
 const SRC = "/_shared/home.js";
 
 // 빌드는 dist를 통째로 지우고 다시 만드는 멱등 스크립트라 테스트에서 그냥 돌린다.
+// **빌드 산출물 검사는 이 파일에 모은다** — 테스트 파일은 병렬로 돌아서,
+// 두 파일이 각자 빌드하면 같은 dist를 두고 경합한다.
 test.before(() => {
   execFileSync("node", [join(ROOT, "_infra/build.mjs")], { cwd: ROOT, stdio: "pipe" });
 });
@@ -168,4 +170,27 @@ test("비공개 서브도메인은 풀다운 메뉴에도 나오지 않는다", 
   }
   // 페이지 자체는 살아 있어야 한다 (주소를 아는 사람은 들어간다)
   assert.ok(existsSync(join(DIST, "invest/index.html")));
+});
+
+// ── 배경화면 상세페이지 (/assets/wallpaper/<id>/) ────────────────────────
+
+test("배경화면 항목마다 상세페이지가 생성된다", () => {
+  const catalog = JSON.parse(readFileSync(join(DIST, "_assets", "catalog.json"), "utf8"));
+  const wallpapers = catalog.items.filter((item) => item.category === "wallpaper");
+  assert.ok(wallpapers.length, "카탈로그에 배경화면이 하나도 없다 — 이 검사가 무의미해진다");
+  for (const item of wallpapers) {
+    const page = join(DIST, "assets", "wallpaper", item.id, "index.html");
+    assert.ok(existsSync(page), `${item.id}: 상세페이지가 없다`);
+    const html = readFileSync(page, "utf8");
+    assert.ok(html.includes('id="item-data"'), `${item.id}: 항목 데이터가 심어지지 않았다`);
+    assert.ok(html.includes("/assets/item.js"), `${item.id}: item.js 연결이 없다`);
+    // 데이터가 스크립트 블록을 끊지 않아야 한다
+    const data = html.split('id="item-data">')[1].split("</script>")[0];
+    assert.deepEqual(JSON.parse(data).id, item.id);
+    assert.equal(data.includes("<"), false, `${item.id}: 심은 JSON에 이스케이프되지 않은 <`);
+  }
+  // 상세페이지가 쓰는 파일이 실제로 배포되는지
+  for (const asset of [["assets", "item.js"], ["assets", "item.css"], ["_shared", "crop.js"]]) {
+    assert.ok(existsSync(join(DIST, ...asset)), `${asset.join("/")}가 배포되지 않았다`);
+  }
 });
