@@ -16,6 +16,11 @@
 실제 파일과 메타데이터는 공개 UI 폴더가 아니라 [`../_assets/`](../_assets/)에서
 관리합니다. 항목 추가 후 `node _infra/build.mjs`로 생성 카탈로그를 검증하세요.
 
+스티커와 배경화면은 이미지 하나로 항목을 통째로 만드는 CLI가 있습니다 —
+`node _infra/sticker-pack.mjs`(4x4 시트 → 팩),
+`node _infra/wallpaper.mjs`(이미지 → 기기별 규격). 사용법은 각
+`_assets/<카테고리>/README.md`에 있습니다.
+
 현재 파일은 저장소에서 정적으로 배포됩니다. 관리자 화면의 업로드 UI와 R2 공개
 경로는 비활성 상태이므로 새 에셋은 `_assets/`에 커밋해야 합니다.
 

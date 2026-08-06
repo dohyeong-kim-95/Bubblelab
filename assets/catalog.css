@@ -29,6 +29,9 @@ body[data-category="music"] .grid { grid-template-columns: repeat(auto-fill, min
 .preview img, .preview video { display: block; width: 100%; height: 100%; object-fit: cover; }
 body[data-category="sticker"] .preview img { width: 68%; height: 68%; object-fit: contain; filter: drop-shadow(0 8px 10px #0003); }
 body[data-category="music"] .preview { aspect-ratio: 1; }
+/* 배경화면은 세로·가로가 섞여 있다 — 잘라내지 말고 전체 비율을 보여준다 */
+body[data-category="wallpaper"] .preview { aspect-ratio: 1; }
+body[data-category="wallpaper"] .preview img { object-fit: contain; }
 .info { padding: 1rem; }
 .title-row { display: flex; align-items: baseline; justify-content: space-between; gap: .65rem; }
 .info h2 { margin: 0; font-size: 1rem; }

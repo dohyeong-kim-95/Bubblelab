@@ -85,6 +85,24 @@ metadata.json·`CHAT_STICKER_PACKS` 등록·스티커 README 표까지 자동 �
 util/chat 클라이언트는 `catalog.json`의 `chat.title` 팩을 자동으로 읽으므로
 손댈 곳 없음. 등록 누락·장수 불일치는 `_infra/sticker-pack.test.mjs`가 잡는다.
 
+## 배경화면 추가 (원샷)
+
+세션에 이미지가 올라오면 그 경로를 그대로 넘긴다. 규격별 잘라내기·preview·
+metadata.json·`_assets/wallpaper/README.md` 표까지 한 번에 갱신된다.
+
+```bash
+node _infra/wallpaper.mjs 이미지.png <id> --title "제목" \
+  --sizes mobile,desktop --tags "태그,태그"
+```
+
+`--sizes`는 `mobile`(1290×2796)·`tablet`·`desktop`(2560×1440)·`wide`·`square`·
+`original` 중에서 고른다(기본 `mobile,desktop`). 잘라내기는 채우기(cover),
+남길 쪽은 `--focus top|bottom|left|right`. **확대는 하지 않는다** — 원본이
+규격보다 작으면 비율만 맞춘 원본 해상도로 저장하고 라벨에 실제 크기가 들어간다
+(CLI가 경고로 알려주니 그때 원본을 더 큰 걸로 받으면 된다). 출력은 JPEG라
+EXIF(위치·기기)는 자동으로 지워진다. 시트 디코더는 스티커와 같아 PNG·JPEG를
+모두 받고, JPEG는 `npm ci` 필요. 검증은 `_infra/wallpaper.test.mjs`.
+
 ## 데일리 팟캐스트 (podcast/)
 
 `podcast/`는 토이가 아니라 초대 코드 기반 서비스다 — 토이 관례(share.js,
