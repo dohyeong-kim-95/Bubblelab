@@ -107,9 +107,12 @@ node _infra/wallpaper.mjs 이미지.png <id> --title "제목" \
 PNG·JPEG를 모두 받고, JPEG는 `npm ci` 필요. 검증은 `_infra/wallpaper.test.mjs`.
 
 항목마다 `/assets/wallpaper/<id>/` 상세페이지가 빌드에서 자동 생성된다
-(`build.mjs`의 `wallpaperPage` + `assets/item.js`) — 크게 보기, 내 화면 해상도에
-맞춰 잘라 저장(캔버스), 폰 케이스 목업. 잘라내기 계산은 CLI와 클라이언트가
-`_shared/crop.js` 하나를 같이 쓴다. 빌드 산출물 검사는 `_infra/home-button.test.mjs`
+(`build.mjs`의 `wallpaperPage` + `assets/item.js`) — 썸네일 갤러리(원본·케이스
+목업), 기종을 골라 잘라 저장(캔버스), 폰 케이스 목업. 기종 목록은
+`assets/devices.js`에 한 줄씩 손으로 관리한다. 잘라내기 계산은 CLI와 클라이언트가
+`_shared/crop.js` 하나를 같이 쓴다. **확대 정책은 둘이 다르다** — CLI는 없는
+해상도를 카탈로그에 광고하지 않으려고 확대하지 않고, 상세페이지는 방문자가 고른
+기종 해상도로 늘려서라도 내보낸다(몇 배 늘렸는지 화면에 표시). 빌드 산출물 검사는 `_infra/home-button.test.mjs`
 한 곳에 모아 둔다(테스트가 병렬이라 dist를 두 번 빌드하면 경합한다).
 
 ## 데일리 팟캐스트 (podcast/)

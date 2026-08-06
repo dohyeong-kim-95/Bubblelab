@@ -175,6 +175,9 @@ function wallpaperPage(item) {
   <section class="panel">
     <h2>내 기기에 맞게 잘라서 저장</h2>
     <p class="panel-note" id="fit-note">화면 크기를 확인하는 중…</p>
+    <label class="field">기종
+      <select id="device-select"></select>
+    </label>
     <div class="fit-inputs">
       <label>가로 <input id="fit-width" type="number" min="120" max="8000" step="1" inputmode="numeric"></label>
       <span class="times">×</span>
@@ -185,6 +188,8 @@ function wallpaperPage(item) {
       <div class="crop-box" id="crop-box" tabindex="0" role="application"
            aria-label="잘라낼 영역 — 끌어서 옮기거나 방향키로 조절">
         <span class="crop-grip" aria-hidden="true"></span>
+        <span class="crop-resize" id="crop-resize" role="button" tabindex="0"
+              aria-label="잘라낼 영역 크기 — 끌어서 늘리거나 줄이기"></span>
       </div>
     </div>
     <p class="panel-note" id="crop-note"></p>

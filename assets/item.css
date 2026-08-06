@@ -30,6 +30,14 @@
 .panel-note { margin: 0 0 .8rem; color: var(--muted); font-size: .74rem; line-height: 1.6; }
 .panel-note:empty { margin: 0; }
 
+/* 기종 이름이 길어서 select 의 고유 폭이 화면을 밀어낸다 — 그리드 트랙과
+   select 양쪽에 min-width:0 을 줘야 100% 로 접힌다. */
+.field { display: grid; gap: .3rem; min-width: 0; margin-bottom: .7rem; color: var(--muted); font-size: .68rem; }
+.field select {
+  width: 100%; min-width: 0; padding: .6rem .7rem; border: 1px solid var(--line); border-radius: .65rem;
+  background: var(--bg); color: var(--text); font: inherit; font-size: .78rem;
+}
+.field select:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
 .fit-inputs { display: flex; align-items: end; gap: .5rem; margin-bottom: .7rem; }
 .fit-inputs label { display: grid; gap: .3rem; color: var(--muted); font-size: .68rem; }
 .fit-inputs input {
@@ -60,7 +68,12 @@
     linear-gradient(#fff9, #fff9) center/2px 1.6rem no-repeat;
   opacity: .8; pointer-events: none;
 }
-.crop--fixed .crop-box { cursor: default; }
+.crop-resize {
+  position: absolute; right: -11px; bottom: -11px; width: 22px; height: 22px;
+  border: 2px solid #fff; border-radius: 50%; background: var(--accent);
+  cursor: nwse-resize; touch-action: none;
+}
+.crop-resize:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .crop--fixed .crop-grip { display: none; }
 
 #crop-note { text-align: center; }

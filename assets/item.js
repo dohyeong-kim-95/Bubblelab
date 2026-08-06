@@ -4,6 +4,7 @@
 //  ③ 폰 케이스 목업 미리보기
 // 잘라내기 계산은 등록 CLI(_infra/wallpaper.mjs)와 같은 /_shared/crop.js 를 쓴다.
 import { coverCrop } from "/_shared/crop.js";
+import { DEVICE_GROUPS, findDevice } from "./devices.js";
 
 const item = JSON.parse(document.getElementById("item-data").textContent);
 const stage = document.getElementById("stage");
@@ -20,6 +21,8 @@ const cropArea = document.getElementById("crop");
 const cropImage = document.getElementById("crop-image");
 const cropBox = document.getElementById("crop-box");
 const cropNote = document.getElementById("crop-note");
+const cropResize = document.getElementById("crop-resize");
+const deviceSelect = document.getElementById("device-select");
 const caseCanvas = document.getElementById("case-canvas");
 const caseSave = document.getElementById("case-save");
 
@@ -128,12 +131,50 @@ function detectScreen() {
   };
 }
 
-function fillDetected() {
-  const { width, height } = detectScreen();
-  widthInput.value = width;
-  heightInput.value = height;
-  fitNote.textContent =
-    `이 화면은 ${width}×${height}으로 보입니다. 다른 기기에 쓰려면 숫자를 고쳐도 됩니다.`;
+const DETECTED = "detected";
+const MANUAL = "manual";
+
+// 기종 목록을 채운다. 맨 위는 감지된 이 화면, 맨 아래는 직접 입력.
+function fillDevices() {
+  const screenSize = detectScreen();
+  const detected = new Option(`이 화면 (${screenSize.width}×${screenSize.height})`, DETECTED);
+  deviceSelect.append(detected);
+  for (const group of DEVICE_GROUPS) {
+    const optgroup = document.createElement("optgroup");
+    optgroup.label = group.label;
+    for (const device of group.devices) {
+      optgroup.append(new Option(`${device.label} — ${device.width}×${device.height}`, device.label));
+    }
+    deviceSelect.append(optgroup);
+  }
+  deviceSelect.append(new Option("직접 입력", MANUAL));
+  applyDevice();
+}
+
+// 선택한 기종의 해상도를 가로·세로 칸에 넣는다.
+function applyDevice() {
+  const value = deviceSelect.value;
+  if (value === MANUAL) {
+    fitNote.textContent = "가로·세로를 직접 적어주세요.";
+    return;
+  }
+  const size = value === DETECTED ? detectScreen() : findDevice(value);
+  if (!size) return;
+  widthInput.value = size.width;
+  heightInput.value = size.height;
+  fitNote.textContent = value === DETECTED
+    ? `이 화면은 ${size.width}×${size.height}으로 보입니다. 기종을 골라도 되고 숫자를 고쳐도 됩니다.`
+    : `${size.width}×${size.height}으로 저장합니다.`;
+  resetCrop();
+}
+
+// 숫자를 손대면 기종 선택은 "직접 입력"으로 내려온다.
+function onManualEdit() {
+  if (deviceSelect.value !== MANUAL) {
+    deviceSelect.value = MANUAL;
+    fitNote.textContent = "가로·세로를 직접 적어주세요.";
+  }
+  resetCrop();
 }
 
 function targetSize() {
@@ -145,16 +186,44 @@ function targetSize() {
 
 // 잘라낼 상자를 목표 비율에 맞춰 다시 잡는다. 이미 고른 위치가 있으면
 // 가운데를 최대한 유지하고, 없으면 가운데에서 시작한다.
-function resetCrop() {
+// 목표 비율로 원본 안에 들어가는 최대 상자 (= 확대 배율 1배 지점)
+function maxCrop() {
   const target = targetSize();
-  if (!sourceImage || !target) return;
+  if (!sourceImage || !target) return null;
+  return coverCrop(sourceImage.naturalWidth, sourceImage.naturalHeight, target.width, target.height);
+}
+// 이보다 더 당기면(=상자를 더 줄이면) 늘려 저장해도 알아보기 어렵다
+const MIN_CROP_RATIO = 0.25;
+
+function resetCrop() {
+  const box = maxCrop();
+  if (!box) return;
   const previous = crop;
-  const box = coverCrop(sourceImage.naturalWidth, sourceImage.naturalHeight, target.width, target.height);
   if (previous) {
+    // 보고 있던 중심과 확대 배율을 최대한 유지한다
+    const zoom = Math.min(1, previous.width / box.width);
+    box.width = Math.max(1, Math.round(box.width * zoom));
+    box.height = Math.max(1, Math.round(box.height * zoom));
     box.x = previous.x + previous.width / 2 - box.width / 2;
     box.y = previous.y + previous.height / 2 - box.height / 2;
   }
   crop = box;
+  clampCrop();
+  drawCrop();
+}
+
+// 상자를 중심 기준으로 키우거나 줄인다 (가로세로비는 그대로).
+function zoomCrop(factor) {
+  const limit = maxCrop();
+  if (!crop || !limit) return;
+  const centerX = crop.x + crop.width / 2;
+  const centerY = crop.y + crop.height / 2;
+  const minWidth = Math.max(16, limit.width * MIN_CROP_RATIO);
+  const width = Math.min(limit.width, Math.max(minWidth, crop.width * factor));
+  crop.width = Math.round(width);
+  crop.height = Math.round(width * (limit.height / limit.width));
+  crop.x = centerX - crop.width / 2;
+  crop.y = centerY - crop.height / 2;
   clampCrop();
   drawCrop();
 }
@@ -172,6 +241,7 @@ function displayScale() {
 
 function drawCrop() {
   if (!crop || !cropImage.getBoundingClientRect().width) return;
+  const target = targetSize();
   const scale = displayScale();
   cropBox.style.left = `${crop.x / scale}px`;
   cropBox.style.top = `${crop.y / scale}px`;
@@ -181,9 +251,13 @@ function drawCrop() {
   const freeY = sourceImage.naturalHeight - crop.height;
   const movable = freeX > 1 || freeY > 1;
   cropArea.classList.toggle("crop--fixed", !movable);
-  cropNote.textContent = movable
-    ? `상자를 끌어서 남길 부분을 고르세요 (방향키로도 됩니다). 원본 ${sourceImage.naturalWidth}×${sourceImage.naturalHeight} 중 ${crop.width}×${crop.height}을 씁니다.`
-    : "이 비율은 원본을 거의 그대로 쓰기 때문에 옮길 여지가 없습니다.";
+  const stretched = target && crop.width < target.width;
+  cropNote.textContent = [
+    movable ? "상자를 끌어 위치를, 모서리를 끌어 크기를 정하세요 (방향키·＋−도 됩니다)."
+      : "모서리를 끌어 크기를 정하세요 — 지금 비율에서는 옮길 여지가 없습니다.",
+    target ? `고른 영역 ${crop.width}×${crop.height} → ${target.width}×${target.height}로 저장.` : "",
+    stretched ? "원본보다 크게 늘려 저장하므로 조금 흐려질 수 있습니다." : "",
+  ].filter(Boolean).join(" ");
   cropBox.setAttribute("aria-label",
     `잘라낼 영역 — 가로 ${Math.round(freeX ? (crop.x / freeX) * 100 : 50)}%, 세로 ${Math.round(freeY ? (crop.y / freeY) * 100 : 50)}% 위치`);
 }
@@ -215,7 +289,31 @@ function startDrag(event) {
   event.preventDefault();
 }
 
+function startResize(event) {
+  if (!crop) return;
+  const scale = displayScale();
+  const startX = event.clientX;
+  const startWidth = crop.width;
+  const move = (moveEvent) => {
+    const delta = (moveEvent.clientX - startX) * scale;
+    zoomCrop((startWidth + delta * 2) / crop.width);
+  };
+  const end = () => {
+    cropResize.removeEventListener("pointermove", move);
+    cropResize.removeEventListener("pointerup", end);
+    cropResize.removeEventListener("pointercancel", end);
+  };
+  cropResize.setPointerCapture(event.pointerId);
+  cropResize.addEventListener("pointermove", move);
+  cropResize.addEventListener("pointerup", end);
+  cropResize.addEventListener("pointercancel", end);
+  event.preventDefault();
+  event.stopPropagation();
+}
+
 function nudge(event) {
+  if (event.key === "+" || event.key === "=") return zoomCrop(0.9), event.preventDefault();
+  if (event.key === "-" || event.key === "_") return zoomCrop(1 / 0.9), event.preventDefault();
   const steps = {
     ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1],
   }[event.key];
@@ -246,10 +344,10 @@ async function saveFitted() {
   saveButton.textContent = "만드는 중…";
   try {
     const box = crop || coverCrop(sourceImage.naturalWidth, sourceImage.naturalHeight, target.width, target.height);
-    // 확대는 하지 않는다 — 원본이 작으면 비율만 맞춘 원본 해상도로 낸다.
-    const scale = Math.min(1, target.width / box.width, target.height / box.height);
-    const outWidth = scale >= 1 ? box.width : target.width;
-    const outHeight = scale >= 1 ? box.height : target.height;
+    // 고른 기종 해상도로 낸다. 고른 영역이 그보다 작으면 늘려서 채우고
+    // (사용자가 당겨 자른 결과다) 얼마나 늘렸는지는 아래에서 알려준다.
+    const outWidth = target.width;
+    const outHeight = target.height;
     const canvas = document.createElement("canvas");
     canvas.width = outWidth;
     canvas.height = outHeight;
@@ -259,10 +357,10 @@ async function saveFitted() {
     const blob = await toBlob(canvas);
     if (!blob) throw new Error("encode");
     const hint = saveBlob(blob, `${item.id}-${outWidth}x${outHeight}.${isPng ? "png" : "jpg"}`);
-    const short = outWidth < target.width || outHeight < target.height;
+    const stretch = outWidth / box.width;
     fitResult.textContent = [
       `${outWidth}×${outHeight}으로 저장했습니다.`,
-      short ? `원본이 ${target.width}×${target.height}보다 작아 비율만 맞췄습니다(확대하지 않습니다).` : "",
+      stretch > 1.02 ? `고른 영역 ${box.width}×${box.height}을 ${stretch.toFixed(1)}배로 늘렸습니다.` : "",
       hint,
     ].filter(Boolean).join(" ");
   } catch {
@@ -393,13 +491,21 @@ swipe(stage);
 showView(0);
 cropBox.addEventListener("pointerdown", startDrag);
 cropBox.addEventListener("keydown", nudge);
-for (const input of [widthInput, heightInput]) input.addEventListener("input", resetCrop);
+cropResize.addEventListener("pointerdown", startResize);
+cropResize.addEventListener("keydown", nudge);
+cropArea.addEventListener("wheel", (event) => {
+  if (!crop) return;
+  zoomCrop(event.deltaY > 0 ? 1 / 0.92 : 0.92);
+  event.preventDefault();
+}, { passive: false });
+deviceSelect.addEventListener("change", applyDevice);
+for (const input of [widthInput, heightInput]) input.addEventListener("input", onManualEdit);
 addEventListener("resize", drawCrop);
 saveButton.addEventListener("click", saveFitted);
 caseSave.addEventListener("click", saveCase);
 caseSave.disabled = true;
 
-fillDetected();
+fillDevices();
 await showSource();
 if (sourceImage) {
   cropImage.src = sourceImage.src;
