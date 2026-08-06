@@ -12,6 +12,10 @@ const fitResult = document.getElementById("fit-result");
 const widthInput = document.getElementById("fit-width");
 const heightInput = document.getElementById("fit-height");
 const saveButton = document.getElementById("fit-save");
+const cropArea = document.getElementById("crop");
+const cropImage = document.getElementById("crop-image");
+const cropBox = document.getElementById("crop-box");
+const cropNote = document.getElementById("crop-note");
 const caseCanvas = document.getElementById("case-canvas");
 const caseSave = document.getElementById("case-save");
 
@@ -21,8 +25,11 @@ const source = [...item.downloads].sort(
   (a, b) => (b.width || 0) * (b.height || 0) - (a.width || 0) * (a.height || 0),
 )[0];
 const isPng = /\.png$/i.test(source?.file || "");
-let focus = "center";
 let sourceImage = null;
+// 잘라낼 영역: 원본 픽셀 기준 상자. 크기는 목표 비율에서 원본 안에 들어가는
+// 최대치로 고정하고(확대하지 않으니 더 키울 수도, 줄일 이유도 없다) 위치만
+// 사용자가 끌어서 정한다.
+let crop = null;
 
 // iOS 사파리는 blob 다운로드에서 download 속성을 무시하고 그냥 열어 버린다.
 // 그 경우엔 새 탭으로 띄우고 "길게 눌러 저장"을 안내한다.
@@ -93,6 +100,91 @@ function targetSize() {
   return { width: Math.min(8000, width), height: Math.min(8000, height) };
 }
 
+// 잘라낼 상자를 목표 비율에 맞춰 다시 잡는다. 이미 고른 위치가 있으면
+// 가운데를 최대한 유지하고, 없으면 가운데에서 시작한다.
+function resetCrop() {
+  const target = targetSize();
+  if (!sourceImage || !target) return;
+  const previous = crop;
+  const box = coverCrop(sourceImage.naturalWidth, sourceImage.naturalHeight, target.width, target.height);
+  if (previous) {
+    box.x = previous.x + previous.width / 2 - box.width / 2;
+    box.y = previous.y + previous.height / 2 - box.height / 2;
+  }
+  crop = box;
+  clampCrop();
+  drawCrop();
+}
+
+function clampCrop() {
+  crop.x = Math.round(Math.min(sourceImage.naturalWidth - crop.width, Math.max(0, crop.x)));
+  crop.y = Math.round(Math.min(sourceImage.naturalHeight - crop.height, Math.max(0, crop.y)));
+}
+
+// 화면에 그려진 이미지 1px 이 원본 몇 px 인지
+function displayScale() {
+  const rect = cropImage.getBoundingClientRect();
+  return rect.width ? sourceImage.naturalWidth / rect.width : 1;
+}
+
+function drawCrop() {
+  if (!crop || !cropImage.getBoundingClientRect().width) return;
+  const scale = displayScale();
+  cropBox.style.left = `${crop.x / scale}px`;
+  cropBox.style.top = `${crop.y / scale}px`;
+  cropBox.style.width = `${crop.width / scale}px`;
+  cropBox.style.height = `${crop.height / scale}px`;
+  const freeX = sourceImage.naturalWidth - crop.width;
+  const freeY = sourceImage.naturalHeight - crop.height;
+  const movable = freeX > 1 || freeY > 1;
+  cropArea.classList.toggle("crop--fixed", !movable);
+  cropNote.textContent = movable
+    ? `상자를 끌어서 남길 부분을 고르세요 (방향키로도 됩니다). 원본 ${sourceImage.naturalWidth}×${sourceImage.naturalHeight} 중 ${crop.width}×${crop.height}을 씁니다.`
+    : "이 비율은 원본을 거의 그대로 쓰기 때문에 옮길 여지가 없습니다.";
+  cropBox.setAttribute("aria-label",
+    `잘라낼 영역 — 가로 ${Math.round(freeX ? (crop.x / freeX) * 100 : 50)}%, 세로 ${Math.round(freeY ? (crop.y / freeY) * 100 : 50)}% 위치`);
+}
+
+function startDrag(event) {
+  if (!crop) return;
+  const scale = displayScale();
+  const startX = event.clientX;
+  const startY = event.clientY;
+  const originX = crop.x;
+  const originY = crop.y;
+  cropBox.setPointerCapture(event.pointerId);
+  cropArea.classList.add("crop--dragging");
+  const move = (moveEvent) => {
+    crop.x = originX + (moveEvent.clientX - startX) * scale;
+    crop.y = originY + (moveEvent.clientY - startY) * scale;
+    clampCrop();
+    drawCrop();
+  };
+  const end = () => {
+    cropArea.classList.remove("crop--dragging");
+    cropBox.removeEventListener("pointermove", move);
+    cropBox.removeEventListener("pointerup", end);
+    cropBox.removeEventListener("pointercancel", end);
+  };
+  cropBox.addEventListener("pointermove", move);
+  cropBox.addEventListener("pointerup", end);
+  cropBox.addEventListener("pointercancel", end);
+  event.preventDefault();
+}
+
+function nudge(event) {
+  const steps = {
+    ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1],
+  }[event.key];
+  if (!steps || !crop) return;
+  const step = (event.shiftKey ? 0.1 : 0.02);
+  crop.x += steps[0] * sourceImage.naturalWidth * step;
+  crop.y += steps[1] * sourceImage.naturalHeight * step;
+  clampCrop();
+  drawCrop();
+  event.preventDefault();
+}
+
 async function saveFitted() {
   const target = targetSize();
   if (!target) {
@@ -110,7 +202,7 @@ async function saveFitted() {
   saveButton.disabled = true;
   saveButton.textContent = "만드는 중…";
   try {
-    const box = coverCrop(sourceImage.naturalWidth, sourceImage.naturalHeight, target.width, target.height, focus);
+    const box = crop || coverCrop(sourceImage.naturalWidth, sourceImage.naturalHeight, target.width, target.height);
     // 확대는 하지 않는다 — 원본이 작으면 비율만 맞춘 원본 해상도로 낸다.
     const scale = Math.min(1, target.width / box.width, target.height / box.height);
     const outWidth = scale >= 1 ? box.width : target.width;
@@ -244,18 +336,20 @@ async function saveCase() {
 }
 
 // ── 시작 ────────────────────────────────────────────────────────────────
-for (const chip of document.querySelectorAll("[data-focus]")) {
-  chip.addEventListener("click", () => {
-    focus = chip.dataset.focus;
-    for (const other of document.querySelectorAll("[data-focus]")) {
-      other.setAttribute("aria-pressed", String(other === chip));
-    }
-  });
-}
+cropBox.addEventListener("pointerdown", startDrag);
+cropBox.addEventListener("keydown", nudge);
+for (const input of [widthInput, heightInput]) input.addEventListener("input", resetCrop);
+addEventListener("resize", drawCrop);
 saveButton.addEventListener("click", saveFitted);
 caseSave.addEventListener("click", saveCase);
 caseSave.disabled = true;
 
 fillDetected();
 await showSource();
+if (sourceImage) {
+  cropImage.src = sourceImage.src;
+  // 이미지가 실제로 배치된 뒤라야 화면 크기를 잴 수 있다
+  if (!cropImage.complete) await new Promise((resolve) => { cropImage.onload = resolve; });
+  resetCrop();
+}
 await renderCase();

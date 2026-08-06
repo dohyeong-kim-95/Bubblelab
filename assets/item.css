@@ -24,14 +24,31 @@
 .fit-inputs input:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
 .times { padding-bottom: .7rem; color: var(--muted); }
 
-.fit-focus { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .9rem; }
-.chip {
-  padding: .45rem .8rem; border: 1px solid var(--line); border-radius: 999px; background: transparent;
-  color: var(--muted); font: inherit; font-size: .7rem; font-weight: 700; cursor: pointer;
+/* 잘라낼 영역 고르기 — 상자를 끌어서 옮긴다 */
+.crop {
+  position: relative; display: block; width: max-content; max-width: 100%; margin: 0 auto .6rem;
+  background: light-dark(#e9e6df, #0c0e10); border-radius: .6rem; overflow: hidden; touch-action: none;
 }
-.chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: var(--bg); }
-.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.crop img { display: block; max-width: 100%; max-height: 46vh; width: auto; }
+.crop-box {
+  position: absolute; box-sizing: border-box; border: 2px solid #fff;
+  box-shadow: 0 0 0 9999px #000000a6, 0 0 0 1px #0006 inset;
+  cursor: grab; touch-action: none;
+}
+.crop--dragging .crop-box { cursor: grabbing; }
+.crop-box:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+/* 상자 안쪽만 원본 밝기로 보이게 — 밖은 위 box-shadow 로 덮인다 */
+.crop-grip {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  background:
+    linear-gradient(#fff9, #fff9) center/1.6rem 2px no-repeat,
+    linear-gradient(#fff9, #fff9) center/2px 1.6rem no-repeat;
+  opacity: .8; pointer-events: none;
+}
+.crop--fixed .crop-box { cursor: default; }
+.crop--fixed .crop-grip { display: none; }
 
+#crop-note { text-align: center; }
 .fit-go, #case-save { width: 100%; border: 0; font: inherit; font-size: .74rem; font-weight: 700; cursor: pointer; }
 .fit-go:disabled, #case-save:disabled { opacity: .55; cursor: default; }
 #fit-result:not(:empty) { margin-top: .7rem; color: var(--accent); }

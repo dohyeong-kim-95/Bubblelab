@@ -165,11 +165,14 @@ function wallpaperPage(item) {
       <span class="times">×</span>
       <label>세로 <input id="fit-height" type="number" min="120" max="8000" step="1" inputmode="numeric"></label>
     </div>
-    <div class="fit-focus" role="group" aria-label="잘라낼 때 남길 쪽">
-      <button class="chip" type="button" data-focus="center" aria-pressed="true">가운데</button>
-      <button class="chip" type="button" data-focus="top" aria-pressed="false">위쪽</button>
-      <button class="chip" type="button" data-focus="bottom" aria-pressed="false">아래쪽</button>
+    <div class="crop" id="crop">
+      <img id="crop-image" alt="잘라낼 영역 고르기">
+      <div class="crop-box" id="crop-box" tabindex="0" role="application"
+           aria-label="잘라낼 영역 — 끌어서 옮기거나 방향키로 조절">
+        <span class="crop-grip" aria-hidden="true"></span>
+      </div>
     </div>
+    <p class="panel-note" id="crop-note"></p>
     <button class="download fit-go" id="fit-save" type="button">↓ 잘라서 저장</button>
     <p class="panel-note" id="fit-result"></p>
   </section>
