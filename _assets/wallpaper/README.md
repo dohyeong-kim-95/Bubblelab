@@ -12,6 +12,7 @@
 | --- | --- | --- |
 | `stars-bootes` | 목동자리 밤하늘 | `mobile.png` |
 | `violet-burnout` | 보라빛 골목의 번아웃 | `mobile.jpg` |
+| `sunset-flight` | 노을을 나는 아이들 | `mobile.jpg` |
 
 ## 항목 추가 (원샷)
 
