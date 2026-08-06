@@ -11,6 +11,7 @@
 | ID | 제목 | 파일 |
 | --- | --- | --- |
 | `stars-bootes` | 목동자리 밤하늘 | `mobile.png` |
+| `violet-burnout` | 보라빛 골목의 번아웃 | `mobile.jpg` |
 
 ## 항목 추가 (원샷)
 
