@@ -165,6 +165,7 @@ test("buildWallpaper writes variants, preview, metadata and the readme row", asy
     const metadata = JSON.parse(readFileSync(join(result.itemDir, "metadata.json"), "utf8"));
     assert.equal(metadata.title, "노을 언덕");
     assert.equal(metadata.preview, "preview.jpg");
+    assert.deepEqual(metadata.previewSize, { width: 800, height: 800 }, "카드 칸 비율용 미리보기 크기");
     assert.deepEqual(metadata.downloads.map((d) => d.file), ["mobile.jpg", "desktop.jpg"]);
     assert.deepEqual(metadata.downloads.map((d) => d.device), ["mobile", "desktop"], "탭 분류가 metadata 에 들어간다");
     assert.match(metadata.downloads[0].label, /모바일 1290×2796/);

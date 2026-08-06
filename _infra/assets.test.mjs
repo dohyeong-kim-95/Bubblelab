@@ -80,3 +80,23 @@ test("wallpaper downloads carry the device tab classification", () => {
   }));
   assert.throws(() => generateAssetCatalog(root), /device must be/);
 });
+
+test("previewSize is passed through and half-written values are rejected", () => {
+  const root = mkdtempSync(join(tmpdir(), "bubblelab-assets-"));
+  const item = join(root, "wallpaper", "tall-one");
+  mkdirSync(item, { recursive: true });
+  writeFileSync(join(item, "preview.jpg"), "preview");
+  writeFileSync(join(item, "mobile.png"), "image");
+  const base = {
+    title: "세로", preview: "preview.jpg", createdAt: "2026-08-06",
+    downloads: [{ label: "모바일", file: "mobile.png", device: "mobile" }],
+  };
+  writeFileSync(join(item, "metadata.json"), JSON.stringify({ ...base, previewSize: { width: 369, height: 800 } }));
+  assert.deepEqual(generateAssetCatalog(root)[0].previewSize, { width: 369, height: 800 });
+
+  writeFileSync(join(item, "metadata.json"), JSON.stringify(base));
+  assert.equal(generateAssetCatalog(root)[0].previewSize, undefined, "없으면 카테고리 기본 비율로");
+
+  writeFileSync(join(item, "metadata.json"), JSON.stringify({ ...base, previewSize: { width: 369 } }));
+  assert.throws(() => generateAssetCatalog(root), /previewSize must be/);
+});

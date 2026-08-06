@@ -269,6 +269,9 @@ export async function buildWallpaper({
     title: title.trim(),
     description: String(description || "").trim(),
     preview: "preview.jpg",
+    // 카탈로그 카드가 미리보기 칸을 원본 비율로 잡는 데 쓴다 — 세로 배경화면은
+    // 세로 칸, 가로는 가로 칸. 없으면 카테고리 기본 비율로 떨어진다.
+    previewSize: { width: preview.width, height: preview.height },
     tags: tags.map((tag) => String(tag).trim()).filter(Boolean),
     createdAt: createdAt ?? new Date().toISOString().slice(0, 10),
     downloads: variants.map(({ label, file, device }) => ({ label, file, ...(device ? { device } : {}) })),

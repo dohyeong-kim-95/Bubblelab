@@ -2,6 +2,10 @@
   "title": "목동자리 밤하늘",
   "description": "util/stars가 그린 2026년 8월 4일 서울 남쪽 하늘. 아르크투루스와 안타레스가 함께 보입니다.",
   "preview": "preview.jpg",
+  "previewSize": {
+    "width": 369,
+    "height": 800
+  },
   "tags": [
     "별자리",
     "목동자리",

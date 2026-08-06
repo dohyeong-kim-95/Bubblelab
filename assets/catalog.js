@@ -3,8 +3,11 @@ const grid = document.getElementById("grid");
 const search = document.getElementById("search");
 const count = document.getElementById("count");
 const deviceTabs = document.getElementById("device-tabs");
+// 배경화면은 크게 봐야 고르는 물건이라 미리보기를 눌러 전체 화면으로 연다.
+const zoomable = category === "wallpaper";
 let device = "all";
 let items = [];
+let visibleItems = [];
 let downloadCounts = { files: {}, items: {} };
 const animatePreviews = !matchMedia("(prefers-reduced-motion: reduce)").matches;
 let activeRepeat = null;
@@ -25,6 +28,19 @@ function downloadDevice(download) {
 }
 
 const matchesDevice = (download) => device === "all" || (downloadDevice(download) ?? device) === device;
+
+// 미리보기 칸을 항목 비율에 맞춘다 (세로 배경화면은 세로 칸). 카드 높이가
+// 끝없이 늘어나지 않게 세로 1:2, 가로 4:3 에서 자른다 — 그 밖은 남는 쪽에
+// 여백이 생기지만 그림이 잘리지는 않는다.
+const ASPECT_MIN = 0.5;
+const ASPECT_MAX = 4 / 3;
+
+function previewAspectStyle(item) {
+  const { width, height } = item.previewSize || {};
+  if (!width || !height) return "";
+  const ratio = Math.min(ASPECT_MAX, Math.max(ASPECT_MIN, width / height));
+  return ` style="aspect-ratio: ${ratio.toFixed(4)}"`;
+}
 
 function previewMarkup(item) {
   if (item.category === "music" && /\.mp4$/i.test(item.preview)) {
@@ -103,12 +119,16 @@ function render() {
       : device === "mobile" ? "아직 모바일 배경화면이 없습니다."
       : device === "desktop" ? "아직 PC 배경화면이 없습니다."
       : "검색 결과가 없습니다.";
+    visibleItems = [];
     grid.innerHTML = `<div class="state">${empty}</div>`;
     return;
   }
+  visibleItems = visible;
   grid.innerHTML = visible.map((item) => `
     <article class="card">
-      <div class="preview">${previewMarkup(item)}</div>
+      <div class="preview"${previewAspectStyle(item)}${zoomable
+        ? ` tabindex="0" role="button" data-zoom="${esc(item.id)}" aria-label="${esc(item.title)} 크게 보기"`
+        : ""}>${previewMarkup(item)}${zoomable ? '<span class="zoom-hint" aria-hidden="true">⤢</span>' : ""}</div>
       <div class="info">
         <div class="title-row">
           <h2>${esc(item.title)}</h2>
@@ -137,7 +157,96 @@ function render() {
   for (const button of grid.querySelectorAll("[data-download-all]")) {
     button.addEventListener("click", () => downloadAll(button));
   }
+  for (const zone of grid.querySelectorAll("[data-zoom]")) {
+    zone.addEventListener("click", () => openZoom(zone.dataset.zoom));
+    zone.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      openZoom(zone.dataset.zoom);
+    });
+  }
 }
+
+// ── 크게 보기 ────────────────────────────────────────────────────────────
+// 카드 썸네일은 최대 800px 미리보기라 배경화면을 고르기엔 작다. 눌러서
+// 전체 화면으로 열고, 실제 다운로드 파일을 그대로 띄운다(누를 때만 받는다).
+// 화살표로 지금 보이는 목록 안에서 이동, Esc 로 닫는다.
+let zoom = null;
+let zoomIndex = -1;
+let zoomOpener = null;
+
+function zoomFile(item) {
+  return item.downloads.find(matchesDevice) || item.downloads[0];
+}
+
+function ensureZoom() {
+  if (zoom) return zoom;
+  zoom = document.createElement("div");
+  zoom.className = "zoom-layer";
+  zoom.hidden = true;
+  zoom.setAttribute("role", "dialog");
+  zoom.setAttribute("aria-modal", "true");
+  zoom.innerHTML = `
+    <button class="zoom-close" type="button" aria-label="닫기">✕</button>
+    <button class="zoom-step" data-step="-1" type="button" aria-label="이전 배경화면">‹</button>
+    <img alt="">
+    <button class="zoom-step" data-step="1" type="button" aria-label="다음 배경화면">›</button>
+    <div class="zoom-bar"><span class="zoom-title"></span><a class="download zoom-download" download>↓</a></div>`;
+  zoom.addEventListener("click", (event) => {
+    const step = event.target.closest("[data-step]");
+    if (step) return showZoom(zoomIndex + Number(step.dataset.step));
+    // 이미지·버튼 바깥(배경)을 누르면 닫는다
+    if (event.target === zoom || event.target.closest(".zoom-close")) closeZoom();
+  });
+  document.body.appendChild(zoom);
+  return zoom;
+}
+
+function showZoom(index) {
+  if (!visibleItems.length) return;
+  zoomIndex = (index + visibleItems.length) % visibleItems.length;
+  const item = visibleItems[zoomIndex];
+  const download = zoomFile(item);
+  const layer = ensureZoom();
+  const image = layer.querySelector("img");
+  image.src = download ? download.url : item.preview;
+  image.alt = `${item.title} 크게 보기`;
+  layer.querySelector(".zoom-title").textContent = item.title;
+  const link = layer.querySelector(".zoom-download");
+  link.hidden = !download;
+  if (download) {
+    link.href = `/_download/${encodeURIComponent(item.category)}/${encodeURIComponent(item.id)}/${encodeURIComponent(download.file)}`;
+    link.setAttribute("download", download.file);
+    link.textContent = `↓ ${download.label}`;
+  }
+  for (const step of layer.querySelectorAll("[data-step]")) step.hidden = visibleItems.length < 2;
+}
+
+function openZoom(id) {
+  const index = visibleItems.findIndex((item) => item.id === id);
+  if (index < 0) return;
+  zoomOpener = document.activeElement;
+  showZoom(index);
+  zoom.hidden = false;
+  document.body.classList.add("zoom-open");
+  zoom.querySelector(".zoom-close").focus();
+}
+
+function closeZoom() {
+  if (!zoom || zoom.hidden) return;
+  zoom.hidden = true;
+  zoom.querySelector("img").removeAttribute("src");
+  document.body.classList.remove("zoom-open");
+  zoomOpener?.focus?.();
+  zoomOpener = null;
+}
+
+addEventListener("keydown", (event) => {
+  if (!zoom || zoom.hidden) return;
+  if (event.key === "Escape") closeZoom();
+  else if (event.key === "ArrowLeft") showZoom(zoomIndex - 1);
+  else if (event.key === "ArrowRight") showZoom(zoomIndex + 1);
+});
 
 // 팩 전체를 한 번에: 각 파일을 받아 무압축 ZIP 하나로 묶어 내려준다.
 // (모바일 브라우저는 탭당 다운로드 1개만 허용 → 개별 16회 다운로드가 불가)

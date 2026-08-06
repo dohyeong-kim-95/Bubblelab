@@ -24,6 +24,14 @@ export function readAssetMetadata(root, category, itemDir) {
   if (typeof data.title !== "string" || !data.title.trim()) throw new Error(`${category}/${id}: title is required`);
   if (!safePart(data.preview)) throw new Error(`${category}/${id}: preview must be a local file name`);
   if (!existsSync(join(itemDir, data.preview))) throw new Error(`${category}/${id}: preview file not found`);
+
+  // 선택 필드: 미리보기 원본 크기. 카드가 칸 비율을 항목에 맞추는 데 쓴다.
+  // 둘 다 양의 정수여야 한다 — 반쪽짜리 값은 비율 계산에서 조용히 NaN이 된다.
+  const size = data.previewSize;
+  const previewSize = Number.isInteger(size?.width) && size.width > 0 && Number.isInteger(size?.height) && size.height > 0
+    ? { width: size.width, height: size.height }
+    : null;
+  if (size && !previewSize) throw new Error(`${category}/${id}: previewSize must be positive integer width and height`);
   if (!Array.isArray(data.downloads) || !data.downloads.length) throw new Error(`${category}/${id}: downloads are required`);
 
   // 선택 필드: 익명 채팅(util/chat) 스티커 서랍 노출용 짧은 제목.
@@ -61,6 +69,7 @@ export function readAssetMetadata(root, category, itemDir) {
     description: String(data.description || "").trim(),
     tags: Array.isArray(data.tags) ? data.tags.map(String).filter(Boolean) : [],
     preview: assetUrl(category, id, data.preview),
+    ...(previewSize ? { previewSize } : {}),
     downloads,
     createdAt: /^\d{4}-\d{2}-\d{2}$/.test(data.createdAt || "") ? data.createdAt : null,
     active: data.active !== false,
