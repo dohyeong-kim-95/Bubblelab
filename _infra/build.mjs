@@ -155,7 +155,22 @@ function wallpaperPage(item) {
     <div class="tags">${tags}</div>
   </header>
 
-  <section class="stage"><img id="stage-image" src="${escapeHtml(item.preview)}" alt="${title}"></section>
+  <section class="gallery">
+    <div class="stage" id="stage">
+      <img id="view-image" src="${escapeHtml(item.preview)}" alt="${title}">
+      <canvas id="case-canvas" width="600" height="1200" hidden aria-label="${title} 폰 케이스 목업"></canvas>
+    </div>
+    <div class="thumbs" id="thumbs" role="tablist" aria-label="미리보기 선택">
+      <button class="thumb" type="button" role="tab" data-view="image" aria-selected="true">
+        <img src="${escapeHtml(item.preview)}" alt=""><span>원본</span>
+      </button>
+      <button class="thumb" type="button" role="tab" data-view="case" aria-selected="false">
+        <img id="case-thumb" alt=""><span>케이스 목업</span>
+      </button>
+    </div>
+    <p class="panel-note" id="view-note"></p>
+    <button class="download" id="case-save" type="button" hidden>↓ 목업 이미지 저장</button>
+  </section>
 
   <section class="panel">
     <h2>내 기기에 맞게 잘라서 저장</h2>
@@ -175,13 +190,6 @@ function wallpaperPage(item) {
     <p class="panel-note" id="crop-note"></p>
     <button class="download fit-go" id="fit-save" type="button">↓ 잘라서 저장</button>
     <p class="panel-note" id="fit-result"></p>
-  </section>
-
-  <section class="panel">
-    <h2>폰 케이스 목업</h2>
-    <p class="panel-note">이 배경화면을 폰 케이스에 얹으면 어떻게 보이는지 그려 봅니다. 인쇄용 파일이 아니라 미리보기입니다.</p>
-    <canvas id="case-canvas" width="600" height="1200" aria-label="${title} 폰 케이스 목업"></canvas>
-    <button class="download" id="case-save" type="button">↓ 목업 이미지 저장</button>
   </section>
 
   <section class="panel">

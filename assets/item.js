@@ -6,7 +6,11 @@
 import { coverCrop } from "/_shared/crop.js";
 
 const item = JSON.parse(document.getElementById("item-data").textContent);
-const stage = document.getElementById("stage-image");
+const stage = document.getElementById("stage");
+const viewImage = document.getElementById("view-image");
+const thumbs = document.getElementById("thumbs");
+const caseThumb = document.getElementById("case-thumb");
+const viewNote = document.getElementById("view-note");
 const fitNote = document.getElementById("fit-note");
 const fitResult = document.getElementById("fit-result");
 const widthInput = document.getElementById("fit-width");
@@ -65,12 +69,51 @@ function saveBlob(blob, filename) {
 const toBlob = (canvas) => new Promise((resolve) =>
   canvas.toBlob(resolve, isPng ? "image/png" : "image/jpeg", 0.92));
 
-// ── ① 원본 보기 ─────────────────────────────────────────────────────────
+// ── ① 미리보기 갤러리 (원본 | 케이스 목업) ──────────────────────────────
+// 쇼핑몰 상품 이미지처럼 아래 썸네일을 누르거나 큰 그림을 좌우로 밀어 넘긴다.
+const VIEWS = [
+  { id: "image", note: "" },
+  { id: "case", note: "이 배경화면을 폰 케이스에 얹으면 어떻게 보이는지 그려 봅니다. 인쇄용 파일이 아니라 미리보기입니다." },
+];
+let view = 0;
+
+function showView(index) {
+  view = (index + VIEWS.length) % VIEWS.length;
+  const current = VIEWS[view];
+  viewImage.hidden = current.id !== "image";
+  caseCanvas.hidden = current.id !== "case";
+  caseSave.hidden = current.id !== "case";
+  viewNote.textContent = current.note;
+  for (const tab of thumbs.querySelectorAll("[data-view]")) {
+    tab.setAttribute("aria-selected", String(tab.dataset.view === current.id));
+  }
+}
+
+// 좌우로 밀어서 넘기기. 세로로 더 많이 움직였으면 페이지 스크롤이므로 무시한다.
+function swipe(element) {
+  let startX = 0;
+  let startY = 0;
+  let tracking = false;
+  element.addEventListener("pointerdown", (event) => {
+    startX = event.clientX;
+    startY = event.clientY;
+    tracking = true;
+  });
+  element.addEventListener("pointerup", (event) => {
+    if (!tracking) return;
+    tracking = false;
+    const dx = event.clientX - startX;
+    if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(event.clientY - startY)) return;
+    showView(view + (dx < 0 ? 1 : -1));
+  });
+  element.addEventListener("pointercancel", () => { tracking = false; });
+}
+
 async function showSource() {
   if (!source) return;
   try {
     sourceImage = await loadImage(source.url);
-    stage.src = source.url;
+    viewImage.src = source.url;
   } catch {
     /* 미리보기가 이미 떠 있으므로 원본 로드 실패는 조용히 넘어간다 */
   }
@@ -319,6 +362,7 @@ async function renderCase() {
   const image = sourceImage || await loadImage(source ? source.url : item.preview).catch(() => null);
   if (!image) return;
   drawCase(image);
+  caseThumb.src = caseCanvas.toDataURL("image/png");
   caseSave.disabled = false;
 }
 
@@ -336,6 +380,17 @@ async function saveCase() {
 }
 
 // ── 시작 ────────────────────────────────────────────────────────────────
+for (const tab of thumbs.querySelectorAll("[data-view]")) {
+  tab.addEventListener("click", () => showView(VIEWS.findIndex((entry) => entry.id === tab.dataset.view)));
+}
+thumbs.addEventListener("keydown", (event) => {
+  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+  showView(view + (event.key === "ArrowRight" ? 1 : -1));
+  thumbs.querySelector('[aria-selected="true"]').focus();
+  event.preventDefault();
+});
+swipe(stage);
+showView(0);
 cropBox.addEventListener("pointerdown", startDrag);
 cropBox.addEventListener("keydown", nudge);
 for (const input of [widthInput, heightInput]) input.addEventListener("input", resetCrop);
