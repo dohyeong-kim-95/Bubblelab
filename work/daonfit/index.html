@@ -454,9 +454,10 @@
                                   0.9*pulse(p,0.34,0.385,0.40,0.445)).toFixed(3);
 
     // 워드마크는 2→3 전환 구간 대부분(0.48~0.73)에 걸쳐 떠오른다 —
-    // 시그모이드 완급 위에 살짝 지나쳤다 내려앉는 오버슈트(backSoft)로 탄력을 준다
+    // 살짝 지나쳤다 내려앉는 부드러운 오버슈트(backSoft)로 탄력만 준다
+    // (시그모이드는 조립 장 전용 — 나머지 장은 램프 완급)
     var w = seg(p,0.48,0.73);
-    var wb = backSoft(sigmoid(w,2.2));
+    var wb = backSoft(w);
     word.style.opacity = Math.min(1, w*1.6).toFixed(3);
     word.style.transform = 'translateY('+((1-wb)*44).toFixed(1)+'px) scale('+(0.96+0.04*wb).toFixed(4)+')';
 
@@ -509,10 +510,10 @@
       snapRaf = null; snapping = false;
       document.documentElement.style.scrollBehavior = '';
     }
-    function snapTo(targetY, kind, durOverride){
+    function snapTo(targetY, kind, durOverride, dramatic){
       var fromY = window.scrollY, dist = targetY - fromY;
       if(Math.abs(dist) < 2) return;
-      snapping = true; snapKind = kind || 'page';
+      snapping = true; snapKind = kind || 'page'; snapDramatic = !!dramatic;
       document.documentElement.style.scrollBehavior = 'auto';
       var dur = durOverride || clamp(Math.abs(dist) / window.innerHeight * 650, 500, 1100);
       var t0 = null;
@@ -520,8 +521,9 @@
         if(!snapping) return;
         if(t0 === null) t0 = ts;
         var k = clamp((ts - t0) / dur, 0, 1);
-        // 페이지 전환은 극적인 시그모이드(느림→쇄도→느림), idle 수습은 완만한 sine
-        window.scrollTo(0, fromY + dist * (snapKind === 'page' ? sigmoid(k, 2.6) : easeInOut(k)));
+        // 조립 장(1→2) 전환만 극적인 시그모이드(느림→쇄도→느림),
+        // 나머지 장·idle 수습은 완만한 sine(램프)
+        window.scrollTo(0, fromY + dist * (snapDramatic ? sigmoid(k, 2.6) : easeInOut(k)));
         if(k < 1){ snapRaf = requestAnimationFrame(step); }
         else {
           if(snapKind === 'page') gestureLock = performance.now() + 250; // 관성 꼬리 흡수
@@ -563,7 +565,7 @@
     // 앵커 한 칸이다. 전환 중 입력은 삼키고(관성 흡수 잠금 250ms 포함),
     // 마지막 앵커에서 아래로 넘기면 본문 일반 스크롤로 풀려난다.
     // 스크롤바 드래그·키보드 등 제스처 밖 이동은 위의 idle 스냅이 수습한다.
-    var gestureLock = 0, snapKind = null;
+    var gestureLock = 0, snapKind = null, snapDramatic = false;
     // 제스처 페이징('page') 전환 중 입력은 삼키지만, idle 수습 스냅('idle')은
     // 사용자 제스처가 항상 이긴다.
     function yieldToGesture(e){
@@ -588,7 +590,8 @@
     function pageStep(dir){
       var t = pageTargets(), y = window.scrollY;
       if(dir > 0){
-        for(var i = 0; i < t.length; i++) if(t[i] > y + 2) return snapTo(t[i], 'page', PAGE_DUR[i]);
+        // i===1(조립 장 도착)만 극적 시그모이드, 나머지는 sine
+        for(var i = 0; i < t.length; i++) if(t[i] > y + 2) return snapTo(t[i], 'page', PAGE_DUR[i], i === 1);
       }else{
         var floor = introDone ? stageBounds().end : 0; // 완주 후엔 워드마크 페이지가 맨 위
         for(var j = t.length - 1; j >= 0; j--) if(t[j] < y - 2 && t[j] >= floor) return snapTo(t[j]);
