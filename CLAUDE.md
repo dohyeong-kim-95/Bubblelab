@@ -85,6 +85,11 @@ metadata.json·`CHAT_STICKER_PACKS` 등록·스티커 README 표까지 자동 �
 util/chat 클라이언트는 `catalog.json`의 `chat.title` 팩을 자동으로 읽으므로
 손댈 곳 없음. 등록 누락·장수 불일치는 `_infra/sticker-pack.test.mjs`가 잡는다.
 
+팩의 **공개 여부는 admin ✨ Sticker 화면에서** 재배포 없이 토글한다
+(`_infra/asset-flags.js`의 `AssetFlagsDO`, 기본값은 metadata의 `active`).
+목록에서만 빼는 것이라 파일은 주소를 알면 받을 수 있다 — 완전히 내리려면 팩을
+지우고 배포한다.
+
 ## 배경화면 추가 (원샷)
 
 세션에 이미지가 올라오면 그 경로를 그대로 넘긴다. 규격별 잘라내기·preview·

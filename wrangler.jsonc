@@ -72,7 +72,9 @@
       { "name": "DURI", "class_name": "DuriDO" },
       { "name": "EMOTICON_REVIEW", "class_name": "EmoticonReviewDO" },
       { "name": "FORTUNE", "class_name": "FortuneDO" },
-      { "name": "BRIEF", "class_name": "BriefDO" }
+      { "name": "BRIEF", "class_name": "BriefDO" },
+      // 에셋(스티커) 공개 여부 오버라이드 — admin에서 토글, 재배포 없이 반영
+      { "name": "ASSET_FLAGS", "class_name": "AssetFlagsDO" }
     ]
   },
   "migrations": [
@@ -88,6 +90,7 @@
     { "tag": "v10", "new_sqlite_classes": ["DuriDO"] },
     { "tag": "v11", "new_sqlite_classes": ["FortuneDO"] },
     { "tag": "v12", "new_sqlite_classes": ["EmoticonReviewDO"] },
-    { "tag": "v13", "new_sqlite_classes": ["BriefDO"] }
+    { "tag": "v13", "new_sqlite_classes": ["BriefDO"] },
+    { "tag": "v14", "new_sqlite_classes": ["AssetFlagsDO"] }
   ]
 }

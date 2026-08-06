@@ -162,6 +162,13 @@
   .asset-row small { margin-top: .25rem; opacity: .5; }
   .asset-row button { border: 0; background: none; color: inherit; opacity: .55; cursor: pointer; font: inherit; }
   .asset-empty { padding: 2.5rem; text-align: center; opacity: .5; border: 1px dashed light-dark(#dce4ec, #263445); border-radius: .8rem; }
+  #sticker-list { display: grid; gap: .6rem; margin-top: .8rem; }
+  #sticker-list img { object-fit: contain; }
+  .toggle { padding: .5rem .85rem; border-radius: .65rem; font: inherit; cursor: pointer;
+            border: 1px solid light-dark(#c3cedb, #37485c); background: light-dark(#eef1f4, #0d131c);
+            color: inherit; opacity: .85; white-space: nowrap; }
+  .toggle[aria-pressed="true"] { background: #477a5d; border-color: transparent; color: #fff; opacity: 1; font-weight: bold; }
+  .toggle:disabled { cursor: default; opacity: .4; }
   #intake { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .6rem; }
   #intake li { display: flex; flex-direction: column; gap: .45rem; padding: .95rem 1.1rem;
                border-radius: 1rem; background: light-dark(#fff, #151e2a);
@@ -193,6 +200,7 @@
       <a class="hub-card" href="#slop"><span class="hub-icon">🎮</span><span><strong>Slop</strong><small>기록·공지·아이디어 관리</small></span></a>
       <a class="hub-card" href="#work"><span class="hub-icon">🧾</span><span><strong>Work</strong><small>신규 의뢰 접수함</small></span></a>
       <a class="hub-card" href="#chat"><span class="hub-icon">💬</span><span><strong>Chat</strong><small>익명 채팅 정원 관리</small></span></a>
+      <a class="hub-card" href="#sticker"><span class="hub-icon">✨</span><span><strong>Sticker</strong><small>스티커 팩 공개 여부</small></span></a>
       <a class="hub-card" href="#podcast"><span class="hub-icon">🎙️</span><span><strong>Podcast</strong><small>데일리 팟캐스트 사용자 관리</small></span></a>
       <a class="hub-card" href="optout"><span class="hub-icon">🫥</span><span><strong>집계 제외</strong><small>이 브라우저를 방문 통계에서 빼기</small></span></a>
     </div>
@@ -295,6 +303,17 @@
     </div>
   </section>
   </section>
+  <section class="view" id="view-sticker" hidden>
+  <h2 class="view-title">✨ Sticker</h2>
+  <section class="top" aria-label="스티커 팩 공개 여부">
+    <h2>🎁 스티커 팩 공개 여부 <span style="opacity:.5;font-weight:normal;font-size:.8rem">assets/sticker 목록과 util/chat 스티커 서랍에 함께 적용돼요</span></h2>
+    <p class="insight-note">기본값은 리포의 metadata.json이고, 여기서 바꾼 값이 그 위에 얹힙니다(재배포해도 유지돼요).
+      목록에서만 빼는 기능이라 파일 주소를 아는 사람은 그대로 내려받을 수 있어요.
+      방문자 화면에 반영되기까지 최대 1분 걸립니다.</p>
+    <div id="sticker-list"><div class="asset-empty">불러오는 중…</div></div>
+    <div class="notice-actions"><span id="sticker-meta" class="meta"></span></div>
+  </section>
+  </section>
   <section class="view" id="view-podcast" hidden>
   <h2 class="view-title">🎙️ Podcast</h2>
   <section class="top" aria-label="팟캐스트 사용자 추가">
@@ -329,7 +348,7 @@
   <footer id="status">불러오는 중…</footer>
 </main>
 <script>
-const views = ['home', 'insights', 'slop', 'work', 'chat', 'podcast'];
+const views = ['home', 'insights', 'slop', 'work', 'chat', 'sticker', 'podcast'];
 function showView() {
   const selected = views.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'home';
   document.body.dataset.view = selected;
@@ -808,6 +827,73 @@ document.getElementById('chat-reset').addEventListener('click', async () => {
   else chatMeta.textContent = `⚠️ 초기화 실패 (HTTP ${res.status})`;
 });
 
+const stickerList = document.getElementById('sticker-list');
+const stickerMeta = document.getElementById('sticker-meta');
+
+function renderStickers(items) {
+  if (!items.length) {
+    stickerList.innerHTML = '<div class="asset-empty">스티커 팩이 없어요</div>';
+    return;
+  }
+  stickerList.replaceChildren();
+  for (const item of items) {
+    const row = document.createElement('article');
+    row.className = 'asset-row';
+    const img = document.createElement('img');
+    img.src = item.preview; img.alt = ''; img.loading = 'lazy';
+    const info = document.createElement('span');
+    const title = document.createElement('strong');
+    title.textContent = item.title;
+    const meta = document.createElement('small');
+    // 기본값과 다르게 켜/꺼 둔 팩은 그 사실을 같이 적는다 (되돌릴 기준이 된다)
+    meta.textContent = [
+      item.id,
+      `${item.count}장`,
+      item.chat ? `채팅 “${item.chat}”` : null,
+      item.overridden ? `기본값 ${item.defaultVisible ? '공개' : '숨김'}` : null,
+    ].filter(Boolean).join(' · ');
+    info.append(title, meta);
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'toggle';
+    toggle.setAttribute('aria-pressed', String(item.visible));
+    toggle.textContent = item.visible ? '공개 중' : '숨김';
+    toggle.addEventListener('click', () => setStickerVisible(item, !item.visible, toggle));
+    row.append(img, info, toggle);
+    stickerList.append(row);
+  }
+}
+
+async function loadStickers() {
+  try {
+    const res = await fetch(`${base}/api/stickers`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const { items } = await res.json();
+    renderStickers(items);
+  } catch (err) {
+    stickerList.innerHTML = `<div class="asset-empty">불러오지 못했어요: ${err.message}</div>`;
+  }
+}
+
+async function setStickerVisible(item, visible, button) {
+  button.disabled = true;
+  stickerMeta.textContent = '저장 중…';
+  try {
+    const res = await fetch(`${base}/api/stickers`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: item.id, visible }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const { items } = await res.json();
+    renderStickers(items);
+    stickerMeta.textContent = `“${item.title}” ${visible ? '공개로' : '숨김으로'} 바꿨어요 · 방문자 화면 반영까지 최대 1분`;
+  } catch (err) {
+    button.disabled = false;
+    stickerMeta.textContent = `⚠️ 저장 실패: ${err.message}`;
+  }
+}
+
 const podcastMeta = document.getElementById('podcast-meta');
 const podcastCode = document.getElementById('podcast-code');
 
@@ -940,6 +1026,7 @@ loadRecords();
 loadAlltime();
 loadNotice();
 loadChat();
+loadStickers();
 loadIntake();
 loadPodcastUsers();
 loadPodcastUsage();

@@ -34,6 +34,12 @@ import {
   validateMutationRequest,
   validateWebSocketOrigin,
 } from "./security.js";
+import {
+  adminAssetList,
+  assetFlagKey,
+  normalizeOverrides,
+  publicCatalog,
+} from "./asset-flags.js";
 
 export { RealtimeDO } from "./realtime.js";
 export { ChatDO } from "./chat.js";
@@ -48,6 +54,7 @@ export { RateLimiterDO } from "./security.js";
 export { DuriDO } from "./duri.js";
 export { FortuneDO } from "./fortune.js";
 export { BriefDO } from "./brief.js";
+export { AssetFlagsDO } from "./asset-flags.js";
 
 const LOGIN_PAGE = (failed = false, base = "") => `<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -533,6 +540,94 @@ async function enforceRateLimit(request, env, options) {
   return result.allowed ? null : rateLimitResponse(result);
 }
 
+// ── 에셋 공개 여부 (admin 토글) ────────────────────────────────────────────
+// 카탈로그는 모든 방문의 첫 화면에서 읽히므로 오버라이드는 아이솔레이트마다
+// 잠깐 들고 있는다. 토글이 실제 목록에 반영되기까지 최대 이 TTL + 캐시 수명.
+const ASSET_FLAGS_TTL_MS = 60_000;
+const ASSET_CATALOG_MAX_AGE = 30;
+let assetFlagsCache = { at: 0, value: {} };
+
+/** 테스트에서 아이솔레이트 캐시를 비운다 (운영 경로에서는 쓰지 않는다). */
+export function resetAssetFlagsCache() {
+  assetFlagsCache = { at: 0, value: {} };
+}
+
+function assetFlagsStub(env) {
+  return env.ASSET_FLAGS.get(env.ASSET_FLAGS.idFromName("global"));
+}
+
+async function readAssetFlags(env) {
+  const response = await assetFlagsStub(env).fetch("https://assetflags.internal/flags");
+  if (!response.ok) throw new Error(`asset flags: HTTP ${response.status}`);
+  const { overrides } = await response.json();
+  return normalizeOverrides(overrides);
+}
+
+async function cachedAssetFlags(env) {
+  const now = Date.now();
+  if (now - assetFlagsCache.at < ASSET_FLAGS_TTL_MS) return assetFlagsCache.value;
+  try {
+    assetFlagsCache = { at: now, value: await readAssetFlags(env) };
+  } catch {
+    // 플래그 저장소가 흔들려도 카탈로그 자체는 계속 나가야 한다.
+    // 마지막으로 읽은 값을 그대로 쓰고, 한 번도 못 읽었으면 metadata 기본값을 따른다.
+  }
+  return assetFlagsCache.value;
+}
+
+async function staticCatalog(env, url) {
+  const catalogUrl = new URL("/_assets/catalog.json", url);
+  const response = await env.ASSETS.fetch(new Request(catalogUrl, { method: "GET" }));
+  if (!response.ok) return null;
+  return response.json().catch(() => null);
+}
+
+/** 빌드가 구운 전체 카탈로그에서 숨긴 항목을 뺀 공개 목록을 내보낸다. */
+async function serveAssetCatalog(request, env, url) {
+  const catalog = await staticCatalog(env, url);
+  if (!catalog) return env.ASSETS.fetch(request);
+  return Response.json(publicCatalog(catalog, await cachedAssetFlags(env)), {
+    headers: { "Cache-Control": `public, max-age=${ASSET_CATALOG_MAX_AGE}` },
+  });
+}
+
+/** admin의 스티커 공개 여부 화면. GET은 목록, POST는 팩 하나를 켜고 끈다. */
+async function handleAssetFlagsAdmin(request, env, url, category) {
+  if (!["GET", "POST"].includes(request.method)) return null;
+  if (!env.ASSET_FLAGS) return Response.json({ error: "asset flags are unavailable" }, { status: 503 });
+  const catalog = await staticCatalog(env, url);
+  if (!catalog) return Response.json({ error: "catalog is unavailable" }, { status: 503 });
+
+  if (request.method === "POST") {
+    const body = await request.json().catch(() => ({}));
+    const key = assetFlagKey(category, body?.id);
+    if (!key) return Response.json({ error: "invalid id" }, { status: 400 });
+    const response = await assetFlagsStub(env).fetch("https://assetflags.internal/flags", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key, visible: body.visible === null ? null : body.visible }),
+    });
+    if (!response.ok) return response;
+    const { overrides } = await response.json();
+    // 방금 바꾼 값은 이 아이솔레이트에서 바로 보이게 한다 (다른 곳은 TTL 뒤).
+    assetFlagsCache = { at: Date.now(), value: normalizeOverrides(overrides) };
+    return Response.json({ items: adminAssetList(catalog, assetFlagsCache.value, category) }, {
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
+
+  // 관리 화면은 캐시를 거치지 않고 저장된 값을 그대로 읽는다
+  let overrides;
+  try {
+    overrides = await readAssetFlags(env);
+  } catch (error) {
+    return Response.json({ error: error.message }, { status: 503 });
+  }
+  return Response.json({ items: adminAssetList(catalog, overrides, category) }, {
+    headers: { "Cache-Control": "no-store" },
+  });
+}
+
 async function handleAdmin(request, env, url, base = "") {
   const adminId = env.ADMIN_ID || "admin";
   const adminPassword = env.ADMIN_PASSWORD || "admin";
@@ -695,6 +790,12 @@ async function handleAdmin(request, env, url, base = "") {
     const podcastResponse = await handlePodcastAdmin(request, env, url);
     if (podcastResponse) return podcastResponse;
   }
+  // 스티커 팩 공개 여부 토글. 리포의 metadata.json(active)을 기본값으로 두고
+  // 여기서 켜고 끈 값이 그 위에 얹힌다 — 재빌드·재배포 없이 바뀐다.
+  if (url.pathname === "/api/stickers") {
+    const flagsResponse = await handleAssetFlagsAdmin(request, env, url, "sticker");
+    if (flagsResponse) return flagsResponse;
+  }
   if (url.pathname === "/api/assets") {
     return new Response("not found", { status: 404 });
   }
@@ -731,6 +832,11 @@ export async function handleRequest(request, env, ctx) {
     // R2 활성화 전까지 관리자 업로드 파일은 공개하지 않는다.
     if (path.startsWith("/_assets/upload/")) {
       return new Response("not found", { status: 404 });
+    }
+    // 카탈로그만 워커가 한 번 걸러서 내보낸다 — admin에서 숨긴 항목 제외.
+    // (assets 바인딩은 run_worker_first 라 이 필터를 우회할 길이 없다.)
+    if (path === "/_assets/catalog.json" && request.method === "GET") {
+      return serveAssetCatalog(request, env, url);
     }
     // 공용 코드와 이미지 에셋은 모든 서브도메인에서 사이트 프리픽스 없이 서빙
     if (path.startsWith("/_shared/") || path.startsWith("/_assets/")) {

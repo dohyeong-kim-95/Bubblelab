@@ -85,6 +85,11 @@ export function readAssetMetadata(root, category, itemDir) {
   };
 }
 
+/** 숨긴 항목까지 담은 전체 카탈로그.
+ *
+ * 공개 목록에서 빼는 일은 요청 시점에 워커가 한다 (_infra/asset-flags.js) —
+ * active:false 항목도 굽혀 있어야 admin에서 재빌드 없이 다시 켤 수 있다.
+ * dist/_assets/catalog.json 은 run_worker_first 라 워커 필터를 우회할 수 없다. */
 export function generateAssetCatalog(root) {
   const items = [];
   for (const category of ASSET_CATEGORIES) {
@@ -93,7 +98,7 @@ export function generateAssetCatalog(root) {
     for (const entry of readdirSync(categoryDir, { withFileTypes: true })) {
       if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
       const item = readAssetMetadata(root, category, join(categoryDir, entry.name));
-      if (item?.active) items.push(item);
+      if (item) items.push(item);
     }
   }
   return items.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || "") || a.title.localeCompare(b.title, "ko"));

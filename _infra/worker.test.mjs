@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import worker from "./worker.js";
+import worker, { resetAssetFlagsCache } from "./worker.js";
+import { AssetFlagsDO } from "./asset-flags.js";
 
 const ctx = { waitUntil() {} };
 
@@ -479,4 +480,132 @@ test("이름이 바뀐 폴더의 옛 주소는 새 주소로 안내한다", asyn
   assert.equal(fresh.status, 200);
   const other = await worker.fetch(new Request("https://slop.bubblelab.dev/convert/"), env, ctx);
   assert.equal(other.status, 200, "다른 서브도메인의 같은 이름까지 옮기면 안 된다");
+});
+
+// ── 에셋 공개 여부 (admin 스티커 토글) ────────────────────────────────────
+
+const catalogItem = (id, extra = {}) => ({
+  id, category: "sticker", title: `${id} 팩`, preview: `/_assets/sticker/${id}/preview.png`,
+  downloads: [{ label: "01", file: "01.png", url: `/_assets/sticker/${id}/01.png` }],
+  createdAt: "2026-07-31", active: true, ...extra,
+});
+
+/** 빌드 산출물(정적 카탈로그) + 진짜 AssetFlagsDO 로 채운 env */
+function assetEnv(items, extra = {}) {
+  const stored = new Map();
+  const flags = new AssetFlagsDO({
+    storage: { async get(key) { return stored.get(key); }, async put(key, value) { stored.set(key, value); } },
+  });
+  return {
+    ...extra,
+    ASSETS: {
+      fetch: async (request) => new URL(request.url).pathname === "/_assets/catalog.json"
+        ? Response.json({ version: 1, generatedAt: "2026-08-06T00:00:00.000Z", items })
+        : new Response("not found", { status: 404 }),
+    },
+    ASSET_FLAGS: {
+      idFromName: (name) => name,
+      get: () => ({ fetch: (input, init) => flags.fetch(new Request(input, init)) }),
+    },
+  };
+}
+
+async function adminSession(env) {
+  const form = new FormData();
+  form.set("id", "boss");
+  form.set("password", "hunter2");
+  const response = await worker.fetch(
+    new Request("https://admin.bubblelab.dev/login", { method: "POST", body: form }), env, ctx);
+  return response.headers.get("Set-Cookie").split(";")[0];
+}
+
+const publicItems = async (env) => {
+  const response = await worker.fetch(
+    new Request("https://assets.bubblelab.dev/_assets/catalog.json"), env, ctx);
+  assert.equal(response.status, 200);
+  return response.json();
+};
+
+test("공개 카탈로그는 metadata에서 꺼 둔 항목을 빼고 나간다", async () => {
+  resetAssetFlagsCache();
+  const env = assetEnv([catalogItem("shown"), catalogItem("build-hidden", { active: false })]);
+  const catalog = await publicItems(env);
+  assert.deepEqual(catalog.items.map((item) => item.id), ["shown"]);
+  assert.equal("active" in catalog.items[0], false, "내부 플래그를 내보내면 안 된다");
+  assert.equal(catalog.version, 1);
+});
+
+test("admin에서 토글한 스티커 공개 여부가 카탈로그에 반영된다", async () => {
+  resetAssetFlagsCache();
+  const env = assetEnv(
+    [catalogItem("jeju-cat"), catalogItem("emoticon-anim", { active: false })],
+    { ADMIN_ID: "boss", ADMIN_PASSWORD: "hunter2" },
+  );
+
+  // 미인증 → 로그인으로
+  let response = await worker.fetch(new Request("https://admin.bubblelab.dev/api/stickers"), env, ctx);
+  assert.equal(response.status, 303);
+  response = await worker.fetch(new Request("https://admin.bubblelab.dev/api/stickers", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: "jeju-cat", visible: false }),
+  }), env, ctx);
+  assert.equal(response.status, 303);
+  assert.deepEqual((await publicItems(env)).items.map((item) => item.id), ["jeju-cat"]);
+
+  const Cookie = await adminSession(env);
+
+  // 목록에는 숨긴 팩까지 현재 상태와 함께 나온다
+  response = await worker.fetch(
+    new Request("https://admin.bubblelab.dev/api/stickers", { headers: { Cookie } }), env, ctx);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
+  let { items } = await response.json();
+  assert.deepEqual(items.map((item) => [item.id, item.visible]), [["jeju-cat", true], ["emoticon-anim", false]]);
+
+  // 공개 → 숨김
+  response = await worker.fetch(new Request("https://admin.bubblelab.dev/api/stickers", {
+    method: "POST", headers: { Cookie, "Content-Type": "application/json" },
+    body: JSON.stringify({ id: "jeju-cat", visible: false }),
+  }), env, ctx);
+  assert.equal(response.status, 200);
+  ({ items } = await response.json());
+  assert.deepEqual(items.find((item) => item.id === "jeju-cat"), {
+    id: "jeju-cat", category: "sticker", title: "jeju-cat 팩",
+    preview: "/_assets/sticker/jeju-cat/preview.png", count: 1, createdAt: "2026-07-31", chat: null,
+    defaultVisible: true, visible: false, overridden: true,
+  });
+  assert.deepEqual((await publicItems(env)).items.map((item) => item.id), []);
+
+  // metadata에서 꺼 둔 팩도 admin에서 켤 수 있다 (재빌드 없이)
+  response = await worker.fetch(new Request("https://admin.bubblelab.dev/api/stickers", {
+    method: "POST", headers: { Cookie, "Content-Type": "application/json" },
+    body: JSON.stringify({ id: "emoticon-anim", visible: true }),
+  }), env, ctx);
+  assert.equal(response.status, 200);
+  assert.deepEqual((await publicItems(env)).items.map((item) => item.id), ["emoticon-anim"]);
+
+  // null → 오버라이드 해제, 리포의 metadata 값으로 되돌아간다
+  response = await worker.fetch(new Request("https://admin.bubblelab.dev/api/stickers", {
+    method: "POST", headers: { Cookie, "Content-Type": "application/json" },
+    body: JSON.stringify({ id: "emoticon-anim", visible: null }),
+  }), env, ctx);
+  assert.equal(response.status, 200);
+  assert.deepEqual((await publicItems(env)).items.map((item) => item.id), []);
+
+  // 토글 대상이 아닌 것들은 거절 (배경화면·경로 조작·값 형식)
+  for (const body of [{ id: "night-sky/../x", visible: false }, { id: "", visible: false }, { visible: false }]) {
+    response = await worker.fetch(new Request("https://admin.bubblelab.dev/api/stickers", {
+      method: "POST", headers: { Cookie, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }), env, ctx);
+    assert.equal(response.status, 400, JSON.stringify(body));
+  }
+
+  // 다른 출처에서 온 쓰기는 세션이 있어도 막힌다
+  response = await worker.fetch(new Request("https://admin.bubblelab.dev/api/stickers", {
+    method: "POST",
+    headers: { Cookie, "Content-Type": "application/json", Origin: "https://attacker.example" },
+    body: JSON.stringify({ id: "jeju-cat", visible: true }),
+  }), env, ctx);
+  assert.equal(response.status, 403);
 });

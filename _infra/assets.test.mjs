@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
 import { generateAssetCatalog } from "./assets.js";
+import { publicCatalog } from "./asset-flags.js";
 
 test("asset catalog is generated from item metadata", () => {
   const root = mkdtempSync(join(tmpdir(), "bubblelab-assets-"));
@@ -40,7 +41,9 @@ test("music assets support a video preview and audio download", () => {
   assert.equal(music.downloads[0].url, "/_assets/music/upward-drift/upward_drift.mp3");
 });
 
-test("inactive assets are kept out of the public catalog", () => {
+// 숨긴 항목도 카탈로그에는 담긴다 — 공개 목록에서 빼는 일은 요청 시점에
+// 워커가 하고(_infra/asset-flags.js), admin에서 재빌드 없이 다시 켤 수 있다.
+test("inactive assets stay in the catalog carrying active:false", () => {
   const root = mkdtempSync(join(tmpdir(), "bubblelab-assets-"));
   const item = join(root, "wallpaper", "hidden");
   mkdirSync(item, { recursive: true });
@@ -50,7 +53,10 @@ test("inactive assets are kept out of the public catalog", () => {
     title: "숨김", preview: "preview.webp", active: false,
     downloads: [{ file: "mobile.webp" }],
   }));
-  assert.deepEqual(generateAssetCatalog(root), []);
+  const items = generateAssetCatalog(root);
+  assert.equal(items.length, 1);
+  assert.equal(items[0].active, false);
+  assert.deepEqual(publicCatalog({ items }, {}).items, []);
 });
 
 test("wallpaper downloads carry the device tab classification", () => {

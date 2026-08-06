@@ -176,7 +176,9 @@ test("비공개 서브도메인은 풀다운 메뉴에도 나오지 않는다", 
 
 test("배경화면 항목마다 상세페이지가 생성된다", () => {
   const catalog = JSON.parse(readFileSync(join(DIST, "_assets", "catalog.json"), "utf8"));
-  const wallpapers = catalog.items.filter((item) => item.category === "wallpaper");
+  // 카탈로그에는 숨긴 항목도 들어 있다 (공개 여부는 워커가 요청 시점에 거른다).
+  // 상세페이지는 공개 항목에만 필요하다 — 배경화면은 admin 토글 대상이 아니다.
+  const wallpapers = catalog.items.filter((item) => item.category === "wallpaper" && item.active !== false);
   assert.ok(wallpapers.length, "카탈로그에 배경화면이 하나도 없다 — 이 검사가 무의미해진다");
   for (const item of wallpapers) {
     const page = join(DIST, "assets", "wallpaper", item.id, "index.html");

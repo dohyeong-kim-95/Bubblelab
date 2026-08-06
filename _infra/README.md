@@ -27,6 +27,7 @@ Bubblelab의 정적 빌드, 단일 Cloudflare Worker, Durable Object 저장소�
 | `estate-basemap.mjs` | VWorld 배경지도를 지역별 PNG 스냅샷으로 이어붙여 estate/에 저장 |
 | `estate-refresh.sh` | 위 estate CLI들을 묶은 원클릭 갱신(수집→지오코딩→커밋→푸시) |
 | `assets.js` | 저장소 이미지 메타데이터 검증과 카탈로그 생성 |
+| `asset-flags.js` | 스티커 공개 여부 오버라이드 `AssetFlagsDO`와 카탈로그 필터 |
 | `assets-store.js` | R2용 데이터 변환 코드. 현재 운영 라우트에서는 비활성 |
 | `idle-balance.mjs` | Bubble Pop Idle 밸런스 시뮬레이터 |
 
@@ -39,6 +40,7 @@ Worker는 다음 우선순위로 요청을 처리합니다.
 | 경로 | 기능 |
 | --- | --- |
 | `/_shared/*`, `/_assets/*` | 모든 서브도메인의 공용 정적 파일 |
+| `/_assets/catalog.json` | 위와 같지만 admin에서 숨긴 항목을 빼고 내보냄 |
 | `/_planner/login`, `/_planner/data`, `/_planner/logout` | 개인 플래너 세션과 데이터. 기본 비활성 |
 | `/_fortune/chart` | 생년월일시를 명식·오늘 운세 계산용 데이터로 변환 |
 | `/_estate/deals` | 국토부 아파트 매매·전월세 실거래가 프록시 (지역·기간 허용 목록 고정) |
@@ -55,7 +57,8 @@ apex와 `www`는 `dist/www`로 연결됩니다. 로컬에서는 첫 경로 세�
 되어 `localhost:8787/slop/fruitmerge` 형식으로 접근합니다.
 
 `admin`은 별도 처리되며 로그인 뒤 `/api/stats`, `/api/records`, `/api/notice`,
-`/api/suggestions`, `/api/chat`(채팅 정원 조회·변경), `/optout`(운영자 브라우저
+`/api/suggestions`, `/api/chat`(채팅 정원 조회·변경), `/api/stickers`(스티커 팩
+공개 여부 조회·토글), `/optout`(운영자 브라우저
 집계 제외 — 전체 서브도메인 bl_notrack 쿠키, 브라우저마다 한 번)을 제공합니다. `/api/assets`와 `/_assets/upload/*`는 현재 404로
 닫혀 있습니다.
 
@@ -98,6 +101,12 @@ node _infra/build.mjs
   보관합니다. cron(06:40 KST)이나 수동 요청이 큐에 넣으면 alarm이 한 건씩
   대본 생성 → TTS → R2 저장 → Web Push 순서로 처리합니다. 파일 본문은
   R2(`bubblelab-podcast`)에만 둡니다.
+- `AssetFlagsDO`: 스티커 팩의 공개 여부 오버라이드(`"sticker/<id>": true|false`)만
+  보관합니다. 빌드가 굽는 `catalog.json`에는 숨긴 항목까지 들어 있고, 공개 목록은
+  워커가 요청 시점에 이 값을 얹어 만듭니다 — admin에서 껐다 켜는 데 재빌드가
+  필요 없고, 반대로 metadata에서 꺼 둔 팩도 배포 없이 켤 수 있습니다. 카탈로그는
+  방문마다 읽히므로 아이솔레이트마다 60초 캐시합니다(저장소를 못 읽으면 마지막
+  값, 그것도 없으면 metadata 기본값으로 계속 서빙합니다).
 - `RateLimiterDO`: Cloudflare가 확인한 클라이언트 IP를 HMAC 처리한 별도 버킷으로
   로그인·공개 쓰기·다운로드 집계 호출을 제한합니다. IP 원문은 저장하지 않으며
   버킷은 제한 시간이 지나면 alarm으로 삭제합니다.

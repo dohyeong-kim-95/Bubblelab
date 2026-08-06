@@ -96,12 +96,14 @@ if (existsSync(join(ROOT, "_assets"))) {
     join(DIST, "_assets", "catalog.json"),
     JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), items: catalog }, null, 2),
   );
-  console.log(`generated asset catalog (${catalog.length} items)`);
+  const hidden = catalog.filter((item) => item.active === false).length;
+  console.log(`generated asset catalog (${catalog.length} items${hidden ? `, ${hidden} hidden` : ""})`);
 
   // 배경화면은 항목마다 상세페이지를 만든다 (/assets/wallpaper/<id>/).
   // 목록 카드로는 못 하는 것 — 원본 크기로 보기, 내 화면 해상도에 맞춰
   // 잘라 저장하기, 폰 케이스 목업 — 이 여기에 있다.
-  const wallpapers = catalog.filter((item) => item.category === "wallpaper");
+  // 숨긴 항목은 페이지도 굽지 않는다 (배경화면은 admin 토글 대상이 아니다).
+  const wallpapers = catalog.filter((item) => item.category === "wallpaper" && item.active !== false);
   for (const item of wallpapers) {
     const dir = join(DIST, "assets", "wallpaper", item.id);
     mkdirSync(dir, { recursive: true });
