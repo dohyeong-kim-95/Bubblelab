@@ -183,7 +183,7 @@ test("배경화면 항목마다 상세페이지가 생성된다", () => {
     assert.ok(existsSync(page), `${item.id}: 상세페이지가 없다`);
     const html = readFileSync(page, "utf8");
     assert.ok(html.includes('id="item-data"'), `${item.id}: 항목 데이터가 심어지지 않았다`);
-    assert.ok(html.includes("/assets/item.js"), `${item.id}: item.js 연결이 없다`);
+    assert.ok(html.includes("item.js"), `${item.id}: item.js 연결이 없다`);
     // 데이터가 스크립트 블록을 끊지 않아야 한다
     const data = html.split('id="item-data">')[1].split("</script>")[0];
     assert.deepEqual(JSON.parse(data).id, item.id);

@@ -29,6 +29,13 @@ function downloadDevice(download) {
 
 const matchesDevice = (download) => device === "all" || (downloadDevice(download) ?? device) === device;
 
+// 항목 상세페이지 주소. 서브도메인 접속에는 URL에 /assets 세그먼트가 없으므로
+// (worker가 내부에서 붙인다) 지금 페이지 기준 상대경로로 만든다.
+const itemHref = (id) => {
+  const base = location.pathname.endsWith("/") ? location.pathname : `${location.pathname}/`;
+  return `${base}${encodeURIComponent(id)}/`;
+};
+
 // 미리보기 칸을 항목 비율에 맞춘다 (세로 배경화면은 세로 칸). 카드 높이가
 // 끝없이 늘어나지 않게 세로 1:2, 가로 4:3 에서 자른다 — 그 밖은 남는 쪽에
 // 여백이 생기지만 그림이 잘리지는 않는다.
@@ -132,7 +139,7 @@ function render() {
       <div class="info">
         <div class="title-row">
           <h2>${zoomable
-            ? `<a class="item-link" href="/assets/wallpaper/${encodeURIComponent(item.id)}/">${esc(item.title)}</a>`
+            ? `<a class="item-link" href="${esc(itemHref(item.id))}">${esc(item.title)}</a>`
             : esc(item.title)}</h2>
           <span class="item-download-count">총 ${numberFormat.format(downloadCounts.items[`${item.category}/${item.id}`] || 0)}회</span>
         </div>
@@ -214,7 +221,7 @@ function showZoom(index) {
   image.src = download ? download.url : item.preview;
   image.alt = `${item.title} 크게 보기`;
   layer.querySelector(".zoom-title").textContent = item.title;
-  layer.querySelector(".zoom-detail").href = `/assets/wallpaper/${encodeURIComponent(item.id)}/`;
+  layer.querySelector(".zoom-detail").href = itemHref(item.id);
   const link = layer.querySelector(".zoom-download");
   link.hidden = !download;
   if (download) {

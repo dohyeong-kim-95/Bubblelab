@@ -119,7 +119,11 @@ if (existsSync(join(ROOT, "_assets"))) {
 }
 
 // 배경화면 상세페이지. 항목 데이터를 통째로 심어 두고(추가 요청 없이 바로
-// 그린다) 나머지 동작은 /assets/item.js 가 맡는다.
+// 그린다) 나머지 동작은 assets/item.js 가 맡는다.
+// **링크는 상대경로.** 서브도메인 접속(assets.bubblelab.dev/wallpaper/<id>/)에는
+// URL에 /assets 세그먼트가 없다 — worker가 내부에서 붙인다. 절대경로 /assets/…
+// 로 적으면 로컬(첫 세그먼트=서브도메인)에서만 되고 실서비스에서 404가 난다.
+// /_shared/*, /_assets/*, /_download/* 는 worker가 프리픽스 없이 서빙하므로 예외.
 function wallpaperPage(item) {
   const title = escapeHtml(item.title);
   const description = escapeHtml(item.description || `Bubblelab에서 만든 배경화면 ${item.title}`);
@@ -138,13 +142,13 @@ function wallpaperPage(item) {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="description" content="${description}">
 <title>${title} · Bubblelab 배경화면</title>
-<link rel="stylesheet" href="/assets/catalog.css">
-<link rel="stylesheet" href="/assets/item.css">
+<link rel="stylesheet" href="../../catalog.css">
+<link rel="stylesheet" href="../../item.css">
 </head>
 <body data-category="wallpaper">
 <main class="wrap item-wrap">
   <header>
-    <a class="back" href="/assets/wallpaper/">← 배경화면 목록</a>
+    <a class="back" href="../">← 배경화면 목록</a>
     <p class="eyebrow">BUBBLELAB ASSETS</p>
     <h1 class="item-title">${title}</h1>
     <p class="intro">${description}</p>
@@ -187,7 +191,7 @@ function wallpaperPage(item) {
   <footer>© Bubblelab Assets</footer>
 </main>
 <script type="application/json" id="item-data">${data}</script>
-<script type="module" src="/assets/item.js"></script>
+<script type="module" src="../../item.js"></script>
 </body>
 </html>
 `;
