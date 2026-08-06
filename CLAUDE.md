@@ -96,12 +96,15 @@ node _infra/wallpaper.mjs 이미지.png <id> --title "제목" \
 ```
 
 `--sizes`는 `mobile`(1290×2796)·`tablet`·`desktop`(2560×1440)·`wide`·`square`·
-`original` 중에서 고른다(기본 `mobile,desktop`). 잘라내기는 채우기(cover),
-남길 쪽은 `--focus top|bottom|left|right`. **확대는 하지 않는다** — 원본이
-규격보다 작으면 비율만 맞춘 원본 해상도로 저장하고 라벨에 실제 크기가 들어간다
-(CLI가 경고로 알려주니 그때 원본을 더 큰 걸로 받으면 된다). 출력은 JPEG라
-EXIF(위치·기기)는 자동으로 지워진다. 시트 디코더는 스티커와 같아 PNG·JPEG를
-모두 받고, JPEG는 `npm ci` 필요. 검증은 `_infra/wallpaper.test.mjs`.
+`original` 중에서 고른다(기본 `mobile,desktop`). **세로 원본에 가로 규격을
+같이 넣지 말 것** — 가운데 가로 띠만 남아 그림이 망가진다. 잘라내기는
+채우기(cover), 남길 쪽은 `--focus top|bottom|left|right`. **확대는 하지 않는다**
+— 원본이 규격보다 작으면 비율만 맞춘 원본 해상도로 저장하고 라벨에 실제 크기가
+들어간다(CLI가 경고로 알려주니 그때 원본을 더 큰 걸로 받으면 된다).
+`--format`은 사진이면 `jpg`(기본), util/stars 출력처럼 어두운 그라데이션·가는
+선·작은 글씨가 있는 생성 그래픽이면 `png`(무손실, 3–4배 큼). 출력은 항상
+재인코딩이라 EXIF(위치·기기)는 자동으로 지워진다. 디코더는 스티커와 같아
+PNG·JPEG를 모두 받고, JPEG는 `npm ci` 필요. 검증은 `_infra/wallpaper.test.mjs`.
 
 ## 데일리 팟캐스트 (podcast/)
 

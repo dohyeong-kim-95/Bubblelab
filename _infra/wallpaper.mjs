@@ -6,16 +6,21 @@
 //
 //   node _infra/wallpaper.mjs <이미지.png|.jpg> <id> --title "제목" \
 //     [--sizes mobile,desktop] [--focus center|top|bottom|left|right] \
-//     [--desc "설명"] [--tags "태그,태그"] [--quality 90] [--force]
+//     [--format jpg|png] [--desc "설명"] [--tags "태그,태그"] [--quality 90] [--force]
 //
 // 규격(--sizes)은 아래 PRESETS의 키를 쉼표로 나열한다. 잘라내기는 항상
 // "채우기(cover)" — 대상 비율로 가운데(--focus로 조정) 잘라낸 뒤 축소한다.
 // **확대는 하지 않는다**: 원본이 규격보다 작으면 비율만 맞춘 원본 해상도로
 // 저장하고 라벨에 실제 크기를 적는다(있지도 않은 해상도를 광고하지 않는다).
-// 출력은 JPEG로 재인코딩되므로 EXIF(촬영 위치·기기)는 자동으로 사라진다.
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+// 출력은 항상 재인코딩되므로 EXIF(촬영 위치·기기)는 자동으로 사라진다.
+// --format: 사진은 jpg(기본), 어두운 그라데이션·가는 선·작은 글씨가 있는
+// 그래픽(util/stars 같은 생성 이미지)은 png. JPEG는 넓은 어두운 면에서
+// 띠(banding)가 보일 수 있고, PNG는 무손실이지만 3–4배 크다.
+// 미리보기는 카탈로그 페이지 무게 때문에 --format 과 무관하게 항상 JPEG다.
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { encodePng } from "./png.mjs";
 import { decodeSheet as decodeImage } from "./sticker-pack.mjs";
 import { readAssetMetadata } from "./assets.js";
 
@@ -25,6 +30,7 @@ const PREVIEW_MAX = 800;
 const PREVIEW_QUALITY = 78;
 const DEFAULT_QUALITY = 90;
 const DEFAULT_SIZES = "mobile,desktop";
+const FORMATS = new Set(["jpg", "png"]);
 // 투명 배경은 배경화면으로 쓸 수 없다(JPEG에 알파가 없다) — 흰색으로 합성한다.
 const FLATTEN_COLOR = [255, 255, 255];
 
@@ -163,6 +169,9 @@ async function encodeJpeg(image, quality) {
   return data;
 }
 
+const encodeVariant = (image, format, quality) =>
+  format === "png" ? encodePng(image) : encodeJpeg(image, quality);
+
 // _assets/wallpaper/README.md 표에 항목 행을 넣거나 갱신한 문서를 돌려준다.
 // 같은 id 가 이미 있으면 그 행을 교체한다(--force 재실행이 표를 늘리지 않는다).
 // 문서에 표가 여럿이라(항목 표 + 옵션 표) 기준은 **첫 번째 표**로 고정한다.
@@ -186,6 +195,7 @@ export async function buildWallpaper({
   title,
   sizes = DEFAULT_SIZES,
   focus = "center",
+  format = "jpg",
   description = "",
   tags = [],
   quality = DEFAULT_QUALITY,
@@ -199,6 +209,9 @@ export async function buildWallpaper({
   if (!title?.trim()) throw new Error("--title 은 필수입니다");
   if (!FOCUS.has(focus)) {
     throw new Error(`--focus 는 ${[...FOCUS].join(", ")} 중 하나여야 합니다: ${focus}`);
+  }
+  if (!FORMATS.has(format)) {
+    throw new Error(`--format 은 ${[...FORMATS].join(", ")} 중 하나여야 합니다: ${format}`);
   }
   const jpegQuality = Number(quality);
   if (!Number.isFinite(jpegQuality) || jpegQuality < 40 || jpegQuality > 100) {
@@ -220,7 +233,7 @@ export async function buildWallpaper({
     const short = preset.width != null && (image.width < preset.width || image.height < preset.height);
     return {
       name,
-      file: `${name}.jpg`,
+      file: `${name}.${format}`,
       label: `${preset.label} ${image.width}×${image.height}`,
       image,
       short,
@@ -229,8 +242,14 @@ export async function buildWallpaper({
   });
 
   mkdirSync(itemDir, { recursive: true });
+  // --force 재실행에서 규격·형식이 바뀌면 이전 파일이 남는다. metadata 에는
+  // 없지만 dist 에는 그대로 실려 나가므로 여기서 지운다.
+  const keep = new Set([...variants.map((variant) => variant.file), "preview.jpg", "metadata.json"]);
+  for (const stale of readdirSync(itemDir)) {
+    if (!keep.has(stale)) rmSync(join(itemDir, stale), { recursive: true, force: true });
+  }
   for (const variant of variants) {
-    writeFileSync(join(itemDir, variant.file), await encodeJpeg(variant.image, jpegQuality));
+    writeFileSync(join(itemDir, variant.file), await encodeVariant(variant.image, format, jpegQuality));
   }
   const previewScale = Math.min(1, PREVIEW_MAX / Math.max(source.width, source.height));
   const preview = resizeTo(
@@ -264,6 +283,7 @@ export async function buildWallpaper({
   return {
     id,
     itemDir,
+    format,
     source: { width: source.width, height: source.height },
     variants: variants.map(({ name, file, label, short, target, image }) => ({
       name,
@@ -302,7 +322,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     console.error(
       'usage: node _infra/wallpaper.mjs <이미지.png|.jpg> [id] --title "제목"\n' +
       "       [--sizes mobile,desktop] [--focus center|top|bottom|left|right]\n" +
-      '       [--desc "설명"] [--tags "태그,태그"] [--quality 90] [--force]\n' +
+      '       [--format jpg|png] [--desc "설명"] [--tags "태그,태그"]\n' +
+      "       [--quality 90] [--force]\n" +
       `       규격: ${Object.keys(PRESETS).join(", ")}`,
     );
     process.exit(1);
@@ -314,12 +335,15 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       title: options.title,
       sizes: options.sizes ?? DEFAULT_SIZES,
       focus: options.focus ?? "center",
+      format: options.format ?? "jpg",
       description: options.desc ?? "",
       tags: options.tags ? options.tags.split(",") : [],
       quality: options.quality ?? DEFAULT_QUALITY,
       force: options.force ?? false,
     });
-    console.log(`✓ ${result.id} 배경화면 등록 (원본 ${result.source.width}×${result.source.height})`);
+    console.log(
+      `✓ ${result.id} 배경화면 등록 (원본 ${result.source.width}×${result.source.height}, ${result.format})`,
+    );
     for (const variant of result.variants) {
       const note = variant.short ? ` ⚠ 원본이 작아 ${variant.target} 규격보다 작습니다` : "";
       console.log(`  - ${variant.file}: ${variant.width}×${variant.height} ${formatSize(variant.bytes)}${note}`);

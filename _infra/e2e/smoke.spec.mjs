@@ -12,6 +12,8 @@ const SCREENS = [
   { name: "puzzle 홈", path: "/puzzle/" },
   { name: "util 홈", path: "/util/" },
   { name: "assets 홈", path: "/assets/" },
+  // 카탈로그 카드(catalog.js/css)를 실제로 그리는 화면 — 항목이 있는 카테고리로 본다
+  { name: "assets 배경화면", path: "/assets/wallpaper/" },
   { name: "mindfulness 홈", path: "/mindfulness/" },
   { name: "idle 홈", path: "/idle/" },
   { name: "아침 브리핑", path: "/util/brief/" },

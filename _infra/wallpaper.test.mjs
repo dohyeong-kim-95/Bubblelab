@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -127,10 +127,13 @@ test("withReadmeRow targets the item table in the real README", () => {
   const patched = withReadmeRow(readFileSync(readmePath, "utf8"), "sunset", "노을", ["mobile.jpg"]);
   const lines = patched.split("\n");
   const row = lines.findIndex((line) => line.startsWith("| `sunset` |"));
+  const separator = lines.findIndex((line) => /^\| *-{3,} *\|/.test(line));
   const optionHeader = lines.findIndex((line) => line.startsWith("| 옵션 |"));
   assert.ok(row > 0, "행이 들어가야 한다");
+  assert.ok(row > separator, "항목 표 구분선 아래여야 한다");
   assert.ok(optionHeader > 0 && row < optionHeader, "옵션 표보다 위(항목 표 안)여야 한다");
-  assert.match(lines[row - 1], /^\| *-{3,} *\|/, "항목 표 구분선 바로 아래");
+  // 항목 표는 빈 줄 없이 이어져야 한다 (표 밖으로 새지 않았는지)
+  for (let i = separator + 1; i <= row; i++) assert.ok(lines[i].startsWith("|"), `${i}행이 표 밖`);
 });
 
 test("buildWallpaper writes variants, preview, metadata and the readme row", async () => {
@@ -188,6 +191,49 @@ test("buildWallpaper flags a source smaller than the preset", async () => {
   }
 });
 
+test("buildWallpaper writes lossless PNG variants with --format png", async () => {
+  const root = makeRoot();
+  try {
+    writeFileSync(join(root, "graphic.png"), encodePng(makeImage(2000, 3000)));
+    const result = await buildWallpaper({
+      imagePath: join(root, "graphic.png"),
+      id: "graphic",
+      title: "그래픽",
+      sizes: "mobile",
+      format: "png",
+      root,
+    });
+    assert.equal(result.variants[0].file, "mobile.png");
+    const bytes = readFileSync(join(result.itemDir, "mobile.png"));
+    assert.deepEqual([...bytes.subarray(0, 4)], [0x89, 0x50, 0x4e, 0x47], "PNG 매직 바이트");
+    // 미리보기는 페이지 무게 때문에 형식과 무관하게 JPEG
+    const metadata = JSON.parse(readFileSync(join(result.itemDir, "metadata.json"), "utf8"));
+    assert.equal(metadata.preview, "preview.jpg");
+    assert.equal(readFileSync(join(result.itemDir, "preview.jpg"))[0], 0xff);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("buildWallpaper removes files left over from an earlier --force run", async () => {
+  const root = makeRoot();
+  try {
+    writeFileSync(join(root, "source.png"), encodePng(makeImage(1500, 1500)));
+    const args = { imagePath: join(root, "source.png"), id: "swap", title: "형식 교체", sizes: "square", root };
+    const first = await buildWallpaper(args);
+    assert.ok(existsSync(join(first.itemDir, "square.jpg")));
+    const second = await buildWallpaper({ ...args, format: "png", force: true });
+    assert.ok(existsSync(join(second.itemDir, "square.png")));
+    assert.equal(existsSync(join(second.itemDir, "square.jpg")), false, "이전 형식 파일이 남으면 안 된다");
+    assert.deepEqual(
+      readdirSync(second.itemDir).sort(),
+      ["metadata.json", "preview.jpg", "square.png"],
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("buildWallpaper validates inputs before touching the disk", async () => {
   const root = makeRoot();
   try {
@@ -196,6 +242,7 @@ test("buildWallpaper validates inputs before touching the disk", async () => {
     await assert.rejects(() => buildWallpaper({ ...base, id: "Bad_Id" }), /영소문자·숫자·하이픈/);
     await assert.rejects(() => buildWallpaper({ ...base, title: " " }), /--title/);
     await assert.rejects(() => buildWallpaper({ ...base, focus: "middle" }), /--focus/);
+    await assert.rejects(() => buildWallpaper({ ...base, format: "webp" }), /--format/);
     await assert.rejects(() => buildWallpaper({ ...base, quality: 10 }), /--quality/);
     await assert.rejects(() => buildWallpaper({ ...base, sizes: "phone" }), /알 수 없는 규격/);
   } finally {
