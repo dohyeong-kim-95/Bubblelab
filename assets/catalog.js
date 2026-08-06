@@ -2,6 +2,8 @@ const category = document.body.dataset.category;
 const grid = document.getElementById("grid");
 const search = document.getElementById("search");
 const count = document.getElementById("count");
+const deviceTabs = document.getElementById("device-tabs");
+let device = "all";
 let items = [];
 let downloadCounts = { files: {}, items: {} };
 const animatePreviews = !matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -11,6 +13,18 @@ const numberFormat = new Intl.NumberFormat("ko-KR");
 const esc = (value) => String(value).replace(/[&<>'"]/g, (char) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;",
 })[char]);
+
+// 배경화면 [모바일 | PC] 탭. 분류는 metadata 의 device 를 그대로 쓰고,
+// 손으로 쓴 항목을 위해 규격 파일명(mobile/tablet/desktop/wide)으로 한 번 더
+// 짐작한다. 둘 다 없으면 null — 정사각·원본처럼 양쪽에 다 보이는 파일이다.
+const FILE_DEVICE = { mobile: "mobile", tablet: "mobile", desktop: "desktop", wide: "desktop" };
+
+function downloadDevice(download) {
+  if (download.device === "mobile" || download.device === "desktop") return download.device;
+  return FILE_DEVICE[download.file.replace(/\.[^.]+$/, "").toLowerCase()] || null;
+}
+
+const matchesDevice = (download) => device === "all" || (downloadDevice(download) ?? device) === device;
 
 function previewMarkup(item) {
   if (item.category === "music" && /\.mp4$/i.test(item.preview)) {
@@ -79,10 +93,17 @@ async function toggleRepeat(button) {
 function render() {
   const query = search.value.trim().toLocaleLowerCase("ko");
   const visible = items.filter((item) =>
-    !query || [item.title, item.description, ...(item.tags || [])].join(" ").toLocaleLowerCase("ko").includes(query));
+    (!query || [item.title, item.description, ...(item.tags || [])].join(" ").toLocaleLowerCase("ko").includes(query))
+    && item.downloads.some(matchesDevice));
   count.textContent = `${visible.length}개`;
   if (!visible.length) {
-    grid.innerHTML = `<div class="state">${items.length ? "검색 결과가 없습니다." : "아직 등록된 에셋이 없습니다.<br>새로운 에셋이 곧 추가될 예정입니다."}</div>`;
+    const empty = !items.length
+      ? "아직 등록된 에셋이 없습니다.<br>새로운 에셋이 곧 추가될 예정입니다."
+      : query ? "검색 결과가 없습니다."
+      : device === "mobile" ? "아직 모바일 배경화면이 없습니다."
+      : device === "desktop" ? "아직 PC 배경화면이 없습니다."
+      : "검색 결과가 없습니다.";
+    grid.innerHTML = `<div class="state">${empty}</div>`;
     return;
   }
   grid.innerHTML = visible.map((item) => `
@@ -99,7 +120,7 @@ function render() {
         <div class="downloads">${
           category === "sticker" && item.downloads.length > 1
             ? `<button class="download-all" type="button" data-download-all="${esc(item.id)}">↓ 스티커 팩 모두 받기 (${item.downloads.length}개 ZIP)</button>`
-            : ""}${item.downloads.map((download) =>
+            : ""}${item.downloads.filter(matchesDevice).map((download) =>
           `<div class="download-item">
             <a class="download" href="/_download/${encodeURIComponent(item.category)}/${encodeURIComponent(item.id)}/${encodeURIComponent(download.file)}" download="${esc(download.file)}">↓ ${esc(download.label)}</a>
             <span class="download-count">${numberFormat.format(downloadCounts.files[`${item.category}/${item.id}/${download.file}`] || 0)}회 다운로드</span>
@@ -167,6 +188,16 @@ if ("mediaSession" in navigator) {
 }
 
 search.addEventListener("input", render);
+
+deviceTabs?.addEventListener("click", (event) => {
+  const tab = event.target.closest("[data-device]");
+  if (!tab || tab.dataset.device === device) return;
+  device = tab.dataset.device;
+  for (const button of deviceTabs.querySelectorAll("[data-device]")) {
+    button.setAttribute("aria-selected", String(button === tab));
+  }
+  render();
+});
 
 try {
   const [response, countsResponse] = await Promise.all([

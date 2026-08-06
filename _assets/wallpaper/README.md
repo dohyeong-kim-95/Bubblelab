@@ -45,6 +45,9 @@ node _infra/wallpaper.mjs <이미지.png|.jpg> <id> --title "제목" \
   쓰고, 사진은 jpg가 낫습니다.
 - 미리보기(`preview.jpg`)는 카탈로그 페이지 무게 때문에 `--format`과
   무관하게 항상 JPEG입니다.
+- 카탈로그의 [전체 | 📱 모바일 | 🖥️ PC] 탭 분류는 규격 이름이 아니라 **출력
+  비율**로 정해져 `metadata.json`의 `downloads[].device`에 들어갑니다 —
+  세로는 `mobile`, 가로는 `desktop`, 정사각은 값이 없어 양쪽에 다 보입니다.
 - `--force` 재실행에서 규격·형식이 바뀌면 이전 파일은 자동으로 지워집니다.
 
 ## 공개 전 확인

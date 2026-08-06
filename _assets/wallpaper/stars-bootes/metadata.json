@@ -13,7 +13,8 @@
   "downloads": [
     {
       "label": "모바일 1080×2340",
-      "file": "mobile.png"
+      "file": "mobile.png",
+      "device": "mobile"
     }
   ]
 }

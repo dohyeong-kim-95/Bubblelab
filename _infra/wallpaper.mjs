@@ -140,6 +140,11 @@ export function flatten(image, color = FLATTEN_COLOR) {
   return { width: image.width, height: image.height, data };
 }
 
+// 카탈로그 [모바일 | PC] 탭이 쓰는 분류. 규격 이름이 아니라 **출력 비율**로
+// 정한다 — 세로면 폰, 가로면 PC, 정사각이면 null(양쪽 탭에 모두 보인다).
+export const deviceOf = ({ width, height }) =>
+  height > width ? "mobile" : width > height ? "desktop" : null;
+
 // 프리셋 하나에 대한 출력 이미지. 확대는 하지 않으므로 실제 크기는
 // 원본이 작을 때 프리셋보다 작아질 수 있다.
 export function renderVariant(image, preset, focus = "center") {
@@ -235,6 +240,7 @@ export async function buildWallpaper({
       name,
       file: `${name}.${format}`,
       label: `${preset.label} ${image.width}×${image.height}`,
+      device: deviceOf(image),
       image,
       short,
       target: preset.width == null ? null : `${preset.width}×${preset.height}`,
@@ -265,7 +271,7 @@ export async function buildWallpaper({
     preview: "preview.jpg",
     tags: tags.map((tag) => String(tag).trim()).filter(Boolean),
     createdAt: createdAt ?? new Date().toISOString().slice(0, 10),
-    downloads: variants.map(({ label, file }) => ({ label, file })),
+    downloads: variants.map(({ label, file, device }) => ({ label, file, ...(device ? { device } : {}) })),
   };
   writeFileSync(join(itemDir, "metadata.json"), JSON.stringify(metadata, null, 2) + "\n");
 
@@ -285,10 +291,11 @@ export async function buildWallpaper({
     itemDir,
     format,
     source: { width: source.width, height: source.height },
-    variants: variants.map(({ name, file, label, short, target, image }) => ({
+    variants: variants.map(({ name, file, label, device, short, target, image }) => ({
       name,
       file,
       label,
+      device,
       short,
       target,
       width: image.width,

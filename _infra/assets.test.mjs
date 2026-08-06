@@ -52,3 +52,31 @@ test("inactive assets are kept out of the public catalog", () => {
   }));
   assert.deepEqual(generateAssetCatalog(root), []);
 });
+
+test("wallpaper downloads carry the device tab classification", () => {
+  const root = mkdtempSync(join(tmpdir(), "bubblelab-assets-"));
+  const item = join(root, "wallpaper", "night-sky");
+  mkdirSync(item, { recursive: true });
+  for (const file of ["preview.jpg", "mobile.png", "desktop.png", "square.png"]) {
+    writeFileSync(join(item, file), "image");
+  }
+  const metadata = {
+    title: "밤하늘", preview: "preview.jpg", createdAt: "2026-08-06",
+    downloads: [
+      { label: "모바일", file: "mobile.png", device: "mobile" },
+      { label: "PC", file: "desktop.png", device: "desktop" },
+      { label: "정사각", file: "square.png" },
+    ],
+  };
+  writeFileSync(join(item, "metadata.json"), JSON.stringify(metadata));
+
+  const [wallpaper] = generateAssetCatalog(root);
+  assert.deepEqual(wallpaper.downloads.map((d) => d.device), ["mobile", "desktop", undefined]);
+
+  // 오타는 조용히 넘어가지 않는다 (탭에서 통째로 사라지는 사고 방지)
+  writeFileSync(join(item, "metadata.json"), JSON.stringify({
+    ...metadata,
+    downloads: [{ label: "모바일", file: "mobile.png", device: "phone" }],
+  }));
+  assert.throws(() => generateAssetCatalog(root), /device must be/);
+});

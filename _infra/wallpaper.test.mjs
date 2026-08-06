@@ -9,6 +9,7 @@ import {
   PRESETS,
   buildWallpaper,
   coverCrop,
+  deviceOf,
   flatten,
   parseSizes,
   renderVariant,
@@ -111,6 +112,13 @@ test("renderVariant original preset only caps the long edge", () => {
   assert.equal(image.height, 2048);
 });
 
+test("deviceOf classifies by output orientation, not by preset name", () => {
+  assert.equal(deviceOf({ width: 1290, height: 2796 }), "mobile");
+  assert.equal(deviceOf({ width: 2048, height: 2732 }), "mobile", "태블릿도 세로면 모바일 탭");
+  assert.equal(deviceOf({ width: 2560, height: 1440 }), "desktop");
+  assert.equal(deviceOf({ width: 2048, height: 2048 }), null, "정사각은 양쪽 탭에 보인다");
+});
+
 test("withReadmeRow inserts once and replaces on repeat", () => {
   const source = "| ID | 제목 | 파일 |\n| --- | --- | --- |\n";
   const once = withReadmeRow(source, "sunset", "노을", ["mobile.jpg"]);
@@ -158,6 +166,7 @@ test("buildWallpaper writes variants, preview, metadata and the readme row", asy
     assert.equal(metadata.title, "노을 언덕");
     assert.equal(metadata.preview, "preview.jpg");
     assert.deepEqual(metadata.downloads.map((d) => d.file), ["mobile.jpg", "desktop.jpg"]);
+    assert.deepEqual(metadata.downloads.map((d) => d.device), ["mobile", "desktop"], "탭 분류가 metadata 에 들어간다");
     assert.match(metadata.downloads[0].label, /모바일 1290×2796/);
 
     const jpegs = ["mobile.jpg", "desktop.jpg", "preview.jpg"];

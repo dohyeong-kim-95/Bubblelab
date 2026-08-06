@@ -41,10 +41,16 @@ export function readAssetMetadata(root, category, itemDir) {
   const downloads = data.downloads.map((download, index) => {
     if (!safePart(download?.file)) throw new Error(`${category}/${id}: invalid download file #${index + 1}`);
     if (!existsSync(join(itemDir, download.file))) throw new Error(`${category}/${id}: download file not found: ${download.file}`);
+    // 선택 필드: 배경화면 [모바일 | PC] 탭 분류. 없으면 어느 탭에서나 보인다.
+    // _infra/wallpaper.mjs 가 출력 비율(세로/가로)을 보고 채운다.
+    if (download.device && download.device !== "mobile" && download.device !== "desktop") {
+      throw new Error(`${category}/${id}: download device must be "mobile" or "desktop": ${download.device}`);
+    }
     return {
       label: String(download.label || "다운로드"),
       file: download.file,
       url: assetUrl(category, id, download.file),
+      ...(download.device ? { device: download.device } : {}),
     };
   });
 

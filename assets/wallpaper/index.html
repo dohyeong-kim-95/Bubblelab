@@ -15,6 +15,11 @@
     <h1>🖼️ Wallpaper</h1>
     <p class="intro">Bubblelab에서 만든 배경화면을 모았습니다. 원하는 규격을 골라 기기에 저장해 사용하세요.</p>
   </header>
+  <div class="tabs" id="device-tabs" role="tablist" aria-label="기기별 보기">
+    <button class="tab" type="button" role="tab" data-device="all" aria-selected="true">전체</button>
+    <button class="tab" type="button" role="tab" data-device="mobile" aria-selected="false">📱 모바일</button>
+    <button class="tab" type="button" role="tab" data-device="desktop" aria-selected="false">🖥️ PC</button>
+  </div>
   <div class="tools"><input class="search" id="search" type="search" placeholder="제목이나 태그 검색" aria-label="배경화면 검색"><span class="count" id="count">불러오는 중…</span></div>
   <section class="grid" id="grid" aria-live="polite"><div class="state">이미지를 불러오는 중입니다…</div></section>
   <footer>© Bubblelab Assets</footer>
