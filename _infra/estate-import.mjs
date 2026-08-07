@@ -42,7 +42,7 @@ function kstNowYm() {
   return `${value.year}${value.month}`;
 }
 
-function readServiceKey() {
+export function readServiceKey() {
   if (process.env.MOLIT_SERVICE_KEY?.trim()) return process.env.MOLIT_SERVICE_KEY.trim();
   const devVars = join(ROOT, ".dev.vars");
   if (existsSync(devVars)) {

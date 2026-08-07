@@ -282,7 +282,8 @@ tr.canceled td { text-decoration: line-through; opacity: 0.5; }
     <div class="card table-wrap"><table id="dealTable"></table></div>
   </div>
 
-  <p class="note">자료: 국토교통부 실거래가 공개시스템 (신고일 기준, 최근 계약은 신고 지연으로 최대 30일
+  <p class="note">자료: 국토교통부 실거래가 공개시스템 · 단지 스펙(세대수·주차·시공사·지하철)은
+    공동주택관리정보시스템 K-apt (신고일 기준, 최근 계약은 신고 지연으로 최대 30일
     늦게 나타남) · 해제신고 거래는 <span class="badge cancel">해제</span>로 표시하고 집계에서 제외 ·
     평당가는 전용면적을 3.3058㎡로 나눈 값 기준이라 공급면적 기준 시세보다 높게 보임 ·
     개인 학습용 화면이며 투자 판단의 근거가 아님</p>
@@ -389,7 +390,7 @@ async function fetchMonth(src, type, ym) {
 
 async function ensureData() {
   const seq = ++loadSeq;
-  await Promise.all([loadStaticIndex(), loadGeo(), loadBasemap()]);
+  await Promise.all([loadStaticIndex(), loadGeo(), loadBasemap(), loadKapt()]);
   populateRefs();
   const src = TABS[state.tab].src;
   const jobs = [];
@@ -620,6 +621,24 @@ async function loadGeo() {
   } catch { geoData = false; }
 }
 
+// K-apt 단지 스펙(세대수·주차·시공사·지하철). 실거래에 없는 정보라 있으면
+// 얹고 없으면 그냥 넘어간다 — kapt.json이 없어도 화면은 그대로 동작한다.
+let kaptData = null; // null = 미로딩, false = 없음
+async function loadKapt() {
+  if (kaptData !== null) return;
+  try {
+    const res = await fetch("data/kapt.json");
+    kaptData = res.ok ? await res.json() : false;
+  } catch { kaptData = false; }
+}
+
+// 지번(정확) → 단지명(보조) 순으로 찾는다. 지번은 부번을 떼고 본번으로 맞춘다.
+function specOf(src, dong, jibun, apt) {
+  if (!kaptData) return null;
+  const key = jibun ? `${src}|${dong}|${String(jibun).split("-")[0]}` : null;
+  return (key && kaptData.complexes?.[key]) || kaptData.byName?.[`${src}|${apt}`] || null;
+}
+
 let basemapMeta = null; // null = 미로딩, false = 없음
 async function loadBasemap() {
   if (basemapMeta !== null) return;
@@ -644,9 +663,10 @@ function complexStats() {
   for (const ym of monthsBack(6)) {
     for (const r of liveTrades(ym)) {
       const key = `${r.apt}|${r.dong}`;
-      const entry = byApt.get(key) ?? { apt: r.apt, dong: r.dong, pys: [], deals: [], point: null };
+      const entry = byApt.get(key) ?? { apt: r.apt, dong: r.dong, pys: [], deals: [], point: null, jibun: null };
       entry.pys.push(perPy(r.amt, r.area));
       entry.deals.push(r);
+      if (!entry.jibun && r.jibun) entry.jibun = r.jibun;
       if (!entry.point && geoData) entry.point = geoData.points?.[`${src}|${r.dong}|${r.jibun}`] ?? null;
       byApt.set(key, entry);
     }
@@ -656,6 +676,7 @@ function complexStats() {
     return {
       apt: e.apt, dong: e.dong, cnt: e.deals.length, med: median(e.pys), last,
       point: e.point, dist: ref && e.point ? distKm(ref, e.point) : null,
+      spec: specOf(src, e.dong, e.jibun, e.apt),
     };
   });
 }
@@ -875,6 +896,19 @@ function renderAptCard() {
     }
     if (best) nearShuttle = `<b>${best.route}</b> · ${best.stop} 정류장 ${(best.d * 1000).toFixed(0)}m`;
   }
+  // K-apt 단지 스펙 (실거래에 없는 정보 — 없으면 줄 자체를 내지 않는다)
+  const sp = e.spec;
+  const specCells =
+    (sp?.units ? `<div><div class="k">세대수</div><div class="v">${sp.units.toLocaleString("ko-KR")}세대${sp.dongs ? ` · ${sp.dongs}개동` : ""}</div></div>` : "") +
+    (sp?.parkingPer ? `<div><div class="k">세대당 주차</div><div class="v">${sp.parkingPer.toFixed(2)}대</div></div>` : "");
+  const specLine = sp
+    ? [sp.builder, sp.built ? `${sp.built}년 준공` : null, sp.topFloor ? `최고 ${sp.topFloor}층` : null, sp.heat, sp.hall]
+        .filter(Boolean).join(" · ")
+    : "";
+  const subwayLine = sp?.subway
+    ? `${sp.subway}${sp.subwayWalk ? ` · 도보 ${sp.subwayWalk}` : ""}`
+    : "";
+
   const note = notes[e.apt] || {};
   const gap = note.price ? note.price - py84 / 10000 : null;
   body.innerHTML =
@@ -886,7 +920,10 @@ function renderAptCard() {
     `<div><div class="k">전용 84㎡ 환산</div><div class="v">${fmtEok(py84)}</div></div>` +
     `<div><div class="k">최근 6개월 거래</div><div class="v">${e.cnt}건</div></div>` +
     `<div><div class="k">최근 실거래</div><div class="v">${e.last.date.slice(2)} · ${Math.round(e.last.area)}㎡ ${fmtEok(e.last.amt)}</div></div>` +
+    specCells +
     `</div>` +
+    (specLine ? `<div class="apt-dist">🏗 ${specLine}</div>` : "") +
+    (subwayLine ? `<div class="apt-dist">🚇 ${subwayLine}</div>` : "") +
     (refDist ? `<div class="apt-dist">📍 ${refDist}</div>` : "") +
     (nearShuttle ? `<div class="apt-dist">🚌 가장 가까운 셔틀: ${nearShuttle}</div>` : "") +
     // 내 메모: 즐겨찾기·호가·자유메모 (localStorage, 이 브라우저에만 저장)
@@ -938,10 +975,14 @@ function renderFavList() {
 // ── 단지 랭킹 ────────────────────────────────────────────────
 function renderRank() {
   const hasRef = Boolean(state.ref && geoData && geoData.refs?.[state.ref]);
-  const list = complexStats().filter(inRadius)
+  const all = complexStats().filter(inRadius);
+  // 세대수 열은 K-apt 데이터가 실제로 붙은 단지가 있을 때만 낸다 (빈 열 방지).
+  const hasSpec = all.some((e) => e.spec?.units);
+  const list = [...all]
     .sort((a, b) =>
       rankSort === "cnt" ? b.cnt - a.cnt :
       rankSort === "med" ? b.med - a.med :
+      rankSort === "units" ? (b.spec?.units ?? -1) - (a.spec?.units ?? -1) :
       (a.dist ?? Infinity) - (b.dist ?? Infinity))
     .slice(0, 20);
   const sortAttr = (k) => rankSort === k ? ` aria-sort="descending"` : "";
@@ -950,10 +991,12 @@ function renderRank() {
     `<thead><tr><th>단지</th><th>법정동</th>` +
     `<th class="num sortable" data-sort="cnt"${sortAttr("cnt")}>거래${arrow("cnt")}</th>` +
     `<th class="num sortable" data-sort="med"${sortAttr("med")}>중앙 평당가${arrow("med")}</th>` +
+    (hasSpec ? `<th class="num sortable" data-sort="units"${sortAttr("units")}>세대수${arrow("units")}</th>` : "") +
     (hasRef ? `<th class="num sortable" data-sort="dist"${sortAttr("dist")}>거리${arrow("dist")}</th>` : "") +
     `<th class="num">최근 거래</th><th>매물</th></tr></thead><tbody>` +
     list.map((e) => `<tr><td>${e.apt}</td><td>${e.dong}</td><td class="num">${e.cnt}건</td>` +
       `<td class="num">${fmtMan(e.med)}만</td>` +
+      (hasSpec ? `<td class="num">${e.spec?.units ? `${e.spec.units.toLocaleString("ko-KR")}세대` : "—"}</td>` : "") +
       (hasRef ? `<td class="num">${e.dist != null ? `${e.dist.toFixed(1)}km` : "—"}</td>` : "") +
       `<td class="num">${e.last.date.slice(2)} · ${Math.round(e.last.area)}㎡ ${fmtEok(e.last.amt)}</td>` +
       `<td><a href="${naverLink(e)}" target="_blank" rel="noreferrer">네이버↗</a></td></tr>`).join("") +

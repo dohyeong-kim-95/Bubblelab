@@ -13,8 +13,13 @@ estate.bubblelab.dev. 국토교통부 실거래가 공개시스템 데이터로 
   구현), 단지 랭킹, 최근 거래 표. 지역 탭(동탄2·동탄1·화성 전체·기흥구),
   기간·전용면적·법정동 필터.
 - `data/` — `_infra/estate-import.mjs`가 생성하는 월별 정적 JSON + `index.json`,
-  그리고 `_infra/estate-geocode.mjs`가 생성하는 단지 좌표 `geo.json`.
+  `_infra/estate-geocode.mjs`가 생성하는 단지 좌표 `geo.json`, 그리고
+  `_infra/estate-kapt.mjs`가 생성하는 단지 스펙 `kapt.json`.
   페이지는 정적 파일을 우선 읽고, 없는 달만 `/_estate/deals` 프록시로 받는다.
+- 단지 스펙 — K-apt(공동주택관리정보시스템)에서 세대수·동수·시공사·준공연도·
+  세대당 주차·난방·복도식 여부·인접 지하철역과 도보시간을 받아 랭킹의 세대수 열과
+  단지 카드에 붙인다. 실거래 지번(부번 제외 본번)으로 맞추고, 안 맞으면 정규화
+  단지명으로 보조 매칭한다. `kapt.json`이 없으면 세대수 열과 스펙 줄만 빠진다.
 - 지도 뷰 — 런타임 외부 타일 없이, `_infra/estate-basemap.mjs`가 VWorld
   배경지도를 지역별 PNG 스냅샷(`basemap-*.png` + `data/basemap.json` 투영 정보)
   으로 커밋해 배경으로 깐다 (출처 표기: © 브이월드. CSP 변경·키 노출 없음,
@@ -42,11 +47,17 @@ bash _infra/estate-refresh.sh --basemap  # 배경지도 스냅샷까지 재생�
 
 인증키는 `.dev.vars`에 한 번만 넣어두면 된다 (`.gitignore`라 커밋 안 됨 — 상주 OK):
 
-- `MOLIT_SERVICE_KEY=…` — data.go.kr **아파트 매매/전월세 실거래가 자료** 인증키
+- `MOLIT_SERVICE_KEY=…` — data.go.kr 인증키. 아래 **네 개** API를 같은 키로 활용신청한다
+  (자동승인): 아파트 매매/전월세 실거래가 자료, **공동주택 단지 목록제공 서비스
+  (AptListService3)**, **공동주택 기본 정보제공 서비스 (AptBasisInfoServiceV4)**
 - `VWORLD_KEY=…` — VWorld 지오코더·배경지도 인증키
 
 수동으로 단계를 나눠 돌리려면 `estate-import.mjs`(`--months N`·`--force`) →
-`estate-geocode.mjs` → 필요 시 `estate-basemap.mjs` 순서다.
+`estate-geocode.mjs` → `estate-kapt.mjs` → 필요 시 `estate-basemap.mjs` 순서다.
+
+K-apt는 단지 하나에 API 호출 2회(기본+상세)라 첫 실행이 380여 개로 제일 무겁다.
+일일 호출 한도에 걸리면 받은 만큼만 저장하고 멈추므로 다음 날 다시 돌리면 이어
+채운다. 한 번에 받을 개수를 직접 끊으려면 `estate-kapt.mjs --limit 200`.
 
 로컬 개발(wrangler dev)은 한국 IP라 `.dev.vars` 키만으로 프록시가 바로 동작한다.
 데이터가 아예 없으면 페이지가 준비 안내를 띄운다 (fail-soft, 배포는 안 막힘).

@@ -22,6 +22,11 @@ node _infra/estate-import.mjs
 echo "▶ 신규 단지 지오코딩…"
 node _infra/estate-geocode.mjs
 
+# K-apt 단지 스펙. 일일 호출 한도에 걸려도 이미 받은 단지는 건너뛰므로 다음
+# 실행에서 이어 채운다 — 실패해도 갱신 전체를 멈추지 않는다.
+echo "▶ 신규 단지 K-apt 스펙…"
+node _infra/estate-kapt.mjs || echo "  (K-apt 일부 실패 — 다음 실행에서 이어받습니다)"
+
 if [[ "${1:-}" == "--basemap" ]]; then
   echo "▶ 배경지도 스냅샷 재생성…"
   node _infra/estate-basemap.mjs
@@ -30,9 +35,11 @@ fi
 echo "▶ 빌드 검증…"
 node _infra/build.mjs >/dev/null
 
-# 실질 변경(실거래 파일·배경지도)만으로 판정한다. geo.json/index.json/basemap.json은
-# generatedAt 타임스탬프가 매번 바뀌므로, 실거래 변경이 없으면 이 노이즈를 되돌린다.
-if git diff --quiet -- 'estate/data/trade-*.json' 'estate/data/rent-*.json' 'estate/basemap-*.png'; then
+# 실질 변경(실거래 파일·배경지도·K-apt 스펙)만으로 판정한다. geo.json/index.json/
+# basemap.json은 generatedAt 타임스탬프가 매번 바뀌므로, 실질 변경이 없으면 이
+# 노이즈를 되돌린다. kapt.json은 내용이 같으면 generatedAt을 유지하므로 그대로 본다.
+if git diff --quiet -- 'estate/data/trade-*.json' 'estate/data/rent-*.json' \
+    'estate/data/kapt.json' 'estate/basemap-*.png'; then
   git checkout -- estate/ 2>/dev/null || true
   echo "✓ 새 신고분 없음 — 커밋·푸시 생략."
   exit 0
