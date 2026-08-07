@@ -73,6 +73,10 @@ svg text { font-family: inherit; font-size: 12px; fill: light-dark(#5a6b7d, #93a
 .s-rent { stroke: var(--c-rent); }
 .f-rent { fill: var(--c-rent); }
 .line { fill: none; stroke-width: 2; }
+/* 신고 지연 구간(잠정)은 점선·흐린 막대로 확정 구간과 구분한다. */
+.line.prov { stroke-dasharray: 5 4; opacity: 0.5; }
+rect.prov { opacity: 0.35; }
+.leg-prov { border: 1.5px dashed currentColor; background: none; opacity: 0.6; }
 .hover-dot { stroke: light-dark(#ffffff, #151e2a); stroke-width: 2; }
 .crosshair { stroke: light-dark(#c6d2de, #35465c); stroke-width: 1; stroke-dasharray: 3 3; }
 .tooltip {
@@ -185,6 +189,9 @@ tr.canceled td { text-decoration: line-through; opacity: 0.5; }
 }
 .note { font-size: 0.75rem; opacity: 0.65; margin-top: 32px; line-height: 1.7; }
 .hidden { display: none; }
+.datanote { font-size: 0.75rem; opacity: 0.62; margin: 6px 0 0; line-height: 1.6; }
+.hedge { font-size: 0.78rem; margin: 10px 0 0; padding: 9px 11px; border-radius: 8px;
+  line-height: 1.6; background: light-dark(#fff4e6, #33261a); color: light-dark(#8a4b08, #ffd8a8); }
 </style>
 </head>
 <body>
@@ -231,8 +238,10 @@ tr.canceled td { text-decoration: line-through; opacity: 0.5; }
         <input type="checkbox" id="capToggle" checked> 85㎡·25억 이하</label>
     </div>
     <p id="status" role="status"></p>
+    <p id="dataNote" class="datanote"></p>
 
     <div class="stats" id="stats"></div>
+    <p id="mixNote" class="hedge hidden"></p>
 
     <h2>㎡→평 환산 중앙 평당가 추이 <span class="sub">만원/평 · 월별 중앙값</span></h2>
     <div class="card chart-wrap" id="chartPrice"></div>
@@ -243,7 +252,7 @@ tr.canceled td { text-decoration: line-through; opacity: 0.5; }
     <h2>전세가율 <span class="sub">전세 중앙 평당가 ÷ 매매 중앙 평당가 · 표본 5건 이상인 달만</span></h2>
     <div class="card chart-wrap" id="chartRatio"></div>
 
-    <h2>지도 <span class="sub">최근 6개월 매매 · 원 크기 = 거래 건수, 진할수록 평당가 높음 · 거리는 직선거리</span></h2>
+    <h2>지도 <span class="sub">최근 6개월(확정월 기준) 매매 · 원 크기 = 거래 건수, 진할수록 평당가 높음 · 거리는 직선거리</span></h2>
 
     <div class="card apt-card hidden" id="favCard">
       <div class="card-head">⭐ 내 관심 단지 <span class="sub">이 브라우저에만 저장됨</span></div>
@@ -273,7 +282,7 @@ tr.canceled td { text-decoration: line-through; opacity: 0.5; }
       <div class="map-legend" id="mapLegend"></div>
     </div>
 
-    <h2>단지 랭킹 <span class="sub">최근 6개월 매매 · 정렬할 열을 클릭</span></h2>
+    <h2>단지 랭킹 <span class="sub">최근 6개월(확정월 기준) 매매 · 정렬할 열을 클릭</span></h2>
     <div class="card table-wrap"><table id="rankTable"></table></div>
 
     <h2>최근 거래
@@ -283,8 +292,9 @@ tr.canceled td { text-decoration: line-through; opacity: 0.5; }
   </div>
 
   <p class="note">자료: 국토교통부 실거래가 공개시스템 · 단지 스펙(세대수·주차·시공사·지하철)은
-    공동주택관리정보시스템 K-apt (신고일 기준, 최근 계약은 신고 지연으로 최대 30일
-    늦게 나타남) · 해제신고 거래는 <span class="badge cancel">해제</span>로 표시하고 집계에서 제외 ·
+    공동주택관리정보시스템 K-apt · 신고는 계약 후 30일 이내라 <b>최근 두 달은 늘 과소집계</b>다 —
+    점선·흐린 막대로 표시하고 요약 수치·지도·랭킹에서는 제외한다 (아래 최근 거래 표는 원자료라 전부 표시) ·
+    해제신고 거래는 <span class="badge cancel">해제</span>로 표시하고 집계에서 제외 ·
     평당가는 전용면적을 3.3058㎡로 나눈 값 기준이라 공급면적 기준 시세보다 높게 보임 ·
     개인 학습용 화면이며 투자 판단의 근거가 아님</p>
 </main>
@@ -465,8 +475,21 @@ function monthItems(type, ym) {
 const liveTrades = (ym) => monthItems("trade", ym).filter((r) => !r.canceled);
 const jeonse = (ym) => monthItems("rent", ym).filter((r) => r.rent === 0);
 
+// 실거래 신고는 계약 후 30일 이내이고 적재에도 시차가 있어 최근 두 달은 늘
+// 과소집계된다. 이 구간을 확정치처럼 그리면 실제로는 없는 "거래 절벽"이
+// 만들어지므로, 확정월(=이번 달의 2개월 전)까지만 집계에 쓰고 그 뒤는 잠정으로
+// 표시만 한다.
+const PROVISIONAL_MONTHS = 2;
+const latestConfirmedYm = () => monthsBack(PROVISIONAL_MONTHS + 1)[0];
+// 확정월로 끝나는 최근 n개월 (지도·랭킹 집계용 — 창이 매달 흔들리지 않는다).
+const confirmedMonthsBack = (n) => monthsBack(n + PROVISIONAL_MONTHS).slice(0, n);
+
+// 그 달 파일을 실제로 받았는지 (필터로 0건인 것과 파일 자체가 없는 것을 구분).
+const hasMonth = (ym) => Array.isArray(store[TABS[state.tab].src].trade[ym]);
+
 function monthlySeries() {
-  return monthsBack(state.months).map((ym) => {
+  const confirmed = latestConfirmedYm();
+  const rows = monthsBack(state.months).map((ym) => {
     const trades = liveTrades(ym);
     const js = jeonse(ym);
     const tradeMed = median(trades.map((r) => perPy(r.amt, r.area)));
@@ -474,9 +497,17 @@ function monthlySeries() {
     return {
       ym, tradeCnt: trades.length, jeonseCnt: js.length,
       tradeMed, jsMed,
+      // 중위 거래금액. 평당가와 방향이 갈리면 시장이 아니라 거래 구성(면적·단지
+      // 비중) 변화라는 신호라 renderStats가 경고를 붙인다.
+      tradeAmtMed: median(trades.map((r) => r.amt)),
       ratio: trades.length >= 5 && js.length >= 5 && tradeMed ? jsMed / tradeMed * 100 : null,
+      provisional: ym > confirmed,
+      hasData: hasMonth(ym),
     };
   });
+  // 아직 파일이 없는 최근 달은 0건으로 그리지 않고 아예 뺀다 (가짜 절벽 방지).
+  while (rows.length && !rows.at(-1).hasData) rows.pop();
+  return rows;
 }
 
 // ── SVG 차트 ────────────────────────────────────────────────
@@ -505,16 +536,37 @@ function chartBase(rows, yMax, yFmt) {
   });
   return { x, y, g };
 }
-function linePath(rows, x, y, val) {
+// lo..hi 구간만 그린다 (확정 구간은 실선, 잠정 구간은 점선으로 나눠 그리려고).
+// x는 전체 행 기준 인덱스를 받으므로 구간을 잘라도 위치가 어긋나지 않는다.
+function linePath(rows, x, y, val, lo = 0, hi = rows.length - 1) {
   let d = "", pen = false;
-  rows.forEach((r, i) => {
-    const v = val(r);
-    if (v == null) { pen = false; return; }
+  for (let i = lo; i <= hi; i += 1) {
+    const v = val(rows[i]);
+    if (v == null) { pen = false; continue; }
     d += `${pen ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`;
     pen = true;
-  });
+  }
   return d;
 }
+
+// 잠정 구간의 시작 인덱스. 점선은 마지막 확정 지점에서 이어 그려야 선이 끊기지
+// 않으므로 한 칸 앞에서 시작한다. 잠정 구간이 없으면 null.
+function provSplit(rows) {
+  const at = rows.findIndex((r) => r.provisional);
+  return at === -1 ? null : { solidTo: Math.max(at - 1, 0), dashFrom: Math.max(at - 1, 0) };
+}
+
+// 확정/잠정 두 선을 겹쳐 그린다 (실선 + 점선).
+function splitLines(rows, x, y, val, cls) {
+  const split = provSplit(rows);
+  if (!split) return `<path class="line ${cls}" d="${linePath(rows, x, y, val)}"/>`;
+  return `<path class="line ${cls}" d="${linePath(rows, x, y, val, 0, split.solidTo)}"/>` +
+    `<path class="line prov ${cls}" d="${linePath(rows, x, y, val, split.dashFrom, rows.length - 1)}"/>`;
+}
+
+// 신고 지연 안내는 세 차트가 같이 쓴다.
+const provLegend = (rows) => rows.some((r) => r.provisional)
+  ? `<span><i class="leg leg-prov"></i>신고 지연 (잠정)</span>` : "";
 function attachHover(wrap, svg, rows, x, tipHtml, marks) {
   const tip = el("div", { class: "tooltip" });
   wrap.appendChild(tip);
@@ -542,14 +594,14 @@ function renderPriceChart(rows) {
   const max = Math.max(...rows.map((r) => Math.max(r.tradeMed ?? 0, r.jsMed ?? 0)), 0);
   const { x, y, g } = chartBase(rows, max, (v) => fmtMan(v));
   wrap.innerHTML =
-    `<div class="legend"><span><i class="leg leg-trade"></i>매매</span><span><i class="leg leg-rent"></i>전세</span></div>` +
+    `<div class="legend"><span><i class="leg leg-trade"></i>매매</span><span><i class="leg leg-rent"></i>전세</span>${provLegend(rows)}</div>` +
     `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="월별 중앙 평당가 추이">${g}` +
-    `<path class="line s-trade" d="${linePath(rows, x, y, (r) => r.tradeMed)}"/>` +
-    `<path class="line s-rent" d="${linePath(rows, x, y, (r) => r.jsMed)}"/>` +
+    splitLines(rows, x, y, (r) => r.tradeMed, "s-trade") +
+    splitLines(rows, x, y, (r) => r.jsMed, "s-rent") +
     `<g class="crosshair-g"></g></svg>`;
   attachHover(wrap, wrap.querySelector("svg"), rows, x,
     (r) => (r.tradeMed == null && r.jsMed == null) ? "" :
-      `<b>20${ymLabel(r.ym)}</b><br>` +
+      `<b>20${ymLabel(r.ym)}</b>${r.provisional ? ' <span class="sub">잠정</span>' : ""}<br>` +
       (r.tradeMed != null ? `매매 ${fmtMan(r.tradeMed)}만/평 (${r.tradeCnt}건)<br>` : "") +
       (r.jsMed != null ? `전세 ${fmtMan(r.jsMed)}만/평 (${r.jeonseCnt}건)` : ""),
     (r, i) => (r.tradeMed != null ? `<circle class="f-trade hover-dot" cx="${x(i)}" cy="${y(r.tradeMed)}" r="4"/>` : "") +
@@ -564,14 +616,16 @@ function renderVolumeChart(rows) {
   let bars = "";
   rows.forEach((r, i) => {
     const cx = x(i);
-    bars += `<rect class="f-trade" x="${cx - bw - 1}" width="${bw}" y="${y(r.tradeCnt)}" height="${y(0) - y(r.tradeCnt)}" rx="1.5"/>`;
-    bars += `<rect class="f-rent" x="${cx + 1}" width="${bw}" y="${y(r.jeonseCnt)}" height="${y(0) - y(r.jeonseCnt)}" rx="1.5"/>`;
+    const p = r.provisional ? " prov" : "";
+    bars += `<rect class="f-trade${p}" x="${cx - bw - 1}" width="${bw}" y="${y(r.tradeCnt)}" height="${y(0) - y(r.tradeCnt)}" rx="1.5"/>`;
+    bars += `<rect class="f-rent${p}" x="${cx + 1}" width="${bw}" y="${y(r.jeonseCnt)}" height="${y(0) - y(r.jeonseCnt)}" rx="1.5"/>`;
   });
   wrap.innerHTML =
-    `<div class="legend"><span><i class="leg leg-trade"></i>매매</span><span><i class="leg leg-rent"></i>전세</span></div>` +
+    `<div class="legend"><span><i class="leg leg-trade"></i>매매</span><span><i class="leg leg-rent"></i>전세</span>${provLegend(rows)}</div>` +
     `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="월별 거래량">${g}${bars}<g class="crosshair-g"></g></svg>`;
   attachHover(wrap, wrap.querySelector("svg"), rows, x,
-    (r) => `<b>20${ymLabel(r.ym)}</b><br>매매 ${r.tradeCnt}건<br>전세 ${r.jeonseCnt}건`,
+    (r) => `<b>20${ymLabel(r.ym)}</b>${r.provisional ? ' <span class="sub">잠정 — 신고 지연으로 계속 늘어남</span>' : ""}` +
+      `<br>매매 ${r.tradeCnt}건<br>전세 ${r.jeonseCnt}건`,
     () => "");
 }
 function renderRatioChart(rows) {
@@ -580,33 +634,72 @@ function renderRatioChart(rows) {
   const max = Math.max(...vals, 0);
   const { x, y, g } = chartBase(rows, Math.min(Math.max(max, 10), 100), (v) => `${Math.round(v)}%`);
   wrap.innerHTML =
+    (provLegend(rows) ? `<div class="legend">${provLegend(rows)}</div>` : "") +
     `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="전세가율 추이">${g}` +
-    `<path class="line s-trade" d="${linePath(rows, x, y, (r) => r.ratio)}"/>` +
+    splitLines(rows, x, y, (r) => r.ratio, "s-trade") +
     `<g class="crosshair-g"></g></svg>`;
   attachHover(wrap, wrap.querySelector("svg"), rows, x,
-    (r) => r.ratio == null ? "" : `<b>20${ymLabel(r.ym)}</b><br>전세가율 ${r.ratio.toFixed(1)}%`,
+    (r) => r.ratio == null ? "" :
+      `<b>20${ymLabel(r.ym)}</b>${r.provisional ? ' <span class="sub">잠정</span>' : ""}<br>전세가율 ${r.ratio.toFixed(1)}%`,
     (r, i) => r.ratio == null ? "" : `<circle class="f-trade hover-dot" cx="${x(i)}" cy="${y(r.ratio)}" r="4"/>`);
 }
 
 // ── 요약 수치 ────────────────────────────────────────────────
 function renderStats(rows) {
-  const recent = rows.slice(-3), prev = rows.slice(-6, -3);
+  // 요약 수치는 확정월만 쓴다. 잠정월을 섞으면 거래량이 늘 줄어든 것처럼 보인다.
+  const conf = rows.filter((r) => !r.provisional);
+  const recent = conf.slice(-3), prev = conf.slice(-6, -3);
   const flat = (part, key) => part.flatMap((r) => r[key] != null ? [r[key]] : []);
-  const medOf = (part) => median(flat(part, "tradeMed"));
-  const cur = medOf(recent), before = medOf(prev);
+  const medOf = (part, key) => median(flat(part, key));
+  const cur = medOf(recent, "tradeMed"), before = medOf(prev, "tradeMed");
   const diff = cur != null && before != null ? (cur / before - 1) * 100 : null;
+  const amt = medOf(recent, "tradeAmtMed"), amtBefore = medOf(prev, "tradeAmtMed");
+  const amtDiff = amt != null && amtBefore != null ? (amt / amtBefore - 1) * 100 : null;
   const vol = recent.reduce((s, r) => s + r.tradeCnt, 0);
   const volPrev = prev.reduce((s, r) => s + r.tradeCnt, 0);
-  const ratio = median(flat(recent, "ratio"));
+  const ratio = medOf(recent, "ratio");
   const py84 = cur != null ? cur * (84.9 / 3.3058) : null; // 전용 84.9㎡ 환산가
   const arrow = (d) => d == null ? "" :
     `<div class="d ${d >= 0 ? "up" : "down"}">${d >= 0 ? "▲" : "▼"} ${Math.abs(d).toFixed(1)}% (직전 3개월 대비)</div>`;
   $("stats").innerHTML = [
     ["매매 중앙 평당가 (3개월)", cur != null ? `${fmtMan(cur)}만` : "—", arrow(diff)],
+    ["매매 중앙 거래가 (3개월)", amt != null ? fmtEok(amt) : "—", arrow(amtDiff)],
     ["전용 84㎡ 환산 중앙가", py84 != null ? fmtEok(py84) : "—", ""],
     ["매매 거래량 (3개월)", `${vol}건`, arrow(volPrev ? (vol / volPrev - 1) * 100 : null)],
     ["전세가율 (3개월)", ratio != null ? `${ratio.toFixed(1)}%` : "—", ""],
   ].map(([k, v, d]) => `<div class="card stat"><div class="k">${k}</div><div class="v">${v}</div>${d}</div>`).join("");
+
+  // 평당가와 거래가가 반대로 움직이면 시장 방향이 아니라 거래 구성(면적·단지
+  // 비중) 변화일 수 있다. 한쪽이 보합이고 다른 쪽만 크게 움직인 경우("평당가는
+  // 제자리인데 거래가만 올랐다" = 큰 평형이 더 팔렸다)도 같은 신호라, 둘 다가
+  // 아니라 **큰 쪽**이 2%를 넘으면 알린다.
+  const mix = $("mixNote");
+  const diverged = diff != null && amtDiff != null &&
+    Math.sign(diff) !== Math.sign(amtDiff) &&
+    Math.max(Math.abs(diff), Math.abs(amtDiff)) >= 2;
+  mix.classList.toggle("hidden", !diverged);
+  if (diverged) {
+    mix.innerHTML = `⚠️ 중앙 평당가(${diff >= 0 ? "+" : ""}${diff.toFixed(1)}%)와 ` +
+      `중앙 거래가(${amtDiff >= 0 ? "+" : ""}${amtDiff.toFixed(1)}%)가 서로 반대로 움직였습니다 — ` +
+      `시장 방향이 아니라 거래 구성(면적·단지 비중) 변화일 수 있습니다. 전용면적 필터를 좁혀서 다시 보세요.`;
+  }
+}
+
+// 어느 달까지가 확정이고 데이터가 언제 것인지 화면에 남긴다. 수동 갱신이라
+// 이 표시가 없으면 몇 주 지난 데이터를 최신으로 오해하기 쉽다.
+function renderDataNote(rows) {
+  const note = $("dataNote");
+  const conf = rows.filter((r) => !r.provisional);
+  if (!conf.length) { note.textContent = ""; return; }
+  const prov = rows.filter((r) => r.provisional);
+  const collected = staticIndex && staticIndex.generatedAt
+    ? ` · 데이터 수집 ${staticIndex.generatedAt.slice(0, 10)}` : "";
+  note.textContent =
+    `20${ymLabel(conf.at(-1).ym)} 확정 기준` +
+    (prov.length
+      ? ` · 20${ymLabel(prov[0].ym)}~20${ymLabel(prov.at(-1).ym)}은 신고 지연으로 잠정(집계 제외)`
+      : "") +
+    collected;
 }
 
 // ── 단지 집계 (지도·랭킹 공용) ───────────────────────────────
@@ -660,7 +753,8 @@ function complexStats() {
   const src = TABS[state.tab].src;
   const ref = state.ref && geoData ? geoData.refs?.[state.ref] : null;
   const byApt = new Map();
-  for (const ym of monthsBack(6)) {
+  // 잠정월을 섞으면 그 달에 거래가 몰린 단지가 실제보다 한산해 보인다.
+  for (const ym of confirmedMonthsBack(6)) {
     for (const r of liveTrades(ym)) {
       const key = `${r.apt}|${r.dong}`;
       const entry = byApt.get(key) ?? { apt: r.apt, dong: r.dong, pys: [], deals: [], point: null, jibun: null };
@@ -918,7 +1012,7 @@ function renderAptCard() {
     `<div class="apt-grid">` +
     `<div><div class="k">중앙 평당가</div><div class="v">${fmtMan(e.med)}만</div></div>` +
     `<div><div class="k">전용 84㎡ 환산</div><div class="v">${fmtEok(py84)}</div></div>` +
-    `<div><div class="k">최근 6개월 거래</div><div class="v">${e.cnt}건</div></div>` +
+    `<div><div class="k">최근 6개월 거래 <span class="sub">확정월</span></div><div class="v">${e.cnt}건</div></div>` +
     `<div><div class="k">최근 실거래</div><div class="v">${e.last.date.slice(2)} · ${Math.round(e.last.area)}㎡ ${fmtEok(e.last.amt)}</div></div>` +
     specCells +
     `</div>` +
@@ -1056,6 +1150,7 @@ function refreshDongOptions() {
 function render() {
   refreshDongOptions();
   const rows = monthlySeries();
+  renderDataNote(rows);
   renderStats(rows);
   renderPriceChart(rows);
   renderVolumeChart(rows);
