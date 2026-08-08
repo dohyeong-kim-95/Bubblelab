@@ -23,10 +23,10 @@
 2·3단계(페이퍼 트레이딩 → 소액 실주문)로 갈 때는 이 화이트리스트를 늘리는 게 아니라
 별도 모듈로 분리하고 한도·킬스위치·감사 로그를 먼저 갖춘다.
 
-## 설정 (기본은 닫혀 있음)
+## 설정
 
-`ENABLE_INVEST` var가 `"false"`라 지금은 접속해도 503이다. 켜려면 secret 셋을 넣고
-var를 `"true"`로 바꾼다. 셋 중 하나라도 없으면 켜도 런타임에서 닫힌다(fail-closed).
+`ENABLE_INVEST` var가 켜져 있어도 아래 secret 셋이 **모두** 있어야 열린다. 하나라도
+없으면 런타임에서 503으로 닫힌다(fail-closed). 내리려면 var를 `"false"`로 바꾼다.
 
 ```bash
 npx wrangler@4 secret put INVEST_PASSWORD        # 화면 게이트 비밀번호

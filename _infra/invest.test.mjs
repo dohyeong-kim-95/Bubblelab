@@ -323,11 +323,27 @@ test("INVEST_ACCOUNT_SEQ가 있으면 계좌 목록을 조회하지 않는다", 
 
 // ── 배선 ───────────────────────────────────────────────────────────────
 
-test("invest는 기본 닫힘이고 DO·마이그레이션이 등록돼 있다", () => {
+test("invest DO·마이그레이션이 등록돼 있다", () => {
   const wrangler = readFileSync(join(ROOT, "wrangler.jsonc"), "utf8");
-  assert.match(wrangler, /"ENABLE_INVEST":\s*"false"/, "invest는 fail-closed여야 한다");
+  assert.match(wrangler, /"ENABLE_INVEST":\s*"(true|false)"/, "기능 플래그가 있어야 한다");
   assert.match(wrangler, /"name":\s*"INVEST",\s*"class_name":\s*"InvestDO"/);
   assert.match(wrangler, /"new_sqlite_classes":\s*\["InvestDO"\]/);
+});
+
+// 플래그를 켜도 secret 이 없으면 열리면 안 된다. 플래그 값이 아니라 이 런타임
+// 가드가 invest 의 fail-closed 를 보장한다.
+test("secret이 하나라도 없으면 플래그와 무관하게 닫힌다", () => {
+  const worker = readFileSync(join(ROOT, "_infra/worker.js"), "utf8");
+  assert.match(
+    worker,
+    /!investPassword\(env\) \|\| !env\.INVEST_CLIENT_ID \|\| !env\.INVEST_CLIENT_SECRET/,
+    "invest API 가 secret 세 개를 모두 요구하지 않는다",
+  );
+  assert.match(
+    worker,
+    /!featureEnabled\(env, "ENABLE_INVEST"\) \|\| !investPassword\(env\)/,
+    "invest 화면 게이트가 플래그·비밀번호를 모두 요구하지 않는다",
+  );
 });
 
 test("워커가 InvestDO를 내보내고 invest를 noindex로 돌린다", () => {
