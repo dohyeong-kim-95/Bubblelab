@@ -12,7 +12,8 @@ import {
   parseDecimal,
   READ_ONLY_PATHS,
   snapshotOf,
-  tokenRequestBody,
+  tokenRequest,
+  TOKEN_AUTH_METHODS,
   tossFetch,
   upstreamError,
 } from "./invest.js";
@@ -139,11 +140,25 @@ test("보관 개수는 3년치 영업일을 덮는다", () => {
 
 // ── 전송 계층 ──────────────────────────────────────────────────────────
 
-test("토큰 요청은 client_credentials 폼이다", () => {
-  const body = tokenRequestBody("id", "secret");
+test("basic 방식은 자격증명을 Authorization 헤더에만 싣는다", () => {
+  const { headers, body } = tokenRequest("id", "secret", "basic");
+  assert.equal(headers.Authorization, `Basic ${Buffer.from("id:secret").toString("base64")}`);
+  assert.equal(body.get("grant_type"), "client_credentials");
+  // RFC 6749 §2.3 — 한 요청에 두 인증 방식을 같이 쓰면 안 된다
+  assert.equal(body.get("client_id"), null);
+  assert.equal(body.get("client_secret"), null);
+});
+
+test("post 방식은 자격증명을 폼 본문에만 싣는다", () => {
+  const { headers, body } = tokenRequest("id", "secret", "post");
+  assert.equal(headers.Authorization, undefined);
   assert.equal(body.get("grant_type"), "client_credentials");
   assert.equal(body.get("client_id"), "id");
   assert.equal(body.get("client_secret"), "secret");
+});
+
+test("basic 을 먼저 시도한다 (토스가 WWW-Authenticate: Basic 을 요구한다)", () => {
+  assert.deepEqual(TOKEN_AUTH_METHODS, ["basic", "post"]);
 });
 
 test("계좌 조회에 Bearer와 X-Tossinvest-Account를 함께 싣는다", async () => {
@@ -364,19 +379,32 @@ test("API 키 앞뒤 공백·줄바꿈을 털어내고 보낸다", async () => {
     { env: { INVEST_CLIENT_ID: "  id-1 ", INVEST_CLIENT_SECRET: "secret-1\n", INVEST_ACCOUNT_SEQ: "7" } },
   );
   assert.equal(status, 200);
-  const form = new URLSearchParams(calls[0].body);
-  assert.equal(form.get("client_id"), "id-1");
-  assert.equal(form.get("client_secret"), "secret-1");
+  assert.equal(calls[0].token, `Basic ${Buffer.from("id-1:secret-1").toString("base64")}`);
 });
 
-test("토큰 발급이 막히면 어느 단계인지 화면 문구에 남는다", async () => {
-  const { body, status } = await runDO([
-    () => new Response('{"message":"invalid_client"}', { status: 401 }),
-    () => new Response('{"message":"invalid_client"}', { status: 401 }),
-  ]);
+// 토스가 basic 을 기대하는지 문서로 확인할 수 없어 자동 판별에 맡겼다.
+test("basic 이 거부되면 post 방식으로 한 번 더 시도하고 통한 쪽을 기억한다", async () => {
+  const storage = storageStub();
+  const { status, calls } = await runDO([
+    () => new Response('{"error":{"code":"unidentified-client"}}', { status: 401 }),
+    () => tokenResponse("tok-post"), okHoldings, okCash, okCash,
+  ], { storage, env: { INVEST_ACCOUNT_SEQ: "7" } });
+
+  assert.equal(status, 200);
+  assert.match(calls[0].token, /^Basic /, "basic 을 먼저 시도하지 않았다");
+  assert.equal(calls[1].token, undefined, "폴백이 basic 헤더를 그대로 달고 갔다");
+  assert.equal(new URLSearchParams(calls[1].body).get("client_id"), "id");
+  assert.equal(storage.map.get("tokenAuthMethod"), "post", "통한 방식을 기억하지 않았다");
+});
+
+test("두 방식 모두 거부되면 어느 단계인지 화면 문구에 남는다", async () => {
+  const denied = () => new Response('{"error":{"code":"unidentified-client"}}', { status: 401 });
+  // 첫 시도(basic·post) → 401 재시도로 한 번 더(basic·post)
+  const { body, status } = await runDO([denied, denied, denied, denied]);
   assert.equal(status, 502);
   assert.match(body.error, /토큰 발급/);
   assert.match(body.error, /HTTP 401/);
+  assert.match(body.error, /API 키가 틀렸거나 허용 IP/);
 });
 
 test("IP 차단이면 키가 아니라 IP 문제라고 알린다", async () => {

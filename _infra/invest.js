@@ -206,13 +206,38 @@ export async function tossFetch(path, { token, query, accountSeq, base = TOSS_BA
   return body.result;
 }
 
-/** 토큰 발급 요청 본문. client_credentials 그랜트, form-urlencoded. */
-export function tokenRequestBody(clientId, clientSecret) {
-  const form = new URLSearchParams();
-  form.set("grant_type", "client_credentials");
-  form.set("client_id", clientId);
-  form.set("client_secret", clientSecret);
-  return form;
+// OAuth2 는 클라이언트 인증 방식이 두 가지다(RFC 6749 §2.3).
+//  · basic — Authorization: Basic base64(id:secret) 헤더. 스펙의 기본값이다.
+//  · post  — client_id·client_secret 을 폼 본문에 담는다. 선택 사항이다.
+// 토스가 401 에 `WWW-Authenticate: Basic realm="openapi"` 를 실어 보내는 것으로
+// 보아 basic 을 기대한다. 다만 문서를 직접 확인할 수 없어 단정하지 않고,
+// basic 을 먼저 시도한 뒤 실패하면 post 로 한 번 더 시도한다(성공한 쪽을 기억).
+// **두 방식을 한 요청에 같이 쓰면 안 된다** — 스펙이 금지하고, 거부하는 서버가 있다.
+export const TOKEN_AUTH_METHODS = ["basic", "post"];
+
+/** UTF-8 안전 base64 (btoa 는 latin1 만 받는다). */
+function base64(text) {
+  const bytes = new TextEncoder().encode(text);
+  return btoa(String.fromCharCode(...bytes));
+}
+
+export function basicAuthHeader(clientId, clientSecret) {
+  return `Basic ${base64(`${clientId}:${clientSecret}`)}`;
+}
+
+/** 토큰 발급 요청의 헤더·본문. 방식(basic|post)에 따라 자격증명 위치가 달라진다. */
+export function tokenRequest(clientId, clientSecret, method = "basic") {
+  const body = new URLSearchParams();
+  body.set("grant_type", "client_credentials");
+  const headers = { "Content-Type": "application/x-www-form-urlencoded" };
+
+  if (method === "basic") {
+    headers.Authorization = basicAuthHeader(clientId, clientSecret);
+  } else {
+    body.set("client_id", clientId);
+    body.set("client_secret", clientSecret);
+  }
+  return { headers, body };
 }
 
 /**
@@ -247,16 +272,40 @@ export class InvestDO {
     const clientSecret = String(this.env.INVEST_CLIENT_SECRET ?? "").trim();
     if (!clientId || !clientSecret) throw new Error("토스 API 키가 설정되지 않았습니다");
 
+    // 지난번에 통한 방식을 먼저 쓰고, 실패하면 나머지 방식으로 한 번 더 시도한다.
+    const known = await this.state.storage.get("tokenAuthMethod");
+    const order = known
+      ? [known, ...TOKEN_AUTH_METHODS.filter((method) => method !== known)]
+      : TOKEN_AUTH_METHODS;
+
+    let last = null;
+    for (const method of order) {
+      try {
+        const value = await this.#exchange(clientId, clientSecret, method);
+        if (method !== known) await this.state.storage.put("tokenAuthMethod", method);
+        return value;
+      } catch (failure) {
+        // 자격증명을 못 알아본 경우에만 다른 방식을 시도할 값어치가 있다.
+        if (failure.status !== 401 && failure.status !== 400) throw failure;
+        last = failure;
+      }
+    }
+    throw last;
+  }
+
+  async #exchange(clientId, clientSecret, method) {
+    const { headers, body } = tokenRequest(clientId, clientSecret, method);
     const response = await fetch(`${TOSS_BASE}/oauth2/token`, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: tokenRequestBody(clientId, clientSecret).toString(),
+      headers,
+      body: body.toString(),
     });
     if (!response.ok) throw upstreamError(response.status, await errorBody(response), "토큰 발급");
-    const body = await response.json();
-    const value = body?.access_token;
+
+    const payload = await response.json();
+    const value = payload?.access_token;
     if (!value) throw new Error("토스가 액세스 토큰을 주지 않았습니다");
-    const expiresAt = Date.now() + Math.max(60, Number(body.expires_in) || 86400) * 1000;
+    const expiresAt = Date.now() + Math.max(60, Number(payload.expires_in) || 86400) * 1000;
     await this.state.storage.put("token", { value, expiresAt });
     return value;
   }

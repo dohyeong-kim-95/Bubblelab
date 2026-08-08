@@ -72,8 +72,21 @@ npx wrangler@4 secret put INVEST_ACCOUNT_SEQ     # (선택) 계좌 조회 한 �
 - **허용 IP가 아니다** — Cloudflare Workers는 아웃바운드 IP가 고정이 아니라서
   콘솔에 등록할 IP 자체가 없다. 아래 2번 구조로 가야 한다.
 
-가르는 방법: **같은 키로 내 PC에서 토큰 발급을 시도해 본다.** 성공하면 키는 멀쩡하고
-IP 문제, PC에서도 실패하면 키·앱 승인 문제다.
+**세 번째 후보이자 현재 가장 유력한 원인**: 클라이언트 인증 방식이 어긋났을 수 있다.
+401 응답에 `WWW-Authenticate: Basic realm="openapi"` 가 실려 오는데, 이는 토스가
+자격증명을 **`Authorization: Basic` 헤더**로 받기를 기대한다는 뜻이다(OAuth2 의 기본
+방식). 초기 구현은 폼 본문에 담아 보냈으므로 키가 맞고 IP 가 허용돼도 401 이 난다.
+지금은 basic 을 먼저 시도하고 실패하면 폼 본문 방식으로 한 번 더 시도한다.
+
+가르는 방법: **같은 키로 내 PC에서 토큰 발급을 시도해 본다**(아래 명령, `-u` 가 basic
+방식이다). 성공하면 키는 멀쩡하고 IP 문제, PC에서도 실패하면 키·앱 승인 문제다.
+
+```bash
+read -rsp "client_id: " ID; echo
+read -rsp "client_secret: " SECRET; echo
+curl -i --compressed -X POST https://openapi.tossinvest.com/oauth2/token \
+  -u "$ID:$SECRET" -d "grant_type=client_credentials"
+```
 
 > 초기에 이 응답을 IP 차단으로 **오진했다**. 본문에 `ip` 라는 단어가 있다는 것만으로
 > 단정했기 때문이다. 지금은 명시적으로 거부당한 문구(`not allowed ip` 등)일 때만
