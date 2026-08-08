@@ -18,7 +18,6 @@
 | `assets/` | <https://assets.bubblelab.dev> | Beta | 스티커·배경화면·음악 카탈로그 |
 | `idle/` | <https://idle.bubblelab.dev> | Experiment | 7일 단위 방치형 게임 |
 | `util/` | <https://util.bubblelab.dev> | Beta | 달력·운세·사진·PDF·이미지 변환·플래너 도구 |
-| `invest/` | <https://invest.bubblelab.dev> | Experiment | 실제 투자용이 아닌 UI 데모 |
 | `games/` | <https://games.bubblelab.dev> | Archived | 실시간 게임 서버 비활성·목록 비노출 |
 | `admin/` | <https://admin.bubblelab.dev> | Restricted | 인증 후 통계·기록·공지 관리 |
 | `work/` | <https://work.bubblelab.dev> | Restricted | 외주 작업 클라이언트 미리보기 (비밀번호 게이트) |
