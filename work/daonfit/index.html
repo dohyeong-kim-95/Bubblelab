@@ -43,6 +43,9 @@
     height:100vh;height:100dvh;
     overflow-y:auto;overflow-x:hidden;
     scroll-behavior:smooth;
+    /* 스냅 지점은 '이름' 섹션 시작 하나뿐 — 인트로에서 본문으로 넘어올 때
+       한 번 걸리고, 나머지 구간은 자유 스크롤(proximity라 근처에서만 작동) */
+    scroll-snap-type:y proximity;
   }
   /* 옛 명조 강조 자리 — 로고와 결을 맞춰 한 가족으로 통일, 무게로만 힘을 준다 */
   .serif{font-weight:800;letter-spacing:-.035em}
@@ -116,7 +119,7 @@
   .reveal.in{opacity:1;transform:none}
 
   /* ---------- 이름의 뜻 ---------- */
-  .meaning{border-top:1px solid var(--line)}
+  .meaning{border-top:1px solid var(--line);scroll-snap-align:start}
   .glyphs{margin-top:44px;display:flex;flex-direction:column;gap:18px}
   .glyph{display:flex;gap:20px;align-items:flex-start;padding:26px 24px;border-radius:20px;background:var(--paper-2)}
   .glyph .side{flex:0 0 96px;display:flex;flex-direction:column;gap:16px}
