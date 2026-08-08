@@ -329,11 +329,13 @@ export class InvestDO {
     const fresh = latest && Date.now() - latest.ts < REFRESH_MIN_MS;
 
     let error = null;
+    let detail = null;
     if (!fresh || force) {
       try {
         await this.#refresh();
       } catch (failure) {
         error = failure.message;
+        detail = failure.body ?? null;
         logUpstreamFailure(failure);
         if (!latest) throw failure;
       }
@@ -348,6 +350,7 @@ export class InvestDO {
       series: buildSeries(await this.#history()),
       stale: !!error,
       error,
+      detail,
     };
   }
 
@@ -358,7 +361,12 @@ export class InvestDO {
       try {
         return Response.json(await this.#state({ force: url.searchParams.get("force") === "1" }));
       } catch (error) {
-        return Response.json({ error: error.message }, { status: error.status === 429 ? 429 : 502 });
+        // detail = 토스가 돌려준 원문. 이 화면은 비밀번호 뒤 본인 전용이고 우리
+        // 키·토큰은 응답에 없으므로, 로그를 볼 수 없는 상황에서 원인을 가르는
+        // 유일한 단서를 화면에 내준다 (사람이 읽는 문구와는 분리해서 담는다).
+        return Response.json({ error: error.message, detail: error.body ?? null }, {
+          status: error.status === 429 ? 429 : 502,
+        });
       }
     }
 

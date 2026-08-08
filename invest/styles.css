@@ -58,6 +58,21 @@ button:disabled { opacity: .5; cursor: default; }
   font-size: .74rem;
 }
 
+.notice-text { margin: 0; }
+
+.notice details { margin-top: .5rem; font-size: .68rem; color: var(--muted); }
+.notice summary { cursor: pointer; }
+
+.notice pre {
+  margin: .4rem 0 0;
+  padding: .5rem;
+  border-radius: .4rem;
+  background: var(--bg);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 main { display: grid; gap: 1rem; }
 
 /* 그리드 항목의 기본 min-width:auto 는 내용(넓은 표·그래프)보다 작아지지 않아

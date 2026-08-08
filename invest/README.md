@@ -62,11 +62,18 @@ npx wrangler@4 secret put INVEST_ACCOUNT_SEQ     # (선택) 계좌 조회 한 �
 아웃바운드 IP가 고정이 아니라서 **토스 콘솔에 등록할 IP가 존재하지 않는다** — 키를
 다시 발급해도 풀리지 않는 종류의 문제다.
 
-확인은 서버 로그로 한다(화면 문구는 본문에 `ip`가 있는지 보는 휴리스틱이다):
+화면 문구는 본문에 `ip`가 단어로 있는지 보는 **휴리스틱**이라 오탐이 가능하다
+(토스가 모든 오류에 호출자 IP를 실어 보낸다면 키가 틀린 401 도 IP 문제로 읽힌다).
+그래서 판정 근거인 토스 응답 원문을 두 곳에서 볼 수 있게 해 뒀다.
 
 ```bash
-npx wrangler@4 tail --format pretty   # invest upstream failure 항목의 body 확인
+npx wrangler@4 tail --format pretty   # invest upstream failure 항목의 body
 ```
+
+**임시 조치**: 로그를 볼 수 없는 상황을 위해 오류 배너에 "토스 응답 원문"을 접어서
+함께 보여준다(`/_invest/state` 응답의 `detail`). 비밀번호 뒤 본인 전용 화면이고 우리
+키·토큰은 토스 응답에 없으므로 노출 위험은 없지만, **원인이 확정되면 되돌린다** —
+`invest.js` 의 `detail` 필드와 `app.js` 의 `showNotice` 두 번째 인자를 빼면 된다.
 
 풀 수 있는 길:
 

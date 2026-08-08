@@ -213,13 +213,14 @@ test("오류에 어느 단계에서 깨졌는지와 상태코드가 담긴다", 
   assert.match(upstreamError(403, "", "잔고 조회").message, /^잔고 조회:/);
 });
 
-test("상류 본문을 화면 문구에 그대로 싣지 않는다", async () => {
-  const fetchImpl = () => Promise.resolve(new Response("secret-ish internal trace", { status: 403 }));
+test("상류 본문을 안내 문구에 섞지 않는다", async () => {
+  const fetchImpl = () => Promise.resolve(new Response("upstream internal trace", { status: 403 }));
   await assert.rejects(
     () => tossFetch("/api/v1/holdings", { token: "t", accountSeq: 1, fetchImpl }),
     (error) => {
-      assert.ok(!error.message.includes("internal trace"), "상류 본문이 그대로 노출됐다");
+      assert.ok(!error.message.includes("internal trace"), "안내 문구에 상류 본문이 섞였다");
       assert.match(error.message, /잔고 조회/);
+      assert.equal(error.body, "upstream internal trace", "진단용 원문이 보존되지 않았다");
       return true;
     },
   );
@@ -372,14 +373,24 @@ test("IP 차단이면 키가 아니라 IP 문제라고 알린다", async () => {
   ]);
   assert.equal(status, 502);
   assert.match(body.error, /IP/);
-  // 판정 근거인 원문은 화면이 아니라 서버 로그로만 간다
-  assert.ok(!JSON.stringify(body).includes("IP not allowed"), "상류 원문이 화면으로 샜다");
+  // 원인 판정은 휴리스틱이라 근거(토스 원문)를 detail 로 함께 준다.
+  // 사람이 읽는 문구(error)와는 분리해 담는다.
+  assert.equal(body.detail, '{"message":"IP not allowed"}');
+  assert.ok(!body.error.includes("IP not allowed"), "안내 문구에 원문이 섞였다");
 });
 
-test("상류 원문은 오류 객체에 붙어 서버 로그로만 나간다", () => {
+test("상류 원문은 error가 아니라 detail로 간다", () => {
   const error = upstreamError(401, '{"message":"unauthorized ip"}', "토큰 발급");
   assert.equal(error.body, '{"message":"unauthorized ip"}');
   assert.ok(!error.message.includes("unauthorized ip"), "화면 문구에 원문이 섞였다");
+});
+
+test("정상 응답에는 detail이 붙지 않는다", async () => {
+  const { body } = await runDO([
+    () => tokenResponse("tok-1"), okAccounts, okHoldings, okCash, okCash,
+  ]);
+  assert.equal(body.detail, null);
+  assert.equal(body.error, null);
 });
 
 test("INVEST_ACCOUNT_SEQ가 있으면 계좌 목록을 조회하지 않는다", async () => {

@@ -199,13 +199,24 @@ function renderHoldings(positions) {
   replace(el.holdings, table);
 }
 
-function showNotice(message) {
-  el.notice.textContent = message ?? "";
+// detail = 토스가 돌려준 원문. 화면 문구는 원인을 요약할 뿐이라 판정이 어긋날 수
+// 있어, 접어둔 채로 원문을 함께 보여준다 (본인만 보는 화면이다).
+function showNotice(message, detail) {
+  el.notice.replaceChildren();
   el.notice.hidden = !message;
+  if (!message) return;
+
+  el.notice.append(element("p", "notice-text", message));
+  if (!detail) return;
+
+  const box = document.createElement("details");
+  box.append(element("summary", null, "토스 응답 원문"));
+  box.append(element("pre", null, detail));
+  el.notice.append(box);
 }
 
-function showFailure(message) {
-  showNotice(message);
+function showFailure(message, detail) {
+  showNotice(message, detail);
   for (const host of [el.summary, el.chart, el.holdings]) {
     replace(host, element("p", "empty", "잔고를 불러오지 못했습니다."));
   }
@@ -223,12 +234,12 @@ async function load({ force = false } = {}) {
     }
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
-      showFailure(body.error || "잔고를 불러오지 못했습니다.");
+      showFailure(body.error || "잔고를 불러오지 못했습니다.", body.detail);
       return;
     }
 
     // stale = 상류 조회가 실패해 직전 캐시를 보여주는 중.
-    showNotice(body.stale ? `${body.error} (마지막으로 받은 값을 보여줍니다)` : "");
+    showNotice(body.stale ? `${body.error} (마지막으로 받은 값을 보여줍니다)` : "", body.detail);
     el.updated.textContent = body.updatedAt
       ? `${new Date(body.updatedAt).toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" })} 기준`
       : "";
