@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>다온핏 브랜드 랜딩 — bubblelab works</title>
+<style>
+  :root { color-scheme: dark;
+    --ground: light-dark(#fafbfc, #10151c);
+    --ink: light-dark(#1c2733, #e2e9f0);
+    --soft: light-dark(#5d6b7a, #93a3b5);
+    --surface: light-dark(#fff, #171f2b);
+    --line: light-dark(#e3e8ee, #263140);
+    --bubble: light-dark(#4f7fdd, #7ea3ec);
+    --bubble-ink: light-dark(#fff, #0d131c);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100dvh; background: var(--ground); color: var(--ink);
+         font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+         line-height: 1.8; word-break: keep-all; }
+  main { max-width: 38rem; margin: 0 auto; padding: 3.2rem 1.4rem 4rem; }
+  .crumb { font-size: .78rem; margin: 0 0 2rem; }
+  .crumb a { color: var(--soft); text-decoration: none; }
+  .crumb a:hover { color: var(--ink); }
+  .tag { display: inline-block; font-size: .7rem; letter-spacing: .12em; color: var(--bubble);
+         border: 1px solid var(--bubble); border-radius: 2rem; padding: .1rem .7rem;
+         margin-bottom: .7rem; margin-right: .4rem; }
+  h1 { margin: 0 0 .4rem; font-size: 1.5rem; letter-spacing: -.02em; }
+  .lead { margin: 0 0 1.8rem; color: var(--soft); font-size: .9rem; }
+  .media { display: flex; gap: .9rem; flex-wrap: wrap; margin: 0 0 1.8rem; }
+  .shot, .demo { border-radius: .9rem; border: 1px solid var(--line); overflow: hidden;
+                 background: var(--surface); flex: 1 1 12rem; max-width: 15rem; }
+  .shot img, .demo video { display: block; width: 100%; }
+  .cap { font-size: .68rem; color: var(--soft); padding: .35rem .6rem .45rem;
+         border-top: 1px solid var(--line); }
+  .live-note { display: inline-block; padding: .8rem 1.5rem; border-radius: .6rem;
+               margin-bottom: 2.4rem; border: 1px dashed var(--line); color: var(--soft);
+               font-size: .82rem; }
+  /* 정식 오픈 후: .live-note 대신 mindfulness.html의 .live 버튼 양식으로
+     클라이언트 도메인 링크를 넣는다 */
+  h2 { margin: 0 0 .8rem; font-size: .8rem; letter-spacing: .18em; color: var(--bubble);
+       text-transform: uppercase; }
+  section { margin-bottom: 2.2rem; }
+  p, li { font-size: .9rem; }
+  ul { margin: 0; padding: 0 0 0 1.1rem; }
+  li { margin: .3rem 0; }
+  li small { color: var(--soft); }
+</style>
+</head>
+<body>
+<main>
+  <p class="crumb"><a href="../">← bubblelab works</a> / Selected work</p>
+  <span class="tag">브랜드 웹사이트</span><span class="tag">외주 프로젝트</span>
+  <h1>다온핏 — 브랜드 스토리 랜딩</h1>
+  <p class="lead">3D프린팅 생활 맞춤 소품 브랜드 다온핏의 랜딩 페이지. "흩어져 있던
+  좋은 것들이 모여, 당신에게 꼭 맞는다"는 브랜드 이야기를 스크롤로 직접
+  체험하게 만들었습니다. 기획–디자인–개발–인계 전 과정을 담당했습니다.</p>
+
+  <div class="media">
+    <span class="shot"><img src="img/daonfit.png" alt="다온핏 랜딩 — 로고와 워드마크 화면">
+      <span class="cap">로고 조립이 끝난 순간</span></span>
+    <span class="demo"><video src="img/daonfit-demo.mp4" poster="img/daonfit.png" muted playsinline loop controls preload="metadata"></video>
+      <span class="cap">스크롤 스크럽 데모 — 멈춤·되감기</span></span>
+  </div>
+  <span class="live-note">정식 오픈 준비 중 — 오픈 후 라이브 링크가 연결됩니다</span>
+
+  <section>
+    <h2>Overview</h2>
+    <p>구매·문의 도선을 스마트스토어와 인스타그램 DM 두 개로 좁힌 단일 페이지
+    구성입니다. 첫 화면에서 흩어져 있던 로고 조각들이 스크롤을 내리는 만큼
+    날아와 착륙하고, 완성되는 순간 브랜드 이름의 뜻(다온·핏)으로 이야기가
+    이어집니다. 서버 없이 정적 파일만으로 구동되어 호스팅 비용이 들지 않습니다.</p>
+  </section>
+
+  <section>
+    <h2>Notes</h2>
+    <ul>
+      <li><b>스크럽 인트로</b> — <small>스크롤 위치가 곧 재생 바. 조각별 순차
+        착륙·착지 스쿼시·임팩트 연출을 되감기까지 지원하는 타임라인으로 설계</small></li>
+      <li><b>브랜드 타이포그래피</b> — <small>로고의 획 맺음에 맞춘 가변 폰트
+        셀프호스팅(unicode-range 분할로 사용 글자만 로드)</small></li>
+      <li><b>모바일 디테일</b> — <small>주소창 고정 내부 스크롤러, 100dvh 대응,
+        prefers-reduced-motion 정지 렌더</small></li>
+      <li><b>전환 설계</b> — <small>고정 CTA 바, 아웃링크 UTM 계측, OG 미리보기
+        이미지 제작</small></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Process</h2>
+    <p>기획서 합의 → 시안 → 클라이언트 피드백 반복(인트로 연출 5개 비교안
+    포함) → 최종 컨펌 → 정적 패키지 인계. 모든 피드백 라운드는 전용 미리보기
+    주소에서 실기기로 확인하며 진행했습니다.</p>
+  </section>
+</main>
+</body>
+</html>
