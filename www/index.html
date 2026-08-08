@@ -26,6 +26,23 @@
   .card b { font-size: .95rem; }
   .card small { display: block; margin-top: .2rem; font-size: .72rem; opacity: .62; }
 
+  /* 검색 — 규칙 기반(서버 없음). 스크립트가 없으면 통째로 감춘다. */
+  .search { display: none; position: relative; margin: 1.4rem 0 0; }
+  .search input { width: 100%; box-sizing: border-box; font: inherit; font-size: .9rem;
+                  padding: .7rem 2.4rem .7rem .9rem; border-radius: .8rem; line-height: 1.4;
+                  color: inherit; background: light-dark(#fff, #161d27);
+                  border: 1px solid light-dark(#dbe2ea, #2a3646); }
+  .search input:focus-visible { outline: 2px solid light-dark(#4f7fdd, #6f9bf0); outline-offset: 1px; }
+  .search input::-webkit-search-cancel-button { display: none; }
+  .search .x { position: absolute; right: .35rem; top: 50%; transform: translateY(-50%);
+               border: 0; background: none; color: inherit; opacity: .45; cursor: pointer;
+               font: inherit; font-size: 1rem; padding: .3rem .55rem; line-height: 1; }
+  .hits { margin: .7rem 0 0; font-size: .74rem; opacity: .6; }
+  .card .why { display: inline-block; margin-top: .25rem; padding: .05rem .35rem;
+               border-radius: .3rem; font-size: .62rem; opacity: .75;
+               border: 1px solid light-dark(hsl(var(--h) 45% 72%), hsl(var(--h) 22% 38%)); }
+  [hidden] { display: none !important; }
+
   /* 모바일: 한 화면에 다 들어오게 2열 콤팩트 카드 */
   @media (max-width: 600px) {
     body { margin: 1.4rem auto .8rem; line-height: 1.6; }
@@ -41,7 +58,16 @@
 <body>
   <h1>🫧 bubblelab</h1>
   <p class="sub">생각나는 대로 만들어 올리는 실험실.</p>
-  <ul class="cards">
+
+  <div class="search" id="search">
+    <input id="q" type="search" autocomplete="off" autocapitalize="off" spellcheck="false"
+           aria-label="카드 검색" placeholder="무엇을 찾으세요? 사다리 · lotto · ㅅㄷㄹ">
+    <button type="button" class="x" id="qx" aria-label="검색어 지우기" hidden>✕</button>
+  </div>
+  <p class="hits" id="hits" hidden aria-live="polite"></p>
+  <ul class="cards" id="results" hidden></ul>
+
+  <ul class="cards" id="categories">
     <li><a class="card" style="--h:265" href="https://slop.bubblelab.dev"><span class="emoji">🧪</span><b>slop</b><small>방금 만든 것들. 대부분 여기서 시작해요.</small></a></li>
     <li><a class="card" style="--h:210" href="https://util.bubblelab.dev"><span class="emoji">🧰</span><b>util</b><small>달력·운세·사진·변환·플래너 같은 작은 도구들.</small></a></li>
     <li><a class="card" style="--h:30" href="https://games.bubblelab.dev"><span class="emoji">🎲</span><b>games</b><small>살아남은 게임들. 아발론도 여기 있어요.</small></a></li>
@@ -50,6 +76,90 @@
     <li><a class="card" style="--h:50" href="https://idle.bubblelab.dev"><span class="emoji">⏳</span><b>idle</b><small>기다리는 시간까지 게임이 되는 7일짜리 실험.</small></a></li>
     <li><a class="card" style="--h:330" href="https://assets.bubblelab.dev"><span class="emoji">🎁</span><b>assets</b><small>스티커·배경화면·음악·포토 프레임 카탈로그.</small></a></li>
   </ul>
-  <p class="sub">쓸 만해지면 카테고리로 승격됩니다.</p>
+  <p class="sub" id="tagline">쓸 만해지면 카테고리로 승격됩니다.</p>
+
+<!-- 카드 색인은 빌드가 채운다 (_infra/build.mjs). 여기 비어 있어도 카테고리 검색은 된다. -->
+<script type="application/json" id="bl-cards">[]</script>
+<script type="module">
+import { searchCards } from "/_shared/search-rules.js";
+
+// 카테고리 카드는 화면에 이미 있는 것을 그대로 읽는다 — 색·설명·주소를 두 벌 두지 않고,
+// 스크립트가 죽어도 랜딩은 원래대로 보인다.
+const categories = [...document.querySelectorAll("#categories .card")].map((a) => {
+  const site = a.querySelector("b").textContent.trim();
+  return {
+    site, name: site, label: site, title: site,
+    desc: a.querySelector("small")?.textContent.trim() ?? "",
+    emoji: a.querySelector(".emoji").textContent.trim(),
+    hue: a.style.getPropertyValue("--h").trim() || "210",
+    url: a.href,
+  };
+});
+const hueOf = Object.fromEntries(categories.map((c) => [c.site, c.hue]));
+
+const cards = JSON.parse(document.getElementById("bl-cards").textContent || "[]")
+  .map((c) => ({
+    ...c, desc: "",
+    hue: hueOf[c.site] ?? "210",
+    url: `https://${c.site}.bubblelab.dev/${c.name}/`,
+  }));
+const entries = [...categories, ...cards];
+
+const box = document.getElementById("search");
+const input = document.getElementById("q");
+const clear = document.getElementById("qx");
+const hits = document.getElementById("hits");
+const results = document.getElementById("results");
+const grid = document.getElementById("categories");
+const tagline = document.getElementById("tagline");
+box.style.display = "block";   // 스크립트가 살아 있을 때만 검색창을 띄운다
+
+// 규칙 이름은 "왜 이게 나왔지?" 싶은 규칙에만 붙인다. 부분·앞부분 일치는 보면 안다.
+const SHOW_WHY = new Set(["초성 일치", "자모 일치", "오타 교정", "비슷한 말"]);
+
+function cardHtml({ entry, label }) {
+  const why = SHOW_WHY.has(label) ? `<span class="why">${label}</span>` : "";
+  const where = entry.name === entry.site ? "카테고리" : `${entry.site}/${entry.name}`;
+  return `<li><a class="card" style="--h:${escAttr(entry.hue)}" href="${escAttr(entry.url)}">` +
+    `<span class="emoji">${esc(entry.emoji || "🫧")}</span><b>${esc(entry.label)}</b>` +
+    `<small>${esc(where)} ${why}</small></a></li>`;
+}
+const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+const escAttr = (s) => esc(s).replace(/"/g, "&quot;");
+
+let found = [];
+function render() {
+  const q = input.value;
+  clear.hidden = !q;
+  if (!q.trim()) {
+    found = [];
+    results.hidden = hits.hidden = true;
+    grid.hidden = tagline.hidden = false;
+    return;
+  }
+  found = searchCards(entries, q);
+  grid.hidden = tagline.hidden = true;
+  results.hidden = found.length === 0;
+  hits.hidden = false;
+  results.innerHTML = found.map(cardHtml).join("");
+  hits.textContent = found.length
+    ? `${found.length}개 — 눌러서 이동, Enter는 맨 위로`
+    : "찾는 게 없어요. 초성(ㅅㄷㄹ)·영문 폴더 이름·한영 오타도 됩니다.";
+}
+
+input.addEventListener("input", render);
+input.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && found.length) location.href = found[0].entry.url;
+  if (e.key === "Escape") { input.value = ""; render(); }
+});
+clear.addEventListener("click", () => { input.value = ""; render(); input.focus(); });
+// 데스크톱에서 '/' 로 바로 검색창에 들어간다
+addEventListener("keydown", (e) => {
+  if (e.key !== "/" || e.target === input || e.metaKey || e.ctrlKey) return;
+  e.preventDefault();
+  input.focus();
+});
+render();
+</script>
 </body>
 </html>

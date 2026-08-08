@@ -196,3 +196,41 @@ test("배경화면 항목마다 상세페이지가 생성된다", () => {
     assert.ok(existsSync(join(DIST, ...asset)), `${asset.join("/")}가 배포되지 않았다`);
   }
 });
+
+// ── 랜딩 검색 색인 (www/index.html 안에 심는다) ───────────────────────────
+
+function landingIndex() {
+  const html = readFileSync(join(DIST, "www", "index.html"), "utf8");
+  const m = html.match(/<script type="application\/json" id="bl-cards">([\s\S]*?)<\/script>/);
+  assert.ok(m, "랜딩에 검색 색인 자리가 없다");
+  const raw = m[1];
+  assert.equal(raw.includes("<"), false, "심은 JSON에 이스케이프되지 않은 <");
+  return JSON.parse(raw);
+}
+
+test("랜딩 검색 색인이 공개 카드로 채워진다", () => {
+  const cards = landingIndex();
+  assert.ok(cards.length >= 40, `색인이 ${cards.length}개뿐이다 — 빌드 산출물을 의심하라`);
+  assert.ok(cards.every((c) => c.site && c.name && c.label), "빈 항목이 있다");
+  // 폴더 이름(영문)만으로는 한국어 검색이 안 된다 — 제목이 함께 들어가야 한다.
+  const ladder = cards.find((c) => c.site === "util" && c.name === "ladder");
+  assert.ok(ladder, "util/ladder가 색인에 없다");
+  assert.equal(ladder.label, "사다리타기");
+  assert.ok(ladder.title.includes("사다리타기"));
+  // 카드 홈이 아닌 공개 서브도메인(mindfulness·idle)도 검색된다
+  assert.ok(cards.some((c) => c.site === "mindfulness"), "mindfulness가 색인에 없다");
+  assert.ok(existsSync(join(DIST, "_shared", "search-rules.js")), "규칙 엔진이 배포되지 않았다");
+});
+
+test("비공개 서브도메인·감춘 카드는 검색 색인에도 없다", () => {
+  const cards = landingIndex();
+  // 카테고리 홈 카드에서 감춘 것과 같은 기준이어야 한다 — 검색이 뒷문이 되면 안 된다.
+  for (const site of ["admin", "work", "podcast", "estate", "duri", "test", "invest", "www"]) {
+    const leaked = cards.filter((c) => c.site === site).map((c) => c.name);
+    assert.deepEqual(leaked, [], `${site}가 검색 색인에 샜다`);
+  }
+  for (const name of ["avalon", "liargame", "yacht", "passport-pic"]) {
+    const leaked = cards.filter((c) => c.name === name).map((c) => `${c.site}/${c.name}`);
+    assert.deepEqual(leaked, [], `${name}이 검색 색인에 샜다`);
+  }
+});

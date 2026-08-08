@@ -231,6 +231,29 @@ function toyEmoji(site, name) {
   }
 }
 
+// 카드 페이지의 <title>을 랜딩 검색용으로 뽑아온다. 제목은 대개 한국어라
+// 폴더 이름(영문)만으로는 안 되는 검색을 이 한 줄이 거의 다 해결한다.
+//   title = 검색에 쓰는 제목 전체, label = 카드에 보여줄 앞부분
+// 생성된 페이지도 있어 dist를 읽는다.
+function toyTitle(site, name) {
+  try {
+    const html = readFileSync(join(DIST, site, name, "index.html"), "utf8");
+    const m = html.match(/<title>([\s\S]*?)<\/title>/i);
+    if (!m) return { title: "", label: "" };
+    const title = m[1]
+      .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"').replace(/&#0*39;/g, "'")
+      .replace(/\s+/g, " ").trim();
+    // 이모지는 카드 아이콘으로 따로 붙고, " — 부제 · 사이트명" 꼬리는 이름이 아니다.
+    const label = title
+      .replace(/^\p{Extended_Pictographic}[️‍\p{Extended_Pictographic}]*\s*/u, "")
+      .split(/\s+[—–·|]\s+/)[0].trim();
+    return { title, label };
+  } catch {
+    return { title: "", label: "" };
+  }
+}
+
 // 이름을 해시해서 카드마다 고정된 파스텔 색상을 준다.
 function hueOf(name) {
   let h = 0;
@@ -675,6 +698,44 @@ for (const site of sites) {
     listingPage(site.name, entries),
   );
   console.log(`generated index for ${site.name} (${entries.length} entries)`);
+}
+
+// 랜딩(bubblelab.dev)의 검색 색인. 공개 서브도메인의 카드 페이지를 제목·폴더 이름으로
+// 모아 www/index.html 안에 그대로 심는다(요청 한 번 덜고, 오프라인에서도 뜬다).
+// **감춘 것은 검색에서도 감춘다** — confidential 서브도메인과 UNLISTED_ENTRIES는
+// 카테고리 홈 카드와 똑같이 제외한다. 검색 규칙 자체는 `_shared/search-rules.js`.
+{
+  const cards = [];
+  for (const site of sites) {
+    if (site.name === "www" || CONFIDENTIAL_SUBDOMAINS.has(site.name)) continue;
+    const unlisted = UNLISTED_ENTRIES.get(site.name);
+    for (const entry of readdirSync(join(DIST, site.name), { withFileTypes: true })) {
+      if (!entry.isDirectory() || unlisted?.has(entry.name)) continue;
+      if (!existsSync(join(DIST, site.name, entry.name, "index.html"))) continue;
+      const { title, label } = toyTitle(site.name, entry.name);
+      cards.push({
+        site: site.name,
+        name: entry.name,
+        label: label || entry.name,
+        title,
+        emoji: toyEmoji(site.name, entry.name).char,
+      });
+    }
+  }
+  cards.sort((a, b) => a.site.localeCompare(b.site) || a.name.localeCompare(b.name, "ko"));
+
+  const file = join(DIST, "www", "index.html");
+  const html = readFileSync(file, "utf8");
+  const json = JSON.stringify(cards).replace(/</g, "\\u003c");
+  const next = html.replace(
+    /(<script type="application\/json" id="bl-cards">)[\s\S]*?(<\/script>)/,
+    (_, open, close) => open + json + close,
+  );
+  if (next === html) {
+    throw new Error('www/index.html에 검색 색인 자리(<script id="bl-cards">)가 없다');
+  }
+  writeFileSync(file, next);
+  console.log(`generated landing search index (${cards.length} cards)`);
 }
 
 // 공용 스크립트를 페이지에 한 번만 삽입한다. 개별 토이가 직접 챙길 필요가 없다.

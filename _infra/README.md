@@ -75,8 +75,15 @@ node _infra/build.mjs
 - `_assets/*/*/metadata.json`을 검증해 `dist/_assets/catalog.json` 생성
 - `index.html`이 없는 사이트 루트에 하위 폴더 카드 페이지 생성
 - 카드에 주간 1위·개인 최고·인기순·연속 방문·아이디어 버튼 연결
+- 랜딩 검색 색인을 `dist/www/index.html`의 `<script id="bl-cards">`에 심기
 - `dist/404.html` 생성
 - 모든 README는 배포 결과에서 제외
+
+랜딩 검색 색인은 각 카드 페이지의 `<title>`(대개 한국어)과 폴더 이름(영문)을 모은
+목록이다. **카테고리 홈 카드와 같은 기준으로 거른다** —
+`CONFIDENTIAL_SUBDOMAINS`·`UNLISTED_ENTRIES`에 걸린 것은 검색에도 나오지 않는다
+(검사: `_infra/home-button.test.mjs`). 자리 표시자가 없으면 빌드가 멈춘다. 규칙 엔진과
+설계는 `_shared/search-rules.js`·`www/README.md`.
 
 ## Durable Object
 

@@ -22,6 +22,10 @@
 ## 토이 작성 관례
 
 - 파일 안에 이모지 하나 (카드 아이콘으로 자동 추출됨)
+- `<title>`은 랜딩(bubblelab.dev) 검색어로 그대로 쓰인다 — **한국어로** 짓는다
+  (폴더 이름은 영문이라 이것 말고는 한국어로 찾을 방법이 없다). 따로 등록할 곳은
+  없고, 제목에 없는 말로도 찾게 하려면 `_shared/search-rules.js`의 `SYNONYMS`만
+  한 줄 늘린다.
 - `</body>` 직전에 `<script defer src="/_shared/share.js"></script>` (공유 버튼)
 - 기록 자랑 문구: `window.blShareText = () => "내 기록은 X! 도전해보세요";`
 - 주간 신기록 보드(월요일 09시 KST 초기화): `window.blWeekly = { game: "이름",
