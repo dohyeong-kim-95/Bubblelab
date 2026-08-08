@@ -27,7 +27,23 @@
   .card small { display: block; margin-top: .2rem; font-size: .72rem; opacity: .62; }
 
   /* 검색 — 규칙 기반(서버 없음). 스크립트가 없으면 통째로 감춘다. */
-  .search { display: none; position: relative; margin: 1.4rem 0 0; }
+  .search { display: none; position: relative; margin: 1.4rem 0 0;
+            isolation: isolate;    /* 아래 후광(z-index:-1)이 페이지 배경 뒤로 빠지지 않게 */
+            --glow: .34; }
+  /* 은은한 후광. 입력칸 뒤에 조금 더 큰 판을 깔고 흐려서 테두리만 빛나 보이게 한다
+     (입력칸 배경이 불투명한 흰색이라 가운데는 가려지고 가장자리만 남는다).
+     색이 아주 천천히 흐르고, 초점이 오면 진해진다. */
+  .search::before { content: ""; position: absolute; inset: -3px; z-index: -1;
+                    border-radius: 1.05rem; opacity: var(--glow);
+                    background: linear-gradient(115deg, #6f9bf0, #9d7ff0, #4fd0dd, #6f9bf0);
+                    background-size: 300% 300%; filter: blur(7px);
+                    animation: glow-drift 12s ease-in-out infinite;
+                    transition: opacity .25s ease, filter .25s ease; }
+  .search:focus-within::before { opacity: calc(var(--glow) + .3); filter: blur(9px); }
+  @keyframes glow-drift { 0%, 100% { background-position: 0% 50%; }
+                          50% { background-position: 100% 50%; } }
+  @media (prefers-color-scheme: dark) { .search { --glow: .5; } }
+  @media (prefers-reduced-motion: reduce) { .search::before { animation: none; } }
   /* 검색창만 다크모드에서도 흰 종이로 둔다 — 어두운 배경에서 확실히 눈에 띈다.
      그래서 글자·플레이스홀더·지우기 버튼 색을 상속받지 않고 직접 정한다
      (light-dark로 두면 흰 바탕에 흰 글씨가 된다). */
