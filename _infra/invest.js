@@ -120,19 +120,25 @@ export function buildSeries(history) {
   return series;
 }
 
-// 401/403 본문에 ip 가 단어로 등장하면 키 문제가 아니라 허용 IP 문제다.
-// Workers 는 아웃바운드 IP 가 고정이 아니라서 이 경우 설정으로 못 푼다 —
-// 화면에 원인을 정확히 적어야 엉뚱한 키를 다시 만드는 삽질을 막는다.
-const IP_HINT = /\bip\b/i;
+// IP 가 거부됐다고 **단정할 수 있는** 문구만 여기서 잡는다. 본문에 ip 라는
+// 단어가 있다는 것만으로 단정하면 안 된다 — 토스의 unidentified-client 응답은
+// "액세스 토큰 또는 IP를 확인해 주세요"처럼 두 원인을 함께 말하므로, 키가 틀린
+// 경우까지 IP 문제로 오진하게 된다(실제로 그렇게 오진한 적이 있다).
+const IP_DENIED = /(not\s+allowed\s+ip|ip\s+not\s+allowed|허용되지\s*않은\s*ip)/i;
+// 토스가 클라이언트를 식별하지 못했을 때 쓰는 코드. 키·IP 어느 쪽이든 날 수 있다.
+const UNIDENTIFIED = /unidentified-client/i;
 
 /**
  * 토스 오류 응답을 화면에 보여줄 짧은 문구로 바꾼다.
- * body 는 분류에만 쓰고 **그대로 노출하지 않는다** — 키·토큰은 어차피 응답에
- * 없지만, 상류 원문을 화면에 흘리지 않는 편이 안전하다.
+ * body 는 분류에만 쓰고 안내 문구에 원문을 섞지 않는다 (원문은 detail 로 따로 간다).
+ *
+ * **원인을 모를 때 아는 척하지 않는다** — 좁힐 수 없으면 후보를 둘 다 적는다.
  */
 export function describeUpstreamError(status, body = "") {
-  if ((status === 401 || status === 403) && IP_HINT.test(String(body))) {
-    return "토스가 이 서버의 IP를 거부했습니다 — 허용 IP 설정 문제입니다";
+  const text = String(body);
+  if (IP_DENIED.test(text)) return "토스가 이 서버의 IP를 거부했습니다 — 허용 IP 설정 문제입니다";
+  if (UNIDENTIFIED.test(text)) {
+    return "토스가 클라이언트를 식별하지 못했습니다 — API 키가 틀렸거나 허용 IP가 아닙니다";
   }
   if (status === 401) return "토스 인증 실패 — API 키를 확인해주세요";
   if (status === 403) return "토스 권한 없음 — 앱 승인 상태와 조회 권한을 확인해주세요";

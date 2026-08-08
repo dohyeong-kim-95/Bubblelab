@@ -195,14 +195,26 @@ test("상태코드별 안내 문구", () => {
   assert.match(describeUpstreamError(503), /서버/);
 });
 
-// 키를 아무리 다시 발급해도 안 풀리는 원인이라 반드시 구분해서 알려야 한다.
-test("401·403 본문이 IP를 가리키면 키 문제가 아니라 IP 문제로 읽는다", () => {
+// 키를 아무리 다시 발급해도 안 풀리는 원인이라 구분해서 알려야 한다. 다만
+// 단정은 명시적으로 거부당했을 때만 한다.
+test("IP 거부가 분명할 때만 IP 문제로 단정한다", () => {
   for (const status of [401, 403]) {
-    assert.match(describeUpstreamError(status, '{"message":"IP not allowed"}'), /IP/);
-    assert.match(describeUpstreamError(status, "client ip 1.2.3.4 rejected"), /IP/);
+    assert.match(describeUpstreamError(status, '{"message":"IP not allowed"}'), /IP를 거부/);
+    assert.match(describeUpstreamError(status, "not allowed ip: 1.2.3.4"), /IP를 거부/);
   }
   // "description" 같은 단어에 들어 있는 ip 는 오탐이면 안 된다
   assert.match(describeUpstreamError(401, '{"error":"invalid_client description"}'), /인증/);
+});
+
+// 실제로 겪은 오진: 토스는 키가 틀려도 IP가 아니어도 같은 코드를 주면서
+// "액세스 토큰 또는 IP를 확인해 주세요"라고 답한다. 여기서 한쪽으로 단정하면
+// 멀쩡한 키를 다시 만들거나, 반대로 IP 문제를 놓친다.
+test("unidentified-client는 두 원인을 모두 알린다", () => {
+  const body = '{"error":{"code":"unidentified-client","message":"클라이언트를 식별할 수 없습니다. 액세스 토큰 또는 IP를 확인해 주세요."}}';
+  const message = describeUpstreamError(401, body);
+  assert.match(message, /API 키/);
+  assert.match(message, /IP/);
+  assert.ok(!/IP를 거부/.test(message), "좁힐 수 없는데 IP 문제로 단정했다");
 });
 
 test("오류에 어느 단계에서 깨졌는지와 상태코드가 담긴다", () => {
