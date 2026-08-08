@@ -48,6 +48,9 @@ npx wrangler@4 secret put INVEST_ACCOUNT_SEQ     # (선택) 계좌 조회 한 �
   **refresh token 없음**.
 - **client당 유효 토큰이 1개**다. 그래서 발급을 `InvestDO` 단일 인스턴스
   (`idFromName("main")`)에 몰아넣었다 — 여러 곳에서 발급하면 서로 무효화한다.
+  같은 키로 **터미널에서 curl 한 번 받아보는 것만으로도** 서버가 캐시한 토큰이
+  죽는다. 그래서 401을 만나면 만료 전이라도 캐시를 버리고 새로 받아 한 번
+  재시도한다 — 이게 없으면 24시간 내내 401이다.
 - 계좌·자산 API는 `Authorization: Bearer` 외에 **`X-Tossinvest-Account` 헤더 필수**.
 - Rate limit이 빡빡하다. 상류 재조회는 30초(`REFRESH_MIN_MS`) 간격으로만 하고
   나머지는 DO 캐시로 답한다. 상류가 429로 막히면 **직전 캐시를 `stale` 표시와 함께**

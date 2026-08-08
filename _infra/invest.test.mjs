@@ -193,6 +193,134 @@ test("상태코드별 안내 문구", () => {
   assert.match(describeUpstreamError(503), /서버/);
 });
 
+// ── 토큰 수명 (InvestDO) ───────────────────────────────────────────────
+
+/** DO storage 최소 스텁 — get/put/list({prefix})/delete(keys)만 쓴다. */
+function storageStub() {
+  const map = new Map();
+  return {
+    map,
+    async get(key) { return map.get(key); },
+    async put(key, value) { map.set(key, value); },
+    async delete(keys) { for (const key of [].concat(keys)) map.delete(key); },
+    async list({ prefix }) {
+      const hit = [...map.entries()].filter(([key]) => key.startsWith(prefix));
+      return new Map(hit);
+    },
+  };
+}
+
+/** 응답 스크립트를 순서대로 돌려주는 fetch. 호출 기록을 남긴다. */
+function fetchStub(script) {
+  const calls = [];
+  const impl = async (input, init) => {
+    const url = String(input);
+    calls.push({ url, body: init?.body, token: init?.headers?.Authorization });
+    const step = script.shift();
+    if (!step) throw new Error(`예상치 못한 호출: ${url}`);
+    return step(url, init);
+  };
+  return { impl, calls };
+}
+
+const tokenResponse = (value) => Response.json({ access_token: value, expires_in: 86400 });
+const okAccounts = () => Response.json({ result: [{ accountNo: "123-45", accountSeq: 7, accountType: "BROKERAGE" }] });
+const okHoldings = () => Response.json({ result: { items: [holding()] } });
+const okCash = () => Response.json({ result: { cashBuyingPower: "1000", currency: "KRW" } });
+
+async function runDO(script, { storage = storageStub(), env = {} } = {}) {
+  const { InvestDO } = await import("./invest.js");
+  const stub = fetchStub(script);
+  const original = globalThis.fetch;
+  globalThis.fetch = stub.impl;
+  try {
+    const instance = new InvestDO({ storage }, {
+      INVEST_CLIENT_ID: "id", INVEST_CLIENT_SECRET: "secret", ...env,
+    });
+    const response = await instance.fetch(new Request("https://invest/state", { method: "GET" }));
+    return { body: await response.json(), status: response.status, calls: stub.calls, storage };
+  } finally {
+    globalThis.fetch = original;
+  }
+}
+
+test("토큰을 받아 잔고를 조회하고 스냅샷을 남긴다", async () => {
+  const { body, status, storage } = await runDO([
+    () => tokenResponse("tok-1"), okAccounts, okHoldings, okCash, okCash,
+  ]);
+  assert.equal(status, 200);
+  assert.equal(body.byCurrency.KRW.value, 800000);
+  assert.equal(body.cash.KRW, 1000);
+  assert.equal(body.positions.length, 1);
+  assert.equal(body.stale, false);
+  // 하루치 스냅샷이 남아 그래프의 첫 점이 된다
+  assert.equal([...storage.map.keys()].filter((k) => k.startsWith("snap:")).length, 1);
+  assert.equal(storage.map.get("accountSeq"), 7);
+});
+
+// 토스는 client당 유효 토큰이 1개라, 다른 곳에서 발급하면 캐시된 토큰이 즉시
+// 죽는다. 만료 전이라도 401이면 새로 받아 재시도해야 24시간 먹통을 피한다.
+test("401이면 캐시된 토큰을 버리고 새로 받아 한 번 재시도한다", async () => {
+  const storage = storageStub();
+  await storage.put("token", { value: "죽은토큰", expiresAt: Date.now() + 60 * 60 * 1000 });
+  await storage.put("accountSeq", 7);
+
+  const { body, status, calls } = await runDO([
+    () => new Response("unauthorized", { status: 401 }),  // 죽은 토큰으로 holdings
+    () => tokenResponse("tok-2"),                          // 강제 재발급
+    okHoldings, okCash, okCash,
+  ], { storage });
+
+  assert.equal(status, 200);
+  assert.equal(body.byCurrency.KRW.value, 800000);
+  assert.equal(calls[0].token, "Bearer 죽은토큰");
+  assert.match(calls[1].url, /\/oauth2\/token$/);
+  assert.equal(calls[2].token, "Bearer tok-2", "재시도가 새 토큰을 쓰지 않았다");
+  assert.equal(storage.map.get("token").value, "tok-2", "새 토큰이 저장되지 않았다");
+});
+
+test("재시도까지 실패하면 캐시가 없을 때 오류를 그대로 알린다", async () => {
+  // 재시도 때는 accountSeq가 이미 캐시돼 있어 계좌 목록을 다시 부르지 않는다.
+  const { body, status } = await runDO([
+    () => tokenResponse("tok-1"), okAccounts,
+    () => new Response("nope", { status: 401 }),
+    () => tokenResponse("tok-2"),
+    () => new Response("nope", { status: 401 }),
+  ]);
+  assert.equal(status, 502);
+  assert.match(body.error, /인증/);
+});
+
+test("상류가 막혀도 캐시가 있으면 stale 표시로 직전 값을 준다", async () => {
+  const storage = storageStub();
+  await storage.put("accountSeq", 7);
+  // 1회차: 정상 조회로 캐시를 만든다
+  await runDO([() => tokenResponse("tok-1"), okHoldings, okCash, okCash], { storage });
+  // 2회차: 30초 캐시를 무시하도록 시각을 되돌린 뒤 상류를 429로 막는다
+  const latest = await storage.get("latest");
+  await storage.put("latest", { ...latest, ts: latest.ts - 10 * 60 * 1000 });
+
+  const { body, status } = await runDO([
+    () => new Response("slow down", { status: 429 }),
+    () => new Response("slow down", { status: 429 }),
+  ], { storage });
+
+  assert.equal(status, 200, "캐시가 있는데 화면을 비웠다");
+  assert.equal(body.stale, true);
+  assert.match(body.error, /한도/);
+  assert.equal(body.byCurrency.KRW.value, 800000);
+});
+
+test("INVEST_ACCOUNT_SEQ가 있으면 계좌 목록을 조회하지 않는다", async () => {
+  const { calls, status } = await runDO(
+    [() => tokenResponse("tok-1"), okHoldings, okCash, okCash],
+    { env: { INVEST_ACCOUNT_SEQ: "42" } },
+  );
+  assert.equal(status, 200);
+  assert.ok(!calls.some((call) => call.url.includes("/api/v1/accounts")), "계좌 목록을 불필요하게 조회했다");
+  assert.ok(calls.some((call) => call.url.includes("/api/v1/holdings")));
+});
+
 // ── 배선 ───────────────────────────────────────────────────────────────
 
 test("invest는 기본 닫힘이고 DO·마이그레이션이 등록돼 있다", () => {

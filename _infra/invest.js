@@ -180,8 +180,16 @@ export class InvestDO {
     this.env = env;
   }
 
-  async #token() {
-    const cached = await this.state.storage.get("token");
+  /**
+   * 액세스 토큰. force 면 캐시를 버리고 새로 받는다.
+   *
+   * 토스는 client 당 유효 토큰을 1개만 두므로, **다른 곳에서 같은 키로 토큰을
+   * 발급하면 여기 캐시된 토큰이 그 순간 무효가 된다**(터미널에서 curl 로 한 번
+   * 받아보는 것만으로도 그렇게 된다). 그래서 401 을 만나면 만료 전이라도
+   * 캐시를 버리고 다시 받아야 한다 — 안 그러면 24시간 내내 401 이다.
+   */
+  async #token({ force = false } = {}) {
+    const cached = force ? null : await this.state.storage.get("token");
     if (cached && cached.expiresAt - TOKEN_SKEW_MS > Date.now()) return cached.value;
 
     const { INVEST_CLIENT_ID, INVEST_CLIENT_SECRET } = this.env;
@@ -220,9 +228,20 @@ export class InvestDO {
     return seq;
   }
 
-  /** 상류에서 잔고를 새로 읽어 캐시·스냅샷을 갱신한다. */
+  /**
+   * 상류에서 잔고를 새로 읽어 캐시·스냅샷을 갱신한다.
+   * 토큰이 무효화된 경우(401)에 한해 새 토큰으로 딱 한 번 다시 시도한다.
+   */
   async #refresh() {
-    const token = await this.#token();
+    try {
+      return await this.#collect(await this.#token());
+    } catch (error) {
+      if (error.status !== 401) throw error;
+      return this.#collect(await this.#token({ force: true }));
+    }
+  }
+
+  async #collect(token) {
     const accountSeq = await this.#accountSeq(token);
 
     const overview = await tossFetch("/api/v1/holdings", { token, accountSeq });
