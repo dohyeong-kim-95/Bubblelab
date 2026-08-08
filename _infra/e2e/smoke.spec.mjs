@@ -5,7 +5,7 @@
 // 기능·로직은 _infra/*.test.mjs 가 담당한다 — 여기서 늘리지 않는다.
 import { test, expect } from "@playwright/test";
 
-// 게이트 뒤(work·admin·duri·podcast·estate)는 로그인이 필요해 스모크 대상이 아니다.
+// 게이트 뒤(work·admin·duri·podcast·estate·invest)는 로그인이 필요해 스모크 대상이 아니다.
 const SCREENS = [
   { name: "랜딩", path: "/" },
   { name: "slop 홈", path: "/slop/" },

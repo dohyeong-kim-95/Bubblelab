@@ -163,13 +163,13 @@ test("비공개 서브도메인은 풀다운 메뉴에도 나오지 않는다", 
   const menuOf = (site) => readFileSync(join(DIST, site, "index.html"), "utf8");
   for (const site of ["slop", "util", "games"]) {
     const home = menuOf(site);
-    for (const hidden of ["admin", "work", "estate", "duri", "podcast", "test"]) {
+    for (const hidden of ["invest", "admin", "work", "estate", "duri", "podcast", "test"]) {
       assert.ok(!home.includes(`https://${hidden}.bubblelab.dev`),
         `${site} 홈 풀다운에 비공개 ${hidden}이 나온다`);
     }
   }
   // 페이지 자체는 살아 있어야 한다 (주소를 아는 사람은 들어간다)
-  assert.ok(existsSync(join(DIST, "estate/index.html")));
+  assert.ok(existsSync(join(DIST, "invest/index.html")));
 });
 
 // ── 배경화면 상세페이지 (/assets/wallpaper/<id>/) ────────────────────────
@@ -225,7 +225,7 @@ test("랜딩 검색 색인이 공개 카드로 채워진다", () => {
 test("비공개 서브도메인·감춘 카드는 검색 색인에도 없다", () => {
   const cards = landingIndex();
   // 카테고리 홈 카드에서 감춘 것과 같은 기준이어야 한다 — 검색이 뒷문이 되면 안 된다.
-  for (const site of ["admin", "work", "podcast", "estate", "duri", "test", "www"]) {
+  for (const site of ["admin", "work", "podcast", "estate", "duri", "test", "invest", "www"]) {
     const leaked = cards.filter((c) => c.site === site).map((c) => c.name);
     assert.deepEqual(leaked, [], `${site}가 검색 색인에 샜다`);
   }

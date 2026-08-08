@@ -55,6 +55,7 @@ export { DuriDO } from "./duri.js";
 export { FortuneDO } from "./fortune.js";
 export { BriefDO } from "./brief.js";
 export { AssetFlagsDO } from "./asset-flags.js";
+export { InvestDO } from "./invest.js";
 
 const LOGIN_PAGE = (failed = false, base = "") => `<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -120,6 +121,31 @@ button { font: inherit; padding: .65rem; border: 0; border-radius: .6rem;
 <body><form method="post" action="${base}/login">
 <h1>💞 Duri</h1>
 <p>둘만의 비공개 공간입니다. 비밀번호를 입력해주세요. (한 번 입력하면 오래 유지됩니다)</p>
+<input name="password" type="password" autocomplete="current-password" aria-label="비밀번호" required autofocus>
+<p class="error">${failed ? "비밀번호가 맞지 않습니다." : ""}</p>
+<button type="submit">들어가기</button></form></body></html>`;
+
+// invest 게이트 로그인. 계좌 정보를 보여주는 화면이라 duri(1년)와 달리 세션이
+// 짧다 — 기기를 잃어버렸을 때 노출 창을 좁히는 쪽을 택했다.
+const INVEST_LOGIN_PAGE = (failed, base) => `<!doctype html><html lang="ko"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow"><title>Invest</title><style>
+:root { color-scheme: light dark; }
+body { font-family: ui-monospace, monospace; min-height: 100dvh; margin: 0; display: grid;
+       place-items: center; background: light-dark(#fafbfc, #0f1216); color: light-dark(#1c2733, #e2e9f0); }
+form { display: grid; gap: .7rem; width: min(19rem, 88vw); padding: 1.6rem;
+       background: light-dark(#fff, #171b21); border: 1px solid light-dark(#e6eaef, #262c35);
+       border-radius: 1rem; }
+h1 { margin: 0; font-size: 1.05rem; }
+p { margin: 0; font-size: .74rem; opacity: .65; line-height: 1.6; }
+input { font: inherit; color: inherit; padding: .65rem .8rem; border-radius: .6rem;
+        border: 1px solid light-dark(#e6eaef, #262c35); background: transparent; }
+button { font: inherit; padding: .65rem; border: 0; border-radius: .6rem;
+         background: light-dark(#1f6f4a, #58c08c); color: light-dark(#fff, #0b1a12); font-weight: bold; cursor: pointer; }
+.error { color: #d05a5a; font-size: .74rem; min-height: 1em; margin: 0; }</style></head>
+<body><form method="post" action="${base}/login">
+<h1>📈 Invest</h1>
+<p>조회 전용 잔고 화면입니다. 비밀번호를 입력해주세요.</p>
 <input name="password" type="password" autocomplete="current-password" aria-label="비밀번호" required autofocus>
 <p class="error">${failed ? "비밀번호가 맞지 않습니다." : ""}</p>
 <button type="submit">들어가기</button></form></body></html>`;
@@ -418,6 +444,104 @@ async function handleDuriGate(request, env, url, base = "") {
   }
   if (!isAuthed) return redirect(`${base}/login`);
   return null;
+}
+
+/* invest 전용 서브도메인(invest.bubblelab.dev) 게이트. 조회 전용 대시보드지만
+ * 계좌 잔고가 보이므로 duri 보다 세션을 짧게(7일) 잡는다. 폴백 비밀번호는 두지
+ * 않는다 — INVEST_PASSWORD 가 없으면 그냥 닫힌다(fail-closed). */
+const INVEST_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function investPassword(env) {
+  return env.INVEST_PASSWORD || null;
+}
+
+async function investSessionKey(env) {
+  return crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(`${investPassword(env)}\0bl-invest-session`),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
+  );
+}
+
+async function issueInvestSession(key) {
+  const payload = `${Date.now() + INVEST_SESSION_TTL_MS}.${crypto.randomUUID()}`;
+  const sig = hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload)));
+  return `${payload}.${sig}`;
+}
+
+async function handleInvestGate(request, env, url, base = "") {
+  const key = await investSessionKey(env);
+  const isAuthed = await validSession(key, cookies(request).bl_invest);
+  const cookieFlags = `Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(INVEST_SESSION_TTL_MS / 1000)}${url.protocol === "https:" ? "; Secure" : ""}`;
+  const htmlHeaders = { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" };
+
+  if (url.pathname === "/login" && request.method === "POST") {
+    const limited = await enforceRateLimit(request, env, {
+      scope: "invest-login", limit: 5, windowMs: 15 * 60 * 1000,
+    });
+    if (limited) return limited;
+    const form = await request.formData();
+    if (await matchesCredential(key, form.get("password"), investPassword(env))) {
+      const token = await issueInvestSession(key);
+      return redirect(`${base}/`, { "Set-Cookie": `bl_invest=${token}; ${cookieFlags}` });
+    }
+    return new Response(INVEST_LOGIN_PAGE(true, base), { status: 401, headers: htmlHeaders });
+  }
+  if (url.pathname === "/logout") {
+    return redirect(`${base}/login`, { "Set-Cookie": "bl_invest=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0" });
+  }
+  if (url.pathname === "/login") {
+    if (isAuthed) return redirect(`${base}/`);
+    return new Response(INVEST_LOGIN_PAGE(false, base), { headers: htmlHeaders });
+  }
+  if (!isAuthed) return redirect(`${base}/login`);
+  return null;
+}
+
+/* invest 조회 API. 게이트를 통과한 브라우저(bl_invest)만 부를 수 있고, 응답에는
+ * 잔고 수치만 담긴다 — API 키·액세스 토큰은 워커 밖으로 절대 나가지 않는다. */
+async function handleInvest(request, env, url) {
+  if (!featureEnabled(env, "ENABLE_INVEST")) {
+    return Response.json({ error: "invest is temporarily unavailable" }, {
+      status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "86400" },
+    });
+  }
+  if (!investPassword(env) || !env.INVEST_CLIENT_ID || !env.INVEST_CLIENT_SECRET) {
+    return new Response("invest is not configured", { status: 503 });
+  }
+  const key = await investSessionKey(env);
+  if (!await validSession(key, cookies(request).bl_invest)) {
+    return Response.json({ error: "unauthorized" }, { status: 401, headers: { "Cache-Control": "no-store" } });
+  }
+  if (url.pathname !== "/_invest/state" || request.method !== "GET") {
+    return new Response("not found", { status: 404 });
+  }
+  // 화면 새로고침 연타로 토스 한도를 건드리지 않게 여기서도 한 겹 막는다.
+  const limited = await enforceRateLimit(request, env, {
+    scope: "invest-state", limit: 30, windowMs: 60 * 1000,
+  });
+  if (limited) return limited;
+
+  const id = env.INVEST.idFromName("main");
+  const response = await env.INVEST.get(id).fetch(
+    new Request(`https://invest/state${url.search}`, { method: "GET" }),
+  );
+  return new Response(response.body, {
+    status: response.status,
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+  });
+}
+
+/* 하루 한 번 잔고를 찍어 수익률 그래프의 점을 남긴다. 토스 Open API 에는
+ * 과거 자산 추이 엔드포인트가 없어서, 그래프는 이렇게 쌓은 스냅샷으로만 그려진다
+ * (즉 켠 날부터 점이 생긴다 — invest/README.md 참고). */
+async function recordInvestSnapshot(env) {
+  if (!featureEnabled(env, "ENABLE_INVEST")) return;
+  if (!env.INVEST_CLIENT_ID || !env.INVEST_CLIENT_SECRET) return;
+  const id = env.INVEST.idFromName("main");
+  const response = await env.INVEST.get(id).fetch(
+    new Request("https://invest/snapshot", { method: "POST" }),
+  );
+  if (!response.ok) console.error("invest snapshot failed", response.status);
 }
 
 /* Duri 실시간 중계 + 사진 버퍼. 접근은 둘 중 하나로만: duri 게이트를 통과한
@@ -1447,6 +1571,11 @@ export async function handleRequest(request, env, ctx) {
       return handleDuri(request, env, url);
     }
 
+    // invest 잔고 조회 API: /_invest/state (invest.bubblelab.dev 전용, 조회만).
+    if (path === "/_invest" || path.startsWith("/_invest/")) {
+      return handleInvest(request, env, url);
+    }
+
     if (host === ROOT_DOMAIN || host === `www.${ROOT_DOMAIN}`) {
       site = "www";
     } else if (host.endsWith(`.${ROOT_DOMAIN}`)) {
@@ -1510,6 +1639,18 @@ export async function handleRequest(request, env, ctx) {
       if (duriResponse) return duriResponse;
     }
 
+    if (site === "invest") {
+      // 조회 전용 잔고 화면. 비밀번호·기능 플래그 중 하나라도 없으면 fail-closed.
+      if (!featureEnabled(env, "ENABLE_INVEST") || !investPassword(env)) {
+        return new Response("invest is not configured", { status: 503 });
+      }
+      const isProdHost = host === ROOT_DOMAIN || host.endsWith(`.${ROOT_DOMAIN}`);
+      const investUrl = new URL(url);
+      investUrl.pathname = path || "/";
+      const investResponse = await handleInvestGate(request, env, investUrl, isProdHost ? "" : "/invest");
+      if (investResponse) return investResponse;
+    }
+
     url.pathname = `/${site}${path}`;
     let response = await env.ASSETS.fetch(new Request(url, request));
 
@@ -1534,7 +1675,7 @@ export async function handleRequest(request, env, ctx) {
       }
     }
 
-    if (["admin", "work", "estate", "duri"].includes(site)) {
+    if (["admin", "work", "estate", "duri", "invest"].includes(site)) {
       const headers = new Headers(response.headers);
       headers.set("Cache-Control", "no-store");
       headers.set("X-Robots-Tag", "noindex, nofollow");
@@ -1603,13 +1744,15 @@ async function syncWorkReviews(env) {
 
 export default {
   // cron 처리 (wrangler.jsonc triggers.crons):
-  //  22:00 KST(13:00 UTC) → 팟캐스트 저녁 리마인더
+  //  22:00 KST(13:00 UTC) → 팟캐스트 저녁 리마인더 + invest 일별 잔고 스냅샷
   //  08:00 KST(23:00 UTC) → 운세 데일리 알림 + 아침 브리핑(날씨) 알림
   //  06:40 KST(21:40 UTC) → 외주 리뷰 동기화 + 데일리 팟캐스트 생성
   async scheduled(controller, env, ctx) {
     const podcastReady = featureEnabled(env, "ENABLE_PODCAST") && env.PODCAST_BUCKET;
     if (controller.cron === "0 13 * * *") {
       if (podcastReady) ctx.waitUntil(runEveningReminder(env));
+      // 국내장 마감 후·미국장 개장 전이라 그날 잔고를 찍기 좋은 시각이다.
+      ctx.waitUntil(recordInvestSnapshot(env));
       return;
     }
     if (controller.cron === "0 23 * * *") {

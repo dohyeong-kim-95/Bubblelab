@@ -19,6 +19,7 @@
 | `idle/` | <https://idle.bubblelab.dev> | Experiment | 7일 단위 방치형 게임 |
 | `util/` | <https://util.bubblelab.dev> | Beta | 달력·운세·사진·PDF·이미지 변환·플래너 도구 |
 | `games/` | <https://games.bubblelab.dev> | Archived | 실시간 게임 서버 비활성·목록 비노출 |
+| `invest/` | <https://invest.bubblelab.dev> | Restricted | 토스증권 조회 전용 잔고·수익률 (비밀번호 게이트) |
 | `admin/` | <https://admin.bubblelab.dev> | Restricted | 인증 후 통계·기록·공지 관리 |
 | `work/` | <https://work.bubblelab.dev> | Restricted | 외주 작업 클라이언트 미리보기 (비밀번호 게이트) |
 

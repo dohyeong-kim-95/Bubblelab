@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>잔고와 수익률 📈</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="bar">
+  <h1>📈 잔고</h1>
+  <div class="bar-right">
+    <span id="updated" class="updated" aria-live="polite"></span>
+    <button id="refresh" type="button">새로고침</button>
+  </div>
+</header>
+
+<p id="notice" class="notice" role="status" hidden></p>
+
+<main>
+  <section id="summary" class="summary" aria-label="통화별 잔고 요약">
+    <p class="empty">불러오는 중…</p>
+  </section>
+
+  <section class="panel" aria-label="수익률 추이">
+    <h2>수익률 추이</h2>
+    <div id="chart" class="chart"><p class="empty">불러오는 중…</p></div>
+    <p class="foot">하루에 한 점씩 쌓입니다. 토스 API에는 과거 자산 추이가 없어서
+      이 화면을 켠 날부터 그려집니다.</p>
+  </section>
+
+  <section class="panel" aria-label="보유 종목">
+    <h2>보유 종목</h2>
+    <div id="holdings" class="scroller"><p class="empty">불러오는 중…</p></div>
+  </section>
+</main>
+
+<footer class="foot end">
+  조회 전용입니다 — 이 화면은 주문을 낼 수 없습니다.
+  <a href="/logout">로그아웃</a>
+</footer>
+
+<script defer src="app.js"></script>
+</body>
+</html>
