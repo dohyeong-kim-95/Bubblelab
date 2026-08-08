@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🪜 사다리타기</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🪜</text></svg>">
+<style>
+  :root { color-scheme: light dark; --bg: light-dark(#f2f4f7, #0d131c);
+          --panel: light-dark(#fff, #171f2b); --line: light-dark(#d9e0e7, #2a3646);
+          --text: light-dark(#1c2733, #e2e9f0); --muted: light-dark(#6e7985, #91a0b2);
+          --accent: #4f7fdd; --cell-fs: .78rem; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100dvh; background: var(--bg); color: var(--text);
+         font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; }
+  .app { width: min(34rem, 100%); margin: 0 auto; padding: 1.2rem 1rem 2rem; }
+  h1 { margin: .2rem 0 .3rem; font-size: 1.25rem; }
+  .desc { margin: 0 0 1rem; color: var(--muted); font-size: .78rem; line-height: 1.6; }
+  button { font: inherit; color: inherit; cursor: pointer; border: 1px solid var(--line);
+           background: light-dark(#fff, #111923); border-radius: .6rem; padding: .55rem .9rem; }
+  button:active { transform: scale(.97); }
+  button:disabled { opacity: .42; cursor: default; transform: none; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button[hidden] { display: none; }
+  .primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: bold; }
+
+  .setup { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-bottom: .9rem; }
+  .setup .label { font-size: .75rem; color: var(--muted); }
+  .stepper { display: inline-flex; align-items: center; border: 1px solid var(--line);
+             border-radius: .6rem; overflow: hidden; background: var(--panel); }
+  .stepper button { border: 0; border-radius: 0; padding: .45rem .8rem; background: none; font-size: 1rem; }
+  .stepper #count { min-width: 2.2rem; text-align: center; font-size: .85rem; font-weight: bold;
+                    font-variant-numeric: tabular-nums; }
+  .ghost { font-size: .72rem; padding: .45rem .7rem; color: var(--muted); }
+
+  /* 사다리 무대 — 위 이름 / 사다리 / 아래 결과가 같은 폭의 열 격자를 공유한다.
+     이름칸 가운데와 세로줄이 정확히 맞아야 해서 세 줄 모두 폭이 같아야 한다. */
+  #stage { background: var(--panel); border: 1px solid var(--line); border-radius: .9rem;
+           padding: .6rem .4rem; }
+  .row { display: grid; grid-template-columns: repeat(var(--n, 4), 1fr); gap: 2px; }
+  .cell { width: 100%; min-width: 0; font: inherit; font-size: var(--cell-fs);
+          text-align: center; padding: .45rem .1rem; border-radius: .45rem;
+          border: 1px solid var(--line); background: light-dark(#fbfcfe, #101825);
+          color: var(--text); overflow: hidden; }
+  .cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .cell::placeholder { color: var(--muted); opacity: .65; }
+  .cell:read-only { cursor: pointer; }
+  .cell.name:read-only { border-color: color-mix(in srgb, var(--c, var(--line)) 55%, transparent); }
+  .cell.hit { border-color: var(--c); color: var(--c); font-weight: bold;
+              background: color-mix(in srgb, var(--c) 13%, transparent); }
+  #ladder { display: block; width: 100%; }
+  #ladder .grid line { stroke: var(--line); stroke-width: 2; stroke-linecap: round; }
+  #ladder .trace { fill: none; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
+  .hint { margin: .5rem 0 0; text-align: center; font-size: .7rem; color: var(--muted); }
+
+  .actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .9rem; }
+  .actions .primary { flex: 1; }
+  #result { list-style: none; margin: 1rem 0 0; padding: 0; font-size: .8rem; line-height: 1.9; }
+  #result li { display: flex; gap: .4rem; align-items: baseline;
+               border-bottom: 1px dashed var(--line); padding: .1rem 0; }
+  #result .who { font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #result .arrow { color: var(--muted); }
+  .privacy { margin-top: 1.1rem; color: var(--muted); font-size: .68rem; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>🪜 사다리타기</h1>
+  <p class="desc">이름과 결과를 적고 사다리를 만드세요. 이름을 누르면 그 줄이 어디로
+    내려가는지 따라 그려집니다. 커피 내기, 순서 정하기에 쓰세요.</p>
+
+  <div class="setup">
+    <span class="label">인원</span>
+    <div class="stepper">
+      <button type="button" id="minus" aria-label="인원 줄이기">−</button>
+      <span id="count">4</span>
+      <button type="button" id="plus" aria-label="인원 늘리기">+</button>
+    </div>
+    <button type="button" class="ghost" id="fillWin">🎯 당첨 하나</button>
+    <button type="button" class="ghost" id="fillRank">🥇 순서대로</button>
+  </div>
+
+  <div id="stage">
+    <div class="row" id="names"></div>
+    <svg id="ladder" aria-label="사다리"></svg>
+    <div class="row" id="prizes"></div>
+  </div>
+  <p class="hint" id="hint">칸을 채우고 사다리를 만드세요</p>
+
+  <div class="actions">
+    <button type="button" class="primary" id="start">🪜 사다리 만들기</button>
+    <button type="button" id="all" hidden>👀 전체 보기</button>
+    <button type="button" id="again" hidden>🎲 다시 만들기</button>
+    <button type="button" id="back" hidden>✏️ 고치기</button>
+  </div>
+
+  <ul id="result"></ul>
+  <p class="privacy">이름과 결과는 이 브라우저에만 저장되고 서버로 보내지 않습니다.</p>
+</div>
+<script>
+const NS = "http://www.w3.org/2000/svg";
+const MIN = 2, MAX = 8, KEY = "bl-ladder";
+const $ = (s) => document.querySelector(s);
+const namesEl = $("#names"), prizesEl = $("#prizes"), svg = $("#ladder");
+const resultEl = $("#result"), hintEl = $("#hint");
+
+let n = 4;
+let names = [], prizes = [];
+let rows = 0, rungs = new Set();     // 가로칸 열쇠 `행:왼쪽열` — 열 c와 c+1 사이
+let phase = "edit";
+let results = new Map();             // 참가자 → 도착한 결과 칸
+let running = 0;                     // 진행 중인 애니메이션 수
+let geom = { w: 0, h: 0 };
+
+/* ---------- 저장 ---------- */
+function load() {
+  try {
+    const s = JSON.parse(localStorage.getItem(KEY) || "null");
+    if (!s) return;
+    if (Number.isInteger(s.n) && s.n >= MIN && s.n <= MAX) n = s.n;
+    if (Array.isArray(s.names)) names = s.names.map((v) => String(v ?? "").slice(0, 5));
+    if (Array.isArray(s.prizes)) prizes = s.prizes.map((v) => String(v ?? "").slice(0, 5));
+  } catch { /* 저장값이 깨졌으면 기본값으로 */ }
+}
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify({ n, names, prizes })); } catch { /* 사생활 모드 */ }
+}
+
+/* ---------- 값 ---------- */
+const nameOf = (i) => (names[i] || "").trim() || `${i + 1}번`;
+const prizeOf = (i) => (prizes[i] || "").trim() || `${i + 1}번 칸`;
+const color = (i) => `hsl(${(i * 360) / n + 12} 68% 48%)`;
+const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function fillWin() {
+  prizes = Array.from({ length: n }, (_, i) => (i === 0 ? "당첨" : "꽝"));
+  save(); renderCells();
+}
+function fillRank() {
+  prizes = Array.from({ length: n }, (_, i) => `${i + 1}등`);
+  save(); renderCells();
+}
+
+/* ---------- 칸 ---------- */
+function renderCells() {
+  namesEl.style.setProperty("--n", n);
+  prizesEl.style.setProperty("--n", n);
+  document.documentElement.style.setProperty("--cell-fs", n > 6 ? ".56rem" : n > 4 ? ".66rem" : ".78rem");
+  namesEl.replaceChildren(...Array.from({ length: n }, (_, i) => cell(i, "name")));
+  prizesEl.replaceChildren(...Array.from({ length: n }, (_, i) => cell(i, "prize")));
+  for (const [who, end] of results) markPrize(who, end);
+}
+function cell(i, kind) {
+  const el = document.createElement("input");
+  el.className = "cell " + kind;
+  el.maxLength = 5;
+  el.autocomplete = "off";
+  el.value = (kind === "name" ? names[i] : prizes[i]) || "";
+  el.placeholder = kind === "name" ? `${i + 1}번` : "결과";
+  el.readOnly = phase === "play";
+  if (kind === "name") {
+    el.style.setProperty("--c", color(i));
+    el.addEventListener("click", () => { if (phase === "play") trace(i); });
+  }
+  el.addEventListener("input", () => {
+    (kind === "name" ? names : prizes)[i] = el.value;
+    save();
+  });
+  return el;
+}
+function markPrize(who, end) {
+  const el = prizesEl.children[end];
+  if (!el) return;
+  el.classList.add("hit");
+  el.style.setProperty("--c", color(who));
+}
+
+/* ---------- 사다리 ---------- */
+function makeRungs() {
+  rows = Math.max(7, n + 4);
+  rungs = new Set();
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < n - 1; c++) {
+      if (rungs.has(`${r}:${c - 1}`)) continue;   // 가로칸이 붙으면 갈림길이 사라진다
+      if (Math.random() < 0.42) rungs.add(`${r}:${c}`);
+    }
+  }
+  // 한 번도 안 쓰인 세로 간격이 있으면 억지로 하나 넣는다 (제자리로 내려오는 줄 방지)
+  for (let c = 0; c < n - 1; c++) {
+    let used = false;
+    for (let r = 0; r < rows && !used; r++) used = rungs.has(`${r}:${c}`);
+    if (used) continue;
+    for (const r of shuffled(rows)) {
+      if (rungs.has(`${r}:${c - 1}`) || rungs.has(`${r}:${c + 1}`)) continue;
+      rungs.add(`${r}:${c}`);
+      break;
+    }
+  }
+}
+function shuffled(len) {
+  const a = Array.from({ length: len }, (_, i) => i);
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+const x = (c) => (geom.w * (c + 0.5)) / n;
+const y = (r) => (geom.h * (r + 1)) / (rows + 1);
+
+function walk(start) {
+  let c = start;
+  const pts = [[x(c), 0]];
+  for (let r = 0; r < rows; r++) {
+    const next = rungs.has(`${r}:${c}`) ? c + 1 : rungs.has(`${r}:${c - 1}`) ? c - 1 : c;
+    if (next === c) continue;
+    pts.push([x(c), y(r)], [x(next), y(r)]);
+    c = next;
+  }
+  pts.push([x(c), geom.h]);
+  return { pts, end: c };
+}
+
+/* ---------- 그리기 ----------
+ * viewBox를 실제 픽셀 크기와 1:1로 맞춘다. 선 굵기와 경로 애니메이션(dash)이
+ * 늘어나지 않고, 위·아래 칸 격자와 세로줄이 정확히 겹친다. */
+function draw() {
+  geom.w = svg.clientWidth || namesEl.clientWidth || 320;
+  geom.h = Math.round(Math.min(340, Math.max(230, window.innerHeight * 0.38)));
+  svg.setAttribute("viewBox", `0 0 ${geom.w} ${geom.h}`);
+  svg.setAttribute("height", geom.h);
+  svg.style.height = geom.h + "px";
+
+  const grid = document.createElementNS(NS, "g");
+  grid.setAttribute("class", "grid");
+  for (let c = 0; c < n; c++) grid.appendChild(line(x(c), 0, x(c), geom.h));
+  for (const key of rungs) {
+    const [r, c] = key.split(":").map(Number);
+    grid.appendChild(line(x(c), y(r), x(c + 1), y(r)));
+  }
+  svg.replaceChildren(grid);
+  for (const [who] of results) drawTrace(who, false);   // 다시 그릴 땐 애니메이션 없이
+}
+function line(x1, y1, x2, y2) {
+  const el = document.createElementNS(NS, "line");
+  el.setAttribute("x1", x1); el.setAttribute("y1", y1);
+  el.setAttribute("x2", x2); el.setAttribute("y2", y2);
+  return el;
+}
+
+function drawTrace(who, animate) {
+  const { pts, end } = walk(who);
+  const path = document.createElementNS(NS, "path");
+  path.setAttribute("class", "trace");
+  path.setAttribute("stroke", color(who));
+  path.setAttribute("d", pts.map(([px, py], i) => `${i ? "L" : "M"}${px.toFixed(1)} ${py.toFixed(1)}`).join(" "));
+  svg.appendChild(path);
+
+  if (!animate) { dot(who, end); return end; }
+
+  const len = path.getTotalLength();
+  const secs = Math.max(0.9, Math.min(2.2, len / 420));
+  path.style.strokeDasharray = len;
+  path.style.strokeDashoffset = len;
+  running++;
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    running--;
+    dot(who, end);
+    markPrize(who, end);
+    renderResult();
+    updateButtons();
+  };
+  requestAnimationFrame(() => {
+    path.style.transition = `stroke-dashoffset ${secs}s linear`;
+    path.style.strokeDashoffset = "0";
+  });
+  path.addEventListener("transitionend", finish, { once: true });
+  setTimeout(finish, secs * 1000 + 400);   // 탭이 뒤로 가면 transitionend가 안 온다
+  return end;
+}
+function dot(who, end) {
+  const c = document.createElementNS(NS, "circle");
+  c.setAttribute("cx", x(end));
+  c.setAttribute("cy", geom.h - 3);
+  c.setAttribute("r", 5);
+  c.setAttribute("fill", color(who));
+  svg.appendChild(c);
+}
+
+function trace(who) {
+  if (results.has(who)) return;
+  results.set(who, walk(who).end);
+  drawTrace(who, true);
+  updateButtons();
+}
+function revealAll() {
+  const rest = [];
+  for (let i = 0; i < n; i++) if (!results.has(i)) rest.push(i);
+  rest.forEach((i, k) => setTimeout(() => trace(i), k * 140));
+}
+
+function renderResult() {
+  const done = [...results.keys()].sort((a, b) => a - b);
+  resultEl.innerHTML = done
+    .map((i) => `<li><span class="who" style="color:${color(i)}">${escapeHtml(nameOf(i))}</span>` +
+                `<span class="arrow">→</span><span>${escapeHtml(prizeOf(results.get(i)))}</span></li>`)
+    .join("");
+}
+
+/* ---------- 상태 ---------- */
+function setPhase(next) {
+  phase = next;
+  if (phase === "edit") { rungs = new Set(); rows = 0; results.clear(); }
+  renderCells();
+  renderResult();
+  draw();
+  updateButtons();
+}
+function updateButtons() {
+  const play = phase === "play";
+  $("#start").hidden = play;
+  $("#all").hidden = !play;
+  $("#again").hidden = !play;
+  $("#back").hidden = !play;
+  $("#minus").disabled = play || n <= MIN;
+  $("#plus").disabled = play || n >= MAX;
+  $("#fillWin").disabled = play;
+  $("#fillRank").disabled = play;
+  $("#all").disabled = results.size >= n;
+  $("#count").textContent = n;
+  hintEl.textContent = !play
+    ? "칸을 채우고 사다리를 만드세요"
+    : results.size >= n ? "결과가 다 나왔어요" : "이름을 누르면 따라 내려갑니다";
+}
+function setCount(next) {
+  n = Math.max(MIN, Math.min(MAX, next));
+  names.length = n;
+  prizes.length = n;
+  save();
+  setPhase("edit");
+}
+
+$("#minus").addEventListener("click", () => setCount(n - 1));
+$("#plus").addEventListener("click", () => setCount(n + 1));
+$("#fillWin").addEventListener("click", fillWin);
+$("#fillRank").addEventListener("click", fillRank);
+$("#start").addEventListener("click", () => { makeRungs(); setPhase("play"); });
+$("#again").addEventListener("click", () => { if (!running) { makeRungs(); setPhase("play"); } });
+$("#back").addEventListener("click", () => setPhase("edit"));
+$("#all").addEventListener("click", revealAll);
+
+// 폭이 바뀌면 좌표를 다시 잡는다 (회전·창 크기). 진행 중이면 끝나고 다시 그린다.
+let lastW = 0;
+new ResizeObserver(() => {
+  const w = svg.clientWidth;
+  if (!w || w === lastW || running) return;
+  lastW = w;
+  draw();
+}).observe(svg);
+
+window.blShareText = () => (results.size
+  ? `사다리타기 결과: ${[...results.keys()].sort((a, b) => a - b)
+      .map((i) => `${nameOf(i)}→${prizeOf(results.get(i))}`).join(", ")}`
+  : "사다리타기로 오늘 커피 내기 정해요");
+
+load();
+if (!prizes.some((p) => (p || "").trim())) prizes = Array.from({ length: n }, (_, i) => (i === 0 ? "당첨" : "꽝"));
+setPhase("edit");
+</script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>
