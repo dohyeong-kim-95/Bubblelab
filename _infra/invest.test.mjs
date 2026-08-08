@@ -372,6 +372,14 @@ test("IP 차단이면 키가 아니라 IP 문제라고 알린다", async () => {
   ]);
   assert.equal(status, 502);
   assert.match(body.error, /IP/);
+  // 판정 근거인 원문은 화면이 아니라 서버 로그로만 간다
+  assert.ok(!JSON.stringify(body).includes("IP not allowed"), "상류 원문이 화면으로 샜다");
+});
+
+test("상류 원문은 오류 객체에 붙어 서버 로그로만 나간다", () => {
+  const error = upstreamError(401, '{"message":"unauthorized ip"}', "토큰 발급");
+  assert.equal(error.body, '{"message":"unauthorized ip"}');
+  assert.ok(!error.message.includes("unauthorized ip"), "화면 문구에 원문이 섞였다");
 });
 
 test("INVEST_ACCOUNT_SEQ가 있으면 계좌 목록을 조회하지 않는다", async () => {

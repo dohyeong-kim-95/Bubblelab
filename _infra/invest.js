@@ -148,7 +148,23 @@ export function describeUpstreamError(status, body = "") {
 export function upstreamError(status, body, stage) {
   const error = new Error(`${stage}: ${describeUpstreamError(status, body)} (HTTP ${status})`);
   error.status = status;
+  // 원문은 서버 로그(wrangler tail)에만 쓰고 화면에는 내보내지 않는다. 화면 문구는
+  // 본문에 "ip"가 있는지 보는 휴리스틱이라, 판정이 맞는지 확인할 근거가 필요하다.
+  error.body = body;
   return error;
+}
+
+/**
+ * 상류 실패를 서버 로그에 남긴다 (`npx wrangler@4 tail`, 또는 대시보드 Logs).
+ * 화면 문구는 원인을 휴리스틱으로 요약하므로, 판정이 맞는지 따지려면 토스가
+ * 실제로 뭐라고 했는지가 필요하다. 요청에 실은 키·토큰은 찍지 않는다.
+ */
+function logUpstreamFailure(error) {
+  console.error("invest upstream failure", {
+    message: error?.message ?? String(error),
+    status: error?.status ?? null,
+    body: error?.body ?? "",
+  });
 }
 
 /** 분류에 쓸 만큼만 본문을 읽는다. 읽기 실패는 무시한다(원 오류가 더 중요하다). */
@@ -318,6 +334,7 @@ export class InvestDO {
         await this.#refresh();
       } catch (failure) {
         error = failure.message;
+        logUpstreamFailure(failure);
         if (!latest) throw failure;
       }
     }
