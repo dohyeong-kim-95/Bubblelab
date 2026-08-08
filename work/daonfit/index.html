@@ -30,13 +30,19 @@
     --line:rgba(42,24,16,.14);
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  html{scroll-behavior:smooth}
+  /* 주소창 항상 노출: 문서는 스크롤하지 않고(#scroller 내부 스크롤만) —
+     모바일 브라우저는 문서 스크롤에서만 주소창을 접는다 */
+  html,body{height:100%;overflow:hidden}
   body{
     background:var(--paper);
     color:var(--ink);
     font-family:'Wanted Sans Variable','Wanted Sans','Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;
     -webkit-font-smoothing:antialiased;
-    overflow-x:hidden;
+  }
+  #scroller{
+    height:100vh;height:100dvh;
+    overflow-y:auto;overflow-x:hidden;
+    scroll-behavior:smooth;
   }
   /* 옛 명조 강조 자리 — 로고와 결을 맞춰 한 가족으로 통일, 무게로만 힘을 준다 */
   .serif{font-weight:800;letter-spacing:-.035em}
@@ -195,6 +201,7 @@
   <a class="cta" href="https://smartstore.naver.com/samyong_2?utm_source=daonfit-landing&utm_medium=referral&utm_campaign=brand-topbar" target="_blank" rel="noopener">스토어 가기</a>
 </div>
 
+<div id="scroller">
 <!-- ================= 무대 ================= -->
 <div class="stage" id="stage">
   <div class="stage-inner">
@@ -323,22 +330,24 @@
   </div>
 </section>
 
-<div class="dock" id="dock" aria-hidden="true">
-  <span class="dock-note">구매 만족도 <span class="star">★ 5.0</span></span>
-  <a class="dock-btn" href="https://smartstore.naver.com/samyong_2?utm_source=daonfit-landing&utm_medium=referral&utm_campaign=brand-dock" target="_blank" rel="noopener">스마트스토어에서 보기</a>
-</div>
-
 <footer>
   다온핏 DAONFIT · 대표 정선용<br>
   <!-- 사업자등록번호·통신판매업신고는 실제 번호 확정 후 이 줄에 추가 -->
   문의 인스타그램 <a href="https://www.instagram.com/daonfit/" target="_blank" rel="noopener" style="color:inherit">@daonfit</a><br>
   로고 및 상품 사진의 권리는 다온핏에 있습니다
 </footer>
+</div><!-- /#scroller -->
+
+<div class="dock" id="dock" aria-hidden="true">
+  <span class="dock-note">구매 만족도 <span class="star">★ 5.0</span></span>
+  <a class="dock-btn" href="https://smartstore.naver.com/samyong_2?utm_source=daonfit-landing&utm_medium=referral&utm_campaign=brand-dock" target="_blank" rel="noopener">스마트스토어에서 보기</a>
+</div>
 
 <script>
 (function(){
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  var scroller = document.getElementById('scroller'); // 주소창 항상 노출용 내부 스크롤러
   var stage = document.getElementById('stage');
   var parts = Array.prototype.slice.call(document.querySelectorAll('#logo .pc'));
   var word  = document.getElementById('word');
@@ -495,26 +504,26 @@
       var rect = stage.getBoundingClientRect();
       var total = stage.offsetHeight - window.innerHeight;
       render(clamp(-rect.top/total, 0, 1));
-      bar.classList.toggle('solid', window.scrollY > 40);
+      bar.classList.toggle('solid', scroller.scrollTop > 40);
       ticking = false;
     });
   }
 
   if(reduce){
     render(1);
-    document.querySelector('.bar .mark').addEventListener('click', function(){ window.scrollTo(0, 0); });
+    document.querySelector('.bar .mark').addEventListener('click', function(){ scroller.scrollTo(0, 0); });
   }
   else{
     // 스크럽: 스크롤 위치 = 재생 바. 붙잡지도, 스냅하지도, 되감기를 막지도 않는다.
     // 조금 내리면 한 조각이 자리잡고, 멈추면 애니메이션도 멈추고, 올리면 거꾸로
     // 흩어진다. 조각이 하나씩 순서대로 모이므로 중간에 멈춘 화면도 의도된 장면이다.
-    window.addEventListener('scroll', onScroll, {passive:true});
+    scroller.addEventListener('scroll', onScroll, {passive:true});
     window.addEventListener('resize', onScroll);
     onScroll();
 
     // 상단 바 로고 = 맨 위로
     document.querySelector('.bar .mark').addEventListener('click', function(){
-      window.scrollTo({top: 0, behavior: 'smooth'});
+      scroller.scrollTo({top: 0, behavior: 'smooth'});
     });
   }
 
@@ -534,7 +543,7 @@
       dockTick = false;
     });
   }
-  window.addEventListener('scroll', onDockScroll, {passive:true});
+  scroller.addEventListener('scroll', onDockScroll, {passive:true});
   window.addEventListener('resize', onDockScroll);
   onDockScroll();
 
