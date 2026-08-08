@@ -14,6 +14,7 @@ import {
   snapshotOf,
   tokenRequestBody,
   tossFetch,
+  upstreamError,
 } from "./invest.js";
 
 const ROOT = new URL("..", import.meta.url).pathname;
@@ -189,8 +190,39 @@ test("오류 응답은 상태코드를 달고 던지며 키·토큰을 노출하
 
 test("상태코드별 안내 문구", () => {
   assert.match(describeUpstreamError(401), /인증/);
+  assert.match(describeUpstreamError(403), /권한/);
   assert.match(describeUpstreamError(429), /한도/);
   assert.match(describeUpstreamError(503), /서버/);
+});
+
+// 키를 아무리 다시 발급해도 안 풀리는 원인이라 반드시 구분해서 알려야 한다.
+test("401·403 본문이 IP를 가리키면 키 문제가 아니라 IP 문제로 읽는다", () => {
+  for (const status of [401, 403]) {
+    assert.match(describeUpstreamError(status, '{"message":"IP not allowed"}'), /IP/);
+    assert.match(describeUpstreamError(status, "client ip 1.2.3.4 rejected"), /IP/);
+  }
+  // "description" 같은 단어에 들어 있는 ip 는 오탐이면 안 된다
+  assert.match(describeUpstreamError(401, '{"error":"invalid_client description"}'), /인증/);
+});
+
+test("오류에 어느 단계에서 깨졌는지와 상태코드가 담긴다", () => {
+  const token = upstreamError(401, "", "토큰 발급");
+  assert.match(token.message, /^토큰 발급:/);
+  assert.match(token.message, /HTTP 401/);
+  assert.equal(token.status, 401);
+  assert.match(upstreamError(403, "", "잔고 조회").message, /^잔고 조회:/);
+});
+
+test("상류 본문을 화면 문구에 그대로 싣지 않는다", async () => {
+  const fetchImpl = () => Promise.resolve(new Response("secret-ish internal trace", { status: 403 }));
+  await assert.rejects(
+    () => tossFetch("/api/v1/holdings", { token: "t", accountSeq: 1, fetchImpl }),
+    (error) => {
+      assert.ok(!error.message.includes("internal trace"), "상류 본문이 그대로 노출됐다");
+      assert.match(error.message, /잔고 조회/);
+      return true;
+    },
+  );
 });
 
 // ── 토큰 수명 (InvestDO) ───────────────────────────────────────────────
@@ -309,6 +341,37 @@ test("상류가 막혀도 캐시가 있으면 stale 표시로 직전 값을 준�
   assert.equal(body.stale, true);
   assert.match(body.error, /한도/);
   assert.equal(body.byCurrency.KRW.value, 800000);
+});
+
+// 콘솔에서 복사하거나 secret 을 넣을 때 딸려오는 공백·줄바꿈은 인증만 조용히
+// 깨뜨리고 아무 단서도 남기지 않는다 — 보내기 전에 털어낸다.
+test("API 키 앞뒤 공백·줄바꿈을 털어내고 보낸다", async () => {
+  const { calls, status } = await runDO(
+    [() => tokenResponse("tok-1"), okHoldings, okCash, okCash],
+    { env: { INVEST_CLIENT_ID: "  id-1 ", INVEST_CLIENT_SECRET: "secret-1\n", INVEST_ACCOUNT_SEQ: "7" } },
+  );
+  assert.equal(status, 200);
+  const form = new URLSearchParams(calls[0].body);
+  assert.equal(form.get("client_id"), "id-1");
+  assert.equal(form.get("client_secret"), "secret-1");
+});
+
+test("토큰 발급이 막히면 어느 단계인지 화면 문구에 남는다", async () => {
+  const { body, status } = await runDO([
+    () => new Response('{"message":"invalid_client"}', { status: 401 }),
+    () => new Response('{"message":"invalid_client"}', { status: 401 }),
+  ]);
+  assert.equal(status, 502);
+  assert.match(body.error, /토큰 발급/);
+  assert.match(body.error, /HTTP 401/);
+});
+
+test("IP 차단이면 키가 아니라 IP 문제라고 알린다", async () => {
+  const { body, status } = await runDO([
+    () => new Response('{"message":"IP not allowed"}', { status: 403 }),
+  ]);
+  assert.equal(status, 502);
+  assert.match(body.error, /IP/);
 });
 
 test("INVEST_ACCOUNT_SEQ가 있으면 계좌 목록을 조회하지 않는다", async () => {

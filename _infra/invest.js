@@ -120,12 +120,44 @@ export function buildSeries(history) {
   return series;
 }
 
-/** 토스 오류 응답을 화면에 보여줄 짧은 문구로 바꾼다. 키·토큰은 절대 싣지 않는다. */
-export function describeUpstreamError(status) {
-  if (status === 401 || status === 403) return "토스 인증 실패 — API 키를 확인해주세요";
+// 401/403 본문에 ip 가 단어로 등장하면 키 문제가 아니라 허용 IP 문제다.
+// Workers 는 아웃바운드 IP 가 고정이 아니라서 이 경우 설정으로 못 푼다 —
+// 화면에 원인을 정확히 적어야 엉뚱한 키를 다시 만드는 삽질을 막는다.
+const IP_HINT = /\bip\b/i;
+
+/**
+ * 토스 오류 응답을 화면에 보여줄 짧은 문구로 바꾼다.
+ * body 는 분류에만 쓰고 **그대로 노출하지 않는다** — 키·토큰은 어차피 응답에
+ * 없지만, 상류 원문을 화면에 흘리지 않는 편이 안전하다.
+ */
+export function describeUpstreamError(status, body = "") {
+  if ((status === 401 || status === 403) && IP_HINT.test(String(body))) {
+    return "토스가 이 서버의 IP를 거부했습니다 — 허용 IP 설정 문제입니다";
+  }
+  if (status === 401) return "토스 인증 실패 — API 키를 확인해주세요";
+  if (status === 403) return "토스 권한 없음 — 앱 승인 상태와 조회 권한을 확인해주세요";
   if (status === 429) return "토스 요청 한도 초과 — 잠시 후 다시 시도합니다";
   if (status >= 500) return "토스 서버 오류";
-  return `토스 응답 오류 (${status})`;
+  return "토스 응답 오류";
+}
+
+/**
+ * 어느 단계에서 깨졌는지까지 담은 오류. 토큰 발급이 막힌 것과 조회 권한이 없는
+ * 것은 원인도 대처도 달라서, 한 문구로 뭉뚱그리면 진단이 안 된다.
+ */
+export function upstreamError(status, body, stage) {
+  const error = new Error(`${stage}: ${describeUpstreamError(status, body)} (HTTP ${status})`);
+  error.status = status;
+  return error;
+}
+
+/** 분류에 쓸 만큼만 본문을 읽는다. 읽기 실패는 무시한다(원 오류가 더 중요하다). */
+async function errorBody(response) {
+  try {
+    return (await response.text()).slice(0, 500);
+  } catch {
+    return "";
+  }
 }
 
 /**
@@ -145,11 +177,7 @@ export async function tossFetch(path, { token, query, accountSeq, base = TOSS_BA
     headers["X-Tossinvest-Account"] = String(accountSeq);
   }
   const response = await fetchImpl(url, { method: "GET", headers });
-  if (!response.ok) {
-    const error = new Error(describeUpstreamError(response.status));
-    error.status = response.status;
-    throw error;
-  }
+  if (!response.ok) throw upstreamError(response.status, await errorBody(response), "잔고 조회");
   const body = await response.json();
   // 공식 API 는 {"result": …} 봉투를 쓴다. 봉투가 없으면 스펙이 바뀐 것이다.
   if (!body || !("result" in body)) throw new Error("토스 응답 형식이 예상과 다릅니다");
@@ -192,19 +220,17 @@ export class InvestDO {
     const cached = force ? null : await this.state.storage.get("token");
     if (cached && cached.expiresAt - TOKEN_SKEW_MS > Date.now()) return cached.value;
 
-    const { INVEST_CLIENT_ID, INVEST_CLIENT_SECRET } = this.env;
-    if (!INVEST_CLIENT_ID || !INVEST_CLIENT_SECRET) throw new Error("토스 API 키가 설정되지 않았습니다");
+    // secret 을 붙여넣을 때 딸려오는 공백·줄바꿈은 조용히 인증을 깨뜨린다.
+    const clientId = String(this.env.INVEST_CLIENT_ID ?? "").trim();
+    const clientSecret = String(this.env.INVEST_CLIENT_SECRET ?? "").trim();
+    if (!clientId || !clientSecret) throw new Error("토스 API 키가 설정되지 않았습니다");
 
     const response = await fetch(`${TOSS_BASE}/oauth2/token`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: tokenRequestBody(INVEST_CLIENT_ID, INVEST_CLIENT_SECRET).toString(),
+      body: tokenRequestBody(clientId, clientSecret).toString(),
     });
-    if (!response.ok) {
-      const error = new Error(describeUpstreamError(response.status));
-      error.status = response.status;
-      throw error;
-    }
+    if (!response.ok) throw upstreamError(response.status, await errorBody(response), "토큰 발급");
     const body = await response.json();
     const value = body?.access_token;
     if (!value) throw new Error("토스가 액세스 토큰을 주지 않았습니다");
