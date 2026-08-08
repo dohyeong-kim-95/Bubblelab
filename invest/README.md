@@ -7,6 +7,24 @@
 토스증권 Open API로 **내 계좌 잔고를 읽어서 보여주기만 한다.** 토이가 아니라
 개인용 서비스라 토이 관례(share.js, 주간 기록)를 적용하지 않는다.
 
+## 구조 — 토스는 내 PC가 부르고, 엣지는 받아만 둔다
+
+```
+내 PC (_src/invest-sink/)          엣지 (InvestDO)              브라우저
+  토스 Open API 조회   ──POST──▶   스냅샷 보관 (일별)  ──GET──▶  잔고·그래프
+  API 키는 여기에만                 키를 알지 못함
+```
+
+**토스는 콘솔에 등록한 IP에서만 받아준다.** Cloudflare Workers는 요청마다 다른
+엣지에서 나가고 그 대역이 수천 개라 등록할 IP가 존재하지 않는다 — 엣지에서 직접
+부르면 영원히 `unidentified-client` 401이다(아래 "겪은 문제" 참고).
+
+그래서 조회는 집 PC 데몬이 하고 엣지에는 **결과 숫자만** 올린다. 덤으로 API 키가
+Cloudflare가 아니라 내 PC에만 남아 보안상 더 낫다. duri의 `_src/duri-sink/`와 같은
+구조다 — 원본은 내 PC, 엣지는 보관·표시.
+
+데몬 설정·실행은 **`_src/invest-sink/README.md`**.
+
 ## 조회 전용이라는 뜻
 
 `_infra/invest.js`의 `READ_ONLY_PATHS`에 있는 세 경로 말고는 부르지 않는다.
@@ -14,7 +32,7 @@
 
 | 부르는 것 | 용도 | Rate limit 그룹 |
 |---|---|---|
-| `GET /api/v1/accounts` | accountSeq 해석 (최초 1회, 이후 캐시) | `ACCOUNT` 초당 1회 |
+| `GET /api/v1/accounts` | accountSeq 해석 (`INVEST_ACCOUNT_SEQ`가 있으면 생략) | `ACCOUNT` 초당 1회 |
 | `GET /api/v1/holdings` | 보유 종목·평가금액·손익 | `ASSET` 초당 5회 |
 | `GET /api/v1/buying-power` | 통화별 예수금 | `ACCOUNT` 초당 1회 |
 
@@ -23,108 +41,36 @@
 2·3단계(페이퍼 트레이딩 → 소액 실주문)로 갈 때는 이 화이트리스트를 늘리는 게 아니라
 별도 모듈로 분리하고 한도·킬스위치·감사 로그를 먼저 갖춘다.
 
-## 설정
+엣지가 데몬의 업로드를 그대로 믿지도 않는다 — `normalizeSnapshot()`이 형태를
+검증하고 **다시 지어서** 저장한다(날짜는 데몬 값이 아니라 받은 시각으로 찍는다).
 
-`ENABLE_INVEST` var가 켜져 있어도 아래 secret 셋이 **모두** 있어야 열린다. 하나라도
-없으면 런타임에서 503으로 닫힌다(fail-closed). 내리려면 var를 `"false"`로 바꾼다.
+## 설정 (엣지)
 
-```bash
-npx wrangler@4 secret put INVEST_PASSWORD        # 화면 게이트 비밀번호
-npx wrangler@4 secret put INVEST_CLIENT_ID       # 토스 developers 앱키
-npx wrangler@4 secret put INVEST_CLIENT_SECRET   # 토스 developers 시크릿
-npx wrangler@4 secret put INVEST_ACCOUNT_SEQ     # (선택) 계좌 조회 한 번을 아낀다
-```
-
-키 발급은 <https://corp.tossinvest.com/ko/open-api>. 게이트 세션 쿠키는 `bl_invest`,
-**7일**이다(duri의 1년보다 짧게 잡았다 — 계좌 정보가 보이는 화면이라 기기를
-잃어버렸을 때의 노출 창을 좁히는 쪽을 택했다). 라우팅·게이트는 `_infra/worker.js`의
-`handleInvestGate`·`handleInvest`.
-
-## 토스 Open API 메모
-
-- **Base**: `https://openapi.tossinvest.com`, 응답은 `{"result": …}` 봉투.
-- **인증**: OAuth2 client_credentials — `POST /oauth2/token`에 `client_id`·
-  `client_secret`(form-urlencoded) → `access_token`, `expires_in` 86400,
-  **refresh token 없음**.
-- **client당 유효 토큰이 1개**다. 그래서 발급을 `InvestDO` 단일 인스턴스
-  (`idFromName("main")`)에 몰아넣었다 — 여러 곳에서 발급하면 서로 무효화한다.
-  같은 키로 **터미널에서 curl 한 번 받아보는 것만으로도** 서버가 캐시한 토큰이
-  죽는다. 그래서 401을 만나면 만료 전이라도 캐시를 버리고 새로 받아 한 번
-  재시도한다 — 이게 없으면 24시간 내내 401이다.
-- 계좌·자산 API는 `Authorization: Bearer` 외에 **`X-Tossinvest-Account` 헤더 필수**.
-- Rate limit이 빡빡하다. 상류 재조회는 30초(`REFRESH_MIN_MS`) 간격으로만 하고
-  나머지는 DO 캐시로 답한다. 상류가 429로 막히면 **직전 캐시를 `stale` 표시와 함께**
-  돌려준다 — 한도에 걸렸다고 화면이 비지 않게.
-
-## 알려진 막힘 — 토큰 발급 실패 (2026-08 현재 미해결)
-
-토스가 토큰 발급(`POST /oauth2/token`)을 **HTTP 401** 로 거절한다. 실제 응답:
-
-```json
-{"error":{"requestId":"…","code":"unidentified-client",
-  "message":"클라이언트를 식별할 수 없습니다. 액세스 토큰 또는 IP를 확인해 주세요."}}
-```
-
-**원인 확정(2026-08-08): 허용 IP.** 토스 콘솔의 "허용 IP 관리"에 발급 시점의 IP
-한 개(휴대폰 통신사 IP)만 등록되어 있었다. 키 자체는 활성·유효하다. 즉 **키 문제가
-아니라 화이트리스트에 워커가 없어서** 나는 401이다.
-
-Cloudflare Workers 는 요청마다 다른 엣지에서 나가고 그 IP 대역은 수천 개라
-**콘솔에 등록하는 방식으로는 풀 수 없다.** 아래 2번(고정 IP 지점에서 호출)이
-사실상 유일한 길이다.
-
-아래는 확정 전 후보들이었다 — 같은 응답을 다시 만났을 때를 위해 남겨 둔다:
-
-- **API 키가 틀렸다** — 키를 다시 확인하면 끝난다.
-- **허용 IP가 아니다** — Cloudflare Workers는 아웃바운드 IP가 고정이 아니라서
-  콘솔에 등록할 IP 자체가 없다. 아래 2번 구조로 가야 한다.
-
-**세 번째 후보이자 현재 가장 유력한 원인**: 클라이언트 인증 방식이 어긋났을 수 있다.
-401 응답에 `WWW-Authenticate: Basic realm="openapi"` 가 실려 오는데, 이는 토스가
-자격증명을 **`Authorization: Basic` 헤더**로 받기를 기대한다는 뜻이다(OAuth2 의 기본
-방식). 초기 구현은 폼 본문에 담아 보냈으므로 키가 맞고 IP 가 허용돼도 401 이 난다.
-지금은 basic 을 먼저 시도하고 실패하면 폼 본문 방식으로 한 번 더 시도한다.
-
-가르는 방법: **같은 키로 내 PC에서 토큰 발급을 시도해 본다**(아래 명령, `-u` 가 basic
-방식이다). 성공하면 키는 멀쩡하고 IP 문제, PC에서도 실패하면 키·앱 승인 문제다.
+`ENABLE_INVEST` var가 켜져 있어도 `INVEST_PASSWORD`가 없으면 503으로 닫힌다
+(fail-closed). 내리려면 var를 `"false"`로 바꾼다.
 
 ```bash
-read -rsp "client_id: " ID; echo
-read -rsp "client_secret: " SECRET; echo
-curl -i --compressed -X POST https://openapi.tossinvest.com/oauth2/token \
-  -u "$ID:$SECRET" -d "grant_type=client_credentials"
+npx wrangler@4 secret put INVEST_PASSWORD      # 화면 게이트 비밀번호
+npx wrangler@4 secret put INVEST_SINK_SECRET   # 데몬 업로드 인증용
 ```
 
-> 초기에 이 응답을 IP 차단으로 **오진했다**. 본문에 `ip` 라는 단어가 있다는 것만으로
-> 단정했기 때문이다. 지금은 명시적으로 거부당한 문구(`not allowed ip` 등)일 때만
-> 단정하고, `unidentified-client` 는 두 원인을 함께 알린다.
+**토스 API 키(`INVEST_CLIENT_ID`·`INVEST_CLIENT_SECRET`)는 엣지에 넣지 않는다.**
+데몬이 쓰는 값이라 이 PC의 환경변수로만 둔다. 예전에 넣어 뒀다면 지우는 게 좋다:
+`npx wrangler@4 secret delete INVEST_CLIENT_ID`.
 
-판정 근거인 토스 응답 원문은 두 곳에서 볼 수 있다.
-
-```bash
-npx wrangler@4 tail --format pretty   # invest upstream failure 항목의 body
-```
-
-**임시 조치**: 로그를 볼 수 없는 상황을 위해 오류 배너에 "토스 응답 원문"을 접어서
-함께 보여준다(`/_invest/state` 응답의 `detail`). 비밀번호 뒤 본인 전용 화면이고 우리
-키·토큰은 토스 응답에 없으므로 노출 위험은 없지만, **원인이 확정되면 되돌린다** —
-`invest.js` 의 `detail` 필드와 `app.js` 의 `showNotice` 두 번째 인자를 빼면 된다.
-
-풀 수 있는 길:
-
-1. **토스 콘솔에서 IP 제한을 끄거나 넓게 잡는다.** 가능하면 이게 끝이다. 코드 변경 없음.
-2. **고정 IP 지점에서 토스를 부른다.** `_src/duri-sink/` 처럼 내 PC에 상주하는 데몬이
-   주기적으로 잔고를 읽어 **숫자만** 엣지로 올리고, 엣지는 저장·표시만 한다. API 키가
-   Cloudflare가 아니라 내 PC에만 있게 되어 보안상 오히려 낫고, 지금 화면을 그대로 쓴다.
-   대신 PC가 꺼져 있으면 갱신이 멈춘다(하루 한 장이 목적이라 대체로 무해).
-3. Cloudflare의 고정 송신 IP 기능은 개인 요금제 범위 밖이라 실질적 선택지가 아니다.
+게이트 세션 쿠키는 `bl_invest`, **7일**이다(duri의 1년보다 짧게 잡았다 — 계좌 정보가
+보이는 화면이라 기기를 잃어버렸을 때의 노출 창을 좁히는 쪽을 택했다).
+라우팅·게이트는 `_infra/worker.js`의 `handleInvestGate`·`handleInvest`.
 
 ## 수익률 그래프가 "오늘부터" 시작하는 이유
 
 토스 Open API의 표면은 시세·계좌·주문뿐이라 **과거 자산 추이 엔드포인트가 없다.**
-그래서 그래프는 우리가 직접 쌓는다 — 매일 22:00 KST(13:00 UTC) cron이 잔고를 한 장
-찍어 `snap:YYYY-MM-DD`로 저장하고(`MAX_SNAPSHOTS` 800장 ≈ 3년), 화면을 열 때도
-그날 스냅샷이 없으면 채운다. 즉 **켠 날부터 점이 생기고, 그 전 기간은 복원할 수 없다.**
+그래서 그래프는 우리가 직접 쌓는다 — 데몬이 올릴 때마다 `snap:YYYY-MM-DD`로 하루
+한 장씩 저장한다(`MAX_SNAPSHOTS` 800장 ≈ 3년, 같은 날 다시 올리면 덮어쓴다).
+즉 **켠 날부터 점이 생기고, 그 전 기간은 복원할 수 없다.**
+
+데몬이 멈추면 점이 빠진다. 마지막 갱신이 `STALE_AFTER_MS`(36시간)를 넘으면 화면이
+"갱신되지 않았습니다"라고 알린다 — 조용히 옛날 숫자를 보여주지 않기 위해서다.
 
 ### 두 가지 한계 (숫자를 읽을 때 알아야 할 것)
 
@@ -137,11 +83,37 @@ npx wrangler@4 tail --format pretty   # invest upstream failure 항목의 body
   다른 값이고, 입금이 잦으면 차이가 커진다. 정확히 하려면 거래원장이 필요한데
   공식 API에 없다.
 
+## 겪은 문제 — 엣지에서 직접 부르면 401 (해결됨: 데몬 구조로 전환)
+
+처음에는 워커가 토스를 직접 불렀고, 토큰 발급이 계속 401로 거절됐다.
+
+```json
+{"error":{"requestId":"…","code":"unidentified-client",
+  "message":"클라이언트를 식별할 수 없습니다. 액세스 토큰 또는 IP를 확인해 주세요."}}
+```
+
+원인은 **허용 IP**였다. 토스 콘솔의 "허용 IP 관리"에 발급 시점의 IP 한 개만 등록돼
+있었고, 워커의 IP는 그 목록에 없었다. Workers는 나가는 IP가 고정이 아니라 등록으로는
+풀 수 없어서 조회 주체를 집 PC로 옮겼다.
+
+원인을 좁히기까지 헛짚은 것들 — 같은 응답을 다시 만나면 참고할 것:
+
+- **본문에 `ip`가 있다고 IP 문제로 단정하면 안 된다.** 저 메시지는 "액세스 토큰
+  **또는** IP"라고 두 원인을 함께 말한다. 지금은 명시적 거부 문구(`not allowed ip`
+  등)일 때만 단정하고, `unidentified-client`는 두 원인을 함께 알린다.
+- **클라이언트 인증 방식도 의심했다.** 401 응답에 `WWW-Authenticate: Basic
+  realm="openapi"`가 실려 와서 폼 본문(`client_secret_post`) 대신 Basic 헤더를
+  기대하는 줄 알았다. 원인은 아니었지만, 확정할 수 없어 지금도 basic → post 순으로
+  자동 판별한다.
+- 진단 문구는 어느 단계(토큰 발급/잔고 조회)에서 깨졌는지와 HTTP 상태코드를 담는다.
+  토스 응답 원문은 `detail`로 따로 실어 화면 배너에서 펼쳐볼 수 있다.
+
 ## 검증
 
 ```bash
 npm test                     # _infra/invest.test.mjs 포함
 node _infra/build.mjs
+node _src/invest-sink/index.mjs   # 실계좌 연결 확인 (환경변수 필요)
 ```
 
 실계좌 연결은 secret 없이는 테스트할 수 없다. `_infra/invest.test.mjs`는 스텁 fetch로

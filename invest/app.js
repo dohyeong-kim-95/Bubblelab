@@ -215,6 +215,12 @@ function showNotice(message, detail) {
   el.notice.append(box);
 }
 
+function staleNotice(updatedAt) {
+  const hours = Math.floor((Date.now() - updatedAt) / (60 * 60 * 1000));
+  const since = hours >= 48 ? `${Math.floor(hours / 24)}일` : `${hours}시간`;
+  return `${since}째 갱신되지 않았습니다 — PC 데몬이 도는지 확인해주세요`;
+}
+
 function showFailure(message, detail) {
   showNotice(message, detail);
   for (const host of [el.summary, el.chart, el.holdings]) {
@@ -238,8 +244,9 @@ async function load({ force = false } = {}) {
       return;
     }
 
-    // stale = 상류 조회가 실패해 직전 캐시를 보여주는 중.
-    showNotice(body.stale ? `${body.error} (마지막으로 받은 값을 보여줍니다)` : "", body.detail);
+    // 잔고를 올리는 건 집 PC 데몬이다. error = 아직 아무것도 안 올라옴,
+    // stale = 숫자는 있는데 오래됨(데몬이 멈췄을 수 있음).
+    showNotice(body.error ?? (body.stale ? staleNotice(body.updatedAt) : ""), body.detail);
     el.updated.textContent = body.updatedAt
       ? `${new Date(body.updatedAt).toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" })} 기준`
       : "";

@@ -1,14 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
   aggregateHoldings,
   buildSeries,
   describeUpstreamError,
+  fetchSnapshot,
+  InvestDO,
   kstDate,
   MAX_SNAPSHOTS,
+  memoryTokenCache,
+  normalizeSnapshot,
   parseDecimal,
   READ_ONLY_PATHS,
   snapshotOf,
@@ -253,7 +257,152 @@ test("상류 본문을 안내 문구에 섞지 않는다", async () => {
   );
 });
 
-// ── 토큰 수명 (InvestDO) ───────────────────────────────────────────────
+// ── 토스 조회 (집 PC 데몬이 실행하는 경로) ─────────────────────────────
+
+/** 응답 스크립트를 순서대로 돌려주는 fetch. 호출 기록을 남긴다. */
+function fetchStub(script) {
+  const calls = [];
+  const impl = async (input, init) => {
+    calls.push({ url: String(input), body: init?.body, token: init?.headers?.Authorization });
+    const step = script.shift();
+    if (!step) throw new Error(`예상치 못한 호출: ${input}`);
+    return step(String(input), init);
+  };
+  return { impl, calls };
+}
+
+const tokenResponse = (value) => Response.json({ access_token: value, expires_in: 86400 });
+const okAccounts = () => Response.json({ result: [{ accountNo: "123-45", accountSeq: 7, accountType: "BROKERAGE" }] });
+const okHoldings = () => Response.json({ result: { items: [holding()] } });
+const okCash = () => Response.json({ result: { cashBuyingPower: "1000", currency: "KRW" } });
+const denied = (body = '{"error":{"code":"unidentified-client"}}') => () => new Response(body, { status: 401 });
+
+async function runSink(script, options = {}) {
+  const stub = fetchStub(script);
+  const snapshot = await fetchSnapshot({
+    clientId: "id", clientSecret: "secret", fetchImpl: stub.impl, ...options,
+  });
+  return { snapshot, calls: stub.calls };
+}
+
+test("잔고를 읽어 엣지로 올릴 스냅샷을 만든다", async () => {
+  const { snapshot } = await runSink([
+    () => tokenResponse("tok-1"), okAccounts, okHoldings, okCash, okCash,
+  ]);
+  assert.equal(snapshot.byCurrency.KRW.value, 800000);
+  assert.equal(snapshot.cash.KRW, 1000);
+  assert.equal(snapshot.positions.length, 1);
+  assert.match(snapshot.date, /^\d{4}-\d{2}-\d{2}$/);
+});
+
+// 토스는 client당 유효 토큰이 1개라, 다른 곳에서 발급하면 쓰던 토큰이 즉시 죽는다.
+test("401이면 토큰을 새로 받아 한 번 재시도한다", async () => {
+  const cache = memoryTokenCache();
+  cache.write({ value: "죽은토큰", expiresAt: Date.now() + 3600_000, method: "basic" });
+
+  const { snapshot, calls } = await runSink([
+    () => new Response("unauthorized", { status: 401 }),  // 죽은 토큰으로 accounts
+    () => tokenResponse("tok-2"),                          // 강제 재발급
+    okAccounts, okHoldings, okCash, okCash,
+  ], { cache });
+
+  assert.equal(snapshot.byCurrency.KRW.value, 800000);
+  assert.equal(calls[0].token, "Bearer 죽은토큰");
+  assert.match(calls[1].url, /\/oauth2\/token$/);
+  assert.equal(cache.read().value, "tok-2", "새 토큰이 캐시되지 않았다");
+});
+
+test("토큰 캐시가 살아 있으면 재발급하지 않는다", async () => {
+  const cache = memoryTokenCache();
+  cache.write({ value: "tok-live", expiresAt: Date.now() + 3600_000, method: "basic" });
+  const { calls } = await runSink([okAccounts, okHoldings, okCash, okCash], { cache });
+  assert.ok(!calls.some((call) => call.url.includes("/oauth2/token")), "토큰을 불필요하게 재발급했다");
+});
+
+test("basic 이 거부되면 post 방식으로 한 번 더 시도하고 통한 쪽을 기억한다", async () => {
+  const cache = memoryTokenCache();
+  const { calls } = await runSink([
+    denied(), () => tokenResponse("tok-post"), okAccounts, okHoldings, okCash, okCash,
+  ], { cache });
+
+  assert.match(calls[0].token, /^Basic /, "basic 을 먼저 시도하지 않았다");
+  assert.equal(calls[1].token, undefined, "폴백이 basic 헤더를 그대로 달고 갔다");
+  assert.equal(new URLSearchParams(calls[1].body).get("client_id"), "id");
+  assert.equal(cache.read().method, "post", "통한 방식을 기억하지 않았다");
+});
+
+test("두 방식 모두 거부되면 단계와 상태코드를 담아 던진다", async () => {
+  await assert.rejects(
+    () => runSink([denied(), denied(), denied(), denied()]),
+    (error) => {
+      assert.match(error.message, /토큰 발급/);
+      assert.match(error.message, /HTTP 401/);
+      assert.match(error.message, /API 키가 틀렸거나 허용 IP/);
+      return true;
+    },
+  );
+});
+
+test("API 키 앞뒤 공백·줄바꿈을 털어내고 보낸다", async () => {
+  const { calls } = await runSink(
+    [() => tokenResponse("tok-1"), okHoldings, okCash, okCash],
+    { clientId: "  id-1 ", clientSecret: "secret-1\n", accountSeq: 7 },
+  );
+  assert.equal(calls[0].token, `Basic ${Buffer.from("id-1:secret-1").toString("base64")}`);
+});
+
+test("accountSeq를 알면 계좌 목록을 조회하지 않는다", async () => {
+  const { calls } = await runSink(
+    [() => tokenResponse("tok-1"), okHoldings, okCash, okCash],
+    { accountSeq: 42 },
+  );
+  assert.ok(!calls.some((call) => call.url.includes("/api/v1/accounts")), "계좌 목록을 불필요하게 조회했다");
+  assert.ok(calls.some((call) => call.url.includes("/api/v1/holdings")));
+});
+
+// ── 엣지가 받는 스냅샷 검증 ────────────────────────────────────────────
+
+const validPush = () => ({
+  byCurrency: { KRW: { value: 100, cost: 90, pnl: 10, rate: 0.111 } },
+  cash: { KRW: 5000 },
+  positions: [{ symbol: "005930", name: "삼성전자", currency: "KRW", quantity: 1, value: 100 }],
+});
+
+test("정상 스냅샷은 통과하고 빠진 값은 0으로 채운다", () => {
+  const snapshot = normalizeSnapshot(validPush(), Date.parse("2026-08-08T01:00:00Z"));
+  assert.equal(snapshot.date, "2026-08-08");
+  assert.equal(snapshot.byCurrency.KRW.value, 100);
+  assert.equal(snapshot.positions[0].symbol, "005930");
+  assert.equal(snapshot.positions[0].pnl, 0, "빠진 수치가 0으로 채워지지 않았다");
+});
+
+// 바깥에서 들어오는 값이라 통과시키지 말고 다시 지어서 쓴다.
+test("망가진 스냅샷은 거부한다", () => {
+  const broken = [
+    null,
+    "문자열",
+    { ...validPush(), positions: "배열이 아님" },
+    { ...validPush(), byCurrency: { KRW: { value: "숫자아님", cost: 0, pnl: 0, rate: 0 } } },
+    { ...validPush(), byCurrency: { KRW: { value: Infinity, cost: 0, pnl: 0, rate: 0 } } },
+    { ...validPush(), byCurrency: { "원화": { value: 1, cost: 1, pnl: 0, rate: 0 } } },
+    { ...validPush(), cash: { KRW: "많음" } },
+  ];
+  for (const payload of broken) {
+    assert.equal(normalizeSnapshot(payload), null, `거부됐어야 한다: ${JSON.stringify(payload)}`);
+  }
+});
+
+// 시계가 어긋난 PC가 미래 날짜를 올리면 그래프가 영영 이상해진다.
+test("날짜는 데몬 값이 아니라 받은 시각으로 다시 찍는다", () => {
+  const snapshot = normalizeSnapshot(
+    { ...validPush(), date: "2099-01-01", ts: 4102444800000 },
+    Date.parse("2026-08-08T01:00:00Z"),
+  );
+  assert.equal(snapshot.date, "2026-08-08");
+  assert.equal(snapshot.ts, Date.parse("2026-08-08T01:00:00Z"));
+});
+
+// ── 엣지 저장소 (InvestDO) ─────────────────────────────────────────────
 
 /** DO storage 최소 스텁 — get/put/list({prefix})/delete(keys)만 쓴다. */
 function storageStub() {
@@ -264,183 +413,76 @@ function storageStub() {
     async put(key, value) { map.set(key, value); },
     async delete(keys) { for (const key of [].concat(keys)) map.delete(key); },
     async list({ prefix }) {
-      const hit = [...map.entries()].filter(([key]) => key.startsWith(prefix));
-      return new Map(hit);
+      return new Map([...map.entries()].filter(([key]) => key.startsWith(prefix)));
     },
   };
 }
 
-/** 응답 스크립트를 순서대로 돌려주는 fetch. 호출 기록을 남긴다. */
-function fetchStub(script) {
-  const calls = [];
-  const impl = async (input, init) => {
-    const url = String(input);
-    calls.push({ url, body: init?.body, token: init?.headers?.Authorization });
-    const step = script.shift();
-    if (!step) throw new Error(`예상치 못한 호출: ${url}`);
-    return step(url, init);
+function investDO(storage = storageStub()) {
+  const instance = new InvestDO({ storage }, {});
+  return {
+    storage,
+    push: (payload) => instance.fetch(new Request("https://invest/push", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+    })),
+    state: () => instance.fetch(new Request("https://invest/state", { method: "GET" })),
   };
-  return { impl, calls };
 }
 
-const tokenResponse = (value) => Response.json({ access_token: value, expires_in: 86400 });
-const okAccounts = () => Response.json({ result: [{ accountNo: "123-45", accountSeq: 7, accountType: "BROKERAGE" }] });
-const okHoldings = () => Response.json({ result: { items: [holding()] } });
-const okCash = () => Response.json({ result: { cashBuyingPower: "1000", currency: "KRW" } });
+test("올라온 스냅샷을 저장하고 화면 상태로 돌려준다", async () => {
+  const server = investDO();
+  assert.equal((await server.push(validPush())).status, 200);
 
-async function runDO(script, { storage = storageStub(), env = {} } = {}) {
-  const { InvestDO } = await import("./invest.js");
-  const stub = fetchStub(script);
-  const original = globalThis.fetch;
-  globalThis.fetch = stub.impl;
-  try {
-    const instance = new InvestDO({ storage }, {
-      INVEST_CLIENT_ID: "id", INVEST_CLIENT_SECRET: "secret", ...env,
-    });
-    const response = await instance.fetch(new Request("https://invest/state", { method: "GET" }));
-    return { body: await response.json(), status: response.status, calls: stub.calls, storage };
-  } finally {
-    globalThis.fetch = original;
-  }
-}
-
-test("토큰을 받아 잔고를 조회하고 스냅샷을 남긴다", async () => {
-  const { body, status, storage } = await runDO([
-    () => tokenResponse("tok-1"), okAccounts, okHoldings, okCash, okCash,
-  ]);
-  assert.equal(status, 200);
-  assert.equal(body.byCurrency.KRW.value, 800000);
-  assert.equal(body.cash.KRW, 1000);
-  assert.equal(body.positions.length, 1);
-  assert.equal(body.stale, false);
-  // 하루치 스냅샷이 남아 그래프의 첫 점이 된다
-  assert.equal([...storage.map.keys()].filter((k) => k.startsWith("snap:")).length, 1);
-  assert.equal(storage.map.get("accountSeq"), 7);
+  const state = await (await server.state()).json();
+  assert.equal(state.byCurrency.KRW.value, 100);
+  assert.equal(state.cash.KRW, 5000);
+  assert.equal(state.positions.length, 1);
+  assert.equal(state.stale, false);
+  assert.equal(state.error, null);
+  assert.equal(state.series.KRW.length, 1, "그래프 점이 남지 않았다");
 });
 
-// 토스는 client당 유효 토큰이 1개라, 다른 곳에서 발급하면 캐시된 토큰이 즉시
-// 죽는다. 만료 전이라도 401이면 새로 받아 재시도해야 24시간 먹통을 피한다.
-test("401이면 캐시된 토큰을 버리고 새로 받아 한 번 재시도한다", async () => {
-  const storage = storageStub();
-  await storage.put("token", { value: "죽은토큰", expiresAt: Date.now() + 60 * 60 * 1000 });
-  await storage.put("accountSeq", 7);
-
-  const { body, status, calls } = await runDO([
-    () => new Response("unauthorized", { status: 401 }),  // 죽은 토큰으로 holdings
-    () => tokenResponse("tok-2"),                          // 강제 재발급
-    okHoldings, okCash, okCash,
-  ], { storage });
-
-  assert.equal(status, 200);
-  assert.equal(body.byCurrency.KRW.value, 800000);
-  assert.equal(calls[0].token, "Bearer 죽은토큰");
-  assert.match(calls[1].url, /\/oauth2\/token$/);
-  assert.equal(calls[2].token, "Bearer tok-2", "재시도가 새 토큰을 쓰지 않았다");
-  assert.equal(storage.map.get("token").value, "tok-2", "새 토큰이 저장되지 않았다");
+test("아직 아무것도 안 올라왔으면 데몬을 확인하라고 알린다", async () => {
+  const state = await (await investDO().state()).json();
+  assert.match(state.error, /데몬/);
+  assert.deepEqual(state.positions, []);
+  assert.deepEqual(state.series, {});
 });
 
-test("재시도까지 실패하면 캐시가 없을 때 오류를 그대로 알린다", async () => {
-  // 재시도 때는 accountSeq가 이미 캐시돼 있어 계좌 목록을 다시 부르지 않는다.
-  const { body, status } = await runDO([
-    () => tokenResponse("tok-1"), okAccounts,
-    () => new Response("nope", { status: 401 }),
-    () => tokenResponse("tok-2"),
-    () => new Response("nope", { status: 401 }),
-  ]);
-  assert.equal(status, 502);
-  assert.match(body.error, /인증/);
+test("망가진 스냅샷은 400으로 돌려주고 저장하지 않는다", async () => {
+  const server = investDO();
+  const response = await server.push({ positions: "배열이 아님" });
+  assert.equal(response.status, 400);
+  assert.equal(server.storage.map.get("latest"), undefined);
 });
 
-test("상류가 막혀도 캐시가 있으면 stale 표시로 직전 값을 준다", async () => {
-  const storage = storageStub();
-  await storage.put("accountSeq", 7);
-  // 1회차: 정상 조회로 캐시를 만든다
-  await runDO([() => tokenResponse("tok-1"), okHoldings, okCash, okCash], { storage });
-  // 2회차: 30초 캐시를 무시하도록 시각을 되돌린 뒤 상류를 429로 막는다
-  const latest = await storage.get("latest");
-  await storage.put("latest", { ...latest, ts: latest.ts - 10 * 60 * 1000 });
+// 데몬이 멈춘 것을 화면이 알아야 한다 — 숫자는 있는데 그저께 것일 수 있다.
+test("오래된 스냅샷은 stale 로 표시한다", async () => {
+  const server = investDO();
+  await server.push(validPush());
+  const latest = server.storage.map.get("latest");
+  server.storage.map.set("latest", { ...latest, ts: latest.ts - 2 * 24 * 60 * 60 * 1000 });
 
-  const { body, status } = await runDO([
-    () => new Response("slow down", { status: 429 }),
-    () => new Response("slow down", { status: 429 }),
-  ], { storage });
-
-  assert.equal(status, 200, "캐시가 있는데 화면을 비웠다");
-  assert.equal(body.stale, true);
-  assert.match(body.error, /한도/);
-  assert.equal(body.byCurrency.KRW.value, 800000);
+  const state = await (await server.state()).json();
+  assert.equal(state.stale, true);
+  assert.equal(state.byCurrency.KRW.value, 100, "오래됐다고 값을 숨기면 안 된다");
 });
 
-// 콘솔에서 복사하거나 secret 을 넣을 때 딸려오는 공백·줄바꿈은 인증만 조용히
-// 깨뜨리고 아무 단서도 남기지 않는다 — 보내기 전에 털어낸다.
-test("API 키 앞뒤 공백·줄바꿈을 털어내고 보낸다", async () => {
-  const { calls, status } = await runDO(
-    [() => tokenResponse("tok-1"), okHoldings, okCash, okCash],
-    { env: { INVEST_CLIENT_ID: "  id-1 ", INVEST_CLIENT_SECRET: "secret-1\n", INVEST_ACCOUNT_SEQ: "7" } },
-  );
-  assert.equal(status, 200);
-  assert.equal(calls[0].token, `Basic ${Buffer.from("id-1:secret-1").toString("base64")}`);
+test("같은 날 다시 올리면 그날 점을 덮어쓴다", async () => {
+  const server = investDO();
+  await server.push(validPush());
+  await server.push({ ...validPush(), byCurrency: { KRW: { value: 200, cost: 90, pnl: 110, rate: 1.22 } } });
+
+  const state = await (await server.state()).json();
+  assert.equal(state.series.KRW.length, 1, "같은 날인데 점이 늘었다");
+  assert.equal(state.series.KRW[0].value, 200);
 });
 
-// 토스가 basic 을 기대하는지 문서로 확인할 수 없어 자동 판별에 맡겼다.
-test("basic 이 거부되면 post 방식으로 한 번 더 시도하고 통한 쪽을 기억한다", async () => {
-  const storage = storageStub();
-  const { status, calls } = await runDO([
-    () => new Response('{"error":{"code":"unidentified-client"}}', { status: 401 }),
-    () => tokenResponse("tok-post"), okHoldings, okCash, okCash,
-  ], { storage, env: { INVEST_ACCOUNT_SEQ: "7" } });
-
-  assert.equal(status, 200);
-  assert.match(calls[0].token, /^Basic /, "basic 을 먼저 시도하지 않았다");
-  assert.equal(calls[1].token, undefined, "폴백이 basic 헤더를 그대로 달고 갔다");
-  assert.equal(new URLSearchParams(calls[1].body).get("client_id"), "id");
-  assert.equal(storage.map.get("tokenAuthMethod"), "post", "통한 방식을 기억하지 않았다");
-});
-
-test("두 방식 모두 거부되면 어느 단계인지 화면 문구에 남는다", async () => {
-  const denied = () => new Response('{"error":{"code":"unidentified-client"}}', { status: 401 });
-  // 첫 시도(basic·post) → 401 재시도로 한 번 더(basic·post)
-  const { body, status } = await runDO([denied, denied, denied, denied]);
-  assert.equal(status, 502);
-  assert.match(body.error, /토큰 발급/);
-  assert.match(body.error, /HTTP 401/);
-  assert.match(body.error, /API 키가 틀렸거나 허용 IP/);
-});
-
-test("IP 차단이면 키가 아니라 IP 문제라고 알린다", async () => {
-  const { body, status } = await runDO([
-    () => new Response('{"message":"IP not allowed"}', { status: 403 }),
-  ]);
-  assert.equal(status, 502);
-  assert.match(body.error, /IP/);
-  // 원인 판정은 휴리스틱이라 근거(토스 원문)를 detail 로 함께 준다.
-  // 사람이 읽는 문구(error)와는 분리해 담는다.
-  assert.equal(body.detail, '{"message":"IP not allowed"}');
-  assert.ok(!body.error.includes("IP not allowed"), "안내 문구에 원문이 섞였다");
-});
-
-test("상류 원문은 error가 아니라 detail로 간다", () => {
-  const error = upstreamError(401, '{"message":"unauthorized ip"}', "토큰 발급");
-  assert.equal(error.body, '{"message":"unauthorized ip"}');
-  assert.ok(!error.message.includes("unauthorized ip"), "화면 문구에 원문이 섞였다");
-});
-
-test("정상 응답에는 detail이 붙지 않는다", async () => {
-  const { body } = await runDO([
-    () => tokenResponse("tok-1"), okAccounts, okHoldings, okCash, okCash,
-  ]);
-  assert.equal(body.detail, null);
-  assert.equal(body.error, null);
-});
-
-test("INVEST_ACCOUNT_SEQ가 있으면 계좌 목록을 조회하지 않는다", async () => {
-  const { calls, status } = await runDO(
-    [() => tokenResponse("tok-1"), okHoldings, okCash, okCash],
-    { env: { INVEST_ACCOUNT_SEQ: "42" } },
-  );
-  assert.equal(status, 200);
-  assert.ok(!calls.some((call) => call.url.includes("/api/v1/accounts")), "계좌 목록을 불필요하게 조회했다");
-  assert.ok(calls.some((call) => call.url.includes("/api/v1/holdings")));
+test("일별 스냅샷에는 종목 단위를 담지 않는다", async () => {
+  const server = investDO();
+  await server.push(validPush());
+  const daily = [...server.storage.map.entries()].find(([key]) => key.startsWith("snap:"))[1];
+  assert.ok(!("positions" in daily), "일별 스냅샷에 종목이 들어갔다");
 });
 
 // ── 배선 ───────────────────────────────────────────────────────────────
@@ -452,26 +494,30 @@ test("invest DO·마이그레이션이 등록돼 있다", () => {
   assert.match(wrangler, /"new_sqlite_classes":\s*\["InvestDO"\]/);
 });
 
-// 플래그를 켜도 secret 이 없으면 열리면 안 된다. 플래그 값이 아니라 이 런타임
-// 가드가 invest 의 fail-closed 를 보장한다.
-test("secret이 하나라도 없으면 플래그와 무관하게 닫힌다", () => {
+test("엣지는 토스 API 키를 알 필요가 없다", () => {
   const worker = readFileSync(join(ROOT, "_infra/worker.js"), "utf8");
-  assert.match(
-    worker,
-    /!investPassword\(env\) \|\| !env\.INVEST_CLIENT_ID \|\| !env\.INVEST_CLIENT_SECRET/,
-    "invest API 가 secret 세 개를 모두 요구하지 않는다",
-  );
-  assert.match(
-    worker,
-    /!featureEnabled\(env, "ENABLE_INVEST"\) \|\| !investPassword\(env\)/,
-    "invest 화면 게이트가 플래그·비밀번호를 모두 요구하지 않는다",
-  );
+  // 조회는 집 PC 데몬이 한다 — 워커가 키를 들고 있으면 구조가 되돌아간 것이다.
+  assert.ok(!worker.includes("INVEST_CLIENT_SECRET"), "워커가 토스 시크릿을 참조한다");
+  assert.match(worker, /!investPassword\(env\)/, "게이트 비밀번호를 요구하지 않는다");
+  assert.match(worker, /env\.INVEST_SINK_SECRET/, "업로드 인증이 없다");
+});
+
+test("업로드 경로는 인증 없이는 열리지 않는다", () => {
+  const worker = readFileSync(join(ROOT, "_infra/worker.js"), "utf8");
+  const push = worker.slice(worker.indexOf('"/_invest/snapshot"'));
+  assert.match(push.slice(0, 900), /matchesCredential/, "업로드가 secret 검증을 거치지 않는다");
 });
 
 test("워커가 InvestDO를 내보내고 invest를 noindex로 돌린다", () => {
   const worker = readFileSync(join(ROOT, "_infra/worker.js"), "utf8");
   assert.match(worker, /export \{ InvestDO \} from "\.\/invest\.js"/);
   assert.match(worker, /\["admin", "work", "estate", "duri", "invest"\]/);
-  // 게이트 비밀번호에 폴백을 두지 않는다 — 계좌 화면은 명시 설정만 허용한다.
   assert.match(worker, /return env\.INVEST_PASSWORD \|\| null;/);
+});
+
+test("데몬은 배포 산출물에 들어가지 않는다", () => {
+  // _ 로 시작하는 폴더는 배포에서 빠진다. API 키를 다루는 코드라 더더욱 중요하다.
+  assert.ok(existsSync(join(ROOT, "_src/invest-sink/index.mjs")));
+  assert.ok(!existsSync(join(ROOT, "dist/invest-sink")));
+  assert.ok(!existsSync(join(ROOT, "dist/_src")));
 });

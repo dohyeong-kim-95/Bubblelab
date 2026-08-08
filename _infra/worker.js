@@ -505,9 +505,39 @@ async function handleInvest(request, env, url) {
       status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "86400" },
     });
   }
-  if (!investPassword(env) || !env.INVEST_CLIENT_ID || !env.INVEST_CLIENT_SECRET) {
+  if (!investPassword(env)) {
     return new Response("invest is not configured", { status: 503 });
   }
+  const id = env.INVEST.idFromName("main");
+
+  // 집 PC 데몬이 잔고를 올린다. 토스 허용 IP 때문에 조회는 엣지가 아니라 데몬이
+  // 하고, 여기는 받아서 보관만 한다 — 그래서 엣지에는 API 키가 없다.
+  if (url.pathname === "/_invest/snapshot" && request.method === "POST") {
+    if (!env.INVEST_SINK_SECRET) {
+      return new Response("invest sink is not configured", { status: 503 });
+    }
+    const limited = await enforceRateLimit(request, env, {
+      scope: "invest-push", limit: 20, windowMs: 60 * 1000,
+    });
+    if (limited) return limited;
+    const offered = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+    if (!await matchesCredential(await investSessionKey(env), offered, env.INVEST_SINK_SECRET)) {
+      return Response.json({ error: "unauthorized" }, { status: 401 });
+    }
+    const response = await env.INVEST.get(id).fetch(
+      new Request("https://invest/push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: await request.text(),
+      }),
+    );
+    return new Response(response.body, {
+      status: response.status,
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    });
+  }
+
+  // 화면 조회는 게이트를 통과한 브라우저만.
   const key = await investSessionKey(env);
   if (!await validSession(key, cookies(request).bl_invest)) {
     return Response.json({ error: "unauthorized" }, { status: 401, headers: { "Cache-Control": "no-store" } });
@@ -515,13 +545,11 @@ async function handleInvest(request, env, url) {
   if (url.pathname !== "/_invest/state" || request.method !== "GET") {
     return new Response("not found", { status: 404 });
   }
-  // 화면 새로고침 연타로 토스 한도를 건드리지 않게 여기서도 한 겹 막는다.
   const limited = await enforceRateLimit(request, env, {
     scope: "invest-state", limit: 30, windowMs: 60 * 1000,
   });
   if (limited) return limited;
 
-  const id = env.INVEST.idFromName("main");
   const response = await env.INVEST.get(id).fetch(
     new Request(`https://invest/state${url.search}`, { method: "GET" }),
   );
@@ -529,19 +557,6 @@ async function handleInvest(request, env, url) {
     status: response.status,
     headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
   });
-}
-
-/* 하루 한 번 잔고를 찍어 수익률 그래프의 점을 남긴다. 토스 Open API 에는
- * 과거 자산 추이 엔드포인트가 없어서, 그래프는 이렇게 쌓은 스냅샷으로만 그려진다
- * (즉 켠 날부터 점이 생긴다 — invest/README.md 참고). */
-async function recordInvestSnapshot(env) {
-  if (!featureEnabled(env, "ENABLE_INVEST")) return;
-  if (!env.INVEST_CLIENT_ID || !env.INVEST_CLIENT_SECRET) return;
-  const id = env.INVEST.idFromName("main");
-  const response = await env.INVEST.get(id).fetch(
-    new Request("https://invest/snapshot", { method: "POST" }),
-  );
-  if (!response.ok) console.error("invest snapshot failed", response.status);
 }
 
 /* Duri 실시간 중계 + 사진 버퍼. 접근은 둘 중 하나로만: duri 게이트를 통과한
@@ -1744,15 +1759,13 @@ async function syncWorkReviews(env) {
 
 export default {
   // cron 처리 (wrangler.jsonc triggers.crons):
-  //  22:00 KST(13:00 UTC) → 팟캐스트 저녁 리마인더 + invest 일별 잔고 스냅샷
+  //  22:00 KST(13:00 UTC) → 팟캐스트 저녁 리마인더
   //  08:00 KST(23:00 UTC) → 운세 데일리 알림 + 아침 브리핑(날씨) 알림
   //  06:40 KST(21:40 UTC) → 외주 리뷰 동기화 + 데일리 팟캐스트 생성
   async scheduled(controller, env, ctx) {
     const podcastReady = featureEnabled(env, "ENABLE_PODCAST") && env.PODCAST_BUCKET;
     if (controller.cron === "0 13 * * *") {
       if (podcastReady) ctx.waitUntil(runEveningReminder(env));
-      // 국내장 마감 후·미국장 개장 전이라 그날 잔고를 찍기 좋은 시각이다.
-      ctx.waitUntil(recordInvestSnapshot(env));
       return;
     }
     if (controller.cron === "0 23 * * *") {

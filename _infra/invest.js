@@ -5,14 +5,19 @@
 // tossFetch가 던진다. 주문 기능을 붙이려면 화이트리스트를 늘리는 게 아니라
 // 별도 모듈 + 별도 검토를 거쳐야 한다 (invest/README.md의 단계 계획 참고).
 //
+// 이 파일은 두 곳에서 돌아간다:
+//  · 위쪽(토스 조회) — 집 PC 데몬 `_src/invest-sink/`. 토스가 콘솔에 등록한 IP
+//    에서만 받아주는데 Workers 는 나가는 IP 가 고정이 아니라 등록이 불가능하다.
+//  · 아래쪽(InvestDO) — 엣지. 데몬이 올린 스냅샷을 보관하고 화면에 돌려준다.
+//    **엣지에는 API 키가 아예 없다.**
+//
 // 공식 스펙 (openapi.tossinvest.com, OpenAPI v1.0.3):
-//  · 인증: OAuth2 client_credentials — POST /oauth2/token (form-urlencoded)
+//  · 인증: OAuth2 client_credentials — POST /oauth2/token
 //          → access_token, expires_in 86400, refresh token 없음.
-//          **client 당 유효 토큰이 1개**라 발급을 한 곳(이 DO)에 모아야 한다.
+//          **client 당 유효 토큰이 1개**라 발급을 한 곳에 모아야 한다.
 //  · 계좌·자산 API 는 Authorization: Bearer 외에 X-Tossinvest-Account 헤더 필수.
 //  · 응답은 {"result": …} 봉투로 감싸여 온다.
 //  · rate limit 이 빡빡하다 — ACCOUNT 그룹 초당 1회, ASSET 초당 5회.
-//    그래서 상류 호출은 REFRESH_MIN_MS 간격으로만 하고 나머지는 캐시로 답한다.
 
 export const TOSS_BASE = "https://openapi.tossinvest.com";
 
@@ -25,8 +30,9 @@ export const READ_ONLY_PATHS = new Set([
 
 // 토큰 만료 60초 전에 미리 새로 받는다 (공식 CLI와 같은 skew).
 const TOKEN_SKEW_MS = 60 * 1000;
-// 상류 재조회 최소 간격. 새로고침을 연타해도 토스 한도를 건드리지 않는다.
-export const REFRESH_MIN_MS = 30 * 1000;
+// 이 시간이 지나도록 새 스냅샷이 안 올라오면 화면에 "갱신이 멈췄다"고 알린다.
+// 데몬은 하루 한 번 도는 것이 기본이라 하루로는 부족하고, 이틀이면 확실히 이상하다.
+export const STALE_AFTER_MS = 36 * 60 * 60 * 1000;
 // 보관할 일별 스냅샷 개수 (약 3년치 영업일).
 export const MAX_SNAPSHOTS = 800;
 
@@ -160,19 +166,6 @@ export function upstreamError(status, body, stage) {
   return error;
 }
 
-/**
- * 상류 실패를 서버 로그에 남긴다 (`npx wrangler@4 tail`, 또는 대시보드 Logs).
- * 화면 문구는 원인을 휴리스틱으로 요약하므로, 판정이 맞는지 따지려면 토스가
- * 실제로 뭐라고 했는지가 필요하다. 요청에 실은 키·토큰은 찍지 않는다.
- */
-function logUpstreamFailure(error) {
-  console.error("invest upstream failure", {
-    message: error?.message ?? String(error),
-    status: error?.status ?? null,
-    body: error?.body ?? "",
-  });
-}
-
 /** 분류에 쓸 만큼만 본문을 읽는다. 읽기 실패는 무시한다(원 오류가 더 중요하다). */
 async function errorBody(response) {
   try {
@@ -240,14 +233,173 @@ export function tokenRequest(clientId, clientSecret, method = "basic") {
   return { headers, body };
 }
 
+/* ── 토스 조회 (집 PC 데몬에서 실행된다) ─────────────────────────────────
+ *
+ * 토스 Open API 는 콘솔에 등록한 IP 에서만 받아준다. Cloudflare Workers 는
+ * 요청마다 다른 엣지에서 나가고 그 대역이 수천 개라 등록이 불가능하다 —
+ * 그래서 **토스를 부르는 쪽은 엣지가 아니라 고정 IP 를 가진 내 PC** 다.
+ * 여기 함수들은 `_src/invest-sink/` 데몬이 가져다 쓴다(엣지에서는 실행되지 않음).
+ * 조회 전용 보증(READ_ONLY_PATHS)은 그대로 이 모듈 안에 남아 있다.
+ */
+
+/** 토큰 캐시 어댑터의 기본값 — 프로세스가 사는 동안만 기억한다. */
+export function memoryTokenCache() {
+  let held = null;
+  return { read: () => held, write: (value) => { held = value; } };
+}
+
 /**
- * 잔고·수익률 대시보드의 서버.
+ * 액세스 토큰을 받아온다. 캐시가 살아 있으면 그대로 쓰고, force 면 새로 받는다.
  *
- * 단일 인스턴스(idFromName("main"))다 — 토스가 client 당 토큰 1개만 허용하므로
- * 발급·캐시를 여기 한 곳에 모아야 서로 토큰을 무효화하지 않는다.
+ * 토스는 client 당 유효 토큰이 1개라, 다른 곳에서 같은 키로 발급하면 이 토큰이
+ * 즉시 무효가 된다. 그래서 401 을 만나면 만료 전이라도 다시 받아야 한다.
  *
- * 저장하는 것: 액세스 토큰(만료시각 포함), accountSeq, 마지막 조회 결과,
- * 일별 스냅샷(snap:YYYY-MM-DD). API 키 자체는 저장하지 않고 매번 env 에서 읽는다.
+ * 클라이언트 인증 방식(basic/post)은 문서로 확정할 수 없어 자동 판별한다 —
+ * 통한 방식을 캐시에 적어 두고 다음부터 먼저 쓴다.
+ */
+export async function issueToken({ clientId, clientSecret, cache = memoryTokenCache(), force = false, fetchImpl = fetch }) {
+  const held = force ? null : cache.read();
+  if (held?.value && held.expiresAt - TOKEN_SKEW_MS > Date.now()) return held.value;
+
+  const id = String(clientId ?? "").trim();
+  const secret = String(clientSecret ?? "").trim();
+  if (!id || !secret) throw new Error("토스 API 키가 설정되지 않았습니다");
+
+  const known = held?.method ?? cache.read()?.method ?? null;
+  const order = known
+    ? [known, ...TOKEN_AUTH_METHODS.filter((method) => method !== known)]
+    : TOKEN_AUTH_METHODS;
+
+  let last = null;
+  for (const method of order) {
+    const { headers, body } = tokenRequest(id, secret, method);
+    const response = await fetchImpl(`${TOSS_BASE}/oauth2/token`, {
+      method: "POST", headers, body: body.toString(),
+    });
+    if (response.ok) {
+      const payload = await response.json();
+      const value = payload?.access_token;
+      if (!value) throw new Error("토스가 액세스 토큰을 주지 않았습니다");
+      const expiresAt = Date.now() + Math.max(60, Number(payload.expires_in) || 86400) * 1000;
+      cache.write({ value, expiresAt, method });
+      return value;
+    }
+    const failure = upstreamError(response.status, await errorBody(response), "토큰 발급");
+    // 자격증명을 못 알아본 경우에만 다른 방식을 시도할 값어치가 있다.
+    if (failure.status !== 401 && failure.status !== 400) throw failure;
+    last = failure;
+  }
+  throw last;
+}
+
+/** X-Tossinvest-Account 값. 미리 알고 있으면 계좌 목록 조회(초당 1회)를 아낀다. */
+export async function resolveAccountSeq({ token, configured, fetchImpl = fetch }) {
+  const given = Number(configured);
+  if (Number.isFinite(given) && given > 0) return given;
+
+  const accounts = await tossFetch("/api/v1/accounts", { token, fetchImpl });
+  const seq = Array.isArray(accounts) ? accounts[0]?.accountSeq : null;
+  if (!seq) throw new Error("조회할 계좌를 찾지 못했습니다");
+  return seq;
+}
+
+/**
+ * 잔고 한 장을 읽어 스냅샷으로 만든다. 엣지로 올릴 최종 형태를 그대로 돌려준다.
+ * 401 을 만나면 토큰을 새로 받아 한 번만 재시도한다.
+ */
+export async function fetchSnapshot({ clientId, clientSecret, accountSeq, cache = memoryTokenCache(), fetchImpl = fetch, at = Date.now() }) {
+  const collect = async (token) => {
+    const seq = await resolveAccountSeq({ token, configured: accountSeq, fetchImpl });
+    const overview = await tossFetch("/api/v1/holdings", { token, accountSeq: seq, fetchImpl });
+    const aggregate = aggregateHoldings(overview?.items);
+
+    // 예수금은 통화별로 따로 조회한다. ACCOUNT 그룹(초당 1회)이라 순차 호출하고,
+    // 실패해도 보유종목은 살려야 하므로 통화 단위로 조용히 건너뛴다.
+    const cash = {};
+    for (const currency of ["KRW", "USD"]) {
+      try {
+        const power = await tossFetch("/api/v1/buying-power", {
+          token, accountSeq: seq, query: { currency }, fetchImpl,
+        });
+        cash[currency] = parseDecimal(power?.cashBuyingPower);
+      } catch { /* 예수금 실패는 치명적이지 않다 — 그 통화만 비운다 */ }
+    }
+    return { ...snapshotOf(aggregate, cash, at), positions: aggregate.positions };
+  };
+
+  try {
+    return await collect(await issueToken({ clientId, clientSecret, cache, fetchImpl }));
+  } catch (error) {
+    if (error.status !== 401) throw error;
+    return collect(await issueToken({ clientId, clientSecret, cache, force: true, fetchImpl }));
+  }
+}
+
+/* ── 엣지 (Durable Object) ─────────────────────────────────────────────── */
+
+/** 숫자만 남긴다. 유한한 수가 아니면 버린다 (NaN·Infinity가 그래프를 깬다). */
+function finiteNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * 데몬이 올린 스냅샷을 검증해 저장 가능한 형태로 만든다.
+ * 바깥에서 들어오는 값이므로 형태를 통과시키지 말고 **다시 지어서** 쓴다.
+ * 형태가 어긋나면 null — 호출부가 400으로 돌려준다.
+ */
+export function normalizeSnapshot(payload, at = Date.now()) {
+  if (!payload || typeof payload !== "object") return null;
+
+  const byCurrency = {};
+  for (const [currency, bucket] of Object.entries(payload.byCurrency ?? {})) {
+    if (!/^[A-Z]{3}$/.test(currency) || !bucket || typeof bucket !== "object") return null;
+    const value = finiteNumber(bucket.value);
+    const cost = finiteNumber(bucket.cost);
+    const pnl = finiteNumber(bucket.pnl);
+    const rate = finiteNumber(bucket.rate);
+    if (value === null || cost === null || pnl === null || rate === null) return null;
+    byCurrency[currency] = { value, cost, pnl, rate };
+  }
+
+  const cash = {};
+  for (const [currency, amount] of Object.entries(payload.cash ?? {})) {
+    if (!/^[A-Z]{3}$/.test(currency)) return null;
+    const parsed = finiteNumber(amount);
+    if (parsed === null) return null;
+    cash[currency] = parsed;
+  }
+
+  if (!Array.isArray(payload.positions)) return null;
+  const positions = payload.positions.map((item) => ({
+    symbol: String(item?.symbol ?? "").slice(0, 32),
+    name: String(item?.name ?? "").slice(0, 64),
+    market: String(item?.market ?? "").slice(0, 8),
+    currency: String(item?.currency ?? "").slice(0, 8),
+    quantity: finiteNumber(item?.quantity) ?? 0,
+    lastPrice: finiteNumber(item?.lastPrice) ?? 0,
+    avgPrice: finiteNumber(item?.avgPrice) ?? 0,
+    value: finiteNumber(item?.value) ?? 0,
+    cost: finiteNumber(item?.cost) ?? 0,
+    pnl: finiteNumber(item?.pnl) ?? 0,
+    rate: finiteNumber(item?.rate) ?? 0,
+    dailyPnl: finiteNumber(item?.dailyPnl) ?? 0,
+    dailyRate: finiteNumber(item?.dailyRate) ?? 0,
+  }));
+
+  // 날짜는 데몬을 믿지 않고 받은 시각(KST)으로 다시 찍는다 — 시계가 어긋난 PC가
+  // 미래 날짜를 올리면 그래프가 영영 이상해진다.
+  return { date: kstDate(at), ts: at, byCurrency, cash, positions };
+}
+
+/**
+ * 잔고·수익률 대시보드의 저장소.
+ *
+ * **토스를 직접 부르지 않는다** — 허용 IP 때문에 조회는 집 PC 데몬이 하고, 여기는
+ * 데몬이 올린 스냅샷을 받아 두었다가 화면에 돌려준다. 그 덕분에 API 키가 엣지에는
+ * 아예 존재하지 않는다.
+ *
+ * 저장하는 것: 마지막 스냅샷(latest), 일별 스냅샷(snap:YYYY-MM-DD).
  */
 export class InvestDO {
   constructor(state, env) {
@@ -255,114 +407,10 @@ export class InvestDO {
     this.env = env;
   }
 
-  /**
-   * 액세스 토큰. force 면 캐시를 버리고 새로 받는다.
-   *
-   * 토스는 client 당 유효 토큰을 1개만 두므로, **다른 곳에서 같은 키로 토큰을
-   * 발급하면 여기 캐시된 토큰이 그 순간 무효가 된다**(터미널에서 curl 로 한 번
-   * 받아보는 것만으로도 그렇게 된다). 그래서 401 을 만나면 만료 전이라도
-   * 캐시를 버리고 다시 받아야 한다 — 안 그러면 24시간 내내 401 이다.
-   */
-  async #token({ force = false } = {}) {
-    const cached = force ? null : await this.state.storage.get("token");
-    if (cached && cached.expiresAt - TOKEN_SKEW_MS > Date.now()) return cached.value;
-
-    // secret 을 붙여넣을 때 딸려오는 공백·줄바꿈은 조용히 인증을 깨뜨린다.
-    const clientId = String(this.env.INVEST_CLIENT_ID ?? "").trim();
-    const clientSecret = String(this.env.INVEST_CLIENT_SECRET ?? "").trim();
-    if (!clientId || !clientSecret) throw new Error("토스 API 키가 설정되지 않았습니다");
-
-    // 지난번에 통한 방식을 먼저 쓰고, 실패하면 나머지 방식으로 한 번 더 시도한다.
-    const known = await this.state.storage.get("tokenAuthMethod");
-    const order = known
-      ? [known, ...TOKEN_AUTH_METHODS.filter((method) => method !== known)]
-      : TOKEN_AUTH_METHODS;
-
-    let last = null;
-    for (const method of order) {
-      try {
-        const value = await this.#exchange(clientId, clientSecret, method);
-        if (method !== known) await this.state.storage.put("tokenAuthMethod", method);
-        return value;
-      } catch (failure) {
-        // 자격증명을 못 알아본 경우에만 다른 방식을 시도할 값어치가 있다.
-        if (failure.status !== 401 && failure.status !== 400) throw failure;
-        last = failure;
-      }
-    }
-    throw last;
-  }
-
-  async #exchange(clientId, clientSecret, method) {
-    const { headers, body } = tokenRequest(clientId, clientSecret, method);
-    const response = await fetch(`${TOSS_BASE}/oauth2/token`, {
-      method: "POST",
-      headers,
-      body: body.toString(),
-    });
-    if (!response.ok) throw upstreamError(response.status, await errorBody(response), "토큰 발급");
-
-    const payload = await response.json();
-    const value = payload?.access_token;
-    if (!value) throw new Error("토스가 액세스 토큰을 주지 않았습니다");
-    const expiresAt = Date.now() + Math.max(60, Number(payload.expires_in) || 86400) * 1000;
-    await this.state.storage.put("token", { value, expiresAt });
-    return value;
-  }
-
-  /** X-Tossinvest-Account 값. secret 으로 고정해두면 ACCOUNT 그룹 호출을 아낀다. */
-  async #accountSeq(token) {
-    const configured = Number(this.env.INVEST_ACCOUNT_SEQ);
-    if (Number.isFinite(configured) && configured > 0) return configured;
-
-    const cached = await this.state.storage.get("accountSeq");
-    if (cached) return cached;
-
-    const accounts = await tossFetch("/api/v1/accounts", { token });
-    const seq = Array.isArray(accounts) ? accounts[0]?.accountSeq : null;
-    if (!seq) throw new Error("조회할 계좌를 찾지 못했습니다");
-    await this.state.storage.put("accountSeq", seq);
-    return seq;
-  }
-
-  /**
-   * 상류에서 잔고를 새로 읽어 캐시·스냅샷을 갱신한다.
-   * 토큰이 무효화된 경우(401)에 한해 새 토큰으로 딱 한 번 다시 시도한다.
-   */
-  async #refresh() {
-    try {
-      return await this.#collect(await this.#token());
-    } catch (error) {
-      if (error.status !== 401) throw error;
-      return this.#collect(await this.#token({ force: true }));
-    }
-  }
-
-  async #collect(token) {
-    const accountSeq = await this.#accountSeq(token);
-
-    const overview = await tossFetch("/api/v1/holdings", { token, accountSeq });
-    const aggregate = aggregateHoldings(overview?.items);
-
-    // 예수금은 통화별로 따로 조회한다. ACCOUNT 그룹(초당 1회)이라 순차 호출하고,
-    // 실패해도 보유종목 화면은 살려야 하므로 통화 단위로 조용히 건너뛴다.
-    const cash = {};
-    for (const currency of ["KRW", "USD"]) {
-      try {
-        const power = await tossFetch("/api/v1/buying-power", { token, accountSeq, query: { currency } });
-        cash[currency] = parseDecimal(power?.cashBuyingPower);
-      } catch { /* 예수금 조회 실패는 치명적이지 않다 — 그 통화만 비운다 */ }
-    }
-
-    const snapshot = snapshotOf(aggregate, cash);
-    await this.state.storage.put("latest", { ...snapshot, positions: aggregate.positions });
-    await this.#record(snapshot);
-    return snapshot;
-  }
-
-  /** 하루 한 장씩 스냅샷을 남긴다. 같은 날 재조회는 그날 값을 덮어쓴다. */
+  /** 하루 한 장씩 남긴다. 같은 날 다시 올라오면 그날 값을 덮어쓴다. */
   async #record(snapshot) {
-    await this.state.storage.put(`snap:${snapshot.date}`, snapshot);
+    const { positions, ...daily } = snapshot;
+    await this.state.storage.put(`snap:${snapshot.date}`, daily);
     const stored = await this.state.storage.list({ prefix: "snap:" });
     if (stored.size <= MAX_SNAPSHOTS) return;
     const keys = [...stored.keys()].sort();
@@ -374,38 +422,19 @@ export class InvestDO {
     return [...stored.values()].sort((a, b) => String(a.date).localeCompare(String(b.date)));
   }
 
-  /**
-   * 화면에 줄 상태. 캐시가 신선하면 그대로, 아니면 상류를 한 번 친다.
-   * 상류가 실패해도 캐시가 있으면 stale 표시를 달아 그걸 돌려준다 — 한도(429)에
-   * 걸렸다고 화면이 비면 안 된다.
-   */
-  async #state({ force = false } = {}) {
+  async #state() {
     const latest = await this.state.storage.get("latest");
-    const fresh = latest && Date.now() - latest.ts < REFRESH_MIN_MS;
-
-    let error = null;
-    let detail = null;
-    if (!fresh || force) {
-      try {
-        await this.#refresh();
-      } catch (failure) {
-        error = failure.message;
-        detail = failure.body ?? null;
-        logUpstreamFailure(failure);
-        if (!latest) throw failure;
-      }
-    }
-
-    const current = await this.state.storage.get("latest");
+    const age = latest ? Date.now() - latest.ts : null;
     return {
-      updatedAt: current?.ts ?? null,
-      byCurrency: current?.byCurrency ?? {},
-      cash: current?.cash ?? {},
-      positions: current?.positions ?? [],
+      updatedAt: latest?.ts ?? null,
+      byCurrency: latest?.byCurrency ?? {},
+      cash: latest?.cash ?? {},
+      positions: latest?.positions ?? [],
       series: buildSeries(await this.#history()),
-      stale: !!error,
-      error,
-      detail,
+      // 데몬이 멈춘 것을 화면이 알아야 한다 — 숫자는 있는데 어제 것일 수 있다.
+      stale: age !== null && age > STALE_AFTER_MS,
+      error: latest ? null : "아직 올라온 잔고가 없습니다 — PC 데몬이 도는지 확인해주세요",
+      detail: null,
     };
   }
 
@@ -413,25 +442,16 @@ export class InvestDO {
     const url = new URL(request.url);
 
     if (url.pathname === "/state" && request.method === "GET") {
-      try {
-        return Response.json(await this.#state({ force: url.searchParams.get("force") === "1" }));
-      } catch (error) {
-        // detail = 토스가 돌려준 원문. 이 화면은 비밀번호 뒤 본인 전용이고 우리
-        // 키·토큰은 응답에 없으므로, 로그를 볼 수 없는 상황에서 원인을 가르는
-        // 유일한 단서를 화면에 내준다 (사람이 읽는 문구와는 분리해서 담는다).
-        return Response.json({ error: error.message, detail: error.body ?? null }, {
-          status: error.status === 429 ? 429 : 502,
-        });
-      }
+      return Response.json(await this.#state());
     }
 
-    // cron 이 부르는 일별 스냅샷. 화면 요청과 달리 캐시를 무시하고 꼭 한 번 읽는다.
-    if (url.pathname === "/snapshot" && request.method === "POST") {
-      try {
-        return Response.json(await this.#refresh());
-      } catch (error) {
-        return Response.json({ error: error.message }, { status: 502 });
-      }
+    if (url.pathname === "/push" && request.method === "POST") {
+      const payload = await request.json().catch(() => null);
+      const snapshot = normalizeSnapshot(payload);
+      if (!snapshot) return Response.json({ error: "invalid snapshot" }, { status: 400 });
+      await this.state.storage.put("latest", snapshot);
+      await this.#record(snapshot);
+      return Response.json({ ok: true, date: snapshot.date });
     }
 
     return new Response("not found", { status: 404 });
