@@ -28,15 +28,20 @@
 
   /* 검색 — 규칙 기반(서버 없음). 스크립트가 없으면 통째로 감춘다. */
   .search { display: none; position: relative; margin: 1.4rem 0 0; }
+  /* 검색창만 다크모드에서도 흰 종이로 둔다 — 어두운 배경에서 확실히 눈에 띈다.
+     그래서 글자·플레이스홀더·지우기 버튼 색을 상속받지 않고 직접 정한다
+     (light-dark로 두면 흰 바탕에 흰 글씨가 된다). */
   .search input { width: 100%; box-sizing: border-box; font: inherit; font-size: .9rem;
                   padding: .7rem 2.4rem .7rem .9rem; border-radius: .8rem; line-height: 1.4;
-                  color: inherit; background: light-dark(#fff, #161d27);
-                  border: 1px solid light-dark(#dbe2ea, #2a3646); }
-  .search input:focus-visible { outline: 2px solid light-dark(#4f7fdd, #6f9bf0); outline-offset: 1px; }
+                  color-scheme: light; background: #fff; color: #1c2733; caret-color: #4f7fdd;
+                  border: 1px solid #cfd8e3; box-shadow: 0 1px 3px rgb(16 24 40 / .08); }
+  .search input::placeholder { color: #8b96a5; opacity: 1; }
+  .search input:focus-visible { outline: 2px solid #4f7fdd; outline-offset: 1px; border-color: #4f7fdd; }
   .search input::-webkit-search-cancel-button { display: none; }
   .search .x { position: absolute; right: .35rem; top: 50%; transform: translateY(-50%);
-               border: 0; background: none; color: inherit; opacity: .45; cursor: pointer;
+               border: 0; background: none; color: #6e7985; opacity: .8; cursor: pointer;
                font: inherit; font-size: 1rem; padding: .3rem .55rem; line-height: 1; }
+  .search .x:hover { color: #1c2733; }
   .hits { margin: .7rem 0 0; font-size: .74rem; opacity: .6; }
   .card .why { display: inline-block; margin-top: .25rem; padding: .05rem .35rem;
                border-radius: .3rem; font-size: .62rem; opacity: .75;
@@ -61,7 +66,7 @@
 
   <div class="search" id="search">
     <input id="q" type="search" autocomplete="off" autocapitalize="off" spellcheck="false"
-           aria-label="카드 검색" placeholder="무엇을 찾으세요? 사다리 · lotto · ㅅㄷㄹ">
+           aria-label="카드 검색" placeholder="검색 — 사다리 · ㅅㄷㄹ · lotto">
     <button type="button" class="x" id="qx" aria-label="검색어 지우기" hidden>✕</button>
   </div>
   <p class="hits" id="hits" hidden aria-live="polite"></p>
