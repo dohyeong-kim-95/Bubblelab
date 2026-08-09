@@ -1,0 +1,887 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>👣</text></svg>">
+<title>발판 리듬 — 카메라로 밟는 펌프·DDR</title>
+<style>
+  :root { color-scheme: dark; --bg: #0a0e16; --fg: #e3e9f2; --line: #e3e9f21f; --panel: #121a28; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+         margin: 0; background: var(--bg); color: var(--fg); overflow-x: hidden;
+         -webkit-text-size-adjust: 100%; }
+  main { width: min(30rem, 100%); margin: 0 auto; min-height: 100dvh;
+         padding: max(1rem, env(safe-area-inset-top)) 1rem max(1.4rem, env(safe-area-inset-bottom));
+         display: flex; flex-direction: column; gap: .85rem; }
+
+  h1 { margin: 0; font-size: 1.1rem; letter-spacing: .01em; }
+  h2 { margin: 0; font-size: .74rem; font-weight: normal; opacity: .55; letter-spacing: .04em; }
+  p { margin: 0; }
+  .lede { font-size: .74rem; line-height: 1.75; opacity: .55; }
+  .note { font-size: .66rem; line-height: 1.65; opacity: .45; }
+  .warn { color: #ffb9a6; opacity: .85; }
+  [hidden] { display: none !important; }
+
+  button, .btn { font: inherit; font-size: .82rem; color: inherit; cursor: pointer;
+                 padding: .75rem 1rem; border-radius: .7rem; border: 1px solid var(--line);
+                 background: #182231; text-align: center; }
+  button:disabled { opacity: .4; cursor: default; }
+  .primary { background: #2a4a7c; border-color: #6f9de0aa; font-weight: bold; }
+  .row { display: flex; gap: .5rem; }
+  .row > * { flex: 1; min-width: 0; }
+  .panel { border: 1px solid var(--line); border-radius: .85rem; padding: .8rem;
+           background: var(--panel); display: grid; gap: .6rem; }
+  label { display: grid; gap: .3rem; font-size: .68rem; opacity: .8; }
+  label.check { display: flex; align-items: center; gap: .5rem; cursor: pointer; opacity: .85; }
+  label.check input { accent-color: #6f9de0; width: 1.05rem; height: 1.05rem; flex: none; }
+  input[type=range] { width: 100%; accent-color: #6f9de0; }
+
+  /* 고르는 칩 (모드·곡·난이도) */
+  .chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .chip { flex: 1 1 auto; padding: .55rem .7rem; border-radius: .6rem; font-size: .76rem;
+          border: 1px solid var(--line); background: #182231; cursor: pointer; }
+  .chip[aria-pressed=true] { background: #2a4a7c; border-color: #6f9de0aa; font-weight: bold; }
+  .songs { display: grid; gap: .45rem; }
+  .song { display: flex; align-items: baseline; gap: .5rem; text-align: left; }
+  .song b { font-size: .86rem; }
+  .song small { opacity: .5; font-size: .66rem; margin-left: auto; }
+
+  /* 카메라 보정 */
+  .camwrap { position: relative; width: 100%; aspect-ratio: 4 / 3; border-radius: .85rem;
+             overflow: hidden; background: #070b12; border: 1px solid var(--line);
+             touch-action: none; user-select: none; -webkit-user-select: none; }
+  .camwrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .handle { position: absolute; width: 2.9rem; height: 2.9rem; margin: -1.45rem 0 0 -1.45rem;
+            border-radius: 50%; cursor: grab; touch-action: none; }
+  .handle::after { content: ""; position: absolute; inset: .85rem; border-radius: 50%;
+                   background: #ffd66e; border: 2px solid #0a0e16; }
+  .camnote { position: absolute; left: 0; right: 0; bottom: 0; padding: .5rem .6rem;
+             font-size: .64rem; line-height: 1.55; background: linear-gradient(transparent, #070b12e0); }
+  #cam { position: fixed; top: 0; left: 0; width: 1px; height: 1px; opacity: 0;
+         pointer-events: none; }
+
+  /* 플레이 화면 — 전체를 덮는다 */
+  #play { position: fixed; inset: 0; z-index: 50; background: var(--bg);
+          display: flex; flex-direction: column;
+          padding: max(.5rem, env(safe-area-inset-top)) .5rem max(.5rem, env(safe-area-inset-bottom)); }
+  .hud { display: flex; align-items: center; gap: .6rem; font-size: .7rem; padding: 0 .3rem .3rem; }
+  .hud .score { font-size: 1.05rem; font-weight: bold; letter-spacing: .02em; }
+  .hud .title { opacity: .5; margin-left: auto; text-align: right; line-height: 1.4; }
+  .bar { height: 3px; border-radius: 2px; background: #ffffff1a; overflow: hidden; margin: 0 .3rem .35rem; }
+  .bar i { display: block; height: 100%; width: 0; background: #6f9de0; }
+  .stagewrap { position: relative; flex: 1; min-height: 0; }
+  #stage { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+  .lanes { position: absolute; inset: auto 0 0; display: flex; }
+  .lanes button { flex: 1; margin: 0 2px; padding: 1.1rem 0; font-size: 1.2rem;
+                  background: #ffffff0f; border-color: transparent; }
+  .foot { display: flex; align-items: center; gap: .5rem; padding-top: .4rem; }
+  .foot .mini { width: 6.4rem; height: 4.8rem; flex: none; border-radius: .5rem;
+                border: 1px solid var(--line); background: #070b12; }
+  .foot .legend { font-size: .62rem; line-height: 1.6; opacity: .5; flex: 1; min-width: 0; }
+  .foot .quit { flex: none; padding: .55rem .8rem; font-size: .72rem; }
+  /* 플레이 중에는 공용 떠다니는 버튼(홈 독·주간 기록 배지)을 치운다 —
+     화면 아래 모서리가 «그만» 버튼과 발판 미리보기 자리다. 결과 화면에서 돌아온다. */
+  body.playing #bl-dock, body.playing #bl-weekly, body.playing #bl-toast { display: none !important; }
+
+  /* 결과 */
+  .rank { font-size: 3.4rem; font-weight: bold; line-height: 1; text-align: center;
+          letter-spacing: .04em; }
+  .big { font-size: 1.9rem; font-weight: bold; text-align: center; letter-spacing: .02em; }
+  .tally { display: grid; grid-template-columns: repeat(4, 1fr); gap: .4rem; text-align: center; }
+  .tally div { padding: .5rem .2rem; border-radius: .5rem; background: #ffffff0a; font-size: .68rem; }
+  .tally b { display: block; font-size: 1rem; margin-top: .15rem; }
+</style>
+</head>
+<body>
+<video id="cam" playsinline muted autoplay></video>
+
+<main>
+  <header>
+    <h1>👣 발판 리듬</h1>
+    <p class="lede">휴대폰 카메라가 발을 봅니다. 바닥에 <b>가상 발판</b>을 그려 두고
+      그 위를 밟으면 노트가 판정돼요 — 펌프처럼 5패널, DDR처럼 4패널.</p>
+  </header>
+
+  <!-- ① 시작 -->
+  <section id="intro" class="panel">
+    <h2>준비물</h2>
+    <p class="note">① 폰을 바닥에 세워 두고 <b>앞면 카메라</b>가 설 자리를 보게 합니다
+      (1~2 m 뒤로 물러나면 딱 좋아요).<br>
+      ② 화면 속 노란 점 네 개를 끌어 바닥에 발판 넉 점을 잡습니다.<br>
+      ③ 발판 밖으로 나가 <b>바닥 기억하기</b>를 누르면 끝.</p>
+    <p class="note">바닥에 무늬가 있고 조명이 고르면 잘 잡힙니다. 영상은 이 폰 안에서만
+      처리되고 어디로도 보내지 않아요.</p>
+    <button class="primary" id="go-camera">카메라 켜고 시작</button>
+    <button id="go-finger">카메라 없이 손가락으로 하기</button>
+    <p class="note warn" id="cam-error" hidden></p>
+  </section>
+
+  <!-- ② 발판 보정 -->
+  <section id="setup" hidden>
+    <div class="camwrap" id="camwrap">
+      <canvas id="preview"></canvas>
+      <canvas id="overlay"></canvas>
+      <div class="camnote" id="setup-hint">발판 네 귀퉁이를 바닥에 맞춰 끌어 주세요.</div>
+    </div>
+
+    <div class="row">
+      <button class="primary" id="learn-floor">바닥 기억하기</button>
+      <button id="flip-cam">카메라 전환</button>
+    </div>
+
+    <div class="panel">
+      <h2>발판</h2>
+      <div class="chips" id="mode-chips"></div>
+      <p class="note" id="mode-note"></p>
+    </div>
+
+    <div class="panel">
+      <h2>인식 조절</h2>
+      <label>민감도 <span id="sens-out"></span>
+        <input type="range" id="sens" min="6" max="34" step="1" value="14"></label>
+      <label>판정 보정 <span id="lat-out"></span>
+        <input type="range" id="lat" min="-120" max="240" step="10" value="60"></label>
+      <label class="check"><input type="checkbox" id="opt-shadow" checked>
+        <span>그림자 무시 (어두운 신발이 안 잡히면 끄세요)</span></label>
+      <label class="check"><input type="checkbox" id="opt-mirror" checked>
+        <span>좌우 반전 (거울처럼 — 앞면 카메라 기본)</span></label>
+      <p class="note" id="detect-note">발이 잡히면 노란 점과 밟은 칸이 표시됩니다.</p>
+    </div>
+
+    <div class="row">
+      <button id="back-intro">뒤로</button>
+      <button class="primary" id="to-select">곡 고르기</button>
+    </div>
+  </section>
+
+  <!-- ③ 곡 -->
+  <section id="select" hidden>
+    <div class="panel">
+      <h2>곡</h2>
+      <div class="songs" id="song-list"></div>
+    </div>
+    <div class="panel">
+      <h2>난이도</h2>
+      <div class="chips" id="diff-chips"></div>
+      <p class="note" id="chart-note"></p>
+    </div>
+    <div class="row">
+      <button id="back-setup">발판 다시 잡기</button>
+      <button class="primary" id="start-song">시작</button>
+    </div>
+  </section>
+
+  <!-- ④ 결과 -->
+  <section id="result" hidden>
+    <div class="panel">
+      <div class="rank" id="r-rank"></div>
+      <div class="big" id="r-score"></div>
+      <p class="note" style="text-align:center" id="r-song"></p>
+      <div class="tally" id="r-tally"></div>
+      <p class="note" id="r-detail" style="text-align:center"></p>
+    </div>
+    <div class="row">
+      <button class="primary" id="r-again">다시</button>
+      <button id="r-other">다른 곡</button>
+    </div>
+  </section>
+
+  <p class="note" id="page-foot">노트는 곡마다 정해진 씨앗으로 만들어져 언제 해도 같은 채보가 나옵니다.
+    소리는 브라우저가 그 자리에서 합성해요.</p>
+</main>
+
+<!-- ⑤ 플레이 (전체 화면) -->
+<div id="play" hidden>
+  <div class="hud">
+    <span class="score" id="p-score">0</span>
+    <span id="p-combo"></span>
+    <span class="title" id="p-title"></span>
+  </div>
+  <div class="bar"><i id="p-bar"></i></div>
+  <div class="stagewrap">
+    <canvas id="stage"></canvas>
+    <div class="lanes" id="p-lanes" hidden></div>
+  </div>
+  <div class="foot">
+    <canvas class="mini" id="mini" width="128" height="96"></canvas>
+    <span class="legend" id="p-legend"></span>
+    <button class="quit" id="p-quit">그만</button>
+  </div>
+</div>
+
+<script type="module">
+import {
+  PADS, averageFrames, blendBackground, createStepTracker, denoise, foreground,
+  footPoints, frameChannels, padOf, pressedPanels,
+} from "./vision.js";
+import {
+  DIFFICULTIES, HIT_WINDOW, JUDGES, MISS, SONGS, buildChart, computeScore,
+  difficultyOf, judgeOf, rankOf, songOf,
+} from "./chart.js";
+import { createBand } from "./audio.js";
+
+const $ = (id) => document.getElementById(id);
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const GRID_W = 96, GRID_H = 72;      // 인식용 저해상도 격자
+const SAMPLE_MS = 33;                 // 초당 30장이면 스텝을 놓치지 않는다
+const LEAD_SEC = 1.55;                // 노트가 화면에 떠 있는 시간
+const STORE = "stepcam:v1";
+
+/* ---------- 설정 ---------- */
+const defaults = {
+  mode: "pump",
+  facing: "user",
+  mirror: true,
+  shadow: true,
+  threshold: 14,
+  latency: 60,
+  song: SONGS[0].id,
+  difficulty: "normal",
+  quad: [{ x: 0.29, y: 0.4 }, { x: 0.71, y: 0.4 }, { x: 0.93, y: 0.92 }, { x: 0.07, y: 0.92 }],
+};
+const settings = load();
+function load() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORE) ?? "{}");
+    const merged = { ...defaults, ...saved };
+    if (!Array.isArray(merged.quad) || merged.quad.length !== 4 ||
+        merged.quad.some((p) => !Number.isFinite(p?.x) || !Number.isFinite(p?.y))) {
+      merged.quad = defaults.quad.map((p) => ({ ...p }));
+    }
+    return merged;
+  } catch {
+    return { ...defaults, quad: defaults.quad.map((p) => ({ ...p })) };
+  }
+}
+const save = () => {
+  try { localStorage.setItem(STORE, JSON.stringify(settings)); } catch { /* 사파리 시크릿 */ }
+};
+
+/* ---------- 상태 ---------- */
+const app = {
+  screen: "intro",
+  stream: null,
+  camera: false,     // 카메라로 판정 중인가 (false면 손가락 모드)
+  bg: null,          // 빈 바닥 기준 프레임
+  feet: [],
+  pressed: new Set(),
+  tracker: createStepTracker(),
+  lastSample: 0,
+  learning: null,    // 바닥 기억하기 진행 상태 { until, frames }
+  game: null,
+  ctx: null,         // AudioContext
+  band: null,
+  wakeLock: null,
+};
+
+const sample = document.createElement("canvas");
+sample.width = GRID_W; sample.height = GRID_H;
+const sampleCtx = sample.getContext("2d", { willReadFrequently: true });
+const video = $("cam");
+const padNow = () => padOf(settings.mode);
+
+/* ---------- 화면 전환 ---------- */
+const SECTIONS = ["intro", "setup", "select", "result"];
+function show(name) {
+  app.screen = name;
+  for (const id of SECTIONS) $(id).hidden = id !== name;
+  $("play").hidden = name !== "play";
+  document.querySelector("main").hidden = name === "play";
+  document.body.classList.toggle("playing", name === "play");
+}
+
+/* ---------- 카메라 ---------- */
+async function startCamera() {
+  stopCamera();
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: settings.facing, width: { ideal: 640 }, height: { ideal: 480 } },
+    audio: false,
+  });
+  app.stream = stream;
+  video.srcObject = stream;
+  await video.play().catch(() => {});
+  app.camera = true;
+  app.bg = null;
+  const wrap = $("camwrap");
+  if (video.videoWidth) wrap.style.aspectRatio = `${video.videoWidth} / ${video.videoHeight}`;
+}
+function stopCamera() {
+  app.stream?.getTracks().forEach((t) => t.stop());
+  app.stream = null;
+  app.camera = false;
+}
+
+// 프레임 한 장을 격자에 그려 담는다. 좌우 반전은 여기서 한 번에 처리해서
+// 이후 좌표는 전부 "화면에 보이는 대로"가 된다.
+function grabFrame() {
+  if (!video.videoWidth) return null;
+  sampleCtx.save();
+  if (settings.mirror) { sampleCtx.translate(GRID_W, 0); sampleCtx.scale(-1, 1); }
+  sampleCtx.drawImage(video, 0, 0, GRID_W, GRID_H);
+  sampleCtx.restore();
+  return frameChannels(sampleCtx.getImageData(0, 0, GRID_W, GRID_H));
+}
+
+function analyze(now) {
+  const frame = grabFrame();
+  if (!frame) return;
+
+  // 바닥 기억하기: 발판 밖으로 나갈 시간을 준 뒤 여러 장을 평균 낸다
+  if (app.learning) {
+    const left = app.learning.until - now;
+    if (left > 0) {
+      $("setup-hint").textContent = `발판 밖으로 나가 주세요… ${Math.ceil(left / 1000)}`;
+      return;
+    }
+    app.learning.frames.push(frame);
+    if (app.learning.frames.length >= 12) {
+      app.bg = averageFrames(app.learning.frames);
+      app.learning = null;
+      $("setup-hint").textContent = "바닥을 기억했어요. 발판 위를 밟아 보세요.";
+    }
+    return;
+  }
+  if (!app.bg) { app.bg = frame.slice(); return; }
+
+  let mask = foreground(app.bg, frame, {
+    lumaThreshold: settings.threshold, shadow: settings.shadow,
+  });
+  mask = denoise(mask, GRID_W, GRID_H);
+  blendBackground(app.bg, frame, mask, 0.015);
+
+  app.feet = footPoints(mask, GRID_W, GRID_H);
+  app.pressed = pressedPanels(app.feet, {
+    cols: GRID_W, rows: GRID_H, quad: settings.quad, pad: padNow(),
+  });
+  for (const panel of app.tracker.update(app.pressed, now)) onStep(panel);
+}
+
+/* ---------- 보정 화면 그리기 ---------- */
+const preview = $("preview"), overlay = $("overlay");
+function fitCanvas(canvas) {
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const w = Math.round(canvas.clientWidth * dpr), h = Math.round(canvas.clientHeight * dpr);
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+  return canvas.getContext("2d");
+}
+
+// 사각형 안의 (u, v) → 화면 좌표. 그리기는 정방향 쌍선형 보간이면 된다.
+function quadPoint(u, v, quad, w, h) {
+  const [a, b, c, d] = quad;
+  const x = (1 - u) * (1 - v) * a.x + u * (1 - v) * b.x + u * v * c.x + (1 - u) * v * d.x;
+  const y = (1 - u) * (1 - v) * a.y + u * (1 - v) * b.y + u * v * c.y + (1 - u) * v * d.y;
+  return [x * w, y * h];
+}
+
+function drawSetup() {
+  if (app.screen !== "setup") return;
+  const pctx = fitCanvas(preview);
+  const { width: w, height: h } = preview;
+  pctx.clearRect(0, 0, w, h);
+  if (video.videoWidth) {
+    pctx.save();
+    if (settings.mirror) { pctx.translate(w, 0); pctx.scale(-1, 1); }
+    pctx.drawImage(video, 0, 0, w, h);
+    pctx.restore();
+  }
+
+  const octx = fitCanvas(overlay);
+  octx.clearRect(0, 0, w, h);
+  drawPad(octx, w, h, { labels: true });
+
+  // 발 위치
+  for (const foot of app.feet) {
+    const x = (foot.x / GRID_W) * w, y = (foot.y / GRID_H) * h;
+    octx.beginPath();
+    octx.arc(x, y, Math.max(5, w * 0.014), 0, Math.PI * 2);
+    octx.fillStyle = "#ffd66e";
+    octx.fill();
+    octx.strokeStyle = "#0a0e16"; octx.lineWidth = 2; octx.stroke();
+  }
+  $("detect-note").textContent = app.feet.length
+    ? `발 ${app.feet.length}개 인식 중 · 밟은 칸: ${[...app.pressed].map(labelOf).join(" ") || "없음"}`
+    : "발이 안 잡혀요 — 발판 밖으로 나가서 «바닥 기억하기»를 눌러 보세요.";
+}
+
+function drawPad(ctx, w, h, { labels = false, flashes = null } = {}) {
+  const pad = padNow(), quad = settings.quad;
+  const line = (u0, v0, u1, v1, style, width) => {
+    ctx.beginPath();
+    ctx.moveTo(...quadPoint(u0, v0, quad, w, h));
+    ctx.lineTo(...quadPoint(u1, v1, quad, w, h));
+    ctx.strokeStyle = style; ctx.lineWidth = width; ctx.stroke();
+  };
+  for (const panel of pad.panels) {
+    const u0 = panel.col / 3, v0 = panel.row / 3;
+    const on = app.pressed.has(panel.id);
+    const flash = flashes?.get(panel.id);
+    ctx.beginPath();
+    ctx.moveTo(...quadPoint(u0, v0, quad, w, h));
+    ctx.lineTo(...quadPoint(u0 + 1 / 3, v0, quad, w, h));
+    ctx.lineTo(...quadPoint(u0 + 1 / 3, v0 + 1 / 3, quad, w, h));
+    ctx.lineTo(...quadPoint(u0, v0 + 1 / 3, quad, w, h));
+    ctx.closePath();
+    ctx.fillStyle = on ? `hsl(${panel.hue} 85% 62% / .55)`
+                  : flash ? `hsl(${panel.hue} 85% 62% / .3)`
+                  : `hsl(${panel.hue} 60% 60% / .13)`;
+    ctx.fill();
+    ctx.strokeStyle = `hsl(${panel.hue} 70% 70% / .75)`;
+    ctx.lineWidth = Math.max(1, w * 0.004);
+    ctx.stroke();
+    if (labels) {
+      const [cx, cy] = quadPoint(u0 + 1 / 6, v0 + 1 / 6, quad, w, h);
+      ctx.fillStyle = "#0a0e16d0";
+      ctx.font = `${Math.round(w * 0.05)}px ui-monospace, monospace`;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(panel.label, cx, cy);
+    }
+  }
+  // 발판 테두리
+  line(0, 0, 1, 0, "#ffd66eaa", Math.max(1, w * 0.005));
+  line(1, 0, 1, 1, "#ffd66eaa", Math.max(1, w * 0.005));
+  line(1, 1, 0, 1, "#ffd66eaa", Math.max(1, w * 0.005));
+  line(0, 1, 0, 0, "#ffd66eaa", Math.max(1, w * 0.005));
+}
+
+const labelOf = (id) => padNow().panels.find((p) => p.id === id)?.label ?? id;
+
+/* ---------- 네 귀퉁이 끌기 ---------- */
+const wrap = $("camwrap");
+const handles = settings.quad.map((_, i) => {
+  const el = document.createElement("div");
+  el.className = "handle";
+  el.dataset.i = String(i);
+  el.setAttribute("role", "slider");
+  el.setAttribute("aria-label", `발판 모서리 ${i + 1}`);
+  wrap.appendChild(el);
+  el.addEventListener("pointerdown", (e) => {
+    el.setPointerCapture(e.pointerId);
+    el.dataset.drag = "1";
+  });
+  el.addEventListener("pointermove", (e) => {
+    if (el.dataset.drag !== "1") return;
+    const r = wrap.getBoundingClientRect();
+    settings.quad[i] = {
+      x: clamp((e.clientX - r.left) / r.width, 0, 1),
+      y: clamp((e.clientY - r.top) / r.height, 0, 1),
+    };
+    placeHandles();
+    save();
+  });
+  const end = () => { el.dataset.drag = "0"; };
+  el.addEventListener("pointerup", end);
+  el.addEventListener("pointercancel", end);
+  return el;
+});
+function placeHandles() {
+  handles.forEach((el, i) => {
+    el.style.left = `${settings.quad[i].x * 100}%`;
+    el.style.top = `${settings.quad[i].y * 100}%`;
+  });
+}
+placeHandles();
+
+/* ---------- 모드·설정 위젯 ---------- */
+function renderModes() {
+  const box = $("mode-chips");
+  box.replaceChildren(...Object.values(PADS).map((pad) => {
+    const b = document.createElement("button");
+    b.className = "chip";
+    b.type = "button";
+    b.textContent = `${pad.name} ${pad.panels.map((p) => p.label).join("")}`;
+    b.setAttribute("aria-pressed", String(settings.mode === pad.id));
+    b.onclick = () => { settings.mode = pad.id; save(); renderModes(); renderChartNote(); };
+    return b;
+  }));
+  $("mode-note").textContent = settings.mode === "pump"
+    ? "3×3 중 네 귀퉁이와 가운데를 밟습니다 (펌프 배치)."
+    : "3×3 중 상하좌우 네 칸을 밟습니다 (DDR 배치).";
+}
+renderModes();
+
+const bindRange = (id, key, fmt) => {
+  const el = $(id), out = $(id === "sens" ? "sens-out" : "lat-out");
+  el.value = String(settings[key]);
+  const sync = () => { out.textContent = fmt(Number(el.value)); };
+  el.oninput = () => { settings[key] = Number(el.value); sync(); save(); };
+  sync();
+};
+bindRange("sens", "threshold", (v) => `${v <= 11 ? "예민" : v >= 24 ? "둔감" : "보통"} (${v})`);
+bindRange("lat", "latency", (v) => `${v > 0 ? "+" : ""}${v} ms`);
+
+const bindCheck = (id, key, after) => {
+  const el = $(id);
+  el.checked = !!settings[key];
+  el.onchange = () => { settings[key] = el.checked; save(); after?.(); };
+};
+bindCheck("opt-shadow", "shadow");
+bindCheck("opt-mirror", "mirror", () => { app.bg = null; });
+
+/* ---------- 곡 고르기 ---------- */
+function renderSongs() {
+  $("song-list").replaceChildren(...SONGS.map((song) => {
+    const b = document.createElement("button");
+    b.className = "chip song";
+    b.type = "button";
+    b.innerHTML = `<b></b><span class="note"></span><small></small>`;
+    b.querySelector("b").textContent = song.title;
+    b.querySelector(".note").textContent = song.mood;
+    b.querySelector("small").textContent = `${song.bpm} BPM`;
+    b.setAttribute("aria-pressed", String(settings.song === song.id));
+    b.onclick = () => { settings.song = song.id; save(); renderSongs(); renderChartNote(); };
+    return b;
+  }));
+}
+function renderDiffs() {
+  $("diff-chips").replaceChildren(...DIFFICULTIES.map((d) => {
+    const b = document.createElement("button");
+    b.className = "chip";
+    b.type = "button";
+    b.textContent = `${d.name} ×${d.multiplier}`;
+    b.setAttribute("aria-pressed", String(settings.difficulty === d.id));
+    b.onclick = () => { settings.difficulty = d.id; save(); renderDiffs(); renderChartNote(); };
+    return b;
+  }));
+}
+function renderChartNote() {
+  const chart = buildChart(songOf(settings.song), padNow(), difficultyOf(settings.difficulty));
+  const nps = chart.notes.length / (chart.duration - chart.leadIn);
+  $("chart-note").textContent =
+    `노트 ${chart.notes.length}개 · 약 ${Math.round(chart.duration)}초 · 초당 ${nps.toFixed(1)}개` +
+    ` · ${padNow().name}`;
+}
+renderSongs(); renderDiffs(); renderChartNote();
+
+/* ---------- 게임 ---------- */
+function audioContext() {
+  if (!app.ctx) {
+    const AC = window.AudioContext ?? window.webkitAudioContext;
+    if (AC) app.ctx = new AC();
+  }
+  app.ctx?.resume?.().catch(() => {});
+  return app.ctx;
+}
+const clockNow = () => (app.ctx ? app.ctx.currentTime : performance.now() / 1000);
+
+function startGame() {
+  const song = songOf(settings.song), diff = difficultyOf(settings.difficulty);
+  const pad = padNow();
+  const chart = buildChart(song, pad, diff);
+  const ctx = audioContext();
+
+  app.game = {
+    song, diff, pad, chart,
+    notes: chart.notes.map((n) => ({ ...n, judged: null })),
+    counts: { perfect: 0, great: 0, good: 0, miss: 0 },
+    combo: 0, maxCombo: 0, score: 0, flashes: new Map(),
+    judgement: null, origin: clockNow() + 0.4, done: false,
+  };
+  app.tracker.reset();
+  if (ctx) {
+    app.band = createBand(ctx, { song, chart });
+    app.band.start(app.game.origin);
+  } else {
+    app.band = null;
+  }
+
+  $("p-title").innerHTML = "";
+  $("p-title").append(song.title, document.createElement("br"), `${diff.name} · ${pad.name}`);
+  $("p-legend").textContent = app.camera
+    ? "발판을 밟으면 판정됩니다"
+    : "아래 칸을 손가락으로 두드리세요";
+  $("mini").hidden = !app.camera;
+  renderLaneButtons();
+  show("play");
+  requestWakeLock();
+}
+
+function renderLaneButtons() {
+  const box = $("p-lanes");
+  box.hidden = app.camera;
+  if (app.camera) { box.replaceChildren(); return; }
+  box.replaceChildren(...padNow().panels.map((panel) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = panel.label;
+    b.style.color = `hsl(${panel.hue} 80% 72%)`;
+    b.addEventListener("pointerdown", (e) => { e.preventDefault(); onStep(panel.id); });
+    return b;
+  }));
+}
+
+function onStep(panel) {
+  const g = app.game;
+  if (!g || g.done || app.screen !== "play") return;
+  flash(panel, null);
+  // 카메라 판정은 실제로 밟은 순간보다 몇 프레임 늦게 도착한다 — 그 지연만
+  // 되돌린다. 화면·소리(아래 updateGame·drawStage)는 건드리지 않는다.
+  const t = clockNow() - g.origin - (app.camera ? settings.latency / 1000 : 0);
+
+  let best = null;
+  for (const note of g.notes) {
+    if (note.judged || note.panel !== panel) continue;
+    const dt = t - note.t;
+    if (dt > HIT_WINDOW) continue;
+    if (dt < -HIT_WINDOW) break;   // 노트는 시간순 — 더 볼 필요 없다
+    if (!best || Math.abs(dt) < Math.abs(best.dt)) best = { note, dt };
+  }
+  if (!best) { app.band?.step(false); return; }
+
+  const judge = judgeOf(best.dt);
+  best.note.judged = judge.id;
+  g.counts[judge.id]++;
+  if (judge === MISS) { g.combo = 0; } else {
+    g.combo++;
+    g.maxCombo = Math.max(g.maxCombo, g.combo);
+  }
+  g.judgement = { judge, at: clockNow() };
+  flash(panel, judge);
+  app.band?.step(true);
+}
+
+function flash(panel, judge) {
+  app.game?.flashes.set(panel, { at: clockNow(), judge });
+}
+
+function updateGame() {
+  const g = app.game;
+  if (!g || g.done) return;
+  const t = clockNow() - g.origin;
+  // 늦게 도착하는 스텝 보고를 기다렸다가 미스를 확정한다
+  const deadline = HIT_WINDOW + (app.camera ? settings.latency / 1000 : 0);
+  for (const note of g.notes) {
+    if (note.judged) continue;
+    if (t - note.t > deadline) {
+      note.judged = "miss";
+      g.counts.miss++;
+      g.combo = 0;
+      g.judgement = { judge: MISS, at: clockNow() };
+    }
+  }
+  g.score = computeScore({
+    counts: g.counts, maxCombo: g.maxCombo,
+    total: g.notes.length, multiplier: g.diff.multiplier,
+  });
+  $("p-score").textContent = g.score.toLocaleString("ko-KR");
+  $("p-combo").textContent = g.combo >= 4 ? `${g.combo} COMBO` : "";
+  $("p-bar").style.width = `${clamp((t / g.chart.duration) * 100, 0, 100)}%`;
+  if (t > g.chart.duration) finish();
+}
+
+function drawStage() {
+  const g = app.game;
+  const ctx = fitCanvas($("stage"));
+  const { width: w, height: h } = $("stage");
+  ctx.clearRect(0, 0, w, h);
+  if (!g) return;
+
+  const lanes = g.pad.panels.length;
+  const laneW = w / lanes;
+  const recY = h * 0.17;
+  const speed = (h - recY) / LEAD_SEC;
+  const now = clockNow();
+  const t = now - g.origin;
+
+  // 레인 구분선
+  ctx.strokeStyle = "#ffffff10"; ctx.lineWidth = 1;
+  for (let i = 1; i < lanes; i++) {
+    ctx.beginPath(); ctx.moveTo(i * laneW, 0); ctx.lineTo(i * laneW, h); ctx.stroke();
+  }
+
+  // 리셉터 (밟아야 하는 자리)
+  g.pad.panels.forEach((panel, i) => {
+    const cx = (i + 0.5) * laneW;
+    const r = Math.min(laneW * 0.36, h * 0.06);
+    const fl = g.flashes.get(panel.id);
+    const age = fl ? now - fl.at : 9;
+    const lit = app.pressed.has(panel.id) || age < 0.12;
+    ctx.beginPath();
+    ctx.arc(cx, recY, r * (lit ? 1.14 : 1), 0, Math.PI * 2);
+    ctx.strokeStyle = `hsl(${panel.hue} 80% 68% / ${lit ? 1 : 0.5})`;
+    ctx.lineWidth = lit ? 4 : 2;
+    ctx.stroke();
+    if (lit) { ctx.fillStyle = `hsl(${panel.hue} 80% 62% / .28)`; ctx.fill(); }
+    ctx.fillStyle = `hsl(${panel.hue} 80% 78% / ${lit ? 1 : 0.65})`;
+    ctx.font = `${Math.round(r * 1.15)}px ui-monospace, monospace`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(panel.label, cx, recY + 1);
+  });
+
+  // 노트
+  for (const note of g.notes) {
+    if (note.judged) continue;
+    const y = recY + (note.t - t) * speed;
+    if (y < -60 || y > h + 60) continue;
+    const cx = (note.lane + 0.5) * laneW;
+    const panel = g.pad.panels[note.lane];
+    const rw = laneW * 0.74, rh = Math.min(laneW * 0.42, h * 0.052);
+    ctx.beginPath();
+    ctx.roundRect(cx - rw / 2, y - rh / 2, rw, rh, rh * 0.35);
+    ctx.fillStyle = `hsl(${panel.hue} 75% 58%)`;
+    ctx.fill();
+    ctx.fillStyle = "#0a0e16";
+    ctx.font = `bold ${Math.round(rh * 0.78)}px ui-monospace, monospace`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(panel.label, cx, y + 1);
+  }
+
+  // 판정 글자
+  if (g.judgement && now - g.judgement.at < 0.7) {
+    const age = (now - g.judgement.at) / 0.7;
+    ctx.globalAlpha = 1 - age * age;
+    ctx.fillStyle = `hsl(${g.judgement.judge.hue} 85% 70%)`;
+    ctx.font = `bold ${Math.round(h * 0.075)}px ui-monospace, monospace`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(g.judgement.judge.name, w / 2, h * 0.42 - age * h * 0.03);
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawMini() {
+  if (!app.camera) return;
+  const canvas = $("mini");
+  const ctx = canvas.getContext("2d");
+  const { width: w, height: h } = canvas;
+  ctx.clearRect(0, 0, w, h);
+  ctx.globalAlpha = 0.5;
+  ctx.drawImage(sample, 0, 0, w, h);
+  ctx.globalAlpha = 1;
+  drawPad(ctx, w, h, { flashes: app.game?.flashes });
+  for (const foot of app.feet) {
+    ctx.beginPath();
+    ctx.arc((foot.x / GRID_W) * w, (foot.y / GRID_H) * h, 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = "#ffd66e"; ctx.fill();
+  }
+}
+
+function finish() {
+  const g = app.game;
+  if (!g || g.done) return;
+  g.done = true;
+  releaseWakeLock();
+
+  const total = g.notes.length;
+  const hits = total - g.counts.miss;
+  $("r-rank").textContent = rankOf(g.score);
+  $("r-score").textContent = `${g.score.toLocaleString("ko-KR")}점`;
+  $("r-song").textContent = `${g.song.title} · ${g.diff.name} · ${g.pad.name}`;
+  $("r-tally").replaceChildren(...[...JUDGES, MISS].map((j) => {
+    const d = document.createElement("div");
+    d.style.color = `hsl(${j.hue} 75% 72%)`;
+    d.innerHTML = "<span></span><b></b>";
+    d.querySelector("span").textContent = j.name;
+    d.querySelector("b").textContent = String(g.counts[j.id] ?? 0);
+    return d;
+  }));
+  $("r-detail").textContent =
+    `최대 콤보 ${g.maxCombo} · 정확도 ${total ? Math.round((hits / total) * 100) : 0}%` +
+    ` · ${app.camera ? "카메라 판정" : "손가락 모드"}`;
+
+  window.blShareText = () =>
+    `발판 리듬 «${g.song.title}» ${g.diff.name} ${g.score.toLocaleString("ko-KR")}점 (${rankOf(g.score)}). 카메라로 밟아보세요!`;
+  // 손가락 모드는 발로 밟은 기록이 아니라 보드에 올리지 않는다
+  if (app.camera) window.blWeeklyReport?.(g.score);
+
+  show("result");
+}
+
+/* ---------- 화면 깨우기 ---------- */
+async function requestWakeLock() {
+  try { app.wakeLock = await navigator.wakeLock?.request("screen"); } catch { /* 지원 안 함 */ }
+}
+function releaseWakeLock() {
+  app.wakeLock?.release?.().catch(() => {});
+  app.wakeLock = null;
+}
+
+/* ---------- 루프 ---------- */
+function loop(ts) {
+  requestAnimationFrame(loop);
+  if (app.camera && ts - app.lastSample >= SAMPLE_MS) {
+    app.lastSample = ts;
+    try { analyze(ts); } catch { /* 프레임 하나쯤은 건너뛴다 */ }
+  }
+  if (app.screen === "setup") drawSetup();
+  if (app.screen === "play") {
+    app.band?.pump();
+    updateGame();
+    drawStage();
+    drawMini();
+  }
+}
+requestAnimationFrame(loop);
+
+/* ---------- 버튼 ---------- */
+$("go-camera").onclick = async () => {
+  $("cam-error").hidden = true;
+  audioContext();
+  try {
+    await startCamera();
+    show("setup");
+    $("setup-hint").textContent = "발판 네 귀퉁이를 바닥에 맞춰 끌어 주세요.";
+  } catch (err) {
+    $("cam-error").hidden = false;
+    $("cam-error").textContent =
+      `카메라를 못 열었어요 (${err?.name ?? "오류"}). 권한을 허용했는지, https로 접속했는지 확인해 주세요. ` +
+      "그냥 손가락 모드로 해도 됩니다.";
+  }
+};
+$("go-finger").onclick = () => {
+  audioContext();
+  stopCamera();
+  show("select");
+};
+$("flip-cam").onclick = async () => {
+  settings.facing = settings.facing === "user" ? "environment" : "user";
+  settings.mirror = settings.facing === "user";
+  $("opt-mirror").checked = settings.mirror;
+  save();
+  try { await startCamera(); } catch { /* 후면이 없을 수도 */ }
+};
+$("learn-floor").onclick = () => {
+  app.bg = null;
+  app.learning = { until: performance.now() + 3000, frames: [] };
+  $("setup-hint").textContent = "발판 밖으로 나가 주세요… 3";
+};
+$("back-intro").onclick = () => { stopCamera(); show("intro"); };
+$("to-select").onclick = () => show("select");
+$("back-setup").onclick = async () => {
+  if (!app.camera) {
+    try { await startCamera(); } catch { show("intro"); return; }
+  }
+  show("setup");
+};
+$("start-song").onclick = startGame;
+$("p-quit").onclick = () => {
+  app.game = null;
+  releaseWakeLock();
+  show("select");
+};
+$("r-again").onclick = startGame;
+$("r-other").onclick = () => show("select");
+
+// 데스크톱에서 확인용 — 숫자키가 레인이다
+addEventListener("keydown", (e) => {
+  if (app.screen !== "play") return;
+  const i = "12345".indexOf(e.key);
+  const panels = padNow().panels;
+  if (i >= 0 && i < panels.length) onStep(panels[i].id);
+});
+
+addEventListener("visibilitychange", () => {
+  if (document.hidden) releaseWakeLock();
+  else if (app.screen === "play" && app.game && !app.game.done) requestWakeLock();
+});
+
+window.blWeekly = {
+  game: "stepcam",
+  dir: "max",
+  fmt: (v) => `${Math.round(v).toLocaleString("ko-KR")}점`,
+};
+</script>
+<script defer src="/_shared/share.js"></script>
+<script defer src="/_shared/records.js"></script>
+</body>
+</html>

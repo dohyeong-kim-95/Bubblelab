@@ -45,6 +45,7 @@ export const GAMES = {
   fillfridge:   { dir: "max", min: 1, max: 10000 },     // 냉장고 채우기 클리어 스테이지
   reactiontime: { dir: "min", min: 0, max: 60000 },     // 반응속도(ms)
   "sort-line":  { dir: "max", min: 0, max: 100000 },    // 컨베이어 분류 정답 수
+  stepcam:      { dir: "max", min: 0, max: 1250000 },   // 발판 리듬 점수 (100만 만점 × 난이도 배수 1.25)
   touch25:      { dir: "min", min: 0, max: 3600 },      // 완주 시간(초)
   trader:       { dir: "max", min: -1, max: 100 },      // 수익률(비율)
   woodstack:    { dir: "max", min: 0, max: 100000 },    // 쌓은 통나무 층수

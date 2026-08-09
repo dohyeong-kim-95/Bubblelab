@@ -22,6 +22,8 @@ const SCREENS = [
   { name: "달력", path: "/util/calendar/" },
   { name: "운세", path: "/util/fortune/" },
   { name: "별자리 배경화면", path: "/util/stars/" },
+  // 카메라가 없는 환경(헤드리스)에서도 첫 화면이 떠야 한다 — 게임 로직은 단위 테스트가 본다
+  { name: "발판 리듬", path: "/games/stepcam/" },
 ];
 
 for (const screen of SCREENS) {
