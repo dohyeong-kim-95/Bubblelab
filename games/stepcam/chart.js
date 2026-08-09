@@ -104,12 +104,13 @@ function pickJumpPartner(random, lanes, lane) {
 
 /* ---------- 판정 ---------- */
 
-// 카메라 판정은 손가락보다 몇 프레임 느리게 들어온다 — 창을 리듬게임보다
-// 넉넉하게 잡았다.
+// 카메라는 초당 30장만 보므로 스텝 시각에 ±16 ms의 눈금 오차가 깔려 있다.
+// 그 아래로 창을 좁히면 실력이 아니라 운이 되니, 퍼펙트를 그 눈금의 서너 배로
+// 두는 선까지만 조인다. (판정 자체의 지연은 설정의 «판정 보정»이 되돌린다.)
 export const JUDGES = [
-  { id: "perfect", name: "퍼펙트", window: 0.09, weight: 1, hue: 45 },
-  { id: "great", name: "그레이트", window: 0.16, weight: 0.7, hue: 140 },
-  { id: "good", name: "굿", window: 0.26, weight: 0.32, hue: 200 },
+  { id: "perfect", name: "퍼펙트", window: 0.06, weight: 1, hue: 45 },
+  { id: "great", name: "그레이트", window: 0.11, weight: 0.7, hue: 140 },
+  { id: "good", name: "굿", window: 0.18, weight: 0.32, hue: 200 },
 ];
 export const MISS = { id: "miss", name: "미스", weight: 0, hue: 0 };
 export const HIT_WINDOW = JUDGES[JUDGES.length - 1].window;

@@ -249,6 +249,14 @@ test("DDR 발판이면 레인이 넷", () => {
 
 /* ---------- 판정·점수 ---------- */
 
+test("판정 창은 좁은 것부터 넓은 순이고, 카메라 눈금(33ms)보다는 넓다", () => {
+  for (let i = 1; i < JUDGES.length; i++) {
+    assert.ok(JUDGES[i].window > JUDGES[i - 1].window, `${JUDGES[i].id} 창이 앞 판정보다 좁다`);
+    assert.ok(JUDGES[i].weight < JUDGES[i - 1].weight, `${JUDGES[i].id} 가중치가 더 크다`);
+  }
+  assert.ok(JUDGES[0].window >= 0.05, "퍼펙트 창이 카메라 프레임 간격에 묻힌다");
+});
+
 test("시간차가 벌어질수록 판정이 내려간다", () => {
   assert.equal(judgeOf(0).id, "perfect");
   assert.equal(judgeOf(-JUDGES[0].window).id, "perfect", "이른 쪽도 대칭이어야 한다");
