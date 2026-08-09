@@ -366,40 +366,6 @@ ${preconnectLinks}
           overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .card--hof .hof-arrow { margin-left: auto; font-size: 1.3rem; opacity: .5; }
   /* 올타임 1위를 가장 많이 가진 3명 — 3·1·2 시상대 (명예의 전당 카드 위) */
-  #hof-podium { margin: 0 0 1.4rem; }
-  #hof-podium[hidden] { display: none; }
-  .podium-title { text-align: center; font-weight: bold; font-size: .95rem;
-          margin: 0 0 .7rem; letter-spacing: .02em;
-          color: light-dark(#8a6d12, #ffd873); }
-  .podium-row { display: flex; justify-content: center; align-items: flex-end; gap: .55rem;
-          max-width: 30rem; margin: 0 auto; }
-  .podium-item { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column;
-          align-items: center; text-align: center;
-          animation: pop .5s cubic-bezier(.2,1.5,.4,1) both; }
-  .podium-item.rank-3 { animation-delay: .04s; }
-  .podium-item.rank-2 { animation-delay: .09s; }
-  .podium-item.rank-1 { animation-delay: .15s; }
-  .podium-figure { font-size: 2rem; line-height: 1; filter: drop-shadow(0 2px 2px #0003); }
-  .rank-1 .podium-figure { font-size: 2.7rem; }
-  /* 동점이면 한 단에 여러 이름이 올라가므로 두 줄까지 접어서 보여준다 */
-  .podium-nick { font-weight: bold; font-size: .88rem; margin-top: .25rem;
-          max-width: 100%; overflow: hidden; overflow-wrap: anywhere;
-          display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-  .podium-count { font-size: .7rem; opacity: .72; margin-bottom: .4rem; }
-  .podium-base { position: relative; width: 100%; overflow: hidden;
-          border-radius: .55rem .55rem 0 0; }
-  .podium-rank { position: absolute; inset: 0; display: grid; place-items: center;
-          font-weight: 900; font-size: 2.4rem; color: #fff; opacity: .3;
-          text-shadow: 0 1px 2px #0004; pointer-events: none; }
-  .podium-games { position: relative; height: 100%; display: flex; flex-wrap: wrap;
-          align-content: center; justify-content: center; gap: .05rem .1rem;
-          padding: .25rem; font-size: .82rem; line-height: 1.05; }
-  .podium-more { align-self: center; font-size: .58rem; font-weight: 800; color: #fff;
-          text-shadow: 0 1px 1px #0006; }
-  .rank-1 .podium-base { height: 4.6rem; background: linear-gradient(#f6d979, #dcae32); }
-  .rank-2 .podium-base { height: 3.4rem; background: linear-gradient(#dfe6ec, #a8b4c1); }
-  .rank-3 .podium-base { height: 2.6rem; background: linear-gradient(#e6b083, #bf7a45); }
-  @keyframes pop { from { transform: scale(.6); opacity: 0; } }
   .emoji { font-size: 2.6rem; line-height: 1; position: relative; display: inline-block; }
   .emoji[data-badge]::after { content: attr(data-badge); position: absolute;
           top: -.1em; right: -.28em; display: grid; place-items: center;
@@ -427,9 +393,9 @@ ${preconnectLinks}
 ${categoryLinks}
     </nav>
   </div>
-  <div id="crown" title="이번 주 1위를 가장 많이 가진 사람 — 월요일 09시 초기화"></div>
+${site === "slop" ? "" : '  <div id="crown" title="이번 주 1위를 가장 많이 가진 사람 — 월요일 09시 초기화"></div>'}
 ${site === "slop" ? '  <div id="streak">🔥 연속 방문 계산 중…</div>' : ""}
-${site === "slop" ? '  <div id="hof-podium" hidden><p class="podium-title">👑 올타임 slop 삼대장</p><div class="podium-row"></div></div>' : ""}
+${site === "slop" ? '  <div id="week-podium" class="bl-podium" hidden><p class="podium-title">🔥 이번 주 slop 삼대장</p><div class="podium-row"></div></div>' : ""}
 ${cards ? `  <div class="grid">\n${cards}\n  </div>` : `  <p class="empty">아직 아무것도 없어요 🫧</p>`}
   <footer><a href="https://bubblelab.dev">bubblelab.dev</a></footer>
 <script>
@@ -472,6 +438,25 @@ addEventListener("keydown", (event) => {
   }
 });
 
+// 이번 주 삼대장 시상대. 순위 계산·렌더는 /_shared/podium.js가 맡는다
+// (명예의 전당의 올타임 시상대와 같은 동점 규칙을 쓰기 위해 한 곳에 뒀다).
+async function renderWeekPodium(records) {
+  // podium.js는 defer라 파싱이 끝나야 실행된다. 캐시 등으로 fetch가 먼저 끝나면
+  // 아직 없을 수 있으므로 DOM 준비를 기다린 뒤에 그린다.
+  if (document.readyState === "loading") {
+    await new Promise((r) => addEventListener("DOMContentLoaded", r, { once: true }));
+  }
+  const mount = document.getElementById("week-podium");
+  if (!mount || !window.blPodium) return;
+  const gameEmoji = {};
+  for (const card of document.querySelectorAll(".card")) {
+    const g = card.querySelector(".champ")?.dataset.game;
+    const e = card.querySelector(".emoji")?.textContent?.trim();
+    if (g && e) gameEmoji[g] = e;
+  }
+  window.blPodium.render(mount, window.blPodium.rank(records), gameEmoji);
+}
+
 // 주간 신기록 보드(/_records)에서 카드별 챔피언을 채운다. 실패해도 조용히 넘어간다.
 (async () => {
   const els = [...document.querySelectorAll(".champ[data-game]")];
@@ -491,6 +476,9 @@ addEventListener("keydown", (event) => {
       el.title = "이번 주 1위 — 월요일 09시 초기화";
       wins[r.nick] = (wins[r.nick] ?? 0) + 1;
     }
+    // 이번 주 삼대장 시상대 — 카드 챔피언과 같은 응답을 재활용해 따로 안 부른다.
+    // 게임 → 이모지는 카드에서 그대로 뽑는다(명예의 전당 배너 카드는 champ가 없다).
+    renderWeekPodium(records);
     for (const el of els) {
       const game = el.dataset.game;
       if (!supportedGames.has(game)) continue;
@@ -502,7 +490,8 @@ addEventListener("keydown", (event) => {
     const top = Math.max(0, ...Object.values(wins));
     if (top > 0) {
       const leaders = Object.keys(wins).filter((n) => wins[n] === top);
-      document.getElementById("crown").textContent =
+      const crown = document.getElementById("crown");   // slop은 시상대가 대신한다
+      if (crown) crown.textContent =
         \`🏆 이번 주 종합 1위: \${leaders.join(" · ")} (1위 \${top}개)\`;
     }
     // 주간 리셋·공지 팝업 (records.js가 정의 — defer 스크립트 실행을 기다린다)
@@ -527,112 +516,6 @@ addEventListener("keydown", (event) => {
   }
 })();
 
-// 올타임 1위(명예의 전당)를 가장 많이 보유한 3명을 3·1·2 시상대로 보여준다.
-// 계산을 기다리지 않도록: 캐시(localStorage)로 즉시 그리고, 최신값은 백그라운드에서
-// 받아 갱신·재캐시한다. (인기순 카드 정렬과 같은 "즉시 표시 + 다음엔 최신" 패턴)
-(async () => {
-  const podium = document.getElementById("hof-podium");
-  if (!podium) return;
-  const CACHE_KEY = "bl-hof-podium-v3";   // v2까지는 puzzle 게임 올타임도 섞여 집계됐다
-  const MEDAL = ["🥇", "🥈", "🥉"];
-  const MAX_EMOJI = 6;                       // 시상대 단에 넣을 이모지 최대 개수
-
-  // 게임 → 이모지 맵은 랜딩 카드에서 그대로 뽑아 쓴다 (명예의 전당 카드 제외).
-  const gameEmoji = {};
-  for (const card of document.querySelectorAll(".card")) {
-    const g = card.querySelector(".champ")?.dataset.game;
-    const e = card.querySelector(".emoji")?.textContent?.trim();
-    if (g && e) gameEmoji[g] = e;
-  }
-
-  // ranked는 등수 단(tier) 배열이다: [{ rank, count, members:[{nick, games}] }, …]
-  // 관왕 수가 같으면 한 단에 함께 올라간다.
-  function renderPodium(ranked) {
-    if (!Array.isArray(ranked) || !ranked.length) return false;
-    if (!ranked.every((t) => t && Array.isArray(t.members) && t.rank)) return false; // 옛 캐시 방어
-    const row = podium.querySelector(".podium-row");
-    row.textContent = "";
-    const byRank = new Map(ranked.map((t) => [t.rank, t]));
-    // 세 단이 다 있으면 1등을 가운데 두는 고전 배치(3·1·2). 동점 때문에 단이
-    // 빠지면(공동 1위 둘이면 2등 단이 없다) 1등이 끝으로 밀리므로 등수 순으로 둔다.
-    const full = [1, 2, 3].every((r) => byRank.has(r));
-    for (const pos of full ? [3, 1, 2] : [...byRank.keys()].sort((a, b) => a - b)) {
-      const t = byRank.get(pos);
-      if (!t) continue;
-      const item = document.createElement("div");
-      item.className = "podium-item rank-" + pos;
-      const fig = document.createElement("div");
-      fig.className = "podium-figure"; fig.textContent = MEDAL[pos - 1];
-      const nick = document.createElement("div");
-      nick.className = "podium-nick";
-      nick.textContent = t.members.map((m) => m.nick).join(" · ");
-      const cnt = document.createElement("div");
-      cnt.className = "podium-count";
-      cnt.textContent = (t.members.length > 1 ? "공동 " : "") + "👑 " + t.count + "관왕";
-      // 시상대 단: 큰 순위 숫자(워터마크) 위에 1등한 게임 이모지들을 올린다.
-      // 동점이면 그 단에 선 사람들의 게임을 모두 합쳐 얹는다.
-      const base = document.createElement("div");
-      base.className = "podium-base";
-      const rank = document.createElement("span");
-      rank.className = "podium-rank"; rank.textContent = String(pos);
-      const games = document.createElement("div");
-      games.className = "podium-games";
-      const emojis = t.members.flatMap((m) => m.games ?? []).map((g) => gameEmoji[g] ?? "🫧");
-      for (const e of emojis.slice(0, MAX_EMOJI)) {
-        const s = document.createElement("span"); s.textContent = e; games.appendChild(s);
-      }
-      if (emojis.length > MAX_EMOJI) {
-        const more = document.createElement("span");
-        more.className = "podium-more"; more.textContent = "+" + (emojis.length - MAX_EMOJI);
-        games.appendChild(more);
-      }
-      base.append(rank, games);
-      item.append(fig, nick, cnt, base);
-      row.appendChild(item);
-    }
-    podium.hidden = false;
-    return true;
-  }
-
-  // 1) 캐시가 있으면 계산 없이 바로 그린다.
-  let renderedKey = null;
-  try {
-    const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || "null");
-    if (cached && renderPodium(cached.ranked)) renderedKey = JSON.stringify(cached.ranked);
-  } catch {}
-
-  // 2) 최신 데이터를 받아 달라졌을 때만 다시 그리고, 항상 재캐시한다.
-  try {
-    const res = await fetch("/_records?alltime=1&scope=slop", { cache: "no-store" });
-    if (!res.ok) throw new Error();
-    const { records } = await res.json();
-    const byNick = new Map();                // 닉네임 → { count, at, games:[] }
-    for (const [game, r] of Object.entries(records ?? {})) {
-      if (!r || !r.nick) continue;
-      const cur = byNick.get(r.nick) ?? { count: 0, at: 0, games: [] };
-      cur.count += 1;
-      cur.at = Math.max(cur.at, r.at ?? 0);
-      cur.games.push(game);
-      byNick.set(r.nick, cur);
-    }
-    const people = [...byNick.entries()]
-      .map(([nick, v]) => ({ nick, count: v.count, at: v.at, games: v.games }))
-      .sort((a, b) => b.count - a.count || b.at - a.at || a.nick.localeCompare(b.nick));
-    // 관왕 수가 같으면 같은 등수(경쟁 순위). 공동 1위가 둘이면 다음 사람은 3위다.
-    const tiers = [];
-    let placed = 0;
-    for (const p of people) {
-      const last = tiers[tiers.length - 1];
-      if (last && last.count === p.count) last.members.push(p);
-      else tiers.push({ rank: placed + 1, count: p.count, members: [p] });
-      placed += 1;
-    }
-    const ranked = tiers.filter((t) => t.rank <= 3);
-    const freshKey = JSON.stringify(ranked);
-    if (freshKey !== renderedKey) renderPodium(ranked);   // 캐시와 같으면 다시 안 그림(깜빡임 방지)
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), ranked }));
-  } catch {}
-})();
 
 // 카드는 즉시 보여주고, 최근에 저장한 인기순을 먼저 적용한다. 최신 통계는
 // 백그라운드에서 받아 다음 방문에 사용하므로 화면이 통계를 기다리거나 점프하지 않는다.
@@ -669,6 +552,7 @@ addEventListener("keydown", (event) => {
   } catch {}
 })();
 </script>
+<script defer src="/_shared/podium.js"></script>
 <script defer src="/_shared/records.js"></script>
 <script defer src="/_shared/suggest.js"></script>
 </body>
