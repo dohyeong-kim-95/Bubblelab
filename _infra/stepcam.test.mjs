@@ -279,18 +279,6 @@ test("전부 미스면 0점, 판정이 좋을수록 점수가 는다", () => {
   assert.ok(perfect <= MAX_SCORE);
 });
 
-test("주간 보드에 올릴 수 있는 범위를 넘지 않는다", async () => {
-  const { GAMES } = await import("./records.js");
-  const cfg = GAMES.stepcam;
-  assert.ok(cfg, "_infra/records.js에 stepcam이 등록돼 있지 않다");
-  const best = Math.max(...DIFFICULTIES.map((d) => computeScore({
-    counts: { perfect: 100, great: 0, good: 0, miss: 0 },
-    maxCombo: 100, total: 100, multiplier: d.multiplier,
-  })));
-  assert.ok(best <= cfg.max, `만점 ${best}이 보드 상한 ${cfg.max}을 넘는다`);
-  assert.equal(cfg.dir, "max");
-});
-
 test("등급은 점수 순서를 지킨다", () => {
   const ranks = [0, 0.5, 0.7, 0.8, 0.9, 0.95, 1].map((r) => rankOf(MAX_SCORE * r));
   assert.deepEqual(ranks, ["D", "C", "B", "A", "S", "SS", "SSS"]);

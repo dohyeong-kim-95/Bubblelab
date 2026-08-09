@@ -81,9 +81,9 @@
                 border: 1px solid var(--line); background: #070b12; }
   .foot .legend { font-size: .62rem; line-height: 1.6; opacity: .5; flex: 1; min-width: 0; }
   .foot .quit { flex: none; padding: .55rem .8rem; font-size: .72rem; }
-  /* 플레이 중에는 공용 떠다니는 버튼(홈 독·주간 기록 배지)을 치운다 —
+  /* 플레이 중에는 공용 떠다니는 버튼(홈 독·공유 토스트)을 치운다 —
      화면 아래 모서리가 «그만» 버튼과 발판 미리보기 자리다. 결과 화면에서 돌아온다. */
-  body.playing #bl-dock, body.playing #bl-weekly, body.playing #bl-toast { display: none !important; }
+  body.playing #bl-dock, body.playing #bl-toast { display: none !important; }
 
   /* 결과 */
   .rank { font-size: 3.4rem; font-weight: bold; line-height: 1; text-align: center;
@@ -781,8 +781,6 @@ function finish() {
 
   window.blShareText = () =>
     `발판 리듬 «${g.song.title}» ${g.diff.name} ${g.score.toLocaleString("ko-KR")}점 (${rankOf(g.score)}). 카메라로 밟아보세요!`;
-  // 손가락 모드는 발로 밟은 기록이 아니라 보드에 올리지 않는다
-  if (app.camera) window.blWeeklyReport?.(g.score);
 
   show("result");
 }
@@ -874,14 +872,7 @@ addEventListener("visibilitychange", () => {
   if (document.hidden) releaseWakeLock();
   else if (app.screen === "play" && app.game && !app.game.done) requestWakeLock();
 });
-
-window.blWeekly = {
-  game: "stepcam",
-  dir: "max",
-  fmt: (v) => `${Math.round(v).toLocaleString("ko-KR")}점`,
-};
 </script>
 <script defer src="/_shared/share.js"></script>
-<script defer src="/_shared/records.js"></script>
 </body>
 </html>

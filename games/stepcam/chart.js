@@ -25,7 +25,7 @@ export const SONGS = [
 ];
 
 // sub = 한 박을 몇 칸으로 쪼개나, gap = 노트 사이 최소 칸 수(연타 제한),
-// multiplier = 주간 보드에 올릴 때의 난이도 배수.
+// multiplier = 어려운 난이도를 고른 만큼 점수에 얹어 주는 배수.
 export const DIFFICULTIES = [
   { id: "easy", name: "쉬움", sub: 1, gap: 1, density: 0.62, jump: 0, multiplier: 0.7 },
   { id: "normal", name: "보통", sub: 2, gap: 2, density: 0.62, jump: 0.04, multiplier: 1 },
@@ -126,7 +126,7 @@ export const MAX_SCORE = 1_000_000;
 
 /**
  * 정확도 95만 + 최대 콤보 5만을 곡 전체에서 나눠 갖고, 난이도 배수를 곱한다.
- * 곡마다 노트 수가 달라도 점수 눈금이 같아 주간 보드에서 비교가 된다.
+ * 곡마다 노트 수가 달라도 점수 눈금이 같아 판마다 비교가 된다.
  */
 export function computeScore({ counts, maxCombo, total, multiplier = 1 }) {
   if (!total) return 0;
