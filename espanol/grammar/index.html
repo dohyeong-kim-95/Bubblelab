@@ -1,0 +1,453 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🧩 최소 문법 — 알아듣는 데 필요한 만큼 · 스페인어</title>
+<meta name="description" content="동사 어미로 '누가'를 알아내는 법, ser와 estar, tú와 usted, 과거 시제 알아듣기. 말하기가 아니라 알아듣기에 필요한 만큼만.">
+<link rel="stylesheet" href="../style.css">
+<script>window.blTTSConfig = { lang: "es-ES", dock: false, rate: 0.9 };</script>
+<script defer src="/_shared/tts.js"></script>
+<style>
+  .toc { padding: 0; margin: 1rem 0 2rem; list-style: none; font-size: .84rem;
+         display: grid; gap: .2rem .8rem; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); }
+  .toc a { color: inherit; text-decoration: none; }
+  .toc a:hover { color: var(--accent); }
+  section { scroll-margin-top: 1rem; }
+  .key { font-size: .82rem; padding: .5rem .7rem; margin: .6rem 0;
+         border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: .3rem; }
+  td.you { background: var(--gold-soft); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <nav class="nav">
+    <a class="back" href="../">← 스페인어 홈</a>
+    <div class="tabs">
+      <a href="../sounds/">발음</a>
+      <a href="../ear/">귀</a>
+      <a href="../words/">단어</a>
+      <a href="./" aria-current="page">문법</a>
+      <a href="../drill/">훈련</a>
+      <a href="../log/">일지</a>
+    </div>
+  </nav>
+
+  <h1>알아듣는 데 필요한 만큼의 문법</h1>
+  <p class="lede">
+    스페인어 문법책은 두껍다. 그런데 <b>영화를 알아듣는 데</b> 필요한 것은 그 일부다.
+    여기 있는 것만 알면 자막을 보며 “왜 저 말이 저렇게 되나”가 대체로 풀린다.
+    말하기용 정확성은 지금 목표가 아니다 — 나중에 필요해지면 그때 채운다.
+  </p>
+
+  <div id="voice-note"></div>
+
+  <ol class="toc">
+    <li><a href="#gender">1. 낱말에 성별이 있다</a></li>
+    <li><a href="#article">2. 관사 el / la / un / una</a></li>
+    <li><a href="#serestar">3. ser 와 estar</a></li>
+    <li><a href="#endings">4. 동사 어미표 — 현재</a></li>
+    <li><a href="#irregular">5. 자주 나오는 불규칙 동사</a></li>
+    <li><a href="#nosubject">6. ★ 주어가 없다 — 어미로 누구인지 안다</a></li>
+    <li><a href="#usted">7. tú 와 usted — 이 영화의 핵심</a></li>
+    <li><a href="#ask">8. 의문사와 ¿ ?</a></li>
+    <li><a href="#negative">9. 부정 — no 를 두 번 쓴다</a></li>
+    <li><a href="#pronoun">10. me · te · lo · le · se</a></li>
+    <li><a href="#past">11. 과거를 알아듣기</a></li>
+    <li><a href="#order">12. 명령형 — 대사에 제일 많다</a></li>
+    <li><a href="#frames">13. 통째로 외울 틀 열두 개</a></li>
+  </ol>
+
+  <section id="gender">
+    <h2>1. 낱말에 성별이 있다</h2>
+    <p style="font-size:.86rem">
+      모든 명사는 남성 또는 여성이다. 규칙은 대개 <b>-o 는 남성, -a 는 여성</b>.
+      성별이 중요한 이유는 뜻이 아니라 <b>주변 낱말이 함께 바뀌기 때문</b>이다:
+      <span class="es" data-say>el jefe nuevo</span>(새 상사, 남) ↔
+      <span class="es" data-say>la jefa nueva</span>(새 상사, 여).
+    </p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th></th><th>단수</th><th>복수</th></tr></thead>
+        <tbody>
+          <tr><th>남성</th><td>el contrato</td><td>los contratos</td></tr>
+          <tr><th>여성</th><td>la fábrica</td><td>las fábricas</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:.84rem" class="dim">
+      복수는 모음으로 끝나면 <b>-s</b>, 자음으로 끝나면 <b>-es</b>
+      (<span class="es">trabajador → trabajadores</span>). 예외가 있지만 무시해도 알아듣는다.
+      다만 <b>-o 로 끝나도 여성인 낱말</b>이 있고(<span class="es">la mano</span> 손),
+      그 반대도 있다(<span class="es">el problema</span> 문제 · <span class="es">el día</span> 날).
+      이건 규칙 대신 통째로 외운다.
+    </p>
+  </section>
+
+  <section id="article">
+    <h2>2. 관사</h2>
+    <div class="scroll">
+      <table>
+        <thead><tr><th></th><th>남성 단수</th><th>여성 단수</th><th>남성 복수</th><th>여성 복수</th></tr></thead>
+        <tbody>
+          <tr><th>그 (정관사)</th><td>el</td><td>la</td><td>los</td><td>las</td></tr>
+          <tr><th>어떤 (부정관사)</th><td>un</td><td>una</td><td>unos</td><td>unas</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:.84rem">
+      두 축약만 눈에 익히면 된다: <b>a + el = al</b>, <b>de + el = del</b>.
+      <span class="es" data-say>Voy al taller.</span> 작업장에 간다 ·
+      <span class="es" data-say>el jefe del almacén</span> 창고 담당자.
+    </p>
+  </section>
+
+  <section id="serestar">
+    <h2>3. ser 와 estar — 둘 다 “~이다”</h2>
+    <p style="font-size:.86rem">
+      한국어로는 둘 다 “~이다/있다”로 번역되지만 쓰임이 갈린다.
+      거칠게: <b>ser 는 바뀌지 않는 것</b>, <b>estar 는 지금 그런 것</b>.
+    </p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th></th><th>ser</th><th>estar</th></tr></thead>
+        <tbody>
+          <tr><th>쓰는 자리</th><td>정체·직업·국적·성격·시각</td><td>위치·기분·상태·진행</td></tr>
+          <tr><th>예</th><td>Soy el jefe. 내가 사장이다</td><td>Estoy cansado. 나 피곤하다</td></tr>
+          <tr><th>예</th><td>Es de Madrid. 마드리드 사람이다</td><td>Está en la oficina. 사무실에 있다</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="key">
+      같은 형용사도 어느 쪽에 붙는지에 따라 뜻이 바뀐다.
+      <span class="es" data-say>Es nervioso</span>는 “원래 예민한 성격이다”,
+      <span class="es" data-say>Está nervioso</span>는 “지금 초조해한다”.
+      영화에서 사람을 평가하는 대사가 나오면 이 둘 중 어느 쪽인지가 뉘앙스를 다 결정한다.
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th></th><th>ser</th><th>estar</th></tr></thead>
+        <tbody>
+          <tr><th>나</th><td class="you">soy</td><td class="you">estoy</td></tr>
+          <tr><th>너 (tú)</th><td>eres</td><td>estás</td></tr>
+          <tr><th>그·그녀·당신 (usted)</th><td>es</td><td>está</td></tr>
+          <tr><th>우리</th><td>somos</td><td>estamos</td></tr>
+          <tr><th>너희 (vosotros)</th><td>sois</td><td>estáis</td></tr>
+          <tr><th>그들·당신들</th><td>son</td><td>están</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:.84rem" class="dim">
+      셋째 형태 <b>hay</b>도 함께: “있다(존재한다)”는 <span class="es" data-say>Hay un problema.</span>
+      (문제가 하나 있다) 처럼 <b>hay</b> 하나로 끝난다. 수에 따라 변하지 않는다.
+    </p>
+  </section>
+
+  <section id="endings">
+    <h2>4. 동사 어미표 — 현재</h2>
+    <p style="font-size:.86rem">
+      모든 동사 원형은 <b>-ar · -er · -ir</b> 셋 중 하나로 끝난다. 그 부분을 떼고 어미를 붙인다.
+      <b>-ar 가 압도적으로 많으니</b> 첫 줄만 확실히 해도 된다.
+    </p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th></th><th>hablar 말하다</th><th>comer 먹다</th><th>vivir 살다</th></tr></thead>
+        <tbody>
+          <tr><th>나</th><td class="you">hablo</td><td class="you">como</td><td class="you">vivo</td></tr>
+          <tr><th>너</th><td>hablas</td><td>comes</td><td>vives</td></tr>
+          <tr><th>그·당신</th><td>habla</td><td>come</td><td>vive</td></tr>
+          <tr><th>우리</th><td>hablamos</td><td>comemos</td><td>vivimos</td></tr>
+          <tr><th>너희</th><td>habláis</td><td>coméis</td><td>vivís</td></tr>
+          <tr><th>그들·당신들</th><td>hablan</td><td>comen</td><td>viven</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="irregular">
+    <h2>5. 자주 나오는 불규칙 동사</h2>
+    <p style="font-size:.86rem">
+      영화 대사의 절반이 이 여덟 개 안에서 돈다. 규칙을 찾지 말고 통째로 외운다.
+    </p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th></th><th>tener 가지다</th><th>ir 가다</th><th>hacer 하다</th><th>poder 할 수 있다</th></tr></thead>
+        <tbody>
+          <tr><th>나</th><td class="you">tengo</td><td class="you">voy</td><td class="you">hago</td><td class="you">puedo</td></tr>
+          <tr><th>너</th><td>tienes</td><td>vas</td><td>haces</td><td>puedes</td></tr>
+          <tr><th>그·당신</th><td>tiene</td><td>va</td><td>hace</td><td>puede</td></tr>
+          <tr><th>우리</th><td>tenemos</td><td>vamos</td><td>hacemos</td><td>podemos</td></tr>
+          <tr><th>너희</th><td>tenéis</td><td>vais</td><td>hacéis</td><td>podéis</td></tr>
+          <tr><th>그들·당신들</th><td>tienen</td><td>van</td><td>hacen</td><td>pueden</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th></th><th>querer 원하다</th><th>decir 말하다</th><th>saber 알다</th><th>venir 오다</th></tr></thead>
+        <tbody>
+          <tr><th>나</th><td class="you">quiero</td><td class="you">digo</td><td class="you">sé</td><td class="you">vengo</td></tr>
+          <tr><th>너</th><td>quieres</td><td>dices</td><td>sabes</td><td>vienes</td></tr>
+          <tr><th>그·당신</th><td>quiere</td><td>dice</td><td>sabe</td><td>viene</td></tr>
+          <tr><th>우리</th><td>queremos</td><td>decimos</td><td>sabemos</td><td>venimos</td></tr>
+          <tr><th>너희</th><td>queréis</td><td>decís</td><td>sabéis</td><td>venís</td></tr>
+          <tr><th>그들·당신들</th><td>quieren</td><td>dicen</td><td>saben</td><td>vienen</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:.84rem" class="dim">
+      가운데 모음이 바뀌는 것(<span class="es">e → ie</span>, <span class="es">o → ue</span>)이 보이는가.
+      <b>“우리·너희” 두 줄에서만 원형 그대로 돌아온다</b> — 이 규칙성 하나로 수십 개 동사가 예측된다.
+    </p>
+  </section>
+
+  <section id="nosubject">
+    <h2>6. ★ 주어가 없다 — 어미로 “누가”를 안다</h2>
+    <p style="font-size:.86rem">
+      이게 이 페이지에서 제일 중요한 항목이다. 스페인어는 <b>yo·tú 같은 주어를 거의 말하지 않는다</b>
+      — 동사 어미가 이미 누구인지 말해 주기 때문이다. 그래서 초급자가 대사를 놓치는 지점은
+      대개 낱말이 아니라 <b>“지금 누가 누구 이야기를 하는가”</b>다.
+    </p>
+    <div class="key">
+      <b>어미만 보고 사람을 잡는 요령 (현재형)</b><br>
+      <b>-o</b> 로 끝나면 → 나 · <b>-s</b> 로 끝나면 → 너 ·
+      <b>아무것도 안 붙으면</b>(-a/-e) → 그 사람 또는 당신 ·
+      <b>-mos</b> → 우리 · <b>-is</b> → 너희 · <b>-n</b> → 그들 또는 당신들
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>들린 말</th><th>누가</th><th>뜻</th></tr></thead>
+        <tbody>
+          <tr><td>trabajo</td><td>나</td><td>내가 일한다</td></tr>
+          <tr><td>trabajas</td><td>너</td><td>네가 일한다</td></tr>
+          <tr><td>trabaja</td><td>그·당신</td><td>그가 / 당신이 일한다</td></tr>
+          <tr><td>trabajamos</td><td>우리</td><td>우리가 일한다</td></tr>
+          <tr><td>trabajan</td><td>그들·당신들</td><td>그들이 일한다</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:.84rem">
+      주어를 말할 때는 <b>강조하거나 대비하려는 것</b>이다.
+      <span class="es" data-say>Yo no he dicho eso.</span>(<b>나는</b> 그렇게 말 안 했어)에서
+      <span class="es">yo</span>가 붙은 순간, 화자는 “다른 사람이 그랬겠지”라고 밀어내고 있다.
+      대사에 주어가 튀어나오면 그 자리가 감정이 실린 자리다.
+    </p>
+  </section>
+
+  <section id="usted">
+    <h2>7. tú 와 usted — 이 영화의 핵심</h2>
+    <p style="font-size:.86rem">
+      “너”에 두 가지가 있다. <b>tú</b>(반말)와 <b>usted</b>(존대). 한국어의 반말/존댓말과 비슷하지만
+      문법이 특이하다 — <b>usted 는 “그 사람” 형태를 쓴다</b>. 즉 “당신은 일합니다”가
+      <span class="es">usted trabaja</span>(그가 일한다와 같은 형태)가 된다.
+    </p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th></th><th>반말 (tú)</th><th>존대 (usted)</th></tr></thead>
+        <tbody>
+          <tr><th>~해요?</th><td>¿Trabajas aquí?</td><td>¿Trabaja aquí?</td></tr>
+          <tr><th>부를 때</th><td>oye</td><td>oiga</td></tr>
+          <tr><th>보세요</th><td>mira</td><td>mire</td></tr>
+          <tr><th>미안</th><td>perdona</td><td>perdone</td></tr>
+          <tr><th>당신의</th><td>tu contrato</td><td>su contrato</td></tr>
+          <tr><th>여러 명</th><td>vosotros trabajáis</td><td>ustedes trabajan</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="key">
+      <b>영화를 볼 때 여기를 보라.</b> 사장은 직원에게 <b>tú</b>로 말하고 직원은 사장에게 <b>usted</b>로 답하는
+      비대칭이 곧 권력 관계다. 그리고 <b>어느 쪽이 말투를 바꾸는 순간</b> — 존대를 갑자기 반말로 낮추거나,
+      친하던 사람에게 usted 로 돌아서거나 — 그게 관계가 틀어졌다는 신호다.
+      자막에는 한국어 존댓말로 다 뭉개져 나오니, 이 차이는 <b>귀로만 잡을 수 있다</b>.
+    </div>
+    <p style="font-size:.84rem" class="dim">
+      참고: <span class="es">vosotros</span>(너희)는 스페인에서만 쓴다. 중남미는 격식 없는 자리에서도
+      <span class="es">ustedes</span>를 쓴다. 이 영화는 스페인 작품이라 <b>-áis / -éis</b> 어미가 자주 들린다.
+    </p>
+  </section>
+
+  <section id="ask">
+    <h2>8. 의문사와 ¿ ?</h2>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>의문사</th><th>발음</th><th>뜻</th><th>예</th></tr></thead>
+        <tbody>
+          <tr><td>qué</td><td>께</td><td>무엇, 무슨</td><td><span class="es" data-say>¿Qué pasa?</span> 무슨 일이야?</td></tr>
+          <tr><td>quién</td><td>끼엔</td><td>누구</td><td><span class="es" data-say>¿Quién es?</span> 누구세요?</td></tr>
+          <tr><td>dónde</td><td>돈데</td><td>어디</td><td><span class="es" data-say>¿Dónde está?</span> 어디 있어요?</td></tr>
+          <tr><td>cuándo</td><td>꾸안도</td><td>언제</td><td><span class="es" data-say>¿Cuándo firmamos?</span> 언제 서명해요?</td></tr>
+          <tr><td>cómo</td><td>꼬모</td><td>어떻게</td><td><span class="es" data-say>¿Cómo estás?</span> 잘 지내?</td></tr>
+          <tr><td>por qué</td><td>뽀르 께</td><td>왜</td><td><span class="es" data-say>¿Por qué no?</span> 왜 안 돼?</td></tr>
+          <tr><td>cuánto</td><td>꾸안또</td><td>얼마나</td><td><span class="es" data-say>¿Cuánto es?</span> 얼마예요?</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:.84rem">
+      의문사가 없는 예/아니오 질문은 <b>어순을 안 바꾸고 억양만 올린다</b>:
+      <span class="es" data-say>¿Tienes el contrato?</span> 계약서 있어? 영어의 do·does 같은 조동사가 없다.
+    </p>
+  </section>
+
+  <section id="negative">
+    <h2>9. 부정 — no 를 두 번 쓴다</h2>
+    <p style="font-size:.86rem">
+      부정은 동사 앞에 <b>no</b> 하나. <span class="es" data-say>No puedo.</span> 못 해요.
+      그런데 “아무것도·아무도·전혀”가 함께 오면 <b>no 를 빼지 않는다</b> — 영어와 정반대다.
+    </p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>스페인어</th><th>직역하면</th><th>실제 뜻</th></tr></thead>
+        <tbody>
+          <tr><td><span class="es" data-say>No sé nada.</span></td><td>아무것도 안 모른다</td><td>아무것도 모른다</td></tr>
+          <tr><td><span class="es" data-say>No he visto a nadie.</span></td><td>아무도 안 못 봤다</td><td>아무도 못 봤다</td></tr>
+          <tr><td><span class="es" data-say>No lo haré nunca.</span></td><td>절대 안 안 할 거다</td><td>절대 안 할 거다</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:.84rem" class="dim">
+      한국어와 같은 방식이니 오히려 편하다 — “아무도 <b>안</b> 왔다”처럼 한국어도 부정을 두 번 쓴다.
+    </p>
+  </section>
+
+  <section id="pronoun">
+    <h2>10. me · te · lo · le · se</h2>
+    <p style="font-size:.86rem">
+      대사에서 동사 앞에 짧은 소리가 하나씩 붙는데, 이게 “누구에게/무엇을”이다.
+      <b>동사 앞에 붙는다</b>는 점만 기억하면 된다 (명령형과 원형에서는 뒤에 붙어 한 낱말이 된다).
+    </p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>대명사</th><th>뜻</th><th>예</th></tr></thead>
+        <tbody>
+          <tr><td>me</td><td>나를 / 나에게</td><td><span class="es" data-say>Me lo has dicho.</span> 네가 나에게 그걸 말했어</td></tr>
+          <tr><td>te</td><td>너를 / 너에게</td><td><span class="es" data-say>Te llamo luego.</span> 나중에 전화할게</td></tr>
+          <tr><td>lo / la</td><td>그것을 / 그를·그녀를</td><td><span class="es" data-say>No lo sé.</span> 그건 몰라</td></tr>
+          <tr><td>le</td><td>그에게 / 당신에게</td><td><span class="es" data-say>Le he dado el papel.</span> 그에게 서류를 줬어</td></tr>
+          <tr><td>nos</td><td>우리를 / 우리에게</td><td><span class="es" data-say>Nos vemos mañana.</span> 내일 봐요</td></tr>
+          <tr><td>se</td><td>자기 자신 / 서로 / 누군가가</td><td><span class="es" data-say>Se ha ido.</span> 그는 가버렸다</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="key">
+      <b>se</b>는 만능이라 초급을 괴롭히는 낱말이다. 지금은 세 쓰임만 알아 두면 충분하다:
+      ① 자기에게 하는 행동(<span class="es">se llama Julio</span> 그는 자기를 훌리오라 부른다 = 이름이 훌리오다)
+      ② 서로(<span class="es">se conocen</span> 서로 안다)
+      ③ 주체를 감추기(<span class="es" data-say>Aquí no se fuma.</span> 여기서는 흡연 금지 — “누가”를 말하지 않는다).
+      ③번은 회사·관공서 말투에서 아주 잘 나온다.
+    </div>
+  </section>
+
+  <section id="past">
+    <h2>11. 과거를 알아듣기</h2>
+    <p style="font-size:.86rem">
+      과거를 <b>말할</b> 필요는 아직 없다. 하지만 <b>알아듣기</b> 위해서는 세 형태의 소리를 구별해야 한다.
+      어미만 보고 “아, 지난 일이구나”를 알면 충분하다.
+    </p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th></th><th>형태</th><th>언제</th><th>예</th></tr></thead>
+        <tbody>
+          <tr><th>현재완료</th><td>he / has / ha / hemos / habéis / han + <b>-ado, -ido</b></td>
+            <td>오늘·최근 일. <b>스페인에서 특히 많이 쓴다</b></td>
+            <td><span class="es" data-say>Me han despedido.</span> 나 해고됐어</td></tr>
+          <tr><th>단순과거</th><td><b>-é / -ó</b>, <b>-aste / -iste</b>, <b>-aron / -ieron</b></td>
+            <td>끝난 한 번의 사건</td>
+            <td><span class="es" data-say>Ayer habló con el jefe.</span> 어제 사장과 얘기했다</td></tr>
+          <tr><th>불완료</th><td><b>-aba</b> (-ar) · <b>-ía</b> (-er·-ir)</td>
+            <td>배경·습관·“~하고 있었다”</td>
+            <td><span class="es" data-say>Antes trabajaba aquí.</span> 전에는 여기서 일했다</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="key">
+      <b>귀로 잡는 요령</b> — <b>-아바 / -이아</b> 처럼 늘어지게 들리면 배경 설명(불완료),
+      <b>끝을 콱 찍는 -에 / -오</b> 는 한 번 일어난 사건(단순과거),
+      <b>he·has·ha 가 앞에 붙으면</b> 방금·오늘 일이다.
+    </div>
+    <p style="font-size:.84rem">
+      단순과거는 흔한 동사가 다 불규칙이라, 이 열 개는 통째로 외우는 편이 빠르다:
+      <b>fui</b>(갔다·였다) · <b>tuve</b>(가졌다) · <b>hice</b>(했다) · <b>dije</b>(말했다) ·
+      <b>estuve</b>(있었다) · <b>pude</b>(할 수 있었다) · <b>quise</b>(원했다) · <b>vine</b>(왔다) ·
+      <b>vi</b>(봤다) · <b>di</b>(줬다).
+    </p>
+    <p style="font-size:.84rem" class="dim">
+      미래는 걱정하지 않아도 된다 — 구어에서는 <span class="es">voy a + 원형</span>(~할 거다)으로 거의 다 해결한다.
+    </p>
+  </section>
+
+  <section id="order">
+    <h2>12. 명령형 — 대사에 제일 많다</h2>
+    <p style="font-size:.86rem">
+      사람을 부리고 설득하는 영화라 명령형이 쉬지 않고 나온다. 만드는 법을 배우기 전에
+      <b>자주 나오는 형태를 낱말처럼 외우는</b> 편이 빠르다.
+    </p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>반말</th><th>존대</th><th>뜻</th></tr></thead>
+        <tbody>
+          <tr><td><span class="es" data-say>mira</span></td><td>mire</td><td>봐 / 그게 말이지</td></tr>
+          <tr><td><span class="es" data-say>oye</span></td><td>oiga</td><td>야 / 저기요</td></tr>
+          <tr><td><span class="es" data-say>escucha</span></td><td>escuche</td><td>들어봐</td></tr>
+          <tr><td><span class="es" data-say>dime</span></td><td>dígame</td><td>말해봐 / 말씀하세요</td></tr>
+          <tr><td><span class="es" data-say>ven</span></td><td>venga</td><td>와 / 오세요 (venga 는 “자자”로도)</td></tr>
+          <tr><td><span class="es" data-say>espera</span></td><td>espere</td><td>기다려</td></tr>
+          <tr><td><span class="es" data-say>déjame</span></td><td>déjeme</td><td>나 좀 놔둬</td></tr>
+          <tr><td><span class="es" data-say>firma aquí</span></td><td>firme aquí</td><td>여기 서명해(주세요)</td></tr>
+          <tr><td><span class="es" data-say>no digas nada</span></td><td>no diga nada</td><td>아무 말 하지 마</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:.84rem" class="dim">
+      규칙만 짧게: 반말 긍정 명령은 대개 <b>“그 사람” 형태</b>와 같다(habla·come). 존대 명령과
+      <b>부정 명령</b>은 모음이 뒤바뀐다(-ar → -e, -er·-ir → -a):
+      <span class="es">habla</span> → <span class="es">no hables</span> / <span class="es">hable</span>.
+      지금은 이 “모음이 반대로 뒤집힌 소리”가 들리면 <b>명령이거나 부탁이다</b> 정도로 알아 두면 된다.
+    </p>
+  </section>
+
+  <section id="frames">
+    <h2>13. 통째로 외울 틀 열두 개</h2>
+    <p style="font-size:.86rem">
+      뜻이 정해진 조립식 틀이다. 빈칸에 동사 원형만 끼우면 되니 문법 없이도 쓸 수 있고,
+      대사에서 들리면 뒤에 뭐가 올지 예측이 된다.
+    </p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>틀</th><th>뜻</th><th>예</th></tr></thead>
+        <tbody>
+          <tr><td>tengo que + 원형</td><td>~해야 한다</td><td><span class="es" data-say>Tengo que hablar contigo.</span> 너와 얘기해야 해</td></tr>
+          <tr><td>hay que + 원형</td><td>(누구든) ~해야 한다</td><td><span class="es" data-say>Hay que firmar hoy.</span> 오늘 서명해야 한다</td></tr>
+          <tr><td>voy a + 원형</td><td>~할 거다</td><td><span class="es" data-say>Voy a llamarle.</span> 그에게 전화할게</td></tr>
+          <tr><td>quiero + 원형</td><td>~하고 싶다</td><td><span class="es" data-say>Quiero verte.</span> 너를 보고 싶어</td></tr>
+          <tr><td>puedo + 원형</td><td>~할 수 있다</td><td><span class="es" data-say>¿Puedo entrar?</span> 들어가도 돼요?</td></tr>
+          <tr><td>acabo de + 원형</td><td>막 ~했다</td><td><span class="es" data-say>Acabo de llegar.</span> 방금 도착했어</td></tr>
+          <tr><td>estoy + -ando/-iendo</td><td>~하고 있다</td><td><span class="es" data-say>Estoy trabajando.</span> 일하는 중이야</td></tr>
+          <tr><td>vuelvo a + 원형</td><td>다시 ~한다</td><td><span class="es" data-say>Vuelvo a llamar.</span> 다시 전화할게</td></tr>
+          <tr><td>hace + 기간 + que</td><td>~한 지 …됐다</td><td><span class="es" data-say>Hace dos años que trabajo aquí.</span> 여기서 일한 지 2년 됐다</td></tr>
+          <tr><td>es que…</td><td>그게 말이야…</td><td><span class="es" data-say>Es que no puedo.</span> 그게, 제가 안 되거든요</td></tr>
+          <tr><td>lo que…</td><td>~하는 것</td><td><span class="es" data-say>No es lo que parece.</span> 보이는 것과 달라</td></tr>
+          <tr><td>me da igual</td><td>난 상관없다</td><td><span class="es" data-say>A mí me da igual.</span> 난 아무래도 좋아</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="note" style="margin-top:2rem">
+    여기까지 읽었으면 문법은 당분간 덮어도 된다. 남은 것은 반복이다 —
+    <a href="../drill/">훈련</a>으로 낱말을 굳히고, 영화 10분을 보고,
+    들린 것을 <a href="../log/">일지</a>에 적는다. 그 순환이 실제 실력이 된다.
+  </div>
+
+  <footer>
+    <a href="../words/">← 단어장</a> · <a href="../">스페인어 홈</a> · 다음: <a href="../drill/">훈련 →</a>
+  </footer>
+</div>
+
+<script type="module">
+import { mountSayButtons, warnIfNoVoice } from "../app.js";
+mountSayButtons();
+warnIfNoVoice(document.getElementById("voice-note"));
+</script>
+</body>
+</html>

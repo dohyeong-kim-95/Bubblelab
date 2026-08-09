@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>👂 귀 트이기 — 영화에 계속 나오는 말 · 스페인어</title>
+<meta name="description" content="vale·claro·venga·joder. 스페인 영화 대사의 뼈대를 이루는 짧은 덩어리 60개를, 뜻이 아니라 '언제 나오나'로 정리했다.">
+<link rel="stylesheet" href="../style.css">
+<script>window.blTTSConfig = { lang: "es-ES", dock: false, rate: 0.95 };</script>
+<script defer src="/_shared/tts.js"></script>
+</head>
+<body>
+<div class="wrap">
+
+  <nav class="nav">
+    <a class="back" href="../">← 스페인어 홈</a>
+    <div class="tabs">
+      <a href="../sounds/">발음</a>
+      <a href="./" aria-current="page">귀</a>
+      <a href="../words/">단어</a>
+      <a href="../grammar/">문법</a>
+      <a href="../drill/">훈련</a>
+      <a href="../log/">일지</a>
+    </div>
+  </nav>
+
+  <h1>먼저 이것들이 들려야 한다</h1>
+  <p class="lede">
+    스페인 영화 대사에서 실제로 가장 많이 나오는 것은 명사도 동사도 아니라 <b>짧은 덩어리</b>다.
+    <span class="es">vale</span>·<span class="es">claro</span>·<span class="es">pues</span>·<span class="es">venga</span>.
+    사전에서 뜻을 찾으면 오히려 헷갈린다 — <span class="es">bueno</span>는 “좋은”이라고 나오지만
+    실제로는 “음…” 하고 뜸 들이는 소리다. 그래서 이 페이지는 뜻과 함께
+    <b>언제 나오는지</b>를 적었다. 그게 알아듣는 열쇠다.
+  </p>
+
+  <div class="note">
+    <b>쓰는 법</b> — 외우려 들지 말고, 오늘 하루 이 페이지를 훑고 영화를 10분 보라.
+    아는 덩어리가 귀에 걸리는 경험이 한 번 오면 그 뒤는 저절로 붙는다.
+  </div>
+
+  <div id="voice-note"></div>
+
+  <ul class="chips" id="filters"></ul>
+  <div class="row" style="margin:.6rem 0 1.2rem">
+    <input type="search" id="q" placeholder="검색 — vale · 알았어 · 놀람" aria-label="표현 검색" style="max-width:18rem">
+    <button class="btn" type="button" id="rude" aria-pressed="false">🚫 비속어 보기</button>
+  </div>
+  <p class="dim" id="count" style="font-size:.78rem; margin:0 0 .6rem" aria-live="polite"></p>
+
+  <div id="list"></div>
+
+  <h2>덩어리를 넘어서면 — 대사가 뭉개지는 자리</h2>
+  <div class="panel">
+    <p style="font-size:.85rem; margin:0 0 .6rem">
+      규칙대로 발음해도 실제 대사는 붙어서 들린다. 자막을 보며 “이렇게 안 들리는데?” 싶은
+      대부분이 아래 넷 중 하나다.
+    </p>
+    <ul style="font-size:.85rem; margin:0; padding-left:1.1rem">
+      <li><b>낱말이 이어 붙는다.</b> <span class="es">¿Qué es esto?</span>는 ‘께 에스 에스또’가 아니라
+        ‘<b>께세스또</b>’ 한 덩어리로 나온다. 모음이 만나면 하나로 뭉친다.</li>
+      <li><b>낱말 끝 s 가 숨이 된다.</b> 스페인 남부·구어에서는 <span class="es">las cosas</span>가
+        ‘라 꼬사’처럼 s가 바람 소리로 약해진다.</li>
+      <li><b>-ado 가 -ao 로 줄어든다.</b> <span class="es">cansado</span>(피곤한)가 ‘깐사오’,
+        <span class="es">trabajado</span>가 ‘뜨라바하오’. 아주 흔한 구어 축약이다.</li>
+      <li><b>para → pa.</b> <span class="es">para qué</span>가 ‘빠 께’로. 격식 없는 대화에서 늘 그렇다.</li>
+    </ul>
+  </div>
+
+  <footer>
+    <a href="../sounds/">← 발음</a> · <a href="../">스페인어 홈</a> · 다음: <a href="../words/">단어장 →</a>
+  </footer>
+</div>
+
+<script type="module">
+import { CHUNK_GROUPS } from "../data/chunks.js";
+import { store, KEYS, sayButton, warnIfNoVoice } from "../app.js";
+
+warnIfNoVoice(document.getElementById("voice-note"));
+
+const listEl = document.getElementById("list");
+const countEl = document.getElementById("count");
+const filtersEl = document.getElementById("filters");
+const searchEl = document.getElementById("q");
+const rudeBtn = document.getElementById("rude");
+
+// 비속어 표시 여부는 홈의 진행 상황·훈련 덱과 같은 값을 쓴다 (한 곳에서만 켠다).
+let showRude = store.get(KEYS.rude, false);
+let active = "all";
+let query = "";
+
+/* ── 묶음 필터 칩 ─────────────────────────────────────────── */
+const chips = [{ id: "all", emoji: "✳️", title: "전체" }, ...CHUNK_GROUPS];
+for (const group of chips) {
+  const li = document.createElement("li");
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "chip";
+  btn.textContent = `${group.emoji} ${group.title}`;
+  btn.setAttribute("aria-pressed", String(group.id === active));
+  btn.dataset.group = group.id;
+  btn.addEventListener("click", () => {
+    active = group.id;
+    for (const chip of filtersEl.querySelectorAll(".chip")) {
+      chip.setAttribute("aria-pressed", String(chip.dataset.group === active));
+    }
+    render();
+  });
+  li.appendChild(btn);
+  filtersEl.appendChild(li);
+}
+
+searchEl.addEventListener("input", () => { query = searchEl.value.trim().toLowerCase(); render(); });
+
+rudeBtn.addEventListener("click", () => {
+  showRude = !showRude;
+  store.set(KEYS.rude, showRude);
+  paintRudeButton();
+  render();
+});
+function paintRudeButton() {
+  rudeBtn.setAttribute("aria-pressed", String(showRude));
+  rudeBtn.textContent = showRude ? "🚫 비속어 숨기기" : "🚫 비속어 보기";
+}
+paintRudeButton();
+
+/* ── 그리기 ───────────────────────────────────────────────── */
+function matches(item) {
+  if (!query) return true;
+  return [item.es, item.ko, item.when, item.pr]
+    .filter(Boolean).some((field) => field.toLowerCase().includes(query));
+}
+
+function itemRow(item) {
+  const row = document.createElement("div");
+  row.className = "item";
+
+  const head = document.createElement("div");
+  head.className = "head";
+  head.appendChild(sayButton(item.es.replace(/[¿¡…]/g, " ").trim(), `${item.es} 듣기`));
+
+  const es = document.createElement("span");
+  es.className = "es";
+  es.textContent = item.es;
+  head.appendChild(es);
+
+  const pr = document.createElement("span");
+  pr.className = "pr";
+  pr.textContent = item.pr;
+  head.appendChild(pr);
+
+  const ko = document.createElement("span");
+  ko.className = "ko";
+  ko.textContent = item.ko;
+  head.appendChild(ko);
+
+  if (item.rude) {
+    const tag = document.createElement("small");
+    tag.className = "dim";
+    tag.textContent = "· 비속어";
+    head.appendChild(tag);
+  }
+
+  row.appendChild(head);
+
+  const when = document.createElement("span");
+  when.className = "when";
+  when.textContent = item.when;
+  row.appendChild(when);
+
+  return row;
+}
+
+function render() {
+  listEl.textContent = "";
+  let shown = 0;
+
+  for (const group of CHUNK_GROUPS) {
+    if (active !== "all" && active !== group.id) continue;
+    if (group.id === "rude" && !showRude) continue;
+
+    const items = group.items.filter(matches);
+    if (!items.length) continue;
+
+    const section = document.createElement("section");
+    section.className = group.id === "rude" ? "panel" : "";
+    if (group.id !== "rude") section.style.margin = "0 0 1.6rem";
+
+    const heading = document.createElement("h2");
+    heading.style.marginTop = group.id === "rude" ? "0" : "1.8rem";
+    heading.textContent = `${group.emoji} ${group.title}`;
+    section.appendChild(heading);
+
+    const note = document.createElement("p");
+    note.className = group.id === "rude" ? "note warn" : "dim";
+    note.style.fontSize = ".8rem";
+    note.style.margin = ".2rem 0 .5rem";
+    note.textContent = group.note;
+    section.appendChild(note);
+
+    for (const item of items) { section.appendChild(itemRow(item)); shown += 1; }
+    listEl.appendChild(section);
+  }
+
+  if (!shown) {
+    const empty = document.createElement("p");
+    empty.className = "dim";
+    empty.style.fontSize = ".85rem";
+    empty.textContent = query ? `“${query}”에 걸리는 표현이 없어요.` : "표시할 표현이 없어요.";
+    listEl.appendChild(empty);
+  }
+  countEl.textContent = `${shown}개 표시 중`;
+}
+
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>📕 단어장 — 이 영화의 낱말 · 스페인어</title>
+<meta name="description" content="기초 낱말과 공장·일·감정 어휘를 한글 근사 발음, 예문, 듣기 버튼과 함께. 별을 누른 낱말은 훈련에서 먼저 나온다.">
+<link rel="stylesheet" href="../style.css">
+<script>window.blTTSConfig = { lang: "es-ES", dock: false, rate: 0.95 };</script>
+<script defer src="/_shared/tts.js"></script>
+<style>
+  .star { flex: none; border: 0; background: none; cursor: pointer; padding: 0 .15rem;
+          font: inherit; font-size: .95rem; line-height: 1; filter: grayscale(1); opacity: .35; }
+  .star[aria-pressed="true"] { filter: none; opacity: 1; }
+  .group-head { display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap;
+                margin: 2rem 0 .2rem; }
+  .group-head h2 { margin: 0; }
+  .group-head small { color: var(--dim); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <nav class="nav">
+    <a class="back" href="../">← 스페인어 홈</a>
+    <div class="tabs">
+      <a href="../sounds/">발음</a>
+      <a href="../ear/">귀</a>
+      <a href="./" aria-current="page">단어</a>
+      <a href="../grammar/">문법</a>
+      <a href="../drill/">훈련</a>
+      <a href="../log/">일지</a>
+    </div>
+  </nav>
+
+  <h1>단어장</h1>
+  <p class="lede">
+    한글 발음은 정확한 소리가 아니라 <b>귀에 걸어 두는 고리</b>다. 실제 소리는 🔊로 확인한다.
+    ⭐를 누른 낱말은 <a href="../drill/">훈련</a>에서 먼저 나온다 — 영화를 보다 막힌 낱말에
+    별을 달아 두면 그게 다음 훈련의 목록이 된다.
+  </p>
+
+  <div id="voice-note"></div>
+
+  <ul class="chips" id="filters"></ul>
+  <div class="row" style="margin:.4rem 0 1rem">
+    <input type="search" id="q" placeholder="검색 — jefe · 사장 · 헤페" aria-label="낱말 검색" style="max-width:18rem">
+    <button class="btn" type="button" id="only-star" aria-pressed="false">⭐ 별표만</button>
+  </div>
+  <p class="dim" id="count" style="font-size:.78rem; margin:0" aria-live="polite"></p>
+
+  <div id="list"></div>
+
+  <footer>
+    <a href="../ear/">← 귀 트이기</a> · <a href="../">스페인어 홈</a> · 다음: <a href="../grammar/">문법 →</a>
+  </footer>
+</div>
+
+<script type="module">
+import { GROUPS, WORDS } from "../data/words.js";
+import { store, KEYS, wordId, sayButton, warnIfNoVoice } from "../app.js";
+
+warnIfNoVoice(document.getElementById("voice-note"));
+
+const listEl = document.getElementById("list");
+const countEl = document.getElementById("count");
+const filtersEl = document.getElementById("filters");
+const searchEl = document.getElementById("q");
+const starBtn = document.getElementById("only-star");
+
+const starred = new Set(store.get(KEYS.star, []));
+let active = "all";
+let query = "";
+let onlyStar = false;
+
+const saveStars = () => store.set(KEYS.star, [...starred]);
+
+/* ── 묶음 칩 ──────────────────────────────────────────────── */
+const chips = [{ id: "all", emoji: "✳️", title: `전체 ${WORDS.length}` }, ...GROUPS];
+for (const group of chips) {
+  const li = document.createElement("li");
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "chip";
+  btn.dataset.group = group.id;
+  btn.textContent = `${group.emoji} ${group.title}`;
+  btn.setAttribute("aria-pressed", String(group.id === active));
+  btn.addEventListener("click", () => {
+    active = group.id;
+    for (const chip of filtersEl.querySelectorAll(".chip")) {
+      chip.setAttribute("aria-pressed", String(chip.dataset.group === active));
+    }
+    render();
+  });
+  li.appendChild(btn);
+  filtersEl.appendChild(li);
+}
+
+searchEl.addEventListener("input", () => { query = searchEl.value.trim().toLowerCase(); render(); });
+starBtn.addEventListener("click", () => {
+  onlyStar = !onlyStar;
+  starBtn.setAttribute("aria-pressed", String(onlyStar));
+  starBtn.textContent = onlyStar ? "⭐ 별표만 (켜짐)" : "⭐ 별표만";
+  render();
+});
+
+/* ── 그리기 ───────────────────────────────────────────────── */
+function matches(word) {
+  if (onlyStar && !starred.has(wordId(word))) return false;
+  if (!query) return true;
+  return [word.es, word.ko, word.pr, word.ex, word.exKo]
+    .filter(Boolean).some((field) => field.toLowerCase().includes(query));
+}
+
+function wordRow(word) {
+  const id = wordId(word);
+  const row = document.createElement("div");
+  row.className = "item";
+
+  const head = document.createElement("div");
+  head.className = "head";
+
+  head.appendChild(sayButton(word.es.split(" / ")[0], `${word.es} 듣기`));
+
+  const star = document.createElement("button");
+  star.type = "button";
+  star.className = "star";
+  star.textContent = "⭐";
+  star.title = "훈련에서 먼저 보기";
+  star.setAttribute("aria-label", `${word.es} 별표`);
+  star.setAttribute("aria-pressed", String(starred.has(id)));
+  star.addEventListener("click", () => {
+    if (starred.has(id)) starred.delete(id); else starred.add(id);
+    star.setAttribute("aria-pressed", String(starred.has(id)));
+    saveStars();
+  });
+  head.appendChild(star);
+
+  const es = document.createElement("span");
+  es.className = "es";
+  es.textContent = word.es;
+  head.appendChild(es);
+
+  const pr = document.createElement("span");
+  pr.className = "pr";
+  pr.textContent = word.pr;
+  head.appendChild(pr);
+
+  const ko = document.createElement("span");
+  ko.className = "ko";
+  ko.textContent = word.ko;
+  head.appendChild(ko);
+
+  row.appendChild(head);
+
+  if (word.ex) {
+    const ex = document.createElement("span");
+    ex.className = "ex";
+    const strong = document.createElement("b");
+    strong.textContent = word.ex;
+    ex.appendChild(strong);
+    ex.append(` — ${word.exKo}`);
+    row.appendChild(ex);
+  }
+  return row;
+}
+
+function render() {
+  listEl.textContent = "";
+  let shown = 0;
+
+  for (const group of GROUPS) {
+    if (active !== "all" && active !== group.id) continue;
+    const words = group.words
+      .map((word) => ({ ...word, group: group.id }))
+      .filter(matches);
+    if (!words.length) continue;
+
+    const head = document.createElement("div");
+    head.className = "group-head";
+    const h2 = document.createElement("h2");
+    h2.textContent = `${group.emoji} ${group.title}`;
+    head.appendChild(h2);
+    const n = document.createElement("small");
+    n.textContent = `${words.length}개`;
+    head.appendChild(n);
+    listEl.appendChild(head);
+
+    const note = document.createElement("p");
+    note.className = "dim";
+    note.style.fontSize = ".8rem";
+    note.style.margin = "0 0 .4rem";
+    note.textContent = group.note;
+    listEl.appendChild(note);
+
+    const box = document.createElement("div");
+    for (const word of words) { box.appendChild(wordRow(word)); shown += 1; }
+    listEl.appendChild(box);
+  }
+
+  if (!shown) {
+    const empty = document.createElement("p");
+    empty.className = "dim";
+    empty.style.fontSize = ".85rem";
+    empty.textContent = onlyStar
+      ? "별표한 낱말이 없어요. 목록에서 ⭐를 눌러 두면 훈련에서 먼저 나옵니다."
+      : `“${query}”에 걸리는 낱말이 없어요.`;
+    listEl.appendChild(empty);
+  }
+  countEl.textContent = `${shown}개 표시 중 · 별표 ${starred.size}개`;
+}
+
+render();
+</script>
+</body>
+</html>

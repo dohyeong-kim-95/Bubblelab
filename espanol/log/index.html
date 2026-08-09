@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>📔 시청 일지 — 들린 표현 모으기 · 스페인어</title>
+<meta name="description" content="영화를 보다 들린 표현을 그 자리에서 적어 둔다. 적은 표현은 그대로 훈련 카드가 된다.">
+<link rel="stylesheet" href="../style.css">
+<script>window.blTTSConfig = { lang: "es-ES", dock: false, rate: 0.95 };</script>
+<script defer src="/_shared/tts.js"></script>
+<style>
+  .form { display: grid; gap: .55rem; grid-template-columns: 1fr; }
+  .form .two { display: grid; gap: .55rem; grid-template-columns: 7rem 1fr; }
+  .form label { font-size: .76rem; color: var(--dim); display: block; margin-bottom: .1rem; }
+  .entry .head { justify-content: flex-start; }
+  .entry .at { font-size: .74rem; color: var(--gold); flex: none; min-width: 3.4rem; }
+  .entry .del { flex: none; margin-left: auto; border: 0; background: none; cursor: pointer;
+                color: var(--dim); font: inherit; font-size: .85rem; padding: 0 .2rem; }
+  .entry .del:hover { color: var(--accent); }
+  @media (max-width: 420px) { .form .two { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <nav class="nav">
+    <a class="back" href="../">← 스페인어 홈</a>
+    <div class="tabs">
+      <a href="../sounds/">발음</a>
+      <a href="../ear/">귀</a>
+      <a href="../words/">단어</a>
+      <a href="../grammar/">문법</a>
+      <a href="../drill/">훈련</a>
+      <a href="./" aria-current="page">일지</a>
+    </div>
+  </nav>
+
+  <h1>시청 일지</h1>
+  <p class="lede">
+    보다가 걸린 표현을 그 자리에서 적는다. <b>여기 적은 표현은 그대로
+    <a href="../drill/">훈련</a> 카드가 된다</b> — 그래서 이 페이지가 이 사이트에서 제일 중요하다.
+    미리 만들어 둔 단어장보다, 내가 직접 못 알아들었던 말이 훨씬 잘 붙는다.
+  </p>
+
+  <div id="voice-note"></div>
+
+  <div class="panel">
+    <h2 style="margin-top:0">지금 어디까지 봤나</h2>
+    <div class="row">
+      <label for="pass" style="font-size:.84rem">회차</label>
+      <select id="pass" style="width:auto">
+        <option value="1">1회차 (한국어 자막)</option>
+        <option value="2">2회차 (스페인어 자막)</option>
+        <option value="3">3회차 (자막 없이)</option>
+      </select>
+      <label for="mark" style="font-size:.84rem">마지막 위치</label>
+      <input type="text" id="mark" placeholder="0:32:10" inputmode="numeric" style="width:7rem">
+      <button class="btn" type="button" id="save-mark">저장</button>
+    </div>
+    <p class="dim" id="mark-note" style="font-size:.78rem; margin:.5rem 0 0" aria-live="polite"></p>
+  </div>
+
+  <h2>표현 하나 적기</h2>
+  <form class="panel form" id="add">
+    <div class="two">
+      <div>
+        <label for="at">시각</label>
+        <input type="text" id="at" placeholder="0:32:10" inputmode="numeric">
+      </div>
+      <div>
+        <label for="es">들린 말 (스페인어)</label>
+        <input type="text" id="es" autocapitalize="off" autocomplete="off" spellcheck="false"
+               placeholder="no me digas" required>
+      </div>
+    </div>
+    <div>
+      <label for="ko">뜻</label>
+      <input type="text" id="ko" placeholder="설마, 진짜?" required>
+    </div>
+    <div>
+      <label for="note">메모 — 어떤 장면이었나, 왜 안 들렸나 (선택)</label>
+      <textarea id="note" rows="2" placeholder="사무실에서 놀라며. 처음엔 '노메디가스' 한 덩어리로 들렸다."></textarea>
+    </div>
+    <div class="row">
+      <button class="btn primary" type="submit">추가</button>
+      <span class="dim" style="font-size:.78rem">스페인어와 뜻을 모두 적으면 훈련 카드로 들어갑니다.</span>
+    </div>
+  </form>
+
+  <div class="row" style="margin:1.6rem 0 .4rem; align-items:baseline">
+    <h2 style="margin:0">모은 표현</h2>
+    <span class="dim" style="font-size:.78rem" id="count"></span>
+    <input type="search" id="q" placeholder="검색" aria-label="일지 검색"
+           style="max-width:11rem; margin-left:auto">
+  </div>
+  <div id="list"></div>
+
+  <h2>기기 옮기기 · 백업</h2>
+  <div class="panel">
+    <p style="font-size:.85rem; margin:0 0 .7rem">
+      이 사이트에는 서버가 없다. 일지·훈련 진도·별표는 <b>이 브라우저 안에만</b> 있어서,
+      방문 기록을 지우면 함께 사라진다. 폰과 PC를 같이 쓰려면 파일로 옮긴다.
+    </p>
+    <div class="row">
+      <button class="btn" type="button" id="export">내려받기 (JSON)</button>
+      <label class="btn" for="import" style="margin:0">불러오기…</label>
+      <input type="file" id="import" accept="application/json,.json" hidden>
+    </div>
+    <p class="dim" id="io-note" style="font-size:.78rem; margin:.6rem 0 0" aria-live="polite"></p>
+  </div>
+
+  <footer>
+    <a href="../drill/">← 훈련</a> · <a href="../">스페인어 홈</a>
+  </footer>
+</div>
+
+<script type="module">
+import {
+  store, KEYS, BACKUP_KEYS, today, sayButton, warnIfNoVoice,
+} from "../app.js";
+
+warnIfNoVoice(document.getElementById("voice-note"));
+
+const el = (id) => document.getElementById(id);
+const listEl = el("list");
+const countEl = el("count");
+
+let entries = store.get(KEYS.log, []);
+let query = "";
+
+const save = () => store.set(KEYS.log, entries);
+
+/* ── 어디까지 봤나 ────────────────────────────────────────── */
+{
+  const watch = store.get(KEYS.watch, { pass: "1", at: "" });
+  el("pass").value = String(watch.pass || "1");
+  el("mark").value = watch.at || "";
+  paintMarkNote(watch);
+
+  el("save-mark").addEventListener("click", () => {
+    const next = { pass: el("pass").value, at: el("mark").value.trim(), day: today() };
+    store.set(KEYS.watch, next);
+    paintMarkNote(next);
+    // 다음 표현을 적을 때 시각 칸을 채워 둔다 — 대개 그 근처에서 계속 적는다.
+    if (next.at && !el("at").value) el("at").value = next.at;
+  });
+}
+function paintMarkNote(watch) {
+  el("mark-note").textContent = watch.at
+    ? `${watch.pass}회차 · ${watch.at} 까지${watch.day ? ` (${watch.day} 기록)` : ""}`
+    : "위치를 적어 두면 다음에 어디서부터 볼지 헤매지 않습니다.";
+}
+
+/* ── 표현 추가 ────────────────────────────────────────────── */
+el("add").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const es = el("es").value.trim();
+  const ko = el("ko").value.trim();
+  if (!es || !ko) return;
+
+  entries.unshift({
+    // id 는 훈련 카드 id 의 뒷부분이 된다. 시간 기반이라 다시 겹치지 않는다.
+    id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    at: el("at").value.trim(),
+    pass: el("pass").value,
+    es,
+    ko,
+    note: el("note").value.trim(),
+    day: today(),
+  });
+  save();
+
+  el("es").value = "";
+  el("ko").value = "";
+  el("note").value = "";
+  el("es").focus();
+  render();
+});
+
+el("q").addEventListener("input", () => { query = el("q").value.trim().toLowerCase(); render(); });
+
+/* ── 목록 ─────────────────────────────────────────────────── */
+function entryRow(entry) {
+  const row = document.createElement("div");
+  row.className = "item entry";
+
+  const head = document.createElement("div");
+  head.className = "head";
+
+  const at = document.createElement("span");
+  at.className = "at";
+  at.textContent = entry.at || "—";
+  head.appendChild(at);
+
+  head.appendChild(sayButton(entry.es, `${entry.es} 듣기`));
+
+  const es = document.createElement("span");
+  es.className = "es";
+  es.textContent = entry.es;
+  head.appendChild(es);
+
+  const ko = document.createElement("span");
+  ko.className = "ko";
+  ko.textContent = entry.ko;
+  head.appendChild(ko);
+
+  const del = document.createElement("button");
+  del.type = "button";
+  del.className = "del";
+  del.textContent = "✕";
+  del.title = "지우기";
+  del.setAttribute("aria-label", `${entry.es} 지우기`);
+  del.addEventListener("click", () => {
+    entries = entries.filter((item) => item.id !== entry.id);
+    save();
+    render();
+  });
+  head.appendChild(del);
+
+  row.appendChild(head);
+
+  const meta = [entry.pass ? `${entry.pass}회차` : "", entry.day].filter(Boolean).join(" · ");
+  if (entry.note || meta) {
+    const when = document.createElement("span");
+    when.className = "when";
+    when.textContent = [entry.note, meta].filter(Boolean).join("  —  ");
+    row.appendChild(when);
+  }
+  return row;
+}
+
+function render() {
+  const shown = entries.filter((entry) => {
+    if (!query) return true;
+    return [entry.es, entry.ko, entry.note, entry.at]
+      .filter(Boolean).some((field) => field.toLowerCase().includes(query));
+  });
+
+  listEl.textContent = "";
+  if (!shown.length) {
+    const empty = document.createElement("p");
+    empty.className = "dim";
+    empty.style.fontSize = ".85rem";
+    empty.textContent = entries.length
+      ? `“${query}”에 걸리는 기록이 없어요.`
+      : "아직 비어 있어요. 영화를 10분 보고 세 개만 적어 보세요 — 그게 첫 카드가 됩니다.";
+    listEl.appendChild(empty);
+  } else {
+    for (const entry of shown) listEl.appendChild(entryRow(entry));
+  }
+
+  const week = new Set();
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 6);
+  for (const entry of entries) {
+    if (entry.day && new Date(entry.day) >= cutoff) week.add(entry.id);
+  }
+  countEl.textContent = `${entries.length}개 · 최근 7일 ${week.size}개`;
+}
+render();
+
+/* ── 내보내기 / 가져오기 ──────────────────────────────────── */
+el("export").addEventListener("click", () => {
+  const payload = { app: "espanol.bubblelab.dev", version: 1, savedAt: new Date().toISOString(), data: {} };
+  for (const key of BACKUP_KEYS) {
+    const value = store.get(key, null);
+    if (value !== null) payload.data[key] = value;
+  }
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `espanol-${today()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  el("io-note").textContent = "내려받았어요. 다른 기기에서 이 파일을 불러오면 그대로 이어집니다.";
+});
+
+el("import").addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  event.target.value = "";                      // 같은 파일을 다시 골라도 이벤트가 오게
+  if (!file) return;
+  try {
+    const parsed = JSON.parse(await file.text());
+    const data = parsed?.data;
+    if (!data || typeof data !== "object") throw new Error("형식이 다릅니다");
+
+    const known = BACKUP_KEYS.filter((key) => key in data);
+    if (!known.length) throw new Error("이 사이트의 백업 파일이 아닙니다");
+
+    // 덮어쓰기다. 지금 기기의 진도가 사라질 수 있으니 반드시 물어본다.
+    const ok = confirm(
+      `이 파일의 기록으로 덮어씁니다 (${known.join(", ")}).\n` +
+      "지금 이 브라우저에 있는 진도는 사라집니다. 계속할까요?",
+    );
+    if (!ok) { el("io-note").textContent = "불러오기를 취소했어요."; return; }
+
+    for (const key of known) store.set(key, data[key]);
+    entries = store.get(KEYS.log, []);
+    render();
+    el("io-note").textContent = "불러왔어요. 훈련과 진행 상황도 함께 바뀌었습니다.";
+  } catch (error) {
+    el("io-note").textContent = `불러오지 못했어요 — ${error.message}`;
+  }
+});
+</script>
+</body>
+</html>

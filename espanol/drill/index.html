@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🎯 훈련 — 매일 10분 반복 · 스페인어</title>
+<meta name="description" content="듣고 맞히기·뜻 떠올리기·받아쓰기. 틀린 카드는 곧 다시 나오고 맞힌 카드는 점점 뜸하게 나오는 반복 학습.">
+<link rel="stylesheet" href="../style.css">
+<script>window.blTTSConfig = { lang: "es-ES", dock: false, rate: 0.9 };</script>
+<script defer src="/_shared/tts.js"></script>
+<style>
+  .stage { min-height: 15rem; padding: 1.4rem 1.1rem; margin: 1rem 0;
+           border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel);
+           display: flex; flex-direction: column; gap: .8rem; }
+  .meter { display: flex; align-items: center; gap: .6rem; font-size: .76rem; color: var(--dim); }
+  .meter .bar { flex: 1; height: .3rem; border-radius: 1rem; background: var(--line); overflow: hidden; }
+  .meter .bar i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .2s; }
+  .prompt { font-size: 1.7rem; font-weight: 700; line-height: 1.35; letter-spacing: -.01em;
+            word-break: break-word; }
+  .prompt.ko { font-size: 1.35rem; }
+  .sub { font-size: .85rem; color: var(--dim); }
+  .answer { padding: .8rem 0 0; border-top: 1px dashed var(--line); }
+  .answer .big { font-size: 1.25rem; font-weight: 700; }
+  .grade { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .4rem; }
+  .grade .btn { flex: 1 1 8rem; padding: .6rem .8rem; }
+  .verdict { font-size: .9rem; font-weight: 700; }
+  .verdict.ok { color: light-dark(#1c6b3f, #7fd6a2); }
+  .verdict.no { color: var(--accent); }
+  .keys { font-size: .72rem; color: var(--dim); }
+  .box-dots { display: inline-flex; gap: .15rem; vertical-align: middle; }
+  .box-dots i { width: .35rem; height: .35rem; border-radius: 50%; background: var(--line); }
+  .box-dots i.on { background: var(--gold); }
+  @media (max-width: 480px) { .prompt { font-size: 1.4rem; } .prompt.ko { font-size: 1.15rem; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <nav class="nav">
+    <a class="back" href="../">← 스페인어 홈</a>
+    <div class="tabs">
+      <a href="../sounds/">발음</a>
+      <a href="../ear/">귀</a>
+      <a href="../words/">단어</a>
+      <a href="../grammar/">문법</a>
+      <a href="./" aria-current="page">훈련</a>
+      <a href="../log/">일지</a>
+    </div>
+  </nav>
+
+  <h1>훈련</h1>
+  <p class="lede">
+    맞힌 카드는 다음 복습이 멀어지고(1 → 2 → 4 → 8 → 16일), 틀린 카드는 처음으로 돌아온다.
+    그래서 <b>모르는 것만 자주 보게 된다</b>. 하루 10분, 20장이면 충분하다.
+  </p>
+
+  <div id="voice-note"></div>
+
+  <section id="setup">
+    <h2 style="margin-top:1.4rem">무엇을 연습할까</h2>
+    <ul class="chips" id="modes"></ul>
+    <p class="dim" id="mode-note" style="font-size:.8rem; margin:.1rem 0 .9rem"></p>
+
+    <div class="row">
+      <label for="size" style="font-size:.84rem">한 번에</label>
+      <select id="size" style="width:auto">
+        <option value="10">10장</option>
+        <option value="20" selected>20장</option>
+        <option value="40">40장</option>
+      </select>
+      <button class="btn primary" type="button" id="start">시작</button>
+    </div>
+
+    <div class="panel" id="queue-info" style="margin-top:1rem"></div>
+  </section>
+
+  <section id="session" hidden>
+    <div class="meter">
+      <span id="pos">1 / 20</span>
+      <span class="bar"><i id="bar"></i></span>
+      <span id="score">0 맞음</span>
+      <button class="btn" type="button" id="quit" style="padding:.15rem .5rem; font-size:.72rem">그만</button>
+    </div>
+
+    <div class="stage" id="stage"></div>
+    <p class="keys" id="keys"></p>
+  </section>
+
+  <section id="done" hidden>
+    <div class="panel gold" id="result"></div>
+  </section>
+
+  <h2>어떻게 쓰면 가장 잘 붙나</h2>
+  <div class="panel">
+    <ul style="font-size:.85rem; margin:0; padding-left:1.1rem">
+      <li><b>영화를 본 직후에 한다.</b> 방금 들은 낱말이 카드로 나오면 그 자리에서 굳는다.</li>
+      <li><b>모르면 바로 “몰랐음”을 누른다.</b> 억지로 떠올린 답은 기억에 남지 않고, 틀렸다고 표시된
+        카드가 곧 다시 나오는 게 이 방식의 핵심이다.</li>
+      <li><b>받아쓰기는 발음이 안정된 뒤에.</b> 첫 주에는 듣고 뜻 맞히기만 해도 된다.</li>
+      <li><b>별표한 낱말이 먼저 나온다.</b> <a href="../words/">단어장</a>에서 ⭐를 눌러 두면 이 순서에 반영된다.</li>
+    </ul>
+  </div>
+
+  <footer>
+    <a href="../grammar/">← 문법</a> · <a href="../">스페인어 홈</a> · <a href="../log/">시청 일지 →</a>
+  </footer>
+</div>
+
+<script type="module">
+import {
+  deck, store, KEYS, today, cardState, isDue, grade, shuffle,
+  speak, sayButton, warnIfNoVoice, countToday,
+} from "../app.js";
+
+warnIfNoVoice(document.getElementById("voice-note"));
+
+const MODES = [
+  { id: "listen", emoji: "🔊", title: "듣고 뜻 맞히기",
+    note: "스페인어를 소리로 먼저 듣고 뜻을 떠올린다. 영화 보기에 가장 직접 도움이 되는 방식." },
+  { id: "recall", emoji: "🇰🇷", title: "뜻 보고 떠올리기",
+    note: "한국어를 보고 스페인어를 떠올린다. 머릿속에서 꺼내는 연습이라 더 오래 남는다." },
+  { id: "type", emoji: "⌨️", title: "받아쓰기",
+    note: "소리만 듣고 스페인어를 입력한다. 악센트 부호와 대소문자는 안 따진다." },
+];
+
+const el = {
+  modes: document.getElementById("modes"),
+  modeNote: document.getElementById("mode-note"),
+  size: document.getElementById("size"),
+  start: document.getElementById("start"),
+  queueInfo: document.getElementById("queue-info"),
+  setup: document.getElementById("setup"),
+  session: document.getElementById("session"),
+  done: document.getElementById("done"),
+  stage: document.getElementById("stage"),
+  pos: document.getElementById("pos"),
+  bar: document.getElementById("bar"),
+  score: document.getElementById("score"),
+  quit: document.getElementById("quit"),
+  keys: document.getElementById("keys"),
+  result: document.getElementById("result"),
+};
+
+let mode = "listen";
+let queue = [];
+let index = 0;
+let right = 0;
+let revealed = false;
+// 이번 판에서 틀린 카드는 뒤에 한 번 더 붙인다 — 세션 안에서 한 번은 다시 만난다.
+let retry = [];
+
+/* ── 모드 칩 ──────────────────────────────────────────────── */
+for (const item of MODES) {
+  const li = document.createElement("li");
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "chip";
+  btn.dataset.mode = item.id;
+  btn.textContent = `${item.emoji} ${item.title}`;
+  btn.setAttribute("aria-pressed", String(item.id === mode));
+  btn.addEventListener("click", () => {
+    mode = item.id;
+    for (const chip of el.modes.querySelectorAll(".chip")) {
+      chip.setAttribute("aria-pressed", String(chip.dataset.mode === mode));
+    }
+    paintModeNote();
+  });
+  li.appendChild(btn);
+  el.modes.appendChild(li);
+}
+function paintModeNote() {
+  el.modeNote.textContent = MODES.find((item) => item.id === mode).note;
+}
+paintModeNote();
+
+/* ── 대기 카드 안내 ───────────────────────────────────────── */
+function pools() {
+  const cards = deck({ includeRude: store.get(KEYS.rude, false) });
+  const srs = store.get(KEYS.srs, {});
+  const day = today();
+  const due = cards.filter((card) => cardState(srs, card.id).box && isDue(srs, card.id, day));
+  const fresh = cards.filter((card) => !cardState(srs, card.id).box);
+  return { cards, srs, due, fresh };
+}
+
+function paintQueueInfo() {
+  const { cards, due, fresh } = pools();
+  el.queueInfo.textContent = "";
+  const p = document.createElement("p");
+  p.style.margin = "0";
+  p.style.fontSize = ".85rem";
+  p.textContent =
+    `전체 ${cards.length}장 · 오늘 복습할 카드 ${due.length}장 · 아직 안 본 카드 ${fresh.length}장`;
+  el.queueInfo.appendChild(p);
+
+  if (!due.length && !fresh.length) {
+    const note = document.createElement("p");
+    note.className = "note";
+    note.style.margin = ".6rem 0 0";
+    note.textContent =
+      "오늘 예정된 카드를 다 봤어요. 그래도 더 하고 싶으면 시작을 누르면 됩니다 — " +
+      "예정보다 이른 복습이라도 손해는 없어요.";
+    el.queueInfo.appendChild(note);
+  }
+}
+paintQueueInfo();
+
+/* ── 세션 만들기 ──────────────────────────────────────────── */
+function buildQueue(size) {
+  const { cards, due, fresh } = pools();
+  const stars = new Set(store.get(KEYS.star, []));
+  const first = (a, b) => (stars.has(b.id) ? 1 : 0) - (stars.has(a.id) ? 1 : 0);
+  // shuffle 뒤 별표만 앞으로 당긴다 (sort 는 안정 정렬이라 나머지 순서는 섞인 채 유지된다)
+  const ordered = [
+    ...shuffle(due).sort(first),
+    ...shuffle(fresh).sort(first),
+  ];
+  // 예정된 카드가 없으면 아무 카드나 꺼내 자유 복습을 돌린다
+  const pool = ordered.length ? ordered : shuffle(cards).sort(first);
+  return pool.slice(0, size);
+}
+
+el.start.addEventListener("click", () => {
+  queue = buildQueue(Number(el.size.value) || 20);
+  if (!queue.length) return;
+  index = 0; right = 0; retry = [];
+  el.setup.hidden = true;
+  el.done.hidden = true;
+  el.session.hidden = false;
+  showCard();
+});
+
+el.quit.addEventListener("click", () => finish(true));
+
+/* ── 카드 그리기 ──────────────────────────────────────────── */
+const normalize = (text) =>
+  String(text).toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")   // 악센트 부호·ñ 물결은 안 따진다
+    .replace(/[¿?¡!.,…"'’]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const answersOf = (card) => card.es.split(" / ").map((part) => part.trim()).filter(Boolean);
+
+function paintMeter() {
+  const total = queue.length;
+  el.pos.textContent = `${Math.min(index + 1, total)} / ${total}`;
+  el.bar.style.width = `${(index / total) * 100}%`;
+  el.score.textContent = `${right} 맞음`;
+}
+
+function boxDots(card) {
+  const box = cardState(store.get(KEYS.srs, {}), card.id).box;
+  const wrap = document.createElement("span");
+  wrap.className = "box-dots";
+  wrap.title = box ? `복습 단계 ${box}/5` : "처음 보는 카드";
+  wrap.setAttribute("aria-label", box ? `복습 단계 ${box} / 5` : "처음 보는 카드");
+  for (let i = 1; i <= 5; i += 1) {
+    const dot = document.createElement("i");
+    if (i <= box) dot.className = "on";
+    wrap.appendChild(dot);
+  }
+  return wrap;
+}
+
+function showCard() {
+  if (index >= queue.length) { finish(false); return; }
+  revealed = false;
+  paintMeter();
+
+  const card = queue[index];
+  el.stage.textContent = "";
+
+  const top = document.createElement("div");
+  top.className = "sub";
+  top.append(`${card.group} · `);
+  top.appendChild(boxDots(card));
+  el.stage.appendChild(top);
+
+  if (mode === "type") { showTypeCard(card); return; }
+
+  const prompt = document.createElement("div");
+  prompt.className = mode === "recall" ? "prompt ko" : "prompt";
+  prompt.textContent = mode === "recall" ? card.ko : card.es;
+  el.stage.appendChild(prompt);
+
+  if (mode === "listen") {
+    const row = document.createElement("div");
+    row.className = "row";
+    row.appendChild(sayButton(answersOf(card)[0], "다시 듣기"));
+    const hint = document.createElement("span");
+    hint.className = "sub";
+    hint.textContent = "소리로 먼저 확인 — 뜻이 떠오르나?";
+    row.appendChild(hint);
+    el.stage.appendChild(row);
+    // 카드가 나오면 바로 한 번 읽어 준다. 첫 카드는 사용자가 시작을 누른 직후라
+    // iOS 의 제스처 제한도 통과한다.
+    speak(answersOf(card)[0]);
+  }
+
+  const reveal = document.createElement("button");
+  reveal.className = "btn";
+  reveal.type = "button";
+  reveal.textContent = "정답 보기 (Space)";
+  reveal.addEventListener("click", () => revealAnswer(card));
+  el.stage.appendChild(reveal);
+
+  el.keys.textContent = "Space 정답 보기 · 1 몰랐음 · 2 알았음";
+}
+
+function revealAnswer(card) {
+  if (revealed) return;
+  revealed = true;
+
+  const box = document.createElement("div");
+  box.className = "answer";
+
+  const big = document.createElement("div");
+  big.className = "big";
+  big.textContent = mode === "recall" ? card.es : card.ko;
+  box.appendChild(big);
+
+  // 어느 모드든 큰 글자에 안 나온 쪽(한글 발음)을 아래에 덧붙인다.
+  if (card.pr) {
+    const detail = document.createElement("div");
+    detail.className = "sub";
+    detail.textContent = card.pr;
+    box.appendChild(detail);
+  }
+
+  if (card.hint) {
+    const hint = document.createElement("div");
+    hint.className = "ex";
+    hint.textContent = card.hint;
+    box.appendChild(hint);
+  }
+
+  const row = document.createElement("div");
+  row.className = "row";
+  row.appendChild(sayButton(answersOf(card)[0], "듣기"));
+  const es = document.createElement("span");
+  es.className = "pr";
+  es.textContent = card.es;
+  row.appendChild(es);
+  box.appendChild(row);
+
+  const grades = document.createElement("div");
+  grades.className = "grade";
+  const wrong = document.createElement("button");
+  wrong.className = "btn";
+  wrong.type = "button";
+  wrong.textContent = "몰랐음 (1)";
+  wrong.addEventListener("click", () => submit(card, false));
+  const ok = document.createElement("button");
+  ok.className = "btn primary";
+  ok.type = "button";
+  ok.textContent = "알았음 (2)";
+  ok.addEventListener("click", () => submit(card, true));
+  grades.append(wrong, ok);
+  box.appendChild(grades);
+
+  el.stage.appendChild(box);
+  if (mode !== "listen") speak(answersOf(card)[0]);
+}
+
+function showTypeCard(card) {
+  const prompt = document.createElement("div");
+  prompt.className = "sub";
+  prompt.textContent = "들리는 대로 적어 보세요.";
+  el.stage.appendChild(prompt);
+
+  const meaning = document.createElement("div");
+  meaning.className = "prompt ko";
+  meaning.textContent = card.ko;
+  el.stage.appendChild(meaning);
+
+  const row = document.createElement("div");
+  row.className = "row";
+  row.appendChild(sayButton(answersOf(card)[0], "다시 듣기"));
+  const again = document.createElement("span");
+  again.className = "sub";
+  again.textContent = "🔊를 눌러 몇 번이든 다시 들을 수 있어요";
+  row.appendChild(again);
+  el.stage.appendChild(row);
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.autocapitalize = "off";
+  input.autocomplete = "off";
+  input.spellcheck = false;
+  input.setAttribute("aria-label", "들은 스페인어 입력");
+  input.placeholder = "스페인어로…";
+  el.stage.appendChild(input);
+
+  const check = document.createElement("button");
+  check.className = "btn primary";
+  check.type = "button";
+  check.textContent = "확인 (Enter)";
+  el.stage.appendChild(check);
+
+  const judge = () => {
+    if (revealed) return;
+    revealed = true;
+    const correct = answersOf(card).some((answer) => normalize(answer) === normalize(input.value));
+    input.disabled = true;
+    check.disabled = true;
+
+    const box = document.createElement("div");
+    box.className = "answer";
+
+    const verdict = document.createElement("div");
+    verdict.className = `verdict ${correct ? "ok" : "no"}`;
+    verdict.textContent = correct ? "맞았어요" : "아쉬워요";
+    box.appendChild(verdict);
+
+    const big = document.createElement("div");
+    big.className = "big";
+    big.textContent = card.es;
+    box.appendChild(big);
+
+    const sub = document.createElement("div");
+    sub.className = "sub";
+    sub.textContent = [card.pr, card.ko].filter(Boolean).join(" · ");
+    box.appendChild(sub);
+
+    if (card.hint) {
+      const hint = document.createElement("div");
+      hint.className = "ex";
+      hint.textContent = card.hint;
+      box.appendChild(hint);
+    }
+
+    const next = document.createElement("button");
+    next.className = "btn primary";
+    next.type = "button";
+    next.textContent = "다음 (Enter)";
+    next.addEventListener("click", () => submit(card, correct));
+    box.appendChild(next);
+
+    el.stage.appendChild(box);
+    next.focus();
+  };
+
+  check.addEventListener("click", judge);
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") { event.preventDefault(); judge(); }
+  });
+
+  el.keys.textContent = "Enter 확인 · 🔊 다시 듣기";
+  input.focus();
+  speak(answersOf(card)[0]);
+}
+
+/* ── 채점 ─────────────────────────────────────────────────── */
+function submit(card, correct) {
+  const srs = store.get(KEYS.srs, {});
+  grade(srs, card.id, correct);
+  store.set(KEYS.srs, srs);
+  countToday(1);
+
+  if (correct) right += 1;
+  else if (!retry.includes(card) && retry.length < 6) retry.push(card);
+
+  index += 1;
+  // 마지막 장까지 왔는데 틀린 카드가 남아 있으면 뒤에 붙여 한 번 더 만난다.
+  if (index >= queue.length && retry.length) {
+    queue = queue.concat(retry);
+    retry = [];
+  }
+  showCard();
+}
+
+function finish(early) {
+  el.session.hidden = true;
+  el.setup.hidden = false;
+  el.done.hidden = false;
+  paintQueueInfo();
+
+  el.result.textContent = "";
+  const h = document.createElement("h2");
+  h.style.margin = "0 0 .4rem";
+  h.textContent = early ? "여기까지" : "한 판 끝";
+  el.result.appendChild(h);
+
+  const p = document.createElement("p");
+  p.style.margin = "0";
+  p.style.fontSize = ".88rem";
+  const seen = index;
+  const rate = seen ? Math.round((right / seen) * 100) : 0;
+  p.textContent = seen
+    ? `${seen}장 중 ${right}장 맞음 (${rate}%). 틀린 카드는 곧 다시 나옵니다.`
+    : "아직 한 장도 안 봤어요.";
+  el.result.appendChild(p);
+
+  const tip = document.createElement("p");
+  tip.className = "dim";
+  tip.style.fontSize = ".8rem";
+  tip.style.margin = ".5rem 0 0";
+  tip.textContent = rate >= 90
+    ? "정답률이 높으면 새 카드를 더 넣을 때다 — 한 번에 40장으로 올려 보세요."
+    : "정답률이 70% 아래로 떨어지면 장수를 줄이는 편이 낫습니다. 지치는 게 제일 큰 적이에요.";
+  el.result.appendChild(tip);
+
+  el.done.scrollIntoView({ block: "nearest" });
+}
+
+/* ── 단축키 ───────────────────────────────────────────────── */
+addEventListener("keydown", (event) => {
+  if (el.session.hidden) return;
+  const typing = event.target instanceof HTMLInputElement
+    || event.target instanceof HTMLTextAreaElement;
+  if (typing) return;
+
+  const card = queue[index];
+  if (!card) return;
+
+  if (event.key === " " && !revealed && mode !== "type") {
+    event.preventDefault();
+    revealAnswer(card);
+    return;
+  }
+  if (!revealed) return;
+  if (event.key === "1") { event.preventDefault(); submit(card, false); }
+  if (event.key === "2") { event.preventDefault(); submit(card, true); }
+  if (event.key === "Enter" && mode === "type") {
+    // 받아쓰기의 "다음" 버튼은 스스로 포커스를 받으므로 Enter 가 이미 그리로 간다
+    return;
+  }
+});
+</script>
+</body>
+</html>
