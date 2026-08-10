@@ -256,7 +256,7 @@
          --sun: light-dark(#c2544f, #f0a8a2); --sat: light-dark(#4f6fc2, #a8c0f0); }
   #cal.cal-off { transform: translateX(100%); pointer-events: none; }
   /* 함께 다닌 곳 지도 — 캘린더처럼 슬라이드로 뜨는 풀스크린 오버레이 */
-  #map { position: fixed; inset: 0; z-index: 60; background: var(--bg); color: inherit;
+  #map { position: fixed; inset: 0; z-index: 61; background: var(--bg); color: inherit;
          display: flex; flex-direction: column; transform: translateX(0);
          transition: transform .26s cubic-bezier(.32,.72,0,1); }
   #map.map-off { transform: translateX(100%); pointer-events: none; }
@@ -3025,7 +3025,10 @@ async function renderMap() {
     : "";
 }
 async function openMap() {
-  closeMenu(); // 설정 메뉴에서 열리므로 메뉴는 닫는다
+  closeMenu(); // 설정 메뉴에서 열릴 수도 있으니 메뉴는 닫는다
+  // 지도(pane 2) 뒤에 캘린더(pane 1)를 열어 둔다 → 지도를 오른쪽으로 밀면 캘린더가
+  // 나오는 3-탭(채팅-캘린더-지도) 순서가 자연스럽게 이어진다.
+  if ($("cal").classList.contains("cal-off")) openCal();
   $("map").classList.remove("map-off");
   try { await renderMap(); } catch (e) { console.warn("map render 실패", e); $("map-empty").hidden = false; }
 }
@@ -3040,54 +3043,71 @@ $("map-here").addEventListener("click", captureHere);
 // 손을 뗀 순간에만 남은 진행률로 열지/닫을지 정해 CSS 스냅 애니메이션으로 마무리한다.
 // 열 때(닫힘→왼쪽 드래그)는 30% 를 확실히 끌어야 열리지만, 돌아갈 때(열림→오른쪽
 // 드래그)는 그보다 훨씬 가볍게(15%) 반응한다 — 뒤로가기는 적은 스와이프로 충분해야 한다.
-const CAL_OPEN_AT = .3;
-const CAL_CLOSE_AT = 1 - .15;
-let calDrag = null; // { startX, startY, fromOpen, w, moved, progress }
-function calDragStart(e) {
-  if (!$("cal-dialog").hidden || !$("cal-colorbox").hidden) return; // 다이얼로그 위에서는 드래그 안 함
-  const t = e.touches[0];
-  calDrag = { startX: t.clientX, startY: t.clientY, fromOpen: !$("cal").classList.contains("cal-off"), w: innerWidth, moved: false };
+// 채팅(0) ↔ 캘린더(1) ↔ 지도(2) 좌우 스와이프. 각 오버레이(#cal, #map)는 닫힘=100%,
+// 열림=0. 현재 위치(pane)와 스와이프 방향으로 어느 오버레이를 끌지 정한다.
+const PANE_OPEN_AT = .3;   // 다음 탭을 끌어올 땐 30% 넘게 끌면 열림
+const PANE_CLOSE_AT = .15; // 현재 탭을 밀어낼 땐 15%만 밀어도 닫힘
+function curPane() {
+  const mapOn = !$("map").classList.contains("map-off");
+  if (mapOn) return 2;
+  return $("cal").classList.contains("cal-off") ? 0 : 1;
 }
-function calDragMove(e) {
-  if (!calDrag) return;
+let paneDrag = null;
+function paneDragStart(e) {
+  if (!$("cal-dialog").hidden || !$("cal-colorbox").hidden || !$("meta-box").hidden) return; // 다이얼로그 위에선 안 함
   const t = e.touches[0];
-  const dx = t.clientX - calDrag.startX, dy = t.clientY - calDrag.startY;
-  if (!calDrag.moved) {
+  paneDrag = { x: t.clientX, y: t.clientY, w: innerWidth, pane: curPane(), el: null, opening: false, moved: false, progress: 0 };
+}
+function paneDragMove(e) {
+  if (!paneDrag) return;
+  const t = e.touches[0];
+  const dx = t.clientX - paneDrag.x, dy = t.clientY - paneDrag.y;
+  if (!paneDrag.moved) {
     if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return; // 방향 판정 전
     const horizontal = Math.abs(dx) > Math.abs(dy) * 1.3;
-    const rightDir = calDrag.fromOpen ? dx > 0 : dx < 0; // 열림→오른쪽으로 닫기 / 닫힘→왼쪽으로 열기
-    if (!horizontal || !rightDir) { calDrag = null; return; } // 세로 스크롤이거나 반대 방향 — 평소대로 둔다
-    calDrag.moved = true;
-    $("cal").style.transition = "none";
+    let el = null, opening = false;
+    if (dx < 0) { // 왼쪽으로 → 다음 탭 끌어오기
+      if (paneDrag.pane === 0) { el = $("cal"); opening = true; }
+      else if (paneDrag.pane === 1) { el = $("map"); opening = true; }
+    } else {      // 오른쪽으로 → 현재 탭 밀어내기
+      if (paneDrag.pane === 1) { el = $("cal"); opening = false; }
+      else if (paneDrag.pane === 2) { el = $("map"); opening = false; }
+    }
+    if (!horizontal || !el) { paneDrag = null; return; } // 세로 스크롤이거나 갈 곳 없음 — 평소대로
+    paneDrag.moved = true; paneDrag.el = el; paneDrag.opening = opening;
+    if (opening) { // 지도를 끌어올 땐 뒤에 캘린더를 켜 둬 자연스럽게
+      if (el === $("map") && $("cal").classList.contains("cal-off")) openCal();
+      el.style.transition = "none"; el.style.transform = "translateX(100%)"; // 닫힘 위치에서 시작
+    } else { el.style.transition = "none"; }
   }
   e.preventDefault();
-  const progress = calDrag.fromOpen ? Math.max(0, 1 - dx / calDrag.w) : Math.min(1, -dx / calDrag.w);
-  calDrag.progress = progress;
-  $("cal").style.transform = `translateX(${(1 - progress) * 100}%)`;
+  const el = paneDrag.el;
+  let pos;
+  if (paneDrag.opening) { const pin = Math.min(1, -dx / paneDrag.w); paneDrag.progress = pin; pos = (1 - pin) * 100; }
+  else { const pout = Math.min(1, dx / paneDrag.w); paneDrag.progress = pout; pos = pout * 100; }
+  el.style.transform = `translateX(${pos}%)`;
 }
-function calDragEnd() {
-  if (!calDrag) return;
-  const { moved, fromOpen, progress = fromOpen ? 1 : 0 } = calDrag;
-  calDrag = null;
-  if (!moved) return;
-  const open = progress > (fromOpen ? CAL_CLOSE_AT : CAL_OPEN_AT);
-  const cal = $("cal");
-  cal.style.transition = "transform .26s cubic-bezier(.32,.72,0,1)";
-  cal.style.transform = open ? "translateX(0%)" : "translateX(100%)";
-  cal.addEventListener("transitionend", () => { cal.style.transition = ""; cal.style.transform = ""; }, { once: true });
-  if (open) openCal(); else closeCal(); // 클래스·렌더링은 기존 함수에 위임(위 인라인 값과 동일해 튀지 않음)
+function paneDragEnd() {
+  if (!paneDrag) return;
+  const { el, opening, moved, progress } = paneDrag;
+  paneDrag = null;
+  if (!moved || !el) return;
+  const settleOpen = opening ? progress > PANE_OPEN_AT : !(progress > PANE_CLOSE_AT);
+  el.style.transition = "transform .26s cubic-bezier(.32,.72,0,1)";
+  el.style.transform = settleOpen ? "translateX(0%)" : "translateX(100%)";
+  el.addEventListener("transitionend", () => { el.style.transition = ""; el.style.transform = ""; }, { once: true });
+  if (el === $("cal")) { if (settleOpen) openCal(); else closeCal(); }
+  else { if (settleOpen) openMap(); else closeMap(); }
 }
-log().addEventListener("touchstart", calDragStart, { passive: true });
-log().addEventListener("touchmove", calDragMove, { passive: false });
-log().addEventListener("touchend", calDragEnd);
-log().addEventListener("touchcancel", calDragEnd);
-$("cal").addEventListener("touchstart", calDragStart, { passive: true });
-$("cal").addEventListener("touchmove", calDragMove, { passive: false });
-$("cal").addEventListener("touchend", calDragEnd);
-$("cal").addEventListener("touchcancel", calDragEnd);
+for (const src of [log(), $("cal"), $("map")]) {
+  src.addEventListener("touchstart", paneDragStart, { passive: true });
+  src.addEventListener("touchmove", paneDragMove, { passive: false });
+  src.addEventListener("touchend", paneDragEnd);
+  src.addEventListener("touchcancel", paneDragEnd);
+}
 
 // 월간↔주간 세로 스와이프(구글 캘린더 뷰 전환 제스처): 월간에서 아래로 끌면
-// 주간, 주간에서 위로 끌면 월간. 가로 드래그(위 calDrag)와 방향 우세로 서로
+// 주간, 주간에서 위로 끌면 월간. 가로 탭 스와이프(위 paneDrag)와 방향 우세로 서로
 // 간섭하지 않는다 — 실시간 추적 없이 손을 뗀 순간의 총 이동량으로만 판정한다.
 const CAL_VSWIPE_PX = 70;
 let calVStart = null; // { x, y }
