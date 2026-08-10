@@ -106,6 +106,8 @@ svg text { font-family: inherit; font-size: 12px; fill: light-dark(#5a6b7d, #93a
 .trend-badge.up { background: light-dark(#fff0f0, #3d1a1a); color: light-dark(#c92a2a, #ffa8a8); }
 .apt-card .apt-chart { padding: 4px 0 0; margin-top: 4px; }
 .apt-trend-note { font-size: 0.74rem; opacity: 0.75; line-height: 1.6; margin-top: 2px; }
+.drop-down { color: light-dark(#1971c2, #74c0fc); font-weight: 700; }
+.drop-peak { color: light-dark(#c92a2a, #ffa8a8); }
 .apt-card .apt-dist { margin-top: 8px; font-size: 0.78rem; line-height: 1.7; }
 .apt-card .apt-dist b { color: light-dark(#c05621, #ffa94d); }
 .apt-card .apt-links { margin-top: 8px; }
@@ -147,6 +149,8 @@ svg text { font-family: inherit; font-size: 12px; fill: light-dark(#5a6b7d, #93a
 .q2 { fill: light-dark(#3b6fd0, #5f95dd); background: light-dark(#3b6fd0, #5f95dd); }
 .q3 { fill: light-dark(#2450a8, #84b0ec); background: light-dark(#2450a8, #84b0ec); }
 .q4 { fill: light-dark(#16337a, #b3ccf6); background: light-dark(#16337a, #b3ccf6); }
+/* 낙폭 모드에서 표본이 얇아 등급을 못 매긴 단지 — 순차 램프 밖의 중립색 */
+.qna { fill: light-dark(#c3ccd6, #4a5a6b); background: light-dark(#c3ccd6, #4a5a6b); }
 .map-dot { stroke: light-dark(#ffffff, #151e2a); stroke-width: 1.2; }
 .map-dot.dim { opacity: 0.22; }
 .map-ref { fill: var(--c-rent); stroke: light-dark(#ffffff, #0d131c); stroke-width: 1; }
@@ -314,7 +318,7 @@ const TABS = {
   giheung:  { src: "giheung", label: "기흥구", dongs: null },
 };
 const MAX_MONTHS = 60;
-const state = { tab: "dongtan2", months: 24, band: "all", dong: "", deals: "trade", ref: "", radius: "3", cap: true, emphasized: new Set(), selectedApt: null };
+const state = { tab: "dongtan2", months: 24, band: "all", dong: "", deals: "trade", ref: "", radius: "3", cap: true, emphasized: new Set(), selectedApt: null, mapColor: "med" };
 // store[src][type][ym] = 배열 | "error"
 const store = { dongtan: { trade: {}, rent: {} }, giheung: { trade: {}, rent: {} } };
 let loadSeq = 0;
@@ -817,10 +821,26 @@ function renderMap() {
     return;
   }
 
-  // 5분위 순차 색 (중앙 평당가)
+  // 5분위 순차 색. 기본은 중앙 평당가(밝음=저가 → 진함=고가)이고,
+  // '고점 대비 낙폭' 모드에서는 많이 빠진 단지가 진하게 나온다(= 싸진 곳 탐색).
+  // 낙폭은 표본이 얇으면 null이라, 그 단지는 등급 없이 회색으로 뺀다.
+  // 낙폭은 5분위를 쓰지 않는다 — 상승장에선 "고점 경신(0%)" 단지가 40%를 넘어
+  // 하위 두 경계가 0/0으로 붙어버려 색 두 칸이 죽는다. 절대 기준이 읽기도 쉽다.
+  const DROP_BREAKS = [-2, -8, -15, -25]; // %
+  const byDrop = state.mapColor === "drop" && list.some((e) => e.drop != null);
   const meds = list.map((e) => e.med).sort((a, b) => a - b);
-  const breaks = [1, 2, 3, 4].map((i) => meds[Math.min(Math.floor(meds.length * i / 5), meds.length - 1)]);
-  const quant = (v) => { const i = breaks.findIndex((b) => v < b); return i === -1 ? 4 : i; };
+  const breaks = meds.length
+    ? [1, 2, 3, 4].map((i) => meds[Math.min(Math.floor(meds.length * i / 5), meds.length - 1)])
+    : [0, 0, 0, 0];
+  const quant = (e) => {
+    if (byDrop) {
+      if (e.drop == null) return "na";
+      const i = DROP_BREAKS.findIndex((b) => e.drop > b);
+      return i === -1 ? 4 : i;
+    }
+    const i = breaks.findIndex((b) => e.med < b);
+    return i === -1 ? 4 : i;
+  };
 
   // 배경지도 스냅샷이 있으면 그 웹 메르카토르 픽셀에 맞추고, 없으면
   // km 평면 투영으로 폴백. 어느 쪽이든 pxPerKm으로 반경 원·축척을 그린다.
@@ -862,7 +882,7 @@ function renderMap() {
   const dots = [...list].sort((a, b) => b.cnt - a.cnt).map((e) => {
     const r = (3.5 + 8 * Math.sqrt(e.cnt / maxCnt)) * ui;
     const cx = px(e.point).toFixed(1), cy = py2(e.point).toFixed(1);
-    let s = `<circle class="map-dot q${quant(e.med)}${inRadius(e) ? "" : " dim"}" data-i="${list.indexOf(e)}"` +
+    let s = `<circle class="map-dot q${quant(e)}${inRadius(e) ? "" : " dim"}" data-i="${list.indexOf(e)}"` +
       ` cx="${cx}" cy="${cy}" r="${r.toFixed(1)}"/>`;
     if (notes[e.apt]?.fav) s += `<text class="fav-star" x="${cx}" y="${(+cy - r - 2 * ui).toFixed(1)}" text-anchor="middle" font-size="${(12 * ui).toFixed(1)}">★</text>`;
     return s;
@@ -929,10 +949,15 @@ function renderMap() {
     `${baseImg}${railLines}${radiusCircle}${dots}${refMarks}${scaleBar}${pins}</svg>`;
 
   // 색범례·핀 설명만 (노선 토글은 별도 셔틀 카드로 분리됨)
+  const swatches = byDrop
+    ? ["고점권", "-2~8%", "-8~15%", "-15~25%", "-25%↓"]
+    : [`~${fmtMan(breaks[0])}`, `~${fmtMan(breaks[1])}`, `~${fmtMan(breaks[2])}`, `~${fmtMan(breaks[3])}`, `${fmtMan(breaks[3])}~`];
   $("mapLegend").innerHTML =
-    [`~${fmtMan(breaks[0])}`, `~${fmtMan(breaks[1])}`, `~${fmtMan(breaks[2])}`, `~${fmtMan(breaks[3])}`, `${fmtMan(breaks[3])}~`]
-      .map((label, i) => `<span><i class="sw q${i}"></i>${label}</span>`).join("") +
-    `<span>만원/평 (중앙값)</span>` +
+    swatches.map((label, i) => `<span><i class="sw q${i}"></i>${label}</span>`).join("") +
+    (byDrop
+      ? (list.some((e) => e.drop == null) ? `<span><i class="sw qna"></i>표본 부족</span>` : "") +
+        `<span>${state.months}개월 내 고점 대비 (진할수록 많이 빠짐)</span>`
+      : `<span>만원/평 (중앙값)</span>`) +
     (geoData.pins?.length ? `<span><b style="color:#e8590c">📍</b> 추천 (셔틀 도보권·8억↓)</span>` : "") +
     (base ? `<span style="margin-left:auto">배경지도 © 브이월드</span>` : "");
   $("mapNote").textContent = state.ref && +state.radius
@@ -1218,6 +1243,7 @@ function initControls() {
     state.radius = e.target.value;
     renderMap(); renderRank();
   });
+  $("selMapColor").addEventListener("change", (e) => { state.mapColor = e.target.value; renderMap(); });
   $("capToggle").addEventListener("change", (e) => { state.cap = e.target.checked; render(); });
   // 관심 목록: ✕ 삭제 / 항목 클릭 = 해당 단지 카드 열기
   $("favList").addEventListener("click", (e) => {
