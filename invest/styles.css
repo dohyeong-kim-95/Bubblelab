@@ -73,7 +73,140 @@ button:disabled { opacity: .5; cursor: default; }
   overflow-wrap: anywhere;
 }
 
-main { display: grid; gap: 1rem; }
+/* ── 그룹 탭 + 좌우 스와이프 ────────────────────────────────────────────
+   그룹 수가 데이터에 따라 변해서 스크롤 스냅 캐러셀을 쓴다. 드래그 추적을
+   직접 하지 않아도 브라우저 기본 스크롤이 손끝을 그대로 따라온다. */
+
+.tabs {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  gap: .4rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: .2rem 0 .7rem;
+  background: var(--bg);
+}
+
+.tabs::-webkit-scrollbar { display: none; }
+
+.tab {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  color: var(--muted);
+}
+
+.tab[aria-selected="true"] {
+  color: var(--text);
+  border-color: currentColor;
+  font-weight: bold;
+}
+
+.track {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 100%;
+  align-items: start;
+  gap: 1rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  /* 높이는 보고 있는 장에 맞춰 app.js 가 지정한다 — 그냥 두면 가장 긴 장에
+     맞춰져 짧은 장 아래가 텅 빈다. 전환은 부드럽게. */
+  transition: height .2s ease;
+}
+
+.track::-webkit-scrollbar { display: none; }
+
+.pane {
+  scroll-snap-align: start;
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+  min-width: 0;
+}
+
+.pane-empty { padding: .9rem 0; }
+
+/* 손가락으로 넘기는 중에는 세로 스크롤이 끼어들지 않게 한다. */
+@media (pointer: coarse) {
+  .track { touch-action: pan-x pan-y; }
+}
+
+/* ── 자산 카드 (증권사 자산 조회 화면 모양) ───────────────────────────── */
+
+.hero {
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: .8rem;
+  background: var(--card);
+}
+
+.hero .label { margin: 0; font-size: .7rem; color: var(--muted); }
+.hero .total { margin: .15rem 0 0; font-size: 1.6rem; font-weight: bold; overflow-wrap: anywhere; }
+.hero .delta { margin: .2rem 0 0; font-size: .78rem; }
+.hero .muted-line { color: var(--muted); font-size: .7rem; }
+
+.bar-split {
+  display: flex;
+  height: .45rem;
+  margin: .8rem 0 .45rem;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--line);
+}
+
+.bar-split i { display: block; height: 100%; }
+
+.split-legend { display: flex; flex-wrap: wrap; gap: .8rem; margin: 0; font-size: .66rem; color: var(--muted); }
+
+.hero dl {
+  margin: .8rem 0 0;
+  padding-top: .7rem;
+  border-top: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: .25rem .8rem;
+  font-size: .74rem;
+}
+
+.hero dt { color: var(--muted); }
+.hero dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+
+/* ── 그룹 안 보유 종목 ─────────────────────────────────────────────────── */
+
+.rows { display: grid; gap: .5rem; }
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: .1rem .6rem;
+  padding: .55rem .7rem;
+  border: 1px solid var(--line);
+  border-radius: .6rem;
+}
+
+.row p { margin: 0; }
+.row .name { font-size: .78rem; overflow-wrap: anywhere; }
+.row .val { font-size: .78rem; text-align: right; white-space: nowrap; }
+.row .sub { font-size: .66rem; color: var(--muted); }
+.row .pl { font-size: .68rem; text-align: right; white-space: nowrap; }
+
+.weight {
+  grid-column: 1 / -1;
+  height: .25rem;
+  margin-top: .4rem;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.weight i { display: block; height: 100%; opacity: .6; }
+
+main { display: grid; gap: 1rem; margin-top: 1rem; }
 
 /* 그리드 항목의 기본 min-width:auto 는 내용(넓은 표·그래프)보다 작아지지 않아
    페이지 전체를 옆으로 민다. 0으로 낮춰야 .scroller 안에서만 가로 스크롤된다. */
@@ -109,7 +242,7 @@ main > * { min-width: 0; }
 .down { color: var(--down); }
 
 .chart { overflow-x: auto; }
-.chart svg { display: block; width: 100%; height: auto; min-width: 18rem; }
+.chart svg { display: block; width: 100%; height: auto; min-width: 16rem; max-width: 34rem; }
 
 .legend { display: flex; flex-wrap: wrap; gap: .8rem; margin: .5rem 0 0; font-size: .68rem; color: var(--muted); }
 .legend span::before { content: "—"; margin-right: .25rem; font-weight: bold; }

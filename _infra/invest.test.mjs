@@ -714,3 +714,27 @@ test("스냅샷의 예수금이 그룹까지 흘러간다", async () => {
   assert.equal(snapshot.byGroup["그룹 1"].KRW.cash, 200000);
   assert.equal(snapshot.byGroup["그룹 2"].KRW.value, 800000);
 });
+
+test("메인 그룹은 * 그룹이고 스냅샷에 실려 화면까지 간다", async () => {
+  const { snapshot } = await runSink(
+    [() => tokenResponse("t"), okAccounts, okHoldings, okStocks, okCash, okCash],
+    { groups: "그룹 2:TSLA;그룹 1:*" },
+  );
+  assert.equal(snapshot.mainGroup, "그룹 1");
+  assert.equal(normalizeSnapshot(snapshot).mainGroup, "그룹 1");
+});
+
+test("메인 그룹은 이력이 아니라 설정이라 일별 스냅샷에는 남기지 않는다", async () => {
+  const instance = investDO();
+  await instance.push({
+    byCurrency: {}, cash: {}, positions: [], mainGroup: "그룹 1",
+    byGroup: { "그룹 1": { KRW: { value: 1, cost: 1, pnl: 0, rate: 0, cash: 5 } } },
+  });
+  const state = await (await instance.state()).json();
+  assert.equal(state.mainGroup, "그룹 1", "최신 스냅샷에는 있어야 한다");
+  assert.equal(state.groupSeries["그룹 1"].KRW.length, 1, "일별 스냅샷은 그대로 쌓여야 한다");
+  // 일별 저장분에는 설정값이 들어가지 않는다.
+  const daily = await instance.storage.get(`snap:${kstDate()}`);
+  assert.ok(!("mainGroup" in daily), "일별 스냅샷에 설정값이 섞였다");
+  assert.ok(!("positions" in daily), "일별 스냅샷에 종목이 섞였다");
+});

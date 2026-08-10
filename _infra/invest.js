@@ -485,7 +485,13 @@ export async function fetchSnapshot({ clientId, clientSecret, accountSeq, groups
       } catch { /* 예수금 실패는 치명적이지 않다 — 그 통화만 비운다 */ }
     }
     const byGroup = aggregateGroups(aggregate.positions, { cash, cashGroup: cashTarget });
-    return { ...snapshotOf(aggregate, cash, at, byGroup), positions: aggregate.positions };
+    // 화면이 처음 여는 그룹. `*`(나머지) 그룹을 메인으로 삼는다 — 분류하지 않은
+    // 종목과 예수금이 모이는 곳이라 "내 기본 자산" 에 해당한다.
+    return {
+      ...snapshotOf(aggregate, cash, at, byGroup),
+      mainGroup: cashTarget,
+      positions: aggregate.positions,
+    };
   };
 
   try {
@@ -570,7 +576,8 @@ export function normalizeSnapshot(payload, at = Date.now()) {
 
   // 날짜는 데몬을 믿지 않고 받은 시각(KST)으로 다시 찍는다 — 시계가 어긋난 PC가
   // 미래 날짜를 올리면 그래프가 영영 이상해진다.
-  return { date: kstDate(at), ts: at, byCurrency, byGroup, cash, positions };
+  const mainGroup = String(payload.mainGroup ?? "").slice(0, MAX_GROUP_LABEL);
+  return { date: kstDate(at), ts: at, byCurrency, byGroup, cash, positions, mainGroup };
 }
 
 /**
@@ -590,7 +597,8 @@ export class InvestDO {
 
   /** 하루 한 장씩 남긴다. 같은 날 다시 올라오면 그날 값을 덮어쓴다. */
   async #record(snapshot) {
-    const { positions, ...daily } = snapshot;
+    // positions 는 부피 때문에, mainGroup 은 이력이 아니라 설정값이라 뺀다.
+    const { positions, mainGroup, ...daily } = snapshot;
     await this.state.storage.put(`snap:${snapshot.date}`, daily);
     const stored = await this.state.storage.list({ prefix: "snap:" });
     if (stored.size <= MAX_SNAPSHOTS) return;
@@ -611,6 +619,7 @@ export class InvestDO {
       updatedAt: latest?.ts ?? null,
       byCurrency: latest?.byCurrency ?? {},
       byGroup: latest?.byGroup ?? {},
+      mainGroup: latest?.mainGroup ?? "",
       cash: latest?.cash ?? {},
       positions: latest?.positions ?? [],
       series: buildSeries(history),

@@ -18,31 +18,21 @@
 
 <p id="notice" class="notice" role="status" hidden></p>
 
-<main>
-  <section id="summary" class="summary" aria-label="통화별 잔고 요약">
-    <p class="empty">불러오는 중…</p>
-  </section>
+<!-- 그룹 탭. 좌우 스와이프로 넘기고, 탭을 눌러도 이동한다. -->
+<nav id="tabs" class="tabs" role="tablist" aria-label="자산 그룹"></nav>
 
-  <section class="panel" aria-label="수익률 추이">
-    <h2>수익률 추이</h2>
+<div id="track" class="track">
+  <p class="empty pane-empty">불러오는 중…</p>
+</div>
+
+<main>
+  <section class="panel" aria-label="전체 수익률 추이">
+    <h2>전체 수익률 추이 — 통화별</h2>
     <div id="chart" class="chart"><p class="empty">불러오는 중…</p></div>
     <p class="foot">집 PC 데몬이 하루에 한 점씩 올립니다. 토스 API에는 과거 자산
-      추이가 없어서 이 화면을 켠 날부터 그려집니다.</p>
-  </section>
-
-  <section class="panel" aria-label="그룹별 잔고">
-    <h2>그룹별</h2>
-    <div id="groups" class="scroller"><p class="empty">불러오는 중…</p></div>
-    <div id="group-chart" class="chart"><p class="empty">불러오는 중…</p></div>
-    <p class="foot">토스 앱의 종목 그룹은 API로 내려오지 않아 이 화면이 직접 나눕니다.
-      그룹을 지정하지 않은 종목은 나라·종목유형으로 자동 분류됩니다.
+      추이가 없어서 이 화면을 켠 날부터 그려집니다.
       <strong>수익률은 예수금을 빼고 보유분만으로 계산합니다</strong> —
       원가가 없는 현금을 섞으면 수익률이 현금 비중만큼 희석됩니다.</p>
-  </section>
-
-  <section class="panel" aria-label="보유 종목">
-    <h2>보유 종목</h2>
-    <div id="holdings" class="scroller"><p class="empty">불러오는 중…</p></div>
   </section>
 </main>
 
