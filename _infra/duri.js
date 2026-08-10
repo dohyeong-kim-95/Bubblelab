@@ -300,6 +300,13 @@ export class DuriDO {
       this.state.blockConcurrencyWhile(() => this.calDel(conn, msg.id, msg.rev));
       return;
     }
+    // 사진(또는 메시지) 삭제: 버퍼 항목·R2 원본을 지우고 양쪽에서 제거하게 전파.
+    if (msg.type === "del") {
+      if (conn.role === "sink" || !Number.isInteger(msg.seq)) return; // 브라우저만
+      conn.stamps.push(now);
+      this.state.blockConcurrencyWhile(() => this.deleteEntry(msg.seq));
+      return;
+    }
   }
 
   // ── 공유 캘린더 ──────────────────────────────────────────────
@@ -324,6 +331,21 @@ export class DuriDO {
     if (cur && cur.rev >= rev) return;
     await this.state.storage.put(key, { id, rev, deleted: true }); // 툼스톤(삭제 전파용)
     this.broadcast({ type: "cal-del", id, rev }, conn);
+  }
+
+  // 항목 삭제: 버퍼에 있으면 R2 원본까지 지우고, 양쪽 클라이언트가 화면·캐시에서
+  // 지우도록 전파한다. 이미 싱크가 가져가 버퍼에서 빠진 항목이어도 전파는 한다
+  // (그 기기 화면에서 지우기 위함 — PC 아카이브 원본은 손대지 않는다).
+  async deleteEntry(seq) {
+    const key = bufKey(seq);
+    const entry = await this.state.storage.get(key);
+    if (entry) {
+      if (entry.kind === "photo" && isPhotoKey(entry.r2key)) {
+        await this.env.DURI_BUCKET?.delete(entry.r2key).catch(() => {});
+      }
+      await this.state.storage.delete(key);
+    }
+    this.broadcast({ type: "deleted", seq });
   }
 
   // ── 버퍼 적재/폐기 ───────────────────────────────────────────

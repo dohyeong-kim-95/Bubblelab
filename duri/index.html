@@ -304,6 +304,11 @@
                 border: 1px solid var(--line); display: block; cursor: pointer; }
   .region-add { display: block; text-align: center; margin-top: .8rem; font: inherit; font-size: .9rem; cursor: pointer;
                 background: var(--pink); color: light-dark(#fff, #1a1016); border-radius: .8rem; padding: .7rem; }
+  /* 사진 꾹 누르면 뜨는 삭제 버튼 */
+  #photo-del { position: fixed; z-index: 205; transform: translate(-50%, -50%); font: inherit; font-size: .82rem;
+               background: light-dark(#d84343, #e05a5a); color: #fff; border: 0; border-radius: 999px;
+               padding: .5rem .95rem; box-shadow: 0 3px 14px #0007; cursor: pointer; }
+  #photo-del[hidden] { display: none; }
   .cal-head { display: flex; align-items: center; gap: .3rem; padding: .5rem .5rem .35rem;
               padding-left: calc(.35rem + env(safe-area-inset-left,0px)); padding-right: calc(.5rem + env(safe-area-inset-right,0px));
               background: var(--bg); border: 0; }
@@ -596,6 +601,7 @@
 </form>
 
 <div id="toast" hidden></div>
+<button id="photo-del" type="button" hidden>🗑 삭제</button>
 
 <div id="lightbox" hidden>
   <button id="lb-close" type="button" title="닫기" aria-label="닫기">✕</button>
@@ -1088,6 +1094,7 @@ function connect() {
     if (m.type === "ping") { ws.send(JSON.stringify({ type: "pong" })); return; }
     if (m.type === "welcome" || m.type === "presence") { setStatus(true, m.online > 1); return; }
     if (m.type === "entry") { renderEntry(m); return; }
+    if (m.type === "deleted") { removeEntry(m.seq); return; }
     if (m.type === "cal-state") { applyCalEntries(m.events || []); return; }
     if (m.type === "cal-put" || m.type === "cal-del") { applyCalEntry(m); return; }
     if (m.type === "reset") { localStorage.removeItem("duri:cal"); clearCache().then(() => location.reload()); return; }
@@ -1298,17 +1305,64 @@ function closeLb() { const lb = $("lightbox"); lb.hidden = true; lb.querySelecto
 
 // 탭하면 전체화면으로 열리는 사진 img. 앨범(.bubble.album) 안이면 형제 사진들을
 // 함께 넘겨 스와이프로 넘길 수 있게 한다.
-function photoImg(blob, alt) {
+let photoLongFired = false; // 롱프레스로 삭제 버튼을 띄운 직후의 click(라이트박스) 억제용
+function photoImg(blob, alt, seq) {
   const img = document.createElement("img");
   img.alt = alt || "사진"; img.decoding = "async";
   img.__blob = blob; // 저장 시 동기적으로 File 을 만들기 위해 원본 blob 을 붙여둔다
+  if (Number.isInteger(seq)) img.dataset.seq = String(seq); // 삭제 시 이 요소를 찾는다
   img.src = URL.createObjectURL(blob);
   img.addEventListener("click", () => {
+    if (photoLongFired) { photoLongFired = false; return; } // 방금 롱프레스면 라이트박스 열지 않음
     const album = img.closest(".bubble.album");
     const imgs = album ? [...album.querySelectorAll("img")] : [img];
     openLightbox(imgs.map((i) => i.src), imgs.indexOf(img), imgs.map((i) => i.__blob));
   });
+  armPhotoDelete(img); // 꾹 누르면 삭제 버튼
   return img;
+}
+// 사진을 꾹 누르면 그 위에 "🗑 삭제" 버튼을 띄운다(양쪽 기기에서 지움).
+function armPhotoDelete(img) {
+  let timer = null, sx = 0, sy = 0;
+  const fire = () => { photoLongFired = true; showPhotoDelete(img); };
+  const clear = () => { if (timer) { clearTimeout(timer); timer = null; } };
+  img.addEventListener("touchstart", (e) => { const t = e.touches[0]; sx = t.clientX; sy = t.clientY; clear(); timer = setTimeout(fire, 500); }, { passive: true });
+  img.addEventListener("touchmove", (e) => { const t = e.touches[0]; if (Math.abs(t.clientX - sx) > 10 || Math.abs(t.clientY - sy) > 10) clear(); }, { passive: true });
+  img.addEventListener("touchend", clear);
+  img.addEventListener("touchcancel", clear);
+  img.addEventListener("contextmenu", (e) => { e.preventDefault(); fire(); }); // 데스크톱 우클릭
+}
+let delSeq = null;
+function showPhotoDelete(img) {
+  const seq = Number(img.dataset.seq);
+  if (!Number.isInteger(seq)) return;
+  delSeq = seq;
+  const r = img.getBoundingClientRect(), b = $("photo-del");
+  b.style.left = Math.round(r.left + r.width / 2) + "px";
+  b.style.top = Math.round(r.top + r.height / 2) + "px";
+  b.hidden = false;
+  if (navigator.vibrate) navigator.vibrate(12);
+}
+$("photo-del").addEventListener("click", () => {
+  const seq = delSeq; $("photo-del").hidden = true; delSeq = null;
+  if (seq == null || !ws || ws.readyState !== 1) return;
+  ws.send(JSON.stringify({ type: "del", seq })); // 서버가 R2·버퍼 지우고 양쪽에 전파
+});
+document.addEventListener("pointerdown", (e) => { // 다른 곳 누르면 삭제 버튼 숨김
+  if (!$("photo-del").hidden && e.target !== $("photo-del")) $("photo-del").hidden = true;
+}, true);
+// 서버가 "deleted" 를 보내면(내가 지웠든 상대가 지웠든) 화면·캐시·지도핀에서 제거.
+function removeEntry(seq) {
+  document.querySelectorAll(`img[data-seq="${seq}"]`).forEach((img) => {
+    if (img.src && img.src.startsWith("blob:")) URL.revokeObjectURL(img.src);
+    const album = img.closest(".bubble.album");
+    if (album) { img.remove(); if (!album.querySelector("img")) album.closest(".row")?.remove(); }
+    else img.closest(".row")?.remove();
+  });
+  const pins = loadPins().filter((p) => p.seq !== seq);
+  try { localStorage.setItem(PINS_KEY, JSON.stringify(pins)); } catch { /* 최선노력 */ }
+  if (!$("map").classList.contains("map-off")) renderMap().catch(() => {});
+  if (db) { try { db.transaction("entries", "readwrite").objectStore("entries").delete(seq); } catch { /* 캐시 최선노력 */ } }
 }
 
 function appendRecord(rec, { silent = false } = {}) {
@@ -1329,7 +1383,7 @@ function appendRecord(rec, { silent = false } = {}) {
   if (rec.album && rec.blob) {
     const grid = albumBubbles.get(rec.album.id);
     if (grid && grid.isConnected) {
-      grid.appendChild(photoImg(rec.blob, rec.caption));
+      grid.appendChild(photoImg(rec.blob, rec.caption, rec.seq));
       if (stick) scroll();
       if (!silent) updateToBottom();
       return;
@@ -1388,12 +1442,12 @@ function appendRecord(rec, { silent = false } = {}) {
     timeEl = buildBubble(row, rec.name, at, (b) => {
       b.classList.add("album");
       b.dataset.n = String(rec.album.n);
-      b.appendChild(photoImg(rec.blob, rec.caption));
+      b.appendChild(photoImg(rec.blob, rec.caption, rec.seq));
       albumBubbles.set(rec.album.id, b); // 이후 같은 앨범 사진이 이 그리드에 붙는다
     }, showName);
   } else if (rec.kind === "photo" && rec.blob) {
     timeEl = buildBubble(row, rec.name, at, (b) => {
-      b.appendChild(photoImg(rec.blob, rec.caption));
+      b.appendChild(photoImg(rec.blob, rec.caption, rec.seq));
       if (rec.caption) { const c = document.createElement("div"); c.className = "cap"; c.textContent = rec.caption; b.appendChild(c); }
     }, showName);
   } else if (rec.sticker && PACK_IDS.has(rec.sticker.pack)) {
@@ -3096,7 +3150,7 @@ async function openRegion(feature) {
     grid.appendChild(p);
   } else {
     const g = document.createElement("div"); g.className = "region-grid";
-    for (const r of photos) g.appendChild(photoImg(r.blob, r.caption)); // 탭하면 lightbox
+    for (const r of photos) g.appendChild(photoImg(r.blob, r.caption, r.seq)); // 탭하면 lightbox
     grid.appendChild(g);
   }
 }

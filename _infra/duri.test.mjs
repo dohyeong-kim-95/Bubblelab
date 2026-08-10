@@ -342,6 +342,25 @@ test("push subscriptions survive a redeploy (DO restart) — messages still push
   assert.deepEqual(hits, ["https://push.example.com/away"]); // 재배포 뒤에도 알림 정상 발송
 });
 
+test("deleteEntry removes the buffer entry + R2 원본 and broadcasts deleted to both", async () => {
+  const r2key = "photo/000000000001-abcdef0123456789";
+  const storage = fakeStorage({ seq: 0, ackSeq: 0 });
+  const bucket = fakeBucket([r2key]);
+  const room = new DuriDO({ storage, blockConcurrencyWhile: (fn) => fn() }, { DURI_BUCKET: bucket });
+  await room.load();
+  const full = await room.append({ kind: "photo", at: Date.now(), r2key, imgIv: "aXY=", sha256: "x", metaIv: "aXY=", metaCt: "bWV0YQ==" });
+  assert.equal((await storage.list({ prefix: "buf:" })).size, 1);
+  assert.ok(bucket.set.has(r2key));
+
+  const sent = [];
+  room.conns.add({ ws: { send: (s) => sent.push(JSON.parse(s)) }, role: "peer", stamps: [], alive: true, endpoint: null });
+  await room.deleteEntry(full.seq);
+
+  assert.equal((await storage.list({ prefix: "buf:" })).size, 0);       // 버퍼에서 삭제
+  assert.equal(bucket.set.has(r2key), false);                            // R2 원본 삭제
+  assert.ok(sent.some((m) => m.type === "deleted" && m.seq === full.seq)); // 양쪽 전파
+});
+
 test("buildPushPayload carries the opaque blob for msg/photo but falls back to generic when oversized", () => {
   const storage = fakeStorage({ seq: 0, ackSeq: 0 });
   const room = new DuriDO({ storage, blockConcurrencyWhile: (fn) => fn() }, {});
