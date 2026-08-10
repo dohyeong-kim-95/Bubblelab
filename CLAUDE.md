@@ -140,8 +140,10 @@ PNG·JPEG를 모두 받고, JPEG는 `npm ci` 필요. 검증은 `_infra/wallpaper
 암호블롭만 중계·버퍼링한다: `_infra/duri.js`(DuriDO + R2), 게이트·라우팅은
 `_infra/worker.js`(`bl_duri` 쿠키·`DURI_PASSWORD`), `ENABLE_DURI` var는 fail-closed.
 **원본은 각자 PC** — 배포에서 제외되는 `_src/duri-sink/` 데몬이 디스크에 쓰고 ack
-하면 서버가 그 항목을 버린다. 화면은 [채팅 | 캘린더] 두 장을 좌우 실시간 드래그
-스와이프로 넘긴다. 셋업·프로토콜·한계는 `duri/README.md` 참고.
+하면 서버가 그 항목을 버린다. 화면은 [채팅 | 캘린더 | 지도] 세 장을 좌우 실시간
+드래그 스와이프로 넘긴다(지도는 사진 위치로 시군구를 색칠 — 커밋된
+`duri/data/kr-sgg.geojson`만 쓰고 외부 지도 API는 없다). 셋업·프로토콜·한계는
+`duri/README.md` 참고.
 
 ## 더 읽을 것 (필요할 때만)
 
