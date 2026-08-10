@@ -134,6 +134,60 @@ test("sticker/location keep their content, and unpin control frames are not stor
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test("calendar: merges by rev, keeps tombstones, and renders a readable view", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "duri-"));
+  try {
+    const pass = "캘린더문구";
+    const ek = await encKeyFor(pass);
+    const store = createStore({ dir, key: await deriveKey(pass), fetchPhoto: async () => new Uint8Array() });
+    const put = async (id, rev, content) => ({ id, rev, deleted: false, ...(await encJson(ek, content)) });
+
+    await store.persistCalendar([
+      await put("evtaaaaaa", 100, { date: "2026-08-15", title: "휴가", owner: "도경", shared: false, start: "09:00", end: "18:00" }),
+      await put("evtbbbbbb", 100, { date: "2026-08-20", title: "저녁 약속", shared: true }),
+      await put("mk20260811", 100, { date: "2026-08-11", marker: "🌙", kind: "marker" }),
+    ]);
+    let saved = JSON.parse(readFileSync(join(dir, "calendar/events.json"), "utf8"));
+    assert.equal(saved.events.length, 3);
+
+    // 같은 id 는 rev 가 큰 쪽이 이긴다 (웹앱·서버와 같은 LWW 규칙)
+    await store.persistCalendar([await put("evtaaaaaa", 90, { date: "2026-08-15", title: "옛 제목" })]);  // 무시
+    await store.persistCalendar([await put("evtaaaaaa", 200, { date: "2026-08-16", title: "휴가(수정)", shared: true })]);
+    saved = JSON.parse(readFileSync(join(dir, "calendar/events.json"), "utf8"));
+    assert.equal(saved.events.find((e) => e.id === "evtaaaaaa").title, "휴가(수정)");
+
+    // 삭제는 툼스톤으로 남는다(내용은 지우되 rev 는 유지)
+    await store.persistCalendar([{ id: "evtbbbbbb", rev: 300, deleted: true }]);
+    saved = JSON.parse(readFileSync(join(dir, "calendar/events.json"), "utf8"));
+    assert.equal(saved.events.find((e) => e.id === "evtbbbbbb").deleted, true);
+
+    const md = readFileSync(join(dir, "calendar/calendar.md"), "utf8");
+    assert.match(md, /## 2026-08-16/);
+    assert.match(md, /휴가\(수정\)/);
+    assert.match(md, /공통/);
+    assert.doesNotMatch(md, /저녁 약속/); // 지운 일정은 뷰에 없다
+    assert.match(md, /## 표식[\s\S]*2026-08-11 🌙/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("calendar: an empty cal-state (room reset) must not wipe the backup", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "duri-"));
+  try {
+    const pass = "초기화문구";
+    const ek = await encKeyFor(pass);
+    const store = createStore({ dir, key: await deriveKey(pass), fetchPhoto: async () => new Uint8Array() });
+    const frame = await encJson(ek, { date: "2026-08-15", title: "소중한 일정", shared: true });
+    await store.persistCalendar([{ id: "evtaaaaaa", rev: 100, deleted: false, ...frame }]);
+
+    // 방초기화 뒤 재접속 → 서버는 아무것도 없다고 말한다. 여기가 백업의 존재 이유다.
+    await store.persistCalendar([]);
+
+    const saved = JSON.parse(readFileSync(join(dir, "calendar/events.json"), "utf8"));
+    assert.equal(saved.events.length, 1);
+    assert.equal(saved.events[0].title, "소중한 일정");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 test("wrong passphrase throws (so the daemon can halt instead of acking away data)", async () => {
   const dir = mkdtempSync(join(tmpdir(), "duri-"));
   try {

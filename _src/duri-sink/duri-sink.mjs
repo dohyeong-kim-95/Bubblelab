@@ -109,6 +109,19 @@ function scheduleAck() {
   }, 800);
 }
 
+// 캘린더 저장. 문구가 다르면(복호화 실패) 대화와 같은 이유로 즉시 멈춘다 —
+// 그 외 오류는 로그만 남기고 넘어간다(대화·사진 보존이 더 중요하다).
+function saveCal(entries, note) {
+  store.persistCalendar(entries).then((count) => {
+    if (note) log(note, `(총 ${count}건 보관)`);
+  }).catch((e) => {
+    if (e?.name === "OperationError" || /decrypt/i.test(String(e))) {
+      fatal("캘린더 복호화 실패 — 패스프레이즈가 상대와 다릅니다.");
+    }
+    log("캘린더 저장 실패:", String(e?.message || e));
+  });
+}
+
 // ── WebSocket 접속 루프 ──────────────────────────────────────
 let backoff = 1000;
 function connect() {
@@ -119,6 +132,7 @@ function connect() {
     backoff = 1000;
     log("접속됨. 커서", cursor, "이후 수신");
     ws.send(JSON.stringify({ type: "hello", since: cursor }));
+    ws.send(JSON.stringify({ type: "cal-hello" })); // 공유 캘린더 전체 상태도 받는다
   });
   ws.addEventListener("message", (e) => {
     let m; try { m = JSON.parse(e.data); } catch { return; }
@@ -126,6 +140,11 @@ function connect() {
     if (m.type === "entry") { enqueue(m); return; }
     if (m.type === "backfill-done") { log("백필 완료. head", m.head); drain(); return; }
     if (m.type === "welcome") { log("welcome. head", m.head); return; }
+    // 캘린더는 ack 이 없다(서버가 계속 들고 있는 지속 상태다). 실패해도 대화·사진
+    // 보존을 막으면 안 되므로 커서와 분리해 여기서 삼키고 로그만 남긴다.
+    if (m.type === "cal-state") { saveCal(m.events, `캘린더 ${m.events?.length ?? 0}건 동기화`); return; }
+    if (m.type === "cal-put") { saveCal([m]); return; }
+    if (m.type === "cal-del") { saveCal([{ id: m.id, rev: m.rev, deleted: true }]); return; }
     if (m.type === "error") { log("서버 오류:", m.error); return; }
   });
   ws.addEventListener("close", () => {

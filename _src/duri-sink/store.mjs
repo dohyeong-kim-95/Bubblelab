@@ -84,6 +84,31 @@ export function renderMarkdown(month, logs) {
   return out;
 }
 
+// 공유 캘린더의 사람용 뷰. 일정은 날짜순, 표식(그 날짜에 붙는 이모지)은 따로 모은다.
+// 툼스톤(deleted)과 팔레트(색 설정)는 기록에는 남기되 여기서는 뺀다.
+export function renderCalendarMarkdown(events) {
+  const live = events.filter((e) => !e.deleted);
+  const marks = live.filter((e) => e.kind === "marker").sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const plans = live.filter((e) => !e.kind).sort((a, b) =>
+    String(a.date).localeCompare(String(b.date)) || String(a.start ?? "").localeCompare(String(b.start ?? "")));
+
+  let out = "# 공유 캘린더\n";
+  let day = "";
+  for (const e of plans) {
+    if (e.date !== day) { day = e.date; out += `\n## ${day}\n`; }
+    const when = e.start ? `${e.start}${e.end ? `–${e.end}` : ""}` : "종일";
+    const span = e.endDate && e.endDate > e.date ? ` → ${e.endDate}` : "";
+    const who = e.shared ? "공통" : (e.owner || "?");
+    const rep = e.recur?.freq ? ` 🔁${e.recur.freq}` : "";
+    out += `- (${when}${span}) **${e.title ?? ""}** — ${who}${rep}\n`;
+  }
+  if (marks.length) {
+    out += `\n## 표식\n`;
+    for (const m of marks) out += `- ${m.date} ${m.marker ?? ""}\n`;
+  }
+  return out;
+}
+
 // dir: DuriStorage 루트, key: AES-GCM 키, fetchPhoto: (r2key) => Promise<Uint8Array>(암호블롭).
 // persist(entry) 는 항목을 디스크에 쓴다. 복호화 실패는 throw(패스프레이즈 불일치),
 // 사진 전송 실패도 throw(상위에서 재시도). 이미 있는 seq 는 조용히 건너뛴다(멱등).
@@ -146,5 +171,46 @@ export function createStore({ dir, key, fetchPhoto }) {
     saveMonth(month);
   }
 
-  return { persist, decryptBytes };
+  // ── 공유 캘린더 ────────────────────────────────────────────
+  // 대화·사진과 성격이 다르다: 버퍼가 아니라 서버의 지속 상태라 ack 이 없고,
+  // 접속할 때마다 cal-state 로 전체가 온다. 그래서 **덮어쓰지 않고 병합**한다 —
+  // 방초기화로 서버가 비워진 뒤 빈 cal-state 가 오면 통째로 쓰다가 백업까지
+  // 날아간다. 서버에 없는 항목은 그대로 두고, 같은 id 는 rev 가 큰 쪽을 남긴다.
+  const calPath = join(dir, "calendar", "events.json");
+  let calCache = null;
+  function loadCalendar() {
+    if (calCache) return calCache;
+    let events = [];
+    if (existsSync(calPath)) {
+      try { events = JSON.parse(readFileSync(calPath, "utf8")).events ?? []; } catch { events = []; }
+    }
+    calCache = new Map(events.map((e) => [e.id, e]));
+    return calCache;
+  }
+
+  // entries: [{ id, iv, ct, rev, deleted }] — cal-state 전체든 cal-put/cal-del 하나든 같다.
+  async function persistCalendar(entries) {
+    const cal = loadCalendar();
+    let changed = false;
+    for (const entry of Array.isArray(entries) ? entries : []) {
+      if (!entry?.id || typeof entry.rev !== "number") continue;
+      const cur = cal.get(entry.id);
+      if (cur && cur.rev >= entry.rev) continue; // last-write-wins (웹앱·서버와 같은 규칙)
+      if (entry.deleted || !entry.ct) {
+        cal.set(entry.id, { id: entry.id, rev: entry.rev, deleted: true });
+      } else {
+        // 복호화 실패는 여기서 던진다 — 대화와 마찬가지로 문구가 다르면 멈춰야 한다.
+        const content = await decryptJson(entry.iv, entry.ct);
+        cal.set(entry.id, { id: entry.id, rev: entry.rev, deleted: false, ...content });
+      }
+      changed = true;
+    }
+    if (!changed) return 0;
+    const events = [...cal.values()].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    atomicWrite(calPath, JSON.stringify({ updatedAt: new Date().toISOString(), events }, null, 2));
+    atomicWrite(join(dir, "calendar", "calendar.md"), renderCalendarMarkdown(events));
+    return events.length;
+  }
+
+  return { persist, persistCalendar, decryptBytes };
 }
