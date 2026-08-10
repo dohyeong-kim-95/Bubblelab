@@ -289,6 +289,21 @@
   #meta-box .meta-loc.has { background: light-dark(#e7f3ec, #16321f); }
   #meta-box .meta-loc.no { background: light-dark(#f7e9e9, #3a1f1f); }
   #meta-box .meta-actions { display: flex; justify-content: flex-end; margin-top: .85rem; }
+  /* 지역 앨범 시트 — 지도에서 시군구를 탭하면 뜬다 */
+  #region-box { position: fixed; inset: 0; z-index: 76; display: flex; align-items: flex-end; justify-content: center;
+                background: #0006; }
+  #region-box[hidden] { display: none; }
+  #region-box .region-card { background: var(--panel); border-top-left-radius: 1rem; border-top-right-radius: 1rem;
+                width: 100%; max-width: 44rem; max-height: 80vh; display: flex; flex-direction: column;
+                padding: .9rem 1rem calc(1rem + env(safe-area-inset-bottom,0px)); }
+  #region-box .region-head { display: flex; align-items: center; gap: .5rem; margin-bottom: .7rem; }
+  #region-box .region-head b { font-size: 1.05rem; margin-right: auto; }
+  #region-photos { flex: 1; min-height: 3rem; overflow-y: auto; }
+  #region-photos .region-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(5rem, 1fr)); gap: .35rem; }
+  #region-photos .region-grid img { width: 100%; aspect-ratio: 1/1; object-fit: cover; border-radius: .5rem;
+                border: 1px solid var(--line); display: block; cursor: pointer; }
+  .region-add { display: block; text-align: center; margin-top: .8rem; font: inherit; font-size: .9rem; cursor: pointer;
+                background: var(--pink); color: light-dark(#fff, #1a1016); border-radius: .8rem; padding: .7rem; }
   .cal-head { display: flex; align-items: center; gap: .3rem; padding: .5rem .5rem .35rem;
               padding-left: calc(.35rem + env(safe-area-inset-left,0px)); padding-right: calc(.5rem + env(safe-area-inset-right,0px));
               background: var(--bg); border: 0; }
@@ -526,14 +541,14 @@
   <span class="status" id="status" title="나 · 상대 접속 여부">
     <span class="dot" id="dot-mine"></span><span class="dot" id="dot-theirs"></span>
   </span>
-  <button id="cal-open" class="icon-btn" title="캘린더">📅</button>
   <div class="menu-wrap">
     <button id="menu-btn" class="icon-btn" title="설정" aria-haspopup="true" aria-expanded="false">⚙️</button>
     <div id="menu" class="menu" role="menu" hidden>
       <button id="push-toggle" role="menuitem" hidden aria-checked="false"
               title="새 메시지가 오면 이 기기로 알림을 받습니다(기본 켜짐)">🔔 푸시 알림: 꺼짐</button>
       <button id="push-test" role="menuitem" hidden title="이 기기로 테스트 알림을 보내 알림이 실제로 오는지 확인">🔔 테스트 알림 보내기</button>
-      <button id="map-open" role="menuitem" title="사진 위치로 다녀온 시군구를 색칠한 지도">🗺️ 함께 다닌 곳 지도</button>
+      <button id="cal-open" role="menuitem" title="공유 캘린더">📅 캘린더</button>
+      <button id="map-open" role="menuitem" title="함께 다닌 곳을 색칠한 지도">🗺️ 함께 다닌 곳 지도</button>
       <button id="relogin" role="menuitem" title="암호 문구를 잘못 입력했을 때 다시 입력">🔑 문구 다시 입력</button>
       <button id="clear-cache" role="menuitem" title="이 기기에 저장된 대화 기록만 지우기">🧹 기록 지우기</button>
       <button id="reset-room" class="danger" role="menuitem" title="서버에 남은 대화·사진을 양쪽 모두에서 지우고 새로 시작">🗑️ 방 초기화</button>
@@ -703,6 +718,17 @@
     <h3>사진 정보</h3>
     <div id="meta-body"></div>
     <div class="meta-actions"><button id="meta-close" class="cal-primary" type="button">닫기</button></div>
+  </div>
+</div>
+
+<div id="region-box" hidden>
+  <div class="region-card">
+    <div class="region-head">
+      <b id="region-name"></b>
+      <button id="region-close" class="icon-btn" type="button" title="닫기" aria-label="닫기">✕</button>
+    </div>
+    <div id="region-photos"></div>
+    <label class="region-add" id="region-add">📷 여기에 사진 추가<input id="file-region" type="file" accept="image/*" multiple hidden></label>
   </div>
 </div>
 
@@ -1494,11 +1520,13 @@ function captureHere() {
     { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
   );
 }
-async function sendPhoto(file, album) {
+async function sendPhoto(file, album, locOverride) {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const sha256 = hex(await crypto.subtle.digest("SHA-256", bytes));
   const img = await encryptBytes(bytes);
-  const loc = exifGps(bytes); // 촬영 위치(있으면) — "함께 다닌 곳 지도"용. E2E 메타에만.
+  // 위치: 지도에서 지역을 콕 찍어 올리면 그 좌표(locOverride), 아니면 사진 EXIF(안드로이드는
+  // 대개 비어 있음). E2E 메타에만 담겨 지도 색칠·지역 앨범에 쓰인다.
+  const loc = locOverride || exifGps(bytes);
   const meta = await encryptJson({ name: MY_NAME, at: Date.now(), ...(loc && { loc }) });
   const headers = { "X-Duri-Img-Iv": img.iv, "X-Duri-Sha256": sha256, "X-Duri-Meta-Iv": meta.iv, "X-Duri-Meta": meta.ct };
   if (album) headers["X-Duri-Album"] = `${album.id}.${album.i}.${album.n}`; // 묶어보내기 그룹정보(평문)
@@ -1891,6 +1919,7 @@ let backArmed = false, backTimer;
 const trapBack = () => history.pushState(null, "", location.href);
 trapBack(); // 초기 방어 상태
 window.addEventListener("popstate", () => {
+  if (!$("region-box").hidden) { closeRegion(); trapBack(); return; }                      // 지역 앨범 시트
   if (!$("meta-box").hidden) { $("meta-box").hidden = true; trapBack(); return; }         // 사진 정보 모달
   if (!$("cal-dialog").hidden) { closeCalDialog(); trapBack(); return; }     // 이벤트 다이얼로그
   if (!$("cal-colorbox").hidden) { $("cal-colorbox").hidden = true; trapBack(); return; } // 색상 설정
@@ -2902,7 +2931,7 @@ function setCalView(view) {
 }
 $("cal-seg-month").addEventListener("click", () => setCalView("month"));
 $("cal-seg-week").addEventListener("click", () => setCalView("week"));
-function openCal() { if (!calCursor) calCursor = new Date(); $("cal").classList.remove("cal-off"); renderCal(); }
+function openCal() { closeMenu(); if (!calCursor) calCursor = new Date(); $("cal").classList.remove("cal-off"); renderCal(); }
 function closeCal() { $("cal").classList.add("cal-off"); }
 $("cal-open").addEventListener("click", openCal);
 $("cal-back").addEventListener("click", closeCal);
@@ -3004,7 +3033,7 @@ async function renderMap() {
     const r = reg[f.properties.sgg];
     const fill = r ? ownerColor(r) : "var(--panel)";
     const op = r ? (0.4 + 0.55 * (r.count / maxc)).toFixed(3) : "1"; // 많이 간 곳일수록 진하게
-    paths += `<path class="rg" d="${d}" fill="${fill}" fill-opacity="${op}"><title>${f.properties.sidonm} ${f.properties.sggnm}${r ? " · " + r.count + "장" : ""}</title></path>`;
+    paths += `<path class="rg" data-sgg="${f.properties.sgg}" d="${d}" fill="${fill}" fill-opacity="${op}"><title>${f.properties.sidonm} ${f.properties.sggnm}${r ? " · " + r.count + "장" : ""}</title></path>`;
   }
   let dots = "";
   for (const p of pins) {
@@ -3037,6 +3066,67 @@ $("map-open").addEventListener("click", openMap);
 $("map-back").addEventListener("click", closeMap);
 $("map-here").addEventListener("click", captureHere);
 
+// ── 지역 앨범: 지도에서 시군구를 탭하면 그 지역 사진을 보고, 사진을 추가한다 ──
+// 사진 위치는 지도에서 지정(그 지역 대표점)하므로 안드로이드 EXIF 제거와 무관하다.
+let regionFeat = null, regionAddLoc = null;
+function regionPoint(feature) { // 지역 안이 보장되는 대표 좌표(색칠·앨범 소속용)
+  let best = null, bestLen = -1;
+  for (const poly of feature._polys) { const ring = poly[0]; if (ring && ring.length > bestLen) { bestLen = ring.length; best = ring; } }
+  if (!best) return { lat: 0, lng: 0 };
+  let sx = 0, sy = 0; for (const c of best) { sx += c[0]; sy += c[1]; }
+  const cx = sx / best.length, cy = sy / best.length;
+  if (pointInPolys(cx, cy, feature._polys)) return { lat: +cy.toFixed(6), lng: +cx.toFixed(6) };
+  return { lat: +best[0][1].toFixed(6), lng: +best[0][0].toFixed(6) };
+}
+async function openRegion(feature) {
+  regionFeat = feature;
+  $("region-name").textContent = `${feature.properties.sidonm} ${feature.properties.sggnm}`;
+  const grid = $("region-photos");
+  grid.innerHTML = "<p style='color:var(--dim);font-size:.85rem'>사진 불러오는 중…</p>";
+  $("region-box").hidden = false;
+  const entries = await allEntries();
+  const photos = entries
+    .filter((r) => r.kind === "photo" && r.blob && r.loc && pointInPolys(r.loc.lng, r.loc.lat, feature._polys))
+    .sort((a, b) => (b.at || 0) - (a.at || 0));
+  grid.replaceChildren();
+  if (!photos.length) {
+    const p = document.createElement("p");
+    p.style.cssText = "color:var(--dim);font-size:.85rem;padding:.4rem 0";
+    p.textContent = "아직 이 지역 사진이 없어요. 아래 버튼으로 추가해보세요.";
+    grid.appendChild(p);
+  } else {
+    const g = document.createElement("div"); g.className = "region-grid";
+    for (const r of photos) g.appendChild(photoImg(r.blob, r.caption)); // 탭하면 lightbox
+    grid.appendChild(g);
+  }
+}
+function closeRegion() { $("region-box").hidden = true; regionFeat = null; }
+$("region-close").addEventListener("click", closeRegion);
+$("region-box").addEventListener("click", (e) => { if (e.target === $("region-box")) closeRegion(); });
+$("region-add").addEventListener("click", () => { if (regionFeat) regionAddLoc = regionPoint(regionFeat); });
+$("file-region").addEventListener("change", (e) => {
+  const files = [...e.target.files]; e.target.value = "";
+  const loc = regionAddLoc; regionAddLoc = null;
+  if (!files.length || !loc) return;
+  const feat = regionFeat;
+  (async () => {
+    for (let s = 0; s < files.length; s += ALBUM_MAX) {
+      const chunk = files.slice(s, s + ALBUM_MAX), n = chunk.length;
+      const albumId = n >= 2 ? randToken() : null;
+      for (let i = 0; i < n; i++) await sendPhoto(chunk[i], albumId ? { id: albumId, i: i + 1, n } : null, loc);
+    }
+    showToast(`📷 이 지역에 사진 ${files.length}장 추가했어요`);
+    if (feat && !$("region-box").hidden && regionFeat === feat) setTimeout(() => openRegion(feat), 400); // 방금 것 반영
+  })();
+});
+// 지도에서 시군구 탭 → 지역 앨범 열기 (스와이프와 구분: 탭은 이동 없이 click 발생)
+$("map-svg").addEventListener("click", (e) => {
+  const path = e.target.closest("path[data-sgg]");
+  if (!path || !mapGeo) return;
+  const f = mapGeo.features.find((ff) => ff.properties.sgg === path.dataset.sgg);
+  if (f) openRegion(f);
+});
+
 // 좌우 스와이프로 화면 전환, 실시간 드래그(손끝을 그대로 따라간다 — 탭을 당겨오는
 // 느낌). 순서는 [채팅|캘린더](채팅이 왼쪽, 캘린더가 오른쪽 화면 밖에서 대기).
 // touchmove 마다 translateX 를 손가락 위치로 직접 갱신하고(transition 끔),
@@ -3054,7 +3144,7 @@ function curPane() {
 }
 let paneDrag = null;
 function paneDragStart(e) {
-  if (!$("cal-dialog").hidden || !$("cal-colorbox").hidden || !$("meta-box").hidden) return; // 다이얼로그 위에선 안 함
+  if (!$("cal-dialog").hidden || !$("cal-colorbox").hidden || !$("meta-box").hidden || !$("region-box").hidden) return; // 다이얼로그 위에선 안 함
   const t = e.touches[0];
   paneDrag = { x: t.clientX, y: t.clientY, w: innerWidth, pane: curPane(), el: null, opening: false, moved: false, progress: 0 };
 }
