@@ -3102,9 +3102,11 @@ async function renderMap() {
   $("map-empty").hidden = pins.length > 0;
   $("map-count").textContent = pins.length ? `${regions}개 지역` : "";
   const sw = (c) => `<span style="display:inline-block;width:.72em;height:.72em;border-radius:2px;background:${c};vertical-align:-1px;margin:0 .15em 0 .5em"></span>`;
+  const esc = (s) => String(s).replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
+  const meName = esc(MY_NAME || "나"), theirName = esc(peerName || "상대"); // 각자 설정한 이름으로 범례 표시
   $("map-summary").innerHTML = pins.length
     ? `다녀온 시군구 ${regions}곳 · 사진 ${inKorea}장${foreign ? ` · 해외 ${foreign}장` : ""}`
-      + `<span style="float:right">${sw(cMine)}나${sw(cTheirs)}상대${sw(cShared)}함께</span>`
+      + `<span style="float:right">${sw(cMine)}${meName}${sw(cTheirs)}${theirName}${sw(cShared)}함께</span>`
     : "";
 }
 async function openMap() {
