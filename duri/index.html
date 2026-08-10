@@ -267,6 +267,10 @@
   #map-wrap { flex: 1; min-height: 0; position: relative; overflow: hidden; touch-action: none; }
   #map-svg { width: 100%; height: 100%; display: block; transform-origin: 0 0; will-change: transform; }
   #map-svg path.rg { stroke: var(--line); stroke-width: .5; vector-effect: non-scaling-stroke; }
+  /* 사진 점은 장식이다. 클릭을 먹으면(기본값) 점 위를 탭했을 때 시군구 path 가
+     안 잡혀 지역 앨범이 안 열린다 — 사진이 많은 곳일수록 점이 촘촘해서 정작
+     사진을 보려는 지역에서 탭이 통하지 않았다. */
+  #map-svg circle { pointer-events: none; }
   #map-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
                text-align: center; padding: 2rem; color: var(--dim); font-size: .85rem; line-height: 1.6; }
   #map-empty[hidden] { display: none; }
@@ -304,6 +308,28 @@
                 border: 1px solid var(--line); display: block; cursor: pointer; }
   .region-add { display: block; text-align: center; margin-top: .8rem; font: inherit; font-size: .9rem; cursor: pointer;
                 background: var(--pink); color: light-dark(#fff, #1a1016); border-radius: .8rem; padding: .7rem; }
+  .region-clear { display: block; width: 100%; text-align: center; margin-top: .45rem; font: inherit; font-size: .8rem;
+                cursor: pointer; background: none; color: var(--dim); border: 1px solid var(--line);
+                border-radius: .8rem; padding: .55rem; }
+  .region-clear[hidden] { display: none; }
+  /* 현재 위치 확인 시트 */
+  #here-box { position: fixed; inset: 0; z-index: 77; display: flex; align-items: center; justify-content: center;
+              background: #0007; padding: 1.2rem; }
+  #here-box[hidden] { display: none; }
+  #here-box .here-card { background: var(--panel); border: 1px solid var(--line); border-radius: .9rem;
+              padding: 1rem 1.1rem; max-width: 22rem; width: 100%; }
+  #here-box h3 { margin: 0 0 .7rem; font-size: 1rem; }
+  #here-region { font-size: 1.15rem; font-weight: 700; letter-spacing: -.02em; }
+  #here-acc { margin-top: .2rem; font-size: .78rem; color: var(--dim); }
+  #here-alts { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .75rem; }
+  #here-alts .here-alt-label { flex: 0 0 100%; font-size: .76rem; color: var(--dim); margin-bottom: .1rem; }
+  #here-alts .here-alt { font: inherit; font-size: .82rem; cursor: pointer; background: none; color: inherit;
+              border: 1px solid var(--line); border-radius: 999px; padding: .3rem .65rem; }
+  #here-alts .here-alt.on { background: var(--pink); color: light-dark(#fff, #1a1016); border-color: transparent; }
+  #here-box .here-actions { display: flex; justify-content: flex-end; gap: .4rem; margin-top: 1rem; }
+  #here-box .here-actions button { font: inherit; font-size: .88rem; cursor: pointer; border-radius: .7rem;
+              padding: .5rem .9rem; border: 1px solid var(--line); background: none; color: inherit; }
+  #here-box #here-ok { background: var(--pink); color: light-dark(#fff, #1a1016); border-color: transparent; }
   /* 사진 꾹 누르면 뜨는 삭제 버튼 */
   #photo-del { position: fixed; z-index: 205; transform: translate(-50%, -50%); font: inherit; font-size: .82rem;
                background: light-dark(#d84343, #e05a5a); color: #fff; border: 0; border-radius: 999px;
@@ -735,6 +761,21 @@
     </div>
     <div id="region-photos"></div>
     <label class="region-add" id="region-add">📷 여기에 사진 추가<input id="file-region" type="file" accept="image/*" multiple hidden></label>
+    <button class="region-clear" id="region-clear" type="button" hidden>🧹 이 지역 색칠 지우기</button>
+  </div>
+</div>
+
+<!-- 현재 위치 확인 — GPS 는 경계 근처에서 옆 구로 찍히므로 사람이 확정한다 -->
+<div id="here-box" hidden>
+  <div class="here-card">
+    <h3>여기가 맞나요?</h3>
+    <div id="here-region"></div>
+    <div id="here-acc"></div>
+    <div id="here-alts"></div>
+    <div class="here-actions">
+      <button id="here-cancel" type="button">취소</button>
+      <button id="here-ok" type="button">지도에 추가</button>
+    </div>
   </div>
 </div>
 
@@ -1088,6 +1129,7 @@ function connect() {
     ws.send(JSON.stringify({ type: "hello", since: getLastSeq(), endpoint: window.__duriPushEndpoint ?? null }));
     ws.send(JSON.stringify({ type: "cal-hello" })); // 캘린더 현재 상태 동기화
     calFlushOutbox();                                // 오프라인 중 쌓인 캘린더 변경 전송
+    flushUnpinOutbox();                              // 오프라인 중 지운 지도 핀 전파
   };
   ws.onmessage = (e) => {
     let m; try { m = JSON.parse(e.data); } catch { return; }
@@ -1097,7 +1139,12 @@ function connect() {
     if (m.type === "deleted") { removeEntry(m.seq); return; }
     if (m.type === "cal-state") { applyCalEntries(m.events || []); return; }
     if (m.type === "cal-put" || m.type === "cal-del") { applyCalEntry(m); return; }
-    if (m.type === "reset") { localStorage.removeItem("duri:cal"); clearCache().then(() => location.reload()); return; }
+    if (m.type === "reset") {
+      // 지도 핀·툼스톤도 함께 비운다 — 안 그러면 "새로 시작" 뒤에도 옛 색칠이 남는다.
+      for (const k of ["duri:cal", PINS_KEY, PINS_HIDDEN_KEY, UNPIN_OUTBOX_KEY]) localStorage.removeItem(k);
+      clearCache().then(() => location.reload());
+      return;
+    }
     if (m.type === "error") { console.warn("duri error", m.error); return; }
   };
   ws.onclose = () => { setStatus(false, false); setTimeout(connect, backoff); backoff = Math.min(backoff * 2, 15000); };
@@ -1359,8 +1406,7 @@ function removeEntry(seq) {
     if (album) { img.remove(); if (!album.querySelector("img")) album.closest(".row")?.remove(); }
     else img.closest(".row")?.remove();
   });
-  const pins = loadPins().filter((p) => p.seq !== seq);
-  try { localStorage.setItem(PINS_KEY, JSON.stringify(pins)); } catch { /* 최선노력 */ }
+  savePins(loadPins().filter((p) => p.seq !== seq)); // 항목 자체가 사라졌으니 툼스톤은 불필요
   if (!$("map").classList.contains("map-off")) renderMap().catch(() => {});
   if (db) { try { db.transaction("entries", "readwrite").objectStore("entries").delete(seq); } catch { /* 캐시 최선노력 */ } }
 }
@@ -1479,6 +1525,14 @@ async function renderEntry(m) {
   try {
     if (m.kind === "msg") {
       const p = await decryptJson(m.iv, m.ct);
+      // 지도 핀 삭제 동기화 — 화면엔 아무것도 그리지 않는 조용한 제어 항목이다
+      // (양쪽 지도가 같아야 하니 채팅 메시지로 실어 보낸다 — E2E·프로토콜은 그대로).
+      if (p.unpin?.seqs) {
+        seen.add(m.seq);
+        if (m.seq > getLastSeq()) setLastSeq(m.seq); // 커서는 진행시킨다(매번 다시 받지 않게)
+        hidePins(p.unpin.seqs);
+        return;
+      }
       const rec = { seq: m.seq, kind: "msg", at: p.at ?? m.at, name: p.name };
       if (p.sticker) rec.sticker = p.sticker;
       else if (p.here) { // /여기 명령 — 위치를 지도에 남긴다. 채팅엔 가운데 알약으로 표시.
@@ -1562,17 +1616,143 @@ async function sendHere(lat, lng) {
   ws.send(JSON.stringify({ type: "msg", ...frame }));
   showToast("📍 현재 위치를 지도에 추가했어요");
 }
+// 지도에서 지운 핀을 상대 기기에도 알린다 — 안 보내면 내 지도에서만 사라지고
+// 상대 지도엔 그대로 남는다. 채팅에는 안 그려지는 조용한 항목이지만 프로토콜상
+// 평범한 msg 라 E2E·싱크·서버 처리가 모두 그대로다. 끊겨 있으면 큐에 쌓았다가
+// 재접속 때 보낸다(캘린더의 calOutbox 와 같은 방식이되, 새로고침에도 살아남게
+// localStorage 에 둔다 — 지도를 정리하고 앱을 닫는 게 자연스러운 흐름이라서).
+const UNPIN_OUTBOX_KEY = "duri:unpinOutbox";
+function loadUnpinOutbox() { try { return JSON.parse(localStorage.getItem(UNPIN_OUTBOX_KEY) || "[]"); } catch { return []; } }
+function saveUnpinOutbox(list) {
+  try { localStorage.setItem(UNPIN_OUTBOX_KEY, JSON.stringify(list)); } catch { /* 최선노력 */ }
+}
+async function sendUnpin(seqs) {
+  if (!ws || ws.readyState !== 1) {
+    saveUnpinOutbox([...loadUnpinOutbox(), seqs]);
+    return false;
+  }
+  const frame = await encryptJson({ name: MY_NAME, at: Date.now(), unpin: { seqs } });
+  ws.send(JSON.stringify({ type: "msg", ...frame }));
+  return true;
+}
+async function flushUnpinOutbox() {
+  const queued = loadUnpinOutbox();
+  if (!queued.length) return;
+  saveUnpinOutbox([]); // 먼저 비운다 — 보내다 끊기면 sendUnpin 이 다시 큐에 넣는다
+  for (const seqs of queued) await sendUnpin(seqs);
+}
+// 첫 fix 는 대개 기지국·와이파이 기반이라 수백 m~수 km 씩 틀린다. 잠깐 지켜보며
+// 정확도가 좋아지는 fix 를 고른다 — 옆 구에 찍히는 걸 줄이는 가장 큰 요인이다.
+// (예전엔 maximumAge: 30000 이라 30초 전의 부정확한 캐시 fix 를 그대로 썼다.)
+function bestFix({ goodEnough = 40, maxWaitMs = 9000 } = {}) {
+  return new Promise((resolve, reject) => {
+    let best = null, done = false, watchId = null;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      if (watchId != null) navigator.geolocation.clearWatch(watchId);
+      best ? resolve(best) : reject(new Error("no-fix"));
+    };
+    const timer = setTimeout(finish, maxWaitMs); // 시간이 다 되면 그때까지의 최선값으로
+    watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        if (!best || pos.coords.accuracy < best.coords.accuracy) best = pos;
+        if (best.coords.accuracy <= goodEnough) finish(); // 충분히 정확해지면 바로 끝
+      },
+      (err) => { if (!best) { done = true; clearTimeout(timer); reject(err); } }, // 이미 값이 있으면 무시
+      { enableHighAccuracy: true, timeout: maxWaitMs, maximumAge: 0 },
+    );
+  });
+}
+// GPS 오차 반경 안에 걸치는 시군구들. 경계 근처면 여기서 옆 구가 함께 나오고,
+// 그걸 확인 시트에 후보로 띄워 사람이 고르게 한다 — 정확도를 아무리 높여도
+// 경계 바로 옆이면 기계는 틀릴 수밖에 없다.
+function nearbyRegions(geo, lat, lng, accuracyM) {
+  // 오차에 비례하되(±1.5배까지 의심) 최소 200m — 정확도가 아주 좋은데도 반경을
+  // 넓게 잡으면 경계에서 멀 때까지 매번 후보가 떠서 확인이 성가시다.
+  const r = Math.min(5000, Math.max(200, (accuracyM || 0) * 1.5));
+  const dLat = r / 111320, dLng = r / (111320 * Math.cos(lat * Math.PI / 180) || 1);
+  const found = new Map();
+  // 판정된 지역 자체를 먼저 넣는다. 원 위만 훑으면 그 지역이 반경보다 작을 때
+  // (넓은 오차 + 작은 구) 정작 선택돼 있는 지역이 후보에 없어 되돌릴 수 없다.
+  const center = sggOfPoint(geo, lng, lat);
+  if (center) found.set(center.properties.sgg, center);
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * 2 * Math.PI;
+    const f = sggOfPoint(geo, lng + Math.cos(a) * dLng, lat + Math.sin(a) * dLat);
+    if (f) found.set(f.properties.sgg, f);
+  }
+  return [...found.values()];
+}
+
+// 확인 시트: 판정된 지역을 보여주고, 경계 근처면 후보 중에서 고르게 한다.
+// 고른 지역이 GPS 판정과 다르면 그 지역 대표점 좌표로 바꿔 보낸다(확실히 그 구에).
+let hereChoice = null, hereResolve = null;
+function openHereConfirm({ feature, alts, accuracy }) {
+  hereChoice = feature;
+  $("here-acc").textContent = accuracy ? `위치 정확도 ±${Math.round(accuracy)}m` : "";
+  const render = () => {
+    $("here-region").textContent = hereChoice
+      ? `${hereChoice.properties.sidonm} ${hereChoice.properties.sggnm}`
+      : "한국 밖 (색칠되지 않아요)";
+    $("here-alts").replaceChildren();
+    if (alts.length < 2) return; // 후보가 하나뿐이면 고를 게 없다
+    const label = document.createElement("div");
+    label.className = "here-alt-label";
+    label.textContent = "아니면 이 중에서:";
+    $("here-alts").appendChild(label);
+    for (const f of alts) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "here-alt" + (f === hereChoice ? " on" : "");
+      b.textContent = `${f.properties.sggnm}`;
+      b.title = `${f.properties.sidonm} ${f.properties.sggnm}`;
+      b.addEventListener("click", () => { hereChoice = f; render(); });
+      $("here-alts").appendChild(b);
+    }
+  };
+  render();
+  $("here-box").hidden = false;
+  return new Promise((resolve) => { hereResolve = resolve; });
+}
+function closeHereConfirm(result) {
+  $("here-box").hidden = true;
+  const done = hereResolve;
+  hereResolve = null;
+  done?.(result);
+}
+$("here-cancel").addEventListener("click", () => closeHereConfirm(null));
+$("here-ok").addEventListener("click", () => closeHereConfirm(hereChoice ?? false));
+$("here-box").addEventListener("click", (e) => { if (e.target === $("here-box")) closeHereConfirm(null); });
+
 let hereBusy = false;
-function captureHere() {
+async function captureHere() {
   if (hereBusy) return;
   if (!navigator.geolocation) { showToast("이 브라우저는 위치를 지원하지 않아요."); return; }
   hereBusy = true;
-  showToast("현재 위치 확인 중…");
-  navigator.geolocation.getCurrentPosition(
-    (pos) => { hereBusy = false; sendHere(pos.coords.latitude, pos.coords.longitude).catch(() => {}); },
-    (err) => { hereBusy = false; showToast(err.code === 1 ? "위치 권한을 허용해야 추가할 수 있어요." : "위치를 가져오지 못했어요."); },
-    { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
-  );
+  showToast("현재 위치 확인 중… (정확해질 때까지 잠시)");
+  try {
+    const pos = await bestFix();
+    const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+    const geo = await loadMapGeo();
+    const feature = sggOfPoint(geo, lng, lat);
+    const alts = feature ? nearbyRegions(geo, lat, lng, accuracy) : [];
+    const picked = await openHereConfirm({ feature, alts, accuracy });
+    if (picked === null) return; // 취소
+    // 고른 지역이 GPS 판정과 같으면 실제 좌표를(더 정확하다), 다르면 그 지역
+    // 대표점을 보낸다 — 사람이 고른 구에 확실히 찍히게.
+    if (picked && picked !== feature) {
+      const p = regionPoint(picked);
+      await sendHere(p.lat, p.lng);
+    } else {
+      await sendHere(lat, lng);
+    }
+  } catch (err) {
+    showToast(err?.code === 1 ? "위치 권한을 허용해야 추가할 수 있어요." : "위치를 가져오지 못했어요.");
+  } finally {
+    hereBusy = false;
+  }
 }
 async function sendPhoto(file, album, locOverride) {
   const bytes = new Uint8Array(await file.arrayBuffer());
@@ -2059,6 +2239,17 @@ const swReady = (async () => {
   const api = (method, body) => fetch("/_duri/push", {
     method, ...(body && { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   });
+  // 이 기기의 고정 식별자. 브라우저가 구독을 회전시키면 endpoint 가 바뀌는데,
+  // 서버는 이 값으로 "같은 기기의 옛 구독"을 알아보고 치운다 — 없으면 죽은 구독이
+  // 배포마다 하나씩 쌓여 슬롯을 채우고, 결국 새 구독이 등록되지 못해 알림이
+  // 조용히 끊긴다(예전에 그랬다).
+  const DEVICE_KEY = "duri:deviceId";
+  function deviceId() {
+    let id = localStorage.getItem(DEVICE_KEY);
+    if (!id) { id = randToken(); try { localStorage.setItem(DEVICE_KEY, id); } catch { /* 최선노력 */ } }
+    return id;
+  }
+  const putSubscription = (subscription) => api("POST", { subscription, deviceId: deviceId() });
   // 내 endpoint 를 전역에 두고(connect 의 hello 가 읽음), 접속 중 바뀌면 서버에 알린다.
   function setMyEndpoint(endpoint) {
     window.__duriPushEndpoint = endpoint || null;
@@ -2075,7 +2266,7 @@ const swReady = (async () => {
     const subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true, applicationServerKey: vapidKeyBytes(vapidPublicKey),
     });
-    const res = await api("POST", { subscription });
+    const res = await putSubscription(subscription);
     if (!res.ok) { await subscription.unsubscribe().catch(() => {}); throw new Error("subscribe failed"); }
     setMyEndpoint(subscription.endpoint);
     return true;
@@ -2152,8 +2343,12 @@ const swReady = (async () => {
         setMyEndpoint(sub.endpoint); // 접속 시 hello 가 실을 수 있게 미리 등록
         // 매 실행마다 현재 구독을 서버에 다시 등록(중복은 서버가 무시). 브라우저가
         // 구독을 회전시켰는데(재배포·키 회전 등) 서버는 옛 엔드포인트만 알아 알림이
-        // 끊기는 걸 이 재등록이 복구한다 — endpoint 가 바뀌었으면 새 걸 알리게 된다.
-        api("POST", { subscription: sub }).catch(() => {});
+        // 끊기는 걸 이 재등록이 복구한다 — deviceId 를 함께 보내므로 그 기기가 쓰던
+        // 옛 구독까지 서버에서 정리된다. 실패를 그냥 삼키면 "설정은 켜짐인데 서버엔
+        // 없는" 상태를 아무도 모른 채 알림만 안 오므로, 이때는 알려준다.
+        putSubscription(sub)
+          .then((res) => { if (!res.ok) showToast("알림 등록이 서버에서 거절됐어요. 설정에서 껐다 켜주세요."); })
+          .catch(() => { /* 오프라인 — 다음 실행에 다시 시도한다 */ });
       }
       btn.hidden = false;
       if (testBtn) testBtn.hidden = false;
@@ -2996,15 +3191,35 @@ $("cal-back").addEventListener("click", closeCal);
 // 외부 타일·API 없이 자급자족(estate 방식). 핀은 서버로 안 나가고, 양쪽 기기가 각자
 // 받은 사진에서 같은 지도를 독립적으로 만든다.
 const PINS_KEY = "duri:pins";
+// 지운 핀(툼스톤). 핀은 메시지·사진에서 파생되므로 pins 에서 빼기만 하면 다음 접속의
+// 히스토리 재생 때 collectPin 이 그대로 되살린다 — 지웠다는 사실 자체를 남겨야 한다.
+const PINS_HIDDEN_KEY = "duri:pinsHidden";
+const MAX_HIDDEN_PINS = 5000;
 function loadPins() { try { return JSON.parse(localStorage.getItem(PINS_KEY) || "[]"); } catch { return []; } }
+function savePins(pins) { try { localStorage.setItem(PINS_KEY, JSON.stringify(pins)); } catch { /* 최선노력 */ } }
+function loadHiddenPins() { try { return new Set(JSON.parse(localStorage.getItem(PINS_HIDDEN_KEY) || "[]")); } catch { return new Set(); } }
+function saveHiddenPins(set) {
+  const list = [...set].slice(-MAX_HIDDEN_PINS); // seq 는 증가하므로 뒤쪽(최신)을 남긴다
+  try { localStorage.setItem(PINS_HIDDEN_KEY, JSON.stringify(list)); } catch { /* 최선노력 */ }
+}
+// 핀을 지운다(사진·메시지는 그대로 — 지도 색칠에서만 뺀다).
+function hidePins(seqs) {
+  if (!seqs?.length) return;
+  const hidden = loadHiddenPins();
+  for (const s of seqs) hidden.add(s);
+  saveHiddenPins(hidden);
+  savePins(loadPins().filter((p) => !hidden.has(p.seq)));
+  if (!$("map").classList.contains("map-off")) renderMap().catch(() => {});
+}
 function collectPin(rec) {
   if (!rec) return;
   const loc = rec.here || rec.loc; // /여기 명령(here) 또는 사진 EXIF(loc)
   if (!loc || typeof loc.lat !== "number" || typeof loc.lng !== "number") return;
+  if (loadHiddenPins().has(rec.seq)) return; // 지운 핀은 되살리지 않는다
   const pins = loadPins();
   if (pins.some((p) => p.seq === rec.seq)) return; // 이미 있음(seq로 중복 제거)
   pins.push({ seq: rec.seq, lat: loc.lat, lng: loc.lng, at: rec.at || 0, mine: rec.name === MY_NAME }); // 올린 사람(나/상대)
-  try { localStorage.setItem(PINS_KEY, JSON.stringify(pins)); } catch { /* 최선노력 */ }
+  savePins(pins);
   if (!$("map").classList.contains("map-off")) renderMap().catch(() => {}); // 지도가 열려 있으면 즉시 반영
 }
 
@@ -3107,6 +3322,8 @@ async function renderMap() {
   $("map-summary").innerHTML = pins.length
     ? `다녀온 시군구 ${regions}곳 · 사진 ${inKorea}장${foreign ? ` · 해외 ${foreign}장` : ""}`
       + `<span style="float:right">${sw(cMine)}${meName}${sw(cTheirs)}${theirName}${sw(cShared)}함께</span>`
+      // 지역 앨범(탭하면 그곳 사진)은 눈에 보이는 단서가 없으면 아무도 모른다.
+      + `<div style="clear:both;padding-top:.3rem;font-size:.76rem;opacity:.8">색칠된 지역을 탭하면 그곳 사진을 볼 수 있어요</div>`
     : "";
 }
 async function openMap() {
@@ -3135,11 +3352,13 @@ function regionPoint(feature) { // 지역 안이 보장되는 대표 좌표(색�
   if (pointInPolys(cx, cy, feature._polys)) return { lat: +cy.toFixed(6), lng: +cx.toFixed(6) };
   return { lat: +best[0][1].toFixed(6), lng: +best[0][0].toFixed(6) };
 }
+const pinsInRegion = (feature) => loadPins().filter((p) => pointInPolys(p.lng, p.lat, feature._polys));
 async function openRegion(feature) {
   regionFeat = feature;
   $("region-name").textContent = `${feature.properties.sidonm} ${feature.properties.sggnm}`;
   const grid = $("region-photos");
   grid.innerHTML = "<p style='color:var(--dim);font-size:.85rem'>사진 불러오는 중…</p>";
+  $("region-clear").hidden = pinsInRegion(feature).length === 0; // 색칠이 있어야 지울 것도 있다
   $("region-box").hidden = false;
   const entries = await allEntries();
   const photos = entries
@@ -3148,8 +3367,12 @@ async function openRegion(feature) {
   grid.replaceChildren();
   if (!photos.length) {
     const p = document.createElement("p");
-    p.style.cssText = "color:var(--dim);font-size:.85rem;padding:.4rem 0";
-    p.textContent = "아직 이 지역 사진이 없어요. 아래 버튼으로 추가해보세요.";
+    p.style.cssText = "color:var(--dim);font-size:.85rem;padding:.4rem 0;line-height:1.6";
+    // 색칠은 됐는데 사진이 없는 경우가 있다 — 위치만 남긴 곳(/여기)이거나, 사진이
+    // 오래돼 이 기기 캐시에서 정리된 경우다. 둘을 구분해 줘야 덜 당황한다.
+    p.textContent = pinsInRegion(feature).length
+      ? "이 지역엔 위치 기록만 있어요(위치만 남겼거나, 사진이 오래돼 이 기기에서 정리됨). 색칠만 지우려면 아래 🧹 를 눌러주세요."
+      : "아직 이 지역 사진이 없어요. 아래 버튼으로 추가해보세요.";
     grid.appendChild(p);
   } else {
     const g = document.createElement("div"); g.className = "region-grid";
@@ -3159,6 +3382,21 @@ async function openRegion(feature) {
 }
 function closeRegion() { $("region-box").hidden = true; regionFeat = null; }
 $("region-close").addEventListener("click", closeRegion);
+// 잘못 찍힌 색칠 지우기. 사진·대화는 건드리지 않고 지도 핀만 뺀다(양쪽 기기 동시).
+$("region-clear").addEventListener("click", async () => {
+  const feat = regionFeat;
+  if (!feat) return;
+  const seqs = pinsInRegion(feat).map((p) => p.seq);
+  if (!seqs.length) { $("region-clear").hidden = true; return; }
+  const name = `${feat.properties.sidonm} ${feat.properties.sggnm}`;
+  if (!confirm(`${name} 색칠을 지울까요?\n지도에서만 빼는 것이라 사진·대화는 그대로 남아요.`)) return;
+  hidePins(seqs);
+  const synced = await sendUnpin(seqs);
+  closeRegion();
+  showToast(synced
+    ? `🧹 ${name} 색칠을 지웠어요`
+    : `🧹 이 기기에서 지웠어요 — 연결되면 상대 기기에도 반영돼요`);
+});
 $("region-box").addEventListener("click", (e) => { if (e.target === $("region-box")) closeRegion(); });
 $("region-add").addEventListener("click", () => { if (regionFeat) regionAddLoc = regionPoint(regionFeat); });
 $("file-region").addEventListener("change", (e) => {

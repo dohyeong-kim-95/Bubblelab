@@ -181,13 +181,51 @@ test("push subscribe/unsubscribe is peer-only, dedupes by endpoint, and caps sub
     await room.fetch(pushReq("POST", { subscription: await fakeSubscription(`https://push.example.com/extra${i}`) }));
   }
   assert.equal((await storage.list({ prefix: "push:" })).size, 8);
-  const full = await room.fetch(pushReq("POST", { subscription: await fakeSubscription("https://push.example.com/one-too-many") }));
-  assert.equal(full.status, 503); // MAX_PUSH_SUBS(8) 상한 — 9번째는 거절
-  assert.equal((await storage.list({ prefix: "push:" })).size, 8);
+  // 상한을 넘으면 거절하지 않고 가장 오래된 구독을 밀어낸다. 방금 알림을 켠 기기가
+  // 좀비 구독 때문에 등록에 실패해 조용히 알림이 끊기는 쪽이 훨씬 나쁘다.
+  const newest = await fakeSubscription("https://push.example.com/one-too-many");
+  const full = await room.fetch(pushReq("POST", { subscription: newest }));
+  assert.equal(full.status, 200);
+  const after = await storage.list({ prefix: "push:" });
+  assert.equal(after.size, 8); // 상한은 지키되
+  assert.ok([...after.values()].some((v) => v.endpoint === newest.endpoint)); // 새 구독은 반드시 들어간다
+  assert.ok(![...after.values()].some((v) => v.endpoint === sub.endpoint)); // 가장 오래된 것이 밀려남
 
-  const gone = await room.fetch(pushReq("DELETE", { endpoint: sub.endpoint }));
+  const gone = await room.fetch(pushReq("DELETE", { endpoint: newest.endpoint }));
   assert.equal(gone.status, 200);
   assert.equal((await storage.list({ prefix: "push:" })).size, 7); // 하나만 해지됨
+});
+
+// 배포·SW 갱신 때마다 브라우저가 endpoint 를 회전시키면 옛 구독이 쌓여 슬롯을
+// 채우고, 결국 새 구독이 밀려나 알림이 조용히 끊겼다. deviceId 로 같은 기기의
+// 옛 구독을 알아보고 치우는지 확인한다.
+test("push subscribe replaces the same device's rotated subscription", async () => {
+  const storage = fakeStorage({ seq: 0, ackSeq: 0 });
+  const state = { storage, blockConcurrencyWhile: (fn) => fn() };
+  const room = new DuriDO(state, { DURI_BUCKET: fakeBucket([]) });
+  await room.load();
+
+  const first = await fakeSubscription("https://push.example.com/rot-1");
+  await room.fetch(pushReq("POST", { subscription: first, deviceId: "device-aaaaaa" }));
+  assert.equal((await storage.list({ prefix: "push:" })).size, 1);
+
+  // 같은 기기가 회전한 새 endpoint 로 다시 등록 → 옛 것은 사라지고 하나만 남는다.
+  const rotated = await fakeSubscription("https://push.example.com/rot-2");
+  await room.fetch(pushReq("POST", { subscription: rotated, deviceId: "device-aaaaaa" }));
+  const subs = await storage.list({ prefix: "push:" });
+  assert.equal(subs.size, 1);
+  assert.equal([...subs.values()][0].endpoint, rotated.endpoint);
+
+  // 다른 기기는 그대로 공존한다(상대방 기기가 밀려나면 안 된다).
+  const other = await fakeSubscription("https://push.example.com/other");
+  await room.fetch(pushReq("POST", { subscription: other, deviceId: "device-bbbbbb" }));
+  assert.equal((await storage.list({ prefix: "push:" })).size, 2);
+
+  // 형식이 틀린 deviceId 는 없는 셈 친다(회전 정리만 못 할 뿐 구독은 정상 등록).
+  const noId = await fakeSubscription("https://push.example.com/no-id");
+  const res = await room.fetch(pushReq("POST", { subscription: noId, deviceId: "!!" }));
+  assert.equal(res.status, 200);
+  assert.equal((await storage.list({ prefix: "push:" })).size, 3);
 });
 
 test("push/test self-diagnostic reports no-vapid, targets only my endpoint, and prunes expired", async () => {

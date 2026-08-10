@@ -52,6 +52,7 @@ const CAL_ID = /^[A-Za-z0-9]{6,40}$/;
 // 여전히 평문을 모르고, 기기의 서비스워커가 그 자리에서 복호화해 알림을 그린다.
 const PUSH_PREFIX = "push:";
 const MAX_PUSH_SUBS = 8; // 두 사람 × 기기 몇 대
+const DEVICE_ID = /^[A-Za-z0-9_-]{6,64}$/; // 기기 식별자(구독 회전 시 옛 구독 정리용)
 const MAX_PUSH_PAYLOAD_BYTES = 3000; // 안전 상한 넘으면 내용 없는 일반 알림으로 대체
 
 const bufKey = (seq) => BUF_PREFIX + String(seq).padStart(12, "0");
@@ -371,13 +372,34 @@ export class DuriDO {
         typeof sub?.keys?.p256dh !== "string" || typeof sub?.keys?.auth !== "string") {
       return Response.json({ error: "invalid subscription" }, { status: 400 });
     }
+    // 기기 식별자(클라이언트가 만들어 보관하는 임의 토큰). 브라우저가 구독을
+    // 회전시키면 endpoint 가 바뀌는데, 이게 있어야 "같은 기기의 옛 구독"을
+    // 알아보고 치울 수 있다.
+    const deviceId = typeof body.deviceId === "string" && DEVICE_ID.test(body.deviceId)
+      ? body.deviceId : null;
     const key = await endpointKey(sub.endpoint);
-    if (!(await this.state.storage.get(key))) {
-      const count = (await this.state.storage.list({ prefix: PUSH_PREFIX, limit: MAX_PUSH_SUBS + 1 })).size;
-      if (count >= MAX_PUSH_SUBS) return Response.json({ error: "구독 가능한 기기 수를 넘었어요" }, { status: 503 });
+    const existing = await this.state.storage.get(key);
+    const all = [...(await this.state.storage.list({ prefix: PUSH_PREFIX }))];
+
+    // ① 같은 기기가 쓰던 옛 endpoint 를 먼저 치운다. 이게 없으면 배포·SW 갱신 때마다
+    // 죽은 구독이 하나씩 쌓여 슬롯을 채운다(pushsubscriptionchange 는 브라우저가
+    // 잘 쏘지 않고 iOS 는 아예 지원하지 않아, 옛 구독을 지울 다른 기회가 없다).
+    if (deviceId) {
+      const stale = all.filter(([k, v]) => k !== key && v?.deviceId === deviceId).map(([k]) => k);
+      if (stale.length) await this.state.storage.delete(stale);
+    }
+    // ② 슬롯이 찼으면 새 구독을 거절하는 대신 가장 오래된 것을 밀어낸다. 방금 알림을
+    // 켠 기기가 좀비 구독 때문에 등록에 실패해 조용히 알림이 끊기는 쪽이 훨씬 나쁘다.
+    if (!existing) {
+      const live = all.filter(([k, v]) => k !== key && !(deviceId && v?.deviceId === deviceId));
+      if (live.length >= MAX_PUSH_SUBS) {
+        live.sort((a, b) => (a[1]?.at ?? 0) - (b[1]?.at ?? 0));
+        await this.state.storage.delete(live.slice(0, live.length - MAX_PUSH_SUBS + 1).map(([k]) => k));
+      }
     }
     await this.state.storage.put(key, {
       endpoint: sub.endpoint, keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth },
+      deviceId, at: Date.now(),
     });
     return Response.json({ subscribed: true });
   }
