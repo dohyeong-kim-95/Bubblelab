@@ -509,7 +509,6 @@
   <span class="status" id="status" title="나 · 상대 접속 여부">
     <span class="dot" id="dot-mine"></span><span class="dot" id="dot-theirs"></span>
   </span>
-  <button id="map-open" class="icon-btn" title="함께 다닌 곳 지도">🗺️</button>
   <button id="cal-open" class="icon-btn" title="캘린더">📅</button>
   <div class="menu-wrap">
     <button id="menu-btn" class="icon-btn" title="설정" aria-haspopup="true" aria-expanded="false">⚙️</button>
@@ -517,6 +516,7 @@
       <button id="push-toggle" role="menuitem" hidden aria-checked="false"
               title="새 메시지가 오면 이 기기로 알림을 받습니다(기본 켜짐)">🔔 푸시 알림: 꺼짐</button>
       <button id="push-test" role="menuitem" hidden title="이 기기로 테스트 알림을 보내 알림이 실제로 오는지 확인">🔔 테스트 알림 보내기</button>
+      <button id="map-open" role="menuitem" title="사진 위치로 다녀온 시군구를 색칠한 지도">🗺️ 함께 다닌 곳 지도</button>
       <button id="relogin" role="menuitem" title="암호 문구를 잘못 입력했을 때 다시 입력">🔑 문구 다시 입력</button>
       <button id="clear-cache" role="menuitem" title="이 기기에 저장된 대화 기록만 지우기">🧹 기록 지우기</button>
       <button id="reset-room" class="danger" role="menuitem" title="서버에 남은 대화·사진을 양쪽 모두에서 지우고 새로 시작">🗑️ 방 초기화</button>
@@ -2884,6 +2884,7 @@ async function renderMap() {
     : "";
 }
 async function openMap() {
+  closeMenu(); // 설정 메뉴에서 열리므로 메뉴는 닫는다
   $("map").classList.remove("map-off");
   try { await renderMap(); } catch (e) { console.warn("map render 실패", e); $("map-empty").hidden = false; }
 }
