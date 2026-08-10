@@ -2794,7 +2794,7 @@ function collectPin(rec) {
   if (typeof lat !== "number" || typeof lng !== "number") return;
   const pins = loadPins();
   if (pins.some((p) => p.seq === rec.seq)) return; // 이미 있음
-  pins.push({ seq: rec.seq, lat, lng, at: rec.at || 0 });
+  pins.push({ seq: rec.seq, lat, lng, at: rec.at || 0, mine: rec.name === MY_NAME }); // 올린 사람(나/상대) 표시
   try { localStorage.setItem(PINS_KEY, JSON.stringify(pins)); } catch { /* 최선노력 */ }
 }
 
@@ -2844,12 +2844,22 @@ function sggOfPoint(geo, lng, lat) {
 async function renderMap() {
   const geo = await loadMapGeo();
   const pins = loadPins();
-  const counts = {}; let inKorea = 0, foreign = 0;
+  // 시군구별로 누가 올렸는지 모은다: 나만 → 내 색, 상대만 → 상대 색, 둘 다 → 공통 색.
+  // 색은 캘린더 설정(colorForOwner/sharedColor)을 그대로 재사용해 양쪽이 똑같이 본다.
+  const reg = {}; let inKorea = 0, foreign = 0;
   for (const p of pins) {
+    const isMine = p.mine !== false; // 옛 핀(플래그 없음)은 내 것으로 간주
     const f = sggOfPoint(geo, p.lng, p.lat);
-    if (f) { counts[f.properties.sgg] = (counts[f.properties.sgg] || 0) + 1; inKorea++; } else foreign++;
+    if (!f) { foreign++; continue; }
+    inKorea++;
+    const r = reg[f.properties.sgg] || (reg[f.properties.sgg] = { count: 0, mine: false, theirs: false });
+    r.count++; if (isMine) r.mine = true; else r.theirs = true;
   }
-  const maxc = Math.max(1, ...Object.values(counts));
+  const maxc = Math.max(1, ...Object.values(reg).map((r) => r.count));
+  const cMine = colorForOwner(MY_NAME);
+  const cTheirs = colorForOwner(peerName || "상대");
+  const cShared = sharedColor();
+  const ownerColor = (r) => (r.mine && r.theirs) ? cShared : r.theirs ? cTheirs : cMine;
   // 투영: 위경도 → 화면(등거리, 위도 보정). 한국 bbox를 viewBox에 맞춘다.
   const W = 1000, H = 1200, PAD = 24, b = geo._bbox;
   const lat0 = (b.minLat + b.maxLat) / 2, kx = Math.cos(lat0 * Math.PI / 180);
@@ -2864,23 +2874,27 @@ async function renderMap() {
     for (const poly of f._polys) for (const ring of poly) {
       d += "M" + ring.map((c) => X(c[0]).toFixed(1) + " " + Y(c[1]).toFixed(1)).join("L") + "Z";
     }
-    const c = counts[f.properties.sgg] || 0;
-    const fill = c ? `rgba(200,80,140,${(0.22 + 0.62 * (c / maxc)).toFixed(3)})` : "var(--panel)";
-    paths += `<path class="rg" d="${d}" fill="${fill}"><title>${f.properties.sidonm} ${f.properties.sggnm}${c ? " · " + c + "장" : ""}</title></path>`;
+    const r = reg[f.properties.sgg];
+    const fill = r ? ownerColor(r) : "var(--panel)";
+    const op = r ? (0.4 + 0.55 * (r.count / maxc)).toFixed(3) : "1"; // 많이 간 곳일수록 진하게
+    paths += `<path class="rg" d="${d}" fill="${fill}" fill-opacity="${op}"><title>${f.properties.sidonm} ${f.properties.sggnm}${r ? " · " + r.count + "장" : ""}</title></path>`;
   }
   let dots = "";
   for (const p of pins) {
     if (p.lng < b.minLng || p.lng > b.maxLng || p.lat < b.minLat || p.lat > b.maxLat) continue; // 해외는 점 생략
-    dots += `<circle cx="${X(p.lng).toFixed(1)}" cy="${Y(p.lat).toFixed(1)}" r="4" fill="var(--pink)" fill-opacity=".9" stroke="#fff" stroke-width=".8"/>`;
+    const dc = p.mine !== false ? cMine : cTheirs; // 점도 올린 사람 색
+    dots += `<circle cx="${X(p.lng).toFixed(1)}" cy="${Y(p.lat).toFixed(1)}" r="4" fill="${dc}" fill-opacity=".95" stroke="#fff" stroke-width=".8"/>`;
   }
   const svg = $("map-svg");
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
   svg.innerHTML = paths + dots;
-  const regions = Object.keys(counts).length;
+  const regions = Object.keys(reg).length;
   $("map-empty").hidden = pins.length > 0;
   $("map-count").textContent = pins.length ? `${regions}개 지역` : "";
-  $("map-summary").textContent = pins.length
+  const sw = (c) => `<span style="display:inline-block;width:.72em;height:.72em;border-radius:2px;background:${c};vertical-align:-1px;margin:0 .15em 0 .5em"></span>`;
+  $("map-summary").innerHTML = pins.length
     ? `다녀온 시군구 ${regions}곳 · 사진 ${inKorea}장${foreign ? ` · 해외 ${foreign}장` : ""}`
+      + `<span style="float:right">${sw(cMine)}나${sw(cTheirs)}상대${sw(cShared)}함께</span>`
     : "";
 }
 async function openMap() {
