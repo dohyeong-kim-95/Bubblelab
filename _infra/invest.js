@@ -21,11 +21,13 @@
 
 export const TOSS_BASE = "https://openapi.tossinvest.com";
 
-// 부를 수 있는 경로. 조회 3종이 전부다 — 주문 계열은 의도적으로 없다.
+// 부를 수 있는 경로. 조회 4종이 전부다 — 주문 계열은 의도적으로 없다.
+// /stocks 는 종목 기본정보(종목유형)만 본다. 계좌와 무관해서 계좌 헤더도 없다.
 export const READ_ONLY_PATHS = new Set([
   "/api/v1/accounts",
   "/api/v1/holdings",
   "/api/v1/buying-power",
+  "/api/v1/stocks",
 ]);
 
 // 토큰 만료 60초 전에 미리 새로 받는다 (공식 CLI와 같은 skew).
@@ -99,12 +101,97 @@ export function aggregateHoldings(items) {
   return { byCurrency, positions };
 }
 
+/* ── 그룹 ──────────────────────────────────────────────────────────────
+ *
+ * 토스 앱에서 나눠 둔 종목 그룹은 **Open API 로 내려오지 않는다** (스펙 v1.2.13
+ * 전체에 group/folder/portfolio 필드가 없고, 계좌도 종합매매 하나만 반환된다).
+ * 그래서 그룹은 우리가 정한다 — 수동 지정이 있으면 그것, 없으면 종목 기본정보
+ * (/api/v1/stocks 의 securityType) 로 자동 분류한다.
+ */
+
+/** 그룹 라벨 길이 상한. 저장·표시가 같은 값을 쓴다. */
+export const MAX_GROUP_LABEL = 24;
+const DEFAULT_GROUP = "기타";
+
+const COUNTRY_LABEL = { KR: "국내", US: "미국" };
+const TYPE_LABEL = {
+  STOCK: "주식", FOREIGN_STOCK: "주식", ETF: "ETF", FOREIGN_ETF: "ETF",
+  ETN: "ETN", REIT: "리츠", INFRASTRUCTURE_FUND: "인프라펀드",
+  DEPOSITARY_RECEIPT: "DR", STOCK_WARRANTS: "신주인수권",
+};
+
+/**
+ * 자동 분류 라벨. 나라(보유 종목이 늘 알려준다) + 종목유형(기본정보가 있을 때만).
+ * 기본정보 조회가 실패하면 **아는 만큼만** 쓴다 — ETF를 주식이라고 우기지 않는다.
+ */
+export function autoGroupLabel(position, info) {
+  const country = COUNTRY_LABEL[position?.market] ?? "";
+  const type = TYPE_LABEL[info?.securityType] ?? "";
+  return [country, type].filter(Boolean).join(" ") || DEFAULT_GROUP;
+}
+
+/**
+ * 수동 그룹 매핑 파싱. `그룹 2:TSLA,NVDA;그룹 1:*` 형식이고 `*` 는 나머지 전부.
+ * 코드가 아니라 데몬 환경변수(INVEST_GROUPS)로 들어온다 — 그래야 그룹을 바꿀 때
+ * 재배포가 필요 없다.
+ */
+export function parseGroupMap(spec) {
+  const bySymbol = new Map();
+  let fallback = null;
+
+  for (const chunk of String(spec ?? "").split(";")) {
+    const at = chunk.indexOf(":");
+    if (at < 0) continue;
+    const label = chunk.slice(0, at).trim().slice(0, MAX_GROUP_LABEL);
+    const symbols = chunk.slice(at + 1).split(",").map((s) => s.trim()).filter(Boolean);
+    if (!label || !symbols.length) continue;
+    for (const symbol of symbols) {
+      if (symbol === "*") fallback = label;
+      else bySymbol.set(symbol.toUpperCase(), label);
+    }
+  }
+  return { bySymbol, fallback };
+}
+
+/** 종목 하나의 그룹. 수동 지정 > 수동 기본값(`*`) > 자동 분류 순. */
+export function groupOf(position, info, map) {
+  const manual = map?.bySymbol?.get(String(position?.symbol ?? "").toUpperCase());
+  if (manual) return manual;
+  if (map?.fallback) return map.fallback;
+  return autoGroupLabel(position, info);
+}
+
+/**
+ * 그룹별 합계. **그룹 안에서도 통화를 섞지 않는다** — byCurrency 와 같은 이유로
+ * KRW 와 USD 를 더한 금액은 뜻이 없다. 그래서 group → currency → 합계 2단이다.
+ */
+export function aggregateGroups(positions) {
+  const byGroup = {};
+
+  for (const position of Array.isArray(positions) ? positions : []) {
+    const group = String(position?.group || DEFAULT_GROUP).slice(0, MAX_GROUP_LABEL);
+    const currency = position?.currency || "KRW";
+    const bucket = ((byGroup[group] ??= {})[currency] ??= { value: 0, cost: 0, pnl: 0, rate: 0 });
+    bucket.value += position?.value ?? 0;
+    bucket.cost += position?.cost ?? 0;
+    bucket.pnl += position?.pnl ?? 0;
+  }
+
+  for (const byCurrency of Object.values(byGroup)) {
+    for (const bucket of Object.values(byCurrency)) {
+      bucket.rate = bucket.cost > 0 ? bucket.pnl / bucket.cost : 0;
+    }
+  }
+  return byGroup;
+}
+
 /** 화면·그래프가 쓰는 스냅샷 한 장. 종목 단위는 빼고 합계만 남긴다. */
-export function snapshotOf(aggregate, cash, at = Date.now()) {
+export function snapshotOf(aggregate, cash, at = Date.now(), byGroup = {}) {
   return {
     date: kstDate(at),
     ts: at,
     byCurrency: aggregate.byCurrency,
+    byGroup,
     cash: cash ?? {},
   };
 }
@@ -123,6 +210,32 @@ export function buildSeries(history) {
     }
   }
   for (const points of Object.values(series)) points.sort((a, b) => a.date.localeCompare(b.date));
+  return series;
+}
+
+/**
+ * 그룹별 시계열. 그룹 → 통화 → 점 배열 (합계와 같은 이유로 통화를 섞지 않는다).
+ *
+ * 그룹을 나중에 넣으면 지난 날짜는 되살릴 수 없다 — 일별 스냅샷은 종목 단위를
+ * 버리고 합계만 남기기 때문이다. 그래서 byGroup 이 없던 날의 점은 그냥 없다.
+ */
+export function buildGroupSeries(history) {
+  const series = {};
+  for (const snap of Array.isArray(history) ? history : []) {
+    for (const [group, byCurrency] of Object.entries(snap?.byGroup ?? {})) {
+      for (const [currency, bucket] of Object.entries(byCurrency ?? {})) {
+        ((series[group] ??= {})[currency] ??= []).push({
+          date: snap.date,
+          rate: bucket.rate ?? 0,
+          value: bucket.value ?? 0,
+          pnl: bucket.pnl ?? 0,
+        });
+      }
+    }
+  }
+  for (const byCurrency of Object.values(series)) {
+    for (const points of Object.values(byCurrency)) points.sort((a, b) => a.date.localeCompare(b.date));
+  }
   return series;
 }
 
@@ -304,14 +417,41 @@ export async function resolveAccountSeq({ token, configured, fetchImpl = fetch }
 }
 
 /**
+ * 보유 종목의 기본정보(종목유형 등)를 한 번에 받는다. 계좌 헤더가 필요 없는 조회다.
+ * **실패해도 던지지 않는다** — 분류가 안 되는 것보다 잔고가 안 올라가는 게 더 나쁘다.
+ * 빈 맵이면 그룹 라벨이 나라까지만 붙는다.
+ */
+export async function stockInfoOf(positions, { token, fetchImpl = fetch } = {}) {
+  const symbols = [...new Set((positions ?? []).map((p) => p?.symbol).filter(Boolean))];
+  if (!symbols.length) return new Map();
+  try {
+    // 다건 조회 상한이 200개다. 보유 종목이 그보다 많을 일은 없지만 잘라서 보낸다.
+    const rows = await tossFetch("/api/v1/stocks", {
+      token, query: { symbols: symbols.slice(0, 200).join(",") }, fetchImpl,
+    });
+    return new Map((Array.isArray(rows) ? rows : []).map((row) => [row?.symbol, row]));
+  } catch {
+    return new Map();
+  }
+}
+
+/**
  * 잔고 한 장을 읽어 스냅샷으로 만든다. 엣지로 올릴 최종 형태를 그대로 돌려준다.
  * 401 을 만나면 토큰을 새로 받아 한 번만 재시도한다.
  */
-export async function fetchSnapshot({ clientId, clientSecret, accountSeq, cache = memoryTokenCache(), fetchImpl = fetch, at = Date.now() }) {
+export async function fetchSnapshot({ clientId, clientSecret, accountSeq, groups, cache = memoryTokenCache(), fetchImpl = fetch, at = Date.now() }) {
+  const groupMap = groups && groups.bySymbol ? groups : parseGroupMap(groups);
+
   const collect = async (token) => {
     const seq = await resolveAccountSeq({ token, configured: accountSeq, fetchImpl });
     const overview = await tossFetch("/api/v1/holdings", { token, accountSeq: seq, fetchImpl });
     const aggregate = aggregateHoldings(overview?.items);
+
+    // 그룹을 붙인다. 토스는 앱의 종목 그룹을 주지 않으므로 우리가 정한다.
+    const info = await stockInfoOf(aggregate.positions, { token, fetchImpl });
+    for (const position of aggregate.positions) {
+      position.group = groupOf(position, info.get(position.symbol), groupMap);
+    }
 
     // 예수금은 통화별로 따로 조회한다. ACCOUNT 그룹(초당 1회)이라 순차 호출하고,
     // 실패해도 보유종목은 살려야 하므로 통화 단위로 조용히 건너뛴다.
@@ -324,7 +464,8 @@ export async function fetchSnapshot({ clientId, clientSecret, accountSeq, cache 
         cash[currency] = parseDecimal(power?.cashBuyingPower);
       } catch { /* 예수금 실패는 치명적이지 않다 — 그 통화만 비운다 */ }
     }
-    return { ...snapshotOf(aggregate, cash, at), positions: aggregate.positions };
+    const byGroup = aggregateGroups(aggregate.positions);
+    return { ...snapshotOf(aggregate, cash, at, byGroup), positions: aggregate.positions };
   };
 
   try {
@@ -362,6 +503,24 @@ export function normalizeSnapshot(payload, at = Date.now()) {
     byCurrency[currency] = { value, cost, pnl, rate };
   }
 
+  // 그룹 합계. 라벨은 데몬이 정한 임의 문자열이라 길이를 자르고, 안쪽 숫자는
+  // byCurrency 와 같은 엄격도로 다시 짓는다.
+  const byGroup = {};
+  for (const [group, byCurrency] of Object.entries(payload.byGroup ?? {})) {
+    if (!group || !byCurrency || typeof byCurrency !== "object") return null;
+    const bucketed = {};
+    for (const [currency, bucket] of Object.entries(byCurrency)) {
+      if (!/^[A-Z]{3}$/.test(currency) || !bucket || typeof bucket !== "object") return null;
+      const value = finiteNumber(bucket.value);
+      const cost = finiteNumber(bucket.cost);
+      const pnl = finiteNumber(bucket.pnl);
+      const rate = finiteNumber(bucket.rate);
+      if (value === null || cost === null || pnl === null || rate === null) return null;
+      bucketed[currency] = { value, cost, pnl, rate };
+    }
+    byGroup[group.slice(0, MAX_GROUP_LABEL)] = bucketed;
+  }
+
   const cash = {};
   for (const [currency, amount] of Object.entries(payload.cash ?? {})) {
     if (!/^[A-Z]{3}$/.test(currency)) return null;
@@ -375,6 +534,7 @@ export function normalizeSnapshot(payload, at = Date.now()) {
     symbol: String(item?.symbol ?? "").slice(0, 32),
     name: String(item?.name ?? "").slice(0, 64),
     market: String(item?.market ?? "").slice(0, 8),
+    group: String(item?.group ?? "").slice(0, MAX_GROUP_LABEL),
     currency: String(item?.currency ?? "").slice(0, 8),
     quantity: finiteNumber(item?.quantity) ?? 0,
     lastPrice: finiteNumber(item?.lastPrice) ?? 0,
@@ -389,7 +549,7 @@ export function normalizeSnapshot(payload, at = Date.now()) {
 
   // 날짜는 데몬을 믿지 않고 받은 시각(KST)으로 다시 찍는다 — 시계가 어긋난 PC가
   // 미래 날짜를 올리면 그래프가 영영 이상해진다.
-  return { date: kstDate(at), ts: at, byCurrency, cash, positions };
+  return { date: kstDate(at), ts: at, byCurrency, byGroup, cash, positions };
 }
 
 /**
@@ -425,12 +585,15 @@ export class InvestDO {
   async #state() {
     const latest = await this.state.storage.get("latest");
     const age = latest ? Date.now() - latest.ts : null;
+    const history = await this.#history();
     return {
       updatedAt: latest?.ts ?? null,
       byCurrency: latest?.byCurrency ?? {},
+      byGroup: latest?.byGroup ?? {},
       cash: latest?.cash ?? {},
       positions: latest?.positions ?? [],
-      series: buildSeries(await this.#history()),
+      series: buildSeries(history),
+      groupSeries: buildGroupSeries(history),
       // 데몬이 멈춘 것을 화면이 알아야 한다 — 숫자는 있는데 어제 것일 수 있다.
       stale: age !== null && age > STALE_AFTER_MS,
       error: latest ? null : "아직 올라온 잔고가 없습니다 — PC 데몬이 도는지 확인해주세요",

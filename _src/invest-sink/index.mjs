@@ -59,15 +59,25 @@ async function main() {
   const sinkSecret = required("INVEST_SINK_SECRET");
   const endpoint = (process.env.INVEST_ENDPOINT ?? "").trim() || DEFAULT_ENDPOINT;
   const accountSeq = process.env.INVEST_ACCOUNT_SEQ;
+  // 토스 앱의 종목 그룹은 API 로 내려오지 않아 여기서 정한다. 비워 두면
+  // 종목 기본정보(나라·종목유형)로 자동 분류한다.
+  const groups = process.env.INVEST_GROUPS;
 
   const snapshot = await fetchSnapshot({
-    clientId, clientSecret, accountSeq, cache: fileTokenCache(TOKEN_CACHE),
+    clientId, clientSecret, accountSeq, groups, cache: fileTokenCache(TOKEN_CACHE),
   });
 
   const summary = Object.entries(snapshot.byCurrency)
     .map(([currency, b]) => `${currency} ${Math.round(b.value).toLocaleString("ko-KR")} (${(b.rate * 100).toFixed(2)}%)`)
     .join(" · ") || "보유 종목 없음";
   console.log(`${snapshot.date} 읽음: ${summary}`);
+
+  for (const [group, byCurrency] of Object.entries(snapshot.byGroup)) {
+    const line = Object.entries(byCurrency)
+      .map(([currency, b]) => `${currency} ${Math.round(b.value).toLocaleString("ko-KR")} (${(b.rate * 100).toFixed(2)}%)`)
+      .join(" · ");
+    console.log(`  [${group}] ${line}`);
+  }
 
   const response = await fetch(endpoint, {
     method: "POST",

@@ -2,6 +2,8 @@
 // 숫자를 그리기만 한다. API 키·토큰은 브라우저로 내려오지 않는다.
 
 const CURRENCY_COLOR = { KRW: "#3f9d6d", USD: "#5b8def" };
+// 그룹 이름은 임의 문자열이라 색을 미리 정할 수 없다 — 순서대로 돌려쓴다.
+const GROUP_PALETTE = ["#5b8def", "#3f9d6d", "#c2703d", "#8b5cc7", "#c04f6e", "#3f8f9d"];
 
 const el = {
   notice: document.getElementById("notice"),
@@ -9,6 +11,8 @@ const el = {
   refresh: document.getElementById("refresh"),
   summary: document.getElementById("summary"),
   chart: document.getElementById("chart"),
+  groups: document.getElementById("groups"),
+  groupChart: document.getElementById("group-chart"),
   holdings: document.getElementById("holdings"),
 };
 
@@ -78,17 +82,30 @@ function renderSummary(byCurrency, cash) {
   replace(el.summary, ...cards);
 }
 
+// 그룹 안에서도 통화를 섞지 않으므로 시계열이 그룹 → 통화 2단으로 온다.
+// 한 그룹이 한 통화만 쓰면 통화 표기를 빼서 라벨을 짧게 둔다.
+function flattenGroupSeries(groupSeries) {
+  const flat = {};
+  for (const [group, byCurrency] of Object.entries(groupSeries ?? {})) {
+    const currencies = Object.keys(byCurrency ?? {});
+    for (const [currency, points] of Object.entries(byCurrency ?? {})) {
+      flat[currencies.length > 1 ? `${group} · ${currency}` : group] = points;
+    }
+  }
+  return flat;
+}
+
 // 수익률(%)은 단위가 없어 통화가 달라도 한 축에 겹쳐 그릴 수 있다.
 // 금액은 통화마다 자릿수가 달라 같은 축에 두면 한쪽이 뭉개지므로 그리지 않는다.
-function renderChart(series) {
-  const entries = Object.entries(series).filter(([, points]) => points.length);
+function renderChart(host, series, { label, colorOf }) {
+  const entries = Object.entries(series ?? {}).filter(([, points]) => points?.length);
   if (!entries.length) {
-    replace(el.chart, element("p", "empty", "아직 기록된 스냅샷이 없습니다."));
+    replace(host, element("p", "empty", "아직 기록된 스냅샷이 없습니다."));
     return;
   }
   const total = entries.reduce((sum, [, points]) => sum + points.length, 0);
   if (total < 2) {
-    replace(el.chart, element("p", "empty", "점이 하나뿐이라 아직 선을 그릴 수 없습니다. 내일 다시 확인해주세요."));
+    replace(host, element("p", "empty", "점이 하나뿐이라 아직 선을 그릴 수 없습니다. 내일 다시 확인해주세요."));
     return;
   }
 
@@ -114,7 +131,7 @@ function renderChart(series) {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   svg.setAttribute("role", "img");
-  svg.setAttribute("aria-label", "통화별 누적 수익률 추이");
+  svg.setAttribute("aria-label", label);
 
   const draw = (tag, attrs) => {
     const node = document.createElementNS("http://www.w3.org/2000/svg", tag);
@@ -135,8 +152,8 @@ function renderChart(series) {
     }).textContent = percent(rate);
   }
 
-  for (const [currency, points] of entries) {
-    const color = CURRENCY_COLOR[currency] ?? "#8b97a5";
+  for (const [key, points] of entries) {
+    const color = colorOf(key, entries.findIndex(([k]) => k === key));
     if (points.length === 1) {
       draw("circle", { cx: x(points[0].date), cy: y(points[0].rate), r: 3, fill: color });
       continue;
@@ -156,13 +173,51 @@ function renderChart(series) {
   }
 
   const legend = element("p", "legend");
-  for (const [currency, points] of entries) {
-    const item = element("span", null, `${currency} ${percent(points.at(-1).rate)}`);
-    item.style.color = CURRENCY_COLOR[currency] ?? "inherit";
+  entries.forEach(([key, points], index) => {
+    const item = element("span", null, `${key} ${percent(points.at(-1).rate)}`);
+    item.style.color = colorOf(key, index);
     legend.append(item);
+  });
+
+  replace(host, svg, legend);
+}
+
+// 그룹별 요약. 그룹 하나가 여러 통화를 담을 수 있어 통화마다 한 줄이다.
+function renderGroups(byGroup) {
+  const groups = Object.keys(byGroup ?? {}).sort();
+  if (!groups.length) {
+    replace(el.groups, element("p", "empty", "그룹으로 나눌 종목이 없습니다."));
+    return;
   }
 
-  replace(el.chart, svg, legend);
+  const table = document.createElement("table");
+  const head = document.createElement("tr");
+  for (const label of ["그룹", "통화", "평가금액", "매입원가", "손익", "수익률"]) {
+    head.append(element("th", null, label));
+  }
+  const thead = document.createElement("thead");
+  thead.append(head);
+  table.append(thead);
+
+  const body = document.createElement("tbody");
+  for (const group of groups) {
+    const currencies = Object.keys(byGroup[group]).sort();
+    currencies.forEach((currency, index) => {
+      const bucket = byGroup[group][currency];
+      const row = document.createElement("tr");
+      // 같은 그룹의 두 번째 통화부터는 이름을 비워 시선이 그룹 단위로 묶이게 한다.
+      row.append(element("td", null, index === 0 ? group : ""));
+      row.append(element("td", null, currency));
+      row.append(element("td", null, money(bucket.value, currency)));
+      row.append(element("td", null, money(bucket.cost, currency)));
+      row.append(element("td", toneOf(bucket.pnl), signed(bucket.pnl, currency)));
+      row.append(element("td", toneOf(bucket.rate), percent(bucket.rate)));
+      body.append(row);
+    });
+  }
+  table.append(body);
+
+  replace(el.groups, table);
 }
 
 function renderHoldings(positions) {
@@ -173,7 +228,7 @@ function renderHoldings(positions) {
 
   const table = document.createElement("table");
   const head = document.createElement("tr");
-  for (const label of ["종목", "수량", "평단", "현재가", "평가금액", "손익", "수익률"]) {
+  for (const label of ["종목", "그룹", "수량", "평단", "현재가", "평가금액", "손익", "수익률"]) {
     head.append(element("th", null, label));
   }
   const thead = document.createElement("thead");
@@ -186,6 +241,7 @@ function renderHoldings(positions) {
     const name = element("td", null, position.name || position.symbol);
     name.title = `${position.symbol} · ${position.market}`;
     row.append(name);
+    row.append(element("td", "group", position.group || "—"));
     row.append(element("td", null, position.quantity.toLocaleString("ko-KR")));
     row.append(element("td", null, money(position.avgPrice, position.currency)));
     row.append(element("td", null, money(position.lastPrice, position.currency)));
@@ -223,7 +279,7 @@ function staleNotice(updatedAt) {
 
 function showFailure(message, detail) {
   showNotice(message, detail);
-  for (const host of [el.summary, el.chart, el.holdings]) {
+  for (const host of [el.summary, el.chart, el.groups, el.groupChart, el.holdings]) {
     replace(host, element("p", "empty", "잔고를 불러오지 못했습니다."));
   }
 }
@@ -252,7 +308,15 @@ async function load({ force = false } = {}) {
       : "";
 
     renderSummary(body.byCurrency ?? {}, body.cash ?? {});
-    renderChart(body.series ?? {});
+    renderChart(el.chart, body.series ?? {}, {
+      label: "통화별 누적 수익률 추이",
+      colorOf: (currency) => CURRENCY_COLOR[currency] ?? "#8b97a5",
+    });
+    renderGroups(body.byGroup ?? {});
+    renderChart(el.groupChart, flattenGroupSeries(body.groupSeries), {
+      label: "그룹별 누적 수익률 추이",
+      colorOf: (_, index) => GROUP_PALETTE[index % GROUP_PALETTE.length],
+    });
     renderHoldings(body.positions ?? []);
   } catch {
     showFailure("서버에 연결하지 못했습니다.");

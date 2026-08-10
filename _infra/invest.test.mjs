@@ -4,8 +4,13 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
+  aggregateGroups,
   aggregateHoldings,
+  autoGroupLabel,
+  buildGroupSeries,
   buildSeries,
+  groupOf,
+  parseGroupMap,
   describeUpstreamError,
   fetchSnapshot,
   InvestDO,
@@ -41,11 +46,13 @@ const holding = (over = {}) => ({
 
 // ── 조회 전용 보증 ─────────────────────────────────────────────────────
 
+// 화이트리스트가 늘어날 때 이 테스트를 같이 고치게 만드는 것이 목적이다 —
+// 개수까지 박아 두면 "조회 하나만 더" 가 소리 없이 지나갈 수 없다.
 test("주문 계열 엔드포인트는 화이트리스트에 없다", () => {
   for (const path of READ_ONLY_PATHS) {
-    assert.match(path, /^\/api\/v1\/(accounts|holdings|buying-power)$/);
+    assert.match(path, /^\/api\/v1\/(accounts|holdings|buying-power|stocks)$/);
   }
-  assert.equal(READ_ONLY_PATHS.size, 3);
+  assert.equal(READ_ONLY_PATHS.size, 4);
 });
 
 test("화이트리스트 밖의 경로는 네트워크를 타기 전에 거부한다", async () => {
@@ -274,6 +281,7 @@ function fetchStub(script) {
 const tokenResponse = (value) => Response.json({ access_token: value, expires_in: 86400 });
 const okAccounts = () => Response.json({ result: [{ accountNo: "123-45", accountSeq: 7, accountType: "BROKERAGE" }] });
 const okHoldings = () => Response.json({ result: { items: [holding()] } });
+const okStocks = () => Response.json({ result: [{ symbol: "005930", market: "KOSPI", securityType: "STOCK" }] });
 const okCash = () => Response.json({ result: { cashBuyingPower: "1000", currency: "KRW" } });
 const denied = (body = '{"error":{"code":"unidentified-client"}}') => () => new Response(body, { status: 401 });
 
@@ -287,7 +295,7 @@ async function runSink(script, options = {}) {
 
 test("잔고를 읽어 엣지로 올릴 스냅샷을 만든다", async () => {
   const { snapshot } = await runSink([
-    () => tokenResponse("tok-1"), okAccounts, okHoldings, okCash, okCash,
+    () => tokenResponse("tok-1"), okAccounts, okHoldings, okStocks, okCash, okCash,
   ]);
   assert.equal(snapshot.byCurrency.KRW.value, 800000);
   assert.equal(snapshot.cash.KRW, 1000);
@@ -303,7 +311,7 @@ test("401이면 토큰을 새로 받아 한 번 재시도한다", async () => {
   const { snapshot, calls } = await runSink([
     () => new Response("unauthorized", { status: 401 }),  // 죽은 토큰으로 accounts
     () => tokenResponse("tok-2"),                          // 강제 재발급
-    okAccounts, okHoldings, okCash, okCash,
+    okAccounts, okHoldings, okStocks, okCash, okCash,
   ], { cache });
 
   assert.equal(snapshot.byCurrency.KRW.value, 800000);
@@ -315,14 +323,14 @@ test("401이면 토큰을 새로 받아 한 번 재시도한다", async () => {
 test("토큰 캐시가 살아 있으면 재발급하지 않는다", async () => {
   const cache = memoryTokenCache();
   cache.write({ value: "tok-live", expiresAt: Date.now() + 3600_000, method: "basic" });
-  const { calls } = await runSink([okAccounts, okHoldings, okCash, okCash], { cache });
+  const { calls } = await runSink([okAccounts, okHoldings, okStocks, okCash, okCash], { cache });
   assert.ok(!calls.some((call) => call.url.includes("/oauth2/token")), "토큰을 불필요하게 재발급했다");
 });
 
 test("basic 이 거부되면 post 방식으로 한 번 더 시도하고 통한 쪽을 기억한다", async () => {
   const cache = memoryTokenCache();
   const { calls } = await runSink([
-    denied(), () => tokenResponse("tok-post"), okAccounts, okHoldings, okCash, okCash,
+    denied(), () => tokenResponse("tok-post"), okAccounts, okHoldings, okStocks, okCash, okCash,
   ], { cache });
 
   assert.match(calls[0].token, /^Basic /, "basic 을 먼저 시도하지 않았다");
@@ -520,4 +528,125 @@ test("데몬은 배포 산출물에 들어가지 않는다", () => {
   assert.ok(existsSync(join(ROOT, "_src/invest-sink/index.mjs")));
   assert.ok(!existsSync(join(ROOT, "dist/invest-sink")));
   assert.ok(!existsSync(join(ROOT, "dist/_src")));
+});
+
+// ── 그룹 ───────────────────────────────────────────────────────────────
+//
+// 토스 앱의 종목 그룹은 API 로 내려오지 않는다(스펙 v1.2.13 전체에 group 필드가
+// 없다). 그래서 그룹은 우리가 정하고, 여기서는 그 규칙만 검사한다.
+
+test("parseGroupMap은 라벨:심볼 목록을 읽고 *를 기본값으로 삼는다", () => {
+  const map = parseGroupMap("그룹 2:TSLA,NVDA;그룹 1:*");
+  assert.equal(map.bySymbol.get("TSLA"), "그룹 2");
+  assert.equal(map.bySymbol.get("NVDA"), "그룹 2");
+  assert.equal(map.fallback, "그룹 1");
+});
+
+test("parseGroupMap은 심볼을 대문자로 맞추고 빈 조각을 버린다", () => {
+  const map = parseGroupMap(" 성장:tsla ;;라벨없음;:심볼만");
+  assert.equal(map.bySymbol.get("TSLA"), "성장");
+  assert.equal(map.bySymbol.size, 1);
+  assert.equal(map.fallback, null);
+});
+
+test("groupOf는 수동 지정 > 기본값 > 자동 분류 순으로 고른다", () => {
+  const map = parseGroupMap("그룹 2:TSLA;그룹 1:*");
+  const tsla = { symbol: "TSLA", market: "US" };
+  const samsung = { symbol: "005930", market: "KR" };
+  assert.equal(groupOf(tsla, { securityType: "STOCK" }, map), "그룹 2");
+  assert.equal(groupOf(samsung, { securityType: "STOCK" }, map), "그룹 1");
+  // 매핑이 없으면 자동 분류로 내려간다.
+  assert.equal(groupOf(samsung, { securityType: "ETF" }, parseGroupMap("")), "국내 ETF");
+});
+
+test("autoGroupLabel은 종목정보가 없으면 아는 만큼만 쓴다", () => {
+  assert.equal(autoGroupLabel({ market: "US" }, { securityType: "ETF" }), "미국 ETF");
+  // 기본정보 조회가 실패하면 종목유형을 모른다 — ETF를 주식이라고 우기지 않는다.
+  assert.equal(autoGroupLabel({ market: "US" }, undefined), "미국");
+  assert.equal(autoGroupLabel({ market: "??" }, undefined), "기타");
+});
+
+test("aggregateGroups는 그룹 안에서도 통화를 섞지 않는다", () => {
+  const byGroup = aggregateGroups([
+    { group: "그룹 1", currency: "KRW", value: 100, cost: 80, pnl: 20 },
+    { group: "그룹 1", currency: "USD", value: 10, cost: 20, pnl: -10 },
+    { group: "그룹 1", currency: "KRW", value: 50, cost: 20, pnl: 30 },
+  ]);
+  assert.deepEqual(Object.keys(byGroup["그룹 1"]).sort(), ["KRW", "USD"]);
+  assert.equal(byGroup["그룹 1"].KRW.value, 150);
+  assert.equal(byGroup["그룹 1"].KRW.rate, 50 / 100);
+  assert.equal(byGroup["그룹 1"].USD.rate, -10 / 20);
+});
+
+test("aggregateGroups는 원가 0인 그룹의 수익률을 0으로 둔다", () => {
+  const byGroup = aggregateGroups([{ group: "정리", currency: "KRW", value: 0, cost: 0, pnl: 0 }]);
+  assert.equal(byGroup["정리"].KRW.rate, 0);
+});
+
+test("normalizeSnapshot은 byGroup을 다시 지어 저장한다", () => {
+  const snap = normalizeSnapshot({
+    byCurrency: {}, cash: {}, positions: [],
+    byGroup: { "그룹 1": { KRW: { value: 1, cost: 2, pnl: -1, rate: -0.5, 몰래: "x" } } },
+  });
+  assert.deepEqual(snap.byGroup, { "그룹 1": { KRW: { value: 1, cost: 2, pnl: -1, rate: -0.5 } } });
+});
+
+test("normalizeSnapshot은 망가진 byGroup을 거부한다", () => {
+  const base = { byCurrency: {}, cash: {}, positions: [] };
+  assert.equal(normalizeSnapshot({ ...base, byGroup: { g: { KRW: { value: "x" } } } }), null);
+  assert.equal(normalizeSnapshot({ ...base, byGroup: { g: { krw: {} } } }), null);
+  assert.equal(normalizeSnapshot({ ...base, byGroup: { g: null } }), null);
+});
+
+test("buildGroupSeries는 그룹→통화로 나눠 날짜순으로 세운다", () => {
+  const series = buildGroupSeries([
+    { date: "2026-08-12", byGroup: { A: { USD: { rate: 0.2, value: 12, pnl: 2 } } } },
+    { date: "2026-08-11", byGroup: { A: { USD: { rate: 0.1, value: 11, pnl: 1 } } } },
+  ]);
+  assert.deepEqual(series.A.USD.map((p) => p.date), ["2026-08-11", "2026-08-12"]);
+});
+
+test("byGroup이 없던 날의 스냅샷은 그룹 시계열에서 그냥 빠진다", () => {
+  // 그룹을 넣기 전에 쌓인 날은 되살릴 수 없다 — 조용히 건너뛰는 게 맞다.
+  const series = buildGroupSeries([{ date: "2026-08-11" }, { date: "2026-08-12", byGroup: { A: { USD: { rate: 0.1 } } } }]);
+  assert.deepEqual(Object.keys(series), ["A"]);
+  assert.equal(series.A.USD.length, 1);
+});
+
+test("스냅샷에 그룹이 붙고 예수금 조회가 밀리지 않는다", async () => {
+  // 종목 기본정보 조회가 holdings 와 buying-power 사이에 낀다. 순서가 어긋나면
+  // 예수금 응답을 종목정보가 먹어서 통화 하나가 조용히 사라진다(실제로 그랬다).
+  const usdCash = () => Response.json({ result: { cashBuyingPower: "50", currency: "USD" } });
+  const { snapshot, calls } = await runSink(
+    [() => tokenResponse("t"), okAccounts, okHoldings, okStocks, okCash, usdCash],
+    { groups: "그룹 2:TSLA;그룹 1:*" },
+  );
+
+  assert.equal(snapshot.positions[0].group, "그룹 1", "매핑의 * 기본값이 안 붙었다");
+  assert.deepEqual(snapshot.byGroup, {
+    "그룹 1": { KRW: { value: 800000, cost: 700000, pnl: 100000, rate: 100000 / 700000 } },
+  });
+  assert.equal(snapshot.cash.KRW, 1000);
+  assert.equal(snapshot.cash.USD, 50, "USD 예수금이 사라졌다 — 호출 순서가 밀렸다");
+  assert.ok(calls.some((c) => c.url.includes("/api/v1/stocks")), "종목 기본정보를 부르지 않았다");
+});
+
+test("종목 기본정보 조회가 실패해도 잔고는 올라간다", async () => {
+  const { snapshot } = await runSink([
+    () => tokenResponse("t"), okAccounts, okHoldings,
+    () => new Response("boom", { status: 500 }),   // /stocks 실패
+    okCash, okCash,
+  ]);
+  assert.equal(snapshot.byCurrency.KRW.value, 800000);
+  // 종목유형을 모르므로 나라까지만 붙인다.
+  assert.equal(snapshot.positions[0].group, "국내");
+});
+
+test("매핑이 없으면 종목유형으로 자동 분류한다", async () => {
+  const etf = () => Response.json({ result: [{ symbol: "005930", market: "KOSPI", securityType: "ETF" }] });
+  const { snapshot } = await runSink([
+    () => tokenResponse("t"), okAccounts, okHoldings, etf, okCash, okCash,
+  ]);
+  assert.equal(snapshot.positions[0].group, "국내 ETF");
+  assert.ok(snapshot.byGroup["국내 ETF"]);
 });

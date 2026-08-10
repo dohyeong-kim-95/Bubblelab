@@ -101,7 +101,7 @@ self.addEventListener("activate", (event) => event.waitUntil((async () => {
 // /_duri·/_rt(실시간·게이트 API)는 항상 최신이어야 하므로 손대지 않는다 —
 // 실제 데이터·인증은 이 캐시와 무관하게 매번 쿠키·E2E 패스프레이즈로 따로
 // 검증되므로, 셸(빈 껍데기 마크업)을 캐싱해도 보안엔 영향이 없다.
-const SHELL_CACHE = "duri-shell-v3";
+const SHELL_CACHE = "duri-shell-v4";
 
 // 문서(HTML)는 '네트워크 우선'. 앱을 열 때마다 최신 코드를 받아, index.html만
 // 바뀐 배포도 "다음 실행"이 아니라 바로 이번 실행에 반영된다(예전 stale-while-
@@ -150,9 +150,17 @@ self.addEventListener("fetch", (event) => {
 
 // 이 기기에서 이미 앱 화면을 보고 있으면(포커스 중) 시스템 알림을 띄우지
 // 않는다 — 어차피 웹소켓으로 화면에 바로 뜨는데 알림까지 겹칠 필요가 없다.
+//
+// 판정은 **focused 만** 믿는다. iOS(홈 화면 PWA)는 백그라운드로 내려간 창을
+// visibilityState:"visible" 로 보고하는 경우가 있어서, 그 말을 믿고 알림을
+// 건너뛰면 iOS 기준 "푸시를 받고도 알림을 안 띄운 것"(silent push)이 된다.
+// iOS 는 이걸 예산에서 깎고, 반복되면 **구독 자체를 취소**해 버린다 — 알림이
+// 어느 날부터 조용히 영영 안 오는 가장 흔한 경로다. 접속 중인 기기에는 서버가
+// 애초에 푸시를 보내지 않으므로(notifyPush 의 activeEndpoints), 이 판정을
+// 좁혀도 "보고 있는데 알림이 겹치는" 일은 거의 생기지 않는다.
 async function isAppFocused() {
   const list = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-  return list.some((c) => c.focused || c.visibilityState === "visible");
+  return list.some((c) => c.focused === true);
 }
 
 self.addEventListener("push", (event) => {

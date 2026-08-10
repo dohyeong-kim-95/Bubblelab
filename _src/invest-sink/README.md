@@ -38,8 +38,24 @@ npx wrangler@4 secret put INVEST_SINK_SECRET
 | `INVEST_CLIENT_SECRET` | ✅ | 토스 시크릿 |
 | `INVEST_SINK_SECRET` | ✅ | 위 ②에서 넣은 값과 같아야 한다 |
 | `INVEST_ACCOUNT_SEQ` | | 계좌가 여러 개일 때 고를 계좌. 비우면 첫 계좌 |
+| `INVEST_GROUPS` | | 종목 그룹. 비우면 나라·종목유형으로 자동 분류 |
 | `INVEST_ENDPOINT` | | 기본 `https://invest.bubblelab.dev/_invest/snapshot` |
 | `INVEST_TOKEN_CACHE` | | 기본 `~/.bubblelab/invest-token.json` |
+
+### 그룹 지정 (`INVEST_GROUPS`)
+
+토스 앱의 종목 그룹은 API로 내려오지 않아 여기서 정한다. `라벨:심볼,심볼;라벨:*`
+형식이고 `*` 는 나머지 전부다.
+
+```
+INVEST_GROUPS="그룹 2:TSLA;그룹 1:*"
+```
+
+**따옴표가 필수다.** 공백과 `;` 가 들어가는데 cron 이 이 파일을 `.` 로 그대로
+읽어서, 따옴표가 없으면 `그룹: 명령어를 찾을 수 없음` 으로 매일 조용히 실패한다.
+
+**코드가 아니라 이 환경변수에 둔다** — 그룹을 바꿔도 재배포가 필요 없고, 리포가
+공개라 보유 종목이 커밋에 남지 않는다. 비워 두면 `미국 ETF` 처럼 자동으로 붙는다.
 
 ## 실행
 

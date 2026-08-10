@@ -276,6 +276,10 @@ tr.canceled td { text-decoration: line-through; opacity: 0.5; }
           <option value="3" selected>3km</option><option value="5">5km</option>
           <option value="8">8km</option><option value="0">전체</option>
         </select></label>
+        <label>색 <select id="selMapColor">
+          <option value="med" selected>중앙 평당가</option>
+          <option value="drop">고점 대비 낙폭</option>
+        </select></label>
         <span id="mapNote" class="sub"></span>
       </div>
       <div id="mapChart" style="position:relative"></div>
@@ -378,7 +382,7 @@ async function fetchMonth(src, type, ym) {
   if (staticIndex && staticIndex.months?.[`${type}:${src}`]?.includes(ym)) {
     try {
       const res = await fetch(`data/${type}-${src}-${ym}.json`);
-      if (res.ok) { bucket[ym] = (await res.json()).items; return "ok"; }
+      if (res.ok) { bucket[ym] = (await res.json()).items; dataVersion += 1; return "ok"; }
     } catch { /* 프록시로 넘어감 */ }
   }
   if (proxyOff) { bucket[ym] = "error"; return "error"; }
@@ -393,6 +397,7 @@ async function fetchMonth(src, type, ym) {
   }
   if (body.status !== "ok") { bucket[ym] = "error"; return "error"; }
   bucket[ym] = body.items;
+  dataVersion += 1;
   return "ok";
 }
 
@@ -666,11 +671,15 @@ function complexStats() {
       byApt.set(key, entry);
     }
   }
+  const series = allAptSeries();
   return [...byApt.values()].map((e) => {
     const last = e.deals.sort((a, b) => a.date < b.date ? -1 : 1).at(-1);
+    // 기간(state.months) 내 고점 대비 위치 — 표본이 얇으면 null이라 열이 비워진다.
+    const trend = aptTrend(series.get(aptKey(e.apt, e.dong)) ?? []);
     return {
       apt: e.apt, dong: e.dong, cnt: e.deals.length, med: median(e.pys), last,
       point: e.point, dist: ref && e.point ? distKm(ref, e.point) : null,
+      trend, drop: trend ? trend.fromPeak : null,
     };
   });
 }
@@ -681,21 +690,52 @@ function complexStats() {
 // 실제 거래가 있던 달만 점으로 찍어 "이건 추정이 아니라 실거래" 를 구분한다.
 // 값은 전용 84.9㎡ 환산가(억) — 호가 메모와 같은 단위라야 바로 비교된다.
 const PY_TO_84 = 84.9 / 3.3058 / 10000; // 평당가(만원) → 84㎡ 환산가(억)
+const aptKey = (apt, dong) => `${apt}|${dong}`;
 
-function aptSeries(apt, dong) {
-  const raw = monthsBack(state.months).map((ym) => ({
-    ym, deals: liveTrades(ym).filter((r) => r.apt === apt && r.dong === dong),
-  }));
+function buildSeries(months, byYm) {
   const medOf = (deals) => median(deals.map((r) => perPy(r.amt, r.area)));
-  return raw.map((r, i) => {
-    const win = raw.slice(Math.max(0, i - 1), i + 2).flatMap((w) => w.deals);
-    const own = medOf(r.deals);
+  const cells = months.map((ym) => byYm.get(ym) ?? []);
+  return months.map((ym, i) => {
+    const win = cells.slice(Math.max(0, i - 1), i + 2).flat();
+    const own = medOf(cells[i]);
     return {
-      ym: r.ym, cnt: r.deals.length,
+      ym, cnt: cells[i].length,
       own: own == null ? null : own * PY_TO_84,
       smooth: win.length ? medOf(win) * PY_TO_84 : null,
     };
   });
+}
+
+// 단지별 시계열은 전 단지를 한 번에 만든다. 단지마다 60개월을 따로 훑으면
+// (단지 90개 × 60개월 × 월 수천 건) 지도·랭킹 렌더가 눈에 띄게 느려진다.
+// 필터·기간·탭이 그대로면 재사용하고, 월 데이터가 새로 도착하면(dataVersion)
+// 무효화한다.
+let dataVersion = 0;
+let seriesCache = { sig: null, map: null };
+
+function allAptSeries() {
+  const sig = [state.tab, state.months, state.band, state.dong, state.cap, dataVersion].join("|");
+  if (seriesCache.sig === sig) return seriesCache.map;
+  const months = monthsBack(state.months);
+  const perApt = new Map();
+  for (const ym of months) {
+    for (const r of liveTrades(ym)) {
+      const key = aptKey(r.apt, r.dong);
+      let byYm = perApt.get(key);
+      if (!byYm) { byYm = new Map(); perApt.set(key, byYm); }
+      const cell = byYm.get(ym);
+      if (cell) cell.push(r); else byYm.set(ym, [r]);
+    }
+  }
+  const map = new Map();
+  for (const [key, byYm] of perApt) map.set(key, buildSeries(months, byYm));
+  seriesCache = { sig, map };
+  return map;
+}
+
+function aptSeries(apt, dong) {
+  return allAptSeries().get(aptKey(apt, dong))
+    ?? monthsBack(state.months).map((ym) => ({ ym, cnt: 0, own: null, smooth: null }));
 }
 
 // 기간 내 고점·저점 대비 현재 위치. 표본이 너무 얇으면(거래 3건 미만) 안 낸다.
@@ -1033,12 +1073,21 @@ function renderFavList() {
 }
 
 // ── 단지 랭킹 ────────────────────────────────────────────────
+// 고점 대비: 매수자 관점이라 많이 빠진 쪽(파랑)이 눈에 띄게. 표본이 얇아
+// 추이를 못 낸 단지는 —로 비운다 (0%로 적으면 고점권과 구분이 안 된다).
+const dropCell = (v) =>
+  v == null ? `<span class="sub">—</span>` :
+  v <= -0.5 ? `<span class="drop-down">${v.toFixed(1)}%</span>` :
+  `<span class="drop-peak">고점권</span>`;
+
 function renderRank() {
   const hasRef = Boolean(state.ref && geoData && geoData.refs?.[state.ref]);
   const list = complexStats().filter(inRadius)
     .sort((a, b) =>
       rankSort === "cnt" ? b.cnt - a.cnt :
       rankSort === "med" ? b.med - a.med :
+      // 많이 빠진 순 — 추이가 없는 단지(표본 부족)는 뒤로 민다.
+      rankSort === "drop" ? (a.drop ?? Infinity) - (b.drop ?? Infinity) :
       (a.dist ?? Infinity) - (b.dist ?? Infinity))
     .slice(0, 20);
   const sortAttr = (k) => rankSort === k ? ` aria-sort="descending"` : "";
@@ -1048,10 +1097,12 @@ function renderRank() {
     `<th class="num sortable" data-sort="cnt"${sortAttr("cnt")}>거래${arrow("cnt")}</th>` +
     `<th class="num sortable" data-sort="med"${sortAttr("med")}>중앙 평당가${arrow("med")}</th>` +
     (hasRef ? `<th class="num sortable" data-sort="dist"${sortAttr("dist")}>거리${arrow("dist")}</th>` : "") +
+    `<th class="num sortable" data-sort="drop"${sortAttr("drop")}>고점 대비${arrow("drop")}</th>` +
     `<th class="num">최근 거래</th><th>매물</th></tr></thead><tbody>` +
     list.map((e) => `<tr><td>${e.apt}</td><td>${e.dong}</td><td class="num">${e.cnt}건</td>` +
       `<td class="num">${fmtMan(e.med)}만</td>` +
       (hasRef ? `<td class="num">${e.dist != null ? `${e.dist.toFixed(1)}km` : "—"}</td>` : "") +
+      `<td class="num">${dropCell(e.drop)}</td>` +
       `<td class="num">${e.last.date.slice(2)} · ${Math.round(e.last.area)}㎡ ${fmtEok(e.last.amt)}</td>` +
       `<td><a href="${naverLink(e)}" target="_blank" rel="noreferrer">네이버↗</a></td></tr>`).join("") +
     `</tbody>`;
