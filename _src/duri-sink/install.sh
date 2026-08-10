@@ -39,7 +39,13 @@ fi
 
 # ── 설치 ─────────────────────────────────────────────────────
 mkdir -p "$DEST"
-cp "$HERE/duri-sink.mjs" "$HERE/store.mjs" "$DEST/"
+# 설치 폴더 안에서 다시 돌릴 수 있어야 한다 — 설정을 채운 뒤의 2회차 실행이
+# 그렇다. 그때는 원본과 사본이 같은 파일이라 복사를 건너뛴다(cp 가 죽는다).
+if [ "$HERE" != "$DEST" ]; then
+  cp "$HERE/duri-sink.mjs" "$HERE/store.mjs" "$DEST/"
+  cp "$HERE/install.sh" "$DEST/"          # 2회차는 여기서 바로 실행하면 된다
+  cp "$HERE/duri-sink.config.example.json" "$DEST/" 2>/dev/null || true
+fi
 say "✓ 설치: $DEST"
 
 # 설정은 덮어쓰지 않는다 — 토큰·문구가 이미 들어 있을 수 있다.
@@ -56,7 +62,9 @@ else
     say "설정 파일을 만들었습니다: $CONFIG"
     say "앱의 [⚙️ → 💾 PC 백업 설정 → 🔑 싱크 토큰 발급] 내용을 붙여넣고,"
     say "passphrase 에는 앱에 입력한 암호 문구를 그대로 적어주세요."
-    say "그런 다음 이 스크립트를 다시 실행하면 서비스로 등록합니다."
+    say ""
+    say "  \$EDITOR $CONFIG"
+    say "  bash $DEST/install.sh      # 채운 뒤 다시 실행하면 서비스로 등록합니다"
     exit 0
   fi
 fi
