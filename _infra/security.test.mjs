@@ -146,4 +146,12 @@ test("별자리 화면만 방향·위치 기능을 self로 연다", () => {
     assert.match(policy, /geolocation=\(\)/, `${url} 에서 위치가 열렸다`);
     assert.match(policy, /accelerometer=\(\)/, `${url} 에서 방향 센서가 열렸다`);
   }
+
+  // duri 지도는 현재 위치가 필요해 geolocation 만 self 로 연다(방향 센서는 잠근 채로).
+  for (const url of ["https://duri.bubblelab.dev/", "http://localhost:8787/duri/"]) {
+    const policy = policyOf(url);
+    assert.match(policy, /geolocation=\(self\)/, `${url} 에서 위치가 막혀 있다`);
+    assert.match(policy, /accelerometer=\(\)/, `${url} 에서 방향 센서가 열렸다`);
+    assert.match(policy, /microphone=\(\)/, `${url} 에서 마이크가 열렸다`);
+  }
 });

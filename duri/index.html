@@ -272,6 +272,9 @@
   #map-empty[hidden] { display: none; }
   #map-summary { flex: none; font-size: .82rem; color: var(--dim); background: var(--panel); border-top: 1px solid var(--line);
                  padding: .55rem .9rem calc(.55rem + env(safe-area-inset-bottom,0px)); }
+  #map-here { flex: none; font: inherit; font-size: .76rem; white-space: nowrap; cursor: pointer;
+              background: var(--pink); color: light-dark(#fff, #1a1016); border: 1px solid transparent;
+              border-radius: 999px; padding: .38rem .7rem; }
   /* 사진 정보(메타데이터) 모달 — 트레이에서 사진을 누르면 뜬다 */
   #meta-box { position: fixed; inset: 0; z-index: 75; display: flex; align-items: center; justify-content: center;
               background: #0007; padding: 1.2rem; }
@@ -619,6 +622,7 @@
     <button id="map-back" class="icon-btn" title="채팅으로" aria-label="채팅으로">‹</button>
     <b>함께 다닌 곳</b>
     <span id="map-count" style="font-size:.72rem;color:var(--dim)"></span>
+    <button id="map-here" type="button" title="지금 있는 곳을 지도에 추가">📍 현재 위치 추가</button>
   </header>
   <div id="map-wrap">
     <svg id="map-svg" role="img" aria-label="함께 다닌 곳 지도"></svg>
@@ -1397,7 +1401,11 @@ async function renderEntry(m) {
       const p = await decryptJson(m.iv, m.ct);
       const rec = { seq: m.seq, kind: "msg", at: p.at ?? m.at, name: p.name };
       if (p.sticker) rec.sticker = p.sticker;
-      else { rec.text = p.text; if (p.sys) rec.sys = true; }
+      else if (p.here) { // /여기 명령 — 위치를 지도에 남긴다. 채팅엔 가운데 알약으로 표시.
+        rec.here = p.here;
+        rec.sys = true;
+        rec.text = (p.name === MY_NAME ? "📍 내가" : `📍 ${p.name || "상대"}님이`) + " 위치를 남겼어요";
+      } else { rec.text = p.text; if (p.sys) rec.sys = true; }
       appendRecord(rec); putEntry(rec);
     } else if (m.kind === "photo") {
       const meta = await decryptJson(m.metaIv, m.metaCt);
@@ -1465,6 +1473,26 @@ async function sendSticker(pack, n) {
   const frame = await encryptJson({ name: MY_NAME, at: Date.now(), sticker: { pack, n } });
   ws.send(JSON.stringify({ type: "msg", ...frame }));
   rememberSticker(pack, n);
+}
+// 현재 위치(브라우저 Geolocation)를 E2E 메시지로 보낸다 → 양쪽 기기가 받아 지도에
+// 색칠한다(내/상대 색 유지). 사진 EXIF가 안드로이드에서 지워지는 문제를 우회하는 길.
+async function sendHere(lat, lng) {
+  if (!ws || ws.readyState !== 1) { showToast("연결 중이에요. 잠시 후 다시 시도해주세요."); return; }
+  const frame = await encryptJson({ name: MY_NAME, at: Date.now(), here: { lat: +lat.toFixed(6), lng: +lng.toFixed(6) } });
+  ws.send(JSON.stringify({ type: "msg", ...frame }));
+  showToast("📍 현재 위치를 지도에 추가했어요");
+}
+let hereBusy = false;
+function captureHere() {
+  if (hereBusy) return;
+  if (!navigator.geolocation) { showToast("이 브라우저는 위치를 지원하지 않아요."); return; }
+  hereBusy = true;
+  showToast("현재 위치 확인 중…");
+  navigator.geolocation.getCurrentPosition(
+    (pos) => { hereBusy = false; sendHere(pos.coords.latitude, pos.coords.longitude).catch(() => {}); },
+    (err) => { hereBusy = false; showToast(err.code === 1 ? "위치 권한을 허용해야 추가할 수 있어요." : "위치를 가져오지 못했어요."); },
+    { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
+  );
 }
 async function sendPhoto(file, album) {
   const bytes = new Uint8Array(await file.arrayBuffer());
@@ -2123,6 +2151,8 @@ $("composer").addEventListener("submit", (e) => {
   }
   const val = text.value.trim();
   if (!val) return;
+  // "/여기" 명령 — 현재 위치를 지도에 남긴다(사진과 무관). 문자로는 보내지 않는다.
+  if (val === "/여기" || val === "/here") { text.value = ""; text.style.height = "auto"; captureHere(); return; }
   text.value = ""; text.style.height = "auto";
   // 서랍(이모지 탭)이 열려 있으면 포커스하지 않는다 — 포커스 시 서랍이 닫히고
   // 키보드가 떠서 이모지를 연속으로 못 보낸다. 키보드로 치던 중이면 포커스 유지.
@@ -2885,13 +2915,14 @@ $("cal-back").addEventListener("click", closeCal);
 const PINS_KEY = "duri:pins";
 function loadPins() { try { return JSON.parse(localStorage.getItem(PINS_KEY) || "[]"); } catch { return []; } }
 function collectPin(rec) {
-  if (!rec || rec.kind !== "photo" || !rec.loc) return;
-  const { lat, lng } = rec.loc;
-  if (typeof lat !== "number" || typeof lng !== "number") return;
+  if (!rec) return;
+  const loc = rec.here || rec.loc; // /여기 명령(here) 또는 사진 EXIF(loc)
+  if (!loc || typeof loc.lat !== "number" || typeof loc.lng !== "number") return;
   const pins = loadPins();
-  if (pins.some((p) => p.seq === rec.seq)) return; // 이미 있음
-  pins.push({ seq: rec.seq, lat, lng, at: rec.at || 0, mine: rec.name === MY_NAME }); // 올린 사람(나/상대) 표시
+  if (pins.some((p) => p.seq === rec.seq)) return; // 이미 있음(seq로 중복 제거)
+  pins.push({ seq: rec.seq, lat: loc.lat, lng: loc.lng, at: rec.at || 0, mine: rec.name === MY_NAME }); // 올린 사람(나/상대)
   try { localStorage.setItem(PINS_KEY, JSON.stringify(pins)); } catch { /* 최선노력 */ }
+  if (!$("map").classList.contains("map-off")) renderMap().catch(() => {}); // 지도가 열려 있으면 즉시 반영
 }
 
 let mapGeo = null;
@@ -3001,6 +3032,7 @@ async function openMap() {
 function closeMap() { $("map").classList.add("map-off"); }
 $("map-open").addEventListener("click", openMap);
 $("map-back").addEventListener("click", closeMap);
+$("map-here").addEventListener("click", captureHere);
 
 // 좌우 스와이프로 화면 전환, 실시간 드래그(손끝을 그대로 따라간다 — 탭을 당겨오는
 // 느낌). 순서는 [채팅|캘린더](채팅이 왼쪽, 캘린더가 오른쪽 화면 밖에서 대기).

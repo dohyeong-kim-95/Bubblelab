@@ -70,6 +70,17 @@ function isSkyPage(url) {
   return (onUtil && at("/stars")) || (local && at("/util/stars"));
 }
 
+// duri "함께 다닌 곳 지도"는 현재 위치(브라우저 Geolocation)로 지역을 색칠한다 —
+// 기본 정책의 geolocation=() 는 권한을 묻기도 전에 막으므로 duri 에 한해 self 로 연다.
+const DURI_POLICY = "accelerometer=(), camera=(self), geolocation=(self), "
+  + "gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()";
+function isDuriPage(url) {
+  const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  const path = url.pathname;
+  const at = (prefix) => path === prefix || path.startsWith(`${prefix}/`);
+  return url.hostname === "duri.bubblelab.dev" || (local && at("/duri"));
+}
+
 export function featureEnabled(env, name) {
   return env?.[name] === "true";
 }
@@ -123,6 +134,9 @@ export function applySecurityHeaders(response, request) {
   }
   if (isSkyPage(url)) {
     headers.set("Permissions-Policy", SENSOR_POLICY);
+  }
+  if (isDuriPage(url)) {
+    headers.set("Permissions-Policy", DURI_POLICY);
   }
   if (url.protocol === "https:") {
     headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
