@@ -52,7 +52,19 @@ node _src/invest-sink/index.mjs
 
 ```bash
 # crontab -e  (환경변수는 별도 파일에 두고 읽어들인다)
-0 22 * * *  cd ~/bubblelab && set -a && . ~/.bubblelab/invest.env && set +a && node _src/invest-sink/index.mjs >> ~/.bubblelab/invest.log 2>&1
+SHELL=/bin/bash
+0 22 * * *  cd <리포경로> && set -a && . ~/.bubblelab/invest.env && set +a && <node경로> _src/invest-sink/index.mjs >> ~/.bubblelab/invest.log 2>&1
+```
+
+**`node`와 리포 경로는 절대경로로 적는다.** cron 의 PATH 는 `/usr/bin:/bin` 뿐이라
+nvm 으로 깐 node 는 잡히지 않는다 — `which node` 값을 그대로 박아 넣는다.
+`~` 는 cron 도 HOME 을 주므로 그대로 써도 된다.
+
+등록한 뒤에는 **cron 과 같은 빈 환경으로 한 번 돌려서** 확인한다. 로그인 셸에서만
+되는 설정에 기대고 있으면 여기서 걸린다(같은 날 다시 올리면 덮어쓰므로 안전하다).
+
+```bash
+env -i HOME=$HOME PATH=/usr/bin:/bin /bin/bash -c '<크론에 적은 명령 그대로>'
 ```
 
 `~/.bubblelab/invest.env` 는 `chmod 600` 으로 두고 `KEY=값` 을 한 줄씩 적는다.
