@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import {
   aggregateGroups,
+  cashGroupOf,
   aggregateHoldings,
   autoGroupLabel,
   buildGroupSeries,
@@ -588,7 +589,7 @@ test("normalizeSnapshot은 byGroup을 다시 지어 저장한다", () => {
     byCurrency: {}, cash: {}, positions: [],
     byGroup: { "그룹 1": { KRW: { value: 1, cost: 2, pnl: -1, rate: -0.5, 몰래: "x" } } },
   });
-  assert.deepEqual(snap.byGroup, { "그룹 1": { KRW: { value: 1, cost: 2, pnl: -1, rate: -0.5 } } });
+  assert.deepEqual(snap.byGroup, { "그룹 1": { KRW: { value: 1, cost: 2, pnl: -1, rate: -0.5, cash: 0 } } });
 });
 
 test("normalizeSnapshot은 망가진 byGroup을 거부한다", () => {
@@ -624,7 +625,11 @@ test("스냅샷에 그룹이 붙고 예수금 조회가 밀리지 않는다", as
 
   assert.equal(snapshot.positions[0].group, "그룹 1", "매핑의 * 기본값이 안 붙었다");
   assert.deepEqual(snapshot.byGroup, {
-    "그룹 1": { KRW: { value: 800000, cost: 700000, pnl: 100000, rate: 100000 / 700000 } },
+    "그룹 1": {
+      KRW: { value: 800000, cost: 700000, pnl: 100000, rate: 100000 / 700000, cash: 1000 },
+      // USD 는 보유 종목 없이 예수금만 있는 통화 — 그래도 남아야 한다.
+      USD: { value: 0, cost: 0, pnl: 0, rate: 0, cash: 50 },
+    },
   });
   assert.equal(snapshot.cash.KRW, 1000);
   assert.equal(snapshot.cash.USD, 50, "USD 예수금이 사라졌다 — 호출 순서가 밀렸다");
@@ -649,4 +654,63 @@ test("매핑이 없으면 종목유형으로 자동 분류한다", async () => {
   ]);
   assert.equal(snapshot.positions[0].group, "국내 ETF");
   assert.ok(snapshot.byGroup["국내 ETF"]);
+});
+
+// ── 예수금 ─────────────────────────────────────────────────────────────
+//
+// KRW 보유 종목이 하나도 없으면 KRW 예수금이 화면에서 통째로 사라지던 버그가
+// 있었다. 조회는 멀쩡했고 집계·표시가 byCurrency 의 통화만 돌았던 게 원인이다.
+
+test("보유 종목이 없는 통화의 예수금도 그룹에 남는다", () => {
+  const byGroup = aggregateGroups(
+    [{ group: "그룹 2", currency: "USD", value: 30, cost: 38, pnl: -8 }],
+    { cash: { KRW: 200000, USD: 3.66 }, cashGroup: "그룹 1" },
+  );
+  // KRW 는 보유 종목이 없지만 예수금 때문에 그룹이 생겨야 한다.
+  assert.equal(byGroup["그룹 1"].KRW.cash, 200000);
+  assert.equal(byGroup["그룹 1"].KRW.value, 0);
+  assert.equal(byGroup["그룹 1"].USD.cash, 3.66);
+  assert.equal(byGroup["그룹 2"].USD.cash, 0, "예수금이 엉뚱한 그룹에 붙었다");
+});
+
+test("예수금은 평가금액·원가에 섞이지 않는다 (수익률이 희석되면 안 된다)", () => {
+  const positions = [{ group: "그룹 1", currency: "KRW", value: 110, cost: 100, pnl: 10 }];
+  const withCash = aggregateGroups(positions, { cash: { KRW: 1_000_000 }, cashGroup: "그룹 1" });
+  const without = aggregateGroups(positions);
+  assert.equal(withCash["그룹 1"].KRW.rate, without["그룹 1"].KRW.rate);
+  assert.equal(withCash["그룹 1"].KRW.value, 110, "예수금이 평가금액에 얹혔다");
+  assert.equal(withCash["그룹 1"].KRW.cost, 100, "예수금이 원가에 얹혔다");
+});
+
+test("0원인 예수금은 그룹을 만들지 않는다", () => {
+  const byGroup = aggregateGroups([], { cash: { KRW: 0, USD: null }, cashGroup: "그룹 1" });
+  assert.deepEqual(byGroup, {});
+});
+
+test("cashGroupOf는 지정 > * 그룹 > 기타 순으로 고른다", () => {
+  const map = parseGroupMap("그룹 2:TSLA;그룹 1:*");
+  assert.equal(cashGroupOf(map, "현금"), "현금");
+  assert.equal(cashGroupOf(map), "그룹 1");
+  assert.equal(cashGroupOf(parseGroupMap("성장:TSLA")), "기타");
+});
+
+test("예수금 필드가 없던 옛 스냅샷도 통과한다", () => {
+  const snap = normalizeSnapshot({
+    byCurrency: {}, cash: {}, positions: [],
+    byGroup: { A: { KRW: { value: 1, cost: 1, pnl: 0, rate: 0 } } },
+  });
+  assert.equal(snap.byGroup.A.KRW.cash, 0);
+});
+
+test("스냅샷의 예수금이 그룹까지 흘러간다", async () => {
+  const krwCash = () => Response.json({ result: { cashBuyingPower: "200000", currency: "KRW" } });
+  const usdCash = () => Response.json({ result: { cashBuyingPower: "3.66", currency: "USD" } });
+  const { snapshot } = await runSink(
+    [() => tokenResponse("t"), okAccounts, okHoldings, okStocks, krwCash, usdCash],
+    { groups: "그룹 2:005930;그룹 1:*" },
+  );
+  assert.equal(snapshot.cash.KRW, 200000);
+  // 매핑에 * 가 그룹 1 이므로 예수금도 그룹 1 로 간다.
+  assert.equal(snapshot.byGroup["그룹 1"].KRW.cash, 200000);
+  assert.equal(snapshot.byGroup["그룹 2"].KRW.value, 800000);
 });

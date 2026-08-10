@@ -62,9 +62,11 @@ async function main() {
   // 토스 앱의 종목 그룹은 API 로 내려오지 않아 여기서 정한다. 비워 두면
   // 종목 기본정보(나라·종목유형)로 자동 분류한다.
   const groups = process.env.INVEST_GROUPS;
+  // 예수금이 들어갈 그룹. 비우면 INVEST_GROUPS 의 `*` 그룹으로 간다.
+  const cashGroup = process.env.INVEST_CASH_GROUP;
 
   const snapshot = await fetchSnapshot({
-    clientId, clientSecret, accountSeq, groups, cache: fileTokenCache(TOKEN_CACHE),
+    clientId, clientSecret, accountSeq, groups, cashGroup, cache: fileTokenCache(TOKEN_CACHE),
   });
 
   const summary = Object.entries(snapshot.byCurrency)
@@ -72,9 +74,18 @@ async function main() {
     .join(" · ") || "보유 종목 없음";
   console.log(`${snapshot.date} 읽음: ${summary}`);
 
+  // 예수금도 찍는다. 안 찍었더니 KRW 예수금이 화면에서 사라진 걸 한참 몰랐다.
+  const cash = Object.entries(snapshot.cash)
+    .map(([currency, amount]) => `${currency} ${Math.round(amount).toLocaleString("ko-KR")}`)
+    .join(" · ") || "없음";
+  console.log(`  예수금: ${cash}`);
+
   for (const [group, byCurrency] of Object.entries(snapshot.byGroup)) {
     const line = Object.entries(byCurrency)
-      .map(([currency, b]) => `${currency} ${Math.round(b.value).toLocaleString("ko-KR")} (${(b.rate * 100).toFixed(2)}%)`)
+      .map(([currency, b]) => {
+        const held = `${currency} ${Math.round(b.value).toLocaleString("ko-KR")} (${(b.rate * 100).toFixed(2)}%)`;
+        return b.cash ? `${held} + 예수금 ${Math.round(b.cash).toLocaleString("ko-KR")}` : held;
+      })
       .join(" · ");
     console.log(`  [${group}] ${line}`);
   }

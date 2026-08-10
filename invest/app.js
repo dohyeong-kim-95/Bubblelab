@@ -51,16 +51,29 @@ function replace(host, ...children) {
   host.replaceChildren(...children);
 }
 
+// 보유 종목이 없는 통화라도 예수금이 있으면 카드를 만든다. 예전에는 byCurrency
+// 의 통화만 돌아서, 국내 주식을 하나도 안 들고 있으면 KRW 예수금이 화면에서
+// 통째로 사라졌다.
 function renderSummary(byCurrency, cash) {
-  const currencies = Object.keys(byCurrency).sort();
+  const currencies = [...new Set([...Object.keys(byCurrency ?? {}), ...Object.keys(cash ?? {})])].sort();
   if (!currencies.length) {
-    replace(el.summary, element("p", "empty", "보유 중인 종목이 없습니다."));
+    replace(el.summary, element("p", "empty", "보유 중인 종목도 예수금도 없습니다."));
     return;
   }
 
   const cards = currencies.map((currency) => {
-    const bucket = byCurrency[currency];
+    const bucket = byCurrency?.[currency];
+    const held = typeof cash?.[currency] === "number" ? cash[currency] : null;
     const card = element("article", "money");
+
+    // 예수금뿐인 통화에 "평가금액 0 / 수익률 0%"를 띄우면 손실처럼 읽힌다.
+    if (!bucket) {
+      card.append(element("h3", null, `${currency} 예수금`));
+      card.append(element("p", "total", money(held ?? 0, currency)));
+      card.append(element("p", "foot", "이 통화로 보유 중인 종목은 없습니다."));
+      return card;
+    }
+
     card.append(element("h3", null, `${currency} 평가금액`));
     card.append(element("p", "total", money(bucket.value, currency)));
 
@@ -70,7 +83,10 @@ function renderSummary(byCurrency, cash) {
       ["평가손익", signed(bucket.pnl, currency), toneOf(bucket.pnl)],
       ["수익률", percent(bucket.rate), toneOf(bucket.rate)],
     ];
-    if (typeof cash?.[currency] === "number") rows.push(["예수금", money(cash[currency], currency), ""]);
+    if (held !== null) {
+      rows.push(["예수금", money(held, currency), ""]);
+      rows.push(["평가금액+예수금", money(bucket.value + held, currency), ""]);
+    }
     for (const [label, value, tone] of rows) {
       list.append(element("dt", null, label));
       list.append(element("dd", tone, value));
@@ -192,7 +208,7 @@ function renderGroups(byGroup) {
 
   const table = document.createElement("table");
   const head = document.createElement("tr");
-  for (const label of ["그룹", "통화", "평가금액", "매입원가", "손익", "수익률"]) {
+  for (const label of ["그룹", "통화", "평가금액", "예수금", "합계", "손익", "수익률"]) {
     head.append(element("th", null, label));
   }
   const thead = document.createElement("thead");
@@ -207,9 +223,11 @@ function renderGroups(byGroup) {
       const row = document.createElement("tr");
       // 같은 그룹의 두 번째 통화부터는 이름을 비워 시선이 그룹 단위로 묶이게 한다.
       row.append(element("td", null, index === 0 ? group : ""));
+      const held = bucket.cash ?? 0;
       row.append(element("td", null, currency));
       row.append(element("td", null, money(bucket.value, currency)));
-      row.append(element("td", null, money(bucket.cost, currency)));
+      row.append(element("td", null, held ? money(held, currency) : "—"));
+      row.append(element("td", null, money(bucket.value + held, currency)));
       row.append(element("td", toneOf(bucket.pnl), signed(bucket.pnl, currency)));
       row.append(element("td", toneOf(bucket.rate), percent(bucket.rate)));
       body.append(row);

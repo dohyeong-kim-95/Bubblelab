@@ -161,20 +161,39 @@ export function groupOf(position, info, map) {
   return autoGroupLabel(position, info);
 }
 
+/** 예수금이 들어갈 그룹. 따로 지정이 없으면 `*`(나머지) 그룹으로 보낸다. */
+export function cashGroupOf(map, override) {
+  return String(override || map?.fallback || DEFAULT_GROUP).trim().slice(0, MAX_GROUP_LABEL);
+}
+
+const emptyBucket = () => ({ value: 0, cost: 0, pnl: 0, rate: 0, cash: 0 });
+
 /**
  * 그룹별 합계. **그룹 안에서도 통화를 섞지 않는다** — byCurrency 와 같은 이유로
  * KRW 와 USD 를 더한 금액은 뜻이 없다. 그래서 group → currency → 합계 2단이다.
+ *
+ * 예수금은 `cash` 로 **따로** 담고 value·cost·pnl 에 섞지 않는다. 섞으면
+ * 원가가 없는 돈이 평가금액에 얹혀 `value = cost + pnl` 이 깨지고, 수익률이
+ * 현금 비중에 따라 희석된다. 그래서 수익률은 끝까지 보유분 기준이다.
  */
-export function aggregateGroups(positions) {
+export function aggregateGroups(positions, { cash, cashGroup } = {}) {
   const byGroup = {};
 
   for (const position of Array.isArray(positions) ? positions : []) {
     const group = String(position?.group || DEFAULT_GROUP).slice(0, MAX_GROUP_LABEL);
     const currency = position?.currency || "KRW";
-    const bucket = ((byGroup[group] ??= {})[currency] ??= { value: 0, cost: 0, pnl: 0, rate: 0 });
+    const bucket = ((byGroup[group] ??= {})[currency] ??= emptyBucket());
     bucket.value += position?.value ?? 0;
     bucket.cost += position?.cost ?? 0;
     bucket.pnl += position?.pnl ?? 0;
+  }
+
+  // 예수금만 있고 보유 종목이 없는 그룹도 나와야 한다 — 그 돈이 안 보이면
+  // 화면에서 통째로 사라진다(실제로 KRW 예수금이 그렇게 숨었다).
+  const target = String(cashGroup || DEFAULT_GROUP).slice(0, MAX_GROUP_LABEL);
+  for (const [currency, amount] of Object.entries(cash ?? {})) {
+    if (!Number.isFinite(amount) || amount === 0) continue;
+    ((byGroup[target] ??= {})[currency] ??= emptyBucket()).cash += amount;
   }
 
   for (const byCurrency of Object.values(byGroup)) {
@@ -439,8 +458,9 @@ export async function stockInfoOf(positions, { token, fetchImpl = fetch } = {}) 
  * 잔고 한 장을 읽어 스냅샷으로 만든다. 엣지로 올릴 최종 형태를 그대로 돌려준다.
  * 401 을 만나면 토큰을 새로 받아 한 번만 재시도한다.
  */
-export async function fetchSnapshot({ clientId, clientSecret, accountSeq, groups, cache = memoryTokenCache(), fetchImpl = fetch, at = Date.now() }) {
+export async function fetchSnapshot({ clientId, clientSecret, accountSeq, groups, cashGroup, cache = memoryTokenCache(), fetchImpl = fetch, at = Date.now() }) {
   const groupMap = groups && groups.bySymbol ? groups : parseGroupMap(groups);
+  const cashTarget = cashGroupOf(groupMap, cashGroup);
 
   const collect = async (token) => {
     const seq = await resolveAccountSeq({ token, configured: accountSeq, fetchImpl });
@@ -464,7 +484,7 @@ export async function fetchSnapshot({ clientId, clientSecret, accountSeq, groups
         cash[currency] = parseDecimal(power?.cashBuyingPower);
       } catch { /* 예수금 실패는 치명적이지 않다 — 그 통화만 비운다 */ }
     }
-    const byGroup = aggregateGroups(aggregate.positions);
+    const byGroup = aggregateGroups(aggregate.positions, { cash, cashGroup: cashTarget });
     return { ...snapshotOf(aggregate, cash, at, byGroup), positions: aggregate.positions };
   };
 
@@ -516,7 +536,8 @@ export function normalizeSnapshot(payload, at = Date.now()) {
       const pnl = finiteNumber(bucket.pnl);
       const rate = finiteNumber(bucket.rate);
       if (value === null || cost === null || pnl === null || rate === null) return null;
-      bucketed[currency] = { value, cost, pnl, rate };
+      // 예수금은 그룹을 나중에 붙인 필드라, 없던 시절 스냅샷도 통과해야 한다.
+      bucketed[currency] = { value, cost, pnl, rate, cash: finiteNumber(bucket.cash) ?? 0 };
     }
     byGroup[group.slice(0, MAX_GROUP_LABEL)] = bucketed;
   }
