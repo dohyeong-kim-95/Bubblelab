@@ -264,8 +264,8 @@
               padding: calc(.5rem + env(safe-area-inset-top,0px)) calc(.6rem + env(safe-area-inset-right,0px)) .5rem calc(.6rem + env(safe-area-inset-left,0px)); }
   .map-head #map-back { font-size: 1.5rem; line-height: 1; padding: .1rem .3rem; }
   .map-head b { font-size: 1rem; margin-right: auto; }
-  #map-wrap { flex: 1; min-height: 0; position: relative; overflow: hidden; }
-  #map-svg { width: 100%; height: 100%; display: block; }
+  #map-wrap { flex: 1; min-height: 0; position: relative; overflow: hidden; touch-action: none; }
+  #map-svg { width: 100%; height: 100%; display: block; transform-origin: 0 0; will-change: transform; }
   #map-svg path.rg { stroke: var(--line); stroke-width: .5; vector-effect: non-scaling-stroke; }
   #map-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
                text-align: center; padding: 2rem; color: var(--dim); font-size: .85rem; line-height: 1.6; }
@@ -3115,6 +3115,7 @@ async function openMap() {
   // 나오는 3-탭(채팅-캘린더-지도) 순서가 자연스럽게 이어진다.
   if ($("cal").classList.contains("cal-off")) openCal();
   $("map").classList.remove("map-off");
+  resetMapView(); // 열 때는 항상 전체가 보이게(배율 1)
   try { await renderMap(); } catch (e) { console.warn("map render 실패", e); $("map-empty").hidden = false; }
 }
 function closeMap() { $("map").classList.add("map-off"); }
@@ -3177,11 +3178,72 @@ $("file-region").addEventListener("change", (e) => {
 });
 // 지도에서 시군구 탭 → 지역 앨범 열기 (스와이프와 구분: 탭은 이동 없이 click 발생)
 $("map-svg").addEventListener("click", (e) => {
+  if (mapMoved) { mapMoved = false; return; } // 확대·이동 직후의 click 은 지역 선택 아님
   const path = e.target.closest("path[data-sgg]");
   if (!path || !mapGeo) return;
   const f = mapGeo.features.find((ff) => ff.properties.sgg === path.dataset.sgg);
   if (f) openRegion(f);
 });
+
+// ── 지도 확대/축소·이동 ─────────────────────────────────────────
+// 두 손가락 핀치 = 확대, 확대 중 한 손가락 = 이동(팬). 확대해서 작은 구를 정확히
+// 탭·사진추가하기 위함. #map-wrap 의 touch-action:none 으로 브라우저 기본 줌을 끄고
+// CSS transform 으로 지도 영역만 확대한다(페이지는 안 움직임).
+let mS = 1, mTx = 0, mTy = 0, mapMoved = false;
+function applyMapT() { $("map-svg").style.transform = `translate(${mTx}px, ${mTy}px) scale(${mS})`; }
+function clampMapT() {
+  const w = $("map-wrap").clientWidth, h = $("map-wrap").clientHeight;
+  mTx = Math.min(0, Math.max(w - w * mS, mTx));
+  mTy = Math.min(0, Math.max(h - h * mS, mTy));
+}
+function resetMapView() { mS = 1; mTx = 0; mTy = 0; applyMapT(); }
+(function mapZoomPan() {
+  const wrap = $("map-wrap");
+  const dist = (a, b) => Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+  let g = null;
+  wrap.addEventListener("touchstart", (e) => {
+    mapMoved = false;
+    if (e.touches.length === 2) {
+      const r = wrap.getBoundingClientRect(), [a, b] = e.touches;
+      g = { mode: "pinch", d0: dist(a, b), mx: (a.clientX + b.clientX) / 2 - r.left, my: (a.clientY + b.clientY) / 2 - r.top, s0: mS, tx0: mTx, ty0: mTy };
+    } else if (e.touches.length === 1) {
+      const t = e.touches[0];
+      g = { mode: "maybe", x: t.clientX, y: t.clientY, lx: t.clientX, ly: t.clientY };
+    }
+  }, { passive: true });
+  wrap.addEventListener("touchmove", (e) => {
+    if (!g) return;
+    if (g.mode === "pinch" && e.touches.length >= 2) {
+      e.preventDefault(); mapMoved = true;
+      const [a, b] = e.touches;
+      const ns = Math.min(6, Math.max(1, g.s0 * dist(a, b) / g.d0));
+      mTx = g.mx - ns * (g.mx - g.tx0) / g.s0;
+      mTy = g.my - ns * (g.my - g.ty0) / g.s0;
+      mS = ns; clampMapT(); applyMapT();
+      return;
+    }
+    if (g.mode === "maybe") {
+      const t = e.touches[0], dx = t.clientX - g.x, dy = t.clientY - g.y;
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      if (mS > 1.01) { g.mode = "pan"; }
+      else { // 기본 배율: 오른쪽 스와이프 = 캘린더로, 그 외(세로 등) 취소
+        if (dx > 45 && Math.abs(dx) > Math.abs(dy) * 1.3) { g = null; closeMap(); }
+        else g = null;
+        return;
+      }
+    }
+    if (g.mode === "pan") {
+      const t = e.touches[0];
+      e.preventDefault(); mapMoved = true;
+      mTx += t.clientX - g.lx; mTy += t.clientY - g.ly;
+      g.lx = t.clientX; g.ly = t.clientY;
+      clampMapT(); applyMapT();
+    }
+  }, { passive: false });
+  const endg = () => { g = null; };
+  wrap.addEventListener("touchend", endg);
+  wrap.addEventListener("touchcancel", endg);
+})();
 
 // 좌우 스와이프로 화면 전환, 실시간 드래그(손끝을 그대로 따라간다 — 탭을 당겨오는
 // 느낌). 순서는 [채팅|캘린더](채팅이 왼쪽, 캘린더가 오른쪽 화면 밖에서 대기).
@@ -3245,7 +3307,9 @@ function paneDragEnd() {
   if (el === $("cal")) { if (settleOpen) openCal(); else closeCal(); }
   else { if (settleOpen) openMap(); else closeMap(); }
 }
-for (const src of [log(), $("cal"), $("map")]) {
+// #map 은 자체 확대/이동 제스처를 쓰므로 여기서 제외한다(지도에서 오른쪽 스와이프로
+// 캘린더 복귀는 지도 제스처 쪽에서 배율 1일 때 처리).
+for (const src of [log(), $("cal")]) {
   src.addEventListener("touchstart", paneDragStart, { passive: true });
   src.addEventListener("touchmove", paneDragMove, { passive: false });
   src.addEventListener("touchend", paneDragEnd);
