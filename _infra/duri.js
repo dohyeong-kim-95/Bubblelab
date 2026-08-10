@@ -135,9 +135,16 @@ export class DuriDO {
       return this.handlePhotoDownload(url.pathname.slice(at + marker.length));
     }
     if (url.pathname.endsWith("/status") && request.method === "GET") {
+      // pending 은 seq 계산값(head-ackSeq)이라 **실제로 버퍼에 남아 있는 항목 수와
+      // 다를 수 있다** — 싱크가 받아갈 게 있는지 판단할 때 이걸 믿으면 안 된다.
+      // buffered/firstSeq 는 스토리지를 실제로 세어 본 값이다.
+      const buffered = await this.state.storage.list({ prefix: BUF_PREFIX, limit: 1000 });
+      const first = buffered.values().next().value;
       return Response.json({
         head: this.head, ackSeq: this.ackSeq, online: this.conns.size,
         pending: this.head - this.ackSeq,
+        buffered: buffered.size, firstSeq: first?.seq ?? null,
+        cal: (await this.state.storage.list({ prefix: CAL_PREFIX, limit: MAX_CAL_EVENTS })).size,
       });
     }
     if (url.pathname.endsWith("/reset") && request.method === "POST") {
