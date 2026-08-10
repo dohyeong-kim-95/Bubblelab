@@ -692,6 +692,71 @@ async function encryptJson(obj) {
   const { iv, ct } = await encryptBytes(enc.encode(JSON.stringify(obj)));
   return { iv, ct: b64(ct) };
 }
+// 원본 JPEG의 EXIF에서 촬영 위치(GPS)만 뽑는다 — 의존성 없는 최소 파서.
+// 반환 { lat, lng } 또는 위치정보 없으면 null. 이 값은 사진 메타(E2E 암호블롭)에만
+// 담겨 서버는 못 본다. "함께 다닌 곳 지도"의 재료. HEIC/PNG 등은 없으면 그냥 null.
+function exifGps(bytes) {
+  try {
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    if (dv.getUint16(0) !== 0xFFD8) return null; // JPEG(SOI) 아님
+    const len = dv.byteLength;
+    let off = 2;
+    while (off + 4 <= len) {
+      if (dv.getUint8(off) !== 0xFF) break;
+      const marker = dv.getUint8(off + 1);
+      if (marker === 0xDA || marker === 0xD9) break; // 스캔 시작/끝
+      const size = dv.getUint16(off + 2);
+      if (marker === 0xE1) { // APP1 = Exif 후보
+        const base = off + 4;
+        if (dv.getUint32(base) === 0x45786966 && dv.getUint16(base + 4) === 0x0000) { // "Exif\0\0"
+          return parseExifGps(dv, base + 6);
+        }
+      }
+      off += 2 + size;
+    }
+  } catch { /* 형식이 이상하면 위치 없음으로 */ }
+  return null;
+}
+function parseExifGps(dv, tiff) {
+  const le = dv.getUint16(tiff) === 0x4949; // II=리틀엔디언, MM=빅엔디언
+  const u16 = (o) => dv.getUint16(o, le);
+  const u32 = (o) => dv.getUint32(o, le);
+  if (u16(tiff + 2) !== 0x002A) return null;
+  const ifd0 = tiff + u32(tiff + 4);
+  const n0 = u16(ifd0);
+  let gpsIfd = 0;
+  for (let i = 0; i < n0; i++) {
+    const e = ifd0 + 2 + i * 12;
+    if (u16(e) === 0x8825) { gpsIfd = tiff + u32(e + 8); break; } // GPS IFD 포인터
+  }
+  if (!gpsIfd) return null;
+  const gn = u16(gpsIfd);
+  const rationals = (valOff, count) => {
+    const a = [];
+    for (let i = 0; i < count; i++) {
+      const num = u32(valOff + i * 8), den = u32(valOff + i * 8 + 4);
+      a.push(den ? num / den : 0);
+    }
+    return a;
+  };
+  let latRef, lngRef, lat, lng;
+  for (let i = 0; i < gn; i++) {
+    const e = gpsIfd + 2 + i * 12;
+    const tag = u16(e);
+    if (tag === 1) latRef = String.fromCharCode(dv.getUint8(e + 8));      // 'N'/'S' (인라인)
+    else if (tag === 3) lngRef = String.fromCharCode(dv.getUint8(e + 8)); // 'E'/'W' (인라인)
+    else if (tag === 2) lat = rationals(tiff + u32(e + 8), 3);            // 도·분·초(rational×3)
+    else if (tag === 4) lng = rationals(tiff + u32(e + 8), 3);
+  }
+  if (!lat || !lng) return null;
+  const dms = (a) => a[0] + a[1] / 60 + a[2] / 3600;
+  let latV = dms(lat), lngV = dms(lng);
+  if (latRef === "S") latV = -latV;
+  if (lngRef === "W") lngV = -lngV;
+  if (!isFinite(latV) || !isFinite(lngV) || (latV === 0 && lngV === 0)) return null;
+  if (latV < -90 || latV > 90 || lngV < -180 || lngV > 180) return null;
+  return { lat: +latV.toFixed(6), lng: +lngV.toFixed(6) };
+}
 async function decryptJson(ivB64, ctB64) {
   return JSON.parse(dec.decode(await decryptBytes(ivB64, unb64(ctB64))));
 }
@@ -1310,7 +1375,8 @@ async function sendPhoto(file, album) {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const sha256 = hex(await crypto.subtle.digest("SHA-256", bytes));
   const img = await encryptBytes(bytes);
-  const meta = await encryptJson({ name: MY_NAME, at: Date.now() }); // 파일명 캡션 없이 원본만
+  const loc = exifGps(bytes); // 촬영 위치(있으면) — "함께 다닌 곳 지도"용. E2E 메타에만.
+  const meta = await encryptJson({ name: MY_NAME, at: Date.now(), ...(loc && { loc }) });
   const headers = { "X-Duri-Img-Iv": img.iv, "X-Duri-Sha256": sha256, "X-Duri-Meta-Iv": meta.iv, "X-Duri-Meta": meta.ct };
   if (album) headers["X-Duri-Album"] = `${album.id}.${album.i}.${album.n}`; // 묶어보내기 그룹정보(평문)
   const res = await fetch("/_duri/photo", { method: "POST", headers, body: img.ct });
