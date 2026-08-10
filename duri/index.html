@@ -272,6 +272,20 @@
   #map-empty[hidden] { display: none; }
   #map-summary { flex: none; font-size: .82rem; color: var(--dim); background: var(--panel); border-top: 1px solid var(--line);
                  padding: .55rem .9rem calc(.55rem + env(safe-area-inset-bottom,0px)); }
+  /* 사진 정보(메타데이터) 모달 — 트레이에서 사진을 누르면 뜬다 */
+  #meta-box { position: fixed; inset: 0; z-index: 75; display: flex; align-items: center; justify-content: center;
+              background: #0007; padding: 1.2rem; }
+  #meta-box[hidden] { display: none; }
+  #meta-box .meta-card { background: var(--panel); border: 1px solid var(--line); border-radius: .9rem;
+              padding: 1rem 1.1rem; max-width: 23rem; width: 100%; }
+  #meta-box h3 { margin: 0 0 .6rem; font-size: 1rem; }
+  #meta-box dl { display: grid; grid-template-columns: auto 1fr; gap: .32rem .7rem; margin: 0; font-size: .85rem; }
+  #meta-box dt { color: var(--dim); white-space: nowrap; }
+  #meta-box dd { margin: 0; word-break: break-all; }
+  #meta-box .meta-loc { margin-top: .7rem; padding: .55rem .65rem; border-radius: .55rem; font-size: .82rem; line-height: 1.5; }
+  #meta-box .meta-loc.has { background: light-dark(#e7f3ec, #16321f); }
+  #meta-box .meta-loc.no { background: light-dark(#f7e9e9, #3a1f1f); }
+  #meta-box .meta-actions { display: flex; justify-content: flex-end; margin-top: .85rem; }
   .cal-head { display: flex; align-items: center; gap: .3rem; padding: .5rem .5rem .35rem;
               padding-left: calc(.35rem + env(safe-area-inset-left,0px)); padding-right: calc(.5rem + env(safe-area-inset-right,0px));
               background: var(--bg); border: 0; }
@@ -680,6 +694,14 @@
   </div>
 </div>
 
+<div id="meta-box" hidden>
+  <div class="meta-card">
+    <h3>사진 정보</h3>
+    <div id="meta-body"></div>
+    <div class="meta-actions"><button id="meta-close" class="cal-primary" type="button">닫기</button></div>
+  </div>
+</div>
+
 <script>
 "use strict";
 // ── 유틸 ─────────────────────────────────────────────────────
@@ -787,6 +809,46 @@ function parseExifGps(dv, tiff) {
   if (!isFinite(latV) || !isFinite(lngV) || (latV === 0 && lngV === 0)) return null;
   if (latV < -90 || latV > 90 || lngV < -180 || lngV > 180) return null;
   return { lat: +latV.toFixed(6), lng: +lngV.toFixed(6) };
+}
+// 사진 정보 미리보기용 EXIF 요약: 위치 + 촬영기기 + 촬영시각. exifGps와 같은 TIFF를 읽는다.
+function exifText(dv, off, count) {
+  let s = ""; for (let i = 0; i < count; i++) { const ch = dv.getUint8(off + i); if (!ch) break; s += String.fromCharCode(ch); }
+  return s.trim();
+}
+function exifInfo(bytes) {
+  const out = { gps: null, make: null, model: null, dateTime: null };
+  try {
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    if (dv.getUint16(0) !== 0xFFD8) return out;
+    let off = 2, tiff = -1;
+    while (off + 4 <= dv.byteLength) {
+      if (dv.getUint8(off) !== 0xFF) break;
+      const mk = dv.getUint8(off + 1);
+      if (mk === 0xDA || mk === 0xD9) break;
+      const sz = dv.getUint16(off + 2);
+      if (mk === 0xE1) { const base = off + 4; if (dv.getUint32(base) === 0x45786966 && dv.getUint16(base + 4) === 0) { tiff = base + 6; break; } }
+      off += 2 + sz;
+    }
+    if (tiff < 0) return out;
+    out.gps = parseExifGps(dv, tiff);
+    const le = dv.getUint16(tiff) === 0x4949;
+    const u16 = (o) => dv.getUint16(o, le), u32 = (o) => dv.getUint32(o, le);
+    const ascii = (e) => { const count = u32(e + 4); return exifText(dv, count <= 4 ? e + 8 : tiff + u32(e + 8), count); };
+    const ifd0 = tiff + u32(tiff + 4), n0 = u16(ifd0);
+    let exifIfd = 0;
+    for (let i = 0; i < n0; i++) {
+      const e = ifd0 + 2 + i * 12, tag = u16(e);
+      if (tag === 0x010F) out.make = ascii(e);
+      else if (tag === 0x0110) out.model = ascii(e);
+      else if (tag === 0x0132) out.dateTime = ascii(e);
+      else if (tag === 0x8769) exifIfd = tiff + u32(e + 8);
+    }
+    if (exifIfd) {
+      const m = u16(exifIfd);
+      for (let i = 0; i < m; i++) { const e = exifIfd + 2 + i * 12; if (u16(e) === 0x9003) out.dateTime = ascii(e) || out.dateTime; } // DateTimeOriginal 우선
+    }
+  } catch { /* 형식 이상이면 비움 */ }
+  return out;
 }
 async function decryptJson(ivB64, ctB64) {
   return JSON.parse(dec.decode(await decryptBytes(ivB64, unb64(ctB64))));
@@ -1435,6 +1497,8 @@ function renderTray() {
     thumb.className = "thumb";
     const img = document.createElement("img");
     img.src = p.url; img.alt = "선택한 사진"; img.decoding = "async";
+    img.style.cursor = "pointer"; img.title = "정보 보기";
+    img.addEventListener("click", () => showPhotoMeta(p.file)); // 누르면 메타데이터(위치 등)
     const rm = document.createElement("button");
     rm.type = "button"; rm.className = "rm"; rm.textContent = "✕"; rm.title = "빼기";
     rm.addEventListener("click", () => { URL.revokeObjectURL(p.url); pendingPhotos.splice(i, 1); renderTray(); });
@@ -1442,6 +1506,37 @@ function renderTray() {
     tray.append(thumb);
   });
 }
+// 트레이 사진을 누르면 정보(파일·해상도·기기·촬영시각·위치)를 보여준다. 위치가 지도에
+// 담기는지 여기서 바로 확인된다(위치 있으면 "지도에 표시돼요").
+async function showPhotoMeta(file) {
+  const box = $("meta-box"), body = $("meta-body");
+  const esc = (s) => String(s).replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
+  body.innerHTML = "<p style='color:var(--dim);font-size:.85rem'>읽는 중…</p>";
+  box.hidden = false;
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const info = exifInfo(bytes);
+    const dim = await new Promise((res) => {
+      const im = new Image(), u = URL.createObjectURL(file);
+      im.onload = () => { res(im.naturalWidth + "×" + im.naturalHeight); URL.revokeObjectURL(u); };
+      im.onerror = () => { res("?"); URL.revokeObjectURL(u); };
+      im.src = u;
+    });
+    const kb = file.size >= 1048576 ? (file.size / 1048576).toFixed(2) + " MB" : Math.round(file.size / 1024) + " KB";
+    const rows = [["파일", file.name || "(이름 없음)"], ["크기", kb], ["해상도", dim]];
+    if (info.make || info.model) rows.push(["기기", [info.make, info.model].filter(Boolean).join(" ")]);
+    if (info.dateTime) rows.push(["촬영시각", info.dateTime]);
+    let html = "<dl>" + rows.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("") + "</dl>";
+    html += info.gps
+      ? `<div class="meta-loc has">📍 위치 ${info.gps.lat}, ${info.gps.lng}<br><b>지도에 표시돼요 ✓</b></div>`
+      : `<div class="meta-loc no"><b>위치정보 없음</b> — 지도에는 안 담겨요.<br>(위치 태그 꺼짐 · 스크린샷/저장본 · 편집본 등)</div>`;
+    body.innerHTML = html;
+  } catch {
+    body.innerHTML = "<p style='color:var(--dim);font-size:.85rem'>메타데이터를 읽지 못했어요.</p>";
+  }
+}
+$("meta-close").addEventListener("click", () => { $("meta-box").hidden = true; });
+$("meta-box").addEventListener("click", (e) => { if (e.target === $("meta-box")) $("meta-box").hidden = true; });
 
 // 백그라운드 전송: 트레이를 즉시 비워 입력창을 계속 쓸 수 있게 하고(업로드 중
 // 채팅 가능 — 카톡식), 사진은 완료되는 대로 채팅에 쌓인다. 2장 이상이면 공유
@@ -1768,6 +1863,7 @@ let backArmed = false, backTimer;
 const trapBack = () => history.pushState(null, "", location.href);
 trapBack(); // 초기 방어 상태
 window.addEventListener("popstate", () => {
+  if (!$("meta-box").hidden) { $("meta-box").hidden = true; trapBack(); return; }         // 사진 정보 모달
   if (!$("cal-dialog").hidden) { closeCalDialog(); trapBack(); return; }     // 이벤트 다이얼로그
   if (!$("cal-colorbox").hidden) { $("cal-colorbox").hidden = true; trapBack(); return; } // 색상 설정
   { const mp = $("cal-day").querySelector(".marker-popup");
