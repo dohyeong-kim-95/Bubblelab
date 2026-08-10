@@ -3216,7 +3216,7 @@ function resetMapView() { mS = 1; mTx = 0; mTy = 0; applyMapT(); }
     if (g.mode === "pinch" && e.touches.length >= 2) {
       e.preventDefault(); mapMoved = true;
       const [a, b] = e.touches;
-      const ns = Math.min(6, Math.max(1, g.s0 * dist(a, b) / g.d0));
+      const ns = Math.min(16, Math.max(1, g.s0 * dist(a, b) / g.d0)); // 최대 16배(작은 구도 크게)
       mTx = g.mx - ns * (g.mx - g.tx0) / g.s0;
       mTy = g.my - ns * (g.my - g.ty0) / g.s0;
       mS = ns; clampMapT(); applyMapT();
