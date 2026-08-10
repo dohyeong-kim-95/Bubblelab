@@ -3,7 +3,11 @@
 // RTMS API가 해외 IP를 차단해 Cloudflare Worker에서는 못 부르므로,
 // 한국 IP인 로컬에서 이 스크립트를 돌리고 결과를 커밋해 배포한다.
 //
-//   MOLIT_SERVICE_KEY=키 node _infra/estate-import.mjs [--months 36] [--force]
+//   MOLIT_SERVICE_KEY=키 node _infra/estate-import.mjs [--months 60] [--force]
+//
+// 기본 60개월은 2021~22년 고점을 포함하려는 것이다 — 그보다 짧으면 하락장만
+// 담겨서 "지금이 싼가"를 볼 기준선이 없다. 늘려도 재수집 비용은 그대로다
+// (과거 달은 파일이 있으면 건너뛰므로 첫 실행만 오래 걸린다).
 //
 // 키는 env가 없으면 리포 루트 .dev.vars의 MOLIT_SERVICE_KEY= 줄에서 읽는다.
 // 지난달 이전에 이미 받아둔 달은 건너뛰고(신고 정정을 다시 반영하려면
@@ -55,7 +59,7 @@ function readServiceKey() {
 async function main() {
   const args = process.argv.slice(2);
   const monthsArg = args.indexOf("--months");
-  const months = monthsArg >= 0 ? Math.min(120, Math.max(1, +args[monthsArg + 1])) : 36;
+  const months = monthsArg >= 0 ? Math.min(120, Math.max(1, +args[monthsArg + 1])) : 60;
   const force = args.includes("--force");
   const key = readServiceKey();
   if (!key) {

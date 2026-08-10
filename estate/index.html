@@ -98,6 +98,14 @@ svg text { font-family: inherit; font-size: 12px; fill: light-dark(#5a6b7d, #93a
   gap: 6px 14px; margin-top: 8px; font-size: 0.8rem; }
 .apt-card .apt-grid .k { opacity: 0.6; font-size: 0.72rem; }
 .apt-card .apt-grid .v { font-weight: 700; }
+/* 단지별 가격 추이 (미니 차트) */
+.apt-trend-head { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: space-between;
+  margin-top: 12px; padding-top: 10px; border-top: 1px dashed light-dark(#dce4ec, #33465c); font-size: 0.78rem; }
+.trend-badge { font-weight: 700; border-radius: 999px; padding: 2px 9px; font-size: 0.74rem; }
+.trend-badge.down { background: light-dark(#e7f5ff, #10293d); color: light-dark(#1971c2, #74c0fc); }
+.trend-badge.up { background: light-dark(#fff0f0, #3d1a1a); color: light-dark(#c92a2a, #ffa8a8); }
+.apt-card .apt-chart { padding: 4px 0 0; margin-top: 4px; }
+.apt-trend-note { font-size: 0.74rem; opacity: 0.75; line-height: 1.6; margin-top: 2px; }
 .apt-card .apt-dist { margin-top: 8px; font-size: 0.78rem; line-height: 1.7; }
 .apt-card .apt-dist b { color: light-dark(#c05621, #ffa94d); }
 .apt-card .apt-links { margin-top: 8px; }
@@ -219,6 +227,7 @@ tr.canceled td { text-decoration: line-through; opacity: 0.5; }
         <option value="12">12개월</option>
         <option value="24" selected>24개월</option>
         <option value="36">36개월</option>
+        <option value="60">60개월 (21~22 고점 포함)</option>
       </select></label>
       <label>전용면적 <select id="selBand">
         <option value="all" selected>전체</option>
@@ -300,7 +309,7 @@ const TABS = {
   dongtan:  { src: "dongtan", label: "동탄 전체", dongs: null },
   giheung:  { src: "giheung", label: "기흥구", dongs: null },
 };
-const MAX_MONTHS = 36;
+const MAX_MONTHS = 60;
 const state = { tab: "dongtan2", months: 24, band: "all", dong: "", deals: "trade", ref: "", radius: "3", cap: true, emphasized: new Set(), selectedApt: null };
 // store[src][type][ym] = 배열 | "error"
 const store = { dongtan: { trade: {}, rent: {} }, giheung: { trade: {}, rent: {} } };
@@ -480,6 +489,9 @@ function monthlySeries() {
 
 // ── SVG 차트 ────────────────────────────────────────────────
 const W = 860, H = 300, PAD = { l: 56, r: 16, t: 12, b: 28 };
+const DIM = { W, H, PAD };
+// 단지 카드 안에 들어가는 작은 차트 — 축 라벨을 6개만 찍어 좁은 폭에서 안 겹치게.
+const MINI = { W: 620, H: 190, PAD: { l: 48, r: 12, t: 10, b: 24 }, xLabels: 6 };
 function niceTicks(max) {
   if (!max) return { top: 1, ticks: [0, 1] };
   const raw = max / 4;
@@ -490,7 +502,9 @@ function niceTicks(max) {
   for (let v = 0; v <= top + 1e-9; v += step) ticks.push(v);
   return { top, ticks };
 }
-function chartBase(rows, yMax, yFmt) {
+// dim을 주면 다른 크기로도 그린다 (단지 카드의 미니 차트). 기본은 상단 큰 차트.
+function chartBase(rows, yMax, yFmt, dim = DIM) {
+  const { W, H, PAD } = dim;
   const { top, ticks } = niceTicks(yMax);
   const x = (i) => PAD.l + (rows.length === 1 ? 0 : (W - PAD.l - PAD.r) * i / (rows.length - 1));
   const y = (v) => H - PAD.b - (H - PAD.t - PAD.b) * v / top;
@@ -498,7 +512,7 @@ function chartBase(rows, yMax, yFmt) {
   for (const t of ticks) g += `<line x1="${PAD.l}" x2="${W - PAD.r}" y1="${y(t)}" y2="${y(t)}"/>`;
   g += `</g><g class="axis"><line x1="${PAD.l}" x2="${W - PAD.r}" y1="${y(0)}" y2="${y(0)}"/></g>`;
   for (const t of ticks) g += `<text x="${PAD.l - 8}" y="${y(t) + 4}" text-anchor="end">${yFmt(t)}</text>`;
-  const every = Math.ceil(rows.length / 12);
+  const every = Math.ceil(rows.length / (dim.xLabels ?? 12));
   rows.forEach((r, i) => {
     if (i % every === 0) g += `<text x="${x(i)}" y="${H - 8}" text-anchor="middle">${ymLabel(r.ym)}</text>`;
   });
@@ -514,7 +528,8 @@ function linePath(rows, x, y, val) {
   });
   return d;
 }
-function attachHover(wrap, svg, rows, x, tipHtml, marks) {
+function attachHover(wrap, svg, rows, x, tipHtml, marks, dim = DIM) {
+  const { W, H, PAD } = dim;
   const tip = el("div", { class: "tooltip" });
   wrap.appendChild(tip);
   const cross = svg.querySelector(".crosshair-g");
@@ -658,6 +673,65 @@ function complexStats() {
       point: e.point, dist: ref && e.point ? distKm(ref, e.point) : null,
     };
   });
+}
+
+// ── 단지 하나의 가격 추이 ────────────────────────────────────
+// 지역 집계 차트와 달리 단지 하나는 한 달 거래가 0~2건이라 월 중앙값만 찍으면
+// 선이 거의 다 끊긴다. 그래서 앞뒤 한 달을 함께 본 3개월 중앙값으로 선을 잇고,
+// 실제 거래가 있던 달만 점으로 찍어 "이건 추정이 아니라 실거래" 를 구분한다.
+// 값은 전용 84.9㎡ 환산가(억) — 호가 메모와 같은 단위라야 바로 비교된다.
+const PY_TO_84 = 84.9 / 3.3058 / 10000; // 평당가(만원) → 84㎡ 환산가(억)
+
+function aptSeries(apt, dong) {
+  const raw = monthsBack(state.months).map((ym) => ({
+    ym, deals: liveTrades(ym).filter((r) => r.apt === apt && r.dong === dong),
+  }));
+  const medOf = (deals) => median(deals.map((r) => perPy(r.amt, r.area)));
+  return raw.map((r, i) => {
+    const win = raw.slice(Math.max(0, i - 1), i + 2).flatMap((w) => w.deals);
+    const own = medOf(r.deals);
+    return {
+      ym: r.ym, cnt: r.deals.length,
+      own: own == null ? null : own * PY_TO_84,
+      smooth: win.length ? medOf(win) * PY_TO_84 : null,
+    };
+  });
+}
+
+// 기간 내 고점·저점 대비 현재 위치. 표본이 너무 얇으면(거래 3건 미만) 안 낸다.
+function aptTrend(rows) {
+  const pts = rows.filter((r) => r.smooth != null);
+  const dealMonths = rows.filter((r) => r.cnt > 0);
+  if (pts.length < 2 || dealMonths.length < 3) return null;
+  const peak = pts.reduce((a, b) => (b.smooth > a.smooth ? b : a));
+  const low = pts.reduce((a, b) => (b.smooth < a.smooth ? b : a));
+  const cur = pts.at(-1);
+  return {
+    cur, peak, low,
+    fromPeak: (cur.smooth / peak.smooth - 1) * 100,
+    fromLow: (cur.smooth / low.smooth - 1) * 100,
+  };
+}
+
+function renderAptChart(wrap, rows) {
+  const max = Math.max(...rows.map((r) => r.smooth ?? 0), 0);
+  if (!max) { wrap.innerHTML = `<p class="sub">이 기간에 매매 실거래가 없습니다.</p>`; return; }
+  // 눈금이 2.5억 단위로 떨어지기도 해서 정수일 때만 소수점을 뗀다.
+  const { x, y, g } = chartBase(rows, max, (v) => Number.isInteger(v) ? `${v}` : v.toFixed(1), MINI);
+  const dots = rows.map((r, i) => r.own == null ? "" :
+    `<circle class="f-trade" cx="${x(i)}" cy="${y(r.own)}" r="2.5" opacity="0.75"/>`).join("");
+  wrap.innerHTML =
+    `<svg viewBox="0 0 ${MINI.W} ${MINI.H}" role="img" aria-label="이 단지의 전용 84㎡ 환산가 추이">${g}` +
+    `<path class="line s-trade" d="${linePath(rows, x, y, (r) => r.smooth)}"/>${dots}` +
+    `<g class="crosshair-g"></g></svg>`;
+  attachHover(wrap, wrap.querySelector("svg"), rows, x,
+    (r) => r.smooth == null ? "" :
+      `<b>20${ymLabel(r.ym)}</b><br>` +
+      `84㎡ 환산 ${r.smooth.toFixed(2)}억<br>` +
+      (r.cnt ? `이 달 실거래 ${r.cnt}건` : `<span class="sub">이 달 거래 없음 (앞뒤 달 기준)</span>`),
+    (r, i) => r.smooth == null ? "" :
+      `<circle class="f-trade hover-dot" cx="${x(i)}" cy="${y(r.smooth)}" r="4"/>`,
+    MINI);
 }
 
 // 내 메모(즐겨찾기·호가·메모)는 이 브라우저에만 저장한다(localStorage). 서버·계정
@@ -877,6 +951,9 @@ function renderAptCard() {
   }
   const note = notes[e.apt] || {};
   const gap = note.price ? note.price - py84 / 10000 : null;
+  const series = aptSeries(e.apt, e.dong);
+  const trend = aptTrend(series);
+  const pct = (v) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
   body.innerHTML =
     `<button class="apt-close" aria-label="닫기">✕</button>` +
     `<div class="apt-name">${e.apt}${isPin ? '<span class="pin-badge">추천</span>' : ""}</div>` +
@@ -887,6 +964,25 @@ function renderAptCard() {
     `<div><div class="k">최근 6개월 거래</div><div class="v">${e.cnt}건</div></div>` +
     `<div><div class="k">최근 실거래</div><div class="v">${e.last.date.slice(2)} · ${Math.round(e.last.area)}㎡ ${fmtEok(e.last.amt)}</div></div>` +
     `</div>` +
+    // 이 단지만의 가격 추이 — 기간 내 고점 대비 위치가 "지금 살 때인가"의 기준선.
+    `<div class="apt-trend-head">` +
+    `<span>이 단지 84㎡ 환산가 추이 <span class="sub">(${state.months}개월)</span></span>` +
+    // 매수자 관점의 색: 고점에서 많이 내려왔으면 파랑, 고점권이면 빨강.
+    (trend
+      ? trend.fromPeak <= -0.5
+        ? `<span class="trend-badge down">고점 대비 ${pct(trend.fromPeak)}</span>`
+        : `<span class="trend-badge up">기간 내 고점권</span>`
+      : `<span class="sub">거래가 적어 추이 생략</span>`) +
+    `</div>` +
+    `<div class="apt-chart chart-wrap" id="aptChart"></div>` +
+    (trend
+      ? `<div class="apt-trend-note">고점 20${ymLabel(trend.peak.ym)} ${trend.peak.smooth.toFixed(2)}억 · ` +
+        `저점 20${ymLabel(trend.low.ym)} ${trend.low.smooth.toFixed(2)}억 · 저점 대비 ${pct(trend.fromLow)}` +
+        (state.months < MAX_MONTHS
+          ? `<br><span class="sub">기간을 ${MAX_MONTHS}개월로 넓히면 21~22년 고점까지 들어옵니다.</span>`
+          : "") +
+        `</div>`
+      : "") +
     (refDist ? `<div class="apt-dist">📍 ${refDist}</div>` : "") +
     (nearShuttle ? `<div class="apt-dist">🚌 가장 가까운 셔틀: ${nearShuttle}</div>` : "") +
     // 내 메모: 즐겨찾기·호가·자유메모 (localStorage, 이 브라우저에만 저장)
@@ -899,6 +995,7 @@ function renderAptCard() {
     (gap != null ? `<div class="note-gap">실거래 84㎡ ${fmtEok(py84)} vs 내 호가 ${note.price}억 · 갭 <b>${gap >= 0 ? "+" : ""}${gap.toFixed(2)}억</b></div>` : "") +
     `</div>` +
     `<div class="apt-links"><a href="${naverLink(e)}" target="_blank" rel="noreferrer">네이버에서 현재 매물 보기 ↗</a></div>`;
+  renderAptChart($("aptChart"), series);
   body.querySelector(".apt-close").onclick = () => { state.selectedApt = null; renderAptCard(); };
   body.querySelector('[data-act="fav"]').onclick = () => { setNote(e.apt, { fav: !note.fav }); renderAptCard(); renderFavList(); renderMap(); };
   body.querySelector('[data-act="price"]').onchange = (ev) => {
