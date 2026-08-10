@@ -312,6 +312,27 @@
                 cursor: pointer; background: none; color: var(--dim); border: 1px solid var(--line);
                 border-radius: .8rem; padding: .55rem; }
   .region-clear[hidden] { display: none; }
+  /* PC 백업(싱크) 설정 시트 */
+  #sink-box { position: fixed; inset: 0; z-index: 78; display: flex; align-items: center; justify-content: center;
+              background: #0007; padding: 1.2rem; }
+  #sink-box[hidden] { display: none; }
+  #sink-box .sink-card { background: var(--panel); border: 1px solid var(--line); border-radius: .9rem;
+              padding: 1rem 1.1rem calc(1rem + env(safe-area-inset-bottom,0px)); max-width: 30rem; width: 100%;
+              max-height: 85vh; overflow-y: auto; }
+  #sink-box .sink-head { display: flex; align-items: center; gap: .5rem; margin-bottom: .6rem; }
+  #sink-box .sink-head b { font-size: 1rem; margin-right: auto; }
+  #sink-box .sink-desc { margin: 0 0 .9rem; font-size: .85rem; line-height: 1.6; color: var(--dim); }
+  #sink-box .sink-step { margin: .9rem 0 .35rem; font-size: .84rem; font-weight: 700; }
+  #sink-box pre { margin: 0; background: var(--bg); border: 1px solid var(--line); border-radius: .6rem;
+              padding: .6rem .7rem; font-size: .74rem; line-height: 1.5; overflow-x: auto; white-space: pre; }
+  #sink-box code { font-size: .95em; }
+  #sink-box .sink-warn { margin: .9rem 0 0; font-size: .78rem; line-height: 1.6; color: var(--dim);
+              background: light-dark(#f7efe4, #33291a); border-radius: .55rem; padding: .55rem .65rem; }
+  #sink-box .sink-actions { display: flex; justify-content: flex-end; margin-top: 1rem; }
+  #sink-box .sink-btn { font: inherit; font-size: .85rem; cursor: pointer; border-radius: .7rem; padding: .5rem .9rem;
+              border: 1px solid var(--line); background: none; color: inherit; }
+  #sink-box .sink-btn.primary { background: var(--pink); color: light-dark(#fff, #1a1016); border-color: transparent; }
+  #sink-box #sink-copy { margin-top: .4rem; }
   /* 현재 위치 확인 시트 */
   #here-box { position: fixed; inset: 0; z-index: 77; display: flex; align-items: center; justify-content: center;
               background: #0007; padding: 1.2rem; }
@@ -580,6 +601,7 @@
       <button id="push-test" role="menuitem" hidden title="이 기기로 테스트 알림을 보내 알림이 실제로 오는지 확인">🔔 테스트 알림 보내기</button>
       <button id="cal-open" role="menuitem" title="공유 캘린더">📅 캘린더</button>
       <button id="map-open" role="menuitem" title="함께 다닌 곳을 색칠한 지도">🗺️ 함께 다닌 곳 지도</button>
+      <button id="sink-setup" role="menuitem" title="이 대화·사진을 내 PC에 자동으로 쌓는 백업 데몬 설정">💾 PC 백업 설정</button>
       <button id="relogin" role="menuitem" title="암호 문구를 잘못 입력했을 때 다시 입력">🔑 문구 다시 입력</button>
       <button id="clear-cache" role="menuitem" title="이 기기에 저장된 대화 기록만 지우기">🧹 기록 지우기</button>
       <button id="reset-room" class="danger" role="menuitem" title="서버에 남은 대화·사진을 양쪽 모두에서 지우고 새로 시작">🗑️ 방 초기화</button>
@@ -762,6 +784,34 @@
     <div id="region-photos"></div>
     <label class="region-add" id="region-add">📷 여기에 사진 추가<input id="file-region" type="file" accept="image/*" multiple hidden></label>
     <button class="region-clear" id="region-clear" type="button" hidden>🧹 이 지역 색칠 지우기</button>
+  </div>
+</div>
+
+<!-- PC 백업(싱크 데몬) 설정 — 토큰 발급 + 설정 파일을 만들어 준다 -->
+<div id="sink-box" hidden>
+  <div class="sink-card">
+    <div class="sink-head">
+      <b>💾 PC 백업 설정</b>
+      <button id="sink-close" class="icon-btn" type="button" title="닫기" aria-label="닫기">✕</button>
+    </div>
+    <p class="sink-desc">
+      대화·사진을 <b>내 PC 디스크에</b> 자동으로 쌓는 데몬 설정이에요. 서버는 임시
+      보관소라, 이걸 켜 두어야 원본이 영구히 남습니다.
+    </p>
+    <div id="sink-out" hidden>
+      <p class="sink-step">① 아래 내용을 <code>duri-sink.config.json</code> 으로 저장</p>
+      <pre id="sink-config"></pre>
+      <button id="sink-copy" type="button" class="sink-btn">📋 복사</button>
+      <p class="sink-step">② PC에서 설치 스크립트 실행 (리포의 <code>_src/duri-sink/</code>)</p>
+      <pre class="sink-cmd">bash install.sh</pre>
+      <p class="sink-warn">
+        토큰은 이 방의 백업 권한이에요. 다른 사람에게 보이지 않게 하세요.
+        <b>암호 문구는 앱이 갖고 있지 않으니</b> 설정 파일에 직접 적어야 합니다.
+      </p>
+    </div>
+    <div class="sink-actions">
+      <button id="sink-issue" type="button" class="sink-btn primary">🔑 싱크 토큰 발급</button>
+    </div>
   </div>
 </div>
 
@@ -1688,6 +1738,53 @@ function nearbyRegions(geo, lat, lng, accuracyM) {
 
 // 확인 시트: 판정된 지역을 보여주고, 경계 근처면 후보 중에서 고르게 한다.
 // 고른 지역이 GPS 판정과 다르면 그 지역 대표점 좌표로 바꿔 보낸다(확실히 그 구에).
+// ── PC 백업(싱크 데몬) 설정 ──────────────────────────────────
+// 예전엔 토큰을 받으려면 개발자도구에서 bl_duri 쿠키를 손으로 복사해 curl 을 쳐야
+// 했다. 그 마찰 때문에 정작 "원본은 내 PC"의 원본이 아무 데도 안 쌓이고 있었다.
+// 앱에서 fetch 하면 쿠키가 알아서 실리므로, 버튼 하나면 되는 일이었다.
+function openSinkSetup() {
+  closeMenu();
+  $("sink-out").hidden = true;
+  $("sink-box").hidden = false;
+}
+$("sink-setup").addEventListener("click", openSinkSetup);
+$("sink-close").addEventListener("click", () => { $("sink-box").hidden = true; });
+$("sink-box").addEventListener("click", (e) => { if (e.target === $("sink-box")) $("sink-box").hidden = true; });
+$("sink-issue").addEventListener("click", async () => {
+  const btn = $("sink-issue");
+  btn.disabled = true;
+  try {
+    const res = await fetch("/_duri/sink-token", { method: "POST" });
+    if (!res.ok) {
+      showToast(res.status === 503
+        ? "서버에 싱크 비밀키가 설정되지 않았어요(운영자 확인 필요)."
+        : "토큰 발급에 실패했어요.");
+      return;
+    }
+    const { token } = await res.json();
+    // 암호 문구는 앱이 갖고 있지 않다(키 객체만 남기고 문구는 버린다) — 자리만 비워 둔다.
+    $("sink-config").textContent = JSON.stringify({
+      url: location.origin,
+      token,
+      passphrase: "여기에 암호 문구를 그대로 적어주세요",
+      dir: "./DuriStorage",
+    }, null, 2);
+    $("sink-out").hidden = false;
+  } catch {
+    showToast("토큰 발급에 실패했어요. 연결을 확인해주세요.");
+  } finally {
+    btn.disabled = false;
+  }
+});
+$("sink-copy").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText($("sink-config").textContent);
+    showToast("📋 복사했어요");
+  } catch {
+    showToast("복사에 실패했어요. 길게 눌러 직접 복사해주세요.");
+  }
+});
+
 let hereChoice = null, hereResolve = null;
 function openHereConfirm({ feature, alts, accuracy }) {
   hereChoice = feature;
@@ -1761,7 +1858,13 @@ async function sendPhoto(file, album, locOverride) {
   // 위치: 지도에서 지역을 콕 찍어 올리면 그 좌표(locOverride), 아니면 사진 EXIF(안드로이드는
   // 대개 비어 있음). E2E 메타에만 담겨 지도 색칠·지역 앨범에 쓰인다.
   const loc = locOverride || exifGps(bytes);
-  const meta = await encryptJson({ name: MY_NAME, at: Date.now(), ...(loc && { loc }) });
+  // 원본 파일명·형식도 메타(E2E)에 담는다 — PC 백업이 "원본 보존"이라면서 정작
+  // 무슨 파일이었는지 못 남기고 있었다. 서버는 여전히 암호블롭만 본다.
+  const meta = await encryptJson({
+    name: MY_NAME, at: Date.now(),
+    file: file.name || undefined, type: file.type || undefined, size: bytes.length,
+    ...(loc && { loc }),
+  });
   const headers = { "X-Duri-Img-Iv": img.iv, "X-Duri-Sha256": sha256, "X-Duri-Meta-Iv": meta.iv, "X-Duri-Meta": meta.ct };
   if (album) headers["X-Duri-Album"] = `${album.id}.${album.i}.${album.n}`; // 묶어보내기 그룹정보(평문)
   const res = await fetch("/_duri/photo", { method: "POST", headers, body: img.ct });

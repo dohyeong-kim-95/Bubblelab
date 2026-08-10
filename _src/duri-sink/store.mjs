@@ -32,10 +32,33 @@ export function atomicWrite(path, data) {
 
 const monthOf = (at) => new Date(at).toISOString().slice(0, 7);
 const stampOf = (at) => new Date(at).toISOString().slice(0, 19).replace(/:/g, "-");
-const safeExt = (name) => {
-  const m = /\.([A-Za-z0-9]{1,8})$/.exec(name || "");
-  return m ? "." + m[1].toLowerCase() : ".jpg";
+
+// 사진 형식은 **실제 바이트**로 판별한다. 웹앱이 보내는 메타에는 확장자가 없어서
+// (예전 코드는 존재하지도 않는 meta.caption 에서 뽑으려 했다) 무엇을 보내든 .jpg 로
+// 저장됐다 — 아이폰이 올리는 HEIC 도 마찬가지였다. 매직바이트는 메타에 아무것도
+// 없는 옛 항목에도 그대로 통하고, 원본 보존이 원칙인 이 저장고에 맞다.
+const ISO_BMFF_BRANDS = {
+  avif: ".avif", avis: ".avif",
+  heic: ".heic", heix: ".heic", hevc: ".heic", hevx: ".heic",
+  heim: ".heic", heis: ".heic", hevm: ".heic", hevs: ".heic",
+  mif1: ".heic", msf1: ".heic",
 };
+export function extOfBytes(b) {
+  if (!b || b.length < 12) return ".bin";
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4E && b[3] === 0x47) return ".png";
+  if (b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF) return ".jpg";
+  if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) return ".gif";
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
+      b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return ".webp";
+  if (b[0] === 0x42 && b[1] === 0x4D) return ".bmp";
+  if ((b[0] === 0x49 && b[1] === 0x49 && b[2] === 0x2A) ||
+      (b[0] === 0x4D && b[1] === 0x4D && b[2] === 0x00)) return ".tif";
+  if (b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) { // ISO-BMFF: ....ftyp<brand>
+    const brand = String.fromCharCode(b[8], b[9], b[10], b[11]).toLowerCase();
+    if (ISO_BMFF_BRANDS[brand]) return ISO_BMFF_BRANDS[brand];
+  }
+  return ".bin"; // 모르면 .jpg 라고 우기지 않는다 — 정체를 위장하느니 그대로 둔다
+}
 
 // metadata.json 에서 재생성되는 사람용 대화록 (View — 정본 아님)
 export function renderMarkdown(month, logs) {
@@ -46,10 +69,16 @@ export function renderMarkdown(month, logs) {
     const dayKey = d.toISOString().slice(0, 10);
     if (dayKey !== day) { day = dayKey; out += `\n## ${dayKey}\n`; }
     const hm = d.toISOString().slice(11, 16);
+    const who = `**${l.name ?? "?"}** (${hm})`;
     if (l.type === "photo") {
-      out += `\n**${l.name ?? "?"}** (${hm}) 🖼️ ${l.photo?.file ?? ""}${l.photo?.caption ? ` — ${l.photo.caption}` : ""}\n`;
+      const where = l.loc ? ` 📍${l.loc.lat},${l.loc.lng}` : "";
+      out += `\n${who} 🖼️ ${l.photo?.file ?? ""}${l.photo?.caption ? ` — ${l.photo.caption}` : ""}${where}\n`;
+    } else if (l.type === "sticker") {
+      out += `\n${who} 🧸 이모티콘 ${l.sticker?.pack ?? "?"}/${l.sticker?.n ?? "?"}\n`;
+    } else if (l.type === "location") {
+      out += `\n${who} 📍 위치 ${l.loc?.lat}, ${l.loc?.lng}\n`;
     } else {
-      out += `\n**${l.name ?? "?"}** (${hm})\n${l.text ?? ""}\n`;
+      out += `\n${who}\n${l.text ?? ""}\n`;
     }
   }
   return out;
@@ -87,18 +116,29 @@ export function createStore({ dir, key, fetchPhoto }) {
 
     if (entry.kind === "msg") {
       const p = await decryptJson(entry.iv, entry.ct);
-      logs.push({ seq: entry.seq, type: "message", at: p.at ?? entry.at, name: p.name, text: p.text });
+      // 지도 핀 삭제(unpin)는 대화가 아니라 조용한 제어 항목이다 — 그대로 두면
+      // 백업에 본문 없는 빈 줄로 쌓인다.
+      if (p.unpin) return;
+      const base = { seq: entry.seq, at: p.at ?? entry.at, name: p.name };
+      // 스티커·위치는 text 가 없다. 예전엔 둘 다 text:undefined 인 message 로 남아
+      // 대화록에 이름만 있고 내용은 빈 줄이었다 — 무엇이 오갔는지 알 수 있게 남긴다.
+      if (p.sticker) logs.push({ ...base, type: "sticker", sticker: p.sticker });
+      else if (p.here) logs.push({ ...base, type: "location", loc: p.here });
+      else logs.push({ ...base, type: "message", text: p.text, ...(p.sys && { sys: true }) });
     } else if (entry.kind === "photo") {
       const meta = await decryptJson(entry.metaIv, entry.metaCt);
       const blob = await fetchPhoto(entry.r2key);
       const plain = await decryptBytes(entry.imgIv, blob.buffer ?? blob);
       const digest = await sha256hex(plain);
-      const file = `${stampOf(entry.at)}_${String(entry.seq).padStart(12, "0")}${safeExt(meta.caption)}`;
+      const file = `${stampOf(entry.at)}_${String(entry.seq).padStart(12, "0")}${extOfBytes(plain)}`;
       atomicWrite(join(monthDir(month), "photos", file), plain);
       logs.push({
         seq: entry.seq, type: "photo", at: meta.at ?? entry.at, name: meta.name,
-        photo: { file, caption: meta.caption, sha256: digest, bytes: plain.length,
-                 hashOk: digest === entry.sha256 },
+        photo: { file, original: meta.file, mime: meta.type, caption: meta.caption,
+                 sha256: digest, bytes: plain.length, hashOk: digest === entry.sha256 },
+        // 촬영 위치 — 지도의 재료다. 이게 없으면 백업만으로는 지도를 되살릴 수 없다.
+        ...(meta.loc && { loc: meta.loc }),
+        ...(entry.album && { album: entry.album }),
       });
     } else return;
 

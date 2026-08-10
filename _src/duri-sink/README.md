@@ -4,7 +4,9 @@
 "엣지는 중계소, 원본은 내 PC"에서 **원본** 쪽이다. 리포의 `_src/`(배포 제외)
 아래 소스이며, 이 폴더를 각자 PC로 복사해 실행한다.
 
-의존성 없음 (Node 22+ 의 전역 `WebSocket`·`crypto`만 사용).
+의존성 없음 (전역 `WebSocket`·`crypto`만 사용). **Node 22+** 면 그대로 되고,
+**Node 20.10~21** 이면 `--experimental-websocket` 플래그가 필요하다 —
+`install.sh` 가 알아서 판별해 서비스 등록에도 붙여 준다.
 
 ## 하는 일
 
@@ -26,54 +28,49 @@ DuriStorage/
     metadata.json     # 정본: 그 달 로그 배열(복호화된 텍스트·사진 메타)
     messages.md       # 사람용 대화록 (metadata에서 재생성되는 View)
     photos/
-      2026-07-20T14-45-33_000000000042.jpg   # 복호화된 원본 사진
+      2026-07-20T14-45-33_000000000042.png   # 복호화된 원본 사진
   .duri-cursor        # 마지막으로 보존한 seq (재시작 시 이어받기)
 ```
 
-## 설정
+로그 항목은 `type` 으로 갈린다: `message`(텍스트, `sys:true` 면 시스템 알림) ·
+`photo` · `sticker`(어떤 팩 몇 번인지) · `location`(`/여기` 로 남긴 좌표).
+사진 로그에는 원본 파일명(`photo.original`)·형식·크기·SHA-256(전송 전 해시와
+대조한 `hashOk`)이 들어가고, 촬영 위치가 있으면 `loc` 으로 남는다 — 백업만으로
+지도를 되살릴 수 있게.
 
-`duri-sink.config.example.json` → `duri-sink.config.json` 으로 복사 후 채운다
-(또는 env `DURI_URL`/`DURI_TOKEN`/`DURI_PASSPHRASE`/`DURI_DIR`). 이 config·데이터는
-`.gitignore`로 커밋되지 않는다.
+**사진 확장자는 저장할 때 실제 바이트(매직바이트)로 판별한다.** 메타에는 확장자가
+없어서 예전 코드는 무엇을 받든 `.jpg` 로 저장했다(아이폰의 HEIC 도 마찬가지였다).
+정체를 모르는 바이트는 `.jpg` 라고 우기지 않고 `.bin` 으로 둔다.
 
-- **token**: duri.bubblelab.dev 에 비밀번호로 로그인한 브라우저에서 한 번 발급받는다:
-  ```bash
-  curl -X POST https://duri.bubblelab.dev/_duri/sink-token \
-    -H "Cookie: bl_duri=<브라우저 개발자도구에서 복사한 값>"
-  ```
-  (또는 웹앱에 발급 버튼을 붙일 수 있음 — 다음 개선.)
-- **passphrase**: 웹앱에 입력한 것과 **똑같이**. 서버로 전송되지 않는다.
-
-## 실행
+## 설치 (한 줄)
 
 ```bash
-node duri-sink.mjs
+bash install.sh
 ```
 
-### 항상 켜두기 (아무것도 안 해도 쌓이게)
+설정이 비어 있으면 파일만 만들어 두고 멈춘다. 앱에서 **⚙️ → 💾 PC 백업 설정 →
+🔑 싱크 토큰 발급**으로 나오는 JSON 을 `duri-sink.config.json` 에 붙여넣고
+`passphrase` 만 손으로 채운 뒤, 다시 실행하면 systemd 유저 서비스로 등록·기동한다
+(`loginctl enable-linger` 까지 — 로그아웃해도 계속 돈다).
 
-**Linux (systemd, user 서비스)** — `~/.config/systemd/user/duri-sink.service`:
-```ini
-[Unit]
-Description=Duri sink
-[Service]
-ExecStart=/usr/bin/node %h/duri-sink/duri-sink.mjs
-WorkingDirectory=%h/duri-sink
-Restart=always
-[Install]
-WantedBy=default.target
-```
+- **token**: 앱의 발급 버튼이 `POST /_duri/sink-token` 을 대신 호출해 준다.
+  (예전엔 개발자도구에서 `bl_duri` 쿠키를 복사해 curl 을 쳐야 했다 — 그 마찰
+  때문에 정작 원본이 아무 데도 안 쌓이고 있었다.)
+- **passphrase**: 웹앱에 입력한 것과 **똑같이**. 서버로 전송되지 않고, 앱도 문구를
+  갖고 있지 않아서(키 객체만 남긴다) 자동으로 채워 줄 수 없다.
+- 설정·데이터는 `.gitignore` 로 커밋되지 않는다. env
+  `DURI_URL`/`DURI_TOKEN`/`DURI_PASSPHRASE`/`DURI_DIR` 로도 줄 수 있다.
+
+확인:
+
 ```bash
-systemctl --user enable --now duri-sink
-loginctl enable-linger $USER   # 로그아웃 후에도 유지
+systemctl --user status duri-sink      # 살아 있는지
+journalctl --user -u duri-sink -f      # 무엇을 받고 있는지
 ```
 
-**macOS (launchd)** — `~/Library/LaunchAgents/dev.bubblelab.duri-sink.plist` 에
-`ProgramArguments`로 `node .../duri-sink.mjs`, `RunAtLoad`·`KeepAlive` true 로 등록 후
-`launchctl load` 한다.
-
-**Windows** — 작업 스케줄러에서 "로그온할 때" 트리거로 `node duri-sink.mjs` 등록
-(또는 `nssm`으로 서비스화).
+**macOS** 는 `~/Library/LaunchAgents` 에 launchd plist(`RunAtLoad`·`KeepAlive` true),
+**Windows** 는 작업 스케줄러 "로그온할 때" 트리거로 등록한다 — `install.sh` 는
+systemd 가 없으면 설치까지만 하고 이 안내를 띄운다.
 
 ## 주의
 

@@ -21,7 +21,10 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const fatal = (msg) => { console.error("✖", msg); process.exit(1); };
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 
-if (typeof WebSocket === "undefined") fatal("Node 22+ 가 필요합니다 (전역 WebSocket 없음).");
+if (typeof WebSocket === "undefined") {
+  fatal("전역 WebSocket 이 없습니다. Node 22+ 로 실행하거나, Node 20.10~21 이면\n" +
+        "  node --experimental-websocket duri-sink.mjs  로 실행하세요 (install.sh 가 자동으로 붙여 줍니다).");
+}
 
 // ── 설정 (env 우선, 없으면 config 파일) ──────────────────────
 function loadConfig() {
