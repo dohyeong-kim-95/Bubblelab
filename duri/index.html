@@ -255,6 +255,23 @@
          padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
          --sun: light-dark(#c2544f, #f0a8a2); --sat: light-dark(#4f6fc2, #a8c0f0); }
   #cal.cal-off { transform: translateX(100%); pointer-events: none; }
+  /* 함께 다닌 곳 지도 — 캘린더처럼 슬라이드로 뜨는 풀스크린 오버레이 */
+  #map { position: fixed; inset: 0; z-index: 60; background: var(--bg); color: inherit;
+         display: flex; flex-direction: column; transform: translateX(0);
+         transition: transform .26s cubic-bezier(.32,.72,0,1); }
+  #map.map-off { transform: translateX(100%); pointer-events: none; }
+  .map-head { display: flex; align-items: center; gap: .5rem; border-bottom: 1px solid var(--line); background: var(--panel);
+              padding: calc(.5rem + env(safe-area-inset-top,0px)) calc(.6rem + env(safe-area-inset-right,0px)) .5rem calc(.6rem + env(safe-area-inset-left,0px)); }
+  .map-head #map-back { font-size: 1.5rem; line-height: 1; padding: .1rem .3rem; }
+  .map-head b { font-size: 1rem; margin-right: auto; }
+  #map-wrap { flex: 1; min-height: 0; position: relative; overflow: hidden; }
+  #map-svg { width: 100%; height: 100%; display: block; }
+  #map-svg path.rg { stroke: var(--line); stroke-width: .5; vector-effect: non-scaling-stroke; }
+  #map-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+               text-align: center; padding: 2rem; color: var(--dim); font-size: .85rem; line-height: 1.6; }
+  #map-empty[hidden] { display: none; }
+  #map-summary { flex: none; font-size: .82rem; color: var(--dim); background: var(--panel); border-top: 1px solid var(--line);
+                 padding: .55rem .9rem calc(.55rem + env(safe-area-inset-bottom,0px)); }
   .cal-head { display: flex; align-items: center; gap: .3rem; padding: .5rem .5rem .35rem;
               padding-left: calc(.35rem + env(safe-area-inset-left,0px)); padding-right: calc(.5rem + env(safe-area-inset-right,0px));
               background: var(--bg); border: 0; }
@@ -492,6 +509,7 @@
   <span class="status" id="status" title="나 · 상대 접속 여부">
     <span class="dot" id="dot-mine"></span><span class="dot" id="dot-theirs"></span>
   </span>
+  <button id="map-open" class="icon-btn" title="함께 다닌 곳 지도">🗺️</button>
   <button id="cal-open" class="icon-btn" title="캘린더">📅</button>
   <div class="menu-wrap">
     <button id="menu-btn" class="icon-btn" title="설정" aria-haspopup="true" aria-expanded="false">⚙️</button>
@@ -580,6 +598,19 @@
     <button id="cal-mprev" type="button">‹ 저번달</button>
     <button id="cal-mnext" type="button">다음달 ›</button>
   </div>
+</section>
+
+<section id="map" class="map-off">
+  <header class="map-head">
+    <button id="map-back" class="icon-btn" title="채팅으로" aria-label="채팅으로">‹</button>
+    <b>함께 다닌 곳</b>
+    <span id="map-count" style="font-size:.72rem;color:var(--dim)"></span>
+  </header>
+  <div id="map-wrap">
+    <svg id="map-svg" role="img" aria-label="함께 다닌 곳 지도"></svg>
+    <div id="map-empty" hidden>아직 위치가 담긴 사진이 없어요.<br>위치정보가 있는 사진을 주고받으면<br>다녀온 시군구가 여기 색칠돼요.</div>
+  </div>
+  <div id="map-summary"></div>
 </section>
 
 <!-- 이벤트 추가/수정 -->
@@ -1193,6 +1224,7 @@ function appendRecord(rec, { silent = false } = {}) {
   seen.add(rec.seq);
   if (rec.seq > getLastSeq()) setLastSeq(rec.seq);
   if (rec.name) notePeerName(rec.name); // 상대 이름을 알아야 색상 설정에 상대 칸을 보여줄 수 있다
+  collectPin(rec); // 사진에 위치가 있으면 지도용 핀으로 모은다(로컬, seq로 중복 제거)
   // silent(초기 히스토리 대량 로드)일 땐 스크롤 위치를 매번 재지 않는다 —
   // atBottom()·scroll() 둘 다 레이아웃을 강제로 다시 계산시키는 연산이라
   // 수백 개를 한 번에 그릴 때 그만큼 강제 리플로우가 쌓인다. 다 그린 뒤
@@ -1310,6 +1342,7 @@ async function renderEntry(m) {
       const blob = await fetchPhotoBlob(m); // R2가 정리되기 전에 받아 캐시에 담는다
       if (blob) {
         const rec = { seq: m.seq, kind: "photo", at: meta.at ?? m.at, name: meta.name, caption: meta.caption, blob };
+        if (meta.loc) rec.loc = meta.loc; // 촬영 위치(E2E) — "함께 다닌 곳 지도"용. 캐시에도 저장돼 지도가 읽는다.
         if (m.album) rec.album = m.album; // 앨범 묶음(평문 그룹정보)
         appendRecord(rec); putEntry(rec);
       } else {
@@ -2747,6 +2780,116 @@ function openCal() { if (!calCursor) calCursor = new Date(); $("cal").classList.
 function closeCal() { $("cal").classList.add("cal-off"); }
 $("cal-open").addEventListener("click", openCal);
 $("cal-back").addEventListener("click", closeCal);
+
+// ── 함께 다닌 곳 지도 ────────────────────────────────────────
+// 사진 EXIF에서 뽑은 위치(E2E 메타)를 이 기기에 로컬로 모아(핀), 커밋된 시군구 경계
+// (data/kr-sgg.geojson, WGS84)에 점-폴리곤 판정으로 배정해 다녀온 시군구를 색칠한다.
+// 외부 타일·API 없이 자급자족(estate 방식). 핀은 서버로 안 나가고, 양쪽 기기가 각자
+// 받은 사진에서 같은 지도를 독립적으로 만든다.
+const PINS_KEY = "duri:pins";
+function loadPins() { try { return JSON.parse(localStorage.getItem(PINS_KEY) || "[]"); } catch { return []; } }
+function collectPin(rec) {
+  if (!rec || rec.kind !== "photo" || !rec.loc) return;
+  const { lat, lng } = rec.loc;
+  if (typeof lat !== "number" || typeof lng !== "number") return;
+  const pins = loadPins();
+  if (pins.some((p) => p.seq === rec.seq)) return; // 이미 있음
+  pins.push({ seq: rec.seq, lat, lng, at: rec.at || 0 });
+  try { localStorage.setItem(PINS_KEY, JSON.stringify(pins)); } catch { /* 최선노력 */ }
+}
+
+let mapGeo = null;
+function geomPolys(g) { // [ [ring, hole...], ... ] — 각 ring = [[lng,lat],...]
+  if (g.type === "Polygon") return [g.coordinates];
+  if (g.type === "MultiPolygon") return g.coordinates;
+  return [];
+}
+async function loadMapGeo() {
+  if (mapGeo) return mapGeo;
+  const res = await fetch("data/kr-sgg.geojson", { cache: "force-cache" });
+  const geo = await res.json();
+  let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
+  for (const f of geo.features) {
+    f._polys = geomPolys(f.geometry);
+    for (const poly of f._polys) for (const ring of poly) for (const c of ring) {
+      if (c[0] < minLng) minLng = c[0]; if (c[0] > maxLng) maxLng = c[0];
+      if (c[1] < minLat) minLat = c[1]; if (c[1] > maxLat) maxLat = c[1];
+    }
+  }
+  geo._bbox = { minLng, minLat, maxLng, maxLat };
+  mapGeo = geo;
+  return geo;
+}
+function pointInRing(x, y, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+    if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) inside = !inside;
+  }
+  return inside;
+}
+function pointInPolys(x, y, polys) {
+  for (const poly of polys) {
+    if (!poly.length || !pointInRing(x, y, poly[0])) continue; // 외곽 안?
+    let inHole = false;
+    for (let k = 1; k < poly.length; k++) if (pointInRing(x, y, poly[k])) { inHole = true; break; }
+    if (!inHole) return true;
+  }
+  return false;
+}
+function sggOfPoint(geo, lng, lat) {
+  for (const f of geo.features) if (pointInPolys(lng, lat, f._polys)) return f;
+  return null;
+}
+async function renderMap() {
+  const geo = await loadMapGeo();
+  const pins = loadPins();
+  const counts = {}; let inKorea = 0, foreign = 0;
+  for (const p of pins) {
+    const f = sggOfPoint(geo, p.lng, p.lat);
+    if (f) { counts[f.properties.sgg] = (counts[f.properties.sgg] || 0) + 1; inKorea++; } else foreign++;
+  }
+  const maxc = Math.max(1, ...Object.values(counts));
+  // 투영: 위경도 → 화면(등거리, 위도 보정). 한국 bbox를 viewBox에 맞춘다.
+  const W = 1000, H = 1200, PAD = 24, b = geo._bbox;
+  const lat0 = (b.minLat + b.maxLat) / 2, kx = Math.cos(lat0 * Math.PI / 180);
+  const gw = (b.maxLng - b.minLng) * kx, gh = (b.maxLat - b.minLat);
+  const s = Math.min((W - 2 * PAD) / gw, (H - 2 * PAD) / gh);
+  const ox = (W - gw * s) / 2, oy = (H - gh * s) / 2;
+  const X = (lng) => ox + (lng - b.minLng) * kx * s;
+  const Y = (lat) => oy + (b.maxLat - lat) * s;
+  let paths = "";
+  for (const f of geo.features) {
+    let d = "";
+    for (const poly of f._polys) for (const ring of poly) {
+      d += "M" + ring.map((c) => X(c[0]).toFixed(1) + " " + Y(c[1]).toFixed(1)).join("L") + "Z";
+    }
+    const c = counts[f.properties.sgg] || 0;
+    const fill = c ? `rgba(200,80,140,${(0.22 + 0.62 * (c / maxc)).toFixed(3)})` : "var(--panel)";
+    paths += `<path class="rg" d="${d}" fill="${fill}"><title>${f.properties.sidonm} ${f.properties.sggnm}${c ? " · " + c + "장" : ""}</title></path>`;
+  }
+  let dots = "";
+  for (const p of pins) {
+    if (p.lng < b.minLng || p.lng > b.maxLng || p.lat < b.minLat || p.lat > b.maxLat) continue; // 해외는 점 생략
+    dots += `<circle cx="${X(p.lng).toFixed(1)}" cy="${Y(p.lat).toFixed(1)}" r="4" fill="var(--pink)" fill-opacity=".9" stroke="#fff" stroke-width=".8"/>`;
+  }
+  const svg = $("map-svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.innerHTML = paths + dots;
+  const regions = Object.keys(counts).length;
+  $("map-empty").hidden = pins.length > 0;
+  $("map-count").textContent = pins.length ? `${regions}개 지역` : "";
+  $("map-summary").textContent = pins.length
+    ? `다녀온 시군구 ${regions}곳 · 사진 ${inKorea}장${foreign ? ` · 해외 ${foreign}장` : ""}`
+    : "";
+}
+async function openMap() {
+  $("map").classList.remove("map-off");
+  try { await renderMap(); } catch (e) { console.warn("map render 실패", e); $("map-empty").hidden = false; }
+}
+function closeMap() { $("map").classList.add("map-off"); }
+$("map-open").addEventListener("click", openMap);
+$("map-back").addEventListener("click", closeMap);
 
 // 좌우 스와이프로 화면 전환, 실시간 드래그(손끝을 그대로 따라간다 — 탭을 당겨오는
 // 느낌). 순서는 [채팅|캘린더](채팅이 왼쪽, 캘린더가 오른쪽 화면 밖에서 대기).
