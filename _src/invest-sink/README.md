@@ -87,6 +87,19 @@ env -i HOME=$HOME PATH=/usr/bin:/bin /bin/bash -c '<크론에 적은 명령 그�
 `~/.bubblelab/invest.env` 는 `chmod 600` 으로 두고 `KEY=값` 을 한 줄씩 적는다.
 윈도우면 작업 스케줄러에 같은 명령을 등록한다.
 
+### `--on-demand` — 화면의 "지금 갱신" 을 받는다
+
+방금 매수한 걸 바로 확인하려면 하루 한 번으로는 안 된다. 엣지는 토스를 부를 수
+없으니(허용 IP) 화면의 버튼은 **요청만 남기고**, 이 모드가 1분마다 그걸 가져간다.
+
+```bash
+* * * * *  cd <리포경로> && set -a && . ~/.bubblelab/invest.env && set +a && <node경로> _src/invest-sink/index.mjs --on-demand >> ~/.bubblelab/invest.log 2>&1
+```
+
+**요청이 없으면 엣지에 가벼운 GET 한 번으로 끝난다** — 토스를 부르지 않으므로
+rate limit 도 축내지 않고 로그도 남지 않는다. 22시 정기 실행은 그대로 두고 이걸
+추가한다(정기 업로드는 대기 중인 요청을 지우지 않는다).
+
 ## 확인
 
 성공하면 이렇게 찍힌다.

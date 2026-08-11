@@ -377,10 +377,12 @@ function showFailure(message, detail) {
   replace(el.chart, element("p", "empty", "잔고를 불러오지 못했습니다."));
 }
 
-async function load({ force = false } = {}) {
-  el.refresh.disabled = true;
+// quiet = 갱신을 기다리는 중의 재조회. 버튼과 안내 문구는 requestRefresh 가
+// 쥐고 있으므로 여기서 건드리면 "요청함…" 이 매 3초마다 지워진다.
+async function load({ quiet = false } = {}) {
+  if (!quiet) el.refresh.disabled = true;
   try {
-    const response = await fetch(`/_invest/state${force ? "?force=1" : ""}`, {
+    const response = await fetch("/_invest/state", {
       headers: { Accept: "application/json" },
     });
     if (response.status === 401) {
@@ -395,10 +397,15 @@ async function load({ force = false } = {}) {
 
     // 잔고를 올리는 건 집 PC 데몬이다. error = 아직 아무것도 안 올라옴,
     // stale = 숫자는 있는데 오래됨(데몬이 멈췄을 수 있음).
-    showNotice(body.error ?? (body.stale ? staleNotice(body.updatedAt) : ""), body.detail);
+    if (!quiet) {
+      // 화면을 새로 열었는데 아직 처리 안 된 갱신 요청이 남아 있을 수 있다.
+      const pending = body.refreshPending ? "PC에 갱신을 요청해 둔 상태입니다 — 곧 반영됩니다." : "";
+      showNotice(body.error ?? (body.stale ? staleNotice(body.updatedAt) : pending), body.detail);
+    }
     el.updated.textContent = body.updatedAt
       ? `${new Date(body.updatedAt).toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" })} 기준`
       : "";
+    lastUpdatedAt = body.updatedAt ?? null;
 
     renderGroups(body.byGroup ?? {}, body.positions ?? [], body.groupSeries ?? {}, body.mainGroup ?? "");
     renderChart(el.chart, body.series ?? {}, {
@@ -408,9 +415,55 @@ async function load({ force = false } = {}) {
   } catch {
     showFailure("서버에 연결하지 못했습니다.");
   } finally {
-    el.refresh.disabled = false;
+    if (!quiet) el.refresh.disabled = false;
   }
 }
 
-el.refresh.addEventListener("click", () => load({ force: true }));
+/* ── "지금 갱신" ────────────────────────────────────────────────────────
+ *
+ * 엣지는 토스를 부를 수 없다(허용 IP). 그래서 이 버튼은 **엣지에 요청을 남기고**,
+ * 집 PC 데몬이 다음 순회(1분)에 가져가 조회·업로드한다. 화면은 그동안 새 숫자가
+ * 올라왔는지 지켜보다가 바뀌면 다시 그린다.
+ *
+ * PC 가 꺼져 있으면 영영 안 온다 — 그래서 기다림에 끝이 있어야 한다.
+ */
+const REFRESH_WAIT_MS = 90 * 1000;
+const REFRESH_POLL_MS = 3000;
+let lastUpdatedAt = null;
+let waiting = false;
+
+const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
+
+async function requestRefresh() {
+  if (waiting) return;
+  waiting = true;
+  const before = lastUpdatedAt;
+  el.refresh.disabled = true;
+  el.refresh.textContent = "요청함…";
+
+  try {
+    const response = await fetch("/_invest/refresh", { method: "POST" });
+    if (response.status === 401) { location.href = "/login"; return; }
+    if (response.status === 429) {
+      showNotice("갱신 요청이 너무 잦습니다 — 잠시 후 다시 눌러주세요.");
+      return;
+    }
+    if (!response.ok) { showNotice("갱신을 요청하지 못했습니다."); return; }
+
+    showNotice("PC에 갱신을 요청했습니다 — 잠시만 기다려주세요.");
+    const until = Date.now() + REFRESH_WAIT_MS;
+    while (Date.now() < until) {
+      await sleep(REFRESH_POLL_MS);
+      await load({ quiet: true });
+      if (lastUpdatedAt && lastUpdatedAt !== before) return;   // 새 숫자가 왔다
+    }
+    showNotice("PC가 아직 응답하지 않습니다 — 데몬이 도는지, PC가 켜져 있는지 확인해주세요.");
+  } finally {
+    waiting = false;
+    el.refresh.disabled = false;
+    el.refresh.textContent = "지금 갱신";
+  }
+}
+
+el.refresh.addEventListener("click", requestRefresh);
 load();

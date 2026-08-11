@@ -16,6 +16,9 @@ import { dirname, join } from "node:path";
 import { fetchSnapshot } from "../../_infra/invest.js";
 
 const DEFAULT_ENDPOINT = "https://invest.bubblelab.dev/_invest/snapshot";
+// `--on-demand` 는 화면의 "지금 갱신" 을 눌렀을 때만 일한다. 1분마다 돌려도
+// 요청이 없으면 엣지에 가벼운 GET 한 번이고 토스는 부르지 않는다.
+const ON_DEMAND = process.argv.includes("--on-demand");
 const TOKEN_CACHE = process.env.INVEST_TOKEN_CACHE
   || join(homedir(), ".bubblelab", "invest-token.json");
 
@@ -53,6 +56,32 @@ function fileTokenCache(path) {
   };
 }
 
+/**
+ * "지금 갱신" 요청이 걸려 있는지 엣지에 물어본다. 요청 시각(ms)이거나 null.
+ *
+ * 엣지가 토스를 직접 부를 수 없어서(허용 IP) 화면의 버튼은 요청만 남기고,
+ * 실제 조회는 이 데몬이 한다. 여기서 실패하면 **조용히 넘어간다** — 1분마다
+ * 도는 자리라 일시적인 네트워크 문제로 로그를 채우면 진짜 문제가 묻힌다.
+ */
+async function pendingRefresh(endpoint, sinkSecret) {
+  const url = new URL(endpoint);
+  url.pathname = "/_invest/pending";
+  try {
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${sinkSecret}` } });
+    if (!response.ok) {
+      // 인증·설정 문제는 계속 반복되므로 알린다. 그 외(5xx)는 넘어간다.
+      if (response.status === 401 || response.status === 503) {
+        console.error(`갱신 요청 조회 실패 (HTTP ${response.status}) — INVEST_SINK_SECRET 을 확인하세요`);
+      }
+      return null;
+    }
+    const body = await response.json();
+    return body?.pending ? Number(body.at) : null;
+  } catch {
+    return null;
+  }
+}
+
 async function main() {
   const clientId = required("INVEST_CLIENT_ID");
   const clientSecret = required("INVEST_CLIENT_SECRET");
@@ -64,6 +93,15 @@ async function main() {
   const groups = process.env.INVEST_GROUPS;
   // 예수금이 들어갈 그룹. 비우면 INVEST_GROUPS 의 `*` 그룹으로 간다.
   const cashGroup = process.env.INVEST_CASH_GROUP;
+
+  // 요청이 있을 때만 도는 모드. 없으면 여기서 끝내고 토스를 부르지 않는다.
+  let served = null;
+  if (ON_DEMAND) {
+    const asked = await pendingRefresh(endpoint, sinkSecret);
+    if (asked === null) return;
+    served = asked;
+    console.log(`${new Date().toLocaleString("ko-KR")} 갱신 요청 확인 — 조회합니다`);
+  }
 
   const snapshot = await fetchSnapshot({
     clientId, clientSecret, accountSeq, groups, cashGroup, cache: fileTokenCache(TOKEN_CACHE),
@@ -90,7 +128,10 @@ async function main() {
     console.log(`  [${group}] ${line}`);
   }
 
-  const response = await fetch(endpoint, {
+  // 처리한 요청 시각을 함께 알린다. 조회하는 사이에 사용자가 다시 눌렀다면
+  // 서버가 그 요청은 남겨 둬서 다음 순회에 처리한다.
+  const target = served === null ? endpoint : `${endpoint}?served=${served}`;
+  const response = await fetch(target, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${sinkSecret}` },
     body: JSON.stringify(snapshot),

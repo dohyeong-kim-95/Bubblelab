@@ -21,6 +21,7 @@ import {
   normalizeSnapshot,
   parseDecimal,
   READ_ONLY_PATHS,
+  REFRESH_TTL_MS,
   snapshotOf,
   tokenRequest,
   TOKEN_AUTH_METHODS,
@@ -435,6 +436,11 @@ function investDO(storage = storageStub()) {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
     })),
     state: () => instance.fetch(new Request("https://invest/state", { method: "GET" })),
+    refresh: () => instance.fetch(new Request("https://invest/refresh", { method: "POST" })),
+    pending: () => instance.fetch(new Request("https://invest/pending")),
+    served: (at, payload) => instance.fetch(new Request(`https://invest/push?served=${at}`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+    })),
   };
 }
 
@@ -737,4 +743,55 @@ test("메인 그룹은 이력이 아니라 설정이라 일별 스냅샷에는 �
   const daily = await instance.storage.get(`snap:${kstDate()}`);
   assert.ok(!("mainGroup" in daily), "일별 스냅샷에 설정값이 섞였다");
   assert.ok(!("positions" in daily), "일별 스냅샷에 종목이 섞였다");
+});
+
+// ── "지금 갱신" 요청 ────────────────────────────────────────────────────
+//
+// 엣지는 토스를 부를 수 없다(허용 IP). 그래서 버튼은 요청만 남기고 집 PC 데몬이
+// 가져간다. 여기서 검사할 것은 그 주고받음이 어긋나지 않는지다.
+
+test("갱신을 요청하면 데몬이 가져갈 수 있게 남는다", async () => {
+  const server = investDO();
+  assert.equal((await (await server.pending()).json()).pending, false);
+
+  const asked = await (await server.refresh()).json();
+  assert.equal(asked.ok, true);
+
+  const pending = await (await server.pending()).json();
+  assert.equal(pending.pending, true);
+  assert.equal(pending.at, asked.at);
+  // 화면을 새로 열어도 기다리는 중인 걸 알 수 있어야 한다.
+  assert.equal((await (await server.state()).json()).refreshPending, true);
+});
+
+test("데몬이 처리하면 요청이 지워진다", async () => {
+  const server = investDO();
+  const { at } = await (await server.refresh()).json();
+  await server.served(at, validPush());
+  assert.equal((await (await server.pending()).json()).pending, false);
+});
+
+test("조회하는 사이에 다시 누른 요청은 남겨 둔다", async () => {
+  const server = investDO();
+  const first = (await (await server.refresh()).json()).at;
+  // 데몬이 조회하는 동안 사용자가 한 번 더 눌렀다.
+  await server.storage.put("refresh", { at: first + 5000 });
+  await server.served(first, validPush());
+  const pending = await (await server.pending()).json();
+  assert.equal(pending.pending, true, "더 최신 요청까지 지워 버렸다");
+  assert.equal(pending.at, first + 5000);
+});
+
+test("오래된 요청은 없는 셈 친다 (PC가 한참 꺼져 있던 경우)", async () => {
+  const server = investDO();
+  await server.storage.put("refresh", { at: Date.now() - REFRESH_TTL_MS - 1000 });
+  assert.equal((await (await server.pending()).json()).pending, false);
+  assert.equal((await (await server.state()).json()).refreshPending, false);
+});
+
+test("served 없이 올린 정기 스냅샷은 대기 중인 요청을 지우지 않는다", async () => {
+  const server = investDO();
+  await server.refresh();
+  await server.push(validPush());   // 22시 정기 업로드
+  assert.equal((await (await server.pending()).json()).pending, true);
 });

@@ -510,6 +510,23 @@ async function handleInvest(request, env, url) {
   }
   const id = env.INVEST.idFromName("main");
 
+  // 데몬이 "지금 갱신" 요청이 걸려 있는지 물어본다. 1분마다 부르는 자리라
+  // 가볍고, 요청이 없으면 데몬은 토스를 부르지 않고 그냥 끝낸다.
+  if (url.pathname === "/_invest/pending" && request.method === "GET") {
+    if (!env.INVEST_SINK_SECRET) {
+      return new Response("invest sink is not configured", { status: 503 });
+    }
+    const offered = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+    if (!await matchesCredential(await investSessionKey(env), offered, env.INVEST_SINK_SECRET)) {
+      return Response.json({ error: "unauthorized" }, { status: 401 });
+    }
+    const response = await env.INVEST.get(id).fetch(new Request("https://invest/pending"));
+    return new Response(response.body, {
+      status: response.status,
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    });
+  }
+
   // 집 PC 데몬이 잔고를 올린다. 토스 허용 IP 때문에 조회는 엣지가 아니라 데몬이
   // 하고, 여기는 받아서 보관만 한다 — 그래서 엣지에는 API 키가 없다.
   if (url.pathname === "/_invest/snapshot" && request.method === "POST") {
@@ -525,7 +542,7 @@ async function handleInvest(request, env, url) {
       return Response.json({ error: "unauthorized" }, { status: 401 });
     }
     const response = await env.INVEST.get(id).fetch(
-      new Request("https://invest/push", {
+      new Request(`https://invest/push${url.search}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: await request.text(),
@@ -542,6 +559,22 @@ async function handleInvest(request, env, url) {
   if (!await validSession(key, cookies(request).bl_invest)) {
     return Response.json({ error: "unauthorized" }, { status: 401, headers: { "Cache-Control": "no-store" } });
   }
+  // "지금 갱신" — 방금 매수한 것을 바로 보고 싶을 때. 엣지가 토스를 부르는 게
+  // 아니라 요청만 남기고, 집 PC 데몬이 다음 순회(1분)에 가져가 올린다.
+  if (url.pathname === "/_invest/refresh" && request.method === "POST") {
+    const limited = await enforceRateLimit(request, env, {
+      scope: "invest-refresh", limit: 6, windowMs: 60 * 1000,
+    });
+    if (limited) return limited;
+    const response = await env.INVEST.get(id).fetch(
+      new Request("https://invest/refresh", { method: "POST" }),
+    );
+    return new Response(response.body, {
+      status: response.status,
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    });
+  }
+
   if (url.pathname !== "/_invest/state" || request.method !== "GET") {
     return new Response("not found", { status: 404 });
   }

@@ -37,6 +37,10 @@ const TOKEN_SKEW_MS = 60 * 1000;
 export const STALE_AFTER_MS = 36 * 60 * 60 * 1000;
 // 보관할 일별 스냅샷 개수 (약 3년치 영업일).
 export const MAX_SNAPSHOTS = 800;
+// "지금 갱신" 요청의 유효 시간. 엣지는 토스를 부를 수 없어서 요청을 적어 두고
+// 집 PC 데몬이 가져가는 구조인데, PC 가 꺼져 있었다면 한참 뒤에 깨어난 데몬이
+// 옛날 요청을 보고 엉뚱한 때에 조회하게 된다. 그래서 오래된 요청은 버린다.
+export const REFRESH_TTL_MS = 10 * 60 * 1000;
 
 /** 소수 문자열 → 숫자. 파싱 불가·누락이면 0. */
 export function parseDecimal(value) {
@@ -611,6 +615,13 @@ export class InvestDO {
     return [...stored.values()].sort((a, b) => String(a.date).localeCompare(String(b.date)));
   }
 
+  /** 살아 있는 "지금 갱신" 요청. 시간이 지난 것은 없는 셈 친다. */
+  async #pendingRefresh(now = Date.now()) {
+    const asked = await this.state.storage.get("refresh");
+    const at = Number(asked?.at);
+    return Number.isFinite(at) && now - at < REFRESH_TTL_MS ? at : null;
+  }
+
   async #state() {
     const latest = await this.state.storage.get("latest");
     const age = latest ? Date.now() - latest.ts : null;
@@ -626,6 +637,9 @@ export class InvestDO {
       groupSeries: buildGroupSeries(history),
       // 데몬이 멈춘 것을 화면이 알아야 한다 — 숫자는 있는데 어제 것일 수 있다.
       stale: age !== null && age > STALE_AFTER_MS,
+      // 갱신 요청을 걸어 뒀는데 아직 PC 가 답하지 않은 상태. 화면을 새로 열어도
+      // "기다리는 중" 을 이어서 보여주려고 함께 내려보낸다.
+      refreshPending: await this.#pendingRefresh() !== null,
       error: latest ? null : "아직 올라온 잔고가 없습니다 — PC 데몬이 도는지 확인해주세요",
       detail: null,
     };
@@ -638,12 +652,34 @@ export class InvestDO {
       return Response.json(await this.#state());
     }
 
+    // 브라우저가 "지금 갱신" 을 누른다. 엣지는 토스를 부를 수 없으니(허용 IP)
+    // 요청만 적어 두고, 집 PC 데몬이 다음 순회에서 가져간다.
+    if (url.pathname === "/refresh" && request.method === "POST") {
+      const at = Date.now();
+      await this.state.storage.put("refresh", { at });
+      return Response.json({ ok: true, at });
+    }
+
+    // 데몬이 "할 일 있나" 물어보는 자리. 없으면 토스를 부르지 않고 그냥 끝낸다.
+    if (url.pathname === "/pending" && request.method === "GET") {
+      const at = await this.#pendingRefresh();
+      return Response.json({ pending: at !== null, at });
+    }
+
     if (url.pathname === "/push" && request.method === "POST") {
       const payload = await request.json().catch(() => null);
       const snapshot = normalizeSnapshot(payload);
       if (!snapshot) return Response.json({ error: "invalid snapshot" }, { status: 400 });
       await this.state.storage.put("latest", snapshot);
       await this.#record(snapshot);
+
+      // 데몬이 처리했다고 알려온 요청 시각까지만 지운다. 조회하는 사이에 사용자가
+      // 다시 눌렀다면(더 최신 요청) 남겨 둬야 다음 순회에서 그것도 처리한다.
+      const served = Number(url.searchParams.get("served"));
+      const asked = Number((await this.state.storage.get("refresh"))?.at);
+      if (Number.isFinite(served) && Number.isFinite(asked) && asked <= served) {
+        await this.state.storage.delete("refresh");
+      }
       return Response.json({ ok: true, date: snapshot.date });
     }
 
