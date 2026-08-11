@@ -18,7 +18,9 @@ import { emitEmoticonHistory } from "./emoticon-history.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const DIST = join(ROOT, "dist");
-const SKIP = new Set(["dist", "node_modules"]);
+// docs/ 는 서브도메인이 아니라 개발 워크플로 문서다(병렬 에이전트 판정 기록 등).
+// 루트 폴더라 그냥 두면 docs.bubblelab.dev 로 배포되고 랜딩 카드 검사에 걸린다.
+const SKIP = new Set(["dist", "node_modules", "docs"]);
 // 서브도메인 공개 구분. 퍼블릭은 www 랜딩 카드와 카테고리 홈 풀다운 메뉴에
 // 노출되고, confidential은 주소를 직접 쳐야만 들어갈 수 있다(어디에도 링크 없음).
 // 새 폴더는 기본 퍼블릭이며, 빌드가 www 랜딩 카드 존재 여부를 검사한다.

@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# 에이전트 브랜치(agent/<서브도메인>/<슬러그>)에서 남의 서브도메인 파일이
+# 커밋되는 것을 막는다. worktree 격리가 1차 방어선이고, 이건 2차 방어선이다 —
+# `git add -A` 를 쳐도 자기 소유 밖의 파일은 커밋에 들어가지 않는다.
+#
+# 소유 범위: 이름 규칙(아래) + _infra/agent-scope.conf 의 명시 목록.
+# 다른 브랜치(main 등)에서는 아무것도 하지 않는다.
+# 예외가 필요하면: AGENT_SCOPE_OK=1 git commit …
+set -uo pipefail
+
+branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo)"
+case "$branch" in agent/*/*) ;; *) exit 0 ;; esac
+[ "${AGENT_SCOPE_OK:-}" = "1" ] && exit 0
+
+sub="${branch#agent/}"; sub="${sub%%/*}"
+root="$(git rev-parse --show-toplevel)"
+conf="$root/_infra/agent-scope.conf"
+
+# conf에서 한 키의 패턴들을 읽는다 (없으면 빈 문자열)
+patterns_for() {
+  [ -f "$conf" ] || return 0
+  sed -n "s|^$1:[[:space:]]*||p" "$conf" | head -1
+}
+
+owned_extra="$(patterns_for "$sub")"
+shared="$(patterns_for '\*shared\*')"
+
+matches() { # matches <path> <patterns…>
+  local path="$1"; shift
+  local pattern
+  for pattern in $*; do
+    # shellcheck disable=SC2053  — 오른쪽은 글롭이어야 한다
+    [[ "$path" == $pattern ]] && return 0
+  done
+  return 1
+}
+
+bad=() warn=()
+while IFS= read -r path; do
+  [ -n "$path" ] || continue
+  matches "$path" "$shared" && { warn+=("$path"); continue; }
+  matches "$path" "$owned_extra" && continue
+  case "$path" in
+    "$sub"/*) continue ;;                        # 자기 서브도메인 폴더
+    _infra/"$sub".*|_infra/"$sub"-*) continue ;; # _infra/<이름>.js, <이름>-ai.js, <이름>.test.mjs
+    _src/"$sub"/*|_src/"$sub"-*/*) continue ;;   # _src/<이름>-sink/ 등
+  esac
+  bad+=("$path")
+done < <(git diff --cached --name-only)
+
+if [ ${#warn[@]} -gt 0 ]; then
+  echo "note: 공용 파일이 커밋에 들어 있다 — 자기 몫 한 줄만 바뀌었는지 확인해라:" >&2
+  printf '  %s\n' "${warn[@]}" >&2
+fi
+
+if [ ${#bad[@]} -gt 0 ]; then
+  {
+    echo ""
+    echo "커밋 거부: 브랜치 '$branch' 는 '$sub' 소유 파일만 커밋할 수 있다."
+    echo "소유 밖 경로:"
+    printf '  %s\n' "${bad[@]}"
+    echo ""
+    echo "소유 범위: $sub/**, _infra/$sub.*, _infra/$sub-*, _src/$sub/**, _src/$sub-*/**"
+    [ -n "$owned_extra" ] && echo "          $owned_extra"
+    echo "공용 파일을 정말 고쳐야 하면 _infra/agent-scope.conf 를 보고"
+    echo "오케스트레이터에게 요청한다 (긴급 우회: AGENT_SCOPE_OK=1 git commit …)."
+  } >&2
+  exit 1
+fi
+exit 0

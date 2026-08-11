@@ -152,6 +152,22 @@ PNG·JPEG를 모두 받고, JPEG는 `npm ci` 필요. 검증은 `_infra/wallpaper
 `duri/data/kr-sgg.geojson`만 쓰고 외부 지도 API는 없다). 셋업·프로토콜·한계는
 `duri/README.md` 참고.
 
+## 병렬로 여러 에이전트를 돌린다면
+
+서브도메인마다 격리된 worktree("레인")가 `../worktrees/<이름>` 에 있다. 같은
+작업 트리를 공유하지 않으므로 남의 미커밋 변경이 커밋에 휩쓸릴 수 없다.
+
+```bash
+_infra/agent-worktree.sh init                      # 레인 전체 생성(멱등)
+_infra/agent-worktree.sh task <서브도메인> <슬러그>  # agent/<서브도메인>/<슬러그> 브랜치로
+```
+
+`agent/<서브도메인>/…` 브랜치에서는 pre-commit 훅이 소유 밖 파일의 커밋을
+거부한다(소유 목록은 `_infra/agent-scope.conf`). 구현 에이전트는 머지하지
+않는다 — Gate 리뷰어(`docs/review-checklist.md`)가 통과시킨 브랜치만
+오케스트레이터가 머지하고, 판정은 `docs/decisions.md` 에 남는다.
+전체 흐름은 `docs/parallel-agents.md`.
+
 ## 더 읽을 것 (필요할 때만)
 
 - 배포/워커/빌드 파이프라인 내부: `_infra/README.md`
