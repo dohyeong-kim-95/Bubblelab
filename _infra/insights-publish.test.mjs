@@ -102,6 +102,41 @@ test("publish는 파일을 쓰고 매니페스트를 최신순으로 다시 만�
   }
 });
 
+test("원문 HTML을 그대로 옆에 싣고 해시로 못 박는다", () => {
+  const dir = mkdtempSync(join(tmpdir(), "insights-report-"));
+  try {
+    const src = join(dir, "report-original.html");
+    const html = "<!doctype html><title>Insights</title><p>Top Tools Used Bash 986</p>";
+    writeFileSync(src, html);
+    const { report } = publish(sample(), { dir, reportHtml: src });
+
+    assert.equal(report, "2026-01-02.report.html");
+    assert.equal(readFileSync(join(dir, report), "utf8"), html, "원문이 바이트 그대로가 아니다");
+    const saved = JSON.parse(readFileSync(join(dir, "2026-01-02.json"), "utf8"));
+    assert.equal(saved.source.report_bytes, Buffer.byteLength(html));
+    assert.match(saved.source.report_sha256, /^[0-9a-f]{64}$/);
+    assert.equal(
+      JSON.parse(readFileSync(join(dir, "index.json"), "utf8")).reports[0].report,
+      report,
+      "매니페스트가 원문을 알리지 않는다",
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("원문 파일이 없으면 매니페스트가 링크를 걸지 않는다", () => {
+  const dir = mkdtempSync(join(tmpdir(), "insights-report-"));
+  try {
+    const p = sample();
+    p.source = { report_file: "2026-01-02.report.html" };
+    publish(p, { dir }); // 파일은 붙이지 않았다
+    assert.equal(JSON.parse(readFileSync(join(dir, "index.json"), "utf8")).reports[0].report, null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("검증에 걸린 payload는 파일을 남기지 않는다", () => {
   const dir = mkdtempSync(join(tmpdir(), "insights-publish-"));
   try {
@@ -124,6 +159,25 @@ test("커밋된 리포트는 모두 검증을 통과한다", () => {
     assert.deepEqual(validatePayload(payload), [], `${file} 검증 실패`);
     for (const section of SECTIONS) assert.ok(payload.ko[section], `${file}: ${section} 누락`);
   }
+});
+
+// 원문 HTML이 발행 이후에 바뀌지 않았는지 — 수치 패널은 여기에만 있다.
+test("커밋된 원문 리포트가 해시와 일치한다", async () => {
+  const { createHash } = await import("node:crypto");
+  let checked = 0;
+  for (const file of readdirSync(DATA_DIR).filter((f) => /^\d{4}-\d{2}-\d{2}\.json$/.test(f))) {
+    const p = JSON.parse(readFileSync(join(DATA_DIR, file), "utf8"));
+    if (!p.source?.report_file) continue;
+    const html = readFileSync(join(DATA_DIR, p.source.report_file));
+    assert.equal(html.length, p.source.report_bytes, `${p.source.report_file}: 크기가 다르다`);
+    assert.equal(
+      createHash("sha256").update(html).digest("hex"),
+      p.source.report_sha256,
+      `${p.source.report_file}: 내용이 발행 시점과 다르다`,
+    );
+    checked++;
+  }
+  assert.ok(checked > 0, "원문이 붙은 리포트가 하나도 없다");
 });
 
 test("커밋된 매니페스트가 데이터 파일과 일치한다", () => {

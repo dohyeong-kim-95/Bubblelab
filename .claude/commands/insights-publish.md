@@ -48,20 +48,30 @@ KST 기준):
 ## 3. 발행·검증·배포
 
 ```bash
-node _infra/insights-publish.mjs <payload.json>     # 이미 있는 날짜면 --force
-npm test -- --test-name-pattern insights            # 구조·매니페스트 검증
+# --report 에 /insights 가 만든 원문 HTML 경로를 반드시 같이 넘긴다
+node _infra/insights-publish.mjs <payload.json> --report ~/.claude/usage-data/report-<시각>.html
+node --test _infra/insights-publish.test.mjs       # 구조·해시·매니페스트 검증
 node _infra/build.mjs
 ```
+
+**원문 HTML을 빠뜨리지 말 것.** 번역본(JSON)에는 리포트의 수치 패널(도구
+사용량·언어·응답시간 분포·Multi-Clauding·마찰 유형·시간대별 메시지)이 없고,
+나중에 세션 기록에서 다시 계산하면 그 뒤 세션이 섞여 숫자가 어긋난다. 원문은
+바이트 그대로 `data/<날짜>.report.html` 로 복사되고 화면의 📄 원문 리포트 버튼이
+그걸 연다. 같은 날짜를 다시 발행하려면 `--force`.
 
 검증기가 잡는 것: 날짜 형식, 통계 숫자, 섹션 누락, ko/en 구조 불일치(항목을
 빠뜨린 번역), 번역 안 된 긴 문장. 실패하면 payload를 고쳐서 다시 돌린다 —
 데이터 파일은 남지 않는다.
 
-커밋은 **이 작업의 파일만** 골라서 한다(`git add -A` 금지):
+커밋은 **이 작업의 파일만** 골라서 한다(`git add -A` 금지). 인덱스도 세션 간
+공유라 add와 commit 사이에 남의 스테이징이 끼어든다 — **한 명령으로 붙여서**
+실행하고, 직후 `git show --stat HEAD` 로 실린 파일을 확인한다:
 
 ```bash
-git add lab/claude-insights/data/<날짜>.json lab/claude-insights/data/index.json
-git commit -m "lab: 클로드 인사이트 <날짜> 리포트" && git push
+git add lab/claude-insights/data/<날짜>.json lab/claude-insights/data/<날짜>.report.html \
+        lab/claude-insights/data/index.json &&
+  git commit -m "lab: 클로드 인사이트 <날짜> 리포트" && git push
 ```
 
 배포는 GitHub Actions가 한다(~1분). 확인은 <https://lab.bubblelab.dev/claude-insights>

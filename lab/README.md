@@ -12,17 +12,26 @@ lab.bubblelab.dev. 토이가 아니라 내가 쓰는 도구 자리라서 랜딩�
 
 ```
 lab/claude-insights/
-  index.html          렌더러 (바닐라, 의존성 없음)
-  data/index.json     날짜 목록 매니페스트 — 스크립트가 항상 다시 만든다
-  data/YYYY-MM-DD.json  하루치 리포트 { date, range, stats, ko, en }
+  index.html               렌더러 (바닐라, 의존성 없음)
+  data/index.json          날짜 목록 매니페스트 — 스크립트가 항상 다시 만든다
+  data/YYYY-MM-DD.json     하루치 리포트 { date, range, stats, source, ko, en }
+  data/YYYY-MM-DD.report.html  그날 /insights 원문 HTML (바이트 그대로)
 ```
+
+**번역본은 `/insights` 가 준 JSON만 담는다** — 리포트 HTML의 수치 패널(도구
+사용량·언어·응답시간 분포·Multi-Clauding·마찰 유형·시간대별 메시지)은 그 JSON에
+없다. 나중에 `~/.claude/usage-data/session-meta/` 에서 다시 계산하면 그 뒤에 쌓인
+세션이 섞여 리포트와 다른 숫자가 나온다(실제로 메시지 187 → 220으로 어긋난다).
+그래서 원문 HTML을 바이트 그대로 옆에 싣고 화면의 **📄 원문 리포트** 버튼이 그걸
+연다. 발행 시점 해시를 `source.report_sha256` 에 박아 테스트가 대조한다.
+원문은 뷰포트 meta가 없어 폰에서는 축소되어 보인다(원본 그대로 두는 쪽을 택했다).
 
 발행 흐름 — 세션에서 `/insights` 를 돌린 **직후**에만 가능하다:
 
 1. `/insights` — 결과 JSON이 대화에 들어온다(리포트 HTML에는 구조화된 데이터가
    없어서 나중에 파일에서 뽑아낼 수 없다).
 2. `/insights-publish` — 에이전트가 한국어로 옮겨 payload를 만들고
-   `node _infra/insights-publish.mjs <payload.json>` 를 돌린다.
+   `node _infra/insights-publish.mjs <payload.json> --report <원문.html>` 를 돌린다.
    자세한 규칙은 `.claude/commands/insights-publish.md`.
 3. 커밋·푸시하면 Actions가 배포한다.
 

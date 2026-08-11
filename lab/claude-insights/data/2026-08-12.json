@@ -13,7 +13,10 @@
     "commits": 76
   },
   "source": {
-    "report": "~/.claude/usage-data/report-2026-08-12-015826.html"
+    "report": "~/.claude/usage-data/report-2026-08-12-015826.html",
+    "report_file": "2026-08-12.report.html",
+    "report_bytes": 69824,
+    "report_sha256": "e7c44fe02fe86986b396cf3c58979aa312405237beeeb7b35540d752c4a2ceac"
   },
   "ko": {
     "at_a_glance": {

@@ -196,8 +196,12 @@ PNG·JPEG를 모두 받고, JPEG는 `npm ci` 필요. 검증은 `_infra/wallpaper
 `.claude/commands/insights-publish.md`, 화면·데이터 구조는 `lab/README.md`.
 
 ```bash
-node _infra/insights-publish.mjs <payload.json>   # 같은 날짜 덮어쓰기는 --force
+node _infra/insights-publish.mjs <payload.json> --report <원문.html>   # 덮어쓰기는 --force
 ```
+
+**원문 HTML을 항상 같이 싣는다** — 번역본(JSON)에는 리포트의 수치 패널(도구
+사용량·응답시간 분포·마찰 유형 등)이 없고 나중에 다시 계산할 수도 없다.
+바이트 그대로 복사되고 화면의 📄 원문 리포트 버튼이 그걸 연다.
 
 ko/en 구조가 어긋나거나(번역에서 항목 누락) 번역이 빠진 문장이 있으면 스크립트가
 거절한다. `data/index.json`(날짜 목록)은 항상 자동 재생성이라 손대지 않는다.

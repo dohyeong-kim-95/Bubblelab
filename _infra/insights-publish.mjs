@@ -13,8 +13,10 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
+import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -122,8 +124,15 @@ export function validatePayload(payload) {
     diffShape(payload.ko, payload.en, "", errors);
     findUntranslated(payload.ko, "ko", errors);
   }
+  // 원문 리포트를 함께 실었다면 파일 이름이 날짜와 묶여 있어야 한다.
+  const file = payload.source?.report_file;
+  if (file != null && file !== `${payload.date}.report.html`) {
+    errors.push(`source.report_file은 "${payload.date}.report.html" 이어야 한다`);
+  }
   return errors;
 }
+
+export const reportName = (date) => `${date}.report.html`;
 
 // 목록 화면이 읽는 매니페스트. 데이터 파일이 진실이고 이건 항상 재생성한다.
 export function buildManifest(dir = DATA_DIR) {
@@ -132,12 +141,16 @@ export function buildManifest(dir = DATA_DIR) {
     for (const name of readdirSync(dir).sort()) {
       if (!/^\d{4}-\d{2}-\d{2}\.json$/.test(name)) continue;
       const p = JSON.parse(readFileSync(join(dir, name), "utf8"));
+      // 원문 HTML은 파일이 실제로 옆에 있을 때만 알린다 — 화면이 없는 링크를
+      // 그리면 404를 누르게 된다.
+      const report = p.source?.report_file;
       reports.push({
         date: p.date,
         generated_at: p.generated_at ?? null,
         range: p.range,
         stats: p.stats,
         summary: p.ko?.interaction_style?.key_pattern ?? "",
+        report: report && existsSync(join(dir, report)) ? report : null,
       });
     }
   }
@@ -151,21 +164,40 @@ export function writeManifest(dir = DATA_DIR) {
   return manifest;
 }
 
-export function publish(payload, { force = false, dir = DATA_DIR } = {}) {
+// 번역본은 /insights 가 준 JSON만 담는다 — 리포트 HTML에 있는 수치 패널(도구
+// 사용량·응답시간 분포·마찰 유형…)은 그 JSON에 없고, 나중에 세션 기록에서
+// 다시 계산하면 그 뒤에 쌓인 세션이 섞여 리포트와 다른 숫자가 나온다.
+// 그래서 원문 HTML을 그대로 옆에 둔다 — 화면의 "원문 리포트" 버튼이 이걸 연다.
+function attachReport(payload, reportHtml, dir) {
+  const html = readFileSync(reportHtml);
+  const name = reportName(payload.date);
+  writeFileSync(join(dir, name), html);
+  const sha = createHash("sha256").update(html).digest("hex");
+  payload.source = { ...payload.source, report_file: name, report_bytes: html.length, report_sha256: sha };
+  return name;
+}
+
+export function publish(payload, { force = false, dir = DATA_DIR, reportHtml = null } = {}) {
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, `${payload.date ?? "invalid"}.json`);
+  if (existsSync(file) && !force) {
+    throw new Error(`${payload.date} 리포트가 이미 있다 — 덮어쓰려면 --force`);
+  }
+  // 원문 첨부는 payload를 건드리므로 검증 전에 한다(파일명 규칙까지 같이 검사된다).
+  if (reportHtml) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(payload.date ?? "")) throw new Error("date가 없어 원문을 붙일 수 없다");
+    attachReport(payload, reportHtml, dir);
+  }
   const errors = validatePayload(payload);
   if (errors.length) {
+    if (reportHtml) rmSync(join(dir, reportName(payload.date)), { force: true });
     const err = new Error(`payload 검증 실패:\n  - ${errors.join("\n  - ")}`);
     err.errors = errors;
     throw err;
   }
-  mkdirSync(dir, { recursive: true });
-  const file = join(dir, `${payload.date}.json`);
-  if (existsSync(file) && !force) {
-    throw new Error(`${payload.date} 리포트가 이미 있다 — 덮어쓰려면 --force`);
-  }
   writeFileSync(file, JSON.stringify(payload, null, 2) + "\n");
   const manifest = writeManifest(dir);
-  return { file, count: manifest.reports.length };
+  return { file, count: manifest.reports.length, report: payload.source?.report_file ?? null };
 }
 
 const invokedDirectly = process.argv[1] &&
@@ -174,15 +206,18 @@ const invokedDirectly = process.argv[1] &&
 if (invokedDirectly) {
   const args = process.argv.slice(2);
   const force = args.includes("--force");
-  const input = args.find((a) => !a.startsWith("--"));
+  const reportAt = args.indexOf("--report");
+  const reportHtml = reportAt === -1 ? null : args[reportAt + 1];
+  const input = args.filter((a, i) => !a.startsWith("--") && i !== reportAt + 1)[0];
   if (!input) {
-    console.error("사용법: node _infra/insights-publish.mjs <payload.json> [--force]");
+    console.error("사용법: node _infra/insights-publish.mjs <payload.json> [--report <원문.html>] [--force]");
     process.exit(1);
   }
   try {
     const payload = JSON.parse(readFileSync(input, "utf8"));
-    const { file, count } = publish(payload, { force });
+    const { file, count, report } = publish(payload, { force, reportHtml });
     console.log(`published ${payload.date} → ${file.replace(ROOT + "/", "")} (총 ${count}개)`);
+    if (report) console.log(`  원문 리포트 첨부: ${report}`);
   } catch (error) {
     console.error(error.message);
     process.exit(1);
