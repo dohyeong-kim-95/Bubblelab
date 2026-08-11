@@ -22,6 +22,8 @@ const SCREENS = [
   { name: "달력", path: "/util/calendar/" },
   { name: "운세", path: "/util/fortune/" },
   { name: "별자리 배경화면", path: "/util/stars/" },
+  // textarea 뒤에 거울을 깔아 밑줄을 그린다 — 두 층이 어긋나면 가로로 넘친다
+  { name: "맞춤법 검사", path: "/util/proofread/" },
   // 카메라가 없는 환경(헤드리스)에서도 첫 화면이 떠야 한다 — 게임 로직은 단위 테스트가 본다
   { name: "발판 리듬", path: "/games/stepcam/" },
   // 스페인어 학습장은 화면을 전부 스크립트로 그린다 — 모듈이 하나만 깨지면 빈 화면이 된다
