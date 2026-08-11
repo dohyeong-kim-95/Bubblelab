@@ -694,7 +694,7 @@
     <button id="map-here" type="button" title="지금 있는 곳을 지도에 추가">📍 현재 위치 추가</button>
   </header>
   <div id="map-wrap">
-    <svg id="map-svg" role="img" aria-label="함께 다닌 곳 지도"></svg>
+    <svg id="map-svg" role="img" aria-label="함께 다닌 곳 지도"><g id="map-paths"></g><g id="map-dots"></g></svg>
     <div id="map-empty" hidden>아직 위치가 담긴 사진이 없어요.<br>위치정보가 있는 사진을 주고받으면<br>다녀온 시군구가 여기 색칠돼요.</div>
   </div>
   <div id="map-summary"></div>
@@ -3352,9 +3352,31 @@ async function loadMapGeo() {
     }
   }
   geo._bbox = { minLng, minLat, maxLng, maxLat };
+  // 클러스터 원을 그리려면 지역마다 "어디에 찍을지(대표점)"와 "얼마나 커도 되는지
+  // (크기)"가 필요하다. 한 번만 재 두고 재사용한다.
+  geo._sido = new Map();
+  for (const f of geo.features) {
+    f._bbox = polysBBox(f._polys);
+    f._point = regionPoint(f); // 지역 안이 보장되는 대표 좌표(색칠·앨범과 같은 것)
+    const nm = f.properties.sidonm;
+    const cur = geo._sido.get(nm);
+    geo._sido.set(nm, cur ? mergeBBox(cur, f._bbox) : { ...f._bbox });
+  }
   mapGeo = geo;
   return geo;
 }
+function polysBBox(polys) {
+  let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
+  for (const poly of polys) for (const ring of poly) for (const c of ring) {
+    if (c[0] < minLng) minLng = c[0]; if (c[0] > maxLng) maxLng = c[0];
+    if (c[1] < minLat) minLat = c[1]; if (c[1] > maxLat) maxLat = c[1];
+  }
+  return { minLng, minLat, maxLng, maxLat };
+}
+const mergeBBox = (a, b) => ({
+  minLng: Math.min(a.minLng, b.minLng), minLat: Math.min(a.minLat, b.minLat),
+  maxLng: Math.max(a.maxLng, b.maxLng), maxLat: Math.max(a.maxLat, b.maxLat),
+});
 function pointInRing(x, y, ring) {
   let inside = false;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
@@ -3414,15 +3436,12 @@ async function renderMap() {
     const op = r ? (0.4 + 0.55 * (r.count / maxc)).toFixed(3) : "1"; // 많이 간 곳일수록 진하게
     paths += `<path class="rg" data-sgg="${f.properties.sgg}" d="${d}" fill="${fill}" fill-opacity="${op}"><title>${f.properties.sidonm} ${f.properties.sggnm}${r ? " · " + r.count + "장" : ""}</title></path>`;
   }
-  let dots = "";
-  for (const p of pins) {
-    if (p.lng < b.minLng || p.lng > b.maxLng || p.lat < b.minLat || p.lat > b.maxLat) continue; // 해외는 점 생략
-    const dc = p.mine !== false ? cMine : cTheirs; // 점도 올린 사람 색
-    dots += `<circle cx="${X(p.lng).toFixed(1)}" cy="${Y(p.lat).toFixed(1)}" r="4" fill="${dc}" fill-opacity=".95" stroke="#fff" stroke-width=".8"/>`;
-  }
   const svg = $("map-svg");
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-  svg.innerHTML = paths + dots;
+  $("map-paths").innerHTML = paths;
+  // 원은 배율이 바뀔 때마다 다시 그린다(단위·크기가 배율에 따라 달라진다).
+  mapProj = { X, Y, b };
+  renderDots();
   const regions = Object.keys(reg).length;
   $("map-empty").hidden = pins.length > 0;
   $("map-count").textContent = pins.length ? `${regions}개 지역` : "";
@@ -3436,6 +3455,79 @@ async function renderMap() {
       + `<div style="clear:both;padding-top:.3rem;font-size:.76rem;opacity:.8">색칠된 지역을 탭하면 그곳 사진을 볼 수 있어요</div>`
     : "";
 }
+// ── 클러스터 원 ──────────────────────────────────────────────
+// 예전엔 위치가 있는 항목마다 같은 크기의 점을 하나씩 찍었다. 많이 간 곳일수록
+// 점만 겹쳐 쌓여 뭉개지고, 작은 구에서는 점 하나가 구보다 커 보였다.
+// 지금은 부동산 앱처럼 **지역별로 묶어 개수에 따라 크기가 다른 원 하나**를 찍고,
+// 배율이 낮으면 시도로, 확대하면 시군구로 단위를 바꾼다.
+let mapProj = null;
+const SGG_ZOOM = 3;              // 이 배율 이상이면 시군구 단위로 쪼갠다
+const DOT_STEPS = [              // 개수 → 기본 반지름(viewBox 기준)
+  { max: 4, r: 4 },              // 1~4장: 있다는 표시만
+  { max: 19, r: 8 },
+  { max: 49, r: 13 },
+  { max: 99, r: 18 },
+  { max: Infinity, r: 23 },
+];
+const dotRadius = (n) => DOT_STEPS.find((s) => n <= s.max).r;
+
+function renderDots() {
+  const geo = mapGeo, proj = mapProj;
+  if (!geo || !proj) return;
+  const { X, Y } = proj;
+  const bySido = mS < SGG_ZOOM; // 멀리서 보면 시도, 당기면 시군구
+  const groups = new Map();
+
+  for (const p of loadPins()) {
+    const f = sggOfPoint(geo, p.lng, p.lat);
+    if (!f) continue; // 해외 — 색칠할 구역이 없다
+    const key = bySido ? f.properties.sidonm : f.properties.sgg;
+    let g = groups.get(key);
+    if (!g) {
+      // 커질 수 있는 한계는 그 구역 크기로 잡는다(시도로 묶을 땐 시도 전체 bbox).
+      g = { count: 0, mine: false, theirs: false, sumLng: 0, sumLat: 0,
+            box: bySido ? geo._sido.get(f.properties.sidonm) : f._bbox,
+            fallback: f._point,
+            name: bySido ? f.properties.sidonm : f.properties.sggnm };
+      groups.set(key, g);
+    }
+    // 원은 **실제로 찍힌 곳들의 평균**에 놓는다. bbox 중심을 쓰면 인천처럼 먼 섬을
+    // 가진 시도의 원이 서해 한복판에 뜬다(실제로 그랬다).
+    g.count++;
+    g.sumLng += p.lng; g.sumLat += p.lat;
+    if (p.mine !== false) g.mine = true; else g.theirs = true;
+  }
+
+  const cMine = colorForOwner(MY_NAME);
+  const cTheirs = colorForOwner(peerName || "상대");
+  const cShared = sharedColor();
+  let out = "";
+  for (const g of groups.values()) {
+    const pt = g.count ? { lng: g.sumLng / g.count, lat: g.sumLat / g.count } : g.fallback;
+    const cx = X(pt.lng), cy = Y(pt.lat);
+    // 원이 행정구역을 덮어 버리면 어디를 탭해야 할지 알 수 없다 — 지름이 그 구역
+    // 짧은 변의 50%를 넘지 않게 묶어 둔다. 확대 중에는 배율로 나눠 화면에서 보이는
+    // 크기를 일정하게 유지한다(SVG 가 통째로 확대되므로 그냥 두면 같이 커진다).
+    const wpx = Math.abs(X(g.box.maxLng) - X(g.box.minLng));
+    const hpx = Math.abs(Y(g.box.maxLat) - Y(g.box.minLat));
+    const limit = Math.min(wpx, hpx) * 0.25; // 반지름 기준 = 지름의 50%
+    // 하한도 배율로 나눈다. 고정값(1.5)으로 두면 확대할수록 모든 원이 하한에 걸려
+    // 개수에 따른 크기 차이가 통째로 사라진다(16배에서 전부 같은 크기로 보였다).
+    const r = Math.max(1.5 / mS, Math.min(dotRadius(g.count) / mS, limit));
+    const fill = (g.mine && g.theirs) ? cShared : g.theirs ? cTheirs : cMine;
+    out += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(2)}"`
+      + ` fill="${fill}" fill-opacity=".9" stroke="#fff" stroke-width="${(1 / mS).toFixed(2)}"`
+      + ` pointer-events="none"><title>${g.name} · ${g.count}장</title></circle>`;
+    // 화면에서 충분히 큰 원에만 숫자를 넣는다(작은 원에 글씨를 우겨넣으면 뭉갠다).
+    if (r * mS >= 10) {
+      out += `<text x="${cx.toFixed(1)}" y="${cy.toFixed(1)}" text-anchor="middle"`
+        + ` dominant-baseline="central" font-size="${(r * 1.05).toFixed(2)}"`
+        + ` font-weight="700" fill="#fff" pointer-events="none">${g.count}</text>`;
+    }
+  }
+  $("map-dots").innerHTML = out;
+}
+
 async function openMap() {
   closeMenu(); // 설정 메뉴에서 열릴 수도 있으니 메뉴는 닫는다
   // 지도(pane 2) 뒤에 캘린더(pane 1)를 열어 둔다 → 지도를 오른쪽으로 밀면 캘린더가
@@ -3538,7 +3630,23 @@ $("map-svg").addEventListener("click", (e) => {
 // 탭·사진추가하기 위함. #map-wrap 의 touch-action:none 으로 브라우저 기본 줌을 끄고
 // CSS transform 으로 지도 영역만 확대한다(페이지는 안 움직임).
 let mS = 1, mTx = 0, mTy = 0, mapMoved = false;
-function applyMapT() { $("map-svg").style.transform = `translate(${mTx}px, ${mTy}px) scale(${mS})`; }
+// 배율이 바뀌면 원의 단위(시도↔시군구)와 크기가 달라진다. 핀치 중엔 touchmove 마다
+// 불리므로 프레임당 한 번으로 합친다(원을 다시 그리는 건 지도 path 재생성보다 싸다).
+let dotsScheduled = false, lastDotScale = 1;
+function scheduleDots() {
+  if (dotsScheduled) return;
+  dotsScheduled = true;
+  requestAnimationFrame(() => {
+    dotsScheduled = false;
+    if (Math.abs(mS - lastDotScale) < 0.01) return; // 팬만 했으면 다시 그릴 게 없다
+    lastDotScale = mS;
+    renderDots();
+  });
+}
+function applyMapT() {
+  $("map-svg").style.transform = `translate(${mTx}px, ${mTy}px) scale(${mS})`;
+  scheduleDots();
+}
 function clampMapT() {
   const w = $("map-wrap").clientWidth, h = $("map-wrap").clientHeight;
   mTx = Math.min(0, Math.max(w - w * mS, mTx));
