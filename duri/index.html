@@ -3470,13 +3470,20 @@ async function renderMap() {
   const sw = (c) => `<span style="display:inline-block;width:.72em;height:.72em;border-radius:2px;background:${c};vertical-align:-1px;margin:0 .15em 0 .5em"></span>`;
   const esc = (s) => String(s).replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
   const meName = esc(MY_NAME || "나"), theirName = esc(peerName || "상대"); // 각자 설정한 이름으로 범례 표시
-  // 사진과 위치(/여기)를 나눠 적는다. 종류를 모르는 옛 핀이 섞여 있으면 나누지
-  // 않고 "기록 N개"로 통칭한다 — 모르는 걸 사진으로 세느니 뭉뚱그리는 게 낫다.
-  const what = unknownN === 0
-    ? [photoN && `사진 ${photoN}장`, spotN && `위치 ${spotN}곳`].filter(Boolean).join(" · ")
-    : `기록 ${inKorea}개`;
+  // 아이콘 + 숫자로 짧게. 사진과 위치(/여기)는 나눠 세되, 종류를 모르는 옛 핀이
+  // 섞여 있으면 나누지 않고 하나로 통칭한다 — 모르는 걸 사진으로 세느니 낫다.
+  // 이모지만으로는 뜻이 안 통하니 title 로 이름을 붙여 둔다.
+  const chip = (emoji, n, label) => `<span title="${label}">${emoji} ${n}</span>`;
+  const parts = [chip("🧭", regions, "다녀온 시군구")];
+  if (unknownN === 0) {
+    if (photoN) parts.push(chip("📷", photoN, "위치가 담긴 사진"));
+    if (spotN) parts.push(chip("📍", spotN, "위치 기록"));
+  } else {
+    parts.push(chip("📌", inKorea, "위치가 담긴 기록"));
+  }
+  if (foreign) parts.push(chip("🌏", foreign, "해외"));
   $("map-summary").innerHTML = pins.length
-    ? `다녀온 시군구 ${regions}곳 · ${what}${foreign ? ` · 해외 ${foreign}개` : ""}`
+    ? `<span style="display:inline-flex;gap:.6rem">${parts.join("")}</span>`
       + `<span style="float:right">${sw(cMine)}${meName}${sw(cTheirs)}${theirName}${sw(cShared)}함께</span>`
       // 지역 앨범(탭하면 그곳 사진)은 눈에 보이는 단서가 없으면 아무도 모른다.
       + `<div style="clear:both;padding-top:.3rem;font-size:.76rem;opacity:.8">색칠된 지역을 탭하면 그곳 사진을 볼 수 있어요</div>`
