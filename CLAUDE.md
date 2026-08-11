@@ -183,6 +183,25 @@ PNG·JPEG를 모두 받고, JPEG는 `npm ci` 필요. 검증은 `_infra/wallpaper
 `duri/data/kr-sgg.geojson`만 쓰고 외부 지도 API는 없다). 셋업·프로토콜·한계는
 `duri/README.md` 참고.
 
+## 인사이트 아카이브 (lab/claude-insights)
+
+`lab/`은 내가 쓰는 도구를 두는 비공개 서브도메인이다(`CONFIDENTIAL_SUBDOMAINS`,
+랜딩 미노출). 그 안의 `claude-insights`는 Claude Code의 `/insights` 리포트를
+한국어로 옮겨 날짜별로 쌓아 두는 화면이다 — 날짜 버튼으로 그날 리포트를 다시
+읽고, 한국어/원문을 토글한다.
+
+**발행은 `/insights`를 돌린 직후에만 가능하다** — 결과 JSON이 대화에 있어야 한다
+(리포트 HTML에는 구조화된 데이터가 없다). 그다음 `/insights-publish`를 실행하면
+번역·검증·발행까지 간다. 번역 규칙과 payload 형식은
+`.claude/commands/insights-publish.md`, 화면·데이터 구조는 `lab/README.md`.
+
+```bash
+node _infra/insights-publish.mjs <payload.json>   # 같은 날짜 덮어쓰기는 --force
+```
+
+ko/en 구조가 어긋나거나(번역에서 항목 누락) 번역이 빠진 문장이 있으면 스크립트가
+거절한다. `data/index.json`(날짜 목록)은 항상 자동 재생성이라 손대지 않는다.
+
 ## 병렬로 여러 에이전트를 돌린다면
 
 서브도메인마다 격리된 worktree("레인")가 `../worktrees/<이름>` 에 있다. 같은
