@@ -63,10 +63,10 @@ const msg = document.getElementById("msg");
     const { records } = await res.json();
     // 올타임 1위를 가장 많이 가진 삼대장. 순위 계산·렌더는 /_shared/podium.js가
     // 맡는다 — 카테고리 홈의 이번 주 시상대와 동점 규칙을 함께 쓰기 위해서다.
-    // podium.js는 defer라 파싱이 끝나야 실행된다. 캐시 등으로 fetch가 먼저
-    // 끝나면 아직 없을 수 있으므로 DOM 준비를 기다린 뒤에 그린다.
-    if (document.readyState === "loading") {
-      await new Promise((r) => addEventListener("DOMContentLoaded", r, { once: true }));
+    // podium.js는 defer라 파싱 뒤에야 실행된다. fetch가 그 사이(interactive)에
+    // 끝나면 blPodium이 아직 없다 — 문서 load까지 기다리면 확실하다.
+    if (document.readyState !== "complete") {
+      await new Promise((r) => addEventListener("load", r, { once: true }));
     }
     window.blPodium?.render(
       document.getElementById("hof-podium"),

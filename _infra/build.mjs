@@ -341,9 +341,11 @@ ${preconnectLinks}
   #alltime-top[hidden] { display: none; }
   #alltime-top .at-sub { display: block; font-size: .78rem; opacity: .8;
            letter-spacing: .02em; color: light-dark(#8a6d12, #ffd873); }
-  #alltime-top .at-nick { display: block; font-size: 1.65rem; font-weight: 900;
-           line-height: 1.3; overflow-wrap: anywhere; }
+  #alltime-top .at-nick { display: block; font-size: 2.15rem; font-weight: 900;
+           line-height: 1.25; overflow-wrap: anywhere; }
   #alltime-top:hover .at-nick { text-decoration: underline; }
+  /* 이번 주 시상대는 올타임 1위보다 한 급 아래로 (공용 css보다 작게) */
+  #week-podium .podium-title { font-size: .8rem; }
   .grid { display: grid; gap: 1rem;
           grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); }
   .card { aspect-ratio: 1; border-radius: 1.25rem; text-decoration: none;
@@ -452,10 +454,11 @@ addEventListener("keydown", (event) => {
 // 이번 주 삼대장 시상대. 순위 계산·렌더는 /_shared/podium.js가 맡는다
 // (명예의 전당의 올타임 시상대와 같은 동점 규칙을 쓰기 위해 한 곳에 뒀다).
 async function renderWeekPodium(records) {
-  // podium.js는 defer라 파싱이 끝나야 실행된다. 캐시 등으로 fetch가 먼저 끝나면
-  // 아직 없을 수 있으므로 DOM 준비를 기다린 뒤에 그린다.
-  if (document.readyState === "loading") {
-    await new Promise((r) => addEventListener("DOMContentLoaded", r, { once: true }));
+  // podium.js는 defer라 파싱 뒤에야 실행된다. fetch가 그 사이(interactive)에
+  // 끝나면 blPodium이 아직 없다 — "loading"만 기다려서는 간헐적으로 빈
+  // 시상대가 됐다. 문서 load까지 기다리면 확실하다.
+  if (document.readyState !== "complete") {
+    await new Promise((r) => addEventListener("load", r, { once: true }));
   }
   const mount = document.getElementById("week-podium");
   if (!mount || !window.blPodium) return;
@@ -505,9 +508,10 @@ async function renderWeekPodium(records) {
       if (crown) crown.textContent =
         \`🏆 이번 주 종합 1위: \${leaders.join(" · ")} (1위 \${top}개)\`;
     }
-    // 주간 리셋·공지 팝업 (records.js가 정의 — defer 스크립트 실행을 기다린다)
-    if (document.readyState === "loading") {
-      await new Promise((r) => addEventListener("DOMContentLoaded", r, { once: true }));
+    // 주간 리셋·공지 팝업 (records.js가 정의 — defer 스크립트라 파싱 뒤에야
+    // 실행된다. fetch가 그 사이(interactive)에 끝나면 아직 없다 — load까지 대기)
+    if (document.readyState !== "complete") {
+      await new Promise((r) => addEventListener("load", r, { once: true }));
     }
     if (SITE === "slop") window.blWeeklyResetNotice?.(week, notice);
   } catch {}
@@ -548,9 +552,10 @@ async function renderWeekPodium(records) {
     const res = await fetch("/_records?alltime=1&scope=slop", { cache: "no-store" });
     if (!res.ok) throw new Error();
     const { records } = await res.json();
-    // podium.js는 defer라 파싱이 끝나야 실행된다 — DOM 준비를 기다린다.
-    if (document.readyState === "loading") {
-      await new Promise((r) => addEventListener("DOMContentLoaded", r, { once: true }));
+    // podium.js는 defer라 파싱 뒤에야 실행된다. fetch가 그 사이(interactive)에
+    // 끝나면 blPodium이 아직 없다 — 문서 load까지 기다리면 확실하다.
+    if (document.readyState !== "complete") {
+      await new Promise((r) => addEventListener("load", r, { once: true }));
     }
     const top = (window.blPodium?.rank(records) ?? [])[0];
     if (!top || top.rank !== 1) return;

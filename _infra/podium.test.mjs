@@ -89,10 +89,14 @@ test("올타임 집계는 slop 스코프만 본다", () => {
 });
 
 test("defer 로드 경합을 막는다", () => {
-  // podium.js는 defer라 파싱이 끝나야 실행된다. fetch가 먼저 끝나면 아직 없다.
+  // podium.js는 defer라 파싱 뒤에야 실행된다. fetch가 그 사이(interactive)에
+  // 끝나면 blPodium이 아직 없다 — "loading"만 기다리는 가드는 간헐적으로
+  // 빈 시상대를 만들었다. 문서 load까지 기다려야 한다.
   for (const [name, src] of [["build.mjs", BUILD], ["hall-of-fame", HOF]]) {
-    assert.match(src, /document\.readyState === "loading"/, `${name}가 DOM 준비를 안 기다린다`);
-    assert.match(src, /DOMContentLoaded/, `${name}가 DOM 준비를 안 기다린다`);
+    assert.match(src, /document\.readyState !== "complete"/, `${name}가 load를 안 기다린다`);
+    assert.match(src, /addEventListener\("load", r, \{ once: true \}\)/, `${name}가 load를 안 기다린다`);
+    assert.ok(!src.includes('document.readyState === "loading"'),
+      `${name}에 낡은 loading 가드가 남아 있다`);
   }
 });
 
