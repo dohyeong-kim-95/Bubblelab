@@ -1,70 +1,119 @@
 #!/usr/bin/env bash
-# 에이전트 브랜치(agent/<서브도메인>/<슬러그>)에서 남의 서브도메인 파일이
-# 커밋되는 것을 막는다. worktree 격리가 1차 방어선이고, 이건 2차 방어선이다 —
-# `git add -A` 를 쳐도 자기 소유 밖의 파일은 커밋에 들어가지 않는다.
+# 커밋 전에 자동으로 도는 세 가지.
 #
-# 소유 범위: 이름 규칙(아래) + _infra/agent-scope.conf 의 명시 목록.
-# 다른 브랜치(main 등)에서는 아무것도 하지 않는다.
-# 예외가 필요하면: AGENT_SCOPE_OK=1 git commit …
+#   1. 소유 범위   — agent/<서브도메인>/… 브랜치에서 남의 파일 커밋 거부
+#   2. 린트        — 스테이지된 js/mjs/json/sh 문법 검사 (scripts/lint.sh)
+#   3. 테스트      — 코드가 스테이지됐으면 npm test (빌드 검사 포함)
+#
+# **stash 하지 않는다.** 보통 훅은 `git stash --keep-index` 로 스테이지된
+# 내용만 검사하지만, 이 리포는 작업 트리를 여러 세션이 공유한다 — stash 는 남의
+# 미커밋 변경까지 걷어가 버린다. 그래서 검사 대상은 "지금 디스크 상태"다.
+# 스테이지하지 않은 변경이 섞여 있으면 그것까지 함께 검사된다.
+#
+# 우회: SKIP_HOOKS=1 git commit …   (소유 범위만 우회: AGENT_SCOPE_OK=1)
 set -uo pipefail
 
-branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo)"
-case "$branch" in agent/*/*) ;; *) exit 0 ;; esac
-[ "${AGENT_SCOPE_OK:-}" = "1" ] && exit 0
+[ "${SKIP_HOOKS:-}" = "1" ] && exit 0
 
-sub="${branch#agent/}"; sub="${sub%%/*}"
 root="$(git rev-parse --show-toplevel)"
-conf="$root/_infra/agent-scope.conf"
+branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo)"
+mapfile -t staged < <(git diff --cached --name-only --diff-filter=ACMR)
+[ ${#staged[@]} -eq 0 ] && exit 0
 
-# conf에서 한 키의 패턴들을 읽는다 (없으면 빈 문자열)
-patterns_for() {
-  [ -f "$conf" ] || return 0
-  sed -n "s|^$1:[[:space:]]*||p" "$conf" | head -1
-}
+# ── 1. 소유 범위 ──────────────────────────────────────────────────────────
+case "$branch" in
+  agent/*/*)
+    if [ "${AGENT_SCOPE_OK:-}" != "1" ]; then
+      sub="${branch#agent/}"; sub="${sub%%/*}"
+      conf="$root/_infra/agent-scope.conf"
 
-owned_extra="$(patterns_for "$sub")"
-shared="$(patterns_for '\*shared\*')"
+      patterns_for() {
+        [ -f "$conf" ] || return 0
+        sed -n "s|^$1:[[:space:]]*||p" "$conf" | head -1
+      }
+      owned_extra="$(patterns_for "$sub")"
+      shared="$(patterns_for '\*shared\*')"
 
-matches() { # matches <path> <patterns…>
-  local path="$1"; shift
-  local pattern
-  for pattern in $*; do
-    # shellcheck disable=SC2053  — 오른쪽은 글롭이어야 한다
-    [[ "$path" == $pattern ]] && return 0
-  done
-  return 1
-}
+      matches() { # matches <path> <patterns…>
+        local path="$1"; shift
+        local pattern
+        for pattern in $*; do
+          # shellcheck disable=SC2053  — 오른쪽은 글롭이어야 한다
+          [[ "$path" == $pattern ]] && return 0
+        done
+        return 1
+      }
 
-bad=() warn=()
-while IFS= read -r path; do
-  [ -n "$path" ] || continue
-  matches "$path" "$shared" && { warn+=("$path"); continue; }
-  matches "$path" "$owned_extra" && continue
+      bad=() warn=()
+      for path in "${staged[@]}"; do
+        matches "$path" "$shared" && { warn+=("$path"); continue; }
+        matches "$path" "$owned_extra" && continue
+        case "$path" in
+          "$sub"/*) continue ;;
+          _infra/"$sub".*|_infra/"$sub"-*) continue ;;
+          _src/"$sub"/*|_src/"$sub"-*/*) continue ;;
+        esac
+        bad+=("$path")
+      done
+
+      if [ ${#warn[@]} -gt 0 ]; then
+        echo "note: 공용 파일이 커밋에 들어 있다 — 자기 몫 한 줄만 바뀌었는지 확인해라:" >&2
+        printf '  %s\n' "${warn[@]}" >&2
+      fi
+
+      if [ ${#bad[@]} -gt 0 ]; then
+        {
+          echo ""
+          echo "커밋 거부: 브랜치 '$branch' 는 '$sub' 소유 파일만 커밋할 수 있다."
+          echo "소유 밖 경로:"
+          printf '  %s\n' "${bad[@]}"
+          echo ""
+          echo "소유 범위: $sub/**, _infra/$sub.*, _infra/$sub-*, _src/$sub/**, _src/$sub-*/**"
+          [ -n "$owned_extra" ] && echo "          $owned_extra"
+          echo "공용 파일을 정말 고쳐야 하면 _infra/agent-scope.conf 를 보고"
+          echo "오케스트레이터에게 요청한다 (긴급 우회: AGENT_SCOPE_OK=1 git commit …)."
+        } >&2
+        exit 1
+      fi
+    fi
+    ;;
+esac
+
+# ── 2. 린트 (스테이지된 파일만) ────────────────────────────────────────────
+if [ -x "$root/scripts/lint.sh" ]; then
+  bash "$root/scripts/lint.sh" "${staged[@]}" || exit 1
+fi
+
+# ── 3. 테스트 ─────────────────────────────────────────────────────────────
+# 문서(.md)·이미지만 바뀐 커밋에는 돌리지 않는다 — 11초가 매번 붙으면 사람들이
+# 훅을 꺼 버린다. 코드가 하나라도 끼면 전부 돈다.
+needs_test=0
+for path in "${staged[@]}"; do
   case "$path" in
-    "$sub"/*) continue ;;                        # 자기 서브도메인 폴더
-    _infra/"$sub".*|_infra/"$sub"-*) continue ;; # _infra/<이름>.js, <이름>-ai.js, <이름>.test.mjs
-    _src/"$sub"/*|_src/"$sub"-*/*) continue ;;   # _src/<이름>-sink/ 등
+    *.md|*.txt|*.png|*.jpg|*.jpeg|*.gif|*.webp|*.svg|*.geojson|LICENSE) ;;
+    *) needs_test=1; break ;;
   esac
-  bad+=("$path")
-done < <(git diff --cached --name-only)
+done
 
-if [ ${#warn[@]} -gt 0 ]; then
-  echo "note: 공용 파일이 커밋에 들어 있다 — 자기 몫 한 줄만 바뀌었는지 확인해라:" >&2
-  printf '  %s\n' "${warn[@]}" >&2
+if [ "$needs_test" = "1" ]; then
+  [ -d "$root/node_modules" ] || {
+    echo "훅: node_modules 가 없어 테스트를 건너뛴다 (npm ci 후 다시 커밋해라)" >&2
+    exit 0
+  }
+  echo "훅: npm test (빌드 검사 포함) …"
+  if ! (cd "$root" && npm test >/tmp/bl-hook-test.$$ 2>&1); then
+    tail -30 /tmp/bl-hook-test.$$ >&2
+    rm -f /tmp/bl-hook-test.$$
+    {
+      echo ""
+      echo "커밋 거부: 테스트가 실패한다."
+      echo "고친 뒤 다시 커밋하거나, 정말 지금 커밋해야 하면 SKIP_HOOKS=1 git commit …"
+    } >&2
+    exit 1
+  fi
+  grep -E '^# (tests|pass|fail)' /tmp/bl-hook-test.$$ | tr '\n' ' ' >&2
+  echo "" >&2
+  rm -f /tmp/bl-hook-test.$$
 fi
 
-if [ ${#bad[@]} -gt 0 ]; then
-  {
-    echo ""
-    echo "커밋 거부: 브랜치 '$branch' 는 '$sub' 소유 파일만 커밋할 수 있다."
-    echo "소유 밖 경로:"
-    printf '  %s\n' "${bad[@]}"
-    echo ""
-    echo "소유 범위: $sub/**, _infra/$sub.*, _infra/$sub-*, _src/$sub/**, _src/$sub-*/**"
-    [ -n "$owned_extra" ] && echo "          $owned_extra"
-    echo "공용 파일을 정말 고쳐야 하면 _infra/agent-scope.conf 를 보고"
-    echo "오케스트레이터에게 요청한다 (긴급 우회: AGENT_SCOPE_OK=1 git commit …)."
-  } >&2
-  exit 1
-fi
 exit 0

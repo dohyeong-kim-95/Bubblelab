@@ -31,6 +31,9 @@ jobs:
       - name: Install root dependencies
         run: npm ci
 
+      - name: Lint (syntax)
+        run: bash scripts/lint.sh
+
       - name: Test infra
         run: node --test _infra/*.test.mjs
 

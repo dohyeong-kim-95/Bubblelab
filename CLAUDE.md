@@ -47,6 +47,7 @@
 
 ```bash
 npm test                     # 인프라 단위 테스트
+make lint                    # 문법 검사 (js/mjs/json/sh) — eslint 없음, 파싱만 본다
 node _infra/build.mjs        # 빌드 (dist/ 생성, 에러 없어야 함)
 npm run test:e2e             # 핵심 화면 모바일 스모크 (빌드 후 Playwright)
 npx wrangler@4 dev --local --local-upstream localhost   # 로컬 서빙
@@ -54,6 +55,11 @@ npx wrangler@4 dev --local --local-upstream localhost   # 로컬 서빙
 ```
 
 `--local-upstream localhost` 필수.
+
+**커밋 훅이 알아서 돈다.** `_infra/agent-hooks/pre-commit` 이 스테이지된 파일에
+린트를 돌리고, 코드가 하나라도 끼면 `npm test`(빌드 검사 포함)까지 돌린다 —
+문서만 바뀐 커밋은 건너뛴다. 급하면 `SKIP_HOOKS=1 git commit`. 새로 클론했으면
+한 번 켜 준다: `git config core.hooksPath _infra/agent-hooks`.
 
 ## 배포는 `make ship` 으로
 
@@ -64,6 +70,9 @@ npx wrangler@4 dev --local --local-upstream localhost   # 로컬 서빙
 make ship     # 테스트 → 빌드 → push → Actions 완료 대기 → 라이브 검증 → 실패 시 롤백
 make verify   # 지금 라이브만 읽기 전용으로 검사 (배포 없이)
 ```
+
+에이전트에게는 슬래시 하나로 시킨다: **`/ship`** (`.claude/commands/ship.md`) —
+절차·옵션·실패 대처가 거기 적혀 있다. 절차를 대화에서 재구성하지 말 것.
 
 - 배포는 push → Actions, 그래서 **롤백은 revert push** 다(`scripts/ship.sh`가
   직전에 서빙 중이던 커밋까지 자동으로 되돌리고 재검증한다). 되돌리지 않고

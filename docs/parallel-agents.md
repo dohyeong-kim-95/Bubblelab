@@ -21,6 +21,10 @@
 2. **`pre-commit` 훅** — 자기 소유 밖의 파일은 스테이지돼도 커밋되지 않는다.
    (`_infra/agent-hooks/pre-commit` + `_infra/agent-scope.conf`)
 
+같은 훅이 커밋마다 **린트와 테스트**도 돌린다(`scripts/lint.sh`, `npm test`).
+문서만 바뀐 커밋은 건너뛴다. 훅은 `git stash` 를 쓰지 않는다 — 공유 작업
+트리에서 stash 는 남의 미커밋 변경까지 걷어간다.
+
 훅은 `core.hooksPath` 리포 설정으로 켜진다. 설정은 커밋되지 않으므로
 `agent-worktree.sh` 가 실행될 때마다 다시 켠다. 새로 클론했다면 한 번:
 
