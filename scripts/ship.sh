@@ -51,7 +51,18 @@ npm test
 
 say "빌드"
 node _infra/build.mjs
-node _infra/check-avalon-sync.mjs
+
+# games/avalon 은 빌드 산출물이라 소스와 어긋나면 Deploy 가 멈춘다. 검사에는
+# _src/avalon/dist 가 필요한데(로컬에 없을 수 있다), 아발론을 건드린 배포에서만
+# 로컬에서 굽고 확인한다 — 나머지는 Actions 가 본다.
+if git diff --name-only origin/main..HEAD | grep -qE '^(_src/avalon|games/avalon)/'; then
+  [[ -d _src/avalon/dist ]] || npm run build --prefix _src/avalon
+  node _infra/check-avalon-sync.mjs
+elif [[ -d _src/avalon/dist ]]; then
+  node _infra/check-avalon-sync.mjs
+else
+  echo "아발론 미변경 · 로컬 빌드 없음 — 동기화 검사는 Actions 가 한다"
+fi
 
 if [[ "${SHIP_E2E:-0}" == "1" ]]; then
   say "모바일 스모크"
