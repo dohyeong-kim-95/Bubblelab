@@ -53,8 +53,39 @@ npx wrangler@4 dev --local --local-upstream localhost   # 로컬 서빙
 # http://localhost:8787/slop/이름  (첫 경로 세그먼트 = 서브도메인)
 ```
 
-`--local-upstream localhost` 필수. 배포 결과는 GitHub Actions run의
-conclusion으로 확인한다.
+`--local-upstream localhost` 필수.
+
+## 배포는 `make ship` 으로
+
+**맨 `git push` 로 배포하지 않는다.** 로컬에서 통과한 코드가 프로덕션·실기기에서
+깨지는 게 이 리포의 가장 흔한 사고였다(빈 스냅샷 덮어쓰기, 바인딩 누락 등).
+
+```bash
+make ship     # 테스트 → 빌드 → push → Actions 완료 대기 → 라이브 검증 → 실패 시 롤백
+make verify   # 지금 라이브만 읽기 전용으로 검사 (배포 없이)
+```
+
+- 배포는 push → Actions, 그래서 **롤백은 revert push** 다(`scripts/ship.sh`가
+  직전에 서빙 중이던 커밋까지 자동으로 되돌리고 재검증한다). 되돌리지 않고
+  직접 판단하려면 `SHIP_ROLLBACK=0 make ship`.
+- 검증은 `scripts/verify-prod.sh`(구현은 `_infra/verify-prod.mjs`). 서브도메인
+  첫 화면·공개 API·DO·WebSocket·게이트를 실제로 찔러 **상태코드가 아니라 응답
+  형태**를 본다. 새 서브도메인 폴더는 자동으로 프로브가 생긴다.
+- **검증은 프로덕션에 쓰지 않는다.** 검증 페이로드를 저장소에 넣는 방식은
+  금지 — 예전에 그날 잔고 스냅샷을 빈 값으로 덮어써서 복구해야 했다. 쓰기
+  경로는 "지금 저장된 값이 비어 있지 않은지" 읽어서 검사한다(InvestDO 는
+  빈 스냅샷 덮어쓰기를 409로 거부한다).
+- 인증 게이트 뒤(invest·duri·admin)는 자격증명이 있을 때만 들어가고, 없으면
+  게이트가 막는지까지만 확인하고 SKIP 한다 — 거짓 실패를 만들지 않는다.
+  자격증명은 `.verify.env`(커밋되지 않음)나 환경변수로 준다:
+  `BL_ADMIN_ID` `BL_ADMIN_PASSWORD` `BL_INVEST_PASSWORD` `BL_DURI_PASSWORD`.
+- 배포 신원은 `/_health` — 빌드가 구운 커밋 SHA·바인딩·기능 플래그를 돌려준다.
+  `make ship` 은 이 값이 방금 올린 커밋이 될 때까지 기다린 뒤 검증한다(옛 배포를
+  검사하고 통과했다고 착각하지 않게).
+- 상류 API(날씨)나 집 PC 데몬(잔고·듀리 싱크)처럼 우리 배포 밖의 문제는 실패가
+  아니라 **경고**다 — 그것 때문에 배포를 되돌리지 않는다.
+
+배포 결과는 Actions run의 conclusion과 `make verify` 두 가지로 확인한다.
 
 스모크 테스트는 화면이 깨지는 세 가지(스크립트 예외·가로 넘침·빈 화면)만 본다 —
 대상 화면은 `_infra/e2e/smoke.spec.mjs`의 `SCREENS`. 컨테이너에 크로미움이 이미

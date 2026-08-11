@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>📊 클로드 코드 인사이트</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>📊</text></svg>">
+<style>
+  :root { color-scheme: light dark; --bg: light-dark(#f2f4f7, #0d131c);
+          --panel: light-dark(#fff, #171f2b); --line: light-dark(#d9e0e7, #2a3646);
+          --text: light-dark(#1c2733, #e2e9f0); --muted: light-dark(#6e7985, #91a0b2);
+          --accent: #4f7fdd; --warn: light-dark(#c07d1c, #e0a54a);
+          --code: light-dark(#f4f6f9, #0f1620); }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100dvh; background: var(--bg); color: var(--text);
+         font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; }
+  .app { width: min(46rem, 100%); margin: 0 auto; padding: 1.2rem 1rem 4rem; }
+  h1 { margin: .2rem 0 .3rem; font-size: 1.2rem; }
+  .desc { margin: 0 0 1rem; color: var(--muted); font-size: .72rem; line-height: 1.6; }
+  a { color: var(--accent); }
+
+  button { font: inherit; color: inherit; cursor: pointer; border: 1px solid var(--line);
+           background: light-dark(#fff, #111923); border-radius: .6rem; padding: .45rem .75rem;
+           font-size: .74rem; white-space: nowrap; }
+  button:active { transform: scale(.97); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent);
+                                color: #fff; font-weight: bold; }
+
+  /* 날짜 줄: 개수가 늘어도 본문을 밀지 않게 이 줄 안에서만 가로로 흐른다 */
+  .dates { display: flex; gap: .4rem; overflow-x: auto; padding: .1rem .1rem .5rem;
+           scrollbar-width: thin; }
+  .toggle { display: flex; gap: .4rem; margin: .2rem 0 1rem; }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr));
+           gap: .4rem; margin: 0 0 .5rem; }
+  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: .7rem;
+          padding: .5rem .4rem; text-align: center; }
+  .stat b { display: block; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+  .stat span { font-size: .62rem; color: var(--muted); }
+  .range { margin: 0 0 1.4rem; font-size: .68rem; color: var(--muted); }
+
+  h2 { margin: 1.8rem 0 .7rem; font-size: .82rem; color: var(--muted); font-weight: normal;
+       border-bottom: 1px dashed var(--line); padding-bottom: .35rem; }
+  h3 { margin: 0 0 .35rem; font-size: .84rem; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: .8rem;
+          padding: .85rem .9rem; margin-bottom: .6rem; }
+  .card p { margin: .35rem 0 0; font-size: .76rem; line-height: 1.75; }
+  .card p:first-of-type { margin-top: 0; }
+  .label { font-size: .64rem; color: var(--muted); letter-spacing: .04em; margin: 0 0 .3rem; }
+  .badge { float: right; font-size: .62rem; color: var(--muted); border: 1px solid var(--line);
+           border-radius: 1rem; padding: .1rem .45rem; margin-left: .5rem; }
+  .why { color: var(--muted); font-size: .72rem; }
+  .why::before { content: "→ "; }
+  .key { border-left: 3px solid var(--accent); padding: .5rem .75rem; margin: 0 0 .8rem;
+         background: var(--panel); border-radius: 0 .5rem .5rem 0; font-size: .78rem;
+         line-height: 1.7; }
+  .fun { border: 1px dashed var(--line); border-radius: .8rem; padding: .9rem;
+         background: var(--panel); }
+  .fun .headline { font-size: .84rem; line-height: 1.7; }
+
+  /* 코드·프롬프트: 길어도 카드 밖으로 넘치지 않게 이 상자 안에서만 스크롤한다 */
+  .code { position: relative; margin: .6rem 0 0; }
+  .code pre { margin: 0; background: var(--code); border: 1px solid var(--line);
+              border-radius: .6rem; padding: .7rem 3.4rem .7rem .7rem; overflow-x: auto;
+              font-size: .68rem; line-height: 1.65; white-space: pre-wrap;
+              overflow-wrap: anywhere; }
+  .code button { position: absolute; top: .35rem; right: .35rem; padding: .2rem .45rem;
+                 font-size: .62rem; }
+  code { background: var(--code); border-radius: .25rem; padding: 0 .2rem; font-size: .95em; }
+  .empty { color: var(--muted); font-size: .78rem; line-height: 1.8; }
+  .foot { margin-top: 2.5rem; font-size: .64rem; color: var(--muted); line-height: 1.8; }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>📊 클로드 코드 인사이트</h1>
+  <p class="desc">
+    <code>/insights</code> 리포트를 한국어로 옮겨 날짜별로 쌓아 둔 곳.
+    날짜 버튼을 누르면 그날의 리포트가 열린다.
+  </p>
+
+  <div class="dates" id="dates"></div>
+  <div class="toggle" id="toggle" hidden>
+    <button id="lang-ko" aria-pressed="true">한국어</button>
+    <button id="lang-en" aria-pressed="false">원문</button>
+  </div>
+
+  <div id="report"><p class="empty">불러오는 중…</p></div>
+
+  <p class="foot" id="foot"></p>
+</div>
+
+<script>
+const BASE = location.pathname.endsWith("/") ? location.pathname : location.pathname + "/";
+const $ = (id) => document.getElementById(id);
+
+const L = {
+  ko: {
+    at_a_glance: "한눈에 보기",
+    project_areas: "무엇을 만들었나",
+    interaction_style: "어떻게 일하나",
+    what_works: "잘 되고 있는 것",
+    suggestions: "제안",
+    on_the_horizon: "앞으로",
+    fun_ending: "마무리",
+    whats_working: "잘 되는 것",
+    whats_hindering: "발목 잡는 것",
+    quick_wins: "바로 해볼 것",
+    ambitious_workflows: "더 큰 그림",
+    claude_md_additions: "CLAUDE.md에 넣을 것",
+    features_to_try: "써볼 만한 기능",
+    usage_patterns: "사용 패턴",
+    opportunities: "해볼 만한 것",
+    sessions: "세션", analyzed: "분석됨", messages: "메시지", hours: "시간", commits: "커밋",
+    copy: "복사", copied: "복사됨", loadFail: "리포트를 불러오지 못했다",
+  },
+  en: {
+    at_a_glance: "At a Glance",
+    project_areas: "Project Areas",
+    interaction_style: "How You Work",
+    what_works: "What's Working",
+    suggestions: "Suggestions",
+    on_the_horizon: "On the Horizon",
+    fun_ending: "One More Thing",
+    whats_working: "What's working",
+    whats_hindering: "What's hindering",
+    quick_wins: "Quick wins",
+    ambitious_workflows: "Ambitious workflows",
+    claude_md_additions: "CLAUDE.md additions",
+    features_to_try: "Features to try",
+    usage_patterns: "Usage patterns",
+    opportunities: "Opportunities",
+    sessions: "sessions", analyzed: "analyzed", messages: "messages", hours: "hours",
+    commits: "commits", copy: "Copy", copied: "Copied", loadFail: "Failed to load the report",
+  },
+};
+
+const el = (tag, cls, text) => {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text != null) node.textContent = text;
+  return node;
+};
+
+// 리포트 본문에는 **강조**와 `코드`만 들어온다. 그 둘만 노드로 바꾸고
+// 나머지는 textContent로 넣는다 — innerHTML을 쓰지 않으니 태그가 섞여도 안전하다.
+function inline(target, text) {
+  const parts = String(text).split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+  for (const part of parts) {
+    if (!part) continue;
+    if (part.startsWith("**") && part.endsWith("**")) {
+      target.append(el("strong", null, part.slice(2, -2)));
+    } else if (part.startsWith("`") && part.endsWith("`")) {
+      target.append(el("code", null, part.slice(1, -1)));
+    } else {
+      target.append(document.createTextNode(part));
+    }
+  }
+  return target;
+}
+
+// 빈 줄로 나뉜 문단을 <p>로. 리포트의 narrative가 이 형식으로 온다.
+function paragraphs(parent, text, cls) {
+  for (const chunk of String(text ?? "").split(/\n{2,}/)) {
+    if (!chunk.trim()) continue;
+    parent.append(inline(el("p", cls), chunk.trim()));
+  }
+}
+
+function codeBlock(parent, text, lang) {
+  if (!text) return;
+  const box = el("div", "code");
+  const pre = el("pre");
+  pre.append(el("code", null, text));
+  const copy = el("button", null, L[lang].copy);
+  copy.addEventListener("click", () => {
+    navigator.clipboard.writeText(text).then(() => {
+      copy.textContent = L[lang].copied;
+      setTimeout(() => { copy.textContent = L[lang].copy; }, 1600);
+    }, () => { copy.textContent = "⚠"; });
+  });
+  box.append(pre, copy);
+  parent.append(box);
+}
+
+function section(parent, title) {
+  parent.append(el("h2", null, title));
+  return parent;
+}
+
+function card(parent, { title, badge, body = [], why, code, lang }) {
+  const box = el("div", "card");
+  if (badge != null) box.append(el("span", "badge", badge));
+  if (title) box.append(inline(el("h3"), title));
+  for (const text of body) if (text) paragraphs(box, text);
+  if (why) box.append(inline(el("p", "why"), why));
+  if (code) codeBlock(box, code, lang);
+  parent.append(box);
+  return box;
+}
+
+function renderReport(payload, lang) {
+  const d = payload[lang] ?? {};
+  const t = L[lang];
+  const root = el("div");
+
+  // 한눈에 보기
+  const glance = d.at_a_glance ?? {};
+  if (Object.keys(glance).length) {
+    section(root, t.at_a_glance);
+    for (const key of ["whats_working", "whats_hindering", "quick_wins", "ambitious_workflows"]) {
+      if (!glance[key]) continue;
+      const box = el("div", "card");
+      box.append(el("p", "label", t[key]));
+      paragraphs(box, glance[key]);
+      root.append(box);
+    }
+  }
+
+  // 무엇을 만들었나
+  const areas = d.project_areas?.areas ?? [];
+  if (areas.length) {
+    section(root, t.project_areas);
+    for (const a of areas) {
+      card(root, {
+        title: a.name,
+        badge: a.session_count != null ? `${a.session_count} ${t.sessions}` : null,
+        body: [a.description],
+        lang,
+      });
+    }
+  }
+
+  // 어떻게 일하나
+  const style = d.interaction_style ?? {};
+  if (style.narrative || style.key_pattern) {
+    section(root, t.interaction_style);
+    if (style.key_pattern) root.append(inline(el("div", "key"), style.key_pattern));
+    if (style.narrative) {
+      const box = el("div", "card");
+      paragraphs(box, style.narrative);
+      root.append(box);
+    }
+  }
+
+  // 잘 되고 있는 것
+  const works = d.what_works ?? {};
+  if (works.intro || (works.impressive_workflows ?? []).length) {
+    section(root, t.what_works);
+    if (works.intro) root.append(inline(el("div", "key"), works.intro));
+    for (const w of works.impressive_workflows ?? []) {
+      card(root, { title: w.title, body: [w.description], lang });
+    }
+  }
+
+  // 제안
+  const sug = d.suggestions ?? {};
+  const sugGroups = [
+    // CLAUDE.md 추가안은 제목이 따로 없다 — 붙여넣을 본문의 첫 줄(## 제목)을 쓴다
+    ["claude_md_additions", (x) => ({
+      title: String(x.addition ?? "").split("\n")[0].replace(/^#+\s*/, ""),
+      body: [x.prompt_scaffold],
+      why: x.why,
+      code: x.addition,
+    })],
+    ["features_to_try", (x) => ({ title: x.feature, body: [x.one_liner, x.why_for_you], code: x.example_code })],
+    ["usage_patterns", (x) => ({ title: x.title, body: [x.suggestion, x.detail], code: x.copyable_prompt })],
+  ];
+  if (sugGroups.some(([key]) => (sug[key] ?? []).length)) {
+    section(root, t.suggestions);
+    for (const [key, shape] of sugGroups) {
+      const items = sug[key] ?? [];
+      if (!items.length) continue;
+      root.append(el("p", "label", t[key]));
+      for (const item of items) card(root, { ...shape(item), lang });
+    }
+  }
+
+  // 앞으로
+  const horizon = d.on_the_horizon ?? {};
+  if (horizon.intro || (horizon.opportunities ?? []).length) {
+    section(root, t.on_the_horizon);
+    if (horizon.intro) root.append(inline(el("div", "key"), horizon.intro));
+    for (const o of horizon.opportunities ?? []) {
+      card(root, {
+        title: o.title,
+        body: [o.whats_possible, o.how_to_try],
+        code: o.copyable_prompt,
+        lang,
+      });
+    }
+  }
+
+  // 마무리
+  const fun = d.fun_ending ?? {};
+  if (fun.headline) {
+    section(root, t.fun_ending);
+    const box = el("div", "fun");
+    box.append(inline(el("div", "headline"), fun.headline));
+    if (fun.detail) paragraphs(box, fun.detail);
+    root.append(box);
+  }
+
+  return root;
+}
+
+function renderHead(payload, lang) {
+  const t = L[lang];
+  const s = payload.stats ?? {};
+  const head = el("div");
+  const stats = el("div", "stats");
+  const tiles = [
+    [s.sessions_total, `${t.sessions}${s.sessions_analyzed != null ? ` (${s.sessions_analyzed} ${t.analyzed})` : ""}`],
+    [s.messages, t.messages],
+    [s.hours, t.hours],
+    [s.commits, t.commits],
+  ];
+  for (const [value, label] of tiles) {
+    if (value == null) continue;
+    const tile = el("div", "stat");
+    tile.append(el("b", null, String(value)), el("span", null, label));
+    stats.append(tile);
+  }
+  head.append(stats);
+  if (payload.range?.from) {
+    head.append(el("p", "range", `${payload.range.from} ~ ${payload.range.to}`));
+  }
+  return head;
+}
+
+const state = { manifest: [], date: null, lang: "ko", cache: new Map() };
+
+async function show(date) {
+  state.date = date;
+  history.replaceState(null, "", BASE + "#" + date);
+  for (const btn of $("dates").children) {
+    btn.setAttribute("aria-pressed", String(btn.dataset.date === date));
+  }
+  $("toggle").hidden = false;
+
+  let payload = state.cache.get(date);
+  if (!payload) {
+    $("report").replaceChildren(el("p", "empty", "…"));
+    try {
+      const res = await fetch(`${BASE}data/${date}.json`);
+      if (!res.ok) throw new Error(res.status);
+      payload = await res.json();
+      state.cache.set(date, payload);
+    } catch {
+      $("report").replaceChildren(el("p", "empty", `${L[state.lang].loadFail} (${date})`));
+      return;
+    }
+  }
+  if (state.date !== date) return; // 그 사이 다른 날짜를 눌렀다
+  const body = el("div");
+  body.append(renderHead(payload, state.lang), renderReport(payload, state.lang));
+  $("report").replaceChildren(body);
+  $("foot").textContent = payload.source?.report
+    ? `원본 리포트: ${payload.source.report}` + (payload.generated_at ? ` · ${payload.generated_at}` : "")
+    : "";
+  scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function setLang(lang) {
+  state.lang = lang;
+  $("lang-ko").setAttribute("aria-pressed", String(lang === "ko"));
+  $("lang-en").setAttribute("aria-pressed", String(lang === "en"));
+  if (state.date) show(state.date);
+}
+
+async function init() {
+  $("lang-ko").addEventListener("click", () => setLang("ko"));
+  $("lang-en").addEventListener("click", () => setLang("en"));
+
+  let manifest;
+  try {
+    const res = await fetch(`${BASE}data/index.json`);
+    if (!res.ok) throw new Error(res.status);
+    manifest = await res.json();
+  } catch {
+    $("report").replaceChildren(el("p", "empty", "리포트 목록을 불러오지 못했다."));
+    return;
+  }
+
+  state.manifest = manifest.reports ?? [];
+  if (!state.manifest.length) {
+    $("report").replaceChildren(el(
+      "p", "empty",
+      "아직 쌓인 리포트가 없다. 세션에서 /insights 를 돌린 뒤 /insights-publish 를 실행하면 여기에 올라온다.",
+    ));
+    return;
+  }
+
+  for (const report of state.manifest) {
+    const btn = el("button", null, report.date);
+    btn.dataset.date = report.date;
+    btn.title = report.summary ?? "";
+    btn.addEventListener("click", () => show(report.date));
+    $("dates").append(btn);
+  }
+
+  const wanted = location.hash.slice(1);
+  const first = state.manifest.some((r) => r.date === wanted) ? wanted : state.manifest[0].date;
+  show(first);
+}
+
+init();
+</script>
+</body>
+</html>

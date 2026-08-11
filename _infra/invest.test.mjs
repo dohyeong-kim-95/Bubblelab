@@ -15,6 +15,7 @@ import {
   describeUpstreamError,
   fetchSnapshot,
   InvestDO,
+  isEmptySnapshot,
   kstDate,
   MAX_SNAPSHOTS,
   memoryTokenCache,
@@ -794,4 +795,60 @@ test("served 없이 올린 정기 스냅샷은 대기 중인 요청을 지우지
   await server.refresh();
   await server.push(validPush());   // 22시 정기 업로드
   assert.equal((await (await server.pending()).json()).pending, true);
+});
+
+// 형태만 보던 시절, 검증용 빈 페이로드 한 방이 그날 스냅샷을 덮어써서 복구해야
+// 했다. 형태(normalizeSnapshot)와 별개로 **내용**이 비었는지까지 본다.
+test("빈 스냅샷은 살아 있는 값을 덮지 않는다", async () => {
+  const server = investDO();
+  await server.push(validPush());
+
+  const empty = { byCurrency: {}, cash: {}, positions: [] };
+  const response = await server.push(empty);
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /empty/);
+
+  const state = await (await server.state()).json();
+  assert.equal(state.byCurrency.KRW.value, 100, "빈 값으로 덮였다");
+  assert.equal(state.positions.length, 1);
+  assert.equal(state.series.KRW.length, 1, "그날 그래프 점이 날아갔다");
+});
+
+test("합계가 0뿐인 페이로드도 빈 것으로 본다 (조회 실패의 흔한 모습)", async () => {
+  const server = investDO();
+  await server.push(validPush());
+  const zeros = {
+    byCurrency: { KRW: { value: 0, cost: 0, pnl: 0, rate: 0 } },
+    cash: { KRW: 0 },
+    positions: [],
+  };
+  assert.equal((await server.push(zeros)).status, 409);
+  assert.equal((await (await server.state()).json()).byCurrency.KRW.value, 100);
+});
+
+test("첫 스냅샷이 비어 있는 것은 막지 않는다 (아직 덮을 값이 없다)", async () => {
+  const server = investDO();
+  const response = await server.push({ byCurrency: {}, cash: {}, positions: [] });
+  assert.equal(response.status, 200);
+});
+
+test("정말 빈 계좌는 allowEmpty로 명시해 올린다", async () => {
+  const server = investDO();
+  await server.push(validPush());
+  const instance = new InvestDO({ storage: server.storage }, {});
+  const response = await instance.fetch(new Request("https://invest/push?allowEmpty=1", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ byCurrency: {}, cash: {}, positions: [] }),
+  }));
+  assert.equal(response.status, 200);
+  assert.equal((await (await server.state()).json()).positions.length, 0);
+});
+
+test("isEmptySnapshot은 보유종목이 있으면 비었다고 하지 않는다", () => {
+  assert.equal(isEmptySnapshot(null), true);
+  assert.equal(isEmptySnapshot({ positions: [], byCurrency: {}, cash: {} }), true);
+  assert.equal(isEmptySnapshot({ positions: [{ symbol: "005930" }] }), false);
+  assert.equal(isEmptySnapshot({ byCurrency: { KRW: { value: 1, cost: 0 } } }), false);
+  assert.equal(isEmptySnapshot({ cash: { KRW: 5000 } }), false);
 });

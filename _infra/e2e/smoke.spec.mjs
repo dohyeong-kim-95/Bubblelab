@@ -30,6 +30,8 @@ const SCREENS = [
   { name: "스페인어 홈", path: "/espanol/" },
   { name: "스페인어 훈련", path: "/espanol/drill/" },
   { name: "스페인어 문법", path: "/espanol/grammar/" },
+  // 리포트를 전부 스크립트로 그린다 — JSON을 못 읽으면 빈 화면이 된다
+  { name: "클로드 인사이트", path: "/lab/claude-insights/" },
 ];
 
 for (const screen of SCREENS) {

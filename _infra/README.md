@@ -30,6 +30,7 @@ Bubblelab의 정적 빌드, 단일 Cloudflare Worker, Durable Object 저장소�
 | `asset-flags.js` | 스티커 공개 여부 오버라이드 `AssetFlagsDO`와 카탈로그 필터 |
 | `assets-store.js` | R2용 데이터 변환 코드. 현재 운영 라우트에서는 비활성 |
 | `idle-balance.mjs` | Bubble Pop Idle 밸런스 시뮬레이터 |
+| `verify-prod.mjs` | 배포된 사이트를 실제로 찔러 보는 읽기 전용 검증기 (`make ship`·`make verify`) |
 
 `*.test.mjs`는 Node 내장 테스트 러너로 실행됩니다.
 
@@ -39,6 +40,7 @@ Worker는 다음 우선순위로 요청을 처리합니다.
 
 | 경로 | 기능 |
 | --- | --- |
+| `/_health` | 배포 신원(커밋 SHA)·바인딩·기능 플래그. 읽기 전용, 저장소 미접근 |
 | `/_shared/*`, `/_assets/*` | 모든 서브도메인의 공용 정적 파일 |
 | `/_assets/catalog.json` | 위와 같지만 admin에서 숨긴 항목을 빼고 내보냄 |
 | `/_planner/login`, `/_planner/data`, `/_planner/logout` | 개인 플래너 세션과 데이터. 기본 비활성 |

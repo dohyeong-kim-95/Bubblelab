@@ -12,3 +12,6 @@ playwright-report/
 .DS_Store
 podcast-preview.json
 podcast-preview.wav
+
+# verify-prod 자격증명 (로컬 전용)
+.verify.env

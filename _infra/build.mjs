@@ -11,6 +11,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { generateAssetCatalog } from "./assets.js";
@@ -20,7 +21,8 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const DIST = join(ROOT, "dist");
 // docs/ 는 서브도메인이 아니라 개발 워크플로 문서다(병렬 에이전트 판정 기록 등).
 // 루트 폴더라 그냥 두면 docs.bubblelab.dev 로 배포되고 랜딩 카드 검사에 걸린다.
-const SKIP = new Set(["dist", "node_modules", "docs"]);
+// scripts/ 는 배포 스크립트(make ship·verify-prod)라 서브도메인이 아니다.
+const SKIP = new Set(["dist", "node_modules", "docs", "scripts"]);
 // 서브도메인 공개 구분. 퍼블릭은 www 랜딩 카드와 카테고리 홈 풀다운 메뉴에
 // 노출되고, confidential은 주소를 직접 쳐야만 들어갈 수 있다(어디에도 링크 없음).
 // 새 폴더는 기본 퍼블릭이며, 빌드가 www 랜딩 카드 존재 여부를 검사한다.
@@ -719,5 +721,24 @@ display:grid;place-items:center;min-height:100vh;margin:0}</style></head>
 </html>
 `,
 );
+
+// 배포 신원. `/_health`가 이 파일을 읽어 커밋 SHA를 돌려주고, verify-prod는
+// "내가 방금 올린 커밋이 실제로 서빙되고 있는가"를 그걸로 판단한다 — 없으면
+// 이전 배포를 검사하고 통과했다고 착각한다.
+{
+  let commit = process.env.GITHUB_SHA ?? "";
+  if (!commit) {
+    try {
+      commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: ROOT, encoding: "utf8" }).trim();
+    } catch { commit = ""; }
+  }
+  writeFileSync(
+    join(DIST, "_health.json"),
+    // 서브도메인 이름 목록은 담지 않는다 — 비공개 서브도메인은 주소를 모르는 것이
+    // 유일한 장벽이라 개수만 센다.
+    JSON.stringify({ commit, builtAt: new Date().toISOString(), siteCount: sites.length }) + "\n",
+  );
+  console.log(`health stamp → dist/_health.json (${commit.slice(0, 7) || "no-git"})`);
+}
 
 console.log(`build done → dist/ (${sites.map((s) => s.name).join(", ")})`);

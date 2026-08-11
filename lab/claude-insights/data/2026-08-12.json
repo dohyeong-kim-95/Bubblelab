@@ -1,0 +1,338 @@
+{
+  "date": "2026-08-12",
+  "generated_at": "2026-08-12T01:58:26+09:00",
+  "range": {
+    "from": "2026-07-18",
+    "to": "2026-08-11"
+  },
+  "stats": {
+    "sessions_total": 12,
+    "sessions_analyzed": 10,
+    "messages": 187,
+    "hours": 182,
+    "commits": 76
+  },
+  "source": {
+    "report": "~/.claude/usage-data/report-2026-08-12-015826.html"
+  },
+  "ko": {
+    "at_a_glance": {
+      "whats_working": "탐색 후 확장하는 리듬으로 일합니다. 손대기 전에 그 서브도메인을 먼저 이해시키고, 그다음 변경을 빌드·테스트·배포·프로덕션 확인까지 끝까지 밀고 갑니다. 동작하는 코드에서 멈추지 않는다는 뜻입니다. invest 서브도메인과 admin 인사이트 작업이 요청에서 배포된 main까지 한 번에 간 것이 그 증거입니다. UI/UX 비평 루프도 좋습니다 — 채팅방과 두리 PWA에서 처음 동작하는 버전을 그냥 받아들이지 않고 구체적으로 되받아쳤고, 그게 초안을 다듬어진 기능으로 만들었습니다.",
+      "whats_hindering": "클로드 쪽 문제는 대부분 '맞아 보이지만 실제로는 깨지는 코드'였습니다. 검증용 페이로드가 하루치 스냅샷을 잠깐 날린 일, 스티커 CSS 특이도 문제, 로컬에서는 통과했지만 IndexedDB 버전 불일치로 실기기에서 실패한 기능들. 설계 의도를 잘못 읽어 재작업을 부른 경우도 두어 번 있었습니다. 사용자 쪽에서는, 클로드가 코드를 먼저 읽는 대신 명령을 돌려 보며 더듬는 일이 잦고, 매 세션이 같은 배경(한국어, 원화 표기, Cloudflare Workers 배포, 멀티 서브도메인 구조)을 다시 세우느라 진짜 작업 전에 턴을 태웁니다. '업데이트해줘' 같은 모호한 첫마디는 결국 중단시켜야 할 방향으로 클로드를 보냅니다.",
+      "quick_wins": "반복되는 배경을 서브도메인별 CLAUDE.md에 넣으세요(로케일, 통화 표기, wrangler/Workers 배포 절차, 테스트 명령). 다시 설명하지 않아도 됩니다. 그다음 배포-검증 의례를 슬래시 하나로 부르는 커스텀 스킬로 만들고, 커밋 전에 테스트·린트가 자동으로 돌도록 훅을 겁니다. 마지막으로 배포-검증-롤백 루프를 대화 속 실험이 아니라 커밋된 스크립트로 완성하세요 — 그래야 세션이 바뀌어도 살아남습니다.",
+      "ambitious_workflows": "모델이 더 좋아지는 만큼, 서브도메인마다 기계가 읽을 수 있는 헬스 계약을 두는 것을 목표로 하세요. 그러면 클로드가 배포하고, 인증 게이트 너머의 실제 프로덕션 엔드포인트를 찔러 보고, 배포 전 스냅샷과 비교하고, 문제가 있으면 스스로 롤백합니다 — 배포가 감독해야 할 과정이 아니라 읽기만 하면 되는 보고서가 됩니다. 여기에 기기 에뮬레이션을 쓰는 Playwright 하네스를 붙이면, 지금 손으로 잡고 있는 실기기 버그들이 앱을 열기 전에 걸립니다. 더 길게 보면 서브도메인마다 전용 서브에이전트를 두고 각자 컨텍스트와 배포 계약을 갖게 하면, 한 메시지로 기능 네 개를 설명하고 검증된 결과 네 개를 받아 보게 됩니다."
+    },
+    "project_areas": {
+      "areas": [
+        {
+          "name": "투자 대시보드 (invest 서브도메인)",
+          "session_count": 2,
+          "description": "엣지 배포, 데몬과 cron 스케줄링, 종목 그룹 분리, 현금 표시, 좌우로 넘기는 증권사 스타일 UI와 수동 갱신까지 아우르며 투자용 서브도메인을 만들어 나갔습니다. 클로드가 기존 코드를 탐색하고, 기능을 끝까지 구현하고, 테스트를 돌리고, 배포한 뒤 프로덕션에서 확인했습니다. 마찰이라면 원화 현금 표시 버그와, 검증용 페이로드가 하루치 스냅샷을 잠깐 덮어썼다가 스스로 복구한 일이 있었습니다."
+        },
+        {
+          "name": "커플 채팅·캘린더 PWA (duri 서브도메인)",
+          "session_count": 2,
+          "description": "두 사람용 채팅·캘린더 앱을 빠르게 반복 개발했습니다. 푸시 알림 수정, 지도 핀 버그, 클러스터링, 댓글, 그리고 메시지·사진·일정 수백 건을 보관한 PC 백업 싱크까지. 클로드가 근본 원인을 진단하고 여러 파일에 걸친 수정을 배포했지만, 설계 의도를 잘못 읽은 일, 공격적으로 읽힌 공휴일 이모지 선택, 기기의 IndexedDB 버전 불일치 때문에 몇 차례 재작업이 필요했습니다."
+        },
+        {
+          "name": "부동산 데이터 시각화",
+          "session_count": 2,
+          "description": "동탄·기흥 비공개 부동산 사이트를 만들고 확장했습니다. 지도 오버레이, DSR 타워 기준점, 그리고 60개월치 실거래 데이터로 갱신한 대시보드에 단지별 시계열과 고점 대비 낙폭 뷰를 붙였습니다. 클로드가 데이터 갱신과 시각화, 배포를 맡고 단지 정보 API와 시장 고점 해석에 대한 조언도 했습니다. K-apt API 신청 단계는 사용자 쪽에서 막혀 뒤로 미뤘습니다."
+        },
+        {
+          "name": "익명 채팅방 (util.bubblelab.dev/chat)",
+          "session_count": 1,
+          "description": "Durable Object 백엔드, 프론트엔드 UI, 테스트, 문서까지 갖춘 스티커 지원 익명 채팅방을 만들어 프로덕션에 배포했습니다. UI/UX 피드백을 여러 차례 돌면서 스티커 투명도의 CSS 특이도 문제, 맨 아래로 가기 버튼 위치, 재접속 때 쏟아지던 입장·퇴장 알림을 해결했습니다 — 로컬 wrangler/workerd의 불안정한 WebSocket 동작 속에서도요."
+        },
+        {
+          "name": "admin 인사이트·리포팅·배포 도구",
+          "session_count": 3,
+          "description": "admin 인사이트 페이지에 하루치 체류 시간을 보는 '오늘' 토글을 추가했습니다 — 이미 있던 API 파라미터를 활용했습니다. 인사이트 리포트의 한국어 번역본도 만들고 구조를 검증했습니다. 롤백을 포함한 자가 검증 배포 루프도 시작했지만 아직 진행 중입니다. 한 세션은 '너 자신을 업데이트해' 같은 모호한 요청 때문에 명령이 중단되며 멈췄습니다."
+        }
+      ]
+    },
+    "interaction_style": {
+      "narrative": "길고 신뢰도 높은 세션으로 일합니다 — 10개 세션, 187개 메시지에 182시간, 그동안 클로드는 Bash를 천 번 가까이, Edit을 573번 호출했습니다. 이 비율이 이야기를 다 해 줍니다: **목표를 주고 고삐를 길게 풉니다.** 전형적인 세션은 'invest 서브도메인을 탐색하고 엣지·데몬·cron 셋업을 끝내라' 같은 말로 시작하고, 그다음 클로드가 오래 달립니다 — 만들고, 테스트하고, 커밋하고, 배포하는 동안 당신은 한 줄씩 조종하는 대신 가끔 들여다봅니다. 이 세션들에서 나온 76개 커밋은, 코드 수정이 아니라 프로덕션 배포까지의 전체 루프를 클로드에게 맡기는 데 익숙하다는 뜻입니다.\n\n당신의 스펙은 구현 모양이 아니라 목표 모양입니다. '종목 그룹 분리와 README 수정', '현금 표시와 수동 갱신이 있는 좌우 스와이프 증권사 UI를 원한다' — 결과는 분명하고 방법은 일부러 비워 둡니다. 도메인이 명확할 때는 아름답게 작동하고(invest 서브도메인과 admin 인사이트 토글 둘 다 완전히 달성), **마찰은 정확히 의도에 말이 더 필요했던 지점에 몰립니다**: 캘린더 이모지 배지 설계 의도를 두 번 잘못 읽었고, 한국 공휴일에 🎌를 골라 불쾌하게 했고, git add 규칙의 README 문구가 당신 뜻과 어긋났습니다. 가장 드문 실패는 '접근 자체가 틀린 것'이고, 흔한 실패는 '접근은 맞는데 취향이 틀린 것'입니다. 또 미리 못 박기보다 달리는 중에 교정합니다 — 도구 호출을 한 번 끊었다가 곧바로 'yes해드림'으로 다시 허락했고, 모호한 '업데이트해' 프롬프트가 원치 않는 길로 갔을 때는 설명하는 대신 끊어 버렸습니다.\n\n막다른 길 앞에서는 실용적입니다. K-apt API 활용신청 안내가 당신 쪽에서 안 되자 반응은 '음 잘 안되는군요'였고, 갈아 넣는 대신 그 갈래를 미뤘습니다. 마찰의 대부분은 배포 후 실기기에서 드러난 버그성 마찰(10건)입니다 — IndexedDB 버전 불일치, 사람별이 아니라 기기별로 저장된 색상, CSS 특이도에 밀린 스티커 투명도. 이건 당신 스타일의 자연스러운 비용입니다 — **리뷰가 아니라 프로덕션에서 검증**하니 피드백 루프가 '올리고, 써 보고, 깨진 걸 알린다'가 됩니다. 결과가 '완전 달성'보다 '대체로 달성'에 자주 머무는 이유이기도 합니다. 마지막 10%는 손에 쥐고 써 봐야 판단할 수 있는 UI/UX 다듬기니까요.",
+      "key_pattern": "목표 수준의 브리핑을 주고 프로덕션까지 알아서 달리게 둔 다음, 세부를 미리 정하기보다 눈에 보이는 결과에 반응하며 교정합니다."
+    },
+    "what_works": {
+      "intro": "3주에 걸친 10개 세션 동안 76개 커밋으로 개인 서브도메인 묶음을 만들고 배포했습니다 — 투자 대시보드, 부동산 시각화, 커플 PWA, 익명 채팅방.",
+      "impressive_workflows": [
+        {
+          "title": "코드만이 아니라 끝까지 배송",
+          "description": "빌드·테스트·배포·프로덕션 확인까지 일관되게 밀고 갑니다. invest 서브도메인이나 admin 인사이트 토글 같은 세션은 요청에서 커밋·푸시·배포 성공까지 한 번에 갔습니다 — 반쯤 하다 만 브랜치가 남지 않습니다."
+        },
+        {
+          "title": "낯선 서브도메인은 탐색부터",
+          "description": "변경을 요청하기 전에 코드 탐색부터 시키는 일이 많습니다. invest와 duri 둘 다 그랬죠. 그 사전 작업이 값을 합니다 — 클로드가 푸시 알림과 지도 핀 버그의 근본 원인을 추측이 아니라 진단으로 짚었고, 이어지는 기능들이 정확한 맥락 위에 깔끔하게 얹혔습니다."
+        },
+        {
+          "title": "촘촘한 UI/UX 반복 루프",
+          "description": "채팅방과 커플 PWA에서 디자인 비평을 여러 번 빠르게 돌렸습니다 — 스티커 투명도, 맨 아래로 가기 버튼 위치, 입장·퇴장 소음, 캘린더 배지 의미. 문제를 빨리 잡고 구체적으로 되받아쳤고, 그래서 거친 초안이 처음 동작하는 버전에 머물지 않고 다듬어진 기능이 되었습니다."
+        }
+      ]
+    },
+    "suggestions": {
+      "claude_md_additions": [
+        {
+          "addition": "## 배포 검증\n프로덕션 배포 뒤에는 읽기 전용으로만 확인한다(GET·상태 엔드포인트·공개 URL curl). 프로덕션 데이터 엔드포인트에 절대 POST/PUT 테스트 페이로드를 보내지 않는다 — 검증용 쓰기가 그날의 스냅샷을 빈 값으로 덮어쓴 적이 있다. 인증 게이트에 막혀 검증이 안 되면 다른 방법을 추측하지 말고 그 사실을 알리고 물어본다.",
+          "why": "검증용 페이로드가 두 세션에 걸쳐 실제 스냅샷 데이터를 덮어썼고, 인증 게이트 때문에 배포 확인이 실패해 복구 작업이 반복됐습니다.",
+          "prompt_scaffold": "CLAUDE.md에 '## 배포 검증'을 새 최상위 섹션으로, 기존 배포·Cloudflare 관련 내용 근처에 추가하세요."
+        },
+        {
+          "addition": "## git 규율\n내가 고친 파일만 `git add` 한다 — `git add .`·`git add -A` 금지. 같은 리포에서 여러 터미널이 동시에 일하고 있을 수 있고, 통짜 add가 남의 변경을 커밋에 쓸어 담은 적이 있다.",
+          "why": "한 세션에서 클로드의 변경이 다른 터미널의 커밋에 휩쓸려 들어갔고, git add 규칙에 대한 README 문구도 의도를 놓쳐 다시 써야 했습니다.",
+          "prompt_scaffold": "기존 '## Git' / '## 커밋' 섹션 아래에, 없으면 CLAUDE.md 위쪽에 새로 만들어 추가하세요."
+        },
+        {
+          "addition": "## 현지화와 문화 관례\n이 프로젝트는 한국 사용자를 위한 것이다. 한국에 맞는 기호만 쓴다 — 한국 공휴일에 🎌(일본 국기)를 절대 쓰지 않는다. 🇰🇷나 중립적인 🎉·📅를 쓴다. 통화는 원화(₩, 소수점 없음). UI 문구나 이모지를 배포하기 전에 무엇을 골랐는지 요약에 적어 검토받는다.",
+          "why": "한국 공휴일에 쓴 🎌 이모지가 불쾌감을 줬고 원화 현금 표시 버그도 그대로 나갔습니다. 둘 다 재작업으로 이어졌습니다.",
+          "prompt_scaffold": "CLAUDE.md에 '## 현지화와 문화 관례' 섹션을 새로 추가하세요."
+        },
+        {
+          "addition": "## 클라이언트 저장소 변경\nIndexedDB·localStorage 스키마를 바꾸면 반드시 DB 버전을 올리고 마이그레이션 경로를 함께 넣는다. 사람별 데이터(캘린더 색상, 개인 설정 등)는 기기 로컬이 아니라 서버나 사용자 ID 기준으로 저장한다.",
+          "why": "채팅 미리보기, 알림 억제, 캘린더 색상 기능이 모두 배포는 됐지만 IndexedDB 버전 불일치와 기기 로컬 저장 때문에 실기기에서 실패했습니다.",
+          "prompt_scaffold": "커플 채팅·캘린더 프로젝트를 다루는 CLAUDE.md의 PWA·프론트엔드 섹션 아래에 추가하세요."
+        },
+        {
+          "addition": "## UI 설계를 구현하기 전에\nUI/UX 변경이 말로만 설명됐다면, 코드를 쓰기 전에 의도한 설계를 한두 문장(또는 ASCII 스케치)으로 되짚어 확인을 받는다. 모호한 디자인 요청에 여러 파일을 고치는 작업을 먼저 시작하지 않는다.",
+          "why": "캘린더 이모지 배지의 설계 의도를 두 번 잘못 읽었고, 여러 UI 기능이 세션을 넘나들며 재작업을 반복했습니다.",
+          "prompt_scaffold": "CLAUDE.md의 '## 작업 방식' 또는 '## UI 작업' 섹션 아래에 추가하세요."
+        }
+      ],
+      "features_to_try": [
+        {
+          "feature": "Custom Skills",
+          "one_liner": "슬래시 명령 하나로 부르는, 재사용 가능한 마크다운 프롬프트.",
+          "why_for_you": "거의 모든 세션에서 빌드 → 테스트 → 커밋 → 배포 → 검증이라는 같은 루프를 돌렸고(커밋 76개, Bash 호출 986회), 그중 검증 단계가 두 번이나 사고가 난 지점입니다. 한 번 적어 두면 매번 안전한 방식으로 돌아갑니다.",
+          "example_code": "# .claude/skills/ship/SKILL.md\n---\nname: ship\ndescription: Build, test, commit, deploy to Cloudflare, and read-only verify\n---\n\n1. Run the test suite; stop and report if anything fails.\n2. `git status` — stage ONLY files you edited this session. Never `git add .`\n3. Commit with a concise Korean-or-English message describing the user-facing change.\n4. `git push origin main`\n5. Deploy: `npx wrangler deploy`\n6. Verify READ-ONLY: `curl -s -o /dev/null -w \"%{http_code}\" <PROD_URL>` plus a GET of the health/status endpoint. NEVER POST test payloads to production.\n7. If verification fails, report the exact failure and propose a rollback command — do not auto-rollback without asking."
+        },
+        {
+          "feature": "Hooks",
+          "one_liner": "편집·명령 전후 같은 수명주기 시점에 자동으로 도는 셸 명령.",
+          "why_for_you": "가장 큰 마찰이 프로덕션까지 나간 '버그 있는 코드'(10건)입니다. Edit마다 린트·타입체크를 돌리는 PostToolUse 훅이 CSS 특이도나 JS 실수를 배포 전에 잡고, PreToolUse 가드로 `git add .`을 아예 막을 수 있습니다.",
+          "example_code": "// .claude/settings.json\n{\n  \"hooks\": {\n    \"PostToolUse\": [\n      {\n        \"matcher\": \"Edit|Write\",\n        \"hooks\": [\n          { \"type\": \"command\", \"command\": \"npx prettier --write \\\"$CLAUDE_FILE_PATHS\\\" 2>/dev/null; npm run lint --silent || true\" }\n        ]\n      }\n    ],\n    \"PreToolUse\": [\n      {\n        \"matcher\": \"Bash\",\n        \"hooks\": [\n          { \"type\": \"command\", \"command\": \"grep -Eq 'git add (\\\\.|-A|--all)' <<< \\\"$CLAUDE_TOOL_INPUT\\\" && { echo 'Blocked: stage individual files only'; exit 2; } || exit 0\" }\n        ]\n      }\n    ]\n  }\n}"
+        },
+        {
+          "feature": "Headless Mode",
+          "one_liner": "스크립트와 CI/CD에서 대화 없이 클로드를 돌리는 방식.",
+          "why_for_you": "지난 세션에서 '롤백까지 있는 자가 검증 배포 루프'를 직접 요청했고 미완으로 남았습니다. 헤드리스 모드가 빠진 조각입니다 — 프로덕션을 주기적으로 점검하고 정말 문제가 있을 때만 당신을 부르는 스크립트를 만들 수 있습니다.",
+          "example_code": "#!/usr/bin/env bash\n# scripts/prod-watch.sh — run from cron every 15m\nclaude -p \"Check https://util.bubblelab.dev and the invest subdomain health endpoints. Report ONLY: status code, response time, and whether today's snapshot has non-empty values. Do not write anything. If broken, output the exact wrangler rollback command.\" \\\n  --allowedTools \"Bash(curl:*),Read\" \\\n  --output-format json > /tmp/prod-check.json"
+        }
+      ],
+      "usage_patterns": [
+        {
+          "title": "Bash 대 Read 비율이 4.5:1 — 눈 감고 디버깅하는 셈",
+          "suggestion": "Bash 명령이 986회인데 Read는 220회뿐입니다. 코드를 먼저 읽는 대신 실행으로 더듬고 있다는 뜻입니다. 편집을 시작하기 전에 Task 에이전트로 탐색을 앞당기세요.",
+          "detail": "duri 푸시 알림 버그, 싱크 데몬 크래시 루프, 스티커 CSS 특이도 문제 모두 긴 시행착오 명령 사슬을 거쳤습니다. 반대로 잘 풀린 세션(인사이트 '오늘' 토글)에서는 클로드가 먼저 읽어 API가 이미 `days=1`을 지원한다는 걸 발견하고 한 번에 끝냈습니다. 손대기 전에 읽기 전용 탐색 에이전트를 띄우면 추측이 계획으로 바뀝니다 — 서브도메인이 여럿인 bubblelab 코드베이스에서는 특히 그렇습니다.",
+          "copyable_prompt": "무엇도 바꾸기 전에: Task 에이전트로 이 서브도메인을 읽기 전용으로 탐색해줘. 보고할 것은 (1) 진입점과 데이터 흐름, (2) 버그가 있을 만한 위치를 file:line으로, (3) 새로 만들지 않고 재사용할 수 있는 기존 코드, (4) 후보 수정안 두 개와 트레이드오프. 아직 편집하거나 상태를 바꾸는 명령을 돌리지 말고 내 확인을 기다려."
+        },
+        {
+          "title": "자가 검증 배포와 롤백 루프를 마무리하기",
+          "suggestion": "마지막 세션이 배포-검증-롤백 루프를 만들다 끝났습니다. 즉석 대화가 아니라 커밋된 스크립트로 완성해 세션이 바뀌어도 남게 하세요.",
+          "detail": "invest·duri·util·estate 대시보드에 Cloudflare Workers 배포를 끊임없이 하고 있고, 잘못된 검증 방법(인증 게이트)과 파괴적인 검증 쓰기에 이미 한 번씩 물렸습니다. 읽기 전용 프로브, 헬스 단언, `wrangler rollback` 폴백이 명시된 스크립트를 리포에 넣어 두면 반복되는 위험이 명령 하나로 줄어듭니다. 위의 /ship 스킬과 짝을 지어 모든 배포가 같은 관문을 지나게 하세요.",
+          "copyable_prompt": "scripts/deploy-verify.sh를 만들어줘. (1) wrangler로 배포하고 새 버전 ID를 잡아 둔다, (2) 10초 기다린 뒤 읽기 전용 헬스 체크를 돈다(HTTP 상태 + 오늘 스냅샷이 비어 있지 않은지 확인하는 GET) — 절대 테스트 데이터를 POST하지 않는다, (3) 인증이 걸린 엔드포인트는 공개 접근을 가정하지 말고 환경변수의 토큰을 쓴다, (4) 실패하면 내용을 출력하고 `wrangler rollback --version-id <이전>`을 실행한다, (5) 실패 시 0이 아닌 코드로 끝나 CI가 잡을 수 있게 한다. --dry-run 플래그도 넣어줘. 그다음 스크립트를 보여주고 실패 경로를 함께 짚어본 뒤에 돌리자."
+        },
+        {
+          "title": "PWA 기능에 '실기기 점검' 단계를 넣기",
+          "suggestion": "채팅·캘린더 기능 몇 개가 로컬 테스트는 통과했는데 IndexedDB 버전과 기기 로컬 저장 때문에 실기기에서 깨졌습니다. 기기 쪽 제약을 명시적인 체크리스트 항목으로 만드세요.",
+          "detail": "커플 PWA 세션이 데이터상 재작업이 가장 많았습니다 — 채팅 미리보기, 내 알림 억제, 캘린더 색상이 모두 깨진 채로 나갔습니다. 논리 버그가 아니라 클라이언트 환경에 대한 가정 문제였습니다. 코드를 쓰기 전에 저장소·버전·권한이 어떤 영향을 받는지 나열하게 하면 이 부류의 실패를 싸게 잡을 수 있습니다. 남의 폰은 디버깅하기 어렵기 때문에 더 그렇습니다.",
+          "copyable_prompt": "이 PWA 기능을 구현하기 전에, 클라이언트 쪽 가정을 전부 나열해줘: IndexedDB 스키마 버전과 마이그레이션 필요 여부, 서비스 워커 캐시 무효화, 알림 권한 상태, 그리고 서버에 사람별로 두지 않고 기기 로컬에 두면 틀어질 데이터. 각각에 대해 예전 캐시를 가진 재방문 사용자에게 어떻게 동작하는지도 말해줘. 그다음 구현하되 버전 올리기와 마이그레이션을 같은 변경에 포함해."
+        },
+        {
+          "title": "반복되는 맥락을 다시 설명하지 말고 CLAUDE.md로",
+          "suggestion": "세션마다 같은 맥락을 다시 세우고 있습니다 — 한국어 로케일, 원화 표기, Cloudflare Workers/wrangler 배포, bubblelab.dev의 멀티 서브도메인 구조.",
+          "detail": "invest·duri·util·estate에 걸친 10개 세션마다 새로 탐색하는 비용을 냅니다. wrangler 4.86 compatibility-date 실패는 툴체인 버전도 적혀 있지 않다는 신호입니다. 서브도메인별 짧은 지도와 고정된 툴체인 섹션을 CLAUDE.md에 넣으면 시작 비용이 줄고 환경 문제 반복(기록된 것만 3건)도 막힙니다.",
+          "copyable_prompt": "이 리포를 읽고 CLAUDE.md 초안을 만들어줘. 넣을 것: 서브도메인(invest, duri, util, estate)마다 한 줄 설명과 진입점·배포 명령, 우리가 써야 할 wrangler/node/패키지 매니저의 정확한 고정 버전과 전역 캐시 버전이 잡히지 않게 호출하는 방법, 테스트 명령, 그리고 우리의 git 스테이징 규칙. 60줄 안쪽으로 군더더기 없이 촘촘하게."
+        }
+      ]
+    },
+    "on_the_horizon": {
+      "intro": "이미 '코드를 써 달라'에서 '기능을 끝까지 배송해 달라'로 옮겨 왔습니다. 다음 도약은 에이전트 무리가 검증-배포-롤백 루프 전체를 맡고, 당신은 diff가 아니라 결과를 검토하는 것입니다.",
+      "opportunities": [
+        {
+          "title": "자동 롤백이 붙은 자가 검증 배포 루프",
+          "whats_possible": "당신의 마찰 기록은 프로덕션에서만 드러나는 것들이 지배합니다 — 검증 페이로드가 하루치 스냅샷을 지운 일, 인증 게이트에 막힌 배포 확인, 실기기까지 나간 IndexedDB 버전 불일치. `wrangler deploy` 뒤에 손으로 확인하는 대신, 서브도메인(invest·duri·util)마다 기계가 읽는 헬스 계약을 정의하고 클로드가 배포·인증 게이트 통과 프로브·배포 전 스냅샷 비교·실패 시 수 초 내 자동 롤백까지 하게 하세요. 그러면 모든 배포가 감독하는 의례가 아니라 읽는 보고서가 됩니다.",
+          "how_to_try": "워커별로 `scripts/deploy-verify.sh`와 `HEALTH.md` 계약을 쓰게 하고, 배포·프로브·`wrangler rollback`이 한 번의 자율 실행 안에서 이어지도록 Bash에 연결하세요.",
+          "copyable_prompt": "내 Cloudflare Workers 서브도메인 전부(invest, duri, util, estate)에 대해 자가 검증 배포 시스템을 만들어줘. 각각에 대해: (1) 기존 wrangler 설정과 라우트를 읽어 배포되는 표면을 전부 목록화한다. (2) HEALTH.md를 만들어 배포 후 단언을 정의한다 — 인증이 걸린 엔드포인트 프로브, 기대하는 JSON 모양, 스냅샷이 비어 있지 않다는 불변식(검증 페이로드가 하루치 스냅샷을 빈 값으로 덮어쓴 사고에서 배운 것), 프론트엔드 에셋 해시 확인. (3) scripts/deploy-verify.sh를 만들어 현재 프로덕션 상태와 배포 ID를 스냅샷으로 잡고, 배포하고, 전파를 기다리고, 실제 세션 토큰으로 인증 구간까지 포함해 모든 단언을 돌리고, 하나라도 실패하면 저장해 둔 배포 ID로 자동 롤백한 뒤 무엇이 깨졌는지 차이를 출력한다. (4) --dry-run 모드를 넣는다. (5) 스테이징 라우트에 일부러 깨진 빌드를 올려 롤백이 실제로 발동하는지 증명한다. 내가 지켜보게 하지 말고 직접 돌리고 검증해서 근거와 함께 결과를 보고해."
+        },
+        {
+          "title": "서브도메인마다 전담 에이전트를 병렬로",
+          "whats_possible": "76개 커밋에 걸쳐 최소 네 개의 독립된 제품을 굴리고 있습니다 — invest, duri, estate 대시보드, util/chat. 그리고 세션마다 코드베이스를 처음부터 다시 익히는 비용을 냅니다. 서브도메인마다 자기 CLAUDE.md, 테스트 명령, 배포 계약을 가진 전담 서브에이전트를 두고, 프롬프트 하나로 기능 작업을 동시에 던지세요. 기능 네 개를 한 메시지로 설명하고, 배포·테스트·검증까지 끝난 결과 네 개를 검토하게 됩니다.",
+          "how_to_try": "Task 도구로 프로젝트별 CLAUDE.md를 가진 서브에이전트를 병렬로 띄우고, 코디네이터 에이전트가 작업을 나눠 주고 보고를 모으게 하세요.",
+          "copyable_prompt": "내 서브도메인 모노레포에 멀티 에이전트 구조를 만들어줘. 1단계: 모든 서브도메인(invest, duri, estate, util/chat)을 탐색해 프로젝트별 CLAUDE.md를 쓴다 — 스택, 데이터 모델, 배포 명령, 테스트 명령, 알려진 지뢰(duri 싱크 데몬의 시퀀스 구멍과 복호화 불가 항목, invest의 원화 현금 표시, PWA의 IndexedDB 버전 올리기), 그리고 '완료'의 정의. 2단계: 루트 CLAUDE.md를 써서 앞으로의 에이전트가 항상 해당 프로젝트 파일을 먼저 읽고, 자기 서브도메인 밖 파일은 절대 커밋하지 않게 한다(내 변경이 다른 터미널의 커밋에 휩쓸린 적이 있다). 3단계: 실제로 시연한다 — 서브에이전트를 병렬로 띄워 (a) invest의 오래된 데이터 엣지 케이스를 점검하고, (b) duri 푸시 알림의 신뢰성을 점검하고, (c) util/chat에 스티커 투명도와 재접속 입퇴장 소음을 덮는 회귀 테스트를 추가한다. 각 서브에이전트가 발견과 제안 diff를 보고하면, 그걸 모아 우선순위가 매겨진 단일 계획으로 정리해줘."
+        },
+        {
+          "title": "실기기에서만 나는 버그를 잡는 테스트 우선 루프",
+          "whats_possible": "마찰 사건 열 건이 버그 있는 코드였습니다 — 스티커 CSS 특이도, 잘못 놓인 맨 아래로 가기 버튼, 재접속 소음, 기기에서만 실패한 IndexedDB 마이그레이션. 전부 헤드리스 브라우저가 당신이 앱을 열기 전에 잡을 수 있는 것들입니다. 실제 기기 에뮬레이션이 있는 Playwright 하네스를 가리키고 실패 테스트가 사라질 때까지 자율적으로 돌게 하세요. UI/UX 재작업 라운드가 세 번에서 0번으로 줄어듭니다.",
+          "how_to_try": "모바일 뷰포트와 IndexedDB 마이그레이션 테스트를 갖춘 Playwright를 세팅하게 한 뒤, Bash 루프로 모든 단언이 통과할 때까지 돌리세요.",
+          "copyable_prompt": "내 PWA와 채팅 앱에 자율 테스트-수정 루프를 세팅해줘. (1) 모바일 기기 에뮬레이션(iPhone·Android 뷰포트)으로 Playwright를 설치하고, 나를 실제로 물었던 부류를 덮는 시각 회귀·동작 테스트를 쓴다: 채팅 말풍선 위 투명 배경 스티커 렌더링, 여러 스크롤 상태에서의 맨 아래로 가기 버튼 위치, WebSocket 재접속 시 중복 입퇴장 메시지, 캘린더 이모지 배지 렌더링, 사람별 색상 대 기기 로컬 색상 저장. (2) 예전 스키마 버전으로 DB를 연 뒤 새 앱 코드를 올려 업그레이드가 데이터 손실 없이 되는지 확인하는 IndexedDB 마이그레이션 테스트를 명시적으로 쓴다 — 기기에서 깨진 적이 있다. (3) npm run test:e2e를 추가한다. (4) 이제 스위트를 돌리고, 실패마다 코드를 고쳐 전부 통과할 때까지 자율적으로 반복한다. 중간에 나에게 묻지 말고, 마지막 통과 결과와 찾아낸 근본 원인 요약을 보여줘."
+        }
+      ]
+    },
+    "fun_ending": {
+      "headline": "클로드가 한국 공휴일에 🎌 이모지를 골랐다 — 커플 캘린더에 뜬 일본 국기를 본 사용자는 웃지 않았다",
+      "detail": "커플 채팅·캘린더 PWA를 만들던 중, 클로드의 공휴일 배지 선택이 의도치 않은 지정학적 발언이 되었습니다. 같은 세션에서 캘린더 이모지 배지의 설계 의도도 두 번 더 잘못 읽은 끝에야 제대로 맞췄습니다."
+    }
+  },
+  "en": {
+    "at_a_glance": {
+      "whats_working": "You work in an explore-then-extend rhythm: you ask Claude to understand a subdomain before touching it, then push each change all the way through build, test, deploy, and production verification rather than stopping at working code. That end-to-end discipline showed up clearly in the invest subdomain and the admin Insights work, which went from request to deployed main in a single pass. You're also good at tight UI/UX critique loops — on the chat room and the couples' PWA you pushed back specifically instead of accepting the first working version, which is what turned rough drafts into polished features.",
+      "whats_hindering": "On Claude's side, most of the pain was code that looked correct but broke in reality: a verification payload that briefly wiped a daily snapshot, sticker CSS specificity issues, and features that passed locally but failed on-device due to an IndexedDB version mismatch. There were also a couple of misreads of design intent that cost you rework rounds. On your side, Claude is often probing by running commands instead of reading code first, and each session re-establishes the same background — Korean locale, KRW formatting, Cloudflare Workers deploys, the multi-subdomain layout — which burns turns before real work starts. Vague openers like 'update yourself' also tend to send Claude down a path you then have to interrupt.",
+      "quick_wins": "Put your recurring context into a CLAUDE.md per subdomain (locale, currency formatting, wrangler/Workers deploy steps, test commands) so you stop re-explaining it. Then turn your deploy-verify ritual into a Custom Skill you invoke with one slash command, and add Hooks to auto-run tests or lint before commits land. Finally, finish that deploy-verify-rollback loop as a committed script rather than an in-conversation experiment — it'll survive across sessions.",
+      "ambitious_workflows": "As models get stronger, aim for a machine-readable health contract per subdomain so Claude can deploy, probe real production endpoints through your auth gate, diff against a pre-deploy snapshot, and roll back automatically — turning every deploy into a report you read rather than a process you supervise. Pair that with a Playwright harness using device emulation so the on-device bugs you keep catching manually get caught before you open the app. Longer term, dedicated subagents per subdomain, each with its own context and deploy contract, would let you describe four features in one message and review four verified results."
+    },
+    "project_areas": {
+      "areas": [
+        {
+          "name": "Investment Dashboard (invest subdomain)",
+          "session_count": 2,
+          "description": "Built out an investing subdomain covering edge deployment, daemon and cron scheduling, stock group separation, cash display, and a swipeable brokerage-style UI with on-demand refresh. Claude explored the existing codebase, implemented features end-to-end, ran tests, and deployed and verified changes in production. Friction included a KRW cash display bug and a verification payload that briefly overwrote a daily snapshot before self-recovery."
+        },
+        {
+          "name": "Couple Chat/Calendar PWA (duri subdomain)",
+          "session_count": 2,
+          "description": "Rapid iterative development on a couple's chat and calendar progressive web app, including push notification fixes, map pin bugs, clustering, comments, and PC backup sync that archived hundreds of messages, photos, and calendar events. Claude diagnosed root causes and shipped multi-file fixes, though several rounds of rework were needed after misread design intent, an offensive holiday emoji choice, and on-device IndexedDB version mismatches."
+        },
+        {
+          "name": "Real Estate Data Visualization",
+          "session_count": 2,
+          "description": "Created and extended a private Dongtan/Giheung real-estate site with map overlays, a DSR Tower reference point, and an estate dashboard refreshed to 60 months of transaction data with per-complex time series and peak-drawdown views. Claude handled data refresh, visualization work, deployment, plus advisory guidance on housing-complex APIs and interpreting market peaks. The K-apt API signup step was deferred after it failed on the user's side."
+        },
+        {
+          "name": "Anonymous Chat Room (util.bubblelab.dev/chat)",
+          "session_count": 1,
+          "description": "Built a sticker-enabled anonymous chat room with a Durable Object backend, frontend UI, tests, and documentation, then deployed it to production. Claude iterated through multiple rounds of UI/UX feedback, resolving sticker transparency CSS specificity issues, jump-to-bottom button placement, and noisy reconnect join/leave spam despite flaky local wrangler/workerd WebSocket behavior."
+        },
+        {
+          "name": "Admin Insights, Reporting & Deploy Tooling",
+          "session_count": 3,
+          "description": "Added a daily active-dwell 'today' toggle to the admin Insights page by leveraging an existing API parameter, and produced a Korean translation of the insights report with structural verification. Also began work on a self-verifying production deployment loop with rollback, which was still in progress. One session stalled when a vague 'update yourself' request led to interrupted commands."
+        }
+      ]
+    },
+    "interaction_style": {
+      "narrative": "You work in long, high-trust sessions — 182 hours across just 10 sessions and 187 messages, with Claude firing off nearly 1,000 Bash calls and 573 Edits. That ratio tells the story: **you give Claude a goal and a lot of rope**. A typical session opens with something like 'explore the invest subdomain and finish its edge/daemon/cron setup' and then Claude runs for a long stretch — building, testing, committing, deploying — while you check in periodically rather than steering line by line. The 76 commits across these sessions show you're comfortable letting Claude own the full loop through production deploy, not just the code edit.\n\nYour specs are goal-shaped rather than implementation-shaped. You'll say 'add stock group separation with README fixes' or 'I want a swipeable brokerage-style UI with cash display and on-demand refresh' — clear on outcome, deliberately vague on mechanics. That works beautifully when the domain is unambiguous (the invest subdomain and admin Insights toggle both landed fully achieved), but **the friction clusters exactly where intent needed more words**: Claude misread your calendar emoji-badge design intent twice, picked a 🎌 emoji for Korean holidays that you found offensive, and wrote README wording for the git-add rule that missed what you meant. Your rarest failure mode is a wrong-approach; your common one is a right-approach-wrong-taste. You also correct in-flight rather than pre-empting — you interrupted a tool call, then immediately re-approved with 'yes해드림', and when the vague 'update yourself' prompt sent Claude down an unwanted path, you killed it rather than clarifying.\n\nYou're pragmatic about dead ends. When the K-apt API 활용신청 guidance didn't work on your side, your response was a shrug — '음 잘 안되는군요' — and you deferred the thread rather than grinding on it. Most of your friction is buggy-code friction (10 instances) surfacing on real devices after deploy: an IndexedDB version mismatch, device-local rather than per-person color storage, sticker transparency losing to CSS specificity. That's the natural cost of your style — **you validate in production, not in review**, so the feedback loop is 'ship it, use it, report what broke.' It's why so many outcomes land at 'mostly achieved' rather than fully: the last 10% is UI/UX polish you can only judge once it's live in your hands.",
+      "key_pattern": "You hand Claude a goal-level brief and let it run all the way to production autonomously, then correct by reacting to what you see live rather than specifying details upfront."
+    },
+    "what_works": {
+      "intro": "Across 10 sessions spanning three weeks, you shipped 76 commits building and deploying a portfolio of personal subdomains — investing dashboards, real-estate visualizations, a couples' PWA, and an anonymous chat room.",
+      "impressive_workflows": [
+        {
+          "title": "End-to-end ship, not just code",
+          "description": "You consistently push work all the way through: build, test, deploy, and verify in production. Sessions like the invest subdomain and the admin Insights toggle went from request to committed, pushed, and successfully deployed main in a single pass — no dangling half-finished branches."
+        },
+        {
+          "title": "Explore-then-extend on unfamiliar subdomains",
+          "description": "You often open with a codebase exploration request before asking for changes, as you did with both the invest and duri subdomains. That upfront grounding pays off — Claude diagnosed root causes for push notifications and map pin bugs rather than guessing, and the follow-on features landed cleanly on top of accurate context."
+        },
+        {
+          "title": "Tight iterative UI/UX feedback loops",
+          "description": "On the chat room and the couples' PWA you ran multiple rapid rounds of design critique — sticker transparency, jump-to-bottom placement, join/leave noise, calendar badge semantics. You caught issues fast and pushed back specifically, which turned rough first drafts into polished, shipped features instead of accepting the first working version."
+        }
+      ]
+    },
+    "suggestions": {
+      "claude_md_additions": [
+        {
+          "addition": "## Deploy Verification\nAfter every production deploy, verify with a read-only check (GET/status endpoint or curl of the public URL). NEVER POST/PUT test payloads to production data endpoints — a verification write once overwrote the day's snapshot with empty values. If an auth gate blocks verification, note it and ask rather than guessing an alternate method.",
+          "why": "Verification payloads overwrote real snapshot data in two separate sessions and an auth-gated deploy check failed, causing repeated recovery work.",
+          "prompt_scaffold": "Add as a new top-level '## Deploy Verification' section in CLAUDE.md, near any existing deployment/Cloudflare notes."
+        },
+        {
+          "addition": "## Git Discipline\nOnly `git add` the specific files you changed — never `git add .` or `git add -A`. Multiple terminals may be working in this repo simultaneously; blanket adds have swept unrelated changes into commits before.",
+          "why": "One session had Claude's changes swept into another terminal's commit, and a README rule about git-add had to be rewritten because the intent was missed.",
+          "prompt_scaffold": "Add under an existing '## Git' / '## Commits' section, or create one near the top of CLAUDE.md."
+        },
+        {
+          "addition": "## Localization & Cultural Conventions\nThis project serves Korean users. Use Korean-appropriate symbols only — never 🎌 (Japanese flag) for Korean holidays; prefer 🇰🇷 or a neutral 🎉/📅. Currency is KRW (₩, no decimals). Before shipping any UI copy or emoji, state the choice in your summary so it can be reviewed.",
+          "why": "A 🎌 emoji used for Korean holidays offended the user and a KRW cash display bug slipped through, both requiring rework.",
+          "prompt_scaffold": "Add as a new '## Localization & Cultural Conventions' section in CLAUDE.md."
+        },
+        {
+          "addition": "## Client-Side Storage Changes\nAny change to an IndexedDB/localStorage schema MUST bump the DB version and include a migration path, and per-person data (e.g., calendar colors, preferences) must be stored server-side or keyed by user ID — not device-local.",
+          "why": "Chat preview, notification suppression, and calendar color features all shipped but failed on-device due to an IndexedDB version mismatch and device-local storage of per-person settings.",
+          "prompt_scaffold": "Add under the PWA/frontend section of CLAUDE.md for the couples chat/calendar project."
+        },
+        {
+          "addition": "## Before Implementing UI Designs\nWhen a UI/UX change is described in prose, restate the intended design in one or two sentences (or an ASCII sketch) and get confirmation BEFORE writing code. Do not begin multi-file edits on ambiguous design requests.",
+          "why": "The calendar emoji-badge design intent was misread twice and several UI features needed multiple rounds of rework across sessions.",
+          "prompt_scaffold": "Add under a '## Working Style' or '## UI Work' section in CLAUDE.md."
+        }
+      ],
+      "features_to_try": [
+        {
+          "feature": "Custom Skills",
+          "one_liner": "Reusable markdown prompts you invoke with a single slash command.",
+          "why_for_you": "You ran the same build → test → commit → deploy → verify loop across nearly every session (76 commits, 986 Bash calls), and the verification step is exactly where things broke twice — codify it once so it runs the safe way every time.",
+          "example_code": "# .claude/skills/ship/SKILL.md\n---\nname: ship\ndescription: Build, test, commit, deploy to Cloudflare, and read-only verify\n---\n\n1. Run the test suite; stop and report if anything fails.\n2. `git status` — stage ONLY files you edited this session. Never `git add .`\n3. Commit with a concise Korean-or-English message describing the user-facing change.\n4. `git push origin main`\n5. Deploy: `npx wrangler deploy`\n6. Verify READ-ONLY: `curl -s -o /dev/null -w \"%{http_code}\" <PROD_URL>` plus a GET of the health/status endpoint. NEVER POST test payloads to production.\n7. If verification fails, report the exact failure and propose a rollback command — do not auto-rollback without asking."
+        },
+        {
+          "feature": "Hooks",
+          "one_liner": "Shell commands that auto-run at lifecycle events like before/after edits or commands.",
+          "why_for_you": "Your top friction category is 'buggy_code' (10 occurrences) shipped to prod — a PostToolUse hook that lints/typechecks after every Edit catches CSS specificity and JS mistakes before deploy, and a PreToolUse guard can block `git add .` outright.",
+          "example_code": "// .claude/settings.json\n{\n  \"hooks\": {\n    \"PostToolUse\": [\n      {\n        \"matcher\": \"Edit|Write\",\n        \"hooks\": [\n          { \"type\": \"command\", \"command\": \"npx prettier --write \\\"$CLAUDE_FILE_PATHS\\\" 2>/dev/null; npm run lint --silent || true\" }\n        ]\n      }\n    ],\n    \"PreToolUse\": [\n      {\n        \"matcher\": \"Bash\",\n        \"hooks\": [\n          { \"type\": \"command\", \"command\": \"grep -Eq 'git add (\\\\.|-A|--all)' <<< \\\"$CLAUDE_TOOL_INPUT\\\" && { echo 'Blocked: stage individual files only'; exit 2; } || exit 0\" }\n        ]\n      }\n    ]\n  }\n}"
+        },
+        {
+          "feature": "Headless Mode",
+          "one_liner": "Run Claude non-interactively from scripts and CI/CD.",
+          "why_for_you": "You explicitly asked for a 'self-verifying prod deployment loop with rollback' in your last session and it was left unfinished — headless mode is the missing piece: a scheduled script that checks prod, and only escalates to you when something is actually wrong.",
+          "example_code": "#!/usr/bin/env bash\n# scripts/prod-watch.sh — run from cron every 15m\nclaude -p \"Check https://util.bubblelab.dev and the invest subdomain health endpoints. Report ONLY: status code, response time, and whether today's snapshot has non-empty values. Do not write anything. If broken, output the exact wrangler rollback command.\" \\\n  --allowedTools \"Bash(curl:*),Read\" \\\n  --output-format json > /tmp/prod-check.json"
+        }
+      ],
+      "usage_patterns": [
+        {
+          "title": "Your Bash-to-Read ratio is 4.5:1 — you're debugging blind",
+          "suggestion": "You issue ~986 Bash commands vs only 220 Reads, meaning Claude is often probing by execution instead of reading code first. Front-load exploration with a Task Agent before edits begin.",
+          "detail": "Sessions like the duri push-notification bugs, the sink daemon crash-loop, and the sticker CSS specificity issue all involved long trial-and-error command chains. In your successful sessions (the Insights 'today' toggle) Claude read first, found the API already supported `days=1`, and shipped in one pass. Spawning a read-only exploration agent before touching anything converts guesswork into a plan, especially in the multi-subdomain bubblelab codebase.",
+          "copyable_prompt": "Before changing anything: use a Task agent to explore this subdomain read-only. Report back (1) the entry points and data flow, (2) where the bug most likely lives with file:line references, (3) what already exists that I could reuse instead of building new, and (4) two candidate fixes with tradeoffs. Do not edit or run any mutating commands yet — wait for my go-ahead."
+        },
+        {
+          "title": "Close the loop on the self-verifying deploy with rollback",
+          "suggestion": "Your final session ended mid-implementation of a deploy-verify-rollback loop. Finish it as a committed script rather than an ad-hoc conversation, so it survives across sessions.",
+          "detail": "You deploy to Cloudflare Workers constantly across invest, duri, util, and the estate dashboard, and you've already been bitten by a bad verification method (auth gate) and a destructive verification write. A checked-in script with an explicit read-only probe, a health assertion, and a `wrangler rollback` fallback turns that recurring risk into one command. Pair it with the /ship skill above so every deploy goes through the same gate.",
+          "copyable_prompt": "Write scripts/deploy-verify.sh that: (1) deploys with wrangler and captures the new version ID, (2) waits 10s then runs READ-ONLY health checks (HTTP status + a GET that asserts today's snapshot is non-empty) — never POST test data, (3) handles auth-gated endpoints by using a token from env rather than assuming public access, (4) on failure prints and runs `wrangler rollback --version-id <previous>`, (5) exits non-zero on failure so CI can catch it. Add a --dry-run flag. Then show me the script and walk through the failure path before we run it."
+        },
+        {
+          "title": "Add an 'on-device reality check' step for PWA features",
+          "suggestion": "Several chat/calendar features passed local tests but failed on real devices due to IndexedDB versioning and device-local storage. Make on-device constraints an explicit checklist item.",
+          "detail": "The couples PWA session had the most rework of any in your data — chat preview, self-notification suppression, and calendar colors all shipped broken. These weren't logic bugs; they were client-environment assumptions. Asking Claude to enumerate storage/version/permission implications before writing code catches this class of failure cheaply, since you can't easily debug the user's phone.",
+          "copyable_prompt": "Before implementing this PWA feature, list every client-side assumption it makes: IndexedDB schema version and whether a migration is needed, service worker cache invalidation, notification permission state, and any data that would be wrong if stored device-local instead of per-user on the server. For each, say how it behaves for a returning user with an old cached version. Then implement, and include the version bump and migration in the same change."
+        },
+        {
+          "title": "Turn recurring context into CLAUDE.md instead of re-explaining",
+          "suggestion": "Your sessions repeatedly re-establish the same context: Korean locale, KRW formatting, Cloudflare Workers/wrangler deploys, and the multi-subdomain layout of bubblelab.dev.",
+          "detail": "With 10 sessions spanning invest, duri, util, and the estate dashboard, each new session pays a fresh discovery tax — and the wrangler 4.86 compatibility-date failure suggests toolchain versions aren't documented either. A short per-subdomain map plus a pinned toolchain section in CLAUDE.md would cut startup cost and prevent repeat environment issues (3 logged).",
+          "copyable_prompt": "Read this repo and draft a CLAUDE.md for me. Include: a one-line description of each subdomain (invest, duri, util, estate) with its entry point and deploy command; the exact pinned versions of wrangler/node/package manager we should use and how to invoke them so a cached global version isn't picked up; the test command; and our git staging rule. Keep it under 60 lines — dense and factual, no filler."
+        }
+      ]
+    },
+    "on_the_horizon": {
+      "intro": "Your work has already shifted from asking Claude to write code to asking Claude to ship features end-to-end — the next leap is letting fleets of agents own entire verify-deploy-rollback loops while you review outcomes instead of diffs.",
+      "opportunities": [
+        {
+          "title": "Self-Verifying Deploy Loops With Auto-Rollback",
+          "whats_possible": "Your friction log is dominated by things that only break in production: a verification payload wiping a day's snapshot, an auth gate defeating deploy checks, an IndexedDB version mismatch shipping to devices. Instead of hand-checking after each `wrangler deploy`, define a machine-readable health contract per subdomain (invest, duri, util) and let Claude deploy, probe real production endpoints through the auth gate, diff against a pre-deploy snapshot, and roll back automatically within seconds when a check fails. Every deploy then becomes a closed loop you read a report about, not a ritual you supervise.",
+          "how_to_try": "Have Claude write a `scripts/deploy-verify.sh` plus a `HEALTH.md` contract per worker, wired into Bash so the deploy, probe, and `wrangler rollback` all happen in one autonomous run.",
+          "copyable_prompt": "Build a self-verifying deployment system for all my Cloudflare Workers subdomains (invest, duri, util, estate). For each one: (1) Read the existing wrangler config and routes to inventory every deployable surface. (2) Create HEALTH.md defining post-deploy assertions — authenticated endpoint probes, expected JSON shape, non-empty snapshot invariants (learn from the bug where a verification payload overwrote a day's snapshot with empty values), and frontend asset hash checks. (3) Write scripts/deploy-verify.sh that snapshots current prod state and the current deployment ID, deploys, waits for propagation, runs every assertion including auth-gated ones with a real session token, and on ANY failure automatically runs wrangler rollback to the saved deployment ID and prints a diff of what broke. (4) Add a --dry-run mode. (5) Test the whole thing by deliberately deploying a broken build to a staging route and proving rollback fires. Do not ask me to babysit — run it, verify it, and report the final result with evidence."
+        },
+        {
+          "title": "Parallel Agents Owning Each Subdomain",
+          "whats_possible": "You're juggling at least four independent products across 76 commits — invest, duri, the estate dashboard, and util/chat — and each session pays the cost of re-learning the codebase from scratch. Spin up dedicated subagents, one per subdomain, each with its own CLAUDE.md context, test commands, and deploy contract, then dispatch feature work to all of them in parallel from a single prompt. You'd describe four features in one message and review four deployed, tested, verified results.",
+          "how_to_try": "Use the Task tool to launch parallel subagents with per-project CLAUDE.md files, and let a coordinator agent fan out work and collect the reports.",
+          "copyable_prompt": "Set up a multi-agent architecture for my monorepo of subdomains. Step 1: Explore every subdomain (invest, duri, estate, util/chat) and write a per-project CLAUDE.md capturing its stack, data model, deploy command, test command, known landmines (e.g. duri's sink daemon sequence gaps and undecryptable entries, invest's KRW cash display, IndexedDB version bumps for the PWA), and its definition of done. Step 2: Write a root CLAUDE.md that tells future agents to always load the relevant project file first and never commit files outside their subdomain (I've had changes swept into another terminal's commit). Step 3: Then demonstrate it — dispatch parallel subagents to independently (a) audit invest for stale-data edge cases, (b) audit duri's push notification reliability, (c) add a regression test suite to util/chat covering sticker transparency and reconnect join/leave spam. Have each subagent report back with findings and a proposed diff, then you synthesize a single prioritized plan for me."
+        },
+        {
+          "title": "Test-First Loops That Catch Device-Only Bugs",
+          "whats_possible": "Ten of your friction events were buggy code — sticker CSS specificity, a wrong-placed jump-to-bottom button, reconnect churn, an IndexedDB migration that only failed on-device. These are exactly the bugs a headless browser can catch before you ever open the app. Point Claude at a Playwright harness with real device emulation and let it iterate autonomously against failing tests until green, so UI/UX rework rounds collapse from three feedback cycles to zero.",
+          "how_to_try": "Have Claude scaffold Playwright with mobile viewports and IndexedDB migration tests, then run it in a loop via Bash until every assertion passes without you in the loop.",
+          "copyable_prompt": "Set up an autonomous test-and-fix loop for my PWA and chat app. (1) Install Playwright with mobile device emulation (iPhone + Android viewports) and write visual regression + behavioral tests covering the exact classes of bugs that have bitten me: sticker rendering with transparent backgrounds over chat bubbles, jump-to-bottom button positioning at multiple scroll states, WebSocket reconnect producing duplicate join/leave messages, calendar emoji badge rendering, and per-person vs device-local color storage. (2) Write an explicit IndexedDB migration test that opens the OLD schema version, then loads the new app code, and asserts the upgrade path succeeds without data loss — this has broken on-device before. (3) Add npm run test:e2e. (4) Now run the suite, and for every failure, fix the code and re-run autonomously until everything is green. Do not stop to ask me between iterations; show me the final passing run plus a summary of every root cause you found."
+        }
+      ]
+    },
+    "fun_ending": {
+      "headline": "Claude picked a 🎌 emoji for Korean holidays — the user, seeing a Japanese flag on their couple's calendar, was not amused",
+      "detail": "During the couple's chat/calendar PWA build, Claude's holiday badge choice landed as an unintended geopolitical statement. It also misread the calendar emoji-badge design intent twice more in the same session before finally getting it right."
+    }
+  }
+}

@@ -763,6 +763,50 @@ async function serveAssetCatalog(request, env, url) {
   });
 }
 
+// 있어야 할 바인딩. 배포는 성공했는데 바인딩 하나가 빠져 특정 기능만 죽는
+// 경우가 실제로 잘 생긴다 — 화면을 열어봐야 알던 것을 프로브 한 번으로 본다.
+export const HEALTH_BINDINGS = [
+  "ASSETS", "ANALYTICS", "RECORDS", "RATE_LIMITER", "REALTIME", "PLANNER",
+  "CHAT", "PODCAST", "DURI", "INVEST", "ASSET_FLAGS", "BRIEF", "FORTUNE",
+  "WORK_QNA", "WORK_REVIEWS", "EMOTICON_REVIEW", "PODCAST_BUCKET", "DURI_BUCKET",
+];
+
+/**
+ * 배포 상태 프로브. **읽기 전용** — 저장소를 건드리지 않는다.
+ *
+ * 커밋 SHA는 빌드가 구운 `dist/_health.json`에서 읽는다. 이게 없으면 배포가
+ * 올라갔는지 확인할 방법이 요청 시각밖에 없어서, 옛 배포를 검사하고 통과했다고
+ * 착각하게 된다(그래서 verify-prod가 이 값을 기대 커밋과 대조한다).
+ */
+export async function serveHealth(request, env, url) {
+  let build = null;
+  try {
+    const response = await env.ASSETS.fetch(new Request(new URL("/_health.json", url), { method: "GET" }));
+    if (response.ok) build = await response.json().catch(() => null);
+  } catch {
+    // 에셋 바인딩이 흔들려도 나머지 진단은 돌려준다.
+  }
+  const bindings = {};
+  for (const name of HEALTH_BINDINGS) bindings[name] = Boolean(env[name]);
+  return Response.json({
+    ok: true,
+    commit: build?.commit || null,
+    builtAt: build?.builtAt ?? null,
+    siteCount: build?.siteCount ?? null,
+    date: kstDate(),
+    now: Date.now(),
+    features: {
+      chat: featureEnabled(env, "ENABLE_CHAT"),
+      podcast: featureEnabled(env, "ENABLE_PODCAST"),
+      duri: featureEnabled(env, "ENABLE_DURI"),
+      invest: featureEnabled(env, "ENABLE_INVEST"),
+      realtime: featureEnabled(env, "ENABLE_REALTIME"),
+      planner: featureEnabled(env, "ENABLE_PLANNER"),
+    },
+    bindings,
+  }, { headers: { "Cache-Control": "no-store" } });
+}
+
 /** admin의 스티커 공개 여부 화면. GET은 목록, POST는 팩 하나를 켜고 끈다. */
 async function handleAssetFlagsAdmin(request, env, url, category) {
   if (!["GET", "POST"].includes(request.method)) return null;
@@ -989,6 +1033,13 @@ export async function handleRequest(request, env, ctx) {
       path === "/_planner/data" ? 600 * 1024 : 64 * 1024,
     );
     if (mutationError) return mutationError;
+
+    // 배포 검증용 읽기 전용 프로브. 아무것도 쓰지 않고, 지금 서빙 중인 빌드가
+    // 어느 커밋인지·바인딩과 기능 플래그가 살아 있는지만 알려준다.
+    // (scripts/verify-prod.sh 가 이걸로 "내 배포가 실제로 올라갔는지"를 본다.)
+    if (path === "/_health" && request.method === "GET") {
+      return serveHealth(request, env, url);
+    }
 
     if (path.startsWith("/_download/")) {
       return serveAssetDownload(request, env, ctx, url);

@@ -515,6 +515,25 @@ function finiteNumber(value) {
 }
 
 /**
+ * 아무것도 들어 있지 않은 스냅샷인가. 보유종목도 없고 통화별 합계·예수금이 전부
+ * 0이면 "잔고를 못 읽은 결과"이지 "잔고가 0인 계좌"가 아닐 확률이 압도적이다.
+ *
+ * 예전에 배포 검증용 페이로드 한 방이 그날 스냅샷을 이 모양으로 덮어써서 복구해야
+ * 했다 — 그래서 형태 검사(normalizeSnapshot)와 별개로 내용까지 본다.
+ */
+export function isEmptySnapshot(snapshot) {
+  if (!snapshot) return true;
+  if (Array.isArray(snapshot.positions) && snapshot.positions.length > 0) return false;
+  for (const bucket of Object.values(snapshot.byCurrency ?? {})) {
+    if (Number(bucket?.value) !== 0 || Number(bucket?.cost) !== 0) return false;
+  }
+  for (const amount of Object.values(snapshot.cash ?? {})) {
+    if (Number(amount) !== 0) return false;
+  }
+  return true;
+}
+
+/**
  * 데몬이 올린 스냅샷을 검증해 저장 가능한 형태로 만든다.
  * 바깥에서 들어오는 값이므로 형태를 통과시키지 말고 **다시 지어서** 쓴다.
  * 형태가 어긋나면 null — 호출부가 400으로 돌려준다.
@@ -670,6 +689,22 @@ export class InvestDO {
       const payload = await request.json().catch(() => null);
       const snapshot = normalizeSnapshot(payload);
       if (!snapshot) return Response.json({ error: "invalid snapshot" }, { status: 400 });
+
+      // 빈 스냅샷으로 살아 있는 값을 덮지 않는다. 형태만 맞으면 통과시키던 때
+      // 검증 페이로드 한 방에 그날 기록이 날아갔다. 정말로 잔고가 0이 되었다면
+      // 데몬이 ?allowEmpty=1 을 붙여 명시적으로 올린다.
+      if (isEmptySnapshot(snapshot) && url.searchParams.get("allowEmpty") !== "1") {
+        const previous = await this.state.storage.get("latest");
+        const sameDay = await this.state.storage.get(`snap:${snapshot.date}`);
+        if (!isEmptySnapshot(previous) || !isEmptySnapshot(sameDay)) {
+          return Response.json({
+            error: "empty snapshot rejected",
+            detail: "보유종목·합계·예수금이 모두 비어 있어 기존 스냅샷을 덮지 않았습니다 " +
+              "(정말 빈 계좌라면 ?allowEmpty=1)",
+          }, { status: 409 });
+        }
+      }
+
       await this.state.storage.put("latest", snapshot);
       await this.#record(snapshot);
 

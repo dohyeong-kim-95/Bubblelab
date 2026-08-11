@@ -609,3 +609,58 @@ test("admin에서 토글한 스티커 공개 여부가 카탈로그에 반영된
   }), env, ctx);
   assert.equal(response.status, 403);
 });
+
+// 배포 검증의 기준점. 없으면 verify-prod 가 옛 배포를 검사하고 통과했다고 한다.
+test("/_health 는 서빙 중인 커밋과 바인딩을 읽기 전용으로 알려준다", async () => {
+  const stamp = { commit: "c".repeat(40), builtAt: "2026-08-12T00:00:00.000Z", siteCount: 14 };
+  let assetRequests = 0;
+  const env = {
+    ENABLE_CHAT: "true", ENABLE_REALTIME: "false",
+    ASSETS: {
+      fetch(request) {
+        assetRequests++;
+        assert.equal(new URL(request.url).pathname, "/_health.json");
+        return Response.json(stamp);
+      },
+    },
+    CHAT: {}, INVEST: {},
+  };
+  const response = await worker.fetch(new Request("https://bubblelab.dev/_health"), env, ctx);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
+  const body = await response.json();
+  assert.equal(assetRequests, 1);
+  assert.equal(body.commit, stamp.commit);
+  assert.equal(body.siteCount, 14);
+  assert.match(body.date, /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(body.features.chat, true);
+  assert.equal(body.features.realtime, false);
+  assert.equal(body.bindings.CHAT, true);
+  assert.equal(body.bindings.RECORDS, false, "없는 바인딩을 있다고 하면 안 된다");
+  // 서브도메인 이름 목록은 담지 않는다 — 비공개 서브도메인은 주소를 모르는 것이
+  // 유일한 장벽이라 개수만 센다. (플래그·바인딩 이름은 공개 리포의 wrangler.jsonc
+  // 에 이미 있으므로 새로 새는 정보가 아니다.)
+  assert.equal(body.sites, undefined);
+});
+
+test("/_health 는 빌드 스탬프가 없어도 진단을 돌려준다", async () => {
+  const env = { ASSETS: { fetch: () => new Response("not found", { status: 404 }) } };
+  const response = await worker.fetch(new Request("https://bubblelab.dev/_health"), env, ctx);
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).commit, null);
+});
+
+test("/_health 는 POST 를 받지 않는다 (읽기 전용)", async () => {
+  // 에셋 서버는 /_health.json 만 안다 — POST /_health 가 health 핸들러를 타면
+  // 200 이 나오고, 안 타면 정적 서빙으로 떨어져 404 가 된다.
+  const env = {
+    ASSETS: {
+      fetch: (request) => (new URL(request.url).pathname === "/_health.json"
+        ? Response.json({ commit: "x" })
+        : new Response("not found", { status: 404 })),
+    },
+  };
+  const response = await worker.fetch(
+    new Request("https://bubblelab.dev/_health", { method: "POST" }), env, ctx);
+  assert.equal(response.status, 404);
+});
