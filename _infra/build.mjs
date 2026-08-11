@@ -332,8 +332,18 @@ ${preconnectLinks}
   .site-menu .menu-home { border-bottom: 1px solid light-dark(#e6ebef, #263342); margin-bottom: .25rem; }
   #crown { text-align: center; opacity: .6; font-size: .85rem;
            margin: 0 0 .35rem; min-height: 1.2em; }
-  #streak { text-align: center; opacity: .6; font-size: .8rem;
-           margin: 0 0 1.8rem; min-height: 1.2em; }
+  /* 연속 방문일: 우상단 구석의 조용한 배지 (🔥 N) */
+  #streak { position: fixed; top: .7rem; right: .8rem; z-index: 4;
+           opacity: .65; font-size: .85rem; }
+  /* 올타임 1위 — 존중의 자리. 시상대는 명예의 전당에, 여기엔 이름만 크게 */
+  #alltime-top { display: block; text-align: center; margin: 0 0 1.6rem;
+           text-decoration: none; color: inherit; }
+  #alltime-top[hidden] { display: none; }
+  #alltime-top .at-sub { display: block; font-size: .78rem; opacity: .8;
+           letter-spacing: .02em; color: light-dark(#8a6d12, #ffd873); }
+  #alltime-top .at-nick { display: block; font-size: 1.65rem; font-weight: 900;
+           line-height: 1.3; overflow-wrap: anywhere; }
+  #alltime-top:hover .at-nick { text-decoration: underline; }
   .grid { display: grid; gap: 1rem;
           grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); }
   .card { aspect-ratio: 1; border-radius: 1.25rem; text-decoration: none;
@@ -394,7 +404,8 @@ ${categoryLinks}
     </nav>
   </div>
 ${site === "slop" ? "" : '  <div id="crown" title="이번 주 1위를 가장 많이 가진 사람 — 월요일 09시 초기화"></div>'}
-${site === "slop" ? '  <div id="streak">🔥 연속 방문 계산 중…</div>' : ""}
+${site === "slop" ? '  <div id="streak" title="나의 Slop 연속 방문일"></div>' : ""}
+${site === "slop" ? '  <a id="alltime-top" href="/hall-of-fame/" hidden><span class="at-sub"></span><strong class="at-nick"></strong></a>' : ""}
 ${site === "slop" ? '  <div id="week-podium" class="bl-podium" hidden><p class="podium-title">🔥 이번 주 slop 삼대장</p><div class="podium-row"></div></div>' : ""}
 ${cards ? `  <div class="grid">\n${cards}\n  </div>` : `  <p class="empty">아직 아무것도 없어요 🫧</p>`}
   <footer><a href="https://bubblelab.dev">bubblelab.dev</a></footer>
@@ -502,7 +513,7 @@ async function renderWeekPodium(records) {
   } catch {}
 })();
 
-// Slop에서만 현재 브라우저의 KST 기준 연속 방문일을 보여준다.
+// Slop에서만 현재 브라우저의 KST 기준 연속 방문일을 우상단 배지로 보여준다.
 (async () => {
   const streak = document.getElementById("streak");
   if (!streak) return;
@@ -510,10 +521,42 @@ async function renderWeekPodium(records) {
     const res = await fetch("/_streak", { cache: "no-store" });
     if (!res.ok) throw new Error();
     const data = await res.json();
-    streak.textContent = \`🔥 나의 Slop 연속 방문 · \${data.streak ?? 1}일\`;
+    streak.textContent = \`🔥 \${data.streak ?? 1}\`;
+    streak.title = \`나의 Slop 연속 방문 · \${data.streak ?? 1}일\`;
   } catch {
     streak.textContent = "";
   }
+})();
+
+// 올타임 1위는 존중받아야 한다 — 홈 상단에 이름을 크게 새긴다.
+// 집계는 명예의 전당과 같은 규칙(blPodium.rank, slop 스코프)이고, 전체
+// 시상대는 명예의 전당에 있다. 캐시로 즉시 그리고 최신값으로 갱신한다.
+(async () => {
+  const el = document.getElementById("alltime-top");
+  if (!el) return;
+  const KEY = "bl-alltime-top-v1";
+  const render = (t) => {
+    if (!t || !Array.isArray(t.nicks) || !t.nicks.length) return false;
+    el.querySelector(".at-sub").textContent =
+      \`👑 \${t.nicks.length > 1 ? "공동 " : ""}올타임 1위 · \${t.count}관왕\`;
+    el.querySelector(".at-nick").textContent = t.nicks.join(" · ");
+    el.hidden = false;
+    return true;
+  };
+  try { render(JSON.parse(localStorage.getItem(KEY) || "null")); } catch {}
+  try {
+    const res = await fetch("/_records?alltime=1&scope=slop", { cache: "no-store" });
+    if (!res.ok) throw new Error();
+    const { records } = await res.json();
+    // podium.js는 defer라 파싱이 끝나야 실행된다 — DOM 준비를 기다린다.
+    if (document.readyState === "loading") {
+      await new Promise((r) => addEventListener("DOMContentLoaded", r, { once: true }));
+    }
+    const top = (window.blPodium?.rank(records) ?? [])[0];
+    if (!top || top.rank !== 1) return;
+    const t = { nicks: top.members.map((m) => m.nick), count: top.count };
+    if (render(t)) localStorage.setItem(KEY, JSON.stringify(t));
+  } catch {}
 })();
 
 

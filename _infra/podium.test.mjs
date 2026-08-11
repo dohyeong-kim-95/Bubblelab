@@ -96,6 +96,15 @@ test("defer 로드 경합을 막는다", () => {
   }
 });
 
+test("slop 홈 상단: 올타임 1위 한 줄(스코프 준수) + 연속 방문은 구석 배지", () => {
+  assert.match(BUILD, /id="alltime-top"[^>]*href="\/hall-of-fame\/"/);
+  // 홈의 올타임 1위 집계도 slop 스코프만 봐야 한다 (puzzle 오염 방지)
+  assert.match(BUILD, /_records\?alltime=1&scope=slop/);
+  // 동점 규칙은 공용 모듈의 rank를 그대로 쓴다
+  assert.match(BUILD, /blPodium\?\.rank\(records\)/);
+  assert.match(BUILD, /id="streak" title=/);
+});
+
 test("slop 홈은 시상대가 대신하므로 #crown을 빼고, 다른 카테고리는 유지한다", () => {
   assert.match(BUILD, /site === "slop" \? "" : '  <div id="crown"/);
   // slop에는 요소가 없으므로 갱신 코드가 방어해야 한다
