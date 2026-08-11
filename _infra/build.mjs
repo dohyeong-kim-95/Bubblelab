@@ -47,8 +47,12 @@ const isSite = (d) =>
 rmSync(DIST, { recursive: true, force: true });
 mkdirSync(DIST);
 
-// README는 온보딩 문서일 뿐이므로 배포에서 제외
-const notReadme = (src) => !src.endsWith("/README.md");
+// README·CLAUDE·AGENTS 는 온보딩 문서일 뿐이므로 배포에서 제외.
+// 특히 서브도메인마다 두는 에이전트 메모(CLAUDE.md)에는 게이트·DO 바인딩·env
+// 이름이 적혀 있는데, 걸러 내지 않으면 `<서브도메인>.bubblelab.dev/CLAUDE.md`
+// 로 그대로 서빙된다.
+const AGENT_DOCS = /\/(README|CLAUDE|AGENTS)\.md$/;
+const notReadme = (src) => !AGENT_DOCS.test(src);
 
 const sites = readdirSync(ROOT, { withFileTypes: true }).filter(isSite);
 

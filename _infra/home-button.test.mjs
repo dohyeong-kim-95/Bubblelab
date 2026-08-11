@@ -222,6 +222,20 @@ test("랜딩 검색 색인이 공개 카드로 채워진다", () => {
   assert.ok(existsSync(join(DIST, "_shared", "search-rules.js")), "규칙 엔진이 배포되지 않았다");
 });
 
+test("에이전트 문서(README·CLAUDE·AGENTS)는 배포되지 않는다", () => {
+  // 서브도메인마다 두는 CLAUDE.md 에는 게이트·DO 바인딩·env 이름이 적혀 있다.
+  // 걸러 내지 않으면 `<서브도메인>.bubblelab.dev/CLAUDE.md` 로 그대로 서빙된다.
+  const walk = (dir) =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+      entry.isDirectory() ? walk(join(dir, entry.name)) : [join(dir, entry.name)]);
+
+  const leaked = walk(DIST)
+    .filter((path) => /\/(README|CLAUDE|AGENTS)\.md$/.test(path))
+    .map((path) => path.slice(DIST.length + 1));
+
+  assert.deepEqual(leaked, [], `에이전트 문서가 배포에 섞였다: ${leaked.join(", ")}`);
+});
+
 test("비공개 서브도메인·감춘 카드는 검색 색인에도 없다", () => {
   const cards = landingIndex();
   // 카테고리 홈 카드에서 감춘 것과 같은 기준이어야 한다 — 검색이 뒷문이 되면 안 된다.
