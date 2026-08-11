@@ -45,7 +45,10 @@ const BUF_PREFIX = "buf:";
 // E2E 암호블롭({iv,ct})을 rev(수정시각)와 함께 저장하고 last-write-wins 로 병합한다.
 export const DURI_MAX_CAL_BLOB = 4 * 1024;
 const CAL_PREFIX = "cal:";
-const MAX_CAL_EVENTS = 2000;
+const MAX_CAL_EVENTS = 2000; // 살아 있는 일정 기준(툼스톤은 세지 않는다)
+// 툼스톤 보존 기간. 이보다 오래 꺼져 있던 기기가 돌아와 삭제를 못 보고 일정을
+// 되살릴 수 있지만, 2인용 캘린더에서 90일은 충분히 안전한 여유다.
+const CAL_TOMBSTONE_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 const CAL_ID = /^[A-Za-z0-9]{6,40}$/;
 // 웹 푸시 구독(브라우저 알림용, peer 전용 — sink 데몬은 알림을 못 받는다/안 받는다).
 // 알림 자체도 암호블롭({iv,ct} 또는 {metaIv,metaCt})을 그대로 실어 보낸다 — 서버는
@@ -318,8 +321,29 @@ export class DuriDO {
   }
 
   // ── 공유 캘린더 ──────────────────────────────────────────────
+  // 툼스톤(삭제 표시)은 오프라인이던 기기가 "이건 지워졌다"를 알기 위한 것이라
+  // 지우자마자 없앨 수 없다 — 없으면 그 기기의 사본이 살아남아 되살아난다.
+  // 대신 **충분히 오래된 것**은 정리한다. 그만큼 오래 꺼져 있던 기기가 돌아와
+  // 좀비를 되살릴 확률은 낮고, 되살아나도 다시 지우면 된다. 접속 때(cal-hello)만
+  // 훑으므로 빈도도 낮다.
+  async sweepCalTombstones() {
+    const entries = await this.state.storage.list({ prefix: CAL_PREFIX, limit: MAX_CAL_EVENTS * 2 });
+    const now = Date.now();
+    const cutoff = now - CAL_TOMBSTONE_TTL_MS;
+    const stale = [];
+    for (const [key, v] of entries) {
+      if (!v?.deleted) continue;
+      // 삭제 시각이 없는 옛 툼스톤은 나이를 알 수 없다. 지금 찍어 두고 그때부터
+      // 세기 시작한다 — 모른다고 지워 버리면 아직 못 본 기기가 되살릴 수 있다.
+      if (typeof v.at !== "number") { await this.state.storage.put(key, { ...v, at: now }); continue; }
+      if (v.at < cutoff) stale.push(key);
+    }
+    if (stale.length) await this.state.storage.delete(stale);
+    return stale.length;
+  }
   async sendCalState(conn) {
-    const entries = await this.state.storage.list({ prefix: CAL_PREFIX, limit: MAX_CAL_EVENTS });
+    await this.sweepCalTombstones();
+    const entries = await this.state.storage.list({ prefix: CAL_PREFIX, limit: MAX_CAL_EVENTS * 2 });
     this.send(conn, { type: "cal-state", events: [...entries.values()] });
   }
   async calPut(conn, id, iv, ct, rev) {
@@ -327,8 +351,17 @@ export class DuriDO {
     const cur = await this.state.storage.get(key);
     if (cur && cur.rev >= rev) return; // last-write-wins: 오래된 갱신 무시
     if (!cur) {
-      const count = (await this.state.storage.list({ prefix: CAL_PREFIX, limit: MAX_CAL_EVENTS + 1 })).size;
-      if (count > MAX_CAL_EVENTS) return; // 상한 초과 시 새 이벤트 거부
+      // 상한은 **살아 있는 일정** 기준이다. 툼스톤까지 세면 만들고 지우기를 반복한
+      // 것만으로 한도가 차 버린다(실제로 61건 중 41건이 툼스톤이었다).
+      const entries = await this.state.storage.list({ prefix: CAL_PREFIX, limit: MAX_CAL_EVENTS * 2 });
+      let live = 0;
+      for (const [, v] of entries) if (!v?.deleted) live++;
+      if (live >= MAX_CAL_EVENTS) {
+        // 예전엔 조용히 버렸다 — 기기에는 저장돼 화면에 보이는데 서버엔 없어서
+        // 상대에게 안 보이고 새로고침하면 사라졌다. 거부를 알려 되돌리게 한다.
+        this.send(conn, { type: "cal-reject", id, reason: "full" });
+        return;
+      }
     }
     await this.state.storage.put(key, { id, iv, ct, rev, deleted: false });
     this.broadcast({ type: "cal-put", id, iv, ct, rev }, conn);
@@ -337,7 +370,9 @@ export class DuriDO {
     const key = CAL_PREFIX + id;
     const cur = await this.state.storage.get(key);
     if (cur && cur.rev >= rev) return;
-    await this.state.storage.put(key, { id, rev, deleted: true }); // 툼스톤(삭제 전파용)
+    // 툼스톤(삭제 전파용). 삭제 시각은 **서버가** 찍는다 — rev 는 클라이언트 시계라
+    // 그걸 기준으로 정리하면 시계가 어긋난 기기 하나가 남의 툼스톤을 조기에 날린다.
+    await this.state.storage.put(key, { id, rev, deleted: true, at: Date.now() });
     this.broadcast({ type: "cal-del", id, rev }, conn);
   }
 
@@ -595,6 +630,7 @@ export class DuriDO {
   }
 
   send(conn, obj) {
+    if (!conn) return; // 보낸 주체가 없는 경로(내부 호출)도 있다
     try { conn.ws.send(JSON.stringify(obj)); } catch { this.onClose(conn); }
   }
 

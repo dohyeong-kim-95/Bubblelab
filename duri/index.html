@@ -1189,6 +1189,13 @@ function connect() {
     if (m.type === "deleted") { removeEntry(m.seq); return; }
     if (m.type === "cal-state") { applyCalEntries(m.events || []); return; }
     if (m.type === "cal-put" || m.type === "cal-del") { applyCalEntry(m); return; }
+    // 서버가 일정 저장을 거부했다(한도 초과). 예전엔 조용히 버려서 이 기기에만
+    // 남고 상대에겐 안 보이다가 새로고침하면 사라졌다 — 되돌리고 알린다.
+    if (m.type === "cal-reject") {
+      calEvents.delete(m.id); calPersist(); renderCal();
+      showToast("일정이 너무 많아 저장되지 않았어요. 지난 일정을 정리해주세요.");
+      return;
+    }
     if (m.type === "reset") {
       // 지도 핀·툼스톤도 함께 비운다 — 안 그러면 "새로 시작" 뒤에도 옛 색칠이 남는다.
       for (const k of ["duri:cal", PINS_KEY, PINS_HIDDEN_KEY, UNPIN_OUTBOX_KEY]) localStorage.removeItem(k);

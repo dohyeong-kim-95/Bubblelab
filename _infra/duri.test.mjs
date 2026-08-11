@@ -118,7 +118,11 @@ test("calendar put/del use last-write-wins and reset clears them", async () => {
   await room.calPut(null, "evt123abc", "bmV3", "bmV3", 200);  // 새 rev → 반영
   assert.equal(storage.map.get("cal:evt123abc").ct, "bmV3");
   await room.calDel(null, "evt123abc", 300);                  // 삭제 → 툼스톤
-  assert.deepEqual(storage.map.get("cal:evt123abc"), { id: "evt123abc", rev: 300, deleted: true });
+  const tomb = storage.map.get("cal:evt123abc");
+  assert.equal(tomb.id, "evt123abc");
+  assert.equal(tomb.rev, 300);
+  assert.equal(tomb.deleted, true);
+  assert.equal(typeof tomb.at, "number"); // 삭제 시각은 서버가 찍는다(정리 기준)
 
   await room.sendCalState(conn);
   const st = sent.find((m) => m.type === "cal-state");
@@ -154,6 +158,48 @@ test("handleReset wipes the buffer and R2 photos but keeps seq monotonic", async
   assert.equal(storage.map.get("ackSeq"), 3);
   // 참조·고아 사진 모두 R2에서 삭제
   assert.equal(bucket.set.size, 0);
+});
+
+test("calendar cap counts live events only, and rejects loudly when full", async () => {
+  const storage = fakeStorage({ seq: 0, ackSeq: 0 });
+  const state = { storage, blockConcurrencyWhile: (fn) => fn() };
+  const room = new DuriDO(state, { DURI_BUCKET: fakeBucket([]) });
+  await room.load();
+  const sent = [];
+  const conn = { ws: { send: (s) => sent.push(JSON.parse(s)) }, role: "peer", stamps: [], alive: true };
+
+  // 만들고 지우기를 반복하면 툼스톤만 쌓인다 — 예전엔 이것만으로 한도가 찼다.
+  for (let i = 0; i < 50; i++) {
+    const id = `evt${String(i).padStart(6, "0")}`;
+    await room.calPut(conn, id, "aXY=", "Y2lwaGVy", 100 + i);
+    await room.calDel(conn, id, 200 + i);
+  }
+  assert.equal((await storage.list({ prefix: "cal:" })).size, 50); // 전부 툼스톤
+  sent.length = 0;
+  await room.calPut(conn, "evtliveaaa", "aXY=", "Y2lwaGVy", 9000); // 살아 있는 건 0개 → 받아들여야 한다
+  assert.equal((await storage.get("cal:evtliveaaa")).deleted, false);
+  assert.ok(!sent.some((m) => m.type === "cal-reject"));
+});
+
+test("calendar sweeps tombstones older than the TTL, keeping recent ones", async () => {
+  const storage = fakeStorage({ seq: 0, ackSeq: 0 });
+  const state = { storage, blockConcurrencyWhile: (fn) => fn() };
+  const room = new DuriDO(state, { DURI_BUCKET: fakeBucket([]) });
+  await room.load();
+  const DAY = 24 * 60 * 60 * 1000;
+  await storage.put("cal:oldtombaaa", { id: "oldtombaaa", rev: 1, deleted: true, at: Date.now() - 120 * DAY });
+  await storage.put("cal:newtombaaa", { id: "newtombaaa", rev: 2, deleted: true, at: Date.now() - 3 * DAY });
+  // 삭제 시각이 없는 옛 툼스톤 — 나이를 모르니 지우지 말고 지금 시각을 찍어 둔다
+  await storage.put("cal:notimeaaaa", { id: "notimeaaaa", rev: 3, deleted: true });
+  // 오래됐어도 살아 있는 일정은 절대 건드리지 않는다
+  await storage.put("cal:oldliveaaa", { id: "oldliveaaa", rev: Date.now() - 300 * DAY, deleted: false, iv: "aXY=", ct: "Y2lwaGVy" });
+
+  const swept = await room.sweepCalTombstones();
+  assert.equal(swept, 1);
+  assert.equal(await storage.get("cal:oldtombaaa"), undefined); // 오래된 툼스톤만 사라짐
+  assert.ok(await storage.get("cal:newtombaaa"));
+  assert.ok(await storage.get("cal:oldliveaaa"));
+  assert.equal(typeof (await storage.get("cal:notimeaaaa")).at, "number"); // 나이를 모르면 지우지 않고 찍어만 둔다
 });
 
 test("push subscribe/unsubscribe is peer-only, dedupes by endpoint, and caps subscriber count", async () => {
