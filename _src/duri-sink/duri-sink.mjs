@@ -68,6 +68,12 @@ async function downloadPhoto(r2key) {
 let store, cursor = loadCursor();
 const queue = [];
 let draining = false, ackTimer = null, socket = null;
+// 이번 연결에서 백필(서버가 가진 것 전부 전송)이 끝났는지 — 갭을 기다릴지 건너뛸지 가른다.
+let backfilled = false;
+// 연속 복호화 실패 상한 — 이만큼 이어지면 문구 자체가 틀린 것으로 보고 멈춘다.
+// 산발적인 실패는 격리(quarantine)하고 지나간다.
+const MAX_DECRYPT_FAILS = 10;
+let decryptFails = 0;
 
 function enqueue(entry) {
   if (entry.seq <= cursor) return; // 이미 보존됨
@@ -82,16 +88,42 @@ async function drain() {
   while (queue.length) {
     const entry = queue[0];
     if (entry.seq <= cursor) { queue.shift(); continue; }
-    if (entry.seq !== cursor + 1) break; // 선행 항목 대기
+    if (entry.seq !== cursor + 1) {
+      // 중간이 비어 있다. 백필이 끝나기 전이면 아직 오는 중일 수 있으니 기다리고,
+      // 끝난 뒤라면 그 번호는 영원히 오지 않는다 — 삭제된 사진(deleteEntry)이나
+      // 이미 폐기된 항목이라 서버에 없다. 기다리기만 하면 거기서 영영 멈춘다.
+      if (!backfilled) break;
+      log(`서버에 없는 구간 건너뜀: ${cursor + 1}~${entry.seq - 1} (삭제됐거나 이미 폐기된 항목)`);
+      cursor = entry.seq - 1;
+      atomicWrite(cursorPath, String(cursor));
+    }
+    let keepGoing = true;
     try {
       await store.persist(entry);
+      decryptFails = 0;
     } catch (e) {
       if (e?.name === "OperationError" || /decrypt/i.test(String(e))) {
-        fatal("복호화 실패 — 패스프레이즈가 상대와 다릅니다. 데이터 보존을 위해 중단합니다.");
+        // 산발적으로 안 풀리는 한 건(문구를 바꾸기 전의 옛 항목 등) 때문에 그 뒤
+        // 전부가 막히면 안 된다 — 실제로 731건이 딱 한 건에 막혀 있었다. 원문을
+        // 못 읽어도 원본까지 잃을 이유는 없으니 암호블롭 그대로 격리하고 넘어간다.
+        // 다만 연속으로 계속 실패하면 문구 자체가 틀린 것이므로 그때는 멈춘다
+        // (전부 격리한 채 ack 해서 서버에서 지워 버리는 게 최악이다).
+        if (++decryptFails >= MAX_DECRYPT_FAILS) {
+          fatal(`복호화가 연속 ${MAX_DECRYPT_FAILS}건 실패 — 패스프레이즈가 상대와 다릅니다. 중단합니다.`);
+        }
+        try {
+          const saved = await store.quarantine(entry);
+          log(`⚠ seq ${entry.seq} 복호화 실패 — 암호문 그대로 보관: undecryptable/${saved}`);
+        } catch (qe) {
+          log("⏳ 격리 보관 재시도:", entry.seq, String(qe?.message || qe));
+          keepGoing = false; // 사진 다운로드 실패 등 — ack 하지 않고 다음 기회에
+        }
+      } else {
+        log("⏳ 보존 재시도:", entry.seq, String(e?.message || e));
+        keepGoing = false; // 커서 전진 안 함 → ack 안 함 → 서버 유지
       }
-      log("⏳ 보존 재시도:", entry.seq, String(e?.message || e));
-      break; // 커서 전진 안 함 → ack 안 함 → 서버 유지
     }
+    if (!keepGoing) break;
     queue.shift();
     cursor = entry.seq;
     atomicWrite(cursorPath, String(cursor));
@@ -99,6 +131,15 @@ async function drain() {
   }
   draining = false;
   if (queue.length && queue[0].seq > cursor + 1) setTimeout(drain, 3000); // 빠진 항목 대기 후 재시도
+}
+
+// 백필이 끝나면 "서버가 가진 건 다 보냈다"는 뜻이다. 이후로는 커서와 큐 사이의
+// 빈 번호를 기다릴 이유가 없다(drain 이 알아서 건너뛴다). 이 표시가 없으면
+// ackSeq>0 인 방에 새 싱크를 붙였을 때(=처음 설치할 때) 큐만 쌓인 채 3초마다
+// 재시도하며 한 건도 저장하지 못하고 영원히 멈춘다. 실제로 그랬다.
+function markBackfilled() {
+  backfilled = true;
+  drain();
 }
 
 function scheduleAck() {
@@ -130,6 +171,7 @@ function connect() {
   socket = ws;
   ws.addEventListener("open", () => {
     backoff = 1000;
+    backfilled = false; // 재연결마다 다시 백필을 받는다
     log("접속됨. 커서", cursor, "이후 수신");
     ws.send(JSON.stringify({ type: "hello", since: cursor }));
     ws.send(JSON.stringify({ type: "cal-hello" })); // 공유 캘린더 전체 상태도 받는다
@@ -138,7 +180,7 @@ function connect() {
     let m; try { m = JSON.parse(e.data); } catch { return; }
     if (m.type === "ping") { ws.send(JSON.stringify({ type: "pong" })); return; }
     if (m.type === "entry") { enqueue(m); return; }
-    if (m.type === "backfill-done") { log("백필 완료. head", m.head); drain(); return; }
+    if (m.type === "backfill-done") { log("백필 완료. head", m.head); markBackfilled(); return; }
     if (m.type === "welcome") { log("welcome. head", m.head); return; }
     // 캘린더는 ack 이 없다(서버가 계속 들고 있는 지속 상태다). 실패해도 대화·사진
     // 보존을 막으면 안 되므로 커서와 분리해 여기서 삼키고 로그만 남긴다.

@@ -188,6 +188,38 @@ test("calendar: an empty cal-state (room reset) must not wipe the backup", async
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test("quarantine keeps the raw blob so one bad entry can't block the rest", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "duri-"));
+  try {
+    const otherKey = await encKeyFor("옛날문구");           // 지금 문구로는 안 풀리는 항목
+    const store = createStore({
+      dir, key: await deriveKey("지금문구"),
+      fetchPhoto: async () => new Uint8Array([9, 9, 9, 9]), // 암호화된 사진 블롭
+    });
+    const at = Date.UTC(2026, 6, 25, 1, 52, 0);
+    const frame = await encJson(otherKey, { name: "도경", text: "안 풀리는 옛 메시지", at });
+    await assert.rejects(store.persist({ seq: 140, kind: "msg", at, iv: frame.iv, ct: frame.ct }));
+
+    // 못 읽어도 원본은 남긴다 — 나중에 옛 문구를 알면 여기서 풀 수 있다.
+    const saved = await store.quarantine({ seq: 140, kind: "msg", at, iv: frame.iv, ct: frame.ct });
+    const rec = JSON.parse(readFileSync(join(dir, "undecryptable", saved), "utf8"));
+    assert.equal(rec.seq, 140);
+    assert.equal(rec.ct, frame.ct); // 암호문 그대로
+
+    // 사진은 서버에서 사라지면 끝이라 블롭까지 받아 둔다
+    const photoSaved = await store.quarantine({
+      seq: 141, kind: "photo", at, r2key: "photo/000000000141-aaaabbbbccccdddd",
+      imgIv: "aXY=", metaIv: "aXY=", metaCt: "zzz",
+    });
+    const photoRec = JSON.parse(readFileSync(join(dir, "undecryptable", photoSaved), "utf8"));
+    assert.equal(photoRec.encryptedImage, "000000000141.img.enc");
+    assert.deepEqual(
+      new Uint8Array(readFileSync(join(dir, "undecryptable", "000000000141.img.enc"))),
+      new Uint8Array([9, 9, 9, 9]),
+    );
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 test("wrong passphrase throws (so the daemon can halt instead of acking away data)", async () => {
   const dir = mkdtempSync(join(tmpdir(), "duri-"));
   try {

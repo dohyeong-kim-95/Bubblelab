@@ -171,6 +171,24 @@ export function createStore({ dir, key, fetchPhoto }) {
     saveMonth(month);
   }
 
+  // 복호화되지 않는 항목을 **암호블롭 그대로** 남긴다. 문구를 바꾸기 전의 옛 항목
+  // 하나가 섞여 있으면 그 한 건 때문에 이후 전부가 보존되지 못했는데(실제로 731건이
+  // 한 건에 막혔다), 원문을 못 읽더라도 원본까지 잃을 이유는 없다. 나중에 옛 문구를
+  // 알게 되면 여기 있는 블롭으로 풀 수 있다.
+  async function quarantine(entry) {
+    const base = String(entry.seq).padStart(12, "0");
+    const dirp = join(dir, "undecryptable");
+    const rec = { ...entry, quarantinedAt: new Date().toISOString() };
+    if (entry.kind === "photo" && entry.r2key) {
+      // 사진은 서버(R2)에서 사라지면 끝이므로 암호블롭을 반드시 받아 둔다.
+      const blob = await fetchPhoto(entry.r2key);
+      atomicWrite(join(dirp, `${base}.img.enc`), Buffer.from(blob));
+      rec.encryptedImage = `${base}.img.enc`;
+    }
+    atomicWrite(join(dirp, `${base}.json`), JSON.stringify(rec, null, 2));
+    return `${base}.json`;
+  }
+
   // ── 공유 캘린더 ────────────────────────────────────────────
   // 대화·사진과 성격이 다르다: 버퍼가 아니라 서버의 지속 상태라 ack 이 없고,
   // 접속할 때마다 cal-state 로 전체가 온다. 그래서 **덮어쓰지 않고 병합**한다 —
@@ -205,12 +223,12 @@ export function createStore({ dir, key, fetchPhoto }) {
       }
       changed = true;
     }
-    if (!changed) return 0;
+    if (!changed) return cal.size; // 바뀐 게 없어도 "지금 몇 건 보관 중"은 알려준다
     const events = [...cal.values()].sort((a, b) => String(a.id).localeCompare(String(b.id)));
     atomicWrite(calPath, JSON.stringify({ updatedAt: new Date().toISOString(), events }, null, 2));
     atomicWrite(join(dir, "calendar", "calendar.md"), renderCalendarMarkdown(events));
     return events.length;
   }
 
-  return { persist, persistCalendar, decryptBytes };
+  return { persist, persistCalendar, quarantine, decryptBytes };
 }
