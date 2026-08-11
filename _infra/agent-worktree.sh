@@ -18,10 +18,17 @@ TREES="$(cd "$ROOT/.." && pwd)/worktrees"
 
 die() { echo "error: $*" >&2; exit 1; }
 
-# 서브도메인 = 루트의 `_`/`.` 로 시작하지 않는 폴더 (build.mjs의 isSite와 같은 규칙)
+# 서브도메인 = 루트의 `_`/`.` 로 시작하지 않고 SKIP에도 없는 폴더.
+# **제외 목록은 build.mjs에서 그대로 읽는다** — 여기에 따로 적어 두면 언젠가
+# 어긋나서 서브도메인 아닌 폴더(scripts/ 등)에 레인이 생긴다.
+skip_names() {
+  sed -n 's/^const SKIP = new Set(\[\(.*\)\]);$/\1/p' "$ROOT/_infra/build.mjs" |
+    tr -d ' "' | tr ',' '\n' | grep -v '^$'
+}
+
 subdomains() {
   find "$ROOT" -maxdepth 1 -mindepth 1 -type d -printf '%f\n' |
-    grep -Ev '^(_|\.)|^(dist|node_modules|docs)$' | sort
+    grep -Ev '^(_|\.)' | grep -vxF -f <(skip_names) | sort
 }
 
 is_subdomain() { subdomains | grep -qx -- "${1:-}"; }
@@ -114,6 +121,7 @@ case "${1:-}" in
   init) cmd_init ;;
   task) shift; cmd_task "$@" ;;
   list) cmd_list ;;
+  subdomains) subdomains ;;   # 테스트가 build.mjs와 대조한다
   remove) shift; cmd_remove "$@" ;;
-  *) die "사용법: $0 init | task <서브도메인> <슬러그> | list | remove <서브도메인> [--force]" ;;
+  *) die "사용법: $0 init | task <서브도메인> <슬러그> | list | subdomains | remove <서브도메인> [--force]" ;;
 esac

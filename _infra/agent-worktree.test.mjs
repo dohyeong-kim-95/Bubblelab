@@ -21,6 +21,25 @@ test("docs/ 는 빌드 SKIP 목록에 있다 (서브도메인으로 배포되지
   assert.match(skip[1], /"docs"/);
 });
 
+test("레인을 만드는 서브도메인 목록이 빌드의 사이트 목록과 같다", () => {
+  // 스크립트가 제외 목록을 따로 들고 있으면 언젠가 어긋나서 서브도메인이 아닌
+  // 폴더(scripts/ 등)에 레인이 생기거나, 새 서브도메인이 레인을 못 받는다.
+  const fromScript = execFileSync("bash", [join(ROOT, "_infra/agent-worktree.sh"), "subdomains"], {
+    encoding: "utf8",
+  }).trim().split("\n");
+
+  const build = readFileSync(join(ROOT, "_infra/build.mjs"), "utf8");
+  const skip = new Set(
+    build.match(/const SKIP = new Set\(\[([^\]]*)\]\)/)[1].match(/"([^"]+)"/g).map((s) => s.slice(1, -1)),
+  );
+  const fromBuild = readdirSync(ROOT, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && !d.name.startsWith("_") && !d.name.startsWith(".") && !skip.has(d.name))
+    .map((d) => d.name)
+    .sort();
+
+  assert.deepEqual(fromScript, fromBuild);
+});
+
 // --- 훅 실기동 -------------------------------------------------------------
 
 const git = (cwd, ...args) =>
