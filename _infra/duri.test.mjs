@@ -160,6 +160,27 @@ test("handleReset wipes the buffer and R2 photos but keeps seq monotonic", async
   assert.equal(bucket.set.size, 0);
 });
 
+// 화면의 "접속중"은 사람을 뜻한다. 싱크 데몬도 같은 WebSocket 으로 붙기 때문에
+// 전체 연결 수를 세면, 싱크를 켠 순간부터 상대가 없어도 늘 접속중으로 보인다.
+test("presence counts people only — the sink daemon must not look like the partner", async () => {
+  const storage = fakeStorage({ seq: 0, ackSeq: 0 });
+  const state = { storage, blockConcurrencyWhile: (fn) => fn() };
+  const room = new DuriDO(state, { DURI_BUCKET: fakeBucket([]) });
+  await room.load();
+  const mk = (role) => ({ ws: { send() {} }, role, stamps: [], alive: true });
+
+  const me = mk("peer");
+  room.conns.add(me);
+  assert.equal(room.peerCount(), 1);
+
+  room.conns.add(mk("sink")); // 데스크톱 백업이 붙어도
+  assert.equal(room.peerCount(), 1); // 여전히 사람은 나 혼자다
+  assert.equal(room.conns.size, 2);
+
+  room.conns.add(mk("peer")); // 상대가 실제로 들어오면
+  assert.equal(room.peerCount(), 2); // 그때 비로소 2명
+});
+
 test("calendar cap counts live events only, and rejects loudly when full", async () => {
   const storage = fakeStorage({ seq: 0, ackSeq: 0 });
   const state = { storage, blockConcurrencyWhile: (fn) => fn() };

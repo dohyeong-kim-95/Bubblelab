@@ -17,7 +17,7 @@
 //                { type:"msg", iv, ct }             … E2E 암호화된 텍스트
 //                { type:"ack", seq }                … (sink) seq 까지 디스크 보존 완료
 //                { type:"pong" }
-//   서버 → 클라: { type:"welcome", head, online }   … 현재 최신 seq + 접속 인원
+//   서버 → 클라: { type:"welcome", head, online }   … 현재 최신 seq + 접속 인원(peer 만)
 //                { type:"entry", ... }              … 버퍼/실시간 항목(아래 참조)
 //                { type:"backfill-done", head }
 //                { type:"presence", online }
@@ -144,7 +144,7 @@ export class DuriDO {
       const buffered = await this.state.storage.list({ prefix: BUF_PREFIX, limit: 1000 });
       const first = buffered.values().next().value;
       return Response.json({
-        head: this.head, ackSeq: this.ackSeq, online: this.conns.size,
+        head: this.head, ackSeq: this.ackSeq, online: this.peerCount(), conns: this.conns.size,
         pending: this.head - this.ackSeq,
         buffered: buffered.size, firstSeq: first?.seq ?? null,
         cal: (await this.state.storage.list({ prefix: CAL_PREFIX, limit: MAX_CAL_EVENTS })).size,
@@ -252,8 +252,8 @@ export class DuriDO {
       // 푸시를 보내지 않는다. iOS는 "받았는데 알림을 안 띄운 푸시(silent push)"를
       // 예산으로 계산해, 반복되면 구독을 조여버린다(결국 백그라운드 알림까지 끊김).
       conn.endpoint = typeof msg.endpoint === "string" ? msg.endpoint : null;
-      this.send(conn, { type: "welcome", head: this.head, online: this.conns.size });
-      this.broadcast({ type: "presence", online: this.conns.size }, conn);
+      this.send(conn, { type: "welcome", head: this.head, online: this.peerCount() });
+      this.broadcast({ type: "presence", online: this.peerCount() }, conn);
       this.backfill(conn, since);
       return;
     }
@@ -629,6 +629,14 @@ export class DuriDO {
     if (this.conns.size) this.scheduleAlarm();
   }
 
+  // 화면의 "접속중"은 **사람**을 뜻한다. 데스크톱 싱크도 같은 WebSocket 으로 붙기
+  // 때문에 전체 연결 수를 세면, 싱크를 켜 둔 순간부터 상대가 없어도 늘 "상대
+  // 접속중"으로 보인다(실제로 그렇게 보였다). peer 만 센다.
+  peerCount() {
+    let n = 0;
+    for (const c of this.conns) if (c.role === "peer") n++;
+    return n;
+  }
   send(conn, obj) {
     if (!conn) return; // 보낸 주체가 없는 경로(내부 호출)도 있다
     try { conn.ws.send(JSON.stringify(obj)); } catch { this.onClose(conn); }
@@ -644,6 +652,6 @@ export class DuriDO {
 
   onClose(conn) {
     if (!this.conns.delete(conn)) return;
-    this.broadcast({ type: "presence", online: this.conns.size });
+    this.broadcast({ type: "presence", online: this.peerCount() });
   }
 }
