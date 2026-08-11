@@ -3328,9 +3328,30 @@ function collectPin(rec) {
   if (loadHiddenPins().has(rec.seq)) return; // 지운 핀은 되살리지 않는다
   const pins = loadPins();
   if (pins.some((p) => p.seq === rec.seq)) return; // 이미 있음(seq로 중복 제거)
-  pins.push({ seq: rec.seq, lat: loc.lat, lng: loc.lng, at: rec.at || 0, mine: rec.name === MY_NAME }); // 올린 사람(나/상대)
+  // photo: 사진인지 /여기로 남긴 위치인지. 예전엔 구분 없이 모아 두고 요약에서
+  // 전부 "사진 N장"으로 셌다 — 위치만 남긴 것도 사진으로 세어 숫자가 부풀었다.
+  pins.push({ seq: rec.seq, lat: loc.lat, lng: loc.lng, at: rec.at || 0,
+              mine: rec.name === MY_NAME, photo: rec.kind === "photo" }); // 올린 사람(나/상대)
   savePins(pins);
   if (!$("map").classList.contains("map-off")) renderMap().catch(() => {}); // 지도가 열려 있으면 즉시 반영
+}
+
+// 예전 핀에는 종류(사진/위치)가 없다. 지도를 열 때 한 번, 이 기기 캐시에서 seq 로
+// 찾아 채워 넣는다. 캐시에서 이미 밀려난 항목은 채울 수 없고, 그 경우 요약이
+// "사진 X · 위치 Y" 대신 "기록 N개"로 통칭된다(모르는 걸 사진으로 세지 않는다).
+async function migratePinKinds() {
+  const pins = loadPins();
+  if (!pins.some((p) => p.photo === undefined)) return;
+  const bySeq = new Map((await allEntries()).map((r) => [r.seq, r]));
+  let changed = false;
+  for (const p of pins) {
+    if (p.photo !== undefined) continue;
+    const rec = bySeq.get(p.seq);
+    if (!rec) continue;
+    p.photo = rec.kind === "photo";
+    changed = true;
+  }
+  if (changed) savePins(pins);
 }
 
 let mapGeo = null;
@@ -3403,12 +3424,13 @@ async function renderMap() {
   const pins = loadPins();
   // 시군구별로 누가 올렸는지 모은다: 나만 → 내 색, 상대만 → 상대 색, 둘 다 → 공통 색.
   // 색은 캘린더 설정(colorForOwner/sharedColor)을 그대로 재사용해 양쪽이 똑같이 본다.
-  const reg = {}; let inKorea = 0, foreign = 0;
+  const reg = {}; let inKorea = 0, foreign = 0, photoN = 0, spotN = 0, unknownN = 0;
   for (const p of pins) {
     const isMine = p.mine !== false; // 옛 핀(플래그 없음)은 내 것으로 간주
     const f = sggOfPoint(geo, p.lng, p.lat);
     if (!f) { foreign++; continue; }
     inKorea++;
+    if (p.photo === true) photoN++; else if (p.photo === false) spotN++; else unknownN++;
     const r = reg[f.properties.sgg] || (reg[f.properties.sgg] = { count: 0, mine: false, theirs: false });
     r.count++; if (isMine) r.mine = true; else r.theirs = true;
   }
@@ -3434,7 +3456,7 @@ async function renderMap() {
     const r = reg[f.properties.sgg];
     const fill = r ? ownerColor(r) : "var(--panel)";
     const op = r ? (0.4 + 0.55 * (r.count / maxc)).toFixed(3) : "1"; // 많이 간 곳일수록 진하게
-    paths += `<path class="rg" data-sgg="${f.properties.sgg}" d="${d}" fill="${fill}" fill-opacity="${op}"><title>${f.properties.sidonm} ${f.properties.sggnm}${r ? " · " + r.count + "장" : ""}</title></path>`;
+    paths += `<path class="rg" data-sgg="${f.properties.sgg}" d="${d}" fill="${fill}" fill-opacity="${op}"><title>${f.properties.sidonm} ${f.properties.sggnm}${r ? " · " + r.count + "개" : ""}</title></path>`;
   }
   const svg = $("map-svg");
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
@@ -3448,8 +3470,13 @@ async function renderMap() {
   const sw = (c) => `<span style="display:inline-block;width:.72em;height:.72em;border-radius:2px;background:${c};vertical-align:-1px;margin:0 .15em 0 .5em"></span>`;
   const esc = (s) => String(s).replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
   const meName = esc(MY_NAME || "나"), theirName = esc(peerName || "상대"); // 각자 설정한 이름으로 범례 표시
+  // 사진과 위치(/여기)를 나눠 적는다. 종류를 모르는 옛 핀이 섞여 있으면 나누지
+  // 않고 "기록 N개"로 통칭한다 — 모르는 걸 사진으로 세느니 뭉뚱그리는 게 낫다.
+  const what = unknownN === 0
+    ? [photoN && `사진 ${photoN}장`, spotN && `위치 ${spotN}곳`].filter(Boolean).join(" · ")
+    : `기록 ${inKorea}개`;
   $("map-summary").innerHTML = pins.length
-    ? `다녀온 시군구 ${regions}곳 · 사진 ${inKorea}장${foreign ? ` · 해외 ${foreign}장` : ""}`
+    ? `다녀온 시군구 ${regions}곳 · ${what}${foreign ? ` · 해외 ${foreign}개` : ""}`
       + `<span style="float:right">${sw(cMine)}${meName}${sw(cTheirs)}${theirName}${sw(cShared)}함께</span>`
       // 지역 앨범(탭하면 그곳 사진)은 눈에 보이는 단서가 없으면 아무도 모른다.
       + `<div style="clear:both;padding-top:.3rem;font-size:.76rem;opacity:.8">색칠된 지역을 탭하면 그곳 사진을 볼 수 있어요</div>`
@@ -3517,7 +3544,7 @@ function renderDots() {
     const fill = (g.mine && g.theirs) ? cShared : g.theirs ? cTheirs : cMine;
     out += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(2)}"`
       + ` fill="${fill}" fill-opacity=".9" stroke="#fff" stroke-width="${(1 / mS).toFixed(2)}"`
-      + ` pointer-events="none"><title>${g.name} · ${g.count}장</title></circle>`;
+      + ` pointer-events="none"><title>${g.name} · ${g.count}개</title></circle>`;
     // 화면에서 충분히 큰 원에만 숫자를 넣는다(작은 원에 글씨를 우겨넣으면 뭉갠다).
     if (r * mS >= 10) {
       out += `<text x="${cx.toFixed(1)}" y="${cy.toFixed(1)}" text-anchor="middle"`
@@ -3535,6 +3562,7 @@ async function openMap() {
   if ($("cal").classList.contains("cal-off")) openCal();
   $("map").classList.remove("map-off");
   resetMapView(); // 열 때는 항상 전체가 보이게(배율 1)
+  await migratePinKinds().catch(() => {}); // 옛 핀의 종류(사진/위치) 보정 — 실패해도 지도는 그린다
   try { await renderMap(); } catch (e) { console.warn("map render 실패", e); $("map-empty").hidden = false; }
 }
 function closeMap() { $("map").classList.add("map-off"); }
