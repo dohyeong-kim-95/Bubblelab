@@ -467,6 +467,7 @@
   .cal-ev.timed { background: none; color: inherit; display: flex; align-items: center; gap: .16rem; padding-left: .1rem; }
   .cal-ev.timed::before { content: ""; flex: none; width: .34rem; height: .34rem; border-radius: 50%; background: var(--c); }
   .cal-ev.timed .t { flex: none; color: var(--dim); }
+  .cal-ev .cmt-badge { margin-left: .22rem; font-weight: 600; opacity: .85; }
   .cal-ev.timed .n { overflow: hidden; text-overflow: ellipsis; }
   .cal-week { flex: 1; display: flex; flex-direction: column; gap: .4rem; padding: .1rem .6rem .9rem;
               padding-left: calc(.6rem + env(safe-area-inset-left,0px)); padding-right: calc(.6rem + env(safe-area-inset-right,0px)); }
@@ -545,6 +546,23 @@
   .cal-recur input[type=number] { width: 3.6rem; }
   .cal-hint { margin: 0; font-size: .68rem; color: var(--dim); line-height: 1.4; }
   .cal-dlg-delrow { display: flex; gap: .5rem; }
+  /* 일정 댓글 */
+  #cal-dlg-comments { border-top: 1px solid var(--line); margin-top: .2rem; padding-top: .7rem; }
+  #cal-dlg-comments[hidden] { display: none; }
+  .cal-cmt-head { font-size: .8rem; color: var(--dim); margin-bottom: .45rem; }
+  #cal-cmt-list { display: flex; flex-direction: column; gap: .45rem; max-height: 9rem; overflow-y: auto; }
+  #cal-cmt-list .cmt { display: flex; align-items: baseline; gap: .4rem; font-size: .85rem; line-height: 1.5; }
+  #cal-cmt-list .cmt .who { font-weight: 700; white-space: nowrap; }
+  #cal-cmt-list .cmt .txt { flex: 1; word-break: break-word; white-space: pre-wrap; }
+  #cal-cmt-list .cmt .when { font-size: .68rem; color: var(--dim); white-space: nowrap; }
+  #cal-cmt-list .cmt .del { font: inherit; font-size: .72rem; background: none; border: 0; color: var(--dim);
+                cursor: pointer; padding: 0 .1rem; }
+  #cal-cmt-list .none { font-size: .8rem; color: var(--dim); }
+  .cal-cmt-form { display: flex; gap: .4rem; margin-top: .6rem; }
+  .cal-cmt-form input { flex: 1; min-width: 0; font: inherit; font-size: .85rem; padding: .45rem .6rem;
+                border: 1px solid var(--line); border-radius: .6rem; background: var(--bg); color: inherit; }
+  .cal-cmt-form button { font: inherit; font-size: .8rem; padding: .45rem .75rem; border-radius: .6rem;
+                border: 1px solid var(--line); background: none; color: inherit; cursor: pointer; }
   .cal-cats { display: flex; gap: .4rem; }
   .cal-cats button { flex: 1; font: inherit; font-size: .78rem; padding: .5rem; border-radius: .6rem;
                      border: 1px solid var(--line); background: var(--bg); color: inherit; cursor: pointer;
@@ -743,6 +761,15 @@
     </div>
     <p class="cal-hint" id="cal-dlg-hint" hidden>여러 날 종료일과 반복은 함께 쓸 수 없어요 — 반복 설정 시 종료일은 무시됩니다.</p>
     <div id="cal-dlg-cats" class="cal-cats"></div>
+    <!-- 댓글 — 이미 저장된 일정에만 보인다(새 일정은 저장 뒤부터) -->
+    <div id="cal-dlg-comments" hidden>
+      <div class="cal-cmt-head">💬 <span id="cal-cmt-count"></span></div>
+      <div id="cal-cmt-list"></div>
+      <div class="cal-cmt-form">
+        <input id="cal-cmt-input" placeholder="댓글 달기" autocomplete="off" maxlength="500">
+        <button type="button" id="cal-cmt-send">등록</button>
+      </div>
+    </div>
     <div id="cal-dlg-delrow" class="cal-dlg-delrow">
       <button id="cal-dlg-del" class="cal-del" hidden>삭제</button>
       <button id="cal-dlg-del-one" class="cal-del" hidden>이 날짜만 삭제</button>
@@ -2704,7 +2731,38 @@ function calDeleteEvent(id) {
   const rev = Date.now();
   calEvents.set(id, { id, rev, deleted: true }); calPersist();
   calSend({ type: "cal-del", id, rev });
+  // 일정이 사라지면 그 댓글은 갈 곳이 없다 — 같이 지운다(안 그러면 고아로 남아
+  // 툼스톤 정리 때까지 저장소만 차지한다).
+  for (const c of commentsOf(id)) calDeleteComment(c.id);
   renderCal();
+}
+
+// ── 일정 댓글 ────────────────────────────────────────────────
+// 댓글은 **일정 안이 아니라 별도 cal:<id> 레코드**다(kind:"comment"). 일정 content
+// 안에 배열로 넣으면 LWW 때문에 한쪽이 댓글을 다는 사이 다른 쪽이 제목을 고치면
+// rev 큰 쪽만 남아 댓글이 통째로 사라진다. 레코드를 나누면 각자 독립적으로 합쳐지고,
+// 표식·색설정과 같은 저장소라 동기화·오프라인 큐·방초기화·PC백업을 그대로 물려받는다.
+function commentsOf(eventId) {
+  const out = [];
+  for (const ev of calEvents.values()) {
+    if (!ev.deleted && ev.kind === "comment" && ev.eventId === eventId) out.push(ev);
+  }
+  return out.sort((a, b) => (a.at || 0) - (b.at || 0));
+}
+async function calAddComment(eventId, text) {
+  const body = String(text || "").trim().slice(0, 500);
+  if (!body) return;
+  const id = randToken();
+  const rev = Date.now();
+  const content = { kind: "comment", eventId, text: body, author: MY_NAME, at: rev };
+  calEvents.set(id, { id, rev, deleted: false, ...content }); calPersist();
+  const frame = await encryptJson(content);
+  calSend({ type: "cal-put", id, iv: frame.iv, ct: frame.ct, rev });
+}
+function calDeleteComment(id) {
+  const rev = Date.now();
+  calEvents.set(id, { id, rev, deleted: true }); calPersist();
+  calSend({ type: "cal-del", id, rev });
 }
 // ── 날짜 표식(스티커/이모지) — 일정이 아니라 "그 날짜 자체"에 붙는다 ─────────
 // 글로 남기기 애매한 것(예: 생리)을 이모지 하나로. 같은 cal:<id> 저장소를
@@ -2887,7 +2945,15 @@ function evChip(ev, onDate) {
   } else {
     c.textContent = title;
   }
+  // 댓글이 달려 있으면 칩에 개수를 붙인다 — 안 그러면 열어보기 전엔 알 수가 없다.
+  const cmts = commentsOf(ev.id).length;
+  if (cmts) {
+    const b = document.createElement("span"); b.className = "cmt-badge";
+    b.textContent = `💬${cmts}`;
+    c.appendChild(b);
+  }
   let tip = (ev.start ? `${ev.start}${ev.end ? "–" + ev.end : ""} ` : "") + (ev.title || "(제목 없음)");
+  if (cmts) tip += ` · 댓글 ${cmts}`;
   if (isRecur) tip += ` (${RECUR_LABEL[ev.recur.freq] || ev.recur.freq} 반복)`;
   else if (ev.endDate && ev.endDate > ev.date) tip += ` (${ev.date} ~ ${ev.endDate})`;
   c.title = tip;
@@ -3196,9 +3262,57 @@ function openCalDialog(dateStr, ev) {
   $("cal-dlg-del-one").hidden = !recurOn;
   $("cal-dlg-del-all").hidden = !recurOn;
   renderCatButtons();
+  // 댓글은 저장된 일정에만. 새 일정에 달게 하면 취소했을 때 고아 댓글이 남는다.
+  $("cal-dlg-comments").hidden = !ev;
+  if (ev) { $("cal-cmt-input").value = ""; renderComments(); }
   $("cal-dialog").hidden = false;
   setTimeout(() => $("cal-dlg-title").focus(), 30);
 }
+
+function renderComments() {
+  const list = commentsOf(calDlgId);
+  $("cal-cmt-count").textContent = list.length ? `댓글 ${list.length}` : "댓글";
+  const box = $("cal-cmt-list");
+  box.replaceChildren();
+  if (!list.length) {
+    const n = document.createElement("div"); n.className = "none";
+    n.textContent = "아직 댓글이 없어요.";
+    box.appendChild(n);
+    return;
+  }
+  for (const c of list) {
+    const row = document.createElement("div"); row.className = "cmt";
+    const who = document.createElement("span"); who.className = "who";
+    who.textContent = c.author || "?";
+    const txt = document.createElement("span"); txt.className = "txt"; txt.textContent = c.text || "";
+    const when = document.createElement("span"); when.className = "when"; when.textContent = fmtTime(c.at || 0);
+    row.append(who, txt, when);
+    // 남의 댓글은 지우지 않는다(둘만 쓰는 공간이라 굳이 막을 것도 없지만, 실수로
+    // 상대 말을 지우는 쪽이 더 곤란하다).
+    if (c.author === MY_NAME) {
+      const del = document.createElement("button");
+      del.type = "button"; del.className = "del"; del.textContent = "✕"; del.title = "댓글 지우기";
+      del.addEventListener("click", () => { calDeleteComment(c.id); renderComments(); renderCal(); });
+      row.appendChild(del);
+    }
+    box.appendChild(row);
+  }
+  box.scrollTop = box.scrollHeight;
+}
+
+async function submitComment() {
+  const input = $("cal-cmt-input");
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  await calAddComment(calDlgId, text);
+  renderComments();
+  renderCal(); // day 패널의 💬 개수 갱신
+}
+$("cal-cmt-send").addEventListener("click", submitComment);
+$("cal-cmt-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); submitComment(); }
+});
 $("cal-dlg-allday").addEventListener("change", () => {
   const allday = $("cal-dlg-allday").checked;
   $("cal-dlg-times").hidden = allday;

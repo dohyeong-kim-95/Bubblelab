@@ -170,6 +170,27 @@ test("calendar: merges by rev, keeps tombstones, and renders a readable view", a
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test("calendar: comments are backed up under their event", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "duri-"));
+  try {
+    const pass = "댓글문구";
+    const ek = await encKeyFor(pass);
+    const store = createStore({ dir, key: await deriveKey(pass), fetchPhoto: async () => new Uint8Array() });
+    const put = async (id, rev, content) => ({ id, rev, deleted: false, ...(await encJson(ek, content)) });
+    await store.persistCalendar([
+      await put("evtaaaaaa", 100, { date: "2026-08-20", title: "저녁 약속", shared: true }),
+      await put("cmt1aaaaaa", 110, { kind: "comment", eventId: "evtaaaaaa", text: "몇 시에 만날까?", author: "도경", at: 110 }),
+      await put("cmt2aaaaaa", 120, { kind: "comment", eventId: "evtaaaaaa", text: "7시!", author: "상대", at: 120 }),
+    ]);
+    const md = readFileSync(join(dir, "calendar/calendar.md"), "utf8");
+    assert.match(md, /- \(종일\) \*\*저녁 약속\*\*/);
+    // 댓글은 일정 바로 아래에 시간순으로
+    assert.match(md, /저녁 약속[\s\S]*💬 도경: 몇 시에 만날까\?[\s\S]*💬 상대: 7시!/);
+    // 댓글 자체가 일정처럼 별도 항목으로 새어 나오지 않는다
+    assert.equal((md.match(/^- \(/gm) || []).length, 1);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 test("calendar: an empty cal-state (room reset) must not wipe the backup", async () => {
   const dir = mkdtempSync(join(tmpdir(), "duri-"));
   try {

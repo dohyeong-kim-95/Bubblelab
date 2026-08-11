@@ -91,6 +91,13 @@ export function renderCalendarMarkdown(events) {
   const marks = live.filter((e) => e.kind === "marker").sort((a, b) => String(a.date).localeCompare(String(b.date)));
   const plans = live.filter((e) => !e.kind).sort((a, b) =>
     String(a.date).localeCompare(String(b.date)) || String(a.start ?? "").localeCompare(String(b.start ?? "")));
+  // 댓글은 별도 레코드(kind:"comment")로 오므로 일정별로 모아 그 아래 붙인다.
+  const byEvent = new Map();
+  for (const c of live.filter((e) => e.kind === "comment")) {
+    const arr = byEvent.get(c.eventId) || [];
+    arr.push(c);
+    byEvent.set(c.eventId, arr);
+  }
 
   let out = "# 공유 캘린더\n";
   let day = "";
@@ -101,6 +108,9 @@ export function renderCalendarMarkdown(events) {
     const who = e.shared ? "공통" : (e.owner || "?");
     const rep = e.recur?.freq ? ` 🔁${e.recur.freq}` : "";
     out += `- (${when}${span}) **${e.title ?? ""}** — ${who}${rep}\n`;
+    for (const c of (byEvent.get(e.id) ?? []).sort((a, b) => (a.at ?? 0) - (b.at ?? 0))) {
+      out += `  - 💬 ${c.author ?? "?"}: ${c.text ?? ""}\n`;
+    }
   }
   if (marks.length) {
     out += `\n## 표식\n`;
