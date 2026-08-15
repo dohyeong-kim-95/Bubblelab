@@ -33,7 +33,17 @@
     // 조회 전용 잔고 대시보드(invest/). 실제 계좌 정보를 다루므로 켜져 있어도
     // INVEST_PASSWORD·INVEST_CLIENT_ID·INVEST_CLIENT_SECRET secret이 셋 다 있어야
     // 열린다(하나라도 없으면 런타임에서 503). 내리려면 여기를 "false"로.
-    "ENABLE_INVEST": "true"
+    "ENABLE_INVEST": "true",
+    // 항공권 가격 관측(trip/ 계획 탭). 개인 일정은 브라우저에만 있고 여기 오지
+    // 않는다 — 서버가 들고 있는 건 노선·날짜별 가격 관측뿐이다. 켜져 있어도
+    // 프로바이더 자격증명(AMADEUS_CLIENT_ID/SECRET)이 없으면 조회는 돌지 않고
+    // 데몬 push 만 쌓인다. 상류 쿼터를 태우는 기능이라 내리려면 여기를 "false"로.
+    "ENABLE_TRIP_WATCH": "true",
+    // 실제 예매 가능한 가격을 받으려면 프로덕션 키가 필요하다. 테스트 환경은
+    // 제한된 캐시 데이터라 화면에 "참고가"로만 표시된다.
+    "AMADEUS_ENV": "test",
+    // cron 한 번에 조회할 (출발,귀국) 조합 수. 쿼터에 맞춰 조절한다.
+    "TRIP_REFRESH_LIMIT": "12"
   },
   // 팟캐스트 소스 파일·생성 오디오 저장소 (계정에 R2 활성화 필요).
   // 바인딩이 없으면 팟캐스트 라우트는 503으로 닫힌다 (fail-closed).
@@ -44,7 +54,8 @@
   ],
   // 매일 06:40 KST(21:40 UTC) 팟캐스트 자동 생성
   // · 08:00 KST(23:00 UTC) 운세 알림 + 아침 브리핑(날씨) 알림
-  "triggers": { "crons": ["40 21 * * *", "0 13 * * *", "0 23 * * *"] },
+  // · 6시간마다 항공권 가격 관측 갱신 (trip/ 계획 탭, 오래된 조합부터 조금씩)
+  "triggers": { "crons": ["40 21 * * *", "0 13 * * *", "0 23 * * *", "20 */6 * * *"] },
   "routes": [
     { "pattern": "bubblelab.dev/*", "zone_name": "bubblelab.dev" },
     { "pattern": "*.bubblelab.dev/*", "zone_name": "bubblelab.dev" }
@@ -62,10 +73,18 @@
     // invest(조회 전용 잔고)를 켤 때 함께 넣는다. 없으면 invest는 닫힌 채로 둔다.
     // 토스 API 키는 여기 넣지 않는다 — 허용 IP 때문에 조회는 집 PC 데몬이 하고
     // 엣지는 결과만 받는다(_src/invest-sink/README.md).
+    // 항공권 관측(trip/): AMADEUS_* 는 엣지가 직접 조회할 때, TRIP_SINK_SECRET 은
+    // 집 PC 데몬이 실제 예매 화면 가격을 밀어 넣을 때. 둘 다 없으면 관측은 비어
+    // 있을 뿐 화면은 뜬다. TRIP_WATCH_SECRET 은 Watch 생성 토큰 서명용(없으면
+    // ADMIN_PASSWORD 파생 키로 떨어진다).
     "optional": [
       "TWELVEDATA_API_KEY",
       "INVEST_PASSWORD",
-      "INVEST_SINK_SECRET"
+      "INVEST_SINK_SECRET",
+      "AMADEUS_CLIENT_ID",
+      "AMADEUS_CLIENT_SECRET",
+      "TRIP_WATCH_SECRET",
+      "TRIP_SINK_SECRET"
     ]
   },
   // /_rt/<이름> 실시간 데이터 서버 (아발론 등 멀티플레이어 토이용)
@@ -88,7 +107,9 @@
       { "name": "ASSET_FLAGS", "class_name": "AssetFlagsDO" },
       // 토스증권 조회 결과 캐시 + 일별 잔고 스냅샷 (수익률 그래프의 점).
       // 토스가 client당 액세스 토큰을 1개만 허용해서 발급을 단일 인스턴스에 모은다.
-      { "name": "INVEST", "class_name": "InvestDO" }
+      { "name": "INVEST", "class_name": "InvestDO" },
+      // 항공권 날짜 조합별 최저가 관측 + 관측일별 추이 (trip/ 계획 탭)
+      { "name": "TRIP_WATCH", "class_name": "TripWatchDO" }
     ]
   },
   "migrations": [

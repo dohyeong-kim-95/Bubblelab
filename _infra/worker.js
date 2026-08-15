@@ -24,6 +24,7 @@ import { handleEstateDeals } from "./estate.js";
 import { serveAssetDownload, serveAssetDownloadCounts } from "./downloads.js";
 import { fetchStoreReviews, REVIEWS_SYNC_VERSION } from "./reviews.js";
 import { DURI_MAX_PHOTO_BYTES } from "./duri.js";
+import { refreshTripWatches } from "./trip-watch.js";
 import { EMOTICON_MAX_BODY, EMOTICON_MAX_PROMPT, EMOTICON_MAX_REFERENCES, geminiGenerate } from "./emoticon-gen.js";
 import {
   applySecurityHeaders,
@@ -56,6 +57,7 @@ export { FortuneDO } from "./fortune.js";
 export { BriefDO } from "./brief.js";
 export { AssetFlagsDO } from "./asset-flags.js";
 export { InvestDO } from "./invest.js";
+export { TripWatchDO } from "./trip-watch.js";
 
 const LOGIN_PAGE = (failed = false, base = "") => `<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -620,6 +622,87 @@ function withDuriRole(request, role) {
   return new Request(request, { headers });
 }
 
+/* 항공권 가격 관측(trip/ 계획 탭).
+ *
+ * 읽기는 공개다 — 가격 관측에는 개인 일정이 없다(일정·예산은 브라우저에만 있다).
+ * 쓰기(watch 생성·삭제·갱신)만 admin 이 발급한 토큰을 요구한다. 데몬 push 는
+ * 별도 secret(TRIP_SINK_SECRET) 이라 토큰이 새도 집 PC 경로는 분리돼 있다. */
+async function tripWatchKey(env) {
+  const secret = env.TRIP_WATCH_SECRET ||
+    (env.ADMIN_PASSWORD ? `${env.ADMIN_PASSWORD}\0bl-trip-watch` : null);
+  if (!secret) return null;
+  return crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
+  );
+}
+
+async function handleTripWatch(request, env, url) {
+  if (!featureEnabled(env, "ENABLE_TRIP_WATCH")) {
+    return Response.json({ error: "trip watch is temporarily unavailable" }, {
+      status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "86400" },
+    });
+  }
+  if (!env.TRIP_WATCH) return new Response("trip watch is not configured", { status: 503 });
+
+  const path = url.pathname.slice("/_trip".length) || "/";
+  const stub = env.TRIP_WATCH.get(env.TRIP_WATCH.idFromName("main"));
+  const forward = (target, init) => stub.fetch(`https://trip-watch${target}`, init);
+
+  if (request.method === "GET") {
+    const limited = await enforceRateLimit(request, env, {
+      scope: "trip-read", limit: 60, windowMs: 60 * 1000,
+    });
+    if (limited) return limited;
+    if (path === "/watches") return forward("/watches");
+    if (path === "/grid") return forward(`/grid?watch=${encodeURIComponent(url.searchParams.get("watch") ?? "")}`);
+    return new Response("not found", { status: 404 });
+  }
+
+  const bearer = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+
+  // 데몬 전용 입구. 집 PC 가 실제 예매 화면에서 받아 온 값을 밀어 넣는다.
+  if (path === "/snapshot" && request.method === "POST") {
+    const secret = env.TRIP_SINK_SECRET;
+    if (!secret) return new Response("sink secret not configured", { status: 503 });
+    const sinkKey = await crypto.subtle.importKey(
+      "raw", new TextEncoder().encode(secret),
+      { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
+    );
+    if (!bearer || !await matchesCredential(sinkKey, bearer, secret)) {
+      return new Response("authentication required", { status: 401 });
+    }
+    const invalid = validateMutationRequest(request, 256 * 1024) ?? requireJsonRequest(request);
+    if (invalid) return invalid;
+    return forward("/observe", { method: "POST", headers: { "Content-Type": "application/json" }, body: await request.text() });
+  }
+
+  const key = await tripWatchKey(env);
+  if (!key || !bearer || !await validSession(key, bearer)) {
+    return new Response("authentication required", { status: 401 });
+  }
+  const limited = await enforceRateLimit(request, env, {
+    scope: "trip-write", limit: 20, windowMs: 60 * 1000,
+  });
+  if (limited) return limited;
+
+  if (path === "/watches" && request.method === "POST") {
+    const invalid = validateMutationRequest(request) ?? requireJsonRequest(request);
+    if (invalid) return invalid;
+    return forward("/watches", { method: "POST", headers: { "Content-Type": "application/json" }, body: await request.text() });
+  }
+  if (path.startsWith("/watches/") && request.method === "DELETE") {
+    return forward(path, { method: "DELETE" });
+  }
+  // 화면의 "지금 갱신" — 상류 쿼터를 태우는 경로라 쓰기와 같은 토큰을 요구한다.
+  if (path === "/refresh" && request.method === "POST") {
+    const invalid = validateMutationRequest(request) ?? requireJsonRequest(request);
+    if (invalid) return invalid;
+    return forward("/refresh", { method: "POST", headers: { "Content-Type": "application/json" }, body: await request.text() });
+  }
+  return new Response("not found", { status: 404 });
+}
+
 async function handleDuri(request, env, url) {
   if (!featureEnabled(env, "ENABLE_DURI")) {
     return Response.json({ error: "duri is temporarily unavailable" }, {
@@ -1014,6 +1097,16 @@ async function handleAdmin(request, env, url, base = "") {
   }
   if (url.pathname === "/api/assets") {
     return new Response("not found", { status: 404 });
+  }
+  // 항공권 Watch 쓰기 토큰. trip 은 로그인이 없어서(주소를 아는 사람은 들어온다)
+  // 관측 대상을 만드는 권한만 여기서 발급해 화면에 한 번 저장시킨다 — 읽기는 공개,
+  // 쓰기만 토큰. 없으면 남이 Watch 를 만들어 상류 API 쿼터를 태울 수 있다.
+  if (url.pathname === "/api/trip/token" && request.method === "POST") {
+    const key = await tripWatchKey(env);
+    if (!key) return Response.json({ error: "TRIP_WATCH_SECRET is not configured" }, { status: 503 });
+    return Response.json({ token: await issueSinkToken(key) }, {
+      headers: { "Cache-Control": "no-store" },
+    });
   }
   return null;
 }
@@ -1675,6 +1768,11 @@ export async function handleRequest(request, env, ctx) {
       return handleInvest(request, env, url);
     }
 
+    // 항공권 가격 관측: /_trip/* (trip.bubblelab.dev 계획 탭).
+    if (path === "/_trip" || path.startsWith("/_trip/")) {
+      return handleTripWatch(request, env, url);
+    }
+
     if (host === ROOT_DOMAIN || host === `www.${ROOT_DOMAIN}`) {
       site = "www";
     } else if (host.endsWith(`.${ROOT_DOMAIN}`)) {
@@ -1856,6 +1954,14 @@ export default {
       if (env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY) {
         ctx.waitUntil(sendFortuneDaily(env));
         ctx.waitUntil(sendBriefDaily(env));
+      }
+      return;
+    }
+    // 항공권 가격 관측. 한 번에 그리드 전체를 돌리지 않고 오래된 조합부터
+    // 조금씩 갱신한다 — 상류 쿼터가 하루치 예산이기 때문이다.
+    if (controller.cron === "20 */6 * * *") {
+      if (featureEnabled(env, "ENABLE_TRIP_WATCH") && env.TRIP_WATCH) {
+        ctx.waitUntil(refreshTripWatches(env));
       }
       return;
     }

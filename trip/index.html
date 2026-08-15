@@ -68,6 +68,45 @@ header .grow { flex: 1 1 120px; min-width: 0; }
 .tabs button { flex: 1; border: 0; border-right: 1px solid var(--line); border-radius: 0; background: var(--card); }
 .tabs button:last-child { border-right: 0; }
 .tabs button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+.tabs.top button { font-weight: 700; padding: 9px 10px; }
+
+/* 계획 탭 — 가격 관측 */
+.badge {
+  display: inline-block; font-size: 0.68rem; padding: 1px 7px; border-radius: 999px;
+  border: 1px solid var(--line); color: var(--dim); vertical-align: 1px;
+}
+.badge.live { color: var(--ok); border-color: currentColor; }
+.badge.ref { color: var(--warn); border-color: currentColor; }
+.watch { padding: 11px 12px; margin-bottom: 8px; cursor: pointer; }
+.watch[aria-selected="true"] { border-color: var(--accent); }
+.watch .top { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.watch .route { font-weight: 700; }
+.watch .price { margin-left: auto; font-size: 1rem; font-weight: 700; white-space: nowrap; }
+.watch .delta.down { color: var(--ok); }
+.watch .delta.up { color: var(--warn); }
+
+/* 날짜 격자 — 행=출발일, 열=밤수. 폰에서는 이 상자만 가로로 스크롤된다. */
+.gridwrap { overflow-x: auto; margin: 0 -2px; padding: 0 2px 4px; }
+table.grid { border-collapse: separate; border-spacing: 3px; font-size: 0.72rem; }
+table.grid th { font-weight: 400; color: var(--dim); white-space: nowrap; padding: 0 4px; }
+table.grid th.rowh { text-align: right; }
+table.grid td { padding: 0; }
+table.grid button {
+  width: 100%; min-width: 4.4em; padding: 5px 4px; border-radius: 6px; font-size: 0.7rem;
+  border: 1px solid transparent; background: light-dark(#eef2f7, #1c2734); color: inherit;
+}
+table.grid button.cheap { background: light-dark(#dcf5e6, #14361f); }
+table.grid button.mid { background: light-dark(#fdf3d9, #3a3013); }
+table.grid button.dear { background: light-dark(#fbe3e0, #3d1c19); }
+table.grid button.best { border-color: var(--accent); font-weight: 700; }
+table.grid button.empty { color: var(--dim); background: none; border: 1px dashed var(--line); }
+
+/* 추이 — 관측일별 최저가 */
+.spark { display: block; width: 100%; height: 64px; }
+.spark path { fill: none; stroke: var(--accent); stroke-width: 2; }
+.spark .area { fill: color-mix(in srgb, var(--accent) 14%, transparent); stroke: none; }
+.legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 0.7rem; color: var(--dim); margin-top: 6px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; vertical-align: -1px; margin-right: 3px; }
 
 /* 일정 */
 .day { margin-bottom: 10px; overflow: hidden; }
@@ -129,31 +168,54 @@ footer { margin-top: 28px; font-size: 0.72rem; color: var(--dim); text-align: ce
 <main>
   <header>
     <h1>🧳 여행</h1>
-    <span class="grow"><select id="tripPick" aria-label="여행 선택"></select></span>
+    <span class="grow" id="tripPickWrap"><select id="tripPick" aria-label="여행 선택"></select></span>
     <button id="newTrip" title="새 여행">＋</button>
     <button id="openSetup" title="여행 설정">⚙️</button>
   </header>
   <p class="sub" id="tripSub"></p>
 
-  <section id="app" class="hidden">
-    <div class="stats" id="stats"></div>
-    <div class="tabs">
-      <button id="tabPlan" aria-pressed="true">📋 일정</button>
-      <button id="tabBudget" aria-pressed="false">💰 예산</button>
+  <div class="tabs top">
+    <button id="modePlan" aria-pressed="false">🔭 계획</button>
+    <button id="modeRun" aria-pressed="true">🧭 실행</button>
+  </div>
+
+  <!-- 계획: 가격 관측. 서버(가격)만 여기, 개인 일정은 실행 탭의 로컬 저장분이다. -->
+  <section id="planMode" class="hidden">
+    <div class="row" style="justify-content:space-between;margin-bottom:8px">
+      <span class="dim" id="watchProvider">가격 관측</span>
+      <span class="row">
+        <button id="addWatch">＋ 노선 추가</button>
+        <button id="watchToken" title="쓰기 토큰">🔑</button>
+      </span>
     </div>
-    <div id="planView"></div>
-    <div id="budgetView" class="hidden"></div>
+    <div id="watchList"></div>
+    <div id="watchDetail"></div>
   </section>
 
-  <section id="blank" class="card empty">
-    <p>아직 여행이 없습니다.</p>
-    <p><button class="primary" id="firstTrip">＋ 첫 여행 만들기</button></p>
+  <!-- 실행: 지금까지의 일정표·예산 (브라우저에만 저장) -->
+  <section id="runMode">
+    <section id="app" class="hidden">
+      <div class="stats" id="stats"></div>
+      <div class="tabs">
+        <button id="tabPlan" aria-pressed="true">📋 일정</button>
+        <button id="tabBudget" aria-pressed="false">💰 예산</button>
+      </div>
+      <div id="planView"></div>
+      <div id="budgetView" class="hidden"></div>
+    </section>
+
+    <section id="blank" class="card empty">
+      <p>아직 여행이 없습니다.</p>
+      <p><button class="primary" id="firstTrip">＋ 첫 여행 만들기</button></p>
+    </section>
   </section>
 
   <footer>
-    브라우저에만 저장됩니다 (localStorage) · 서버로 보내지 않습니다<br>
-    <button class="ghost" id="exportBtn">⬇ 내보내기</button>
-    <button class="ghost" id="importBtn">⬆ 가져오기</button>
+    <span id="footNote"></span><br>
+    <span id="footTools">
+      <button class="ghost" id="exportBtn">⬇ 내보내기</button>
+      <button class="ghost" id="importBtn">⬆ 가져오기</button>
+    </span>
     <input type="file" id="importFile" accept="application/json,.json" class="hidden">
   </footer>
 </main>
@@ -181,6 +243,34 @@ footer { margin-top: 28px; font-size: 0.72rem; color: var(--dim); text-align: ce
   </form>
 </dialog>
 
+<dialog id="watchSetup">
+  <form method="dialog" id="watchForm">
+    <h2 style="margin-top:0">노선 관측 추가</h2>
+    <div class="grid">
+      <label class="field full">이름<input name="label" maxlength="60" placeholder="몽골 여름"></label>
+      <label class="field">출발 공항<input name="origin" maxlength="3" required placeholder="ICN" style="text-transform:uppercase"></label>
+      <label class="field">도착 공항<input name="dest" maxlength="3" required placeholder="ULN" style="text-transform:uppercase"></label>
+      <label class="field">출발 가능 시작<input type="date" name="from" required></label>
+      <label class="field">출발 가능 끝<input type="date" name="to" required></label>
+      <label class="field">최소 박<input type="number" name="minNights" min="0" max="30" value="5"></label>
+      <label class="field">최대 박<input type="number" name="maxNights" min="0" max="30" value="7"></label>
+      <label class="field">인원<input type="number" name="adults" min="1" max="9" value="1"></label>
+      <label class="field">좌석<select name="cabin">
+        <option value="ECONOMY">이코노미</option>
+        <option value="PREMIUM_ECONOMY">프리미엄</option>
+        <option value="BUSINESS">비즈니스</option>
+      </select></label>
+      <label class="check full"><input type="checkbox" name="nonstop"> 직항만</label>
+    </div>
+    <p class="dim">출발 구간 × 박수 조합마다 최저가를 관측합니다. 조합이 많을수록 한 바퀴 도는 데 오래 걸립니다.</p>
+    <p class="dim" id="watchError" style="color:var(--warn)"></p>
+    <div class="row" style="justify-content:flex-end;margin-top:10px">
+      <button value="cancel" formnovalidate>취소</button>
+      <button value="save" class="primary">추가</button>
+    </div>
+  </form>
+</dialog>
+
 <script type="module">
 import {
   CATS, CAT_BY_KEY, STATUSES,
@@ -189,10 +279,12 @@ import {
 } from "./budget.js";
 
 const KEY = "bl-trip-v1";
+const TOKEN_KEY = "bl-trip-token";
 const $ = (id) => document.getElementById(id);
 
 let store = load();
-let tab = "plan";
+let mode = "run";   // run = 일정·예산(로컬) / plan = 가격 관측(서버)
+let tab = "plan";   // 실행 탭 안의 하위 탭 (일정/예산)
 let editing = null; // 편집 중인 항목 id ("new:<날짜>" 면 추가 폼)
 
 function load() {
@@ -216,6 +308,24 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&l
 /* ── 화면 ─────────────────────────────────────────────────────────── */
 
 function render() {
+  $("modePlan").setAttribute("aria-pressed", String(mode === "plan"));
+  $("modeRun").setAttribute("aria-pressed", String(mode === "run"));
+  $("planMode").classList.toggle("hidden", mode !== "plan");
+  $("runMode").classList.toggle("hidden", mode !== "run");
+  // 여행 선택·설정은 실행 탭의 것이다 (계획은 노선 단위라 여행이 없어도 본다)
+  for (const id of ["tripPickWrap", "newTrip", "openSetup"]) {
+    $(id).classList.toggle("hidden", mode !== "run");
+  }
+  // 계획 탭은 서버를 쓴다 — "서버로 보내지 않습니다" 를 거기서도 띄우면 거짓말이다.
+  $("footNote").textContent = mode === "plan"
+    ? "가격 관측만 서버에 저장됩니다 · 일정·예산은 이 브라우저에만 있습니다"
+    : "브라우저에만 저장됩니다 (localStorage) · 서버로 보내지 않습니다";
+  $("footTools").classList.toggle("hidden", mode !== "run");
+  if (mode === "plan") {
+    $("tripSub").textContent = "";
+    return;
+  }
+
   const trip = active();
   $("blank").classList.toggle("hidden", !!trip);
   $("app").classList.toggle("hidden", !trip);
@@ -503,6 +613,293 @@ $("budgetView").addEventListener("change", (e) => {
     trip.budgets[input.dataset.budget] = Math.max(0, Math.round(Number(input.value) || 0));
   });
 });
+
+/* ── 계획 탭: 가격 관측 ────────────────────────────────────────────
+ *
+ * 여기만 서버를 쓴다. 올라가는 건 "노선·날짜 조합·가격"뿐이고 내 일정·예산은
+ * 올라가지 않는다. 읽기는 누구나, 쓰기(노선 추가·삭제·지금 갱신)는 admin 에서
+ * 발급한 토큰이 있어야 한다 — 상류 API 쿼터를 남이 태우지 못하게.
+ */
+let watches = [];
+let selected = null;   // 선택한 watch id
+let grid = null;       // 선택한 watch 의 집계
+let planError = "";
+const token = () => localStorage.getItem(TOKEN_KEY) ?? "";
+
+async function api(path, init = {}) {
+  const headers = { ...(init.headers ?? {}) };
+  if (init.method && init.method !== "GET") {
+    headers.Authorization = `Bearer ${token()}`;
+    headers["Content-Type"] = "application/json";
+  }
+  const res = await fetch(`/_trip${path}`, { ...init, headers });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new Error(body?.errors?.join(", ") || body?.error ||
+      (res.status === 401 ? "쓰기 토큰이 필요합니다 (🔑)" : `요청 실패 (${res.status})`));
+  }
+  return body;
+}
+
+async function loadWatches() {
+  try {
+    const data = await api("/watches");
+    watches = data.watches ?? [];
+    const p = data.provider ?? {};
+    const kind = p.bookable
+      ? '<span class="badge live">예매가</span>'
+      : '<span class="badge ref">참고가</span>';
+    $("watchProvider").innerHTML = `가격 관측 ${kind} <span class="dim">${esc(p.name ?? "?")}</span>` +
+      (p.live === false ? ' <span class="dim">· 집 PC 데몬이 수집</span>' : "");
+    planError = "";
+    if (!watches.some((w) => w.id === selected)) selected = watches[0]?.id ?? null;
+    if (selected) await loadGrid(selected);
+  } catch (error) {
+    planError = error.message;
+  }
+  renderWatches();
+}
+
+async function loadGrid(id) {
+  try {
+    grid = await api(`/grid?watch=${encodeURIComponent(id)}`);
+  } catch (error) {
+    grid = null;
+    planError = error.message;
+  }
+}
+
+function renderWatches() {
+  $("watchList").innerHTML = planError
+    ? `<div class="card empty">${esc(planError)}</div>`
+    : watches.length
+      ? watches.map(watchCard).join("")
+      : `<div class="card empty"><p>관측 중인 노선이 없습니다.</p>
+         <p class="dim">＋ 노선 추가로 인천→울란바토르 같은 구간을 등록하면,<br>
+         날짜 조합별 최저가를 6시간마다 모아 둡니다.</p></div>`;
+  $("watchDetail").innerHTML = grid && watches.some((w) => w.id === selected) ? detailView(grid) : "";
+}
+
+function watchCard(w) {
+  const on = w.id === selected;
+  const g = on ? grid : null;
+  const best = g?.best;
+  const change = g?.change;
+  const delta = change === null || change === undefined ? ""
+    : `<span class="delta ${change < 0 ? "down" : "up"}">${change < 0 ? "▼" : "▲"} ${formatShort(Math.abs(change))}</span>`;
+  return `<div class="watch card" data-watch="${esc(w.id)}" role="button" tabindex="0" aria-selected="${on}">
+    <div class="top">
+      <span class="route">${esc(w.origin)} → ${esc(w.dest)}</span>
+      <span class="dim">${esc(w.label)}</span>
+      <span class="price">${best ? esc(formatKRW(best.price)) : '<span class="dim">관측 전</span>'} ${delta}</span>
+    </div>
+    <div class="dim">${esc(w.from)} ~ ${esc(w.to)} 출발 ·
+      ${w.oneWay ? "편도" : `${w.minNights}~${w.maxNights}박`} · ${w.adults}명${w.nonstop ? " · 직항" : ""}</div>
+  </div>`;
+}
+
+// 격자: 행=출발일, 열=박수. Google Flights 의 날짜 격자와 같은 읽는 법이지만
+// 열을 귀국일 대신 박수로 둬서 폰 화면에 들어온다.
+function detailView(g) {
+  const cells = g.cells ?? [];
+  if (!cells.length) {
+    return `<div class="card empty">아직 관측된 가격이 없습니다.
+      <br><span class="dim">6시간마다 조금씩 모읍니다 — 🔑 토큰이 있으면 "지금 갱신"으로 앞당길 수 있습니다.</span>
+      ${g.watch ? `<p><button data-refresh="${esc(g.watch.id)}">지금 갱신</button></p>` : ""}</div>`;
+  }
+  const prices = cells.map((c) => c.price);
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+  const nights = [...new Set(cells.map((c) => nightsOf(c)))].sort((a, b) => a - b);
+  const departs = [...new Set(cells.map((c) => c.depart))].sort();
+  const at = new Map(cells.map((c) => [`${c.depart}:${nightsOf(c)}`, c]));
+
+  const tier = (p) => {
+    if (max === min) return "cheap";
+    const r = (p - min) / (max - min);
+    return r <= 0.33 ? "cheap" : r <= 0.66 ? "mid" : "dear";
+  };
+
+  const head = `<tr><th></th>${nights.map((n) => `<th>${n}박</th>`).join("")}</tr>`;
+  const rows = departs.map((d) => {
+    const tds = nights.map((n) => {
+      const cell = at.get(`${d}:${n}`);
+      if (!cell) return `<td><button class="empty" disabled>·</button></td>`;
+      const isBest = cell.price === min;
+      return `<td><button class="${tier(cell.price)}${isBest ? " best" : ""}"
+        data-pick="${esc(cell.depart)}|${esc(cell.ret ?? "")}|${cell.price}"
+        title="${esc(cell.depart)}${cell.ret ? ` → ${esc(cell.ret)}` : ""} · ${esc(cell.carrier || "")} ${cell.stops ? `${cell.stops}경유` : "직항"}">
+        ${esc(formatShort(cell.price))}</button></td>`;
+    }).join("");
+    return `<tr><th class="rowh">${esc(d.slice(5).replace("-", "/"))} (${esc(weekday(d))})</th>${tds}</tr>`;
+  }).join("");
+
+  const badge = g.stats?.reference
+    ? '<span class="badge ref">참고가 포함</span>'
+    : '<span class="badge live">예매가</span>';
+
+  return `<div class="card bud">
+    <div class="top"><span class="name">최저 ${esc(formatKRW(min))}</span> ${badge}
+      <span class="dim">중앙값 ${esc(formatKRW(g.stats?.median ?? 0))} · 관측 ${g.stats?.observed ?? 0}칸</span></div>
+    <div class="note">${g.best ? `${esc(g.best.depart)}${g.best.ret ? ` → ${esc(g.best.ret)}` : ""} · ${esc(g.best.carrier || "-")}${g.best.stops ? ` · ${g.best.stops}경유` : " · 직항"}` : ""}</div>
+  </div>
+  <div class="gridwrap"><table class="grid">${head}${rows}</table></div>
+  <div class="legend">
+    <span><i style="background:light-dark(#dcf5e6,#14361f)"></i>싼 편</span>
+    <span><i style="background:light-dark(#fdf3d9,#3a3013)"></i>중간</span>
+    <span><i style="background:light-dark(#fbe3e0,#3d1c19)"></i>비싼 편</span>
+    <span>칸을 누르면 그 날짜로 일정이 만들어집니다</span>
+  </div>
+  ${trendView(g.history ?? [])}
+  <p class="row" style="margin-top:10px">
+    <button data-refresh="${esc(g.watch?.id ?? "")}">🔄 지금 갱신</button>
+    <button class="ghost" data-drop="${esc(g.watch?.id ?? "")}">🗑 이 노선 삭제</button>
+  </p>`;
+}
+
+const nightsOf = (c) => {
+  if (!c.ret) return 0;
+  const a = Date.parse(`${c.depart}T00:00:00Z`);
+  const b = Date.parse(`${c.ret}T00:00:00Z`);
+  return Math.round((b - a) / 86400000);
+};
+
+function trendView(history) {
+  if (history.length < 2) {
+    return `<p class="dim" style="margin-top:10px">추이는 관측일이 이틀 이상 쌓이면 그려집니다 (지금 ${history.length}일).</p>`;
+  }
+  const w = 300;
+  const h = 60;
+  const values = history.map((p) => p.min);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  const x = (i) => (i / (history.length - 1)) * w;
+  const y = (v) => h - ((v - min) / span) * (h - 8) - 4;
+  const line = history.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.min).toFixed(1)}`).join(" ");
+  return `<h2>가격 추이</h2>
+  <div class="card bud">
+    <svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img"
+      aria-label="관측일별 최저가 추이, ${formatKRW(values[0])}에서 ${formatKRW(values.at(-1))}">
+      <path class="area" d="${line} L${w},${h} L0,${h} Z"></path>
+      <path d="${line}"></path>
+    </svg>
+    <div class="note">${esc(history[0].date)} ${esc(formatShort(values[0]))}
+      → ${esc(history.at(-1).date)} ${esc(formatShort(values.at(-1)))}
+      · 최저 ${esc(formatKRW(min))}</div>
+  </div>`;
+}
+
+$("modePlan").addEventListener("click", () => {
+  mode = "plan";
+  render();
+  loadWatches();
+});
+$("modeRun").addEventListener("click", () => { mode = "run"; render(); });
+
+$("watchToken").addEventListener("click", () => {
+  const next = prompt("admin 에서 발급한 쓰기 토큰을 붙여 넣으세요 (비우면 삭제)", token());
+  if (next === null) return;
+  if (next.trim()) localStorage.setItem(TOKEN_KEY, next.trim());
+  else localStorage.removeItem(TOKEN_KEY);
+});
+
+$("addWatch").addEventListener("click", () => {
+  const f = $("watchForm");
+  const today = todayKST();
+  if (!f.from.value) f.from.value = today;
+  if (!f.to.value) f.to.value = today;
+  $("watchError").textContent = "";
+  $("watchSetup").showModal();
+});
+
+$("watchForm").addEventListener("submit", async (e) => {
+  if (e.submitter?.value !== "save") return;
+  e.preventDefault();
+  const f = new FormData(e.target);
+  try {
+    const created = await api("/watches", {
+      method: "POST",
+      body: JSON.stringify({
+        label: f.get("label"), origin: f.get("origin"), dest: f.get("dest"),
+        from: f.get("from"), to: f.get("to"),
+        minNights: Number(f.get("minNights")), maxNights: Number(f.get("maxNights")),
+        adults: Number(f.get("adults")), cabin: f.get("cabin"), nonstop: f.get("nonstop") === "on",
+      }),
+    });
+    selected = created.watch.id;
+    $("watchSetup").close();
+    await loadWatches();
+  } catch (error) {
+    $("watchError").textContent = error.message;
+  }
+});
+
+$("planMode").addEventListener("click", async (e) => {
+  const card = e.target.closest("[data-watch]");
+  if (card) {
+    selected = card.dataset.watch;
+    await loadGrid(selected);
+    renderWatches();
+    return;
+  }
+  const refresh = e.target.closest("[data-refresh]");
+  if (refresh) {
+    refresh.disabled = true;
+    refresh.textContent = "갱신 중…";
+    try {
+      await api("/refresh", { method: "POST", body: JSON.stringify({ watchId: refresh.dataset.refresh, limit: 12 }) });
+      await loadWatches();
+    } catch (error) {
+      planError = error.message;
+      renderWatches();
+    }
+    return;
+  }
+  const drop = e.target.closest("[data-drop]");
+  if (drop) {
+    if (!confirm("이 노선의 관측 기록까지 함께 지웁니다. 계속할까요?")) return;
+    try {
+      await api(`/watches/${encodeURIComponent(drop.dataset.drop)}`, { method: "DELETE" });
+      selected = null;
+      grid = null;
+      await loadWatches();
+    } catch (error) {
+      planError = error.message;
+      renderWatches();
+    }
+    return;
+  }
+  // 격자 칸 → 그 날짜로 실행 탭의 여행을 만든다. 계획에서 실행으로 넘어오는 길목이고,
+  // 이때부터는 서버가 아니라 브라우저에만 남는다.
+  const pick = e.target.closest("[data-pick]");
+  if (pick) adoptCombo(pick.dataset.pick);
+});
+
+function adoptCombo(value) {
+  const [depart, ret, price] = value.split("|");
+  const w = watches.find((x) => x.id === selected);
+  if (!w) return;
+  if (!confirm(`${depart}${ret ? ` → ${ret}` : ""} 일정으로 새 여행을 만들까요?\n항공권 ${formatKRW(Number(price))}이 예산에 들어갑니다.`)) return;
+  const trip = newTrip({
+    title: w.label || `${w.origin}→${w.dest}`,
+    dest: w.dest,
+    start: depart,
+    end: ret || depart,
+    people: w.adults,
+    items: [newItem({
+      date: depart, title: `${w.origin} → ${w.dest} 항공권`, cat: "flight",
+      amount: Number(price), cur: "KRW", status: "plan",
+      memo: `관측 최저가 (${w.origin}→${w.dest})`,
+    })],
+  });
+  store.trips.push(trip);
+  store.activeId = trip.id;
+  save();
+  mode = "run";
+  tab = "plan";
+  render();
+}
 
 /* ── 내보내기·가져오기 (기기 옮길 때) ─────────────────────────────── */
 

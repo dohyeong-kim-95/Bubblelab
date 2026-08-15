@@ -197,10 +197,24 @@ PNG·JPEG를 모두 받고, JPEG는 `npm ci` 필요. 검증은 `_infra/wallpaper
 `trip/`은 혼자 쓰는 여행 계획·예산 화면이다(`CONFIDENTIAL_SUBDOMAINS`, 랜딩·풀다운·
 검색 미노출). 토이 관례(share.js, 주간 기록)를 적용하지 않는다. **로그인은 없고**
 estate·lab처럼 주소를 아는 사람은 들어온다 — 워커가 `no-store`·noindex를 붙이고
-방문 집계에서만 뺀다. 서버가 없어서 기록은 브라우저 localStorage에만 있고
-(내보내기/가져오기 JSON이 유일한 백업), 계산은 전부 `trip/budget.js` 한 모듈에
-모여 있다(화면과 `_infra/trip.test.mjs`가 같이 쓴다 — 합계를 화면 안에서 따로
-더하지 말 것). 자세한 것은 `trip/README.md`.
+방문 집계에서 뺀다.
+
+화면은 **계획 / 실행** 두 장이고 저장 경계가 다르다. **실행**(일정표·예산)은 브라우저
+localStorage에만 있고 서버로 가지 않는다(내보내기/가져오기 JSON이 유일한 백업).
+**계획**(항공권 가격 관측)만 서버에 쌓인다 — 노선·날짜별 가격뿐이라 새어도 남의 여행
+계획이 드러나지 않는다. 이 경계를 흐리지 말 것.
+
+- 일정·예산 계산은 `trip/budget.js` 한 모듈에 모은다(화면과 `_infra/trip.test.mjs`가
+  같이 쓴다 — 합계를 화면 안에서 따로 더하지 말 것).
+- 가격 관측은 `_infra/trip-watch.js`(TripWatchDO)+`_infra/trip-flights.js`(프로바이더
+  계층: amadeus·sink·mock). cron `20 */6 * * *`이 오래된 날짜 조합부터 조금씩만
+  갱신한다 — 한 번에 그리드 전체를 돌리면 상류 쿼터가 하루도 못 간다.
+- **예매가와 참고가를 섞지 말 것.** 관측마다 `bookable`을 저장하고 화면이 배지로
+  나눈다. Amadeus는 프로덕션 키일 때만 예매가고, 테스트 환경·목업은 참고가다.
+- 쓰기(노선 추가·삭제·갱신)는 admin이 발급한 토큰(`/api/trip/token`), 데몬 push는
+  별도 `TRIP_SINK_SECRET`. 읽기만 공개. `ENABLE_TRIP_WATCH` var는 fail-closed.
+
+자세한 것은 `trip/README.md`.
 
 ## 인사이트 아카이브 (lab/claude-insights)
 
