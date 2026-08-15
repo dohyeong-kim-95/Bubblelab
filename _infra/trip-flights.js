@@ -16,10 +16,12 @@
 // 같다 — 나중에 갈아끼워도 그동안 쌓은 관측이 그대로 이어진다.
 
 export const GRID_LIMITS = {
-  maxCombos: 120,      // watch 하나가 만드는 (출발,귀국) 조합 상한 = 쿼터 보호선
-  maxWindowDays: 180,  // 출발 가능 구간 길이 상한
+  maxCombos: 120,      // 노선 하나가 만드는 (출발,귀국) 조합 상한 = 쿼터 보호선
+  maxWindowDays: 180,  // 여행 가능 구간 길이 상한
   maxNights: 30,
-  maxWatches: 8,
+  maxDestinations: 8,
+  maxFlights: 4,       // 여행지 하나에 붙는 노선 (홋카이도 = ICN→CTS + PUS→CTS)
+  maxPackages: 6,
   historyDays: 180,
 };
 
@@ -67,58 +69,124 @@ export function buildDateGrid({ from, to, minNights, maxNights, oneWay = false }
 
 export const comboKey = (c) => `${c.depart}:${c.ret ?? "-"}`;
 
-/** watch 설정 검사. 화면과 API 가 같은 규칙을 쓰도록 여기 한 곳에만 둔다. */
-export function validateWatch(raw) {
-  const w = raw && typeof raw === "object" ? raw : {};
-  const code = (v) => String(v ?? "").trim().toUpperCase();
-  const origin = code(w.origin);
-  const dest = code(w.dest);
+/* ── 관측 대상: 여행지 하나 = DestinationWatch ────────────────────────
+ *
+ * **여행지와 공항은 다른 것이다.** "몽골"은 가고 싶은 곳이고 ICN→UBN 은 그걸
+ * 실현하는 하나의 노선일 뿐이다. 둘을 한 덩어리로 두면 홋카이도를 ICN→CTS 와
+ * PUS→CTS 로 함께 비교하거나, 다낭·호이안처럼 항공과 패키지를 같은 여행지 아래
+ * 놓는 일이 안 된다.
+ *
+ *   DestinationWatch { 이름·나라·기간·밤수·인원 }
+ *     ├─ flights[]  { ICN→UBN, PUS→UBN … }   ← 날짜 격자·관측이 붙는 단위
+ *     └─ packages[] { 소스·검색어 }           ← 수집기는 아직 없다(자리만)
+ *
+ * 기간·밤수·인원은 **여행지에 있다** — 같은 여행을 여러 노선으로 비교하려면
+ * 조건이 하나여야 한다.
+ */
+const CABINS = ["ECONOMY", "PREMIUM_ECONOMY", "BUSINESS", "FIRST"];
+const STATUSES = ["watching", "selected", "archived"];
+
+const upper = (v) => String(v ?? "").trim().toUpperCase();
+const text = (v, max) => String(v ?? "").trim().slice(0, max);
+const newId = (prefix) =>
+  `${prefix}${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
+
+/** 여행지 하나의 설정 검사. 화면과 API 가 같은 규칙을 쓰도록 여기 한 곳에만 둔다. */
+export function validateDestination(raw) {
+  const d = raw && typeof raw === "object" ? raw : {};
   const errors = [];
 
-  if (!/^[A-Z]{3}$/.test(origin)) errors.push("출발지는 IATA 3글자여야 합니다 (예: ICN)");
-  if (!/^[A-Z]{3}$/.test(dest)) errors.push("도착지는 IATA 3글자여야 합니다 (예: ULN)");
-  if (origin && origin === dest) errors.push("출발지와 도착지가 같습니다");
+  const name = text(d.name, 40);
+  if (!name) errors.push("여행지 이름이 필요합니다 (예: 몽골)");
+  // 나라 코드는 국기·나중의 패키지 검색을 위한 힌트라 없어도 된다.
+  const country = /^[A-Z]{2}$/.test(upper(d.country)) ? upper(d.country) : "";
 
-  const from = parseDay(w.from);
-  const to = parseDay(w.to);
-  if (from === null || to === null) errors.push("출발 가능 구간의 날짜 형식이 올바르지 않습니다");
+  const from = parseDay(d.from);
+  const to = parseDay(d.to);
+  if (from === null || to === null) errors.push("여행 가능 구간의 날짜 형식이 올바르지 않습니다");
   else if (to < from) errors.push("구간의 끝이 시작보다 앞섭니다");
   else if ((to - from) / DAY_MS + 1 > GRID_LIMITS.maxWindowDays) {
-    errors.push(`출발 가능 구간은 ${GRID_LIMITS.maxWindowDays}일까지입니다`);
+    errors.push(`여행 가능 구간은 ${GRID_LIMITS.maxWindowDays}일까지입니다`);
   }
 
-  const oneWay = w.oneWay === true;
-  const minNights = Math.max(0, Math.round(Number(w.minNights) || 0));
-  const maxNights = Math.max(minNights, Math.round(Number(w.maxNights) || minNights));
+  const oneWay = d.oneWay === true;
+  const minNights = Math.max(0, Math.round(Number(d.minNights) || 0));
+  const maxNights = Math.max(minNights, Math.round(Number(d.maxNights) || minNights));
   if (!oneWay && maxNights > GRID_LIMITS.maxNights) {
     errors.push(`여행 밤수는 ${GRID_LIMITS.maxNights}박까지입니다`);
   }
 
-  const adults = Math.min(9, Math.max(1, Math.round(Number(w.adults) || 1)));
-  const cabin = ["ECONOMY", "PREMIUM_ECONOMY", "BUSINESS", "FIRST"].includes(code(w.cabin))
-    ? code(w.cabin) : "ECONOMY";
+  const rawFlights = Array.isArray(d.flights) ? d.flights : [];
+  if (rawFlights.length > GRID_LIMITS.maxFlights) {
+    errors.push(`노선은 여행지마다 ${GRID_LIMITS.maxFlights}개까지입니다`);
+  }
+  const flights = rawFlights.slice(0, GRID_LIMITS.maxFlights).map((raw) => {
+    const f = raw && typeof raw === "object" ? raw : {};
+    const origin = upper(f.origin);
+    const airport = upper(f.dest ?? f.airport);
+    if (!/^[A-Z]{3}$/.test(origin)) errors.push(`출발 공항은 IATA 3글자여야 합니다 (예: ICN) — "${origin}"`);
+    if (!/^[A-Z]{3}$/.test(airport)) errors.push(`도착 공항은 IATA 3글자여야 합니다 (예: UBN) — "${airport}"`);
+    if (origin && origin === airport) errors.push("출발 공항과 도착 공항이 같습니다");
+    return {
+      id: text(f.id, 64) || newId("f"),
+      origin, dest: airport,
+      cabin: CABINS.includes(upper(f.cabin)) ? upper(f.cabin) : "ECONOMY",
+      nonstop: f.nonstop === true,
+      currency: /^[A-Z]{3}$/.test(upper(f.currency)) ? upper(f.currency) : "KRW",
+      active: f.active !== false,
+    };
+  });
 
-  const watch = {
-    id: String(w.id ?? "").slice(0, 64) || `w${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`,
-    label: String(w.label ?? "").slice(0, 60) || `${origin}→${dest}`,
-    origin, dest,
-    from: w.from, to: w.to,
+  // 패키지는 아직 수집기가 없다 — 모델만 열어 두고 저장은 한다.
+  const packages = (Array.isArray(d.packages) ? d.packages : [])
+    .slice(0, GRID_LIMITS.maxPackages).map((raw) => {
+      const p = raw && typeof raw === "object" ? raw : {};
+      return {
+        id: text(p.id, 64) || newId("p"),
+        source: text(p.source, 40),
+        query: text(p.query, 80),
+        active: p.active !== false,
+      };
+    });
+
+  const destination = {
+    id: text(d.id, 64) || newId("d"),
+    name: name || "이름 없는 여행지",
+    country,
+    people: Math.min(9, Math.max(1, Math.round(Number(d.people ?? d.adults) || 1))),
+    from: d.from, to: d.to,
     oneWay, minNights, maxNights,
-    adults, cabin,
-    nonstop: w.nonstop === true,
-    currency: /^[A-Z]{3}$/.test(code(w.currency)) ? code(w.currency) : "KRW",
-    active: w.active !== false,
-    createdAt: Number(w.createdAt) || Date.now(),
+    status: STATUSES.includes(d.status) ? d.status : "watching",
+    flights, packages,
+    createdAt: Number(d.createdAt) || Date.now(),
   };
 
-  const combos = errors.length ? [] : buildDateGrid(watch);
-  if (!errors.length && combos.length > GRID_LIMITS.maxCombos) {
-    errors.push(
-      `날짜 조합이 ${combos.length}개입니다 — ${GRID_LIMITS.maxCombos}개까지만 관측합니다. ` +
-      "구간이나 밤수 범위를 좁혀 주세요",
-    );
+  if (!errors.length) {
+    for (const flight of flights) {
+      const combos = flightGrid(destination, flight);
+      if (combos.length > GRID_LIMITS.maxCombos) {
+        errors.push(
+          `${flight.origin}→${flight.dest} 의 날짜 조합이 ${combos.length}개입니다 — ` +
+          `${GRID_LIMITS.maxCombos}개까지만 관측합니다. 구간이나 밤수 범위를 좁혀 주세요`,
+        );
+      }
+    }
   }
-  return { watch, combos, errors };
+  return { destination, errors };
+}
+
+/** 노선 하나의 날짜 격자. 기간·밤수는 여행지에서 온다. */
+export function flightGrid(destination, _flight) {
+  return buildDateGrid(destination ?? {});
+}
+
+/** 여행지 안에서 노선을 찾는다 (관측·격자는 노선 id 로 저장된다). */
+export function findFlight(destinations, flightId) {
+  for (const destination of destinations ?? []) {
+    const flight = (destination.flights ?? []).find((f) => f.id === flightId);
+    if (flight) return { destination, flight };
+  }
+  return null;
 }
 
 /* ── Amadeus ──────────────────────────────────────────────────────────
@@ -346,3 +414,25 @@ export function pickStaleCombos(combos, checks, limit) {
 }
 
 export const CHECK_STATUSES = ["found", "no_offer", "error"];
+
+/**
+ * 한 바퀴를 얼마나 돌았는지. **시도했다(attempted)와 답을 얻었다(resolved)는 다르다** —
+ * 상류가 429 로 막혀도 checks 시각은 갱신되므로(그래야 큐가 막히지 않는다),
+ * 시도 횟수만 세면 "120/120 조합 확인"인데 실제로는 40개가 오류인 상황이 숨는다.
+ */
+export function summarizeChecks(checks, total) {
+  const values = Object.values(checks ?? {});
+  const count = (status) => values.filter((c) => c.status === status).length;
+  const found = count("found");
+  const noOffer = count("no_offer");
+  return {
+    total,
+    attempted: values.length,
+    resolved: found + noOffer,
+    found,
+    noOffer,
+    error: count("error"),
+    oldestCheckedAt: values.length ? Math.min(...values.map((c) => c.at ?? 0)) : null,
+    lastCheckedAt: values.length ? Math.max(...values.map((c) => c.at ?? 0)) : null,
+  };
+}

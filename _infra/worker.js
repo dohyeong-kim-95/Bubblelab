@@ -622,12 +622,12 @@ function withDuriRole(request, role) {
   return new Request(request, { headers });
 }
 
-/* 항공권 가격 관측(trip/ 계획 탭).
+/* 여행지 가격 관측(trip/ 계획 탭).
  *
- * 읽기는 지금 공개다. 일정·예산은 브라우저에만 있지만, watch 설정(노선·기간·인원)은
- * 함께 나가므로 여행 의향까지는 드러난다 — 읽기도 토큰으로 좁히는 것이 다음 정리 대상.
- * 쓰기(watch 생성·삭제·갱신)만 admin 이 발급한 토큰을 요구한다. 데몬 push 는
- * 별도 secret(TRIP_SINK_SECRET) 이라 토큰이 새도 집 PC 경로는 분리돼 있다. */
+ * **읽기·쓰기 모두 admin 이 발급한 토큰을 요구한다.** 가격만 나가는 게 아니라
+ * 여행지·기간·인원·노선까지 함께 나가 여행 의향이 읽히고, 혼자 쓰는 화면이라
+ * 공개 조회로 얻는 이익이 없다. 데몬 push 만 별도 secret(TRIP_SINK_SECRET) 이라
+ * 화면용 토큰이 새도 집 PC 경로는 분리돼 있다. */
 async function tripWatchKey(env) {
   const secret = env.TRIP_WATCH_SECRET ||
     (env.ADMIN_PASSWORD ? `${env.ADMIN_PASSWORD}\0bl-trip-watch` : null);
@@ -649,20 +649,10 @@ async function handleTripWatch(request, env, url) {
   const path = url.pathname.slice("/_trip".length) || "/";
   const stub = env.TRIP_WATCH.get(env.TRIP_WATCH.idFromName("main"));
   const forward = (target, init) => stub.fetch(`https://trip-watch${target}`, init);
-
-  if (request.method === "GET") {
-    const limited = await enforceRateLimit(request, env, {
-      scope: "trip-read", limit: 60, windowMs: 60 * 1000,
-    });
-    if (limited) return limited;
-    if (path === "/watches") return forward("/watches");
-    if (path === "/grid") return forward(`/grid?watch=${encodeURIComponent(url.searchParams.get("watch") ?? "")}`);
-    return new Response("not found", { status: 404 });
-  }
-
   const bearer = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
 
   // 데몬 전용 입구. 집 PC 가 실제 예매 화면에서 받아 온 값을 밀어 넣는다.
+  // 별도 secret 이라 화면용 토큰이 새도 이 경로는 분리돼 있다.
   if (path === "/snapshot" && request.method === "POST") {
     const secret = env.TRIP_SINK_SECRET;
     if (!secret) return new Response("sink secret not configured", { status: 503 });
@@ -675,31 +665,51 @@ async function handleTripWatch(request, env, url) {
     }
     const invalid = validateMutationRequest(request, 256 * 1024) ?? requireJsonRequest(request);
     if (invalid) return invalid;
-    return forward("/observe", { method: "POST", headers: { "Content-Type": "application/json" }, body: await request.text() });
+    return forward("/observe", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: await request.text(),
+    });
   }
 
+  // **읽기도 토큰을 요구한다.** 가격만 나가는 게 아니라 여행지·기간·인원·노선까지
+  // 함께 나가므로, 주소를 아는 사람에게 여행 의향이 읽힌다. 혼자 쓰는 화면이라
+  // 공개 조회로 얻는 이익이 없다.
   const key = await tripWatchKey(env);
   if (!key || !bearer || !await validSession(key, bearer)) {
     return new Response("authentication required", { status: 401 });
   }
   const limited = await enforceRateLimit(request, env, {
-    scope: "trip-write", limit: 20, windowMs: 60 * 1000,
+    scope: request.method === "GET" ? "trip-read" : "trip-write",
+    limit: request.method === "GET" ? 60 : 20,
+    windowMs: 60 * 1000,
   });
   if (limited) return limited;
 
-  if (path === "/watches" && request.method === "POST") {
+  if (request.method === "GET") {
+    if (path === "/destinations") return forward("/destinations");
+    if (path === "/grid") {
+      const flight = url.searchParams.get("flight") ?? url.searchParams.get("watch") ?? "";
+      return forward(`/grid?flight=${encodeURIComponent(flight)}`);
+    }
+    return new Response("not found", { status: 404 });
+  }
+
+  if (path === "/destinations" && request.method === "POST") {
     const invalid = validateMutationRequest(request) ?? requireJsonRequest(request);
     if (invalid) return invalid;
-    return forward("/watches", { method: "POST", headers: { "Content-Type": "application/json" }, body: await request.text() });
+    return forward("/destinations", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: await request.text(),
+    });
   }
-  if (path.startsWith("/watches/") && request.method === "DELETE") {
+  if (path.startsWith("/destinations/") && request.method === "DELETE") {
     return forward(path, { method: "DELETE" });
   }
   // 화면의 "지금 갱신" — 상류 쿼터를 태우는 경로라 쓰기와 같은 토큰을 요구한다.
   if (path === "/refresh" && request.method === "POST") {
     const invalid = validateMutationRequest(request) ?? requireJsonRequest(request);
     if (invalid) return invalid;
-    return forward("/refresh", { method: "POST", headers: { "Content-Type": "application/json" }, body: await request.text() });
+    return forward("/refresh", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: await request.text(),
+    });
   }
   return new Response("not found", { status: 404 });
 }
