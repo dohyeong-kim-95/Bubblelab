@@ -89,6 +89,14 @@
   #suggestions .del, #records .del, #podcast-users .del { border: 0; background: none; color: inherit;
                       opacity: .45; cursor: pointer; font: inherit; padding: 0 .2rem; }
   #suggestions .del:hover, #records .del:hover, #podcast-users .del:hover { opacity: 1; }
+  #trip-token { display: none; padding: .9rem 1.1rem; border-radius: .8rem;
+                background: light-dark(#e8f3ec, #16301f); border: 1px solid #477a5d;
+                line-height: 1.7; overflow-wrap: anywhere; }
+  #trip-token code { font-size: .82rem; }
+  #trip-token button { margin-left: .5rem; font: inherit; font-size: .78rem; padding: .25rem .6rem;
+                border-radius: .5rem; border: 1px solid currentColor; background: none;
+                color: inherit; cursor: pointer; }
+  #trip-token small { display: block; opacity: .65; }
   #podcast-code { display: none; padding: .9rem 1.1rem; border-radius: .8rem;
                   background: light-dark(#e8f3ec, #16301f); border: 1px solid #477a5d;
                   line-height: 1.7; overflow-wrap: anywhere; }
@@ -202,6 +210,7 @@
       <a class="hub-card" href="#chat"><span class="hub-icon">💬</span><span><strong>Chat</strong><small>익명 채팅 정원 관리</small></span></a>
       <a class="hub-card" href="#sticker"><span class="hub-icon">✨</span><span><strong>Sticker</strong><small>스티커 팩 공개 여부</small></span></a>
       <a class="hub-card" href="#podcast"><span class="hub-icon">🎙️</span><span><strong>Podcast</strong><small>데일리 팟캐스트 사용자 관리</small></span></a>
+      <a class="hub-card" href="#trip"><span class="hub-icon">🧳</span><span><strong>Trip</strong><small>여행 가격 관측 접근 토큰</small></span></a>
       <a class="hub-card" href="optout"><span class="hub-icon">🫥</span><span><strong>집계 제외</strong><small>이 브라우저를 방문 통계에서 빼기</small></span></a>
     </div>
   </section>
@@ -314,6 +323,23 @@
     <div class="notice-actions"><span id="sticker-meta" class="meta"></span></div>
   </section>
   </section>
+  <section class="view" id="view-trip" hidden>
+  <h2 class="view-title">🧳 Trip</h2>
+  <section class="top" aria-label="여행 가격 관측 토큰">
+    <h2>🔑 접근 토큰 발급 <span style="opacity:.5;font-weight:normal;font-size:.8rem">trip.bubblelab.dev 계획 탭의 🔑 에 붙여 넣어요</span></h2>
+    <p class="insight-note">trip 은 로그인이 없어서 주소를 아는 사람은 화면에 들어옵니다. 그래서 가격 관측
+      API(<code>/_trip/*</code>)는 <strong>읽기·쓰기 모두</strong> 이 토큰을 요구해요 — 여행지·기간·인원 같은
+      여행 의향이 그대로 나가고, 남이 노선을 만들면 상류 API 쿼터도 태울 수 있으니까요.
+      일정·예산(실행 탭)은 브라우저에만 있으므로 토큰과 무관합니다.</p>
+    <div id="trip-card">
+      <div class="notice-actions">
+        <button id="trip-issue">토큰 발급</button>
+        <span id="trip-meta" class="meta" style="opacity:.5;font-size:.78rem"></span>
+      </div>
+      <div id="trip-token"></div>
+    </div>
+  </section>
+  </section>
   <section class="view" id="view-podcast" hidden>
   <h2 class="view-title">🎙️ Podcast</h2>
   <section class="top" aria-label="팟캐스트 사용자 추가">
@@ -348,7 +374,7 @@
   <footer id="status">불러오는 중…</footer>
 </main>
 <script>
-const views = ['home', 'insights', 'slop', 'work', 'chat', 'sticker', 'podcast'];
+const views = ['home', 'insights', 'slop', 'work', 'chat', 'sticker', 'podcast', 'trip'];
 function showView() {
   const selected = views.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'home';
   document.body.dataset.view = selected;
@@ -1027,6 +1053,52 @@ loadAlltime();
 loadNotice();
 loadChat();
 loadStickers();
+
+/* 🧳 Trip — 가격 관측 접근 토큰.
+ * 토큰은 발급 직후 한 번만 보여 준다(서버에 저장하지 않는 서명값이라 다시 볼 수 없다).
+ * 잃어버리면 그냥 다시 발급하면 된다 — 옛 토큰도 만료 전까지는 함께 유효하다. */
+const tripIssue = document.getElementById('trip-issue');
+const tripMeta = document.getElementById('trip-meta');
+const tripToken = document.getElementById('trip-token');
+
+tripIssue?.addEventListener('click', async () => {
+  tripIssue.disabled = true;
+  tripMeta.textContent = '발급 중…';
+  tripToken.replaceChildren();
+  try {
+    const response = await fetch('api/trip/token', { method: 'POST' });
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      throw new Error(body?.error || `발급 실패 (${response.status})`);
+    }
+    const { token } = await response.json();
+    tripMeta.textContent = '';
+
+    const line = document.createElement('div');
+    const code = document.createElement('code');
+    code.textContent = token;
+    code.style.wordBreak = 'break-all';
+    const copy = document.createElement('button');
+    copy.type = 'button';
+    copy.textContent = '복사';
+    copy.addEventListener('click', async () => {
+      await navigator.clipboard.writeText(token).catch(() => {});
+      copy.textContent = '복사됨';
+      setTimeout(() => { copy.textContent = '복사'; }, 1500);
+    });
+    line.append(code, ' ', copy);
+
+    const note = document.createElement('small');
+    note.textContent = 'trip.bubblelab.dev → 🔭 계획 → 🔑 에 붙여 넣으세요. 이 값은 지금만 보입니다.';
+    tripToken.append(line, note);
+    tripToken.style.display = 'block';
+  } catch (error) {
+    tripMeta.textContent = error.message;
+  } finally {
+    tripIssue.disabled = false;
+  }
+});
+
 loadIntake();
 loadPodcastUsers();
 loadPodcastUsage();

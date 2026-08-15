@@ -89,6 +89,9 @@ export function normalizePackage(raw, { destinationId, source, now = Date.now() 
     unknownCosts: cost.unknownCosts,
     floor: cost.floor,
 
+    // 노쇼핑·출발확정·게르2인실 같은 태그. 가격만큼 의미가 커서 함께 저장한다 —
+    // "104만 노쇼핑"과 "96만 쇼핑3회"는 싼 쪽이 좋은 여행이 아니다.
+    tags: list(p.tags),
     airline: text(p.airline, 40),
     direct: p.direct === undefined ? null : bool(p.direct),
     shopping: num(p.shopping),
@@ -121,6 +124,7 @@ export function summarizePackages(observations, previous = new Map()) {
   return {
     count: items.length,
     best,
+    tags: best.tags ?? [],
     // 같은 상품의 직전 관측과 비교한다. 다른 상품과 비교하면 "가격이 내렸다"가
     // 아니라 "더 싼 상품이 새로 떴다"인데 둘은 다른 이야기다.
     change: priorPrice === null ? null : best.effectivePrice - priorPrice,
@@ -273,7 +277,12 @@ export function parsePackages(html, { destinationId, source = "modetour", now = 
     if (seen.has(productId)) continue;
     seen.add(productId);
     if (!row.title) warnings.push(`제목 없는 상품(${productId})`);
-    observations.push(normalizePackage({ ...row, productId }, { destinationId, source, now }));
+    // 목록에서 읽은 상품은 현지 필수경비·선택관광을 **확인하지 못한 것**이지 없는 게
+    // 아니다. 표시하지 않으면 0원으로 삼켜서 실질가가 표시가와 같아진다.
+    const unknownCosts = row.unknownCosts ?? (
+      Number.isFinite(row.mandatoryLocalFee) ? [] : ["현지 필수경비", "선택관광"]
+    );
+    observations.push(normalizePackage({ ...row, productId, unknownCosts }, { destinationId, source, now }));
     if (observations.length >= PACKAGE_LIMITS.maxProducts) break;
   }
   // 표시가만 읽힌 상태라는 걸 분명히 남긴다 — 현지경비·선택관광은 상세 페이지에 있다.

@@ -781,10 +781,13 @@ function packageLine(d) {
     ? ` <span class="badge ref" title="${esc(s.unknownCosts.join(", "))}">추가비용 확인 필요</span>`
     : "";
   const span = best.nights ? `${best.nights}박${best.days ? `${best.days}일` : ""}` : "";
+  // 태그(노쇼핑·출발확정·게르2인실)는 가격만큼 중요하다 — 싼 여행과 가성비 좋은
+  // 여행은 다르다.
+  const tags = (s.tags ?? []).slice(0, 3).map((t) => `<span class="badge">${esc(t)}</span>`).join(" ");
   return `<div class="route-line" data-packages="${esc(d.id)}" role="button" tabindex="0">
     <span>🧳 ${esc(best.title || "패키지")}</span>
     <span class="p">${esc(formatKRW(best.effectivePrice))}${s.floor ? "~" : ""}/인 ${delta}</span>
-    <span class="dim">${esc([span, best.airline, `${s.count}건`].filter(Boolean).join(" · "))}</span>${floor}
+    <span class="dim">${esc([span, best.airline, `${s.count}건`].filter(Boolean).join(" · "))}</span>${tags}${floor}
   </div>`;
 }
 

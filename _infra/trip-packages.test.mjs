@@ -157,6 +157,24 @@ test("파싱 결과는 관측 모양으로 나오고, 표시가만 읽혔음을 
   assert.match(out.warnings.join(), /표시가만 읽힙니다/);
 });
 
+test("목록에서만 읽은 상품은 현지경비를 0원으로 삼키지 않는다", () => {
+  // 목록 페이지에는 현지 필수경비·선택관광이 없다. 그걸 "없음"으로 두면 실질가가
+  // 표시가와 같아져서, 나중에 자유여행과 비교할 때 패키지가 싸 보인다.
+  const out = parsePackages(jsonLdPage, { destinationId: "d1" });
+  const first = out.observations[0];
+  assert.equal(first.floor, true, "확인 못 한 비용이 있으면 실질가는 하한이다");
+  assert.deepEqual(first.unknownCosts, ["현지 필수경비", "선택관광"]);
+  assert.equal(first.effectivePrice, first.listedPrice, "아는 값이 없으니 표시가와 같되, 하한으로 표시된다");
+});
+
+test("태그는 가격만큼 중요해서 함께 저장한다", () => {
+  const o = normalizePackage({
+    productId: "P1", listedPrice: 1039900, tags: ["노쇼핑", "출발확정", "게르 2인실", ""],
+  }, { destinationId: "d1", source: "modetour" });
+  assert.deepEqual(o.tags, ["노쇼핑", "출발확정", "게르 2인실"]);
+  assert.deepEqual(summarizePackages([o]).tags, ["노쇼핑", "출발확정", "게르 2인실"]);
+});
+
 test("같은 상품을 두 번 세지 않는다", () => {
   const twice = jsonLdPage + jsonLdPage;
   assert.equal(parsePackages(twice, { destinationId: "d1" }).observations.length, 2);

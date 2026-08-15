@@ -200,6 +200,7 @@ npx wrangler@4 dev --local --local-upstream localhost   # http://localhost:8787/
 | `effectivePrice` | listedPrice + 아는 필수비용 |
 | `unknownCosts[]` | 있는 건 아는데 금액을 모르는 것 (예: 선택관광, 기사팁) |
 | `floor` | `unknownCosts` 가 있으면 true — effectivePrice 는 **하한**이다 |
+| `tags[]` | 노쇼핑·출발확정·게르2인실 등. 가격만큼 중요하다 — 싼 여행과 가성비 좋은 여행은 다르다 |
 
 **모르는 값을 0원으로 채우지 않는다.** 화면은 `1,189,000원~/인` 처럼 물결과
 "추가비용 확인 필요" 배지로 하한임을 밝힌다. 최저가 정렬도 표시가가 아니라
@@ -215,8 +216,17 @@ npx wrangler@4 dev --local --local-upstream localhost   # http://localhost:8787/
 JSON(`__NEXT_DATA__` 등) ③ 둘 다 없으면 **실패로 남긴다** — 억지로 정규식을 긁어 잘못된
 숫자를 저장하는 것보다 "못 읽었다"가 낫다.
 
+**목록 페이지만으로는 수집을 시작하면 안 된다.** 거기에는 표시가와 제목뿐이고
+출발일·현지 필수경비·선택관광은 **상품 상세(또는 출발일 선택) 페이지**에 있다.
+목록에서 읽은 상품은 파서가 `unknownCosts: ["현지 필수경비","선택관광"]` 로 표시해
+실질가를 하한으로 남긴다 — 0원으로 삼키지 않기 위해서다.
+
+CLI 는 마지막에 **사람이 원문과 대조할 다섯 가지**를 체크리스트로 찍는다:
+상품명 · 1인 표시가 · 출발일 · 알려진 필수 현지비용 · 모르는 비용을 0원으로 삼키지
+않았는지. 다섯 개가 모두 ✓ 여야 cron 수집을 시작한다.
+
 ```bash
-# 실제 검색 결과 페이지를 저장한 뒤
+# 실제 상품 상세 페이지를 저장한 뒤
 node _infra/trip-package-parse.mjs mongolia.html --source modetour --destination <destId>
 node _infra/trip-package-parse.mjs mongolia.html --destination <destId> --json \
   | curl -X POST https://trip.bubblelab.dev/_trip/snapshot \

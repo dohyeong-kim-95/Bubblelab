@@ -49,6 +49,8 @@ if (flag("json")) {
 }
 
 const won = (n) => (Number.isFinite(n) ? `${n.toLocaleString("ko-KR")}원` : "—");
+const mark = (ok) => (ok ? "✓" : "✗");
+
 console.log(`파일      ${file} (${(html.length / 1024).toFixed(0)} KB)`);
 console.log(`전략      ${strategy}`);
 console.log(`상품      ${observations.length}건\n`);
@@ -58,8 +60,31 @@ for (const o of observations) {
   console.log(`· ${o.title || "(제목 없음)"}`);
   console.log(`  표시가 ${won(o.listedPrice)}  실질가 ${won(o.effectivePrice)}${o.floor ? " (하한)" : ""}` +
     `${span ? `  ${span}` : ""}${o.airline ? `  ${o.airline}` : ""}`);
+  if (o.departureDate) console.log(`  출발일 ${o.departureDate}`);
+  if (o.tags.length) console.log(`  태그 ${o.tags.join(", ")}`);
+  if (Number.isFinite(o.mandatoryLocalFee)) console.log(`  현지 필수경비 ${won(o.mandatoryLocalFee)}`);
   if (o.unknownCosts.length) console.log(`  확인 필요: ${o.unknownCosts.join(", ")}`);
   if (o.url) console.log(`  ${o.url}`);
+}
+
+/* 사람이 원문과 대조할 체크리스트. 이 다섯이 맞아야 cron 수집을 시작한다 —
+ * 상세페이지에서 표시가와 현지경비를 구분하지 못하면 며칠 쌓아도 나중에 버린다. */
+console.log("\n원문과 대조할 것 (다섯 개가 맞아야 수집 시작)");
+const first = observations[0];
+const checks = [
+  ["상품명", !!first?.title, first?.title ?? "못 읽음"],
+  ["1인 표시가", Number.isFinite(first?.listedPrice), won(first?.listedPrice)],
+  ["출발일", !!first?.departureDate, first?.departureDate || "못 읽음 (목록 페이지면 정상 — 상세/날짜선택 페이지를 저장하세요)"],
+  ["알려진 필수 현지비용", Number.isFinite(first?.mandatoryLocalFee),
+    Number.isFinite(first?.mandatoryLocalFee) ? won(first.mandatoryLocalFee)
+      : "못 읽음 (상세 페이지에만 있습니다)"],
+  ["모르는 비용을 0원으로 삼키지 않음", !Number.isFinite(first?.mandatoryLocalFee) ? first?.floor === true : true,
+    first?.floor ? `하한 표시 (${first.unknownCosts.join(", ") || "unknownCosts 비어 있음"})` : "확인된 비용만으로 계산됨"],
+];
+for (const [label, ok, detail] of checks) console.log(`  ${mark(ok)} ${label}: ${detail}`);
+if (checks.some(([, ok]) => !ok)) {
+  console.log("\n✗ 가 있으면 아직 수집을 시작하지 마세요. 상품 상세(출발일·가격이 함께 보이는) 페이지를");
+  console.log("  저장해 다시 돌리고, 그래도 안 잡히면 _infra/trip-packages.js 에 그 페이지용 전략을 추가합니다.");
 }
 
 if (warnings.length) {
