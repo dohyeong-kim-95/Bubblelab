@@ -356,6 +356,9 @@ test("쓰기는 토큰 없이 열리지 않고, 데몬 push 는 별도 secret �
 test("wrangler 에 DO 바인딩·cron·기능 플래그가 있다", () => {
   const config = readFileSync(join(ROOT, "wrangler.jsonc"), "utf8");
   assert.match(config, /"name": "TRIP_WATCH", "class_name": "TripWatchDO"/);
+  // 바인딩만 있고 migration 이 없으면 배포가 통째로 실패한다 (새 DO 클래스는
+  // 반드시 migration 태그가 있어야 한다).
+  assert.match(config, /"new_sqlite_classes": \["TripWatchDO"\]/);
   assert.match(config, /"20 \*\/6 \* \* \*"/);
   assert.match(config, /"ENABLE_TRIP_WATCH": "true"/);
   // 자격증명은 secret 목록에만 있고 값이 박혀 있으면 안 된다

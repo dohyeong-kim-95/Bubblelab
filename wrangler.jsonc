@@ -127,6 +127,7 @@
     { "tag": "v12", "new_sqlite_classes": ["EmoticonReviewDO"] },
     { "tag": "v13", "new_sqlite_classes": ["BriefDO"] },
     { "tag": "v14", "new_sqlite_classes": ["AssetFlagsDO"] },
-    { "tag": "v15", "new_sqlite_classes": ["InvestDO"] }
+    { "tag": "v15", "new_sqlite_classes": ["InvestDO"] },
+    { "tag": "v16", "new_sqlite_classes": ["TripWatchDO"] }
   ]
 }
