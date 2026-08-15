@@ -31,7 +31,12 @@ import { sendWebPush } from "./webpush.js";
 export const DURI_MAX_TEXT_BLOB = 16 * 1024; // 암호화된 텍스트 base64 상한
 export const DURI_MAX_PHOTO_BYTES = 96 * 1024 * 1024; // 암호화된 사진 원본 상한(원본 보존이 원칙)
 export const DURI_MAX_META_BLOB = 4 * 1024; // 사진 메타(이름·캡션) 암호블롭 상한
+// 사진 미리보기(저해상도)를 **메시지 안에 그대로 실어** 보낸다. 받는 쪽이 원본을
+// 내려받기 전에 바로 그릴 수 있어야 채팅이 즉시 뜬다(텔레그램 photoStrippedSize,
+// 왓츠앱 envelope thumbnail 과 같은 방식). 서버는 여전히 암호블롭만 본다.
+export const DURI_MAX_THUMB_BLOB = 24 * 1024;
 const MAX_BUFFER_ENTRIES = 5000; // 싱크가 오래 꺼져 있을 때의 상한
+const BACKFILL_LIMIT = 100; // 접속 직후 한 번에 보내는 최대 항목 수(나머지는 요청 시)
 export const DURI_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 미ack 항목 보존 30일
 const MAX_MESSAGE_BYTES = 32 * 1024;
 const MAX_CONNECTIONS = 8; // 두 사람 × 기기 몇 + 싱크
@@ -280,6 +285,13 @@ export class DuriDO {
     if (msg.type === "ack") {
       if (conn.role !== "sink") return; // 싱크만 버퍼를 폐기할 수 있다
       if (Number.isInteger(msg.seq)) this.state.blockConcurrencyWhile(() => this.prune(msg.seq));
+      return;
+    }
+
+    // 위로 올려 캐시가 바닥났을 때 그 앞 구간을 요청한다.
+    if (msg.type === "fetch-older") {
+      if (!Number.isInteger(msg.before)) return;
+      this.fetchOlder(conn, msg.before, Number.isInteger(msg.limit) ? msg.limit : 0);
       return;
     }
 
@@ -601,11 +613,34 @@ export class DuriDO {
     if (last > this.ackSeq) { this.ackSeq = last; await this.state.storage.put(ACK_KEY, last); }
   }
 
+  // 접속 직후엔 **최근 것부터 BACKFILL_LIMIT 개만** 보낸다. 그 앞은 클라이언트가
+  // 위로 올려 필요해질 때 fetch-older 로 따로 가져간다(커서 기반 페이지네이션).
   async backfill(conn, since) {
-    const start = bufKey(Math.max(since, this.ackSeq) + 1);
-    const entries = await this.state.storage.list({ prefix: BUF_PREFIX, start, limit: 1000 });
-    for (const [, value] of entries) this.send(conn, { type: "entry", ...value });
-    this.send(conn, { type: "backfill-done", head: this.head });
+    const from = Math.max(since, this.ackSeq) + 1;
+    const all = await this.state.storage.list({ prefix: BUF_PREFIX, start: bufKey(from), limit: 1000 });
+    const values = [...all.values()];
+    const page = values.slice(-BACKFILL_LIMIT);
+    for (const value of page) this.send(conn, { type: "entry", ...value });
+    this.send(conn, {
+      type: "backfill-done", head: this.head,
+      // 아직 서버에 남아 있는 더 오래된 구간이 있는지 알려 준다(있으면 위로 올릴 때 가져간다).
+      oldest: page.length ? page[0].seq : null,
+      more: values.length > page.length,
+    });
+  }
+
+  // 위로 올려 캐시가 바닥났을 때 서버에 남아 있는 그 앞 구간을 가져간다.
+  async fetchOlder(conn, before, limit) {
+    const end = bufKey(Math.max(0, before));
+    const all = await this.state.storage.list({ prefix: BUF_PREFIX, end, limit: 1000 });
+    const values = [...all.values()];
+    const page = values.slice(-Math.min(limit || BACKFILL_LIMIT, BACKFILL_LIMIT));
+    for (const value of page) this.send(conn, { type: "entry", ...value });
+    this.send(conn, {
+      type: "older-done",
+      oldest: page.length ? page[0].seq : null,
+      more: values.length > page.length,
+    });
   }
 
   // ── 사진 (R2 임시 버퍼) ──────────────────────────────────────
@@ -635,11 +670,16 @@ export class DuriDO {
     await this.env.DURI_BUCKET.put(r2key, body, {
       httpMetadata: { contentType: "application/octet-stream" },
     });
+    const thumbIv = request.headers.get("X-Duri-Thumb-Iv");
+    const thumbCt = request.headers.get("X-Duri-Thumb");
+    const thumb = isBlob(thumbIv, 64) && isBlob(thumbCt, DURI_MAX_THUMB_BLOB)
+      ? { thumbIv, thumbCt } : null; // 없으면 받는 쪽이 예전처럼 원본을 기다린다
     const album = parseAlbumHeader(request.headers.get("X-Duri-Album"));
     const entry = await this.state.blockConcurrencyWhile(() => this.append({
       kind: "photo", at: Date.now(), r2key,
       imgIv: meta.imgIv, sha256: meta.sha256, bytes: body.byteLength,
       metaIv: meta.metaIv, metaCt: meta.metaCt,
+      ...(thumb || {}),
       ...(album ? { album } : {}),
     }));
     return Response.json({ seq: entry.seq, r2key }, { headers: { "Cache-Control": "no-store" } });

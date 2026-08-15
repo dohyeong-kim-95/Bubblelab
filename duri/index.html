@@ -362,6 +362,14 @@
   #here-box .here-actions button { font: inherit; font-size: .88rem; cursor: pointer; border-radius: .7rem;
               padding: .5rem .9rem; border: 1px solid var(--line); background: none; color: inherit; }
   #here-box #here-ok { background: var(--pink); color: light-dark(#fff, #1a1016); border-color: transparent; }
+  /* 업로드 중인 사진(낙관적 표시)과 아직 미리보기인 사진 */
+  .row.pending-photo .bubble { position: relative; opacity: .75; }
+  .row.pending-photo.failed .bubble { opacity: .45; outline: 1px solid light-dark(#d84343,#e05a5a); }
+  .up-bar { position: absolute; left: .35rem; right: .35rem; bottom: .35rem; height: .28rem;
+            border-radius: 999px; background: #0004; overflow: hidden; }
+  .up-fill { height: 100%; width: 0; background: var(--pink); transition: width .15s linear; }
+  /* 원본이 오기 전의 미리보기 — 저해상도라 살짝 흐리게 두고, 오면 클래스가 벗겨진다 */
+  .bubble img.thumb { filter: blur(1px); }
   /* 사진 꾹 누르면 뜨는 삭제 버튼 */
   #photo-del { position: fixed; z-index: 205; transform: translate(-50%, -50%); font: inherit; font-size: .82rem;
                background: light-dark(#d84343, #e05a5a); color: #fff; border: 0; border-radius: 999px;
@@ -1214,7 +1222,11 @@ function reportSeen() {
   seenTimer = setTimeout(() => {
     seenTimer = null;
     if (ws && ws.readyState === 1) {
-      ws.send(JSON.stringify({ type: "seen", seq: getLastSeq(), deviceId: duriDeviceId() }));
+      // 원본을 아직 못 받은 사진이 있으면 그 앞까지만 보고한다. 넘겨서 보고하면
+      // 서버가 그 사진을 지워 버려 영영 못 받는다(미리보기만 남는다).
+      const last = getLastSeq();
+      const seq = awaitingPhoto.size ? Math.min(last, Math.min(...awaitingPhoto) - 1) : last;
+      if (seq > 0) ws.send(JSON.stringify({ type: "seen", seq, deviceId: duriDeviceId() }));
     }
   }, 1000);
 }
@@ -1245,6 +1257,13 @@ function connect() {
     let m; try { m = JSON.parse(e.data); } catch { return; }
     if (m.type === "ping") { ws.send(JSON.stringify({ type: "pong" })); return; }
     if (m.type === "welcome" || m.type === "presence") { setStatus(true, m.online > 1); return; }
+    // 접속 직후엔 최근 것만 온다. 서버에 그 앞이 더 남아 있으면 위로 올릴 때 가져간다.
+    if (m.type === "backfill-done" || m.type === "older-done") {
+      serverHasOlder = !!m.more;
+      if (Number.isInteger(m.oldest)) serverOldest = m.oldest;
+      olderPending = false;
+      return;
+    }
     if (m.type === "entry") { renderEntry(m); return; }
     if (m.type === "deleted") { removeEntry(m.seq); return; }
     if (m.type === "cal-state") { applyCalEntries(m.events || []); return; }
@@ -1474,9 +1493,12 @@ function closeLb() { const lb = $("lightbox"); lb.hidden = true; lb.querySelecto
 // 탭하면 전체화면으로 열리는 사진 img. 앨범(.bubble.album) 안이면 형제 사진들을
 // 함께 넘겨 스와이프로 넘길 수 있게 한다.
 let photoLongFired = false; // 롱프레스로 삭제 버튼을 띄운 직후의 click(라이트박스) 억제용
-function photoImg(blob, alt, seq) {
+function photoImg(blob, alt, seq, rec) {
   const img = document.createElement("img");
   img.alt = alt || "사진"; img.decoding = "async";
+  // 원본 비율을 알면 자리를 미리 잡는다 — 미리보기가 원본으로 바뀔 때 화면이 안 튄다.
+  if (rec?.w && rec?.h) img.style.aspectRatio = `${rec.w} / ${rec.h}`;
+  if (rec && !rec.blob) img.classList.add("thumb"); // 아직 미리보기(흐릿) 상태
   img.__blob = blob; // 저장 시 동기적으로 File 을 만들기 위해 원본 blob 을 붙여둔다
   if (Number.isInteger(seq)) img.dataset.seq = String(seq); // 삭제 시 이 요소를 찾는다
   img.src = URL.createObjectURL(blob);
@@ -1540,6 +1562,8 @@ const OLDER_BATCH = 100;
 let oldestShownSeq = null;  // 지금 화면에 그려진 것 중 가장 오래된 seq
 let olderLoaded = false;    // 한 번이라도 위로 불러왔는가(그러면 DOM 상한을 늘린다)
 let loadingOlder = false, noMoreOlder = false;
+// 서버 버퍼에 아직 남아 있는 더 오래된 구간(접속 시 최근 100개만 받으므로).
+let serverHasOlder = false, serverOldest = null, olderPending = false;
 
 // column-reverse 라 "맨 위"는 scrollTop 이 최대로 음수인 지점이다.
 function nearTop() {
@@ -1555,7 +1579,18 @@ async function loadOlder() {
       .filter((r) => r.seq < oldestShownSeq)
       .sort((a, b) => a.seq - b.seq)
       .slice(-OLDER_BATCH);
-    if (!older.length) { noMoreOlder = true; showOlderHint("여기가 이 기기에 남은 가장 오래된 대화예요"); return; }
+    if (!older.length) {
+      // 이 기기 캐시는 바닥났다. 서버에 그 앞 구간이 남아 있으면 거기서 가져온다.
+      if (serverHasOlder && !olderPending && ws && ws.readyState === 1) {
+        olderPending = true;
+        ws.send(JSON.stringify({ type: "fetch-older", before: serverOldest ?? oldestShownSeq }));
+        showOlderHint("서버에서 옛 대화를 가져오는 중…");
+        return;
+      }
+      noMoreOlder = true;
+      showOlderHint("여기가 이 기기에 남은 가장 오래된 대화예요");
+      return;
+    }
 
     // 옛 묶음은 따로 그린 뒤 통째로 앞에 붙인다 — 날짜 구분선·연속 발신자 그룹은
     // 이 묶음 안에서만 다시 계산해야 해서 전역 그룹 상태를 잠시 비켜 둔다.
@@ -1612,10 +1647,10 @@ function appendRecord(rec, { silent = false, into = null } = {}) {
   const stick = silent ? false : (atBottom() || rec.name === MY_NAME);
 
   // 앨범 사진: 같은 앨범 id 버블이 화면에 있으면 새 말풍선 대신 거기에 이어붙인다.
-  if (rec.album && rec.blob) {
+  if (rec.album && (rec.blob || rec.thumb)) {
     const grid = albumBubbles.get(rec.album.id);
     if (grid && grid.isConnected) {
-      grid.appendChild(photoImg(rec.blob, rec.caption, rec.seq));
+      grid.appendChild(photoImg(rec.blob || rec.thumb, rec.caption, rec.seq, rec));
       if (stick) scroll();
       if (!silent) updateToBottom();
       return;
@@ -1666,16 +1701,16 @@ function appendRecord(rec, { silent = false, into = null } = {}) {
   const row = document.createElement("div");
   row.className = cont ? "row cont" : "row";
   let timeEl;
-  if (rec.album && rec.blob) {
+  if (rec.album && (rec.blob || rec.thumb)) {
     timeEl = buildBubble(row, rec.name, at, (b) => {
       b.classList.add("album");
       b.dataset.n = String(rec.album.n);
-      b.appendChild(photoImg(rec.blob, rec.caption, rec.seq));
+      b.appendChild(photoImg(rec.blob || rec.thumb, rec.caption, rec.seq, rec));
       albumBubbles.set(rec.album.id, b); // 이후 같은 앨범 사진이 이 그리드에 붙는다
     }, showName);
-  } else if (rec.kind === "photo" && rec.blob) {
+  } else if (rec.kind === "photo" && (rec.blob || rec.thumb)) {
     timeEl = buildBubble(row, rec.name, at, (b) => {
-      b.appendChild(photoImg(rec.blob, rec.caption, rec.seq));
+      b.appendChild(photoImg(rec.blob || rec.thumb, rec.caption, rec.seq, rec));
       if (rec.caption) { const c = document.createElement("div"); c.className = "cap"; c.textContent = rec.caption; b.appendChild(c); }
     }, showName);
   } else if (rec.sticker && PACK_IDS.has(rec.sticker.pack)) {
@@ -1721,11 +1756,25 @@ async function renderEntry(m) {
       appendRecord(rec); putEntry(rec);
     } else if (m.kind === "photo") {
       const meta = await decryptJson(m.metaIv, m.metaCt);
-      const blob = await fetchPhotoBlob(m); // R2가 정리되기 전에 받아 캐시에 담는다
+      if (meta.name === MY_NAME) clearOnePendingPhoto(); // 내가 방금 올린 것 — 임시 말풍선 교체
+      const rec = { seq: m.seq, kind: "photo", at: meta.at ?? m.at, name: meta.name, caption: meta.caption };
+      if (meta.loc) rec.loc = meta.loc; // 촬영 위치(E2E) — "함께 다닌 곳 지도"용. 캐시에도 저장돼 지도가 읽는다.
+      if (meta.w && meta.h) { rec.w = meta.w; rec.h = meta.h; } // 원본 비율 — 자리를 미리 잡아 화면이 안 튄다
+      if (m.album) rec.album = m.album; // 앨범 묶음(평문 그룹정보)
+
+      // 미리보기가 실려 왔으면 **원본을 기다리지 않고** 그것부터 그린다.
+      // 원본은 뒤에서 천천히 받아 교체한다(그때 캐시에도 저장).
+      const thumb = m.thumbIv && m.thumbCt ? await decryptThumb(m) : null;
+      if (thumb) {
+        rec.thumb = thumb;
+        appendRecord(rec); putEntry(rec);
+        queuePhotoFetch(m, rec);
+        return;
+      }
+      // 미리보기가 없는 옛 사진은 예전처럼 원본을 받아서 그린다.
+      const blob = await fetchPhotoBlob(m);
       if (blob) {
-        const rec = { seq: m.seq, kind: "photo", at: meta.at ?? m.at, name: meta.name, caption: meta.caption, blob };
-        if (meta.loc) rec.loc = meta.loc; // 촬영 위치(E2E) — "함께 다닌 곳 지도"용. 캐시에도 저장돼 지도가 읽는다.
-        if (m.album) rec.album = m.album; // 앨범 묶음(평문 그룹정보)
+        rec.blob = blob;
         appendRecord(rec); putEntry(rec);
       } else {
         appendRecord({ seq: m.seq, at: m.at, broken: "사진을 불러올 수 없습니다 (이미 백업되어 정리됨)" });
@@ -1756,6 +1805,57 @@ function sniffImageType(bytes) {
   if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[8] === 0x57 && bytes[9] === 0x45) return "image/webp";
   return "image/jpeg";
 }
+async function decryptThumb(m) {
+  try {
+    const plain = await decryptBytes(m.thumbIv, unb64(m.thumbCt).buffer);
+    return new Blob([plain], { type: "image/jpeg" });
+  } catch { return null; }
+}
+
+// 원본은 미리보기를 띄운 뒤 천천히 받는다. 한꺼번에 받으면 회선을 다 먹어 채팅이
+// 굼떠지므로 동시 2장까지만, 화면에 가까운(최근) 것부터.
+const PHOTO_FETCH_PARALLEL = 2;
+const photoQueue = [];
+let photoFetching = 0;
+// **아직 원본을 못 받은 사진의 seq.** 서버는 "여기까지 봤다"를 받으면 그 앞을 지우므로,
+// 원본을 확보하기 전에 그 seq 를 봤다고 보고하면 원본을 영영 못 받는다. seen 은 이
+// 집합의 가장 앞보다 뒤로 나가지 않는다(reportSeen 참고).
+const awaitingPhoto = new Set();
+
+function queuePhotoFetch(m, rec) {
+  awaitingPhoto.add(m.seq);
+  photoQueue.push({ m, rec });
+  photoQueue.sort((a, b) => b.m.seq - a.m.seq); // 최근 것부터
+  pumpPhotoQueue();
+}
+function pumpPhotoQueue() {
+  while (photoFetching < PHOTO_FETCH_PARALLEL && photoQueue.length) {
+    const job = photoQueue.shift();
+    photoFetching++;
+    fetchPhotoBlob(job.m)
+      .then((blob) => {
+        if (!blob) return;
+        job.rec.blob = blob;
+        putEntry(job.rec); // 이제야 캐시에 원본이 담긴다
+        // 화면에 이미 그려져 있으면 미리보기를 원본으로 갈아끼운다.
+        for (const img of log().querySelectorAll(`img[data-seq="${job.m.seq}"]`)) {
+          const old = img.src;
+          img.src = URL.createObjectURL(blob);
+          img.__blob = blob;
+          img.classList.remove("thumb");
+          if (old.startsWith("blob:")) URL.revokeObjectURL(old);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        awaitingPhoto.delete(job.m.seq);
+        photoFetching--;
+        pumpPhotoQueue();
+        reportSeen(); // 원본까지 확보됐으니 그만큼 "봤다"를 밀어 준다
+      });
+  }
+}
+
 async function fetchPhotoBlob(m) {
   try {
     const res = await fetch(`/_duri/photo/${m.r2key}`, { cache: "no-store" });
@@ -1979,6 +2079,62 @@ async function captureHere() {
     hereBusy = false;
   }
 }
+// 업로드 중인 사진을 미리 띄운다. 서버가 seq 를 발급해 broadcast 로 돌아오면
+// (renderEntry) 그때 이 임시 말풍선을 걷어낸다 — 예전엔 업로드가 끝날 때까지
+// 화면에 아무것도 없어서 보낸 건지 아닌지 알 수 없었다.
+const uploadingPhotos = new Set();
+function showPendingPhoto(file) {
+  const url = URL.createObjectURL(file);
+  const row = document.createElement("div");
+  row.className = "row me pending-photo";
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  const img = document.createElement("img");
+  img.src = url; img.alt = "보내는 중";
+  const bar = document.createElement("div"); bar.className = "up-bar";
+  const fill = document.createElement("div"); fill.className = "up-fill";
+  bar.appendChild(fill);
+  bubble.append(img, bar);
+  row.appendChild(bubble);
+  log().appendChild(row);
+  scroll();
+  const entry = {
+    row, url,
+    setProgress(r) { fill.style.width = `${Math.round(r * 100)}%`; },
+    done() { uploadingPhotos.delete(entry); URL.revokeObjectURL(url); row.remove(); },
+    fail() { row.classList.add("failed"); bar.remove(); },
+  };
+  uploadingPhotos.add(entry);
+  return entry;
+}
+// 내가 보낸 사진이 서버를 돌아 도착하면 임시 말풍선 하나를 걷어낸다(가장 오래된 것부터).
+function clearOnePendingPhoto() {
+  const first = uploadingPhotos.values().next().value;
+  first?.done();
+}
+
+// 미리보기(저해상도)를 만들어 메시지에 그대로 실어 보낸다. 받는 쪽은 원본을
+// 내려받기 전에 이걸로 즉시 그린다 — 2.5MB 를 기다리던 자리가 10KB 남짓으로 준다.
+// (텔레그램 photoStrippedSize·왓츠앱 envelope thumbnail 과 같은 방식.)
+const THUMB_MAX_EDGE = 320;
+async function makeThumb(file) {
+  try {
+    const bmp = await createImageBitmap(file);
+    const scale = Math.min(1, THUMB_MAX_EDGE / Math.max(bmp.width, bmp.height));
+    const w = Math.max(1, Math.round(bmp.width * scale));
+    const h = Math.max(1, Math.round(bmp.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w; canvas.height = h;
+    canvas.getContext("2d").drawImage(bmp, 0, 0, w, h);
+    bmp.close?.();
+    const blob = await new Promise((res) => canvas.toBlob(res, "image/jpeg", 0.6));
+    if (!blob) return null;
+    const buf = new Uint8Array(await blob.arrayBuffer());
+    // 프레임 상한을 넘으면 아예 안 싣는다(그 경우 받는 쪽이 예전처럼 원본을 기다린다).
+    return buf.length > 16 * 1024 ? null : { bytes: buf, w: bmp.width, h: bmp.height };
+  } catch { return null; } // HEIC 등 브라우저가 못 여는 형식
+}
+
 async function sendPhoto(file, album, locOverride) {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const sha256 = hex(await crypto.subtle.digest("SHA-256", bytes));
@@ -1988,20 +2144,51 @@ async function sendPhoto(file, album, locOverride) {
   const loc = locOverride || exifGps(bytes);
   // 원본 파일명·형식도 메타(E2E)에 담는다 — PC 백업이 "원본 보존"이라면서 정작
   // 무슨 파일이었는지 못 남기고 있었다. 서버는 여전히 암호블롭만 본다.
+  const thumb = await makeThumb(file);
   const meta = await encryptJson({
     name: MY_NAME, at: Date.now(),
     file: file.name || undefined, type: file.type || undefined, size: bytes.length,
+    ...(thumb && { w: thumb.w, h: thumb.h }), // 원본 비율 — 미리보기 자리를 미리 잡는다
     ...(loc && { loc }),
   });
   const headers = { "X-Duri-Img-Iv": img.iv, "X-Duri-Sha256": sha256, "X-Duri-Meta-Iv": meta.iv, "X-Duri-Meta": meta.ct };
+  if (thumb) {
+    const t = await encryptBytes(thumb.bytes);
+    headers["X-Duri-Thumb-Iv"] = t.iv;
+    headers["X-Duri-Thumb"] = b64(t.ct);
+  }
   if (album) headers["X-Duri-Album"] = `${album.id}.${album.i}.${album.n}`; // 묶어보내기 그룹정보(평문)
-  const res = await fetch("/_duri/photo", { method: "POST", headers, body: img.ct });
-  if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    alert(`사진 전송 실패: ${res.status}\n원본 ${(bytes.length / 1048576).toFixed(1)}MB\n${detail}`);
+
+  // 보내는 쪽 화면은 기다리지 않는다 — 고른 사진을 바로 말풍선으로 띄우고 진행률을
+  // 채운다(낙관적 표시). 서버가 받아 broadcast 로 돌아오면 그 자리를 대신한다.
+  const pending = showPendingPhoto(file);
+  try {
+    await uploadWithProgress("/_duri/photo", headers, img.ct, (ratio) => pending?.setProgress(ratio));
+  } catch (e) {
+    pending?.fail();
+    alert(`사진 전송 실패: ${e?.message || e}\n원본 ${(bytes.length / 1048576).toFixed(1)}MB`);
     return false;
   }
   return true;
+}
+
+// fetch 로는 업로드 진행률을 알 수 없어 XHR 을 쓴다(upload.onprogress).
+function uploadWithProgress(url, headers, body, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+    for (const [k, v] of Object.entries(headers)) xhr.setRequestHeader(k, v);
+    xhr.upload.addEventListener("progress", (e) => {
+      if (e.lengthComputable) onProgress?.(e.loaded / e.total);
+    });
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) { onProgress?.(1); resolve(xhr.responseText); }
+      else reject(new Error(`${xhr.status} ${xhr.responseText || ""}`.trim()));
+    });
+    xhr.addEventListener("error", () => reject(new Error("network")));
+    xhr.addEventListener("abort", () => reject(new Error("aborted")));
+    xhr.send(body);
+  });
 }
 
 // ── 사진 미리보기 트레이 (카톡식: 여러 장 담아 확인 후 보내기) ──
@@ -3878,7 +4065,7 @@ async function openRegion(feature) {
   $("region-box").hidden = false;
   const entries = await allEntries();
   const photos = entries
-    .filter((r) => r.kind === "photo" && r.blob && r.loc && pointInPolys(r.loc.lng, r.loc.lat, feature._polys))
+    .filter((r) => r.kind === "photo" && (r.blob || r.thumb) && r.loc && pointInPolys(r.loc.lng, r.loc.lat, feature._polys))
     .sort((a, b) => (b.at || 0) - (a.at || 0));
   grid.replaceChildren();
   if (!photos.length) {
@@ -3892,7 +4079,7 @@ async function openRegion(feature) {
     grid.appendChild(p);
   } else {
     const g = document.createElement("div"); g.className = "region-grid";
-    for (const r of photos) g.appendChild(photoImg(r.blob, r.caption, r.seq)); // 탭하면 lightbox
+    for (const r of photos) g.appendChild(photoImg(r.blob || r.thumb, r.caption, r.seq, r)); // 탭하면 lightbox
     grid.appendChild(g);
   }
 }
