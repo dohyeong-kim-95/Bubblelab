@@ -709,6 +709,7 @@
     <button id="map-back" class="icon-btn" title="채팅으로" aria-label="채팅으로">‹</button>
     <b>함께 다닌 곳</b>
     <span id="map-count" style="font-size:.72rem;color:var(--dim)"></span>
+    <button id="map-sync" class="icon-btn" type="button" title="이 기기 기록으로 빠진 핀을 만들고 상대 지도와 맞춥니다" aria-label="지도 동기화">🔄</button>
     <button id="map-here" type="button" title="지금 있는 곳을 지도에 추가">📍 현재 위치 추가</button>
   </header>
   <div id="map-wrap">
@@ -1490,7 +1491,7 @@ function removeEntry(seq) {
     if (album) { img.remove(); if (!album.querySelector("img")) album.closest(".row")?.remove(); }
     else img.closest(".row")?.remove();
   });
-  savePins(loadPins().filter((p) => p.seq !== seq)); // 항목 자체가 사라졌으니 툼스톤은 불필요
+  hidePins([seq]); // 항목 자체가 사라졌으니 그 핀도 양쪽에서 지운다
   if (!$("map").classList.contains("map-off")) renderMap().catch(() => {});
   if (db) { try { db.transaction("entries", "readwrite").objectStore("entries").delete(seq); } catch { /* 캐시 최선노력 */ } }
 }
@@ -1500,7 +1501,7 @@ function appendRecord(rec, { silent = false } = {}) {
   seen.add(rec.seq);
   if (rec.seq > getLastSeq()) setLastSeq(rec.seq);
   if (rec.name) notePeerName(rec.name); // 상대 이름을 알아야 색상 설정에 상대 칸을 보여줄 수 있다
-  collectPin(rec); // 사진에 위치가 있으면 지도용 핀으로 모은다(로컬, seq로 중복 제거)
+  collectPin(rec).catch(() => {}); // 위치가 있으면 지도 핀으로(공유 저장소에 올린다)
   // silent(초기 히스토리 대량 로드)일 땐 스크롤 위치를 매번 재지 않는다 —
   // atBottom()·scroll() 둘 다 레이아웃을 강제로 다시 계산시키는 연산이라
   // 수백 개를 한 번에 그릴 때 그만큼 강제 리플로우가 쌓인다. 다 그린 뒤
@@ -2681,7 +2682,10 @@ async function mergeCalEntry(entry) {
   const id = entry?.id; if (!id) return;
   const cur = calEvents.get(id);
   if (cur && cur.rev >= entry.rev) return;
-  if (entry.deleted) {
+  // 서버가 실시간으로 보내는 삭제 프레임은 { type:"cal-del", id, rev } 라 deleted
+  // 필드가 없다. 저장된 형태(cal-state)만 보고 있어서 **실시간 삭제가 통째로
+  // 무시됐다** — 지운 일정이 상대 화면에서 새로고침 전까지 안 사라졌다.
+  if (entry.deleted || entry.type === "cal-del") {
     calEvents.set(id, { id, rev: entry.rev, deleted: true });
   } else {
     let content; try { content = await decryptJson(entry.iv, entry.ct); } catch { return; }
@@ -3414,58 +3418,109 @@ $("cal-back").addEventListener("click", closeCal);
 // (data/kr-sgg.geojson, WGS84)에 점-폴리곤 판정으로 배정해 다녀온 시군구를 색칠한다.
 // 외부 타일·API 없이 자급자족(estate 방식). 핀은 서버로 안 나가고, 양쪽 기기가 각자
 // 받은 사진에서 같은 지도를 독립적으로 만든다.
-const PINS_KEY = "duri:pins";
-// 지운 핀(툼스톤). 핀은 메시지·사진에서 파생되므로 pins 에서 빼기만 하면 다음 접속의
-// 히스토리 재생 때 collectPin 이 그대로 되살린다 — 지웠다는 사실 자체를 남겨야 한다.
-const PINS_HIDDEN_KEY = "duri:pinsHidden";
-const MAX_HIDDEN_PINS = 5000;
-function loadPins() { try { return JSON.parse(localStorage.getItem(PINS_KEY) || "[]"); } catch { return []; } }
-function savePins(pins) { try { localStorage.setItem(PINS_KEY, JSON.stringify(pins)); } catch { /* 최선노력 */ } }
-function loadHiddenPins() { try { return new Set(JSON.parse(localStorage.getItem(PINS_HIDDEN_KEY) || "[]")); } catch { return new Set(); } }
-function saveHiddenPins(set) {
-  const list = [...set].slice(-MAX_HIDDEN_PINS); // seq 는 증가하므로 뒤쪽(최신)을 남긴다
-  try { localStorage.setItem(PINS_HIDDEN_KEY, JSON.stringify(list)); } catch { /* 최선노력 */ }
+// 핀은 **캘린더와 같은 cal:<id> 저장소에 동기화**된다(`kind:"pin"`). 예전엔 기기
+// 로컬(localStorage)에만 쌓고 서버로 보내지 않았는데, 그때는 양쪽이 같은 메시지를
+// 받아 각자 같은 지도를 만든다는 전제가 있었다. PC 백업(싱크)을 켜면서 그 전제가
+// 깨졌다 — 싱크가 ack 하면 서버가 항목을 바로 버리므로, 그 순간 접속해 있지 않던
+// 기기는 그 핀을 영영 만들지 못한다. 그래서 핀 자체를 공유 상태로 올린다.
+// 저장소를 같이 쓰면 동기화·LWW·오프라인 큐·방초기화·PC백업이 전부 딸려 온다.
+const PINS_KEY = "duri:pins";           // 옛 로컬 핀 — 한 번 서버로 올리고 비운다
+const PINS_HIDDEN_KEY = "duri:pinsHidden"; // 옛 툼스톤 — 마이그레이션 때만 참고한다
+const pinId = (seq) => `pin${String(seq).padStart(12, "0")}`; // 결정적 id = seq 당 하나
+
+// 지도가 쓰는 핀 목록은 calEvents 에서 파생한다(localStorage 사본은 두지 않는다).
+// owner 는 **이름**이다 — mine(내 것인지) 을 저장하면 상대 기기에서 뒤집힌다.
+// 캘린더 일정 색에서 이미 겪은 버그라 같은 실수를 반복하지 않는다.
+function loadPins() {
+  const out = [];
+  for (const ev of calEvents.values()) {
+    if (ev.deleted || ev.kind !== "pin") continue;
+    if (typeof ev.lat !== "number" || typeof ev.lng !== "number") continue;
+    out.push({ seq: ev.seq, lat: ev.lat, lng: ev.lng, at: ev.at || 0,
+               owner: ev.owner, photo: ev.photo, id: ev.id });
+  }
+  return out.sort((a, b) => (a.seq || 0) - (b.seq || 0));
 }
-// 핀을 지운다(사진·메시지는 그대로 — 지도 색칠에서만 뺀다).
+
+// 핀을 지운다(사진·메시지는 그대로 — 지도 색칠에서만 뺀다). 캘린더 삭제와 같은
+// 툼스톤이라 상대 기기에도 그대로 전파된다.
 function hidePins(seqs) {
   if (!seqs?.length) return;
-  const hidden = loadHiddenPins();
-  for (const s of seqs) hidden.add(s);
-  saveHiddenPins(hidden);
-  savePins(loadPins().filter((p) => !hidden.has(p.seq)));
+  for (const seq of seqs) {
+    const id = pinId(seq);
+    if (!calEvents.has(id) || calEvents.get(id).deleted) continue;
+    const rev = Date.now();
+    calEvents.set(id, { id, rev, deleted: true });
+    calSend({ type: "cal-del", id, rev });
+  }
+  calPersist();
   if (!$("map").classList.contains("map-off")) renderMap().catch(() => {});
 }
-function collectPin(rec) {
+
+async function collectPin(rec) {
   if (!rec) return;
   const loc = rec.here || rec.loc; // /여기 명령(here) 또는 사진 EXIF(loc)
   if (!loc || typeof loc.lat !== "number" || typeof loc.lng !== "number") return;
-  if (loadHiddenPins().has(rec.seq)) return; // 지운 핀은 되살리지 않는다
-  const pins = loadPins();
-  if (pins.some((p) => p.seq === rec.seq)) return; // 이미 있음(seq로 중복 제거)
-  // photo: 사진인지 /여기로 남긴 위치인지. 예전엔 구분 없이 모아 두고 요약에서
-  // 전부 "사진 N장"으로 셌다 — 위치만 남긴 것도 사진으로 세어 숫자가 부풀었다.
-  pins.push({ seq: rec.seq, lat: loc.lat, lng: loc.lng, at: rec.at || 0,
-              mine: rec.name === MY_NAME, photo: rec.kind === "photo" }); // 올린 사람(나/상대)
-  savePins(pins);
-  if (!$("map").classList.contains("map-off")) renderMap().catch(() => {}); // 지도가 열려 있으면 즉시 반영
+  const id = pinId(rec.seq);
+  const cur = calEvents.get(id);
+  if (cur) return; // 이미 있음(지워진 것도 되살리지 않는다 — 툼스톤이 남아 있다)
+  const rev = Date.now();
+  // photo: 사진인지 /여기로 남긴 위치인지. 요약에서 "사진 X · 위치 Y"를 나누는 근거.
+  const content = { kind: "pin", seq: rec.seq, lat: loc.lat, lng: loc.lng,
+                    at: rec.at || 0, owner: rec.name || "", photo: rec.kind === "photo" };
+  calEvents.set(id, { id, rev, deleted: false, ...content }); calPersist();
+  const frame = await encryptJson(content);
+  calSend({ type: "cal-put", id, iv: frame.iv, ct: frame.ct, rev });
+  if (!$("map").classList.contains("map-off")) renderMap().catch(() => {}); // 열려 있으면 즉시 반영
 }
 
-// 예전 핀에는 종류(사진/위치)가 없다. 지도를 열 때 한 번, 이 기기 캐시에서 seq 로
-// 찾아 채워 넣는다. 캐시에서 이미 밀려난 항목은 채울 수 없고, 그 경우 요약이
-// "사진 X · 위치 Y" 대신 "기록 N개"로 통칭된다(모르는 걸 사진으로 세지 않는다).
-async function migratePinKinds() {
-  const pins = loadPins();
-  if (!pins.some((p) => p.photo === undefined)) return;
-  const bySeq = new Map((await allEntries()).map((r) => [r.seq, r]));
-  let changed = false;
-  for (const p of pins) {
-    if (p.photo !== undefined) continue;
-    const rec = bySeq.get(p.seq);
-    if (!rec) continue;
-    p.photo = rec.kind === "photo";
-    changed = true;
+// 옛 로컬 핀(localStorage)을 공유 저장소로 한 번 옮긴다. 지운 핀은 툼스톤으로
+// 올려서 상대 기기에서도 되살아나지 않게 한다.
+async function migrateLocalPins() {
+  let old = [];
+  try { old = JSON.parse(localStorage.getItem(PINS_KEY) || "[]"); } catch { old = []; }
+  let hidden = [];
+  try { hidden = JSON.parse(localStorage.getItem(PINS_HIDDEN_KEY) || "[]"); } catch { hidden = []; }
+  if (!old.length && !hidden.length) return 0;
+
+  let moved = 0;
+  for (const p of old) {
+    const id = pinId(p.seq);
+    if (calEvents.has(id) || typeof p.lat !== "number") continue;
+    const rev = Date.now();
+    // 옛 핀은 owner 대신 mine(이 기기 기준) 만 갖고 있다 — 이 기기에서 내 것이었으면
+    // 내 이름, 아니면 상대 이름으로 되살린다(모르면 비워 둔다).
+    const owner = p.owner ?? (p.mine === false ? (peerName || "") : MY_NAME);
+    const content = { kind: "pin", seq: p.seq, lat: p.lat, lng: p.lng,
+                      at: p.at || 0, owner, photo: p.photo };
+    calEvents.set(id, { id, rev, deleted: false, ...content });
+    const frame = await encryptJson(content);
+    calSend({ type: "cal-put", id, iv: frame.iv, ct: frame.ct, rev });
+    moved++;
   }
-  if (changed) savePins(pins);
+  for (const seq of hidden) {
+    const id = pinId(seq);
+    if (calEvents.get(id)?.deleted) continue;
+    const rev = Date.now();
+    calEvents.set(id, { id, rev, deleted: true });
+    calSend({ type: "cal-del", id, rev });
+  }
+  calPersist();
+  localStorage.removeItem(PINS_KEY);
+  localStorage.removeItem(PINS_HIDDEN_KEY);
+  return moved;
+}
+
+// 수동 동기화: 이 기기에 남아 있는 기록을 다시 훑어 빠진 핀을 만들고, 상대가 올린
+// 핀도 받아온다. 서버 버퍼는 싱크가 ack 하면 비므로, 그 사이 꺼져 있던 기기의
+// 지도를 맞출 방법이 이것밖에 없다.
+async function resyncPins() {
+  const before = loadPins().length;
+  const moved = await migrateLocalPins();
+  for (const rec of await allEntries()) await collectPin(rec);
+  calSend({ type: "cal-hello" }); // 상대가 올린 핀도 끌어온다
+  await renderMap().catch(() => {});
+  return { added: loadPins().length - before, moved };
 }
 
 let mapGeo = null;
@@ -3540,7 +3595,7 @@ async function renderMap() {
   // 색은 캘린더 설정(colorForOwner/sharedColor)을 그대로 재사용해 양쪽이 똑같이 본다.
   const reg = {}; let inKorea = 0, foreign = 0, photoN = 0, spotN = 0, unknownN = 0;
   for (const p of pins) {
-    const isMine = p.mine !== false; // 옛 핀(플래그 없음)은 내 것으로 간주
+    const isMine = !p.owner || p.owner === MY_NAME; // 이름으로 판정(owner 없는 옛 핀은 내 것으로)
     const f = sggOfPoint(geo, p.lng, p.lat);
     if (!f) { foreign++; continue; }
     inKorea++;
@@ -3643,7 +3698,7 @@ function renderDots() {
     // 가진 시도의 원이 서해 한복판에 뜬다(실제로 그랬다).
     g.count++;
     g.sumLng += p.lng; g.sumLat += p.lat;
-    if (p.mine !== false) g.mine = true; else g.theirs = true;
+    if (!p.owner || p.owner === MY_NAME) g.mine = true; else g.theirs = true;
   }
 
   const cMine = colorForOwner(MY_NAME);
@@ -3683,13 +3738,32 @@ async function openMap() {
   if ($("cal").classList.contains("cal-off")) openCal();
   $("map").classList.remove("map-off");
   resetMapView(); // 열 때는 항상 전체가 보이게(배율 1)
-  await migratePinKinds().catch(() => {}); // 옛 핀의 종류(사진/위치) 보정 — 실패해도 지도는 그린다
+  await migrateLocalPins().catch(() => {}); // 옛 로컬 핀을 공유 저장소로 — 실패해도 지도는 그린다
   try { await renderMap(); } catch (e) { console.warn("map render 실패", e); $("map-empty").hidden = false; }
 }
 function closeMap() { $("map").classList.add("map-off"); }
 $("map-open").addEventListener("click", openMap);
 $("map-back").addEventListener("click", closeMap);
 $("map-here").addEventListener("click", captureHere);
+// 수동 동기화. 자동으로도 맞춰지지만(핀이 공유 저장소에 올라간다), 옛 기록에서
+// 핀을 새로 만들어야 하거나 한쪽이 오래 꺼져 있었을 때 눌러 맞춘다.
+let syncBusy = false;
+$("map-sync").addEventListener("click", async () => {
+  if (syncBusy) return;
+  syncBusy = true;
+  const btn = $("map-sync");
+  btn.disabled = true; btn.style.opacity = ".5";
+  try {
+    const { added, moved } = await resyncPins();
+    const n = added + moved;
+    showToast(n ? `🔄 핀 ${n}개를 맞췄어요` : "🔄 이미 최신이에요");
+  } catch {
+    showToast("동기화에 실패했어요. 잠시 후 다시 시도해주세요.");
+  } finally {
+    syncBusy = false;
+    btn.disabled = false; btn.style.opacity = "";
+  }
+});
 
 // ── 지역 앨범: 지도에서 시군구를 탭하면 그 지역 사진을 보고, 사진을 추가한다 ──
 // 사진 위치는 지도에서 지정(그 지역 대표점)하므로 안드로이드 EXIF 제거와 무관하다.
@@ -3741,12 +3815,9 @@ $("region-clear").addEventListener("click", async () => {
   if (!seqs.length) { $("region-clear").hidden = true; return; }
   const name = `${feat.properties.sidonm} ${feat.properties.sggnm}`;
   if (!confirm(`${name} 색칠을 지울까요?\n지도에서만 빼는 것이라 사진·대화는 그대로 남아요.`)) return;
-  hidePins(seqs);
-  const synced = await sendUnpin(seqs);
+  hidePins(seqs); // 캘린더와 같은 툼스톤이라 상대 기기에도 그대로 전파된다
   closeRegion();
-  showToast(synced
-    ? `🧹 ${name} 색칠을 지웠어요`
-    : `🧹 이 기기에서 지웠어요 — 연결되면 상대 기기에도 반영돼요`);
+  showToast(`🧹 ${name} 색칠을 지웠어요`);
 });
 $("region-box").addEventListener("click", (e) => { if (e.target === $("region-box")) closeRegion(); });
 $("region-add").addEventListener("click", () => { if (regionFeat) regionAddLoc = regionPoint(regionFeat); });
