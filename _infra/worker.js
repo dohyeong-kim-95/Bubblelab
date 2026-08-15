@@ -624,7 +624,8 @@ function withDuriRole(request, role) {
 
 /* 항공권 가격 관측(trip/ 계획 탭).
  *
- * 읽기는 공개다 — 가격 관측에는 개인 일정이 없다(일정·예산은 브라우저에만 있다).
+ * 읽기는 지금 공개다. 일정·예산은 브라우저에만 있지만, watch 설정(노선·기간·인원)은
+ * 함께 나가므로 여행 의향까지는 드러난다 — 읽기도 토큰으로 좁히는 것이 다음 정리 대상.
  * 쓰기(watch 생성·삭제·갱신)만 admin 이 발급한 토큰을 요구한다. 데몬 push 는
  * 별도 secret(TRIP_SINK_SECRET) 이라 토큰이 새도 집 PC 경로는 분리돼 있다. */
 async function tripWatchKey(env) {

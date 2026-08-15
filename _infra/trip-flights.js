@@ -295,10 +295,14 @@ export function summarizeObservations(watch, observations, history = []) {
     if (!cur || o.price < cur.price) byDepart.set(o.depart, o);
   }
 
+  // 관측일 점은 그날 실제로 조회한 것만 담는다. 아무 가격도 못 받은 날(min=null)도
+  // 점으로 남는다 — "그날 얼마였는지 모른다"와 "그날 안 봤다"는 다른 이야기다.
   const sortedHistory = [...history]
-    .filter((h) => h && h.date && Number.isFinite(h.min))
+    .filter((h) => h && h.date)
     .sort((a, b) => a.date.localeCompare(b.date));
-  const previous = sortedHistory.length > 1 ? sortedHistory[sortedHistory.length - 2].min : null;
+  const priced = sortedHistory.filter((h) => Number.isFinite(h.min));
+  const previous = priced.length > 1 ? priced[priced.length - 2].min : null;
+  const latest = priced.length ? priced[priced.length - 1] : null;
 
   return {
     watch,
@@ -306,8 +310,11 @@ export function summarizeObservations(watch, observations, history = []) {
     departures: [...byDepart.values()],
     history: sortedHistory,
     best,
+    latest,
     // 관측이 한 점뿐일 때 0% 변동을 보여 주면 "안정적"으로 오해한다 — null 로 둔다.
-    change: best && previous ? best.price - previous : null,
+    // 비교는 **그날 관측된 최저가끼리** 한다. 격자의 best 는 며칠 전 값일 수 있어
+    // 오늘 값처럼 빼면 있지도 않은 하락으로 보인다.
+    change: latest && previous ? latest.min - previous : null,
     stats: {
       observed: cells.length,
       min: prices.length ? Math.min(...prices) : null,
@@ -322,10 +329,20 @@ export function summarizeObservations(watch, observations, history = []) {
   };
 }
 
-/** 오래된 관측부터 갱신한다 — cron 한 번에 그리드 전체를 돌리면 쿼터가 남지 않는다. */
-export function pickStaleCombos(combos, observations, limit) {
-  const seen = new Map(observations.map((o) => [comboKey(o), o.observedAt ?? 0]));
+/**
+ * 오래 안 본 조합부터 갱신한다 — cron 한 번에 그리드 전체를 돌리면 쿼터가 남지 않는다.
+ *
+ * 기준은 **"가격을 받은 시각"이 아니라 "조회를 시도한 시각"** 이다. 항공편이 아예
+ * 없는 날짜(no_offer)는 관측이 기록되지 않으므로, 관측 시각으로 줄을 세우면 그 조합이
+ * 영원히 맨 앞에 남아 매 cron 마다 다시 조회되고 뒤쪽 날짜는 한 번도 못 본다.
+ * (실제로 앞 12개가 no_offer 면 그 12개만 무한 반복했다.)
+ */
+export function pickStaleCombos(combos, checks, limit) {
+  const seen = checks instanceof Map ? checks : new Map(Object.entries(checks ?? {}));
+  const at = (combo) => seen.get(comboKey(combo))?.at ?? 0;
   return [...combos]
-    .sort((a, b) => (seen.get(comboKey(a)) ?? 0) - (seen.get(comboKey(b)) ?? 0))
+    .sort((a, b) => at(a) - at(b))
     .slice(0, Math.max(0, limit));
 }
+
+export const CHECK_STATUSES = ["found", "no_offer", "error"];

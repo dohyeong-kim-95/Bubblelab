@@ -728,7 +728,7 @@ function detailView(g) {
       const isBest = cell.price === min;
       return `<td><button class="${tier(cell.price)}${isBest ? " best" : ""}"
         data-pick="${esc(cell.depart)}|${esc(cell.ret ?? "")}|${cell.price}"
-        title="${esc(cell.depart)}${cell.ret ? ` → ${esc(cell.ret)}` : ""} · ${esc(cell.carrier || "")} ${cell.stops ? `${cell.stops}경유` : "직항"}">
+        title="${esc(cell.depart)}${cell.ret ? ` → ${esc(cell.ret)}` : ""} · ${esc(cell.carrier || "")} ${cell.stops ? `${cell.stops}경유` : "직항"} · ${esc(observedLabel(cell.observedAt))} 관측">
         ${esc(formatShort(cell.price))}</button></td>`;
     }).join("");
     return `<tr><th class="rowh">${esc(d.slice(5).replace("-", "/"))} (${esc(weekday(d))})</th>${tds}</tr>`;
@@ -741,7 +741,8 @@ function detailView(g) {
   return `<div class="card bud">
     <div class="top"><span class="name">최저 ${esc(formatKRW(min))}</span> ${badge}
       <span class="dim">중앙값 ${esc(formatKRW(g.stats?.median ?? 0))} · 관측 ${g.stats?.observed ?? 0}칸</span></div>
-    <div class="note">${g.best ? `${esc(g.best.depart)}${g.best.ret ? ` → ${esc(g.best.ret)}` : ""} · ${esc(g.best.carrier || "-")}${g.best.stops ? ` · ${g.best.stops}경유` : " · 직항"}` : ""}</div>
+    <div class="note">${g.best ? `${esc(g.best.depart)}${g.best.ret ? ` → ${esc(g.best.ret)}` : ""} · ${esc(g.best.carrier || "-")}${g.best.stops ? ` · ${g.best.stops}경유` : " · 직항"}
+      · <span class="dim">${esc(observedLabel(g.best.observedAt))} 관측</span>` : ""}</div>
   </div>
   <div class="gridwrap"><table class="grid">${head}${rows}</table></div>
   <div class="legend">
@@ -750,11 +751,21 @@ function detailView(g) {
     <span><i style="background:light-dark(#fbe3e0,#3d1c19)"></i>비싼 편</span>
     <span>칸을 누르면 그 날짜로 일정이 만들어집니다</span>
   </div>
-  ${trendView(g.history ?? [])}
+  ${trendView(g.history ?? [], g.coverage)}
   <p class="row" style="margin-top:10px">
     <button data-refresh="${esc(g.watch?.id ?? "")}">🔄 지금 갱신</button>
     <button class="ghost" data-drop="${esc(g.watch?.id ?? "")}">🗑 이 노선 삭제</button>
   </p>`;
+}
+
+// 격자 칸은 "마지막으로 본 값"이다 — 며칠 전 값일 수 있으니 언제 본 것인지 밝힌다.
+function observedLabel(ms) {
+  if (!Number.isFinite(ms)) return "?";
+  const day = todayKST(new Date(ms));
+  const today = todayKST();
+  if (day === today) return "오늘";
+  const diff = Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${day}T00:00:00Z`)) / 86400000);
+  return diff === 1 ? "어제" : `${diff}일 전`;
 }
 
 const nightsOf = (c) => {
@@ -764,19 +775,31 @@ const nightsOf = (c) => {
   return Math.round((b - a) / 86400000);
 };
 
-function trendView(history) {
-  if (history.length < 2) {
-    return `<p class="dim" style="margin-top:10px">추이는 관측일이 이틀 이상 쌓이면 그려집니다 (지금 ${history.length}일).</p>`;
+// 추이 점은 **그날 실제로 조회한 것**의 최저가다. cron 이 하루에 그리드의 일부만
+// 돌기 때문에, 몇 칸을 보고 나온 값인지(coverage)를 같이 보여 주지 않으면
+// "그날 그 가격이 있었다"고 과장하게 된다.
+function trendView(history, coverage) {
+  const priced = history.filter((p) => Number.isFinite(p.min));
+  const cov = (p) => (p?.total ? ` · ${p.checked}/${p.total} 조합 확인` : "");
+  if (priced.length < 2) {
+    const last = history.at(-1);
+    return `<p class="dim" style="margin-top:10px">추이는 가격이 나온 관측일이 이틀 이상 쌓이면 그려집니다
+      (지금 ${priced.length}일${last ? cov(last) : ""}).</p>`;
   }
   const w = 300;
   const h = 60;
-  const values = history.map((p) => p.min);
+  const values = priced.map((p) => p.min);
   const min = Math.min(...values);
   const max = Math.max(...values);
   const span = max - min || 1;
-  const x = (i) => (i / (history.length - 1)) * w;
+  const x = (i) => (i / (priced.length - 1)) * w;
   const y = (v) => h - ((v - min) / span) * (h - 8) - 4;
-  const line = history.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.min).toFixed(1)}`).join(" ");
+  const line = priced.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.min).toFixed(1)}`).join(" ");
+  const last = priced.at(-1);
+  const cycle = coverage?.total
+    ? `<div class="note">한 바퀴 진행 ${coverage.checked}/${coverage.total} 조합` +
+      `${coverage.noOffer ? ` · 항공편 없음 ${coverage.noOffer}` : ""}</div>`
+    : "";
   return `<h2>가격 추이</h2>
   <div class="card bud">
     <svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img"
@@ -784,9 +807,10 @@ function trendView(history) {
       <path class="area" d="${line} L${w},${h} L0,${h} Z"></path>
       <path d="${line}"></path>
     </svg>
-    <div class="note">${esc(history[0].date)} ${esc(formatShort(values[0]))}
-      → ${esc(history.at(-1).date)} ${esc(formatShort(values.at(-1)))}
-      · 최저 ${esc(formatKRW(min))}</div>
+    <div class="note">${esc(last.date)} ${esc(formatKRW(last.min))}${esc(cov(last))}</div>
+    <div class="note">${esc(priced[0].date)} ${esc(formatShort(values[0]))}
+      → ${esc(last.date)} ${esc(formatShort(values.at(-1)))} · 기간 최저 ${esc(formatKRW(min))}</div>
+    ${cycle}
   </div>`;
 }
 

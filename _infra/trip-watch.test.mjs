@@ -190,17 +190,30 @@ test("가격이 0이거나 숫자가 아닌 관측은 격자에서 빠진다", (
   assert.equal(s.best.price, 300000);
 });
 
-test("갱신은 한 번도 못 본 조합부터, 그다음 오래된 것부터", () => {
+test("갱신은 한 번도 못 본 조합부터, 그다음 오래 안 본 것부터", () => {
   const combos = [
     { depart: "2026-09-01", ret: "2026-09-06" },
     { depart: "2026-09-02", ret: "2026-09-07" },
     { depart: "2026-09-03", ret: "2026-09-08" },
   ];
-  const picked = pickStaleCombos(combos, [
-    { depart: "2026-09-01", ret: "2026-09-06", observedAt: 500 },
-    { depart: "2026-09-03", ret: "2026-09-08", observedAt: 100 },
-  ], 2);
+  const picked = pickStaleCombos(combos, {
+    "2026-09-01:2026-09-06": { at: 500, status: "found" },
+    "2026-09-03:2026-09-08": { at: 100, status: "found" },
+  }, 2);
   assert.deepEqual(picked.map((c) => c.depart), ["2026-09-02", "2026-09-03"]);
+});
+
+test("항공편이 없던 조합도 '봤다'로 친다 — 안 그러면 뒤쪽을 영원히 굶긴다", () => {
+  const combos = [
+    { depart: "2026-09-01", ret: "2026-09-06" },
+    { depart: "2026-09-02", ret: "2026-09-07" },
+  ];
+  // 09-01 은 조회했지만 파는 항공편이 없었다(no_offer). 가격이 없다고 해서
+  // 다음 회차에 또 09-01 이 먼저 잡히면 09-02 는 한 번도 못 본다.
+  const picked = pickStaleCombos(combos, {
+    "2026-09-01:2026-09-06": { at: 900, status: "no_offer" },
+  }, 1);
+  assert.deepEqual(picked.map((c) => c.depart), ["2026-09-02"]);
 });
 
 /* ── DO ──────────────────────────────────────────────────────────────── */
@@ -250,6 +263,78 @@ test("watch 를 만들고 관측을 넣으면 격자와 추이가 나온다", as
   assert.equal(grid.history[0].min, 720000);
 });
 
+test("cron 은 항공편 없는 앞 날짜에 갇히지 않는다 (starvation)", async () => {
+  const storage = storageStub();
+  // 09-04 이전에는 파는 항공편이 없는 상류
+  const env = { TRIP_FLIGHT_PROVIDER: "mock" };
+  const dо = new TripWatchDO({ storage }, env);
+  const real = createFlightProvider(env);
+  const asked = [];
+  dо.provider = () => ({
+    ...real,
+    quote: async (q) => {
+      asked.push(q.depart);
+      return q.depart <= "2026-09-03" ? null : real.quote(q);
+    },
+  });
+
+  await call(dо, "/watches", post({
+    ...baseWatch, id: "w1", from: "2026-09-01", to: "2026-09-06", minNights: 5, maxNights: 5,
+  }));
+  await call(dо, "/refresh", post({ limit: 3 }));
+  await call(dо, "/refresh", post({ limit: 3 }));
+  assert.deepEqual(asked, ["2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04", "2026-09-05", "2026-09-06"],
+    "두 번째 회차가 같은 앞 날짜를 다시 조회하고 있다 (starvation)");
+
+  const grid = await (await call(dо, "/grid?watch=w1")).json();
+  assert.equal(grid.coverage.checked, 6, "조회 시도는 모두 기록된다");
+  assert.equal(grid.coverage.noOffer, 3, "항공편 없던 조합도 센다");
+  assert.equal(grid.cells.length, 3, "가격이 나온 것만 격자에 들어간다");
+});
+
+test("추이는 그날 조회한 것만으로 계산하고 커버리지를 함께 남긴다", async () => {
+  const storage = storageStub();
+  const dо = new TripWatchDO({ storage }, {});
+  await call(dо, "/watches", post({
+    ...baseWatch, id: "w1", from: "2026-09-01", to: "2026-09-04", minNights: 5, maxNights: 5,
+  }));
+
+  // 어제: 09-01 이 35만원이었다
+  const yesterday = Date.UTC(2026, 7, 14, 3);
+  await dо.ingest("w1", [{ depart: "2026-09-01", ret: "2026-09-06", price: 350000 }], yesterday);
+
+  // 오늘: 09-01 은 조회하지 않고 다른 조합만 봤다 (42만~50만)
+  const today = Date.UTC(2026, 7, 15, 3);
+  await dо.ingest("w1", [
+    { depart: "2026-09-02", ret: "2026-09-07", price: 420000 },
+    { depart: "2026-09-03", ret: "2026-09-08", price: 500000 },
+  ], today);
+
+  const grid = await (await call(dо, "/grid?watch=w1")).json();
+  const [d1, d2] = grid.history;
+  assert.equal(d1.min, 350000);
+  assert.equal(d2.min, 420000,
+    "오늘 보지도 않은 어제의 35만원이 오늘 최저가로 찍히면 그래프가 거짓말을 한다");
+  assert.equal(d2.checked, 2);
+  assert.equal(d2.total, 4, "그리드 전체 칸 수를 함께 남겨 '2/4 확인'으로 말할 수 있다");
+  // 격자 자체는 마지막으로 알려진 값을 계속 보여 준다(관측 시각과 함께)
+  assert.equal(grid.best.price, 350000);
+  assert.equal(grid.change, 420000 - 350000, "변화는 그날 관측끼리 비교한다");
+});
+
+test("아무 가격도 못 받은 날도 점으로 남는다 ('안 봤다'와 다르다)", async () => {
+  const dо = new TripWatchDO({ storage: storageStub() }, {});
+  await call(dо, "/watches", post({ ...baseWatch, id: "w1" }));
+  await dо.ingest("w1", [
+    { depart: "2026-09-01", ret: "2026-09-06", status: "no_offer" },
+  ], Date.UTC(2026, 7, 15, 3));
+  const grid = await (await call(dо, "/grid?watch=w1")).json();
+  assert.equal(grid.history.length, 1);
+  assert.equal(grid.history[0].min, null);
+  assert.equal(grid.history[0].checked, 1);
+  assert.equal(grid.history[0].found, 0);
+});
+
 test("같은 날 다시 관측하면 추이의 점은 더 싼 값으로만 내려간다", async () => {
   const storage = storageStub();
   const dо = new TripWatchDO({ storage }, {});
@@ -266,6 +351,19 @@ test("같은 날 다시 관측하면 추이의 점은 더 싼 값으로만 내�
   grid = await (await call(dо, "/grid?watch=w1")).json();
   assert.equal(grid.history[0].min, 600000);
   assert.equal(grid.cells[0].price, 950000, "격자 칸은 최신 관측을 보여 준다");
+});
+
+test("하루 안의 최저가 바닥은 어제 값을 끌고 오지 않는다", async () => {
+  // 위 두 성질이 함께 성립해야 한다: 하루 안에서는 내려가기만 하되,
+  // 그 바닥이 어제 관측으로 채워지면 안 된다.
+  const dо = new TripWatchDO({ storage: storageStub() }, {});
+  await call(dо, "/watches", post({ ...baseWatch, id: "w1" }));
+  await dо.ingest("w1", [{ depart: "2026-09-01", ret: "2026-09-06", price: 300000 }],
+    Date.UTC(2026, 7, 14, 3));
+  await dо.ingest("w1", [{ depart: "2026-09-02", ret: "2026-09-07", price: 900000 }],
+    Date.UTC(2026, 7, 15, 3));
+  const grid = await (await call(dо, "/grid?watch=w1")).json();
+  assert.equal(grid.history.at(-1).min, 900000, "어제의 30만이 오늘 점의 바닥이 되면 안 된다");
 });
 
 test("없는 watch 로는 관측을 넣을 수 없다", async () => {
