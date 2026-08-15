@@ -80,6 +80,11 @@
   #log { flex: 1; overflow-y: auto; display: flex; flex-direction: column-reverse;
          max-width: 44rem; width: 100%; margin: 0 auto; }
   #log-inner { display: flex; flex-direction: column; padding: 1rem; }
+  /* 옛 대화를 더 못 불러올 때 잠깐 뜨는 안내 */
+  #older-hint { position: absolute; left: 50%; transform: translateX(-50%); top: .6rem; z-index: 5;
+                background: var(--panel); border: 1px solid var(--line); border-radius: 999px;
+                padding: .35rem .8rem; font-size: .76rem; color: var(--dim); box-shadow: 0 2px 8px #0002; }
+  #older-hint[hidden] { display: none; }
   /* 스크롤이 위로 올라가 있을 때만 뜨는 "맨 아래로" 버튼 (util/chat 패턴) */
   #to-bottom { position: absolute; left: 50%; transform: translateX(-50%); bottom: .8rem;
                width: 2.6rem; height: 2.6rem; border-radius: 50%; cursor: pointer;
@@ -636,6 +641,7 @@
 
 <div id="log-wrap" class="hidden">
   <div id="log"><div id="log-inner"></div></div>
+  <div id="older-hint" hidden></div>
   <button id="to-bottom" type="button" hidden aria-label="맨 아래로">⬇</button>
 </div>
 
@@ -1351,7 +1357,10 @@ function scroll() { logBox().scrollTop = 0; }
 function scrollToBottom(smooth) { logBox().scrollTo({ top: 0, behavior: smooth ? "smooth" : "auto" }); }
 // 스크롤이 위로 올라가 있으면 "맨 아래로" 버튼을 띄운다(바닥 근처면 숨김).
 function updateToBottom() { const b = $("to-bottom"); if (b) b.hidden = atBottom(); }
-logBox().addEventListener("scroll", updateToBottom, { passive: true });
+logBox().addEventListener("scroll", () => {
+  updateToBottom();
+  if (nearTop()) loadOlder().catch(() => {}); // 위에 닿으면 옛 대화를 이어 붙인다
+}, { passive: true });
 $("to-bottom").addEventListener("click", () => scrollToBottom(true));
 $("lightbox").addEventListener("click", (e) => { if (e.target === $("lightbox")) closeLb(); }); // 배경 탭 → 닫기
 $("lb-close").addEventListener("click", (e) => { e.stopPropagation(); closeLb(); });
@@ -1523,7 +1532,72 @@ function removeEntry(seq) {
   if (db) { try { db.transaction("entries", "readwrite").objectStore("entries").delete(seq); } catch { /* 캐시 최선노력 */ } }
 }
 
-function appendRecord(rec, { silent = false } = {}) {
+// ── 옛 대화 이어보기 ─────────────────────────────────────────
+// 앱을 열면 최근 MAX_DOM 개만 그린다. 예전엔 그게 스크롤의 끝이라, 이 기기 캐시
+// (IndexedDB, MAX_CACHE 개)에 멀쩡히 있는 그 앞 대화를 볼 방법이 아예 없었다.
+// 위로 올려 상단에 닿으면 캐시에서 그 앞을 한 묶음씩 이어 붙인다.
+const OLDER_BATCH = 100;
+let oldestShownSeq = null;  // 지금 화면에 그려진 것 중 가장 오래된 seq
+let olderLoaded = false;    // 한 번이라도 위로 불러왔는가(그러면 DOM 상한을 늘린다)
+let loadingOlder = false, noMoreOlder = false;
+
+// column-reverse 라 "맨 위"는 scrollTop 이 최대로 음수인 지점이다.
+function nearTop() {
+  const el = logBox();
+  return el.scrollHeight - el.clientHeight + el.scrollTop < 600;
+}
+
+async function loadOlder() {
+  if (loadingOlder || noMoreOlder || oldestShownSeq == null) return;
+  loadingOlder = true;
+  try {
+    const older = (await allEntries())
+      .filter((r) => r.seq < oldestShownSeq)
+      .sort((a, b) => a.seq - b.seq)
+      .slice(-OLDER_BATCH);
+    if (!older.length) { noMoreOlder = true; showOlderHint("여기가 이 기기에 남은 가장 오래된 대화예요"); return; }
+
+    // 옛 묶음은 따로 그린 뒤 통째로 앞에 붙인다 — 날짜 구분선·연속 발신자 그룹은
+    // 이 묶음 안에서만 다시 계산해야 해서 전역 그룹 상태를 잠시 비켜 둔다.
+    const frag = document.createElement("div");
+    const savedDay = grpDay, savedSender = grpSender;
+    grpDay = null; grpSender = null;
+    for (const rec of older) appendRecord(rec, { silent: true, into: frag });
+    grpDay = savedDay; grpSender = savedSender;
+
+    olderLoaded = true;
+    oldestShownSeq = older[0].seq;
+    // column-reverse 컨테이너는 위에 콘텐츠가 들어와도 보고 있던 자리가 밀리지 않는다.
+    log().prepend(...frag.childNodes);
+  } finally {
+    loadingOlder = false;
+  }
+}
+
+let olderHintTimer = null;
+function showOlderHint(text) {
+  const el = $("older-hint");
+  if (!el) return;
+  el.textContent = text;
+  el.hidden = false;
+  clearTimeout(olderHintTimer);
+  olderHintTimer = setTimeout(() => { el.hidden = true; }, 2500);
+}
+
+// 화면에 유지할 말풍선 수를 넘으면 위에서부터 버린다(성능). 위로 올려 옛 대화를
+// 불러온 상태에서는 방금 불러온 것을 도로 잘라내면 안 되므로 상한을 늘려 잡는다.
+function trimDom() {
+  const limit = olderLoaded ? MAX_CACHE : MAX_DOM;
+  while (log().children.length > limit) {
+    const first = log().firstChild;
+    first.querySelectorAll?.("img[src^='blob:']").forEach((im) => URL.revokeObjectURL(im.src));
+    first.remove();
+  }
+}
+function appendRecord(rec, { silent = false, into = null } = {}) {
+  // into: 옛 대화를 위쪽에 이어 붙일 때 쓰는 임시 컨테이너. 주어지면 화면 정리·
+  // 스크롤은 건드리지 않고 그리기만 한다(호출자가 통째로 앞에 삽입한다).
+  const box = into || log();
   if (seen.has(rec.seq)) return;
   seen.add(rec.seq);
   if (rec.seq > getLastSeq()) setLastSeq(rec.seq);
@@ -1555,17 +1629,13 @@ function appendRecord(rec, { silent = false } = {}) {
     if (day !== grpDay) {
       const sep = document.createElement("div"); sep.className = "daysep";
       const label = document.createElement("span"); label.textContent = day;
-      sep.appendChild(label); log().appendChild(sep); grpDay = day;
+      sep.appendChild(label); box.appendChild(sep); grpDay = day;
     }
     const notice = document.createElement("div"); notice.className = "sysnotice";
     const span = document.createElement("span"); span.textContent = rec.text; notice.appendChild(span);
-    log().appendChild(notice);
+    box.appendChild(notice);
     grpSender = null; // 알림 뒤에 오는 다음 메시지는 이름을 다시 보여준다
-    while (log().children.length > MAX_DOM) {
-      const first = log().firstChild;
-      first.querySelectorAll?.("img[src^='blob:']").forEach((im) => URL.revokeObjectURL(im.src));
-      first.remove();
-    }
+    if (!into) trimDom();
     if (stick) scroll();
     if (!silent) updateToBottom();
     return;
@@ -1585,7 +1655,7 @@ function appendRecord(rec, { silent = false } = {}) {
     const label = document.createElement("span");
     label.textContent = day;
     sep.appendChild(label);
-    log().appendChild(sep);
+    box.appendChild(sep);
     grpDay = day;
     grpSender = null;
   }
@@ -1615,18 +1685,14 @@ function appendRecord(rec, { silent = false } = {}) {
   } else {
     timeEl = buildBubble(row, rec.name, at, (b) => { b.textContent = rec.text; }, showName);
   }
-  log().appendChild(row);
+  box.appendChild(row);
 
   // ③ 시간 묶기: 같은 사람·같은 분의 연속이면 직전 말풍선의 시간을 감춰 마지막만 남긴다.
   if (cont && minute === grpMinute && grpTimeEl) grpTimeEl.style.display = "none";
   grpSender = senderKey; grpMinute = minute; grpTimeEl = timeEl;
 
   // 화면 노드 수를 제한한다(성능). 지운 사진의 blob URL은 메모리 회수.
-  while (log().children.length > MAX_DOM) {
-    const first = log().firstChild;
-    first.querySelectorAll?.("img[src^='blob:']").forEach((im) => URL.revokeObjectURL(im.src));
-    first.remove();
-  }
+  if (!into) trimDom();
   if (stick) scroll();
   if (!silent) updateToBottom(); // 위를 보는 중 새 메시지가 오면 ⬇ 버튼을 띄운다
 }
@@ -2283,7 +2349,11 @@ async function enterWith(key, name) {
   delMeta("pass");
   // 이 기기 캐시의 최근 분만 그린 뒤(새로고침에도 대화 유지, 화면은 가볍게),
   // 마지막 seq 이후만 이어받는다. 나머지 이력은 IndexedDB·PC 백업에 그대로 있다.
-  for (const rec of (await allEntries()).sort((a, b) => a.seq - b.seq).slice(-MAX_DOM)) appendRecord(rec, { silent: true });
+  const cached = (await allEntries()).sort((a, b) => a.seq - b.seq);
+  const firstShown = cached.slice(-MAX_DOM);
+  for (const rec of firstShown) appendRecord(rec, { silent: true });
+  oldestShownSeq = firstShown.length ? firstShown[0].seq : null; // 여기부터 위로 거슬러 올라간다
+  noMoreOlder = cached.length <= firstShown.length;
   scroll(); updateToBottom(); // 대량으로 그린 뒤 한 번만 바닥으로 스크롤
   connect();
 }
