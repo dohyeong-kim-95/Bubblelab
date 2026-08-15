@@ -1324,6 +1324,35 @@ function scroll() { log().scrollTop = log().scrollHeight; }
 function scrollToBottom(smooth) { const el = log(); el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "auto" }); }
 // 스크롤이 위로 올라가 있으면 "맨 아래로" 버튼을 띄운다(바닥 근처면 숨김).
 function updateToBottom() { const b = $("to-bottom"); if (b) b.hidden = atBottom(); }
+// 앱을 열면 채팅이 바닥이 아니라 조금 올라간 자리에서 시작하던 문제.
+// 초기 렌더 직후의 한 번짜리 scroll() 은 그 순간의 높이만 보고 끝난다. 그 뒤에
+// 높이를 바꾸는 일이 여럿 있다 — 사진·스티커가 디코딩되며 자리를 차지하고,
+// 모바일에서는 주소창·키보드·safe-area 가 정리되며 보이는 영역 자체가 줄어든다.
+// 어느 쪽이든 결과는 같다: 바닥이었던 자리가 위로 밀린다.
+// 그래서 잠깐 동안 높이 변화를 따라다니며 바닥을 유지하되, 사용자가 스크롤을
+// 건드리면 그 순간 손을 뗀다(읽고 있던 자리를 뺏지 않는다).
+function holdBottomBriefly(ms = 3000) {
+  const el = log();
+  let active = true;
+  const bump = () => { if (active) { scroll(); updateToBottom(); } };
+  const ro = new ResizeObserver(bump);      // 보이는 영역이 줄어드는 경우(주소창·키보드)
+  ro.observe(el);
+  const release = () => {
+    if (!active) return;
+    active = false;
+    ro.disconnect();
+    window.visualViewport?.removeEventListener("resize", bump);
+    for (const ev of ["wheel", "touchstart", "keydown"]) el.removeEventListener(ev, release);
+  };
+  window.visualViewport?.addEventListener("resize", bump);
+  for (const img of el.querySelectorAll("img")) { // 콘텐츠가 늘어나는 경우(사진·스티커)
+    if (img.complete) continue;
+    img.addEventListener("load", bump, { once: true });
+    img.addEventListener("error", bump, { once: true }); // 깨진 사진도 자리를 차지한다
+  }
+  for (const ev of ["wheel", "touchstart", "keydown"]) el.addEventListener(ev, release, { passive: true });
+  setTimeout(release, ms); // 오래 걸리는 사진 하나 때문에 영영 붙잡고 있지 않는다
+}
 log().addEventListener("scroll", updateToBottom, { passive: true });
 $("to-bottom").addEventListener("click", () => scrollToBottom(true));
 $("lightbox").addEventListener("click", (e) => { if (e.target === $("lightbox")) closeLb(); }); // 배경 탭 → 닫기
@@ -2258,6 +2287,7 @@ async function enterWith(key, name) {
   // 마지막 seq 이후만 이어받는다. 나머지 이력은 IndexedDB·PC 백업에 그대로 있다.
   for (const rec of (await allEntries()).sort((a, b) => a.seq - b.seq).slice(-MAX_DOM)) appendRecord(rec, { silent: true });
   scroll(); updateToBottom(); // 대량으로 그린 뒤 한 번만 바닥으로 스크롤
+  holdBottomBriefly(); // 사진·뷰포트 변화로 밀려나지 않게 잠깐 바닥을 붙잡는다
   connect();
 }
 
