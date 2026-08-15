@@ -72,8 +72,14 @@
   .menu button[aria-checked=true] { color: var(--pink); font-weight: 600; }
 
   #log-wrap { flex: 1; min-height: 0; position: relative; display: flex; }
-  #log { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column;
+  /* 메신저의 표준 "최하단 보장": 스크롤 컨테이너를 column-reverse 로 두면 시각적
+     바닥이 scrollTop 0 이 되고, 콘텐츠가 늘어나도(사진이 늦게 디코딩되거나 주소창이
+     정리돼도) 브라우저가 알아서 바닥을 유지한다. 스크롤 앵커링(overflow-anchor)에
+     기대지 않으므로 그걸 지원하지 않는 **iOS Safari 에서도 똑같이 동작**한다.
+     안쪽 #log-inner 를 다시 column 으로 두어 메시지 순서·append 로직은 그대로 쓴다. */
+  #log { flex: 1; overflow-y: auto; display: flex; flex-direction: column-reverse;
          max-width: 44rem; width: 100%; margin: 0 auto; }
+  #log-inner { display: flex; flex-direction: column; padding: 1rem; }
   /* 스크롤이 위로 올라가 있을 때만 뜨는 "맨 아래로" 버튼 (util/chat 패턴) */
   #to-bottom { position: absolute; left: 50%; transform: translateX(-50%); bottom: .8rem;
                width: 2.6rem; height: 2.6rem; border-radius: 50%; cursor: pointer;
@@ -629,7 +635,7 @@
 </header>
 
 <div id="log-wrap" class="hidden">
-  <div id="log"></div>
+  <div id="log"><div id="log-inner"></div></div>
   <button id="to-bottom" type="button" hidden aria-label="맨 아래로">⬇</button>
 </div>
 
@@ -1318,42 +1324,14 @@ function clearCache() {
 }
 
 // ── 렌더 ─────────────────────────────────────────────────────
-const log = () => $("log");
-function atBottom() { const el = log(); return el.scrollHeight - el.scrollTop - el.clientHeight < 80; }
-function scroll() { log().scrollTop = log().scrollHeight; }
-function scrollToBottom(smooth) { const el = log(); el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "auto" }); }
+const log = () => $("log-inner");   // 메시지가 쌓이는 곳(순서 그대로)
+const logBox = () => $("log");      // 스크롤 컨테이너(column-reverse)
+function atBottom() { return logBox().scrollTop > -80; } // column-reverse: 0 이 바닥, 위는 음수
+function scroll() { logBox().scrollTop = 0; }
+function scrollToBottom(smooth) { logBox().scrollTo({ top: 0, behavior: smooth ? "smooth" : "auto" }); }
 // 스크롤이 위로 올라가 있으면 "맨 아래로" 버튼을 띄운다(바닥 근처면 숨김).
 function updateToBottom() { const b = $("to-bottom"); if (b) b.hidden = atBottom(); }
-// 앱을 열면 채팅이 바닥이 아니라 조금 올라간 자리에서 시작하던 문제.
-// 초기 렌더 직후의 한 번짜리 scroll() 은 그 순간의 높이만 보고 끝난다. 그 뒤에
-// 높이를 바꾸는 일이 여럿 있다 — 사진·스티커가 디코딩되며 자리를 차지하고,
-// 모바일에서는 주소창·키보드·safe-area 가 정리되며 보이는 영역 자체가 줄어든다.
-// 어느 쪽이든 결과는 같다: 바닥이었던 자리가 위로 밀린다.
-// 그래서 잠깐 동안 높이 변화를 따라다니며 바닥을 유지하되, 사용자가 스크롤을
-// 건드리면 그 순간 손을 뗀다(읽고 있던 자리를 뺏지 않는다).
-function holdBottomBriefly(ms = 3000) {
-  const el = log();
-  let active = true;
-  const bump = () => { if (active) { scroll(); updateToBottom(); } };
-  const ro = new ResizeObserver(bump);      // 보이는 영역이 줄어드는 경우(주소창·키보드)
-  ro.observe(el);
-  const release = () => {
-    if (!active) return;
-    active = false;
-    ro.disconnect();
-    window.visualViewport?.removeEventListener("resize", bump);
-    for (const ev of ["wheel", "touchstart", "keydown"]) el.removeEventListener(ev, release);
-  };
-  window.visualViewport?.addEventListener("resize", bump);
-  for (const img of el.querySelectorAll("img")) { // 콘텐츠가 늘어나는 경우(사진·스티커)
-    if (img.complete) continue;
-    img.addEventListener("load", bump, { once: true });
-    img.addEventListener("error", bump, { once: true }); // 깨진 사진도 자리를 차지한다
-  }
-  for (const ev of ["wheel", "touchstart", "keydown"]) el.addEventListener(ev, release, { passive: true });
-  setTimeout(release, ms); // 오래 걸리는 사진 하나 때문에 영영 붙잡고 있지 않는다
-}
-log().addEventListener("scroll", updateToBottom, { passive: true });
+logBox().addEventListener("scroll", updateToBottom, { passive: true });
 $("to-bottom").addEventListener("click", () => scrollToBottom(true));
 $("lightbox").addEventListener("click", (e) => { if (e.target === $("lightbox")) closeLb(); }); // 배경 탭 → 닫기
 $("lb-close").addEventListener("click", (e) => { e.stopPropagation(); closeLb(); });
@@ -2287,7 +2265,6 @@ async function enterWith(key, name) {
   // 마지막 seq 이후만 이어받는다. 나머지 이력은 IndexedDB·PC 백업에 그대로 있다.
   for (const rec of (await allEntries()).sort((a, b) => a.seq - b.seq).slice(-MAX_DOM)) appendRecord(rec, { silent: true });
   scroll(); updateToBottom(); // 대량으로 그린 뒤 한 번만 바닥으로 스크롤
-  holdBottomBriefly(); // 사진·뷰포트 변화로 밀려나지 않게 잠깐 바닥을 붙잡는다
   connect();
 }
 
@@ -4032,7 +4009,7 @@ function paneDragEnd() {
 }
 // #map 은 자체 확대/이동 제스처를 쓰므로 여기서 제외한다(지도에서 오른쪽 스와이프로
 // 캘린더 복귀는 지도 제스처 쪽에서 배율 1일 때 처리).
-for (const src of [log(), $("cal")]) {
+for (const src of [logBox(), $("cal")]) {
   src.addEventListener("touchstart", paneDragStart, { passive: true });
   src.addEventListener("touchmove", paneDragMove, { passive: false });
   src.addEventListener("touchend", paneDragEnd);
