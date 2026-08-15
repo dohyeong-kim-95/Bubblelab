@@ -8,7 +8,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   GRID_LIMITS, buildDateGrid, comboKey, validateDestination, flightGrid, findFlight,
-  parseAmadeusOffers, amadeusConfig, createFlightProvider, mockPrice,
+  parseAmadeusOffers, amadeusConfig, createFlightProvider, mockPrice, qualityOf,
   summarizeObservations, summarizeChecks, pickStaleCombos,
 } from "./trip-flights.js";
 import { TripWatchDO } from "./trip-watch.js";
@@ -143,10 +143,11 @@ test("가격이 없는 offer 는 무시하고, 하나도 없으면 null", () => 
 
 /* ── 프로바이더 선택 ─────────────────────────────────────────────────── */
 
-test("실제 예매가는 프로덕션 키일 때만 예매가로 센다", () => {
-  assert.equal(amadeusConfig({ AMADEUS_ENV: "production" }).bookable, true);
-  assert.equal(amadeusConfig({ AMADEUS_ENV: "test" }).bookable, false);
-  assert.equal(amadeusConfig({}).bookable, false, "기본값은 테스트 환경이라 참고가다");
+test("프로덕션 키라도 '결제 가능'이 아니라 live 다", () => {
+  // 검색 결과 가격은 좌석·수수료 때문에 결제 화면에서 바뀔 수 있다.
+  assert.equal(amadeusConfig({ AMADEUS_ENV: "production" }).quality, "live");
+  assert.equal(amadeusConfig({ AMADEUS_ENV: "test" }).quality, "reference");
+  assert.equal(amadeusConfig({}).quality, "reference", "기본값은 테스트 환경이라 참고가다");
   assert.match(amadeusConfig({ AMADEUS_ENV: "production" }).host, /^https:\/\/api\.amadeus\.com$/);
 });
 
@@ -155,14 +156,21 @@ test("프로바이더는 env 하나로 갈아끼운다", () => {
   assert.equal(createFlightProvider({ AMADEUS_CLIENT_ID: "x" }).name, "amadeus/test");
   const sink = createFlightProvider({ TRIP_FLIGHT_PROVIDER: "sink" });
   assert.equal(sink.live, false, "데몬 방식은 엣지가 조회하지 않는다");
-  assert.equal(sink.bookable, true);
+  assert.equal(sink.quality, "live");
 });
 
-test("목업은 절대 예매가가 아니다", async () => {
+test("목업은 언제나 참고가다", async () => {
   const provider = createFlightProvider({ TRIP_FLIGHT_PROVIDER: "mock" });
   const quote = await provider.quote({ origin: "ICN", dest: "ULN", depart: "2026-09-01", adults: 1 });
-  assert.equal(quote.bookable, false);
-  assert.equal(provider.bookable, false);
+  assert.equal(quote.quality, "reference");
+  assert.equal(provider.quality, "reference");
+});
+
+test("옛 레코드의 bookable 도 읽는다 (quality 로 옮기기 전 관측)", () => {
+  assert.equal(qualityOf({ bookable: true }), "live");
+  assert.equal(qualityOf({ bookable: false }), "reference");
+  assert.equal(qualityOf({ quality: "verified" }), "verified");
+  assert.equal(qualityOf({}), "reference");
 });
 
 test("목업 가격은 같은 입력이면 같다 — 그래프가 이유 없이 요동치면 안 된다", () => {
@@ -174,7 +182,7 @@ test("목업 가격은 같은 입력이면 같다 — 그래프가 이유 없이
 /* ── 집계 ────────────────────────────────────────────────────────────── */
 
 const obs = (depart, ret, price, extra = {}) =>
-  ({ depart, ret, price, bookable: true, observedAt: 1000, ...extra });
+  ({ depart, ret, price, quality: "live", observedAt: 1000, ...extra });
 
 test("집계는 최저가·출발일별 최저가·추이를 한 번에 낸다", () => {
   const s = summarizeObservations({ id: "w1" }, [
@@ -192,7 +200,7 @@ test("집계는 최저가·출발일별 최저가·추이를 한 번에 낸다",
   assert.equal(s.change, 720000 - 900000, "직전 관측일 대비 변화");
   assert.equal(s.stats.min, 720000);
   assert.equal(s.stats.max, 880000);
-  assert.equal(s.stats.bookable, true);
+  assert.equal(s.stats.quality, "live");
   assert.equal(s.stats.reference, false);
 });
 
@@ -202,13 +210,13 @@ test("관측이 한 점뿐이면 변화는 null이다 (0%는 '안정적'으로 �
   assert.equal(s.change, null);
 });
 
-test("참고가가 하나라도 섞이면 reference 로 표시된다", () => {
+test("참고가가 하나라도 섞이면 배지를 낮춘다", () => {
   const s = summarizeObservations({}, [
     obs("2026-09-01", null, 500000),
-    obs("2026-09-02", null, 400000, { bookable: false }),
+    obs("2026-09-02", null, 400000, { quality: "reference" }),
   ]);
-  assert.equal(s.stats.reference, true, "참고가가 섞였는데 예매가처럼 보이면 안 된다");
-  assert.equal(s.stats.bookable, true);
+  assert.equal(s.stats.quality, "reference", "참고가가 섞였는데 실시간처럼 보이면 안 된다");
+  assert.equal(s.stats.reference, true);
 });
 
 test("가격이 0이거나 숫자가 아닌 관측은 격자에서 빠진다", () => {

@@ -17,11 +17,17 @@
 //                                    같은 조합에 갇히지 않는다.
 //   hist:<flightId>                … 관측일별 최저가 + 그날 몇 칸을 봤는지(coverage)
 //   cursor:<flightId>              … 마지막 갱신 시각·시도 수 (디버깅용)
+//   pkg:<destId>:<source>:<id>     … 패키지 상품의 **최신** 관측 (직전 값도 함께)
+//   pkghist:<destId>               … 관측일별 패키지 최저가(effectivePrice 기준)
 //   watch:<id>                     … (옛 모델) 첫 접근 때 dest 아래로 옮기고 지운다
 import {
   GRID_LIMITS, CHECK_STATUSES, validateDestination, flightGrid, findFlight,
   createFlightProvider, summarizeObservations, summarizeChecks, pickStaleCombos,
+  qualityOf,
 } from "./trip-flights.js";
+import {
+  PACKAGE_LIMITS, normalizePackage, packageKey, summarizePackages,
+} from "./trip-packages.js";
 
 const json = (data, status = 200) =>
   Response.json(data, { status, headers: { "Cache-Control": "no-store" } });
@@ -138,8 +144,8 @@ export class TripWatchDO {
         carrier: String(raw?.carrier ?? "").slice(0, 40),
         flights: String(raw?.flights ?? "").slice(0, 80),
         stops: Math.max(0, Math.round(Number(raw?.stops) || 0)),
-        // 프로바이더가 "실제 예매 가능한 값"이라고 말한 것만 예매가로 센다.
-        bookable: raw?.bookable === true,
+        // 가격의 성격(reference|live|verified). 옛 레코드의 bookable 도 읽어 준다.
+        quality: qualityOf(raw),
         source: String(raw?.source ?? "").slice(0, 40),
         observedAt: now,
       };
@@ -297,11 +303,17 @@ export class TripWatchDO {
             .reduce((min, o) => (!min || o.price < min.price ? o : min), null);
           flights.push({ ...flight, best, coverage: summarizeChecks(checks, total) });
         }
-        summarized.push({ ...destination, flights });
+        const observations = await this.packages(destination.id);
+        const previous = new Map(observations.map((o) => [packageKey(o), o.previous]).filter(([, v]) => v));
+        summarized.push({
+          ...destination,
+          flights,
+          packageSummary: summarizePackages(observations, previous),
+        });
       }
       return json({
         destinations: summarized,
-        provider: { name: provider.name, bookable: provider.bookable, live: provider.live,
+        provider: { name: provider.name, quality: provider.quality, live: provider.live,
           configured: provider.configured },
         limits: GRID_LIMITS,
       });
@@ -333,6 +345,7 @@ export class TripWatchDO {
       const id = decodeURIComponent(path.slice("/destinations/".length));
       const destination = await this.state.storage.get(`dest:${id}`);
       for (const flight of destination?.flights ?? []) await this.dropFlight(flight.id);
+      await this.dropPackages(id);
       await this.state.storage.delete(`dest:${id}`);
       return json({ deleted: id });
     }
@@ -347,7 +360,7 @@ export class TripWatchDO {
         ...summarizeObservations(found.flight, await this.observations(id), await this.history(id)),
         destination: found.destination,
         cursor: (await this.state.storage.get(`cursor:${id}`)) ?? null,
-        provider: { name: provider.name, bookable: provider.bookable },
+        provider: { name: provider.name, quality: provider.quality },
         // 한 바퀴를 얼마나 돌았는지. 시도(attempted)와 답을 얻은 것(resolved)을
         // 나눠야 "120/120 확인"인데 실제로는 40개가 429였던 상황이 숨지 않는다.
         coverage: summarizeChecks(checks, await this.gridSize(id)),
@@ -363,6 +376,27 @@ export class TripWatchDO {
       return json(await this.ingest(flightId, list));
     }
 
+    // 패키지 관측 push (데몬 전용 경로로 들어온다).
+    if (path === "/observe-packages" && request.method === "POST") {
+      const body = await request.json().catch(() => null);
+      const destinationId = String(body?.destinationId ?? "");
+      const source = String(body?.source ?? "modetour").slice(0, 20);
+      const result = await this.ingestPackages(destinationId, body?.packages, source);
+      return json(result, result.status ?? 200);
+    }
+
+    if (path === "/packages" && request.method === "GET") {
+      const id = url.searchParams.get("destination") ?? "";
+      const observations = await this.packages(id);
+      const previous = new Map(observations.map((o) => [packageKey(o), o.previous]).filter(([, v]) => v));
+      return json({
+        destinationId: id,
+        packages: observations.sort((a, b) => a.effectivePrice - b.effectivePrice),
+        summary: summarizePackages(observations, previous),
+        history: await this.packageHistory(id),
+      });
+    }
+
     if (path === "/refresh" && request.method === "POST") {
       const body = await request.json().catch(() => null);
       const limit = Math.min(60, Math.max(1, Math.round(Number(body?.limit) || 12)));
@@ -374,6 +408,76 @@ export class TripWatchDO {
     }
 
     return json({ error: "not found" }, 404);
+  }
+
+  async packages(destinationId) {
+    const map = await this.state.storage.list({ prefix: `pkg:${destinationId}:` });
+    return [...map.values()];
+  }
+
+  async packageHistory(destinationId) {
+    return (await this.state.storage.get(`pkghist:${destinationId}`)) ?? [];
+  }
+
+  /**
+   * 패키지 관측을 반영한다. 상품마다 **직전 값을 함께 들고** 있어야 "가격이 내렸다"를
+   * 같은 상품끼리 말할 수 있다(더 싼 상품이 새로 뜬 것과 다른 이야기다).
+   */
+  async ingestPackages(destinationId, rows, source, now = Date.now()) {
+    if (!await this.state.storage.get(`dest:${destinationId}`)) {
+      return { error: "destination not found", status: 404 };
+    }
+    const existing = new Map((await this.packages(destinationId)).map((o) => [packageKey(o), o]));
+    const writes = {};
+    let accepted = 0;
+
+    for (const raw of (rows ?? []).slice(0, PACKAGE_LIMITS.maxProducts)) {
+      const obs = normalizePackage(raw, { destinationId, source, now });
+      if (!obs.productId || !Number.isFinite(obs.effectivePrice)) continue;
+      const key = packageKey(obs);
+      const before = existing.get(key);
+      writes[`pkg:${destinationId}:${key}`] = {
+        ...obs,
+        previous: before
+          ? { effectivePrice: before.effectivePrice, listedPrice: before.listedPrice, observedAt: before.observedAt }
+          : (before === undefined ? null : before.previous ?? null),
+      };
+      accepted += 1;
+    }
+    if (!accepted) return { accepted: 0 };
+    await this.state.storage.put(writes);
+    await this.recomputePackageHistory(destinationId, now);
+    return { accepted };
+  }
+
+  /** 패키지 추이도 항공과 같은 규칙 — 그날 관측된 것만, 하루 안에서는 내려가기만. */
+  async recomputePackageHistory(destinationId, now = Date.now()) {
+    const date = kstDay(now);
+    const today = (await this.packages(destinationId))
+      .filter((o) => kstDay(o.observedAt ?? 0) === date && Number.isFinite(o.effectivePrice));
+    const hist = await this.packageHistory(destinationId);
+    const previous = hist.find((h) => h.date === date);
+    const candidates = [
+      ...today.map((o) => o.effectivePrice),
+      ...(Number.isFinite(previous?.min) ? [previous.min] : []),
+    ];
+    const entry = {
+      date,
+      min: candidates.length ? Math.min(...candidates) : null,
+      products: today.length,
+      // 최저가에 모르는 비용이 붙어 있으면 그 점은 하한이다 — 그래프가 과장하지 않게.
+      floor: today.some((o) => o.floor),
+    };
+    const next = hist.filter((h) => h.date !== date).concat(entry)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    await this.state.storage.put(`pkghist:${destinationId}`, next.slice(-PACKAGE_LIMITS.historyDays));
+    return entry;
+  }
+
+  async dropPackages(destinationId) {
+    const keys = await this.state.storage.list({ prefix: `pkg:${destinationId}:` });
+    if (keys.size) await this.state.storage.delete([...keys.keys()]);
+    await this.state.storage.delete(`pkghist:${destinationId}`);
   }
 
   /** 노선 하나에 딸린 관측·조회이력·추이를 지운다. */

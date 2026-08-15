@@ -637,7 +637,9 @@ let destinations = [];
 let selected = null;    // 펼친 여행지 id
 let selectedFlight = null;
 let grid = null;
-let planError = "";
+let packages = null;   // 패키지 목록을 펼친 여행지의 응답
+let planError = "";    // 목록 자체를 못 불러온 경우
+let detailError = "";  // 격자·패키지 상세만 실패한 경우
 let editingDestination = null;
 const token = () => localStorage.getItem(TOKEN_KEY) ?? "";
 
@@ -658,9 +660,7 @@ async function loadDestinations() {
     const data = await api("/destinations");
     destinations = data.destinations ?? [];
     const p = data.provider ?? {};
-    const kind = p.bookable
-      ? '<span class="badge live">예매가</span>'
-      : '<span class="badge ref">참고가</span>';
+    const kind = qualityBadge(p.quality);
     $("watchProvider").innerHTML = `가격 관측 ${kind} <span class="dim">${esc(p.name ?? "?")}</span>` +
       (p.live === false ? ' <span class="dim">· 집 PC 데몬이 수집</span>' : "");
     planError = "";
@@ -678,14 +678,29 @@ async function loadDestinations() {
   renderWatches();
 }
 
+// 상세(격자·패키지) 실패가 목록 전체를 덮으면 안 된다 — 노선 하나가 사라졌을 뿐인데
+// 여행지 카드가 통째로 에러 문구로 바뀌면 다른 여행지도 못 본다.
 async function loadGrid(flightId) {
   try {
     grid = await api(`/grid?flight=${encodeURIComponent(flightId)}`);
+    detailError = "";
   } catch (error) {
     grid = null;
-    planError = error.message;
+    detailError = error.message;
   }
 }
+
+// 가격의 성격. "예매가"라고 부르지 않는다 — 검색 결과 가격은 좌석·수수료 때문에
+// 결제 화면에서 바뀔 수 있어서, 그대로 결제된다고 오해하면 예산이 어긋난다.
+const QUALITY = {
+  verified: { cls: "live", label: "확인됨", note: "결제 직전까지 확인한 값" },
+  live: { cls: "live", label: "실시간", note: "예약 직전 재확인 필요" },
+  reference: { cls: "ref", label: "참고가", note: "그대로 결제되는 값이 아님" },
+};
+const qualityBadge = (q) => {
+  const kind = QUALITY[q] ?? QUALITY.reference;
+  return `<span class="badge ${kind.cls}" title="${kind.note}">${kind.label}</span>`;
+};
 
 // 나라 코드 → 국기. 코드가 없으면 지구본.
 const flagOf = (code) => (/^[A-Z]{2}$/.test(code ?? "")
@@ -702,7 +717,10 @@ function renderWatches() {
       : `<div class="card empty"><p>관측 중인 여행 후보가 없습니다.</p>
          <p class="dim">＋ 여행 후보 추가로 "몽골" 같은 여행지를 등록하고,<br>
          그 아래에 ICN→UBN 같은 노선을 답니다. 6시간마다 조금씩 조사합니다.</p></div>`;
-  $("watchDetail").innerHTML = grid && selectedFlight ? detailView(grid) : "";
+  $("watchDetail").innerHTML = detailError
+    ? `<div class="card empty">${esc(detailError)}</div>`
+    : (packages ? packageView(packages)
+      : (grid && selectedFlight ? detailView(grid) : ""));
 }
 
 function destinationCard(d) {
@@ -725,9 +743,7 @@ function destinationCard(d) {
     </div>`;
   }).join("") || '<div class="dim">노선이 없습니다 — ⚙️ 에서 추가하세요</div>';
 
-  const packages = (d.packages ?? []).length
-    ? `<div class="dim">🧳 패키지 ${d.packages.length}건 등록 · 수집기 준비 중</div>`
-    : '<div class="dim">🧳 패키지 <span class="dim">아직 수집 전</span></div>';
+  const packages = packageLine(d);
 
   return `<div class="watch card" data-dest="${esc(d.id)}" aria-selected="${on}">
     <div class="top">
@@ -744,6 +760,31 @@ function destinationCard(d) {
         <button class="ghost" data-refresh="${esc(d.id)}">🔄 지금 조사</button>
       </span>
     </div>
+  </div>`;
+}
+
+// 패키지는 표시가가 아니라 **실질가(effectivePrice)** 로 줄을 세운다 —
+// 표시가로 비교하면 현지경비를 감춘 상품이 항상 이긴다.
+function packageLine(d) {
+  const s = d.packageSummary;
+  if (!s?.count) {
+    const watching = (d.packages ?? []).length;
+    return `<div class="route-line" data-packages="${esc(d.id)}" role="button" tabindex="0">
+      <span>🧳 패키지</span>
+      <span class="p dim">${watching ? "수집 대기" : "아직 수집 전"}</span></div>`;
+  }
+  const best = s.best;
+  const delta = Number.isFinite(s.change) && s.change !== 0
+    ? `<span class="delta ${s.change < 0 ? "down" : "up"}">${s.change < 0 ? "▼" : "▲"} ${esc(formatShort(Math.abs(s.change)))}</span>`
+    : "";
+  const floor = s.floor
+    ? ` <span class="badge ref" title="${esc(s.unknownCosts.join(", "))}">추가비용 확인 필요</span>`
+    : "";
+  const span = best.nights ? `${best.nights}박${best.days ? `${best.days}일` : ""}` : "";
+  return `<div class="route-line" data-packages="${esc(d.id)}" role="button" tabindex="0">
+    <span>🧳 ${esc(best.title || "패키지")}</span>
+    <span class="p">${esc(formatKRW(best.effectivePrice))}${s.floor ? "~" : ""}/인 ${delta}</span>
+    <span class="dim">${esc([span, best.airline, `${s.count}건`].filter(Boolean).join(" · "))}</span>${floor}
   </div>`;
 }
 
@@ -792,9 +833,8 @@ function detailView(g) {
     return `<tr><th class="rowh">${esc(d.slice(5).replace("-", "/"))} (${esc(weekday(d))})</th>${tds}</tr>`;
   }).join("");
 
-  const badge = g.stats?.reference
-    ? '<span class="badge ref">참고가 포함</span>'
-    : '<span class="badge live">예매가</span>';
+  const badge = qualityBadge(g.stats?.quality) +
+    (g.stats?.quality === "live" ? ' <span class="dim">예약 직전 재확인 필요</span>' : "");
 
   return `${head2}<div class="card bud">
     <div class="top"><span class="name">최저 ${esc(formatKRW(min))}</span> ${badge}
@@ -828,6 +868,43 @@ const nightsOf = (c) => {
   const b = Date.parse(`${c.ret}T00:00:00Z`);
   return Math.round((b - a) / 86400000);
 };
+
+/* 패키지 상세 — 표시가와 실질가를 나란히 둔다. 이게 이 화면의 핵심이다:
+ * 표시가 749,900원 옆에 "현지경비·선택관광 확인 필요"가 없으면 자유여행과
+ * 비교할 때 패키지가 실제보다 싸 보인다. */
+function packageView(data) {
+  const rows = data.packages ?? [];
+  if (!rows.length) {
+    return `<h2>🧳 패키지</h2><div class="card empty">
+      아직 수집된 상품이 없습니다.
+      <br><span class="dim">집 PC 데몬이 여행사 페이지를 읽어 밀어 넣습니다
+      (<code>POST /_trip/snapshot</code>).</span></div>`;
+  }
+  const list = rows.map((p) => {
+    const extra = p.effectivePrice - p.listedPrice;
+    return `<div class="card bud">
+      <div class="top">
+        <span class="name">${esc(p.title || "(제목 없음)")}</span>
+        <span>${esc(formatKRW(p.effectivePrice))}${p.floor ? "~" : ""}/인</span>
+      </div>
+      <div class="note">${esc([
+        p.nights ? `${p.nights}박${p.days ? `${p.days}일` : ""}` : "",
+        p.departureDate, p.airline,
+        p.direct === null ? "" : (p.direct ? "직항" : "경유"),
+      ].filter(Boolean).join(" · "))}</div>
+      <div class="note">표시가 ${esc(formatKRW(p.listedPrice))}${extra > 0 ? ` · 확인된 추가 ${esc(formatKRW(extra))}` : ""}
+        ${p.floor ? `· <span class="over">추가비용 확인 필요: ${esc(p.unknownCosts.join(", "))}</span>` : ""}</div>
+      ${p.included?.length ? `<div class="note">포함 ${esc(p.included.join(", "))}</div>` : ""}
+      ${p.excluded?.length ? `<div class="note">불포함 ${esc(p.excluded.join(", "))}</div>` : ""}
+      <div class="note dim">${esc(p.source)} · ${esc(observedLabel(p.observedAt))} 관측
+        ${p.url ? `· <a href="${esc(p.url)}" target="_blank" rel="noopener">상품 보기</a>` : ""}</div>
+    </div>`;
+  }).join("");
+  return `<h2>🧳 패키지 ${rows.length}건</h2>
+    <p class="dim">실질가(표시가 + 확인된 필수비용) 순입니다. 모르는 비용은 0원으로 세지 않고
+    "확인 필요"로 둡니다 — 그래야 나중에 자유여행과 정직하게 비교됩니다.</p>
+    ${list}`;
+}
 
 // 격자 칸은 "마지막으로 본 값"이다 — 며칠 전 값일 수 있으니 언제 본 것인지 밝힌다.
 function observedLabel(ms) {
@@ -990,10 +1067,27 @@ $("planMode").addEventListener("click", async (e) => {
     }
     return;
   }
+  const pkg = e.target.closest("[data-packages]");
+  if (pkg) {
+    selected = pkg.closest("[data-dest]").dataset.dest;
+    selectedFlight = null;
+    grid = null;
+    try {
+      packages = await api(`/packages?destination=${encodeURIComponent(selected)}`);
+      detailError = "";
+    } catch (error) {
+      packages = null;
+      detailError = error.message;
+    }
+    renderWatches();
+    return;
+  }
   const route = e.target.closest("[data-flight]");
   if (route) {
     selected = route.closest("[data-dest]").dataset.dest;
     selectedFlight = route.dataset.flight;
+    packages = null;
+    detailError = "";
     await loadGrid(selectedFlight);
     renderWatches();
     return;
@@ -1001,6 +1095,7 @@ $("planMode").addEventListener("click", async (e) => {
   const card = e.target.closest("[data-dest]");
   if (card && card.dataset.dest !== selected) {
     selected = card.dataset.dest;
+    packages = null;
     selectedFlight = destinations.find((d) => d.id === selected)?.flights?.[0]?.id ?? null;
     if (selectedFlight) await loadGrid(selectedFlight);
     else grid = null;
@@ -1015,10 +1110,10 @@ $("planMode").addEventListener("click", async (e) => {
 
 $("planMode").addEventListener("keydown", (e) => {
   if (e.key !== "Enter" && e.key !== " ") return;
-  const route = e.target.closest("[data-flight]");
-  if (!route) return;
+  const line = e.target.closest("[data-flight], [data-packages]");
+  if (!line) return;
   e.preventDefault();
-  route.click();
+  line.click();
 });
 
 function adoptCombo(value) {

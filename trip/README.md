@@ -78,28 +78,42 @@ DestinationWatch  몽골 · MN · 2027.06~09 · 5~8박 · 2명 · watching|selec
   발급: admin → `POST /api/trip/token` → 계획 탭 🔑 에 붙여 넣기(브라우저에 저장).
   데몬 push 만 별도 secret(`TRIP_SINK_SECRET`)이라 화면 토큰이 새도 분리돼 있다.
 
-### "예매가"와 "참고가" — 이 구분이 제일 중요하다
+### 가격의 성격 — 이 구분이 제일 중요하다
 
-보고 싶은 건 *지금 결제하면 실제로 나갈 금액*이지 참고 시세가 아니다. 그래서 관측마다
-`bookable` 을 같이 저장하고 화면이 배지로 나눈다. 참고가가 하나라도 섞이면 "참고가
-포함"으로 낮춰 단다.
+관측마다 `quality` 를 같이 저장하고 화면이 배지로 나눈다. 하나라도 낮은 게 섞이면
+배지를 낮춰 단다.
+
+| quality | 뜻 |
+| --- | --- |
+| `reference` | 참고 시세(캐시·집계·목업). 그대로 결제되는 값이 아니다 |
+| `live` | 그 시점 실제 판매 화면/검색 결과의 값. **예약 직전 재확인 필요** |
+| `verified` | 결제 직전까지 눌러 좌석·최종가를 확인한 값 (아직 아무도 못 만든다) |
+
+**"예매가(bookable)"라고 부르지 않는다.** 검색 결과 가격은 좌석 재고·수수료 때문에
+결제 화면에서 바뀔 수 있어서, live 를 bookable 로 부르면 그 금액 그대로 살 수 있다고
+오해한다. Amadeus 도 Search → Price → Create Orders 순서를 명시하고, 우리는 아직
+Price 단계를 부르지 않는다.
 
 | 프로바이더 (`TRIP_FLIGHT_PROVIDER`) | 예매가? | 메모 |
 | --- | --- | --- |
-| `amadeus` + `AMADEUS_ENV=production` | ✅ | Flight Offers Search 의 `grandTotal`(세금·수수료 포함) |
-| `amadeus` + 테스트 환경(기본) | ❌ 참고가 | 제한된 캐시 데이터라 실제 예매가가 아니다 |
-| `sink` | ✅ | 집 PC 데몬이 실제 예매 화면에서 받아 `/_trip/snapshot` 으로 push |
-| `mock` (기본, 키 없을 때) | ❌ 참고가 | 로컬 개발용 가짜 가격 |
+| `sink` | live | 집 PC 데몬이 실제 판매 화면에서 받아 `/_trip/snapshot` 으로 push. **평소 경로** |
+| `amadeus` + `AMADEUS_ENV=production` | live | Flight Offers Search 의 `grandTotal`. 키가 있을 때만 |
+| `amadeus` + 테스트 환경 | reference | 제한된 캐시 데이터 |
+| `mock` (자격증명이 없을 때 기본) | reference | 로컬 개발용 가짜 가격 |
 
-**Amadeus 로 실제 예매가를 받으려면 프로덕션 키가 필요하다.** 테스트 키는 노선
-커버리지도 얕아서 ICN→ULN 이 비어 나올 수 있다. 또 GDS 에 없는 LCC·국내 OTA 할인가는
-Amadeus 에 잡히지 않으므로, "내가 실제로 사는 창구의 가격"과 차이가 나면 `sink` 로
-바꾸는 게 맞다.
+> ⚠️ **Amadeus Self-Service 는 종료됐다.** 예전처럼 가입해서 키를 즉시 받는 흐름이
+> 신규 사용자에게는 열려 있지 않고, 지금은 Enterprise 문의 기반이다 — 이 프로젝트
+> 규모에는 과하다. 코드의 amadeus 경로는 **키가 생기면 쓰는 자리**로만 남겨 둔다.
+> 지금 프로덕션은 자격증명이 없어 `mock`(참고가)으로 돌고 있다.
 
-> ⚠️ **집 PC 데몬(`sink`)은 아직 만들지 않았다.** 서버 쪽 입구
-> (`POST /_trip/snapshot`, `Bearer TRIP_SINK_SECRET`)와 저장·집계는 준비돼 있고,
-> 실제로 긁어서 밀어 넣는 `_src/trip-sink/` 는 다음 작업이다. Amadeus 프로덕션 키로
-> 충분한지 먼저 보고 정하기로 한 부분이다.
+그리고 Amadeus 는 애초에 LCC 와 일부 대형 항공사를 빼고 published GDS fare 중심이라,
+"한국 소비자가 실제로 싸게 사는 가격"을 온전히 잡지 못한다. **평소 경로는 집 PC
+데몬(`sink`)** 이 맞다 — 네이버 항공권·구글 플라이트 같은 실제 구매 창구를 보고
+아래 payload 를 밀어 넣으면 된다.
+
+> ⚠️ **집 PC 데몬(`_src/trip-sink/`)은 아직 만들지 않았다.** 서버 쪽 입구
+> (`POST /_trip/snapshot`, `Bearer TRIP_SINK_SECRET`)와 저장·집계·교정 도구는
+> 준비돼 있어, 지금도 curl 로 밀어 넣으면 그대로 쌓인다.
 
 Payload 는 두 경로가 같다:
 
@@ -166,3 +180,53 @@ npx wrangler@4 dev --local --local-upstream localhost   # http://localhost:8787/
 라이브 검증은 `node _infra/verify-prod.mjs --only site:trip`(폴더가 있으면 프로브가
 자동 생성된다 — 게이트가 없으므로 200 + HTML을 기대한다). 모바일 스모크 대상이라
 `_infra/e2e/smoke.spec.mjs`의 `SCREENS`에도 `/trip/`이 있다.
+
+
+## 패키지 관측 (PackageWatch v0)
+
+여행지마다 여행사 패키지 상품을 같이 쌓는다. 몽골처럼 **자유여행이 항공+숙소로 끝나지
+않는 곳**(테를지·초원 이동에 차량·기사·가이드·게르가 붙는다)에서는 패키지와의 비교가
+곧 이 화면의 존재 이유다.
+
+### 표시가만 저장하지 않는다
+
+"749,900원" 상품이라도 실제로는 가이드 경비, 필수 선택관광, 기사팁, 현지 결제가 붙는다.
+표시가만 쌓으면 나중에 자유여행과 비교할 때 패키지가 실제보다 싸 보인다.
+
+| 필드 | 뜻 |
+| --- | --- |
+| `listedPrice` | 광고된 1인가 |
+| `mandatoryLocalFee` · `knownMandatoryOptions` | 금액을 아는 필수비용 |
+| `effectivePrice` | listedPrice + 아는 필수비용 |
+| `unknownCosts[]` | 있는 건 아는데 금액을 모르는 것 (예: 선택관광, 기사팁) |
+| `floor` | `unknownCosts` 가 있으면 true — effectivePrice 는 **하한**이다 |
+
+**모르는 값을 0원으로 채우지 않는다.** 화면은 `1,189,000원~/인` 처럼 물결과
+"추가비용 확인 필요" 배지로 하한임을 밝힌다. 최저가 정렬도 표시가가 아니라
+`effectivePrice` 기준이다 — 표시가로 줄 세우면 현지경비를 감춘 상품이 항상 이긴다.
+
+가격 변화는 **같은 상품의 직전 관측**과 비교한다(상품마다 `previous` 를 들고 있다).
+더 싼 상품이 새로 뜬 것과 값이 내린 것은 다른 이야기다.
+
+### 수집 — 파서는 저장된 페이지로 교정한다
+
+여행사 사이트는 우리 배포 밖이고 구조가 자주 바뀐다. 그래서 셀렉터를 짐작해 넣지 않고
+**표준 구조부터** 읽는다: ① JSON-LD(schema.org Product/Offer) ② 페이지에 심긴 상태
+JSON(`__NEXT_DATA__` 등) ③ 둘 다 없으면 **실패로 남긴다** — 억지로 정규식을 긁어 잘못된
+숫자를 저장하는 것보다 "못 읽었다"가 낫다.
+
+```bash
+# 실제 검색 결과 페이지를 저장한 뒤
+node _infra/trip-package-parse.mjs mongolia.html --source modetour --destination <destId>
+node _infra/trip-package-parse.mjs mongolia.html --destination <destId> --json \
+  | curl -X POST https://trip.bubblelab.dev/_trip/snapshot \
+      -H "Authorization: Bearer $TRIP_SINK_SECRET" -H 'Content-Type: application/json' -d @-
+```
+
+> ⚠️ **첫 소스(모두투어)의 셀렉터는 실제 페이지로 검증되지 않았다.** 이 저장소를 만든
+> 환경에서 여행사 사이트로 나가는 네트워크가 막혀 있어 실제 HTML 을 확인하지 못했다.
+> 위 CLI 로 한 번 교정한 뒤에 수집을 시작해야 한다. 목록 페이지에서는 표시가만 읽히므로,
+> 현지 필수경비·선택관광은 상세 페이지를 봐야 하고 그전까지 effectivePrice 는 하한이다.
+
+여행사는 **하나만** 붙인다. parser 와 snapshot 의미를 한 사이트로 안정화한 뒤
+provider 를 복제하는 편이, 여러 곳을 동시에 열고 전부 어중간하게 두는 것보다 낫다.

@@ -1,16 +1,23 @@
 // 항공권 최저가 조회 프로바이더. trip/ 계획 탭의 가격 관측이 여기서 나온다.
 //
-// **가격의 성격이 제일 중요하다.** 우리가 보고 싶은 건 "지금 결제하면 실제로 나갈
-// 금액"이지 참고 시세가 아니다. 그래서 관측마다 `bookable` 을 같이 저장하고 화면이
-// 배지로 구분한다 — 참고가를 예매가처럼 보여 주면 예산 전체가 거짓말이 된다.
+// **가격의 성격이 제일 중요하다.** 그래서 관측마다 `quality` 를 같이 저장하고 화면이
+// 배지로 구분한다 — 참고가를 결제 가능한 값처럼 보여 주면 예산 전체가 거짓말이 된다.
 //
-//   amadeus  … Flight Offers Search. 세금·수수료 포함 총액(grandTotal)이고
-//              프로덕션 키일 때만 실제 예매 가능한 offer 다(테스트 환경은 제한된
-//              캐시 데이터라 bookable=false 로 내려간다).
-//   sink     … 엣지가 조회하지 않는다. 집 PC 데몬이 실제 예매 화면에서 긁어
-//              /_trip/snapshot 으로 밀어 넣는다(_src/trip-sink). GDS 에 없는
-//              LCC·국내 OTA 할인가까지 잡히는 대신 PC 가 꺼져 있으면 멈춘다.
-//   mock     … 로컬 개발·테스트용 가짜 가격. 절대 bookable 이 아니다.
+//   reference … 참고 시세. 캐시·집계·목업. 그대로 결제할 수 있는 값이 아니다.
+//   live      … 그 시점 실제 판매 화면/검색 결과의 값. **예약 직전 재확인은 필요하다.**
+//   verified  … 결제 직전 단계까지 눌러 좌석·최종가를 확인한 값 (아직 아무도 못 만든다).
+//
+// "결제 가능"(bookable)이라는 이름을 쓰지 않는 이유가 여기 있다. 검색 결과 가격은
+// 좌석 재고·수수료 때문에 결제 화면에서 바뀔 수 있어서, live 를 bookable 로 부르면
+// 그 금액 그대로 살 수 있다고 오해한다.
+//
+//   amadeus  … Flight Offers Search. **Self-Service 는 종료돼 신규 발급이 안 된다** —
+//              Enterprise 계약으로 키가 생기면 그때 쓰는 경로로 남겨 둔다.
+//              프로덕션 키면 live, 테스트 환경이면 reference.
+//   sink     … 엣지가 조회하지 않는다. 집 PC 데몬이 실제 판매 화면에서 긁어
+//              /_trip/snapshot 으로 밀어 넣는다. GDS 에 없는 LCC·국내 OTA 특가까지
+//              잡히는 대신 PC 가 꺼져 있으면 멈춘다. 기본값이 이쪽이다.
+//   mock     … 로컬 개발·테스트용 가짜 가격. 언제나 reference.
 //
 // 프로바이더를 바꾸는 건 env 하나(TRIP_FLIGHT_PROVIDER)뿐이고, 저장 형식은 셋 다
 // 같다 — 나중에 갈아끼워도 그동안 쌓은 관측이 그대로 이어진다.
@@ -191,14 +198,26 @@ export function findFlight(destinations, flightId) {
 
 /* ── Amadeus ──────────────────────────────────────────────────────────
  *
- * 테스트 환경(test.api.amadeus.com)은 일부 노선의 캐시된 샘플만 돌려준다.
- * 그래서 여기서 bookable 을 켜지 않는다 — "실제 예매가"로 믿으려면 프로덕션 키가
- * 필요하고, 그 판단을 화면이 아니라 이 계층에서 한 번에 한다.
+ * 테스트 환경(test.api.amadeus.com)은 일부 노선의 캐시된 샘플만 돌려주므로 reference 다.
+ * 프로덕션은 live/complete 데이터라 live 지만, 그마저도 결제 직전 값은 아니다
+ * (Amadeus 도 Search → Price → Create Orders 순서를 명시한다). 그 판단을 화면이
+ * 아니라 이 계층에서 한 번에 한다.
+ *
+ * ⚠️ Self-Service 는 종료됐다. 신규로 키를 받으려면 Enterprise 문의가 필요하고,
+ * 이 프로젝트 규모에는 과하다 — 키가 생기면 쓰는 경로로만 남겨 둔다.
  */
 const AMADEUS_HOSTS = {
   production: "https://api.amadeus.com",
   test: "https://test.api.amadeus.com",
 };
+
+export const PRICE_QUALITY = ["reference", "live", "verified"];
+
+/** 저장된 관측의 가격 성격. 옛 레코드(bookable 불리언)도 읽을 수 있게 한다. */
+export function qualityOf(observation) {
+  if (PRICE_QUALITY.includes(observation?.quality)) return observation.quality;
+  return observation?.bookable === true ? "live" : "reference";
+}
 
 export function amadeusConfig(env) {
   const mode = env.AMADEUS_ENV === "production" ? "production" : "test";
@@ -207,7 +226,9 @@ export function amadeusConfig(env) {
     host: AMADEUS_HOSTS[mode],
     clientId: env.AMADEUS_CLIENT_ID || "",
     clientSecret: env.AMADEUS_CLIENT_SECRET || "",
-    bookable: mode === "production",
+    // 프로덕션은 live/complete 데이터지만 그대로 결제되는 값은 아니다 —
+    // 좌석·최종가는 Flight Offers Price 단계가 확인한다(우리는 아직 안 부른다).
+    quality: mode === "production" ? "live" : "reference",
   };
 }
 
@@ -265,7 +286,7 @@ function amadeusProvider(env) {
 
   return {
     name: `amadeus/${cfg.mode}`,
-    bookable: cfg.bookable,
+    quality: cfg.quality,
     live: true,
     configured: !!(cfg.clientId && cfg.clientSecret),
     async quote(query) {
@@ -288,7 +309,7 @@ function amadeusProvider(env) {
       if (res.status === 429) throw new Error("amadeus rate limited");
       if (!res.ok) throw new Error(`amadeus search failed (${res.status})`);
       const best = parseAmadeusOffers(await res.json());
-      return best ? { ...best, bookable: cfg.bookable, source: this.name } : null;
+      return best ? { ...best, quality: cfg.quality, source: this.name } : null;
     },
   };
 }
@@ -297,7 +318,8 @@ function amadeusProvider(env) {
 function sinkProvider() {
   return {
     name: "sink",
-    bookable: true, // 실제 예매 화면에서 받아 온 값이라는 전제
+    // 실제 판매 화면에서 받아 온 값이라는 전제. 그래도 결제 직전 재확인은 필요하다.
+    quality: "live",
     live: false,
     configured: true,
     async quote() {
@@ -320,7 +342,7 @@ export function mockPrice(query) {
 function mockProvider() {
   return {
     name: "mock",
-    bookable: false,
+    quality: "reference",
     live: true,
     configured: true,
     async quote(query) {
@@ -330,7 +352,7 @@ function mockProvider() {
         carrier: "MOCK",
         stops: 0,
         flights: "",
-        bookable: false,
+        quality: "reference",
         source: "mock",
       };
     },
@@ -338,6 +360,8 @@ function mockProvider() {
 }
 
 export function createFlightProvider(env) {
+  // Amadeus 는 키가 있을 때만. Self-Service 종료로 신규 발급이 막혀 있어 기본 경로가
+  // 아니다 — 평소에는 집 PC 데몬(sink)이 밀어 넣고, 아무것도 없으면 목업이다.
   const name = env.TRIP_FLIGHT_PROVIDER || (env.AMADEUS_CLIENT_ID ? "amadeus" : "mock");
   if (name === "amadeus") return amadeusProvider(env);
   if (name === "sink") return sinkProvider();
@@ -390,9 +414,10 @@ export function summarizeObservations(watch, observations, history = []) {
       median: prices.length
         ? [...prices].sort((a, b) => a - b)[Math.floor(prices.length / 2)]
         : null,
-      bookable: cells.some((o) => o.bookable),
-      // 하나라도 참고가가 섞여 있으면 화면이 배지를 낮춰 단다.
-      reference: cells.some((o) => !o.bookable),
+      // 가장 낮은 성격을 대표로 삼는다 — 하나라도 참고가가 섞였으면 배지를 낮춘다.
+      quality: cells.some((o) => qualityOf(o) === "reference") ? "reference"
+        : (cells.every((o) => qualityOf(o) === "verified") ? "verified" : "live"),
+      reference: cells.some((o) => qualityOf(o) === "reference"),
     },
   };
 }

@@ -665,8 +665,12 @@ async function handleTripWatch(request, env, url) {
     }
     const invalid = validateMutationRequest(request, 256 * 1024) ?? requireJsonRequest(request);
     if (invalid) return invalid;
-    return forward("/observe", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: await request.text(),
+    const body = await request.text();
+    // 같은 입구로 항공 관측과 패키지 관측을 받는다 — 데몬이 토큰을 하나만 들면 된다.
+    const parsed = (() => { try { return JSON.parse(body); } catch { return null; } })();
+    const target = Array.isArray(parsed?.packages) ? "/observe-packages" : "/observe";
+    return forward(target, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body,
     });
   }
 
@@ -689,6 +693,10 @@ async function handleTripWatch(request, env, url) {
     if (path === "/grid") {
       const flight = url.searchParams.get("flight") ?? url.searchParams.get("watch") ?? "";
       return forward(`/grid?flight=${encodeURIComponent(flight)}`);
+    }
+    if (path === "/packages") {
+      const destination = url.searchParams.get("destination") ?? "";
+      return forward(`/packages?destination=${encodeURIComponent(destination)}`);
     }
     return new Response("not found", { status: 404 });
   }
