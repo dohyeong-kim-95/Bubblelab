@@ -32,6 +32,8 @@ const SCREENS = [
   { name: "스페인어 문법", path: "/espanol/grammar/" },
   // 리포트를 전부 스크립트로 그린다 — JSON을 못 읽으면 빈 화면이 된다
   { name: "클로드 인사이트", path: "/lab/claude-insights/" },
+  // 화면을 전부 스크립트로 그린다. 저장본이 없는 첫 방문에서도 안내가 떠야 한다
+  { name: "여행 계획", path: "/trip/" },
 ];
 
 for (const screen of SCREENS) {

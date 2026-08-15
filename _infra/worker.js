@@ -1774,7 +1774,7 @@ export async function handleRequest(request, env, ctx) {
       }
     }
 
-    if (["admin", "work", "estate", "duri", "invest"].includes(site)) {
+    if (["admin", "work", "estate", "duri", "invest", "trip"].includes(site)) {
       const headers = new Headers(response.headers);
       headers.set("Cache-Control", "no-store");
       headers.set("X-Robots-Tag", "noindex, nofollow");

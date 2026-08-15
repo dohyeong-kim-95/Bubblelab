@@ -192,6 +192,16 @@ PNG·JPEG를 모두 받고, JPEG는 `npm ci` 필요. 검증은 `_infra/wallpaper
 `duri/data/kr-sgg.geojson`만 쓰고 외부 지도 API는 없다). 셋업·프로토콜·한계는
 `duri/README.md` 참고.
 
+## 여행 계획·예산 (trip/)
+
+`trip/`은 혼자 쓰는 여행 계획·예산 화면이다(`CONFIDENTIAL_SUBDOMAINS`, 랜딩·풀다운·
+검색 미노출). 토이 관례(share.js, 주간 기록)를 적용하지 않는다. **로그인은 없고**
+estate·lab처럼 주소를 아는 사람은 들어온다 — 워커가 `no-store`·noindex를 붙이고
+방문 집계에서만 뺀다. 서버가 없어서 기록은 브라우저 localStorage에만 있고
+(내보내기/가져오기 JSON이 유일한 백업), 계산은 전부 `trip/budget.js` 한 모듈에
+모여 있다(화면과 `_infra/trip.test.mjs`가 같이 쓴다 — 합계를 화면 안에서 따로
+더하지 말 것). 자세한 것은 `trip/README.md`.
+
 ## 인사이트 아카이브 (lab/claude-insights)
 
 `lab/`은 내가 쓰는 도구를 두는 비공개 서브도메인이다(`CONFIDENTIAL_SUBDOMAINS`,

@@ -527,7 +527,11 @@ test("업로드 경로는 인증 없이는 열리지 않는다", () => {
 test("워커가 InvestDO를 내보내고 invest를 noindex로 돌린다", () => {
   const worker = readFileSync(join(ROOT, "_infra/worker.js"), "utf8");
   assert.match(worker, /export \{ InvestDO \} from "\.\/invest\.js"/);
-  assert.match(worker, /\["admin", "work", "estate", "duri", "invest"\]/);
+  // 목록 전체를 그대로 박아 두면 비공개 서브도메인이 하나 늘 때마다 invest 와
+  // 상관없이 깨진다 — invest 가 그 안에 있는지만 본다.
+  const noindex = worker.match(/if \((\["admin"[^\]]*\])\.includes\(site\)\) \{\n\s*const headers = new Headers/);
+  assert.ok(noindex, "worker 의 noindex 목록을 찾지 못했다");
+  assert.match(noindex[1], /"invest"/, "invest 가 noindex 목록에서 빠졌다");
   assert.match(worker, /return env\.INVEST_PASSWORD \|\| null;/);
 });
 

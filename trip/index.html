@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>🧳 여행 계획·예산</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: light-dark(#f4f6f9, #0d131c);
+  --fg: light-dark(#1c2733, #e2e9f0);
+  --card: light-dark(#ffffff, #151e2a);
+  --line: light-dark(#dce4ec, #263445);
+  --dim: light-dark(#5d6b7a, #93a3b4);
+  --accent: light-dark(#1d4ed8, #5b82f0);
+  --warn: light-dark(#b3261e, #ff8a80);
+  --ok: light-dark(#166534, #6ee7a8);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 14px; line-height: 1.6;
+  background: var(--bg); color: var(--fg);
+  -webkit-text-size-adjust: 100%;
+}
+main { max-width: 760px; margin: 0 auto; padding: 20px 14px 64px; }
+h1 { font-size: 1.1rem; margin: 0; }
+h2 { font-size: 0.9rem; margin: 24px 0 10px; }
+p { margin: 8px 0; }
+.dim { color: var(--dim); font-size: 0.78rem; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+button, select, input, textarea {
+  font: inherit; font-size: 0.85rem; color: inherit;
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 8px; padding: 6px 10px; max-width: 100%;
+}
+button { cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.ghost { background: none; border-color: transparent; color: var(--dim); padding: 4px 6px; }
+button.ghost:hover { color: var(--warn); border-color: transparent; }
+input[type="number"] { -moz-appearance: textfield; }
+label.field { display: flex; flex-direction: column; gap: 3px; font-size: 0.72rem; color: var(--dim); }
+label.field > input, label.field > select { font-size: 0.85rem; width: 100%; }
+.check { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; color: var(--dim); }
+.check input { accent-color: var(--accent); width: auto; }
+
+/* 머리 */
+header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+header .grow { flex: 1 1 120px; min-width: 0; }
+#tripPick { width: 100%; }
+.sub { font-size: 0.78rem; color: var(--dim); margin: 2px 0 0; }
+
+/* 통계 */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin: 14px 0; }
+.stat { padding: 10px 12px; }
+.stat .k { font-size: 0.7rem; color: var(--dim); }
+.stat .v { font-size: 1.15rem; font-weight: 700; margin-top: 1px; word-break: break-all; }
+.stat .d { font-size: 0.7rem; color: var(--dim); }
+.stat .v.over { color: var(--warn); }
+.stat .v.ok { color: var(--ok); }
+
+/* 탭 */
+.tabs { display: flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin: 4px 0 12px; }
+.tabs button { flex: 1; border: 0; border-right: 1px solid var(--line); border-radius: 0; background: var(--card); }
+.tabs button:last-child { border-right: 0; }
+.tabs button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+
+/* 일정 */
+.day { margin-bottom: 10px; overflow: hidden; }
+.day > summary {
+  display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap;
+  padding: 9px 12px; cursor: pointer; list-style: none;
+}
+.day > summary::-webkit-details-marker { display: none; }
+.day > summary::before { content: "▸"; color: var(--dim); }
+.day[open] > summary::before { content: "▾"; }
+.day .d-name { font-weight: 700; }
+.day .d-sum { margin-left: auto; font-size: 0.8rem; color: var(--dim); }
+.day .body { border-top: 1px solid var(--line); padding: 8px 10px 10px; }
+
+/* 시간 | 내용 | 금액 3열. 내용이 길어도 금액 칸을 밀지 않게 grid 로 잡는다
+   (flex 로 두니 폰 폭에서 제목이 두세 글자씩 잘려 내려갔다). */
+.item {
+  display: grid; grid-template-columns: 3.1em minmax(0, 1fr) auto;
+  gap: 2px 8px; align-items: baseline;
+  padding: 7px 4px; border-radius: 8px; cursor: pointer;
+}
+.item:hover { background: light-dark(#f1f5fb, #1c2734); }
+.item .t { color: var(--dim); font-size: 0.75rem; }
+.item .n { min-width: 0; overflow-wrap: anywhere; }
+.item .n .cat { opacity: 0.85; }
+.item .n .st { color: var(--dim); font-size: 0.72rem; }
+.item .a { text-align: right; font-size: 0.82rem; }
+.item .a .orig { display: block; font-size: 0.68rem; color: var(--dim); white-space: nowrap; }
+.item.paid .a > b { color: var(--ok); }
+.item .memo { grid-column: 2 / -1; color: var(--dim); font-size: 0.72rem; }
+
+/* 항목 편집 */
+.edit { border: 1px dashed var(--line); border-radius: 10px; padding: 10px; margin: 6px 0; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+.edit .full { grid-column: 1 / -1; }
+
+/* 예산 */
+.bud { padding: 10px 12px; margin-bottom: 8px; }
+.bud .top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.bud .name { font-weight: 700; flex: 1 1 auto; }
+.bud input { width: 8em; text-align: right; }
+.bar { height: 6px; border-radius: 999px; background: light-dark(#e6ecf3, #1f2b3a); margin-top: 8px; overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
+.bar > i.over { background: var(--warn); }
+.bud .note { font-size: 0.75rem; color: var(--dim); margin-top: 4px; }
+.bud .note .over { color: var(--warn); }
+
+.empty { padding: 28px 16px; text-align: center; color: var(--dim); }
+.hidden { display: none !important; }
+dialog {
+  border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--fg);
+  padding: 16px; max-width: 420px; width: calc(100% - 28px);
+}
+dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
+footer { margin-top: 28px; font-size: 0.72rem; color: var(--dim); text-align: center; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>🧳 여행</h1>
+    <span class="grow"><select id="tripPick" aria-label="여행 선택"></select></span>
+    <button id="newTrip" title="새 여행">＋</button>
+    <button id="openSetup" title="여행 설정">⚙️</button>
+  </header>
+  <p class="sub" id="tripSub"></p>
+
+  <section id="app" class="hidden">
+    <div class="stats" id="stats"></div>
+    <div class="tabs">
+      <button id="tabPlan" aria-pressed="true">📋 일정</button>
+      <button id="tabBudget" aria-pressed="false">💰 예산</button>
+    </div>
+    <div id="planView"></div>
+    <div id="budgetView" class="hidden"></div>
+  </section>
+
+  <section id="blank" class="card empty">
+    <p>아직 여행이 없습니다.</p>
+    <p><button class="primary" id="firstTrip">＋ 첫 여행 만들기</button></p>
+  </section>
+
+  <footer>
+    브라우저에만 저장됩니다 (localStorage) · 서버로 보내지 않습니다<br>
+    <button class="ghost" id="exportBtn">⬇ 내보내기</button>
+    <button class="ghost" id="importBtn">⬆ 가져오기</button>
+    <input type="file" id="importFile" accept="application/json,.json" class="hidden">
+  </footer>
+</main>
+
+<dialog id="setup">
+  <form method="dialog" id="setupForm">
+    <h2 style="margin-top:0">여행 설정</h2>
+    <div class="grid">
+      <label class="field full">이름<input name="title" maxlength="60" required></label>
+      <label class="field full">목적지<input name="dest" maxlength="60" placeholder="예: 오사카"></label>
+      <label class="field">출발<input type="date" name="start" required></label>
+      <label class="field">도착<input type="date" name="end" required></label>
+      <label class="field">인원<input type="number" name="people" min="1" max="99" step="1" required></label>
+      <label class="field">현지통화<input name="currency" maxlength="8" placeholder="JPY"></label>
+      <label class="field">환율 (1단위 = ?원)<input type="number" name="rate" min="0" step="any" placeholder="9.5"></label>
+    </div>
+    <p class="dim">환율은 계획용 어림값입니다. 바꾸면 현지통화로 적은 항목이 모두 다시 환산됩니다.</p>
+    <div class="row" style="justify-content:space-between;margin-top:12px">
+      <button type="button" class="ghost" id="deleteTrip">🗑 이 여행 삭제</button>
+      <span class="row">
+        <button value="cancel" formnovalidate>취소</button>
+        <button value="save" class="primary">저장</button>
+      </span>
+    </div>
+  </form>
+</dialog>
+
+<script type="module">
+import {
+  CATS, CAT_BY_KEY, STATUSES,
+  summarize, itemKRW, dayList, weekday, sortItems,
+  formatKRW, formatShort, newTrip, newItem, normalizeStore, todayKST,
+} from "./budget.js";
+
+const KEY = "bl-trip-v1";
+const $ = (id) => document.getElementById(id);
+
+let store = load();
+let tab = "plan";
+let editing = null; // 편집 중인 항목 id ("new:<날짜>" 면 추가 폼)
+
+function load() {
+  try {
+    return normalizeStore(JSON.parse(localStorage.getItem(KEY) ?? "{}"));
+  } catch {
+    // 저장본이 깨졌다고 화면까지 죽이지 않는다 — 빈 상태로 시작한다.
+    return normalizeStore(null);
+  }
+}
+function save() {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(store));
+  } catch {
+    // 용량 초과(사진 없는 텍스트라 사실상 안 나지만) — 화면은 계속 쓸 수 있게 둔다.
+  }
+}
+const active = () => store.trips.find((t) => t.id === store.activeId) ?? null;
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+/* ── 화면 ─────────────────────────────────────────────────────────── */
+
+function render() {
+  const trip = active();
+  $("blank").classList.toggle("hidden", !!trip);
+  $("app").classList.toggle("hidden", !trip);
+  $("openSetup").disabled = !trip;
+
+  $("tripPick").innerHTML = store.trips
+    .map((t) => `<option value="${esc(t.id)}"${t.id === store.activeId ? " selected" : ""}>${esc(t.title)}</option>`)
+    .join("");
+  $("tripPick").classList.toggle("hidden", store.trips.length === 0);
+
+  if (!trip) {
+    $("tripSub").textContent = "";
+    return;
+  }
+
+  const s = summarize(trip, todayKST());
+  const period = trip.start === trip.end ? trip.start : `${trip.start} → ${trip.end}`;
+  $("tripSub").textContent =
+    `${trip.dest ? trip.dest + " · " : ""}${period} · ${s.dayCount}일 · ${s.people}명` +
+    (trip.currency !== "KRW" ? ` · ${trip.currency} ${trip.rate}원` : "");
+
+  renderStats(s);
+  $("tabPlan").setAttribute("aria-pressed", String(tab === "plan"));
+  $("tabBudget").setAttribute("aria-pressed", String(tab === "budget"));
+  $("planView").classList.toggle("hidden", tab !== "plan");
+  $("budgetView").classList.toggle("hidden", tab !== "budget");
+  if (tab === "plan") renderPlan(trip, s);
+  else renderBudget(trip, s);
+}
+
+function renderStats(s) {
+  const d = s.dday;
+  const ddayText = d === null ? "—" : d > 0 ? `D-${d}` : d === 0 ? "D-DAY" : `D+${-d}`;
+  const overBudget = s.budgetTotal > 0 && s.remain < 0;
+  $("stats").innerHTML = [
+    { k: "출발까지", v: ddayText, d: `${s.dayCount}일 일정` },
+    { k: "계획 총액", v: formatShort(s.planned), d: `1인 ${formatShort(s.perPerson)}` },
+    {
+      k: s.budgetTotal > 0 ? (overBudget ? "예산 초과" : "예산 남음") : "예산",
+      v: s.budgetTotal > 0 ? formatShort(Math.abs(s.remain)) : "미설정",
+      d: s.budgetTotal > 0 ? `총 ${formatShort(s.budgetTotal)}` : "예산 탭에서 설정",
+      cls: s.budgetTotal > 0 ? (overBudget ? "over" : "ok") : "",
+    },
+    { k: "결제 완료", v: formatShort(s.paid), d: `미결제 ${formatShort(s.unpaid)}` },
+  ].map((x) => `<div class="stat card"><div class="k">${x.k}</div>` +
+      `<div class="v ${x.cls ?? ""}">${esc(x.v)}</div><div class="d">${esc(x.d)}</div></div>`).join("");
+}
+
+// 금액 칸: 환산된 원화가 크게, 원래 입력(현지통화·1인당)이 그 밑에 작게.
+function amountCell(item, trip) {
+  const krw = itemKRW(item, trip);
+  if (!krw && !item.amount) return "";
+  const parts = [];
+  if (item.cur === "LOC") parts.push(`${item.amount.toLocaleString("ko-KR")}${trip.currency}`);
+  if (item.per) parts.push(`${trip.people}인`);
+  return `<b>${esc(formatKRW(krw))}</b>` +
+    (parts.length ? `<span class="orig">${esc(parts.join(" · "))}</span>` : "");
+}
+
+function itemRow(item, trip) {
+  const cat = CAT_BY_KEY.get(item.cat) ?? CAT_BY_KEY.get("etc");
+  const st = STATUSES.find((s) => s.key === item.status) ?? STATUSES[0];
+  return `<div class="item ${item.status}" data-item="${esc(item.id)}" tabindex="0" role="button">
+    <span class="t">${esc(item.time || "–")}</span>
+    <span class="n"><span class="cat">${cat.emoji}</span> ${esc(item.title || "(제목 없음)")}
+      <span class="st" title="${esc(st.label)}">${st.emoji}</span></span>
+    <span class="a">${amountCell(item, trip)}</span>
+    ${item.memo ? `<span class="memo">${esc(item.memo)}</span>` : ""}
+  </div>`;
+}
+
+function renderPlan(trip, s) {
+  const byDate = new Map();
+  for (const item of trip.items) {
+    const key = s.days.includes(item.date) ? item.date : "";
+    if (!byDate.has(key)) byDate.set(key, []);
+    byDate.get(key).push(item);
+  }
+
+  const dayCard = (date, index) => {
+    const items = sortItems(byDate.get(date) ?? []);
+    const total = items.reduce((sum, it) => sum + itemKRW(it, trip), 0);
+    const title = date
+      ? `Day ${index + 1} · ${date.slice(5).replace("-", "/")} (${weekday(date)})`
+      : "날짜 미정";
+    const open = editing?.startsWith(`new:${date}`) ||
+      items.some((it) => it.id === editing) ||
+      (date && date === todayKST()) || index === 0;
+    return `<details class="day card" data-date="${esc(date)}"${open ? " open" : ""}>
+      <summary><span class="d-name">${esc(title)}</span>
+        <span class="d-sum">${items.length ? `${items.length}건 · ${formatShort(total)}` : "비어 있음"}</span></summary>
+      <div class="body">
+        ${items.map((it) => (editing === it.id ? editForm(it, trip) : itemRow(it, trip))).join("")}
+        ${editing === `new:${date}` ? editForm(newItem({ date }), trip, true) : ""}
+        ${editing === `new:${date}` ? "" :
+          `<p><button data-add="${esc(date)}">＋ 항목 추가</button></p>`}
+      </div>
+    </details>`;
+  };
+
+  const cards = s.days.map((d, i) => dayCard(d, i));
+  // 날짜를 아직 못 정한 항목(항공권 후보 등)은 맨 아래 한 장에 모은다.
+  if ((byDate.get("") ?? []).length || editing === "new:") cards.push(dayCard("", -1));
+  $("planView").innerHTML = cards.join("") ||
+    `<div class="card empty">기간을 설정하면 날짜별 일정이 생깁니다.</div>`;
+}
+
+function editForm(item, trip, isNew = false) {
+  const opt = (list, sel, val = (x) => x.key, lab = (x) => x.label) =>
+    list.map((x) => `<option value="${esc(val(x))}"${val(x) === sel ? " selected" : ""}>${esc(lab(x))}</option>`).join("");
+  return `<form class="edit" data-edit="${esc(item.id)}" data-new="${isNew ? "1" : ""}" data-date="${esc(item.date)}">
+    <div class="grid">
+      <label class="field full">내용<input name="title" maxlength="80" value="${esc(item.title)}" placeholder="예: 간사이공항 도착" autofocus></label>
+      <label class="field">시간<input type="time" name="time" value="${esc(item.time)}"></label>
+      <label class="field">분류<select name="cat">${opt(CATS, item.cat, (x) => x.key, (x) => `${x.emoji} ${x.label}`)}</select></label>
+      <label class="field">상태<select name="status">${opt(STATUSES, item.status)}</select></label>
+      <label class="field">금액<input type="number" name="amount" min="0" step="any" value="${item.amount || ""}"></label>
+      <label class="field">통화<select name="cur">
+        <option value="KRW"${item.cur === "KRW" ? " selected" : ""}>원</option>
+        <option value="LOC"${item.cur === "LOC" ? " selected" : ""}>${esc(trip.currency)}</option>
+      </select></label>
+      <label class="field full">메모<input name="memo" maxlength="500" value="${esc(item.memo)}"></label>
+      <label class="check full"><input type="checkbox" name="per"${item.per ? " checked" : ""}> 1인당 금액 (×${trip.people}명)</label>
+      <label class="field full">날짜<input type="date" name="date" value="${esc(item.date)}"></label>
+    </div>
+    <div class="row" style="justify-content:space-between;margin-top:8px">
+      ${isNew ? "<span></span>" : `<button type="button" class="ghost" data-del="${esc(item.id)}">🗑 삭제</button>`}
+      <span class="row">
+        <button type="button" data-cancel="1">취소</button>
+        <button type="submit" class="primary">${isNew ? "추가" : "저장"}</button>
+      </span>
+    </div>
+  </form>`;
+}
+
+function renderBudget(trip, s) {
+  const rows = s.byCat.map((c) => {
+    const pct = c.ratio === null ? 0 : Math.min(100, Math.round(c.ratio * 100));
+    return `<div class="bud card">
+      <div class="top">
+        <span class="name">${c.emoji} ${c.label}</span>
+        <span class="dim">${c.count}건</span>
+        <input type="number" min="0" step="1000" data-budget="${c.key}" value="${c.budget || ""}" placeholder="예산" aria-label="${c.label} 예산">
+      </div>
+      ${c.budget > 0 ? `<div class="bar"><i class="${c.over ? "over" : ""}" style="width:${pct}%"></i></div>` : ""}
+      <div class="note">계획 ${formatKRW(c.planned)} · 결제 ${formatKRW(c.paid)}
+        ${c.budget > 0
+          ? c.over
+            ? `<span class="over">· ${formatKRW(c.planned - c.budget)} 초과</span>`
+            : `· ${formatKRW(c.budget - c.planned)} 남음`
+          : ""}</div>
+    </div>`;
+  });
+  const over = s.budgetTotal > 0 && s.remain < 0;
+  $("budgetView").innerHTML = rows.join("") + `<div class="bud card">
+    <div class="top"><span class="name">합계</span>
+      <span>${formatKRW(s.planned)} / ${s.budgetTotal > 0 ? formatKRW(s.budgetTotal) : "예산 미설정"}</span></div>
+    <div class="note">1인 ${formatKRW(s.perPerson)} · 하루 ${formatKRW(s.perDay)}
+      ${s.budgetTotal > 0 ? (over ? `<span class="over">· ${formatKRW(-s.remain)} 초과</span>` : `· ${formatKRW(s.remain)} 남음`) : ""}</div>
+  </div>`;
+}
+
+/* ── 조작 ─────────────────────────────────────────────────────────── */
+
+function update(fn) {
+  const trip = active();
+  if (!trip) return;
+  fn(trip);
+  save();
+  render();
+}
+
+$("tripPick").addEventListener("change", (e) => {
+  store.activeId = e.target.value;
+  editing = null;
+  save();
+  render();
+});
+
+const createTrip = () => {
+  const trip = newTrip({ title: `여행 ${store.trips.length + 1}` });
+  store.trips.push(trip);
+  store.activeId = trip.id;
+  save();
+  render();
+  openSetup();
+};
+$("newTrip").addEventListener("click", createTrip);
+$("firstTrip").addEventListener("click", createTrip);
+
+$("tabPlan").addEventListener("click", () => { tab = "plan"; render(); });
+$("tabBudget").addEventListener("click", () => { tab = "budget"; render(); });
+
+function openSetup() {
+  const trip = active();
+  if (!trip) return;
+  const f = $("setupForm");
+  for (const k of ["title", "dest", "start", "end", "people", "currency", "rate"]) f[k].value = trip[k];
+  $("setup").showModal();
+}
+$("openSetup").addEventListener("click", openSetup);
+
+$("setupForm").addEventListener("submit", (e) => {
+  if (e.submitter?.value !== "save") return;
+  const f = new FormData(e.target);
+  update((trip) => {
+    trip.title = String(f.get("title") ?? "").trim() || trip.title;
+    trip.dest = String(f.get("dest") ?? "").trim();
+    trip.start = String(f.get("start") ?? "") || trip.start;
+    trip.end = String(f.get("end") ?? "") || trip.end;
+    trip.people = Math.min(99, Math.max(1, Math.round(Number(f.get("people")) || 1)));
+    trip.currency = (String(f.get("currency") ?? "").trim() || "KRW").toUpperCase();
+    const rate = Number(f.get("rate"));
+    trip.rate = rate > 0 ? rate : 1;
+    // 기간을 줄여도 항목은 지우지 않는다 — "날짜 미정"으로 내려가 살아 있다.
+  });
+});
+
+$("deleteTrip").addEventListener("click", () => {
+  const trip = active();
+  if (!trip || !confirm(`"${trip.title}"을(를) 삭제할까요? 되돌릴 수 없습니다.`)) return;
+  store.trips = store.trips.filter((t) => t.id !== trip.id);
+  store.activeId = store.trips[0]?.id ?? "";
+  save();
+  $("setup").close();
+  render();
+});
+
+// 일정 조작은 목록 전체에 위임한다 — 매 렌더마다 핸들러를 다시 달지 않는다.
+$("planView").addEventListener("click", (e) => {
+  const add = e.target.closest("[data-add]");
+  if (add) { editing = `new:${add.dataset.add}`; render(); return; }
+  const del = e.target.closest("[data-del]");
+  if (del) {
+    update((trip) => { trip.items = trip.items.filter((i) => i.id !== del.dataset.del); });
+    editing = null;
+    render();
+    return;
+  }
+  if (e.target.closest("[data-cancel]")) { editing = null; render(); return; }
+  const row = e.target.closest("[data-item]");
+  if (row) { editing = row.dataset.item; render(); }
+});
+$("planView").addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" && e.key !== " ") return;
+  const row = e.target.closest("[data-item]");
+  if (!row) return;
+  e.preventDefault();
+  editing = row.dataset.item;
+  render();
+});
+
+$("planView").addEventListener("submit", (e) => {
+  const form = e.target.closest("[data-edit]");
+  if (!form) return;
+  e.preventDefault();
+  const f = new FormData(form);
+  const patch = {
+    title: String(f.get("title") ?? "").trim(),
+    time: String(f.get("time") ?? ""),
+    cat: String(f.get("cat") ?? "etc"),
+    status: String(f.get("status") ?? "plan"),
+    amount: Math.max(0, Number(f.get("amount")) || 0),
+    cur: f.get("cur") === "LOC" ? "LOC" : "KRW",
+    per: f.get("per") === "on",
+    memo: String(f.get("memo") ?? "").trim(),
+    date: String(f.get("date") ?? ""),
+  };
+  update((trip) => {
+    if (form.dataset.new) trip.items.push(newItem(patch));
+    else {
+      const item = trip.items.find((i) => i.id === form.dataset.edit);
+      if (item) Object.assign(item, patch);
+    }
+  });
+  // 이어서 더 넣는 경우가 많다 — 추가였으면 빈 폼을 그 자리에 다시 연다.
+  editing = form.dataset.new ? `new:${form.dataset.date}` : null;
+  render();
+});
+
+$("budgetView").addEventListener("change", (e) => {
+  const input = e.target.closest("[data-budget]");
+  if (!input) return;
+  update((trip) => {
+    trip.budgets[input.dataset.budget] = Math.max(0, Math.round(Number(input.value) || 0));
+  });
+});
+
+/* ── 내보내기·가져오기 (기기 옮길 때) ─────────────────────────────── */
+
+$("exportBtn").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify(store, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `trip-${todayKST()}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+$("importBtn").addEventListener("click", () => $("importFile").click());
+$("importFile").addEventListener("change", async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  try {
+    const incoming = normalizeStore(JSON.parse(await file.text()));
+    if (!incoming.trips.length) throw new Error("여행이 없습니다");
+    if (!confirm(`여행 ${incoming.trips.length}건을 가져옵니다. 지금 저장된 내용은 지워집니다.`)) return;
+    store = incoming;
+    editing = null;
+    save();
+    render();
+  } catch (err) {
+    alert(`가져오지 못했습니다: ${err.message}`);
+  } finally {
+    e.target.value = "";
+  }
+});
+
+render();
+</script>
+</body>
+</html>
