@@ -56,6 +56,11 @@ const CAL_ID = /^[A-Za-z0-9]{6,40}$/;
 const PUSH_PREFIX = "push:";
 const MAX_PUSH_SUBS = 8; // 두 사람 × 기기 몇 대
 const DEVICE_ID = /^[A-Za-z0-9_-]{6,64}$/; // 기기 식별자(구독 회전 시 옛 구독 정리용)
+// 브라우저별 수신 커서. 싱크가 ack 했어도 아직 못 본 기기가 있으면 버퍼를 지우지
+// 않기 위해 둔다(사진이 그 기기에서 영영 안 보이던 문제). 한참 안 들르는 기기까지
+// 기다리면 버퍼가 무한히 쌓이므로 이 기간이 지나면 계산에서 뺀다.
+const PEER_PREFIX = "peer:";
+const PEER_STALE_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_PUSH_PAYLOAD_BYTES = 3000; // 안전 상한 넘으면 내용 없는 일반 알림으로 대체
 
 const bufKey = (seq) => BUF_PREFIX + String(seq).padStart(12, "0");
@@ -252,6 +257,14 @@ export class DuriDO {
       // 푸시를 보내지 않는다. iOS는 "받았는데 알림을 안 띄운 푸시(silent push)"를
       // 예산으로 계산해, 반복되면 구독을 조여버린다(결국 백그라운드 알림까지 끊김).
       conn.endpoint = typeof msg.endpoint === "string" ? msg.endpoint : null;
+      // 접속 시점의 커서를 바로 기록한다 — 재접속 직후 싱크가 ack 해서 아직 못 본
+      // 항목이 지워지는 걸 막는다("seen" 을 보낼 틈도 없이 사라지던 자리).
+      const dev = typeof msg.deviceId === "string" && DEVICE_ID.test(msg.deviceId) ? msg.deviceId : null;
+      if (conn.role === "peer" && dev) {
+        conn.deviceId = dev;
+        this.state.blockConcurrencyWhile(() =>
+          this.state.storage.put(PEER_PREFIX + dev, { seq: since, at: Date.now() }));
+      }
       this.send(conn, { type: "welcome", head: this.head, online: this.peerCount() });
       this.broadcast({ type: "presence", online: this.peerCount() }, conn);
       this.backfill(conn, since);
@@ -267,6 +280,26 @@ export class DuriDO {
     if (msg.type === "ack") {
       if (conn.role !== "sink") return; // 싱크만 버퍼를 폐기할 수 있다
       if (Number.isInteger(msg.seq)) this.state.blockConcurrencyWhile(() => this.prune(msg.seq));
+      return;
+    }
+
+    // 브라우저가 "여기까지 받아서 그렸다"고 알린다. 싱크가 ack 했더라도 **아직 못 본
+    // 기기가 있으면 버퍼를 지우지 않기 위해** 필요하다 — 예전엔 싱크 ack 만으로
+    // 지워서, 그 순간 앱을 안 열어 둔 쪽은 사진을 영영 받지 못했다(알림만 오고
+    // 화면엔 안 뜸). 기기 구분은 클라이언트가 만든 deviceId 로 한다.
+    if (msg.type === "seen") {
+      if (conn.role !== "peer" || !Number.isInteger(msg.seq)) return;
+      const id = typeof msg.deviceId === "string" && DEVICE_ID.test(msg.deviceId) ? msg.deviceId : null;
+      if (!id) return;
+      this.state.blockConcurrencyWhile(async () => {
+        const key = PEER_PREFIX + id;
+        const cur = await this.state.storage.get(key);
+        if (cur && cur.seq >= msg.seq) { // 커서는 되감지 않되 생존 신호는 갱신한다
+          await this.state.storage.put(key, { ...cur, at: Date.now() });
+          return;
+        }
+        await this.state.storage.put(key, { seq: msg.seq, at: Date.now() });
+      });
       return;
     }
 
@@ -515,8 +548,22 @@ export class DuriDO {
   }
 
   // 싱크가 seq 까지 보존 완료 → 그 이하 버퍼와 사진 R2 객체를 폐기한다.
+  // 아직 못 본 기기가 있으면 그 앞까지만 지운다. 싱크(=PC 백업)가 받아 갔다는 것과
+  // 두 사람이 다 봤다는 것은 다른 얘기인데, 예전엔 싱크 ack 하나로 버퍼·R2 를 비워서
+  // **그 순간 앱을 안 열어 둔 쪽은 사진을 영영 못 받았다**(알림만 오고 화면엔 안 뜸).
+  // 오래 소식이 없는 기기까지 기다리면 버퍼가 무한히 쌓이므로 그건 건너뛴다.
+  async safePruneSeq(sinkSeq) {
+    const peers = await this.state.storage.list({ prefix: PEER_PREFIX, limit: 32 });
+    const cutoff = Date.now() - PEER_STALE_MS;
+    let upto = sinkSeq;
+    for (const [, v] of peers) {
+      if (!v || (v.at ?? 0) < cutoff) continue; // 한참 안 들른 기기는 기다려 주지 않는다
+      upto = Math.min(upto, v.seq ?? 0);
+    }
+    return upto;
+  }
   async prune(seq) {
-    const upto = Math.min(seq, this.head);
+    const upto = Math.min(await this.safePruneSeq(seq), this.head);
     if (upto <= this.ackSeq) return;
     const entries = await this.state.storage.list({
       prefix: BUF_PREFIX, end: bufKey(upto + 1), limit: 1000,

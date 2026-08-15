@@ -162,6 +162,53 @@ test("handleReset wipes the buffer and R2 photos but keeps seq monotonic", async
 
 // 화면의 "접속중"은 사람을 뜻한다. 싱크 데몬도 같은 WebSocket 으로 붙기 때문에
 // 전체 연결 수를 세면, 싱크를 켠 순간부터 상대가 없어도 늘 접속중으로 보인다.
+// 싱크(PC 백업)가 받아 갔다는 것과 두 사람이 다 봤다는 것은 다른 얘기다. 예전엔
+// 싱크 ack 하나로 버퍼·R2 를 비워서, 그 순간 앱을 안 열어 둔 쪽은 사진을 영영 받지
+// 못했다(알림만 오고 화면엔 안 뜸).
+test("sink ack must not discard entries a peer has not seen yet", async () => {
+  const photoKey = "photo/000000000003-a1b2c3d4e5f6a7b8";
+  const storage = fakeStorage({
+    seq: 3, ackSeq: 0,
+    "buf:000000000001": { seq: 1, kind: "msg", iv: "aa", ct: "bb" },
+    "buf:000000000002": { seq: 2, kind: "msg", iv: "cc", ct: "dd" },
+    "buf:000000000003": { seq: 3, kind: "photo", r2key: photoKey },
+  });
+  const bucket = fakeBucket([photoKey]);
+  const state = { storage, blockConcurrencyWhile: (fn) => fn() };
+  const room = new DuriDO(state, { DURI_BUCKET: bucket });
+  await room.load();
+
+  // 상대 기기는 1번까지만 봤다. 싱크는 3번까지 다 받아 ack 한다.
+  await storage.put("peer:devicebbbbbb", { seq: 1, at: Date.now() });
+  await room.prune(3);
+
+  const left = [...storage.map.keys()].filter((k) => k.startsWith("buf:"));
+  assert.deepEqual(left, ["buf:000000000002", "buf:000000000003"]); // 못 본 건 남는다
+  assert.equal(bucket.set.has(photoKey), true);                     // 사진도 R2에 남아 있어야
+  assert.equal(storage.map.get("ackSeq"), 1);
+
+  // 그 기기가 3번까지 보고 나면 그때 비워진다.
+  await storage.put("peer:devicebbbbbb", { seq: 3, at: Date.now() });
+  await room.prune(3);
+  assert.equal([...storage.map.keys()].filter((k) => k.startsWith("buf:")).length, 0);
+  assert.equal(bucket.set.size, 0);
+});
+
+test("a device that stopped checking in is not waited for forever", async () => {
+  const storage = fakeStorage({
+    seq: 2, ackSeq: 0,
+    "buf:000000000001": { seq: 1, kind: "msg", iv: "aa", ct: "bb" },
+    "buf:000000000002": { seq: 2, kind: "msg", iv: "cc", ct: "dd" },
+  });
+  const state = { storage, blockConcurrencyWhile: (fn) => fn() };
+  const room = new DuriDO(state, { DURI_BUCKET: fakeBucket([]) });
+  await room.load();
+  // 40일째 소식이 없는 기기 — 이것까지 기다리면 버퍼가 무한히 쌓인다
+  await storage.put("peer:deviceoldddd", { seq: 0, at: Date.now() - 40 * 24 * 60 * 60 * 1000 });
+  await room.prune(2);
+  assert.equal([...storage.map.keys()].filter((k) => k.startsWith("buf:")).length, 0);
+});
+
 test("presence counts people only — the sink daemon must not look like the partner", async () => {
   const storage = fakeStorage({ seq: 0, ackSeq: 0 });
   const state = { storage, blockConcurrencyWhile: (fn) => fn() };

@@ -1192,8 +1192,28 @@ function stickerImg(pack, n, alt) {
 let ws = null, backoff = 1000;
 const seen = new Set();
 const lastSeqKey = "duri:lastSeq";
+// 이 기기의 고정 식별자. 푸시 구독 회전 정리와, 아래 "여기까지 봤다" 보고에 쓴다.
+const DEVICE_KEY = "duri:deviceId";
+function duriDeviceId() {
+  let id = localStorage.getItem(DEVICE_KEY);
+  if (!id) { id = randToken(); try { localStorage.setItem(DEVICE_KEY, id); } catch { /* 최선노력 */ } }
+  return id;
+}
+// 서버에 "여기까지 받아서 그렸다"고 알린다. 싱크(PC 백업)가 ack 했어도 아직 못 본
+// 기기가 있으면 서버가 버퍼·R2 를 지우지 않게 하려는 것이다 — 예전엔 싱크 ack 하나로
+// 지워서, 그 순간 앱을 안 열어 둔 쪽은 사진을 영영 못 받았다(알림만 오고 화면엔 안 뜸).
+let seenTimer = null;
+function reportSeen() {
+  if (seenTimer) return; // 항목마다 보내지 않고 1초에 한 번으로 묶는다
+  seenTimer = setTimeout(() => {
+    seenTimer = null;
+    if (ws && ws.readyState === 1) {
+      ws.send(JSON.stringify({ type: "seen", seq: getLastSeq(), deviceId: duriDeviceId() }));
+    }
+  }, 1000);
+}
 const getLastSeq = () => Number(localStorage.getItem(lastSeqKey) || 0);
-const setLastSeq = (n) => localStorage.setItem(lastSeqKey, String(n));
+const setLastSeq = (n) => { localStorage.setItem(lastSeqKey, String(n)); reportSeen(); };
 
 // 나·상대 동그라미. online 은 서버가 아는 "총 접속 수"일 뿐(신원 모름)이라, 상대
 // 동그라미는 정확히 "그 사람"이 아니라 "나 말고 접속한 무언가가 있다"는 뜻이다
@@ -1210,7 +1230,7 @@ function connect() {
     backoff = 1000; setStatus(true, false); // 상대 여부는 welcome/presence 로 곧 갱신
     // 내 푸시 endpoint 를 함께 알린다 → 접속 중인 내 기기엔 서버가 푸시를 안 보낸다
     // (silent push 방지 — iOS 알림 예산 보호). 없으면(알림 끔) null.
-    ws.send(JSON.stringify({ type: "hello", since: getLastSeq(), endpoint: window.__duriPushEndpoint ?? null }));
+    ws.send(JSON.stringify({ type: "hello", since: getLastSeq(), deviceId: duriDeviceId(), endpoint: window.__duriPushEndpoint ?? null }));
     ws.send(JSON.stringify({ type: "cal-hello" })); // 캘린더 현재 상태 동기화
     calFlushOutbox();                                // 오프라인 중 쌓인 캘린더 변경 전송
     flushUnpinOutbox();                              // 오프라인 중 지운 지도 핀 전파
@@ -2388,13 +2408,7 @@ const swReady = (async () => {
   // 서버는 이 값으로 "같은 기기의 옛 구독"을 알아보고 치운다 — 없으면 죽은 구독이
   // 배포마다 하나씩 쌓여 슬롯을 채우고, 결국 새 구독이 등록되지 못해 알림이
   // 조용히 끊긴다(예전에 그랬다).
-  const DEVICE_KEY = "duri:deviceId";
-  function deviceId() {
-    let id = localStorage.getItem(DEVICE_KEY);
-    if (!id) { id = randToken(); try { localStorage.setItem(DEVICE_KEY, id); } catch { /* 최선노력 */ } }
-    return id;
-  }
-  const putSubscription = (subscription) => api("POST", { subscription, deviceId: deviceId() });
+  const putSubscription = (subscription) => api("POST", { subscription, deviceId: duriDeviceId() });
   // 내 endpoint 를 전역에 두고(connect 의 hello 가 읽음), 접속 중 바뀌면 서버에 알린다.
   function setMyEndpoint(endpoint) {
     window.__duriPushEndpoint = endpoint || null;
