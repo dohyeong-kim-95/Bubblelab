@@ -276,7 +276,13 @@
   .map-head { display: flex; align-items: center; gap: .5rem; border-bottom: 1px solid var(--line); background: var(--panel);
               padding: calc(.5rem + env(safe-area-inset-top,0px)) calc(.6rem + env(safe-area-inset-right,0px)) .5rem calc(.6rem + env(safe-area-inset-left,0px)); }
   .map-head #map-back { font-size: 1.5rem; line-height: 1; padding: .1rem .3rem; }
-  .map-head b { font-size: 1rem; margin-right: auto; }
+  /* 제목·개수는 절대 줄바꿈하지 않는다 — 오른쪽 버튼이 폭을 먹으면서 "함께 다닌 /
+     곳", "5개 지 / 역" 으로 깨졌다. 좁은 화면에서는 버튼 라벨을 접어 자리를 낸다. */
+  .map-head b { font-size: 1rem; margin-right: auto; white-space: nowrap; }
+  .map-head #map-count { white-space: nowrap; flex: none; }
+  .map-head #map-sync { flex: none; }
+  #map-here { flex: none; }
+  @media (max-width: 430px) { #map-here .lbl { display: none; } }
   #map-wrap { flex: 1; min-height: 0; position: relative; overflow: hidden; touch-action: none; }
   #map-svg { width: 100%; height: 100%; display: block; transform-origin: 0 0; will-change: transform; }
   #map-svg path.rg { stroke: var(--line); stroke-width: .5; vector-effect: non-scaling-stroke; }
@@ -781,7 +787,7 @@
     <b>함께 다닌 곳</b>
     <span id="map-count" style="font-size:.72rem;color:var(--dim)"></span>
     <button id="map-sync" class="icon-btn" type="button" title="이 기기 기록으로 빠진 핀을 만들고 상대 지도와 맞춥니다" aria-label="지도 동기화">🔄</button>
-    <button id="map-here" type="button" title="지금 있는 곳을 지도에 추가">📍 현재 위치 추가</button>
+    <button id="map-here" type="button" title="지금 있는 곳을 지도에 추가">📍<span class="lbl"> 현재 위치 추가</span></button>
   </header>
   <div id="map-wrap">
     <svg id="map-svg" role="img" aria-label="함께 다닌 곳 지도"><g id="map-paths"></g><g id="map-dots"></g></svg>
