@@ -1623,6 +1623,9 @@ $("bucket-file").addEventListener("change", async (e) => {
 // 두 기기가 각자 실행해도 같은 레코드로 수렴한다(중복 없음, LWW). 이미 있으면
 // 건너뛰고, 지운 항목은 툼스톤이 남아 되살아나지 않는다. 한 번만 실행되게 표시를 남긴다.
 const SEED_CANVAS = "seedcv2026x";
+// 시드에 항목을 더할 때 올린다. 이미 시드한 기기도 다시 훑어 **새 항목만** 넣는다
+// (id 가 결정적이라 있는 건 건너뛴다 — 중복도 없고 지운 것도 안 되살아난다).
+const SEED_VERSION = 2;
 const BUCKET_SEED = [
   ["sd26item01", "💑 커플링", { done: "2026-05-17", memo: "2026.05.17 쩡이랑" }],
   ["sd26item02", "🍗 바베큐", {}],
@@ -1640,9 +1643,20 @@ const BUCKET_SEED = [
   ["sd26item14", "📚 독서 데이트", { done: "2026-04-26", memo: "26.4.26 경기도서관" }],
   ["sd26item15", "🌾 전주 여행", {}],
   ["sd26item16", "⛰️ 한라산 등반", { done: "2026-06-01", memo: "2026.6.1 빵이랑 우중 한라산><" }],
+  ["sd26item17", "🎾 테니스 랠리", { done: "2026-04-12", memo: "'26.4.12 돌모루공원 첫 랠리" }],
+  ["sd26item18", "☕ 바리스타 교육 같이 듣기", {}],
+  ["sd26item19", "⚽ 축구 관람", { done: "2026-08-07", memo: "'26.8.7 수원월드컵경기장" }],
+  ["sd26item20", "⚾ 야구 어웨이 유니폼 사기", { done: "2026-05-22", memo: "2026.05.22" }],
+  ["sd26item21", "💃 댄스 원데이 클래스", {}],
+  ["sd26item22", "🧗 클라이밍 원데이 클래스", {}],
+  ["sd26item23", "🌊 워터파크", { done: true }],
+  ["sd26item24", "🏃 10km 마라톤 출전", {}],
+  ["sd26item25", "🚢 잠수함 타기", {}],
+  ["sd26item26", "🎭 합정/홍대 데이트", {}],
+  ["sd26item27", "🐴 승마배우기", { done: true, memo: "힐링승마 신갈 승마클럽" }],
 ];
 async function seedBucket2026() {
-  if (localStorage.getItem("duri:bucketSeeded")) return;
+  if (Number(localStorage.getItem("duri:bucketSeedV") || 0) >= SEED_VERSION) return;
   try {
     if (!calEvents.has(SEED_CANVAS)) {
       await bucketPut(SEED_CANVAS, { kind: "bucketcanvas", title: "2026 데이트", by: MY_NAME, at: Date.now() });
@@ -1661,7 +1675,7 @@ async function seedBucket2026() {
     }
     bucketCanvas = SEED_CANVAS;
   } finally {
-    localStorage.setItem("duri:bucketSeeded", "1");
+    localStorage.setItem("duri:bucketSeedV", String(SEED_VERSION));
   }
 }
 function openBucket() {
