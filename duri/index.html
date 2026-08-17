@@ -337,7 +337,8 @@
   #bucket-tabs { flex: none; display: flex; gap: .35rem; overflow-x: auto; padding: .5rem .9rem 0;
                  max-width: 44rem; width: 100%; margin: 0 auto; scrollbar-width: none; }
   #bucket-tabs::-webkit-scrollbar { display: none; }
-  #bucket-tabs .tab { flex: none; font: inherit; font-size: .8rem; cursor: pointer; white-space: nowrap;
+  #bucket-tabs .tab { flex: none; max-width: 9rem; font: inherit; font-size: .8rem; cursor: pointer;
+                 white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
                  border: 1px solid var(--line); border-radius: 999px; padding: .32rem .75rem;
                  background: none; color: var(--dim); }
   #bucket-tabs .tab.on { background: light-dark(#2b2b2e, #e8e8ea); color: light-dark(#fff, #1b1b1e);
@@ -361,7 +362,7 @@
   #bucket-list .bk-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(4.5rem, 1fr)); gap: .3rem; }
   #bucket-list .bk-photos img { width: 100%; aspect-ratio: 1/1; object-fit: cover; border-radius: .45rem;
                  border: 1px solid var(--line); display: block; cursor: pointer; }
-  #bucket-list .bk .who { flex: none; font-size: .66rem; color: var(--dim); white-space: nowrap; text-align: right; }
+  #bucket-list .bk .when { font-size: .66rem; color: var(--dim); line-height: 1.4; }
   #bucket-list .bk .rm { flex: none; font: inherit; font-size: .8rem; background: none; border: 0; color: var(--dim);
                      cursor: pointer; padding: .2rem .3rem; }
   #bucket-list .empty { text-align: center; color: var(--dim); font-size: .85rem; padding: 3rem 1rem; line-height: 1.7; }
@@ -618,10 +619,11 @@
   #cal-dlg-comments[hidden] { display: none; }
   .cal-cmt-head { font-size: .8rem; color: var(--dim); margin-bottom: .45rem; }
   #cal-cmt-list { display: flex; flex-direction: column; gap: .45rem; max-height: 9rem; overflow-y: auto; }
-  #cal-cmt-list .cmt { display: flex; align-items: baseline; gap: .4rem; font-size: .85rem; line-height: 1.5; }
-  #cal-cmt-list .cmt .who { font-weight: 700; white-space: nowrap; }
-  #cal-cmt-list .cmt .txt { flex: 1; word-break: break-word; white-space: pre-wrap; }
-  #cal-cmt-list .cmt .when { font-size: .68rem; color: var(--dim); white-space: nowrap; }
+  #cal-cmt-list .cmt { display: flex; flex-direction: column; gap: .1rem; font-size: .85rem; line-height: 1.5; }
+  #cal-cmt-list .cmt .chead { display: flex; align-items: baseline; gap: .4rem; }
+  #cal-cmt-list .cmt .who { font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #cal-cmt-list .cmt .txt { word-break: break-word; white-space: pre-wrap; }
+  #cal-cmt-list .cmt .when { font-size: .68rem; color: var(--dim); white-space: nowrap; margin-right: auto; }
   #cal-cmt-list .cmt .del { font: inherit; font-size: .72rem; background: none; border: 0; color: var(--dim);
                 cursor: pointer; padding: 0 .1rem; }
   #cal-cmt-list .none { font-size: .8rem; color: var(--dim); }
@@ -1559,14 +1561,18 @@ function renderBucket() {
       const m = document.createElement("span"); m.className = "memo"; m.textContent = "▸ " + ev.memo;
       mid.appendChild(m);
     }
-    const who = document.createElement("span"); who.className = "who";
-    who.textContent = ev.done
-      ? [ev.doneBy, ev.doneAt && new Date(ev.doneAt).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })]
-          .filter(Boolean).join(" · ") + " 달성"
-      : (ev.by || "");
+    // 달성 표시는 제목 **아래 줄**에 둔다(메모와 같은 자리). 제목 옆에 두면 좁은
+    // 화면에서 그만큼 제목이 밀려 평범한 항목까지 두 줄로 깨졌다. 미달성 항목의
+    // 작성자는 매 줄 반복되며 폭만 먹어 아예 적지 않는다.
+    if (ev.done) {
+      const d = document.createElement("span"); d.className = "when";
+      d.textContent = [ev.doneBy, ev.doneAt && new Date(ev.doneAt).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })]
+        .filter(Boolean).join(" · ") + " 달성";
+      mid.appendChild(d);
+    }
     const rm = document.createElement("button"); rm.type = "button"; rm.className = "rm"; rm.textContent = "✕";
     rm.title = "지우기"; rm.addEventListener("click", () => bucketDelete(ev.id));
-    row.append(chk, mid, who, rm);
+    row.append(chk, mid, rm);
     wrap.appendChild(row);
     // 제목을 탭하면 상세(메모 편집 + 증명 사진)가 펼쳐진다 — 지역 앨범과 같은 패턴.
     mid.addEventListener("click", () => toggleBucketDetail(wrap, ev));
@@ -3897,11 +3903,13 @@ function renderComments() {
   }
   for (const c of list) {
     const row = document.createElement("div"); row.className = "cmt";
+    const head = document.createElement("div"); head.className = "chead";
     const who = document.createElement("span"); who.className = "who";
     who.textContent = c.author || "?";
-    const txt = document.createElement("span"); txt.className = "txt"; txt.textContent = c.text || "";
     const when = document.createElement("span"); when.className = "when"; when.textContent = fmtTime(c.at || 0);
-    row.append(who, txt, when);
+    head.append(who, when);
+    const txt = document.createElement("div"); txt.className = "txt"; txt.textContent = c.text || "";
+    row.append(head, txt);
     // 남의 댓글은 지우지 않는다(둘만 쓰는 공간이라 굳이 막을 것도 없지만, 실수로
     // 상대 말을 지우는 쪽이 더 곤란하다).
     if (c.author === MY_NAME) {
