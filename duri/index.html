@@ -323,20 +323,31 @@
                 cursor: pointer; background: none; color: var(--dim); border: 1px solid var(--line);
                 border-radius: .8rem; padding: .55rem; }
   .region-clear[hidden] { display: none; }
-  /* 데이트 버킷리스트 */
+  /* 데이트 버킷리스트 — 모노톤, 체크만 빨강 */
   #bucket { position: fixed; inset: 0; z-index: 64; background: var(--bg); display: flex; flex-direction: column; }
   #bucket[hidden] { display: none; }
   .bucket-head { display: flex; align-items: center; gap: .5rem; border-bottom: 1px solid var(--line); background: var(--panel);
                  padding: .5rem .6rem; padding-top: calc(.5rem + env(safe-area-inset-top,0px)); }
   .bucket-head #bucket-back { font-size: 1.5rem; line-height: 1; padding: .1rem .3rem; }
-  .bucket-head b { font-size: 1rem; margin-right: auto; }
+  .bucket-head b { font-size: 1rem; margin-right: auto; font-weight: 700; }
   .bucket-head #bucket-count { font-size: .72rem; color: var(--dim); }
-  #bucket-list { flex: 1; overflow-y: auto; padding: .7rem .9rem; max-width: 44rem; width: 100%; margin: 0 auto; }
+  /* 캔버스(목록) 칩 — 여러 계층의 todo 를 목록 단위로 나눈다 */
+  #bucket-tabs { flex: none; display: flex; gap: .35rem; overflow-x: auto; padding: .5rem .9rem 0;
+                 max-width: 44rem; width: 100%; margin: 0 auto; scrollbar-width: none; }
+  #bucket-tabs::-webkit-scrollbar { display: none; }
+  #bucket-tabs .tab { flex: none; font: inherit; font-size: .8rem; cursor: pointer; white-space: nowrap;
+                 border: 1px solid var(--line); border-radius: 999px; padding: .32rem .75rem;
+                 background: none; color: var(--dim); }
+  #bucket-tabs .tab.on { background: light-dark(#2b2b2e, #e8e8ea); color: light-dark(#fff, #1b1b1e);
+                 border-color: transparent; font-weight: 600; }
+  #bucket-tabs .tab.add { font-weight: 700; }
+  #bucket-list { flex: 1; overflow-y: auto; padding: .5rem .9rem .7rem; max-width: 44rem; width: 100%; margin: 0 auto; }
   #bucket-list .bk { display: flex; align-items: center; gap: .55rem; padding: .55rem .2rem;
                      border-bottom: 1px solid var(--line); }
   #bucket-list .bk .chk { flex: none; width: 1.45rem; height: 1.45rem; border-radius: .45rem; cursor: pointer;
                      border: 2px solid var(--line); background: none; font-size: .95rem; line-height: 1; color: #fff; }
-  #bucket-list .bk.done .chk { background: var(--pink); border-color: transparent; }
+  /* 체크만 빨강 — 나머지는 전부 모노톤 */
+  #bucket-list .bk.done .chk { background: light-dark(#d84343, #e05a5a); border-color: transparent; }
   #bucket-list .bk .t { flex: 1; min-width: 0; font-size: .92rem; line-height: 1.45; word-break: break-word; }
   #bucket-list .bk.done .t { color: var(--dim); text-decoration: line-through; }
   #bucket-list .bk .who { flex: none; font-size: .66rem; color: var(--dim); white-space: nowrap; text-align: right; }
@@ -348,7 +359,7 @@
   #bucket-form input { flex: 1; min-width: 0; font: inherit; font-size: .92rem; padding: .5rem .7rem;
                  border: 1px solid var(--line); border-radius: .7rem; background: var(--bg); color: inherit; }
   #bucket-form button { font: inherit; font-size: .85rem; padding: .5rem .95rem; border-radius: .7rem; cursor: pointer;
-                 background: var(--pink); color: light-dark(#fff, #1a1016); border: 0; }
+                 background: light-dark(#2b2b2e, #e8e8ea); color: light-dark(#fff, #1b1b1e); border: 0; font-weight: 600; }
   /* PC 백업(싱크) 설정 시트 */
   #sink-box { position: fixed; inset: 0; z-index: 78; display: flex; align-items: center; justify-content: center;
               background: #0007; padding: 1.2rem; }
@@ -869,6 +880,7 @@
     <b>✅ 버킷리스트</b>
     <span id="bucket-count"></span>
   </header>
+  <div id="bucket-tabs"></div>
   <div id="bucket-list"></div>
   <form id="bucket-form">
     <input id="bucket-input" placeholder="둘이 해보고 싶은 것" autocomplete="off" maxlength="120">
@@ -1414,13 +1426,47 @@ function clearCache() {
 // 방초기화·PC백업이 전부 딸려 온다. 서버·싱크는 kind 를 보지 못하므로 변경 없음.
 // 리치 문서(notion식)로 가지 않는 이유: LWW 는 레코드 단위라 자유 편집 문서를
 // 올리면 동시 편집에서 한쪽이 통째로 사라진다. "추가/체크/삭제"는 항목 단위라 안전.
-function bucketItems() {
+// 캔버스(목록) — 여러 계층의 todo 를 목록 단위로 나눈다(kind:"bucketcanvas").
+// 항목의 list 필드가 캔버스 id 를 가리키고, 없으면 기본 캔버스("default")다.
+let bucketCanvas = "default";
+function bucketCanvases() {
+  const out = [{ id: "default", title: "기본" }];
+  for (const ev of calEvents.values()) {
+    if (!ev.deleted && ev.kind === "bucketcanvas" && ev.title) out.push(ev);
+  }
+  return [out[0], ...out.slice(1).sort((a, b) => (a.at || 0) - (b.at || 0))];
+}
+function bucketItems(canvas = bucketCanvas) {
   const out = [];
   for (const ev of calEvents.values()) {
-    if (!ev.deleted && ev.kind === "bucket" && ev.title) out.push(ev);
+    if (!ev.deleted && ev.kind === "bucket" && ev.title && (ev.list || "default") === canvas) out.push(ev);
   }
   // 미달성 먼저(만든 순), 달성한 것은 아래로(최근 달성이 위)
   return out.sort((a, b) => (!!a.done - !!b.done) || (a.done ? (b.doneAt || 0) - (a.doneAt || 0) : (a.at || 0) - (b.at || 0)));
+}
+async function canvasAdd() {
+  const title = prompt("새 목록 이름 (예: 여행, 맛집, 집)");
+  const t = String(title || "").trim().slice(0, 30);
+  if (!t) return;
+  const id = randToken();
+  await bucketPut(id, { kind: "bucketcanvas", title: t, by: MY_NAME, at: Date.now() });
+  bucketCanvas = id;
+  renderBucket();
+}
+function canvasDelete(id) {
+  if (id === "default") return; // 기본 목록은 못 지운다
+  const items = bucketItems(id);
+  const cv = calEvents.get(id);
+  if (!confirm(`"${cv?.title}" 목록을 지울까요?${items.length ? `\n안의 항목 ${items.length}개도 함께 지워져요.` : ""}`)) return;
+  const rev = Date.now();
+  for (const it of items) {
+    calEvents.set(it.id, { id: it.id, rev, deleted: true });
+    calSend({ type: "cal-del", id: it.id, rev });
+  }
+  calEvents.set(id, { id, rev, deleted: true }); calPersist();
+  calSend({ type: "cal-del", id, rev });
+  bucketCanvas = "default";
+  renderBucket();
 }
 async function bucketPut(id, content) {
   const rev = Date.now();
@@ -1431,7 +1477,8 @@ async function bucketPut(id, content) {
 async function bucketAdd(title) {
   const t = String(title || "").trim().slice(0, 120);
   if (!t) return;
-  await bucketPut(randToken(), { kind: "bucket", title: t, by: MY_NAME, at: Date.now() });
+  await bucketPut(randToken(), { kind: "bucket", title: t, by: MY_NAME, at: Date.now(),
+    ...(bucketCanvas !== "default" && { list: bucketCanvas }) });
   renderBucket();
 }
 async function bucketToggle(id) {
@@ -1456,6 +1503,26 @@ function bucketDelete(id) {
 }
 function renderBucket() {
   if ($("bucket").hidden) return; // 안 보이면 그리지 않는다(상대 변경은 열 때 반영)
+  const canvases = bucketCanvases();
+  if (!canvases.some((c) => c.id === bucketCanvas)) bucketCanvas = "default"; // 상대가 지웠을 수 있다
+  const tabs = $("bucket-tabs");
+  tabs.replaceChildren();
+  for (const c of canvases) {
+    const b = document.createElement("button"); b.type = "button";
+    b.className = "tab" + (c.id === bucketCanvas ? " on" : "");
+    const n = bucketItems(c.id).length;
+    b.textContent = c.title + (n ? ` ${n}` : "");
+    b.addEventListener("click", () => {
+      if (bucketCanvas === c.id && c.id !== "default") canvasDelete(c.id); // 선택된 칩을 다시 누르면 삭제 확인
+      else { bucketCanvas = c.id; renderBucket(); }
+    });
+    if (c.id === bucketCanvas && c.id !== "default") b.title = "한 번 더 누르면 목록 삭제";
+    tabs.appendChild(b);
+  }
+  const add = document.createElement("button"); add.type = "button"; add.className = "tab add";
+  add.textContent = "＋"; add.title = "새 목록";
+  add.addEventListener("click", canvasAdd);
+  tabs.appendChild(add);
   const list = bucketItems();
   const doneN = list.filter((x) => x.done).length;
   $("bucket-count").textContent = list.length ? `${list.length}개 중 ${doneN}개 달성` : "";
