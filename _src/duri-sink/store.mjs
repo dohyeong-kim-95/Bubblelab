@@ -173,6 +173,7 @@ export function createStore({ dir, key, fetchPhoto }) {
                  sha256: digest, bytes: plain.length, hashOk: digest === entry.sha256 },
         // 촬영 위치 — 지도의 재료다. 이게 없으면 백업만으로는 지도를 되살릴 수 없다.
         ...(meta.loc && { loc: meta.loc }),
+        ...(meta.bucket && { bucket: meta.bucket }), // 버킷리스트 증명 사진 태그
         ...(entry.album && { album: entry.album }),
       });
     } else return;

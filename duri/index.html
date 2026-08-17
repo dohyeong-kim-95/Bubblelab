@@ -348,8 +348,17 @@
                      border: 2px solid var(--line); background: none; font-size: .95rem; line-height: 1; color: #fff; }
   /* 체크만 빨강 — 나머지는 전부 모노톤 */
   #bucket-list .bk.done .chk { background: light-dark(#d84343, #e05a5a); border-color: transparent; }
-  #bucket-list .bk .t { flex: 1; min-width: 0; font-size: .92rem; line-height: 1.45; word-break: break-word; }
+  #bucket-list .bk .mid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .1rem; cursor: pointer; }
+  #bucket-list .bk .t { font-size: .92rem; line-height: 1.45; word-break: break-word; }
   #bucket-list .bk.done .t { color: var(--dim); text-decoration: line-through; }
+  #bucket-list .bk .memo { font-size: .74rem; color: var(--dim); line-height: 1.4; word-break: break-word; }
+  #bucket-list .bk-detail { padding: .45rem .2rem .7rem 2.2rem; border-bottom: 1px solid var(--line); }
+  #bucket-list .bk-detail .acts { display: flex; gap: .4rem; margin-bottom: .5rem; }
+  #bucket-list .bk-detail .acts button { font: inherit; font-size: .78rem; cursor: pointer; background: none;
+                 color: var(--dim); border: 1px solid var(--line); border-radius: 999px; padding: .32rem .7rem; }
+  #bucket-list .bk-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(4.5rem, 1fr)); gap: .3rem; }
+  #bucket-list .bk-photos img { width: 100%; aspect-ratio: 1/1; object-fit: cover; border-radius: .45rem;
+                 border: 1px solid var(--line); display: block; cursor: pointer; }
   #bucket-list .bk .who { flex: none; font-size: .66rem; color: var(--dim); white-space: nowrap; text-align: right; }
   #bucket-list .bk .rm { flex: none; font: inherit; font-size: .8rem; background: none; border: 0; color: var(--dim);
                      cursor: pointer; padding: .2rem .3rem; }
@@ -886,6 +895,7 @@
     <input id="bucket-input" placeholder="둘이 해보고 싶은 것" autocomplete="off" maxlength="120">
     <button type="submit">추가</button>
   </form>
+  <input id="bucket-file" type="file" accept="image/*" multiple hidden>
 </section>
 
 <!-- PC 백업(싱크 데몬) 설정 — 토큰 발급 + 설정 파일을 만들어 준다 -->
@@ -1535,22 +1545,131 @@ function renderBucket() {
     return;
   }
   for (const ev of list) {
+    const wrap = document.createElement("div"); wrap.className = "bk-item";
     const row = document.createElement("div"); row.className = "bk" + (ev.done ? " done" : "");
     const chk = document.createElement("button"); chk.type = "button"; chk.className = "chk";
     chk.textContent = ev.done ? "✓" : ""; chk.title = ev.done ? "달성 취소" : "달성!";
     chk.addEventListener("click", () => bucketToggle(ev.id));
+    const mid = document.createElement("div"); mid.className = "mid";
     const t = document.createElement("span"); t.className = "t"; t.textContent = ev.title;
+    mid.appendChild(t);
+    if (ev.memo) { // 스크린샷의 "▶ 2026.05.17 쩡이랑" 같은 줄 — 제목 아래 작은 메모
+      const m = document.createElement("span"); m.className = "memo"; m.textContent = "▸ " + ev.memo;
+      mid.appendChild(m);
+    }
     const who = document.createElement("span"); who.className = "who";
     who.textContent = ev.done
-      ? `${ev.doneBy || "?"} · ${new Date(ev.doneAt || 0).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })} 달성`
+      ? [ev.doneBy, ev.doneAt && new Date(ev.doneAt).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })]
+          .filter(Boolean).join(" · ") + " 달성"
       : (ev.by || "");
     const rm = document.createElement("button"); rm.type = "button"; rm.className = "rm"; rm.textContent = "✕";
     rm.title = "지우기"; rm.addEventListener("click", () => bucketDelete(ev.id));
-    row.append(chk, t, who, rm);
-    box.appendChild(row);
+    row.append(chk, mid, who, rm);
+    wrap.appendChild(row);
+    // 제목을 탭하면 상세(메모 편집 + 증명 사진)가 펼쳐진다 — 지역 앨범과 같은 패턴.
+    mid.addEventListener("click", () => toggleBucketDetail(wrap, ev));
+    if (bucketExpanded === ev.id) toggleBucketDetail(wrap, ev, true);
+    box.appendChild(wrap);
   }
 }
-function openBucket() { closeMenu(); $("bucket").hidden = false; renderBucket(); setTimeout(() => $("bucket-input").focus(), 30); }
+
+// ── 항목 상세: 메모 + 증명 사진 ─────────────────────────────
+// 사진은 평범한 E2E 사진 메시지에 bucket:<항목id> 태그만 붙는다(지역 앨범의 loc 와
+// 같은 방식) — 채팅에도 그대로 뜨고, 동기화·PC백업·미리보기 파이프라인을 전부
+// 재사용한다. 상세는 이 기기 캐시에서 태그로 걸러 보여준다.
+let bucketExpanded = null;
+async function toggleBucketDetail(wrap, ev, force = false) {
+  const open = wrap.querySelector(".bk-detail");
+  if (open && !force) { open.remove(); bucketExpanded = null; return; }
+  if (open) return;
+  bucketExpanded = ev.id;
+  document.querySelectorAll("#bucket-list .bk-detail").forEach((d) => d.remove()); // 한 번에 하나만
+  const d = document.createElement("div"); d.className = "bk-detail";
+  const acts = document.createElement("div"); acts.className = "acts";
+  const memoBtn = document.createElement("button"); memoBtn.type = "button";
+  memoBtn.textContent = ev.memo ? "✏️ 메모 고치기" : "✏️ 메모";
+  memoBtn.addEventListener("click", async () => {
+    const v = prompt("메모 (언제·누구랑·어땠는지)", ev.memo || "");
+    if (v === null) return;
+    const { id: _i, rev: _r, deleted: _d, ...content } = calEvents.get(ev.id);
+    content.memo = String(v).trim().slice(0, 200);
+    if (!content.memo) delete content.memo;
+    await bucketPut(ev.id, content);
+    renderBucket();
+  });
+  const photoBtn = document.createElement("button"); photoBtn.type = "button";
+  photoBtn.textContent = "📷 증명 사진 추가";
+  photoBtn.addEventListener("click", () => { bucketPhotoTarget = ev.id; $("bucket-file").click(); });
+  acts.append(memoBtn, photoBtn);
+  d.appendChild(acts);
+  const grid = document.createElement("div"); grid.className = "bk-photos";
+  d.appendChild(grid);
+  wrap.appendChild(d);
+  const photos = (await allEntries())
+    .filter((r) => r.kind === "photo" && (r.blob || r.thumb) && r.bucket === ev.id)
+    .sort((a, b) => (b.at || 0) - (a.at || 0));
+  for (const r of photos) grid.appendChild(photoImg(r.blob || r.thumb, r.caption, r.seq, r));
+}
+let bucketPhotoTarget = null;
+$("bucket-file").addEventListener("change", async (e) => {
+  const files = [...e.target.files]; e.target.value = "";
+  const target = bucketPhotoTarget; bucketPhotoTarget = null;
+  if (!files.length || !target) return;
+  for (const f of files) await sendPhoto(f, null, null, target);
+  showToast(`📷 증명 사진 ${files.length}장을 담았어요`);
+  setTimeout(() => renderBucket(), 800); // 서버를 돌아 도착하면 상세에 나타난다
+});
+// 사용자가 쓰던 "2026 데이트 버킷리스트"(노트 앱)를 옮겨 온다. **id 가 결정적**이라
+// 두 기기가 각자 실행해도 같은 레코드로 수렴한다(중복 없음, LWW). 이미 있으면
+// 건너뛰고, 지운 항목은 툼스톤이 남아 되살아나지 않는다. 한 번만 실행되게 표시를 남긴다.
+const SEED_CANVAS = "seedcv2026x";
+const BUCKET_SEED = [
+  ["sd26item01", "💑 커플링", { done: "2026-05-17", memo: "2026.05.17 쩡이랑" }],
+  ["sd26item02", "🍗 바베큐", {}],
+  ["sd26item03", "🚗 드라이브", { done: true }],
+  ["sd26item04", "🚲 한강 자전거", {}],
+  ["sd26item05", "🏃 스포츠 몬스터", {}],
+  ["sd26item06", "🏰 수원 데이트", { done: "2026-05-16", memo: "수원데이투 2026.05.16" }],
+  ["sd26item07", "🛶 한강카약", {}],
+  ["sd26item08", "✈️ 경비행기", {}],
+  ["sd26item09", "🎨 유화 드로잉", {}],
+  ["sd26item10", "🎈 열기구", {}],
+  ["sd26item11", "📺 방송 방청객으로 가기", {}],
+  ["sd26item12", "✈️ 해외여행 가기", {}],
+  ["sd26item13", "📊 금융 세미나 듣기", {}],
+  ["sd26item14", "📚 독서 데이트", { done: "2026-04-26", memo: "26.4.26 경기도서관" }],
+  ["sd26item15", "🌾 전주 여행", {}],
+  ["sd26item16", "⛰️ 한라산 등반", { done: "2026-06-01", memo: "2026.6.1 빵이랑 우중 한라산><" }],
+];
+async function seedBucket2026() {
+  if (localStorage.getItem("duri:bucketSeeded")) return;
+  try {
+    if (!calEvents.has(SEED_CANVAS)) {
+      await bucketPut(SEED_CANVAS, { kind: "bucketcanvas", title: "2026 데이트", by: MY_NAME, at: Date.now() });
+    }
+    let order = Date.now() - BUCKET_SEED.length * 1000; // 적은 순서 유지
+    for (const [id, title, opt] of BUCKET_SEED) {
+      if (calEvents.has(id)) { order += 1000; continue; } // 상대가 이미 올렸다(툼스톤 포함)
+      const content = { kind: "bucket", title, by: MY_NAME, at: order, list: SEED_CANVAS };
+      if (opt.memo) content.memo = opt.memo;
+      if (opt.done) {
+        content.done = true;
+        content.doneAt = typeof opt.done === "string" ? new Date(opt.done + "T12:00:00").getTime() : undefined;
+      }
+      await bucketPut(id, content);
+      order += 1000;
+    }
+    bucketCanvas = SEED_CANVAS;
+  } finally {
+    localStorage.setItem("duri:bucketSeeded", "1");
+  }
+}
+function openBucket() {
+  closeMenu(); $("bucket").hidden = false;
+  seedBucket2026().catch(() => {}).then(() => renderBucket());
+  renderBucket();
+  setTimeout(() => $("bucket-input").focus(), 30);
+}
 function closeBucket() { $("bucket").hidden = true; }
 $("bucket-open").addEventListener("click", openBucket);
 $("bucket-back").addEventListener("click", closeBucket);
@@ -1952,6 +2071,7 @@ async function renderEntry(m) {
       if (meta.name === MY_NAME) clearOnePendingPhoto(); // 내가 방금 올린 것 — 임시 말풍선 교체
       const rec = { seq: m.seq, kind: "photo", at: meta.at ?? m.at, name: meta.name, caption: meta.caption };
       if (meta.loc) rec.loc = meta.loc; // 촬영 위치(E2E) — "함께 다닌 곳 지도"용. 캐시에도 저장돼 지도가 읽는다.
+      if (meta.bucket) rec.bucket = meta.bucket; // 버킷리스트 증명 사진 태그
       if (meta.w && meta.h) { rec.w = meta.w; rec.h = meta.h; } // 원본 비율 — 자리를 미리 잡아 화면이 안 튄다
       if (m.album) rec.album = m.album; // 앨범 묶음(평문 그룹정보)
 
@@ -2328,7 +2448,7 @@ async function makeThumb(file) {
   } catch { return null; } // HEIC 등 브라우저가 못 여는 형식
 }
 
-async function sendPhoto(file, album, locOverride) {
+async function sendPhoto(file, album, locOverride, bucketId) {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const sha256 = hex(await crypto.subtle.digest("SHA-256", bytes));
   const img = await encryptBytes(bytes);
@@ -2343,6 +2463,7 @@ async function sendPhoto(file, album, locOverride) {
     file: file.name || undefined, type: file.type || undefined, size: bytes.length,
     ...(thumb && { w: thumb.w, h: thumb.h }), // 원본 비율 — 미리보기 자리를 미리 잡는다
     ...(loc && { loc }),
+    ...(bucketId && { bucket: bucketId }), // 버킷리스트 항목의 증명 사진(지역 앨범과 같은 패턴)
   });
   const headers = { "X-Duri-Img-Iv": img.iv, "X-Duri-Sha256": sha256, "X-Duri-Meta-Iv": meta.iv, "X-Duri-Meta": meta.ct };
   if (thumb) {
