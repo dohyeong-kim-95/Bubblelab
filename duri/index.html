@@ -323,6 +323,32 @@
                 cursor: pointer; background: none; color: var(--dim); border: 1px solid var(--line);
                 border-radius: .8rem; padding: .55rem; }
   .region-clear[hidden] { display: none; }
+  /* 데이트 버킷리스트 */
+  #bucket { position: fixed; inset: 0; z-index: 64; background: var(--bg); display: flex; flex-direction: column; }
+  #bucket[hidden] { display: none; }
+  .bucket-head { display: flex; align-items: center; gap: .5rem; border-bottom: 1px solid var(--line); background: var(--panel);
+                 padding: .5rem .6rem; padding-top: calc(.5rem + env(safe-area-inset-top,0px)); }
+  .bucket-head #bucket-back { font-size: 1.5rem; line-height: 1; padding: .1rem .3rem; }
+  .bucket-head b { font-size: 1rem; margin-right: auto; }
+  .bucket-head #bucket-count { font-size: .72rem; color: var(--dim); }
+  #bucket-list { flex: 1; overflow-y: auto; padding: .7rem .9rem; max-width: 44rem; width: 100%; margin: 0 auto; }
+  #bucket-list .bk { display: flex; align-items: center; gap: .55rem; padding: .55rem .2rem;
+                     border-bottom: 1px solid var(--line); }
+  #bucket-list .bk .chk { flex: none; width: 1.45rem; height: 1.45rem; border-radius: .45rem; cursor: pointer;
+                     border: 2px solid var(--line); background: none; font-size: .95rem; line-height: 1; color: #fff; }
+  #bucket-list .bk.done .chk { background: var(--pink); border-color: transparent; }
+  #bucket-list .bk .t { flex: 1; min-width: 0; font-size: .92rem; line-height: 1.45; word-break: break-word; }
+  #bucket-list .bk.done .t { color: var(--dim); text-decoration: line-through; }
+  #bucket-list .bk .who { flex: none; font-size: .66rem; color: var(--dim); white-space: nowrap; text-align: right; }
+  #bucket-list .bk .rm { flex: none; font: inherit; font-size: .8rem; background: none; border: 0; color: var(--dim);
+                     cursor: pointer; padding: .2rem .3rem; }
+  #bucket-list .empty { text-align: center; color: var(--dim); font-size: .85rem; padding: 3rem 1rem; line-height: 1.7; }
+  #bucket-form { flex: none; display: flex; gap: .45rem; border-top: 1px solid var(--line); background: var(--panel);
+                 padding: .55rem .7rem calc(.55rem + env(safe-area-inset-bottom,0px)); }
+  #bucket-form input { flex: 1; min-width: 0; font: inherit; font-size: .92rem; padding: .5rem .7rem;
+                 border: 1px solid var(--line); border-radius: .7rem; background: var(--bg); color: inherit; }
+  #bucket-form button { font: inherit; font-size: .85rem; padding: .5rem .95rem; border-radius: .7rem; cursor: pointer;
+                 background: var(--pink); color: light-dark(#fff, #1a1016); border: 0; }
   /* PC 백업(싱크) 설정 시트 */
   #sink-box { position: fixed; inset: 0; z-index: 78; display: flex; align-items: center; justify-content: center;
               background: #0007; padding: 1.2rem; }
@@ -638,6 +664,7 @@
       <button id="push-test" role="menuitem" hidden title="이 기기로 테스트 알림을 보내 알림이 실제로 오는지 확인">🔔 테스트 알림 보내기</button>
       <button id="cal-open" role="menuitem" title="공유 캘린더">📅 캘린더</button>
       <button id="map-open" role="menuitem" title="함께 다닌 곳을 색칠한 지도">🗺️ 함께 다닌 곳 지도</button>
+      <button id="bucket-open" role="menuitem" title="둘이 해보고 싶은 것들 — 달성하면 채팅에 알려요">✅ 데이트 버킷리스트</button>
       <button id="sink-setup" role="menuitem" title="이 대화·사진을 내 PC에 자동으로 쌓는 백업 데몬 설정">💾 PC 백업 설정</button>
       <button id="relogin" role="menuitem" title="암호 문구를 잘못 입력했을 때 다시 입력">🔑 문구 다시 입력</button>
       <button id="clear-cache" role="menuitem" title="이 기기에 저장된 대화 기록만 지우기">🧹 기록 지우기</button>
@@ -834,6 +861,20 @@
     <button class="region-clear" id="region-clear" type="button" hidden>🧹 이 지역 색칠 지우기</button>
   </div>
 </div>
+
+<!-- 데이트 버킷리스트 — 둘이 해보고 싶은 것 목록(캘린더 저장소 공유, kind:"bucket") -->
+<section id="bucket" hidden>
+  <header class="bucket-head">
+    <button id="bucket-back" class="icon-btn" type="button" title="닫기" aria-label="닫기">‹</button>
+    <b>✅ 버킷리스트</b>
+    <span id="bucket-count"></span>
+  </header>
+  <div id="bucket-list"></div>
+  <form id="bucket-form">
+    <input id="bucket-input" placeholder="둘이 해보고 싶은 것" autocomplete="off" maxlength="120">
+    <button type="submit">추가</button>
+  </form>
+</section>
 
 <!-- PC 백업(싱크 데몬) 설정 — 토큰 발급 + 설정 파일을 만들어 준다 -->
 <div id="sink-box" hidden>
@@ -1367,6 +1408,91 @@ function clearCache() {
     catch { resolve(); }
   });
 }
+
+// ── 데이트 버킷리스트 ────────────────────────────────────────
+// 캘린더와 같은 cal:<id> 저장소를 쓴다(kind:"bucket") — 동기화·LWW·오프라인 큐·
+// 방초기화·PC백업이 전부 딸려 온다. 서버·싱크는 kind 를 보지 못하므로 변경 없음.
+// 리치 문서(notion식)로 가지 않는 이유: LWW 는 레코드 단위라 자유 편집 문서를
+// 올리면 동시 편집에서 한쪽이 통째로 사라진다. "추가/체크/삭제"는 항목 단위라 안전.
+function bucketItems() {
+  const out = [];
+  for (const ev of calEvents.values()) {
+    if (!ev.deleted && ev.kind === "bucket" && ev.title) out.push(ev);
+  }
+  // 미달성 먼저(만든 순), 달성한 것은 아래로(최근 달성이 위)
+  return out.sort((a, b) => (!!a.done - !!b.done) || (a.done ? (b.doneAt || 0) - (a.doneAt || 0) : (a.at || 0) - (b.at || 0)));
+}
+async function bucketPut(id, content) {
+  const rev = Date.now();
+  calEvents.set(id, { id, rev, deleted: false, ...content }); calPersist();
+  const frame = await encryptJson(content);
+  calSend({ type: "cal-put", id, iv: frame.iv, ct: frame.ct, rev });
+}
+async function bucketAdd(title) {
+  const t = String(title || "").trim().slice(0, 120);
+  if (!t) return;
+  await bucketPut(randToken(), { kind: "bucket", title: t, by: MY_NAME, at: Date.now() });
+  renderBucket();
+}
+async function bucketToggle(id) {
+  const ev = calEvents.get(id);
+  if (!ev || ev.deleted) return;
+  const done = !ev.done;
+  const { id: _i, rev: _r, deleted: _d, ...content } = ev;
+  if (done) { content.done = true; content.doneAt = Date.now(); content.doneBy = MY_NAME; }
+  else { delete content.done; delete content.doneAt; delete content.doneBy; }
+  await bucketPut(id, content);
+  renderBucket();
+  // 달성 순간을 채팅에 남긴다("/일정" 알림과 같은 알약) — 상대도 바로 알게 되는 게 재미다.
+  if (done) sendSysNotice(`✅ "${content.title}" 달성! 🎉`).catch(() => {});
+}
+function bucketDelete(id) {
+  const ev = calEvents.get(id);
+  if (!ev || !confirm(`"${ev.title}" 를 지울까요?`)) return;
+  const rev = Date.now();
+  calEvents.set(id, { id, rev, deleted: true }); calPersist();
+  calSend({ type: "cal-del", id, rev });
+  renderBucket();
+}
+function renderBucket() {
+  if ($("bucket").hidden) return; // 안 보이면 그리지 않는다(상대 변경은 열 때 반영)
+  const list = bucketItems();
+  const doneN = list.filter((x) => x.done).length;
+  $("bucket-count").textContent = list.length ? `${list.length}개 중 ${doneN}개 달성` : "";
+  const box = $("bucket-list");
+  box.replaceChildren();
+  if (!list.length) {
+    const e = document.createElement("div"); e.className = "empty";
+    e.textContent = "아직 비어 있어요.\n둘이 해보고 싶은 걸 아래에 적어보세요.";
+    box.appendChild(e);
+    return;
+  }
+  for (const ev of list) {
+    const row = document.createElement("div"); row.className = "bk" + (ev.done ? " done" : "");
+    const chk = document.createElement("button"); chk.type = "button"; chk.className = "chk";
+    chk.textContent = ev.done ? "✓" : ""; chk.title = ev.done ? "달성 취소" : "달성!";
+    chk.addEventListener("click", () => bucketToggle(ev.id));
+    const t = document.createElement("span"); t.className = "t"; t.textContent = ev.title;
+    const who = document.createElement("span"); who.className = "who";
+    who.textContent = ev.done
+      ? `${ev.doneBy || "?"} · ${new Date(ev.doneAt || 0).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })} 달성`
+      : (ev.by || "");
+    const rm = document.createElement("button"); rm.type = "button"; rm.className = "rm"; rm.textContent = "✕";
+    rm.title = "지우기"; rm.addEventListener("click", () => bucketDelete(ev.id));
+    row.append(chk, t, who, rm);
+    box.appendChild(row);
+  }
+}
+function openBucket() { closeMenu(); $("bucket").hidden = false; renderBucket(); setTimeout(() => $("bucket-input").focus(), 30); }
+function closeBucket() { $("bucket").hidden = true; }
+$("bucket-open").addEventListener("click", openBucket);
+$("bucket-back").addEventListener("click", closeBucket);
+$("bucket-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const v = $("bucket-input").value;
+  $("bucket-input").value = "";
+  bucketAdd(v);
+});
 
 // ── 렌더 ─────────────────────────────────────────────────────
 const log = () => $("log-inner");   // 메시지가 쌓이는 곳(순서 그대로)
@@ -2581,6 +2707,7 @@ window.addEventListener("popstate", () => {
   if (!$("cal-colorbox").hidden) { $("cal-colorbox").hidden = true; trapBack(); return; } // 색상 설정
   { const mp = $("cal-day").querySelector(".marker-popup");
     if (mp && !mp.hidden) { mp.hidden = true; trapBack(); return; } } // 표식 이모지 팝업 먼저 닫기
+  if (!$("bucket").hidden) { closeBucket(); trapBack(); return; }            // 버킷리스트
   if (!$("cal").classList.contains("cal-off")) { closeCal(); trapBack(); return; } // 캘린더 → 채팅
   if (!$("lightbox").hidden) { closeLb(); trapBack(); return; } // 사진 뷰어 먼저 닫기
   if (!$("cal-cmd-picker").hidden) { closeCalCmdPicker(); trapBack(); return; } // "/일정" 미니 달력 먼저 닫기
@@ -2980,6 +3107,7 @@ function scheduleCalFlush() {
     calFlushTimer = null;
     calPersist();
     if (!$("cal").classList.contains("cal-off")) renderCal();
+    else renderBucket(); // 캘린더는 닫혀 있고 버킷리스트만 열려 있을 때도 상대 변경을 반영
   }, 30);
 }
 async function applyCalEntry(entry) { // 실시간으로 한 건씩 오는 cal-put/cal-del
@@ -3193,6 +3321,7 @@ function renderCal() {
   renderDayPanel();
   $("cal-monthnav").hidden = calView !== "month";
   applyStatusColors(); // 상대가 색상 팔레트를 동기화해 왔을 수도 있으니 매번 다시 반영
+  renderBucket();      // 버킷리스트가 열려 있으면 상대 변경도 바로 반영
 }
 // 제목은 "7월" 크게 + 연도 작게 (구글 캘린더식). 오늘이 현재 화면 범위를 벗어나면
 // "오늘" 버튼을 띄운다 — 늘 자리를 차지하지 않아 헤더가 가볍다.
