@@ -53,6 +53,8 @@
   header .dot { width: .55rem; height: .55rem; border-radius: 50%; background: var(--dim);
                 opacity: .3; flex-shrink: 0; transition: opacity .15s, background .15s; }
   header .dot.on { opacity: 1; }
+  /* 헤더의 ✓ 는 이모지가 아니라 글자다 — 옆의 ⚙️ 와 시각적 무게를 맞춘다 */
+  #bucket-open { font-size: 1.15rem; font-weight: 700; line-height: 1; }
   /* 헤더 우측 아이콘 버튼(설정·나가기) — 텍스트 대신 이모지 한 글자라 줄바꿈이 없다 */
   header .icon-btn { flex-shrink: 0; font: inherit; font-size: 1.15rem; line-height: 1; background: none;
                      border: 0; color: inherit; cursor: pointer; padding: .3rem; border-radius: .5rem;
@@ -64,10 +66,10 @@
           flex-direction: column; gap: .1rem; min-width: 9.5rem; z-index: 20;
           box-shadow: 0 8px 24px light-dark(#0002, #0007); }
   .menu[hidden] { display: none; }
-  .menu button { font: inherit; font-size: .82rem; text-align: left; padding: .55rem .65rem;
+  .menu button, .menu a { font: inherit; font-size: .82rem; text-align: left; padding: .55rem .65rem;
                  background: none; border: 0; border-radius: .45rem; color: inherit; cursor: pointer;
-                 white-space: nowrap; }
-  .menu button:hover { background: var(--bg); }
+                 white-space: nowrap; text-decoration: none; display: block; }
+  .menu button:hover, .menu a:hover { background: var(--bg); }
   .menu button.danger { color: light-dark(#b4453a, #f0a8a2); }
   .menu button[aria-checked=true] { color: var(--pink); font-weight: 600; }
 
@@ -676,6 +678,7 @@
   <span class="status" id="status" title="나 · 상대 접속 여부">
     <span class="dot" id="dot-mine"></span><span class="dot" id="dot-theirs"></span>
   </span>
+  <button id="bucket-open" class="icon-btn" type="button" title="데이트 버킷리스트" aria-label="데이트 버킷리스트">✓</button>
   <div class="menu-wrap">
     <button id="menu-btn" class="icon-btn" title="설정" aria-haspopup="true" aria-expanded="false">⚙️</button>
     <div id="menu" class="menu" role="menu" hidden>
@@ -684,14 +687,13 @@
       <button id="push-test" role="menuitem" hidden title="이 기기로 테스트 알림을 보내 알림이 실제로 오는지 확인">🔔 테스트 알림 보내기</button>
       <button id="cal-open" role="menuitem" title="공유 캘린더">📅 캘린더</button>
       <button id="map-open" role="menuitem" title="함께 다닌 곳을 색칠한 지도">🗺️ 함께 다닌 곳 지도</button>
-      <button id="bucket-open" role="menuitem" title="둘이 해보고 싶은 것들 — 달성하면 채팅에 알려요">✅ 데이트 버킷리스트</button>
       <button id="sink-setup" role="menuitem" title="이 대화·사진을 내 PC에 자동으로 쌓는 백업 데몬 설정">💾 PC 백업 설정</button>
       <button id="relogin" role="menuitem" title="암호 문구를 잘못 입력했을 때 다시 입력">🔑 문구 다시 입력</button>
       <button id="clear-cache" role="menuitem" title="이 기기에 저장된 대화 기록만 지우기">🧹 기록 지우기</button>
       <button id="reset-room" class="danger" role="menuitem" title="서버에 남은 대화·사진을 양쪽 모두에서 지우고 새로 시작">🗑️ 방 초기화</button>
+      <a id="logout" href="/logout" role="menuitem" title="이 기기에서 로그아웃">🚪 나가기</a>
     </div>
   </div>
-  <a href="/logout" class="icon-btn" title="나가기" aria-label="나가기">🚪</a>
 </header>
 
 <div id="log-wrap" class="hidden">
@@ -886,7 +888,7 @@
 <section id="bucket" hidden>
   <header class="bucket-head">
     <button id="bucket-back" class="icon-btn" type="button" title="닫기" aria-label="닫기">‹</button>
-    <b>✅ 버킷리스트</b>
+    <b>✓ 버킷리스트</b>
     <span id="bucket-count"></span>
   </header>
   <div id="bucket-tabs"></div>
@@ -1501,7 +1503,7 @@ async function bucketToggle(id) {
   await bucketPut(id, content);
   renderBucket();
   // 달성 순간을 채팅에 남긴다("/일정" 알림과 같은 알약) — 상대도 바로 알게 되는 게 재미다.
-  if (done) sendSysNotice(`✅ "${content.title}" 달성! 🎉`).catch(() => {});
+  if (done) sendSysNotice(`✓ "${content.title}" 달성! 🎉`).catch(() => {});
 }
 function bucketDelete(id) {
   const ev = calEvents.get(id);
