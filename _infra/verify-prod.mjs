@@ -178,18 +178,6 @@ export function assertDuriStatus(status, checks, { pendingWarnAt = 200 } = {}) {
   return checks;
 }
 
-export function assertLifeStatus(status, checks) {
-  checks.eq("life.protocol", status?.protocol, 1);
-  checks.number("life.head", status?.head, { min: 0 });
-  checks.number("life.oldestSeq", status?.oldestSeq, { min: 1 });
-  checks.number("life.entityCount", status?.entityCount, { min: 0 });
-  checks.number("life.currentBytes", status?.currentBytes, { min: 0 });
-  checks.number("life.sinkAckSeq", status?.sinkAckSeq, { min: 0 });
-  checks.number("life.sinkLag", status?.sinkLag, { min: 0 });
-  checks.ok("life status has no entity bodies", !Object.hasOwn(status ?? {}, "entities"), "entities omitted");
-  return checks;
-}
-
 export function assertChatWelcome(message, checks) {
   checks.eq("chat.welcome.type", message?.type, "welcome");
   checks.nonEmpty("chat.welcome.id", message?.id);
@@ -454,7 +442,6 @@ export function buildProbes({ sites, expectedCommit, ws }) {
       const cases = [
         ["/_invest/state", [401, 503]],
         ["/_duri/status", [401]],
-        ["/_life/status", [401, 503]],
         ["/_planner/data", [401, 503]],
         ["/_rt/avalon", [503]],       // ENABLE_REALTIME=false
         ["/_chat", [403]],            // Origin 없는 WebSocket 시도
@@ -478,17 +465,6 @@ export function buildProbes({ sites, expectedCommit, ws }) {
       const { status, text } = await request(target.apiOn("duri", "/_duri/status"), { timeoutMs, headers: { cookie } });
       checks.eq("GET /_duri/status status", status, 200);
       assertDuriStatus(parseJson(text) ?? {}, checks);
-    },
-  });
-
-  add({
-    id: "life:status", surface: "do", title: "Life OS 상태 (LifeDO·PC 싱크)", needs: "life",
-    async run({ target, checks, timeoutMs, creds }) {
-      const cookie = await formLogin(target, "life", { password: creds.lifePassword }, "bl_life", timeoutMs);
-      if (!cookie) throw new Error("life 로그인 실패 — BL_LIFE_PASSWORD 확인");
-      const { status, text } = await request(target.apiOn("life", "/_life/status"), { timeoutMs, headers: { cookie } });
-      checks.eq("GET /_life/status status", status, 200);
-      assertLifeStatus(parseJson(text) ?? {}, checks);
     },
   });
 

@@ -99,7 +99,6 @@ export { AssetFlagsDO } from "./asset-flags.js";
 export { InvestDO } from "./invest.js";
 export { TripWatchDO } from "./trip-watch.js";
 export { LifeDO } from "./life.js";
-import { LIFE_PENDING_TTL_MS } from "./life.js";
 
 const LOGIN_PAGE = (failed = false, base = "") => `<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -203,18 +202,6 @@ const LIFE_LOGIN_PAGE = (failed, base) => `<!doctype html><html lang="ko"><head>
 <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
 ${failed ? '<p class="form-error" role="alert">비밀번호가 맞지 않습니다.</p>' : ""}
 <button type="submit">들어가기</button></form></main></body></html>`;
-
-const LIFE_REGISTER_PAGE = (code, base, full) => `<!doctype html><html lang="ko"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex, nofollow"><meta http-equiv="refresh" content="4">
-<title>새 기기 등록</title><link rel="stylesheet" href="${base}/styles.css"></head>
-<body class="login-page"><main class="login-card"><h1>새 기기 등록</h1>
-<p>이미 등록된 기기에서 <b>⚙️ 설정 → 기기</b>를 열고 아래 코드를 입력하세요.</p>
-<p class="pair-code">${code}</p>
-${full ? '<p class="form-error" role="alert">등록된 기기가 가득 찼습니다. 기존 기기를 하나 해제한 뒤 승인하세요.</p>' : ""}
-<p class="fine-print">승인하면 이 화면이 저절로 넘어갑니다. 코드는 10분 뒤 만료됩니다.</p>
-<form method="post" action="${base}/logout"><button type="submit">취소</button></form>
-</main></body></html>`;
 
 // 운영자 브라우저 집계 제외 화면 (admin 로그인 뒤 /optout). 켜면 전체 서브도메인
 // bl_notrack 쿠키가 심어지고 그 브라우저의 방문·체류·유효방문이 모두 통계에서
@@ -565,10 +552,9 @@ async function handleInvestGate(request, env, url, base = "") {
 
 const LIFE_SESSION_TTL_MS = 365 * 24 * 60 * 60 * 1000;
 
+// 서버에 남는 것이 없으므로 비밀번호와 세션 비밀만 있으면 열린다.
 function lifeConfigured(env) {
-  return featureEnabled(env, "ENABLE_LIFE") && Boolean(
-    env.LIFE && env.LIFE_PASSWORD && env.LIFE_SESSION_SECRET && env.LIFE_SINK_SECRET,
-  );
+  return featureEnabled(env, "ENABLE_LIFE") && Boolean(env.LIFE_PASSWORD && env.LIFE_SESSION_SECRET);
 }
 
 async function lifeKey(secret, purpose) {
@@ -578,178 +564,39 @@ async function lifeKey(secret, purpose) {
   );
 }
 
-/* life 세션은 기기 ID 를 함께 서명한다 — 쿠키만으로 어느 기기인지 알 수 있어야
- * 등록이 풀린 기기를 즉시 끊을 수 있다. 다른 사이트가 쓰는 validSession 은
- * 두 토막(만료.nonce)이라 형식이 다르므로 건드리지 않는다. */
-async function issueLifeSession(key, deviceId) {
-  const payload = `${Date.now() + LIFE_SESSION_TTL_MS}.${deviceId}.${crypto.randomUUID()}`;
+async function issueLifeSession(key) {
+  const payload = `${Date.now() + LIFE_SESSION_TTL_MS}.${crypto.randomUUID()}`;
   const sig = hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload)));
   return `${payload}.${sig}`;
-}
-
-async function lifeSessionDevice(key, token) {
-  const [expiry, deviceId, nonce, sig] = token?.split(".") ?? [];
-  if (!expiry || !deviceId || !nonce || !/^[0-9a-f]{64}$/.test(sig ?? "")) return null;
-  if (!Number.isFinite(+expiry) || Date.now() > +expiry) return null;
-  const sigBytes = Uint8Array.from(sig.match(/../g) ?? [], (h) => parseInt(h, 16));
-  const valid = await crypto.subtle.verify(
-    "HMAC", key, sigBytes, new TextEncoder().encode(`${expiry}.${deviceId}.${nonce}`),
-  );
-  return valid ? deviceId : null;
-}
-
-/** LifeDO 직접 호출 (게이트는 로그인 전에도 기기 등록 절차를 밟아야 한다). */
-async function lifeCall(env, path, { method = "POST", body, role = "gate" } = {}) {
-  const stub = env.LIFE.get(env.LIFE.idFromName("main"));
-  return stub.fetch(new Request(`https://life.internal${path}`, {
-    method,
-    headers: { "X-Life-Role": role, "Content-Type": "application/json" },
-    ...(method === "GET" ? {} : { body: JSON.stringify(body ?? {}) }),
-  }));
-}
-
-async function lifeDeviceRegistered(env, deviceId) {
-  const response = await lifeCall(env, "/devices/check", { body: { deviceId } });
-  return response.ok;
 }
 
 async function handleLifeGate(request, env, url, base = "") {
   if (!lifeConfigured(env)) return new Response("life is not configured", { status: 503 });
   const key = await lifeKey(env.LIFE_SESSION_SECRET, "bl-life-session");
-  const jar = cookies(request);
-  const deviceId = await lifeSessionDevice(key, jar.bl_life);
+  const authenticated = await validSession(key, cookies(request).bl_life);
   const headers = { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" };
   const secure = url.protocol === "https:" ? "; Secure" : "";
   const cookieFlags = `Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(LIFE_SESSION_TTL_MS / 1000)}${secure}`;
-  const claimFlags = `Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(LIFE_PENDING_TTL_MS / 1000)}${secure}`;
-  const clearSession = `bl_life=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
-  const clearClaim = `bl_life_claim=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
-  const enter = async (id) => redirect(`${base}/`, {
-    "Set-Cookie": `bl_life=${await issueLifeSession(key, id)}; ${cookieFlags}`,
-  });
-
   if (url.pathname === "/login" && request.method === "POST") {
     const limited = await enforceRateLimit(request, env, {
       scope: "life-login", limit: 5, windowMs: 15 * 60 * 1000, secret: env.LIFE_SESSION_SECRET,
     });
     if (limited) return limited;
     const form = await request.formData();
-    if (!await matchesCredential(key, form.get("password"), env.LIFE_PASSWORD)) {
-      return new Response(LIFE_LOGIN_PAGE(true, base), { status: 401, headers });
+    if (await matchesCredential(key, form.get("password"), env.LIFE_PASSWORD)) {
+      return redirect(`${base}/`, { "Set-Cookie": `bl_life=${await issueLifeSession(key)}; ${cookieFlags}` });
     }
-    // 비밀번호는 "등록 절차를 시작할 자격"일 뿐이다. 실제 입장은 등록된 기기만 한다.
-    const started = await lifeCall(env, "/devices/start", {
-      body: { label: deviceLabelFrom(request) },
-    });
-    if (!started.ok) return new Response("device registration failed", { status: 503 });
-    const result = await started.json();
-    if (result.registered) return enter(result.deviceId);   // 첫 기기 — 승인해 줄 상대가 없다
-    return redirect(`${base}/register`, { "Set-Cookie": `bl_life_claim=${result.claim}; ${claimFlags}` });
+    return new Response(LIFE_LOGIN_PAGE(true, base), { status: 401, headers });
   }
-
-  if (url.pathname === "/register") {
-    if (deviceId) return redirect(`${base}/`);
-    if (!jar.bl_life_claim) return redirect(`${base}/login`);
-    const claimed = await lifeCall(env, "/devices/claim", { body: { claim: jar.bl_life_claim } });
-    if (claimed.status === 404) {
-      return redirect(`${base}/login`, { "Set-Cookie": clearClaim });   // 만료됐거나 다른 기기가 시작했다
-    }
-    const state = await claimed.json();
-    if (state.approved) {
-      const response = await enter(state.deviceId);
-      response.headers.append("Set-Cookie", clearClaim);
-      return response;
-    }
-    const list = await (await lifeCall(env, "/devices", { method: "GET", role: "owner" })).json();
-    return new Response(LIFE_REGISTER_PAGE(state.code, base, list.devices.length >= list.max), { headers });
-  }
-
   if (url.pathname === "/logout") {
-    const response = redirect(`${base}/login`, { "Set-Cookie": clearSession });
-    response.headers.append("Set-Cookie", clearClaim);
-    return response;
+    return redirect(`${base}/login`, { "Set-Cookie": "bl_life=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0" });
   }
   if (url.pathname === "/login") {
-    return deviceId ? redirect(`${base}/`) : new Response(LIFE_LOGIN_PAGE(false, base), { headers });
+    return authenticated ? redirect(`${base}/`) : new Response(LIFE_LOGIN_PAGE(false, base), { headers });
   }
-  // The login document may load only its stylesheet. Everything else is gated.
-  if (!deviceId && url.pathname !== "/styles.css") return redirect(`${base}/login`);
-  // 등록이 풀린 기기는 여기서 끊는다. 문서 요청에서만 확인한다 — 껍데기를 이루는
-  // css·js 마다 DO 를 부르면 페이지 한 장에 열 번씩 왕복하게 된다. 데이터는
-  // /_life/* 가 매 요청 확인하므로 그것만으로도 아무것도 읽을 수 없다.
-  if (deviceId && request.headers.get("Sec-Fetch-Dest") === "document" &&
-      !await lifeDeviceRegistered(env, deviceId)) {
-    return redirect(`${base}/login`, { "Set-Cookie": clearSession });
-  }
+  // 로그인 문서는 제 스타일시트만 불러올 수 있다. 나머지는 전부 게이트 뒤다.
+  if (!authenticated && url.pathname !== "/styles.css") return redirect(`${base}/login`);
   return null;
-}
-
-/** 목록에서 사람이 알아볼 만한 이름. User-Agent 에서 기기·브라우저만 추린다. */
-function deviceLabelFrom(request) {
-  const ua = request.headers.get("User-Agent") ?? "";
-  const platform = /iPhone/i.test(ua) ? "iPhone" : /iPad/i.test(ua) ? "iPad"
-    : /Android/i.test(ua) ? "Android" : /Macintosh/i.test(ua) ? "Mac"
-    : /Windows/i.test(ua) ? "Windows" : /Linux/i.test(ua) ? "Linux" : "알 수 없는 기기";
-  const browser = /CriOS|Chrome/i.test(ua) ? "Chrome" : /FxiOS|Firefox/i.test(ua) ? "Firefox"
-    : /Edg/i.test(ua) ? "Edge" : /Safari/i.test(ua) ? "Safari" : "";
-  return browser ? `${platform} · ${browser}` : platform;
-}
-
-function withLifeRole(request, role, pathname, deviceId = null) {
-  const headers = new Headers(request.headers);
-  headers.set("X-Life-Role", role);
-  headers.delete("X-Life-Device");
-  if (deviceId) headers.set("X-Life-Device", deviceId);
-  const target = new URL(request.url);
-  target.hostname = "life.internal";
-  target.pathname = pathname;
-  return new Request(target, { method: request.method, headers,
-    ...(request.method !== "GET" && request.method !== "HEAD" ? { body: request.body, duplex: "half" } : {}) });
-}
-
-async function handleLife(request, env, url) {
-  if (!lifeConfigured(env)) return Response.json({ error: "life is not configured" }, { status: 503 });
-  const sessionKey = await lifeKey(env.LIFE_SESSION_SECRET, "bl-life-session");
-  const deviceId = await lifeSessionDevice(sessionKey, cookies(request).bl_life);
-  // 서명이 맞아도 등록이 풀린 기기면 남이다. 데이터가 오가는 길목이라 매 요청 본다.
-  const owner = Boolean(deviceId) && await lifeDeviceRegistered(env, deviceId);
-  const sinkKey = await lifeKey(env.LIFE_SINK_SECRET, "bl-life-sink");
-  const bearer = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
-  const sink = Boolean(bearer) && await validSession(sinkKey, bearer);
-  const path = url.pathname.slice("/_life".length) || "/";
-
-  if (path === "/sink-token" && request.method === "POST") {
-    if (!owner) return Response.json({ error: "authentication required" }, { status: 401 });
-    const limited = await enforceRateLimit(request, env, {
-      scope: "life-token", limit: 5, windowMs: 60 * 60 * 1000, secret: env.LIFE_SESSION_SECRET,
-    });
-    if (limited) return limited;
-    return Response.json({ token: await issueSinkToken(sinkKey) }, { headers: { "Cache-Control": "no-store" } });
-  }
-  if (!owner && !sink) return Response.json({ error: "authentication required" }, { status: 401 });
-  if (sink && !["/bootstrap", "/changes", "/snapshot", "/sink/ack"].includes(path)) {
-    return Response.json({ error: "forbidden" }, { status: 403 });
-  }
-  // 기기 목록은 등록된 기기만 읽고 바꾼다. 승인·해제가 여기로 들어온다.
-  if (path.startsWith("/devices") && sink) return Response.json({ error: "forbidden" }, { status: 403 });
-  let forwardRequest = request;
-  if (request.method !== "GET" && request.method !== "HEAD") {
-    const contentTypeError = requireJsonRequest(request);
-    if (contentTypeError) return contentTypeError;
-    const cap = path === "/commit" ? 512 * 1024 : path === "/bootstrap" ? 16 * 1024 : 8 * 1024;
-    const body = await request.arrayBuffer();
-    if (body.byteLength > cap) return Response.json({ error: "request body too large" }, { status: 413 });
-    forwardRequest = new Request(request, { body });
-  }
-  const read = request.method === "GET" && ["/bootstrap", "/changes", "/snapshot", "/status"].includes(path);
-  const secret = sink ? env.LIFE_SINK_SECRET : env.LIFE_SESSION_SECRET;
-  const limited = await enforceRateLimit(request, env, {
-    scope: read ? "life-read" : "life-write",
-    limit: read && !sink ? 300 : 120, windowMs: 60 * 1000, secret,
-  });
-  if (limited) return limited;
-  const stub = env.LIFE.get(env.LIFE.idFromName("main"));
-  return stub.fetch(withLifeRole(forwardRequest, sink ? "sink" : "owner", path, sink ? null : deviceId));
 }
 
 /* invest 조회 API. 게이트를 통과한 브라우저(bl_invest)만 부를 수 있고, 응답에는
@@ -1396,10 +1243,6 @@ export async function handleRequest(request, env, ctx) {
       path === "/_podcast/upload" ? UPLOAD_MAX_BYTES :
       path === "/_duri/photo" ? DURI_MAX_PHOTO_BYTES :
       path === "/_emoticon/generate" ? EMOTICON_MAX_BODY :
-      path === "/_life/commit" ? 512 * 1024 :
-      path === "/_life/bootstrap" ? 16 * 1024 :
-      path === "/_life/sink/ack" || path === "/_life/sink-token" ||
-        path.startsWith("/_life/devices") ? 8 * 1024 :
       path === "/_planner/data" ? 600 * 1024 : 64 * 1024,
     );
     if (mutationError) return mutationError;
@@ -2039,10 +1882,6 @@ export async function handleRequest(request, env, ctx) {
     // 서버는 E2E 암호블롭만 중계·버퍼링하고, 데스크톱 싱크가 받아 ack 하면 폐기한다.
     if (path === "/_duri" || path.startsWith("/_duri/")) {
       return handleDuri(request, env, url);
-    }
-
-    if (path === "/_life" || path.startsWith("/_life/")) {
-      return handleLife(request, env, url);
     }
 
     // invest 잔고 조회 API: /_invest/state (invest.bubblelab.dev 전용, 조회만).

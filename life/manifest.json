@@ -1,14 +1,20 @@
 {
-  "name": "오늘 할 일",
-  "short_name": "오늘",
-  "description": "오늘 해야 할 일을 적는 개인 기록",
+  "name": "할 일",
+  "short_name": "할 일",
+  "description": "여러 목록을 옆으로 넘기며 쓰는 할 일 앱",
   "lang": "ko",
-  "start_url": "./?view=today",
+  "dir": "ltr",
+  "start_url": "./",
   "scope": "./",
+  "id": "/life/",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#f4f1e8",
   "theme_color": "#f4f1e8",
   "icons": [
-    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ]
 }

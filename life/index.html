@@ -5,151 +5,54 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="robots" content="noindex, nofollow, noarchive">
   <meta name="theme-color" content="#f4f1e8">
-  <title>🌿 오늘 할 일</title>
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>할 일</title>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="stylesheet" href="styles.css">
   <script type="module" src="app.js"></script>
 </head>
 <body>
-  <div id="boot" class="boot" aria-live="polite">로컬 기록을 여는 중…</div>
+  <header class="bar">
+    <div class="bar-title">
+      <h1 id="list-name">할 일</h1>
+      <span id="list-count" class="count"></span>
+    </div>
+    <button id="menu-button" type="button" aria-label="목록 메뉴" aria-haspopup="dialog">⋯</button>
+  </header>
 
-  <section id="unlock" class="unlock" hidden aria-labelledby="unlock-title">
-    <div class="unlock-mark" aria-hidden="true">生</div>
-    <h1 id="unlock-title">할 일 기록 열기</h1>
-    <p id="unlock-copy">이 기기에서 기록을 복호화할 패스프레이즈를 입력하세요.</p>
-    <form id="unlock-form">
-      <label for="passphrase">패스프레이즈</label>
-      <input id="passphrase" name="passphrase" type="password" autocomplete="current-password" minlength="12" required>
-      <label id="confirm-label" for="passphrase-confirm" hidden>한 번 더 입력</label>
-      <input id="passphrase-confirm" name="confirm" type="password" autocomplete="new-password" minlength="12" hidden>
-      <button class="primary" type="submit">열기</button>
-    </form>
-    <p id="unlock-error" class="form-error" role="alert"></p>
-    <p class="security-note">패스프레이즈는 서버로 전송되지 않습니다. 분실하면 서버의 암호 기록은 복구할 수 없습니다.</p>
-  </section>
+  <nav id="dots" class="dots" aria-label="목록"></nav>
 
-  <div id="app" class="app-shell" hidden>
-    <header class="topbar">
-      <div>
-        <p id="date-label" class="date-label"></p>
-        <h1 id="view-title">오늘</h1>
-      </div>
-      <div class="top-actions">
-        <span id="sync-state" class="sync-state" aria-live="polite">로컬</span>
-        <button id="lock-button" class="icon-button" type="button" aria-label="앱 잠그기" title="잠그기">⌁</button>
-      </div>
-    </header>
+  <main id="track" class="track" tabindex="-1"></main>
 
-    <main>
-      <section id="today-view" class="view" data-view="today">
-        <section class="content-section" aria-labelledby="today-actions-title">
-          <div class="section-heading">
-            <h2 id="today-actions-title">오늘 할 일</h2>
-            <span id="today-count"></span>
-          </div>
-          <ol id="today-actions" class="action-list"></ol>
-          <div id="today-empty" class="empty-state" hidden>
-            <p>오늘 할 일이 아직 없습니다.</p>
-            <button id="empty-add" type="button">할 일 적기</button>
-          </div>
-        </section>
-        <section id="carried-section" class="content-section" aria-labelledby="carried-title" hidden>
-          <div class="section-heading">
-            <h2 id="carried-title">아직 남은 것</h2>
-            <span id="carried-count"></span>
-          </div>
-          <ol id="carried-actions" class="action-list"></ol>
-        </section>
-      </section>
+  <form id="add-form" class="add">
+    <label class="sr-only" for="add-text">할 일 추가</label>
+    <input id="add-text" type="text" maxlength="200" autocomplete="off" placeholder="할 일 추가">
+    <button type="submit" aria-label="추가">＋</button>
+  </form>
 
-      <section id="settings-view" class="view" data-view="settings" hidden>
-        <section class="settings-section">
-          <h2>보안</h2>
-          <dl class="status-list">
-            <div><dt>이 기기 키</dt><dd id="key-state">열림</dd></div>
-            <div><dt>마지막 서버 동기화</dt><dd id="last-sync">아직 없음</dd></div>
-            <div><dt>오프라인 변경</dt><dd id="outbox-count">0건</dd></div>
-            <div><dt>충돌 보관함</dt><dd id="conflict-count">0건</dd></div>
-          </dl>
-          <div id="conflict-list" class="conflict-list"></div>
-          <div class="button-row">
-            <button id="settings-lock" type="button">잠그기</button>
-            <button id="logout-button" class="danger" type="button">로그아웃</button>
-          </div>
-          <p class="fine-print">오프라인에서는 서버 세션 만료를 알 수 없습니다. 이 기기의 키가 열려 있다면 로컬 기록만 계속 볼 수 있습니다.</p>
-        </section>
-        <section class="settings-section">
-          <h2>기기</h2>
-          <p class="fine-print">등록한 기기에서만 들어올 수 있습니다. <span id="device-count"></span></p>
-          <div id="device-pending" class="pending-note" hidden></div>
-          <ul id="device-list" class="device-list"></ul>
-          <form id="approve-form" class="approve-form">
-            <label for="approve-code">새 기기에 뜬 등록 코드</label>
-            <div class="approve-row">
-              <input id="approve-code" type="text" maxlength="6" autocomplete="off"
-                     autocapitalize="characters" spellcheck="false" placeholder="A1B2C3">
-              <button type="submit">승인</button>
-            </div>
-          </form>
-          <p id="device-result" class="fine-print" role="status" aria-live="polite"></p>
-        </section>
-        <section class="settings-section">
-          <h2>PC 백업</h2>
-          <dl class="status-list">
-            <div><dt>서버 변경 번호</dt><dd id="server-head">—</dd></div>
-            <div><dt>PC 저장 완료</dt><dd id="sink-head">—</dd></div>
-            <div><dt>마지막 PC 접속</dt><dd id="sink-seen">—</dd></div>
-          </dl>
-          <button id="sink-token-button" type="button">새 sink 토큰 발급</button>
-          <output id="sink-token-output" class="token-output" hidden></output>
-        </section>
-        <section class="settings-section">
-          <h2>내보내기와 가져오기</h2>
-          <div class="button-row">
-            <button id="export-button" type="button">JSON 내보내기</button>
-            <label class="file-button" for="import-input">JSON 가져오기</label>
-            <input id="import-input" type="file" accept="application/json" hidden>
-          </div>
-          <p id="import-result" class="fine-print" aria-live="polite"></p>
-        </section>
-      </section>
-    </main>
-
-    <p id="toast" class="toast" role="status" aria-live="polite" hidden></p>
-
-    <form id="quick-add" class="quick-add">
-      <label class="sr-only" for="quick-title">할 일 추가</label>
-      <input id="quick-title" type="text" maxlength="400" placeholder="오늘 할 일 적기" autocomplete="off">
-      <button type="submit" aria-label="할 일 추가">＋</button>
-    </form>
-
-    <nav class="bottom-nav" aria-label="주요 화면">
-      <button type="button" data-view-target="today" aria-current="page"><span aria-hidden="true">●</span>오늘</button>
-      <button type="button" data-view-target="settings"><span aria-hidden="true">⚙</span>설정</button>
-    </nav>
-  </div>
-
-  <dialog id="editor-dialog" aria-labelledby="editor-title">
-    <form id="editor-form">
-      <div class="dialog-heading"><h2 id="editor-title">할 일 추가</h2><button id="editor-close" type="button" aria-label="닫기">×</button></div>
-      <input id="editor-id" type="hidden">
-      <label for="editor-title-input">할 일</label>
-      <input id="editor-title-input" type="text" maxlength="400" required>
-      <label for="editor-date">날짜</label>
-      <input id="editor-date" type="date" required>
-      <p id="editor-error" class="form-error" role="alert"></p>
-      <div class="dialog-actions"><button id="editor-cancel" type="button">취소</button><button class="primary" type="submit">저장</button></div>
-    </form>
+  <dialog id="menu" aria-labelledby="menu-title">
+    <h2 id="menu-title" class="sr-only">목록 메뉴</h2>
+    <div class="menu-items">
+      <button id="menu-add" type="button">새 목록</button>
+      <button id="menu-rename" type="button">이름 바꾸기</button>
+      <button id="menu-clear" type="button">완료한 항목 지우기</button>
+      <button id="menu-remove" type="button" class="danger">이 목록 삭제</button>
+      <button id="menu-close" type="button" class="quiet">닫기</button>
+    </div>
   </dialog>
 
-  <dialog id="delete-dialog" aria-labelledby="delete-title">
-    <form id="delete-form">
-      <div class="dialog-heading"><h2 id="delete-title">할 일 삭제</h2><button id="delete-close" type="button" aria-label="닫기">×</button></div>
-      <input id="delete-id" type="hidden">
-      <p id="delete-copy"></p>
-      <p class="fine-print">이 기기와 서버 양쪽에서 목록에 보이지 않게 됩니다. PC 백업에는 지운 기록이 남습니다.</p>
-      <div class="dialog-actions"><button id="delete-cancel" type="button">취소</button><button class="danger" type="submit">삭제하기</button></div>
+  <dialog id="prompt" aria-labelledby="prompt-title">
+    <form id="prompt-form" method="dialog">
+      <h2 id="prompt-title">새 목록</h2>
+      <label class="sr-only" for="prompt-text">목록 이름</label>
+      <input id="prompt-text" type="text" maxlength="24" autocomplete="off" required>
+      <p id="prompt-error" class="error" role="alert"></p>
+      <div class="menu-items row">
+        <button id="prompt-cancel" type="button" class="quiet">취소</button>
+        <button id="prompt-ok" type="submit" class="primary">확인</button>
+      </div>
     </form>
   </dialog>
 </body>

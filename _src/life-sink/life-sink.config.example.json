@@ -1,7 +1,0 @@
-{
-  "url": "https://life.bubblelab.dev",
-  "token": "앱의 설정에서 발급한 sink token",
-  "passphrase": "앱 암호 문구",
-  "dir": "./LifeStorage",
-  "pollMs": 30000
-}

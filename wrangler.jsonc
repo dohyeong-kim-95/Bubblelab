@@ -34,8 +34,8 @@
     // INVEST_PASSWORD·INVEST_CLIENT_ID·INVEST_CLIENT_SECRET secret이 셋 다 있어야
     // 열린다(하나라도 없으면 런타임에서 503). 내리려면 여기를 "false"로.
     "ENABLE_INVEST": "false",
-    // Life OS. 네 가지 전제(바인딩 + 시크릿 3개)를 런타임에서 확인하므로, 하나라도
-    // 없으면 플래그가 켜져 있어도 503 이다. 시크릿은 2026-08-18 에 등록했다.
+    // 할 일 앱. 서버 저장이 없어 게이트만 담당한다 — LIFE_PASSWORD 와
+    // LIFE_SESSION_SECRET 이 있어야 열린다(없으면 플래그와 무관하게 503).
     "ENABLE_LIFE": "true",
     // 항공권 가격 관측(trip/ 계획 탭). 개인 일정은 브라우저에만 있고 여기 오지
     // 않는다 — 서버가 들고 있는 건 노선·날짜별 가격 관측뿐이다. 켜져 있어도
@@ -90,8 +90,7 @@
       "TRIP_WATCH_SECRET",
       "TRIP_SINK_SECRET",
       "LIFE_PASSWORD",
-      "LIFE_SESSION_SECRET",
-      "LIFE_SINK_SECRET"
+      "LIFE_SESSION_SECRET"
     ]
   },
   // /_rt/<이름> 실시간 데이터 서버 (아발론 등 멀티플레이어 토이용)
@@ -117,6 +116,8 @@
       { "name": "INVEST", "class_name": "InvestDO" },
       // 항공권 날짜 조합별 최저가 관측 + 관측일별 추이 (trip/ 계획 탭)
       { "name": "TRIP_WATCH", "class_name": "TripWatchDO" },
+      // 쓰지 않는다. v17 마이그레이션이 이미 적용돼 있어 클래스를 지우면
+      // 배포가 거부되므로 자리만 남겨 둔다 (_infra/life.js 주석 참고).
       { "name": "LIFE", "class_name": "LifeDO" }
     ]
   },

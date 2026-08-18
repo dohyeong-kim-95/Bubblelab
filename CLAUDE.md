@@ -192,6 +192,16 @@ PNG·JPEG를 모두 받고, JPEG는 `npm ci` 필요. 검증은 `_infra/wallpaper
 (env로 모델·업체 교체). `ENABLE_PODCAST` var는 fail-closed. 셋업·운영은
 `podcast/README.md` 참고.
 
+## 할 일 (life/)
+
+`life/`는 목록 여러 개를 좌우로 넘기며 쓰는 할 일 PWA다(`CONFIDENTIAL_SUBDOMAINS`).
+토이 관례(share.js, 주간 기록)를 적용하지 않는다.
+
+**서버에 아무것도 저장하지 않는다** — 할 일은 브라우저 localStorage 에만 있고, 워커는
+비밀번호 게이트(`bl_life` 쿠키·`LIFE_PASSWORD`)만 담당한다. `/_life/*` API 는 없다.
+`ENABLE_LIFE` var는 fail-closed. 상태 규칙은 `life/store.js` 한 곳, 좌우 이동은 CSS
+scroll-snap 이다. 자세한 것은 `life/README.md`.
+
 ## 둘만의 기록 (duri/)
 
 `duri/`도 토이가 아니라 두 사람만 쓰는 비공개 서비스다 — 토이 관례(share.js, 주간

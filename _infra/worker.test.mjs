@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import worker, { resetAssetFlagsCache } from "./worker.js";
 import { AssetFlagsDO } from "./asset-flags.js";
-import { LifeDO } from "./life.js";
 
 const ctx = { waitUntil() {} };
 
@@ -50,157 +49,51 @@ test("worker rejects cross-site public writes before storage access", async () =
   assert.equal(response.headers.get("X-Frame-Options"), "DENY");
 });
 
-class LifeMemoryStorage {
-  constructor() { this.map = new Map(); }
-  async get(key) {
-    if (Array.isArray(key)) return new Map(key.filter((k) => this.map.has(k)).map((k) => [k, this.map.get(k)]));
-    return this.map.get(key);
-  }
-  async put(key, value) {
-    if (typeof key === "object") for (const [k, v] of Object.entries(key)) this.map.set(k, v);
-    else this.map.set(key, value);
-  }
-  async delete(keys) { for (const key of [].concat(keys)) this.map.delete(key); }
-  async list(options = {}) {
-    let keys = [...this.map.keys()].sort();
-    if (options.prefix) keys = keys.filter((k) => k.startsWith(options.prefix));
-    if (options.start) keys = keys.filter((k) => k >= options.start);
-    if (options.end) keys = keys.filter((k) => k < options.end);
-    if (options.limit != null) keys = keys.slice(0, options.limit);
-    return new Map(keys.map((k) => [k, this.map.get(k)]));
-  }
-  async transaction(fn) { return fn(this); }
-}
-
-function lifeEnv() {
-  const life = new LifeDO({ storage: new LifeMemoryStorage() });
-  return {
-    ENABLE_LIFE: "true", LIFE_PASSWORD: "only-me", LIFE_SESSION_SECRET: "session-secret",
-    LIFE_SINK_SECRET: "sink-secret",
-    ASSETS: { fetch: async () => new Response("<main>life</main>", { headers: { "Content-Type": "text/html" } }) },
-    LIFE: { idFromName: (name) => name, get: () => life },
-  };
-}
-
-const ORIGIN = "https://life.bubblelab.dev";
-const cookieOf = (response, name) =>
-  response.headers.getSetCookie().map((c) => c.split(";", 1)[0]).find((c) => c.startsWith(`${name}=`));
-const lifeGet = (path, env, cookie) => worker.fetch(
-  new Request(`${ORIGIN}${path}`, { headers: { ...(cookie ? { Cookie: cookie } : {}), "Sec-Fetch-Dest": "document" } }), env, ctx);
-const lifePost = (path, env, cookie, body) => worker.fetch(
-  new Request(`${ORIGIN}${path}`, {
-    method: "POST", body: JSON.stringify(body ?? {}),
-    headers: { Cookie: cookie, Origin: ORIGIN, "Content-Type": "application/json" },
-  }), env, ctx);
-
-async function login(env, cookie) {
-  const form = new FormData();
-  form.set("password", "only-me");
-  return worker.fetch(new Request(`${ORIGIN}/login`, {
-    method: "POST", body: form, headers: { Origin: ORIGIN, ...(cookie ? { Cookie: cookie } : {}) },
-  }), env, ctx);
-}
-
-test("life is fail-closed and only lets registered devices in", async () => {
-  let response = await worker.fetch(new Request(`${ORIGIN}/`), { ENABLE_LIFE: "true" }, ctx);
+test("life 은 fail-closed 이고 게이트 뒤에서만 열린다", async () => {
+  let response = await worker.fetch(new Request("https://life.bubblelab.dev/"), {
+    ENABLE_LIFE: "true",
+  }, ctx);
   assert.equal(response.status, 503, "시크릿이 없으면 플래그가 켜져 있어도 닫힌다");
 
-  const env = lifeEnv();
-  response = await lifeGet("/", env);
+  const env = {
+    ENABLE_LIFE: "true", LIFE_PASSWORD: "only-me", LIFE_SESSION_SECRET: "session-secret",
+    ASSETS: {
+      // 실제 에셋 서버처럼 없는 파일에는 404 를 준다.
+      fetch: async (request) => (new URL(request.url).pathname.includes("/_life/")
+        ? new Response("not found", { status: 404 })
+        : new Response("<main>할 일</main>", { headers: { "Content-Type": "text/html" } })),
+    },
+  };
+  response = await worker.fetch(new Request("https://life.bubblelab.dev/"), env, ctx);
   assert.equal(response.status, 303);
   assert.equal(response.headers.get("Location"), "/login");
-  assert.equal((await lifeGet("/_life/status", env)).status, 401);
 
   const wrong = new FormData();
   wrong.set("password", "nope");
-  response = await worker.fetch(new Request(`${ORIGIN}/login`, { method: "POST", body: wrong }), env, ctx);
+  response = await worker.fetch(
+    new Request("https://life.bubblelab.dev/login", { method: "POST", body: wrong }), env, ctx);
   assert.equal(response.status, 401);
 
-  // 첫 기기는 승인해 줄 상대가 없으므로 그대로 등록된다.
-  response = await login(env);
+  const form = new FormData();
+  form.set("password", "only-me");
+  response = await worker.fetch(
+    new Request("https://life.bubblelab.dev/login", { method: "POST", body: form }), env, ctx);
   assert.equal(response.status, 303);
-  assert.equal(response.headers.get("Location"), "/");
-  const first = cookieOf(response, "bl_life");
-  assert.ok(first, "첫 기기는 바로 세션을 받는다");
-  response = await lifeGet("/_life/status", env, first);
+  assert.match(response.headers.get("Set-Cookie"), /^bl_life=.*HttpOnly; SameSite=Lax; Max-Age=31536000; Secure/);
+  const cookie = response.headers.get("Set-Cookie").split(";", 1)[0];
+
+  response = await worker.fetch(
+    new Request("https://life.bubblelab.dev/", { headers: { Cookie: cookie } }), env, ctx);
   assert.equal(response.status, 200);
   assert.doesNotMatch(response.headers.get("Content-Security-Policy"), /unsafe-inline/);
-});
+  assert.equal(response.headers.get("X-Robots-Tag"), "noindex, nofollow");
 
-test("두 번째 기기는 등록된 기기가 승인해야 들어온다", async () => {
-  const env = lifeEnv();
-  const first = cookieOf(await login(env), "bl_life");
-
-  // 비밀번호만으로는 못 들어온다 — 등록 대기 화면으로 간다.
-  let response = await login(env);
-  assert.equal(response.status, 303);
-  assert.equal(response.headers.get("Location"), "/register");
-  const claim = cookieOf(response, "bl_life_claim");
-  assert.ok(claim);
-  assert.equal(cookieOf(response, "bl_life"), undefined, "승인 전에는 세션을 주지 않는다");
-
-  response = await lifeGet("/register", env, claim);
-  assert.equal(response.status, 200);
-  const page = await response.text();
-  const code = page.match(/<p class="pair-code">([A-Z0-9]{6})<\/p>/)?.[1];
-  assert.ok(code, "등록 코드가 화면에 보인다");
-
-  // 대기 중인 기기는 아직 아무것도 읽지 못한다.
-  assert.equal((await lifeGet("/_life/status", env, claim)).status, 401);
-
-  // 코드가 틀리면 승인되지 않는다.
-  assert.equal((await lifePost("/_life/devices/approve", env, first, { code: "AAAAAA" })).status, 403);
-
-  assert.equal((await lifePost("/_life/devices/approve", env, first, { code })).status, 200);
-  response = await lifeGet("/register", env, claim);
-  assert.equal(response.status, 303);
-  assert.equal(response.headers.get("Location"), "/");
-  const second = cookieOf(response, "bl_life");
-  assert.ok(second);
-  assert.equal((await lifeGet("/_life/status", env, second)).status, 200);
-
-  // 해제하면 그 기기는 즉시 끊긴다.
-  const list = await (await lifeGet("/_life/devices", env, first)).json();
-  assert.equal(list.devices.length, 2);
-  assert.equal(list.max, 5);
-  const target = list.devices.find((device) => device.id !== list.devices[0].id) ?? list.devices[1];
-  assert.equal((await lifePost("/_life/devices/revoke", env, first, { id: target.id })).status, 200);
-  const revoked = [first, second].find((cookie) => cookie !== first) ?? second;
-  const stillIn = (await lifeGet("/_life/status", env, revoked)).status;
-  const firstStatus = (await lifeGet("/_life/status", env, first)).status;
-  assert.ok(stillIn === 401 || firstStatus === 401, "해제된 기기는 401 이다");
-});
-
-test("등록 슬롯이 가득 차면 승인이 거절된다", async () => {
-  const env = lifeEnv();
-  const first = cookieOf(await login(env), "bl_life");
-  for (let n = 2; n <= 5; n += 1) {
-    const claim = cookieOf(await login(env), "bl_life_claim");
-    const page = await (await lifeGet("/register", env, claim)).text();
-    const code = page.match(/<p class="pair-code">([A-Z0-9]{6})<\/p>/)[1];
-    assert.equal((await lifePost("/_life/devices/approve", env, first, { code })).status, 200, `${n}번째 기기`);
-    await lifeGet("/register", env, claim);
+  // 서버에 저장하는 경로는 없다 — 예전 API 가 남아 있지 않아야 한다.
+  for (const path of ["/_life/status", "/_life/commit", "/_life/devices"]) {
+    response = await worker.fetch(
+      new Request(`https://life.bubblelab.dev${path}`, { headers: { Cookie: cookie } }), env, ctx);
+    assert.equal(response.status, 404, path);
   }
-  const list = await (await lifeGet("/_life/devices", env, first)).json();
-  assert.equal(list.devices.length, 5);
-
-  const claim = cookieOf(await login(env), "bl_life_claim");
-  const page = await (await lifeGet("/register", env, claim)).text();
-  assert.match(page, /가득 찼습니다/);
-  const code = page.match(/<p class="pair-code">([A-Z0-9]{6})<\/p>/)[1];
-  const refused = await lifePost("/_life/devices/approve", env, first, { code });
-  assert.equal(refused.status, 409);
-  assert.match((await refused.json()).error, /5대/);
-});
-
-test("PC 싱크 토큰으로는 기기 목록을 건드릴 수 없다", async () => {
-  const env = lifeEnv();
-  const first = cookieOf(await login(env), "bl_life");
-  const token = (await (await lifePost("/_life/sink-token", env, first)).json()).token;
-  const response = await worker.fetch(new Request(`${ORIGIN}/_life/devices`, {
-    headers: { Authorization: `Bearer ${token}` },
-  }), env, ctx);
-  assert.equal(response.status, 403);
 });
 
 test("enabled realtime still rejects missing websocket origin before binding access", async () => {

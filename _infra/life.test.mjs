@@ -1,174 +1,115 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {
-  LifeDO, LIFE_JOURNAL_KEEP, LIFE_MAX_ENTITY_BYTES, LIFE_MAX_FRAMES,
-  LIFE_PAGE_MAX_RECORDS, validateLifeEnvelope,
-} from "./life.js";
+import { webcrypto } from "node:crypto";
 
-// 실제 DurableObjectStorage 의 배치 한도를 그대로 흉내낸다. 예전에 이 한도가
-// 없는 가짜 스토리지 때문에, 한 번에 128개를 넘겨 프로덕션에서만 터지는
-// put/delete 가 테스트를 그대로 통과한 적이 있다.
-const STORAGE_MAX_BATCH = 128;
+if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
-class MemoryStorage {
-  constructor() { this.map = new Map(); this.listCalls = []; }
-  async get(key) {
-    if (Array.isArray(key)) {
-      assert.ok(key.length <= STORAGE_MAX_BATCH, `get() 는 한 번에 ${STORAGE_MAX_BATCH}개까지다 (${key.length})`);
-      return new Map(key.filter((k) => this.map.has(k)).map((k) => [k, this.map.get(k)]));
-    }
-    return this.map.get(key);
-  }
-  async put(key, value) {
-    if (typeof key === "object") {
-      const entries = Object.entries(key);
-      assert.ok(entries.length <= STORAGE_MAX_BATCH, `put() 는 한 번에 ${STORAGE_MAX_BATCH}쌍까지다 (${entries.length})`);
-      for (const [k, v] of entries) this.map.set(k, v);
-    } else this.map.set(key, value);
-  }
-  async delete(keys) {
-    const list = [].concat(keys);
-    assert.ok(list.length <= STORAGE_MAX_BATCH, `delete() 는 한 번에 ${STORAGE_MAX_BATCH}개까지다 (${list.length})`);
-    for (const key of list) this.map.delete(key);
-  }
-  async list(options = {}) {
-    this.listCalls.push(options);
-    let keys = [...this.map.keys()].sort();
-    if (options.prefix) keys = keys.filter((k) => k.startsWith(options.prefix));
-    if (options.start) keys = keys.filter((k) => k >= options.start);
-    if (options.end) keys = keys.filter((k) => k < options.end);
-    if (options.reverse) keys.reverse();
-    if (options.limit != null) keys = keys.slice(0, options.limit);
-    return new Map(keys.map((k) => [k, this.map.get(k)]));
-  }
-  async transaction(fn) { return fn(this); }
-}
+const {
+  MAX_LISTS, NAME_MAX, TEXT_MAX, addItem, addList, clearDone, emptyState, parseState,
+  progressOf, removeItem, removeList, renameList, toggleItem,
+} = await import("../life/store.js");
 
-const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
-const mutation = (n) => `10000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
-const envelope = (n, nextRev = 1, extra = {}) => ({
-  entityId: id(n), nextRev, deleted: false, iv: "AAAAAAAAAAAAAAAA", ct: `cipher_${n}`,
-  schema: 1, ...extra,
+const first = (state) => state.lists[0];
+
+test("빈 상태는 목록 하나로 시작한다", () => {
+  const state = emptyState();
+  assert.equal(state.lists.length, 1);
+  assert.deepEqual(first(state).items, []);
 });
-const req = (path, method = "GET", body, role = "owner") => new Request(`https://life.internal${path}`, {
-  method, headers: { "X-Life-Role": role, ...(body ? { "Content-Type": "application/json" } : {}) },
-  ...(body ? { body: JSON.stringify(body) } : {}),
-});
-const parse = async (response) => ({ status: response.status, body: await response.json() });
 
-async function commitOne(life, n) {
-  const response = await life.fetch(req("/commit", "POST", {
-    mutationId: mutation(n), frames: [{ baseRev: 0, ...envelope(n) }],
+test("깨진 저장값은 조용히 빈 상태가 된다", () => {
+  for (const raw of [null, "", "{", "[]", '{"v":2,"lists":[]}', '{"v":1,"lists":"x"}', '{"v":1,"lists":[]}']) {
+    const state = parseState(raw);
+    assert.equal(state.v, 1);
+    assert.equal(state.lists.length, 1, `${raw} 에서 복구 실패`);
+  }
+});
+
+test("저장했다 읽으면 그대로 돌아온다", () => {
+  let state = emptyState();
+  state = addItem(state, first(state).id, "우유 사기");
+  state = addItem(state, first(state).id, "세탁");
+  state = toggleItem(state, first(state).id, first(state).items[1].id);
+  state = addList(state, "장보기");
+  const restored = parseState(JSON.stringify(state));
+  assert.deepEqual(restored, state);
+});
+
+test("불량 항목은 읽을 때 걸러진다", () => {
+  const state = parseState(JSON.stringify({
+    v: 1,
+    lists: [
+      { id: "a", name: "  이름   정리  ", items: [
+        { id: "1", text: "정상", done: false },
+        { id: "2", text: "   " },
+        { text: "id 없음" },
+        { id: "3", text: "x".repeat(TEXT_MAX + 50), done: "네" },
+      ] },
+      { id: "b" },
+    ],
   }));
-  assert.equal(response.status, 200, `commit ${n} 실패`);
-}
-
-test("envelope validator fixes the opaque server schema and 64KiB cap", () => {
-  assert.deepEqual(validateLifeEnvelope(envelope(1)), envelope(1));
-  assert.throws(() => validateLifeEnvelope({ ...envelope(1), entityId: "sys:forged" }), /entity id/);
-  assert.throws(() => validateLifeEnvelope({ ...envelope(1), ct: "x".repeat(LIFE_MAX_ENTITY_BYTES) }), /too large/);
+  assert.equal(state.lists.length, 1, "이름 없는 목록은 버린다");
+  assert.equal(state.lists[0].name, "이름 정리");
+  assert.equal(state.lists[0].items.length, 2, "빈 텍스트와 id 없는 항목은 버린다");
+  assert.equal(state.lists[0].items[1].text.length, TEXT_MAX);
+  assert.equal(state.lists[0].items[1].done, true);
 });
 
-test("bootstrap is create-once and never replaces the original sentinel", async () => {
-  const storage = new MemoryStorage();
-  const life = new LifeDO({ storage });
-  const first = { salt: "AAAAAAAAAAAAAAAA", sentinel: { iv: "BBBBBBBBBBBBBBBB", ct: "opaque", schema: 1 } };
-  assert.equal((await parse(await life.fetch(req("/bootstrap", "POST", first)))).status, 201);
-  assert.equal((await parse(await life.fetch(req("/bootstrap", "POST", { ...first, salt: "CCCCCCCCCCCCCCCC" })))).status, 409);
-  assert.equal((await storage.get("bootstrap")).salt, first.salt);
+test("항목을 더하고 지우고 완료한다", () => {
+  let state = emptyState();
+  const list = first(state).id;
+  state = addItem(state, list, "  공백 정리   해줘 ");
+  assert.equal(first(state).items[0].text, "공백 정리 해줘");
+  state = addItem(state, list, "   ");
+  assert.equal(first(state).items.length, 1, "빈 입력은 무시한다");
+
+  const item = first(state).items[0].id;
+  state = toggleItem(state, list, item);
+  assert.equal(first(state).items[0].done, true);
+  assert.deepEqual(progressOf(first(state)), { done: 1, total: 1 });
+  state = toggleItem(state, list, item);
+  assert.equal(first(state).items[0].done, false);
+  state = removeItem(state, list, item);
+  assert.equal(first(state).items.length, 0);
 });
 
-test("commit is CAS atomic, idempotent, paginated and does not expose plaintext", async () => {
-  const storage = new MemoryStorage();
-  const life = new LifeDO({ storage });
-  const body = { mutationId: mutation(1), frames: [{ baseRev: 0, ...envelope(1) }, { baseRev: 0, ...envelope(2) }] };
-  let result = await parse(await life.fetch(req("/commit", "POST", body)));
-  assert.equal(result.status, 200);
-  assert.equal(result.body.head, 2);
-  assert.equal((await parse(await life.fetch(req("/commit", "POST", body)))).body.head, 2);
-  assert.equal((await storage.get("meta")).head, 2);
-
-  result = await parse(await life.fetch(req("/commit", "POST", {
-    mutationId: mutation(2), frames: [{ baseRev: 0, ...envelope(1, 1) }, { baseRev: 0, ...envelope(3) }],
-  })));
-  assert.equal(result.status, 409);
-  assert.equal(result.body.conflicts[0].entityId, id(1));
-  assert.equal(await storage.get(`entity:${id(3)}`), undefined, "stale batch must write nothing");
-  const page = (await parse(await life.fetch(req("/changes?after=0&limit=1")))).body;
-  assert.equal(page.changes.length, 1);
-  assert.equal(page.hasMore, true);
-  assert.equal(JSON.stringify(await (await life.fetch(req("/status"))).json()).includes("cipher_"), false);
+test("완료한 항목만 한 번에 지운다", () => {
+  let state = emptyState();
+  const list = first(state).id;
+  state = addItem(state, list, "남을 것");
+  state = addItem(state, list, "지울 것");
+  state = toggleItem(state, list, first(state).items[1].id);
+  state = clearDone(state, list);
+  assert.deepEqual(first(state).items.map((item) => item.text), ["남을 것"]);
 });
 
-test("서버가 처음 보는 항목의 충돌에는 latest 가 null 로 실린다", async () => {
-  const life = new LifeDO({ storage: new MemoryStorage() });
-  // baseRev 1 은 서버에 rev 1 이 이미 있다는 주장인데 실제로는 아무것도 없다.
-  const result = await parse(await life.fetch(req("/commit", "POST", {
-    mutationId: mutation(1), frames: [{ baseRev: 1, ...envelope(1, 2) }],
-  })));
-  assert.equal(result.status, 409);
-  assert.deepEqual(result.body.conflicts, [{ entityId: id(1), latest: null }]);
+test("목록을 더하고 이름을 바꾸고 지운다", () => {
+  let state = emptyState();
+  state = addList(state, "장보기");
+  assert.equal(state.lists.length, 2);
+  state = renameList(state, state.lists[1].id, "주말 장보기");
+  assert.equal(state.lists[1].name, "주말 장보기");
+  assert.throws(() => renameList(state, state.lists[1].id, "   "), /이름/);
+  assert.throws(() => addList(state, ""), /이름/);
+
+  state = removeList(state, state.lists[1].id);
+  assert.equal(state.lists.length, 1);
+  assert.throws(() => removeList(state, first(state).id), /하나 이상/, "마지막 목록은 지울 수 없다");
 });
 
-test("최대 크기 커밋도 스토리지 배치 한도를 넘지 않는다", async () => {
-  const storage = new MemoryStorage();
-  const life = new LifeDO({ storage });
-  const frames = Array.from({ length: LIFE_MAX_FRAMES }, (_, index) => ({ baseRev: 0, ...envelope(index + 1) }));
-  const result = await parse(await life.fetch(req("/commit", "POST", { mutationId: mutation(1), frames })));
-  assert.equal(result.status, 200);
-  assert.equal(result.body.head, LIFE_MAX_FRAMES);
-  assert.equal((await storage.get("meta")).entityCount, LIFE_MAX_FRAMES);
-  assert.equal((await parse(await life.fetch(req("/commit", "POST", {
-    mutationId: mutation(2), frames: [...frames, { baseRev: 0, ...envelope(999) }],
-  })))).status, 400, "프레임 한도를 넘으면 거절한다");
+test("목록 이름과 개수에 상한이 있다", () => {
+  let state = emptyState();
+  state = renameList(state, first(state).id, "가".repeat(NAME_MAX + 10));
+  assert.equal(first(state).name.length, NAME_MAX);
+  for (let n = state.lists.length; n < MAX_LISTS; n += 1) state = addList(state, `목록 ${n}`);
+  assert.equal(state.lists.length, MAX_LISTS);
+  assert.throws(() => addList(state, "하나 더"), new RegExp(`${MAX_LISTS}개`));
 });
 
-test("snapshot 은 현재 엔터티를 head 와 함께 페이지로 돌려준다", async () => {
-  const storage = new MemoryStorage();
-  const life = new LifeDO({ storage });
-  for (let n = 1; n <= 205; n += 1) await commitOne(life, n);
-
-  const collected = [];
-  let after = "";
-  let pages = 0;
-  for (;;) {
-    const body = (await parse(await life.fetch(req(`/snapshot?limit=100${after ? `&after=${after}` : ""}`, "GET", undefined, "sink")))).body;
-    assert.equal(body.head, 205, "페이지마다 그 시점의 head 를 알려준다");
-    collected.push(...body.envelopes);
-    pages += 1;
-    if (body.done) { assert.equal(body.nextCursor, null); break; }
-    after = body.nextCursor;
-    assert.ok(after, "done 이 아니면 다음 커서가 있어야 한다");
-  }
-  assert.equal(pages, 3);
-  assert.equal(collected.length, 205);
-  assert.equal(collected[0].entityId, id(1));
-  assert.equal(new Set(collected.map((item) => item.entityId)).size, 205);
-  assert.ok(storage.listCalls.every((call) => call.limit <= LIFE_PAGE_MAX_RECORDS), "no unbounded list");
-});
-
-test("sink ack 은 단조롭고, 잘라낸 저널 뒤의 커서는 snapshot 으로 돌려보낸다", async () => {
-  const storage = new MemoryStorage();
-  const life = new LifeDO({ storage });
-  const total = LIFE_JOURNAL_KEEP + 110;
-  for (let n = 1; n <= total; n += 1) await commitOne(life, n);
-
-  assert.equal((await life.fetch(req("/sink/ack", "POST", { seq: total }, "owner"))).status, 403, "owner 는 ack 할 수 없다");
-  // 한 번의 ack 는 저널 한 페이지(100건)와 그 뮤테이션 키까지 200개를 지운다 —
-  // 나눠 지우지 않으면 여기서 배치 한도에 걸린다.
-  let acked = (await parse(await life.fetch(req("/sink/ack", "POST", { seq: total }, "sink")))).body;
-  assert.equal(acked.ackSeq, total);
-  assert.equal(acked.oldestSeq, 101);
-  acked = (await parse(await life.fetch(req("/sink/ack", "POST", { seq: total }, "sink")))).body;
-  assert.equal(acked.oldestSeq, 111, "다음 ack 가 남은 구간을 이어서 지운다");
-  assert.equal((await life.fetch(req("/sink/ack", "POST", { seq: total - 1 }, "sink"))).status, 409, "뒤로 가는 ack 는 거절");
-
-  assert.ok(await storage.get(`entity:${id(1)}`), "저널을 잘라도 현재 엔터티는 남는다");
-  assert.equal(await storage.get("journal:000000000001"), undefined);
-  const stale = (await parse(await life.fetch(req("/changes?after=50")))).body;
-  assert.equal(stale.snapshotRequired, true);
-  assert.equal(stale.oldestSeq, 111);
-  const fresh = (await parse(await life.fetch(req(`/changes?after=${total - 1}`)))).body;
-  assert.equal(fresh.snapshotRequired, undefined);
-  assert.equal(fresh.changes.length, 1);
+test("바꾸기는 원래 상태를 건드리지 않는다", () => {
+  const state = emptyState();
+  const snapshot = JSON.stringify(state);
+  addItem(state, first(state).id, "새 항목");
+  addList(state, "새 목록");
+  assert.equal(JSON.stringify(state), snapshot);
 });
