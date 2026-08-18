@@ -22,4 +22,8 @@
   `putAll/getAll/deleteAll`을 쓴다 — DO는 한 번에 128개까지만 받는다.
 - UI는 Today가 기본 진입이다. 390px 가로 넘침, 44px 터치 타깃, 키보드/스크린리더,
   reduced motion을 유지한다.
+- **기기 목록 API(`/_life/devices`)는 등록 코드를 돌려주지 않는다.** 코드는 새 기기
+  화면에만 뜬다 — 이걸 목록에 실으면 비밀번호만 가진 사람이 혼자 등록을 마칠 수 있다.
+- 세션 쿠키는 기기 ID 를 함께 서명한다. 다른 사이트가 쓰는 `validSession`(만료.nonce)
+  과 형식이 다르니 그쪽을 고쳐 맞추지 말고 `lifeSessionDevice` 를 쓴다.
 - `README.md`와 이 파일은 빌드에서 배포되지 않는다.

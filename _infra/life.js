@@ -17,6 +17,12 @@ export const LIFE_JOURNAL_KEEP = 500;
 export const LIFE_WARN_BYTES = 24 * 1024 * 1024;
 export const LIFE_MAX_CURRENT_BYTES = 32 * 1024 * 1024;
 export const LIFE_MAX_ENTITIES = 50_000;
+// 등록 기기 수. 이 값을 넘으면 새 기기는 슬롯이 빌 때까지 승인될 수 없다.
+export const LIFE_MAX_DEVICES = 5;
+export const LIFE_PENDING_TTL_MS = 10 * 60 * 1000;
+// 코드를 눈으로 읽어 옮겨 적으므로 헷갈리는 글자(0/O, 1/I/L, S/5, B/8, 2/Z)는 뺀다.
+const DEVICE_CODE_ALPHABET = "ACDEFGHJKMNPQRTUVWXY34679";
+const DEVICE_CODE_LENGTH = 6;
 // DurableObjectStorage 의 put/get/delete 는 한 번에 128개까지만 받는다.
 const STORAGE_BATCH = 100;
 
@@ -130,6 +136,7 @@ export class LifeDO {
       if (url.pathname === "/changes" && request.method === "GET") return this.changes(url);
       if (url.pathname === "/snapshot" && request.method === "GET") return this.snapshot(url);
       if (url.pathname === "/status" && request.method === "GET") return this.status();
+      if (url.pathname.startsWith("/devices")) return this.devices(request, url, role);
       if (url.pathname === "/sink/ack") {
         return request.method === "POST" && role === "sink" ? this.ack(request) : json({ error: "forbidden" }, 403);
       }
@@ -273,4 +280,150 @@ export class LifeDO {
       return json({ ackSeq: next.sinkAckSeq, head: next.head, oldestSeq: next.oldestSeq });
     });
   }
+
+  /* ── 기기 등록 ────────────────────────────────────────────────────────────
+   * 여기 담기는 것은 기기 라벨과 시각뿐이다 — 사용자가 적은 내용은 한 글자도
+   * 오지 않는다. 게이트가 매 요청 확인해야 하므로 암호화하지 않는다.
+   *
+   * role 은 워커가 붙인다: owner(로그인한 기기) · gate(아직 로그인 전 등록 절차)
+   * · sink(PC 데몬, 여기 접근 불가). */
+  async deviceState(storage = this.state.storage) {
+    return {
+      devices: (await storage.get("devices")) ?? [],
+      pending: (await storage.get("pending")) ?? null,
+    };
+  }
+
+  livePending(pending) {
+    return pending && pending.expiresAt > Date.now() ? pending : null;
+  }
+
+  async devices(request, url, role) {
+    const path = url.pathname.slice("/devices".length) || "/";
+    const self = request.headers.get("X-Life-Device") || null;
+    const OWNER_ONLY = ["/", "/approve", "/revoke"];
+    const GATE_OK = ["/start", "/claim", "/check"];
+    if (OWNER_ONLY.includes(path) && role !== "owner") return json({ error: "forbidden" }, 403);
+    if (GATE_OK.includes(path) && !["owner", "gate"].includes(role)) return json({ error: "forbidden" }, 403);
+    if (path === "/reset") {
+      if (role !== "gate") return json({ error: "forbidden" }, 403);
+      return this.atomic(async (storage) => {
+        await storage.put({ devices: [], pending: null });
+        return json({ devices: [], reset: true });
+      });
+    }
+    if (path === "/" && request.method === "GET") {
+      const { devices, pending } = await this.deviceState();
+      const live = this.livePending(pending);
+      return json({
+        max: LIFE_MAX_DEVICES,
+        devices: devices.map(({ id, label, createdAt, lastSeenAt }) =>
+          ({ id, label, createdAt, lastSeenAt, current: id === self })),
+        // 코드는 일부러 싣지 않는다 — 새 기기 화면을 직접 보고 옮겨 적어야
+        // 비밀번호만 가진 사람이 혼자 등록을 마칠 수 없다.
+        pending: live && !live.approved ? { label: live.label, expiresAt: live.expiresAt } : null,
+      });
+    }
+    if (request.method !== "POST") return json({ error: "method not allowed" }, 405);
+    const body = await request.json().catch(() => ({}));
+    if (path === "/start") return this.startRegistration(body);
+    if (path === "/claim") return this.claimRegistration(body);
+    if (path === "/approve") return this.approveDevice(body);
+    if (path === "/revoke") return this.revokeDevice(body);
+    if (path === "/check") return this.checkDevice(body);
+    return json({ error: "not found" }, 404);
+  }
+
+  /* 비밀번호를 통과한 새 기기가 부른다. 등록된 기기가 하나도 없으면(첫 기기)
+   * 승인해 줄 상대가 없으므로 그대로 등록한다. */
+  async startRegistration(body) {
+    const label = deviceLabel(body?.label);
+    return this.atomic(async (storage) => {
+      const { devices } = await this.deviceState(storage);
+      if (!devices.length) {
+        const device = newDevice(label);
+        await storage.put({ devices: [device], pending: null });
+        return json({ registered: true, deviceId: device.id, devices: 1, max: LIFE_MAX_DEVICES });
+      }
+      const pending = {
+        code: deviceCode(), claim: crypto.randomUUID(), deviceId: crypto.randomUUID(),
+        label, approved: false, createdAt: nowIso(), expiresAt: Date.now() + LIFE_PENDING_TTL_MS,
+      };
+      await storage.put("pending", pending);
+      return json({ registered: false, code: pending.code, claim: pending.claim,
+        expiresAt: pending.expiresAt, devices: devices.length, max: LIFE_MAX_DEVICES });
+    });
+  }
+
+  /* 대기 중인 새 기기가 승인됐는지 물어본다(등록 화면이 몇 초마다 부른다). */
+  async claimRegistration(body) {
+    return this.atomic(async (storage) => {
+      const { pending } = await this.deviceState(storage);
+      const live = this.livePending(pending);
+      if (!live || live.claim !== body?.claim) return json({ error: "unknown claim" }, 404);
+      if (!live.approved) return json({ approved: false, code: live.code, expiresAt: live.expiresAt });
+      await storage.put("pending", null);
+      return json({ approved: true, deviceId: live.deviceId });
+    });
+  }
+
+  async approveDevice(body) {
+    return this.atomic(async (storage) => {
+      const { devices, pending } = await this.deviceState(storage);
+      const live = this.livePending(pending);
+      if (!live) return json({ error: "등록을 기다리는 기기가 없습니다" }, 404);
+      const code = String(body?.code ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+      if (code !== live.code) return json({ error: "코드가 맞지 않습니다" }, 403);
+      if (live.approved) return json({ approved: true, devices: devices.length });
+      if (devices.length >= LIFE_MAX_DEVICES) {
+        return json({ error: `등록된 기기가 ${LIFE_MAX_DEVICES}대입니다. 하나를 해제한 뒤 승인하세요.` }, 409);
+      }
+      const device = newDevice(live.label, live.deviceId);
+      await storage.put({ devices: [...devices, device], pending: { ...live, approved: true } });
+      return json({ approved: true, device, devices: devices.length + 1 });
+    });
+  }
+
+  async revokeDevice(body) {
+    return this.atomic(async (storage) => {
+      const { devices } = await this.deviceState(storage);
+      const remaining = devices.filter((device) => device.id !== body?.id);
+      if (remaining.length === devices.length) return json({ error: "그런 기기가 없습니다" }, 404);
+      await storage.put("devices", remaining);
+      return json({ revoked: body.id, devices: remaining.length });
+    });
+  }
+
+  /* 게이트가 매 요청 부른다. 등록이 풀린 기기는 여기서 바로 걸린다. */
+  async checkDevice(body) {
+    const { devices } = await this.deviceState();
+    const device = devices.find((item) => item.id === body?.deviceId);
+    if (!device) return json({ registered: false }, 403);
+    // 마지막 접속 시각은 한 시간에 한 번만 적는다 — 매 요청 쓰면 DO 가 놀 틈이 없다.
+    if (Date.now() - Date.parse(device.lastSeenAt ?? 0) > 60 * 60 * 1000) {
+      await this.atomic(async (storage) => {
+        const { devices: current } = await this.deviceState(storage);
+        await storage.put("devices", current.map((item) =>
+          item.id === device.id ? { ...item, lastSeenAt: nowIso() } : item));
+      });
+    }
+    return json({ registered: true, label: device.label });
+  }
+}
+
+const nowIso = () => new Date().toISOString();
+
+function deviceCode() {
+  const bytes = crypto.getRandomValues(new Uint8Array(DEVICE_CODE_LENGTH));
+  return [...bytes].map((b) => DEVICE_CODE_ALPHABET[b % DEVICE_CODE_ALPHABET.length]).join("");
+}
+
+function newDevice(label, id = crypto.randomUUID()) {
+  return { id, label, createdAt: nowIso(), lastSeenAt: nowIso() };
+}
+
+/** User-Agent 에서 뽑은 짧은 이름. 사람이 목록에서 구분할 수 있으면 충분하다. */
+export function deviceLabel(value) {
+  const raw = String(value ?? "").trim().replace(/\s+/g, " ");
+  return raw ? raw.slice(0, 60) : "알 수 없는 기기";
 }

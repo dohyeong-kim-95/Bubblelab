@@ -71,6 +71,17 @@ main { width: min(100%, 720px); margin: 0 auto; }
 .button-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .file-button { display: inline-flex; align-items: center; }
 .token-output { display: block; margin-top: 10px; padding: 10px; border: 1px solid var(--line); overflow-wrap: anywhere; user-select: all; }
+.device-list { list-style: none; margin: 12px 0; padding: 0; }
+.device-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 54px; border-bottom: 1px solid var(--line); }
+.device-name { overflow-wrap: anywhere; }
+.device-when { display: block; color: var(--muted); font-size: 11px; }
+.device-current { border: 1px solid var(--moss); border-radius: 6px; padding: 1px 6px; background: var(--moss-quiet); color: var(--moss); font-size: 11px; }
+.device-list button { flex: none; min-height: 36px; padding: 5px 9px; font-size: 12px; }
+.pending-note { border-left: 2px solid var(--moss); padding: 8px 0 8px 12px; margin: 12px 0; font-size: 13px; }
+.approve-form { margin-top: 8px; }
+.approve-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-top: 6px; }
+.approve-row input { text-transform: uppercase; letter-spacing: .3em; font-size: 17px; }
+.pair-code { margin: 22px 0; padding: 16px; border: 1px solid var(--moss); border-radius: 8px; background: var(--moss-quiet); color: var(--moss); font-size: 30px; letter-spacing: .32em; text-align: center; user-select: all; }
 .conflict-list { display: grid; gap: 10px; margin: 0 0 16px; }
 .conflict-item { border-left: 2px solid var(--danger); padding: 8px 0 8px 12px; }
 .conflict-item p { margin: 0 0 8px; overflow-wrap: anywhere; }

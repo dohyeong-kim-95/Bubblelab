@@ -250,6 +250,7 @@ async function synchronize() {
     await refreshLocal();
     setText("sync-state", "동기화됨");
     await loadServerStatus();
+    await renderDevices();
   } catch (error) {
     setText("sync-state", navigator.onLine ? error.message : "오프라인 · 로컬");
     $("sync-state").classList.add("error");
@@ -273,7 +274,8 @@ async function logout() {
 
 function scrubDecryptedState() {
   state.entities = [];
-  for (const id of ["today-actions", "carried-actions", "conflict-list"]) $(id)?.replaceChildren();
+  for (const id of ["today-actions", "carried-actions", "conflict-list", "device-list"]) $(id)?.replaceChildren();
+  $("device-pending").hidden = true;
   for (const input of document.querySelectorAll("input:not([type=hidden]), textarea")) input.value = "";
   for (const id of ["sink-token-output", "import-result", "delete-copy", "toast"]) setText(id, "");
   $("sink-token-output").hidden = true;
@@ -376,6 +378,60 @@ async function resolveConflictLocal(conflict, drafts) {
   void synchronize();
 }
 
+/* 기기 관리. 새 기기는 등록 코드를 화면에 띄우고 기다리고, 이미 등록된 기기가
+ * 그 코드를 옮겨 적어 승인한다 — 비밀번호만 아는 사람은 혼자 마칠 수 없다. */
+async function renderDevices() {
+  const list = $("device-list");
+  try {
+    const response = await lifeFetch("devices");
+    if (!response.ok) throw new Error(`기기 목록을 불러오지 못했습니다 (${response.status})`);
+    const state = await response.json();
+    setText("device-count", `${state.devices.length} / ${state.max}대`);
+    list.replaceChildren(...state.devices.map((device) => {
+      const row = node("li");
+      const name = node("div", "device-name");
+      name.append(document.createTextNode(device.label));
+      if (device.current) name.append(" ", node("span", "device-current", "이 기기"));
+      name.append(node("span", "device-when", `등록 ${formatTimestamp(device.createdAt)} · 최근 ${formatTimestamp(device.lastSeenAt)}`));
+      row.append(name);
+      const revoke = node("button", "", device.current ? "여기서 나가기" : "해제");
+      revoke.type = "button";
+      revoke.addEventListener("click", () => guard(() => revokeDevice(device)));
+      row.append(revoke);
+      return row;
+    }));
+    const pending = $("device-pending");
+    pending.hidden = !state.pending;
+    if (state.pending) {
+      pending.replaceChildren(
+        node("strong", "", `${state.pending.label} 이(가) 등록을 기다립니다.`),
+        node("span", "device-when", "그 기기 화면에 뜬 6자리 코드를 아래에 입력하세요."),
+      );
+    }
+  } catch (error) { setText("device-result", error.message); }
+}
+
+async function approveDevice(event) {
+  event.preventDefault();
+  const code = $("approve-code").value.trim().toUpperCase();
+  if (!code) return;
+  setText("device-result", "승인 중…");
+  const response = await lifeFetch("devices/approve", { method: "POST", body: JSON.stringify({ code }) });
+  const result = await response.json().catch(() => ({}));
+  setText("device-result", response.ok ? "새 기기를 등록했습니다." : result.error || `승인하지 못했습니다 (${response.status})`);
+  if (response.ok) $("approve-code").value = "";
+  await renderDevices();
+}
+
+async function revokeDevice(device) {
+  const response = await lifeFetch("devices/revoke", { method: "POST", body: JSON.stringify({ id: device.id }) });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || "해제하지 못했습니다");
+  // 이 기기를 해제했다면 다음 요청부터 남이다 — 로그인 화면으로 보낸다.
+  if (device.current) { handleUnauthorized(); return; }
+  setText("device-result", `${device.label} 을(를) 해제했습니다.`);
+  await renderDevices();
+}
+
 async function loadServerStatus() {
   try {
     const response = await lifeFetch("status");
@@ -440,6 +496,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("export-button").addEventListener("click", exportData);
   $("import-input").addEventListener("change", importData);
   $("sink-token-button").addEventListener("click", issueSinkToken);
+  $("approve-form").addEventListener("submit", (event) => guard(() => approveDevice(event)));
   $("empty-add").addEventListener("click", () => openEditor());
   document.querySelectorAll("[data-view-target]").forEach((button) => button.addEventListener("click", () => switchView(button.dataset.viewTarget)));
   addEventListener("online", () => void (async () => {
