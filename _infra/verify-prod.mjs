@@ -309,6 +309,15 @@ export function buildProbes({ sites, expectedCommit, ws }) {
       async run({ target, checks, timeoutMs }) {
         const { status, text, headers } = await request(target.site(site, "/"), { timeoutMs });
         if (gated) {
+          // 기능 플래그로 통째로 닫아 둔 사이트는 로그인 화면조차 없다(503). 다만
+          // 그냥 503 을 허용하면 시크릿 누락·바인딩 사고를 못 잡으므로, /_health 가
+          // 실제로 "이 기능 꺼짐"이라고 말할 때만 통과시킨다.
+          if (status === 503) {
+            const health = parseJson((await request(target.api("/_health"), { timeoutMs })).text) ?? {};
+            checks.ok(`${site} 503 은 기능이 꺼져 있을 때만`, health.features?.[site] === false,
+              `features.${site} === false`);
+            return;
+          }
           // 로그인 게이트는 "막는 것"이 정상 동작이다. 여기서 200이면 오히려 사고.
           checks.oneOf(`GET ${site}/ status (게이트)`, status, [302, 303]);
           checks.matches(`${site} 로그인 리다이렉트`, headers.get("location") ?? "", /\/login$/);
