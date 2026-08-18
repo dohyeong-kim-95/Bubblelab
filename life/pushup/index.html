@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <meta name="theme-color" content="#000000">
+  <title>팔굽혀펴기</title>
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="modulepreload" href="store.js">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="bar">
+    <a class="back" href="../" aria-label="LIFE 로 돌아가기">←</a>
+    <h1 class="bar-title">팔굽혀펴기 <span id="progress" class="count"></span></h1>
+    <button id="retest-button" type="button" aria-label="최대량 다시 재기">↻</button>
+  </header>
+
+  <p id="summary" class="summary"></p>
+  <main id="days" class="days"></main>
+
+  <dialog id="runner" aria-labelledby="runner-title">
+    <div class="runner">
+      <p id="runner-title" class="runner-day"></p>
+      <p id="runner-step" class="runner-step"></p>
+      <p id="runner-reps" class="runner-reps"></p>
+      <label id="actual-label" for="actual" hidden>실제로 한 개수</label>
+      <input id="actual" type="number" min="0" max="300" inputmode="numeric" hidden>
+      <p id="runner-rest" class="runner-rest" hidden></p>
+      <div class="menu-items row">
+        <button id="runner-quit" type="button" class="quiet">그만</button>
+        <button id="runner-next" class="primary" type="button">완료</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="retest" aria-labelledby="retest-title">
+    <form id="retest-form">
+      <h2 id="retest-title">최대량 다시 재기</h2>
+      <p class="fine-print">쉬지 않고 할 수 있는 만큼 해 보고, 그 개수를 적어주세요.
+        새 계획이 그 값에 맞춰 다시 만들어집니다 — 진행은 1일차부터 시작합니다.</p>
+      <label for="retest-max">최대 개수</label>
+      <input id="retest-max" type="number" min="1" max="300" inputmode="numeric" required>
+      <p id="retest-error" class="error" role="alert"></p>
+      <div class="menu-items row">
+        <button id="retest-cancel" type="button" class="quiet">취소</button>
+        <button class="primary" type="submit">계획 다시 짜기</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>
