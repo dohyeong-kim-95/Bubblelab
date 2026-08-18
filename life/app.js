@@ -97,7 +97,7 @@ function itemRow(list, item) {
   grip.type = "button";
   grip.setAttribute("aria-label", `${item.text} 순서 바꾸기`);
 
-  row.append(toggle, text, grip, remove);
+  row.append(toggle, text, remove, grip);
   return row;
 }
 
