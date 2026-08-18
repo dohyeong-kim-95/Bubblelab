@@ -83,16 +83,28 @@ function renderPanels() {
   }));
 }
 
+/* 점은 목록 구성이 바뀔 때만 다시 만든다. 스와이프 중에는 클래스만 갈아 끼운다 —
+ * 매 프레임 DOM 을 새로 만들면 그게 그대로 굼뜬 느낌이 된다. */
+let dotEls = [];
+
 function renderDots() {
-  $("dots").replaceChildren(...state.lists.map((list, position) => {
-    const dot = node("button", `dot${position === index ? " on" : ""}`);
+  dotEls = state.lists.map((list, position) => {
+    const dot = node("button", "dot");
     dot.type = "button";
     dot.setAttribute("aria-label", list.name);
-    dot.setAttribute("aria-current", position === index ? "true" : "false");
     dot.addEventListener("click", () => goTo(position));
     return dot;
-  }));
+  });
+  $("dots").replaceChildren(...dotEls);
   $("dots").hidden = state.lists.length < 2;
+  markDots();
+}
+
+function markDots() {
+  dotEls.forEach((dot, position) => {
+    dot.classList.toggle("on", position === index);
+    dot.setAttribute("aria-current", position === index ? "true" : "false");
+  });
 }
 
 function renderHeader() {
@@ -118,21 +130,36 @@ function update(next, listId = null) {
   else render();
 }
 
+/* 점을 누르거나 목록을 새로 만들어 옮길 때. 부드럽게 미끄러지는 동안에는 중간
+ * 위치가 계속 들어오므로 스크롤 핸들러가 끼어들지 못하게 잠깐 막는다 — 안 막으면
+ * 목적지에 닿기 전 중간값으로 헤더가 되돌아간다. */
+let navigatingUntil = 0;
+
 function goTo(position, behavior = "smooth") {
   index = Math.max(0, Math.min(position, state.lists.length - 1));
+  navigatingUntil = behavior === "smooth" ? Date.now() + 600 : 0;
   track.scrollTo({ left: index * track.clientWidth, behavior });
-  renderDots();
+  markDots();
   renderHeader();
 }
 
-// 스와이프가 멈춘 자리를 헤더·점에 반영한다.
-let settle = null;
+/* 손가락을 따라오게 한다. 스크롤이 멈추기를 기다리지 않고 매 프레임 확인하되,
+ * 프레임당 한 번으로 묶어 스크롤을 방해하지 않는다(절반을 넘어서면 넘어간 것). */
+let scrollFrame = 0;
+// 손가락이 닿는 순간 사용자가 주도권을 가져간다 — 미끄러지던 중이라도 잠금을 푼다.
+track.addEventListener("pointerdown", () => { navigatingUntil = 0; }, { passive: true });
 track.addEventListener("scroll", () => {
-  clearTimeout(settle);
-  settle = setTimeout(() => {
+  if (scrollFrame) return;
+  scrollFrame = requestAnimationFrame(() => {
+    scrollFrame = 0;
     const position = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
-    if (position !== index) { index = position; renderDots(); renderHeader(); }
-  }, 60);
+    if (position === index) { navigatingUntil = 0; return; }   // 목적지에 닿았다
+    if (Date.now() < navigatingUntil) return;                  // 아직 미끄러지는 중
+    if (position < 0 || position >= state.lists.length) return;
+    index = position;
+    markDots();
+    renderHeader();
+  });
 }, { passive: true });
 
 addEventListener("resize", () => {

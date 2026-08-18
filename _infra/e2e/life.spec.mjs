@@ -37,6 +37,7 @@ test("할 일 PWA — 목록을 옆으로 넘기고, 적은 내용이 오프라�
   // 가로 스크롤(스와이프)로 넘겨도 헤더와 점이 따라온다.
   await page.evaluate(() => {
     const track = document.getElementById("track");
+    track.dispatchEvent(new PointerEvent("pointerdown"));   // 손가락이 닿았다
     track.scrollTo({ left: 0, behavior: "auto" });
     track.dispatchEvent(new Event("scroll"));
   });

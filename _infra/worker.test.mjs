@@ -88,6 +88,18 @@ test("life 은 fail-closed 이고 게이트 뒤에서만 열린다", async () =>
   assert.doesNotMatch(response.headers.get("Content-Security-Policy"), /unsafe-inline/);
   assert.equal(response.headers.get("X-Robots-Tag"), "noindex, nofollow");
 
+  // 설치에 필요한 것만 게이트 앞에 있다. 크롬(과 WebAPK 서버)이 쿠키 없이 받아 가는데
+  // 로그인 HTML 이 돌아오면 "앱 설치" 대신 바로가기만 만들어진다.
+  for (const path of ["/manifest.json", "/icon-192.png", "/icon-512.png", "/icon.svg", "/styles.css"]) {
+    const anonymous = await worker.fetch(new Request(`https://life.bubblelab.dev${path}`), env, ctx);
+    assert.equal(anonymous.status, 200, `${path} 는 로그인 없이 받을 수 있어야 한다`);
+  }
+  // 그 밖에는 전부 막힌다.
+  for (const path of ["/", "/app.js", "/store.js", "/sw.js", "/invest/"]) {
+    const anonymous = await worker.fetch(new Request(`https://life.bubblelab.dev${path}`), env, ctx);
+    assert.equal(anonymous.status, 303, `${path} 는 막혀야 한다`);
+  }
+
   // 서버에 저장하는 경로는 없다 — 예전 API 가 남아 있지 않아야 한다.
   for (const path of ["/_life/status", "/_life/commit", "/_life/devices"]) {
     response = await worker.fetch(

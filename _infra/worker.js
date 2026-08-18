@@ -551,6 +551,9 @@ async function handleInvestGate(request, env, url, base = "") {
 }
 
 const LIFE_SESSION_TTL_MS = 365 * 24 * 60 * 60 * 1000;
+const LIFE_PUBLIC_PATHS = new Set([
+  "/styles.css", "/manifest.json", "/icon.svg", "/icon-192.png", "/icon-512.png",
+]);
 
 // 서버에 남는 것이 없으므로 비밀번호와 세션 비밀만 있으면 열린다.
 function lifeConfigured(env) {
@@ -594,8 +597,12 @@ async function handleLifeGate(request, env, url, base = "") {
   if (url.pathname === "/login") {
     return authenticated ? redirect(`${base}/`) : new Response(LIFE_LOGIN_PAGE(false, base), { headers });
   }
-  // 로그인 문서는 제 스타일시트만 불러올 수 있다. 나머지는 전부 게이트 뒤다.
-  if (!authenticated && url.pathname !== "/styles.css") return redirect(`${base}/login`);
+  // 로그인 문서의 스타일시트, 그리고 설치에 필요한 매니페스트·아이콘만 게이트 앞에
+  // 둔다. 크롬은 설치 조건을 확인할 때(WebAPK 를 구울 때는 구글 서버가) 이것들을
+  // 쿠키 없이 받아 가는데, 로그인 페이지 HTML 이 돌아오면 "설치 가능"으로 보지 않아
+  // 앱 설치 대신 바로가기만 만들어진다. 여기서 드러나는 것은 앱 이름과 아이콘뿐이고
+  // 적어 둔 내용은 한 줄도 나가지 않는다.
+  if (!authenticated && !LIFE_PUBLIC_PATHS.has(url.pathname)) return redirect(`${base}/login`);
   return null;
 }
 

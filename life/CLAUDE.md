@@ -14,8 +14,12 @@
   맞지 않는다 — `#prompt` dialog 를 쓴다.
 - CSP 가 인라인 스크립트·스타일을 막는다(`_infra/security.js`). 외부 호스트도 전부
   막혀 있으니 폰트·아이콘을 CDN 에서 불러오지 않는다.
-- `<link rel="manifest">` 의 `crossorigin="use-credentials"` 를 지우지 말 것. 게이트
-  뒤에서는 이게 없으면 설치가 바로가기로 떨어지고 주소창이 남는다.
+- 설치에 필요한 것(`manifest.json`·아이콘·`styles.css`)은 `_infra/worker.js` 의
+  `LIFE_PUBLIC_PATHS` 로 게이트 앞에 열어 둔다. 여기에 앱 파일이나 도구를 추가하지 말 것.
+- `<link rel="manifest">` 의 `crossorigin="use-credentials"` 를 지우지 말 것.
+- 프로그램 이동(`goTo`) 중에는 스크롤 핸들러가 끼어들지 않지만, 손가락이 닿으면
+  (`pointerdown`) 즉시 사용자에게 주도권을 넘긴다. 이 해제를 빼면 목록을 만들고 바로
+  스와이프할 때 먹지 않는다.
 - 아이콘을 바꾸면 192·512 PNG 를 함께 갱신한다. 없으면 안드로이드에서 설치 프롬프트가
   뜨지 않는다.
 - 항목 순서는 **미완료 → 완료**가 불변이다. 정렬은 `orderedItems` 한 곳에서만 하고,

@@ -61,7 +61,7 @@ button { border: 0; background: none; cursor: pointer; touch-action: manipulatio
 .tool { margin-left: 6px; color: var(--muted); font-size: 11px; white-space: nowrap; }
 .item.done .text { color: var(--muted); text-decoration: line-through; }
 .item, .dot::before, #list-name { transition: background-color 140ms ease; }
-.dot::before { transition: background-color 160ms ease, transform 160ms ease; }
+.dot::before { transition: background-color 90ms linear, transform 90ms ease-out; }
 .item.done .check { color: var(--muted); }
 .remove { height: 44px; font-size: 19px; color: var(--line); }
 .item:hover .remove, .item:focus-within .remove { color: var(--muted); }
