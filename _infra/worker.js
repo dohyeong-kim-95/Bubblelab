@@ -553,6 +553,10 @@ async function handleInvestGate(request, env, url, base = "") {
 const LIFE_SESSION_TTL_MS = 365 * 24 * 60 * 60 * 1000;
 const LIFE_PUBLIC_PATHS = new Set([
   "/styles.css", "/manifest.json", "/icon.svg", "/icon-192.png", "/icon-512.png",
+  // 서비스워커 스크립트는 리다이렉트되면 등록 자체가 거부된다(스펙). 세션이 끊긴
+  // 순간 등록이 깨지면 설치 조건도 함께 무너지므로 게이트 앞에 둔다 — 이 파일에는
+  // 데이터가 없고 리포에 그대로 있는 코드다.
+  "/sw.js",
 ]);
 
 // 서버에 남는 것이 없으므로 비밀번호와 세션 비밀만 있으면 열린다.

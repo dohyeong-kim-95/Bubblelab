@@ -90,12 +90,12 @@ test("life 은 fail-closed 이고 게이트 뒤에서만 열린다", async () =>
 
   // 설치에 필요한 것만 게이트 앞에 있다. 크롬(과 WebAPK 서버)이 쿠키 없이 받아 가는데
   // 로그인 HTML 이 돌아오면 "앱 설치" 대신 바로가기만 만들어진다.
-  for (const path of ["/manifest.json", "/icon-192.png", "/icon-512.png", "/icon.svg", "/styles.css"]) {
+  for (const path of ["/manifest.json", "/icon-192.png", "/icon-512.png", "/icon.svg", "/styles.css", "/sw.js"]) {
     const anonymous = await worker.fetch(new Request(`https://life.bubblelab.dev${path}`), env, ctx);
     assert.equal(anonymous.status, 200, `${path} 는 로그인 없이 받을 수 있어야 한다`);
   }
   // 그 밖에는 전부 막힌다.
-  for (const path of ["/", "/app.js", "/store.js", "/sw.js", "/invest/"]) {
+  for (const path of ["/", "/app.js", "/store.js", "/invest/"]) {
     const anonymous = await worker.fetch(new Request(`https://life.bubblelab.dev${path}`), env, ctx);
     assert.equal(anonymous.status, 303, `${path} 는 막혀야 한다`);
   }

@@ -1,10 +1,24 @@
 // 오프라인에서도 열리게만 한다. 할 일은 localStorage 에 있어 네트워크가 필요 없다.
-const CACHE = "life-v3";
-const SHELL = ["./", "index.html", "styles.css", "app.js", "store.js", "manifest.json", "icon.svg", "icon-192.png", "icon-512.png"];
+const CACHE = "life-v4";
+const SHELL = ["./", "index.html", "styles.css", "app.js", "store.js"];
+// 크롬이 설치 가능 여부를 판단할 때 직접 보는 것들. 서비스워커가 중간에서
+// 만지지 않는다 — 한 번이라도 옛 응답을 돌려주면 설치가 막힌다.
+const INSTALL_ASSETS = ["/manifest.json", "/icon.svg", "/icon-192.png", "/icon-512.png"];
+
+/* 리다이렉트된 응답은 캐시하지 않는다. 게이트가 /login 으로 돌려보낸 것을 그대로
+ * 담아 두면, 그 뒤로 원본 대신 로그인 페이지가 나온다(설치가 막히던 원인 중 하나). */
+async function store(cache, request, response) {
+  if (!response.ok || response.redirected) return false;
+  await cache.put(request, response.clone());
+  return true;
+}
 
 self.addEventListener("install", (event) => event.waitUntil((async () => {
   const cache = await caches.open(CACHE);
-  await Promise.allSettled(SHELL.map((path) => cache.add(new Request(path, { cache: "reload" }))));
+  await Promise.allSettled(SHELL.map(async (path) => {
+    const request = new Request(path, { cache: "reload" });
+    await store(cache, request, await fetch(request));
+  }));
   await self.skipWaiting();
 })()));
 
@@ -20,10 +34,7 @@ async function networkFirst(request) {
   const cache = await caches.open(CACHE);
   try {
     const response = await fetch(request);
-    const url = new URL(response.url);
-    if (response.ok && !response.redirected && !url.pathname.endsWith("/login")) {
-      await cache.put(request, response.clone());
-    }
+    await store(cache, request, response);
     return response;
   } catch {
     return (await cache.match(request, { ignoreSearch: request.mode === "navigate" })) || Response.error();
@@ -34,6 +45,7 @@ self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.method !== "GET") return;
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin || url.pathname.endsWith("/login")) return;
+  if (url.origin !== self.location.origin) return;
+  if (url.pathname.endsWith("/login") || INSTALL_ASSETS.includes(url.pathname)) return;
   event.respondWith(networkFirst(request));
 });
