@@ -252,3 +252,16 @@ test("비공개 서브도메인·감춘 카드는 검색 색인에도 없다", (
     assert.deepEqual(leaked, [], `${name}이 검색 색인에 샜다`);
   }
 });
+
+test("life 에는 공용 스크립트를 넣지 않는다 (여는 속도)", () => {
+  const html = readFileSync(join(DIST, "life/index.html"), "utf8");
+  for (const script of ["engagement.js", "dock.js", "home.js", "share.js"]) {
+    assert.ok(!html.includes(script), `life 에 ${script} 가 붙었다`);
+  }
+  // 워커가 방문 집계에서 life 를 빼고 있고 공유·홈 버튼도 없다 — 받아 봐야 하는 일이 없다.
+  const worker = readFileSync(new URL("./worker.js", import.meta.url), "utf8");
+  assert.match(worker, /!\["admin", "work", "estate", "life"\]\.includes\(site\)/);
+
+  // 다른 사이트는 그대로 받아야 한다.
+  assert.ok(readFileSync(join(DIST, "slop/index.html"), "utf8").includes("engagement.js"));
+});
