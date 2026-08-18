@@ -304,6 +304,7 @@ function openPicker() {
     draggable(grip, row, container, commitListOrder);
     return row;
   }));
+  $("picker-hint").hidden = state.lists.length < 2;
   $("picker").showModal();
 }
 
