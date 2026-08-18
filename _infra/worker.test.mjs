@@ -100,6 +100,13 @@ test("life 은 fail-closed 이고 게이트 뒤에서만 열린다", async () =>
     assert.equal(anonymous.status, 303, `${path} 는 막혀야 한다`);
   }
 
+  // 배포하면 바로 반영돼야 한다 — 앱 코드에 브라우저 캐시를 붙이지 않는다.
+  for (const path of ["/", "/app.js", "/store.js", "/styles.css"]) {
+    const served = await worker.fetch(
+      new Request(`https://life.bubblelab.dev${path}`, { headers: { Cookie: cookie } }), env, ctx);
+    assert.equal(served.headers.get("Cache-Control"), "no-store", path);
+  }
+
   // 서버에 저장하는 경로는 없다 — 예전 API 가 남아 있지 않아야 한다.
   for (const path of ["/_life/status", "/_life/commit", "/_life/devices"]) {
     response = await worker.fetch(
@@ -788,10 +795,12 @@ test("confidential static cache only admits code, fonts, and explicitly non-sens
   assert.equal(response.headers.get("Cache-Control"), "private, max-age=2592000, stale-while-revalidate=86400");
   assert.equal(response.headers.get("X-Robots-Tag"), "noindex, nofollow");
 
-  response = await worker.fetch(new Request(
-    "https://work.bubblelab.dev/daonfit/app.js", { headers: { Cookie: cookie } },
-  ), env, ctx);
-  assert.equal(response.headers.get("Cache-Control"), "private, max-age=3600, must-revalidate");
+  // 코드는 캐시하지 않는다. HTML 은 늘 최신인데 JS 만 캐시되면 배포 직후 둘이 어긋난다.
+  for (const path of ["/daonfit/app.js", "/daonfit/style.css"]) {
+    response = await worker.fetch(
+      new Request(`https://work.bubblelab.dev${path}`, { headers: { Cookie: cookie } }), env, ctx);
+    assert.equal(response.headers.get("Cache-Control"), "no-store", path);
+  }
 
   // 인증 뒤 이미지는 지문이 박혀 있어도 디스크에 남기지 않는다.
   for (const path of ["/daonfit/private-preview.png", "/daonfit/private-preview-a1b2c3d4.png"]) {

@@ -9,7 +9,11 @@ import { isDormant } from "./dormant.js";
 
 const ROOT_DOMAIN = "bubblelab.dev";
 
-const AUTH_GATED_STATIC_SITES = new Set(["work", "duri", "invest", "life"]);
+// 비공개 사이트에서 공유 캐시에 남겨도 되는 것 — 사용자 데이터가 아닌 공개 이미지뿐.
+const PUBLIC_MEDIA = {
+  work: /^\/showcase\/.+\.(?:avif|gif|jpe?g|png|svg|webp)$/i,
+  estate: /^\/basemap-[a-z0-9-]+\.(?:avif|jpe?g|png|webp)$/i,
+};
 const CODE_EXT = /\.(?:css|js|mjs|wasm)$/i;
 const FONT_EXT = /\.(?:woff2?|ttf|otf)$/i;
 const MEDIA_EXT = /\.(?:avif|gif|ico|jpe?g|mp3|mp4|ogg|png|svg|webm|webp)$/i;
@@ -23,16 +27,13 @@ function hasContentFingerprint(path) {
   return /^[a-f0-9]{8,}$/i.test(token) || (/[A-Z]/.test(token) && /[a-z]/.test(token) && /\d/.test(token));
 }
 
-function staticCacheControl(path, { visibility = "public", allowMedia = true } = {}) {
-  const media = MEDIA_EXT.test(path);
-  if (hasContentFingerprint(path) && (!media || allowMedia)) {
-    return `${visibility}, max-age=31536000, immutable`;
-  }
-  if (FONT_EXT.test(path)) return `${visibility}, max-age=2592000, stale-while-revalidate=86400`;
-  if (media && allowMedia) {
-    return `${visibility}, max-age=604800, stale-while-revalidate=86400`;
-  }
-  if (CODE_EXT.test(path)) return `${visibility}, max-age=3600, must-revalidate`;
+/* 공개 경로(/_shared, /_assets, 공개 서브도메인)용. 비공개 사이트는 이걸 쓰지 않고
+ * no-store 를 기본으로 두므로 visibility 같은 인자가 필요 없다. */
+function staticCacheControl(path) {
+  if (hasContentFingerprint(path)) return "public, max-age=31536000, immutable";
+  if (FONT_EXT.test(path)) return "public, max-age=2592000, stale-while-revalidate=86400";
+  if (MEDIA_EXT.test(path)) return "public, max-age=604800, stale-while-revalidate=86400";
+  if (CODE_EXT.test(path)) return "public, max-age=3600, must-revalidate";
   return null;
 }
 
@@ -2021,14 +2022,13 @@ export async function handleRequest(request, env, ctx) {
       // 문서·JSON·인증 뒤 이미지는 디스크에 남기지 않는다. 실행 코드와 폰트는
       // 사용자 데이터가 아니므로 브라우저 전용 캐시를 허용하고, 공개 데이터인
       // estate 배경지도와 work 공개 showcase 미디어만 공유 캐시할 수 있게 한다.
-      const authGated = AUTH_GATED_STATIC_SITES.has(site);
-      const publicWorkMedia = site === "work" && path.startsWith("/showcase/") && MEDIA_EXT.test(path);
-      const publicEstateMedia = site === "estate" && /^\/basemap-[a-z0-9-]+\.(?:avif|jpe?g|png|webp)$/i.test(path);
-      const allowMedia = publicWorkMedia || publicEstateMedia;
-      const visibility = authGated && !publicWorkMedia ? "private" : "public";
-      const cacheControl = site === "admin" || response.status !== 200
-        ? null
-        : staticCacheControl(path, { visibility, allowMedia });
+      // no-store 가 기본이다. 사용자 데이터가 아닌 게 확실한 폰트와 명시한 공개
+      // 이미지만 예외로 캐시한다 — **코드는 넣지 않는다**. HTML 은 늘 최신인데 JS 만
+      // 캐시되면 배포 직후 둘이 어긋나고, 그게 "배포해도 반영이 안 된다"로 나타난다.
+      const cacheControl = site === "admin" || response.status !== 200 ? null
+        : PUBLIC_MEDIA[site]?.test(path) ? "public, max-age=604800, stale-while-revalidate=86400"
+        : FONT_EXT.test(path) ? "private, max-age=2592000, stale-while-revalidate=86400"
+        : null;
       headers.set("Cache-Control", cacheControl ?? "no-store");
       headers.set("X-Robots-Tag", "noindex, nofollow");
       return new Response(response.body, {

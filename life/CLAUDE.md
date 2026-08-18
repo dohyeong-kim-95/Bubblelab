@@ -30,6 +30,8 @@
   저장된 배열을 재정렬하지 않는다(완료를 취소하면 제자리로 돌아와야 한다).
 - 항목 하나만 바뀌면 `update(next, listId)` 로 그 목록만 다시 그린다. 목록 구성이
   바뀔 때만 인자 없이 불러 전체를 그린다.
+- `app.js`·`store.js`·`styles.css` 에 `Cache-Control` 을 붙이지 말 것. 배포가 즉시
+  반영돼야 하고, HTML(no-store)과 어긋나는 순간 앱이 깨진다.
 - 키보드 대응은 뷰포트 meta 의 `interactive-widget=resizes-content` + `--app-h` 다.
   문서 스크롤(`body` 에 overflow)을 만들지 않는다 — PWA 에서 화면이 통째로 밀린다.
 
