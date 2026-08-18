@@ -736,10 +736,8 @@ test("public static assets cache by stability while HTML and JSON keep their exi
   response = await fetch("https://assets.bubblelab.dev/_assets/sticker/couple-cat/preview.png");
   assert.equal(response.headers.get("Cache-Control"), "public, max-age=604800, stale-while-revalidate=86400");
 
-  response = await fetch("https://estate.bubblelab.dev/");
-  assert.equal(response.headers.get("Cache-Control"), "no-store");
-  response = await fetch("https://estate.bubblelab.dev/data/trade-dongtan-202606.json");
-  assert.equal(response.headers.get("Cache-Control"), "no-store");
+  response = await fetch("https://puzzle.bubblelab.dev/");
+  assert.equal(response.headers.get("Cache-Control"), null, "공개 문서는 캐시 헤더를 붙이지 않는다");
 });
 
 test("confidential static cache only admits code, fonts, and explicitly non-sensitive media", async () => {
@@ -755,25 +753,10 @@ test("confidential static cache only admits code, fonts, and explicitly non-sens
   };
 
   let response = await worker.fetch(
-    new Request("https://estate.bubblelab.dev/basemap-dongtan.png"), { ASSETS: assets }, ctx);
-  assert.equal(response.headers.get("Cache-Control"), "public, max-age=604800, stale-while-revalidate=86400");
-  assert.equal(response.headers.get("X-Robots-Tag"), "noindex, nofollow");
-
-  response = await worker.fetch(
-    new Request("https://trip.bubblelab.dev/budget.js"), { ASSETS: assets }, ctx);
-  assert.equal(response.headers.get("Cache-Control"), "public, max-age=3600, must-revalidate");
-  response = await worker.fetch(
-    new Request("https://trip.bubblelab.dev/private-plan.png"), { ASSETS: assets }, ctx);
-  assert.equal(response.headers.get("Cache-Control"), "no-store");
-
-  response = await worker.fetch(
-    new Request("https://estate.bubblelab.dev/private-scan.png"), { ASSETS: assets }, ctx);
-  assert.equal(response.headers.get("Cache-Control"), "no-store");
-
-  response = await worker.fetch(
     new Request("https://work.bubblelab.dev/showcase/img/mindfulness.png"),
     { WORK_PASSWORD: "master", ASSETS: assets }, ctx);
   assert.equal(response.headers.get("Cache-Control"), "public, max-age=604800, stale-while-revalidate=86400");
+  assert.equal(response.headers.get("X-Robots-Tag"), "noindex, nofollow");
 
   const env = { WORK_PASSWORD: "master", ASSETS: assets };
   const form = new FormData();
@@ -790,14 +773,40 @@ test("confidential static cache only admits code, fonts, and explicitly non-sens
   assert.equal(response.headers.get("X-Robots-Tag"), "noindex, nofollow");
 
   response = await worker.fetch(new Request(
-    "https://work.bubblelab.dev/daonfit/private-preview.png",
-    { headers: { Cookie: cookie } },
+    "https://work.bubblelab.dev/daonfit/app.js", { headers: { Cookie: cookie } },
   ), env, ctx);
-  assert.equal(response.headers.get("Cache-Control"), "no-store");
+  assert.equal(response.headers.get("Cache-Control"), "private, max-age=3600, must-revalidate");
 
-  response = await worker.fetch(new Request(
-    "https://work.bubblelab.dev/daonfit/private-preview-a1b2c3d4.png",
-    { headers: { Cookie: cookie } },
-  ), env, ctx);
-  assert.equal(response.headers.get("Cache-Control"), "no-store");
+  // 인증 뒤 이미지는 지문이 박혀 있어도 디스크에 남기지 않는다.
+  for (const path of ["/daonfit/private-preview.png", "/daonfit/private-preview-a1b2c3d4.png"]) {
+    response = await worker.fetch(
+      new Request(`https://work.bubblelab.dev${path}`, { headers: { Cookie: cookie } }), env, ctx);
+    assert.equal(response.headers.get("Cache-Control"), "no-store", path);
+  }
+
+  response = await worker.fetch(
+    new Request("https://work.bubblelab.dev/daonfit/", { headers: { Cookie: cookie } }), env, ctx);
+  assert.equal(response.headers.get("Cache-Control"), "no-store", "문서는 no-store");
+});
+
+test("잠든 화면은 코드와 데이터를 남긴 채 입구만 닫힌다", async () => {
+  const env = { ASSETS: { fetch: () => new Response("page", { headers: { "Content-Type": "text/html" } }) } };
+  const get = (url) => worker.fetch(new Request(url), env, ctx);
+
+  for (const url of [
+    "https://estate.bubblelab.dev/",
+    "https://estate.bubblelab.dev/basemap-dongtan.png",
+    "https://trip.bubblelab.dev/",
+    "https://invest.bubblelab.dev/",
+    "https://util.bubblelab.dev/planner/",
+  ]) {
+    assert.equal((await get(url)).status, 404, url);
+  }
+  // 같은 서브도메인의 다른 화면은 멀쩡해야 한다.
+  assert.equal((await get("https://util.bubblelab.dev/")).status, 200);
+  assert.equal((await get("https://util.bubblelab.dev/calendar/")).status, 200);
+  // API 는 기능 플래그로 fail-closed.
+  for (const path of ["/_invest/state", "/_planner/data", "/_trip/watches"]) {
+    assert.equal((await get(`https://bubblelab.dev${path}`)).status, 503, path);
+  }
 });

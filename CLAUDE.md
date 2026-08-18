@@ -25,6 +25,20 @@
   작업이니 그대로 둔다(실제로 휩쓸려 나간 적이 있다). 커밋 전 `git status
   --short`로 확인한다. 이미 푸시된 이력은 혼자 다시 쓰지 말고 사용자에게 알린다.
 
+## 잠들어 있는 화면
+
+`estate`, `invest`, `trip`, `util/planner` 는 **내려 둔 상태**다. 목록은
+`_infra/dormant.js` 한 곳에 있고, 워커가 404 로 답하며 빌드가 아예 배포하지 않는다.
+`ENABLE_INVEST`·`ENABLE_TRIP_WATCH`·`ENABLE_PLANNER` 는 `"false"`, trip 가격 수집
+cron 도 빼 뒀다.
+
+**코드와 Durable Object 데이터는 그대로 있다.** 바인딩과 migrations 를 지우면
+invest 잔고 이력과 trip 가격 관측이 사라지고 되살릴 방법이 없으니 건드리지 말 것.
+하나씩 필요해질 때 `dormant.js` 에서 한 줄 지우고 해당 플래그를 되돌리면 살아난다
+(되살릴 항목은 그 파일에 적혀 있다).
+
+아래 문서에 남아 있는 trip·estate·invest 설명은 되살릴 때를 위한 것이다.
+
 ## 토이 작성 관례
 
 - 파일 안에 이모지 하나 (카드 아이콘으로 자동 추출됨)
@@ -192,7 +206,7 @@ PNG·JPEG를 모두 받고, JPEG는 `npm ci` 필요. 검증은 `_infra/wallpaper
 `duri/data/kr-sgg.geojson`만 쓰고 외부 지도 API는 없다). 셋업·프로토콜·한계는
 `duri/README.md` 참고.
 
-## 여행 계획·예산 (trip/)
+## 여행 계획·예산 (trip/) — 잠들어 있음
 
 `trip/`은 혼자 쓰는 여행 계획·예산 화면이다(`CONFIDENTIAL_SUBDOMAINS`, 랜딩·풀다운·
 검색 미노출). 토이 관례(share.js, 주간 기록)를 적용하지 않는다. **로그인은 없고**

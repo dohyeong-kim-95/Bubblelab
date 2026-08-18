@@ -584,8 +584,10 @@ test("wrangler 에 DO 바인딩·cron·기능 플래그가 있다", () => {
   // 바인딩만 있고 migration 이 없으면 배포가 통째로 실패한다 (새 DO 클래스는
   // 반드시 migration 태그가 있어야 한다).
   assert.match(config, /"new_sqlite_classes": \["TripWatchDO"\]/);
-  assert.match(config, /"20 \*\/6 \* \* \*"/);
-  assert.match(config, /"ENABLE_TRIP_WATCH": "true"/);
+  // trip 은 잠들어 있다(_infra/dormant.js) — 플래그는 꺼져 있고 수집 cron 도 뺐다.
+  // 바인딩과 migration 은 위에서 그대로 확인한다: 지우면 쌓아 둔 관측이 사라진다.
+  assert.match(config, /"ENABLE_TRIP_WATCH": "false"/);
+  assert.ok(!/"20 \*\/6 \* \* \*"/.test(config), "잠든 동안 수집 cron 이 남아 있다");
   // 자격증명은 secret 목록에만 있고 값이 박혀 있으면 안 된다
   assert.match(config, /"AMADEUS_CLIENT_SECRET"/);
   assert.ok(!/AMADEUS_CLIENT_SECRET"\s*:/.test(config), "secret 값이 설정에 박혔다");

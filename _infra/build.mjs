@@ -16,13 +16,14 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { generateAssetCatalog } from "./assets.js";
 import { emitEmoticonHistory } from "./emoticon-history.mjs";
+import { dormantEntries, dormantSubdomains } from "./dormant.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const DIST = join(ROOT, "dist");
 // docs/ 는 서브도메인이 아니라 개발 워크플로 문서다(병렬 에이전트 판정 기록 등).
 // 루트 폴더라 그냥 두면 docs.bubblelab.dev 로 배포되고 랜딩 카드 검사에 걸린다.
 // scripts/ 는 배포 스크립트(make ship·verify-prod)라 서브도메인이 아니다.
-const SKIP = new Set(["dist", "node_modules", "docs", "scripts"]);
+const SKIP = new Set(["dist", "node_modules", "docs", "scripts", ...dormantSubdomains()]);
 // 서브도메인 공개 구분. 퍼블릭은 www 랜딩 카드와 카테고리 홈 풀다운 메뉴에
 // 노출되고, confidential은 주소를 직접 쳐야만 들어갈 수 있다(어디에도 링크 없음).
 // 새 폴더는 기본 퍼블릭이며, 빌드가 www 랜딩 카드 존재 여부를 검사한다.
@@ -34,8 +35,8 @@ const CONFIDENTIAL_SUBDOMAINS = new Set(
 const UNLISTED_ENTRIES = new Map([
   // 백엔드가 보안상 닫혀 있는 동안 발견되지 않게 한다(인증/ACL 검토 후 해제).
   ["games", new Set(["avalon", "liargame", "yacht"])],
-  // 여권사진은 비공개 요청으로 목록에서 내렸다.
-  ["util", new Set(["passport-pic"])],
+  // 여권사진은 비공개 요청으로 목록에서 내렸다. planner 는 잠들어 있다.
+  ["util", new Set(["passport-pic", ...dormantEntries("util")])],
 ]);
 
 const isSite = (d) =>

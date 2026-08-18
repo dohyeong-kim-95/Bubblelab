@@ -5,6 +5,8 @@
 // 첫 번째 경로 세그먼트를 서브도메인 대신 사용한다:
 //   localhost:8787/slop/foo → dist/slop/foo
 
+import { isDormant } from "./dormant.js";
+
 const ROOT_DOMAIN = "bubblelab.dev";
 
 const AUTH_GATED_STATIC_SITES = new Set(["work", "duri", "invest", "life"]);
@@ -1961,6 +1963,10 @@ export async function handleRequest(request, env, ctx) {
       // 트레일링 슬래시 보존 (없으면 에셋 서버의 canonical 리다이렉트와 루프)
       if (url.pathname.endsWith("/") && !path.endsWith("/")) path += "/";
     }
+
+    // 내려 둔 화면은 없는 주소처럼 답한다. 정적 껍데기만 남아 반쯤 도는 것보다
+    // 닫혀 있는 편이 낫다 — 살릴 때는 _infra/dormant.js 에서 한 줄 지운다.
+    if (isDormant(site, path)) return new Response("not found", { status: 404 });
 
     // 폴더 이름을 바꾸면 예전 주소로 온 사람(북마크·공유 링크)이 404를 만난다.
     // 옮긴 자리만 알려주고 끝낸다 — 페이지를 남겨 두면 두 벌을 관리하게 된다.

@@ -171,7 +171,7 @@ test("모든 서브도메인에 첫 화면 프로브가 하나씩 생긴다", ()
   }
   assert.equal(new Set(probes.map((p) => p.id)).size, probes.length, "프로브 id 가 겹친다");
   // 게이트 뒤 서브도메인은 worker.js 의 분기와 같아야 한다.
-  assert.deepEqual([...GATED_SITES].sort(), ["admin", "duri", "invest", "life"]);
+  assert.deepEqual([...GATED_SITES].sort(), ["admin", "duri", "life"]);
 });
 
 test("life status는 숫자 메타데이터만 허용한다", () => {

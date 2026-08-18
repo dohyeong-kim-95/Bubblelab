@@ -15,13 +15,14 @@
 // 사용: node _infra/verify-prod.mjs [--domain bubblelab.dev] [--commit <sha>] [--json]
 import { readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { dormantSubdomains } from "./dormant.js";
 
 const ROOT = new URL("..", import.meta.url);
 
 /** 로그인 게이트 뒤에 있는 서브도메인 (worker.js 의 site 분기와 같아야 한다). */
-export const GATED_SITES = new Set(["admin", "invest", "duri", "life"]);
+export const GATED_SITES = new Set(["admin", "duri", "life"]);
 /** 배포되지 않는 폴더 규칙은 build.mjs 와 같다. */
-const SKIP_DIRS = new Set(["dist", "node_modules", "docs", "scripts"]);
+const SKIP_DIRS = new Set(["dist", "node_modules", "docs", "scripts", ...dormantSubdomains()]);
 
 export function listSites(root = fileURLToPath(ROOT)) {
   return readdirSync(root, { withFileTypes: true })
@@ -440,11 +441,12 @@ export function buildProbes({ sites, expectedCommit, ws }) {
   add({
     id: "gate:closed", surface: "worker", title: "인증·기능 게이트 (익명 접근)",
     async run({ target, checks, timeoutMs }) {
+      // 잠든 기능은 503, 살아 있으면 401 — 어느 쪽이든 익명에게 열리지 않는다.
       const cases = [
-        ["/_invest/state", [401]],
+        ["/_invest/state", [401, 503]],
         ["/_duri/status", [401]],
         ["/_life/status", [401, 503]],
-        ["/_planner/data", [401]],
+        ["/_planner/data", [401, 503]],
         ["/_rt/avalon", [503]],       // ENABLE_REALTIME=false
         ["/_chat", [403]],            // Origin 없는 WebSocket 시도
         ["/_assets/upload/x.png", [404]],
@@ -459,18 +461,6 @@ export function buildProbes({ sites, expectedCommit, ws }) {
   });
 
   /* 게이트 안쪽 — 자격증명이 있을 때만. */
-  add({
-    id: "invest:state", surface: "do", title: "잔고 스냅샷 (InvestDO)", needs: "invest",
-    async run({ target, checks, timeoutMs, creds }) {
-      const cookie = await formLogin(target, "invest", { password: creds.investPassword }, "bl_invest", timeoutMs);
-      if (!cookie) throw new Error("invest 로그인 실패 — BL_INVEST_PASSWORD 확인");
-      const { status, text } = await request(target.apiOn("invest", "/_invest/state"), { timeoutMs, headers: { cookie } });
-      checks.eq("GET /_invest/state status", status, 200);
-      const state = parseJson(text) ?? {};
-      assertInvestState(state, checks);
-    },
-  });
-
   add({
     id: "duri:status", surface: "do", title: "듀리 중계 상태 (DuriDO·PC 싱크)", needs: "duri",
     async run({ target, checks, timeoutMs, creds }) {

@@ -5,7 +5,8 @@
 // 기능·로직은 _infra/*.test.mjs 가 담당한다 — 여기서 늘리지 않는다.
 import { test, expect } from "@playwright/test";
 
-// 게이트 뒤(work·admin·duri·podcast·estate·invest)는 로그인이 필요해 스모크 대상이 아니다.
+// 게이트 뒤(work·admin·duri·podcast)는 로그인이 필요해 스모크 대상이 아니다.
+// 잠들어 있는 화면(estate·invest·trip·util/planner)도 배포되지 않아 대상이 아니다 — _infra/dormant.js.
 const SCREENS = [
   { name: "랜딩", path: "/" },
   { name: "slop 홈", path: "/slop/" },
@@ -33,7 +34,6 @@ const SCREENS = [
   // 리포트를 전부 스크립트로 그린다 — JSON을 못 읽으면 빈 화면이 된다
   { name: "클로드 인사이트", path: "/lab/claude-insights/" },
   // 화면을 전부 스크립트로 그린다. 저장본이 없는 첫 방문에서도 안내가 떠야 한다
-  { name: "여행 계획", path: "/trip/" },
 ];
 
 for (const screen of SCREENS) {
