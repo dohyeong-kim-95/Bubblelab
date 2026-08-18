@@ -6,7 +6,8 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 const {
   MAX_LISTS, NAME_MAX, TEXT_MAX, addItem, addList, clearDone, emptyState, parseState,
-  orderedItems, progressOf, removeItem, removeList, renameList, setTool, toggleItem, toolSlug,
+  orderedItems, progressOf, removeItem, removeList, renameList, reorderItems, reorderLists,
+  setTool, toggleItem, toolSlug,
 } = await import("../life/store.js");
 
 const first = (state) => state.lists[0];
@@ -172,4 +173,42 @@ test("미완료가 항상 위, 완료가 항상 아래", () => {
   assert.deepEqual(orderedItems(first(state)).map((item) => item.text), ["하나", "둘", "셋", "넷"]);
   assert.equal(first(state).items[0].id, a);
   assert.equal(first(state).items[2].id, c);
+});
+
+test("한 목록 안에서 순서를 바꾼다", () => {
+  let state = emptyState();
+  const list = first(state).id;
+  for (const text of ["하나", "둘", "셋"]) state = addItem(state, list, text);
+  const [a, b, c] = first(state).items.map((item) => item.id);
+
+  state = reorderItems(state, list, [c, a, b]);
+  assert.deepEqual(first(state).items.map((item) => item.text), ["셋", "하나", "둘"]);
+
+  // 넘어오지 않은 항목은 잃어버리지 않고 뒤에 남는다.
+  state = reorderItems(state, list, [b]);
+  assert.deepEqual(first(state).items.map((item) => item.text), ["둘", "셋", "하나"]);
+  // 모르는 id 는 무시한다.
+  state = reorderItems(state, list, ["없는-id", a]);
+  assert.deepEqual(first(state).items.map((item) => item.text), ["하나", "둘", "셋"]);
+});
+
+test("완료한 항목은 순서를 바꿔도 아래에 남는다", () => {
+  let state = emptyState();
+  const list = first(state).id;
+  for (const text of ["하나", "둘", "셋"]) state = addItem(state, list, text);
+  const [a, b, c] = first(state).items.map((item) => item.id);
+  state = toggleItem(state, list, a);
+  // 완료한 "하나"를 맨 앞으로 끌어도 보이는 순서에서는 여전히 아래다.
+  state = reorderItems(state, list, [a, c, b]);
+  assert.deepEqual(orderedItems(first(state)).map((item) => item.text), ["셋", "둘", "하나"]);
+});
+
+test("목록끼리 순서를 바꾼다", () => {
+  let state = emptyState();
+  state = addList(state, "둘째");
+  state = addList(state, "셋째");
+  const [a, b, c] = state.lists.map((list) => list.id);
+  state = reorderLists(state, [c, b, a]);
+  assert.deepEqual(state.lists.map((list) => list.name), ["셋째", "둘째", "할 일"]);
+  assert.equal(state.lists.length, 3);
 });

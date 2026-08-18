@@ -110,6 +110,24 @@ export function clearDone(state, listId) {
   return mapList(state, listId, (list) => ({ ...list, items: list.items.filter((item) => !item.done) }));
 }
 
+/* 순서 바꾸기는 "화면에 보이던 id 순서"를 그대로 받는다. 화면이 이미 정답을
+ * 들고 있으니 인덱스 계산을 양쪽에서 되풀이하지 않는다. 목록에 있는데 넘어오지
+ * 않은 것은 뒤에 붙여 잃어버리지 않는다. */
+function applyOrder(items, orderedIds) {
+  const byId = new Map(items.map((item) => [item.id, item]));
+  const moved = orderedIds.map((id) => byId.get(id)).filter(Boolean);
+  const seen = new Set(moved.map((item) => item.id));
+  return [...moved, ...items.filter((item) => !seen.has(item.id))];
+}
+
+export function reorderItems(state, listId, orderedIds) {
+  return mapList(state, listId, (list) => ({ ...list, items: applyOrder(list.items, orderedIds) }));
+}
+
+export function reorderLists(state, orderedIds) {
+  return { ...state, lists: applyOrder(state.lists, orderedIds) };
+}
+
 /** 화면에 보이는 순서: 미완료가 먼저, 완료가 뒤. 각 묶음 안에서는 적은 순서 그대로.
  *  저장된 배열은 건드리지 않는다 — 완료를 취소하면 원래 자리로 돌아가야 한다. */
 export function orderedItems(list) {

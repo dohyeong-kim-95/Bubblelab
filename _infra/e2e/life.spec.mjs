@@ -48,7 +48,7 @@ test("할 일 PWA — 목록을 옆으로 넘기고, 적은 내용이 오프라�
   // 제목을 한 번 누르면 목록 선택, 두 번 누르면 이름 바꾸기.
   await page.locator("#list-name").click();
   await expect(page.locator("#picker")).toBeVisible();
-  await page.locator("#picker .pick").nth(1).click();
+  await page.locator("#picker .pick-open").nth(1).click();
   await expect(page.locator("#list-name")).toHaveText("장보기");
 
   await page.locator("#list-name").dblclick();
@@ -123,3 +123,55 @@ function assertStandalone(manifest) {
   expect(sizes).toContain("512x512");
   expect(manifest.icons.some((icon) => icon.purpose?.includes("maskable"))).toBe(true);
 }
+
+async function dragGrip(page, grip, target, offset) {
+  const from = await grip.boundingBox();
+  const to = await target.boundingBox();
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  // 여러 번 나눠 움직여야 pointermove 가 실제로 여러 번 들어온다.
+  for (let step = 1; step <= 4; step += 1) {
+    const y = from.y + ((to.y + offset - from.y) * step) / 4;
+    await page.mouse.move(from.x + from.width / 2, y + from.height / 2);
+  }
+  await page.mouse.up();
+}
+
+test("손잡이를 끌어 항목과 목록 순서를 바꾼다", async ({ page }) => {
+  await page.goto("/life/");
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+
+  for (const text of ["하나", "둘", "셋"]) {
+    await page.locator("#add-text").fill(text);
+    await page.getByRole("button", { name: "추가" }).click();
+  }
+  await expect(page.locator(".item .text")).toHaveText([/하나/, /둘/, /셋/]);
+
+  // 첫 항목을 셋째 자리로 끌어 내린다.
+  const rows = page.locator(".item");
+  await dragGrip(page, rows.nth(0).locator(".grip"), rows.nth(2), 20);
+  await expect(page.locator(".item .text")).toHaveText([/둘/, /셋/, /하나/]);
+
+  // 새로고침해도 그대로다 (저장됐다).
+  await page.reload();
+  await expect(page.locator(".item .text")).toHaveText([/둘/, /셋/, /하나/]);
+
+  // 목록도 선택 화면에서 끌어 옮긴다.
+  await page.locator("#menu-button").click();
+  await page.getByRole("button", { name: "새 목록" }).click();
+  await page.locator("#prompt-text").fill("둘째 목록");
+  await page.getByRole("button", { name: "확인" }).click();
+  await expect(page.locator("#list-name")).toHaveText("둘째 목록");
+
+  await page.locator("#list-name").click();
+  await expect(page.locator("#picker")).toBeVisible();
+  const picks = page.locator("#picker .pick");
+  await expect(picks).toHaveCount(2);
+  await dragGrip(page, picks.nth(0).locator(".grip"), picks.nth(1), 20);
+  await expect(page.locator("#picker .pick-open")).toHaveText([/둘째 목록/, /할 일/]);
+
+  // 순서가 바뀌어도 보고 있던 목록은 그대로 따라온다.
+  await page.locator("#picker").press("Escape");
+  await expect(page.locator("#list-name")).toHaveText("둘째 목록");
+});

@@ -1,6 +1,7 @@
 import {
   MAX_LISTS, STORAGE_KEY, addItem, addList, clearDone, emptyState, parseState,
-  orderedItems, progressOf, removeItem, removeList, renameList, setTool, toggleItem,
+  orderedItems, progressOf, removeItem, removeList, renameList, reorderItems, reorderLists,
+  setTool, toggleItem,
 } from "./store.js";
 
 const $ = (id) => document.getElementById(id);
@@ -24,6 +25,40 @@ function node(tag, className, text) {
 }
 
 const current = () => state.lists[Math.min(index, state.lists.length - 1)];
+
+/* 손잡이를 끌어 순서를 바꾼다. 끄는 동안에는 DOM 을 직접 옮겨 눈에 보이게 하고,
+ * 손을 떼면 그때 보이던 id 순서를 그대로 저장한다 — 인덱스 계산을 두 번 하지 않는다.
+ * 길게 누르기는 이미 도구 연결이 쓰고 있어 손잡이를 따로 둔다. */
+function draggable(handle, row, container, commit) {
+  handle.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    handle.setPointerCapture(event.pointerId);
+    row.classList.add("dragging");
+
+    const onMove = (moveEvent) => {
+      for (const other of [...container.children]) {
+        if (other === row) continue;
+        const box = other.getBoundingClientRect();
+        if (moveEvent.clientY < box.top || moveEvent.clientY > box.bottom) continue;
+        // 끌고 있는 행은 제자리에 두고 상대를 옮긴다. 잡고 있는 요소를 DOM 에서
+        // 움직이면 포인터 캡처가 풀려 드래그가 그 자리에서 끊긴다.
+        const dragged = row.getBoundingClientRect();
+        container.insertBefore(other, dragged.top < box.top ? row : row.nextSibling);
+        break;
+      }
+    };
+    const onEnd = () => {
+      handle.removeEventListener("pointermove", onMove);
+      handle.removeEventListener("pointerup", onEnd);
+      handle.removeEventListener("pointercancel", onEnd);
+      row.classList.remove("dragging");
+      commit([...container.children].map((child) => child.dataset.id).filter(Boolean));
+    };
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", onEnd);
+    handle.addEventListener("pointercancel", onEnd);
+  });
+}
 const listById = (id) => state.lists.find((list) => list.id === id);
 const panelOf = (id) => track.querySelector(`[data-list-id="${CSS.escape(id)}"]`);
 
@@ -40,6 +75,7 @@ function syncViewport() {
  * 그대로 지연으로 느껴지고, 스크롤 위치까지 튄다. */
 function itemRow(list, item) {
   const row = node("li", `item${item.done ? " done" : ""}`);
+  row.dataset.id = item.id;
   const toggle = node("button", "check", item.done ? "●" : "○");
   toggle.type = "button";
   toggle.setAttribute("aria-pressed", String(item.done));
@@ -57,13 +93,22 @@ function itemRow(list, item) {
   remove.setAttribute("aria-label", `${item.text} 삭제`);
   remove.addEventListener("click", () => update(removeItem(state, list.id, item.id), list.id));
 
-  row.append(toggle, text, remove);
+  const grip = node("button", "grip", "⠿");
+  grip.type = "button";
+  grip.setAttribute("aria-label", `${item.text} 순서 바꾸기`);
+
+  row.append(toggle, text, grip, remove);
   return row;
 }
 
 function fillPanel(panel, list) {
   const items = node("ul", "items");
-  for (const item of orderedItems(list)) items.append(itemRow(list, item));
+  for (const item of orderedItems(list)) {
+    const row = itemRow(list, item);
+    draggable(row.querySelector(".grip"), row, items,
+      (order) => update(reorderItems(state, list.id, order), list.id));
+    items.append(row);
+  }
   panel.replaceChildren(items);
   if (!list.items.length) panel.append(node("p", "empty", "아직 없습니다."));
 }
@@ -242,16 +287,34 @@ function onTitleTap() {
 }
 
 function openPicker() {
-  $("picker-items").replaceChildren(...state.lists.map((list, position) => {
+  const container = $("picker-items");
+  container.replaceChildren(...state.lists.map((list, position) => {
     const { done, total } = progressOf(list);
-    const button = node("button", "pick");
-    button.type = "button";
-    button.setAttribute("aria-current", String(position === index));
-    button.append(node("span", "", list.name), node("span", "count", total ? `${done}/${total}` : ""));
-    button.addEventListener("click", () => { $("picker").close(); goTo(position); });
-    return button;
+    const row = node("div", "pick");
+    row.dataset.id = list.id;
+    const open = node("button", "pick-open");
+    open.type = "button";
+    open.setAttribute("aria-current", String(position === index));
+    open.append(node("span", "", list.name), node("span", "count", total ? `${done}/${total}` : ""));
+    open.addEventListener("click", () => { $("picker").close(); goTo(position); });
+    const grip = node("button", "grip", "⠿");
+    grip.type = "button";
+    grip.setAttribute("aria-label", `${list.name} 순서 바꾸기`);
+    row.append(open, grip);
+    draggable(grip, row, container, commitListOrder);
+    return row;
   }));
   $("picker").showModal();
+}
+
+/* 목록 순서가 바뀌면 위치 번호의 의미도 바뀐다 — 보고 있던 목록을 id 로 붙잡아
+ * 그 자리로 따라간다. */
+function commitListOrder(order) {
+  const showing = current().id;
+  update(reorderLists(state, order));
+  const moved = state.lists.findIndex((list) => list.id === showing);
+  if (moved >= 0) goTo(moved, "auto");
+  openPicker();
 }
 
 async function renamePrompt() {
