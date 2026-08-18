@@ -27,7 +27,7 @@ const SKIP = new Set(["dist", "node_modules", "docs", "scripts"]);
 // 노출되고, confidential은 주소를 직접 쳐야만 들어갈 수 있다(어디에도 링크 없음).
 // 새 폴더는 기본 퍼블릭이며, 빌드가 www 랜딩 카드 존재 여부를 검사한다.
 const CONFIDENTIAL_SUBDOMAINS = new Set(
-  ["admin", "work", "podcast", "estate", "duri", "test", "invest", "lab", "trip"]);
+  ["admin", "work", "podcast", "estate", "duri", "test", "invest", "lab", "trip", "life"]);
 // 카테고리 홈 카드 목록에서 감춘다. 소스와 직접 URL은 그대로 살아 있고,
 // 공개할 준비가 되면 이 목록에서 빼면 된다. (서브도메인 단위 비공개는
 // CONFIDENTIAL_SUBDOMAINS 쪽이다 — 여기는 카테고리 안의 개별 카드용.)

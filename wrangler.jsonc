@@ -34,6 +34,9 @@
     // INVEST_PASSWORD·INVEST_CLIENT_ID·INVEST_CLIENT_SECRET secret이 셋 다 있어야
     // 열린다(하나라도 없으면 런타임에서 503). 내리려면 여기를 "false"로.
     "ENABLE_INVEST": "true",
+    // Life OS. All four secret/binding prerequisites are checked at runtime;
+    // keep disabled until LIFE_PASSWORD, LIFE_SESSION_SECRET and LIFE_SINK_SECRET exist.
+    "ENABLE_LIFE": "false",
     // 항공권 가격 관측(trip/ 계획 탭). 개인 일정은 브라우저에만 있고 여기 오지
     // 않는다 — 서버가 들고 있는 건 노선·날짜별 가격 관측뿐이다. 켜져 있어도
     // 프로바이더 자격증명(AMADEUS_CLIENT_ID/SECRET)이 없으면 조회는 돌지 않고
@@ -84,7 +87,10 @@
       "AMADEUS_CLIENT_ID",
       "AMADEUS_CLIENT_SECRET",
       "TRIP_WATCH_SECRET",
-      "TRIP_SINK_SECRET"
+      "TRIP_SINK_SECRET",
+      "LIFE_PASSWORD",
+      "LIFE_SESSION_SECRET",
+      "LIFE_SINK_SECRET"
     ]
   },
   // /_rt/<이름> 실시간 데이터 서버 (아발론 등 멀티플레이어 토이용)
@@ -109,7 +115,8 @@
       // 토스가 client당 액세스 토큰을 1개만 허용해서 발급을 단일 인스턴스에 모은다.
       { "name": "INVEST", "class_name": "InvestDO" },
       // 항공권 날짜 조합별 최저가 관측 + 관측일별 추이 (trip/ 계획 탭)
-      { "name": "TRIP_WATCH", "class_name": "TripWatchDO" }
+      { "name": "TRIP_WATCH", "class_name": "TripWatchDO" },
+      { "name": "LIFE", "class_name": "LifeDO" }
     ]
   },
   "migrations": [
@@ -128,6 +135,7 @@
     { "tag": "v13", "new_sqlite_classes": ["BriefDO"] },
     { "tag": "v14", "new_sqlite_classes": ["AssetFlagsDO"] },
     { "tag": "v15", "new_sqlite_classes": ["InvestDO"] },
-    { "tag": "v16", "new_sqlite_classes": ["TripWatchDO"] }
+    { "tag": "v16", "new_sqlite_classes": ["TripWatchDO"] },
+    { "tag": "v17", "new_sqlite_classes": ["LifeDO"] }
   ]
 }

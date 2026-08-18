@@ -47,7 +47,7 @@ test("카테고리 홈 자신에는 주입되지 않는다 (갈 곳이 없다)",
 });
 
 test("카드 구조가 아닌 서비스·비공개 사이트에는 주입되지 않는다", () => {
-  for (const site of ["podcast", "duri", "admin", "www", "work", "estate", "trip"]) {
+  for (const site of ["podcast", "duri", "admin", "www", "work", "estate", "trip", "life"]) {
     const base = join(DIST, site);
     if (!existsSync(base)) continue;
     assert.ok(!has(join(base, "index.html")), `${site} 홈에 홈 버튼이 붙었다`);

@@ -49,6 +49,49 @@ test("worker rejects cross-site public writes before storage access", async () =
   assert.equal(response.headers.get("X-Frame-Options"), "DENY");
 });
 
+test("life is fail-closed, issues an isolated long session, and protects its API", async () => {
+  let response = await worker.fetch(new Request("https://life.bubblelab.dev/"), {
+    ENABLE_LIFE: "true",
+  }, ctx);
+  assert.equal(response.status, 503);
+
+  const calls = [];
+  const env = {
+    ENABLE_LIFE: "true", LIFE_PASSWORD: "only-me", LIFE_SESSION_SECRET: "session-secret",
+    LIFE_SINK_SECRET: "sink-secret", ASSETS: { fetch: async () => new Response("<main>life</main>", {
+      headers: { "Content-Type": "text/html" },
+    }) },
+    LIFE: {
+      idFromName: (name) => name,
+      get: () => ({ fetch: async (request) => {
+        calls.push({ path: new URL(request.url).pathname, role: request.headers.get("X-Life-Role") });
+        return Response.json({ protocol: 1, head: 0, oldestSeq: 1, entityCount: 0,
+          currentBytes: 0, sinkAckSeq: 0, sinkLag: 0 });
+      } }),
+    },
+  };
+  response = await worker.fetch(new Request("https://life.bubblelab.dev/"), env, ctx);
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get("Location"), "/login");
+  response = await worker.fetch(new Request("https://life.bubblelab.dev/_life/status"), env, ctx);
+  assert.equal(response.status, 401);
+
+  const form = new FormData(); form.set("password", "only-me");
+  response = await worker.fetch(new Request("https://life.bubblelab.dev/login", { method: "POST", body: form }), env, ctx);
+  assert.equal(response.status, 303);
+  assert.match(response.headers.get("Set-Cookie"), /^bl_life=.*HttpOnly; SameSite=Lax; Max-Age=31536000; Secure/);
+  const cookie = response.headers.get("Set-Cookie").split(";", 1)[0];
+  response = await worker.fetch(new Request("https://life.bubblelab.dev/_life/status", { headers: { Cookie: cookie } }), env, ctx);
+  assert.equal(response.status, 200);
+  assert.deepEqual(calls.at(-1), { path: "/status", role: "owner" });
+  assert.doesNotMatch(response.headers.get("Content-Security-Policy"), /unsafe-inline/);
+
+  response = await worker.fetch(new Request("https://life.bubblelab.dev/_life/commit", {
+    method: "POST", headers: { Cookie: cookie, Origin: "https://evil.example", "Content-Type": "application/json" }, body: "{}",
+  }), env, ctx);
+  assert.equal(response.status, 403);
+});
+
 test("enabled realtime still rejects missing websocket origin before binding access", async () => {
   const response = await worker.fetch(
     new Request("https://games.bubblelab.dev/_rt/avalon", {

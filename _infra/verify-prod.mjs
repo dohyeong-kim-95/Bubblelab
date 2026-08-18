@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = new URL("..", import.meta.url);
 
 /** 로그인 게이트 뒤에 있는 서브도메인 (worker.js 의 site 분기와 같아야 한다). */
-export const GATED_SITES = new Set(["admin", "invest", "duri"]);
+export const GATED_SITES = new Set(["admin", "invest", "duri", "life"]);
 /** 배포되지 않는 폴더 규칙은 build.mjs 와 같다. */
 const SKIP_DIRS = new Set(["dist", "node_modules", "docs", "scripts"]);
 
@@ -174,6 +174,18 @@ export function assertDuriStatus(status, checks, { pendingWarnAt = 200 } = {}) {
   if (Number(status?.pending) > pendingWarnAt) {
     throw new Warning(`싱크가 밀려 있습니다 (pending=${status.pending}) — PC 데몬이 도는지 확인`);
   }
+  return checks;
+}
+
+export function assertLifeStatus(status, checks) {
+  checks.eq("life.protocol", status?.protocol, 1);
+  checks.number("life.head", status?.head, { min: 0 });
+  checks.number("life.oldestSeq", status?.oldestSeq, { min: 1 });
+  checks.number("life.entityCount", status?.entityCount, { min: 0 });
+  checks.number("life.currentBytes", status?.currentBytes, { min: 0 });
+  checks.number("life.sinkAckSeq", status?.sinkAckSeq, { min: 0 });
+  checks.number("life.sinkLag", status?.sinkLag, { min: 0 });
+  checks.ok("life status has no entity bodies", !Object.hasOwn(status ?? {}, "entities"), "entities omitted");
   return checks;
 }
 
@@ -431,6 +443,7 @@ export function buildProbes({ sites, expectedCommit, ws }) {
       const cases = [
         ["/_invest/state", [401]],
         ["/_duri/status", [401]],
+        ["/_life/status", [401, 503]],
         ["/_planner/data", [401]],
         ["/_rt/avalon", [503]],       // ENABLE_REALTIME=false
         ["/_chat", [403]],            // Origin 없는 WebSocket 시도
@@ -466,6 +479,17 @@ export function buildProbes({ sites, expectedCommit, ws }) {
       const { status, text } = await request(target.apiOn("duri", "/_duri/status"), { timeoutMs, headers: { cookie } });
       checks.eq("GET /_duri/status status", status, 200);
       assertDuriStatus(parseJson(text) ?? {}, checks);
+    },
+  });
+
+  add({
+    id: "life:status", surface: "do", title: "Life OS 상태 (LifeDO·PC 싱크)", needs: "life",
+    async run({ target, checks, timeoutMs, creds }) {
+      const cookie = await formLogin(target, "life", { password: creds.lifePassword }, "bl_life", timeoutMs);
+      if (!cookie) throw new Error("life 로그인 실패 — BL_LIFE_PASSWORD 확인");
+      const { status, text } = await request(target.apiOn("life", "/_life/status"), { timeoutMs, headers: { cookie } });
+      checks.eq("GET /_life/status status", status, 200);
+      assertLifeStatus(parseJson(text) ?? {}, checks);
     },
   });
 
@@ -523,10 +547,12 @@ export function credsFromEnv(env = process.env) {
     adminPassword: env.BL_ADMIN_PASSWORD || "",
     investPassword: env.BL_INVEST_PASSWORD || "",
     duriPassword: env.BL_DURI_PASSWORD || "",
+    lifePassword: env.BL_LIFE_PASSWORD || "",
     has(kind) {
       if (kind === "admin") return Boolean(this.adminId && this.adminPassword);
       if (kind === "invest") return Boolean(this.investPassword);
       if (kind === "duri") return Boolean(this.duriPassword);
+      if (kind === "life") return Boolean(this.lifePassword);
       return true;
     },
   };
@@ -601,7 +627,7 @@ const USAGE = `사용: node _infra/verify-prod.mjs [옵션]
   --json              결과를 JSON 으로 (make ship 이 diff 출력에 쓴다)
 
 자격증명(없으면 게이트 안쪽은 SKIP):
-  BL_ADMIN_ID / BL_ADMIN_PASSWORD / BL_INVEST_PASSWORD / BL_DURI_PASSWORD
+  BL_ADMIN_ID / BL_ADMIN_PASSWORD / BL_INVEST_PASSWORD / BL_DURI_PASSWORD / BL_LIFE_PASSWORD
 
 이 스크립트는 프로덕션에 **쓰기를 하지 않는다**.`;
 
