@@ -34,9 +34,9 @@
     // INVEST_PASSWORD·INVEST_CLIENT_ID·INVEST_CLIENT_SECRET secret이 셋 다 있어야
     // 열린다(하나라도 없으면 런타임에서 503). 내리려면 여기를 "false"로.
     "ENABLE_INVEST": "false",
-    // Life OS. All four secret/binding prerequisites are checked at runtime;
-    // keep disabled until LIFE_PASSWORD, LIFE_SESSION_SECRET and LIFE_SINK_SECRET exist.
-    "ENABLE_LIFE": "false",
+    // Life OS. 네 가지 전제(바인딩 + 시크릿 3개)를 런타임에서 확인하므로, 하나라도
+    // 없으면 플래그가 켜져 있어도 503 이다. 시크릿은 2026-08-18 에 등록했다.
+    "ENABLE_LIFE": "true",
     // 항공권 가격 관측(trip/ 계획 탭). 개인 일정은 브라우저에만 있고 여기 오지
     // 않는다 — 서버가 들고 있는 건 노선·날짜별 가격 관측뿐이다. 켜져 있어도
     // 프로바이더 자격증명(AMADEUS_CLIENT_ID/SECRET)이 없으면 조회는 돌지 않고
