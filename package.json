@@ -2,7 +2,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test _infra/*.test.mjs _src/duri-sink/*.test.mjs _src/life-sink/*.test.mjs",
+    "test": "node --test _infra/*.test.mjs _src/duri-sink/*.test.mjs",
     "build": "node _infra/build.mjs",
     "test:e2e": "node _infra/build.mjs && playwright test",
     "serve:dist": "node _infra/e2e/serve.mjs"

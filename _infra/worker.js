@@ -5,47 +5,7 @@
 // 첫 번째 경로 세그먼트를 서브도메인 대신 사용한다:
 //   localhost:8787/slop/foo → dist/slop/foo
 
-import { isDormant } from "./dormant.js";
-
 const ROOT_DOMAIN = "bubblelab.dev";
-
-const AUTH_GATED_STATIC_SITES = new Set(["work", "duri", "invest", "life"]);
-const CODE_EXT = /\.(?:css|js|mjs|wasm)$/i;
-const FONT_EXT = /\.(?:woff2?|ttf|otf)$/i;
-const MEDIA_EXT = /\.(?:avif|gif|ico|jpe?g|mp3|mp4|ogg|png|svg|webm|webp)$/i;
-const FINGERPRINTABLE_EXT = /\.(?:avif|css|gif|ico|jpe?g|js|mjs|mp3|mp4|ogg|png|svg|wasm|webm|webp|woff2?)$/i;
-
-function hasContentFingerprint(path) {
-  if (!FINGERPRINTABLE_EXT.test(path)) return false;
-  const stem = path.split("/").pop().replace(/\.[^.]+$/, "");
-  const token = stem.split(/[-_.]/).pop();
-  if (!/^[A-Za-z0-9]{8,}$/.test(token)) return false;
-  return /^[a-f0-9]{8,}$/i.test(token) || (/[A-Z]/.test(token) && /[a-z]/.test(token) && /\d/.test(token));
-}
-
-function staticCacheControl(path, { visibility = "public", allowMedia = true } = {}) {
-  const media = MEDIA_EXT.test(path);
-  if (hasContentFingerprint(path) && (!media || allowMedia)) {
-    return `${visibility}, max-age=31536000, immutable`;
-  }
-  if (FONT_EXT.test(path)) return `${visibility}, max-age=2592000, stale-while-revalidate=86400`;
-  if (media && allowMedia) {
-    return `${visibility}, max-age=604800, stale-while-revalidate=86400`;
-  }
-  if (CODE_EXT.test(path)) return `${visibility}, max-age=3600, must-revalidate`;
-  return null;
-}
-
-function withCacheControl(response, cacheControl) {
-  if (!cacheControl || response.status !== 200) return response;
-  const headers = new Headers(response.headers);
-  headers.set("Cache-Control", cacheControl);
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
-}
 
 // 이름이 바뀐 폴더의 옛 주소 → 새 주소. 키는 `<서브도메인>:<경로>`(끝 슬래시 없음).
 // 폴더 이름은 곧 카드 라벨이자 URL이라, 하는 일을 못 알리는 이름은 바꾸는 게 맞다.
@@ -98,7 +58,6 @@ export { BriefDO } from "./brief.js";
 export { AssetFlagsDO } from "./asset-flags.js";
 export { InvestDO } from "./invest.js";
 export { TripWatchDO } from "./trip-watch.js";
-export { LifeDO } from "./life.js";
 
 const LOGIN_PAGE = (failed = false, base = "") => `<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -192,16 +151,6 @@ button { font: inherit; padding: .65rem; border: 0; border-radius: .6rem;
 <input name="password" type="password" autocomplete="current-password" aria-label="비밀번호" required autofocus>
 <p class="error">${failed ? "비밀번호가 맞지 않습니다." : ""}</p>
 <button type="submit">들어가기</button></form></body></html>`;
-
-const LIFE_LOGIN_PAGE = (failed, base) => `<!doctype html><html lang="ko"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex, nofollow"><title>오늘 할 일</title>
-<link rel="stylesheet" href="${base}/styles.css"></head><body class="login-page">
-<main class="login-card"><h1>오늘 할 일</h1><p>혼자 쓰는 비공개 기록입니다.</p>
-<form method="post" action="${base}/login"><label for="password">비밀번호</label>
-<input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
-${failed ? '<p class="form-error" role="alert">비밀번호가 맞지 않습니다.</p>' : ""}
-<button type="submit">들어가기</button></form></main></body></html>`;
 
 // 운영자 브라우저 집계 제외 화면 (admin 로그인 뒤 /optout). 켜면 전체 서브도메인
 // bl_notrack 쿠키가 심어지고 그 브라우저의 방문·체류·유효방문이 모두 통계에서
@@ -548,106 +497,6 @@ async function handleInvestGate(request, env, url, base = "") {
   }
   if (!isAuthed) return redirect(`${base}/login`);
   return null;
-}
-
-const LIFE_SESSION_TTL_MS = 365 * 24 * 60 * 60 * 1000;
-
-function lifeConfigured(env) {
-  return featureEnabled(env, "ENABLE_LIFE") && Boolean(
-    env.LIFE && env.LIFE_PASSWORD && env.LIFE_SESSION_SECRET && env.LIFE_SINK_SECRET,
-  );
-}
-
-async function lifeKey(secret, purpose) {
-  return crypto.subtle.importKey(
-    "raw", new TextEncoder().encode(`${secret}\0${purpose}`),
-    { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
-  );
-}
-
-async function issueLifeSession(key) {
-  const payload = `${Date.now() + LIFE_SESSION_TTL_MS}.${crypto.randomUUID()}`;
-  const sig = hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload)));
-  return `${payload}.${sig}`;
-}
-
-async function handleLifeGate(request, env, url, base = "") {
-  if (!lifeConfigured(env)) return new Response("life is not configured", { status: 503 });
-  const key = await lifeKey(env.LIFE_SESSION_SECRET, "bl-life-session");
-  const authenticated = await validSession(key, cookies(request).bl_life);
-  const headers = { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" };
-  const cookieFlags = `Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(LIFE_SESSION_TTL_MS / 1000)}${url.protocol === "https:" ? "; Secure" : ""}`;
-  if (url.pathname === "/login" && request.method === "POST") {
-    const limited = await enforceRateLimit(request, env, {
-      scope: "life-login", limit: 5, windowMs: 15 * 60 * 1000, secret: env.LIFE_SESSION_SECRET,
-    });
-    if (limited) return limited;
-    const form = await request.formData();
-    if (await matchesCredential(key, form.get("password"), env.LIFE_PASSWORD)) {
-      return redirect(`${base}/`, { "Set-Cookie": `bl_life=${await issueLifeSession(key)}; ${cookieFlags}` });
-    }
-    return new Response(LIFE_LOGIN_PAGE(true, base), { status: 401, headers });
-  }
-  if (url.pathname === "/logout") {
-    return redirect(`${base}/login`, { "Set-Cookie": "bl_life=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0" });
-  }
-  if (url.pathname === "/login") {
-    return authenticated ? redirect(`${base}/`) : new Response(LIFE_LOGIN_PAGE(false, base), { headers });
-  }
-  // The login document may load only its stylesheet. Everything else is gated.
-  if (!authenticated && url.pathname !== "/styles.css") return redirect(`${base}/login`);
-  return null;
-}
-
-function withLifeRole(request, role, pathname) {
-  const headers = new Headers(request.headers);
-  headers.set("X-Life-Role", role);
-  const target = new URL(request.url);
-  target.hostname = "life.internal";
-  target.pathname = pathname;
-  return new Request(target, { method: request.method, headers,
-    ...(request.method !== "GET" && request.method !== "HEAD" ? { body: request.body, duplex: "half" } : {}) });
-}
-
-async function handleLife(request, env, url) {
-  if (!lifeConfigured(env)) return Response.json({ error: "life is not configured" }, { status: 503 });
-  const sessionKey = await lifeKey(env.LIFE_SESSION_SECRET, "bl-life-session");
-  const owner = await validSession(sessionKey, cookies(request).bl_life);
-  const sinkKey = await lifeKey(env.LIFE_SINK_SECRET, "bl-life-sink");
-  const bearer = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
-  const sink = Boolean(bearer) && await validSession(sinkKey, bearer);
-  const path = url.pathname.slice("/_life".length) || "/";
-
-  if (path === "/sink-token" && request.method === "POST") {
-    if (!owner) return Response.json({ error: "authentication required" }, { status: 401 });
-    const limited = await enforceRateLimit(request, env, {
-      scope: "life-token", limit: 5, windowMs: 60 * 60 * 1000, secret: env.LIFE_SESSION_SECRET,
-    });
-    if (limited) return limited;
-    return Response.json({ token: await issueSinkToken(sinkKey) }, { headers: { "Cache-Control": "no-store" } });
-  }
-  if (!owner && !sink) return Response.json({ error: "authentication required" }, { status: 401 });
-  if (sink && !["/bootstrap", "/changes", "/snapshot", "/sink/ack"].includes(path)) {
-    return Response.json({ error: "forbidden" }, { status: 403 });
-  }
-  let forwardRequest = request;
-  if (request.method !== "GET" && request.method !== "HEAD") {
-    const contentTypeError = requireJsonRequest(request);
-    if (contentTypeError) return contentTypeError;
-    const cap = path === "/commit" ? 512 * 1024 : path === "/bootstrap" ? 16 * 1024 : 8 * 1024;
-    const body = await request.arrayBuffer();
-    if (body.byteLength > cap) return Response.json({ error: "request body too large" }, { status: 413 });
-    forwardRequest = new Request(request, { body });
-  }
-  const read = request.method === "GET" && ["/bootstrap", "/changes", "/snapshot", "/status"].includes(path);
-  const secret = sink ? env.LIFE_SINK_SECRET : env.LIFE_SESSION_SECRET;
-  const limited = await enforceRateLimit(request, env, {
-    scope: read ? "life-read" : "life-write",
-    limit: read && !sink ? 300 : 120, windowMs: 60 * 1000, secret,
-  });
-  if (limited) return limited;
-  const stub = env.LIFE.get(env.LIFE.idFromName("main"));
-  return stub.fetch(withLifeRole(forwardRequest, sink ? "sink" : "owner", path));
 }
 
 /* invest 조회 API. 게이트를 통과한 브라우저(bl_invest)만 부를 수 있고, 응답에는
@@ -1021,7 +870,7 @@ async function serveAssetCatalog(request, env, url) {
 export const HEALTH_BINDINGS = [
   "ASSETS", "ANALYTICS", "RECORDS", "RATE_LIMITER", "REALTIME", "PLANNER",
   "CHAT", "PODCAST", "DURI", "INVEST", "ASSET_FLAGS", "BRIEF", "FORTUNE",
-  "WORK_QNA", "WORK_REVIEWS", "EMOTICON_REVIEW", "PODCAST_BUCKET", "DURI_BUCKET", "LIFE",
+  "WORK_QNA", "WORK_REVIEWS", "EMOTICON_REVIEW", "PODCAST_BUCKET", "DURI_BUCKET",
 ];
 
 /**
@@ -1055,7 +904,6 @@ export async function serveHealth(request, env, url) {
       invest: featureEnabled(env, "ENABLE_INVEST"),
       realtime: featureEnabled(env, "ENABLE_REALTIME"),
       planner: featureEnabled(env, "ENABLE_PLANNER"),
-      life: featureEnabled(env, "ENABLE_LIFE"),
     },
     bindings,
   }, { headers: { "Cache-Control": "no-store" } });
@@ -1294,9 +1142,6 @@ export async function handleRequest(request, env, ctx) {
       path === "/_podcast/upload" ? UPLOAD_MAX_BYTES :
       path === "/_duri/photo" ? DURI_MAX_PHOTO_BYTES :
       path === "/_emoticon/generate" ? EMOTICON_MAX_BODY :
-      path === "/_life/commit" ? 512 * 1024 :
-      path === "/_life/bootstrap" ? 16 * 1024 :
-      path === "/_life/sink/ack" || path === "/_life/sink-token" ? 8 * 1024 :
       path === "/_planner/data" ? 600 * 1024 : 64 * 1024,
     );
     if (mutationError) return mutationError;
@@ -1330,8 +1175,7 @@ export async function handleRequest(request, env, ctx) {
     }
     // 공용 코드와 이미지 에셋은 모든 서브도메인에서 사이트 프리픽스 없이 서빙
     if (path.startsWith("/_shared/") || path.startsWith("/_assets/")) {
-      const response = await env.ASSETS.fetch(request);
-      return withCacheControl(response, staticCacheControl(path));
+      return env.ASSETS.fetch(request);
     }
 
     if (path.startsWith("/_planner/")) {
@@ -1938,10 +1782,6 @@ export async function handleRequest(request, env, ctx) {
       return handleDuri(request, env, url);
     }
 
-    if (path === "/_life" || path.startsWith("/_life/")) {
-      return handleLife(request, env, url);
-    }
-
     // invest 잔고 조회 API: /_invest/state (invest.bubblelab.dev 전용, 조회만).
     if (path === "/_invest" || path.startsWith("/_invest/")) {
       return handleInvest(request, env, url);
@@ -1963,10 +1803,6 @@ export async function handleRequest(request, env, ctx) {
       // 트레일링 슬래시 보존 (없으면 에셋 서버의 canonical 리다이렉트와 루프)
       if (url.pathname.endsWith("/") && !path.endsWith("/")) path += "/";
     }
-
-    // 내려 둔 화면은 없는 주소처럼 답한다. 정적 껍데기만 남아 반쯤 도는 것보다
-    // 닫혀 있는 편이 낫다 — 살릴 때는 _infra/dormant.js 에서 한 줄 지운다.
-    if (isDormant(site, path)) return new Response("not found", { status: 404 });
 
     // 폴더 이름을 바꾸면 예전 주소로 온 사람(북마크·공유 링크)이 404를 만난다.
     // 옮긴 자리만 알려주고 끝낸다 — 페이지를 남겨 두면 두 벌을 관리하게 된다.
@@ -2031,14 +1867,6 @@ export async function handleRequest(request, env, ctx) {
       if (investResponse) return investResponse;
     }
 
-    if (site === "life") {
-      const isProdHost = host === ROOT_DOMAIN || host.endsWith(`.${ROOT_DOMAIN}`);
-      const lifeUrl = new URL(url);
-      lifeUrl.pathname = path || "/";
-      const lifeResponse = await handleLifeGate(request, env, lifeUrl, isProdHost ? "" : "/life");
-      if (lifeResponse) return lifeResponse;
-    }
-
     url.pathname = `/${site}${path}`;
     let response = await env.ASSETS.fetch(new Request(url, request));
 
@@ -2063,20 +1891,9 @@ export async function handleRequest(request, env, ctx) {
       }
     }
 
-    if (["admin", "work", "estate", "duri", "invest", "trip", "life"].includes(site)) {
+    if (["admin", "work", "estate", "duri", "invest", "trip"].includes(site)) {
       const headers = new Headers(response.headers);
-      // 문서·JSON·인증 뒤 이미지는 디스크에 남기지 않는다. 실행 코드와 폰트는
-      // 사용자 데이터가 아니므로 브라우저 전용 캐시를 허용하고, 공개 데이터인
-      // estate 배경지도와 work 공개 showcase 미디어만 공유 캐시할 수 있게 한다.
-      const authGated = AUTH_GATED_STATIC_SITES.has(site);
-      const publicWorkMedia = site === "work" && path.startsWith("/showcase/") && MEDIA_EXT.test(path);
-      const publicEstateMedia = site === "estate" && /^\/basemap-[a-z0-9-]+\.(?:avif|jpe?g|png|webp)$/i.test(path);
-      const allowMedia = publicWorkMedia || publicEstateMedia;
-      const visibility = authGated && !publicWorkMedia ? "private" : "public";
-      const cacheControl = site === "admin" || response.status !== 200
-        ? null
-        : staticCacheControl(path, { visibility, allowMedia });
-      headers.set("Cache-Control", cacheControl ?? "no-store");
+      headers.set("Cache-Control", "no-store");
       headers.set("X-Robots-Tag", "noindex, nofollow");
       return new Response(response.body, {
         status: response.status,
@@ -2084,8 +1901,6 @@ export async function handleRequest(request, env, ctx) {
         headers,
       });
     }
-
-    response = withCacheControl(response, staticCacheControl(path));
 
     // HTML 문서 방문만 집계한다. IP/UA는 저장하지 않고 익명 쿠키 ID만 사용한다.
     // 페이지별 인기 집계를 위해 문서마다 보낸다 (DO 쓰기는 방문자별 key라 멱등).
@@ -2097,7 +1912,7 @@ export async function handleRequest(request, env, ctx) {
     const isDocument = request.headers.get("Sec-Fetch-Dest") === "document";
     // bl_notrack: 운영자가 /_optout에서 켠 브라우저는 집계·쿠키 발급 모두 건너뛴다.
     const optedOut = cookies(request).bl_notrack === "1";
-    if (!["admin", "work", "estate", "life"].includes(site) && isDocument && !isBot && !optedOut && response.ok &&
+    if (!["admin", "work", "estate"].includes(site) && isDocument && !isBot && !optedOut && response.ok &&
         response.headers.get("Content-Type")?.includes("text/html")) {
       const date = kstDate();
       const jar = cookies(request);
