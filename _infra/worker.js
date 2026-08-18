@@ -9,11 +9,31 @@ import { isDormant } from "./dormant.js";
 
 const ROOT_DOMAIN = "bubblelab.dev";
 
-// 비공개 사이트에서 공유 캐시에 남겨도 되는 것 — 사용자 데이터가 아닌 공개 이미지뿐.
-const PUBLIC_MEDIA = {
-  work: /^\/showcase\/.+\.(?:avif|gif|jpe?g|png|svg|webp)$/i,
-  estate: /^\/basemap-[a-z0-9-]+\.(?:avif|jpe?g|png|webp)$/i,
+/* 게이트 뒤·비공개 사이트는 no-store 가 기본이다. 사용자 데이터가 아닌 게 확실하고
+ * 실제로 무거운 것만 사이트별로 한 줄씩 적어 연다 — 여기 없으면 전부 no-store 다.
+ *
+ * 확장자로 추론하지 않는 이유: 그렇게 했더니 life 의 app.js 까지 한 시간 캐시돼
+ * 배포해도 화면이 안 바뀌었다. 사이트마다 무엇이 무거운지는 다르고, 여기 없는
+ * 사이트(admin·life)는 캐시할 게 아예 없다.
+ *
+ * private = 브라우저에만, public = 중간 캐시에도 남아도 되는 공개 자료. */
+const CACHEABLE = {
+  work: [
+    // 자막 없는 본문용 서브셋 폰트 92개(2.2MB). 방문마다 다시 받으면 그대로 체감된다.
+    [/\.(?:woff2?|ttf|otf)$/i, "private, max-age=2592000, stale-while-revalidate=86400"],
+    // 공개 쇼케이스에 쓰는 이미지 — 클라이언트에게 보여 주는 공개 자료다.
+    [/^\/showcase\/.+\.(?:avif|gif|jpe?g|png|svg|webp)$/i, "public, max-age=604800, stale-while-revalidate=86400"],
+  ],
+  // 시군구 경계 386KB. 커밋된 공개 지리 데이터이고 거의 바뀌지 않는다.
+  duri: [[/^\/data\/.+\.geojson$/i, "private, max-age=2592000, stale-while-revalidate=86400"]],
+  // 배경지도 3MB. 공개 시세 화면이라 공유 캐시에 남아도 된다.
+  estate: [[/^\/basemap-[a-z0-9-]+\.(?:avif|jpe?g|png|webp)$/i, "public, max-age=604800, stale-while-revalidate=86400"]],
 };
+
+function confidentialCacheControl(site, path) {
+  for (const [pattern, value] of CACHEABLE[site] ?? []) if (pattern.test(path)) return value;
+  return "no-store";
+}
 const CODE_EXT = /\.(?:css|js|mjs|wasm)$/i;
 const FONT_EXT = /\.(?:woff2?|ttf|otf)$/i;
 const MEDIA_EXT = /\.(?:avif|gif|ico|jpe?g|mp3|mp4|ogg|png|svg|webm|webp)$/i;
@@ -2022,14 +2042,8 @@ export async function handleRequest(request, env, ctx) {
       // 문서·JSON·인증 뒤 이미지는 디스크에 남기지 않는다. 실행 코드와 폰트는
       // 사용자 데이터가 아니므로 브라우저 전용 캐시를 허용하고, 공개 데이터인
       // estate 배경지도와 work 공개 showcase 미디어만 공유 캐시할 수 있게 한다.
-      // no-store 가 기본이다. 사용자 데이터가 아닌 게 확실한 폰트와 명시한 공개
-      // 이미지만 예외로 캐시한다 — **코드는 넣지 않는다**. HTML 은 늘 최신인데 JS 만
-      // 캐시되면 배포 직후 둘이 어긋나고, 그게 "배포해도 반영이 안 된다"로 나타난다.
-      const cacheControl = site === "admin" || response.status !== 200 ? null
-        : PUBLIC_MEDIA[site]?.test(path) ? "public, max-age=604800, stale-while-revalidate=86400"
-        : FONT_EXT.test(path) ? "private, max-age=2592000, stale-while-revalidate=86400"
-        : null;
-      headers.set("Cache-Control", cacheControl ?? "no-store");
+      headers.set("Cache-Control",
+        response.status === 200 ? confidentialCacheControl(site, path) : "no-store");
       headers.set("X-Robots-Tag", "noindex, nofollow");
       return new Response(response.body, {
         status: response.status,
