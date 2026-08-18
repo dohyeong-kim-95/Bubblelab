@@ -23,8 +23,13 @@ test("팔굽혀펴기 — 회차를 수행하고, 다시 재면 계획이 새로
   await expect(page.locator("#runner-reps")).toHaveText("2");
   await page.locator("#runner-next").click();
   await expect(page.locator("#runner-step")).toHaveText("쉬는 중");
-  await expect(page.locator("#runner-rest")).toContainText("초");
-  await page.locator("#runner-next").click();          // 휴식 건너뛰기
+  // 쉬는 동안은 남은 초가 팝업을 꽉 채운다.
+  await expect(page.locator("#runner-reps")).toHaveClass(/resting/);
+  await expect(page.locator("#runner-reps")).toHaveText("60");
+  await page.locator("#runner-add").click();           // +10
+  await expect(page.locator("#runner-reps")).toHaveText("70");
+  await expect(page.locator("#runner-next")).toHaveText("스킵");
+  await page.locator("#runner-next").click();          // 스킵
   await expect(page.locator("#runner-step")).toHaveText("세트 2 / 5");
   await expect(page.locator("#runner-reps")).toHaveText("3");
 

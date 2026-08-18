@@ -79,28 +79,27 @@ function stopRest() {
 }
 
 function renderRunner() {
-  const { day, sets, index, resting } = session;
+  const { day, sets, index, resting, left } = session;
   const last = index === sets.length - 1;
   $("runner-title").textContent = `Day ${day}`;
   $("runner-step").textContent = resting ? "쉬는 중" : `세트 ${index + 1} / ${sets.length}${last ? " · 최대한" : ""}`;
-  $("runner-reps").textContent = resting ? "" : `${sets[index]}${last ? "+" : ""}`;
-  $("runner-rest").hidden = !resting;
+  $("runner-reps").textContent = resting ? String(left) : `${sets[index]}${last ? "+" : ""}`;
+  $("runner-reps").classList.toggle("resting", resting);
+  $("runner-add").hidden = !resting;
   $("actual").hidden = resting || !last;
   $("actual-label").hidden = resting || !last;
   if (!resting && last && !$("actual").value) $("actual").value = String(sets[index]);
-  $("runner-next").textContent = resting ? "건너뛰기" : last ? "끝내기" : "완료";
+  $("runner-next").textContent = resting ? "스킵" : last ? "끝내기" : "완료";
 }
 
 function beginRest() {
   session.resting = true;
-  let left = REST_SECONDS;
-  const tick = () => {
-    $("runner-rest").textContent = `${left}초`;
-    if (left <= 0) { stopRest(); advance(); return; }
-    left -= 1;
-  };
-  tick();
-  restTimer = setInterval(tick, 1000);
+  session.left = REST_SECONDS;
+  restTimer = setInterval(() => {
+    session.left -= 1;
+    if (session.left <= 0) { stopRest(); advance(); return; }
+    renderRunner();
+  }, 1000);
   renderRunner();
 }
 
@@ -129,6 +128,12 @@ $("runner-next").addEventListener("click", () => {
   if (session.resting) { stopRest(); advance(); return; }
   if (session.index === session.sets.length - 1) { finish(); return; }
   beginRest();
+});
+// 쉬는 시간이 모자랄 때. 원본 프로그램도 "필요하면 더 쉬라"고 한다.
+$("runner-add").addEventListener("click", () => {
+  if (!session?.resting) return;
+  session.left += 10;
+  renderRunner();
 });
 $("runner-quit").addEventListener("click", closeRunner);
 $("runner").addEventListener("close", () => { stopRest(); session = null; });
