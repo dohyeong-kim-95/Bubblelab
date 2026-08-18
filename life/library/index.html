@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <meta name="theme-color" content="#000000">
+  <title>서재</title>
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="modulepreload" href="store.js">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="bar">
+    <a class="back" href="../" aria-label="LIFE 로 돌아가기">←</a>
+    <h1 class="bar-title">서재 <span id="count" class="count"></span></h1>
+    <button id="add-button" type="button" aria-label="책 추가">＋</button>
+  </header>
+
+  <main id="shelf" class="shelf"></main>
+
+  <p id="empty" class="empty" hidden>아직 없습니다. 읽은 책을 한 권 남겨보세요.</p>
+
+  <dialog id="editor" aria-labelledby="editor-title">
+    <form id="editor-form">
+      <h2 id="editor-title">책 남기기</h2>
+      <input id="book-id" type="hidden">
+
+      <label class="cover-pick" for="cover-input">
+        <img id="cover-preview" alt="" hidden>
+        <span id="cover-empty">표지 고르기</span>
+      </label>
+      <input id="cover-input" type="file" accept="image/*" hidden>
+      <button id="cover-clear" type="button" class="quiet" hidden>표지 지우기</button>
+
+      <label for="title-input">제목</label>
+      <input id="title-input" type="text" maxlength="120" autocomplete="off" required>
+
+      <label for="author-input">지은이 <span class="count">선택</span></label>
+      <input id="author-input" type="text" maxlength="60" autocomplete="off">
+
+      <label for="note-input">한두 줄 <span id="note-count" class="count"></span></label>
+      <textarea id="note-input" maxlength="140" rows="3" required></textarea>
+
+      <label for="date-input">읽은 날</label>
+      <input id="date-input" type="date" required>
+
+      <p id="editor-error" class="error" role="alert"></p>
+      <div class="menu-items row">
+        <button id="editor-delete" type="button" class="danger" hidden>삭제</button>
+        <button id="editor-cancel" type="button" class="quiet">취소</button>
+        <button class="primary" type="submit">저장</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>
