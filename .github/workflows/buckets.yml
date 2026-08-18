@@ -1,0 +1,34 @@
+# R2 버킷 만들기 — 필요할 때 손으로 돌린다.
+#
+# 예전에는 Deploy 워크플로가 배포마다 `r2 bucket create` 를 한 번씩 쳤다(멱등이라
+# 이미 있으면 그냥 실패). 버킷은 한 번 만들면 그만인데 배포마다 14초를 쓰고 있어
+# 여기로 옮겼다. 계정을 새로 만들었거나 버킷을 지웠을 때만 돌리면 된다.
+name: Buckets
+
+on: workflow_dispatch
+
+jobs:
+  create:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Ensure image bucket exists
+        continue-on-error: true
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4.111.0"
+          command: r2 bucket create bubblelab-assets
+
+      - name: Ensure podcast bucket exists
+        continue-on-error: true
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4.111.0"
+          command: r2 bucket create bubblelab-podcast

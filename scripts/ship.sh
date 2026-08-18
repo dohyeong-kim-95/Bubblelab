@@ -104,7 +104,6 @@ say "라이브 검증 (읽기 전용)"
 set +e
 bash scripts/verify-prod.sh --commit "$SHA" --wait 180
 VERIFY=$?
-bash scripts/verify-prod.sh --commit "$SHA" --json > "$REPORT" 2>/dev/null
 set -e
 
 if [[ $VERIFY -eq 0 ]]; then
@@ -113,6 +112,9 @@ if [[ $VERIFY -eq 0 ]]; then
 fi
 
 # ── 5. 실패 → 기대값·실제값 diff 후 롤백 ─────────────────────────────────
+# 실패했을 때만 한 번 더 돈다. 성공하는 배포마다 프로브 전체를 두 번 찌를 이유가 없다
+# (매번 18초였다). 이 리포트는 아래 diff 와 실패 안내에만 쓰인다.
+bash scripts/verify-prod.sh --commit "$SHA" --json > "$REPORT" 2>/dev/null || true
 printf '\n\033[31m✗ 검증 실패 — 기대값 vs 실제값\033[0m\n'
 node -e '
 const report = require(process.argv[1]);
