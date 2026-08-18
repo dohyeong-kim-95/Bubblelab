@@ -1,12 +1,12 @@
+/* 검은 바탕에 흰 글씨 하나로 간다. 색은 강조 대신 밝기로만 나눈다. */
 :root {
-  color-scheme: light dark;
-  --paper: light-dark(#f4f1e8, #16170f);
-  --surface: light-dark(#fbf9f2, #1f211a);
-  --ink: light-dark(#24261e, #ecebde);
-  --muted: light-dark(#7b7c6f, #9c9d90);
-  --line: light-dark(#e0dccf, #32342a);
-  --moss: light-dark(#52654b, #9db692);
-  --danger: light-dark(#9a4438, #e08c7f);
+  color-scheme: dark;
+  --bg: #000;
+  --surface: #0d0d0d;
+  --ink: #f4f4f2;
+  --muted: #8b8b86;
+  --line: #242422;
+  --danger: #e08c7f;
   --bar: 56px;
   --add: 60px;
 }
@@ -14,26 +14,29 @@
 html, body { height: 100%; }
 body {
   margin: 0; display: flex; flex-direction: column; overflow: hidden;
-  background: var(--paper); color: var(--ink);
+  background: var(--bg); color: var(--ink);
   font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 16px; line-height: 1.5;
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 button, input { color: inherit; font: inherit; }
-button { border: 0; background: none; cursor: pointer; }
-:focus-visible { outline: 2px solid var(--moss); outline-offset: 2px; }
+button { border: 0; background: none; cursor: pointer; touch-action: manipulation; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 [hidden] { display: none !important; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
 
-.bar { display: flex; align-items: center; gap: 12px; min-height: var(--bar); padding: 0 8px 0 18px; }
-.bar-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex: 1; }
-.bar h1 { margin: 0; font-size: 19px; letter-spacing: -.02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.count { color: var(--muted); font-size: 13px; flex: none; }
+.bar { display: flex; align-items: center; gap: 12px; min-height: var(--bar); padding: 0 8px 0 10px; }
+.bar-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex: 1; margin: 0; font-size: 19px; }
+/* 한 번 누르면 목록 선택, 두 번 누르면 이름 바꾸기 — touch-action 으로 더블탭 확대를 막는다. */
+#list-name { min-height: 44px; padding: 0 8px; border-radius: 8px; font-size: 19px; font-weight: 700;
+  letter-spacing: -.02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#list-name:active { background: var(--surface); }
+.count { color: var(--muted); font-size: 13px; font-weight: 400; flex: none; }
 #menu-button { width: 44px; height: 44px; flex: none; font-size: 20px; color: var(--muted); }
 
 .dots { display: flex; justify-content: center; gap: 7px; height: 18px; }
 .dot { width: 18px; height: 18px; display: grid; place-items: center; }
 .dot::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--line); }
-.dot.on::before { background: var(--moss); transform: scale(1.4); }
+.dot.on::before { background: var(--ink); transform: scale(1.4); }
 
 /* 좌우 이동은 scroll-snap 이 맡는다. 각 패널은 세로로 따로 스크롤된다. */
 .track { flex: 1; min-height: 0; display: flex; overflow-x: auto; overflow-y: hidden;
@@ -45,9 +48,10 @@ button { border: 0; background: none; cursor: pointer; }
 .items { list-style: none; margin: 0; padding: 0; }
 .item { display: grid; grid-template-columns: 34px minmax(0, 1fr) 34px; align-items: center;
   min-height: 48px; border-bottom: 1px solid var(--line); }
-.check { height: 44px; font-size: 17px; color: var(--moss); text-align: left; }
+.check { height: 44px; font-size: 17px; text-align: left; }
 .text { padding: 10px 4px; overflow-wrap: anywhere; }
 .item.done .text { color: var(--muted); text-decoration: line-through; }
+.item.done .check { color: var(--muted); }
 .remove { height: 44px; font-size: 19px; color: var(--line); }
 .item:hover .remove, .item:focus-within .remove { color: var(--muted); }
 .empty { margin: 28px 0; color: var(--muted); font-size: 14px; }
@@ -56,21 +60,37 @@ button { border: 0; background: none; cursor: pointer; }
   min-height: var(--add); border-top: 1px solid var(--line); background: var(--surface); }
 .add input { height: 100%; border: 0; background: none; padding: 0 18px; }
 .add input::placeholder { color: var(--muted); }
-.add button { height: 100%; font-size: 24px; color: var(--moss); }
+.add button { height: 100%; font-size: 24px; }
 
 dialog { width: min(100% - 32px, 340px); border: 1px solid var(--line); border-radius: 14px;
   background: var(--surface); color: var(--ink); padding: 14px; }
-dialog::backdrop { background: rgb(12 13 9 / 45%); }
+dialog::backdrop { background: rgb(0 0 0 / 70%); }
 dialog h2 { margin: 2px 4px 12px; font-size: 16px; }
 dialog input { width: 100%; height: 46px; border: 1px solid var(--line); border-radius: 9px;
-  background: var(--paper); padding: 0 12px; margin-bottom: 4px; }
-.menu-items { display: grid; gap: 2px; }
+  background: var(--bg); padding: 0 12px; margin-bottom: 4px; }
+.menu-items { display: grid; gap: 2px; max-height: 60dvh; overflow-y: auto; }
 .menu-items.row { grid-auto-flow: column; gap: 8px; margin-top: 10px; }
 .menu-items button { min-height: 48px; border-radius: 9px; padding: 0 14px; text-align: left; }
 .menu-items.row button { text-align: center; }
-.menu-items button:hover { background: var(--paper); }
+.menu-items button:hover { background: var(--bg); }
 .menu-items .danger { color: var(--danger); }
 .menu-items .quiet { color: var(--muted); }
-.menu-items .primary { background: var(--moss); color: light-dark(#fff, #14160f); font-weight: 700; }
+.menu-items .primary { background: var(--ink); color: var(--bg); font-weight: 700; }
+.pick { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pick[aria-current="true"] { background: var(--bg); }
+.pick .count { font-weight: 400; }
 .error { min-height: 1.2em; margin: 0 4px; color: var(--danger); font-size: 13px; }
+
+/* 워커가 게이트에서 직접 그리는 로그인 화면 (_infra/worker.js 의 LIFE_LOGIN_PAGE). */
+.login-page { display: block; overflow: auto; }
+.login-card { width: min(100% - 40px, 380px); margin: 0 auto; padding: max(64px, 14vh) 0 48px; }
+.login-card h1 { margin: 0 0 8px; font-size: 24px; letter-spacing: -.03em; }
+.login-card > p { margin: 0; color: var(--muted); font-size: 14px; }
+.login-card form { display: grid; gap: 8px; margin-top: 28px; }
+.login-card label { font-size: 13px; color: var(--muted); }
+.login-card input { width: 100%; height: 48px; border: 1px solid var(--line); border-radius: 9px;
+  background: var(--surface); padding: 0 12px; }
+.login-card button { min-height: 48px; margin-top: 8px; border-radius: 9px;
+  background: var(--ink); color: var(--bg); font-weight: 700; }
+.login-card .form-error { min-height: 1.2em; color: var(--danger); font-size: 13px; }
 @media (prefers-reduced-motion: reduce) { .track { scroll-behavior: auto; } }
