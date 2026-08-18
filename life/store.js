@@ -110,6 +110,13 @@ export function clearDone(state, listId) {
   return mapList(state, listId, (list) => ({ ...list, items: list.items.filter((item) => !item.done) }));
 }
 
+/** 화면에 보이는 순서: 미완료가 먼저, 완료가 뒤. 각 묶음 안에서는 적은 순서 그대로.
+ *  저장된 배열은 건드리지 않는다 — 완료를 취소하면 원래 자리로 돌아가야 한다. */
+export function orderedItems(list) {
+  const items = list.items;
+  return [...items.filter((item) => !item.done), ...items.filter((item) => item.done)];
+}
+
 export const progressOf = (list) => ({
   done: list.items.filter((item) => item.done).length,
   total: list.items.length,

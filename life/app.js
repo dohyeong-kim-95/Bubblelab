@@ -1,6 +1,6 @@
 import {
   MAX_LISTS, STORAGE_KEY, addItem, addList, clearDone, emptyState, parseState,
-  progressOf, removeItem, removeList, renameList, setTool, toggleItem,
+  orderedItems, progressOf, removeItem, removeList, renameList, setTool, toggleItem,
 } from "./store.js";
 
 const $ = (id) => document.getElementById(id);
@@ -63,7 +63,7 @@ function itemRow(list, item) {
 
 function fillPanel(panel, list) {
   const items = node("ul", "items");
-  for (const item of list.items) items.append(itemRow(list, item));
+  for (const item of orderedItems(list)) items.append(itemRow(list, item));
   panel.replaceChildren(items);
   if (!list.items.length) panel.append(node("p", "empty", "아직 없습니다."));
 }

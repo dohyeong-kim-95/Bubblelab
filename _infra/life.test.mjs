@@ -6,7 +6,7 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 const {
   MAX_LISTS, NAME_MAX, TEXT_MAX, addItem, addList, clearDone, emptyState, parseState,
-  progressOf, removeItem, removeList, renameList, setTool, toggleItem, toolSlug,
+  orderedItems, progressOf, removeItem, removeList, renameList, setTool, toggleItem, toolSlug,
 } = await import("../life/store.js");
 
 const first = (state) => state.lists[0];
@@ -150,4 +150,26 @@ test("저장된 도구 이름도 읽을 때 검사한다", () => {
   assert.equal(ok.tool, "invest");
   assert.equal("tool" in unsafe, false, "주소에 못 쓰는 이름은 버린다");
   assert.equal(upper.tool, "trip");
+});
+
+test("미완료가 항상 위, 완료가 항상 아래", () => {
+  let state = emptyState();
+  const list = first(state).id;
+  for (const text of ["하나", "둘", "셋", "넷"]) state = addItem(state, list, text);
+  const [a, b, c, d] = first(state).items.map((item) => item.id);
+
+  assert.deepEqual(orderedItems(first(state)).map((item) => item.text), ["하나", "둘", "셋", "넷"]);
+
+  state = toggleItem(state, list, b);
+  assert.deepEqual(orderedItems(first(state)).map((item) => item.text), ["하나", "셋", "넷", "둘"]);
+
+  state = toggleItem(state, list, d);
+  assert.deepEqual(orderedItems(first(state)).map((item) => item.text), ["하나", "셋", "둘", "넷"],
+    "완료끼리도 적은 순서를 지킨다");
+
+  // 완료를 취소하면 원래 자리로 돌아온다 — 저장된 배열을 흔들지 않기 때문이다.
+  state = toggleItem(state, list, b);
+  assert.deepEqual(orderedItems(first(state)).map((item) => item.text), ["하나", "둘", "셋", "넷"]);
+  assert.equal(first(state).items[0].id, a);
+  assert.equal(first(state).items[2].id, c);
 });

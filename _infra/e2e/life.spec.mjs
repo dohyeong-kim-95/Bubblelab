@@ -10,12 +10,21 @@ test("할 일 PWA — 목록을 옆으로 넘기고, 적은 내용이 오프라�
   await page.goto("/life/");
   await expect(page.locator("#list-name")).toHaveText("할 일");
 
-  await page.locator("#add-text").fill("우유 사기");
-  await page.getByRole("button", { name: "추가" }).click();
-  await expect(page.getByText("우유 사기")).toBeVisible();
-  await expect(page.locator("#list-count")).toHaveText("0/1");
+  for (const text of ["우유 사기", "세탁", "이력서"]) {
+    await page.locator("#add-text").fill(text);
+    await page.getByRole("button", { name: "추가" }).click();
+  }
+  await expect(page.locator(".item")).toHaveCount(3);
+  await expect(page.locator("#list-count")).toHaveText("0/3");
+
+  // 완료한 것은 항상 아래로 내려간다.
+  await page.getByRole("button", { name: "세탁 완료" }).click();
+  await expect(page.locator("#list-count")).toHaveText("1/3");
+  await expect(page.locator(".item .text")).toHaveText([/우유 사기/, /이력서/, /세탁/]);
+  await page.getByRole("button", { name: "세탁 완료 취소" }).click();
+  await expect(page.locator(".item .text")).toHaveText([/우유 사기/, /세탁/, /이력서/]);
   await page.getByRole("button", { name: "우유 사기 완료" }).click();
-  await expect(page.locator("#list-count")).toHaveText("1/1");
+  await expect(page.locator(".item .text")).toHaveText([/세탁/, /이력서/, /우유 사기/]);
 
   // 두 번째 목록을 만들면 점이 생기고 그쪽으로 넘어간다.
   await page.locator("#menu-button").click();
@@ -33,7 +42,7 @@ test("할 일 PWA — 목록을 옆으로 넘기고, 적은 내용이 오프라�
   });
   await expect(page.locator("#list-name")).toHaveText("할 일");
   await expect(page.locator("#dots .dot").first()).toHaveAttribute("aria-current", "true");
-  await expect(page.locator("#list-count")).toHaveText("1/1");
+  await expect(page.locator("#list-count")).toHaveText("1/3");
 
   // 제목을 한 번 누르면 목록 선택, 두 번 누르면 이름 바꾸기.
   await page.locator("#list-name").click();
@@ -53,7 +62,7 @@ test("할 일 PWA — 목록을 옆으로 넘기고, 적은 내용이 오프라�
   // 할 일을 길게 누르면 도구를 연결하고, 두 번 누르면 그 도구가 열린다.
   await page.locator("#dots .dot").first().click();
   await expect(page.locator("#list-name")).toHaveText("할 일");
-  const text = page.locator(".item .text").first();
+  const text = page.locator(".item .text").first();  // 맨 위 = 미완료 첫 항목
   await text.hover();
   await page.mouse.down();
   await page.waitForTimeout(650);
@@ -78,6 +87,7 @@ test("할 일 PWA — 목록을 옆으로 넘기고, 적은 내용이 오프라�
   await expect(page.getByText("우유 사기")).toBeVisible({ timeout: 3000 });
   await expect(page.locator("#dots .dot")).toHaveCount(2);
   await expect(page.locator(".item .tool").first()).toHaveText("↗ invest", { timeout: 3000 });
+  await expect(page.locator(".item .text")).toHaveText([/세탁/, /이력서/, /우유 사기/], { timeout: 3000 });
 });
 
 test("PWA 로 설치되면 주소창 없이 뜬다", async ({ page }) => {
