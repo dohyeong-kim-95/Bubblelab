@@ -6,7 +6,7 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 const {
   MAX_LISTS, NAME_MAX, TEXT_MAX, addItem, addList, clearDone, emptyState, parseState,
-  progressOf, removeItem, removeList, renameList, toggleItem,
+  progressOf, removeItem, removeList, renameList, setTool, toggleItem, toolSlug,
 } = await import("../life/store.js");
 
 const first = (state) => state.lists[0];
@@ -112,4 +112,42 @@ test("바꾸기는 원래 상태를 건드리지 않는다", () => {
   addItem(state, first(state).id, "새 항목");
   addList(state, "새 목록");
   assert.equal(JSON.stringify(state), snapshot);
+});
+
+test("도구 이름은 주소에 쓸 수 있는 슬러그만 받는다", () => {
+  assert.equal(toolSlug("invest"), "invest");
+  assert.equal(toolSlug("  Trip Budget "), "trip-budget");
+  for (const bad of ["", "-시작", "../etc", "javascript:alert(1)", "a".repeat(33), "한글", "a b/c"]) {
+    assert.equal(toolSlug(bad), null, `${bad} 는 거절해야 한다`);
+  }
+});
+
+test("할 일에 도구를 붙이고 뗀다", () => {
+  let state = emptyState();
+  const list = first(state).id;
+  state = addItem(state, list, "잔고 확인");
+  const item = first(state).items[0].id;
+
+  state = setTool(state, list, item, "Invest");
+  assert.equal(first(state).items[0].tool, "invest");
+  assert.throws(() => setTool(state, list, item, "../secret"), /소문자/);
+  assert.equal(first(state).items[0].tool, "invest", "거절된 입력은 아무것도 바꾸지 않는다");
+
+  state = setTool(state, list, item, "  ");
+  assert.equal("tool" in first(state).items[0], false, "빈 값이면 연결이 끊긴다");
+});
+
+test("저장된 도구 이름도 읽을 때 검사한다", () => {
+  const state = parseState(JSON.stringify({
+    v: 1,
+    lists: [{ id: "a", name: "목록", items: [
+      { id: "1", text: "정상", tool: "invest" },
+      { id: "2", text: "위험", tool: "javascript:alert(1)" },
+      { id: "3", text: "대문자", tool: "Trip" },
+    ] }],
+  }));
+  const [ok, unsafe, upper] = state.lists[0].items;
+  assert.equal(ok.tool, "invest");
+  assert.equal("tool" in unsafe, false, "주소에 못 쓰는 이름은 버린다");
+  assert.equal(upper.tool, "trip");
 });

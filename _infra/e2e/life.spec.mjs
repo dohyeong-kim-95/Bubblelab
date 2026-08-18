@@ -50,6 +50,24 @@ test("할 일 PWA — 목록을 옆으로 넘기고, 적은 내용이 오프라�
   await page.locator("#dots .dot").first().click();
   await expect(page.locator("#list-name")).toHaveText("할 일");
 
+  // 할 일을 길게 누르면 도구를 연결하고, 두 번 누르면 그 도구가 열린다.
+  await page.locator("#dots .dot").first().click();
+  await expect(page.locator("#list-name")).toHaveText("할 일");
+  const text = page.locator(".item .text").first();
+  await text.hover();
+  await page.mouse.down();
+  await page.waitForTimeout(650);
+  await page.mouse.up();
+  await expect(page.locator("#prompt-title")).toHaveText("도구 연결");
+  await page.locator("#prompt-text").fill("invest");
+  await page.getByRole("button", { name: "확인" }).click();
+  await expect(page.locator(".item .tool").first()).toHaveText("↗ invest");
+
+  await text.dblclick();
+  await expect(page).toHaveURL(/\/life\/invest\/$/);
+  await page.goBack();
+  await expect(page.locator(".item .tool").first()).toHaveText("↗ invest");
+
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(2);
   expect(failures).toEqual([]);
@@ -59,6 +77,7 @@ test("할 일 PWA — 목록을 옆으로 넘기고, 적은 내용이 오프라�
   await page.reload();
   await expect(page.getByText("우유 사기")).toBeVisible({ timeout: 3000 });
   await expect(page.locator("#dots .dot")).toHaveCount(2);
+  await expect(page.locator(".item .tool").first()).toHaveText("↗ invest", { timeout: 3000 });
 });
 
 test("PWA 로 설치되면 주소창 없이 뜬다", async ({ page }) => {
@@ -75,6 +94,9 @@ test("PWA 로 설치되면 주소창 없이 뜬다", async ({ page }) => {
   // 게이트 뒤에 있으므로 매니페스트는 쿠키와 함께 받아야 한다. 이 속성이 빠지면
   // 크롬이 매니페스트를 못 읽어 설치 대신 바로가기가 되고 주소창이 남는다.
   await expect(page.locator('link[rel="manifest"]')).toHaveAttribute("crossorigin", "use-credentials");
+  // 키보드가 앱을 덮지 않고 레이아웃을 줄이도록 선언한다.
+  await expect(page.locator('meta[name="viewport"]'))
+    .toHaveAttribute("content", /interactive-widget=resizes-content/);
   const registered = await page.evaluate(() => navigator.serviceWorker.ready.then(() => true));
   expect(registered).toBe(true);
 });

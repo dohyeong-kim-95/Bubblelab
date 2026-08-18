@@ -5,6 +5,9 @@ export const STORAGE_KEY = "bl_life_v1";
 export const MAX_LISTS = 12;
 export const TEXT_MAX = 200;
 export const NAME_MAX = 24;
+// 도구 이름은 그대로 주소가 된다(life.bubblelab.dev/<이름>). 슬러그만 허용해
+// javascript: 나 ../ 같은 것이 주소에 섞이지 않게 한다.
+export const TOOL_PATTERN = /^[a-z0-9][a-z0-9-]{0,31}$/;
 
 const id = () => crypto.randomUUID();
 const clean = (value, max) => String(value ?? "").replace(/\s+/g, " ").trim().slice(0, max);
@@ -26,7 +29,12 @@ export function parseState(raw) {
       name: clean(list.name, NAME_MAX) || "목록",
       items: (Array.isArray(list.items) ? list.items : [])
         .filter((item) => item && typeof item.id === "string" && typeof item.text === "string")
-        .map((item) => ({ id: item.id, text: clean(item.text, TEXT_MAX), done: Boolean(item.done) }))
+        .map((item) => ({
+          id: item.id,
+          text: clean(item.text, TEXT_MAX),
+          done: Boolean(item.done),
+          ...(toolSlug(item.tool) ? { tool: toolSlug(item.tool) } : {}),
+        }))
         .filter((item) => item.text),
     }));
   return lists.length ? { v: 1, lists } : emptyState();
@@ -53,6 +61,28 @@ export function renameList(state, listId, name) {
 export function removeList(state, listId) {
   if (state.lists.length <= 1) throw new Error("목록은 하나 이상 있어야 해요");
   return { ...state, lists: state.lists.filter((list) => list.id !== listId) };
+}
+
+/** 사람이 적은 것을 주소에 쓸 수 있는 이름으로. 못 쓰는 글자면 null. */
+export function toolSlug(value) {
+  const slug = String(value ?? "").trim().toLowerCase().replace(/\s+/g, "-");
+  return TOOL_PATTERN.test(slug) ? slug : null;
+}
+
+/** 할 일에 도구를 연결한다. 빈 값을 주면 연결을 끊는다. */
+export function setTool(state, listId, itemId, value) {
+  const raw = String(value ?? "").trim();
+  const slug = raw ? toolSlug(raw) : null;
+  if (raw && !slug) throw new Error("영문 소문자·숫자·하이픈으로 32자까지만 쓸 수 있어요");
+  return mapList(state, listId, (list) => ({
+    ...list,
+    items: list.items.map((item) => {
+      if (item.id !== itemId) return item;
+      const next = { ...item };
+      if (slug) next.tool = slug; else delete next.tool;
+      return next;
+    }),
+  }));
 }
 
 export function addItem(state, listId, text) {

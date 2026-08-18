@@ -1,6 +1,6 @@
 import {
   MAX_LISTS, STORAGE_KEY, addItem, addList, clearDone, emptyState, parseState,
-  progressOf, removeItem, removeList, renameList, toggleItem,
+  progressOf, removeItem, removeList, renameList, setTool, toggleItem,
 } from "./store.js";
 
 const $ = (id) => document.getElementById(id);
@@ -24,31 +24,61 @@ function node(tag, className, text) {
 }
 
 const current = () => state.lists[Math.min(index, state.lists.length - 1)];
+const listById = (id) => state.lists.find((list) => list.id === id);
+const panelOf = (id) => track.querySelector(`[data-list-id="${CSS.escape(id)}"]`);
 
-/* 목록 이동은 CSS scroll-snap 이 맡는다 — 드래그를 직접 처리하지 않아야
- * 관성·되돌아가기·접근성이 브라우저 것 그대로 나온다. */
+/* 키보드가 올라오면 앱이 그만큼 줄어야 한다(가려지면 안 된다). 뷰포트 meta 의
+ * interactive-widget=resizes-content 가 기본이고, 이건 그걸 지원하지 않는
+ * 브라우저를 위한 보험이다. */
+function syncViewport() {
+  const height = globalThis.visualViewport?.height;
+  document.documentElement.style.setProperty("--app-h", height ? `${Math.round(height)}px` : "100%");
+}
+
+/* ── 그리기 ─────────────────────────────────────────────────────────────
+ * 항목 하나가 바뀌었을 때 전체를 다시 그리지 않는다. 목록이 길어질수록 그게
+ * 그대로 지연으로 느껴지고, 스크롤 위치까지 튄다. */
+function itemRow(list, item) {
+  const row = node("li", `item${item.done ? " done" : ""}`);
+  const toggle = node("button", "check", item.done ? "●" : "○");
+  toggle.type = "button";
+  toggle.setAttribute("aria-pressed", String(item.done));
+  toggle.setAttribute("aria-label", `${item.text} ${item.done ? "완료 취소" : "완료"}`);
+  toggle.addEventListener("click", () => update(toggleItem(state, list.id, item.id), list.id));
+
+  const text = node("span", "text");
+  text.append(item.text);
+  if (item.tool) text.append(node("span", "tool", `↗ ${item.tool}`));
+  text.title = item.tool ? `두 번 누르면 ${item.tool} 열기 · 길게 누르면 도구 바꾸기` : "길게 누르면 도구 연결";
+  attachToolGestures(text, row, list, item);
+
+  const remove = node("button", "remove", "×");
+  remove.type = "button";
+  remove.setAttribute("aria-label", `${item.text} 삭제`);
+  remove.addEventListener("click", () => update(removeItem(state, list.id, item.id), list.id));
+
+  row.append(toggle, text, remove);
+  return row;
+}
+
+function fillPanel(panel, list) {
+  const items = node("ul", "items");
+  for (const item of list.items) items.append(itemRow(list, item));
+  panel.replaceChildren(items);
+  if (!list.items.length) panel.append(node("p", "empty", "아직 없습니다."));
+}
+
+function renderPanel(listId) {
+  const list = listById(listId);
+  const panel = panelOf(listId);
+  if (list && panel) fillPanel(panel, list);
+}
+
 function renderPanels() {
   track.replaceChildren(...state.lists.map((list) => {
     const panel = node("section", "panel");
     panel.dataset.listId = list.id;
-    const items = node("ul", "items");
-    for (const item of list.items) {
-      const row = node("li", `item${item.done ? " done" : ""}`);
-      const toggle = node("button", "check", item.done ? "●" : "○");
-      toggle.type = "button";
-      toggle.setAttribute("aria-pressed", String(item.done));
-      toggle.setAttribute("aria-label", `${item.text} ${item.done ? "완료 취소" : "완료"}`);
-      toggle.addEventListener("click", () => update(toggleItem(state, list.id, item.id)));
-      const text = node("span", "text", item.text);
-      const remove = node("button", "remove", "×");
-      remove.type = "button";
-      remove.setAttribute("aria-label", `${item.text} 삭제`);
-      remove.addEventListener("click", () => update(removeItem(state, list.id, item.id)));
-      row.append(toggle, text, remove);
-      items.append(row);
-    }
-    panel.append(items);
-    if (!list.items.length) panel.append(node("p", "empty", "아직 없습니다."));
+    fillPanel(panel, list);
     return panel;
   }));
 }
@@ -72,43 +102,6 @@ function renderHeader() {
   $("list-count").textContent = total ? `${done}/${total}` : "";
 }
 
-/* 제목은 한 번 누르면 목록 선택, 두 번 누르면 이름 바꾸기다. 같은 자리에 두 동작이
- * 겹치므로 단일 탭을 잠깐 미뤄 두 번째 탭을 기다린다 — 이보다 짧으면 더블탭을
- * 놓치고, 길면 목록 선택이 굼떠 보인다. */
-const DOUBLE_TAP_MS = 250;
-let tapTimer = null;
-
-function onTitleTap() {
-  if (tapTimer) {
-    clearTimeout(tapTimer);
-    tapTimer = null;
-    void renamePrompt();
-    return;
-  }
-  tapTimer = setTimeout(() => { tapTimer = null; openPicker(); }, DOUBLE_TAP_MS);
-}
-
-function openPicker() {
-  const items = state.lists.map((list, position) => {
-    const { done, total } = progressOf(list);
-    const button = node("button", "pick");
-    button.type = "button";
-    button.setAttribute("aria-current", String(position === index));
-    button.append(node("span", "", list.name), node("span", "count", total ? `${done}/${total}` : ""));
-    button.addEventListener("click", () => { $("picker").close(); goTo(position); });
-    return button;
-  });
-  $("picker-items").replaceChildren(...items);
-  $("picker").showModal();
-}
-
-async function renamePrompt() {
-  const name = await ask("이름 바꾸기", current().name);
-  if (name === null) return;
-  try { update(renameList(state, current().id, name)); }
-  catch (error) { await ask(error.message, "", { confirm: true }); }
-}
-
 function render() {
   index = Math.max(0, Math.min(index, state.lists.length - 1));
   renderPanels();
@@ -117,10 +110,12 @@ function render() {
   goTo(index, "auto");
 }
 
-function update(next) {
+/** listId 를 주면 그 목록만 다시 그린다. 없으면 목록 구성이 바뀐 것이라 전부. */
+function update(next, listId = null) {
   state = next;
   save();
-  render();
+  if (listId && panelOf(listId)) { renderPanel(listId); renderHeader(); }
+  else render();
 }
 
 function goTo(position, behavior = "smooth") {
@@ -140,28 +135,115 @@ track.addEventListener("scroll", () => {
   }, 60);
 }, { passive: true });
 
-addEventListener("resize", () => track.scrollTo({ left: index * track.clientWidth, behavior: "auto" }));
+addEventListener("resize", () => {
+  syncViewport();
+  track.scrollTo({ left: index * track.clientWidth, behavior: "auto" });
+});
+globalThis.visualViewport?.addEventListener("resize", syncViewport);
 
 $("add-form").addEventListener("submit", (event) => {
   event.preventDefault();
   const input = $("add-text");
   const text = input.value;
   input.value = "";
-  update(addItem(state, current().id, text));
-  const panel = track.children[index];
-  panel?.scrollTo({ top: panel.scrollHeight, behavior: "smooth" });
+  const list = current();
+  update(addItem(state, list.id, text), list.id);
+  panelOf(list.id)?.scrollTo({ top: panelOf(list.id).scrollHeight, behavior: "smooth" });
 });
 
-/* 이름 입력은 dialog 하나를 돌려 쓴다. window.prompt 는 PWA 에서 주소를 드러내고
+/* ── 도구 연결 ──────────────────────────────────────────────────────────
+ * 할 일마다 도구 이름을 하나 붙일 수 있다. 이름은 그대로 주소가 되어
+ * (이 앱 기준 상대경로) `/<이름>/` 을 연다. 두 번 누르면 열고, 길게 누르면
+ * 이름을 고친다. */
+const LONG_PRESS_MS = 500;
+
+function toolHref(tool) {
+  return new URL(`${tool}/`, location.href).href;
+}
+
+function attachToolGestures(text, row, list, item) {
+  let timer = null;
+  let origin = null;
+  let longPressed = false;
+
+  const stop = () => {
+    clearTimeout(timer);
+    timer = null;
+    origin = null;
+    row.classList.remove("pressing");
+  };
+  text.addEventListener("pointerdown", (event) => {
+    longPressed = false;
+    origin = { x: event.clientX, y: event.clientY };
+    row.classList.add("pressing");
+    timer = setTimeout(() => { longPressed = true; stop(); void linkPrompt(list, item); }, LONG_PRESS_MS);
+  });
+  text.addEventListener("pointermove", (event) => {
+    if (origin && Math.hypot(event.clientX - origin.x, event.clientY - origin.y) > 10) stop();
+  });
+  for (const type of ["pointerup", "pointercancel", "pointerleave"]) text.addEventListener(type, stop);
+  text.addEventListener("contextmenu", (event) => event.preventDefault());
+  text.addEventListener("dblclick", () => {
+    if (longPressed) return;
+    if (item.tool) location.assign(toolHref(item.tool));
+    else void linkPrompt(list, item);
+  });
+}
+
+async function linkPrompt(list, item) {
+  const name = await ask("도구 연결", item.tool ?? "", { optional: true, hint: "비우면 연결을 끊습니다" });
+  if (name === null) return;
+  try { update(setTool(state, list.id, item.id, name), list.id); }
+  catch (error) { await ask(error.message, "", { confirm: true }); }
+}
+
+/* ── 제목 ───────────────────────────────────────────────────────────────
+ * 한 번 누르면 목록 선택, 두 번 누르면 이름 바꾸기다. 같은 자리에 두 동작이
+ * 겹치므로 단일 탭을 잠깐 미뤄 두 번째 탭을 기다린다 — 이보다 짧으면 더블탭을
+ * 놓치고, 길면 목록 선택이 굼떠 보인다. */
+const DOUBLE_TAP_MS = 250;
+let tapTimer = null;
+
+function onTitleTap() {
+  if (tapTimer) {
+    clearTimeout(tapTimer);
+    tapTimer = null;
+    void renamePrompt();
+    return;
+  }
+  tapTimer = setTimeout(() => { tapTimer = null; openPicker(); }, DOUBLE_TAP_MS);
+}
+
+function openPicker() {
+  $("picker-items").replaceChildren(...state.lists.map((list, position) => {
+    const { done, total } = progressOf(list);
+    const button = node("button", "pick");
+    button.type = "button";
+    button.setAttribute("aria-current", String(position === index));
+    button.append(node("span", "", list.name), node("span", "count", total ? `${done}/${total}` : ""));
+    button.addEventListener("click", () => { $("picker").close(); goTo(position); });
+    return button;
+  }));
+  $("picker").showModal();
+}
+
+async function renamePrompt() {
+  const name = await ask("이름 바꾸기", current().name);
+  if (name === null) return;
+  try { update(renameList(state, current().id, name)); }
+  catch (error) { await ask(error.message, "", { confirm: true }); }
+}
+
+/* 입력은 dialog 하나를 돌려 쓴다. window.prompt 는 PWA 에서 출처를 드러내고
  * 스타일도 맞지 않는다. */
-function ask(title, value = "", { confirm = false } = {}) {
+function ask(title, value = "", { confirm = false, optional = false, hint = "" } = {}) {
   return new Promise((resolve) => {
     const dialog = $("prompt");
     $("prompt-title").textContent = title;
     $("prompt-text").value = value;
     $("prompt-text").hidden = confirm;
-    $("prompt-text").required = !confirm;
-    $("prompt-error").textContent = "";
+    $("prompt-text").required = !confirm && !optional;
+    $("prompt-error").textContent = hint;
     const done = (result) => { dialog.close(); resolve(result); };
     $("prompt-form").onsubmit = (event) => {
       event.preventDefault();
@@ -176,7 +258,7 @@ function ask(title, value = "", { confirm = false } = {}) {
 
 const withMenu = (handler) => async () => {
   $("menu").close();
-  try { await handler(); } catch (error) { await ask(error.message, ""); }
+  try { await handler(); } catch (error) { await ask(error.message, "", { confirm: true }); }
 };
 
 $("list-name").addEventListener("click", onTitleTap);
@@ -203,7 +285,10 @@ $("menu-add").addEventListener("click", withMenu(async () => {
 
 $("menu-rename").addEventListener("click", withMenu(renamePrompt));
 
-$("menu-clear").addEventListener("click", withMenu(() => update(clearDone(state, current().id))));
+$("menu-clear").addEventListener("click", withMenu(() => {
+  const list = current();
+  update(clearDone(state, list.id), list.id);
+}));
 
 $("menu-remove").addEventListener("click", withMenu(async () => {
   const list = current();
@@ -214,5 +299,6 @@ $("menu-remove").addEventListener("click", withMenu(async () => {
   update(next);
 }));
 
+syncViewport();
 render();
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
