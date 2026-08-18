@@ -114,6 +114,32 @@ test("PWA 로 설치되면 주소창 없이 뜬다", async ({ page }) => {
   expect(registered).toBe(true);
 });
 
+test("도구는 열 때 받는다 — 시작에는 섞이지 않는다", async ({ page }) => {
+  const paths = [];
+  page.on("request", (request) => paths.push(new URL(request.url()).pathname));
+
+  await page.goto("/life/", { waitUntil: "networkidle" });
+  // 도구가 몇 개가 되든 시작에 받는 것은 셸뿐이어야 한다. 여기가 늘어나는 순간
+  // 여는 속도가 도구 개수를 따라간다.
+  const tools = paths.filter((path) => /^\/life\/[^/]+\//.test(path));
+  expect(tools, `시작에 도구를 받았다: ${tools.join(", ")}`).toEqual([]);
+  expect(paths.filter((path) => path.startsWith("/life/"))).toHaveLength(4);
+
+  await page.evaluate(() => navigator.serviceWorker.ready.then(() => undefined));
+  await page.waitForTimeout(400);
+  const cached = await page.evaluate(async () => {
+    const names = await caches.keys();
+    const cache = await caches.open(names.find((name) => name.startsWith("life-")));
+    return (await cache.keys()).map((request) => new URL(request.url).pathname);
+  });
+  expect(cached.filter((path) => /^\/life\/[^/]+\//.test(path))).toEqual([]);
+
+  // 도구는 눌렀을 때 비로소 받는다.
+  paths.length = 0;
+  await page.goto("/life/pushup/", { waitUntil: "networkidle" });
+  expect(paths.some((path) => path.startsWith("/life/pushup/"))).toBe(true);
+});
+
 test("두 번째부터는 네트워크를 기다리지 않고 열린다", async ({ page }) => {
   await page.goto("/life/");
   await page.evaluate(() => navigator.serviceWorker.ready.then(() => undefined));
