@@ -72,43 +72,6 @@ function renderHeader() {
   $("list-count").textContent = total ? `${done}/${total}` : "";
 }
 
-/* 제목은 한 번 누르면 목록 선택, 두 번 누르면 이름 바꾸기다. 같은 자리에 두 동작이
- * 겹치므로 단일 탭을 잠깐 미뤄 두 번째 탭을 기다린다 — 이보다 짧으면 더블탭을
- * 놓치고, 길면 목록 선택이 굼떠 보인다. */
-const DOUBLE_TAP_MS = 250;
-let tapTimer = null;
-
-function onTitleTap() {
-  if (tapTimer) {
-    clearTimeout(tapTimer);
-    tapTimer = null;
-    void renamePrompt();
-    return;
-  }
-  tapTimer = setTimeout(() => { tapTimer = null; openPicker(); }, DOUBLE_TAP_MS);
-}
-
-function openPicker() {
-  const items = state.lists.map((list, position) => {
-    const { done, total } = progressOf(list);
-    const button = node("button", "pick");
-    button.type = "button";
-    button.setAttribute("aria-current", String(position === index));
-    button.append(node("span", "", list.name), node("span", "count", total ? `${done}/${total}` : ""));
-    button.addEventListener("click", () => { $("picker").close(); goTo(position); });
-    return button;
-  });
-  $("picker-items").replaceChildren(...items);
-  $("picker").showModal();
-}
-
-async function renamePrompt() {
-  const name = await ask("이름 바꾸기", current().name);
-  if (name === null) return;
-  try { update(renameList(state, current().id, name)); }
-  catch (error) { await ask(error.message, "", { confirm: true }); }
-}
-
 function render() {
   index = Math.max(0, Math.min(index, state.lists.length - 1));
   renderPanels();
@@ -179,16 +142,6 @@ const withMenu = (handler) => async () => {
   try { await handler(); } catch (error) { await ask(error.message, ""); }
 };
 
-$("list-name").addEventListener("click", onTitleTap);
-// 키보드로는 탭 횟수를 셀 수 없다 — Enter 는 목록 선택, 이름 바꾸기는 ⋯ 메뉴에 있다.
-$("list-name").addEventListener("keydown", (event) => {
-  if (event.key !== "Enter" && event.key !== " ") return;
-  event.preventDefault();
-  clearTimeout(tapTimer);
-  tapTimer = null;
-  openPicker();
-});
-$("picker").addEventListener("click", (event) => { if (event.target === $("picker")) $("picker").close(); });
 $("menu-button").addEventListener("click", () => $("menu").showModal());
 $("menu-close").addEventListener("click", () => $("menu").close());
 $("menu").addEventListener("click", (event) => { if (event.target === $("menu")) $("menu").close(); });
@@ -201,7 +154,11 @@ $("menu-add").addEventListener("click", withMenu(async () => {
   goTo(state.lists.length - 1);
 }));
 
-$("menu-rename").addEventListener("click", withMenu(renamePrompt));
+$("menu-rename").addEventListener("click", withMenu(async () => {
+  const name = await ask("이름 바꾸기", current().name);
+  if (name === null) return;
+  update(renameList(state, current().id, name));
+}));
 
 $("menu-clear").addEventListener("click", withMenu(() => update(clearDone(state, current().id))));
 

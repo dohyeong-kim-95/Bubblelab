@@ -5,17 +5,10 @@
 - 상태 규칙(목록·항목·상한·정리)은 `store.js` 한 곳에만 둔다. 화면에서 직접
   배열을 주무르지 않는다. `store.js` 의 함수는 순수하게 유지한다 — 테스트가 그것만 본다.
 - 좌우 이동은 `scroll-snap` 이다. 터치 드래그를 직접 구현하지 않는다.
-- 제목의 한 번/두 번 탭은 `DOUBLE_TAP_MS` 하나로 갈린다. 값을 줄이면 더블탭을 놓치고
-  늘리면 목록 선택이 굼떠진다. 탭 구분이 필요한 요소에는 `touch-action: manipulation`
-  을 반드시 준다 — 없으면 안드로이드가 더블탭을 확대로 먹는다.
-- 테마는 다크 하나다. `light-dark()` 나 밝은 대체 색을 다시 들이지 않는다. 배경색을
-  바꾸면 `index.html` 의 `theme-color` 와 `manifest.json` 두 곳을 함께 고친다.
 - `window.alert/confirm/prompt` 를 쓰지 않는다. PWA 에서 출처가 드러나고 스타일도
   맞지 않는다 — `#prompt` dialog 를 쓴다.
 - CSP 가 인라인 스크립트·스타일을 막는다(`_infra/security.js`). 외부 호스트도 전부
   막혀 있으니 폰트·아이콘을 CDN 에서 불러오지 않는다.
-- `<link rel="manifest">` 의 `crossorigin="use-credentials"` 를 지우지 말 것. 게이트
-  뒤에서는 이게 없으면 설치가 바로가기로 떨어지고 주소창이 남는다.
 - 아이콘을 바꾸면 192·512 PNG 를 함께 갱신한다. 없으면 안드로이드에서 설치 프롬프트가
   뜨지 않는다.
 - `README.md`와 이 파일은 빌드에서 배포되지 않는다.

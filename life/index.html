@@ -4,14 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="robots" content="noindex, nofollow, noarchive">
-  <meta name="theme-color" content="#000000">
+  <meta name="theme-color" content="#f4f1e8">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="application-name" content="할 일">
   <title>할 일</title>
-  <!-- crossorigin: 이게 없으면 크롬이 매니페스트를 쿠키 없이 받아 간다. 게이트가
-       /login 으로 돌려보내면 매니페스트가 깨져 설치 대신 "바로가기"가 되고,
-       바로가기는 브라우저 탭이라 주소창이 그대로 보인다. -->
-  <link rel="manifest" href="manifest.json" crossorigin="use-credentials">
+  <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="stylesheet" href="styles.css">
@@ -19,11 +15,10 @@
 </head>
 <body>
   <header class="bar">
-    <h1 class="bar-title">
-      <button id="list-name" type="button" aria-haspopup="dialog"
-              title="한 번 누르면 목록 선택 · 두 번 누르면 이름 바꾸기">할 일</button>
+    <div class="bar-title">
+      <h1 id="list-name">할 일</h1>
       <span id="list-count" class="count"></span>
-    </h1>
+    </div>
     <button id="menu-button" type="button" aria-label="목록 메뉴" aria-haspopup="dialog">⋯</button>
   </header>
 
@@ -46,11 +41,6 @@
       <button id="menu-remove" type="button" class="danger">이 목록 삭제</button>
       <button id="menu-close" type="button" class="quiet">닫기</button>
     </div>
-  </dialog>
-
-  <dialog id="picker" aria-labelledby="picker-title">
-    <h2 id="picker-title">목록</h2>
-    <div id="picker-items" class="menu-items"></div>
   </dialog>
 
   <dialog id="prompt" aria-labelledby="prompt-title">
