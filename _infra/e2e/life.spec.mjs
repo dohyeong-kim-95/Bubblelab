@@ -8,7 +8,7 @@ test("할 일 PWA — 목록을 옆으로 넘기고, 적은 내용이 오프라�
   });
 
   await page.goto("/life/");
-  await expect(page.getByRole("heading", { name: "할 일" })).toBeVisible();
+  await expect(page.locator("#list-name")).toHaveText("할 일");
 
   await page.locator("#add-text").fill("우유 사기");
   await page.getByRole("button", { name: "추가" }).click();
@@ -22,7 +22,7 @@ test("할 일 PWA — 목록을 옆으로 넘기고, 적은 내용이 오프라�
   await page.getByRole("button", { name: "새 목록" }).click();
   await page.locator("#prompt-text").fill("장보기");
   await page.getByRole("button", { name: "확인" }).click();
-  await expect(page.getByRole("heading", { name: "장보기" })).toBeVisible();
+  await expect(page.locator("#list-name")).toHaveText("장보기");
   await expect(page.locator("#dots .dot")).toHaveCount(2);
 
   // 가로 스크롤(스와이프)로 넘겨도 헤더와 점이 따라온다.
@@ -31,9 +31,24 @@ test("할 일 PWA — 목록을 옆으로 넘기고, 적은 내용이 오프라�
     track.scrollTo({ left: 0, behavior: "auto" });
     track.dispatchEvent(new Event("scroll"));
   });
-  await expect(page.getByRole("heading", { name: "할 일" })).toBeVisible();
+  await expect(page.locator("#list-name")).toHaveText("할 일");
   await expect(page.locator("#dots .dot").first()).toHaveAttribute("aria-current", "true");
   await expect(page.locator("#list-count")).toHaveText("1/1");
+
+  // 제목을 한 번 누르면 목록 선택, 두 번 누르면 이름 바꾸기.
+  await page.locator("#list-name").click();
+  await expect(page.locator("#picker")).toBeVisible();
+  await page.locator("#picker .pick").nth(1).click();
+  await expect(page.locator("#list-name")).toHaveText("장보기");
+
+  await page.locator("#list-name").dblclick();
+  await expect(page.locator("#prompt-title")).toHaveText("이름 바꾸기");
+  await page.locator("#prompt-text").fill("주말 장보기");
+  await page.getByRole("button", { name: "확인" }).click();
+  await expect(page.locator("#list-name")).toHaveText("주말 장보기");
+  await expect(page.locator("#picker")).toBeHidden();
+  await page.locator("#dots .dot").first().click();
+  await expect(page.locator("#list-name")).toHaveText("할 일");
 
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(2);
@@ -53,7 +68,13 @@ test("PWA 로 설치되면 주소창 없이 뜬다", async ({ page }) => {
     return (await fetch(href)).json();
   });
   assertStandalone(manifest);
-  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", /#/);
+  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#000000");
+  expect(manifest.background_color).toBe("#000000");
+  const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  expect(bg).toBe("rgb(0, 0, 0)");
+  // 게이트 뒤에 있으므로 매니페스트는 쿠키와 함께 받아야 한다. 이 속성이 빠지면
+  // 크롬이 매니페스트를 못 읽어 설치 대신 바로가기가 되고 주소창이 남는다.
+  await expect(page.locator('link[rel="manifest"]')).toHaveAttribute("crossorigin", "use-credentials");
   const registered = await page.evaluate(() => navigator.serviceWorker.ready.then(() => true));
   expect(registered).toBe(true);
 });
