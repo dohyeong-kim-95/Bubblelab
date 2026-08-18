@@ -707,3 +707,97 @@ test("/_health 는 POST 를 받지 않는다 (읽기 전용)", async () => {
     new Request("https://bubblelab.dev/_health", { method: "POST" }), env, ctx);
   assert.equal(response.status, 404);
 });
+
+test("public static assets cache by stability while HTML and JSON keep their existing policy", async () => {
+  const env = {
+    ASSETS: {
+      fetch(request) {
+        const path = new URL(request.url).pathname;
+        const type = path.endsWith(".js") ? "text/javascript"
+          : path.endsWith(".woff2") ? "font/woff2"
+          : path.endsWith(".png") ? "image/png"
+          : path.endsWith(".json") ? "application/json"
+          : "text/html";
+        return new Response("asset", { headers: { "Content-Type": type } });
+      },
+    },
+  };
+
+  const fetch = (url) => worker.fetch(new Request(url), env, ctx);
+  let response = await fetch("https://games.bubblelab.dev/avalon/assets/index-DwRzto2u.js");
+  assert.equal(response.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
+
+  response = await fetch("https://www.bubblelab.dev/_shared/search-rules.js");
+  assert.equal(response.headers.get("Cache-Control"), "public, max-age=3600, must-revalidate");
+
+  response = await fetch("https://www.bubblelab.dev/_shared/TwemojiCountryFlags.woff2");
+  assert.equal(response.headers.get("Cache-Control"), "public, max-age=2592000, stale-while-revalidate=86400");
+
+  response = await fetch("https://assets.bubblelab.dev/_assets/sticker/couple-cat/preview.png");
+  assert.equal(response.headers.get("Cache-Control"), "public, max-age=604800, stale-while-revalidate=86400");
+
+  response = await fetch("https://estate.bubblelab.dev/");
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
+  response = await fetch("https://estate.bubblelab.dev/data/trade-dongtan-202606.json");
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
+});
+
+test("confidential static cache only admits code, fonts, and explicitly non-sensitive media", async () => {
+  const assets = {
+    fetch(request) {
+      const path = new URL(request.url).pathname;
+      const type = path.endsWith(".woff2") ? "font/woff2"
+        : path.endsWith(".png") ? "image/png"
+        : path.endsWith(".js") ? "text/javascript"
+        : "text/html";
+      return new Response("asset", { headers: { "Content-Type": type } });
+    },
+  };
+
+  let response = await worker.fetch(
+    new Request("https://estate.bubblelab.dev/basemap-dongtan.png"), { ASSETS: assets }, ctx);
+  assert.equal(response.headers.get("Cache-Control"), "public, max-age=604800, stale-while-revalidate=86400");
+  assert.equal(response.headers.get("X-Robots-Tag"), "noindex, nofollow");
+
+  response = await worker.fetch(
+    new Request("https://trip.bubblelab.dev/budget.js"), { ASSETS: assets }, ctx);
+  assert.equal(response.headers.get("Cache-Control"), "public, max-age=3600, must-revalidate");
+  response = await worker.fetch(
+    new Request("https://trip.bubblelab.dev/private-plan.png"), { ASSETS: assets }, ctx);
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
+
+  response = await worker.fetch(
+    new Request("https://estate.bubblelab.dev/private-scan.png"), { ASSETS: assets }, ctx);
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
+
+  response = await worker.fetch(
+    new Request("https://work.bubblelab.dev/showcase/img/mindfulness.png"),
+    { WORK_PASSWORD: "master", ASSETS: assets }, ctx);
+  assert.equal(response.headers.get("Cache-Control"), "public, max-age=604800, stale-while-revalidate=86400");
+
+  const env = { WORK_PASSWORD: "master", ASSETS: assets };
+  const form = new FormData();
+  form.set("password", "master");
+  response = await worker.fetch(
+    new Request("https://work.bubblelab.dev/login", { method: "POST", body: form }), env, ctx);
+  const cookie = response.headers.get("Set-Cookie").split(";", 1)[0];
+
+  response = await worker.fetch(new Request(
+    "https://work.bubblelab.dev/daonfit/_work_assets/fonts/woff2/subset.woff2",
+    { headers: { Cookie: cookie } },
+  ), env, ctx);
+  assert.equal(response.headers.get("Cache-Control"), "private, max-age=2592000, stale-while-revalidate=86400");
+  assert.equal(response.headers.get("X-Robots-Tag"), "noindex, nofollow");
+
+  response = await worker.fetch(new Request(
+    "https://work.bubblelab.dev/daonfit/private-preview.png",
+    { headers: { Cookie: cookie } },
+  ), env, ctx);
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
+
+  response = await worker.fetch(new Request(
+    "https://work.bubblelab.dev/daonfit/private-preview-a1b2c3d4.png",
+    { headers: { Cookie: cookie } },
+  ), env, ctx);
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
+});

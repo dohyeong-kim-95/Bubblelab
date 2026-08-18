@@ -7,6 +7,44 @@
 
 const ROOT_DOMAIN = "bubblelab.dev";
 
+const AUTH_GATED_STATIC_SITES = new Set(["work", "duri", "invest", "life"]);
+const CODE_EXT = /\.(?:css|js|mjs|wasm)$/i;
+const FONT_EXT = /\.(?:woff2?|ttf|otf)$/i;
+const MEDIA_EXT = /\.(?:avif|gif|ico|jpe?g|mp3|mp4|ogg|png|svg|webm|webp)$/i;
+const FINGERPRINTABLE_EXT = /\.(?:avif|css|gif|ico|jpe?g|js|mjs|mp3|mp4|ogg|png|svg|wasm|webm|webp|woff2?)$/i;
+
+function hasContentFingerprint(path) {
+  if (!FINGERPRINTABLE_EXT.test(path)) return false;
+  const stem = path.split("/").pop().replace(/\.[^.]+$/, "");
+  const token = stem.split(/[-_.]/).pop();
+  if (!/^[A-Za-z0-9]{8,}$/.test(token)) return false;
+  return /^[a-f0-9]{8,}$/i.test(token) || (/[A-Z]/.test(token) && /[a-z]/.test(token) && /\d/.test(token));
+}
+
+function staticCacheControl(path, { visibility = "public", allowMedia = true } = {}) {
+  const media = MEDIA_EXT.test(path);
+  if (hasContentFingerprint(path) && (!media || allowMedia)) {
+    return `${visibility}, max-age=31536000, immutable`;
+  }
+  if (FONT_EXT.test(path)) return `${visibility}, max-age=2592000, stale-while-revalidate=86400`;
+  if (media && allowMedia) {
+    return `${visibility}, max-age=604800, stale-while-revalidate=86400`;
+  }
+  if (CODE_EXT.test(path)) return `${visibility}, max-age=3600, must-revalidate`;
+  return null;
+}
+
+function withCacheControl(response, cacheControl) {
+  if (!cacheControl || response.status !== 200) return response;
+  const headers = new Headers(response.headers);
+  headers.set("Cache-Control", cacheControl);
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 // 이름이 바뀐 폴더의 옛 주소 → 새 주소. 키는 `<서브도메인>:<경로>`(끝 슬래시 없음).
 // 폴더 이름은 곧 카드 라벨이자 URL이라, 하는 일을 못 알리는 이름은 바꾸는 게 맞다.
 // 다만 바꾸는 순간 예전 링크가 죽으므로 여기 한 줄을 함께 남긴다.
@@ -1290,7 +1328,8 @@ export async function handleRequest(request, env, ctx) {
     }
     // 공용 코드와 이미지 에셋은 모든 서브도메인에서 사이트 프리픽스 없이 서빙
     if (path.startsWith("/_shared/") || path.startsWith("/_assets/")) {
-      return env.ASSETS.fetch(request);
+      const response = await env.ASSETS.fetch(request);
+      return withCacheControl(response, staticCacheControl(path));
     }
 
     if (path.startsWith("/_planner/")) {
@@ -2020,7 +2059,18 @@ export async function handleRequest(request, env, ctx) {
 
     if (["admin", "work", "estate", "duri", "invest", "trip", "life"].includes(site)) {
       const headers = new Headers(response.headers);
-      headers.set("Cache-Control", "no-store");
+      // 문서·JSON·인증 뒤 이미지는 디스크에 남기지 않는다. 실행 코드와 폰트는
+      // 사용자 데이터가 아니므로 브라우저 전용 캐시를 허용하고, 공개 데이터인
+      // estate 배경지도와 work 공개 showcase 미디어만 공유 캐시할 수 있게 한다.
+      const authGated = AUTH_GATED_STATIC_SITES.has(site);
+      const publicWorkMedia = site === "work" && path.startsWith("/showcase/") && MEDIA_EXT.test(path);
+      const publicEstateMedia = site === "estate" && /^\/basemap-[a-z0-9-]+\.(?:avif|jpe?g|png|webp)$/i.test(path);
+      const allowMedia = publicWorkMedia || publicEstateMedia;
+      const visibility = authGated && !publicWorkMedia ? "private" : "public";
+      const cacheControl = site === "admin" || response.status !== 200
+        ? null
+        : staticCacheControl(path, { visibility, allowMedia });
+      headers.set("Cache-Control", cacheControl ?? "no-store");
       headers.set("X-Robots-Tag", "noindex, nofollow");
       return new Response(response.body, {
         status: response.status,
@@ -2028,6 +2078,8 @@ export async function handleRequest(request, env, ctx) {
         headers,
       });
     }
+
+    response = withCacheControl(response, staticCacheControl(path));
 
     // HTML 문서 방문만 집계한다. IP/UA는 저장하지 않고 익명 쿠키 ID만 사용한다.
     // 페이지별 인기 집계를 위해 문서마다 보낸다 (DO 쓰기는 방문자별 key라 멱등).
