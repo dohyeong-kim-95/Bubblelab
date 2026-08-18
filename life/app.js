@@ -392,4 +392,13 @@ $("menu-remove").addEventListener("click", withMenu(async () => {
 
 syncViewport();
 render();
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+  /* 캐시에서 먼저 열고 뒤에서 새 버전을 받는다. 실제로 달라졌을 때만 알려 오므로
+   * 그때 한 번 다시 그린다 — 적다 말았거나 창이 열려 있으면 건드리지 않는다. */
+  navigator.serviceWorker.addEventListener("message", (event) => {
+    if (event.data?.type !== "life:updated") return;
+    if ($("add-text").value.trim() || document.querySelector("dialog[open]")) return;
+    location.reload();
+  });
+}

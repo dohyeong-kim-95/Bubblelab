@@ -15,6 +15,8 @@
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="stylesheet" href="styles.css">
+  <!-- app.js 를 파싱한 뒤에야 store.js 를 발견하면 왕복이 한 번 더 붙는다. -->
+  <link rel="modulepreload" href="store.js">
   <script type="module" src="app.js"></script>
 </head>
 <body>

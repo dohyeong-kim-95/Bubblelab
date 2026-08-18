@@ -114,6 +114,19 @@ test("PWA 로 설치되면 주소창 없이 뜬다", async ({ page }) => {
   expect(registered).toBe(true);
 });
 
+test("두 번째부터는 네트워크를 기다리지 않고 열린다", async ({ page }) => {
+  await page.goto("/life/");
+  await page.evaluate(() => navigator.serviceWorker.ready.then(() => undefined));
+  await page.waitForTimeout(400);   // 셸이 캐시에 담길 때까지
+
+  await page.reload();
+  await expect(page.locator("#list-name")).toBeVisible();
+  const delivery = await page.evaluate(() =>
+    performance.getEntriesByType("navigation")[0].deliveryType);
+  // 네트워크를 타면 여는 순간이 왕복만큼 늦어진다 — todo 앱은 누르자마자 떠야 한다.
+  expect(delivery).toBe("cache-storage");
+});
+
 function assertStandalone(manifest) {
   expect(manifest.display).toBe("standalone");
   expect(manifest.start_url).toBeTruthy();
