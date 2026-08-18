@@ -47,7 +47,7 @@ test("카테고리 홈 자신에는 주입되지 않는다 (갈 곳이 없다)",
 });
 
 test("카드 구조가 아닌 서비스·비공개 사이트에는 주입되지 않는다", () => {
-  for (const site of ["podcast", "duri", "admin", "www", "work", "estate", "trip"]) {
+  for (const site of ["podcast", "duri", "admin", "www", "work", "estate", "trip", "life"]) {
     const base = join(DIST, site);
     if (!existsSync(base)) continue;
     assert.ok(!has(join(base, "index.html")), `${site} 홈에 홈 버튼이 붙었다`);
@@ -169,7 +169,11 @@ test("비공개 서브도메인은 풀다운 메뉴에도 나오지 않는다", 
     }
   }
   // 페이지 자체는 살아 있어야 한다 (주소를 아는 사람은 들어간다)
-  assert.ok(existsSync(join(DIST, "invest/index.html")));
+  assert.ok(existsSync(join(DIST, "duri/index.html")));
+  // 잠든 서브도메인은 아예 배포되지 않는다 (_infra/dormant.js)
+  for (const site of ["estate", "invest", "trip"]) {
+    assert.ok(!existsSync(join(DIST, site)), `잠든 ${site} 가 배포됐다`);
+  }
 });
 
 // ── 배경화면 상세페이지 (/assets/wallpaper/<id>/) ────────────────────────

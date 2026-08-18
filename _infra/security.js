@@ -74,11 +74,23 @@ function isSkyPage(url) {
 // 기본 정책의 geolocation=() 는 권한을 묻기도 전에 막으므로 duri 에 한해 self 로 연다.
 const DURI_POLICY = "accelerometer=(), camera=(self), geolocation=(self), "
   + "gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()";
+const LIFE_CSP = [
+  "default-src 'self'", "base-uri 'self'", "object-src 'none'", "frame-ancestors 'none'",
+  "form-action 'self'", "script-src 'self'", "style-src 'self'", "img-src 'self' data:",
+  "font-src 'self'", "connect-src 'self'", "worker-src 'self'", "manifest-src 'self'",
+  "upgrade-insecure-requests",
+].join("; ");
 function isDuriPage(url) {
   const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
   const path = url.pathname;
   const at = (prefix) => path === prefix || path.startsWith(`${prefix}/`);
   return url.hostname === "duri.bubblelab.dev" || (local && at("/duri"));
+}
+
+function isLifePage(url) {
+  const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  return url.hostname === "life.bubblelab.dev" ||
+    (local && (url.pathname === "/life" || url.pathname.startsWith("/life/")));
 }
 
 export function featureEnabled(env, name) {
@@ -138,6 +150,7 @@ export function applySecurityHeaders(response, request) {
   if (isDuriPage(url)) {
     headers.set("Permissions-Policy", DURI_POLICY);
   }
+  if (isLifePage(url)) headers.set("Content-Security-Policy", LIFE_CSP);
   if (url.protocol === "https:") {
     headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   }
@@ -152,9 +165,9 @@ export function applySecurityHeaders(response, request) {
   });
 }
 
-async function rateLimitName(request, env, scope) {
+async function rateLimitName(request, env, scope, secretOverride) {
   const address = request.headers.get("CF-Connecting-IP") || "unknown";
-  const secret = env.ADMIN_SESSION_SECRET || env.PLANNER_SESSION_SECRET || env.ADMIN_PASSWORD;
+  const secret = secretOverride || env.ADMIN_SESSION_SECRET || env.PLANNER_SESSION_SECRET || env.ADMIN_PASSWORD;
   if (!secret) return null;
   const key = await crypto.subtle.importKey(
     "raw",
@@ -181,7 +194,7 @@ export async function consumeRateLimit(request, env, options) {
   // RATE_LIMITER and ADMIN_SESSION_SECRET in wrangler.jsonc, so this is fail-open
   // only in an explicitly incomplete local environment.
   if (!env.RATE_LIMITER) return { allowed: true, retryAfter: 0 };
-  const name = await rateLimitName(request, env, options.scope);
+  const name = await rateLimitName(request, env, options.scope, options.secret);
   if (!name) return { allowed: false, retryAfter: Math.ceil(windowMs / 1000) };
 
   const id = env.RATE_LIMITER.idFromName(name);
