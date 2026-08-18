@@ -97,6 +97,8 @@ test("PWA 로 설치되면 주소창 없이 뜬다", async ({ page }) => {
     const href = document.querySelector('link[rel="manifest"]').href;
     return (await fetch(href)).json();
   });
+  expect(manifest.name).toBe("LIFE");
+  expect(manifest.short_name).toBe("LIFE");
   assertStandalone(manifest);
   await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#000000");
   expect(manifest.background_color).toBe("#000000");

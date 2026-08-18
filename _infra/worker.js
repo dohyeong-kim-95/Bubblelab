@@ -195,9 +195,9 @@ button { font: inherit; padding: .65rem; border: 0; border-radius: .6rem;
 
 const LIFE_LOGIN_PAGE = (failed, base) => `<!doctype html><html lang="ko"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex, nofollow"><title>오늘 할 일</title>
+<meta name="robots" content="noindex, nofollow"><title>LIFE</title>
 <link rel="stylesheet" href="${base}/styles.css"></head><body class="login-page">
-<main class="login-card"><h1>오늘 할 일</h1><p>혼자 쓰는 비공개 기록입니다.</p>
+<main class="login-card"><h1>LIFE</h1><p>혼자 쓰는 비공개 기록입니다.</p>
 <form method="post" action="${base}/login"><label for="password">비밀번호</label>
 <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
 ${failed ? '<p class="form-error" role="alert">비밀번호가 맞지 않습니다.</p>' : ""}
