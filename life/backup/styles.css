@@ -1,0 +1,19 @@
+/* LIFE 의 ../styles.css 를 물려받고 여기 필요한 것만 더한다. */
+body { overflow: auto; }
+.back { display: grid; place-items: center; width: 40px; height: 44px; flex: none;
+  color: var(--muted); font-size: 20px; text-decoration: none; }
+.bar-title { font-size: 19px; font-weight: 700; letter-spacing: -.02em; }
+.panel { padding: 4px 18px 32px; display: grid; gap: 12px; }
+.section { margin: 8px 0 0; font-size: 13px; color: var(--muted); font-weight: 400; }
+.entries { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.entries li { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  min-height: 44px; border-bottom: 1px solid var(--line); font-size: 14px; }
+.entries li:last-child { border-bottom: 0; }
+code { font-size: 12px; color: var(--ink); }
+.danger-note { color: var(--danger); }
+.button-row { display: flex; gap: 8px; margin-top: 4px; }
+.button-row .primary, .file-button { flex: 1; min-height: 48px; display: grid; place-items: center;
+  border-radius: 9px; cursor: pointer; }
+.button-row .primary { background: var(--ink); color: var(--bg); font-weight: 700; border: 0; }
+.file-button { border: 1px solid var(--line); }
+#confirm .entries { margin: 8px 0; }
