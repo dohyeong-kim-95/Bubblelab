@@ -5,6 +5,9 @@ export const STORAGE_KEY = "bl_life_v1";
 export const MAX_LISTS = 12;
 export const TEXT_MAX = 200;
 export const NAME_MAX = 24;
+// 끝낸 일의 기록. 나중에 "올해 이만큼 했구나" 를 보려면 지금부터 남아 있어야 한다.
+// 하루 다섯 개씩 3년이면 5천 개다 — 그 언저리에서 오래된 것부터 버린다.
+export const LOG_MAX = 5000;
 // 도구 이름은 그대로 주소가 된다(life.bubblelab.dev/<이름>). 슬러그만 허용해
 // javascript: 나 ../ 같은 것이 주소에 섞이지 않게 한다.
 export const TOOL_PATTERN = /^[a-z0-9][a-z0-9-]{0,31}$/;
@@ -13,7 +16,7 @@ const id = () => crypto.randomUUID();
 const clean = (value, max) => String(value ?? "").replace(/\s+/g, " ").trim().slice(0, max);
 
 export function emptyState() {
-  return { v: 1, lists: [{ id: id(), name: "할 일", items: [] }] };
+  return { v: 1, lists: [{ id: id(), name: "할 일", items: [] }], log: [] };
 }
 
 /** 저장된 문자열을 상태로. 깨졌거나 비었으면 빈 상태로 시작한다. */
@@ -33,11 +36,17 @@ export function parseState(raw) {
           id: item.id,
           text: clean(item.text, TEXT_MAX),
           done: Boolean(item.done),
+          doneAt: typeof item.doneAt === "string" ? item.doneAt : null,
           ...(toolSlug(item.tool) ? { tool: toolSlug(item.tool) } : {}),
         }))
         .filter((item) => item.text),
     }));
-  return lists.length ? { v: 1, lists } : emptyState();
+  const log = (Array.isArray(value.log) ? value.log : [])
+    .filter((entry) => entry && typeof entry.id === "string"
+      && typeof entry.text === "string" && typeof entry.at === "string")
+    .map((entry) => ({ id: entry.id, text: clean(entry.text, TEXT_MAX), at: entry.at }))
+    .slice(-LOG_MAX);
+  return lists.length ? { v: 1, lists, log } : { ...emptyState(), log };
 }
 
 const mapList = (state, listId, fn) => ({
@@ -89,15 +98,26 @@ export function addItem(state, listId, text) {
   const label = clean(text, TEXT_MAX);
   if (!label) return state;
   return mapList(state, listId, (list) => ({
-    ...list, items: [...list.items, { id: id(), text: label, done: false }],
+    ...list, items: [...list.items, { id: id(), text: label, done: false, doneAt: null }],
   }));
 }
 
-export function toggleItem(state, listId, itemId) {
-  return mapList(state, listId, (list) => ({
-    ...list,
-    items: list.items.map((item) => (item.id === itemId ? { ...item, done: !item.done } : item)),
+/* 끝낼 때 기록을 남긴다. 되돌리면 그 기록도 지운다 — 잘못 누른 것까지 "올해 한 일"
+ * 로 세면 숫자가 거짓말이 된다. 항목을 나중에 지워도 기록은 남는다. */
+export function toggleItem(state, listId, itemId, now = new Date()) {
+  const list = state.lists.find((entry) => entry.id === listId);
+  const item = list?.items.find((entry) => entry.id === itemId);
+  if (!item) return state;
+  const done = !item.done;
+  const next = mapList(state, listId, (entry) => ({
+    ...entry,
+    items: entry.items.map((one) =>
+      (one.id === itemId ? { ...one, done, doneAt: done ? now.toISOString() : null } : one)),
   }));
+  const log = done
+    ? [...state.log, { id: item.id, text: item.text, at: now.toISOString() }].slice(-LOG_MAX)
+    : state.log.filter((entry) => entry.id !== itemId);
+  return { ...next, log };
 }
 
 export function removeItem(state, listId, itemId) {

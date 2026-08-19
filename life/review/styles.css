@@ -1,0 +1,27 @@
+body { overflow: auto; }
+.back { display: grid; place-items: center; width: 40px; height: 44px; flex: none;
+  color: var(--muted); font-size: 20px; text-decoration: none; }
+.bar-title { font-size: 19px; font-weight: 700; letter-spacing: -.02em; }
+#year { width: auto; min-height: 40px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--surface); color: var(--ink); padding: 0 8px; font: inherit; font-size: 14px; }
+
+.report { padding: 4px 18px 40px; display: grid; gap: 26px; }
+.block { display: grid; gap: 8px; }
+.headline { display: flex; align-items: baseline; gap: 10px; }
+.headline b { font-size: 40px; line-height: 1; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+.headline span { color: var(--muted); font-size: 13px; }
+.note { margin: 0; color: var(--muted); font-size: 12px; }
+
+/* 달마다 얼마나 했는지. 막대 하나가 한 달이다. */
+.months { display: grid; grid-template-columns: repeat(12, 1fr); align-items: end; gap: 3px; height: 88px; }
+.month { display: grid; align-content: end; gap: 4px; height: 100%; }
+.bar { background: var(--ink); border-radius: 2px; min-height: 2px; }
+.bar.zero { background: var(--line); }
+.month-label { color: var(--muted); font-size: 9px; text-align: center; }
+
+.covers { display: grid; grid-template-columns: repeat(auto-fill, minmax(58px, 1fr)); gap: 8px; }
+.cover { aspect-ratio: 2 / 3; width: 100%; border: 1px solid var(--line); border-radius: 4px;
+  background: var(--surface); object-fit: cover; display: block; }
+.cover-blank { display: grid; align-content: center; padding: 5px; color: var(--muted);
+  font-size: 9px; overflow: hidden; }
+.empty-note { margin: 32px 18px; }

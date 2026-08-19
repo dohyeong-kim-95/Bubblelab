@@ -6,8 +6,8 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 const {
   MAX_LISTS, NAME_MAX, TEXT_MAX, addItem, addList, clearDone, emptyState, parseState,
-  orderedItems, progressOf, removeItem, removeList, renameList, reorderItems, reorderLists,
-  setTool, toggleItem, toolSlug,
+  LOG_MAX, orderedItems, progressOf, removeItem, removeList, renameList, reorderItems,
+  reorderLists, setTool, toggleItem, toolSlug,
 } = await import("../life/store.js");
 
 const first = (state) => state.lists[0];
@@ -211,4 +211,57 @@ test("목록끼리 순서를 바꾼다", () => {
   state = reorderLists(state, [c, b, a]);
   assert.deepEqual(state.lists.map((list) => list.name), ["셋째", "둘째", "할 일"]);
   assert.equal(state.lists.length, 3);
+});
+
+test("끝낸 일은 기록으로 남는다 — 나중에 돌아보려면 지금부터 쌓여야 한다", () => {
+  let state = emptyState();
+  const list = first(state).id;
+  state = addItem(state, list, "이력서 고치기");
+  const item = first(state).items[0].id;
+
+  const at = new Date("2026-08-19T09:00:00Z");
+  state = toggleItem(state, list, item, at);
+  assert.equal(first(state).items[0].doneAt, at.toISOString());
+  assert.deepEqual(state.log, [{ id: item, text: "이력서 고치기", at: at.toISOString() }]);
+
+  // 되돌리면 기록도 지운다 — 잘못 누른 것까지 세면 숫자가 거짓말이 된다.
+  state = toggleItem(state, list, item, new Date("2026-08-19T09:01:00Z"));
+  assert.equal(first(state).items[0].doneAt, null);
+  assert.deepEqual(state.log, []);
+});
+
+test("항목을 지워도 끝냈다는 기록은 남는다", () => {
+  let state = emptyState();
+  const list = first(state).id;
+  state = addItem(state, list, "치울 것");
+  const item = first(state).items[0].id;
+  state = toggleItem(state, list, item, new Date("2026-08-19T09:00:00Z"));
+
+  state = clearDone(state, list);
+  assert.equal(first(state).items.length, 0);
+  assert.equal(state.log.length, 1, "정리해도 한 일은 남는다");
+
+  state = addItem(state, list, "또 하나");
+  const second = first(state).items[0].id;
+  state = toggleItem(state, list, second, new Date("2026-08-20T09:00:00Z"));
+  state = removeItem(state, list, second);
+  assert.equal(state.log.length, 2, "지워도 남는다");
+});
+
+test("기록은 저장했다 읽어도 그대로고, 상한을 넘으면 오래된 것부터 버린다", () => {
+  const at = (n) => new Date(2026, 0, 1, 0, 0, n).toISOString();
+  const log = Array.from({ length: LOG_MAX + 20 }, (_, index) =>
+    ({ id: `id-${index}`, text: `할 일 ${index}`, at: at(index) }));
+  const state = parseState(JSON.stringify({ v: 1, lists: [{ id: "a", name: "목록", items: [] }], log }));
+  assert.equal(state.log.length, LOG_MAX);
+  assert.equal(state.log[0].id, "id-20", "오래된 것부터 버린다");
+  assert.equal(state.log.at(-1).id, `id-${LOG_MAX + 19}`);
+});
+
+test("깨진 기록은 걸러 낸다", () => {
+  const state = parseState(JSON.stringify({
+    v: 1, lists: [{ id: "a", name: "목록", items: [] }],
+    log: [{ id: "ok", text: "정상", at: "2026-08-19T00:00:00Z" }, { id: "x" }, null, { text: "id 없음", at: "x" }],
+  }));
+  assert.deepEqual(state.log.map((entry) => entry.id), ["ok"]);
 });
