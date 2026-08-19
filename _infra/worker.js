@@ -598,6 +598,82 @@ async function issueLifeSession(key) {
   return `${payload}.${sig}`;
 }
 
+/* LIFE 백업 중계. 서버에 상시 저장하는 것은 이 한 덩어리뿐이고, 폰이 올린 것을
+ * 집 PC 데몬이 받아 간다 — 폰이 죽어도 기록이 남게 하는 것이 전부다.
+ *
+ * 본문은 평문이다(암호를 잃으면 백업도 잃으므로 그렇게 정했다). 대신 올리는 쪽은
+ * 게이트 세션이, 받아 가는 쪽은 sink 토큰이 있어야 한다. 표지 같은 큰 이미지는
+ * 담지 않는다 — 파일 내보내기(/backup) 로만 보관한다. */
+const LIFE_BACKUP_KEY = "backup.json";
+const LIFE_BACKUP_MAX_BYTES = 4 * 1024 * 1024;
+
+async function lifeSinkKey(env) {
+  if (!env.LIFE_SINK_SECRET) return null;
+  return lifeKey(env.LIFE_SINK_SECRET, "bl-life-sink");
+}
+
+async function handleLifeBackup(request, env, url) {
+  if (!lifeConfigured(env) || !env.LIFE_BUCKET) {
+    return Response.json({ error: "life backup is not configured" }, { status: 503 });
+  }
+  const path = url.pathname.slice("/_life".length) || "/";
+  const sessionKey = await lifeKey(env.LIFE_SESSION_SECRET, "bl-life-session");
+  const owner = await validSession(sessionKey, cookies(request).bl_life);
+  const sinkKey = await lifeSinkKey(env);
+  const bearer = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+  const sink = Boolean(bearer && sinkKey) && await validSession(sinkKey, bearer);
+  const json = (body, status = 200) =>
+    Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
+
+  if (path === "/sink-token" && request.method === "POST") {
+    if (!owner) return json({ error: "authentication required" }, 401);
+    if (!sinkKey) return json({ error: "LIFE_SINK_SECRET is missing" }, 503);
+    const limited = await enforceRateLimit(request, env, {
+      scope: "life-token", limit: 5, windowMs: 60 * 60 * 1000, secret: env.LIFE_SESSION_SECRET,
+    });
+    if (limited) return limited;
+    return json({ token: await issueSinkToken(sinkKey) });
+  }
+
+  if (path === "/backup" && request.method === "PUT") {
+    if (!owner) return json({ error: "authentication required" }, 401);
+    const contentTypeError = requireJsonRequest(request);
+    if (contentTypeError) return contentTypeError;
+    const body = await request.arrayBuffer();
+    if (body.byteLength > LIFE_BACKUP_MAX_BYTES) return json({ error: "backup too large" }, 413);
+    // 빈 값으로 덮어써서 지난 백업을 날리지 않는다.
+    if (body.byteLength < 2) return json({ error: "empty backup refused" }, 400);
+    await env.LIFE_BUCKET.put(LIFE_BACKUP_KEY, body, {
+      httpMetadata: { contentType: "application/json" },
+    });
+    return json({ savedAt: new Date().toISOString(), bytes: body.byteLength });
+  }
+
+  if (path === "/backup" && request.method === "GET") {
+    if (!sink) return json({ error: "sink token required" }, 401);
+    const object = await env.LIFE_BUCKET.get(LIFE_BACKUP_KEY);
+    if (!object) return json({ error: "no backup yet" }, 404);
+    return new Response(object.body, {
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+        "ETag": object.httpEtag,
+        "Last-Modified": object.uploaded.toUTCString(),
+      },
+    });
+  }
+
+  if (path === "/backup/status" && request.method === "GET") {
+    if (!owner) return json({ error: "authentication required" }, 401);
+    const object = await env.LIFE_BUCKET.head(LIFE_BACKUP_KEY);
+    return json(object
+      ? { savedAt: object.uploaded.toISOString(), bytes: object.size }
+      : { savedAt: null, bytes: 0 });
+  }
+
+  return json({ error: "not found" }, 404);
+}
+
 async function handleLifeGate(request, env, url, base = "") {
   if (!lifeConfigured(env)) return new Response("life is not configured", { status: 503 });
   const key = await lifeKey(env.LIFE_SESSION_SECRET, "bl-life-session");
@@ -1003,6 +1079,7 @@ export const HEALTH_BINDINGS = [
   "ASSETS", "ANALYTICS", "RECORDS", "RATE_LIMITER", "REALTIME", "PLANNER",
   "CHAT", "PODCAST", "DURI", "INVEST", "ASSET_FLAGS", "BRIEF", "FORTUNE",
   "WORK_QNA", "WORK_REVIEWS", "EMOTICON_REVIEW", "PODCAST_BUCKET", "DURI_BUCKET", "LIFE",
+  "LIFE_BUCKET",
 ];
 
 /**
@@ -1275,6 +1352,7 @@ export async function handleRequest(request, env, ctx) {
       path === "/_podcast/upload" ? UPLOAD_MAX_BYTES :
       path === "/_duri/photo" ? DURI_MAX_PHOTO_BYTES :
       path === "/_emoticon/generate" ? EMOTICON_MAX_BODY :
+      path === "/_life/backup" ? 4 * 1024 * 1024 :
       path === "/_planner/data" ? 600 * 1024 : 64 * 1024,
     );
     if (mutationError) return mutationError;
@@ -1917,6 +1995,10 @@ export async function handleRequest(request, env, ctx) {
     }
 
     // invest 잔고 조회 API: /_invest/state (invest.bubblelab.dev 전용, 조회만).
+    if (path === "/_life" || path.startsWith("/_life/")) {
+      return handleLifeBackup(request, env, url);
+    }
+
     if (path === "/_invest" || path.startsWith("/_invest/")) {
       return handleInvest(request, env, url);
     }

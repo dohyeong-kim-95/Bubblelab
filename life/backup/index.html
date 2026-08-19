@@ -31,6 +31,18 @@
       <input id="import-input" type="file" accept="application/json,.json" hidden>
     </div>
     <p id="status" class="fine-print" role="status" aria-live="polite"></p>
+
+    <h2 class="section">집 PC 로 보내기</h2>
+    <p class="fine-print">폰이 하루에 한 번 자동으로 올리고, 집 PC 데몬이 받아 갑니다.
+      <b>표지 같은 이미지는 보내지 않습니다</b> — 그건 위의 파일 내보내기로만 보관됩니다.</p>
+    <dl class="status-list">
+      <div><dt>마지막으로 올린 때</dt><dd id="sink-state">확인 중…</dd></div>
+    </dl>
+    <div class="button-row">
+      <button id="sink-push" type="button">지금 보내기</button>
+      <button id="sink-token" type="button">PC 용 토큰 발급</button>
+    </div>
+    <output id="token-output" class="token-output" hidden></output>
   </main>
 
   <dialog id="confirm" aria-labelledby="confirm-title">

@@ -44,6 +44,31 @@ export function summarize(envelope) {
   ].sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/* PC 백업으로 보낼 때는 큰 이미지를 뺀다. 도구 이름을 알 필요 없이 "data: 로
+ * 시작하는 긴 문자열"을 걷어낸다 — 앞으로 어떤 도구가 사진을 담아도 자동으로
+ * 빠진다. 표지 같은 것은 파일 내보내기로만 보관한다. */
+export const BLOB_MIN = 1024;
+
+export function withoutBlobs(value) {
+  if (typeof value === "string") {
+    return value.startsWith("data:") && value.length > BLOB_MIN ? null : value;
+  }
+  if (Array.isArray(value)) return value.map(withoutBlobs);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, withoutBlobs(item)]));
+  }
+  return value;
+}
+
+/* localStorage 값은 JSON 문자열이라 한 겹 열어서 훑어야 한다. 열지 못하면 그대로 둔다. */
+export function slimEnvelope(envelope) {
+  const local = Object.fromEntries(Object.entries(envelope.local).map(([key, raw]) => {
+    try { return [key, JSON.stringify(withoutBlobs(JSON.parse(raw)))]; }
+    catch { return [key, raw]; }
+  }));
+  return { ...envelope, local, databases: withoutBlobs(envelope.databases) };
+}
+
 export function fileName(now = new Date()) {
   const stamp = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit",

@@ -107,12 +107,78 @@ test("life 은 fail-closed 이고 게이트 뒤에서만 열린다", async () =>
     assert.equal(served.headers.get("Cache-Control"), "no-store", path);
   }
 
-  // 서버에 저장하는 경로는 없다 — 예전 API 가 남아 있지 않아야 한다.
+  // 서버가 들고 있는 것은 백업 한 덩어리뿐이다 — 예전 API 는 남아 있지 않아야 한다.
+  const withBucket = { ...env, LIFE_BUCKET: { head: async () => null } };
   for (const path of ["/_life/status", "/_life/commit", "/_life/devices"]) {
     response = await worker.fetch(
-      new Request(`https://life.bubblelab.dev${path}`, { headers: { Cookie: cookie } }), env, ctx);
+      new Request(`https://life.bubblelab.dev${path}`, { headers: { Cookie: cookie } }), withBucket, ctx);
     assert.equal(response.status, 404, path);
   }
+  // 버킷이 없으면 백업 경로 자체가 닫힌다(fail-closed).
+  assert.equal((await worker.fetch(new Request("https://life.bubblelab.dev/_life/backup/status",
+    { headers: { Cookie: cookie } }), env, ctx)).status, 503);
+});
+
+test("life 백업은 세션이 올리고 sink 토큰이 받아 간다", async () => {
+  const stored = new Map();
+  const env = {
+    ENABLE_LIFE: "true", LIFE_PASSWORD: "only-me", LIFE_SESSION_SECRET: "session-secret",
+    LIFE_SINK_SECRET: "sink-secret",
+    ASSETS: { fetch: async () => new Response("x", { headers: { "Content-Type": "text/html" } }) },
+    LIFE_BUCKET: {
+      put: async (key, body) => stored.set(key, { body: Buffer.from(body), uploaded: new Date("2026-08-19T00:00:00Z") }),
+      get: async (key) => {
+        const found = stored.get(key);
+        return found && { body: found.body, httpEtag: '"e1"', uploaded: found.uploaded };
+      },
+      head: async (key) => {
+        const found = stored.get(key);
+        return found && { size: found.body.length, uploaded: found.uploaded };
+      },
+    },
+  };
+  const backup = JSON.stringify({ app: "life", format: 1, local: { bl_life_v1: "{}" }, databases: [] });
+  const put = (cookie, body) => worker.fetch(new Request("https://life.bubblelab.dev/_life/backup", {
+    method: "PUT", body, headers: { ...(cookie ? { Cookie: cookie } : {}),
+      Origin: "https://life.bubblelab.dev", "Content-Type": "application/json" },
+  }), env, ctx);
+
+  // 익명은 올릴 수도 받아 갈 수도 없다.
+  assert.equal((await put(null, backup)).status, 401);
+  assert.equal((await worker.fetch(new Request("https://life.bubblelab.dev/_life/backup"), env, ctx)).status, 401);
+
+  const form = new FormData();
+  form.set("password", "only-me");
+  const login = await worker.fetch(
+    new Request("https://life.bubblelab.dev/login", { method: "POST", body: form }), env, ctx);
+  const cookie = login.headers.get("Set-Cookie").split(";", 1)[0];
+
+  assert.equal((await put(cookie, backup)).status, 200);
+  // 빈 값으로 지난 백업을 덮지 않는다.
+  assert.equal((await put(cookie, "")).status, 400);
+
+  const status = await worker.fetch(new Request("https://life.bubblelab.dev/_life/backup/status",
+    { headers: { Cookie: cookie } }), env, ctx);
+  assert.equal((await status.json()).bytes, backup.length);
+
+  // 세션만으로는 받아 갈 수 없다 — 받아 가는 쪽은 sink 토큰이다.
+  assert.equal((await worker.fetch(new Request("https://life.bubblelab.dev/_life/backup",
+    { headers: { Cookie: cookie } }), env, ctx)).status, 401);
+
+  const token = (await (await worker.fetch(new Request("https://life.bubblelab.dev/_life/sink-token", {
+    method: "POST", headers: { Cookie: cookie, Origin: "https://life.bubblelab.dev" },
+  }), env, ctx)).json()).token;
+  const pulled = await worker.fetch(new Request("https://life.bubblelab.dev/_life/backup", {
+    headers: { Authorization: `Bearer ${token}` },
+  }), env, ctx);
+  assert.equal(pulled.status, 200);
+  assert.equal(await pulled.text(), backup);
+
+  // sink 토큰으로 올릴 수는 없다 — 받아 가기만 한다.
+  assert.equal((await worker.fetch(new Request("https://life.bubblelab.dev/_life/backup", {
+    method: "PUT", body: backup,
+    headers: { Authorization: `Bearer ${token}`, Origin: "https://life.bubblelab.dev", "Content-Type": "application/json" },
+  }), env, ctx)).status, 401);
 });
 
 test("enabled realtime still rejects missing websocket origin before binding access", async () => {

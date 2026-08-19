@@ -392,6 +392,22 @@ $("menu-remove").addEventListener("click", withMenu(async () => {
 
 syncViewport();
 render();
+/* 하루에 한 번 PC 로 백업을 보낸다. 화면을 다 그린 뒤 한가할 때 그때서야 모듈을
+ * 받아 오므로(동적 import) 여는 속도에 섞이지 않는다 — 평소에는 이 파일을
+ * 받지도 않는다. 실패해도 조용하다. */
+const PUSH_EVERY_MS = 24 * 60 * 60 * 1000;
+const idle = globalThis.requestIdleCallback ?? ((fn) => setTimeout(fn, 1200));
+idle(() => {
+  // 보낼 때가 됐는지 여기서 먼저 본다 — 아니면 모듈을 받아 오지도 않는다.
+  const last = Number(localStorage.getItem("bl_backup_pushed_at") ?? 0);
+  if (!navigator.onLine || Date.now() - last < PUSH_EVERY_MS) return;
+  // 아직 아무것도 없으면 보내지 않는다. 빈 백업으로 지난 것을 덮을 이유가 없다.
+  const hasData = Object.keys(localStorage)
+    .some((key) => key.startsWith("bl_") && key !== "bl_backup_pushed_at");
+  if (!hasData) return;
+  import("./backup/push.js").then((module) => module.push()).catch(() => {});
+});
+
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
   /* 캐시에서 먼저 열고 뒤에서 새 버전을 받는다. 실제로 달라졌을 때만 알려 오므로

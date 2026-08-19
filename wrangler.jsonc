@@ -53,7 +53,10 @@
   "r2_buckets": [
     { "binding": "PODCAST_BUCKET", "bucket_name": "bubblelab-podcast" },
     // Duri 사진 임시 버퍼. 싱크가 받아 ack 하면 폐기된다(영구 저장은 사용자 PC).
-    { "binding": "DURI_BUCKET", "bucket_name": "bubblelab-duri" }
+    { "binding": "DURI_BUCKET", "bucket_name": "bubblelab-duri" },
+    // LIFE 백업 한 덩어리. 표지 같은 큰 것은 담지 않아 작지만, 몇 해 쌓이면
+    // DO 값 한도(128KB)를 넘길 수 있어 R2 에 둔다.
+    { "binding": "LIFE_BUCKET", "bucket_name": "bubblelab-life" }
   ],
   // 매일 06:40 KST(21:40 UTC) 팟캐스트 자동 생성
   // · 08:00 KST(23:00 UTC) 운세 알림 + 아침 브리핑(날씨) 알림
@@ -90,7 +93,8 @@
       "TRIP_WATCH_SECRET",
       "TRIP_SINK_SECRET",
       "LIFE_PASSWORD",
-      "LIFE_SESSION_SECRET"
+      "LIFE_SESSION_SECRET",
+      "LIFE_SINK_SECRET"
     ]
   },
   // /_rt/<이름> 실시간 데이터 서버 (아발론 등 멀티플레이어 토이용)

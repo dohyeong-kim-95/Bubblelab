@@ -1,0 +1,6 @@
+{
+  "url": "https://life.bubblelab.dev",
+  "token": "앱의 백업 화면 → PC 용 토큰 발급",
+  "dir": "/home/사용자/life-sink",
+  "pollMs": 3600000
+}
