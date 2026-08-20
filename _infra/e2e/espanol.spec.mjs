@@ -106,7 +106,9 @@ test("음원 — 기기에서 고른 파일로 줄을 맞추고 그 구간만 �
   await page.locator("#clip-input").setInputFiles({
     name: "song.wav", mimeType: "audio/wav", buffer: silentWav(),
   });
-  await expect(page.locator("#clip-name")).toHaveText("song.wav");
+  // 소리만 든 파일은 그대로 담는다 — 풀었다 다시 쓰면 커지기만 한다.
+  await expect(page.locator("#clip-name")).toContainText("song.wav");
+  await expect(page.locator("#clip-name")).not.toContainText("소리만");
   await expect(page.locator("#clip-error")).toHaveText("");
   // 외부 호스트가 막혀 있어 재생은 blob: 으로만 된다 (life CSP 의 media-src).
   await expect(page.locator("#player")).toHaveAttribute("src", /^blob:/);
@@ -121,7 +123,109 @@ test("음원 — 기기에서 고른 파일로 줄을 맞추고 그 구간만 �
 
   // 새로고침해도 음원이 남고(IndexedDB), 찍어 둔 줄은 그 구간이 재생된다.
   await page.reload();
-  await expect(page.locator("#clip-name")).toHaveText("song.wav");
+  await expect(page.locator("#clip-name")).toContainText("song.wav");
+  await page.locator(".line-play").first().click();
+  await expect.poll(() => page.evaluate(() => !document.getElementById("player").paused)).toBe(true);
+
+  expect(failures).toEqual([]);
+});
+
+/**
+ * 브라우저 안에서 "영상 + 소리" 파일을 만들어 파일 선택기에 넣는다. 실제 뮤직비디오처럼
+ * 영상 쪽이 무겁도록 매 프레임 잡음을 그린다 — 그래야 "소리만 남기기"가 실제로 이득인
+ * 경우가 되고, 그 판단까지 함께 검사된다. (컨테이너의 크로미움에는 AAC 가 없어 mp4 대신
+ * webm 으로 만든다. 판단하는 코드는 컨테이너를 가리지 않는다 — 소리·영상 여부만 본다.)
+ */
+async function feedVideoFile(page, seconds = 2) {
+  return page.evaluate(async (length) => {
+    if (!MediaRecorder.isTypeSupported("video/webm")) throw new Error("이 브라우저가 영상을 못 만든다");
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const dest = ctx.createMediaStreamDestination();
+    osc.frequency.value = 440;
+    osc.connect(dest);
+    osc.start();
+
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 640;
+    const paint = () => {
+      const surface = canvas.getContext("2d");
+      const image = surface.createImageData(640, 640);
+      for (let index = 0; index < image.data.length; index += 1) image.data[index] = (Math.random() * 255) | 0;
+      surface.putImageData(image, 0, 0);
+    };
+    paint();
+    const timer = setInterval(paint, 40);
+
+    const stream = new MediaStream([
+      ...canvas.captureStream(25).getVideoTracks(),
+      ...dest.stream.getAudioTracks(),
+    ]);
+    const chunks = [];
+    const recorder = new MediaRecorder(stream, { mimeType: "video/webm", videoBitsPerSecond: 6_000_000 });
+    recorder.ondataavailable = (event) => chunks.push(event.data);
+    recorder.start();
+    await new Promise((done) => setTimeout(done, length * 1000));
+    await new Promise((done) => { recorder.onstop = done; recorder.stop(); });
+    clearInterval(timer);
+    osc.stop();
+    await ctx.close();
+
+    const blob = new Blob(chunks, { type: "video/webm" });
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([blob], "뮤직비디오.webm", { type: "video/webm" }));
+    const input = document.getElementById("clip-input");
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    return blob.size;
+  }, seconds);
+}
+
+test("영상 파일 — 소리만 뽑아 담고, 그것으로 연습한다", async ({ page }) => {
+  const failures = [];
+  page.on("pageerror", (error) => failures.push(error.message));
+
+  await page.goto("/life/espanol/");
+  await page.locator("#add-button").click();
+  await page.locator("#title-input").fill("뮤직비디오 곡");
+  await page.locator("#lyrics-input").fill("El amor no me deja dormir\nTe quiero más que ayer");
+  await page.getByRole("button", { name: "저장", exact: true }).click();
+
+  const videoBytes = await feedVideoFile(page);
+  await expect(page.locator("#clip-name")).toContainText("· 소리만", { timeout: 20_000 });
+  await expect(page.locator("#clip-error")).toHaveText("");
+
+  // 담긴 것은 소리뿐이고, 넣은 영상보다 훨씬 작다.
+  const clip = await page.evaluate(async () => {
+    const db = await new Promise((done) => {
+      const request = indexedDB.open("bl_espanol_audio", 1);
+      request.onsuccess = () => done(request.result);
+    });
+    const [row] = await new Promise((done) => {
+      const request = db.transaction("clips").objectStore("clips").getAll();
+      request.onsuccess = () => done(request.result);
+    });
+    const bytes = Uint8Array.from(atob(row.data.split(",")[1]), (letter) => letter.charCodeAt(0));
+    const head = new DataView(bytes.buffer);
+    return {
+      kind: row.kind,
+      size: row.size,
+      type: row.data.slice(5, row.data.indexOf(";")),
+      channels: head.getUint16(22, true),
+      rate: head.getUint32(24, true),
+    };
+  });
+  expect(clip.kind).toBe("sound");
+  expect(clip.type).toBe("audio/wav");
+  expect(clip.channels).toBe(1);                    // 따라 부르기용이라 모노면 충분하다
+  expect(clip.rate).toBe(22050);
+  expect(clip.size).toBeLessThan(videoBytes / 2);
+
+  // 뽑아낸 소리로 구간 반복까지 실제로 된다.
+  await page.locator("#clip-sync").click();
+  await page.locator("#sync-now").click();
+  await page.locator("#sync-close").click();
+  await expect(page.locator(".line.marked")).toHaveCount(1);
   await page.locator(".line-play").first().click();
   await expect.poll(() => page.evaluate(() => !document.getElementById("player").paused)).toBe(true);
 

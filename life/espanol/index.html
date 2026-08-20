@@ -38,9 +38,10 @@
       <button id="clip-pick" type="button">🎵 음원 넣기</button>
       <button id="clip-sync" type="button" hidden>⏱ 줄 맞추기</button>
       <span id="clip-name" class="fine-print"></span>
-      <label class="sr-only" for="clip-input">음원 파일</label>
-      <input id="clip-input" type="file" accept="audio/*" hidden>
+      <label class="sr-only" for="clip-input">음원 파일 (mp3·m4a·mp4 …)</label>
+      <input id="clip-input" type="file" accept="audio/*,video/*" hidden>
     </div>
+    <p class="fine-print">mp3·m4a·mp4 다 됩니다 — 영상을 넣으면 소리만 남겨 담습니다.</p>
     <p id="clip-error" class="error"></p>
     <ol id="lines" class="lines"></ol>
   </main>
@@ -73,8 +74,9 @@
       <input id="title-input" type="text" maxlength="60" autocomplete="off" required>
       <label for="artist-input">가수</label>
       <input id="artist-input" type="text" maxlength="40" autocomplete="off">
-      <label for="lyrics-input">가사 — 줄 단위로 붙여넣으세요</label>
-      <textarea id="lyrics-input" rows="8"></textarea>
+      <label for="lyrics-input">가사 — 복사한 그대로 붙여넣으세요 (한 줄이 카드 한 장)</label>
+      <textarea id="lyrics-input" rows="8"
+        placeholder="El amor no me deja dormir&#10;Te quiero más que ayer&#10;No me olvides, corazón"></textarea>
       <p class="fine-print">가사는 이 브라우저에만 저장됩니다. 다시 붙여넣어도 이미 익힌 줄의 진도는 그대로입니다.</p>
       <p id="editor-error" class="error" role="alert"></p>
       <div class="menu-items row">

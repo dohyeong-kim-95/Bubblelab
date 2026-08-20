@@ -351,6 +351,10 @@ $("menu-remove").addEventListener("click", async (event) => {
 });
 
 /* ── 음원 ────────────────────────────────────────────────────────────────── */
+const sizeLabel = (bytes) => (bytes >= 1024 * 1024
+  ? `${(bytes / 1024 / 1024).toFixed(1)}MB`
+  : `${Math.round(bytes / 1024)}KB`);
+
 function setClip(next) {
   if (clipSrc) URL.revokeObjectURL(clipSrc);
   clip = next;
@@ -358,7 +362,10 @@ function setClip(next) {
   // src="" 로 두면 브라우저가 이 페이지를 음원으로 받아 보려다 실패한다.
   if (clipSrc) player.src = clipSrc;
   else { player.removeAttribute("src"); player.load(); }
-  $("clip-name").textContent = next ? next.name : "";
+  // 영상에서 소리만 남겼으면 그렇다고 말해 준다 — 넣은 파일과 크기가 달라 보인다.
+  $("clip-name").textContent = next
+    ? `${next.name}${next.kind === "sound" ? " · 소리만" : ""} ${sizeLabel(next.size)}`
+    : "";
   $("clip-pick").textContent = next ? "🎵 음원 바꾸기" : "🎵 음원 넣기";
   $("clip-sync").hidden = !next;
 }
@@ -375,11 +382,19 @@ $("clip-input").addEventListener("change", async (event) => {
   event.target.value = "";
   $("clip-error").textContent = "";
   if (!file) return;
+  const pick = $("clip-pick");
+  const label = pick.textContent;
+  pick.disabled = true;
+  // 영상에서 소리를 뽑는 데 몇 초 걸린다. 아무 반응이 없으면 고장으로 받아들인다.
+  pick.textContent = file.type.startsWith("video/") ? "소리만 뽑는 중…" : "넣는 중…";
   try {
     setClip(await saveClip(songId, file));
   } catch (error) {
     $("clip-error").textContent = error.message
       ?? `${Math.round(AUDIO_MAX_BYTES / 1024 / 1024)}MB 까지만 넣을 수 있어요`;
+    pick.textContent = label;
+  } finally {
+    pick.disabled = false;
   }
 });
 
