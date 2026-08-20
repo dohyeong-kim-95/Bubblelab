@@ -442,6 +442,15 @@ $("sync-close").addEventListener("click", closeSync);
 globalThis.speechSynthesis?.addEventListener?.("voiceschanged", () => {
   if (!$("view-practice").hidden && step === 0) renderCard();
 });
+/* 서비스워커는 캐시에서 먼저 내주고 뒤에서 새 버전을 받는다. 본체(life/app.js)는
+ * 그때 다시 그리는데 도구 페이지에 그 처리가 없으면, 배포한 것이 "다음 번에 열 때"가
+ * 아니라 "그다음 번에 열 때" 나타난다. 하던 일이 날아갈 때는 건드리지 않는다. */
+navigator.serviceWorker?.addEventListener("message", (event) => {
+  if (event.data?.type !== "life:updated") return;
+  if (!$("view-practice").hidden || document.querySelector("dialog[open]") || $("clip-pick").disabled) return;
+  location.reload();
+});
+
 window.addEventListener("hashchange", route);
 window.addEventListener("pagehide", stopSound);
 route();

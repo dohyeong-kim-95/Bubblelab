@@ -99,11 +99,21 @@ function encodeWav(buffer) {
 
 const megabytes = (bytes) => `${Math.round(bytes / 1024 / 1024)}MB`;
 
+/* 안드로이드의 파일 제공자는 MIME 을 비워 두거나 application/octet-stream 으로
+ * 주는 일이 잦다. 그 말만 믿으면 멀쩡한 mp4 를 "소리 파일이 아니에요"로 되돌린다 —
+ * 확장자도 함께 본다. */
+const SOUND_NAME = /\.(mp3|m4a|aac|wav|ogg|oga|opus|weba|flac|wma|aiff?)$/i;
+const MEDIA_NAME = /\.(mp3|m4a|mp4|m4v|aac|wav|ogg|oga|opus|weba|webm|flac|mov|3gp|mkv|wma|aiff?)$/i;
+
+const isMedia = (file) => /^(audio|video)\//.test(file.type) || MEDIA_NAME.test(file.name);
+const isSoundOnly = (file) => (/^audio\//.test(file.type)
+  || (!/^video\//.test(file.type) && SOUND_NAME.test(file.name)));
+
 /** 담을 것을 고른다. 원본과 "소리만" 중 작은 쪽이고, 둘 다 크면 거절한다. */
 async function prepare(file) {
   const raw = { blob: file, kind: "raw" };
   // 소리만 든 파일이 상한 안에 들면 그게 최선이다 — 풀었다 다시 쓰면 커지기만 한다.
-  if (file.type.startsWith("audio/") && file.size <= AUDIO_MAX_BYTES) return raw;
+  if (isSoundOnly(file) && file.size <= AUDIO_MAX_BYTES) return raw;
 
   let sound = null;
   try {
@@ -123,7 +133,7 @@ async function prepare(file) {
 
 export async function saveClip(songId, file) {
   if (!file) throw new Error("파일을 고르지 못했어요");
-  if (!/^(audio|video)\//.test(file.type)) throw new Error("소리나 영상 파일이 아니에요");
+  if (!isMedia(file)) throw new Error("소리나 영상 파일이 아니에요");
   if (file.size > INPUT_MAX_BYTES) {
     throw new Error(`${megabytes(INPUT_MAX_BYTES)} 까지만 열어 볼 수 있어요`);
   }
