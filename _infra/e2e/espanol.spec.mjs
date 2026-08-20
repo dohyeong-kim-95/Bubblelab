@@ -293,3 +293,20 @@ test("형식을 MIME 하나로 판단하지 않는다 — 안드로이드가 빈
 
   expect(failures).toEqual([]);
 });
+
+test("도구는 네트워크에서 먼저 받고, 없으면 캐시로 연다", async ({ page, context }) => {
+  // 셸이 서비스워커를 등록한다. 도구는 그 스코프 안이라 그대로 물려받는다.
+  await page.goto("/life/");
+  await page.evaluate(() => navigator.serviceWorker.ready.then(() => undefined));
+
+  await page.goto("/life/espanol/");
+  await expect(page.locator("#empty")).toBeVisible();
+
+  // 네트워크가 끊겨도 마지막으로 받아 둔 것으로 열린다 — 캐시 먼저가 아니라
+  // "네트워크 먼저, 실패하면 캐시" 라서 배포한 것이 한 박자 늦지 않는다.
+  await context.setOffline(true);
+  await page.reload();
+  await expect(page.locator("#empty")).toBeVisible({ timeout: 5000 });
+  await expect(page.locator("#add-button")).toBeVisible();
+  await context.setOffline(false);
+});
