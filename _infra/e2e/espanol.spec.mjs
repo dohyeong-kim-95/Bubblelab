@@ -104,7 +104,7 @@ test("음원 — 기기에서 고른 파일로 줄을 맞추고 그 구간만 �
   await expect(page.locator("#clip-sync")).toBeHidden();
 
   await page.locator("#clip-input").setInputFiles({
-    name: "song.wav", mimeType: "audio/wav", buffer: silentWav(),
+    name: "song.wav", mimeType: "audio/wav", buffer: silentWav(8),
   });
   // 소리만 든 파일은 그대로 담는다 — 풀었다 다시 쓰면 커지기만 한다.
   await expect(page.locator("#clip-name")).toContainText("song.wav");
@@ -116,8 +116,35 @@ test("음원 — 기기에서 고른 파일로 줄을 맞추고 그 구간만 �
   // 들으면서 줄이 시작할 때 누른다.
   await page.locator("#clip-sync").click();
   await expect(page.locator("#sync-at")).toHaveText("1 / 2");
+
+  // 한 줄 놓쳤다고 처음부터 다시 듣게 하면 아무도 끝까지 안 한다 — 되감을 수 있어야 한다.
+  const at = () => page.evaluate(() => document.getElementById("player").currentTime);
+  await expect.poll(() => page.evaluate(() => Number(document.getElementById("sync-seek").max)))
+    .toBeGreaterThan(1);                              // 재생바가 곡 길이를 안다
+
+  // 재는 동안에는 멈춰 둔다 — 흐르는 시각과 겨루면 무엇이 틀렸는지 알 수 없다.
+  await page.locator("#sync-play").click();
+  await expect(page.locator("#sync-play")).toHaveText("▶︎");
+  await page.locator("#sync-seek").fill("5");
+  await expect.poll(at).toBe(5);
+  await expect(page.locator("#sync-time")).toHaveText("0:05 / 0:08");
+  await page.locator("#sync-back3").click();
+  await expect.poll(at).toBe(2);
+  await page.locator("#sync-fwd3").click();
+  await expect.poll(at).toBe(5);
+  await page.locator("#sync-play").click();           // 다시 재생
+  await expect(page.locator("#sync-play")).toHaveText("⏸");
+
   await page.locator("#sync-now").click();
   await expect(page.locator("#sync-at")).toHaveText("2 / 2");
+
+  // 앞 줄로 돌아가면 소리도 그 줄의 시각으로 되돌아간다 — 거기서 다시 들어야 고칠 수 있다.
+  await page.locator("#sync-fwd3").click();
+  await page.locator("#sync-back").click();
+  await expect(page.locator("#sync-at")).toContainText("1 / 2 · 찍어 둔 시각");
+  // 재생 중이라 시각은 계속 흐른다 — 되돌아왔는지만 본다(+3초 자리에 남아 있지 않다).
+  await expect.poll(at).toBeLessThan(7);
+
   await page.locator("#sync-close").click();
   await expect(page.locator(".line.marked")).toHaveCount(1);
 

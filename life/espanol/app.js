@@ -399,7 +399,52 @@ $("clip-input").addEventListener("change", async (event) => {
 });
 
 /* 줄 맞추기 — 들으면서 줄이 시작할 때마다 누른다. 파형을 그리거나 자동으로
- * 맞추려 들지 않는다. 노래 한 곡은 3분이고, 그동안 스무 번 누르면 끝난다. */
+ * 맞추려 들지 않는다. 노래 한 곡은 3분이고, 그동안 스무 번 누르면 끝난다.
+ *
+ * 대신 되감을 수 있어야 한다. 한 줄 놓쳤다고 처음부터 다시 듣게 하면 아무도
+ * 끝까지 안 한다 — 재생바·±3초·"앞 줄로" 가 그것을 위해 있다. */
+const clock = (seconds) => {
+  if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
+  const whole = Math.floor(seconds);
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
+};
+
+let scrubbing = false;
+
+/** 재생바·시각·재생 버튼을 지금 상태에 맞춘다. 끌고 있는 동안에는 손잡이를 뺏지 않는다. */
+function renderScrub() {
+  if (!$("sync").open) return;
+  const duration = Number.isFinite(player.duration) ? player.duration : 0;
+  const seek = $("sync-seek");
+  seek.max = duration || 0;
+  if (!scrubbing) seek.value = player.currentTime || 0;
+  $("sync-time").textContent = `${clock(player.currentTime)} / ${clock(duration)}`;
+  $("sync-play").textContent = player.paused ? "▶︎" : "⏸";
+}
+
+for (const event of ["timeupdate", "loadedmetadata", "play", "pause", "seeked"]) {
+  player.addEventListener(event, renderScrub);
+}
+
+const seekTo = (seconds) => {
+  const duration = Number.isFinite(player.duration) ? player.duration : 0;
+  player.currentTime = Math.min(Math.max(seconds, 0), duration || 0);
+  renderScrub();
+};
+
+$("sync-seek").addEventListener("input", (event) => {
+  scrubbing = true;
+  seekTo(Number(event.target.value));
+});
+$("sync-seek").addEventListener("change", () => { scrubbing = false; });
+$("sync-play").addEventListener("click", () => {
+  if (player.paused) player.play().catch(() => { /* 막히면 다시 누른다 */ });
+  else player.pause();
+  renderScrub();
+});
+$("sync-back3").addEventListener("click", () => seekTo(player.currentTime - 3));
+$("sync-fwd3").addEventListener("click", () => seekTo(player.currentTime + 3));
+
 function renderSync() {
   const song = current();
   const line = song.lines[syncAt];
@@ -411,6 +456,7 @@ function renderSync() {
   $("sync-at").textContent = line.t === null
     ? `${syncAt + 1} / ${song.lines.length}`
     : `${syncAt + 1} / ${song.lines.length} · 찍어 둔 시각 ${line.t.toFixed(1)}초`;
+  renderScrub();
 }
 
 function closeSync() {
@@ -435,7 +481,14 @@ $("sync-now").addEventListener("click", () => {
   renderSync();
 });
 $("sync-skip").addEventListener("click", () => { syncAt += 1; renderSync(); });
-$("sync-back").addEventListener("click", () => { syncAt = Math.max(0, syncAt - 1); renderSync(); });
+/* 앞 줄로 갈 때는 소리도 그 자리로 되돌린다 — 찍은 시각이 틀렸다는 걸 알고 돌아오는
+ * 것이라, 거기서 다시 들어야 고칠 수 있다. */
+$("sync-back").addEventListener("click", () => {
+  syncAt = Math.max(0, syncAt - 1);
+  const mark = current()?.lines[syncAt]?.t;
+  if (Number.isFinite(mark)) seekTo(mark);
+  renderSync();
+});
 $("sync-close").addEventListener("click", closeSync);
 
 /* ── 시작 ────────────────────────────────────────────────────────────────── */

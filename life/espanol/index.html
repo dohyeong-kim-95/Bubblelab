@@ -118,10 +118,23 @@
   <dialog id="sync" aria-labelledby="sync-title">
     <h2 id="sync-title">줄 맞추기</h2>
     <p class="dialog-hint">노래를 들으면서 각 줄이 <b>시작할 때</b> 눌러 주세요.
-      찍어 둔 줄은 연습에서 그 부분만 반복됩니다.</p>
+      찍어 둔 줄은 연습에서 그 부분만 반복됩니다.<br>
+      놓쳤으면 재생바를 끌거나 −3초로 되감으면 됩니다.</p>
     <p id="sync-line" class="es"></p>
     <p id="sync-sound" class="sound"></p>
     <p id="sync-at" class="fine-print"></p>
+
+    <div class="scrub">
+      <button id="sync-play" type="button" aria-label="재생·멈춤">⏸</button>
+      <label class="sr-only" for="sync-seek">재생 위치</label>
+      <input id="sync-seek" type="range" min="0" max="0" step="0.1" value="0">
+      <span id="sync-time" class="fine-print">0:00 / 0:00</span>
+    </div>
+    <div class="menu-items row">
+      <button id="sync-back3" type="button" class="quiet">−3초</button>
+      <button id="sync-fwd3" type="button" class="quiet">+3초</button>
+    </div>
+
     <div class="menu-items row">
       <button id="sync-skip" type="button" class="quiet">건너뛰기</button>
       <button id="sync-now" type="button" class="primary">지금</button>
