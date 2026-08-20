@@ -26,7 +26,7 @@ body { overflow: auto; }
 /* ── 소리 ─────────────────────────────────────────────────────────────
  * 한 덩어리가 한 박이다. 덩어리 사이만 살짝 띄우고 단어 사이는 더 띄운다 —
  * 글자를 붙여 놓으면 어디서 끊어 부르는지 보이지 않는다. */
-.sound { margin: 0; font-size: 19px; line-height: 1.7; letter-spacing: -.01em; }
+.sound { margin: 0; font-size: 14px; line-height: 1.7; letter-spacing: -.01em; }
 .beat { display: inline-block; margin-right: 2px; color: var(--muted); }
 .beat.on { color: var(--ink); font-weight: 700; }
 .gap { display: inline-block; width: 9px; }
@@ -37,9 +37,10 @@ body { overflow: auto; }
 .line { display: grid; grid-template-columns: 34px minmax(0, 1fr) 22px; align-items: center;
   gap: 4px; border-bottom: 1px solid var(--line); }
 .line-play { height: 52px; font-size: 15px; color: var(--muted); text-align: left; }
-.line-body { display: grid; gap: 2px; padding: 10px 2px; text-align: left; overflow-wrap: anywhere; }
-.line .es { color: var(--muted); font-size: 13px; }
-.line .ko { font-size: 13px; }
+.line-body { display: grid; gap: 3px; padding: 10px 2px; text-align: left; overflow-wrap: anywhere; }
+.line .es { font-size: 17px; line-height: 1.4; }
+.line .sound { font-size: 13px; }
+.line .ko { color: var(--muted); font-size: 13px; }
 .line .box { color: var(--muted); font-size: 11px; text-align: right; }
 .line.marked .line-play { color: var(--ink); }
 
@@ -49,8 +50,9 @@ body { overflow: auto; }
 .play { min-width: 140px; min-height: 52px; border: 1px solid var(--line); border-radius: 26px;
   font-size: 15px; }
 .hint { margin: 0; color: var(--muted); font-size: 13px; }
-.card .sound { font-size: 22px; }
-.card .es { margin: 0; font-size: 15px; color: var(--muted); }
+/* 카드에서는 소리도 따라 부르는 작업면이라 목록보다 크게 둔다. 다만 원어가 위다. */
+.card .es { margin: 0; font-size: 22px; line-height: 1.4; }
+.card .sound { font-size: 17px; }
 .card .ko { margin: 0; font-size: 16px; }
 .gloss { list-style: none; display: grid; gap: 4px; margin: 0; padding: 0;
   font-size: 13px; text-align: left; min-width: min(280px, 100%); }
@@ -80,10 +82,10 @@ dialog label { display: block; margin: 8px 4px 4px; color: var(--muted); font-si
 dialog textarea { width: 100%; border: 1px solid var(--line); border-radius: 9px;
   background: var(--bg); color: var(--ink); padding: 10px 12px; font: inherit; resize: vertical; }
 dialog form { max-height: 82dvh; overflow-y: auto; }
-#gloss-dialog .es { margin: 4px 4px 2px; font-size: 15px; }
-#gloss-dialog .sound, #sync .sound { margin: 0 4px 8px; font-size: 17px; }
+#gloss-dialog .es { margin: 4px 4px 2px; font-size: 17px; }
+#gloss-dialog .sound, #sync .sound { margin: 0 4px 8px; font-size: 14px; }
 #gloss-known { margin: 0 4px; }
-#sync .es { margin: 10px 4px 2px; font-size: 16px; }
+#sync .es { margin: 10px 4px 2px; font-size: 18px; }
 #sync-at { margin: 0 4px 4px; }
 #sync-now { font-size: 17px; }
 

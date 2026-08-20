@@ -180,9 +180,11 @@ function renderSong() {
 
     const body = node("button", "line-body");
     body.type = "button";
+    // 원어가 주인공이고 소리는 그 밑에 붙는 도움말이다 — 읽을 줄 아는 사람에게
+    // 한글 소리가 먼저 오면 눈이 그쪽으로 끌려 원문을 안 보게 된다.
     const sound = node("span", "sound");
     sound.append(soundNodes(line.es));
-    body.append(sound, node("span", "es", line.es));
+    body.append(node("span", "es", line.es), sound);
     if (line.ko) body.append(node("span", "ko", line.ko));
     body.addEventListener("click", () => openGloss(line));
 

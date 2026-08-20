@@ -122,6 +122,14 @@ export const WORDS = {
   bailando: "춤추면서", cantando: "노래하면서", mirando: "바라보면서",
   pensando: "생각하면서", esperando: "기다리면서", llorando: "울면서",
   buscando: "찾으면서", soñando: "꿈꾸면서", sintiendo: "느끼면서",
+  hablando: "말하면서", diciendo: "말하면서", haciendo: "하면서",
+  queriendo: "원하면서", viviendo: "살면서", muriendo: "죽어가면서",
+  corriendo: "달리면서", durmiendo: "자면서", tocando: "만지면서·연주하면서",
+  besando: "입맞추면서", amando: "사랑하면서", jugando: "놀면서",
+  riendo: "웃으면서", volviendo: "돌아오면서", yendo: "가면서",
+  llevando: "데려가면서", dando: "주면서", viendo: "보면서", teniendo: "가진 채",
+  saliendo: "나가면서", llegando: "닿으면서", dejando: "놔두면서",
+  perdiendo: "잃으면서", recordando: "기억하면서", olvidando: "잊으면서",
 
   /* 나머지 자주 쓰는 동사·상태 */
   gustar: "마음에 들다", gusta: "마음에 든다", encanta: "아주 좋아한다",
@@ -166,16 +174,53 @@ export const PHRASES = {
 const STRIP = { á: "a", é: "e", í: "i", ó: "o", ú: "u", ü: "u", ñ: "n" };
 const bare = (value) => [...value].map((letter) => STRIP[letter] ?? letter).join("");
 
-/** 표기가 조금 달라도 찾는다 — 강세 표시를 빼먹고 적는 가사가 흔하다. */
-export function lookup(word) {
-  const key = String(word ?? "").toLowerCase().replace(/[^a-záéíóúüñ']/g, "");
-  if (!key) return null;
+/** 사전에서 곧바로 찾는다. 표시를 빼먹고 적는 가사가 흔해 표시 없이도 맞춰 본다. */
+function direct(key) {
   if (WORDS[key]) return WORDS[key];
   const target = bare(key);
   for (const [entry, meaning] of Object.entries(WORDS)) {
     if (bare(entry) === target) return meaning;
   }
   return null;
+}
+
+/* 스페인어는 목적격 대명사를 동사 뒤에 붙여 한 낱말로 쓴다 — 원형·현재분사·명령형에서.
+ * mirándote = mirando + te, dármelo = dar + me + lo. 조합이 사실상 무한해서 낱말로
+ * 다 담을 수 없다. 떼어 내고 각각을 찾는다 — 붙을 때 생기는 강세 표시
+ * (mirando → mirándo…)는 표시를 무시하는 비교가 흡수한다. */
+const CLITICS = {
+  me: "나를", te: "너를", se: "자기를", nos: "우리를", os: "너희를",
+  lo: "그것을", la: "그것을", los: "그것들을", las: "그것들을",
+  le: "그에게", les: "그들에게",
+};
+// 어간이 이보다 짧으면 낱말이 아니라 우연이다 (clase 의 "se" 를 떼지 않는다).
+const STEM_MIN = 3;
+
+function splitClitics(key) {
+  const names = Object.keys(CLITICS);
+  // 두 개 붙은 것(dármelo)부터 본다. 하나만 떼면 남은 것이 어간에 섞인다.
+  const tails = [];
+  for (const first of names) {
+    for (const second of names) tails.push([first + second, [first, second]]);
+    tails.push([first, [first]]);
+  }
+  tails.sort((a, b) => b[0].length - a[0].length);
+  for (const [tail, parts] of tails) {
+    if (!key.endsWith(tail)) continue;
+    const stem = key.slice(0, -tail.length);
+    if (stem.length < STEM_MIN) continue;
+    const meaning = direct(stem);
+    // 어간이 사전에 있을 때만 쪼갠 것으로 친다 — 없으면 그냥 모르는 낱말이다.
+    if (meaning) return `${meaning} + ${parts.map((part) => CLITICS[part]).join(" + ")}`;
+  }
+  return null;
+}
+
+/** 표기가 조금 달라도 찾는다 — 강세 표시를 빼먹고 적는 가사가 흔하다. */
+export function lookup(word) {
+  const key = String(word ?? "").toLowerCase().replace(/[^a-záéíóúüñ']/g, "");
+  if (!key) return null;
+  return direct(key) ?? splitClitics(key);
 }
 
 const LETTER = /[a-záéíóúüñ]/;

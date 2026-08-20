@@ -134,6 +134,25 @@ test("레게톤·라틴팝 어휘도 사전에 있다", () => {
   assert.equal(lookup("despacito"), "천천히·살살");
 });
 
+test("동사에 붙은 대명사를 떼어 내고 찾는다", () => {
+  // mirándote = mirando + te. 조합이 사실상 무한해서 낱말로 다 담을 수 없다.
+  assert.equal(lookup("mirándote"), "바라보면서 + 너를");
+  assert.equal(lookup("esperándome"), "기다리면서 + 나를");
+  assert.equal(lookup("llevándote"), "데려가면서 + 너를");
+  assert.equal(lookup("quererte"), `${lookup("querer")} + 너를`);
+  assert.equal(lookup("dármelo"), "주다 + 나를 + 그것을");   // 두 개 붙은 것
+  // 표시를 무시하고 맞추므로 표시를 빼먹고 적어도 찾는다.
+  assert.equal(lookup("mirandote"), lookup("mirándote"));
+});
+
+test("낱말 안의 우연한 대명사 꼴은 떼지 않는다", () => {
+  // clase 의 "se", noche 의 … 를 떼면 엉뚱한 뜻이 붙는다. 어간이 사전에 있을 때만 쪼갠다.
+  assert.equal(lookup("clase"), null);
+  assert.equal(lookup("noche"), "밤");
+  assert.equal(lookup("suavecito"), "아주 살살");
+  assert.equal(lookup("zzzz"), null);
+});
+
 test("표시 하나로 뜻이 갈리는 짝은 섞이지 않는다", () => {
   // 표시를 지우고 찾는 보조 규칙이 있어서, 짝을 둘 다 담아 두지 않으면
   // el(관사)에 él(그) 의 뜻이 붙는다.
