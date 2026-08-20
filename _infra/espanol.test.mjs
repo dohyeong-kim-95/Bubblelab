@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { beats, koLine, readLine, splitWords } from "../life/espanol/pronounce.js";
 import { glossLine, lookup } from "../life/espanol/words.js";
 import {
-  INTERVALS, KNOWN_BOX, SONGS_MAX,
+  INTERVALS, KNOWN_BOX, REACTION_LEAD, SONGS_MAX,
   addSong, clearMarks, deckLines, dueLines, emptyState, grade, lineSpan, linesFrom,
   parseLyrics, parseState, progressOf, removeSong, setLineKo, setMark, updateSong,
 } from "../life/espanol/store.js";
@@ -222,6 +222,17 @@ test("음원 구간 — 끝은 다음으로 찍은 줄이고, 마지막 줄은 �
   assert.equal(lineSpan(song, lines[1].id), null);   // 안 찍은 줄은 구간이 없다
   assert.equal(progressOf(song).marked, 2);
   assert.equal(clearMarks(state, id).songs[0].lines.every((line) => line.t === null), true);
+});
+
+test("찍은 시각은 0 아래로 내려가지 않는다", () => {
+  let state = seed("Uno\nDos");
+  const { id, lines } = state.songs[0];
+  // 곡 맨 앞에서 누르면 반응 속도를 빼는 것만으로 음수가 된다. 0 으로 잡아 두지 않으면
+  // 음수가 "안 찍음"으로 읽혀 찍은 것이 통째로 사라진다.
+  state = setMark(state, id, lines[0].id, 0.2 - REACTION_LEAD);
+  assert.equal(state.songs[0].lines[0].t, 0);
+  assert.equal(setMark(state, id, lines[0].id, null).songs[0].lines[0].t, null);
+  assert.ok(REACTION_LEAD > 0 && REACTION_LEAD < 1);
 });
 
 test("제목만 고쳐도 가사와 진도는 그대로다", () => {

@@ -1,5 +1,5 @@
 import {
-  INTERVALS, STORAGE_KEY,
+  INTERVALS, REACTION_LEAD, STORAGE_KEY,
   addSong, clearMarks, deckLines, dueLines, emptyState, grade, kstDate, lineSpan,
   parseState, progressOf, removeSong, setLineKo, setMark, songById, updateSong,
 } from "./store.js";
@@ -475,7 +475,8 @@ $("clip-sync").addEventListener("click", () => {
 });
 $("sync-now").addEventListener("click", () => {
   const line = current().lines[syncAt];
-  state = setMark(state, songId, line.id, player.currentTime);
+  // 들은 뒤에 손이 움직인다 — 누른 자리가 아니라 그보다 앞을 찍는다.
+  state = setMark(state, songId, line.id, player.currentTime - REACTION_LEAD);
   save();
   syncAt += 1;
   renderSync();

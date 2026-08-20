@@ -156,10 +156,19 @@ export const removeSong = (state, songId) => ({
 export const setLineKo = (state, songId, lineId, ko) =>
   mapLine(state, songId, lineId, (line) => ({ ...line, ko: clean(ko, KO_MAX) }));
 
+/**
+ * 누른 순간과 그 줄이 실제로 시작한 순간은 다르다 — 듣고 손이 움직이는 데 걸리는
+ * 만큼 늦다. 그만큼 앞을 찍는다. 조금 이른 것은 앞 소절이 살짝 들리는 정도지만,
+ * 늦으면 첫 음절이 잘려 나가 따라 부를 수가 없다.
+ */
+export const REACTION_LEAD = 0.4;
+
 /** 음원에서 이 줄이 시작하는 시각. 찍어 두면 그 줄만 반복 재생할 수 있다. */
 export const setMark = (state, songId, lineId, seconds) =>
   mapLine(state, songId, lineId, (line) => ({
-    ...line, t: Number.isFinite(seconds) && seconds >= 0 ? Math.round(seconds * 10) / 10 : null,
+    // 곡 맨 앞에서 누르면 빼기만으로 음수가 된다 — 0 으로 잡아 두지 않으면
+    // 찍은 것이 통째로 사라진다(음수는 "안 찍음"으로 읽힌다).
+    ...line, t: Number.isFinite(seconds) ? Math.round(Math.max(0, seconds) * 10) / 10 : null,
   }));
 
 export const clearMarks = (state, songId) =>

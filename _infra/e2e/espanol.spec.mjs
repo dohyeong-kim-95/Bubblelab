@@ -132,18 +132,19 @@ test("음원 — 기기에서 고른 파일로 줄을 맞추고 그 구간만 �
   await expect.poll(at).toBe(2);
   await page.locator("#sync-fwd3").click();
   await expect.poll(at).toBe(5);
-  await page.locator("#sync-play").click();           // 다시 재생
-  await expect(page.locator("#sync-play")).toHaveText("⏸");
 
+  // 누른 자리가 아니라 그보다 앞을 찍는다 — 듣고 손이 움직이는 만큼(0.4초) 늦기 때문이다.
   await page.locator("#sync-now").click();
   await expect(page.locator("#sync-at")).toHaveText("2 / 2");
 
   // 앞 줄로 돌아가면 소리도 그 줄의 시각으로 되돌아간다 — 거기서 다시 들어야 고칠 수 있다.
   await page.locator("#sync-fwd3").click();
   await page.locator("#sync-back").click();
-  await expect(page.locator("#sync-at")).toContainText("1 / 2 · 찍어 둔 시각");
-  // 재생 중이라 시각은 계속 흐른다 — 되돌아왔는지만 본다(+3초 자리에 남아 있지 않다).
-  await expect.poll(at).toBeLessThan(7);
+  await expect(page.locator("#sync-at")).toContainText("1 / 2 · 찍어 둔 시각 4.6초");
+  await expect.poll(at).toBe(4.6);
+
+  await page.locator("#sync-play").click();           // 다시 재생
+  await expect(page.locator("#sync-play")).toHaveText("⏸");
 
   await page.locator("#sync-close").click();
   await expect(page.locator(".line.marked")).toHaveCount(1);
