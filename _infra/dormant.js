@@ -6,9 +6,11 @@
 // trip 가격 관측이 사라지고, 그건 되살릴 방법이 없다.
 //
 // 항목은 서브도메인("estate") 이거나 그 안의 첫 경로("util/planner") 다.
-export const DORMANT = new Set(["estate", "invest", "trip", "util/planner"]);
+export const DORMANT = new Set(["espanol", "estate", "invest", "trip", "util/planner"]);
 
 // 되살릴 때 함께 되돌릴 것:
+//   espanol       — www/index.html 에 랜딩 카드 다시 추가(퍼블릭 서브도메인은 카드가 필수),
+//                   _infra/e2e/smoke.spec.mjs 에 홈·훈련·문법 화면 다시 등록
 //   estate        — (서버 기능 없음, 목록에서 빼면 끝)
 //   invest        — wrangler.jsonc "ENABLE_INVEST": "true", 집 PC 데몬 cron 재개
 //   trip          — "ENABLE_TRIP_WATCH": "true", triggers.crons 에 "20 */6 * * *" 추가

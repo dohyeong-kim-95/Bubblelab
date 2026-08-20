@@ -171,7 +171,7 @@ test("비공개 서브도메인은 풀다운 메뉴에도 나오지 않는다", 
   // 페이지 자체는 살아 있어야 한다 (주소를 아는 사람은 들어간다)
   assert.ok(existsSync(join(DIST, "duri/index.html")));
   // 잠든 서브도메인은 아예 배포되지 않는다 (_infra/dormant.js)
-  for (const site of ["estate", "invest", "trip"]) {
+  for (const site of ["espanol", "estate", "invest", "trip"]) {
     assert.ok(!existsSync(join(DIST, site)), `잠든 ${site} 가 배포됐다`);
   }
 });

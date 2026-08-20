@@ -27,7 +27,7 @@
 
 ## 잠들어 있는 화면
 
-`estate`, `invest`, `trip`, `util/planner` 는 **내려 둔 상태**다. 목록은
+`espanol`, `estate`, `invest`, `trip`, `util/planner` 는 **내려 둔 상태**다. 목록은
 `_infra/dormant.js` 한 곳에 있고, 워커가 404 로 답하며 빌드가 아예 배포하지 않는다.
 `ENABLE_INVEST`·`ENABLE_TRIP_WATCH`·`ENABLE_PLANNER` 는 `"false"`, trip 가격 수집
 cron 도 빼 뒀다.
@@ -36,6 +36,10 @@ cron 도 빼 뒀다.
 invest 잔고 이력과 trip 가격 관측이 사라지고 되살릴 방법이 없으니 건드리지 말 것.
 하나씩 필요해질 때 `dormant.js` 에서 한 줄 지우고 해당 플래그를 되돌리면 살아난다
 (되살릴 항목은 그 파일에 적혀 있다).
+
+`espanol`(영화로 스페인어) 은 서버도 DO 도 쓰지 않아 폴더만 그대로 남아 있다.
+스페인어는 **`life/espanol/`(노래로 스페인어)** 로 자리를 옮겼다 — 목적도 방식도
+다른 별개의 도구이고, 옛 폴더에서 옮겨온 코드는 없다.
 
 아래 문서에 남아 있는 trip·estate·invest 설명은 되살릴 때를 위한 것이다.
 
@@ -196,6 +200,10 @@ PNG·JPEG를 모두 받고, JPEG는 `npm ci` 필요. 검증은 `_infra/wallpaper
 
 `life/`는 목록 여러 개를 좌우로 넘기며 쓰는 할 일 PWA다(`CONFIDENTIAL_SUBDOMAINS`).
 토이 관례(share.js, 주간 기록)를 적용하지 않는다.
+
+할 일 밖의 도구는 `life/<이름>/` 폴더 하나가 전부다(서재·팔굽혀펴기·돌아보기·백업,
+그리고 **`life/espanol/` — 노래로 스페인어**. 가사를 안 보고 알아듣고 따라 부르는
+연습장이고, 소리 엔진·저작권 선은 `life/espanol/README.md` 에 적혀 있다).
 
 **서버에 아무것도 저장하지 않는다** — 할 일은 브라우저 localStorage 에만 있고, 워커는
 비밀번호 게이트(`bl_life` 쿠키·`LIFE_PASSWORD`)만 담당한다. `/_life/*` API 는 없다.

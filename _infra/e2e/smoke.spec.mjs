@@ -6,7 +6,7 @@
 import { test, expect } from "@playwright/test";
 
 // 게이트 뒤(work·admin·duri·podcast)는 로그인이 필요해 스모크 대상이 아니다.
-// 잠들어 있는 화면(estate·invest·trip·util/planner)도 배포되지 않아 대상이 아니다 — _infra/dormant.js.
+// 잠들어 있는 화면(espanol·estate·invest·trip·util/planner)도 배포되지 않아 대상이 아니다 — _infra/dormant.js.
 const SCREENS = [
   { name: "랜딩", path: "/" },
   { name: "slop 홈", path: "/slop/" },
@@ -27,10 +27,6 @@ const SCREENS = [
   { name: "맞춤법 검사", path: "/util/proofread/" },
   // 카메라가 없는 환경(헤드리스)에서도 첫 화면이 떠야 한다 — 게임 로직은 단위 테스트가 본다
   { name: "발판 리듬", path: "/games/stepcam/" },
-  // 스페인어 학습장은 화면을 전부 스크립트로 그린다 — 모듈이 하나만 깨지면 빈 화면이 된다
-  { name: "스페인어 홈", path: "/espanol/" },
-  { name: "스페인어 훈련", path: "/espanol/drill/" },
-  { name: "스페인어 문법", path: "/espanol/grammar/" },
   // 리포트를 전부 스크립트로 그린다 — JSON을 못 읽으면 빈 화면이 된다
   { name: "클로드 인사이트", path: "/lab/claude-insights/" },
   // 화면을 전부 스크립트로 그린다. 저장본이 없는 첫 방문에서도 안내가 떠야 한다
