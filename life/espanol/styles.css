@@ -1,0 +1,88 @@
+/* LIFE 의 ../styles.css 를 그대로 물려받고, 이 도구에만 필요한 것만 더한다.
+ * 주인공은 "소리"다 — 소리를 가장 크게, 스페인어 원문은 그 아래 작게 둔다. */
+body { overflow: auto; }
+.back { display: grid; place-items: center; width: 40px; height: 44px; flex: none;
+  color: var(--muted); font-size: 20px; text-decoration: none; }
+.bar-title { font-size: 19px; font-weight: 700; letter-spacing: -.02em; }
+#add-button, #song-menu { width: 44px; height: 44px; flex: none; font-size: 22px; }
+#song-menu { font-size: 20px; color: var(--muted); }
+.page { flex: 1; padding: 4px 18px 40px; }
+.summary { margin: 6px 0 12px; color: var(--muted); font-size: 13px; }
+.fine-print { color: var(--muted); font-size: 12px; }
+.wide { display: block; width: 100%; min-height: 50px; border-radius: 10px;
+  background: var(--ink); color: var(--bg); font-weight: 700; }
+
+/* ── 곡 목록 ─────────────────────────────────────────────────────────── */
+.songs { list-style: none; margin: 0; padding: 0; }
+.song-link { display: grid; gap: 6px; padding: 14px 2px; border-bottom: 1px solid var(--line);
+  color: inherit; text-decoration: none; }
+.song-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.song-head b { font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.song-artist { color: var(--muted); font-size: 12px; flex: none; }
+.song-stat { color: var(--muted); font-size: 12px; }
+.meter { height: 3px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.meter-fill { display: block; height: 100%; background: var(--ink); }
+
+/* ── 소리 ─────────────────────────────────────────────────────────────
+ * 한 덩어리가 한 박이다. 덩어리 사이만 살짝 띄우고 단어 사이는 더 띄운다 —
+ * 글자를 붙여 놓으면 어디서 끊어 부르는지 보이지 않는다. */
+.sound { margin: 0; font-size: 19px; line-height: 1.7; letter-spacing: -.01em; }
+.beat { display: inline-block; margin-right: 2px; color: var(--muted); }
+.beat.on { color: var(--ink); font-weight: 700; }
+.gap { display: inline-block; width: 9px; }
+.tie { color: #6b6b66; font-size: 13px; }
+
+/* ── 가사 줄 ─────────────────────────────────────────────────────────── */
+.lines { list-style: none; margin: 14px 0 0; padding: 0; }
+.line { display: grid; grid-template-columns: 34px minmax(0, 1fr) 22px; align-items: center;
+  gap: 4px; border-bottom: 1px solid var(--line); }
+.line-play { height: 52px; font-size: 15px; color: var(--muted); text-align: left; }
+.line-body { display: grid; gap: 2px; padding: 10px 2px; text-align: left; overflow-wrap: anywhere; }
+.line .es { color: var(--muted); font-size: 13px; }
+.line .ko { font-size: 13px; }
+.line .box { color: var(--muted); font-size: 11px; text-align: right; }
+.line.marked .line-play { color: var(--ink); }
+
+/* ── 연습 카드 ───────────────────────────────────────────────────────── */
+.card { display: grid; gap: 12px; min-height: 46dvh; align-content: center; justify-items: center;
+  padding: 18px 4px; text-align: center; }
+.play { min-width: 140px; min-height: 52px; border: 1px solid var(--line); border-radius: 26px;
+  font-size: 15px; }
+.hint { margin: 0; color: var(--muted); font-size: 13px; }
+.card .sound { font-size: 22px; }
+.card .es { margin: 0; font-size: 15px; color: var(--muted); }
+.card .ko { margin: 0; font-size: 16px; }
+.gloss { list-style: none; display: grid; gap: 4px; margin: 0; padding: 0;
+  font-size: 13px; text-align: left; min-width: min(280px, 100%); }
+.gloss-row { display: flex; gap: 8px; }
+.gloss-row b { color: var(--ink); font-weight: 700; }
+.gloss-row span { color: var(--muted); }
+/* 카드는 화면을 채우고 판정 버튼은 바닥에 붙는다 — 카드 길이에 따라 버튼이
+ * 위아래로 뛰면 손가락이 매번 다른 자리를 찾아야 한다. */
+#view-practice { display: flex; flex-direction: column; }
+#view-practice .card { flex: 1; }
+#view-practice .menu-items.row { max-width: 420px; width: 100%; margin: 18px auto 0; }
+/* 공용 `.menu-items button:hover` 가 배경만 바탕색으로 덮어 primary 를 검은 글씨·
+ * 검은 배경으로 만든다. 탭한 자리에 hover 가 남는 기기에서 버튼이 사라져 보인다. */
+.menu-items .primary:hover { background: var(--ink); color: var(--bg); }
+.empty { margin: 32px 0; color: var(--muted); font-size: 14px; line-height: 1.7; }
+
+/* ── 음원 ─────────────────────────────────────────────────────────────── */
+.clip-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 14px 0 0; }
+.clip-bar button { min-height: 40px; border: 1px solid var(--line); border-radius: 9px;
+  padding: 0 12px; font-size: 13px; }
+#clip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+#clip-error:empty { min-height: 0; }
+#player { display: none; }
+
+/* ── 대화상자 ────────────────────────────────────────────────────────── */
+dialog label { display: block; margin: 8px 4px 4px; color: var(--muted); font-size: 13px; }
+dialog textarea { width: 100%; border: 1px solid var(--line); border-radius: 9px;
+  background: var(--bg); color: var(--ink); padding: 10px 12px; font: inherit; resize: vertical; }
+dialog form { max-height: 82dvh; overflow-y: auto; }
+#gloss-dialog .es { margin: 4px 4px 2px; font-size: 15px; }
+#gloss-dialog .sound, #sync .sound { margin: 0 4px 8px; font-size: 17px; }
+#gloss-known { margin: 0 4px; }
+#sync .es { margin: 10px 4px 2px; font-size: 16px; }
+#sync-at { margin: 0 4px 4px; }
+#sync-now { font-size: 17px; }

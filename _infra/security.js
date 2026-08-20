@@ -78,6 +78,9 @@ const LIFE_CSP = [
   "default-src 'self'", "base-uri 'self'", "object-src 'none'", "frame-ancestors 'none'",
   "form-action 'self'", "script-src 'self'", "style-src 'self'", "img-src 'self' data:",
   "font-src 'self'", "connect-src 'self'", "worker-src 'self'", "manifest-src 'self'",
+  // life/espanol 이 기기에서 고른 음원을 blob: 으로 재생한다. 외부 호스트는 그대로
+  // 막혀 있다 — 소리는 그 기기 안에서만 오간다.
+  "media-src 'self' blob:",
   "upgrade-insecure-requests",
 ].join("; ");
 function isDuriPage(url) {

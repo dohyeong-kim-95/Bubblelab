@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <meta name="theme-color" content="#000000">
+  <title>노래 스페인어</title>
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="modulepreload" href="store.js">
+  <link rel="modulepreload" href="pronounce.js">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="bar">
+    <a class="back" id="back" href="../" aria-label="LIFE 로 돌아가기">←</a>
+    <h1 class="bar-title"><span id="heading">노래 스페인어</span> <span id="count" class="count"></span></h1>
+    <button id="add-button" type="button" aria-label="노래 추가">＋</button>
+    <button id="song-menu" type="button" aria-label="노래 메뉴" aria-haspopup="dialog" hidden>⋯</button>
+  </header>
+
+  <!-- ① 곡 목록 -->
+  <main id="view-list" class="page">
+    <ul id="songs" class="songs"></ul>
+    <p id="empty" class="empty" hidden>
+      노래를 한 곡 넣고 가사를 붙여넣으면 시작합니다.<br>
+      소리(연음·강세)는 저절로 붙고, 아는 낱말에는 뜻이 달립니다.<br>
+      <span class="fine-print">가사와 음원은 이 브라우저에만 저장됩니다 — 서버로 보내지 않습니다.</span>
+    </p>
+  </main>
+
+  <!-- ② 곡 한 편 -->
+  <main id="view-song" class="page" hidden>
+    <p id="song-progress" class="summary"></p>
+    <button id="start-practice" class="wide primary" type="button">🎧 연습 시작</button>
+    <div class="clip-bar">
+      <button id="clip-pick" type="button">🎵 음원 넣기</button>
+      <button id="clip-sync" type="button" hidden>⏱ 줄 맞추기</button>
+      <span id="clip-name" class="fine-print"></span>
+      <label class="sr-only" for="clip-input">음원 파일</label>
+      <input id="clip-input" type="file" accept="audio/*" hidden>
+    </div>
+    <p id="clip-error" class="error"></p>
+    <ol id="lines" class="lines"></ol>
+  </main>
+
+  <!-- ③ 연습 -->
+  <main id="view-practice" class="page" hidden>
+    <p id="practice-progress" class="summary"></p>
+    <div id="card" class="card">
+      <button id="play" class="play" type="button">▶︎ 듣기</button>
+      <p id="card-hint" class="hint"></p>
+      <p id="card-sound" class="sound" hidden></p>
+      <p id="card-es" class="es" hidden></p>
+      <p id="card-ko" class="ko" hidden></p>
+      <ul id="card-gloss" class="gloss" hidden></ul>
+    </div>
+    <div class="menu-items row">
+      <button id="reveal" class="primary" type="button">소리 보기</button>
+      <button id="again" class="quiet" type="button" hidden>다시</button>
+      <button id="got" class="primary" type="button" hidden>알았다</button>
+    </div>
+    <p id="practice-done" class="empty" hidden></p>
+  </main>
+
+  <audio id="player" preload="metadata"></audio>
+
+  <dialog id="editor" aria-labelledby="editor-title">
+    <form id="editor-form">
+      <h2 id="editor-title">노래 넣기</h2>
+      <label for="title-input">제목</label>
+      <input id="title-input" type="text" maxlength="60" autocomplete="off" required>
+      <label for="artist-input">가수</label>
+      <input id="artist-input" type="text" maxlength="40" autocomplete="off">
+      <label for="lyrics-input">가사 — 줄 단위로 붙여넣으세요</label>
+      <textarea id="lyrics-input" rows="8"></textarea>
+      <p class="fine-print">가사는 이 브라우저에만 저장됩니다. 다시 붙여넣어도 이미 익힌 줄의 진도는 그대로입니다.</p>
+      <p id="editor-error" class="error" role="alert"></p>
+      <div class="menu-items row">
+        <button id="editor-cancel" type="button" class="quiet">취소</button>
+        <button class="primary" type="submit">저장</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="gloss-dialog" aria-labelledby="gloss-title">
+    <form id="gloss-form">
+      <h2 id="gloss-title">이 줄의 뜻</h2>
+      <p id="gloss-es" class="es"></p>
+      <p id="gloss-sound" class="sound"></p>
+      <ul id="gloss-known" class="gloss"></ul>
+      <label for="gloss-input">내가 적는 뜻</label>
+      <input id="gloss-input" type="text" maxlength="120" autocomplete="off">
+      <div class="menu-items row">
+        <button id="gloss-cancel" type="button" class="quiet">취소</button>
+        <button class="primary" type="submit">저장</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="menu" aria-labelledby="menu-title">
+    <h2 id="menu-title" class="sr-only">노래 메뉴</h2>
+    <div class="menu-items">
+      <button id="menu-edit" type="button">제목·가사 고치기</button>
+      <button id="menu-reset-marks" type="button">줄 맞춘 시각 지우기</button>
+      <button id="menu-clip-remove" type="button">음원 빼기</button>
+      <button id="menu-remove" type="button" class="danger">이 노래 지우기</button>
+      <button id="menu-close" type="button" class="quiet">닫기</button>
+    </div>
+  </dialog>
+
+  <dialog id="sync" aria-labelledby="sync-title">
+    <h2 id="sync-title">줄 맞추기</h2>
+    <p class="dialog-hint">노래를 들으면서 각 줄이 <b>시작할 때</b> 눌러 주세요.
+      찍어 둔 줄은 연습에서 그 부분만 반복됩니다.</p>
+    <p id="sync-line" class="es"></p>
+    <p id="sync-sound" class="sound"></p>
+    <p id="sync-at" class="fine-print"></p>
+    <div class="menu-items row">
+      <button id="sync-skip" type="button" class="quiet">건너뛰기</button>
+      <button id="sync-now" type="button" class="primary">지금</button>
+    </div>
+    <div class="menu-items row">
+      <button id="sync-back" type="button" class="quiet">앞 줄로</button>
+      <button id="sync-close" type="button" class="quiet">끝내기</button>
+    </div>
+  </dialog>
+</body>
+</html>

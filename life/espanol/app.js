@@ -1,0 +1,432 @@
+import {
+  INTERVALS, STORAGE_KEY,
+  addSong, clearMarks, deckLines, dueLines, emptyState, grade, kstDate, lineSpan,
+  parseState, progressOf, removeSong, setLineKo, setMark, songById, updateSong,
+} from "./store.js";
+import { readLine } from "./pronounce.js";
+import { glossLine } from "./words.js";
+import { AUDIO_MAX_BYTES, clipUrl, loadClip, removeClip, saveClip } from "./audio.js";
+
+const $ = (id) => document.getElementById(id);
+const player = $("player");
+
+let state = load();
+let songId = null;      // 보고 있는 곡
+let queue = [];         // 연습에 남은 줄
+let step = 0;           // 0 아무것도 · 1 소리 · 2 뜻까지
+let clip = null;        // { id, name, data }
+let clipSrc = null;     // blob: 주소 (재생용)
+let stopAt = null;      // 구간 반복의 끝
+let editing = null;     // 편집 중인 곡 id (없으면 새 노래)
+let glossing = null;    // 뜻을 달고 있는 줄 id
+let syncAt = 0;         // 줄 맞추기에서 가리키는 줄 번호
+
+function load() {
+  try { return parseState(localStorage.getItem(STORAGE_KEY)); } catch { return emptyState(); }
+}
+
+function save() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch { /* 공간이 없으면 화면만 유지 */ }
+}
+
+function node(tag, className, text) {
+  const element = document.createElement(tag);
+  if (className) element.className = className;
+  if (text != null) element.textContent = text;
+  return element;
+}
+
+const current = () => songById(state, songId);
+
+/* ── 소리 ────────────────────────────────────────────────────────────────
+ * 음원이 있고 그 줄의 시각을 찍어 뒀으면 진짜 노래를, 아니면 브라우저 음성을
+ * 쓴다. 둘 다 없으면 조용히 실패하지 않고 그렇다고 말해 준다. */
+const spanishVoice = () =>
+  globalThis.speechSynthesis?.getVoices().find((voice) => voice.lang?.startsWith("es")) ?? null;
+
+function speak(text) {
+  const synth = globalThis.speechSynthesis;
+  if (!synth) return false;
+  const voice = spanishVoice();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "es-ES";
+  utterance.rate = 0.9;                       // 노래 속도에 가깝게 조금 늦춘다
+  if (voice) utterance.voice = voice;
+  synth.cancel();
+  synth.speak(utterance);
+  return Boolean(voice);
+}
+
+player.addEventListener("timeupdate", () => {
+  if (stopAt !== null && player.currentTime >= stopAt) { player.pause(); stopAt = null; }
+});
+
+/** 그 줄만 들려준다. 음원 구간이 있으면 그것, 없으면 읽어 주기. */
+function playLine(line) {
+  const song = current();
+  const span = song && clipSrc ? lineSpan(song, line.id) : null;
+  if (span) {
+    stopAt = span.end;
+    player.currentTime = span.start;
+    player.play().catch(() => { /* 사용자 동작 없이 막히면 조용히 넘어간다 */ });
+    return true;
+  }
+  return speak(line.es);
+}
+
+function stopSound() {
+  stopAt = null;
+  player.pause();
+  globalThis.speechSynthesis?.cancel();
+}
+
+/* ── 소리 표시 ───────────────────────────────────────────────────────────
+ * 한 덩어리가 한 박이다. 강세 음절만 밝게 주고, 앞 단어에서 소리가 넘어온
+ * 자리에는 이음표를 둔다 — 가사만 봐서는 절대 안 보이는 것이 그것이다. */
+function soundNodes(text) {
+  const box = document.createDocumentFragment();
+  for (const [index, unit] of readLine(text).entries()) {
+    if (unit.space && index) box.append(node("span", "gap", " "));
+    else if (unit.linked) box.append(node("span", "tie", "‿"));
+    box.append(node("span", `beat${unit.stress ? " on" : ""}`, unit.ko));
+  }
+  return box;
+}
+
+const BARS = ["", "▁", "▃", "▅", "▆", "█"];
+
+function glossNodes(text, host) {
+  host.textContent = "";
+  const found = glossLine(text);
+  for (const entry of found) {
+    const row = node("li", "gloss-row");
+    row.append(node("b", null, entry.es), node("span", null, entry.ko));
+    host.append(row);
+  }
+  host.hidden = found.length === 0;
+  return found.length;
+}
+
+/* ── 화면 고르기 ─────────────────────────────────────────────────────────
+ * 주소의 해시가 곧 화면이다. 뒤로 가기가 그대로 동작해야 PWA 에서 헤매지 않는다. */
+function route() {
+  const hash = location.hash.replace(/^#/, "");
+  const [, kind, id] = hash.match(/^\/([sp])\/(.+)$/) ?? [];
+  const song = id ? songById(state, id) : null;
+  songId = song?.id ?? null;
+  stopSound();
+
+  const view = song ? (kind === "p" ? "practice" : "song") : "list";
+  $("view-list").hidden = view !== "list";
+  $("view-song").hidden = view !== "song";
+  $("view-practice").hidden = view !== "practice";
+  $("add-button").hidden = view !== "list";
+  $("song-menu").hidden = view !== "song";
+  $("back").setAttribute("href", view === "list" ? "../" : view === "song" ? "#/" : `#/s/${songId}`);
+
+  if (view === "list") { renderList(); return; }
+  loadClipFor(song.id);
+  if (view === "song") { renderSong(); return; }
+  startPractice();
+}
+
+/* ── ① 곡 목록 ──────────────────────────────────────────────────────────── */
+function renderList() {
+  $("heading").textContent = "노래 스페인어";
+  $("count").textContent = state.songs.length ? `${state.songs.length}곡` : "";
+  const host = $("songs");
+  host.textContent = "";
+  for (const song of state.songs) {
+    const stat = progressOf(song);
+    const item = node("li", "song");
+    const link = node("a", "song-link");
+    link.href = `#/s/${song.id}`;
+    const head = node("span", "song-head");
+    head.append(node("b", null, song.title));
+    if (song.artist) head.append(node("span", "song-artist", song.artist));
+    link.append(head);
+    link.append(node("span", "song-stat",
+      `가사 없이 아는 줄 ${stat.known}/${stat.total}${stat.due ? ` · 오늘 ${stat.due}줄` : ""}`));
+    const bar = node("span", "meter");
+    const fill = node("span", "meter-fill");
+    fill.style.width = `${stat.total ? Math.round((stat.known / stat.total) * 100) : 0}%`;
+    bar.append(fill);
+    link.append(bar);
+    item.append(link);
+    host.append(item);
+  }
+  $("empty").hidden = state.songs.length > 0;
+}
+
+/* ── ② 곡 한 편 ─────────────────────────────────────────────────────────── */
+function renderSong() {
+  const song = current();
+  if (!song) { location.hash = "#/"; return; }
+  $("heading").textContent = song.title;
+  $("count").textContent = song.artist;
+  const stat = progressOf(song);
+  $("song-progress").textContent =
+    `가사 없이 아는 줄 ${stat.known}/${stat.total} · 오늘 연습할 줄 ${stat.due}줄`;
+  $("start-practice").textContent = stat.due ? `🎧 연습 시작 — ${stat.due}줄` : "🎧 다시 훑어보기";
+
+  const host = $("lines");
+  host.textContent = "";
+  for (const line of song.lines) {
+    const row = node("li", "line");
+    const play = node("button", "line-play", "▶︎");
+    play.type = "button";
+    play.setAttribute("aria-label", `${line.es} 듣기`);
+    play.addEventListener("click", () => playLine(line));
+
+    const body = node("button", "line-body");
+    body.type = "button";
+    const sound = node("span", "sound");
+    sound.append(soundNodes(line.es));
+    body.append(sound, node("span", "es", line.es));
+    if (line.ko) body.append(node("span", "ko", line.ko));
+    body.addEventListener("click", () => openGloss(line));
+
+    const box = node("span", "box", BARS[line.box] || "");
+    box.title = `${line.box}/${INTERVALS.length - 1} 단계`;
+    row.append(play, body, box);
+    if (line.t !== null) row.classList.add("marked");
+    host.append(row);
+  }
+}
+
+/* ── ③ 연습 ─────────────────────────────────────────────────────────────
+ * 한 줄이 카드 하나다. 소리 → 한글 소리 → 스페인어·뜻 순으로만 열린다. 가사를
+ * 먼저 보여 주면 그때부터는 읽기 연습이지 듣기 연습이 아니다. */
+function startPractice() {
+  const song = current();
+  if (!song) { location.hash = "#/"; return; }
+  $("heading").textContent = "연습";
+  $("count").textContent = "";
+  const due = dueLines(song, kstDate());
+  queue = due.length ? [...due] : [...deckLines(song)];
+  step = 0;
+  renderCard();
+}
+
+function renderCard() {
+  const song = current();
+  const done = queue.length === 0;
+  $("card").hidden = done;
+  $("reveal").hidden = done || step >= 2;
+  $("again").hidden = done || step < 2;
+  $("got").hidden = done || step < 2;
+  $("practice-done").hidden = !done;
+  if (done) {
+    const stat = progressOf(song);
+    $("practice-progress").textContent = "";
+    $("practice-done").textContent =
+      `오늘 몫을 끝냈습니다. 가사 없이 아는 줄 ${stat.known}/${stat.total}.`;
+    return;
+  }
+
+  const line = queue[0];
+  $("practice-progress").textContent = `${queue.length}줄 남음`;
+  $("reveal").textContent = step === 0 ? "소리 보기" : "뜻 보기";
+  $("card-hint").textContent = step === 0
+    ? "무슨 뜻이었는지 떠올려 보세요"
+    : step === 1 ? "소리를 보고 따라 불러 보세요" : "";
+
+  const sound = $("card-sound");
+  sound.textContent = "";
+  sound.hidden = step < 1;
+  if (step >= 1) sound.append(soundNodes(line.es));
+
+  $("card-es").hidden = step < 2;
+  $("card-es").textContent = line.es;
+  $("card-ko").hidden = step < 2 || !line.ko;
+  $("card-ko").textContent = line.ko;
+  if (step >= 2) glossNodes(line.es, $("card-gloss"));
+  else $("card-gloss").hidden = true;
+
+  if (step === 0 && !playLine(line) && !clipSrc) {
+    $("card-hint").textContent =
+      "이 기기에 스페인어 음성이 없습니다 — 음원을 넣으면 노래로 연습할 수 있어요";
+  }
+}
+
+function answer(ok) {
+  const line = queue.shift();
+  state = grade(state, songId, line.id, ok);
+  save();
+  // 틀린 줄은 이번 판 안에서 다시 돌아온다. 다음 날로 미루면 틀린 채로 굳는다.
+  if (!ok) queue.push(songById(state, songId).lines.find((entry) => entry.id === line.id) ?? line);
+  step = 0;
+  renderCard();
+}
+
+$("reveal").addEventListener("click", () => { step = Math.min(step + 1, 2); renderCard(); });
+$("again").addEventListener("click", () => answer(false));
+$("got").addEventListener("click", () => answer(true));
+$("play").addEventListener("click", () => { if (queue[0]) playLine(queue[0]); });
+$("start-practice").addEventListener("click", () => { location.hash = `#/p/${songId}`; });
+
+/* ── 노래 넣기·고치기 ────────────────────────────────────────────────────── */
+function openEditor(song) {
+  editing = song?.id ?? null;
+  $("editor-title").textContent = song ? "노래 고치기" : "노래 넣기";
+  $("title-input").value = song?.title ?? "";
+  $("artist-input").value = song?.artist ?? "";
+  $("lyrics-input").value = song ? song.lines.map((line) => line.es).join("\n") : "";
+  $("editor-error").textContent = "";
+  $("editor").showModal();
+}
+
+$("add-button").addEventListener("click", () => openEditor(null));
+$("editor-cancel").addEventListener("click", () => $("editor").close());
+$("editor-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const fields = {
+    title: $("title-input").value,
+    artist: $("artist-input").value,
+    lyrics: $("lyrics-input").value,
+  };
+  try {
+    state = editing ? updateSong(state, editing, fields) : addSong(state, fields);
+  } catch (error) {
+    $("editor-error").textContent = error.message;
+    return;
+  }
+  save();
+  $("editor").close();
+  if (editing) route();
+  else location.hash = `#/s/${state.songs[0].id}`;   // 새 곡은 바로 열어 준다
+});
+
+/* ── 줄의 뜻 ─────────────────────────────────────────────────────────────
+ * 아는 낱말은 이미 달려 있다. 손으로 적는 것은 낱말만으로 안 되는 줄뿐이다. */
+function openGloss(line) {
+  glossing = line.id;
+  $("gloss-es").textContent = line.es;
+  const sound = $("gloss-sound");
+  sound.textContent = "";
+  sound.append(soundNodes(line.es));
+  glossNodes(line.es, $("gloss-known"));
+  $("gloss-input").value = line.ko;
+  $("gloss-dialog").showModal();
+}
+
+$("gloss-cancel").addEventListener("click", () => $("gloss-dialog").close());
+$("gloss-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  state = setLineKo(state, songId, glossing, $("gloss-input").value);
+  save();
+  $("gloss-dialog").close();
+  renderSong();
+});
+
+/* ── 곡 메뉴 ─────────────────────────────────────────────────────────────── */
+$("song-menu").addEventListener("click", () => {
+  $("menu-clip-remove").hidden = !clip;
+  $("menu-remove").textContent = "이 노래 지우기";
+  $("menu").showModal();
+});
+$("menu-close").addEventListener("click", () => $("menu").close());
+$("menu-edit").addEventListener("click", () => { $("menu").close(); openEditor(current()); });
+$("menu-reset-marks").addEventListener("click", () => {
+  state = clearMarks(state, songId);
+  save();
+  $("menu").close();
+  renderSong();
+});
+$("menu-clip-remove").addEventListener("click", async () => {
+  await removeClip(songId);
+  setClip(null);
+  $("menu").close();
+  renderSong();
+});
+// 지우면 되돌릴 수 없다 — 확인 없이 지우지 않는다(alert 은 PWA 에서 쓰지 않는다).
+$("menu-remove").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  if (button.textContent !== "정말 지울까요?") { button.textContent = "정말 지울까요?"; return; }
+  await removeClip(songId);
+  state = removeSong(state, songId);
+  save();
+  $("menu").close();
+  location.hash = "#/";
+});
+
+/* ── 음원 ────────────────────────────────────────────────────────────────── */
+function setClip(next) {
+  if (clipSrc) URL.revokeObjectURL(clipSrc);
+  clip = next;
+  clipSrc = next ? clipUrl(next.data) : null;
+  // src="" 로 두면 브라우저가 이 페이지를 음원으로 받아 보려다 실패한다.
+  if (clipSrc) player.src = clipSrc;
+  else { player.removeAttribute("src"); player.load(); }
+  $("clip-name").textContent = next ? next.name : "";
+  $("clip-pick").textContent = next ? "🎵 음원 바꾸기" : "🎵 음원 넣기";
+  $("clip-sync").hidden = !next;
+}
+
+async function loadClipFor(id) {
+  const found = await loadClip(id);
+  // 그 사이 다른 곡으로 옮겨 갔으면 버린다.
+  if (songId === id) setClip(found);
+}
+
+$("clip-pick").addEventListener("click", () => $("clip-input").click());
+$("clip-input").addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  $("clip-error").textContent = "";
+  if (!file) return;
+  try {
+    setClip(await saveClip(songId, file));
+  } catch (error) {
+    $("clip-error").textContent = error.message
+      ?? `${Math.round(AUDIO_MAX_BYTES / 1024 / 1024)}MB 까지만 넣을 수 있어요`;
+  }
+});
+
+/* 줄 맞추기 — 들으면서 줄이 시작할 때마다 누른다. 파형을 그리거나 자동으로
+ * 맞추려 들지 않는다. 노래 한 곡은 3분이고, 그동안 스무 번 누르면 끝난다. */
+function renderSync() {
+  const song = current();
+  const line = song.lines[syncAt];
+  if (!line) { closeSync(); return; }
+  $("sync-line").textContent = line.es;
+  const sound = $("sync-sound");
+  sound.textContent = "";
+  sound.append(soundNodes(line.es));
+  $("sync-at").textContent = line.t === null
+    ? `${syncAt + 1} / ${song.lines.length}`
+    : `${syncAt + 1} / ${song.lines.length} · 찍어 둔 시각 ${line.t.toFixed(1)}초`;
+}
+
+function closeSync() {
+  player.pause();
+  $("sync").close();
+  renderSong();
+}
+
+$("clip-sync").addEventListener("click", () => {
+  syncAt = 0;
+  stopAt = null;
+  player.currentTime = 0;
+  player.play().catch(() => { /* 막히면 사용자가 다시 누른다 */ });
+  renderSync();
+  $("sync").showModal();
+});
+$("sync-now").addEventListener("click", () => {
+  const line = current().lines[syncAt];
+  state = setMark(state, songId, line.id, player.currentTime);
+  save();
+  syncAt += 1;
+  renderSync();
+});
+$("sync-skip").addEventListener("click", () => { syncAt += 1; renderSync(); });
+$("sync-back").addEventListener("click", () => { syncAt = Math.max(0, syncAt - 1); renderSync(); });
+$("sync-close").addEventListener("click", closeSync);
+
+/* ── 시작 ────────────────────────────────────────────────────────────────── */
+globalThis.speechSynthesis?.addEventListener?.("voiceschanged", () => {
+  if (!$("view-practice").hidden && step === 0) renderCard();
+});
+window.addEventListener("hashchange", route);
+window.addEventListener("pagehide", stopSound);
+route();
