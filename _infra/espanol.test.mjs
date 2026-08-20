@@ -1,6 +1,7 @@
 // life/espanol — 노래로 스페인어. 소리 엔진과 상태 규칙만 본다(화면은 e2e).
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import { beats, koLine, readLine, splitWords } from "../life/espanol/pronounce.js";
 import { glossLine, lookup } from "../life/espanol/words.js";
@@ -94,10 +95,43 @@ test("아는 낱말에 뜻이 붙고, 덩어리가 낱말보다 먼저다", () =
   assert.ok(found.some((entry) => entry.es === "ayer"));
 });
 
+test("덩어리가 낱말 안에 묻혀 있으면 찾은 것이 아니다", () => {
+  // muévete 안의 "vete" 를 잡으면 "가 버려" 라는 엉뚱한 뜻이 붙는다.
+  const found = glossLine("Muévete suavecito").map((entry) => entry.es);
+  assert.ok(!found.includes("vete"), `낱말 안에서 덩어리를 잡았다: ${found.join(" ")}`);
+  assert.ok(found.includes("muévete"));
+  // 낱말로 서 있으면 그대로 찾는다.
+  assert.ok(glossLine("Vete ya").some((entry) => entry.es === "vete"));
+});
+
 test("강세 표시를 빼먹고 적어도 찾는다", () => {
   assert.equal(lookup("corazon"), lookup("corazón"));
   assert.equal(lookup("Corazón,"), "심장·마음");
   assert.equal(lookup("zzzz"), null);
+});
+
+test("사전에 같은 낱말을 두 번 적지 않는다", () => {
+  // 객체 리터럴의 중복 키는 조용히 덮인다 — 뒤에 적은 뜻만 남고 앞엣것은 사라진다.
+  // 파싱된 뒤에는 알 수 없으므로 파일 원문을 읽어 센다.
+  const source = readFileSync(new URL("../life/espanol/words.js", import.meta.url), "utf8");
+  const section = (name, end) =>
+    source.slice(source.indexOf(`export const ${name} = {`), source.indexOf(end));
+  const twice = (keys) => keys.filter((key, index) => keys.indexOf(key) !== index);
+
+  assert.deepEqual(twice([...section("WORDS", "/* 낱말 하나로는").matchAll(/([a-záéíóúüñ]+): "/g)]
+    .map(([, key]) => key)), []);
+  assert.deepEqual(twice([...section("PHRASES", "const STRIP =").matchAll(/"([a-záéíóúüñ ]+)":/g)]
+    .map(([, key]) => key)), []);
+});
+
+test("레게톤·라틴팝 어휘도 사전에 있다", () => {
+  // 이 갈래는 축소사(-ito)와 명령형, -ando 꼴이 유난히 많다.
+  for (const word of ["despacito", "suavecito", "pasito", "oído", "cintura",
+    "muévete", "acércate", "bailando", "sintiendo", "peligroso"]) {
+    assert.ok(lookup(word), `${word} 이 사전에 없다`);
+  }
+  // 낱말과 뜻만 싣는다 — 특정 곡의 구절은 리포에 들어오지 않는다.
+  assert.equal(lookup("despacito"), "천천히·살살");
 });
 
 test("표시 하나로 뜻이 갈리는 짝은 섞이지 않는다", () => {

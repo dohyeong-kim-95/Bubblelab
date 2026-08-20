@@ -100,6 +100,41 @@ export const WORDS = {
   bien: "잘·좋아", mal: "나쁘게", mejor: "더 나은", peor: "더 나쁜", igual: "마찬가지",
   así: "이렇게", solamente: "오직", casi: "거의", quizás: "아마", acaso: "혹시",
 
+  /* 레게톤·라틴팝에 특히 잦은 말. 여름·바다·춤·몸짓의 어휘가 몰려 있고,
+     축소사(-ito/-ita)와 명령형이 유난히 많다 — 교재에는 잘 안 나오지만
+     이 갈래의 노래에서는 뼈대다. */
+  despacito: "천천히·살살", despacio: "천천히", suave: "부드러운", suavecito: "아주 살살",
+  paso: "걸음", pasito: "작은 걸음", poquito: "아주 조금", besito: "뽀뽀",
+  oído: "귀·귓속", oreja: "귀", cuello: "목", hombro: "어깨", cintura: "허리",
+  sonrisa: "미소", mirada: "눈빛", aliento: "숨결", latido: "심장 뛰는 소리",
+  sudor: "땀", calor: "더위", ropa: "옷", perfume: "향수",
+  laberinto: "미로", pared: "벽", lugar: "장소", isla: "섬", arena: "모래", ola: "파도",
+  luz: "빛", sombra: "그림자", oscuridad: "어둠", letra: "가사·글자", coro: "후렴",
+  tambor: "북", guitarra: "기타",
+
+  /* 몸을 움직이는 말 — 명령형으로 튀어나온다 */
+  muévete: "움직여", acércate: "가까이 와", sígueme: "따라와", llévame: "데려가줘",
+  pégate: "붙어", sube: "올라와", baja: "내려와", grita: "소리쳐", respira: "숨 쉬어",
+  moverse: "움직이다", acercar: "가까이 하다", gritar: "소리치다", respirar: "숨 쉬다",
+  abrazar: "안다", abrazo: "포옹", despertar: "깨우다", dormir: "자다",
+
+  /* 계속 나오는 -ando/-iendo (…하면서) */
+  bailando: "춤추면서", cantando: "노래하면서", mirando: "바라보면서",
+  pensando: "생각하면서", esperando: "기다리면서", llorando: "울면서",
+  buscando: "찾으면서", soñando: "꿈꾸면서", sintiendo: "느끼면서",
+
+  /* 나머지 자주 쓰는 동사·상태 */
+  gustar: "마음에 들다", gusta: "마음에 든다", encanta: "아주 좋아한다",
+  poder: "할 수 있다", puedo: "나는 할 수 있다", puedes: "너는 할 수 있다", puede: "할 수 있다",
+  hacer: "하다", hago: "나는 한다", hace: "한다", haz: "해라",
+  poner: "놓다", pon: "놔", llevar: "데려가다·입다", ganar: "이기다·얻다",
+  empezar: "시작하다", empieza: "시작한다", seguir: "계속하다", sigue: "계속해",
+  terminar: "끝내다", acabar: "끝나다", probar: "맛보다·해 보다", pasar: "지나가다·일어나다",
+  peligro: "위험", peligroso: "위험한", prohibido: "금지된", secreto: "비밀",
+  tranquilo: "괜찮아·느긋한", favorito: "가장 좋아하는", mismo: "같은",
+  aquí: "여기", ahí: "거기", allá: "저기", arriba: "위로", abajo: "아래로",
+  cerca: "가까이", lejos: "멀리", toda: "전부(여성)",
+
   /* 노래에서 자주 튀는 말 */
   ay: "아이고", oye: "이봐", dale: "자, 해봐", claro: "물론", vale: "좋아",
   venga: "자, 어서", bueno: "음·좋은", ojalá: "제발 ~라면", gracias: "고마워",
@@ -124,6 +159,8 @@ export const PHRASES = {
   "qué será": "어떻게 될까", "vámonos": "가자", "no me importa": "상관없어",
   "te necesito": "네가 필요해", "vuelve a mí": "내게 돌아와", "bésame": "키스해줘",
   "abrázame": "안아줘", "quédate": "있어줘", "mírame": "날 봐",
+  "me gusta": "나는 좋아해", "me encanta": "너무 좋아해", "ven aquí": "이리 와",
+  "más despacio": "더 천천히",
 };
 
 const STRIP = { á: "a", é: "e", í: "i", ó: "o", ú: "u", ü: "u", ñ: "n" };
@@ -141,11 +178,28 @@ export function lookup(word) {
   return null;
 }
 
+const LETTER = /[a-záéíóúüñ]/;
+
+/**
+ * 덩어리가 낱말 안에 묻혀 있는 것은 찾은 것이 아니다 — muévete 안의 "vete" 를
+ * 잡으면 "가 버려" 라는 엉뚱한 뜻이 붙는다. 앞뒤가 글자면 넘어간다.
+ */
+function hasPhrase(text, phrase) {
+  for (let from = 0; ; from += 1) {
+    const at = text.indexOf(phrase, from);
+    if (at < 0) return false;
+    const before = text[at - 1];
+    const after = text[at + phrase.length];
+    if (!LETTER.test(before ?? " ") && !LETTER.test(after ?? " ")) return true;
+    from = at;
+  }
+}
+
 /** 한 줄에서 아는 덩어리와 낱말을 뽑는다. 덩어리가 먼저다(긴 것부터). */
 export function glossLine(line) {
   const text = String(line ?? "").toLowerCase();
   const phrases = Object.keys(PHRASES)
-    .filter((phrase) => text.includes(phrase))
+    .filter((phrase) => hasPhrase(text, phrase))
     .sort((a, b) => b.length - a.length)
     .map((phrase) => ({ es: phrase, ko: PHRASES[phrase] }));
 
