@@ -174,12 +174,27 @@ export const setMark = (state, songId, lineId, seconds) =>
 export const clearMarks = (state, songId) =>
   mapSong(state, songId, (song) => ({ ...song, lines: song.lines.map((line) => ({ ...line, t: null })) }));
 
-/** 반복 재생할 구간. 끝은 다음으로 찍힌 줄이고, 없으면 곡 끝까지다. */
-export function lineSpan(song, lineId) {
+/**
+ * 찍어 둔 줄을 시각 순서로 늘어놓는다. 문장 단위로 오가는 것(구간 반복·재생 모드)은
+ * 전부 이 목록 하나를 본다 — 끝은 다음으로 찍힌 줄이고, 마지막은 곡 끝까지다.
+ */
+export function timeline(song) {
   const marked = song.lines.filter((line) => line.t !== null).sort((a, b) => a.t - b.t);
-  const index = marked.findIndex((line) => line.id === lineId);
-  if (index < 0) return null;
-  return { start: marked[index].t, end: marked[index + 1]?.t ?? null };
+  return marked.map((line, index) => ({ line, start: line.t, end: marked[index + 1]?.t ?? null }));
+}
+
+/** 반복 재생할 구간. */
+export function lineSpan(song, lineId) {
+  const found = timeline(song).find((entry) => entry.line.id === lineId);
+  return found ? { start: found.start, end: found.end } : null;
+}
+
+/** 지금 흐르는 시각이 몇 번째 문장인가. 첫 문장이 시작하기 전이면 -1. */
+export function lineAt(song, seconds) {
+  const marks = timeline(song);
+  let found = -1;
+  for (const [index, entry] of marks.entries()) if (seconds >= entry.start) found = index;
+  return found;
 }
 
 /* ── 복습 ──────────────────────────────────────────────────────────────── */

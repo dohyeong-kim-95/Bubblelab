@@ -34,6 +34,7 @@
   <main id="view-song" class="page" hidden>
     <p id="song-progress" class="summary"></p>
     <button id="start-practice" class="wide primary" type="button">🎧 연습 시작</button>
+    <button id="start-player" class="wide quiet-wide" type="button" hidden>▶︎ 재생 — 문장을 오가며 듣기</button>
     <div class="clip-bar">
       <button id="clip-pick" type="button">🎵 음원 넣기</button>
       <button id="clip-sync" type="button" hidden>⏱ 줄 맞추기</button>
@@ -66,6 +67,31 @@
       <button id="got" class="primary" type="button" hidden>알았다</button>
     </div>
     <p id="practice-done" class="empty" hidden></p>
+  </main>
+
+  <!-- ④ 재생 — 원곡을 틀고 문장을 오가며 듣는다 (lyric video) -->
+  <main id="view-player" class="player" hidden>
+    <button id="lv-close" class="lv-close" type="button" aria-label="닫기">✕</button>
+    <div class="lv">
+      <p id="lv-prev" class="lv-side"></p>
+      <p id="lv-line" class="lv-line"></p>
+      <p id="lv-sound" class="lv-sound"></p>
+      <p id="lv-ko" class="lv-ko"></p>
+      <p id="lv-next" class="lv-side"></p>
+    </div>
+    <div class="lv-bar">
+      <div class="scrub lv-scrub">
+        <label class="sr-only" for="lv-seek">재생 위치</label>
+        <input id="lv-seek" type="range" min="0" max="0" step="0.1" value="0">
+        <span id="lv-time" class="fine-print">0:00 / 0:00</span>
+      </div>
+      <div class="lv-buttons">
+        <button id="lv-back" type="button" aria-label="앞 문장">⏮</button>
+        <button id="lv-play" type="button" aria-label="재생·멈춤">⏸</button>
+        <button id="lv-forward" type="button" aria-label="다음 문장">⏭</button>
+        <button id="lv-repeat" type="button" aria-pressed="false" aria-label="이 문장 반복">🔁</button>
+      </div>
+    </div>
   </main>
 
   <audio id="player" preload="metadata"></audio>

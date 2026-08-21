@@ -1,7 +1,7 @@
 import {
   INTERVALS, REACTION_LEAD, STORAGE_KEY,
-  addSong, clearMarks, deckLines, dueLines, emptyState, grade, kstDate, lineSpan,
-  parseState, progressOf, removeSong, setLineKo, setMark, songById, updateSong,
+  addSong, clearMarks, deckLines, dueLines, emptyState, grade, kstDate, lineAt, lineSpan,
+  parseState, progressOf, removeSong, setLineKo, setMark, songById, timeline, updateSong,
 } from "./store.js";
 import { readLine } from "./pronounce.js";
 import { glossLine } from "./words.js";
@@ -111,22 +111,26 @@ function glossNodes(text, host) {
  * 주소의 해시가 곧 화면이다. 뒤로 가기가 그대로 동작해야 PWA 에서 헤매지 않는다. */
 function route() {
   const hash = location.hash.replace(/^#/, "");
-  const [, kind, id] = hash.match(/^\/([sp])\/(.+)$/) ?? [];
+  const [, kind, id] = hash.match(/^\/([spv])\/(.+)$/) ?? [];
   const song = id ? songById(state, id) : null;
   songId = song?.id ?? null;
   stopSound();
 
-  const view = song ? (kind === "p" ? "practice" : "song") : "list";
+  const view = song ? ({ p: "practice", v: "player" }[kind] ?? "song") : "list";
   $("view-list").hidden = view !== "list";
   $("view-song").hidden = view !== "song";
   $("view-practice").hidden = view !== "practice";
+  $("view-player").hidden = view !== "player";
   $("add-button").hidden = view !== "list";
   $("song-menu").hidden = view !== "song";
+  // 재생은 가사만 남기고 다 치운다 — lyric video 를 보는 화면이다.
+  document.querySelector(".bar").hidden = view === "player";
   $("back").setAttribute("href", view === "list" ? "../" : view === "song" ? "#/" : `#/s/${songId}`);
 
   if (view === "list") { renderList(); return; }
   loadClipFor(song.id);
   if (view === "song") { renderSong(); return; }
+  if (view === "player") { startPlayer(); return; }
   startPractice();
 }
 
@@ -168,6 +172,8 @@ function renderSong() {
   $("song-progress").textContent =
     `가사 없이 아는 줄 ${stat.known}/${stat.total} · 오늘 연습할 줄 ${stat.due}줄`;
   $("start-practice").textContent = stat.due ? `🎧 연습 시작 — ${stat.due}줄` : "🎧 다시 훑어보기";
+  // 원곡을 틀려면 음원과 찍어 둔 줄이 둘 다 있어야 한다 — 없으면 오갈 자리가 없다.
+  $("start-player").hidden = !clip || !timeline(song).length;
 
   const host = $("lines");
   host.textContent = "";
@@ -272,6 +278,7 @@ $("again").addEventListener("click", () => answer(false));
 $("got").addEventListener("click", () => answer(true));
 $("play").addEventListener("click", () => { if (queue[0]) playLine(queue[0]); });
 $("start-practice").addEventListener("click", () => { location.hash = `#/p/${songId}`; });
+$("start-player").addEventListener("click", () => { location.hash = `#/v/${songId}`; });
 
 /* ── 노래 넣기·고치기 ────────────────────────────────────────────────────── */
 function openEditor(song) {
@@ -379,9 +386,15 @@ function setClip(next) {
 }
 
 async function loadClipFor(id) {
+  // 이미 물려 있으면 그대로 둔다. 다시 걸면 src 가 새 blob 이 되어 **재생 위치가
+  // 0 으로 돌아간다** — 곡 ⇄ 연습 ⇄ 재생 을 오갈 때마다 처음으로 튀던 원인이다.
+  if (clip?.id === id) return;
   const found = await loadClip(id);
   // 그 사이 다른 곡으로 옮겨 갔으면 버린다.
-  if (songId === id) setClip(found);
+  if (songId !== id) return;
+  setClip(found);
+  // 음원 유무에 따라 재생 버튼이 달라진다 — 받아 온 뒤 한 번 더 그린다.
+  if (!$("view-song").hidden) renderSong();
 }
 
 $("clip-pick").addEventListener("click", () => $("clip-input").click());
@@ -499,6 +512,114 @@ $("sync-back").addEventListener("click", () => {
   renderSync();
 });
 $("sync-close").addEventListener("click", closeSync);
+
+/* ── ④ 재생 (lyric video) ────────────────────────────────────────────────
+ * 원곡을 그대로 틀고 문장 단위로 오간다. 줄 맞추기에서 찍어 둔 시각이 그대로
+ * 문장의 경계가 된다(store.js 의 timeline) — 여기서 새로 재지 않는다.
+ *
+ * 진행은 timeupdate(초당 네 번)가 아니라 rAF 로 그린다. 글자가 네 칸씩 끊겨
+ * 차오르면 노래를 따라가는 느낌이 사라진다. */
+let frame = null;
+let lyricAt = -2;        // 지금 그려 둔 문장 번호 (-1 은 첫 문장 전, -2 는 아직 안 그림)
+let repeatOne = false;
+
+function stopFrames() {
+  if (frame) cancelAnimationFrame(frame);
+  frame = null;
+}
+
+function drawLyric(force) {
+  const song = current();
+  if (!song) return;
+  const marks = timeline(song);
+  const index = lineAt(song, player.currentTime);
+  const now = marks[index] ?? null;
+
+  if (force || index !== lyricAt) {
+    lyricAt = index;
+    $("lv-prev").textContent = marks[index - 1]?.line.es ?? "";
+    $("lv-next").textContent = marks[index + 1]?.line.es ?? "";
+    const line = now?.line;
+    $("lv-line").textContent = line?.es ?? "";
+    const sound = $("lv-sound");
+    sound.textContent = "";
+    if (line) sound.append(soundNodes(line.es));
+    $("lv-ko").textContent = line?.ko ?? "";
+    // 새 문장은 아래에서 올라오며 뜬다. 클래스를 다시 붙이려면 리플로우가 한 번 필요하다.
+    $("lv-line").classList.remove("lv-in");
+    void $("lv-line").offsetWidth;
+    $("lv-line").classList.add("lv-in");
+  }
+
+  const duration = Number.isFinite(player.duration) ? player.duration : 0;
+  // 이 문장 안에서 지금 어디쯤인가 — 글자가 그만큼 차오른다.
+  const end = now ? now.end ?? duration : 0;
+  const done = now && end > now.start ? (player.currentTime - now.start) / (end - now.start) : 0;
+  $("lv-line").style.setProperty("--fill", `${Math.min(Math.max(done, 0), 1) * 100}%`);
+
+  if (repeatOne && now?.end !== null && now && player.currentTime >= now.end) {
+    player.currentTime = now.start;
+  }
+
+  const seek = $("lv-seek");
+  seek.max = duration || 0;
+  if (!scrubbing) seek.value = player.currentTime || 0;
+  $("lv-time").textContent = `${clock(player.currentTime)} / ${clock(duration)}`;
+  $("lv-play").textContent = player.paused ? "▶︎" : "⏸";
+}
+
+function tick() {
+  if ($("view-player").hidden) { stopFrames(); return; }
+  drawLyric(false);
+  frame = requestAnimationFrame(tick);
+}
+
+function startPlayer() {
+  const marks = timeline(current());
+  if (!marks.length) { location.hash = `#/s/${songId}`; return; }
+  stopAt = null;                       // 구간 반복(연습)이 걸려 있으면 풀어 준다
+  lyricAt = -2;
+  // 도입부를 멀뚱히 보고 있게 하지 않는다 — 첫 문장 앞이면 거기서부터.
+  if (!(player.currentTime > marks[0].start)) player.currentTime = marks[0].start;
+  player.play().catch(() => { /* 막히면 ▶ 로 시작한다 */ });
+  drawLyric(true);
+  if (!frame) frame = requestAnimationFrame(tick);
+}
+
+/** 문장 단위로 오간다. 한참 들은 뒤의 ⏮ 은 지금 문장 처음으로 (음악 앱과 같은 관례). */
+function jump(delta) {
+  const song = current();
+  const marks = timeline(song);
+  const index = lineAt(song, player.currentTime);
+  const started = marks[index]?.start ?? 0;
+  const target = delta < 0 && index >= 0 && player.currentTime - started > 1.5 ? index : index + delta;
+  // 마지막 문장에서 ⏭ 은 할 일이 없다 — 그 문장을 다시 시작해 버리면 갇힌 것처럼 보인다.
+  if (target >= marks.length) return;
+  const entry = marks[Math.max(target, 0)];
+  if (!entry) return;
+  player.currentTime = entry.start;
+  drawLyric(true);
+}
+
+$("lv-close").addEventListener("click", () => { location.hash = `#/s/${songId}`; });
+$("lv-back").addEventListener("click", () => jump(-1));
+$("lv-forward").addEventListener("click", () => jump(1));
+$("lv-play").addEventListener("click", () => {
+  if (player.paused) player.play().catch(() => { /* 막히면 다시 누른다 */ });
+  else player.pause();
+  drawLyric(false);
+});
+$("lv-seek").addEventListener("input", (event) => {
+  scrubbing = true;
+  player.currentTime = Number(event.target.value);
+  drawLyric(false);
+});
+$("lv-seek").addEventListener("change", () => { scrubbing = false; });
+$("lv-repeat").addEventListener("click", () => {
+  repeatOne = !repeatOne;
+  $("lv-repeat").setAttribute("aria-pressed", String(repeatOne));
+  $("lv-repeat").classList.toggle("on", repeatOne);
+});
 
 /* ── 시작 ────────────────────────────────────────────────────────────────── */
 globalThis.speechSynthesis?.addEventListener?.("voiceschanged", () => {

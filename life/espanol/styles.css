@@ -95,3 +95,37 @@ dialog form { max-height: 82dvh; overflow-y: auto; }
 #sync-play { height: 40px; font-size: 17px; }
 #sync-seek { width: 100%; height: 36px; accent-color: var(--ink); background: none; }
 #sync-time { white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* ── 재생 (lyric video) ───────────────────────────────────────────────────
+ * 가사만 남기고 다 치운 화면. 원곡이 흐르고 문장이 저절로 넘어간다. */
+.player { position: fixed; inset: 0; z-index: 5; display: flex; flex-direction: column;
+  background: var(--bg);
+  padding: env(safe-area-inset-top) 18px env(safe-area-inset-bottom); }
+.lv-close { position: absolute; top: calc(env(safe-area-inset-top) + 4px); right: 6px;
+  width: 44px; height: 44px; font-size: 17px; color: var(--muted); }
+.lv { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center;
+  gap: 10px; text-align: center; overflow: hidden; }
+/* 앞뒤 문장은 있다는 것만 보이면 된다 — 지금 문장에서 눈을 뺏지 않는다. */
+.lv-side { margin: 0; max-width: 100%; color: #4a4a46; font-size: 15px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lv-line { margin: 0; font-size: 26px; font-weight: 700; line-height: 1.35;
+  letter-spacing: -.02em; color: var(--ink); }
+/* 노래가 흐른 만큼 글자가 차오른다. 문장 하나에 시각이 하나뿐이라 그 안은 고르게
+ * 나눈 값이다 — 정확한 음절 타이밍이 아니라 "지금 이 줄의 어디쯤"이다. */
+@supports (-webkit-background-clip: text) {
+  .lv-line { background-image:
+      linear-gradient(90deg, var(--ink) var(--fill, 0%), #55554f var(--fill, 0%));
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+}
+.lv-in { animation: lv-rise 260ms ease-out; }
+@keyframes lv-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.lv-sound { margin: 0; font-size: 15px; }
+.lv-ko { margin: 0; color: var(--muted); font-size: 14px; }
+.lv-bar { display: grid; gap: 4px; padding-bottom: 8px; }
+.lv-scrub { grid-template-columns: minmax(0, 1fr) auto; margin: 0 2px; }
+.lv-buttons { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.lv-buttons button { width: 56px; height: 52px; border-radius: 10px; font-size: 19px;
+  color: var(--muted); }
+#lv-play { font-size: 24px; color: var(--ink); }
+#lv-repeat.on { background: var(--surface); color: var(--ink); }
+@media (prefers-reduced-motion: reduce) { .lv-in { animation: none; } }

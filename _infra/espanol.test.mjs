@@ -7,8 +7,8 @@ import { beats, koLine, readLine, splitWords } from "../life/espanol/pronounce.j
 import { glossLine, lookup } from "../life/espanol/words.js";
 import {
   INTERVALS, KNOWN_BOX, REACTION_LEAD, SONGS_MAX,
-  addSong, clearMarks, deckLines, dueLines, emptyState, grade, lineSpan, linesFrom,
-  parseLyrics, parseState, progressOf, removeSong, setLineKo, setMark, updateSong,
+  addSong, clearMarks, deckLines, dueLines, emptyState, grade, lineAt, lineSpan, linesFrom,
+  parseLyrics, parseState, progressOf, removeSong, setLineKo, setMark, timeline, updateSong,
 } from "../life/espanol/store.js";
 
 /* ── 소리 ────────────────────────────────────────────────────────────────
@@ -252,6 +252,30 @@ test("찍은 시각은 0 아래로 내려가지 않는다", () => {
   assert.equal(state.songs[0].lines[0].t, 0);
   assert.equal(setMark(state, id, lines[0].id, null).songs[0].lines[0].t, null);
   assert.ok(REACTION_LEAD > 0 && REACTION_LEAD < 1);
+});
+
+test("문장 타임라인 — 찍은 순서가 아니라 시각 순서다", () => {
+  let state = seed("Uno\nDos\nTres");
+  const { id, lines } = state.songs[0];
+  state = setMark(state, id, lines[2].id, 20);      // 거꾸로 찍어도
+  state = setMark(state, id, lines[0].id, 5);
+  const song = state.songs[0];
+  assert.deepEqual(timeline(song).map((entry) => [entry.line.es, entry.start, entry.end]),
+    [["Uno", 5, 20], ["Tres", 20, null]]);          // 끝은 다음 문장이 시작하는 자리
+});
+
+test("지금 흐르는 시각이 몇 번째 문장인가", () => {
+  let state = seed("Uno\nDos");
+  const { id, lines } = state.songs[0];
+  state = setMark(state, id, lines[0].id, 5);
+  state = setMark(state, id, lines[1].id, 20);
+  const song = state.songs[0];
+  assert.equal(lineAt(song, 0), -1);                // 첫 문장이 시작하기 전
+  assert.equal(lineAt(song, 5), 0);                 // 시작하는 순간부터 그 문장이다
+  assert.equal(lineAt(song, 19.9), 0);
+  assert.equal(lineAt(song, 20), 1);
+  assert.equal(lineAt(song, 999), 1);               // 마지막 문장은 곡 끝까지
+  assert.equal(lineAt(seed("Uno").songs[0], 3), -1);  // 아무것도 안 찍었으면 없다
 });
 
 test("제목만 고쳐도 가사와 진도는 그대로다", () => {

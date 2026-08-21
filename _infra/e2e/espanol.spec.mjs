@@ -312,3 +312,74 @@ test("도구는 네트워크에서 먼저 받고, 없으면 캐시로 연다", a
   await expect(page.locator("#add-button")).toBeVisible();
   await context.setOffline(false);
 });
+
+test("재생 — 원곡을 틀고 문장을 오간다 (lyric video)", async ({ page }) => {
+  const failures = [];
+  page.on("pageerror", (error) => failures.push(error.message));
+
+  await page.goto("/life/espanol/");
+  await page.locator("#add-button").click();
+  await page.locator("#title-input").fill("재생할 곡");
+  await page.locator("#lyrics-input").fill(
+    "El amor no me deja dormir\nTe quiero más que ayer\nNo me olvides, corazón");
+  await page.getByRole("button", { name: "저장", exact: true }).click();
+
+  // 음원만 있고 찍어 둔 줄이 없으면 오갈 자리가 없다 — 그때는 재생이 뜨지 않는다.
+  await expect(page.locator("#start-player")).toBeHidden();
+  await page.locator("#clip-input").setInputFiles({
+    name: "song.wav", mimeType: "audio/wav", buffer: silentWav(12),
+  });
+  await expect(page.locator("#clip-name")).toContainText("song.wav");
+  await expect(page.locator("#start-player")).toBeHidden();
+
+  // 세 줄에 시각을 찍는다. 멈춰 놓고 찍어야 값이 정확하다(반응 속도 0.4초를 뺀다).
+  await page.locator("#clip-sync").click();
+  await page.locator("#sync-play").click();
+  for (const at of ["2", "5", "8"]) {
+    await page.locator("#sync-seek").fill(at);
+    await page.locator("#sync-now").click();
+  }
+  await expect(page.locator(".line.marked")).toHaveCount(3);
+  await expect(page.locator("#start-player")).toBeVisible();
+
+  const at = () => page.evaluate(() => document.getElementById("player").currentTime);
+  await page.locator("#start-player").click();
+  // 가사만 남기고 다 치운다 — 상단 바까지 사라진다.
+  await expect(page.locator(".bar")).toBeHidden();
+  await expect(page.locator("#view-player")).toBeVisible();
+
+  await page.locator("#lv-play").click();            // 재는 동안에는 멈춰 둔다
+  await expect(page.locator("#lv-play")).toHaveText("▶︎");
+  await page.locator("#lv-seek").fill("0");
+  // 첫 문장이 시작하기 전에는 현재 문장이 없고, 다음 문장만 아래에 보인다.
+  await expect(page.locator("#lv-line")).toHaveText("");
+  await expect(page.locator("#lv-next")).toHaveText("El amor no me deja dormir");
+
+  await page.locator("#lv-forward").click();
+  await expect(page.locator("#lv-line")).toHaveText("El amor no me deja dormir");
+  await expect.poll(at).toBe(1.6);                   // 찍은 시각 = 2초 − 반응 속도 0.4초
+  await expect(page.locator("#lv-sound")).toContainText("라모르");
+
+  await page.locator("#lv-forward").click();
+  await expect(page.locator("#lv-line")).toHaveText("Te quiero más que ayer");
+  await expect(page.locator("#lv-prev")).toHaveText("El amor no me deja dormir");
+  await page.locator("#lv-back").click();
+  await expect(page.locator("#lv-line")).toHaveText("El amor no me deja dormir");
+
+  // 문장 안에서 흐른 만큼 글자가 차오른다 (7.6초에 시작한 마지막 문장, 곡은 12초)
+  await page.locator("#lv-seek").fill("9");
+  await expect(page.locator("#lv-line")).toHaveText("No me olvides, corazón");
+  const fill = await page.evaluate(() =>
+    document.getElementById("lv-line").style.getPropertyValue("--fill"));
+  expect(Number.parseFloat(fill)).toBeGreaterThan(20);
+  expect(Number.parseFloat(fill)).toBeLessThan(45);
+
+  await page.locator("#lv-repeat").click();
+  await expect(page.locator("#lv-repeat")).toHaveAttribute("aria-pressed", "true");
+
+  await page.locator("#lv-close").click();
+  await expect(page.locator(".bar")).toBeVisible();
+  await expect(page.locator("#song-progress")).toBeVisible();
+
+  expect(failures).toEqual([]);
+});
