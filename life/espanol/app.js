@@ -197,8 +197,13 @@ function renderSong() {
 }
 
 /* ── ③ 연습 ─────────────────────────────────────────────────────────────
- * 한 줄이 카드 하나다. 소리 → 한글 소리 → 스페인어·뜻 순으로만 열린다. 가사를
- * 먼저 보여 주면 그때부터는 읽기 연습이지 듣기 연습이 아니다. */
+ * 한 줄이 카드 하나고, 세 단계로만 열린다.
+ *
+ *   ① 소리만          듣기 — 가사를 먼저 보여 주면 읽기 연습이 되어 버린다
+ *   ② 원어            읽고 따라 부르기. 여기까지 되는 것이 목표 상태다
+ *   ③ 음차 + 뜻 + 사전  ②에서 막혔을 때의 도움
+ *
+ * 음차를 ②에 같이 두면 눈이 그쪽으로 가서 원어를 영영 읽지 않게 된다. */
 function startPractice() {
   const song = current();
   if (!song) { location.hash = "#/"; return; }
@@ -228,18 +233,19 @@ function renderCard() {
 
   const line = queue[0];
   $("practice-progress").textContent = `${queue.length}줄 남음`;
-  $("reveal").textContent = step === 0 ? "소리 보기" : "뜻 보기";
+  $("reveal").textContent = step === 0 ? "원어 보기" : "음차·뜻 보기";
   $("card-hint").textContent = step === 0
     ? "무슨 뜻이었는지 떠올려 보세요"
-    : step === 1 ? "소리를 보고 따라 불러 보세요" : "";
+    : step === 1 ? "원어를 보고 따라 불러 보세요" : "";
+
+  // 원어가 먼저, 음차는 마지막이다 — 음차를 같이 열어 주면 원어를 읽으려 하지 않는다.
+  $("card-es").hidden = step < 1;
+  $("card-es").textContent = line.es;
 
   const sound = $("card-sound");
   sound.textContent = "";
-  sound.hidden = step < 1;
-  if (step >= 1) sound.append(soundNodes(line.es));
-
-  $("card-es").hidden = step < 2;
-  $("card-es").textContent = line.es;
+  sound.hidden = step < 2;
+  if (step >= 2) sound.append(soundNodes(line.es));
   $("card-ko").hidden = step < 2 || !line.ko;
   $("card-ko").textContent = line.ko;
   if (step >= 2) glossNodes(line.es, $("card-gloss"));

@@ -41,14 +41,15 @@ test("노래 스페인어 — 가사를 넣고, 소리로 익히고, 진도가 �
   await page.locator("#start-practice").click();
   await expect(page.locator("#practice-progress")).toHaveText("2줄 남음");
 
-  // 가사는 마지막에야 열린다. 먼저 보여 주면 듣기 연습이 아니라 읽기 연습이 된다.
+  // 처음에는 소리뿐이다 — 가사를 먼저 보여 주면 듣기 연습이 아니라 읽기 연습이 된다.
+  await expect(page.locator("#card-es")).toBeHidden();
   await expect(page.locator("#card-sound")).toBeHidden();
-  await expect(page.locator("#card-es")).toBeHidden();
-  await page.locator("#reveal").click();
-  await expect(page.locator("#card-sound")).toBeVisible();
-  await expect(page.locator("#card-es")).toBeHidden();
+  // 원어가 먼저 열리고, 음차는 마지막이다(같이 열면 원어를 읽으려 하지 않는다).
   await page.locator("#reveal").click();
   await expect(page.locator("#card-es")).toBeVisible();
+  await expect(page.locator("#card-sound")).toBeHidden();
+  await page.locator("#reveal").click();
+  await expect(page.locator("#card-sound")).toBeVisible();
   await expect(page.locator("#card-gloss")).toBeVisible();
 
   // 모르겠으면 이번 판 안에서 다시 돌아온다.
