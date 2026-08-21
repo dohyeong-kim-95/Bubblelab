@@ -171,7 +171,8 @@ function renderSong() {
   const stat = progressOf(song);
   $("song-progress").textContent =
     `가사 없이 아는 줄 ${stat.known}/${stat.total} · 오늘 연습할 줄 ${stat.due}줄`;
-  $("start-practice").textContent = stat.due ? `🎧 연습 시작 — ${stat.due}줄` : "🎧 다시 훑어보기";
+  // 둘이 나란히 서므로 이름이 짧아야 한다 — 반 폭에서 줄바꿈이 나면 지저분하다.
+  $("start-practice").textContent = stat.due ? `🎧 연습 ${stat.due}줄` : "🎧 훑어보기";
   // 원곡을 틀려면 음원과 찍어 둔 줄이 둘 다 있어야 한다 — 없으면 오갈 자리가 없다.
   $("start-player").hidden = !clip || !timeline(song).length;
 

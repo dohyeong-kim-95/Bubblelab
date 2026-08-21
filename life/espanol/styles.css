@@ -9,8 +9,12 @@ body { overflow: auto; }
 .page { flex: 1; padding: 4px 18px 40px; }
 .summary { margin: 6px 0 12px; color: var(--muted); font-size: 13px; }
 .fine-print { color: var(--muted); font-size: 12px; }
-.wide { display: block; width: 100%; min-height: 50px; border-radius: 10px;
-  background: var(--ink); color: var(--bg); font-weight: 700; }
+/* 연습과 재생은 나란히 둔다. 하나만 있을 때(음원을 아직 안 넣었을 때)는 그것이
+ * 폭을 다 쓴다 — flex 하나면 저절로 그렇게 된다. */
+.starts { display: flex; gap: 8px; }
+.start { flex: 1; min-height: 50px; border-radius: 10px; font-weight: 700; }
+.start.primary { background: var(--ink); color: var(--bg); }
+#start-player { border: 1px solid var(--line); color: var(--ink); }
 
 /* ── 곡 목록 ─────────────────────────────────────────────────────────── */
 .songs { list-style: none; margin: 0; padding: 0; }

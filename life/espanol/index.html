@@ -33,8 +33,10 @@
   <!-- ② 곡 한 편 -->
   <main id="view-song" class="page" hidden>
     <p id="song-progress" class="summary"></p>
-    <button id="start-practice" class="wide primary" type="button">🎧 연습 시작</button>
-    <button id="start-player" class="wide quiet-wide" type="button" hidden>▶︎ 재생 — 문장을 오가며 듣기</button>
+    <div class="starts">
+      <button id="start-practice" class="start primary" type="button">🎧 연습</button>
+      <button id="start-player" class="start" type="button" hidden>▶︎ 재생</button>
+    </div>
     <div class="clip-bar">
       <button id="clip-pick" type="button">🎵 음원 넣기</button>
       <button id="clip-sync" type="button" hidden>⏱ 줄 맞추기</button>
