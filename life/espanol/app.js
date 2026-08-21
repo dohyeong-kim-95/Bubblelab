@@ -522,6 +522,61 @@ $("sync-close").addEventListener("click", closeSync);
 let frame = null;
 let lyricAt = -2;        // 지금 그려 둔 문장 번호 (-1 은 첫 문장 전, -2 는 아직 안 그림)
 let repeatOne = false;
+let lyricRows = [];      // 화면에서 실제로 접힌 줄들 (한 줄씩 차례로 차오른다)
+
+/**
+ * 한 문장이 화면에서 두 줄로 접히면 그라디언트가 두 줄에 똑같이 걸린다 —
+ * 아래 줄이 위 줄과 나란히 차올라 엉뚱하게 보인다. 브라우저가 **어디서 접었는지
+ * 재서** 실제 줄로 다시 그리고, 줄마다 따로 채운다.
+ *
+ * 무게는 글자 수가 아니라 줄의 폭이다. 짧은 마지막 줄이 긴 첫 줄과 같은 시간을
+ * 먹으면 그 줄만 느리게 차오른다.
+ */
+function layoutLine(text) {
+  const host = $("lv-line");
+  host.textContent = "";
+  lyricRows = [];
+  if (!text) return;
+
+  // ① 낱말마다 재서 같은 높이끼리 묶는다 (낱말 사이 공백은 그대로 둬야 같은 자리에서 접힌다)
+  const probes = [];
+  for (const [index, word] of text.split(/\s+/).filter(Boolean).entries()) {
+    if (index) host.append(document.createTextNode(" "));
+    const span = document.createElement("span");
+    span.textContent = word;
+    host.append(span);
+    probes.push(span);
+  }
+  const rows = [];
+  let top = null;
+  for (const span of probes) {
+    const y = Math.round(span.getBoundingClientRect().top);
+    if (top === null || y !== top) { rows.push([]); top = y; }
+    rows.at(-1).push(span.textContent);
+  }
+
+  // ② 접힌 대로 다시 그린다. 줄마다 제 폭만큼만 차지해야 그라디언트도 그 폭에 걸린다.
+  host.textContent = "";
+  const drawn = rows.map((words, index) => {
+    const row = document.createElement("span");
+    row.className = "lv-row";
+    row.textContent = words.join(" ");
+    // 줄 사이에 줄바꿈 문자를 끼운다. 블록 사이의 공백은 화면에서 사라지지만,
+    // 이게 없으면 문장이 "deja"+"dormir" 로 붙어 읽히고 복사된다.
+    if (index) host.append(document.createTextNode("\n"));
+    host.append(row);
+    return row;
+  });
+  const widths = drawn.map((row) => row.getBoundingClientRect().width || 1);
+  const total = widths.reduce((sum, width) => sum + width, 0);
+  let from = 0;
+  lyricRows = drawn.map((row, index) => {
+    const to = index === drawn.length - 1 ? 1 : from + widths[index] / total;
+    const entry = { row, from, to };
+    from = to;
+    return entry;
+  });
+}
 
 function stopFrames() {
   if (frame) cancelAnimationFrame(frame);
@@ -540,7 +595,7 @@ function drawLyric(force) {
     $("lv-prev").textContent = marks[index - 1]?.line.es ?? "";
     $("lv-next").textContent = marks[index + 1]?.line.es ?? "";
     const line = now?.line;
-    $("lv-line").textContent = line?.es ?? "";
+    layoutLine(line?.es ?? "");
     const sound = $("lv-sound");
     sound.textContent = "";
     if (line) sound.append(soundNodes(line.es));
@@ -555,7 +610,10 @@ function drawLyric(force) {
   // 이 문장 안에서 지금 어디쯤인가 — 글자가 그만큼 차오른다.
   const end = now ? now.end ?? duration : 0;
   const done = now && end > now.start ? (player.currentTime - now.start) / (end - now.start) : 0;
-  $("lv-line").style.setProperty("--fill", `${Math.min(Math.max(done, 0), 1) * 100}%`);
+  for (const { row, from, to } of lyricRows) {
+    const local = to > from ? (done - from) / (to - from) : 0;
+    row.style.setProperty("--fill", `${Math.min(Math.max(local, 0), 1) * 100}%`);
+  }
 
   if (repeatOne && now?.end !== null && now && player.currentTime >= now.end) {
     player.currentTime = now.start;
@@ -634,6 +692,8 @@ navigator.serviceWorker?.addEventListener("message", (event) => {
   location.reload();
 });
 
+// 화면 폭이 바뀌면 접히는 자리가 달라진다 — 재서 다시 그린다.
+window.addEventListener("resize", () => { if (!$("view-player").hidden) drawLyric(true); });
 window.addEventListener("hashchange", route);
 window.addEventListener("pagehide", stopSound);
 route();

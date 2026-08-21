@@ -111,9 +111,14 @@ dialog form { max-height: 82dvh; overflow-y: auto; }
 .lv-line { margin: 0; font-size: 26px; font-weight: 700; line-height: 1.35;
   letter-spacing: -.02em; color: var(--ink); }
 /* 노래가 흐른 만큼 글자가 차오른다. 문장 하나에 시각이 하나뿐이라 그 안은 고르게
- * 나눈 값이다 — 정확한 음절 타이밍이 아니라 "지금 이 줄의 어디쯤"이다. */
+ * 나눈 값이다 — 정확한 음절 타이밍이 아니라 "지금 이 줄의 어디쯤"이다.
+ *
+ * 차오르는 단위는 문장이 아니라 **화면에서 접힌 줄**이다(app.js 의 layoutLine).
+ * 문장에 통째로 걸면 두 줄이 나란히 차올라 엉뚱하게 보인다. 줄마다 제 폭만큼만
+ * 차지해야 그라디언트도 글자 폭에 딱 걸린다. */
+.lv-row { display: block; width: fit-content; max-width: 100%; margin: 0 auto; }
 @supports (-webkit-background-clip: text) {
-  .lv-line { background-image:
+  .lv-row { background-image:
       linear-gradient(90deg, var(--ink) var(--fill, 0%), #55554f var(--fill, 0%));
     -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
 }

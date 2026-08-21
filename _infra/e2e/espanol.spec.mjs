@@ -366,13 +366,15 @@ test("재생 — 원곡을 틀고 문장을 오간다 (lyric video)", async ({ p
   await page.locator("#lv-back").click();
   await expect(page.locator("#lv-line")).toHaveText("El amor no me deja dormir");
 
-  // 문장 안에서 흐른 만큼 글자가 차오른다 (7.6초에 시작한 마지막 문장, 곡은 12초)
+  // 문장 안에서 흐른 만큼 글자가 차오른다 (7.6초에 시작한 마지막 문장, 곡은 12초).
+  // 차오르는 단위는 화면에서 접힌 줄이라, 여기서는 "시작했고 아직 안 끝났다"만 본다
+  // — 몇 줄로 접히는지는 폰트 폭에 달렸다(줄 단위 규칙은 아래 접힘 테스트가 본다).
   await page.locator("#lv-seek").fill("9");
   await expect(page.locator("#lv-line")).toHaveText("No me olvides, corazón");
-  const fill = await page.evaluate(() =>
-    document.getElementById("lv-line").style.getPropertyValue("--fill"));
-  expect(Number.parseFloat(fill)).toBeGreaterThan(20);
-  expect(Number.parseFloat(fill)).toBeLessThan(45);
+  const fills = await page.evaluate(() => [...document.querySelectorAll(".lv-row")]
+    .map((row) => Number.parseFloat(row.style.getPropertyValue("--fill")) || 0));
+  expect(fills[0]).toBeGreaterThan(0);
+  expect(fills.at(-1)).toBeLessThan(100);
 
   await page.locator("#lv-repeat").click();
   await expect(page.locator("#lv-repeat")).toHaveAttribute("aria-pressed", "true");
@@ -380,6 +382,51 @@ test("재생 — 원곡을 틀고 문장을 오간다 (lyric video)", async ({ p
   await page.locator("#lv-close").click();
   await expect(page.locator(".bar")).toBeVisible();
   await expect(page.locator("#song-progress")).toBeVisible();
+
+  expect(failures).toEqual([]);
+});
+
+test("접힌 문장은 화면 줄 단위로 차례차례 차오른다", async ({ page }) => {
+  const failures = [];
+  page.on("pageerror", (error) => failures.push(error.message));
+
+  await page.goto("/life/espanol/");
+  await page.locator("#add-button").click();
+  await page.locator("#title-input").fill("긴 줄 곡");
+  // 폰 폭에서 반드시 접히는 길이. 문장에 통째로 그라디언트를 걸면 접힌 줄들이
+  // 나란히 차올라 엉뚱하게 보인다 — 실제로 그렇게 만들었다가 고쳤다.
+  await page.locator("#lyrics-input").fill(
+    "Cuando te vi bailando en la playa supe que no podía olvidarte\nTe quiero");
+  await page.getByRole("button", { name: "저장", exact: true }).click();
+  await page.locator("#clip-input").setInputFiles({
+    name: "song.wav", mimeType: "audio/wav", buffer: silentWav(12),
+  });
+  await expect(page.locator("#clip-name")).toContainText("song.wav");
+
+  await page.locator("#clip-sync").click();
+  await page.locator("#sync-play").click();
+  for (const at of ["2", "10"]) {
+    await page.locator("#sync-seek").fill(at);
+    await page.locator("#sync-now").click();
+  }
+  await page.locator("#start-player").click();
+  await page.locator("#lv-play").click();            // 멈춰 놓고 잰다
+
+  const fills = () => page.evaluate(() => [...document.querySelectorAll(".lv-row")]
+    .map((row) => Number.parseFloat(row.style.getPropertyValue("--fill")) || 0));
+  await page.locator("#lv-seek").fill("1.6");        // 문장이 시작하는 자리
+  expect((await fills()).length).toBeGreaterThan(1); // 접혔다
+  expect(await fills()).toEqual((await fills()).map(() => 0));
+
+  // 가운데쯤 — 앞 줄은 다 찼고 뒷 줄은 아직이다(다 같이 차오르지 않는다).
+  await page.locator("#lv-seek").fill("6");
+  const middle = await fills();
+  expect(middle[0]).toBe(100);
+  expect(middle.at(-1)).toBeLessThan(100);
+  // 언제나 앞에서 뒤로만 차오른다.
+  for (const [index, value] of middle.entries()) {
+    if (index) expect(value).toBeLessThanOrEqual(middle[index - 1]);
+  }
 
   expect(failures).toEqual([]);
 });
