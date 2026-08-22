@@ -21,7 +21,17 @@ body { overflow: auto; }
   /* 손가락으로 눌렀을 때 글자가 잡히지 않게. 목록에서 자주 누르는 자리다. */
   user-select: none; -webkit-tap-highlight-color: transparent;
 }
-.day > summary::marker { color: var(--line); }
+/* summary 에 display:flex 를 주면 브라우저가 펼침 삼각형을 지운다. 접히는 줄인지
+ * 안 보이게 되므로 직접 그린다(사파리는 ::marker 도 제대로 안 먹는다). */
+.day > summary::marker { content: ""; }
+.day > summary::-webkit-details-marker { display: none; }
+.day > summary::before {
+  content: "▸"; flex: none; display: inline-block;
+  color: var(--muted); font-size: 11px; line-height: 1;
+  transition: transform .15s ease;
+}
+.day[open] > summary::before { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) { .day > summary::before { transition: none; } }
 .day[open] > summary { margin-bottom: 10px; }
 .day-date { color: var(--ink); font-variant-numeric: tabular-nums; }
 .day-note { font-size: 12px; }
