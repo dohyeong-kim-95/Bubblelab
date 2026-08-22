@@ -8,7 +8,7 @@
 //
 //   PAPERS_SINK_SECRET=... node _src/discord/register.mjs
 
-const BASE = (process.env.PAPERS_ENDPOINT ?? "").trim() || "https://papers.bubblelab.dev";
+const BASE = (process.env.PAPERS_ENDPOINT ?? "").trim() || "https://life.bubblelab.dev";
 const secret = (process.env.PAPERS_SINK_SECRET ?? "").trim();
 
 if (!secret) {

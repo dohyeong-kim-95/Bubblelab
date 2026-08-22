@@ -1,8 +1,11 @@
 # papers — 매일 아침, 내 문제에 쓸 수 있는 최적화 논문
 
 arXiv 에서 하루치를 골라 **디스코드로 보낸다.** 이 화면은 지난 것을 다시 보는 용도다.
-토이가 아니라 개인용 피드라 토이 관례(share.js, 주간 기록)를 쓰지 않고, 랜딩에도
-나오지 않는다(`CONFIDENTIAL_SUBDOMAINS`).
+토이가 아니라 개인용 피드라 토이 관례(share.js, 주간 기록)를 쓰지 않는다.
+**LIFE 의 도구 하나**로 `life.bubblelab.dev/papers` 에 있다 — 서브도메인을 따로 두지
+않고 LIFE 의 비밀번호 게이트를 그대로 물려받는다(`life/CLAUDE.md` 의 도구 관례를
+따른다: 색은 `../styles.css` 토큰만 쓰고, 인라인 스크립트·스타일은 CSP 가 막는다).
+LIFE 홈에서는 할 일에 도구 이름 `papers` 를 붙이면 열린다.
 
 ## 왜 이런 모양인가 — 실측이 설계를 정했다
 
@@ -178,7 +181,7 @@ sink secret 으로 인증) — 토큰은 다이제스트 발송 때문에 어차
 Secrets → Add → Secret)에서 넣으면 터미널이 아예 필요 없다.
 
 개발자 포털의 **Interactions Endpoint URL** 에
-`https://papers.bubblelab.dev/_discord/interactions` 를 넣는다. 저장 버튼을 누르는
+`https://life.bubblelab.dev/_discord/interactions` 를 넣는다. 저장 버튼을 누르는
 순간 디스코드가 PING 을 쏘므로, **secret 을 먼저 넣고 배포한 뒤** 등록해야 한다.
 
 ### 안전

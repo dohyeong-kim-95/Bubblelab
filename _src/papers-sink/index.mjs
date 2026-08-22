@@ -16,7 +16,7 @@ import { dirname } from "node:path";
 
 import { ANSWER_LIMIT, buildAskPrompt, RESEARCH_PROFILE } from "../../_infra/papers.js";
 
-const BASE = (process.env.PAPERS_ENDPOINT ?? "").trim() || "https://papers.bubblelab.dev";
+const BASE = (process.env.PAPERS_ENDPOINT ?? "").trim() || "https://life.bubblelab.dev";
 const CLAUDE = (process.env.CLAUDE_BIN ?? "").trim() || "claude";
 // 한 번에 답할 개수. 폭주해도 구독 한도를 한꺼번에 태우지 않게 막아 둔다.
 const MAX_PER_RUN = 3;

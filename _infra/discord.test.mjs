@@ -83,7 +83,7 @@ const env = (over = {}) => ({
 });
 
 const post = (body, headers = {}) =>
-  new Request("https://papers.bubblelab.dev/_discord/interactions", { method: "POST", body, headers });
+  new Request("https://life.bubblelab.dev/_discord/interactions", { method: "POST", body, headers });
 
 const ctxStub = () => { const held = []; return { held, waitUntil: (p) => held.push(p) }; };
 
@@ -169,7 +169,7 @@ test("명령어를 등록한다", async () => {
 // 인증이 느슨하면 남이 내 봇의 명령어를 갈아치울 수 있다.
 
 const reg = (env_, headers = {}, method = "POST") => handleCommandRegistration(
-  new Request("https://papers.bubblelab.dev/_discord/commands", { method, headers }), env_);
+  new Request("https://life.bubblelab.dev/_discord/commands", { method, headers }), env_);
 
 test("등록 경로는 sink secret 없이 못 연다", async () => {
   const base = { PAPERS_SINK_SECRET: "s", DISCORD_BOT_TOKEN: "t", DISCORD_APPLICATION_ID: "1" };

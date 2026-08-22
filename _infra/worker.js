@@ -1937,7 +1937,7 @@ export async function handleRequest(request, env, ctx) {
       return Response.json(data, { headers: { "Cache-Control": "no-store" } });
     }
 
-    // 매일 논문 다이제스트 (papers.bubblelab.dev). 읽기 전용 조회만 열려 있다 —
+    // 매일 논문 다이제스트 (life.bubblelab.dev/papers). 읽기 전용 조회만 열려 있다 —
     // 실행(/run)은 cron 이 DO 를 직접 부르므로 밖으로 나오지 않는다.
     if (path.startsWith("/_papers/")) {
       if (!featureEnabled(env, "ENABLE_PAPERS") || !env.PAPERS) {

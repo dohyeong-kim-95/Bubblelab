@@ -391,8 +391,8 @@ test("밖에서는 읽기만 되고 /run 은 닫혀 있다", async () => {
     },
   };
   const ask = (method, path) =>
-    handlePapers(new Request(`https://papers.bubblelab.dev${path}`, { method }), env,
-      new URL(`https://papers.bubblelab.dev${path}`));
+    handlePapers(new Request(`https://life.bubblelab.dev${path}`, { method }), env,
+      new URL(`https://life.bubblelab.dev${path}`));
 
   assert.equal((await ask("POST", "/_papers/run")).status, 404, "/run 이 밖으로 열려 있다");
   assert.equal((await ask("GET", "/_papers/run")).status, 404);
@@ -461,8 +461,8 @@ test("데몬 경로는 secret 없이 못 연다", async () => {
     PAPERS: { idFromName: () => "id", get: () => ({ fetch: (req) => { calls.push(new URL(req.url).pathname); return Response.json({ asks: [] }); } }) },
   };
   const ask = (env_, headers = {}) => handlePapersSink(
-    new Request("https://papers.bubblelab.dev/_papers/asks", { headers }), env_,
-    new URL("https://papers.bubblelab.dev/_papers/asks"));
+    new Request("https://life.bubblelab.dev/_papers/asks", { headers }), env_,
+    new URL("https://life.bubblelab.dev/_papers/asks"));
 
   assert.equal((await ask({ ...base })).status, 503, "secret 미설정이면 열려선 안 된다");
   assert.equal((await ask({ ...base, PAPERS_SINK_SECRET: "s" })).status, 401, "인증 없이 통과했다");
@@ -476,7 +476,7 @@ test("데몬 경로는 secret 없이 못 연다", async () => {
 test("데몬 경로 밖은 sink 로 통과하지 않는다", async () => {
   const env_ = { PAPERS_SINK_SECRET: "s", PAPERS: { idFromName: () => "id", get: () => ({ fetch: () => Response.json({}) }) } };
   const response = await handlePapersSink(
-    new Request("https://papers.bubblelab.dev/_papers/run", { method: "POST", headers: { Authorization: "Bearer s" } }),
-    env_, new URL("https://papers.bubblelab.dev/_papers/run"));
+    new Request("https://life.bubblelab.dev/_papers/run", { method: "POST", headers: { Authorization: "Bearer s" } }),
+    env_, new URL("https://life.bubblelab.dev/_papers/run"));
   assert.equal(response.status, 404, "sink 인증으로 /run 을 부를 수 있으면 안 된다");
 });
