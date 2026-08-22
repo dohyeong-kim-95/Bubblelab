@@ -98,9 +98,12 @@
       //   PAPERS_SINK_SECRET  → 집 PC 데몬이 질문을 가져갈 때 쓰는 인증.
       //     답변은 엣지가 아니라 PC 의 Claude Code(구독)가 만든다 — 그래서
       //     여기에 LLM 키가 하나 더 늘지 않는다.
+      //   DISCORD_CHAT_CHANNEL_ID → 이 채널에서는 슬래시 명령 없이 그냥 쓰면
+      //     답한다. 발송 채널과 나눠 둬야 매일 오는 목록과 대화가 섞이지 않는다.
       "DISCORD_WEBHOOK_URL",
       "DISCORD_BOT_TOKEN",
       "DISCORD_CHANNEL_ID",
+      "DISCORD_CHAT_CHANNEL_ID",
       "DISCORD_PUBLIC_KEY",
       "DISCORD_APPLICATION_ID",
       "PAPERS_SINK_SECRET",
