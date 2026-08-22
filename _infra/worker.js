@@ -81,6 +81,7 @@ import { validPlannerCode } from "./planner.js";
 import { handleFortuneChart, handleFortunePush, sendFortuneDaily } from "./fortune.js";
 import { handleBriefPush, handleBriefRates, handleBriefToday, sendBriefDaily } from "./brief.js";
 import { handlePodcast, handlePodcastAdmin, runDailyGeneration, runEveningReminder, UPLOAD_MAX_BYTES } from "./podcast.js";
+import { handlePapers, runDailyPapers } from "./papers.js";
 import { handleEstateDeals } from "./estate.js";
 import { serveAssetDownload, serveAssetDownloadCounts } from "./downloads.js";
 import { fetchStoreReviews, REVIEWS_SYNC_VERSION } from "./reviews.js";
@@ -118,6 +119,7 @@ export { FortuneDO } from "./fortune.js";
 export { BriefDO } from "./brief.js";
 export { AssetFlagsDO } from "./asset-flags.js";
 export { InvestDO } from "./invest.js";
+export { PapersDO } from "./papers.js";
 export { TripWatchDO } from "./trip-watch.js";
 export { LifeDO } from "./life.js";
 
@@ -1936,6 +1938,14 @@ export async function handleRequest(request, env, ctx) {
 
     // 데일리 팟캐스트 (podcast.bubblelab.dev). 초대 코드 로그인 뒤에만
     // 쓸 수 있고, ENABLE_PODCAST가 없으면 fail-closed로 닫힌다.
+    if (path.startsWith("/_papers/")) {
+      if (!featureEnabled(env, "ENABLE_PAPERS") || !env.PAPERS) {
+        return Response.json({ error: "papers is temporarily unavailable" }, {
+          status: 503, headers: { "Cache-Control": "no-store" },
+        });
+      }
+      return handlePapers(request, env, url);
+    }
     if (path.startsWith("/_podcast/")) {
       if (!featureEnabled(env, "ENABLE_PODCAST")) {
         return Response.json({ error: "podcast is temporarily unavailable" }, {
@@ -2201,6 +2211,11 @@ export default {
     const podcastReady = featureEnabled(env, "ENABLE_PODCAST") && env.PODCAST_BUCKET;
     if (controller.cron === "0 13 * * *") {
       if (podcastReady) ctx.waitUntil(runEveningReminder(env));
+      return;
+    }
+    // 07:00 KST. arXiv 신규 공지(13~14시 KST)가 한참 지난 뒤라 하루치가 다 모여 있다.
+    if (controller.cron === "0 22 * * *") {
+      if (featureEnabled(env, "ENABLE_PAPERS") && env.PAPERS) ctx.waitUntil(runDailyPapers(env));
       return;
     }
     if (controller.cron === "0 23 * * *") {

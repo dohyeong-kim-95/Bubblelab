@@ -37,6 +37,9 @@
     // 할 일 앱. 서버 저장이 없어 게이트만 담당한다 — LIFE_PASSWORD 와
     // LIFE_SESSION_SECRET 이 있어야 열린다(없으면 플래그와 무관하게 503).
     "ENABLE_LIFE": "true",
+    // 매일 논문 다이제스트(papers/). 켜져 있어도 GEMINI_API_KEY 와
+    // DISCORD_WEBHOOK_URL secret 이 없으면 cron 이 실패로 남는다.
+    "ENABLE_PAPERS": "true",
     // 항공권 가격 관측(trip/ 계획 탭). 개인 일정은 브라우저에만 있고 여기 오지
     // 않는다 — 서버가 들고 있는 건 노선·날짜별 가격 관측뿐이다. 켜져 있어도
     // 프로바이더 자격증명(AMADEUS_CLIENT_ID/SECRET)이 없으면 조회는 돌지 않고
@@ -62,7 +65,7 @@
   // · 08:00 KST(23:00 UTC) 운세 알림 + 아침 브리핑(날씨) 알림
   // · 6시간마다 항공권 가격 관측 갱신 (trip/ 계획 탭, 오래된 조합부터 조금씩)
   // 6시간마다 돌던 trip 가격 관측 cron 은 잠든 동안 뺐다 — 되살리는 값은 _infra/dormant.js 에 적어 뒀다.
-  "triggers": { "crons": ["40 21 * * *", "0 13 * * *", "0 23 * * *"] },
+  "triggers": { "crons": ["40 21 * * *", "0 13 * * *", "0 22 * * *", "0 23 * * *"] },
   "routes": [
     { "pattern": "bubblelab.dev/*", "zone_name": "bubblelab.dev" },
     { "pattern": "*.bubblelab.dev/*", "zone_name": "bubblelab.dev" }
@@ -118,6 +121,9 @@
       // 토스증권 조회 결과 캐시 + 일별 잔고 스냅샷 (수익률 그래프의 점).
       // 토스가 client당 액세스 토큰을 1개만 허용해서 발급을 단일 인스턴스에 모은다.
       { "name": "INVEST", "class_name": "InvestDO" },
+      // 매일 arXiv 최적화 논문을 골라 디스코드로 보낸다. 보낸 논문 ID와
+      // 지난 다이제스트를 보관한다.
+      { "name": "PAPERS", "class_name": "PapersDO" },
       // 항공권 날짜 조합별 최저가 관측 + 관측일별 추이 (trip/ 계획 탭)
       { "name": "TRIP_WATCH", "class_name": "TripWatchDO" },
       // 쓰지 않는다. v17 마이그레이션이 이미 적용돼 있어 클래스를 지우면
@@ -142,6 +148,7 @@
     { "tag": "v14", "new_sqlite_classes": ["AssetFlagsDO"] },
     { "tag": "v15", "new_sqlite_classes": ["InvestDO"] },
     { "tag": "v16", "new_sqlite_classes": ["TripWatchDO"] },
-    { "tag": "v17", "new_sqlite_classes": ["LifeDO"] }
+    { "tag": "v17", "new_sqlite_classes": ["LifeDO"] },
+    { "tag": "v18", "new_sqlite_classes": ["PapersDO"] }
   ]
 }
