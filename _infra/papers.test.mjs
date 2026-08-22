@@ -16,8 +16,12 @@ import {
   CLAIM_TTL_MS,
   CHAT_HISTORY_LIMIT,
   COMMENT_PER_PAPER,
+  parseReview,
+  parseReviewRequest,
   parseSearchRequest,
+  REVIEW_FIELDS,
   searchArxiv,
+  buildReviewPrompt,
   handlePapersComments,
   PapersDO,
   parseAtom,
@@ -632,4 +636,78 @@ test("검색어의 줄바꿈·따옴표를 걷어내고 관련도순으로 훑�
 test("빈 검색어로는 arXiv 를 부르지 않는다", async () => {
   const papers = await searchArxiv("   ", { fetchImpl: () => { throw new Error("불렀다"); } });
   assert.deepEqual(papers, []);
+});
+
+// ── 리뷰 ────────────────────────────────────────────────────────────────
+
+test("리뷰 요청에서 arXiv 번호만 집어낸다", () => {
+  assert.equal(parseReviewRequest("REVIEW: 2608.19808"), "2608.19808");
+  assert.equal(parseReviewRequest("REVIEW: https://arxiv.org/abs/2508.06847v2"), "2508.06847");
+  assert.equal(parseReviewRequest("이건 이미 아는 내용이라 리뷰가 필요 없습니다"), null);
+});
+
+test("여러 줄로 쓴 항목을 하나로 모은다", () => {
+  // 모델이 항목 아래에 문단을 이어 쓴다. 첫 줄만 받으면 대부분이 잘려 나간다.
+  const parsed = parseReview([
+    "무엇을 한 논문인가: 고리형 펩타이드 설계를",
+    "실행가능성 인지 DPO 로 미세조정한다.",
+    "**핵심 방법**: 난이도 그룹 로버스트 최적화.",
+    "내 문제 적용: 800회로는 선호쌍을 못 만든다.",
+  ].join("\n"));
+
+  assert.equal(parsed["무엇을 한 논문인가"], "고리형 펩타이드 설계를 실행가능성 인지 DPO 로 미세조정한다.");
+  assert.equal(parsed["핵심 방법"], "난이도 그룹 로버스트 최적화.");
+  assert.equal(parsed["내 문제 적용"], "800회로는 선호쌍을 못 만든다.");
+  assert.ok(!("실험 설계" in parsed), "빈 항목이 들어갔다");
+});
+
+test("리뷰를 최신순으로 쌓고 논문 정보를 같이 남긴다", async () => {
+  const storage = storageStub();
+  const instance = new PapersDO({ storage }, env());
+  const paper = { id: "2608.19808", title: "FAR-DPO", link: "https://arxiv.org/abs/2608.19808",
+    published: "2026-08-20", authors: ["Guofeng Zhang"] };
+
+  await instance.saveReview({ paper, review: { "핵심 방법": "먼저" }, at: 1000 });
+  await instance.saveReview({ paper: { ...paper, id: "1111.1111", title: "나중" },
+    review: { "핵심 방법": "나중" }, at: 2000 });
+
+  const body = await (await instance.fetch(new Request("https://papers/reviews"))).json();
+  assert.deepEqual(body.reviews.map((r) => r.title), ["나중", "FAR-DPO"]);
+  assert.equal(body.reviews[1].authors[0], "Guofeng Zhang");
+  // 형식에 없는 표제어는 버린다 — 화면이 아는 항목만 그린다.
+  assert.deepEqual(Object.keys(body.reviews[0].review), ["핵심 방법"]);
+});
+
+test("빈 리뷰는 저장하지 않는다", async () => {
+  const instance = new PapersDO({ storage: storageStub() }, env());
+  const response = await instance.fetch(new Request("https://papers/reviews", {
+    method: "POST", body: JSON.stringify({ paper: { id: "1111.1111" }, review: { "엉뚱한 항목": "값" } }),
+  }));
+  assert.equal(response.status, 400);
+});
+
+test("리뷰는 읽기만 LIFE 세션으로 열고 쓰기는 데몬만 한다", async () => {
+  const calls = [];
+  const papersEnv = {
+    PAPERS: {
+      idFromName: () => "id",
+      get: () => ({ fetch: (req) => { calls.push(`${req.method} ${new URL(req.url).pathname}`); return Response.json({ ok: true }); } }),
+    },
+  };
+  const call = (owner, method) => handlePapersComments(
+    new Request("https://life.bubblelab.dev/_papers/reviews", { method, body: method === "POST" ? "{}" : undefined }),
+    papersEnv, new URL("https://life.bubblelab.dev/_papers/reviews"), owner);
+
+  assert.equal((await call(false, "GET")).status, 401);
+  // 세션이 있어도 이 문으로는 못 쓴다 — 쓰기는 sink secret 경로다.
+  assert.equal((await call(true, "POST")).status, 404);
+  assert.equal((await call(true, "GET")).status, 200);
+  assert.deepEqual(calls, ["GET /reviews"]);
+});
+
+test("리뷰 프롬프트는 초록만 보고 쓰라고 못박는다", () => {
+  const prompt = buildReviewPrompt({ title: "T", summary: "S", link: "L", published: "2026-08-20", authors: [] });
+  assert.match(prompt, /초록만 보고 씁니다/);
+  assert.match(prompt, /800회/);
+  for (const field of REVIEW_FIELDS) assert.ok(prompt.includes(field), `${field} 누락`);
 });

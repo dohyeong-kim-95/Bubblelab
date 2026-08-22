@@ -56,6 +56,17 @@ export const CHAT_HISTORY_LIMIT = 12;   // 오가는 말 12개까지 기억한�
 export const CHAT_ANSWER_LIMIT = 1800;  // 디스코드 메시지 상한 2000자 안쪽
 export const CHAT_SEARCH_MAX = 8;       // 한 번 검색에 물어다 줄 논문 수
 
+/* ── 리뷰 ────────────────────────────────────────────────────────────────
+ * 다이제스트의 다섯 줄은 "읽을지 말지" 를 정하는 용도다. 읽기로 한 논문은
+ * 그것만으로 부족해서, 한 편을 붙들고 쓴 글을 따로 남긴다 — 이게 쌓이는 게
+ * 이 도구를 그냥 물어보는 것과 가르는 지점이다.
+ */
+export const REVIEW_FIELDS = [
+  "무엇을 한 논문인가", "핵심 방법", "전제와 가정", "실험 설계",
+  "내 문제 적용", "따라 해볼 것", "한계와 의심",
+];
+export const MAX_REVIEWS = 200;
+
 // 댓글. 논문 하나에 여러 개를 쌓을 수 있게 두되, 한 논문에 무한정 쌓이지 않게 막는다.
 export const COMMENT_TEXT_LIMIT = 1000;
 export const COMMENT_PER_PAPER = 20;
@@ -162,6 +173,17 @@ export async function searchArxiv(query, { fetchImpl = fetch, max = CHAT_SEARCH_
   const response = await fetchImpl(url, { headers: { Accept: "application/atom+xml" } });
   if (!response.ok) throw new Error(`arXiv 검색 실패 (HTTP ${response.status})`);
   return parseAtom(await response.text());
+}
+
+/** arXiv 번호 하나로 논문을 집어 온다. 리뷰는 특정 한 편을 붙들고 쓴다. */
+export async function fetchPaperById(id, { fetchImpl = fetch } = {}) {
+  const clean = String(id ?? "").match(/(\d{4}\.\d{4,5})/)?.[1];
+  if (!clean) return null;
+  const url = new URL(ARXIV_API);
+  url.searchParams.set("id_list", clean);
+  const response = await fetchImpl(url, { headers: { Accept: "application/atom+xml" } });
+  if (!response.ok) throw new Error(`arXiv 조회 실패 (HTTP ${response.status})`);
+  return parseAtom(await response.text())[0] ?? null;
 }
 
 /* ── 채점 ────────────────────────────────────────────────────────────────
@@ -533,6 +555,40 @@ export class PapersDO {
     return { ok: true, remembered: next.length };
   }
 
+  /* ── 리뷰 ──────────────────────────────────────────────────────────────
+   * 보관본(다이제스트)과 키를 나눈다. 다이제스트는 그날 서버가 만든 것이고
+   * 리뷰는 내가 읽기로 하고 쌓은 것이라, 성격이 다르면 자리도 다르게 둔다.
+   */
+  async saveReview({ paper, review, at = Date.now() }) {
+    const id = String(paper?.id ?? "").slice(0, 32);
+    if (!id) throw new Error("논문이 필요합니다");
+    const body = Object.fromEntries(
+      REVIEW_FIELDS.filter((f) => review?.[f]).map((f) => [f, String(review[f]).slice(0, 1200)]),
+    );
+    if (!Object.keys(body).length) throw new Error("리뷰가 비어 있습니다");
+
+    const row = {
+      id, at,
+      title: String(paper.title ?? "").slice(0, 300),
+      link: String(paper.link ?? "").slice(0, 200),
+      published: String(paper.published ?? "").slice(0, 10),
+      authors: (paper.authors ?? []).slice(0, 6).map((a) => String(a).slice(0, 60)),
+      review: body,
+    };
+    await this.state.storage.put(`review:${at}:${id}`, row);
+
+    const stored = await this.state.storage.list({ prefix: "review:" });
+    if (stored.size > MAX_REVIEWS) {
+      await this.state.storage.delete([...stored.keys()].sort().slice(0, stored.size - MAX_REVIEWS));
+    }
+    return { ok: true, id, title: row.title };
+  }
+
+  async #reviews(limit) {
+    const stored = await this.state.storage.list({ prefix: "review:", reverse: true, limit });
+    return [...stored.values()];
+  }
+
   /* ── 댓글 ──────────────────────────────────────────────────────────────
    * 논문 ID 하나에 키 하나. 다이제스트 안에 끼워 넣지 않는 이유는 보관본이
    * **서버가 만든 그대로**여야 해서다 — 내가 쓴 글이 섞이면 나중에 다시 그릴 때
@@ -578,6 +634,20 @@ export class PapersDO {
     if (url.pathname === "/chat/remember" && request.method === "POST") {
       const payload = await request.json().catch(() => null);
       return Response.json(await this.chatRemember(payload ?? {}));
+    }
+
+    if (url.pathname === "/reviews" && request.method === "GET") {
+      const limit = Math.min(60, Math.max(1, Number(url.searchParams.get("limit")) || 30));
+      return Response.json({ reviews: await this.#reviews(limit) });
+    }
+
+    if (url.pathname === "/reviews" && request.method === "POST") {
+      const payload = await request.json().catch(() => null);
+      try {
+        return Response.json(await this.saveReview(payload ?? {}));
+      } catch (error) {
+        return Response.json({ error: String(error.message ?? error) }, { status: 400 });
+      }
     }
 
     if (url.pathname === "/comments" && request.method === "GET") {
@@ -666,10 +736,10 @@ export class PapersDO {
 const PUBLIC_PATHS = new Set(["/latest", "/archive"]);
 
 /** PC 데몬만 부르는 경로. sink secret 으로 막는다. */
-const SINK_PATHS = new Set(["/asks", "/asks/done", "/digest/pending", "/digest/done", "/chat/history", "/chat/remember"]);
+const SINK_PATHS = new Set(["/asks", "/asks/done", "/digest/pending", "/digest/done", "/chat/history", "/chat/remember", "/reviews"]);
 
 /**
- * 댓글. **LIFE 세션 쿠키로만** 연다 — 화면이 게이트 뒤에 있으니 쓰기도 같은
+ * 댓글과 리뷰 읽기. **LIFE 세션 쿠키로만** 연다 — 화면이 게이트 뒤에 있으니 쓰기도 같은
  * 자격으로 맞춘다. `/_papers/*` 는 게이트보다 앞에서 처리되므로 여기서 직접
  * 확인해야 한다(그냥 두면 주소만 알면 남이 쓸 수 있다).
  *
@@ -679,14 +749,16 @@ export async function handlePapersComments(request, env, url, owner) {
   if (!owner) return Response.json({ error: "authentication required" }, { status: 401 });
 
   const path = url.pathname.replace(/^\/_papers/, "");
-  const id = env.PAPERS.idFromName("main");
-  const target = path === "/comments/delete" ? "/comments/delete" : "/comments";
-  if (path !== "/comments" && path !== "/comments/delete") {
+  // 리뷰는 **읽기만** 여기로 온다 — 쓰는 쪽은 데몬이라 sink secret 을 쓴다.
+  const owned = new Set(["/comments", "/comments/delete", "/reviews"]);
+  if (!owned.has(path)) return new Response("not found", { status: 404 });
+  if (path === "/reviews" && request.method !== "GET") {
     return new Response("not found", { status: 404 });
   }
 
+  const id = env.PAPERS.idFromName("main");
   const response = await env.PAPERS.get(id).fetch(
-    new Request(`https://papers${target}`, {
+    new Request(`https://papers${path}${url.search}`, {
       method: request.method,
       headers: { "Content-Type": "application/json" },
       body: request.method === "POST" ? await request.text() : undefined,
@@ -820,13 +892,19 @@ ${chatHistory(history)}
 ${message}
 
 # 지금 할 일
-논문을 새로 찾아봐야 답할 수 있으면, **다른 말 없이 첫 줄에만** 이렇게 쓰세요:
+셋 중 하나를 하세요.
+
+**① 논문을 새로 찾아야 하면** — 다른 말 없이 첫 줄에만:
 SEARCH: <영어 검색어>
+arXiv 전체를 훑습니다(기간 제한 없음 — 옛날 논문도 나옵니다). "옛날 거라도",
+"더 찾아봐", "이런 주제 없나" 같은 말이면 검색하세요.
 
-검색어는 arXiv 전체를 훑습니다(기간 제한 없음 — 옛날 논문도 나옵니다). 연구자가
-"옛날 거라도", "더 찾아봐", "이런 주제 없나" 같은 말을 하면 검색하세요.
+**② 특정 논문을 제대로 읽어 달라고 하면** — 다른 말 없이 첫 줄에만:
+REVIEW: <arXiv 번호>
+"리뷰해줘", "이거 자세히", "정리해줘" 처럼 한 편을 붙들라는 말일 때입니다.
+결과는 life/papers 에 글로 남습니다. 번호를 모르면 먼저 SEARCH 로 찾으세요.
 
-찾을 필요 없이 지금 아는 것으로 답할 수 있으면 그냥 한국어로 답하세요.
+**③ 그럴 필요 없이 지금 아는 것으로 답할 수 있으면** 그냥 한국어로 답하세요.
 **논문 제목이나 arXiv 번호를 기억에 기대어 쓰지 마세요** — 그럴 상황이면 검색하세요.
 한국어로, ${CHAT_ANSWER_LIMIT}자 이내. 문단을 짧게 끊으세요.`;
 }
@@ -864,6 +942,60 @@ ${found}
 - 편마다 **내 문제에 쓸 수 있는지**를 한 줄로 판단해 주세요. 800회 예산·순서형
   조합 공간·다목적이 기준입니다.
 - 링크는 그대로 붙여 주세요. 한국어로, ${CHAT_ANSWER_LIMIT}자 이내.`;
+}
+
+/* ── 리뷰 프롬프트 ───────────────────────────────────────────────────────
+ * 초록만 보고 쓴다는 걸 숨기지 않는다 — 본문을 봐야 아는 것은 "봐야 한다" 고
+ * 적게 한다. 지어낸 확신보다 정확한 모름이 낫다.
+ */
+export function buildReviewPrompt(paper, profile = RESEARCH_PROFILE) {
+  return `아래 논문을 한 편 붙들고 정리하세요. 읽을지 말지를 고르는 요약이 아니라,
+**읽기로 한 논문을 공부한 결과물**입니다.
+
+# 내 문제
+${profile}
+
+# 논문
+${paper.title}
+${paper.authors?.slice(0, 6).join(", ") ?? ""} (${paper.published?.slice(0, 7) ?? "?"})
+${paper.link}
+
+${paper.summary}
+
+# 출력 형식 (한국어. 표제어를 그대로 두고 각 항목 아래에 씁니다)
+${REVIEW_FIELDS.map((f) => `${f}: …`).join("\n")}
+
+# 쓸 때
+- **초록만 보고 씁니다.** 본문을 봐야 아는 것은 "본문의 어디를 봐야 한다" 고 적으세요.
+  지어낸 확신보다 정확한 모름이 낫습니다.
+- "내 문제 적용" 은 800회 예산·순서형 3x10^14 조합 공간·다목적을 기준으로
+  **쓸 수 있다/없다를 분명히** 하고 이유를 답니다.
+- "따라 해볼 것" 은 내일 당장 코드로 옮길 수 있는 크기로 적으세요. 없으면 없다고.
+- 항목마다 2~5문장. 전체 1500자 안쪽.`;
+}
+
+export function parseReview(text) {
+  const out = {};
+  let current = null;
+  for (const line of String(text ?? "").split("\n")) {
+    const head = line.match(/^\s*\**\s*(.+?)\s*\**\s*[:：]\s*(.*)$/);
+    const field = head && REVIEW_FIELDS.find((f) => head[1].replace(/\*/g, "").trim() === f);
+    if (field) {
+      current = field;
+      out[current] = head[2].replace(/\*\*/g, "").trim();
+    } else if (current && line.trim()) {
+      out[current] = `${out[current]} ${line.replace(/\*\*/g, "").trim()}`.trim();
+    }
+  }
+  return Object.fromEntries(
+    Object.entries(out).filter(([, v]) => v).map(([k, v]) => [k, v.slice(0, 1200)]),
+  );
+}
+
+/** 대화에서 "이 논문 리뷰해줘" 를 집어낸다. */
+export function parseReviewRequest(text) {
+  const match = String(text ?? "").match(/^\s*REVIEW:\s*(.+)$/m);
+  return match ? (match[1].match(/(\d{4}\.\d{4,5})/)?.[1] ?? null) : null;
 }
 
 /* ── 질문 큐 ─────────────────────────────────────────────────────────────

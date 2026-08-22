@@ -1947,7 +1947,8 @@ export async function handleRequest(request, env, ctx) {
       }
       // 내 댓글은 LIFE 세션으로 연다. 이 경로들은 게이트보다 앞이라 여기서
       // 직접 확인하지 않으면 주소만 알면 남이 쓸 수 있다.
-      if (path.startsWith("/_papers/comments")) {
+      if (path.startsWith("/_papers/comments")
+        || (path === "/_papers/reviews" && request.method === "GET")) {
         const key = await lifeKey(env.LIFE_SESSION_SECRET, "bl-life-session");
         const owner = lifeConfigured(env) && await validSession(key, cookies(request).bl_life);
         return handlePapersComments(request, env, url, owner);

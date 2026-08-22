@@ -11,6 +11,11 @@ const updated = document.getElementById("updated");
 /** 논문 ID → 댓글 배열. 화면을 그리기 전에 한 번 받아 둔다. */
 let comments = {};
 
+const REVIEW_ORDER = [
+  "무엇을 한 논문인가", "핵심 방법", "전제와 가정", "실험 설계",
+  "내 문제 적용", "따라 해볼 것", "한계와 의심",
+];
+
 function element(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -157,12 +162,40 @@ function dayBlock(digest, open) {
   return block;
 }
 
+/**
+ * 리뷰 한 편. 다이제스트와 나란히 두지 않고 위에 따로 모은다 — 저쪽은 서버가
+ * 매일 만든 목록이고, 이건 읽기로 하고 붙들어 쓴 글이라 성격이 다르다.
+ */
+function reviewBlock(row) {
+  const block = element("details", "review");
+  const head = element("summary");
+  head.append(element("span", "review-title", row.title));
+  head.append(element("span", "day-note", stamp(row.at)));
+  block.append(head);
+
+  const link = element("a", "review-link", row.link);
+  link.href = row.link;
+  link.rel = "noopener noreferrer";
+  link.target = "_blank";
+  block.append(link);
+
+  const list = document.createElement("dl");
+  for (const field of REVIEW_ORDER.filter((f) => row.review?.[f])) {
+    list.append(element("dt", null, field));
+    list.append(element("dd", null, row.review[field]));
+  }
+  block.append(list);
+  block.append(commentBox(row.id));
+  return block;
+}
+
 async function load() {
   try {
-    const [archive, mine] = await Promise.all([
+    const [archive, mine, written] = await Promise.all([
       fetch("/_papers/archive?limit=21", { headers: { Accept: "application/json" } }),
       // 로그인이 풀렸으면 댓글 없이 읽기만 한다 — 목록까지 못 보게 할 이유는 없다.
       fetch("/_papers/comments", { headers: { Accept: "application/json" } }).catch(() => null),
+      fetch("/_papers/reviews", { headers: { Accept: "application/json" } }).catch(() => null),
     ]);
     const body = await archive.json().catch(() => ({}));
     if (!archive.ok) {
@@ -176,7 +209,20 @@ async function load() {
       feed.replaceChildren(element("p", "empty", "아직 쌓인 다이제스트가 없습니다. 내일 아침에 첫 편이 옵니다."));
       return;
     }
-    feed.replaceChildren(...digests.map((digest, index) => dayBlock(digest, index === 0)));
+    const reviews = written?.ok ? (await written.json().catch(() => ({}))).reviews ?? [] : [];
+    const blocks = digests.map((digest, index) => dayBlock(digest, index === 0));
+    if (reviews.length) {
+      const section = element("section", "reviews");
+      section.append(element("h2", "reviews-head", `📝 읽고 쓴 것 ${reviews.length}편`));
+      // 맨 위 하나만 펴 둔다 — 날짜 목록과 같은 규칙이라 화면이 한결같다.
+      for (const [index, row] of reviews.entries()) {
+        const block = reviewBlock(row);
+        block.open = index === 0;
+        section.append(block);
+      }
+      blocks.unshift(section);
+    }
+    feed.replaceChildren(...blocks);
     updated.textContent = `${digests[0].date} 까지 · ${digests.length}일치`;
   } catch {
     feed.replaceChildren(element("p", "empty", "서버에 연결하지 못했습니다."));
