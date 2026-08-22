@@ -159,6 +159,11 @@ async function buildDigest(secret) {
 async function chat(secret) {
   const poll = await api("/chat", secret);
   const messages = poll?.messages ?? [];
+  if (poll?.needsIntent) {
+    // 조용히 넘기면 사용자는 "썼는데 답이 없다" 만 겪는다. 로그에 남긴다.
+    console.error(`${new Date().toLocaleString("ko-KR")} ${poll.reason}`);
+    return;
+  }
   if (!messages.length) return;
 
   // 한꺼번에 여러 줄을 썼으면 한 번의 말로 묶어 답한다 — 줄마다 답하면 시끄럽다.

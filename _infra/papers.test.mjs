@@ -674,3 +674,15 @@ test("빈 검색어로는 arXiv 를 부르지 않는다", async () => {
   const papers = await searchArxiv("   ", { fetchImpl: () => { throw new Error("불렀다"); } });
   assert.deepEqual(papers, []);
 });
+
+test("인텐트가 꺼져 내용이 비어 오면 그렇다고 알린다", async () => {
+  // 그냥 넘기면 "썼는데 답이 없다" 만 남고 어디가 막혔는지 알 수 없다.
+  const storage = storageStub();
+  await storage.put("chat:last", "100");
+  const rows = [{ id: "101", content: "", author: {} }];
+  const result = await new PapersDO({ storage }, chatEnv()).chatPoll({ fetchImpl: channelStub(rows) });
+
+  assert.equal(result.needsIntent, true);
+  assert.match(result.reason, /Message Content/);
+  assert.equal(await storage.get("chat:last"), "100", "읽지도 못했는데 커서가 움직였다");
+});

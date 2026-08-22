@@ -539,10 +539,21 @@ export class PapersDO {
     }
 
     // 디스코드는 최신순으로 준다. 오래된 것부터 읽어야 말의 순서가 맞는다.
-    const messages = rows
-      .filter((row) => !row.author?.bot && String(row.content ?? "").trim())
+    const humans = rows.filter((row) => !row.author?.bot);
+    const messages = humans
+      .filter((row) => String(row.content ?? "").trim())
       .map((row) => ({ id: row.id, text: String(row.content).trim().slice(0, 2000) }))
       .reverse();
+
+    // 인텐트가 꺼져 있으면 글은 오는데 **내용만 빈 채로** 온다. 그냥 넘기면
+    // 아무 일도 안 일어난 것처럼 보여서 어디가 막혔는지 알 수 없다.
+    if (humans.length && !messages.length) {
+      return {
+        messages: [],
+        needsIntent: true,
+        reason: "메시지 내용이 비어 있습니다 — 개발자 포털에서 Message Content 인텐트를 켜세요",
+      };
+    }
 
     return {
       messages,
