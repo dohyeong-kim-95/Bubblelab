@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   buildDiscordPayload,
   createDelivery,
+  handlePapers,
   buildQuery,
   buildScorePrompt,
   CATEGORIES,
@@ -374,4 +375,29 @@ test("봇 토큰으로 하루치를 보낸다", async () => {
   ).run({ fetchImpl: stub.impl });
   assert.equal(result.via, "bot");
   assert.equal(stub.calls.discord, 1);
+});
+
+// ── 밖으로 열린 경로 ────────────────────────────────────────────────────
+
+test("밖에서는 읽기만 되고 /run 은 닫혀 있다", async () => {
+  // 열려 있으면 아무나 arXiv 조회·LLM 호출을 돌리고 남의 디스코드로 보낼 수 있다.
+  const calls = [];
+  const env = {
+    PAPERS: {
+      idFromName: () => "id",
+      get: () => ({ fetch: (req) => { calls.push(new URL(req.url).pathname); return Response.json({ ok: true }); } }),
+    },
+  };
+  const ask = (method, path) =>
+    handlePapers(new Request(`https://papers.bubblelab.dev${path}`, { method }), env,
+      new URL(`https://papers.bubblelab.dev${path}`));
+
+  assert.equal((await ask("POST", "/_papers/run")).status, 404, "/run 이 밖으로 열려 있다");
+  assert.equal((await ask("GET", "/_papers/run")).status, 404);
+  assert.equal((await ask("POST", "/_papers/latest")).status, 404, "쓰기 메서드가 통과했다");
+  assert.deepEqual(calls, [], "거부해야 할 요청이 DO 까지 갔다");
+
+  assert.equal((await ask("GET", "/_papers/latest")).status, 200);
+  assert.equal((await ask("GET", "/_papers/archive")).status, 200);
+  assert.deepEqual(calls, ["/latest", "/archive"]);
 });

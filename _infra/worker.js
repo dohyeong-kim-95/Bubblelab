@@ -82,6 +82,7 @@ import { handleFortuneChart, handleFortunePush, sendFortuneDaily } from "./fortu
 import { handleBriefPush, handleBriefRates, handleBriefToday, sendBriefDaily } from "./brief.js";
 import { handlePodcast, handlePodcastAdmin, runDailyGeneration, runEveningReminder, UPLOAD_MAX_BYTES } from "./podcast.js";
 import { handlePapers, runDailyPapers } from "./papers.js";
+import { handleInteraction } from "./discord.js";
 import { handleEstateDeals } from "./estate.js";
 import { serveAssetDownload, serveAssetDownloadCounts } from "./downloads.js";
 import { fetchStoreReviews, REVIEWS_SYNC_VERSION } from "./reviews.js";
@@ -1936,8 +1937,8 @@ export async function handleRequest(request, env, ctx) {
       return Response.json(data, { headers: { "Cache-Control": "no-store" } });
     }
 
-    // 데일리 팟캐스트 (podcast.bubblelab.dev). 초대 코드 로그인 뒤에만
-    // 쓸 수 있고, ENABLE_PODCAST가 없으면 fail-closed로 닫힌다.
+    // 매일 논문 다이제스트 (papers.bubblelab.dev). 읽기 전용 조회만 열려 있다 —
+    // 실행(/run)은 cron 이 DO 를 직접 부르므로 밖으로 나오지 않는다.
     if (path.startsWith("/_papers/")) {
       if (!featureEnabled(env, "ENABLE_PAPERS") || !env.PAPERS) {
         return Response.json({ error: "papers is temporarily unavailable" }, {
@@ -1946,6 +1947,18 @@ export async function handleRequest(request, env, ctx) {
       }
       return handlePapers(request, env, url);
     }
+
+    // 디스코드 슬래시 명령. 게이트를 두지 않는 대신 **Ed25519 서명**으로만 받는다
+    // (디스코드가 직접 POST 하므로 쿠키도 세션도 없다).
+    if (path === "/_discord/interactions") {
+      if (!featureEnabled(env, "ENABLE_PAPERS")) {
+        return new Response("discord is temporarily unavailable", { status: 503 });
+      }
+      return handleInteraction(request, env, ctx);
+    }
+
+    // 데일리 팟캐스트 (podcast.bubblelab.dev). 초대 코드 로그인 뒤에만
+    // 쓸 수 있고, ENABLE_PODCAST가 없으면 fail-closed로 닫힌다.
     if (path.startsWith("/_podcast/")) {
       if (!featureEnabled(env, "ENABLE_PODCAST")) {
         return Response.json({ error: "podcast is temporarily unavailable" }, {

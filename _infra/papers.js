@@ -469,15 +469,125 @@ export async function runDailyPapers(env) {
   else console.log("papers", body);
 }
 
-/** `/_papers/*` 조회. 게이트는 worker 가 담당한다. */
+/**
+ * 밖으로 열어 두는 경로. **읽기 전용만** 연다.
+ *
+ * `/run` 이 여기 없는 건 실수가 아니다 — 열려 있으면 아무나 arXiv 조회와 LLM
+ * 호출을 돌리고 남의 디스코드로 발송까지 시킬 수 있다. 정기 실행은 cron 이
+ * DO 를 직접 부르므로 이 경로가 필요 없다.
+ */
+const PUBLIC_PATHS = new Set(["/latest", "/archive"]);
+
+/** `/_papers/*` 조회. */
 export async function handlePapers(request, env, url) {
-  const id = env.PAPERS.idFromName("main");
   const path = url.pathname.replace(/^\/_papers/, "") || "/latest";
+  if (request.method !== "GET" || !PUBLIC_PATHS.has(path)) {
+    return new Response("not found", { status: 404 });
+  }
+  const id = env.PAPERS.idFromName("main");
   const response = await env.PAPERS.get(id).fetch(
-    new Request(`https://papers${path}${url.search}`, { method: request.method }),
+    new Request(`https://papers${path}${url.search}`, { method: "GET" }),
   );
   return new Response(response.body, {
     status: response.status,
     headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
   });
+}
+
+/* ── 질문에 답하기 (디스코드 슬래시 명령) ────────────────────────────────
+ *
+ * 요약은 Gemini(callLLM)로 만들고 질문 답변은 Claude 로 한다. 요약은 정해진
+ * 틀을 채우는 일이라 싼 모델로 충분하지만, "이 방법을 800회 예산에 쓸 수 있나"
+ * 같은 물음은 논문의 가정과 내 제약을 견줘야 해서 추론 품질이 실제로 갈린다.
+ */
+
+/** 답변에 쓸 모델. 바꾸려면 PAPERS_ANSWER_MODEL. */
+export const ANSWER_MODEL = "claude-opus-5";
+// 디스코드 임베드 설명 한도가 4096자다. 그보다 앞서 읽기 힘들어지므로 더 짧게 끊는다.
+export const ANSWER_LIMIT = 1400;
+
+/** 최신 다이제스트를 문맥으로 깔아 준다. 없으면 논문 없이 답한다. */
+export function buildAskPrompt(digest, question, profile = RESEARCH_PROFILE) {
+  const papers = [...(digest?.hits ?? []), ...(digest?.near ?? [])];
+  const context = papers.length
+    ? papers.map((paper, i) => {
+      const summary = FIELDS.filter((f) => paper.summary_ko?.[f])
+        .map((f) => `${f}: ${paper.summary_ko[f]}`).join("\n");
+      return `[${i + 1}] ${paper.title} (${paper.score}점)\n${summary || paper.summary}\n${paper.link}`;
+    }).join("\n\n")
+    : "(오늘 고른 논문이 없습니다)";
+
+  return `당신은 아래 문제를 실제로 풀고 있는 연구자의 조수입니다.
+
+# 내 문제
+${profile}
+
+# 오늘의 논문 (${digest?.date ?? "날짜 미상"})
+${context}
+
+# 질문
+${question}
+
+# 답할 때
+- **적용 관점으로** 답하세요. 아이디어 설명보다 "내 문제에 쓸 수 있는가"가 먼저입니다.
+- 위 논문에 없는 내용은 **지어내지 마세요.** 초록만으로 판단할 수 없으면 그렇게 말하고,
+  본문의 어느 부분을 봐야 하는지 알려주세요.
+- 일반적인 최적화 지식으로 답해도 되지만, 그때는 논문 근거가 아니라는 걸 밝히세요.
+- 한국어로, ${ANSWER_LIMIT}자 이내. 출퇴근길에 읽습니다 — 문단을 짧게 끊으세요.`;
+}
+
+/**
+ * Claude 호출. 이 리포는 의존성을 두지 않는 관례라 공식 SDK 대신 raw fetch 를 쓴다
+ * (podcast-ai.js 의 Gemini 호출과 같은 방식이고, 워커 번들도 가벼워진다).
+ *
+ * 주의할 것 둘:
+ *  · Opus 5 는 **thinking 이 기본으로 켜져** 있고 그 토큰도 max_tokens 를 함께
+ *    먹는다. 넉넉히 잡지 않으면 답이 중간에 잘린다.
+ *  · 응답 content 에는 thinking 블록이 섞여 오므로 **text 블록만** 골라야 한다.
+ */
+export async function callClaude(env, prompt, { fetchImpl = fetch } = {}) {
+  const key = env.ANTHROPIC_API_KEY;
+  if (!key) throw new Error("ANTHROPIC_API_KEY 가 없습니다");
+
+  const response = await fetchImpl("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": key,
+      "anthropic-version": "2023-06-01",
+      // 안전 분류기가 거절하면 서버가 알아서 다른 모델로 넘겨 준다.
+      "anthropic-beta": "server-side-fallback-2026-07-01",
+    },
+    body: JSON.stringify({
+      model: env.PAPERS_ANSWER_MODEL || ANSWER_MODEL,
+      max_tokens: 8000,
+      fallbacks: "default",
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+
+  if (!response.ok) throw new Error(`Claude 호출 실패 (HTTP ${response.status})`);
+  const body = await response.json();
+  // 거절은 오류가 아니라 200 으로 온다 — content 를 읽기 전에 확인한다.
+  if (body?.stop_reason === "refusal") throw new Error("모델이 답변을 거절했습니다");
+  const text = (body?.content ?? [])
+    .filter((block) => block?.type === "text")
+    .map((block) => block.text ?? "")
+    .join("")
+    .trim();
+  if (!text) throw new Error("Claude 가 빈 응답을 돌려줬습니다");
+  return text;
+}
+
+/** 슬래시 명령이 부른다. 최신 다이제스트를 문맥으로 질문에 답한다. */
+export async function answerQuestion(env, question, { fetchImpl = fetch } = {}) {
+  const id = env.PAPERS.idFromName("main");
+  const stored = await env.PAPERS.get(id).fetch(new Request("https://papers/latest"));
+  const digest = await stored.json().catch(() => null);
+  const answer = await callClaude(
+    env,
+    buildAskPrompt(digest?.empty ? null : digest, question, env.PAPERS_PROFILE || RESEARCH_PROFILE),
+    { fetchImpl },
+  );
+  return { answer: clip(answer, ANSWER_LIMIT), date: digest?.date ?? null };
 }

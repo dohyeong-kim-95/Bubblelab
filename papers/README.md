@@ -107,3 +107,54 @@ node _infra/build.mjs
 
 실제 발송 없이 한 번 돌려보려면 `POST /_papers/run?dry=1` (저장은 하되 디스코드로는
 안 보낸다).
+
+## 슬래시 명령 — `/논문 질문:<질문>`
+
+받아본 다이제스트에 대해 그 자리에서 물어볼 수 있다. 요약은 Gemini 로 만들지만
+**답변은 Claude(`claude-opus-5`)** 로 한다 — 요약은 정해진 틀을 채우는 일이라 싼
+모델로 충분하지만, "이 방법을 800회 예산에 쓸 수 있나" 는 논문의 가정과 내 제약을
+견줘야 해서 추론 품질이 실제로 갈린다. 모델은 `PAPERS_ANSWER_MODEL` 로 바꾼다.
+
+### 왜 게이트웨이가 아니라 HTTP Interactions 인가
+
+디스코드 봇은 보통 상시 웹소켓(게이트웨이)을 물고 있어야 해서 워커에서는 안 된다.
+대신 **Interactions Endpoint** 를 쓰면 디스코드가 우리 URL 로 POST 하고 우리가
+JSON 으로 답하는 구조가 되어, 요청 단위로만 사는 런타임에서도 봇이 성립한다.
+상시 켜 둘 프로세스가 없다 — 오픈클로 같은 자체 호스팅 에이전트와 갈리는 지점이다.
+
+지켜야 하는 세 가지. 하나라도 어기면 디스코드가 엔드포인트를 꺼 버린다:
+
+1. **모든 요청의 Ed25519 서명을 검증하고, 틀리면 401.** 200 으로 답하면 등록 자체가
+   거부된다. 워커는 표준 `Ed25519` 를 지원한다(예전 `NODE-ED25519` 는 레거시).
+2. **PING(type 1) 에 PONG(type 1).** 엔드포인트 등록 때 이걸로 확인한다.
+3. **3초 안에 응답.** LLM 은 더 걸리므로 먼저 `type 5`(생각 중)로 답하고, 실제 답은
+   15분 안에 `PATCH /webhooks/{app_id}/{token}/messages/@original` 로 채운다.
+   워커는 응답과 함께 죽으므로 **`ctx.waitUntil()`** 로 붙잡아야 한다.
+
+### 설정
+
+| 키 | 용도 |
+|---|---|
+| `DISCORD_PUBLIC_KEY` | 서명 검증 (개발자 포털 → General Information) |
+| `DISCORD_APPLICATION_ID` | followup 주소 |
+| `ANTHROPIC_API_KEY` | 답변 생성 |
+| `DISCORD_BOT_TOKEN` | **명령어 등록에만** 필요 — 엣지에는 안 넣어도 된다 |
+
+```bash
+# 명령어 등록 (한 번, 그리고 명령어를 바꿀 때마다)
+DISCORD_APPLICATION_ID=... DISCORD_BOT_TOKEN=... node _src/discord/register.mjs
+```
+
+개발자 포털의 **Interactions Endpoint URL** 에
+`https://papers.bubblelab.dev/_discord/interactions` 를 넣는다. 저장 버튼을 누르는
+순간 디스코드가 PING 을 쏘므로, **secret 을 먼저 넣고 배포한 뒤** 등록해야 한다.
+
+### 안전
+
+- 엔드포인트에 게이트가 없다. 게이트 대신 **서명이 유일한 관문**이라, 서명 검증을
+  느슨하게 만드는 변경은 곧 아무나 명령을 흉내 낼 수 있다는 뜻이다.
+- 질문은 500자에서 자른다. 답변은 1,400자에서 자른다(임베드 한도 4,096 보다 앞서
+  읽기 힘들어진다).
+- **`/_papers/run` 은 밖으로 열려 있지 않다.** 열려 있으면 아무나 arXiv 조회와 LLM
+  호출을 돌리고 남의 채널로 발송까지 시킬 수 있다 — `PUBLIC_PATHS` 로 읽기 전용
+  경로만 통과시킨다.

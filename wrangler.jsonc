@@ -88,6 +88,16 @@
     // 있을 뿐 화면은 뜬다. TRIP_WATCH_SECRET 은 Watch 생성 토큰 서명용(없으면
     // ADMIN_PASSWORD 파생 키로 떨어진다).
     "optional": [
+      // 논문 다이제스트의 디스코드 발송과 슬래시 명령.
+      //   DISCORD_WEBHOOK_URL 또는 DISCORD_BOT_TOKEN+DISCORD_CHANNEL_ID  → 발송
+      //   DISCORD_PUBLIC_KEY + DISCORD_APPLICATION_ID                    → 슬래시 명령
+      //   ANTHROPIC_API_KEY                                              → 질문 답변
+      "DISCORD_WEBHOOK_URL",
+      "DISCORD_BOT_TOKEN",
+      "DISCORD_CHANNEL_ID",
+      "DISCORD_PUBLIC_KEY",
+      "DISCORD_APPLICATION_ID",
+      "ANTHROPIC_API_KEY",
       "TWELVEDATA_API_KEY",
       "INVEST_PASSWORD",
       "INVEST_SINK_SECRET",
