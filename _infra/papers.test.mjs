@@ -15,6 +15,7 @@ import {
   MAX_PICKS,
   CLAIM_TTL_MS,
   CHAT_HISTORY_LIMIT,
+  GATEWAY_ALIVE_MS,
   COMMENT_PER_PAPER,
   parseReview,
   parseReviewRequest,
@@ -710,4 +711,77 @@ test("리뷰 프롬프트는 초록만 보고 쓰라고 못박는다", () => {
   assert.match(prompt, /초록만 보고 씁니다/);
   assert.match(prompt, /800회/);
   for (const field of REVIEW_FIELDS) assert.ok(prompt.includes(field), `${field} 누락`);
+});
+
+// ── 두 길이 겹치지 않게 ─────────────────────────────────────────────────
+
+/** 디스코드 채널 조회/발송을 흉내낸다. 최신순으로 준다(실제 API 와 같게). */
+function channelStub(rows, posted = []) {
+  return async (input, init) => {
+    if (init?.method === "POST") { posted.push(JSON.parse(init.body)); return new Response(null, { status: 204 }); }
+    return Response.json(rows);
+  };
+}
+
+const chatEnv2 = (over = {}) => env({ DISCORD_BOT_TOKEN: "t", DISCORD_CHAT_CHANNEL_ID: "77", ...over });
+
+test("상주가 듣고 있으면 폴링은 비켜선다", async () => {
+  // 둘 다 답하면 같은 말에 두 번 답한다.
+  const storage = storageStub();
+  await storage.put("chat:last", "100");
+  const instance = new PapersDO({ storage }, chatEnv2());
+  await instance.chatAlive({ at: 1_000_000 });
+
+  const rows = [{ id: "101", content: "질문", author: {} }];
+  const busy = await instance.chatPoll({ at: 1_000_000 + 60_000, fetchImpl: channelStub(rows) });
+  assert.deepEqual(busy.messages, []);
+  assert.match(busy.reason, /상주/);
+
+  // 신호가 상하면 폴링이 이어받는다 — PC 를 꺼도 대화가 죽지 않는다.
+  const took = await instance.chatPoll({ at: 1_000_000 + GATEWAY_ALIVE_MS + 1, fetchImpl: channelStub(rows) });
+  assert.deepEqual(took.messages.map((m) => m.text), ["질문"]);
+});
+
+test("처음 켠 순간에는 밀린 대화에 답하지 않는다", async () => {
+  const storage = storageStub();
+  const rows = [{ id: "300", content: "옛날 글", author: {} }];
+  const result = await new PapersDO({ storage }, chatEnv2()).chatPoll({ fetchImpl: channelStub(rows) });
+  assert.deepEqual(result.messages, []);
+  assert.equal(await storage.get("chat:last"), "300");
+});
+
+test("폴링도 봇 말을 빼고 오래된 순서로 준다", async () => {
+  const storage = storageStub();
+  await storage.put("chat:last", "100");
+  const rows = [
+    { id: "103", content: "옛날 거라도", author: {} },
+    { id: "102", content: "찾았습니다", author: { bot: true } },
+    { id: "101", content: "순서형 BO 없나?", author: {} },
+  ];
+  const result = await new PapersDO({ storage }, chatEnv2()).chatPoll({ fetchImpl: channelStub(rows) });
+  assert.deepEqual(result.messages.map((m) => m.text), ["순서형 BO 없나?", "옛날 거라도"]);
+  assert.equal(result.cursor, "103");
+});
+
+test("폴링은 답한 뒤에 커서를 옮긴다", async () => {
+  const storage = storageStub();
+  await storage.put("chat:last", "100");
+  const posted = [];
+  const instance = new PapersDO({ storage }, chatEnv2());
+
+  await instance.chatPoll({ fetchImpl: channelStub([{ id: "101", content: "질문", author: {} }]) });
+  assert.equal(await storage.get("chat:last"), "100", "읽기만 했는데 커서가 움직였다");
+
+  await instance.chatReply({ cursor: "101", question: "질문", answer: "답" }, { fetchImpl: channelStub([], posted) });
+  assert.equal(posted[0].content, "답");
+  assert.equal(await storage.get("chat:last"), "101");
+});
+
+test("인텐트가 꺼져 내용이 비어 오면 그렇다고 알린다", async () => {
+  const storage = storageStub();
+  await storage.put("chat:last", "100");
+  const result = await new PapersDO({ storage }, chatEnv2())
+    .chatPoll({ fetchImpl: channelStub([{ id: "101", content: "", author: {} }]) });
+  assert.equal(result.needsIntent, true);
+  assert.match(result.reason, /Message Content/);
 });

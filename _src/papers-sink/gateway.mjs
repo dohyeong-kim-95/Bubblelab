@@ -46,6 +46,23 @@ const SECRET = required("PAPERS_SINK_SECRET");
 
 const log = (...parts) => console.log(new Date().toLocaleString("ko-KR"), ...parts);
 
+/**
+ * "나 듣고 있다" 를 엣지에 1분마다 알린다.
+ *
+ * 이게 신선하면 1분 cron 폴링이 비켜선다 — **둘 다 답하면 같은 말에 두 번
+ * 답한다.** 설정을 바꿔 가며 고르지 않아도 되고, 이 프로세스가 죽으면 신호가
+ * 상해서 폴링이 저절로 이어받는다.
+ *
+ * READY 가 아니라 **시작하자마자** 알린다: 붙는 데 시간이 걸려도 그 사이에
+ * 폴링이 끼어들지 않게.
+ */
+function announce() {
+  const tell = () => edge("/chat/alive", { method: "POST", body: "{}" })
+    .catch((error) => log("살아있음 알림 실패:", error.message));
+  tell();
+  setInterval(tell, 60_000);
+}
+
 /* ── 디스코드 REST ─────────────────────────────────────────────────────── */
 
 async function discord(path, init = {}) {
@@ -304,4 +321,5 @@ if (typeof WebSocket !== "function") {
   process.exit(2);
 }
 log(`대화 채널 ${CHANNEL} 을 듣습니다`);
+announce();
 connect();
