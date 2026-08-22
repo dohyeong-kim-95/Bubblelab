@@ -13,6 +13,7 @@ import {
   DISCORD_TOTAL_LIMIT,
   KEYWORDS,
   MAX_PICKS,
+  CLAIM_TTL_MS,
   PapersDO,
   parseAtom,
   parseScores,
@@ -217,100 +218,116 @@ function storageStub() {
   };
 }
 
-/** arXiv → 채점 → 요약 × N 순서로 답하는 fetch. 호출 기록을 남긴다. */
-function pipelineStub({ entries, scores, sent = [] }) {
-  const calls = { arxiv: 0, llm: 0, discord: 0 };
+/** 디스코드 발송만 받는 fetch. 채점·요약은 이제 엣지에서 돌지 않는다. */
+function discordStub() {
+  const sent = [];
   const impl = async (input, init) => {
-    const href = String(input);
-    if (href.includes("export.arxiv.org")) {
-      calls.arxiv++;
-      return new Response(feed(...entries));
-    }
-    if (href.includes("generativelanguage")) {
-      calls.llm++;
-      // 첫 호출이 채점, 이후는 편별 요약.
-      const text = calls.llm === 1 ? scores : "한줄: 요약된 한 줄\n가정: 어떤 가정";
-      return Response.json({ candidates: [{ content: { parts: [{ text }] } }] });
-    }
-    calls.discord++;
-    sent.push(JSON.parse(init.body));
+    sent.push({ url: String(input), body: JSON.parse(init.body) });
     return new Response(null, { status: 204 });
   };
-  return { impl, calls, sent };
+  return { impl, sent };
 }
 
-const env = (over = {}) => ({
-  GEMINI_API_KEY: "k", DISCORD_WEBHOOK_URL: "https://hook", ...over,
-});
+const env = (over = {}) => ({ DISCORD_WEBHOOK_URL: "https://hook", ...over });
 
-test("후보를 받아 채점하고 골라서 디스코드로 보낸다", async () => {
-  const stub = pipelineStub({
-    entries: [entry({ id: "1111.1111" }), entry({ id: "2222.2222" })],
-    scores: "1|9|순서형 다목적\n2|2|연속변수 전용",
-  });
+// 2026-08-22 08:00 KST = 전날 23:00 UTC. 생성 시각(07시 KST)을 넘긴 시점이다.
+const MORNING = Date.parse("2026-08-21T23:00:00Z");
+
+test("데몬이 만들어 온 하루치를 보관하고 디스코드로 보낸다", async () => {
   const storage = storageStub();
-  const result = await new PapersDO({ storage }, env()).run({ fetchImpl: stub.impl });
+  const stub = discordStub();
+  const result = await new PapersDO({ storage }, env()).completeDigest(
+    { date: "2026-08-22", scanned: 2, ids: ["1111.1111", "2222.2222"], hits: [paper({ id: "1111.1111", title: "MOCA-HESP" })], near: [] },
+    { at: MORNING, fetchImpl: stub.impl },
+  );
 
   assert.equal(result.hits, 1);
   assert.equal(result.scanned, 2);
-  assert.equal(stub.calls.arxiv, 1, "arXiv 는 하루 한 번만 부른다");
-  // 채점 1회 + 고른 1편 요약 1회. 후보 전부를 요약하면 호출이 배로 는다.
-  assert.equal(stub.calls.llm, 2);
-  assert.equal(stub.calls.discord, 1);
-  assert.match(stub.sent[0].embeds[0].description, /요약된 한 줄/);
+  assert.equal(stub.sent.length, 1);
+  assert.match(stub.sent[0].body.embeds[0].title, /MOCA-HESP/);
+  // 고른 것뿐 아니라 **본 것 전부**를 기억해야 내일 다시 채점하지 않는다.
+  assert.deepEqual(await storage.get("seen"), ["1111.1111", "2222.2222"]);
 });
 
-test("이미 보낸 논문은 다시 채점하지도 보내지도 않는다", async () => {
+test("고른 게 없으면 보내지 않지만 본 것은 기억한다", async () => {
   const storage = storageStub();
-  const first = pipelineStub({ entries: [entry({ id: "1111.1111" })], scores: "1|9|좋음" });
-  await new PapersDO({ storage }, env()).run({ fetchImpl: first.impl });
-
-  // 다음 날 같은 논문이 개정판(v2)으로 다시 올라온다.
-  const second = pipelineStub({ entries: [entry({ id: "1111.1111", v: 2 })], scores: "1|9|좋음" });
-  const result = await new PapersDO({ storage }, env()).run({ fetchImpl: second.impl });
-
-  assert.equal(result.skipped, "새 논문 없음");
-  assert.equal(second.calls.llm, 0, "새 논문이 없는데 LLM 을 불렀다");
-  assert.equal(second.calls.discord, 0);
-});
-
-test("점수가 낮으면 아무것도 보내지 않고, 본 것은 기억한다", async () => {
-  const storage = storageStub();
-  const stub = pipelineStub({ entries: [entry({ id: "3333.3333" })], scores: "1|2|무관" });
-  const result = await new PapersDO({ storage }, env()).run({ fetchImpl: stub.impl });
+  const stub = discordStub();
+  const result = await new PapersDO({ storage }, env()).completeDigest(
+    { date: "2026-08-22", scanned: 3, ids: ["3333.3333"], hits: [], near: [] },
+    { at: MORNING, fetchImpl: stub.impl },
+  );
 
   // "오늘은 없습니다" 를 매일 보내면 그것부터 안 읽게 된다.
   assert.equal(result.skipped, "고를 만한 논문 없음");
-  assert.equal(stub.calls.discord, 0);
-  // 그래도 기억은 해야 내일 같은 논문을 또 채점하지 않는다.
+  assert.equal(stub.sent.length, 0);
   assert.deepEqual(await storage.get("seen"), ["3333.3333"]);
 });
 
-test("요약 하나가 실패해도 나머지는 보낸다", async () => {
-  let llm = 0;
-  const sent = [];
-  const impl = async (input, init) => {
-    const href = String(input);
-    if (href.includes("export.arxiv.org")) return new Response(feed(entry({ id: "4444.4444" })));
-    if (href.includes("generativelanguage")) {
-      llm++;
-      if (llm === 1) return Response.json({ candidates: [{ content: { parts: [{ text: "1|9|좋음" }] } }] });
-      return new Response("quota", { status: 429 });   // 요약만 실패
-    }
-    sent.push(JSON.parse(init.body));
-    return new Response(null, { status: 204 });
-  };
-  const result = await new PapersDO({ storage: storageStub() }, env()).run({ fetchImpl: impl });
-  assert.equal(result.hits, 1);
-  assert.match(sent[0].embeds[0].description, /expensive black-box/, "초록으로 대체되지 않았다");
+test("요약이 빠진 편은 초록으로 대체해서 보낸다", async () => {
+  // 데몬에서 요약 한 편이 실패해도 그 편을 빼지 않는다.
+  const stub = discordStub();
+  await new PapersDO({ storage: storageStub() }, env()).completeDigest(
+    { date: "2026-08-22", hits: [paper({ summary: "expensive black-box", summary_ko: undefined })], near: [] },
+    { at: MORNING, fetchImpl: stub.impl },
+  );
+  assert.match(stub.sent[0].body.embeds[0].description, /expensive black-box/);
 });
 
-test("dry 실행은 저장은 하되 디스코드로는 보내지 않는다", async () => {
+test("보낼 곳이 없으면 받아 놓고 조용히 넘어가지 않는다", async () => {
+  await assert.rejects(
+    () => new PapersDO({ storage: storageStub() }, env({ DISCORD_WEBHOOK_URL: "" }))
+      .completeDigest({ date: "2026-08-22", hits: [paper()], near: [] }, { at: MORNING }),
+    /보낼 곳이 없습니다/,
+  );
+});
+
+// ── 하루치를 언제 만들지는 엣지가 정한다 (claimDigest) ──────────────────
+
+test("아침이 지났고 오늘 것이 없으면 만들라고 한다", async () => {
+  const pending = await new PapersDO({ storage: storageStub() }, env())
+    .claimDigest({ at: MORNING });
+  assert.equal(pending.due, true);
+  assert.equal(pending.date, "2026-08-22");
+  assert.deepEqual(pending.seen, []);
+});
+
+test("생성 시각 전에는 만들지 않는다", async () => {
+  // 06:00 KST. arXiv 하루치가 아직 다 모이지 않았다.
+  const early = Date.parse("2026-08-21T21:00:00Z");
+  const pending = await new PapersDO({ storage: storageStub() }, env()).claimDigest({ at: early });
+  assert.equal(pending.due, false);
+});
+
+test("오늘 것이 이미 있으면 다시 만들지 않는다", async () => {
   const storage = storageStub();
-  const stub = pipelineStub({ entries: [entry({ id: "5555.5555" })], scores: "1|9|좋음" });
-  await new PapersDO({ storage }, env()).run({ fetchImpl: stub.impl, dryRun: true });
-  assert.equal(stub.calls.discord, 0);
-  assert.ok(await storage.get("latest"));
+  await storage.put("digest:2026-08-22", { date: "2026-08-22" });
+  const pending = await new PapersDO({ storage }, env()).claimDigest({ at: MORNING });
+  assert.equal(pending.due, false);
+});
+
+test("한 번 집어가면 만드는 동안 다른 실행이 또 집어가지 않는다", async () => {
+  // 데몬은 1분마다 도는데 채점·요약은 몇 분씩 걸린다. 찜하지 않으면 같은
+  // 하루치를 여러 번 만들고 디스코드로도 여러 번 나간다.
+  const storage = storageStub();
+  const instance = new PapersDO({ storage }, env());
+  assert.equal((await instance.claimDigest({ at: MORNING })).due, true);
+  assert.equal((await instance.claimDigest({ at: MORNING + 60_000 })).due, false);
+  // 찜이 만료되면 다시 집어간다 — 데몬이 죽어도 영영 막히지 않는다.
+  assert.equal((await instance.claimDigest({ at: MORNING + CLAIM_TTL_MS + 1 })).due, true);
+});
+
+test("peek 은 보기만 하고 집어가지 않는다", async () => {
+  const instance = new PapersDO({ storage: storageStub() }, env());
+  assert.equal((await instance.claimDigest({ at: MORNING, claim: false })).due, true);
+  assert.equal((await instance.claimDigest({ at: MORNING })).due, true, "peek 이 자리를 찜했다");
+});
+
+test("보낼 곳이 없으면 만들라고 하지도 않는다", async () => {
+  // 만들고 나서 보낼 곳이 없다고 실패하면 구독 호출이 그대로 낭비된다.
+  const pending = await new PapersDO({ storage: storageStub() }, env({ DISCORD_WEBHOOK_URL: "" }))
+    .claimDigest({ at: MORNING });
+  assert.equal(pending.due, false);
+  assert.match(pending.reason, /보낼 곳이 없습니다/);
 });
 
 test("보관본을 최신순으로 돌려준다", async () => {
@@ -321,25 +338,6 @@ test("보관본을 최신순으로 돌려준다", async () => {
   }
   const body = await (await instance.fetch(new Request("https://papers/archive?limit=2"))).json();
   assert.deepEqual(body.digests.map((d) => d.date), ["2026-08-22", "2026-08-21"]);
-});
-
-test("웹훅이 없으면 실패로 알린다 (조용히 넘어가지 않는다)", async () => {
-  const stub = pipelineStub({ entries: [entry({ id: "6666.6666" })], scores: "1|9|좋음" });
-  await assert.rejects(
-    () => new PapersDO({ storage: storageStub() }, env({ DISCORD_WEBHOOK_URL: "" })).run({ fetchImpl: stub.impl }),
-    /보낼 곳이 없습니다/,
-  );
-});
-
-test("웹훅이 없으면 LLM 을 태우기 전에 멈춘다", async () => {
-  // 맨 끝에서 확인하면 조회·채점·요약 비용을 다 쓰고 나서 실패한다.
-  const stub = pipelineStub({ entries: [entry({ id: "7777.7777" })], scores: "1|9|좋음" });
-  await assert.rejects(
-    () => new PapersDO({ storage: storageStub() }, env({ DISCORD_WEBHOOK_URL: "" })).run({ fetchImpl: stub.impl }),
-    /보낼 곳이 없습니다/,
-  );
-  assert.equal(stub.calls.llm, 0, "LLM 을 부르고 나서 실패했다");
-  assert.equal(stub.calls.arxiv, 0, "arXiv 까지 불렀다");
 });
 
 // ── 보낼 곳 (봇 토큰 / 웹훅) ────────────────────────────────────────────
@@ -379,18 +377,18 @@ test("봇 경로도 같은 payload 와 429 규칙을 쓴다", async () => {
 });
 
 test("봇 토큰으로 하루치를 보낸다", async () => {
-  const stub = pipelineStub({ entries: [entry({ id: "8888.8888" })], scores: "1|9|좋음" });
+  const stub = discordStub();
   const result = await new PapersDO({ storage: storageStub() },
-    { GEMINI_API_KEY: "k", DISCORD_BOT_TOKEN: "t", DISCORD_CHANNEL_ID: "9" }
-  ).run({ fetchImpl: stub.impl });
+    { DISCORD_BOT_TOKEN: "t", DISCORD_CHANNEL_ID: "9" },
+  ).completeDigest({ date: "2026-08-22", hits: [paper()], near: [] }, { at: MORNING, fetchImpl: stub.impl });
   assert.equal(result.via, "bot");
-  assert.equal(stub.calls.discord, 1);
+  assert.match(stub.sent[0].url, /channels\/9\/messages$/);
 });
 
 // ── 밖으로 열린 경로 ────────────────────────────────────────────────────
 
-test("밖에서는 읽기만 되고 /run 은 닫혀 있다", async () => {
-  // 열려 있으면 아무나 arXiv 조회·LLM 호출을 돌리고 남의 디스코드로 보낼 수 있다.
+test("밖에서는 읽기만 되고 하루치를 만드는 경로는 닫혀 있다", async () => {
+  // 열려 있으면 아무나 남의 디스코드로 발송을 시킬 수 있다.
   const calls = [];
   const env = {
     PAPERS: {
@@ -402,8 +400,8 @@ test("밖에서는 읽기만 되고 /run 은 닫혀 있다", async () => {
     handlePapers(new Request(`https://life.bubblelab.dev${path}`, { method }), env,
       new URL(`https://life.bubblelab.dev${path}`));
 
-  assert.equal((await ask("POST", "/_papers/run")).status, 404, "/run 이 밖으로 열려 있다");
-  assert.equal((await ask("GET", "/_papers/run")).status, 404);
+  assert.equal((await ask("POST", "/_papers/digest/done")).status, 404, "발송 경로가 밖으로 열려 있다");
+  assert.equal((await ask("GET", "/_papers/digest/pending")).status, 404);
   assert.equal((await ask("POST", "/_papers/latest")).status, 404, "쓰기 메서드가 통과했다");
   assert.deepEqual(calls, [], "거부해야 할 요청이 DO 까지 갔다");
 

@@ -38,6 +38,12 @@ export const SCORE_HIT = 8;    // 🎯 정확히 내 문제
 export const SCORE_NEAR = 5;   // 🔍 인접
 export const MAX_PICKS = 5;    // 디스코드 임베드 상한(10)의 절반. 하루 5편이면 충분하다.
 export const MAX_ARCHIVE = 400;
+// 하루치를 만드는 시각(KST). arXiv 신규 공지가 13~14시 KST 라 그 다음 날 아침이면
+// 하루치가 다 모여 있다.
+export const DIGEST_HOUR_KST = 7;
+// 찜의 수명. 채점 1회 + 요약 최대 5회이고 각 호출의 상한이 3분이라 최악이 18분이다
+// — 그보다 넉넉해야 정상 실행 중에 다른 실행이 끼어들지 않는다.
+export const CLAIM_TTL_MS = 30 * 60 * 1000;
 /* arXiv 는 주말에 쉬고, 색인에 하루 남짓 더 걸린다. 2026-08-22(토) 23시 KST 에
  * 재어 보니 색인된 최신 논문이 08-20 이었다 — 이틀 창이면 그 날 다이제스트가
  * 통째로 빈다. 닷새면 주말과 색인 지연을 함께 넘고, 이미 보낸 것은 `seen` 이
@@ -212,32 +218,13 @@ export function parseSummary(text) {
   return out;
 }
 
-/* ── LLM ─────────────────────────────────────────────────────────────────
- * podcast-ai.js 와 같은 뜻의 env 교체 방식을 쓰되, 그쪽 프롬프트 빌더에
- * 묶이지 않게 여기서 얇게 부른다(그건 팟캐스트 대본 전용이다).
+/* ── LLM 은 엣지에 없다 ──────────────────────────────────────────────────
+ * 채점도 요약도 **집 PC 의 `claude -p`(구독)** 가 만든다. 엣지에서 부르려면
+ * 별도 API 키가 필요한데, 이 도구 하나 때문에 키와 청구서를 늘리지 않기로 했다.
+ * 그래서 이 파일에는 프롬프트를 짓는 함수와 답을 읽는 함수만 있고, 실제 호출은
+ * `_src/papers-sink/` 가 한다 — invest-sink 와 같은 거래다(PC 가 꺼져 있으면
+ * 그날 다이제스트는 PC 가 켜질 때까지 미뤄진다).
  */
-export async function callLLM(env, prompt, { fetchImpl = fetch } = {}) {
-  const key = env.PAPERS_LLM_API_KEY || env.GEMINI_API_KEY;
-  if (!key) throw new Error("GEMINI_API_KEY (또는 PAPERS_LLM_API_KEY) 가 없습니다");
-  const model = env.PAPERS_LLM_MODEL || "gemini-flash-latest";
-  const base = env.PAPERS_LLM_BASE_URL || "https://generativelanguage.googleapis.com/v1beta";
-
-  const response = await fetchImpl(`${base}/models/${model}:generateContent`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-    body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.2 },
-    }),
-  });
-  if (!response.ok) {
-    throw new Error(`LLM 호출 실패 (HTTP ${response.status})`);
-  }
-  const body = await response.json();
-  const text = (body?.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("");
-  if (!text.trim()) throw new Error("LLM 이 빈 응답을 돌려줬습니다");
-  return text;
-}
 
 /* ── 디스코드 ────────────────────────────────────────────────────────────
  * 한도: 임베드 10개 · 설명 4096자 · 제목 256자 · **전체 합 6000자**.
@@ -388,51 +375,70 @@ export class PapersDO {
    * 하루치를 만들어 보낸다. 새 논문이 없으면 **아무것도 보내지 않는다** —
    * "오늘은 없습니다" 를 매일 보내면 그것부터 안 읽게 된다.
    */
-  async run({ at = Date.now(), fetchImpl = fetch, dryRun = false } = {}) {
+  /**
+   * PC 데몬이 물어본다: "오늘 치를 내가 만들까?"
+   *
+   * 판단을 엣지가 하는 이유는 **오늘 것이 이미 저장됐는지 아는 쪽이 여기**라서다.
+   * 넘겨줄 때 자리를 찜해 둔다(`claim`) — 데몬은 1분마다 도는데 채점·요약은
+   * 몇 분씩 걸려서, 찜하지 않으면 앞선 실행이 끝나기 전에 다음 실행이 같은
+   * 하루치를 또 만든다. 찜이 만료되면 다시 집어가므로 데몬이 죽어도 막히지 않는다.
+   */
+  async claimDigest({ at = Date.now(), claim = true } = {}) {
+    const date = kstDate(at);
     const env = this.env;
-    const profile = env.PAPERS_PROFILE || RESEARCH_PROFILE;
 
-    // 보낼 곳부터 본다. 맨 끝에서 확인하면 조회·채점·요약을 전부 태우고 나서
-    // 보낼 곳이 없다고 실패하게 된다 — LLM 호출이 그대로 낭비된다.
+    if (!createDelivery(env)) {
+      return { due: false, reason: "보낼 곳이 없습니다 — DISCORD_BOT_TOKEN+DISCORD_CHANNEL_ID" };
+    }
+    if (await this.state.storage.get(`digest:${date}`)) return { due: false, reason: "오늘 것은 이미 있습니다" };
+
+    // arXiv 신규 공지(13~14시 KST)가 한참 지난 뒤라 하루치가 다 모여 있다.
+    const hourKst = new Date(at + 9 * 60 * 60 * 1000).getUTCHours();
+    if (hourKst < DIGEST_HOUR_KST) return { due: false, reason: `${DIGEST_HOUR_KST}시 이후에 만듭니다` };
+
+    const claimed = (await this.state.storage.get("claim")) ?? 0;
+    if (at - claimed < CLAIM_TTL_MS) return { due: false, reason: "다른 실행이 만드는 중입니다" };
+    if (claim) await this.state.storage.put("claim", at);
+
+    return {
+      due: true,
+      date,
+      profile: env.PAPERS_PROFILE || RESEARCH_PROFILE,
+      seen: [...(await this.#seen())],
+    };
+  }
+
+  /**
+   * 데몬이 만들어 온 하루치를 받아 보관하고 디스코드로 보낸다.
+   *
+   * **본 논문 ID 는 고른 게 없어도 기억한다** — 안 그러면 내일 같은 논문을 다시
+   * 채점한다. 봇 토큰이 엣지에만 있으므로 발송도 여기서 한다(PC 로 내리지 않는다).
+   */
+  async completeDigest(payload, { at = Date.now(), fetchImpl = fetch } = {}) {
+    const env = this.env;
     const delivery = createDelivery(env);
-    if (!delivery && !dryRun) {
-      throw new Error("보낼 곳이 없습니다 — DISCORD_WEBHOOK_URL 또는 DISCORD_BOT_TOKEN+DISCORD_CHANNEL_ID");
+    if (!delivery) throw new Error("보낼 곳이 없습니다");
+
+    const scanned = Number(payload?.scanned) || 0;
+    const ids = Array.isArray(payload?.ids) ? payload.ids.map(String).slice(0, 200) : [];
+    const digest = normalizeDigest({
+      date: String(payload?.date || kstDate(at)).slice(0, 10),
+      ts: at,
+      scanned,
+      hits: Array.isArray(payload?.hits) ? payload.hits : [],
+      near: Array.isArray(payload?.near) ? payload.near : [],
+    });
+
+    if (ids.length) await this.#remember(ids);
+    await this.state.storage.delete("claim");
+
+    if (!digest.hits.length && !digest.near.length) {
+      return { skipped: "고를 만한 논문 없음", scanned };
     }
-
-    const candidates = await fetchCandidates({ at, fetchImpl });
-    const seen = await this.#seen();
-    const fresh = candidates.filter((paper) => !seen.has(paper.id));
-    if (!fresh.length) return { skipped: "새 논문 없음", scanned: candidates.length };
-
-    const scored = parseScores(
-      await callLLM(env, buildScorePrompt(fresh, profile), { fetchImpl }),
-      fresh,
-    );
-    const { hits, near } = pickPapers(scored);
-
-    // 요약은 실제로 보낼 것에만 붙인다 — 후보 전부에 붙이면 호출이 6배가 된다.
-    for (const paper of [...hits, ...near]) {
-      try {
-        paper.summary_ko = parseSummary(
-          await callLLM(env, buildSummaryPrompt(paper, profile), { fetchImpl }),
-        );
-      } catch {
-        // 요약 하나가 실패해도 나머지는 보낸다. 초록으로 대체된다.
-      }
-    }
-
-    const digest = normalizeDigest({ date: kstDate(at), ts: at, scanned: candidates.length, hits, near });
-    // 고른 게 없어도 본 것은 기억한다 — 내일 같은 논문을 다시 채점하지 않는다.
-    await this.#remember(fresh.map((p) => p.id));
-
-    if (!hits.length && !near.length) return { skipped: "고를 만한 논문 없음", scanned: candidates.length };
 
     await this.#save(digest);
-    if (!dryRun) await postToDiscord(delivery, buildDiscordPayload(digest), { fetchImpl });
-    return {
-      date: digest.date, hits: hits.length, near: near.length,
-      scanned: candidates.length, via: delivery?.kind ?? "dry",
-    };
+    await postToDiscord(delivery, buildDiscordPayload(digest), { fetchImpl });
+    return { date: digest.date, hits: digest.hits.length, near: digest.near.length, scanned, via: delivery.kind };
   }
 
   /** 살아 있는 질문만. 토큰이 죽은 것은 목록에서 뺀다. */
@@ -449,10 +455,16 @@ export class PapersDO {
   async fetch(request) {
     const url = new URL(request.url);
 
-    if (url.pathname === "/run" && request.method === "POST") {
-      const dryRun = url.searchParams.get("dry") === "1";
+    // PC 데몬이 하루치를 가져가고(찜) 만들어서 돌려준다.
+    if (url.pathname === "/digest/pending" && request.method === "GET") {
+      const claim = url.searchParams.get("peek") !== "1";
+      return Response.json(await this.claimDigest({ claim }));
+    }
+
+    if (url.pathname === "/digest/done" && request.method === "POST") {
+      const payload = await request.json().catch(() => null);
       try {
-        return Response.json(await this.run({ dryRun }));
+        return Response.json(await this.completeDigest(payload ?? {}));
       } catch (error) {
         return Response.json({ error: String(error.message ?? error) }, { status: 502 });
       }
@@ -502,25 +514,16 @@ export class PapersDO {
 }
 
 /** 워커의 scheduled 훅이 부른다. */
-export async function runDailyPapers(env) {
-  const id = env.PAPERS.idFromName("main");
-  const response = await env.PAPERS.get(id).fetch(new Request("https://papers/run", { method: "POST" }));
-  const body = await response.text();
-  if (!response.ok) console.error("papers 일일 실행 실패", body);
-  else console.log("papers", body);
-}
-
 /**
  * 밖으로 열어 두는 경로. **읽기 전용만** 연다.
  *
- * `/run` 이 여기 없는 건 실수가 아니다 — 열려 있으면 아무나 arXiv 조회와 LLM
- * 호출을 돌리고 남의 디스코드로 발송까지 시킬 수 있다. 정기 실행은 cron 이
- * DO 를 직접 부르므로 이 경로가 필요 없다.
+ * 하루치를 만드는 경로가 여기 없는 건 실수가 아니다 — 열려 있으면 아무나 남의
+ * 디스코드로 발송을 시킬 수 있다. 만드는 쪽은 sink secret 뒤에 둔다.
  */
 const PUBLIC_PATHS = new Set(["/latest", "/archive"]);
 
 /** PC 데몬만 부르는 경로. sink secret 으로 막는다. */
-const SINK_PATHS = new Set(["/asks", "/asks/done"]);
+const SINK_PATHS = new Set(["/asks", "/asks/done", "/digest/pending", "/digest/done"]);
 
 /** 길이·내용 모두 상수 시간으로 비교한다. 인증 경계라 값싼 대로 제대로 한다. */
 export function secretMatches(offered, expected) {
@@ -543,7 +546,8 @@ export async function handlePapersSink(request, env, url) {
   }
   const id = env.PAPERS.idFromName("main");
   const response = await env.PAPERS.get(id).fetch(
-    new Request(`https://papers${path}`, {
+    // 쿼리를 함께 넘긴다 — 떼면 `?peek=1`(찜하지 않고 보기)이 조용히 무시된다.
+    new Request(`https://papers${path}${url.search}`, {
       method: request.method,
       headers: { "Content-Type": "application/json" },
       body: request.method === "POST" ? await request.text() : undefined,
@@ -573,7 +577,7 @@ export async function handlePapers(request, env, url) {
 
 /* ── 질문에 답하기 (디스코드 슬래시 명령) ────────────────────────────────
  *
- * 요약은 Gemini(callLLM)로 만들고 질문 답변은 Claude 로 한다. 요약은 정해진
+ * 채점·요약·답변이 모두 집 PC 의 Claude 로 간다. 요약은 정해진
  * 틀을 채우는 일이라 싼 모델로 충분하지만, "이 방법을 800회 예산에 쓸 수 있나"
  * 같은 물음은 논문의 가정과 내 제약을 견줘야 해서 추론 품질이 실제로 갈린다.
  */

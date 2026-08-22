@@ -81,7 +81,7 @@ import { validPlannerCode } from "./planner.js";
 import { handleFortuneChart, handleFortunePush, sendFortuneDaily } from "./fortune.js";
 import { handleBriefPush, handleBriefRates, handleBriefToday, sendBriefDaily } from "./brief.js";
 import { handlePodcast, handlePodcastAdmin, runDailyGeneration, runEveningReminder, UPLOAD_MAX_BYTES } from "./podcast.js";
-import { handlePapers, handlePapersSink, runDailyPapers } from "./papers.js";
+import { handlePapers, handlePapersSink } from "./papers.js";
 import { handleCommandRegistration, handleInteraction } from "./discord.js";
 import { handleEstateDeals } from "./estate.js";
 import { serveAssetDownload, serveAssetDownloadCounts } from "./downloads.js";
@@ -1937,8 +1937,8 @@ export async function handleRequest(request, env, ctx) {
       return Response.json(data, { headers: { "Cache-Control": "no-store" } });
     }
 
-    // 매일 논문 다이제스트 (life.bubblelab.dev/papers). 읽기 전용 조회만 열려 있다 —
-    // 실행(/run)은 cron 이 DO 를 직접 부르므로 밖으로 나오지 않는다.
+    // 매일 논문 다이제스트 (life.bubblelab.dev/papers). 밖에는 읽기 전용 조회만
+    // 열려 있고, 하루치를 만드는 경로는 집 PC 데몬만 부른다(sink secret).
     if (path.startsWith("/_papers/")) {
       if (!featureEnabled(env, "ENABLE_PAPERS") || !env.PAPERS) {
         return Response.json({ error: "papers is temporarily unavailable" }, {
@@ -1946,7 +1946,7 @@ export async function handleRequest(request, env, ctx) {
         });
       }
       // 집 PC 데몬 전용 경로는 sink secret 으로, 나머지는 읽기 전용으로 연다.
-      return path.startsWith("/_papers/asks")
+      return path.startsWith("/_papers/asks") || path.startsWith("/_papers/digest")
         ? handlePapersSink(request, env, url)
         : handlePapers(request, env, url);
     }
@@ -2231,11 +2231,6 @@ export default {
     const podcastReady = featureEnabled(env, "ENABLE_PODCAST") && env.PODCAST_BUCKET;
     if (controller.cron === "0 13 * * *") {
       if (podcastReady) ctx.waitUntil(runEveningReminder(env));
-      return;
-    }
-    // 07:00 KST. arXiv 신규 공지(13~14시 KST)가 한참 지난 뒤라 하루치가 다 모여 있다.
-    if (controller.cron === "0 22 * * *") {
-      if (featureEnabled(env, "ENABLE_PAPERS") && env.PAPERS) ctx.waitUntil(runDailyPapers(env));
       return;
     }
     if (controller.cron === "0 23 * * *") {

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// papers-sink — 디스코드 `/논문` 질문을 집 PC 의 Claude Code 로 답한다.
+// papers-sink — 하루치 다이제스트를 만들고, 디스코드 `/논문` 질문에 답한다.
+// 둘 다 집 PC 의 Claude Code 가 한다.
 //
 // 왜 PC 에서 도는가: 엣지에서 Claude 를 부르려면 API 키(=별도 과금)가 필요하다.
 // `claude -p` 는 이미 쓰는 구독에서 차감되므로 키도 청구서도 늘지 않는다.
@@ -14,13 +15,20 @@
 import { spawn } from "node:child_process";
 import { dirname } from "node:path";
 
-import { ANSWER_LIMIT, buildAskPrompt, RESEARCH_PROFILE } from "../../_infra/papers.js";
+import {
+  ANSWER_LIMIT, buildAskPrompt, buildScorePrompt, buildSummaryPrompt,
+  fetchCandidates, parseScores, parseSummary, pickPapers, RESEARCH_PROFILE,
+} from "../../_infra/papers.js";
 
 const BASE = (process.env.PAPERS_ENDPOINT ?? "").trim() || "https://life.bubblelab.dev";
 const CLAUDE = (process.env.CLAUDE_BIN ?? "").trim() || "claude";
 // 한 번에 답할 개수. 폭주해도 구독 한도를 한꺼번에 태우지 않게 막아 둔다.
 const MAX_PER_RUN = 3;
 const TIMEOUT_MS = 180_000;
+// 한 번에 채점할 후보 수. 프롬프트 하나에 전부 넣어야 서로를 보고 상대 순위를
+// 매길 수 있는데, 너무 길면 뒤쪽을 대충 읽는다. 실측 후보가 하루 ~30편이라
+// 평소엔 걸리지 않고, 연휴 뒤처럼 몰릴 때만 최신순으로 자른다.
+const MAX_SCORED = 40;
 
 function required(name) {
   const value = (process.env[name] ?? "").trim();
@@ -95,12 +103,59 @@ async function reply(applicationId, token, embed) {
   return response.ok;
 }
 
+/**
+ * 하루치를 만든다. 엣지가 "만들 때"라고 할 때만 들어온다.
+ *
+ * 채점은 **한 번의 호출로 전부** 한다 — 편마다 부르면 서로를 못 보고 매기게 되어
+ * 같은 날 상대 순위가 흔들린다. 요약은 반대로 실제로 보낼 것에만 붙인다(후보
+ * 전부에 붙이면 호출이 예닐곱 배가 된다).
+ */
+async function buildDigest(secret) {
+  const pending = await api("/digest/pending", secret);
+  if (!pending?.due) return;
+
+  console.log(`${new Date().toLocaleString("ko-KR")} ${pending.date} 다이제스트 생성`);
+  const profile = pending.profile || RESEARCH_PROFILE;
+  const seen = new Set(pending.seen ?? []);
+
+  const candidates = await fetchCandidates();
+  const fresh = candidates.filter((paper) => !seen.has(paper.id)).slice(0, MAX_SCORED);
+  console.log(`  후보 ${candidates.length}편 중 새것 ${fresh.length}편`);
+
+  let hits = [], near = [];
+  if (fresh.length) {
+    const scored = parseScores(await ask(buildScorePrompt(fresh, profile)), fresh);
+    ({ hits, near } = pickPapers(scored));
+
+    for (const paper of [...hits, ...near]) {
+      try {
+        paper.summary_ko = parseSummary(await ask(buildSummaryPrompt(paper, profile)));
+      } catch (error) {
+        // 요약 하나가 실패해도 나머지는 보낸다 — 화면에서는 초록으로 대체된다.
+        console.error(`  요약 실패(${paper.id}): ${error.message}`);
+      }
+    }
+  }
+
+  // 고른 게 없어도 본 것은 올린다 — 안 그러면 내일 같은 논문을 다시 채점한다.
+  const result = await api("/digest/done", secret, {
+    method: "POST",
+    body: JSON.stringify({
+      date: pending.date, scanned: candidates.length,
+      ids: fresh.map((paper) => paper.id), hits, near,
+    }),
+  });
+  console.log(`  ${JSON.stringify(result)}`);
+}
+
 async function main() {
   const secret = required("PAPERS_SINK_SECRET");
   const applicationId = required("DISCORD_APPLICATION_ID");
 
+  // 질문을 먼저 본다. interaction 토큰이 15분이면 죽어서 다이제스트(몇 분 걸린다)
+  // 뒤로 밀면 그 사이에 시한을 넘긴다.
   const { asks } = await api("/asks", secret);
-  if (!asks?.length) return;   // 조용히 끝낸다 — 1분마다 도는 자리다
+  if (!asks?.length) return buildDigest(secret);   // 조용히 끝낸다 — 1분마다 도는 자리다
 
   const digest = await latestDigest();
   const profile = process.env.PAPERS_PROFILE || RESEARCH_PROFILE;
@@ -128,6 +183,7 @@ async function main() {
   }
 
   await api("/asks/done", secret, { method: "POST", body: JSON.stringify({ ids: done }) });
+  await buildDigest(secret);
 }
 
 main().catch((error) => {
