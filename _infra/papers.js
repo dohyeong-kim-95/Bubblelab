@@ -345,7 +345,9 @@ export function normalizeDigest(digest) {
   };
 }
 
-const digestField = (paper, field) => String(paper?.summary_ko?.[field] ?? "").slice(0, 200);
+// 프롬프트에서 120자를 넘기지 말라고 하지만 모델이 곧잘 넘긴다. 자를 때는 잘렸다고
+// 보이게 한다 — 맨 슬라이스면 문장이 끊긴 자리가 오류처럼 읽힌다.
+const digestField = (paper, field) => clip(String(paper?.summary_ko?.[field] ?? ""), 200);
 
 export class PapersDO {
   constructor(state, env) {
