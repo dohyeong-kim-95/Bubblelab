@@ -42,12 +42,15 @@ export const MAX_ARCHIVE = 400;
 // 하루치가 다 모여 있다.
 export const DIGEST_HOUR_KST = 7;
 /* ── 채널 대화 ────────────────────────────────────────────────────────────
- * 슬래시 명령 없이 전용 채널에 그냥 쓰면 답한다. 게이트웨이(상주 연결)를 두지
- * 않고 **REST 를 1분마다 훑는** 방식이라, 이미 도는 데몬 말고 새로 띄울 게 없다.
- * 대신 응답이 즉시가 아니라 1~2분 뒤다 — 출퇴근길에 읽는 용도라 그걸로 족하다.
+ * 슬래시 명령 없이 전용 채널에 그냥 쓰면 답한다. 듣는 것은 집 PC 의 상주
+ * 데몬(`_src/papers-sink/gateway.mjs`)이고, 엣지는 **오간 말을 기억만** 한다 —
+ * PC 를 갈아엎어도 대화가 남게.
+ *
+ * 발송까지 게이트웨이가 직접 하는 이유는 지연이다. 엣지를 한 번 더 거치면
+ * 사람이 느끼는 만큼 늦어지는데, 상주로 만든 목적이 바로 그 지연을 없애는 것이다.
  *
  * 봇이 채널 글을 읽으려면 개발자 포털에서 **Message Content 인텐트**를 켜야 한다
- * (서버 100개 미만이면 심사 없이 토글만 켜면 된다). REST 도 이 인텐트에 걸린다.
+ * (서버 100개 미만이면 심사 없이 토글만 켜면 된다).
  */
 export const CHAT_HISTORY_LIMIT = 12;   // 오가는 말 12개까지 기억한다
 export const CHAT_ANSWER_LIMIT = 1800;  // 디스코드 메시지 상한 2000자 안쪽
@@ -515,73 +518,18 @@ export class PapersDO {
    * "새 말 있나" 를 물어보고 답만 만들어 준다.
    */
 
-  /** 새 메시지. 처음 켠 순간에는 **밀린 것을 답하지 않는다** — 자리만 잡는다. */
-  async chatPoll({ fetchImpl = fetch } = {}) {
-    const channel = this.env.DISCORD_CHAT_CHANNEL_ID;
-    const token = this.env.DISCORD_BOT_TOKEN;
-    if (!channel || !token) return { messages: [], reason: "대화 채널이 설정되지 않았습니다" };
-
-    const since = await this.state.storage.get("chat:last");
-    const url = new URL(`https://discord.com/api/v10/channels/${channel}/messages`);
-    url.searchParams.set("limit", since ? "20" : "1");
-    if (since) url.searchParams.set("after", since);
-
-    const response = await fetchImpl(url, { headers: { Authorization: `Bot ${token}` } });
-    if (!response.ok) throw new Error(`채널 조회 실패 (HTTP ${response.status})`);
-    const rows = await response.json();
-    if (!Array.isArray(rows)) return { messages: [] };
-
-    // 처음이면 지금 자리만 기억하고 끝낸다. 안 그러면 켜자마자 밀린 대화에
-    // 줄줄이 답한다.
-    if (!since) {
-      if (rows[0]?.id) await this.state.storage.put("chat:last", rows[0].id);
-      return { messages: [], reason: "대화 시작 위치를 잡았습니다" };
-    }
-
-    // 디스코드는 최신순으로 준다. 오래된 것부터 읽어야 말의 순서가 맞는다.
-    const humans = rows.filter((row) => !row.author?.bot);
-    const messages = humans
-      .filter((row) => String(row.content ?? "").trim())
-      .map((row) => ({ id: row.id, text: String(row.content).trim().slice(0, 2000) }))
-      .reverse();
-
-    // 인텐트가 꺼져 있으면 글은 오는데 **내용만 빈 채로** 온다. 그냥 넘기면
-    // 아무 일도 안 일어난 것처럼 보여서 어디가 막혔는지 알 수 없다.
-    if (humans.length && !messages.length) {
-      return {
-        messages: [],
-        needsIntent: true,
-        reason: "메시지 내용이 비어 있습니다 — 개발자 포털에서 Message Content 인텐트를 켜세요",
-      };
-    }
-
-    return {
-      messages,
-      cursor: rows[0]?.id ?? since,
-      history: (await this.state.storage.get("chat:history")) ?? [],
-    };
+  async chatHistory() {
+    return { history: (await this.state.storage.get("chat:history")) ?? [] };
   }
 
-  /** 답을 채널에 올리고, 오간 말을 기억하고, 커서를 옮긴다. */
-  async chatReply({ cursor, question, answer }, { fetchImpl = fetch } = {}) {
-    const channel = this.env.DISCORD_CHAT_CHANNEL_ID;
-    const token = this.env.DISCORD_BOT_TOKEN;
-    if (!channel || !token) throw new Error("대화 채널이 설정되지 않았습니다");
-
-    const text = String(answer ?? "").trim().slice(0, CHAT_ANSWER_LIMIT);
-    if (text) {
-      await postToDiscord({ kind: "bot", url: `https://discord.com/api/v10/channels/${channel}/messages`,
-        headers: { Authorization: `Bot ${token}` } }, { content: text }, { fetchImpl });
-    }
-
+  /** 오간 말을 기억한다. 발송은 게이트웨이가 직접 하므로 여기서는 기억만. */
+  async chatRemember({ question, answer }) {
     const history = (await this.state.storage.get("chat:history")) ?? [];
     const next = [...history,
       { role: "user", text: String(question ?? "").slice(0, 600) },
-      { role: "bot", text: text.slice(0, 600) },
+      { role: "bot", text: String(answer ?? "").slice(0, 600) },
     ].slice(-CHAT_HISTORY_LIMIT);
     await this.state.storage.put("chat:history", next);
-    // **답한 뒤에 커서를 옮긴다.** 먼저 옮기면 답을 만들다 죽었을 때 그 말이 사라진다.
-    if (cursor) await this.state.storage.put("chat:last", String(cursor));
     return { ok: true, remembered: next.length };
   }
 
@@ -623,21 +571,13 @@ export class PapersDO {
   async fetch(request) {
     const url = new URL(request.url);
 
-    if (url.pathname === "/chat" && request.method === "GET") {
-      try {
-        return Response.json(await this.chatPoll());
-      } catch (error) {
-        return Response.json({ error: String(error.message ?? error) }, { status: 502 });
-      }
+    if (url.pathname === "/chat/history" && request.method === "GET") {
+      return Response.json(await this.chatHistory());
     }
 
-    if (url.pathname === "/chat/reply" && request.method === "POST") {
+    if (url.pathname === "/chat/remember" && request.method === "POST") {
       const payload = await request.json().catch(() => null);
-      try {
-        return Response.json(await this.chatReply(payload ?? {}));
-      } catch (error) {
-        return Response.json({ error: String(error.message ?? error) }, { status: 502 });
-      }
+      return Response.json(await this.chatRemember(payload ?? {}));
     }
 
     if (url.pathname === "/comments" && request.method === "GET") {
@@ -726,7 +666,7 @@ export class PapersDO {
 const PUBLIC_PATHS = new Set(["/latest", "/archive"]);
 
 /** PC 데몬만 부르는 경로. sink secret 으로 막는다. */
-const SINK_PATHS = new Set(["/asks", "/asks/done", "/digest/pending", "/digest/done", "/chat", "/chat/reply"]);
+const SINK_PATHS = new Set(["/asks", "/asks/done", "/digest/pending", "/digest/done", "/chat/history", "/chat/remember"]);
 
 /**
  * 댓글. **LIFE 세션 쿠키로만** 연다 — 화면이 게이트 뒤에 있으니 쓰기도 같은
