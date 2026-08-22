@@ -1954,6 +1954,7 @@ export async function handleRequest(request, env, ctx) {
       }
       // 집 PC 데몬 전용 경로는 sink secret 으로, 나머지는 읽기 전용으로 연다.
       return path.startsWith("/_papers/asks") || path.startsWith("/_papers/digest")
+        || path.startsWith("/_papers/chat")
         ? handlePapersSink(request, env, url)
         : handlePapers(request, env, url);
     }

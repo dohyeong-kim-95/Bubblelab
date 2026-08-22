@@ -16,8 +16,9 @@ import { spawn } from "node:child_process";
 import { dirname } from "node:path";
 
 import {
-  ANSWER_LIMIT, buildAskPrompt, buildScorePrompt, buildSummaryPrompt,
-  fetchCandidates, parseScores, parseSummary, pickPapers, RESEARCH_PROFILE,
+  ANSWER_LIMIT, buildAskPrompt, buildChatAnswerPrompt, buildChatPrompt, buildScorePrompt,
+  buildSummaryPrompt, CHAT_ANSWER_LIMIT, fetchCandidates, parseScores, parseSearchRequest,
+  parseSummary, pickPapers, RESEARCH_PROFILE, searchArxiv,
 } from "../../_infra/papers.js";
 
 const BASE = (process.env.PAPERS_ENDPOINT ?? "").trim() || "https://life.bubblelab.dev";
@@ -148,6 +149,51 @@ async function buildDigest(secret) {
   console.log(`  ${JSON.stringify(result)}`);
 }
 
+/**
+ * 전용 채널의 자유 대화. 새 말이 있으면 답한다.
+ *
+ * **검색은 모델이 아니라 여기서 돈다.** 도구 없이 부르는 claude 에게 논문을 물으면
+ * arXiv 번호를 지어내므로, "찾아봐야겠다" 는 판단만 모델에게 맡기고 실제 조회는
+ * 이 함수가 한 뒤 그 결과만 보여 주고 다시 답하게 한다.
+ */
+async function chat(secret) {
+  const poll = await api("/chat", secret);
+  const messages = poll?.messages ?? [];
+  if (!messages.length) return;
+
+  // 한꺼번에 여러 줄을 썼으면 한 번의 말로 묶어 답한다 — 줄마다 답하면 시끄럽다.
+  const question = messages.map((m) => m.text).join("\n").slice(0, 2000);
+  console.log(`${new Date().toLocaleString("ko-KR")} 대화: ${question.slice(0, 60)}`);
+
+  const digest = await latestDigest();
+  const profile = process.env.PAPERS_PROFILE || RESEARCH_PROFILE;
+  const history = poll.history ?? [];
+
+  let answer;
+  try {
+    const first = await ask(buildChatPrompt(history, question, digest, profile));
+    const query = parseSearchRequest(first);
+    if (query) {
+      console.log(`  arXiv 검색: ${query}`);
+      const papers = await searchArxiv(query);
+      console.log(`  ${papers.length}편 찾음`);
+      answer = await ask(buildChatAnswerPrompt(history, question, papers, query, profile));
+    } else {
+      answer = first;
+    }
+  } catch (error) {
+    // 답을 못 만들어도 커서는 옮긴다 — 안 그러면 같은 말에 매분 다시 걸린다.
+    answer = `답하지 못했습니다: ${String(error.message ?? error).slice(0, 300)}`;
+    console.error("  실패:", error.message);
+  }
+
+  await api("/chat/reply", secret, {
+    method: "POST",
+    body: JSON.stringify({ cursor: poll.cursor, question, answer: answer.slice(0, CHAT_ANSWER_LIMIT) }),
+  });
+  console.log(`  답변 ${answer.length}자`);
+}
+
 async function main() {
   const secret = required("PAPERS_SINK_SECRET");
   const applicationId = required("DISCORD_APPLICATION_ID");
@@ -155,7 +201,11 @@ async function main() {
   // 질문을 먼저 본다. interaction 토큰이 15분이면 죽어서 다이제스트(몇 분 걸린다)
   // 뒤로 밀면 그 사이에 시한을 넘긴다.
   const { asks } = await api("/asks", secret);
-  if (!asks?.length) return buildDigest(secret);   // 조용히 끝낸다 — 1분마다 도는 자리다
+  if (!asks?.length) {
+    // 조용히 끝낸다 — 1분마다 도는 자리다.
+    await chat(secret);
+    return buildDigest(secret);
+  }
 
   const digest = await latestDigest();
   const profile = process.env.PAPERS_PROFILE || RESEARCH_PROFILE;
@@ -183,6 +233,7 @@ async function main() {
   }
 
   await api("/asks/done", secret, { method: "POST", body: JSON.stringify({ ids: done }) });
+  await chat(secret);
   await buildDigest(secret);
 }
 

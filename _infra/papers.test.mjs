@@ -14,7 +14,10 @@ import {
   KEYWORDS,
   MAX_PICKS,
   CLAIM_TTL_MS,
+  CHAT_HISTORY_LIMIT,
   COMMENT_PER_PAPER,
+  parseSearchRequest,
+  searchArxiv,
   handlePapersComments,
   PapersDO,
   parseAtom,
@@ -570,4 +573,104 @@ test("로그인하지 않으면 댓글을 읽지도 쓰지도 못한다", async 
 
   // 엉뚱한 하위 경로를 DO 로 흘려보내지 않는다.
   assert.equal((await call(true, "POST", "/_papers/comments/../run")).status, 404);
+});
+
+// ── 채널 대화 ───────────────────────────────────────────────────────────
+
+const chatEnv = (over = {}) => env({ DISCORD_BOT_TOKEN: "t", DISCORD_CHAT_CHANNEL_ID: "77", ...over });
+
+/** 디스코드 채널 조회/발송을 흉내낸다. 최신순으로 준다(실제 API 와 같게). */
+function channelStub(rows, posted = []) {
+  return async (input, init) => {
+    if (init?.method === "POST") { posted.push(JSON.parse(init.body)); return new Response(null, { status: 204 }); }
+    return Response.json(rows);
+  };
+}
+
+test("처음 켠 순간에는 밀린 대화에 답하지 않는다", async () => {
+  // 안 그러면 켜자마자 채널에 있던 옛 글에 줄줄이 답한다.
+  const storage = storageStub();
+  const rows = [{ id: "300", content: "옛날 글", author: {} }];
+  const result = await new PapersDO({ storage }, chatEnv()).chatPoll({ fetchImpl: channelStub(rows) });
+
+  assert.deepEqual(result.messages, []);
+  assert.equal(await storage.get("chat:last"), "300", "자리를 안 잡으면 다음에도 밀린 글을 읽는다");
+});
+
+test("새 말만 오래된 순서로 돌려주고 봇 말은 뺀다", async () => {
+  const storage = storageStub();
+  await storage.put("chat:last", "100");
+  const rows = [
+    { id: "103", content: "그럼 옛날 거라도 찾아줘", author: {} },
+    { id: "102", content: "🔍 5편 찾았습니다", author: { bot: true } },
+    { id: "101", content: "순서형 BO 논문 없나?", author: {} },
+  ];
+  const result = await new PapersDO({ storage }, chatEnv()).chatPoll({ fetchImpl: channelStub(rows) });
+
+  assert.deepEqual(result.messages.map((m) => m.text),
+    ["순서형 BO 논문 없나?", "그럼 옛날 거라도 찾아줘"], "말의 순서가 뒤집혔다");
+  assert.equal(result.cursor, "103");
+});
+
+test("답한 뒤에 커서를 옮기고 오간 말을 기억한다", async () => {
+  const storage = storageStub();
+  await storage.put("chat:last", "100");
+  const posted = [];
+  const instance = new PapersDO({ storage }, chatEnv());
+  await instance.chatReply({ cursor: "103", question: "옛날 거라도", answer: "이런 게 있습니다" },
+    { fetchImpl: channelStub([], posted) });
+
+  assert.equal(posted[0].content, "이런 게 있습니다");
+  assert.equal(await storage.get("chat:last"), "103");
+  assert.deepEqual((await storage.get("chat:history")).map((t) => t.role), ["user", "bot"]);
+});
+
+test("답을 못 만들면 커서가 그대로라 같은 말을 다시 잡는다", async () => {
+  // chatReply 를 부르지 못한 상황. 커서를 미리 옮겨 뒀다면 그 말이 사라진다.
+  const storage = storageStub();
+  await storage.put("chat:last", "100");
+  await new PapersDO({ storage }, chatEnv()).chatPoll({ fetchImpl: channelStub([{ id: "101", content: "질문", author: {} }]) });
+  assert.equal(await storage.get("chat:last"), "100", "읽기만 했는데 커서가 움직였다");
+});
+
+test("오간 말은 최근 것만 기억한다", async () => {
+  const storage = storageStub();
+  const instance = new PapersDO({ storage }, chatEnv());
+  for (let i = 0; i < CHAT_HISTORY_LIMIT; i++) {
+    await instance.chatReply({ cursor: `${i}`, question: `묻기 ${i}`, answer: `답 ${i}` },
+      { fetchImpl: channelStub([], []) });
+  }
+  const history = await storage.get("chat:history");
+  assert.equal(history.length, CHAT_HISTORY_LIMIT);
+  assert.equal(history.at(-1).text, `답 ${CHAT_HISTORY_LIMIT - 1}`);
+});
+
+test("대화 채널이 없으면 조용히 아무것도 하지 않는다", async () => {
+  const result = await new PapersDO({ storage: storageStub() }, env()).chatPoll({ fetchImpl: () => {
+    throw new Error("채널이 없는데 디스코드를 불렀다");
+  } });
+  assert.deepEqual(result.messages, []);
+});
+
+test("검색 요청은 첫 줄에서만 읽는다", async () => {
+  assert.equal(parseSearchRequest("SEARCH: ordinal bayesian optimization"), "ordinal bayesian optimization");
+  assert.equal(parseSearchRequest("네, 찾아볼게요.\nSEARCH: multi-objective"), "multi-objective");
+  assert.equal(parseSearchRequest("검색은 필요 없습니다. 이건 이미 아는 내용이에요."), null);
+});
+
+test("검색어의 줄바꿈·따옴표를 걷어내고 관련도순으로 훑는다", async () => {
+  let asked;
+  const papers = await searchArxiv('ordinal "multi-objective"\nBO', {
+    fetchImpl: async (url) => { asked = new URL(url); return new Response(feed(entry({ id: "9999.9999" }))); },
+  });
+  // 따옴표가 남으면 검색식이 깨지고, 기간 제한을 걸면 "옛날 거라도" 가 안 된다.
+  assert.equal(asked.searchParams.get("search_query"), 'all:"ordinal multi-objective BO"');
+  assert.equal(asked.searchParams.get("sortBy"), "relevance");
+  assert.ok(!asked.searchParams.get("search_query").includes("submittedDate"));
+  assert.equal(papers[0].id, "9999.9999");
+});
+
+test("빈 검색어로는 arXiv 를 부르지 않는다", async () => {
+  const papers = await searchArxiv("   ", { fetchImpl: () => { throw new Error("불렀다"); } });
+  assert.deepEqual(papers, []);
 });

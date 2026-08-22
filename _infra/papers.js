@@ -41,6 +41,18 @@ export const MAX_ARCHIVE = 400;
 // 하루치를 만드는 시각(KST). arXiv 신규 공지가 13~14시 KST 라 그 다음 날 아침이면
 // 하루치가 다 모여 있다.
 export const DIGEST_HOUR_KST = 7;
+/* ── 채널 대화 ────────────────────────────────────────────────────────────
+ * 슬래시 명령 없이 전용 채널에 그냥 쓰면 답한다. 게이트웨이(상주 연결)를 두지
+ * 않고 **REST 를 1분마다 훑는** 방식이라, 이미 도는 데몬 말고 새로 띄울 게 없다.
+ * 대신 응답이 즉시가 아니라 1~2분 뒤다 — 출퇴근길에 읽는 용도라 그걸로 족하다.
+ *
+ * 봇이 채널 글을 읽으려면 개발자 포털에서 **Message Content 인텐트**를 켜야 한다
+ * (서버 100개 미만이면 심사 없이 토글만 켜면 된다). REST 도 이 인텐트에 걸린다.
+ */
+export const CHAT_HISTORY_LIMIT = 12;   // 오가는 말 12개까지 기억한다
+export const CHAT_ANSWER_LIMIT = 1800;  // 디스코드 메시지 상한 2000자 안쪽
+export const CHAT_SEARCH_MAX = 8;       // 한 번 검색에 물어다 줄 논문 수
+
 // 댓글. 논문 하나에 여러 개를 쌓을 수 있게 두되, 한 논문에 무한정 쌓이지 않게 막는다.
 export const COMMENT_TEXT_LIMIT = 1000;
 export const COMMENT_PER_PAPER = 20;
@@ -121,6 +133,31 @@ export async function fetchCandidates({ at = Date.now(), fetchImpl = fetch, max 
   url.searchParams.set("max_results", String(max));
   const response = await fetchImpl(url, { headers: { Accept: "application/atom+xml" } });
   if (!response.ok) throw new Error(`arXiv 조회 실패 (HTTP ${response.status})`);
+  return parseAtom(await response.text());
+}
+
+/**
+ * 아무 말로나 arXiv 를 뒤진다. 하루치 수집(`fetchCandidates`)과 다른 함수인 이유:
+ * 저쪽은 **날짜 창 + 키워드 선필터**가 핵심이고, 이쪽은 **기간 제한이 없고**
+ * 관련도순이다 — "옛날 거라도" 를 위해서다.
+ *
+ * 이게 있어야 하는 진짜 이유는 따로 있다. 도구 없이 부르는 `claude` 에게 논문을
+ * 물으면 **arXiv 번호를 지어낸다**(기억으로 답하니까). 실제 검색 결과만 보고
+ * 답하게 해서 없는 논문을 만들지 못하게 한다.
+ */
+export async function searchArxiv(query, { fetchImpl = fetch, max = CHAT_SEARCH_MAX } = {}) {
+  // 줄바꿈·따옴표가 섞이면 검색식이 깨진다. 모델이 만든 문자열이라 여기서 손본다.
+  // 걷어낸 자리에 공백이 겹치므로 한 칸으로 모은다.
+  const cleaned = String(query ?? "")
+    .replace(/["\n\r]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 200);
+  if (!cleaned) return [];
+
+  const url = new URL(ARXIV_API);
+  url.searchParams.set("search_query", `all:"${cleaned}"`);
+  url.searchParams.set("sortBy", "relevance");
+  url.searchParams.set("max_results", String(max));
+  const response = await fetchImpl(url, { headers: { Accept: "application/atom+xml" } });
+  if (!response.ok) throw new Error(`arXiv 검색 실패 (HTTP ${response.status})`);
   return parseAtom(await response.text());
 }
 
@@ -473,6 +510,70 @@ export class PapersDO {
     await this.state.storage.delete(keys.slice(0, stored.size - MAX_ARCHIVE));
   }
 
+  /* ── 채널 대화 ─────────────────────────────────────────────────────────
+   * 봇 토큰이 엣지에만 있으므로 채널을 읽고 쓰는 것도 엣지가 한다. 데몬은
+   * "새 말 있나" 를 물어보고 답만 만들어 준다.
+   */
+
+  /** 새 메시지. 처음 켠 순간에는 **밀린 것을 답하지 않는다** — 자리만 잡는다. */
+  async chatPoll({ fetchImpl = fetch } = {}) {
+    const channel = this.env.DISCORD_CHAT_CHANNEL_ID;
+    const token = this.env.DISCORD_BOT_TOKEN;
+    if (!channel || !token) return { messages: [], reason: "대화 채널이 설정되지 않았습니다" };
+
+    const since = await this.state.storage.get("chat:last");
+    const url = new URL(`https://discord.com/api/v10/channels/${channel}/messages`);
+    url.searchParams.set("limit", since ? "20" : "1");
+    if (since) url.searchParams.set("after", since);
+
+    const response = await fetchImpl(url, { headers: { Authorization: `Bot ${token}` } });
+    if (!response.ok) throw new Error(`채널 조회 실패 (HTTP ${response.status})`);
+    const rows = await response.json();
+    if (!Array.isArray(rows)) return { messages: [] };
+
+    // 처음이면 지금 자리만 기억하고 끝낸다. 안 그러면 켜자마자 밀린 대화에
+    // 줄줄이 답한다.
+    if (!since) {
+      if (rows[0]?.id) await this.state.storage.put("chat:last", rows[0].id);
+      return { messages: [], reason: "대화 시작 위치를 잡았습니다" };
+    }
+
+    // 디스코드는 최신순으로 준다. 오래된 것부터 읽어야 말의 순서가 맞는다.
+    const messages = rows
+      .filter((row) => !row.author?.bot && String(row.content ?? "").trim())
+      .map((row) => ({ id: row.id, text: String(row.content).trim().slice(0, 2000) }))
+      .reverse();
+
+    return {
+      messages,
+      cursor: rows[0]?.id ?? since,
+      history: (await this.state.storage.get("chat:history")) ?? [],
+    };
+  }
+
+  /** 답을 채널에 올리고, 오간 말을 기억하고, 커서를 옮긴다. */
+  async chatReply({ cursor, question, answer }, { fetchImpl = fetch } = {}) {
+    const channel = this.env.DISCORD_CHAT_CHANNEL_ID;
+    const token = this.env.DISCORD_BOT_TOKEN;
+    if (!channel || !token) throw new Error("대화 채널이 설정되지 않았습니다");
+
+    const text = String(answer ?? "").trim().slice(0, CHAT_ANSWER_LIMIT);
+    if (text) {
+      await postToDiscord({ kind: "bot", url: `https://discord.com/api/v10/channels/${channel}/messages`,
+        headers: { Authorization: `Bot ${token}` } }, { content: text }, { fetchImpl });
+    }
+
+    const history = (await this.state.storage.get("chat:history")) ?? [];
+    const next = [...history,
+      { role: "user", text: String(question ?? "").slice(0, 600) },
+      { role: "bot", text: text.slice(0, 600) },
+    ].slice(-CHAT_HISTORY_LIMIT);
+    await this.state.storage.put("chat:history", next);
+    // **답한 뒤에 커서를 옮긴다.** 먼저 옮기면 답을 만들다 죽었을 때 그 말이 사라진다.
+    if (cursor) await this.state.storage.put("chat:last", String(cursor));
+    return { ok: true, remembered: next.length };
+  }
+
   /* ── 댓글 ──────────────────────────────────────────────────────────────
    * 논문 ID 하나에 키 하나. 다이제스트 안에 끼워 넣지 않는 이유는 보관본이
    * **서버가 만든 그대로**여야 해서다 — 내가 쓴 글이 섞이면 나중에 다시 그릴 때
@@ -510,6 +611,23 @@ export class PapersDO {
 
   async fetch(request) {
     const url = new URL(request.url);
+
+    if (url.pathname === "/chat" && request.method === "GET") {
+      try {
+        return Response.json(await this.chatPoll());
+      } catch (error) {
+        return Response.json({ error: String(error.message ?? error) }, { status: 502 });
+      }
+    }
+
+    if (url.pathname === "/chat/reply" && request.method === "POST") {
+      const payload = await request.json().catch(() => null);
+      try {
+        return Response.json(await this.chatReply(payload ?? {}));
+      } catch (error) {
+        return Response.json({ error: String(error.message ?? error) }, { status: 502 });
+      }
+    }
 
     if (url.pathname === "/comments" && request.method === "GET") {
       return Response.json({ comments: await this.#comments() });
@@ -597,7 +715,7 @@ export class PapersDO {
 const PUBLIC_PATHS = new Set(["/latest", "/archive"]);
 
 /** PC 데몬만 부르는 경로. sink secret 으로 막는다. */
-const SINK_PATHS = new Set(["/asks", "/asks/done", "/digest/pending", "/digest/done"]);
+const SINK_PATHS = new Set(["/asks", "/asks/done", "/digest/pending", "/digest/done", "/chat", "/chat/reply"]);
 
 /**
  * 댓글. **LIFE 세션 쿠키로만** 연다 — 화면이 게이트 뒤에 있으니 쓰기도 같은
@@ -720,6 +838,81 @@ ${question}
   본문의 어느 부분을 봐야 하는지 알려주세요.
 - 일반적인 최적화 지식으로 답해도 되지만, 그때는 논문 근거가 아니라는 걸 밝히세요.
 - 한국어로, ${ANSWER_LIMIT}자 이내. 출퇴근길에 읽습니다 — 문단을 짧게 끊으세요.`;
+}
+
+/* ── 채널 대화 프롬프트 ──────────────────────────────────────────────────
+ *
+ * 두 걸음으로 나눈다. ① 지금 말에 답하려면 논문을 뒤져야 하는지 모델이 정하고,
+ * ② 뒤져야 한다면 **데몬이 실제로 arXiv 를 부른 뒤** 그 결과만 보여 주고 답하게
+ * 한다. 도구를 쥐여 주지 않고도(=인젝션 위험을 늘리지 않고) 근거 있는 답이 된다.
+ */
+
+const chatHistory = (history) => (history ?? [])
+  .map((turn) => `${turn.role === "bot" ? "나(조수)" : "연구자"}: ${turn.text}`)
+  .join("\n") || "(첫 대화입니다)";
+
+export function buildChatPrompt(history, message, digest, profile = RESEARCH_PROFILE) {
+  return `당신은 아래 문제를 실제로 풀고 있는 연구자의 조수입니다. 디스코드에서
+대화 중이고, 지금 연구자가 한 말에 답해야 합니다.
+
+# 내 문제
+${profile}
+
+# 최근 다이제스트 (${digest?.date ?? "없음"})
+${[...(digest?.hits ?? []), ...(digest?.near ?? [])]
+    .map((paper) => `- ${paper.title} (${paper.score}점) ${paper.link}`).join("\n") || "(없음)"}
+
+# 지금까지 오간 말
+${chatHistory(history)}
+
+# 연구자가 방금 한 말
+${message}
+
+# 지금 할 일
+논문을 새로 찾아봐야 답할 수 있으면, **다른 말 없이 첫 줄에만** 이렇게 쓰세요:
+SEARCH: <영어 검색어>
+
+검색어는 arXiv 전체를 훑습니다(기간 제한 없음 — 옛날 논문도 나옵니다). 연구자가
+"옛날 거라도", "더 찾아봐", "이런 주제 없나" 같은 말을 하면 검색하세요.
+
+찾을 필요 없이 지금 아는 것으로 답할 수 있으면 그냥 한국어로 답하세요.
+**논문 제목이나 arXiv 번호를 기억에 기대어 쓰지 마세요** — 그럴 상황이면 검색하세요.
+한국어로, ${CHAT_ANSWER_LIMIT}자 이내. 문단을 짧게 끊으세요.`;
+}
+
+export function parseSearchRequest(text) {
+  const match = String(text ?? "").match(/^\s*SEARCH:\s*(.+)$/m);
+  return match ? match[1].trim().slice(0, 200) : null;
+}
+
+export function buildChatAnswerPrompt(history, message, papers, query, profile = RESEARCH_PROFILE) {
+  const found = papers.length
+    ? papers.map((paper, i) =>
+      `[${i + 1}] ${paper.title} (${paper.published?.slice(0, 7) ?? "?"})\n${paper.summary.slice(0, 900)}\n${paper.link}`)
+      .join("\n\n")
+    : "(검색 결과가 없습니다)";
+
+  return `당신은 아래 문제를 실제로 풀고 있는 연구자의 조수입니다.
+
+# 내 문제
+${profile}
+
+# 지금까지 오간 말
+${chatHistory(history)}
+
+# 연구자가 방금 한 말
+${message}
+
+# "${query}" 로 arXiv 를 찾은 결과
+${found}
+
+# 답할 때
+- **위 목록에 있는 논문만** 언급하세요. 목록에 없는 제목·arXiv 번호를 쓰면 안 됩니다.
+  기억에 있는 다른 논문이 떠올라도 쓰지 마세요 — 번호가 틀립니다.
+- 쓸 만한 게 없으면 없다고 말하고, 검색어를 어떻게 바꾸면 좋을지 알려주세요.
+- 편마다 **내 문제에 쓸 수 있는지**를 한 줄로 판단해 주세요. 800회 예산·순서형
+  조합 공간·다목적이 기준입니다.
+- 링크는 그대로 붙여 주세요. 한국어로, ${CHAT_ANSWER_LIMIT}자 이내.`;
 }
 
 /* ── 질문 큐 ─────────────────────────────────────────────────────────────
