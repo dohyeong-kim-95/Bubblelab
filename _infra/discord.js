@@ -12,6 +12,8 @@
 
 
 
+import { secretMatches } from "./papers.js";
+
 export const INTERACTION = { PING: 1, APPLICATION_COMMAND: 2 };
 export const RESPONSE = { PONG: 1, MESSAGE: 4, DEFERRED: 5 };
 
@@ -145,4 +147,32 @@ export async function registerCommands(env, { fetchImpl = fetch } = {}) {
   );
   if (!response.ok) throw new Error(`명령어 등록 실패 (HTTP ${response.status}): ${await response.text()}`);
   return response.json();
+}
+
+/**
+ * 명령어 등록을 **엣지에서** 돌린다.
+ *
+ * 봇 토큰은 다이제스트 발송 때문에 어차피 Cloudflare 에 있다. 등록까지 여기서
+ * 하면 토큰을 로컬로 꺼낼 일이 없어진다 — 폰만 있어도 되고, 토큰이 셸 히스토리나
+ * 대화 기록에 남지 않는다.
+ */
+export async function handleCommandRegistration(request, env) {
+  if (request.method !== "POST") return new Response("not found", { status: 404 });
+  if (!env.PAPERS_SINK_SECRET) return new Response("not configured", { status: 503 });
+
+  const offered = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+  if (!secretMatches(offered, env.PAPERS_SINK_SECRET)) {
+    return Response.json({ error: "unauthorized" }, { status: 401 });
+  }
+  if (!env.DISCORD_BOT_TOKEN || !env.DISCORD_APPLICATION_ID) {
+    return Response.json(
+      { error: "DISCORD_BOT_TOKEN 또는 DISCORD_APPLICATION_ID 가 없습니다" }, { status: 503 });
+  }
+
+  try {
+    const registered = await registerCommands(env);
+    return Response.json({ ok: true, commands: registered.map((command) => command.name) });
+  } catch (error) {
+    return Response.json({ error: String(error.message ?? error).slice(0, 300) }, { status: 502 });
+  }
 }

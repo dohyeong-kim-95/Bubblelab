@@ -517,13 +517,23 @@ const PUBLIC_PATHS = new Set(["/latest", "/archive"]);
 /** PC 데몬만 부르는 경로. sink secret 으로 막는다. */
 const SINK_PATHS = new Set(["/asks", "/asks/done"]);
 
+/** 길이·내용 모두 상수 시간으로 비교한다. 인증 경계라 값싼 대로 제대로 한다. */
+export function secretMatches(offered, expected) {
+  const a = new TextEncoder().encode(String(offered ?? ""));
+  const b = new TextEncoder().encode(String(expected ?? ""));
+  if (!b.length) return false;
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < Math.max(a.length, b.length); i++) diff |= (a[i] ?? 0) ^ (b[i] ?? 0);
+  return diff === 0;
+}
+
 /** 데몬 인증. 질문 원문과 다이제스트가 오가므로 아무나 읽게 두지 않는다. */
 export async function handlePapersSink(request, env, url) {
   const path = url.pathname.replace(/^\/_papers/, "");
   if (!SINK_PATHS.has(path)) return new Response("not found", { status: 404 });
   if (!env.PAPERS_SINK_SECRET) return new Response("papers sink is not configured", { status: 503 });
   const offered = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
-  if (offered !== env.PAPERS_SINK_SECRET) {
+  if (!secretMatches(offered, env.PAPERS_SINK_SECRET)) {
     return Response.json({ error: "unauthorized" }, { status: 401 });
   }
   const id = env.PAPERS.idFromName("main");

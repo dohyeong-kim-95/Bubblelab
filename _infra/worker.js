@@ -82,7 +82,7 @@ import { handleFortuneChart, handleFortunePush, sendFortuneDaily } from "./fortu
 import { handleBriefPush, handleBriefRates, handleBriefToday, sendBriefDaily } from "./brief.js";
 import { handlePodcast, handlePodcastAdmin, runDailyGeneration, runEveningReminder, UPLOAD_MAX_BYTES } from "./podcast.js";
 import { handlePapers, handlePapersSink, runDailyPapers } from "./papers.js";
-import { handleInteraction } from "./discord.js";
+import { handleCommandRegistration, handleInteraction } from "./discord.js";
 import { handleEstateDeals } from "./estate.js";
 import { serveAssetDownload, serveAssetDownloadCounts } from "./downloads.js";
 import { fetchStoreReviews, REVIEWS_SYNC_VERSION } from "./reviews.js";
@@ -1953,6 +1953,10 @@ export async function handleRequest(request, env, ctx) {
 
     // 디스코드 슬래시 명령. 게이트를 두지 않는 대신 **Ed25519 서명**으로만 받는다
     // (디스코드가 직접 POST 하므로 쿠키도 세션도 없다).
+    // 명령어 등록. 봇 토큰이 이미 엣지에 있으므로 로컬로 꺼낼 필요가 없다.
+    if (path === "/_discord/commands") {
+      return handleCommandRegistration(request, env);
+    }
     if (path === "/_discord/interactions") {
       if (!featureEnabled(env, "ENABLE_PAPERS")) {
         return new Response("discord is temporarily unavailable", { status: 503 });

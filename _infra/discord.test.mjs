@@ -7,12 +7,14 @@ import {
   INTERACTION,
   RESPONSE,
   followUp,
+  handleCommandRegistration,
   handleInteraction,
   PLACEHOLDER,
   queueAsk,
   registerCommands,
   verifySignature,
 } from "./discord.js";
+import { secretMatches } from "./papers.js";
 
 // 워커의 crypto 전역을 흉내 낸다.
 if (!globalThis.crypto?.subtle) globalThis.crypto = webcrypto;
@@ -159,4 +161,34 @@ test("명령어를 등록한다", async () => {
   assert.equal(seen.init.method, "PUT");
   assert.equal(seen.init.headers.Authorization, "Bot tok");
   assert.equal(JSON.parse(seen.init.body)[0].name, "논문");
+});
+
+// ── 명령어 등록 엔드포인트 ──────────────────────────────────────────────
+//
+// 봇 토큰을 로컬로 꺼내지 않으려고 등록을 엣지에서 돌린다. 그만큼 이 경로의
+// 인증이 느슨하면 남이 내 봇의 명령어를 갈아치울 수 있다.
+
+const reg = (env_, headers = {}, method = "POST") => handleCommandRegistration(
+  new Request("https://papers.bubblelab.dev/_discord/commands", { method, headers }), env_);
+
+test("등록 경로는 sink secret 없이 못 연다", async () => {
+  const base = { PAPERS_SINK_SECRET: "s", DISCORD_BOT_TOKEN: "t", DISCORD_APPLICATION_ID: "1" };
+  assert.equal((await reg({ ...base, PAPERS_SINK_SECRET: "" })).status, 503);
+  assert.equal((await reg(base)).status, 401, "인증 없이 통과했다");
+  assert.equal((await reg(base, { Authorization: "Bearer wrong" })).status, 401);
+  assert.equal((await reg(base, { Authorization: "Bearer s" }, "GET")).status, 404);
+});
+
+test("봇 토큰이 없으면 그렇게 알린다", async () => {
+  const response = await reg({ PAPERS_SINK_SECRET: "s", DISCORD_APPLICATION_ID: "1" },
+    { Authorization: "Bearer s" });
+  assert.equal(response.status, 503);
+  assert.match((await response.json()).error, /DISCORD_BOT_TOKEN/);
+});
+
+test("길이가 달라도 상수 시간 비교가 통과시키지 않는다", () => {
+  assert.equal(secretMatches("s", "s"), true);
+  assert.equal(secretMatches("s", "ss"), false);
+  assert.equal(secretMatches("", ""), false, "빈 secret 은 항상 거부해야 한다");
+  assert.equal(secretMatches(undefined, "s"), false);
 });

@@ -168,8 +168,14 @@ JSON 으로 답하는 구조가 되어, 요청 단위로만 사는 런타임에�
 
 ```bash
 # 명령어 등록 (한 번, 그리고 명령어를 바꿀 때마다)
-DISCORD_APPLICATION_ID=... DISCORD_BOT_TOKEN=... node _src/discord/register.mjs
+PAPERS_SINK_SECRET=... node _src/discord/register.mjs
 ```
+
+**봇 토큰은 여기 필요 없다.** 등록은 엣지가 대신 한다(`POST /_discord/commands`,
+sink secret 으로 인증) — 토큰은 다이제스트 발송 때문에 어차피 Cloudflare 에 있고,
+그걸 로컬로 꺼내면 셸 히스토리에 남는다. 폰만 있어도 되는 이유이기도 하다:
+토큰은 Cloudflare 대시보드(Workers & Pages → 워커 → Settings → Variables and
+Secrets → Add → Secret)에서 넣으면 터미널이 아예 필요 없다.
 
 개발자 포털의 **Interactions Endpoint URL** 에
 `https://papers.bubblelab.dev/_discord/interactions` 를 넣는다. 저장 버튼을 누르는
