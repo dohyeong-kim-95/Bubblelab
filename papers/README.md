@@ -55,13 +55,33 @@ arXiv 에서 하루치를 골라 **디스코드로 보낸다.** 이 화면은 �
 |---|---|---|
 | `ENABLE_PAPERS` | var | fail-closed. 내리려면 `"false"` |
 | `DISCORD_WEBHOOK_URL` | secret | 채널 설정 → 연동 → 웹훅에서 만든 URL |
+| `DISCORD_BOT_TOKEN` + `DISCORD_CHANNEL_ID` | secret | 웹훅 대신 봇으로 보낼 때 (있으면 이쪽이 우선) |
 | `GEMINI_API_KEY` | secret | 이미 팟캐스트가 쓰는 것을 같이 쓴다 |
 | `PAPERS_LLM_MODEL` | var(선택) | 기본 `gemini-flash-latest` |
 | `PAPERS_PROFILE` | var(선택) | 내 문제 설명. 비우면 코드의 기본값 |
 
-**봇이 아니라 웹훅이다.** 단방향 게시라 토큰도 상시 연결도 필요 없다. 나중에
-슬래시 명령을 원하면 디스코드 HTTP Interactions 를 이 워커에 붙이면 된다
-(게이트웨이 없이 Workers 에서 공식 지원된다).
+### 웹훅과 봇 — OAuth 는 어느 쪽도 런타임에 안 쓴다
+
+자주 헷갈리는 곳이라 적어 둔다. 디스코드 봇의 초대 링크(`scope=bot`)가 OAuth2 이긴
+하지만 공식 문서가 **"server-less and callback-less"** 특수 플로우라고 부르는 것이고,
+설치가 끝나면 런타임 인증은 **봇 토큰**이다 — *"bot users have full access to most API
+routes without using bearer tokens."* OAuth 인증 코드 플로우가 실제로 필요한 건
+**남의** 서버·계정을 대신할 때다(`webhook.incoming` 으로 남이 채널을 고르게 하는 경우 등).
+내 서버, 내 채널에 올리는 여기는 해당하지 않는다.
+
+그래서 둘 다 지원하고 env 로 고른다(`createDelivery`):
+
+| | 웹훅 | 봇 토큰 |
+|---|---|---|
+| 설치 | 채널 설정에서 URL 하나 | 초대 링크 한 번 |
+| 런타임 | URL 자체가 자격증명 | `Authorization: Bot <token>` |
+| 채널 여러 개 | ❌ | ✅ |
+| 메시지 수정·스레드·반응 | 제한적 | ✅ |
+| 나중에 슬래시 명령 | 불가 | ✅ 같은 토큰으로 |
+
+봇으로 옮길 때 코드는 그대로 두고 `DISCORD_BOT_TOKEN`·`DISCORD_CHANNEL_ID` 만 넣으면
+된다(있으면 웹훅보다 우선한다). 슬래시 명령이 필요해지면 디스코드 HTTP Interactions 를
+이 워커에 붙이면 되고, 게이트웨이 없이 Workers 에서 공식 지원된다.
 
 ## 일정
 

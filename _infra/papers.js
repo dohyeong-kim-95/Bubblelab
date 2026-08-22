@@ -274,11 +274,39 @@ export function buildDiscordPayload(digest) {
   return { content, embeds };
 }
 
-/** 웹훅 전송. 429 는 Retry-After 만큼 한 번만 기다렸다 다시 보낸다. */
-export async function postToDiscord(webhook, payload, { fetchImpl = fetch, sleep } = {}) {
-  const send = () => fetchImpl(webhook, {
+/**
+ * 보낼 곳을 고른다. 봇 토큰이 있으면 봇으로, 없으면 웹훅으로.
+ *
+ * 둘 다 REST 로 같은 payload 를 보내고 rate limit 규칙도 같아서, 다른 건
+ * 주소와 Authorization 헤더뿐이다. **OAuth 는 어느 쪽도 런타임에 쓰지 않는다** —
+ * 봇은 초대 링크(scope=bot)로 한 번 설치한 뒤 봇 토큰으로 부르고, 웹훅은
+ * URL 자체가 자격증명이다. OAuth 인증 코드 플로우가 필요한 건 **남의** 서버·
+ * 계정을 대신할 때(webhook.incoming 등)이고 여기 해당하지 않는다.
+ *
+ * 봇을 쓰면 채널 여러 개·메시지 수정·스레드·나중의 슬래시 명령이 열린다.
+ */
+export function createDelivery(env) {
+  const token = env.DISCORD_BOT_TOKEN;
+  const channel = env.DISCORD_CHANNEL_ID;
+  if (token && channel) {
+    return {
+      kind: "bot",
+      url: `https://discord.com/api/v10/channels/${channel}/messages`,
+      headers: { Authorization: `Bot ${token}` },
+    };
+  }
+  if (env.DISCORD_WEBHOOK_URL) {
+    return { kind: "webhook", url: env.DISCORD_WEBHOOK_URL, headers: {} };
+  }
+  return null;
+}
+
+/** 전송. 429 는 Retry-After 만큼 한 번만 기다렸다 다시 보낸다. */
+export async function postToDiscord(delivery, payload, { fetchImpl = fetch, sleep } = {}) {
+  const target = typeof delivery === "string" ? { url: delivery, headers: {} } : delivery;
+  const send = () => fetchImpl(target.url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...target.headers },
     body: JSON.stringify(payload),
   });
   let response = await send();
@@ -359,10 +387,12 @@ export class PapersDO {
     const env = this.env;
     const profile = env.PAPERS_PROFILE || RESEARCH_PROFILE;
 
-    // 웹훅부터 본다. 맨 끝에서 확인하면 조회·채점·요약을 전부 태우고 나서
+    // 보낼 곳부터 본다. 맨 끝에서 확인하면 조회·채점·요약을 전부 태우고 나서
     // 보낼 곳이 없다고 실패하게 된다 — LLM 호출이 그대로 낭비된다.
-    const webhook = env.DISCORD_WEBHOOK_URL;
-    if (!webhook && !dryRun) throw new Error("DISCORD_WEBHOOK_URL 이 없습니다");
+    const delivery = createDelivery(env);
+    if (!delivery && !dryRun) {
+      throw new Error("보낼 곳이 없습니다 — DISCORD_WEBHOOK_URL 또는 DISCORD_BOT_TOKEN+DISCORD_CHANNEL_ID");
+    }
 
     const candidates = await fetchCandidates({ at, fetchImpl });
     const seen = await this.#seen();
@@ -393,8 +423,11 @@ export class PapersDO {
     if (!hits.length && !near.length) return { skipped: "고를 만한 논문 없음", scanned: candidates.length };
 
     await this.#save(digest);
-    if (!dryRun) await postToDiscord(webhook, buildDiscordPayload(digest), { fetchImpl });
-    return { date: digest.date, hits: hits.length, near: near.length, scanned: candidates.length };
+    if (!dryRun) await postToDiscord(delivery, buildDiscordPayload(digest), { fetchImpl });
+    return {
+      date: digest.date, hits: hits.length, near: near.length,
+      scanned: candidates.length, via: delivery?.kind ?? "dry",
+    };
   }
 
   async #archive(limit) {

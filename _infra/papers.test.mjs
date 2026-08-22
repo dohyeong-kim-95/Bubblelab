@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   buildDiscordPayload,
+  createDelivery,
   buildQuery,
   buildScorePrompt,
   CATEGORIES,
@@ -315,7 +316,7 @@ test("웹훅이 없으면 실패로 알린다 (조용히 넘어가지 않는다)
   const stub = pipelineStub({ entries: [entry({ id: "6666.6666" })], scores: "1|9|좋음" });
   await assert.rejects(
     () => new PapersDO({ storage: storageStub() }, env({ DISCORD_WEBHOOK_URL: "" })).run({ fetchImpl: stub.impl }),
-    /DISCORD_WEBHOOK_URL/,
+    /보낼 곳이 없습니다/,
   );
 });
 
@@ -324,8 +325,53 @@ test("웹훅이 없으면 LLM 을 태우기 전에 멈춘다", async () => {
   const stub = pipelineStub({ entries: [entry({ id: "7777.7777" })], scores: "1|9|좋음" });
   await assert.rejects(
     () => new PapersDO({ storage: storageStub() }, env({ DISCORD_WEBHOOK_URL: "" })).run({ fetchImpl: stub.impl }),
-    /DISCORD_WEBHOOK_URL/,
+    /보낼 곳이 없습니다/,
   );
   assert.equal(stub.calls.llm, 0, "LLM 을 부르고 나서 실패했다");
   assert.equal(stub.calls.arxiv, 0, "arXiv 까지 불렀다");
+});
+
+// ── 보낼 곳 (봇 토큰 / 웹훅) ────────────────────────────────────────────
+//
+// OAuth 는 어느 쪽도 런타임에 쓰지 않는다. 봇은 초대 링크로 한 번 설치한 뒤
+// 봇 토큰으로 부르고, 웹훅은 URL 자체가 자격증명이다.
+
+test("봇 토큰이 있으면 봇 API 로, 없으면 웹훅으로 보낸다", () => {
+  const bot = createDelivery({ DISCORD_BOT_TOKEN: "t", DISCORD_CHANNEL_ID: "123", DISCORD_WEBHOOK_URL: "https://hook" });
+  assert.equal(bot.kind, "bot", "봇 토큰이 있으면 봇이 우선이다");
+  assert.equal(bot.url, "https://discord.com/api/v10/channels/123/messages");
+  assert.equal(bot.headers.Authorization, "Bot t");
+
+  const hook = createDelivery({ DISCORD_WEBHOOK_URL: "https://hook" });
+  assert.equal(hook.kind, "webhook");
+  assert.deepEqual(hook.headers, {}, "웹훅은 Authorization 헤더를 쓰지 않는다");
+});
+
+test("토큰만 있고 채널이 없으면 봇으로 보지 않는다", () => {
+  // 채널 ID 없이 봇 토큰만 있으면 보낼 곳을 특정할 수 없다.
+  assert.equal(createDelivery({ DISCORD_BOT_TOKEN: "t" }), null);
+  assert.equal(createDelivery({ DISCORD_CHANNEL_ID: "123" }), null);
+  assert.equal(createDelivery({}), null);
+});
+
+test("봇 경로도 같은 payload 와 429 규칙을 쓴다", async () => {
+  const seen = [];
+  const fetchImpl = async (url, init) => {
+    seen.push({ url: String(url), auth: init.headers.Authorization, body: JSON.parse(init.body) });
+    return new Response(null, { status: 204 });
+  };
+  await postToDiscord(createDelivery({ DISCORD_BOT_TOKEN: "t", DISCORD_CHANNEL_ID: "9" }),
+    { content: "안녕", embeds: [] }, { fetchImpl });
+  assert.match(seen[0].url, /channels\/9\/messages$/);
+  assert.equal(seen[0].auth, "Bot t");
+  assert.equal(seen[0].body.content, "안녕");
+});
+
+test("봇 토큰으로 하루치를 보낸다", async () => {
+  const stub = pipelineStub({ entries: [entry({ id: "8888.8888" })], scores: "1|9|좋음" });
+  const result = await new PapersDO({ storage: storageStub() },
+    { GEMINI_API_KEY: "k", DISCORD_BOT_TOKEN: "t", DISCORD_CHANNEL_ID: "9" }
+  ).run({ fetchImpl: stub.impl });
+  assert.equal(result.via, "bot");
+  assert.equal(stub.calls.discord, 1);
 });
