@@ -41,6 +41,9 @@ export const MAX_ARCHIVE = 400;
 // 하루치를 만드는 시각(KST). arXiv 신규 공지가 13~14시 KST 라 그 다음 날 아침이면
 // 하루치가 다 모여 있다.
 export const DIGEST_HOUR_KST = 7;
+// 댓글. 논문 하나에 여러 개를 쌓을 수 있게 두되, 한 논문에 무한정 쌓이지 않게 막는다.
+export const COMMENT_TEXT_LIMIT = 1000;
+export const COMMENT_PER_PAPER = 20;
 // 찜의 수명. 채점 1회 + 요약 최대 5회이고 각 호출의 상한이 3분이라 최악이 18분이다
 // — 그보다 넉넉해야 정상 실행 중에 다른 실행이 끼어들지 않는다.
 export const CLAIM_TTL_MS = 30 * 60 * 1000;
@@ -454,8 +457,61 @@ export class PapersDO {
     return [...stored.values()];
   }
 
+  /* ── 댓글 ──────────────────────────────────────────────────────────────
+   * 논문 ID 하나에 키 하나. 다이제스트 안에 끼워 넣지 않는 이유는 보관본이
+   * **서버가 만든 그대로**여야 해서다 — 내가 쓴 글이 섞이면 나중에 다시 그릴 때
+   * 무엇이 요약이고 무엇이 내 메모인지 구분이 안 된다.
+   */
+  async #comments() {
+    const stored = await this.state.storage.list({ prefix: "comment:" });
+    return Object.fromEntries(
+      [...stored.entries()].map(([key, items]) => [key.slice("comment:".length), items ?? []]),
+    );
+  }
+
+  async addComment({ paperId, text, at = Date.now() }) {
+    const id = String(paperId ?? "").slice(0, 32);
+    const body = String(text ?? "").trim().slice(0, COMMENT_TEXT_LIMIT);
+    if (!id || !body) throw new Error("논문과 내용이 필요합니다");
+
+    const items = (await this.state.storage.get(`comment:${id}`)) ?? [];
+    // 오래된 것부터 밀어낸다 — 최근 생각이 남는 편이 낫다.
+    const next = [...items, { id: `${at.toString(36)}${items.length}`, text: body, at }]
+      .slice(-COMMENT_PER_PAPER);
+    await this.state.storage.put(`comment:${id}`, next);
+    return { paperId: id, comments: next };
+  }
+
+  async removeComment({ paperId, id }) {
+    const key = `comment:${String(paperId ?? "").slice(0, 32)}`;
+    const items = (await this.state.storage.get(key)) ?? [];
+    const next = items.filter((item) => item.id !== id);
+    // 마지막 하나를 지우면 키까지 지운다 — 빈 배열이 목록에 남지 않게.
+    if (next.length) await this.state.storage.put(key, next);
+    else await this.state.storage.delete(key);
+    return { paperId: key.slice("comment:".length), comments: next };
+  }
+
   async fetch(request) {
     const url = new URL(request.url);
+
+    if (url.pathname === "/comments" && request.method === "GET") {
+      return Response.json({ comments: await this.#comments() });
+    }
+
+    if (url.pathname === "/comments" && request.method === "POST") {
+      const payload = await request.json().catch(() => null);
+      try {
+        return Response.json(await this.addComment(payload ?? {}));
+      } catch (error) {
+        return Response.json({ error: String(error.message ?? error) }, { status: 400 });
+      }
+    }
+
+    if (url.pathname === "/comments/delete" && request.method === "POST") {
+      const payload = await request.json().catch(() => null);
+      return Response.json(await this.removeComment(payload ?? {}));
+    }
 
     // PC 데몬이 하루치를 가져가고(찜) 만들어서 돌려준다.
     if (url.pathname === "/digest/pending" && request.method === "GET") {
@@ -526,6 +582,36 @@ const PUBLIC_PATHS = new Set(["/latest", "/archive"]);
 
 /** PC 데몬만 부르는 경로. sink secret 으로 막는다. */
 const SINK_PATHS = new Set(["/asks", "/asks/done", "/digest/pending", "/digest/done"]);
+
+/**
+ * 댓글. **LIFE 세션 쿠키로만** 연다 — 화면이 게이트 뒤에 있으니 쓰기도 같은
+ * 자격으로 맞춘다. `/_papers/*` 는 게이트보다 앞에서 처리되므로 여기서 직접
+ * 확인해야 한다(그냥 두면 주소만 알면 남이 쓸 수 있다).
+ *
+ * `owner` 판정은 worker.js 가 한다 — 세션 열쇠가 거기 있다.
+ */
+export async function handlePapersComments(request, env, url, owner) {
+  if (!owner) return Response.json({ error: "authentication required" }, { status: 401 });
+
+  const path = url.pathname.replace(/^\/_papers/, "");
+  const id = env.PAPERS.idFromName("main");
+  const target = path === "/comments/delete" ? "/comments/delete" : "/comments";
+  if (path !== "/comments" && path !== "/comments/delete") {
+    return new Response("not found", { status: 404 });
+  }
+
+  const response = await env.PAPERS.get(id).fetch(
+    new Request(`https://papers${target}`, {
+      method: request.method,
+      headers: { "Content-Type": "application/json" },
+      body: request.method === "POST" ? await request.text() : undefined,
+    }),
+  );
+  return new Response(response.body, {
+    status: response.status,
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+  });
+}
 
 /** 길이·내용 모두 상수 시간으로 비교한다. 인증 경계라 값싼 대로 제대로 한다. */
 export function secretMatches(offered, expected) {

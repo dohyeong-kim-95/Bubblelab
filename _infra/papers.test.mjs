@@ -14,6 +14,8 @@ import {
   KEYWORDS,
   MAX_PICKS,
   CLAIM_TTL_MS,
+  COMMENT_PER_PAPER,
+  handlePapersComments,
   PapersDO,
   parseAtom,
   parseScores,
@@ -485,4 +487,70 @@ test("데몬 경로 밖은 sink 로 통과하지 않는다", async () => {
     new Request("https://life.bubblelab.dev/_papers/run", { method: "POST", headers: { Authorization: "Bearer s" } }),
     env_, new URL("https://life.bubblelab.dev/_papers/run"));
   assert.equal(response.status, 404, "sink 인증으로 /run 을 부를 수 있으면 안 된다");
+});
+
+// ── 댓글 ────────────────────────────────────────────────────────────────
+
+test("댓글을 쌓고 지운다", async () => {
+  const storage = storageStub();
+  const instance = new PapersDO({ storage }, env());
+
+  await instance.addComment({ paperId: "2608.19808", text: "  이건 800회로는 안 되겠다  ", at: 1000 });
+  const second = await instance.addComment({ paperId: "2608.19808", text: "그래도 스칼라화는 참고", at: 2000 });
+  assert.deepEqual(second.comments.map((c) => c.text),
+    ["이건 800회로는 안 되겠다", "그래도 스칼라화는 참고"], "앞뒤 공백이 남았다");
+
+  const after = await instance.removeComment({ paperId: "2608.19808", id: second.comments[0].id });
+  assert.equal(after.comments.length, 1);
+
+  // 마지막 하나를 지우면 키까지 지운다 — 빈 배열이 목록에 남으면 안 된다.
+  await instance.removeComment({ paperId: "2608.19808", id: after.comments[0].id });
+  const body = await (await instance.fetch(new Request("https://papers/comments"))).json();
+  assert.deepEqual(body.comments, {});
+});
+
+test("빈 댓글은 받지 않는다", async () => {
+  const instance = new PapersDO({ storage: storageStub() }, env());
+  const response = await instance.fetch(new Request("https://papers/comments", {
+    method: "POST", body: JSON.stringify({ paperId: "1111.1111", text: "   " }),
+  }));
+  assert.equal(response.status, 400);
+});
+
+test("한 논문에 무한정 쌓이지 않고 오래된 것부터 밀린다", async () => {
+  const instance = new PapersDO({ storage: storageStub() }, env());
+  for (let i = 0; i < COMMENT_PER_PAPER + 3; i++) {
+    await instance.addComment({ paperId: "1111.1111", text: `메모 ${i}`, at: 1000 + i });
+  }
+  const { comments } = await instance.addComment({ paperId: "1111.1111", text: "마지막", at: 9999 });
+  assert.equal(comments.length, COMMENT_PER_PAPER);
+  assert.equal(comments.at(-1).text, "마지막");
+  assert.equal(comments[0].text, "메모 4", "오래된 것이 아니라 최근 것이 밀려났다");
+});
+
+test("로그인하지 않으면 댓글을 읽지도 쓰지도 못한다", async () => {
+  // 이 경로는 LIFE 게이트보다 앞에서 처리된다 — 여기서 막지 않으면 주소만
+  // 알면 남이 내 메모를 읽고 쓸 수 있다.
+  const calls = [];
+  const papersEnv = {
+    PAPERS: {
+      idFromName: () => "id",
+      get: () => ({ fetch: (req) => { calls.push(new URL(req.url).pathname); return Response.json({ ok: true }); } }),
+    },
+  };
+  const call = (owner, method = "GET", path = "/_papers/comments") =>
+    handlePapersComments(new Request(`https://life.bubblelab.dev${path}`, {
+      method, body: method === "POST" ? "{}" : undefined,
+    }), papersEnv, new URL(`https://life.bubblelab.dev${path}`), owner);
+
+  assert.equal((await call(false)).status, 401);
+  assert.equal((await call(false, "POST")).status, 401);
+  assert.deepEqual(calls, [], "인증 없이 DO 까지 갔다");
+
+  assert.equal((await call(true)).status, 200);
+  assert.equal((await call(true, "POST", "/_papers/comments/delete")).status, 200);
+  assert.deepEqual(calls, ["/comments", "/comments/delete"]);
+
+  // 엉뚱한 하위 경로를 DO 로 흘려보내지 않는다.
+  assert.equal((await call(true, "POST", "/_papers/comments/../run")).status, 404);
 });

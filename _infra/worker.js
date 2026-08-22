@@ -81,7 +81,7 @@ import { validPlannerCode } from "./planner.js";
 import { handleFortuneChart, handleFortunePush, sendFortuneDaily } from "./fortune.js";
 import { handleBriefPush, handleBriefRates, handleBriefToday, sendBriefDaily } from "./brief.js";
 import { handlePodcast, handlePodcastAdmin, runDailyGeneration, runEveningReminder, UPLOAD_MAX_BYTES } from "./podcast.js";
-import { handlePapers, handlePapersSink } from "./papers.js";
+import { handlePapers, handlePapersComments, handlePapersSink } from "./papers.js";
 import { handleCommandRegistration, handleInteraction } from "./discord.js";
 import { handleEstateDeals } from "./estate.js";
 import { serveAssetDownload, serveAssetDownloadCounts } from "./downloads.js";
@@ -1944,6 +1944,13 @@ export async function handleRequest(request, env, ctx) {
         return Response.json({ error: "papers is temporarily unavailable" }, {
           status: 503, headers: { "Cache-Control": "no-store" },
         });
+      }
+      // 내 댓글은 LIFE 세션으로 연다. 이 경로들은 게이트보다 앞이라 여기서
+      // 직접 확인하지 않으면 주소만 알면 남이 쓸 수 있다.
+      if (path.startsWith("/_papers/comments")) {
+        const key = await lifeKey(env.LIFE_SESSION_SECRET, "bl-life-session");
+        const owner = lifeConfigured(env) && await validSession(key, cookies(request).bl_life);
+        return handlePapersComments(request, env, url, owner);
       }
       // 집 PC 데몬 전용 경로는 sink secret 으로, 나머지는 읽기 전용으로 연다.
       return path.startsWith("/_papers/asks") || path.startsWith("/_papers/digest")
