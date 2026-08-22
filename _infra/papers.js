@@ -38,8 +38,11 @@ export const SCORE_HIT = 8;    // 🎯 정확히 내 문제
 export const SCORE_NEAR = 5;   // 🔍 인접
 export const MAX_PICKS = 5;    // 디스코드 임베드 상한(10)의 절반. 하루 5편이면 충분하다.
 export const MAX_ARCHIVE = 400;
-// 주말·공휴일에 arXiv 가 쉬면 하루치가 빈다. 창을 이틀로 잡고 중복은 ID 로 거른다.
-export const LOOKBACK_DAYS = 2;
+/* arXiv 는 주말에 쉬고, 색인에 하루 남짓 더 걸린다. 2026-08-22(토) 23시 KST 에
+ * 재어 보니 색인된 최신 논문이 08-20 이었다 — 이틀 창이면 그 날 다이제스트가
+ * 통째로 빈다. 닷새면 주말과 색인 지연을 함께 넘고, 이미 보낸 것은 `seen` 이
+ * ID 로 거르므로 창을 넓혀도 같은 논문이 두 번 가지 않는다. */
+export const LOOKBACK_DAYS = 5;
 
 /** KST 기준 YYYY-MM-DD. */
 export function kstDate(at = Date.now()) {
@@ -58,7 +61,9 @@ function stamp(at) {
 export function buildQuery(at = Date.now(), { days = LOOKBACK_DAYS } = {}) {
   const cats = CATEGORIES.map((c) => `cat:${c}`).join(" OR ");
   const words = KEYWORDS.map((k) => `abs:"${k}"`).join(" OR ");
-  const from = stamp(at - days * 24 * 60 * 60 * 1000);
+  // 시작점은 그 날 0시로 내린다. 시각까지 맞추면 창의 첫날이 반나절만 걸려
+  // 아침에 올라온 논문을 놓친다.
+  const from = stamp(at - days * 24 * 60 * 60 * 1000).slice(0, 8) + "0000";
   const to = stamp(at);
   return `(${cats}) AND (${words}) AND submittedDate:[${from} TO ${to}]`;
 }

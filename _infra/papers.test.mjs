@@ -43,8 +43,16 @@ test("검색식에 카테고리·키워드·날짜창이 모두 들어간다", (
   const query = buildQuery(Date.parse("2026-08-22T00:00:00Z"));
   for (const cat of CATEGORIES) assert.ok(query.includes(`cat:${cat}`), `${cat} 누락`);
   for (const word of KEYWORDS) assert.ok(query.includes(`abs:"${word}"`), `${word} 누락`);
-  // 이틀 창 — 주말에 arXiv 가 쉬어도 하루치가 통째로 비지 않는다.
-  assert.match(query, /submittedDate:\[202608200000 TO 202608220000\]/);
+  // 닷새 창 — 주말과 색인 지연을 함께 넘는다. 시작점은 그 날 0시로 내려서
+  // 창의 첫날이 반나절만 걸리는 일이 없어야 한다.
+  assert.match(query, /submittedDate:\[202608170000 TO 202608220000\]/);
+});
+
+test("창의 시작은 시각과 무관하게 그 날 0시다", () => {
+  // 오후에 돌든 새벽에 돌든 첫날은 통째로 들어와야 한다. 예전엔 시각까지
+  // 맞추는 바람에 토요일 실행이 후보 0편으로 끝났다.
+  const noon = buildQuery(Date.parse("2026-08-22T14:30:00Z"));
+  assert.match(noon, /submittedDate:\[202608170000 TO 202608221430\]/);
 });
 
 test("Atom 을 읽고 개정판 접미사를 떼어 낸다", () => {
