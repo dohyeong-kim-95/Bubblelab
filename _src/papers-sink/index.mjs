@@ -11,12 +11,10 @@
 //
 //   PAPERS_SINK_SECRET=... node _src/papers-sink/index.mjs
 
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { spawn } from "node:child_process";
+import { dirname } from "node:path";
 
 import { ANSWER_LIMIT, buildAskPrompt, RESEARCH_PROFILE } from "../../_infra/papers.js";
-
-const run = promisify(execFile);
 
 const BASE = (process.env.PAPERS_ENDPOINT ?? "").trim() || "https://papers.bubblelab.dev";
 const CLAUDE = (process.env.CLAUDE_BIN ?? "").trim() || "claude";
@@ -53,14 +51,34 @@ async function latestDigest() {
   }
 }
 
-/** Claude Code 헤드리스 호출. 도구를 주지 않는다. */
-async function ask(prompt) {
-  const { stdout } = await run(
-    CLAUDE,
-    ["-p", prompt, "--allowed-tools", "", "--output-format", "text"],
-    { timeout: TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024 },
-  );
-  return stdout.trim();
+/**
+ * Claude Code 헤드리스 호출. 도구를 주지 않는다.
+ *
+ * 두 가지를 cron 환경에 맞춰 둔다:
+ *  · **stdin 을 닫는다.** 열어 두면 claude 가 파이프 입력을 3초 기다렸다가
+ *    "no stdin data received" 경고를 내고 진행한다 — 질문마다 3초씩 손해다.
+ *  · **PATH 에 node 디렉터리를 넣는다.** cron 의 PATH 는 /usr/bin:/bin 뿐이라
+ *    claude 의 플러그인 훅이 `node` 를 못 찾고 실패 로그를 남긴다(답변 자체는
+ *    나오지만 로그가 지저분해져 진짜 오류가 묻힌다).
+ */
+function ask(prompt) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(CLAUDE, ["-p", prompt, "--allowed-tools", "", "--output-format", "text"], {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, PATH: `${dirname(process.execPath)}:${process.env.PATH ?? ""}` },
+    });
+
+    let out = "", err = "";
+    const timer = setTimeout(() => { child.kill("SIGKILL"); reject(new Error("시간 초과")); }, TIMEOUT_MS);
+    child.stdout.on("data", (chunk) => { out += chunk; });
+    child.stderr.on("data", (chunk) => { err += chunk; });
+    child.on("error", (error) => { clearTimeout(timer); reject(error); });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      if (code === 0) resolve(out.trim());
+      else reject(new Error(`claude 실패 (exit ${code}): ${err.trim().slice(0, 200)}`));
+    });
+  });
 }
 
 /** 디스코드의 원래 메시지를 답으로 갈아끼운다. 봇 토큰이 필요 없다. */

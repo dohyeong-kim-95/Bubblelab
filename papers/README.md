@@ -155,6 +155,14 @@ JSON 으로 답하는 구조가 되어, 요청 단위로만 사는 런타임에�
 * * * * * cd <리포경로> && set -a && . ~/.bubblelab/papers.env && set +a && <node경로> _src/papers-sink/index.mjs >> ~/.bubblelab/papers.log 2>&1
 ```
 
+**`CLAUDE_BIN` 에 `claude` 절대경로를 넣는다.** cron 의 PATH 는 `/usr/bin:/bin` 뿐이라
+`~/.local/bin/claude` 를 못 찾는다 — node 와 똑같은 함정이고, 질문이 처음 올 때까지
+드러나지 않는다(질문이 없으면 claude 를 부르지 않으므로 cron 은 조용히 성공한다).
+
+데몬은 claude 를 부를 때 **stdin 을 닫고**(안 그러면 파이프 입력을 3초 기다렸다가
+경고를 낸다) **PATH 에 node 디렉터리를 넣는다**(claude 의 플러그인 훅이 `node` 를
+못 찾아 실패 로그를 남긴다 — 답변은 나오지만 로그가 지저분해져 진짜 오류가 묻힌다).
+
 질문이 없으면 엣지에 가벼운 GET 한 번으로 끝난다 — `claude` 를 부르지 않으므로
 구독 한도를 축내지 않는다. 한 번에 최대 3개까지만 답한다(폭주 방지).
 
