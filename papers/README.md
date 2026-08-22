@@ -110,10 +110,17 @@ node _infra/build.mjs
 
 ## 슬래시 명령 — `/논문 질문:<질문>`
 
-받아본 다이제스트에 대해 그 자리에서 물어볼 수 있다. 요약은 Gemini 로 만들지만
-**답변은 Claude(`claude-opus-5`)** 로 한다 — 요약은 정해진 틀을 채우는 일이라 싼
-모델로 충분하지만, "이 방법을 800회 예산에 쓸 수 있나" 는 논문의 가정과 내 제약을
-견줘야 해서 추론 품질이 실제로 갈린다. 모델은 `PAPERS_ANSWER_MODEL` 로 바꾼다.
+받아본 다이제스트에 대해 그 자리에서 물어볼 수 있다. **답은 엣지가 만들지 않는다** —
+집 PC 의 Claude Code(`claude -p`)가 만들고, 그건 이미 쓰는 구독에서 차감된다.
+그래서 LLM API 키가 하나도 늘지 않는다.
+
+```
+디스코드 /논문  →  워커가 질문을 DO 에 적어 둠  →  즉시 "물어보는 중…" 표시
+집 PC 데몬(1분) →  질문을 가져가 claude -p 로 답  →  원래 메시지를 답으로 교체
+```
+
+invest 의 "지금 갱신" 과 같은 구조다 — 엣지가 못 하는 일을 PC 가 가져간다.
+거래도 같다: **PC 가 꺼져 있으면 답이 오지 않는다.**
 
 ### 왜 게이트웨이가 아니라 HTTP Interactions 인가
 
@@ -136,9 +143,20 @@ JSON 으로 답하는 구조가 되어, 요청 단위로만 사는 런타임에�
 | 키 | 용도 |
 |---|---|
 | `DISCORD_PUBLIC_KEY` | 서명 검증 (개발자 포털 → General Information) |
-| `DISCORD_APPLICATION_ID` | followup 주소 |
-| `ANTHROPIC_API_KEY` | 답변 생성 |
+| `DISCORD_APPLICATION_ID` | 답을 채워 넣을 주소. 엣지·PC 양쪽에 필요 |
+| `PAPERS_SINK_SECRET` | PC 데몬이 질문을 가져갈 때의 인증. 양쪽에 같은 값 |
 | `DISCORD_BOT_TOKEN` | **명령어 등록에만** 필요 — 엣지에는 안 넣어도 된다 |
+
+`PAPERS_SINK_SECRET` 은 **ASCII 로 만든다.** HTTP 헤더에 실리므로 한글이 들어가면
+데몬이 요청을 만들다 죽는다.
+
+```bash
+# 집 PC 데몬 — 1분마다 질문을 가져가 답한다
+* * * * * cd <리포경로> && set -a && . ~/.bubblelab/papers.env && set +a && <node경로> _src/papers-sink/index.mjs >> ~/.bubblelab/papers.log 2>&1
+```
+
+질문이 없으면 엣지에 가벼운 GET 한 번으로 끝난다 — `claude` 를 부르지 않으므로
+구독 한도를 축내지 않는다. 한 번에 최대 3개까지만 답한다(폭주 방지).
 
 ```bash
 # 명령어 등록 (한 번, 그리고 명령어를 바꿀 때마다)
@@ -155,6 +173,11 @@ DISCORD_APPLICATION_ID=... DISCORD_BOT_TOKEN=... node _src/discord/register.mjs
   느슨하게 만드는 변경은 곧 아무나 명령을 흉내 낼 수 있다는 뜻이다.
 - 질문은 500자에서 자른다. 답변은 1,400자에서 자른다(임베드 한도 4,096 보다 앞서
   읽기 힘들어진다).
+- **`claude -p` 를 도구 없이(`--allowed-tools ""`) 부른다.** 프롬프트에 arXiv 초록이
+  그대로 들어가는데 그건 남이 쓴 검증되지 않은 텍스트다. 도구가 없으면 초록에 지시를
+  심어 둬도 읽고 답하는 것 말고 할 수 있는 게 없다 — 오픈클로를 걱정했던 지점이
+  여기서는 사라진다.
+- **`/_papers/asks` 는 sink secret 으로 막혀 있다.** 질문 원문과 다이제스트가 오간다.
 - **`/_papers/run` 은 밖으로 열려 있지 않다.** 열려 있으면 아무나 arXiv 조회와 LLM
   호출을 돌리고 남의 채널로 발송까지 시킬 수 있다 — `PUBLIC_PATHS` 로 읽기 전용
   경로만 통과시킨다.

@@ -10,10 +10,15 @@
 //  ③ **3초 안에** 답해야 한다. LLM 은 그보다 오래 걸리므로 먼저 "생각 중"(type 5)
 //     으로 답해 두고, 실제 답은 15분 안에 followup 으로 채운다.
 
-import { answerQuestion } from "./papers.js";
+
 
 export const INTERACTION = { PING: 1, APPLICATION_COMMAND: 2 };
-export const RESPONSE = { PONG: 1, DEFERRED: 5 };
+export const RESPONSE = { PONG: 1, MESSAGE: 4, DEFERRED: 5 };
+
+// 답이 오기 전까지 자리를 지키는 문구. "생각 중…"(type 5) 대신 실제 메시지로
+// 답하는 이유는, PC 가 꺼져 있어 답이 영영 안 올 때 무한 스피너가 아니라
+// 읽을 수 있는 글이 남게 하기 위해서다.
+export const PLACEHOLDER = "🤔 집 PC에 물어보는 중… (보통 1분 이내)";
 
 export const DISCORD_API = "https://discord.com/api/v10";
 
@@ -70,31 +75,23 @@ export async function followUp(applicationId, token, payload, { fetchImpl = fetc
 const optionOf = (interaction, name) =>
   (interaction?.data?.options ?? []).find((option) => option?.name === name)?.value ?? "";
 
-/** 명령 하나를 처리해 followup 으로 답을 채운다. 3초 밖에서 도는 부분이다. */
-export async function runCommand(interaction, env, { fetchImpl = fetch } = {}) {
-  const applicationId = env.DISCORD_APPLICATION_ID;
-  const token = interaction?.token;
-  const send = (payload) => followUp(applicationId, token, payload, { fetchImpl });
+/**
+ * 질문을 큐에 넣는다. **엣지는 답하지 않는다** — 답은 집 PC 의 Claude Code 가
+ * 만든다(구독 사용, API 키 불필요). 여기서는 적어 두기만 하므로 3초 제한을
+ * 넉넉히 지킨다.
+ */
+export async function queueAsk(interaction, env) {
+  const question = String(optionOf(interaction, "질문")).trim().slice(0, 500);
+  if (!question) return { ok: false, message: "질문을 적어주세요." };
 
-  try {
-    if (interaction?.data?.name !== "논문") {
-      return send({ content: "모르는 명령입니다." });
-    }
-    const question = String(optionOf(interaction, "질문")).slice(0, 500);
-    if (!question.trim()) return send({ content: "질문을 적어주세요." });
-
-    const { answer, date } = await answerQuestion(env, question, { fetchImpl });
-    return send({
-      embeds: [{
-        title: `📄 ${question.slice(0, 240)}`,
-        description: answer,
-        footer: { text: date ? `${date} 다이제스트 기준` : "아직 쌓인 다이제스트가 없습니다" },
-      }],
-    });
-  } catch (error) {
-    // 실패를 조용히 삼키면 "생각 중…" 이 영원히 남는다.
-    return send({ content: `답하지 못했습니다 — ${String(error.message ?? error).slice(0, 300)}` });
-  }
+  const id = env.PAPERS.idFromName("main");
+  const response = await env.PAPERS.get(id).fetch(new Request("https://papers/ask", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: interaction.id, token: interaction.token, question }),
+  }));
+  if (!response.ok) return { ok: false, message: "질문을 받지 못했습니다." };
+  return { ok: true, message: `${PLACEHOLDER}\n> ${question.slice(0, 200)}` };
 }
 
 /**
@@ -123,8 +120,11 @@ export async function handleInteraction(request, env, ctx) {
   if (interaction.type === INTERACTION.PING) return Response.json({ type: RESPONSE.PONG });
 
   if (interaction.type === INTERACTION.APPLICATION_COMMAND) {
-    ctx.waitUntil(runCommand(interaction, env));
-    return Response.json({ type: RESPONSE.DEFERRED });
+    if (interaction?.data?.name !== "논문" || !env.PAPERS) {
+      return Response.json({ type: RESPONSE.MESSAGE, data: { content: "모르는 명령입니다." } });
+    }
+    const queued = await queueAsk(interaction, env);
+    return Response.json({ type: RESPONSE.MESSAGE, data: { content: queued.message } });
   }
 
   return Response.json({ type: RESPONSE.PONG });

@@ -430,6 +430,12 @@ export class PapersDO {
     };
   }
 
+  /** 살아 있는 질문만. 토큰이 죽은 것은 목록에서 뺀다. */
+  async #liveAsks(now = Date.now()) {
+    const stored = await this.state.storage.list({ prefix: "ask:" });
+    return [...stored.values()].filter((ask) => now - (ask?.at ?? 0) < ASK_TTL_MS);
+  }
+
   async #archive(limit) {
     const stored = await this.state.storage.list({ prefix: "digest:", reverse: true, limit });
     return [...stored.values()];
@@ -445,6 +451,36 @@ export class PapersDO {
       } catch (error) {
         return Response.json({ error: String(error.message ?? error) }, { status: 502 });
       }
+    }
+
+    // 디스코드 슬래시 명령이 넣는다. 답은 PC 데몬이 채운다.
+    if (url.pathname === "/ask" && request.method === "POST") {
+      const payload = await request.json().catch(() => null);
+      const id = String(payload?.id ?? "").slice(0, 64);
+      const token = String(payload?.token ?? "").slice(0, 200);
+      const question = String(payload?.question ?? "").trim().slice(0, 500);
+      if (!id || !token || !question) {
+        return Response.json({ error: "invalid ask" }, { status: 400 });
+      }
+      await this.state.storage.put(`ask:${id}`, { id, token, question, at: Date.now() });
+      return Response.json({ ok: true, id });
+    }
+
+    // PC 데몬이 가져간다.
+    if (url.pathname === "/asks" && request.method === "GET") {
+      return Response.json({ asks: await this.#liveAsks() });
+    }
+
+    // 처리한 것을 지운다. 시간이 지나 죽은 것도 같이 걷어낸다.
+    if (url.pathname === "/asks/done" && request.method === "POST") {
+      const payload = await request.json().catch(() => null);
+      const ids = Array.isArray(payload?.ids) ? payload.ids.slice(0, 50) : [];
+      const live = new Set((await this.#liveAsks()).map((ask) => ask.id));
+      const stored = await this.state.storage.list({ prefix: "ask:" });
+      const stale = [...stored.values()].filter((ask) => !live.has(ask.id)).map((ask) => ask.id);
+      const drop = [...new Set([...ids, ...stale])].map((id) => `ask:${id}`);
+      if (drop.length) await this.state.storage.delete(drop);
+      return Response.json({ ok: true, removed: drop.length });
     }
 
     if (url.pathname === "/latest" && request.method === "GET") {
@@ -478,6 +514,32 @@ export async function runDailyPapers(env) {
  */
 const PUBLIC_PATHS = new Set(["/latest", "/archive"]);
 
+/** PC 데몬만 부르는 경로. sink secret 으로 막는다. */
+const SINK_PATHS = new Set(["/asks", "/asks/done"]);
+
+/** 데몬 인증. 질문 원문과 다이제스트가 오가므로 아무나 읽게 두지 않는다. */
+export async function handlePapersSink(request, env, url) {
+  const path = url.pathname.replace(/^\/_papers/, "");
+  if (!SINK_PATHS.has(path)) return new Response("not found", { status: 404 });
+  if (!env.PAPERS_SINK_SECRET) return new Response("papers sink is not configured", { status: 503 });
+  const offered = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+  if (offered !== env.PAPERS_SINK_SECRET) {
+    return Response.json({ error: "unauthorized" }, { status: 401 });
+  }
+  const id = env.PAPERS.idFromName("main");
+  const response = await env.PAPERS.get(id).fetch(
+    new Request(`https://papers${path}`, {
+      method: request.method,
+      headers: { "Content-Type": "application/json" },
+      body: request.method === "POST" ? await request.text() : undefined,
+    }),
+  );
+  return new Response(response.body, {
+    status: response.status,
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+  });
+}
+
 /** `/_papers/*` 조회. */
 export async function handlePapers(request, env, url) {
   const path = url.pathname.replace(/^\/_papers/, "") || "/latest";
@@ -501,10 +563,11 @@ export async function handlePapers(request, env, url) {
  * 같은 물음은 논문의 가정과 내 제약을 견줘야 해서 추론 품질이 실제로 갈린다.
  */
 
-/** 답변에 쓸 모델. 바꾸려면 PAPERS_ANSWER_MODEL. */
-export const ANSWER_MODEL = "claude-opus-5";
 // 디스코드 임베드 설명 한도가 4096자다. 그보다 앞서 읽기 힘들어지므로 더 짧게 끊는다.
 export const ANSWER_LIMIT = 1400;
+// interaction 토큰은 15분이면 죽는다. 그 안에 못 답하면 버린다 — 데몬이 한참
+// 뒤에 깨어나 이미 의미 없는 질문에 답하고 PATCH 가 실패하는 걸 막는다.
+export const ASK_TTL_MS = 14 * 60 * 1000;
 
 /** 최신 다이제스트를 문맥으로 깔아 준다. 없으면 논문 없이 답한다. */
 export function buildAskPrompt(digest, question, profile = RESEARCH_PROFILE) {
@@ -536,58 +599,9 @@ ${question}
 - 한국어로, ${ANSWER_LIMIT}자 이내. 출퇴근길에 읽습니다 — 문단을 짧게 끊으세요.`;
 }
 
-/**
- * Claude 호출. 이 리포는 의존성을 두지 않는 관례라 공식 SDK 대신 raw fetch 를 쓴다
- * (podcast-ai.js 의 Gemini 호출과 같은 방식이고, 워커 번들도 가벼워진다).
+/* ── 질문 큐 ─────────────────────────────────────────────────────────────
  *
- * 주의할 것 둘:
- *  · Opus 5 는 **thinking 이 기본으로 켜져** 있고 그 토큰도 max_tokens 를 함께
- *    먹는다. 넉넉히 잡지 않으면 답이 중간에 잘린다.
- *  · 응답 content 에는 thinking 블록이 섞여 오므로 **text 블록만** 골라야 한다.
+ * 엣지는 질문을 적어 두기만 하고, 답은 집 PC 의 Claude Code 가 만든다
+ * (`claude -p`, 구독 사용 — API 키가 필요 없다). invest 의 "지금 갱신" 과 같은
+ * 구조다: 엣지가 못 하는 일을 PC 가 가져가는 형태.
  */
-export async function callClaude(env, prompt, { fetchImpl = fetch } = {}) {
-  const key = env.ANTHROPIC_API_KEY;
-  if (!key) throw new Error("ANTHROPIC_API_KEY 가 없습니다");
-
-  const response = await fetchImpl("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": key,
-      "anthropic-version": "2023-06-01",
-      // 안전 분류기가 거절하면 서버가 알아서 다른 모델로 넘겨 준다.
-      "anthropic-beta": "server-side-fallback-2026-07-01",
-    },
-    body: JSON.stringify({
-      model: env.PAPERS_ANSWER_MODEL || ANSWER_MODEL,
-      max_tokens: 8000,
-      fallbacks: "default",
-      messages: [{ role: "user", content: prompt }],
-    }),
-  });
-
-  if (!response.ok) throw new Error(`Claude 호출 실패 (HTTP ${response.status})`);
-  const body = await response.json();
-  // 거절은 오류가 아니라 200 으로 온다 — content 를 읽기 전에 확인한다.
-  if (body?.stop_reason === "refusal") throw new Error("모델이 답변을 거절했습니다");
-  const text = (body?.content ?? [])
-    .filter((block) => block?.type === "text")
-    .map((block) => block.text ?? "")
-    .join("")
-    .trim();
-  if (!text) throw new Error("Claude 가 빈 응답을 돌려줬습니다");
-  return text;
-}
-
-/** 슬래시 명령이 부른다. 최신 다이제스트를 문맥으로 질문에 답한다. */
-export async function answerQuestion(env, question, { fetchImpl = fetch } = {}) {
-  const id = env.PAPERS.idFromName("main");
-  const stored = await env.PAPERS.get(id).fetch(new Request("https://papers/latest"));
-  const digest = await stored.json().catch(() => null);
-  const answer = await callClaude(
-    env,
-    buildAskPrompt(digest?.empty ? null : digest, question, env.PAPERS_PROFILE || RESEARCH_PROFILE),
-    { fetchImpl },
-  );
-  return { answer: clip(answer, ANSWER_LIMIT), date: digest?.date ?? null };
-}

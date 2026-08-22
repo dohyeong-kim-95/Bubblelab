@@ -5,6 +5,8 @@ import {
   buildDiscordPayload,
   createDelivery,
   handlePapers,
+  handlePapersSink,
+  ASK_TTL_MS,
   buildQuery,
   buildScorePrompt,
   CATEGORIES,
@@ -400,4 +402,81 @@ test("밖에서는 읽기만 되고 /run 은 닫혀 있다", async () => {
   assert.equal((await ask("GET", "/_papers/latest")).status, 200);
   assert.equal((await ask("GET", "/_papers/archive")).status, 200);
   assert.deepEqual(calls, ["/latest", "/archive"]);
+});
+
+// ── 질문 큐 (디스코드 → 집 PC) ──────────────────────────────────────────
+
+function papersDO(storage = storageStub()) {
+  const instance = new PapersDO({ storage }, env());
+  const call = (path, method = "GET", body) => instance.fetch(new Request(`https://papers${path}`, {
+    method, headers: { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  }));
+  return { storage, call };
+}
+
+test("질문을 넣고 데몬이 가져간다", async () => {
+  const p = papersDO();
+  assert.equal((await p.call("/ask", "POST", { id: "a", token: "t", question: "되나?" })).status, 200);
+  const { asks } = await (await p.call("/asks")).json();
+  assert.equal(asks.length, 1);
+  assert.equal(asks[0].question, "되나?");
+  assert.equal(asks[0].token, "t");
+});
+
+test("id·토큰·질문이 하나라도 없으면 거절한다", async () => {
+  const p = papersDO();
+  for (const bad of [{ id: "a", token: "t" }, { id: "a", question: "q" }, { token: "t", question: "q" },
+                     { id: "a", token: "t", question: "   " }]) {
+    assert.equal((await p.call("/ask", "POST", bad)).status, 400);
+  }
+});
+
+test("처리한 질문은 목록에서 빠진다", async () => {
+  const p = papersDO();
+  await p.call("/ask", "POST", { id: "a", token: "t", question: "q1" });
+  await p.call("/ask", "POST", { id: "b", token: "t", question: "q2" });
+  await p.call("/asks/done", "POST", { ids: ["a"] });
+  const { asks } = await (await p.call("/asks")).json();
+  assert.deepEqual(asks.map((x) => x.id), ["b"]);
+});
+
+test("토큰이 죽은 질문은 건네주지도, 남기지도 않는다", async () => {
+  // interaction 토큰은 15분이면 죽는다. 그 뒤에 답해 봐야 PATCH 가 실패한다.
+  const p = papersDO();
+  await p.storage.put("ask:old", { id: "old", token: "t", question: "옛날 질문", at: Date.now() - ASK_TTL_MS - 1000 });
+  await p.call("/ask", "POST", { id: "new", token: "t", question: "새 질문" });
+
+  const { asks } = await (await p.call("/asks")).json();
+  assert.deepEqual(asks.map((x) => x.id), ["new"], "죽은 질문을 데몬에 건넸다");
+
+  // done 을 부를 때 같이 걷어낸다 — 안 그러면 저장소에 영영 쌓인다.
+  await p.call("/asks/done", "POST", { ids: ["new"] });
+  assert.equal([...p.storage.map.keys()].filter((k) => k.startsWith("ask:")).length, 0);
+});
+
+test("데몬 경로는 secret 없이 못 연다", async () => {
+  const calls = [];
+  const base = {
+    PAPERS: { idFromName: () => "id", get: () => ({ fetch: (req) => { calls.push(new URL(req.url).pathname); return Response.json({ asks: [] }); } }) },
+  };
+  const ask = (env_, headers = {}) => handlePapersSink(
+    new Request("https://papers.bubblelab.dev/_papers/asks", { headers }), env_,
+    new URL("https://papers.bubblelab.dev/_papers/asks"));
+
+  assert.equal((await ask({ ...base })).status, 503, "secret 미설정이면 열려선 안 된다");
+  assert.equal((await ask({ ...base, PAPERS_SINK_SECRET: "s" })).status, 401, "인증 없이 통과했다");
+  assert.equal((await ask({ ...base, PAPERS_SINK_SECRET: "s" }, { Authorization: "Bearer wrong" })).status, 401);
+  assert.deepEqual(calls, [], "거부해야 할 요청이 DO 까지 갔다");
+
+  assert.equal((await ask({ ...base, PAPERS_SINK_SECRET: "s" }, { Authorization: "Bearer s" })).status, 200);
+  assert.deepEqual(calls, ["/asks"]);
+});
+
+test("데몬 경로 밖은 sink 로 통과하지 않는다", async () => {
+  const env_ = { PAPERS_SINK_SECRET: "s", PAPERS: { idFromName: () => "id", get: () => ({ fetch: () => Response.json({}) }) } };
+  const response = await handlePapersSink(
+    new Request("https://papers.bubblelab.dev/_papers/run", { method: "POST", headers: { Authorization: "Bearer s" } }),
+    env_, new URL("https://papers.bubblelab.dev/_papers/run"));
+  assert.equal(response.status, 404, "sink 인증으로 /run 을 부를 수 있으면 안 된다");
 });

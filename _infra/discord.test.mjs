@@ -8,8 +8,9 @@ import {
   RESPONSE,
   followUp,
   handleInteraction,
+  PLACEHOLDER,
+  queueAsk,
   registerCommands,
-  runCommand,
   verifySignature,
 } from "./discord.js";
 
@@ -103,20 +104,44 @@ test("PING 에 PONG 으로 답한다", async () => {
   assert.deepEqual(await response.json(), { type: RESPONSE.PONG });
 });
 
-test("명령은 먼저 미뤄 두고 뒤에서 처리한다", async () => {
-  // 3초 안에 답하지 않으면 디스코드가 실패로 처리한다. LLM 은 그보다 오래 걸린다.
+test("명령을 큐에 넣고 읽을 수 있는 문구로 즉시 답한다", async () => {
+  // 3초 안에 답해야 한다. 엣지는 적어 두기만 하므로 여유가 크다.
   const { publicKey, sign } = await signer();
+  const stored = [];
   const body = JSON.stringify({
-    type: INTERACTION.APPLICATION_COMMAND, token: "tok",
+    type: INTERACTION.APPLICATION_COMMAND, id: "int-1", token: "tok",
     data: { name: "논문", options: [{ name: "질문", value: "이거 800회에 되나?" }] },
   });
-  const ctx = ctxStub();
+  const papers = {
+    idFromName: () => "id",
+    get: () => ({ fetch: async (req) => { stored.push(await req.json()); return Response.json({ ok: true }); } }),
+  };
   const response = await handleInteraction(
     post(body, { "X-Signature-Ed25519": await sign("1", body), "X-Signature-Timestamp": "1" }),
-    env({ publicKey }), ctx,
+    env({ publicKey, PAPERS: papers }), ctxStub(),
   );
-  assert.deepEqual(await response.json(), { type: RESPONSE.DEFERRED });
-  assert.equal(ctx.held.length, 1, "waitUntil 로 붙잡지 않으면 응답과 함께 죽는다");
+  const json = await response.json();
+
+  // type 5(생각 중) 가 아니라 type 4 — PC 가 꺼져 있어도 무한 스피너가 아니라
+  // 읽을 수 있는 글이 남는다.
+  assert.equal(json.type, RESPONSE.MESSAGE);
+  assert.match(json.data.content, /집 PC에 물어보는 중/);
+  assert.match(json.data.content, /800회에 되나/);
+  assert.deepEqual(stored, [{ id: "int-1", token: "tok", question: "이거 800회에 되나?" }]);
+});
+
+test("빈 질문은 큐에 넣지 않는다", async () => {
+  let stored = 0;
+  const papers = { idFromName: () => "id", get: () => ({ fetch: async () => { stored++; return Response.json({}); } }) };
+  const result = await queueAsk({ id: "i", token: "t", data: { options: [{ name: "질문", value: "  " }] } },
+    { PAPERS: papers });
+  assert.equal(result.ok, false);
+  assert.equal(stored, 0);
+});
+
+test("자리를 지키는 문구가 비어 있지 않다", () => {
+  // 비면 디스코드가 빈 메시지를 거절한다.
+  assert.ok(PLACEHOLDER.trim().length > 0);
 });
 
 test("설정이 없으면 503 으로 알린다", async () => {
@@ -124,81 +149,7 @@ test("설정이 없으면 503 으로 알린다", async () => {
   assert.equal(response.status, 503);
 });
 
-// ── 명령 처리 ───────────────────────────────────────────────────────────
-
-/** DO(최신 다이제스트) + Claude + 디스코드 followup 을 한 번에 흉내 낸다. */
-function stub({ digest, claude = "쓸 수 있습니다.", claudeStatus = 200 } = {}) {
-  const sent = [];
-  const impl = async (input, init) => {
-    const href = String(input);
-    if (href.includes("api.anthropic.com")) {
-      if (claudeStatus !== 200) return new Response("nope", { status: claudeStatus });
-      return Response.json({ content: [{ type: "thinking", thinking: "" }, { type: "text", text: claude }] });
-    }
-    sent.push({ url: href, method: init.method, body: JSON.parse(init.body) });
-    return new Response(null, { status: 204 });
-  };
-  const env_ = env({
-    PAPERS: {
-      idFromName: () => "id",
-      get: () => ({ fetch: async () => Response.json(digest ?? { empty: true }) }),
-    },
-  });
-  return { impl, sent, env: env_ };
-}
-
-const digest = {
-  date: "2026-08-22", hits: [{
-    title: "MOCA-HESP", score: 9, link: "https://arxiv.org/abs/x", summary: "초록",
-    summary_ko: { "한줄": "조합 공간 BO", "예산": "500회" },
-  }], near: [],
-};
-
-test("질문에 답해 followup 으로 채운다", async () => {
-  const s = stub({ digest });
-  await runCommand({ token: "tok", data: { name: "논문", options: [{ name: "질문", value: "되나?" }] } },
-    s.env, { fetchImpl: s.impl });
-
-  assert.equal(s.sent.length, 1);
-  assert.equal(s.sent[0].method, "PATCH");
-  assert.match(s.sent[0].url, /webhooks\/123\/tok\/messages\/@original$/);
-  assert.equal(s.sent[0].body.embeds[0].description, "쓸 수 있습니다.");
-  assert.match(s.sent[0].body.embeds[0].footer.text, /2026-08-22/);
-});
-
-test("Claude 응답에서 thinking 을 빼고 text 만 읽는다", async () => {
-  // Opus 5 는 thinking 이 기본으로 켜져 있어 블록이 섞여 온다.
-  const s = stub({ digest, claude: "본문만" });
-  await runCommand({ token: "t", data: { name: "논문", options: [{ name: "질문", value: "q" }] } },
-    s.env, { fetchImpl: s.impl });
-  assert.equal(s.sent[0].body.embeds[0].description, "본문만");
-});
-
-test("실패해도 '생각 중…' 을 남기지 않고 이유를 알린다", async () => {
-  const s = stub({ digest, claudeStatus: 429 });
-  await runCommand({ token: "t", data: { name: "논문", options: [{ name: "질문", value: "q" }] } },
-    s.env, { fetchImpl: s.impl });
-  assert.match(s.sent[0].body.content, /답하지 못했습니다/);
-  assert.match(s.sent[0].body.content, /429/);
-});
-
-test("다이제스트가 없어도 답은 돌려준다", async () => {
-  const s = stub({ digest: null });
-  await runCommand({ token: "t", data: { name: "논문", options: [{ name: "질문", value: "q" }] } },
-    s.env, { fetchImpl: s.impl });
-  assert.match(s.sent[0].body.embeds[0].footer.text, /아직 쌓인 다이제스트가 없습니다/);
-});
-
-test("빈 질문은 LLM 을 부르지 않는다", async () => {
-  let claudeCalls = 0;
-  const impl = async (input, init) => {
-    if (String(input).includes("anthropic")) { claudeCalls++; return Response.json({ content: [] }); }
-    return new Response(null, { status: 204 });
-  };
-  await runCommand({ token: "t", data: { name: "논문", options: [{ name: "질문", value: "   " }] } },
-    env(), { fetchImpl: impl });
-  assert.equal(claudeCalls, 0);
-});
+// ── 명령어 등록 ────────────────────────────────────────────────────────
 
 test("명령어를 등록한다", async () => {
   let seen = null;

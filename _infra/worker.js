@@ -81,7 +81,7 @@ import { validPlannerCode } from "./planner.js";
 import { handleFortuneChart, handleFortunePush, sendFortuneDaily } from "./fortune.js";
 import { handleBriefPush, handleBriefRates, handleBriefToday, sendBriefDaily } from "./brief.js";
 import { handlePodcast, handlePodcastAdmin, runDailyGeneration, runEveningReminder, UPLOAD_MAX_BYTES } from "./podcast.js";
-import { handlePapers, runDailyPapers } from "./papers.js";
+import { handlePapers, handlePapersSink, runDailyPapers } from "./papers.js";
 import { handleInteraction } from "./discord.js";
 import { handleEstateDeals } from "./estate.js";
 import { serveAssetDownload, serveAssetDownloadCounts } from "./downloads.js";
@@ -1945,7 +1945,10 @@ export async function handleRequest(request, env, ctx) {
           status: 503, headers: { "Cache-Control": "no-store" },
         });
       }
-      return handlePapers(request, env, url);
+      // 집 PC 데몬 전용 경로는 sink secret 으로, 나머지는 읽기 전용으로 연다.
+      return path.startsWith("/_papers/asks")
+        ? handlePapersSink(request, env, url)
+        : handlePapers(request, env, url);
     }
 
     // 디스코드 슬래시 명령. 게이트를 두지 않는 대신 **Ed25519 서명**으로만 받는다
