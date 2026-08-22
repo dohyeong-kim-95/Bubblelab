@@ -395,7 +395,10 @@ export class PapersDO {
     if (!createDelivery(env)) {
       return { due: false, reason: "보낼 곳이 없습니다 — DISCORD_BOT_TOKEN+DISCORD_CHANNEL_ID" };
     }
-    if (await this.state.storage.get(`digest:${date}`)) return { due: false, reason: "오늘 것은 이미 있습니다" };
+    // 보관본과 "만들어 봤다" 표시를 함께 본다 — 못 고른 날은 보관본이 없다.
+    if (await this.state.storage.get(`done:${date}`) || await this.state.storage.get(`digest:${date}`)) {
+      return { due: false, reason: "오늘 것은 이미 만들었습니다" };
+    }
 
     // arXiv 신규 공지(13~14시 KST)가 한참 지난 뒤라 하루치가 다 모여 있다.
     const hourKst = new Date(at + 9 * 60 * 60 * 1000).getUTCHours();
@@ -436,6 +439,10 @@ export class PapersDO {
 
     if (ids.length) await this.#remember(ids);
     await this.state.storage.delete("claim");
+    // **고를 게 없어도 그날은 끝난 것으로 표시한다.** 보관본만 기준으로 삼으면
+    // 아무것도 못 고른 날에 저장되는 게 없어서, 1분마다 도는 데몬이 하루 종일
+    // 같은 하루치를 다시 만들며 arXiv 를 찌른다.
+    await this.#finish(digest.date, at);
 
     if (!digest.hits.length && !digest.near.length) {
       return { skipped: "고를 만한 논문 없음", scanned };
@@ -455,6 +462,15 @@ export class PapersDO {
   async #archive(limit) {
     const stored = await this.state.storage.list({ prefix: "digest:", reverse: true, limit });
     return [...stored.values()];
+  }
+
+  /** 그날 치를 만들어 봤다는 표시. 보관본과 달리 **못 고른 날에도** 남는다. */
+  async #finish(date, at) {
+    await this.state.storage.put(`done:${date}`, at);
+    const stored = await this.state.storage.list({ prefix: "done:" });
+    if (stored.size <= MAX_ARCHIVE) return;
+    const keys = [...stored.keys()].sort();
+    await this.state.storage.delete(keys.slice(0, stored.size - MAX_ARCHIVE));
   }
 
   /* ── 댓글 ──────────────────────────────────────────────────────────────

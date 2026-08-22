@@ -307,6 +307,23 @@ test("오늘 것이 이미 있으면 다시 만들지 않는다", async () => {
   assert.equal(pending.due, false);
 });
 
+test("고를 게 없던 날도 다시 만들지 않는다", async () => {
+  // 보관본만 기준으로 삼으면 못 고른 날은 저장되는 게 없어서, 1분마다 도는
+  // 데몬이 하루 종일 같은 하루치를 다시 만들며 arXiv 를 찌른다.
+  const storage = storageStub();
+  const instance = new PapersDO({ storage }, env());
+  const result = await instance.completeDigest(
+    { date: "2026-08-22", scanned: 31, ids: [], hits: [], near: [] },
+    { at: MORNING, fetchImpl: discordStub().impl },
+  );
+  assert.equal(result.skipped, "고를 만한 논문 없음");
+  assert.equal(await storage.get("digest:2026-08-22"), undefined, "빈 보관본을 남겼다");
+  assert.equal((await instance.claimDigest({ at: MORNING + 60_000 })).due, false);
+
+  // 다음 날은 당연히 다시 만든다.
+  assert.equal((await instance.claimDigest({ at: MORNING + 24 * 60 * 60 * 1000 })).due, true);
+});
+
 test("한 번 집어가면 만드는 동안 다른 실행이 또 집어가지 않는다", async () => {
   // 데몬은 1분마다 도는데 채점·요약은 몇 분씩 걸린다. 찜하지 않으면 같은
   // 하루치를 여러 번 만들고 디스코드로도 여러 번 나간다.
