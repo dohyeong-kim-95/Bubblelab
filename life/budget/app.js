@@ -260,8 +260,8 @@ function updateSaveLabel() {
 }
 
 /* 폴더를 기억해 두고 "그 폴더의 최신 백업"을 바로 여는 길. File System Access API 가
- * 있는 브라우저(데스크톱 크롬 계열)에서만 성립한다 — 안드로이드 크롬에는 이 API 가
- * 아직 없어서 그쪽은 파일 선택창 그대로다. 있는지 물어보고 켠다. */
+ * 필요해서 있는지 물어보고 켠다 — 안드로이드에서도 실제로 동작하는 것을 확인했다
+ * (2026-08-24, 삼성 폰). 없는 브라우저는 파일 선택창 그대로다. */
 const FOLDER_DB = "bl_budget_fs";     // 기기 안에서만 뜻이 있는 폴더 손잡이 하나
 const canPickFolder = typeof window.showDirectoryPicker === "function";
 

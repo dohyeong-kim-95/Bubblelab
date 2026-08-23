@@ -66,7 +66,12 @@ body { overflow: auto; }
 .compose input[type=number]::-webkit-inner-spin-button { appearance: none; margin: 0; }
 
 /* ── 내역 ───────────────────────────────────────────────────────── */
-.entries { display: grid; gap: 14px; margin-top: 14px; }
+/* grid·flex 자리의 기본 min-width 는 auto 라, 긴 가맹점 한 줄이 그 자리를 밀어
+ * **문서 전체를 가로로 넓힌다**. 그러면 그 위에 뜬 팝업까지 넓어진 문서를 기준으로
+ * 자리를 잡아 "담기" 가 화면 밖으로 나간다(실기기에서 그랬다). 줄일 수 있게 못박는다. */
+.entries { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; margin-top: 14px; }
+.day, .day-head, .entry { min-width: 0; }
+.day-head span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .day-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
   color: var(--muted); font-size: 11px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
 .day-total { font-variant-numeric: tabular-nums; }
@@ -87,22 +92,42 @@ body { overflow: auto; }
 #settings-form .fine-print { margin: 10px 4px 0; }
 
 /* ── 카드 문자에서 담기 ─────────────────────────────────────────── */
-dialog.wide { width: min(100% - 24px, 420px); }
+/* 폰에서는 팝업이 아니라 아래에서 올라오는 시트로 연다. 420px 를 폭으로 박아 두었더니
+ * 실기기(412dp)에서 오른쪽이 잘려 "담기" 가 화면 밖으로 나갔다 — 폭은 화면이 정하고
+ * 상한만 준다. */
+dialog { width: auto; max-width: min(340px, calc(100vw - 32px)); }
+dialog.wide { max-width: min(420px, calc(100vw - 24px)); }
+@media (max-width: 520px) {
+  dialog, dialog.wide {
+    width: 100%; max-width: 100%; margin: auto 0 0; max-height: 88dvh; overflow-y: auto;
+    border-radius: 16px 16px 0 0; border-bottom: 0;
+    padding: 16px 16px max(16px, env(safe-area-inset-bottom));
+  }
+  /* 시트 아래쪽 버튼은 엄지가 닿는 자리라 크게 잡는다. */
+  .menu-items.row button { min-height: 52px; }
+}
 /* 파일 입력은 버튼으로 위장한다 — 기본 파일 입력은 폭도 글자도 브라우저 마음대로다. */
-.file-button { display: grid; place-items: center; min-height: 48px; margin-top: 12px;
+/* button 은 내용만큼만 넓어진다 — 시트에서는 한 줄을 다 쓰게 못박는다. */
+.file-button { display: grid; place-items: center; width: 100%; min-height: 48px; margin-top: 12px;
   border-radius: 9px; padding: 0 14px; font-size: 15px; cursor: pointer; }
 /* 폴더를 기억할 수 있는 브라우저에서만 보이는 줄. */
-.folder-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
-.folder-row button { flex: none; min-height: 40px; border-radius: 9px; padding: 0 12px;
-  color: var(--muted); font-size: 13px; }
+.folder-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.folder-row button { flex: none; min-height: 40px; border-radius: 9px; padding: 0 10px;
+  color: var(--muted); font-size: 13px; text-decoration: underline; }
 #folder-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   color: var(--muted); font-size: 12px; }
+#sms-file-label:not(.primary) { min-height: 40px; margin-top: 4px; color: var(--muted);
+  font-size: 13px; text-decoration: underline; }
 .file-button.primary { background: var(--ink); color: var(--bg); font-weight: 700; }
 .file-button:active { opacity: .85; }
 /* 읽은 것이 없을 때의 "담기" 는 눌러도 되는 것처럼 보이면 안 된다. */
 #sms-save:disabled { background: var(--surface); color: var(--muted); }
-.summary-line { min-height: 1.2em; margin: 10px 4px 0; }
-.preview { list-style: none; margin: 6px 0 0; padding: 0; max-height: 40dvh; overflow-y: auto; }
+.summary-line { min-height: 1.2em; margin: 10px 4px 0; overflow-wrap: anywhere; }
+/* 긴 가맹점 이름 하나가 팝업 전체를 밀어 넓히면 "담기" 가 화면 밖으로 나간다.
+ * 실기기에서 실제로 그랬다 — 폭을 정하는 쪽은 언제나 화면이고 내용이 아니다. */
+#sms-form, .preview, .preview-row, .preview-label { min-width: 0; max-width: 100%; }
+.preview { list-style: none; margin: 6px 0 0; padding: 0; max-height: 40dvh;
+  overflow-y: auto; overflow-x: hidden; }
 .preview-row { border-bottom: 1px solid var(--line); }
 .preview-row:last-child { border-bottom: 0; }
 .preview-label { display: flex; align-items: center; gap: 10px; padding: 9px 2px; font-size: 14px; }

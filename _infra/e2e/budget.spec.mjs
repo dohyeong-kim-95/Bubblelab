@@ -175,3 +175,39 @@ test("가계부 — 공유 시트로 보낸 백업 파일을 서비스워커가 
 
   expect(failures).toEqual([]);
 });
+
+test("가계부 — 긴 가맹점 이름이 있어도 가로로 넘치지 않는다", async ({ page }) => {
+  /* 실기기(삼성)에서 팝업의 오른쪽이 잘려 "담기" 가 화면 밖으로 나갔다. 원인은 팝업이
+   * 아니라 본문이다 — 긴 기록 한 줄이 문서를 가로로 넓히면, 그 위에 뜬 팝업도 넓어진
+   * 문서를 기준으로 자리를 잡는다. 그래서 목록과 팝업을 함께 본다. */
+  const long = "신한카드(3484)승인 김*형님 아주아주긴가맹점이름주식회사강남대로지점";
+  await page.goto("/life/budget/");
+  await page.evaluate((memo) => localStorage.setItem("bl_budget_v1", JSON.stringify({
+    v: 1, limit: 1000000, startDay: 1,
+    entries: [{ id: "a", amount: 39600, memo, on: "2026-08-10", at: "2026-08-10T03:00:00Z" }],
+  })), long);
+  await page.reload();
+  await expect(page.locator(".entry")).toHaveCount(1);
+
+  const viewport = page.viewportSize().width;
+  const fits = async (what) =>
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), what)
+      .toBeLessThanOrEqual(page.viewportSize().width + 1);
+  await fits("목록이 가로로 넘친다");
+
+  await page.locator("#sms-button").click();
+  await page.locator("#sms-file").setInputFiles({
+    name: "sms.txt", mimeType: "text/plain",
+    buffer: Buffer.from(`${long} 12,000원 08/23\n\n${long} 4,500원 08/22`),
+  });
+  await expect(page.locator(".preview-row")).toHaveCount(2);
+  await fits("팝업이 열린 뒤 가로로 넘친다");
+
+  const box = await page.locator("#sms").boundingBox();
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width, "팝업이 화면보다 넓다").toBeLessThanOrEqual(viewport + 1);
+  // 담을 수 있는지는 버튼이 화면 안에 있느냐로 갈린다.
+  const save = await page.locator("#sms-save").boundingBox();
+  expect(save.x + save.width, "담기 버튼이 화면 밖에 있다").toBeLessThanOrEqual(viewport + 1);
+  await expect(page.locator("#sms-save")).toBeVisible();
+});
