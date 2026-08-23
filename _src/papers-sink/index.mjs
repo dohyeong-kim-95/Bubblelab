@@ -20,8 +20,8 @@ import { dirname } from "node:path";
 
 import {
   ANSWER_LIMIT, buildAskPrompt, buildChatAnswerPrompt, buildChatPrompt, buildScorePrompt,
-  buildSummaryPrompt, CHAT_ANSWER_LIMIT, fetchCandidates, parseScores, parseSearchRequest,
-  parseSummary, pickPapers, RESEARCH_PROFILE, searchArxiv,
+  buildSummaryPrompt, CHAT_ANSWER_LIMIT, fetchCandidates, parseScores, parseSummary,
+  parseVerb, pickPapers, RESEARCH_PROFILE, runVerb,
 } from "../../_infra/papers.js";
 
 const BASE = (process.env.PAPERS_ENDPOINT ?? "").trim() || "https://life.bubblelab.dev";
@@ -183,12 +183,14 @@ async function chat(secret) {
   let answer;
   try {
     const first = await ask(buildChatPrompt(history, question, digest, profile));
-    const query = parseSearchRequest(first);
-    if (query) {
-      console.log(`  arXiv 검색: ${query}`);
-      const papers = await searchArxiv(query);
-      console.log(`  ${papers.length}편 찾음`);
-      answer = await ask(buildChatAnswerPrompt(history, question, papers, query, profile));
+    const wanted = parseVerb(first);
+    if (wanted) {
+      console.log(`  ${wanted.verb}: ${wanted.arg}`);
+      const found = await runVerb(wanted, {
+        lookup: (q) => api(`/reviews/search?q=${encodeURIComponent(q)}`, secret).then((r) => r.reviews ?? []),
+      });
+      console.log(`  ${found.papers.length}편 찾음`);
+      answer = await ask(buildChatAnswerPrompt(history, question, found.papers, found.query, profile));
     } else {
       answer = first;
     }

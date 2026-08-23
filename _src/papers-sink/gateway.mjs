@@ -20,7 +20,7 @@ import { dirname } from "node:path";
 
 import {
   buildChatAnswerPrompt, buildChatPrompt, CHAT_ANSWER_LIMIT,
-  parseSearchRequest, RESEARCH_PROFILE, searchArxiv,
+  parseVerb, RESEARCH_PROFILE, runVerb,
 } from "../../_infra/papers.js";
 
 const BASE = (process.env.PAPERS_ENDPOINT ?? "").trim() || "https://life.bubblelab.dev";
@@ -158,14 +158,15 @@ async function answer(question) {
   ]);
   const profile = process.env.PAPERS_PROFILE || RESEARCH_PROFILE;
 
-  const first = await ask(buildChatPrompt(history ?? [], question, digest, profile));
-  const query = parseSearchRequest(first);
-  if (!query) return first;
+  const wanted = parseVerb(first);
+  if (!wanted) return first;
 
-  log(`  arXiv 검색: ${query}`);
-  const papers = await searchArxiv(query);
-  log(`  ${papers.length}편 찾음`);
-  return ask(buildChatAnswerPrompt(history ?? [], question, papers, query, profile));
+  log(`  ${wanted.verb}: ${wanted.arg}`);
+  const found = await runVerb(wanted, {
+    lookup: (q) => edge(`/reviews/search?q=${encodeURIComponent(q)}`).then((r) => r.reviews ?? []),
+  });
+  log(`  ${found.papers.length}편 찾음`);
+  return ask(buildChatAnswerPrompt(history ?? [], question, found.papers, found.query, profile));
 }
 
 /* ── 한 번에 하나씩 ─────────────────────────────────────────────────────

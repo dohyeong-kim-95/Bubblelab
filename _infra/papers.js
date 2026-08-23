@@ -691,6 +691,28 @@ export class PapersDO {
    * **서버가 만든 그대로**여야 해서다 — 내가 쓴 글이 섞이면 나중에 다시 그릴 때
    * 무엇이 요약이고 무엇이 내 메모인지 구분이 안 된다.
    */
+  /**
+   * 내가 읽은 것 중에서 찾는다. 디스코드에서 "이거 전에 본 것 같은데?" 가 되는
+   * 자리다 — 쌓인 게 쓰이지 않으면 쌓는 뜻이 없다.
+   *
+   * 제목·리뷰 본문·내가 내린 결론을 모두 훑는다. 낱말 하나라도 걸리면 준다.
+   */
+  async searchReviews(query, { limit = 5 } = {}) {
+    const words = String(query ?? "").toLowerCase().split(/\s+/).filter(Boolean).slice(0, 8);
+    if (!words.length) return { reviews: [] };
+
+    const stored = await this.state.storage.list({ prefix: "review:", reverse: true });
+    const scored = [...stored.values()].map((row) => {
+      const hay = [row.title, row.verdict, ...Object.values(row.review ?? {})]
+        .join(" ").toLowerCase();
+      return { row, hits: words.filter((word) => hay.includes(word)).length };
+    });
+    return {
+      reviews: scored.filter((s) => s.hits).sort((a, b) => b.hits - a.hits)
+        .slice(0, limit).map((s) => s.row),
+    };
+  }
+
   async #comments() {
     const stored = await this.state.storage.list({ prefix: "comment:" });
     return Object.fromEntries(
@@ -758,6 +780,10 @@ export class PapersDO {
     if (url.pathname === "/chat/remember" && request.method === "POST") {
       const payload = await request.json().catch(() => null);
       return Response.json(await this.chatRemember(payload ?? {}));
+    }
+
+    if (url.pathname === "/reviews/search" && request.method === "GET") {
+      return Response.json(await this.searchReviews(url.searchParams.get("q")));
     }
 
     if (url.pathname === "/reviews" && request.method === "GET") {
@@ -860,7 +886,7 @@ export class PapersDO {
 const PUBLIC_PATHS = new Set(["/latest", "/archive"]);
 
 /** PC 데몬만 부르는 경로. sink secret 으로 막는다. */
-export const SINK_PATHS = new Set(["/asks", "/asks/done", "/digest/pending", "/digest/done", "/chat", "/chat/reply", "/chat/alive", "/chat/history", "/chat/remember", "/reviews", "/profile"]);
+export const SINK_PATHS = new Set(["/asks", "/asks/done", "/digest/pending", "/digest/done", "/chat", "/chat/reply", "/chat/alive", "/chat/history", "/chat/remember", "/reviews", "/reviews/search", "/profile"]);
 
 /**
  * 댓글과 리뷰 읽기. **LIFE 세션 쿠키로만** 연다 — 화면이 게이트 뒤에 있으니 쓰기도 같은
@@ -1016,14 +1042,21 @@ ${chatHistory(history)}
 ${message}
 
 # 지금 할 일
-논문을 새로 찾아야 답할 수 있으면, **다른 말 없이 첫 줄에만** 이렇게 쓰세요:
-SEARCH: <영어 검색어>
+무언가를 찾아봐야 답할 수 있으면, **다른 말 없이 첫 줄에만** 아래 중 하나를 쓰세요.
 
-arXiv 전체를 훑습니다(기간 제한 없음 — 옛날 논문도 나옵니다). "옛날 거라도",
-"더 찾아봐", "이런 주제 없나" 같은 말이면 검색하세요.
+SEARCH: <영어 검색어>
+  arXiv 전체를 훑습니다(기간 제한 없음 — 옛날 논문도 나옵니다).
+  "옛날 거라도", "더 찾아봐", "이런 주제 없나" 같은 말이면 이것.
+
+REVIEWS: <한국어나 영어 낱말 몇 개>
+  **연구자가 전에 읽고 정리해 둔 논문** 중에서 찾습니다.
+  "전에 본 것 같은데", "예전에 읽은 거 중에", "내가 뭐라고 했었지" 면 이것.
+
+FETCH: <arXiv 번호>
+  그 번호 논문 하나를 집어 옵니다. 번호를 콕 집어 물어보면 이것.
 
 찾을 필요 없이 지금 아는 것으로 답할 수 있으면 그냥 한국어로 답하세요.
-**논문 제목이나 arXiv 번호를 기억에 기대어 쓰지 마세요** — 그럴 상황이면 검색하세요.
+**논문 제목이나 arXiv 번호를 기억에 기대어 쓰지 마세요** — 그럴 상황이면 찾으세요.
 
 **여기는 거르는 자리입니다.** 초록까지만 보고 "읽어볼 만한가" 를 가릅니다.
 제대로 읽는 것은 연구자가 직접 합니다 — 대신 읽어 주겠다고 하지 마세요.
@@ -1036,17 +1069,43 @@ arXiv 전체를 훑습니다(기간 제한 없음 — 옛날 논문도 나옵니
 한국어로, ${CHAT_ANSWER_LIMIT}자 이내. 문단을 짧게 끊으세요.`;
 }
 
+/**
+ * 모델이 고를 수 있는 **동사**는 여기 적힌 것뿐이다.
+ *
+ * 도구를 쥐여 주는 것과 결정적으로 다르다: 모델은 무엇을 할지 못 정하고
+ * **인자만 고른다.** 실제 동작은 데몬이 제 코드로 하므로, 프롬프트에 섞여 들어온
+ * 남의 글(arXiv 초록)이 지시를 심어도 할 수 있는 게 없다. 동사를 늘리는 것은
+ * 안전하고, 도구를 늘리는 것은 안전하지 않다.
+ */
+export const VERBS = ["SEARCH", "REVIEWS", "FETCH"];
+
+export function parseVerb(text) {
+  for (const line of String(text ?? "").split("\n")) {
+    const match = line.match(/^\s*([A-Z]+):\s*(.+)$/);
+    if (match && VERBS.includes(match[1])) {
+      return { verb: match[1], arg: match[2].trim().slice(0, 200) };
+    }
+  }
+  return null;
+}
+
 export function parseSearchRequest(text) {
-  const match = String(text ?? "").match(/^\s*SEARCH:\s*(.+)$/m);
-  return match ? match[1].trim().slice(0, 200) : null;
+  const found = parseVerb(text);
+  return found?.verb === "SEARCH" ? found.arg : null;
 }
 
 export function buildChatAnswerPrompt(history, message, papers, query, profile = RESEARCH_PROFILE) {
   const found = papers.length
-    ? papers.map((paper, i) =>
-      `[${i + 1}] ${paper.title} (${paper.published?.slice(0, 7) ?? "?"})\n${paper.summary.slice(0, 900)}\n${paper.link}`)
-      .join("\n\n")
-    : "(검색 결과가 없습니다)";
+    ? papers.map((paper, i) => {
+      // 내가 읽고 정리해 둔 것은 초록 대신 **내가 쓴 글**을 보여 준다. 그게
+      // 이 목록을 뒤지는 이유다 — 초록이야 arXiv 에 다시 물으면 된다.
+      const mine = paper.review
+        ? [paper.verdict && `내 결론: ${paper.verdict}`,
+          ...Object.entries(paper.review).map(([k, v]) => `${k}: ${v}`)].filter(Boolean).join("\n")
+        : paper.summary?.slice(0, 900);
+      return `[${i + 1}] ${paper.title} (${paper.published?.slice(0, 7) ?? "?"})\n${mine}\n${paper.link}`;
+    }).join("\n\n")
+    : "(찾은 것이 없습니다)";
 
   return `당신은 아래 문제를 실제로 풀고 있는 연구자의 조수입니다.
 
@@ -1059,13 +1118,15 @@ ${chatHistory(history)}
 # 연구자가 방금 한 말
 ${message}
 
-# "${query}" 로 arXiv 를 찾은 결과
+# "${query}" 로 찾은 결과
 ${found}
 
 # 답할 때
 - **위 목록에 있는 논문만** 언급하세요. 목록에 없는 제목·arXiv 번호를 쓰면 안 됩니다.
   기억에 있는 다른 논문이 떠올라도 쓰지 마세요 — 번호가 틀립니다.
 - 쓸 만한 게 없으면 없다고 말하고, 검색어를 어떻게 바꾸면 좋을지 알려주세요.
+- 목록에 "내 결론" 이 붙어 있으면 그건 **연구자가 전에 직접 읽고 내린 판단**입니다.
+  그걸 앞세워 답하고, 지금 물음과 어긋나면 어긋난다고 짚어 주세요.
 - 편마다 **내 문제에 쓸 수 있는지**를 한 줄로 판단해 주세요. 800회 예산·순서형
   조합 공간·다목적이 기준입니다.
 - 링크는 그대로 붙여 주세요. 한국어로, ${CHAT_ANSWER_LIMIT}자 이내.`;
@@ -1117,6 +1178,26 @@ export function parseReview(text) {
   return Object.fromEntries(
     Object.entries(out).filter(([, v]) => v).map(([k, v]) => [k, v.slice(0, 1200)]),
   );
+}
+
+/**
+ * 동사 하나를 실제로 수행한다. **여기 적힌 것 말고는 아무것도 하지 않는다** —
+ * 모델이 고른 것은 인자뿐이고, 무엇을 할지는 이 함수가 정한다.
+ *
+ * `lookup` 은 저장해 둔 리뷰를 뒤지는 함수다(데몬이 엣지를 부르는 모양이 서로
+ * 달라서 밖에서 받는다).
+ */
+export async function runVerb({ verb, arg }, { fetchImpl = fetch, lookup } = {}) {
+  if (verb === "SEARCH") return { query: arg, papers: await searchArxiv(arg, { fetchImpl }) };
+  if (verb === "FETCH") {
+    const paper = await fetchPaperById(arg, { fetchImpl });
+    return { query: `arXiv ${arg}`, papers: paper ? [paper] : [] };
+  }
+  if (verb === "REVIEWS") {
+    const rows = lookup ? await lookup(arg) : [];
+    return { query: `내가 읽은 것 · ${arg}`, papers: rows };
+  }
+  return null;
 }
 
 /* ── 질문 큐 ─────────────────────────────────────────────────────────────
