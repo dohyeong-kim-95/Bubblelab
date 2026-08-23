@@ -259,6 +259,86 @@ function updateSaveLabel() {
   $("sms-save").textContent = count ? `${count}건 담기` : "담기";
 }
 
+/* 폴더를 기억해 두고 "그 폴더의 최신 백업"을 바로 여는 길. File System Access API 가
+ * 있는 브라우저(데스크톱 크롬 계열)에서만 성립한다 — 안드로이드 크롬에는 이 API 가
+ * 아직 없어서 그쪽은 파일 선택창 그대로다. 있는지 물어보고 켠다. */
+const FOLDER_DB = "bl_budget_fs";     // 기기 안에서만 뜻이 있는 폴더 손잡이 하나
+const canPickFolder = typeof window.showDirectoryPicker === "function";
+
+function folderStore(mode) {
+  return new Promise((resolve, reject) => {
+    const open = indexedDB.open(FOLDER_DB, 1);
+    open.onupgradeneeded = () => open.result.createObjectStore("handles");
+    open.onsuccess = () => resolve(open.result.transaction("handles", mode).objectStore("handles"));
+    open.onerror = () => reject(open.error);
+  });
+}
+
+async function savedFolder() {
+  try {
+    const store = await folderStore("readonly");
+    return await new Promise((resolve) => {
+      const request = store.get("folder");
+      request.onsuccess = () => resolve(request.result ?? null);
+      request.onerror = () => resolve(null);
+    });
+  } catch { return null; }
+}
+
+async function rememberFolder(handle) {
+  try { (await folderStore("readwrite")).put(handle, "folder"); } catch { /* 못 담아도 이번엔 열린다 */ }
+}
+
+/** 폴더에서 가장 최근에 만들어진 백업 파일. 이름이 아니라 수정 시각으로 고른다. */
+async function newestBackup(handle) {
+  let newest = null;
+  for await (const [name, entry] of handle.entries()) {
+    if (entry.kind !== "file" || !/\.(xml|txt)$/i.test(name)) continue;
+    const file = await entry.getFile();
+    if (!newest || file.lastModified > newest.lastModified) newest = file;
+  }
+  return newest;
+}
+
+async function openFromFolder(pickAgain = false) {
+  try {
+    let handle = pickAgain ? null : await savedFolder();
+    if (!handle) {
+      handle = await window.showDirectoryPicker({ id: "bl-budget-sms", mode: "read", startIn: "downloads" });
+      await rememberFolder(handle);
+    }
+    // 권한은 브라우저를 껐다 켜면 다시 물어본다 — 손잡이는 남아 있으므로 한 번 눌러 준다.
+    if (await handle.queryPermission?.({ mode: "read" }) !== "granted"
+      && await handle.requestPermission?.({ mode: "read" }) !== "granted") {
+      $("sms-summary").textContent = "폴더 읽기를 허용해야 열 수 있어요";
+      return;
+    }
+    showFolder(handle.name);
+    const file = await newestBackup(handle);
+    if (!file) { $("sms-summary").textContent = `${handle.name} 에 백업 파일이 없어요`; return; }
+    readSms(await file.text());
+    $("sms-summary").textContent = `${file.name} · ${$("sms-summary").textContent}`;
+  } catch (error) {
+    // 사용자가 선택창을 닫은 것은 실패가 아니다.
+    if (error?.name !== "AbortError") $("sms-summary").textContent = "폴더를 열지 못했습니다";
+  }
+}
+
+function showFolder(name) {
+  $("folder-name").textContent = name ? `기억한 폴더: ${name}` : "";
+  $("folder-row").hidden = !name;
+  $("folder-open").textContent = name ? "폴더에서 최신 백업 열기" : "백업 폴더 고르기";
+}
+
+if (canPickFolder) {
+  $("folder-open").hidden = false;
+  $("sms-file-label").classList.remove("primary");
+  $("sms-file-label").textContent = "다른 파일 고르기";
+  $("folder-open").addEventListener("click", () => openFromFolder());
+  $("folder-change").addEventListener("click", () => openFromFolder(true));
+  savedFolder().then((handle) => showFolder(handle?.name ?? ""));
+}
+
 $("sms-button").addEventListener("click", () => openSms());
 $("sms-cancel").addEventListener("click", () => $("sms").close());
 $("sms-file").addEventListener("change", async (event) => {

@@ -7,7 +7,10 @@ body { overflow: auto; }
 #settings-button { width: 44px; height: 44px; flex: none; font-size: 17px; color: var(--muted); }
 .fine-print { color: var(--muted); font-size: 12px; line-height: 1.6; }
 
-.cycle { display: flex; align-items: center; justify-content: center; gap: 4px; padding: 0 12px 4px; }
+/* 목록이 길어지면 헤더가 스크롤 밖으로 나가 ✉·⚙ 를 다시 찾아 올라가야 했다. */
+.bar { position: sticky; top: 0; z-index: 3; background: var(--bg); }
+.cycle { position: sticky; top: var(--bar); z-index: 2; background: var(--bg);
+  display: flex; align-items: center; justify-content: center; gap: 4px; padding: 0 12px 6px; }
 .cycle button { width: 44px; height: 36px; color: var(--muted); font-size: 13px; }
 .cycle button:disabled { opacity: .3; }
 .cycle-range { flex: 1; text-align: center; color: var(--muted); font-size: 12px;
@@ -48,15 +51,17 @@ body { overflow: auto; }
  * 자기 이름을 쓴다. */
 .compose { margin: 18px 0 6px; }
 .compose-row { display: flex; align-items: center; gap: 8px; }
-.compose-row.fine { margin-top: 8px; }
+/* 날짜 칸은 한 줄을 통째로 쓴다 — 옆에 오류 자리를 두었더니 폰에서 폭이 모자라
+ * "2026. 08." 까지만 보이고 일(日)이 잘렸다(실기기에서 확인). */
+.compose-row.fine { margin-top: 8px; flex-wrap: wrap; }
 .compose input { height: 48px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg);
   color: var(--ink); padding: 0 12px; font: inherit; min-width: 0; }
 .amount { flex: 0 0 38%; font-variant-numeric: tabular-nums; }
 .memo { flex: 1; }
 #add-button { width: 48px; height: 48px; flex: none; border-radius: 9px; background: var(--ink);
   color: var(--bg); font-size: 20px; font-weight: 700; }
-#date { flex: 0 0 auto; max-width: 60%; height: 40px; color: var(--muted); font-size: 13px; }
-.compose .error { flex: 1; min-width: 0; margin: 0; }
+#date { flex: 1 1 auto; min-width: 0; height: 44px; color: var(--muted); font-size: 14px; }
+.compose .error { flex: 1 1 100%; margin: 0; }
 /* 숫자 입력의 스피너는 폭만 잡아먹는다. */
 .compose input[type=number]::-webkit-inner-spin-button { appearance: none; margin: 0; }
 
@@ -86,6 +91,12 @@ dialog.wide { width: min(100% - 24px, 420px); }
 /* 파일 입력은 버튼으로 위장한다 — 기본 파일 입력은 폭도 글자도 브라우저 마음대로다. */
 .file-button { display: grid; place-items: center; min-height: 48px; margin-top: 12px;
   border-radius: 9px; padding: 0 14px; font-size: 15px; cursor: pointer; }
+/* 폴더를 기억할 수 있는 브라우저에서만 보이는 줄. */
+.folder-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.folder-row button { flex: none; min-height: 40px; border-radius: 9px; padding: 0 12px;
+  color: var(--muted); font-size: 13px; }
+#folder-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--muted); font-size: 12px; }
 .file-button.primary { background: var(--ink); color: var(--bg); font-weight: 700; }
 .file-button:active { opacity: .85; }
 /* 읽은 것이 없을 때의 "담기" 는 눌러도 되는 것처럼 보이면 안 된다. */

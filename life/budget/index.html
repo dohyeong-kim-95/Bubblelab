@@ -68,6 +68,11 @@
       <p class="fine-print">가장 빠른 길은 <b>공유</b>입니다. 문자 앱에서 그 문자를, 또는 문자 백업
         앱(SMS Backup &amp; Restore)이 만든 XML 파일을 <b>공유 → LIFE</b> 로 보내면 여기가 바로 열립니다.
         파일 선택창은 브라우저가 시작 폴더를 정할 수 없어 이 길이 손이 덜 갑니다.</p>
+      <button id="folder-open" class="file-button primary" type="button" hidden>폴더에서 최신 백업 열기</button>
+      <div id="folder-row" class="folder-row" hidden>
+        <span id="folder-name"></span>
+        <button id="folder-change" type="button">폴더 바꾸기</button>
+      </div>
       <label id="sms-file-label" class="file-button primary" for="sms-file">백업 파일 열기</label>
       <input id="sms-file" type="file" accept=".xml,.txt,text/xml,application/xml,text/plain" hidden>
       <p id="sms-summary" class="fine-print summary-line"></p>

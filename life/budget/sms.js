@@ -64,29 +64,49 @@ function findDate(message, today) {
 
 const findTime = (message) => message.match(/(?<!\d)([01]?\d|2[0-3]):([0-5]\d)/)?.[0] ?? null;
 
+/* 가맹점이 아닌 것들. 문자에서 이것들을 지우고 남는 말이 가게 이름이다.
+ * 자리로 찾지 않는 이유: 시각이 없는 문자(자동이체·정기결제)가 실제로 있고, 그때
+ * "시각 뒤" 규칙이 통째로 빗나가 문자 전체가 메모로 들어갔다. */
+const NOT_MERCHANT = [
+  /\[[^\]]*발신\]/g,
+  /(누적|잔액|사용가능금액|사용가능|한도|승인금액)\s*[0-9,]+\s*원?/g,
+  /[0-9][0-9,]*\s*원/g,
+  /\d{4}[.\-/]\d{1,2}[.\-/]\d{1,2}/g,
+  /(?<!\d)\d{1,2}\s*[./]\s*\d{1,2}(?!\d)/g,
+  /\d{1,2}월\s*\d{1,2}일/g,
+  /\d{1,2}:\d{2}/g,
+  // 카드사 이름과 뒤에 붙는 카드 번호 네 자리. 아는 이름만 지운다 — "카드" 를 무조건
+  // 지우면 상호에 든 글자까지 깎인다.
+  /(신한|KB국민|KB|국민|삼성|현대|롯데|하나|우리|BC|비씨|NH|농협|씨티|IBK|기업|카카오뱅크|카카오|토스뱅크|토스|케이뱅크|수협|우체국)\s*(체크|신용)?카드?\s*\(?\d{0,4}\)?/g,
+  /승인취소|승인|취소|환불|일시불|\d+개월|할부|결제완료|정상결제/g,
+  // 이름은 대개 가운데를 가린다(김*형, 홍*동).
+  /[가-힣]\*+[가-힣]*(님|귀하)?/g,
+  /\d{2,4}-\d{3,4}-\d{4}/g,
+];
+
+function scrub(value) {
+  let text = String(value ?? "");
+  for (const pattern of NOT_MERCHANT) text = text.replace(pattern, " ");
+  // 괄호는 깎지 않는다 — "(주)나인투원" 처럼 상호의 일부다. 빈 짝만 걷어낸다.
+  return trim(text.replace(/\(\s*\)/g, ""))
+    .replace(/^[\s,.·|/-]+|[\s,.·|/-]+$/g, "")
+    .slice(0, MEMO_MAX);
+}
+
 /**
- * 가맹점. 시각 뒤에 붙는 것이 가장 흔하고, 없으면 누적·잔액·카드사 줄이 아닌
- * 마지막 줄을 쓴다. 사람이 고칠 수 있는 값이라 틀려도 기록을 막지는 않는다.
+ * 가맹점. 시각 뒤에 붙는 것이 가장 흔하고, 그것이 없으면 문자에서 가맹점이 아닌 것을
+ * 모두 지워 남는 말을 쓴다. 사람이 고칠 수 있는 값이라 틀려도 기록을 막지는 않는다.
  */
 function findMerchant(message, time) {
   const lines = message.split("\n").map((line) => trim(line)).filter(Boolean);
-  const drop = /^(누적|잔액|사용가능|한도|승인|취소|일시불|\d+개월)/;
   const afterTime = time
-    ? lines.find((line) => line.includes(time))?.split(time)[1]?.trim()
+    ? scrub(lines.find((line) => line.includes(time))?.split(time)[1] ?? "")
     : "";
-  const cleaned = (value) => trim(String(value ?? "")
-    .replace(/(누적|잔액|사용가능금액|한도)\s*[0-9,]+\s*원.*$/, "")
-    .replace(/^[\s,·|/-]+|[\s,·|/-]+$/g, "")
-    .replace(/(님|귀하)$/, ""))
-    .slice(0, MEMO_MAX);
+  if (afterTime) return afterTime;
 
-  if (cleaned(afterTime)) return cleaned(afterTime);
+  // 지우고 남는 말이 있는 줄 중 마지막 것. 여러 줄이면 아래쪽이 가맹점일 때가 많다.
   for (let index = lines.length - 1; index >= 0; index -= 1) {
-    const line = lines[index];
-    if (drop.test(line) || /원$/.test(line) || /카드$/.test(line)) continue;
-    // 이름(홍*동)만 있는 줄은 가맹점이 아니다.
-    if (/^[가-힣]\*[가-힣]/.test(line)) continue;
-    const value = cleaned(line.replace(/^.*?\d{1,2}:\d{2}\s*/, ""));
+    const value = scrub(lines[index]);
     if (value) return value;
   }
   return "";
