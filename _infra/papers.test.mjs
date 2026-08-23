@@ -27,6 +27,7 @@ import {
   buildChatPrompt,
   buildReviewPrompt,
   handlePapersComments,
+  SINK_PATHS,
   PapersDO,
   parseAtom,
   parseScores,
@@ -863,4 +864,16 @@ test("논문 세션이 내 문제 설명을 받아 갈 수 있다", async () => 
   const fallback = new PapersDO({ storage: storageStub() }, env());
   const { profile } = await (await fallback.fetch(new Request("https://papers/profile"))).json();
   assert.match(profile, /순서형/, "env 가 비면 코드의 기본값을 준다");
+});
+
+test("sink 경로가 워커 라우팅과 짝이 맞는다", async () => {
+  // papers.js 에만 경로를 늘리면 워커가 읽기 전용 핸들러로 보내서 404 가 된다.
+  // /profile 을 넣고 이걸 빠뜨려 실제로 그랬다.
+  const { readFile } = await import("node:fs/promises");
+  const worker = await readFile(new URL("./worker.js", import.meta.url), "utf8");
+  const routed = worker.match(/const sinkPrefixes = \[([^\]]+)\]/)?.[1] ?? "";
+  for (const path of SINK_PATHS) {
+    const top = `/_papers/${path.split("/")[1]}`;
+    assert.ok(routed.includes(`"${top}"`), `${path} 가 워커 라우팅에 없다 (${top})`);
+  }
 });

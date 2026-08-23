@@ -860,7 +860,7 @@ export class PapersDO {
 const PUBLIC_PATHS = new Set(["/latest", "/archive"]);
 
 /** PC 데몬만 부르는 경로. sink secret 으로 막는다. */
-const SINK_PATHS = new Set(["/asks", "/asks/done", "/digest/pending", "/digest/done", "/chat", "/chat/reply", "/chat/alive", "/chat/history", "/chat/remember", "/reviews", "/profile"]);
+export const SINK_PATHS = new Set(["/asks", "/asks/done", "/digest/pending", "/digest/done", "/chat", "/chat/reply", "/chat/alive", "/chat/history", "/chat/remember", "/reviews", "/profile"]);
 
 /**
  * 댓글과 리뷰 읽기. **LIFE 세션 쿠키로만** 연다 — 화면이 게이트 뒤에 있으니 쓰기도 같은

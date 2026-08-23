@@ -1954,8 +1954,12 @@ export async function handleRequest(request, env, ctx) {
         return handlePapersComments(request, env, url, owner);
       }
       // 집 PC 데몬 전용 경로는 sink secret 으로, 나머지는 읽기 전용으로 연다.
-      return path.startsWith("/_papers/asks") || path.startsWith("/_papers/digest")
-        || path.startsWith("/_papers/chat")
+      // 데몬·논문 세션이 부르는 경로. papers.js 의 SINK_PATHS 와 짝이 맞아야
+      // 한다 — 한쪽만 늘리면 여기서 걸러져 404 가 된다(실제로 그랬다).
+      // 리뷰는 GET 만 위에서 세션으로 갈라졌고, 쓰기(POST)는 여기로 온다.
+      const sinkPrefixes = ["/_papers/asks", "/_papers/digest", "/_papers/chat",
+        "/_papers/profile", "/_papers/reviews"];
+      return sinkPrefixes.some((prefix) => path.startsWith(prefix))
         ? handlePapersSink(request, env, url)
         : handlePapers(request, env, url);
     }
