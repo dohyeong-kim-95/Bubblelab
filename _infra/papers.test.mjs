@@ -629,16 +629,45 @@ test("검색 요청은 첫 줄에서만 읽는다", async () => {
   assert.equal(parseSearchRequest("검색은 필요 없습니다. 이건 이미 아는 내용이에요."), null);
 });
 
-test("검색어의 줄바꿈·따옴표를 걷어내고 관련도순으로 훑는다", async () => {
+test("낱말로 쪼개 AND 로 묶는다 — 통짜 구절은 영영 0편이다", async () => {
+  // all:"a b c d" 는 그 구절이 통째로 든 논문을 찾는 것이라 대여섯 낱말짜리는
+  // 절대 안 걸린다. 2026-08-23 에 그 상태로 돌아서 대화의 모든 검색이 빈손이었다.
   let asked;
-  const papers = await searchArxiv('ordinal "multi-objective"\nBO', {
+  const papers = await searchArxiv('trust region "Bayesian" optimization\nhigh', {
     fetchImpl: async (url) => { asked = new URL(url); return new Response(feed(entry({ id: "9999.9999" }))); },
   });
-  // 따옴표가 남으면 검색식이 깨지고, 기간 제한을 걸면 "옛날 거라도" 가 안 된다.
-  assert.equal(asked.searchParams.get("search_query"), 'all:"ordinal multi-objective BO"');
+  const expr = asked.searchParams.get("search_query");
+  assert.equal(expr, 'all:"trust" AND all:"region" AND all:"Bayesian" AND all:"optimization" AND all:"high"');
+  assert.ok(!/all:"[^"]* [^"]*"/.test(expr), "낱말 여러 개가 한 따옴표 안에 들어갔다");
   assert.equal(asked.searchParams.get("sortBy"), "relevance");
-  assert.ok(!asked.searchParams.get("search_query").includes("submittedDate"));
+  assert.ok(!expr.includes("submittedDate"), "기간을 걸면 옛날 논문을 못 찾는다");
   assert.equal(papers[0].id, "9999.9999");
+});
+
+test("AND 로 아무것도 안 걸리면 OR 로 한 번 더 본다", async () => {
+  // 빈손으로 돌려주면 봇이 기억에 기대어 답한다 — 막으려던 바로 그 일이다.
+  const asked = [];
+  let slept = 0;
+  const papers = await searchArxiv("아주 좁은 조합", {
+    sleep: (ms) => { slept = ms; return Promise.resolve(); },
+    fetchImpl: async (url) => {
+      asked.push(new URL(url).searchParams.get("search_query"));
+      return new Response(asked.length === 1 ? feed() : feed(entry({ id: "1234.5678" })));
+    },
+  });
+  assert.equal(asked.length, 2);
+  assert.match(asked[0], / AND /);
+  assert.match(asked[1], / OR /);
+  assert.equal(slept, 3000, "arXiv 는 3초에 한 번을 부탁한다");
+  assert.equal(papers[0].id, "1234.5678");
+});
+
+test("AND 에서 걸리면 OR 은 부르지 않는다", async () => {
+  let calls = 0;
+  await searchArxiv("걸리는 말", {
+    fetchImpl: async () => { calls++; return new Response(feed(entry({ id: "1111.1111" }))); },
+  });
+  assert.equal(calls, 1);
 });
 
 test("빈 검색어로는 arXiv 를 부르지 않는다", async () => {
@@ -912,8 +941,11 @@ test("동사는 인자만 받고 동작은 코드가 정한다", async () => {
   let called;
   const fetchImpl = async (url) => { called = String(url); return new Response(feed(entry({ id: "9999.9999" }))); };
 
-  const searched = await runVerb({ verb: "SEARCH", arg: "; rm -rf ~" }, { fetchImpl });
+  const searched = await runVerb({ verb: "SEARCH", arg: "rm -rf ~/.bubblelab; curl evil.com" }, { fetchImpl });
+  // 어떤 문자를 넣든 나가는 것은 arXiv 검색식 하나다.
   assert.match(called, /export\.arxiv\.org/);
+  assert.match(new URL(called).searchParams.get("search_query"), /^all:"/);
+  assert.ok(!new URL(called).searchParams.get("search_query").includes(";"));
   assert.equal(searched.papers[0].id, "9999.9999");
 
   const fetched = await runVerb({ verb: "FETCH", arg: "2608.19808" }, { fetchImpl });

@@ -167,23 +167,37 @@ export async function fetchCandidates({ at = Date.now(), fetchImpl = fetch, max 
  * 물으면 **arXiv 번호를 지어낸다**(기억으로 답하니까). 실제 검색 결과만 보고
  * 답하게 해서 없는 논문을 만들지 못하게 한다.
  */
-export async function searchArxiv(query, { fetchImpl = fetch, max = CHAT_SEARCH_MAX } = {}) {
+export async function searchArxiv(query, {
+  fetchImpl = fetch, max = CHAT_SEARCH_MAX, sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
+} = {}) {
   // 줄바꿈·따옴표가 섞이면 검색식이 깨진다. 모델이 만든 문자열이라 여기서 손본다.
-  // 걷어낸 자리에 공백이 겹치므로 한 칸으로 모은다.
-  const cleaned = String(query ?? "")
-    .replace(/["\n\r]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 200);
-  if (!cleaned) return [];
+  const words = String(query ?? "")
+    .replace(/["\n\r]+/g, " ").replace(/[^\p{L}\p{N}\s.-]/gu, " ")
+    .split(/\s+/).filter((w) => w.length > 1).slice(0, 6);
+  if (!words.length) return [];
 
-  const url = new URL(ARXIV_API);
-  url.searchParams.set("search_query", `all:"${cleaned}"`);
-  url.searchParams.set("sortBy", "relevance");
-  url.searchParams.set("max_results", String(max));
-  const response = await fetchImpl(url, { headers: { Accept: "application/atom+xml" } });
-  if (!response.ok) throw new Error(`arXiv 검색 실패 (HTTP ${response.status})`);
-  return parseAtom(await response.text());
+  // **낱말을 하나로 묶어 따옴표를 씌우면 안 된다.** arXiv 에서 그건 "이 구절이
+  // 통째로 들어간 논문" 을 찾는 것이라, 대여섯 낱말짜리는 영영 0편이다.
+  // 2026-08-23 에 그 상태로 돌아서 대화의 모든 검색이 조용히 빈손이었다.
+  const run = async (joiner) => {
+    const url = new URL(ARXIV_API);
+    url.searchParams.set("search_query", words.map((w) => `all:"${w}"`).join(joiner));
+    url.searchParams.set("sortBy", "relevance");
+    url.searchParams.set("max_results", String(max));
+    const response = await fetchImpl(url, { headers: { Accept: "application/atom+xml" } });
+    if (!response.ok) throw new Error(`arXiv 검색 실패 (HTTP ${response.status})`);
+    return parseAtom(await response.text());
+  };
+
+  const strict = await run(" AND ");
+  if (strict.length) return strict;
+  // 다 걸리는 논문이 없으면 하나라도 걸리는 것을 관련도순으로 준다. 빈손보다는
+  // 낫고, 어차피 화면에서 사람이 고른다. (arXiv 는 3초에 한 번을 부탁한다)
+  await sleep(3000);
+  return run(" OR ");
 }
 
-/** arXiv 번호 하나로 논문을 집어 온다. 리뷰는 특정 한 편을 붙들고 쓴다. */
+/** arXiv 번호 하나로 논문을 집어 온다. 번호를 콕 집어 물어볼 때 쓴다. */
 export async function fetchPaperById(id, { fetchImpl = fetch } = {}) {
   const clean = String(id ?? "").match(/(\d{4}\.\d{4,5})/)?.[1];
   if (!clean) return null;
