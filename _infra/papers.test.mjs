@@ -853,3 +853,14 @@ test("프롬프트 빌더가 전부 실제로 만들어진다", () => {
     assert.ok(!out.includes("undefined"), `${name} 에 undefined 가 박혔다`);
   }
 });
+
+test("논문 세션이 내 문제 설명을 받아 갈 수 있다", async () => {
+  // 리포 밖에서 열려도 같은 설명을 써야 한다. 명령 파일에 복사해 두면 어긋난다.
+  const instance = new PapersDO({ storage: storageStub() }, env({ PAPERS_PROFILE: "내 문제 설명" }));
+  const body = await (await instance.fetch(new Request("https://papers/profile"))).json();
+  assert.equal(body.profile, "내 문제 설명");
+
+  const fallback = new PapersDO({ storage: storageStub() }, env());
+  const { profile } = await (await fallback.fetch(new Request("https://papers/profile"))).json();
+  assert.match(profile, /순서형/, "env 가 비면 코드의 기본값을 준다");
+});

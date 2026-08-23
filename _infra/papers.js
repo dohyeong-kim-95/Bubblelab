@@ -745,6 +745,12 @@ export class PapersDO {
       return Response.json(await this.chatAlive());
     }
 
+    // 논문 세션이 리포 밖에서 열려도 "내 문제" 를 알 수 있게. 여기 한 곳만 고치면
+    // 다이제스트 채점·요약·대화·논문 세션이 같은 설명을 쓴다.
+    if (url.pathname === "/profile" && request.method === "GET") {
+      return Response.json({ profile: this.env.PAPERS_PROFILE || RESEARCH_PROFILE });
+    }
+
     if (url.pathname === "/chat/history" && request.method === "GET") {
       return Response.json(await this.chatHistory());
     }
@@ -854,7 +860,7 @@ export class PapersDO {
 const PUBLIC_PATHS = new Set(["/latest", "/archive"]);
 
 /** PC 데몬만 부르는 경로. sink secret 으로 막는다. */
-const SINK_PATHS = new Set(["/asks", "/asks/done", "/digest/pending", "/digest/done", "/chat", "/chat/reply", "/chat/alive", "/chat/history", "/chat/remember", "/reviews"]);
+const SINK_PATHS = new Set(["/asks", "/asks/done", "/digest/pending", "/digest/done", "/chat", "/chat/reply", "/chat/alive", "/chat/history", "/chat/remember", "/reviews", "/profile"]);
 
 /**
  * 댓글과 리뷰 읽기. **LIFE 세션 쿠키로만** 연다 — 화면이 게이트 뒤에 있으니 쓰기도 같은
