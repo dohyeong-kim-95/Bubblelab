@@ -204,6 +204,9 @@ PNG·JPEG를 모두 받고, JPEG는 `npm ci` 필요. 검증은 `_infra/wallpaper
 할 일 밖의 도구는 `life/<이름>/` 폴더 하나가 전부다(서재·팔굽혀펴기·돌아보기·백업,
 그리고 **`life/espanol/` — 노래로 스페인어**. 가사를 안 보고 알아듣고 따라 부르는
 연습장이고, 소리 엔진·저작권 선은 `life/espanol/README.md` 에 적혀 있다).
+**`life/budget/`(가계부)** 는 카드 한 장의 소비를 한 주기 한도(기본 100만원)와 견준다 —
+합계보다 "오늘까지의 기준선"과 "남은 날에 하루 얼마"가 먼저 나온다. 주기 긋기·페이스
+계산은 `life/budget/store.js` 한 곳이다(`life/budget/README.md`).
 
 **서버에 아무것도 저장하지 않는다** — 할 일은 브라우저 localStorage 에만 있고, 워커는
 비밀번호 게이트(`bl_life` 쿠키·`LIFE_PASSWORD`)만 담당한다. `/_life/*` API 는 없다.

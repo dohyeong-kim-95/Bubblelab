@@ -1,0 +1,82 @@
+/* LIFE 의 ../styles.css 를 물려받고, 여기 필요한 것만 더한다.
+ * 색은 강조가 아니라 경고에만 쓴다 — 한도를 넘겼을 때만 --danger 가 나온다. */
+body { overflow: auto; }
+.back { display: grid; place-items: center; width: 40px; height: 44px; flex: none;
+  color: var(--muted); font-size: 20px; text-decoration: none; }
+.bar-title { font-size: 19px; font-weight: 700; letter-spacing: -.02em; }
+#settings-button { width: 44px; height: 44px; flex: none; font-size: 17px; color: var(--muted); }
+.fine-print { color: var(--muted); font-size: 12px; line-height: 1.6; }
+
+.cycle { display: flex; align-items: center; justify-content: center; gap: 4px; padding: 0 12px 4px; }
+.cycle button { width: 44px; height: 36px; color: var(--muted); font-size: 13px; }
+.cycle button:disabled { opacity: .3; }
+.cycle-range { flex: 1; text-align: center; color: var(--muted); font-size: 12px;
+  font-variant-numeric: tabular-nums; }
+
+.sheet { padding: 0 18px 40px; }
+
+/* ── 지금 어디쯤인가 ─────────────────────────────────────────────── */
+.hero { padding: 6px 0 14px; }
+.hero-label { margin: 0; color: var(--muted); font-size: 12px; }
+.hero-number { margin: 2px 0 14px; font-size: 44px; line-height: 1.1; font-weight: 700;
+  letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+.hero-number.over { color: var(--danger); }
+
+/* 막대는 쓴 비율, 세로선은 오늘까지의 기준선이다 — 선보다 왼쪽에서 멈춰 있으면 잘 가고 있다. */
+.gauge { position: relative; height: 10px; border: 1px solid var(--line); border-radius: 6px;
+  overflow: hidden; background: var(--surface); }
+.fill { height: 100%; width: 0; background: var(--muted); transition: width 160ms ease; }
+.gauge.ahead .fill, .gauge.on .fill { background: var(--ink); }
+.gauge.over .fill { background: var(--danger); }
+.mark { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--ink);
+  box-shadow: 0 0 0 1px var(--bg); }
+.gauge.over .mark, .gauge.done .mark { display: none; }
+.gauge-note { margin: 5px 0 0; color: var(--muted); font-size: 11px;
+  font-variant-numeric: tabular-nums; }
+.verdict { margin: 8px 0 0; font-size: 14px; line-height: 1.5; }
+.verdict.over { color: var(--danger); }
+
+.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px;
+  margin: 14px 0 0; background: var(--line); border: 1px solid var(--line); border-radius: 10px;
+  overflow: hidden; }
+.fact { background: var(--bg); padding: 9px 11px; }
+.fact dt { color: var(--muted); font-size: 11px; }
+.fact dd { margin: 2px 0 0; font-size: 15px; font-variant-numeric: tabular-nums; }
+
+/* ── 적기 ───────────────────────────────────────────────────────── */
+/* 이름을 .add 로 두면 LIFE 셸의 할 일 입력 바(../styles.css)가 덮어쓴다 — 도구는
+ * 자기 이름을 쓴다. */
+.compose { margin: 18px 0 6px; }
+.compose-row { display: flex; align-items: center; gap: 8px; }
+.compose-row.fine { margin-top: 8px; }
+.compose input { height: 48px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg);
+  color: var(--ink); padding: 0 12px; font: inherit; min-width: 0; }
+.amount { flex: 0 0 38%; font-variant-numeric: tabular-nums; }
+.memo { flex: 1; }
+#add-button { width: 48px; height: 48px; flex: none; border-radius: 9px; background: var(--ink);
+  color: var(--bg); font-size: 20px; font-weight: 700; }
+#date { flex: 0 0 auto; max-width: 60%; height: 40px; color: var(--muted); font-size: 13px; }
+.compose .error { flex: 1; min-width: 0; margin: 0; }
+/* 숫자 입력의 스피너는 폭만 잡아먹는다. */
+.compose input[type=number]::-webkit-inner-spin-button { appearance: none; margin: 0; }
+
+/* ── 내역 ───────────────────────────────────────────────────────── */
+.entries { display: grid; gap: 14px; margin-top: 14px; }
+.day-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+  color: var(--muted); font-size: 11px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+.day-total { font-variant-numeric: tabular-nums; }
+.entry { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 46px;
+  padding: 0 2px; border-bottom: 1px solid var(--line); text-align: left; }
+.entry:last-child { border-bottom: 0; }
+.entry:active { background: var(--surface); }
+.entry-memo { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 14px; }
+.entry-memo.blank { color: var(--muted); }
+.entry-amount { flex: none; font-size: 15px; font-variant-numeric: tabular-nums; }
+/* 환불·취소는 들어온 돈이라 밝기를 낮춰 쓴 돈과 구분한다. */
+.entry-amount.refund { color: var(--muted); }
+.empty-note { margin: 28px 2px; }
+
+#editor-form label, #settings-form label { display: block; margin: 10px 4px 4px;
+  color: var(--muted); font-size: 12px; }
+#settings-form .fine-print { margin: 10px 4px 0; }

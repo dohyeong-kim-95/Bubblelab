@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <meta name="theme-color" content="#000000">
+  <title>가계부</title>
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="modulepreload" href="store.js">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="bar">
+    <a class="back" href="../" aria-label="LIFE 로 돌아가기">←</a>
+    <h1 class="bar-title">가계부 <span id="cycle-label" class="count"></span></h1>
+    <button id="settings-button" type="button" aria-label="한도와 주기 설정">⚙</button>
+  </header>
+
+  <div class="cycle">
+    <button id="prev-cycle" type="button" aria-label="지난 주기">◀</button>
+    <span id="cycle-range" class="cycle-range"></span>
+    <button id="next-cycle" type="button" aria-label="다음 주기">▶</button>
+  </div>
+
+  <main class="sheet">
+    <section class="hero" aria-labelledby="hero-label">
+      <p id="hero-label" class="hero-label">남은 돈</p>
+      <p id="remaining" class="hero-number"></p>
+      <div id="gauge" class="gauge">
+        <div id="fill" class="fill"></div>
+        <div id="mark" class="mark"></div>
+      </div>
+      <p id="gauge-note" class="gauge-note"></p>
+      <p id="verdict" class="verdict"></p>
+      <dl class="facts">
+        <div class="fact"><dt>쓴 돈</dt><dd id="fact-spent"></dd></div>
+        <div class="fact"><dt>하루 가능</dt><dd id="fact-perday"></dd></div>
+        <div class="fact"><dt>이 속도면</dt><dd id="fact-projected"></dd></div>
+        <div class="fact"><dt>오늘</dt><dd id="fact-today"></dd></div>
+      </dl>
+    </section>
+
+    <form id="add" class="compose" autocomplete="off">
+      <div class="compose-row">
+        <input id="amount" class="amount" type="number" inputmode="numeric" step="1"
+          placeholder="금액" aria-label="금액(원)" required>
+        <input id="memo" class="memo" type="text" placeholder="어디에" aria-label="메모" maxlength="40">
+        <button id="add-button" class="primary" type="submit" aria-label="추가">＋</button>
+      </div>
+      <div class="compose-row fine">
+        <input id="date" type="date" aria-label="쓴 날짜">
+        <p id="add-error" class="error" role="alert"></p>
+      </div>
+    </form>
+
+    <section id="entries" class="entries" aria-label="쓴 내역"></section>
+    <p id="empty" class="fine-print empty-note" hidden>이 주기에 적은 것이 아직 없습니다.
+      카드를 쓸 때마다 위에 금액을 적어 두면, 남은 날에 하루 얼마씩 쓸 수 있는지 계속 알려 줍니다.</p>
+  </main>
+
+  <dialog id="editor" aria-labelledby="editor-title">
+    <form id="editor-form">
+      <h2 id="editor-title">고치기</h2>
+      <label for="editor-amount">금액(원) — 환불은 앞에 -</label>
+      <input id="editor-amount" type="number" inputmode="numeric" step="1" required>
+      <label for="editor-memo">메모</label>
+      <input id="editor-memo" type="text" maxlength="40">
+      <label for="editor-date">쓴 날짜</label>
+      <input id="editor-date" type="date">
+      <p id="editor-error" class="error" role="alert"></p>
+      <div class="menu-items row">
+        <button id="editor-delete" type="button" class="quiet danger">삭제</button>
+        <button id="editor-cancel" type="button" class="quiet">취소</button>
+        <button class="primary" type="submit">저장</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="settings" aria-labelledby="settings-title">
+    <form id="settings-form">
+      <h2 id="settings-title">한도와 주기</h2>
+      <label for="limit-input">한 주기 한도(원)</label>
+      <input id="limit-input" type="number" inputmode="numeric" step="10000" min="0" required>
+      <label for="start-day-input">주기 시작일(1–28)</label>
+      <input id="start-day-input" type="number" inputmode="numeric" step="1" min="1" max="28" required>
+      <p class="fine-print">카드 청구가 1일에 시작하지 않으면 그 날짜를 적습니다. 예를 들어 15 로 두면
+        7/15–8/14 가 한 주기가 됩니다. 적어 둔 내역은 날짜로 저장되므로 주기만 다시 그어집니다.</p>
+      <p id="settings-error" class="error" role="alert"></p>
+      <div class="menu-items row">
+        <button id="settings-cancel" type="button" class="quiet">취소</button>
+        <button class="primary" type="submit">저장</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>
