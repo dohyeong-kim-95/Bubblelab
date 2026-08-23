@@ -152,12 +152,16 @@ function ask(prompt) {
  * 물으면 arXiv 번호를 지어내므로, "찾아야 하나" 판단만 맡기고 조회는 우리가 한다.
  */
 async function answer(question) {
-  const [{ history }, digest] = await Promise.all([
+  const [state, digest] = await Promise.all([
     edge("/chat/history").catch(() => ({ history: [] })),
     latestDigest(),
   ]);
+  const history = state.history ?? [];
+  const focus = state.focus ?? null;
   const profile = process.env.PAPERS_PROFILE || RESEARCH_PROFILE;
+  if (focus) log(`  붙든 논문: ${focus.title.slice(0, 50)}`);
 
+  const first = await ask(buildChatPrompt(history, question, digest, profile, focus));
   const wanted = parseVerb(first);
   if (!wanted) return first;
 
@@ -165,8 +169,19 @@ async function answer(question) {
   const found = await runVerb(wanted, {
     lookup: (q) => edge(`/reviews/search?q=${encodeURIComponent(q)}`).then((r) => r.reviews ?? []),
   });
+
+  // 붙들기·놓기는 답이 아니라 상태가 바뀌는 일이다.
+  if (wanted.verb === "FOCUS" || wanted.verb === "RELEASE") {
+    if (found.failed) return found.failed;
+    await edge("/chat/focus", { method: "POST", body: JSON.stringify(found.focus ?? {}) });
+    if (!found.focus) return "붙들고 있던 논문을 놓았습니다.";
+    log(`  본문 ${found.focus.text.length}자 붙듦`);
+    // 붙든 김에 첫 설명까지 해 준다 — 붙들었다는 말만 하면 한 번 더 물어야 한다.
+    return ask(buildChatPrompt(history, question, null, profile, found.focus));
+  }
+
   log(`  ${found.papers.length}편 찾음`);
-  return ask(buildChatAnswerPrompt(history ?? [], question, found.papers, found.query, profile));
+  return ask(buildChatAnswerPrompt(history, question, found.papers, found.query, profile));
 }
 
 /* ── 한 번에 하나씩 ─────────────────────────────────────────────────────

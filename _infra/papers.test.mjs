@@ -21,6 +21,7 @@ import {
   parseReview,
   parseSearchRequest,
   parseVerb,
+  fetchPaperText,
   runVerb,
   VERBS,
   REVIEW_FIELDS,
@@ -994,4 +995,87 @@ test("동사 목록이 프롬프트에 그대로 적혀 있다", () => {
   // 코드에만 늘리고 프롬프트에 안 적으면 모델이 영영 안 쓴다.
   const prompt = buildChatPrompt([], "질문", null);
   for (const verb of VERBS) assert.ok(prompt.includes(`${verb}:`), `${verb} 가 프롬프트에 없다`);
+});
+
+// ── 논문 붙들기 ─────────────────────────────────────────────────────────
+
+const htmlPage = (body) => `<html><head><style>x{}</style></head><body>
+  <script>ignored()</script><h1>제목</h1><p>${body}</p></body></html>`;
+
+test("본문을 글로 긁어 온다 — arXiv HTML 이 없으면 ar5iv", async () => {
+  // 봇에 도구를 주지 않고 전문을 파는 방법이다. 모델이 PDF 를 읽는 게 아니라
+  // 데몬이 글로 긁어서 프롬프트에 넣는다.
+  const seen = [];
+  const text = await fetchPaperText("1706.03673", {
+    fetchImpl: async (url) => {
+      seen.push(String(url));
+      return seen.length === 1
+        ? new Response("없음", { status: 404 })
+        : new Response(htmlPage("본문 ".repeat(2000)));
+    },
+  });
+  assert.match(seen[0], /arxiv\.org\/html\/1706\.03673/);
+  assert.match(seen[1], /ar5iv/);
+  assert.match(text, /^제목 본문/, "태그를 안 걷어냈다");
+  assert.ok(!text.includes("ignored"), "script 안이 본문으로 들어갔다");
+});
+
+test("변환이 껍데기만 주면 붙들지 않는다", async () => {
+  // 초록보다 짧은 걸 "전문" 이라고 하면 약속이 거짓이 된다.
+  const text = await fetchPaperText("1706.03673", {
+    fetchImpl: async () => new Response(htmlPage("짧다")),
+  });
+  assert.equal(text, null);
+});
+
+test("FOCUS 는 본문까지 받아야 붙든다", async () => {
+  const long = "본문 ".repeat(2000);
+  const focus = await runVerb({ verb: "FOCUS", arg: "https://arxiv.org/abs/1706.03673" }, {
+    fetchImpl: async (url) => String(url).includes("id_list")
+      ? new Response(feed(entry({ id: "1706.03673", title: "Integer-valued BO" })))
+      : new Response(htmlPage(long)),
+  });
+  assert.equal(focus.focus.id, "1706.03673");
+  assert.match(focus.focus.title, /Integer-valued/);
+  assert.ok(focus.focus.text.length > 3000);
+
+  // 본문이 없으면 붙들지 않고 그렇다고 말한다.
+  const failed = await runVerb({ verb: "FOCUS", arg: "1706.03673" }, {
+    fetchImpl: async (url) => String(url).includes("id_list")
+      ? new Response(feed(entry({ id: "1706.03673" })))
+      : new Response("없음", { status: 404 }),
+  });
+  assert.equal(failed.focus, null);
+  assert.match(failed.failed, /본문을 글로 받을 수 없는/);
+});
+
+test("붙든 논문이 있으면 본문이 주인공이고 다이제스트는 밀린다", () => {
+  const digest = { date: "2026-08-22", hits: [{ title: "옆 논문", score: 9, link: "L" }], near: [] };
+  const held = buildChatPrompt([], "3.2절이 왜 저래?", digest, "내 문제",
+    { title: "Integer-valued BO", link: "L", text: "정수형 변수를 다루려면 …" });
+
+  assert.match(held, /본문 전문입니다/);
+  assert.match(held, /정수형 변수를 다루려면/);
+  assert.ok(!held.includes("옆 논문"), "붙든 중에 다른 논문을 들먹인다");
+  assert.match(held, /본문에 없으면/);
+});
+
+test("붙들고 놓는 것을 엣지가 기억한다", async () => {
+  const storage = storageStub();
+  const instance = new PapersDO({ storage }, chatEnv2());
+
+  await instance.chatFocus({ id: "1706.03673", title: "Integer-valued BO", link: "L", text: "본문" });
+  const held = await instance.chatHistory();
+  assert.equal(held.focus.id, "1706.03673");
+  assert.equal(held.focus.text, "본문");
+
+  await instance.chatFocus({});
+  const let_go = await instance.chatHistory();
+  assert.equal(let_go.focus, null);
+  assert.equal(await storage.get("chat:focus:text"), undefined, "본문이 남았다");
+});
+
+test("RELEASE 는 인자가 없어도 알아듣는다", () => {
+  assert.deepEqual(parseVerb("RELEASE:"), { verb: "RELEASE", arg: "" });
+  assert.deepEqual(parseVerb("FOCUS: 1706.03673"), { verb: "FOCUS", arg: "1706.03673" });
 });

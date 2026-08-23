@@ -179,20 +179,33 @@ async function chat(secret) {
   const digest = await latestDigest();
   const profile = process.env.PAPERS_PROFILE || RESEARCH_PROFILE;
   const history = poll.history ?? [];
+  const focus = poll.focus ?? null;
+  if (focus) console.log(`  붙든 논문: ${focus.title.slice(0, 50)}`);
 
   let answer;
   try {
-    const first = await ask(buildChatPrompt(history, question, digest, profile));
+    const first = await ask(buildChatPrompt(history, question, digest, profile, focus));
     const wanted = parseVerb(first);
-    if (wanted) {
+    if (!wanted) {
+      answer = first;
+    } else {
       console.log(`  ${wanted.verb}: ${wanted.arg}`);
       const found = await runVerb(wanted, {
         lookup: (q) => api(`/reviews/search?q=${encodeURIComponent(q)}`, secret).then((r) => r.reviews ?? []),
       });
-      console.log(`  ${found.papers.length}편 찾음`);
-      answer = await ask(buildChatAnswerPrompt(history, question, found.papers, found.query, profile));
-    } else {
-      answer = first;
+      if (wanted.verb === "FOCUS" || wanted.verb === "RELEASE") {
+        if (found.failed) {
+          answer = found.failed;
+        } else {
+          await api("/chat/focus", secret, { method: "POST", body: JSON.stringify(found.focus ?? {}) });
+          answer = found.focus
+            ? await ask(buildChatPrompt(history, question, null, profile, found.focus))
+            : "붙들고 있던 논문을 놓았습니다.";
+        }
+      } else {
+        console.log(`  ${found.papers.length}편 찾음`);
+        answer = await ask(buildChatAnswerPrompt(history, question, found.papers, found.query, profile));
+      }
     }
   } catch (error) {
     // 답을 못 만들어도 커서는 옮긴다 — 안 그러면 같은 말에 매분 다시 걸린다.

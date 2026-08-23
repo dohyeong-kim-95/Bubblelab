@@ -57,6 +57,8 @@ export const DIGEST_HOUR_KST = 7;
 export const CHAT_HISTORY_LIMIT = 12;   // 오가는 말 12개까지 기억한다
 export const CHAT_ANSWER_LIMIT = 1800;  // 디스코드 메시지 상한 2000자 안쪽
 export const CHAT_SEARCH_MAX = 8;       // 한 번 검색에 물어다 줄 논문 수
+// 붙들고 있는 논문의 본문. 프롬프트에 통째로 실리므로 상한을 둔다(실측 2만 자 안팎).
+export const FOCUS_TEXT_LIMIT = 60_000;
 // 상주 데몬의 "듣고 있다" 신호가 이보다 오래되면 폴링이 이어받는다. 데몬은
 // 1분마다 알리므로 두 번 놓쳐야 넘어간다 — 잠깐의 끊김으로 둘 다 답하지 않게.
 export const GATEWAY_ALIVE_MS = 150 * 1000;
@@ -206,6 +208,40 @@ export async function fetchPaperById(id, { fetchImpl = fetch } = {}) {
   const response = await fetchImpl(url, { headers: { Accept: "application/atom+xml" } });
   if (!response.ok) throw new Error(`arXiv 조회 실패 (HTTP ${response.status})`);
   return parseAtom(await response.text())[0] ?? null;
+}
+
+/**
+ * 논문 **본문**을 글로 받아 온다. 초록이 아니라 전문이다.
+ *
+ * 봇에 도구를 주지 않고도 전문을 파는 방법이다 — 모델이 PDF 를 읽는 게 아니라
+ * **데몬이 글로 긁어서 프롬프트에 넣는다.** 검색과 같은 방식이고, 그래서 위험이
+ * 늘지 않는다.
+ *
+ * arXiv 가 2023 말부터 HTML 을 준다. 그 전 논문은 ar5iv(LaTeXML 변환)에 있다 —
+ * 둘 다 없으면 초록으로 물러난다(PDF 를 의존성 없이 글로 푸는 건 값이 안 맞는다).
+ */
+export async function fetchPaperText(id, { fetchImpl = fetch, limit = FOCUS_TEXT_LIMIT } = {}) {
+  const clean = String(id ?? "").match(/(\d{4}\.\d{4,5})/)?.[1];
+  if (!clean) return null;
+
+  for (const base of ["https://arxiv.org/html", "https://ar5iv.labs.arxiv.org/html"]) {
+    let html;
+    try {
+      const response = await fetchImpl(`${base}/${clean}`, { redirect: "follow" });
+      if (!response.ok) continue;
+      html = await response.text();
+    } catch {
+      continue;
+    }
+    const text = html
+      .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&[a-z]+;|&#\d+;/gi, " ")
+      .replace(/\s+/g, " ").trim();
+    // 변환이 실패하면 껍데기만 온다. 초록보다 짧으면 쓸모가 없다.
+    if (text.length > 3000) return text.slice(0, limit);
+  }
+  return null;
 }
 
 /* ── 채점 ────────────────────────────────────────────────────────────────
@@ -613,6 +649,7 @@ export class PapersDO {
       messages,
       cursor: rows[0]?.id ?? since,
       history: (await this.state.storage.get("chat:history")) ?? [],
+      focus: await this.#focus(),
     };
   }
 
@@ -645,8 +682,36 @@ export class PapersDO {
     return { ok: true, remembered: next.length };
   }
 
+  /**
+   * 붙들고 있는 논문. 본문까지 엣지에 둔다 — 상주와 cron 이 둘 다 쓰고, PC 를
+   * 껐다 켜도 붙든 게 풀리지 않아야 한다.
+   */
+  async chatFocus({ id, title, link, text } = {}) {
+    if (!id) {
+      await this.state.storage.delete(["chat:focus", "chat:focus:text"]);
+      return { ok: true, focus: null };
+    }
+    const focus = {
+      id: String(id).slice(0, 32),
+      title: String(title ?? "").slice(0, 300),
+      link: String(link ?? "").slice(0, 200),
+    };
+    await this.state.storage.put("chat:focus", focus);
+    await this.state.storage.put("chat:focus:text", String(text ?? "").slice(0, FOCUS_TEXT_LIMIT));
+    return { ok: true, focus };
+  }
+
+  async #focus() {
+    const focus = await this.state.storage.get("chat:focus");
+    if (!focus) return null;
+    return { ...focus, text: (await this.state.storage.get("chat:focus:text")) ?? "" };
+  }
+
   async chatHistory() {
-    return { history: (await this.state.storage.get("chat:history")) ?? [] };
+    return {
+      history: (await this.state.storage.get("chat:history")) ?? [],
+      focus: await this.#focus(),
+    };
   }
 
   /** 오간 말을 기억한다. 발송은 게이트웨이가 직접 하므로 여기서는 기억만. */
@@ -787,6 +852,11 @@ export class PapersDO {
       return Response.json({ profile: this.env.PAPERS_PROFILE || RESEARCH_PROFILE });
     }
 
+    if (url.pathname === "/chat/focus" && request.method === "POST") {
+      const payload = await request.json().catch(() => null);
+      return Response.json(await this.chatFocus(payload ?? {}));
+    }
+
     if (url.pathname === "/chat/history" && request.method === "GET") {
       return Response.json(await this.chatHistory());
     }
@@ -900,7 +970,7 @@ export class PapersDO {
 const PUBLIC_PATHS = new Set(["/latest", "/archive"]);
 
 /** PC 데몬만 부르는 경로. sink secret 으로 막는다. */
-export const SINK_PATHS = new Set(["/asks", "/asks/done", "/digest/pending", "/digest/done", "/chat", "/chat/reply", "/chat/alive", "/chat/history", "/chat/remember", "/reviews", "/reviews/search", "/profile"]);
+export const SINK_PATHS = new Set(["/asks", "/asks/done", "/digest/pending", "/digest/done", "/chat", "/chat/reply", "/chat/alive", "/chat/history", "/chat/remember", "/chat/focus", "/reviews", "/reviews/search", "/profile"]);
 
 /**
  * 댓글과 리뷰 읽기. **LIFE 세션 쿠키로만** 연다 — 화면이 게이트 뒤에 있으니 쓰기도 같은
@@ -1038,17 +1108,29 @@ const chatHistory = (history) => (history ?? [])
   .map((turn) => `${turn.role === "bot" ? "나(조수)" : "연구자"}: ${turn.text}`)
   .join("\n") || "(첫 대화입니다)";
 
-export function buildChatPrompt(history, message, digest, profile = RESEARCH_PROFILE) {
+export function buildChatPrompt(history, message, digest, profile = RESEARCH_PROFILE, focus = null) {
+  // 붙들고 있는 논문이 있으면 그게 주인공이다. 다이제스트 목록은 밀어 둔다 —
+  // 지금 파고드는 중인데 옆의 다른 논문을 들먹이면 흐름이 끊긴다.
+  const holding = focus?.text
+    ? `# 지금 붙들고 있는 논문 — **본문 전문입니다**
+${focus.title} (${focus.link})
+
+${focus.text}
+
+위 본문에 있는 것만 근거로 답하세요. 본문에 없으면 "본문에 없다" 고 말합니다.
+`
+    : `# 최근 다이제스트 (${digest?.date ?? "없음"})
+${[...(digest?.hits ?? []), ...(digest?.near ?? [])]
+      .map((paper) => `- ${paper.title} (${paper.score}점) ${paper.link}`).join("\n") || "(없음)"}
+`;
+
   return `당신은 아래 문제를 실제로 풀고 있는 연구자의 조수입니다. 디스코드에서
 대화 중이고, 지금 연구자가 한 말에 답해야 합니다.
 
 # 내 문제
 ${profile}
 
-# 최근 다이제스트 (${digest?.date ?? "없음"})
-${[...(digest?.hits ?? []), ...(digest?.near ?? [])]
-    .map((paper) => `- ${paper.title} (${paper.score}점) ${paper.link}`).join("\n") || "(없음)"}
-
+${holding}
 # 지금까지 오간 말
 ${chatHistory(history)}
 
@@ -1067,9 +1149,20 @@ REVIEWS: <한국어나 영어 낱말 몇 개>
   "전에 본 것 같은데", "예전에 읽은 거 중에", "내가 뭐라고 했었지" 면 이것.
 
 FETCH: <arXiv 번호>
-  그 번호 논문 하나를 집어 옵니다. 번호를 콕 집어 물어보면 이것.
+  그 번호 논문 하나의 **초록**을 집어 옵니다. 가볍게 확인할 때.
 
-찾을 필요 없이 지금 아는 것으로 답할 수 있으면 그냥 한국어로 답하세요.
+FOCUS: <arXiv 번호>
+  그 논문 **본문 전문**을 가져와 붙듭니다. 이후 대화는 계속 그 논문 위에서
+  이어집니다. "이거 파고들자", "자세히 보자", 링크를 던지며 "이거 설명해줘" 면 이것.
+  **번호나 링크가 나오면 초록으로 때우지 말고 이걸 쓰세요.**
+
+RELEASE:
+  붙들고 있던 논문을 놓습니다. "그만", "다른 거 보자" 면 이것.
+
+**이미 붙들고 있는 논문이 있고 그 논문에 대한 물음이면 동사를 쓰지 말고 바로
+답하세요.** 본문이 위에 다 있습니다.
+
+그 밖에는, 찾을 필요 없이 지금 아는 것으로 답할 수 있으면 그냥 한국어로 답하세요.
 **논문 제목이나 arXiv 번호를 기억에 기대어 쓰지 마세요** — 그럴 상황이면 찾으세요.
 
 **여기는 거르는 자리입니다.** 초록까지만 보고 "읽어볼 만한가" 를 가릅니다.
@@ -1091,11 +1184,12 @@ FETCH: <arXiv 번호>
  * 남의 글(arXiv 초록)이 지시를 심어도 할 수 있는 게 없다. 동사를 늘리는 것은
  * 안전하고, 도구를 늘리는 것은 안전하지 않다.
  */
-export const VERBS = ["SEARCH", "REVIEWS", "FETCH"];
+export const VERBS = ["SEARCH", "REVIEWS", "FETCH", "FOCUS", "RELEASE"];
 
 export function parseVerb(text) {
   for (const line of String(text ?? "").split("\n")) {
-    const match = line.match(/^\s*([A-Z]+):\s*(.+)$/);
+    // RELEASE 처럼 인자가 없는 동사가 있어서 인자를 필수로 두지 않는다.
+    const match = line.match(/^\s*([A-Z]+):\s*(.*)$/);
     if (match && VERBS.includes(match[1])) {
       return { verb: match[1], arg: match[2].trim().slice(0, 200) };
     }
@@ -1211,6 +1305,17 @@ export async function runVerb({ verb, arg }, { fetchImpl = fetch, lookup } = {})
     const rows = lookup ? await lookup(arg) : [];
     return { query: `내가 읽은 것 · ${arg}`, papers: rows };
   }
+  if (verb === "FOCUS") {
+    const paper = await fetchPaperById(arg, { fetchImpl });
+    if (!paper) return { focus: null, failed: `arXiv ${arg} 를 찾지 못했습니다.` };
+    const text = await fetchPaperText(arg, { fetchImpl });
+    // 본문이 없으면 붙들지 않는다. 초록으로 붙들면 "전문을 본다" 는 약속이 거짓이 된다.
+    if (!text) {
+      return { focus: null, failed: `${paper.title}\n${paper.link}\n\n본문을 글로 받을 수 없는 논문입니다(HTML 판이 없습니다). 초록까지만 볼 수 있습니다.` };
+    }
+    return { focus: { id: paper.id, title: paper.title, link: paper.link, text } };
+  }
+  if (verb === "RELEASE") return { focus: null, released: true };
   return null;
 }
 
