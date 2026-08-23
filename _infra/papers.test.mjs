@@ -9,6 +9,7 @@ import {
   ASK_TTL_MS,
   buildQuery,
   buildScorePrompt,
+  buildSummaryPrompt,
   CATEGORIES,
   DISCORD_TOTAL_LIMIT,
   KEYWORDS,
@@ -21,6 +22,9 @@ import {
   parseSearchRequest,
   REVIEW_FIELDS,
   searchArxiv,
+  buildAskPrompt,
+  buildChatAnswerPrompt,
+  buildChatPrompt,
   buildReviewPrompt,
   handlePapersComments,
   PapersDO,
@@ -814,4 +818,38 @@ test("전문을 봤다고 우기지 못하게 값을 좁힌다", async () => {
     source: "대충 봤음", at: 1000 });
   const { reviews } = await (await instance.fetch(new Request("https://papers/reviews"))).json();
   assert.equal(reviews[0].source, "abstract");
+});
+
+test("봇은 /paper 가 디스코드 명령이 아니라고 못박는다", () => {
+  // 폰에서 이름만 보면 당연히 디스코드에 친다. 거기엔 그 명령이 없어서 아무 일도
+  // 안 일어나고, 왜 안 되는지도 알 수 없다.
+  const prompt = buildChatPrompt([], "이거 읽어볼 만해?", null);
+  assert.match(prompt, /Claude Code/);
+  assert.match(prompt, /디스코드 명령이 아니라/);
+});
+
+test("프롬프트 빌더가 전부 실제로 만들어진다", () => {
+  // **`node --check` 로는 못 잡는다.** 프롬프트 안에 백틱을 쓰면 템플릿 리터럴이
+  // 거기서 끊겨 뒷부분이 코드로 읽힌다 — 문법은 멀쩡하고 런타임에 던진다.
+  // 2026-08-23 에 이걸로 대화 채널이 배포된 채로 죽어 있었다. 빌더를 부르지 않는
+  // 테스트만 있으면 전부 통과하므로, 여기서 전부 한 번씩 불러 본다.
+  const paper = {
+    id: "1111.1111", title: "제목", summary: "초록", link: "https://arxiv.org/abs/1111.1111",
+    published: "2026-08-20", authors: ["저자"], score: 9, reason: "이유",
+  };
+  const digest = { date: "2026-08-22", hits: [paper], near: [] };
+  const builders = {
+    buildChatPrompt: () => buildChatPrompt([{ role: "user", text: "앞말" }], "질문", digest),
+    buildChatAnswerPrompt: () => buildChatAnswerPrompt([], "질문", [paper], "검색어"),
+    buildReviewPrompt: () => buildReviewPrompt(paper),
+    buildAskPrompt: () => buildAskPrompt(digest, "질문"),
+    buildScorePrompt: () => buildScorePrompt([paper]),
+    buildSummaryPrompt: () => buildSummaryPrompt(paper),
+  };
+  for (const [name, build] of Object.entries(builders)) {
+    const out = build();
+    assert.equal(typeof out, "string", `${name} 이 문자열을 안 돌려준다`);
+    assert.ok(out.length > 200, `${name} 이 너무 짧다 — 템플릿이 끊겼을 수 있다`);
+    assert.ok(!out.includes("undefined"), `${name} 에 undefined 가 박혔다`);
+  }
 });
