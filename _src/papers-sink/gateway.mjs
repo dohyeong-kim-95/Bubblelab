@@ -11,14 +11,16 @@
 //
 // 답을 만드는 것은 `claude -p`(구독)다. 오간 말과 다이제스트는 엣지에 있고
 // 여기서는 그때그때 받아 쓴다 — PC 를 갈아엎어도 대화가 남는다.
+//
+// **여기는 거르는 자리다.** 초록까지만 보고 읽어볼 만한지 가른다. 제대로 읽는
+// 것은 사람이 `/paper` 로 직접 하고, life/papers 에는 그렇게 이해한 것만 남는다.
 
 import { spawn } from "node:child_process";
 import { dirname } from "node:path";
 
 import {
-  buildChatAnswerPrompt, buildChatPrompt, buildReviewPrompt, CHAT_ANSWER_LIMIT,
-  fetchPaperById, parseReview, parseReviewRequest, parseSearchRequest,
-  REVIEW_FIELDS, RESEARCH_PROFILE, searchArxiv,
+  buildChatAnswerPrompt, buildChatPrompt, CHAT_ANSWER_LIMIT,
+  parseSearchRequest, RESEARCH_PROFILE, searchArxiv,
 } from "../../_infra/papers.js";
 
 const BASE = (process.env.PAPERS_ENDPOINT ?? "").trim() || "https://life.bubblelab.dev";
@@ -157,10 +159,6 @@ async function answer(question) {
   const profile = process.env.PAPERS_PROFILE || RESEARCH_PROFILE;
 
   const first = await ask(buildChatPrompt(history ?? [], question, digest, profile));
-
-  const wanted = parseReviewRequest(first);
-  if (wanted) return review(wanted);
-
   const query = parseSearchRequest(first);
   if (!query) return first;
 
@@ -168,29 +166,6 @@ async function answer(question) {
   const papers = await searchArxiv(query);
   log(`  ${papers.length}편 찾음`);
   return ask(buildChatAnswerPrompt(history ?? [], question, papers, query, profile));
-}
-
-/**
- * 한 편을 붙들고 읽은 결과를 **글로 남긴다.**
- *
- * 채널의 대화는 흘러가고 12개까지만 기억되지만, 리뷰는 life/papers 에 쌓여서
- * 나중에 다시 읽을 수 있다 — 그냥 물어보는 것과 이 도구가 갈리는 지점이다.
- */
-async function review(id) {
-  log(`  리뷰: arXiv ${id}`);
-  const paper = await fetchPaperById(id);
-  if (!paper) return `arXiv ${id} 를 찾지 못했습니다. 번호를 확인해주세요.`;
-
-  const parsed = parseReview(await ask(buildReviewPrompt(paper, process.env.PAPERS_PROFILE || RESEARCH_PROFILE)));
-  if (!Object.keys(parsed).length) return `${paper.title}\n\n리뷰를 만들지 못했습니다.`;
-
-  await edge("/reviews", { method: "POST", body: JSON.stringify({ paper, review: parsed }) });
-  log(`  리뷰 저장: ${paper.title.slice(0, 50)}`);
-
-  // 채널에는 요지만 보내고 전문은 화면으로 넘긴다 — 긴 글은 디스코드에서 안 읽힌다.
-  const head = REVIEW_FIELDS.filter((f) => parsed[f]).slice(0, 3)
-    .map((f) => `**${f}**\n${parsed[f]}`).join("\n\n");
-  return `📝 **${paper.title}**\n${paper.link}\n\n${head}\n\n— 전문은 ${BASE.replace(/^https?:\/\//, "")}/papers 에 남겼습니다.`;
 }
 
 /* ── 한 번에 하나씩 ─────────────────────────────────────────────────────

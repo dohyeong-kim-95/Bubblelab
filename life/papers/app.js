@@ -170,7 +170,8 @@ function reviewBlock(row) {
   const block = element("details", "review");
   const head = element("summary");
   head.append(element("span", "review-title", row.title));
-  head.append(element("span", "day-note", stamp(row.at)));
+  // 초록만 보고 쓴 글과 전문을 읽고 쓴 글은 믿을 만한 정도가 다르다.
+  head.append(element("span", "day-note", `${row.source === "full" ? "전문" : "초록"} · ${stamp(row.at)}`));
   block.append(head);
 
   const link = element("a", "review-link", row.link);
@@ -179,12 +180,28 @@ function reviewBlock(row) {
   link.target = "_blank";
   block.append(link);
 
+  // 내가 내린 결론을 맨 위에 둔다 — 나중에 다시 열 때 제일 먼저 볼 것이다.
+  if (row.verdict) {
+    const verdict = element("p", "verdict", row.verdict);
+    block.append(verdict);
+  }
+
   const list = document.createElement("dl");
   for (const field of REVIEW_ORDER.filter((f) => row.review?.[f])) {
     list.append(element("dt", null, field));
     list.append(element("dd", null, row.review[field]));
   }
   block.append(list);
+
+  // 내가 무엇을 물었는지가 곧 무엇을 붙들었는지다. 기계 요약에는 없는 부분이라
+  // 접어 두지 않고 그대로 보여 준다.
+  if (row.asked?.length) {
+    block.append(element("p", "asked-head", `물어본 것 ${row.asked.length}개`));
+    const asked = element("ul", "asked");
+    for (const question of row.asked) asked.append(element("li", null, question));
+    block.append(asked);
+  }
+
   block.append(commentBox(row.id));
   return block;
 }
@@ -213,7 +230,7 @@ async function load() {
     const blocks = digests.map((digest, index) => dayBlock(digest, index === 0));
     if (reviews.length) {
       const section = element("section", "reviews");
-      section.append(element("h2", "reviews-head", `📝 읽고 쓴 것 ${reviews.length}편`));
+      section.append(element("h2", "reviews-head", `📖 내가 읽은 논문 ${reviews.length}편`));
       // 맨 위 하나만 펴 둔다 — 날짜 목록과 같은 규칙이라 화면이 한결같다.
       for (const [index, row] of reviews.entries()) {
         const block = reviewBlock(row);

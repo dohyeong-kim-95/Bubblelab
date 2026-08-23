@@ -19,10 +19,9 @@ import { spawn } from "node:child_process";
 import { dirname } from "node:path";
 
 import {
-  ANSWER_LIMIT, buildAskPrompt, buildChatAnswerPrompt, buildChatPrompt, buildReviewPrompt,
-  buildScorePrompt, buildSummaryPrompt, CHAT_ANSWER_LIMIT, fetchCandidates, fetchPaperById,
-  parseReview, parseReviewRequest, parseScores, parseSearchRequest, parseSummary, pickPapers,
-  RESEARCH_PROFILE, searchArxiv,
+  ANSWER_LIMIT, buildAskPrompt, buildChatAnswerPrompt, buildChatPrompt, buildScorePrompt,
+  buildSummaryPrompt, CHAT_ANSWER_LIMIT, fetchCandidates, parseScores, parseSearchRequest,
+  parseSummary, pickPapers, RESEARCH_PROFILE, searchArxiv,
 } from "../../_infra/papers.js";
 
 const BASE = (process.env.PAPERS_ENDPOINT ?? "").trim() || "https://life.bubblelab.dev";
@@ -153,19 +152,6 @@ async function buildDigest(secret) {
   console.log(`  ${JSON.stringify(result)}`);
 }
 
-/** 한 편을 붙들고 읽은 결과를 글로 남긴다. 상주 쪽과 같은 동작이다. */
-async function review(id, secret, profile) {
-  console.log(`  리뷰: arXiv ${id}`);
-  const paper = await fetchPaperById(id);
-  if (!paper) return `arXiv ${id} 를 찾지 못했습니다. 번호를 확인해주세요.`;
-
-  const parsed = parseReview(await ask(buildReviewPrompt(paper, profile)));
-  if (!Object.keys(parsed).length) return `${paper.title}\n\n리뷰를 만들지 못했습니다.`;
-
-  await api("/reviews", secret, { method: "POST", body: JSON.stringify({ paper, review: parsed }) });
-  return `📝 ${paper.title}\n${paper.link}\n\n전문은 ${BASE.replace(/^https?:\/\//, "")}/papers 에 남겼습니다.`;
-}
-
 /**
  * 전용 채널의 자유 대화. 새 말이 있으면 답한다.
  *
@@ -197,11 +183,8 @@ async function chat(secret) {
   let answer;
   try {
     const first = await ask(buildChatPrompt(history, question, digest, profile));
-    const wanted = parseReviewRequest(first);
     const query = parseSearchRequest(first);
-    if (wanted) {
-      answer = await review(wanted, secret, profile);
-    } else if (query) {
+    if (query) {
       console.log(`  arXiv 검색: ${query}`);
       const papers = await searchArxiv(query);
       console.log(`  ${papers.length}편 찾음`);

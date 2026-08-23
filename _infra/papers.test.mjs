@@ -18,7 +18,6 @@ import {
   GATEWAY_ALIVE_MS,
   COMMENT_PER_PAPER,
   parseReview,
-  parseReviewRequest,
   parseSearchRequest,
   REVIEW_FIELDS,
   searchArxiv,
@@ -641,12 +640,6 @@ test("빈 검색어로는 arXiv 를 부르지 않는다", async () => {
 
 // ── 리뷰 ────────────────────────────────────────────────────────────────
 
-test("리뷰 요청에서 arXiv 번호만 집어낸다", () => {
-  assert.equal(parseReviewRequest("REVIEW: 2608.19808"), "2608.19808");
-  assert.equal(parseReviewRequest("REVIEW: https://arxiv.org/abs/2508.06847v2"), "2508.06847");
-  assert.equal(parseReviewRequest("이건 이미 아는 내용이라 리뷰가 필요 없습니다"), null);
-});
-
 test("여러 줄로 쓴 항목을 하나로 모은다", () => {
   // 모델이 항목 아래에 문단을 이어 쓴다. 첫 줄만 받으면 대부분이 잘려 나간다.
   const parsed = parseReview([
@@ -784,4 +777,41 @@ test("인텐트가 꺼져 내용이 비어 오면 그렇다고 알린다", async
     .chatPoll({ fetchImpl: channelStub([{ id: "101", content: "", author: {} }]) });
   assert.equal(result.needsIntent, true);
   assert.match(result.reason, /Message Content/);
+});
+
+// ── /paper 명령과 어긋나지 않게 ─────────────────────────────────────────
+
+test("리뷰 항목이 /paper 명령과 같다", async () => {
+  // 두 곳에 적힌 목록이 어긋나면 명령이 만든 리뷰의 절반이 조용히 버려진다
+  // (saveReview 가 아는 항목만 남기기 때문에).
+  const { readFile } = await import("node:fs/promises");
+  const doc = await readFile(new URL("../.claude/commands/paper.md", import.meta.url), "utf8");
+  for (const field of REVIEW_FIELDS) assert.ok(doc.includes(field), `${field} 가 명령 문서에 없다`);
+});
+
+test("내가 물은 것과 내린 결론을 같이 남긴다", async () => {
+  // 이게 없으면 life/papers 는 그냥 기계 요약 더미가 된다.
+  const storage = storageStub();
+  const instance = new PapersDO({ storage }, env());
+  await instance.saveReview({
+    paper: { id: "2608.19808", title: "FAR-DPO" },
+    review: { "핵심 방법": "선호쌍 DPO" },
+    asked: ["선호쌍을 800회로 어떻게 만드나?", "제약은 어디서 들어가나?"],
+    verdict: "우리 예산으로는 못 쓴다. 다만 실행가능성 필터는 가져올 만하다.",
+    source: "full", at: 1000,
+  });
+
+  const { reviews } = await (await instance.fetch(new Request("https://papers/reviews"))).json();
+  assert.equal(reviews[0].asked.length, 2);
+  assert.match(reviews[0].verdict, /못 쓴다/);
+  assert.equal(reviews[0].source, "full");
+});
+
+test("전문을 봤다고 우기지 못하게 값을 좁힌다", async () => {
+  const storage = storageStub();
+  const instance = new PapersDO({ storage }, env());
+  await instance.saveReview({ paper: { id: "1111.1111" }, review: { "핵심 방법": "x" },
+    source: "대충 봤음", at: 1000 });
+  const { reviews } = await (await instance.fetch(new Request("https://papers/reviews"))).json();
+  assert.equal(reviews[0].source, "abstract");
 });

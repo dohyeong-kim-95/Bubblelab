@@ -63,8 +63,11 @@ export const GATEWAY_ALIVE_MS = 150 * 1000;
 
 /* ── 리뷰 ────────────────────────────────────────────────────────────────
  * 다이제스트의 다섯 줄은 "읽을지 말지" 를 정하는 용도다. 읽기로 한 논문은
- * 그것만으로 부족해서, 한 편을 붙들고 쓴 글을 따로 남긴다 — 이게 쌓이는 게
- * 이 도구를 그냥 물어보는 것과 가르는 지점이다.
+ * 그것만으로 부족해서, 한 편을 붙들고 쓴 글을 따로 남긴다.
+ *
+ * **여기 남는 것은 내가 직접 붙들고 이해한 논문뿐이다.** 봇은 쓰지 못한다 —
+ * 기계가 만든 요약을 여기 쌓으면 다이제스트와 다를 게 없고, "내가 읽은 것" 이라는
+ * 이 목록의 뜻이 사라진다. 쓰는 길은 `/paper` 하나다(`.claude/commands/paper.md`).
  */
 export const REVIEW_FIELDS = [
   "무엇을 한 논문인가", "핵심 방법", "전제와 가정", "실험 설계",
@@ -647,7 +650,7 @@ export class PapersDO {
    * 보관본(다이제스트)과 키를 나눈다. 다이제스트는 그날 서버가 만든 것이고
    * 리뷰는 내가 읽기로 하고 쌓은 것이라, 성격이 다르면 자리도 다르게 둔다.
    */
-  async saveReview({ paper, review, at = Date.now() }) {
+  async saveReview({ paper, review, asked, verdict, source, at = Date.now() }) {
     const id = String(paper?.id ?? "").slice(0, 32);
     if (!id) throw new Error("논문이 필요합니다");
     const body = Object.fromEntries(
@@ -661,7 +664,13 @@ export class PapersDO {
       link: String(paper.link ?? "").slice(0, 200),
       published: String(paper.published ?? "").slice(0, 10),
       authors: (paper.authors ?? []).slice(0, 6).map((a) => String(a).slice(0, 60)),
+      // 초록만 봤는지 전문을 봤는지 남긴다 — 나중에 이 글을 얼마나 믿을지가 달라진다.
+      source: source === "full" ? "full" : "abstract",
       review: body,
+      // **여기가 이 글을 기계 요약과 가르는 부분이다.** 내가 무엇을 물었고
+      // 무엇으로 결론 냈는지는 내가 그 자리에 있었어야만 남는다.
+      asked: (asked ?? []).slice(0, 20).map((q) => String(q).slice(0, 300)),
+      verdict: String(verdict ?? "").slice(0, 600),
     };
     await this.state.storage.put(`review:${at}:${id}`, row);
 
@@ -1001,19 +1010,18 @@ ${chatHistory(history)}
 ${message}
 
 # 지금 할 일
-셋 중 하나를 하세요.
-
-**① 논문을 새로 찾아야 하면** — 다른 말 없이 첫 줄에만:
+논문을 새로 찾아야 답할 수 있으면, **다른 말 없이 첫 줄에만** 이렇게 쓰세요:
 SEARCH: <영어 검색어>
+
 arXiv 전체를 훑습니다(기간 제한 없음 — 옛날 논문도 나옵니다). "옛날 거라도",
 "더 찾아봐", "이런 주제 없나" 같은 말이면 검색하세요.
 
-**② 특정 논문을 제대로 읽어 달라고 하면** — 다른 말 없이 첫 줄에만:
-REVIEW: <arXiv 번호>
-"리뷰해줘", "이거 자세히", "정리해줘" 처럼 한 편을 붙들라는 말일 때입니다.
-결과는 life/papers 에 글로 남습니다. 번호를 모르면 먼저 SEARCH 로 찾으세요.
+찾을 필요 없이 지금 아는 것으로 답할 수 있으면 그냥 한국어로 답하세요.
+**논문 제목이나 arXiv 번호를 기억에 기대어 쓰지 마세요** — 그럴 상황이면 검색하세요.
 
-**③ 그럴 필요 없이 지금 아는 것으로 답할 수 있으면** 그냥 한국어로 답하세요.
+**여기는 거르는 자리입니다.** 초록까지만 보고 "읽어볼 만한가" 를 가릅니다.
+제대로 읽는 것은 연구자가 직접 `/paper` 로 합니다 — 대신 읽어 주겠다고 하지 마세요.
+읽어볼 만하다고 판단되면 "`/paper <번호>` 로 붙들면 됩니다" 라고 알려주세요.
 **논문 제목이나 arXiv 번호를 기억에 기대어 쓰지 마세요** — 그럴 상황이면 검색하세요.
 한국어로, ${CHAT_ANSWER_LIMIT}자 이내. 문단을 짧게 끊으세요.`;
 }
@@ -1099,12 +1107,6 @@ export function parseReview(text) {
   return Object.fromEntries(
     Object.entries(out).filter(([, v]) => v).map(([k, v]) => [k, v.slice(0, 1200)]),
   );
-}
-
-/** 대화에서 "이 논문 리뷰해줘" 를 집어낸다. */
-export function parseReviewRequest(text) {
-  const match = String(text ?? "").match(/^\s*REVIEW:\s*(.+)$/m);
-  return match ? (match[1].match(/(\d{4}\.\d{4,5})/)?.[1] ?? null) : null;
 }
 
 /* ── 질문 큐 ─────────────────────────────────────────────────────────────
