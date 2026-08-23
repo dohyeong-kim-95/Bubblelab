@@ -786,6 +786,15 @@ test("인텐트가 꺼져 내용이 비어 오면 그렇다고 알린다", async
 
 // ── /paper 명령과 어긋나지 않게 ─────────────────────────────────────────
 
+test("비밀키가 없는 자리에서도 멈추지 않게 적어 뒀다", async () => {
+  // 웹 세션은 클라우드에서 돌아 papers.env 가 없다. 읽고 이해하는 일은 그것
+  // 없이 다 되는데 명령이 거기서 멈추면 반쪽도 못 쓴다.
+  const { readFile } = await import("node:fs/promises");
+  const doc = await readFile(new URL("../.claude/commands/paper.md", import.meta.url), "utf8");
+  assert.match(doc, /비밀키가 없는 자리/);
+  assert.match(doc, /payload JSON 을 그대로 출력/);
+});
+
 test("리뷰 항목이 /paper 명령과 같다", async () => {
   // 두 곳에 적힌 목록이 어긋나면 명령이 만든 리뷰의 절반이 조용히 버려진다
   // (saveReview 가 아는 항목만 남기기 때문에).

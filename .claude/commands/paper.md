@@ -19,16 +19,28 @@
 (고치면 어긋난다).
 
 ```bash
-set -a && . ~/.bubblelab/papers.env && set +a
+set -a && . ~/.bubblelab/papers.env 2>/dev/null && set +a
 curl -s -H "Authorization: Bearer $PAPERS_SINK_SECRET" \
   https://life.bubblelab.dev/_papers/profile
 ```
 
-번호가 없으면 오늘 것을 보여주고 고르게 한다:
+번호가 없으면 오늘 것을 보여주고 고르게 한다(이건 인증이 필요 없다):
 
 ```bash
 curl -s https://life.bubblelab.dev/_papers/latest
 ```
+
+### 비밀키가 없는 자리라면 (웹 세션 등)
+
+`papers.env` 는 집 PC 에만 있다. 클라우드에서 도는 세션에는 없으므로 위 호출이
+`not found` 나 401 로 돌아온다. **그때 멈추지 말 것** — 읽고 이해하는 일은 그것
+없이 다 된다. 이렇게 한다:
+
+1. 사용자에게 한 줄로 알린다: "여기선 서버에 저장이 안 됩니다. 읽고 이야기한 뒤
+   정리본을 드릴 테니 PC 세션에서 올리시면 됩니다."
+2. "내 문제" 는 사용자에게 한 번 물어서 받거나, 대화에서 드러난 것을 쓴다.
+3. 마지막 ④ 에서는 서버에 올리는 대신 **payload JSON 을 그대로 출력**한다.
+   PC 세션에서 그걸 파일로 저장해 올리면 된다.
 
 ## ② 읽기 — 전문을 본다
 
@@ -70,11 +82,15 @@ Read 도구로 읽는다(PDF 를 직접 읽는다. 10쪽이 넘으면 `pages` �
 따라 해볼 것 · 한계와 의심
 
 ```bash
+set -a && . ~/.bubblelab/papers.env 2>/dev/null && set +a
 curl -s -X POST https://life.bubblelab.dev/_papers/reviews \
   -H "Authorization: Bearer $PAPERS_SINK_SECRET" \
   -H "Content-Type: application/json" \
   -d @payload.json
 ```
+
+**401 이나 not found 가 오면** 비밀키가 없는 자리다. 실패했다고만 말하지 말고
+payload 를 그대로 출력해서, PC 세션에서 올릴 수 있게 넘긴다.
 
 ```json
 {
