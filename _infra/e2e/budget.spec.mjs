@@ -80,7 +80,7 @@ test("가계부 — 한도와 남은 날에 견주어 지금 어디쯤인지 보
   expect(failures).toEqual([]);
 });
 
-test("가계부 — 카드 문자를 붙여넣으면 여러 건이 한 번에 담긴다", async ({ page }) => {
+test("가계부 — 문자 여러 건을 한 번에 읽어 고른 것만 담는다", async ({ page }) => {
   const failures = [];
   page.on("pageerror", (error) => failures.push(error.message));
   page.on("console", (message) => {
@@ -98,11 +98,12 @@ test("가계부 — 카드 문자를 붙여넣으면 여러 건이 한 번에 �
   const sms = (amount, time, memo, cancel = "") =>
     `[Web발신]\n신한카드(1234)승인${cancel}\n${amount}원 일시불\n${month}/${day} ${time}\n${memo}\n누적1,234,567원`;
 
+  const drop = (text) => ({ name: "sms.txt", mimeType: "text/plain", buffer: Buffer.from(text) });
+
   await page.locator("#sms-button").click();
-  await page.locator("#sms-text").fill(
+  await page.locator("#sms-file").setInputFiles(drop(
     [sms("12,000", "14:22", "백암순대"), sms("4,500", "16:05", "카페"),
-      sms("4,500", "16:20", "카페", "취소"), "[Web발신] 인증번호 [009911]"].join("\n\n"));
-  await page.locator("#sms-read").click();
+      sms("4,500", "16:20", "카페", "취소"), "[Web발신] 인증번호 [009911]"].join("\n\n")));
 
   await expect(page.locator("#sms-summary")).toContainText("3건 읽음");
   await expect(page.locator("#sms-summary")).toContainText("못 읽은 것 1건");
@@ -119,21 +120,58 @@ test("가계부 — 카드 문자를 붙여넣으면 여러 건이 한 번에 �
 
   // 같은 문자를 또 넣어도 두 번 담기지 않는다.
   await page.locator("#sms-button").click();
-  await page.locator("#sms-text").fill(sms("12,000", "14:22", "백암순대"));
-  await page.locator("#sms-read").click();
+  await page.locator("#sms-file").setInputFiles(drop(sms("12,000", "14:22", "백암순대")));
   await expect(page.locator("#sms-summary")).toContainText("이미 담긴 것 1건");
   await expect(page.locator(".preview-row.duplicate")).toHaveCount(1);
   await expect(page.locator("#sms-save")).toBeDisabled();
   await page.locator("#sms-cancel").click();
   await expect(page.locator(".entry")).toHaveCount(2);
 
-  // 공유 시트로 들어온 문자는 열자마자 읽고, 주소에 남지 않는다.
+  // 옛 방식(GET ?text=)으로 오는 공유도 받는다 — 이미 설치된 폰의 WebAPK 는
+  // 매니페스트가 갱신될 때까지 그쪽으로 보낸다.
   await page.goto(`/life/budget/?text=${encodeURIComponent(sms("9,900", "19:30", "편의점"))}`);
   await expect(page.locator("#sms")).toBeVisible();
   await expect(page.locator("#sms-summary")).toContainText("1건 읽음");
   expect(new URL(page.url()).search).toBe("");
   await page.locator("#sms-save").click();
   await expect(page.locator("#fact-spent")).toHaveText("17,400원");
+
+  expect(failures).toEqual([]);
+});
+
+test("가계부 — 공유 시트로 보낸 백업 파일을 서비스워커가 받아 연다", async ({ page }) => {
+  const failures = [];
+  page.on("pageerror", (error) => failures.push(error.message));
+
+  // 서비스워커는 LIFE 셸에서 등록된다. 스코프가 /life/ 라 도구 페이지까지 함께 맡는다.
+  await page.goto("/life/");
+  await page.evaluate(() => navigator.serviceWorker.ready.then(() => undefined));
+  await page.goto("/life/budget/");
+  await page.evaluate(() => localStorage.removeItem("bl_budget_v1"));
+
+  // 안드로이드가 공유할 때 보내는 것과 같은 모양: multipart POST 의 file 칸.
+  const status = await page.evaluate(async () => {
+    const xml = `<smses count="1"><sms address="15778000" date="${Date.now()}" `
+      + `body="[Web발신]&#10;신한카드(1234)승인&#10;25,000원 일시불&#10;정육점" /></smses>`;
+    const form = new FormData();
+    form.append("file", new File([xml], "sms-backup.xml", { type: "text/xml" }));
+    const response = await fetch("/life/budget/", { method: "POST", body: form });
+    return response.status;
+  });
+  expect(status).toBe(200);   // 서비스워커가 ?share=1 로 돌려보내고 그 화면이 온다
+
+  await page.goto("/life/budget/?share=1");
+  await expect(page.locator("#sms")).toBeVisible();
+  await expect(page.locator("#sms-summary")).toContainText("1건 읽음");
+  await expect(page.locator(".preview-memo")).toHaveText("정육점");
+  expect(new URL(page.url()).search).toBe("");
+  await page.locator("#sms-save").click();
+  await expect(page.locator("#fact-spent")).toHaveText("25,000원");
+
+  // 한 번 받은 것은 캐시에서 지워진다 — 다시 열어도 같은 것이 또 뜨지 않는다.
+  await page.goto("/life/budget/?share=1");
+  await expect(page.locator("#sms-summary")).toContainText("읽지 못했습니다");
+  await expect(page.locator(".entry")).toHaveCount(1);
 
   expect(failures).toEqual([]);
 });

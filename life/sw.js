@@ -6,7 +6,7 @@
 // 보이지 않는 반면, 캐시를 먼저 내주면 **배포한 것이 한 박자 늦게 도착한다** —
 // 고쳐서 배포했는데 폰에서 그대로인 사고가 실제로 났다. 그래서 도구는 네트워크 먼저,
 // 실패하면 캐시(오프라인에서도 열린다).
-const CACHE = "life-v6";
+const CACHE = "life-v7";
 const SHELL = ["./", "index.html", "styles.css", "app.js", "store.js"];
 // 크롬이 설치 가능 여부를 판단할 때 직접 보는 것들. 서비스워커가 만지지 않는다.
 const INSTALL_ASSETS = ["/manifest.json", "/icon.svg", "/icon-192.png", "/icon-512.png"];
@@ -73,8 +73,38 @@ async function networkFirst(request) {
   }
 }
 
+/* 공유 시트로 들어온 것(manifest 의 share_target)은 POST 로 온다. 서비스워커가
+ * 가로채 잠깐 담아 두고 그 화면을 연다.
+ *
+ * 파일을 이렇게 받는 이유: 브라우저는 파일 선택창이 어느 폴더에서 열릴지 정할 수
+ * 없다(안드로이드 크롬에는 File System Access API 자체가 없다). 폴더를 찾아가는
+ * 대신 파일을 앱으로 보내는 쪽으로 뒤집으면 선택창이 통째로 없어진다.
+ *
+ * 셸은 어느 도구가 받는지 모른다 — life 안에서 POST 하는 곳은 여기뿐이라
+ * 들어온 경로의 화면으로 그대로 넘긴다. */
+const SHARE_CACHE = "bl-life-share";
+const SHARE_KEY = "/__share";
+
+async function receiveShare(request, target) {
+  let payload = "";
+  try {
+    const form = await request.formData();
+    const file = form.getAll("file").find((one) => one && typeof one.text === "function" && one.size);
+    payload = file ? await file.text() : [form.get("text"), form.get("title")].filter(Boolean).join("\n");
+  } catch { /* 못 읽으면 빈손으로 연다 — 화면은 떠야 한다 */ }
+  const cache = await caches.open(SHARE_CACHE);
+  await cache.put(SHARE_KEY, new Response(payload, { headers: { "content-type": "text/plain" } }));
+  return Response.redirect(`${target}?share=1`, 303);
+}
+
 self.addEventListener("fetch", (event) => {
   const request = event.request;
+  const shared = new URL(request.url);
+  if (request.method === "POST" && shared.origin === self.location.origin
+    && shared.pathname.startsWith(SCOPE)) {
+    event.respondWith(receiveShare(request, shared.pathname));
+    return;
+  }
   if (request.method !== "GET") return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;

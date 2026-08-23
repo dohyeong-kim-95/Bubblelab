@@ -200,14 +200,13 @@ $("editor").addEventListener("close", () => { editing = null; });
 /* ── 카드 문자에서 담기 ─────────────────────────────────────────
  * 브라우저는 문자를 읽을 수 없다. 문자가 여기 오는 길은 셋이고 파서는 하나다:
  * 공유 시트(manifest 의 share_target) · 붙여넣기 · 백업 파일. */
-function openSms(prefill = "") {
+function openSms(text = "") {
   pending = [];
-  $("sms-text").value = prefill;
   $("sms-summary").textContent = "";
   $("sms-preview").replaceChildren();
   $("sms-save").disabled = true;
-  $("sms").showModal();
-  if (prefill) readSms(prefill);
+  if (!$("sms").open) $("sms").showModal();
+  if (text.trim()) readSms(text);
 }
 
 function readSms(text) {
@@ -262,17 +261,11 @@ function updateSaveLabel() {
 
 $("sms-button").addEventListener("click", () => openSms());
 $("sms-cancel").addEventListener("click", () => $("sms").close());
-$("sms-read").addEventListener("click", () => readSms($("sms-text").value));
 $("sms-file").addEventListener("change", async (event) => {
   const [file] = event.target.files ?? [];
   if (!file) return;
-  try {
-    const text = await file.text();
-    $("sms-text").value = text.length > 4000 ? `${file.name} — ${Math.round(file.size / 1024)}KB` : text;
-    readSms(text);
-  } catch {
-    $("sms-summary").textContent = "파일을 읽지 못했습니다";
-  }
+  try { readSms(await file.text()); }
+  catch { $("sms-summary").textContent = "파일을 읽지 못했습니다"; }
   event.target.value = "";
 });
 
@@ -295,14 +288,34 @@ $("sms-form").addEventListener("submit", (event) => {
 });
 $("sms").addEventListener("close", () => { pending = []; });
 
-/* 공유 시트로 들어온 문자(manifest 의 share_target). 주소에 문자가 남지 않게
- * 읽자마자 지운다 — 뒤로 가기로 되돌아와 두 번 담기는 것도 막는다. */
-const shared = new URLSearchParams(location.search);
-const sharedText = [shared.get("text"), shared.get("title")].filter(Boolean).join("\n");
-if (sharedText) {
+/* 공유 시트로 들어온 것(manifest 의 share_target). 파일은 POST 로 오므로 서비스워커가
+ * 받아 캐시에 담아 두고 ?share=1 로 넘긴다(life/sw.js). 주소에 문자가 남지 않게 읽자마자
+ * 지운다 — 뒤로 가기로 되돌아와 두 번 담기는 것도 막는다.
+ *
+ * ?text= 도 계속 받는다: 이미 설치된 폰의 WebAPK 는 매니페스트가 갱신될 때까지 옛
+ * 방식(GET)으로 보낸다. */
+const SHARE_CACHE = "bl-life-share";
+const SHARE_KEY = "/__share";
+
+async function takeShared() {
+  const params = new URLSearchParams(location.search);
+  if (!params.has("share") && !params.has("text") && !params.has("title")) return;
   history.replaceState(null, "", location.pathname);
-  openSms(sharedText);
+  if (params.has("share")) {
+    try {
+      const cache = await caches.open(SHARE_CACHE);
+      const stored = await cache.match(SHARE_KEY);
+      await cache.delete(SHARE_KEY);
+      const text = stored ? await stored.text() : "";
+      if (text.trim()) { openSms(text); return; }
+    } catch { /* 캐시를 못 읽으면 빈 화면이라도 연다 */ }
+    openSms();
+    $("sms-summary").textContent = "공유받은 것을 읽지 못했습니다 — 파일 열기로 넣어주세요";
+    return;
+  }
+  openSms([params.get("text"), params.get("title")].filter(Boolean).join("\n"));
 }
+takeShared();
 
 /* ── 한도와 주기 ────────────────────────────────────────────────── */
 $("settings-button").addEventListener("click", () => {
