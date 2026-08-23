@@ -206,7 +206,9 @@ PNG·JPEG를 모두 받고, JPEG는 `npm ci` 필요. 검증은 `_infra/wallpaper
 연습장이고, 소리 엔진·저작권 선은 `life/espanol/README.md` 에 적혀 있다).
 **`life/budget/`(가계부)** 는 카드 한 장의 소비를 한 주기 한도(기본 100만원)와 견준다 —
 합계보다 "오늘까지의 기준선"과 "남은 날에 하루 얼마"가 먼저 나온다. 주기 긋기·페이스
-계산은 `life/budget/store.js` 한 곳이다(`life/budget/README.md`).
+계산은 `life/budget/store.js` 한 곳이다(`life/budget/README.md`). 카드 승인 문자를
+읽어 담는 파서는 `life/budget/sms.js` — 공유 시트(매니페스트의 `share_target`)·
+붙여넣기·문자 백업 XML 셋 다 이 한 파서로 들어온다.
 
 **서버에 아무것도 저장하지 않는다** — 할 일은 브라우저 localStorage 에만 있고, 워커는
 비밀번호 게이트(`bl_life` 쿠키·`LIFE_PASSWORD`)만 담당한다. `/_life/*` API 는 없다.

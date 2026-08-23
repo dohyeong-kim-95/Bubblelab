@@ -2,6 +2,7 @@ import {
   addEntry, cycleLabel, cycleOf, editEntry, emptyState, entriesIn, groupByDay, inCycle,
   kstDate, pace, parseState, removeEntry, setLimit, setStartDay, shiftDate, shortWon, won,
 } from "./store.js";
+import { parseBackupOrText, seenSigs } from "./sms.js";
 
 const $ = (id) => document.getElementById(id);
 const STORAGE_KEY = "bl_budget_v1";
@@ -11,6 +12,7 @@ let state = load();
 // 보고 있는 주기는 이 날짜 하나로 정해진다 — 시작일이 바뀌어도 다시 계산될 뿐이다.
 let anchor = kstDate();
 let editing = null;
+let pending = [];   // 문자에서 읽어 낸 것들 — 담기 전까지는 화면에만 있다
 
 function load() {
   try { return parseState(localStorage.getItem(STORAGE_KEY)) ?? emptyState(); }
@@ -194,6 +196,113 @@ $("editor-delete").addEventListener("click", () => {
 });
 $("editor-cancel").addEventListener("click", () => $("editor").close());
 $("editor").addEventListener("close", () => { editing = null; });
+
+/* ── 카드 문자에서 담기 ─────────────────────────────────────────
+ * 브라우저는 문자를 읽을 수 없다. 문자가 여기 오는 길은 셋이고 파서는 하나다:
+ * 공유 시트(manifest 의 share_target) · 붙여넣기 · 백업 파일. */
+function openSms(prefill = "") {
+  pending = [];
+  $("sms-text").value = prefill;
+  $("sms-summary").textContent = "";
+  $("sms-preview").replaceChildren();
+  $("sms-save").disabled = true;
+  $("sms").showModal();
+  if (prefill) readSms(prefill);
+}
+
+function readSms(text) {
+  const { found, failed, fromBackup } = parseBackupOrText(text, kstDate());
+  const seen = seenSigs(state);
+  pending = found.map(({ entry }) => {
+    // 같은 문자를 두 번 담지 않는다. 한 번에 붙여넣은 것 안에서 겹치는 것도 본다.
+    const duplicate = seen.has(entry.sig);
+    seen.add(entry.sig);
+    return { entry, duplicate, take: !duplicate };
+  });
+
+  const fresh = pending.filter((row) => !row.duplicate).length;
+  $("sms-summary").textContent = [
+    `${pending.length}건 읽음`,
+    pending.length - fresh > 0 ? `이미 담긴 것 ${pending.length - fresh}건` : "",
+    // 백업 파일은 결제와 무관한 문자가 대부분이라 실패 건수를 세어 봐야 소음이다.
+    !fromBackup && failed.length ? `못 읽은 것 ${failed.length}건 (${failed[0].reason})` : "",
+  ].filter(Boolean).join(" · ");
+  renderPreview();
+}
+
+function renderPreview() {
+  $("sms-preview").replaceChildren(...pending.map((row, index) => {
+    const item = node("li", `preview-row${row.duplicate ? " duplicate" : ""}`);
+    const label = node("label", "preview-label");
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = row.take;
+    box.addEventListener("change", () => {
+      pending[index].take = box.checked;
+      $("sms-save").disabled = !pending.some((one) => one.take);
+      updateSaveLabel();
+    });
+    const body = node("span", "preview-body");
+    body.append(
+      node("span", "preview-memo", row.entry.memo || "메모 없음"),
+      node("span", "preview-when", `${row.entry.on.slice(5).replace("-", "/")}${row.duplicate ? " · 이미 담김" : ""}`),
+    );
+    label.append(box, body, node("span", "preview-amount", won(row.entry.amount)));
+    item.append(label);
+    return item;
+  }));
+  $("sms-save").disabled = !pending.some((row) => row.take);
+  updateSaveLabel();
+}
+
+function updateSaveLabel() {
+  const count = pending.filter((row) => row.take).length;
+  $("sms-save").textContent = count ? `${count}건 담기` : "담기";
+}
+
+$("sms-button").addEventListener("click", () => openSms());
+$("sms-cancel").addEventListener("click", () => $("sms").close());
+$("sms-read").addEventListener("click", () => readSms($("sms-text").value));
+$("sms-file").addEventListener("change", async (event) => {
+  const [file] = event.target.files ?? [];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    $("sms-text").value = text.length > 4000 ? `${file.name} — ${Math.round(file.size / 1024)}KB` : text;
+    readSms(text);
+  } catch {
+    $("sms-summary").textContent = "파일을 읽지 못했습니다";
+  }
+  event.target.value = "";
+});
+
+$("sms-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const taking = pending.filter((row) => row.take).map((row) => row.entry);
+  let next = state;
+  for (const entry of taking) {
+    try { next = addEntry(next, entry, new Date(`${entry.on}T12:00:00Z`)); }
+    catch { /* 한 건이 틀렸다고 나머지를 버리지 않는다 */ }
+  }
+  update(next);
+  // 담은 것이 지금 보는 주기에 하나도 없으면 그쪽으로 따라간다.
+  const cycle = cycleOf(anchor, state.startDay);
+  if (taking.length && !taking.some((entry) => inCycle(cycle, entry.on))) {
+    anchor = taking.map((entry) => entry.on).sort().at(-1);
+    render();
+  }
+  $("sms").close();
+});
+$("sms").addEventListener("close", () => { pending = []; });
+
+/* 공유 시트로 들어온 문자(manifest 의 share_target). 주소에 문자가 남지 않게
+ * 읽자마자 지운다 — 뒤로 가기로 되돌아와 두 번 담기는 것도 막는다. */
+const shared = new URLSearchParams(location.search);
+const sharedText = [shared.get("text"), shared.get("title")].filter(Boolean).join("\n");
+if (sharedText) {
+  history.replaceState(null, "", location.pathname);
+  openSms(sharedText);
+}
 
 /* ── 한도와 주기 ────────────────────────────────────────────────── */
 $("settings-button").addEventListener("click", () => {

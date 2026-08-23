@@ -80,3 +80,26 @@ body { overflow: auto; }
 #editor-form label, #settings-form label { display: block; margin: 10px 4px 4px;
   color: var(--muted); font-size: 12px; }
 #settings-form .fine-print { margin: 10px 4px 0; }
+
+/* ── 카드 문자에서 담기 ─────────────────────────────────────────── */
+dialog.wide { width: min(100% - 24px, 420px); }
+#sms-text { width: 100%; border: 1px solid var(--line); border-radius: 9px; background: var(--bg);
+  color: var(--ink); padding: 10px 12px; margin: 10px 0 0; font: inherit; font-size: 13px;
+  line-height: 1.5; resize: vertical; }
+#sms-text::placeholder { color: var(--muted); }
+/* 파일 입력은 버튼으로 위장한다 — 기본 파일 입력은 폭도 글자도 브라우저 마음대로다. */
+.file-button { display: grid; place-items: center; min-height: 48px; border-radius: 9px;
+  padding: 0 14px; color: var(--muted); font-size: 14px; cursor: pointer; }
+.file-button:active { background: var(--bg); }
+.summary-line { min-height: 1.2em; margin: 10px 4px 0; }
+.preview { list-style: none; margin: 6px 0 0; padding: 0; max-height: 40dvh; overflow-y: auto; }
+.preview-row { border-bottom: 1px solid var(--line); }
+.preview-row:last-child { border-bottom: 0; }
+.preview-label { display: flex; align-items: center; gap: 10px; padding: 9px 2px; font-size: 14px; }
+.preview-label input { width: 18px; height: 18px; flex: none; margin: 0; accent-color: var(--ink); }
+.preview-body { flex: 1; min-width: 0; display: grid; }
+.preview-memo { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview-when { color: var(--muted); font-size: 11px; }
+.preview-amount { flex: none; font-variant-numeric: tabular-nums; }
+/* 이미 담긴 문자는 지우지 않고 흐리게 둔다 — 왜 안 담기는지 보여야 한다. */
+.preview-row.duplicate { color: var(--muted); }

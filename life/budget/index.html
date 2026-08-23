@@ -9,12 +9,14 @@
   <link rel="stylesheet" href="../styles.css">
   <link rel="stylesheet" href="styles.css">
   <link rel="modulepreload" href="store.js">
+  <link rel="modulepreload" href="sms.js">
   <script type="module" src="app.js"></script>
 </head>
 <body>
   <header class="bar">
     <a class="back" href="../" aria-label="LIFE 로 돌아가기">←</a>
     <h1 class="bar-title">가계부 <span id="cycle-label" class="count"></span></h1>
+    <button id="sms-button" type="button" aria-label="카드 문자에서 담기">✉</button>
     <button id="settings-button" type="button" aria-label="한도와 주기 설정">⚙</button>
   </header>
 
@@ -59,6 +61,28 @@
     <p id="empty" class="fine-print empty-note" hidden>이 주기에 적은 것이 아직 없습니다.
       카드를 쓸 때마다 위에 금액을 적어 두면, 남은 날에 하루 얼마씩 쓸 수 있는지 계속 알려 줍니다.</p>
   </main>
+
+  <dialog id="sms" class="wide" aria-labelledby="sms-title">
+    <form id="sms-form">
+      <h2 id="sms-title">카드 문자에서 담기</h2>
+      <p class="fine-print">문자 앱에서 <b>공유 → LIFE</b> 로 보내거나, 문자를 복사해 붙여넣으세요.
+        여러 건을 한 번에 넣어도 됩니다. 문자 백업 앱(SMS Backup &amp; Restore)이 만든
+        XML 파일도 열 수 있습니다.</p>
+      <textarea id="sms-text" rows="5" aria-label="카드 문자"
+        placeholder="[Web발신]&#10;신한카드(1234)승인&#10;12,000원 일시불&#10;08/23 14:22&#10;백암순대"></textarea>
+      <div class="menu-items row">
+        <label id="sms-file-label" class="file-button" for="sms-file">백업 파일 열기</label>
+        <button id="sms-read" type="button" class="primary">읽기</button>
+      </div>
+      <input id="sms-file" type="file" accept=".xml,.txt,text/xml,application/xml,text/plain" hidden>
+      <p id="sms-summary" class="fine-print summary-line"></p>
+      <ul id="sms-preview" class="preview"></ul>
+      <div class="menu-items row">
+        <button id="sms-cancel" type="button" class="quiet">취소</button>
+        <button id="sms-save" class="primary" type="submit" disabled>담기</button>
+      </div>
+    </form>
+  </dialog>
 
   <dialog id="editor" aria-labelledby="editor-title">
     <form id="editor-form">

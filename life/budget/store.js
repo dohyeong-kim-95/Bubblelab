@@ -107,6 +107,8 @@ export function normalizeEntry(entry) {
     memo: clean(entry?.memo, MEMO_MAX),
     on: isDate(entry?.on) ? entry.on : kstDate(),
     at: typeof entry?.at === "string" ? entry.at : new Date().toISOString(),
+    // 카드 문자에서 온 것만 갖는 표식. 같은 문자를 두 번 담지 않으려고 둔다(sms.js).
+    ...(typeof entry?.sig === "string" && entry.sig ? { sig: entry.sig.slice(0, 40) } : {}),
   };
 }
 
