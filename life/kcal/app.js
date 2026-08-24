@@ -152,11 +152,19 @@ function renderResults(query) {
 }
 
 $("search").addEventListener("input", () => renderResults($("search").value));
-$("picker-cancel").addEventListener("click", () => $("picker").close());
-$("picker-new").addEventListener("click", () => {
+function newFood() {
   $("picker").close();
   openEditor({ name: $("search").value, meal: draftMeal, kcal: 0, carb: 0, protein: 0, fat: 0 });
-});
+}
+
+/* 취소·담기는 위아래 두 곳에 있다 — 키보드가 올라오면 아래 것이 가려져서 키보드를
+ * 내렸다가 눌러야 했다(실기기에서 걸린 불편이다). 같은 일을 하는 버튼이라 함께 묶는다. */
+for (const id of ["picker-cancel", "picker-cancel-top"]) {
+  $(id).addEventListener("click", () => $("picker").close());
+}
+for (const id of ["picker-new", "picker-new-top"]) {
+  $(id).addEventListener("click", newFood);
+}
 
 /* ── 양과 끼니를 정해 담기 ─────────────────────────────────────── */
 function openEditor(entry) {
@@ -224,7 +232,9 @@ $("editor-delete").addEventListener("click", () => {
   if (editing) update(removeEntry(state, editing));
   $("editor").close();
 });
-$("editor-cancel").addEventListener("click", () => $("editor").close());
+for (const id of ["editor-cancel", "editor-cancel-top"]) {
+  $(id).addEventListener("click", () => $("editor").close());
+}
 $("editor").addEventListener("close", () => { editing = null; });
 
 /* ── 몸 정보와 목표 ────────────────────────────────────────────── */
@@ -293,7 +303,9 @@ $("manual").addEventListener("change", () => {
   showAuto();
 });
 
-$("goal-cancel").addEventListener("click", () => $("goal").close());
+for (const id of ["goal-cancel", "goal-cancel-top"]) {
+  $(id).addEventListener("click", () => $("goal").close());
+}
 $("goal-form").addEventListener("submit", (event) => {
   event.preventDefault();
   try {

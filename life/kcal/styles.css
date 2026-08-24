@@ -75,6 +75,16 @@ dialog.wide { max-width: min(420px, calc(100vw - 24px)); }
   .menu-items.row button { min-height: 52px; }
 }
 #picker-form, #editor-form, #goal-form, .results, .result { min-width: 0; max-width: 100%; }
+/* 제목 줄에 붙어 따라오는 취소·담기. 키보드가 올라오면 팝업 아래쪽 버튼이 가려져
+ * 키보드를 내렸다가 눌러야 했다 — 위에도 두고 스크롤에 붙여 둔다. */
+.sheet-head { position: sticky; top: 0; z-index: 2; background: var(--surface);
+  display: flex; align-items: center; gap: 6px; padding: 2px 0 8px; }
+.sheet-head h2 { flex: 1; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; }
+.head-button { flex: none; min-height: 36px; border-radius: 8px; padding: 0 12px; font-size: 13px; }
+.head-quiet { color: var(--muted); }
+.head-primary { background: var(--ink); color: var(--bg); font-weight: 700; }
+.head-primary:active { opacity: .85; }
 #search { width: 100%; height: 46px; border: 1px solid var(--line); border-radius: 9px;
   background: var(--bg); color: var(--ink); padding: 0 12px; font: inherit; margin: 8px 0 4px; }
 .results { list-style: none; margin: 4px 0 0; padding: 0; max-height: 44dvh;
