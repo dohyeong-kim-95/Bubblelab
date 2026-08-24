@@ -139,3 +139,14 @@ test("칼로리 — 취소·담기가 팝업 위쪽에도 있다", async ({ page
   await page.locator("#goal-save-top").click();
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem("bl_kcal_v1")).profile.weight)).toBe(81);
 });
+
+test("칼로리 — 아래로 당겨도 새로고침이 걸리지 않는다", async ({ page }) => {
+  // 목록 맨 위에서 손가락을 조금 내리면 화면이 통째로 다시 뜨는 게 폰에서 성가시다.
+  // 셸의 ../styles.css 하나로 도구 전부에 걸린다(life/CLAUDE.md).
+  await page.goto("/life/kcal/");
+  const overscroll = await page.evaluate(() => [
+    getComputedStyle(document.documentElement).overscrollBehaviorY,
+    getComputedStyle(document.body).overscrollBehaviorY,
+  ]);
+  expect(overscroll, "도구에서 body 를 다시 정의하며 이 속성을 지웠다").toEqual(["contain", "contain"]);
+});

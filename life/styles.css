@@ -11,7 +11,10 @@
   --add: 60px;
 }
 * { box-sizing: border-box; }
-html, body { height: 100%; }
+/* 안드로이드에서 위로 당기면 새로고침이 걸린다 — 목록 맨 위에서 손가락을 조금만
+ * 내려도 화면이 통째로 다시 뜬다. 셸은 body 가 overflow: hidden 이라 원래 안 걸렸지만
+ * 도구는 세로로 스크롤되므로 여기서 한 번에 막는다(도구는 이 파일을 물려받는다). */
+html, body { height: 100%; overscroll-behavior-y: contain; }
 /* 키보드가 올라오면 앱을 덮는 게 아니라 앱이 그만큼 줄어들어야 한다. 뷰포트 meta 의
  * interactive-widget=resizes-content 가 기본이고, --app-h 는 그걸 지원하지 않는
  * 브라우저를 위해 visualViewport 로 채워 넣는 보험이다. */
