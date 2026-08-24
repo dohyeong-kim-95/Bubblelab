@@ -209,8 +209,8 @@ function openSms(text = "") {
   if (text.trim()) readSms(text);
 }
 
-function readSms(text) {
-  const { found, failed, fromBackup } = parseBackupOrText(text, kstDate());
+function readSms(text, fileName = "") {
+  const { found, failed, fromBackup, scanned, clipped, newestOn } = parseBackupOrText(text, kstDate());
   const seen = seenSigs(state);
   pending = found.map(({ entry }) => {
     // 같은 문자를 두 번 담지 않는다. 한 번에 붙여넣은 것 안에서 겹치는 것도 본다.
@@ -221,11 +221,19 @@ function readSms(text) {
 
   const fresh = pending.filter((row) => !row.duplicate).length;
   $("sms-summary").textContent = [
+    fileName,
+    // 파일이 언제 것인지 말해 준다 — "백업했는데 안 늘어난다" 는 대개 옛 파일을 연 것이다.
+    fromBackup && newestOn ? `최근 문자 ${newestOn.slice(5).replace("-", "/")}` : "",
     `${pending.length}건 읽음`,
     pending.length - fresh > 0 ? `이미 담긴 것 ${pending.length - fresh}건` : "",
+    // 조용히 자르지 않는다. 자르는 쪽은 언제나 옛 문자다(sms.js).
+    clipped ? `옛 문자 ${clipped}건은 건너뜀` : "",
     // 백업 파일은 결제와 무관한 문자가 대부분이라 실패 건수를 세어 봐야 소음이다.
     !fromBackup && failed.length ? `못 읽은 것 ${failed.length}건 (${failed[0].reason})` : "",
   ].filter(Boolean).join(" · ");
+  if (fromBackup && !pending.length) {
+    $("sms-summary").textContent += ` — 결제 문자가 없습니다(훑은 문자 ${scanned}건)`;
+  }
   renderPreview();
 }
 
@@ -289,13 +297,20 @@ async function rememberFolder(handle) {
   try { (await folderStore("readwrite")).put(handle, "folder"); } catch { /* 못 담아도 이번엔 열린다 */ }
 }
 
-/** 폴더에서 가장 최근에 만들어진 백업 파일. 이름이 아니라 수정 시각으로 고른다. */
+/**
+ * 폴더에서 가장 최근 백업 파일. 수정 시각으로 고르되, **시각이 같거나 없으면 이름**으로
+ * 가른다 — 안드로이드 파일 제공자가 lastModified 를 0 으로 주는 일이 있고, 그러면
+ * 옛 파일을 열어 놓고 "백업했는데 안 늘어난다" 가 된다(백업 파일명에는 날짜가 들어간다).
+ */
 async function newestBackup(handle) {
   let newest = null;
   for await (const [name, entry] of handle.entries()) {
     if (entry.kind !== "file" || !/\.(xml|txt)$/i.test(name)) continue;
     const file = await entry.getFile();
-    if (!newest || file.lastModified > newest.lastModified) newest = file;
+    const fresher = !newest
+      || file.lastModified > newest.lastModified
+      || (file.lastModified === newest.lastModified && file.name.localeCompare(newest.name, "en") > 0);
+    if (fresher) newest = file;
   }
   return newest;
 }
@@ -316,8 +331,7 @@ async function openFromFolder(pickAgain = false) {
     showFolder(handle.name);
     const file = await newestBackup(handle);
     if (!file) { $("sms-summary").textContent = `${handle.name} 에 백업 파일이 없어요`; return; }
-    readSms(await file.text());
-    $("sms-summary").textContent = `${file.name} · ${$("sms-summary").textContent}`;
+    readSms(await file.text(), file.name);
   } catch (error) {
     // 사용자가 선택창을 닫은 것은 실패가 아니다.
     if (error?.name !== "AbortError") $("sms-summary").textContent = "폴더를 열지 못했습니다";

@@ -175,12 +175,14 @@ const BACKUP = `<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
 test("백업 XML 에서 문자 본문과 받은 시각을 뽑는다", () => {
   assert.equal(looksLikeBackup(BACKUP), true);
   assert.equal(looksLikeBackup("신한카드(1234)승인 12,000원"), false);
-  const rows = extractBackup(BACKUP);
-  assert.equal(rows.length, 3);
+  const { rows, total, newestAt } = extractBackup(BACKUP);
+  assert.equal(rows.length, 2, "금액이 없는 문자는 결제일 수 없어 먼저 걸러낸다");
+  assert.equal(total, 2);
+  assert.equal(newestAt, 1787462520000);
   assert.equal(rows[0].at, 1787462520000);
   assert.match(rows[0].body, /백암순대 & 국밥/, "XML 이스케이프를 되돌린다");
   assert.equal(rows[0].body.split("\n").length, 6, "줄바꿈(&#10;)도 되돌린다");
-  assert.equal(extractBackup(BACKUP, 1).length, 1, "상한을 넘겨 훑지 않는다");
+  assert.equal(extractBackup(BACKUP, 1).rows.length, 1, "상한을 넘겨 훑지 않는다");
 });
 
 test("백업 파일은 결제 문자만 골라 담고 날짜는 받은 시각을 쓴다", () => {
@@ -191,11 +193,32 @@ test("백업 파일은 결제 문자만 골라 담고 날짜는 받은 시각을
   assert.equal(found[0].entry.on, "2026-08-23");
   // 본문에 날짜가 없어도 받은 시각(2025-07-24 KST)으로 담긴다 — 오늘로 몰리지 않는다.
   assert.equal(found[1].entry.on, "2025-07-24");
-  assert.equal(failed.length, 1, "결제와 무관한 문자는 조용히 빠진다");
+  assert.equal(failed.length, 0, "금액이 없는 문자는 파싱 전에 걸러진다 — 백업에는 그런 게 대부분이다");
 });
 
 test("같은 입구로 붙여넣은 글도 그대로 받는다", () => {
   const { found, fromBackup } = parseBackupOrText("신한카드(1234)승인 12,000원 08/23 14:22 백암순대", TODAY);
   assert.equal(fromBackup, undefined);
   assert.equal(found[0].entry.amount, 12000);
+});
+
+test("백업이 오래된 것부터 적혀 있어도 최근 결제를 읽는다", () => {
+  /* 파일에 적힌 순서대로 앞에서 잘랐더니, 오래된 문자가 먼저 오는 백업에서 최근 결제가
+   * 통째로 잘렸다 — "새로 백업했는데 결제내역이 안 늘어난다" 의 정체다. */
+  const day = 86_400_000;
+  const start = Date.parse("2026-07-01T00:00:00Z");
+  const sms = (index) => `<sms address="1577" date="${start + index * day}" `
+    + `body="[Web발신] 신한카드승인 ${1000 + index}원 08/24 12:00 가게${index}" />`;
+  const xml = `<smses count="30">${Array.from({ length: 30 }, (_, i) => sms(i)).join("")}</smses>`;
+
+  const { rows, total, newestAt } = extractBackup(xml, 5);
+  assert.equal(total, 30);
+  assert.equal(rows.length, 5);
+  assert.deepEqual(rows.map((row) => row.body.match(/가게\d+/)[0]),
+    ["가게29", "가게28", "가게27", "가게26", "가게25"], "잘리는 쪽은 언제나 옛 문자다");
+  assert.equal(newestAt, start + 29 * day);
+
+  const read = parseBackupOrText(xml, TODAY);
+  assert.equal(read.clipped, 30 - read.scanned, "잘린 개수를 숨기지 않는다");
+  assert.equal(read.newestOn, "2026-07-30", "파일이 언제 것인지 화면이 말할 수 있어야 한다");
 });

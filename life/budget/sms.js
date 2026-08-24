@@ -169,7 +169,9 @@ export function parseMessages(text, today = kstDate()) {
 const SMS_TAG = /<sms\b[^>]*\/?>/g;
 const ATTR = (name) => new RegExp(`\\b${name}="([^"]*)"`);
 const ENTITIES = { "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&apos;": "'" };
-export const SMS_FILE_MAX = 20_000;   // 한 번에 훑는 문자 수 상한
+export const SMS_FILE_MAX = 20_000;   // 한 번에 훑는 문자 수 상한(최근 것부터 센다)
+// 금액이 없는 문자는 결제일 수 없다. 백업 파일에는 잡문자가 훨씬 많아서 먼저 걸러낸다.
+const HAS_AMOUNT = /[0-9][0-9,]*\s*원/;
 
 const unescapeXml = (value) => value
   .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
@@ -180,23 +182,28 @@ export const looksLikeBackup = (text) => /<smses\b|<sms\b/.test(String(text ?? "
 /**
  * 백업 XML 에서 문자 본문과 받은 시각을 뽑는다. 시각은 본문의 "08/23" 보다 정확해서
  * (연도가 들어 있다) 있으면 그쪽을 날짜로 쓴다.
+ *
+ * **최근 것부터 센다.** 파일에 적힌 순서대로 앞에서 상한만큼 잘랐더니, 오래된 문자가
+ * 먼저 오는 백업에서는 최근 결제가 통째로 잘려 나갔다("새로 백업했는데 안 늘어난다").
+ * 잘린 개수는 숨기지 않고 돌려준다 — 조용히 자르면 다 읽은 줄 안다.
  */
 export function extractBackup(xml, limit = SMS_FILE_MAX) {
-  const found = [];
+  const rows = [];
   for (const tag of String(xml ?? "").matchAll(SMS_TAG)) {
-    if (found.length >= limit) break;
     const body = tag[0].match(ATTR("body"))?.[1];
-    if (!body) continue;
+    if (!body || !HAS_AMOUNT.test(body)) continue;
     const stamp = Number(tag[0].match(ATTR("date"))?.[1]);
-    found.push({ body: unescapeXml(body), at: Number.isFinite(stamp) && stamp > 0 ? stamp : null });
+    rows.push({ body: unescapeXml(body), at: Number.isFinite(stamp) && stamp > 0 ? stamp : null });
   }
-  return found;
+  rows.sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
+  return { rows: rows.slice(0, limit), total: rows.length, newestAt: rows[0]?.at ?? null };
 }
 
 /** 붙여넣은 글이든 백업 파일이든 한 입구로 받는다. */
 export function parseBackupOrText(text, today = kstDate()) {
   if (!looksLikeBackup(text)) return parseMessages(text, today);
-  const results = extractBackup(text).map(({ body, at }) => {
+  const { rows, total, newestAt } = extractBackup(text);
+  const results = rows.map(({ body, at }) => {
     const result = parseMessage(body, at ? kstDate(new Date(at)) : today);
     // 백업에는 받은 시각이 들어 있다 — 본문에 날짜가 없어도 그날로 담긴다.
     if (result.entry && at) result.entry.on = kstDate(new Date(at));
@@ -207,6 +214,10 @@ export function parseBackupOrText(text, today = kstDate()) {
     // 백업 파일에는 결제와 무관한 문자가 대부분이라 실패를 일일이 보여 주지 않는다.
     failed: results.filter((result) => !result.entry),
     fromBackup: true,
+    // 파일이 언제 것인지 화면이 말해 줄 수 있게 함께 돌려준다.
+    scanned: rows.length,
+    clipped: Math.max(total - rows.length, 0),
+    newestOn: newestAt ? kstDate(new Date(newestAt)) : null,
   };
 }
 
