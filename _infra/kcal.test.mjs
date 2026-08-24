@@ -6,10 +6,11 @@ import { webcrypto } from "node:crypto";
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 const {
-  GRAM_MAX, KCAL_MAX, MEALS, addEntry, autoGoal, bmr, byMeal, dayReport, editEntry, emptyProfile,
-  emptyState, entriesOn, frequentFoods, kcalFromMacros, kstDate, macrosFor, normalizeProfile,
-  parseState, removeEntry, scaleFood, searchFoods, setGoal, setProfile, tdee, totals, useAutoGoal,
-  validateEntry,
+  EXERCISES, GRAM_MAX, KCAL_MAX, MEALS, addEntry, addWorkout, autoGoal, bmr, burn, burned, byMeal,
+  dayReport, editEntry, editWorkout, emptyProfile, emptyState, entriesOn, exerciseLabel,
+  frequentFoods, kcalFromMacros, kstDate, macrosFor, normalizeProfile, parseState, removeEntry,
+  removeWorkout, scaleFood, searchFoods, setGoal, setProfile, tdee, totals, useAutoGoal,
+  validateEntry, validateWorkout, workoutsOn,
 } = await import("../life/kcal/store.js");
 const { FOODS } = await import("../life/kcal/foods.js");
 const { makeFood, render } = await import("./kcal-food.mjs");
@@ -231,4 +232,69 @@ test("음식표는 이름순으로 다시 적는다 — diff 가 지저분해지
   assert.equal(text.indexOf('"가나"') < text.indexOf('"하나"'), true);
   assert.match(text, /export const FOODS = \[/);
   assert.match(text, /^\/\/ life\/kcal 의 음식표/, "머리말 주석이 살아 있다");
+});
+
+/* ── 태운 것 ───────────────────────────────────────────────────── */
+
+test("소모는 MET × 몸무게 × 시간으로 센다", () => {
+  // 8 MET × 3.5 × 78kg ÷ 200 = 10.92 kcal/분 → 30분이면 328
+  assert.equal(burn({ met: 8, minutes: 30, weight: 78 }), 328);
+  // 같은 운동이라도 무거운 사람이 더 태운다 — 분당 고정 표를 두지 않은 이유다.
+  assert.equal(burn({ met: 8, minutes: 30, weight: 55 }) < burn({ met: 8, minutes: 30, weight: 90 }), true);
+  assert.equal(burn({ met: 8, minutes: 0, weight: 78 }), 0);
+  assert.equal(burn({ met: 0, minutes: 30, weight: 0 }), 0, "몸무게가 없으면 셀 수 없다");
+});
+
+test("사이클은 가볍게·중간·열심히 세 강도다", () => {
+  assert.deepEqual(EXERCISES.map((one) => one.effort), ["가볍게", "중간", "열심히"]);
+  assert.equal(EXERCISES.every((one) => one.name === "사이클"), true);
+  // 강도가 셀수록 MET 이 커야 한다 — 뒤집히면 화면이 거짓말을 한다.
+  const mets = EXERCISES.map((one) => one.met);
+  assert.deepEqual([...mets].sort((a, b) => a - b), mets);
+  assert.equal(exerciseLabel(EXERCISES[1]), "사이클 · 중간");
+});
+
+test("태운 만큼 더 먹을 수 있다", () => {
+  let state = setGoal(emptyState(at(TODAY)), { kcal: 2000, carb: 250, protein: 100, fat: 67, source: "manual" });
+  state = eat(state, TODAY, { name: "샌드위치", kcal: 411, carb: 40, protein: 16, fat: 21, meal: "점심" });
+  state = addWorkout(state, { name: "사이클 · 중간", minutes: 30, kcal: 328, on: TODAY }, at(TODAY, 19));
+
+  const report = dayReport(state, TODAY);
+  assert.equal(report.burned, 328);
+  assert.equal(report.left.kcal, 1917, "2000 + 328 − 411");
+  assert.equal(report.over, false);
+  assert.equal(report.workouts.length, 1);
+  // 목표를 넘겼는지도 태운 것을 넣고 본다.
+  const heavy = dayReport(addEntry(state, { name: "치킨", kcal: 2000, on: TODAY }, at(TODAY, 20)), TODAY);
+  assert.equal(heavy.over, true);
+  assert.equal(heavy.left.kcal, -83);
+});
+
+test("운동은 이름과 태운 칼로리가 있어야 기록이 된다", () => {
+  const state = emptyState(at(TODAY));
+  assert.throws(() => addWorkout(state, { name: " ", kcal: 300, on: TODAY }, at(TODAY)), /무엇을/);
+  assert.throws(() => addWorkout(state, { name: "산책", kcal: 0, on: TODAY }, at(TODAY)), /시간을 적어주세요/);
+  assert.deepEqual(validateWorkout({ name: "사이클", kcal: 100, on: TODAY }), []);
+});
+
+test("운동도 고치고 지우는 것은 id 로만 한다", () => {
+  let state = addWorkout(emptyState(at(TODAY)), { name: "사이클 · 중간", minutes: 30, kcal: 328, on: TODAY }, at(TODAY));
+  const [first] = state.workouts;
+  state = editWorkout(state, first.id, { minutes: 45, kcal: 492 });
+  assert.equal(state.workouts[0].kcal, 492);
+  assert.equal(state.workouts[0].at, first.at, "적은 시각은 그대로 둔다");
+  assert.equal(workoutsOn(state, TODAY).length, 1);
+  assert.equal(removeWorkout(state, first.id).workouts.length, 0);
+  assert.throws(() => editWorkout(state, "없는id", { kcal: 1 }), /없습니다/);
+});
+
+test("운동을 붙이기 전 저장본도 그대로 열린다", () => {
+  // 옛 저장본에는 workouts 칸이 없다 — 없으면 빈 배열로 연다.
+  const parsed = parseState(JSON.stringify({
+    v: 1, profile: emptyProfile(), goal: { source: "auto" },
+    entries: [{ id: "a", name: "밥", kcal: 310, on: TODAY, at: `${TODAY}T00:00:00Z` }],
+  }));
+  assert.deepEqual(parsed.workouts, []);
+  assert.equal(dayReport(parsed, TODAY).burned, 0);
+  assert.equal(burned([]), 0);
 });

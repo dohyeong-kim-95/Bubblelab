@@ -59,6 +59,13 @@ body { overflow: auto; }
   white-space: nowrap; }
 .item-kcal { flex: none; font-size: 15px; font-variant-numeric: tabular-nums; }
 .item-kcal::after { content: " kcal"; color: var(--muted); font-size: 11px; }
+/* 태운 것은 먹은 것과 부호가 반대라 밝기로 갈라 둔다. */
+.item-kcal.burn { color: var(--muted); }
+/* 고른 강도. 라디오 대신 줄 자체가 눌린 것으로 보인다 — 어두운 바탕에서는 배경만으로
+ * 구분이 약해 왼쪽에 표시를 하나 세운다. */
+.result-button.picked { background: var(--surface); box-shadow: inset 3px 0 0 var(--ink);
+  padding-left: 9px; }
+.result-button.picked .item-name { font-weight: 700; }
 .meal-add { width: 100%; min-height: 44px; margin-top: 4px; border-radius: 9px;
   color: var(--muted); font-size: 13px; }
 .meal-add:active { background: var(--surface); }

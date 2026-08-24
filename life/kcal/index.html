@@ -48,6 +48,7 @@
     </section>
 
     <section id="meals" class="meals" aria-label="끼니별 기록"></section>
+    <section id="workouts" class="meals" aria-label="운동 기록"></section>
   </main>
 
   <!-- 무엇을 먹었는지 고르는 화면. 자주 먹는 것이 먼저 뜬다. -->
@@ -103,6 +104,33 @@
         <button id="editor-delete" type="button" class="quiet danger" hidden>삭제</button>
         <button id="editor-cancel" type="button" class="quiet">취소</button>
         <button id="editor-save" class="primary" type="submit">담기</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 운동은 강도와 시간으로 센다(MET × 몸무게 × 시간). 값은 고칠 수 있다. -->
+  <dialog id="exercise" class="wide" aria-labelledby="exercise-title">
+    <form id="exercise-form" novalidate>
+      <div class="sheet-head">
+        <h2 id="exercise-title">운동 담기</h2>
+        <button id="exercise-cancel-top" type="button" class="head-button head-quiet">취소</button>
+        <button id="exercise-save-top" type="submit" class="head-button head-primary">담기</button>
+      </div>
+      <ul id="exercise-list" class="results" aria-label="운동 고르기"></ul>
+      <div class="pair">
+        <div><label for="exercise-minutes">시간(분)</label>
+          <input id="exercise-minutes" type="number" inputmode="decimal" step="any" min="0" value="30"></div>
+        <div><label for="exercise-kcal">태운 칼로리</label>
+          <input id="exercise-kcal" type="number" inputmode="decimal" step="any" min="0"></div>
+      </div>
+      <label for="exercise-name">이름</label>
+      <input id="exercise-name" type="text" maxlength="40">
+      <p id="exercise-hint" class="fine-print"></p>
+      <p id="exercise-error" class="error" role="alert"></p>
+      <div class="menu-items row">
+        <button id="exercise-delete" type="button" class="quiet danger" hidden>삭제</button>
+        <button id="exercise-cancel" type="button" class="quiet">취소</button>
+        <button id="exercise-save" class="primary" type="submit">담기</button>
       </div>
     </form>
   </dialog>

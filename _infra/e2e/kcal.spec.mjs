@@ -150,3 +150,53 @@ test("칼로리 — 아래로 당겨도 새로고침이 걸리지 않는다", as
   ]);
   expect(overscroll, "도구에서 body 를 다시 정의하며 이 속성을 지웠다").toEqual(["contain", "contain"]);
 });
+
+test("칼로리 — 운동을 담으면 그만큼 더 먹을 수 있다", async ({ page }) => {
+  await page.goto("/life/kcal/");
+  await page.evaluate(() => localStorage.removeItem("bl_kcal_v1"));
+  await page.reload();
+
+  // 몸무게가 소모 계산에 쓰인다 — 목표도 함께 직접 정해 숫자를 고정한다.
+  await page.locator("#goal-button").click();
+  await page.locator("#weight").fill("78");
+  await page.locator("#manual").check();
+  await page.locator("#goal-kcal").fill("2000");
+  await page.locator("#goal-save").click();
+  await expect(page.locator("#left-kcal")).toHaveText("2,000");
+
+  // 사이클 세 강도가 있고, 강도를 올리면 태우는 값이 커진다.
+  await page.locator("#workouts .meal-add").click();
+  await expect(page.locator("#exercise-list .result")).toHaveCount(3);
+  await expect(page.locator("#exercise-list .item-name")).toContainText([/가볍게/, /중간/, /열심히/]);
+  const shown = async () => (await page.locator("#exercise-list .item-kcal").allTextContents()).map(Number);
+  const [easy, mid, hard] = await shown();
+  expect(easy).toBeLessThan(mid);
+  expect(mid).toBeLessThan(hard);
+
+  // 8 MET × 3.5 × 78kg ÷ 200 × 30분 = 328
+  await page.locator("#exercise-list .result-button").nth(1).click();
+  await expect(page.locator("#exercise-kcal")).toHaveValue("328");
+  await expect(page.locator("#exercise-name")).toHaveValue("사이클 · 중간");
+  await page.locator("#exercise-minutes").fill("60");
+  await expect(page.locator("#exercise-kcal")).toHaveValue("655");
+  await page.locator("#exercise-minutes").fill("30");
+  await page.locator("#exercise-save").click();
+
+  await expect(page.locator("#workouts .meal-item")).toHaveCount(1);
+  await expect(page.locator("#left-kcal")).toHaveText("2,328");   // 태운 만큼 여유가 는다
+  await expect(page.locator("#eaten-line")).toContainText("328 태움");
+
+  // 칼로리를 직접 고치면 시간이 바뀌어도 그 값을 지킨다.
+  await page.locator("#workouts .meal-item-button").click();
+  await page.locator("#exercise-kcal").fill("400");
+  await page.locator("#exercise-minutes").fill("45");
+  await expect(page.locator("#exercise-kcal")).toHaveValue("400");
+  await page.locator("#exercise-save").click();
+  await expect(page.locator("#left-kcal")).toHaveText("2,400");
+
+  // 지우면 여유도 사라진다.
+  await page.locator("#workouts .meal-item-button").click();
+  await page.locator("#exercise-delete").click();
+  await expect(page.locator("#workouts .meal-item")).toHaveCount(0);
+  await expect(page.locator("#left-kcal")).toHaveText("2,000");
+});

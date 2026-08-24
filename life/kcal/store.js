@@ -7,6 +7,7 @@
 export const NAME_MAX = 40;
 export const KCAL_MAX = 10_000;      // 한 끼에 이보다 많을 리 없다 — 오타를 거른다
 export const GRAM_MAX = 2_000;
+export const MINUTES_MAX = 24 * 60;
 export const MEALS = ["아침", "점심", "저녁", "간식"];
 export const DEFAULT_MEAL = "간식";
 
@@ -128,6 +129,88 @@ export function normalizeGoal(goal, profile) {
   };
 }
 
+/* ── 태운 것 ───────────────────────────────────────────────────────
+ * 소모는 MET(대사당량)로 센다. 같은 30분이라도 무거운 사람이 더 태우므로, 분당 고정
+ * kcal 표를 두는 것보다 몸무게를 쓰는 쪽이 맞다 — 목표 계산에 쓰려고 이미 받아 둔 값이다.
+ *
+ *   kcal = MET × 3.5 × 몸무게(kg) ÷ 200 × 분        (Compendium of Physical Activities)
+ *
+ * MET 값 자체가 평균치라 결과도 어림이다. 담은 뒤 화면에서 고칠 수 있다. */
+export const MET_FACTOR = 3.5 / 200;
+
+export const EXERCISES = [
+  { id: "cycle-easy", name: "사이클", effort: "가볍게", met: 4, hint: "여유롭게 · 16km/h 미만" },
+  { id: "cycle-mid", name: "사이클", effort: "중간", met: 8, hint: "보통 · 16–19km/h" },
+  { id: "cycle-hard", name: "사이클", effort: "열심히", met: 10, hint: "빠르게 · 19–22km/h" },
+];
+
+export const findExercise = (id) => EXERCISES.find((one) => one.id === id) ?? null;
+export const exerciseLabel = (exercise) =>
+  (exercise?.effort ? `${exercise.name} · ${exercise.effort}` : exercise?.name ?? "");
+
+/** 이 강도로 이만큼 하면 몇 kcal. 몸무게가 없으면 계산할 수 없어 0 이다. */
+export function burn({ met, minutes, weight }) {
+  const value = (Number(met) || 0) * MET_FACTOR * (Number(weight) || 0) * (Number(minutes) || 0);
+  return Math.max(Math.round(value), 0);
+}
+
+export function makeWorkout(fields = {}, now = new Date()) {
+  return normalizeWorkout({
+    id: crypto.randomUUID(),
+    name: "",
+    minutes: 0,
+    kcal: 0,
+    on: kstDate(now),
+    at: now.toISOString(),
+    ...fields,
+  });
+}
+
+export function normalizeWorkout(workout) {
+  return {
+    id: typeof workout?.id === "string" && workout.id ? workout.id : crypto.randomUUID(),
+    name: clean(workout?.name, NAME_MAX),
+    minutes: Math.min(Math.max(round(workout?.minutes, 1) || 0, 0), MINUTES_MAX),
+    kcal: Math.min(Math.max(Math.round(Number(workout?.kcal) || 0), 0), KCAL_MAX),
+    on: isDate(workout?.on) ? workout.on : kstDate(),
+    at: typeof workout?.at === "string" ? workout.at : new Date().toISOString(),
+  };
+}
+
+export function validateWorkout(workout) {
+  const errors = [];
+  if (!clean(workout?.name, NAME_MAX)) errors.push("무엇을 했는지 적어주세요");
+  const kcal = Math.round(Number(workout?.kcal));
+  if (!Number.isFinite(kcal) || kcal <= 0) errors.push("태운 칼로리가 0 입니다 — 시간을 적어주세요");
+  if (!isDate(workout?.on)) errors.push("날짜가 올바르지 않습니다");
+  return errors;
+}
+
+export function addWorkout(state, fields, now = new Date()) {
+  const workout = makeWorkout(fields, now);
+  const errors = validateWorkout(workout);
+  if (errors.length) throw new Error(errors[0]);
+  return { ...state, workouts: [...state.workouts, workout] };
+}
+
+export function editWorkout(state, id, fields) {
+  const found = state.workouts.find((workout) => workout.id === id);
+  if (!found) throw new Error("그런 기록이 없습니다");
+  const next = normalizeWorkout({ ...found, ...fields, id: found.id, at: found.at });
+  const errors = validateWorkout(next);
+  if (errors.length) throw new Error(errors[0]);
+  return { ...state, workouts: state.workouts.map((workout) => (workout.id === id ? next : workout)) };
+}
+
+export const removeWorkout = (state, id) =>
+  ({ ...state, workouts: state.workouts.filter((workout) => workout.id !== id) });
+
+export const workoutsOn = (state, date) => (state.workouts ?? [])
+  .filter((workout) => workout.on === date)
+  .sort((a, b) => String(a.at).localeCompare(String(b.at)));
+
+export const burned = (workouts) => workouts.reduce((sum, workout) => sum + workout.kcal, 0);
+
 /* ── 먹은 것 ───────────────────────────────────────────────────── */
 
 export function makeEntry(fields = {}, now = new Date()) {
@@ -201,7 +284,7 @@ export const kcalFromMacros = ({ carb = 0, protein = 0, fat = 0 } = {}) =>
 
 export function emptyState(now = new Date()) {
   const profile = emptyProfile();
-  return { v: 1, profile, goal: autoGoal(profile), entries: [], startedOn: kstDate(now) };
+  return { v: 1, profile, goal: autoGoal(profile), entries: [], workouts: [], startedOn: kstDate(now) };
 }
 
 export function parseState(raw) {
@@ -216,6 +299,10 @@ export function parseState(raw) {
     entries: (Array.isArray(value.entries) ? value.entries : [])
       .map(normalizeEntry)
       .filter((entry) => validateEntry(entry).length === 0),
+    // 운동은 나중에 붙였다 — 옛 저장본에는 이 칸이 없다.
+    workouts: (Array.isArray(value.workouts) ? value.workouts : [])
+      .map(normalizeWorkout)
+      .filter((workout) => validateWorkout(workout).length === 0),
     startedOn: isDate(value.startedOn) ? value.startedOn : kstDate(),
   };
 }
@@ -276,24 +363,27 @@ export function byMeal(entries) {
 export function dayReport(state, date = kstDate()) {
   const entries = entriesOn(state, date);
   const eaten = totals(entries);
+  const workouts = workoutsOn(state, date);
+  const out = burned(workouts);
   const goal = state.goal;
   const share = (value, target) => (target > 0 ? value / target : 0);
   return {
-    date, entries, eaten, goal,
+    date, entries, eaten, goal, workouts, burned: out,
     left: {
-      kcal: goal.kcal - eaten.kcal,
+      // 태운 만큼 더 먹어도 된다 — 목표는 섭취 기준이고 소모는 그 여유를 넓힌다.
+      kcal: goal.kcal + out - eaten.kcal,
       carb: round(goal.carb - eaten.carb, 1),
       protein: round(goal.protein - eaten.protein, 1),
       fat: round(goal.fat - eaten.fat, 1),
     },
     share: {
-      kcal: share(eaten.kcal, goal.kcal),
+      kcal: share(eaten.kcal, goal.kcal + out),
       carb: share(eaten.carb, goal.carb),
       protein: share(eaten.protein, goal.protein),
       fat: share(eaten.fat, goal.fat),
     },
     meals: byMeal(entries),
-    over: eaten.kcal > goal.kcal,
+    over: eaten.kcal > goal.kcal + out,
   };
 }
 

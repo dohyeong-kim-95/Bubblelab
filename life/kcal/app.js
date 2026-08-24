@@ -1,7 +1,7 @@
 import {
-  ACTIVITY, AIMS, MEALS, SPLITS, addEntry, autoGoal, bmr, dayReport, editEntry, emptyState,
-  kstDate, macrosFor, parseState, removeEntry, scaleFood, searchFoods, setGoal,
-  setProfile, shiftDate, tdee,
+  ACTIVITY, AIMS, EXERCISES, MEALS, SPLITS, addEntry, addWorkout, autoGoal, bmr, burn, dayReport,
+  editEntry, editWorkout, emptyState, exerciseLabel, findExercise, kstDate, macrosFor, parseState,
+  removeEntry, removeWorkout, scaleFood, searchFoods, setGoal, setProfile, shiftDate, tdee,
 } from "./store.js";
 import { FOODS } from "./foods.js";
 
@@ -14,6 +14,9 @@ let day = kstDate();
 let editing = null;      // 고치는 중인 기록의 id. 새로 담는 중이면 null
 let draftMeal = null;    // 어느 끼니에 담는 중인가
 let draftBrand = "";     // 고른 제품의 회사(입력칸은 없고 따라만 간다)
+let editingWorkout = null;
+let draftExercise = null;   // 고른 강도. 시간이 바뀌면 여기서 다시 계산한다
+let manualBurn = false;     // 칼로리를 직접 고쳤으면 다시 계산하지 않는다
 
 function load() {
   try { return parseState(localStorage.getItem(STORAGE_KEY)) ?? emptyState(); }
@@ -57,14 +60,48 @@ function render() {
   $("hero-label").textContent = over ? "넘긴 칼로리" : "남은 칼로리";
   $("left-kcal").textContent = kcal(Math.abs(report.left.kcal));
   $("left-kcal").classList.toggle("over", over);
-  $("eaten-line").textContent =
-    `${kcal(report.eaten.kcal)} / ${kcal(report.goal.kcal)} kcal 먹음`
-    + (report.goal.source === "manual" ? " · 직접 정한 목표" : "");
+  $("eaten-line").textContent = [
+    `${kcal(report.eaten.kcal)} / ${kcal(report.goal.kcal)} kcal 먹음`,
+    report.burned ? `${kcal(report.burned)} 태움` : "",
+    report.goal.source === "manual" ? "직접 정한 목표" : "",
+  ].filter(Boolean).join(" · ");
 
   renderMacro("carb", report, "탄수화물");
   renderMacro("protein", report, "단백질");
   renderMacro("fat", report, "지방");
   renderMeals(report);
+  renderWorkouts(report);
+}
+
+/* 운동은 끼니와 같은 모양으로 붙인다 — 하루를 한 화면에서 보려면 자리가 따로 있으면 안 된다. */
+function renderWorkouts(report) {
+  const section = node("section", "meal");
+  const head = node("div", "meal-head");
+  head.append(
+    node("span", "meal-name", "운동"),
+    node("span", "meal-total", report.burned ? `−${kcal(report.burned)} kcal` : ""),
+  );
+  const list = node("ul", "meal-items");
+  list.append(...report.workouts.map((workout) => {
+    const item = node("li", "meal-item");
+    const button = node("button", "meal-item-button");
+    button.type = "button";
+    const body = node("span", "item-body");
+    body.append(
+      node("span", "item-name", workout.name),
+      node("span", "item-macros", `${workout.minutes}분`),
+    );
+    button.append(body, node("span", "item-kcal burn", `−${kcal(workout.kcal)}`));
+    button.addEventListener("click", () => openExercise(workout));
+    item.append(button);
+    return item;
+  }));
+
+  const add = node("button", "meal-add", "＋ 담기");
+  add.type = "button";
+  add.addEventListener("click", () => openExercise());
+  section.append(head, list, add);
+  $("workouts").replaceChildren(section);
 }
 
 function renderMacro(key, report, label) {
@@ -236,6 +273,93 @@ for (const id of ["editor-cancel", "editor-cancel-top"]) {
   $(id).addEventListener("click", () => $("editor").close());
 }
 $("editor").addEventListener("close", () => { editing = null; });
+
+/* ── 태운 것 ───────────────────────────────────────────────────── */
+function openExercise(workout = null) {
+  editingWorkout = workout?.id ?? null;
+  draftExercise = workout ? null : EXERCISES[1];   // 새로 담을 때는 "중간" 부터
+  manualBurn = Boolean(workout);
+  $("exercise-title").textContent = workout ? "운동 고치기" : "운동 담기";
+  $("exercise-minutes").value = String(workout?.minutes ?? 30);
+  $("exercise-name").value = workout?.name ?? exerciseLabel(draftExercise);
+  $("exercise-kcal").value = String(workout?.kcal ?? 0);
+  $("exercise-delete").hidden = !editingWorkout;
+  $("exercise-error").textContent = "";
+  renderExercises();
+  if (!workout) recomputeBurn();
+  else showBurnHint();
+  $("exercise").showModal();
+}
+
+function renderExercises() {
+  $("exercise-list").replaceChildren(...EXERCISES.map((exercise) => {
+    const item = node("li", "result");
+    const button = node("button", `result-button${draftExercise?.id === exercise.id ? " picked" : ""}`);
+    button.type = "button";
+    const body = node("span", "item-body");
+    body.append(
+      node("span", "item-name", exerciseLabel(exercise)),
+      node("span", "item-macros", exercise.hint),
+    );
+    button.append(body, node("span", "item-kcal",
+      `${kcal(burn({ met: exercise.met, minutes: $("exercise-minutes").value, weight: state.profile.weight }))}`));
+    button.addEventListener("click", () => {
+      draftExercise = exercise;
+      manualBurn = false;
+      $("exercise-name").value = exerciseLabel(exercise);
+      renderExercises();
+      recomputeBurn();
+    });
+    item.append(button);
+    return item;
+  }));
+}
+
+/** 강도와 시간이 바뀌면 다시 센다. 칼로리를 직접 고쳤으면 그 값을 존중한다. */
+function recomputeBurn() {
+  if (!manualBurn && draftExercise) {
+    $("exercise-kcal").value = String(burn({
+      met: draftExercise.met, minutes: $("exercise-minutes").value, weight: state.profile.weight,
+    }));
+  }
+  showBurnHint();
+  renderExercises();
+}
+
+function showBurnHint() {
+  $("exercise-hint").textContent = draftExercise
+    ? `${state.profile.weight}kg 기준 · MET ${draftExercise.met}`
+      + (manualBurn ? " · 칼로리를 직접 고쳤습니다" : "")
+    : "몸무게와 시간으로 셉니다. 다른 운동이면 이름과 칼로리를 직접 적으세요.";
+}
+
+$("exercise-minutes").addEventListener("input", recomputeBurn);
+// 칼로리를 손대면 그때부터 자동 계산을 멈춘다 — 고친 값을 되돌리면 놀란다.
+$("exercise-kcal").addEventListener("input", () => { manualBurn = true; showBurnHint(); });
+
+$("exercise-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const draft = {
+    name: $("exercise-name").value,
+    minutes: $("exercise-minutes").value,
+    kcal: $("exercise-kcal").value,
+    on: day,
+  };
+  try {
+    update(editingWorkout ? editWorkout(state, editingWorkout, draft) : addWorkout(state, draft));
+    $("exercise").close();
+  } catch (error) {
+    $("exercise-error").textContent = error.message;
+  }
+});
+$("exercise-delete").addEventListener("click", () => {
+  if (editingWorkout) update(removeWorkout(state, editingWorkout));
+  $("exercise").close();
+});
+for (const id of ["exercise-cancel", "exercise-cancel-top"]) {
+  $(id).addEventListener("click", () => $("exercise").close());
+}
+$("exercise").addEventListener("close", () => { editingWorkout = null; draftExercise = null; });
 
 /* ── 몸 정보와 목표 ────────────────────────────────────────────── */
 function fillOptions(select, rows, selected) {
