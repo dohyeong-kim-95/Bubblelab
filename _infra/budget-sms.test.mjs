@@ -93,6 +93,34 @@ test("결제가 아닌 문자와 원화가 아닌 승인은 이유를 남기고 
   assert.match(read("   ").reason, /빈 문자/);
 });
 
+test("카드 대금을 갚은 문자는 소비로 담지 않는다 — 이중 계상이 된다", () => {
+  /* 개별 승인으로 이미 센 돈을, 그 대금을 갚은 문자로 한 번 더 세면 두 배가 된다.
+   * 즉시결제·선결제를 신청하면 은행에서 카드값이 빠져나가며 문자가 온다. */
+  const bills = [
+    "[Web발신]\n신한카드 즉시결제\n500,000원\n08/24 10:00\n감사합니다",
+    "[Web발신]\n신한카드(3484) 선결제 300,000원 08/24 10:00 처리완료",
+    "[Web발신]\n국민은행\n08/24 10:00 출금 500,000원\n신한카드대금\n잔액 1,234,567원",
+    "[Web발신]\n신한카드 결제대금 1,203,400원이 출금되었습니다 08/25",
+    "[Web발신] 신한카드 일부결제금액이월약정 안내 500,000원",
+  ];
+  for (const message of bills) {
+    assert.match(read(message).reason ?? "", /카드 대금/, message);
+  }
+});
+
+test("출금·이체가 들어 있어도 쓴 돈이면 담는다", () => {
+  // "출금" 만으로 거르면 체크카드 승인이 사라지고, "이체" 로 거르면 통신요금이 사라진다.
+  const spending = [
+    ["[Web발신] KB국민체크 출금 3,000원 08/24 09:10 스타벅스", 3000, "스타벅스"],
+    ["신한카드(3484)승인 김*형님 LG U+통신요금 자동이체 39,600원 08/10", 39600, "LG U+통신요금 자동이체"],
+  ];
+  for (const [message, amount, memo] of spending) {
+    const { entry, reason } = read(message);
+    assert.equal(reason, undefined, message);
+    assert.deepEqual([entry.amount, entry.memo], [amount, memo], message);
+  }
+});
+
 test("여러 건을 한 번에 붙여넣는다", () => {
   const text = `[Web발신]
 신한카드(1234)승인

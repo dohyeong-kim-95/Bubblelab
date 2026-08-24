@@ -18,6 +18,12 @@ const CANCEL = /(취소|환불)/;
 const FOREIGN = /(USD|EUR|JPY|CNY|GBP|\$|€|￥|£)/;
 // 광고·인증번호처럼 결제가 아닌 문자.
 const NOT_PAYMENT = /(인증번호|본인확인|광고|무료수신거부)/;
+/* 카드 대금을 갚은 것은 소비가 아니다 — 즉시결제·선결제로 카드값이 빠져나간 문자를
+ * 담으면, 개별 승인으로 이미 센 돈을 대금으로 한 번 더 세게 된다(이중 계상).
+ *
+ * "출금"·"이체" 만으로는 거를 수 없다. 체크카드 승인 문자에도 출금이 들어가고,
+ * 통신요금 자동이체는 진짜 소비다 — 카드 **대금**을 가리키는 말이 있을 때만 거른다. */
+const CARD_BILL = /(즉시결제|선결제|일부결제|카드대금|결제대금|이용대금|청구대금|카드값|대금\s*(납부|출금|결제|이체))/;
 const NOISE = /^\s*(\[Web발신\]|\[국외발신\]|\(광고\))\s*/gm;
 
 const trim = (value) => value.replace(/\s+/g, " ").trim();
@@ -120,6 +126,7 @@ export function parseMessage(raw, today = kstDate()) {
   const message = String(raw ?? "").replace(NOISE, "").trim();
   if (!message) return { raw, reason: "빈 문자" };
   if (NOT_PAYMENT.test(message)) return { raw, reason: "결제 문자가 아님" };
+  if (CARD_BILL.test(message)) return { raw, reason: "카드 대금 납부 — 쓴 돈이 아님" };
   if (FOREIGN.test(message)) return { raw, reason: "원화 결제가 아님 — 직접 적어주세요" };
 
   const found = findAmount(message);
