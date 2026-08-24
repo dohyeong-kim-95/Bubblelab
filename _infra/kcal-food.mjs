@@ -43,8 +43,11 @@ export function makeFood(args) {
     protein: number(args.protein, GRAM_MAX),
     fat: number(args.fat, GRAM_MAX),
   };
+  // 0kcal 은 값이 없는 것이 아니다 — 제로 음료·물·블랙커피가 그렇다. 아무것도 주지
+  // 않았을 때만 거절한다.
+  const given = ["kcal", "carb", "protein", "fat"].some((key) => args[key] != null);
+  if (!given) throw new Error("칼로리나 탄단지 중 하나는 있어야 합니다");
   const kcal = args.kcal == null ? kcalFromMacros(macros) : Math.round(number(args.kcal, KCAL_MAX));
-  if (!kcal) throw new Error("칼로리나 탄단지 중 하나는 있어야 합니다");
   const brand = String(args.brand ?? "").replace(/\s+/g, " ").trim().slice(0, NAME_MAX);
   return { name, ...(brand ? { brand } : {}), unit: String(args.unit ?? "1인분").trim() || "1인분", kcal, ...macros };
 }

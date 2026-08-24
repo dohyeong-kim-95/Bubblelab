@@ -218,6 +218,9 @@ test("CLI 는 칼로리가 없으면 탄단지에서 되짚는다", () => {
   assert.throws(() => makeFood({ carb: 1 }), /--name/);
   assert.throws(() => makeFood({ name: "빈 것" }), /하나는 있어야/);
   assert.throws(() => makeFood({ name: "이상", kcal: -5 }), /범위/);
+  // 0kcal 은 값이 없는 것이 아니다 — 제로 음료·물·블랙커피가 그렇다.
+  const zero = makeFood({ name: "갈배사이다 제로", brand: "해태", unit: "355ml", kcal: 0, carb: 0, protein: 0, fat: 0 });
+  assert.deepEqual([zero.kcal, zero.carb, zero.brand], [0, 0, "해태"]);
 });
 
 test("음식표는 이름순으로 다시 적는다 — diff 가 지저분해지지 않게", () => {
