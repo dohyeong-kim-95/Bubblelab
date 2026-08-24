@@ -209,6 +209,10 @@ PNG·JPEG를 모두 받고, JPEG는 `npm ci` 필요. 검증은 `_infra/wallpaper
 계산은 `life/budget/store.js` 한 곳이다(`life/budget/README.md`). 카드 승인 문자를
 읽어 담는 파서는 `life/budget/sms.js` — 공유 시트(매니페스트의 `share_target`)·
 붙여넣기·문자 백업 XML 셋 다 이 한 파서로 들어온다.
+**`life/kcal/`(칼로리)** 는 하루 섭취와 탄단지를 끼니별로 적는다(인아웃 벤치마크, 섭취만).
+목표는 몸 정보(Mifflin-St Jeor)로 계산하고 직접 덮어쓸 수 있으며, 규칙은
+`life/kcal/store.js` 한 곳이다. 음식표(`life/kcal/foods.js`)는 **사람이 채우는 표**라
+손으로 고치지 말고 `node _infra/kcal-food.mjs` 로 넣는다(`life/kcal/README.md`).
 
 **서버에 아무것도 저장하지 않는다** — 할 일은 브라우저 localStorage 에만 있고, 워커는
 비밀번호 게이트(`bl_life` 쿠키·`LIFE_PASSWORD`)만 담당한다. `/_life/*` API 는 없다.

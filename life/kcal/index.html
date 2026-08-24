@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <meta name="theme-color" content="#000000">
+  <title>칼로리</title>
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="modulepreload" href="store.js">
+  <link rel="modulepreload" href="foods.js">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="bar">
+    <a class="back" href="../" aria-label="LIFE 로 돌아가기">←</a>
+    <h1 class="bar-title">칼로리</h1>
+    <button id="goal-button" type="button" aria-label="몸 정보와 목표">⚙</button>
+  </header>
+
+  <div class="daybar">
+    <button id="prev-day" type="button" aria-label="어제">◀</button>
+    <span id="day-label" class="day-label"></span>
+    <button id="next-day" type="button" aria-label="내일">▶</button>
+  </div>
+
+  <main class="sheet">
+    <section class="hero" aria-labelledby="hero-label">
+      <p id="hero-label" class="hero-label">남은 칼로리</p>
+      <p id="left-kcal" class="hero-number"></p>
+      <p id="eaten-line" class="hero-note"></p>
+
+      <dl class="macros">
+        <div class="macro" id="macro-carb"><dt>탄수화물</dt>
+          <dd><span class="macro-grams"></span><span class="macro-goal"></span></dd>
+          <div class="track"><div class="track-fill"></div></div>
+        </div>
+        <div class="macro" id="macro-protein"><dt>단백질</dt>
+          <dd><span class="macro-grams"></span><span class="macro-goal"></span></dd>
+          <div class="track"><div class="track-fill"></div></div>
+        </div>
+        <div class="macro" id="macro-fat"><dt>지방</dt>
+          <dd><span class="macro-grams"></span><span class="macro-goal"></span></dd>
+          <div class="track"><div class="track-fill"></div></div>
+        </div>
+      </dl>
+    </section>
+
+    <section id="meals" class="meals" aria-label="끼니별 기록"></section>
+  </main>
+
+  <!-- 무엇을 먹었는지 고르는 화면. 자주 먹는 것이 먼저 뜬다. -->
+  <dialog id="picker" class="wide" aria-labelledby="picker-title">
+    <form id="picker-form">
+      <h2 id="picker-title">먹은 것 담기</h2>
+      <input id="search" type="search" placeholder="이름으로 찾기" aria-label="음식 찾기" autocomplete="off">
+      <ul id="results" class="results"></ul>
+      <p id="picker-empty" class="fine-print" hidden>찾는 것이 없으면 아래에서 직접 적으세요.
+        한 번 적어 두면 다음부터는 위 목록에 남습니다.</p>
+      <div class="menu-items row">
+        <button id="picker-cancel" type="button" class="quiet">취소</button>
+        <button id="picker-new" type="button" class="primary">직접 적기</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 담기 전에 양과 끼니를 정한다. 고치기도 같은 화면을 쓴다. -->
+  <dialog id="editor" aria-labelledby="editor-title">
+    <form id="editor-form">
+      <h2 id="editor-title">먹은 것</h2>
+      <label for="editor-name">이름</label>
+      <input id="editor-name" type="text" maxlength="40" required>
+      <div class="pair">
+        <div><label for="editor-amount">수량</label>
+          <input id="editor-amount" type="number" inputmode="decimal" step="0.1" min="0.1" value="1"></div>
+        <div><label for="editor-unit">단위</label>
+          <input id="editor-unit" type="text" maxlength="8" value="인분"></div>
+      </div>
+      <label for="editor-kcal">칼로리(kcal) — 1<span id="unit-echo">인분</span> 기준</label>
+      <input id="editor-kcal" type="number" inputmode="numeric" step="1" min="0" required>
+      <div class="triple">
+        <div><label for="editor-carb">탄수화물</label>
+          <input id="editor-carb" type="number" inputmode="decimal" step="0.1" min="0" value="0"></div>
+        <div><label for="editor-protein">단백질</label>
+          <input id="editor-protein" type="number" inputmode="decimal" step="0.1" min="0" value="0"></div>
+        <div><label for="editor-fat">지방</label>
+          <input id="editor-fat" type="number" inputmode="decimal" step="0.1" min="0" value="0"></div>
+      </div>
+      <label for="editor-meal">끼니</label>
+      <select id="editor-meal"></select>
+      <p id="editor-total" class="fine-print"></p>
+      <p id="editor-error" class="error" role="alert"></p>
+      <div class="menu-items row">
+        <button id="editor-delete" type="button" class="quiet danger" hidden>삭제</button>
+        <button id="editor-cancel" type="button" class="quiet">취소</button>
+        <button class="primary" type="submit">담기</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 몸 정보로 목표를 계산한다. 마음에 안 들면 숫자를 덮어쓴다. -->
+  <dialog id="goal" class="wide" aria-labelledby="goal-title">
+    <form id="goal-form">
+      <h2 id="goal-title">몸 정보와 목표</h2>
+      <div class="pair">
+        <div><label for="sex">성별</label>
+          <select id="sex"><option value="male">남</option><option value="female">여</option></select></div>
+        <div><label for="age">나이</label>
+          <input id="age" type="number" inputmode="numeric" step="1" min="10" max="100"></div>
+      </div>
+      <div class="pair">
+        <div><label for="height">키(cm)</label>
+          <input id="height" type="number" inputmode="numeric" step="1" min="120" max="230"></div>
+        <div><label for="weight">몸무게(kg)</label>
+          <input id="weight" type="number" inputmode="numeric" step="1" min="30" max="250"></div>
+      </div>
+      <label for="activity">활동량</label>
+      <select id="activity"></select>
+      <div class="pair">
+        <div><label for="aim">목표</label><select id="aim"></select></div>
+        <div><label for="split">식단</label><select id="split"></select></div>
+      </div>
+      <p id="auto-line" class="fine-print"></p>
+
+      <label class="check"><input id="manual" type="checkbox"> 목표를 직접 적기</label>
+      <div id="manual-fields" hidden>
+        <label for="goal-kcal">하루 칼로리(kcal)</label>
+        <input id="goal-kcal" type="number" inputmode="numeric" step="10" min="0">
+        <div class="triple">
+          <div><label for="goal-carb">탄수화물</label>
+            <input id="goal-carb" type="number" inputmode="numeric" step="1" min="0"></div>
+          <div><label for="goal-protein">단백질</label>
+            <input id="goal-protein" type="number" inputmode="numeric" step="1" min="0"></div>
+          <div><label for="goal-fat">지방</label>
+            <input id="goal-fat" type="number" inputmode="numeric" step="1" min="0"></div>
+        </div>
+      </div>
+      <p id="goal-error" class="error" role="alert"></p>
+      <div class="menu-items row">
+        <button id="goal-cancel" type="button" class="quiet">취소</button>
+        <button class="primary" type="submit">저장</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>

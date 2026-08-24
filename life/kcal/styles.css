@@ -1,0 +1,96 @@
+/* LIFE 의 ../styles.css 를 물려받고, 여기 필요한 것만 더한다.
+ * 색은 강조가 아니라 경고에만 쓴다 — 목표를 넘겼을 때만 --danger 가 나온다.
+ *
+ * 폭을 정하는 쪽은 언제나 화면이다(life/CLAUDE.md). grid·flex 자리에는 min-width: 0 을
+ * 못박아 긴 음식 이름 하나가 문서를 가로로 넓히지 못하게 한다. */
+body { overflow: auto; }
+.back { display: grid; place-items: center; width: 40px; height: 44px; flex: none;
+  color: var(--muted); font-size: 20px; text-decoration: none; }
+.bar { position: sticky; top: 0; z-index: 3; background: var(--bg); }
+.bar-title { font-size: 19px; font-weight: 700; letter-spacing: -.02em; }
+#goal-button { width: 44px; height: 44px; flex: none; font-size: 17px; color: var(--muted); }
+.fine-print { color: var(--muted); font-size: 12px; line-height: 1.6; }
+
+.daybar { position: sticky; top: var(--bar); z-index: 2; background: var(--bg);
+  display: flex; align-items: center; justify-content: center; gap: 4px; padding: 0 12px 6px; }
+.daybar button { width: 44px; height: 36px; color: var(--muted); font-size: 13px; }
+.daybar button:disabled { opacity: .3; }
+.day-label { flex: 1; min-width: 0; text-align: center; color: var(--muted); font-size: 12px;
+  font-variant-numeric: tabular-nums; }
+
+.sheet { padding: 0 18px 40px; }
+
+/* ── 오늘 얼마나 남았나 ─────────────────────────────────────────── */
+.hero { padding: 6px 0 4px; }
+.hero-label { margin: 0; color: var(--muted); font-size: 12px; }
+.hero-number { margin: 2px 0 2px; font-size: 46px; line-height: 1.1; font-weight: 700;
+  letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+.hero-number::after { content: " kcal"; font-size: 16px; font-weight: 400; letter-spacing: 0;
+  color: var(--muted); }
+.hero-number.over { color: var(--danger); }
+.hero-note { margin: 0 0 14px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+.macros { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; margin: 0 0 6px; }
+.macro { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; }
+.macro dt { color: var(--muted); font-size: 12px; }
+.macro dd { margin: 0; text-align: right; font-size: 13px; font-variant-numeric: tabular-nums; }
+.macro-goal { color: var(--muted); }
+.track { grid-column: 1 / -1; height: 6px; border-radius: 4px; background: var(--surface);
+  border: 1px solid var(--line); overflow: hidden; }
+.track-fill { height: 100%; width: 0; background: var(--ink); transition: width 160ms ease; }
+.macro.over .track-fill { background: var(--danger); }
+.macro.over dd { color: var(--danger); }
+
+/* ── 끼니 ───────────────────────────────────────────────────────── */
+.meals { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; margin-top: 20px; }
+.meal { min-width: 0; }
+.meal-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+  padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+.meal-name { font-size: 14px; font-weight: 700; }
+.meal-total { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.meal-items { list-style: none; margin: 0; padding: 0; }
+.meal-item { min-width: 0; border-bottom: 1px solid var(--line); }
+.meal-item-button, .result-button { display: flex; align-items: center; gap: 10px; width: 100%;
+  min-width: 0; min-height: 52px; padding: 6px 2px; text-align: left; }
+.meal-item-button:active, .result-button:active { background: var(--surface); }
+.item-body { flex: 1; min-width: 0; display: grid; }
+.item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.item-macros { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; }
+.item-kcal { flex: none; font-size: 15px; font-variant-numeric: tabular-nums; }
+.item-kcal::after { content: " kcal"; color: var(--muted); font-size: 11px; }
+.meal-add { width: 100%; min-height: 44px; margin-top: 4px; border-radius: 9px;
+  color: var(--muted); font-size: 13px; }
+.meal-add:active { background: var(--surface); }
+
+/* ── 고르기·담기 ───────────────────────────────────────────────── */
+dialog { width: auto; max-width: min(340px, calc(100vw - 32px)); }
+dialog.wide { max-width: min(420px, calc(100vw - 24px)); }
+@media (max-width: 520px) {
+  dialog, dialog.wide {
+    width: 100%; max-width: 100%; margin: auto 0 0; max-height: 88dvh; overflow-y: auto;
+    border-radius: 16px 16px 0 0; border-bottom: 0;
+    padding: 16px 16px max(16px, env(safe-area-inset-bottom));
+  }
+  .menu-items.row button { min-height: 52px; }
+}
+#picker-form, #editor-form, #goal-form, .results, .result { min-width: 0; max-width: 100%; }
+#search { width: 100%; height: 46px; border: 1px solid var(--line); border-radius: 9px;
+  background: var(--bg); color: var(--ink); padding: 0 12px; font: inherit; margin: 8px 0 4px; }
+.results { list-style: none; margin: 4px 0 0; padding: 0; max-height: 44dvh;
+  overflow-y: auto; overflow-x: hidden; }
+.result { border-bottom: 1px solid var(--line); }
+.result:last-child { border-bottom: 0; }
+
+#editor-form label, #goal-form label { display: block; margin: 10px 4px 4px;
+  color: var(--muted); font-size: 12px; }
+#editor-form select, #goal-form select { width: 100%; height: 46px; border: 1px solid var(--line);
+  border-radius: 9px; background: var(--bg); color: var(--ink); padding: 0 10px; font: inherit;
+  margin-bottom: 4px; }
+.pair, .triple { display: grid; gap: 8px; }
+.pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.triple { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.pair > div, .triple > div { min-width: 0; }
+.check { display: flex; align-items: center; gap: 8px; margin: 14px 4px 0; font-size: 13px; }
+.check input { width: 18px; height: 18px; margin: 0; accent-color: var(--ink); }
+#editor-total, #auto-line { margin: 10px 4px 0; }
