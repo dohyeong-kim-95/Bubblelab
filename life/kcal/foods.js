@@ -18,4 +18,5 @@ export const FOODS = [
   { name: "프로틴 드링크 퍼펙트 바나나", brand: "랩노쉬", unit: "350ml", kcal: 125, carb: 3, protein: 27, fat: 0.5 },
   { name: "프로틴 드링크 퍼펙트 초코", brand: "랩노쉬", unit: "350ml", kcal: 135, carb: 5, protein: 27, fat: 0.6 },
   { name: "프로틴 드링크 퍼펙트 쿠키앤크림", brand: "랩노쉬", unit: "350ml", kcal: 135, carb: 1, protein: 27, fat: 2.3 },
+  { name: "햄에그 샌드위치", brand: "삼성웰스토리", unit: "1개", kcal: 324, carb: 44, protein: 12, fat: 11 },
 ];
