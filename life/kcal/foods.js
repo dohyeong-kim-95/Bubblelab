@@ -13,6 +13,7 @@ export const FOODS = [
   { name: "갈배사이다 제로", brand: "해태", unit: "355ml", kcal: 0, carb: 0, protein: 0, fat: 0 },
   { name: "덴마크 드링킹 요구르트 딸기", brand: "동원", unit: "275ml", kcal: 220, carb: 28, protein: 9, fat: 8 },
   { name: "렌틸닭큐브 밸런스팩", brand: "삼성웰스토리", unit: "1팩", kcal: 349, carb: 37, protein: 35, fat: 7 },
+  { name: "아메리카노", unit: "1잔(355ml)", kcal: 10, carb: 2, protein: 1, fat: 0 },
   { name: "참치&바질 샌드위치", brand: "삼성웰스토리", unit: "1개", kcal: 411, carb: 40, protein: 16, fat: 21 },
   { name: "프로틴 드링크 퍼펙트 곡물", brand: "랩노쉬", unit: "350ml", kcal: 125, carb: 3, protein: 27, fat: 0.6 },
   { name: "프로틴 드링크 퍼펙트 바나나", brand: "랩노쉬", unit: "350ml", kcal: 125, carb: 3, protein: 27, fat: 0.5 },
