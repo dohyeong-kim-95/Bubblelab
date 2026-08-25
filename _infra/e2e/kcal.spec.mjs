@@ -184,17 +184,25 @@ test("칼로리 — 운동을 담으면 그만큼 더 먹을 수 있다", async 
   await page.locator("#goal-save").click();
   await expect(page.locator("#left-kcal")).toHaveText("2,000");
 
-  // 사이클 세 강도가 있고, 강도를 올리면 태우는 값이 커진다.
+  // 걷기·사이클 각각 세 강도가 있고, 강도를 올리면 태우는 값이 커진다.
   await page.locator("#workouts .meal-add").click();
-  await expect(page.locator("#exercise-list .result")).toHaveCount(3);
-  await expect(page.locator("#exercise-list .item-name")).toContainText([/가볍게/, /중간/, /열심히/]);
+  await expect(page.locator("#exercise-list .result")).toHaveCount(6);
+  await expect(page.locator("#exercise-list .item-name")).toContainText(
+    [/걷기 · 가볍게/, /걷기 · 중간/, /걷기 · 열심히/, /사이클 · 가볍게/, /사이클 · 중간/, /사이클 · 열심히/]);
   const shown = async () => (await page.locator("#exercise-list .item-kcal").allTextContents()).map(Number);
-  const [easy, mid, hard] = await shown();
-  expect(easy).toBeLessThan(mid);
-  expect(mid).toBeLessThan(hard);
+  const [walkEasy, walkMid, walkHard, cycleEasy, cycleMid, cycleHard] = await shown();
+  expect(walkEasy).toBeLessThan(walkMid);
+  expect(walkMid).toBeLessThan(walkHard);
+  expect(cycleEasy).toBeLessThan(cycleMid);
+  expect(cycleMid).toBeLessThan(cycleHard);
+  expect(walkMid, "같은 강도면 걷기가 사이클보다 덜 태운다").toBeLessThan(cycleMid);
+
+  // 처음 서 있는 자리는 걷기 · 중간이다. 3.5 MET × 3.5 × 78kg ÷ 200 × 30분 = 143
+  await expect(page.locator("#exercise-name")).toHaveValue("걷기 · 중간");
+  await expect(page.locator("#exercise-kcal")).toHaveValue("143");
 
   // 8 MET × 3.5 × 78kg ÷ 200 × 30분 = 328
-  await page.locator("#exercise-list .result-button").nth(1).click();
+  await page.locator("#exercise-list .result-button").nth(4).click();
   await expect(page.locator("#exercise-kcal")).toHaveValue("328");
   await expect(page.locator("#exercise-name")).toHaveValue("사이클 · 중간");
   await page.locator("#exercise-minutes").fill("60");

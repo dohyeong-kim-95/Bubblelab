@@ -139,6 +139,9 @@ export function normalizeGoal(goal, profile) {
 export const MET_FACTOR = 3.5 / 200;
 
 export const EXERCISES = [
+  { id: "walk-easy", name: "걷기", effort: "가볍게", met: 2.8, hint: "천천히 · 3–4km/h" },
+  { id: "walk-mid", name: "걷기", effort: "중간", met: 3.5, hint: "보통 · 5km/h" },
+  { id: "walk-hard", name: "걷기", effort: "열심히", met: 5, hint: "빠르게 · 6.5km/h" },
   { id: "cycle-easy", name: "사이클", effort: "가볍게", met: 4, hint: "여유롭게 · 16km/h 미만" },
   { id: "cycle-mid", name: "사이클", effort: "중간", met: 8, hint: "보통 · 16–19km/h" },
   { id: "cycle-hard", name: "사이클", effort: "열심히", met: 10, hint: "빠르게 · 19–22km/h" },

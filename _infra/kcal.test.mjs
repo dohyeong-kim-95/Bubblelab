@@ -9,7 +9,7 @@ const {
   EXERCISES, GRAM_MAX, KCAL_MAX, MEALS, addEntries, addEntry, addWorkout, autoGoal, bmr, burn,
   burned, byMeal, kstHour, mealNow,
   dayReport, editEntry, editWorkout, emptyProfile, emptyState, entriesOn, exerciseLabel,
-  frequentFoods, kcalFromMacros, kstDate, macrosFor, normalizeProfile, parseState, removeEntry,
+  findExercise, frequentFoods, kcalFromMacros, kstDate, macrosFor, normalizeProfile, parseState, removeEntry,
   removeWorkout, scaleFood, searchFoods, setGoal, setProfile, tdee, totals, useAutoGoal,
   validateEntry, validateWorkout, workoutsOn,
 } = await import("../life/kcal/store.js");
@@ -246,13 +246,24 @@ test("소모는 MET × 몸무게 × 시간으로 센다", () => {
   assert.equal(burn({ met: 0, minutes: 30, weight: 0 }), 0, "몸무게가 없으면 셀 수 없다");
 });
 
-test("사이클은 가볍게·중간·열심히 세 강도다", () => {
-  assert.deepEqual(EXERCISES.map((one) => one.effort), ["가볍게", "중간", "열심히"]);
-  assert.equal(EXERCISES.every((one) => one.name === "사이클"), true);
-  // 강도가 셀수록 MET 이 커야 한다 — 뒤집히면 화면이 거짓말을 한다.
-  const mets = EXERCISES.map((one) => one.met);
-  assert.deepEqual([...mets].sort((a, b) => a - b), mets);
-  assert.equal(exerciseLabel(EXERCISES[1]), "사이클 · 중간");
+test("운동은 종목마다 가볍게·중간·열심히 세 강도다", () => {
+  const names = [...new Set(EXERCISES.map((one) => one.name))];
+  assert.deepEqual(names, ["걷기", "사이클"]);
+  for (const name of names) {
+    const rows = EXERCISES.filter((one) => one.name === name);
+    assert.deepEqual(rows.map((one) => one.effort), ["가볍게", "중간", "열심히"], `${name} 의 강도`);
+    // 강도가 셀수록 MET 이 커야 한다 — 뒤집히면 화면이 거짓말을 한다.
+    const mets = rows.map((one) => one.met);
+    assert.deepEqual([...mets].sort((a, b) => a - b), mets, `${name} 의 MET 차례`);
+  }
+  // 같은 강도라면 걷기가 사이클보다 덜 태운다.
+  const met = (id) => findExercise(id).met;
+  assert.equal(met("walk-mid") < met("cycle-mid"), true);
+  assert.equal(exerciseLabel(findExercise("walk-mid")), "걷기 · 중간");
+  assert.equal(findExercise("없는것"), null);
+
+  // 78kg 이 걷기 중간(MET 3.5)으로 30분이면 143kcal.
+  assert.equal(burn({ met: met("walk-mid"), minutes: 30, weight: 78 }), 143);
 });
 
 test("태운 만큼 더 먹을 수 있다", () => {

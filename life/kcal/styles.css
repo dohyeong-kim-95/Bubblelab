@@ -120,6 +120,8 @@ dialog.wide { max-width: min(420px, calc(100vw - 24px)); }
  * 오르내리면 누르려던 자리가 매번 달라진다. */
 .results-box { height: 40dvh; margin: 4px 0 0; overflow-y: auto; overflow-x: hidden; }
 .results { list-style: none; margin: 0; padding: 0; }
+/* 운동 목록도 길어지면 아래 입력칸을 밀어낸다 — 여기서 스크롤되게 한다. */
+#exercise-list { max-height: 34dvh; overflow-y: auto; overflow-x: hidden; }
 .result { border-bottom: 1px solid var(--line); }
 .result:last-child { border-bottom: 0; }
 

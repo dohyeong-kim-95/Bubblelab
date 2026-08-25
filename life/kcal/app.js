@@ -1,6 +1,7 @@
 import {
   ACTIVITY, AIMS, EXERCISES, MEALS, SPLITS, addEntries, addEntry, addWorkout, autoGoal, bmr, burn,
-  dayReport, editEntry, editWorkout, emptyState, exerciseLabel, kstDate, macrosFor, mealNow,
+  dayReport, editEntry, editWorkout, emptyState, exerciseLabel, findExercise, kstDate, macrosFor,
+  mealNow,
   parseState, removeEntry, removeWorkout, scaleFood, searchFoods, setGoal, setProfile, shiftDate,
   tdee,
 } from "./store.js";
@@ -343,7 +344,8 @@ $("picker").addEventListener("close", () => { picked = new Map(); });
 /* ── 태운 것 ───────────────────────────────────────────────────── */
 function openExercise(workout = null) {
   editingWorkout = workout?.id ?? null;
-  draftExercise = workout ? null : EXERCISES[1];   // 새로 담을 때는 "중간" 부터
+  // 새로 담을 때 어디에 서 있을지. 목록이 길어져도 자리가 흔들리지 않게 id 로 집는다.
+  draftExercise = workout ? null : findExercise("walk-mid");
   manualBurn = Boolean(workout);
   $("exercise-title").textContent = workout ? "운동 고치기" : "운동 담기";
   $("exercise-minutes").value = String(workout?.minutes ?? 30);
