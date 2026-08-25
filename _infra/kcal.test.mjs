@@ -6,7 +6,8 @@ import { webcrypto } from "node:crypto";
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 const {
-  EXERCISES, GRAM_MAX, KCAL_MAX, MEALS, addEntries, addEntry, addWorkout, autoGoal, bmr, burn,
+  EFFORTS, EXERCISES, EXERCISE_NAMES, GRAM_MAX, KCAL_MAX, MEALS, addEntries, addEntry, addWorkout,
+  autoGoal, bmr, burn, findEffort,
   burned, byMeal, kstHour, mealNow,
   dayReport, editEntry, editWorkout, emptyProfile, emptyState, entriesOn, exerciseLabel,
   findExercise, frequentFoods, kcalFromMacros, kstDate, macrosFor, normalizeProfile, parseState, removeEntry,
@@ -261,6 +262,17 @@ test("운동은 종목마다 가볍게·중간·열심히 세 강도다", () => 
   assert.equal(met("walk-mid") < met("cycle-mid"), true);
   assert.equal(exerciseLabel(findExercise("walk-mid")), "걷기 · 중간");
   assert.equal(findExercise("없는것"), null);
+
+  // 화면은 종목만 늘어놓고 강도는 그 안에서 고른다 — 두 목록이 표와 어긋나면 안 된다.
+  assert.deepEqual(EXERCISE_NAMES, names);
+  assert.deepEqual(EFFORTS, ["가볍게", "중간", "열심히"]);
+  for (const name of EXERCISE_NAMES) {
+    for (const effort of EFFORTS) assert.equal(findEffort(name, effort)?.effort, effort, `${name} ${effort}`);
+  }
+  // 종목을 바꿔도 강도는 따라간다. 모르는 강도면 중간으로 떨어진다.
+  assert.equal(findEffort("사이클", "열심히").id, "cycle-hard");
+  assert.equal(findEffort("걷기", "없는강도").id, "walk-mid");
+  assert.equal(findEffort("없는종목", "중간"), null);
 
   // 78kg 이 걷기 중간(MET 3.5)으로 30분이면 143kcal.
   assert.equal(burn({ met: met("walk-mid"), minutes: 30, weight: 78 }), 143);

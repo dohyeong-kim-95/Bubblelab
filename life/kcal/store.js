@@ -147,7 +147,17 @@ export const EXERCISES = [
   { id: "cycle-hard", name: "사이클", effort: "열심히", met: 10, hint: "빠르게 · 19–22km/h" },
 ];
 
+/* 목록은 종목만 놓고, 강도는 그 안에서 고른다 — 종목이 늘 때마다 목록이 세 배로
+ * 길어지면 고르는 일이 스크롤이 된다. */
+export const EFFORTS = ["가볍게", "중간", "열심히"];
+export const EXERCISE_NAMES = [...new Set(EXERCISES.map((one) => one.name))];
+
 export const findExercise = (id) => EXERCISES.find((one) => one.id === id) ?? null;
+/** 종목과 강도로 집는다. 강도를 그대로 둔 채 종목만 바꾸는 것이 기본 동작이다. */
+export const findEffort = (name, effort) =>
+  EXERCISES.find((one) => one.name === name && one.effort === effort)
+  ?? EXERCISES.find((one) => one.name === name && one.effort === "중간")
+  ?? null;
 export const exerciseLabel = (exercise) =>
   (exercise?.effort ? `${exercise.name} · ${exercise.effort}` : exercise?.name ?? "");
 

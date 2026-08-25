@@ -1,7 +1,7 @@
 import {
-  ACTIVITY, AIMS, EXERCISES, MEALS, SPLITS, addEntries, addEntry, addWorkout, autoGoal, bmr, burn,
-  dayReport, editEntry, editWorkout, emptyState, exerciseLabel, findExercise, kstDate, macrosFor,
-  mealNow,
+  ACTIVITY, AIMS, EFFORTS, EXERCISE_NAMES, MEALS, SPLITS, addEntries, addEntry, addWorkout,
+  autoGoal, bmr, burn, dayReport, editEntry, editWorkout, emptyState, exerciseLabel, findEffort,
+  findExercise, kstDate, macrosFor, mealNow,
   parseState, removeEntry, removeWorkout, scaleFood, searchFoods, setGoal, setProfile, shiftDate,
   tdee,
 } from "./store.js";
@@ -359,28 +359,48 @@ function openExercise(workout = null) {
   $("exercise").showModal();
 }
 
+/* 목록에는 종목만 놓는다. 강도는 그 아래 셋 중에서 고른다 — 종목이 늘 때마다 목록이
+ * 세 배로 길어지면 고르는 일이 스크롤이 된다. 종목을 바꿔도 강도는 그대로 따라간다. */
 function renderExercises() {
-  $("exercise-list").replaceChildren(...EXERCISES.map((exercise) => {
+  const effort = draftExercise?.effort ?? "중간";
+  const shown = (exercise) => kcal(burn({
+    met: exercise.met, minutes: $("exercise-minutes").value, weight: state.profile.weight,
+  }));
+
+  $("exercise-list").replaceChildren(...EXERCISE_NAMES.map((name) => {
+    const exercise = findEffort(name, effort);
+    const on = draftExercise?.name === name;
     const item = node("li", "result");
-    const button = node("button", `result-button${draftExercise?.id === exercise.id ? " picked" : ""}`);
+    const button = node("button", `result-button${on ? " picked" : ""}`);
     button.type = "button";
+    button.setAttribute("aria-pressed", String(on));
     const body = node("span", "item-body");
-    body.append(
-      node("span", "item-name", exerciseLabel(exercise)),
-      node("span", "item-macros", exercise.hint),
-    );
-    button.append(body, node("span", "item-kcal",
-      `${kcal(burn({ met: exercise.met, minutes: $("exercise-minutes").value, weight: state.profile.weight }))}`));
-    button.addEventListener("click", () => {
-      draftExercise = exercise;
-      manualBurn = false;
-      $("exercise-name").value = exerciseLabel(exercise);
-      renderExercises();
-      recomputeBurn();
-    });
+    body.append(node("span", "item-name", name), node("span", "item-macros", exercise.hint));
+    button.append(body, node("span", "item-kcal", shown(exercise)));
+    button.addEventListener("click", () => pickExercise(exercise));
     item.append(button);
     return item;
   }));
+
+  $("effort-row").replaceChildren(...EFFORTS.map((label) => {
+    const on = draftExercise?.effort === label;
+    const button = node("button", `effort${on ? " on" : ""}`, label);
+    button.type = "button";
+    button.setAttribute("aria-pressed", String(on));
+    // 종목을 고르기 전(고치는 중)에도 자리는 그대로다 — 누르면 지금 종목의 그 강도가 된다.
+    button.addEventListener("click", () => {
+      pickExercise(findEffort(draftExercise?.name ?? EXERCISE_NAMES[0], label));
+    });
+    return button;
+  }));
+}
+
+function pickExercise(exercise) {
+  if (!exercise) return;
+  draftExercise = exercise;
+  manualBurn = false;
+  $("exercise-name").value = exerciseLabel(exercise);
+  recomputeBurn();
 }
 
 /** 강도와 시간이 바뀌면 다시 센다. 칼로리를 직접 고쳤으면 그 값을 존중한다. */

@@ -184,25 +184,36 @@ test("칼로리 — 운동을 담으면 그만큼 더 먹을 수 있다", async 
   await page.locator("#goal-save").click();
   await expect(page.locator("#left-kcal")).toHaveText("2,000");
 
-  // 걷기·사이클 각각 세 강도가 있고, 강도를 올리면 태우는 값이 커진다.
+  /* 목록에는 종목만 놓고, 강도는 그 아래 셋에서 고른다 — 종목이 늘 때마다 목록이
+   * 세 배로 길어지면 고르는 일이 스크롤이 된다. */
   await page.locator("#workouts .meal-add").click();
-  await expect(page.locator("#exercise-list .result")).toHaveCount(6);
-  await expect(page.locator("#exercise-list .item-name")).toContainText(
-    [/걷기 · 가볍게/, /걷기 · 중간/, /걷기 · 열심히/, /사이클 · 가볍게/, /사이클 · 중간/, /사이클 · 열심히/]);
-  const shown = async () => (await page.locator("#exercise-list .item-kcal").allTextContents()).map(Number);
-  const [walkEasy, walkMid, walkHard, cycleEasy, cycleMid, cycleHard] = await shown();
-  expect(walkEasy).toBeLessThan(walkMid);
-  expect(walkMid).toBeLessThan(walkHard);
-  expect(cycleEasy).toBeLessThan(cycleMid);
-  expect(cycleMid).toBeLessThan(cycleHard);
-  expect(walkMid, "같은 강도면 걷기가 사이클보다 덜 태운다").toBeLessThan(cycleMid);
+  await expect(page.locator("#exercise-list .result")).toHaveCount(2);
+  await expect(page.locator("#exercise-list .item-name")).toContainText([/^걷기$/, /^사이클$/]);
+  await expect(page.locator(".effort")).toHaveCount(3);
+  await expect(page.locator(".effort")).toContainText([/가볍게/, /중간/, /열심히/]);
 
   // 처음 서 있는 자리는 걷기 · 중간이다. 3.5 MET × 3.5 × 78kg ÷ 200 × 30분 = 143
   await expect(page.locator("#exercise-name")).toHaveValue("걷기 · 중간");
   await expect(page.locator("#exercise-kcal")).toHaveValue("143");
+  await expect(page.locator(".effort.on")).toHaveText("중간");
+  await expect(page.locator("#exercise-list .result-button.picked .item-name")).toHaveText("걷기");
 
-  // 8 MET × 3.5 × 78kg ÷ 200 × 30분 = 328
-  await page.locator("#exercise-list .result-button").nth(4).click();
+  // 강도를 올리면 태우는 값이 커지고, 목록에 보이는 값도 그 강도로 바뀐다.
+  const shown = async () => (await page.locator("#exercise-list .item-kcal").allTextContents()).map(Number);
+  const [walkMid, cycleMid] = await shown();
+  expect(walkMid, "같은 강도면 걷기가 사이클보다 덜 태운다").toBeLessThan(cycleMid);
+  await page.locator(".effort").filter({ hasText: "열심히" }).click();
+  await expect(page.locator("#exercise-name")).toHaveValue("걷기 · 열심히");
+  const [walkHard] = await shown();
+  expect(walkHard).toBeGreaterThan(walkMid);
+  await page.locator(".effort").filter({ hasText: "가볍게" }).click();
+  const [walkEasy] = await shown();
+  expect(walkEasy).toBeLessThan(walkMid);
+
+  // 종목을 바꿔도 고른 강도는 따라간다. 다시 중간으로 두면 8 MET × 3.5 × 78 ÷ 200 × 30 = 328
+  await page.locator("#exercise-list .result-button").nth(1).click();
+  await expect(page.locator("#exercise-name")).toHaveValue("사이클 · 가볍게");
+  await page.locator(".effort").filter({ hasText: "중간" }).click();
   await expect(page.locator("#exercise-kcal")).toHaveValue("328");
   await expect(page.locator("#exercise-name")).toHaveValue("사이클 · 중간");
   await page.locator("#exercise-minutes").fill("60");
