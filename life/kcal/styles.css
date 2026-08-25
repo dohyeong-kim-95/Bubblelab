@@ -66,10 +66,10 @@ body { overflow: auto; }
 .item-kcal::after { content: " kcal"; color: var(--muted); font-size: 11px; }
 /* 태운 것은 먹은 것과 부호가 반대라 밝기로 갈라 둔다. */
 .item-kcal.burn { color: var(--muted); }
-/* 고른 강도. 라디오 대신 줄 자체가 눌린 것으로 보인다 — 어두운 바탕에서는 배경만으로
- * 구분이 약해 왼쪽에 표시를 하나 세운다. */
-.result-button.picked { background: var(--surface); box-shadow: inset 3px 0 0 var(--ink);
-  padding-left: 9px; }
+/* 고른 줄. 배경과 굵기로만 갈라 둔다 — 안쪽 여백을 바꾸면 고를 때마다 글자가
+ * 가로로 밀린다. 왼쪽 막대는 네모 표시가 없는 운동 목록에만 세운다. */
+.result-button.picked { background: var(--surface); }
+#exercise-list .result-button.picked { box-shadow: inset 3px 0 0 var(--ink); padding-left: 9px; }
 /* 여러 개를 고를 수 있다는 말을 네모 하나가 대신한다. */
 .pick-box { flex: none; display: grid; place-items: center; width: 20px; height: 20px;
   border: 1px solid var(--line); border-radius: 6px; color: var(--bg); font-size: 12px; }
@@ -101,15 +101,25 @@ dialog.wide { max-width: min(420px, calc(100vw - 24px)); }
 .head-quiet { color: var(--muted); }
 .head-primary { background: var(--ink); color: var(--bg); font-weight: 700; }
 .head-primary:active { opacity: .85; }
-.menu-items.row button { min-width: 0; }   /* 버튼이 셋이면 글자가 자리를 넓히지 못하게 */
-/* 하나만 골랐을 때만 나오는 줄. 아래 버튼 줄을 넷으로 늘리지 않으려고 한 줄을 따로 준다. */
+/* 글자 길이가 칸 너비를 흔들지 못하게 셋을 똑같이 나눈다. */
+.menu-items.row { grid-auto-columns: minmax(0, 1fr); }
+.menu-items.row button { min-width: 0; }
+/* 하나만 골랐을 때 쓰는 줄. 사라지지 않고 흐려질 뿐이라 자리가 그대로다. */
 .line-button { width: 100%; min-height: 40px; margin-top: 6px; border-radius: 9px;
   color: var(--muted); font-size: 13px; }
-.line-button:active { background: var(--bg); }
+.line-button:active:not(:disabled) { background: var(--bg); }
+/* 할 수 없는 것은 사라지는 대신 흐려진다 — 자리가 흔들리지 않는 쪽이 덜 정신없다. */
+.line-button:disabled, .menu-items button:disabled, .head-button:disabled { opacity: .35; }
+/* 고른 개수를 말하는 한 줄. 글이 길어져도 두 줄이 되지 않게 한 줄로 자른다. */
+.picker-count { min-height: 20px; margin: 8px 2px 0; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+#picker-empty { margin: 8px 2px; }
 #search { width: 100%; height: 46px; border: 1px solid var(--line); border-radius: 9px;
   background: var(--bg); color: var(--ink); padding: 0 12px; font: inherit; margin: 8px 0 4px; }
-.results { list-style: none; margin: 4px 0 0; padding: 0; max-height: 44dvh;
-  overflow-y: auto; overflow-x: hidden; }
+/* 목록 칸의 높이는 결과 수와 상관없이 같다. 몇 개가 걸리느냐에 따라 아래 버튼이
+ * 오르내리면 누르려던 자리가 매번 달라진다. */
+.results-box { height: 40dvh; margin: 4px 0 0; overflow-y: auto; overflow-x: hidden; }
+.results { list-style: none; margin: 0; padding: 0; }
 .result { border-bottom: 1px solid var(--line); }
 .result:last-child { border-bottom: 0; }
 

@@ -224,15 +224,13 @@ function renderResults(query) {
 function showPicked() {
   const rows = [...picked.values()];
   const sum = rows.reduce((total, food) => total + food.kcal, 0);
-  $("picker-count").hidden = rows.length === 0;
+  /* 개수에 따라 자리를 바꾸지 않는다 — 버튼이 나타났다 사라지면 누르려던 자리가
+   * 매번 달라진다. 바뀌는 것은 이 한 줄의 글과 버튼이 눌리는지 여부뿐이다. */
   $("picker-count").textContent = rows.length
-    ? `${rows.length}개 고름 · ${kcal(sum)} kcal — 눌러서 빼고, 담기를 누르면 1${rows.length > 1 ? "개씩" : "개"} 담깁니다`
-    : "";
-  for (const id of ["picker-save", "picker-save-top"]) {
-    $(id).hidden = rows.length === 0;
-    $(id).textContent = rows.length > 1 ? `${rows.length}개 담기` : "담기";
-  }
-  $("picker-amount").hidden = rows.length !== 1;
+    ? `${rows.length}개 고름 · ${kcal(sum)} kcal · 1인분씩 담깁니다`
+    : "눌러서 고릅니다 · 여러 개를 한 번에 담을 수 있어요";
+  for (const id of ["picker-save", "picker-save-top"]) $(id).disabled = rows.length === 0;
+  $("picker-amount").disabled = rows.length !== 1;
 }
 
 function takePicked() {

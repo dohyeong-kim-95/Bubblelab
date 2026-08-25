@@ -139,11 +139,11 @@ test("칼로리 — 취소·담기가 팝업 위쪽에도 있다", async ({ page
   await openMeal(page, "점심");
   await page.locator(".meal").filter({ hasText: "점심" }).locator(".meal-add").click();
   await expect(page.locator("#picker-cancel-top")).toBeVisible();
-  // 고르기 전에는 위쪽 담기가 없다가, 하나 고르면 나타난다.
-  await expect(page.locator("#picker-save-top")).toBeHidden();
+  // 위쪽 담기는 늘 같은 자리에 있고, 고르기 전에는 눌리지 않을 뿐이다.
+  await expect(page.locator("#picker-save-top")).toBeDisabled();
   await page.locator("#search").fill("아메리카노");
   await page.locator(".result-button").first().click();
-  await expect(page.locator("#picker-save-top")).toBeVisible();
+  await expect(page.locator("#picker-save-top")).toBeEnabled();
   await page.locator("#picker-new").click();
   await page.locator("#editor-name").fill("위쪽 버튼으로 담기");
   await page.locator("#editor-kcal").fill("120");
@@ -240,17 +240,37 @@ test("칼로리 — 여러 개를 골라 한 번에 담고, 끼니는 접었다 
   await openMeal(page, "점심");
   await page.locator(".meal").filter({ hasText: "점심" }).locator(".meal-add").click();
 
+  /* 고른 개수가 0·1·2 로 바뀌어도 뼈대는 같아야 한다 — 버튼이 나타났다 사라지면
+   * 누르려던 자리가 매번 달라져 정신없다("담기" 자리를 재어 견준다). */
+  const box = async (id) => JSON.stringify(await page.locator(id).boundingBox());
+  const frame = async () => [await box("#picker-save"), await box("#picker-amount"),
+    await box("#picker-new"), await box("#picker-cancel"), await box("#picker-count")];
+  const none = await frame();
+  await expect(page.locator("#picker-save")).toBeDisabled();
+  await expect(page.locator("#picker-amount")).toBeDisabled();
+
   // 눌러서 고르고, 다시 눌러 뺀다. 찾기를 다시 해도 고른 것은 풀리지 않는다.
   await page.locator("#search").fill("아메리카노");
   await page.locator(".result-button").first().click();
   await expect(page.locator("#picker-count")).toContainText("1개 고름");
+  await expect(page.locator("#picker-save")).toBeEnabled();
+  await expect(page.locator("#picker-amount")).toBeEnabled();   // 하나면 양을 정하러 갈 수 있다
+  expect(await frame(), "하나 골랐다고 자리가 움직였다").toEqual(none);
+
   await page.locator("#search").fill("햄에그");
   await page.locator(".result-button").first().click();
   await expect(page.locator("#picker-count")).toContainText("2개 고름");
-  await expect(page.locator("#picker-save")).toHaveText("2개 담기");
-  await expect(page.locator("#picker-amount")).toBeHidden();   // 여러 개면 양을 따로 정하지 않는다
+  await expect(page.locator("#picker-amount")).toBeDisabled();  // 여럿이면 양을 따로 정하지 않는다
+  expect(await frame(), "여러 개 골랐다고 자리가 움직였다").toEqual(none);
+
+  // 찾은 것이 몇 개든 목록 칸의 높이는 같다.
+  await page.locator("#search").fill("없는음식이름");
+  await expect(page.locator("#picker-empty")).toBeVisible();
+  expect(await frame(), "결과가 없다고 버튼이 올라왔다").toEqual(none);
+  await page.locator("#search").fill("");
 
   // 뺐다가 다시 넣어도 수가 맞는다.
+  await page.locator("#search").fill("아메리카노");
   await page.locator(".result-button.picked").first().click();
   await expect(page.locator("#picker-count")).toContainText("1개 고름");
   await page.locator(".result-button").first().click();

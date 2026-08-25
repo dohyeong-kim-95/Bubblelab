@@ -57,19 +57,24 @@
       <div class="sheet-head">
         <h2 id="picker-title">먹은 것 담기</h2>
         <button id="picker-cancel-top" type="button" class="head-button head-quiet">취소</button>
-        <button id="picker-save-top" type="button" class="head-button head-primary" hidden>담기</button>
+        <button id="picker-save-top" type="button" class="head-button head-primary" disabled>담기</button>
       </div>
       <input id="search" type="search" placeholder="이름으로 찾기" aria-label="음식 찾기" autocomplete="off">
-      <ul id="results" class="results"></ul>
-      <p id="picker-empty" class="fine-print" hidden>찾는 것이 없으면 아래에서 직접 적으세요.
-        한 번 적어 두면 다음부터는 위 목록에 남습니다.</p>
-      <!-- 여러 개를 눌러 두고 한 번에 담는다. 고른 것이 몇 개인지 여기서 말해 준다. -->
-      <p id="picker-count" class="fine-print" hidden></p>
-      <button id="picker-amount" type="button" class="line-button" hidden>양·끼니를 정해서 담기</button>
+      <!-- 목록 칸의 높이를 고정한다. 검색 결과 수에 따라 아래 버튼이 오르내리면
+           누르려던 자리가 매번 달라진다. -->
+      <div class="results-box">
+        <ul id="results" class="results"></ul>
+        <p id="picker-empty" class="fine-print" hidden>찾는 것이 없으면 아래에서 직접 적으세요.
+          한 번 적어 두면 다음부터는 위 목록에 남습니다.</p>
+      </div>
+      <!-- 아래 셋은 고른 개수와 상관없이 늘 같은 자리에 있다. 할 수 없는 것은
+           사라지는 대신 흐려진다(0개면 담기, 2개 이상이면 양 정하기). -->
+      <p id="picker-count" class="fine-print picker-count"></p>
+      <button id="picker-amount" type="button" class="line-button" disabled>양·끼니를 정해서 담기</button>
       <div class="menu-items row">
         <button id="picker-cancel" type="button" class="quiet">취소</button>
         <button id="picker-new" type="button" class="quiet">직접 적기</button>
-        <button id="picker-save" type="button" class="primary" hidden>담기</button>
+        <button id="picker-save" type="button" class="primary" disabled>담기</button>
       </div>
     </form>
   </dialog>
