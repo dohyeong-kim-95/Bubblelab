@@ -75,10 +75,17 @@ body { overflow: auto; }
 .day-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
   color: var(--muted); font-size: 11px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
 .day-total { font-variant-numeric: tabular-nums; }
-.entry { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 46px;
-  padding: 0 2px; border-bottom: 1px solid var(--line); text-align: left; }
+.entry { display: flex; align-items: center; min-width: 0; border-bottom: 1px solid var(--line); }
 .entry:last-child { border-bottom: 0; }
-.entry:active { background: var(--surface); }
+.entry-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px;
+  min-height: 46px; padding: 0 2px; text-align: left; }
+.entry-main:active { background: var(--surface); }
+/* 합계에서 뺀 것. 목록에는 남기고 돈만 빼므로, 지워진 것과 헷갈리지 않게 줄을 긋는다. */
+.entry-skip { flex: none; min-width: 46px; min-height: 44px; padding: 0 6px;
+  color: var(--muted); font-size: 11px; }
+.entry.skipped .entry-memo, .entry.skipped .entry-amount { color: var(--muted);
+  text-decoration: line-through; }
+.entry.skipped .entry-skip { color: var(--ink); text-decoration: underline; }
 .entry-memo { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-size: 14px; }
 .entry-memo.blank { color: var(--muted); }

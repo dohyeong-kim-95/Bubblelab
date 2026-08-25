@@ -41,8 +41,19 @@ export function splitMessages(text) {
     .filter(Boolean);
 }
 
+/* 은행 문자의 금액은 "원" 없이 적히기도 한다: "출금100,000 잔액900,000원".
+ * 그래서 이런 문자에서는 **출금·이체·송금 뒤에 붙은 숫자**를 금액으로 본다 — 원이 붙은
+ * 유일한 숫자가 잔액이라, 그것만 보면 금액을 못 찾거나 잔액을 담게 된다. */
+const MOVED_AMOUNT = /(출금|이체|송금)\s*:?\s*([0-9][0-9,]*)/;
+const DEPOSIT = /(입금|환급|이자)\s*:?\s*[0-9]/;
+
 /** 결제액. 누적·잔액처럼 뒤따라오는 다른 금액에 속지 않는다. */
 function findAmount(message) {
+  const moved = message.match(MOVED_AMOUNT);
+  if (moved) {
+    const amount = Number(moved[2].replace(/,/g, ""));
+    if (Number.isFinite(amount) && amount > 0) return { amount, index: moved.index };
+  }
   for (const match of message.matchAll(/([0-9][0-9,]*)\s*원/g)) {
     const before = message.slice(0, match.index).split("\n").pop();
     if (NOT_SPENDING.test(before)) continue;
@@ -88,10 +99,15 @@ const NOT_MERCHANT = [
   // 이름은 대개 가운데를 가린다(김*형, 홍*동).
   /[가-힣]\*+[가-힣]*(님|귀하)?/g,
   /\d{2,4}-\d{3,4}-\d{4}/g,
+  // 은행 문자: 계좌 마스킹(900330**4)·출금/이체 같은 동사·꺾쇠 표기.
+  /\d{3,}\*+\d*/g,
+  // 앞에 한글이 붙은 것은 지우지 않는다 — "자동이체" 는 통신요금 결제의 일부다.
+  /(?<![가-힣])(출금|입금|이체|송금|잔액|거래)\s*:?\s*[0-9,]*/g,
 ];
 
 function scrub(value) {
-  let text = String(value ?? "");
+  // 꺾쇠는 지우되 안의 이름은 남긴다 — <새마을금고> 의 은행 이름이 곧 단서다.
+  let text = String(value ?? "").replace(/[<>]/g, " ");
   for (const pattern of NOT_MERCHANT) text = text.replace(pattern, " ");
   // 괄호는 깎지 않는다 — "(주)나인투원" 처럼 상호의 일부다. 빈 짝만 걷어낸다.
   return trim(text.replace(/\(\s*\)/g, ""))
@@ -127,6 +143,7 @@ export function parseMessage(raw, today = kstDate()) {
   if (!message) return { raw, reason: "빈 문자" };
   if (NOT_PAYMENT.test(message)) return { raw, reason: "결제 문자가 아님" };
   if (CARD_BILL.test(message)) return { raw, reason: "카드 대금 납부 — 쓴 돈이 아님" };
+  if (DEPOSIT.test(message) && !MOVED_AMOUNT.test(message)) return { raw, reason: "입금 — 쓴 돈이 아님" };
   if (FOREIGN.test(message)) return { raw, reason: "원화 결제가 아님 — 직접 적어주세요" };
 
   const found = findAmount(message);
@@ -171,7 +188,8 @@ const ATTR = (name) => new RegExp(`\\b${name}="([^"]*)"`);
 const ENTITIES = { "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&apos;": "'" };
 export const SMS_FILE_MAX = 20_000;   // 한 번에 훑는 문자 수 상한(최근 것부터 센다)
 // 금액이 없는 문자는 결제일 수 없다. 백업 파일에는 잡문자가 훨씬 많아서 먼저 걸러낸다.
-const HAS_AMOUNT = /[0-9][0-9,]*\s*원/;
+// 은행 문자는 "출금100,000" 처럼 원 없이 적기도 한다(실기기에서 이것 때문에 통째로 빠졌다).
+const HAS_AMOUNT = /[0-9][0-9,]*\s*원|(출금|이체|송금|입금)\s*[0-9]/;
 
 const unescapeXml = (value) => value
   .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))

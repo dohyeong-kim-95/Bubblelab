@@ -1,6 +1,7 @@
 import {
   addEntry, cycleLabel, cycleOf, editEntry, emptyState, entriesIn, groupByDay, inCycle,
-  kstDate, pace, parseState, removeEntry, setLimit, setStartDay, shiftDate, shortWon, won,
+  kstDate, pace, parseState, removeEntry, setLimit, setStartDay, shiftDate, shortWon,
+  toggleSkip, won,
 } from "./store.js";
 import { parseBackupOrText, seenSigs } from "./sms.js";
 
@@ -122,13 +123,25 @@ function renderEntries(cycle) {
 }
 
 function entryRow(entry) {
-  const row = node("button", "entry");
-  row.type = "button";
-  const memo = node("span", `entry-memo${entry.memo ? "" : " blank"}`, entry.memo || "메모 없음");
-  const amount = node("span", `entry-amount${entry.amount < 0 ? " refund" : ""}`,
-    entry.amount < 0 ? `+${won(-entry.amount)}` : won(entry.amount));
-  row.append(memo, amount);
-  row.addEventListener("click", () => openEditor(entry));
+  const row = node("div", `entry${entry.skip ? " skipped" : ""}`);
+  const main = node("button", "entry-main");
+  main.type = "button";
+  main.append(
+    node("span", `entry-memo${entry.memo ? "" : " blank"}`, entry.memo || "메모 없음"),
+    node("span", `entry-amount${entry.amount < 0 ? " refund" : ""}`,
+      entry.amount < 0 ? `+${won(-entry.amount)}` : won(entry.amount)),
+  );
+  main.addEventListener("click", () => openEditor(entry));
+
+  /* 담아는 두되 합계에서 빼는 자리. 즉시결제로 빠져나간 카드값처럼 "쓴 돈이 아닌" 것을
+   * 지우지 않고 빼 둔다 — 지우면 다음 백업에서 또 담긴다. 한 번 눌러 되돌린다. */
+  const skip = node("button", "entry-skip", entry.skip ? "되돌리기" : "제외");
+  skip.type = "button";
+  skip.setAttribute("aria-label",
+    `${entry.memo || "이 항목"} ${entry.skip ? "다시 합계에 넣기" : "합계에서 빼기"}`);
+  skip.addEventListener("click", () => update(toggleSkip(state, entry.id)));
+
+  row.append(main, skip);
   return row;
 }
 

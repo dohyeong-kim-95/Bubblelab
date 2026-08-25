@@ -109,6 +109,9 @@ export function normalizeEntry(entry) {
     at: typeof entry?.at === "string" ? entry.at : new Date().toISOString(),
     // 카드 문자에서 온 것만 갖는 표식. 같은 문자를 두 번 담지 않으려고 둔다(sms.js).
     ...(typeof entry?.sig === "string" && entry.sig ? { sig: entry.sig.slice(0, 40) } : {}),
+    // 담아는 두되 합계에서 빼는 것. 즉시결제로 빠져나간 카드값처럼 "쓴 돈이 아닌" 것을
+    // 지우지 않고 남겨 둘 수 있어야 한다 — 지우면 다음 백업에서 또 담긴다.
+    ...(entry?.skip ? { skip: true } : {}),
   };
 }
 
@@ -159,7 +162,20 @@ export const setStartDay = (state, value) => ({ ...state, startDay: normalizeSta
 
 /* ── 세기 ─────────────────────────────────────────────────────────── */
 
-export const totalOf = (entries) => entries.reduce((sum, entry) => sum + entry.amount, 0);
+/** 합계. 계산에서 뺀 것(skip)은 세지 않는다 — 목록에는 남아 있어도 돈은 아니다. */
+export const totalOf = (entries) =>
+  entries.reduce((sum, entry) => (entry.skip ? sum : sum + entry.amount), 0);
+
+/** 계산에 넣었다 뺐다 한다. 목록에서 한 번 눌러 바꾼다. */
+export function toggleSkip(state, id) {
+  const found = state.entries.find((entry) => entry.id === id);
+  if (!found) throw new Error("그런 항목이 없습니다");
+  return {
+    ...state,
+    entries: state.entries.map((entry) =>
+      (entry.id === id ? normalizeEntry({ ...entry, skip: !entry.skip }) : entry)),
+  };
+}
 
 /** 주기 안의 항목. 최근 날짜가 위, 같은 날이면 나중에 적은 것이 위로. */
 export function entriesIn(state, cycle) {

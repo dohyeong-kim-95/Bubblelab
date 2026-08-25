@@ -211,3 +211,36 @@ test("가계부 — 긴 가맹점 이름이 있어도 가로로 넘치지 않는
   expect(save.x + save.width, "담기 버튼이 화면 밖에 있다").toBeLessThanOrEqual(viewport + 1);
   await expect(page.locator("#sms-save")).toBeVisible();
 });
+
+test("가계부 — 담은 것을 지우지 않고 합계에서만 뺀다", async ({ page }) => {
+  /* 즉시결제로 빠져나간 카드값처럼 "쓴 돈이 아닌" 것이 담길 때가 있다. 지우면 다음
+   * 백업에서 또 담기므로, 목록에 남겨 둔 채 합계에서만 뺀다. */
+  await page.goto("/life/budget/");
+  // 날짜를 박아 두면 주기를 찾아가야 한다 — 오늘로 심어 지금 보는 주기에 두 건이 있게 한다.
+  await page.evaluate(() => {
+    const today = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(new Date());
+    localStorage.setItem("bl_budget_v1", JSON.stringify({
+      v: 1, limit: 1000000, startDay: 1,
+      entries: [
+        { id: "a", amount: 12000, memo: "국밥", on: today, at: `${today}T03:00:00Z` },
+        { id: "b", amount: 500000, memo: "카드값 출금", on: today, at: `${today}T04:00:00Z` },
+      ],
+    }));
+  });
+  await page.reload();
+  await expect(page.locator(".entry")).toHaveCount(2);
+  await expect(page.locator("#fact-spent")).toHaveText("512,000원");
+
+  await page.locator(".entry").filter({ hasText: "카드값 출금" }).locator(".entry-skip").click();
+  await expect(page.locator("#fact-spent")).toHaveText("12,000원");
+  await expect(page.locator(".entry")).toHaveCount(2);          // 목록에는 남는다
+  await expect(page.locator(".entry.skipped")).toHaveCount(1);
+
+  // 새로고침해도 뺀 상태가 남고, 한 번 더 누르면 되돌아온다.
+  await page.reload();
+  await expect(page.locator("#fact-spent")).toHaveText("12,000원");
+  await page.locator(".entry.skipped .entry-skip").click();
+  await expect(page.locator("#fact-spent")).toHaveText("512,000원");
+});

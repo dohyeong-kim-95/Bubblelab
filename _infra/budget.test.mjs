@@ -8,7 +8,7 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto;
 const {
   DEFAULT_LIMIT, addEntry, cycleLabel, cycleOf, editEntry, emptyState, entriesIn, groupByDay,
   inCycle, kstDate, nextCycle, pace, parseState, previousCycle, removeEntry, setLimit,
-  setStartDay, shortWon, totalOf, validateEntry, won,
+  setStartDay, shortWon, toggleSkip, totalOf, validateEntry, won,
 } = await import("../life/budget/store.js");
 
 // 같은 날 여러 번 적을 수 있으므로 적은 시각을 부를 때마다 1분씩 뒤로 민다.
@@ -172,6 +172,32 @@ test("한도와 시작일을 바꿔도 적어 둔 것은 그대로다 — 주기
   assert.equal(totalOf(entriesIn(state, cycle)), 0, "8/10 은 이제 지난 주기에 속한다");
   assert.equal(totalOf(entriesIn(state, cycleOf("2026-08-10", state.startDay))), 300000);
   assert.throws(() => setLimit(state, -1), /한도/);
+});
+
+test("담아는 두되 합계에서 뺀다 — 지우면 다음 백업에서 또 담긴다", () => {
+  let state = spend(spend(emptyState(), "2026-08-10", 12000, "국밥"), "2026-08-11", 500000, "카드값 출금");
+  const [, bill] = state.entries;
+  assert.equal(totalOf(entriesIn(state, cycleOf("2026-08-15"))), 512000);
+
+  state = toggleSkip(state, bill.id);
+  assert.equal(state.entries[1].skip, true);
+  assert.equal(totalOf(entriesIn(state, cycleOf("2026-08-15"))), 12000, "뺀 것은 세지 않는다");
+  assert.equal(entriesIn(state, cycleOf("2026-08-15")).length, 2, "목록에는 남는다");
+  assert.equal(pace(state, cycleOf("2026-08-15"), "2026-08-15").spent, 12000);
+  assert.equal(groupByDay(entriesIn(state, cycleOf("2026-08-15")))[0].total, 0, "그날 합계에서도 빠진다");
+
+  state = toggleSkip(state, bill.id);
+  assert.equal(state.entries[1].skip, undefined, "되돌리면 표식이 사라진다");
+  assert.equal(totalOf(entriesIn(state, cycleOf("2026-08-15"))), 512000);
+  assert.throws(() => toggleSkip(state, "없는id"), /없습니다/);
+});
+
+test("합계에서 뺀 표식은 저장본에도 남는다", () => {
+  let state = spend(emptyState(), "2026-08-10", 12000, "국밥");
+  state = toggleSkip(state, state.entries[0].id);
+  const parsed = parseState(JSON.stringify(state));
+  assert.equal(parsed.entries[0].skip, true);
+  assert.equal(totalOf(entriesIn(parsed, cycleOf("2026-08-15"))), 0);
 });
 
 test("고치고 지우는 것은 id 로만 한다", () => {
