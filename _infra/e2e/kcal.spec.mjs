@@ -1,5 +1,13 @@
 import { expect, test } from "@playwright/test";
 
+/* 끼니 칸은 지금 시각의 것만 펴져 있다(점심때면 점심). 다른 칸을 보려면 머리줄을 눌러 편다 —
+ * 테스트가 몇 시에 돌든 같은 자리를 보게 하는 장치다. */
+async function openMeal(page, name) {
+  const head = page.locator(".meal").filter({ hasText: name }).locator(".meal-head").first();
+  if (await head.getAttribute("aria-expanded") === "false") await head.click();
+  await expect(head).toHaveAttribute("aria-expanded", "true");
+}
+
 test("칼로리 — 목표를 정하고 먹은 것을 담으면 남은 것이 줄어든다", async ({ page }) => {
   const failures = [];
   page.on("pageerror", (error) => failures.push(error.message));
@@ -23,11 +31,13 @@ test("칼로리 — 목표를 정하고 먹은 것을 담으면 남은 것이 �
   await expect(page.locator("#left-kcal")).toHaveText("2,000");
   await expect(page.locator("#eaten-line")).toContainText("0 / 2,000 kcal");
 
-  // 리포의 음식표에서 골라 담는다.
+  // 리포의 음식표에서 골라 담는다. 하나만 골랐으면 양을 정하러 갈 수 있다.
+  await openMeal(page, "점심");
   await page.locator(".meal").filter({ hasText: "점심" }).locator(".meal-add").click();
   await page.locator("#search").fill("랩노쉬");
   await expect(page.locator(".result")).not.toHaveCount(0);
   await page.locator(".result-button").first().click();
+  await page.locator("#picker-amount").click();
   await expect(page.locator("#editor-total")).toContainText("kcal");
   await page.locator("#editor-save").click();
 
@@ -36,6 +46,7 @@ test("칼로리 — 목표를 정하고 먹은 것을 담으면 남은 것이 �
   await expect(page.locator("#macro-protein .macro-grams")).toHaveText("27g");
 
   // 없는 음식은 직접 적는다. 수량을 곱해 담긴다.
+  await openMeal(page, "저녁");
   await page.locator(".meal").filter({ hasText: "저녁" }).locator(".meal-add").click();
   await page.locator("#search").fill("집 김치찌개");
   await page.locator("#picker-new").click();
@@ -50,6 +61,7 @@ test("칼로리 — 목표를 정하고 먹은 것을 담으면 남은 것이 �
   await expect(page.locator("#left-kcal")).toHaveText("1,395");
 
   // 한 번 적은 것은 다음부터 목록에 남는다 — 즐겨찾기를 따로 만들지 않는다.
+  await openMeal(page, "아침");
   await page.locator(".meal").filter({ hasText: "아침" }).locator(".meal-add").click();
   await expect(page.locator(".result")).toContainText([/집 김치찌개/]);
   await page.locator("#picker-cancel").click();
@@ -69,8 +81,9 @@ test("칼로리 — 목표를 정하고 먹은 것을 담으면 남은 것이 �
   await expect(page.locator(".meal-item")).toHaveCount(0);
   await expect(page.locator("#left-kcal")).toHaveText("2,000");
 
-  // 새로고침해도 남아 있다.
+  // 새로고침해도 남아 있다(칸은 다시 접히므로 저녁을 펴서 본다).
   await page.reload();
+  await openMeal(page, "저녁");
   await expect(page.locator(".meal-item")).toHaveCount(1);
   await expect(page.locator("#left-kcal")).toHaveText("1,520");   // 2000 - 480
 
@@ -96,7 +109,8 @@ test("칼로리 — 소수를 넣어도 저장이 막히지 않는다", async ({
   expect(profile.height).toBe(177);
 
   // 담기 쪽도 같은 함정이 있었다.
-  await page.locator(".meal").first().locator(".meal-add").click();
+  await openMeal(page, "아침");
+  await page.locator(".meal").filter({ hasText: "아침" }).locator(".meal-add").click();
   await page.locator("#picker-new").click();
   await page.locator("#editor-name").fill("반 공기");
   await page.locator("#editor-kcal").fill("155.5");
@@ -107,7 +121,7 @@ test("칼로리 — 소수를 넣어도 저장이 막히지 않는다", async ({
   await expect(page.locator(".meal-item .item-kcal")).toHaveText("117");   // 155.5 × 0.75 ("kcal" 은 CSS 로 붙인다)
 
   // 이름을 비우면 브라우저가 아니라 화면이 이유를 말한다.
-  await page.locator(".meal").first().locator(".meal-add").click();
+  await page.locator(".meal").filter({ hasText: "아침" }).locator(".meal-add").click();
   await page.locator("#picker-new").click();
   await page.locator("#editor-name").fill(" ");
   await page.locator("#editor-kcal").fill("100");
@@ -122,9 +136,15 @@ test("칼로리 — 취소·담기가 팝업 위쪽에도 있다", async ({ page
   await page.evaluate(() => localStorage.removeItem("bl_kcal_v1"));
   await page.reload();
 
+  await openMeal(page, "점심");
   await page.locator(".meal").filter({ hasText: "점심" }).locator(".meal-add").click();
   await expect(page.locator("#picker-cancel-top")).toBeVisible();
-  await page.locator("#picker-new-top").click();
+  // 고르기 전에는 위쪽 담기가 없다가, 하나 고르면 나타난다.
+  await expect(page.locator("#picker-save-top")).toBeHidden();
+  await page.locator("#search").fill("아메리카노");
+  await page.locator(".result-button").first().click();
+  await expect(page.locator("#picker-save-top")).toBeVisible();
+  await page.locator("#picker-new").click();
   await page.locator("#editor-name").fill("위쪽 버튼으로 담기");
   await page.locator("#editor-kcal").fill("120");
   await page.locator("#editor-save-top").click();
@@ -199,4 +219,59 @@ test("칼로리 — 운동을 담으면 그만큼 더 먹을 수 있다", async 
   await page.locator("#exercise-delete").click();
   await expect(page.locator("#workouts .meal-item")).toHaveCount(0);
   await expect(page.locator("#left-kcal")).toHaveText("2,000");
+});
+
+test("칼로리 — 여러 개를 골라 한 번에 담고, 끼니는 접었다 편다", async ({ page }) => {
+  const failures = [];
+  page.on("pageerror", (error) => failures.push(error.message));
+
+  await page.goto("/life/kcal/");
+  await page.evaluate(() => localStorage.removeItem("bl_kcal_v1"));
+  await page.reload();
+
+  // 지금 시각의 끼니 하나만 펴져 있다 — 네 칸을 다 펴 두면 적을 자리를 찾아 내려가야 한다.
+  await expect(page.locator(".meal-head[aria-expanded='true']")).toHaveCount(1);
+
+  await page.locator("#goal-button").click();
+  await page.locator("#manual").check();
+  await page.locator("#goal-kcal").fill("2000");
+  await page.locator("#goal-save").click();
+
+  await openMeal(page, "점심");
+  await page.locator(".meal").filter({ hasText: "점심" }).locator(".meal-add").click();
+
+  // 눌러서 고르고, 다시 눌러 뺀다. 찾기를 다시 해도 고른 것은 풀리지 않는다.
+  await page.locator("#search").fill("아메리카노");
+  await page.locator(".result-button").first().click();
+  await expect(page.locator("#picker-count")).toContainText("1개 고름");
+  await page.locator("#search").fill("햄에그");
+  await page.locator(".result-button").first().click();
+  await expect(page.locator("#picker-count")).toContainText("2개 고름");
+  await expect(page.locator("#picker-save")).toHaveText("2개 담기");
+  await expect(page.locator("#picker-amount")).toBeHidden();   // 여러 개면 양을 따로 정하지 않는다
+
+  // 뺐다가 다시 넣어도 수가 맞는다.
+  await page.locator(".result-button.picked").first().click();
+  await expect(page.locator("#picker-count")).toContainText("1개 고름");
+  await page.locator(".result-button").first().click();
+  await expect(page.locator("#picker-count")).toContainText("2개 고름");
+
+  await page.locator("#picker-save").click();
+  await expect(page.locator("#picker")).toBeHidden();
+  await expect(page.locator(".meal").filter({ hasText: "점심" }).locator(".meal-item")).toHaveCount(2);
+  await expect(page.locator("#left-kcal")).toHaveText("1,666");   // 2000 − (324 + 10)
+
+  // 접으면 줄은 사라지지만 몇 개·몇 kcal 인지는 머리줄에 남는다.
+  const lunch = page.locator(".meal").filter({ hasText: "점심" });
+  await lunch.locator(".meal-head").click();
+  await expect(lunch.locator(".meal-item")).toHaveCount(0);
+  await expect(lunch.locator(".meal-total")).toContainText("2개");
+  await expect(lunch.locator(".meal-total")).toContainText("334 kcal");
+  await expect(page.locator("#left-kcal")).toHaveText("1,666");   // 접어도 합계는 그대로다
+
+  await lunch.locator(".meal-head").click();
+  await expect(lunch.locator(".meal-item")).toHaveCount(2);
+
+  expect(failures).toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 });

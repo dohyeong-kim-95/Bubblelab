@@ -1,7 +1,8 @@
 import {
-  ACTIVITY, AIMS, EXERCISES, MEALS, SPLITS, addEntry, addWorkout, autoGoal, bmr, burn, dayReport,
-  editEntry, editWorkout, emptyState, exerciseLabel, findExercise, kstDate, macrosFor, parseState,
-  removeEntry, removeWorkout, scaleFood, searchFoods, setGoal, setProfile, shiftDate, tdee,
+  ACTIVITY, AIMS, EXERCISES, MEALS, SPLITS, addEntries, addEntry, addWorkout, autoGoal, bmr, burn,
+  dayReport, editEntry, editWorkout, emptyState, exerciseLabel, kstDate, macrosFor, mealNow,
+  parseState, removeEntry, removeWorkout, scaleFood, searchFoods, setGoal, setProfile, shiftDate,
+  tdee,
 } from "./store.js";
 import { FOODS } from "./foods.js";
 
@@ -14,6 +15,9 @@ let day = kstDate();
 let editing = null;      // 고치는 중인 기록의 id. 새로 담는 중이면 null
 let draftMeal = null;    // 어느 끼니에 담는 중인가
 let draftBrand = "";     // 고른 제품의 회사(입력칸은 없고 따라만 간다)
+let picked = new Map();  // 고르는 화면에서 눌러 둔 것들 — 한 번에 담는다
+/* 지금 끼니만 펴 둔다. 네 칸을 다 펴 두면 적을 자리를 매번 찾아 내려가야 한다. */
+let openMeals = new Set([mealNow()]);
 let editingWorkout = null;
 let draftExercise = null;   // 고른 강도. 시간이 바뀌면 여기서 다시 계산한다
 let manualBurn = false;     // 칼로리를 직접 고쳤으면 다시 계산하지 않는다
@@ -117,18 +121,35 @@ function renderMacro(key, report, label) {
 function renderMeals(report) {
   $("meals").replaceChildren(...report.meals.map(({ meal, items, total }) => {
     const section = node("section", "meal");
-    const head = node("div", "meal-head");
-    head.append(
-      node("span", "meal-name", meal),
-      node("span", "meal-total", total.kcal ? `${kcal(total.kcal)} kcal` : ""),
-    );
-    const list = node("ul", "meal-items");
-    list.append(...items.map((entry) => entryRow(entry)));
+    const open = openMeals.has(meal);
 
-    const add = node("button", "meal-add", "＋ 담기");
-    add.type = "button";
-    add.addEventListener("click", () => openPicker(meal));
-    section.append(head, list, add);
+    /* 머리줄이 곧 여닫는 버튼이다. 접었을 때도 몇 개·몇 kcal 인지는 남겨 둔다 —
+     * 접힌 칸이 빈 칸처럼 보이면 안 적은 줄 알고 두 번 담게 된다. */
+    const head = node("button", `meal-head${open ? " open" : ""}`);
+    head.type = "button";
+    head.setAttribute("aria-expanded", String(open));
+    head.append(
+      node("span", "meal-caret", open ? "▾" : "▸"),
+      node("span", "meal-name", meal),
+      node("span", "meal-total", [
+        !open && items.length ? `${items.length}개` : "",
+        total.kcal ? `${kcal(total.kcal)} kcal` : "",
+      ].filter(Boolean).join(" · ")),
+    );
+    head.addEventListener("click", () => {
+      if (open) openMeals.delete(meal); else openMeals.add(meal);
+      render();
+    });
+    section.append(head);
+
+    if (open) {
+      const list = node("ul", "meal-items");
+      list.append(...items.map((entry) => entryRow(entry)));
+      const add = node("button", "meal-add", "＋ 담기");
+      add.type = "button";
+      add.addEventListener("click", () => openPicker(meal));
+      section.append(list, add);
+    }
     return section;
   }));
 }
@@ -159,18 +180,26 @@ $("next-day").addEventListener("click", () => {
 /* ── 무엇을 먹었나 고르기 ──────────────────────────────────────── */
 function openPicker(meal) {
   draftMeal = meal;
+  picked = new Map();
   $("search").value = "";
   renderResults("");
   $("picker").showModal();
 }
+
+/** 같은 이름·회사면 같은 것으로 본다 — 찾기를 다시 해도 눌러 둔 것이 풀리지 않게. */
+const foodKey = (food) => `${food.name}|${food.brand ?? ""}`;
 
 function renderResults(query) {
   const found = searchFoods(query, { foods: FOODS, state }).slice(0, 20);
   $("picker-empty").hidden = found.length > 0;
   $("results").replaceChildren(...found.map((food) => {
     const item = node("li", "result");
-    const button = node("button", "result-button");
+    const on = picked.has(foodKey(food));
+    const button = node("button", `result-button${on ? " picked" : ""}`);
     button.type = "button";
+    button.setAttribute("aria-pressed", String(on));
+    // 네모 하나가 "여러 개를 고를 수 있다" 는 말을 대신한다.
+    button.append(node("span", "pick-box", on ? "✓" : ""));
     const body = node("span", "item-body");
     body.append(
       node("span", "item-name", food.name),
@@ -180,18 +209,54 @@ function renderResults(query) {
     );
     button.append(body, node("span", "item-kcal", `${kcal(food.kcal)}`));
     button.addEventListener("click", () => {
-      $("picker").close();
-      openEditor({ ...scaleFood(food, 1), meal: draftMeal });
+      const key = foodKey(food);
+      if (picked.has(key)) picked.delete(key); else picked.set(key, food);
+      renderResults($("search").value);
     });
     item.append(button);
     return item;
   }));
+  showPicked();
+}
+
+/* 고른 것이 몇 개이고 합이 얼마인지. 하나만 골랐으면 양을 정하러 갈 수도 있다
+ * (여러 개는 1인분으로 담고, 다르면 담긴 줄을 눌러 고친다). */
+function showPicked() {
+  const rows = [...picked.values()];
+  const sum = rows.reduce((total, food) => total + food.kcal, 0);
+  $("picker-count").hidden = rows.length === 0;
+  $("picker-count").textContent = rows.length
+    ? `${rows.length}개 고름 · ${kcal(sum)} kcal — 눌러서 빼고, 담기를 누르면 1${rows.length > 1 ? "개씩" : "개"} 담깁니다`
+    : "";
+  for (const id of ["picker-save", "picker-save-top"]) {
+    $(id).hidden = rows.length === 0;
+    $(id).textContent = rows.length > 1 ? `${rows.length}개 담기` : "담기";
+  }
+  $("picker-amount").hidden = rows.length !== 1;
+}
+
+function takePicked() {
+  const drafts = [...picked.values()].map((food) => ({ ...scaleFood(food, 1), meal: draftMeal, on: day }));
+  const { state: next, added } = addEntries(state, drafts);
+  openMeals.add(draftMeal);        // 담은 것이 접힌 칸에 숨지 않게
+  $("picker").close();
+  if (added) update(next);
 }
 
 $("search").addEventListener("input", () => renderResults($("search").value));
 function newFood() {
   $("picker").close();
+  openMeals.add(draftMeal);
   openEditor({ name: $("search").value, meal: draftMeal, kcal: 0, carb: 0, protein: 0, fat: 0 });
+}
+
+/** 하나만 골랐을 때 양·끼니를 정하러 가는 길. 옛 흐름이 그대로 남는다. */
+function pickedToEditor() {
+  const [food] = [...picked.values()];
+  if (!food) return;
+  $("picker").close();
+  openMeals.add(draftMeal);
+  openEditor({ ...scaleFood(food, 1), meal: draftMeal });
 }
 
 /* 취소·담기는 위아래 두 곳에 있다 — 키보드가 올라오면 아래 것이 가려져서 키보드를
@@ -199,8 +264,10 @@ function newFood() {
 for (const id of ["picker-cancel", "picker-cancel-top"]) {
   $(id).addEventListener("click", () => $("picker").close());
 }
-for (const id of ["picker-new", "picker-new-top"]) {
-  $(id).addEventListener("click", newFood);
+$("picker-new").addEventListener("click", newFood);
+$("picker-amount").addEventListener("click", pickedToEditor);
+for (const id of ["picker-save", "picker-save-top"]) {
+  $(id).addEventListener("click", takePicked);
 }
 
 /* ── 양과 끼니를 정해 담기 ─────────────────────────────────────── */
@@ -273,6 +340,7 @@ for (const id of ["editor-cancel", "editor-cancel-top"]) {
   $(id).addEventListener("click", () => $("editor").close());
 }
 $("editor").addEventListener("close", () => { editing = null; });
+$("picker").addEventListener("close", () => { picked = new Map(); });
 
 /* ── 태운 것 ───────────────────────────────────────────────────── */
 function openExercise(workout = null) {

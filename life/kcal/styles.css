@@ -44,10 +44,15 @@ body { overflow: auto; }
 /* ── 끼니 ───────────────────────────────────────────────────────── */
 .meals { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; margin-top: 20px; }
 .meal { min-width: 0; }
-.meal-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
-  padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+/* 머리줄이 곧 여닫는 버튼이다 — 지금 끼니만 펴 두고 나머지는 접어 둔다. */
+.meal-head { display: flex; align-items: baseline; gap: 8px; width: 100%; min-height: 40px;
+  padding: 0 0 4px; text-align: left; border-bottom: 1px solid var(--line); }
+.meal-head:active { background: var(--surface); }
+.meal-caret { flex: none; width: 14px; color: var(--muted); font-size: 10px; }
+.meal-head .meal-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; }
 .meal-name { font-size: 14px; font-weight: 700; }
-.meal-total { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.meal-total { flex: none; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .meal-items { list-style: none; margin: 0; padding: 0; }
 .meal-item { min-width: 0; border-bottom: 1px solid var(--line); }
 .meal-item-button, .result-button { display: flex; align-items: center; gap: 10px; width: 100%;
@@ -65,6 +70,10 @@ body { overflow: auto; }
  * 구분이 약해 왼쪽에 표시를 하나 세운다. */
 .result-button.picked { background: var(--surface); box-shadow: inset 3px 0 0 var(--ink);
   padding-left: 9px; }
+/* 여러 개를 고를 수 있다는 말을 네모 하나가 대신한다. */
+.pick-box { flex: none; display: grid; place-items: center; width: 20px; height: 20px;
+  border: 1px solid var(--line); border-radius: 6px; color: var(--bg); font-size: 12px; }
+.result-button.picked .pick-box { background: var(--ink); border-color: var(--ink); }
 .result-button.picked .item-name { font-weight: 700; }
 .meal-add { width: 100%; min-height: 44px; margin-top: 4px; border-radius: 9px;
   color: var(--muted); font-size: 13px; }
@@ -92,6 +101,11 @@ dialog.wide { max-width: min(420px, calc(100vw - 24px)); }
 .head-quiet { color: var(--muted); }
 .head-primary { background: var(--ink); color: var(--bg); font-weight: 700; }
 .head-primary:active { opacity: .85; }
+.menu-items.row button { min-width: 0; }   /* 버튼이 셋이면 글자가 자리를 넓히지 못하게 */
+/* 하나만 골랐을 때만 나오는 줄. 아래 버튼 줄을 넷으로 늘리지 않으려고 한 줄을 따로 준다. */
+.line-button { width: 100%; min-height: 40px; margin-top: 6px; border-radius: 9px;
+  color: var(--muted); font-size: 13px; }
+.line-button:active { background: var(--bg); }
 #search { width: 100%; height: 46px; border: 1px solid var(--line); border-radius: 9px;
   background: var(--bg); color: var(--ink); padding: 0 12px; font: inherit; margin: 8px 0 4px; }
 .results { list-style: none; margin: 4px 0 0; padding: 0; max-height: 44dvh;

@@ -314,6 +314,20 @@ export function addEntry(state, fields, now = new Date()) {
   return { ...state, entries: [...state.entries, entry] };
 }
 
+/**
+ * 여러 개를 한 번에 담는다. 한 건이 틀렸다고 나머지를 버리지 않고, 담긴 것의 수를
+ * 함께 돌려준다 — 고르는 화면이 "N개 담았다" 고 말할 수 있어야 한다.
+ */
+export function addEntries(state, drafts, now = new Date()) {
+  let next = state;
+  let added = 0;
+  for (const draft of drafts) {
+    try { next = addEntry(next, draft, now); added += 1; }
+    catch { /* 이름이 없거나 값이 이상한 것 하나가 나머지를 막지 않는다 */ }
+  }
+  return { state: next, added };
+}
+
 export function editEntry(state, id, fields) {
   const found = state.entries.find((entry) => entry.id === id);
   if (!found) throw new Error("그런 기록이 없습니다");
@@ -360,6 +374,25 @@ export function byMeal(entries) {
 }
 
 /** 하루치 요약. 남은 것이 먼저다. */
+/* 지금이 어느 끼니인가. 화면을 열면 그 끼니만 펼쳐 둔다 — 하루 네 칸을 다 펴 두면
+ * 지금 적을 자리를 매번 찾아 내려가야 한다. 경계는 끼니 때를 넉넉히 감싼다. */
+export const MEAL_HOURS = [
+  { meal: "아침", from: 4, to: 11 },
+  { meal: "점심", from: 11, to: 16 },
+  { meal: "저녁", from: 16, to: 22 },
+];
+
+export function kstHour(now = new Date()) {
+  return Number(new Intl.DateTimeFormat("en-GB", { timeZone: KST, hour: "2-digit", hour12: false })
+    .format(now).slice(0, 2)) % 24;
+}
+
+/** 밤 10시 이후와 새벽은 어느 끼니도 아니다 — 그때는 간식이 열린다. */
+export function mealNow(now = new Date()) {
+  const hour = kstHour(now);
+  return MEAL_HOURS.find((row) => hour >= row.from && hour < row.to)?.meal ?? DEFAULT_MEAL;
+}
+
 export function dayReport(state, date = kstDate()) {
   const entries = entriesOn(state, date);
   const eaten = totals(entries);

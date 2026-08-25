@@ -57,15 +57,19 @@
       <div class="sheet-head">
         <h2 id="picker-title">먹은 것 담기</h2>
         <button id="picker-cancel-top" type="button" class="head-button head-quiet">취소</button>
-        <button id="picker-new-top" type="button" class="head-button head-primary">직접 적기</button>
+        <button id="picker-save-top" type="button" class="head-button head-primary" hidden>담기</button>
       </div>
       <input id="search" type="search" placeholder="이름으로 찾기" aria-label="음식 찾기" autocomplete="off">
       <ul id="results" class="results"></ul>
       <p id="picker-empty" class="fine-print" hidden>찾는 것이 없으면 아래에서 직접 적으세요.
         한 번 적어 두면 다음부터는 위 목록에 남습니다.</p>
+      <!-- 여러 개를 눌러 두고 한 번에 담는다. 고른 것이 몇 개인지 여기서 말해 준다. -->
+      <p id="picker-count" class="fine-print" hidden></p>
+      <button id="picker-amount" type="button" class="line-button" hidden>양·끼니를 정해서 담기</button>
       <div class="menu-items row">
         <button id="picker-cancel" type="button" class="quiet">취소</button>
-        <button id="picker-new" type="button" class="primary">직접 적기</button>
+        <button id="picker-new" type="button" class="quiet">직접 적기</button>
+        <button id="picker-save" type="button" class="primary" hidden>담기</button>
       </div>
     </form>
   </dialog>

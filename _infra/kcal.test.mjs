@@ -6,7 +6,8 @@ import { webcrypto } from "node:crypto";
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 const {
-  EXERCISES, GRAM_MAX, KCAL_MAX, MEALS, addEntry, addWorkout, autoGoal, bmr, burn, burned, byMeal,
+  EXERCISES, GRAM_MAX, KCAL_MAX, MEALS, addEntries, addEntry, addWorkout, autoGoal, bmr, burn,
+  burned, byMeal, kstHour, mealNow,
   dayReport, editEntry, editWorkout, emptyProfile, emptyState, entriesOn, exerciseLabel,
   frequentFoods, kcalFromMacros, kstDate, macrosFor, normalizeProfile, parseState, removeEntry,
   removeWorkout, scaleFood, searchFoods, setGoal, setProfile, tdee, totals, useAutoGoal,
@@ -297,4 +298,33 @@ test("운동을 붙이기 전 저장본도 그대로 열린다", () => {
   assert.deepEqual(parsed.workouts, []);
   assert.equal(dayReport(parsed, TODAY).burned, 0);
   assert.equal(burned([]), 0);
+});
+
+/* ── 여러 개를 한 번에, 그리고 지금 끼니 ────────────────────────── */
+test("여러 개를 한 번에 담는다", () => {
+  const { state, added } = addEntries(emptyState(), [
+    { name: "햄에그 샌드위치", kcal: 324, carb: 44, protein: 12, fat: 11, meal: "점심", on: "2026-08-25" },
+    { name: "", kcal: 100, meal: "점심", on: "2026-08-25" },           // 이름이 없으면 담기지 않는다
+    { name: "아메리카노", kcal: 10, carb: 2, protein: 1, fat: 0, meal: "점심", on: "2026-08-25" },
+  ]);
+  assert.equal(added, 2, "틀린 한 건 때문에 나머지를 버리지 않는다");
+  assert.equal(state.entries.length, 2);
+  assert.equal(totals(entriesOn(state, "2026-08-25")).kcal, 334);
+  assert.equal(addEntries(state, []).added, 0);
+});
+
+test("지금이 어느 끼니인지로 펼 칸을 정한다", () => {
+  // KST 기준 시각으로 본다(브라우저 시간대가 무엇이든).
+  const at = (hour) => new Date(Date.UTC(2026, 7, 25, (hour + 24 - 9) % 24, 30));
+  assert.equal(kstHour(at(13)), 13);
+  assert.equal(mealNow(at(7)), "아침");
+  assert.equal(mealNow(at(10)), "아침");
+  assert.equal(mealNow(at(11)), "점심");
+  assert.equal(mealNow(at(15)), "점심");
+  assert.equal(mealNow(at(16)), "저녁");
+  assert.equal(mealNow(at(21)), "저녁");
+  // 밤과 새벽은 어느 끼니도 아니다 — 그때는 간식이 열린다.
+  assert.equal(mealNow(at(23)), "간식");
+  assert.equal(mealNow(at(2)), "간식");
+  assert.equal(MEALS.includes(mealNow()), true);
 });
