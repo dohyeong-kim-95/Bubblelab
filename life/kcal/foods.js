@@ -19,6 +19,7 @@ export const FOODS = [
   { name: "우삼겹 깍두기 주먹밥", brand: "삼성웰스토리", unit: "1팩", kcal: 612, carb: 100, protein: 22, fat: 14 },
   { name: "참치&바질 샌드위치", brand: "삼성웰스토리", unit: "1개", kcal: 411, carb: 40, protein: 16, fat: 21 },
   { name: "치즈 함박스테이크 덮밥", brand: "삼성웰스토리", unit: "1팩", kcal: 590, carb: 70, protein: 24, fat: 24 },
+  { name: "칠성사이다 제로", brand: "롯데칠성", unit: "355ml", kcal: 0, carb: 6, protein: 0, fat: 0 },
   { name: "프로틴 드링크 퍼펙트 곡물", brand: "랩노쉬", unit: "350ml", kcal: 125, carb: 3, protein: 27, fat: 0.6 },
   { name: "프로틴 드링크 퍼펙트 바나나", brand: "랩노쉬", unit: "350ml", kcal: 125, carb: 3, protein: 27, fat: 0.5 },
   { name: "프로틴 드링크 퍼펙트 초코", brand: "랩노쉬", unit: "350ml", kcal: 135, carb: 5, protein: 27, fat: 0.6 },
