@@ -220,19 +220,26 @@ function readSms(text, fileName = "") {
   });
 
   const fresh = pending.filter((row) => !row.duplicate).length;
+  // 읽은 것이 언제 것인지가 "왜 안 늘어나나" 의 답이다 — 개수만으로는 알 수 없다.
+  const days = pending.map((row) => row.entry.on).sort();
+  const span = days.length
+    ? `${days[0].slice(5).replace("-", "/")}~${days.at(-1).slice(5).replace("-", "/")}`
+    : "";
   $("sms-summary").textContent = [
     fileName,
     // 파일이 언제 것인지 말해 준다 — "백업했는데 안 늘어난다" 는 대개 옛 파일을 연 것이다.
-    fromBackup && newestOn ? `최근 문자 ${newestOn.slice(5).replace("-", "/")}` : "",
-    `${pending.length}건 읽음`,
+    // 받은 시각이 없는 백업도 있다(date 속성이 빠진다) — 그때는 본문 날짜에 기댄다고 알린다.
+    fromBackup ? (newestOn ? `최근 문자 ${newestOn.slice(5).replace("-", "/")}` : "받은 시각 없는 백업") : "",
+    span ? `${pending.length}건 읽음 (${span})` : `${pending.length}건 읽음`,
     pending.length - fresh > 0 ? `이미 담긴 것 ${pending.length - fresh}건` : "",
     // 조용히 자르지 않는다. 자르는 쪽은 언제나 옛 문자다(sms.js).
     clipped ? `옛 문자 ${clipped}건은 건너뜀` : "",
     // 백업 파일은 결제와 무관한 문자가 대부분이라 실패 건수를 세어 봐야 소음이다.
     !fromBackup && failed.length ? `못 읽은 것 ${failed.length}건 (${failed[0].reason})` : "",
   ].filter(Boolean).join(" · ");
-  if (fromBackup && !pending.length) {
-    $("sms-summary").textContent += ` — 결제 문자가 없습니다(훑은 문자 ${scanned}건)`;
+  if (fromBackup) {
+    // 파일에서 금액이 든 문자를 몇 건이나 봤는지 — 파일 탓인지 파서 탓인지 여기서 갈린다.
+    $("sms-summary").textContent += ` · 파일에서 금액이 든 문자 ${scanned + clipped}건`;
   }
   renderPreview();
 }

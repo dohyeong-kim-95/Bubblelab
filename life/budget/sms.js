@@ -190,10 +190,13 @@ export const looksLikeBackup = (text) => /<smses\b|<sms\b/.test(String(text ?? "
 export function extractBackup(xml, limit = SMS_FILE_MAX) {
   const rows = [];
   for (const tag of String(xml ?? "").matchAll(SMS_TAG)) {
-    const body = tag[0].match(ATTR("body"))?.[1];
-    if (!body || !HAS_AMOUNT.test(body)) continue;
+    const raw = tag[0].match(ATTR("body"))?.[1];
+    if (!raw) continue;
+    // 되돌린 뒤에 거른다 — 백업 앱이 한글을 &#50896; 처럼 적어 두면 "원" 이 안 걸린다.
+    const body = unescapeXml(raw);
+    if (!HAS_AMOUNT.test(body)) continue;
     const stamp = Number(tag[0].match(ATTR("date"))?.[1]);
-    rows.push({ body: unescapeXml(body), at: Number.isFinite(stamp) && stamp > 0 ? stamp : null });
+    rows.push({ body, at: Number.isFinite(stamp) && stamp > 0 ? stamp : null });
   }
   rows.sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
   return { rows: rows.slice(0, limit), total: rows.length, newestAt: rows[0]?.at ?? null };
