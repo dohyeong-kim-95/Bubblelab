@@ -1,7 +1,7 @@
 import {
-  addEntry, cycleLabel, cycleOf, editEntry, emptyState, entriesIn, groupByDay, inCycle,
-  kstDate, pace, parseState, removeEntry, setLimit, setStartDay, shiftDate, shortWon,
-  toggleSkip, won,
+  addEntries, addEntry, cycleLabel, cycleOf, editEntry, emptyState, entriesIn, groupByDay,
+  inCycle, kstDate, markSynced, needsSync, pace, parseState, removeEntries, removeEntry,
+  setAuto, setLimit, setStartDay, shiftDate, shortWon, toggleSkip, won,
 } from "./store.js";
 import { parseBackupOrText, seenSigs } from "./sms.js";
 
@@ -304,18 +304,23 @@ function folderStore(mode) {
   });
 }
 
+let folder = null;   // 이번 화면에서 쓰는 손잡이 — 저장이 막혀도 세션 안에서는 산다
+
 async function savedFolder() {
+  if (folder) return folder;
   try {
     const store = await folderStore("readonly");
-    return await new Promise((resolve) => {
+    folder = await new Promise((resolve) => {
       const request = store.get("folder");
       request.onsuccess = () => resolve(request.result ?? null);
       request.onerror = () => resolve(null);
     });
-  } catch { return null; }
+  } catch { folder = null; }
+  return folder;
 }
 
 async function rememberFolder(handle) {
+  folder = handle;
   try { (await folderStore("readwrite")).put(handle, "folder"); } catch { /* 못 담아도 이번엔 열린다 */ }
 }
 
@@ -350,7 +355,9 @@ async function openFromFolder(pickAgain = false) {
       $("sms-summary").textContent = "폴더 읽기를 허용해야 열 수 있어요";
       return;
     }
+    folder = handle;
     showFolder(handle.name);
+    offerSync();
     const file = await newestBackup(handle);
     if (!file) { $("sms-summary").textContent = `${handle.name} 에 백업 파일이 없어요`; return; }
     readSms(await file.text(), file.name);
@@ -374,6 +381,90 @@ if (canPickFolder) {
   $("folder-change").addEventListener("click", () => openFromFolder(true));
   savedFolder().then((handle) => showFolder(handle?.name ?? ""));
 }
+
+/* ── 매일 최신 백업 받기 ────────────────────────────────────────
+ * 백업 앱은 매번 새 파일을 쓴다. 그걸 손으로 열어 담는 것이 하루 일과가 되면 안 된다 —
+ * 폴더를 기억해 뒀으면 화면을 열 때 **하루 한 번** 조용히 최신 파일을 읽어 새 결제만
+ * 담는다. 조용히 담고 말이 없으면 무서우니 한 줄로 알리고 되돌리기를 한 번 준다.
+ * 권한이 끊겼거나 오늘 이미 읽었으면 원버튼("지금 받기")으로 남는다. */
+let justSynced = [];   // 방금 자동으로 담은 것의 id — 되돌리기 한 번이면 없던 일이 된다
+
+// 받기 버튼은 늘 남는다 — 한 번 받았다고 사라지면 다음 백업을 받을 길이 없다.
+function showSync(text, { undo = false, now = true } = {}) {
+  $("sync").hidden = !text;
+  $("sync-line").textContent = text;
+  $("sync-undo").hidden = !undo;
+  $("sync-now").hidden = !now;
+}
+
+/** 권한 확인. `ask` 가 아니면 묻지 않는다 — 화면을 열자마자 창을 띄우지 않는다. */
+async function allowed(handle, ask) {
+  if (!handle?.queryPermission) return Boolean(handle);
+  if (await handle.queryPermission({ mode: "read" }) === "granted") return true;
+  return Boolean(ask) && await handle.requestPermission?.({ mode: "read" }) === "granted";
+}
+
+/** 백업에서 아직 안 담은 것만 담는다. 담긴 건수를 돌려준다. */
+function takeNew(text) {
+  const { found } = parseBackupOrText(text, kstDate());
+  const seen = seenSigs(state);
+  const drafts = [];
+  for (const { entry } of found) {
+    if (entry.sig && seen.has(entry.sig)) continue;
+    if (entry.sig) seen.add(entry.sig);
+    drafts.push(entry);
+  }
+  // 담은 것이 없어도 오늘 읽은 것으로 친다 — 열 때마다 폴더를 들추지 않게.
+  const { state: next, added } = addEntries(markSynced(state), drafts);
+  justSynced = added;
+  update(next);
+  return added.length;
+}
+
+async function pullFrom(handle) {
+  try {
+    const file = await newestBackup(handle);
+    if (!file) { showSync(`${handle.name} 에 백업 파일이 없어요`); return; }
+    const count = takeNew(await file.text());
+    showSync(count ? `${file.name} 에서 ${count}건 담았어요` : `${file.name} · 새 결제 없음`,
+      { undo: count > 0 });
+  } catch {
+    showSync("백업을 읽지 못했어요");
+  }
+}
+
+/** 자동이 안 되는(또는 이미 끝난) 자리에 남는 원버튼. */
+async function offerSync() {
+  const handle = await savedFolder();
+  if (handle) showSync(`${handle.name} 에서 최신 백업 받기`);
+}
+
+async function startSync() {
+  if (!canPickFolder) return;
+  const handle = await savedFolder();
+  if (!handle) return;                    // 아직 폴더를 안 골랐다 — 📩 에서 한 번 고르면 켜진다
+  // 권한이 끊겨 있으면 묻지 않는다 — 화면을 열자마자 창을 띄우는 앱이 되지 않게.
+  if (!needsSync(state) || !(await allowed(handle, false))) { offerSync(); return; }
+  showSync("최신 백업을 읽는 중…", { now: false });
+  await pullFrom(handle);
+}
+
+$("sync-now").addEventListener("click", async () => {
+  const handle = await savedFolder();
+  if (!handle) { openSms(); return; }
+  if (!(await allowed(handle, true))) {
+    showSync("폴더 읽기를 허용해야 받을 수 있어요");
+    return;
+  }
+  showSync("최신 백업을 읽는 중…", { now: false });
+  await pullFrom(handle);
+});
+
+$("sync-undo").addEventListener("click", () => {
+  update(removeEntries(state, justSynced));
+  justSynced = [];
+  showSync("방금 담은 것을 되돌렸어요");
+});
 
 $("sms-button").addEventListener("click", () => openSms());
 $("sms-cancel").addEventListener("click", () => $("sms").close());
@@ -437,6 +528,7 @@ takeShared();
 $("settings-button").addEventListener("click", () => {
   $("limit-input").value = String(state.limit);
   $("start-day-input").value = String(state.startDay);
+  $("auto-input").checked = state.auto !== false;
   $("settings-error").textContent = "";
   $("settings").showModal();
 });
@@ -444,7 +536,10 @@ $("settings-cancel").addEventListener("click", () => $("settings").close());
 $("settings-form").addEventListener("submit", (event) => {
   event.preventDefault();
   try {
-    update(setStartDay(setLimit(state, $("limit-input").value), $("start-day-input").value));
+    update(setAuto(
+      setStartDay(setLimit(state, $("limit-input").value), $("start-day-input").value),
+      $("auto-input").checked,
+    ));
     $("settings").close();
   } catch (error) {
     $("settings-error").textContent = error.message;
@@ -452,3 +547,4 @@ $("settings-form").addEventListener("submit", (event) => {
 });
 
 render();
+startSync();

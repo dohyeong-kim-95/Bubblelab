@@ -6,9 +6,10 @@ import { webcrypto } from "node:crypto";
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 const {
-  DEFAULT_LIMIT, addEntry, cycleLabel, cycleOf, editEntry, emptyState, entriesIn, groupByDay,
-  inCycle, kstDate, nextCycle, pace, parseState, previousCycle, removeEntry, setLimit,
-  setStartDay, shortWon, toggleSkip, totalOf, validateEntry, won,
+  DEFAULT_LIMIT, addEntries, addEntry, cycleLabel, cycleOf, editEntry, emptyState, entriesIn,
+  groupByDay, inCycle, kstDate, markSynced, needsSync, nextCycle, pace, parseState,
+  previousCycle, removeEntries, removeEntry, setAuto, setLimit, setStartDay, shortWon,
+  toggleSkip, totalOf, validateEntry, won,
 } = await import("../life/budget/store.js");
 
 // 같은 날 여러 번 적을 수 있으므로 적은 시각을 부를 때마다 1분씩 뒤로 민다.
@@ -218,4 +219,46 @@ test("큰 숫자는 만 단위로 줄여 읽는다", () => {
   assert.equal(shortWon(1000000), "100만원");
   assert.equal(shortWon(322581), "32.3만원");
   assert.equal(shortWon(-80000), "-8만원");
+});
+
+/* ── 매일 최신 백업 받기 ─────────────────────────────────────────
+ * 화면이 하루 한 번만 폴더를 들추고, 방금 담은 것만 되돌릴 수 있어야 한다. */
+test("자동 읽기는 하루 한 번이다", () => {
+  const fresh = emptyState();
+  assert.equal(fresh.auto, true, "기본은 켜 둔다");
+  assert.equal(needsSync(fresh, "2026-08-25"), true);
+
+  const done = markSynced(fresh, "2026-08-25");
+  assert.equal(done.lastSyncOn, "2026-08-25");
+  assert.equal(needsSync(done, "2026-08-25"), false, "같은 날 두 번 들추지 않는다");
+  assert.equal(needsSync(done, "2026-08-26"), true, "날이 바뀌면 다시 읽는다");
+  assert.equal(needsSync(setAuto(fresh, false), "2026-08-25"), false, "꺼 두면 안 읽는다");
+  assert.equal(markSynced(fresh, "엉터리").lastSyncOn, kstDate(), "이상한 날짜는 오늘로 친다");
+});
+
+test("자동 읽기 설정은 저장본을 오가도 남는다", () => {
+  const saved = parseState(JSON.stringify(markSynced(setAuto(emptyState(), false), "2026-08-25")));
+  assert.equal(saved.auto, false);
+  assert.equal(saved.lastSyncOn, "2026-08-25");
+  // 이 칸이 없던 시절의 저장본은 켜진 것으로 읽는다.
+  assert.equal(parseState(JSON.stringify({ v: 1, limit: 1000000, startDay: 1, entries: [] })).auto, true);
+  assert.equal(parseState(JSON.stringify({ v: 1, lastSyncOn: "어제" })).lastSyncOn, "");
+});
+
+test("한 번에 담은 것만 되돌린다", () => {
+  const before = spend(emptyState(), "2026-08-10", 12000, "국밥");
+  const { state, added } = addEntries(before, [
+    { amount: 4500, memo: "커피", on: "2026-08-25" },
+    { amount: 0, memo: "0원은 담지 않는다", on: "2026-08-25" },
+    { amount: 9360, memo: "메가엠지씨커피", on: "2026-08-25" },
+  ], new Date("2026-08-25T08:00:00Z"));
+
+  assert.equal(added.length, 2, "틀린 한 건 때문에 나머지를 버리지 않는다");
+  assert.equal(state.entries.length, 3);
+  assert.equal(totalOf(state.entries), 25860);
+
+  const undone = removeEntries(state, added);
+  assert.equal(undone.entries.length, 1, "먼저 있던 것은 남는다");
+  assert.equal(undone.entries[0].memo, "국밥");
+  assert.equal(removeEntries(state, []).entries.length, 3);
 });

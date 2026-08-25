@@ -26,6 +26,13 @@
     <button id="next-cycle" type="button" aria-label="다음 주기">▶</button>
   </div>
 
+  <!-- 기억한 폴더에서 최신 백업을 읽어 새 결제만 담는다. 열 때 알아서 하고, 안 되면 버튼. -->
+  <div id="sync" class="sync" hidden>
+    <span id="sync-line" class="sync-line"></span>
+    <button id="sync-now" type="button" class="sync-button" hidden>지금 받기</button>
+    <button id="sync-undo" type="button" class="sync-button" hidden>되돌리기</button>
+  </div>
+
   <main class="sheet">
     <section class="hero" aria-labelledby="hero-label">
       <p id="hero-label" class="hero-label">남은 돈</p>
@@ -106,6 +113,11 @@
       <h2 id="settings-title">한도와 주기</h2>
       <label for="limit-input">한 주기 한도(원)</label>
       <input id="limit-input" type="number" inputmode="numeric" step="10000" min="0" required>
+      <label class="check"><input id="auto-input" type="checkbox">
+        화면을 열면 최신 백업을 알아서 읽기</label>
+      <p class="fine-print">기억한 폴더가 있고 읽기 권한이 살아 있을 때만 조용히 읽습니다.
+        하루 한 번이면 충분하고, 새 결제만 담습니다.</p>
+
       <label for="start-day-input">주기 시작일(1–28)</label>
       <input id="start-day-input" type="number" inputmode="numeric" step="1" min="1" max="28" required>
       <p class="fine-print">카드 청구가 1일에 시작하지 않으면 그 날짜를 적습니다. 예를 들어 15 로 두면

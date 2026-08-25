@@ -244,3 +244,70 @@ test("가계부 — 담은 것을 지우지 않고 합계에서만 뺀다", asyn
   await page.locator(".entry.skipped .entry-skip").click();
   await expect(page.locator("#fact-spent")).toHaveText("512,000원");
 });
+
+test("가계부 — 기억한 폴더의 최신 백업을 한 번에 받고 되돌린다", async ({ page }) => {
+  /* 백업 앱은 매번 새 파일을 쓴다. 손으로 열어 담는 게 하루 일과가 되지 않게, 폴더를
+   * 기억해 두면 최신 파일에서 새 결제만 담는다. 실제 폴더 선택창은 자동으로 못 여니
+   * 가짜 손잡이를 심어 그 뒤의 길(최신 파일 고르기 → 새 것만 담기 → 되돌리기)을 본다. */
+  const failures = [];
+  page.on("pageerror", (error) => failures.push(error.message));
+
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date());
+  const [month, day] = [today.slice(5, 7), today.slice(8, 10)];
+  const sms = (amount, time, memo) =>
+    `[Web발신]\n신한카드(1234)승인\n${amount}원 일시불\n${month}/${day} ${time}\n${memo}\n누적1,234,567원`;
+
+  await page.addInitScript(([old, fresh]) => {
+    const file = (name, text, lastModified) => Object.assign(new File([text], name, { lastModified }), {});
+    const files = [file("sms-old.xml", old, 1000), file("sms-new.xml", fresh, 2000)];
+    const handle = {
+      name: "Backups",
+      entries: async function* entries() {
+        for (const one of files) yield [one.name, { kind: "file", getFile: async () => one }];
+      },
+      queryPermission: async () => "granted",
+    };
+    window.showDirectoryPicker = async () => handle;
+  }, [sms("12,000", "14:22", "옛날국밥"), [sms("12,000", "14:22", "옛날국밥"), sms("9,360", "17:52", "메가엠지씨커피")].join("\n\n")]);
+
+  await page.goto("/life/budget/");
+  await page.evaluate(() => localStorage.removeItem("bl_budget_v1"));
+  await page.reload();
+  await expect(page.locator("#sync")).toBeHidden();     // 기억한 폴더가 없으면 자리도 없다
+
+  // 📩 에서 폴더를 한 번 고르면 그 자리가 생긴다.
+  await page.locator("#sms-button").click();
+  await page.locator("#folder-open").click();
+  await expect(page.locator("#sms-summary")).toContainText("sms-new.xml");
+  await page.locator("#sms-cancel").click();
+  await expect(page.locator("#sync-now")).toBeVisible();
+
+  // 원버튼 — 최신 파일에서 두 건을 담는다.
+  await page.locator("#sync-now").click();
+  await expect(page.locator("#sync-line")).toContainText("sms-new.xml 에서 2건 담았어요");
+  await expect(page.locator(".entry")).toHaveCount(2);
+  await expect(page.locator("#fact-spent")).toHaveText("21,360원");
+
+  // 한 번 더 눌러도 늘지 않는다(같은 문자는 두 번 담지 않는다).
+  await page.locator("#sync-now").click();
+  await expect(page.locator("#sync-line")).toContainText("새 결제 없음");
+  await expect(page.locator(".entry")).toHaveCount(2);
+
+  await expect(page.locator("#sync-undo")).toBeHidden();    // 되돌릴 게 없으면 버튼도 없다
+
+  // 한 건을 지워 두면 그 한 건만 다시 담기고, 방금 담은 것은 되돌릴 수 있다.
+  await page.locator(".entry").filter({ hasText: "메가엠지씨커피" }).locator(".entry-main").click();
+  await page.locator("#editor-delete").click();
+  await expect(page.locator(".entry")).toHaveCount(1);
+  await page.locator("#sync-now").click();
+  await expect(page.locator("#sync-line")).toContainText("1건 담았어요");
+  await expect(page.locator(".entry")).toHaveCount(2);
+  await page.locator("#sync-undo").click();
+  await expect(page.locator("#sync-line")).toContainText("되돌렸어요");
+  await expect(page.locator(".entry")).toHaveCount(1);
+  await expect(page.locator("#fact-spent")).toHaveText("12,000원");
+
+  expect(failures).toEqual([]);
+});

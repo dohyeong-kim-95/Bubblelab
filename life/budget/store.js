@@ -82,7 +82,15 @@ export function cycleLabel(cycle) {
 /* ── 상태 ─────────────────────────────────────────────────────────── */
 
 export function emptyState(limit = DEFAULT_LIMIT, startDay = DEFAULT_START_DAY) {
-  return { v: 1, limit: normalizeLimit(limit), startDay: normalizeStartDay(startDay), entries: [] };
+  return {
+    v: 1,
+    limit: normalizeLimit(limit),
+    startDay: normalizeStartDay(startDay),
+    entries: [],
+    // 화면을 열 때 기억한 폴더에서 최신 백업을 알아서 읽는다. 하루 한 번이면 충분하다.
+    auto: true,
+    lastSyncOn: "",
+  };
 }
 
 const clean = (value, max) => String(value ?? "").replace(/\s+/g, " ").trim().slice(0, max);
@@ -133,8 +141,43 @@ export function parseState(raw) {
   const entries = (Array.isArray(value.entries) ? value.entries : [])
     .map(normalizeEntry)
     .filter((entry) => validateEntry(entry).length === 0);
-  return { v: 1, limit, startDay: normalizeStartDay(value.startDay), entries };
+  return {
+    v: 1,
+    limit,
+    startDay: normalizeStartDay(value.startDay),
+    entries,
+    // 자동 읽기는 나중에 붙였다 — 옛 저장본에는 이 칸이 없다(기본은 켜 둔다).
+    auto: value.auto !== false,
+    lastSyncOn: isDate(value.lastSyncOn) ? value.lastSyncOn : "",
+  };
 }
+
+export const setAuto = (state, auto) => ({ ...state, auto: Boolean(auto) });
+export const markSynced = (state, on = kstDate()) =>
+  ({ ...state, lastSyncOn: isDate(on) ? on : kstDate() });
+/** 오늘 아직 안 읽었으면 읽을 때다. 하루 한 번을 넘겨 폴더를 들추지 않는다. */
+export const needsSync = (state, today = kstDate()) => Boolean(state.auto) && state.lastSyncOn !== today;
+
+/**
+ * 여러 건을 한 번에 담고 **담긴 id 를 함께 돌려준다** — 방금 담은 것만 되돌리려면
+ * 무엇이 새로 들어왔는지 알아야 한다.
+ */
+export function addEntries(state, drafts, now = new Date()) {
+  const added = [];
+  let next = state;
+  for (const draft of drafts) {
+    try {
+      next = addEntry(next, draft, now);
+      added.push(next.entries.at(-1).id);
+    } catch { /* 한 건이 틀렸다고 나머지를 버리지 않는다 */ }
+  }
+  return { state: next, added };
+}
+
+export const removeEntries = (state, ids) => {
+  const drop = new Set(ids);
+  return { ...state, entries: state.entries.filter((entry) => !drop.has(entry.id)) };
+};
 
 export function addEntry(state, fields, now = new Date()) {
   const entry = makeEntry(fields, now);

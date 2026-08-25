@@ -18,6 +18,16 @@ body { overflow: auto; }
 
 .sheet { padding: 0 18px 40px; }
 
+/* 백업을 읽었는지 한 줄로 말해 준다. 조용히 담아 놓고 말이 없으면 무섭다. */
+.sync { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 18px 4px; }
+.sync[hidden] { display: none; }   /* 작성자 규칙이 UA 의 [hidden] 을 이긴다 */
+.sync-line { flex: 1; min-width: 0; color: var(--muted); font-size: 12px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sync-button { flex: none; min-height: 32px; border-radius: 8px; padding: 0 10px;
+  color: var(--ink); font-size: 12px; text-decoration: underline; }
+.check { display: flex; align-items: center; gap: 8px; margin: 14px 4px 0; font-size: 13px; }
+.check input { width: 18px; height: 18px; margin: 0; accent-color: var(--ink); }
+
 /* ── 지금 어디쯤인가 ─────────────────────────────────────────────── */
 .hero { padding: 6px 0 14px; }
 .hero-label { margin: 0; color: var(--muted); font-size: 12px; }
