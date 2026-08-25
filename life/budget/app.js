@@ -234,8 +234,10 @@ function readSms(text, fileName = "") {
     pending.length - fresh > 0 ? `이미 담긴 것 ${pending.length - fresh}건` : "",
     // 조용히 자르지 않는다. 자르는 쪽은 언제나 옛 문자다(sms.js).
     clipped ? `옛 문자 ${clipped}건은 건너뜀` : "",
-    // 백업 파일은 결제와 무관한 문자가 대부분이라 실패 건수를 세어 봐야 소음이다.
-    !fromBackup && failed.length ? `못 읽은 것 ${failed.length}건 (${failed[0].reason})` : "",
+    /* 못 읽은 것은 백업에서도 보여 준다. 파일에서 이미 **금액이 든 문자만** 골라 왔으므로
+     * 여기 남는 실패는 소음이 아니라 "결제 같은데 못 읽은 것" 이다 — 오늘 온 문자가
+     * 조용히 사라지는 일이 실제로 있었다. */
+    failed.length ? `못 읽은 것 ${failed.length}건 (${failed[0].reason})` : "",
   ].filter(Boolean).join(" · ");
   if (fromBackup) {
     // 파일에서 금액이 든 문자를 몇 건이나 봤는지 — 파일 탓인지 파서 탓인지 여기서 갈린다.
