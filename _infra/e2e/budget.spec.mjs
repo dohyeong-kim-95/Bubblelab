@@ -311,3 +311,75 @@ test("가계부 — 기억한 폴더의 최신 백업을 한 번에 받고 되�
 
   expect(failures).toEqual([]);
 });
+
+test("가계부 — 카테고리를 한 번 정하면 기억하고, 주기를 글로 내보낸다", async ({ page }) => {
+  /* 문자에는 가맹점 이름밖에 없다. 씨앗 표가 아는 이름은 담을 때 찍히고, 모르는 것은
+   * 미분류로 남는다 — 한 번 정하면 같은 가맹점은 다음부터 그 칸이다. */
+  const failures = [];
+  page.on("pageerror", (error) => failures.push(error.message));
+
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date());
+  const [month, day] = [today.slice(5, 7), today.slice(8, 10)];
+  const sms = (amount, time, memo) =>
+    `[Web발신]\n신한카드(1234)승인\n${amount}원 일시불\n${month}/${day} ${time}\n${memo}\n누적1,234,567원`;
+
+  await page.goto("/life/budget/");
+  await page.evaluate(() => localStorage.removeItem("bl_budget_v1"));
+  await page.reload();
+
+  // 씨앗 표가 아는 이름은 담을 때 찍힌다(메가엠지씨커피 = 메가커피의 법인 표기).
+  await page.locator("#sms-button").click();
+  await page.locator("#sms-file").setInputFiles({
+    name: "sms.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from([sms("9,360", "17:52", "메가엠지씨커피"), sms("31,000", "12:30", "동네정육점")].join("\n\n")),
+  });
+  await page.locator("#sms-save").click();
+  await expect(page.locator(".entry")).toHaveCount(2);
+  await expect(page.locator(".entry-memo").filter({ hasText: "메가엠지씨커피" })).toContainText("카페/간식");
+  await expect(page.locator(".cat")).toHaveCount(2);
+  await expect(page.locator(".cat")).toContainText([/미분류/, /카페\/간식/]);   // 금액 큰 칸이 먼저
+
+  // 모르는 이름은 미분류로 남는다. 한 번 정하면 규칙이 된다.
+  await page.locator(".entry").filter({ hasText: "동네정육점" }).locator(".entry-main").click();
+  await page.locator("#editor-cat").selectOption("food");
+  await page.getByRole("button", { name: "저장", exact: true }).click();
+  await expect(page.locator(".entry-memo").filter({ hasText: "동네정육점" })).toContainText("식비");
+  await expect(page.locator(".cat")).toContainText([/식비/, /카페\/간식/]);   // 금액 큰 칸이 먼저
+
+  // 같은 가맹점이 또 들어오면 처음부터 그 칸이다.
+  await page.locator("#sms-button").click();
+  await page.locator("#sms-file").setInputFiles({
+    name: "sms2.txt", mimeType: "text/plain", buffer: Buffer.from(sms("18,000", "19:10", "동네정육점")),
+  });
+  await page.locator("#sms-save").click();
+  await expect(page.locator(".entry-memo").filter({ hasText: "동네정육점" })).toHaveCount(2);
+  await expect(page.locator(".entry-memo").filter({ hasText: "동네정육점" }).nth(1)).toContainText("식비");
+
+  // 한 칸을 누르면 그 칸만 추려 본다.
+  await page.locator(".cat").filter({ hasText: "카페/간식" }).click();
+  await expect(page.locator(".entry")).toHaveCount(1);
+  await expect(page.locator("#cat-clear")).toContainText("카페/간식만 보는 중");
+  await page.locator("#cat-clear").click();
+  await expect(page.locator(".entry")).toHaveCount(3);
+
+  // 내보내기 — 요약과 표가 한 덩어리로 나온다(LLM 대화창에 붙여넣는 것이 쓰임새다).
+  await page.locator("#settings-button").click();
+  await page.locator("#export-open").click();
+  const text = await page.locator("#export-text").inputValue();
+  expect(text).toContain("한도 1,000,000원");
+  expect(text).toContain("- 식비 49,000원");
+  expect(text).toContain("- 카페/간식 9,360원");
+  expect(text).toContain("\t9360\t메가엠지씨커피\t카페/간식\t");
+  expect(text.split("\n").filter((line) => /^\d\d-\d\d\t/.test(line)).length).toBe(3);
+
+  // 새로고침해도 카테고리가 남는다.
+  await page.locator("#export-cancel").click();
+  await page.reload();
+  await expect(page.locator(".entry-memo").filter({ hasText: "메가엠지씨커피" })).toContainText("카페/간식");
+
+  expect(failures).toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+});

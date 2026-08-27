@@ -6,11 +6,13 @@ import { webcrypto } from "node:crypto";
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 const {
-  DEFAULT_LIMIT, addEntries, addEntry, cycleLabel, cycleOf, editEntry, emptyState, entriesIn,
-  groupByDay, inCycle, kstDate, markSynced, needsSync, nextCycle, pace, parseState,
-  previousCycle, removeEntries, removeEntry, setAuto, setLimit, setStartDay, shortWon,
-  toggleSkip, totalOf, validateEntry, won,
+  CATEGORIES, DEFAULT_LIMIT, addEntries, addEntry, byCategory, categoryFor, categoryLabel,
+  cycleLabel, cycleOf, editEntry, emptyState, entriesIn, exportText, groupByDay, inCycle, kstDate,
+  markSynced, needsSync, nextCycle, pace, parseState, previousCycle, removeEntries, removeEntry,
+  ruleKey, setAuto, setCategory, setLimit, setStartDay, shortWon, toggleSkip, totalOf,
+  validateEntry, won,
 } = await import("../life/budget/store.js");
+const { MERCHANTS } = await import("../life/budget/merchants.js");
 
 // 같은 날 여러 번 적을 수 있으므로 적은 시각을 부를 때마다 1분씩 뒤로 민다.
 let clock = 0;
@@ -261,4 +263,111 @@ test("한 번에 담은 것만 되돌린다", () => {
   assert.equal(undone.entries.length, 1, "먼저 있던 것은 남는다");
   assert.equal(undone.entries[0].memo, "국밥");
   assert.equal(removeEntries(state, []).entries.length, 3);
+});
+
+/* ── 카테고리 ───────────────────────────────────────────────────── */
+test("씨앗 표는 이름에 든 글자로 보고, 긴 쪽이 이긴다", () => {
+  // 카드 문자의 가맹점명은 잘리고 붙는다 — 법인명이 그대로 오기도 한다(실기기 표본).
+  assert.equal(categoryFor("메가엠지씨커피", {}, MERCHANTS), "cafe");
+  assert.equal(categoryFor("(주)메가엠지씨커피 강남점", {}, MERCHANTS), "cafe");
+  // "쿠팡이츠" 가 "쿠팡" 을 이겨야 배달이 생필품으로 가지 않는다.
+  assert.equal(categoryFor("쿠팡이츠", {}, MERCHANTS), "food");
+  assert.equal(categoryFor("쿠팡", {}, MERCHANTS), "living");
+  // 어디에 썼는지 알 수 없는 것은 미분류로 둔다.
+  assert.equal(categoryFor("새마을금고 도우너", {}, MERCHANTS), "");
+  assert.equal(categoryFor("", {}, MERCHANTS), "");
+});
+
+test("내가 정한 규칙이 씨앗 표를 이긴다", () => {
+  const rules = { [ruleKey("스타벅스")]: "etc" };
+  assert.equal(categoryFor("스타벅스", rules, MERCHANTS), "etc");
+  assert.equal(categoryFor("스타벅스", {}, MERCHANTS), "cafe");
+  // 띄어쓰기·대소문자·괄호가 달라도 같은 열쇠다.
+  // 법인 머리는 떼어 낸다 — 같은 가게가 두 규칙으로 갈리면 안 된다.
+  assert.equal(ruleKey("(주) GS25 강남"), ruleKey("gs25강남"));
+  assert.equal(ruleKey("㈜나인투원"), ruleKey("나인투원"));
+  assert.equal(ruleKey("주식회사 카카오모빌리티"), ruleKey("카카오모빌리티"));
+  assert.equal(categoryFor("이상한칸", { [ruleKey("이상한칸")]: "없는칸" }, MERCHANTS), "");
+});
+
+test("카테고리를 정하면 같은 가맹점이 모두 따라오고 규칙으로 남는다", () => {
+  let state = spend(emptyState(), "2026-08-10", 9360, "메가엠지씨커피");
+  state = spend(state, "2026-08-12", 4500, "메가엠지씨커피");
+  state = spend(state, "2026-08-13", 12000, "백암순대");
+
+  state = setCategory(state, state.entries[0].id, "cafe");
+  assert.deepEqual(state.entries.map((one) => one.cat ?? ""), ["cafe", "cafe", ""], "같은 이름이 함께 바뀐다");
+  assert.equal(state.rules[ruleKey("메가엠지씨커피")], "cafe");
+  // 규칙이 남았으니 다음에 담기는 것도 그 칸으로 간다(화면이 categoryFor 로 찍어 준다).
+  assert.equal(categoryFor("메가엠지씨커피", state.rules, []), "cafe");
+
+  // 미분류로 되돌리면 규칙도 지운다 — 잘못 정한 것을 되돌릴 길이 있어야 한다.
+  state = setCategory(state, state.entries[1].id, "");
+  assert.deepEqual(state.entries.map((one) => one.cat ?? ""), ["", "", ""]);
+  assert.equal(ruleKey("메가엠지씨커피") in state.rules, false);
+  assert.throws(() => setCategory(state, "없는id", "cafe"), /없습니다/);
+});
+
+test("카테고리와 규칙은 저장본을 오가도 남는다", () => {
+  let state = spend(emptyState(), "2026-08-10", 9360, "메가엠지씨커피");
+  state = setCategory(state, state.entries[0].id, "cafe");
+  const saved = parseState(JSON.stringify(state));
+  assert.equal(saved.entries[0].cat, "cafe");
+  assert.equal(saved.rules[ruleKey("메가엠지씨커피")], "cafe");
+  // 이 칸이 없던 저장본, 그리고 이상한 값은 조용히 버린다.
+  assert.deepEqual(parseState(JSON.stringify({ v: 1, entries: [] })).rules, {});
+  assert.deepEqual(parseState(JSON.stringify({ v: 1, rules: { 가게: "없는칸" } })).rules, {});
+  assert.equal(parseState(JSON.stringify({ v: 1, entries: [
+    { id: "x", amount: 100, memo: "가게", on: "2026-08-10", at: "2026-08-10T00:00:00Z", cat: "없는칸" },
+  ] })).entries[0].cat, undefined);
+});
+
+test("카테고리별 합계는 뺀 것을 세지 않는다", () => {
+  let state = spend(emptyState(), "2026-08-10", 12000, "국밥");
+  state = setCategory(state, state.entries[0].id, "food");
+  state = spend(state, "2026-08-11", 9360, "커피");
+  state = setCategory(state, state.entries[1].id, "cafe");
+  state = spend(state, "2026-08-12", 500000, "카드대금");
+  state = toggleSkip(state, state.entries[2].id);
+
+  const rows = byCategory(entriesIn(state, cycleOf("2026-08-15")));
+  assert.deepEqual(rows.map((row) => [row.label, row.total, row.count]),
+    [["식비", 12000, 1], ["카페/간식", 9360, 1]], "금액 큰 칸이 먼저, 뺀 것은 없다");
+  assert.equal(rows.reduce((sum, row) => sum + row.total, 0), totalOf(entriesIn(state, cycleOf("2026-08-15"))),
+    "카테고리 합과 주기 합이 어긋나면 안 된다");
+  assert.equal(categoryLabel("food"), "식비");
+  assert.equal(categoryLabel(""), "미분류");
+  assert.equal(CATEGORIES.length, 8);
+});
+
+test("내보내기는 요약과 표를 함께 낸다", () => {
+  let state = spend(emptyState(), "2026-08-10", 12000, "백암순대");
+  state = setCategory(state, state.entries[0].id, "food");
+  state = spend(state, "2026-08-12", 500000, "카드대금");
+  state = toggleSkip(state, state.entries[1].id);
+
+  const text = exportText(state, cycleOf("2026-08-15"), "2026-08-15");
+  assert.match(text, /주기 2026-08-01 ~ 2026-08-31 \(31일\) · 한도 1,000,000원/);
+  assert.match(text, /31일 중 15일째/);
+  assert.match(text, /합계에서 뺀 것 1건 500,000원/);
+  assert.match(text, /- 식비 12,000원 \(100%\) 1건/);
+  // 뺀 것도 표에는 남기고 열로 표시한다 — 없으면 왜 없는지 알 수 없다.
+  assert.match(text, /08-12\t500000\t카드대금\t미분류\tY/);
+  assert.match(text, /08-10\t12000\t백암순대\t식비\t/);
+  assert.equal(text.split("\n").filter((line) => line.startsWith("08-")).length, 2);
+
+  // 빈 주기에서도 깨지지 않는다.
+  assert.match(exportText(emptyState(), cycleOf("2026-08-15"), "2026-08-15"), /아직 적은 것이 없다/);
+});
+
+test("씨앗 표는 형식이 맞고 겹치지 않는다", () => {
+  const ids = new Set(CATEGORIES.map((one) => one.id));
+  const seen = new Set();
+  for (const seed of MERCHANTS) {
+    assert.equal(typeof seed.match === "string" && seed.match.length > 0, true, "빈 열쇠");
+    assert.equal(ids.has(seed.cat), true, `${seed.match}: 없는 카테고리 ${seed.cat}`);
+    const key = ruleKey(seed.match);
+    assert.equal(seen.has(key), false, `같은 것이 두 번 있다: ${seed.match}`);
+    seen.add(key);
+  }
 });

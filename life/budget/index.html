@@ -64,6 +64,10 @@
       </div>
     </form>
 
+    <!-- 어디에 얼마나 썼나. 한 줄을 누르면 그 칸만 추려 본다. -->
+    <section id="cats" class="cats" aria-label="카테고리별"></section>
+    <button id="cat-clear" class="line-button" type="button" hidden></button>
+
     <section id="entries" class="entries" aria-label="쓴 내역"></section>
     <p id="empty" class="fine-print empty-note" hidden>이 주기에 적은 것이 아직 없습니다.
       카드를 쓸 때마다 위에 금액을 적어 두면, 남은 날에 하루 얼마씩 쓸 수 있는지 계속 알려 줍니다.</p>
@@ -97,6 +101,9 @@
       <input id="editor-amount" type="number" inputmode="numeric" step="1" required>
       <label for="editor-memo">메모</label>
       <input id="editor-memo" type="text" maxlength="40">
+      <label for="editor-cat">카테고리</label>
+      <select id="editor-cat"></select>
+      <p class="fine-print">한 번 정하면 <b>같은 가맹점은 다음부터 이 칸으로</b> 담깁니다.</p>
       <label for="editor-date">쓴 날짜</label>
       <input id="editor-date" type="date">
       <p id="editor-error" class="error" role="alert"></p>
@@ -122,10 +129,26 @@
       <input id="start-day-input" type="number" inputmode="numeric" step="1" min="1" max="28" required>
       <p class="fine-print">카드 청구가 1일에 시작하지 않으면 그 날짜를 적습니다. 예를 들어 15 로 두면
         7/15–8/14 가 한 주기가 됩니다. 적어 둔 내역은 날짜로 저장되므로 주기만 다시 그어집니다.</p>
+      <button id="export-open" type="button" class="line-button">이번 주기 내보내기</button>
       <p id="settings-error" class="error" role="alert"></p>
       <div class="menu-items row">
         <button id="settings-cancel" type="button" class="quiet">취소</button>
         <button class="primary" type="submit">저장</button>
+      </div>
+    </form>
+  </dialog>
+  <!-- 보고 있는 주기를 글 한 덩어리로. 쓰임새가 "LLM 에 넣고 물어보기" 라 표가 아니라 글이다. -->
+  <dialog id="export" class="wide" aria-labelledby="export-title">
+    <form id="export-form">
+      <h2 id="export-title">이번 주기 내보내기</h2>
+      <p class="fine-print">아래 글을 그대로 복사해 대화창에 붙여넣고 물어보면 됩니다.
+        가맹점 이름이 그대로 들어가니 어디에 넣는지는 보고 정하세요.</p>
+      <textarea id="export-text" class="export-text" readonly rows="10" aria-label="내보낼 글"></textarea>
+      <p id="export-note" class="fine-print"></p>
+      <div class="menu-items row">
+        <button id="export-cancel" type="button" class="quiet">닫기</button>
+        <button id="export-share" type="button" class="quiet">공유</button>
+        <button id="export-copy" type="button" class="primary">복사</button>
       </div>
     </form>
   </dialog>

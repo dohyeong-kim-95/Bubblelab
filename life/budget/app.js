@@ -1,8 +1,10 @@
 import {
-  addEntries, addEntry, cycleLabel, cycleOf, editEntry, emptyState, entriesIn, groupByDay,
-  inCycle, kstDate, markSynced, needsSync, pace, parseState, removeEntries, removeEntry,
-  setAuto, setLimit, setStartDay, shiftDate, shortWon, toggleSkip, won,
+  CATEGORIES, addEntries, addEntry, byCategory, categoryFor, categoryLabel, cycleLabel, cycleOf,
+  editEntry, emptyState, entriesIn, exportText, groupByDay, inCycle, kstDate, markSynced,
+  needsSync, pace, parseState, removeEntries, removeEntry, setAuto, setCategory, setLimit,
+  setStartDay, shiftDate, shortWon, toggleSkip, won,
 } from "./store.js";
+import { MERCHANTS } from "./merchants.js";
 import { parseBackupOrText, seenSigs } from "./sms.js";
 
 const $ = (id) => document.getElementById(id);
@@ -14,6 +16,10 @@ let state = load();
 let anchor = kstDate();
 let editing = null;
 let pending = [];   // 문자에서 읽어 낸 것들 — 담기 전까지는 화면에만 있다
+let onlyCat = null; // 한 칸만 보는 중이면 그 카테고리 id(null 이면 전체)
+
+/** 담을 때 카테고리를 찍어 준다. 내가 정한 규칙이 먼저고, 없으면 씨앗 표를 본다. */
+const withCategory = (draft) => ({ ...draft, cat: draft.cat || categoryFor(draft.memo, state.rules, MERCHANTS) });
 
 function load() {
   try { return parseState(localStorage.getItem(STORAGE_KEY)) ?? emptyState(); }
@@ -62,6 +68,7 @@ function render() {
   $("next-cycle").disabled = inCycle(cycle, today) || cycle.start > today;
 
   renderHero(now);
+  renderCats(cycle);
   renderEntries(cycle);
   syncDateInput(cycle, today);
 }
@@ -107,8 +114,38 @@ function verdict(now) {
   return `기준에 맞게 쓰고 있어요. ${perDay}`;
 }
 
+/* 어디에 얼마나 썼나. 합계에서 뺀 것은 여기서도 빠진다 — 두 수가 어긋나면 안 된다.
+ * 한 줄을 누르면 그 칸만 추려 본다(미분류를 훑어 정하는 자리이기도 하다). */
+function renderCats(cycle) {
+  const rows = byCategory(entriesIn(state, cycle));
+  const top = rows[0]?.total ?? 0;
+  $("cats").replaceChildren(...rows.map((row) => {
+    const on = onlyCat === row.cat;
+    const button = node("button", `cat${on ? " on" : ""}${row.cat ? "" : " none"}`);
+    button.type = "button";
+    button.setAttribute("aria-pressed", String(on));
+    const bar = node("div", "cat-bar");
+    const fill = node("div", "cat-fill");
+    fill.style.width = `${top > 0 ? Math.max((row.total / top) * 100, 2) : 0}%`;
+    bar.append(fill);
+    button.append(
+      node("span", "cat-name", row.label),
+      bar,
+      node("span", "cat-total", `${won(row.total)} · ${row.count}건`),
+    );
+    button.addEventListener("click", () => { onlyCat = on ? null : row.cat; render(); });
+    return button;
+  }));
+
+  const picked = rows.find((row) => row.cat === onlyCat);
+  $("cat-clear").hidden = !picked;
+  if (picked) $("cat-clear").textContent = `${picked.label}만 보는 중 · 전체 보기`;
+}
+
 function renderEntries(cycle) {
-  const days = groupByDay(entriesIn(state, cycle));
+  const shown = entriesIn(state, cycle)
+    .filter((entry) => onlyCat === null || (entry.cat ?? "") === onlyCat);
+  const days = groupByDay(shown);
   $("empty").hidden = days.length > 0;
   $("entries").replaceChildren(...days.map((day) => {
     const section = node("div", "day");
@@ -127,7 +164,8 @@ function entryRow(entry) {
   const main = node("button", "entry-main");
   main.type = "button";
   main.append(
-    node("span", `entry-memo${entry.memo ? "" : " blank"}`, entry.memo || "메모 없음"),
+    node("span", `entry-memo${entry.memo ? "" : " blank"}`,
+      `${entry.memo || "메모 없음"}${entry.cat ? ` · ${categoryLabel(entry.cat)}` : ""}`),
     node("span", `entry-amount${entry.amount < 0 ? " refund" : ""}`,
       entry.amount < 0 ? `+${won(-entry.amount)}` : won(entry.amount)),
   );
@@ -158,7 +196,7 @@ $("add").addEventListener("submit", (event) => {
   event.preventDefault();
   const on = $("date").value || kstDate();
   try {
-    update(addEntry(state, { amount: $("amount").value, memo: $("memo").value, on }));
+    update(addEntry(state, withCategory({ amount: $("amount").value, memo: $("memo").value, on })));
     $("add-error").textContent = "";
     $("amount").value = "";
     $("memo").value = "";
@@ -169,6 +207,8 @@ $("add").addEventListener("submit", (event) => {
     $("add-error").textContent = error.message;
   }
 });
+
+$("cat-clear").addEventListener("click", () => { onlyCat = null; render(); });
 
 /* ── 주기 넘기기 ────────────────────────────────────────────────── */
 $("prev-cycle").addEventListener("click", () => {
@@ -186,6 +226,13 @@ function openEditor(entry) {
   $("editor-amount").value = String(entry.amount);
   $("editor-memo").value = entry.memo;
   $("editor-date").value = entry.on;
+  $("editor-cat").replaceChildren(...[{ id: "", label: "미분류" }, ...CATEGORIES].map((cat) => {
+    const option = document.createElement("option");
+    option.value = cat.id;
+    option.textContent = cat.label;
+    option.selected = cat.id === (entry.cat ?? "");
+    return option;
+  }));
   $("editor-error").textContent = "";
   $("editor").showModal();
 }
@@ -193,11 +240,14 @@ function openEditor(entry) {
 $("editor-form").addEventListener("submit", (event) => {
   event.preventDefault();
   try {
-    update(editEntry(state, editing, {
+    /* 고친 뒤에 카테고리를 정한다 — 규칙은 **고친 메모**에 붙어야 하고, 같은 가맹점의
+     * 다른 항목도 함께 따라온다(setCategory). */
+    const edited = editEntry(state, editing, {
       amount: $("editor-amount").value,
       memo: $("editor-memo").value,
       on: $("editor-date").value,
-    }));
+    });
+    update(setCategory(edited, editing, $("editor-cat").value));
     $("editor").close();
   } catch (error) {
     $("editor-error").textContent = error.message;
@@ -415,7 +465,7 @@ function takeNew(text) {
     drafts.push(entry);
   }
   // 담은 것이 없어도 오늘 읽은 것으로 친다 — 열 때마다 폴더를 들추지 않게.
-  const { state: next, added } = addEntries(markSynced(state), drafts);
+  const { state: next, added } = addEntries(markSynced(state), drafts.map(withCategory));
   justSynced = added;
   update(next);
   return added.length;
@@ -478,7 +528,7 @@ $("sms-file").addEventListener("change", async (event) => {
 
 $("sms-form").addEventListener("submit", (event) => {
   event.preventDefault();
-  const taking = pending.filter((row) => row.take).map((row) => row.entry);
+  const taking = pending.filter((row) => row.take).map((row) => withCategory(row.entry));
   let next = state;
   for (const entry of taking) {
     try { next = addEntry(next, entry, new Date(`${entry.on}T12:00:00Z`)); }
@@ -523,6 +573,44 @@ async function takeShared() {
   openSms([params.get("text"), params.get("title")].filter(Boolean).join("\n"));
 }
 takeShared();
+
+/* ── 내보내기 ───────────────────────────────────────────────────
+ * 쓰임새가 "LLM 에 넣고 물어보기" 라 파일보다 **클립보드가 먼저**다(붙여넣기 한 번이면
+ * 대화창에 들어간다). 무엇이 나가는지 눈으로 보고 복사하도록 글을 그대로 띄운다. */
+function openExport() {
+  $("export-text").value = exportText(state, cycleOf(anchor, state.startDay), kstDate());
+  $("export-note").textContent = "";
+  $("export-share").hidden = typeof navigator.share !== "function";
+  $("export").showModal();
+}
+
+async function copyExport() {
+  const text = $("export-text").value;
+  try {
+    await navigator.clipboard.writeText(text);
+    $("export-note").textContent = "복사했습니다 — 대화창에 붙여넣으세요";
+  } catch {
+    // 클립보드가 막힌 자리(권한·비보안 컨텍스트)에서는 손으로 고를 수 있게 잡아만 준다.
+    $("export-text").focus();
+    $("export-text").select();
+    $("export-note").textContent = "복사가 막혀 있어 글을 골라 뒀습니다 — 길게 눌러 복사하세요";
+  }
+}
+
+async function shareExport() {
+  const cycle = cycleOf(anchor, state.startDay);
+  try {
+    await navigator.share({ title: `가계부 ${cycle.start}~${cycle.end}`, text: $("export-text").value });
+  } catch (error) {
+    if (error?.name !== "AbortError") $("export-note").textContent = "공유하지 못했습니다 — 복사를 써주세요";
+  }
+}
+
+$("export-open").addEventListener("click", () => { $("settings").close(); openExport(); });
+$("export-copy").addEventListener("click", copyExport);
+$("export-share").addEventListener("click", shareExport);
+$("export-cancel").addEventListener("click", () => $("export").close());
+$("export-form").addEventListener("submit", (event) => event.preventDefault());
 
 /* ── 한도와 주기 ────────────────────────────────────────────────── */
 $("settings-button").addEventListener("click", () => {

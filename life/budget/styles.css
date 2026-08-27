@@ -104,8 +104,36 @@ body { overflow: auto; }
 .entry-amount.refund { color: var(--muted); }
 .empty-note { margin: 28px 2px; }
 
+/* ── 어디에 얼마나 썼나 ─────────────────────────────────────────────
+ * 목록 위에 한 줄씩. 누르면 그 칸만 추려 본다(누른 줄이 진해진다). */
+.cats { display: grid; grid-template-columns: minmax(0, 1fr); margin-top: 18px; }
+.cat { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px;
+  padding: 0 2px; text-align: left; border-bottom: 1px solid var(--line); }
+.cat:active { background: var(--surface); }
+.cat.on { font-weight: 700; }
+.cat-name { flex: none; font-size: 13px; }
+.cat-bar { flex: 1; min-width: 0; height: 6px; border-radius: 4px; background: var(--surface);
+  border: 1px solid var(--line); overflow: hidden; }
+.cat-fill { height: 100%; background: var(--ink); }
+.cat.none .cat-fill { background: var(--muted); }
+.cat-total { flex: none; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.cat.on .cat-total { color: var(--ink); }
+
+/* 한 칸만 보는 중이라는 표시 겸 되돌리는 버튼. 설정 안의 내보내기 줄도 같은 모양이다. */
+.line-button { width: 100%; min-height: 42px; margin-top: 10px; border-radius: 9px;
+  border: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+.line-button:active { background: var(--surface); }
+
+/* 내보낼 글. 무엇이 나가는지 눈으로 보고 복사한다. */
+.export-text { width: 100%; box-sizing: border-box; margin-top: 10px; border: 1px solid var(--line);
+  border-radius: 9px; background: var(--bg); color: var(--ink); padding: 10px;
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; resize: vertical; }
+
+#editor-form .fine-print { margin: 6px 4px 0; }
 #editor-form label, #settings-form label { display: block; margin: 10px 4px 4px;
   color: var(--muted); font-size: 12px; }
+#editor-form select { width: 100%; height: 46px; border: 1px solid var(--line); border-radius: 9px;
+  background: var(--bg); color: var(--ink); padding: 0 10px; font: inherit; }
 #settings-form .fine-print { margin: 10px 4px 0; }
 
 /* ── 카드 문자에서 담기 ─────────────────────────────────────────── */

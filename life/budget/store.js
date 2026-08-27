@@ -90,6 +90,8 @@ export function emptyState(limit = DEFAULT_LIMIT, startDay = DEFAULT_START_DAY) 
     // 화면을 열 때 기억한 폴더에서 최신 백업을 알아서 읽는다. 하루 한 번이면 충분하다.
     auto: true,
     lastSyncOn: "",
+    // 가맹점 이름 → 카테고리. 한 번 정하면 다음부터 그 칸으로 담긴다.
+    rules: {},
   };
 }
 
@@ -117,6 +119,8 @@ export function normalizeEntry(entry) {
     at: typeof entry?.at === "string" ? entry.at : new Date().toISOString(),
     // 카드 문자에서 온 것만 갖는 표식. 같은 문자를 두 번 담지 않으려고 둔다(sms.js).
     ...(typeof entry?.sig === "string" && entry.sig ? { sig: entry.sig.slice(0, 40) } : {}),
+    // 카테고리. 아직 정하지 않았으면 빈 값(미분류)이다 — 미분류로 남는 것을 정상으로 본다.
+    ...(isCategory(entry?.cat) ? { cat: entry.cat } : {}),
     // 담아는 두되 합계에서 빼는 것. 즉시결제로 빠져나간 카드값처럼 "쓴 돈이 아닌" 것을
     // 지우지 않고 남겨 둘 수 있어야 한다 — 지우면 다음 백업에서 또 담긴다.
     ...(entry?.skip ? { skip: true } : {}),
@@ -149,7 +153,107 @@ export function parseState(raw) {
     // 자동 읽기는 나중에 붙였다 — 옛 저장본에는 이 칸이 없다(기본은 켜 둔다).
     auto: value.auto !== false,
     lastSyncOn: isDate(value.lastSyncOn) ? value.lastSyncOn : "",
+    // 한 번 정한 카테고리는 가맹점 이름에 붙어 남는다. 옛 저장본에는 이 칸이 없다.
+    rules: normalizeRules(value.rules),
   };
+}
+
+function normalizeRules(rules) {
+  const clean = {};
+  for (const [key, cat] of Object.entries(rules && typeof rules === "object" ? rules : {})) {
+    if (isCategory(cat) && key) clean[ruleKey(key)] = cat;
+  }
+  return clean;
+}
+
+/* ── 카테고리 ───────────────────────────────────────────────────────
+ * 목록은 **고정**이다. 늘리고 줄이게 하면 관리할 것이 하나 늘고, 이름이 흔들리면
+ * 지난 주기와 견줄 수 없다. 미분류로 남는 것은 정상이다 — 분류를 강요하지 않는다.
+ *
+ * 자동 분류를 똑똑하게 만들지 않는다. 문자에는 가맹점 이름밖에 없고 그게 무슨 소비인지는
+ * 사람만 안다. 대신 **한 번 정한 것을 기억**한다(state.rules) — 쓸수록 손이 덜 간다. */
+export const CATEGORIES = [
+  { id: "food", label: "식비" },
+  { id: "cafe", label: "카페/간식" },
+  { id: "transport", label: "교통" },
+  { id: "living", label: "생필품" },
+  { id: "health", label: "의료" },
+  { id: "fun", label: "문화/여가" },
+  { id: "bills", label: "통신/구독" },
+  { id: "etc", label: "기타" },
+];
+export const UNCATEGORIZED = "미분류";
+
+const isCategory = (id) => CATEGORIES.some((one) => one.id === id);
+export const categoryLabel = (id) => CATEGORIES.find((one) => one.id === id)?.label ?? UNCATEGORIZED;
+
+/**
+ * 규칙의 열쇠. 카드사마다 띄어쓰기·대소문자가 달라 붙여서 비교하고, 법인 머리
+ * ("(주)"·"㈜"·"주식회사")는 떼어 낸다 — 같은 가게가 두 규칙으로 갈리면 안 된다.
+ */
+export const ruleKey = (memo) => String(memo ?? "")
+  .replace(/\(주\)|\(유\)|㈜|주식회사/g, "")
+  .toLowerCase()
+  .replace(/[\s()·.,\-*]/g, "");
+
+/**
+ * 이 가맹점은 어느 칸인가. 순서가 곧 우선순위다.
+ * 1. 내가 정한 규칙 — 언제나 이긴다.
+ * 2. 씨앗 표(merchants.js) — 이름에 든 글자로 본다. 겹치면 **긴 쪽**이 이긴다
+ *    ("쿠팡이츠" 가 "쿠팡" 을 이겨야 배달이 생필품으로 가지 않는다).
+ * 3. 미분류.
+ */
+export function categoryFor(memo, rules = {}, seeds = []) {
+  const key = ruleKey(memo);
+  if (!key) return "";
+  if (isCategory(rules[key])) return rules[key];
+  let best = "";
+  let length = 0;
+  for (const seed of seeds) {
+    const needle = ruleKey(seed.match);
+    if (!needle || needle.length <= length || !key.includes(needle)) continue;
+    if (!isCategory(seed.cat)) continue;
+    best = seed.cat;
+    length = needle.length;
+  }
+  return best;
+}
+
+/**
+ * 카테고리를 정한다. **같은 이름의 다른 항목도 함께 바뀌고** 규칙으로 남는다 —
+ * 같은 가맹점이 주기마다 다른 칸에 있으면 카테고리를 보는 뜻이 없다.
+ * 빈 값으로 두면 규칙도 지운다(잘못 정한 것을 되돌릴 길이 있어야 한다).
+ */
+export function setCategory(state, id, cat) {
+  const found = state.entries.find((entry) => entry.id === id);
+  if (!found) throw new Error("그런 항목이 없습니다");
+  const next = isCategory(cat) ? cat : "";
+  const key = ruleKey(found.memo);
+  const rules = { ...state.rules };
+  if (key) {
+    if (next) rules[key] = next; else delete rules[key];
+  }
+  return {
+    ...state,
+    rules,
+    entries: state.entries.map((entry) => (entry.id === id || (key && ruleKey(entry.memo) === key)
+      ? normalizeEntry({ ...entry, cat: next })
+      : entry)),
+  };
+}
+
+/** 카테고리별 합계. 합계에서 뺀 것(skip)은 여기서도 빠진다 — 두 수가 어긋나면 안 된다. */
+export function byCategory(entries) {
+  const sums = new Map();
+  for (const entry of entries) {
+    if (entry.skip) continue;
+    const cat = isCategory(entry.cat) ? entry.cat : "";
+    const row = sums.get(cat) ?? { cat, label: categoryLabel(cat), total: 0, count: 0 };
+    row.total += entry.amount;
+    row.count += 1;
+    sums.set(cat, row);
+  }
+  return [...sums.values()].sort((a, b) => b.total - a.total);
 }
 
 export const setAuto = (state, auto) => ({ ...state, auto: Boolean(auto) });
@@ -271,6 +375,59 @@ function status(spent, limit, diff) {
   if (spent > limit) return "over";                      // 한도를 넘겼다
   if (Math.abs(diff) <= limit * ON_PACE) return "on";    // 기준선 언저리
   return diff > 0 ? "ahead" : "under";                   // 앞서 씀 / 아껴 씀
+}
+
+/* ── 내보내기 ───────────────────────────────────────────────────────
+ * 쓰임새가 "LLM 에 넣고 물어보기" 라 CSV 가 아니라 **글 한 덩어리**다. 위에는 사람이
+ * 읽는 요약(주기·한도·페이스·카테고리별 합계), 아래에는 탭으로 나눈 표를 둔다 —
+ * 요약이 있어야 모델이 "많다/적다" 를 자기 기준으로 지어내지 않는다.
+ *
+ * 합계에서 뺀 것(skip)도 표에는 남기고 열로 표시한다. 빼 버리면 파일만 보고는 왜 없는지
+ * 알 수 없고, 모델이 합계와 표를 더해 보고 어긋난다고 여긴다. */
+export function exportText(state, cycle, today = kstDate()) {
+  const entries = [...entriesIn(state, cycle)]
+    .sort((a, b) => (a.on === b.on ? a.at.localeCompare(b.at) : a.on.localeCompare(b.on)));
+  const now = pace(state, cycle, today);
+  const skipped = entries.filter((entry) => entry.skip);
+  const share = (value) => (now.spent > 0 ? ` (${Math.round((value / now.spent) * 100)}%)` : "");
+  const short = (date) => date.slice(5);
+
+  const head = [
+    "아래는 카드 한 장으로 쓴 한 주기의 소비 기록이다. 금액 단위는 원(KRW), 날짜는 한국 시간이다.",
+    `주기 ${cycle.start} ~ ${cycle.end} (${cycle.days}일) · 한도 ${won(now.limit)}`,
+    now.finished
+      ? `끝난 주기 · 쓴 돈 ${won(now.spent)} · ${now.remaining < 0 ? `한도를 ${won(-now.remaining)} 넘김` : `${won(now.remaining)} 남김`}`
+      : now.started
+        ? `${now.days}일 중 ${now.dayIndex}일째(${today}) · 오늘까지 기준선 ${won(now.expected)}`
+          + ` · 쓴 돈 ${won(now.spent)} · 남은 돈 ${won(now.remaining)}`
+          + (now.perDay == null ? "" : ` · 남은 ${now.daysLeft}일 동안 하루 ${won(now.perDay)}`)
+        : `아직 시작하지 않은 주기 · 하루 기준 ${won(Math.round(now.limit / now.days))}`,
+    skipped.length
+      ? `합계에서 뺀 것 ${skipped.length}건 ${won(skipped.reduce((sum, one) => sum + one.amount, 0))}`
+        + " (카드 대금 납부처럼 쓴 돈이 아닌 것 — 아래 표의 제외=Y)"
+      : "",
+  ].filter(Boolean);
+
+  const cats = byCategory(entries).map((row) => `- ${row.label} ${won(row.total)}${share(row.total)} ${row.count}건`);
+  const rows = entries.map((entry) => [
+    short(entry.on),
+    entry.amount,
+    entry.memo || "(메모 없음)",
+    categoryLabel(entry.cat),
+    entry.skip ? "Y" : "",
+  ].join("\t"));
+
+  return [
+    head.join("\n"),
+    "",
+    `카테고리별 (합계 ${won(now.spent)})`,
+    ...(cats.length ? cats : ["- 아직 적은 것이 없다"]),
+    "",
+    `기록 ${entries.length}건`,
+    ["날짜", "금액", "가맹점", "카테고리", "제외"].join("\t"),
+    ...rows,
+    "",
+  ].join("\n");
 }
 
 /* ── 보이기 ───────────────────────────────────────────────────────── */
