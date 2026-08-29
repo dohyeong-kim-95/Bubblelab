@@ -12,6 +12,9 @@ const PINS = [
   { seq: 7, lat: 48.8584, lng: 2.2945, owner: "나", photo: true },     // 파리
   { seq: 8, lat: 40.7580, lng: -73.9855, owner: "너", photo: true },   // 뉴욕(섬)
   { seq: 9, lat: 0, lng: -150, owner: "나", photo: true },             // 태평양 한복판 → 어디에도 안 붙음
+  // 러시아 극동(추코트카)은 날짜변경선 **건너편**이다. 링을 안 자르면 러시아가
+  // 지도를 가로지르는 직선이 되고 이 점의 판정도 같이 망가진다.
+  { seq: 10, lat: 66.0, lng: -173.0, owner: "나", photo: true },
 ];
 
 test("duri 지도 — 한국편/세계편이 모두 그려지고 토글된다", async ({ page }) => {
@@ -52,12 +55,12 @@ test("duri 지도 — 한국편/세계편이 모두 그려지고 토글된다", 
   expect(kr.viewBox).toBe("0 0 1000 1200");
   expect(kr.painted.length).toBe(4);           // 중구·강남구·해운대구·제주시
   expect(kr.count).toBe("4개 지역");
-  expect(kr.summary).toContain("🌏 5");        // 해외 5(도쿄·싱가포르·파리·뉴욕·태평양)
+  expect(kr.summary).toContain("🌏 6");        // 해외 6(도쿄·싱가포르·파리·뉴욕·태평양·추코트카)
   expect(kr.summary).toContain("색칠된 지역을 탭하면");
   expect(kr.toggle).toBe("🌏");
 
   await page.evaluate(() => window.setMapMode("world"));
-  await page.waitForFunction(() => document.getElementById("map-svg").getAttribute("viewBox") === "0 0 1000 428", null, { timeout: 20000 });
+  await page.waitForFunction(() => document.getElementById("map-svg").getAttribute("viewBox") === "0 0 1000 663", null, { timeout: 20000 });
   const world = await page.evaluate(() => ({
     paths: document.getElementById("map-paths").children.length,
     painted: [...document.getElementById("map-paths").children]
@@ -73,14 +76,14 @@ test("duri 지도 — 한국편/세계편이 모두 그려지고 토글된다", 
   console.log("세계편:", JSON.stringify(world, null, 1));
   expect(world.paths).toBe(233);
   expect(world.painted.map((t) => t.split(" · ")[0])).toEqual(
-    ["대한민국", "미국", "싱가포르", "일본", "프랑스"]);
+    ["대한민국", "러시아", "미국", "싱가포르", "일본", "프랑스"]);
   expect(world.painted.find((t) => t.startsWith("대한민국"))).toBe("대한민국 · 4개");
-  expect(world.count).toBe("5개 나라");
-  expect(world.summary).toContain("🌏 5");   // 다녀온 나라 5
+  expect(world.count).toBe("6개 나라");
+  expect(world.summary).toContain("🌏 6");   // 다녀온 나라 6
   expect(world.summary).toContain("❓ 1");   // 태평양 한복판
   expect(world.summary).toContain("색칠된 나라를 탭하면"); // 조사가 "나라을" 로 깨지지 않는다
+  expect(world.dots).toBe(6);
   expect(world.toggle).toBe("🇰🇷");
-  expect(world.dots).toBe(5);
 
   // 나라를 탭하면 그 나라 앨범이 열린다
   await page.evaluate(() => {

@@ -140,6 +140,54 @@ const polysOf = (arcs, geom) =>
   (geom.type === "Polygon" ? [geom.arcs] : geom.type === "MultiPolygon" ? geom.arcs : [])
     .map((poly) => poly.map((ring) => ringOf(arcs, ring)));
 
+// ── 날짜변경선 자르기 ───────────────────────────────────────────
+// 러시아처럼 ±180 을 넘는 나라는 한 링 안에서 경도가 179.9 → -180 으로 튄다.
+// 평면에 그대로 그리면 그 한 변이 **지도를 가로지르는 직선**이 된다(실제로 북위
+// 65·69·71·71.5도에 네 줄이 그어졌다). 점-폴리곤 판정도 같이 망가진다.
+// 링을 이어지게 편 뒤(unwrap) 경도 180도 간격의 띠마다 잘라 조각으로 나눈다.
+function unwrapLng(ring) { // 튀는 지점마다 ±360 을 더해 경도를 이어 붙인다
+  const out = [[...ring[0]]];
+  for (let i = 1; i < ring.length; i++) {
+    let x = ring[i][0];
+    const prev = out[i - 1][0];
+    while (x - prev > 180) x -= 360;
+    while (x - prev < -180) x += 360;
+    out.push([x, ring[i][1]]);
+  }
+  return out;
+}
+function clipHalf(ring, lim, keepBelow) { // 반평면으로 자르기(Sutherland–Hodgman)
+  const inside = (p) => (keepBelow ? p[0] <= lim : p[0] >= lim);
+  const out = [];
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[j], b = ring[i];
+    const ia = inside(a), ib = inside(b);
+    if (ia !== ib) {
+      const t = (lim - a[0]) / (b[0] - a[0]);
+      out.push([lim, a[1] + t * (b[1] - a[1])]);
+    }
+    if (ib) out.push([...b]);
+  }
+  return out;
+}
+function splitAntimeridian(ring) { // 닫힌 링 → 닫힌 링 여러 개
+  const open = ring.slice(0, -1);
+  const un = unwrapLng(open);
+  let min = Infinity, max = -Infinity;
+  for (const p of un) { if (p[0] < min) min = p[0]; if (p[0] > max) max = p[0]; }
+  if (min >= -180 && max <= 180) return [ring];  // 안 넘는다 — 그대로
+  if (max - min >= 360) return [ring];           // 지구를 한 바퀴 — 이 방법으로는 못 나눈다
+  const parts = [];
+  for (let k = Math.floor((min + 180) / 360); k <= Math.floor((max + 180) / 360); k++) {
+    const piece = clipHalf(clipHalf(un, 180 + 360 * k, true), -180 + 360 * k, false);
+    if (piece.length < 3) continue;
+    const moved = piece.map(([x, y]) => [x - 360 * k, y]); // 제자리로 되돌린다
+    moved.push([...moved[0]]);
+    parts.push(moved);
+  }
+  return parts.length ? parts : [ring];
+}
+
 // ── 단순화 (Douglas-Peucker) ────────────────────────────────────
 function perpSq(p, a, b) {
   let dx = b[0] - a[0], dy = b[1] - a[1];
@@ -201,13 +249,19 @@ function main() {
 
     const polys = [];
     for (const poly of polysOf(arcs, geom)) {
-      const rings = [];
-      for (let i = 0; i < poly.length; i++) {
-        const s = simplifyRing(poly[i]);
-        if (!s) { if (i === 0) { rings.length = 0; break; } continue; } // 외곽이 죽으면 이 폴리곤은 버린다
-        rings.push(s.ring);
+      // 외곽이 날짜변경선을 넘으면 조각으로 나눠 각각을 하나의 폴리곤으로 둔다.
+      // 이 데이터에는 구멍이 하나도 없어(생성 시 확인) 구멍 재배치는 필요 없다 —
+      // 구멍이 생기면 자르지 않고 그대로 딸려 보낸다.
+      const outers = splitAntimeridian(poly[0]);
+      for (const outer of outers) {
+        const rings = [];
+        for (const raw of [outer, ...poly.slice(1)]) {
+          const s = simplifyRing(raw);
+          if (!s) { if (!rings.length) break; continue; } // 외곽이 죽으면 이 조각은 버린다
+          rings.push(s.ring);
+        }
+        if (rings.length) polys.push({ rings, span: spanOf(rings[0]) });
       }
-      if (rings.length) polys.push({ rings, span: spanOf(rings[0]) });
     }
     if (!polys.length) continue;
     // 아주 작은 부속 섬은 뺀다 — 나라마다 제일 큰 조각은 반드시 남긴다(섬나라 보호).

@@ -101,7 +101,7 @@ self.addEventListener("activate", (event) => event.waitUntil((async () => {
 // /_duri·/_rt(실시간·게이트 API)는 항상 최신이어야 하므로 손대지 않는다 —
 // 실제 데이터·인증은 이 캐시와 무관하게 매번 쿠키·E2E 패스프레이즈로 따로
 // 검증되므로, 셸(빈 껍데기 마크업)을 캐싱해도 보안엔 영향이 없다.
-const SHELL_CACHE = "duri-shell-v5";
+const SHELL_CACHE = "duri-shell-v6";
 
 // 문서(HTML)는 '네트워크 우선'. 앱을 열 때마다 최신 코드를 받아, index.html만
 // 바뀐 배포도 "다음 실행"이 아니라 바로 이번 실행에 반영된다(예전 stale-while-

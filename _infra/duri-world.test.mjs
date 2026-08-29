@@ -1,7 +1,7 @@
 // duri 세계 지도 데이터 검사.
 //
 // duri/data/world-countries.geojson 은 _infra/duri-world-geo.mjs 가 Natural Earth
-// 에서 구워 낸 576KB 짜리 산출물이라 눈으로 훑을 수가 없다. 다시 구웠을 때
+// 에서 구워 낸 577KB 짜리 산출물이라 눈으로 훑을 수가 없다. 다시 구웠을 때
 // **실제 여행지 좌표가 맞는 나라로 떨어지는지**를 여기서 지킨다 — 예전에 단순화를
 // 세게 걸었다가 해운대·제주공항·싱가포르·뉴욕이 통째로 "해외 미상"이 된 적이 있다.
 //
@@ -99,6 +99,25 @@ test("링은 닫혀 있고 최소 4점이다", () => {
     const a = ring[0], b = ring[ring.length - 1];
     assert.ok(a[0] === b[0] && a[1] === b[1], `${f.properties.name}: 링이 닫히지 않았다`);
   }
+});
+
+test("날짜변경선을 넘는 링이 없다 — 넘으면 지도에 가로줄이 그어진다", () => {
+  // 러시아는 ±180 을 넘어서, 자르지 않으면 한 변이 경도 359.9° 를 건너뛴다.
+  // 그게 평면에서 **지도를 가로지르는 직선**으로 그려졌다(북위 65·69·71·71.5도에
+  // 네 줄). 생성기가 splitAntimeridian 으로 조각내므로 긴 점프가 남으면 안 된다.
+  const jumps = [];
+  for (const f of geo.features) for (const poly of f._polys) for (const ring of poly) {
+    for (let i = 1; i < ring.length; i++) {
+      const dx = Math.abs(ring[i][0] - ring[i - 1][0]);
+      if (dx > 60) jumps.push(`${f.properties.name} Δlng=${dx.toFixed(1)}° (lat ${ring[i][1]})`);
+    }
+  }
+  assert.deepEqual(jumps, [], "경도가 크게 튀는 변이 있다 — 지도에 가로줄이 그어진다");
+});
+
+test("날짜변경선 건너편도 제 나라로 판정된다", () => {
+  assert.equal(countryOf(66.0, -173.0), "러시아", "추코트카(러시아 극동)");
+  assert.equal(countryOf(51.9, 177.5), "미국", "알류샨 열도 서쪽 끝");
 });
 
 test("남극은 빼 둔다 — 있으면 사람 사는 곳이 손톱만 해진다", () => {

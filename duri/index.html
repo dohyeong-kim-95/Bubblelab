@@ -4167,6 +4167,7 @@ const MAP_MODES = {
   kr: {
     file: "data/kr-sgg.geojson",
     view: { W: 1000, H: 1200 },   // 한국 bbox 비율에 맞춘 세로 화면
+    proj: "equirect",             // 좁은 범위라 등거리로 충분하다(위도 보정만)
     snap: false,                  // 시군구는 근접 판정을 하지 않는다(아래 SNAP_KM 설명)
     key: (f) => f.properties.sgg,
     name: (f) => `${f.properties.sidonm} ${f.properties.sggnm}`,
@@ -4179,7 +4180,8 @@ const MAP_MODES = {
   },
   world: {
     file: "data/world-countries.geojson",
-    view: { W: 1000, H: 428 },    // 세계 bbox(남극 제외) 비율 — 가로로 넓다
+    view: { W: 1000, H: 663 },    // 메르카토르 세계 bbox(남극 제외) 비율
+    proj: "mercator",
     snap: true,
     key: (f) => f.properties.en,  // 한국어 이름은 겹칠 수 있어 영문을 키로 쓴다
     name: (f) => f.properties.name,
@@ -4199,7 +4201,7 @@ function geomPolys(g) { // [ [ring, hole...], ... ] — 각 ring = [[lng,lat],..
   if (g.type === "MultiPolygon") return g.coordinates;
   return [];
 }
-const mapGeos = {}; // mode → geo. 세계 지도(576KB)는 세계편을 처음 열 때만 받는다.
+const mapGeos = {}; // mode → geo. 세계 지도(577KB)는 세계편을 처음 열 때만 받는다.
 async function loadMapGeo(mode = mapMode) {
   if (mapGeos[mode]) return mapGeos[mode];
   const M = MAP_MODES[mode];
@@ -4337,15 +4339,29 @@ async function renderMap() {
   const cTheirs = colorForOwner(peerName || "상대");
   const cShared = sharedColor();
   const ownerColor = (r) => (r.mine && r.theirs) ? cShared : r.theirs ? cTheirs : cMine;
-  // 투영: 위경도 → 화면(등거리, 위도 보정). 그 지도의 bbox를 viewBox에 맞춘다
-  // (한국은 세로로 긴 1000×1200, 세계는 가로로 넓은 1000×428).
+  // 투영: 위경도 → 화면. 그 지도의 bbox 를 viewBox 에 맞춘다.
+  //
+  // **한국은 등거리**(위도 보정만) — 위도 5도 남짓이라 이걸로 충분하고, 지금까지
+  // 그려 온 모양 그대로다(1000×1200).
+  // **세계는 메르카토르**. 등거리로 세계를 그리면 가로:세로가 1 : 0.40 이라 세로로
+  // 긴 휴대폰에서 위아래가 텅 빈 납작한 띠가 되고, 고위도가 가로로 늘어져 그린란드가
+  // 러시아만큼 넓적해진다. 메르카토르는 같은 폭에서 1 : 0.65 로 **55% 더 높고**
+  // 모양도 제자리를 찾는다(1000×663).
   const { W, H } = M.view; const PAD = 24, b = geo._bbox;
-  const lat0 = (b.minLat + b.maxLat) / 2, kx = Math.cos(lat0 * Math.PI / 180);
-  const gw = (b.maxLng - b.minLng) * kx, gh = (b.maxLat - b.minLat);
+  const merc = M.proj === "mercator";
+  // 메르카토르 y(라디안). 극에서 발산하므로 ±85도에서 자른다 — 데이터는 83.6도까지다.
+  const my = (lat) => Math.log(Math.tan(Math.PI / 4 + Math.max(-85, Math.min(85, lat)) * Math.PI / 360));
+  const lat0 = (b.minLat + b.maxLat) / 2, kx = merc ? 1 : Math.cos(lat0 * Math.PI / 180);
+  const yTop = merc ? my(b.maxLat) : b.maxLat;
+  const yOf = merc ? my : (lat) => lat;
+  // 메르카토르는 경도도 라디안으로 재야 세로와 단위가 맞는다.
+  const xk = merc ? Math.PI / 180 : 1;
+  const gw = (b.maxLng - b.minLng) * kx * xk;
+  const gh = yTop - yOf(b.minLat);
   const s = Math.min((W - 2 * PAD) / gw, (H - 2 * PAD) / gh);
   const ox = (W - gw * s) / 2, oy = (H - gh * s) / 2;
-  const X = (lng) => ox + (lng - b.minLng) * kx * s;
-  const Y = (lat) => oy + (b.maxLat - lat) * s;
+  const X = (lng) => ox + (lng - b.minLng) * kx * xk * s;
+  const Y = (lat) => oy + (yTop - yOf(lat)) * s;
   let paths = "";
   for (const f of geo.features) {
     let d = "";
@@ -4502,7 +4518,7 @@ async function setMapMode(mode) {
   resetMapView();     // 배율 1로 — 세계 지도를 16배 확대된 채로 만나면 어디인지 모른다
   syncMapModeButton();
   const btn = $("map-mode");
-  btn.disabled = true; // 세계 지도는 처음 한 번 받아 오는 동안(576KB) 잠깐 걸린다
+  btn.disabled = true; // 세계 지도는 처음 한 번 받아 오는 동안(577KB) 잠깐 걸린다
   try { if (!await renderMapSafe()) showToast("지도를 불러오지 못했어요."); }
   finally { btn.disabled = false; }
 }
