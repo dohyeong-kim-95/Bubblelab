@@ -280,9 +280,11 @@
      곳", "5개 지 / 역" 으로 깨졌다. 좁은 화면에서는 버튼 라벨을 접어 자리를 낸다. */
   .map-head b { font-size: 1rem; margin-right: auto; white-space: nowrap; }
   .map-head #map-count { white-space: nowrap; flex: none; }
-  .map-head #map-sync { flex: none; }
+  .map-head #map-sync, .map-head #map-mode { flex: none; }
   #map-here { flex: none; }
-  @media (max-width: 430px) { #map-here .lbl { display: none; } }
+  /* 헤더에 버튼이 하나 더 붙었다(한국↔세계). 320px 에서도 제목이 안 깨지게
+     라벨을 접는 기준을 넉넉히 잡는다 — 접기 전 폭이 그만큼 늘었다. */
+  @media (max-width: 520px) { #map-here .lbl { display: none; } }
   #map-wrap { flex: 1; min-height: 0; position: relative; overflow: hidden; touch-action: none; }
   #map-svg { width: 100%; height: 100%; display: block; transform-origin: 0 0; will-change: transform; }
   #map-svg path.rg { stroke: var(--line); stroke-width: .5; vector-effect: non-scaling-stroke; }
@@ -788,10 +790,11 @@
     <span id="map-count" style="font-size:.72rem;color:var(--dim)"></span>
     <button id="map-sync" class="icon-btn" type="button" title="이 기기 기록으로 빠진 핀을 만들고 상대 지도와 맞춥니다" aria-label="지도 동기화">🔄</button>
     <button id="map-here" type="button" title="지금 있는 곳을 지도에 추가">📍<span class="lbl"> 현재 위치 추가</span></button>
+    <button id="map-mode" class="icon-btn" type="button" title="세계 지도로" aria-label="세계 지도로">🌏</button>
   </header>
   <div id="map-wrap">
     <svg id="map-svg" role="img" aria-label="함께 다닌 곳 지도"><g id="map-paths"></g><g id="map-dots"></g></svg>
-    <div id="map-empty" hidden>아직 위치가 담긴 사진이 없어요.<br>위치정보가 있는 사진을 주고받으면<br>다녀온 시군구가 여기 색칠돼요.</div>
+    <div id="map-empty" hidden></div>
   </div>
   <div id="map-summary"></div>
 </section>
@@ -2355,13 +2358,15 @@ $("sink-copy").addEventListener("click", async () => {
 });
 
 let hereChoice = null, hereResolve = null;
-function openHereConfirm({ feature, alts, accuracy }) {
+function openHereConfirm({ feature, alts, accuracy, abroad = null }) {
   hereChoice = feature;
   $("here-acc").textContent = accuracy ? `위치 정확도 ±${Math.round(accuracy)}m` : "";
   const render = () => {
     $("here-region").textContent = hereChoice
       ? `${hereChoice.properties.sidonm} ${hereChoice.properties.sggnm}`
-      : "한국 밖 (색칠되지 않아요)";
+      : abroad
+        ? `${abroad._name} (세계 지도에 색칠돼요)`
+        : "어느 나라인지 몰라요 (색칠되지 않아요)";
     $("here-alts").replaceChildren();
     if (alts.length < 2) return; // 후보가 하나뿐이면 고를 게 없다
     const label = document.createElement("div");
@@ -2401,10 +2406,15 @@ async function captureHere() {
   try {
     const pos = await bestFix();
     const { latitude: lat, longitude: lng, accuracy } = pos.coords;
-    const geo = await loadMapGeo();
+    // 확인 시트는 지금 보는 지도가 세계편이어도 **항상 시군구 기준**이다 — 사람이
+    // 확정하는 건 "이 좌표가 어느 구인가"이고, 그 좌표 하나로 두 지도가 다 그려진다.
+    const geo = await loadMapGeo("kr");
     const feature = sggOfPoint(geo, lng, lat);
     const alts = feature ? nearbyRegions(geo, lat, lng, accuracy) : [];
-    const picked = await openHereConfirm({ feature, alts, accuracy });
+    // 한국 밖이면 어느 나라인지라도 알려 준다("색칠 안 돼요"는 이제 사실이 아니다).
+    const abroad = feature ? null
+      : await loadMapGeo("world").then((w) => regionOfPoint(w, lng, lat)).catch(() => null);
+    const picked = await openHereConfirm({ feature, alts, accuracy, abroad });
     if (picked === null) return; // 취소
     // 고른 지역이 GPS 판정과 같으면 실제 좌표를(더 정확하다), 다르면 그 지역
     // 대표점을 보낸다 — 사람이 고른 구에 확실히 찍히게.
@@ -4148,36 +4158,75 @@ async function resyncPins() {
   return { added: loadPins().length - before, moved };
 }
 
-let mapGeo = null;
+// ── 두 장의 지도: 한국편(시군구) · 세계편(나라) ──────────────────
+// 같은 핀을 단위만 바꿔 칠한다. 아래 코드는 어느 쪽이든 feature 의 _key/_name/
+// _short/_group 네 값만 보고 돌아간다 — 시군구/나라 분기를 화면 곳곳에 흩지 않으려고
+// 불러올 때 딱 한 번 정규화한다. 새 지도를 붙이려면 여기에 한 줄 더하면 된다.
+const MAP_MODE_KEY = "duri:mapMode";
+const MAP_MODES = {
+  kr: {
+    file: "data/kr-sgg.geojson",
+    view: { W: 1000, H: 1200 },   // 한국 bbox 비율에 맞춘 세로 화면
+    snap: false,                  // 시군구는 근접 판정을 하지 않는다(아래 SNAP_KM 설명)
+    key: (f) => f.properties.sgg,
+    name: (f) => `${f.properties.sidonm} ${f.properties.sggnm}`,
+    short: (f) => f.properties.sggnm,
+    group: (f) => f.properties.sidonm, // 축소하면 시도로 묶는다
+    unit: "지역", icon: "🧭", what: "다녀온 시군구", empty: "다녀온 시군구",
+    tapHint: "색칠된 지역을 탭하면 그곳 사진을 볼 수 있어요", // 조사가 달라 통째로 적어 둔다
+    outIcon: "🌏", outWhat: "해외",
+    toggle: { emoji: "🌏", label: "세계 지도로" }, // 누르면 넘어갈 곳
+  },
+  world: {
+    file: "data/world-countries.geojson",
+    view: { W: 1000, H: 428 },    // 세계 bbox(남극 제외) 비율 — 가로로 넓다
+    snap: true,
+    key: (f) => f.properties.en,  // 한국어 이름은 겹칠 수 있어 영문을 키로 쓴다
+    name: (f) => f.properties.name,
+    short: (f) => f.properties.name,
+    group: () => null,            // 나라 밑으로 더 쪼갤 단위가 없다
+    unit: "나라", icon: "🌏", what: "다녀온 나라", empty: "다녀온 나라",
+    tapHint: "색칠된 나라를 탭하면 그곳 사진을 볼 수 있어요",
+    outIcon: "❓", outWhat: "어느 나라인지 모르는 기록",
+    toggle: { emoji: "🇰🇷", label: "한국 지도로" },
+  },
+};
+let mapMode = "kr";
+try { if (localStorage.getItem(MAP_MODE_KEY) === "world") mapMode = "world"; } catch { /* 최선노력 */ }
+
 function geomPolys(g) { // [ [ring, hole...], ... ] — 각 ring = [[lng,lat],...]
   if (g.type === "Polygon") return [g.coordinates];
   if (g.type === "MultiPolygon") return g.coordinates;
   return [];
 }
-async function loadMapGeo() {
-  if (mapGeo) return mapGeo;
-  const res = await fetch("data/kr-sgg.geojson", { cache: "force-cache" });
+const mapGeos = {}; // mode → geo. 세계 지도(576KB)는 세계편을 처음 열 때만 받는다.
+async function loadMapGeo(mode = mapMode) {
+  if (mapGeos[mode]) return mapGeos[mode];
+  const M = MAP_MODES[mode];
+  const res = await fetch(M.file, { cache: "force-cache" });
   const geo = await res.json();
+  geo._mode = mode; geo._m = M;
   let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
+  // 클러스터 원을 그리려면 지역마다 "어디에 찍을지(대표점)"와 "얼마나 커도 되는지
+  // (크기)"가 필요하다. 한 번만 재 두고 재사용한다.
+  geo._groups = M.group(geo.features[0]) == null ? null : new Map();
   for (const f of geo.features) {
     f._polys = geomPolys(f.geometry);
-    for (const poly of f._polys) for (const ring of poly) for (const c of ring) {
-      if (c[0] < minLng) minLng = c[0]; if (c[0] > maxLng) maxLng = c[0];
-      if (c[1] < minLat) minLat = c[1]; if (c[1] > maxLat) maxLat = c[1];
+    f._bbox = polysBBox(f._polys);
+    f._point = regionPoint(f); // 지역 안이 보장되는 대표 좌표(색칠·앨범과 같은 것)
+    f._key = M.key(f); f._name = M.name(f); f._short = M.short(f); f._group = M.group(f);
+    f._geo = geo;
+    if (minLng > f._bbox.minLng) minLng = f._bbox.minLng;
+    if (minLat > f._bbox.minLat) minLat = f._bbox.minLat;
+    if (maxLng < f._bbox.maxLng) maxLng = f._bbox.maxLng;
+    if (maxLat < f._bbox.maxLat) maxLat = f._bbox.maxLat;
+    if (geo._groups) {
+      const cur = geo._groups.get(f._group);
+      geo._groups.set(f._group, cur ? mergeBBox(cur, f._bbox) : { ...f._bbox });
     }
   }
   geo._bbox = { minLng, minLat, maxLng, maxLat };
-  // 클러스터 원을 그리려면 지역마다 "어디에 찍을지(대표점)"와 "얼마나 커도 되는지
-  // (크기)"가 필요하다. 한 번만 재 두고 재사용한다.
-  geo._sido = new Map();
-  for (const f of geo.features) {
-    f._bbox = polysBBox(f._polys);
-    f._point = regionPoint(f); // 지역 안이 보장되는 대표 좌표(색칠·앨범과 같은 것)
-    const nm = f.properties.sidonm;
-    const cur = geo._sido.get(nm);
-    geo._sido.set(nm, cur ? mergeBBox(cur, f._bbox) : { ...f._bbox });
-  }
-  mapGeo = geo;
+  mapGeos[mode] = geo;
   return geo;
 }
 function polysBBox(polys) {
@@ -4209,23 +4258,78 @@ function pointInPolys(x, y, polys) {
   }
   return false;
 }
+// 점이 정확히 들어 있는 구역. 나라 폴리곤은 시군구보다 훨씬 무거워서(233개 3만 점)
+// bbox 로 먼저 걸러 낸다 — 판정 결과는 그대로고 속도만 는다.
 function sggOfPoint(geo, lng, lat) {
-  for (const f of geo.features) if (pointInPolys(lng, lat, f._polys)) return f;
+  for (const f of geo.features) {
+    const b = f._bbox;
+    if (!b || lng < b.minLng || lng > b.maxLng || lat < b.minLat || lat > b.maxLat) continue;
+    if (pointInPolys(lng, lat, f._polys)) return f;
+  }
   return null;
 }
+
+// ── 점 → 지역 (지도가 실제로 쓰는 판정) ──────────────────────────
+// 폴리곤 안이 1순위. 세계편은 밖이어도 SNAP_KM 안에 나라가 있으면 거기로 붙인다.
+//
+// **왜 근접 판정이 필요한가**: Natural Earth 해안선은 실제 해안보다 안쪽이라
+// 해운대·제주공항·뉴욕·이스탄불처럼 물가에서 찍은 사진이 어느 나라에도 안 들어간다.
+// 싱가포르 마리나베이 같은 매립지는 원본 지도에 아예 없다. 단순화를 8배 세밀하게
+// (0.08°→0.01°) 해 봐도 그대로였고 파일만 두 배가 됐다 — 원본 해상도의 한계다.
+// 폴리곤 **안**이면 근접 판정은 아예 돌지 않으므로 국경에서 엉뚱한 나라로 새지 않고,
+// 태평양 한복판은 그대로 미상으로 남는다. 실측 오차는 최대 2.2km 였다.
+// 시군구(한국편)는 끄고 쓴다 — 해외 사진이 제일 가까운 구에 붙어 버린다.
+// 이 값을 바꾸면 _infra/duri-world.test.mjs 의 SNAP_KM 도 같이 바꾼다.
+const SNAP_KM = 20;
+function segDistDeg(px, py, ax, ay, bx, by, kx) { // 점-선분 거리(도, 경도는 위도 보정)
+  let dx = (bx - ax) * kx, dy = by - ay;
+  const ex = (px - ax) * kx, ey = py - ay;
+  if (dx || dy) {
+    const t = Math.max(0, Math.min(1, (ex * dx + ey * dy) / (dx * dx + dy * dy)));
+    dx = ex - t * dx; dy = ey - t * dy;
+  } else { dx = ex; dy = ey; }
+  return Math.hypot(dx, dy);
+}
+function nearestRegion(geo, lng, lat, maxKm) {
+  const maxDeg = maxKm / 111.32, kx = Math.cos(lat * Math.PI / 180) || 1;
+  let best = null, bestD = maxDeg;
+  for (const f of geo.features) {
+    const b = f._bbox;
+    if (lng < b.minLng - maxDeg / kx || lng > b.maxLng + maxDeg / kx ||
+        lat < b.minLat - maxDeg || lat > b.maxLat + maxDeg) continue;
+    for (const poly of f._polys) for (const ring of poly) for (let i = 1; i < ring.length; i++) {
+      const d = segDistDeg(lng, lat, ring[i - 1][0], ring[i - 1][1], ring[i][0], ring[i][1], kx);
+      if (d < bestD) { bestD = d; best = f; }
+    }
+  }
+  return best;
+}
+// 핀 하나하나를 지도 다시 그릴 때마다(핀치 중엔 배율이 바뀔 때마다) 판정하므로
+// 좌표별로 기억해 둔다. 지도는 두 장뿐이고 핀 수만큼만 쌓인다.
+const regionCache = new Map();
+function regionOfPoint(geo, lng, lat) {
+  const ck = `${geo._mode}:${lng},${lat}`;
+  if (regionCache.has(ck)) return regionCache.get(ck);
+  let hit = sggOfPoint(geo, lng, lat);
+  if (!hit && geo._m.snap) hit = nearestRegion(geo, lng, lat, SNAP_KM);
+  regionCache.set(ck, hit);
+  return hit;
+}
+const escMap = (v) => String(v).replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]));
 async function renderMap() {
   const geo = await loadMapGeo();
+  const M = geo._m;
   const pins = loadPins();
-  // 시군구별로 누가 올렸는지 모은다: 나만 → 내 색, 상대만 → 상대 색, 둘 다 → 공통 색.
+  // 지역별로 누가 올렸는지 모은다: 나만 → 내 색, 상대만 → 상대 색, 둘 다 → 공통 색.
   // 색은 캘린더 설정(colorForOwner/sharedColor)을 그대로 재사용해 양쪽이 똑같이 본다.
-  const reg = {}; let inKorea = 0, foreign = 0, photoN = 0, spotN = 0, unknownN = 0;
+  const reg = {}; let inside = 0, outside = 0, photoN = 0, spotN = 0, unknownN = 0;
   for (const p of pins) {
     const isMine = !p.owner || p.owner === MY_NAME; // 이름으로 판정(owner 없는 옛 핀은 내 것으로)
-    const f = sggOfPoint(geo, p.lng, p.lat);
-    if (!f) { foreign++; continue; }
-    inKorea++;
+    const f = regionOfPoint(geo, p.lng, p.lat);
+    if (!f) { outside++; continue; } // 한국편이면 해외, 세계편이면 바다 한복판
+    inside++;
     if (p.photo === true) photoN++; else if (p.photo === false) spotN++; else unknownN++;
-    const r = reg[f.properties.sgg] || (reg[f.properties.sgg] = { count: 0, mine: false, theirs: false });
+    const r = reg[f._key] || (reg[f._key] = { count: 0, mine: false, theirs: false });
     r.count++; if (isMine) r.mine = true; else r.theirs = true;
   }
   const maxc = Math.max(1, ...Object.values(reg).map((r) => r.count));
@@ -4233,8 +4337,9 @@ async function renderMap() {
   const cTheirs = colorForOwner(peerName || "상대");
   const cShared = sharedColor();
   const ownerColor = (r) => (r.mine && r.theirs) ? cShared : r.theirs ? cTheirs : cMine;
-  // 투영: 위경도 → 화면(등거리, 위도 보정). 한국 bbox를 viewBox에 맞춘다.
-  const W = 1000, H = 1200, PAD = 24, b = geo._bbox;
+  // 투영: 위경도 → 화면(등거리, 위도 보정). 그 지도의 bbox를 viewBox에 맞춘다
+  // (한국은 세로로 긴 1000×1200, 세계는 가로로 넓은 1000×428).
+  const { W, H } = M.view; const PAD = 24, b = geo._bbox;
   const lat0 = (b.minLat + b.maxLat) / 2, kx = Math.cos(lat0 * Math.PI / 180);
   const gw = (b.maxLng - b.minLng) * kx, gh = (b.maxLat - b.minLat);
   const s = Math.min((W - 2 * PAD) / gw, (H - 2 * PAD) / gh);
@@ -4247,40 +4352,40 @@ async function renderMap() {
     for (const poly of f._polys) for (const ring of poly) {
       d += "M" + ring.map((c) => X(c[0]).toFixed(1) + " " + Y(c[1]).toFixed(1)).join("L") + "Z";
     }
-    const r = reg[f.properties.sgg];
+    const r = reg[f._key];
     const fill = r ? ownerColor(r) : "var(--panel)";
     const op = r ? (0.4 + 0.55 * (r.count / maxc)).toFixed(3) : "1"; // 많이 간 곳일수록 진하게
-    paths += `<path class="rg" data-sgg="${f.properties.sgg}" d="${d}" fill="${fill}" fill-opacity="${op}"><title>${f.properties.sidonm} ${f.properties.sggnm}${r ? " · " + r.count + "개" : ""}</title></path>`;
+    paths += `<path class="rg" data-key="${escMap(f._key)}" d="${d}" fill="${fill}" fill-opacity="${op}"><title>${escMap(f._name)}${r ? " · " + r.count + "개" : ""}</title></path>`;
   }
   const svg = $("map-svg");
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
   $("map-paths").innerHTML = paths;
   // 원은 배율이 바뀔 때마다 다시 그린다(단위·크기가 배율에 따라 달라진다).
-  mapProj = { X, Y, b };
+  mapProj = { X, Y, b, mode: geo._mode }; // 모드가 바뀌면 이 투영은 못 쓴다
   renderDots();
   const regions = Object.keys(reg).length;
   $("map-empty").hidden = pins.length > 0;
-  $("map-count").textContent = pins.length ? `${regions}개 지역` : "";
+  $("map-empty").innerHTML = `아직 위치가 담긴 사진이 없어요.<br>위치정보가 있는 사진을 주고받으면<br>${M.empty}가 여기 색칠돼요.`;
+  $("map-count").textContent = pins.length ? `${regions}개 ${M.unit}` : "";
   const sw = (c) => `<span style="display:inline-block;width:.72em;height:.72em;border-radius:2px;background:${c};vertical-align:-1px;margin:0 .15em 0 .5em"></span>`;
-  const esc = (s) => String(s).replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
-  const meName = esc(MY_NAME || "나"), theirName = esc(peerName || "상대"); // 각자 설정한 이름으로 범례 표시
+  const meName = escMap(MY_NAME || "나"), theirName = escMap(peerName || "상대"); // 각자 설정한 이름으로 범례 표시
   // 아이콘 + 숫자로 짧게. 사진과 위치(/여기)는 나눠 세되, 종류를 모르는 옛 핀이
   // 섞여 있으면 나누지 않고 하나로 통칭한다 — 모르는 걸 사진으로 세느니 낫다.
   // 이모지만으로는 뜻이 안 통하니 title 로 이름을 붙여 둔다.
   const chip = (emoji, n, label) => `<span title="${label}">${emoji} ${n}</span>`;
-  const parts = [chip("🧭", regions, "다녀온 시군구")];
+  const parts = [chip(M.icon, regions, M.what)];
   if (unknownN === 0) {
     if (photoN) parts.push(chip("📷", photoN, "위치가 담긴 사진"));
     if (spotN) parts.push(chip("📍", spotN, "위치 기록"));
   } else {
-    parts.push(chip("📌", inKorea, "위치가 담긴 기록"));
+    parts.push(chip("📌", inside, "위치가 담긴 기록"));
   }
-  if (foreign) parts.push(chip("🌏", foreign, "해외"));
+  if (outside) parts.push(chip(M.outIcon, outside, M.outWhat));
   $("map-summary").innerHTML = pins.length
     ? `<span style="display:inline-flex;gap:.6rem">${parts.join("")}</span>`
       + `<span style="float:right">${sw(cMine)}${meName}${sw(cTheirs)}${theirName}${sw(cShared)}함께</span>`
       // 지역 앨범(탭하면 그곳 사진)은 눈에 보이는 단서가 없으면 아무도 모른다.
-      + `<div style="clear:both;padding-top:.3rem;font-size:.76rem;opacity:.8">색칠된 지역을 탭하면 그곳 사진을 볼 수 있어요</div>`
+      + `<div style="clear:both;padding-top:.3rem;font-size:.76rem;opacity:.8">${M.tapHint}</div>`
     : "";
 }
 // ── 클러스터 원 ──────────────────────────────────────────────
@@ -4300,23 +4405,24 @@ const DOT_STEPS = [              // 개수 → 기본 반지름(viewBox 기준)
 const dotRadius = (n) => DOT_STEPS.find((s) => n <= s.max).r;
 
 function renderDots() {
-  const geo = mapGeo, proj = mapProj;
-  if (!geo || !proj) return;
+  const geo = mapGeos[mapMode], proj = mapProj;
+  if (!geo || !proj || proj.mode !== mapMode) return;
   const { X, Y } = proj;
-  const bySido = mS < SGG_ZOOM; // 멀리서 보면 시도, 당기면 시군구
+  // 한국편은 멀리서 보면 시도, 당기면 시군구. 세계편은 나라 밑에 단위가 없어 항상 나라.
+  const byGroup = !!geo._groups && mS < SGG_ZOOM;
   const groups = new Map();
 
   for (const p of loadPins()) {
-    const f = sggOfPoint(geo, p.lng, p.lat);
-    if (!f) continue; // 해외 — 색칠할 구역이 없다
-    const key = bySido ? f.properties.sidonm : f.properties.sgg;
+    const f = regionOfPoint(geo, p.lng, p.lat);
+    if (!f) continue; // 색칠할 구역이 없다(한국편의 해외, 세계편의 바다)
+    const key = byGroup ? f._group : f._key;
     let g = groups.get(key);
     if (!g) {
-      // 커질 수 있는 한계는 그 구역 크기로 잡는다(시도로 묶을 땐 시도 전체 bbox).
+      // 커질 수 있는 한계는 그 구역 크기로 잡는다(묶어 볼 땐 묶음 전체 bbox).
       g = { count: 0, mine: false, theirs: false, sumLng: 0, sumLat: 0,
-            box: bySido ? geo._sido.get(f.properties.sidonm) : f._bbox,
+            box: byGroup ? geo._groups.get(f._group) : f._bbox,
             fallback: f._point,
-            name: bySido ? f.properties.sidonm : f.properties.sggnm };
+            name: byGroup ? f._group : f._short };
       groups.set(key, g);
     }
     // 원은 **실제로 찍힌 곳들의 평균**에 놓는다. bbox 중심을 쓰면 인천처럼 먼 섬을
@@ -4345,7 +4451,7 @@ function renderDots() {
     const fill = (g.mine && g.theirs) ? cShared : g.theirs ? cTheirs : cMine;
     out += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(2)}"`
       + ` fill="${fill}" fill-opacity=".9" stroke="#fff" stroke-width="${(1 / mS).toFixed(2)}"`
-      + ` pointer-events="none"><title>${g.name} · ${g.count}개</title></circle>`;
+      + ` pointer-events="none"><title>${escMap(g.name)} · ${g.count}개</title></circle>`;
     // 화면에서 충분히 큰 원에만 숫자를 넣는다(작은 원에 글씨를 우겨넣으면 뭉갠다).
     if (r * mS >= 10) {
       out += `<text x="${cx.toFixed(1)}" y="${cy.toFixed(1)}" text-anchor="middle"`
@@ -4363,10 +4469,44 @@ async function openMap() {
   if ($("cal").classList.contains("cal-off")) openCal();
   $("map").classList.remove("map-off");
   resetMapView(); // 열 때는 항상 전체가 보이게(배율 1)
+  syncMapModeButton(); // 지난번에 보던 편(한국/세계)으로 열린다
   await migrateLocalPins().catch(() => {}); // 옛 로컬 핀을 공유 저장소로 — 실패해도 지도는 그린다
-  try { await renderMap(); } catch (e) { console.warn("map render 실패", e); $("map-empty").hidden = false; }
+  await renderMapSafe();
 }
 function closeMap() { $("map").classList.add("map-off"); }
+
+// 우측 상단 버튼 하나로 한국편 ↔ 세계편. 버튼에는 **넘어갈 곳**을 그린다
+// (지금 보는 곳이 아니라) — 지도 자체가 어느 쪽인지 이미 말해 주기 때문이다.
+function syncMapModeButton() {
+  const t = MAP_MODES[mapMode].toggle;
+  const btn = $("map-mode");
+  btn.textContent = t.emoji;
+  btn.title = t.label;
+  btn.setAttribute("aria-label", t.label);
+  $("map-svg").setAttribute("aria-label", `함께 다닌 곳 ${MAP_MODES[mapMode].unit} 지도`);
+}
+async function renderMapSafe() {
+  try { await renderMap(); return true; }
+  catch (e) {
+    console.warn("map render 실패", e);
+    $("map-empty").innerHTML = "지도를 불러오지 못했어요.<br>연결을 확인하고 다시 열어주세요.";
+    $("map-empty").hidden = false;
+    return false;
+  }
+}
+async function setMapMode(mode) {
+  if (mode === mapMode || !MAP_MODES[mode]) return;
+  mapMode = mode;
+  try { localStorage.setItem(MAP_MODE_KEY, mode); } catch { /* 최선노력 */ }
+  closeRegion();      // 열려 있던 앨범은 다른 지도의 지역이라 의미가 없다
+  resetMapView();     // 배율 1로 — 세계 지도를 16배 확대된 채로 만나면 어디인지 모른다
+  syncMapModeButton();
+  const btn = $("map-mode");
+  btn.disabled = true; // 세계 지도는 처음 한 번 받아 오는 동안(576KB) 잠깐 걸린다
+  try { if (!await renderMapSafe()) showToast("지도를 불러오지 못했어요."); }
+  finally { btn.disabled = false; }
+}
+$("map-mode").addEventListener("click", () => setMapMode(mapMode === "kr" ? "world" : "kr"));
 $("map-open").addEventListener("click", openMap);
 $("map-back").addEventListener("click", closeMap);
 $("map-here").addEventListener("click", captureHere);
@@ -4400,19 +4540,42 @@ function regionPoint(feature) { // 지역 안이 보장되는 대표 좌표(색�
   let sx = 0, sy = 0; for (const c of best) { sx += c[0]; sy += c[1]; }
   const cx = sx / best.length, cy = sy / best.length;
   if (pointInPolys(cx, cy, feature._polys)) return { lat: +cy.toFixed(6), lng: +cx.toFixed(6) };
-  return { lat: +best[0][1].toFixed(6), lng: +best[0][0].toFixed(6) };
+  // 무게중심이 제 구역 밖으로 떨어지는 모양이 있다 — 베트남·노르웨이·크로아티아처럼
+  // 길게 휜 나라, 만이 깊게 들어온 시군구. 그럴 때 그 위도로 가로선을 그어
+  // **구역 안을 지나는 가장 긴 구간의 한가운데**를 쓴다(짝수-홀수 규칙이라 구멍도
+  // 알아서 빠진다). 예전엔 외곽선의 첫 점으로 물러섰는데 그건 경계선 **위**라서,
+  // "이 지역에 사진 추가"가 옆 지역으로 색칠되는 자리였다.
+  const xs = [];
+  for (const poly of feature._polys) for (const ring of poly) {
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const yi = ring[i][1], yj = ring[j][1];
+      if ((yi > cy) === (yj > cy)) continue;
+      xs.push(ring[j][0] + (cy - yj) * (ring[i][0] - ring[j][0]) / (yi - yj));
+    }
+  }
+  xs.sort((a, b) => a - b);
+  let bx = null, bw = -1;
+  for (let i = 0; i + 1 < xs.length; i += 2) {
+    const w = xs[i + 1] - xs[i];
+    if (w > bw) { bw = w; bx = (xs[i] + xs[i + 1]) / 2; }
+  }
+  if (bx !== null && pointInPolys(bx, cy, feature._polys)) return { lat: +cy.toFixed(6), lng: +bx.toFixed(6) };
+  return { lat: +best[0][1].toFixed(6), lng: +best[0][0].toFixed(6) }; // 여기까지 오면 모양이 깨진 것
 }
-const pinsInRegion = (feature) => loadPins().filter((p) => pointInPolys(p.lng, p.lat, feature._polys));
+// 소속 판정은 색칠과 **같은 규칙**이어야 한다. pointInPolys 를 직접 쓰면 근접
+// 판정으로 붙은 핀(해운대·뉴욕처럼 폴리곤 밖)이 색칠은 됐는데 앨범에선 빠진다.
+const inRegion = (feature, lng, lat) => regionOfPoint(feature._geo, lng, lat) === feature;
+const pinsInRegion = (feature) => loadPins().filter((p) => inRegion(feature, p.lng, p.lat));
 async function openRegion(feature) {
   regionFeat = feature;
-  $("region-name").textContent = `${feature.properties.sidonm} ${feature.properties.sggnm}`;
+  $("region-name").textContent = feature._name;
   const grid = $("region-photos");
   grid.innerHTML = "<p style='color:var(--dim);font-size:.85rem'>사진 불러오는 중…</p>";
   $("region-clear").hidden = pinsInRegion(feature).length === 0; // 색칠이 있어야 지울 것도 있다
   $("region-box").hidden = false;
   const entries = await allEntries();
   const photos = entries
-    .filter((r) => r.kind === "photo" && (r.blob || r.thumb) && r.loc && pointInPolys(r.loc.lng, r.loc.lat, feature._polys))
+    .filter((r) => r.kind === "photo" && (r.blob || r.thumb) && r.loc && inRegion(feature, r.loc.lng, r.loc.lat))
     .sort((a, b) => (b.at || 0) - (a.at || 0));
   grid.replaceChildren();
   if (!photos.length) {
@@ -4438,8 +4601,9 @@ $("region-clear").addEventListener("click", async () => {
   if (!feat) return;
   const seqs = pinsInRegion(feat).map((p) => p.seq);
   if (!seqs.length) { $("region-clear").hidden = true; return; }
-  const name = `${feat.properties.sidonm} ${feat.properties.sggnm}`;
-  if (!confirm(`${name} 색칠을 지울까요?\n지도에서만 빼는 것이라 사진·대화는 그대로 남아요.`)) return;
+  const name = feat._name;
+  // 몇 개가 빠지는지 먼저 알린다 — 세계편의 "대한민국"은 국내 핀 전부다.
+  if (!confirm(`${name} 색칠을 지울까요?\n핀 ${seqs.length}개가 지도에서 빠져요(사진·대화는 그대로 남아요).`)) return;
   hidePins(seqs); // 캘린더와 같은 툼스톤이라 상대 기기에도 그대로 전파된다
   closeRegion();
   showToast(`🧹 ${name} 색칠을 지웠어요`);
@@ -4464,9 +4628,10 @@ $("file-region").addEventListener("change", (e) => {
 // 지도에서 시군구 탭 → 지역 앨범 열기 (스와이프와 구분: 탭은 이동 없이 click 발생)
 $("map-svg").addEventListener("click", (e) => {
   if (mapMoved) { mapMoved = false; return; } // 확대·이동 직후의 click 은 지역 선택 아님
-  const path = e.target.closest("path[data-sgg]");
-  if (!path || !mapGeo) return;
-  const f = mapGeo.features.find((ff) => ff.properties.sgg === path.dataset.sgg);
+  const path = e.target.closest("path[data-key]");
+  const geo = mapGeos[mapMode];
+  if (!path || !geo) return;
+  const f = geo.features.find((ff) => ff._key === path.dataset.key);
   if (f) openRegion(f);
 });
 

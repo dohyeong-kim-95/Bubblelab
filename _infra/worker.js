@@ -24,7 +24,8 @@ const CACHEABLE = {
     // 공개 쇼케이스에 쓰는 이미지 — 클라이언트에게 보여 주는 공개 자료다.
     [/^\/showcase\/.+\.(?:avif|gif|jpe?g|png|svg|webp)$/i, "public, max-age=604800, stale-while-revalidate=86400"],
   ],
-  // 시군구 경계 386KB. 커밋된 공개 지리 데이터이고 거의 바뀌지 않는다.
+  // 지도 경계 데이터(시군구 386KB · 나라 576KB). 커밋된 공개 지리 데이터이고 거의
+  // 바뀌지 않는다 — 세계편을 열 때마다 다시 받으면 그대로 체감된다.
   duri: [[/^\/data\/.+\.geojson$/i, "private, max-age=2592000, stale-while-revalidate=86400"]],
   // 배경지도 3MB. 공개 시세 화면이라 공유 캐시에 남아도 된다.
   estate: [[/^\/basemap-[a-z0-9-]+\.(?:avif|jpe?g|png|webp)$/i, "public, max-age=604800, stale-while-revalidate=86400"]],
