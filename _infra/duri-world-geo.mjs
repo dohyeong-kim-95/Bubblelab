@@ -18,10 +18,12 @@
 //   properties: { iso, name(한국어), en }
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = path.join(ROOT, "duri/data/world-countries.geojson");
+const APP = path.join(ROOT, "duri/index.html");
 // 해안선을 이보다 세밀하게 둘 이유가 없다 — 화면은 나라 단위로만 칠하고,
 // 판정은 폴리곤 밖 20km 까지 가까운 나라로 붙여 주기 때문이다(SNAP_KM).
 // 실제로 EPS 를 0.01 까지 낮춰 봐도 뉴욕·해운대 같은 해안 지점은 여전히 폴리곤
@@ -283,9 +285,27 @@ function main() {
   const json = JSON.stringify({ type: "FeatureCollection", features });
   fs.writeFileSync(OUT, json + "\n");
 
+  // 앱이 부르는 주소의 ?v= 를 새 내용 해시로 갈아 끼운다. 이걸 안 하면 폰은
+  // force-cache + 30일 캐시로 **옛 파일을 계속 쓴다** — 러시아 가로줄을 고쳐
+  // 배포하고도 실기기에서는 그대로였던 적이 있다(코드만 새것, 데이터는 옛것).
+  const stamp = stampApp();
+
   if (missing.length) console.warn("한국어 이름 없음(영문 그대로 나감):", missing.join(", "));
   const kb = (json.length / 1024).toFixed(0);
   console.log(`${path.relative(ROOT, OUT)} — 나라 ${features.length}개, 좌표 ${points}점, ${kb}KB`);
+  console.log(`${path.relative(ROOT, APP)} — 캐시 버전 ?v=${stamp}`);
+}
+
+export const fileStamp = (file) =>
+  crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex").slice(0, 8);
+
+function stampApp() {
+  const stamp = fileStamp(OUT);
+  const app = fs.readFileSync(APP, "utf8");
+  const re = /(file: "data\/world-countries\.geojson\?v=)[0-9a-f]{8}(")/;
+  if (!re.test(app)) throw new Error(`${path.relative(ROOT, APP)} 에서 ?v= 자리를 못 찾았다`);
+  fs.writeFileSync(APP, app.replace(re, `$1${stamp}$2`));
+  return stamp;
 }
 function spanOf(ring) {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;

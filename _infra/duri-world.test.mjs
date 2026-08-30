@@ -14,6 +14,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -173,6 +174,24 @@ test("실제 여행지 좌표가 맞는 나라로 떨어진다", () => {
 test("바다 한복판은 어느 나라에도 붙지 않는다", () => {
   assert.equal(countryOf(0, -150), null, "태평양 한복판이 어딘가에 붙었다");
   assert.equal(countryOf(-30, -10), null, "대서양 한복판이 어딘가에 붙었다");
+});
+
+test("앱이 부르는 주소의 ?v= 가 실제 파일과 맞는다", () => {
+  // 경계 데이터는 30일 캐시(워커 CACHEABLE) + force-cache 로 받는다. 파일을 다시
+  // 구웠는데 주소가 그대로면 폰은 **옛 파일을 계속 쓴다** — 러시아 가로줄을 고쳐
+  // 배포하고도 실기기에서는 그대로였던 사고가 이것이다(코드만 새것, 데이터는 옛것).
+  // 세계 지도는 _infra/duri-world-geo.mjs 가 다시 구울 때 알아서 써 넣는다.
+  const app = fs.readFileSync(path.join(ROOT, "duri/index.html"), "utf8");
+  const stale = [];
+  for (const name of ["kr-sgg", "world-countries"]) {
+    const file = path.join(ROOT, `duri/data/${name}.geojson`);
+    const want = crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex").slice(0, 8);
+    const m = app.match(new RegExp(`data/${name}\\.geojson\\?v=([0-9a-f]{8})`));
+    if (!m) { stale.push(`${name}: 주소에 ?v= 가 없다`); continue; }
+    if (m[1] !== want) stale.push(`${name}: 앱은 ?v=${m[1]}, 파일은 ${want}`);
+  }
+  assert.deepEqual(stale, [],
+    "geojson 을 바꿨으면 ?v= 도 바꿔야 한다 — 세계 지도는 _infra/duri-world-geo.mjs 를 다시 돌리면 알아서 맞춘다");
 });
 
 test("파일이 감당할 만한 크기다", () => {

@@ -4165,7 +4165,7 @@ async function resyncPins() {
 const MAP_MODE_KEY = "duri:mapMode";
 const MAP_MODES = {
   kr: {
-    file: "data/kr-sgg.geojson",
+    file: "data/kr-sgg.geojson?v=08d4b011",
     view: { W: 1000, H: 1200 },   // 한국 bbox 비율에 맞춘 세로 화면
     proj: "equirect",             // 좁은 범위라 등거리로 충분하다(위도 보정만)
     snap: false,                  // 시군구는 근접 판정을 하지 않는다(아래 SNAP_KM 설명)
@@ -4179,7 +4179,7 @@ const MAP_MODES = {
     toggle: { emoji: "🌏", label: "세계 지도로" }, // 누르면 넘어갈 곳
   },
   world: {
-    file: "data/world-countries.geojson",
+    file: "data/world-countries.geojson?v=f1f69546",
     view: { W: 1000, H: 663 },    // 메르카토르 세계 bbox(남극 제외) 비율
     proj: "mercator",
     snap: true,
@@ -4201,6 +4201,11 @@ function geomPolys(g) { // [ [ring, hole...], ... ] — 각 ring = [[lng,lat],..
   if (g.type === "MultiPolygon") return g.coordinates;
   return [];
 }
+// 경계 데이터는 **주소에 내용 해시(?v=)를 달고 30일 캐시**로 받는다(워커의 CACHEABLE).
+// 파일을 다시 구웠는데 주소가 그대로면 폰은 force-cache 로 옛 파일을 계속 쓴다 —
+// 실제로 러시아 가로줄을 고쳐 배포했는데 폰에서는 그대로였다(코드만 새것, 데이터는
+// 옛것). 해시는 _infra/duri-world-geo.mjs 가 다시 구울 때 여기에 직접 써 넣고,
+// _infra/duri-world.test.mjs 가 파일과 어긋나지 않는지 지킨다 — 손으로 맞추지 말 것.
 const mapGeos = {}; // mode → geo. 세계 지도(577KB)는 세계편을 처음 열 때만 받는다.
 async function loadMapGeo(mode = mapMode) {
   if (mapGeos[mode]) return mapGeos[mode];
