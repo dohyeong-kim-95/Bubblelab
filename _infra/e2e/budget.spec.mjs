@@ -181,11 +181,17 @@ test("가계부 — 긴 가맹점 이름이 있어도 가로로 넘치지 않는
    * 아니라 본문이다 — 긴 기록 한 줄이 문서를 가로로 넓히면, 그 위에 뜬 팝업도 넓어진
    * 문서를 기준으로 자리를 잡는다. 그래서 목록과 팝업을 함께 본다. */
   const long = "신한카드(3484)승인 김*형님 아주아주긴가맹점이름주식회사강남대로지점";
+  // 목록은 **이번 주기**만 보여준다(startDay=1 이면 이번 달). 날짜를 박아 두면 달이
+  // 바뀌는 순간 이 항목이 목록에서 빠져 검사가 통째로 무너진다 — 2026-08-10 으로
+  // 박아 둔 것이 9월 1일에 그렇게 깨져 **배포가 막혔다**. 주기 계산이 KST 기준이라
+  // 여기서도 KST 로 이번 달 1일을 짚는다(어느 시간대에서 돌려도 이번 주기 안이다).
+  const kst = new Date(Date.now() + 9 * 3600 * 1000);
+  const on = `${kst.getUTCFullYear()}-${String(kst.getUTCMonth() + 1).padStart(2, "0")}-01`;
   await page.goto("/life/budget/");
-  await page.evaluate((memo) => localStorage.setItem("bl_budget_v1", JSON.stringify({
+  await page.evaluate(([memo, day]) => localStorage.setItem("bl_budget_v1", JSON.stringify({
     v: 1, limit: 1000000, startDay: 1,
-    entries: [{ id: "a", amount: 39600, memo, on: "2026-08-10", at: "2026-08-10T03:00:00Z" }],
-  })), long);
+    entries: [{ id: "a", amount: 39600, memo, on: day, at: `${day}T03:00:00Z` }],
+  })), [long, on]);
   await page.reload();
   await expect(page.locator(".entry")).toHaveCount(1);
 
