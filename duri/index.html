@@ -403,12 +403,17 @@
   #fit-week, #fit-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: .3rem; }
   #fit-week { margin-bottom: .25rem; }
   #fit-week div { text-align: center; font-size: .72rem; color: var(--dim); padding: .2rem 0; }
-  /* 칸은 정사각형. 안 한 날은 옅은 회색 판, 한 날은 사람 색으로 칠한다. */
+  /* 칸은 정사각형. 안 한 날은 옅은 회색 판, 한 날은 사람 색으로 칠한다.
+     **이 칸에는 background 단축 속성을 쓰지 않는다.** 단축을 쓰면 background-origin 이
+     초기값(padding-box)으로 되돌아가는데, 배경을 칠하는 범위는 border-box 라 남는
+     테두리 2px 띠가 **repeat 로 채워진다** — "둘 다" 칸의 대각선이 위아래 끝에서 2px씩
+     어긋나 Z 모양 계단이 생겼다. 인라인 스타일(renderFit)도 같은 이유로 longhand 다. */
   #fit-grid .cell { aspect-ratio: 1/1; border-radius: .55rem; border: 2px solid transparent;
+                    background-origin: border-box; background-color: light-dark(#f1f3f5, #1b222c);
                     display: flex; align-items: center; justify-content: center;
-                    font-size: .8rem; color: var(--dim); background: light-dark(#f1f3f5, #1b222c);
+                    font-size: .8rem; color: var(--dim);
                     cursor: pointer; -webkit-tap-highlight-color: transparent; }
-  #fit-grid .cell.blank { background: none; cursor: default; }
+  #fit-grid .cell.blank { background-color: transparent; cursor: default; }
   #fit-grid .cell.on { color: #fff; font-size: .95rem; }
   #fit-grid .cell.today { font-weight: 700; color: var(--pink); }
   #fit-grid .cell.on.today { color: #fff; }
@@ -1906,9 +1911,12 @@ function renderFit() {
     if (mine || theirs) {
       cls.push("on");
       // 둘 다면 색을 반씩 나눠 칠하고 하트를 얹는다 — 누가 했는지 한눈에 보이게.
+      // **단축 속성(background:)이 아니라 longhand 로 준다.** 단축을 쓰면 CSS 의
+      // background-origin: border-box 가 초기값으로 되돌아가고, 그러면 테두리 2px
+      // 띠에 대각선의 복사본이 이어 붙어 Z 모양 계단이 생긴다.
       style = mine && theirs
-        ? `background:linear-gradient(115deg, ${cMine} 0 50%, ${cTheirs} 50% 100%)`
-        : `background:${mine ? cMine : cTheirs}`;
+        ? `background-image:linear-gradient(115deg, ${cMine} 0 50%, ${cTheirs} 50% 100%)`
+        : `background-color:${mine ? cMine : cTheirs}`;
       label = mine && theirs ? "♥" : "";
     }
     if (date === today) cls.push("today");

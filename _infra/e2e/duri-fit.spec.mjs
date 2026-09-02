@@ -88,6 +88,11 @@ test("둘 다 체크한 날은 하트로, 앞으로 올 날은 못 누른다", a
   await page.locator("#fit-check").click();
   await expect(first).toHaveText("♥");                      // 둘 다 → 하트
   await expect(page.locator("#fit-stats .card").nth(2).locator(".n")).toHaveText("1일"); // 같이 1일
+  // 반씩 나눈 대각선은 **칸 전체**에 걸쳐야 한다. background 단축 속성을 쓰면
+  // background-origin 이 padding-box 로 되돌아가고, 칠하는 범위(border-box)에서 남는
+  // 테두리 2px 띠가 repeat 로 채워져 대각선이 끝에서 어긋난다(Z 모양 계단).
+  expect(await first.evaluate((el) => getComputedStyle(el).backgroundOrigin),
+    "대각선이 테두리에서 어긋난다 — background 단축 속성을 쓰지 말 것").toBe("border-box");
 
   // 아직 안 온 날은 고를 수는 있어도 체크는 못 한다
   const last = `${month}-${pad2(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate())}`;
