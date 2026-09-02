@@ -378,6 +378,59 @@
                  padding: .55rem .7rem calc(.55rem + env(safe-area-inset-bottom,0px)); }
   #bucket-form input { flex: 1; min-width: 0; font: inherit; font-size: .92rem; padding: .5rem .7rem;
                  border: 1px solid var(--line); border-radius: .7rem; background: var(--bg); color: inherit; }
+  /* 운동 인증 — 버킷리스트와 같은 전체화면 오버레이. 달력 한 장에 둘의 체크를 겹쳐 칠한다. */
+  #fit { position: fixed; inset: 0; z-index: 64; background: var(--bg); display: flex; flex-direction: column; }
+  #fit[hidden] { display: none; }
+  .fit-head { flex: none; display: flex; align-items: center; gap: .5rem; border-bottom: 1px solid var(--line);
+              background: var(--panel);
+              padding: calc(.5rem + env(safe-area-inset-top,0px)) calc(.6rem + env(safe-area-inset-right,0px)) .5rem calc(.6rem + env(safe-area-inset-left,0px)); }
+  .fit-head #fit-back { font-size: 1.5rem; line-height: 1; padding: .1rem .3rem; }
+  .fit-head b { font-size: 1rem; white-space: nowrap; }
+  #fit-body { flex: 1; overflow-y: auto; padding: .7rem .9rem calc(1rem + env(safe-area-inset-bottom,0px));
+              max-width: 34rem; width: 100%; margin: 0 auto; }
+  .fit-month { display: flex; align-items: center; justify-content: center; gap: .6rem; margin-bottom: .7rem; }
+  .fit-month b { font-size: 1.05rem; min-width: 8.5rem; text-align: center; }
+  .fit-month .icon-btn { font-size: 1.3rem; line-height: 1; padding: .1rem .45rem; }
+  /* 사람별 집계 — 셋을 같은 폭으로 세워 둔다(글자 길이가 달라도 안 흔들리게). */
+  #fit-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .45rem; margin-bottom: .9rem; }
+  #fit-stats .card { border: 1px solid var(--line); border-radius: .8rem; background: var(--panel);
+                     padding: .5rem .55rem; min-width: 0; }
+  #fit-stats .who { display: flex; align-items: center; gap: .28rem; font-size: .74rem; color: var(--dim);
+                    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #fit-stats .sw { flex: none; width: .5rem; height: .5rem; border-radius: 50%; }
+  #fit-stats .n { font-size: 1.25rem; font-weight: 700; line-height: 1.3; }
+  #fit-stats .n span { font-size: .74rem; font-weight: 400; color: var(--dim); margin-left: .1rem; }
+  #fit-week, #fit-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: .3rem; }
+  #fit-week { margin-bottom: .25rem; }
+  #fit-week div { text-align: center; font-size: .72rem; color: var(--dim); padding: .2rem 0; }
+  /* 칸은 정사각형. 안 한 날은 옅은 회색 판, 한 날은 사람 색으로 칠한다. */
+  #fit-grid .cell { aspect-ratio: 1/1; border-radius: .55rem; border: 2px solid transparent;
+                    display: flex; align-items: center; justify-content: center;
+                    font-size: .8rem; color: var(--dim); background: light-dark(#f1f3f5, #1b222c);
+                    cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  #fit-grid .cell.blank { background: none; cursor: default; }
+  #fit-grid .cell.on { color: #fff; font-size: .95rem; }
+  #fit-grid .cell.today { font-weight: 700; color: var(--pink); }
+  #fit-grid .cell.on.today { color: #fff; }
+  #fit-grid .cell.pick { border-color: light-dark(#2b2b2e, #e8e8ea); }
+  #fit-grid .cell.future { opacity: .45; }
+  #fit-check { display: block; width: 100%; font: inherit; font-size: .9rem; cursor: pointer;
+               margin: 1rem 0 .2rem; padding: .8rem; border-radius: .85rem;
+               border: 1px solid var(--line); background: var(--panel); color: inherit; }
+  #fit-check.on { background: var(--pink); color: light-dark(#fff, #1a1016); border-color: transparent; font-weight: 700; }
+  #fit-check:disabled { opacity: .45; cursor: default; }
+  #fit-day { display: block; font-size: .88rem; margin: 1.1rem 0 .5rem; }
+  #fit-notes .note { border: 1px solid var(--line); border-radius: .8rem; background: var(--panel);
+                     padding: .55rem .7rem; margin-bottom: .4rem; }
+  #fit-notes .note .nm { font-size: .74rem; font-weight: 700; margin-bottom: .15rem; }
+  #fit-notes .note .tx { font-size: .85rem; line-height: 1.5; word-break: break-word; color: var(--dim); }
+  #fit-notes .empty { font-size: .82rem; color: var(--dim); line-height: 1.6; padding: .2rem 0 .4rem; }
+  #fit-memo-form { display: flex; gap: .45rem; margin-top: .5rem; }
+  #fit-memo-form[hidden] { display: none; }
+  #fit-memo-form input { flex: 1; min-width: 0; font: inherit; font-size: .88rem; padding: .5rem .7rem;
+                         border-radius: .7rem; border: 1px solid var(--line); background: var(--panel); color: inherit; }
+  #fit-memo-form button { font: inherit; font-size: .85rem; padding: .5rem .95rem; border-radius: .7rem; cursor: pointer;
+                          border: 1px solid var(--line); background: var(--panel); color: inherit; }
   #bucket-form button { font: inherit; font-size: .85rem; padding: .5rem .95rem; border-radius: .7rem; cursor: pointer;
                  background: light-dark(#2b2b2e, #e8e8ea); color: light-dark(#fff, #1b1b1e); border: 0; font-weight: 600; }
   /* PC 백업(싱크) 설정 시트 */
@@ -689,6 +742,7 @@
     <span class="dot" id="dot-mine"></span><span class="dot" id="dot-theirs"></span>
   </span>
   <button id="bucket-open" class="icon-btn" type="button" title="데이트 버킷리스트" aria-label="데이트 버킷리스트">✓</button>
+  <button id="fit-open" class="icon-btn" type="button" title="운동 인증" aria-label="운동 인증">💪</button>
   <div class="menu-wrap">
     <button id="menu-btn" class="icon-btn" title="설정" aria-haspopup="true" aria-expanded="false">⚙️</button>
     <div id="menu" class="menu" role="menu" hidden>
@@ -909,6 +963,31 @@
     <button type="submit">추가</button>
   </form>
   <input id="bucket-file" type="file" accept="image/*" multiple hidden>
+</section>
+
+<!-- 운동 인증 — 둘이 하루 한 번 체크하는 달력(캘린더 저장소 공유, kind:"workout") -->
+<section id="fit" hidden>
+  <header class="fit-head">
+    <button id="fit-back" class="icon-btn" type="button" title="닫기" aria-label="닫기">‹</button>
+    <b>💪 운동 인증</b>
+  </header>
+  <div id="fit-body">
+    <div class="fit-month">
+      <button id="fit-prev" class="icon-btn" type="button" title="지난달" aria-label="지난달">‹</button>
+      <b id="fit-title"></b>
+      <button id="fit-next" class="icon-btn" type="button" title="다음달" aria-label="다음달">›</button>
+    </div>
+    <div id="fit-stats"></div>
+    <div id="fit-week"></div>
+    <div id="fit-grid"></div>
+    <button id="fit-check" type="button"></button>
+    <b id="fit-day"></b>
+    <div id="fit-notes"></div>
+    <form id="fit-memo-form" hidden>
+      <input id="fit-memo" placeholder="오늘 운동 한 줄 (선택)" autocomplete="off" maxlength="120">
+      <button type="submit">저장</button>
+    </form>
+  </div>
 </section>
 
 <!-- PC 백업(싱크 데몬) 설정 — 토큰 발급 + 설정 파일을 만들어 준다 -->
@@ -1472,7 +1551,7 @@ async function canvasAdd() {
   const t = String(title || "").trim().slice(0, 30);
   if (!t) return;
   const id = randToken();
-  await bucketPut(id, { kind: "bucketcanvas", title: t, by: MY_NAME, at: Date.now() });
+  await calPutRecord(id, { kind: "bucketcanvas", title: t, by: MY_NAME, at: Date.now() });
   bucketCanvas = id;
   renderBucket();
 }
@@ -1491,7 +1570,9 @@ function canvasDelete(id) {
   bucketCanvas = "default";
   renderBucket();
 }
-async function bucketPut(id, content) {
+// cal:<id> 저장소에 레코드 하나를 올린다(버킷리스트·운동 인증이 같이 쓴다).
+// rev 는 Date.now() — 툼스톤보다 항상 크므로 지웠던 id 도 다시 살아난다.
+async function calPutRecord(id, content) {
   const rev = Date.now();
   calEvents.set(id, { id, rev, deleted: false, ...content }); calPersist();
   const frame = await encryptJson(content);
@@ -1500,7 +1581,7 @@ async function bucketPut(id, content) {
 async function bucketAdd(title) {
   const t = String(title || "").trim().slice(0, 120);
   if (!t) return;
-  await bucketPut(randToken(), { kind: "bucket", title: t, by: MY_NAME, at: Date.now(),
+  await calPutRecord(randToken(), { kind: "bucket", title: t, by: MY_NAME, at: Date.now(),
     ...(bucketCanvas !== "default" && { list: bucketCanvas }) });
   renderBucket();
 }
@@ -1511,7 +1592,7 @@ async function bucketToggle(id) {
   const { id: _i, rev: _r, deleted: _d, ...content } = ev;
   if (done) { content.done = true; content.doneAt = Date.now(); content.doneBy = MY_NAME; }
   else { delete content.done; delete content.doneAt; delete content.doneBy; }
-  await bucketPut(id, content);
+  await calPutRecord(id, content);
   renderBucket();
   // 달성 순간을 채팅에 남긴다("/일정" 알림과 같은 알약) — 상대도 바로 알게 되는 게 재미다.
   if (done) sendSysNotice(`✓ "${content.title}" 달성! 🎉`).catch(() => {});
@@ -1611,7 +1692,7 @@ async function toggleBucketDetail(wrap, ev, force = false) {
     const { id: _i, rev: _r, deleted: _d, ...content } = calEvents.get(ev.id);
     content.memo = String(v).trim().slice(0, 200);
     if (!content.memo) delete content.memo;
-    await bucketPut(ev.id, content);
+    await calPutRecord(ev.id, content);
     renderBucket();
   });
   const photoBtn = document.createElement("button"); photoBtn.type = "button";
@@ -1676,7 +1757,7 @@ async function seedBucket2026() {
   if (Number(localStorage.getItem("duri:bucketSeedV") || 0) >= SEED_VERSION) return;
   try {
     if (!calEvents.has(SEED_CANVAS)) {
-      await bucketPut(SEED_CANVAS, { kind: "bucketcanvas", title: "2026 데이트", by: MY_NAME, at: Date.now() });
+      await calPutRecord(SEED_CANVAS, { kind: "bucketcanvas", title: "2026 데이트", by: MY_NAME, at: Date.now() });
     }
     let order = Date.now() - BUCKET_SEED.length * 1000; // 적은 순서 유지
     for (const [id, title, opt] of BUCKET_SEED) {
@@ -1687,7 +1768,7 @@ async function seedBucket2026() {
         content.done = true;
         content.doneAt = typeof opt.done === "string" ? new Date(opt.done + "T12:00:00").getTime() : undefined;
       }
-      await bucketPut(id, content);
+      await calPutRecord(id, content);
       order += 1000;
     }
     bucketCanvas = SEED_CANVAS;
@@ -1695,6 +1776,202 @@ async function seedBucket2026() {
     localStorage.setItem("duri:bucketSeedV", String(SEED_VERSION));
   }
 }
+// ── 운동 인증 ────────────────────────────────────────────────
+// 둘이 하루 한 번 체크하는 달력. 버킷리스트·핀과 같은 cal:<id> 저장소를 쓴다
+// (kind:"workout") — 동기화·LWW·오프라인 큐·방초기화·PC백업이 전부 딸려 온다.
+//
+// **하루 한 건이 아니라 사람당 한 달 한 건이다.** 서버는 E2E라 kind 를 못 보므로
+// MAX_CAL_EVENTS(2000)를 일정과 **합쳐** 센다. 하루 한 건으로 쌓으면 2인 × 365일 =
+// 연 730건이라 두어 해 만에 상한을 채워 **일정 추가가 거부된다**(cal-reject).
+// 한 달 한 건이면 연 24건이라 그럴 일이 없다. 레코드 하나를 한 사람만 쓰므로
+// (자기 달력에 자기 체크만 적는다) LWW 로 남의 체크를 덮어쓸 일도 없다.
+//
+// id 는 `wk` + YYYYMM + 이름해시(6자)다 — 서버의 CAL_ID 는 영숫자 6~40자만 받으므로
+// 하이픈을 쓸 수 없다. 이름으로 가르는 이유는 캘린더·핀과 같다(mine 같은 기기 기준
+// 값을 저장하면 상대 기기에서 뒤집힌다). 이름을 바꾸면 그 달부터 새 레코드가 되고
+// 옛 기록은 옛 이름으로 남는다 — 캘린더 일정과 같은 성질이다.
+const FIT_MEMO_MAX = 120;
+function whoKey(name) { // 이름 → 영숫자 6자(id 에 쓰려고). 두 사람뿐이라 충돌 걱정은 없다.
+  let h = 0;
+  for (let i = 0; i < (name || "").length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return h.toString(36).padStart(6, "0").slice(-6);
+}
+const fitId = (month, name) => `wk${month.replace("-", "")}${whoKey(name)}`;
+const fitMonthOf = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
+let fitCursor = null; // 보고 있는 달(Date)
+let fitPick = null;   // 고른 날짜(ymd)
+
+// 그 달의 살아 있는 기록들. { owner, days: { "1": {at, memo} } }
+function fitRecords(month) {
+  const out = [];
+  for (const ev of calEvents.values()) {
+    if (ev.deleted || ev.kind !== "workout" || ev.month !== month) continue;
+    out.push({ owner: ev.owner || "", days: ev.days && typeof ev.days === "object" ? ev.days : {} });
+  }
+  return out;
+}
+const fitIsMine = (owner) => !owner || owner === MY_NAME; // owner 없는 옛 기록은 내 것으로
+function fitMyRecord(month) {
+  const ev = calEvents.get(fitId(month, MY_NAME));
+  return (ev && !ev.deleted && ev.kind === "workout") ? ev : null;
+}
+// 그 날 누가 체크했는지. { mine, theirs, notes:[{owner, memo}] }
+function fitDay(month, day) {
+  const key = String(day);
+  let mine = false, theirs = false;
+  const notes = [];
+  for (const r of fitRecords(month)) {
+    const hit = r.days[key];
+    if (!hit) continue;
+    if (fitIsMine(r.owner)) mine = true; else theirs = true;
+    if (hit.memo) notes.push({ owner: r.owner, memo: hit.memo });
+  }
+  return { mine, theirs, notes };
+}
+async function fitWrite(month, days) {
+  const id = fitId(month, MY_NAME);
+  // 지웠다 다시 켜도 살아난다 — rev 가 툼스톤보다 크므로 LWW 가 이쪽을 택한다.
+  await calPutRecord(id, { kind: "workout", month, owner: MY_NAME, days, at: Date.now() });
+}
+async function fitToggle(date) { // date = ymd
+  const [y, m, d] = date.split("-");
+  const month = `${y}-${m}`;
+  const day = String(Number(d));
+  const cur = fitMyRecord(month);
+  const days = { ...(cur?.days || {}) };
+  const on = !days[day];
+  if (on) days[day] = { at: Date.now() }; else delete days[day];
+  await fitWrite(month, days);
+  renderFit();
+  // 인증이니 상대가 바로 알게 한다 — 버킷리스트 달성과 같은 가운데 알약이다.
+  // 취소는 알리지 않는다(잘못 눌러 지우는 일까지 알릴 필요는 없다).
+  if (on) {
+    const today = todayYmd();
+    sendSysNotice(date === today ? "💪 오늘 운동 완료!" : `💪 ${Number(m)}월 ${Number(d)}일 운동 완료!`).catch(() => {});
+  }
+}
+async function fitSetMemo(date, text) {
+  const [y, m, d] = date.split("-");
+  const month = `${y}-${m}`;
+  const day = String(Number(d));
+  const cur = fitMyRecord(month);
+  if (!cur?.days?.[day]) return; // 체크한 날에만 적는다
+  const days = { ...cur.days };
+  const t = String(text || "").trim().slice(0, FIT_MEMO_MAX);
+  days[day] = { ...days[day], ...(t ? { memo: t } : {}) };
+  if (!t) delete days[day].memo;
+  await fitWrite(month, days);
+  renderFit();
+}
+
+function renderFit() {
+  if ($("fit").hidden) return; // 안 보이면 그리지 않는다(상대 변경은 열 때 반영)
+  if (!fitCursor) fitCursor = new Date();
+  const month = fitMonthOf(fitCursor);
+  const y = fitCursor.getFullYear(), mi = fitCursor.getMonth();
+  $("fit-title").textContent = `${y}년 ${mi + 1}월`;
+
+  const recs = fitRecords(month);
+  const last = new Date(y, mi + 1, 0).getDate();
+  let nMine = 0, nTheirs = 0, nBoth = 0;
+  for (let d = 1; d <= last; d++) {
+    const { mine, theirs } = fitDay(month, d);
+    if (mine) nMine++;
+    if (theirs) nTheirs++;
+    if (mine && theirs) nBoth++;
+  }
+  // 상대 이름은 상대가 뭔가 보낸 뒤에야 안다 — 모르면 이 달 기록에서 주워 온다.
+  const otherName = peerName || recs.find((r) => !fitIsMine(r.owner))?.owner || "상대";
+  const cMine = colorForOwner(MY_NAME), cTheirs = colorForOwner(otherName), cBoth = sharedColor();
+  const card = (color, name, n) =>
+    `<div class="card"><div class="who"><span class="sw" style="background:${color}"></span>${escMap(name)}</div>`
+    + `<div class="n">${n}<span>일</span></div></div>`;
+  $("fit-stats").innerHTML = card(cMine, MY_NAME || "나", nMine)
+    + card(cTheirs, otherName, nTheirs) + card(cBoth, "같이", nBoth);
+
+  $("fit-week").innerHTML = WEEKDAYS.map((w) => `<div>${w}</div>`).join("");
+
+  const today = todayYmd();
+  if (!fitPick || !fitPick.startsWith(`${month}-`)) {
+    // 이번 달을 보고 있으면 오늘, 지난달을 넘겨 보면 1일을 고른 것으로 둔다.
+    fitPick = today.startsWith(`${month}-`) ? today : `${month}-01`;
+  }
+  let cells = "";
+  for (let i = 0; i < new Date(y, mi, 1).getDay(); i++) cells += `<div class="cell blank"></div>`;
+  for (let d = 1; d <= last; d++) {
+    const date = `${month}-${pad2(d)}`;
+    const { mine, theirs } = fitDay(month, d);
+    const cls = ["cell"];
+    let style = "", label = String(d);
+    if (mine || theirs) {
+      cls.push("on");
+      // 둘 다면 색을 반씩 나눠 칠하고 하트를 얹는다 — 누가 했는지 한눈에 보이게.
+      style = mine && theirs
+        ? `background:linear-gradient(115deg, ${cMine} 0 50%, ${cTheirs} 50% 100%)`
+        : `background:${mine ? cMine : cTheirs}`;
+      label = mine && theirs ? "♥" : "";
+    }
+    if (date === today) cls.push("today");
+    if (date === fitPick) cls.push("pick");
+    if (date > today) cls.push("future");
+    cells += `<button type="button" class="${cls.join(" ")}" data-date="${date}"`
+      + `${style ? ` style="${style}"` : ""}>${label}</button>`;
+  }
+  $("fit-grid").innerHTML = cells;
+
+  const [, pm, pd] = fitPick.split("-").map(Number);
+  const picked = fitDay(month, pd);
+  const btn = $("fit-check");
+  const future = fitPick > today;
+  btn.disabled = future;
+  // 채워진 버튼은 **지금 할 일**이다 — 아직 안 했으면 "체크하기"가 강조되고,
+  // 이미 했으면 "취소"는 조용한 테두리 버튼으로 물러난다.
+  btn.classList.toggle("on", !picked.mine && !future);
+  btn.textContent = future ? "아직 오지 않은 날이에요"
+    : picked.mine ? "체크 취소하기"
+    : fitPick === today ? "오늘 운동 체크하기" : `${pm}월 ${pd}일 체크하기`;
+
+  const dow = WEEKDAYS[new Date(y, mi, pd).getDay()];
+  $("fit-day").textContent = `${pm}월 ${pd}일 ${dow}요일`;
+  const notes = picked.notes;
+  $("fit-notes").innerHTML = notes.length
+    ? notes.map((n) => `<div class="note"><div class="nm" style="color:${colorForOwner(n.owner)}">`
+        + `${escMap(n.owner || "나")}</div><div class="tx">${escMap(n.memo)}</div></div>`).join("")
+    : `<div class="empty">${picked.mine || picked.theirs ? "이 날은 적어 둔 말이 없어요." : "아직 아무도 체크하지 않은 날이에요."}</div>`;
+  // 메모는 내가 체크한 날에만 적을 수 있다(체크가 곧 인증이고 메모는 거기 딸린 말).
+  const form = $("fit-memo-form");
+  form.hidden = !picked.mine;
+  if (picked.mine && document.activeElement !== $("fit-memo")) {
+    const mineNote = notes.find((n) => fitIsMine(n.owner));
+    $("fit-memo").value = mineNote?.memo || "";
+  }
+}
+
+function openFit() {
+  closeMenu();
+  fitCursor = new Date();
+  fitPick = todayYmd();
+  $("fit").hidden = false;
+  renderFit();
+}
+function closeFit() { $("fit").hidden = true; }
+$("fit-open").addEventListener("click", openFit);
+$("fit-back").addEventListener("click", closeFit);
+$("fit-prev").addEventListener("click", () => { fitCursor = new Date(fitCursor.getFullYear(), fitCursor.getMonth() - 1, 1); fitPick = null; renderFit(); });
+$("fit-next").addEventListener("click", () => { fitCursor = new Date(fitCursor.getFullYear(), fitCursor.getMonth() + 1, 1); fitPick = null; renderFit(); });
+$("fit-grid").addEventListener("click", (e) => {
+  const cell = e.target.closest("[data-date]");
+  if (!cell) return;
+  fitPick = cell.dataset.date;
+  renderFit();
+});
+$("fit-check").addEventListener("click", () => { if (fitPick) fitToggle(fitPick); });
+$("fit-memo-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  $("fit-memo").blur();
+  if (fitPick) fitSetMemo(fitPick, $("fit-memo").value);
+});
+
 function openBucket() {
   closeMenu(); $("bucket").hidden = false;
   seedBucket2026().catch(() => {}).then(() => renderBucket());
@@ -3334,6 +3611,7 @@ function scheduleCalFlush() {
     calPersist();
     if (!$("cal").classList.contains("cal-off")) renderCal();
     else renderBucket(); // 캘린더는 닫혀 있고 버킷리스트만 열려 있을 때도 상대 변경을 반영
+    renderFit();         // 운동 화면도 열려 있으면 상대 체크를 바로 반영(닫혀 있으면 그냥 나간다)
   }, 30);
 }
 async function applyCalEntry(entry) { // 실시간으로 한 건씩 오는 cal-put/cal-del
