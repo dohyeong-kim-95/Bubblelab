@@ -214,6 +214,13 @@ PNG·JPEG를 모두 받고, JPEG는 `npm ci` 필요. 검증은 `_infra/wallpaper
 목표는 몸 정보(Mifflin-St Jeor)로 계산하고 직접 덮어쓸 수 있으며, 규칙은
 `life/kcal/store.js` 한 곳이다. 음식표(`life/kcal/foods.js`)는 **사람이 채우는 표**라
 손으로 고치지 말고 `node _infra/kcal-food.mjs` 로 넣는다(`life/kcal/README.md`).
+**`life/dram/`(DRAM 동작)** 은 다른 것들과 성격이 다르다 — 기록이 아니라 **공부용
+시뮬레이터**다. 뱅크를 고르고 커맨드를 누르면 낼 수 있는 가장 빠른 클럭까지 시계가
+밀리고 무엇이 밀었는지(tRCD·tFAW·커맨드 버스…)를 타임라인에 남긴다. 판정은
+`life/dram/engine.js` 순수 함수 한 곳이고, 커맨드·파라미터·규칙 세 표는 세대별로
+`life/dram/spec/*.js` 에 있다. **미공개 세대(DDR6·LPDDR6)는 값을 지어내지 않고
+빈 껍데기로 두고 화면이 못 여는 이유를 말한다** — 값은 공개 자료 기준 대표값이라
+`verify` 가 붙은 것은 스펙과 대조가 필요하다(`life/dram/README.md`).
 
 **서버에 아무것도 저장하지 않는다** — 할 일은 브라우저 localStorage 에만 있고, 워커는
 비밀번호 게이트(`bl_life` 쿠키·`LIFE_PASSWORD`)만 담당한다. `/_life/*` API 는 없다.

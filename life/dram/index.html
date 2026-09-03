@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <meta name="theme-color" content="#000000">
+  <title>DRAM 동작</title>
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="modulepreload" href="engine.js">
+  <link rel="modulepreload" href="spec/index.js">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="bar">
+    <a class="back" href="../" aria-label="LIFE 로 돌아가기">←</a>
+    <h1 class="bar-title">DRAM <span id="clock" class="count"></span></h1>
+    <button id="undo" type="button" aria-label="마지막 커맨드 취소">↺</button>
+    <button id="reset" type="button" aria-label="처음으로">⟲</button>
+  </header>
+
+  <main class="page">
+    <nav id="gens" class="gens" aria-label="세대"></nav>
+
+    <p id="gen-note" class="note"></p>
+
+    <section id="sim" class="sim">
+      <div class="binrow">
+        <label for="bin" class="dim">스피드빈</label>
+        <select id="bin"></select>
+        <span id="tck" class="dim"></span>
+      </div>
+
+      <div id="refresh" class="refresh"></div>
+
+      <h2 class="head">뱅크 <span id="org" class="dim"></span></h2>
+      <div id="grid" class="grid" role="group" aria-label="뱅크 고르기"></div>
+
+      <h2 class="head">커맨드 <span id="target" class="dim"></span></h2>
+      <div id="palette" class="palette"></div>
+
+      <div id="why" class="why" hidden></div>
+
+      <h2 class="head">타임라인</h2>
+      <div id="scroller" class="scroller"><svg id="timeline" class="timeline"></svg></div>
+      <p class="legend dim">
+        <span class="key key-cmd"></span> 커맨드
+        <span class="key key-rd"></span> 읽기 데이터
+        <span class="key key-wr"></span> 쓰기 데이터
+      </p>
+
+      <h2 class="head">파라미터</h2>
+      <p class="note">값은 공개 자료 기준 대표값이다. <b>?</b> 는 스펙과 대조가 필요한 값 — 틀렸으면 <code>spec/</code> 한 곳만 고치면 화면과 테스트가 따라온다.</p>
+      <div id="params" class="params"></div>
+    </section>
+  </main>
+</body>
+</html>
