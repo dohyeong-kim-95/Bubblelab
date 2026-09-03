@@ -1,0 +1,52 @@
+/* LIFE 의 ../styles.css 를 물려받고 여기 필요한 것만 더한다. 색은 쓰지 않고
+ * 밝기로만 나눈다.
+ *
+ * 폭을 정하는 쪽은 언제나 화면이다(life/CLAUDE.md) — 긴 주소 한 줄이 문서를
+ * 가로로 넓히지 못하게 줄어들 수 있는 자리에 min-width: 0 을 못박는다. */
+body { overflow: auto; }
+.back { display: grid; place-items: center; width: 40px; height: 44px; flex: none;
+  color: var(--muted); font-size: 20px; text-decoration: none; }
+.bar { position: sticky; top: 0; z-index: 3; background: var(--bg); }
+.bar-title { font-size: 19px; font-weight: 700; letter-spacing: -.02em; }
+#add-button { width: 44px; height: 44px; flex: none; font-size: 22px; color: var(--muted); }
+.fine-print { color: var(--muted); font-size: 12px; line-height: 1.6; }
+
+.tabs { position: sticky; top: var(--bar); z-index: 2; display: grid; grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr); gap: 8px; padding: 0 18px 10px; background: var(--bg); }
+.tabs button { min-height: 40px; border: 1px solid var(--line); border-radius: 9px;
+  color: var(--muted); font-size: 14px; }
+.tabs button[aria-current="true"] { border-color: var(--ink); color: var(--ink); font-weight: 700; }
+
+.sheet { padding: 0 18px 40px; }
+
+/* ── 정리 ───────────────────────────────────────────────────────── */
+.topic { margin: 0 0 22px; }
+.topic-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  min-width: 0; margin: 0 0 4px; padding-bottom: 4px; font-size: 14px;
+  border-bottom: 1px solid var(--line); }
+.topic-hint { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+
+.card { border-bottom: 1px solid var(--line); }
+.card-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
+  gap: 10px; min-height: 48px; cursor: pointer; list-style: none;
+  touch-action: manipulation; }
+.card-head::-webkit-details-marker { display: none; }
+.card-title { min-width: 0; overflow-wrap: anywhere; font-size: 15px; }
+.card-box { flex: none; color: var(--line); font-size: 9px; letter-spacing: 1px; }
+.card[open] .card-head { color: var(--muted); }
+.card-body { margin: 2px 0 10px; font-size: 14px; line-height: 1.7; white-space: pre-wrap;
+  overflow-wrap: anywhere; }
+.source { display: inline-block; max-width: 100%; margin-bottom: 10px; color: var(--muted);
+  font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-edit { min-height: 40px; margin-bottom: 8px; padding: 0 12px; border: 1px solid var(--line);
+  border-radius: 9px; color: var(--muted); font-size: 13px; }
+
+/* ── 복습 ───────────────────────────────────────────────────────── */
+.quiz { padding: 10px 0 0; }
+.card-topic { margin: 0; color: var(--muted); font-size: 12px; }
+.quiz-title { margin: 4px 0 14px; font-size: 22px; line-height: 1.4; letter-spacing: -.02em;
+  overflow-wrap: anywhere; }
+/* 답은 자리를 차지한 채 가려만 둔다 — 확인을 눌러도 아래 버튼이 움직이지 않는다. */
+.quiz-answer { min-height: 40dvh; padding-top: 10px; border-top: 1px solid var(--line); }
+.veiled { visibility: hidden; }
+#review-left { margin: 12px 0 0; text-align: center; }

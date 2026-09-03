@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <meta name="theme-color" content="#000000">
+  <title>반도체</title>
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="modulepreload" href="store.js">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="bar">
+    <a class="back" href="../" aria-label="LIFE 로 돌아가기">←</a>
+    <h1 class="bar-title">반도체 <span id="count" class="count"></span></h1>
+    <button id="add-button" type="button" aria-label="카드 추가">＋</button>
+  </header>
+
+  <nav class="tabs" aria-label="화면">
+    <button id="tab-notes" type="button" aria-current="true">정리</button>
+    <button id="tab-review" type="button" aria-current="false">복습 <span id="due-count" class="count"></span></button>
+  </nav>
+
+  <main id="sheet" class="sheet">
+    <section id="notes"></section>
+
+    <section id="review" hidden>
+      <article id="review-card" class="quiz" hidden>
+        <p id="review-topic" class="card-topic"></p>
+        <h2 id="review-title" class="quiz-title"></h2>
+        <div class="quiz-answer">
+          <p id="review-body" class="card-body"></p>
+          <a id="review-source" class="source" target="_blank" rel="noreferrer noopener" hidden></a>
+        </div>
+        <div class="menu-items row">
+          <button id="review-show" type="button" class="primary">확인</button>
+          <button id="review-again" type="button" class="quiet" disabled>아직</button>
+          <button id="review-ok" type="button" class="primary" disabled>알겠다</button>
+        </div>
+        <p id="review-left" class="fine-print"></p>
+      </article>
+      <p id="review-empty" class="empty" hidden></p>
+    </section>
+  </main>
+
+  <dialog id="editor" aria-labelledby="editor-title">
+    <form id="editor-form" novalidate>
+      <div class="menu-items row">
+        <button id="editor-cancel" type="button" class="quiet">취소</button>
+        <button class="primary" type="submit">저장</button>
+      </div>
+      <h2 id="editor-title">카드</h2>
+      <input id="card-id" type="hidden">
+
+      <label for="topic-input">주제</label>
+      <select id="topic-input"></select>
+
+      <label for="title-input">제목 <span class="count">떠올릴 질문 하나</span></label>
+      <input id="title-input" type="text" maxlength="80" autocomplete="off">
+
+      <label for="body-input">내가 이해한 것 <span id="body-count" class="count"></span></label>
+      <textarea id="body-input" maxlength="800" rows="7"></textarea>
+
+      <label for="source-input">출처 <span class="count">선택 · http(s) 주소</span></label>
+      <input id="source-input" type="url" maxlength="300" autocomplete="off" inputmode="url">
+
+      <p id="editor-error" class="error" role="alert"></p>
+      <div class="menu-items row">
+        <button id="editor-delete" type="button" class="danger" hidden>삭제</button>
+        <button id="editor-cancel-2" type="button" class="quiet">취소</button>
+        <button class="primary" type="submit">저장</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>
