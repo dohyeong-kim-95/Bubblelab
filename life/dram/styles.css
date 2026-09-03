@@ -89,3 +89,9 @@ select { min-height: 40px; border: 1px solid var(--line); border-radius: 9px; ba
 .empty-gen { margin: 20px 0; border: 1px solid var(--line); border-radius: 10px; padding: 14px;
   color: var(--muted); font-size: 13px; line-height: 1.7; }
 .empty-gen b { color: var(--ink); }
+
+.zoomrow { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.zoomrow input { flex: 1; min-width: 0; accent-color: var(--ink); }
+#lane-note { margin: 8px 0 0; min-height: 2.6em; }
+#lane-note b { color: var(--ink); }
+#rails { margin: 4px 0 0; font-size: 11px; }

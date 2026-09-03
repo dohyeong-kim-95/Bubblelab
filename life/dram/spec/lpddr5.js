@@ -2,7 +2,7 @@
 // 레이턴시(RL/WL)는 동작 모드(DVFSC·WCK 비율·세트)마다 표가 달라 여기서는 비워 뒀다 —
 // 지어내는 것보다 빈 칸이 낫다. 값을 아는 대로 채우면 화면이 그만큼 살아난다.
 
-import { command, param, rule, window_ } from "./common.js";
+import { command, param, rails, rule, window_ } from "./common.js";
 
 export default {
   id: "lpddr5",
@@ -41,6 +41,13 @@ export default {
     RL: param({ why: "READ 레이턴시. 모드마다 표가 달라 비워 뒀다." }),
     WL: param({ why: "WRITE 레이턴시. 모드마다 표가 달라 비워 뒀다." }),
   },
+
+  /* LPDDR5 는 DDR5 처럼 VPP 핀을 두지 않는다 — 워드라인 부스트를 내부 펌프가
+   * VDD1(1.8V)에서 만든다. 그림에서는 같은 자리에 놓는다. */
+  rails: rails({
+    VDD: 1.05, VPP: 1.8, dV: 0.05,
+    note: "코어는 VDD2(1.05V), 부스트는 VDD1(1.8V) 기준. IO 는 VDDQ(0.5V)로 따로 논다.",
+  }),
 
   commands: [
     command("ACT", { needs: "idle", makes: "active", ca: 2, label: "ACT", desc: "행을 연다. LPDDR5 도 두 클럭에 나눠 보낸다." }),

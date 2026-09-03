@@ -5,7 +5,7 @@
 // `verify: true` 가 붙은 것은 표기 방식에 이견이 있을 수 있어 스펙과 대조가 필요한 값이다.
 // 값이 틀렸다고 판단되면 이 파일 한 곳만 고치면 화면과 테스트가 함께 따라온다.
 
-import { command, param, rule, window_ } from "./common.js";
+import { command, param, rails, rule, window_ } from "./common.js";
 
 export default {
   id: "ddr5",
@@ -64,6 +64,13 @@ export default {
     tREFI: param({ ns: 3900, why: "리프레시를 평균 이 간격으로 내야 한다. **최소 간격이 아니라 마감**이라 8번까지 미루거나 당길 수 있다." }),
     BL: param({ ck: 16, why: "한 번의 RD/WR 가 옮기는 비트 수. DDR 이라 DQ 를 쓰는 클럭 수는 그 절반인 8." }),
   },
+
+  /* 전압 레일. VPP 는 워드라인을 VDD 위로 올리기 위한 별도 전원이다 —
+   * 셀의 액세스 트랜지스터를 완전히 열어야 저장 전하가 온전히 나오기 때문이다. */
+  rails: rails({
+    VDD: 1.1, VPP: 1.8, dV: 0.06,
+    note: "DDR5 의 공개 대표값. ΔV(전하공유로 갈라지는 폭)는 셀·비트라인 용량비에 달려 있어 부품마다 다르다.",
+  }),
 
   commands: [
     command("ACT", { needs: "idle", makes: "active", ca: 2, label: "ACT", desc: "행 하나를 열어 센스앰프에 올린다. 행 주소가 커서 CA 버스를 두 클럭 쓴다." }),

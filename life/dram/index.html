@@ -42,13 +42,15 @@
 
       <div id="why" class="why" hidden></div>
 
-      <h2 class="head">타임라인</h2>
+      <h2 class="head">파형 <span class="dim">전압 레벨의 시간 변화</span></h2>
+      <div class="zoomrow">
+        <label for="zoom" class="dim">가로 확대</label>
+        <input id="zoom" type="range" min="2" max="24" step="1" value="4">
+        <span id="zoomval" class="dim"></span>
+      </div>
       <div id="scroller" class="scroller"><svg id="timeline" class="timeline"></svg></div>
-      <p class="legend dim">
-        <span class="key key-cmd"></span> 커맨드
-        <span class="key key-rd"></span> 읽기 데이터
-        <span class="key key-wr"></span> 쓰기 데이터
-      </p>
+      <p id="lane-note" class="note">신호 이름을 누르면 그 선이 무엇인지 나온다.</p>
+      <p id="rails" class="note"></p>
 
       <h2 class="head">파라미터</h2>
       <p class="note">값은 공개 자료 기준 대표값이다. <b>?</b> 는 스펙과 대조가 필요한 값 — 틀렸으면 <code>spec/</code> 한 곳만 고치면 화면과 테스트가 따라온다.</p>

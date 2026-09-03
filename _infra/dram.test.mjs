@@ -197,3 +197,119 @@ test("모든 규칙이 실재하는 커맨드와 파라미터만 가리킨다", 
     }
   }
 });
+
+/* ---------- 파형 ----------
+ * 어레이 내부 파형은 모식도지만, **타이밍 파라미터와 어긋나면 안 된다** —
+ * 셀 복원이 tRAS 에 끝나고 비트라인이 tRP 에 모이는 것이 그 파라미터의 뜻이기 때문이다.
+ * 여기서 고정하는 것은 모양이 아니라 그 대응 관계다.
+ */
+const { ARRAY, IFACE, buildWaves, mergeRanges, sampleAt } = await import("../life/dram/waves.js");
+
+const PICK = { bg: 0, bank: 0 };
+const wavesOf = (state, picked = PICK) => {
+  const w = buildWaves(ddr5, bin, state, picked);
+  return { w, lane: (id) => w.lanes.find((l) => l.id === id) };
+};
+const RAILS = ddr5.rails;
+
+test("맞닿은 구간은 하나로 합쳐진다 — 계단이 뒤로 갔다 오면 선이 꼬인다", () => {
+  assert.deepEqual(mergeRanges([[0, 2], [2, 4], [10, 12]]), [[0, 4], [10, 12]]);
+  assert.deepEqual(mergeRanges([[5, 9], [0, 6]]), [[0, 9]]);
+});
+
+test("워드라인은 ACT 에 VPP 까지 오르고 PRE 뒤에 내려온다", () => {
+  const s = run(fresh(), ACT(0, 0), { op: "PRE", bg: 0, bank: 0 });
+  const { lane } = wavesOf(s);
+  const [act, pre] = s.history;
+  const wl = lane("WL").points;
+  assert.equal(sampleAt(wl, act.clk), RAILS.VSS);
+  assert.equal(sampleAt(wl, act.clk + paramClocks(ddr5, bin, "tRCD")), RAILS.VPP);
+  assert.equal(sampleAt(wl, pre.clk), RAILS.VPP);
+  assert.equal(sampleAt(wl, pre.clk + paramClocks(ddr5, bin, "tRP")), RAILS.VSS);
+});
+
+test("셀 저장 노드는 읽히며 무너졌다가 **정확히 tRAS 에** 복원된다", () => {
+  const s = run(fresh(), ACT(0, 0));
+  const { lane } = wavesOf(s);
+  const cell = lane("Cell").points;
+  const A = paramClocks(ddr5, bin, "tRAS");
+  const R = paramClocks(ddr5, bin, "tRCD");
+  assert.equal(sampleAt(cell, 0), RAILS.VDD);
+  // 전하공유가 끝난 시점에는 비트라인 전위 근처까지 무너져 있다
+  assert.ok(sampleAt(cell, 0.35 * R) < RAILS.VDD / 2 + RAILS.dV * 1.01);
+  // 그리고 tRAS 에 원래 전위로 돌아온다 — 이것이 tRAS 가 존재하는 이유다
+  assert.ok(sampleAt(cell, A * 0.7) < RAILS.VDD - 1e-9, "복원이 너무 일찍 끝났다");
+  assert.equal(sampleAt(cell, A), RAILS.VDD);
+});
+
+test("비트라인 쌍은 ΔV 만큼만 갈라졌다가 센스앰프가 양 레일까지 벌린다", () => {
+  const s = run(fresh(), ACT(0, 0));
+  const { lane } = wavesOf(s);
+  const pair = lane("BL");
+  const [bl, blb] = pair.series.map((x) => x.points);
+  const R = paramClocks(ddr5, bin, "tRCD");
+  const blp = RAILS.VDD / 2;
+
+  assert.equal(pair.kind, "pair");
+  assert.equal(sampleAt(bl, 0), blp);
+  // 전하공유가 끝난 순간: VDD/2 를 사이에 두고 ΔV 만큼만 벌어져 있다
+  assert.ok(Math.abs(sampleAt(bl, 0.35 * R) - (blp + RAILS.dV)) < 1e-9);
+  assert.ok(Math.abs(sampleAt(blb, 0.35 * R) - (blp - RAILS.dV)) < 1e-9);
+  // 증폭이 끝나면 양 레일에 닿고, tRCD 전에 끝나 있어야 컬럼이 읽어갈 수 있다
+  assert.equal(sampleAt(bl, R), RAILS.VDD);
+  assert.equal(sampleAt(blb, R), RAILS.VSS);
+});
+
+test("PRE 뒤 비트라인은 tRP 에 걸쳐 VDD/2 로 다시 모인다", () => {
+  const s = run(fresh(), ACT(0, 0), { op: "PRE", bg: 0, bank: 0 });
+  const { lane } = wavesOf(s);
+  const [bl, blb] = lane("BL").series.map((x) => x.points);
+  const pre = s.history[1].clk;
+  const P = paramClocks(ddr5, bin, "tRP");
+  assert.equal(sampleAt(bl, pre), RAILS.VDD);
+  assert.equal(sampleAt(bl, pre + P), RAILS.VDD / 2);
+  assert.equal(sampleAt(blb, pre + P), RAILS.VDD / 2);
+});
+
+test("센스앰프는 전하공유가 끝난 뒤에 켜진다 — 일찍 켜면 엉뚱한 쪽으로 증폭된다", () => {
+  const s = run(fresh(), ACT(0, 0));
+  const { lane } = wavesOf(s);
+  const R = paramClocks(ddr5, bin, "tRCD");
+  assert.equal(sampleAt(lane("SAE").points, 0.3 * R), RAILS.VSS);
+  assert.equal(sampleAt(lane("SAE").points, 0.5 * R), RAILS.VDD);
+});
+
+test("다른 뱅크를 고르면 어레이 파형은 조용하다 — 뱅크마다 따로 논다", () => {
+  const s = run(fresh(), ACT(0, 0));
+  const { lane } = wavesOf(s, { bg: 3, bank: 2 });
+  assert.equal(Math.max(...lane("WL").points.map(([, v]) => v)), RAILS.VSS);
+  assert.equal(new Set(lane("BL").series[0].points.map(([, v]) => v)).size, 1);
+});
+
+test("인터페이스는 실제 스펙 타이밍을 따른다 — CA 폭과 DQ 시작", () => {
+  const s = run(fresh(), ACT(0, 0), RD(0, 0));
+  const { lane } = wavesOf(s);
+  const [act, rd] = s.history;
+  // ACT 는 두 클럭짜리 커맨드라 CA 를 2클럭 붙잡는다
+  assert.deepEqual(lane("CA").ranges[0], [act.clk, act.clk + 2]);
+  // 읽기 데이터는 CL 뒤에 열려 BL/2 클럭 동안 버스를 쓴다
+  const [start, stop, kind] = lane("DQ").ranges.at(-1);
+  assert.equal(start, rd.clk + paramClocks(ddr5, bin, "CL"));
+  assert.equal(stop - start, paramClocks(ddr5, bin, "BL") / 2);
+  assert.equal(kind, "read");
+});
+
+test("두 묶음을 섞지 않는다 — 인터페이스는 스펙, 어레이는 모식도", () => {
+  const { w } = wavesOf(run(fresh(), ACT(0, 0)));
+  const groups = Object.fromEntries(w.lanes.map((l) => [l.id, l.group]));
+  for (const id of ["CK_t", "CS_n", "CA", "DQS_t", "DQ"]) assert.equal(groups[id], IFACE);
+  for (const id of ["WL", "BL", "SAE", "CSL", "Cell"]) assert.equal(groups[id], ARRAY);
+  assert.match(w.groups.find((g) => g.id === ARRAY).note, /모식도/);
+  for (const l of w.lanes) assert.ok(l.note?.length, `${l.id} 에 설명이 없다`);
+});
+
+test("전압 레일이 없는 세대는 파형을 그리지 않는다", () => {
+  const ddr6 = findGen("ddr6");
+  assert.equal(ddr6.rails, undefined);
+  assert.equal(buildWaves(ddr6, null, fresh(), PICK), null);
+});

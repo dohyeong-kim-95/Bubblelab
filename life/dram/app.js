@@ -4,18 +4,22 @@
 
 import { GENERATIONS, DEFAULT_GEN, findGen, isRunnable } from "./spec/index.js";
 import {
-  bankAt, busSpan, canIssue, createState, findBin, issue, lookupParam, paramClocks,
+  bankAt, canIssue, createState, findBin, issue, lookupParam, paramClocks,
   refreshStatus, tCK,
 } from "./engine.js";
+import { ARRAY, buildWaves } from "./waves.js";
 
 const $ = (id) => document.getElementById(id);
 const el = { clock: $("clock"), undo: $("undo"), reset: $("reset"), gens: $("gens"), genNote: $("gen-note"),
   sim: $("sim"), bin: $("bin"), tck: $("tck"), refresh: $("refresh"), org: $("org"), grid: $("grid"),
-  target: $("target"), palette: $("palette"), why: $("why"), timeline: $("timeline"), params: $("params") };
+  target: $("target"), palette: $("palette"), why: $("why"), timeline: $("timeline"), params: $("params"),
+  zoom: $("zoom"), zoomval: $("zoomval"), laneNote: $("lane-note"), rails: $("rails") };
 
 const SVG = "http://www.w3.org/2000/svg";
-const PX_PER_CK = 4;          // 타임라인의 클럭 하나가 몇 px 인가
-const GUTTER = 34;            // 왼쪽 레인 이름 자리
+const GUTTER = 46;            // 왼쪽 신호 이름 자리
+const LANE_H = 24, LANE_GAP = 7, GROUP_HEAD = 18;
+const BOX_W = 20, BOX_H = 26, CMD_GAP = 4, CMD_TOP = 22;
+let zoom = 4;                 // 클럭 하나가 몇 px 인가
 const fmt = (n) => (Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, ""));
 
 let gen = findGen(DEFAULT_GEN);
@@ -24,6 +28,7 @@ let sim = null;
 let picked = { bg: 0, bank: 0 };
 let past = [];
 let lastEntry = null;
+let waveLanes = [];
 
 /* ---------- 만들기 도우미 ---------- */
 function node(tag, props = {}, kids = []) {
@@ -162,62 +167,65 @@ function renderWhy() {
   el.why.replaceChildren(...kids);
 }
 
-/* ---------- 타임라인 ---------- */
+/* ---------- 파형 ----------
+ *
+ * 커맨드가 언제 나갔는지(위)와 그때 회로의 전압이 어떻게 움직였는지(아래)를
+ * 같은 시간축에 겹친다. tRCD·tRAS·tRP 가 왜 그 길이인지는 아래쪽 그림에서만 보인다.
+ * 다만 어레이 내부는 JEDEC 밖이라 모식도다 — 화면에도 그렇게 적는다.
+ */
+
+/* 눈금 간격을 확대율에 맞춰 고른다. 촘촘하면 숫자가 겹치고 성기면 위치를 못 읽는다. */
+function niceStep(px) {
+  const raw = 54 / px;
+  return [1, 2, 5, 10, 20, 50, 100, 200].find((n) => n >= raw) ?? 500;
+}
+
 function renderTimeline() {
   const h = sim.history;
-  const spans = h.map((e) => busSpan(gen, bin, e));
-  const lastClk = Math.max(sim.clk, ...spans.map((s) => (s ? s.start + s.len : 0)), 24);
-  const width = GUTTER + (lastClk + 8) * PX_PER_CK;
-  const arrows = h.flatMap((e) => e.waitedFor.map((w) => ({ e, w })));
-  const levels = Math.min(arrows.length, 4);
-  const x = (clk) => GUTTER + clk * PX_PER_CK;
-
-  /* 커맨드 상자를 겹치지 않게 레인에 앉힌다. 커맨드 버스가 직렬이라 간격이 1클럭까지
-   * 좁아질 수 있는데, 4px 로는 글자가 겹쳐 무엇이 언제 나갔는지 못 읽는다. */
-  const BOX_W = 20, BOX_H = 26, LANE_GAP = 4;
-  const laneEnd = [];
-  const lanes = h.map((e) => {
-    const left = x(e.clk) - BOX_W / 2;
-    let lane = laneEnd.findIndex((end) => left >= end);
-    if (lane === -1) { lane = laneEnd.length; laneEnd.push(0); }
-    laneEnd[lane] = left + BOX_W + 2;
-    return lane;
-  });
-  const laneCount = Math.max(laneEnd.length, 1);
-  const CMD_TOP = 22;
-  const DQ_TOP = CMD_TOP + laneCount * (BOX_H + LANE_GAP) + 8;
-  const ARROW_TOP = DQ_TOP + 30;
-  const height = ARROW_TOP + Math.max(levels, 1) * 17 + 8;
-
-  const g = svg("svg");
+  const waves = buildWaves(gen, bin, sim, picked);
+  const end = waves ? waves.end : Math.max(sim.clk, 24) + 6;
+  const x = (clk) => GUTTER + clk * zoom;
+  const width = GUTTER + end * zoom + 16;
   const parts = [];
 
-  // 클럭 눈금 — 100clk 마다 굵게
-  const step = lastClk > 260 ? 50 : lastClk > 90 ? 20 : 10;
-  for (let c = 0; c <= lastClk + 4; c += step) {
-    parts.push(svg("line", { x1: x(c), y1: 16, x2: x(c), y2: ARROW_TOP - 4, stroke: "var(--line)", "stroke-width": 1 }));
+  /* 커맨드 상자를 겹치지 않게 레인에 앉힌다. 커맨드 버스가 직렬이라 간격이 1클럭까지
+   * 좁아지는데, 그 폭으로는 글자가 겹쳐 무엇이 언제 나갔는지 못 읽는다. */
+  const laneEnd = [];
+  const cmdLane = h.map((e) => {
+    const left = x(e.clk) - BOX_W / 2;
+    let n = laneEnd.findIndex((edge) => left >= edge);
+    if (n === -1) { n = laneEnd.length; laneEnd.push(0); }
+    laneEnd[n] = left + BOX_W + 2;
+    return n;
+  });
+  const laneCount = Math.max(laneEnd.length, 1);
+  const arrows = h.flatMap((e) => e.waitedFor.map((w) => ({ e, w })));
+  const levels = Math.max(Math.min(arrows.length, 4), 1);
+  const ARROW_TOP = CMD_TOP + laneCount * (BOX_H + CMD_GAP) + 6;
+  let y = ARROW_TOP + levels * 17 + 14;
+
+  const groups = [];
+  if (waves) {
+    for (const g of waves.groups) {
+      const lanes = waves.lanes.filter((l) => l.group === g.id);
+      groups.push({ ...g, lanes, top: y + GROUP_HEAD });
+      y += GROUP_HEAD + lanes.reduce((sum, l) => sum + LANE_H * l.h + LANE_GAP, 0);
+    }
+  }
+  const height = y + 6;
+
+  // 클럭 눈금
+  const step = niceStep(zoom);
+  for (let c = 0; c <= end; c += step) {
+    parts.push(svg("line", { x1: x(c), y1: 16, x2: x(c), y2: height - 4, stroke: "var(--line)", "stroke-width": 1 }));
     parts.push(svg("text", { x: x(c) + 2, y: 12, fill: "var(--muted)", "font-size": 9 }, String(c)));
   }
-
-  // 레인 이름
   parts.push(svg("text", { x: 2, y: CMD_TOP + 14, fill: "var(--muted)", "font-size": 9 }, "CMD"));
-  parts.push(svg("text", { x: 2, y: DQ_TOP + 12, fill: "var(--muted)", "font-size": 9 }, "DQ"));
 
-  // DQ 버스 — 읽기는 채우고 쓰기는 테두리만. 버스가 얼마나 비어 있는지가 한눈에 보인다.
-  spans.forEach((s) => {
-    if (!s) return;
-    parts.push(svg("rect", {
-      x: x(s.start), y: DQ_TOP, width: Math.max(2, s.len * PX_PER_CK), height: 16, rx: 2,
-      fill: s.kind === "read" ? "var(--muted)" : "none",
-      stroke: "var(--muted)", "stroke-width": 1,
-    }));
-  });
-
-  // 커맨드 — 상자 안에 커맨드 이름과 대상 뱅크를 함께 적는다
+  // 커맨드
   h.forEach((e, i) => {
     const cx = x(e.clk);
-    const top = CMD_TOP + lanes[i] * (BOX_H + LANE_GAP);
-    // 상자가 레인에 내려앉으면 실제 클럭 위치를 놓치기 쉬워, 눈금까지 실선으로 잇는다.
+    const top = CMD_TOP + cmdLane[i] * (BOX_H + CMD_GAP);
     parts.push(svg("line", { x1: cx, y1: 16, x2: cx, y2: top, stroke: "var(--muted)", "stroke-width": 1 }));
     parts.push(svg("rect", { x: cx - BOX_W / 2, y: top, width: BOX_W, height: BOX_H, rx: 3, fill: "var(--ink)" }));
     parts.push(svg("text", { x: cx, y: top + 11, fill: "var(--bg)", "font-size": 9, "text-anchor": "middle" }, e.op.slice(0, 5)));
@@ -229,24 +237,100 @@ function renderTimeline() {
   arrows.forEach(({ e, w }, i) => {
     const from = h.find((p) => p.id === w.fromId);
     if (!from) return;
-    const y = ARROW_TOP + (i % Math.max(levels, 1)) * 17;
-    parts.push(svg("line", { x1: x(from.clk), y1: y, x2: x(e.clk), y2: y, stroke: "var(--muted)", "stroke-width": 1 }));
+    const ay = ARROW_TOP + (i % levels) * 17;
+    parts.push(svg("line", { x1: x(from.clk), y1: ay, x2: x(e.clk), y2: ay, stroke: "var(--muted)", "stroke-width": 1 }));
     for (const c of [from.clk, e.clk]) {
-      parts.push(svg("line", { x1: x(c), y1: y - 4, x2: x(c), y2: y + 4, stroke: "var(--muted)", "stroke-width": 1 }));
+      parts.push(svg("line", { x1: x(c), y1: ay - 4, x2: x(c), y2: ay + 4, stroke: "var(--muted)", "stroke-width": 1 }));
     }
     parts.push(svg("text", {
-      x: (x(from.clk) + x(e.clk)) / 2, y: y - 3, fill: "var(--ink)", "font-size": 9, "text-anchor": "middle",
+      x: (x(from.clk) + x(e.clk)) / 2, y: ay - 3, fill: "var(--ink)", "font-size": 9, "text-anchor": "middle",
     }, `${w.label} ${fmt(w.need)}`));
   });
+
+  // 파형
+  for (const g of groups) {
+    parts.push(svg("text", { x: 2, y: g.top - 6, fill: "var(--muted)", "font-size": 9 }, `${g.label} · ${g.note}`));
+    let top = g.top;
+    for (const l of g.lanes) {
+      const H = LANE_H * l.h;
+      /* **눈금은 레인마다 제 vmax 다.** 묶음 전체를 VPP 로 재면 비트라인이 눌려 버린다.
+       * 대신 각 레인의 윗 레일을 글자로 적어 어디까지 올라간 것인지 헷갈리지 않게 한다. */
+      const yv = (v) => top + H - (v / l.vmax) * H;
+      parts.push(svg("line", { x1: GUTTER, y1: yv(0), x2: x(end), y2: yv(0), stroke: "var(--line)", "stroke-width": 1 }));
+      /* 이름과 눈금은 **왼쪽 칸에** 적는다. 파형 위에 얹으면 정작 봐야 할 선을 가린다
+       * (처음에 그렇게 그렸다가 SAE·Cell 의 높은 구간이 글자에 묻혔다). */
+      parts.push(svg("text", { x: 2, y: top + H / 2 - 1, fill: "var(--muted)", "font-size": 9 }, l.label));
+      if (l.group === ARRAY) {
+        const railName = l.vmax === waves.rails.VPP ? "VPP" : "VDD";
+        parts.push(svg("text", { x: 2, y: top + H / 2 + 9, fill: "var(--line)", "font-size": 8 }, `0–${railName}`));
+      }
+      parts.push(svg("rect", { x: 0, y: top - 3, width: GUTTER - 2, height: H + 6, fill: "transparent", "data-lane": l.id, style: "cursor:pointer" }));
+
+      if (l.kind === "pair") {
+        // VDD/2 기준선. 두 선이 여기서 갈라져 나가는 것이 센싱의 전부다.
+        parts.push(svg("line", {
+          x1: GUTTER, y1: yv(l.guide), x2: x(end), y2: yv(l.guide),
+          stroke: "var(--line)", "stroke-width": 1, "stroke-dasharray": "2 3",
+        }));
+        parts.push(svg("text", { x: x(end) - 2, y: yv(l.guide) - 3, fill: "var(--muted)", "font-size": 8, "text-anchor": "end" }, `VDD/2 ${fmt(l.guide)}V`));
+        l.series.forEach((s, si) => {
+          parts.push(svg("polyline", {
+            points: s.points.map(([c, v]) => `${x(c)},${yv(v)}`).join(" "),
+            fill: "none", stroke: "var(--ink)", "stroke-width": 1.4, "stroke-linejoin": "round",
+            "stroke-dasharray": si === 1 ? "4 2" : null,
+          }));
+        });
+      } else if (l.kind === "wave") {
+        parts.push(svg("polyline", {
+          points: l.points.map(([c, v]) => `${x(c)},${yv(v)}`).join(" "),
+          fill: "none", stroke: "var(--ink)", "stroke-width": 1.4, "stroke-linejoin": "round",
+        }));
+      } else if (l.kind === "clock") {
+        // 클럭 사각파는 촘촘해서 확대해야 읽힌다 — 좁을 때 그리면 잉크 덩어리가 된다.
+        if (zoom >= 8) {
+          const pts = [];
+          for (let c = 0; c <= end; c += 1) pts.push(`${x(c)},${yv(l.vmax)}`, `${x(c + 0.5)},${yv(l.vmax)}`, `${x(c + 0.5)},${yv(0)}`, `${x(c + 1)},${yv(0)}`);
+          parts.push(svg("polyline", { points: pts.join(" "), fill: "none", stroke: "var(--muted)", "stroke-width": 1 }));
+        } else {
+          parts.push(svg("text", { x: GUTTER + 4, y: top + H - 7, fill: "var(--muted)", "font-size": 9 }, "확대하면 사각파가 보인다"));
+        }
+      } else if (l.kind === "toggle") {
+        parts.push(svg("line", { x1: GUTTER, y1: yv(l.vmax / 2), x2: x(end), y2: yv(l.vmax / 2), stroke: "var(--line)", "stroke-width": 1, "stroke-dasharray": "1 4" }));
+        for (const [s, e2] of l.ranges) {
+          if (zoom >= 8) {
+            const pts = [];
+            for (let c = s; c < e2; c += 1) pts.push(`${x(c)},${yv(l.vmax)}`, `${x(c + 0.5)},${yv(l.vmax)}`, `${x(c + 0.5)},${yv(0)}`, `${x(c + 1)},${yv(0)}`);
+            parts.push(svg("polyline", { points: pts.join(" "), fill: "none", stroke: "var(--ink)", "stroke-width": 1.2 }));
+          } else {
+            parts.push(svg("rect", { x: x(s), y: yv(l.vmax), width: Math.max(2, (e2 - s) * zoom), height: H, fill: "none", stroke: "var(--ink)", "stroke-width": 1 }));
+          }
+        }
+      } else if (l.kind === "band") {
+        for (const [s, e2, kind] of l.ranges) {
+          parts.push(svg("rect", {
+            x: x(s), y: yv(l.vmax), width: Math.max(2, (e2 - s) * zoom), height: H, rx: 2,
+            fill: kind === "write" ? "none" : "var(--muted)", stroke: "var(--muted)", "stroke-width": 1,
+          }));
+        }
+      }
+      top += H + LANE_GAP;
+    }
+  }
 
   // 지금 시각
   parts.push(svg("line", { x1: x(sim.clk), y1: 16, x2: x(sim.clk), y2: height, stroke: "var(--ink)", "stroke-width": 1, "stroke-dasharray": "2 2" }));
 
-  g.append(...parts);
   el.timeline.setAttribute("width", width);
   el.timeline.setAttribute("height", height);
   el.timeline.setAttribute("viewBox", `0 0 ${width} ${height}`);
-  el.timeline.replaceChildren(...g.childNodes);
+  el.timeline.replaceChildren(...parts);
+  waveLanes = waves ? waves.lanes : [];
+
+  const r = waves?.rails;
+  el.rails.textContent = r
+    ? `VDD ${r.VDD}V · VPP ${r.VPP}V · 비트라인 프리차지 ${fmt(r.VBLP)}V · 전하공유 ΔV ${Math.round(r.dV * 1000)}mV — ${r.note}`
+    : "";
+  el.zoomval.textContent = `${zoom}px/clk`;
 }
 
 /* ---------- 파라미터 표 ---------- */
@@ -328,6 +412,21 @@ el.palette.addEventListener("click", (e) => {
   sim = r.state;
   lastEntry = sim.history[sim.history.length - 1];
   render();
+});
+
+el.zoom.addEventListener("input", () => { zoom = Number(el.zoom.value); renderTimeline(); });
+
+/* 신호 이름을 누르면 그 선이 무엇인지 말해 준다 — 폰에서는 hover 가 없다. */
+el.timeline.addEventListener("click", (e) => {
+  const id = e.target.getAttribute?.("data-lane");
+  if (!id) return;
+  const l = waveLanes.find((w) => w.id === id);
+  if (!l) return;
+  el.laneNote.replaceChildren(
+    node("b", { text: `${l.label} — ` }),
+    document.createTextNode(l.note),
+    ...(l.group === ARRAY ? [node("br"), node("span", { class: "dim", text: "어레이 내부는 JEDEC 이 정하지 않는다 — 모식도다." })] : []),
+  );
 });
 
 el.undo.addEventListener("click", () => {
