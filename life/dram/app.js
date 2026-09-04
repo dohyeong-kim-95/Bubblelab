@@ -9,6 +9,7 @@ import {
   refreshStatus, tCK,
 } from "./engine.js";
 import { ARRAY, buildWaves } from "./waves.js";
+import { explain } from "./explain.js";
 
 const $ = (id) => document.getElementById(id);
 const el = { clock: $("clock"), undo: $("undo"), reset: $("reset"), gens: $("gens"), genNote: $("gen-note"),
@@ -16,7 +17,8 @@ const el = { clock: $("clock"), undo: $("undo"), reset: $("reset"), gens: $("gen
   target: $("target"), palette: $("palette"), why: $("why"), timeline: $("timeline"), params: $("params"),
   zoom: $("zoom"), zoomval: $("zoomval"), laneNote: $("lane-note"), rails: $("rails"), legend: $("legend"), paramsNote: $("params-note"),
   refs: $("refs"), refsBody: $("refs-body"), refsTitle: $("refs-title"),
-  refsOpen: $("refs-open"), refsLink: $("refs-link"), refsClose: $("refs-close") };
+  refsOpen: $("refs-open"), refsLink: $("refs-link"), refsClose: $("refs-close"),
+  param: $("param"), paramTitle: $("param-title"), paramBody: $("param-body"), paramClose: $("param-close") };
 
 const SVG = "http://www.w3.org/2000/svg";
 const GUTTER = 46;            // 왼쪽 신호 이름 자리
@@ -174,7 +176,7 @@ function renderWhy() {
     const terms = node("div", { class: "terms" });
     w.parts.forEach((p, i) => {
       if (i) terms.append(node("span", { class: "op", text: "+" }));
-      terms.append(node("span", { class: "term", text: `${p.term} ${p.ck == null ? "?" : fmt(p.ck)}` }));
+      terms.append(node("span", { class: "term", "data-param": p.term === "BL/2" ? "BL" : p.term, text: `${p.term} ${p.ck == null ? "?" : fmt(p.ck)}` }));
     });
     terms.append(node("span", { class: "op", text: "=" }), node("span", { class: "sum", text: `${fmt(w.need)}clk` }));
     kids.push(terms, node("p", { text: w.why }));
@@ -415,7 +417,7 @@ function renderParams() {
   el.params.replaceChildren(...names.map((name) => {
     const d = describe(name);
     const known = d?.ck != null;
-    return node("div", { class: `prow${known ? "" : " unknown"}` }, [
+    return node("div", { class: `prow${known ? "" : " unknown"}`, "data-param": name }, [
       node("b", { text: name }),
       node("span", { class: "val" }, known
         ? [document.createTextNode(`${d.ck}clk`), node("em", { text: ` (${d.form})` })]
@@ -429,6 +431,86 @@ function renderParams() {
       ]),
     ]);
   }));
+}
+
+/* ---------- 파라미터 한 장 ----------
+ *
+ * "tXX 를 설명할 수 있는가"에 필요한 것을 한자리에 모은다. 손으로 쓴 설명문은
+ * why/breaks 둘뿐이고, 나머지(어느 자리에 걸리는가·빈이 바뀌면·무엇과 짝인가)는
+ * explain.js 가 규칙 표에서 뽑아낸다 — 규칙을 고치면 설명이 저절로 따라온다.
+ */
+function section(title, kids, cls = "") {
+  return node("div", { class: `ex-sec ${cls}`.trim() }, [node("h3", { text: title }), ...kids]);
+}
+
+function placeCard(place, name) {
+  const head = node("div", { class: "place-top" }, [
+    node("b", { text: `${place.from} → ${place.to}` }),
+    node("span", { class: "scope", text: place.kind === "window" ? `최근 ${place.count}번째부터 · 랭크 전체` : place.scopeLabel }),
+  ]);
+  const kids = [head, node("p", { class: "sub", text: place.why })];
+  if (place.total) {
+    // 이 파라미터 혼자가 아니라 여러 항의 합인 자리 — 어디에 끼어 있는지 보여 준다.
+    const terms = node("div", { class: "terms" });
+    place.total.parts.forEach((p, i) => {
+      if (i) terms.append(node("span", { class: "op", text: "+" }));
+      terms.append(node("span", { class: `term${p.term === name ? " me" : ""}`, text: `${p.term} ${p.ck == null ? "?" : fmt(p.ck)}` }));
+    });
+    terms.append(node("span", { class: "op", text: "=" }), node("span", { class: "term", text: `${fmt(place.total.total)}clk` }));
+    kids.push(terms);
+  }
+  return node("div", { class: "place" }, kids);
+}
+
+function openParam(name) {
+  const card = explain(gen, bin, name);
+  if (!card) return;
+  el.paramTitle.replaceChildren(
+    document.createTextNode(name),
+    node("span", { class: "val", text: card.clocks == null ? "값 없음" : `${card.clocks}clk` }),
+    ...(card.family ? [node("span", { class: "fam", text: card.family.label })] : []),
+  );
+
+  const body = [];
+  if (card.places.length) {
+    body.push(section("어느 자리에 걸리는가", card.places.map((p) => placeCard(p, name))));
+  } else {
+    body.push(section("어느 자리에 걸리는가", [node("p", { class: "sub", text: "규칙에 직접 쓰이지 않는다 — 다른 값의 재료로 쓰인다." })]));
+  }
+  body.push(section("왜 존재하나", [node("p", { text: card.param.why })]));
+  if (card.param.breaks) {
+    body.push(section("안 지키면", [node("p", { text: card.param.breaks })], "ex-break"));
+  }
+  if (card.binding) {
+    const chips = node("div", { class: "binrow-ex" });
+    for (const b of card.bins) {
+      chips.append(node("span", { class: "binchip" }, [
+        document.createTextNode(`${b.bin.label.replace(/^모의 /, "")} ${b.clocks ?? "—"}clk`),
+        ...(b.winner ? [node("em", { text: ` ${b.winner === "ns" ? "ns 가 이김" : "클럭이 이김"}` })] : []),
+      ]));
+    }
+    body.push(section("빈이 바뀌면", [node("p", { class: "sub", text: card.binding.text }), chips]));
+  }
+  if (card.siblings.length) {
+    const kids = [node("p", { class: "sub", text: card.family.note })];
+    for (const s of card.siblings) {
+      kids.push(node("div", { class: "sib" }, [
+        node("div", { class: "sib-top" }, [
+          node("button", { type: "button", "data-param": s.name, text: s.name }),
+          node("span", { class: "num", text: s.clocks == null ? "값 없음" : `${s.clocks}clk` }),
+        ]),
+        // 커맨드 쌍이 같고 범위만 다른 둘 — 이 차이가 뱅크그룹을 이해하는 자리다.
+        ...(s.pairedBy ? [node("p", { class: "pair" }, [
+          document.createTextNode(`${s.pairedBy.from} → ${s.pairedBy.to} 로 자리가 같고 범위만 다르다 — `),
+          node("b", { text: `${name}: ${s.pairedBy.mine} / ${s.name}: ${s.pairedBy.theirs}` }),
+        ])] : []),
+        node("p", { class: "swhy", text: s.why }),
+      ]));
+    }
+    body.push(section(`같은 무리 — ${card.family.label}`, kids));
+  }
+  el.paramBody.replaceChildren(...body);
+  if (!el.param.open) el.param.showModal();
 }
 
 /* ---------- 참고문헌 ----------
@@ -549,6 +631,14 @@ el.legend.addEventListener("click", (e) => {
   const id = e.target.closest("[data-lane]")?.dataset.lane;
   if (id) setFocus(id);
 });
+
+for (const host of [el.params, el.why, el.paramBody]) {
+  host.addEventListener("click", (e) => {
+    const name = e.target.closest("[data-param]")?.dataset.param;
+    if (name) openParam(name);
+  });
+}
+el.paramClose.addEventListener("click", () => el.param.close());
 
 for (const b of [el.refsOpen, el.refsLink]) {
   b.addEventListener("click", () => { renderRefs(); el.refs.showModal(); });

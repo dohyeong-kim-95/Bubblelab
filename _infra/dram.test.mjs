@@ -422,3 +422,88 @@ test("모의값임을 참고문헌이 말한다 — 세대마다 그 항목이 �
     assert.match(mockRef.where, /데이터시트/, `${gen.id}: 무엇을 쓰지 않았는지 밝히지 않았다`);
   }
 });
+
+/* ---------- 설명 ----------
+ * "tXX 를 설명할 수 있는가"에 필요한 것들이 **규칙 표에서 뽑혀 나오는지**를 본다.
+ * 손으로 적은 설명문을 따로 두면 규칙을 고칠 때 반드시 어긋나므로, 유도가 맞는지가
+ * 곧 설명이 맞는지다.
+ */
+const { bindingOf, explain, pairedScope, placesOf, siblingsOf } = await import("../life/dram/explain.js");
+
+test("어느 자리에 걸리는지가 규칙 표에서 나온다", () => {
+  const places = placesOf(ddr5, "tRCD");
+  assert.deepEqual(places.map((p) => `${p.from}→${p.to}`).sort(), ["ACT→RD", "ACT→WR"]);
+  for (const p of places) {
+    assert.equal(p.scope, "bank");
+    assert.ok(p.why.length);
+  }
+});
+
+test("여러 항의 합인 자리는 그 합까지 펼쳐진다", () => {
+  const card = explain(ddr5, bin, "tWTR_L");
+  const place = card.places.find((p) => p.from === "WR" && p.to === "RD");
+  assert.deepEqual(place.terms, ["CWL", "BL/2", "tWTR_L"]);
+  assert.equal(place.total.total, place.total.parts.reduce((s, x) => s + x.ck, 0));
+});
+
+test("굴러가는 창은 창으로 표시된다 — 쌍 제약과 섞지 않는다", () => {
+  const [place] = placesOf(ddr5, "tFAW");
+  assert.equal(place.kind, "window");
+  assert.equal(place.count, 4);
+});
+
+test("무엇에 묶였는지가 값의 모양에서 나온다", () => {
+  assert.equal(bindingOf(ddr5, bin, "tRCD").kind, "ns");      // ns 만
+  assert.equal(bindingOf(ddr5, bin, "tRRD_S").kind, "ck");    // 클럭만
+  assert.equal(bindingOf(ddr5, bin, "tRRD_L").kind, "both");  // 둘 다 → 빈에 따라 이기는 쪽이 바뀐다
+});
+
+test("빈마다 누가 이겼는지까지 나온다 — max() 를 이해하는 자리다", () => {
+  const { bins } = explain(ddr5, bin, "tRRD_L");
+  assert.deepEqual(bins.map((b) => [b.bin.id, b.clocks, b.winner]), [["slow", 8, "ck"], ["fast", 10, "ns"]]);
+});
+
+test("짝은 커맨드 쌍이 같고 범위만 다른 둘이다", () => {
+  const pair = pairedScope(ddr5, "tCCD_L", "tCCD_S");
+  assert.equal(pair.from, "RD");
+  assert.equal(pair.to, "RD");
+  assert.notEqual(pair.mine, pair.theirs);
+  assert.ok(pairedScope(ddr5, "tRRD_L", "tRRD_S"));
+  assert.ok(pairedScope(ddr5, "tWTR_L", "tWTR_S"));
+  // 굴러가는 창은 짝이 될 수 없다 — 성격이 다른데 커맨드 쌍만 같다.
+  assert.equal(pairedScope(ddr5, "tFAW", "tRRD_S"), null);
+});
+
+test("무리는 혼자가 아니다 — 이웃이 없으면 묶은 뜻이 없다", () => {
+  for (const gen of GENERATIONS.filter(isRunnable)) {
+    const b = findBin(gen, null);
+    const names = [...Object.keys(gen.params), ...gen.bins.flatMap((x) => Object.keys(x.params ?? {}))];
+    for (const name of [...new Set(names)]) {
+      assert.ok(siblingsOf(gen, b, name).length > 0, `${gen.id}: ${name} 의 무리에 이웃이 없다`);
+    }
+  }
+});
+
+test("모든 파라미터가 설명 한 장을 만들어 낸다", () => {
+  for (const gen of GENERATIONS.filter(isRunnable)) {
+    const b = findBin(gen, null);
+    const names = [...new Set([...Object.keys(gen.params), ...gen.bins.flatMap((x) => Object.keys(x.params ?? {}))])];
+    for (const name of names) {
+      const card = explain(gen, b, name);
+      assert.ok(card, `${gen.id}: ${name} 의 설명을 만들지 못했다`);
+      assert.ok(card.param.why?.length, `${gen.id}: ${name} 에 "왜"가 없다`);
+      assert.ok(card.family, `${gen.id}: ${name} 이 어느 무리에도 없다`);
+      // 값이 있는 것은 "안 지키면"까지 있어야 설명이 된다.
+      if (card.clocks != null) assert.ok(card.param.breaks?.length, `${gen.id}: ${name} 에 실패 모드가 없다`);
+    }
+  }
+});
+
+test("규칙에 쓰이는 파라미터는 걸리는 자리가 비어 있지 않다", () => {
+  for (const gen of GENERATIONS.filter(isRunnable)) {
+    const used = new Set(gen.rules.flatMap((r) => r.terms).filter((x) => x !== "BL/2"));
+    for (const name of used) {
+      assert.ok(placesOf(gen, name).length > 0, `${gen.id}: ${name} 이 규칙에 쓰이는데 자리가 안 잡힌다`);
+    }
+  }
+});

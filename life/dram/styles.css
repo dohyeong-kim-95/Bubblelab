@@ -128,3 +128,37 @@ dialog#refs { width: min(100% - 24px, 460px); max-height: 82dvh; overflow-y: aut
 .ref-clean h3 { margin: 0 0 4px; font-size: 13px; }
 .ref-clean p { margin: 0 0 5px; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .src-line b { color: var(--ink); font-weight: 400; }
+
+/* 파라미터 한 장. "설명할 수 있는 수준"에 필요한 것을 한자리에 모은다 —
+ * 어느 자리에 걸리는가 · 왜 있는가 · 안 지키면 · 빈이 바뀌면 · 무엇과 헷갈리는가. */
+dialog#param { width: min(100% - 24px, 460px); max-height: 84dvh; overflow-y: auto; }
+#param-title { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+#param-title .val { color: var(--muted); font-size: 13px; font-weight: 400; }
+#param-title .fam { border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px;
+  color: var(--muted); font-size: 10px; font-weight: 400; }
+.explain { display: grid; gap: 13px; margin-top: 4px; }
+.ex-sec > h3 { margin: 0 0 5px; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .05em; }
+.ex-sec p { margin: 0 0 4px; font-size: 13px; line-height: 1.65; }
+.ex-sec .sub { color: var(--muted); font-size: 12px; }
+.ex-break { border-left: 2px solid var(--danger); padding-left: 9px; }
+.ex-break p { color: var(--ink); }
+.place { border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; margin-bottom: 5px; }
+.place-top { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; font-size: 13px; }
+.place-top b { font-weight: 700; }
+.place-top .scope { color: var(--muted); font-size: 11px; }
+.place .terms { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; margin-top: 5px; }
+.place .term { border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; font-size: 11px; }
+.place .term.me { border-color: var(--ink); color: var(--ink); font-weight: 700; }
+.binrow-ex { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.binchip { border: 1px solid var(--line); border-radius: 6px; padding: 2px 7px; font-size: 12px; }
+.binchip em { color: var(--muted); font-style: normal; font-size: 10px; }
+.sib { display: grid; gap: 2px; border-top: 1px solid var(--line); padding: 7px 0 0; margin-top: 7px; }
+.sib-top { display: flex; align-items: baseline; gap: 7px; }
+.sib-top button { font-size: 13px; text-decoration: underline; text-underline-offset: 3px; }
+.sib-top .num { color: var(--muted); font-size: 11px; }
+.sib .pair { color: var(--ink); font-size: 11px; }
+.sib .pair b { font-weight: 700; }
+.sib .swhy { color: var(--muted); font-size: 11px; line-height: 1.5; }
+.prow { cursor: pointer; }
+.prow:hover { background: var(--surface); }
+.why .term { cursor: pointer; }

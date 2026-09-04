@@ -57,9 +57,26 @@ export function window_(op, count, param, why) {
  *   why     왜 이 제약이 존재하는가 — 한 줄
  *   verify  값의 출처가 대표값이라 스펙과 대조가 필요하면 true
  */
+/*   why     왜 이 제약이 존재하는가
+ *   breaks  **안 지키면 무슨 일이 나는가.** 설명이 막히는 자리가 대개 여기다 —
+ *           "몇 클럭"은 외워도 "왜 그걸 지켜야 하나"는 말로 못 하는 경우가 많다.
+ *   family  어느 무리인가. 헷갈리는 것끼리 나란히 놓기 위한 것이다(tRP↔tRTP↔tWR 처럼).
+ */
 export function param(fields) {
-  return { ns: null, ck: null, why: "", verify: false, src: null, ...fields };
+  return { ns: null, ck: null, why: "", breaks: "", family: null, verify: false, src: null, ...fields };
 }
+
+/* 파라미터의 무리. 설명이 막히는 지점은 거의 항상 **비슷한 것끼리 헷갈릴 때**라,
+ * 하나를 볼 때 같은 무리를 함께 보여 준다. 같은 무리에서 커맨드 쌍까지 같고 범위만
+ * 다른 것은 화면이 "짝"으로 표시한다 — tCCD_L/tCCD_S 처럼. */
+export const FAMILIES = {
+  row: { label: "행 여닫기", note: "한 행을 열고 쓰고 닫는 한 바퀴에 걸리는 것들." },
+  spacing: { label: "연속 열기", note: "행을 잇달아 열 때 걸리는 것들. 전류가 몰리는 것을 막는다." },
+  bus: { label: "버스 점유", note: "DQ 를 얼마나 촘촘히 이어 쓸 수 있는가." },
+  turn: { label: "방향 전환·마무리", note: "읽기/쓰기를 끝내고 다음으로 넘어갈 때 걸리는 것들. 서로 가장 헷갈린다." },
+  latency: { label: "레이턴시", note: "커맨드를 낸 뒤 데이터가 오가기까지. 클럭에 묶여 있다." },
+  refresh: { label: "리프레시", note: "전하가 새기 전에 다시 써 넣는 일." },
+};
 
 /* ---------- 값의 출처 ----------
  *
