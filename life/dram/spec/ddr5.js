@@ -5,7 +5,7 @@
 // `verify: true` 가 붙은 것은 표기 방식에 이견이 있을 수 있어 스펙과 대조가 필요한 값이다.
 // 값이 틀렸다고 판단되면 이 파일 한 곳만 고치면 화면과 테스트가 함께 따라온다.
 
-import { command, param, rails, ref, rule, window_ } from "./common.js";
+import { command, param, rails, ref, rule, window_, withSrc } from "./common.js";
 
 export default {
   id: "ddr5",
@@ -28,28 +28,29 @@ export default {
   bins: [
     {
       id: "4800B", label: "DDR5-4800B", mtps: 4800,
-      params: {
+      params: withSrc("public", {
         CL: param({ ck: 40, why: "READ 를 낸 뒤 첫 데이터가 DQ 에 나오기까지의 클럭." }),
         CWL: param({ ck: 38, why: "WRITE 를 낸 뒤 첫 데이터를 DQ 에 실어야 하는 클럭.", verify: true }),
         tCCD_L: param({ ck: 8, why: "같은 뱅크그룹 안의 연속 접근 간격. 이 빈에서는 tCCD_S 와 같아 그룹을 갈라도 읽기가 빨라지지 않는다.", verify: true }),
-      },
+      }),
     },
     {
       id: "6400A", label: "DDR5-6400A", mtps: 6400,
-      params: {
+      params: withSrc("public", {
         CL: param({ ck: 46, why: "READ 를 낸 뒤 첫 데이터가 DQ 에 나오기까지의 클럭." }),
         CWL: param({ ck: 44, why: "WRITE 를 낸 뒤 첫 데이터를 DQ 에 실어야 하는 클럭.", verify: true }),
         tCCD_L: param({ ck: 12, why: "빈이 빨라지면 클럭으로 센 tCCD_L 도 함께 커진다 — ns 가 그대로이기 때문.", verify: true }),
-      },
+      }),
     },
   ],
 
-  /* 빈과 무관한 코어 타이밍. 전부 ns 다 — 셀·센스앰프의 물리이지 버스의 사정이 아니다. */
-  params: {
+  /* 빈과 무관한 코어 타이밍. 전부 ns 다 — 셀·센스앰프의 물리이지 버스의 사정이 아니다.
+   * 출처는 기본이 "공개 데이터시트"이고, 그렇지 않은 것만 값에 직접 적는다. */
+  params: withSrc("public", {
     tRCD: param({ ns: 16.25, why: "ACT 로 워드라인을 올리고 센스앰프가 미세한 전하차를 판별해 행이 설 때까지." }),
     tRP: param({ ns: 16.25, why: "PRE 로 비트라인을 다시 Vdd/2 로 되돌려 다음 ACT 를 받을 수 있게 될 때까지." }),
     tRAS: param({ ns: 32, why: "행을 연 뒤 최소한 이만큼은 열어 둬야 한다 — 센스앰프가 셀을 원래 값으로 복원(restore)하는 시간." }),
-    tRC: param({ ns: 48.25, why: "같은 뱅크의 ACT → ACT. 사실상 tRAS + tRP 이고, 한 뱅크의 최대 회전율을 정한다." }),
+    tRC: param({ ns: 48.25, src: "derived", why: "같은 뱅크의 ACT → ACT. 사실상 tRAS + tRP 이고, 한 뱅크의 최대 회전율을 정한다." }),
     tRRD_L: param({ ns: 5, ck: 8, why: "같은 그룹 안의 연속 ACT. 그룹 내부 자원이 겹친다." }),
     tRRD_S: param({ ck: 8, why: "다른 그룹의 연속 ACT. 그룹이 다르면 코어 자원이 겹치지 않아 짧다." }),
     tFAW: param({ ns: 32, why: "어떤 32ns 창에서도 ACT 는 4번까지. 행을 여는 것은 전류를 크게 쓰는 동작이라 전원이 못 버틴다.", verify: true }),
@@ -62,13 +63,13 @@ export default {
     tRFC1: param({ ns: 295, why: "all-bank 리프레시 하나가 끝나기까지. 16Gb 기준이고 밀도가 커지면 함께 커진다.", verify: true }),
     tRFCsb: param({ ns: 130, why: "same-bank 리프레시. DDR5 가 새로 넣은 것 — 한 뱅크만 쉬게 하고 나머지는 계속 쓴다.", verify: true }),
     tREFI: param({ ns: 3900, why: "리프레시를 평균 이 간격으로 내야 한다. **최소 간격이 아니라 마감**이라 8번까지 미루거나 당길 수 있다." }),
-    BL: param({ ck: 16, why: "한 번의 RD/WR 가 옮기는 비트 수. DDR 이라 DQ 를 쓰는 클럭 수는 그 절반인 8." }),
-  },
+    BL: param({ ck: 16, src: "convention", why: "한 번의 RD/WR 가 옮기는 비트 수. DDR 이라 DQ 를 쓰는 클럭 수는 그 절반인 8." }),
+  }),
 
   /* 전압 레일. VPP 는 워드라인을 VDD 위로 올리기 위한 별도 전원이다 —
    * 셀의 액세스 트랜지스터를 완전히 열어야 저장 전하가 온전히 나오기 때문이다. */
   rails: rails({
-    VDD: 1.1, VPP: 1.8, dV: 0.06,
+    VDD: 1.1, VPP: 1.8, dV: 0.06, src: { VDD: "public", VPP: "public", dV: "illustrative" },
     note: "DDR5 의 공개 대표값. ΔV(전하공유로 갈라지는 폭)는 셀·비트라인 용량비에 달려 있어 부품마다 다르다.",
   }),
 

@@ -348,3 +348,42 @@ test("링크는 발행처 대문이다 — 문서 깊은 주소는 개정판마�
     }
   }
 });
+
+/* ---------- 값의 출처 ----------
+ * "비공개 자료는 들어 있지 않다"는 말이 참이려면 **값마다 출처가 붙어 있어야** 한다.
+ * 여기서 막지 않으면 나중에 값을 더할 때 출처 없는 숫자가 슬그머니 섞인다.
+ */
+const { PROVENANCE } = await import("../life/dram/spec/common.js");
+
+test("값이 있는 파라미터는 모두 출처가 붙어 있다 — 넷 밖의 출처는 없다", () => {
+  const kinds = new Set(Object.keys(PROVENANCE));
+  for (const gen of GENERATIONS.filter(isRunnable)) {
+    const rows = [...Object.entries(gen.params), ...gen.bins.flatMap((b) => Object.entries(b.params ?? {}))];
+    for (const [name, p] of rows) {
+      const hasValue = p.ns != null || p.ck != null;
+      if (!hasValue) { assert.equal(p.src, null, `${gen.id}: ${name} 은 값이 없는데 출처가 붙었다`); continue; }
+      assert.ok(kinds.has(p.src), `${gen.id}: ${name} 의 출처가 없거나 모르는 값이다 (${p.src})`);
+    }
+  }
+});
+
+test("전압 레일도 출처를 밝힌다 — ΔV 는 모식도용으로 고른 값이다", () => {
+  for (const gen of GENERATIONS.filter(isRunnable)) {
+    for (const key of ["VDD", "VPP", "dV"]) {
+      assert.ok(PROVENANCE[gen.rails.src[key]], `${gen.id}: rails.${key} 의 출처가 없다`);
+    }
+    assert.equal(gen.rails.src.dV, "illustrative", `${gen.id}: ΔV 를 공개 값처럼 적으면 안 된다`);
+  }
+});
+
+test("산술로 나온 값은 실제로 그 산술과 맞는다 — 라벨만 붙이면 거짓말이 된다", () => {
+  // tRC 는 derived 라고 적혀 있다. 정말 tRAS + tRP 인지 확인한다.
+  assert.equal(ddr5.params.tRC.src, "derived");
+  assert.equal(ddr5.params.tRC.ns, ddr5.params.tRAS.ns + ddr5.params.tRP.ns);
+});
+
+test("출처 넷은 저마다 설명이 있다 — 라벨만으로는 무엇이 공개 자료인지 모른다", () => {
+  for (const [key, meta] of Object.entries(PROVENANCE)) {
+    assert.ok(meta.label?.length && meta.note?.length, `${key} 에 설명이 없다`);
+  }
+});

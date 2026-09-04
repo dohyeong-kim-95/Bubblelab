@@ -70,9 +70,16 @@ node _infra/build.mjs        # 빌드 (dist/ 생성, 에러 없어야 함)
 npm run test:e2e             # 핵심 화면 모바일 스모크 (빌드 후 Playwright)
 npx wrangler@4 dev --local --local-upstream localhost   # 로컬 서빙
 # http://localhost:8787/slop/이름  (첫 경로 세그먼트 = 서브도메인)
+node _infra/csp-serve.mjs     # 빌드 산출물을 프로덕션과 같은 보안 헤더로 (8788)
 ```
 
 `--local-upstream localhost` 필수.
+
+**맨 정적 서버로 화면을 확인하지 말 것.** CSP 가 없어서 `life` 처럼 `style-src 'self'`
+인 화면의 인라인 `style` 이 로컬에서만 멀쩡히 그려지고 프로덕션에서는 조용히 버려진다
+(마크업의 `style=` 도 `setAttribute("style", …)` 도 막힌다 — 값이 계산되는 스타일은
+`el.style.setProperty` 같은 CSSOM 으로 넣어야 한다). `_infra/csp-serve.mjs` 는 워커와
+**같은 `applySecurityHeaders`** 를 불러 헤더가 어긋날 수 없다.
 
 **커밋 훅이 알아서 돈다.** `_infra/agent-hooks/pre-commit` 이 스테이지된 파일에
 린트를 돌리고, 코드가 하나라도 끼면 `npm test`(빌드 검사 포함)까지 돌린다 —

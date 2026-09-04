@@ -58,7 +58,39 @@ export function window_(op, count, param, why) {
  *   verify  값의 출처가 대표값이라 스펙과 대조가 필요하면 true
  */
 export function param(fields) {
-  return { ns: null, ck: null, why: "", verify: false, ...fields };
+  return { ns: null, ck: null, why: "", verify: false, src: null, ...fields };
+}
+
+/* ---------- 값의 출처 ----------
+ *
+ * **이 화면의 어떤 값도 비공개 자료·벤더 내부 문서·NDA 자료에서 오지 않았다.**
+ * 값마다 아래 넷 중 하나를 달아 그것을 확인할 수 있게 한다. 넷 밖의 출처는 없고,
+ * 테스트가 출처 없는 값을 거절한다 — 나중에 값을 더할 때 슬그머니 섞이지 않게.
+ */
+export const PROVENANCE = {
+  public: {
+    label: "공개 데이터시트",
+    note: "제조사가 웹에 공개하는 부품 데이터시트와 스피드빈 표에 널리 실려 있는 값. 특정 업체의 비공개 문서가 아니다.",
+  },
+  convention: {
+    label: "표준 표기",
+    note: "값이라기보다 표준이 쓰는 표기 방식 자체다 — max(x nCK, y ns) 꼴, 버스트 길이 같은 것.",
+  },
+  derived: {
+    label: "산술",
+    note: "다른 값에서 계산해 나왔다. 따로 인용한 출처가 없다(예: tRC = tRAS + tRP).",
+  },
+  illustrative: {
+    label: "모식도",
+    note: "그림을 위해 고른 값이다. 측정값도 규정값도 아니다.",
+  },
+};
+
+/* 표의 값에 출처를 채운다. 기본을 주고 예외만 값에 직접 적는다 —
+ * 열일곱 줄에 같은 글자를 반복하면 오히려 빠뜨린 것이 눈에 안 띈다. */
+export function withSrc(fallback, params) {
+  return Object.fromEntries(Object.entries(params)
+    .map(([name, p]) => [name, { ...p, src: p.src ?? (p.ns == null && p.ck == null ? null : fallback) }]));
 }
 
 /* ns → 클럭. 항상 올림이다. 클럭 경계 안쪽으로 값을 깎으면 스펙 위반이 된다. */
@@ -78,7 +110,7 @@ export const tCKns = (mtps) => 2000 / mtps;
 
 /* 전압 레일. 공개 자료 기준 대표값이다. */
 export function rails(fields) {
-  return { VSS: 0, VDD: null, VPP: null, dV: null, note: "", ...fields };
+  return { VSS: 0, VDD: null, VPP: null, dV: null, note: "", src: {}, ...fields };
 }
 export const VBLP = (r) => r.VDD / 2;   // 비트라인 프리차지 전위는 두 레일의 가운데다
 

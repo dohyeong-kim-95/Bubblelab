@@ -2,7 +2,7 @@
 // 레이턴시(RL/WL)는 동작 모드(DVFSC·WCK 비율·세트)마다 표가 달라 여기서는 비워 뒀다 —
 // 지어내는 것보다 빈 칸이 낫다. 값을 아는 대로 채우면 화면이 그만큼 살아난다.
 
-import { command, param, rails, ref, rule, window_ } from "./common.js";
+import { command, param, rails, ref, rule, window_, withSrc } from "./common.js";
 
 export default {
   id: "lpddr5",
@@ -24,7 +24,7 @@ export default {
     { id: "6400", label: "LPDDR5-6400", mtps: 6400, params: {} },
   ],
 
-  params: {
+  params: withSrc("public", {
     tRCD: param({ ns: 18, why: "행이 서기까지. DDR5 보다 길다 — 모바일은 속도보다 전력이 먼저다.", verify: true }),
     tRP: param({ ns: 18, why: "per-bank 프리차지. all-bank 는 이보다 길다.", verify: true }),
     tRAS: param({ ns: 42, why: "복원이 끝날 때까지 행을 열어 둬야 하는 시간.", verify: true }),
@@ -37,15 +37,15 @@ export default {
     tRFCab: param({ ns: 280, why: "all-bank 리프레시. 16Gb 기준.", verify: true }),
     tRFCpb: param({ ns: 140, why: "per-bank 리프레시. LPDDR 은 오래전부터 이걸 갖고 있었다.", verify: true }),
     tREFI: param({ ns: 3904, why: "리프레시 마감. 온도가 오르면 절반으로 줄어든다." }),
-    BL: param({ ck: 16, why: "버스트 길이. LPDDR5 는 16/32 를 고른다." }),
+    BL: param({ ck: 16, src: "convention", why: "버스트 길이. LPDDR5 는 16/32 를 고른다." }),
     RL: param({ why: "READ 레이턴시. 모드마다 표가 달라 비워 뒀다." }),
     WL: param({ why: "WRITE 레이턴시. 모드마다 표가 달라 비워 뒀다." }),
-  },
+  }),
 
   /* LPDDR5 는 DDR5 처럼 VPP 핀을 두지 않는다 — 워드라인 부스트를 내부 펌프가
    * VDD1(1.8V)에서 만든다. 그림에서는 같은 자리에 놓는다. */
   rails: rails({
-    VDD: 1.05, VPP: 1.8, dV: 0.05,
+    VDD: 1.05, VPP: 1.8, dV: 0.05, src: { VDD: "public", VPP: "public", dV: "illustrative" },
     note: "코어는 VDD2(1.05V), 부스트는 VDD1(1.8V) 기준. IO 는 VDDQ(0.5V)로 따로 논다.",
   }),
 

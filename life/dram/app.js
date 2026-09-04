@@ -3,6 +3,7 @@
 //  타임라인은 SVG 를 직접 만든다.)
 
 import { GENERATIONS, DEFAULT_GEN, findGen, isRunnable } from "./spec/index.js";
+import { PROVENANCE } from "./spec/common.js";
 import {
   bankAt, canIssue, createState, findBin, issue, lookupParam, paramClocks,
   refreshStatus, tCK,
@@ -416,6 +417,8 @@ function renderParams() {
         : [node("em", { text: "값 없음" })]),
       node("span", {}, [
         node("span", { class: "why", text: d?.p.why ?? "" }),
+        // 값마다 출처를 붙인다 — 어디서 왔는지 모르는 숫자가 표에 섞이지 않게.
+        ...(d?.p.src ? [node("span", { class: "srctag", text: PROVENANCE[d.p.src].label })] : []),
         ...(d?.p.verify ? [node("span", { class: "flag", text: "? 스펙과 대조 필요" })] : []),
       ]),
     ]);
@@ -439,6 +442,28 @@ function renderRefs() {
     node("p", { class: "ref-where", text: r.where }),
     ...(r.url ? [node("a", { href: r.url, target: "_blank", rel: "noopener noreferrer", text: `${r.url} ↗` })] : []),
   ]));
+
+  /* 출처별로 몇 개인지 세어 보여 준다. 목록이 아니라 숫자여야 한 눈에 들어오고,
+   * "공개 자료 밖에서 온 값이 하나도 없다"는 것이 그 합으로 증명된다. */
+  const all = [
+    ...Object.entries(gen.params ?? {}),
+    ...(gen.bins ?? []).flatMap((b) => Object.entries(b.params ?? {})),
+    // 전압 레일도 값이다 — 파형의 세로축이 여기서 나오므로 셈에서 빼지 않는다.
+    ...Object.entries(gen.rails?.src ?? {}).map(([name, src]) => [name, { src }]),
+  ].filter(([, p]) => p.src);
+  if (all.length) {
+    const counts = Object.entries(PROVENANCE)
+      .map(([key, meta]) => [meta, all.filter(([, p]) => p.src === key).length])
+      .filter(([, n]) => n > 0);
+    items.unshift(node("div", { class: "ref-clean" }, [
+      node("h3", { text: "비공개 자료는 들어 있지 않다" }),
+      node("p", { text: `값 ${all.length}개가 모두 아래 넷 중 하나에서 왔다. 벤더 내부 문서나 NDA 자료에서 온 값은 하나도 없다.` }),
+      ...counts.map(([meta, n]) => node("p", { class: "src-line" }, [
+        node("b", { text: `${meta.label} ${n}개 — ` }),
+        document.createTextNode(meta.note),
+      ])),
+    ]));
+  }
 
   const unsure = Object.entries(gen.params ?? {}).filter(([, p]) => p.verify).map(([n]) => n)
     .concat(gen.bins?.flatMap((b) => Object.entries(b.params ?? {}).filter(([, p]) => p.verify).map(([n]) => `${n}(${b.id})`)) ?? []);

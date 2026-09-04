@@ -121,3 +121,10 @@ dialog#refs { width: min(100% - 24px, 460px); max-height: 82dvh; overflow-y: aut
 .ref-verify h3 { margin: 0 0 4px; font-size: 12px; }
 .ref-verify p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .ref-verify code { color: var(--ink); }
+
+.srctag { display: inline-block; margin-right: 6px; border: 1px solid var(--line); border-radius: 4px;
+  padding: 0 5px; color: var(--muted); font-size: 10px; }
+.ref-clean { border-left: 2px solid var(--ink); padding-left: 10px; }
+.ref-clean h3 { margin: 0 0 4px; font-size: 13px; }
+.ref-clean p { margin: 0 0 5px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.src-line b { color: var(--ink); font-weight: 400; }
