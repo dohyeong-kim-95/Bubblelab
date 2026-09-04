@@ -32,19 +32,21 @@
       <div id="grid" class="grid" role="group" aria-label="뱅크 고르기"></div>
       <div id="refresh" class="refresh"></div>
       <p id="layer-now" class="layer-now"></p>
-      <div id="layer-plist" class="chips tail"></div>
+      <div id="layer-plist" class="chips"></div>
+      <button class="next-pane" type="button" data-next="pane-wave">↓ <b>전압</b> 동작에 따른 변화</button>
     </section>
 
     <section class="pane" id="pane-wave" aria-label="전압">
       <p class="pane-head"><b>전압</b> <span class="dim">동작에 따른 변화 · 화살표가 tXX</span><span class="pane-n">2/3</span></p>
       <div id="legend" class="legend-box"></div>
       <div id="scroller" class="scroller"><svg id="timeline" class="timeline"></svg></div>
-      <div class="zoomrow tail">
+      <div class="zoomrow">
         <label for="zoom" class="dim">확대</label>
         <input id="zoom" type="range" min="2" max="24" step="1" value="4">
         <span id="zoomval" class="dim"></span>
       </div>
       <p id="lane-note" class="note"></p>
+      <button class="next-pane" type="button" data-next="pane-param">↓ <b>설명</b> tXX 하나씩</button>
     </section>
 
     <section class="pane pane-scroll" id="pane-param" aria-label="설명">

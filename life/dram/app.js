@@ -767,6 +767,12 @@ el.palette.addEventListener("click", (e) => {
 
 el.zoom.addEventListener("input", () => { zoom = Number(el.zoom.value); renderTimeline(); });
 
+/* 눌러도 다음 장으로 간다 — 쓸어 넘기는 것이 안 될 때의 확실한 길. */
+el.deck.addEventListener("click", (e) => {
+  const id = e.target.closest("[data-next]")?.dataset.next;
+  if (id) document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
 /* 신호를 누르면 그것만 남기고 나머지는 흐려진다 — 폰에는 hover 가 없다. */
 el.timeline.addEventListener("click", (e) => {
   const name = e.target.getAttribute?.("data-param");
