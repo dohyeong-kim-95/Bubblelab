@@ -3106,8 +3106,25 @@ $("sticker-btn").addEventListener("click", () => { if (picker.hidden) openPicker
 // 같은 공간을 1:1로 바꿔 매끄럽다(카톡식). 측정값은 저장해 다음부터 즉시 적용.
 const KB_KEY = "duri:kbHeight";
 const setKb = (px) => document.documentElement.style.setProperty("--kb", px + "px");
-const savedKb = Number(localStorage.getItem("duri:kbHeight") || 0);
-if (savedKb > 120) setKb(savedKb);
+// 폰 키보드는 화면의 4분의 1보다 작을 수 없다. 이 아래로 재진 값은 키보드가 아니라
+// **애니메이션 중간 프레임**이거나 액세서리 바만 올라온 상태다 — 그게 저장되면 서랍이
+// 그 높이로 굳어 스티커가 한 줄만 보인다(실기기에서 그랬다). 기억할 때도, 저장된 것을
+// 되읽을 때도 이 바닥을 넘겨야 쓴다 — 이미 굳은 기기는 다음에 열 때 스스로 풀린다.
+const kbFloor = () => Math.max(150, Math.round(window.innerHeight * 0.25));
+const savedKb = Number(localStorage.getItem(KB_KEY) || 0);
+if (savedKb >= kbFloor()) setKb(savedKb);
+// 키보드가 오르내리는 동안 resize 가 여러 번 쏟아진다. 그때마다 저장하면 마지막으로
+// 스쳐 간 중간값이 남는다 — **값이 멎은 뒤에만** 기억한다. 올라오는 애니메이션의 끝은
+// 늘 제 높이고, 내려가는 끝은 0 이라 바닥에 걸려 저절로 걸러진다.
+let kbSettle = null;
+function rememberKb(kb) {
+  clearTimeout(kbSettle);
+  kbSettle = setTimeout(() => {
+    if (kb < kbFloor()) return;
+    setKb(kb);
+    try { localStorage.setItem(KB_KEY, String(kb)); } catch { /* 최선노력 */ }
+  }, 250);
+}
 let syncViewport = () => {}; // 입력창 포커스 핸들러 등 다른 곳에서도 부를 수 있게 모듈 스코프
 if (window.visualViewport) {
   const vv = window.visualViewport;
@@ -3119,10 +3136,7 @@ if (window.visualViewport) {
     const kb = Math.round(window.innerHeight - vv.height - vv.offsetTop);
     // 지금 이 순간의 실제 값(0=닫힘) — 캘린더 다이얼로그가 키보드를 피해 위치를 잡는 데 쓴다.
     document.documentElement.style.setProperty("--kb-live", Math.max(0, kb) + "px");
-    if (kb > 120) { // 서랍 높이 기억용은 유의미하게 올라온 경우만 캡처(주소창 등 소소한 변동은 무시)
-      setKb(kb);
-      try { localStorage.setItem(KB_KEY, String(kb)); } catch { /* 최선노력 */ }
-    }
+    rememberKb(kb); // 서랍 높이는 값이 멎은 뒤에만 기억한다(위 설명)
     // 키보드로 화면(로그)이 줄면 맨 아래 메시지가 입력창에 가려질 수 있다 — 맨 아래를
     // 보고 있었으면 계속 붙여둬 마지막 메시지가 안 잘리게 한다(위로 읽는 중이면 건드리지 않음).
     if (atBottom()) scroll();
