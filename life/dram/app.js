@@ -14,7 +14,7 @@ const $ = (id) => document.getElementById(id);
 const el = { clock: $("clock"), undo: $("undo"), reset: $("reset"), gens: $("gens"), genNote: $("gen-note"),
   sim: $("sim"), bin: $("bin"), tck: $("tck"), refresh: $("refresh"), org: $("org"), grid: $("grid"),
   target: $("target"), palette: $("palette"), why: $("why"), timeline: $("timeline"), params: $("params"),
-  zoom: $("zoom"), zoomval: $("zoomval"), laneNote: $("lane-note"), rails: $("rails"), legend: $("legend"),
+  zoom: $("zoom"), zoomval: $("zoomval"), laneNote: $("lane-note"), rails: $("rails"), legend: $("legend"), paramsNote: $("params-note"),
   refs: $("refs"), refsBody: $("refs-body"), refsTitle: $("refs-title"),
   refsOpen: $("refs-open"), refsLink: $("refs-link"), refsClose: $("refs-close") };
 
@@ -407,6 +407,11 @@ function describe(name) {
 
 function renderParams() {
   const names = [...new Set([...Object.keys(gen.params), ...gen.bins.flatMap((b) => Object.keys(b.params ?? {}))])];
+  const srcs = names.map((n) => describe(n)?.p.src).filter(Boolean);
+  const majority = srcs.length && srcs.every((s) => s === srcs[0]) ? srcs[0] : null;
+  el.paramsNote.replaceChildren(...(majority
+    ? [node("b", { text: `아래 값은 전부 ${PROVENANCE[majority].label}이다. ` }), document.createTextNode(PROVENANCE[majority].note.replace(/\*\*/g, ""))]
+    : [document.createTextNode("값마다 출처가 줄 끝에 붙는다.")]));
   el.params.replaceChildren(...names.map((name) => {
     const d = describe(name);
     const known = d?.ck != null;
@@ -417,8 +422,9 @@ function renderParams() {
         : [node("em", { text: "값 없음" })]),
       node("span", {}, [
         node("span", { class: "why", text: d?.p.why ?? "" }),
-        // 값마다 출처를 붙인다 — 어디서 왔는지 모르는 숫자가 표에 섞이지 않게.
-        ...(d?.p.src ? [node("span", { class: "srctag", text: PROVENANCE[d.p.src].label })] : []),
+        /* 표 전체가 모의값이면 줄마다 같은 태그를 달지 않는다 — 위의 한 줄이 이미 말한다.
+         * 다른 출처가 섞이는 순간에만 그 줄에 태그가 뜬다(그때는 눈에 띄어야 한다). */
+        ...(d?.p.src && d.p.src !== majority ? [node("span", { class: "srctag", text: PROVENANCE[d.p.src].label })] : []),
         ...(d?.p.verify ? [node("span", { class: "flag", text: "? 스펙과 대조 필요" })] : []),
       ]),
     ]);
@@ -443,8 +449,8 @@ function renderRefs() {
     ...(r.url ? [node("a", { href: r.url, target: "_blank", rel: "noopener noreferrer", text: `${r.url} ↗` })] : []),
   ]));
 
-  /* 출처별로 몇 개인지 세어 보여 준다. 목록이 아니라 숫자여야 한 눈에 들어오고,
-   * "공개 자료 밖에서 온 값이 하나도 없다"는 것이 그 합으로 증명된다. */
+  /* 숫자가 전부 모의값이라는 것을 셈으로 보인다. 말로 주장하는 것과 개수를 세어
+   * 보이는 것은 다르다 — 나중에 다른 출처가 섞이면 이 줄이 먼저 달라진다. */
   const all = [
     ...Object.entries(gen.params ?? {}),
     ...(gen.bins ?? []).flatMap((b) => Object.entries(b.params ?? {})),
@@ -456,11 +462,12 @@ function renderRefs() {
       .map(([key, meta]) => [meta, all.filter(([, p]) => p.src === key).length])
       .filter(([, n]) => n > 0);
     items.unshift(node("div", { class: "ref-clean" }, [
-      node("h3", { text: "비공개 자료는 들어 있지 않다" }),
-      node("p", { text: `값 ${all.length}개가 모두 아래 넷 중 하나에서 왔다. 벤더 내부 문서나 NDA 자료에서 온 값은 하나도 없다.` }),
+      node("h3", { text: "숫자는 전부 모의값이다" }),
+      node("p", { text: `이 화면의 값 ${all.length}개가 모두 모의값이다. 부품 데이터시트의 값도, 사내·NDA 자료의 값도 들어 있지 않다.` }),
+      node("p", { text: "구조(커맨드·상태 전이·규칙·뱅크 구성)는 표준에서, 파형의 모양은 널리 알려진 원리에서 온다. 숫자만 그림을 그리려고 둔 것이고, 관계는 실제와 맞춰 뒀다." }),
       ...counts.map(([meta, n]) => node("p", { class: "src-line" }, [
         node("b", { text: `${meta.label} ${n}개 — ` }),
-        document.createTextNode(meta.note),
+        document.createTextNode(meta.note.replace(/\*\*/g, "")),
       ])),
     ]));
   }

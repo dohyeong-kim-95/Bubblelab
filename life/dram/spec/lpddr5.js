@@ -1,6 +1,11 @@
-// LPDDR5 (JESD209-5). 모바일 쪽 관점. 값은 공개 데이터시트 수준의 대표값이고,
-// 레이턴시(RL/WL)는 동작 모드(DVFSC·WCK 비율·세트)마다 표가 달라 여기서는 비워 뒀다 —
-// 지어내는 것보다 빈 칸이 낫다. 값을 아는 대로 채우면 화면이 그만큼 살아난다.
+// LPDDR5 (JESD209-5). 모바일 쪽 관점.
+//
+// DDR5 와 같은 원칙이다 — 구조는 표준(1층), 파형은 알려진 원리(3층),
+// **숫자는 전부 모의값**. 부품 데이터시트의 값은 쓰지 않는다.
+//
+// RL/WL 은 모의값조차 두지 않았다. 동작 모드에 따라 표가 갈라지는 구조 자체가
+// 이 세대의 성격이라, 하나로 뭉뚱그린 가짜 숫자를 두면 그 성격이 지워진다.
+// 그래서 데이터 버스트는 그려지지 않는다.
 
 import { command, param, rails, ref, rule, window_, withSrc } from "./common.js";
 
@@ -8,7 +13,7 @@ export default {
   id: "lpddr5",
   label: "LPDDR5",
   status: "partial",
-  status_note: "코어 타이밍은 채웠고 RL/WL 은 비어 있다. 데이터 버스트는 그려지지 않는다.",
+  status_note: "구조는 표준, 숫자는 모의값이다. RL/WL 은 비워 뒀으므로 데이터 버스트는 그려지지 않는다.",
 
   org: {
     bankGroups: 4,
@@ -21,33 +26,46 @@ export default {
   },
 
   bins: [
-    { id: "6400", label: "LPDDR5-6400", mtps: 6400, params: {} },
+    { id: "mock", label: "모의 빈", mtps: 8000, params: {} },   // tCK 0.25ns
   ],
 
-  params: withSrc("public", {
-    tRCD: param({ ns: 18, why: "행이 서기까지. DDR5 보다 길다 — 모바일은 속도보다 전력이 먼저다.", verify: true }),
-    tRP: param({ ns: 18, why: "per-bank 프리차지. all-bank 는 이보다 길다.", verify: true }),
-    tRAS: param({ ns: 42, why: "복원이 끝날 때까지 행을 열어 둬야 하는 시간.", verify: true }),
-    tRC: param({ ns: 60, why: "같은 뱅크의 ACT → ACT.", verify: true }),
-    tRRD: param({ ns: 10, why: "연속 ACT 간격. LPDDR5 는 _L/_S 를 나누지 않는다.", verify: true }),
-    tFAW: param({ ns: 40, why: "어떤 창에서도 ACT 4번. 전류 제약은 모바일에서 더 빡빡하다.", verify: true }),
-    tWR: param({ ns: 34, why: "쓰기 데이터가 끝난 뒤 PRE 까지.", verify: true }),
-    tRTP: param({ ns: 7.5, why: "READ 뒤 같은 뱅크 PRE 까지.", verify: true }),
-    tWTR: param({ ns: 10, why: "쓰기에서 읽기로 방향을 돌리는 시간.", verify: true }),
-    tRFCab: param({ ns: 280, why: "all-bank 리프레시. 16Gb 기준.", verify: true }),
-    tRFCpb: param({ ns: 140, why: "per-bank 리프레시. LPDDR 은 오래전부터 이걸 갖고 있었다.", verify: true }),
-    tREFI: param({ ns: 3904, why: "리프레시 마감. 온도가 오르면 절반으로 줄어든다." }),
-    BL: param({ ck: 16, src: "convention", why: "버스트 길이. LPDDR5 는 16/32 를 고른다." }),
-    RL: param({ why: "READ 레이턴시. 모드마다 표가 달라 비워 뒀다." }),
-    WL: param({ why: "WRITE 레이턴시. 모드마다 표가 달라 비워 뒀다." }),
+  params: withSrc("mock", {
+    tRCD: param({ ns: 12, why: "행이 서기까지. 모바일은 속도보다 전력이 먼저라 데스크톱 쪽보다 여유가 있다." }),
+    tRP: param({ ns: 12, why: "per-bank 프리차지. all-bank 는 이보다 길다." }),
+    tRAS: param({ ns: 25, why: "복원이 끝날 때까지 행을 열어 둬야 하는 시간." }),
+    tRC: param({ ns: 37, why: "같은 뱅크의 ACT → ACT. 정의상 tRAS + tRP 다." }),
+    tRRD: param({ ns: 6, why: "연속 ACT 간격. LPDDR5 는 _L/_S 를 나누지 않는다 — 뱅크그룹 구분이 규칙에 드러나지 않는다." }),
+    tFAW: param({ ns: 30, why: "어떤 창에서도 ACT 4번. 연속 ACT 간격(tRRD)만으로 낼 수 있는 것보다 길어야 뜻이 있다." }),
+    tWR: param({ ns: 18, why: "쓰기 데이터가 끝난 뒤 PRE 까지." }),
+    tRTP: param({ ns: 5, why: "READ 뒤 같은 뱅크 PRE 까지." }),
+    tWTR: param({ ns: 6, why: "쓰기에서 읽기로 방향을 돌리는 시간." }),
+    tRFCab: param({ ns: 90, why: "all-bank 리프레시. 어레이 전체가 잠긴다." }),
+    tRFCpb: param({ ns: 45, why: "per-bank 리프레시. LPDDR 은 오래전부터 이걸 갖고 있었다." }),
+    tREFI: param({ ns: 2000, why: "리프레시 마감. 온도가 오르면 짧아진다." }),
+    BL: param({ ck: 16, why: "버스트 길이. LPDDR5 는 16/32 를 고른다." }),
+    RL: param({ why: "READ 레이턴시. 동작 모드마다 표가 갈라지는 것이 이 세대의 성격이라, 하나로 뭉뚱그린 모의값을 두지 않았다." }),
+    WL: param({ why: "WRITE 레이턴시. 같은 이유로 비워 뒀다." }),
   }),
 
-  /* LPDDR5 는 DDR5 처럼 VPP 핀을 두지 않는다 — 워드라인 부스트를 내부 펌프가
-   * VDD1(1.8V)에서 만든다. 그림에서는 같은 자리에 놓는다. */
   rails: rails({
-    VDD: 1.05, VPP: 1.8, dV: 0.05, src: { VDD: "public", VPP: "public", dV: "illustrative" },
-    note: "코어는 VDD2(1.05V), 부스트는 VDD1(1.8V) 기준. IO 는 VDDQ(0.5V)로 따로 논다.",
+    VDD: 1.0, VPP: 2.0, dV: 0.05,
+    src: { VDD: "mock", VPP: "mock", dV: "mock" },
+    note: "모의값이다. LPDDR5 는 DDR5 처럼 VPP 핀을 두지 않고 내부 펌프로 부스트를 만들며 IO 는 코어와 다른 전원으로 따로 논다 — 그 구조가 요점이지 숫자가 아니다.",
   }),
+
+  refs: [
+    ref("표준", "LPDDR5 SDRAM", {
+      doc: "JESD209-5",
+      where: "JEDEC. DDR5 와 다른 계열의 표준이다 — 뱅크 구성을 모드로 고르고, 데이터는 별도의 WCK 에 실리며, 리프레시가 per-bank 로 나뉜다. 이 화면의 구조가 그것이다.",
+      url: "https://www.jedec.org/",
+    }),
+    ref("알려진 원리", "어레이 동작", {
+      where: "DDR5 와 같다. 다만 LPDDR5 는 VPP 핀 없이 내부 펌프로 워드라인 부스트를 만든다 — 이것도 널리 알려진 구조다.",
+    }),
+    ref("모의값", "이 화면의 모든 숫자", {
+      where: "부품 데이터시트의 값은 쓰지 않는다. 여기 적힌 숫자는 실제 부품의 값이 아니다. RL/WL 은 모의값조차 두지 않았다 — 동작 모드마다 표가 갈라지는 구조 자체가 이 세대의 성격이라, 하나로 뭉뚱그리면 그 성격이 지워지기 때문이다.",
+    }),
+  ],
 
   commands: [
     command("ACT", { needs: "idle", makes: "active", ca: 2, label: "ACT", desc: "행을 연다. LPDDR5 도 두 클럭에 나눠 보낸다." }),
@@ -57,7 +75,7 @@ export default {
     command("PREA", { target: "all", needs: null, makes: "idle", label: "PREA", desc: "모든 뱅크를 닫는다." }),
     command("REFab", { target: "all", needs: "idle", makes: "idle", label: "REFab", desc: "all-bank 리프레시." }),
     command("REFpb", { needs: "idle", makes: "idle", label: "REFpb", desc: "per-bank 리프레시. 한 뱅크씩 돌아가며 쉰다." }),
-    command("MRW", { target: "none", label: "MRW", desc: "모드 레지스터를 쓴다." }),
+    command("MRW", { target: "none", ca: 2, label: "MRW", desc: "모드 레지스터를 쓴다." }),
   ],
 
   rules: [
@@ -76,21 +94,6 @@ export default {
   ],
 
   windows: [window_("ACT", 4, "tFAW", "행 열기의 전류 제약.")],
-  refresh: { param: "tREFI", command: "REFab", note: "고온에서는 마감이 절반으로 줄어든다." },
-  refs: [
-    ref("표준", "LPDDR5 SDRAM", {
-      doc: "JESD209-5",
-      where: "JEDEC. DDR5 와 다른 계열의 표준이다 — 뱅크 구성을 모드로 고르고 데이터는 별도의 WCK 에 실린다.",
-      url: "https://www.jedec.org/",
-    }),
-    ref("값", "모바일 부품 데이터시트", {
-      where: "공개된 LPDDR5 데이터시트 수준의 대표값. RL/WL 은 동작 모드(WCK 비율·세트)마다 표가 달라 여기서는 비워 뒀다.",
-      url: "https://www.micron.com/",
-    }),
-    ref("모식도", "어레이 내부 파형", {
-      where: "DDR5 와 같다 — JEDEC 밖이고, 그린 것은 모식도다. LPDDR5 는 VPP 핀이 없어 워드라인 부스트를 내부 펌프가 VDD1 에서 만든다.",
-    }),
-  ],
-
-  sources: ["공개된 LPDDR5 부품 데이터시트 수준의 대표값", "RL/WL 은 동작 모드 의존이라 비워 둠"],
+  refresh: { param: "tREFI", command: "REFab", note: "고온에서는 마감이 짧아진다." },
+  sources: ["구조는 표준(JESD209-5)", "숫자는 전부 모의값 — RL/WL 은 비워 둠"],
 };

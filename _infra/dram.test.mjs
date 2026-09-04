@@ -9,8 +9,8 @@ const {
 } = await import("../life/dram/engine.js");
 
 const ddr5 = findGen("ddr5");
-const bin = findBin(ddr5, "4800B");
-const fresh = () => createState(ddr5, "4800B");
+const bin = findBin(ddr5, "slow");
+const fresh = () => createState(ddr5, "slow");
 const run = (state, ...cmds) => cmds.reduce((s, c) => {
   const r = issue(ddr5, bin, s, c);
   assert.equal(r.error, null, `${c.op} 가 거부됐다: ${r.error}`);
@@ -22,22 +22,24 @@ const RD = (bg, bank) => ({ op: "RD", bg, bank });
 const WR = (bg, bank) => ({ op: "WR", bg, bank });
 
 test("클럭 환산은 데이터레이트의 절반이고, ns 하한은 항상 올림이다", () => {
-  assert.equal(tCK(bin), 2000 / 4800);
-  // tRCD 16.25ns / 0.4167ns = 38.99… → 39. 내림하면 스펙 위반이 된다.
-  assert.equal(paramClocks(ddr5, bin, "tRCD"), 39);
+  assert.equal(tCK(bin), 0.5);
+  // tRCD 10ns / 0.5ns = 20. 내림하면 규정 위반이 되므로 환산은 항상 올림이다.
+  assert.equal(paramClocks(ddr5, bin, "tRCD"), 20);
 });
 
 test("max(nCK, ns) 는 둘 중 큰 쪽이 이긴다 — 빈이 빨라지면 이기는 쪽이 바뀐다", () => {
-  // tRRD_L 은 5ns 또는 8클럭. 4800 에서 5ns = 12클럭이라 ns 가 이긴다.
-  assert.equal(paramClocks(ddr5, bin, "tRRD_L"), 12);
+  // tRRD_L 은 2.5ns 또는 8클럭. 느린 빈에서는 2.5ns = 5클럭이라 클럭 쪽이 이긴다.
+  assert.equal(paramClocks(ddr5, bin, "tRRD_L"), 8);
+  // 빈이 빨라지면 같은 2.5ns 가 10클럭이 되어 이기는 쪽이 바뀐다 — max() 가 있는 이유다.
+  assert.equal(paramClocks(ddr5, findBin(ddr5, "fast"), "tRRD_L"), 10);
   // tRRD_S 는 클럭만 있다 — 코어가 아니라 커맨드 버스의 사정이라서.
   assert.equal(paramClocks(ddr5, bin, "tRRD_S"), 8);
 });
 
 test("빈이 덮어쓴 값이 세대 값을 이긴다 (CL·tCCD_L)", () => {
-  const fast = findBin(ddr5, "6400A");
-  assert.equal(paramClocks(ddr5, bin, "CL"), 40);
-  assert.equal(paramClocks(ddr5, fast, "CL"), 46);
+  const fast = findBin(ddr5, "fast");
+  assert.equal(paramClocks(ddr5, bin, "CL"), 20);
+  assert.equal(paramClocks(ddr5, fast, "CL"), 40);
   // ns 로 묶인 코어 타이밍은 빈이 바뀌면 클럭 수가 늘어난다 — 같은 물리 시간이므로.
   assert.ok(paramClocks(ddr5, fast, "tRCD") > paramClocks(ddr5, bin, "tRCD"));
 });
@@ -70,13 +72,13 @@ test("같은 그룹의 연속 읽기는 tCCD_L, 다른 그룹이면 tCCD_S — �
 test("뱅크그룹의 이득은 빠른 빈에서 나온다 — tCCD_L 만 커지고 tCCD_S 는 그대로다", () => {
   // 느린 빈에서는 둘이 같아 그룹을 갈라도 읽기 간격이 달라지지 않는다.
   // 빈이 빨라지면 tCCD_L 이 벌어지고, 그때부터 그룹을 번갈아 써야 DQ 가 찬다.
-  const fast = findBin(ddr5, "6400A");
+  const fast = findBin(ddr5, "fast");
   assert.equal(paramClocks(ddr5, bin, "tCCD_L"), paramClocks(ddr5, bin, "tCCD_S"));
   assert.ok(paramClocks(ddr5, fast, "tCCD_L") > paramClocks(ddr5, fast, "tCCD_S"));
 
   // 빠른 빈에서 같은 시퀀스를 돌리면 그룹을 가른 쪽이 실제로 먼저 끝난다.
   const fastRun = (state, ...cmds) => cmds.reduce((acc, c) => issue(ddr5, fast, acc, c).state, state);
-  const seed = fastRun(createState(ddr5, "6400A"), ACT(0, 0), ACT(0, 1), ACT(1, 0));
+  const seed = fastRun(createState(ddr5, "fast"), ACT(0, 0), ACT(0, 1), ACT(1, 0));
   const ready = advance(seed, paramClocks(ddr5, fast, "tRCD"));
   const sameBg = fastRun(ready, RD(0, 0), RD(0, 1));
   const diffBg = fastRun(ready, RD(0, 0), RD(1, 0));
@@ -330,14 +332,16 @@ test("모든 세대가 표준 문서를 밝힌다 — 미공개 세대도 문서
   }
 });
 
-test("돌아가는 세대는 값의 출처와 모식도의 경계를 함께 밝힌다", () => {
+test("돌아가는 세대는 세 갈래를 모두 밝힌다 — 표준 / 알려진 원리 / 모의값", () => {
   for (const gen of GENERATIONS.filter(isRunnable)) {
     const kinds = gen.refs.map((r) => r.kind);
-    assert.ok(kinds.includes("값"), `${gen.id}: 값의 출처가 없다`);
-    const shape = gen.refs.find((r) => r.kind === "모식도");
-    assert.ok(shape, `${gen.id}: 모식도 경계를 밝히지 않았다`);
-    // 모식도는 문서가 아니므로 링크를 달면 안 된다 — 출처가 있는 척이 된다
-    assert.equal(shape.url, null, `${gen.id}: 모식도에 링크가 붙었다`);
+    for (const want of ["표준", "알려진 원리", "모의값"]) {
+      assert.ok(kinds.includes(want), `${gen.id}: "${want}" 항목이 없다`);
+    }
+    // 문서가 아닌 것에는 링크를 달지 않는다 — 달면 출처가 있는 척이 된다.
+    for (const r of gen.refs.filter((x) => x.kind !== "표준")) {
+      assert.equal(r.url, null, `${gen.id}: ${r.kind} 에 링크가 붙었다`);
+    }
   }
 });
 
@@ -355,35 +359,66 @@ test("링크는 발행처 대문이다 — 문서 깊은 주소는 개정판마�
  */
 const { PROVENANCE } = await import("../life/dram/spec/common.js");
 
-test("값이 있는 파라미터는 모두 출처가 붙어 있다 — 넷 밖의 출처는 없다", () => {
-  const kinds = new Set(Object.keys(PROVENANCE));
+test("값이 있는 숫자는 **전부 모의값**이다 — 데이터시트 값이 섞이면 여기서 걸린다", () => {
   for (const gen of GENERATIONS.filter(isRunnable)) {
     const rows = [...Object.entries(gen.params), ...gen.bins.flatMap((b) => Object.entries(b.params ?? {}))];
     for (const [name, p] of rows) {
       const hasValue = p.ns != null || p.ck != null;
       if (!hasValue) { assert.equal(p.src, null, `${gen.id}: ${name} 은 값이 없는데 출처가 붙었다`); continue; }
-      assert.ok(kinds.has(p.src), `${gen.id}: ${name} 의 출처가 없거나 모르는 값이다 (${p.src})`);
+      assert.equal(p.src, "mock", `${gen.id}: ${name} 이 모의값이 아니다 (${p.src}) — 부품 데이터시트 값을 넣으려는 것이라면 멈춰라`);
     }
-  }
-});
-
-test("전압 레일도 출처를 밝힌다 — ΔV 는 모식도용으로 고른 값이다", () => {
-  for (const gen of GENERATIONS.filter(isRunnable)) {
     for (const key of ["VDD", "VPP", "dV"]) {
-      assert.ok(PROVENANCE[gen.rails.src[key]], `${gen.id}: rails.${key} 의 출처가 없다`);
+      assert.equal(gen.rails.src[key], "mock", `${gen.id}: rails.${key} 가 모의값이 아니다`);
     }
-    assert.equal(gen.rails.src.dV, "illustrative", `${gen.id}: ΔV 를 공개 값처럼 적으면 안 된다`);
   }
 });
 
-test("산술로 나온 값은 실제로 그 산술과 맞는다 — 라벨만 붙이면 거짓말이 된다", () => {
-  // tRC 는 derived 라고 적혀 있다. 정말 tRAS + tRP 인지 확인한다.
-  assert.equal(ddr5.params.tRC.src, "derived");
-  assert.equal(ddr5.params.tRC.ns, ddr5.params.tRAS.ns + ddr5.params.tRP.ns);
-});
-
-test("출처 넷은 저마다 설명이 있다 — 라벨만으로는 무엇이 공개 자료인지 모른다", () => {
+test("출처 어휘에 2층(부품 데이터시트)이 아예 없다", () => {
+  // 어휘에 없으면 적을 수도 없다. 실수로 섞이는 경로를 어휘에서부터 끊는다.
+  assert.deepEqual(Object.keys(PROVENANCE).sort(), ["known", "mock", "standard"]);
   for (const [key, meta] of Object.entries(PROVENANCE)) {
     assert.ok(meta.label?.length && meta.note?.length, `${key} 에 설명이 없다`);
+  }
+});
+
+test("모의값이라도 **관계**는 실제와 맞다 — 배우는 것이 그 관계다", () => {
+  for (const gen of GENERATIONS.filter(isRunnable)) {
+    const P = gen.params;
+    const bins = gen.bins.map((b) => b);
+    // 한 뱅크의 회전은 복원 + 프리차지다
+    assert.equal(P.tRC.ns, P.tRAS.ns + P.tRP.ns, `${gen.id}: tRC ≠ tRAS + tRP`);
+    // 복원이 프리차지보다 오래 걸린다
+    assert.ok(P.tRAS.ns > P.tRP.ns, `${gen.id}: tRAS 가 tRP 보다 짧다`);
+    // 리프레시는 한 뱅크 회전보다 훨씬 크다 — 안에서 여러 행을 돈다
+    const rfc = P.tRFC1 ?? P.tRFCab;
+    assert.ok(rfc.ns > P.tRC.ns * 2, `${gen.id}: tRFC 가 tRC 에 비해 너무 작다`);
+    // per-bank/same-bank 리프레시는 all-bank 보다 짧다
+    const sb = P.tRFCsb ?? P.tRFCpb;
+    assert.ok(sb.ns < rfc.ns, `${gen.id}: 부분 리프레시가 전체보다 길다`);
+    // 리프레시 마감은 리프레시 하나보다 훨씬 길다(아니면 리프레시만 하다 끝난다)
+    assert.ok(P.tREFI.ns > rfc.ns * 5, `${gen.id}: tREFI 가 tRFC 에 비해 너무 짧다`);
+    // tFAW 는 연속 ACT 간격만으로 낼 수 있는 것보다 길어야 한다.
+    // 짧으면 tRRD 가 항상 이겨 이 제약이 한 번도 걸리지 않는다 — 있으나 마나가 된다.
+    for (const b of bins) {
+      const rrd = paramClocks(gen, b, gen.params.tRRD_S ? "tRRD_S" : "tRRD");
+      assert.ok(paramClocks(gen, b, "tFAW") > rrd * 4,
+        `${gen.id}/${b.id}: tFAW 가 4 × tRRD 보다 짧아 한 번도 걸리지 않는다`);
+    }
+  }
+});
+
+test("DDR5 의 뱅크그룹 관계 — 같은 그룹이 더 길고, 쓰기가 읽기보다 길다", () => {
+  const fast = findBin(ddr5, "fast");
+  assert.ok(paramClocks(ddr5, fast, "tCCD_L") > paramClocks(ddr5, fast, "tCCD_S"));
+  assert.ok(paramClocks(ddr5, bin, "tCCD_L_WR") > paramClocks(ddr5, bin, "tCCD_L"));
+  assert.ok(paramClocks(ddr5, bin, "tWTR_L") > paramClocks(ddr5, bin, "tWTR_S"));
+});
+
+test("모의값임을 참고문헌이 말한다 — 세대마다 그 항목이 있다", () => {
+  for (const gen of GENERATIONS.filter(isRunnable)) {
+    const mockRef = gen.refs.find((r) => r.kind === "모의값");
+    assert.ok(mockRef, `${gen.id}: 모의값이라는 사실을 밝히지 않았다`);
+    assert.equal(mockRef.url, null, `${gen.id}: 모의값에 링크가 붙었다`);
+    assert.match(mockRef.where, /데이터시트/, `${gen.id}: 무엇을 쓰지 않았는지 밝히지 않았다`);
   }
 });
