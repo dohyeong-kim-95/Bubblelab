@@ -102,3 +102,22 @@ select { min-height: 40px; border: 1px solid var(--line); border-radius: 9px; ba
 .chip .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
 .chip[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); font-weight: 700; }
 .timeline [data-lane] { cursor: pointer; }
+
+#refs-open { width: 40px; height: 40px; flex: none; font-size: 16px; }
+.linkish { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; font-size: 12px; padding: 4px 0; }
+
+/* 참고문헌. 표준과 대표값과 모식도를 한자리에서 갈라 보여 준다 —
+ * 무엇이 확인 가능한 근거이고 무엇이 아닌지가 이 화면에서는 값만큼 중요하다. */
+dialog#refs { width: min(100% - 24px, 460px); max-height: 82dvh; overflow-y: auto; }
+.refs { display: grid; gap: 12px; }
+.ref { border-left: 2px solid var(--line); padding-left: 10px; }
+.ref-top { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; }
+.ref-kind { border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; color: var(--muted); font-size: 10px; }
+.ref-title { font-size: 13px; }
+.ref-doc { color: var(--muted); font-size: 11px; }
+.ref-where { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.ref a { display: inline-block; margin-top: 5px; color: var(--ink); font-size: 12px; overflow-wrap: anywhere; }
+.ref-verify { margin-top: 2px; border-left: 2px solid var(--danger); padding-left: 10px; }
+.ref-verify h3 { margin: 0 0 4px; font-size: 12px; }
+.ref-verify p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.ref-verify code { color: var(--ink); }

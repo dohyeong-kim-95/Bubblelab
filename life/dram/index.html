@@ -16,6 +16,7 @@
   <header class="bar">
     <a class="back" href="../" aria-label="LIFE 로 돌아가기">←</a>
     <h1 class="bar-title">DRAM <span id="clock" class="count"></span></h1>
+    <button id="refs-open" type="button" aria-label="참고문헌">📚</button>
     <button id="undo" type="button" aria-label="마지막 커맨드 취소">↺</button>
     <button id="reset" type="button" aria-label="처음으로">⟲</button>
   </header>
@@ -54,9 +55,18 @@
       <p id="rails" class="note"></p>
 
       <h2 class="head">파라미터</h2>
-      <p class="note">값은 공개 자료 기준 대표값이다. <b>?</b> 는 스펙과 대조가 필요한 값 — 틀렸으면 <code>spec/</code> 한 곳만 고치면 화면과 테스트가 따라온다.</p>
+      <p class="note">값은 공개 자료 기준 대표값이다. <b>?</b> 는 스펙과 대조가 필요한 값 — 틀렸으면 <code>spec/</code> 한 곳만 고치면 화면과 테스트가 따라온다. <button id="refs-link" type="button" class="linkish">참고문헌 →</button></p>
       <div id="params" class="params"></div>
     </section>
   </main>
+
+  <dialog id="refs" aria-labelledby="refs-title">
+    <h2 id="refs-title">참고문헌</h2>
+    <p class="dialog-hint">숫자가 어디서 왔는지, 무엇이 표준이고 무엇이 아닌지.</p>
+    <div id="refs-body" class="refs"></div>
+    <div class="menu-items row">
+      <button id="refs-close" type="button" class="quiet">닫기</button>
+    </div>
+  </dialog>
 </body>
 </html>

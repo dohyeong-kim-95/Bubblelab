@@ -313,3 +313,38 @@ test("전압 레일이 없는 세대는 파형을 그리지 않는다", () => {
   assert.equal(ddr6.rails, undefined);
   assert.equal(buildWaves(ddr6, null, fresh(), PICK), null);
 });
+
+/* ---------- 참고문헌 ----------
+ * 값이 대표값인 이상 "어디를 보면 확인할 수 있는가"가 값만큼 중요하다.
+ * 그래서 근거가 비어 있는 세대가 생기지 않게 여기서 막는다.
+ */
+test("모든 세대가 표준 문서를 밝힌다 — 미공개 세대도 문서번호는 있다", () => {
+  for (const gen of GENERATIONS) {
+    const std = gen.refs?.filter((r) => r.kind === "표준") ?? [];
+    assert.equal(std.length, 1, `${gen.id}: 표준이 하나여야 한다`);
+    assert.match(std[0].doc, /^JESD\d+/, `${gen.id}: 문서번호가 없다`);
+    for (const r of gen.refs) {
+      assert.ok(r.title?.length && r.where?.length, `${gen.id}: ${r.kind} 에 내용이 없다`);
+      if (r.url) assert.match(r.url, /^https:\/\//, `${gen.id}: ${r.url} 는 https 가 아니다`);
+    }
+  }
+});
+
+test("돌아가는 세대는 값의 출처와 모식도의 경계를 함께 밝힌다", () => {
+  for (const gen of GENERATIONS.filter(isRunnable)) {
+    const kinds = gen.refs.map((r) => r.kind);
+    assert.ok(kinds.includes("값"), `${gen.id}: 값의 출처가 없다`);
+    const shape = gen.refs.find((r) => r.kind === "모식도");
+    assert.ok(shape, `${gen.id}: 모식도 경계를 밝히지 않았다`);
+    // 모식도는 문서가 아니므로 링크를 달면 안 된다 — 출처가 있는 척이 된다
+    assert.equal(shape.url, null, `${gen.id}: 모식도에 링크가 붙었다`);
+  }
+});
+
+test("링크는 발행처 대문이다 — 문서 깊은 주소는 개정판마다 바뀌어 끊긴다", () => {
+  for (const gen of GENERATIONS) {
+    for (const r of gen.refs.filter((x) => x.url)) {
+      assert.match(r.url, /^https:\/\/[^/]+\/$/, `${gen.id}: ${r.url} 가 대문이 아니다`);
+    }
+  }
+});

@@ -2,7 +2,7 @@
 // 레이턴시(RL/WL)는 동작 모드(DVFSC·WCK 비율·세트)마다 표가 달라 여기서는 비워 뒀다 —
 // 지어내는 것보다 빈 칸이 낫다. 값을 아는 대로 채우면 화면이 그만큼 살아난다.
 
-import { command, param, rails, rule, window_ } from "./common.js";
+import { command, param, rails, ref, rule, window_ } from "./common.js";
 
 export default {
   id: "lpddr5",
@@ -77,5 +77,20 @@ export default {
 
   windows: [window_("ACT", 4, "tFAW", "행 열기의 전류 제약.")],
   refresh: { param: "tREFI", command: "REFab", note: "고온에서는 마감이 절반으로 줄어든다." },
+  refs: [
+    ref("표준", "LPDDR5 SDRAM", {
+      doc: "JESD209-5",
+      where: "JEDEC. DDR5 와 다른 계열의 표준이다 — 뱅크 구성을 모드로 고르고 데이터는 별도의 WCK 에 실린다.",
+      url: "https://www.jedec.org/",
+    }),
+    ref("값", "모바일 부품 데이터시트", {
+      where: "공개된 LPDDR5 데이터시트 수준의 대표값. RL/WL 은 동작 모드(WCK 비율·세트)마다 표가 달라 여기서는 비워 뒀다.",
+      url: "https://www.micron.com/",
+    }),
+    ref("모식도", "어레이 내부 파형", {
+      where: "DDR5 와 같다 — JEDEC 밖이고, 그린 것은 모식도다. LPDDR5 는 VPP 핀이 없어 워드라인 부스트를 내부 펌프가 VDD1 에서 만든다.",
+    }),
+  ],
+
   sources: ["공개된 LPDDR5 부품 데이터시트 수준의 대표값", "RL/WL 은 동작 모드 의존이라 비워 둠"],
 };

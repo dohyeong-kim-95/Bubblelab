@@ -5,7 +5,7 @@
 // `verify: true` 가 붙은 것은 표기 방식에 이견이 있을 수 있어 스펙과 대조가 필요한 값이다.
 // 값이 틀렸다고 판단되면 이 파일 한 곳만 고치면 화면과 테스트가 함께 따라온다.
 
-import { command, param, rails, rule, window_ } from "./common.js";
+import { command, param, rails, ref, rule, window_ } from "./common.js";
 
 export default {
   id: "ddr5",
@@ -110,6 +110,21 @@ export default {
   ],
 
   refresh: { param: "tREFI", command: "REFab", note: "마감이지 최소 간격이 아니다. 최대 8번까지 미루거나 당길 수 있다." },
+
+  refs: [
+    ref("표준", "DDR5 SDRAM", {
+      doc: "JESD79-5",
+      where: "JEDEC. 가입하면 무료로 내려받는다. 커맨드 인코딩·상태 전이·타이밍 파라미터의 원본이다.",
+      url: "https://www.jedec.org/",
+    }),
+    ref("값", "부품 데이터시트와 스피드빈 표", {
+      where: "Micron 등 제조사가 공개하는 DDR5 데이터시트. 이 화면의 숫자는 이 수준의 대표값이고, 밀도·페이지 크기·부품에 따라 달라진다.",
+      url: "https://www.micron.com/",
+    }),
+    ref("모식도", "어레이 내부 파형 (WL·BL/BLB·SAE·CSL·Cell)", {
+      where: "출처가 문서가 아니다. 내부 노드의 전압 파형은 소자 물리와 회로 설계 영역이라 JEDEC 이 정하지 않고 업체·공정마다 다르다. 여기 그린 것은 타이밍 파라미터의 뜻을 보이기 위한 모식도이며, 사건의 위치는 tRCD·tRP 대비 비율로만 적혀 있다(spec/common.js 의 ARRAY_SHAPE).",
+    }),
+  ],
 
   sources: [
     "공개된 DDR5 부품 데이터시트와 스피드빈 표 수준의 대표값",

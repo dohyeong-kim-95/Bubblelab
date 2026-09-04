@@ -5,6 +5,8 @@
 // 이 세대의 성격을 거의 다 말해 준다. 타이밍이 확인되는 대로 params/rules 를 채우면
 // 그때부터 시뮬레이터가 돈다.
 
+import { ref } from "./common.js";
+
 export default {
   id: "lpddr6",
   label: "LPDDR6",
@@ -27,5 +29,13 @@ export default {
   rules: [],
   windows: [],
   refresh: null,
+  refs: [
+    ref("표준", "LPDDR6 SDRAM", {
+      doc: "JESD209-6",
+      where: "발행된 표준이다. 다만 부품 데이터시트가 아직 널리 풀리지 않아 신뢰할 수 있는 타이밍 값을 채우지 못했다 — 채널을 서브채널 둘로 가르는 구조만 적어 뒀다.",
+      url: "https://www.jedec.org/",
+    }),
+  ],
+
   sources: [],
 };

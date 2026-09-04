@@ -13,7 +13,9 @@ const $ = (id) => document.getElementById(id);
 const el = { clock: $("clock"), undo: $("undo"), reset: $("reset"), gens: $("gens"), genNote: $("gen-note"),
   sim: $("sim"), bin: $("bin"), tck: $("tck"), refresh: $("refresh"), org: $("org"), grid: $("grid"),
   target: $("target"), palette: $("palette"), why: $("why"), timeline: $("timeline"), params: $("params"),
-  zoom: $("zoom"), zoomval: $("zoomval"), laneNote: $("lane-note"), rails: $("rails"), legend: $("legend") };
+  zoom: $("zoom"), zoomval: $("zoomval"), laneNote: $("lane-note"), rails: $("rails"), legend: $("legend"),
+  refs: $("refs"), refsBody: $("refs-body"), refsTitle: $("refs-title"),
+  refsOpen: $("refs-open"), refsLink: $("refs-link"), refsClose: $("refs-close") };
 
 const SVG = "http://www.w3.org/2000/svg";
 const GUTTER = 46;            // 왼쪽 신호 이름 자리
@@ -420,6 +422,39 @@ function renderParams() {
   }));
 }
 
+/* ---------- 참고문헌 ----------
+ *
+ * 값이 대표값인 이상 **어디를 보면 확인할 수 있는지**가 값만큼 중요하다.
+ * 대조가 필요한 값 목록은 손으로 적지 않고 spec 의 verify 표시에서 뽑는다 —
+ * 손으로 적으면 값을 고칠 때 목록이 따라오지 않아 금방 거짓말이 된다.
+ */
+function renderRefs() {
+  el.refsTitle.textContent = `참고문헌 — ${gen.label}`;
+  const items = (gen.refs ?? []).map((r) => node("div", { class: "ref" }, [
+    node("div", { class: "ref-top" }, [
+      node("span", { class: "ref-kind", text: r.kind }),
+      node("span", { class: "ref-title", text: r.title }),
+      ...(r.doc ? [node("span", { class: "ref-doc", text: r.doc })] : []),
+    ]),
+    node("p", { class: "ref-where", text: r.where }),
+    ...(r.url ? [node("a", { href: r.url, target: "_blank", rel: "noopener noreferrer", text: `${r.url} ↗` })] : []),
+  ]));
+
+  const unsure = Object.entries(gen.params ?? {}).filter(([, p]) => p.verify).map(([n]) => n)
+    .concat(gen.bins?.flatMap((b) => Object.entries(b.params ?? {}).filter(([, p]) => p.verify).map(([n]) => `${n}(${b.id})`)) ?? []);
+  if (unsure.length) {
+    items.push(node("div", { class: "ref-verify" }, [
+      node("h3", { text: `대조가 필요한 값 ${unsure.length}개` }),
+      node("p", {}, [
+        document.createTextNode("표기 방식에 이견이 있을 수 있어 스펙과 맞춰 봐야 하는 값이다 — "),
+        node("code", { text: unsure.join(", ") }),
+        document.createTextNode(". 화면의 파라미터 표에서 ? 로 표시된다."),
+      ]),
+    ]));
+  }
+  el.refsBody.replaceChildren(...items);
+}
+
 /* ---------- 전체 ---------- */
 function render() {
   renderGens();
@@ -482,6 +517,11 @@ el.legend.addEventListener("click", (e) => {
   const id = e.target.closest("[data-lane]")?.dataset.lane;
   if (id) setFocus(id);
 });
+
+for (const b of [el.refsOpen, el.refsLink]) {
+  b.addEventListener("click", () => { renderRefs(); el.refs.showModal(); });
+}
+el.refsClose.addEventListener("click", () => el.refs.close());
 
 el.undo.addEventListener("click", () => {
   if (!past.length) return;
