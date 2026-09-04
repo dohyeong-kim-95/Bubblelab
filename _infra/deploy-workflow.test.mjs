@@ -25,3 +25,33 @@ test("워크플로의 wranglerVersion 과 같은 버전이다", () => {
   assert.equal(pkg.devDependencies.wrangler, inWorkflow,
     "package.json 과 워크플로의 wrangler 버전이 어긋났다 — 설치 단계가 다시 살아난다");
 });
+
+
+/* 배포 시간의 86%가 의존성 설치였다(한 번은 루트 4분 15초 + 아발론 7분 01초,
+ * 실제 검증·빌드·배포는 다 합쳐 1분 35초). 두 가지를 고쳤고, 여기서 되돌아가지
+ * 않게 묶어 둔다 — 성능 회귀는 조용히 돌아오고 아무도 눈치채지 못한다. */
+
+test("node_modules 를 통째로 캐시한다 — setup-node 캐시는 내려받기만 아낀다", () => {
+  assert.match(workflow, /path:\s*node_modules/, "node_modules 캐시가 없다");
+  assert.match(workflow, /if:\s*steps\.node-modules\.outputs\.cache-hit\s*!=\s*'true'/,
+    "캐시가 맞아도 npm ci 를 그대로 돌리고 있다");
+});
+
+test("아발론은 내용이 바뀌었을 때만 검증한다", () => {
+  // 키가 소스와 산출물의 내용 해시여야 한다. 커밋 이력을 보면 force-push 에 취약하다.
+  assert.match(workflow, /key:\s*avalon-\$\{\{\s*hashFiles\('_src\/avalon\/\*\*',\s*'games\/avalon\/\*\*'\)/,
+    "아발론 캐시 키가 내용 해시가 아니다");
+  for (const step of ["Test and build Avalon", "Verify games/avalon matches the source build"]) {
+    const at = workflow.indexOf(step);
+    assert.ok(at > 0, `${step} 단계가 없다`);
+    assert.match(workflow.slice(at, at + 260), /steps\.avalon\.outputs\.cache-hit\s*!=\s*'true'/,
+      `${step} 이 무조건 돈다 — 몇 주씩 안 바뀌는 것을 매번 다시 검증하게 된다`);
+  }
+});
+
+test("설치는 audit·funding 왕복을 하지 않는다", () => {
+  for (const [, cmd] of workflow.matchAll(/run:\s*(npm ci[^\n]*)/g)) {
+    assert.match(cmd, /--no-audit/, `${cmd} 에 --no-audit 이 없다`);
+    assert.match(cmd, /--no-fund/, `${cmd} 에 --no-fund 가 없다`);
+  }
+});

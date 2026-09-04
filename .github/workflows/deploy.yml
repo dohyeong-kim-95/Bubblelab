@@ -24,13 +24,27 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
+          # 이건 ~/.npm(내려받은 tarball)만 캐시한다 — node_modules 는 매번 새로 만든다.
+          # 아래의 node_modules 캐시가 주력이고, 이건 그게 빗나갔을 때의 보험이다.
           cache: npm
           cache-dependency-path: |
             package-lock.json
             _src/avalon/package-lock.json
 
+      # **설치 자체를 건너뛴다.** setup-node 의 캐시는 내려받기만 아껴 주고 압축 해제와
+      # 링크는 매번 다시 하는데, 그게 배포 시간의 대부분이었다(한 번은 4분 15초).
+      # lockfile 이 그대로면 node_modules 를 통째로 되살린다.
+      - name: node_modules 캐시
+        id: node-modules
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: node_modules
+          key: nm-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+
       - name: Install dependencies
-        run: npm ci
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        # audit·funding 은 설치할 때마다 네트워크를 더 왕복한다. 배포 경로에서는 뺀다.
+        run: npm ci --prefer-offline --no-audit --no-fund
 
       - name: Test infra
         run: node --test _infra/*.test.mjs
@@ -41,14 +55,43 @@ jobs:
       # 이 리포는 main에 직접 push하고 배포한다 — PR에서만 도는 CI는 아발론을
       # 사실상 검사하지 못했다. 배포 경로에서도 시뮬레이션·불변조건·빌드를 돌리고,
       # 커밋된 games/avalon 이 그 빌드와 같은지까지 확인한다.
+      #
+      # **다만 내용이 그대로면 다시 검증하지 않는다.** 아발론은 몇 주씩 안 바뀌는데
+      # 매 배포마다 vite 를 새로 깔고(한 번은 7분) 같은 결론을 다시 냈다. 키가 소스와
+      # 산출물의 내용 해시라, 한 글자라도 바뀌면 키가 달라져 반드시 다시 돈다 —
+      # 커밋 이력이 아니라 내용을 보므로 force-push 나 되돌리기에도 안전하다.
+      # 이 단계는 node_modules 를 되살리기 **전에** 와야 한다(그래야 해시가 소스만 본다).
+      - name: 아발론이 이미 검증된 내용인지 본다
+        id: avalon
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .avalon-verified
+          key: avalon-${{ hashFiles('_src/avalon/**', 'games/avalon/**') }}
+
+      - name: Cache Avalon node_modules
+        if: steps.avalon.outputs.cache-hit != 'true'
+        id: avalon-modules
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: _src/avalon/node_modules
+          key: nm-avalon-${{ runner.os }}-node22-${{ hashFiles('_src/avalon/package-lock.json') }}
+
       - name: Install Avalon dependencies
-        run: npm ci --prefix _src/avalon
+        if: steps.avalon.outputs.cache-hit != 'true' && steps.avalon-modules.outputs.cache-hit != 'true'
+        run: npm ci --prefix _src/avalon --prefer-offline --no-audit --no-fund
 
       - name: Test and build Avalon
+        if: steps.avalon.outputs.cache-hit != 'true'
         run: npm run test:ci --prefix _src/avalon
 
       - name: Verify games/avalon matches the source build
+        if: steps.avalon.outputs.cache-hit != 'true'
         run: node _infra/check-avalon-sync.mjs
+
+      # 통과했다는 표시를 남긴다 — 다음 배포에서 같은 내용이면 위 캐시가 맞고 건너뛴다.
+      - name: 아발론 검증 표시 남기기
+        if: steps.avalon.outputs.cache-hit != 'true'
+        run: git rev-parse HEAD > .avalon-verified
 
       # 방문의 대부분이 휴대폰이다 — 배포 전에 핵심 화면이 모바일 폭에서
       # 깨지지 않는지(예외·가로 넘침·빈 화면) 한 번 본다.
