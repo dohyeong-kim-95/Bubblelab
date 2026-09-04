@@ -162,3 +162,19 @@ dialog#param { width: min(100% - 24px, 460px); max-height: 84dvh; overflow-y: au
 .prow { cursor: pointer; }
 .prow:hover { background: var(--surface); }
 .why .term { cursor: pointer; }
+
+/* 셀에서 칩까지 여섯 배율. 같은 순간을 다른 크기로 보는 것이라 그림 아래에
+ * "지금 이 배율에서는 무엇이 보이는가"를 한 줄로 붙인다. */
+.layer-card { border: 1px solid var(--line); border-radius: 10px; padding: 10px 11px; margin-top: 8px; }
+.layer-card .note { margin: 0 0 6px; }
+.layer-key { margin: 0 0 10px; border-left: 2px solid var(--ink); padding-left: 9px;
+  font-size: 13px; line-height: 1.65; }
+.layer-key b { font-weight: 700; }
+.layer-art { display: block; width: 100%; height: auto; margin-bottom: 8px; }
+.layer-now { margin: 8px 0 0; padding: 7px 9px; border-radius: 7px; background: var(--surface);
+  color: var(--ink); font-size: 12px; line-height: 1.6; }
+.layer-params { display: grid; gap: 5px; margin-top: 10px; }
+.layer-params .dim { font-size: 10px; letter-spacing: .04em; }
+.layer-params .chip { min-height: 28px; font-size: 12px; }
+#layers .chip { min-height: 32px; }
+#layers .chip[aria-current="true"] { border-color: var(--ink); color: var(--ink); font-weight: 700; }

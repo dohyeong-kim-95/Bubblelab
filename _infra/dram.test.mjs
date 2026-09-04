@@ -507,3 +507,112 @@ test("규칙에 쓰이는 파라미터는 걸리는 자리가 비어 있지 않�
     }
   }
 });
+
+/* ---------- 계층 ----------
+ * 셀에서 칩까지 여섯 배율. 각 층은 **이 도구가 이미 모델링하는 무언가**를 설명할 때만
+ * 뜻이 있으므로, 층이 가리키는 파라미터가 실제로 그 세대에 있는지를 본다.
+ */
+const { DEFAULT_LAYER, LAYERS, findLayer, paramsAt, stateAt } = await import("../life/dram/layers.js");
+const wavesFor = (state, picked = PICK) => buildWaves(ddr5, bin, state, picked);
+
+test("여섯 층이고, 셀에서 칩까지 안에서 바깥으로 간다", () => {
+  assert.deepEqual(LAYERS.map((l) => l.id), ["cell", "bitline", "mat", "bank", "bg", "chip"]);
+  assert.equal(new Set(LAYERS.map((l) => l.id)).size, 6);
+  // 처음 열었을 때는 원래 격자가 있던 자리여야 한다 — 갑자기 달라 보이면 안 된다.
+  assert.equal(DEFAULT_LAYER, "bg");
+  for (const l of LAYERS) {
+    assert.ok(l.what?.length && l.key?.length, `${l.id} 에 설명이 없다`);
+    assert.ok(l.params.length, `${l.id} 이 아무 파라미터도 가리키지 않는다 — 그럼 둘 이유가 없다`);
+  }
+});
+
+test("층이 가리키는 파라미터는 그 세대에 실제로 있는 것만 나온다", () => {
+  for (const gen of GENERATIONS.filter(isRunnable)) {
+    for (const l of LAYERS) {
+      for (const name of paramsAt(gen, l.id)) {
+        const exists = gen.params[name] || gen.bins.some((b) => b.params?.[name]);
+        assert.ok(exists, `${gen.id}/${l.id}: 없는 파라미터 ${name} 을 가리킨다`);
+      }
+    }
+  }
+});
+
+test("DDR5 는 여섯 층이 모두 무언가를 설명한다", () => {
+  for (const l of LAYERS) {
+    assert.ok(paramsAt(ddr5, l.id).length > 0, `ddr5/${l.id}: 가리키는 파라미터가 하나도 없다`);
+  }
+  // 뱅크그룹 층은 짝이 사는 자리다 — 이 도구의 핵심 배움이 여기 걸린다.
+  assert.deepEqual(paramsAt(ddr5, "bg").sort(), ["tCCD_L", "tCCD_L_WR", "tCCD_S"]);
+});
+
+test("LPDDR5 의 뱅크그룹 층은 비어 있다 — 그룹으로 간격을 나누지 않기 때문", () => {
+  // 빈 것이 버그가 아니라 사실이다. 화면은 이걸 빈 줄이 아니라 문장으로 말한다.
+  assert.deepEqual(paramsAt(findGen("lpddr5"), "bg"), []);
+  assert.ok(paramsAt(findGen("lpddr5"), "mat").includes("tRRD"));
+});
+
+test("셀 층은 복원이 끝났는지를 말한다 — tRAS 의 뜻이 그것이다", () => {
+  const s = run(fresh(), ACT(0, 0));
+  // ACT 직후에는 아직 전하공유 전이라 셀이 가득 차 보인다 — 그래도 닫으면 안 된다.
+  const justOpened = stateAt(ddr5, bin, s, PICK, wavesFor(s), "cell");
+  assert.equal(justOpened.restored, false, "tRAS 전인데 닫아도 된다고 말한다");
+  assert.match(justOpened.note, /지금 닫으면 값이 깨진다/);
+
+  const half = advance(s, Math.floor(paramClocks(ddr5, bin, "tRAS") / 2));
+  const mid = stateAt(ddr5, bin, half, PICK, wavesFor(half), "cell");
+  assert.equal(mid.restored, false);
+  assert.ok(mid.level < 1, "복원 중인데 셀이 가득 차 있다");
+
+  const done = advance(s, paramClocks(ddr5, bin, "tRAS"));
+  const after = stateAt(ddr5, bin, done, PICK, wavesFor(done), "cell");
+  assert.equal(after.restored, true);
+  assert.match(after.note, /복원이 끝났다/);
+  assert.ok(Math.abs(after.level - 1) < 1e-9, "tRAS 를 지났는데 복원이 안 끝났다");
+});
+
+test("비트라인 층은 얼마나 갈라졌는지를 말한다", () => {
+  const s = run(fresh(), ACT(0, 0));
+  const early = stateAt(ddr5, bin, s, PICK, wavesFor(s), "bitline");
+  assert.ok(early.split < 0.5, "센싱 전인데 이미 다 벌어져 있다");
+
+  const done = advance(s, paramClocks(ddr5, bin, "tRCD"));
+  const late = stateAt(ddr5, bin, done, PICK, wavesFor(done), "bitline");
+  assert.ok(Math.abs(late.split - 1) < 1e-9, "tRCD 를 지났는데 양 레일까지 안 벌어졌다");
+  assert.match(late.note, /읽어 갈 수 있다/);
+});
+
+test("서브어레이 층은 tFAW 창이 몇 칸 찼는지를 센다", () => {
+  const s = run(fresh(), ACT(0, 0), ACT(1, 0), ACT(2, 0));
+  const st = stateAt(ddr5, bin, s, PICK, wavesFor(s), "mat");
+  assert.equal(st.used, 3);
+  assert.equal(st.allowed, 4);
+  assert.equal(st.span, paramClocks(ddr5, bin, "tFAW"));
+
+  // 창을 벗어난 ACT 는 세지 않는다 — 굴러가는 창이라서다.
+  const later = advance(s, st.span);
+  assert.equal(stateAt(ddr5, bin, later, PICK, wavesFor(later), "mat").used, 0);
+});
+
+test("뱅크그룹 층은 직전 커맨드가 같은 그룹이었는지를 말한다 — 짝이 갈리는 자리", () => {
+  const same = run(fresh(), ACT(0, 0), ACT(0, 1));
+  assert.match(stateAt(ddr5, bin, same, { bg: 0, bank: 1 }, wavesFor(same), "bg").note, /같은 그룹/);
+  // 직전 커맨드가 BG1 인데 지금 고른 대상은 BG0 — 다음 커맨드는 짧은 쪽 간격을 탄다.
+  const diff = run(fresh(), ACT(1, 0));
+  assert.match(stateAt(ddr5, bin, diff, PICK, wavesFor(diff), "bg").note, /다른 그룹/);
+});
+
+test("모든 층이 모든 세대에서 한마디씩 한다", () => {
+  for (const gen of GENERATIONS.filter(isRunnable)) {
+    const b = findBin(gen, null);
+    const s = createState(gen, b.id);
+    const w = buildWaves(gen, b, s, PICK);
+    for (const l of LAYERS) {
+      const st = stateAt(gen, b, s, PICK, w, l.id);
+      assert.ok(st.note?.length, `${gen.id}/${l.id}: 지금 상태를 말하지 않는다`);
+    }
+  }
+});
+
+test("findLayer 는 모르는 이름에도 무너지지 않는다", () => {
+  assert.equal(findLayer("없는층").id, DEFAULT_LAYER);
+});

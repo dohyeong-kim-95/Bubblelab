@@ -35,8 +35,19 @@
 
       <div id="refresh" class="refresh"></div>
 
-      <h2 class="head">뱅크 <span id="org" class="dim"></span></h2>
-      <div id="grid" class="grid" role="group" aria-label="뱅크 고르기"></div>
+      <h2 class="head">구조 <span id="org" class="dim"></span></h2>
+      <div id="layers" class="chips" role="group" aria-label="계층 고르기"></div>
+      <div class="layer-card">
+        <p id="layer-what" class="note"></p>
+        <p id="layer-key" class="layer-key"></p>
+        <svg id="layer-art" class="layer-art"></svg>
+        <div id="grid" class="grid" role="group" aria-label="뱅크 고르기"></div>
+        <p id="layer-now" class="layer-now"></p>
+        <div class="layer-params">
+          <span class="dim">여기 사는 파라미터</span>
+          <div id="layer-plist" class="chips"></div>
+        </div>
+      </div>
 
       <h2 class="head">커맨드 <span id="target" class="dim"></span></h2>
       <div id="palette" class="palette"></div>

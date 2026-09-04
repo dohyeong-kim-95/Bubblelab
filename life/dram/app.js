@@ -10,6 +10,7 @@ import {
 } from "./engine.js";
 import { ARRAY, buildWaves } from "./waves.js";
 import { explain } from "./explain.js";
+import { DEFAULT_LAYER, LAYERS, findLayer, paramsAt, stateAt } from "./layers.js";
 
 const $ = (id) => document.getElementById(id);
 const el = { clock: $("clock"), undo: $("undo"), reset: $("reset"), gens: $("gens"), genNote: $("gen-note"),
@@ -18,7 +19,9 @@ const el = { clock: $("clock"), undo: $("undo"), reset: $("reset"), gens: $("gen
   zoom: $("zoom"), zoomval: $("zoomval"), laneNote: $("lane-note"), rails: $("rails"), legend: $("legend"), paramsNote: $("params-note"),
   refs: $("refs"), refsBody: $("refs-body"), refsTitle: $("refs-title"),
   refsOpen: $("refs-open"), refsLink: $("refs-link"), refsClose: $("refs-close"),
-  param: $("param"), paramTitle: $("param-title"), paramBody: $("param-body"), paramClose: $("param-close") };
+  param: $("param"), paramTitle: $("param-title"), paramBody: $("param-body"), paramClose: $("param-close"),
+  layers: $("layers"), layerWhat: $("layer-what"), layerKey: $("layer-key"), layerArt: $("layer-art"),
+  layerNow: $("layer-now"), layerPlist: $("layer-plist") };
 
 const SVG = "http://www.w3.org/2000/svg";
 const GUTTER = 46;            // 왼쪽 신호 이름 자리
@@ -35,6 +38,7 @@ let past = [];
 let lastEntry = null;
 let waveLanes = [];
 let focus = null;   // 강조 중인 신호 id
+let layer = DEFAULT_LAYER;   // 지금 보고 있는 배율
 
 /* ---------- 만들기 도우미 ---------- */
 function node(tag, props = {}, kids = []) {
@@ -119,6 +123,168 @@ function renderRefresh() {
     node("div", { class: "refresh-bar" }, [fill(pct)]),
     node("p", { class: "note refresh-note", text: r.note }),
   );
+}
+
+/* ---------- 계층 모식도 ----------
+ *
+ * 셀에서 칩까지 여섯 배율. **같은 순간을 다른 크기로 보는 것**이라 그림이 지금 상태를
+ * 반영한다 — ACT 를 누르면 워드라인이 켜지고, 비트라인이 갈라지고, 셀이 무너졌다
+ * 복원되는 것이 층을 옮겨 가며 보인다. 파형과 같은 색을 써서 둘이 이어지게 했다.
+ */
+const ART_W = 320, ART_H = 148;
+const g = (kids) => { const n = svg("g"); n.append(...kids); return n; };
+const box = (x, y, w, h, o = {}) => svg("rect", { x, y, width: w, height: h, rx: 3, fill: "none", stroke: "var(--line)", ...o });
+const lab = (x, y, text, o = {}) => svg("text", { x, y, fill: "var(--muted)", "font-size": 9, ...o }, text);
+
+function artCell(st) {
+  const on = st.open;
+  const wl = on ? COLORS.WL : "var(--line)";
+  const fill = st.level == null ? 0 : Math.max(0, Math.min(1, st.level));
+  return [
+    // 워드라인 — 켜지면 게이트가 열린다
+    svg("line", { x1: 20, y1: 46, x2: 150, y2: 46, stroke: wl, "stroke-width": on ? 2.4 : 1.4 }),
+    lab(20, 38, on ? "워드라인 (열림)" : "워드라인 (닫힘)", { fill: wl }),
+    // 액세스 트랜지스터
+    box(150, 34, 26, 24, { stroke: wl, "stroke-width": on ? 2 : 1.2 }),
+    svg("line", { x1: 163, y1: 34, x2: 163, y2: 20, stroke: "var(--line)" }),
+    // 비트라인
+    svg("line", { x1: 163, y1: 20, x2: 300, y2: 20, stroke: COLORS.BL, "stroke-width": 1.6 }),
+    lab(240, 14, "비트라인으로", { fill: COLORS.BL }),
+    // 커패시터 — 담긴 전하를 채움으로 보인다
+    svg("line", { x1: 163, y1: 58, x2: 163, y2: 76, stroke: "var(--line)" }),
+    svg("line", { x1: 138, y1: 76, x2: 188, y2: 76, stroke: "var(--ink)", "stroke-width": 2 }),
+    svg("rect", { x: 138, y: 80, width: 50 * fill, height: 8, fill: COLORS.Cell, opacity: 0.9 }),
+    svg("line", { x1: 138, y1: 92, x2: 188, y2: 92, stroke: "var(--ink)", "stroke-width": 2 }),
+    lab(196, 88, `저장 전하 ${st.level == null ? "—" : Math.round(fill * 100) + "%"}`, { fill: COLORS.Cell }),
+    svg("line", { x1: 163, y1: 92, x2: 163, y2: 108, stroke: "var(--line)" }),
+    svg("line", { x1: 151, y1: 108, x2: 175, y2: 108, stroke: "var(--line)", "stroke-width": 2 }),
+    lab(20, 128, "셀 하나 = 트랜지스터 1 + 커패시터 1"),
+  ];
+}
+
+function artBitline(st) {
+  const y = (v) => (st.blp == null || v == null ? 70 : 112 - (v / (st.blp * 2)) * 76);
+  const line = (x, v, color, dash) => svg("line", {
+    x1: x, y1: 36, x2: x, y2: 112, stroke: color, "stroke-width": 1.6, "stroke-dasharray": dash ?? null,
+  });
+  const dot = (x, v, color) => svg("circle", { cx: x, cy: y(v), r: 3.4, fill: color });
+  return [
+    box(96, 14, 128, 22, { stroke: st.sae ? COLORS.SAE : "var(--line)", "stroke-width": st.sae ? 2 : 1 }),
+    lab(160, 29, st.sae ? "센스앰프 (켜짐)" : "센스앰프 (꺼짐)", { "text-anchor": "middle", fill: st.sae ? COLORS.SAE : "var(--muted)" }),
+    line(120, st.bl, COLORS.BL),
+    line(200, st.blb, COLORS.BL, "4 3"),
+    lab(120, 124, "BL", { "text-anchor": "middle", fill: COLORS.BL }),
+    lab(200, 124, "BLB", { "text-anchor": "middle", fill: COLORS.BL }),
+    // VDD/2 기준선 — 여기서 갈라져 나가는 것이 센싱의 전부다
+    svg("line", { x1: 88, y1: y(st.blp), x2: 232, y2: y(st.blp), stroke: "var(--line)", "stroke-dasharray": "2 3" }),
+    lab(238, y(st.blp) + 3, "VDD/2"),
+    dot(120, st.bl, COLORS.BL),
+    dot(200, st.blb, COLORS.BL),
+    lab(20, 60, "셀은 한쪽에만"),
+    lab(20, 72, "매달린다"),
+    svg("line", { x1: 78, y1: 88, x2: 112, y2: 88, stroke: "var(--line)" }),
+    svg("circle", { cx: 74, cy: 88, r: 4, fill: "none", stroke: COLORS.Cell }),
+    lab(238, 60, st.split == null ? "" : `벌어짐 ${Math.round(st.split * 100)}%`, { fill: COLORS.BL }),
+  ];
+}
+
+function artMat(st) {
+  const kids = [];
+  const cols = 9, rows = 5;
+  const openRow = st.wordline ? 2 : -1;
+  for (let r = 0; r < rows; r++) {
+    const yy = 30 + r * 15;
+    const on = r === openRow;
+    kids.push(svg("line", { x1: 56, y1: yy, x2: 250, y2: yy, stroke: on ? COLORS.WL : "var(--line)", "stroke-width": on ? 2.2 : 1 }));
+    for (let c = 0; c < cols; c++) {
+      kids.push(svg("circle", { cx: 62 + c * 21, cy: yy, r: 2.2, fill: on ? COLORS.WL : "var(--line)" }));
+    }
+  }
+  for (let c = 0; c < cols; c++) {
+    kids.push(svg("line", { x1: 62 + c * 21, y1: 24, x2: 62 + c * 21, y2: 112, stroke: "var(--line)", "stroke-width": 0.8 }));
+  }
+  kids.push(box(20, 24, 30, 82), lab(35, 68, "WL", { "text-anchor": "middle" }), lab(35, 80, "드라이버", { "text-anchor": "middle", "font-size": 7 }));
+  kids.push(box(56, 112, 194, 16, { stroke: COLORS.SAE }), lab(153, 123, "센스앰프 줄", { "text-anchor": "middle", fill: COLORS.SAE }));
+  kids.push(lab(258, 34, "워드라인 하나가"), lab(258, 45, "이 줄 전부를"), lab(258, 56, "동시에 연다"));
+  // tFAW 창 — 지금 몇 칸 찼는지
+  if (st.allowed) {
+    for (let i = 0; i < st.allowed; i++) {
+      kids.push(svg("rect", { x: 258 + i * 13, y: 74, width: 10, height: 10, rx: 2,
+        fill: i < st.used ? COLORS.WL : "none", stroke: "var(--line)" }));
+    }
+    kids.push(lab(258, 98, `창 ${st.used}/${st.allowed}`, { fill: st.used >= st.allowed ? "var(--danger)" : "var(--muted)" }));
+  }
+  return kids;
+}
+
+function artBank(st) {
+  const kids = [box(58, 40, 200, 70)];
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 4; c++) {
+      kids.push(box(66 + c * 48, 46 + r * 21, 40, 16, { stroke: "var(--line)" }));
+    }
+  }
+  kids.push(lab(158, 122, "서브어레이 격자", { "text-anchor": "middle" }));
+  kids.push(box(20, 40, 30, 70), lab(35, 78, "행", { "text-anchor": "middle" }), lab(35, 90, "디코더", { "text-anchor": "middle", "font-size": 7 }));
+  // 행 버퍼 — 열린 행 하나가 여기 올라온다
+  kids.push(box(58, 16, 200, 18, { stroke: st.open ? COLORS.SAE : "var(--line)", "stroke-width": st.open ? 2 : 1 }));
+  kids.push(lab(158, 29, st.open ? `행 버퍼 — 행 ${st.row}` : "행 버퍼 (비어 있음)",
+    { "text-anchor": "middle", fill: st.open ? COLORS.SAE : "var(--muted)" }));
+  kids.push(lab(266, 50, "열린 행은"), lab(266, 62, "언제나 하나"));
+  return kids;
+}
+
+function artChip(st, org) {
+  const kids = [box(52, 14, 214, 100, { stroke: "var(--muted)" })];
+  const cols = Math.min(org.bankGroups, 4);
+  const rows = Math.ceil(org.bankGroups / cols);
+  st.groups.forEach((openCount, i) => {
+    const x = 60 + (i % cols) * 51, y = 22 + Math.floor(i / cols) * 34;
+    kids.push(box(x, y, 45, 28, { stroke: openCount ? COLORS.SAE : "var(--line)", "stroke-width": openCount ? 1.8 : 1 }));
+    kids.push(lab(x + 22, y + 13, `BG${i}`, { "text-anchor": "middle", fill: openCount ? "var(--ink)" : "var(--muted)" }));
+    kids.push(lab(x + 22, y + 23, `${openCount}/${org.banksPerGroup} 열림`, { "text-anchor": "middle", "font-size": 7 }));
+  });
+  if (rows < 3) kids.push(lab(159, 106, "뱅크그룹", { "text-anchor": "middle" }));
+  // 밖에서 보이는 것은 핀뿐이다
+  kids.push(svg("line", { x1: 20, y1: 44, x2: 52, y2: 44, stroke: COLORS.CA, "stroke-width": 2 }));
+  kids.push(lab(20, 36, "CA", { fill: COLORS.CA }), lab(20, 58, "한 줄", { "font-size": 7 }));
+  kids.push(svg("line", { x1: 266, y1: 74, x2: 300, y2: 74, stroke: st.dqBusy ? COLORS.DQ : "var(--line)", "stroke-width": st.dqBusy ? 2.4 : 1.4 }));
+  kids.push(lab(270, 66, "DQ", { fill: st.dqBusy ? COLORS.DQ : "var(--muted)" }));
+  kids.push(lab(270, 88, st.dqBusy ? "전송 중" : "비어 있음", { "font-size": 7 }));
+  kids.push(lab(52, 128, `${st.openBanks}/${st.total} 뱅크 열림`));
+  return kids;
+}
+
+function renderLayers() {
+  el.layers.replaceChildren(...LAYERS.map((l) =>
+    node("button", { type: "button", class: "chip", "data-layer": l.id, "aria-current": String(l.id === layer), text: l.label })));
+
+  const meta = findLayer(layer);
+  const waves = isRunnable(gen) ? buildWaves(gen, bin, sim, picked) : null;
+  const st = stateAt(gen, bin, sim, picked, waves, layer);
+
+  // **굵게** 표시는 화면에서 강조로 바꾼다 — 두 문단 모두에 적용해야 한다
+  // (한쪽만 하면 별표가 그대로 새어 나온다).
+  const bolded = (s) => s.split(/\*\*/).map((part, i) =>
+    (i % 2 ? node("b", { text: part }) : document.createTextNode(part)));
+  el.layerWhat.replaceChildren(...bolded(meta.what));
+  el.layerKey.replaceChildren(...bolded(meta.key));
+  el.layerNow.textContent = st.note;
+
+  const art = { cell: artCell, bitline: artBitline, mat: artMat, bank: artBank }[layer];
+  el.layerArt.hidden = layer === "bg";
+  el.grid.hidden = layer !== "bg";
+  if (layer !== "bg") {
+    el.layerArt.setAttribute("viewBox", `0 0 ${ART_W} ${ART_H}`);
+    el.layerArt.replaceChildren(g(layer === "chip" ? artChip(st, gen.org) : art(st)));
+  }
+
+  /* 이 층에 걸리는 파라미터가 없는 세대도 있다 — LPDDR5 는 뱅크그룹으로 간격을
+   * 나누지 않아 그 층이 빈다. 빈 줄로 두지 않고 그 사실을 말해 준다. */
+  const here = paramsAt(gen, layer);
+  el.layerPlist.replaceChildren(...(here.length
+    ? here.map((name) => node("button", { type: "button", class: "chip", "data-param": name, text: name }))
+    : [node("span", { class: "dim", text: `${gen.label} 는 이 층에서 갈리는 파라미터가 없다.` })]));
 }
 
 /* ---------- 뱅크 격자 ---------- */
@@ -580,6 +746,7 @@ function render() {
   renderBin();
   renderRefresh();
   renderGrid();
+  renderLayers();
   renderPalette();
   renderWhy();
   renderTimeline();
@@ -598,6 +765,15 @@ el.bin.addEventListener("change", () => {
   past = [];
   lastEntry = null;
   render();
+});
+
+el.layers.addEventListener("click", (e) => {
+  const id = e.target.closest("[data-layer]")?.dataset.layer;
+  if (id) { layer = id; renderLayers(); }
+});
+el.layerPlist.addEventListener("click", (e) => {
+  const name = e.target.closest("[data-param]")?.dataset.param;
+  if (name) openParam(name);
 });
 
 el.grid.addEventListener("click", (e) => {
