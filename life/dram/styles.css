@@ -1,7 +1,31 @@
 /* LIFE 의 검은 바탕을 그대로 물려받는다 — 색이 아니라 밝기로만 나눈다.
  * 이 화면은 세로로 길어서 main 이 스크롤된다(셸은 body 가 overflow: hidden 이다). */
 
-.page { flex: 1; min-height: 0; overflow-y: auto; padding: 0 14px 40px; overscroll-behavior-y: contain; }
+/* 한 장에 하나의 개념. 아래로 넘겨 깊이 들어간다.
+ * 세로 scroll-snap 이라 손가락으로 넘기면 장 단위로 걸린다 — 브라우저가 관성과
+ * 되돌아가기를 알아서 하므로 드래그를 직접 처리하지 않는다(LIFE 셸과 같은 원칙). */
+.deck { flex: 1; min-height: 0; overflow-y: auto; scroll-snap-type: y mandatory;
+  overscroll-behavior-y: contain; scroll-behavior: smooth; scrollbar-width: none; }
+.deck::-webkit-scrollbar { display: none; }
+/* 한 장에 들어가도록 짜지만, 더 작은 화면에서 내용이 잘려 사라지지 않게 안전판을 둔다.
+ * overflow: hidden 이면 넘친 것이 스크롤도 안 되고 그냥 없어진다. */
+.pane { height: 100%; scroll-snap-align: start; scroll-snap-stop: always;
+  display: flex; flex-direction: column; padding: 0 14px 10px;
+  overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: none; }
+.pane::-webkit-scrollbar { display: none; }
+/* 설명 장만 안에서 스크롤된다 — 깊이 들어가는 자리라 길어지는 것이 정상이다. */
+.pane-scroll { overflow-y: auto; overscroll-behavior-y: contain; }
+.pane-head { display: flex; align-items: baseline; gap: 8px; margin: 8px 0 8px; flex: none;
+  color: var(--muted); font-size: 12px; }
+.pane-head b { color: var(--ink); font-size: 14px; }
+.pane-n { margin-left: auto; color: var(--line); font-size: 11px; }
+/* 장 안에서 마지막 요소는 바닥에 붙인다 — 위쪽 내용이 짧아도 화면이 허전하지 않게. */
+.tail { margin-top: auto; }
+
+/* 커맨드는 뷰가 아니라 입력이라 장 밖에 고정한다. 어느 장에서든 누를 수 있어야 한다. */
+.cmdbar { flex: none; border-top: 1px solid var(--line); background: var(--surface);
+  padding: 7px 12px calc(7px + env(safe-area-inset-bottom)); }
+.cmdbar #target { margin: 0 0 6px; font-size: 11px; }
 .dim { color: var(--muted); font-size: 12px; font-weight: 400; }
 .note { margin: 0 0 14px; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .note b { color: var(--ink); }
@@ -37,22 +61,26 @@ select { min-height: 40px; border: 1px solid var(--line); border-radius: 9px; ba
 .refresh-note { margin: 7px 0 0; }
 
 /* 뱅크 격자. 열이 뱅크, 행이 뱅크그룹 — 그룹이 규칙의 단위라 세로로 읽히는 편이 낫다. */
-.grid { display: grid; grid-template-columns: auto repeat(var(--cols, 4), minmax(0, 1fr)); gap: 4px; }
+.grid { display: grid; grid-template-columns: auto repeat(var(--cols, 4), minmax(0, 1fr)); gap: 3px; flex: none; }
 .bglabel { display: grid; place-items: center; padding-right: 4px; color: var(--muted); font-size: 11px; }
-.cell { min-height: 38px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg);
+.cell { min-height: 28px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg);
   display: grid; place-items: center; gap: 0; padding: 3px 2px; line-height: 1.15; }
 .cell b { font-size: 12px; font-weight: 400; color: var(--muted); }
 .cell.active { background: var(--surface); border-color: var(--muted); }
 .cell.active b { color: var(--ink); font-weight: 700; }
-.cell .row { font-size: 10px; color: var(--muted); }
+.cell .row { font-size: 9px; color: var(--muted); }
 .cell[aria-pressed="true"] { outline: 2px solid var(--ink); outline-offset: -1px; }
 
 /* 커맨드 버튼. 못 내는 것은 지우지 않고 **이유를 달아 남긴다** — 막히는 경험이 학습이다. */
-.palette { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; }
-.cmd { min-height: 54px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface);
-  display: grid; align-content: center; gap: 2px; padding: 6px 8px; text-align: left; }
+/* 커맨드는 가로로 흐른다 — 세로를 먹으면 장 하나가 통째로 줄어든다. */
+.palette { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px;
+  scrollbar-width: none; overscroll-behavior-x: contain; }
+.palette::-webkit-scrollbar { display: none; }
+.cmd { flex: none; width: 118px; min-height: 46px; border: 1px solid var(--line); border-radius: 9px;
+  background: var(--bg); display: grid; align-content: center; gap: 1px; padding: 5px 8px; text-align: left; }
 .cmd b { font-size: 14px; }
-.cmd small { font-size: 10px; color: var(--muted); line-height: 1.3; }
+.cmd small { font-size: 10px; color: var(--muted); line-height: 1.25;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .cmd.wait { background: var(--bg); }
 .cmd.wait b { color: var(--muted); }
 .cmd.blocked { background: var(--bg); opacity: .6; }
@@ -68,7 +96,7 @@ select { min-height: 40px; border: 1px solid var(--line); border-radius: 9px; ba
 .why .op { color: var(--muted); }
 .why .sum { font-weight: 700; }
 
-.scroller { overflow-x: auto; overscroll-behavior-x: contain; border: 1px solid var(--line);
+.scroller { flex: none; overflow-x: auto; overscroll-behavior-x: contain; border: 1px solid var(--line);
   border-radius: 10px; background: var(--surface); }
 .timeline { display: block; }
 
@@ -86,24 +114,26 @@ select { min-height: 40px; border: 1px solid var(--line); border-radius: 9px; ba
   color: var(--muted); font-size: 13px; line-height: 1.7; }
 .empty-gen b { color: var(--ink); }
 
-.zoomrow { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.zoomrow { display: flex; align-items: center; gap: 10px; margin-bottom: 0; flex: none; }
 .zoomrow input { flex: 1; min-width: 0; accent-color: var(--ink); }
-#lane-note { margin: 8px 0 0; min-height: 2.6em; }
+#lane-note { margin: 6px 0 0; font-size: 11px; }
 #lane-note b { color: var(--ink); }
 #rails { margin: 4px 0 0; font-size: 11px; }
 
 /* 겹쳐 그린 신호를 가려내는 칩. 누르면 그 신호만 남는다. */
-.legend-box { display: grid; gap: 6px; margin-bottom: 8px; }
+.legend-box { margin-bottom: 7px; flex: none; }
+.legend-box .chip { min-height: 27px; padding: 0 8px; font-size: 11px; }
 .legend-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px; }
 .legend-name { color: var(--muted); font-size: 10px; letter-spacing: .04em; }
 .chips { display: flex; flex-wrap: wrap; gap: 4px; }
-.chip { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 0 9px;
+.chip { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 0 9px; flex: none;
   border: 1px solid var(--line); border-radius: 15px; color: var(--muted); font-size: 12px; }
 .chip .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
 .chip[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); font-weight: 700; }
 .timeline [data-lane] { cursor: pointer; }
 
-#refs-open { width: 40px; height: 40px; flex: none; font-size: 16px; }
+#refs-open, #settings-open { width: 38px; height: 38px; flex: none; font-size: 15px; }
+#undo, #reset { width: 36px; }
 .linkish { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; font-size: 12px; padding: 4px 0; }
 
 /* 참고문헌. 표준과 대표값과 모식도를 한자리에서 갈라 보여 준다 —
@@ -131,8 +161,8 @@ dialog#refs { width: min(100% - 24px, 460px); max-height: 82dvh; overflow-y: aut
 
 /* 파라미터 한 장. "설명할 수 있는 수준"에 필요한 것을 한자리에 모은다 —
  * 어느 자리에 걸리는가 · 왜 있는가 · 안 지키면 · 빈이 바뀌면 · 무엇과 헷갈리는가. */
-dialog#param { width: min(100% - 24px, 460px); max-height: 84dvh; overflow-y: auto; }
-#param-title { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+#param-title { margin: 10px 0 4px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+#param-title { font-size: 17px; }
 #param-title .val { color: var(--muted); font-size: 13px; font-weight: 400; }
 #param-title .fam { border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px;
   color: var(--muted); font-size: 10px; font-weight: 400; }
@@ -165,16 +195,19 @@ dialog#param { width: min(100% - 24px, 460px); max-height: 84dvh; overflow-y: au
 
 /* 셀에서 칩까지 여섯 배율. 같은 순간을 다른 크기로 보는 것이라 그림 아래에
  * "지금 이 배율에서는 무엇이 보이는가"를 한 줄로 붙인다. */
-.layer-card { border: 1px solid var(--line); border-radius: 10px; padding: 10px 11px; margin-top: 8px; }
-.layer-card .note { margin: 0 0 6px; }
-.layer-key { margin: 0 0 10px; border-left: 2px solid var(--ink); padding-left: 9px;
-  font-size: 13px; line-height: 1.65; }
+.layer-key { margin: 0 0 7px; border-left: 2px solid var(--ink); padding-left: 9px;
+  font-size: 12px; line-height: 1.55; flex: none; }
 .layer-key b { font-weight: 700; }
 .layer-art { display: block; width: 100%; height: auto; margin-bottom: 8px; }
-.layer-now { margin: 8px 0 0; padding: 7px 9px; border-radius: 7px; background: var(--surface);
+.layer-now { margin: 7px 0 0; flex: none; padding: 6px 9px; border-radius: 7px; background: var(--surface);
   color: var(--ink); font-size: 12px; line-height: 1.6; }
-.layer-params { display: grid; gap: 5px; margin-top: 10px; }
-.layer-params .dim { font-size: 10px; letter-spacing: .04em; }
-.layer-params .chip { min-height: 28px; font-size: 12px; }
 #layers .chip { min-height: 32px; }
 #layers .chip[aria-current="true"] { border-color: var(--ink); color: var(--ink); font-weight: 700; }
+
+#param-picker { padding-bottom: 2px; }
+#param-picker .chip { min-height: 28px; font-size: 12px; }
+#param-picker .chip[aria-current="true"] { border-color: var(--ink); color: var(--ink); font-weight: 700; }
+#settings .chips { margin-bottom: 8px; }
+#settings select { width: 100%; margin-top: 4px; }
+#settings #tck { margin: 6px 0 0; }
+.explain { padding-bottom: 12px; }

@@ -13,15 +13,20 @@ import { explain } from "./explain.js";
 import { DEFAULT_LAYER, LAYERS, findLayer, paramsAt, stateAt } from "./layers.js";
 
 const $ = (id) => document.getElementById(id);
-const el = { clock: $("clock"), undo: $("undo"), reset: $("reset"), gens: $("gens"), genNote: $("gen-note"),
-  sim: $("sim"), bin: $("bin"), tck: $("tck"), refresh: $("refresh"), org: $("org"), grid: $("grid"),
-  target: $("target"), palette: $("palette"), why: $("why"), timeline: $("timeline"), params: $("params"),
-  zoom: $("zoom"), zoomval: $("zoomval"), laneNote: $("lane-note"), rails: $("rails"), legend: $("legend"), paramsNote: $("params-note"),
+const el = {
+  clock: $("clock"), undo: $("undo"), reset: $("reset"),
+  deck: $("deck"), paneParam: $("pane-param"),
+  gens: $("gens"), genNote: $("gen-note"), bin: $("bin"), tck: $("tck"),
+  settings: $("settings"), settingsOpen: $("settings-open"), settingsClose: $("settings-close"),
+  org: $("org"), layers: $("layers"), layerKey: $("layer-key"), layerArt: $("layer-art"),
+  layerNow: $("layer-now"), layerPlist: $("layer-plist"), grid: $("grid"), refresh: $("refresh"),
+  legend: $("legend"), timeline: $("timeline"), zoom: $("zoom"), zoomval: $("zoomval"),
+  laneNote: $("lane-note"),
+  picker: $("param-picker"), paramTitle: $("param-title"), paramBody: $("param-body"),
+  target: $("target"), palette: $("palette"),
   refs: $("refs"), refsBody: $("refs-body"), refsTitle: $("refs-title"),
-  refsOpen: $("refs-open"), refsLink: $("refs-link"), refsClose: $("refs-close"),
-  param: $("param"), paramTitle: $("param-title"), paramBody: $("param-body"), paramClose: $("param-close"),
-  layers: $("layers"), layerWhat: $("layer-what"), layerKey: $("layer-key"), layerArt: $("layer-art"),
-  layerNow: $("layer-now"), layerPlist: $("layer-plist") };
+  refsOpen: $("refs-open"), refsClose: $("refs-close"),
+};
 
 const SVG = "http://www.w3.org/2000/svg";
 const GUTTER = 46;            // 왼쪽 신호 이름 자리
@@ -37,6 +42,7 @@ let picked = { bg: 0, bank: 0 };
 let past = [];
 let lastEntry = null;
 let waveLanes = [];
+let picked_param = null;   // 3장이 설명하고 있는 tXX
 let focus = null;   // 강조 중인 신호 id
 let layer = DEFAULT_LAYER;   // 지금 보고 있는 배율
 
@@ -79,7 +85,6 @@ function selectGen(id) {
 
 /* ---------- 못 돌리는 세대 ---------- */
 function renderUnavailable() {
-  el.sim.hidden = true;
   el.genNote.replaceChildren(
     node("span", { class: "empty-gen" }, [
       node("b", { text: `${gen.label} 는 지금 돌릴 수 없다. ` }),
@@ -88,6 +93,13 @@ function renderUnavailable() {
     ]));
   el.genNote.className = "";
   el.clock.textContent = "";
+  el.layerKey.textContent = `${gen.label} 는 지금 돌릴 수 없다.`;
+  el.layerNow.textContent = gen.status_note;
+  for (const n of [el.layers, el.layerPlist, el.grid, el.palette, el.legend, el.picker, el.paramBody]) n.replaceChildren();
+  el.layerArt.replaceChildren();
+  el.timeline.replaceChildren();
+  el.paramTitle.textContent = "";
+  el.refresh.hidden = true;
 }
 
 /* ---------- 스피드빈 ---------- */
@@ -111,7 +123,8 @@ const fill = (pct) => styled(node("div", { class: "refresh-fill" }), { width: `$
 /* ---------- 리프레시 마감 ---------- */
 function renderRefresh() {
   const r = refreshStatus(gen, bin, sim);
-  if (!r) { el.refresh.hidden = true; return; }
+  // 리프레시 마감은 칩 전체의 사정이라 칩 층에서만 보여 준다 — 다른 층에서는 잡음이다.
+  if (!r || layer !== "chip") { el.refresh.hidden = true; return; }
   el.refresh.hidden = false;
   el.refresh.className = `refresh${r.overdue ? " late" : ""}`;
   const pct = Math.min(100, (r.since / r.period) * 100);
@@ -131,7 +144,7 @@ function renderRefresh() {
  * 반영한다 — ACT 를 누르면 워드라인이 켜지고, 비트라인이 갈라지고, 셀이 무너졌다
  * 복원되는 것이 층을 옮겨 가며 보인다. 파형과 같은 색을 써서 둘이 이어지게 했다.
  */
-const ART_W = 320, ART_H = 148;
+const ART_W = 320, ART_H = 134;
 const g = (kids) => { const n = svg("g"); n.append(...kids); return n; };
 const box = (x, y, w, h, o = {}) => svg("rect", { x, y, width: w, height: h, rx: 3, fill: "none", stroke: "var(--line)", ...o });
 const lab = (x, y, text, o = {}) => svg("text", { x, y, fill: "var(--muted)", "font-size": 9, ...o }, text);
@@ -267,7 +280,7 @@ function renderLayers() {
   // (한쪽만 하면 별표가 그대로 새어 나온다).
   const bolded = (s) => s.split(/\*\*/).map((part, i) =>
     (i % 2 ? node("b", { text: part }) : document.createTextNode(part)));
-  el.layerWhat.replaceChildren(...bolded(meta.what));
+  // 한 장에 문단 둘은 많다. 날이 선 쪽(key)만 남기고 what 은 접었다.
   el.layerKey.replaceChildren(...bolded(meta.key));
   el.layerNow.textContent = st.note;
 
@@ -324,32 +337,6 @@ function renderPalette() {
   }));
 }
 
-/* ---------- "왜 기다렸나" ---------- */
-function renderWhy() {
-  if (!lastEntry?.waitedFor?.length) {
-    el.why.hidden = !lastEntry;
-    if (lastEntry) {
-      el.why.hidden = false;
-      el.why.replaceChildren(
-        node("h3", { text: `${lastEntry.op} @ ${lastEntry.clk}clk` }),
-        node("p", { text: "기다린 제약이 없다 — 바로 낼 수 있었다." }));
-    }
-    return;
-  }
-  el.why.hidden = false;
-  const kids = [node("h3", { text: `${lastEntry.op} 는 ${lastEntry.clk}clk 까지 기다렸다` })];
-  for (const w of lastEntry.waitedFor) {
-    const terms = node("div", { class: "terms" });
-    w.parts.forEach((p, i) => {
-      if (i) terms.append(node("span", { class: "op", text: "+" }));
-      terms.append(node("span", { class: "term", "data-param": p.term === "BL/2" ? "BL" : p.term, text: `${p.term} ${p.ck == null ? "?" : fmt(p.ck)}` }));
-    });
-    terms.append(node("span", { class: "op", text: "=" }), node("span", { class: "sum", text: `${fmt(w.need)}clk` }));
-    kids.push(terms, node("p", { text: w.why }));
-  }
-  el.why.replaceChildren(...kids);
-}
-
 /* ---------- 파형 ----------
  *
  * 신호를 층층이 쌓지 않고 **한 판에 겹쳐 그린다.** 겹쳐야 같은 시각에 무엇이 같이
@@ -367,7 +354,7 @@ const COLORS = {
   CK_t: "#7b8794", CS_n: "#efeee8", CA: "#f0b64a", DQS_t: "#7aa7f0", DQ: "#56c8e0",
   WL: "#f0b64a", BL: "#56c8e0", SAE: "#a894f0", CSL: "#6fcf8f", Cell: "#f08a9a",
 };
-const PLOT_H = { iface: 104, array: 190 };
+const PLOT_H = { iface: 86, array: 168 };
 const DIM = 0.16;
 
 /* 눈금 간격을 확대율에 맞춰 고른다. 촘촘하면 숫자가 겹치고 성기면 위치를 못 읽는다. */
@@ -394,21 +381,15 @@ function square(x, yv, from, to, hi) {
 
 function renderLegend(waves) {
   if (!waves) { el.legend.replaceChildren(); return; }
-  const rows = [];
-  for (const g of waves.groups) {
-    const chips = waves.lanes.filter((l) => l.group === g.id).map((l) => {
-      const dot = styled(node("i", { class: "dot" }), { background: COLORS[l.id] ?? "var(--ink)" });
-      return node("button", {
-        type: "button", class: "chip", "data-lane": l.id,
-        "aria-pressed": String(focus === l.id),
-      }, [dot, node("span", { text: l.label })]);
-    });
-    rows.push(node("div", { class: "legend-row" }, [
-      node("span", { class: "legend-name", text: g.label }),
-      node("div", { class: "chips" }, chips),
-    ]));
-  }
-  el.legend.replaceChildren(...rows);
+  /* 묶음 이름은 그래프 안에 이미 적혀 있다. 범례까지 묶어 두면 세로를 200px 넘게
+   * 먹으면서 정작 봐야 할 그래프가 눌린다 — 한 줄로 흘린다. */
+  el.legend.replaceChildren(node("div", { class: "chips" }, waves.lanes.map((l) => {
+    const dot = styled(node("i", { class: "dot" }), { background: COLORS[l.id] ?? "var(--ink)" });
+    return node("button", {
+      type: "button", class: "chip", "data-lane": l.id,
+      "aria-pressed": String(focus === l.id),
+    }, [dot, node("span", { text: l.label })]);
+  })));
 }
 
 function renderTimeline() {
@@ -488,8 +469,12 @@ function renderTimeline() {
     for (const c of [from.clk, e.clk]) {
       parts.push(svg("line", { x1: x(c), y1: ay - 4, x2: x(c), y2: ay + 4, stroke: "var(--muted)", "stroke-width": 1 }));
     }
+    /* 이 라벨이 곧 tXX 주석이다 — 무엇이 이 커맨드를 여기까지 밀었는가.
+     * 누르면 3장으로 넘어가 그 파라미터를 설명한다. */
+    const first = w.parts.find((p) => p.term !== "BL/2")?.term ?? w.parts[0]?.term;
     parts.push(svg("text", {
       x: (x(from.clk) + x(e.clk)) / 2, y: ay - 3, fill: "var(--ink)", "font-size": 9, "text-anchor": "middle",
+      "data-param": first === "BL/2" ? "BL" : first, style: null,
     }, `${w.label} ${fmt(w.need)}`));
   });
 
@@ -497,7 +482,7 @@ function renderTimeline() {
   for (const g of plots) {
     const H = g.height;
     const yv = (v) => g.top + H - (v / g.vmax) * H;
-    parts.push(svg("text", { x: 2, y: g.top - 10, fill: "var(--muted)", "font-size": 9 }, `${g.label} · ${g.note}`));
+    parts.push(svg("text", { x: 2, y: g.top - 10, fill: "var(--muted)", "font-size": 9 }, g.short ?? g.label));
     // 빈 곳을 누르면 강조가 풀리도록 판 전체를 과녁으로 깔아 둔다(맨 아래에).
     parts.push(svg("rect", { x: 0, y: g.top - 2, width, height: H + 4, fill: "transparent", "data-lane": "" }));
 
@@ -522,7 +507,7 @@ function renderTimeline() {
       } else if (l.kind === "clock") {
         // 클럭 사각파는 촘촘해서 확대해야 읽힌다 — 좁을 때 그리면 잉크 덩어리가 된다.
         if (zoom >= 8) line(l.id, square(x, yv, 0, end, l.vmax), color);
-        else parts.push(svg("text", { x: GUTTER + 4, y: yv(l.vmax * 0.5) + 3, fill: color, "font-size": 9, opacity: focus && focus !== l.id ? DIM : 0.85 }, "CK — 확대하면 사각파가 보인다"));
+        else parts.push(svg("text", { x: GUTTER + 4, y: yv(l.vmax * 0.5) + 3, fill: color, "font-size": 9, opacity: focus && focus !== l.id ? DIM : 0.85 }, "확대하면 사각파"));
       } else if (l.kind === "toggle") {
         for (const [s, e2] of l.ranges) {
           if (zoom >= 8) line(l.id, square(x, yv, s, e2, l.vmax), color);
@@ -543,10 +528,6 @@ function renderTimeline() {
   el.timeline.replaceChildren(...parts);
   renderLegend(waves);
 
-  const r = waves?.rails;
-  el.rails.textContent = r
-    ? `VDD ${r.VDD}V · VPP ${r.VPP}V · 비트라인 프리차지 ${fmt(r.VBLP)}V · 전하공유 ΔV ${Math.round(r.dV * 1000)}mV — ${r.note}`
-    : "";
   el.zoomval.textContent = `${zoom}px/clk`;
 }
 
@@ -561,42 +542,25 @@ function setFocus(id) {
   renderTimeline();
 }
 
-/* ---------- 파라미터 표 ---------- */
-function describe(name) {
-  const p = lookupParam(gen, bin, name);
-  const ck = paramClocks(gen, bin, name);
-  if (!p) return null;
-  const bits = [];
-  if (p.ns != null) bits.push(`${fmt(p.ns)}ns`);
-  if (p.ck != null) bits.push(`${p.ck}clk`);
-  const form = bits.length === 2 ? `max(${bits.join(", ")})` : bits[0] ?? "—";
-  return { p, ck, form };
+/* ---------- 파라미터 고르개 ---------- */
+const allParams = () => [...new Set([
+  ...Object.keys(gen.params ?? {}),
+  ...(gen.bins ?? []).flatMap((b) => Object.keys(b.params ?? {})),
+])];
+
+/* 3장이 설명할 tXX. 커맨드가 막 밀렸다면 **그것을 민 파라미터**를 고른다 —
+ * 방금 겪은 것을 바로 설명받는 흐름이 가장 잘 남는다. */
+function defaultParam() {
+  const parts = lastEntry?.waitedFor?.[0]?.parts ?? [];
+  const known = allParams();
+  const hit = parts.map((p) => (p.term === "BL/2" ? "BL" : p.term)).find((n) => known.includes(n));
+  return hit ?? (known.includes(picked_param) ? picked_param : known[0] ?? null);
 }
 
-function renderParams() {
-  const names = [...new Set([...Object.keys(gen.params), ...gen.bins.flatMap((b) => Object.keys(b.params ?? {}))])];
-  const srcs = names.map((n) => describe(n)?.p.src).filter(Boolean);
-  const majority = srcs.length && srcs.every((s) => s === srcs[0]) ? srcs[0] : null;
-  el.paramsNote.replaceChildren(...(majority
-    ? [node("b", { text: `아래 값은 전부 ${PROVENANCE[majority].label}이다. ` }), document.createTextNode(PROVENANCE[majority].note.replace(/\*\*/g, ""))]
-    : [document.createTextNode("값마다 출처가 줄 끝에 붙는다.")]));
-  el.params.replaceChildren(...names.map((name) => {
-    const d = describe(name);
-    const known = d?.ck != null;
-    return node("div", { class: `prow${known ? "" : " unknown"}`, "data-param": name }, [
-      node("b", { text: name }),
-      node("span", { class: "val" }, known
-        ? [document.createTextNode(`${d.ck}clk`), node("em", { text: ` (${d.form})` })]
-        : [node("em", { text: "값 없음" })]),
-      node("span", {}, [
-        node("span", { class: "why", text: d?.p.why ?? "" }),
-        /* 표 전체가 모의값이면 줄마다 같은 태그를 달지 않는다 — 위의 한 줄이 이미 말한다.
-         * 다른 출처가 섞이는 순간에만 그 줄에 태그가 뜬다(그때는 눈에 띄어야 한다). */
-        ...(d?.p.src && d.p.src !== majority ? [node("span", { class: "srctag", text: PROVENANCE[d.p.src].label })] : []),
-        ...(d?.p.verify ? [node("span", { class: "flag", text: "? 스펙과 대조 필요" })] : []),
-      ]),
-    ]);
-  }));
+function renderPicker() {
+  el.picker.replaceChildren(...allParams().map((name) =>
+    node("button", { type: "button", class: "chip", "data-param": name,
+      "aria-current": String(name === picked_param), text: name })));
 }
 
 /* ---------- 파라미터 한 장 ----------
@@ -628,9 +592,10 @@ function placeCard(place, name) {
   return node("div", { class: "place" }, kids);
 }
 
-function openParam(name) {
-  const card = explain(gen, bin, name);
-  if (!card) return;
+function renderParam() {
+  const name = picked_param;
+  const card = name && explain(gen, bin, name);
+  if (!card) { el.paramTitle.textContent = ""; el.paramBody.replaceChildren(); return; }
   el.paramTitle.replaceChildren(
     document.createTextNode(name),
     node("span", { class: "val", text: card.clocks == null ? "값 없음" : `${card.clocks}clk` }),
@@ -676,7 +641,15 @@ function openParam(name) {
     body.push(section(`같은 무리 — ${card.family.label}`, kids));
   }
   el.paramBody.replaceChildren(...body);
-  if (!el.param.open) el.param.showModal();
+}
+
+/* tXX 를 고르면 3장으로 데려간다 — 그림에서 이름을 누르면 설명이 나오는 흐름. */
+function selectParam(name, jump = true) {
+  if (!allParams().includes(name)) return;
+  picked_param = name;
+  renderPicker();
+  renderParam();
+  if (jump) el.paneParam.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 /* ---------- 참고문헌 ----------
@@ -741,16 +714,16 @@ function render() {
   if (!isRunnable(gen)) return renderUnavailable();
   el.genNote.className = "note";
   el.genNote.textContent = gen.status_note;
-  el.sim.hidden = false;
   el.clock.textContent = `${sim.clk}clk`;
   renderBin();
   renderRefresh();
   renderGrid();
   renderLayers();
   renderPalette();
-  renderWhy();
   renderTimeline();
-  renderParams();
+  picked_param = defaultParam();
+  renderPicker();
+  renderParam();
 }
 
 /* ---------- 입력 ---------- */
@@ -769,11 +742,7 @@ el.bin.addEventListener("change", () => {
 
 el.layers.addEventListener("click", (e) => {
   const id = e.target.closest("[data-layer]")?.dataset.layer;
-  if (id) { layer = id; renderLayers(); }
-});
-el.layerPlist.addEventListener("click", (e) => {
-  const name = e.target.closest("[data-param]")?.dataset.param;
-  if (name) openParam(name);
+  if (id) { layer = id; renderLayers(); renderRefresh(); }
 });
 
 el.grid.addEventListener("click", (e) => {
@@ -798,28 +767,30 @@ el.palette.addEventListener("click", (e) => {
 
 el.zoom.addEventListener("input", () => { zoom = Number(el.zoom.value); renderTimeline(); });
 
+/* 신호를 누르면 그것만 남기고 나머지는 흐려진다 — 폰에는 hover 가 없다. */
 el.timeline.addEventListener("click", (e) => {
+  const name = e.target.getAttribute?.("data-param");
+  if (name) { selectParam(name); return; }
   const id = e.target.getAttribute?.("data-lane");
-  if (id == null) return;
-  setFocus(id);
+  if (id != null) setFocus(id);
 });
 el.legend.addEventListener("click", (e) => {
   const id = e.target.closest("[data-lane]")?.dataset.lane;
   if (id) setFocus(id);
 });
 
-for (const host of [el.params, el.why, el.paramBody]) {
+/* tXX 이름은 어디서 눌러도 3장으로 간다 — 그림에서, 층에서, 고르개에서, 이웃에서. */
+for (const host of [el.picker, el.layerPlist, el.paramBody]) {
   host.addEventListener("click", (e) => {
     const name = e.target.closest("[data-param]")?.dataset.param;
-    if (name) openParam(name);
+    if (name) selectParam(name, host !== el.picker);
   });
 }
-el.paramClose.addEventListener("click", () => el.param.close());
 
-for (const b of [el.refsOpen, el.refsLink]) {
-  b.addEventListener("click", () => { renderRefs(); el.refs.showModal(); });
+for (const [open, close, dlg] of [[el.settingsOpen, el.settingsClose, el.settings], [el.refsOpen, el.refsClose, el.refs]]) {
+  open.addEventListener("click", () => { if (dlg === el.refs) renderRefs(); dlg.showModal(); });
+  close.addEventListener("click", () => dlg.close());
 }
-el.refsClose.addEventListener("click", () => el.refs.close());
 
 el.undo.addEventListener("click", () => {
   if (!past.length) return;

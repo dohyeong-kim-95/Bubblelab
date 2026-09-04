@@ -156,8 +156,11 @@ export function buildWaves(gen, bin, state, picked) {
     rails: { ...r, VBLP: blp },
     lanes: [ck, csn, ca, dqs, dq, wl, pair, sae, csl, cell],
     groups: [
-      { id: IFACE, label: "인터페이스", note: "JEDEC 이 타이밍과 레벨을 정한다" },
-      { id: ARRAY, label: `어레이 내부 — BG${picked.bg}/B${picked.bank}`, note: "모식도 — JEDEC 밖이다. 눈금은 신호마다 다르다" },
+      /* short 는 그래프 안에 얹는 짧은 이름이다. 긴 설명을 차트에 올리면 파형을 덮는다 —
+       * 무엇이 표준이고 무엇이 모식도인지는 참고문헌과 설명 장이 말한다. */
+      { id: IFACE, label: "인터페이스", short: "인터페이스 (표준)", note: "JEDEC 이 타이밍과 레벨을 정한다" },
+      { id: ARRAY, label: `어레이 내부 — BG${picked.bg}/B${picked.bank}`,
+        short: `어레이 BG${picked.bg}/B${picked.bank} (모식도)`, note: "모식도 — JEDEC 밖이다" },
     ],
   };
 }
