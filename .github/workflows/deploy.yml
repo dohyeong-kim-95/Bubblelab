@@ -71,4 +71,8 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          wranglerVersion: "4.111.0" # 기본값(3.x)은 wrangler.jsonc를 못 읽음
+          # 기본값(3.x)은 wrangler.jsonc를 못 읽는다.
+          # **package.json 의 devDependencies.wrangler 와 같은 버전이어야 한다** —
+          # 같아야 위의 npm ci 가 깔아 둔 것을 action 이 찾아 쓰고, 다르면 여기서
+          # 매번 새로 받느라 4분 가까이 쓴다(_infra/wrangler-pin.test.mjs 가 묶어 둔다).
+          wranglerVersion: "4.111.0"
