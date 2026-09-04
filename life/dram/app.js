@@ -13,7 +13,7 @@ const $ = (id) => document.getElementById(id);
 const el = { clock: $("clock"), undo: $("undo"), reset: $("reset"), gens: $("gens"), genNote: $("gen-note"),
   sim: $("sim"), bin: $("bin"), tck: $("tck"), refresh: $("refresh"), org: $("org"), grid: $("grid"),
   target: $("target"), palette: $("palette"), why: $("why"), timeline: $("timeline"), params: $("params"),
-  zoom: $("zoom"), zoomval: $("zoomval"), laneNote: $("lane-note"), rails: $("rails") };
+  zoom: $("zoom"), zoomval: $("zoomval"), laneNote: $("lane-note"), rails: $("rails"), legend: $("legend") };
 
 const SVG = "http://www.w3.org/2000/svg";
 const GUTTER = 46;            // 왼쪽 신호 이름 자리
@@ -29,6 +29,7 @@ let picked = { bg: 0, bank: 0 };
 let past = [];
 let lastEntry = null;
 let waveLanes = [];
+let focus = null;   // 강조 중인 신호 id
 
 /* ---------- 만들기 도우미 ---------- */
 function node(tag, props = {}, kids = []) {
@@ -87,6 +88,17 @@ function renderBin() {
   el.tck.textContent = `${fmt(tCK(bin))}ns/clk · ${bin.mtps} MT/s`;
 }
 
+/* CSP 가 style-src 'self' 라 **인라인 style 속성은 막힌다** — 마크업의 style= 도,
+ * setAttribute("style", …) 도 조용히 버려진다. 반면 el.style.setProperty 같은 CSSOM
+ * 조작은 허용되므로, 값이 계산되는 스타일은 반드시 이쪽으로 넣는다.
+ * (로컬 정적 서버에는 CSP 가 없어 이 차이가 안 보인다 — _infra 없이 확인하려면
+ *  같은 헤더를 걸고 띄워야 한다.) */
+function styled(el, props) {
+  for (const [k, v] of Object.entries(props)) el.style.setProperty(k, v);
+  return el;
+}
+const fill = (pct) => styled(node("div", { class: "refresh-fill" }), { width: `${pct}%` });
+
 /* ---------- 리프레시 마감 ---------- */
 function renderRefresh() {
   const r = refreshStatus(gen, bin, sim);
@@ -99,8 +111,8 @@ function renderRefresh() {
       node("span", { text: r.overdue ? `리프레시 마감을 ${-r.remaining}clk 넘겼다` : `다음 리프레시까지 ${r.remaining}clk` }),
       node("span", { text: `tREFI ${r.period}clk` }),
     ]),
-    node("div", { class: "refresh-bar" }, [node("div", { class: "refresh-fill", style: `width:${pct}%` })]),
-    node("p", { class: "note", style: "margin:7px 0 0", text: r.note }),
+    node("div", { class: "refresh-bar" }, [fill(pct)]),
+    node("p", { class: "note refresh-note", text: r.note }),
   );
 }
 
@@ -169,10 +181,23 @@ function renderWhy() {
 
 /* ---------- 파형 ----------
  *
- * 커맨드가 언제 나갔는지(위)와 그때 회로의 전압이 어떻게 움직였는지(아래)를
- * 같은 시간축에 겹친다. tRCD·tRAS·tRP 가 왜 그 길이인지는 아래쪽 그림에서만 보인다.
- * 다만 어레이 내부는 JEDEC 밖이라 모식도다 — 화면에도 그렇게 적는다.
+ * 신호를 층층이 쌓지 않고 **한 판에 겹쳐 그린다.** 겹쳐야 같은 시각에 무엇이 같이
+ * 움직였는지가 보이기 때문이다(WL 이 오를 때 비트라인이 갈라지고, SAE 가 켜지자
+ * 그것이 레일까지 벌어진다 — 쌓아 두면 눈이 따라가지 못한다).
+ *
+ * 겹치면 눈금을 하나로 써야 하므로 묶음마다 공용 축을 쓴다. 그래서 WL 이 VPP 까지
+ * 올라가는 것이 다른 신호보다 실제로 높게 보이고, VPP 가 왜 따로 있는지가 드러난다.
+ * 대신 비트라인의 ΔV 가 작아지므로 판을 넉넉히 높인다.
+ *
+ * 색은 신호를 가르기 위한 것이고, 하나를 누르면 그것만 남기고 나머지는 죽인다 —
+ * 겹쳐 그린 그림은 결국 한 번에 하나를 따라 읽게 되기 때문이다.
  */
+const COLORS = {
+  CK_t: "#7b8794", CS_n: "#efeee8", CA: "#f0b64a", DQS_t: "#7aa7f0", DQ: "#56c8e0",
+  WL: "#f0b64a", BL: "#56c8e0", SAE: "#a894f0", CSL: "#6fcf8f", Cell: "#f08a9a",
+};
+const PLOT_H = { iface: 104, array: 190 };
+const DIM = 0.16;
 
 /* 눈금 간격을 확대율에 맞춰 고른다. 촘촘하면 숫자가 겹치고 성기면 위치를 못 읽는다. */
 function niceStep(px) {
@@ -180,13 +205,62 @@ function niceStep(px) {
   return [1, 2, 5, 10, 20, 50, 100, 200].find((n) => n >= raw) ?? 500;
 }
 
+/* 버스(CA·DQ)는 값이 아니라 "유효한 구간"이 뜻이라 타이밍도 관례대로 육각형으로 그린다.
+ * 채워진 막대로 그리면 겹쳐 놓았을 때 뒤의 선을 다 가린다. */
+function busPoints(x, yv, s, e, hi, lo, mid) {
+  const t = Math.min(0.5, (e - s) / 4);
+  return [[s, mid], [s + t, hi], [e - t, hi], [e, mid], [e - t, lo], [s + t, lo]]
+    .map(([c, v]) => `${x(c)},${yv(v)}`).join(" ");
+}
+
+function square(x, yv, from, to, hi) {
+  const pts = [];
+  for (let c = from; c < to; c += 1) {
+    pts.push(`${x(c)},${yv(hi)}`, `${x(c + 0.5)},${yv(hi)}`, `${x(c + 0.5)},${yv(0)}`, `${x(c + 1)},${yv(0)}`);
+  }
+  return pts.join(" ");
+}
+
+function renderLegend(waves) {
+  if (!waves) { el.legend.replaceChildren(); return; }
+  const rows = [];
+  for (const g of waves.groups) {
+    const chips = waves.lanes.filter((l) => l.group === g.id).map((l) => {
+      const dot = styled(node("i", { class: "dot" }), { background: COLORS[l.id] ?? "var(--ink)" });
+      return node("button", {
+        type: "button", class: "chip", "data-lane": l.id,
+        "aria-pressed": String(focus === l.id),
+      }, [dot, node("span", { text: l.label })]);
+    });
+    rows.push(node("div", { class: "legend-row" }, [
+      node("span", { class: "legend-name", text: g.label }),
+      node("div", { class: "chips" }, chips),
+    ]));
+  }
+  el.legend.replaceChildren(...rows);
+}
+
 function renderTimeline() {
   const h = sim.history;
   const waves = buildWaves(gen, bin, sim, picked);
+  waveLanes = waves ? waves.lanes : [];
   const end = waves ? waves.end : Math.max(sim.clk, 24) + 6;
   const x = (clk) => GUTTER + clk * zoom;
   const width = GUTTER + end * zoom + 16;
   const parts = [];
+  const line = (id, pts, color, dash) => {
+    const el2 = svg("polyline", {
+      points: pts, fill: "none", stroke: color, "stroke-width": focus === id ? 2.2 : 1.4,
+      "stroke-linejoin": "round", "stroke-dasharray": dash ?? null,
+      opacity: focus && focus !== id ? DIM : 1,
+    });
+    parts.push(el2);
+    // 선이 얇아 손가락으로 못 짚는다 — 보이지 않는 굵은 선을 겹쳐 과녁으로 쓴다.
+    parts.push(svg("polyline", {
+      points: pts, fill: "none", stroke: "transparent", "stroke-width": 14,
+      "pointer-events": "stroke", "data-lane": id,
+    }));
+  };
 
   /* 커맨드 상자를 겹치지 않게 레인에 앉힌다. 커맨드 버스가 직렬이라 간격이 1클럭까지
    * 좁아지는데, 그 폭으로는 글자가 겹쳐 무엇이 언제 나갔는지 못 읽는다. */
@@ -202,17 +276,18 @@ function renderTimeline() {
   const arrows = h.flatMap((e) => e.waitedFor.map((w) => ({ e, w })));
   const levels = Math.max(Math.min(arrows.length, 4), 1);
   const ARROW_TOP = CMD_TOP + laneCount * (BOX_H + CMD_GAP) + 6;
-  let y = ARROW_TOP + levels * 17 + 14;
 
-  const groups = [];
+  let y = ARROW_TOP + levels * 17 + 16;
+  const plots = [];
   if (waves) {
     for (const g of waves.groups) {
       const lanes = waves.lanes.filter((l) => l.group === g.id);
-      groups.push({ ...g, lanes, top: y + GROUP_HEAD });
-      y += GROUP_HEAD + lanes.reduce((sum, l) => sum + LANE_H * l.h + LANE_GAP, 0);
+      const vmax = Math.max(...lanes.map((l) => l.vmax));
+      plots.push({ ...g, lanes, vmax, top: y, height: PLOT_H[g.id] });
+      y += PLOT_H[g.id] + 28;
     }
   }
-  const height = y + 6;
+  const height = y + 4;
 
   // 클럭 눈금
   const step = niceStep(zoom);
@@ -247,73 +322,44 @@ function renderTimeline() {
     }, `${w.label} ${fmt(w.need)}`));
   });
 
-  // 파형
-  for (const g of groups) {
-    parts.push(svg("text", { x: 2, y: g.top - 6, fill: "var(--muted)", "font-size": 9 }, `${g.label} · ${g.note}`));
-    let top = g.top;
-    for (const l of g.lanes) {
-      const H = LANE_H * l.h;
-      /* **눈금은 레인마다 제 vmax 다.** 묶음 전체를 VPP 로 재면 비트라인이 눌려 버린다.
-       * 대신 각 레인의 윗 레일을 글자로 적어 어디까지 올라간 것인지 헷갈리지 않게 한다. */
-      const yv = (v) => top + H - (v / l.vmax) * H;
-      parts.push(svg("line", { x1: GUTTER, y1: yv(0), x2: x(end), y2: yv(0), stroke: "var(--line)", "stroke-width": 1 }));
-      /* 이름과 눈금은 **왼쪽 칸에** 적는다. 파형 위에 얹으면 정작 봐야 할 선을 가린다
-       * (처음에 그렇게 그렸다가 SAE·Cell 의 높은 구간이 글자에 묻혔다). */
-      parts.push(svg("text", { x: 2, y: top + H / 2 - 1, fill: "var(--muted)", "font-size": 9 }, l.label));
-      if (l.group === ARRAY) {
-        const railName = l.vmax === waves.rails.VPP ? "VPP" : "VDD";
-        parts.push(svg("text", { x: 2, y: top + H / 2 + 9, fill: "var(--line)", "font-size": 8 }, `0–${railName}`));
-      }
-      parts.push(svg("rect", { x: 0, y: top - 3, width: GUTTER - 2, height: H + 6, fill: "transparent", "data-lane": l.id, style: "cursor:pointer" }));
+  // 겹쳐 그린 파형
+  for (const g of plots) {
+    const H = g.height;
+    const yv = (v) => g.top + H - (v / g.vmax) * H;
+    parts.push(svg("text", { x: 2, y: g.top - 10, fill: "var(--muted)", "font-size": 9 }, `${g.label} · ${g.note}`));
+    // 빈 곳을 누르면 강조가 풀리도록 판 전체를 과녁으로 깔아 둔다(맨 아래에).
+    parts.push(svg("rect", { x: 0, y: g.top - 2, width, height: H + 4, fill: "transparent", "data-lane": "" }));
 
+    const rails = waves.rails;
+    const marks = g.id === ARRAY
+      ? [[0, "0"], [rails.VBLP, `VDD/2 ${fmt(rails.VBLP)}`], [rails.VDD, `VDD ${rails.VDD}`], [rails.VPP, `VPP ${rails.VPP}`]]
+      : [[0, "0"], [rails.VDD, `VDD ${rails.VDD}`]];
+    for (const [v, label] of marks) {
+      parts.push(svg("line", {
+        x1: GUTTER, y1: yv(v), x2: x(end), y2: yv(v), stroke: "var(--line)", "stroke-width": 1,
+        "stroke-dasharray": v === 0 ? null : "2 4",
+      }));
+      parts.push(svg("text", { x: 2, y: yv(v) + 3, fill: "var(--line)", "font-size": 8 }, label));
+    }
+
+    for (const l of g.lanes) {
+      const color = COLORS[l.id] ?? "var(--ink)";
       if (l.kind === "pair") {
-        // VDD/2 기준선. 두 선이 여기서 갈라져 나가는 것이 센싱의 전부다.
-        parts.push(svg("line", {
-          x1: GUTTER, y1: yv(l.guide), x2: x(end), y2: yv(l.guide),
-          stroke: "var(--line)", "stroke-width": 1, "stroke-dasharray": "2 3",
-        }));
-        parts.push(svg("text", { x: x(end) - 2, y: yv(l.guide) - 3, fill: "var(--muted)", "font-size": 8, "text-anchor": "end" }, `VDD/2 ${fmt(l.guide)}V`));
-        l.series.forEach((s, si) => {
-          parts.push(svg("polyline", {
-            points: s.points.map(([c, v]) => `${x(c)},${yv(v)}`).join(" "),
-            fill: "none", stroke: "var(--ink)", "stroke-width": 1.4, "stroke-linejoin": "round",
-            "stroke-dasharray": si === 1 ? "4 2" : null,
-          }));
-        });
+        l.series.forEach((s, si) => line(l.id, s.points.map(([c, v]) => `${x(c)},${yv(v)}`).join(" "), color, si === 1 ? "5 3" : null));
       } else if (l.kind === "wave") {
-        parts.push(svg("polyline", {
-          points: l.points.map(([c, v]) => `${x(c)},${yv(v)}`).join(" "),
-          fill: "none", stroke: "var(--ink)", "stroke-width": 1.4, "stroke-linejoin": "round",
-        }));
+        line(l.id, l.points.map(([c, v]) => `${x(c)},${yv(v)}`).join(" "), color);
       } else if (l.kind === "clock") {
         // 클럭 사각파는 촘촘해서 확대해야 읽힌다 — 좁을 때 그리면 잉크 덩어리가 된다.
-        if (zoom >= 8) {
-          const pts = [];
-          for (let c = 0; c <= end; c += 1) pts.push(`${x(c)},${yv(l.vmax)}`, `${x(c + 0.5)},${yv(l.vmax)}`, `${x(c + 0.5)},${yv(0)}`, `${x(c + 1)},${yv(0)}`);
-          parts.push(svg("polyline", { points: pts.join(" "), fill: "none", stroke: "var(--muted)", "stroke-width": 1 }));
-        } else {
-          parts.push(svg("text", { x: GUTTER + 4, y: top + H - 7, fill: "var(--muted)", "font-size": 9 }, "확대하면 사각파가 보인다"));
-        }
+        if (zoom >= 8) line(l.id, square(x, yv, 0, end, l.vmax), color);
+        else parts.push(svg("text", { x: GUTTER + 4, y: yv(l.vmax * 0.5) + 3, fill: color, "font-size": 9, opacity: focus && focus !== l.id ? DIM : 0.85 }, "CK — 확대하면 사각파가 보인다"));
       } else if (l.kind === "toggle") {
-        parts.push(svg("line", { x1: GUTTER, y1: yv(l.vmax / 2), x2: x(end), y2: yv(l.vmax / 2), stroke: "var(--line)", "stroke-width": 1, "stroke-dasharray": "1 4" }));
         for (const [s, e2] of l.ranges) {
-          if (zoom >= 8) {
-            const pts = [];
-            for (let c = s; c < e2; c += 1) pts.push(`${x(c)},${yv(l.vmax)}`, `${x(c + 0.5)},${yv(l.vmax)}`, `${x(c + 0.5)},${yv(0)}`, `${x(c + 1)},${yv(0)}`);
-            parts.push(svg("polyline", { points: pts.join(" "), fill: "none", stroke: "var(--ink)", "stroke-width": 1.2 }));
-          } else {
-            parts.push(svg("rect", { x: x(s), y: yv(l.vmax), width: Math.max(2, (e2 - s) * zoom), height: H, fill: "none", stroke: "var(--ink)", "stroke-width": 1 }));
-          }
+          if (zoom >= 8) line(l.id, square(x, yv, s, e2, l.vmax), color);
+          else line(l.id, busPoints(x, yv, s, e2, l.vmax, 0, l.vmax / 2), color);
         }
       } else if (l.kind === "band") {
-        for (const [s, e2, kind] of l.ranges) {
-          parts.push(svg("rect", {
-            x: x(s), y: yv(l.vmax), width: Math.max(2, (e2 - s) * zoom), height: H, rx: 2,
-            fill: kind === "write" ? "none" : "var(--muted)", stroke: "var(--muted)", "stroke-width": 1,
-          }));
-        }
+        for (const [s, e2] of l.ranges) line(l.id, busPoints(x, yv, s, e2, l.vmax, 0, l.vmax / 2), color);
       }
-      top += H + LANE_GAP;
     }
   }
 
@@ -324,13 +370,24 @@ function renderTimeline() {
   el.timeline.setAttribute("height", height);
   el.timeline.setAttribute("viewBox", `0 0 ${width} ${height}`);
   el.timeline.replaceChildren(...parts);
-  waveLanes = waves ? waves.lanes : [];
+  renderLegend(waves);
 
   const r = waves?.rails;
   el.rails.textContent = r
     ? `VDD ${r.VDD}V · VPP ${r.VPP}V · 비트라인 프리차지 ${fmt(r.VBLP)}V · 전하공유 ΔV ${Math.round(r.dV * 1000)}mV — ${r.note}`
     : "";
   el.zoomval.textContent = `${zoom}px/clk`;
+}
+
+/* 하나를 고르면 그것만 남기고 나머지를 죽인다. 같은 것을 다시 누르면 전부 돌아온다. */
+function setFocus(id) {
+  focus = id && focus !== id ? id : null;
+  const l = waveLanes.find((w) => w.id === focus);
+  el.laneNote.replaceChildren(...(l
+    ? [node("b", { text: `${l.label} — ` }), document.createTextNode(l.note),
+       ...(l.group === ARRAY ? [node("br"), node("span", { class: "dim", text: "어레이 내부는 JEDEC 이 정하지 않는다 — 모식도다." })] : [])]
+    : [document.createTextNode("신호를 누르면 그것만 남기고 나머지는 흐려진다.")]));
+  renderTimeline();
 }
 
 /* ---------- 파라미터 표 ---------- */
@@ -416,17 +473,14 @@ el.palette.addEventListener("click", (e) => {
 
 el.zoom.addEventListener("input", () => { zoom = Number(el.zoom.value); renderTimeline(); });
 
-/* 신호 이름을 누르면 그 선이 무엇인지 말해 준다 — 폰에서는 hover 가 없다. */
 el.timeline.addEventListener("click", (e) => {
   const id = e.target.getAttribute?.("data-lane");
-  if (!id) return;
-  const l = waveLanes.find((w) => w.id === id);
-  if (!l) return;
-  el.laneNote.replaceChildren(
-    node("b", { text: `${l.label} — ` }),
-    document.createTextNode(l.note),
-    ...(l.group === ARRAY ? [node("br"), node("span", { class: "dim", text: "어레이 내부는 JEDEC 이 정하지 않는다 — 모식도다." })] : []),
-  );
+  if (id == null) return;
+  setFocus(id);
+});
+el.legend.addEventListener("click", (e) => {
+  const id = e.target.closest("[data-lane]")?.dataset.lane;
+  if (id) setFocus(id);
 });
 
 el.undo.addEventListener("click", () => {

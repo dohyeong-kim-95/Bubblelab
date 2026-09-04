@@ -34,6 +34,7 @@ select { min-height: 40px; border: 1px solid var(--line); border-radius: 9px; ba
 .refresh-fill { height: 100%; background: var(--muted); transition: width 160ms linear; }
 .refresh.late .refresh-fill { background: var(--danger); }
 .refresh.late .refresh-top { color: var(--danger); }
+.refresh-note { margin: 7px 0 0; }
 
 /* 뱅크 격자. 열이 뱅크, 행이 뱅크그룹 — 그룹이 규칙의 단위라 세로로 읽히는 편이 낫다. */
 .grid { display: grid; grid-template-columns: auto repeat(var(--cols, 4), minmax(0, 1fr)); gap: 4px; }
@@ -70,11 +71,6 @@ select { min-height: 40px; border: 1px solid var(--line); border-radius: 9px; ba
 .scroller { overflow-x: auto; overscroll-behavior-x: contain; border: 1px solid var(--line);
   border-radius: 10px; background: var(--surface); }
 .timeline { display: block; }
-.legend { display: flex; align-items: center; gap: 6px; margin: 8px 0 0; flex-wrap: wrap; }
-.key { width: 14px; height: 9px; border-radius: 2px; display: inline-block; }
-.key-cmd { background: var(--ink); }
-.key-rd { background: var(--muted); }
-.key-wr { border: 1px solid var(--muted); }
 
 .params { display: grid; gap: 1px; }
 .prow { display: grid; grid-template-columns: minmax(74px, auto) auto minmax(0, 1fr); gap: 8px;
@@ -95,3 +91,14 @@ select { min-height: 40px; border: 1px solid var(--line); border-radius: 9px; ba
 #lane-note { margin: 8px 0 0; min-height: 2.6em; }
 #lane-note b { color: var(--ink); }
 #rails { margin: 4px 0 0; font-size: 11px; }
+
+/* 겹쳐 그린 신호를 가려내는 칩. 누르면 그 신호만 남는다. */
+.legend-box { display: grid; gap: 6px; margin-bottom: 8px; }
+.legend-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px; }
+.legend-name { color: var(--muted); font-size: 10px; letter-spacing: .04em; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 0 9px;
+  border: 1px solid var(--line); border-radius: 15px; color: var(--muted); font-size: 12px; }
+.chip .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.chip[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); font-weight: 700; }
+.timeline [data-lane] { cursor: pointer; }
