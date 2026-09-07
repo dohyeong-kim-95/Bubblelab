@@ -37,7 +37,7 @@ jobs:
       # **아예 안 하는 쪽**으로 간다. lockfile 이 그대로면 node_modules 를 통째로 되살린다.
       - name: node_modules 캐시
         id: node-modules
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: node_modules
           key: nm-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
@@ -65,7 +65,7 @@ jobs:
       # 이 단계는 node_modules 를 되살리기 **전에** 와야 한다(그래야 해시가 소스만 본다).
       - name: 아발론이 이미 검증된 내용인지 본다
         id: avalon
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .avalon-verified
           key: avalon-${{ hashFiles('_src/avalon/**', 'games/avalon/**') }}
@@ -73,7 +73,7 @@ jobs:
       - name: Cache Avalon node_modules
         if: steps.avalon.outputs.cache-hit != 'true'
         id: avalon-modules
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: _src/avalon/node_modules
           key: nm-avalon-${{ runner.os }}-node22-${{ hashFiles('_src/avalon/package-lock.json') }}
@@ -100,7 +100,7 @@ jobs:
       # 브라우저를 매번 새로 받으면 배포마다 20초가 그냥 나간다. package-lock 이
       # 그대로면 캐시를 쓴다(플레이라이트 버전이 바뀌면 키가 달라져 다시 받는다).
       - name: Cache Playwright browsers
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
