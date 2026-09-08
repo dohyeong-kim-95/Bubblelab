@@ -20,19 +20,19 @@ workbook/core.js      parseAnswerKey / gradeAnswers — 순수 함수, 테스트
 
 - **로컬 바이트 전용.** `file.arrayBuffer()` → `Uint8Array` → `getDocument({ data })`.
   `createObjectURL` 도 fetch 도 없어서 네트워크 경로 자체가 없다.
-- **`isEvalSupported: false`** (`app.js:147`). PDF.js 가 폰트 프로그램에 쓰는
+- **`isEvalSupported: false`** (`getDocument` 호출부). PDF.js 가 폰트 프로그램에 쓰는
   eval 을 끄고, CSP 에는 `'unsafe-eval'` 없이 `'wasm-unsafe-eval'` 만 열었다
   (`_infra/security.js:152`). 이 짝을 깨지 말 것.
 - **버전 카운터 두 개.** `fileVersion` 은 로딩 중 다른 파일 선택,
   `renderVersion` 은 페이지·확대 연타의 레이스를 막는다. 늦게 끝난 콜백이
   화면을 덮어쓰지 않게 하는 유일한 장치다.
 - **캔버스 픽셀 상한** `Math.min(devicePixelRatio, 2, √(16e6 / 면적))`
-  (`app.js:175`). 큰 페이지를 300% 로 열어도 캔버스가 터지지 않게 하는 계산.
+  (캔버스 크기 계산부). 큰 페이지를 300% 로 열어도 캔버스가 터지지 않게 하는 계산.
 - **벽시계 타이머.** 백그라운드 탭에서 `setInterval` 이 throttle 돼도 안 밀린다.
 
 ## 고칠 것
 
-### 1. `const document` 섀도잉 — `app.js:151`
+### 1. `const document` 섀도잉 — `workbook/app.js`, PDF 열기 핸들러
 
 ```js
 loading = task; const document = await task.promise;
@@ -41,7 +41,7 @@ loading = task; const document = await task.promise;
 파일 열기 핸들러 안에서 전역 `document` 를 가린다. 지금 동작하는 건 그 핸들러가
 전역 `document` 를 직접 안 쓰기 때문이다(`$` 는 모듈 스코프에서 닫혀 있다).
 
-이 핸들러 안에 `document.` 한 줄만 새로 넣으면 **151행 위쪽이면 TDZ
+이 핸들러 안에 `document.` 한 줄만 새로 넣으면 **이 줄 위쪽이면 TDZ
 ReferenceError, 아래쪽이면 PDFDocumentProxy 를 DOM 으로 착각**한다. 재현이
 어렵고 원인이 안 보이는 종류의 사고다.
 
@@ -97,7 +97,7 @@ CLAUDE.md 의 검증 절차에 `node _infra/build.mjs` 가 그대로 적혀 있�
 ## 알아 둘 것 (고칠 것 아님)
 
 - **확대율 100% 는 실제 크기가 아니라 폭 맞춤이다.** `fit` 을 먼저 구하고
-  `zoom` 을 곱하는 구조(`app.js:173`)라 50–300% 는 폭 맞춤 기준 배율이고,
+  `zoom` 을 곱하는 구조(`renderPDF()`)라 50–300% 는 폭 맞춤 기준 배율이고,
   `폭 맞춤` 버튼은 `zoom = 1` 일 뿐이다. 실제 크기 배율로 바꾸려면 라벨과
   하한·상한을 같이 다시 정해야 한다.
 - `standard_fonts/FoxitSans.pfb` 는 404 지만 정상이다. PDF.js 6 에서 표준 폰트가

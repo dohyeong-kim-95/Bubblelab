@@ -15,3 +15,9 @@ podcast-preview.wav
 
 # verify-prod 자격증명 (로컬 전용)
 .verify.env
+
+# sktest 연습 자료(내가 구한 PDF). 배포도 커밋도 되지 않는다 — README만 추적.
+_raw/**
+!_raw/
+!_raw/*/
+!_raw/*/README.md
