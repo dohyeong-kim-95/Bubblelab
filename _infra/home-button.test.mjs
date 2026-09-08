@@ -212,6 +212,20 @@ function landingIndex() {
   return JSON.parse(raw);
 }
 
+test("sktest is deployed without appearing in public navigation or search", () => {
+  for (const file of ["index.html", "app.js", "core.js", "questions.js", "style.css", "robots.txt", "workbook/index.html", "vendor/pdf.mjs", "vendor/pdf.worker.mjs"]) {
+    assert.ok(existsSync(join(DIST, "sktest", file)), `sktest/${file} must be deployed`);
+  }
+  assert.ok(!landingIndex().some(card => card.site === "sktest"));
+  for (const site of ["www", ...CARD_SITES]) {
+    assert.doesNotMatch(readFileSync(join(DIST, site, "index.html"), "utf8"), /sktest\.bubblelab\.dev/);
+  }
+  assert.ok(!has(join(DIST, "sktest", "index.html")));
+  for (const file of ["index.html", "workbook/index.html"]) {
+    assert.doesNotMatch(readFileSync(join(DIST, "sktest", file), "utf8"), /engagement\.js|dock\.js/);
+  }
+});
+
 test("랜딩 검색 색인이 공개 카드로 채워진다", () => {
   const cards = landingIndex();
   assert.ok(cards.length >= 40, `색인이 ${cards.length}개뿐이다 — 빌드 산출물을 의심하라`);

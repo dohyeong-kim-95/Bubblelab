@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <title>내 PDF로 연습 — SKCT 연습실</title>
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../style.css"><link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div id="device-gate" class="device-gate"><div class="gate-icon">PC</div><h1 id="gate-title">PC에서 만나요.</h1><p>데스크톱·노트북에서 창을 1,024px 이상으로 넓혀 주세요.</p><noscript>JavaScript를 켜 주세요.</noscript></div>
+  <div id="workbook" hidden>
+    <header class="book-header"><a class="brand" href="../">SKTEST <span class="brand-sub">내 PDF로 연습</span></a><div class="book-actions"><button id="toggle-pdf" aria-pressed="true">PDF 숨기기</button><button id="toggle-omr" aria-pressed="true">OMR 숨기기</button><button id="fullscreen">전체화면</button><button id="help-open">이용 안내</button></div></header>
+    <div class="session-bar">
+      <label>문항 <select id="count"><option value="20">20문항</option><option value="100" selected>100문항</option></select></label>
+      <label>시간 <select id="duration"><option value="5">5분</option><option value="15" selected>15분</option><option value="20">20분</option><option value="100">100분</option><option value="0">자유 연습</option></select></label>
+      <strong id="timer" role="timer">15:00</strong><button id="timer-start" class="primary">시작</button><button id="timer-pause" disabled>일시정지</button><span id="session-status" role="status">시간은 연습용으로 직접 선택합니다.</span><button id="grade-open">정답 입력 · 채점</button><button id="reset">새 연습</button>
+    </div>
+    <div id="book-layout" class="book-layout">
+      <section id="pdf-panel" class="pdf-panel" aria-label="PDF 문제집">
+        <div class="pdf-toolbar"><label class="file-button" for="pdf-file">PDF 선택 / 변경</label><input id="pdf-file" class="sr-only" type="file" accept="application/pdf,.pdf"><span id="filename">선택한 파일 없음</span></div>
+        <div class="pdf-controls"><button id="page-prev" aria-label="이전 페이지" disabled>←</button><label>페이지 <input id="page-number" type="number" min="1" value="1" disabled></label><span id="page-total">/ 0</span><button id="page-next" aria-label="다음 페이지" disabled>→</button><span class="control-spacer"></span><button id="zoom-out" aria-label="PDF 축소">−</button><output id="zoom-label">100%</output><button id="zoom-in" aria-label="PDF 확대">+</button><button id="zoom-fit">폭 맞춤</button></div>
+        <div id="pdf-scroll" class="pdf-scroll"><p id="pdf-status" role="status">가지고 있는 PDF를 선택하세요.<br>파일은 이 브라우저 안에서만 열립니다.<br>PDF 없이 OMR과 도구만 사용할 수도 있어요.</p><canvas id="pdf-canvas" hidden aria-label="PDF 페이지"></canvas></div>
+      </section>
+      <section id="omr-panel" class="omr-panel" aria-label="OMR 답안지"><div class="book-panel-head"><h2>OMR 답안지</h2><span id="answered">0 / 100</span></div><div id="omr" class="omr-scroll"></div><p class="panel-tip">같은 답을 다시 누르면 선택이 취소됩니다.</p></section>
+      <aside class="book-tools">
+        <section class="book-tool"><div class="book-panel-head"><h2>풀이 도구</h2><button id="clear-notes">내용 지우기</button></div><div class="book-tabs" role="tablist" aria-label="풀이 도구"><button id="memo-tab" role="tab" aria-selected="true" aria-controls="memo-panel">메모장</button><button id="draw-tab" role="tab" aria-selected="false" aria-controls="draw-panel">그림판</button></div><div id="memo-panel" role="tabpanel" aria-labelledby="memo-tab"><textarea id="book-memo" aria-label="연습 메모" placeholder="종이 대신 키보드로 풀이를 적어 보세요."></textarea></div><div id="draw-panel" role="tabpanel" aria-labelledby="draw-tab" hidden><canvas id="drawing" width="840" height="640" aria-label="마우스로 풀이를 그리는 그림판"></canvas><div class="draw-controls"><button id="undo-draw">한 획 취소</button><label><input id="eraser" type="checkbox"> 지우개</label></div></div></section>
+        <section class="book-tool"><div class="book-panel-head"><h2>계산기</h2><small>입력란에서 Enter = 계산</small></div><div class="calc-area"><input id="book-calc" class="calc-display" aria-label="계산식" autocomplete="off" spellcheck="false" placeholder="0"><div id="calc-keys" class="calc-keys"></div><p id="calc-error" role="status"></p></div></section>
+        <p class="panel-tip">PDF·답안·메모는 서버에 전송하지 않습니다. 새로고침하면 초기화됩니다.</p>
+      </aside>
+    </div>
+  </div>
+  <dialog id="grade-dialog" aria-labelledby="grade-title"><div class="dialog-head"><h2 id="grade-title">정답표로 채점</h2><button class="icon-button" data-close="grade-dialog" aria-label="닫기">×</button></div><div class="dialog-body"><label for="answer-key">정답을 1번부터 순서대로 입력하세요.</label><p>예: 1,2,3,4,5 또는 1 2 3 4 5<br>선택한 문항 수와 정확히 일치해야 합니다. 채점하면 타이머가 종료됩니다.</p><textarea id="answer-key" rows="5" placeholder="1,2,3,4,5 …"></textarea><p id="grade-error" role="alert"></p><div id="grade-result" hidden></div></div><div class="dialog-footer"><button data-close="grade-dialog" class="button secondary">닫기</button><button id="grade" class="button primary">채점하기</button></div></dialog>
+  <dialog id="help-dialog" aria-labelledby="help-title"><div class="dialog-head"><h2 id="help-title">내 자료로 실전 환경 연습</h2><button class="icon-button" data-close="help-dialog" aria-label="닫기">×</button></div><div class="dialog-body"><h3>PDF → OMR → 채점</h3><p>내 PDF를 열고 문항 수와 연습 시간을 선택한 뒤 시작하세요. PDF 페이지 이동과 50–300% 확대를 지원합니다. 풀이 후 정답표를 입력하면 정답·오답·미응답을 확인할 수 있습니다.</p><h3>나에게 맞게 배치</h3><p>PDF와 OMR은 각각 숨길 수 있고, 전체화면으로 더 넓게 사용할 수 있습니다. 메모장과 그림판을 전환해도 내용은 유지됩니다. 그림판은 한 획 취소와 지우개를 지원합니다.</p><h3>시간과 저장</h3><p>종료 시간이 지나면 답안을 잠급니다. 일시정지는 연습 편의 기능입니다. 답안·PDF·메모는 이 탭에만 보관하며, 새 연습이나 새로고침 때 초기화합니다. 정답표는 직접 제공해야 합니다.</p><h3>참고한 제작기</h3><p><a href="https://velog.io/@hyunji24/대기업-인적성-SKCT-시뮬레이션-개발" target="_blank" rel="noopener noreferrer">hyunji24 · SKCT 시뮬레이션 개발</a>의 PDF·OMR 통합 학습 방식과 화면 조절 기능을 참고했습니다. 공식 시험 UI·시간·허용 도구와 동일함을 보장하지 않습니다.</p></div><div class="dialog-footer"><button class="button primary" data-close="help-dialog">연습 준비하기</button></div></dialog>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

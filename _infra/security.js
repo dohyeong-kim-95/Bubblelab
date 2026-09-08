@@ -147,6 +147,13 @@ export function applySecurityHeaders(response, request) {
   if (isPyodideSite(url)) {
     headers.set("Content-Security-Policy", PYODIDE_CSP);
   }
+  // PDF.js의 스캔 이미지 디코더만 WASM을 쓴다. CDN이나 JavaScript eval은 열지 않는다.
+  const localSktest = ["localhost", "127.0.0.1"].includes(url.hostname)
+    && (url.pathname === "/sktest" || url.pathname.startsWith("/sktest/"));
+  if (url.hostname === "sktest.bubblelab.dev" || localSktest) {
+    headers.set("Content-Security-Policy", SECURITY_HEADERS["Content-Security-Policy"]
+      .replace("script-src 'self' 'unsafe-inline'", "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'"));
+  }
   if (isSkyPage(url)) {
     headers.set("Permissions-Policy", SENSOR_POLICY);
   }
