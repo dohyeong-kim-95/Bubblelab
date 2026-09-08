@@ -2163,7 +2163,7 @@ export async function handleRequest(request, env, ctx) {
       }
     }
 
-    if (["admin", "work", "estate", "duri", "invest", "trip", "life"].includes(site)) {
+    if (["admin", "work", "estate", "duri", "invest", "trip", "life", "sktest"].includes(site)) {
       const headers = new Headers(response.headers);
       // 문서·JSON·인증 뒤 이미지는 디스크에 남기지 않는다. 실행 코드와 폰트는
       // 사용자 데이터가 아니므로 브라우저 전용 캐시를 허용하고, 공개 데이터인
