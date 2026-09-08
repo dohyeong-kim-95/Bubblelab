@@ -23,11 +23,22 @@ export default defineConfig({
   projects: [
     {
       name: "mobile",
+      testIgnore: /sktest-workbook\.spec\.mjs/,
       use: {
         ...devices["Pixel 5"],
         // CI는 `playwright install chromium`으로 맞는 빌드를 받는다. 로컬·컨테이너에
         // 이미 크로미움이 있으면 PLAYWRIGHT_CHROMIUM_PATH로 그걸 쓰게 해서
         // 브라우저를 또 내려받지 않는다.
+        ...(process.env.PLAYWRIGHT_CHROMIUM_PATH
+          ? { launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH } }
+          : {}),
+      },
+    },
+    {
+      name: "desktop",
+      testMatch: /sktest-workbook\.spec\.mjs/,
+      use: {
+        ...devices["Desktop Chrome"],
         ...(process.env.PLAYWRIGHT_CHROMIUM_PATH
           ? { launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH } }
           : {}),

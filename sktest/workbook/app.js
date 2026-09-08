@@ -130,7 +130,11 @@ document.addEventListener('fullscreenchange', () => { $('#fullscreen').textConte
 
 // Local bytes only: PDF.js loads its code, CMaps and fonts from this same origin.
 $('#pdf-file').onchange = async event => {
-  const file = event.target.files[0]; if (!file) return;
+  const input = event.target;
+  const file = input.files[0];
+  // 같은 파일을 다시 고르거나, 잘못 고른 파일을 바꿀 때도 change가 발생하게 한다.
+  input.value = '';
+  if (!file) return;
   if (!/\.pdf$/i.test(file.name) || file.size > 100 * 1024 * 1024) {
     $('#pdf-status').hidden = false; $('#pdf-status').textContent = '100MB 이하 PDF 파일을 선택해 주세요.'; return;
   }
@@ -250,8 +254,4 @@ document.addEventListener('visibilitychange', tick);
 let resizeTimer;
 window.addEventListener('resize', () => { gate(); clearTimeout(resizeTimer); resizeTimer = setTimeout(renderPDF, 180); });
 window.addEventListener('beforeunload', event => { if (state === 'running' || answers.some(value => value !== null) || $('#book-memo').value || strokes.length) { event.preventDefault(); event.returnValue = ''; } });
-setInterval(tick, 250); renderOMR(); controls(); tick();
-if (gate()) {
-  try { if (!sessionStorage.getItem('sktest-workbook-help')) { $('#help-dialog').showModal(); sessionStorage.setItem('sktest-workbook-help', 'seen'); } }
-  catch { $('#help-dialog').showModal(); }
-}
+setInterval(tick, 250); renderOMR(); controls(); tick(); gate();
