@@ -60,10 +60,15 @@ run_ship_tests() {
     return
   fi
 
-  if grep -qE '^(scripts/|_infra/(build|worker|security|verify-prod)|wrangler\.jsonc|\.github/)' <<<"$files"; then
+  if grep -qE '^(_infra/(build|worker|security|verify-prod)|wrangler\.jsonc|\.github/)' <<<"$files"; then
     echo "공용 인프라 변경 · 전체 테스트"
     npm test
     return
+  fi
+
+  if grep -qE '^scripts/.*\.sh$' <<<"$files"; then
+    echo "배포 스크립트 변경 · 셸 문법 검사"
+    bash -n scripts/*.sh
   fi
 
   declare -a tests=()
