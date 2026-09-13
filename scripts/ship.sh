@@ -45,9 +45,54 @@ if ! git diff --quiet origin/main..HEAD; then
   git --no-pager diff --name-status origin/main..HEAD
 fi
 
+# 변경된 서브도메인에 맞는 최소 테스트 집합을 고른다. Worker·빌드·공용
+# 인프라를 건드린 경우에는 라우팅/배포 계약이 넓게 영향을 받을 수 있으므로
+# 기존 전체 테스트를 유지한다.
+changed_files() {
+  git diff --name-only origin/main..HEAD
+}
+
+run_ship_tests() {
+  local files test_file
+  files="$(changed_files)"
+  if [[ -z "$files" ]]; then
+    echo "변경 파일 없음 · 테스트 생략 (라이브만 검증)"
+    return
+  fi
+
+  if grep -qE '^(scripts/|_infra/(build|worker|security|verify-prod)|wrangler\.jsonc|\.github/)' <<<"$files"; then
+    echo "공용 인프라 변경 · 전체 테스트"
+    npm test
+    return
+  fi
+
+  declare -a tests=()
+  add_test() {
+    for test_file in "${tests[@]}"; do
+      [[ "$test_file" == "$1" ]] && return
+    done
+    tests+=("$1")
+  }
+  while IFS= read -r file; do
+    case "$file" in
+      life/*) add_test "_infra/life.test.mjs"; add_test "_infra/pops.test.mjs" ;;
+      _infra/*.test.mjs|_src/*/*.test.mjs) add_test "$file" ;;
+      _shared/*) add_test "_infra/life.test.mjs" ;;
+      *) : ;;
+    esac
+  done <<<"$files"
+
+  if ((${#tests[@]})); then
+    echo "변경 서브도메인 테스트: ${tests[*]}"
+    node --test "${tests[@]}"
+  else
+    echo "해당 서브도메인 테스트 없음 · 문법/빌드 검증만 수행"
+  fi
+}
+
 # ── 1. 빌드 · 테스트 ──────────────────────────────────────────────────────
 say "테스트"
-npm test
+run_ship_tests
 
 say "빌드"
 node _infra/build.mjs
