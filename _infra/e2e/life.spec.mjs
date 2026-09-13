@@ -121,9 +121,10 @@ test("Pops 20개 영상을 연속 스와이프해도 다음 영상이 준비된�
   for (let index = 0; index < 20; index += 1) {
     const card = cards.nth(index);
     await card.scrollIntoViewIfNeeded();
-    await expect.poll(() => card.locator("video").evaluate((video) => video.readyState))
+    await expect(page.locator("#position")).toHaveText(`${index + 1} / 20`);
+    await expect.poll(() => card.locator("video").evaluate((video) => video.readyState), { timeout: 15000 })
       .toBeGreaterThanOrEqual(2);
-    if (index < 7) {
+    if (index < 19) {
       await expect(cards.nth(index + 1).locator("video")).toHaveAttribute("src", /videos\/a1-/);
     }
   }
