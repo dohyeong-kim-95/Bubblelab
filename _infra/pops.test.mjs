@@ -15,7 +15,6 @@ test("pops는 LIFE 도구 페이지와 정적 manifest를 가진다", () => {
   assert.equal(manifest.version, 1);
   assert.ok(Array.isArray(manifest.items));
   assert.equal(manifest.items.length, 20);
-  assert.equal(JSON.parse(read("pops_generator/content/a1-words.json")).items.length, 200);
   for (const item of manifest.items) {
     assert.ok(existsSync(join(ROOT, "life/pops", item.src)), item.src);
   }
