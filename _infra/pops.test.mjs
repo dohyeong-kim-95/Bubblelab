@@ -17,6 +17,9 @@ test("pops는 LIFE 도구 페이지와 정적 manifest를 가진다", () => {
   assert.equal(manifest.items.length, 20);
   for (const item of manifest.items) {
     assert.ok(existsSync(join(ROOT, "life/pops", item.src)), item.src);
+    assert.equal(item.segments?.length, 4, `${item.id} has four script segments`);
+    assert.deepEqual(item.segments.map((segment) => [segment.from, segment.to]),
+      [[0, 0.2], [0.2, 0.4], [0.4, 0.7], [0.7, 1]], `${item.id} segment timing`);
   }
   assert.equal(existsSync(join(ROOT, "life/pops/content/tts")), false, "TTS 원본은 서비스하지 않는다");
   assert.equal(existsSync(join(ROOT, "life/pops/content/a1-words.json")), false, "단어 원본은 서비스하지 않는다");
@@ -29,6 +32,8 @@ test("pops 재생기는 active/next만 준비하고 화면 밖 source를 해제�
   assert.match(js, /removeAttribute\("src"\)/);
   assert.match(js, /IntersectionObserver/);
   assert.match(js, /video\.play\(\)/);
+  assert.match(js, /updateCaption/);
+  assert.match(js, /feed\.scrollHeight/);
 });
 
 test("pops는 추천 서버 없이 정적 콘텐츠를 로드한다", () => {

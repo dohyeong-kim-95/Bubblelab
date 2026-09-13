@@ -1,25 +1,765 @@
 {
   "version": 1,
   "items": [
-    { "id": "a1-001", "kind": "ESPAÑOL A1", "word": "hola", "meaning": "안녕", "example": "Hola, Ana.", "voice": "es_female_01", "src": "content/videos/a1-001.mp4", "duration": "3.3초", "topic": "인사" },
-    { "id": "a1-002", "kind": "ESPAÑOL A1", "word": "adiós", "meaning": "잘 가", "example": "Adiós, hasta mañana.", "voice": "es_female_02", "src": "content/videos/a1-002.mp4", "duration": "4.9초", "topic": "인사" },
-    { "id": "a1-003", "kind": "ESPAÑOL A1", "word": "gracias", "meaning": "고마워요", "example": "Gracias por tu ayuda.", "voice": "es_slow_01", "src": "content/videos/a1-003.mp4", "duration": "4.9초", "topic": "기본 표현" },
-    { "id": "a1-004", "kind": "ESPAÑOL A1", "word": "por favor", "meaning": "부탁해요", "example": "Agua, por favor.", "voice": "es_clear_01", "src": "content/videos/a1-004.mp4", "duration": "4.7초", "topic": "기본 표현" },
-    { "id": "a1-005", "kind": "ESPAÑOL A1", "word": "perdón", "meaning": "미안해요", "example": "Perdón, no entiendo.", "voice": "es_female_01", "src": "content/videos/a1-005.mp4", "duration": "4.8초", "topic": "기본 표현" },
-    { "id": "a1-006", "kind": "ESPAÑOL A1", "word": "sí", "meaning": "네", "example": "Sí, estoy bien.", "voice": "es_female_02", "src": "content/videos/a1-006.mp4", "duration": "4.0초", "topic": "기본 표현" },
-    { "id": "a1-007", "kind": "ESPAÑOL A1", "word": "no", "meaning": "아니요", "example": "No, gracias.", "voice": "es_slow_01", "src": "content/videos/a1-007.mp4", "duration": "3.9초", "topic": "기본 표현" },
-    { "id": "a1-008", "kind": "ESPAÑOL A1", "word": "bien", "meaning": "잘, 좋아", "example": "Estoy bien.", "voice": "es_clear_01", "src": "content/videos/a1-008.mp4", "duration": "3.5초", "topic": "상태" },
-    { "id": "a1-009", "kind": "ESPAÑOL A1", "word": "casa", "meaning": "집", "example": "Esta es mi casa.", "voice": "es_female_01", "src": "content/videos/a1-009.mp4", "duration": "3.9초", "topic": "장소" },
-    { "id": "a1-010", "kind": "ESPAÑOL A1", "word": "amigo", "meaning": "친구", "example": "Mi amigo es amable.", "voice": "es_female_02", "src": "content/videos/a1-010.mp4", "duration": "4.4초", "topic": "사람" },
-    { "id": "a1-011", "kind": "ESPAÑOL A1", "word": "comer", "meaning": "먹다", "example": "Quiero comer ahora.", "voice": "es_slow_01", "src": "content/videos/a1-011.mp4", "duration": "4.3초", "topic": "동사" },
-    { "id": "a1-012", "kind": "ESPAÑOL A1", "word": "beber", "meaning": "마시다", "example": "Quiero beber agua.", "voice": "es_clear_01", "src": "content/videos/a1-012.mp4", "duration": "4.0초", "topic": "동사" },
-    { "id": "a1-013", "kind": "ESPAÑOL A1", "word": "escuela", "meaning": "학교", "example": "Voy a la escuela.", "voice": "es_female_01", "src": "content/videos/a1-013.mp4", "duration": "4.1초", "topic": "장소" },
-    { "id": "a1-014", "kind": "ESPAÑOL A1", "word": "trabajo", "meaning": "일", "example": "Tengo mucho trabajo.", "voice": "es_female_02", "src": "content/videos/a1-014.mp4", "duration": "4.7초", "topic": "일상" },
-    { "id": "a1-015", "kind": "ESPAÑOL A1", "word": "libro", "meaning": "책", "example": "Leo un libro.", "voice": "es_slow_01", "src": "content/videos/a1-015.mp4", "duration": "3.9초", "topic": "사물" },
-    { "id": "a1-016", "kind": "ESPAÑOL A1", "word": "agua", "meaning": "물", "example": "Bebo agua todos los días.", "voice": "es_clear_01", "src": "content/videos/a1-016.mp4", "duration": "4.5초", "topic": "음식" },
-    { "id": "a1-017", "kind": "ESPAÑOL A1", "word": "tiempo", "meaning": "시간·날씨", "example": "No tengo tiempo.", "voice": "es_female_01", "src": "content/videos/a1-017.mp4", "duration": "4.0초", "topic": "일상" },
-    { "id": "a1-018", "kind": "ESPAÑOL A1", "word": "hoy", "meaning": "오늘", "example": "Hoy hace buen tiempo.", "voice": "es_female_02", "src": "content/videos/a1-018.mp4", "duration": "4.0초", "topic": "시간" },
-    { "id": "a1-019", "kind": "ESPAÑOL A1", "word": "mañana", "meaning": "내일", "example": "Hasta mañana.", "voice": "es_slow_01", "src": "content/videos/a1-019.mp4", "duration": "4.1초", "topic": "시간" },
-    { "id": "a1-020", "kind": "ESPAÑOL A1", "word": "feliz", "meaning": "행복한", "example": "Estoy feliz hoy.", "voice": "es_clear_01", "src": "content/videos/a1-020.mp4", "duration": "3.9초", "topic": "감정" }
+    {
+      "id": "a1-001",
+      "kind": "ESPAÑOL A1",
+      "word": "hola",
+      "meaning": "안녕",
+      "example": "Hola, Ana.",
+      "voice": "es_female_01",
+      "src": "content/videos/a1-001.mp4",
+      "duration": "5.3초",
+      "topic": "인사",
+      "exampleMeaning": "Hola, Ana. — 안녕이라는 뜻이에요.",
+      "segments": [
+        {
+          "kind": "word",
+          "from": 0,
+          "to": 0.2,
+          "text": "hola"
+        },
+        {
+          "kind": "meaning",
+          "from": 0.2,
+          "to": 0.4,
+          "text": "안녕"
+        },
+        {
+          "kind": "example",
+          "from": 0.4,
+          "to": 0.7,
+          "text": "Hola, Ana."
+        },
+        {
+          "kind": "example",
+          "from": 0.7,
+          "to": 1,
+          "text": "Hola, Ana. = 안녕"
+        }
+      ]
+    },
+    {
+      "id": "a1-002",
+      "kind": "ESPAÑOL A1",
+      "word": "adiós",
+      "meaning": "잘 가",
+      "example": "Adiós, hasta mañana.",
+      "voice": "es_female_02",
+      "src": "content/videos/a1-002.mp4",
+      "duration": "6.0초",
+      "topic": "인사",
+      "exampleMeaning": "Adiós, hasta mañana. — 잘 가이라는 뜻이에요.",
+      "segments": [
+        {
+          "kind": "word",
+          "from": 0,
+          "to": 0.2,
+          "text": "adiós"
+        },
+        {
+          "kind": "meaning",
+          "from": 0.2,
+          "to": 0.4,
+          "text": "잘 가"
+        },
+        {
+          "kind": "example",
+          "from": 0.4,
+          "to": 0.7,
+          "text": "Adiós, hasta mañana."
+        },
+        {
+          "kind": "example",
+          "from": 0.7,
+          "to": 1,
+          "text": "Adiós, hasta mañana. = 잘 가"
+        }
+      ]
+    },
+    {
+      "id": "a1-003",
+      "kind": "ESPAÑOL A1",
+      "word": "gracias",
+      "meaning": "고마워요",
+      "example": "Gracias por tu ayuda.",
+      "voice": "es_slow_01",
+      "src": "content/videos/a1-003.mp4",
+      "duration": "6.4초",
+      "topic": "기본 표현",
+      "exampleMeaning": "Gracias por tu ayuda. — 고마워요이라는 뜻이에요.",
+      "segments": [
+        {
+          "kind": "word",
+          "from": 0,
+          "to": 0.2,
+          "text": "gracias"
+        },
+        {
+          "kind": "meaning",
+          "from": 0.2,
+          "to": 0.4,
+          "text": "고마워요"
+        },
+        {
+          "kind": "example",
+          "from": 0.4,
+          "to": 0.7,
+          "text": "Gracias por tu ayuda."
+        },
+        {
+          "kind": "example",
+          "from": 0.7,
+          "to": 1,
+          "text": "Gracias por tu ayuda. = 고마워요"
+        }
+      ]
+    },
+    {
+      "id": "a1-004",
+      "kind": "ESPAÑOL A1",
+      "word": "por favor",
+      "meaning": "부탁해요",
+      "example": "Agua, por favor.",
+      "voice": "es_clear_01",
+      "src": "content/videos/a1-004.mp4",
+      "duration": "5.9초",
+      "topic": "기본 표현",
+      "exampleMeaning": "Agua, por favor. — 부탁해요이라는 뜻이에요.",
+      "segments": [
+        {
+          "kind": "word",
+          "from": 0,
+          "to": 0.2,
+          "text": "por favor"
+        },
+        {
+          "kind": "meaning",
+          "from": 0.2,
+          "to": 0.4,
+          "text": "부탁해요"
+        },
+        {
+          "kind": "example",
+          "from": 0.4,
+          "to": 0.7,
+          "text": "Agua, por favor."
+        },
+        {
+          "kind": "example",
+          "from": 0.7,
+          "to": 1,
+          "text": "Agua, por favor. = 부탁해요"
+        }
+      ]
+    },
+    {
+      "id": "a1-005",
+      "kind": "ESPAÑOL A1",
+      "word": "perdón",
+      "meaning": "미안해요",
+      "example": "Perdón, no entiendo.",
+      "voice": "es_female_01",
+      "src": "content/videos/a1-005.mp4",
+      "duration": "6.2초",
+      "topic": "기본 표현",
+      "exampleMeaning": "Perdón, no entiendo. — 미안해요이라는 뜻이에요.",
+      "segments": [
+        {
+          "kind": "word",
+          "from": 0,
+          "to": 0.2,
+          "text": "perdón"
+        },
+        {
+          "kind": "meaning",
+          "from": 0.2,
+          "to": 0.4,
+          "text": "미안해요"
+        },
+        {
+          "kind": "example",
+          "from": 0.4,
+          "to": 0.7,
+          "text": "Perdón, no entiendo."
+        },
+        {
+          "kind": "example",
+          "from": 0.7,
+          "to": 1,
+          "text": "Perdón, no entiendo. = 미안해요"
+        }
+      ]
+    },
+    {
+      "id": "a1-006",
+      "kind": "ESPAÑOL A1",
+      "word": "sí",
+      "meaning": "네",
+      "example": "Sí, estoy bien.",
+      "voice": "es_female_02",
+      "src": "content/videos/a1-006.mp4",
+      "duration": "5.3초",
+      "topic": "기본 표현",
+      "exampleMeaning": "Sí, estoy bien. — 네이라는 뜻이에요.",
+      "segments": [
+        {
+          "kind": "word",
+          "from": 0,
+          "to": 0.2,
+          "text": "sí"
+        },
+        {
+          "kind": "meaning",
+          "from": 0.2,
+          "to": 0.4,
+          "text": "네"
+        },
+        {
+          "kind": "example",
+          "from": 0.4,
+          "to": 0.7,
+          "text": "Sí, estoy bien."
+        },
+        {
+          "kind": "example",
+          "from": 0.7,
+          "to": 1,
+          "text": "Sí, estoy bien. = 네"
+        }
+      ]
+    },
+    {
+      "id": "a1-007",
+      "kind": "ESPAÑOL A1",
+      "word": "no",
+      "meaning": "아니요",
+      "example": "No, gracias.",
+      "voice": "es_slow_01",
+      "src": "content/videos/a1-007.mp4",
+      "duration": "5.5초",
+      "topic": "기본 표현",
+      "exampleMeaning": "No, gracias. — 아니요이라는 뜻이에요.",
+      "segments": [
+        {
+          "kind": "word",
+          "from": 0,
+          "to": 0.2,
+          "text": "no"
+        },
+        {
+          "kind": "meaning",
+          "from": 0.2,
+          "to": 0.4,
+          "text": "아니요"
+        },
+        {
+          "kind": "example",
+          "from": 0.4,
+          "to": 0.7,
+          "text": "No, gracias."
+        },
+        {
+          "kind": "example",
+          "from": 0.7,
+          "to": 1,
+          "text": "No, gracias. = 아니요"
+        }
+      ]
+    },
+    {
+      "id": "a1-008",
+      "kind": "ESPAÑOL A1",
+      "word": "bien",
+      "meaning": "잘, 좋아",
+      "example": "Estoy bien.",
+      "voice": "es_clear_01",
+      "src": "content/videos/a1-008.mp4",
+      "duration": "5.7초",
+      "topic": "상태",
+      "exampleMeaning": "Estoy bien. — 잘, 좋아이라는 뜻이에요.",
+      "segments": [
+        {
+          "kind": "word",
+          "from": 0,
+          "to": 0.2,
+          "text": "bien"
+        },
+        {
+          "kind": "meaning",
+          "from": 0.2,
+          "to": 0.4,
+          "text": "잘, 좋아"
+        },
+        {
+          "kind": "example",
+          "from": 0.4,
+          "to": 0.7,
+          "text": "Estoy bien."
+        },
+        {
+          "kind": "example",
+          "from": 0.7,
+          "to": 1,
+          "text": "Estoy bien. = 잘, 좋아"
+        }
+      ]
+    },
+    {
+      "id": "a1-009",
+      "kind": "ESPAÑOL A1",
+      "word": "casa",
+      "meaning": "집",
+      "example": "Esta es mi casa.",
+      "voice": "es_female_01",
+      "src": "content/videos/a1-009.mp4",
+      "duration": "5.3초",
+      "topic": "장소",
+      "exampleMeaning": "Esta es mi casa. — 집이라는 뜻이에요.",
+      "segments": [
+        {
+          "kind": "word",
+          "from": 0,
+          "to": 0.2,
+          "text": "casa"
+        },
+        {
+          "kind": "meaning",
+          "from": 0.2,
+          "to": 0.4,
+          "text": "집"
+        },
+        {
+          "kind": "example",
+          "from": 0.4,
+          "to": 0.7,
+          "text": "Esta es mi casa."
+        },
+        {
+          "kind": "example",
+          "from": 0.7,
+          "to": 1,
+          "text": "Esta es mi casa. = 집"
+        }
+      ]
+    },
+    {
+      "id": "a1-010",
+      "kind": "ESPAÑOL A1",
+      "word": "amigo",
+      "meaning": "친구",
+      "example": "Mi amigo es amable.",
+      "voice": "es_female_02",
+      "src": "content/videos/a1-010.mp4",
+      "duration": "6.0초",
+      "topic": "사람",
+      "exampleMeaning": "Mi amigo es amable. — 친구이라는 뜻이에요.",
+      "segments": [
+        {
+          "kind": "word",
+          "from": 0,
+          "to": 0.2,
+          "text": "amigo"
+        },
+        {
+          "kind": "meaning",
+          "from": 0.2,
+          "to": 0.4,
+          "text": "친구"
+        },
+        {
+          "kind": "example",
+          "from": 0.4,
+          "to": 0.7,
+          "text": "Mi amigo es amable."
+        },
+        {
+          "kind": "example",
+          "from": 0.7,
+          "to": 1,
+          "text": "Mi amigo es amable. = 친구"
+        }
+      ]
+    },
+    {
+      "id": "a1-011",
+      "kind": "ESPAÑOL A1",
+      "word": "comer",
+      "meaning": "먹다",
+      "example": "Quiero comer ahora.",
+      "voice": "es_slow_01",
+      "src": "content/videos/a1-011.mp4",
+      "duration": "5.7초",
+      "topic": "동사",
+      "exampleMeaning": "Quiero comer ahora. — 먹다이라는 뜻이에요.",
+      "segments": [
+        {
+          "kind": "word",
+          "from": 0,
+          "to": 0.2,
+          "text": "comer"
+        },
+        {
+          "kind": "meaning",
+          "from": 0.2,
+          "to": 0.4,
+          "text": "먹다"
+        },
+        {
+          "kind": "example",
+          "from": 0.4,
+          "to": 0.7,
+          "text": "Quiero comer ahora."
+        },
+        {
+          "kind": "example",
+          "from": 0.7,
+          "to": 1,
+          "text": "Quiero comer ahora. = 먹다"
+        }
+      ]
+    },
+    {
+      "id": "a1-012",
+      "kind": "ESPAÑOL A1",
+      "word": "beber",
+      "meaning": "마시다",
+      "example": "Quiero beber agua.",
+      "voice": "es_clear_01",
+      "src": "content/videos/a1-012.mp4",
+      "duration": "5.6초",
+      "topic": "동사",
+      "exampleMeaning": "Quiero beber agua. — 마시다이라는 뜻이에요.",
+      "segments": [
+        {
+          "kind": "word",
+          "from": 0,
+          "to": 0.2,
+          "text": "beber"
+        },
+        {
+          "kind": "meaning",
+          "from": 0.2,
+          "to": 0.4,
+          "text": "마시다"
+        },
+        {
+          "kind": "example",
+          "from": 0.4,
+          "to": 0.7,
+          "text": "Quiero beber agua."
+        },
+        {
+          "kind": "example",
+          "from": 0.7,
+          "to": 1,
+          "text": "Quiero beber agua. = 마시다"
+        }
+      ]
+    },
+    {
+      "id": "a1-013",
+      "kind": "ESPAÑOL A1",
+      "word": "escuela",
+      "meaning": "학교",
+      "example": "Voy a la escuela.",
+      "voice": "es_female_01",
+      "src": "content/videos/a1-013.mp4",
+      "duration": "5.7초",
+      "topic": "장소",
+      "exampleMeaning": "Voy a la escuela. — 학교이라는 뜻이에요.",
+      "segments": [
+        {
+          "kind": "word",
+          "from": 0,
+          "to": 0.2,
+          "text": "escuela"
+        },
+        {
+          "kind": "meaning",
+          "from": 0.2,
+          "to": 0.4,
+          "text": "학교"
+        },
+        {
+          "kind": "example",
+          "from": 0.4,
+          "to": 0.7,
+          "text": "Voy a la escuela."
+        },
+        {
+          "kind": "example",
+          "from": 0.7,
+          "to": 1,
+          "text": "Voy a la escuela. = 학교"
+        }
+      ]
+    },
+    {
+      "id": "a1-014",
+      "kind": "ESPAÑOL A1",
+      "word": "trabajo",
+      "meaning": "일",
+      "example": "Tengo mucho trabajo.",
+      "voice": "es_female_02",
+      "src": "content/videos/a1-014.mp4",
+      "duration": "5.9초",
+      "topic": "일상",
+      "exampleMeaning": "Tengo mucho trabajo. — 일이라는 뜻이에요.",
+      "segments": [
+        {
+          "kind": "word",
+          "from": 0,
+          "to": 0.2,
+          "text": "trabajo"
+        },
+        {
+          "kind": "meaning",
+          "from": 0.2,
+          "to": 0.4,
+          "text": "일"
+        },
+        {
+          "kind": "example",
+          "from": 0.4,
+          "to": 0.7,
+          "text": "Tengo mucho trabajo."
+        },
+        {
+          "kind": "example",
+          "from": 0.7,
+          "to": 1,
+          "text": "Tengo mucho trabajo. = 일"
+        }
+      ]
+    },
+    {
+      "id": "a1-015",
+      "kind": "ESPAÑOL A1",
+      "word": "libro",
+      "meaning": "책",
+      "example": "Leo un libro.",
+      "voice": "es_slow_01",
+      "src": "content/videos/a1-015.mp4",
+      "duration": "5.1초",
+      "topic": "사물",
+      "exampleMeaning": "Leo un libro. — 책이라는 뜻이에요.",
+      "segments": [
+        {
+          "kind": "word",
+          "from": 0,
+          "to": 0.2,
+          "text": "libro"
+        },
+        {
+          "kind": "meaning",
+          "from": 0.2,
+          "to": 0.4,
+          "text": "책"
+        },
+        {
+          "kind": "example",
+          "from": 0.4,
+          "to": 0.7,
+          "text": "Leo un libro."
+        },
+        {
+          "kind": "example",
+          "from": 0.7,
+          "to": 1,
+          "text": "Leo un libro. = 책"
+        }
+      ]
+    },
+    {
+      "id": "a1-016",
+      "kind": "ESPAÑOL A1",
+      "word": "agua",
+      "meaning": "물",
+      "example": "Bebo agua todos los días.",
+      "voice": "es_clear_01",
+      "src": "content/videos/a1-016.mp4",
+      "duration": "5.8초",
+      "topic": "음식",
+      "exampleMeaning": "Bebo agua todos los días. — 물이라는 뜻이에요.",
+      "segments": [
+        {
+          "kind": "word",
+          "from": 0,
+          "to": 0.2,
+          "text": "agua"
+        },
+        {
+          "kind": "meaning",
+          "from": 0.2,
+          "to": 0.4,
+          "text": "물"
+        },
+        {
+          "kind": "example",
+          "from": 0.4,
+          "to": 0.7,
+          "text": "Bebo agua todos los días."
+        },
+        {
+          "kind": "example",
+          "from": 0.7,
+          "to": 1,
+          "text": "Bebo agua todos los días. = 물"
+        }
+      ]
+    },
+    {
+      "id": "a1-017",
+      "kind": "ESPAÑOL A1",
+      "word": "tiempo",
+      "meaning": "시간·날씨",
+      "example": "No tengo tiempo.",
+      "voice": "es_female_01",
+      "src": "content/videos/a1-017.mp4",
+      "duration": "6.6초",
+      "topic": "일상",
+      "exampleMeaning": "No tengo tiempo. — 시간·날씨이라는 뜻이에요.",
+      "segments": [
+        {
+          "kind": "word",
+          "from": 0,
+          "to": 0.2,
+          "text": "tiempo"
+        },
+        {
+          "kind": "meaning",
+          "from": 0.2,
+          "to": 0.4,
+          "text": "시간·날씨"
+        },
+        {
+          "kind": "example",
+          "from": 0.4,
+          "to": 0.7,
+          "text": "No tengo tiempo."
+        },
+        {
+          "kind": "example",
+          "from": 0.7,
+          "to": 1,
+          "text": "No tengo tiempo. = 시간·날씨"
+        }
+      ]
+    },
+    {
+      "id": "a1-018",
+      "kind": "ESPAÑOL A1",
+      "word": "hoy",
+      "meaning": "오늘",
+      "example": "Hoy hace buen tiempo.",
+      "voice": "es_female_02",
+      "src": "content/videos/a1-018.mp4",
+      "duration": "5.7초",
+      "topic": "시간",
+      "exampleMeaning": "Hoy hace buen tiempo. — 오늘이라는 뜻이에요.",
+      "segments": [
+        {
+          "kind": "word",
+          "from": 0,
+          "to": 0.2,
+          "text": "hoy"
+        },
+        {
+          "kind": "meaning",
+          "from": 0.2,
+          "to": 0.4,
+          "text": "오늘"
+        },
+        {
+          "kind": "example",
+          "from": 0.4,
+          "to": 0.7,
+          "text": "Hoy hace buen tiempo."
+        },
+        {
+          "kind": "example",
+          "from": 0.7,
+          "to": 1,
+          "text": "Hoy hace buen tiempo. = 오늘"
+        }
+      ]
+    },
+    {
+      "id": "a1-019",
+      "kind": "ESPAÑOL A1",
+      "word": "mañana",
+      "meaning": "내일",
+      "example": "Hasta mañana.",
+      "voice": "es_slow_01",
+      "src": "content/videos/a1-019.mp4",
+      "duration": "5.4초",
+      "topic": "시간",
+      "exampleMeaning": "Hasta mañana. — 내일이라는 뜻이에요.",
+      "segments": [
+        {
+          "kind": "word",
+          "from": 0,
+          "to": 0.2,
+          "text": "mañana"
+        },
+        {
+          "kind": "meaning",
+          "from": 0.2,
+          "to": 0.4,
+          "text": "내일"
+        },
+        {
+          "kind": "example",
+          "from": 0.4,
+          "to": 0.7,
+          "text": "Hasta mañana."
+        },
+        {
+          "kind": "example",
+          "from": 0.7,
+          "to": 1,
+          "text": "Hasta mañana. = 내일"
+        }
+      ]
+    },
+    {
+      "id": "a1-020",
+      "kind": "ESPAÑOL A1",
+      "word": "feliz",
+      "meaning": "행복한",
+      "example": "Estoy feliz hoy.",
+      "voice": "es_clear_01",
+      "src": "content/videos/a1-020.mp4",
+      "duration": "5.9초",
+      "topic": "감정",
+      "exampleMeaning": "Estoy feliz hoy. — 행복한이라는 뜻이에요.",
+      "segments": [
+        {
+          "kind": "word",
+          "from": 0,
+          "to": 0.2,
+          "text": "feliz"
+        },
+        {
+          "kind": "meaning",
+          "from": 0.2,
+          "to": 0.4,
+          "text": "행복한"
+        },
+        {
+          "kind": "example",
+          "from": 0.4,
+          "to": 0.7,
+          "text": "Estoy feliz hoy."
+        },
+        {
+          "kind": "example",
+          "from": 0.7,
+          "to": 1,
+          "text": "Estoy feliz hoy. = 행복한"
+        }
+      ]
+    }
   ]
 }

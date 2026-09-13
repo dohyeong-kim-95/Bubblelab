@@ -68,6 +68,25 @@ body { position: relative; overflow: hidden; }
   color: var(--pops-ink);
   text-shadow: 0 1px 8px rgb(0 0 0 / 60%);
 }
+.caption {
+  position: fixed;
+  z-index: 2;
+  top: 50%;
+  left: 50%;
+  max-width: min(88vw, 34rem);
+  color: var(--pops-ink);
+  font-size: clamp(30px, 9vw, 64px);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -.05em;
+  text-align: center;
+  text-shadow: 0 2px 14px rgb(0 0 0 / 72%);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.caption:empty { display: none; }
+.caption.is-meaning { font-size: clamp(25px, 7vw, 48px); letter-spacing: -.04em; }
+.caption.is-example { max-width: min(90vw, 38rem); font-size: clamp(24px, 6vw, 44px); letter-spacing: -.04em; }
 .pop-kind { margin: 0 0 8px; color: var(--pops-muted); font-size: 12px; }
 .pop-word { margin: 0; font-size: clamp(36px, 12vw, 72px); line-height: 1; letter-spacing: -.06em; }
 .pop-meaning { margin: 12px 0 0; font-size: 20px; }
