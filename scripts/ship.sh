@@ -67,6 +67,7 @@ run_ship_tests() {
   fi
 
   declare -a tests=()
+  declare -a e2e_tests=()
   add_test() {
     for test_file in "${tests[@]}"; do
       [[ "$test_file" == "$1" ]] && return
@@ -77,6 +78,7 @@ run_ship_tests() {
     case "$file" in
       life/*) add_test "_infra/life.test.mjs"; add_test "_infra/pops.test.mjs" ;;
       _infra/*.test.mjs|_src/*/*.test.mjs) add_test "$file" ;;
+      _infra/e2e/*.spec.mjs) e2e_tests+=("$file") ;;
       _shared/*) add_test "_infra/life.test.mjs" ;;
       *) : ;;
     esac
@@ -85,7 +87,12 @@ run_ship_tests() {
   if ((${#tests[@]})); then
     echo "변경 서브도메인 테스트: ${tests[*]}"
     node --test "${tests[@]}"
-  else
+  fi
+  if ((${#e2e_tests[@]})); then
+    echo "변경 서브도메인 E2E 테스트: ${e2e_tests[*]}"
+    npx playwright test "${e2e_tests[@]}"
+  fi
+  if ((${#tests[@]} == 0 && ${#e2e_tests[@]} == 0)); then
     echo "해당 서브도메인 테스트 없음 · 문법/빌드 검증만 수행"
   fi
 }

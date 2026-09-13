@@ -91,6 +91,29 @@ test("할 일 PWA — 목록을 옆으로 넘기고, 적은 내용이 오프라�
   await expect(page.locator(".item .text")).toHaveText([/세탁/, /이력서/, /우유 사기/], { timeout: 3000 });
 });
 
+test("연결한 pops 도구를 더블클릭하면 Pops UI가 열린다", async ({ page }) => {
+  await page.goto("/life/");
+  await page.locator("#add-text").fill("스페인어 보기");
+  await page.getByRole("button", { name: "추가" }).click();
+
+  const text = page.locator(".item .text").first();
+  await text.hover();
+  await page.mouse.down();
+  await page.waitForTimeout(650);
+  await page.mouse.up();
+  await expect(page.locator("#prompt-title")).toHaveText("도구 연결");
+  await page.locator("#prompt-text").fill("pops");
+  await page.getByRole("button", { name: "확인" }).click();
+  await expect(page.locator(".item .tool")).toHaveText("↗ pops");
+
+  await text.dblclick();
+  await expect(page).toHaveURL(/\/life\/pops\/$/);
+  await expect(page).toHaveTitle("Pops · LIFE");
+  await expect(page.locator(".pops-bar")).toBeVisible();
+  await expect(page.locator("#feed")).toBeVisible();
+  await expect(page.locator("#sound")).toBeVisible();
+});
+
 test("PWA 로 설치되면 주소창 없이 뜬다", async ({ page }) => {
   await page.goto("/life/");
   const manifest = await page.evaluate(async () => {
