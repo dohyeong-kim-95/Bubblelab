@@ -160,6 +160,7 @@ test("배포되는 폴더만 사이트로 센다", () => {
   assert.ok(!sites.some((name) => name.startsWith("_") || name.startsWith(".")));
   assert.ok(!sites.includes("dist"));
   assert.ok(!sites.includes("node_modules"));
+  assert.ok(!sites.includes("pops_generator"));
 });
 
 test("모든 서브도메인에 첫 화면 프로브가 하나씩 생긴다", () => {

@@ -22,7 +22,7 @@ const ROOT = new URL("..", import.meta.url);
 /** 로그인 게이트 뒤에 있는 서브도메인 (worker.js 의 site 분기와 같아야 한다). */
 export const GATED_SITES = new Set(["admin", "duri", "life"]);
 /** 배포되지 않는 폴더 규칙은 build.mjs 와 같다. */
-const SKIP_DIRS = new Set(["dist", "node_modules", "docs", "scripts", ...dormantSubdomains()]);
+const SKIP_DIRS = new Set(["dist", "node_modules", "docs", "scripts", "pops_generator", ...dormantSubdomains()]);
 
 export function listSites(root = fileURLToPath(ROOT)) {
   return readdirSync(root, { withFileTypes: true })
