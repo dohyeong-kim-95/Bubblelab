@@ -1,25 +1,23 @@
 # Pops
 
 `life.bubblelab.dev/pops/`는 개인용 세로 영상 피드다. 현재는 CEFR A1 스페인어 단어
-학습 영상을 8개 넣어 스와이프 성능을 확인하는 단계다.
+학습 영상 20개로 스와이프 성능을 확인하는 단계다.
 
 ## 콘텐츠
 
-- `content/a1-words.json`: `_infra/pops-a1.mjs`가 생성한 A1 단어 200개와 예문
 - `content/manifest.json`: 피드에 노출할 영상 목록
-- `content/videos/`: 최종 MP4. 현재 360×640, 18초, H.264/AAC
-- `content/tts/`: espeak-ng로 만든 스페인어 spoken 트랙. `es`·`es-419`와 속도·피치
-  조합 네 프로필을 순환한다.
+- `content/videos/`: 최종 MP4. 현재 360×640, TTS 길이+1초, H.264/AAC
+- 서비스에는 영상과 manifest만 배포한다. 단어 원본·TTS WAV·모델은 로컬
+  `pops_generator/`에만 둔다.
 
 단어 원본을 다시 만들 때:
 
 ```bash
-node _infra/pops-a1.mjs
+node pops_generator/a1.mjs
 ```
 
-초기 성능 fixture 영상은 CC0 배경음, 단어 텍스트, spoken 스페인어를 조합해 만들었다.
-향후 터미널 생성기는 `asset.bubblelab.dev`의 템플릿·TTS·음원을 받아 최종 MP4를 만들고,
-이 폴더의 manifest와 영상만 갱신한다. 앱은 asset 도메인을 런타임에 호출하지 않는다.
+로컬 생성기는 `asset.bubblelab.dev`의 템플릿·TTS·음원을 받아 최종 MP4를 만들고,
+이 폴더의 manifest와 영상만 갱신한다. 앱은 asset 도메인이나 TTS 모델을 런타임에 호출하지 않는다.
 
 ## 음원 출처
 

@@ -13,6 +13,9 @@ playwright-report/
 podcast-preview.json
 podcast-preview.wav
 
+# Pops 생성기·모델·TTS 원본은 이 컴퓨터에서만 만든다. 서비스에는 MP4와 manifest만 둔다.
+pops_generator/
+
 # verify-prod 자격증명 (로컬 전용)
 .verify.env
 
