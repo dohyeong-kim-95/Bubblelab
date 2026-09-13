@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -14,6 +14,9 @@ test("pops는 LIFE 도구 페이지와 정적 manifest를 가진다", () => {
   assert.match(html, /href="\.\.\/styles\.css"/);
   assert.equal(manifest.version, 1);
   assert.ok(Array.isArray(manifest.items));
+  assert.equal(manifest.items.length, 8);
+  assert.equal(JSON.parse(read("life/pops/content/a1-words.json")).items.length, 200);
+  for (const item of manifest.items) assert.ok(existsSync(join(ROOT, "life/pops", item.src)), item.src);
 });
 
 test("pops 재생기는 active/next만 준비하고 화면 밖 source를 해제한다", () => {

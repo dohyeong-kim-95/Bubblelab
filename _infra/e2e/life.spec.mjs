@@ -114,6 +114,21 @@ test("연결한 pops 도구를 더블클릭하면 Pops UI가 열린다", async (
   await expect(page.locator("#sound")).toBeVisible();
 });
 
+test("Pops 8개 영상을 연속 스와이프해도 다음 영상이 준비된다", async ({ page }) => {
+  await page.goto("/life/pops/");
+  const cards = page.locator(".pop");
+  await expect(cards).toHaveCount(8);
+  for (let index = 0; index < 8; index += 1) {
+    const card = cards.nth(index);
+    await card.scrollIntoViewIfNeeded();
+    await expect.poll(() => card.locator("video").evaluate((video) => video.readyState))
+      .toBeGreaterThanOrEqual(2);
+    if (index < 7) {
+      await expect(cards.nth(index + 1).locator("video")).toHaveAttribute("src", /videos\/a1-/);
+    }
+  }
+});
+
 test("PWA 로 설치되면 주소창 없이 뜬다", async ({ page }) => {
   await page.goto("/life/");
   const manifest = await page.evaluate(async () => {

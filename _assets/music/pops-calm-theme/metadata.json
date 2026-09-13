@@ -1,0 +1,10 @@
+{
+  "title": "Pops Calm Theme",
+  "description": "스페인어 학습 영상용 잔잔한 앰비언트 테마.",
+  "preview": "preview.svg",
+  "tags": ["pops", "ambient", "calm", "cc0"],
+  "createdAt": "2026-09-13",
+  "license": "CC0 1.0 Universal",
+  "source": "OpenGameArt.org · pebonius · https://opengameart.org/content/calm-music-0",
+  "downloads": [{ "label": "OGG 다운로드", "file": "calm_theme.ogg" }]
+}

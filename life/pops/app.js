@@ -64,9 +64,12 @@ function renderItem(item, index) {
 function setSource(article, eager = false) {
   const video = article.querySelector("video");
   if (!video || video.src || !video.dataset.src) return;
+  video.preload = eager ? "auto" : "metadata";
   video.src = video.dataset.src;
   if (video.dataset.poster) video.poster = video.dataset.poster;
-  video.preload = eager ? "auto" : "metadata";
+  // 동적으로 src를 붙인 뒤에도 모바일 브라우저가 즉시 디코더를 준비하도록
+  // 명시적으로 로드한다. 다음 영상은 metadata만, 현재 영상은 전체 선행 로드다.
+  video.load();
 }
 
 function releaseSource(article) {

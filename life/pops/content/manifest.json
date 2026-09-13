@@ -1,4 +1,13 @@
 {
   "version": 1,
-  "items": []
+  "items": [
+    { "id": "a1-001", "kind": "ESPAÑOL A1", "word": "hola", "meaning": "안녕", "example": "Hola, Ana.", "src": "content/videos/a1-001.mp4", "duration": "18초", "topic": "인사" },
+    { "id": "a1-002", "kind": "ESPAÑOL A1", "word": "adiós", "meaning": "잘 가", "example": "Adiós, hasta mañana.", "src": "content/videos/a1-002.mp4", "duration": "18초", "topic": "인사" },
+    { "id": "a1-003", "kind": "ESPAÑOL A1", "word": "gracias", "meaning": "고마워요", "example": "Gracias por tu ayuda.", "src": "content/videos/a1-003.mp4", "duration": "18초", "topic": "기본 표현" },
+    { "id": "a1-004", "kind": "ESPAÑOL A1", "word": "por favor", "meaning": "부탁해요", "example": "Agua, por favor.", "src": "content/videos/a1-004.mp4", "duration": "18초", "topic": "기본 표현" },
+    { "id": "a1-005", "kind": "ESPAÑOL A1", "word": "perdón", "meaning": "미안해요", "example": "Perdón, no entiendo.", "src": "content/videos/a1-005.mp4", "duration": "18초", "topic": "기본 표현" },
+    { "id": "a1-006", "kind": "ESPAÑOL A1", "word": "sí", "meaning": "네", "example": "Sí, estoy bien.", "src": "content/videos/a1-006.mp4", "duration": "18초", "topic": "기본 표현" },
+    { "id": "a1-007", "kind": "ESPAÑOL A1", "word": "no", "meaning": "아니요", "example": "No, gracias.", "src": "content/videos/a1-007.mp4", "duration": "18초", "topic": "기본 표현" },
+    { "id": "a1-008", "kind": "ESPAÑOL A1", "word": "bien", "meaning": "잘, 좋아", "example": "Estoy bien.", "src": "content/videos/a1-008.mp4", "duration": "18초", "topic": "상태" }
+  ]
 }

@@ -1,0 +1,1407 @@
+{
+  "version": 1,
+  "level": "A1",
+  "language": "es",
+  "items": [
+    {
+      "id": "a1-001",
+      "word": "hola",
+      "meaning": "안녕",
+      "type": "phrase",
+      "example": "Hoy aprendo la palabra «hola»."
+    },
+    {
+      "id": "a1-002",
+      "word": "adiós",
+      "meaning": "잘 가",
+      "type": "phrase",
+      "example": "Hoy aprendo la palabra «adiós»."
+    },
+    {
+      "id": "a1-003",
+      "word": "gracias",
+      "meaning": "고마워",
+      "type": "phrase",
+      "example": "Hoy aprendo la palabra «gracias»."
+    },
+    {
+      "id": "a1-004",
+      "word": "por favor",
+      "meaning": "부탁해",
+      "type": "phrase",
+      "example": "Hoy aprendo la palabra «por favor»."
+    },
+    {
+      "id": "a1-005",
+      "word": "perdón",
+      "meaning": "미안해",
+      "type": "phrase",
+      "example": "Hoy aprendo la palabra «perdón»."
+    },
+    {
+      "id": "a1-006",
+      "word": "sí",
+      "meaning": "응",
+      "type": "phrase",
+      "example": "Hoy aprendo la palabra «sí»."
+    },
+    {
+      "id": "a1-007",
+      "word": "no",
+      "meaning": "아니",
+      "type": "phrase",
+      "example": "Hoy aprendo la palabra «no»."
+    },
+    {
+      "id": "a1-008",
+      "word": "bien",
+      "meaning": "잘",
+      "type": "adv",
+      "example": "Hoy aprendo la palabra «bien»."
+    },
+    {
+      "id": "a1-009",
+      "word": "muy",
+      "meaning": "매우",
+      "type": "adv",
+      "example": "Hoy aprendo la palabra «muy»."
+    },
+    {
+      "id": "a1-010",
+      "word": "también",
+      "meaning": "또한",
+      "type": "adv",
+      "example": "Hoy aprendo la palabra «también»."
+    },
+    {
+      "id": "a1-011",
+      "word": "aquí",
+      "meaning": "여기",
+      "type": "adv",
+      "example": "Hoy aprendo la palabra «aquí»."
+    },
+    {
+      "id": "a1-012",
+      "word": "allí",
+      "meaning": "저기",
+      "type": "adv",
+      "example": "Hoy aprendo la palabra «allí»."
+    },
+    {
+      "id": "a1-013",
+      "word": "ahora",
+      "meaning": "지금",
+      "type": "adv",
+      "example": "Hoy aprendo la palabra «ahora»."
+    },
+    {
+      "id": "a1-014",
+      "word": "hoy",
+      "meaning": "오늘",
+      "type": "adv",
+      "example": "Hoy aprendo la palabra «hoy»."
+    },
+    {
+      "id": "a1-015",
+      "word": "mañana",
+      "meaning": "내일",
+      "type": "adv",
+      "example": "Hoy aprendo la palabra «mañana»."
+    },
+    {
+      "id": "a1-016",
+      "word": "ayer",
+      "meaning": "어제",
+      "type": "adv",
+      "example": "Hoy aprendo la palabra «ayer»."
+    },
+    {
+      "id": "a1-017",
+      "word": "siempre",
+      "meaning": "항상",
+      "type": "adv",
+      "example": "Hoy aprendo la palabra «siempre»."
+    },
+    {
+      "id": "a1-018",
+      "word": "nunca",
+      "meaning": "결코",
+      "type": "adv",
+      "example": "Hoy aprendo la palabra «nunca»."
+    },
+    {
+      "id": "a1-019",
+      "word": "ya",
+      "meaning": "벌써",
+      "type": "adv",
+      "example": "Hoy aprendo la palabra «ya»."
+    },
+    {
+      "id": "a1-020",
+      "word": "todavía",
+      "meaning": "아직",
+      "type": "adv",
+      "example": "Hoy aprendo la palabra «todavía»."
+    },
+    {
+      "id": "a1-021",
+      "word": "yo",
+      "meaning": "나",
+      "type": "pron",
+      "example": "Hoy aprendo la palabra «yo»."
+    },
+    {
+      "id": "a1-022",
+      "word": "tú",
+      "meaning": "너",
+      "type": "pron",
+      "example": "Hoy aprendo la palabra «tú»."
+    },
+    {
+      "id": "a1-023",
+      "word": "él",
+      "meaning": "그",
+      "type": "pron",
+      "example": "Hoy aprendo la palabra «él»."
+    },
+    {
+      "id": "a1-024",
+      "word": "ella",
+      "meaning": "그녀",
+      "type": "pron",
+      "example": "Hoy aprendo la palabra «ella»."
+    },
+    {
+      "id": "a1-025",
+      "word": "nosotros",
+      "meaning": "우리",
+      "type": "pron",
+      "example": "Hoy aprendo la palabra «nosotros»."
+    },
+    {
+      "id": "a1-026",
+      "word": "ellos",
+      "meaning": "그들",
+      "type": "pron",
+      "example": "Hoy aprendo la palabra «ellos»."
+    },
+    {
+      "id": "a1-027",
+      "word": "usted",
+      "meaning": "당신",
+      "type": "pron",
+      "example": "Hoy aprendo la palabra «usted»."
+    },
+    {
+      "id": "a1-028",
+      "word": "mi",
+      "meaning": "나의",
+      "type": "pron",
+      "example": "Hoy aprendo la palabra «mi»."
+    },
+    {
+      "id": "a1-029",
+      "word": "tu",
+      "meaning": "너의",
+      "type": "pron",
+      "example": "Hoy aprendo la palabra «tu»."
+    },
+    {
+      "id": "a1-030",
+      "word": "su",
+      "meaning": "그의·그녀의",
+      "type": "pron",
+      "example": "Hoy aprendo la palabra «su»."
+    },
+    {
+      "id": "a1-031",
+      "word": "este",
+      "meaning": "이",
+      "type": "det",
+      "example": "Hoy aprendo la palabra «este»."
+    },
+    {
+      "id": "a1-032",
+      "word": "ese",
+      "meaning": "그",
+      "type": "det",
+      "example": "Hoy aprendo la palabra «ese»."
+    },
+    {
+      "id": "a1-033",
+      "word": "qué",
+      "meaning": "무엇",
+      "type": "pron",
+      "example": "Hoy aprendo la palabra «qué»."
+    },
+    {
+      "id": "a1-034",
+      "word": "quién",
+      "meaning": "누구",
+      "type": "pron",
+      "example": "Hoy aprendo la palabra «quién»."
+    },
+    {
+      "id": "a1-035",
+      "word": "dónde",
+      "meaning": "어디",
+      "type": "pron",
+      "example": "Hoy aprendo la palabra «dónde»."
+    },
+    {
+      "id": "a1-036",
+      "word": "cuándo",
+      "meaning": "언제",
+      "type": "pron",
+      "example": "Hoy aprendo la palabra «cuándo»."
+    },
+    {
+      "id": "a1-037",
+      "word": "cómo",
+      "meaning": "어떻게",
+      "type": "pron",
+      "example": "Hoy aprendo la palabra «cómo»."
+    },
+    {
+      "id": "a1-038",
+      "word": "por qué",
+      "meaning": "왜",
+      "type": "pron",
+      "example": "Hoy aprendo la palabra «por qué»."
+    },
+    {
+      "id": "a1-039",
+      "word": "uno",
+      "meaning": "하나",
+      "type": "num",
+      "example": "Hoy aprendo la palabra «uno»."
+    },
+    {
+      "id": "a1-040",
+      "word": "dos",
+      "meaning": "둘",
+      "type": "num",
+      "example": "Hoy aprendo la palabra «dos»."
+    },
+    {
+      "id": "a1-041",
+      "word": "tres",
+      "meaning": "셋",
+      "type": "num",
+      "example": "Hoy aprendo la palabra «tres»."
+    },
+    {
+      "id": "a1-042",
+      "word": "cuatro",
+      "meaning": "넷",
+      "type": "num",
+      "example": "Hoy aprendo la palabra «cuatro»."
+    },
+    {
+      "id": "a1-043",
+      "word": "cinco",
+      "meaning": "다섯",
+      "type": "num",
+      "example": "Hoy aprendo la palabra «cinco»."
+    },
+    {
+      "id": "a1-044",
+      "word": "seis",
+      "meaning": "여섯",
+      "type": "num",
+      "example": "Hoy aprendo la palabra «seis»."
+    },
+    {
+      "id": "a1-045",
+      "word": "siete",
+      "meaning": "일곱",
+      "type": "num",
+      "example": "Hoy aprendo la palabra «siete»."
+    },
+    {
+      "id": "a1-046",
+      "word": "ocho",
+      "meaning": "여덟",
+      "type": "num",
+      "example": "Hoy aprendo la palabra «ocho»."
+    },
+    {
+      "id": "a1-047",
+      "word": "nueve",
+      "meaning": "아홉",
+      "type": "num",
+      "example": "Hoy aprendo la palabra «nueve»."
+    },
+    {
+      "id": "a1-048",
+      "word": "diez",
+      "meaning": "열",
+      "type": "num",
+      "example": "Hoy aprendo la palabra «diez»."
+    },
+    {
+      "id": "a1-049",
+      "word": "once",
+      "meaning": "열하나",
+      "type": "num",
+      "example": "Hoy aprendo la palabra «once»."
+    },
+    {
+      "id": "a1-050",
+      "word": "doce",
+      "meaning": "열둘",
+      "type": "num",
+      "example": "Hoy aprendo la palabra «doce»."
+    },
+    {
+      "id": "a1-051",
+      "word": "primero",
+      "meaning": "첫 번째",
+      "type": "num",
+      "example": "Hoy aprendo la palabra «primero»."
+    },
+    {
+      "id": "a1-052",
+      "word": "último",
+      "meaning": "마지막",
+      "type": "adj",
+      "example": "Estoy último."
+    },
+    {
+      "id": "a1-053",
+      "word": "grande",
+      "meaning": "큰",
+      "type": "adj",
+      "example": "Estoy grande."
+    },
+    {
+      "id": "a1-054",
+      "word": "pequeño",
+      "meaning": "작은",
+      "type": "adj",
+      "example": "Estoy pequeño."
+    },
+    {
+      "id": "a1-055",
+      "word": "alto",
+      "meaning": "높은",
+      "type": "adj",
+      "example": "Estoy alto."
+    },
+    {
+      "id": "a1-056",
+      "word": "bajo",
+      "meaning": "낮은",
+      "type": "adj",
+      "example": "Estoy bajo."
+    },
+    {
+      "id": "a1-057",
+      "word": "bueno",
+      "meaning": "좋은",
+      "type": "adj",
+      "example": "Estoy bueno."
+    },
+    {
+      "id": "a1-058",
+      "word": "malo",
+      "meaning": "나쁜",
+      "type": "adj",
+      "example": "Estoy malo."
+    },
+    {
+      "id": "a1-059",
+      "word": "bonito",
+      "meaning": "예쁜",
+      "type": "adj",
+      "example": "Estoy bonito."
+    },
+    {
+      "id": "a1-060",
+      "word": "feo",
+      "meaning": "못생긴",
+      "type": "adj",
+      "example": "Estoy feo."
+    },
+    {
+      "id": "a1-061",
+      "word": "nuevo",
+      "meaning": "새로운",
+      "type": "adj",
+      "example": "Estoy nuevo."
+    },
+    {
+      "id": "a1-062",
+      "word": "viejo",
+      "meaning": "오래된",
+      "type": "adj",
+      "example": "Estoy viejo."
+    },
+    {
+      "id": "a1-063",
+      "word": "joven",
+      "meaning": "젊은",
+      "type": "adj",
+      "example": "Estoy joven."
+    },
+    {
+      "id": "a1-064",
+      "word": "rápido",
+      "meaning": "빠른",
+      "type": "adj",
+      "example": "Estoy rápido."
+    },
+    {
+      "id": "a1-065",
+      "word": "lento",
+      "meaning": "느린",
+      "type": "adj",
+      "example": "Estoy lento."
+    },
+    {
+      "id": "a1-066",
+      "word": "fácil",
+      "meaning": "쉬운",
+      "type": "adj",
+      "example": "Estoy fácil."
+    },
+    {
+      "id": "a1-067",
+      "word": "difícil",
+      "meaning": "어려운",
+      "type": "adj",
+      "example": "Estoy difícil."
+    },
+    {
+      "id": "a1-068",
+      "word": "caliente",
+      "meaning": "뜨거운",
+      "type": "adj",
+      "example": "Estoy caliente."
+    },
+    {
+      "id": "a1-069",
+      "word": "frío",
+      "meaning": "차가운",
+      "type": "adj",
+      "example": "Estoy frío."
+    },
+    {
+      "id": "a1-070",
+      "word": "feliz",
+      "meaning": "행복한",
+      "type": "adj",
+      "example": "Estoy feliz."
+    },
+    {
+      "id": "a1-071",
+      "word": "triste",
+      "meaning": "슬픈",
+      "type": "adj",
+      "example": "Estoy triste."
+    },
+    {
+      "id": "a1-072",
+      "word": "cansado",
+      "meaning": "피곤한",
+      "type": "adj",
+      "example": "Estoy cansado."
+    },
+    {
+      "id": "a1-073",
+      "word": "enfermo",
+      "meaning": "아픈",
+      "type": "adj",
+      "example": "Estoy enfermo."
+    },
+    {
+      "id": "a1-074",
+      "word": "ocupado",
+      "meaning": "바쁜",
+      "type": "adj",
+      "example": "Estoy ocupado."
+    },
+    {
+      "id": "a1-075",
+      "word": "libre",
+      "meaning": "한가한",
+      "type": "adj",
+      "example": "Estoy libre."
+    },
+    {
+      "id": "a1-076",
+      "word": "importante",
+      "meaning": "중요한",
+      "type": "adj",
+      "example": "Estoy importante."
+    },
+    {
+      "id": "a1-077",
+      "word": "posible",
+      "meaning": "가능한",
+      "type": "adj",
+      "example": "Estoy posible."
+    },
+    {
+      "id": "a1-078",
+      "word": "diferente",
+      "meaning": "다른",
+      "type": "adj",
+      "example": "Estoy diferente."
+    },
+    {
+      "id": "a1-079",
+      "word": "igual",
+      "meaning": "같은",
+      "type": "adj",
+      "example": "Estoy igual."
+    },
+    {
+      "id": "a1-080",
+      "word": "rojo",
+      "meaning": "빨간",
+      "type": "adj",
+      "example": "Estoy rojo."
+    },
+    {
+      "id": "a1-081",
+      "word": "azul",
+      "meaning": "파란",
+      "type": "adj",
+      "example": "Estoy azul."
+    },
+    {
+      "id": "a1-082",
+      "word": "verde",
+      "meaning": "초록의",
+      "type": "adj",
+      "example": "Estoy verde."
+    },
+    {
+      "id": "a1-083",
+      "word": "blanco",
+      "meaning": "하얀",
+      "type": "adj",
+      "example": "Estoy blanco."
+    },
+    {
+      "id": "a1-084",
+      "word": "negro",
+      "meaning": "검은",
+      "type": "adj",
+      "example": "Estoy negro."
+    },
+    {
+      "id": "a1-085",
+      "word": "amarillo",
+      "meaning": "노란",
+      "type": "adj",
+      "example": "Estoy amarillo."
+    },
+    {
+      "id": "a1-086",
+      "word": "persona",
+      "meaning": "사람",
+      "type": "noun",
+      "example": "Veo la persona."
+    },
+    {
+      "id": "a1-087",
+      "word": "hombre",
+      "meaning": "남자",
+      "type": "noun",
+      "example": "Veo la hombre."
+    },
+    {
+      "id": "a1-088",
+      "word": "mujer",
+      "meaning": "여자",
+      "type": "noun",
+      "example": "Veo la mujer."
+    },
+    {
+      "id": "a1-089",
+      "word": "niño",
+      "meaning": "아이",
+      "type": "noun",
+      "example": "Veo la niño."
+    },
+    {
+      "id": "a1-090",
+      "word": "niña",
+      "meaning": "여자아이",
+      "type": "noun",
+      "example": "Veo la niña."
+    },
+    {
+      "id": "a1-091",
+      "word": "amigo",
+      "meaning": "친구",
+      "type": "noun",
+      "example": "Veo el amigo."
+    },
+    {
+      "id": "a1-092",
+      "word": "familia",
+      "meaning": "가족",
+      "type": "noun",
+      "example": "Veo la familia."
+    },
+    {
+      "id": "a1-093",
+      "word": "madre",
+      "meaning": "어머니",
+      "type": "noun",
+      "example": "Veo la madre."
+    },
+    {
+      "id": "a1-094",
+      "word": "padre",
+      "meaning": "아버지",
+      "type": "noun",
+      "example": "Veo la padre."
+    },
+    {
+      "id": "a1-095",
+      "word": "hermano",
+      "meaning": "형제",
+      "type": "noun",
+      "example": "Veo la hermano."
+    },
+    {
+      "id": "a1-096",
+      "word": "hermana",
+      "meaning": "자매",
+      "type": "noun",
+      "example": "Veo la hermana."
+    },
+    {
+      "id": "a1-097",
+      "word": "hijo",
+      "meaning": "아들",
+      "type": "noun",
+      "example": "Veo la hijo."
+    },
+    {
+      "id": "a1-098",
+      "word": "hija",
+      "meaning": "딸",
+      "type": "noun",
+      "example": "Veo la hija."
+    },
+    {
+      "id": "a1-099",
+      "word": "nombre",
+      "meaning": "이름",
+      "type": "noun",
+      "example": "Veo la nombre."
+    },
+    {
+      "id": "a1-100",
+      "word": "edad",
+      "meaning": "나이",
+      "type": "noun",
+      "example": "Veo el edad."
+    },
+    {
+      "id": "a1-101",
+      "word": "día",
+      "meaning": "날",
+      "type": "noun",
+      "example": "Veo la día."
+    },
+    {
+      "id": "a1-102",
+      "word": "semana",
+      "meaning": "주",
+      "type": "noun",
+      "example": "Veo la semana."
+    },
+    {
+      "id": "a1-103",
+      "word": "mes",
+      "meaning": "달",
+      "type": "noun",
+      "example": "Veo la mes."
+    },
+    {
+      "id": "a1-104",
+      "word": "año",
+      "meaning": "년",
+      "type": "noun",
+      "example": "Veo el año."
+    },
+    {
+      "id": "a1-105",
+      "word": "hora",
+      "meaning": "시간",
+      "type": "noun",
+      "example": "Veo la hora."
+    },
+    {
+      "id": "a1-106",
+      "word": "minuto",
+      "meaning": "분",
+      "type": "noun",
+      "example": "Veo la minuto."
+    },
+    {
+      "id": "a1-107",
+      "word": "tarde",
+      "meaning": "오후",
+      "type": "noun",
+      "example": "Veo la tarde."
+    },
+    {
+      "id": "a1-108",
+      "word": "noche",
+      "meaning": "밤",
+      "type": "noun",
+      "example": "Veo la noche."
+    },
+    {
+      "id": "a1-109",
+      "word": "tiempo",
+      "meaning": "시간·날씨",
+      "type": "noun",
+      "example": "Veo la tiempo."
+    },
+    {
+      "id": "a1-110",
+      "word": "vida",
+      "meaning": "삶",
+      "type": "noun",
+      "example": "Veo la vida."
+    },
+    {
+      "id": "a1-111",
+      "word": "casa",
+      "meaning": "집",
+      "type": "noun",
+      "example": "Veo la casa."
+    },
+    {
+      "id": "a1-112",
+      "word": "habitación",
+      "meaning": "방",
+      "type": "noun",
+      "example": "Veo la habitación."
+    },
+    {
+      "id": "a1-113",
+      "word": "puerta",
+      "meaning": "문",
+      "type": "noun",
+      "example": "Veo la puerta."
+    },
+    {
+      "id": "a1-114",
+      "word": "ventana",
+      "meaning": "창문",
+      "type": "noun",
+      "example": "Veo la ventana."
+    },
+    {
+      "id": "a1-115",
+      "word": "mesa",
+      "meaning": "탁자",
+      "type": "noun",
+      "example": "Veo la mesa."
+    },
+    {
+      "id": "a1-116",
+      "word": "silla",
+      "meaning": "의자",
+      "type": "noun",
+      "example": "Veo la silla."
+    },
+    {
+      "id": "a1-117",
+      "word": "cama",
+      "meaning": "침대",
+      "type": "noun",
+      "example": "Veo la cama."
+    },
+    {
+      "id": "a1-118",
+      "word": "escuela",
+      "meaning": "학교",
+      "type": "noun",
+      "example": "Veo el escuela."
+    },
+    {
+      "id": "a1-119",
+      "word": "trabajo",
+      "meaning": "일",
+      "type": "noun",
+      "example": "Veo la trabajo."
+    },
+    {
+      "id": "a1-120",
+      "word": "oficina",
+      "meaning": "사무실",
+      "type": "noun",
+      "example": "Veo el oficina."
+    },
+    {
+      "id": "a1-121",
+      "word": "tienda",
+      "meaning": "가게",
+      "type": "noun",
+      "example": "Veo la tienda."
+    },
+    {
+      "id": "a1-122",
+      "word": "mercado",
+      "meaning": "시장",
+      "type": "noun",
+      "example": "Veo la mercado."
+    },
+    {
+      "id": "a1-123",
+      "word": "ciudad",
+      "meaning": "도시",
+      "type": "noun",
+      "example": "Veo la ciudad."
+    },
+    {
+      "id": "a1-124",
+      "word": "país",
+      "meaning": "나라",
+      "type": "noun",
+      "example": "Veo la país."
+    },
+    {
+      "id": "a1-125",
+      "word": "calle",
+      "meaning": "거리",
+      "type": "noun",
+      "example": "Veo la calle."
+    },
+    {
+      "id": "a1-126",
+      "word": "parque",
+      "meaning": "공원",
+      "type": "noun",
+      "example": "Veo la parque."
+    },
+    {
+      "id": "a1-127",
+      "word": "playa",
+      "meaning": "해변",
+      "type": "noun",
+      "example": "Veo la playa."
+    },
+    {
+      "id": "a1-128",
+      "word": "estación",
+      "meaning": "역",
+      "type": "noun",
+      "example": "Veo el estación."
+    },
+    {
+      "id": "a1-129",
+      "word": "hotel",
+      "meaning": "호텔",
+      "type": "noun",
+      "example": "Veo la hotel."
+    },
+    {
+      "id": "a1-130",
+      "word": "restaurante",
+      "meaning": "식당",
+      "type": "noun",
+      "example": "Veo la restaurante."
+    },
+    {
+      "id": "a1-131",
+      "word": "baño",
+      "meaning": "욕실",
+      "type": "noun",
+      "example": "Veo la baño."
+    },
+    {
+      "id": "a1-132",
+      "word": "agua",
+      "meaning": "물",
+      "type": "noun",
+      "example": "Veo el agua."
+    },
+    {
+      "id": "a1-133",
+      "word": "café",
+      "meaning": "커피",
+      "type": "noun",
+      "example": "Veo la café."
+    },
+    {
+      "id": "a1-134",
+      "word": "té",
+      "meaning": "차",
+      "type": "noun",
+      "example": "Veo la té."
+    },
+    {
+      "id": "a1-135",
+      "word": "leche",
+      "meaning": "우유",
+      "type": "noun",
+      "example": "Veo la leche."
+    },
+    {
+      "id": "a1-136",
+      "word": "pan",
+      "meaning": "빵",
+      "type": "noun",
+      "example": "Veo la pan."
+    },
+    {
+      "id": "a1-137",
+      "word": "arroz",
+      "meaning": "쌀·밥",
+      "type": "noun",
+      "example": "Veo el arroz."
+    },
+    {
+      "id": "a1-138",
+      "word": "carne",
+      "meaning": "고기",
+      "type": "noun",
+      "example": "Veo la carne."
+    },
+    {
+      "id": "a1-139",
+      "word": "pez",
+      "meaning": "물고기",
+      "type": "noun",
+      "example": "Veo la pez."
+    },
+    {
+      "id": "a1-140",
+      "word": "fruta",
+      "meaning": "과일",
+      "type": "noun",
+      "example": "Veo la fruta."
+    },
+    {
+      "id": "a1-141",
+      "word": "manzana",
+      "meaning": "사과",
+      "type": "noun",
+      "example": "Veo la manzana."
+    },
+    {
+      "id": "a1-142",
+      "word": "plátano",
+      "meaning": "바나나",
+      "type": "noun",
+      "example": "Veo la plátano."
+    },
+    {
+      "id": "a1-143",
+      "word": "comida",
+      "meaning": "음식",
+      "type": "noun",
+      "example": "Veo la comida."
+    },
+    {
+      "id": "a1-144",
+      "word": "desayuno",
+      "meaning": "아침 식사",
+      "type": "noun",
+      "example": "Veo la desayuno."
+    },
+    {
+      "id": "a1-145",
+      "word": "almuerzo",
+      "meaning": "점심",
+      "type": "noun",
+      "example": "Veo el almuerzo."
+    },
+    {
+      "id": "a1-146",
+      "word": "cena",
+      "meaning": "저녁 식사",
+      "type": "noun",
+      "example": "Veo la cena."
+    },
+    {
+      "id": "a1-147",
+      "word": "dinero",
+      "meaning": "돈",
+      "type": "noun",
+      "example": "Veo la dinero."
+    },
+    {
+      "id": "a1-148",
+      "word": "libro",
+      "meaning": "책",
+      "type": "noun",
+      "example": "Veo la libro."
+    },
+    {
+      "id": "a1-149",
+      "word": "papel",
+      "meaning": "종이",
+      "type": "noun",
+      "example": "Veo la papel."
+    },
+    {
+      "id": "a1-150",
+      "word": "teléfono",
+      "meaning": "전화",
+      "type": "noun",
+      "example": "Veo la teléfono."
+    },
+    {
+      "id": "a1-151",
+      "word": "foto",
+      "meaning": "사진",
+      "type": "noun",
+      "example": "Veo la foto."
+    },
+    {
+      "id": "a1-152",
+      "word": "música",
+      "meaning": "음악",
+      "type": "noun",
+      "example": "Veo la música."
+    },
+    {
+      "id": "a1-153",
+      "word": "película",
+      "meaning": "영화",
+      "type": "noun",
+      "example": "Veo la película."
+    },
+    {
+      "id": "a1-154",
+      "word": "idioma",
+      "meaning": "언어",
+      "type": "noun",
+      "example": "Veo el idioma."
+    },
+    {
+      "id": "a1-155",
+      "word": "palabra",
+      "meaning": "단어",
+      "type": "noun",
+      "example": "Veo la palabra."
+    },
+    {
+      "id": "a1-156",
+      "word": "pregunta",
+      "meaning": "질문",
+      "type": "noun",
+      "example": "Veo la pregunta."
+    },
+    {
+      "id": "a1-157",
+      "word": "respuesta",
+      "meaning": "대답",
+      "type": "noun",
+      "example": "Veo la respuesta."
+    },
+    {
+      "id": "a1-158",
+      "word": "idea",
+      "meaning": "생각",
+      "type": "noun",
+      "example": "Veo el idea."
+    },
+    {
+      "id": "a1-159",
+      "word": "amor",
+      "meaning": "사랑",
+      "type": "noun",
+      "example": "Veo el amor."
+    },
+    {
+      "id": "a1-160",
+      "word": "ayuda",
+      "meaning": "도움",
+      "type": "noun",
+      "example": "Veo el ayuda."
+    },
+    {
+      "id": "a1-161",
+      "word": "problema",
+      "meaning": "문제",
+      "type": "noun",
+      "example": "Veo la problema."
+    },
+    {
+      "id": "a1-162",
+      "word": "viaje",
+      "meaning": "여행",
+      "type": "noun",
+      "example": "Veo la viaje."
+    },
+    {
+      "id": "a1-163",
+      "word": "sol",
+      "meaning": "해",
+      "type": "noun",
+      "example": "Veo la sol."
+    },
+    {
+      "id": "a1-164",
+      "word": "luna",
+      "meaning": "달",
+      "type": "noun",
+      "example": "Veo la luna."
+    },
+    {
+      "id": "a1-165",
+      "word": "lluvia",
+      "meaning": "비",
+      "type": "noun",
+      "example": "Veo la lluvia."
+    },
+    {
+      "id": "a1-166",
+      "word": "viento",
+      "meaning": "바람",
+      "type": "noun",
+      "example": "Veo la viento."
+    },
+    {
+      "id": "a1-167",
+      "word": "ir",
+      "meaning": "가다",
+      "type": "verb",
+      "example": "Quiero ir hoy."
+    },
+    {
+      "id": "a1-168",
+      "word": "venir",
+      "meaning": "오다",
+      "type": "verb",
+      "example": "Quiero venir hoy."
+    },
+    {
+      "id": "a1-169",
+      "word": "estar",
+      "meaning": "있다·상태이다",
+      "type": "verb",
+      "example": "Quiero estar hoy."
+    },
+    {
+      "id": "a1-170",
+      "word": "ser",
+      "meaning": "~이다",
+      "type": "verb",
+      "example": "Quiero ser hoy."
+    },
+    {
+      "id": "a1-171",
+      "word": "tener",
+      "meaning": "가지다",
+      "type": "verb",
+      "example": "Quiero tener hoy."
+    },
+    {
+      "id": "a1-172",
+      "word": "hacer",
+      "meaning": "하다",
+      "type": "verb",
+      "example": "Quiero hacer hoy."
+    },
+    {
+      "id": "a1-173",
+      "word": "decir",
+      "meaning": "말하다",
+      "type": "verb",
+      "example": "Quiero decir hoy."
+    },
+    {
+      "id": "a1-174",
+      "word": "hablar",
+      "meaning": "말하다",
+      "type": "verb",
+      "example": "Quiero hablar hoy."
+    },
+    {
+      "id": "a1-175",
+      "word": "escuchar",
+      "meaning": "듣다",
+      "type": "verb",
+      "example": "Quiero escuchar hoy."
+    },
+    {
+      "id": "a1-176",
+      "word": "leer",
+      "meaning": "읽다",
+      "type": "verb",
+      "example": "Quiero leer hoy."
+    },
+    {
+      "id": "a1-177",
+      "word": "escribir",
+      "meaning": "쓰다",
+      "type": "verb",
+      "example": "Quiero escribir hoy."
+    },
+    {
+      "id": "a1-178",
+      "word": "ver",
+      "meaning": "보다",
+      "type": "verb",
+      "example": "Quiero ver hoy."
+    },
+    {
+      "id": "a1-179",
+      "word": "mirar",
+      "meaning": "바라보다",
+      "type": "verb",
+      "example": "Quiero mirar hoy."
+    },
+    {
+      "id": "a1-180",
+      "word": "conocer",
+      "meaning": "알다·만나다",
+      "type": "verb",
+      "example": "Quiero conocer hoy."
+    },
+    {
+      "id": "a1-181",
+      "word": "saber",
+      "meaning": "알다",
+      "type": "verb",
+      "example": "Quiero saber hoy."
+    },
+    {
+      "id": "a1-182",
+      "word": "querer",
+      "meaning": "원하다",
+      "type": "verb",
+      "example": "Quiero querer hoy."
+    },
+    {
+      "id": "a1-183",
+      "word": "gustar",
+      "meaning": "좋아하다",
+      "type": "verb",
+      "example": "Quiero gustar hoy."
+    },
+    {
+      "id": "a1-184",
+      "word": "amar",
+      "meaning": "사랑하다",
+      "type": "verb",
+      "example": "Quiero amar hoy."
+    },
+    {
+      "id": "a1-185",
+      "word": "necesitar",
+      "meaning": "필요로 하다",
+      "type": "verb",
+      "example": "Quiero necesitar hoy."
+    },
+    {
+      "id": "a1-186",
+      "word": "buscar",
+      "meaning": "찾다",
+      "type": "verb",
+      "example": "Quiero buscar hoy."
+    },
+    {
+      "id": "a1-187",
+      "word": "encontrar",
+      "meaning": "찾아내다",
+      "type": "verb",
+      "example": "Quiero encontrar hoy."
+    },
+    {
+      "id": "a1-188",
+      "word": "dar",
+      "meaning": "주다",
+      "type": "verb",
+      "example": "Quiero dar hoy."
+    },
+    {
+      "id": "a1-189",
+      "word": "tomar",
+      "meaning": "마시다·잡다",
+      "type": "verb",
+      "example": "Quiero tomar hoy."
+    },
+    {
+      "id": "a1-190",
+      "word": "comer",
+      "meaning": "먹다",
+      "type": "verb",
+      "example": "Quiero comer hoy."
+    },
+    {
+      "id": "a1-191",
+      "word": "beber",
+      "meaning": "마시다",
+      "type": "verb",
+      "example": "Quiero beber hoy."
+    },
+    {
+      "id": "a1-192",
+      "word": "comprar",
+      "meaning": "사다",
+      "type": "verb",
+      "example": "Quiero comprar hoy."
+    },
+    {
+      "id": "a1-193",
+      "word": "vender",
+      "meaning": "팔다",
+      "type": "verb",
+      "example": "Quiero vender hoy."
+    },
+    {
+      "id": "a1-194",
+      "word": "abrir",
+      "meaning": "열다",
+      "type": "verb",
+      "example": "Quiero abrir hoy."
+    },
+    {
+      "id": "a1-195",
+      "word": "cerrar",
+      "meaning": "닫다",
+      "type": "verb",
+      "example": "Quiero cerrar hoy."
+    },
+    {
+      "id": "a1-196",
+      "word": "entrar",
+      "meaning": "들어가다",
+      "type": "verb",
+      "example": "Quiero entrar hoy."
+    },
+    {
+      "id": "a1-197",
+      "word": "salir",
+      "meaning": "나가다",
+      "type": "verb",
+      "example": "Quiero salir hoy."
+    },
+    {
+      "id": "a1-198",
+      "word": "llegar",
+      "meaning": "도착하다",
+      "type": "verb",
+      "example": "Quiero llegar hoy."
+    },
+    {
+      "id": "a1-199",
+      "word": "vivir",
+      "meaning": "살다",
+      "type": "verb",
+      "example": "Quiero vivir hoy."
+    },
+    {
+      "id": "a1-200",
+      "word": "trabajar",
+      "meaning": "일하다",
+      "type": "verb",
+      "example": "Quiero trabajar hoy."
+    }
+  ]
+}
