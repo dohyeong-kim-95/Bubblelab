@@ -292,6 +292,35 @@
      안 잡혀 지역 앨범이 안 열린다 — 사진이 많은 곳일수록 점이 촘촘해서 정작
      사진을 보려는 지역에서 탭이 통하지 않았다. */
   #map-svg circle { pointer-events: none; }
+  /* 우하단 유틸 독 — 아래 토글을 축으로 위로 자란다(엄지가 먼저 닿는 자리).
+     slop 의 _shared/dock.js 와 같은 모양이지만, 그건 페이지 전역 고정이라
+     지도에서만 뜨게 하려고 여기 안에 따로 둔다. */
+  #map-dock { position: absolute; right: .8rem; bottom: .8rem; z-index: 3;
+              display: flex; flex-direction: column; align-items: center; gap: .25rem; padding: .25rem;
+              border-radius: 2rem; border: 1.5px solid currentColor; color: var(--dim);
+              background: light-dark(rgba(255,255,255,.75), rgba(20,26,36,.75));
+              backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+  #map-dock .dock-btn { width: 2.4rem; height: 2.4rem; flex: none; padding: 0;
+                        display: inline-flex; align-items: center; justify-content: center;
+                        font: 1.1rem/1 inherit; border: 0; border-radius: 50%;
+                        background: none; color: inherit; cursor: pointer; }
+  #map-dock .dock-btn:active { transform: scale(.9); }
+  #map-dock .dock-btn:disabled { opacity: .45; }
+  #map-dock.collapsed .dock-btn:not(#map-dock-toggle) { display: none; }
+  #tl { position: fixed; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center;
+        background: rgba(0,0,0,.86); padding: 1rem; }
+  #tl[hidden] { display: none; }
+  .tl-card { display: flex; flex-direction: column; align-items: center; gap: .7rem;
+             max-width: 100%; max-height: 100%; }
+  /* 캔버스는 9:16 원본을 줄여 보여줄 뿐 — 녹화는 원본 해상도로 간다 */
+  #tl-canvas { max-width: 100%; min-height: 0; flex: 1; object-fit: contain;
+               border-radius: .8rem; background: #0b1016; }
+  #tl-status { flex: none; font-size: .8rem; color: #c9d2dc; text-align: center; line-height: 1.6; }
+  .tl-actions { flex: none; display: flex; gap: .5rem; }
+  .tl-actions button { font: inherit; font-size: .88rem; padding: .55rem 1.1rem; border-radius: .8rem;
+                       cursor: pointer; border: 1px solid #3a4553; background: #1b222c; color: #e2e9f0; }
+  .tl-actions button.primary { background: var(--pink); color: #1a1016; border-color: transparent; font-weight: 700; }
+  .tl-actions button:disabled { opacity: .45; cursor: default; }
   #map-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
                text-align: center; padding: 2rem; color: var(--dim); font-size: .85rem; line-height: 1.6; }
   #map-empty[hidden] { display: none; }
@@ -847,13 +876,20 @@
     <button id="map-back" class="icon-btn" title="채팅으로" aria-label="채팅으로">‹</button>
     <b>함께 다닌 곳</b>
     <span id="map-count" style="font-size:.72rem;color:var(--dim)"></span>
-    <button id="map-sync" class="icon-btn" type="button" title="이 기기 기록으로 빠진 핀을 만들고 상대 지도와 맞춥니다" aria-label="지도 동기화">🔄</button>
     <button id="map-here" type="button" title="지금 있는 곳을 지도에 추가">📍<span class="lbl"> 현재 위치 추가</span></button>
     <button id="map-mode" class="icon-btn" type="button" title="세계 지도로" aria-label="세계 지도로">🌏</button>
   </header>
   <div id="map-wrap">
     <svg id="map-svg" role="img" aria-label="함께 다닌 곳 지도"><g id="map-paths"></g><g id="map-dots"></g></svg>
     <div id="map-empty" hidden></div>
+    <!-- 우하단 유틸 독 — slop 의 공용 독(_shared/dock.js)과 같은 모양·조작.
+         헤더 오른쪽은 📍·🌏 둘이 한계라, 자주 안 쓰는 것은 여기로 내린다.
+         기본은 접힘(⋯) — 지도는 보는 화면이라 버튼이 깔려 있으면 거슬린다. -->
+    <div id="map-dock" class="collapsed">
+      <button id="map-export" class="dock-btn" type="button" title="타임랩스 동영상 만들기" aria-label="타임랩스 동영상 만들기">🎬</button>
+      <button id="map-sync" class="dock-btn" type="button" title="이 기기 기록으로 빠진 핀을 만들고 상대 지도와 맞춥니다" aria-label="지도 동기화">🔄</button>
+      <button id="map-dock-toggle" class="dock-btn" type="button">⋯</button>
+    </div>
   </div>
   <div id="map-summary"></div>
 </section>
@@ -1019,6 +1055,18 @@
     </div>
     <div class="sink-actions">
       <button id="sink-issue" type="button" class="sink-btn primary">🔑 싱크 토큰 발급</button>
+    </div>
+  </div>
+</div>
+
+<!-- 타임랩스 — 핀이 찍힌 순서대로 지도에 얹히는 동영상을 만든다 -->
+<div id="tl" hidden>
+  <div class="tl-card">
+    <canvas id="tl-canvas"></canvas>
+    <div id="tl-status"></div>
+    <div class="tl-actions">
+      <button id="tl-close" type="button">닫기</button>
+      <button id="tl-save" type="button" class="primary" hidden>저장 · 공유</button>
     </div>
   </div>
 </div>
@@ -4622,6 +4670,32 @@ function regionOfPoint(geo, lng, lat) {
   regionCache.set(ck, hit);
   return hit;
 }
+// 투영: 위경도 → 그리는 면(SVG viewBox 든 캔버스든). 한 곳에 둬서 화면과
+// 타임랩스 동영상이 **같은 좌표**를 쓴다 — 두 벌로 두면 조용히 어긋난다.
+//
+// **한국은 등거리**(위도 보정만) — 위도 5도 남짓이라 이걸로 충분하고, 지금까지
+// 그려 온 모양 그대로다.
+// **세계는 메르카토르**. 등거리로 세계를 그리면 가로:세로가 1 : 0.40 이라 세로로
+// 긴 휴대폰에서 위아래가 텅 빈 납작한 띠가 되고, 고위도가 가로로 늘어져 그린란드가
+// 러시아만큼 넓적해진다. 메르카토르는 같은 폭에서 1 : 0.65 로 55% 더 높다.
+function mapProjection(geo, W, H, PAD = 24) {
+  const b = geo._bbox, merc = geo._m.proj === "mercator";
+  // 메르카토르 y(라디안). 극에서 발산하므로 ±85도에서 자른다 — 데이터는 83.6도까지다.
+  const my = (lat) => Math.log(Math.tan(Math.PI / 4 + Math.max(-85, Math.min(85, lat)) * Math.PI / 360));
+  const lat0 = (b.minLat + b.maxLat) / 2, kx = merc ? 1 : Math.cos(lat0 * Math.PI / 180);
+  const yTop = merc ? my(b.maxLat) : b.maxLat;
+  const yOf = merc ? my : (lat) => lat;
+  // 메르카토르는 경도도 라디안으로 재야 세로와 단위가 맞는다.
+  const xk = merc ? Math.PI / 180 : 1;
+  const gw = (b.maxLng - b.minLng) * kx * xk;
+  const gh = yTop - yOf(b.minLat);
+  const s = Math.min((W - 2 * PAD) / gw, (H - 2 * PAD) / gh);
+  const ox = (W - gw * s) / 2, oy = (H - gh * s) / 2;
+  return {
+    X: (lng) => ox + (lng - b.minLng) * kx * xk * s,
+    Y: (lat) => oy + (yTop - yOf(lat)) * s,
+  };
+}
 const escMap = (v) => String(v).replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]));
 async function renderMap() {
   const geo = await loadMapGeo();
@@ -4644,29 +4718,8 @@ async function renderMap() {
   const cTheirs = colorForOwner(peerName || "상대");
   const cShared = sharedColor();
   const ownerColor = (r) => (r.mine && r.theirs) ? cShared : r.theirs ? cTheirs : cMine;
-  // 투영: 위경도 → 화면. 그 지도의 bbox 를 viewBox 에 맞춘다.
-  //
-  // **한국은 등거리**(위도 보정만) — 위도 5도 남짓이라 이걸로 충분하고, 지금까지
-  // 그려 온 모양 그대로다(1000×1200).
-  // **세계는 메르카토르**. 등거리로 세계를 그리면 가로:세로가 1 : 0.40 이라 세로로
-  // 긴 휴대폰에서 위아래가 텅 빈 납작한 띠가 되고, 고위도가 가로로 늘어져 그린란드가
-  // 러시아만큼 넓적해진다. 메르카토르는 같은 폭에서 1 : 0.65 로 **55% 더 높고**
-  // 모양도 제자리를 찾는다(1000×663).
-  const { W, H } = M.view; const PAD = 24, b = geo._bbox;
-  const merc = M.proj === "mercator";
-  // 메르카토르 y(라디안). 극에서 발산하므로 ±85도에서 자른다 — 데이터는 83.6도까지다.
-  const my = (lat) => Math.log(Math.tan(Math.PI / 4 + Math.max(-85, Math.min(85, lat)) * Math.PI / 360));
-  const lat0 = (b.minLat + b.maxLat) / 2, kx = merc ? 1 : Math.cos(lat0 * Math.PI / 180);
-  const yTop = merc ? my(b.maxLat) : b.maxLat;
-  const yOf = merc ? my : (lat) => lat;
-  // 메르카토르는 경도도 라디안으로 재야 세로와 단위가 맞는다.
-  const xk = merc ? Math.PI / 180 : 1;
-  const gw = (b.maxLng - b.minLng) * kx * xk;
-  const gh = yTop - yOf(b.minLat);
-  const s = Math.min((W - 2 * PAD) / gw, (H - 2 * PAD) / gh);
-  const ox = (W - gw * s) / 2, oy = (H - gh * s) / 2;
-  const X = (lng) => ox + (lng - b.minLng) * kx * xk * s;
-  const Y = (lat) => oy + (yTop - yOf(lat)) * s;
+  const { W, H } = M.view;
+  const { X, Y } = mapProjection(geo, W, H);
   let paths = "";
   for (const f of geo.features) {
     let d = "";
@@ -4682,7 +4735,7 @@ async function renderMap() {
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
   $("map-paths").innerHTML = paths;
   // 원은 배율이 바뀔 때마다 다시 그린다(단위·크기가 배율에 따라 달라진다).
-  mapProj = { X, Y, b, mode: geo._mode }; // 모드가 바뀌면 이 투영은 못 쓴다
+  mapProj = { X, Y, b: geo._bbox, mode: geo._mode }; // 모드가 바뀌면 이 투영은 못 쓴다
   renderDots();
   const regions = Object.keys(reg).length;
   $("map-empty").hidden = pins.length > 0;
@@ -4828,6 +4881,24 @@ async function setMapMode(mode) {
   finally { btn.disabled = false; }
 }
 $("map-mode").addEventListener("click", () => setMapMode(mapMode === "kr" ? "world" : "kr"));
+
+// 우하단 독 접기/펴기. 접힌 상태를 기억한다(독의 기본은 접힘).
+const DOCK_KEY = "duri:mapDock";
+function syncDock() {
+  const open = $("map-dock").classList.contains("collapsed") === false;
+  const btn = $("map-dock-toggle");
+  btn.textContent = open ? "✕" : "⋯";
+  btn.title = open ? "유틸 접기" : "유틸 펼치기";
+  btn.setAttribute("aria-label", btn.title);
+  btn.setAttribute("aria-expanded", String(open));
+}
+try { if (localStorage.getItem(DOCK_KEY) === "open") $("map-dock").classList.remove("collapsed"); } catch { /* 최선노력 */ }
+syncDock();
+$("map-dock-toggle").addEventListener("click", () => {
+  const open = $("map-dock").classList.toggle("collapsed") === false;
+  try { localStorage.setItem(DOCK_KEY, open ? "open" : "shut"); } catch { /* 최선노력 */ }
+  syncDock();
+});
 $("map-open").addEventListener("click", openMap);
 $("map-back").addEventListener("click", closeMap);
 $("map-here").addEventListener("click", captureHere);
@@ -4850,6 +4921,269 @@ $("map-sync").addEventListener("click", async () => {
     btn.disabled = false; btn.style.opacity = "";
   }
 });
+
+// ── 타임랩스 동영상 ──────────────────────────────────────────
+// 핀이 **찍힌 시간 순서대로** 지도에 얹히는 영상을 만든다. 그 날 핀에 걸린 사진이
+// 한두 장 같이 뜬다. 지도는 지금 보고 있는 편(한국/세계)을 그대로 쓴다.
+//
+// 캔버스에 직접 그린다 — SVG 를 다시 래스터화하는 것보다 제어가 쉽고, 투영은
+// 화면과 같은 mapProjection 을 쓰므로 좌표가 어긋날 일이 없다.
+// 녹화는 canvas.captureStream + MediaRecorder 라 **실시간**이다(35초짜리면 35초
+// 걸린다). 그동안 캔버스를 그대로 보여줘서 미리보기 겸 진행 표시가 된다.
+const TL_W = 1080, TL_H = 1920;       // 9:16 — 폰에서 보고 공유하는 물건이다
+const TL_MAP_H = 1250;                // 위쪽 지도 영역
+const TL_INTRO = 1400, TL_STEP = 1100, TL_OUTRO = 3000; // ms
+const TL_MIMES = ["video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp9", "video/webm"];
+const tlMime = () => TL_MIMES.find((t) => window.MediaRecorder?.isTypeSupported?.(t)) || null;
+const tlCanRecord = () => !!(window.MediaRecorder && tlMime()
+  && HTMLCanvasElement.prototype.captureStream);
+
+let tlAbort = false, tlBlob = null, tlName = "";
+
+// 핀을 날짜별로 묶는다. 시각이 없는 옛 핀(at=0)은 줄 세울 수가 없어 **처음부터
+// 놓여 있던 것**으로 친다 — 버리면 지도가 실제보다 비어 보인다.
+function tlSteps(geo, pins) {
+  const days = new Map(), seeded = [];
+  for (const p of pins) {
+    const f = regionOfPoint(geo, p.lng, p.lat);
+    if (!f) continue; // 이 지도에 없는 곳(한국편의 해외 등)
+    if (!p.at) { seeded.push(p); continue; }
+    const key = ymd(new Date(p.at));
+    if (!days.has(key)) days.set(key, []);
+    days.get(key).push(p);
+  }
+  return { seeded, steps: [...days.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)) };
+}
+
+function tlRoundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+// 바탕 지도(경계선)는 매 프레임 다시 그리기엔 무겁다(세계편은 3만 점) — 한 번
+// 그려 두고 프레임마다 통째로 얹는다. 색칠도 새 지역이 생길 때만 덧그린다.
+function tlBaseLayer(geo, proj) {
+  const base = document.createElement("canvas");
+  base.width = TL_W; base.height = TL_MAP_H;
+  const c = base.getContext("2d");
+  c.fillStyle = "#11161d"; c.fillRect(0, 0, TL_W, TL_MAP_H);
+  c.strokeStyle = "#2b3644"; c.lineWidth = 1; c.fillStyle = "#171e27";
+  for (const f of geo.features) {
+    c.beginPath();
+    for (const poly of f._polys) for (const ring of poly) {
+      ring.forEach(([lng, lat], i) => (i ? c.lineTo(proj.X(lng), proj.Y(lat)) : c.moveTo(proj.X(lng), proj.Y(lat))));
+      c.closePath();
+    }
+    c.fill(); c.stroke();
+  }
+  return base;
+}
+function tlFillRegion(ctx, f, proj, color) {
+  ctx.globalAlpha = .85; ctx.fillStyle = color;
+  ctx.beginPath();
+  for (const poly of f._polys) for (const ring of poly) {
+    ring.forEach(([lng, lat], i) => (i ? ctx.lineTo(proj.X(lng), proj.Y(lat)) : ctx.moveTo(proj.X(lng), proj.Y(lat))));
+    ctx.closePath();
+  }
+  ctx.fill(); ctx.globalAlpha = 1;
+}
+
+async function runTimelapse() {
+  const geo = await loadMapGeo();
+  const pins = loadPins();
+  const { seeded, steps } = tlSteps(geo, pins);
+  if (!steps.length && !seeded.length) { showToast("아직 지도에 찍힌 곳이 없어요."); return; }
+
+  // 사진은 seq 로 정확히 붙는다(핀이 그 메시지에서 나왔다). 미리보기(thumb)를
+  // 먼저 쓴다 — 원본은 몇 MB 라 수십 장을 한꺼번에 올리면 메모리가 튄다.
+  const bySeq = new Map();
+  for (const r of await allEntries()) {
+    if (r.kind === "photo" && (r.thumb || r.blob)) bySeq.set(r.seq, r.thumb || r.blob);
+  }
+
+  const proj = mapProjection(geo, TL_W, TL_MAP_H, 40);
+  const cMine = colorForOwner(MY_NAME);
+  const cTheirs = colorForOwner(peerName || "상대");
+  const isMine = (p) => !p.owner || p.owner === MY_NAME;
+  const dotColor = (p) => (isMine(p) ? cMine : cTheirs);
+
+  const canvas = $("tl-canvas");
+  canvas.width = TL_W; canvas.height = TL_H;
+  const ctx = canvas.getContext("2d");
+  const base = tlBaseLayer(geo, proj);
+  const fills = document.createElement("canvas");
+  fills.width = TL_W; fills.height = TL_MAP_H;
+  const fctx = fills.getContext("2d");
+
+  // 각 단계의 사진 두 장을 미리 비트맵으로 만들어 둔다(그리는 중에 디코딩하면 끊긴다).
+  const shots = new Map();
+  for (const [day, list] of steps) {
+    const blobs = list.map((p) => bySeq.get(p.seq)).filter(Boolean).slice(0, 2);
+    const bmps = [];
+    for (const b of blobs) { try { bmps.push(await createImageBitmap(b)); } catch { /* 못 읽으면 건너뛴다 */ } }
+    if (bmps.length) shots.set(day, bmps);
+  }
+
+  // 마무리 화면용 — 전체 기간에서 고르게 뽑은 몇 장. 안 그러면 끝 화면 아래가 텅 빈다.
+  const withShots = steps.map(([d]) => d).filter((d) => shots.has(d));
+  const outro = [];
+  for (let i = 0; i < 3 && withShots.length; i++) {
+    const d = withShots[Math.round((i * (withShots.length - 1)) / 2)];
+    const bm = shots.get(d)[0];
+    if (bm && !outro.includes(bm)) outro.push(bm);
+  }
+
+  const total = TL_INTRO + steps.length * TL_STEP + TL_OUTRO;
+  const placed = [...seeded];   // 지금까지 찍힌 핀
+  const painted = new Set();    // 이미 칠한 지역
+  for (const p of seeded) {
+    const f = regionOfPoint(geo, p.lng, p.lat);
+    if (f && !painted.has(f._key)) { painted.add(f._key); tlFillRegion(fctx, f, proj, dotColor(p)); }
+  }
+
+  const label = (day) => { const [y, m, d] = day.split("-"); return `${y}년 ${Number(m)}월 ${Number(d)}일`; };
+  function frame(t) {
+    ctx.fillStyle = "#0b1016"; ctx.fillRect(0, 0, TL_W, TL_H);
+    ctx.drawImage(base, 0, 0);
+    ctx.drawImage(fills, 0, 0);
+
+    // 지금까지의 핀. 이번 단계에 새로 찍힌 것은 커졌다 가라앉으며 고리를 남긴다.
+    for (const p of placed) {
+      const age = p._born == null ? 1 : Math.min(1, (t - p._born) / 550);
+      const r = 9 + (1 - age) * 26;
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = dotColor(p);
+      ctx.beginPath(); ctx.arc(proj.X(p.lng), proj.Y(p.lat), r, 0, 7); ctx.fill();
+      ctx.strokeStyle = "#fff"; ctx.lineWidth = 3; ctx.stroke();
+      if (age < 1) {
+        ctx.globalAlpha = 1 - age; ctx.strokeStyle = dotColor(p); ctx.lineWidth = 5;
+        ctx.beginPath(); ctx.arc(proj.X(p.lng), proj.Y(p.lat), r + 22 * age, 0, 7); ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // 아래쪽: 날짜 + 그 날 사진
+    const step = Math.floor((t - TL_INTRO) / TL_STEP);
+    const day = steps[Math.max(0, Math.min(steps.length - 1, step))]?.[0];
+    const done = t >= TL_INTRO + steps.length * TL_STEP;
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#e2e9f0";
+    ctx.font = "700 62px system-ui, -apple-system, sans-serif";
+    ctx.fillText(done ? "함께 다닌 곳" : (t < TL_INTRO ? "" : label(day)), TL_W / 2, TL_MAP_H + 110);
+    ctx.font = "400 40px system-ui, -apple-system, sans-serif";
+    ctx.fillStyle = "#94a1b0";
+    const unit = geo._m.unit;
+    ctx.fillText(done ? `${painted.size}개 ${unit} · 핀 ${placed.length}개` : "", TL_W / 2, TL_MAP_H + 180);
+
+    const bmps = done ? outro : ((t >= TL_INTRO && shots.get(day)) || []);
+    if (bmps.length) {
+      const size = bmps.length > 2 ? 240 : 300, gap = 28;
+      const w = bmps.length * size + (bmps.length - 1) * gap;
+      bmps.forEach((bm, i) => {
+        const x = (TL_W - w) / 2 + i * (size + gap), y = TL_MAP_H + 230;
+        ctx.save();
+        tlRoundRect(ctx, x, y, size, size, 28); ctx.clip();
+        const sc = Math.max(size / bm.width, size / bm.height);
+        ctx.drawImage(bm, x + (size - bm.width * sc) / 2, y + (size - bm.height * sc) / 2,
+          bm.width * sc, bm.height * sc);
+        ctx.restore();
+        ctx.strokeStyle = "#2b3644"; ctx.lineWidth = 3;
+        tlRoundRect(ctx, x, y, size, size, 28); ctx.stroke();
+      });
+    }
+  }
+
+  // 새 단계로 넘어갈 때 핀·색칠을 누적한다(프레임마다 다시 계산하지 않는다).
+  let applied = -1;
+  function advance(t) {
+    const step = Math.floor((t - TL_INTRO) / TL_STEP);
+    for (let i = applied + 1; i <= Math.min(step, steps.length - 1); i++) {
+      for (const p of steps[i][1]) {
+        p._born = TL_INTRO + i * TL_STEP;
+        placed.push(p);
+        const f = regionOfPoint(geo, p.lng, p.lat);
+        if (f && !painted.has(f._key)) { painted.add(f._key); tlFillRegion(fctx, f, proj, dotColor(p)); }
+      }
+      applied = i;
+    }
+  }
+
+  $("tl").hidden = false;
+  $("tl-save").hidden = true;
+  tlAbort = false; tlBlob = null;
+  const recording = tlCanRecord();
+  $("tl-status").textContent = recording
+    ? "만드는 중… 이 화면을 그대로 담고 있어요"
+    : "이 기기는 동영상 저장을 지원하지 않아요 — 재생만 보여드려요";
+
+  let rec = null, stream = null, chunks = [];
+  if (recording) {
+    stream = canvas.captureStream(30);
+    rec = new MediaRecorder(stream, { mimeType: tlMime(), videoBitsPerSecond: 8e6 });
+    rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+    rec.start();
+  }
+
+  const t0 = performance.now();
+  await new Promise((resolve) => {
+    const tick = () => {
+      const t = performance.now() - t0;
+      if (tlAbort) return resolve();
+      advance(t);
+      frame(t);
+      const left = Math.max(0, Math.ceil((total - t) / 1000));
+      if (recording) $("tl-status").textContent = `만드는 중… ${left}초 남았어요`;
+      if (t >= total) return resolve();
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  for (const bmps of shots.values()) for (const b of bmps) b.close?.();
+
+  if (rec && rec.state !== "inactive") {
+    await new Promise((done) => { rec.onstop = done; rec.stop(); });
+  }
+  for (const tr of stream?.getTracks() || []) tr.stop(); // 캔버스 스트림을 붙들고 있지 않는다
+  if (tlAbort) { $("tl").hidden = true; return; }
+  if (!recording) { $("tl-status").textContent = "재생이 끝났어요."; return; }
+
+  const type = (rec.mimeType || tlMime()).split(";")[0];
+  tlBlob = new Blob(chunks, { type });
+  tlName = `함께다닌곳-${todayYmd()}.${type.includes("mp4") ? "mp4" : "webm"}`;
+  $("tl-status").textContent = `다 됐어요 · ${(tlBlob.size / 1048576).toFixed(1)}MB`;
+  $("tl-save").hidden = false;
+}
+
+async function saveTimelapse() {
+  if (!tlBlob) return;
+  const file = new File([tlBlob], tlName, { type: tlBlob.type });
+  // 폰에서는 공유 시트가 먼저다 — 사진 앱에 저장하거나 바로 상대에게 보낼 수 있고,
+  // 아이폰 홈화면 앱에서는 <a download> 가 제대로 안 먹는다.
+  if (navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: "함께 다닌 곳" }); return; }
+    catch (e) { if (e?.name === "AbortError") return; }
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(tlBlob);
+  a.download = tlName;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
+
+$("map-export").addEventListener("click", async () => {
+  const btn = $("map-export");
+  btn.disabled = true;
+  try { await runTimelapse(); }
+  catch (e) { console.warn("타임랩스 실패", e); $("tl").hidden = true; showToast("동영상을 만들지 못했어요."); }
+  finally { btn.disabled = false; }
+});
+$("tl-close").addEventListener("click", () => { tlAbort = true; $("tl").hidden = true; });
+$("tl-save").addEventListener("click", saveTimelapse);
 
 // ── 지역 앨범: 지도에서 시군구를 탭하면 그 지역 사진을 보고, 사진을 추가한다 ──
 // 사진 위치는 지도에서 지정(그 지역 대표점)하므로 안드로이드 EXIF 제거와 무관하다.
