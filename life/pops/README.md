@@ -17,7 +17,7 @@ node pops_generator/generate50.mjs
 ./pops_generator/render50.sh
 ```
 
-로컬 생성기는 단어 → 0.5초 → 뜻 → 0.5초 → 예문 → 0.5초 → 예문뜻 → 0.5초
+로컬 Piper 생성기는 단어 → 0.5초 → 뜻 → 0.5초 → 예문 → 0.5초 → 예문뜻 → 0.5초
 순서로 TTS를 조합해 최종 MP4를 만들고, 이 폴더의 manifest와 영상만 갱신한다.
 앱은 asset 도메인이나 TTS 모델을 런타임에 호출하지 않는다.
 

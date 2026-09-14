@@ -10,7 +10,7 @@
       "exampleMeaning": "안녕, 아나.",
       "voice": "es_female_01",
       "src": "content/videos/a1-001.mp4",
-      "duration": "6.8초",
+      "duration": "5.6초",
       "topic": "기본 표현"
     },
     {
@@ -22,7 +22,7 @@
       "exampleMeaning": "잘 가, 내일 보자.",
       "voice": "es_female_02",
       "src": "content/videos/a1-002.mp4",
-      "duration": "8.6초",
+      "duration": "7.0초",
       "topic": "기본 표현"
     },
     {
@@ -34,7 +34,7 @@
       "exampleMeaning": "도와줘서 고마워.",
       "voice": "es_slow_01",
       "src": "content/videos/a1-003.mp4",
-      "duration": "7.8초",
+      "duration": "6.8초",
       "topic": "기본 표현"
     },
     {
@@ -46,7 +46,7 @@
       "exampleMeaning": "물 주세요.",
       "voice": "es_clear_01",
       "src": "content/videos/a1-004.mp4",
-      "duration": "7.9초",
+      "duration": "6.0초",
       "topic": "기본 표현"
     },
     {
@@ -58,7 +58,7 @@
       "exampleMeaning": "미안해, 이해하지 못하겠어.",
       "voice": "es_female_01",
       "src": "content/videos/a1-005.mp4",
-      "duration": "9.1초",
+      "duration": "7.7초",
       "topic": "기본 표현"
     },
     {
@@ -70,7 +70,7 @@
       "exampleMeaning": "응, 나는 괜찮아.",
       "voice": "es_female_02",
       "src": "content/videos/a1-006.mp4",
-      "duration": "7.9초",
+      "duration": "6.1초",
       "topic": "기본 표현"
     },
     {
@@ -82,7 +82,7 @@
       "exampleMeaning": "아니요, 괜찮아요.",
       "voice": "es_slow_01",
       "src": "content/videos/a1-007.mp4",
-      "duration": "7.3초",
+      "duration": "6.2초",
       "topic": "기본 표현"
     },
     {
@@ -94,7 +94,7 @@
       "exampleMeaning": "나는 잘 지내.",
       "voice": "es_clear_01",
       "src": "content/videos/a1-008.mp4",
-      "duration": "6.8초",
+      "duration": "5.7초",
       "topic": "기본 표현"
     },
     {
@@ -106,7 +106,7 @@
       "exampleMeaning": "그것은 아주 좋아.",
       "voice": "es_female_01",
       "src": "content/videos/a1-009.mp4",
-      "duration": "6.9초",
+      "duration": "5.8초",
       "topic": "기초 부사"
     },
     {
@@ -118,7 +118,7 @@
       "exampleMeaning": "나도 가.",
       "voice": "es_female_02",
       "src": "content/videos/a1-010.mp4",
-      "duration": "7.0초",
+      "duration": "5.4초",
       "topic": "기초 부사"
     },
     {
@@ -130,7 +130,7 @@
       "exampleMeaning": "나는 여기 있어.",
       "voice": "es_slow_01",
       "src": "content/videos/a1-011.mp4",
-      "duration": "6.7초",
+      "duration": "5.9초",
       "topic": "기초 부사"
     },
     {
@@ -142,7 +142,7 @@
       "exampleMeaning": "책은 저기에 있어.",
       "voice": "es_clear_01",
       "src": "content/videos/a1-012.mp4",
-      "duration": "7.7초",
+      "duration": "6.1초",
       "topic": "기초 부사"
     },
     {
@@ -154,7 +154,7 @@
       "exampleMeaning": "나는 지금 가.",
       "voice": "es_female_01",
       "src": "content/videos/a1-013.mp4",
-      "duration": "6.7초",
+      "duration": "5.7초",
       "topic": "기초 부사"
     },
     {
@@ -166,7 +166,7 @@
       "exampleMeaning": "오늘 나는 스페인어를 공부해.",
       "voice": "es_female_02",
       "src": "content/videos/a1-014.mp4",
-      "duration": "8.4초",
+      "duration": "7.1초",
       "topic": "기초 부사"
     },
     {
@@ -178,7 +178,7 @@
       "exampleMeaning": "나는 내일 일해.",
       "voice": "es_slow_01",
       "src": "content/videos/a1-015.mp4",
-      "duration": "7.1초",
+      "duration": "6.0초",
       "topic": "기초 부사"
     },
     {
@@ -190,7 +190,7 @@
       "exampleMeaning": "어제 비가 왔어.",
       "voice": "es_clear_01",
       "src": "content/videos/a1-016.mp4",
-      "duration": "6.8초",
+      "duration": "5.6초",
       "topic": "기초 부사"
     },
     {
@@ -202,7 +202,7 @@
       "exampleMeaning": "나는 항상 걸어.",
       "voice": "es_female_01",
       "src": "content/videos/a1-017.mp4",
-      "duration": "7.6초",
+      "duration": "6.3초",
       "topic": "기초 부사"
     },
     {
@@ -214,7 +214,7 @@
       "exampleMeaning": "나는 절대 담배를 피우지 않아.",
       "voice": "es_female_02",
       "src": "content/videos/a1-018.mp4",
-      "duration": "8.2초",
+      "duration": "6.9초",
       "topic": "기초 부사"
     },
     {
@@ -226,7 +226,7 @@
       "exampleMeaning": "나는 이미 준비됐어.",
       "voice": "es_slow_01",
       "src": "content/videos/a1-019.mp4",
-      "duration": "7.5초",
+      "duration": "6.3초",
       "topic": "기초 부사"
     },
     {
@@ -238,7 +238,7 @@
       "exampleMeaning": "나는 아직 여기 있어.",
       "voice": "es_clear_01",
       "src": "content/videos/a1-020.mp4",
-      "duration": "7.7초",
+      "duration": "6.8초",
       "topic": "기초 부사"
     },
     {
@@ -250,7 +250,7 @@
       "exampleMeaning": "나는 아나야.",
       "voice": "es_female_01",
       "src": "content/videos/a1-021.mp4",
-      "duration": "6.3초",
+      "duration": "5.3초",
       "topic": "대명사·의문사"
     },
     {
@@ -262,7 +262,7 @@
       "exampleMeaning": "너는 내 친구야.",
       "voice": "es_female_02",
       "src": "content/videos/a1-022.mp4",
-      "duration": "7.0초",
+      "duration": "5.9초",
       "topic": "대명사·의문사"
     },
     {
@@ -274,7 +274,7 @@
       "exampleMeaning": "그는 여기 살아.",
       "voice": "es_slow_01",
       "src": "content/videos/a1-023.mp4",
-      "duration": "6.7초",
+      "duration": "5.6초",
       "topic": "대명사·의문사"
     },
     {
@@ -286,7 +286,7 @@
       "exampleMeaning": "그녀는 책을 읽어.",
       "voice": "es_clear_01",
       "src": "content/videos/a1-024.mp4",
-      "duration": "7.8초",
+      "duration": "6.3초",
       "topic": "대명사·의문사"
     },
     {
@@ -298,7 +298,7 @@
       "exampleMeaning": "우리는 함께 공부해.",
       "voice": "es_female_01",
       "src": "content/videos/a1-025.mp4",
-      "duration": "8.6초",
+      "duration": "7.1초",
       "topic": "대명사·의문사"
     },
     {
@@ -310,7 +310,7 @@
       "exampleMeaning": "그들은 오늘 일해.",
       "voice": "es_female_02",
       "src": "content/videos/a1-026.mp4",
-      "duration": "7.6초",
+      "duration": "6.4초",
       "topic": "대명사·의문사"
     },
     {
@@ -322,7 +322,7 @@
       "exampleMeaning": "당신은 어떠세요?",
       "voice": "es_slow_01",
       "src": "content/videos/a1-027.mp4",
-      "duration": "7.4초",
+      "duration": "6.3초",
       "topic": "대명사·의문사"
     },
     {
@@ -334,7 +334,7 @@
       "exampleMeaning": "내 집은 작아.",
       "voice": "es_clear_01",
       "src": "content/videos/a1-028.mp4",
-      "duration": "7.3초",
+      "duration": "6.1초",
       "topic": "대명사·의문사"
     },
     {
@@ -346,7 +346,7 @@
       "exampleMeaning": "네 책은 여기 있어.",
       "voice": "es_female_01",
       "src": "content/videos/a1-029.mp4",
-      "duration": "7.4초",
+      "duration": "6.2초",
       "topic": "대명사·의문사"
     },
     {
@@ -358,7 +358,7 @@
       "exampleMeaning": "그의 이름은 루이스야.",
       "voice": "es_female_02",
       "src": "content/videos/a1-030.mp4",
-      "duration": "8.2초",
+      "duration": "6.8초",
       "topic": "대명사·의문사"
     },
     {
@@ -370,7 +370,7 @@
       "exampleMeaning": "이 책은 새 책이야.",
       "voice": "es_slow_01",
       "src": "content/videos/a1-031.mp4",
-      "duration": "7.6초",
+      "duration": "6.5초",
       "topic": "대명사·의문사"
     },
     {
@@ -382,7 +382,7 @@
       "exampleMeaning": "그 커피는 뜨거워.",
       "voice": "es_clear_01",
       "src": "content/videos/a1-032.mp4",
-      "duration": "7.7초",
+      "duration": "6.5초",
       "topic": "대명사·의문사"
     },
     {
@@ -394,7 +394,7 @@
       "exampleMeaning": "너는 무엇을 원해?",
       "voice": "es_female_01",
       "src": "content/videos/a1-033.mp4",
-      "duration": "6.9초",
+      "duration": "5.7초",
       "topic": "대명사·의문사"
     },
     {
@@ -406,7 +406,7 @@
       "exampleMeaning": "그녀는 누구야?",
       "voice": "es_female_02",
       "src": "content/videos/a1-034.mp4",
-      "duration": "7.1초",
+      "duration": "5.7초",
       "topic": "대명사·의문사"
     },
     {
@@ -418,7 +418,7 @@
       "exampleMeaning": "학교는 어디에 있어?",
       "voice": "es_slow_01",
       "src": "content/videos/a1-035.mp4",
-      "duration": "7.6초",
+      "duration": "6.5초",
       "topic": "대명사·의문사"
     },
     {
@@ -430,7 +430,7 @@
       "exampleMeaning": "너는 언제 와?",
       "voice": "es_clear_01",
       "src": "content/videos/a1-036.mp4",
-      "duration": "7.0초",
+      "duration": "6.1초",
       "topic": "대명사·의문사"
     },
     {
@@ -442,7 +442,7 @@
       "exampleMeaning": "네 이름은 뭐야?",
       "voice": "es_female_01",
       "src": "content/videos/a1-037.mp4",
-      "duration": "7.1초",
+      "duration": "6.1초",
       "topic": "대명사·의문사"
     },
     {
@@ -454,7 +454,7 @@
       "exampleMeaning": "너는 왜 공부해?",
       "voice": "es_female_02",
       "src": "content/videos/a1-038.mp4",
-      "duration": "7.3초",
+      "duration": "6.0초",
       "topic": "대명사·의문사"
     },
     {
@@ -466,7 +466,7 @@
       "exampleMeaning": "나는 하나 가지고 있어.",
       "voice": "es_slow_01",
       "src": "content/videos/a1-039.mp4",
-      "duration": "7.0초",
+      "duration": "5.8초",
       "topic": "숫자"
     },
     {
@@ -478,7 +478,7 @@
       "exampleMeaning": "나는 책 두 권이 있어.",
       "voice": "es_clear_01",
       "src": "content/videos/a1-040.mp4",
-      "duration": "7.7초",
+      "duration": "6.5초",
       "topic": "숫자"
     },
     {
@@ -490,7 +490,7 @@
       "exampleMeaning": "나는 고양이 세 마리를 봐.",
       "voice": "es_female_01",
       "src": "content/videos/a1-041.mp4",
-      "duration": "7.9초",
+      "duration": "6.7초",
       "topic": "숫자"
     },
     {
@@ -502,7 +502,7 @@
       "exampleMeaning": "우리는 네 명이야.",
       "voice": "es_female_02",
       "src": "content/videos/a1-042.mp4",
-      "duration": "7.6초",
+      "duration": "6.5초",
       "topic": "숫자"
     },
     {
@@ -514,7 +514,7 @@
       "exampleMeaning": "나는 5분이 있어.",
       "voice": "es_slow_01",
       "src": "content/videos/a1-043.mp4",
-      "duration": "7.8초",
+      "duration": "6.4초",
       "topic": "숫자"
     },
     {
@@ -526,7 +526,7 @@
       "exampleMeaning": "6시야.",
       "voice": "es_clear_01",
       "src": "content/videos/a1-044.mp4",
-      "duration": "6.6초",
+      "duration": "5.8초",
       "topic": "숫자"
     },
     {
@@ -538,7 +538,7 @@
       "exampleMeaning": "7시야.",
       "voice": "es_female_01",
       "src": "content/videos/a1-045.mp4",
-      "duration": "6.8초",
+      "duration": "5.6초",
       "topic": "숫자"
     },
     {
@@ -550,7 +550,7 @@
       "exampleMeaning": "나는 8살이야.",
       "voice": "es_female_02",
       "src": "content/videos/a1-046.mp4",
-      "duration": "7.5초",
+      "duration": "6.5초",
       "topic": "숫자"
     },
     {
@@ -562,7 +562,7 @@
       "exampleMeaning": "9시야.",
       "voice": "es_slow_01",
       "src": "content/videos/a1-047.mp4",
-      "duration": "6.4초",
+      "duration": "5.4초",
       "topic": "숫자"
     },
     {
@@ -574,7 +574,7 @@
       "exampleMeaning": "나는 10유로가 있어.",
       "voice": "es_clear_01",
       "src": "content/videos/a1-048.mp4",
-      "duration": "7.6초",
+      "duration": "6.4초",
       "topic": "숫자"
     },
     {
@@ -586,7 +586,7 @@
       "exampleMeaning": "11시야.",
       "voice": "es_female_01",
       "src": "content/videos/a1-049.mp4",
-      "duration": "7.0초",
+      "duration": "5.8초",
       "topic": "숫자"
     },
     {
@@ -598,7 +598,7 @@
       "exampleMeaning": "12명이 와.",
       "voice": "es_female_02",
       "src": "content/videos/a1-050.mp4",
-      "duration": "7.7초",
+      "duration": "6.4초",
       "topic": "숫자"
     }
   ]
