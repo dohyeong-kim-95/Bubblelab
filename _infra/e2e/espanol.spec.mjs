@@ -398,6 +398,9 @@ test("접힌 문장은 화면 줄 단위로 차례차례 차오른다", async ({
   await page.locator("#lyrics-input").fill(
     "Cuando te vi bailando en la playa supe que no podía olvidarte\nTe quiero");
   await page.getByRole("button", { name: "저장", exact: true }).click();
+  // 곡 화면으로 넘어간 뒤에 붙인다 — 안 기다리면 songId 가 아직 없는 순간에
+  // saveClip 이 들어가 CI 에서 간헐적으로 비었다(로컬에선 늘 빨라 안 보인다).
+  await expect(page.locator("#clip-pick")).toBeVisible();
   await page.locator("#clip-input").setInputFiles({
     name: "song.wav", mimeType: "audio/wav", buffer: silentWav(12),
   });
