@@ -1,0 +1,14 @@
+{
+  "title": "Midnight Pavement",
+  "description": "자정 무렵 젖은 보도블록을 걷는 느낌의 2분 32초 트랙. 움직이는 썸네일은 같은 곡의 정사각 뮤직비디오(1024×1024)다.",
+  "preview": "midnight_pavement.mp4",
+  "previewSize": { "width": 1024, "height": 1024 },
+  "tags": ["night", "walk", "lofi", "2분32초", "bgm"],
+  "createdAt": "2026-09-14",
+  "license": "개인 소장 — 재배포 전 문의",
+  "source": "사이트 운영자 업로드",
+  "downloads": [
+    { "label": "MP3 다운로드", "file": "midnight_pavement.mp3" },
+    { "label": "MP4(영상) 다운로드", "file": "midnight_pavement.mp4" }
+  ]
+}

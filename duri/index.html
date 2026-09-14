@@ -316,6 +316,14 @@
   #tl-canvas { max-width: 100%; min-height: 0; flex: 1; object-fit: contain;
                border-radius: .8rem; background: #0b1016; }
   #tl-status { flex: none; font-size: .8rem; color: #c9d2dc; text-align: center; line-height: 1.6; }
+  /* 고르는 동안에는 캔버스를 접어 둔다 — 아직 아무것도 안 그려서 새카만 판이
+     화면을 다 차지하면 정작 고를 자리가 안 보인다. */
+  #tl.picking #tl-canvas { display: none; }
+  #tl-setup { flex: none; display: flex; align-items: center; gap: .5rem;
+              font-size: .82rem; color: #c9d2dc; }
+  #tl-setup[hidden] { display: none; }
+  #tl-bgm { font: inherit; font-size: .82rem; max-width: 12rem; padding: .35rem .5rem;
+            border-radius: .6rem; border: 1px solid #3a4553; background: #1b222c; color: #e2e9f0; }
   .tl-actions { flex: none; display: flex; gap: .5rem; }
   .tl-actions button { font: inherit; font-size: .88rem; padding: .55rem 1.1rem; border-radius: .8rem;
                        cursor: pointer; border: 1px solid #3a4553; background: #1b222c; color: #e2e9f0; }
@@ -1064,8 +1072,13 @@
   <div class="tl-card">
     <canvas id="tl-canvas"></canvas>
     <div id="tl-status"></div>
+    <!-- 배경음악은 assets.bubblelab.dev 의 music 카탈로그에서 그대로 읽어 온다 -->
+    <label id="tl-setup" for="tl-bgm">배경음악
+      <select id="tl-bgm"><option value="">없음</option></select>
+    </label>
     <div class="tl-actions">
       <button id="tl-close" type="button">닫기</button>
+      <button id="tl-start" type="button" class="primary">만들기</button>
       <button id="tl-save" type="button" class="primary" hidden>저장 · 공유</button>
     </div>
   </div>
@@ -4923,43 +4936,125 @@ $("map-sync").addEventListener("click", async () => {
 });
 
 // ── 타임랩스 동영상 ──────────────────────────────────────────
-// 핀이 **찍힌 시간 순서대로** 지도에 얹히는 영상을 만든다. 그 날 핀에 걸린 사진이
-// 한두 장 같이 뜬다. 지도는 지금 보고 있는 편(한국/세계)을 그대로 쓴다.
+// **데이트 로그**다 — 둘이 **같은 날** 찍은 날만 담는다(한 사람만 찍은 날은 뺀다).
+// 지도가 위를 통째로 쓰고 아래 판에 글과 사진이 앉는다.
+//
+// 사진은 한 단계에 떴다 사라지는 게 아니라 **필름처럼 가로로 계속 흐른다**
+// (롤링 윈도우). 지금 날의 사진이 한가운데에 서고 지난 사진이 왼쪽으로 밀려
+// 나간다. 길이에 상한이 있어 한 단계가 짧아져도 한 장이 창을 가로지르는 내내
+// 보이므로 노출이 창 너비/슬롯 배(약 2.4배)로 길어진다 — 오래 본 느낌이 나는
+// 이유다.
 //
 // 캔버스에 직접 그린다 — SVG 를 다시 래스터화하는 것보다 제어가 쉽고, 투영은
 // 화면과 같은 mapProjection 을 쓰므로 좌표가 어긋날 일이 없다.
-// 녹화는 canvas.captureStream + MediaRecorder 라 **실시간**이다(35초짜리면 35초
+// 녹화는 canvas.captureStream + MediaRecorder 라 **실시간**이다(12초짜리면 12초
 // 걸린다). 그동안 캔버스를 그대로 보여줘서 미리보기 겸 진행 표시가 된다.
-const TL_W = 1080, TL_H = 1920;       // 9:16 — 폰에서 보고 공유하는 물건이다
-const TL_MAP_H = 1250;                // 위쪽 지도 영역
-// 만드는 시간 = 영상 길이다(실시간 녹화라 우회가 없다). 그래서 **전체 길이에 상한**을
-// 두고 날짜 수로 한 단계를 나눈다 — 날짜가 많을수록 빨라져 눈이 몇 일이든 12초 안쪽에
-// 끝난다. 타임랩스는 원래 빨라야 제맛이라 영상 자체도 이쪽이 낫다.
-const TL_INTRO = 900, TL_OUTRO = 2400, TL_BODY_MAX = 9000; // ms
-const TL_STEP_MAX = 900, TL_STEP_MIN = 160;
+const TL_W = 1080, TL_H = 1920;
+const TL_MAP = { x: 0, y: 0, w: 1080, h: 1150 };     // 위 전체
+const TL_PANEL = 1150;                               // 아래 판이 시작하는 높이
+const TL_FILM = { x: 0, y: 1400, w: 1080, h: 420 };  // 가로로 흐르는 필름
+const TL_SHOT = 420, TL_SLOT = TL_SHOT + 30;
+const TL_PER_DAY = 2;                                // 한 날에서 고르는 사진 수
+// 만드는 시간 = 영상 길이다(실시간 녹화라 우회가 없다). 전체 길이에 상한을 두고
+// 날짜 수로 한 단계를 나눈다 — 날짜가 많을수록 빨라져 12초 안쪽에 끝난다.
+const TL_INTRO = 900, TL_OUTRO = 2600, TL_BODY_MAX = 10000; // ms
+const TL_STEP_MAX = 1100, TL_STEP_MIN = 260;
 const tlStepMs = (n) => Math.max(TL_STEP_MIN, Math.min(TL_STEP_MAX, Math.round(TL_BODY_MAX / Math.max(1, n))));
-const TL_MIMES = ["video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp9", "video/webm"];
-const tlMime = () => TL_MIMES.find((t) => window.MediaRecorder?.isTypeSupported?.(t)) || null;
-const tlCanRecord = () => !!(window.MediaRecorder && tlMime()
-  && HTMLCanvasElement.prototype.captureStream);
+// 소리를 넣으면 오디오 코덱까지 적어야 한다 — 안 적으면 크롬이 무음 트랙만 담는다.
+const TL_MIMES = (sound) => (sound
+  ? ["video/mp4;codecs=avc1,mp4a.40.2", "video/mp4", "video/webm;codecs=vp9,opus", "video/webm"]
+  : ["video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp9", "video/webm"]);
+const tlMime = (sound) => TL_MIMES(sound).find((t) => window.MediaRecorder?.isTypeSupported?.(t)) || null;
+const tlCanRecord = () => !!(window.MediaRecorder && tlMime(false) && HTMLCanvasElement.prototype.captureStream);
+const tlMine = (p) => !p.owner || p.owner === MY_NAME; // 이름으로 판정(옛 핀은 내 것)
 
 let tlAbort = false, tlBlob = null, tlName = "";
 
-// 핀을 날짜별로 묶는다. 시각이 없는 옛 핀(at=0)은 줄 세울 수가 없어 **처음부터
-// 놓여 있던 것**으로 친다 — 버리면 지도가 실제보다 비어 보인다.
+// ── 배경음악: assets.bubblelab.dev 의 music 카탈로그 ──
+// /_assets/* 는 워커가 **모든 서브도메인에서** 프리픽스 없이 서빙한다(_infra/worker.js)
+// — 그래서 duri 에서도 같은 출처(same-origin)라 CORS 도, 캔버스 오염도 없다.
+// admin 에서 숨긴 항목은 워커가 카탈로그에서 빼 주므로 여기서 거를 게 없다.
+const BGM_KEY = "duri:tlBgm";
+const AUDIO_EXT = /\.(mp3|m4a|aac|wav|ogg)$/i;
+let bgmList = null;
+async function loadBgmList() {
+  if (bgmList) return bgmList;
+  try {
+    const res = await fetch("/_assets/catalog.json", { cache: "no-store" });
+    const data = await res.json();
+    bgmList = (Array.isArray(data.items) ? data.items : [])
+      .filter((it) => it.category === "music")
+      .map((it) => ({ title: it.title, url: it.downloads?.find((d) => AUDIO_EXT.test(d.file || ""))?.url }))
+      .filter((it) => it.url);
+  } catch { bgmList = []; }
+  return bgmList;
+}
+
+// 캔버스 스트림에 얹을 오디오 트랙. AudioContext 는 하나만 두고 재사용한다
+// (만들 때마다 새로 열면 기기별 개수 상한에 걸린다).
+let tlCtx = null;
+async function tlAudio(url, totalMs) {
+  if (!url) return null;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return null;
+  tlCtx = tlCtx || new AC();
+  await tlCtx.resume().catch(() => {});
+  const el = new Audio(url);
+  el.loop = true;          // 곡이 영상보다 짧아도 빈 구간이 생기지 않는다
+  el.preload = "auto";
+  const ready = new Promise((res) => {
+    el.addEventListener("canplay", () => res(true), { once: true });
+    el.addEventListener("error", () => res(false), { once: true });
+    // 4초 안에 못 열리면 포기한다 — 다만 "덜 받은 것"과 "못 여는 것"은 다르니
+    // 디코더가 붙었는지(readyState)를 보고 판단한다. 무음 트랙을 얹고
+    // "음악 포함"이라고 말하면 저장한 뒤에야 알게 된다.
+    setTimeout(() => res(el.readyState >= 2), 4000);
+  });
+  el.load();
+  if (!(await ready)) return null;
+  const src = tlCtx.createMediaElementSource(el);
+  const gain = tlCtx.createGain();
+  const dest = tlCtx.createMediaStreamDestination();
+  src.connect(gain); gain.connect(dest);
+  gain.connect(tlCtx.destination); // 만드는 동안 들린다 — 미리 듣기 겸
+  // 시작은 살짝 올리고 끝은 확실히 내린다. 뚝 끊기면 녹화본이 싸구려로 들린다.
+  const now = tlCtx.currentTime, end = now + totalMs / 1000;
+  gain.gain.setValueAtTime(0, now);
+  gain.gain.linearRampToValueAtTime(1, now + .5);
+  gain.gain.setValueAtTime(1, Math.max(now + .5, end - 1.2));
+  gain.gain.linearRampToValueAtTime(0, end);
+  return { el, gain, dest, stop: () => { el.pause(); try { src.disconnect(); gain.disconnect(); } catch {} } };
+}
+
+// 둘이 같은 날 찍은 날만, 시간순으로. 시각이 없는 옛 핀(at=0)은 어느 날인지 알 수
+// 없어 뺀다 — 날짜가 주인공인 영상이라 "언젠가"를 끼워 넣을 자리가 없다.
+// 지금 지도에 **들어오는지**(bbox)로 거르지, 지역이 잡히는지로 거르지 않는다 —
+// 시군구는 스냅이 없어서 제주공항·해운대처럼 바다 쪽으로 살짝 나간 핀이 지역
+// 판정에 실패한다. 그걸로 거르면 색칠만 못 할 일에 그날 하루가 통째로 빠진다.
+const tlOnMap = (geo, p) => {
+  const b = geo._bbox;
+  return p.lng >= b.minLng && p.lng <= b.maxLng && p.lat >= b.minLat && p.lat <= b.maxLat;
+};
 function tlSteps(geo, pins) {
-  const days = new Map(), seeded = [];
+  const days = new Map();
   for (const p of pins) {
-    const f = regionOfPoint(geo, p.lng, p.lat);
-    if (!f) continue; // 이 지도에 없는 곳(한국편의 해외 등)
-    if (!p.at) { seeded.push(p); continue; }
+    if (!p.at || !tlOnMap(geo, p)) continue;
     const key = ymd(new Date(p.at));
     if (!days.has(key)) days.set(key, []);
     days.get(key).push(p);
   }
-  return { seeded, steps: [...days.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)) };
+  return [...days.entries()]
+    .filter(([, list]) => list.some(tlMine) && list.some((p) => !tlMine(p)))
+    .sort((a, b) => (a[0] < b[0] ? -1 : 1));
 }
 
+// 아래 판의 한 줄은 넘치면 말줄임한다 — 지역 이름이 길면 판 밖으로 샌다.
+function tlFit(ctx, text, max) {
+  if (ctx.measureText(text).width <= max) return text;
+  let out = text;
+  while (out.length > 1 && ctx.measureText(out + "…").width > max) out = out.slice(0, -1);
+  return out + "…";
+}
 function tlRoundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
@@ -4974,9 +5069,8 @@ function tlRoundRect(ctx, x, y, w, h, r) {
 // 그려 두고 프레임마다 통째로 얹는다. 색칠도 새 지역이 생길 때만 덧그린다.
 function tlBaseLayer(geo, proj) {
   const base = document.createElement("canvas");
-  base.width = TL_W; base.height = TL_MAP_H;
+  base.width = TL_MAP.w; base.height = TL_MAP.h;
   const c = base.getContext("2d");
-  c.fillStyle = "#11161d"; c.fillRect(0, 0, TL_W, TL_MAP_H);
   c.strokeStyle = "#2b3644"; c.lineWidth = 1; c.fillStyle = "#171e27";
   for (const f of geo.features) {
     c.beginPath();
@@ -4998,11 +5092,13 @@ function tlFillRegion(ctx, f, proj, color) {
   ctx.fill(); ctx.globalAlpha = 1;
 }
 
-async function runTimelapse() {
+async function runTimelapse(bgmUrl = "") {
   const geo = await loadMapGeo();
-  const pins = loadPins();
-  const { seeded, steps } = tlSteps(geo, pins);
-  if (!steps.length && !seeded.length) { showToast("아직 지도에 찍힌 곳이 없어요."); return; }
+  const steps = tlSteps(geo, loadPins());
+  if (!steps.length) {
+    showToast("둘이 같은 날 찍은 기록이 아직 없어요.");
+    return;
+  }
 
   // 사진은 seq 로 정확히 붙는다(핀이 그 메시지에서 나왔다). 미리보기(thumb)를
   // 먼저 쓴다 — 원본은 몇 MB 라 수십 장을 한꺼번에 올리면 메모리가 튄다.
@@ -5011,97 +5107,123 @@ async function runTimelapse() {
     if (r.kind === "photo" && (r.thumb || r.blob)) bySeq.set(r.seq, r.thumb || r.blob);
   }
 
-  const proj = mapProjection(geo, TL_W, TL_MAP_H, 40);
-  const cMine = colorForOwner(MY_NAME);
-  const cTheirs = colorForOwner(peerName || "상대");
-  const isMine = (p) => !p.owner || p.owner === MY_NAME;
-  const dotColor = (p) => (isMine(p) ? cMine : cTheirs);
+  const TL_STEP = tlStepMs(steps.length);
+  const proj = mapProjection(geo, TL_MAP.w, TL_MAP.h, 24);
+  // 점은 화면 지도와 같은 규칙으로 주인 색, 색칠은 "같이" 색이다 — 둘이 같은 날
+  // 간 곳만 담기니 한 사람 색으로 칠하면 누구 자리인지 거짓말이 된다.
+  const dotColor = (p) => colorForOwner(p.owner || MY_NAME);
+  const fillColor = sharedColor();
 
   const canvas = $("tl-canvas");
   canvas.width = TL_W; canvas.height = TL_H;
   const ctx = canvas.getContext("2d");
   const base = tlBaseLayer(geo, proj);
   const fills = document.createElement("canvas");
-  fills.width = TL_W; fills.height = TL_MAP_H;
+  fills.width = TL_MAP.w; fills.height = TL_MAP.h;
   const fctx = fills.getContext("2d");
 
-  // 각 단계의 사진 두 장을 미리 비트맵으로 만들어 둔다(그리는 중에 디코딩하면 끊긴다).
-  const shots = new Map();
-  for (const [day, list] of steps) {
-    const blobs = list.map((p) => bySeq.get(p.seq)).filter(Boolean).slice(0, 2);
-    const bmps = [];
-    for (const b of blobs) { try { bmps.push(await createImageBitmap(b)); } catch { /* 못 읽으면 건너뛴다 */ } }
-    if (bmps.length) shots.set(day, bmps);
+  // 필름에 올릴 사진을 날짜순으로 줄 세운다. 한 날에서 두 장까지 — 그보다 많이
+  // 넣으면 같은 시간에 더 빨리 흘러 한 장이 스쳐 지나간다.
+  // start[k] = k번째 날의 첫 사진 위치. 흐름(cursor)을 단계에 맞추는 데 쓴다.
+  const film = [], start = [0], stepNames = [];
+  for (const [, list] of steps) {
+    for (const p of list.slice(0, TL_PER_DAY)) {
+      const blob = bySeq.get(p.seq);
+      if (!blob) continue;
+      try { film.push(await createImageBitmap(blob)); } catch { /* 못 읽으면 건너뛴다 */ }
+    }
+    start.push(film.length);
+    const seen = [];
+    for (const p of list) {
+      const f = regionOfPoint(geo, p.lng, p.lat);
+      if (f && !seen.includes(f._name)) seen.push(f._name);
+    }
+    stepNames.push(seen);
   }
 
-  // 마무리 화면용 — 전체 기간에서 고르게 뽑은 몇 장. 안 그러면 끝 화면 아래가 텅 빈다.
-  const withShots = steps.map(([d]) => d).filter((d) => shots.has(d));
-  const outro = [];
-  for (let i = 0; i < 3 && withShots.length; i++) {
-    const d = withShots[Math.round((i * (withShots.length - 1)) / 2)];
-    const bm = shots.get(d)[0];
-    if (bm && !outro.includes(bm)) outro.push(bm);
-  }
-
-  const TL_STEP = tlStepMs(steps.length);
   const total = TL_INTRO + steps.length * TL_STEP + TL_OUTRO;
-  const placed = [...seeded];   // 지금까지 찍힌 핀
-  const painted = new Set();    // 이미 칠한 지역
-  for (const p of seeded) {
-    const f = regionOfPoint(geo, p.lng, p.lat);
-    if (f && !painted.has(f._key)) { painted.add(f._key); tlFillRegion(fctx, f, proj, dotColor(p)); }
+  const placed = [], painted = new Set();
+
+  // 필름이 흐른 거리(사진 개수 단위). 단계 안에서는 고르게 이어져 **끊기지 않고
+  // 계속 흐르는** 것처럼 보이고, 단계가 넘어가는 순간 그 날 사진이 아래에서 들어온다.
+  // 끝나면 마지막 장이 오른쪽 여백만 남기고 서도록 멈춘다 — 그 앞 장이 왼쪽을
+  // 채워 마지막 화면(= 미리보기 썸네일)이 비지 않는다. 마지막 단계의 목적지를
+  // 아예 이 값으로 잡아서 멈추는 순간 되감기듯 튀지 않게 한다.
+  const midX = TL_W / 2 - TL_SHOT / 2;
+  const freeze = Math.max(0, film.length - 1 + (midX - (TL_W - TL_SHOT - 40)) / TL_SLOT);
+  function cursorAt(t) {
+    if (t <= TL_INTRO) return 0;
+    const body = t - TL_INTRO, k = Math.floor(body / TL_STEP);
+    if (k >= steps.length) return freeze;
+    const f = (body - k * TL_STEP) / TL_STEP;
+    const to = Math.max(start[k], k === steps.length - 1 ? freeze : start[k + 1]);
+    return start[k] + (to - start[k]) * f;
   }
 
   const label = (day) => { const [y, m, d] = day.split("-"); return `${y}년 ${Number(m)}월 ${Number(d)}일`; };
   function frame(t) {
     ctx.fillStyle = "#0b1016"; ctx.fillRect(0, 0, TL_W, TL_H);
-    ctx.drawImage(base, 0, 0);
-    ctx.drawImage(fills, 0, 0);
+    const step = Math.floor((t - TL_INTRO) / TL_STEP);
+    const done = t >= TL_INTRO + steps.length * TL_STEP;
+    const cur = Math.max(0, Math.min(steps.length - 1, step));
 
-    // 지금까지의 핀. 이번 단계에 새로 찍힌 것은 커졌다 가라앉으며 고리를 남긴다.
+    // ── 위: 지도 ──
+    ctx.drawImage(base, TL_MAP.x, TL_MAP.y);
+    ctx.drawImage(fills, TL_MAP.x, TL_MAP.y);
+    ctx.save();
+    ctx.beginPath(); ctx.rect(TL_MAP.x, TL_MAP.y, TL_MAP.w, TL_MAP.h); ctx.clip();
     for (const p of placed) {
-      const age = p._born == null ? 1 : Math.min(1, (t - p._born) / Math.min(550, TL_STEP));
-      const r = 9 + (1 - age) * 26;
-      ctx.globalAlpha = 1;
+      const age = p._born == null ? 1 : Math.min(1, (t - p._born) / Math.min(500, TL_STEP));
+      const x = TL_MAP.x + proj.X(p.lng), y = TL_MAP.y + proj.Y(p.lat);
+      const r = 8 + (1 - age) * 22;
       ctx.fillStyle = dotColor(p);
-      ctx.beginPath(); ctx.arc(proj.X(p.lng), proj.Y(p.lat), r, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
       ctx.strokeStyle = "#fff"; ctx.lineWidth = 3; ctx.stroke();
       if (age < 1) {
         ctx.globalAlpha = 1 - age; ctx.strokeStyle = dotColor(p); ctx.lineWidth = 5;
-        ctx.beginPath(); ctx.arc(proj.X(p.lng), proj.Y(p.lat), r + 22 * age, 0, 7); ctx.stroke();
+        ctx.beginPath(); ctx.arc(x, y, r + 20 * age, 0, 7); ctx.stroke();
         ctx.globalAlpha = 1;
       }
     }
+    ctx.restore();
 
-    // 아래쪽: 날짜 + 그 날 사진
-    const step = Math.floor((t - TL_INTRO) / TL_STEP);
-    const day = steps[Math.max(0, Math.min(steps.length - 1, step))]?.[0];
-    const done = t >= TL_INTRO + steps.length * TL_STEP;
+    // ── 아래 판: 날짜·지역, 그리고 흐르는 필름 ──
+    ctx.fillStyle = "#0d131b"; ctx.fillRect(0, TL_PANEL, TL_W, TL_H - TL_PANEL);
+    ctx.fillStyle = "#1b2431"; ctx.fillRect(0, TL_PANEL, TL_W, 2);
+
     ctx.textAlign = "center";
     ctx.fillStyle = "#e2e9f0";
     ctx.font = "700 62px system-ui, -apple-system, sans-serif";
-    ctx.fillText(done ? "함께 다닌 곳" : (t < TL_INTRO ? "" : label(day)), TL_W / 2, TL_MAP_H + 110);
-    ctx.font = "400 40px system-ui, -apple-system, sans-serif";
+    ctx.fillText(done ? "함께 다닌 곳" : (t < TL_INTRO ? "" : label(steps[cur][0])), TL_W / 2, 1272);
+    ctx.font = "400 36px system-ui, -apple-system, sans-serif";
     ctx.fillStyle = "#94a1b0";
-    const unit = geo._m.unit;
-    ctx.fillText(done ? `${painted.size}개 ${unit} · 핀 ${placed.length}개` : "", TL_W / 2, TL_MAP_H + 180);
+    const sub = done
+      ? `같이 다닌 ${steps.length}일 · ${painted.size}개 ${geo._m.unit}`
+      : (t < TL_INTRO ? "" : ((stepNames[cur] || []).join(" · ") || `${cur + 1}일째`));
+    ctx.fillText(tlFit(ctx, sub, TL_W - 120), TL_W / 2, 1336);
 
-    const bmps = done ? outro : ((t >= TL_INTRO && shots.get(day)) || []);
-    if (bmps.length) {
-      const size = bmps.length > 2 ? 240 : 300, gap = 28;
-      const w = bmps.length * size + (bmps.length - 1) * gap;
-      bmps.forEach((bm, i) => {
-        const x = (TL_W - w) / 2 + i * (size + gap), y = TL_MAP_H + 230;
-        ctx.save();
-        tlRoundRect(ctx, x, y, size, size, 28); ctx.clip();
-        const sc = Math.max(size / bm.width, size / bm.height);
-        ctx.drawImage(bm, x + (size - bm.width * sc) / 2, y + (size - bm.height * sc) / 2,
-          bm.width * sc, bm.height * sc);
-        ctx.restore();
-        ctx.strokeStyle = "#2b3644"; ctx.lineWidth = 3;
-        tlRoundRect(ctx, x, y, size, size, 28); ctx.stroke();
-      });
+    // 지금 날의 사진이 한가운데, 지난 사진은 왼쪽으로 밀려 나간다.
+    ctx.save();
+    ctx.beginPath(); ctx.rect(TL_FILM.x, TL_FILM.y, TL_FILM.w, TL_FILM.h); ctx.clip();
+    const cursor = cursorAt(t), mid = midX;
+    for (let i = 0; i < film.length; i++) {
+      const x = mid - TL_SLOT * (cursor - i);
+      if (x > TL_W || x + TL_SHOT < 0) continue; // 창 밖
+      const bm = film[i];
+      // 가운데에서 멀수록 옅게 — 지금 보는 한 장이 또렷하게 도드라진다
+      ctx.globalAlpha = Math.max(.35, 1 - Math.abs(x - mid) / (TL_W * .8));
+      ctx.save();
+      tlRoundRect(ctx, x, TL_FILM.y, TL_SHOT, TL_SHOT, 28); ctx.clip();
+      const sc = Math.max(TL_SHOT / bm.width, TL_SHOT / bm.height);
+      ctx.drawImage(bm, x + (TL_SHOT - bm.width * sc) / 2, TL_FILM.y + (TL_SHOT - bm.height * sc) / 2,
+        bm.width * sc, bm.height * sc);
+      ctx.restore();
+      ctx.strokeStyle = "#2b3644"; ctx.lineWidth = 3;
+      tlRoundRect(ctx, x, TL_FILM.y, TL_SHOT, TL_SHOT, 28); ctx.stroke();
+      ctx.globalAlpha = 1;
     }
+    ctx.restore();
+    ctx.textAlign = "left";
   }
 
   // 새 단계로 넘어갈 때 핀·색칠을 누적한다(프레임마다 다시 계산하지 않는다).
@@ -5113,7 +5235,7 @@ async function runTimelapse() {
         p._born = TL_INTRO + i * TL_STEP;
         placed.push(p);
         const f = regionOfPoint(geo, p.lng, p.lat);
-        if (f && !painted.has(f._key)) { painted.add(f._key); tlFillRegion(fctx, f, proj, dotColor(p)); }
+        if (f && !painted.has(f._key)) { painted.add(f._key); tlFillRegion(fctx, f, proj, fillColor); }
       }
       applied = i;
     }
@@ -5123,6 +5245,9 @@ async function runTimelapse() {
   $("tl-save").hidden = true;
   tlAbort = false; tlBlob = null;
   const recording = tlCanRecord();
+  // 음악은 녹화 직전에 붙인다 — 여기까지 오는 길은 사용자의 클릭이라 자동재생
+  // 정책에 걸리지 않는다. 못 받아 오면(네트워크·코덱) 소리 없이 그냥 만든다.
+  const audio = recording ? await tlAudio(bgmUrl, total).catch(() => null) : null;
   $("tl-status").textContent = recording
     ? "만드는 중… 이 화면을 그대로 담고 있어요"
     : "이 기기는 동영상 저장을 지원하지 않아요 — 재생만 보여드려요";
@@ -5130,9 +5255,13 @@ async function runTimelapse() {
   let rec = null, stream = null, chunks = [];
   if (recording) {
     stream = canvas.captureStream(30);
-    rec = new MediaRecorder(stream, { mimeType: tlMime(), videoBitsPerSecond: 8e6 });
+    for (const tr of audio?.dest.stream.getAudioTracks() || []) stream.addTrack(tr);
+    rec = new MediaRecorder(stream, {
+      mimeType: tlMime(!!audio), videoBitsPerSecond: 8e6, audioBitsPerSecond: 128e3,
+    });
     rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
     rec.start();
+    audio?.el.play().catch(() => {});
   }
 
   const t0 = performance.now();
@@ -5149,7 +5278,8 @@ async function runTimelapse() {
     };
     requestAnimationFrame(tick);
   });
-  for (const bmps of shots.values()) for (const b of bmps) b.close?.();
+  for (const bm of film) bm.close?.();
+  audio?.stop();
 
   if (rec && rec.state !== "inactive") {
     await new Promise((done) => { rec.onstop = done; rec.stop(); });
@@ -5158,11 +5288,15 @@ async function runTimelapse() {
   if (tlAbort) { $("tl").hidden = true; return; }
   if (!recording) { $("tl-status").textContent = "재생이 끝났어요."; return; }
 
-  const type = (rec.mimeType || tlMime()).split(";")[0];
+  const type = (rec.mimeType || tlMime(!!audio)).split(";")[0];
   tlBlob = new Blob(chunks, { type });
   tlName = `함께다닌곳-${todayYmd()}.${type.includes("mp4") ? "mp4" : "webm"}`;
-  $("tl-status").textContent = `다 됐어요 · ${(tlBlob.size / 1048576).toFixed(1)}MB`;
+  // 음악을 골랐는데 못 붙인 경우(코덱·네트워크)를 조용히 넘기지 않는다 — 저장한
+  // 뒤에 무음인 걸 알면 처음부터 다시 만들어야 한다.
+  const sound = bgmUrl ? (audio ? " · 음악 포함" : " · 음악은 못 넣었어요") : "";
+  $("tl-status").textContent = `다 됐어요 · ${(tlBlob.size / 1048576).toFixed(1)}MB${sound}`;
   $("tl-save").hidden = false;
+  window.tlBlob = tlBlob; // e2e 가 담긴 트랙을 들여다본다
 }
 
 async function saveTimelapse() {
@@ -5181,12 +5315,47 @@ async function saveTimelapse() {
   setTimeout(() => URL.revokeObjectURL(a.href), 10000);
 }
 
+// 🎬 는 바로 만들지 않고 먼저 연다 — 음악을 고를 자리가 필요하고, 그 "만들기"
+// 클릭이 AudioContext 를 여는 사용자 동작이 돼 준다(자동재생 정책).
+async function openTimelapse() {
+  const geo = await loadMapGeo();
+  const days = tlSteps(geo, loadPins()).length;
+  if (!days) { showToast("둘이 같은 날 찍은 기록이 아직 없어요."); return; }
+  const canvas = $("tl-canvas");
+  canvas.width = TL_W; canvas.height = TL_H;
+  canvas.getContext("2d").clearRect(0, 0, TL_W, TL_H);
+  $("tl").hidden = false;
+  $("tl").classList.add("picking");
+  $("tl-save").hidden = true;
+  $("tl-setup").hidden = false;
+  $("tl-start").hidden = false;
+  $("tl-status").textContent = `둘이 같은 날 다녀온 ${days}일이 담겨요.`;
+
+  const sel = $("tl-bgm");
+  if (sel.options.length <= 1) {
+    for (const track of await loadBgmList()) {
+      sel.append(new Option(track.title, track.url));
+    }
+    let saved = "";
+    try { saved = localStorage.getItem(BGM_KEY) || ""; } catch {}
+    if (saved && [...sel.options].some((o) => o.value === saved)) sel.value = saved;
+  }
+}
 $("map-export").addEventListener("click", async () => {
   const btn = $("map-export");
   btn.disabled = true;
-  try { await runTimelapse(); }
-  catch (e) { console.warn("타임랩스 실패", e); $("tl").hidden = true; showToast("동영상을 만들지 못했어요."); }
+  try { await openTimelapse(); }
+  catch (e) { console.warn("타임랩스 열기 실패", e); showToast("동영상을 만들지 못했어요."); }
   finally { btn.disabled = false; }
+});
+$("tl-start").addEventListener("click", async () => {
+  const url = $("tl-bgm").value;
+  try { localStorage.setItem(BGM_KEY, url); } catch {}
+  $("tl-setup").hidden = true;
+  $("tl-start").hidden = true;
+  $("tl").classList.remove("picking");
+  try { await runTimelapse(url); }
+  catch (e) { console.warn("타임랩스 실패", e); $("tl").hidden = true; showToast("동영상을 만들지 못했어요."); }
 });
 $("tl-close").addEventListener("click", () => { tlAbort = true; $("tl").hidden = true; });
 $("tl-save").addEventListener("click", saveTimelapse);
