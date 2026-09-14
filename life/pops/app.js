@@ -110,7 +110,9 @@ function activate(index) {
 function setAudible(next) {
   audible = next;
   sound.setAttribute("aria-pressed", String(audible));
-  sound.textContent = audible ? "소리 켬" : "소리 끔";
+  sound.textContent = audible ? "🔊" : "🔇";
+  sound.setAttribute("aria-label", audible ? "소리 끄기" : "소리 켜기");
+  sound.title = audible ? "소리 끄기" : "소리 켜기";
   const video = feed.querySelector(`.pop[data-index="${activeIndex}"] video`);
   if (video) video.muted = !audible;
 }

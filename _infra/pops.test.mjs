@@ -11,6 +11,7 @@ test("pops는 LIFE 도구 페이지와 정적 manifest를 가진다", () => {
   const html = read("life/pops/index.html");
   const manifest = JSON.parse(read("life/pops/content/manifest.json"));
   assert.match(html, /<script type="module" src="app\.js"><\/script>/);
+  assert.match(html, /id="sound"[^>]*>🔇<\/button>/);
   assert.match(html, /href="\.\.\/styles\.css"/);
   assert.equal(manifest.version, 2);
   assert.ok(Array.isArray(manifest.items));
