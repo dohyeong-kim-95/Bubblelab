@@ -13,7 +13,7 @@
     "pdfjs-dist": "6.3.289"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.1",
+    "@playwright/test": "^1.63.0",
     "wrangler": "4.111.0"
   }
 }
