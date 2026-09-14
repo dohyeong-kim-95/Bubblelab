@@ -125,7 +125,11 @@ async function load() {
     empty.hidden = false;
     return;
   }
-  items = Array.isArray(manifest.items) ? manifest.items.filter((item) => item && item.id && item.src) : [];
+  const assetVersion = encodeURIComponent(manifest.version || 1);
+  items = Array.isArray(manifest.items)
+    ? manifest.items.filter((item) => item && item.id && item.src)
+      .map((item) => ({ ...item, src: `${item.src}?v=${assetVersion}` }))
+    : [];
   if (!items.length) { empty.hidden = false; return; }
   feed.replaceChildren(...items.map(renderItem));
   const observer = new IntersectionObserver((entries) => {
