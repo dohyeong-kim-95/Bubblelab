@@ -14,9 +14,11 @@ test("pops는 LIFE 도구 페이지와 정적 manifest를 가진다", () => {
   assert.match(html, /href="\.\.\/styles\.css"/);
   assert.equal(manifest.version, 1);
   assert.ok(Array.isArray(manifest.items));
-  assert.equal(manifest.items.length, 20);
+  assert.equal(manifest.items.length, 50);
   for (const item of manifest.items) {
     assert.ok(existsSync(join(ROOT, "life/pops", item.src)), item.src);
+    assert.ok(item.exampleMeaning, `${item.id} has no example translation`);
+    assert.doesNotMatch(item.exampleMeaning, /뜻은 .*입니다/, `${item.id} still uses the placeholder translation`);
   }
   assert.equal(existsSync(join(ROOT, "life/pops/content/tts")), false, "TTS 원본은 서비스하지 않는다");
   assert.equal(existsSync(join(ROOT, "life/pops/content/a1-words.json")), false, "단어 원본은 서비스하지 않는다");

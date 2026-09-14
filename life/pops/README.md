@@ -1,7 +1,7 @@
 # Pops
 
 `life.bubblelab.dev/pops/`는 개인용 세로 영상 피드다. 현재는 CEFR A1 스페인어 단어
-학습 영상 20개로 스와이프 성능을 확인하는 단계다.
+학습 영상 50개로 스와이프 성능을 확인하는 단계다.
 
 ## 콘텐츠
 
@@ -13,7 +13,8 @@
 단어 원본을 다시 만들 때:
 
 ```bash
-node pops_generator/a1.mjs
+node pops_generator/generate50.mjs
+./pops_generator/render50.sh
 ```
 
 로컬 생성기는 단어 → 0.5초 → 뜻 → 0.5초 → 예문 → 0.5초 → 예문뜻 → 0.5초

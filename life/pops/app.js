@@ -9,6 +9,7 @@ let items = [];
 let activeIndex = -1;
 let audible = false;
 let wrapping = false;
+let previousScrollTop = 0;
 
 const esc = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;",
@@ -128,6 +129,7 @@ async function load() {
   if (!items.length) { empty.hidden = false; return; }
   feed.replaceChildren(...items.map(renderItem));
   const observer = new IntersectionObserver((entries) => {
+    if (wrapping) return;
     const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
     if (visible) activate(Number(visible.target.dataset.index));
   }, { root: feed, threshold: [0.6, 0.85] });
@@ -138,13 +140,21 @@ async function load() {
 sound.addEventListener("click", () => setAudible(!audible));
 feed.addEventListener("scroll", () => {
   if (wrapping || feed.scrollHeight <= feed.clientHeight) return;
-  const last = feed.scrollTop + feed.clientHeight >= feed.scrollHeight - 2;
-  const first = feed.scrollTop <= 2;
+  const current = feed.scrollTop;
+  const last = current + feed.clientHeight >= feed.scrollHeight - 2 && current > previousScrollTop;
+  const first = current <= 2 && current < previousScrollTop;
+  previousScrollTop = current;
   if (!last && !first) return;
   wrapping = true;
+  feed.classList.add("wrapping");
   requestAnimationFrame(() => {
-    feed.scrollTop = last ? 2 : feed.scrollHeight - feed.clientHeight - 2;
-    wrapping = false;
+    feed.scrollTo({ top: last ? 2 : feed.scrollHeight - feed.clientHeight - 2, behavior: "auto" });
+    activate(last ? 0 : items.length - 1);
+    requestAnimationFrame(() => {
+      previousScrollTop = feed.scrollTop;
+      feed.classList.remove("wrapping");
+      wrapping = false;
+    });
   });
 });
 load();
