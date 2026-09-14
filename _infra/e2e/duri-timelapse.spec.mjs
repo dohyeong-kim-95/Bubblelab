@@ -10,7 +10,7 @@ const DAYS = [
   ["2026-07-20", 33.5104, 126.4914, "빵"],
 ];
 
-const openMapWithPins = async (page) => {
+const openMapWithPins = async (page, days = DAYS) => {
   await page.goto("/duri/");
   await page.waitForFunction(() => typeof window.renderMap === "function");
   await page.locator("#pass").fill("우리만아는긴문장");
@@ -33,7 +33,7 @@ const openMapWithPins = async (page) => {
       await window.putEntry({ seq, kind: "photo", at, name: who, thumb: await shot(),
                               loc: { lat, lng }, w: 64, h: 64 });
     }
-  }, DAYS);
+  }, days);
   await page.evaluate(() => window.openMap());
 };
 
@@ -75,4 +75,22 @@ test("🎬 는 핀을 시간순으로 얹은 동영상 파일을 만든다", asy
   await page.locator("#tl-close").click();
   await expect(page.locator("#tl")).toBeHidden();
   expect(errors).toEqual([]);
+});
+
+test("날짜가 많아도 영상은 짧게 끝난다 — 만드는 시간이 곧 영상 길이다", async ({ page }) => {
+  // 녹화가 실시간이라 우회가 없다. 그래서 전체 길이에 상한을 두고 날짜 수로 한 단계를
+  // 나눈다 — 하루당 고정 길이였을 때 마흔 날이면 46초였다.
+  const many = [];
+  for (let i = 0; i < 40; i++) {
+    const d = new Date(Date.UTC(2026, 0, 1 + i));
+    many.push([d.toISOString().slice(0, 10), 35 + (i % 7) * 0.4, 127 + (i % 5) * 0.5, i % 2 ? "쫑" : "빵"]);
+  }
+  await openMapWithPins(page, many);
+  await page.locator("#map-dock-toggle").click();
+
+  const t0 = Date.now();
+  await page.locator("#map-export").click();
+  await expect(page.locator("#tl-save")).toBeVisible({ timeout: 40000 });
+  const took = (Date.now() - t0) / 1000;
+  expect(took, `40일치가 ${took.toFixed(1)}초 걸렸다 — 길이 상한이 풀렸다`).toBeLessThan(17);
 });

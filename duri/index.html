@@ -4932,7 +4932,12 @@ $("map-sync").addEventListener("click", async () => {
 // 걸린다). 그동안 캔버스를 그대로 보여줘서 미리보기 겸 진행 표시가 된다.
 const TL_W = 1080, TL_H = 1920;       // 9:16 — 폰에서 보고 공유하는 물건이다
 const TL_MAP_H = 1250;                // 위쪽 지도 영역
-const TL_INTRO = 1400, TL_STEP = 1100, TL_OUTRO = 3000; // ms
+// 만드는 시간 = 영상 길이다(실시간 녹화라 우회가 없다). 그래서 **전체 길이에 상한**을
+// 두고 날짜 수로 한 단계를 나눈다 — 날짜가 많을수록 빨라져 눈이 몇 일이든 12초 안쪽에
+// 끝난다. 타임랩스는 원래 빨라야 제맛이라 영상 자체도 이쪽이 낫다.
+const TL_INTRO = 900, TL_OUTRO = 2400, TL_BODY_MAX = 9000; // ms
+const TL_STEP_MAX = 900, TL_STEP_MIN = 160;
+const tlStepMs = (n) => Math.max(TL_STEP_MIN, Math.min(TL_STEP_MAX, Math.round(TL_BODY_MAX / Math.max(1, n))));
 const TL_MIMES = ["video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp9", "video/webm"];
 const tlMime = () => TL_MIMES.find((t) => window.MediaRecorder?.isTypeSupported?.(t)) || null;
 const tlCanRecord = () => !!(window.MediaRecorder && tlMime()
@@ -5038,6 +5043,7 @@ async function runTimelapse() {
     if (bm && !outro.includes(bm)) outro.push(bm);
   }
 
+  const TL_STEP = tlStepMs(steps.length);
   const total = TL_INTRO + steps.length * TL_STEP + TL_OUTRO;
   const placed = [...seeded];   // 지금까지 찍힌 핀
   const painted = new Set();    // 이미 칠한 지역
@@ -5054,7 +5060,7 @@ async function runTimelapse() {
 
     // 지금까지의 핀. 이번 단계에 새로 찍힌 것은 커졌다 가라앉으며 고리를 남긴다.
     for (const p of placed) {
-      const age = p._born == null ? 1 : Math.min(1, (t - p._born) / 550);
+      const age = p._born == null ? 1 : Math.min(1, (t - p._born) / Math.min(550, TL_STEP));
       const r = 9 + (1 - age) * 26;
       ctx.globalAlpha = 1;
       ctx.fillStyle = dotColor(p);
