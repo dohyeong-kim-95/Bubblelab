@@ -2,7 +2,6 @@ const feed = document.querySelector("#feed");
 const empty = document.querySelector("#empty");
 const position = document.querySelector("#position");
 const sound = document.querySelector("#sound");
-const caption = document.querySelector("#caption");
 const VIEWED_KEY = "bl_pops_viewed_v1";
 const MAX_PREPARED_AHEAD = 1;
 
@@ -86,16 +85,6 @@ function updatePosition() {
   position.textContent = activeIndex < 0 ? "" : `${activeIndex + 1} / ${items.length}`;
 }
 
-function updateCaption(item, video) {
-  const segments = Array.isArray(item.segments) ? item.segments : [];
-  if (!segments.length || !Number.isFinite(video.currentTime)) return;
-  const progress = video.duration > 0 ? video.currentTime / video.duration : 0;
-  const segment = segments.find((one) => progress >= one.from && progress < one.to)
-    || segments.at(-1);
-  caption.textContent = segment.text || "";
-  caption.className = `caption is-${segment.kind || "word"}`;
-}
-
 function activate(index) {
   if (index < 0 || index >= items.length) return;
   activeIndex = index;
@@ -107,8 +96,6 @@ function activate(index) {
     else releaseSource(card);
     if (cardIndex === index) {
       video.muted = !audible;
-      video.ontimeupdate = () => updateCaption(items[index], video);
-      video.onloadedmetadata = () => updateCaption(items[index], video);
       video.play().then(() => card.classList.remove("paused")).catch(() => card.classList.add("paused"));
       markViewed(items[index].id);
     } else if (video) {
@@ -125,7 +112,6 @@ function setAudible(next) {
   sound.textContent = audible ? "소리 켬" : "소리 끔";
   const video = feed.querySelector(`.pop[data-index="${activeIndex}"] video`);
   if (video) video.muted = !audible;
-  if (video) updateCaption(items[activeIndex], video);
 }
 
 async function load() {
