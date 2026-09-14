@@ -315,7 +315,8 @@
   /* 캔버스는 9:16 원본을 줄여 보여줄 뿐 — 녹화는 원본 해상도로 간다 */
   #tl-canvas { max-width: 100%; min-height: 0; flex: 1; object-fit: contain;
                border-radius: .8rem; background: #0b1016; }
-  #tl-status { flex: none; font-size: .8rem; color: #c9d2dc; text-align: center; line-height: 1.6; }
+  #tl-status { flex: none; font-size: .8rem; color: #c9d2dc; text-align: center; line-height: 1.6;
+               white-space: pre-line; } /* 왜 사진이 적은지 한 줄 더 붙는다 */
   /* 고르는 동안에는 캔버스를 접어 둔다 — 아직 아무것도 안 그려서 새카만 판이
      화면을 다 차지하면 정작 고를 자리가 안 보인다. */
   #tl.picking #tl-canvas { display: none; }
@@ -4954,7 +4955,9 @@ const TL_MAP = { x: 0, y: 0, w: 1080, h: 1150 };     // 위 전체
 const TL_PANEL = 1150;                               // 아래 판이 시작하는 높이
 const TL_FILM = { x: 0, y: 1400, w: 1080, h: 420 };  // 가로로 흐르는 필름
 const TL_SHOT = 420, TL_SLOT = TL_SHOT + 30;
-const TL_PER_DAY = 2;                                // 한 날에서 고르는 사진 수
+// 한 날에서 고르는 사진 수. 날이 적으면 더 많이 골라야 필름이 안 빈다 —
+// 전체 길이가 정해져 있어 장수가 적으면 그만큼 화면이 휑하게 흐른다.
+const tlPerDay = (days) => (days <= 3 ? 6 : days <= 8 ? 4 : 2);
 // 만드는 시간 = 영상 길이다(실시간 녹화라 우회가 없다). 전체 길이에 상한을 두고
 // 날짜 수로 한 단계를 나눈다 — 날짜가 많을수록 빨라져 12초 안쪽에 끝난다.
 const TL_INTRO = 900, TL_OUTRO = 2600, TL_BODY_MAX = 10000; // ms
@@ -5104,9 +5107,20 @@ async function runTimelapse(bgmUrl = "") {
 
   // 사진은 seq 로 정확히 붙는다(핀이 그 메시지에서 나왔다). 미리보기(thumb)를
   // 먼저 쓴다 — 원본은 몇 MB 라 수십 장을 한꺼번에 올리면 메모리가 튄다.
-  const bySeq = new Map();
-  for (const r of await allEntries()) {
-    if (r.kind === "photo" && (r.thumb || r.blob)) bySeq.set(r.seq, r.thumb || r.blob);
+  //
+  // **그것만으로는 필름이 텅 빈다.** 핀은 서버에 동기화돼 오래 남지만 사진은 이
+  // 기기 캐시에만 있고 최근 MAX_CACHE(2000)개 메시지까지다 — 대화가 쌓이면 옛
+  // 날짜는 점만 남고 사진이 정리돼 있다. `/여기` 로 남긴 핀은 애초에 사진이 없다.
+  // 그래서 seq 로 못 찾으면 **그날 찍힌 다른 사진**으로 채운다(그날의 기록인 건
+  // 마찬가지다). 날이 적으면 하루에서 더 많이 골라 흐름이 끊기지 않게 한다.
+  const shots = (await allEntries()).filter((r) => r.kind === "photo" && (r.thumb || r.blob));
+  const bySeq = new Map(shots.map((r) => [r.seq, r]));
+  const byDay = new Map();
+  for (const r of shots) {
+    if (!r.at) continue;
+    const key = ymd(new Date(r.at));
+    if (!byDay.has(key)) byDay.set(key, []);
+    byDay.get(key).push(r);
   }
 
   const TL_STEP = tlStepMs(steps.length);
@@ -5127,21 +5141,31 @@ async function runTimelapse(bgmUrl = "") {
   // 필름에 올릴 사진을 날짜순으로 줄 세운다. 한 날에서 두 장까지 — 그보다 많이
   // 넣으면 같은 시간에 더 빨리 흘러 한 장이 스쳐 지나간다.
   // start[k] = k번째 날의 첫 사진 위치. 흐름(cursor)을 단계에 맞추는 데 쓴다.
+  const perDay = tlPerDay(steps.length);
   const film = [], start = [0], stepNames = [];
-  for (const [, list] of steps) {
-    for (const p of list.slice(0, TL_PER_DAY)) {
-      const blob = bySeq.get(p.seq);
-      if (!blob) continue;
-      try { film.push(await createImageBitmap(blob)); } catch { /* 못 읽으면 건너뛴다 */ }
+  for (const [day, list] of steps) {
+    const picked = [], seen = new Set();
+    for (const p of list) {                      // ① 핀에 정확히 붙은 사진
+      const r = bySeq.get(p.seq);
+      if (r && !seen.has(r.seq)) { seen.add(r.seq); picked.push(r); }
+    }
+    for (const r of byDay.get(day) || []) {      // ② 모자라면 그날의 다른 사진
+      if (picked.length >= perDay) break;
+      if (!seen.has(r.seq)) { seen.add(r.seq); picked.push(r); }
+    }
+    for (const r of picked.slice(0, perDay)) {
+      try { film.push(await createImageBitmap(r.thumb || r.blob)); } catch { /* 못 읽으면 건너뛴다 */ }
     }
     start.push(film.length);
-    const seen = [];
+    const names = [];
     for (const p of list) {
       const f = regionOfPoint(geo, p.lng, p.lat);
-      if (f && !seen.includes(f._name)) seen.push(f._name);
+      if (f && !names.includes(f._name)) names.push(f._name);
     }
-    stepNames.push(seen);
+    stepNames.push(names);
   }
+
+  window.tlFilmCount = film.length; // e2e 가 "필름에 실제로 몇 장 들어갔나"를 본다
 
   const total = TL_INTRO + steps.length * TL_STEP + TL_OUTRO;
   const placed = [], painted = new Set();
@@ -5319,9 +5343,26 @@ async function saveTimelapse() {
 
 // 🎬 는 바로 만들지 않고 먼저 연다 — 음악을 고를 자리가 필요하고, 그 "만들기"
 // 클릭이 AudioContext 를 여는 사용자 동작이 돼 준다(자동재생 정책).
+// 이 기기에 남아 있는 사진 중 그 날들에 쓸 수 있는 장수. **미리 세서 보여 준다** —
+// 사진은 최근 MAX_CACHE 개 메시지 안에만 있어서 옛 날짜는 점만 남는데, 그걸 모르면
+// 다 만들고 나서 "왜 사진이 한 장이지" 하게 된다.
+async function tlPhotoCount(steps) {
+  const perDay = tlPerDay(steps.length);
+  const count = new Map();
+  for (const r of await allEntries()) {
+    if (r.kind !== "photo" || !(r.thumb || r.blob) || !r.at) continue;
+    const key = ymd(new Date(r.at));
+    count.set(key, (count.get(key) || 0) + 1);
+  }
+  let n = 0;
+  for (const [day] of steps) n += Math.min(perDay, count.get(day) || 0);
+  return n;
+}
+
 async function openTimelapse() {
   const geo = await loadMapGeo();
-  const days = tlSteps(geo, loadPins()).length;
+  const steps = tlSteps(geo, loadPins());
+  const days = steps.length;
   if (!days) { showToast("둘이 같은 날 찍은 기록이 아직 없어요."); return; }
   const canvas = $("tl-canvas");
   canvas.width = TL_W; canvas.height = TL_H;
@@ -5331,7 +5372,11 @@ async function openTimelapse() {
   $("tl-save").hidden = true;
   $("tl-setup").hidden = false;
   $("tl-start").hidden = false;
-  $("tl-status").textContent = `둘이 같은 날 다녀온 ${days}일이 담겨요.`;
+  const shots = await tlPhotoCount(steps);
+  $("tl-status").textContent = `둘이 같은 날 다녀온 ${days}일 · 사진 ${shots}장`
+    + (shots < days
+      ? "\n오래된 날은 사진이 이 기기에서 정리돼 지도에 점만 남아요."
+      : "");
 
   const sel = $("tl-bgm");
   if (sel.options.length <= 1) {

@@ -12,14 +12,16 @@ const DAYS = [
   ["2026-07-20", 33.5104, 126.4914],
 ];
 
-const openMapWithPins = async (page, days = DAYS) => {
+// photos:false — 사진을 아예 안 심는다(캐시가 다 정리된 기기).
+// photosBySeq:false — 핀과 다른 seq 로 심는다(핀에 붙은 사진만 정리된 경우).
+const openMapWithPins = async (page, days = DAYS, opts = {}) => {
   await page.goto("/duri/");
   await page.waitForFunction(() => typeof window.renderMap === "function");
   await page.locator("#pass").fill("우리만아는긴문장");
   await page.locator("#name").fill("빵");
   await page.locator("#enter").click();
   await expect(page.locator("#bar")).toBeVisible();
-  await page.evaluate(async (days) => {
+  await page.evaluate(async ([days, opts]) => {
     // 사진도 같이 심는다 — 타임랩스가 핀의 seq 로 정확히 붙여 온다
     const shot = () => new Promise((res) => {
       const c = document.createElement("canvas"); c.width = c.height = 64;
@@ -34,11 +36,15 @@ const openMapWithPins = async (page, days = DAYS) => {
         const [la, ln] = [lat + i * 0.01, lng + i * 0.01];
         await window.calPutRecord(`pin${String(seq).padStart(12, "0")}`,
           { kind: "pin", seq, lat: la, lng: ln, at, owner: who, photo: true });
-        await window.putEntry({ seq, kind: "photo", at, name: who, thumb: await shot(),
-                                loc: { lat: la, lng: ln }, w: 64, h: 64 });
+        if (opts.photos === false) continue;
+        await window.putEntry({
+          seq: opts.photosBySeq === false ? seq + 50000 : seq,
+          kind: "photo", at, name: who, thumb: await shot(),
+          loc: { lat: la, lng: ln }, w: 64, h: 64,
+        });
       }
     }
-  }, days);
+  }, [days, opts]);
   await page.evaluate(() => window.openMap());
 };
 
@@ -85,6 +91,33 @@ test("🎬 는 핀을 시간순으로 얹은 동영상 파일을 만든다", asy
   await page.locator("#tl-close").click();
   await expect(page.locator("#tl")).toBeHidden();
   expect(errors).toEqual([]);
+});
+
+test("사진이 정리된 날도 그날 사진으로 채운다 — 핀의 seq 로만 찾지 않는다", async ({ page }) => {
+  // 실제로 겪은 일: 핀은 서버에 남아 오래된 날까지 다 보이는데, 사진은 이 기기
+  // 캐시(MAX_CACHE)에서 정리돼 seq 로 찾으면 한 장밖에 안 나왔다. 여기서는 핀의
+  // seq 와 **다른** seq 로 그날 사진을 심어 그 상황을 그대로 만든다.
+  await openMapWithPins(page, DAYS, { photosBySeq: false });
+  await page.locator("#map-dock-toggle").click();
+  await page.locator("#map-export").click();
+  await page.locator("#tl-setup").waitFor();
+  // 세 날 모두 사진이 잡혀야 한다(하루 2장씩 심었다)
+  await expect(page.locator("#tl-status")).toHaveText(/둘이 같은 날 다녀온 3일 · 사진 6장/);
+  await expect(page.locator("#tl-status")).not.toContainText("정리돼");
+
+  await page.locator("#tl-start").click();
+  await expect(page.locator("#tl-save")).toBeVisible({ timeout: 40000 });
+  // 라벨만이 아니라 필름에 실제로 들어갔는지 본다 — seq 로만 찾던 때는 0장이었다
+  expect(await page.evaluate(() => window.tlFilmCount)).toBe(6);
+});
+
+test("이 기기에 사진이 없으면 그렇다고 먼저 말한다", async ({ page }) => {
+  await openMapWithPins(page, DAYS, { photos: false });
+  await page.locator("#map-dock-toggle").click();
+  await page.locator("#map-export").click();
+  await page.locator("#tl-setup").waitFor();
+  await expect(page.locator("#tl-status")).toContainText("사진 0장");
+  await expect(page.locator("#tl-status")).toContainText("정리돼");
 });
 
 test("배경음악을 고르면 소리 트랙까지 담긴다", async ({ page }) => {
