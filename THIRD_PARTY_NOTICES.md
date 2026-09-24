@@ -52,6 +52,18 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+## MediaPipe Tasks Vision 1.0.1
+
+`util/face-emoji/vendor/vision_bundle.mjs`와 `util/face-emoji/vendor/wasm/`에
+포함된 `@mediapipe/tasks-vision` 배포 파일.
+
+Copyright Google LLC. Licensed under the Apache License, Version 2.0:
+<https://www.apache.org/licenses/LICENSE-2.0>
+
+Face Landmarker 모델(`util/face-emoji/vendor/face_landmarker.task`)은 Google
+MediaPipe 모델 배포물이며, 원본 모델 문서와 이용 조건은 upstream 배포 경로를
+따른다: <https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task>
+
 ## pdf.js (pdfjs-dist) 6.2.108
 
 `util/pdf/vendor/pdf.min.mjs`, `pdf.worker.min.mjs`, `cmaps/`, `standard_fonts/`,

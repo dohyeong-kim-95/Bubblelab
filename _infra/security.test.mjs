@@ -97,6 +97,22 @@ test("test subdomain relaxes CSP for Pyodide CDN and wasm only there", () => {
   assert.doesNotMatch(strict, /jsdelivr|wasm-unsafe-eval/);
 });
 
+test("얼굴 캐릭터 화면은 동일 출처 WASM만 실행할 수 있다", () => {
+  const policyOf = (url) => applySecurityHeaders(new Response("ok"), new Request(url))
+    .headers.get("Content-Security-Policy");
+  for (const url of [
+    "https://util.bubblelab.dev/face-emoji/",
+    "http://localhost:8787/util/face-emoji/",
+  ]) {
+    const policy = policyOf(url);
+    assert.match(policy, /script-src [^;]*'wasm-unsafe-eval'/);
+    assert.match(policy, /connect-src 'self';/);
+    assert.doesNotMatch(policy, /jsdelivr|storage\.googleapis/);
+  }
+  const other = policyOf("https://util.bubblelab.dev/photo/");
+  assert.doesNotMatch(other, /wasm-unsafe-eval/);
+});
+
 test("admin responses are never cached or indexed", () => {
   const response = applySecurityHeaders(
     new Response(null, { status: 303, headers: { Location: "/login" } }),

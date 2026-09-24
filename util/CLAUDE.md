@@ -12,6 +12,7 @@
 | `planner/` | `/_planner/login`·`logout`·`data` → `worker.js handlePlanner` + `_infra/planner.js` (PlannerDO) | `_infra/planner.test.mjs` |
 | `chat/` | `/_chat` WebSocket → `_infra/chat.js` `ChatDO` (`idFromName("lobby")`, 단일 로비) | `_infra/chat.test.mjs`, verify `chat:ws` |
 | `proofread/` | 없음 — 규칙표 `util/proofread/rules.js` 하나 | `_infra/proofread.test.mjs`, e2e |
+| `face-emoji/` | 없음 — 브라우저 전용, 동일 출처 MediaPipe 자산 + Canvas 2D | `_infra/face-emoji.test.mjs`, e2e |
 | `stars/` | 없음 — `util/stars/sky.js`·`skyline.js` | `_infra/stars.test.mjs`, `_infra/stars-skyline.test.mjs`, e2e |
 | `calendar/`·`photo/`·`image-convert/`·`ladder/`·`lotto/`·`pdf/`·`passport-pic/` | 없음 — 브라우저 전용(스티커만 `/_assets` 읽기) | `calendar`만 e2e |
 

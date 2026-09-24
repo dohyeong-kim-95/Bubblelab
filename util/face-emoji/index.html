@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="얼굴 사진을 브라우저에서만 처리해 SD 캐릭터로 만들어주는 도구">
+<title>얼굴 사진으로 SD 캐릭터 만들기</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🙂</text></svg>">
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: light-dark(#f8f3f4, #11131a);
+    --panel: light-dark(#fff, #1b1e27);
+    --line: light-dark(#e2d9dd, #343845);
+    --text: light-dark(#28242a, #f3edf0);
+    --muted: light-dark(#766c74, #aaa1ad);
+    --accent: #d76582;
+    --accent-dark: #a23d5d;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100dvh; background: var(--bg); color: var(--text);
+    font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; }
+  button, input { font: inherit; }
+  button { border: 1px solid var(--line); border-radius: .75rem; padding: .75rem 1rem;
+    color: var(--text); background: var(--panel); cursor: pointer; }
+  button:active { transform: scale(.98); }
+  button:disabled { cursor: default; opacity: .45; }
+  button:focus-visible, label:focus-within { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .primary { border-color: var(--accent); color: #fff; background: var(--accent); font-weight: 700; }
+  .app { width: min(36rem, 100%); min-height: 100dvh; margin: 0 auto; padding: 1rem 1rem 8rem; }
+  header { display: flex; align-items: center; justify-content: space-between; min-height: 2.7rem; }
+  header h1 { margin: 0; font-size: 1rem; }
+  .home-space { width: 2rem; }
+  .hero { padding: 2.2rem 0 1.1rem; text-align: center; }
+  .emoji { width: 7rem; height: 7rem; margin: 0 auto 1rem; display: grid; place-items: center;
+    border-radius: 2.3rem; background: linear-gradient(145deg, #f6bdc9, #fff2da); box-shadow: 0 1rem 2rem #81345322;
+    font-size: 4rem; transform: rotate(-4deg); }
+  .eyebrow { margin: 0 0 .45rem; color: var(--accent-dark); font-size: .7rem; font-weight: 700; letter-spacing: .08em; }
+  h2 { margin: 0; font-size: 1.45rem; line-height: 1.35; }
+  .intro { margin: .7rem auto 0; max-width: 29rem; color: var(--muted); font-size: .78rem; line-height: 1.7; }
+  .card { margin-top: 1rem; padding: 1rem; border: 1px solid var(--line); border-radius: 1.15rem;
+    background: var(--panel); box-shadow: 0 .8rem 2.5rem #6b3a4b12; }
+  .engine { display: flex; gap: .5rem; align-items: center; min-height: 2.2rem; margin-bottom: .9rem;
+    color: var(--muted); font-size: .7rem; line-height: 1.45; }
+  .engine::before { content: ""; width: .55rem; height: .55rem; flex: none; border-radius: 50%; background: var(--accent); }
+  .file-label { display: grid; place-items: center; width: 100%; min-height: 8rem; padding: 1rem; border: 1.5px dashed var(--accent);
+    border-radius: .9rem; color: var(--accent-dark); background: light-dark(#fff8fa, #241a20); text-align: center; cursor: pointer; }
+  .file-label strong { display: block; font-size: .9rem; }
+  .file-label span { display: block; margin-top: .45rem; color: var(--muted); font-size: .68rem; }
+  .file-label .pick-plus { margin: 0; color: var(--accent); font-size: 2rem; line-height: 1; }
+  #photoInput { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+  .status { min-height: 1.5em; margin: .85rem 0 0; color: var(--muted); font-size: .72rem; line-height: 1.5; }
+  .error { margin: .75rem 0 0; padding: .7rem .8rem; border-radius: .65rem; color: light-dark(#8d2e4c, #ffc3d0);
+    background: light-dark(#fff0f4, #351e29); font-size: .72rem; line-height: 1.5; }
+  .error[hidden], #resultPanel[hidden] { display: none; }
+  .privacy { margin: 1rem 0 0; padding-top: .85rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .68rem; line-height: 1.65; }
+  .privacy strong { color: var(--text); }
+  .privacy summary { cursor: pointer; color: var(--text); }
+  .result { margin-top: 1rem; text-align: center; }
+  #output { display: block; width: min(100%, 25rem); height: auto; margin: 0 auto .9rem; border-radius: 1rem; box-shadow: 0 .7rem 1.8rem #5a304022; }
+  #output[hidden] { display: none; }
+  .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+  .result-actions { display: grid; grid-template-columns: 1fr 1fr; gap: .55rem; }
+  .result-note { margin: .8rem 0 0; color: var(--muted); font-size: .68rem; line-height: 1.5; }
+  @media (min-width: 48rem) { .app { padding-top: 1.5rem; } }
+</style>
+</head>
+<body>
+<main class="app">
+  <header>
+    <span class="home-space" aria-hidden="true"></span>
+    <h1>🙂 얼굴 SD 캐릭터</h1>
+    <span class="home-space" aria-hidden="true"></span>
+  </header>
+
+  <section class="hero">
+    <div class="emoji" aria-hidden="true">🙂</div>
+    <p class="eyebrow">FACE EMOJI</p>
+    <h2>사진 속 얼굴을<br>귀여운 캐릭터로</h2>
+    <p class="intro">사진의 눈·코·입·표정을 참고해 SD 얼굴을 그려요.<br>원본 사진은 이 브라우저 밖으로 나가지 않습니다.</p>
+  </section>
+
+  <section class="card" aria-labelledby="pickTitle">
+    <h2 id="pickTitle" class="visually-hidden">사진 고르기</h2>
+    <p class="engine" id="engineStatus" role="status">얼굴 엔진을 준비하는 중이에요.</p>
+    <button class="file-label" id="choosePhoto" type="button" aria-controls="photoInput" disabled>
+      <span aria-hidden="true" class="pick-plus">＋</span>
+      <strong>얼굴 사진 고르기</strong>
+      <span>한 명 · 정면에 가까운 사진 · 12MB 이하</span>
+    </button>
+    <input id="photoInput" type="file" accept="image/*" disabled>
+    <p class="status" id="status" role="status">얼굴 엔진을 준비하는 중이에요.</p>
+    <p class="error" id="error" role="alert" hidden></p>
+    <details class="privacy">
+      <summary><strong>사진 처리 방식</strong></summary>
+      <p>원본 사진과 얼굴 위치 정보는 브라우저 메모리에서만 사용합니다. 서버 업로드,
+        외부 생성 API, localStorage·IndexedDB 저장을 하지 않습니다. 처리가 끝나면
+        원본 메모리와 임시 이미지 주소를 정리합니다.</p>
+    </details>
+  </section>
+
+  <section class="card result" id="resultPanel" aria-labelledby="resultTitle" hidden>
+    <h2 id="resultTitle" class="visually-hidden">완성된 캐릭터</h2>
+    <canvas id="output" width="1" height="1" hidden aria-label="생성된 얼굴 SD 캐릭터"></canvas>
+    <div class="result-actions">
+      <button id="reset" type="button">다시 만들기</button>
+      <button id="download" type="button" class="primary" disabled>PNG 저장</button>
+    </div>
+    <p class="result-note">저장되는 것은 방금 만든 캐릭터 PNG뿐이에요.</p>
+  </section>
+</main>
+
+<script defer src="/_shared/share.js"></script>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

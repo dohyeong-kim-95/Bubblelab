@@ -54,6 +54,13 @@ function isPyodideSite(url) {
   return local && (url.pathname === "/test" || url.pathname.startsWith("/test/"));
 }
 
+function isFaceEmojiPage(url) {
+  const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  const production = url.hostname === "util.bubblelab.dev";
+  return (production && (url.pathname === "/face-emoji" || url.pathname.startsWith("/face-emoji/")))
+    || (local && (url.pathname === "/util/face-emoji" || url.pathname.startsWith("/util/face-emoji/")));
+}
+
 // util/stars는 폰이 겨눈 방향으로 하늘을 그린다 — 기기 방향(가속도·자이로·지자기)과
 // 위치가 필요하다. 기본 정책은 이 넷을 빈 목록으로 잠가 두는데, 그러면 브라우저가
 // **권한을 묻기도 전에** 이벤트를 아예 안 보내서 "값이 안 들어온다"로 보인다.
@@ -153,6 +160,13 @@ export function applySecurityHeaders(response, request) {
   if (url.hostname === "sktest.bubblelab.dev" || localSktest) {
     headers.set("Content-Security-Policy", SECURITY_HEADERS["Content-Security-Policy"]
       .replace("script-src 'self' 'unsafe-inline'", "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'"));
+  }
+  // Face Landmarker는 동일 출처로 고정한 WASM을 실행한다. 외부 스크립트·연결은
+  // 열지 않고 이 경로에만 WebAssembly 평가 권한을 준다.
+  if (isFaceEmojiPage(url)) {
+    headers.set("Content-Security-Policy", SECURITY_HEADERS["Content-Security-Policy"]
+      .replace("script-src 'self' 'unsafe-inline'", "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'")
+      .replace("connect-src 'self' https://*.bubblelab.dev wss://*.bubblelab.dev", "connect-src 'self'"));
   }
   if (isSkyPage(url)) {
     headers.set("Permissions-Policy", SENSOR_POLICY);
