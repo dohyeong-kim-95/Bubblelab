@@ -83,12 +83,12 @@
   <section class="card" aria-labelledby="pickTitle">
     <h2 id="pickTitle" class="visually-hidden">사진 고르기</h2>
     <p class="engine" id="engineStatus" role="status">얼굴 엔진을 준비하는 중이에요.</p>
-    <button class="file-label" id="choosePhoto" type="button" aria-controls="photoInput" disabled>
+    <button class="file-label" id="choosePhoto" type="button" aria-controls="photoInput" aria-describedby="engineStatus">
       <span aria-hidden="true" class="pick-plus">＋</span>
       <strong>얼굴 사진 고르기</strong>
       <span>한 명 · 정면에 가까운 사진 · 12MB 이하</span>
     </button>
-    <input id="photoInput" type="file" accept="image/*" disabled>
+    <input id="photoInput" type="file" accept="image/*">
     <p class="status" id="status" role="status">얼굴 엔진을 준비하는 중이에요.</p>
     <p class="error" id="error" role="alert" hidden></p>
     <details class="privacy">

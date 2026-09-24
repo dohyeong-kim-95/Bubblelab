@@ -64,12 +64,14 @@ test("face-emoji 정적 자산은 동일 출처 경로만 사용한다", () => {
   assert.match(html, /<html lang="ko">/);
   assert.match(html, /<title>얼굴 사진으로 SD 캐릭터 만들기<\/title>/);
   assert.match(html, /_shared\/share\.js/);
-  assert.match(html, /id="choosePhoto"[^>]*disabled/);
-  assert.match(html, /id="photoInput"[^>]*disabled/);
+  assert.doesNotMatch(html, /id="choosePhoto"[^>]*disabled/);
+  assert.doesNotMatch(html, /id="photoInput"[^>]*disabled/);
   assert.match(app, /\.\/vendor\/face_landmarker\.task/);
   assert.match(app, /\.\/vendor\/wasm\//);
   assert.match(app, /numFaces: 2/);
   assert.match(app, /chooseButton\.addEventListener\("click", \(\) => fileInput\.click\(\)\)/);
+  assert.match(app, /let pendingFile = null/);
+  assert.match(app, /pendingFile = file/);
   assert.doesNotMatch(app, /FormData|XMLHttpRequest|sendBeacon/);
   assert.doesNotMatch(app, /https?:\/\//);
 });

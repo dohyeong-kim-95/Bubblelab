@@ -17,14 +17,15 @@ const resultPanel = document.querySelector("#resultPanel");
 
 let faceLandmarker = null;
 let lastBlob = null;
+let pendingFile = null;
 let busy = false;
 
 const setStatus = (message) => { statusEl.textContent = message || ""; };
 const setError = (message) => { errorEl.textContent = message || ""; errorEl.hidden = !message; };
 const setBusy = (value) => {
   busy = value;
-  chooseButton.disabled = value || !faceLandmarker;
-  fileInput.disabled = value || !faceLandmarker;
+  chooseButton.disabled = value;
+  fileInput.disabled = value;
   resetButton.disabled = value;
   if (value) downloadButton.disabled = true;
 };
@@ -41,6 +42,7 @@ function clearResult() {
 
 function resetScreen() {
   if (busy) return;
+  pendingFile = null;
   fileInput.value = "";
   clearResult();
   setError("");
@@ -71,12 +73,14 @@ async function prepareLandmarker() {
     engineEl.textContent = "얼굴 엔진 준비 완료 · 사진은 전송하지 않아요";
     chooseButton.disabled = false;
     fileInput.disabled = false;
+    const queuedFile = pendingFile;
+    pendingFile = null;
+    if (queuedFile) await processFile(queuedFile);
   } catch (error) {
     console.error("face engine initialization failed", error);
     engineEl.textContent = "얼굴 엔진을 준비하지 못했어요.";
     setError("잠시 후 다시 열어주세요. 모델 파일을 불러오지 못했어요.");
-    chooseButton.disabled = true;
-    fileInput.disabled = true;
+    setStatus("얼굴 엔진을 준비하지 못했어요. 페이지를 새로 열어주세요.");
   }
 }
 
@@ -171,10 +175,6 @@ function canvasBlob(canvas) {
 
 async function processFile(file) {
   if (!file || busy) return;
-  if (!faceLandmarker) {
-    setError("얼굴 엔진이 아직 준비되지 않았어요. 잠시 후 다시 시도해주세요.");
-    return;
-  }
   setError("");
   clearResult();
   if (!file.type.startsWith("image/")) {
@@ -183,6 +183,11 @@ async function processFile(file) {
   }
   if (file.size > MAX_FILE_BYTES) {
     setError("12MB보다 작은 사진을 골라주세요.");
+    return;
+  }
+  if (!faceLandmarker) {
+    pendingFile = file;
+    setStatus("사진을 선택했어요. 얼굴 엔진이 준비되면 자동으로 처리할게요.");
     return;
   }
 
