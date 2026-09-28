@@ -94,7 +94,7 @@ test("builds a deterministic daily fortune from the natal chart and KST date", (
   const daily = buildDailyFortune(chart.candidates[0], { year: 2026, month: 7, day: 15 });
   assert.deepEqual(
     { date: daily.date, iljin: daily.iljin, tenGod: daily.tenGod, method: daily.method },
-    { date: "2026-07-15", iljin: "경인", tenGod: "정인", method: "natal-daymaster+daily-pillar-v1" },
+    { date: "2026-07-15", iljin: "경인", tenGod: "정인", method: "natal-daymaster+daily-pillar-v2" },
   );
   assert.match(daily.text, /배우고 도움받는 흐름/);
   assert.deepEqual(

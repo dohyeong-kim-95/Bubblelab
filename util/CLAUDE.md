@@ -8,7 +8,7 @@
 | 폴더 | 서버 | 테스트 |
 | --- | --- | --- |
 | `brief/` | `/_brief/today`·`/rates`·`/push` → `_infra/brief.js` (BriefDO) | `_infra/brief.test.mjs`, e2e |
-| `fortune/` | `/_fortune/chart`·`/push` → `_infra/fortune.js` (FortuneDO) | `_infra/fortune.test.mjs`, e2e |
+| `fortune/` | `/_fortune/chart`·`/push` → `_infra/fortune.js` (FortuneDO), 신살·12운성·대운은 `_infra/saju-detail.js` | `_infra/fortune.test.mjs`, `_infra/saju-detail.test.mjs`, e2e |
 | `planner/` | `/_planner/login`·`logout`·`data` → `worker.js handlePlanner` + `_infra/planner.js` (PlannerDO) | `_infra/planner.test.mjs` |
 | `chat/` | `/_chat` WebSocket → `_infra/chat.js` `ChatDO` (`idFromName("lobby")`, 단일 로비) | `_infra/chat.test.mjs`, verify `chat:ws` |
 | `proofread/` | 없음 — 규칙표 `util/proofread/rules.js` 하나 | `_infra/proofread.test.mjs`, e2e |
@@ -36,6 +36,11 @@ KST로 자르며, 방식이 서로 다르다.
 - **calendar** — 서버가 없어 KST가 아니라 **기기 로컬시각**이다(`calendar/index.html:289`).
 - **cron은 UTC로 등록**한다. `0 23 * * *` = 08:00 KST 가 운세·브리핑 푸시
   (`wrangler.jsonc` triggers + `worker.js:1855`).
+
+**신살·12운성은 학파마다 표가 갈린다** — `manseryeok`이 일부러 안 주는 영역이라
+`_infra/saju-detail.js`가 통용 기준 하나를 골라 `SHINSAL_RULES`(`shinsal-kr-v1`)로 버전을
+붙이고 응답·화면에 밝힌다. 표를 고치면 버전을 올리고, 표에 없는 신살은 지어 넣지 않는다.
+대운은 라이브러리 값이며 성별이 있어야 나온다.
 
 **만세력(음력)**: 사주 계산은 npm `manseryeok`(package.json 의존성 — 테스트 전 `npm ci`).
 공공 API는 두 곳뿐 — 음력 생일 → 양력 변환(`kasiSolarFromLunar`)과 일진 대조 검증

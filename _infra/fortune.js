@@ -1,5 +1,6 @@
 import manseryeok from "manseryeok";
 import { sendWebPush } from "./webpush.js";
+import { buildSajuDetail, twelveShinsal } from "./saju-detail.js";
 
 const {
   calculateFourPillars,
@@ -48,6 +49,12 @@ const CATEGORY_TEXT = {
     무난: "큰 기복 없이 편안한 흐름이에요. 평소처럼 솔직하게 대화해보세요.",
     주의: "감정이 엇갈리기 쉬운 날이에요. 단정하기보다 상대의 말을 한 번 더 들어보세요.",
   },
+};
+// 오늘 일진이 일지 기준 12신살 중 무엇에 걸리는지 — 뚜렷한 셋만 한 문장 덧붙인다.
+const SHINSAL_ACCENT = {
+  역마살: " 역마가 드는 날이라 이동·출장·새 일정이 잦아질 수 있습니다.",
+  년살: " 도화가 드는 날이라 사람들의 눈길이 모입니다. 말과 행동을 가볍게 흘리지 마세요.",
+  화개살: " 화개가 드는 날이라 혼자 몰입하는 공부나 창작에 잘 맞습니다.",
 };
 const PILLAR_KEYS = ["year", "month", "day", "hour"];
 const RULES = {
@@ -204,10 +211,12 @@ export function buildDailyFortune(candidate, date, gender = "unspecified") {
   const harmony = natalBranches.filter((branch) => BRANCH_HARMONY.has(pairKey(branch, todayPillar.branch.korean)));
   const clash = natalBranches.filter((branch) => BRANCH_CLASH.has(pairKey(branch, todayPillar.branch.korean)));
   const categories = categoryFortunes(candidate, todayPillar.branch.korean, god, harmony, clash, gender);
+  const todayShinsal = twelveShinsal(candidate.pillars.day.branch.korean, todayPillar.branch.korean);
   let accent = "";
   if (harmony.length && clash.length) accent = " 관계의 연결과 변화 신호가 함께 있어, 속도보다 조율이 중요합니다.";
   else if (harmony.length) accent = " 원국과 합의 신호가 있어 사람이나 계획을 연결하기에 좋습니다.";
   else if (clash.length) accent = " 원국과 충의 신호가 있어 일정 변경이나 감정적 반응에는 여유를 두세요.";
+  accent += SHINSAL_ACCENT[todayShinsal] ?? "";
   return {
     date: `${date.year}-${String(date.month).padStart(2, "0")}-${String(date.day).padStart(2, "0")}`,
     iljin: todayPillar.korean,
@@ -216,8 +225,8 @@ export function buildDailyFortune(candidate, date, gender = "unspecified") {
     emoji: STEM_EMOJI[god],
     text: DAILY_TEXT[god] + accent,
     categories,
-    signals: { harmony, clash },
-    method: "natal-daymaster+daily-pillar-v1",
+    signals: { harmony, clash, shinsal: todayShinsal },
+    method: "natal-daymaster+daily-pillar-v2",
   };
 }
 
@@ -229,24 +238,28 @@ function kstToday(now = new Date()) {
   return { year: +value.year, month: +value.month, day: +value.day };
 }
 
-export function buildChart(input) {
+export function buildChart(input, today = kstToday()) {
   const year = integer(input?.year, "연도", 1800, 2300);
   const month = integer(input?.month, "월", 1, 12);
   const day = integer(input?.day, "일", 1, 31);
   if (!validSolarDate(year, month, day)) throw new RangeError("실재하지 않는 양력 날짜입니다.");
 
   const { includeHour, points } = timeCandidates(input);
+  const gender = ["male", "female"].includes(input?.gender) ? input.gender : undefined;
   const candidates = [];
   const seen = new Set();
   for (const point of points) {
     const result = calculateFourPillars({
       year, month, day, hour: point.hour, minute: point.minute,
-      dayBoundary: RULES.dayBoundary,
+      dayBoundary: RULES.dayBoundary, gender,
     });
     const candidate = serialize(result, point, includeHour);
     const key = signature(candidate);
     if (!seen.has(key)) {
       seen.add(key);
+      candidate.detail = buildSajuDetail(candidate, {
+        birth: { year, month, day }, today, luck: result.luckPillars ?? null, tenGod,
+      });
       candidates.push(candidate);
     }
   }
@@ -393,11 +406,11 @@ export async function handleFortuneChart(request, env) {
   try {
     const input = await request.json();
     const resolved = await resolveBirthDate(input, env);
-    const chart = buildChart({ ...input, ...resolved.solar });
+    const today = kstToday();
+    const chart = buildChart({ ...input, ...resolved.solar }, today);
     chart.inputCalendar = resolved.calendar;
     chart.inputDate = resolved.inputDate;
     chart.solarDate = resolved.solar;
-    const today = kstToday();
     const gender = ["male", "female"].includes(input?.gender) ? input.gender : "unspecified";
     chart.gender = gender;
     chart.dailyFortunes = chart.candidates.map((candidate) => buildDailyFortune(candidate, today, gender));

@@ -173,6 +173,27 @@
   .saju-warning { margin: .8rem 0 0; padding: .65rem .75rem; border-radius: .5rem;
                   font-size: .73rem; line-height: 1.5;
                   background: light-dark(#d99a2614, #ffcf6b12); }
+  .saju-sub { display: block; font-size: .66rem; line-height: 1.35; word-break: keep-all; }
+  .saju-sub small { display: block; font-size: .52rem; opacity: .55; }
+  .saju-section { margin: 1rem 0 0; }
+  .saju-section h3 { margin: 0 0 .45rem; font-size: .76rem; font-weight: 600; opacity: .7; }
+  .saju-elements { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .3rem; }
+  .saju-element { padding: .4rem .1rem; border-radius: .45rem; text-align: center; font-size: .72rem;
+                  background: light-dark(#1c273308, #dbe4ee0a); }
+  .saju-element b { display: block; font-size: 1rem; }
+  .saju-element.none { opacity: .45; }
+  .saju-shinsal { margin: 0; padding: 0; list-style: none; display: grid; gap: .35rem; }
+  .saju-shinsal li { font-size: .74rem; line-height: 1.5; }
+  .saju-shinsal .tag { display: inline-block; margin-right: .35rem; padding: .05rem .4rem;
+                       border-radius: .4rem; font-weight: 600; background: light-dark(#2f8f6e18, #6fd4ac1c); }
+  .saju-shinsal .where { opacity: .5; font-size: .66rem; }
+  .saju-luck { display: flex; gap: .3rem; overflow-x: auto; padding-bottom: .2rem; }
+  .saju-luck div { flex: 0 0 auto; min-width: 2.9rem; padding: .35rem .2rem; border-radius: .45rem;
+                   text-align: center; font-size: .72rem; line-height: 1.35;
+                   border: 1px solid light-dark(#1c273318, #dbe4ee18); }
+  .saju-luck div.now { border-color: light-dark(#2f8f6e, #6fd4ac); background: light-dark(#2f8f6e14, #6fd4ac14); }
+  .saju-luck small { display: block; font-size: .56rem; opacity: .55; }
+  .saju-note { margin: .35rem 0 0; font-size: .7rem; line-height: 1.55; opacity: .7; }
   @media (max-width: 390px) {
     body { padding: 1rem; }
     .card { padding: 1.15rem .9rem; }
@@ -577,8 +598,119 @@
     for (const [key] of SAJU_COLUMNS) addPillarPart(grid, candidate.pillars[key]?.stem);
     addSajuCell(grid, "saju-label", "지지");
     for (const [key] of SAJU_COLUMNS) addPillarPart(grid, candidate.pillars[key]?.branch);
+    const detail = candidate.detail;
+    if (detail) {
+      addDetailRow(grid, "지장간", (d) => d.hiddenStems.map((h) => h.stem).join(" "));
+      addDetailRow(grid, "12운성", (d) => d.stage);
+      addDetailRow(grid, "12신살", (d) => shinsalLabel(d.shinsalByYear), (d) => `일지 ${shinsalLabel(d.shinsalByDay)}`);
+    }
     wrap.appendChild(grid);
+    if (detail) renderSajuDetail(wrap, detail);
     sajuCandidates.appendChild(wrap);
+
+    function addDetailRow(target, label, main, sub) {
+      addSajuCell(target, "saju-label", label);
+      for (const [key] of SAJU_COLUMNS) {
+        const d = detail.pillars[key];
+        const cell = addSajuCell(target, "", "");
+        const text = document.createElement("span");
+        text.className = "saju-sub";
+        text.textContent = d ? main(d) : "—";
+        if (d && sub) {
+          const small = document.createElement("small");
+          small.textContent = sub(d);
+          text.appendChild(small);
+        }
+        cell.appendChild(text);
+      }
+    }
+  }
+
+  const shinsalLabel = (name) => (name === "년살" ? "도화(년살)" : name);
+
+  function sajuSection(wrap, title) {
+    const section = document.createElement("div");
+    section.className = "saju-section";
+    const h = document.createElement("h3");
+    h.textContent = title;
+    section.appendChild(h);
+    wrap.appendChild(section);
+    return section;
+  }
+
+  function renderSajuDetail(wrap, detail) {
+    const elements = document.createElement("div");
+    elements.className = "saju-elements";
+    for (const [name, count] of Object.entries(detail.elements)) {
+      const item = document.createElement("div");
+      item.className = count ? "saju-element" : "saju-element none";
+      const b = document.createElement("b");
+      b.textContent = count;
+      item.append(b, name);
+      elements.appendChild(item);
+    }
+    sajuSection(wrap, "오행 분포 (천간·지지 여덟 글자)").appendChild(elements);
+
+    const list = document.createElement("ul");
+    list.className = "saju-shinsal";
+    for (const item of detail.shinsal) {
+      const li = document.createElement("li");
+      const tag = document.createElement("span");
+      tag.className = "tag";
+      tag.textContent = item.name;
+      const where = document.createElement("span");
+      where.className = "where";
+      where.textContent = ` ${item.pillarNames.join("·")} · ${item.basis} 기준`;
+      li.append(tag, item.meaning, where);
+      list.appendChild(li);
+    }
+    const shinsalSection = sajuSection(wrap, "신살");
+    if (detail.shinsal.length) shinsalSection.appendChild(list);
+    else {
+      const none = document.createElement("p");
+      none.className = "saju-note";
+      none.textContent = "원국에 두드러지는 신살이 없습니다.";
+      shinsalSection.appendChild(none);
+    }
+
+    const annual = detail.annual;
+    const annualSection = sajuSection(wrap, `${annual.year}년 세운 · ${annual.ganji}(${annual.hanja})`);
+    const annualNote = document.createElement("p");
+    annualNote.className = "saju-note";
+    annualNote.textContent = `일간에게 ${annual.tenGod}의 해 · 12운성 ${annual.stage} · 12신살 연지 ${shinsalLabel(annual.shinsalByYear)} / 일지 ${shinsalLabel(annual.shinsalByDay)}`;
+    annualSection.appendChild(annualNote);
+
+    const luckSection = sajuSection(wrap, "대운");
+    if (!detail.luck) {
+      const note = document.createElement("p");
+      note.className = "saju-note";
+      note.textContent = "대운은 순행·역행이 성별로 정해져 성별을 선택하면 표시됩니다.";
+      luckSection.appendChild(note);
+    } else {
+      const strip = document.createElement("div");
+      strip.className = "saju-luck";
+      detail.luck.pillars.forEach((item, index) => {
+        const box = document.createElement("div");
+        if (index === detail.luck.current) box.className = "now";
+        const age = document.createElement("small");
+        age.textContent = `${item.age}세`;
+        const stage = document.createElement("small");
+        stage.textContent = item.stage;
+        box.append(age, item.ganji, stage);
+        strip.appendChild(box);
+      });
+      luckSection.appendChild(strip);
+      const note = document.createElement("p");
+      note.className = "saju-note";
+      note.textContent = `${detail.luck.forward ? "순행" : "역행"} · 대운수 ${detail.luck.startAge}`
+        + (detail.luck.current >= 0 ? ` · 지금은 ${detail.luck.pillars[detail.luck.current].ganji} 대운` : "");
+      luckSection.appendChild(note);
+    }
+
+    const rule = document.createElement("p");
+    rule.className = "saju-status";
+    rule.textContent = `신살 기준 ${detail.rules.version} — ${detail.rules.twelveShinsal}, 양인은 ${detail.rules.yangin}`;
+    wrap.appendChild(rule);
   }
 
   async function renderSaju(birth) {
