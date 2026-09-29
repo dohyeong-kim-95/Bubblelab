@@ -8,7 +8,7 @@
 | 폴더 | 서버 | 테스트 |
 | --- | --- | --- |
 | `brief/` | `/_brief/today`·`/rates`·`/push` → `_infra/brief.js` (BriefDO) | `_infra/brief.test.mjs`, e2e |
-| `fortune/` | `/_fortune/chart`·`/push` → `_infra/fortune.js` (FortuneDO), 신살·12운성·대운은 `_infra/saju-detail.js` | `_infra/fortune.test.mjs`, `_infra/saju-detail.test.mjs`, e2e |
+| `fortune/` | `/_fortune/chart`·`/push` → `_infra/fortune.js` (FortuneDO), 신살·12운성·대운은 `_infra/saju-detail.js`, 토정비결 작괘는 `_infra/tojeong.js`(본문은 정적 `fortune/tojeong/<괘>.json`) | `_infra/fortune.test.mjs`, `_infra/saju-detail.test.mjs`, `_infra/tojeong.test.mjs`, e2e |
 | `planner/` | `/_planner/login`·`logout`·`data` → `worker.js handlePlanner` + `_infra/planner.js` (PlannerDO) | `_infra/planner.test.mjs` |
 | `chat/` | `/_chat` WebSocket → `_infra/chat.js` `ChatDO` (`idFromName("lobby")`, 단일 로비) | `_infra/chat.test.mjs`, verify `chat:ws` |
 | `proofread/` | 없음 — 규칙표 `util/proofread/rules.js` 하나 | `_infra/proofread.test.mjs`, e2e |
@@ -41,6 +41,15 @@ KST로 자르며, 방식이 서로 다르다.
 `_infra/saju-detail.js`가 통용 기준 하나를 골라 `SHINSAL_RULES`(`shinsal-kr-v1`)로 버전을
 붙이고 응답·화면에 밝힌다. 표를 고치면 버전을 올리고, 표에 없는 신살은 지어 넣지 않는다.
 대운은 라이브러리 값이며 성별이 있어야 나온다.
+
+**토정비결 본문은 손으로 고치지 않는다.** `util/fortune/tojeong/*.json` 144개는
+`node _infra/tojeong-import.mjs`가 원문(한문·독음)·번역표·교정표를 합쳐 쓰고, 번역이 빠진
+구가 하나라도 있으면 아무것도 쓰지 않는다. 번역은 **한문 한 구를 키로** 둔다 — 판본을
+바꿔도 같은 구는 그대로 쓰고 달라진 구만 다시 옮기면 된다. 한문은 퍼블릭 도메인이지만
+월별 구절까지 있는 전사본은 상업 사이트 한 곳뿐이라 **그 사이트의 한국어 풀이는 쓰지
+않고** 풀이는 우리가 한문에서 직접 옮겼다(출처·교정 근거는 `tojeong/sources.json`).
+작괘의 세 수는 수표가 서로 다르다(태세 중천+중천, 월건 선천+선천, 일진 선천+중천) —
+출처의 풀이 예시 세 개를 중간값까지 `tojeong.test.mjs`가 고정한다.
 
 **만세력(음력)**: 사주 계산은 npm `manseryeok`(package.json 의존성 — 테스트 전 `npm ci`).
 공공 API는 두 곳뿐 — 음력 생일 → 양력 변환(`kasiSolarFromLunar`)과 일진 대조 검증

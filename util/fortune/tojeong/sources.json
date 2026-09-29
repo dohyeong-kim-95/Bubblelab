@@ -1,0 +1,32 @@
+{
+  "credit": "한문 원문은 전래 토정비결(퍼블릭 도메인)을 사주플러스의 전사본에서 옮겼고, 총론 첫 구 22곳은 춘호재 소장 필사본으로 교정했습니다. 한국어 풀이는 bubblelab이 한문에서 직접 옮긴 것입니다. 판본마다 구절이 조금씩 다릅니다.",
+  "edition": "총론 9구 · 달마다 3구, 144괘 6,480구 판본",
+  "sources": [
+    {
+      "role": "한문 전사",
+      "title": "사주플러스 토정비결 원본 해설",
+      "url": "http://tojung.sajuplus.net/",
+      "used": "한문·독음만(사이트의 한국어 풀이는 쓰지 않음)"
+    },
+    {
+      "role": "교정 증거",
+      "title": "土亭秘訣 필사본(춘호재 소장, 국립중앙도서관 CNTS-00076808100)",
+      "url": "https://commons.wikimedia.org/wiki/File:CNTS-00076808100_-%E5%9C%9F%E4%BA%AD%E7%A7%98%E8%A8%A3-.pdf",
+      "license": "PD-South Korea"
+    },
+    {
+      "role": "교정 증거",
+      "title": "장보원 토정비결 괘사(총론 첫 구)",
+      "url": "http://jangbowon.com/"
+    },
+    {
+      "role": "작괘법",
+      "title": "한국민족문화대백과사전 '토정비결'",
+      "url": "https://encykorea.aks.ac.kr/Article/E0059207",
+      "license": "공공누리"
+    }
+  ],
+  "translation": "bubblelab 자체 번역(한문에서 직접, 외부 풀이 미참조)",
+  "lines": 6480,
+  "fixes": 22
+}

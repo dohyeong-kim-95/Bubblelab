@@ -1,6 +1,7 @@
 import manseryeok from "manseryeok";
 import { sendWebPush } from "./webpush.js";
 import { buildSajuDetail, twelveShinsal } from "./saju-detail.js";
+import { tojeongHexagram } from "./tojeong.js";
 
 const {
   calculateFourPillars,
@@ -8,6 +9,7 @@ const {
   getEarthlyBranchYinYang,
   getHeavenlyStemElement,
   getHeavenlyStemYinYang,
+  solarToLunar,
 } = manseryeok;
 
 const BRANCH_NAMES = ["자", "축", "인", "묘", "진", "사", "오", "미", "신", "유", "술", "해"];
@@ -398,6 +400,19 @@ async function resolveBirthDate(input, env) {
   return { calendar, inputDate: lunar, solar: await kasiSolarFromLunar(env, lunar) };
 }
 
+// 토정비결은 음력 생년월일로 괘를 짓는다. 시각과 무관해서 명식 후보가 여럿이어도 하나다.
+// 보는 해는 음력 기준 올해와 내년 — 연말에 이듬해 신수를 미리 보는 일이 흔하다.
+export function buildTojeong(resolved, today) {
+  const lunar = resolved.calendar === "lunar"
+    ? resolved.inputDate
+    : (({ year, month, day, isLeapMonth }) => ({ year, month, day, leap: isLeapMonth }))(
+      solarToLunar(resolved.solar.year, resolved.solar.month, resolved.solar.day));
+  const thisYear = solarToLunar(today.year, today.month, today.day).year;
+  return [thisYear, thisYear + 1]
+    .filter((year) => year >= lunar.year)
+    .map((year) => tojeongHexagram(lunar, year));
+}
+
 export async function handleFortuneChart(request, env) {
   if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
   if (+(request.headers.get("Content-Length") ?? 0) > 2048) {
@@ -414,6 +429,8 @@ export async function handleFortuneChart(request, env) {
     const gender = ["male", "female"].includes(input?.gender) ? input.gender : "unspecified";
     chart.gender = gender;
     chart.dailyFortunes = chart.candidates.map((candidate) => buildDailyFortune(candidate, today, gender));
+    chart.tojeong = buildTojeong(resolved, today);
+    chart.lunarToday = solarToLunar(today.year, today.month, today.day);
     const [year, month, day] = chart.birthDate.split("-").map(Number);
     const verification = await kasiDay(env, year, month, day);
     if (verification.status === "received") {

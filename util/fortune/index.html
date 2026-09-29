@@ -194,6 +194,34 @@
   .saju-luck div.now { border-color: light-dark(#2f8f6e, #6fd4ac); background: light-dark(#2f8f6e14, #6fd4ac14); }
   .saju-luck small { display: block; font-size: .56rem; opacity: .55; }
   .saju-note { margin: .35rem 0 0; font-size: .7rem; line-height: 1.55; opacity: .7; }
+  /* 토정비결 */
+  #tojeong h2 { margin: 0 0 .3rem; font-size: .95rem; }
+  #tojeong .sub { margin: .6rem 0 .8rem; font-size: .72rem; opacity: .55; line-height: 1.5; }
+  .tj-years { display: flex; gap: .35rem; margin-top: .5rem; }
+  .tj-years button { padding: .3rem .7rem; font-size: .74rem; }
+  .tj-years button[aria-pressed="true"] { border-color: light-dark(#2f8f6e, #6fd4ac);
+                                          background: light-dark(#2f8f6e14, #6fd4ac14); }
+  .tj-title { padding: .8rem; border-radius: .6rem; text-align: center;
+              background: light-dark(#1c273307, #dbe4ee08); }
+  .tj-title .code { display: block; font-size: .64rem; opacity: .5; letter-spacing: .08em; }
+  .tj-title .hanja { display: block; margin: .15rem 0; font-family: serif; font-size: 1.35rem; }
+  .tj-title .ko { display: block; font-size: .78rem; opacity: .75; }
+  .tj-h { margin: 1.1rem 0 .4rem; font-size: .76rem; font-weight: 600; opacity: .7; }
+  .tj-lines { margin: 0; padding: 0; list-style: none; display: grid; gap: .55rem; }
+  .tj-lines li { font-size: .82rem; line-height: 1.55; word-break: keep-all; }
+  .tj-lines .orig { display: block; margin-top: .1rem; font-size: .64rem; opacity: .48; }
+  .tj-lines .orig span { font-family: serif; }
+  .tj-month { border-top: 1px solid light-dark(#1c273314, #dbe4ee14); }
+  .tj-month summary { padding: .55rem 0; font-size: .8rem; cursor: pointer; }
+  .tj-month summary .hint { margin-left: .35rem; font-size: .68rem; opacity: .5; }
+  .tj-month[open] summary { font-weight: 600; }
+  .tj-month .tj-lines { padding-bottom: .7rem; }
+  .tj-month.now summary::after { content: "이번 달"; margin-left: .4rem; padding: .05rem .35rem;
+                                 border-radius: .35rem; font-size: .6rem; font-weight: 600;
+                                 background: light-dark(#2f8f6e18, #6fd4ac1c); }
+  .tj-work { margin-top: .9rem; font-size: .72rem; }
+  .tj-work summary { cursor: pointer; opacity: .6; }
+  .tj-work p { margin: .45rem 0 0; line-height: 1.65; opacity: .75; word-break: keep-all; }
   @media (max-width: 390px) {
     body { padding: 1rem; }
     .card { padding: 1.15rem .9rem; }
@@ -308,6 +336,28 @@
       <div class="saju-actions"><button type="button" class="saju-copy" id="saju-copy" disabled>명식 이미지 복사</button></div>
       <p class="saju-status" id="saju-status">명식을 계산하고 있습니다…</p>
       <p class="saju-warning" id="saju-warning" hidden></p>
+    </div>
+  </section>
+
+  <!-- 토정비결 -->
+  <section class="card" id="tojeong" hidden>
+    <button type="button" class="panel-toggle" aria-expanded="true" aria-controls="tj-content">
+      <h2>📜 토정비결</h2><span class="panel-chevron" aria-hidden="true">▼</span>
+    </button>
+    <div class="panel-content" id="tj-content">
+      <div class="tj-years" id="tj-years" role="group" aria-label="보는 해"></div>
+      <p class="sub" id="tj-sub"></p>
+      <div class="tj-title" id="tj-title"></div>
+      <h3 class="tj-h">한 해 총운</h3>
+      <ol class="tj-lines" id="tj-summary"></ol>
+      <h3 class="tj-h">달마다</h3>
+      <div id="tj-months"></div>
+      <details class="tj-work">
+        <summary>괘를 짓는 법</summary>
+        <p id="tj-work"></p>
+      </details>
+      <p class="saju-warning" id="tj-assume" hidden></p>
+      <p class="saju-status" id="tj-source"></p>
     </div>
   </section>
 
@@ -752,6 +802,7 @@
           "양력 · 대한민국 표준시(KST) · 00시 일주 변경 · 진태양시 미보정";
       }
       if (data.dailyFortunes?.[0]) showSajuFortune(data.dailyFortunes[0]);
+      renderTojeong(data);
       for (const candidate of data.candidates) renderSajuCandidate(candidate, data.ambiguous);
       const verifyText = {
         verified: "KASI 일진 교차검증 완료",
@@ -766,10 +817,132 @@
       }
     } catch (error) {
       if (requestId !== sajuRequestId) return;
+      tojeongSec.hidden = true;
       sajuStatus.textContent = error.message || "명식을 계산하지 못했습니다.";
       showFortune(fallbackFortuneSeed);
       if (birth.calendar === "lunar" && !birth.solar) document.getElementById("form").hidden = false;
     }
+  }
+
+  // ── 토정비결 ────────────────────────────────────────────────
+  // 괘는 서버가 짓고(_infra/tojeong.js), 본문은 괘마다 정적 JSON 하나를 받아 온다.
+  const tojeongSec = document.getElementById("tojeong");
+  const LUNAR_MONTHS = ["정월", "2월", "3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "동짓달", "섣달"];
+  const ASSUMPTION_TEXT = {
+    leapBirth: "윤달에 태어나셨네요. 전래 작괘법에 윤달 규칙이 없어 같은 달 평달로 계산했습니다.",
+    missingDay: "올해 음력 생월에 30일이 없어, 생일 일진은 그달 말일(29일)로 계산했습니다.",
+  };
+  const tojeongCache = new Map();
+  let tojeongSources = null;
+  let tojeongRequestId = 0;
+
+  function tojeongLines(target, lines) {
+    target.replaceChildren();
+    for (const line of lines) {
+      const li = document.createElement("li");
+      li.textContent = line.ko || line.reading;
+      const orig = document.createElement("small");
+      orig.className = "orig";
+      const hanja = document.createElement("span");
+      hanja.textContent = line.hanja;
+      orig.append(hanja, ` ${line.reading}`);
+      if (line.fix) orig.append(` · 전사본 표기 ${line.fix.from} — ${line.fix.why}`);
+      if (line.note) orig.append(` · ${line.note}`);
+      if (line.unsure) orig.append(" · 뜻이 분명치 않아 가장 그럴듯하게 옮김");
+      li.appendChild(orig);
+      target.appendChild(li);
+    }
+  }
+
+  async function fetchTojeong(code) {
+    if (!tojeongCache.has(code)) {
+      tojeongCache.set(code, fetch(`tojeong/${code}.json`).then((r) => {
+        if (!r.ok) throw new Error("본문을 불러오지 못했습니다.");
+        return r.json();
+      }));
+    }
+    try { return await tojeongCache.get(code); }
+    catch (error) { tojeongCache.delete(code); throw error; }
+  }
+
+  async function showTojeongYear(data, entry) {
+    const requestId = ++tojeongRequestId;
+    for (const button of document.querySelectorAll("#tj-years button")) {
+      button.setAttribute("aria-pressed", String(+button.dataset.year === entry.year));
+    }
+    const b = entry.lunarBirth;
+    document.getElementById("tj-sub").textContent =
+      `음력 ${b.year}.${b.month}.${b.day}생 · ${entry.year}년 세는나이 ${entry.age}세 · 괘 ${entry.code}`;
+    const w = entry.work;
+    document.getElementById("tj-work").textContent =
+      `상괘 = (나이 ${entry.age} + 태세수 ${w.taesae.value}[${w.taesae.ganji}년]) ÷ 8의 나머지 → ${entry.upper} · `
+      + `중괘 = (생월 날수 ${w.wolgeon.monthLength} + 월건수 ${w.wolgeon.value}[${w.wolgeon.ganji}월]) ÷ 6의 나머지 → ${entry.middle} · `
+      + `하괘 = (생일 ${b.day} + 일진수 ${w.iljin.value}[${w.iljin.ganji}일]) ÷ 3의 나머지 → ${entry.lower}. `
+      + `나머지가 0이면 나눈 수를 씁니다. 연·월·일 간지는 모두 ${entry.year}년 것입니다(${entry.rules.version}).`;
+    const assume = document.getElementById("tj-assume");
+    assume.hidden = !entry.assumptions.length;
+    assume.textContent = entry.assumptions.map((a) => ASSUMPTION_TEXT[a]).join(" ");
+
+    const title = document.getElementById("tj-title");
+    title.textContent = "본문을 불러오고 있습니다…";
+    document.getElementById("tj-summary").replaceChildren();
+    document.getElementById("tj-months").replaceChildren();
+    try {
+      const text = await fetchTojeong(entry.code);
+      if (requestId !== tojeongRequestId) return;
+      title.replaceChildren();
+      for (const [cls, value] of [["code", `${entry.year}년 · 괘 ${entry.code}`], ["hanja", text.title.hanja],
+        ["ko", `${text.title.reading} — ${text.title.ko}`]]) {
+        const span = document.createElement("span");
+        span.className = cls;
+        span.textContent = value;
+        title.appendChild(span);
+      }
+      tojeongLines(document.getElementById("tj-summary"), text.summary);
+      const months = document.getElementById("tj-months");
+      const nowMonth = data.lunarToday?.year === entry.year ? data.lunarToday.month : 0;
+      text.months.forEach((lines, index) => {
+        const details = document.createElement("details");
+        details.className = index + 1 === nowMonth ? "tj-month now" : "tj-month";
+        details.open = index + 1 === nowMonth;
+        const summary = document.createElement("summary");
+        summary.textContent = LUNAR_MONTHS[index];
+        const hint = document.createElement("span");
+        hint.className = "hint";
+        hint.textContent = lines[0]?.ko ? lines[0].ko.slice(0, 18) + (lines[0].ko.length > 18 ? "…" : "") : "";
+        summary.appendChild(hint);
+        const ol = document.createElement("ol");
+        ol.className = "tj-lines";
+        tojeongLines(ol, lines);
+        details.append(summary, ol);
+        months.appendChild(details);
+      });
+      if (!tojeongSources) {
+        tojeongSources = await fetch("tojeong/sources.json").then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      }
+      document.getElementById("tj-source").textContent = tojeongSources?.credit
+        ?? "원문은 전래 판본, 풀이는 bubblelab 자체 번역입니다.";
+    } catch (error) {
+      if (requestId !== tojeongRequestId) return;
+      title.textContent = error.message || "본문을 불러오지 못했습니다.";
+    }
+  }
+
+  function renderTojeong(data) {
+    const list = data.tojeong ?? [];
+    tojeongSec.hidden = !list.length;
+    if (!list.length) return;
+    const years = document.getElementById("tj-years");
+    years.replaceChildren();
+    for (const entry of list) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.year = entry.year;
+      button.textContent = `${entry.year}년`;
+      button.addEventListener("click", () => showTojeongYear(data, entry));
+      years.appendChild(button);
+    }
+    showTojeongYear(data, list[0]);
   }
 
   function drawSajuCard(data) {
@@ -965,6 +1138,7 @@
   document.getElementById("edit-btn").addEventListener("click", () => {
     document.getElementById("result").hidden = true;
     sajuSec.hidden = true;
+    tojeongSec.hidden = true;
     sajuRequestId++;
     fillForm(load());
     formSec.hidden = false;
