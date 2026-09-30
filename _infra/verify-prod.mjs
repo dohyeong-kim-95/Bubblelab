@@ -533,36 +533,53 @@ export function credsFromEnv(env = process.env) {
   };
 }
 
-export async function runProbes(probes, ctx) {
-  const results = [];
-  for (const probe of probes) {
-    if (probe.needs && !ctx.creds.has(probe.needs)) {
-      results.push({ ...summaryOf(probe), state: "SKIP", note: `자격증명 없음 (${probe.needs})`, failures: [] });
-      continue;
-    }
-    const checks = createChecks();
-    const started = Date.now();
-    try {
-      await probe.run({ ...ctx, checks });
-      const failures = checks.failures;
-      results.push({
-        ...summaryOf(probe),
-        state: failures.length === 0 ? "PASS" : (probe.soft ? "WARN" : "FAIL"),
-        failures,
-        ms: Date.now() - started,
-      });
-    } catch (error) {
-      const soft = probe.soft || error instanceof Warning;
-      results.push({
-        ...summaryOf(probe),
-        state: soft ? "WARN" : "FAIL",
-        note: error.message,
-        failures: checks.failures,
-        ms: Date.now() - started,
-      });
-    }
-    if (ctx.onResult) ctx.onResult(results[results.length - 1]);
+const PROBE_CONCURRENCY = 6;
+
+async function runProbe(probe, ctx) {
+  if (probe.needs && !ctx.creds.has(probe.needs)) {
+    return { ...summaryOf(probe), state: "SKIP", note: `자격증명 없음 (${probe.needs})`, failures: [] };
   }
+  const checks = createChecks();
+  const started = Date.now();
+  try {
+    await probe.run({ ...ctx, checks });
+    const failures = checks.failures;
+    return {
+      ...summaryOf(probe),
+      state: failures.length === 0 ? "PASS" : (probe.soft ? "WARN" : "FAIL"),
+      failures,
+      ms: Date.now() - started,
+    };
+  } catch (error) {
+    const soft = probe.soft || error instanceof Warning;
+    return {
+      ...summaryOf(probe),
+      state: soft ? "WARN" : "FAIL",
+      note: error.message,
+      failures: checks.failures,
+      ms: Date.now() - started,
+    };
+  }
+}
+
+export async function runProbes(probes, ctx) {
+  const results = new Array(probes.length);
+  let nextIndex = 0;
+  let reportIndex = 0;
+
+  const runNext = async () => {
+    while (nextIndex < probes.length) {
+      const index = nextIndex++;
+      results[index] = await runProbe(probes[index], ctx);
+      while (results[reportIndex]) {
+        const result = results[reportIndex++];
+        if (ctx.onResult && result.state !== "SKIP") ctx.onResult(result);
+      }
+    }
+  };
+
+  const workerCount = Math.min(PROBE_CONCURRENCY, probes.length);
+  await Promise.all(Array.from({ length: workerCount }, runNext));
   return results;
 }
 

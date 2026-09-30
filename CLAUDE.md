@@ -88,20 +88,33 @@ node _infra/csp-serve.mjs     # 빌드 산출물을 프로덕션과 같은 보�
 
 ## 배포는 `make ship` 으로
 
-**맨 `git push` 로 배포하지 않는다.** 로컬에서 통과한 코드가 프로덕션·실기기에서
-깨지는 게 이 리포의 가장 흔한 사고였다(빈 스냅샷 덮어쓰기, 바인딩 누락 등).
+**배포 판정의 원본은 GitHub Actions `deploy.yml` 하나다.** 로컬 PC에 Node·브라우저·
+Cloudflare 자격증명이 없어도 저장소 환경에서 테스트부터 실패 복구까지 끝나야 한다.
 
 ```bash
-make ship     # 테스트 → 빌드 → push → Actions 완료 대기 → 라이브 검증 → 실패 시 롤백
+make ship     # main push → 정확한 커밋의 Actions 배포·검증 완료 대기
 make verify   # 지금 라이브만 읽기 전용으로 검사 (배포 없이)
 ```
 
 에이전트에게는 슬래시 하나로 시킨다: **`/ship`** (`.claude/commands/ship.md`) —
 절차·옵션·실패 대처가 거기 적혀 있다. 절차를 대화에서 재구성하지 말 것.
 
-- 배포는 push → Actions, 그래서 **롤백은 revert push** 다(`scripts/ship.sh`가
-  직전에 서빙 중이던 커밋까지 자동으로 되돌리고 재검증한다). 되돌리지 않고
-  직접 판단하려면 `SHIP_ROLLBACK=0 make ship`.
+- `scripts/ship.sh`는 tracked 파일이 깨끗한 `main`인지 확인하고 커밋 목록을 보여 준 뒤
+  push하며, 그 SHA의 Actions run만 기다린다. 필요한 로컬 도구는 `git`·`gh`·`curl`이다.
+  로컬에서 `npm`·`node`·Playwright를 다시 실행하거나 git revert를 만들지 않는다.
+- SHA가 이미 `origin/main`인데 run이 없거나 실패했다면 `deploy.yml`을 `main`에서 수동
+  실행한다. 성공한 기존 run은 `/_health`의 정확한 SHA까지 확인한다. 문서 전용 run은
+  plan 단계 성공과 publish 단계 skip이 함께 확인될 때만 이전 라이브 SHA를 허용한다.
+- Actions는 변경 파일로 검증 범위를 고른다. 알려진 단일 서브도메인은 그 테스트와
+  관련 E2E를 실행하고, 공용·인프라·미분류 파일이나 새로 발견된 미분류 테스트는 전체
+  검증으로 올린다. GitHub Ubuntu 이미지에 설치된 Chrome을 사용해 브라우저 다운로드를
+  배포 경로에서 없앴다.
+- 범위가 작아도 배포 결과는 모든 사이트가 든 Worker·정적 asset **전체 bundle**이다.
+  부분 asset 배포나 데이터 migration은 하지 않으므로 미변경 사이트와 Durable Object
+  데이터는 유지된다.
+- publish 뒤 라이브 검증이 실패하면 Actions가 Cloudflare의 직전 production version으로
+  Worker와 asset을 복구하고 그 SHA를 재확인한다. git 이력은 바꾸지 않으며 Durable Object
+  저장 데이터와 migration 상태는 롤백 대상이 아니다.
 - 검증은 `scripts/verify-prod.sh`(구현은 `_infra/verify-prod.mjs`). 서브도메인
   첫 화면·공개 API·DO·WebSocket·게이트를 실제로 찔러 **상태코드가 아니라 응답
   형태**를 본다. 새 서브도메인 폴더는 자동으로 프로브가 생긴다.
@@ -119,7 +132,9 @@ make verify   # 지금 라이브만 읽기 전용으로 검사 (배포 없이)
 - 상류 API(날씨)나 집 PC 데몬(잔고·듀리 싱크)처럼 우리 배포 밖의 문제는 실패가
   아니라 **경고**다 — 그것 때문에 배포를 되돌리지 않는다.
 
-배포 결과는 Actions run의 conclusion과 `make verify` 두 가지로 확인한다.
+작은 기능 60초, 단일 서브도메인 120초 목표는 실제 원격 Actions 실행과 라이브 SHA로
+재기 전에는 달성했다고 주장하지 않는다. 배포 결과는 Actions run의 conclusion과
+`make verify` 두 가지로 확인한다.
 
 **배포 시간은 들쭉날쭉하다 — 평균이 아니라 최악을 없애는 쪽으로 걸어 뒀다.** 같은
 `npm ci` 가 어떤 실행에서는 2초, 어떤 실행에서는 4분 15초였다(총 13분 6초까지 간 적이

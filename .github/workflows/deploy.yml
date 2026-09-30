@@ -5,37 +5,40 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Finish publication and recovery before the next deployment starts.
 concurrency:
   group: deploy
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
+    env:
+      PLAYWRIGHT_CHANNEL: chrome
+      WRANGLER_SEND_METRICS: false
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
+          fetch-depth: 2
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
-          # 이건 ~/.npm(내려받은 tarball)만 캐시한다 — node_modules 는 매번 새로 만든다.
-          # 아래의 node_modules 캐시가 주력이고, 이건 그게 빗나갔을 때의 보험이다.
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            _src/avalon/package-lock.json
 
-      # **설치 자체를 건너뛴다.** setup-node 의 캐시는 내려받기만 아껴 주고 압축 해제와
-      # 링크는 매번 다시 한다. 이 단계는 실행마다 편차가 아주 컸다 — 같은 설치가 2초일
-      # 때도, 4분 15초일 때도 있었다. 러너·레지스트리 사정이라 줄일 수 있는 값이 아니라
-      # **아예 안 하는 쪽**으로 간다. lockfile 이 그대로면 node_modules 를 통째로 되살린다.
-      - name: node_modules 캐시
+      - name: Plan changes since the live deployment
+        id: scope
+        env:
+          DEPLOY_FORCE_FULL: ${{ github.event_name == 'workflow_dispatch' }}
+        run: node _infra/deploy-prepare.mjs
+
+      - name: node_modules cache
+        if: steps.scope.outputs.mode != 'none'
         id: node-modules
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
@@ -43,27 +46,15 @@ jobs:
           key: nm-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
 
       - name: Install dependencies
-        if: steps.node-modules.outputs.cache-hit != 'true'
-        # audit·funding 은 설치할 때마다 네트워크를 더 왕복한다. 배포 경로에서는 뺀다.
+        if: steps.scope.outputs.mode != 'none' && steps.node-modules.outputs.cache-hit != 'true'
         run: npm ci --prefer-offline --no-audit --no-fund
 
-      - name: Test infra
-        run: node --test _infra/*.test.mjs
+      - name: Validate changed scope and build once
+        if: steps.scope.outputs.mode != 'none'
+        run: node _infra/deploy-check.mjs .deploy-plan.json unit
 
-      - name: Build
-        run: node _infra/build.mjs
-
-      # 이 리포는 main에 직접 push하고 배포한다 — PR에서만 도는 CI는 아발론을
-      # 사실상 검사하지 못했다. 배포 경로에서도 시뮬레이션·불변조건·빌드를 돌리고,
-      # 커밋된 games/avalon 이 그 빌드와 같은지까지 확인한다.
-      #
-      # **다만 내용이 그대로면 다시 검증하지 않는다.** 아발론은 몇 주씩 안 바뀌는데
-      # 매 배포마다 vite 를 새로 깔고 같은 결론을 다시 냈다(그 설치도 7분까지 튄 적이
-      # 있다 — 두 번째 설치를 없애면 그 변동에 노출되는 횟수가 절반이 된다). 키가 소스와
-      # 산출물의 내용 해시라, 한 글자라도 바뀌면 키가 달라져 반드시 다시 돈다 —
-      # 커밋 이력이 아니라 내용을 보므로 force-push 나 되돌리기에도 안전하다.
-      # 이 단계는 node_modules 를 되살리기 **전에** 와야 한다(그래야 해시가 소스만 본다).
-      - name: 아발론이 이미 검증된 내용인지 본다
+      - name: Check previously verified Avalon content
+        if: steps.scope.outputs.avalon == 'true'
         id: avalon
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
@@ -71,7 +62,7 @@ jobs:
           key: avalon-${{ hashFiles('_src/avalon/**', 'games/avalon/**') }}
 
       - name: Cache Avalon node_modules
-        if: steps.avalon.outputs.cache-hit != 'true'
+        if: steps.scope.outputs.avalon == 'true' && steps.avalon.outputs.cache-hit != 'true'
         id: avalon-modules
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
@@ -79,45 +70,29 @@ jobs:
           key: nm-avalon-${{ runner.os }}-node22-${{ hashFiles('_src/avalon/package-lock.json') }}
 
       - name: Install Avalon dependencies
-        if: steps.avalon.outputs.cache-hit != 'true' && steps.avalon-modules.outputs.cache-hit != 'true'
+        if: steps.scope.outputs.avalon == 'true' && steps.avalon.outputs.cache-hit != 'true' && steps.avalon-modules.outputs.cache-hit != 'true'
         run: npm ci --prefix _src/avalon --prefer-offline --no-audit --no-fund
 
       - name: Test and build Avalon
-        if: steps.avalon.outputs.cache-hit != 'true'
+        if: steps.scope.outputs.avalon == 'true' && steps.avalon.outputs.cache-hit != 'true'
         run: npm run test:ci --prefix _src/avalon
 
       - name: Verify games/avalon matches the source build
-        if: steps.avalon.outputs.cache-hit != 'true'
+        if: steps.scope.outputs.avalon == 'true' && steps.avalon.outputs.cache-hit != 'true'
         run: node _infra/check-avalon-sync.mjs
 
-      # 통과했다는 표시를 남긴다 — 다음 배포에서 같은 내용이면 위 캐시가 맞고 건너뛴다.
-      - name: 아발론 검증 표시 남기기
-        if: steps.avalon.outputs.cache-hit != 'true'
+      - name: Record verified Avalon content
+        if: steps.scope.outputs.avalon == 'true' && steps.avalon.outputs.cache-hit != 'true'
         run: git rev-parse HEAD > .avalon-verified
 
-      # 방문의 대부분이 휴대폰이다 — 배포 전에 핵심 화면이 모바일 폭에서
-      # 깨지지 않는지(예외·가로 넘침·빈 화면) 한 번 본다.
-      # 브라우저를 매번 새로 받으면 배포마다 20초가 그냥 나간다. package-lock 이
-      # 그대로면 캐시를 쓴다(플레이라이트 버전이 바뀌면 키가 달라져 다시 받는다).
-      - name: Cache Playwright browsers
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      # Ubuntu already includes Chrome and its system dependencies.
+      - name: Browser tests for changed scope
+        if: steps.scope.outputs.mode != 'none'
+        run: node _infra/deploy-check.mjs .deploy-plan.json e2e
 
-      - name: Install Chromium for smoke tests
-        run: npx playwright install --with-deps chromium
-
-      - name: Mobile smoke test
-        run: npx playwright test
-
-      - name: Deploy to Cloudflare
-        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          # 기본값(3.x)은 wrangler.jsonc를 못 읽는다.
-          # **package.json 의 devDependencies.wrangler 와 같은 버전이어야 한다** —
-          # 같아야 위의 npm ci 가 깔아 둔 것을 action 이 찾아 쓰고, 다르면 여기서
-          # 매번 새로 받느라 4분 가까이 쓴다(_infra/wrangler-pin.test.mjs 가 묶어 둔다).
-          wranglerVersion: "4.111.0"
+      - name: Publish, verify live commit, restore previous version on failure
+        if: steps.scope.outputs.mode != 'none'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node _infra/deploy-release.mjs .deploy-plan.json

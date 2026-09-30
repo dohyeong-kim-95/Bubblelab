@@ -211,6 +211,67 @@ test("soft 프로브의 실패는 WARN 이다 (배포를 되돌리지 않는다)
   assert.equal(result.state, "WARN");
 });
 
+test("프로브는 최대 6개만 동시에 실행한다", async () => {
+  let active = 0;
+  let maxActive = 0;
+  const probes = Array.from({ length: 13 }, (_, index) => ({
+    id: `probe:${index}`, surface: "worker", title: `프로브 ${index}`,
+    async run() {
+      active++;
+      maxActive = Math.max(maxActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      active--;
+    },
+  }));
+
+  const results = await runProbes(probes, { creds: credsFromEnv({}) });
+
+  assert.equal(maxActive, 6);
+  assert.equal(results.length, probes.length);
+});
+
+test("병렬 완료 순서와 무관하게 보고 순서와 실패 semantics를 보존한다", async () => {
+  const reported = [];
+  const probes = [
+    {
+      id: "slow-pass", surface: "worker", title: "느린 통과",
+      async run() { await new Promise((resolve) => setTimeout(resolve, 25)); },
+    },
+    {
+      id: "skip", surface: "do", title: "건너뜀", needs: "invest",
+      run() { throw new Error("불려서는 안 된다"); },
+    },
+    {
+      id: "warning", surface: "worker", title: "경고",
+      run() { throw new Warning("외부 의존 실패"); },
+    },
+    {
+      id: "failure", surface: "worker", title: "실패",
+      async run() {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        throw new Error("프로브 실패");
+      },
+    },
+    {
+      id: "check-failure", surface: "worker", title: "검사 실패",
+      run({ checks }) { checks.eq("status", 500, 200); },
+    },
+    { id: "final-pass", surface: "worker", title: "마지막 통과", run() {} },
+  ];
+
+  const results = await runProbes(probes, {
+    creds: credsFromEnv({}),
+    onResult: (result) => reported.push(result.id),
+  });
+
+  assert.deepEqual(results.map((result) => result.id), probes.map((probe) => probe.id));
+  assert.deepEqual(reported, ["slow-pass", "warning", "failure", "check-failure", "final-pass"]);
+  assert.deepEqual(results.map((result) => result.state), ["PASS", "SKIP", "WARN", "FAIL", "FAIL", "PASS"]);
+  assert.match(results[2].note, /외부 의존 실패/);
+  assert.match(results[3].note, /프로브 실패/);
+  assert.deepEqual(results[4].failures, [{ at: "status", expected: "200", actual: "500" }]);
+});
+
 test("옵션 파싱", () => {
   const args = parseArgs(["--domain", "example.dev", "--commit", COMMIT, "--wait", "60", "--no-ws", "--json"]);
   assert.equal(args.domain, "example.dev");

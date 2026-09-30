@@ -1,7 +1,7 @@
 # bubblelab — 배포는 항상 `make ship` 으로 한다.
 #
-# 맨 push 는 검증 없이 라이브를 바꾼다. ship 은 빌드·테스트·배포·라이브 검증을
-# 한 줄로 묶고, 검증이 실패하면 직전 배포로 되돌린다.
+# ship 은 main을 push하고 해당 SHA의 저장소 Deploy 실행을 기다린다. 테스트·빌드·
+# 배포·라이브 검증·실패 복구의 기준 구현은 GitHub Actions에만 둔다.
 .PHONY: help test lint build e2e verify ship serve
 
 help:
@@ -10,7 +10,7 @@ help:
 	@echo "make build   — dist/ 빌드 (_health.json 스탬프 포함)"
 	@echo "make e2e     — 모바일 스모크 (빌드 후 Playwright)"
 	@echo "make verify  — 지금 라이브를 읽기 전용으로 검증"
-	@echo "make ship    — 빌드→테스트→배포(push)→라이브 검증→실패 시 롤백"
+	@echo "make ship    — main push→해당 SHA의 Actions 배포·검증 완료 대기"
 	@echo "make serve   — 로컬 서빙 (wrangler dev)"
 
 test:

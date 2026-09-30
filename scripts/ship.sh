@@ -1,214 +1,147 @@
 #!/usr/bin/env bash
-# make ship — 빌드 → 테스트 → 배포 → 라이브 검증 → (실패하면) 롤백.
-#
-# 이 리포의 배포는 "main 에 push → GitHub Actions → wrangler deploy" 다. 그래서
-# 배포는 push, 롤백은 revert push 다(로컬에 Cloudflare 토큰을 두지 않는다).
-# 검증은 scripts/verify-prod.sh — 프로덕션에 쓰지 않고 읽기만 한다.
-#
-# 환경변수:
-#   SHIP_ROLLBACK=0   검증 실패해도 되돌리지 않는다 (직접 판단하고 싶을 때)
-#   SHIP_E2E=1        푸시 전에 로컬에서 모바일 스모크(Playwright)까지 돌린다
-#   SHIP_DEPLOY_TIMEOUT=1200   Actions 완료 대기 상한(초)
+# make ship — main을 push하고, 해당 커밋의 저장소 Deploy 실행이 끝날 때까지 기다린다.
+# 테스트·빌드·배포 검증·Cloudflare 버전 복구는 deploy.yml이 한 트랜잭션으로 맡는다.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-ROLLBACK="${SHIP_ROLLBACK:-1}"
 DEPLOY_TIMEOUT="${SHIP_DEPLOY_TIMEOUT:-1200}"
-REPORT="${TMPDIR:-/tmp}/bubblelab-verify.json"
+DISCOVERY_TIMEOUT="${SHIP_RUN_DISCOVERY_TIMEOUT:-150}"
+POLL_INTERVAL="${SHIP_POLL_INTERVAL:-5}"
+WORKFLOW="deploy.yml"
 
 say() { printf '\n\033[1m▶ %s\033[0m\n' "$*"; }
 die() { printf '\033[31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
 
-served_commit() {
-  curl -fsS --max-time 20 "https://bubblelab.dev/_health" 2>/dev/null \
-    | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).commit??"")}catch{}})' \
-    || true
+RUN_ID=""
+RUN_STATUS=""
+RUN_CONCLUSION=""
+RUN_IDS_FOR_SHA=""
+
+find_run() {
+  local sha="$1" excluded="${2:-}" deadline rows id status conclusion
+  deadline=$((SECONDS + DISCOVERY_TIMEOUT))
+  while ((SECONDS <= deadline)); do
+    rows="$(gh run list --workflow "$WORKFLOW" -b main -L 30 \
+      --json databaseId,status,conclusion,headSha \
+      --jq ".[] | select(.headSha == \"$sha\") | [.databaseId, .status, .conclusion] | @tsv" \
+      2>/dev/null || true)"
+    RUN_IDS_FOR_SHA=""
+    while IFS=$'\t' read -r id status conclusion; do
+      [[ -n "$id" ]] && RUN_IDS_FOR_SHA+="${RUN_IDS_FOR_SHA:+$'\n'}$id"
+    done <<<"$rows"
+    while IFS=$'\t' read -r id status conclusion; do
+      [[ -n "$id" ]] || continue
+      [[ $'\n'"$excluded"$'\n' == *$'\n'"$id"$'\n'* ]] && continue
+      RUN_ID="$id"
+      RUN_STATUS="$status"
+      RUN_CONCLUSION="$conclusion"
+      return 0
+    done <<<"$rows"
+    sleep "$POLL_INTERVAL"
+  done
+  return 1
 }
 
-# ── 0. 프리플라이트 ───────────────────────────────────────────────────────
+watch_run() {
+  local run_id="$1" deadline row status conclusion
+  echo "run #$run_id"
+  deadline=$((SECONDS + DEPLOY_TIMEOUT))
+  while ((SECONDS <= deadline)); do
+    row="$(gh run view "$run_id" --json status,conclusion \
+      --jq '[.status, .conclusion] | @tsv' 2>/dev/null)" || break
+    IFS=$'\t' read -r status conclusion <<<"$row"
+    if [[ "$status" == "completed" ]]; then
+      [[ "$conclusion" == "success" ]] && return 0
+      gh run view "$run_id" --log-failed || true
+      return 1
+    fi
+    sleep "$POLL_INTERVAL"
+  done
+  gh run view "$run_id" --log-failed || true
+  return 1
+}
+
+live_commit() {
+  local body pattern
+  body="$(curl -fsS --max-time 20 "https://bubblelab.dev/_health")" || return 1
+  pattern='"commit"[[:space:]]*:[[:space:]]*"([^"]+)"'
+  [[ "$body" =~ $pattern ]] || return 1
+  printf '%s\n' "${BASH_REMATCH[1]}"
+}
+
+is_docs_only_run() {
+  local run_id="$1" jobs name conclusion plan_ok=0 publish_skipped=0
+  jobs="$(gh run view "$run_id" --json jobs \
+    --jq '.jobs[].steps[] | [.name, .conclusion] | @tsv')" || return 1
+  while IFS=$'\t' read -r name conclusion; do
+    [[ "$name" == "Plan changes since the live deployment" && "$conclusion" == "success" ]] \
+      && plan_ok=1
+    [[ "$name" == "Publish, verify live commit, restore previous version on failure" \
+      && "$conclusion" == "skipped" ]] && publish_skipped=1
+  done <<<"$jobs"
+  ((plan_ok && publish_skipped))
+}
+
 say "프리플라이트"
-[[ "$(git rev-parse --abbrev-ref HEAD)" == "main" ]] || die "main 브랜치에서만 배포한다 (지금: $(git rev-parse --abbrev-ref HEAD))"
-git diff --quiet || die "커밋되지 않은 변경이 있다 — 배포할 것만 커밋하고 다시 실행해라"
+for tool in git gh curl; do
+  command -v "$tool" >/dev/null || die "$tool 명령이 필요하다"
+done
+BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+[[ "$BRANCH" == "main" ]] || die "main 브랜치에서만 배포한다 (지금: $BRANCH)"
+git diff --quiet || die "커밋되지 않은 tracked 변경이 있다 — 배포할 것만 커밋하고 다시 실행해라"
 git diff --cached --quiet || die "스테이징된 변경이 남아 있다 — 커밋하고 다시 실행해라"
-command -v gh >/dev/null || die "gh CLI 가 필요하다 (Actions 배포 결과를 확인한다)"
 gh auth status >/dev/null 2>&1 || die "gh 로그인이 필요하다: gh auth login"
 
-# 작업 트리를 여러 세션이 공유한다 — 남의 변경을 같이 밀어버리지 않도록
-# 무엇이 올라가는지 먼저 보여준다.
 git fetch --quiet origin main
-if ! git diff --quiet origin/main..HEAD; then
+SHA="$(git rev-parse HEAD)"
+REMOTE_SHA="$(git rev-parse origin/main)"
+
+if [[ "$SHA" != "$REMOTE_SHA" ]]; then
   echo "이번에 올라가는 커밋:"
   git --no-pager log --oneline origin/main..HEAD
   echo "바뀌는 파일:"
   git --no-pager diff --name-status origin/main..HEAD
-fi
-
-# 변경된 서브도메인에 맞는 최소 테스트 집합을 고른다. Worker·빌드·공용
-# 인프라를 건드린 경우에는 라우팅/배포 계약이 넓게 영향을 받을 수 있으므로
-# 기존 전체 테스트를 유지한다.
-changed_files() {
-  git diff --name-only origin/main..HEAD
-}
-
-run_ship_tests() {
-  local files test_file
-  files="$(changed_files)"
-  if [[ -z "$files" ]]; then
-    echo "변경 파일 없음 · 테스트 생략 (라이브만 검증)"
-    return
-  fi
-
-  if grep -qE '^(_infra/(build|worker|security|verify-prod)|wrangler\.jsonc|\.github/)' <<<"$files"; then
-    echo "공용 인프라 변경 · 전체 테스트"
-    npm test
-    return
-  fi
-
-  if grep -qE '^scripts/.*\.sh$' <<<"$files"; then
-    echo "배포 스크립트 변경 · 셸 문법 검사"
-    bash -n scripts/*.sh
-  fi
-
-  declare -a tests=()
-  declare -a e2e_tests=()
-  add_test() {
-    for test_file in "${tests[@]}"; do
-      [[ "$test_file" == "$1" ]] && return
-    done
-    tests+=("$1")
-  }
-  while IFS= read -r file; do
-    case "$file" in
-      life/*) add_test "_infra/life.test.mjs"; add_test "_infra/pops.test.mjs" ;;
-      _infra/*.test.mjs|_src/*/*.test.mjs) add_test "$file" ;;
-      _infra/e2e/*.spec.mjs) e2e_tests+=("$file") ;;
-      _shared/*) add_test "_infra/life.test.mjs" ;;
-      *) : ;;
-    esac
-  done <<<"$files"
-
-  if ((${#tests[@]})); then
-    echo "변경 서브도메인 테스트: ${tests[*]}"
-    node --test "${tests[@]}"
-  fi
-  if ((${#e2e_tests[@]})); then
-    echo "변경 서브도메인 E2E 테스트: ${e2e_tests[*]}"
-    npx playwright test "${e2e_tests[@]}"
-  fi
-  if ((${#tests[@]} == 0 && ${#e2e_tests[@]} == 0)); then
-    echo "해당 서브도메인 테스트 없음 · 문법/빌드 검증만 수행"
-  fi
-}
-
-# ── 1. 빌드 · 테스트 ──────────────────────────────────────────────────────
-say "테스트"
-run_ship_tests
-
-say "빌드"
-node _infra/build.mjs
-
-# games/avalon 은 빌드 산출물이라 소스와 어긋나면 Deploy 가 멈춘다. 검사에는
-# _src/avalon/dist 가 필요한데(로컬에 없을 수 있다), 아발론을 건드린 배포에서만
-# 로컬에서 굽고 확인한다 — 나머지는 Actions 가 본다.
-if git diff --name-only origin/main..HEAD | grep -qE '^(_src/avalon|games/avalon)/'; then
-  [[ -d _src/avalon/dist ]] || npm run build --prefix _src/avalon
-  node _infra/check-avalon-sync.mjs
-elif [[ -d _src/avalon/dist ]]; then
-  node _infra/check-avalon-sync.mjs
-else
-  echo "아발론 미변경 · 로컬 빌드 없음 — 동기화 검사는 Actions 가 한다"
-fi
-
-if [[ "${SHIP_E2E:-0}" == "1" ]]; then
-  say "모바일 스모크"
-  npm run test:e2e
-fi
-
-# ── 2. 배포 (push → Actions) ──────────────────────────────────────────────
-SHA="$(git rev-parse HEAD)"
-PREV_SERVED="$(served_commit)"
-[[ -n "$PREV_SERVED" ]] || PREV_SERVED="$(git rev-parse origin/main)"
-say "배포: ${SHA:0:7} (지금 서빙 중: ${PREV_SERVED:0:7})"
-
-if [[ "$SHA" == "$(git rev-parse origin/main)" ]]; then
-  echo "origin/main 이 이미 이 커밋이다 — push 를 건너뛰고 검증만 한다"
-else
+  say "main push: ${SHA:0:7}"
   git push origin main
-fi
 
-# ── 3. Actions 완료 대기 ─────────────────────────────────────────────────
-say "Deploy 워크플로 대기"
-RUN_ID=""
-for _ in $(seq 1 30); do
-  RUN_ID="$(gh run list --workflow deploy.yml -b main -L 20 \
-    --json headSha,databaseId --jq "[.[] | select(.headSha==\"$SHA\")][0].databaseId" 2>/dev/null || true)"
-  [[ -n "$RUN_ID" && "$RUN_ID" != "null" ]] && break
-  sleep 5
-done
-if [[ -z "$RUN_ID" || "$RUN_ID" == "null" ]]; then
-  die "이 커밋의 Deploy 런을 찾지 못했다 — Actions 탭을 확인해라"
-fi
-echo "run #$RUN_ID"
-if ! timeout "$DEPLOY_TIMEOUT" gh run watch "$RUN_ID" --exit-status >/dev/null; then
-  gh run view "$RUN_ID" --log-failed | tail -40 || true
-  die "배포가 실패했다 (run #$RUN_ID) — 라이브는 아직 ${PREV_SERVED:0:7} 이다"
-fi
-
-# ── 4. 라이브 검증 ───────────────────────────────────────────────────────
-say "라이브 검증 (읽기 전용)"
-set +e
-bash scripts/verify-prod.sh --commit "$SHA" --wait 180
-VERIFY=$?
-set -e
-
-if [[ $VERIFY -eq 0 ]]; then
-  say "완료 — ${SHA:0:7} 가 라이브에서 검증되었다"
+  say "저장소 Deploy 대기"
+  find_run "$SHA" || die "${SHA:0:7}의 Deploy 실행을 ${DISCOVERY_TIMEOUT}초 안에 찾지 못했다"
+  watch_run "$RUN_ID" || die "배포가 실패했다 (run #$RUN_ID) — Actions가 복구까지 처리한다"
+  say "완료 — ${SHA:0:7}의 저장소 배포가 검증되었다"
   exit 0
 fi
 
-# ── 5. 실패 → 기대값·실제값 diff 후 롤백 ─────────────────────────────────
-# 실패했을 때만 한 번 더 돈다. 성공하는 배포마다 프로브 전체를 두 번 찌를 이유가 없다
-# (매번 18초였다). 이 리포트는 아래 diff 와 실패 안내에만 쓰인다.
-bash scripts/verify-prod.sh --commit "$SHA" --json > "$REPORT" 2>/dev/null || true
-printf '\n\033[31m✗ 검증 실패 — 기대값 vs 실제값\033[0m\n'
-node -e '
-const report = require(process.argv[1]);
-for (const result of report.results.filter((r) => r.state === "FAIL")) {
-  console.log(`\n[${result.id}] ${result.title}${result.note ? ` — ${result.note}` : ""}`);
-  for (const failure of result.failures) {
-    console.log(`  ${failure.at}`);
-    console.log(`    - 기대: ${failure.expected}`);
-    console.log(`    + 실제: ${failure.actual}`);
-  }
-}
-' "$REPORT" || true
+say "origin/main ${SHA:0:7}의 Deploy 확인"
+if find_run "$SHA"; then
+  EXISTING_RUN_IDS="$RUN_IDS_FOR_SHA"
+  NEED_DISPATCH=0
+  if [[ "$RUN_STATUS" == "completed" && "$RUN_CONCLUSION" != "success" ]]; then
+    NEED_DISPATCH=1
+  elif [[ "$RUN_STATUS" != "completed" ]] && ! watch_run "$RUN_ID"; then
+    NEED_DISPATCH=1
+  fi
 
-if [[ "$ROLLBACK" != "1" ]]; then
-  die "SHIP_ROLLBACK=0 이라 되돌리지 않았다 — 라이브는 ${SHA:0:7} 그대로다"
+  if [[ "$NEED_DISPATCH" == "0" ]]; then
+    LIVE_SHA="$(live_commit || true)"
+    if [[ "$LIVE_SHA" == "$SHA" ]]; then
+      say "완료 — ${SHA:0:7}가 이미 라이브에서 검증되었다"
+      exit 0
+    fi
+    if is_docs_only_run "$RUN_ID"; then
+      say "완료 — 문서 전용 실행이라 배포가 생략되었다 (라이브 ${LIVE_SHA:0:7})"
+      exit 0
+    fi
+    die "run #$RUN_ID는 성공했지만 라이브 커밋이 ${SHA:0:7}가 아니다 (실제: ${LIVE_SHA:-응답 없음})"
+  fi
+else
+  EXISTING_RUN_IDS=""
 fi
 
-say "롤백: ${PREV_SERVED:0:7} 상태로 되돌린다"
-git revert --no-edit --no-commit "${PREV_SERVED}..${SHA}"
-git commit -m "revert: ${SHA:0:7} 라이브 검증 실패로 되돌림
-
-verify-prod 가 실패해서 배포 직전 상태(${PREV_SERVED:0:7})로 되돌립니다.
-실패 내역: $REPORT"
-git push origin main
-REVERT_SHA="$(git rev-parse HEAD)"
-
-for _ in $(seq 1 30); do
-  RUN_ID="$(gh run list --workflow deploy.yml -b main -L 20 \
-    --json headSha,databaseId --jq "[.[] | select(.headSha==\"$REVERT_SHA\")][0].databaseId" 2>/dev/null || true)"
-  [[ -n "$RUN_ID" && "$RUN_ID" != "null" ]] && break
-  sleep 5
-done
-timeout "$DEPLOY_TIMEOUT" gh run watch "$RUN_ID" --exit-status >/dev/null \
-  || die "롤백 배포까지 실패했다 — 직접 확인이 필요하다 (run #$RUN_ID)"
-
-say "롤백 검증"
-bash scripts/verify-prod.sh --commit "$REVERT_SHA" --wait 180 \
-  || die "되돌린 뒤에도 검증이 실패한다 — 라이브가 정상이 아니다"
-
-die "배포는 되돌렸다. 위의 기대값·실제값 diff 를 보고 고친 뒤 다시 make ship 해라"
+say "Deploy 수동 재실행: ${SHA:0:7}"
+gh workflow run "$WORKFLOW" --ref main
+find_run "$SHA" "$EXISTING_RUN_IDS" \
+  || die "새 Deploy 실행을 ${DISCOVERY_TIMEOUT}초 안에 찾지 못했다"
+watch_run "$RUN_ID" || die "재실행한 배포가 실패했다 (run #$RUN_ID) — Actions가 복구까지 처리한다"
+say "완료 — ${SHA:0:7}의 저장소 배포가 검증되었다"

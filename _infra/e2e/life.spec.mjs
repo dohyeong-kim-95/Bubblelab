@@ -165,7 +165,10 @@ test("도구는 열 때 받는다 — 시작에는 섞이지 않는다", async (
   // 여는 속도가 도구 개수를 따라간다.
   const tools = paths.filter((path) => /^\/life\/[^/]+\//.test(path));
   expect(tools, `시작에 도구를 받았다: ${tools.join(", ")}`).toEqual([]);
-  expect(paths.filter((path) => path.startsWith("/life/"))).toHaveLength(4);
+  // Installed Chrome also requests the declared favicon; headless-shell may not.
+  // Keep the application shell exact so added startup modules still fail this test.
+  expect(paths.filter((path) => path.startsWith("/life/") && path !== "/life/icon.svg").sort())
+    .toEqual(["/life/", "/life/app.js", "/life/store.js", "/life/styles.css"]);
 
   await page.evaluate(() => navigator.serviceWorker.ready.then(() => undefined));
   await page.waitForTimeout(400);

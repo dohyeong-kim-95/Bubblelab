@@ -159,6 +159,15 @@ test("지적은 글 순서대로 나온다", () => {
   assert.ok(issues.length >= 3);
 });
 
+test("여러 지적을 끝까지 검사한 뒤 거듭 검사해도 같은 결과가 나온다", () => {
+  const text = "웬지 몇일 되서 또 웬지 몇일 되서";
+  const first = check(text);
+
+  assert.deepEqual(first.map((i) => i.found), ["웬지", "몇일", "되서", "웬지", "몇일", "되서"]);
+  assert.deepEqual(check(text), first);
+  assert.deepEqual(check(text), first);
+});
+
 test("found는 원문에서 잘라낸 그 자리다", () => {
   const text = "이건 정말 어의없는 일이다";
   for (const issue of check(text)) {

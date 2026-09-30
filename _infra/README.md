@@ -30,7 +30,11 @@ Bubblelab의 정적 빌드, 단일 Cloudflare Worker, Durable Object 저장소�
 | `asset-flags.js` | 스티커 공개 여부 오버라이드 `AssetFlagsDO`와 카탈로그 필터 |
 | `assets-store.js` | R2용 데이터 변환 코드. 현재 운영 라우트에서는 비활성 |
 | `idle-balance.mjs` | Bubble Pop Idle 밸런스 시뮬레이터 |
-| `verify-prod.mjs` | 배포된 사이트를 실제로 찔러 보는 읽기 전용 검증기 (`make ship`·`make verify`) |
+| `deploy-scope.mjs` | 변경 파일을 문서 전용·서브도메인 범위·전체 검증으로 분류 |
+| `deploy-prepare.mjs` | 라이브 SHA부터 현재 SHA까지의 배포 계획을 Actions에 생성 |
+| `deploy-check.mjs` | 계획에 든 단위·브라우저 검증과 전체 bundle 빌드를 실행 |
+| `deploy-release.mjs` | publish·라이브 SHA 검증·Cloudflare 직전 version 복구를 처리 |
+| `verify-prod.mjs` | 배포된 사이트를 실제로 찌르는 읽기 전용 검증기 (Actions·`make verify`) |
 
 `*.test.mjs`는 Node 내장 테스트 러너로 실행됩니다.
 
@@ -170,8 +174,22 @@ npx wrangler@4 dev --local --local-upstream localhost
 
 - `ci.yml`: pull request에서 루트 인프라 테스트·전체 빌드와 Avalon 테스트·빌드를
   실행합니다. 배포용 secret을 사용하지 않으며 Cloudflare에 배포하지 않습니다.
-- `deploy.yml`: `main` push에서 루트 의존성을 설치하고, 인프라 테스트와 빌드가
-  성공한 뒤 Cloudflare에 자동 배포합니다. 별도의 수동 배포 작업은 없습니다.
+- `deploy.yml`: `main` push와 `main` 대상 수동 실행에서 동작하는 배포의 기준
+  구현입니다. 알려진 단일 서브도메인은 해당 단위 테스트와 관련 E2E를 고르고,
+  공용·인프라·미분류 변경 또는 미분류 테스트가 있으면 전체 검증으로 전환합니다.
+  브라우저 검증은 GitHub Ubuntu 이미지에 설치된 Chrome을 사용합니다.
+- 검증 범위와 무관하게 `dist/` 전체를 한 번 만들고 Worker와 모든 정적 asset을
+  하나의 bundle로 배포합니다. 부분 배포와 데이터 migration은 하지 않으므로
+  변경하지 않은 서브도메인과 Durable Object 데이터가 유지됩니다.
+- publish 뒤 프로덕션 검증이 실패하면 Cloudflare의 직전 production version으로
+  Worker와 asset을 복구하고 이전 SHA의 health를 확인합니다. git revert를 만들지
+  않으며 Durable Object 저장 데이터와 migration 상태는 되돌리지 않습니다.
+- `make ship`은 깨끗한 `main`을 push하고 정확한 head SHA의 run을 기다립니다.
+  이미 원격에 있는 SHA의 run이 없거나 실패했을 때만 `deploy.yml --ref main`을 다시
+  실행합니다. 로컬 요구 도구는 `git`·`gh`·`curl`입니다. 문서 전용 변경은 plan
+  step 성공과 publish step skip을 함께 확인한 경우에만 기존 라이브 SHA를 허용합니다.
+- 작은 기능 60초, 단일 서브도메인 120초 목표는 실제 Actions 시작부터 기대 SHA의
+  라이브 검증 완료까지 측정한 원격 근거가 생기기 전에는 달성으로 간주하지 않습니다.
 - 외부 GitHub Action은 공급망 변경을 막기 위해 전체 commit SHA로 고정하고,
   Wrangler도 정확한 버전으로 고정합니다. Dependabot이 매주 업데이트 PR을 엽니다.
 - `CODEOWNERS`는 배포·인프라·의존성 파일의 PR 검토를 요청합니다. Branch ruleset을

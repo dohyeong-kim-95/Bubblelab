@@ -4,6 +4,8 @@
 //   ③ 첫 화면에 눈에 보이는 내용이 있는가
 // 기능·로직은 _infra/*.test.mjs 가 담당한다 — 여기서 늘리지 않는다.
 import { test, expect } from "@playwright/test";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname } from "node:path";
 
 // 게이트 뒤(work·admin·duri·podcast)는 로그인이 필요해 스모크 대상이 아니다.
 // 잠들어 있는 화면(espanol·estate·invest·trip·util/planner)도 배포되지 않아 대상이 아니다 — _infra/dormant.js.
@@ -32,7 +34,22 @@ const SCREENS = [
   // 화면을 전부 스크립트로 그린다. 저장본이 없는 첫 방문에서도 안내가 떠야 한다
 ];
 
-for (const screen of SCREENS) {
+const plan = process.env.BL_DEPLOY_PLAN
+  ? JSON.parse(readFileSync(process.env.BL_DEPLOY_PLAN, "utf8")) : null;
+const scoped = plan?.mode === "scoped";
+const screens = SCREENS.filter(screen => !scoped || screen.path === "/" || plan.sites.includes(screen.path.split("/")[1]));
+// Newly added tools must be exercised even before someone adds a permanent smoke entry.
+if (scoped) {
+  for (const file of plan.files) {
+    let page = file.endsWith(".html") ? file : `${dirname(file)}/index.html`;
+    while (!existsSync(`dist/${page}`) && dirname(page).includes("/")) page = `${dirname(dirname(page))}/index.html`;
+    if (!existsSync(`dist/${page}`) || !plan.sites.includes(page.split("/")[0])) continue;
+    const path = `/${page}`.replace(/\/index\.html$/, "/").replace(/^\/www\//, "/");
+    if (!screens.some(screen => screen.path === path)) screens.push({ name: page, path });
+  }
+}
+
+for (const screen of screens) {
   test(`${screen.name} — 모바일에서 깨지지 않는다`, async ({ page }) => {
     const failures = [];
     page.on("pageerror", (error) => failures.push(`예외: ${error.message}`));

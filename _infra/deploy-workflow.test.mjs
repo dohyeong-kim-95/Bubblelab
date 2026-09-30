@@ -19,11 +19,11 @@ test("wrangler 는 정확한 버전으로 핀되어 있다 — 범위(^)면 npx 
   assert.match(pinned, /^\d+\.\d+\.\d+$/, `정확한 버전이어야 한다 (지금 ${pinned})`);
 });
 
-test("워크플로의 wranglerVersion 과 같은 버전이다", () => {
-  const [, inWorkflow] = workflow.match(/wranglerVersion:\s*"([^"]+)"/) ?? [];
-  assert.ok(inWorkflow, "워크플로에서 wranglerVersion 을 찾지 못했다");
-  assert.equal(pkg.devDependencies.wrangler, inWorkflow,
-    "package.json 과 워크플로의 wrangler 버전이 어긋났다 — 설치 단계가 다시 살아난다");
+test("워크플로는 lockfile에 설치한 Wrangler만 실행한다", async () => {
+  const release = await readFile(new URL("./deploy-release.mjs", import.meta.url), "utf8");
+  assert.match(workflow, /node _infra\/deploy-release\.mjs/);
+  assert.match(release, /node_modules\/wrangler\/bin\/wrangler\.js/);
+  assert.doesNotMatch(workflow, /wrangler-action|npx.*wrangler/);
 });
 
 
@@ -34,8 +34,17 @@ test("워크플로의 wranglerVersion 과 같은 버전이다", () => {
 
 test("node_modules 를 통째로 캐시한다 — setup-node 캐시는 내려받기만 아낀다", () => {
   assert.match(workflow, /path:\s*node_modules/, "node_modules 캐시가 없다");
-  assert.match(workflow, /if:\s*steps\.node-modules\.outputs\.cache-hit\s*!=\s*'true'/,
+  assert.match(workflow, /if:[^\n]*steps\.node-modules\.outputs\.cache-hit\s*!=\s*'true'/,
     "캐시가 맞아도 npm ci 를 그대로 돌리고 있다");
+});
+
+test("설치된 Chrome과 공통 선택기로 검증하고 라이브 검증까지 취소하지 않는다", () => {
+  assert.match(workflow, /PLAYWRIGHT_CHANNEL: chrome/);
+  assert.doesNotMatch(workflow, /playwright install|--with-deps/);
+  assert.match(workflow, /deploy-check\.mjs .deploy-plan\.json unit/);
+  assert.match(workflow, /deploy-check\.mjs .deploy-plan\.json e2e/);
+  assert.match(workflow, /cancel-in-progress: false/);
+  assert.match(workflow, /github.ref == 'refs\/heads\/main'/);
 });
 
 test("아발론은 내용이 바뀌었을 때만 검증한다", () => {
