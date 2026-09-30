@@ -12,7 +12,9 @@ import { zipStore } from "./zip.js";
 const $ = (id) => document.getElementById(id);
 const API = "/_yaksok/rooms";
 const STORE_KEY = "yaksok:rooms";
-const POLL_MS = 8000;
+// 셋이 동시에 보는 방이라 짧게 묻는다 — 누가 확정·장소를 바꾼 뒤 공유 버튼을 누르면 그 사이
+// 옛 단계 문구가 나가지 않게(공유는 사용자 제스처 안에서 바로 불러야 해 누를 때 물을 수 없다).
+const POLL_MS = 3000;
 
 // ── 기기에 남기는 것: 방 코드별 내 토큰과 방 이름 (내 약속 목록용) ──
 function loadRooms() {
@@ -603,7 +605,10 @@ function render() {
   // 날짜가 잡히면 달력은 접어 둔다(다시 볼 수 있다).
   const later = state.phase >= 1;
   $("cal-toggle").hidden = !later;
+  // 날짜 잡기에서 다음 단계로 넘어가는 순간 한 번 접는다(그 뒤로는 사람이 연 대로 둔다).
   if (!later) calendarOpen = true;
+  else if (lastPhase === 0) calendarOpen = false;
+  lastPhase = state.phase;
   $("cal-layout").hidden = later && !calendarOpen;
   $("cal-toggle").textContent = calendarOpen ? "📅 날짜 투표 접기" : "📅 날짜 투표 다시 보기";
   renderPhases();
@@ -618,6 +623,7 @@ function render() {
   scheduleOg();
 }
 let calendarOpen = false;
+let lastPhase = null;
 
 function showRoomGone() {
   if (gone) return;
