@@ -1347,6 +1347,13 @@ async function handleAdmin(request, env, url, base = "") {
   return null;
 }
 
+// 약속 방에서 큰 본문을 받는 곳 — 사진(긴 변 2048px JPEG + 썸네일, base64), 결제내역 캡처,
+// 미리보기 카드 PNG. 나머지 약속 요청은 기본 64KB 로 충분하다.
+function yaksokBodyLimit(path) {
+  const action = /^\/_yaksok\/rooms\/[a-z0-9]{6}\/(photo|parse|og)$/.exec(path)?.[1];
+  return { photo: 8 * 1024 * 1024, parse: 7 * 1024 * 1024, og: 1024 * 1024 }[action] ?? null;
+}
+
 export async function handleRequest(request, env, ctx) {
     const url = new URL(request.url);
     const host = url.hostname;
@@ -1360,7 +1367,8 @@ export async function handleRequest(request, env, ctx) {
       path === "/_duri/photo" ? DURI_MAX_PHOTO_BYTES :
       path === "/_emoticon/generate" ? EMOTICON_MAX_BODY :
       path === "/_life/backup" ? 4 * 1024 * 1024 :
-      path === "/_planner/data" ? 600 * 1024 : 64 * 1024,
+      path === "/_planner/data" ? 600 * 1024 :
+      yaksokBodyLimit(path) ?? 64 * 1024,
     );
     if (mutationError) return mutationError;
 
@@ -1449,10 +1457,6 @@ export async function handleRequest(request, env, ctx) {
       if (request.method === "POST") {
         const contentTypeError = requireJsonRequest(request);
         if (contentTypeError) return contentTypeError;
-        // 사진 한 장(긴 변 2048px JPEG + 썸네일, base64)이 가장 크다.
-        if (+(request.headers.get("Content-Length") ?? 0) > 8 * 1024 * 1024) {
-          return Response.json({ error: "너무 커요." }, { status: 413 });
-        }
       }
       // 사진 썸네일은 한 화면에 수십 장을 한꺼번에 받으므로 읽기와 따로 넉넉히 센다.
       const media = request.method === "GET" && /\/(photos\/[0-9a-f]{16}|og\.png)$/.test(path);

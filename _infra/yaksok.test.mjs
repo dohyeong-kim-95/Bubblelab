@@ -467,3 +467,23 @@ test("단계마다 중간에 터트려도 사진·정산까지 전부 지워지�
     assert.equal(late.status, 410, `${stage}: 늦게 온 저장은 410`);
   }
 });
+
+test("워커 앞단: 사진·캡처·미리보기는 큰 본문을 받고(64KB 기본 상한에 막히지 않게), 나머지는 64KB", async () => {
+  const { default: worker } = await import("./worker.js");
+  const env = fakeEnv();
+  const { code, b } = await threeFriends(env, "size01");
+  env.ENABLE_YAKSOK = "true";
+  const post = (action, body) => {
+    const text = JSON.stringify(body);
+    return worker.fetch(new Request(`https://util.bubblelab.dev/_yaksok/rooms/${code}/${action}`, {
+      method: "POST", body: text,
+      headers: { "Content-Type": "application/json", "Content-Length": String(Buffer.byteLength(text)), "X-Yaksok-Token": b },
+    }), env, { waitUntil() {} });
+  };
+  const photo = await post("photo", { full: jpeg(1_500_000), thumb: jpeg(20_000) });   // base64 로 2MB 넘음
+  assert.equal(photo.status, 200, "사진 업로드가 앞단에서 막히지 않는다");
+  const og = await post("og", { version: (await photo.json()).state.version, png: png() });
+  assert.equal(og.status, 200);
+  const tooBigVote = await post("vote", { votes: {}, pad: "x".repeat(70 * 1024) });
+  assert.equal(tooBigVote.status, 413, "그 밖의 요청은 여전히 64KB");
+});
