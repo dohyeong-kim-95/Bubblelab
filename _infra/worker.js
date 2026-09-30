@@ -80,6 +80,8 @@ const REALTIME_NAMESPACES = new Set(["avalon", "liargame", "yacht"]);
 const WORK_REVIEW_PROJECTS = ["daonfit"];
 import { validPlannerCode } from "./planner.js";
 import { handleFortuneChart, handleFortunePush, sendFortuneDaily } from "./fortune.js";
+import { handleYaksokApi, renderRoomPage } from "./yaksok.js";
+import { CODE_RE as YAKSOK_CODE_RE } from "../util/yaksok/logic.js";
 import { handleBriefPush, handleBriefRates, handleBriefToday, sendBriefDaily } from "./brief.js";
 import { handlePodcast, handlePodcastAdmin, runDailyGeneration, runEveningReminder, UPLOAD_MAX_BYTES } from "./podcast.js";
 import { handlePapers, handlePapersComments, handlePapersSink } from "./papers.js";
@@ -118,6 +120,7 @@ export { PodcastDO } from "./podcast.js";
 export { RateLimiterDO } from "./security.js";
 export { DuriDO } from "./duri.js";
 export { FortuneDO } from "./fortune.js";
+export { YaksokDO } from "./yaksok.js";
 export { BriefDO } from "./brief.js";
 export { AssetFlagsDO } from "./asset-flags.js";
 export { InvestDO } from "./invest.js";
@@ -1083,7 +1086,7 @@ export const HEALTH_BINDINGS = [
   "ASSETS", "ANALYTICS", "RECORDS", "RATE_LIMITER", "REALTIME", "PLANNER",
   "CHAT", "PODCAST", "DURI", "INVEST", "ASSET_FLAGS", "BRIEF", "FORTUNE",
   "WORK_QNA", "WORK_REVIEWS", "EMOTICON_REVIEW", "PODCAST_BUCKET", "DURI_BUCKET", "LIFE",
-  "LIFE_BUCKET",
+  "LIFE_BUCKET", "YAKSOK",
 ];
 
 /**
@@ -1435,6 +1438,25 @@ export async function handleRequest(request, env, ctx) {
       });
       if (limited) return limited;
       return handleFortuneChart(request, env);
+    }
+
+    // 약속 방(util/yaksok). 방 하나가 YaksokDO 하나. 코드 추측을 막으려고 읽기에도 한도를 둔다.
+    if (path.startsWith("/_yaksok/")) {
+      if (!featureEnabled(env, "ENABLE_YAKSOK")) {
+        return Response.json({ error: "약속 기능이 잠시 꺼져 있어요." }, { status: 503 });
+      }
+      const creating = path === "/_yaksok/rooms" && request.method === "POST";
+      if (request.method === "POST") {
+        const contentTypeError = requireJsonRequest(request);
+        if (contentTypeError) return contentTypeError;
+      }
+      const limited = await enforceRateLimit(request, env, creating
+        ? { scope: "yaksok-create", limit: 5, windowMs: 10 * 60 * 1000 }
+        : request.method === "POST"
+          ? { scope: "yaksok-write", limit: 120, windowMs: 60 * 1000 }
+          : { scope: "yaksok-read", limit: 120, windowMs: 60 * 1000 });
+      if (limited) return limited;
+      return handleYaksokApi(request, env, path);
     }
 
     // 매일 오전 8시(KST) 운세 알림 구독 — 익명 Web Push. GET은 공개키 조회.
@@ -2137,6 +2159,28 @@ export async function handleRequest(request, env, ctx) {
       lifeUrl.pathname = path || "/";
       const lifeResponse = await handleLifeGate(request, env, lifeUrl, isProdHost ? "" : "/life");
       if (lifeResponse) return lifeResponse;
+    }
+
+    // 약속 방 주소(/yaksok/<코드>)는 파일이 없다 — 방 화면을 내주고 카톡 미리보기용 OG 를 끼운다.
+    // 방은 개인 모임이라 검색·캐시에서 뺀다.
+    if (site === "util" && path.startsWith("/yaksok/")) {
+      const roomCode = path.slice("/yaksok/".length).replace(/\/$/, "");
+      if (YAKSOK_CODE_RE.test(roomCode)) {
+        if (path.endsWith("/")) {
+          return Response.redirect(new URL(url.pathname.replace(/\/$/, "") + url.search, url), 301);
+        }
+        if (!featureEnabled(env, "ENABLE_YAKSOK")) return new Response("약속 기능이 잠시 꺼져 있어요.", { status: 503 });
+        const shell = await env.ASSETS.fetch(new Request(new URL("/util/yaksok/", url), request));
+        if (!shell.ok) return shell;
+        const html = await renderRoomPage(await shell.text(), env, roomCode);
+        return new Response(html, {
+          headers: {
+            "Content-Type": "text/html; charset=utf-8",
+            "Cache-Control": "no-store",
+            "X-Robots-Tag": "noindex, nofollow",
+          },
+        });
+      }
     }
 
     url.pathname = `/${site}${path}`;

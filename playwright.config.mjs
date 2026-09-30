@@ -46,6 +46,13 @@ export default defineConfig({
           : {}),
       },
     },
+    // 아이폰(WebKit) — iOS 브라우저는 전부 WebKit 이다. CI 는 브라우저를 내려받지 않으므로
+    // 로컬에서만 켠다: PLAYWRIGHT_IOS=1 npx playwright test --project=iphone
+    ...(process.env.PLAYWRIGHT_IOS ? [{
+      name: "iphone",
+      testMatch: /yaksok\.spec\.mjs/,
+      use: { ...devices["iPhone 13"] },
+    }] : []),
   ],
   // dist/ 가 있어야 한다 — 없으면 node _infra/build.mjs 를 먼저 돌린다.
   webServer: {

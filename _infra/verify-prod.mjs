@@ -458,6 +458,21 @@ export function buildProbes({ sites, expectedCommit, ws }) {
     },
   });
 
+  /* 약속(util/yaksok) — 읽기만 한다. 방을 만들면 프로덕션에 쓰게 되므로 없는 방으로만 찌른다:
+     API 가 DO 까지 가서 404 JSON 을 돌려주는지, 방 주소가 화면과 카톡 미리보기 OG 를 내주는지. */
+  add({
+    id: "api:yaksok", surface: "do", title: "약속 방 (YaksokDO·방 주소 OG)",
+    async run({ target, checks, timeoutMs }) {
+      const api = await request(target.apiOn("util", "/_yaksok/rooms/zzzzzz"), { timeoutMs });
+      checks.eq("GET /_yaksok/rooms/<없는 방> status", api.status, 404);
+      checks.ok("없는 방 응답은 JSON error", typeof parseJson(api.text)?.error === "string");
+      const page = await request(target.site("util", "/yaksok/zzzzzz"), { timeoutMs });
+      checks.eq("GET /yaksok/<코드> status", page.status, 200);
+      checks.ok("방 화면에 OG 미리보기", /property="og:image" content="https:\/\/util\.bubblelab\.dev\/yaksok\/og\.png"/.test(page.text));
+      checks.eq("방 화면 캐시", page.headers.get("cache-control"), "no-store");
+    },
+  });
+
   /* 닫혀 있어야 하는 것들 — fail-closed 계약을 매 배포마다 확인한다. */
   add({
     id: "gate:closed", surface: "worker", title: "인증·기능 게이트 (익명 접근)",

@@ -24,6 +24,7 @@ const SCREENS = [
   { name: "아침 브리핑", path: "/util/brief/" },
   { name: "달력", path: "/util/calendar/" },
   { name: "운세", path: "/util/fortune/" },
+  { name: "약속", path: "/util/yaksok/" },
   { name: "별자리 배경화면", path: "/util/stars/" },
   // textarea 뒤에 거울을 깔아 밑줄을 그린다 — 두 층이 어긋나면 가로로 넘친다
   { name: "맞춤법 검사", path: "/util/proofread/" },

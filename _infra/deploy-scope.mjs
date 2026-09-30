@@ -52,6 +52,7 @@ const SITE_TESTS = {
     "_infra/brief.test.mjs", "_infra/chat.test.mjs", "_infra/fortune.test.mjs",
     "_infra/planner.test.mjs", "_infra/proofread.test.mjs", "_infra/saju-detail.test.mjs",
     "_infra/stars-skyline.test.mjs", "_infra/stars.test.mjs", "_infra/tojeong.test.mjs",
+    "_infra/yaksok.test.mjs",
   ],
   work: [
     "_infra/emoticon-gate.test.mjs", "_infra/emoticon-prompt.test.mjs",
@@ -74,6 +75,7 @@ const SITE_E2E = {
     "_infra/e2e/pushup.spec.mjs", "_infra/e2e/review.spec.mjs",
   ],
   sktest: ["_infra/e2e/sktest-workbook.spec.mjs"],
+  util: ["_infra/e2e/yaksok.spec.mjs"],
 };
 
 const GLOBAL_TESTS = [

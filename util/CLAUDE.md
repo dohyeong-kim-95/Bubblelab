@@ -9,6 +9,7 @@
 | --- | --- | --- |
 | `brief/` | `/_brief/today`·`/rates`·`/push` → `_infra/brief.js` (BriefDO) | `_infra/brief.test.mjs`, e2e |
 | `fortune/` | `/_fortune/chart`·`/push` → `_infra/fortune.js` (FortuneDO), 신살·12운성·대운은 `_infra/saju-detail.js`, 토정비결 작괘는 `_infra/tojeong.js`(본문은 정적 `fortune/tojeong/<괘>.json`) | `_infra/fortune.test.mjs`, `_infra/saju-detail.test.mjs`, `_infra/tojeong.test.mjs`, e2e |
+| `yaksok/` | `/_yaksok/rooms[/<코드>[/<동작>]]` → `_infra/yaksok.js` (**방마다 `YaksokDO` 하나**, `idFromName(코드)`), 방 주소 `/yaksok/<코드>`는 워커가 화면+OG 로 내준다. 규칙은 `yaksok/logic.js` 하나(화면·서버 공용) | `_infra/yaksok.test.mjs`, `_infra/e2e/yaksok.spec.mjs`, verify `api:yaksok` |
 | `planner/` | `/_planner/login`·`logout`·`data` → `worker.js handlePlanner` + `_infra/planner.js` (PlannerDO) | `_infra/planner.test.mjs` |
 | `chat/` | `/_chat` WebSocket → `_infra/chat.js` `ChatDO` (`idFromName("lobby")`, 단일 로비) | `_infra/chat.test.mjs`, verify `chat:ws` |
 | `proofread/` | 없음 — 규칙표 `util/proofread/rules.js` 하나 | `_infra/proofread.test.mjs`, e2e |

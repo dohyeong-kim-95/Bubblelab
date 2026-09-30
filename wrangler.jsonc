@@ -21,6 +21,8 @@
     "ENABLE_PLANNER": "false",
     // 익명 채팅(util/chat). 서버는 메시지를 저장하지 않고 브로드캐스트만 한다.
     "ENABLE_CHAT": "true",
+    // 약속 방(util/yaksok). 방마다 YaksokDO 하나, 만료 알람으로 저절로 사라진다.
+    "ENABLE_YAKSOK": "true",
     // 데일리 팟캐스트(podcast/). 켜기 전에 GEMINI_API_KEY·PODCAST_SESSION_SECRET
     // secret과 R2 버킷(bubblelab-podcast)이 준비되어야 한다.
     "ENABLE_PODCAST": "true",
@@ -147,7 +149,8 @@
       { "name": "TRIP_WATCH", "class_name": "TripWatchDO" },
       // 쓰지 않는다. v17 마이그레이션이 이미 적용돼 있어 클래스를 지우면
       // 배포가 거부되므로 자리만 남겨 둔다 (_infra/life.js 주석 참고).
-      { "name": "LIFE", "class_name": "LifeDO" }
+      { "name": "LIFE", "class_name": "LifeDO" },
+      { "name": "YAKSOK", "class_name": "YaksokDO" }
     ]
   },
   "migrations": [
@@ -168,6 +171,7 @@
     { "tag": "v15", "new_sqlite_classes": ["InvestDO"] },
     { "tag": "v16", "new_sqlite_classes": ["TripWatchDO"] },
     { "tag": "v17", "new_sqlite_classes": ["LifeDO"] },
-    { "tag": "v18", "new_sqlite_classes": ["PapersDO"] }
+    { "tag": "v18", "new_sqlite_classes": ["PapersDO"] },
+    { "tag": "v19", "new_sqlite_classes": ["YaksokDO"] }
   ]
 }
