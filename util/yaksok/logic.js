@@ -156,3 +156,81 @@ export function calendarEvent({ title, date, slot, place }) {
   ].join("\r\n");
   return { google: google.href, ics };
 }
+
+// 맨 위 진행 단계. 방 상태로 정한다 — 확정 전이면 날짜 잡기, 확정했는데 장소가 없으면 장소 전달,
+// 장소까지 정했고 약속일이 지나지 않았으면 놀기, 약속일이 지나면 정산.
+export const PHASES = ["날짜 잡기", "장소 전달", "놀기", "정산"];
+// 방장이 "놀기 끝 → 정산" 을 누르면(settling) 약속일이 지나지 않았어도 정산이다 — 당일 저녁에 나누는 게 보통이다.
+export function phaseOf(room, today) {
+  if (!room.confirmed) return 0;
+  if (room.settling || today > room.confirmed.date) return 3;
+  return room.place ? 2 : 1;
+}
+
+// 한 날짜의 가능 인원(점심·저녁)과 모두 되는지. 분모는 정원 — 안 들어온 사람까지 세야 "8명 중 3명"이다.
+export function dayCounts(votes, memberIds, date) {
+  let lunch = 0, dinner = 0;
+  for (const id of memberIds) {
+    const s = votes[id]?.[date];
+    if (s === FULL || s === LUNCH) lunch += 1;
+    if (s === FULL || s === DINNER) dinner += 1;
+  }
+  return { lunch, dinner };
+}
+
+// ── 사진 ──
+export const PHOTO_MAX = 50;
+export const PHOTO_BYTES_MAX = 100 * 1024 * 1024;
+export const PHOTO_ONE_MAX = 4 * 1024 * 1024;    // 한 장(화면이 긴 변 2048px JPEG 로 줄여 올린다)
+
+// ── 송금 정보 ── 카카오페이 송금 링크(qr.kakaopay.com)만 링크로 받고, 계좌는 글로 받는다.
+export function kakaopayUrl(value) {
+  try {
+    const url = new URL(String(value ?? "").trim());
+    return url.protocol === "https:" && url.hostname === "qr.kakaopay.com" ? url.href.slice(0, 200) : null;
+  } catch {
+    return null;
+  }
+}
+
+// ── 정산 ── 돈은 원 단위 정수. 나누어떨어지지 않는 몇 원은 참여자 순서대로 1원씩 더 낸다.
+export const AMOUNT_MAX = 10_000_000;
+export function cleanAmount(value) {
+  const n = typeof value === "string" ? Number(value.replace(/[,\s원]/g, "")) : value;
+  return Number.isInteger(n) && n > 0 && n <= AMOUNT_MAX ? n : null;
+}
+
+export function settle(memberIds, expenses) {
+  const balance = Object.fromEntries(memberIds.map((id) => [id, 0]));
+  let total = 0;
+  for (const e of expenses) {
+    const who = (e.participants ?? memberIds).filter((id) => id in balance);
+    if (!who.length || !(e.payer in balance)) continue;
+    total += e.amount;
+    balance[e.payer] += e.amount;
+    const base = Math.floor(e.amount / who.length);
+    let rest = e.amount - base * who.length;
+    for (const id of who) {
+      balance[id] -= base + (rest > 0 ? 1 : 0);
+      if (rest > 0) rest -= 1;
+    }
+  }
+  // 받을 사람·보낼 사람을 큰 금액부터 짝지으면 송금 횟수가 (거의) 최소가 된다.
+  const creditors = memberIds.filter((id) => balance[id] > 0).map((id) => ({ id, left: balance[id] }))
+    .sort((a, b) => b.left - a.left);
+  const debtors = memberIds.filter((id) => balance[id] < 0).map((id) => ({ id, left: -balance[id] }))
+    .sort((a, b) => b.left - a.left);
+  const transfers = [];
+  let i = 0, j = 0;
+  while (i < debtors.length && j < creditors.length) {
+    const amount = Math.min(debtors[i].left, creditors[j].left);
+    transfers.push({ from: debtors[i].id, to: creditors[j].id, amount });
+    debtors[i].left -= amount;
+    creditors[j].left -= amount;
+    if (!debtors[i].left) i += 1;
+    if (!creditors[j].left) j += 1;
+  }
+  return { total, balance, transfers };
+}
+
+export const won = (n) => `${Math.round(n).toLocaleString("ko-KR")}원`;

@@ -6,11 +6,18 @@ import { readFileSync } from "node:fs";
 import { YaksokDO, handleYaksokApi } from "../yaksok.js";
 
 class MemoryStorage {
-  constructor() { this.data = new Map(); }
-  async get(k) { return this.data.has(k) ? structuredClone(this.data.get(k)) : undefined; }
-  async put(k, v) { this.data.set(k, structuredClone(v)); }
+  constructor() { this.data = new Map(); this.alarm = null; }
+  async get(k) {
+    if (Array.isArray(k)) return new Map(k.filter((x) => this.data.has(x)).map((x) => [x, structuredClone(this.data.get(x))]));
+    return this.data.has(k) ? structuredClone(this.data.get(k)) : undefined;
+  }
+  async put(k, v) {
+    if (typeof k === "object") { for (const [kk, vv] of Object.entries(k)) this.data.set(kk, structuredClone(vv)); return; }
+    this.data.set(k, structuredClone(v));
+  }
+  async delete(k) { for (const x of [].concat(k)) this.data.delete(x); }
   async deleteAll() { this.data.clear(); }
-  async setAlarm() {}
+  async setAlarm(t) { this.alarm = t; }
 }
 
 async function serveYaksok(page, rooms = new Map()) {
@@ -73,6 +80,7 @@ test("마우스로 누른 채 끌면 지나간 날이 모두 같은 상태로 �
   const all = days(page);
   const sunday = await all.evaluateAll((els) => els.findIndex((el) => new Date(el.dataset.date).getUTCDay() === 0));
   const cells = { nth: (i) => all.nth(sunday + i) };
+  await cells.nth(0).scrollIntoViewIfNeeded();
   const a = await cells.nth(0).boundingBox();
   const c = await cells.nth(2).boundingBox();
   await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
@@ -109,6 +117,7 @@ test("터치로 꾹 누른 뒤 끌면 여러 날을 칠하고, 바로 쓸면 칠
   const all = days(page);
   const sunday = await all.evaluateAll((els) => els.findIndex((el) => new Date(el.dataset.date).getUTCDay() === 0));
   const cells = { nth: (i) => all.nth(sunday + i) };
+  await cells.nth(0).scrollIntoViewIfNeeded();
   const dates = await Promise.all([0, 1, 2, 3].map((i) => cells.nth(i).getAttribute("data-date")));
 
   await touchDrag(page, await cells.nth(0).boundingBox(), await cells.nth(3).boundingBox(), 60);
@@ -166,7 +175,7 @@ test("PC·폰에서 같은 코드를 치면 같은 방이 열리고, 🎲 는 �
 
   // 다른 기기: 같은 코드 + 다른 닉네임 → 같은 방에 참여
   await createRoom(phone, "meet26", "민지");
-  await expect(phone.locator("#members span")).toHaveCount(2);
+  await expect(phone.locator(".seat:not(.empty)")).toHaveCount(2);
   expect(rooms.size).toBe(1);
 
   // 같은 닉네임이면 막히고 방 안의 참여 칸에서 이어하기 링크를 안내한다
@@ -195,7 +204,7 @@ test("코드로 들어가기 — 코드만 넣으면 그 방이 열리고 방 �
   await expect(page.locator("#join")).toBeVisible();
   await page.fill("#j-name", "친구");
   await page.click("#join button[type=submit]");
-  await expect(page.locator("#members span")).toHaveCount(2);
+  await expect(page.locator(".seat:not(.empty)")).toHaveCount(2);
 });
 
 test("방을 만들 때 정원을 고르면 그 인원까지만 들어온다", async ({ page, browser }) => {
@@ -210,7 +219,9 @@ test("방을 만들 때 정원을 고르면 그 인원까지만 들어온다", a
   await page.fill("#c-name", "도형");
   await page.click("#create button[type=submit]");
   await page.waitForURL(/\/util\/yaksok\/duo222$/);
-  await expect(page.locator("#m-count")).toHaveText("1/2");
+  await expect(page.locator("#ready-count")).toContainText("1/2명");
+  await expect(page.locator(".seat")).toHaveCount(2);
+  await expect(page.locator(".seat.empty")).toHaveCount(1);
 
   const friend = await (await browser.newContext()).newPage();
   await serveYaksok(friend, rooms);
@@ -223,4 +234,29 @@ test("방을 만들 때 정원을 고르면 그 인원까지만 들어온다", a
   await third.click("#create button[type=submit]");
   await third.waitForURL(/\/util\/yaksok\/duo222$/);
   await expect(third.locator("#j-err")).toContainText("정원 2명");
+});
+
+test("중간에 터트리기: 저장 전 응답이 있던 다른 참여자 화면도 곧 '터트린 방'으로 바뀐다", async ({ browser }) => {
+  const rooms = new Map();
+  const host = await (await browser.newContext()).newPage();
+  const friend = await (await browser.newContext()).newPage();
+  await serveYaksok(host, rooms);
+  await serveYaksok(friend, rooms);
+  await createRoom(host, "popmid");
+  await createRoom(friend, "popmid", "민지");
+
+  // 친구가 날짜를 누르고(0.6초 뒤 저장) — 그 사이 방장이 터트린다
+  let votePosts = 0;
+  friend.on("request", (r) => { if (r.method() === "POST" && r.url().endsWith("/vote")) votePosts += 1; });
+  await friend.locator("#months .day:not([disabled])").nth(1).click();
+  await host.click("#host-card summary");
+  await host.fill("#pop-code", "popmid");
+  await host.click("#pop");
+  await expect(host.locator("#gone-title")).toHaveText("펑! 방을 터트렸어요");
+
+  await expect(friend.locator("#gone-title")).toHaveText("터트린 방이에요", { timeout: 4000 });
+  const posted = votePosts;
+  await friend.waitForTimeout(2500);
+  expect(votePosts, "터진 방에 저장을 계속 다시 보내지 않는다").toBe(posted);
+  expect(posted).toBeLessThanOrEqual(1);
 });

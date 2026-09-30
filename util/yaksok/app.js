@@ -1,9 +1,13 @@
 // 약속 화면. 규칙은 logic.js, 저장은 서버(/_yaksok, _infra/yaksok.js)가 맡는다.
 import {
-  CAPACITY_DEFAULT, CAPACITY_MAX, CAPACITY_MIN, CODE_RE, DINNER, FULL, LUNCH, NO, NONE, SLOT_LABEL, STATE_LABEL,
-  bestDates, calendarEvent, dateLabel, datesBetween, kstToday, nextState, normalizeCode, randomCode,
-  tally, weekday,
+  CAPACITY_DEFAULT, CAPACITY_MAX, CAPACITY_MIN, CODE_RE, DINNER, FULL, LUNCH, NO, NONE, PHASES,
+  PHOTO_MAX, SLOT_LABEL, STATE_LABEL,
+  bestDates, calendarEvent, cleanAmount, dateLabel, datesBetween, dayCounts, kstToday, nextState,
+  normalizeCode, randomCode, settle, tally, weekday, won,
 } from "./logic.js";
+import { drawSprite } from "./sprite.js";
+import { cardPngBase64 } from "./card.js";
+import { zipStore } from "./zip.js";
 
 const $ = (id) => document.getElementById(id);
 const API = "/_yaksok/rooms";
@@ -148,13 +152,19 @@ function showGone(icon, title, text) {
   $("gone-text").textContent = text;
 }
 
+
 // ── 방 ──
 let state = null;
 let token = null;
-let view = "mine";
 const pending = {};          // 아직 서버에 안 보낸 내 응답 { date: state }
 let flushTimer = null;
 let inFlight = false;
+let flushFailures = 0;
+let gone = false;
+
+const memberIds = () => state.members.map((m) => m.id);
+const nameOf = (id) => state.members.find((m) => m.id === id)?.name ?? "?";
+const isHost = () => Boolean(state?.me?.host);
 
 function myVotes() {
   const mine = { ...(state.votes[state.me?.id] ?? {}) };
@@ -169,170 +179,142 @@ function allVotes() {
   return { ...state.votes, [state.me.id]: myVotes() };
 }
 
-function paint(el, top, bottom) {
-  const t = document.createElement("span");
-  t.className = "half top";
-  t.style.setProperty("background", top);
-  const b = document.createElement("span");
-  b.className = "half bottom";
-  b.style.setProperty("background", bottom);
-  el.append(t, b);
+function el(tag, props = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(props)) {
+    if (key === "class") node.className = value;
+    else if (key === "on") for (const [type, fn] of Object.entries(value)) node.addEventListener(type, fn);
+    else if (key in node) node[key] = value;
+    else node.setAttribute(key, value);
+  }
+  node.append(...children.filter((c) => c != null && c !== false));
+  return node;
 }
 
-// 모두 보기의 칸 색: 인원 비율만큼 진해진다. 전원이면 가장 진하다.
-function heat(color, count, total) {
-  if (!count) return "transparent";
-  const pct = Math.round(18 + 70 * (count / Math.max(total, 1)));
-  return `color-mix(in srgb, ${color} ${pct}%, transparent)`;
+// ── 맨 위: 진행 단계 ──
+function renderPhases() {
+  $("phases").replaceChildren(...PHASES.map((label, i) => el("li", {
+    class: i === state.phase ? "now" : i < state.phase ? "done" : "",
+    "aria-current": i === state.phase ? "step" : "false",
+  }, label)));
 }
 
-// 내 일정 칸: 점심은 위 절반, 저녁은 아래 절반, 불가는 ✕. 드래그 중에도 이 칸만 다시 칠한다
-// (달력 전체를 다시 그리면 손가락 아래 요소가 바뀌어 터치 드래그가 끊긴다).
-function drawMine(button, s) {
-  button.querySelectorAll(".half, .x").forEach((el) => el.remove());
-  if (s === FULL || s === LUNCH || s === DINNER) {
-    paint(button, s === DINNER ? "transparent" : "var(--lunch)", s === LUNCH ? "transparent" : "var(--dinner)");
+// ── READY 창: 정원만큼 자리, 들어온 사람은 캐릭터, 날짜를 넣었으면 READY, 빈 자리는 실루엣 ──
+function renderReady() {
+  const responded = state.members.filter((m) => m.responded).length;
+  $("ready-count").textContent = `${state.members.length}/${state.max}명 · READY ${responded}`;
+  const seats = [];
+  for (let i = 0; i < state.max; i += 1) {
+    const m = state.members[i];
+    const canvas = el("canvas", { width: 16, height: 16, "aria-hidden": "true" });
+    if (m) {
+      drawSprite(canvas, `${m.id}:${m.name}`);
+      seats.push(el("div", {
+        class: `seat${m.responded ? " ready-on" : ""}${m.id === state.me?.id ? " me" : ""}`,
+        title: `${m.name}${m.responded ? " — 날짜를 넣었어요" : " — 아직 날짜를 안 넣었어요"}`,
+      }, m.host ? el("span", { class: "crown", "aria-label": "방장" }, "👑") : null, canvas,
+      el("span", { class: "who" }, m.name + (m.id === state.me?.id ? " (나)" : "")),
+      el("span", { class: "tag" }, m.responded ? "READY" : "대기")));
+    } else {
+      drawSprite(canvas, `empty:${i}`, { silhouette: true });
+      const seat = el(state.me ? "div" : "button", { class: "seat empty", type: "button", title: "빈 자리" },
+        canvas, el("span", { class: "who" }, "빈 자리"), el("span", { class: "tag" }, "—"));
+      if (!state.me) seat.addEventListener("click", () => $("j-name").focus());
+      seats.push(seat);
+    }
   }
-  if (s === NO) {
-    const x = document.createElement("span");
-    x.className = "x";
-    x.textContent = "✕";
-    button.appendChild(x);
-  }
-  button.setAttribute("aria-label", `${dateLabel(button.dataset.date)} ${STATE_LABEL[s] ?? "미응답"}`);
+  $("seats").replaceChildren(...seats);
+}
+
+// ── 달력: 한 장. 칸 위 점심·아래 저녁, 불투명도 = 가능 인원 ÷ 정원, 모두 되면 테두리,
+//    왼쪽 위 작은 칸이 내 응답. 드래그 중에는 이 칸만 다시 칠한다(달력 전체를 다시 그리면
+//    손가락 아래 요소가 바뀌어 터치 드래그가 끊긴다). ──
+function drawCell(button) {
+  const date = button.dataset.date;
+  button.querySelectorAll(".half, .mine, .counts").forEach((node) => node.remove());
+  const { lunch, dinner } = dayCounts(allVotes(), memberIds(), date);
+  const cap = state.max;
+  const top = el("span", { class: "half top" });
+  top.style.setProperty("background", `rgb(var(--lunch-rgb) / ${lunch / cap})`);
+  const bottom = el("span", { class: "half bottom" });
+  bottom.style.setProperty("background", `rgb(var(--dinner-rgb) / ${dinner / cap})`);
+  button.append(top, bottom);
+  button.classList.toggle("all", lunch === cap || dinner === cap);
+  if (lunch || dinner) button.append(el("span", { class: "counts" }, `${lunch}·${dinner}`));
+  const mine = state.me ? myVotes()[date] ?? NONE : NONE;
+  if (state.me) button.append(el("span", { class: `mine s${mine}` }));
+  button.setAttribute("aria-label",
+    `${dateLabel(date)} 점심 ${lunch}명 저녁 ${dinner}명 (정원 ${cap}명)${state.me ? ` · 내 응답 ${STATE_LABEL[mine] ?? "미응답"}` : ""}`);
 }
 
 function renderCalendar() {
   const dates = datesBetween(state.period.start, state.period.end);
   const inPeriod = new Set(dates);
-  const mine = myVotes();
-  const memberIds = state.members.map((m) => m.id);
-  const { byDate } = tally(allVotes(), memberIds, dates);
-  const total = state.members.length;
   const today = kstToday();
   const confirmed = state.confirmed?.date;
-
   const months = [];
   for (let d = state.period.start.slice(0, 8) + "01"; d <= state.period.end; ) {
     const [y, m] = d.split("-").map(Number);
     months.push({ y, m });
     d = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
   }
-
-  const wrap = $("months");
-  wrap.replaceChildren();
-  for (const { y, m } of months) {
-    const box = document.createElement("div");
-    box.className = "month";
-    const h = document.createElement("h3");
-    h.textContent = `${y}년 ${m}월`;
-    const grid = document.createElement("div");
-    grid.className = "grid";
-    ["일", "월", "화", "수", "목", "금", "토"].forEach((w, i) => {
-      const cell = document.createElement("div");
-      cell.className = "dow" + (i === 0 ? " sun" : i === 6 ? " sat" : "");
-      cell.textContent = w;
-      grid.appendChild(cell);
-    });
+  $("months").replaceChildren(...months.map(({ y, m }) => {
+    const grid = el("div", { class: "grid" }, ...["일", "월", "화", "수", "목", "금", "토"].map((w, i) =>
+      el("div", { class: "dow" + (i === 0 ? " sun" : i === 6 ? " sat" : "") }, w)));
     const first = `${y}-${String(m).padStart(2, "0")}-01`;
-    for (let i = 0; i < weekday(first); i += 1) grid.appendChild(document.createElement("div"));
+    for (let i = 0; i < weekday(first); i += 1) grid.append(el("div"));
     const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
     for (let day = 1; day <= last; day += 1) {
       const date = `${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
       const wd = weekday(date);
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "day" + (wd === 0 ? " sun" : wd === 6 ? " sat" : "")
-        + (date === today ? " today" : "") + (date === confirmed ? " picked" : "");
+      const button = el("button", {
+        type: "button",
+        class: "day" + (wd === 0 ? " sun" : wd === 6 ? " sat" : "") + (date === today ? " today" : "")
+          + (date === confirmed ? " picked" : ""),
+      }, el("span", { class: "num" }, String(day)));
       button.dataset.date = date;
-      button.disabled = !inPeriod.has(date) || (view === "mine" && !state.me);
-      const num = document.createElement("span");
-      num.className = "num";
-      num.textContent = day;
-      if (inPeriod.has(date)) {
-        if (view === "mine") {
-          drawMine(button, mine[date] ?? NONE);
-        } else {
-          const t = byDate[date];
-          paint(button, heat("var(--lunch)", t.lunch, total), heat("var(--dinner)", t.dinner, total));
-          if (t.lunch || t.dinner) {
-            const counts = document.createElement("span");
-            counts.className = "counts";
-            counts.textContent = `${t.lunch}·${t.dinner}`;
-            button.appendChild(counts);
-          }
-          button.setAttribute("aria-label", `${dateLabel(date)} 점심 ${t.lunch}명 저녁 ${t.dinner}명`);
-        }
-      }
-      button.prepend(num);
-      grid.appendChild(button);
+      button.disabled = !inPeriod.has(date);
+      if (inPeriod.has(date)) drawCell(button);
+      grid.append(button);
     }
-    box.append(h, grid);
-    wrap.appendChild(box);
-  }
-
-  $("cal-help").textContent = view === "mine"
-    ? (state.me ? "톡 누를 때마다 전일 → 점심만 → 저녁만 → 불가 순서로 바뀌어요." : "참여하면 날짜를 누를 수 있어요.")
-    : (state.me?.host ? "칸 위는 점심, 아래는 저녁 인원이에요. 날짜를 누르면 그날로 확정할 수 있어요."
-      : "칸 위는 점심, 아래는 저녁 인원이에요. 진할수록 많이 돼요.");
-  $("drag-tip").textContent = view === "mine" && state.me
+    return el("div", { class: "month" }, el("h3", {}, `${y}년 ${m}월`), grid);
+  }));
+  $("cal-help").textContent = state.me
+    ? "톡 누를 때마다 내 응답이 전일 → 점심만 → 저녁만 → 불가 순서로 바뀌어요."
+    : "참여하면 날짜를 누를 수 있어요.";
+  $("drag-tip").textContent = state.me
     ? (matchMedia("(pointer: coarse)").matches ? "꾹 누른 채 끌면 여러 날을 한 번에 칠해요." : "누른 채 끌면 여러 날을 한 번에 칠해요.")
     : "";
-  const legend = view === "mine"
-    ? [["var(--lunch)", "점심"], ["var(--dinner)", "저녁"], ["transparent", "✕ 불가"]]
-    : [["var(--lunch)", "점심 인원"], ["var(--dinner)", "저녁 인원"]];
-  $("legend").replaceChildren(...legend.map(([color, text]) => {
-    const span = document.createElement("span");
-    const i = document.createElement("i");
-    i.style.setProperty("background", color);
-    span.append(i, text);
-    return span;
-  }));
+  $("legend").replaceChildren(
+    el("span", {}, el("i", { class: "lg-lunch" }), "위 = 점심"),
+    el("span", {}, el("i", { class: "lg-dinner" }), "아래 = 저녁"),
+    el("span", {}, `진하기 = 가능 인원 ÷ 정원 ${state.max}명`),
+    el("span", {}, el("i", { class: "lg-all" }), "모두 가능"),
+    state.me ? el("span", {}, el("i", { class: "lg-mine" }), "내 응답") : null,
+  );
 }
 
 function renderBest() {
   const dates = datesBetween(state.period.start, state.period.end);
-  const memberIds = state.members.map((m) => m.id);
-  const { byDate } = tally(allVotes(), memberIds, dates);
+  const { byDate } = tally(allVotes(), memberIds(), dates);
   const best = bestDates(byDate, 3);
   $("best-empty").hidden = best.length > 0;
-  $("best").replaceChildren(...best.map((item) => {
-    const li = document.createElement("li");
-    const text = document.createElement("div");
-    const when = document.createElement("div");
-    when.textContent = `${dateLabel(item.date)} ${SLOT_LABEL[item.slot]}`;
-    const who = document.createElement("div");
-    who.className = "who";
-    who.textContent = `${item.count}/${state.members.length}명 · 점심 ${item.lunch} 저녁 ${item.dinner}`;
-    text.append(when, who);
-    li.appendChild(text);
-    if (state.me?.host) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.textContent = "확정";
-      button.addEventListener("click", () => openConfirm(item.date, item.slot));
-      li.appendChild(button);
-    }
-    return li;
-  }));
+  $("best").replaceChildren(...best.map((item) => el("li", {},
+    el("div", {},
+      el("div", {}, `${dateLabel(item.date)} ${SLOT_LABEL[item.slot]}${item.count === state.max ? " · 모두 가능" : ""}`),
+      el("div", { class: "who" }, `${item.count}/${state.max}명 · 점심 ${item.lunch} 저녁 ${item.dinner}`)),
+    isHost() ? el("button", { type: "button", on: { click: () => openConfirm(item.date, item.slot) } }, "확정") : null)));
 }
 
-function renderMembers() {
-  $("m-count").textContent = `${state.members.length}/${state.max}`;
-  $("members").replaceChildren(...state.members.map((m) => {
-    const span = document.createElement("span");
-    span.className = m.responded ? "" : "yet";
-    span.textContent = `${m.host ? "👑 " : ""}${m.name}${m.responded ? " ✓" : ""}${m.id === state.me?.id ? " (나)" : ""}`;
-    return span;
-  }));
-  $("resume").hidden = !state.me;
-  $("resume").parentElement.hidden = !state.me;
+function renderMine() {
+  $("m-count").textContent = "";
+  $("members-card").hidden = !state.me;
 }
 
 let syncHostCap = null;
 function renderHost() {
-  $("host-card").hidden = !state.me?.host;
-  if (!state.me?.host) return;
+  $("host-card").hidden = !isHost();
+  if (!isHost()) return;
   $("h-cap-val").textContent = state.max;
   if (!syncHostCap) {
     syncHostCap = bindStepper("h-cap", () => state.max, async (next) => {
@@ -343,34 +325,270 @@ function renderHost() {
   }
   syncHostCap();
   const others = state.members.filter((m) => m.id !== state.me.id);
-  $("handover").replaceChildren(...(others.length ? others.map((m) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = m.name;
-    button.addEventListener("click", async () => {
-      await act("host", { memberId: m.id });
-    });
-    return button;
-  }) : [Object.assign(document.createElement("span"), { className: "muted", textContent: "아직 다른 참여자가 없어요." })]));
+  $("handover").replaceChildren(...(others.length
+    ? others.map((m) => el("button", { type: "button", on: { click: () => act("host", { memberId: m.id }) } }, m.name))
+    : [el("span", { class: "muted" }, "아직 다른 참여자가 없어요.")]));
   if (document.activeElement !== $("p-name") && document.activeElement !== $("p-url")) {
     $("p-name").value = state.place?.name ?? "";
     $("p-url").value = state.place?.url ?? "";
   }
 }
 
+const eventTitle = () => `약속 (${state.code})`;
+
 function renderConfirmed() {
   const c = state.confirmed;
   $("confirmed").hidden = !c;
   if (!c) return;
   $("cf-when").textContent = `📅 ${dateLabel(c.date)} ${SLOT_LABEL[c.slot]}`;
-  $("cf-place").textContent = state.place ? `📍 ${state.place.name}` : "장소는 아직이에요.";
+  $("cf-place").textContent = state.place ? `📍 ${state.place.name}` : "장소는 방장이 곧 알려 줄 거예요.";
   $("cf-map").hidden = !state.place;
   if (state.place) $("cf-map").href = state.place.url;
-  const event = calendarEvent({ title: eventTitle(), date: c.date, slot: c.slot, place: state.place });
-  $("cf-google").href = event.google;
+  $("cf-google").href = calendarEvent({ title: eventTitle(), date: c.date, slot: c.slot, place: state.place }).google;
+  $("settle-start").hidden = !(isHost() && state.phase < 3);
+  $("settle-stop").hidden = !(isHost() && state.settling);
 }
 
-const eventTitle = () => `약속 (${state.code})`;
+// ── 사진 ──
+const inKakao = /KAKAOTALK/i.test(navigator.userAgent);
+const photoUrl = (id, size) => `${API}/${code}/photos/${id}${size === "thumb" ? "?size=thumb" : ""}`;
+let picking = false;
+const picked = new Set();
+
+function renderPhotos() {
+  const show = state.phase >= 1;
+  $("photos-card").hidden = !show;
+  if (!show) return;
+  const photos = state.photos;
+  $("ph-count").textContent = `${photos.length}/${PHOTO_MAX}장 · ${(state.photoBytes / 1048576).toFixed(1)}MB/100MB`;
+  // 카톡 안의 브라우저는 여러 장 저장·ZIP 다운로드가 잘 안 된다 — 기본 브라우저로 넘긴다.
+  // 다른 브라우저는 기기 저장소가 달라 내 토큰을 # 뒤에 실어 보낸다(서버로는 가지 않는다).
+  $("open-external").hidden = !inKakao;
+  if (inKakao) {
+    const target = `${roomUrl(code)}${token ? `#t=${token}` : ""}`;
+    $("open-external").href = `kakaotalk://web/openExternal?url=${encodeURIComponent(target)}`;
+  }
+  $("ph-input").disabled = !state.me;
+  $("ph-all").disabled = !photos.length;
+  $("ph-pick").disabled = !photos.length;
+  $("ph-pick").textContent = picking ? "고르기 그만" : "골라서 받기";
+  $("ph-zip").hidden = !picking;
+  $("ph-zip").textContent = `선택한 ${picked.size}장 받기`;
+  $("ph-zip").disabled = !picked.size;
+  $("gallery").classList.toggle("picking", picking);
+  const existing = new Map([...$("gallery").children].map((b) => [b.dataset.id, b]));
+  $("gallery").replaceChildren(...photos.map((p) => {
+    const button = existing.get(p.id) ?? el("button", { type: "button" },
+      el("img", { src: photoUrl(p.id, "thumb"), alt: `${nameOf(p.by)}의 사진`, loading: "lazy" }),
+      el("span", { class: "pick" }));
+    button.dataset.id = p.id;
+    button.classList.toggle("picked", picked.has(p.id));
+    return button;
+  }));
+}
+
+async function toBase64(blob) {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
+// 올리기 전에 긴 변 2048px JPEG 와 360px 썸네일로 줄인다 — 다시 그리면 EXIF(촬영 위치)도 빠진다.
+async function shrink(file, edge, quality) {
+  const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+  const scale = Math.min(1, edge / Math.max(bitmap.width, bitmap.height));
+  const canvas = el("canvas", { width: Math.round(bitmap.width * scale), height: Math.round(bitmap.height * scale) });
+  canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+  return { blob, w: canvas.width, h: canvas.height };
+}
+
+async function uploadPhotos(files) {
+  const list = [...files];
+  let done = 0;
+  for (const file of list) {
+    $("ph-status").textContent = `올리는 중… ${done + 1}/${list.length}`;
+    try {
+      const full = await shrink(file, 2048, 0.85);
+      const thumb = await shrink(file, 360, 0.75);
+      await act("photo", { full: await toBase64(full.blob), thumb: await toBase64(thumb.blob), w: full.w, h: full.h });
+      done += 1;
+    } catch (error) {
+      $("ph-status").textContent = `${done}장 올림 — ${error.message}`;
+      return;
+    }
+  }
+  $("ph-status").textContent = `${done}장 올렸어요.`;
+}
+
+async function downloadZip(ids) {
+  $("ph-status").textContent = "사진을 모으는 중…";
+  const files = [];
+  for (const [i, id] of ids.entries()) {
+    const response = await fetch(photoUrl(id, "full"));
+    if (!response.ok) continue;
+    files.push({ name: `yaksok-${code}-${String(i + 1).padStart(2, "0")}.jpg`, bytes: new Uint8Array(await response.arrayBuffer()) });
+    $("ph-status").textContent = `사진을 모으는 중… ${i + 1}/${ids.length}`;
+  }
+  const url = URL.createObjectURL(new Blob([zipStore(files)], { type: "application/zip" }));
+  el("a", { href: url, download: `yaksok-${code}-사진${files.length}장.zip` }).click();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  $("ph-status").textContent = inKakao
+    ? `${files.length}장을 묶었어요. 저장이 안 되면 위의 "기본 브라우저로 열기"를 눌러 주세요.`
+    : `${files.length}장을 묶어 받았어요.`;
+}
+
+let openPhotoId = null;
+function openPhoto(id) {
+  const photo = state.photos.find((p) => p.id === id);
+  if (!photo) return;
+  openPhotoId = id;
+  $("pd-img").src = photoUrl(id, "full");
+  $("pd-open").href = photoUrl(id, "full");
+  $("pd-meta").textContent = `${nameOf(photo.by)} · 길게 누르면 저장할 수 있어요`;
+  $("pd-del").hidden = !(state.me && (photo.by === state.me.id || isHost()));
+  $("photo-dialog").showModal();
+}
+
+// ── 정산 ──
+let parsedItems = [];
+
+function renderSettle() {
+  const show = state.phase === 3;
+  $("settle-card").hidden = !show;
+  if (!show) return;
+  const ids = memberIds();
+  const { total, balance, transfers } = settle(ids, state.expenses);
+  const me = state.me?.id;
+  const perHead = ids.length ? Math.round(total / ids.length) : 0;
+  $("st-sum").replaceChildren(
+    el("div", {}, "총 ", el("b", {}, won(total)), ` · ${ids.length}명 (평균 ${won(perHead)})`),
+    me ? el("div", {}, balance[me] > 0 ? `나는 ${won(balance[me])} 받아요`
+      : balance[me] < 0 ? `나는 ${won(-balance[me])} 보내요` : "나는 주고받을 돈이 없어요") : null,
+  );
+  $("st-transfers").replaceChildren(...(transfers.length ? transfers.map((t) => {
+    const mark = state.sent[`${t.from}>${t.to}`] ?? {};
+    const to = state.members.find((m) => m.id === t.to);
+    const li = el("li", { class: mark.receivedAt ? "done" : "" },
+      el("div", {}, `${nameOf(t.from)} → ${nameOf(t.to)} `, el("span", { class: "amt" }, won(t.amount)),
+        mark.receivedAt ? " · 받음 ✓" : mark.sentAt ? " · 보냈어요" : ""));
+    const buttons = [];
+    if (me === t.from) {
+      if (to?.pay?.kakaopay) buttons.push(el("a", { class: "button kakaopay", href: to.pay.kakaopay, target: "_blank", rel: "noopener" }, "카카오페이로 보내기"));
+      if (to?.pay?.account) {
+        buttons.push(el("button", { type: "button", on: { click: async (event) => {
+          try { await navigator.clipboard.writeText(`${to.pay.account} ${t.amount}원`); event.target.textContent = "복사했어요"; }
+          catch { event.target.textContent = to.pay.account; }
+        } } }, "계좌 복사"));
+      }
+      if (!to?.pay) buttons.push(el("span", { class: "muted" }, `${nameOf(t.to)}님이 받을 곳을 아직 안 적었어요`));
+      buttons.push(el("button", { type: "button", on: { click: () => act("sent", { from: t.from, to: t.to, amount: t.amount, done: !mark.sentAt }) } },
+        mark.sentAt ? "보냄 취소" : "보냈어요"));
+    }
+    if (me === t.to) {
+      buttons.push(el("button", { type: "button", on: { click: () => act("sent", { from: t.from, to: t.to, amount: t.amount, done: !mark.receivedAt }) } },
+        mark.receivedAt ? "받음 취소" : "받았어요"));
+    }
+    if (buttons.length) li.append(el("div", { class: "row" }, ...buttons));
+    return li;
+  }) : [el("li", {}, total ? "보낼 돈이 없어요 🎉" : "아래에 결제 항목을 넣으면 누가 누구에게 얼마 보낼지 계산해요.")]));
+
+  $("st-list").replaceChildren(...state.expenses.map((e) => {
+    const editable = state.me && (e.by === me || isHost());
+    const who = e.participants ?? ids;
+    return el("li", {},
+      el("div", {}, `${e.title} · `, el("b", {}, won(e.amount)), ` · ${nameOf(e.payer)} 냄${e.source === "parsed" ? " · 캡처" : ""}`),
+      el("div", { class: "chips" }, ...state.members.map((m) => el("button", {
+        type: "button", disabled: !editable, "aria-pressed": String(who.includes(m.id)),
+        title: editable ? "눌러서 이 항목에서 빼거나 넣기" : "",
+        on: { click: () => {
+          const next = who.includes(m.id) ? who.filter((id) => id !== m.id) : [...who, m.id];
+          act("expense", { op: "update", id: e.id, title: e.title, amount: e.amount, payer: e.payer,
+            participants: next.length === ids.length ? null : next }).catch((error) => { $("st-err").textContent = error.message; });
+        } },
+      }, m.name))),
+      editable ? el("div", { class: "row" }, el("button", { type: "button", on: { click: () => act("expense", { op: "delete", id: e.id }) } }, "지우기")) : null);
+  }));
+
+  $("st-parsed").replaceChildren(...(parsedItems.length ? [el("div", { class: "parsed" },
+    el("div", { class: "muted" }, "읽은 결과예요. 맞는지 보고 고친 뒤 넣어 주세요."),
+    ...parsedItems.map((item, i) => el("label", {},
+      el("input", { type: "checkbox", checked: !item.canceled, on: { change: (ev) => { parsedItems[i].use = ev.target.checked; } } }),
+      el("input", { type: "text", value: item.title, on: { input: (ev) => { parsedItems[i].title = ev.target.value; } } }),
+      el("input", { type: "number", value: item.amount, on: { input: (ev) => { parsedItems[i].amount = Number(ev.target.value); } } }),
+      item.canceled ? el("span", { class: "muted" }, "취소") : null)),
+    el("div", { class: "row" },
+      el("button", { type: "button", class: "primary", on: { click: addParsed } }, "선택한 항목 넣기"),
+      el("button", { type: "button", on: { click: () => { parsedItems = []; renderSettle(); } } }, "버리기")))] : []));
+
+  const mine = state.members.find((m) => m.id === me);
+  if (mine && document.activeElement !== $("pay-kakao") && document.activeElement !== $("pay-account")) {
+    $("pay-kakao").value = mine.pay?.kakaopay ?? "";
+    $("pay-account").value = mine.pay?.account ?? "";
+  }
+  $("st-pay").hidden = !state.me;
+}
+
+async function addParsed() {
+  const items = parsedItems.filter((i) => i.use !== false && !(i.canceled && i.use === undefined))
+    .map((i) => ({ title: i.title, amount: i.amount, source: "parsed" }));
+  if (!items.length) return;
+  try {
+    await act("expense", { op: "add", items });
+    parsedItems = [];
+    renderSettle();
+  } catch (error) {
+    $("st-err").textContent = error.message;
+  }
+}
+
+// ── 미리보기 카드 ── 방이 바뀌면(version) 참여자 화면이 새로 그려 올린다. 공유 버튼은 이 그림을
+// 가리키는 주소(?v=버전)를 그대로 보내므로 카톡이 새 미리보기를 긁는다. 누른 뒤에 그리면 아이폰에서
+// 공유 시트가 막힐 수 있어(사용자 제스처가 끊긴다) 미리 올려 둔다.
+let ogTimer = null;
+let ogBusy = false;
+function scheduleOg() {
+  if (!state?.me || gone) return;
+  clearTimeout(ogTimer);
+  if (state.og?.version === state.version) { syncShareUrl(); return; }
+  ogTimer = setTimeout(async () => {
+    if (ogBusy || Object.keys(pending).length || state.og?.version === state.version) return;
+    ogBusy = true;
+    try {
+      const png = await cardPngBase64(state);
+      const data = await api(`/${code}/og`, { method: "POST", body: { version: state.version, png }, token });
+      state = data.state;
+      syncShareUrl();
+    } catch { /* 그새 바뀌었으면(409) 다음 새로고침에서 다시 그린다 */ }
+    finally { ogBusy = false; }
+  }, 1200);
+}
+
+function syncShareUrl() {
+  if (!state?.og) return;
+  const want = `?v=${state.og.version}`;
+  if (location.search !== want) history.replaceState(null, "", `${location.pathname}${want}${location.hash}`);
+}
+
+// 공유 버튼(오른쪽 아래 독)이 보내는 문구 — 단계마다 다르다. 주소는 location.href(?v=버전).
+function shareText() {
+  if (!state) return "";
+  const c = state.confirmed;
+  const when = c ? `${dateLabel(c.date)} ${SLOT_LABEL[c.slot]}` : "";
+  const responded = state.members.filter((m) => m.responded).length;
+  switch (state.phase) {
+    case 0: return `🫧 약속 방 ${state.code} — 되는 날짜 톡톡 눌러 줘! (${state.max}명 중 ${responded}명 응답)`;
+    case 1: return `📅 ${when}로 확정! 장소는 곧 알려 줄게 (방 ${state.code})`;
+    case 2: return `📅 ${when} · 📍 ${state.place?.name} — 여기서 만나! 지도: ${state.place?.url}`;
+    default: {
+      const { transfers } = settle(memberIds(), state.expenses);
+      const lines = transfers.map((t) => `${nameOf(t.from)} → ${nameOf(t.to)} ${won(t.amount)}`);
+      return `💸 정산해 줘! ${lines.length ? lines.join(", ") : "결제 항목을 넣어 줘"} (방 ${state.code})`;
+    }
+  }
+}
+window.blShareText = shareText;
 
 function render() {
   $("room").hidden = false;
@@ -378,86 +596,128 @@ function render() {
   $("r-title").textContent = `🫧 ${state.code}`;
   document.title = `약속 방 ${state.code}`;
   const responded = state.members.filter((m) => m.responded).length;
-  $("r-meta").textContent = `${dateLabel(state.period.start)} ~ ${dateLabel(state.period.end)} · ${state.members.length}명 중 ${responded}명 응답`;
+  $("r-meta").textContent = `${dateLabel(state.period.start)} ~ ${dateLabel(state.period.end)} · ${state.max}명 중 ${responded}명 응답`;
   $("join").hidden = Boolean(state.me);
   const expires = new Date(state.expiresAt);
   $("expires").textContent = `이 방은 ${expires.getMonth() + 1}월 ${expires.getDate()}일에 저절로 터져요 🫧`;
+  // 날짜가 잡히면 달력은 접어 둔다(다시 볼 수 있다).
+  const later = state.phase >= 1;
+  $("cal-toggle").hidden = !later;
+  if (!later) calendarOpen = true;
+  $("cal-layout").hidden = later && !calendarOpen;
+  $("cal-toggle").textContent = calendarOpen ? "📅 날짜 투표 접기" : "📅 날짜 투표 다시 보기";
+  renderPhases();
+  renderReady();
   renderConfirmed();
+  renderSettle();
+  renderPhotos();
   renderCalendar();
   renderBest();
-  renderMembers();
+  renderMine();
   renderHost();
+  scheduleOg();
+}
+let calendarOpen = false;
+
+function showRoomGone() {
+  if (gone) return;
+  gone = true;
+  forgetRoom(code);
+  for (const key of Object.keys(pending)) delete pending[key];
+  clearTimeout(flushTimer);
+  showGone("🫧", "터트린 방이에요", "방장이 방을 터트려서 기록과 사진이 모두 사라졌어요.");
 }
 
 async function refresh() {
-  if (inFlight || Object.keys(pending).length) return;
+  if (inFlight || gone) return;
   try {
-    state = await api(`/${code}`, { token });
-    if (token && !state.me) { token = null; forgetRoom(code); }   // 토큰이 더는 이 방의 것이 아니다
-    saveRoom(code, token ? { token } : {});
+    const next = await api(`/${code}`, { token });
+    if (token && !next.me) { token = null; forgetRoom(code); }   // 토큰이 더는 이 방의 것이 아니다
+    state = next;
+    if (token) saveRoom(code, { token });
     render();
   } catch (error) {
     if (error.status === 404) showGone("🔍", "없는 방이에요", "방 코드를 다시 확인해 주세요.");
-    else if (error.status === 410) { forgetRoom(code); showGone("🫧", "터트린 방이에요", "방장이 방을 터트려서 기록이 모두 사라졌어요."); }
+    else if (error.status === 410) showRoomGone();
   }
 }
 
+// 모아 둔 응답을 보낸다. 방이 그새 터졌으면(410·404) 붙들지 않고 바로 "터진 방"으로 — 예전에는
+// 여기서 0.6초마다 끝없이 다시 보내며 화면이 계속 방에 머물렀다. 다른 실패는 세 번까지만 다시 한다.
+const RETRY_MS = [1500, 4000, 10000];
 async function flush() {
   flushTimer = null;
   const votes = { ...pending };
-  if (!Object.keys(votes).length) return;
+  if (!Object.keys(votes).length || gone) return;
   inFlight = true;
   $("saving").textContent = "저장 중…";
   try {
     const data = await api(`/${code}/vote`, { method: "POST", body: { votes }, token });
     for (const [date, s] of Object.entries(votes)) if (pending[date] === s) delete pending[date];
+    flushFailures = 0;
     state = data.state;
     $("saving").textContent = "저장됨";
     render();
   } catch (error) {
-    $("saving").textContent = `저장 못 함: ${error.message}`;
-  } finally {
+    if (error.status === 410 || error.status === 404) { inFlight = false; showRoomGone(); return; }
+    flushFailures += 1;
+    if (flushFailures > RETRY_MS.length) {
+      $("saving").textContent = `저장 못 함: ${error.message} — 날짜를 다시 눌러 주세요.`;
+      for (const key of Object.keys(votes)) if (pending[key] === votes[key]) delete pending[key];
+      flushFailures = 0;
+      inFlight = false;
+      refresh();
+      return;
+    }
+    $("saving").textContent = `저장 못 함 — 다시 시도할게요 (${flushFailures}/${RETRY_MS.length})`;
     inFlight = false;
-    if (Object.keys(pending).length && !flushTimer) flushTimer = setTimeout(flush, 600);
+    if (!flushTimer) flushTimer = setTimeout(flush, RETRY_MS[flushFailures - 1]);
+    return;
   }
+  inFlight = false;
+  if (Object.keys(pending).length && !flushTimer) flushTimer = setTimeout(flush, 600);
 }
 
 async function act(action, body) {
-  const data = await api(`/${code}/${action}`, { method: "POST", body, token });
-  state = data.state ?? state;
-  render();
-  return data;
+  try {
+    const data = await api(`/${code}/${action}`, { method: "POST", body, token });
+    if (data.state) state = data.state;
+    if (!gone) render();
+    return data;
+  } catch (error) {
+    if (error.status === 410 || error.status === 404) showRoomGone();
+    throw error;
+  }
 }
 
 // 확정 창
 let confirmDate = null;
 let confirmSlot = "dinner";
 function openConfirm(date, slot) {
-  const dates = datesBetween(state.period.start, state.period.end);
-  const t = tally(allVotes(), state.members.map((m) => m.id), dates).byDate[date];
+  const { lunch, dinner } = dayCounts(allVotes(), memberIds(), date);
   confirmDate = date;
-  confirmSlot = slot === "full" && t.lunch !== t.dinner ? (t.lunch > t.dinner ? "lunch" : "dinner") : slot;
+  confirmSlot = slot === "full" && lunch !== dinner ? (lunch > dinner ? "lunch" : "dinner") : slot;
   $("cd-date").textContent = dateLabel(date);
-  $("cd-counts").textContent = `점심 ${t.lunch}명 · 저녁 ${t.dinner}명 가능 (${state.members.length}명 중)`;
+  $("cd-counts").textContent = `점심 ${lunch}명 · 저녁 ${dinner}명 가능 (정원 ${state.max}명)`;
   for (const b of $("cd-slots").children) b.setAttribute("aria-pressed", String(b.dataset.slot === confirmSlot));
   $("confirm-dialog").showModal();
 }
 
-// 내 일정 칠하기. 톡 = 한 칸 순환. 누른 채 끌기 = 첫 칸이 바뀔 상태로 지나간 칸을 모두 칠한다.
+// 칠하기. 톡 = 한 칸 순환. 누른 채 끌기 = 첫 칸이 바뀔 상태로 지나간 칸을 모두 칠한다.
 // 마우스는 누르는 즉시 끌기, 터치는 잠깐(HOLD_MS) 누르고 있어야 끌기 — 바로 쓸면 스크롤이다.
 const HOLD_MS = 220;
 const MOVE_SLOP = 8;
 function bindPaint() {
   const months = $("months");
-  let gesture = null;   // { id, x, y, start, target, dragging, painted:Set, hold }
+  let gesture = null;
 
   const dayAt = (x, y) => {
-    const el = document.elementFromPoint(x, y)?.closest?.(".day");
-    return el && months.contains(el) && !el.disabled ? el : null;
+    const node = document.elementFromPoint(x, y)?.closest?.(".day");
+    return node && months.contains(node) && !node.disabled ? node : null;
   };
   const apply = (button, target) => {
     pending[button.dataset.date] = target;
-    drawMine(button, target);
+    drawCell(button);
     gesture.painted.add(button.dataset.date);
   };
   const beginDrag = () => {
@@ -477,12 +737,13 @@ function bindPaint() {
     if (!changed) return;
     $("saving").textContent = "";
     renderBest();
+    renderReady();
     clearTimeout(flushTimer);
     flushTimer = setTimeout(flush, 600);
   };
 
   months.addEventListener("pointerdown", (event) => {
-    if (view !== "mine" || !state?.me || event.button > 0) return;
+    if (!state?.me || gone || event.button > 0) return;
     const button = event.target.closest(".day");
     if (!button || button.disabled) return;
     gesture = {
@@ -527,24 +788,13 @@ function bindPaint() {
     if (gesture?.dragging) event.preventDefault();
   }, { passive: false });
   // 꾹 누를 때 뜨는 길게 누르기 메뉴·텍스트 선택을 막는다.
-  months.addEventListener("contextmenu", (event) => { if (view === "mine") event.preventDefault(); });
+  months.addEventListener("contextmenu", (event) => event.preventDefault());
 }
 
 function bindRoom() {
-  $("tab-mine").addEventListener("click", () => { view = "mine"; syncTabs(); renderCalendar(); });
-  $("tab-all").addEventListener("click", () => { view = "all"; syncTabs(); renderCalendar(); });
-  function syncTabs() {
-    $("tab-mine").setAttribute("aria-pressed", String(view === "mine"));
-    $("tab-all").setAttribute("aria-pressed", String(view === "all"));
-  }
-
-  // 모두 보기: 방장이 날짜를 누르면 확정 창.
-  $("months").addEventListener("click", (event) => {
-    const button = event.target.closest(".day");
-    if (!button || button.disabled || view !== "all") return;
-    if (state.me?.host) openConfirm(button.dataset.date, "full");
-  });
   bindPaint();
+
+  $("cal-toggle").addEventListener("click", () => { calendarOpen = !calendarOpen; render(); });
 
   $("join").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -556,6 +806,7 @@ function bindRoom() {
       saveRoom(code, { token });
       render();
     } catch (error) {
+      if (error.status === 410) showRoomGone();
       $("j-err").textContent = error.message;
     }
   });
@@ -569,18 +820,18 @@ function bindRoom() {
   $("cd-cancel").addEventListener("click", () => $("confirm-dialog").close());
   $("cd-ok").addEventListener("click", async () => {
     $("confirm-dialog").close();
-    await act("confirm", { date: confirmDate, slot: confirmSlot });
+    await act("confirm", { date: confirmDate, slot: confirmSlot }).catch(() => {});
   });
 
   $("cf-ics").addEventListener("click", () => {
     const c = state.confirmed;
     const { ics } = calendarEvent({ title: eventTitle(), date: c.date, slot: c.slot, place: state.place });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([ics], { type: "text/calendar" }));
-    a.download = `yaksok-${c.date}.ics`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    const url = URL.createObjectURL(new Blob([ics], { type: "text/calendar" }));
+    el("a", { href: url, download: `yaksok-${c.date}.ics` }).click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
+  $("settle-start").addEventListener("click", () => act("settle", { settling: true }).catch(() => {}));
+  $("settle-stop").addEventListener("click", () => act("settle", { settling: false }).catch(() => {}));
 
   $("p-save").addEventListener("click", async () => {
     $("p-err").textContent = "";
@@ -589,19 +840,76 @@ function bindRoom() {
   });
   $("p-clear").addEventListener("click", async () => {
     $("p-name").value = ""; $("p-url").value = "";
-    await act("place", { url: null });
+    await act("place", { url: null }).catch(() => {});
+  });
+
+  // 사진
+  $("ph-input").addEventListener("change", async (event) => {
+    const files = event.target.files;
+    if (files?.length) await uploadPhotos(files);
+    event.target.value = "";
+  });
+  $("ph-all").addEventListener("click", () => downloadZip(state.photos.map((p) => p.id)));
+  $("ph-pick").addEventListener("click", () => { picking = !picking; picked.clear(); renderPhotos(); });
+  $("ph-zip").addEventListener("click", () => downloadZip(state.photos.filter((p) => picked.has(p.id)).map((p) => p.id)));
+  $("gallery").addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-id]");
+    if (!button) return;
+    if (picking) {
+      const id = button.dataset.id;
+      if (picked.has(id)) picked.delete(id); else picked.add(id);
+      renderPhotos();
+    } else {
+      openPhoto(button.dataset.id);
+    }
+  });
+  $("pd-close").addEventListener("click", () => $("photo-dialog").close());
+  $("pd-del").addEventListener("click", async () => {
+    $("photo-dialog").close();
+    await act("photo-delete", { id: openPhotoId }).catch((error) => { $("ph-status").textContent = error.message; });
+  });
+
+  // 정산
+  $("st-add").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    $("st-err").textContent = "";
+    const amount = cleanAmount($("st-amount").value);
+    if (!amount) { $("st-err").textContent = "금액을 숫자로 적어 주세요."; return; }
+    try {
+      await act("expense", { op: "add", title: $("st-title").value || "결제", amount });
+      $("st-title").value = ""; $("st-amount").value = "";
+    } catch (error) { $("st-err").textContent = error.message; }
+  });
+  $("st-shot").addEventListener("change", async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    $("st-err").textContent = "캡처를 읽는 중…";
+    try {
+      const small = await shrink(file, 1800, 0.9);
+      const data = await api(`/${code}/parse`, { method: "POST", body: { data: await toBase64(small.blob), mime: "image/jpeg" }, token });
+      parsedItems = data.items.map((i) => ({ ...i, use: !i.canceled }));
+      $("st-err").textContent = parsedItems.length ? "" : "결제 금액을 찾지 못했어요. 직접 적어 주세요.";
+      renderSettle();
+    } catch (error) {
+      $("st-err").textContent = error.message;
+    }
+  });
+  $("pay-save").addEventListener("click", async () => {
+    $("st-err").textContent = "";
+    try { await act("pay", { kakaopay: $("pay-kakao").value, account: $("pay-account").value }); }
+    catch (error) { $("st-err").textContent = error.message; }
   });
 
   $("pop").addEventListener("click", async () => {
     $("pop-err").textContent = "";
     try {
-      await act("pop", { code: $("pop-code").value });
+      await api(`/${code}/pop`, { method: "POST", body: { code: $("pop-code").value }, token });
+      gone = true;
       forgetRoom(code);
-      const burst = document.createElement("div");
-      burst.className = "pop";
-      burst.innerHTML = "<span>🫧</span>";
-      document.body.appendChild(burst);
-      setTimeout(() => showGone("🫧", "펑! 방을 터트렸어요", "모든 응답과 기록을 지웠어요."), 650);
+      const burst = el("div", { class: "pop" }, el("span", {}, "🫧"));
+      document.body.append(burst);
+      setTimeout(() => showGone("🫧", "펑! 방을 터트렸어요", "모든 응답·사진·정산 기록을 지웠어요."), 650);
     } catch (error) {
       $("pop-err").textContent = error.message;
     }
@@ -614,7 +922,7 @@ function bindRoom() {
       await navigator.clipboard.writeText(link);
       $("resume").textContent = "복사했어요 — 나만 보관하세요";
     } catch {
-      prompt("이 링크를 복사해 두세요 (나만 보관)", link);
+      $("resume").textContent = link;
     }
   });
 
@@ -627,7 +935,7 @@ async function openRoom() {
   const fromHash = /^#t=([\w-]{20,})$/.exec(location.hash)?.[1];
   if (fromHash) {
     saveRoom(code, { token: fromHash });
-    history.replaceState(null, "", location.pathname);
+    history.replaceState(null, "", location.pathname + location.search);
   }
   token = loadRooms()[code]?.token ?? null;
   bindRoom();
@@ -641,10 +949,5 @@ async function openRoom() {
     }
   } catch {}
 }
-
-// 공유(오른쪽 아래 독): 방 주소가 그대로 나가고 카톡이 방 이름 미리보기를 붙인다.
-window.blShareText = () => (state && !state.confirmed
-  ? `🫧 약속 방 ${state.code} — 되는 날짜 톡톡 눌러 줘!`
-  : state ? `🫧 약속 방 ${state.code} — 약속 잡혔어!` : "");
 
 if (code) openRoom(); else showHome();

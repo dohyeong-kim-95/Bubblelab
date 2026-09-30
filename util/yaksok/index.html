@@ -18,6 +18,9 @@
     --accent-ink: light-dark(#ffffff, #0e1a15);
     --lunch: light-dark(#f0a33a, #ffc66b);
     --dinner: light-dark(#5b6ee1, #8f9dff);
+    /* 칸의 불투명도 = 가능 인원 ÷ 정원 — rgb(var(--lunch-rgb) / 0.375) 처럼 쓴다 */
+    --lunch-rgb: 240 163 58;
+    --dinner-rgb: 91 110 225;
     --no: light-dark(#1c273330, #dbe4ee30);
     --sun: light-dark(#d4493b, #ff8a7a);
     --sat: light-dark(#3a6fd4, #8fb2ff);
@@ -69,7 +72,9 @@
   .banner { border-color: var(--accent); background: light-dark(#2f8f6e10, #6fd4ac10); }
   .banner .when { font-size: 1.05rem; font-weight: 700; margin: .1rem 0 .5rem; }
   .banner .row button, .banner .row a { font-size: .76rem; }
-  a.button { display: inline-block; border: 1px solid var(--line); background: var(--soft);
+  label.button { display: inline-block; margin: 0; opacity: 1; font-size: inherit; cursor: pointer; }
+  label.button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+  a.button, label.button { display: inline-block; border: 1px solid var(--line); background: var(--soft);
              border-radius: .6rem; padding: .55rem .8rem; color: inherit; text-decoration: none; }
 
   .tabs { display: flex; gap: .3rem; margin-bottom: .7rem; }
@@ -97,6 +102,9 @@
   .day.picked { outline: 3px solid var(--accent); outline-offset: -3px; }
   .drag-tip { margin: .45rem 0 0; font-size: .66rem; opacity: .55; }
   .legend { display: flex; flex-wrap: wrap; gap: .35rem .8rem; margin: .7rem 0 0; font-size: .68rem; opacity: .75; }
+  .legend .lg-lunch { background: var(--lunch); } .legend .lg-dinner { background: var(--dinner); }
+  .legend .lg-all { background: transparent; box-shadow: inset 0 0 0 2px var(--accent); }
+  .legend .lg-mine { background: linear-gradient(var(--lunch) 50%, var(--dinner) 50%); border-color: var(--ink); }
   .legend i { display: inline-block; width: .8rem; height: .8rem; border-radius: .2rem; vertical-align: -2px;
               margin-right: .25rem; border: 1px solid var(--line); }
   .saving { font-size: .66rem; opacity: .5; min-height: 1em; margin: .4rem 0 0; text-align: right; }
@@ -120,6 +128,90 @@
   .slots { display: grid; grid-template-columns: repeat(3, 1fr); gap: .4rem; margin: .8rem 0; }
   .slots button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 
+  /* 진행 단계 */
+  .phases { display: flex; gap: .25rem; margin: 0 0 .9rem; padding: 0; list-style: none; counter-reset: p; }
+  .phases li { flex: 1; text-align: center; font-size: .7rem; padding: .45rem .2rem; border-radius: .5rem;
+               background: var(--soft); opacity: .55; position: relative; white-space: nowrap; }
+  .phases li.done { opacity: .8; }
+  .phases li.done::before { content: "✓ "; }
+  .phases li.now { opacity: 1; background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+  .phases li small { display: block; font-size: .56rem; opacity: .8; }
+
+  /* READY 창 — 오락실 대기실풍. 정원만큼 자리가 4열로 놓인다. */
+  .ready { margin-bottom: .9rem; padding: .75rem; border-radius: .9rem;
+           background: linear-gradient(180deg, #2b5fc9, #1c3f8f); color: #fff;
+           box-shadow: inset 0 0 0 3px #7fb2ff55, 0 2px 0 #0d2459; }
+  .ready-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: .55rem; }
+  .ready-title { font-weight: 900; letter-spacing: .2em; color: #ffe14d; text-shadow: 2px 2px 0 #0d2459; }
+  #ready-count { font-size: .72rem; opacity: .85; }
+  .seats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .45rem; }
+  .seat { position: relative; display: flex; flex-direction: column; align-items: center; gap: .15rem;
+          padding: .45rem .2rem .4rem; border-radius: .6rem; background: #0f2c6e;
+          box-shadow: inset 0 0 0 2px #4f86e8; min-width: 0; }
+  .seat canvas { width: 48px; height: 48px; image-rendering: pixelated; image-rendering: crisp-edges; }
+  .seat .who { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+               font-size: .66rem; }
+  .seat .tag { font-size: .56rem; font-weight: 900; letter-spacing: .08em; padding: .05rem .35rem;
+               border-radius: .3rem; background: #0a1f52; color: #9fb7e8; }
+  .seat.ready-on .tag { background: #ffe14d; color: #1c2f66; }
+  .seat.empty { background: #0b2258; box-shadow: inset 0 0 0 2px #2c4f9a; }
+  .seat.empty .who { opacity: .5; }
+  .seat.me { box-shadow: inset 0 0 0 2px #ffe14d; }
+  .seat .crown { position: absolute; top: .15rem; left: .3rem; font-size: .75rem; }
+  button.seat { font: inherit; color: inherit; border: 0; cursor: pointer; }
+  @media (min-width: 860px) { .seats { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); } }
+
+  /* 달력 칸: 위 점심·아래 저녁, 불투명도 = 가능 인원 ÷ 정원. 모두 되는 날은 테두리. 내 응답은 왼쪽 위 표시. */
+  .day.all { box-shadow: inset 0 0 0 3px var(--accent); border-color: var(--accent); }
+  .day .mine { position: absolute; top: 3px; left: 3px; z-index: 2; width: 9px; height: 9px; border-radius: 2px;
+               border: 1.5px solid var(--ink); background: var(--card); overflow: hidden; }
+  .day .mine.s1 { background: linear-gradient(var(--lunch) 50%, var(--dinner) 50%); }
+  .day .mine.s2 { background: linear-gradient(var(--lunch) 50%, var(--card) 50%); }
+  .day .mine.s3 { background: linear-gradient(var(--card) 50%, var(--dinner) 50%); }
+  .day .mine.s4 { background: var(--card); }
+  .day .mine.s4::after { content: ""; position: absolute; inset: 0;
+                         background: linear-gradient(45deg, transparent 42%, var(--ink) 42% 58%, transparent 58%); }
+
+  /* 사진 */
+  .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 4px; margin-top: .6rem; }
+  .gallery button { position: relative; padding: 0; border: 0; aspect-ratio: 1; overflow: hidden; border-radius: .4rem;
+                    background: var(--soft); }
+  .gallery img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .gallery .pick { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; border-radius: 50%;
+                   border: 2px solid #fff; background: #0006; }
+  .gallery .picked .pick { background: var(--accent); }
+  .gallery.picking button:not(.picked) img { opacity: .6; }
+  .kakao-out { display: block; text-align: center; margin: 0 0 .6rem; background: #fee500; color: #191600;
+               border-color: transparent; font-weight: 600; }
+  .photo-dialog { width: min(96vw, 720px); }
+  .photo-dialog img { width: 100%; max-height: 70vh; object-fit: contain; border-radius: .5rem; background: #000; }
+  .calendar-toggle { width: 100%; margin-bottom: .9rem; }
+
+  /* 정산 */
+  .sub-h { margin: 1rem 0 .4rem; font-size: .78rem; opacity: .75; }
+  .settle-sum { font-size: .9rem; line-height: 1.6; }
+  .settle-sum b { font-size: 1.1rem; }
+  .transfers, .expenses { margin: 0; padding: 0; list-style: none; display: grid; gap: .4rem; }
+  .transfers li, .expenses li { padding: .6rem .65rem; border-radius: .6rem; background: var(--soft); font-size: .8rem; }
+  .transfers .amt { font-weight: 700; }
+  .transfers .row, .expenses .row { margin-top: .35rem; }
+  .transfers button, .transfers a.button, .expenses button { font-size: .7rem; padding: .3rem .55rem; }
+  .transfers .done { opacity: .55; }
+  .kakaopay { background: #fee500 !important; color: #191600 !important; border-color: transparent !important; }
+  .chips { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .35rem; }
+  .chips button { font-size: .66rem; padding: .15rem .45rem; border-radius: 1rem; }
+  .chips button[aria-pressed="false"] { opacity: .4; text-decoration: line-through; }
+  .add-expense { margin-top: .6rem; flex-wrap: nowrap; }
+  .add-expense input:first-child { flex: 2; } .add-expense input:nth-child(2) { flex: 1; min-width: 0; }
+  .add-expense button { flex: none; }
+  .parsed { margin-top: .6rem; padding: .6rem; border: 1px dashed var(--accent); border-radius: .6rem; }
+  .parsed label { display: flex; gap: .4rem; align-items: center; margin: .25rem 0; font-size: .78rem; opacity: 1; }
+  .parsed label input[type=text] { flex: 2; padding: .35rem .5rem; }
+  .parsed label input[type=number] { flex: 1; min-width: 0; padding: .35rem .5rem; }
+  .parsed label input[type=checkbox] { width: auto; }
+  .pay-box { margin-top: .9rem; font-size: .78rem; }
+  .pay-box summary { cursor: pointer; font-weight: 600; }
+
   /* 터트리기 */
   .pop { position: fixed; inset: 0; display: grid; place-items: center; pointer-events: none; z-index: 20; }
   .pop span { font-size: 6rem; animation: pop .7s ease-out forwards; }
@@ -131,6 +223,7 @@
   /* PC: 달력 왼쪽, 요약·참여자·방장 메뉴 오른쪽. 달은 나란히 놓는다. */
   .layout { display: grid; gap: .9rem; }
   .side .card:last-child, .cal .card:last-child { margin-bottom: 0; }
+  @media (prefers-color-scheme: dark) { :root { --lunch-rgb: 255 198 107; --dinner-rgb: 143 157 255; } }
   @media (min-width: 860px) {
     main { padding: 2rem 1.5rem 8rem; }
     .layout { grid-template-columns: minmax(0, 1fr) 320px; align-items: start; }
@@ -210,6 +303,7 @@
 
   <!-- 방 -->
   <section id="room" hidden>
+    <ol class="phases" id="phases" aria-label="진행 단계"></ol>
     <div class="room-head">
       <div>
         <div class="code" id="r-code"></div>
@@ -217,6 +311,11 @@
         <p class="muted" id="r-meta"></p>
       </div>
     </div>
+
+    <section class="ready" id="ready" aria-label="참여자">
+      <div class="ready-head"><span class="ready-title">READY</span><span id="ready-count"></span></div>
+      <div class="seats" id="seats"></div>
+    </section>
 
     <div class="card banner" id="confirmed" hidden>
       <div class="muted">약속이 잡혔어요</div>
@@ -226,6 +325,10 @@
         <a class="button" id="cf-map" target="_blank" rel="noopener" hidden>📍 네이버 지도</a>
         <a class="button" id="cf-google" target="_blank" rel="noopener">구글 캘린더에 넣기</a>
         <button type="button" id="cf-ics">캘린더 파일(.ics)</button>
+      </div>
+      <div class="row" style="margin-top:.6rem">
+        <button type="button" class="primary" id="settle-start" hidden>🎉 놀기 끝! 정산 시작</button>
+        <button type="button" id="settle-stop" hidden>정산 닫기</button>
       </div>
     </div>
 
@@ -239,13 +342,52 @@
       <p class="err" id="j-err"></p>
     </form>
 
-    <div class="layout room-body">
+    <section class="card room-body" id="settle-card" hidden>
+      <h2>💸 정산</h2>
+      <div class="settle-sum" id="st-sum"></div>
+      <h3 class="sub-h">보낼 돈</h3>
+      <ul class="transfers" id="st-transfers"></ul>
+      <h3 class="sub-h">결제 항목</h3>
+      <div class="row">
+        <label class="button primary" for="st-shot">📷 결제내역 캡처로 넣기</label>
+        <input type="file" id="st-shot" accept="image/*" hidden>
+      </div>
+      <p class="muted">캡처는 금액을 읽는 데만 쓰고 저장하지 않아요(Google Gemini 로 보내 읽어요). 읽은 값은 확인하고 넣어 주세요.</p>
+      <div id="st-parsed"></div>
+      <form class="row add-expense" id="st-add">
+        <input id="st-title" maxlength="40" placeholder="어디서 (예: 1차 삼겹살)">
+        <input id="st-amount" inputmode="numeric" placeholder="금액(원)">
+        <button type="submit">직접 추가</button>
+      </form>
+      <ul class="expenses" id="st-list"></ul>
+      <details class="pay-box" id="st-pay">
+        <summary>내가 돈 받을 곳 (카카오페이 송금 링크·계좌)</summary>
+        <p class="muted">카카오페이 앱 → 송금 → 송금코드(QR) → 링크 복사. 참여자에게만 보여요.</p>
+        <input id="pay-kakao" placeholder="https://qr.kakaopay.com/…" inputmode="url">
+        <input id="pay-account" maxlength="60" placeholder="은행 계좌번호 예금주 (예: 토스뱅크 1000-0000-0000 김도형)" style="margin-top:.4rem">
+        <button type="button" id="pay-save" style="margin-top:.5rem">저장</button>
+      </details>
+      <p class="err" id="st-err"></p>
+    </section>
+
+    <section class="card room-body" id="photos-card" hidden>
+      <h2>📸 사진 <span class="muted" id="ph-count"></span></h2>
+      <a class="button kakao-out" id="open-external" hidden>🌐 기본 브라우저로 열기 (사진 저장이 잘 돼요)</a>
+      <div class="row">
+        <label class="button primary" for="ph-input">사진 올리기</label>
+        <input type="file" id="ph-input" accept="image/*" multiple hidden>
+        <button type="button" id="ph-all">전체 받기 (ZIP)</button>
+        <button type="button" id="ph-pick">골라서 받기</button>
+        <button type="button" id="ph-zip" hidden>선택한 사진 받기</button>
+      </div>
+      <p class="muted" id="ph-status"></p>
+      <div class="gallery" id="gallery"></div>
+    </section>
+
+    <button type="button" class="calendar-toggle" id="cal-toggle" hidden>📅 날짜 투표 다시 보기</button>
+    <div class="layout room-body" id="cal-layout">
       <div class="cal">
         <div class="card">
-          <div class="tabs" role="group" aria-label="보기">
-            <button type="button" id="tab-mine" aria-pressed="true">내 일정</button>
-            <button type="button" id="tab-all" aria-pressed="false">모두</button>
-          </div>
           <p class="muted" id="cal-help"></p>
           <div class="months" id="months"></div>
           <div class="legend" id="legend"></div>
@@ -260,9 +402,8 @@
           <p class="muted" id="best-empty">아직 응답이 없어요. 날짜를 톡톡 눌러 주세요.</p>
         </div>
         <div class="card" id="members-card">
-          <h2>참여자 <span class="muted" id="m-count"></span></h2>
-          <div class="members" id="members"></div>
-          <p class="muted" style="margin:.7rem 0 0">
+          <h2>내 기기 <span class="muted" id="m-count"></span></h2>
+          <p class="muted" style="margin:0">
             다른 폰에서 이어서 하려면 <button type="button" id="resume" style="font-size:.72rem;padding:.25rem .5rem">내 이어하기 링크 복사</button>
           </p>
         </div>
@@ -304,6 +445,16 @@
     </div>
     <p class="muted" id="expires" style="text-align:center;margin-top:1rem"></p>
   </section>
+
+  <dialog id="photo-dialog" class="photo-dialog">
+    <img id="pd-img" alt="">
+    <p class="muted" id="pd-meta"></p>
+    <div class="row" style="justify-content:flex-end">
+      <a class="button" id="pd-open" target="_blank" rel="noopener">원본 열기</a>
+      <button type="button" id="pd-del">지우기</button>
+      <button type="button" id="pd-close">닫기</button>
+    </div>
+  </dialog>
 
   <dialog id="confirm-dialog">
     <h2 id="cd-date"></h2>

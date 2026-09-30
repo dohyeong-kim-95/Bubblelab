@@ -1449,12 +1449,20 @@ export async function handleRequest(request, env, ctx) {
       if (request.method === "POST") {
         const contentTypeError = requireJsonRequest(request);
         if (contentTypeError) return contentTypeError;
+        // 사진 한 장(긴 변 2048px JPEG + 썸네일, base64)이 가장 크다.
+        if (+(request.headers.get("Content-Length") ?? 0) > 8 * 1024 * 1024) {
+          return Response.json({ error: "너무 커요." }, { status: 413 });
+        }
       }
+      // 사진 썸네일은 한 화면에 수십 장을 한꺼번에 받으므로 읽기와 따로 넉넉히 센다.
+      const media = request.method === "GET" && /\/(photos\/[0-9a-f]{16}|og\.png)$/.test(path);
       const limited = await enforceRateLimit(request, env, creating
         ? { scope: "yaksok-create", limit: 5, windowMs: 10 * 60 * 1000 }
         : request.method === "POST"
           ? { scope: "yaksok-write", limit: 120, windowMs: 60 * 1000 }
-          : { scope: "yaksok-read", limit: 120, windowMs: 60 * 1000 });
+          : media
+            ? { scope: "yaksok-media", limit: 600, windowMs: 60 * 1000 }
+            : { scope: "yaksok-read", limit: 120, windowMs: 60 * 1000 });
       if (limited) return limited;
       return handleYaksokApi(request, env, path);
     }
