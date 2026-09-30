@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { release } from "./deploy-release.mjs";
+import { parseWranglerJson, release } from "./deploy-release.mjs";
 
 const oldVersion = "11111111-1111-1111-1111-111111111111";
 const newVersion = "22222222-2222-2222-2222-222222222222";
@@ -95,4 +95,24 @@ test("a failed prior-version health check retains the deployment failure", async
     release({ head: "a".repeat(40), base: "b".repeat(40) }, f),
     /Production verification failed; previous version restored, but rollback health verification failed/,
   );
+});
+
+test("wrangler 가 --json 앞에 섞는 안내 문장은 건너뛰고 JSON 만 읽는다", () => {
+  const json = JSON.stringify({ versions: [{ version_id: oldVersion, percentage: 100 }] }, null, 2);
+  const noisy = "There is a newer version of Wrangler available (current: 4.111.0, latest: 4.120.0). "
+    + "Try upgrading, as it might support this configuration option.\n" + json + "\n";
+  assert.equal(parseWranglerJson(noisy).versions[0].version_id, oldVersion);
+  assert.equal(parseWranglerJson(json).versions[0].percentage, 100);
+  assert.throws(() => parseWranglerJson("There is a problem\n"), /did not print JSON/);
+});
+
+test("안내가 섞여도 배포 전 production version 을 잡는다", async () => {
+  const f = fixture([0]);
+  const plain = f.command;
+  f.command = (args) => {
+    const out = plain(args);
+    return args[0] === "deployments" ? `There is a newer version of Wrangler available.\n${out}` : out;
+  };
+  await release({ head: "a".repeat(40), base: "b".repeat(40) }, f);
+  assert.deepEqual(f.commands.map(c => c[0]), ["deployments", "deploy"]);
 });

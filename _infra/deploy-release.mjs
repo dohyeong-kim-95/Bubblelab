@@ -10,8 +10,21 @@ function command(args) {
   });
 }
 
+// wrangler 는 설정 경고(예: wrangler.jsonc 의 secrets.optional)를 만나면 "There is a newer
+// version of Wrangler available…" 같은 안내를 --json 출력 앞에 stdout 으로 섞는다. 첫 배포가
+// 이것 때문에 publish 전에 멈췄다. 줄 맨 앞의 "{" 부터 마지막 "}" 까지만 JSON 으로 읽는다.
+export function parseWranglerJson(output) {
+  const text = String(output);
+  const start = text.startsWith("{") ? 0 : text.indexOf("\n{") + 1;
+  const end = text.lastIndexOf("}");
+  if (start <= 0 && !text.startsWith("{") || end < start) {
+    throw new Error(`wrangler did not print JSON: ${text.slice(0, 120)}`);
+  }
+  return JSON.parse(text.slice(start, end + 1));
+}
+
 function productionVersion(io) {
-  const current = JSON.parse(io.command(["deployments", "status", "--json"]));
+  const current = parseWranglerJson(io.command(["deployments", "status", "--json"]));
   const version = current.versions?.length === 1 && current.versions[0];
   if (!version || version.percentage !== 100 || !/^[a-f0-9-]{36}$/.test(version.version_id)) {
     throw new Error("Expected one production version serving 100% before deployment");
