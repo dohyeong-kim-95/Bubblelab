@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -123,6 +123,25 @@ function isDocumentation(file) {
   return /^[^/]+\.md$/i.test(file) || /^(?:\.omx|\.codex|\.agents|docs)\//.test(file);
 }
 
+// _infra/agent-scope.conf 가 서브도메인 하나의 것이라고 적어 둔 파일(예: util 의 _infra/yaksok.js)은
+// 공용 인프라가 아니다 — 그 서브도메인 범위로 검증한다. 워커는 한 번들이지만 publish 뒤 라이브
+// 검증이 모든 서브도메인을 매번 찌르고, 깨지면 직전 버전으로 복구한다. *shared* 줄은 소유가 아니다.
+function ownershipOf(root) {
+  const file = join(root, "_infra", "agent-scope.conf");
+  if (!existsSync(file)) return [];
+  const rules = [];
+  for (const line of readFileSync(file, "utf8").split("\n")) {
+    const match = /^([a-z][a-z0-9-]*):\s+(.+)$/.exec(line.trim());
+    if (!match || !SITES.includes(match[1])) continue;
+    for (const pattern of match[2].split(/\s+/)) {
+      const source = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]*")
+        .replace(/\/\[\^\/\]\*$/, "/.*");
+      rules.push({ site: match[1], re: new RegExp(`^${source}$`) });
+    }
+  }
+  return rules;
+}
+
 function requiresFull(file) {
   if (/(?:^|\/)\.?.+\.test\.mjs$/.test(file) || /(?:^|\/).+\.spec\.mjs$/.test(file)) return true;
   if (file === "www/index.html") return true;
@@ -154,8 +173,11 @@ export function planDeployment(files, { root = repoRoot, full = false } = {}) {
   }
 
   const sites = new Set();
+  const owned = ownershipOf(absoluteRoot);
   for (const file of normalized) {
     if (isDocumentation(file)) continue;
+    const owner = owned.find((rule) => rule.re.test(file))?.site;
+    if (owner) { sites.add(owner); continue; }
     if (requiresFull(file)) return fullPlan(normalized, absoluteRoot, discoveredTests, discoveredE2e);
     const [site] = file.split("/", 1);
     if (!SITES.includes(site)) return fullPlan(normalized, absoluteRoot, discoveredTests, discoveredE2e);

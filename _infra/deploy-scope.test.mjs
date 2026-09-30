@@ -119,7 +119,7 @@ test("배포되지 않는 문서만 바뀌면 실행할 일이 없다", () => {
 
 test("공용·런타임·알 수 없는 경로와 test/spec 변경은 full이다", () => {
   for (const file of [
-    "_shared/share.js", "_assets/wallpaper/x.png", "_infra/worker.js", "_src/avalon/src/main.js",
+    "_shared/share.js", "_assets/wallpaper/x.png", "_infra/worker.js",
     "scripts/lint.sh", "package-lock.json", ".github/workflows/ci.yml", "newsite/index.html",
     "_infra/life.test.mjs", "_infra/e2e/life.spec.mjs",
   ]) {
@@ -252,4 +252,24 @@ test("CLI는 유효하지 않은 commit을 실패로 드러내고 출력 파일�
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("agent-scope.conf 가 한 서브도메인 소유로 적은 _infra 파일은 그 범위로, 공용 파일은 전체로", () => {
+  const util = planDeployment(["_infra/yaksok.js", "_infra/yaksok.test.mjs", "_infra/e2e/yaksok.spec.mjs"]);
+  assert.equal(util.mode, "scoped");
+  assert.deepEqual(util.sites, ["util"]);
+  assert.ok(util.tests.includes("_infra/yaksok.test.mjs"));
+  assert.ok(util.e2e.includes("_infra/e2e/yaksok.spec.mjs"));
+
+  // 와일드카드 소유(_infra/emoticon*.mjs, _src/avalon/*)도 따른다
+  assert.deepEqual(planDeployment(["_infra/emoticon-ai.mjs"]).sites, ["work"]);
+  const avalon = planDeployment(["_src/avalon/src/firebase.js"]);
+  assert.deepEqual([avalon.mode, avalon.sites, avalon.avalon], ["scoped", ["games"], true]);
+
+  // *shared* 줄은 소유가 아니다 — 공용이 하나라도 끼면 전체
+  for (const shared of ["_infra/worker.js", "_infra/build.mjs", "_infra/e2e/smoke.spec.mjs", "wrangler.jsonc"]) {
+    assert.equal(planDeployment(["_infra/yaksok.js", shared]).mode, "full", shared);
+  }
+  // 두 서브도메인 소유가 섞이면 둘 다
+  assert.deepEqual(planDeployment(["_infra/yaksok.js", "_infra/analytics.js"]).sites, ["admin", "util"]);
 });

@@ -177,6 +177,9 @@ npx wrangler@4 dev --local --local-upstream localhost
 - `deploy.yml`: `main` push와 `main` 대상 수동 실행에서 동작하는 배포의 기준
   구현입니다. 알려진 단일 서브도메인은 해당 단위 테스트와 관련 E2E를 고르고,
   공용·인프라·미분류 변경 또는 미분류 테스트가 있으면 전체 검증으로 전환합니다.
+  `_infra/`·`_src/` 파일이라도 `agent-scope.conf`가 한 서브도메인 소유로 적어 둔 것
+  (예: util 의 `_infra/yaksok.js`)은 그 서브도메인 범위로 봅니다 — `*shared*` 줄은 소유가
+  아니라 전체입니다. 새 서브도메인 서버 코드는 그 줄에 적어야 배포가 가벼워집니다.
   브라우저 검증은 GitHub Ubuntu 이미지에 설치된 Chrome을 사용합니다.
 - 검증 범위와 무관하게 `dist/` 전체를 한 번 만들고 Worker와 모든 정적 asset을
   하나의 bundle로 배포합니다. 부분 배포와 데이터 migration은 하지 않으므로
