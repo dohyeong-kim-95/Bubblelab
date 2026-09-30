@@ -11,11 +11,26 @@ export function nextState(state) {
   return state === NONE || state === NO ? FULL : state + 1;
 }
 
-export const MAX_MEMBERS = 10;
+// 정원은 방을 만들 때 고른다(방장이 나중에 바꿀 수 있고, 이미 들어온 인원 밑으로는 못 줄인다).
+export const CAPACITY_MIN = 2, CAPACITY_MAX = 20, CAPACITY_DEFAULT = 10;
+export function cleanCapacity(value) {
+  const n = Number(value);
+  return Number.isInteger(n) && n >= CAPACITY_MIN && n <= CAPACITY_MAX ? n : null;
+}
 export const NAME_MAX = 12;
-export const TITLE_MAX = 30;
-export const CODE_ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz";   // 0·1·i·l·o 는 헷갈려서 뺀다
-export const CODE_RE = /^[23456789abcdefghjkmnpqrstuvwxyz]{6}$/;
+// 방 코드는 사람이 정한다 — 같은 코드를 치면 PC·폰 어디서든 같은 방이 열린다.
+// 치기 쉽게 영문 소문자·숫자 6자리는 다 받고, 🎲 는 헷갈리는 글자(0·1·i·l·o)를 빼고 뽑는다.
+export const CODE_RE = /^[a-z0-9]{6}$/;
+export const CODE_ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz";
+
+export function normalizeCode(value) {
+  return String(value ?? "").trim().toLowerCase().replace(/\s+/g, "");
+}
+
+export function randomCode() {
+  const bytes = crypto.getRandomValues(new Uint8Array(6));
+  return Array.from(bytes, (b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join("");
+}
 
 export function kstToday(now = new Date()) {
   return new Date(now.getTime() + 9 * 3600 * 1000).toISOString().slice(0, 10);

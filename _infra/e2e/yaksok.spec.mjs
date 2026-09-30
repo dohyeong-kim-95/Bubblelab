@@ -13,8 +13,7 @@ class MemoryStorage {
   async setAlarm() {}
 }
 
-async function serveYaksok(page) {
-  const rooms = new Map();
+async function serveYaksok(page, rooms = new Map()) {
   const env = {
     YAKSOK: {
       idFromName: (name) => name,
@@ -33,18 +32,18 @@ async function serveYaksok(page) {
     await route.fulfill({ status: response.status, contentType: "application/json", body: await response.text() });
   });
   const shell = readFileSync("dist/util/yaksok/index.html", "utf8");
-  await page.route(/\/util\/yaksok\/[23456789a-z]{6}$/, (route) =>
+  await page.route(/\/util\/yaksok\/[a-z0-9]{6}$/, (route) =>
     route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: shell }));
   return rooms;
 }
 
-async function createRoom(page) {
+async function createRoom(page, code = "dinner", name = "도형") {
   await page.goto("/util/yaksok/");
-  await page.fill("#c-title", "10월 동기 모임");
-  await page.fill("#c-name", "도형");
+  await page.fill("#c-code", code);
+  await page.fill("#c-name", name);
   await page.click("#create button[type=submit]");
-  await page.waitForURL(/\/util\/yaksok\/[23456789a-z]{6}$/);
-  await expect(page.locator("#r-title")).toHaveText("10월 동기 모임");
+  await page.waitForURL(new RegExp(`/util/yaksok/${code}$`));
+  await expect(page.locator("#r-title")).toHaveText(`🫧 ${code}`);
 }
 
 const days = (page) => page.locator("#months .day:not([disabled])");
@@ -132,10 +131,96 @@ test("모바일은 요약이 달력 위, PC 는 두 열이고 어느 폭에서�
   const cal = await page.locator(".cal").boundingBox();
   expect(best.y).toBeLessThan(cal.y);
   expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(0);
+  // 오른쪽 아래 공용 독이 달력 칸을 덮지 않는다(토요일 줄을 누르다 독이 눌리던 자리)
+  await expect(page.locator("#bl-dock")).toBeVisible();
+  const covered = await page.evaluate(() => {
+    const dock = document.querySelector("#bl-dock").getBoundingClientRect();
+    return [...document.querySelectorAll("#months .day")].some((d) => d.getBoundingClientRect().right > dock.left);
+  });
+  expect(covered).toBe(false);
 
   await page.setViewportSize({ width: 1280, height: 860 });
   const side = await page.locator(".side").boundingBox();
   const cal2 = await page.locator(".cal").boundingBox();
   expect(side.x).toBeGreaterThan(cal2.x + cal2.width - 1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(0);
+});
+
+test("PC·폰에서 같은 코드를 치면 같은 방이 열리고, 🎲 는 새 코드를 뽑는다", async ({ browser }) => {
+  const rooms = new Map();
+  const pc = await (await browser.newContext()).newPage();
+  const phone = await (await browser.newContext()).newPage();
+  await serveYaksok(pc, rooms);
+  await serveYaksok(phone, rooms);
+
+  await pc.goto("/util/yaksok/");
+  const first = await pc.inputValue("#c-code");
+  await pc.click("#dice");
+  expect(await pc.inputValue("#c-code")).toMatch(/^[a-z0-9]{6}$/);
+  expect(await pc.inputValue("#c-code")).not.toBe(first);
+  await pc.fill("#c-code", "Meet26");
+  expect(await pc.inputValue("#c-code")).toBe("meet26");     // 대문자는 소문자로
+  await pc.fill("#c-name", "도형");
+  await pc.click("#create button[type=submit]");
+  await pc.waitForURL(/\/util\/yaksok\/meet26$/);
+
+  // 다른 기기: 같은 코드 + 다른 닉네임 → 같은 방에 참여
+  await createRoom(phone, "meet26", "민지");
+  await expect(phone.locator("#members span")).toHaveCount(2);
+  expect(rooms.size).toBe(1);
+
+  // 같은 닉네임이면 막히고 방 안의 참여 칸에서 이어하기 링크를 안내한다
+  const tablet = await (await browser.newContext()).newPage();
+  await serveYaksok(tablet, rooms);
+  await tablet.goto("/util/yaksok/");
+  await tablet.fill("#c-code", "meet26");
+  await tablet.fill("#c-name", "도형");
+  await tablet.click("#create button[type=submit]");
+  await tablet.waitForURL(/\/util\/yaksok\/meet26$/);
+  await expect(tablet.locator("#join")).toBeVisible();
+  await expect(tablet.locator("#j-err")).toContainText("이어하기 링크");
+});
+
+test("코드로 들어가기 — 코드만 넣으면 그 방이 열리고 방 안에서 참여한다", async ({ page, browser }) => {
+  const rooms = new Map();
+  const host = await (await browser.newContext()).newPage();
+  await serveYaksok(host, rooms);
+  await createRoom(host, "abc123");
+
+  await serveYaksok(page, rooms);
+  await page.goto("/util/yaksok/");
+  await page.fill("#e-code", "ABC123");
+  await page.click("#enter button[type=submit]");
+  await page.waitForURL(/\/util\/yaksok\/abc123$/);
+  await expect(page.locator("#join")).toBeVisible();
+  await page.fill("#j-name", "친구");
+  await page.click("#join button[type=submit]");
+  await expect(page.locator("#members span")).toHaveCount(2);
+});
+
+test("방을 만들 때 정원을 고르면 그 인원까지만 들어온다", async ({ page, browser }) => {
+  const rooms = new Map();
+  await serveYaksok(page, rooms);
+  await page.goto("/util/yaksok/");
+  await expect(page.locator("#c-cap-val")).toHaveText("10");
+  for (let i = 0; i < 8; i += 1) await page.click('#c-cap button[data-step="-1"]');
+  await expect(page.locator("#c-cap-val")).toHaveText("2");
+  await expect(page.locator('#c-cap button[data-step="-1"]')).toBeDisabled();
+  await page.fill("#c-code", "duo222");
+  await page.fill("#c-name", "도형");
+  await page.click("#create button[type=submit]");
+  await page.waitForURL(/\/util\/yaksok\/duo222$/);
+  await expect(page.locator("#m-count")).toHaveText("1/2");
+
+  const friend = await (await browser.newContext()).newPage();
+  await serveYaksok(friend, rooms);
+  await createRoom(friend, "duo222", "민지");
+  const third = await (await browser.newContext()).newPage();
+  await serveYaksok(third, rooms);
+  await third.goto("/util/yaksok/");
+  await third.fill("#c-code", "duo222");
+  await third.fill("#c-name", "세번째");
+  await third.click("#create button[type=submit]");
+  await third.waitForURL(/\/util\/yaksok\/duo222$/);
+  await expect(third.locator("#j-err")).toContainText("정원 2명");
 });

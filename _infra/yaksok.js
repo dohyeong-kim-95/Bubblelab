@@ -8,8 +8,8 @@
 // 방은 저절로 사라진다 — 약속을 확정하면 그날로부터 30일, 확정하지 않으면 후보 기간
 // 끝에서 30일. 방장이 터트리면 즉시 지우고 "터진 방"이라는 표시만 7일 남긴다.
 import {
-  CODE_ALPHABET, CODE_RE, FULL, MAX_MEMBERS, NAME_MAX, NO, NONE, TITLE_MAX,
-  addDays, candidatePeriod, cleanText, isValidDate, kstToday, naverMapUrl,
+  CAPACITY_DEFAULT, CODE_RE, NAME_MAX, NO, NONE,
+  addDays, candidatePeriod, cleanCapacity, cleanText, isValidDate, kstToday, naverMapUrl, normalizeCode,
 } from "../util/yaksok/logic.js";
 
 const KEEP_DAYS = 30;
@@ -21,11 +21,6 @@ const json = (body, status = 200) => Response.json(body, {
   status, headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" },
 });
 
-function randomCode() {
-  const bytes = crypto.getRandomValues(new Uint8Array(6));
-  return Array.from(bytes, (b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join("");
-}
-
 function randomToken() {
   const bytes = crypto.getRandomValues(new Uint8Array(24));
   return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -35,6 +30,8 @@ async function sha256(text) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
 }
+
+const capacityOf = (room) => room.capacity ?? CAPACITY_DEFAULT;
 
 // 만료 시각: 확정일(또는 후보 기간 끝) 다음 날 KST 0시 + 30일.
 function expiryFor(room) {
@@ -70,6 +67,7 @@ export class YaksokDO {
     if (action === "confirm") return this.confirm(room, me, body);
     if (action === "place") return this.place(room, me, body);
     if (action === "host") return this.handOver(room, me, body);
+    if (action === "capacity") return this.setCapacity(room, me, body);
     if (action === "pop") return this.pop(room, body);
     return json({ error: "not found" }, 404);
   }
@@ -82,7 +80,6 @@ export class YaksokDO {
   view(room, me) {
     return {
       code: room.code,
-      title: room.title,
       period: room.period,
       members: room.members.map((m) => ({
         id: m.id, name: m.name, host: m.id === room.hostId,
@@ -93,7 +90,7 @@ export class YaksokDO {
       place: room.place,
       expiresAt: room.expiresAt,
       me: me ? { id: me.id, name: me.name, host: me.id === room.hostId } : null,
-      max: MAX_MEMBERS,
+      max: capacityOf(room),
     };
   }
 
@@ -104,18 +101,18 @@ export class YaksokDO {
   }
 
   async init(body) {
-    if (await this.storage.get("room") || await this.storage.get("popped")) {
-      return json({ error: "taken" }, 409);
+    if (await this.storage.get("room")) return json({ error: "이미 있는 방이에요.", exists: true }, 409);
+    if (await this.storage.get("popped")) {
+      return json({ error: "얼마 전 터트린 코드예요. 🎲 로 다른 코드를 골라 주세요.", popped: true }, 409);
     }
-    const title = cleanText(body.title, TITLE_MAX);
     const name = cleanText(body.name, NAME_MAX);
-    if (!title || !name || !CODE_RE.test(body.code ?? "")) {
-      return json({ error: "약속 이름과 닉네임을 적어 주세요." }, 400);
-    }
+    if (!name || !CODE_RE.test(body.code ?? "")) return json({ error: "닉네임을 적어 주세요." }, 400);
+    const capacity = body.capacity === undefined ? CAPACITY_DEFAULT : cleanCapacity(body.capacity);
+    if (!capacity) return json({ error: "정원은 2~20명 사이로 골라 주세요." }, 400);
     const token = randomToken();
     const today = isValidDate(body.today) ? body.today : kstToday();
     const room = {
-      code: body.code, title, createdAt: Date.now(), period: candidatePeriod(today),
+      code: body.code, createdAt: Date.now(), period: candidatePeriod(today), capacity,
       hostId: "m1", nextId: 2,
       members: [{ id: "m1", name, tokenHash: await sha256(token), joinedAt: Date.now() }],
       votes: {}, confirmed: null, place: null,
@@ -128,11 +125,14 @@ export class YaksokDO {
     if (me) return json({ state: this.view(room, me) });
     const name = cleanText(body.name, NAME_MAX);
     if (!name) return json({ error: "닉네임을 적어 주세요." }, 400);
-    if (room.members.length >= MAX_MEMBERS) {
-      return json({ error: `이 방은 ${MAX_MEMBERS}명이 다 찼어요.` }, 409);
+    if (room.members.length >= capacityOf(room)) {
+      return json({ error: `이 방은 정원 ${capacityOf(room)}명이 다 찼어요. 방장에게 정원을 늘려 달라고 해 주세요.` }, 409);
     }
     if (room.members.some((m) => m.name === name)) {
-      return json({ error: "이미 있는 닉네임이에요. 다른 이름을 써 주세요." }, 409);
+      return json({
+        error: "이미 있는 닉네임이에요. 다른 기기에서 들어온 거라면 그 기기의 \"내 이어하기 링크\"로 열어 주세요.",
+        duplicate: true,
+      }, 409);
     }
     const token = randomToken();
     const member = { id: `m${room.nextId++}`, name, tokenHash: await sha256(token), joinedAt: Date.now() };
@@ -202,10 +202,21 @@ export class YaksokDO {
     return json({ state: this.view(room, me) });
   }
 
-  // 방 이름을 그대로 적어야 터진다 — 잘못 누른 한 번에 모두의 기록이 사라지지 않게.
+  async setCapacity(room, me, body) {
+    const capacity = cleanCapacity(body.capacity);
+    if (!capacity) return json({ error: "정원은 2~20명 사이로 골라 주세요." }, 400);
+    if (capacity < room.members.length) {
+      return json({ error: `이미 ${room.members.length}명이 들어와 있어서 그보다 줄일 수 없어요.` }, 400);
+    }
+    room.capacity = capacity;
+    await this.save(room);
+    return json({ state: this.view(room, me) });
+  }
+
+  // 방 코드를 그대로 적어야 터진다 — 잘못 누른 한 번에 모두의 기록이 사라지지 않게.
   async pop(room, body) {
-    if (cleanText(body.title, TITLE_MAX) !== room.title) {
-      return json({ error: "방 이름을 똑같이 적어 주세요." }, 400);
+    if (normalizeCode(body.code) !== room.code) {
+      return json({ error: "방 코드를 똑같이 적어 주세요." }, 400);
     }
     await this.storage.deleteAll();
     await this.storage.put("popped", Date.now());
@@ -238,9 +249,9 @@ function forward(env, code, action, request, body) {
   });
 }
 
-const ACTIONS = new Set(["join", "vote", "confirm", "place", "host", "pop"]);
+const ACTIONS = new Set(["join", "vote", "confirm", "place", "host", "capacity", "pop"]);
 
-// /_yaksok/rooms            POST 방 만들기
+// /_yaksok/rooms            POST 방 만들기 {code, name} — 이미 있으면 409 {exists:true}
 // /_yaksok/rooms/<코드>      GET  방 상태
 // /_yaksok/rooms/<코드>/<동작> POST 참여·투표·확정·장소·방장 넘기기·터트리기
 export async function handleYaksokApi(request, env, path) {
@@ -251,14 +262,11 @@ export async function handleYaksokApi(request, env, path) {
   if (!code) {
     if (request.method !== "POST") return new Response("method not allowed", { status: 405, headers: { Allow: "POST" } });
     const body = await request.json().catch(() => ({}));
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      const candidate = randomCode();
-      const response = await forward(env, candidate, "init", request, {
-        code: candidate, title: body.title, name: body.name, today: kstToday(),
-      });
-      if (response.status !== 409) return response;
-    }
-    return json({ error: "잠시 후 다시 시도해 주세요." }, 503);
+    const wanted = normalizeCode(body.code);
+    if (!CODE_RE.test(wanted)) return json({ error: "방 코드는 영문 소문자·숫자 6자리예요." }, 400);
+    return forward(env, wanted, "init", request, {
+      code: wanted, name: body.name, capacity: body.capacity, today: kstToday(),
+    });
   }
 
   if (!CODE_RE.test(code)) return json({ error: "없는 방이에요." }, 404);
@@ -277,7 +285,7 @@ const escapeHtml = (s) => String(s).replace(/[&<>"']/g,
   (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
 export function ogTags(room, code) {
-  const title = room ? `🫧 ${room.title}` : "🫧 약속 잡기";
+  const title = room ? `🫧 약속 방 ${room.code}` : "🫧 약속 잡기";
   const description = room?.confirmed
     ? "약속이 잡혔어요. 눌러서 날짜와 장소를 확인하세요."
     : "되는 날짜를 톡톡 눌러 주세요. 모두 되는 날을 찾아 드려요.";

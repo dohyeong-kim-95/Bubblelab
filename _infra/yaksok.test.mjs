@@ -84,16 +84,28 @@ async function call(env, method, path, body, token) {
   return { status: response.status, body: await response.json().catch(() => null) };
 }
 
-async function newRoom(env) {
-  const created = await call(env, "POST", "/_yaksok/rooms", { title: "10월 동기 모임", name: "도형" });
+async function newRoom(env, code = "dinner") {
+  const created = await call(env, "POST", "/_yaksok/rooms", { code, name: "도형" });
   assert.equal(created.status, 201);
   return created.body;
 }
 
-test("방을 만들면 6자리 코드와 방장 토큰을 받고, 서버는 토큰 해시만 가진다", async () => {
+test("방 코드는 사람이 정하고, 같은 코드는 같은 방이다 — 이미 있으면 409 exists", async () => {
+  const env = fakeEnv();
+  const upper = await call(env, "POST", "/_yaksok/rooms", { code: " DINNER ", name: "도형" });
+  assert.equal(upper.status, 201);
+  assert.equal(upper.body.code, "dinner");
+  const again = await call(env, "POST", "/_yaksok/rooms", { code: "dinner", name: "다른기기" });
+  assert.equal(again.status, 409);
+  assert.equal(again.body.exists, true);
+  assert.equal((await call(env, "POST", "/_yaksok/rooms", { code: "ab!", name: "a" })).status, 400);
+  assert.equal((await call(env, "POST", "/_yaksok/rooms", { code: "abcdefg", name: "a" })).status, 400);
+});
+
+test("방을 만들면 방장 토큰을 받고, 서버는 토큰 해시만 가진다", async () => {
   const env = fakeEnv();
   const { code, token, state } = await newRoom(env);
-  assert.match(code, /^[23456789abcdefghjkmnpqrstuvwxyz]{6}$/);
+  assert.equal(code, "dinner");
   assert.equal(state.me.host, true);
   const stored = await env.rooms.get(code).storage.get("room");
   assert.ok(!JSON.stringify(stored).includes(token));
@@ -108,11 +120,15 @@ test("방을 만들면 6자리 코드와 방장 토큰을 받고, 서버는 토�
 test("참여는 10명까지, 같은 닉네임은 안 된다", async () => {
   const env = fakeEnv();
   const { code } = await newRoom(env);
-  assert.equal((await call(env, "POST", `/_yaksok/rooms/${code}/join`, { name: "도형" })).status, 409);
+  const dup = await call(env, "POST", `/_yaksok/rooms/${code}/join`, { name: "도형" });
+  assert.equal(dup.status, 409);
+  assert.equal(dup.body.duplicate, true);
+  assert.match(dup.body.error, /이어하기 링크/);
   for (let i = 2; i <= 10; i += 1) {
     assert.equal((await call(env, "POST", `/_yaksok/rooms/${code}/join`, { name: `친구${i}` })).status, 201);
   }
   const full = await call(env, "POST", `/_yaksok/rooms/${code}/join`, { name: "열한번째" });
+  assert.equal(full.body.duplicate, undefined);
   assert.equal(full.status, 409);
   assert.match(full.body.error, /10명/);
 });
@@ -155,18 +171,18 @@ test("확정·장소·방장 넘기기는 방장만, 확정하면 만료가 약�
   assert.equal((await call(env, "POST", `/_yaksok/rooms/${code}/confirm`, { date: null }, token)).status, 403);
 });
 
-test("터트리려면 방 이름을 똑같이 적어야 하고, 터지면 기록이 사라지고 410 이 된다", async () => {
+test("터트리려면 방 코드를 똑같이 적어야 하고, 터지면 기록이 사라지고 410 이 된다", async () => {
   const env = fakeEnv();
   const { code, token } = await newRoom(env);
-  assert.equal((await call(env, "POST", `/_yaksok/rooms/${code}/pop`, { title: "틀린 이름" }, token)).status, 400);
-  assert.equal((await call(env, "POST", `/_yaksok/rooms/${code}/pop`, { title: "10월 동기 모임" }, token)).status, 200);
+  assert.equal((await call(env, "POST", `/_yaksok/rooms/${code}/pop`, { code: "lunch1" }, token)).status, 400);
+  assert.equal((await call(env, "POST", `/_yaksok/rooms/${code}/pop`, { code: "DINNER" }, token)).status, 200);
   const storage = env.rooms.get(code).storage;
   assert.equal(await storage.get("room"), undefined);
   assert.equal((await call(env, "GET", `/_yaksok/rooms/${code}`)).status, 410);
-  // 터진 자리는 다시 만들 수 없고, 알람이 표시까지 지운다
-  assert.equal((await env.rooms.get(code).fetch(new Request("https://x/init", {
-    method: "POST", body: JSON.stringify({ code, title: "새 방", name: "누군가" }),
-  }))).status, 409);
+  // 터진 코드는 표시가 남아 있는 동안 다시 만들 수 없고, 알람이 표시까지 지운다
+  const reuse = await call(env, "POST", "/_yaksok/rooms", { code, name: "누군가" });
+  assert.equal(reuse.status, 409);
+  assert.equal(reuse.body.popped, true);
   await env.rooms.get(code).alarm();
   assert.equal(storage.data.size, 0);
 });
@@ -189,15 +205,14 @@ test("없는 방·잘못된 코드·잘못된 메서드", async () => {
   assert.equal((await call(env, "GET", "/_yaksok/rooms/zzzzzz")).status, 404);
   assert.equal((await call(env, "GET", "/_yaksok/rooms/ABC!!!")).status, 404);
   assert.equal((await call(env, "GET", "/_yaksok/rooms")).status, 405);
-  assert.equal((await call(env, "POST", "/_yaksok/rooms", { title: "", name: "a" })).status, 400);
+  assert.equal((await call(env, "POST", "/_yaksok/rooms", { code: "abc123", name: "" })).status, 400);
 });
 
-test("미리보기 OG 에 방 이름을 넣되 이스케이프한다", async () => {
+test("미리보기 OG 에 방 코드를 넣는다", async () => {
   const env = fakeEnv();
-  const created = await call(env, "POST", "/_yaksok/rooms", { title: `"><script>x</script>`, name: "a" });
+  const created = await call(env, "POST", "/_yaksok/rooms", { code: "abc123", name: "<b>" });
   const html = await renderRoomPage("<head><!--yaksok-og--></head>", env, created.body.code);
-  assert.ok(!html.includes("<script>x"));
-  assert.match(html, /og:title" content="🫧 &quot;&gt;&lt;script&gt;/);
+  assert.match(html, /og:title" content="🫧 약속 방 abc123"/);
   assert.match(html, new RegExp(`og:url" content="https://util.bubblelab.dev/yaksok/${created.body.code}"`));
   assert.match(ogTags(null, "zzzzzz"), /og:image" content="https:\/\/util.bubblelab.dev\/yaksok\/og.png"/);
 });
@@ -222,7 +237,7 @@ test("워커: 방 주소는 화면에 OG 를 끼워 no-store·noindex 로 내주
   assert.equal(page.headers.get("cache-control"), "no-store");
   assert.equal(page.headers.get("x-robots-tag"), "noindex, nofollow");
   const html = await page.text();
-  assert.match(html, /og:title" content="🫧 10월 동기 모임"/);
+  assert.match(html, /og:title" content="🫧 약속 방 dinner"/);
   assert.deepEqual(asked, ["/util/yaksok/"]);
 
   const slash = await worker.fetch(new Request(`https://util.bubblelab.dev/yaksok/${code}/`), env, ctx);
@@ -236,4 +251,26 @@ test("워커: 방 주소는 화면에 OG 를 끼워 no-store·noindex 로 내주
 
   delete env.ENABLE_YAKSOK;
   assert.equal((await worker.fetch(new Request(`https://util.bubblelab.dev/yaksok/${code}`), env, ctx)).status, 503);
+});
+
+test("정원은 만들 때 2~20명으로 정하고, 방장이 바꾸되 이미 들어온 인원 밑으로는 못 줄인다", async () => {
+  const env = fakeEnv();
+  assert.equal((await call(env, "POST", "/_yaksok/rooms", { code: "cap001", name: "a", capacity: 1 })).status, 400);
+  assert.equal((await call(env, "POST", "/_yaksok/rooms", { code: "cap001", name: "a", capacity: 21 })).status, 400);
+  const created = await call(env, "POST", "/_yaksok/rooms", { code: "cap003", name: "방장", capacity: 3 });
+  assert.equal(created.body.state.max, 3);
+  const { token } = created.body;
+  const b = await call(env, "POST", "/_yaksok/rooms/cap003/join", { name: "b" });
+  assert.equal((await call(env, "POST", "/_yaksok/rooms/cap003/join", { name: "c" })).status, 201);
+  const full = await call(env, "POST", "/_yaksok/rooms/cap003/join", { name: "d" });
+  assert.equal(full.status, 409);
+  assert.match(full.body.error, /정원 3명/);
+
+  assert.equal((await call(env, "POST", "/_yaksok/rooms/cap003/capacity", { capacity: 5 }, b.body.token)).status, 403);
+  const shrink = await call(env, "POST", "/_yaksok/rooms/cap003/capacity", { capacity: 2 }, token);
+  assert.equal(shrink.status, 400);
+  assert.match(shrink.body.error, /3명/);
+  const grown = await call(env, "POST", "/_yaksok/rooms/cap003/capacity", { capacity: 4 }, token);
+  assert.equal(grown.body.state.max, 4);
+  assert.equal((await call(env, "POST", "/_yaksok/rooms/cap003/join", { name: "d" })).status, 201);
 });

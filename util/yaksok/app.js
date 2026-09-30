@@ -1,7 +1,8 @@
 // 약속 화면. 규칙은 logic.js, 저장은 서버(/_yaksok, _infra/yaksok.js)가 맡는다.
 import {
-  CODE_RE, DINNER, FULL, LUNCH, NO, NONE, SLOT_LABEL, STATE_LABEL,
-  bestDates, calendarEvent, dateLabel, datesBetween, kstToday, nextState, tally, weekday,
+  CAPACITY_DEFAULT, CAPACITY_MAX, CAPACITY_MIN, CODE_RE, DINNER, FULL, LUNCH, NO, NONE, SLOT_LABEL, STATE_LABEL,
+  bestDates, calendarEvent, dateLabel, datesBetween, kstToday, nextState, normalizeCode, randomCode,
+  tally, weekday,
 } from "./logic.js";
 
 const $ = (id) => document.getElementById(id);
@@ -36,10 +37,32 @@ async function api(path, { method = "GET", body, token } = {}) {
   return data;
 }
 
-// 방 주소는 /yaksok/<코드> (로컬은 /util/yaksok/<코드>). 끝 조각이 코드면 방이다.
-const lastSegment = location.pathname.split("/").filter(Boolean).pop() ?? "";
-const code = CODE_RE.test(lastSegment) ? lastSegment : null;
+// 방 주소는 /yaksok/<코드> (로컬은 /util/yaksok/<코드>). "yaksok" 바로 다음 조각이 코드다 —
+// "yaksok" 자체도 영문 6자라, 끝 조각만 보면 첫 화면을 방으로 착각한다.
+const segments = location.pathname.split("/").filter(Boolean);
+const afterYaksok = segments[segments.indexOf("yaksok") + 1] ?? "";
+const code = segments.includes("yaksok") && CODE_RE.test(afterYaksok) && afterYaksok === segments.at(-1)
+  ? afterYaksok : null;
 const roomUrl = (c) => new URL(c, location.href.replace(/[^/]*([?#].*)?$/, "")).href;
+
+// − / + 정원 조절기. 범위 밖으로는 버튼이 꺼진다.
+function bindStepper(id, get, set, min = () => CAPACITY_MIN) {
+  const box = $(id);
+  const sync = () => {
+    const [down, up] = box.querySelectorAll("button");
+    down.disabled = get() <= min();
+    up.disabled = get() >= CAPACITY_MAX;
+  };
+  box.addEventListener("click", async (event) => {
+    const step = Number(event.target.closest("button")?.dataset.step);
+    if (!step) return;
+    const next = Math.min(CAPACITY_MAX, Math.max(min(), get() + step));
+    if (next !== get()) await set(next);
+    sync();
+  });
+  sync();
+  return sync;
+}
 
 // ── 첫 화면 ──
 function showHome() {
@@ -51,27 +74,69 @@ function showHome() {
       const a = document.createElement("a");
       a.href = c;
       const name = document.createElement("span");
-      name.textContent = r.title ?? c;
+      name.textContent = `🫧 ${c}`;
       const small = document.createElement("span");
       small.className = "muted";
-      small.textContent = c;
+      small.textContent = r.seen ? new Date(r.seen).toLocaleDateString("ko-KR") : "";
       a.append(name, small);
       return a;
     }));
   }
+  // 코드 칸은 영문 소문자·숫자만 남긴다(대문자는 소문자로).
+  for (const id of ["c-code", "e-code"]) {
+    $(id).addEventListener("input", () => {
+      const clean = normalizeCode($(id).value).replace(/[^a-z0-9]/g, "").slice(0, 6);
+      if (clean !== $(id).value) $(id).value = clean;
+    });
+  }
+  const roll = () => {
+    $("c-code").value = randomCode();
+    $("dice").classList.remove("roll");
+    void $("dice").offsetWidth;   // 애니메이션을 다시 시작한다
+    $("dice").classList.add("roll");
+  };
+  $("dice").addEventListener("click", roll);
+  let capacity = CAPACITY_DEFAULT;
+  bindStepper("c-cap", () => capacity, (next) => { capacity = next; $("c-cap-val").textContent = next; });
+  $("c-code").value = randomCode();
+
+  // 방 열기: 없는 코드면 만들고, 있는 코드면 그 방에 참여한다 — PC·폰에서 같은 코드면 같은 방.
   $("create").addEventListener("submit", async (event) => {
     event.preventDefault();
     const button = event.submitter;
-    button.disabled = true;
+    const code = normalizeCode($("c-code").value);
+    const name = $("c-name").value;
     $("c-err").textContent = "";
+    if (!CODE_RE.test(code)) { $("c-err").textContent = "방 코드는 영문 소문자·숫자 6자리예요."; return; }
+    button.disabled = true;
     try {
-      const data = await api("", { method: "POST", body: { title: $("c-title").value, name: $("c-name").value } });
-      saveRoom(data.code, { token: data.token, title: data.state.title });
-      location.href = data.code;
+      const data = await api("", { method: "POST", body: { code, name, capacity } });
+      saveRoom(code, { token: data.token });
+      location.href = code;
     } catch (error) {
+      if (error.data?.exists) {
+        // 이미 있는 방 — 내 토큰이 있으면 그냥 열고, 없으면 이 닉네임으로 참여한다.
+        if (loadRooms()[code]?.token) { location.href = code; return; }
+        try {
+          const joined = await api(`/${code}/join`, { method: "POST", body: { name } });
+          saveRoom(code, { token: joined.token });
+        } catch (joinError) {
+          // 닉네임 겹침·정원 초과 — 방 화면의 참여 칸에서 이어서 한다.
+          try { sessionStorage.setItem("yaksok:flash", JSON.stringify({ code, name, error: joinError.message })); } catch {}
+        }
+        location.href = code;
+        return;
+      }
       $("c-err").textContent = error.message;
       button.disabled = false;
     }
+  });
+
+  $("enter").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const code = normalizeCode($("e-code").value);
+    if (!CODE_RE.test(code)) { $("e-err").textContent = "방 코드는 영문 소문자·숫자 6자리예요."; return; }
+    location.href = code;
   });
 }
 
@@ -264,9 +329,19 @@ function renderMembers() {
   $("resume").parentElement.hidden = !state.me;
 }
 
+let syncHostCap = null;
 function renderHost() {
   $("host-card").hidden = !state.me?.host;
   if (!state.me?.host) return;
+  $("h-cap-val").textContent = state.max;
+  if (!syncHostCap) {
+    syncHostCap = bindStepper("h-cap", () => state.max, async (next) => {
+      $("h-cap-err").textContent = "";
+      try { await act("capacity", { capacity: next }); }
+      catch (error) { $("h-cap-err").textContent = error.message; }
+    }, () => Math.max(CAPACITY_MIN, state.members.length));
+  }
+  syncHostCap();
   const others = state.members.filter((m) => m.id !== state.me.id);
   $("handover").replaceChildren(...(others.length ? others.map((m) => {
     const button = document.createElement("button");
@@ -291,15 +366,17 @@ function renderConfirmed() {
   $("cf-place").textContent = state.place ? `📍 ${state.place.name}` : "장소는 아직이에요.";
   $("cf-map").hidden = !state.place;
   if (state.place) $("cf-map").href = state.place.url;
-  const event = calendarEvent({ title: state.title, date: c.date, slot: c.slot, place: state.place });
+  const event = calendarEvent({ title: eventTitle(), date: c.date, slot: c.slot, place: state.place });
   $("cf-google").href = event.google;
 }
 
+const eventTitle = () => `약속 (${state.code})`;
+
 function render() {
   $("room").hidden = false;
-  $("r-code").textContent = `방 코드 ${state.code}`;
-  $("r-title").textContent = state.title;
-  document.title = `${state.title} — 약속 잡기`;
+  $("r-code").textContent = "약속 방";
+  $("r-title").textContent = `🫧 ${state.code}`;
+  document.title = `약속 방 ${state.code}`;
   const responded = state.members.filter((m) => m.responded).length;
   $("r-meta").textContent = `${dateLabel(state.period.start)} ~ ${dateLabel(state.period.end)} · ${state.members.length}명 중 ${responded}명 응답`;
   $("join").hidden = Boolean(state.me);
@@ -317,7 +394,7 @@ async function refresh() {
   try {
     state = await api(`/${code}`, { token });
     if (token && !state.me) { token = null; forgetRoom(code); }   // 토큰이 더는 이 방의 것이 아니다
-    saveRoom(code, { title: state.title, ...(token ? { token } : {}) });
+    saveRoom(code, token ? { token } : {});
     render();
   } catch (error) {
     if (error.status === 404) showGone("🔍", "없는 방이에요", "방 코드를 다시 확인해 주세요.");
@@ -476,7 +553,7 @@ function bindRoom() {
       const data = await api(`/${code}/join`, { method: "POST", body: { name: $("j-name").value } });
       token = data.token;
       state = data.state;
-      saveRoom(code, { token, title: state.title });
+      saveRoom(code, { token });
       render();
     } catch (error) {
       $("j-err").textContent = error.message;
@@ -497,7 +574,7 @@ function bindRoom() {
 
   $("cf-ics").addEventListener("click", () => {
     const c = state.confirmed;
-    const { ics } = calendarEvent({ title: state.title, date: c.date, slot: c.slot, place: state.place });
+    const { ics } = calendarEvent({ title: eventTitle(), date: c.date, slot: c.slot, place: state.place });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([ics], { type: "text/calendar" }));
     a.download = `yaksok-${c.date}.ics`;
@@ -518,7 +595,7 @@ function bindRoom() {
   $("pop").addEventListener("click", async () => {
     $("pop-err").textContent = "";
     try {
-      await act("pop", { title: $("pop-title").value });
+      await act("pop", { code: $("pop-code").value });
       forgetRoom(code);
       const burst = document.createElement("div");
       burst.className = "pop";
@@ -555,11 +632,19 @@ async function openRoom() {
   token = loadRooms()[code]?.token ?? null;
   bindRoom();
   await refresh();
+  try {
+    const flash = JSON.parse(sessionStorage.getItem("yaksok:flash") ?? "null");
+    sessionStorage.removeItem("yaksok:flash");
+    if (flash?.code === code && !state?.me) {
+      $("j-name").value = flash.name ?? "";
+      $("j-err").textContent = flash.error;
+    }
+  } catch {}
 }
 
 // 공유(오른쪽 아래 독): 방 주소가 그대로 나가고 카톡이 방 이름 미리보기를 붙인다.
 window.blShareText = () => (state && !state.confirmed
-  ? `🫧 ${state.title} — 되는 날짜 톡톡 눌러 줘!`
-  : state ? `🫧 ${state.title} 약속 잡혔어!` : "");
+  ? `🫧 약속 방 ${state.code} — 되는 날짜 톡톡 눌러 줘!`
+  : state ? `🫧 약속 방 ${state.code} — 약속 잡혔어!` : "");
 
 if (code) openRoom(); else showHome();
