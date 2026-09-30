@@ -293,3 +293,26 @@ test("카탈로그 카테고리는 _assets/ 폴더에서 읽는다 (하드코딩
     checks, { categories });
   assert.deepEqual(checks.failures, []);
 });
+
+test("연결 실패한 읽기 요청만 다시 묻고, 응답 뒤의 틀림과 쓰기는 다시 보내지 않는다", async () => {
+  const { withTransportRetry } = await import("./verify-prod.mjs");
+  const sleep = async () => {};
+  let calls = 0;
+  const flaky = async () => { calls += 1; if (calls < 3) throw new TypeError("fetch failed"); return "ok"; };
+  assert.equal(await withTransportRetry(flaky, { sleep }), "ok");
+  assert.equal(calls, 3);
+
+  calls = 0;
+  const down = async () => { calls += 1; throw new TypeError("fetch failed"); };
+  await assert.rejects(withTransportRetry(down, { sleep }), /fetch failed/);
+  assert.equal(calls, 3);
+
+  calls = 0;
+  await assert.rejects(withTransportRetry(down, { method: "POST", sleep }), /fetch failed/);
+  assert.equal(calls, 1);
+
+  calls = 0;
+  const wrong = async () => { calls += 1; throw new Error("unexpected body"); };
+  await assert.rejects(withTransportRetry(wrong, { sleep }), /unexpected body/);
+  assert.equal(calls, 1);
+});

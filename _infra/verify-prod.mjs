@@ -215,7 +215,31 @@ function targetOf({ domain, base }) {
   };
 }
 
-async function request(url, { method = "GET", timeoutMs = 20000, cookie, headers = {}, body } = {}) {
+// 연결 자체가 끊긴 것("fetch failed")은 배포가 아니라 망 사정일 때가 많다 — 실제로 무관한
+// 두 프로브가 같은 순간 이렇게 실패해 멀쩡한 배포를 되돌릴 뻔했다. 검증 실패는 곧 production
+// 복구로 이어지므로, 응답을 받지 못한 읽기 요청만 몇 번 더 묻는다. 응답이 온 뒤의 틀림은
+// 그대로 실패다. 쓰기(POST 등)는 두 번 보내지 않는다.
+export const TRANSPORT_RETRY_DELAYS_MS = [1000, 3000];
+
+export async function withTransportRetry(send, { method = "GET", delays = TRANSPORT_RETRY_DELAYS_MS,
+  sleep = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
+  const idempotent = method === "GET" || method === "HEAD";
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await send();
+    } catch (error) {
+      const transport = error instanceof TypeError || error?.name === "AbortError";
+      if (!idempotent || !transport || attempt >= delays.length) throw error;
+      await sleep(delays[attempt]);
+    }
+  }
+}
+
+function request(url, options = {}) {
+  return withTransportRetry(() => requestOnce(url, options), { method: options.method ?? "GET" });
+}
+
+async function requestOnce(url, { method = "GET", timeoutMs = 20000, cookie, headers = {}, body } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
