@@ -260,3 +260,22 @@ test("중간에 터트리기: 저장 전 응답이 있던 다른 참여자 화�
   expect(votePosts, "터진 방에 저장을 계속 다시 보내지 않는다").toBe(posted);
   expect(posted).toBeLessThanOrEqual(1);
 });
+
+test("날짜를 확정해 달력이 접혀도 방장 메뉴(장소·터트리기)는 그대로 쓸 수 있다", async ({ page }) => {
+  await serveYaksok(page);
+  await createRoom(page, "hostme");
+  await page.locator("#months .day:not([disabled])").nth(1).click();
+  await page.locator("#best li button").first().click();
+  await page.click("#cd-ok");
+  await expect(page.locator("#phases li.now")).toHaveText("장소 전달");
+  await expect(page.locator("#cal-layout")).toBeHidden();
+  await expect(page.locator("#host-card")).toBeVisible();
+  await page.evaluate(() => { document.querySelector("#host-card").open = true; });
+  await page.fill("#p-name", "을지로");
+  await page.fill("#p-url", "https://naver.me/abcd1234");
+  await page.click("#p-save");
+  await expect(page.locator("#phases li.now")).toHaveText("놀기");
+  await page.fill("#pop-code", "hostme");
+  await page.click("#pop");
+  await expect(page.locator("#gone-title")).toHaveText("펑! 방을 터트렸어요");
+});

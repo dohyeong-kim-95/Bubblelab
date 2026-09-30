@@ -223,6 +223,7 @@
   /* PC: 달력 왼쪽, 요약·참여자·방장 메뉴 오른쪽. 달은 나란히 놓는다. */
   .layout { display: grid; gap: .9rem; }
   .side .card:last-child, .cal .card:last-child { margin-bottom: 0; }
+  .room-foot { margin-top: .9rem; }
   @media (prefers-color-scheme: dark) { :root { --lunch-rgb: 255 198 107; --dinner-rgb: 143 157 255; } }
   @media (min-width: 860px) {
     main { padding: 2rem 1.5rem 8rem; }
@@ -239,8 +240,6 @@
     .layout { display: flex; flex-direction: column; }
     .side { display: contents; }
     #best-card { order: -1; }
-    #members-card { order: 2; }
-    #host-card { order: 3; }
     .day .num { font-size: .72rem; }
   }
 </style>
@@ -401,47 +400,50 @@
           <ol class="best" id="best"></ol>
           <p class="muted" id="best-empty">아직 응답이 없어요. 날짜를 톡톡 눌러 주세요.</p>
         </div>
-        <div class="card" id="members-card">
-          <h2>내 기기 <span class="muted" id="m-count"></span></h2>
-          <p class="muted" style="margin:0">
-            다른 폰에서 이어서 하려면 <button type="button" id="resume" style="font-size:.72rem;padding:.25rem .5rem">내 이어하기 링크 복사</button>
-          </p>
-        </div>
-        <details class="card host" id="host-card" hidden>
-          <summary>👑 방장 메뉴</summary>
-          <section>
-            <h3>장소</h3>
-            <p class="muted">네이버 지도에서 장소 → 공유 → 링크 복사 후 붙여 넣어 주세요.</p>
-            <input id="p-name" maxlength="40" placeholder="장소 이름 (예: 을지로 노가리집)">
-            <input id="p-url" placeholder="https://naver.me/…" style="margin-top:.4rem" inputmode="url">
-            <div class="row" style="margin-top:.5rem">
-              <button type="button" id="p-save">장소 저장</button>
-              <button type="button" id="p-clear">장소 지우기</button>
-            </div>
-            <p class="err" id="p-err"></p>
-          </section>
-          <section>
-            <h3>정원</h3>
-            <div class="stepper" id="h-cap">
-              <button type="button" data-step="-1" aria-label="정원 줄이기">−</button>
-              <output id="h-cap-val"></output><span>명</span>
-              <button type="button" data-step="1" aria-label="정원 늘리기">+</button>
-            </div>
-            <p class="err" id="h-cap-err"></p>
-          </section>
-          <section>
-            <h3>방장 넘기기</h3>
-            <div class="row" id="handover"></div>
-          </section>
-          <section>
-            <h3>🫧 방 터트리기</h3>
-            <p class="muted">모든 응답과 기록이 바로 사라져요. 확인하려면 방 코드를 똑같이 적어 주세요.</p>
-            <input id="pop-code" class="code-input" maxlength="6" autocomplete="off" autocapitalize="none">
-            <button type="button" id="pop" style="margin-top:.5rem">터트리기</button>
-            <p class="err" id="pop-err"></p>
-          </section>
-        </details>
       </div>
+    </div>
+    <!-- 방장 메뉴·이어하기는 달력 밖 — 날짜가 잡혀 달력을 접어도 장소·터트리기를 할 수 있어야 한다 -->
+    <div class="room-foot room-body">
+    <div class="card" id="members-card">
+      <h2>내 기기 <span class="muted" id="m-count"></span></h2>
+      <p class="muted" style="margin:0">
+        다른 폰에서 이어서 하려면 <button type="button" id="resume" style="font-size:.72rem;padding:.25rem .5rem">내 이어하기 링크 복사</button>
+      </p>
+    </div>
+    <details class="card host" id="host-card" hidden>
+      <summary>👑 방장 메뉴</summary>
+      <section>
+        <h3>장소</h3>
+        <p class="muted">네이버 지도에서 장소 → 공유 → 링크 복사 후 붙여 넣어 주세요.</p>
+        <input id="p-name" maxlength="40" placeholder="장소 이름 (예: 을지로 노가리집)">
+        <input id="p-url" placeholder="https://naver.me/…" style="margin-top:.4rem" inputmode="url">
+        <div class="row" style="margin-top:.5rem">
+          <button type="button" id="p-save">장소 저장</button>
+          <button type="button" id="p-clear">장소 지우기</button>
+        </div>
+        <p class="err" id="p-err"></p>
+      </section>
+      <section>
+        <h3>정원</h3>
+        <div class="stepper" id="h-cap">
+          <button type="button" data-step="-1" aria-label="정원 줄이기">−</button>
+          <output id="h-cap-val"></output><span>명</span>
+          <button type="button" data-step="1" aria-label="정원 늘리기">+</button>
+        </div>
+        <p class="err" id="h-cap-err"></p>
+      </section>
+      <section>
+        <h3>방장 넘기기</h3>
+        <div class="row" id="handover"></div>
+      </section>
+      <section>
+        <h3>🫧 방 터트리기</h3>
+        <p class="muted">모든 응답과 기록이 바로 사라져요. 확인하려면 방 코드를 똑같이 적어 주세요.</p>
+        <input id="pop-code" class="code-input" maxlength="6" autocomplete="off" autocapitalize="none">
+        <button type="button" id="pop" style="margin-top:.5rem">터트리기</button>
+        <p class="err" id="pop-err"></p>
+      </section>
+    </details>
     </div>
     <p class="muted" id="expires" style="text-align:center;margin-top:1rem"></p>
   </section>
