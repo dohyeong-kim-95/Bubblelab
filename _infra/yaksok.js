@@ -529,8 +529,8 @@ export function ogDescription(room) {
   const when = room.confirmed ? `${dateLabel(room.confirmed.date)} ${SLOT_LABEL[room.confirmed.slot]}` : "";
   switch (room.phase) {
     case 0: return `되는 날짜를 톡톡 눌러 주세요 · ${room.max}명 중 ${responded}명 응답`;
-    case 1: return `📅 ${when} 확정! 장소는 곧 알려 드려요.`;
-    case 2: return `📅 ${when} · 📍 ${room.place?.name ?? ""}`;
+    case 1: return `🗓️ ${when} 확정! 장소는 곧 알려 드려요.`;
+    case 2: return `🗓️ ${when} · 📍 ${room.place?.name ?? ""}`;
     default: return `💸 정산 중이에요 — 보낼 돈을 확인해 주세요. (${when})`;
   }
 }

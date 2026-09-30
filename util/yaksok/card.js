@@ -119,7 +119,7 @@ function confirmed(ctx, state) {
   const c = state.confirmed;
   ctx.fillStyle = C.ink;
   ctx.font = `800 64px ${FONT}`;
-  ctx.fillText(`📅 ${dateLabel(c.date)} ${SLOT_LABEL[c.slot]}`, 60, 280);
+  ctx.fillText(`🗓️ ${dateLabel(c.date)} ${SLOT_LABEL[c.slot]}`, 60, 280);
   ctx.font = `700 40px ${FONT}`;
   ctx.fillText(state.place ? `📍 ${state.place.name}` : "📍 장소는 곧 알려 드려요", 60, 350);
   seats(ctx, state, 420);

@@ -342,7 +342,7 @@ function renderConfirmed() {
   const c = state.confirmed;
   $("confirmed").hidden = !c;
   if (!c) return;
-  $("cf-when").textContent = `📅 ${dateLabel(c.date)} ${SLOT_LABEL[c.slot]}`;
+  $("cf-when").textContent = `🗓️ ${dateLabel(c.date)} ${SLOT_LABEL[c.slot]}`;
   $("cf-place").textContent = state.place ? `📍 ${state.place.name}` : "장소는 방장이 곧 알려 줄 거예요.";
   $("cf-map").hidden = !state.place;
   if (state.place) $("cf-map").href = state.place.url;
@@ -581,8 +581,8 @@ function shareText() {
   const responded = state.members.filter((m) => m.responded).length;
   switch (state.phase) {
     case 0: return `🫧 약속 방 ${state.code} — 되는 날짜 톡톡 눌러 줘! (${state.max}명 중 ${responded}명 응답)`;
-    case 1: return `📅 ${when}로 확정! 장소는 곧 알려 줄게 (방 ${state.code})`;
-    case 2: return `📅 ${when} · 📍 ${state.place?.name} — 여기서 만나! 지도: ${state.place?.url}`;
+    case 1: return `🗓️ ${when}로 확정! 장소는 곧 알려 줄게 (방 ${state.code})`;
+    case 2: return `🗓️ ${when} · 📍 ${state.place?.name} — 여기서 만나! 지도: ${state.place?.url}`;
     default: {
       const { transfers } = settle(memberIds(), state.expenses);
       const lines = transfers.map((t) => `${nameOf(t.from)} → ${nameOf(t.to)} ${won(t.amount)}`);
@@ -610,7 +610,7 @@ function render() {
   else if (lastPhase === 0) calendarOpen = false;
   lastPhase = state.phase;
   $("cal-layout").hidden = later && !calendarOpen;
-  $("cal-toggle").textContent = calendarOpen ? "📅 날짜 투표 접기" : "📅 날짜 투표 다시 보기";
+  $("cal-toggle").textContent = calendarOpen ? "🗓️ 날짜 투표 접기" : "🗓️ 날짜 투표 다시 보기";
   renderPhases();
   renderReady();
   renderConfirmed();
