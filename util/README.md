@@ -73,8 +73,16 @@
 **실제 워커로 돌려 보기**: e2e 는 정적 서버 위에서 `/_yaksok` 만 실제 코드로 답해 워커 앞단
 (본문 상한 등)을 지나지 않는다 — 그 틈으로 사진 업로드가 64KB 에 막히는 걸 놓친 적이 있다.
 `wrangler dev --local`(Node 22 필요, 레이트 리미터 때문에 `.dev.vars` 에 `ADMIN_SESSION_SECRET`)
-위에서 세 사람이 단계마다 공유 버튼을 누르는 시나리오를 돌려 확인했다. 아이폰(WebKit) e2e 는
-CI 에서 돌지 않는다 — 로컬 `PLAYWRIGHT_IOS=1 npx playwright test --project=iphone`.
+위에서 세 사람이 단계마다 공유 버튼을 누르는 시나리오를 돌려 확인했다(아이폰 역은 실제 WebKit).
+로컬에서 WebKit 을 돌릴 때는 **https 로** 띄운다(`--local-protocol https`) — WebKit 은 CSP 의
+`upgrade-insecure-requests` 때문에 `http://localhost` 의 스크립트 요청도 https 로 올려 화면이 안 뜬다.
+
+아이폰(WebKit) e2e 는 CI 에서 돌지 않는다(브라우저를 내려받지 않으므로). 로컬에서는
+`bash scripts/webkit-libs.sh && PLAYWRIGHT_IOS=1 npx playwright test --project=iphone` —
+WebKit 이 찾는 `libavif16` 이 데스크톱 배포판엔 없는 경우가 많아, 스크립트가 sudo 없이 apt 패키지를
+내려받아 `.cache/webkit-libs/`(git 제외)에 풀고 설정이 `LD_PRELOAD` 로 올린다(WebKit 실행 래퍼가
+`LD_LIBRARY_PATH` 를 덮어써서 경로만으로는 안 된다). 터치 끌기는 WebKit 에선 페이지 안에서 만든
+터치 포인터 이벤트로 본다 — 실제 손가락의 스크롤 구분은 실기기에서 본다.
 
 ## 아침 브리핑
 

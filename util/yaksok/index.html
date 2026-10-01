@@ -94,7 +94,9 @@
   .day:disabled { opacity: .28; border-style: dashed; background: transparent; }
   .day .half { position: absolute; left: 0; right: 0; height: 50%; }
   .day .top { top: 0; } .day .bottom { bottom: 0; }
-  .day .num { position: relative; z-index: 1; font-size: .78rem; font-weight: 600; }
+  /* 진하게 칠한 칸(모두 가능)에서도 숫자가 읽히게 바탕색 테두리를 두른다 */
+  .day .num { position: relative; z-index: 1; font-size: .78rem; font-weight: 600;
+              text-shadow: 0 0 2px var(--card), 0 0 2px var(--card), 0 0 3px var(--card); }
   .day.sun .num { color: var(--sun); } .day.sat .num { color: var(--sat); }
   .day .x { position: absolute; inset: 0; display: grid; place-items: center; font-size: 1.3rem; opacity: .35; }
   .day .counts { position: absolute; right: 3px; bottom: 2px; z-index: 1; font-size: .56rem; opacity: .8; }

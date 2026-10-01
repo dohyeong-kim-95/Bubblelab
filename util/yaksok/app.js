@@ -244,7 +244,8 @@ function drawCell(button) {
   button.classList.toggle("all", lunch === cap || dinner === cap);
   if (lunch || dinner) button.append(el("span", { class: "counts" }, `${lunch}·${dinner}`));
   const mine = state.me ? myVotes()[date] ?? NONE : NONE;
-  if (state.me) button.append(el("span", { class: `mine s${mine}` }));
+  // 내가 누른 칸에만 표시한다 — 안 누른 칸마다 빈 네모가 있으면 작은 화면에서 달력이 지저분하다.
+  if (mine !== NONE) button.append(el("span", { class: `mine s${mine}` }));
   button.setAttribute("aria-label",
     `${dateLabel(date)} 점심 ${lunch}명 저녁 ${dinner}명 (정원 ${cap}명)${state.me ? ` · 내 응답 ${STATE_LABEL[mine] ?? "미응답"}` : ""}`);
 }

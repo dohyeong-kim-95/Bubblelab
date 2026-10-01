@@ -279,3 +279,33 @@ test("날짜를 확정해 달력이 접혀도 방장 메뉴(장소·터트리기
   await page.click("#pop");
   await expect(page.locator("#gone-title")).toHaveText("펑! 방을 터트렸어요");
 });
+
+test("WebKit(아이폰 엔진): 터치 포인터로 꾹 누른 뒤 끌면 칠하고, 바로 쓸면 칠하지 않는다", async ({ page, browserName }) => {
+  // Playwright WebKit 은 터치 끌기를 흉내 내지 못해 페이지 안에서 터치 포인터 이벤트를 만들어 보낸다.
+  // 실제 손가락의 스크롤까지는 재현하지 못한다 — 손짓을 칸으로 바꾸는 처리(묶인 이벤트 API 없음 포함)를 본다.
+  test.skip(browserName !== "webkit", "WebKit 전용 — Chromium 은 위의 CDP 터치 테스트가 본다");
+  const rooms = await serveYaksok(page);
+  await createRoom(page, "webtch");
+  const all = page.locator("#months .day:not([disabled])");
+  const sunday = await all.evaluateAll((els) => els.findIndex((el) => new Date(el.dataset.date).getUTCDay() === 0));
+  await all.nth(sunday).scrollIntoViewIfNeeded();
+  const dates = await Promise.all([0, 1, 2, 3].map((i) => all.nth(sunday + i).getAttribute("data-date")));
+  const swipe = (holdMs) => page.evaluate(async ({ dates, holdMs }) => {
+    const center = (d) => { const r = document.querySelector(`.day[data-date="${d}"]`).getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; };
+    const [x0, y0] = center(dates[0]), [x1, y1] = center(dates[3]);
+    const fire = (type, x, y) => (type === "pointerdown" ? document.elementFromPoint(x, y) : document)
+      .dispatchEvent(new PointerEvent(type, { pointerId: 7, pointerType: "touch", isPrimary: true, clientX: x, clientY: y, bubbles: true }));
+    fire("pointerdown", x0, y0);
+    await new Promise((r) => setTimeout(r, holdMs));
+    for (let i = 1; i <= 6; i += 1) fire("pointermove", x0 + (x1 - x0) * i / 6, y0 + (y1 - y0) * i / 6);
+    fire("pointerup", x1, y1);
+  }, { dates, holdMs });
+  await swipe(40);                 // 바로 쓸기 = 스크롤
+  await page.waitForTimeout(900);
+  const [room] = rooms.values();
+  expect((await room.storage.get("room")).votes.m1 ?? {}).toEqual({});
+  await swipe(400);                // 꾹 누른 뒤 끌기
+  await expect(page.locator("#saving")).toHaveText("저장됨");
+  const votes = (await room.storage.get("room")).votes.m1;
+  expect(dates.map((d) => votes[d])).toEqual([1, 1, 1, 1]);
+});

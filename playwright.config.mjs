@@ -2,9 +2,24 @@
 // 바닐라 HTML이라, 화면이 깨지는 방식도 대개 같다 — 스크립트 예외로 화면이 통째로
 // 비거나, 가로로 넘쳐 옆으로 밀리거나, 상단 진입 요소가 사라지거나.
 // 그 세 가지만 핵심 화면에서 확인한다(기능 테스트는 _infra의 단위 테스트가 한다).
+import { existsSync } from "node:fs";
 import { defineConfig, devices } from "@playwright/test";
 
 const PORT = 8788;
+
+const WEBKIT_LIBS = new URL("./.cache/webkit-libs/root/usr/lib/x86_64-linux-gnu", import.meta.url).pathname;
+// Playwright 는 브라우저를 띄우기 전에 러너 프로세스의 환경으로 라이브러리를 검사하므로 러너(와
+// 물려받는 워커)의 LD_LIBRARY_PATH 에 붙인다. 그런데 WebKit 실행 래퍼(minibrowser-wpe/MiniBrowser)는
+// LD_LIBRARY_PATH 를 자기 경로로 덮어써서, 실제 실행에는 LD_PRELOAD 로 직접 올린다
+// (의존 순서대로 — libavif 가 libgav1·libyuv 를 찾는다). 내려받은 브라우저 파일은 건드리지 않는다.
+if (process.env.PLAYWRIGHT_IOS && existsSync(`${WEBKIT_LIBS}/libavif.so.16`)
+  && !(process.env.LD_LIBRARY_PATH ?? "").includes(WEBKIT_LIBS)) {
+  process.env.LD_LIBRARY_PATH = [WEBKIT_LIBS, process.env.LD_LIBRARY_PATH].filter(Boolean).join(":");
+  process.env.LD_PRELOAD = [
+    ...["libgav1.so.1", "libyuv.so.0", "libavif.so.16"].map((lib) => `${WEBKIT_LIBS}/${lib}`),
+    process.env.LD_PRELOAD,
+  ].filter(Boolean).join(":");
+}
 
 export default defineConfig({
   testDir: "./_infra/e2e",
@@ -48,10 +63,13 @@ export default defineConfig({
     },
     // 아이폰(WebKit) — iOS 브라우저는 전부 WebKit 이다. CI 는 브라우저를 내려받지 않으므로
     // 로컬에서만 켠다: PLAYWRIGHT_IOS=1 npx playwright test --project=iphone
+    // libavif16 이 시스템에 없으면 scripts/webkit-libs.sh 가 sudo 없이 .cache/ 에 풀어 둔다.
     ...(process.env.PLAYWRIGHT_IOS ? [{
       name: "iphone",
       testMatch: /yaksok\.spec\.mjs/,
-      use: { ...devices["iPhone 13"] },
+      use: {
+        ...devices["iPhone 13"],
+      },
     }] : []),
   ],
   // dist/ 가 있어야 한다 — 없으면 node _infra/build.mjs 를 먼저 돌린다.
