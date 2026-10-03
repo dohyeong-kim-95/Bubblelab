@@ -125,7 +125,10 @@
                   justify-content: center; }
   .view-actions button { font-size: .8rem; }
   #view-save { background: #ffffff2e; font-weight: bold; }
-  #today-btn { font-size: .74rem; padding: .4rem .6rem; }
+  #today-btn, #theme-btn { font-size: .74rem; padding: .4rem .6rem; }
+  /* 테마 버튼은 왼쪽 끝에 따로 둔다 — 가운데 줄이 넓어지면 오른쪽 공용 독에 닿는다 */
+  #view-bar { position: relative; }
+  #theme-btn { position: absolute; left: .6rem; bottom: max(.8rem, env(safe-area-inset-bottom)); }
   #today-btn[hidden] { display: none; }
   /* 목업 위에 겹쳐 두어 달을 옮겨도 목업 크기가 흔들리지 않게 한다 */
   #view-note { position: absolute; z-index: 3; left: 50%; transform: translateX(-50%);
@@ -222,6 +225,7 @@
   <div id="view-bar">
     <!-- 달 이름은 배경화면 자체가 크게 보여준다. 여기선 읽기 도구용으로만 남긴다. -->
     <span id="month-label" class="sr-only" aria-live="polite"></span>
+    <button id="theme-btn" type="button" aria-label="라이트/다크 전환"></button>
     <div class="view-actions">
       <button id="today-btn" type="button" hidden>오늘로</button>
       <button id="decorate" type="button">🎨 꾸미기</button>
@@ -273,9 +277,16 @@ function monthData(y, m) {
   return { y, m, weeks };
 }
 
+// 라이트/다크: 버튼으로 고른 값이 있으면 그것, 없으면 기기 설정을 따른다
+const THEME_KEY = "bl_calendar_theme";
+let themePick = null;
+try { themePick = localStorage.getItem(THEME_KEY); } catch {}
+const isDark = () => themePick ? themePick === "dark"
+                               : matchMedia("(prefers-color-scheme: dark)").matches;
+
 // 현재 활성 테마의 색상 (배경화면 = 이 페이지의 배경색)
 function themeColors() {
-  const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+  const dark = isDark();
   return dark
     ? { bg: "#10161f", fg: "#dbe4ee", sun: "#ff8a7a", sat: "#8ab8ff" }
     : { bg: "#eef2f6", fg: "#1c2733", sun: "#c0392b", sat: "#2563ab" };
@@ -576,7 +587,23 @@ addEventListener("resize", () => { layoutStage(); render(); });
 // 조작부 높이는 글꼴·줄바꿈·"오늘로" 버튼 유무로 달라진다. 무대가 들어갈 자리가
 // 바뀌면 목업 크기를 다시 잡는다 (첫 렌더에서 여백이 사라지는 것 방지).
 new ResizeObserver(() => { layoutStage(); render(); }).observe(stageWrap);
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
+
+// light-dark() 도 같은 값을 따르도록 color-scheme 을 CSSOM 으로 고정한다 (CSP 안전)
+const themeBtn = document.getElementById("theme-btn");
+function applyTheme() {
+  const dark = isDark();
+  document.documentElement.style.setProperty("color-scheme", dark ? "dark" : "light");
+  themeBtn.textContent = dark ? "☀️" : "🌙";
+  themeBtn.title = dark ? "라이트 모드로" : "다크 모드로";
+  render();
+}
+themeBtn.addEventListener("click", () => {
+  themePick = isDark() ? "light" : "dark";
+  try { localStorage.setItem(THEME_KEY, themePick); } catch {}
+  applyTheme();
+});
+applyTheme();
 
 window.blShareText = () => `📅 ${cal.y}년 ${cal.m + 1}월 달력 — util.bubblelab.dev/calendar`;
 
