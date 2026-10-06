@@ -31,7 +31,7 @@ export const COMMANDS = [{
   options: [{
     type: 3,          // STRING
     name: "질문",
-    description: "예: 이 방법 800회 예산에 현실적이야?",
+    description: "예: 이 방법으로 PDF 표 수치를 정확히 읽을 수 있어?",
     required: true,
   }],
 }];

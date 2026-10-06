@@ -4,7 +4,8 @@
 // LIFE 도구 관례: ../styles.css 의 토큰을 그대로 쓰고 색을 새로 정하지 않는다.
 // 댓글은 브라우저가 아니라 서버에 둔다 — 폰에서 적은 것을 PC 에서도 봐야 한다.
 
-const FIELDS = ["한줄", "아이디어", "가정", "예산", "걸림돌"];
+// 옛 보관본(가정·예산)도 있는 그대로 보여 준다 — 없는 항목은 건너뛴다.
+const FIELDS = ["한줄", "아이디어", "적용", "검증", "가정", "예산", "걸림돌"];
 const feed = document.getElementById("feed");
 const updated = document.getElementById("updated");
 

@@ -13,6 +13,8 @@ import {
   CATEGORIES,
   DISCORD_TOTAL_LIMIT,
   KEYWORDS,
+  BROAD_KEYWORDS,
+  CONTEXT_WORDS,
   MAX_PICKS,
   CLAIM_TTL_MS,
   CHAT_HISTORY_LIMIT,
@@ -61,7 +63,11 @@ const feed = (...entries) => `<?xml version="1.0"?><feed>${entries.join("")}</fe
 test("검색식에 카테고리·키워드·날짜창이 모두 들어간다", () => {
   const query = buildQuery(Date.parse("2026-08-22T00:00:00Z"));
   for (const cat of CATEGORIES) assert.ok(query.includes(`cat:${cat}`), `${cat} 누락`);
-  for (const word of KEYWORDS) assert.ok(query.includes(`abs:"${word}"`), `${word} 누락`);
+  for (const word of [...KEYWORDS, ...BROAD_KEYWORDS, ...CONTEXT_WORDS]) {
+    assert.ok(query.includes(`abs:"${word}"`), `${word} 누락`);
+  }
+  // 넓은 말은 맥락과 AND 로 묶여야 한다 — 혼자 걸리면 후보가 넘친다.
+  assert.match(query, /\(abs:"retrieval-augmented"[^)]*\) AND \(abs:"PDF"/);
   // 닷새 창 — 주말과 색인 지연을 함께 넘는다. 시작점은 그 날 0시로 내려서
   // 창의 첫날이 반나절만 걸리는 일이 없어야 한다.
   assert.match(query, /submittedDate:\[202608170000 TO 202608220000\]/);
@@ -95,9 +101,10 @@ test("망가진 응답은 조용히 빈 배열이 된다", () => {
 
 test("채점 프롬프트가 내 문제 조건을 담는다", () => {
   const prompt = buildScorePrompt(parseAtom(feed(entry())));
-  assert.match(prompt, /800/);            // 예산
-  assert.match(prompt, /순서형|ordinal/);  // 변수 종류
-  assert.match(prompt, /다목적/);          // 목적 수
+  assert.match(prompt, /500쪽/);          // 자료 규모
+  assert.match(prompt, /표의 수치/);       // 가장 못 참는 실패
+  assert.match(prompt, /상용 LLM API/);    // 모델 제약
+  assert.match(prompt, /벤치마크·평가 설계/); // 평가 논문도 받는다
   // 후하게 주지 말라는 지침이 빠지면 전부 8점이 된다.
   assert.match(prompt, /후하게 주지 마세요/);
 });
@@ -143,13 +150,14 @@ test("요약의 다섯 항목을 읽는다 (굵게 표시도 허용)", () => {
   const parsed = parseSummary([
     "한줄: 조합 공간에서 다목적 BO 를 한다",
     "**아이디어:** 초타원체로 공간을 쪼갠다",
-    "가정: 목적이 서로 독립이다",
-    "예산: 500회",
+    "적용: 전처리 파이프라인",
+    "검증: 300쪽 PDF, 표 포함",
     "걸림돌: 순서형 인코딩을 직접 짜야 한다",
   ].join("\n"));
   assert.equal(parsed["한줄"], "조합 공간에서 다목적 BO 를 한다");
   assert.equal(parsed["아이디어"], "초타원체로 공간을 쪼갠다");
-  assert.equal(parsed["예산"], "500회");
+  assert.equal(parsed["적용"], "전처리 파이프라인");
+  assert.equal(parsed["검증"], "300쪽 PDF, 표 포함");
   assert.equal(parsed["걸림돌"], "순서형 인코딩을 직접 짜야 한다");
 });
 
@@ -740,7 +748,7 @@ test("리뷰는 읽기만 LIFE 세션으로 열고 쓰기는 데몬만 한다", 
 test("리뷰 프롬프트는 초록만 보고 쓰라고 못박는다", () => {
   const prompt = buildReviewPrompt({ title: "T", summary: "S", link: "L", published: "2026-08-20", authors: [] });
   assert.match(prompt, /초록만 보고 씁니다/);
-  assert.match(prompt, /800회/);
+  assert.match(prompt, /500쪽/);
   for (const field of REVIEW_FIELDS) assert.ok(prompt.includes(field), `${field} 누락`);
 });
 
@@ -905,7 +913,7 @@ test("논문 세션이 내 문제 설명을 받아 갈 수 있다", async () => 
 
   const fallback = new PapersDO({ storage: storageStub() }, env());
   const { profile } = await (await fallback.fetch(new Request("https://papers/profile"))).json();
-  assert.match(profile, /순서형/, "env 가 비면 코드의 기본값을 준다");
+  assert.match(profile, /500쪽/, "env 가 비면 코드의 기본값을 준다");
 });
 
 test("sink 경로가 워커 라우팅과 짝이 맞는다", async () => {
