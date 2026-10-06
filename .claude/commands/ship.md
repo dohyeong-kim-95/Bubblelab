@@ -1,6 +1,6 @@
 ---
 description: 배포 의례 한 줄 — main push 후 정확한 SHA의 저장소 Deploy 완료 대기
-allowed-tools: Bash, Read
+allowed-tools: Bash, Read, mcp__github__actions_list, mcp__github__actions_get, mcp__github__actions_run_trigger, mcp__github__get_job_logs
 ---
 
 # 배포 (`make ship`)
@@ -42,6 +42,29 @@ make ship
 `make ship` 은 오래 걸린다(Actions 대기 포함 보통 2~5분). 백그라운드로 돌리지
 말고 끝까지 기다렸다가 결과를 보고한다. 실패 복구가 필요하면 같은 Actions run이
 Cloudflare의 직전 production version으로 복구하고 그 SHA까지 확인한다.
+
+## `gh` 가 없는 환경 (클라우드 세션 등) — 처음부터 GitHub MCP 로
+
+**`make ship` 을 먼저 돌려 보지 말 것.** 시작 전에 `gh auth status` 가 실패하거나
+`gh` 가 없으면 스크립트는 프리플라이트에서 멈춘다. 그런 환경(Claude Code 원격 세션처럼
+`mcp__github__*` 도구가 있는 곳)에서는 **맨 처음부터** 아래 순서를 GitHub MCP 로 밟는다.
+`scripts/ship.sh` 와 같은 순서다. 판정의 원본은 여전히 `deploy.yml` 하나다.
+
+1. **프리플라이트** — `git branch --show-current` 가 `main`, `git status --short` 에
+   내 것 아닌 tracked 변경이 없는지, `git log --oneline origin/main..main` 과
+   `git diff --stat origin/main..main` 으로 올라갈 커밋·파일을 보여 준다.
+2. `git push origin main` 후 `git rev-parse HEAD` 로 SHA 를 적어 둔다.
+3. `mcp__github__actions_list`(`list_workflow_runs`, `resource_id: deploy.yml`)에서
+   **`head_sha` 가 정확히 그 SHA 인 run** 을 고른다. 다른 SHA 의 run 은 보지 않는다.
+4. 완료까지 기다린다 — `mcp__github__actions_get`(`get_workflow_run`)로 2분쯤 간격을
+   두고 본다(대기는 `run_in_background` 의 `sleep`). run 이 없거나 실패했으면
+   `mcp__github__actions_run_trigger` 로 `deploy.yml` 을 `main` 에서 한 번 재실행한다.
+5. **라이브 SHA 확인** — `/_health` 를 curl 로 열 수 있으면 연다. 네트워크 정책에
+   막히면 `mcp__github__get_job_logs`(`return_content`, `tail_lines: 60`)로 publish
+   단계 로그의 `Deployment verified: <SHA>` 와 `통과 N · 실패 0` 줄을 확인한다.
+   이 줄이 방금 SHA 와 같아야 성공이다.
+6. 실패면 `mcp__github__get_job_logs`(`run_id`, `failed_only`)로 실패 로그를 보고한다.
+   아래 「실패했을 때」 규칙은 그대로 따른다.
 
 ## 실패했을 때
 

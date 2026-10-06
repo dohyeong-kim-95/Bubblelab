@@ -98,6 +98,8 @@ make verify   # 지금 라이브만 읽기 전용으로 검사 (배포 없이)
 
 에이전트에게는 슬래시 하나로 시킨다: **`/ship`** (`.claude/commands/ship.md`) —
 절차·옵션·실패 대처가 거기 적혀 있다. 절차를 대화에서 재구성하지 말 것.
+**`gh` 가 없는 환경(클라우드 세션 등)은 `make ship` 을 돌려 보지 말고 처음부터 GitHub
+MCP 로 진행한다** — 순서는 같은 파일의 「`gh` 가 없는 환경」 절.
 
 - `scripts/ship.sh`는 tracked 파일이 깨끗한 `main`인지 확인하고 커밋 목록을 보여 준 뒤
   push하며, 그 SHA의 Actions run만 기다린다. 필요한 로컬 도구는 `git`·`gh`·`curl`이다.
