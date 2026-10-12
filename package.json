@@ -10,7 +10,7 @@
   "dependencies": {
     "jpeg-js": "^0.4.4",
     "manseryeok": "2.0.0",
-    "pdfjs-dist": "6.3.289"
+    "pdfjs-dist": "6.4.299"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
