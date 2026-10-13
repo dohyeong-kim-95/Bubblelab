@@ -6,7 +6,15 @@
  *
  * 요소 기본값은 최소한만 건드리고(배경·글자·글꼴·선택·초점), 부품은 bl- 접두사 클래스로
  * 골라 쓴다. 값이 필요한 곳은 클래스 대신 var(--…) 토큰을 직접 써도 된다.
+ *
+ * **토큰의 원본은 이 파일 하나다.** 랜딩(www/index.html)·카테고리 홈(build.mjs 의
+ * listingPage)·도구들 모두 이 파일을 불러 쓴다 — 값을 바꾸려면 여기만 고친다.
  */
+
+/* 고운바탕 Bold (OFL, fonts/GowunBatang-OFL.txt) — 라틴 전체 + 랜딩 제목 한글만 담은 부분 파일.
+   제목에 새 한글이 생기면 Google Fonts css2 의 text= 로 다시 받는다(없는 글자는 --sans 로 떨어진다). */
+@font-face { font-family: "Gowun Batang"; font-weight: 700; font-display: swap;
+             src: url("/_shared/fonts/gowun-batang-700.woff2") format("woff2"); }
 
 :root {
   color-scheme: light dark;
@@ -25,9 +33,32 @@
   --warn: light-dark(#9a5b00, #f3bd5c);
   --bad: light-dark(#b3261e, #ff8a80);
 
-  /* 글꼴 */
+  --selection: light-dark(#cdd8ff, #2c3d78);
+  /* 방울 하이라이트 — 색 면 위에 얹는 왼쪽 위 광택. background: var(--gloss), <색>; */
+  --gloss: radial-gradient(circle at 32% 28%, rgb(255 255 255 / .8) 0 8%, transparent 22%);
+
+  /* 글꼴 — serif 는 이름(사이트·카테고리·랜딩 제목)에만, 본문·UI 는 sans, 숫자·주소·라벨은 mono */
+  --serif: "Gowun Batang", "Nanum Myeongjo", "AppleMyungjo", serif;
   --sans: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
   --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+
+  /* 글자 크기 단계 — 화면 폭 따라 커지는 것(display·title)은 clamp */
+  --t-display: clamp(2.5rem, 9vw, 5.4rem);  /* 랜딩 헤드라인 */
+  --t-title: clamp(2.2rem, 8vw, 3.4rem);    /* 카테고리 홈 사이트 이름 */
+  --t-h1: 1.35rem;                          /* 도구 제목(.bl-head) */
+  --t-lead: 1.05rem;                        /* 리드 문단 */
+  --t-body: 1rem;
+  --t-small: .88rem;                        /* 설명·칩 */
+  --t-caption: .78rem;                      /* mono 라벨·주석 */
+
+  /* 간격 단계 — 0.25rem 배수 */
+  --s-1: .25rem;
+  --s-2: .5rem;
+  --s-3: .75rem;
+  --s-4: 1rem;
+  --s-5: 1.5rem;
+  --s-6: 2rem;
+  --s-7: 3rem;
 
   /* 모양 */
   --r-sm: .6rem;
@@ -53,7 +84,7 @@
 html { background: var(--bg); }
 body { background: var(--bg); color: var(--ink); font-family: var(--sans);
        word-break: keep-all; -webkit-font-smoothing: antialiased; }
-::selection { background: light-dark(#cdd8ff, #2c3d78); }
+::selection { background: var(--selection); }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 /* hidden 속성은 언제나 이긴다 — bl-btn·bl-drop 처럼 display 를 정한 부품이 숨김을 덮지 않게 */
 [hidden] { display: none !important; }
@@ -67,8 +98,7 @@ body { background: var(--bg); color: var(--ink); font-family: var(--sans);
 
 .bl-bubble { display: inline-grid; place-items: center; width: 2.8rem; aspect-ratio: 1; border-radius: 50%;
              font-size: 1.35rem; line-height: 1;
-             background: radial-gradient(circle at 32% 28%, rgb(255 255 255 / .8) 0 8%, transparent 22%),
-                         var(--accent-soft);
+             background: var(--gloss), var(--accent-soft);
              box-shadow: inset 0 0 0 1px var(--accent-line); }
 
 /* ── 버튼 ─────────────────────────────────────── */

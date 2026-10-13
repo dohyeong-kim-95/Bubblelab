@@ -344,33 +344,17 @@ function listingPage(site, entries) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(site)}.bubblelab.dev</title>
 ${preconnectLinks}
+<link rel="stylesheet" href="/_shared/bubble.css">
 <style>
-  /* 랜딩(www/index.html)과 같은 "비눗방울 실험실" 한 벌 — 토큰·글꼴을 맞춰 둔다 */
-  @font-face { font-family: "Gowun Batang"; font-weight: 700; font-display: swap;
-               src: url("/_shared/fonts/gowun-batang-700.woff2") format("woff2"); }
-  :root {
-    color-scheme: light dark;
-    --bg: light-dark(#f3f0e8, #0b0f17);
-    --ink: light-dark(#15171c, #ece8df);
-    --muted: light-dark(#5b5f68, #a3a7b0);
-    --line: light-dark(#d9d4c8, #232a36);
-    --field: light-dark(#fffdf8, #141a25);
-    --focus: light-dark(#3f5fd0, #8fa8ff);
-    --serif: "Gowun Batang", "Nanum Myeongjo", "AppleMyungjo", serif;
-    --sans: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
-    --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
-  }
-  html { background: var(--bg); }
-  body { font-family: var(--sans); color: var(--ink); background: var(--bg); max-width: 56rem;
-         margin: 0 auto; padding: 2.6rem 1.25rem 4rem; word-break: keep-all; -webkit-font-smoothing: antialiased; }
-  ::selection { background: light-dark(#cdd8ff, #2c3d78); }
+  /* 랜딩과 같은 "비눗방울 실험실" — 색·글꼴·크기 토큰은 /_shared/bubble.css (원본 한 곳) */
+  body { max-width: 56rem; margin: 0 auto; padding: 2.6rem 1.25rem 4rem; }
   :focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
   h1 { margin: 0 0 1.4rem; font-weight: normal; }
   .site-switcher { position: relative; width: max-content; max-width: 100%; margin: 0 auto; text-align: center; }
   .site-trigger { border: 0; padding: .3rem .7rem; border-radius: 999px; background: transparent;
           color: inherit; font: inherit; cursor: pointer; display: inline-flex; align-items: baseline; gap: .1rem; }
   .site-trigger:hover, .site-trigger:focus-visible { background: light-dark(#e9e4d8, #161d2a); outline: none; }
-  .site-trigger strong { font-family: var(--serif); font-weight: 700; font-size: clamp(2.2rem, 8vw, 3.4rem);
+  .site-trigger strong { font-family: var(--serif); font-weight: 700; font-size: var(--t-title);
           letter-spacing: -.02em; line-height: 1.1; }
   .site-trigger .domain { font-family: var(--mono); font-size: .85rem; color: var(--muted); }
   .site-trigger .chevron { display: inline-block; margin: 0 .25rem; color: var(--muted); font-size: 1rem;
@@ -417,7 +401,7 @@ ${preconnectLinks}
   @media (prefers-reduced-motion: reduce) { .card { animation: none; transition: none; } }
   .emoji { position: relative; display: grid; place-items: center; width: 4.4rem; aspect-ratio: 1;
           border-radius: 50%; font-size: 2.1rem; line-height: 1;
-          background: radial-gradient(circle at 32% 28%, rgb(255 255 255 / .85) 0 8%, transparent 22%),
+          background: var(--gloss),
                       light-dark(hsl(var(--hue) 85% 88%), hsl(var(--hue) 45% 24%));
           box-shadow: inset 0 0 0 1px light-dark(hsl(var(--hue) 60% 76%), hsl(var(--hue) 40% 36%));
           transition: transform .35s cubic-bezier(.2, .9, .3, 1.3); }
@@ -441,7 +425,7 @@ ${preconnectLinks}
   .card--hof:hover, .card--hof:focus-visible { border-color: light-dark(#d9b45a, #8a7232); }
   .card--hof .hof-emoji { display: grid; place-items: center; width: 3.2rem; aspect-ratio: 1; border-radius: 50%;
           font-size: 1.7rem; line-height: 1;
-          background: radial-gradient(circle at 32% 28%, rgb(255 255 255 / .85) 0 8%, transparent 22%),
+          background: var(--gloss),
                       light-dark(#f6dc8f, #6b5620); }
   .card--hof .hof-text { display: flex; flex-direction: column; gap: .15rem; min-width: 0; }
   .card--hof .hof-name { font-weight: 800; font-size: 1.1rem; letter-spacing: -.01em; }
