@@ -19,6 +19,7 @@
 | `home.js` | 카드 페이지의 🏠 홈 버튼 (빌드가 자동 주입) |
 | `engagement.js` | 유효 방문 비콘과 표시 시간 누적 (빌드가 자동 주입) |
 | `TwemojiCountryFlags.woff2` | 국기 게임용 Twemoji Country Flags 폰트 |
+| `fonts/gowun-batang-700.woff2` | 고운바탕 Bold 부분 파일(라틴 전체 + 랜딩 제목 한글만) — 랜딩·카테고리 홈 제목용, OFL(`fonts/GowunBatang-OFL.txt`) |
 
 ## 공유 버튼
 
