@@ -4,28 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>bubblelab</title>
+<link rel="stylesheet" href="/_shared/bubble.css">
 <style>
-  /* 고운바탕 Bold (OFL, /_shared/fonts/GowunBatang-OFL.txt) — 랜딩의 고정 문구(제목·카테고리 이름)에 쓰는 글자만 담은
-     부분 파일이다. 글자를 바꾸면 Google Fonts css2 의 text= 로 다시 받는다. 없는 글자는 --sans 로 떨어진다. */
-  @font-face { font-family: "Gowun Batang"; font-weight: 700; font-display: swap;
-               src: url("/_shared/fonts/gowun-batang-700.woff2") format("woff2"); }
-  :root {
-    color-scheme: light dark;
-    --bg: light-dark(#f3f0e8, #0b0f17);
-    --ink: light-dark(#15171c, #ece8df);
-    --muted: light-dark(#5b5f68, #a3a7b0);
-    --line: light-dark(#d9d4c8, #232a36);
-    --field: light-dark(#fffdf8, #141a25);
-    --focus: light-dark(#3f5fd0, #8fa8ff);
-    --serif: "Gowun Batang", "Nanum Myeongjo", "AppleMyungjo", serif;
-    --sans: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
-    --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
-  }
+  /* 색·글꼴·크기 토큰은 /_shared/bubble.css (원본 한 곳) */
   * { box-sizing: border-box; }
-  html { background: var(--bg); }
-  body { margin: 0; font-family: var(--sans); color: var(--ink); background: var(--bg);
-         line-height: 1.6; word-break: keep-all; -webkit-font-smoothing: antialiased; }
-  ::selection { background: light-dark(#cdd8ff, #2c3d78); }
+  body { margin: 0; line-height: 1.6; }
   a { color: inherit; }
   :focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
   .wrap { max-width: 56rem; margin: 0 auto; padding: 0 1.25rem; }
@@ -38,7 +21,7 @@
   /* ── 히어로: 진짜로 떠다니는 비눗방울 ─────────────── */
   .hero { position: relative; overflow: clip; padding: 4.5rem 0 3rem; }
   .hero h1 { position: relative; z-index: 1; margin: 0; font-family: var(--serif); font-weight: 700;
-             font-size: clamp(2.5rem, 9vw, 5.4rem); line-height: 1.15; letter-spacing: -.02em; }
+             font-size: var(--t-display); line-height: 1.15; letter-spacing: -.02em; }
   .hero p { position: relative; z-index: 1; margin: 1.4rem 0 0; max-width: 30rem;
             font-size: 1.05rem; color: var(--muted); }
   .bubbles { position: absolute; inset: 0; pointer-events: none; }
@@ -89,7 +72,7 @@
           column-gap: 1.1rem; align-items: center; padding: 1.1rem .25rem; text-decoration: none; }
   .card .emoji { grid-area: e; display: grid; place-items: center; width: 3.4rem; aspect-ratio: 1;
                  border-radius: 50%; font-size: 1.5rem; line-height: 1;
-                 background: radial-gradient(circle at 32% 28%, rgb(255 255 255 / .8) 0 8%, transparent 22%),
+                 background: var(--gloss),
                              light-dark(hsl(var(--h) 85% 88%), hsl(var(--h) 45% 24%));
                  box-shadow: inset 0 0 0 1px light-dark(hsl(var(--h) 60% 76%), hsl(var(--h) 40% 36%));
                  transition: transform .35s cubic-bezier(.2, .9, .3, 1.3); }
