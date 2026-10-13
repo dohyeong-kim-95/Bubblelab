@@ -5,52 +5,51 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>자물쇠 러시 — 스코어 어택</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🔓</text></svg>">
+<link rel="stylesheet" href="/_shared/bubble.css">
 <style>
-  :root { color-scheme: light dark; }
+  :root { color-scheme: light dark; --accent-h: 155; }
   html, body { height: 100%; }
   body { margin: 0; overflow: hidden; user-select: none; -webkit-user-select: none;
-         touch-action: none; font-family: ui-monospace, "SF Mono", "Cascadia Mono",
-         "Roboto Mono", Consolas, monospace;
-         background: light-dark(#f6ead8, #1a1626); color: light-dark(#3a2b18, #e8ddcb); }
+         touch-action: none; background: light-dark(#f6ead8, #1a1626); color: var(--ink); }
   canvas { display: block; touch-action: none; }
-  #hud { position: fixed; top: 0; left: 0; right: 0; display: flex; gap: .55rem;
-         align-items: center; padding: .5rem .7rem; font-size: .78rem; z-index: 3;
+  /* 상단 HUD — 판 위에 얹힌 얇은 띠: 이름은 sans, 점수는 mono */
+  #hud { position: fixed; top: 0; left: 0; right: 0; display: flex; gap: var(--s-2);
+         align-items: center; padding: var(--s-2) var(--s-3); font-size: var(--t-small); z-index: 3;
          pointer-events: none; white-space: nowrap; }
-  #hud b { font-weight: bold; }
+  #hud b { font-weight: 800; letter-spacing: -.01em; }
   #hud .sp { flex: 1; }
   #hud > span:first-child { flex: 0 1 auto; min-width: 0; overflow: hidden;
-                            text-overflow: ellipsis; }
-  #retry { pointer-events: auto; font: inherit; border: 1.5px solid currentColor;
-           background: none; color: inherit; border-radius: 1rem; padding: .15rem .7rem;
-           cursor: pointer; opacity: .75; }
-  #retry:active { transform: scale(.95); }
+                            text-overflow: ellipsis; display: flex; align-items: center; gap: var(--s-2); }
+  #hud .bl-bubble { width: 1.9rem; font-size: 1rem; flex: none; }
+  #hScore { font-family: var(--mono); font-size: var(--t-caption); }
+  #retry { pointer-events: auto; min-height: 2.2rem; min-width: 2.2rem; padding: 0 .6rem; font-size: 1rem; }
   #overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
-             display: flex; flex-direction: column; align-items: center; gap: .9rem;
-             width: min(84vw, 21rem); padding: 1.5rem 1.6rem; border-radius: 1.25rem;
-             text-align: center; z-index: 5;
-             border: 1.5px solid light-dark(rgba(90,60,20,.3), rgba(230,215,190,.25));
-             background: light-dark(rgba(255,250,240,.92), rgba(26,20,38,.92));
+             display: flex; flex-direction: column; align-items: center; gap: var(--s-3);
+             width: min(88vw, 21rem); box-sizing: border-box; padding: var(--s-5); border-radius: var(--r-lg);
+             text-align: center; z-index: 5; color: var(--ink);
+             border: 1px solid var(--line);
+             background: color-mix(in srgb, var(--field) 92%, transparent);
+             box-shadow: 0 .8rem 2.4rem light-dark(rgb(60 50 30 / .14), rgb(0 0 0 / .5));
              backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
   #overlay.hide { display: none; }
-  #overlay h1 { margin: 0; font-size: 1.15rem; }
-  #overlay p { margin: 0; font-size: .88rem; line-height: 1.55; opacity: .75;
+  #overlay h1 { margin: 0; font-size: var(--t-h1); font-weight: 800; letter-spacing: -.02em; }
+  #overlay p { margin: 0; font-size: var(--t-small); line-height: 1.6; color: var(--muted);
                white-space: pre-line; }
-  #overlay .big { font-size: 2.2rem; margin: 0; }
-  #btn { font: inherit; font-size: 1.05rem; padding: .75rem 2.2rem; border-radius: 2rem;
-         border: 2px solid currentColor; background: none; color: inherit; cursor: pointer; }
-  #btn:active { transform: scale(.96); }
-  #best { margin: 0; font-size: .8rem; opacity: .5; min-height: 1.1em; }
+  #overlay .big { width: 3.8rem; font-size: 1.9rem; margin: 0 0 var(--s-1); }
+  #btn { font-size: 1.05rem; min-height: 3.2rem; padding: .7rem 2.6rem; margin-top: var(--s-2); }
+  #overlay #best { font-size: .8rem; }
+  #overlay #best:empty { display: none; }
 </style>
 </head>
 <body>
 <div id="hud">
-  <span>🔓 <b>자물쇠 러시</b></span>
+  <span><span class="bl-bubble" aria-hidden="true">🔓</span><b>자물쇠 러시</b></span>
   <span class="sp"></span>
-  <span id="hScore"></span>
-  <button id="retry" title="다시 시작">↻</button>
+  <span id="hScore" class="bl-num"></span>
+  <button id="retry" class="bl-btn bl-btn--sm" title="다시 시작">↻</button>
 </div>
 <div id="overlay">
-  <p class="big" id="oEmoji">🔓</p>
+  <p class="big bl-bubble" id="oEmoji">🔓</p>
   <h1 id="oTitle">자물쇠 러시</h1>
   <p id="oMsg">바늘이 금색 구간에 들어왔을 때 탭!
 
@@ -60,8 +59,8 @@
 더 빠르고 좁은 다음 자물쇠.
 
 한 번이라도 빗나가면 그대로 끝.</p>
-  <button id="btn">시작</button>
-  <p id="best"></p>
+  <button id="btn" class="bl-btn bl-btn--primary">시작</button>
+  <p id="best" class="bl-note bl-num"></p>
 </div>
 <canvas id="cv"></canvas>
 <script>

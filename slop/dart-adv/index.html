@@ -4,59 +4,59 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>다트 서커스 EX</title>
+<link rel="stylesheet" href="/_shared/bubble.css">
 <style>
-  :root { color-scheme: light dark; }
-  body { margin: 0; overflow: hidden; font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
-         background: light-dark(#f2eef7, #120c1c); user-select: none;
+  :root { color-scheme: light dark; --accent-h: 157; }
+  body { margin: 0; overflow: hidden; background: var(--bg); user-select: none;
          -webkit-user-select: none; touch-action: manipulation; }
   canvas { display: block; }
+  /* 시작·결과 카드 — 판(캔버스) 위에 떠 있는 종이 한 장 */
   #overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-             display: flex; flex-direction: column; align-items: center; gap: 1rem;
-             padding: 1.6rem 2rem; border-radius: 1.25rem; text-align: center;
-             border: 1.5px solid light-dark(rgba(60,40,90,.25), rgba(210,195,235,.25));
-             background: light-dark(rgba(255,255,255,.85), rgba(20,14,30,.85));
+             display: flex; flex-direction: column; align-items: center; gap: var(--s-4);
+             padding: var(--s-5) var(--s-5) var(--s-5); border-radius: var(--r-lg); text-align: center;
+             border: 1px solid var(--line); box-sizing: border-box;
+             background: color-mix(in srgb, var(--field) 92%, transparent);
+             box-shadow: 0 .8rem 2.4rem light-dark(rgb(60 50 30 / .14), rgb(0 0 0 / .5));
              backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-             color: light-dark(#231a33, #e0d6f0); width: min(82vw, 20rem); z-index: 60; }
+             color: var(--ink); width: min(90vw, 22rem); z-index: 60; }
   #overlay.hide { display: none; }
-  #overlay h1 { font-size: 1.2rem; margin: 0; opacity: .8; }
-  #msg { margin: 0; opacity: .7; white-space: pre-line; line-height: 1.5; }
-  #result { font-weight: bold; white-space: pre-line; min-height: 0; }
-  #btn { font: inherit; font-size: 1.15rem; padding: .8rem 2.4rem;
-         border-radius: 2rem; border: 2px solid currentColor;
-         background: none; color: inherit; cursor: pointer; }
-  #btn:active { transform: scale(.96); }
-  #btn:disabled { opacity: .4; cursor: default; }
-  .endbtns { display: flex; flex-direction: column; align-items: center; gap: .6rem; }
+  #overlay .bl-head { margin: 0; align-self: stretch; text-align: left; }
+  #msg { margin: 0; color: var(--muted); font-size: var(--t-small); white-space: pre-line; line-height: 1.6; }
+  #msg:empty { display: none; }
+  #result { font-size: 1.15rem; font-weight: 800; white-space: pre-line; line-height: 1.5; min-height: 0; }
+  #result:empty { display: none; }
+  #btn { font-size: 1.1rem; min-height: 3.2rem; padding: .7rem 2.6rem; }
+  .endbtns { display: flex; flex-direction: column; align-items: center; gap: var(--s-2); }
   .endbtns.hide { display: none; }
-  .imgrow { display: flex; gap: .6rem; }
-  .minibtn { font: inherit; font-size: .9rem; padding: .5rem 1.1rem;
-             border-radius: 2rem; border: 1.5px solid currentColor;
-             background: none; color: inherit; cursor: pointer; opacity: .85;
-             text-decoration: none; display: inline-block; text-align: center; }
-  .minibtn:active { transform: scale(.96); }
-  #best { opacity: .5; font-size: .85rem; min-height: 1.2em; margin: 0; }
+  .imgrow { display: flex; gap: var(--s-2); }
+  #best { margin: 0; }
+  #best:empty { display: none; }
 </style>
 </head>
 <body>
 <!-- 카드 아이콘: 🎯+ (다트 + 작은 플러스 배지 — 소스 첫 이모지가 카드로 추출됨) -->
 <div id="overlay">
-  <h1>🎯 다트 서커스 EX</h1>
+  <header class="bl-head">
+    <span class="bl-bubble" aria-hidden="true">🎯</span>
+    <h1>다트 서커스 EX</h1>
+    <p>파워 게이지로 세기를 골라 던져요</p>
+  </header>
   <p id="msg">화면 아무 곳이나 누르고 있으면
 그 자리에 파워 게이지가 0↔최대로 오르내려요.
 손을 떼는 순간의 세기로 다트가 날아갑니다.
 세면 빠르게, 약하면 느리게 —
 도착 타이밍을 노려 원에 꽂으세요!
 부딪히면 끝, 많이 꽂을수록 고득점.</p>
-  <div id="result"></div>
-  <button id="btn">시작!</button>
+  <div id="result" class="bl-num"></div>
+  <button id="btn" class="bl-btn bl-btn--primary">시작!</button>
   <div class="endbtns hide" id="endbtns">
     <div class="imgrow">
-      <button class="minibtn" id="shareimg">🖼️ 이미지 공유</button>
-      <button class="minibtn" id="saveimg">💾 저장</button>
+      <button class="bl-btn bl-btn--sm" id="shareimg">🖼️ 이미지 공유</button>
+      <button class="bl-btn bl-btn--sm" id="saveimg">💾 저장</button>
     </div>
-    <a class="minibtn" id="more" href="https://slop.bubblelab.dev">🎪 다른 게임도 해보기</a>
+    <a class="bl-btn bl-btn--sm" id="more" href="https://slop.bubblelab.dev">🎪 다른 게임도 해보기</a>
   </div>
-  <p id="best"></p>
+  <p id="best" class="bl-note bl-num"></p>
 </div>
 <canvas id="c"></canvas>
 <script>

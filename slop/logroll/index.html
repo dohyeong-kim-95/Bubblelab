@@ -5,53 +5,60 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>통나무굴리기</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🪵</text></svg>">
+<link rel="stylesheet" href="/_shared/bubble.css">
 <style>
-  :root { color-scheme: light dark; }
+  :root { color-scheme: light dark; --accent-h: 73; }
   html, body { height: 100%; }
-  body { margin: 0; overflow: hidden; font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
-         background: light-dark(#dfeef7, #0b1420); user-select: none;
+  /* 바탕색은 하늘(판의 일부) — 캔버스가 반투명 하늘·물을 이 위에 칠한다 */
+  html, body { background: light-dark(#dfeef7, #0b1420); }
+  body { margin: 0; overflow: hidden; user-select: none;
          -webkit-user-select: none; touch-action: none; }
   canvas { display: block; }
   /* 좌우 조작 힌트 */
   .hint { position: fixed; top: 0; bottom: 0; width: 50%; display: flex;
           align-items: center; justify-content: center; font-size: 3rem;
-          color: light-dark(#123, #cde); opacity: 0; pointer-events: none;
+          color: var(--ink); opacity: 0; pointer-events: none;
           transition: opacity .08s; }
   .hint.l { left: 0; } .hint.r { right: 0; }
   .hint.on { opacity: .28; }
+  /* 시작·결과 카드 — 판 위에 떠 있는 종이 한 장 */
   #overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-             display: flex; flex-direction: column; align-items: center; gap: 1rem;
-             padding: 1.6rem 2rem; border-radius: 1.25rem; text-align: center;
-             border: 1.5px solid light-dark(rgba(30,50,70,.25), rgba(200,215,235,.25));
-             background: light-dark(rgba(255,255,255,.88), rgba(15,22,32,.88));
+             display: flex; flex-direction: column; align-items: center; gap: var(--s-4);
+             padding: var(--s-5); border-radius: var(--r-lg); text-align: center;
+             border: 1px solid var(--line); box-sizing: border-box;
+             background: color-mix(in srgb, var(--field) 92%, transparent);
+             box-shadow: 0 .8rem 2.4rem light-dark(rgb(30 50 70 / .16), rgb(0 0 0 / .5));
              backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-             color: light-dark(#123, #cde); width: min(82vw, 20rem); z-index: 5; }
+             color: var(--ink); width: min(88vw, 20.5rem); z-index: 5; }
   #overlay.hide { display: none; }
-  #overlay h1 { font-size: 1.2rem; margin: 0; opacity: .8; }
-  #msg { margin: 0; opacity: .72; white-space: pre-line; font-size: .92rem; line-height: 1.5; }
-  #result { font-weight: bold; white-space: pre-line; min-height: 0; }
-  #btn { font: inherit; font-size: 1.15rem; padding: .8rem 2.4rem;
-         border-radius: 2rem; border: 2px solid currentColor;
-         background: none; color: inherit; cursor: pointer; }
-  #btn:active { transform: scale(.96); }
-  #btn:disabled { opacity: .4; cursor: default; }
-  #best { opacity: .5; font-size: .85rem; min-height: 1.2em; margin: 0; }
+  #overlay .bl-head { margin: 0; align-self: stretch; text-align: left; }
+  #msg { margin: 0; color: var(--muted); white-space: pre-line; font-size: var(--t-small); line-height: 1.6; }
+  #msg:empty { display: none; }
+  #result { font-size: 1.15rem; font-weight: 800; white-space: pre-line; line-height: 1.5; min-height: 0; }
+  #result:empty { display: none; }
+  #btn { font-size: 1.1rem; min-height: 3.2rem; padding: .7rem 2.6rem; }
+  #best { margin: 0; }
+  #best:empty { display: none; }
 </style>
 </head>
 <body>
 <div class="hint l" id="hintL">◀</div>
 <div class="hint r" id="hintR">▶</div>
 <div id="overlay">
-  <h1>🪵 통나무굴리기</h1>
+  <header class="bl-head">
+    <span class="bl-bubble" aria-hidden="true">🪵</span>
+    <h1>통나무굴리기</h1>
+    <p>통나무 위에서 오래 버티기</p>
+  </header>
   <p id="msg">통나무 위 사람이 떨어지지 않게
 균형을 잡으세요!
 
 화면 왼쪽/오른쪽(← →)을 눌러
 통나무를 그 방향으로 굴립니다.
 오래 버틸수록 고득점!</p>
-  <div id="result"></div>
-  <button id="btn">시작!</button>
-  <p id="best"></p>
+  <div id="result" class="bl-num"></div>
+  <button id="btn" class="bl-btn bl-btn--primary">시작!</button>
+  <p id="best" class="bl-note bl-num"></p>
 </div>
 <canvas id="c"></canvas>
 <script>

@@ -4,17 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title>맥주 따르기</title>
+<link rel="stylesheet" href="/_shared/bubble.css">
 <style>
-  :root { color-scheme: light dark; }
+  :root { color-scheme: light dark; --accent-h: 144; }
   html, body { margin: 0; height: 100%; overflow: hidden; touch-action: none; }
-  body { font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
-         background: light-dark(#eef2f6, #10161f);
-         color: light-dark(#17202b, #dbe5ef);
+  html { background: var(--sunk); }
+  body { background: transparent;
          display: flex; flex-direction: column; align-items: center;
          justify-content: center; gap: .6rem; padding: 1rem 1rem 5rem;
          box-sizing: border-box; user-select: none; -webkit-user-select: none; }
-  h1 { margin: 0; font-size: 1.1rem; opacity: .75; }
-  #status { min-height: 2.7em; font-size: .95rem; opacity: .9; text-align: center;
+  .bl-head { margin: 0; width: min(92vw, 20rem); }
+  .bl-head .bl-bubble { width: 2.5rem; font-size: 1.2rem; }
+  .bl-head h1 { font-size: 1.2rem; }
+  #status { min-height: 2.7em; font-size: .95rem; font-weight: 600; text-align: center;
             line-height: 1.35; width: min(92vw, 22rem); }
   #rig { position: relative; width: 20rem; height: 24rem; margin-top: 1.3rem; }
   /* 손님 (인내심에 따라 표정이 바뀐다) */
@@ -73,35 +75,35 @@
          background: #f6b93b; opacity: 0; transition: opacity .3s; }
   body.spilled #spill { opacity: .8; }
   /* 인내심 게이지 */
-  #patience { width: 15rem; height: .5rem; border-radius: .3rem;
-         background: light-dark(#d5dee6, #223244); overflow: hidden; }
-  #patience div { height: 100%; width: 100%;
-         background: light-dark(#3fae5f, #4dd07a); transition: width .2s linear; }
-  #patience div.low { background: #e05252; }
-  #hint { opacity: .55; font-size: .78rem; text-align: center; line-height: 1.5; }
-  #best { opacity: .6; font-size: .85rem; min-height: 1em; }
+  #patience { width: 15rem; height: .55rem; border-radius: var(--pill);
+         background: var(--field); box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; }
+  #patience div { height: 100%; width: 100%; border-radius: var(--pill);
+         background: var(--ok); transition: width .2s linear; }
+  #patience div.low { background: var(--bad); }
+  #hint { text-align: center; }
+  #best { color: var(--muted); font-size: .85rem; min-height: 1em; }
   #serve { position: fixed; bottom: 4.3rem; left: 50%; transform: translateX(-50%);
-         z-index: 50; font: inherit; font-weight: bold; font-size: 1.05rem;
-         padding: .85rem 2rem; white-space: nowrap; border-radius: 2rem;
-         border: 2px solid currentColor;
-         background: light-dark(rgba(255,255,255,.85), rgba(20,26,36,.85));
-         backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
-         color: inherit; cursor: pointer;
+         z-index: 50; font-size: 1.05rem; font-weight: 700;
+         min-height: 3.2rem; padding: .85rem 2rem; white-space: nowrap;
+         box-shadow: 0 .4rem 1.2rem light-dark(rgba(60,50,30,.18), rgba(0,0,0,.45));
          display: none; }  /* 첫 붓기 전에는 숨긴다 */
-  #serve.show { display: block; }
+  #serve:active { transform: translateX(-50%) scale(.97); }
+  #serve.show { display: inline-flex; }
   /* 신기록 닉네임 패널이 서빙 버튼을 가리지 않게 이 페이지에선 위로 */
   body #bl-claim { bottom: 8.4rem; }
   /* 데스크톱: 사용 영역(모바일 폭 스테이지) 밖은 톤을 낮춰 구분 */
-  body::before { content: ""; position: fixed; inset: 0; z-index: -2;
-                 background: light-dark(#dee6ee, #0a0e15); }
   body::after { content: ""; position: fixed; top: 0; bottom: 0; left: 50%;
                 transform: translateX(-50%); width: min(100vw, 34rem); z-index: -1;
-                background: light-dark(#eef2f6, #10161f);
-                box-shadow: 0 0 1.5rem light-dark(rgba(30,50,70,.14), rgba(0,0,0,.5)); }
+                background: var(--bg);
+                box-shadow: 0 0 1.5rem light-dark(rgba(60,50,30,.12), rgba(0,0,0,.5)); }
 </style>
 </head>
 <body>
-<h1>🍺 맥주 따르기</h1>
+<header class="bl-head">
+  <span class="bl-bubble" aria-hidden="true">🍺</span>
+  <h1>맥주 따르기</h1>
+  <p>500cc 눈금에 딱 맞게 따라 보세요</p>
+</header>
 <div id="rig">
   <div id="tap"><div id="handle"></div></div>
   <div id="stream"></div>
@@ -118,8 +120,8 @@
 </div>
 <div id="patience"><div></div></div>
 <div id="status">꾹 누르면 따르고, 떼면 멈춰요</div>
-<div id="hint">거품 가라앉는 타이밍을 노려 500cc 딱 맞게!<br>거품까지 넘치면 실패 · 손님 인내심 4초 · 오차가 같으면 빨리 딴 쪽이 승리</div>
-<button id="serve">🍺 서빙하기</button>
+<div id="hint" class="bl-note">거품 가라앉는 타이밍을 노려 500cc 딱 맞게!<br>거품까지 넘치면 실패 · 손님 인내심 4초 · 오차가 같으면 빨리 딴 쪽이 승리</div>
+<button id="serve" class="bl-btn bl-btn--primary">🍺 서빙하기</button>
 <script>
 const CAPACITY = 600;   // 잔 크기 (cc)
 const TARGET = 500;     // 목표선

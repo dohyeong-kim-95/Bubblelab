@@ -5,68 +5,80 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>공룡 점프 — 판다 구경</title>
 <!-- 🦖 크롬 오프라인 공룡 게임 오마주. 일정 거리마다 길가에 판다가 앉아 대나무를 먹는다. -->
+<link rel="stylesheet" href="/_shared/bubble.css">
 <style>
-  :root { color-scheme: light dark; }
+  :root { color-scheme: light dark; --accent-h: 126; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; }
-  body {
-    margin: 0; overflow: hidden; user-select: none; -webkit-user-select: none;
-    font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
-    color: light-dark(#2a2a2a, #d9d9d9);
-    background: light-dark(#f7f7f7, #0e0e10);
-  }
+  body { margin: 0; overflow: hidden; user-select: none; -webkit-user-select: none; }
   #stage {
     position: relative; width: 100%; height: 100dvh; overflow: hidden; cursor: pointer;
-    background: light-dark(#f7f7f7, #0e0e10);
+    background: var(--bg);
   }
   canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
 
-  /* HUD */
+  /* HUD — 밤낮으로 바뀌는 하늘 위에서도 읽히게 종이색 알약 위에 숫자를 얹는다 */
   #hud {
     position: absolute; top: 0; left: 0; right: 0; z-index: 10;
     display: flex; justify-content: space-between; align-items: flex-start;
-    padding: .9rem 1.1rem; pointer-events: none;
-    font-size: .95rem; letter-spacing: .08em; font-variant-numeric: tabular-nums;
+    padding: var(--s-3) var(--s-4); pointer-events: none;
   }
-  #hi { opacity: .55; }
-  #score { font-weight: bold; }
+  .hud-pill {
+    padding: .3rem .8rem; border-radius: var(--pill);
+    font-family: var(--mono); font-size: .95rem; letter-spacing: .04em;
+    color: var(--ink); background: color-mix(in srgb, var(--field) 88%, transparent);
+    box-shadow: inset 0 0 0 1px var(--line);
+    backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  }
+  .hud-pill:empty { display: none; }
+  #hi { color: var(--muted); font-size: var(--t-small); }
+  #score { font-weight: 700; }
 
-  /* 시작/종료 오버레이 */
+  /* 시작/종료 오버레이 — 판 위에 카드 한 장 */
   #overlay {
     position: absolute; inset: 0; z-index: 20;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: .55rem; text-align: center; pointer-events: none;
-    background: light-dark(rgba(247,247,247,.55), rgba(14,14,16,.55));
-    backdrop-filter: blur(1px);
+    display: grid; place-items: center; padding: var(--s-4);
+    pointer-events: none;
+    background: color-mix(in srgb, var(--bg) 45%, transparent);
     transition: opacity .25s;
   }
   #overlay.hide { opacity: 0; pointer-events: none; }
-  #bigmsg { font-size: 1.6rem; font-weight: bold; letter-spacing: .04em; }
-  #submsg { font-size: .95rem; opacity: .7; line-height: 1.7; }
-  #finalScore { font-size: 1.05rem; opacity: .85; }
-  kbd {
-    font-family: inherit; font-size: .82em; padding: .05em .45em; border-radius: .35em;
-    border: 1px solid light-dark(#0003, #fff3); background: light-dark(#0000000d, #ffffff12);
+  .ov-card {
+    display: flex; flex-direction: column; align-items: center; gap: var(--s-2);
+    width: min(100%, 24rem); text-align: center; padding: var(--s-5) var(--s-4);
+    box-shadow: 0 10px 30px light-dark(rgb(60 50 30 / .14), rgb(0 0 0 / .45));
   }
-  .pandaline { font-size: .82rem; opacity: .6; margin-top: .35rem; }
+  .ov-card .bl-bubble { width: 3.6rem; font-size: 1.8rem; margin-bottom: var(--s-1); }
+  #bigmsg { margin: 0; font-size: var(--t-h1); font-weight: 800; letter-spacing: -.02em; line-height: 1.25; }
+  #submsg { font-size: var(--t-small); color: var(--muted); line-height: 1.8; }
+  #finalScore { font-family: var(--mono); font-size: 1.05rem; font-weight: 700; color: var(--accent); }
+  #finalScore:empty { display: none; }
+  kbd {
+    font-family: var(--mono); font-size: .82em; padding: .05em .45em; border-radius: .35em;
+    color: var(--ink); border: 1px solid var(--line); background: var(--sunk);
+  }
+  .pandaline { margin-top: var(--s-1); padding: var(--s-2) var(--s-3); line-height: 1.6; }
 </style>
 </head>
 <body>
 <div id="stage">
   <canvas id="c"></canvas>
   <div id="hud">
-    <span id="score">0 m</span>
-    <span id="hi"></span>
+    <span id="score" class="hud-pill bl-num">0 m</span>
+    <span id="hi" class="hud-pill bl-num"></span>
   </div>
   <div id="overlay">
-    <div id="bigmsg">🦖 공룡 점프</div>
-    <div id="finalScore"></div>
+   <div class="ov-card bl-panel">
+    <span class="bl-bubble" id="ovEmoji" aria-hidden="true">🦖</span>
+    <h1 id="bigmsg">공룡 점프</h1>
+    <div id="finalScore" class="bl-num"></div>
     <div id="submsg">
       <kbd>Space</kbd> / <kbd>↑</kbd> / 탭 — 점프<br>
       <kbd>↓</kbd> 누르는 동안 — 숙이기<br>
       선인장과 익룡을 피하세요
     </div>
-    <div class="pandaline">🐼 500m마다 판다 · 💧 1km마다 음수대 · 🏁 5·10·21.1·42.195km 마라톤 지점</div>
+    <div class="pandaline bl-sunk bl-note">🐼 500m마다 판다 · 💧 1km마다 음수대 · 🏁 5·10·21.1·42.195km 마라톤 지점</div>
+   </div>
   </div>
 </div>
 
@@ -267,7 +279,8 @@ function gameOver() {
 
   $("finalScore").textContent = `${m.toLocaleString("ko-KR")} m 주파` +
     (m >= hi ? "  🏅 최고 기록!" : `   (최고 ${hi.toLocaleString("ko-KR")} m)`);
-  $("bigmsg").textContent = "💥 부딪혔어요";
+  $("ovEmoji").textContent = "💥";
+  $("bigmsg").textContent = "부딪혔어요";
   $("submsg").innerHTML = "<kbd>Space</kbd> / 탭 — 다시 시작";
   $("overlay").classList.remove("hide");
 }

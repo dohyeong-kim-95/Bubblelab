@@ -4,15 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>야구 리듬 — 홈런 타이밍</title>
+<link rel="stylesheet" href="/_shared/bubble.css">
 <style>
-  :root { color-scheme: light dark; }
+  :root { color-scheme: light dark; --accent-h: 76; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }  /* 탭 시 전체화면 초록 깜빡임 제거 */
   html, body { height: 100%; }
   body {
     margin: 0; overflow: hidden; user-select: none; -webkit-user-select: none;
-    font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
-    color: light-dark(#243040, #dce6f0);
-    background: light-dark(#eaf1f7, #0c1219);
   }
   #field {
     position: relative; width: 100%; height: 100dvh; overflow: hidden; cursor: pointer;
@@ -34,9 +32,13 @@
   #hud {
     position: absolute; top: 0; left: 0; right: 0; z-index: 20;
     display: flex; justify-content: space-between; align-items: center;
-    padding: .9rem 1.1rem; pointer-events: none; font-size: .95rem;
+    padding: var(--s-3) var(--s-4); pointer-events: none; font-size: .95rem;
   }
-  #lv { font-weight: bold; letter-spacing: .02em; }
+  /* 레벨 표시 — 하늘·잔디 위에서도 읽히게 종이색 알약 */
+  #lv { padding: .3rem .85rem; border-radius: var(--pill); font-weight: 700; font-size: var(--t-small);
+        color: var(--ink); background: color-mix(in srgb, var(--field) 88%, transparent);
+        box-shadow: inset 0 0 0 1px var(--line);
+        backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
   #strikes { display: flex; gap: .35rem; font-size: 1.1rem; align-self: flex-start; }
   /* 전광판(외야 LED 스코어보드) */
   #board {
@@ -130,24 +132,26 @@
     transition: opacity .4s ease-out;
   }
   /* 오버레이 */
+  /* 시작/결과 — 구장 위에 카드 한 장(방울 + 제목 + 설명 + 버튼) */
   #overlay {
-    position: absolute; inset: 0; z-index: 30; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; gap: 1rem; text-align: center; padding: 1.4rem;
-    background: light-dark(rgba(234,241,247,.9), rgba(12,18,25,.9));
+    position: absolute; inset: 0; z-index: 30; display: grid; place-items: center;
+    padding: var(--s-4); overflow-y: auto;
+    background: color-mix(in srgb, var(--bg) 55%, transparent);
     backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
   }
   #overlay.hidden { display: none; }
-  #overlay h1 { font-size: clamp(1.6rem, 6vmin, 2.6rem); margin: 0; }
-  #overlay p { margin: 0; opacity: .8; line-height: 1.7; font-size: clamp(.85rem, 3.4vmin, 1rem); }
-  #overlay .big { font-size: 4rem; margin-bottom: .3rem; }
-  #btn {
-    margin-top: .6rem; font: bold 1rem ui-monospace, monospace; padding: .8rem 1.8rem;
-    border-radius: 2rem; border: 2px solid currentColor; cursor: pointer; color: inherit;
-    background: light-dark(rgba(255,255,255,.6), rgba(30,40,55,.6));
+  .ov-card {
+    display: flex; flex-direction: column; align-items: center; gap: var(--s-3);
+    width: min(100%, 26rem); text-align: center; padding: var(--s-5) var(--s-4);
+    box-shadow: 0 12px 34px light-dark(rgb(40 60 80 / .16), rgb(0 0 0 / .45));
   }
-  #btn:active { transform: scale(.95); }
-  .key { display: inline-block; padding: .05rem .5rem; border: 1.5px solid currentColor;
-         border-radius: .4rem; font-size: .85em; opacity: .85; }
+  #overlay .big { width: 4.2rem; font-size: 1.7rem; letter-spacing: -.1em; white-space: nowrap; }
+  #overlay h1 { margin: 0; font-size: var(--t-h1); font-weight: 800; letter-spacing: -.02em; line-height: 1.25; }
+  #overlay p { margin: 0; line-height: 1.75; font-size: var(--t-small); color: var(--muted); }
+  #overlay p b { color: var(--ink); }
+  #btn { margin-top: var(--s-1); min-width: 9rem; font-size: 1.05rem; }
+  .key { display: inline-block; padding: .05rem .5rem; border: 1px solid var(--line);
+         border-radius: .4rem; font-size: .85em; color: var(--ink); background: var(--sunk); }
   #countin {
     position: absolute; top: 40%; left: 50%; transform: translate(-50%,-50%);
     z-index: 16; font-size: 16vmin; font-weight: bold; opacity: 0; pointer-events: none;
@@ -199,7 +203,8 @@
   <div id="judge"></div>
 
   <div id="overlay">
-    <div class="big">⚾</div>
+   <div class="ov-card bl-panel">
+    <div class="big bl-bubble" aria-hidden="true">⚾</div>
     <h1>야구 리듬 — 홈런 타이밍</h1>
     <p>
       사이드암 투수의 <b>투심</b>이 옆으로 <b>크게 휘며(런)</b> 커져서 날아와요.<br>
@@ -210,7 +215,8 @@
       레벨이 오를수록 판정이 <b>빡세져요</b>.<br>
       세 레벨 다 통과하면 <b>🏆 공동 1등</b>.
     </p>
-    <button id="btn">플레이</button>
+    <button id="btn" class="bl-btn bl-btn--primary">플레이</button>
+   </div>
   </div>
 </div>
 

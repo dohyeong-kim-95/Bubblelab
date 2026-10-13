@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title>4분할 반응속도 테스트</title>
+<link rel="stylesheet" href="/_shared/bubble.css">
 <style>
-  :root { color-scheme: light dark; }
+  :root { color-scheme: light dark; --accent-h: 54; }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; overscroll-behavior: none; }
+  html { background: var(--sunk); }
   body {
-    font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
-    background: light-dark(#dce5ed, #090d13);
-    color: light-dark(#17202b, #dbe5ef);
+    background: var(--sunk);
     user-select: none;
     -webkit-user-select: none;
   }
@@ -25,39 +25,29 @@
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
     gap: .8rem;
-    background: light-dark(#eef2f6, #10161f);
-    box-shadow: 0 0 1.5rem light-dark(rgba(30,50,70,.14), rgba(0,0,0,.5));
+    background: var(--bg);
+    box-shadow: 0 0 1.5rem light-dark(rgba(60,50,30,.12), rgba(0,0,0,.5));
   }
   header {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: .35rem .8rem;
+    gap: .5rem .8rem;
     align-items: center;
   }
-  h1 { margin: 0; font-size: 1.15rem; }
+  header .bl-head { margin: 0; }
   #summary {
     grid-column: 1 / -1;
     min-height: 2.6em;
     margin: 0;
-    opacity: .7;
-    font-size: .78rem;
-    line-height: 1.4;
+    color: var(--muted);
+    font-size: .8rem;
+    line-height: 1.45;
   }
   #start {
     grid-column: 2;
     grid-row: 1;
-    font: inherit;
-    font-size: .85rem;
-    font-weight: bold;
-    padding: .55rem .9rem;
-    border: 1.5px solid currentColor;
-    border-radius: 999px;
-    background: light-dark(#fff, #1c2735);
-    color: inherit;
-    cursor: pointer;
+    min-width: 4.6rem;
   }
-  #start:active { transform: scale(.96); }
-  #start:disabled { cursor: default; opacity: .45; transform: none; }
   #grid {
     min-height: 0;
     display: grid;
@@ -69,23 +59,25 @@
     min-width: 0;
     min-height: 0;
     padding: .5rem;
-    border: 2px solid light-dark(rgba(23,32,43,.16), rgba(219,229,239,.18));
-    border-radius: 1rem;
+    border: 1.5px solid var(--line);
+    border-radius: var(--r-lg);
     display: grid;
     place-content: center;
     gap: .35rem;
     text-align: center;
     touch-action: manipulation;
     font: inherit;
-    color: inherit;
+    color: var(--ink);
     cursor: pointer;
     transition: background .12s, transform .12s, border-color .12s;
   }
   .zone:active { transform: scale(.98); }
   .zone.idle {
-    background: light-dark(#dde5ec, #1c2735);
+    background: var(--field);
     cursor: default;
   }
+  .zone.idle strong { color: var(--muted); }
+  /* 빨강·초록·노랑은 게임의 신호라 그대로 둔다 */
   .zone.wait {
     background: light-dark(#d94f58, #762128);
     border-color: transparent;
@@ -98,7 +90,8 @@
     transform: scale(1.015);
   }
   .zone.done {
-    background: light-dark(#d9e8f5, #21344a);
+    background: var(--accent-soft);
+    border-color: var(--accent-line);
     cursor: default;
   }
   .zone.early {
@@ -107,10 +100,12 @@
     cursor: default;
   }
   .zone strong {
+    font-family: var(--mono);
     font-size: clamp(1.25rem, 7vw, 2.25rem);
     font-variant-numeric: tabular-nums;
   }
-  .zone span { min-height: 1.2em; font-size: .75rem; opacity: .72; }
+  .zone.wait strong, .zone.go strong { font-family: var(--sans); font-weight: 800; }
+  .zone span { min-height: 1.2em; font-size: .78rem; opacity: .8; }
   #result-overlay {
     position: fixed;
     inset: 0;
@@ -118,7 +113,7 @@
     display: grid;
     place-items: center;
     padding: 1.2rem 1.2rem 5rem;
-    background: light-dark(rgba(222,230,238,.82), rgba(7,11,17,.82));
+    background: color-mix(in srgb, var(--sunk) 80%, transparent);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
   }
@@ -126,24 +121,22 @@
   #result-card {
     width: min(86vw, 20rem);
     padding: 1.5rem 1.35rem;
-    border: 1.5px solid light-dark(rgba(30,50,70,.22), rgba(200,215,235,.22));
-    border-radius: 1.25rem;
-    background: light-dark(rgba(255,255,255,.9), rgba(20,28,39,.92));
-    box-shadow: 0 1rem 3rem rgba(0,0,0,.2);
+    box-shadow: 0 1rem 3rem light-dark(rgba(60,50,30,.18), rgba(0,0,0,.5));
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: .75rem;
     text-align: center;
   }
-  #result-icon { font-size: 2.2rem; }
-  #result-title { margin: 0; font-size: 1.1rem; opacity: .78; }
+  #result-icon { width: 3.4rem; font-size: 1.7rem; }
+  #result-title { margin: 0; font-size: 1.1rem; font-weight: 800; }
   #result-average {
-    font-size: 2.35rem;
-    font-weight: bold;
-    font-variant-numeric: tabular-nums;
+    font-family: var(--mono);
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: var(--accent);
   }
-  #result-grade { margin: -.2rem 0 .1rem; font-size: .85rem; opacity: .72; }
+  #result-grade { margin: -.2rem 0 .1rem; font-size: .88rem; color: var(--muted); }
   #result-breakdown {
     width: 100%;
     display: grid;
@@ -152,34 +145,23 @@
   }
   .result-item {
     padding: .6rem .4rem;
-    border-radius: .7rem;
-    background: light-dark(#e9eef3, #182331);
+    border-radius: var(--r-sm);
+    background: var(--sunk);
     display: flex;
     flex-direction: column;
     gap: .15rem;
   }
-  .result-item.penalty { background: light-dark(#f5dfad, #5f4819); }
-  .result-item small { opacity: .55; }
-  .result-item b { font-variant-numeric: tabular-nums; }
-  #result-best { margin: 0; min-height: 1.2em; font-size: .8rem; opacity: .58; }
-  #retry {
-    font: inherit;
-    font-size: 1.05rem;
-    font-weight: bold;
-    padding: .78rem 2rem;
-    border: 2px solid currentColor;
-    border-radius: 2rem;
-    background: none;
-    color: inherit;
-    cursor: pointer;
-  }
-  #retry:active { transform: scale(.96); }
+  .result-item.penalty { background: color-mix(in srgb, var(--warn) 20%, var(--field)); }
+  .result-item small { color: var(--muted); font-size: var(--t-caption); }
+  .result-item b { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  #result-best { margin: 0; min-height: 1.2em; font-size: .82rem; color: var(--muted); }
+  #retry { min-width: 10rem; font-size: 1.05rem; }
   #retry:disabled { opacity: .4; cursor: default; transform: none; }
   @media (max-height: 570px) {
     #app { padding-top: .55rem; gap: .5rem; }
     #summary { min-height: 1.2em; }
     #result-card { padding: 1rem 1.1rem; gap: .5rem; }
-    #result-icon { font-size: 1.6rem; }
+    #result-icon { width: 2.6rem; font-size: 1.3rem; }
     #result-average { font-size: 1.8rem; }
   }
 </style>
@@ -187,8 +169,12 @@
 <body>
 <main id="app">
   <header>
-    <h1>⚡ 4분할 반응속도</h1>
-    <button id="start" type="button">시작</button>
+    <div class="bl-head">
+      <span class="bl-bubble" aria-hidden="true">⚡</span>
+      <h1>4분할 반응속도</h1>
+      <p>네 칸, 초록이 되는 순간 탭!</p>
+    </div>
+    <button id="start" class="bl-btn bl-btn--primary" type="button">시작</button>
     <p id="summary">네 칸이 각각 초록색으로 바뀌는 순간 누르세요.<br>미리 누른 칸은 1000ms로 계산됩니다.</p>
   </header>
   <section id="grid" aria-label="반응속도 측정 영역">
@@ -207,14 +193,14 @@
   </section>
 </main>
 <div id="result-overlay" class="hidden" role="dialog" aria-modal="true" aria-labelledby="result-title">
-  <section id="result-card">
-    <div id="result-icon">⚡</div>
+  <section id="result-card" class="bl-panel">
+    <div id="result-icon" class="bl-bubble" aria-hidden="true">⚡</div>
     <h2 id="result-title">측정 완료!</h2>
-    <div id="result-average">평균 0ms</div>
+    <div id="result-average" class="bl-num">평균 0ms</div>
     <p id="result-grade"></p>
     <div id="result-breakdown"></div>
     <p id="result-best"></p>
-    <button id="retry" type="button">다시 도전</button>
+    <button id="retry" class="bl-btn bl-btn--primary" type="button">다시 도전</button>
   </section>
 </div>
 <script>
