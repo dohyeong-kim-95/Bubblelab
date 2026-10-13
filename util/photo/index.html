@@ -6,38 +6,43 @@
 <title>📸 네컷사진</title>
 <meta name="description" content="프레임을 고르고 3초 간격으로 찍는 네컷사진.">
 <meta name="bl-group" content="사진·이미지">
+<link rel="stylesheet" href="/_shared/bubble.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>📸</text></svg>">
 <style>
-  :root { color-scheme: light dark; --bg: light-dark(#f2f4f7, #0d131c);
-          --panel: light-dark(#fff, #171f2b); --line: light-dark(#d9e0e7, #2a3646);
-          --text: light-dark(#1c2733, #e2e9f0); --muted: light-dark(#6e7985, #91a0b2);
-          --accent: #df5f75; }
+  :root { --accent-h: 194; }
   * { box-sizing: border-box; }
-  body { margin: 0; min-height: 100dvh; background: var(--bg); color: var(--text);
-         font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
-         user-select: none; -webkit-user-select: none; }
-  button { font: inherit; color: inherit; cursor: pointer; border: 1px solid var(--line);
-           background: light-dark(#fff, #111923); border-radius: .75rem; padding: .75rem 1rem; }
+  body { margin: 0; min-height: 100dvh; user-select: none; -webkit-user-select: none; }
+  /* JS 가 만드는 버튼(프레임·리뷰·스티커 팩)도 같은 재료를 입도록 기본값을 bl-btn 쪽에 맞춘다 */
+  button { font: inherit; color: var(--ink); cursor: pointer; border: 1px solid var(--line);
+           background: var(--field); border-radius: var(--r); padding: .75rem 1rem;
+           transition: transform .12s, border-color .15s, background-color .15s; }
+  button:hover { border-color: var(--accent-line); }
   button:active { transform: scale(.97); }
-  button:disabled { opacity: .42; cursor: default; }
-  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: bold; }
+  button:disabled { opacity: .42; cursor: default; transform: none; }
+  .bl-btn[hidden] { display: none; }   /* bl-btn 의 inline-flex 가 hidden 속성을 이기지 않게 */
   .app { width: min(32rem, 100%); min-height: 100dvh; margin: 0 auto; padding: .8rem 1rem 1.5rem;
          display: flex; flex-direction: column; }
-  header { height: 2.8rem; display: grid; grid-template-columns: 2.6rem 1fr 2.6rem;
-           align-items: center; text-align: center; flex: none; }
-  header h1 { margin: 0; font-size: 1rem; }
-  #back { padding: .3rem; border: 0; background: transparent; font-size: 1.5rem; }
+  .app > header { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: .3rem;
+                  flex: none; margin-bottom: .4rem; }
+  /* 뒤로 버튼이 숨으면(첫 화면) 첫 칸이 비어도 제목 묶음은 늘 둘째 칸에 — 아니면 좁은 첫 칸에 갇힌다 */
+  .app > header .bl-head { grid-column: 2; margin: 0; column-gap: .65rem; }
+  .app > header .bl-bubble { width: 2.4rem; font-size: 1.15rem; }
+  .app > header h1 { font-size: 1.1rem; }
+  .app > header p { font-size: .78rem; margin-top: .05rem; }
+  #back { width: 2.4rem; height: 2.4rem; padding: 0; border-radius: 50%; font-size: 1.4rem; line-height: 1;
+          color: var(--muted); }
   #back[hidden] { visibility: hidden; display: block; }
   .step { display: none; flex: 1; min-height: 0; }
   .step.active { display: flex; flex-direction: column; animation: enter .22s ease-out; }
   .step[data-step="result"].active { justify-content: flex-start; }
   @keyframes enter { from { opacity: 0; transform: translateX(12px); } }
   .center { justify-content: center; align-items: center; text-align: center; }
-  .eyebrow { margin: 0 0 .45rem; color: var(--accent); font-size: .72rem; font-weight: bold; }
-  h2 { margin: 0; font-size: 1.45rem; line-height: 1.35; }
-  .desc { margin: .65rem 0 1.2rem; color: var(--muted); font-size: .78rem; line-height: 1.65; }
-  .privacy { margin: .9rem 0 0; color: var(--muted); font-size: .68rem; line-height: 1.55; }
+  .eyebrow { margin: 0 0 .45rem; color: var(--accent); font-family: var(--mono); font-size: .72rem;
+             font-weight: 700; letter-spacing: .04em; }
+  h2 { margin: 0; font-size: 1.45rem; font-weight: 800; letter-spacing: -.02em; line-height: 1.35; }
+  .desc { margin: .65rem 0 1.2rem; color: var(--muted); font-size: .86rem; line-height: 1.65; }
+  .privacy { margin: .9rem 0 0; color: var(--muted); font-size: .75rem; line-height: 1.55; }
+  #begin { min-width: 10rem; }
 
   .hero-strip { width: 7.2rem; aspect-ratio: 1/3; padding: .7rem; margin: 0 auto 1.2rem;
                 background: #f7dce5; border-radius: .35rem; box-shadow: 0 12px 28px #0002;
@@ -50,20 +55,23 @@
   .progress i { width: .45rem; height: .45rem; border-radius: 50%; background: var(--line); }
   .progress i.on { background: var(--accent); }
   .frame-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: .65rem; width: 100%; }
-  .frame-choice { padding: .6rem .35rem; color: var(--muted); font-size: .72rem; }
-  .frame-choice.active { border-color: var(--accent); color: var(--accent); font-weight: bold; }
+  .frame-choice { padding: .7rem .35rem; color: var(--muted); font-size: .82rem; border-radius: var(--r-lg); }
+  .frame-choice.active { border-color: var(--accent); color: var(--accent); font-weight: 700;
+                         background: color-mix(in srgb, var(--accent-soft) 55%, var(--field));
+                         box-shadow: inset 0 0 0 1px var(--accent); }
   .frame-mini { width: 3.7rem; aspect-ratio: 1/3; padding: .32rem; margin: 0 auto .45rem;
                 border-radius: .2rem; background: var(--frame); display: grid;
                 grid-template-rows: repeat(4, 1fr); gap: .14rem; border: 1px solid #8884; }
   .frame-mini span { background: linear-gradient(135deg, #a9c6d4, #dec0d1); border-radius: .08rem; }
   .frame-mini.custom { display: grid; place-items: center; color: var(--accent); font-size: 1.7rem;
-                       border: 2px dashed #df5f7580; }
+                       border: 2px dashed var(--accent-line); }
   .frame-mini-img { display: block; width: 3.7rem; aspect-ratio: 1/3; object-fit: cover;
                     margin: 0 auto .45rem; border-radius: .2rem; border: 1px solid #8884; background: #fff; }
   .frame-actions { margin-top: auto; padding-top: 1rem; display: grid; }
 
   .camera-box { position: relative; width: 100%; aspect-ratio: 3/2; flex: none; overflow: hidden;
-                border-radius: 1rem; background: #080b10; display: grid; place-items: center; }
+                border-radius: var(--r-lg); background: #080b10; display: grid; place-items: center;
+                box-shadow: inset 0 0 0 1px var(--line); }
   #camera { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
   #cameraPreview { display: block; width: 100%; height: 100%; background: #080b10; }
   #cameraEmpty { position: absolute; inset: 0; display: grid; place-items: center; padding: 1rem;
@@ -74,20 +82,23 @@
   #flash { position: absolute; inset: 0; pointer-events: none; opacity: 0; background: #fff; }
   #flash.on { animation: flash .22s ease-out; }
   @keyframes flash { 25% { opacity: .95; } to { opacity: 0; } }
-  #shotProgress { position: absolute; top: .55rem; right: .65rem; color: #fff; font-weight: bold;
-                  font-size: .78rem; text-shadow: 0 2px 5px #000; }
+  #shotProgress { position: absolute; top: .55rem; right: .65rem; color: #fff; font-weight: 700;
+                  font-family: var(--mono); font-size: .75rem; font-variant-numeric: tabular-nums;
+                  padding: .2rem .6rem; border-radius: var(--pill); background: #0008;
+                  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
   .shots { display: grid; grid-template-columns: repeat(4, 1fr); gap: .4rem; margin-top: .65rem; }
-  .shot { aspect-ratio: 3/2; border-radius: .35rem; overflow: hidden; background: var(--line);
+  .shot { aspect-ratio: 3/2; border-radius: var(--r-sm); overflow: hidden; background: var(--sunk);
           border: 2px solid transparent; }
   .shot.filled { border-color: var(--accent); }
   .shot canvas { display: block; width: 100%; height: 100%; object-fit: cover; }
   .camera-status { min-height: 1.35em; margin: .6rem 0; text-align: center;
-                   color: var(--muted); font-size: .72rem; }
+                   color: var(--muted); font-size: .8rem; }
   .camera-actions { display: grid; grid-template-columns: 1fr 1.25fr 1fr; gap: .45rem; }
-  .camera-actions button { padding: .65rem .25rem; font-size: .72rem; }
+  .camera-actions button { padding: .55rem .25rem; font-size: .85rem; }
 
   .review-list { display: grid; grid-template-columns: 1fr 1fr; gap: .65rem; margin-top: .9rem; }
-  .review-shot { padding: 0; overflow: hidden; aspect-ratio: 3/2; border: 3px solid transparent; }
+  .review-shot { padding: 0; overflow: hidden; aspect-ratio: 3/2; border: 3px solid transparent;
+                 border-radius: var(--r); background: var(--sunk); }
   .review-shot.active { border-color: var(--accent); }
   .review-shot canvas { display: block; width: 100%; height: 100%; }
   .review-actions { margin-top: auto; padding-top: .9rem; display: grid; grid-template-columns: 1fr 1.25fr; gap: .55rem; }
@@ -96,20 +107,21 @@
   .custom-colors { display: flex; align-items: center; gap: .45rem; padding: 0 .1rem .5rem;
                    overflow-x: auto; scrollbar-width: none; }
   .custom-colors::-webkit-scrollbar { display: none; }
-  .custom-colors > span { flex: none; color: var(--muted); font-size: .66rem; margin-right: .1rem; }
+  .custom-colors > span { flex: none; color: var(--muted); font-size: .75rem; margin-right: .1rem; }
   .color-swatch { width: 1.65rem; height: 1.65rem; flex: none; padding: 0; border-radius: 50%;
-                  background: var(--swatch); border: 2px solid #8885; }
+                  background: var(--swatch); border: 2px solid var(--line); }
   .color-swatch.active { outline: 2px solid var(--accent); outline-offset: 2px; }
   #customColor { width: 1.8rem; height: 1.8rem; flex: none; padding: 0; border: 0;
                  border-radius: 50%; overflow: hidden; background: transparent; }
   #customColor::-webkit-color-swatch-wrapper { padding: 0; }
-  #customColor::-webkit-color-swatch { border: 2px solid #8885; border-radius: 50%; }
+  #customColor::-webkit-color-swatch { border: 2px solid var(--line); border-radius: 50%; }
   .decorate-toolbar { display: grid; grid-template-columns: repeat(4, 1fr); gap: .35rem; }
-  .decorate-toolbar button { min-width: 0; padding: .62rem .25rem; font-size: .68rem; }
+  .decorate-toolbar button { min-width: 0; min-height: 2.4rem; padding: .45rem .25rem; font-size: .8rem; }
   #addSticker, #pickAsset { grid-column: span 2; }
   /* 스티커 영역은 touch-action:none이라 스트립 양옆에 스크롤용 여백을 남긴다 */
   .decorator-wrap { position: relative; width: min(82%, 28rem); aspect-ratio: 1/3; margin: .2rem auto .8rem;
-                    flex: none; box-shadow: 0 10px 28px #0003; overflow: hidden; background: #fff; }
+                    flex: none; box-shadow: 0 10px 28px #0003, 0 0 0 1px var(--line); overflow: hidden;
+                    background: #fff; border-radius: .2rem; }
   #decoratorCanvas, #stickerLayer { position: absolute; inset: 0; width: 100%; height: 100%; }
   #decoratorCanvas { display: block; }
   #stickerLayer { overflow: hidden; touch-action: none; }
@@ -118,30 +130,32 @@
              -webkit-user-drag: none; user-select: none; }
   .sticker.selected { border-color: #fff; outline: 2px solid var(--accent); }
   .decorate-help { margin: 0 0 .7rem; color: var(--muted); text-align: center;
-                   font-size: .68rem; line-height: 1.55; }
+                   font-size: .78rem; line-height: 1.55; }
   .decorate-finish { display: grid; grid-template-columns: 1fr 1.35fr; gap: .55rem; margin-bottom: .5rem; }
-  #exportFrame { font-size: .78rem; }
+  #exportFrame { font-size: .88rem; }
 
   #assetPicker { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column;
-                 justify-content: flex-end; background: #0007; }
+                 justify-content: flex-end; background: #0008; }
   #assetPicker[hidden] { display: none; }
-  .picker-sheet { max-height: 72dvh; overflow-y: auto; background: var(--panel);
-                  border-radius: 1rem 1rem 0 0; padding: .9rem 1rem 1.2rem; }
+  .picker-sheet { max-height: 72dvh; overflow-y: auto; background: var(--bg);
+                  border-top: 1px solid var(--line);
+                  border-radius: var(--r-lg) var(--r-lg) 0 0; padding: .9rem 1rem 1.2rem; }
   .picker-head { display: flex; justify-content: space-between; align-items: center; gap: .6rem; }
-  .picker-head h3 { margin: 0; font-size: .92rem; }
-  .picker-head button { padding: .45rem .8rem; font-size: .72rem; }
-  .picker-status { margin: .5rem 0; color: var(--muted); font-size: .7rem; line-height: 1.5; }
+  .picker-head h3 { margin: 0; font-size: 1rem; font-weight: 800; }
+  .picker-status { margin: .5rem 0; color: var(--muted); font-size: .78rem; line-height: 1.5; }
   .picker-tabs { display: flex; gap: .35rem; overflow-x: auto; padding: .55rem 0 .45rem;
                  scrollbar-width: none; }
   .picker-tabs::-webkit-scrollbar { display: none; }
   .picker-tabs button { flex: none; width: 3rem; height: 3rem; padding: .28rem;
-                        display: grid; place-items: center; border-radius: .6rem; }
-  .picker-tabs button.on { border-color: var(--accent); outline: 1px solid var(--accent); }
+                        display: grid; place-items: center; border-radius: var(--r-sm); }
+  .picker-tabs button.on { border-color: var(--accent); background: var(--accent-soft);
+                           box-shadow: inset 0 0 0 1px var(--accent); }
   .picker-tabs img { max-width: 100%; max-height: 100%; object-fit: contain; }
   /* minmax(0,1fr)+min-width:0 — 이미지 고유 폭이 트랙을 밀어내 가로로 넘치는 것 방지 */
   .picker-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .45rem;
                  min-height: 34dvh; align-content: start; touch-action: pan-y; }
-  .picker-grid button { min-width: 0; padding: .3rem; aspect-ratio: 1; display: grid; place-items: center; }
+  .picker-grid button { min-width: 0; padding: .3rem; aspect-ratio: 1; display: grid; place-items: center;
+                        border-radius: var(--r-sm); }
   .picker-grid button:disabled { opacity: .5; }
   .picker-grid img { width: 100%; height: 100%; object-fit: contain; }
   .picker-grid.swap-left { animation: packSwapL .16s ease-out; }
@@ -158,15 +172,14 @@
   .result-actions { display: grid; grid-template-columns: 1.25fr 1fr; gap: .55rem;
                     width: 100%; opacity: 0; pointer-events: none; }
   .result-actions.ready { opacity: 1; pointer-events: auto; transition: opacity .3s; }
-  .video-result { width: 100%; margin: .2rem 0 .7rem; padding: .65rem; border: 1px solid var(--line);
-                  border-radius: .8rem; background: var(--panel); text-align: left; }
+  .video-result { width: 100%; margin: .2rem 0 .7rem; padding: .75rem; text-align: left; }
   .video-result[hidden] { display: none; }
-  .video-result p { margin: 0 0 .5rem; color: var(--muted); font-size: .68rem; }
+  .video-result p { margin: 0 0 .5rem; color: var(--muted); font-size: .8rem; }
   #resultVideo { display: block; width: 100%; aspect-ratio: 3/2; object-fit: cover;
-                 border-radius: .5rem; background: #080b10; }
+                 border-radius: var(--r-sm); background: #080b10; }
   #resultVideo.mirror { transform: scaleX(-1); }
-  #resultStatus { min-height: 1.25em; margin: .55rem 0 0; color: var(--muted); font-size: .7rem; }
-  .restart { margin-top: .55rem; border: 0; background: transparent; color: var(--muted); font-size: .72rem; }
+  #resultStatus { min-height: 1.25em; margin: .55rem 0 0; color: var(--muted); font-size: .8rem; }
+  .restart { margin-top: .55rem; }
   @media (min-width: 48rem) { .app { padding-top: 1.2rem; } }
 </style>
 </head>
@@ -174,8 +187,11 @@
 <main class="app">
   <header>
     <button id="back" type="button" aria-label="이전 단계" hidden>‹</button>
-    <h1>📸 Bubblelab 네컷사진</h1>
-    <span></span>
+    <div class="bl-head">
+      <span class="bl-bubble" aria-hidden="true">📸</span>
+      <h1>네컷사진</h1>
+      <p>프레임을 고르고 3초 간격으로 찍는 네컷사진.</p>
+    </div>
   </header>
 
   <section class="step active center" data-step="welcome">
@@ -183,7 +199,7 @@
     <p class="eyebrow">FOUR CUT PHOTO</p>
     <h2>우리만의 순간을<br>네 컷에 담아보세요</h2>
     <p class="desc">프레임을 고르고 3초 간격으로 촬영합니다.<br>사진과 촬영 영상은 기기 밖으로 전송되지 않습니다.</p>
-    <button class="primary" id="begin" type="button">촬영 시작</button>
+    <button class="primary bl-btn bl-btn--primary" id="begin" type="button">촬영 시작</button>
   </section>
 
   <section class="step" data-step="frame">
@@ -193,7 +209,7 @@
     <p class="desc">모든 프레임은 실제 포토부스 규격인 1:3 스트립입니다.</p>
     <div class="frame-grid" id="frameGrid"></div>
     <p class="camera-status" id="frameStatus"></p>
-    <div class="frame-actions"><button class="primary" id="frameNext" type="button">이 프레임으로 촬영</button></div>
+    <div class="frame-actions"><button class="primary bl-btn bl-btn--primary" id="frameNext" type="button">이 프레임으로 촬영</button></div>
   </section>
 
   <section class="step" data-step="camera">
@@ -210,9 +226,9 @@
     <div class="shots" id="shotRail"></div>
     <p class="camera-status" id="cameraStatus"></p>
     <div class="camera-actions">
-      <button id="cameraStart" type="button">카메라 켜기</button>
-      <button class="primary" id="shoot" type="button" disabled>네컷 촬영</button>
-      <button id="cameraSwitch" type="button" disabled>전환</button>
+      <button class="bl-btn" id="cameraStart" type="button">카메라 켜기</button>
+      <button class="primary bl-btn bl-btn--primary" id="shoot" type="button" disabled>네컷 촬영</button>
+      <button class="bl-btn" id="cameraSwitch" type="button" disabled>전환</button>
     </div>
   </section>
 
@@ -223,8 +239,8 @@
     <p class="desc">다시 찍을 사진을 고르거나 바로 출력할 수 있습니다.</p>
     <div class="review-list" id="reviewList"></div>
     <div class="review-actions">
-      <button id="retake" type="button">선택 컷 재촬영</button>
-      <button class="primary" id="print" type="button">이대로 출력</button>
+      <button class="bl-btn" id="retake" type="button">선택 컷 재촬영</button>
+      <button class="primary bl-btn bl-btn--primary" id="print" type="button">이대로 출력</button>
     </div>
   </section>
 
@@ -247,12 +263,12 @@
         <input id="customColor" type="color" value="#f3f0e9" aria-label="직접 색상 선택">
       </div>
       <div class="decorate-toolbar">
-        <button class="primary" id="addSticker" type="button">＋ 사진 추가</button>
-        <button id="pickAsset" type="button">🐶 에셋 스티커</button>
-        <button id="stickerSmaller" type="button" disabled>－ 크기</button>
-        <button id="stickerLarger" type="button" disabled>＋ 크기</button>
-        <button id="duplicateSticker" type="button" disabled>복제</button>
-        <button id="deleteSticker" type="button" disabled>삭제</button>
+        <button class="primary bl-btn bl-btn--primary" id="addSticker" type="button">＋ 사진 추가</button>
+        <button class="bl-btn" id="pickAsset" type="button">🐶 에셋 스티커</button>
+        <button class="bl-btn" id="stickerSmaller" type="button" disabled>－ 크기</button>
+        <button class="bl-btn" id="stickerLarger" type="button" disabled>＋ 크기</button>
+        <button class="bl-btn" id="duplicateSticker" type="button" disabled>복제</button>
+        <button class="bl-btn" id="deleteSticker" type="button" disabled>삭제</button>
       </div>
     </div>
     <input id="stickerInput" type="file" accept="image/*" multiple hidden>
@@ -262,8 +278,8 @@
       <div id="stickerLayer" aria-label="스티커 편집 영역"></div>
     </div>
     <div class="decorate-finish">
-      <button id="exportFrame" type="button">프레임 내보내기</button>
-      <button class="primary" id="finishDecorate" type="button">꾸미기 완료 · 출력</button>
+      <button class="bl-btn" id="exportFrame" type="button">프레임 내보내기</button>
+      <button class="primary bl-btn bl-btn--primary" id="finishDecorate" type="button">꾸미기 완료 · 출력</button>
     </div>
   </section>
 
@@ -271,20 +287,20 @@
     <div class="progress"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></div>
     <p class="eyebrow">STEP 4 · PRINTING</p>
     <div class="print-window"><canvas id="finalCanvas" width="1200" height="3600"></canvas></div>
-    <div class="video-result" id="videoResult" hidden>
+    <div class="video-result bl-panel" id="videoResult" hidden>
       <p>🎬 네 컷을 찍는 동안의 영상</p>
       <video id="resultVideo" controls muted playsinline preload="metadata"></video>
     </div>
     <div class="result-actions" id="resultActions">
-      <button id="downloadPhoto" type="button">사진 저장</button>
-      <button id="downloadVideo" type="button">영상 저장</button>
-      <button class="primary" id="downloadAll" type="button">모두 저장</button>
-      <button id="shareAll" type="button" hidden>함께 공유</button>
-      <button id="sharePhoto" type="button" hidden>사진 공유</button>
-      <button id="shareVideo" type="button" hidden>영상 공유</button>
+      <button class="bl-btn" id="downloadPhoto" type="button">사진 저장</button>
+      <button class="bl-btn" id="downloadVideo" type="button">영상 저장</button>
+      <button class="primary bl-btn bl-btn--primary" id="downloadAll" type="button">모두 저장</button>
+      <button class="bl-btn" id="shareAll" type="button" hidden>함께 공유</button>
+      <button class="bl-btn" id="sharePhoto" type="button" hidden>사진 공유</button>
+      <button class="bl-btn" id="shareVideo" type="button" hidden>영상 공유</button>
     </div>
     <p id="resultStatus" role="status"></p>
-    <button class="restart" id="restart" type="button">처음부터 다시 찍기</button>
+    <button class="restart bl-btn bl-btn--ghost bl-btn--sm" id="restart" type="button">처음부터 다시 찍기</button>
   </section>
 </main>
 
@@ -292,7 +308,7 @@
   <div class="picker-sheet">
     <div class="picker-head">
       <h3>🖼️ 에셋 스티커</h3>
-      <button id="closePicker" type="button">닫기</button>
+      <button class="bl-btn bl-btn--sm" id="closePicker" type="button">닫기</button>
     </div>
     <div class="picker-tabs" id="pickerTabs" hidden></div>
     <p class="picker-status" id="pickerStatus">assets.bubblelab.dev의 스티커입니다. 누르면 배경을 지우고 프레임에 붙여드려요.</p>

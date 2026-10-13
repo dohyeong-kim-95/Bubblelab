@@ -7,142 +7,111 @@
 <meta name="description" content="날씨·미세먼지·환율·운세를 아침 한 장에. 8시 알림도 받아요.">
 <meta name="bl-group" content="매일">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🌤️</text></svg>">
+<link rel="stylesheet" href="/_shared/bubble.css">
 <style>
-  :root { color-scheme: light dark; }
+  :root { --accent-h: 10; }
   * { box-sizing: border-box; }
-  body { font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
-         margin: 0; min-height: 100dvh; display: flex; align-items: center; justify-content: center;
+  body { margin: 0; min-height: 100dvh; display: flex; align-items: center; justify-content: center;
          /* 우하단 독은 fixed라 문서 흐름을 밀어내지 않는다. 독이 차지하는 높이
             (버튼 3개 ≈ 133px + 아래 여백 16px)만큼 아래를 비워 카드가 그 위로
             올라오게 한다 — 짧은 화면에서 안내 문구가 독에 가리던 문제. */
-         padding: 1.5rem 1.5rem 10rem;
-         background: light-dark(#eef2f6, #10161f);
-         color: light-dark(#1c2733, #dbe4ee); }
+         padding: 1.5rem 1rem 10rem; }
   main { width: min(30rem, 100%); }
-  header { text-align: center; margin-bottom: 1.2rem; }
-  h1 { margin: 0; font-size: 1.15rem; font-weight: bold; letter-spacing: .02em; }
-  .date { margin: .35rem 0 0; opacity: .55; font-size: .85rem; }
+  .bl-head { margin-bottom: .5rem; }
+  .date { margin: 0 0 1rem; color: var(--muted); font-size: .82rem; }
 
-  .card { padding: 1.4rem 1.3rem; border-radius: .9rem;
-          border: 1px solid light-dark(#1c273322, #dbe4ee22);
-          background: light-dark(#ffffffaa, #182230aa); }
+  .card { padding: 1.3rem 1.2rem; }
 
   /* 지역 선택 + 설정 */
   .region-row { display: flex; align-items: center; gap: .55rem; margin-bottom: 1rem; }
-  .region-row label { font-size: .78rem; opacity: .6; flex: none; }
-  .icon-btn { flex: none; padding: .4rem .55rem; font-size: .9rem; line-height: 1; }
+  .region-row label { font-size: .8rem; color: var(--muted); flex: none; }
+  .region-row .bl-input { flex: 1; min-width: 0; padding: .55rem .7rem; font-size: .92rem; }
+  .icon-btn { flex: none; padding: .35rem .7rem; }
 
   /* 설정 패널 — 브리핑에 무엇을 넣을지 고른다 */
-  #settings { margin: -.4rem 0 1rem; padding: .75rem .8rem; border-radius: .55rem;
-              background: light-dark(#1c273307, #dbe4ee08); }
-  #settings h2 { margin: 0 0 .5rem; font-size: .72rem; opacity: .55; font-weight: normal; }
-  .set-row { display: flex; align-items: center; gap: .6rem; padding: .3rem 0; font-size: .82rem; }
-  .set-row .desc { font-size: .68rem; opacity: .5; margin-left: auto; }
-  #settings .warn { margin: .5rem 0 0; font-size: .7rem; line-height: 1.45;
-                    color: light-dark(#b6483d, #ff8a7a); }
+  #settings { margin: -.3rem 0 1rem; }
+  #settings h2 { margin: 0 0 .5rem; font-size: .78rem; color: var(--muted); font-weight: 600; }
+  .set-row { display: flex; align-items: center; gap: .6rem; padding: .3rem 0; font-size: .88rem; }
+  #settings .warn { margin: .5rem 0 0; font-size: .76rem; line-height: 1.45; color: var(--bad); }
 
   /* 생년월일시 (운세를 켰을 때만) — fortune과 같은 값을 읽고 쓴다 */
-  #birth { margin: .6rem 0 0; padding-top: .6rem;
-           border-top: 1px solid light-dark(#1c273312, #dbe4ee12); }
-  #birth .brow { display: flex; gap: .35rem; align-items: center; margin-bottom: .4rem; }
-  #birth select { flex: 1; min-width: 0; font-size: .8rem; padding: .35rem .3rem; }
-  #birth .seg { display: flex; gap: .25rem; padding: .18rem; border-radius: .45rem;
-                background: light-dark(#1c27330b, #dbe4ee0d); }
-  #birth .seg button { flex: 1; padding: .3rem .4rem; border: 0; font-size: .76rem; opacity: .55;
-                       border-radius: .35rem; }
-  #birth .seg button[aria-pressed="true"] { opacity: 1; font-weight: bold;
-                       background: light-dark(#fff, #273445); box-shadow: 0 1px 4px #0002; }
-  #birth-save { width: 100%; margin-top: .5rem; font-size: .8rem; padding: .45rem; }
-  #birth-msg { margin: .4rem 0 0; font-size: .7rem; line-height: 1.45; opacity: .55; }
+  #birth { margin: .7rem 0 0; padding-top: .7rem; border-top: 1px solid var(--line); }
+  #birth .brow { display: flex; gap: .35rem; align-items: center; margin-bottom: .45rem; }
+  #birth select.bl-input { flex: 1; min-width: 0; font-size: .85rem; padding: .45rem .4rem; }
+  #birth .seg { display: flex; gap: .3rem; }
+  #birth .seg .bl-chip { flex: 1; justify-content: center; padding: .25rem .4rem; font-size: .82rem; }
+  #birth-save { margin-top: .55rem; }
+  #birth-msg { margin: .45rem 0 0; }
 
   /* 브리핑 읽기 — 화면 최상단의 주 동작 */
-  #speak { width: 100%; padding: .95rem 1rem; font-size: 1rem; font-weight: bold;
-           border-radius: .7rem; margin-bottom: 1rem;
-           border-color: light-dark(#247b5f66, #6fd4ac55);
-           background: light-dark(#247b5f12, #6fd4ac14); }
-  #speak:hover:not(:disabled) { background: light-dark(#247b5f22, #6fd4ac22); }
+  #speak { min-height: 3.2rem; font-size: 1rem; font-weight: 700; margin-bottom: 1rem; }
 
   /* 환율 */
-  #rates { margin-top: 1.1rem; padding-top: 1rem;
-           border-top: 1px solid light-dark(#1c273315, #dbe4ee15); }
-  .rate-row { display: flex; align-items: baseline; gap: .5rem; padding: .28rem 0; font-size: .84rem; }
-  .rate-row .name { flex: none; width: 4.6rem; opacity: .6; font-size: .76rem; }
-  .rate-row .val { font-weight: bold; }
-  .rate-row .chg { font-size: .72rem; }
-  .rate-row .chg.up { color: light-dark(#b6483d, #ff8a7a); }
-  .rate-row .chg.down { color: light-dark(#2b6cb0, #7cb8f0); }
-  #rates .basis { margin: .5rem 0 0; font-size: .62rem; line-height: 1.45; opacity: .42; }
+  #rates { margin-top: 1.1rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+  .rate-row { display: flex; align-items: baseline; gap: .5rem; padding: .28rem 0; font-size: .9rem;
+              font-variant-numeric: tabular-nums; }
+  .rate-row .name { flex: none; width: 4.6rem; color: var(--muted); font-size: .8rem; }
+  .rate-row .val { font-weight: 700; }
+  .rate-row .chg { font-size: .76rem; }
+  .rate-row .chg.up { color: var(--bad); }
+  .rate-row .chg.down { color: var(--focus); }
+  .basis { margin: .5rem 0 0; font-size: .7rem; line-height: 1.5; color: var(--muted); }
+  .basis a, .source a { color: inherit; }
 
   /* 운세 총평 */
-  #fortune { margin-top: 1.1rem; padding-top: 1rem;
-             border-top: 1px solid light-dark(#1c273315, #dbe4ee15);
+  #fortune { margin-top: 1.1rem; padding-top: 1rem; border-top: 1px solid var(--line);
              display: flex; align-items: flex-start; gap: .8rem; }
   #fortune .icon { font-size: 1.9rem; line-height: 1.2; flex: none; }
-  #fortune .text { font-size: .84rem; line-height: 1.6; }
-  #fortune .basis { margin: .35rem 0 0; font-size: .62rem; line-height: 1.45; opacity: .42; }
-  #fortune .basis a { color: inherit; }
+  #fortune .text { font-size: .92rem; line-height: 1.65; }
+  #fortune .basis { margin-top: .35rem; }
   /* 총평 아래 작은 유도 버튼. 브리핑 흐름을 끊지 않도록 카드 안에서 가장 작게 둔다 */
-  .fo-action { display: inline-block; margin-top: .5rem; padding: .28rem .6rem;
-               font: inherit; font-size: .72rem; line-height: 1.3; color: inherit;
-               text-decoration: none; border-radius: .4rem; cursor: pointer;
-               border: 1px solid light-dark(#1c273333, #dbe4ee33);
-               background: light-dark(#1c273308, #dbe4ee0a); }
-  .fo-action:hover { background: light-dark(#1c273315, #dbe4ee16); }
-  select { flex: 1; font: inherit; font-size: .85rem; color: inherit; padding: .45rem .55rem;
-           border-radius: .5rem; background: light-dark(#ffffff, #10161f);
-           border: 1px solid light-dark(#1c273333, #dbe4ee33); }
+  .fo-action { margin-top: .55rem; min-height: 2rem; font-size: .76rem; font-weight: 600; }
 
   /* 지금 */
   .now { display: flex; align-items: center; gap: 1rem; }
   .now .icon { font-size: 3.2rem; line-height: 1; flex: none; }
-  .now .temp { font-size: 2.4rem; font-weight: bold; line-height: 1.1; }
-  .now .sky { font-size: .9rem; opacity: .7; margin-top: .15rem; }
+  .now .temp { font-size: 2.5rem; font-weight: 800; line-height: 1.1; letter-spacing: -.02em;
+               font-variant-numeric: tabular-nums; }
+  .now .sky { font-size: .92rem; color: var(--muted); margin-top: .15rem; }
 
   /* 오늘 요약 */
   .facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .4rem;
            margin-top: 1.1rem; }
-  .fact { padding: .6rem .5rem; border-radius: .5rem; text-align: center;
-          background: light-dark(#1c273307, #dbe4ee08); }
-  .fact .k { font-size: .66rem; opacity: .55; }
-  .fact .v { font-size: .95rem; font-weight: bold; margin-top: .22rem; }
-  .fact[data-grade="나쁨"] .v, .fact[data-grade="매우 나쁨"] .v { color: light-dark(#b6483d, #ff8a7a); }
-  .fact[data-grade="좋음"] .v { color: light-dark(#247b5f, #6fd4ac); }
+  .fact { padding: .6rem .5rem; border-radius: var(--r-sm); text-align: center; background: var(--sunk); }
+  .fact .k { font-size: .72rem; color: var(--muted); }
+  .fact .v { font-size: 1rem; font-weight: 700; margin-top: .22rem; font-variant-numeric: tabular-nums; }
+  .fact[data-grade="나쁨"] .v, .fact[data-grade="매우 나쁨"] .v { color: var(--bad); }
+  .fact[data-grade="좋음"] .v { color: var(--ok); }
 
-  .tomorrow { margin: 1rem 0 0; font-size: .78rem; line-height: 1.5; opacity: .62; }
-  .source { margin: .7rem 0 0; font-size: .6rem; line-height: 1.45; opacity: .4; }
-  .source a { color: inherit; }
+  .tomorrow { margin: 1rem 0 0; font-size: .84rem; line-height: 1.5; color: var(--muted); }
+  .source { margin: .7rem 0 0; font-size: .68rem; line-height: 1.45; color: var(--muted); }
 
-  button { font: inherit; color: inherit; background: none; cursor: pointer;
-           padding: .6rem 1.2rem; border-radius: .55rem;
-           border: 1px solid light-dark(#1c273355, #dbe4ee55); transition: background .15s; }
-  button:hover:not(:disabled) { background: light-dark(#1c273310, #dbe4ee14); }
-  button:active:not(:disabled) { transform: scale(.97); }
-  button:disabled { opacity: .45; cursor: default; }
+  button { font: inherit; color: inherit; cursor: pointer; }
 
-  /* 데일리 알림 (토글 스위치) — fortune과 같은 모양이되 자리가 다르다.
+  /* 토글 스위치 (설정·알림 공용) — bubble.css에 스위치 부품이 없어 토큰으로 직접 짓는다.
+     켜지면 도구 강조색으로 찬다. */
+  .notify-toggle { position: relative; flex: none; width: 3rem; height: 1.7rem; padding: 0;
+                   border-radius: var(--pill); border: 1px solid var(--line); background: var(--sunk);
+                   transition: background .18s, border-color .18s; }
+  .notify-toggle::before { content: ""; position: absolute; top: 50%; left: .2rem;
+                   transform: translateY(-50%); width: 1.24rem; height: 1.24rem; border-radius: 50%;
+                   background: var(--field); box-shadow: 0 1px 3px #0003, inset 0 0 0 1px var(--line);
+                   transition: left .18s; }
+  .notify-toggle:hover:not(:disabled) { border-color: var(--accent-line); }
+  .notify-toggle[aria-checked="true"],
+  .notify-toggle[aria-checked="true"]:hover:not(:disabled) { background: var(--accent); border-color: transparent; }
+  .notify-toggle[aria-checked="true"]::before { left: calc(100% - 1.44rem); background: #fff; box-shadow: 0 1px 3px #0003; }
+  .notify-toggle:disabled { opacity: .5; cursor: default; }
+
+  /* 데일리 알림 — fortune과 같은 모양이되 자리가 다르다.
      우하단은 공용 독(#bl-dock)이 fixed로 차지한다. 이 페이지는 짧아서 세로 중앙
      정렬을 하면 알림 행이 정확히 그 코너에 놓이고, 360px 화면에서는 토글을 눌러도
      독의 버튼이 눌렸다. 그래서 ① 알림을 카드 안으로 넣고 ② 토글을 행의 왼쪽에
      둔다 — 조작 요소가 오른쪽 코너에 없으면 독과 구조적으로 겹칠 수 없다. */
-  #notify { margin-top: 1.1rem; padding-top: 1rem;
-            border-top: 1px solid light-dark(#1c273315, #dbe4ee15); }
+  #notify { margin-top: 1.1rem; padding-top: 1rem; border-top: 1px solid var(--line); }
   .notify-row { display: flex; align-items: center; justify-content: flex-start; gap: .7rem; }
-  .notify-title { font-size: .88rem; font-weight: bold; }
-  .notify-toggle { position: relative; flex: none; width: 3rem; height: 1.7rem; padding: 0;
-                   border-radius: 1rem; border: 1px solid light-dark(#1c273333, #dbe4ee33);
-                   background: light-dark(#1c273315, #dbe4ee15);
-                   transition: background .18s, border-color .18s; }
-  .notify-toggle::before { content: ""; position: absolute; top: 50%; left: .2rem;
-                   transform: translateY(-50%); width: 1.24rem; height: 1.24rem; border-radius: 50%;
-                   background: light-dark(#fff, #dbe4ee); box-shadow: 0 1px 3px #0003;
-                   transition: left .18s; }
-  .notify-toggle:hover:not(:disabled) { background: light-dark(#1c273322, #dbe4ee22); }
-  .notify-toggle[aria-checked="true"],
-  .notify-toggle[aria-checked="true"]:hover:not(:disabled) {
-                   background: light-dark(#247b5f, #6fd4ac); border-color: transparent; }
-  .notify-toggle[aria-checked="true"]::before { left: calc(100% - 1.44rem); background: #fff; }
-  .notify-toggle:disabled { opacity: .5; cursor: default; }
-  .notify-help { margin: .6rem 0 0; font-size: .72rem; line-height: 1.45; opacity: .5; }
+  .notify-title { font-size: .9rem; font-weight: 700; }
+  .notify-help { margin: .6rem 0 0; }
 
   /* 아래 여백은 문서 끝에서만 독을 비켜 준다. 설정을 펼쳐 페이지가 길어지면
      스크롤 위치에 따라 안내 문구가 독 아래로 들어가므로, 카드가 독 근처까지
@@ -151,8 +120,7 @@
 
   section { margin-top: 1.2rem; }
   [hidden] { display: none !important; }
-  #err { margin: 1rem 0 0; font-size: .8rem; line-height: 1.5; text-align: center;
-         color: light-dark(#b6483d, #ff8a7a); }
+  #err { margin: 1rem 0 0; font-size: .84rem; line-height: 1.5; text-align: center; color: var(--bad); }
 
   /* 불러오는 동안 뼈대만 흐리게 — 값이 튀어 보이지 않게 한다 */
   .card.is-loading .now, .card.is-loading .facts, .card.is-loading .tomorrow { opacity: .35; }
@@ -160,24 +128,26 @@
 </head>
 <body>
 <main>
-  <header>
-    <h1>🌤️ 아침 브리핑</h1>
-    <p class="date" id="date">오늘의 날씨와 미세먼지</p>
+  <header class="bl-head">
+    <span class="bl-bubble" aria-hidden="true">🌤️</span>
+    <h1>아침 브리핑</h1>
+    <p>날씨·미세먼지·환율·운세를 아침 한 장에. 8시 알림도 받아요.</p>
   </header>
+  <p class="date bl-num" id="date">오늘의 날씨와 미세먼지</p>
 
   <!-- 브리핑 읽기는 이 화면의 주 동작이라 카드보다 위, 크게 둔다 -->
-  <button type="button" id="speak">🔊 브리핑 읽어주기</button>
+  <button type="button" id="speak" class="bl-btn bl-btn--primary bl-btn--block">🔊 브리핑 읽어주기</button>
 
-  <div class="card is-loading" id="card">
+  <div class="card bl-panel is-loading" id="card">
     <div class="region-row">
       <label for="region">지역</label>
-      <select id="region"></select>
-      <button type="button" class="icon-btn" id="settings-btn"
+      <select id="region" class="bl-input"></select>
+      <button type="button" class="icon-btn bl-btn bl-btn--sm" id="settings-btn"
               aria-expanded="false" aria-controls="settings" aria-label="브리핑 설정">⚙️</button>
     </div>
 
     <!-- 브리핑에 넣을 항목 고르기 (화면·읽어주기 모두에 적용) -->
-    <div id="settings" hidden>
+    <div id="settings" class="bl-sunk" hidden>
       <h2>브리핑에 넣을 내용</h2>
       <div class="set-row">
         <button type="button" id="set-weather" class="notify-toggle" role="switch"
@@ -199,30 +169,30 @@
       <!-- 생년월일시. fortune과 같은 저장값을 쓰므로 어느 쪽에서 넣어도 함께 바뀐다 -->
       <div id="birth" hidden>
         <div class="brow">
-          <select id="b-y" aria-label="태어난 해"></select>
-          <select id="b-m" aria-label="태어난 달"></select>
-          <select id="b-d" aria-label="태어난 날"></select>
+          <select id="b-y" class="bl-input" aria-label="태어난 해"></select>
+          <select id="b-m" class="bl-input" aria-label="태어난 달"></select>
+          <select id="b-d" class="bl-input" aria-label="태어난 날"></select>
         </div>
         <div class="brow">
           <div class="seg" style="flex:1">
-            <button type="button" id="b-solar" aria-pressed="true">양력</button>
-            <button type="button" id="b-lunar" aria-pressed="false">음력</button>
+            <button type="button" class="bl-chip" id="b-solar" aria-pressed="true">양력</button>
+            <button type="button" class="bl-chip" id="b-lunar" aria-pressed="false">음력</button>
           </div>
           <div class="seg" id="b-leap-wrap" hidden style="flex:1">
-            <button type="button" id="b-normal" aria-pressed="true">평달</button>
-            <button type="button" id="b-leap" aria-pressed="false">윤달</button>
+            <button type="button" class="bl-chip" id="b-normal" aria-pressed="true">평달</button>
+            <button type="button" class="bl-chip" id="b-leap" aria-pressed="false">윤달</button>
           </div>
         </div>
         <div class="brow">
-          <select id="b-h" aria-label="태어난 시진"></select>
-          <select id="b-g" aria-label="성별">
+          <select id="b-h" class="bl-input" aria-label="태어난 시진"></select>
+          <select id="b-g" class="bl-input" aria-label="성별">
             <option value="unspecified">성별 미지정</option>
             <option value="male">남성</option>
             <option value="female">여성</option>
           </select>
         </div>
-        <button type="button" id="birth-save">생년월일시 저장</button>
-        <p id="birth-msg"></p>
+        <button type="button" id="birth-save" class="bl-btn bl-btn--sm bl-btn--block">생년월일시 저장</button>
+        <p id="birth-msg" class="bl-note"></p>
       </div>
     </div>
 
@@ -263,8 +233,8 @@
         <div class="text" id="fo-text"></div>
         <p class="basis" id="fo-basis"></p>
         <!-- 안 넣은 사람은 입력으로, 넣은 사람은 자세히 보기로 -->
-        <button type="button" class="fo-action" id="fo-setup" hidden>맞춤 정보 입력</button>
-        <a class="fo-action" id="fo-more" href="/fortune" hidden>자세히 보기 →</a>
+        <button type="button" class="fo-action bl-btn bl-btn--sm" id="fo-setup" hidden>맞춤 정보 입력</button>
+        <a class="fo-action bl-btn bl-btn--sm" id="fo-more" href="/fortune" hidden>자세히 보기 →</a>
       </div>
     </div>
 
@@ -274,7 +244,7 @@
         <button type="button" id="notify-btn" class="notify-toggle" role="switch" aria-checked="false" aria-label="매일 오전 8시 날씨 알림"></button>
         <span class="notify-title">🔔 매일 오전 8시 알림 받기</span>
       </div>
-      <p class="notify-help" id="notify-help">브라우저 알림으로 매일 오전 8시(KST)에 선택한 지역의 날씨를 받아보세요.</p>
+      <p class="notify-help bl-note" id="notify-help">브라우저 알림으로 매일 오전 8시(KST)에 선택한 지역의 날씨를 받아보세요.</p>
     </section>
   </div>
 

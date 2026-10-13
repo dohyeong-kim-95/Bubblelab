@@ -7,90 +7,78 @@
 <meta name="description" content="HEIC·WebP 를 JPG·PNG 로. 여러 장은 ZIP 으로 한 번에.">
 <meta name="bl-group" content="사진·이미지">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🖼️</text></svg>">
+<link rel="stylesheet" href="/_shared/bubble.css">
 <style>
-  :root { color-scheme: light dark; --bg: light-dark(#f2f4f7, #0d131c);
-          --panel: light-dark(#fff, #171f2b); --line: light-dark(#d9e0e7, #2a3646);
-          --text: light-dark(#1c2733, #e2e9f0); --muted: light-dark(#6e7985, #91a0b2);
-          --accent: #4f7fdd; }
+  :root { --accent-h: 9; }
   * { box-sizing: border-box; }
-  body { margin: 0; min-height: 100dvh; background: var(--bg); color: var(--text);
-         font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; }
-  .app { width: min(34rem, 100%); margin: 0 auto; padding: 1.2rem 1rem 2rem; }
-  h1 { margin: .2rem 0 .3rem; font-size: 1.25rem; }
-  .desc { margin: 0 0 1.1rem; color: var(--muted); font-size: .78rem; line-height: 1.6; }
-  button { font: inherit; color: inherit; cursor: pointer; border: 1px solid var(--line);
-           background: light-dark(#fff, #111923); border-radius: .6rem; padding: .55rem .9rem; }
-  button:active { transform: scale(.97); }
-  button:disabled { opacity: .42; cursor: default; transform: none; }
-  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: bold; }
+  body { margin: 0; min-height: 100dvh; }
+  .app { width: min(34rem, 100%); margin: 0 auto; padding: 1.4rem 1rem 2rem; }
 
-  #drop { display: grid; place-items: center; gap: .4rem; padding: 2.2rem 1rem; text-align: center;
-          border: 2px dashed var(--line); border-radius: 1rem; background: var(--panel);
-          cursor: pointer; transition: border-color .15s, background .15s; }
-  #drop.over { border-color: var(--accent); background: light-dark(#eef3fd, #1a2436); }
-  #drop .big { font-size: 2.2rem; }
-  #drop p { margin: 0; font-size: .8rem; color: var(--muted); line-height: 1.6; }
+  #drop { padding: 2.2rem 1rem; transition: border-color .15s, background-color .15s; }
+  #drop.over { border-color: var(--accent); background: var(--accent-soft); }
+  #drop p { margin: 0; font-size: .85rem; line-height: 1.65; }
+  #drop strong { color: var(--ink); font-weight: 700; }
   #file { display: none; }
 
-  .options { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin: 1rem 0; }
-  .options .label { font-size: .75rem; color: var(--muted); }
-  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: .6rem; overflow: hidden; }
-  .seg button { border: 0; border-radius: 0; padding: .5rem 1.1rem; font-size: .8rem; }
-  .seg button.on { background: var(--accent); color: #fff; font-weight: bold; }
-  #qualityWrap { display: flex; align-items: center; gap: .45rem; font-size: .75rem; color: var(--muted); }
+  .options { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1rem; margin: 1rem 0; }
+  .options .bl-label { margin: 0; }
+  .seg .bl-chip { min-width: 3.6rem; justify-content: center; font-weight: 600; }
+  .seg .bl-chip.on { color: var(--accent-ink); background: var(--accent); border-color: transparent; }
+  #qualityWrap { display: flex; align-items: center; gap: .5rem; font-size: .82rem; color: var(--muted); }
   #qualityWrap[hidden] { display: none; }
   #quality { accent-color: var(--accent); width: 7rem; }
+  #qualityVal { min-width: 1.6rem; color: var(--ink); }
 
-  .item { display: grid; grid-template-columns: 3.4rem 1fr auto; gap: .7rem; align-items: center;
-          padding: .65rem; margin-bottom: .55rem; background: var(--panel);
-          border: 1px solid var(--line); border-radius: .8rem; }
-  .item img { width: 3.4rem; height: 3.4rem; object-fit: cover; border-radius: .45rem;
-              background: repeating-conic-gradient(#8883 0% 25%, transparent 0% 50%) 0 0/.8rem .8rem; }
-  .item .meta { min-width: 0; font-size: .72rem; line-height: 1.55; }
-  .item .name { font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .item .info { color: var(--muted); }
-  .item .err { color: #d05a5a; }
-  .item a { display: inline-block; padding: .5rem .8rem; border: 1px solid var(--accent);
-            border-radius: .6rem; color: var(--accent); font-size: .75rem; font-weight: bold;
-            text-decoration: none; white-space: nowrap; }
+  .item { display: grid; grid-template-columns: 3.4rem 1fr auto; gap: .75rem; align-items: center;
+          padding: .65rem .75rem; margin-bottom: .55rem; border-radius: var(--r); }
+  .item img { width: 3.4rem; height: 3.4rem; object-fit: cover; border-radius: var(--r-sm);
+              background: var(--sunk) repeating-conic-gradient(#8883 0% 25%, transparent 0% 50%) 0 0/.8rem .8rem; }
+  .item .meta { min-width: 0; font-size: .8rem; line-height: 1.55; }
+  .item .name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item .info { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .item .err { color: var(--bad); }
+  .item a { white-space: nowrap; color: var(--accent); border-color: var(--accent-line); }
+  .item a[hidden] { display: none; }
   .actions { display: flex; gap: .55rem; margin-top: .9rem; }
   .actions[hidden] { display: none; }
-  .actions .primary { flex: 1; }
-  .privacy { margin-top: 1.1rem; color: var(--muted); font-size: .68rem; line-height: 1.6; }
+  .actions .bl-btn--primary { flex: 1; }
+  .privacy { margin-top: 1.2rem; }
 </style>
 </head>
 <body>
 <div class="app">
-  <h1>🖼️ 이미지 형식 변환</h1>
-  <p class="desc">이미지 파일의 형식을 JPG·PNG로 바꿔 내려받습니다. HEIC·WebP·BMP 등
-    브라우저가 읽을 수 있는 형식이면 무엇이든 넣어도 되고, 여러 장도 한 번에 됩니다.</p>
+  <header class="bl-head">
+    <span class="bl-bubble" aria-hidden="true">🖼️</span>
+    <h1>이미지 형식 변환</h1>
+    <p>HEIC·WebP 를 JPG·PNG 로. 여러 장은 ZIP 으로 한 번에.</p>
+  </header>
 
-  <div id="drop" role="button" tabindex="0" aria-label="이미지 선택">
-    <p>여기를 눌러 이미지를 고르거나<br>파일을 끌어다 놓으세요 (붙여넣기도 가능)</p>
+  <div id="drop" class="bl-drop" role="button" tabindex="0" aria-label="이미지 선택">
+    <p><strong>여기를 눌러 이미지를 고르거나</strong><br>파일을 끌어다 놓으세요 (붙여넣기도 가능)<br>
+      HEIC·WebP·BMP 등 브라우저가 읽는 형식이면 무엇이든</p>
   </div>
   <input id="file" type="file" accept="image/*" multiple>
 
   <div class="options">
-    <span class="label">변환할 형식</span>
-    <div class="seg" role="group" aria-label="출력 형식">
-      <button type="button" data-fmt="jpg" class="on">JPG</button>
-      <button type="button" data-fmt="png">PNG</button>
+    <span class="bl-label">변환할 형식</span>
+    <div class="seg bl-chips" role="group" aria-label="출력 형식">
+      <button type="button" data-fmt="jpg" class="bl-chip on">JPG</button>
+      <button type="button" data-fmt="png" class="bl-chip">PNG</button>
     </div>
     <label id="qualityWrap">품질
       <input id="quality" type="range" min="50" max="100" value="90">
-      <span id="qualityVal">90</span>
+      <span id="qualityVal" class="bl-num">90</span>
     </label>
   </div>
 
   <div id="list"></div>
 
   <div class="actions" id="actions" hidden>
-    <button class="primary" id="saveAll">전체 저장</button>
-    <button id="clear">비우기</button>
+    <button class="bl-btn bl-btn--primary" id="saveAll">전체 저장</button>
+    <button class="bl-btn" id="clear">비우기</button>
   </div>
 
-  <p class="privacy">변환은 전부 이 브라우저 안에서만 일어나요. 이미지는 서버로 전송·저장되지 않습니다.</p>
+  <p class="privacy bl-note">변환은 전부 이 브라우저 안에서만 일어나요. 이미지는 서버로 전송·저장되지 않습니다.</p>
 </div>
 
 <script>
@@ -128,8 +116,8 @@ async function addFiles(fileList) {
   for (const file of [...fileList]) {
     if (!file.type.startsWith("image/") && !/\.(heic|heif|avif|webp|bmp|gif|tiff?)$/i.test(file.name)) continue;
     const row = document.createElement("div");
-    row.className = "item";
-    row.innerHTML = `<img alt=""><div class="meta"><div class="name"></div><div class="info">읽는 중…</div></div><a hidden>저장</a>`;
+    row.className = "item bl-panel";
+    row.innerHTML = `<img alt=""><div class="meta"><div class="name"></div><div class="info">읽는 중…</div></div><a class="bl-btn bl-btn--sm" hidden>저장</a>`;
     row.querySelector(".name").textContent = file.name;
     list.append(row);
     const it = { file, row };
@@ -139,8 +127,10 @@ async function addFiles(fileList) {
       row.querySelector("img").src = URL.createObjectURL(file);
       await convert(it);
     } catch {
-      row.querySelector(".info").className = "err";
-      row.querySelector(".info").textContent = "이 형식은 브라우저가 읽지 못해요 (예: HEIC)";
+      // 클래스를 바꾸면 다시 ".info" 로는 못 찾는다 — 한 번 잡아 둔다
+      const info = row.querySelector(".info");
+      info.className = "err";
+      info.textContent = "이 형식은 브라우저가 읽지 못해요 (예: HEIC)";
     }
   }
   $("#actions").hidden = items.length === 0;

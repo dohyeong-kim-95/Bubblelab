@@ -152,6 +152,7 @@ function wallpaperPage(item) {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="description" content="${description}">
 <title>${title} · Bubblelab 배경화면</title>
+<link rel="stylesheet" href="/_shared/bubble.css">
 <link rel="stylesheet" href="../../catalog.css">
 <link rel="stylesheet" href="../../item.css">
 </head>
@@ -159,7 +160,6 @@ function wallpaperPage(item) {
 <main class="wrap item-wrap">
   <header>
     <a class="back" href="../">← 배경화면 목록</a>
-    <p class="eyebrow">BUBBLELAB ASSETS</p>
     <h1 class="item-title">${title}</h1>
     <p class="intro">${description}</p>
     <div class="tags">${tags}</div>

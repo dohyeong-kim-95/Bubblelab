@@ -7,125 +7,129 @@
 <meta name="description" content="PDF 보기·검색, 합치기·나누기·회전, 이미지↔PDF.">
 <meta name="bl-group" content="글·문서">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>📕</text></svg>">
+<link rel="stylesheet" href="/_shared/bubble.css">
 <style>
-  :root { color-scheme: light dark; --bg: light-dark(#f2f4f7, #0d131c);
-          --panel: light-dark(#fff, #171f2b); --line: light-dark(#d9e0e7, #2a3646);
-          --text: light-dark(#1c2733, #e2e9f0); --muted: light-dark(#6e7985, #91a0b2);
-          --accent: #4f7fdd; --paper: light-dark(#fff, #e8eaee); }
+  :root { --accent-h: 314; --paper: light-dark(#fff, #e8eaee); }
   * { box-sizing: border-box; }
-  body { margin: 0; min-height: 100dvh; background: var(--bg); color: var(--text);
-         font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; }
-  .app { width: min(60rem, 100%); margin: 0 auto; padding: 1.2rem .75rem 4rem; }
-  h1 { margin: .2rem 0 .3rem; font-size: 1.25rem; }
-  .desc { margin: 0 0 1rem; color: var(--muted); font-size: .78rem; line-height: 1.6; }
+  [hidden] { display: none !important; }
+  body { margin: 0; min-height: 100dvh; }
+  .app { width: min(60rem, 100%); margin: 0 auto; padding: 1.4rem 1rem 4rem; }
 
-  button, select, input[type=text], input[type=number] {
-    font: inherit; color: inherit; border: 1px solid var(--line);
-    background: light-dark(#fff, #111923); border-radius: .6rem; padding: .5rem .8rem; }
+  /* 버튼·입력 기본 — bl-btn/bl-input이 붙지 않은 작은 부품(페이지 넘김 등)도 같은 재료로 */
+  button, select, input[type=text], input[type=number] { font: inherit; color: inherit; }
   button { cursor: pointer; }
-  button:active { transform: scale(.97); }
-  button:disabled { opacity: .4; cursor: default; transform: none; }
-  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: bold; }
-  .tiny { padding: .35rem .55rem; font-size: .75rem; }
+  button:disabled { cursor: not-allowed; }
+  select.bl-input { width: auto; padding: .45rem .7rem; font-size: .88rem; min-height: 2.2rem; }
+  .bl-btn--sm { min-width: 2.2rem; }
 
-  /* 탭 */
-  .tabs { display: flex; gap: .3rem; border-bottom: 1px solid var(--line); margin-bottom: .9rem; }
-  .tabs button { border: 0; background: none; border-radius: .5rem .5rem 0 0; padding: .6rem .9rem;
-                 font-size: .82rem; color: var(--muted); border-bottom: 2px solid transparent; }
-  .tabs button[aria-selected=true] { color: var(--text); font-weight: bold; border-bottom-color: var(--accent); }
-  section[hidden] { display: none; }
+  /* 탭 — 칩 줄 */
+  .tabs { margin-bottom: 1rem; }
+  .tabs .bl-chip { font-weight: 600; padding-inline: 1rem; }
 
   /* 파일 표시줄 */
-  .filebar { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: .8rem;
-             padding: .55rem .7rem; background: var(--panel); border: 1px solid var(--line); border-radius: .7rem; }
-  .filebar .nm { font-size: .78rem; font-weight: bold; overflow: hidden; text-overflow: ellipsis;
+  .filebar { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: .9rem;
+             padding: .55rem .6rem .55rem 1rem; border-radius: var(--r); }
+  .filebar .nm { font-size: .9rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis;
                  white-space: nowrap; min-width: 0; flex: 1; }
-  .filebar .mt { font-size: .7rem; color: var(--muted); white-space: nowrap; }
+  .filebar .mt { font-size: .78rem; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
   /* 드롭존 */
-  .drop { display: grid; place-items: center; gap: .4rem; padding: 2.4rem 1rem; text-align: center;
-          border: 2px dashed var(--line); border-radius: 1rem; background: var(--panel); cursor: pointer; }
-  .drop.over { border-color: var(--accent); background: light-dark(#eef3fd, #1a2436); }
+  .drop { padding: 2.6rem 1rem; transition: border-color .15s, background-color .15s; }
+  .drop.over { border-color: var(--accent); background: var(--accent-soft); }
   .drop .big { font-size: 2.2rem; }
-  .drop p { margin: 0; font-size: .8rem; color: var(--muted); line-height: 1.6; }
+  .drop p { margin: 0; font-size: .9rem; line-height: 1.6; }
   input[type=file] { display: none; }
 
   /* 도구 막대 */
   .bar { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; margin-bottom: .8rem; }
   .bar .sp { flex: 1; }
-  .bar .label { font-size: .72rem; color: var(--muted); }
-  .grp { display: inline-flex; align-items: center; gap: .3rem; border: 1px solid var(--line);
-         border-radius: .6rem; padding: .2rem; background: var(--panel); }
-  .grp button { border: 0; background: none; padding: .3rem .5rem; font-size: .8rem; }
-  #pageNum { width: 3.2rem; text-align: center; padding: .3rem; font-size: .78rem; }
-  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: .6rem; overflow: hidden; }
-  .seg button { border: 0; border-radius: 0; padding: .45rem .9rem; font-size: .78rem; }
-  .seg button.on { background: var(--accent); color: #fff; font-weight: bold; }
+  .bar .label { font-size: .8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .grp { display: inline-flex; align-items: center; gap: .15rem; border: 1px solid var(--line);
+         border-radius: var(--pill); padding: .15rem; background: var(--field); }
+  .grp > button:not(.bl-btn) { border: 0; background: none; border-radius: var(--pill);
+                               min-width: 2.1rem; min-height: 2.1rem; padding: .2rem .5rem; font-size: .85rem; }
+  .grp > button:not(.bl-btn):hover { background: var(--sunk); }
+  .grp > button:not(.bl-btn):active { transform: scale(.94); }
+  .grp .bl-btn { border: 0; background: var(--sunk); }
+  #pageNum { width: 3.2rem; text-align: center; padding: .3rem; font-size: .85rem; min-height: 2.1rem;
+             border-radius: var(--pill); font-variant-numeric: tabular-nums; }
+  /* 둘 중 하나 고르기 — 칩을 한 알약 안에 붙인 모양 */
+  .seg { display: inline-flex; gap: .15rem; padding: .2rem; border: 1px solid var(--line);
+         border-radius: var(--pill); background: var(--field); }
+  .seg button { border: 0; border-radius: var(--pill); background: none; color: var(--muted);
+                min-height: 2.2rem; padding: .35rem 1rem; font-size: .88rem; font-weight: 600; }
+  .seg button.on { background: var(--accent); color: var(--accent-ink); }
 
   /* 검색 */
   .search { display: flex; align-items: center; gap: .3rem; }
-  .search input { width: 8rem; padding: .4rem .6rem; font-size: .78rem; }
-  .search .hits { font-size: .72rem; color: var(--muted); min-width: 3.4rem; text-align: center; }
+  .search input { width: 9rem; padding: .45rem .85rem; font-size: .88rem; border-radius: var(--pill); }
+  .search .hits { font-size: .78rem; color: var(--muted); min-width: 3.4rem; text-align: center;
+                  font-variant-numeric: tabular-nums; }
 
   /* 보기 */
-  #viewport { background: light-dark(#e3e7ee, #0a0f16); border: 1px solid var(--line);
-              border-radius: .7rem; padding: .7rem 0; height: 72dvh; min-height: 20rem;
+  #viewport { background: var(--sunk); border: 1px solid var(--line);
+              border-radius: var(--r-lg); padding: .8rem 0; height: 72dvh; min-height: 20rem;
               overflow: auto; overscroll-behavior: contain; }
-  .pageBox { position: relative; margin: 0 auto .7rem; background: var(--paper);
-             box-shadow: 0 1px 6px #0003; }
+  .pageBox { position: relative; margin: 0 auto .8rem; background: var(--paper);
+             box-shadow: 0 1px 2px #0002, 0 4px 14px #0002; }
   .pageBox:last-child { margin-bottom: 0; }
   .pageBox canvas { display: block; width: 100%; height: 100%; }
-  .pageBox .ph { display: grid; place-items: center; height: 100%; color: var(--muted); font-size: .75rem; }
-  .pageBox .no { position: absolute; right: .3rem; bottom: .3rem; background: #0009; color: #fff;
-                 font-size: .62rem; padding: .1rem .35rem; border-radius: .3rem; }
+  .pageBox .ph { display: grid; place-items: center; height: 100%; color: #6b6f78; font-size: .8rem; }
+  .pageBox .no { position: absolute; right: .35rem; bottom: .35rem; background: #0009; color: #fff;
+                 font-size: .68rem; padding: .1rem .45rem; border-radius: var(--pill);
+                 font-variant-numeric: tabular-nums; }
   .hl { position: absolute; inset: 0; pointer-events: none; }
   .hl i { position: absolute; background: #ffd54a80; border-radius: 1px; }
   .hl i.cur { background: #ff8a3d99; outline: 1px solid #ff8a3d; }
 
   /* 페이지 썸네일 */
-  #thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr)); gap: .55rem; }
-  .thumb { position: relative; background: var(--panel); border: 1px solid var(--line);
-           border-radius: .6rem; padding: .35rem; cursor: pointer; }
-  .thumb.sel { border-color: var(--accent); box-shadow: 0 0 0 2px light-dark(#4f7fdd44, #4f7fdd55); }
-  .thumb .sheet { background: var(--paper); display: grid; place-items: center; overflow: hidden; }
+  #thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr)); gap: .6rem; }
+  .thumb { position: relative; background: var(--field); border: 1px solid var(--line);
+           border-radius: var(--r); padding: .4rem; cursor: pointer; transition: border-color .15s; }
+  .thumb:hover { border-color: var(--accent-line); }
+  .thumb.sel { border-color: var(--accent); background: var(--accent-soft);
+               box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
+  .thumb .sheet { background: var(--paper); display: grid; place-items: center; overflow: hidden;
+                  border-radius: .25rem; }
   .thumb canvas { display: block; max-width: 100%; max-height: 100%; }
   .thumb .cap { display: flex; justify-content: space-between; align-items: center;
-                margin-top: .25rem; font-size: .62rem; color: var(--muted); }
+                margin-top: .3rem; font-size: .7rem; color: var(--muted); font-variant-numeric: tabular-nums; }
   .thumb .src { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 4.5rem; }
-  .thumb .tick { position: absolute; top: .5rem; left: .5rem; width: 1.1rem; height: 1.1rem;
-                 border-radius: .3rem; border: 1px solid var(--line); background: light-dark(#fff, #0d131c);
+  .thumb .tick { position: absolute; top: .6rem; left: .6rem; width: 1.2rem; height: 1.2rem;
+                 border-radius: 50%; border: 1px solid #0003; background: rgb(255 255 255 / .9);
                  display: grid; place-items: center; font-size: .7rem; color: transparent; }
-  .thumb.sel .tick { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .thumb.sel .tick { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 
   /* 목록 (변환) */
-  .item { display: grid; grid-template-columns: 3rem 1fr auto; gap: .6rem; align-items: center;
-          padding: .5rem; margin-bottom: .45rem; background: var(--panel);
-          border: 1px solid var(--line); border-radius: .7rem; }
-  .item img { width: 3rem; height: 3rem; object-fit: cover; border-radius: .4rem;
+  .item { display: grid; grid-template-columns: 3rem 1fr auto; gap: .7rem; align-items: center;
+          padding: .5rem .6rem; margin-bottom: .45rem; background: var(--field);
+          border: 1px solid var(--line); border-radius: var(--r); }
+  .item img { width: 3rem; height: 3rem; object-fit: cover; border-radius: var(--r-sm);
               background: repeating-conic-gradient(#8883 0% 25%, transparent 0% 50%) 0 0/.8rem .8rem; }
-  .item .meta { min-width: 0; font-size: .7rem; line-height: 1.5; }
-  .item .name { font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .item .info { color: var(--muted); }
-  .item .err { color: #d05a5a; }
+  .item .meta { min-width: 0; font-size: .8rem; line-height: 1.5; }
+  .item .name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item .info { color: var(--muted); font-variant-numeric: tabular-nums; }
   .item .ops { display: flex; gap: .25rem; }
+  .item .ops .bl-btn { padding-inline: .5rem; }
 
-  .row { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: .7rem; font-size: .75rem; }
-  .row .label { color: var(--muted); }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: .8rem;
-          padding: .8rem; margin-bottom: .9rem; }
-  .empty { text-align: center; color: var(--muted); font-size: .78rem; padding: 2rem 1rem; line-height: 1.7; }
-  .note { color: var(--muted); font-size: .68rem; line-height: 1.6; margin: .5rem 0 0; }
-  .privacy { margin-top: 1.2rem; color: var(--muted); font-size: .68rem; line-height: 1.6; }
-  .err { color: #d05a5a; font-size: .74rem; }
+  .row { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: .7rem; font-size: .85rem; }
+  .row:last-child { margin-bottom: 0; }
+  .row .label { color: var(--muted); font-size: .82rem; }
+  .row .sp { flex: 1; }
+  .card { margin: .9rem 0; }
+  .empty { text-align: center; color: var(--muted); font-size: .9rem; padding: 2.2rem 1rem; line-height: 1.7;
+           border: 1px dashed var(--line); border-radius: var(--r-lg); }
+  .note { margin: .6rem 0 0; }
+  .privacy { margin-top: 1.4rem; }
+  .err { color: var(--bad); font-size: .8rem; }
   #toast { position: fixed; left: 50%; bottom: 1.2rem; transform: translateX(-50%);
-           background: light-dark(#1c2733, #e2e9f0); color: light-dark(#fff, #101821);
-           padding: .55rem .9rem; border-radius: .6rem; font-size: .76rem; z-index: 50;
-           box-shadow: 0 3px 12px #0004; max-width: 90vw; text-align: center; }
-  #toast[hidden] { display: none; }
+           background: var(--ink); color: var(--bg);
+           padding: .6rem 1.1rem; border-radius: var(--pill); font-size: .85rem; z-index: 50;
+           box-shadow: 0 4px 16px #0004; max-width: 90vw; text-align: center; }
 
   @media (max-width: 30rem) {
-    .search input { width: 5.5rem; }
+    .search { flex: 1 1 100%; min-width: 0; }
+    .search input { width: 0; flex: 1; min-width: 0; }
     #viewport { height: 68dvh; }
     #thumbs { grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr)); }
   }
@@ -133,37 +137,40 @@
 </head>
 <body>
 <div class="app">
-  <h1>📕 PDF 도구</h1>
-  <p class="desc">PDF를 열어 보고, 페이지를 합치거나 나누고, 이미지와 서로 바꿉니다. 전부 이 브라우저 안에서만 처리해요.</p>
+  <header class="bl-head">
+    <span class="bl-bubble" aria-hidden="true">📕</span>
+    <h1>PDF 도구</h1>
+    <p>PDF 보기·검색, 합치기·나누기·회전, 이미지↔PDF.</p>
+  </header>
 
-  <div class="filebar" id="filebar" hidden>
+  <div class="filebar bl-panel" id="filebar" hidden>
     <span class="nm" id="fileName"></span>
     <span class="mt" id="fileMeta"></span>
-    <button class="tiny" id="changeFile">다른 PDF</button>
-    <button class="tiny" id="closeFile">닫기</button>
+    <button class="tiny bl-btn bl-btn--sm" id="changeFile">다른 PDF</button>
+    <button class="tiny bl-btn bl-btn--sm" id="closeFile">닫기</button>
   </div>
 
-  <nav class="tabs" role="tablist">
-    <button role="tab" id="tabView" aria-controls="paneView" aria-selected="true">📄 보기</button>
-    <button role="tab" id="tabPages" aria-controls="panePages" aria-selected="false">📑 페이지</button>
-    <button role="tab" id="tabConv" aria-controls="paneConv" aria-selected="false">🔄 변환</button>
+  <nav class="tabs bl-chips" role="tablist">
+    <button class="bl-chip" role="tab" id="tabView" aria-controls="paneView" aria-selected="true">📄 보기</button>
+    <button class="bl-chip" role="tab" id="tabPages" aria-controls="panePages" aria-selected="false">📑 페이지</button>
+    <button class="bl-chip" role="tab" id="tabConv" aria-controls="paneConv" aria-selected="false">🔄 변환</button>
   </nav>
 
   <!-- ── 보기 ── -->
   <section id="paneView" role="tabpanel" aria-labelledby="tabView">
     <div id="viewEmpty">
-      <div class="drop" id="drop" role="button" tabindex="0" aria-label="PDF 열기">
+      <div class="drop bl-drop" id="drop" role="button" tabindex="0" aria-label="PDF 열기">
         <span class="big">📄</span>
         <p>여기를 눌러 PDF를 고르거나<br>파일을 끌어다 놓으세요</p>
       </div>
-      <p class="note">여러 개를 한 번에 올리면 순서대로 이어 붙여 엽니다.</p>
+      <p class="note bl-note">여러 개를 한 번에 올리면 순서대로 이어 붙여 엽니다.</p>
     </div>
 
     <div id="viewMain" hidden>
       <div class="bar">
         <span class="grp">
           <button id="prevPage" aria-label="이전 페이지">◀</button>
-          <input id="pageNum" type="text" inputmode="numeric" aria-label="페이지 번호">
+          <input id="pageNum" class="bl-input" type="text" inputmode="numeric" aria-label="페이지 번호">
           <span class="label" id="pageTotal"></span>
           <button id="nextPage" aria-label="다음 페이지">▶</button>
         </span>
@@ -171,14 +178,14 @@
           <button id="zoomOut" aria-label="축소">−</button>
           <span class="label" id="zoomVal">100%</span>
           <button id="zoomIn" aria-label="확대">＋</button>
-          <button id="zoomFit" class="tiny">맞춤</button>
+          <button id="zoomFit" class="tiny bl-btn bl-btn--sm">맞춤</button>
         </span>
         <span class="sp"></span>
         <span class="search">
-          <input id="q" type="text" placeholder="문서 내 검색" aria-label="문서 내 검색">
+          <input id="q" class="bl-input" type="text" placeholder="문서 내 검색" aria-label="문서 내 검색">
           <span class="hits" id="hits"></span>
-          <button id="prevHit" class="tiny" aria-label="이전 검색 결과" disabled>‹</button>
-          <button id="nextHit" class="tiny" aria-label="다음 검색 결과" disabled>›</button>
+          <button id="prevHit" class="tiny bl-btn bl-btn--sm" aria-label="이전 검색 결과" disabled>‹</button>
+          <button id="nextHit" class="tiny bl-btn bl-btn--sm" aria-label="다음 검색 결과" disabled>›</button>
         </span>
       </div>
       <div id="viewport" tabindex="0"></div>
@@ -189,29 +196,29 @@
   <section id="panePages" role="tabpanel" aria-labelledby="tabPages" hidden>
     <div id="pagesEmpty" class="empty">
       먼저 PDF를 열어주세요.<br><br>
-      <button class="primary" id="pagesOpen">PDF 열기</button>
+      <button class="primary bl-btn bl-btn--primary" id="pagesOpen">PDF 열기</button>
     </div>
 
     <div id="pagesMain" hidden>
       <div class="bar">
-        <button class="tiny" id="selAll">전체 선택</button>
-        <button class="tiny" id="selNone">선택 해제</button>
+        <button class="tiny bl-btn bl-btn--sm" id="selAll">전체 선택</button>
+        <button class="tiny bl-btn bl-btn--sm" id="selNone">선택 해제</button>
         <span class="label" id="selCount">0장 선택</span>
         <span class="sp"></span>
-        <button class="tiny" id="rotL" disabled aria-label="왼쪽으로 회전">↺</button>
-        <button class="tiny" id="rotR" disabled aria-label="오른쪽으로 회전">↻</button>
-        <button class="tiny" id="moveL" disabled aria-label="앞으로 이동">←</button>
-        <button class="tiny" id="moveR" disabled aria-label="뒤로 이동">→</button>
-        <button class="tiny" id="delSel" disabled>삭제</button>
+        <button class="tiny bl-btn bl-btn--sm" id="rotL" disabled aria-label="왼쪽으로 회전">↺</button>
+        <button class="tiny bl-btn bl-btn--sm" id="rotR" disabled aria-label="오른쪽으로 회전">↻</button>
+        <button class="tiny bl-btn bl-btn--sm" id="moveL" disabled aria-label="앞으로 이동">←</button>
+        <button class="tiny bl-btn bl-btn--sm" id="moveR" disabled aria-label="뒤로 이동">→</button>
+        <button class="tiny bl-btn bl-btn--sm" id="delSel" disabled>삭제</button>
       </div>
       <div class="bar">
-        <button class="tiny" id="addPdf">＋ PDF 합치기</button>
+        <button class="tiny bl-btn bl-btn--sm" id="addPdf">＋ PDF 합치기</button>
         <span class="sp"></span>
-        <button class="tiny" id="saveSel" disabled>선택만 저장</button>
-        <button class="primary tiny" id="saveAll">저장</button>
+        <button class="tiny bl-btn bl-btn--sm" id="saveSel" disabled>선택만 저장</button>
+        <button class="primary tiny bl-btn bl-btn--primary bl-btn--sm" id="saveAll">저장</button>
       </div>
       <div id="thumbs"></div>
-      <p class="note">썸네일을 눌러 고른 뒤 회전·이동·삭제하세요. 저장을 눌러야 파일로 만들어집니다.</p>
+      <p class="note bl-note">썸네일을 눌러 고른 뒤 회전·이동·삭제하세요. 저장을 눌러야 파일로 만들어집니다.</p>
     </div>
   </section>
 
@@ -224,26 +231,26 @@
 
     <!-- 이미지 → PDF -->
     <div id="i2p">
-      <div class="drop" id="imgDrop" role="button" tabindex="0" aria-label="이미지 선택">
+      <div class="drop bl-drop" id="imgDrop" role="button" tabindex="0" aria-label="이미지 선택">
         <span class="big">🖼️</span>
         <p>여기를 눌러 이미지를 고르거나<br>파일을 끌어다 놓으세요 (붙여넣기도 가능)</p>
       </div>
-      <div class="card" id="i2pOpts" hidden>
+      <div class="card bl-panel" id="i2pOpts" hidden>
         <div class="row">
           <span class="label">페이지 크기</span>
-          <select id="paper">
+          <select class="bl-input" id="paper">
             <option value="fit">이미지 크기 그대로</option>
             <option value="a4">A4</option>
             <option value="letter">Letter</option>
           </select>
           <span class="label">방향</span>
-          <select id="orient">
+          <select class="bl-input" id="orient">
             <option value="auto">자동</option>
             <option value="portrait">세로</option>
             <option value="landscape">가로</option>
           </select>
           <span class="label">여백</span>
-          <select id="margin">
+          <select class="bl-input" id="margin">
             <option value="0">없음</option>
             <option value="10">10mm</option>
             <option value="20">20mm</option>
@@ -251,8 +258,8 @@
         </div>
         <div class="row">
           <span class="sp"></span>
-          <button class="tiny" id="imgClear">비우기</button>
-          <button class="primary tiny" id="makePdf">PDF 만들기</button>
+          <button class="tiny bl-btn bl-btn--sm" id="imgClear">비우기</button>
+          <button class="primary tiny bl-btn bl-btn--primary bl-btn--sm" id="makePdf">PDF 만들기</button>
         </div>
       </div>
       <div id="imgList"></div>
@@ -262,10 +269,10 @@
     <div id="p2i" hidden>
       <div id="p2iEmpty" class="empty">
         먼저 PDF를 열어주세요.<br><br>
-        <button class="primary" id="p2iOpen">PDF 열기</button>
+        <button class="primary bl-btn bl-btn--primary" id="p2iOpen">PDF 열기</button>
       </div>
       <div id="p2iMain" hidden>
-        <div class="card">
+        <div class="card bl-panel">
           <div class="row">
             <span class="label">형식</span>
             <div class="seg" role="group" aria-label="출력 형식">
@@ -273,7 +280,7 @@
               <button type="button" data-imgfmt="jpg">JPG</button>
             </div>
             <span class="label">해상도</span>
-            <select id="p2iScale">
+            <select class="bl-input" id="p2iScale">
               <option value="1">1× (72dpi)</option>
               <option value="2" selected>2× (144dpi)</option>
               <option value="3">3× (216dpi)</option>
@@ -282,20 +289,20 @@
           </div>
           <div class="row">
             <span class="label">범위</span>
-            <input id="p2iRange" type="text" placeholder="예: 1-3, 7 (비우면 전체)" aria-label="페이지 범위" style="flex:1;min-width:9rem">
+            <input id="p2iRange" class="bl-input" type="text" placeholder="예: 1-3, 7 (비우면 전체)" aria-label="페이지 범위" style="flex:1;min-width:9rem">
           </div>
           <div class="row">
             <span class="sp"></span>
             <span class="label" id="p2iStatus"></span>
-            <button class="primary tiny" id="p2iGo">이미지로 저장</button>
+            <button class="primary tiny bl-btn bl-btn--primary bl-btn--sm" id="p2iGo">이미지로 저장</button>
           </div>
         </div>
-        <p class="note">2장 이상이면 ZIP 하나로 묶어 내려받습니다.</p>
+        <p class="note bl-note">2장 이상이면 ZIP 하나로 묶어 내려받습니다.</p>
       </div>
     </div>
   </section>
 
-  <p class="privacy">PDF와 이미지는 이 브라우저 안에서만 열리고 만들어집니다. Bubblelab 서버로 올라가거나 저장되지 않아요.</p>
+  <p class="privacy bl-note">PDF와 이미지는 이 브라우저 안에서만 열리고 만들어집니다. Bubblelab 서버로 올라가거나 저장되지 않아요.</p>
 </div>
 
 <input id="pdfInput" type="file" accept="application/pdf,.pdf" multiple>
@@ -1044,9 +1051,9 @@ async function addImages(fileList) {
     if (!file.type.startsWith("image/") && !/\.(heic|heif|avif|webp|bmp|gif|tiff?)$/i.test(file.name)) continue;
     const row = el("div", "item");
     row.innerHTML = `<img alt=""><div class="meta"><div class="name"></div><div class="info">읽는 중…</div></div>
-      <span class="ops"><button class="tiny" data-op="up" aria-label="위로">↑</button>
-      <button class="tiny" data-op="down" aria-label="아래로">↓</button>
-      <button class="tiny" data-op="del" aria-label="빼기">✕</button></span>`;
+      <span class="ops"><button class="tiny bl-btn bl-btn--sm" data-op="up" aria-label="위로">↑</button>
+      <button class="tiny bl-btn bl-btn--sm" data-op="down" aria-label="아래로">↓</button>
+      <button class="tiny bl-btn bl-btn--sm" data-op="del" aria-label="빼기">✕</button></span>`;
     row.querySelector(".name").textContent = file.name;
     const item = { file, row };
     images.push(item);

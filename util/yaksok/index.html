@@ -8,161 +8,162 @@
 <meta name="bl-group" content="함께">
 <!--yaksok-og-->
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🫧</text></svg>">
+<link rel="stylesheet" href="/_shared/bubble.css">
 <style>
   :root {
-    color-scheme: light dark;
-    --bg: light-dark(#f6f7f9, #14171b);
-    --card: light-dark(#ffffff, #1c2127);
-    --ink: light-dark(#1c2733, #dbe4ee);
-    --line: light-dark(#1c273318, #dbe4ee1c);
-    --soft: light-dark(#1c273308, #dbe4ee0a);
-    --accent: light-dark(#2f8f6e, #6fd4ac);
-    --accent-ink: light-dark(#ffffff, #0e1a15);
+    --accent-h: 268;
+    /* 도구 고유 색 — 점심·저녁 칸과 주말. 나머지는 bubble.css 토큰. */
+    --card: var(--field);
+    --soft: var(--sunk);
     --lunch: light-dark(#f0a33a, #ffc66b);
-    --dinner: light-dark(#5b6ee1, #8f9dff);
+    --dinner: light-dark(#3f86d6, #7fb6ff);
     /* 칸의 불투명도 = 가능 인원 ÷ 정원 — rgb(var(--lunch-rgb) / 0.375) 처럼 쓴다 */
     --lunch-rgb: 240 163 58;
-    --dinner-rgb: 91 110 225;
-    --no: light-dark(#1c273330, #dbe4ee30);
+    --dinner-rgb: 63 134 214;
     --sun: light-dark(#d4493b, #ff8a7a);
     --sat: light-dark(#3a6fd4, #8fb2ff);
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink);
-         font-family: ui-monospace, "SF Mono", Menlo, Consolas, "D2Coding", monospace;
-         -webkit-text-size-adjust: 100%; }
+  body { margin: 0; -webkit-text-size-adjust: 100%; }
   main { max-width: 1120px; margin: 0 auto; padding: 1.1rem 1rem 10rem; }
-  h1 { margin: .2rem 0 .3rem; font-size: 1.25rem; }
-  h2 { margin: 0 0 .7rem; font-size: .92rem; }
-  .muted { opacity: .58; font-size: .76rem; line-height: 1.55; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: .9rem;
-          padding: 1rem; margin-bottom: .9rem; }
+  h1 { margin: .2rem 0 .3rem; font-size: 1.3rem; font-weight: 800; letter-spacing: -.02em; }
+  h2 { margin: 0 0 .7rem; font-size: 1rem; font-weight: 700; letter-spacing: -.01em; }
+  .muted { color: var(--muted); font-size: .8rem; line-height: 1.55; }
+  .card { margin-bottom: .9rem; }
   button, input { font: inherit; color: inherit; }
-  button { border: 1px solid var(--line); background: var(--soft); border-radius: .6rem;
-           padding: .55rem .8rem; cursor: pointer; }
-  button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
-  button:disabled { opacity: .45; cursor: default; }
-  input { width: 100%; padding: .65rem .75rem; border: 1px solid var(--line); border-radius: .6rem;
-          background: var(--bg); font-size: 16px; }
-  label { display: block; margin: .7rem 0 .3rem; font-size: .76rem; opacity: .7; }
+  /* 스크립트가 만드는 버튼(확정·계좌 복사·방장 넘기기 …)도 같은 재료로 — .bl-btn 의 작은 판 */
+  button, a.button, label.button {
+    display: inline-flex; align-items: center; justify-content: center; gap: .35rem;
+    border: 1px solid var(--line); background: var(--field); color: var(--ink);
+    border-radius: var(--pill); padding: .5rem .95rem; cursor: pointer; font-size: .88rem;
+    font-weight: 600; line-height: 1.2; text-decoration: none;
+    transition: transform .12s, border-color .15s, filter .15s; }
+  button:hover, a.button:hover, label.button:hover { border-color: var(--accent-line); }
+  button:active, a.button:active, label.button:active { transform: scale(.97); }
+  button.primary, label.button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+  button:disabled { opacity: .45; cursor: default; transform: none; }
+  input { width: 100%; padding: .65rem .8rem; border: 1px solid var(--line); border-radius: var(--r-sm);
+          background: var(--field); font-size: 16px; caret-color: var(--accent); }
+  input:focus-visible { outline: none; border-color: var(--accent);
+                        box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+  input.bl-input { font-size: 16px; }
+  label { display: block; margin: .8rem 0 .35rem; font-size: .82rem; color: var(--muted); }
   .row { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
-  .err { color: var(--sun); font-size: .76rem; min-height: 1.1em; margin: .5rem 0 0; }
+  .row.nowrap { flex-wrap: nowrap; }
+  .err { color: var(--bad); font-size: .8rem; min-height: 1.1em; margin: .5rem 0 0; }
   [hidden] { display: none !important; }
 
   /* 첫 화면 */
-  .hero { text-align: center; padding: 1.4rem 0 .6rem; }
-  .hero .big { font-size: 3rem; }
-  .flow { display: flex; flex-wrap: wrap; justify-content: center; gap: .3rem .5rem;
-          margin: .6rem 0 0; padding: 0; list-style: none; font-size: .72rem; opacity: .7; }
-  .flow li + li::before { content: "→ "; opacity: .5; }
-  .flow .soon { opacity: .55; }
+  .hero { max-width: 460px; margin: 0 auto; padding: 1rem 0 .4rem; }
+  .hero .bl-head { margin-bottom: .8rem; }
+  .hero .bl-bubble { width: 3.4rem; font-size: 1.7rem; }
+  .flow { display: flex; flex-wrap: wrap; gap: .35rem; margin: .7rem 0 1rem; padding: 0; list-style: none; }
+  .flow li { font-size: .76rem; padding: .25rem .65rem; border-radius: var(--pill);
+             background: var(--accent-soft); color: var(--ink); box-shadow: inset 0 0 0 1px var(--accent-line); }
+  .flow .soon { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1px var(--line); }
   #create, #enter { max-width: 460px; margin: 0 auto .9rem; }
-  .code-input { letter-spacing: .25em; font-weight: 600; text-transform: lowercase; }
+  .code-input { font-family: var(--mono); letter-spacing: .25em; font-weight: 600; text-transform: lowercase; }
   .stepper { display: inline-flex; align-items: center; gap: .5rem; }
-  .stepper button { width: 2.4rem; height: 2.4rem; padding: 0; font-size: 1.1rem; }
-  .stepper output { min-width: 1.8rem; text-align: center; font-size: 1.05rem; font-weight: 700; }
-  .dice { flex: none; font-size: 1.3rem; padding: .35rem .6rem; }
+  .stepper button { width: 2.5rem; height: 2.5rem; padding: 0; font-size: 1.1rem; }
+  .stepper output { min-width: 1.8rem; text-align: center; font-size: 1.1rem; font-weight: 800;
+                    font-variant-numeric: tabular-nums; }
+  .dice { flex: none; font-size: 1.3rem; width: 2.9rem; height: 2.9rem; padding: 0; }
   .dice.roll { animation: roll .35s ease-out; }
   @keyframes roll { from { transform: rotate(-200deg) scale(.7); } to { transform: none; } }
+  #create > button[type=submit] { margin-top: .4rem; }
   #mine { max-width: 460px; margin: 0 auto; }
-  #mine a { display: flex; justify-content: space-between; padding: .6rem 0; color: inherit;
-            text-decoration: none; border-top: 1px solid var(--line); font-size: .84rem; }
+  #mine a { display: flex; justify-content: space-between; padding: .65rem 0; color: inherit;
+            text-decoration: none; border-top: 1px solid var(--line); font-size: .88rem; }
+  #mine a:hover { color: var(--accent); }
 
   /* 방 */
-  .room-head { display: flex; justify-content: space-between; align-items: flex-start; gap: .6rem; }
-  .code { font-size: .7rem; opacity: .5; letter-spacing: .08em; }
-  .banner { border-color: var(--accent); background: light-dark(#2f8f6e10, #6fd4ac10); }
-  .banner .when { font-size: 1.05rem; font-weight: 700; margin: .1rem 0 .5rem; }
-  .banner .row button, .banner .row a { font-size: .76rem; }
-  label.button { display: inline-block; margin: 0; opacity: 1; font-size: inherit; cursor: pointer; }
-  label.button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
-  a.button, label.button { display: inline-block; border: 1px solid var(--line); background: var(--soft);
-             border-radius: .6rem; padding: .55rem .8rem; color: inherit; text-decoration: none; }
-
-  .tabs { display: flex; gap: .3rem; margin-bottom: .7rem; }
-  .tabs button { flex: 1; font-size: .8rem; }
-  .tabs button[aria-pressed="true"] { background: var(--ink); color: var(--card); border-color: transparent; }
+  .room-head { display: flex; justify-content: space-between; align-items: flex-start; gap: .6rem; margin-bottom: .2rem; }
+  .room-head h1 { font-family: var(--mono); letter-spacing: 0; }
+  .code { font-size: .74rem; color: var(--muted); letter-spacing: .04em; }
+  .banner { border-color: var(--accent-line); background: color-mix(in srgb, var(--accent-soft) 70%, var(--field)); }
+  .banner .when { font-size: 1.1rem; font-weight: 800; margin: .1rem 0 .5rem; }
+  .banner .row button, .banner .row a { font-size: .8rem; }
+  label.button { margin: 0; }
 
   .months { display: grid; gap: 1rem; }
-  .month h3 { margin: 0 0 .4rem; font-size: .84rem; }
+  .month h3 { margin: 0 0 .45rem; font-size: .9rem; font-weight: 700; }
   .grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
-  .dow { text-align: center; font-size: .64rem; opacity: .55; padding-bottom: .15rem; }
-  .dow.sun { color: var(--sun); opacity: .8; } .dow.sat { color: var(--sat); opacity: .8; }
-  .day { position: relative; aspect-ratio: 1 / 1; border-radius: .5rem; border: 1px solid var(--line);
-         background: var(--card); padding: 0; overflow: hidden; touch-action: manipulation;
-         -webkit-tap-highlight-color: transparent; user-select: none; }
+  .dow { text-align: center; font-size: .68rem; color: var(--muted); padding-bottom: .15rem; }
+  .dow.sun { color: var(--sun); } .dow.sat { color: var(--sat); }
+  .day { position: relative; aspect-ratio: 1 / 1; border-radius: .55rem; border: 1px solid var(--line);
+         background: var(--card); padding: 0; overflow: hidden; touch-action: manipulation; display: block;
+         -webkit-tap-highlight-color: transparent; user-select: none; font-weight: 400; transition: none; }
+  .day:active { transform: none; }
   .months.painting .day { cursor: crosshair; }
   .day { -webkit-touch-callout: none; }
-  .day:disabled { opacity: .28; border-style: dashed; background: transparent; }
+  .day:disabled { opacity: .3; border-style: dashed; background: transparent; }
   .day .half { position: absolute; left: 0; right: 0; height: 50%; }
   .day .top { top: 0; } .day .bottom { bottom: 0; }
   /* 진하게 칠한 칸(모두 가능)에서도 숫자가 읽히게 바탕색 테두리를 두른다 */
-  .day .num { position: relative; z-index: 1; font-size: .78rem; font-weight: 600;
+  .day .num { position: relative; z-index: 1; font-size: .8rem; font-weight: 700; font-variant-numeric: tabular-nums;
               text-shadow: 0 0 2px var(--card), 0 0 2px var(--card), 0 0 3px var(--card); }
   .day.sun .num { color: var(--sun); } .day.sat .num { color: var(--sat); }
   .day .x { position: absolute; inset: 0; display: grid; place-items: center; font-size: 1.3rem; opacity: .35; }
-  .day .counts { position: absolute; right: 3px; bottom: 2px; z-index: 1; font-size: .56rem; opacity: .8; }
+  .day .counts { position: absolute; right: 3px; bottom: 2px; z-index: 1; font-size: .56rem; font-family: var(--mono); opacity: .85; }
   .day.today { outline: 2px solid var(--ink); outline-offset: -2px; }
   .day.picked { outline: 3px solid var(--accent); outline-offset: -3px; }
-  .drag-tip { margin: .45rem 0 0; font-size: .66rem; opacity: .55; }
-  .legend { display: flex; flex-wrap: wrap; gap: .35rem .8rem; margin: .7rem 0 0; font-size: .68rem; opacity: .75; }
+  .drag-tip { margin: .45rem 0 0; font-size: .72rem; color: var(--muted); }
+  .legend { display: flex; flex-wrap: wrap; gap: .35rem .8rem; margin: .7rem 0 0; font-size: .74rem; color: var(--muted); }
   .legend .lg-lunch { background: var(--lunch); } .legend .lg-dinner { background: var(--dinner); }
   .legend .lg-all { background: transparent; box-shadow: inset 0 0 0 2px var(--accent); }
   .legend .lg-mine { background: linear-gradient(var(--lunch) 50%, var(--dinner) 50%); border-color: var(--ink); }
   .legend i { display: inline-block; width: .8rem; height: .8rem; border-radius: .2rem; vertical-align: -2px;
               margin-right: .25rem; border: 1px solid var(--line); }
-  .saving { font-size: .66rem; opacity: .5; min-height: 1em; margin: .4rem 0 0; text-align: right; }
+  .saving { font-size: .7rem; color: var(--muted); min-height: 1em; margin: .4rem 0 0; text-align: right; }
 
   .best { margin: 0; padding: 0; list-style: none; display: grid; gap: .4rem; }
   .best li { display: flex; align-items: center; justify-content: space-between; gap: .5rem;
-             padding: .55rem .65rem; border-radius: .6rem; background: var(--soft); font-size: .8rem; }
-  .best .who { font-size: .66rem; opacity: .6; }
-  .best button { font-size: .72rem; padding: .35rem .6rem; }
-  .members { display: flex; flex-wrap: wrap; gap: .35rem; }
-  .members span { font-size: .74rem; padding: .25rem .55rem; border-radius: 1rem; background: var(--soft);
-                  border: 1px solid var(--line); }
-  .members .yet { opacity: .5; }
-  details.host summary { cursor: pointer; font-size: .82rem; font-weight: 600; }
+             padding: .6rem .7rem; border-radius: var(--r-sm); background: var(--sunk); font-size: .86rem; }
+  .best li:first-child { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent-line); }
+  .best .who { font-size: .72rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .best button { font-size: .78rem; padding: .35rem .75rem; }
+  details.host summary { cursor: pointer; font-size: .9rem; font-weight: 700; }
   details.host section { margin-top: .8rem; padding-top: .8rem; border-top: 1px solid var(--line); }
-  details.host h3 { margin: 0 0 .3rem; font-size: .78rem; }
+  details.host h3 { margin: 0 0 .35rem; font-size: .84rem; font-weight: 700; }
 
-  dialog { border: 1px solid var(--line); border-radius: .9rem; background: var(--card); color: var(--ink);
+  dialog { border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--field); color: var(--ink);
            padding: 1.1rem; width: min(92vw, 360px); }
-  dialog::backdrop { background: #0007; }
+  dialog::backdrop { background: rgb(0 0 0 / .45); }
   .slots { display: grid; grid-template-columns: repeat(3, 1fr); gap: .4rem; margin: .8rem 0; }
-  .slots button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+  .slots button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
 
   /* 진행 단계 */
-  .phases { display: flex; gap: .25rem; margin: 0 0 .9rem; padding: 0; list-style: none; counter-reset: p; }
-  .phases li { flex: 1; text-align: center; font-size: .7rem; padding: .45rem .2rem; border-radius: .5rem;
-               background: var(--soft); opacity: .55; position: relative; white-space: nowrap; }
-  .phases li.done { opacity: .8; }
-  .phases li.done::before { content: "✓ "; }
-  .phases li.now { opacity: 1; background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+  .phases { display: flex; gap: .3rem; margin: 0 0 .9rem; padding: 0; list-style: none; counter-reset: p; }
+  .phases li { flex: 1; text-align: center; font-size: .74rem; padding: .45rem .2rem; border-radius: var(--pill);
+               background: var(--sunk); color: var(--muted); position: relative; white-space: nowrap; }
+  .phases li.done { color: var(--ink); background: var(--accent-soft); }
+  .phases li.done::before { content: "✓ "; color: var(--accent); }
+  .phases li.now { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
   .phases li small { display: block; font-size: .56rem; opacity: .8; }
 
-  /* READY 창 — 오락실 대기실풍. 정원만큼 자리가 4열로 놓인다. */
-  .ready { margin-bottom: .9rem; padding: .75rem; border-radius: .9rem;
-           background: linear-gradient(180deg, #2b5fc9, #1c3f8f); color: #fff;
-           box-shadow: inset 0 0 0 3px #7fb2ff55, 0 2px 0 #0d2459; }
+  /* READY 창 — 오락실 대기실풍. 정원만큼 자리가 4열로 놓인다. 색은 도구 강조색 계열. */
+  .ready { --rh: var(--accent-h); margin-bottom: .9rem; padding: .75rem; border-radius: var(--r-lg);
+           background: linear-gradient(180deg, hsl(var(--rh) 58% 46%), hsl(var(--rh) 62% 30%)); color: #fff;
+           box-shadow: inset 0 0 0 3px hsl(var(--rh) 90% 80% / .35), 0 2px 0 hsl(var(--rh) 70% 18%); }
   .ready-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: .55rem; }
-  .ready-title { font-weight: 900; letter-spacing: .2em; color: #ffe14d; text-shadow: 2px 2px 0 #0d2459; }
-  #ready-count { font-size: .72rem; opacity: .85; }
+  .ready-title { font-family: var(--mono); font-weight: 900; letter-spacing: .2em; color: #ffe14d;
+                 text-shadow: 2px 2px 0 hsl(var(--rh) 70% 18%); }
+  #ready-count { font-size: .74rem; opacity: .9; font-variant-numeric: tabular-nums; }
   .seats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .45rem; }
   .seat { position: relative; display: flex; flex-direction: column; align-items: center; gap: .15rem;
-          padding: .45rem .2rem .4rem; border-radius: .6rem; background: #0f2c6e;
-          box-shadow: inset 0 0 0 2px #4f86e8; min-width: 0; }
+          padding: .45rem .2rem .4rem; border-radius: var(--r-sm); background: hsl(var(--rh) 70% 22%);
+          box-shadow: inset 0 0 0 2px hsl(var(--rh) 70% 66%); min-width: 0; }
   .seat canvas { width: 48px; height: 48px; image-rendering: pixelated; image-rendering: crisp-edges; }
   .seat .who { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-               font-size: .66rem; }
-  .seat .tag { font-size: .56rem; font-weight: 900; letter-spacing: .08em; padding: .05rem .35rem;
-               border-radius: .3rem; background: #0a1f52; color: #9fb7e8; }
-  .seat.ready-on .tag { background: #ffe14d; color: #1c2f66; }
-  .seat.empty { background: #0b2258; box-shadow: inset 0 0 0 2px #2c4f9a; }
-  .seat.empty .who { opacity: .5; }
+               font-size: .7rem; }
+  .seat .tag { font-family: var(--mono); font-size: .56rem; font-weight: 900; letter-spacing: .08em; padding: .05rem .35rem;
+               border-radius: .3rem; background: hsl(var(--rh) 70% 15%); color: hsl(var(--rh) 60% 82%); }
+  .seat.ready-on .tag { background: #ffe14d; color: #2a1c55; }
+  .seat.empty { background: hsl(var(--rh) 70% 18%); box-shadow: inset 0 0 0 2px hsl(var(--rh) 50% 38%); }
+  .seat.empty .who { opacity: .55; }
   .seat.me { box-shadow: inset 0 0 0 2px #ffe14d; }
   .seat .crown { position: absolute; top: .15rem; left: .3rem; font-size: .75rem; }
-  button.seat { font: inherit; color: inherit; border: 0; cursor: pointer; }
+  button.seat { font: inherit; color: inherit; border: 0; cursor: pointer; justify-content: flex-start; font-weight: 400; }
   @media (min-width: 860px) { .seats { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); } }
 
   /* 달력 칸: 위 점심·아래 저녁, 불투명도 = 가능 인원 ÷ 정원. 모두 되는 날은 테두리. 내 응답은 왼쪽 위 표시. */
@@ -178,43 +179,49 @@
 
   /* 사진 */
   .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 4px; margin-top: .6rem; }
-  .gallery button { position: relative; padding: 0; border: 0; aspect-ratio: 1; overflow: hidden; border-radius: .4rem;
-                    background: var(--soft); }
+  .gallery button { position: relative; display: block; padding: 0; border: 0; aspect-ratio: 1; overflow: hidden;
+                    border-radius: var(--r-sm); background: var(--sunk); }
   .gallery img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .gallery .pick { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; border-radius: 50%;
                    border: 2px solid #fff; background: #0006; }
   .gallery .picked .pick { background: var(--accent); }
   .gallery.picking button:not(.picked) img { opacity: .6; }
-  .kakao-out { display: block; text-align: center; margin: 0 0 .6rem; background: #fee500; color: #191600;
+  .kakao-out { display: flex; text-align: center; margin: 0 0 .6rem; background: #fee500; color: #191600;
                border-color: transparent; font-weight: 600; }
   .photo-dialog { width: min(96vw, 720px); }
-  .photo-dialog img { width: 100%; max-height: 70vh; object-fit: contain; border-radius: .5rem; background: #000; }
+  .photo-dialog img { width: 100%; max-height: 70vh; object-fit: contain; border-radius: var(--r-sm); background: #000; }
   .calendar-toggle { width: 100%; margin-bottom: .9rem; }
 
   /* 정산 */
-  .sub-h { margin: 1rem 0 .4rem; font-size: .78rem; opacity: .75; }
-  .settle-sum { font-size: .9rem; line-height: 1.6; }
-  .settle-sum b { font-size: 1.1rem; }
+  .sub-h { margin: 1.1rem 0 .45rem; font-size: .82rem; font-weight: 700; color: var(--muted); }
+  .settle-sum { font-size: .95rem; line-height: 1.6; font-variant-numeric: tabular-nums; }
+  .settle-sum b { font-size: 1.2rem; font-weight: 800; }
   .transfers, .expenses { margin: 0; padding: 0; list-style: none; display: grid; gap: .4rem; }
-  .transfers li, .expenses li { padding: .6rem .65rem; border-radius: .6rem; background: var(--soft); font-size: .8rem; }
-  .transfers .amt { font-weight: 700; }
-  .transfers .row, .expenses .row { margin-top: .35rem; }
-  .transfers button, .transfers a.button, .expenses button { font-size: .7rem; padding: .3rem .55rem; }
+  .transfers li, .expenses li { padding: .65rem .75rem; border-radius: var(--r-sm); background: var(--sunk); font-size: .86rem;
+                                font-variant-numeric: tabular-nums; }
+  .transfers .amt { font-weight: 800; }
+  .transfers .row, .expenses .row { margin-top: .4rem; }
+  .transfers button, .transfers a.button, .expenses button { font-size: .76rem; padding: .3rem .7rem; }
   .transfers .done { opacity: .55; }
   .kakaopay { background: #fee500 !important; color: #191600 !important; border-color: transparent !important; }
-  .chips { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .35rem; }
-  .chips button { font-size: .66rem; padding: .15rem .45rem; border-radius: 1rem; }
-  .chips button[aria-pressed="false"] { opacity: .4; text-decoration: line-through; }
+  .chips { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .4rem; }
+  .chips button { font-size: .72rem; padding: .2rem .6rem; font-weight: 500; }
+  .chips button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent-line); }
+  .chips button[aria-pressed="false"] { opacity: .5; text-decoration: line-through; background: transparent; }
+  .chips button:disabled { opacity: 1; cursor: default; }
+  .chips button[aria-pressed="false"]:disabled { opacity: .5; }
   .add-expense { margin-top: .6rem; flex-wrap: nowrap; }
   .add-expense input:first-child { flex: 2; } .add-expense input:nth-child(2) { flex: 1; min-width: 0; }
-  .add-expense button { flex: none; }
-  .parsed { margin-top: .6rem; padding: .6rem; border: 1px dashed var(--accent); border-radius: .6rem; }
-  .parsed label { display: flex; gap: .4rem; align-items: center; margin: .25rem 0; font-size: .78rem; opacity: 1; }
+  .add-expense button { flex: none; padding: .5rem .75rem; }
+  .add-expense input { padding-left: .65rem; padding-right: .65rem; min-width: 0; }
+  .parsed { margin-top: .6rem; padding: .7rem; border: 1.5px dashed var(--accent-line); border-radius: var(--r);
+            background: color-mix(in srgb, var(--accent-soft) 45%, transparent); }
+  .parsed label { display: flex; gap: .4rem; align-items: center; margin: .3rem 0; font-size: .82rem; color: var(--ink); }
   .parsed label input[type=text] { flex: 2; padding: .35rem .5rem; }
   .parsed label input[type=number] { flex: 1; min-width: 0; padding: .35rem .5rem; }
-  .parsed label input[type=checkbox] { width: auto; }
-  .pay-box { margin-top: .9rem; font-size: .78rem; }
-  .pay-box summary { cursor: pointer; font-weight: 600; }
+  .parsed label input[type=checkbox] { width: auto; accent-color: var(--accent); }
+  .pay-box { margin-top: 1rem; font-size: .84rem; }
+  .pay-box summary { cursor: pointer; font-weight: 700; }
 
   /* 터트리기 */
   .pop { position: fixed; inset: 0; display: grid; place-items: center; pointer-events: none; z-index: 20; }
@@ -222,19 +229,19 @@
   @keyframes pop { 0% { transform: scale(1); opacity: 1; } 60% { transform: scale(1.6); opacity: .9; }
                    100% { transform: scale(2.4); opacity: 0; } }
   .gone { text-align: center; padding: 3rem 0; }
-  .gone .big { font-size: 3.2rem; }
+  .gone .bl-bubble { width: 4.6rem; font-size: 2.4rem; margin-bottom: .6rem; }
 
   /* PC: 달력 왼쪽, 요약·참여자·방장 메뉴 오른쪽. 달은 나란히 놓는다. */
   .layout { display: grid; gap: .9rem; }
   .side .card:last-child, .cal .card:last-child { margin-bottom: 0; }
   .room-foot { margin-top: .9rem; }
-  @media (prefers-color-scheme: dark) { :root { --lunch-rgb: 255 198 107; --dinner-rgb: 143 157 255; } }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --lunch-rgb: 255 198 107; --dinner-rgb: 127 182 255; } }
+  :root[data-theme="dark"] { --lunch-rgb: 255 198 107; --dinner-rgb: 127 182 255; }
   @media (min-width: 860px) {
     main { padding: 2rem 1.5rem 8rem; }
     .layout { grid-template-columns: minmax(0, 1fr) 320px; align-items: start; }
     .side { position: sticky; top: 1rem; }
     .months { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .tabs { max-width: 320px; }
   }
   /* 모바일: 요약을 달력 위로 올린다 — 먼저 "언제 되는지"를 본다. */
   @media (max-width: 859px) {
@@ -244,7 +251,7 @@
     .layout { display: flex; flex-direction: column; }
     .side { display: contents; }
     #best-card { order: -1; }
-    .day .num { font-size: .72rem; }
+    .day .num { font-size: .74rem; }
   }
 </style>
 </head>
@@ -253,23 +260,26 @@
   <!-- 첫 화면: 방 만들기 -->
   <section id="home" hidden>
     <div class="hero">
-      <div class="big">🫧</div>
-      <h1>약속 잡기</h1>
+      <header class="bl-head">
+        <span class="bl-bubble" aria-hidden="true">🫧</span>
+        <h1>약속 잡기</h1>
+        <p>모두 되는 날짜 찾기부터 장소·사진·정산까지 링크 하나로.</p>
+      </header>
       <p class="muted">링크 하나로 모두 되는 날짜를 찾아요. 로그인 없이, 카톡방에 링크만 올리면 돼요.</p>
       <ul class="flow">
         <li>날짜 잡기</li><li>만나기</li><li class="soon">사진·정산 (준비 중)</li><li>🫧 터트리기</li>
       </ul>
     </div>
-    <form class="card" id="create">
+    <form class="card bl-panel" id="create">
       <h2>새 약속 방</h2>
       <label for="c-code">방 코드 (영문 소문자·숫자 6자리)</label>
-      <div class="row" style="flex-wrap:nowrap">
-        <input id="c-code" class="code-input" maxlength="6" placeholder="예: dinner" autocomplete="off"
+      <div class="row nowrap">
+        <input id="c-code" class="bl-input code-input" maxlength="6" placeholder="예: dinner" autocomplete="off"
                autocapitalize="none" spellcheck="false" required>
-        <button type="button" id="dice" class="dice" aria-label="무작위 코드">🎲</button>
+        <button type="button" id="dice" class="bl-btn dice" aria-label="무작위 코드">🎲</button>
       </div>
       <label for="c-name">내 닉네임</label>
-      <input id="c-name" maxlength="12" placeholder="예: 도형" autocomplete="nickname" required>
+      <input id="c-name" class="bl-input" maxlength="12" placeholder="예: 도형" autocomplete="nickname" required>
       <label>정원</label>
       <div class="stepper" id="c-cap">
         <button type="button" data-step="-1" aria-label="정원 줄이기">−</button>
@@ -278,19 +288,19 @@
       </div>
       <p class="muted">같은 코드를 치면 PC·폰 어디서든 같은 방이 열려요. 이미 있는 코드면 그 방에 들어가요.
         후보 날짜는 오늘부터 다음 달 말일까지, 방은 약속일로부터 30일 뒤 저절로 터져요.</p>
-      <button class="primary" type="submit" style="width:100%">방 열기</button>
+      <button class="bl-btn bl-btn--primary bl-btn--block primary" type="submit">방 열기</button>
       <p class="err" id="c-err"></p>
     </form>
-    <form class="card" id="enter">
+    <form class="card bl-panel" id="enter">
       <h2>코드로 들어가기</h2>
-      <div class="row" style="flex-wrap:nowrap">
-        <input id="e-code" class="code-input" maxlength="6" placeholder="받은 방 코드" autocomplete="off"
+      <div class="row nowrap">
+        <input id="e-code" class="bl-input code-input" maxlength="6" placeholder="받은 방 코드" autocomplete="off"
                autocapitalize="none" spellcheck="false" required>
-        <button type="submit" style="flex:none">들어가기</button>
+        <button class="bl-btn" type="submit" style="flex:none">들어가기</button>
       </div>
       <p class="err" id="e-err"></p>
     </form>
-    <section class="card" id="mine" hidden>
+    <section class="card bl-panel" id="mine" hidden>
       <h2>내 약속</h2>
       <div id="mine-list"></div>
     </section>
@@ -298,10 +308,10 @@
 
   <!-- 없는 방 / 터진 방 -->
   <section class="gone" id="gone" hidden>
-    <div class="big" id="gone-icon">🫧</div>
+    <div class="bl-bubble" id="gone-icon">🫧</div>
     <h1 id="gone-title"></h1>
     <p class="muted" id="gone-text"></p>
-    <p><a class="button" href="./">새 약속 만들기</a></p>
+    <p><a class="button bl-btn bl-btn--primary" href="./">새 약속 만들기</a></p>
   </section>
 
   <!-- 방 -->
@@ -320,7 +330,7 @@
       <div class="seats" id="seats"></div>
     </section>
 
-    <div class="card banner" id="confirmed" hidden>
+    <div class="card bl-panel banner" id="confirmed" hidden>
       <div class="muted">약속이 잡혔어요</div>
       <div class="when" id="cf-when"></div>
       <div class="muted" id="cf-place"></div>
@@ -335,17 +345,17 @@
       </div>
     </div>
 
-    <form class="card" id="join" hidden>
+    <form class="card bl-panel" id="join" hidden>
       <h2>참여하기</h2>
       <p class="muted">닉네임만 적으면 바로 날짜를 누를 수 있어요.</p>
-      <div class="row" style="flex-wrap:nowrap">
-        <input id="j-name" maxlength="12" placeholder="내 닉네임" autocomplete="nickname" required>
-        <button class="primary" type="submit" style="flex:none">참여</button>
+      <div class="row nowrap">
+        <input id="j-name" class="bl-input" maxlength="12" placeholder="내 닉네임" autocomplete="nickname" required>
+        <button class="bl-btn bl-btn--primary primary" type="submit" style="flex:none">참여</button>
       </div>
       <p class="err" id="j-err"></p>
     </form>
 
-    <section class="card room-body" id="settle-card" hidden>
+    <section class="card bl-panel room-body" id="settle-card" hidden>
       <h2>💸 정산</h2>
       <div class="settle-sum" id="st-sum"></div>
       <h3 class="sub-h">보낼 돈</h3>
@@ -358,22 +368,22 @@
       <p class="muted">캡처는 금액을 읽는 데만 쓰고 저장하지 않아요(Google Gemini 로 보내 읽어요). 읽은 값은 확인하고 넣어 주세요.</p>
       <div id="st-parsed"></div>
       <form class="row add-expense" id="st-add">
-        <input id="st-title" maxlength="40" placeholder="어디서 (예: 1차 삼겹살)">
-        <input id="st-amount" inputmode="numeric" placeholder="금액(원)">
+        <input id="st-title" class="bl-input" maxlength="40" placeholder="어디서 (예: 1차 삼겹살)">
+        <input id="st-amount" class="bl-input bl-num" inputmode="numeric" placeholder="금액(원)">
         <button type="submit">직접 추가</button>
       </form>
       <ul class="expenses" id="st-list"></ul>
       <details class="pay-box" id="st-pay">
         <summary>내가 돈 받을 곳 (카카오페이 송금 링크·계좌)</summary>
         <p class="muted">카카오페이 앱 → 송금 → 송금코드(QR) → 링크 복사. 참여자에게만 보여요.</p>
-        <input id="pay-kakao" placeholder="https://qr.kakaopay.com/…" inputmode="url">
-        <input id="pay-account" maxlength="60" placeholder="은행 계좌번호 예금주 (예: 토스뱅크 1000-0000-0000 김도형)" style="margin-top:.4rem">
+        <input id="pay-kakao" class="bl-input" placeholder="https://qr.kakaopay.com/…" inputmode="url">
+        <input id="pay-account" class="bl-input" maxlength="60" placeholder="은행 계좌번호 예금주 (예: 토스뱅크 1000-0000-0000 김도형)" style="margin-top:.4rem">
         <button type="button" id="pay-save" style="margin-top:.5rem">저장</button>
       </details>
       <p class="err" id="st-err"></p>
     </section>
 
-    <section class="card room-body" id="photos-card" hidden>
+    <section class="card bl-panel room-body" id="photos-card" hidden>
       <h2>📸 사진 <span class="muted" id="ph-count"></span></h2>
       <a class="button kakao-out" id="open-external" hidden>🌐 기본 브라우저로 열기 (사진 저장이 잘 돼요)</a>
       <div class="row">
@@ -390,7 +400,7 @@
     <button type="button" class="calendar-toggle" id="cal-toggle" hidden>🗓️ 날짜 투표 다시 보기</button>
     <div class="layout room-body" id="cal-layout">
       <div class="cal">
-        <div class="card">
+        <div class="card bl-panel">
           <p class="muted" id="cal-help"></p>
           <div class="months" id="months"></div>
           <div class="legend" id="legend"></div>
@@ -399,7 +409,7 @@
         </div>
       </div>
       <div class="side">
-        <div class="card" id="best-card">
+        <div class="card bl-panel" id="best-card">
           <h2>가장 많이 모이는 날</h2>
           <ol class="best" id="best"></ol>
           <p class="muted" id="best-empty">아직 응답이 없어요. 날짜를 톡톡 눌러 주세요.</p>
@@ -408,19 +418,19 @@
     </div>
     <!-- 방장 메뉴·이어하기는 달력 밖 — 날짜가 잡혀 달력을 접어도 장소·터트리기를 할 수 있어야 한다 -->
     <div class="room-foot room-body">
-    <div class="card" id="members-card">
+    <div class="card bl-panel" id="members-card">
       <h2>내 기기 <span class="muted" id="m-count"></span></h2>
       <p class="muted" style="margin:0">
-        다른 폰에서 이어서 하려면 <button type="button" id="resume" style="font-size:.72rem;padding:.25rem .5rem">내 이어하기 링크 복사</button>
+        다른 폰에서 이어서 하려면 <button type="button" id="resume" class="bl-btn bl-btn--sm">내 이어하기 링크 복사</button>
       </p>
     </div>
-    <details class="card host" id="host-card" hidden>
+    <details class="card bl-panel host" id="host-card" hidden>
       <summary>👑 방장 메뉴</summary>
       <section>
         <h3>장소</h3>
         <p class="muted">네이버 지도에서 장소 → 공유 → 링크 복사 후 붙여 넣어 주세요.</p>
-        <input id="p-name" maxlength="40" placeholder="장소 이름 (예: 을지로 노가리집)">
-        <input id="p-url" placeholder="https://naver.me/…" style="margin-top:.4rem" inputmode="url">
+        <input id="p-name" class="bl-input" maxlength="40" placeholder="장소 이름 (예: 을지로 노가리집)">
+        <input id="p-url" class="bl-input" placeholder="https://naver.me/…" style="margin-top:.4rem" inputmode="url">
         <div class="row" style="margin-top:.5rem">
           <button type="button" id="p-save">장소 저장</button>
           <button type="button" id="p-clear">장소 지우기</button>
@@ -443,13 +453,13 @@
       <section>
         <h3>🫧 방 터트리기</h3>
         <p class="muted">모든 응답과 기록이 바로 사라져요. 확인하려면 방 코드를 똑같이 적어 주세요.</p>
-        <input id="pop-code" class="code-input" maxlength="6" autocomplete="off" autocapitalize="none">
+        <input id="pop-code" class="bl-input code-input" maxlength="6" autocomplete="off" autocapitalize="none">
         <button type="button" id="pop" style="margin-top:.5rem">터트리기</button>
         <p class="err" id="pop-err"></p>
       </section>
     </details>
     </div>
-    <p class="muted" id="expires" style="text-align:center;margin-top:1rem"></p>
+    <p class="muted bl-note" id="expires" style="text-align:center;margin-top:1rem"></p>
   </section>
 
   <dialog id="photo-dialog" class="photo-dialog">

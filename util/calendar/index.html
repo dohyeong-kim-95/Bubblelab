@@ -7,12 +7,18 @@
 <meta name="description" content="이번 달 달력을 사진·스티커로 꾸며 배경화면으로.">
 <meta name="bl-group" content="사진·이미지">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>📅</text></svg>">
+<link rel="stylesheet" href="/_shared/bubble.css">
 <style>
-  :root { color-scheme: light dark; }
+  /* 공용 재료(bubble.css) 위에 짓는다. 목업 둘레는 몰입형이라 늘 어두운 무대로 두고,
+     그 위의 조작부만 공용 알약·시트 재료를 쓴다. */
+  :root { color-scheme: light dark; --accent-h: 166;
+          --stage-bg: #05080c;                        /* 목업 바깥 어두운 무대 */
+          --glass: #000000a6; --glass-hi: #000000d9; --glass-line: #ffffff30; }
   html, body { height: 100%; }
-  body { font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
-         margin: 0; overflow: hidden; background: #05080c;
-         color: light-dark(#1c2733, #dbe4ee); }
+  html { background: var(--stage-bg); }
+  body { font-family: var(--sans);
+         margin: 0; overflow: hidden; background: var(--stage-bg);
+         color: var(--ink); }
   .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
              overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 
@@ -24,10 +30,11 @@
   #stage-wrap { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; }
   #stage-slot { flex: 1; min-width: 0; height: 100%; display: grid; place-items: center; }
   .side-nav { position: absolute; top: 50%; transform: translateY(-50%); z-index: 4;
-              width: 2.5rem; height: 2.5rem; border: 0; border-radius: 50%;
-              background: #00000073; color: #fff; opacity: .8; cursor: pointer;
+              width: 2.5rem; height: 2.5rem; border: 1px solid var(--glass-line); border-radius: var(--pill);
+              background: #00000073; color: #fff; opacity: .85; cursor: pointer;
+              backdrop-filter: blur(6px);
               font: inherit; font-size: .95rem; display: grid; place-items: center; }
-  .side-nav:hover { opacity: 1; background: #000000ad; }
+  .side-nav:hover { opacity: 1; background: var(--glass-hi); }
   #prev { left: .3rem; }
   #next { right: .3rem; }
   body.editing .side-nav { display: none; }
@@ -37,7 +44,7 @@
   body:not(.editing) #stage { border-radius: 1.5rem;
     box-shadow: 0 0 0 5px #10151c, 0 0 0 6px #ffffff2e, 0 16px 40px #000a; }
   /* 꾸미기: 화면 끝까지 배경화면 색으로 채우고, 실제 배경화면 영역만 선으로 표시 */
-  body.editing #app { background: var(--wp-bg, #05080c); }
+  body.editing #app { background: var(--wp-bg, var(--stage-bg)); }
   body.editing #stage { outline: 1px dashed #8888; outline-offset: 0; }
   /* 뒤 레이어(내 사진) → 캔버스(달력) → 앞 레이어(스티커) 순으로 쌓는다.
      배경색은 무대가 칠하고 캔버스는 투명이라 캔버스 아래에도 그림을 놓을 수 있다.
@@ -51,7 +58,7 @@
   .sticker { position: absolute; transform-origin: center; height: auto; max-width: none;
              border: 2px solid transparent; border-radius: .2rem; touch-action: none;
              -webkit-user-drag: none; user-select: none; -webkit-touch-callout: none; }
-  .sticker.selected { border-color: #fff; outline: 2px solid #8ab8ff; }
+  .sticker.selected { border-color: #fff; outline: 2px solid var(--accent); }
   .sticker.rot-snapped { outline-color: #ff3ea5; }
   /* 잠금화면 UI가 덮는 자리. 스토리 편집기처럼 "끄는 동안에만" 반투명으로 떠서
      평소 화면은 깨끗하게 둔다. 화면에만 있고 저장 PNG에는 안 들어간다.
@@ -70,11 +77,11 @@
                   color: light-dark(#1c2733, #dbe4ee); }
   /* 지금 잡고 있는 대상(기본값 = 달력) */
   #cal-frame { position: absolute; pointer-events: none; border-radius: .35rem;
-               border: 1.5px dashed #8ab8ff; }
+               border: 1.5px dashed var(--accent); }
   #cal-frame[hidden] { display: none; }
   #cal-frame::after { content: "달력"; position: absolute; top: .2rem; left: .2rem;
-                      font-size: .62rem; padding: .1rem .35rem; border-radius: .3rem;
-                      background: #8ab8ff; color: #06121f; }
+                      font-size: .62rem; font-weight: 600; padding: .1rem .4rem; border-radius: var(--pill);
+                      background: var(--accent); color: var(--accent-ink); }
 
   #guide-v, #guide-h { position: absolute; z-index: 2; pointer-events: none;
                        background: #ff3ea5; box-shadow: 0 0 4px #ff3ea5; }
@@ -89,28 +96,34 @@
   .edit-top, .edit-dock { position: absolute; z-index: 3; color: #fff; }
   .edit-top[hidden], .edit-dock[hidden] { display: none; }
   .edit-top button, .edit-dock button { color: #fff; font: inherit; cursor: pointer;
-    border: 1px solid #ffffff30; background: #000000a6; backdrop-filter: blur(6px); }
-  .edit-top button:hover:not(:disabled), .edit-dock button:hover:not(:disabled) { background: #000000d9; }
+    border: 1px solid var(--glass-line); background: var(--glass); backdrop-filter: blur(6px);
+    transition: transform .12s, background-color .15s; }
+  .edit-top button:hover:not(:disabled), .edit-dock button:hover:not(:disabled) { background: var(--glass-hi); }
+  .edit-top button:active:not(:disabled), .edit-dock button:active:not(:disabled) { transform: scale(.95); }
   .edit-top button:disabled, .edit-dock button:disabled { opacity: .35; cursor: default; }
   .edit-top { top: max(.55rem, env(safe-area-inset-top)); left: .55rem; right: .55rem;
               display: flex; align-items: center; gap: .4rem; }
-  .edit-top button { padding: .4rem .7rem; font-size: .76rem; border-radius: 999px; flex: none; }
+  .edit-top button { padding: .45rem .8rem; font-size: .78rem; font-weight: 600; border-radius: var(--pill); flex: none; }
   #edit-device-label { flex: 1; min-width: 0; font-size: .68rem; text-align: center;
                        color: #ffffffb0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .edit-top select { flex: 1; min-width: 0; font: inherit; font-size: .74rem; color: #fff;
-                     background: #000000d9; border: 1px solid #ffffff30; border-radius: .5rem;
+                     background: var(--glass-hi); border: 1px solid var(--glass-line); border-radius: var(--r-sm);
                      padding: .3rem .4rem; }
-  #edit-save { font-weight: bold; }
+  /* 저장은 도구의 강조색 알약 (bl-btn--primary 와 같은 재료) */
+  .edit-top #edit-save { font-weight: 700; color: var(--accent-ink); background: var(--accent);
+                         border-color: transparent; }
+  .edit-top #edit-save:hover { background: var(--accent); filter: brightness(1.06); }
   /* 세로 독 — 오른쪽 가장자리에만 붙어서 화면 대부분을 비워 둔다 */
   .edit-dock { top: 50%; right: .5rem; transform: translateY(-50%);
                display: flex; flex-direction: column; gap: .3rem;
-               padding: .3rem; border-radius: 999px; background: #00000059; }
+               padding: .3rem; border-radius: var(--pill); background: #00000059;
+               box-shadow: inset 0 0 0 1px #ffffff1a; }
   /* 버튼이 10개라 조금 작게 — 그래도 무대 세로의 절반 남짓만 쓴다 */
   .edit-dock button { width: 2.3rem; height: 2.3rem; padding: 0; border-radius: 50%;
                       font-size: .9rem; display: grid; place-items: center; }
   #edit-hint { position: absolute; z-index: 3; left: 50%; transform: translateX(-50%);
                bottom: max(.6rem, env(safe-area-inset-bottom)); margin: 0;
-               padding: .3rem .7rem; border-radius: 999px; background: #000000a6;
+               padding: .3rem .75rem; border-radius: var(--pill); background: var(--glass);
                color: #fff; font-size: .66rem; white-space: nowrap; }
   #edit-hint[hidden] { display: none; }
 
@@ -119,28 +132,29 @@
               gap: .5rem; color: #fff;
               padding: .8rem .6rem max(.8rem, env(safe-area-inset-bottom)); }
   #view-bar[hidden] { display: none; }
-  #view-bar button { color: #fff; border: 1px solid #ffffff33; background: #ffffff14;
-                     font: inherit; border-radius: .5rem; cursor: pointer; padding: .5rem .8rem; }
-  #view-bar button:hover { background: #ffffff2b; }
+  /* 조작부 버튼은 bl-btn 알약 — 무대가 늘 어두우므로 바탕·선만 어두운 유리로 바꾼다 */
+  #view-bar .bl-btn { color: #fff; border-color: #ffffff33; background: #ffffff14; }
+  #view-bar .bl-btn:hover { background: #ffffff2b; border-color: #ffffff55; }
+  #view-bar .bl-btn--primary { color: var(--accent-ink); background: var(--accent); border-color: transparent; }
+  #view-bar .bl-btn--primary:hover { background: var(--accent); }
   /* 줄바꿈이 생기면 "오늘로" 유무에 따라 높이가 달라진다 — 한 줄로 고정 */
   .view-actions { display: flex; gap: .4rem; align-items: center; flex-wrap: nowrap;
                   justify-content: center; }
-  .view-actions button { font-size: .8rem; }
-  #view-save { background: #ffffff2e; font-weight: bold; }
-  #today-btn, #theme-btn { font-size: .74rem; padding: .4rem .6rem; }
+  #view-save { font-weight: 700; }
+  #theme-btn { width: 2.2rem; padding: 0; }
   /* 테마 버튼은 왼쪽 끝에 따로 둔다 — 가운데 줄이 넓어지면 오른쪽 공용 독에 닿는다 */
   #view-bar { position: relative; }
   #theme-btn { position: absolute; left: .6rem; bottom: max(.8rem, env(safe-area-inset-bottom)); }
   #today-btn[hidden] { display: none; }
   /* 목업 위에 겹쳐 두어 달을 옮겨도 목업 크기가 흔들리지 않게 한다 */
   #view-note { position: absolute; z-index: 3; left: 50%; transform: translateX(-50%);
-               bottom: .5rem; margin: 0; padding: .25rem .6rem; border-radius: 999px;
+               bottom: .5rem; margin: 0; padding: .25rem .65rem; border-radius: var(--pill);
                background: #00000094; color: #fff; font-size: .6rem; white-space: nowrap; }
   #view-note[hidden] { display: none; }
   /* 저장 결과 안내는 두 상태 모두에서 같은 자리(화면 가운데)에 잠깐 뜬다 */
   #err { position: absolute; z-index: 5; left: 50%; top: 50%; transform: translate(-50%, -50%);
-         margin: 0; max-width: 82%; padding: .5rem .8rem; border-radius: .6rem;
-         background: #000000cc; color: #ffb0a4; font-size: .75rem; text-align: center; }
+         margin: 0; max-width: 82%; padding: .55rem .9rem; border-radius: var(--r);
+         background: #000000cc; color: #ff8a80; font-size: .8rem; line-height: 1.5; text-align: center; }
   #err:empty { display: none; }
   #err.info { color: #fff; }
 
@@ -149,22 +163,22 @@
                   justify-content: flex-end; background: #0007; }
   #asset-picker[hidden] { display: none; }
   .picker-sheet { max-height: 72dvh; overflow-y: auto; padding: .9rem 1rem 1.2rem;
-                  border-radius: 1rem 1rem 0 0;
-                  background: light-dark(#fff, #141d28);
-                  color: light-dark(#1c2733, #dbe4ee);
-                  border-top: 1px solid light-dark(#dce3ea, #2a3747); }
+                  border-radius: var(--r-lg) var(--r-lg) 0 0;
+                  background: var(--bg); color: var(--ink);
+                  border-top: 1px solid var(--line); }
   .picker-head { display: flex; justify-content: space-between; align-items: center; gap: .6rem; }
-  .picker-head h3 { margin: 0; font-size: .92rem; }
-  .picker-sheet button { font: inherit; color: inherit; cursor: pointer; border-radius: .5rem;
-                         background: none; border: 1px solid light-dark(#1c273355, #dbe4ee55); }
-  .picker-head button { padding: .4rem .8rem; font-size: .75rem; }
-  .picker-status { margin: .5rem 0; opacity: .6; font-size: .72rem; line-height: 1.5; }
+  .picker-head h3 { margin: 0; font-size: 1rem; font-weight: 800; letter-spacing: -.01em; }
+  .picker-tabs button, .picker-grid button { font: inherit; color: inherit; cursor: pointer;
+                         border-radius: var(--r-sm); background: var(--field); border: 1px solid var(--line); }
+  .picker-grid button:hover { border-color: var(--accent-line); }
+  .picker-status { margin: .5rem 0; font-size: .78rem; }
   .picker-tabs { display: flex; gap: .35rem; overflow-x: auto; padding: .55rem 0 .45rem;
                  scrollbar-width: none; }
   .picker-tabs::-webkit-scrollbar { display: none; }
   .picker-tabs button { flex: none; width: 3rem; height: 3rem; padding: .28rem;
                         display: grid; place-items: center; border-radius: .6rem; }
-  .picker-tabs button.on { outline: 2px solid light-dark(#2563ab, #8ab8ff); }
+  .picker-tabs button.on { background: var(--accent-soft); border-color: var(--accent);
+                           box-shadow: inset 0 0 0 1px var(--accent); }
   /* minmax(0,1fr) — 이미지 고유 폭이 트랙을 밀어내 가로로 넘치는 것 방지 */
   .picker-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .45rem;
                  min-height: 30dvh; align-content: start; touch-action: pan-y; }
@@ -227,11 +241,11 @@
   <div id="view-bar">
     <!-- 달 이름은 배경화면 자체가 크게 보여준다. 여기선 읽기 도구용으로만 남긴다. -->
     <span id="month-label" class="sr-only" aria-live="polite"></span>
-    <button id="theme-btn" type="button" aria-label="라이트/다크 전환"></button>
+    <button id="theme-btn" class="bl-btn bl-btn--sm" type="button" aria-label="라이트/다크 전환"></button>
     <div class="view-actions">
-      <button id="today-btn" type="button" hidden>오늘로</button>
-      <button id="decorate" type="button">🎨 꾸미기</button>
-      <button id="view-save" type="button">💾 저장</button>
+      <button id="today-btn" class="bl-btn bl-btn--sm" type="button" hidden>오늘로</button>
+      <button id="decorate" class="bl-btn" type="button">🎨 꾸미기</button>
+      <button id="view-save" class="bl-btn bl-btn--primary" type="button">💾 저장</button>
     </div>
   </div>
 </div>
@@ -254,10 +268,10 @@
   <div class="picker-sheet">
     <div class="picker-head">
       <h3>🖼️ 스티커</h3>
-      <button id="close-picker" type="button">닫기</button>
+      <button id="close-picker" class="bl-btn bl-btn--sm" type="button">닫기</button>
     </div>
     <div class="picker-tabs" id="picker-tabs" hidden></div>
-    <p class="picker-status" id="picker-status">assets.bubblelab.dev의 스티커입니다. 누르면 배경을 지우고 붙여드려요.</p>
+    <p class="picker-status bl-note" id="picker-status">assets.bubblelab.dev의 스티커입니다. 누르면 배경을 지우고 붙여드려요.</p>
     <div class="picker-grid" id="picker-body"></div>
   </div>
 </div>

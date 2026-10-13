@@ -19,6 +19,7 @@
 | `home.js` | 카드 페이지의 🏠 홈 버튼 (빌드가 자동 주입) |
 | `engagement.js` | 유효 방문 비콘과 표시 시간 누적 (빌드가 자동 주입) |
 | `TwemojiCountryFlags.woff2` | 국기 게임용 Twemoji Country Flags 폰트 |
+| `bubble.css` | "비눗방울 실험실" 공용 재료 — 색·글꼴 토큰과 `bl-` 부품(머리·버튼·입력·칩·패널). util 도구들이 쓴다 |
 | `fonts/gowun-batang-700.woff2` | 고운바탕 Bold 부분 파일(라틴 전체 + 랜딩 제목 한글만) — 랜딩·카테고리 홈 제목용, OFL(`fonts/GowunBatang-OFL.txt`) |
 
 ## 공유 버튼
@@ -190,3 +191,21 @@ window.blWeekly = {
 - 비밀키, 관리자 정보, 민감한 자유 입력을 `localStorage`나 공유 모듈 전역 상태에
   넣지 않습니다.
 - 변경 후 최소한 인프라 테스트와 관련 카테고리의 모바일 흐름을 확인합니다.
+
+## 공용 재료 (bubble.css)
+
+랜딩·카테고리 홈과 같은 토큰을 도구 화면에서도 쓰기 위한 스타일시트입니다. 레이아웃은
+도구마다 그대로 두고 **재료만** 맞춥니다.
+
+```html
+<link rel="stylesheet" href="/_shared/bubble.css">
+<style> :root { --accent-h: 50; } </style>   <!-- 홈 목록의 방울 색과 같은 색상각 -->
+```
+
+- 요소 기본값은 배경·글자·글꼴·선택·초점만 건드립니다. 나머지는 `bl-` 클래스를 골라 씁니다:
+  `bl-head`(+`bl-bubble`), `bl-btn`(`--primary` `--ghost` `--block` `--sm`), `bl-input`·`bl-label`,
+  `bl-chips`·`bl-chip`(`aria-pressed`/`aria-selected`/`.is-on`), `bl-panel`·`bl-sunk`·`bl-drop`, `bl-note`.
+- 색이 필요하면 클래스 대신 토큰을 바로 씁니다: `--bg --ink --muted --line --field --sunk --accent
+  --accent-soft --accent-line --ok --warn --bad`. 전부 `light-dark()` 라 다크모드는 따로 적지 않습니다.
+- `--accent-h` 는 카테고리 홈의 `hueOf(폴더 이름)` 값과 맞춥니다(방울 색과 화면 강조색이 같아진다).
+
