@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>주차 마스터 — 광고에서 본 그 게임</title>
+<title>🚗 주차 러시 — 한 번 박으면 끝</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🚗</text></svg>">
 <style>
   :root { color-scheme: light dark; }
@@ -29,6 +29,7 @@
   #go:disabled { opacity: .3; cursor: default; }
   #go:active:not(:disabled) { transform: scale(.95); }
   #go.hide { display: none; }
+  #btn.hide { display: none; }
   #overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
              display: flex; flex-direction: column; align-items: center; gap: .9rem;
              width: min(84vw, 21rem); padding: 1.5rem 1.6rem; border-radius: 1.25rem;
@@ -49,21 +50,21 @@
 </head>
 <body>
 <div id="hud">
-  <span>🚗 <b>주차 마스터 (진짜임)</b></span>
+  <span>🚗 <b>주차 러시</b></span>
   <span class="sp"></span>
   <span id="hStage"></span>
   <button id="go" class="hide" disabled>출발!</button>
-  <button id="retry" title="다시 시작">↻</button>
+  <button id="retry" title="그린 길 지우기">↻</button>
 </div>
 <div id="overlay">
   <p class="big" id="oEmoji">🚗</p>
-  <h1 id="oTitle">주차 마스터</h1>
-  <p id="oMsg">광고에서 보던 바로 그 주차선 긋기 게임.
-근데 이건 진짜로 그 게임임.
+  <h1 id="oTitle">주차 러시</h1>
+  <p id="oMsg">주차선 긋기 게임의 한 판 승부 버전.
+차에서 같은 색 P까지 길을 그리고 출발!
+모든 차가 동시에 달립니다.
 
-차에서 같은 색 P까지 길을 그리세요.
-출발하면 모든 차가 동시에 달립니다.
-부딪히면 끝 — 길이로 타이밍을 조절하세요!</p>
+한 번이라도 부딪히면 그대로 끝.
+스테이지 1부터 몇 판 연속 클리어하나가 점수예요.</p>
   <button id="btn">시작</button>
   <p id="best"></p>
 </div>
@@ -245,8 +246,12 @@ window.blDiffAt = (s) => diffOf(genTuned(s));
 window.blSimAt = (s) => s < 2 ? 0 : simFp(fpOf(genTuned(s)), fpOf(genTuned(s - 1)));
 
 /* ── 상태 ─────────────────────────────────────────────── */
-let stage = 1, best = +localStorage.getItem("parkmaster.best") || 0;
+const BEST_KEY = "bl-parkrush-best";
+const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+let stage = 1, score = 0, best = +lsGet(BEST_KEY) || 0;
 let phase = "title";           // title | draw | run | win | fail
+let advanceT = 0;
 let cars = [], timer = 0, spd = BASE_SPD, tip = "", boom = null;
 let drawingCar = -1, curPath = [];
 
@@ -266,7 +271,7 @@ function loadStage() {
   go.classList.remove("hide"); go.disabled = true;
   window.__pm = {                                    // 테스트/디버그용
     defs: g.defs, boxes: g.boxes,
-    state: () => ({ moves, phase }),
+    state: () => ({ phase, stage, score, best }),
   };
   window.__pmGen = (s) => {                          // 생성기 대량 검사용
     const r = gen(s);
@@ -317,17 +322,26 @@ function step(dt) {
 
 function fail() {
   phase = "fail";
+  if (score > best) { best = score; lsSet(BEST_KEY, best); }
+  if (score >= 1) window.blWeeklyReport?.(score);
   const quips = ["광고 속 그 사람도 딱 이렇게 박던데요.",
                  "보험사에 광고 탓이라고 해보세요.",
                  "괜찮아요. 어차피 광고엔 이 게임이 없었잖아요."];
-  show("💥", "쾅…", "차가 부딪혔어요. 길이로 타이밍을 벌리세요.\n\n" +
-       quips[(Math.random() * quips.length) | 0], "다시 도전");
+  show("💥", `${score}판 연속 클리어`, `스테이지 ${stage}에서 쾅…\n\n` +
+       quips[(Math.random() * quips.length) | 0], "처음부터 다시");
 }
 function win() {
   phase = "win";
-  if (stage > best) { best = stage; localStorage.setItem("parkmaster.best", best); }
-  window.blWeeklyReport?.(stage);
-  show("🏆", `스테이지 ${stage} 클리어!`, "전 차량 주차 완료. 접촉사고 0건!", "다음 스테이지");
+  score++; hud();
+  show("🏆", `${score}연속!`, `스테이지 ${stage} 클리어 — 다음 스테이지로`, "");
+  $("btn").classList.add("hide");
+  clearTimeout(advanceT);
+  advanceT = setTimeout(() => {               // 자동으로 다음 스테이지
+    if (phase !== "win") return;
+    stage++;
+    $("overlay").classList.add("hide");
+    loadStage();
+  }, 900);
 }
 
 /* ── 그리기 ───────────────────────────────────────────── */
@@ -401,23 +415,30 @@ requestAnimationFrame(loop);
 
 /* ── 입력/UI ──────────────────────────────────────────── */
 const $ = (id) => document.getElementById(id);
-function hud() { $("hStage").textContent = `스테이지 ${stage} ${starsOf(dScore)}`; }
+function hud() { $("hStage").textContent = `${score}연속 · 스테이지 ${stage} ${starsOf(dScore)}`; }
 function show(emoji, title, msg, btnText) {
   $("oEmoji").textContent = emoji; $("oTitle").textContent = title;
   $("oMsg").textContent = msg; $("btn").textContent = btnText;
-  $("best").textContent = best ? `최고 기록: 스테이지 ${best}` : "";
+  $("btn").classList.remove("hide");
+  $("best").textContent = best ? `최고 기록: ${best}연속` : "";
   $("overlay").classList.remove("hide");
   $("go").classList.add("hide");
 }
-$("btn").addEventListener("click", () => {
-  if (phase === "win") stage++;
+function newRun() {                          // 새 런은 항상 스테이지 1부터
+  clearTimeout(advanceT);
+  stage = 1; score = 0;
   $("overlay").classList.add("hide");
   loadStage();
+}
+$("btn").addEventListener("click", () => {
+  if (phase === "title" || phase === "fail") newRun();
 });
-$("retry").addEventListener("click", () => {
-  if (phase === "draw" || phase === "run") loadStage();
+$("retry").addEventListener("click", () => {   // 그린 길만 지우기 (출발 후엔 불가)
+  if (phase === "draw") loadStage();
 });
-window.__pmJump = (s) => { stage = s; $("overlay").classList.add("hide"); loadStage(); };
+window.__pmJump = (s) => { clearTimeout(advanceT); stage = s; $("overlay").classList.add("hide"); loadStage(); };
+window.__pmWin = () => { if (phase === "draw" || phase === "run") win(); };
+window.__pmFail = () => { if (phase === "draw" || phase === "run") fail(); };
 $("go").addEventListener("click", () => {
   if (phase !== "draw" || !cars.every((c) => c.path)) return;
   phase = "run"; timer = 0; $("go").classList.add("hide");
@@ -448,8 +469,8 @@ addEventListener("pointerup", () => {
   drawingCar = -1; curPath = [];
 });
 
-window.blShareText = () => `주차 마스터 스테이지 ${best}까지 무사고! 광고에서 본 그 게임, 진짜로 있음 🚗`;
-window.blWeekly = { game: "parkmaster", dir: "max", fmt: (v) => `스테이지 ${v}` };
+window.blShareText = () => `주차 러시 ${best}연속! 한 번도 안 박고 도전해보세요 🚗`;
+window.blWeekly = { game: "parkrush", dir: "max", fmt: (v) => `${v}연속` };
 </script>
 <script defer src="/_shared/records.js"></script>
 <script defer src="/_shared/share.js"></script>

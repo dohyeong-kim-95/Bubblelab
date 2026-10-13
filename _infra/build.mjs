@@ -290,13 +290,15 @@ function listingPage(site, entries) {
   const hofCard = hofEntry
     ? `    <a class="card card--hof card--pinned" href="/hall-of-fame/" style="--hue:45;--i:0">
       <span class="hof-emoji">🏆</span>
-      <span class="hof-text"><span class="hof-name">명예의 전당</span><span class="hof-desc">${site === "puzzle" ? "전체 게임 스테이지 총합 랭킹" : "전체 게임 올타임 1위 모음"}</span></span>
+      <span class="hof-text"><span class="hof-name">명예의 전당</span><span class="hof-desc">전체 게임 올타임 1위 모음</span></span>
       <span class="hof-arrow" aria-hidden="true">→</span>
     </a>\n`
     : "";
   const gameCards = gameEntries
     .map(({ name, emoji }, i) => {
-      return `    <a class="card" href="/${escapeHtml(name)}/"
+      // 이름을 감추는 홈(slop)에서도 스크린리더·툴팁에는 한국어 제목이 남는다
+      const label = toyTitle(site, name).label || name;
+      return `    <a class="card" href="/${escapeHtml(name)}/" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}"
        style="--hue:${hueOf(name)};--i:${i + (hofEntry ? 1 : 0)}">
       <span class="emoji"${emoji.badge ? ' data-badge="+"' : ""}>${emoji.char}</span>
       <span class="name">${escapeHtml(name)}</span>
@@ -421,15 +423,23 @@ ${preconnectLinks}
   footer { margin-top: 3.5rem; padding-top: 1.2rem; border-top: 1px solid var(--line);
            font-family: var(--mono); color: var(--muted); font-size: .78rem; text-align: center; }
   footer a { color: inherit; text-underline-offset: .2em; }
+  /* slop: 이름 없이 방울만, 항상 3열 — 이름은 aria-label·title 로 남긴다 */
+  body[data-site="slop"] .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: 34rem; margin: 0 auto; }
+  body[data-site="slop"] .card:not(.card--hof) { gap: 0; }
+  body[data-site="slop"] .card:not(.card--hof) .name,
+  body[data-site="slop"] .card:not(.card--hof) .champ,
+  body[data-site="slop"] .card:not(.card--hof) .mine { position: absolute; width: 1px; height: 1px;
+          overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  body[data-site="slop"] .card:not(.card--hof) .emoji { width: 62%; font-size: clamp(2rem, 9vw, 3.6rem); }
   @media (max-width: 600px) {
     body { padding-top: 2rem; }
     .grid { gap: .65rem; grid-template-columns: repeat(auto-fill, minmax(8.2rem, 1fr)); }
-    .emoji { width: 3.7rem; font-size: 1.8rem; }
+    body:not([data-site="slop"]) .emoji { width: 3.7rem; font-size: 1.8rem; }
     .name { font-size: 1rem; }
   }
 </style>
 </head>
-<body>
+<body data-site="${escapeHtml(site)}">
   <div class="site-switcher">
     <h1><button class="site-trigger" id="siteTrigger" type="button" aria-expanded="false" aria-controls="siteMenu">
       <strong>${escapeHtml(site)}</strong><span class="chevron">⌄</span><span class="domain">.bubblelab.dev</span>

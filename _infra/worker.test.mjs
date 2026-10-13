@@ -602,6 +602,20 @@ test("이름이 바뀐 폴더의 옛 주소는 새 주소로 안내한다", asyn
   // 새 주소와 무관한 경로는 건드리지 않는다
   const fresh = await worker.fetch(new Request("https://util.bubblelab.dev/image-convert/"), env, ctx);
   assert.equal(fresh.status, 200);
+  // 폐지된 puzzle 서브도메인: 승격된 게임은 slop 의 새 이름으로, 나머지는 slop 홈으로
+  for (const [from, to] of [
+    ["https://puzzle.bubblelab.dev/pullpin/", "https://slop.bubblelab.dev/pinrush/"],
+    ["https://puzzle.bubblelab.dev/icebreak", "https://slop.bubblelab.dev/icerush/"],
+    ["https://puzzle.bubblelab.dev/watersort/", "https://slop.bubblelab.dev/"],
+    ["https://puzzle.bubblelab.dev/", "https://slop.bubblelab.dev/"],
+  ]) {
+    const response = await worker.fetch(new Request(from), env, ctx);
+    assert.equal(response.status, 301, from);
+    assert.equal(response.headers.get("Location"), to, from);
+  }
+  const localPuzzle = await worker.fetch(new Request("http://localhost:8787/puzzle/savedog/"), env, ctx);
+  assert.equal(localPuzzle.headers.get("Location"), "/slop/dogrush/");
+
   const other = await worker.fetch(new Request("https://slop.bubblelab.dev/convert/"), env, ctx);
   assert.equal(other.status, 200, "다른 서브도메인의 같은 이름까지 옮기면 안 된다");
 });
@@ -817,7 +831,7 @@ test("public static assets cache by stability while HTML and JSON keep their exi
   response = await fetch("https://assets.bubblelab.dev/_assets/sticker/couple-cat/preview.png");
   assert.equal(response.headers.get("Cache-Control"), "public, max-age=604800, stale-while-revalidate=86400");
 
-  response = await fetch("https://puzzle.bubblelab.dev/");
+  response = await fetch("https://slop.bubblelab.dev/");
   assert.equal(response.headers.get("Cache-Control"), null, "공개 문서는 캐시 헤더를 붙이지 않는다");
 });
 

@@ -201,10 +201,11 @@ test("all-time hall of fame: updates on accept, survives weekly pruning", async 
   await records.fetch(new Request("https://records.internal/?game=touch25&alltime=1", { method: "DELETE" }));
   assert.equal("touch25" in (await alltime()), false);
 
-  // scope 분리: slop 보드에는 puzzle 게임·은퇴 키가 안 보이고, puzzle 보드에는
-  // puzzle 게임만 보인다 (기본 무스코프는 admin용 — 전부 노출)
-  await post(records, { game: "watersort", nick: "퍼즐러", score: 42 });
+  // scope=slop: 은퇴 키(picklock, 폐지된 puzzle 게임)는 안 보인다
+  // (기본 무스코프는 admin용 — 전부 노출)
   await storage.put("alltime:picklock", { nick: "유령", score: 999, at: 1 }); // 은퇴 키 잔재
+  await storage.put("alltime:watersort", { nick: "퍼즐러", score: 42, at: 1 }); // 폐지된 puzzle 잔재
+  await post(records, { game: "pinrush", nick: "러시", score: 7 });
   const scoped = async (scope) => {
     const res = await records.fetch(
       new Request(`https://records.internal/?alltime=1&scope=${scope}`));
@@ -214,11 +215,11 @@ test("all-time hall of fame: updates on accept, survives weekly pruning", async 
   assert.equal("watersort" in slop, false);
   assert.equal("picklock" in slop, false);
   assert.equal(slop.circle.nick, "동글이");
-  const puzzle = await scoped("puzzle");
-  assert.equal(puzzle.watersort.nick, "퍼즐러");
-  assert.equal("circle" in puzzle, false);
-  assert.equal("picklock" in puzzle, false);
+  assert.equal(slop.pinrush.nick, "러시");               // 승격된 *rush 는 slop 보드에
   assert.equal((await alltime()).picklock.nick, "유령");  // admin(무스코프)엔 보인다
+  assert.equal((await alltime()).watersort.nick, "퍼즐러");
+  // 은퇴 키로 새 기록은 받지 않는다 (GAMES 미등록 → 400)
+  assert.equal((await post(records, { game: "watersort", nick: "퍼즐러", score: 43 })).status, 400);
 });
 
 test("notice: set, piggybacks on record reads, delete, validation", async () => {

@@ -39,7 +39,7 @@ agent_coding/
 ├─ Bubblelab/              ← main 체크아웃. 오케스트레이터(머지·기록)만 쓴다
 └─ worktrees/
    ├─ admin/  assets/  duri/  games/  idle/  lab/  life/
-   ├─ mindfulness/  podcast/  puzzle/  slop/  test/  util/  work/  www/
+   ├─ mindfulness/  podcast/  slop/  test/  util/  work/  www/
    └─ (서브도메인당 하나. 레인은 계속 재사용, 브랜치만 작업마다 갈아탄다)
 ```
 

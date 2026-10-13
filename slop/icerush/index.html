@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>얼음 깨서 보석 꺼내기 — 광고에서 본 그 게임</title>
+<title>💎 얼음 러시 — 한 번 틀리면 끝</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>💎</text></svg>">
 <style>
   :root { color-scheme: light dark; }
@@ -19,10 +19,6 @@
   #hud .sp { flex: 1; }
   #hud > span:first-child { flex: 0 1 auto; min-width: 0; overflow: hidden;
                             text-overflow: ellipsis; }
-  #retry { pointer-events: auto; font: inherit; border: 1.5px solid currentColor;
-           background: none; color: inherit; border-radius: 1rem; padding: .15rem .7rem;
-           cursor: pointer; opacity: .75; }
-  #retry:active { transform: scale(.95); }
   #overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
              display: flex; flex-direction: column; align-items: center; gap: .9rem;
              width: min(84vw, 21rem); padding: 1.5rem 1.6rem; border-radius: 1.25rem;
@@ -43,16 +39,16 @@
 </head>
 <body>
 <div id="hud">
-  <span>💎 <b>얼음 깨기 (진짜임)</b></span>
+  <span>💎 <b>얼음 러시</b></span>
   <span class="sp"></span>
   <span id="hStage"></span>
-  <button id="retry" title="다시 시작">↻</button>
 </div>
 <div id="overlay">
   <p class="big" id="oEmoji">💎</p>
-  <h1 id="oTitle">얼음 깨서 보석 꺼내기</h1>
-  <p id="oMsg">광고에서 보던 바로 그 얼음 깨기.
-근데 이건 진짜로 그 게임임.
+  <h1 id="oTitle">얼음 러시</h1>
+  <p id="oMsg">얼음 깨기, 목숨은 하나.
+한 번이라도 실패하면 거기서 끝!
+연속으로 클리어한 판 수가 점수예요.
 
 곡괭이는 찍은 칸에 2, 옆 칸에 1 데미지.
 보석은 전부 캐고, 폭탄 위 얼음은
@@ -205,7 +201,10 @@ window.blDiffAt = (s) => diffOf(genTuned(s));
 window.blSimAt = (s) => s < 2 ? 0 : simFp(fpOf(genTuned(s)), fpOf(genTuned(s - 1)));
 
 /* ── 상태 ─────────────────────────────────────────────── */
-let stage = 1, best = +localStorage.getItem("icebreak.best") || 0;
+const BEST_KEY = "bl-icerush-best";
+let best = 0;
+try { best = +localStorage.getItem(BEST_KEY) || 0; } catch {}
+let stage = 1, score = 0;
 let phase = "title";
 let grid = [], picks = 0, gemsLeft = 0, parts = [], shakeT = 0;
 
@@ -261,18 +260,25 @@ function tap(c, r) {
 
 function fail(msg) {
   phase = "fail";
+  const newBest = score > best;
+  if (newBest) { best = score; try { localStorage.setItem(BEST_KEY, best); } catch {} }
+  if (score >= 1) window.blWeeklyReport?.(score);
   const quips = ["광고 속 그 사람도 맨날 폭탄부터 찍던데요.",
                  "괜찮아요. 얼음은 내년 겨울에 또 얼어요.",
                  "보석은 원래 남 주기 아까워서 얼려둔 겁니다."];
-  show("💥", "발굴 실패…", msg + "\n\n" + quips[(Math.random() * quips.length) | 0],
-       "다시 도전");
+  show("💥", `${score}판 연속 클리어`,
+       msg + (newBest ? "\n🎉 최고 기록 경신!" : "") + "\n\n" + quips[(Math.random() * quips.length) | 0],
+       "처음부터 다시");
 }
 function win() {
   phase = "win";
-  if (stage > best) { best = stage; localStorage.setItem("icebreak.best", best); }
-  window.blWeeklyReport?.(stage);
-  show("🏆", `스테이지 ${stage} 클리어!`,
-       `보석 전부 발굴! 곡괭이 ${picks}개 남기고 성공.`, "다음 스테이지");
+  score++;
+  $("hStage").textContent = `✨ 스테이지 ${stage} 클리어! · 🔥 ${score}연속`;
+  setTimeout(() => {                                 // 짧게 보여주고 자동으로 다음 판
+    if (phase !== "win") return;
+    stage++;
+    loadStage();
+  }, 700);
 }
 
 /* ── 그리기 ───────────────────────────────────────────── */
@@ -361,20 +367,21 @@ requestAnimationFrame(loop);
 const $ = (id) => document.getElementById(id);
 function hud() {
   $("hStage").textContent =
-    `스테이지 ${stage} ${starsOf(dScore)} · 💎 ${gemsLeft} · ⛏️ ${picks}`;
+    `🔥 ${score}연속 · 스테이지 ${stage} ${starsOf(dScore)} · 💎 ${gemsLeft} · ⛏️ ${picks}`;
 }
 function show(emoji, title, msg, btnText) {
   $("oEmoji").textContent = emoji; $("oTitle").textContent = title;
   $("oMsg").textContent = msg; $("btn").textContent = btnText;
-  $("best").textContent = best ? `최고 기록: 스테이지 ${best}` : "";
+  $("best").textContent = best ? `최고 기록: ${best}연속` : "";
   $("overlay").classList.remove("hide");
 }
+if (best) $("best").textContent = `최고 기록: ${best}연속`;
 $("btn").addEventListener("click", () => {
-  if (phase === "win") stage++;
+  if (phase === "play" || phase === "win") return;
+  stage = 1; score = 0;                              // 새 런은 항상 스테이지 1부터
   $("overlay").classList.add("hide");
   loadStage();
 });
-$("retry").addEventListener("click", () => { if (phase === "play") loadStage(); });
 
 addEventListener("pointerdown", (e) => {
   if (e.target === cv) e.preventDefault();   // 모바일 더블탭 줌·고스트 클릭 방지
@@ -383,8 +390,8 @@ addEventListener("pointerdown", (e) => {
   tap(Math.floor((x - GX) / CELL), Math.floor((y - GY) / CELL));
 });
 
-window.blShareText = () => `얼음 깨기 스테이지 ${best}까지 발굴 완료! 광고에서 본 그 게임, 진짜임 💎`;
-window.blWeekly = { game: "icebreak", dir: "max", fmt: (v) => `스테이지 ${v}` };
+window.blShareText = () => `얼음 러시 ${best}연속! 한 번도 안 틀리고 도전해보세요 💎`;
+window.blWeekly = { game: "icerush", dir: "max", fmt: (v) => `${v}연속` };
 </script>
 <script defer src="/_shared/records.js"></script>
 <script defer src="/_shared/share.js"></script>

@@ -71,6 +71,12 @@ function withCacheControl(response, cacheControl) {
 const MOVED_PATHS = new Map([
   ["util:/convert", "/image-convert/"],   // 2026-08: "convert"만으로는 이미지 도구인 줄 모른다
 ]);
+// puzzle 서브도메인은 2026-10 에 접었다. 실패가 있는 게임만 연속 클리어제로 바꿔 slop 에
+// 새 이름(*rush)으로 옮겼고, 나머지 옛 주소는 slop 홈으로 보낸다.
+const PUZZLE_TO_SLOP = new Map([
+  ["pullpin", "pinrush"], ["gaterunner", "gaterush"], ["savedog", "dogrush"],
+  ["parkmaster", "parkrush"], ["screwout", "screwrush"], ["icebreak", "icerush"],
+]);
 const REALTIME_NAMESPACES = new Set(["avalon", "liargame", "yacht"]);
 // cron이 리뷰를 주기적으로 동기화할 외주 프로젝트 목록 (커머스 API, 현재 mock).
 const WORK_REVIEW_PROJECTS = ["daonfit"];
@@ -1272,36 +1278,6 @@ export async function handleRequest(request, env, ctx) {
       return env.RECORDS.get(id).fetch(request);
     }
 
-    // puzzle 명예의 전당: 전체 스테이지 총합 랭킹 (조회 공개, 등록은 닉네임 제출)
-    if (path === "/_puzzletotal") {
-      const id = env.RECORDS.idFromName("global");
-      if (request.method === "GET") {
-        const limited = await enforceRateLimit(request, env, {
-          scope: "puzzletotal-read", limit: 60, windowMs: 60 * 1000,
-        });
-        if (limited) return limited;
-        const vid = visitorId(request);
-        return env.RECORDS.get(id).fetch(
-          `https://records.internal/_puzzletotal${vid ? `?vid=${encodeURIComponent(vid)}` : ""}`,
-        );
-      }
-      if (request.method === "POST") {
-        const contentTypeError = requireJsonRequest(request);
-        if (contentTypeError) return contentTypeError;
-        const limited = await enforceRateLimit(request, env, {
-          scope: "puzzletotal", limit: 10, windowMs: 60 * 1000,
-        });
-        if (limited) return limited;
-        const { nick } = await request.json().catch(() => ({}));
-        return env.RECORDS.get(id).fetch("https://records.internal/_puzzletotal", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ nick, vid: visitorId(request) }),
-        });
-      }
-      return new Response("method not allowed", { status: 405 });
-    }
-
     // 게임 추천(좋아요): 방문자당 게임별 1회. 집계는 공개 조회.
     if (path === "/_like") {
       const id = env.RECORDS.idFromName("global");
@@ -1708,6 +1684,16 @@ export async function handleRequest(request, env, ctx) {
       return new Response(null, {
         status: 301,
         headers: { Location: hostBased ? moved : `/${site}${moved}` },
+      });
+    }
+
+    if (site === "puzzle") {
+      const moved = PUZZLE_TO_SLOP.get(path.split("/").filter(Boolean)[0]);
+      const dest = moved ? `/${moved}/` : "/";
+      const hostBased = host === ROOT_DOMAIN || host.endsWith(`.${ROOT_DOMAIN}`);
+      return new Response(null, {
+        status: 301,
+        headers: { Location: hostBased ? `https://slop.${ROOT_DOMAIN}${dest}` : `/slop${dest}` },
       });
     }
 

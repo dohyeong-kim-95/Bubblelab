@@ -34,15 +34,12 @@ export const GAMES = {
   flags:        { dir: "max", min: 0, max: 1000 },      // 연속으로 맞춘 국기 수
   logroll:      { dir: "max", min: 0, max: 100000 },    // 버틴 시간(초)
   lockrush:     { dir: "max", min: 1, max: 1000000 },   // 자물쇠 러시 점수 (구 picklock 스테이지제에서 승격 — 단위가 달라 새 키)
-  pullpin:      { dir: "max", min: 1, max: 1000 },      // 핀 뽑기 클리어 스테이지
-  watersort:    { dir: "max", min: 1, max: 10000 },     // 물 소팅 클리어 스테이지
-  gaterunner:   { dir: "max", min: 1, max: 10000 },     // 게이트 러너 클리어 스테이지
-  savedog:      { dir: "max", min: 1, max: 10000 },     // 강아지 구하기 클리어 스테이지
-  parkmaster:   { dir: "max", min: 1, max: 10000 },     // 주차 마스터 클리어 스테이지
-  screwout:     { dir: "max", min: 1, max: 10000 },     // 나사 풀기 클리어 스테이지
-  icebreak:     { dir: "max", min: 1, max: 10000 },     // 얼음 깨기 클리어 스테이지
-  trafficjam:   { dir: "max", min: 1, max: 10000 },     // 트래픽 잼 클리어 스테이지
-  fillfridge:   { dir: "max", min: 1, max: 10000 },     // 냉장고 채우기 클리어 스테이지
+  pinrush:      { dir: "max", min: 1, max: 10000 },     // 핀 러시 연속 클리어 수 (구 puzzle pullpin 에서 승격)
+  gaterush:     { dir: "max", min: 1, max: 10000 },     // 게이트 러시 연속 클리어 수 (구 gaterunner)
+  dogrush:      { dir: "max", min: 1, max: 10000 },     // 강아지 러시 연속 클리어 수 (구 savedog)
+  parkrush:     { dir: "max", min: 1, max: 10000 },     // 주차 러시 연속 클리어 수 (구 parkmaster)
+  screwrush:    { dir: "max", min: 1, max: 10000 },     // 나사 러시 연속 클리어 수 (구 screwout)
+  icerush:      { dir: "max", min: 1, max: 10000 },     // 얼음 러시 연속 클리어 수 (구 icebreak)
   reactiontime: { dir: "min", min: 0, max: 60000 },     // 반응속도(ms)
   "sort-line":  { dir: "max", min: 0, max: 100000 },    // 컨베이어 분류 정답 수
   touch25:      { dir: "min", min: 0, max: 3600 },      // 완주 시간(초)
@@ -52,12 +49,14 @@ export const GAMES = {
 };
 const HISTORICAL_GAMES = new Set(["bubble-pop-idle"]);
 
-// puzzle 서브도메인 게임들 — 명예의 전당(전체 스테이지 총합) 집계 대상
-const PUZZLE_GAMES = ["pullpin", "watersort", "gaterunner", "savedog", "parkmaster",
-                      "screwout", "icebreak", "trafficjam", "fillfridge"];
-const PUZZLE_SET = new Set(PUZZLE_GAMES);
 // 개편으로 은퇴한 키 — 어느 보드에도 안 보이고(스코프 필터), 삭제만 가능
-const RETIRED_SET = new Set(["picklock"]);   // 스테이지제 → lockrush 점수제로 승격
+const RETIRED_SET = new Set([
+  "picklock",                                  // 스테이지제 → lockrush 점수제로 승격
+  // 2026-10 puzzle 서브도메인 폐지: 실패가 있는 6종은 연속 클리어제(*rush)로 slop 승격,
+  // 실패가 없는 3종(watersort·trafficjam·fillfridge)은 점수로 바꿀 수 없어 내렸다
+  "pullpin", "gaterunner", "savedog", "parkmaster", "screwout", "icebreak",
+  "watersort", "trafficjam", "fillfridge",
+]);
 
 const beats = (dir, score, record) =>
   !record || (dir === "max" ? score > record.score : score < record.score);
@@ -81,47 +80,10 @@ export class RecordsDO {
     this.state = state;
   }
 
-  // puzzle 개인 최고 기록의 스테이지 총합
-  async puzzleTotal(vid) {
-    let total = 0, games = 0;
-    for (const g of PUZZLE_GAMES) {
-      const r = await this.state.storage.get(`personal:${vid}:${g}`);
-      if (r) { total += r.score; games++; }
-    }
-    return { total, games };
-  }
 
   async fetch(request) {
     const url = new URL(request.url);
     const week = weekKey();
-
-    // ---------- puzzle 명예의 전당: 전체 스테이지 총합 랭킹 ----------
-    if (url.pathname === "/_puzzletotal") {
-      if (request.method === "GET") {
-        const entries = [];
-        for (const [k, v] of await this.state.storage.list({ prefix: "ptotal:" })) {
-          entries.push({ vid: k.slice("ptotal:".length), ...v });
-        }
-        entries.sort((a, b) => b.total - a.total || a.at - b.at);
-        const vid = url.searchParams.get("vid");
-        const meIdx = VISITOR_ID.test(vid ?? "") ? entries.findIndex((e) => e.vid === vid) : -1;
-        const pub = ({ nick, total, games }) => ({ nick, total, games });
-        return Response.json({
-          board: entries.slice(0, 50).map(pub),
-          me: meIdx >= 0 ? { rank: meIdx + 1, ...pub(entries[meIdx]) } : null,
-        }, { headers: { "Cache-Control": "no-store" } });
-      }
-      if (request.method === "POST") {
-        const { vid, nick } = await request.json().catch(() => ({}));
-        if (!VISITOR_ID.test(vid ?? "") || !NICK.test(nick ?? "")) {
-          return new Response("invalid entry", { status: 400 });
-        }
-        const { total, games } = await this.puzzleTotal(vid);
-        if (total < 1) return new Response("no records yet", { status: 400 });
-        await this.state.storage.put(`ptotal:${vid}`, { nick, total, games, at: Date.now() });
-        return Response.json({ total, games }, { status: 201 });
-      }
-    }
 
     // ---------- 게임 추천(좋아요): 방문자당 게임별 1회 ----------
     if (url.pathname === "/_like" && request.method === "GET") {
@@ -264,13 +226,11 @@ export class RecordsDO {
       }
       // 올타임 명예의 전당: 저장된 올타임 + 이번 주 기록의 병합.
       // (올타임 저장 기능 도입 전에 세워진 이번 주 기록도 보이게 한다)
-      // scope=slop|puzzle 로 서브도메인별 보드를 분리한다 (기본은 전부 — admin용).
+      // scope=slop 은 은퇴 키를 뺀 공개 보드 (기본은 전부 — admin용).
       if (url.searchParams.has("alltime")) {
         const scope = url.searchParams.get("scope");
         const inScope = (g) =>
-          scope === "slop" ? !PUZZLE_SET.has(g) && !RETIRED_SET.has(g)
-          : scope === "puzzle" ? PUZZLE_SET.has(g)
-          : true;
+          scope === "slop" ? !RETIRED_SET.has(g) : true;
         const records = {};
         for (const [k, v] of await this.state.storage.list({ prefix: "alltime:" })) {
           const game = k.slice("alltime:".length);
@@ -340,14 +300,6 @@ export class RecordsDO {
       }
       const record = { score, text: display, dir: cfg.dir, at: Date.now() };
       await this.state.storage.put(key, record);
-      // 전당 등록자는 개인 기록이 갱신될 때 총합도 따라 갱신된다
-      if (PUZZLE_SET.has(game)) {
-        const entry = await this.state.storage.get(`ptotal:${vid}`);
-        if (entry) {
-          const { total, games } = await this.puzzleTotal(vid);
-          await this.state.storage.put(`ptotal:${vid}`, { ...entry, total, games, at: Date.now() });
-        }
-      }
       return Response.json({ accepted: true, record: presentRecord(game, record) });
     }
 

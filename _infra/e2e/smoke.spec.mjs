@@ -11,7 +11,6 @@ import { dirname } from "node:path";
 const SCREENS = [
   { name: "랜딩", path: "/" },
   { name: "slop 홈", path: "/slop/" },
-  { name: "puzzle 홈", path: "/puzzle/" },
   { name: "util 홈", path: "/util/" },
   { name: "assets 홈", path: "/assets/" },
   // 카탈로그 카드(catalog.js/css)를 실제로 그리는 화면 — 항목이 있는 카테고리로 본다

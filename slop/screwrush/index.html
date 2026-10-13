@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>나사 풀기 — 광고에서 본 그 게임</title>
+<title>🔩 나사 러시 — 한 번 틀리면 끝</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🔩</text></svg>">
 <style>
   :root { color-scheme: light dark; }
@@ -39,20 +39,27 @@
          border: 2px solid currentColor; background: none; color: inherit; cursor: pointer; }
   #btn:active { transform: scale(.96); }
   #best { margin: 0; font-size: .8rem; opacity: .5; min-height: 1.1em; }
+  #toast { position: fixed; top: 22%; left: 50%; transform: translateX(-50%);
+           z-index: 4; pointer-events: none; padding: .55rem 1.2rem; border-radius: 1rem;
+           font-size: 1rem; font-weight: bold; white-space: nowrap;
+           background: light-dark(rgba(255,250,240,.92), rgba(26,20,38,.92));
+           border: 1.5px solid light-dark(rgba(90,60,20,.3), rgba(230,215,190,.25)); }
+  #toast.hide { display: none; }
 </style>
 </head>
 <body>
 <div id="hud">
-  <span>🔩 <b>나사 풀기 (진짜임)</b></span>
+  <span>🔩 <b>나사 러시</b></span>
   <span class="sp"></span>
   <span id="hStage"></span>
-  <button id="retry" title="다시 시작">↻</button>
+  <button id="retry" title="처음부터 새로 시작">↻</button>
 </div>
 <div id="overlay">
   <p class="big" id="oEmoji">🔩</p>
-  <h1 id="oTitle">나사 풀기</h1>
-  <p id="oMsg">광고에서 보던 바로 그 나사 게임.
-근데 이건 진짜로 그 게임임.
+  <h1 id="oTitle">나사 러시</h1>
+  <p id="oMsg">광고에서 보던 바로 그 나사 게임, 러시 모드.
+한 번이라도 실패하면 끝!
+연속으로 클리어한 판 수가 점수예요.
 
 위에 판자가 없는 나사만 풀 수 있어요.
 상자 색에 맞춰 3개씩 담고,
@@ -61,6 +68,7 @@
   <button id="btn">시작</button>
   <p id="best"></p>
 </div>
+<div id="toast" class="hide"></div>
 <canvas id="cv"></canvas>
 <script>
 "use strict";
@@ -203,7 +211,10 @@ window.blDiffAt = (s) => diffOf(genTuned(s));
 window.blSimAt = (s) => s < 2 ? 0 : simFp(fpOf(genTuned(s)), fpOf(genTuned(s - 1)));
 
 /* ── 상태 ─────────────────────────────────────────────── */
-let stage = 1, best = +localStorage.getItem("screwout.best") || 0;
+const BEST_KEY = "bl-screwrush-best";
+let best = 0;
+try { best = +localStorage.getItem(BEST_KEY) || 0; } catch {}
+let stage = 1, score = 0, advT = 0;
 let phase = "title";
 let G = null, qi = 0, boxFill = 0, tray = [], anims = [], denyId = -1, denyT = 0;
 
@@ -279,18 +290,34 @@ function tap(id) {
 
 function fail(msg) {
   phase = "fail";
+  clearTimeout(advT);
+  if (score > best) {
+    best = score;
+    try { localStorage.setItem(BEST_KEY, best); } catch {}
+  }
+  if (score >= 1) window.blWeeklyReport?.(score);
+  hud();
   const quips = ["광고 속 그 사람도 트레이부터 채우더라고요.",
                  "괜찮아요. 나사는 원래 풀라고 있는 건데 뭐.",
                  "드라이버 탓을 해봅시다."];
-  show("🧰", "나사 지옥…", msg + "\n\n" + quips[(Math.random() * quips.length) | 0],
-       "다시 도전");
+  show("🧰", `${score}판 연속 클리어`,
+       msg + `\n스테이지 ${stage}에서 끝났어요.\n\n` + quips[(Math.random() * quips.length) | 0],
+       "처음부터 다시");
 }
 function win() {
   phase = "win";
-  if (stage > best) { best = stage; localStorage.setItem("screwout.best", best); }
-  window.blWeeklyReport?.(stage);
-  show("🏆", `스테이지 ${stage} 클리어!`, "모든 나사를 풀었습니다. 판자 전량 해체!",
-       "다음 스테이지");
+  score++;
+  hud();
+  const t = $("toast");
+  t.textContent = `🏆 ${score}연속! 다음 판으로…`;
+  t.classList.remove("hide");
+  clearTimeout(advT);
+  advT = setTimeout(() => {
+    t.classList.add("hide");
+    if (phase !== "win") return;
+    stage++;
+    loadStage();
+  }, 900);
 }
 
 /* ── 그리기 ───────────────────────────────────────────── */
@@ -400,20 +427,24 @@ requestAnimationFrame(loop);
 const $ = (id) => document.getElementById(id);
 function hud() {
   const left = G ? G.screws.filter((s) => s.state === "on").length : 0;
-  $("hStage").textContent = `스테이지 ${stage} ${starsOf(dScore)} · 🔩 ${left}`;
+  $("hStage").textContent = `🔥 ${score}연속 · 스테이지 ${stage} ${starsOf(dScore)} · 🔩 ${left}`;
 }
 function show(emoji, title, msg, btnText) {
   $("oEmoji").textContent = emoji; $("oTitle").textContent = title;
   $("oMsg").textContent = msg; $("btn").textContent = btnText;
-  $("best").textContent = best ? `최고 기록: 스테이지 ${best}` : "";
+  $("best").textContent = best ? `최고 기록: ${best}연속` : "";
   $("overlay").classList.remove("hide");
 }
-$("btn").addEventListener("click", () => {
-  if (phase === "win") stage++;
+function newRun() {
+  clearTimeout(advT);
+  $("toast").classList.add("hide");
+  stage = 1; score = 0;
   $("overlay").classList.add("hide");
   loadStage();
-});
-$("retry").addEventListener("click", () => { if (phase === "play") loadStage(); });
+}
+$("btn").addEventListener("click", newRun);
+// ↻ 는 같은 판 재시도가 아니라 이번 판을 포기하고 1스테이지부터 새로 시작한다
+$("retry").addEventListener("click", () => { if (phase === "play" || phase === "win") newRun(); });
 
 addEventListener("pointerdown", (e) => {
   if (e.target === cv) e.preventDefault();   // 모바일 더블탭 줌·고스트 클릭 방지
@@ -429,8 +460,11 @@ addEventListener("pointerdown", (e) => {
   if (hit) tap(hit.id);
 });
 
-window.blShareText = () => `나사 풀기 스테이지 ${best}까지 해체 완료! 광고에서 본 그 게임, 진짜임 🔩`;
-window.blWeekly = { game: "screwout", dir: "max", fmt: (v) => `스테이지 ${v}` };
+window.blShareText = () => `나사 러시 ${best}연속! 한 번도 안 틀리고 도전해보세요 🔩`;
+window.blWeekly = { game: "screwrush", dir: "max", fmt: (v) => `${v}연속` };
+if (best) $("best").textContent = `최고 기록: ${best}연속`;
+window.__swRun = { state: () => ({ phase, stage, score, best }), win: () => win(),
+                   fail: (m = "테스트 실패") => fail(m), newRun: () => newRun() };
 </script>
 <script defer src="/_shared/records.js"></script>
 <script defer src="/_shared/share.js"></script>
