@@ -41,7 +41,28 @@
   `GAMES`에 dir·점수 범위 한 줄 등록** (서버가 방향·범위를 고정한다 —
   미등록 게임의 제출은 거절됨).
 - 다크모드: `:root { color-scheme: light dark; }` + `light-dark()` 함수
-- 언어는 한국어, 스타일은 ui-monospace 계열의 가벼운 느낌
+- 언어는 한국어. **디자인은 공용 재료 `/_shared/bubble.css`** — 아래 「디자인 시스템」.
+
+## 디자인 시스템 ("비눗방울 실험실")
+
+종이색 바탕·잉크 글자·화면마다 강조색 하나·이모지를 담은 방울. **토큰의 원본은
+`_shared/bubble.css` 하나**다 — 랜딩·카테고리 홈(`build.mjs` 의 `listingPage`)·util/assets
+도구가 모두 이 파일을 불러 쓴다. 값을 바꾸려면 여기만 고친다(페이지에 사본을 두지 않는다).
+
+```html
+<link rel="stylesheet" href="/_shared/bubble.css">
+<style> :root { --accent-h: 50; } </style>   <!-- 홈 방울과 같은 색상각 = hueOf(폴더 이름) -->
+```
+
+- 부품은 `bl-` 클래스(`bl-head`·`bl-bubble`·`bl-btn`·`bl-input`·`bl-chip`·`bl-switch`·`bl-panel`…),
+  색·크기·간격은 토큰(`--bg --ink --muted --accent … --t-* --s-* --r*`). 레이아웃은 도구마다
+  자유, 재료만 같게. 사용법은 `_shared/README.md` 의 「공용 재료」.
+- 글꼴: 이름(사이트·카테고리·랜딩 제목)만 `--serif`(고운바탕 부분 파일 — 라틴 + 랜딩 제목 한글만),
+  본문·UI 는 `--sans`, 숫자·주소·라벨은 `--mono`. 모노를 본문에 쓰지 않는다.
+- 강조색은 OKLCH 라 어떤 색상각이든 흰 글자 대비가 나온다 — HSL 로 바꾸지 말 것.
+- 브랜드 가이드·토큰 표·부품 미리보기는 Design System 아티팩트에 있다(사용자 계정,
+  https://claude.ai/artifact/SRC69QSshqNTt3EhqyttvE). `bubble.css` 를 크게 바꾸면 그것도 다시 맞춘다.
+- slop 토이는 아직 각자의 스타일이다(옮기지 않았다). 새 토이는 bubble.css 로 시작해도 된다.
 
 ## 검증 방법
 
