@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title>📷 필터 카메라</title>
-<meta name="description" content="플래시 디카·로파이·필름 같은 요즘 필터를 실시간으로 보며 찍고 저장하는 카메라. 사진은 기기 밖으로 나가지 않습니다.">
+<meta name="description" content="플래시 디카·로파이·필름 같은 요즘 필터와 볼록거울·타임 워프 같은 장난 필터를 실시간으로 보며 찍고 저장하는 카메라. 사진은 기기 밖으로 나가지 않습니다.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>📷</text></svg>">
 <style>
   :root { color-scheme: light dark; --bg: light-dark(#f2f4f7, #0d131c);
@@ -32,6 +32,9 @@
            padding: 1.5rem; text-align: center; color: #e2e9f0; }
   .empty p { margin: 0; font-size: .78rem; line-height: 1.6; color: #b9c4d0; }
   #result { position: absolute; inset: 0; }
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: .4rem; }
+  .tabs button { padding: .55rem; font-size: .8rem; }
+  .tabs button[aria-selected="true"] { border-color: var(--accent); color: var(--accent); font-weight: bold; }
   .filters { display: flex; gap: .45rem; overflow-x: auto; padding-bottom: .2rem;
              scroll-snap-type: x proximity; scrollbar-width: none; }
   .filters::-webkit-scrollbar { display: none; }
@@ -58,11 +61,15 @@
     <canvas id="preview" width="432" height="540" aria-label="필터 미리보기"></canvas>
     <img id="result" alt="찍은 사진" hidden>
     <div class="empty" id="empty">
-      <p>요즘 유행하는 필터를 실시간으로 보면서 찍어요.</p>
+      <p>요즘 유행하는 감성 필터와 장난 필터를 실시간으로 보면서 찍어요.</p>
       <button class="primary" id="start" type="button">카메라 켜기</button>
     </div>
   </div>
 
+  <div class="tabs" id="tabs" role="tablist" aria-label="필터 종류">
+    <button type="button" role="tab" data-group="mood" aria-selected="true">✨ 감성</button>
+    <button type="button" role="tab" data-group="fun" aria-selected="false">🤪 장난</button>
+  </div>
   <div class="filters" id="filters" role="group" aria-label="필터"></div>
 
   <div class="controls" id="cameraControls">
@@ -80,7 +87,7 @@
 </main>
 
 <script type="module">
-import { FILTERS, applyColor, applyLayers } from "./filters.js";
+import { FILTERS, applyColor, applyEffect, applyLayers } from "./filters.js";
 
 const $ = (id) => document.getElementById(id);
 const preview = $("preview");
@@ -92,25 +99,39 @@ video.muted = true; video.playsInline = true; video.setAttribute("playsinline", 
 let stream = null;
 let facing = "user";
 let current = FILTERS[1];
+let group = "mood";
 let frame = 0;
 let raf = 0;
-let shot = null; // { blob, url }
+let shot = null; // { blob, url, name }
+let scan = null; // 타임 워프 진행 상태 { live, frozen, y, last }
 
-// ── 필터 고르기 ──
+// ── 탭 · 필터 고르기 ──
 const filterBox = $("filters");
-for (const filter of FILTERS) {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.textContent = filter.name;
-  button.dataset.id = filter.id;
-  button.setAttribute("aria-pressed", String(filter === current));
-  button.addEventListener("click", () => {
-    current = filter;
-    for (const b of filterBox.children) b.setAttribute("aria-pressed", String(b.dataset.id === filter.id));
-    button.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
-  });
-  filterBox.append(button);
+function selectFilter(filter) {
+  current = filter;
+  for (const b of filterBox.children) b.setAttribute("aria-pressed", String(b.dataset.id === filter.id));
+  $("status").textContent = filter.hint ?? "";
 }
+function showGroup(name) {
+  group = name;
+  for (const tab of $("tabs").children) tab.setAttribute("aria-selected", String(tab.dataset.group === name));
+  filterBox.replaceChildren();
+  for (const filter of FILTERS.filter((f) => f.group === name)) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = filter.name;
+    button.dataset.id = filter.id;
+    button.setAttribute("aria-pressed", String(filter === current));
+    button.addEventListener("click", () => {
+      selectFilter(filter);
+      button.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+    });
+    filterBox.append(button);
+  }
+  filterBox.scrollLeft = 0;
+}
+for (const tab of $("tabs").children) tab.addEventListener("click", () => showGroup(tab.dataset.group));
+showGroup("mood");
 
 // 영상 가운데를 4:5 로 잘라 캔버스에 그린다. 전면 카메라는 거울처럼 뒤집는다.
 function drawFrame(ctx, canvas) {
@@ -129,7 +150,12 @@ function drawFrame(ctx, canvas) {
 
 function render(ctx, canvas) {
   if (!drawFrame(ctx, canvas)) return false;
-  if (current.id !== "original") {
+  if (current.effect && current.effect !== "timewarp") {
+    const src = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const dst = ctx.createImageData(src);
+    applyEffect(src, dst, current);
+    ctx.putImageData(dst, 0, 0);
+  } else if (current.id !== "original" && !current.effect) {
     const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
     applyColor(image.data, current, frame++);
     ctx.putImageData(image, 0, 0);
@@ -138,9 +164,53 @@ function render(ctx, canvas) {
   return true;
 }
 
+function drawScanLine(ctx, canvas, y) {
+  ctx.fillStyle = "#29adff";
+  ctx.fillRect(0, Math.max(0, y - 2), canvas.width, 4);
+}
+
 function loop() {
-  render(pctx, preview);
+  if (scan) stepScan();
+  else {
+    render(pctx, preview);
+    if (current.effect === "timewarp") drawScanLine(pctx, preview, 0);
+  }
   raf = requestAnimationFrame(loop);
+}
+
+// ── 타임 워프: 선이 지나간 줄은 그 순간의 영상으로 굳는다 ──
+const SCAN_MS = 6000;
+function startScan() {
+  const live = makeOutputCanvas(), frozen = makeOutputCanvas();
+  scan = { live, frozen, y: 0, last: performance.now() };
+  setBusy(true);
+}
+function stepScan() {
+  const { live, frozen } = scan;
+  const now = performance.now();
+  const next = Math.min(live.height, scan.y + (live.height * (now - scan.last)) / SCAN_MS);
+  scan.last = now;
+  drawFrame(live.getContext("2d"), live);
+  const from = Math.floor(scan.y), rows = Math.ceil(next) - from;
+  if (rows > 0) frozen.getContext("2d").drawImage(live, 0, from, live.width, rows, 0, from, live.width, rows);
+  scan.y = next;
+  // 미리보기: 위쪽은 굳은 줄, 아래쪽은 지금 영상.
+  const k = preview.height / live.height, cut = Math.floor(next * k);
+  pctx.drawImage(live, 0, 0, preview.width, preview.height);
+  if (cut > 0) pctx.drawImage(frozen, 0, 0, live.width, cut / k, 0, 0, preview.width, cut);
+  drawScanLine(pctx, preview, cut);
+  if (next >= live.height) {
+    const done = scan.frozen;
+    scan = null;
+    setBusy(false);
+    finishShot(done);
+  }
+}
+
+function setBusy(on) {
+  $("shoot").disabled = on;
+  $("switch").disabled = on;
+  for (const b of [...filterBox.children, ...$("tabs").children]) b.disabled = on;
 }
 
 // ── 카메라 ──
@@ -160,8 +230,7 @@ async function startCamera() {
     $("empty").hidden = true;
     $("shoot").disabled = false;
     $("switch").disabled = false;
-    $("status").textContent = "";
-    cancelAnimationFrame(raf);
+    $("status").textContent = current.hint ?? "";
     loop();
   } catch (err) {
     $("status").textContent = err?.name === "NotAllowedError"
@@ -172,6 +241,7 @@ async function startCamera() {
 
 function stopCamera() {
   cancelAnimationFrame(raf);
+  if (scan) { scan = null; setBusy(false); }
   stream?.getTracks().forEach((track) => track.stop());
   stream = null;
 }
@@ -188,22 +258,33 @@ function showShot(on) {
   $("cameraControls").hidden = on;
   $("shotActions").classList.toggle("on", on);
   $("filters").hidden = on;
+  $("tabs").hidden = on;
 }
 
-$("shoot").addEventListener("click", async () => {
-  // 미리보기보다 큰 해상도(최대 1080×1350)로 같은 필터를 한 번 더 그린다.
+// 미리보기보다 큰 해상도(최대 1080×1350)로 그린다.
+function makeOutputCanvas() {
   const out = document.createElement("canvas");
   const scale = Math.min(1, video.videoHeight / 1350, video.videoWidth / 1080) || 1;
   out.width = Math.round(1080 * scale);
   out.height = Math.round(1350 * scale);
-  if (!render(out.getContext("2d", { willReadFrequently: true }), out)) return;
-  const blob = await new Promise((resolve) => out.toBlob(resolve, "image/jpeg", 0.92));
+  return out;
+}
+
+async function finishShot(canvas) {
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
   if (!blob) { $("status").textContent = "사진을 만들지 못했어요."; return; }
   if (shot) URL.revokeObjectURL(shot.url);
   shot = { blob, url: URL.createObjectURL(blob), name: `filter-${current.id}-${Date.now()}.jpg` };
   $("result").src = shot.url;
   cancelAnimationFrame(raf);
   showShot(true);
+}
+
+$("shoot").addEventListener("click", () => {
+  if (current.effect === "timewarp") { startScan(); return; }
+  const out = makeOutputCanvas();
+  if (!render(out.getContext("2d", { willReadFrequently: true }), out)) return;
+  finishShot(out);
 });
 
 $("retake").addEventListener("click", () => {
@@ -227,8 +308,10 @@ $("save").addEventListener("click", async () => {
 });
 
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) cancelAnimationFrame(raf);
-  else if (stream && $("result").hidden) loop();
+  if (document.hidden) {
+    cancelAnimationFrame(raf);
+    if (scan) { scan = null; setBusy(false); }
+  } else if (stream && $("result").hidden) loop();
 });
 </script>
 <script defer src="/_shared/share.js"></script>

@@ -12,7 +12,7 @@
 | `yaksok/` | `/_yaksok/rooms[/<코드>[/<동작>]]` → `_infra/yaksok.js` (**방마다 `YaksokDO` 하나**, 사진도 이 DO 에 조각 저장), 캡처 인식은 `_infra/yaksok-receipt.js`(Gemini). 방 주소 `/yaksok/<코드>`는 워커가 화면+단계별 OG 로 내준다. 규칙은 `yaksok/logic.js` 하나(화면·서버 공용), 카드 `card.js`·캐릭터 `sprite.js`·ZIP `zip.js` | `_infra/yaksok.test.mjs`, `_infra/e2e/yaksok.spec.mjs`, verify `api:yaksok` |
 | `chat/` | `/_chat` WebSocket → `_infra/chat.js` `ChatDO` (`idFromName("lobby")`, 단일 로비) | `_infra/chat.test.mjs`, verify `chat:ws` |
 | `proofread/` | 없음 — 규칙표 `util/proofread/rules.js` 하나 | `_infra/proofread.test.mjs`, e2e |
-| `filter-cam/` | 없음 — 필터 표·색 계산은 `util/filter-cam/filters.js` 하나 | `_infra/filter-cam.test.mjs`, e2e |
+| `filter-cam/` | 없음 — 필터 표·색 계산·장난 효과는 `util/filter-cam/filters.js` 하나(타임 워프만 진행형이라 `index.html`이 돌린다) | `_infra/filter-cam.test.mjs`, e2e |
 | `stars/` | 없음 — `util/stars/sky.js`·`skyline.js` | `_infra/stars.test.mjs`, `_infra/stars-skyline.test.mjs`, e2e |
 | `calendar/`·`photo/`·`image-convert/`·`ladder/`·`lotto/`·`pdf/`·`passport-pic/` | 없음 — 브라우저 전용(스티커만 `/_assets` 읽기) | `calendar`만 e2e |
 
