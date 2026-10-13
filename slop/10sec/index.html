@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko">
+<html lang="ko" class="bl-stage">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,8 +7,7 @@
 <link rel="stylesheet" href="/_shared/bubble.css">
 <style>
   :root { color-scheme: light dark; --accent-h: 202; }
-  html { background: var(--sunk); }
-  body { margin: 0; min-height: 100vh; background: transparent;
+  body { margin: 0; min-height: 100vh;
          display: flex; flex-direction: column; align-items: center;
          justify-content: center; gap: var(--s-5); text-align: center;
          padding: var(--s-5) var(--s-4); box-sizing: border-box; user-select: none;
@@ -21,11 +20,6 @@
   #msg { color: var(--muted); min-height: 2.6em; white-space: pre-line; line-height: 1.55; }
   #btn { font-size: 1.15rem; min-height: 3.2rem; padding: .8rem 2.8rem; }
   #best { color: var(--muted); font-size: var(--t-small); min-height: 1.2em; }
-  /* 데스크톱: 사용 영역(모바일 폭 스테이지) 밖은 톤을 낮춰 구분 */
-  body::after { content: ""; position: fixed; top: 0; bottom: 0; left: 50%;
-                transform: translateX(-50%); width: min(100vw, 34rem); z-index: -1;
-                background: var(--bg);
-                box-shadow: 0 0 1.5rem light-dark(rgba(60,50,30,.12), rgba(0,0,0,.5)); }
 </style>
 </head>
 <body>

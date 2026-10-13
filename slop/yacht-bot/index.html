@@ -74,7 +74,6 @@
   tr.bonusrow td { color: var(--muted); font-size: .8rem; border-bottom: 2px solid
                    var(--accent-line); }
   #over { position: fixed; inset: 0; display: none; place-items: center; z-index: 100;
-          background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(4px);
           text-align: center; padding: 1.5rem; }
   #over.show { display: grid; }
   #over .card { display: flex; flex-direction: column; align-items: center; gap: .9rem;
@@ -83,13 +82,6 @@
   #over .big { font-size: 1.6rem; font-weight: 800; letter-spacing: -.02em; }
   #oversub { color: var(--muted); font-size: var(--t-small); line-height: 1.5; }
   #over button { min-width: 9rem; }
-  /* 데스크톱: 사용 영역(모바일 폭 스테이지) 밖은 톤을 낮춰 구분 */
-  body::before { content: ""; position: fixed; inset: 0; z-index: -2;
-                 background: light-dark(#e8e3d8, #070a10); }
-  body::after { content: ""; position: fixed; top: 0; bottom: 0; left: 50%;
-                transform: translateX(-50%); width: min(100vw, 34rem); z-index: -1;
-                background: var(--bg);
-                box-shadow: 0 0 1.5rem light-dark(rgba(60,50,30,.12), rgba(0,0,0,.5)); }
 </style>
 </head>
 <body>
@@ -109,7 +101,7 @@
 <footer class="bl-head"><span class="bl-bubble" aria-hidden="true">🤖</span><b>야추 봇 대전</b><span id="best" class="bl-num"></span></footer>
 <div id="tip"></div>
 <button id="roll" class="bl-btn bl-btn--primary">굴리기</button>
-<div id="over">
+<div id="over" class="bl-scrim">
   <div class="card bl-panel">
     <div class="big" id="overtitle"></div>
     <div id="oversub" class="bl-num"></div>

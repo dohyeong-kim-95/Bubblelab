@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko">
+<html lang="ko" class="bl-stage">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,17 +7,14 @@
 <link rel="stylesheet" href="/_shared/bubble.css">
 <style>
   :root { color-scheme: light dark; --accent-h: 334; }
-  html { background: var(--sunk); }
-  body { margin: 0; background: transparent;
+  body { margin: 0;
          min-height: 100vh; display: flex; flex-direction: column; align-items: center;
          justify-content: center; gap: .9rem; text-align: center;
          padding: 1.5rem; box-sizing: border-box; user-select: none;
          -webkit-user-select: none; touch-action: manipulation; }
   .bl-head { margin: 0 0 .2rem; text-align: left; width: min(84vw, 20rem); }
-  #streak { font-family: var(--mono); font-size: .85rem; font-weight: 700;
-            padding: .3rem .85rem; border-radius: var(--pill);
-            color: var(--accent); background: var(--accent-soft);
-            box-shadow: inset 0 0 0 1px var(--accent-line); }
+  /* 재료는 bl-pill--accent — 테두리 1px 만큼 안쪽 여백을 줄여 크기를 그대로 둔다 */
+  #streak { font-size: .85rem; padding: calc(.3rem - 1px) calc(.85rem - 1px); }
   #stage { display: flex; flex-direction: column; align-items: center; gap: .35rem;
            width: min(84vw, 20rem); }
   .card { width: 100%; box-sizing: border-box; padding: .9rem 1rem;
@@ -45,11 +42,6 @@
   #again.show { display: inline-flex; }
   #best { color: var(--muted); font-size: .85rem; min-height: 1.2em; }
   #note { margin-top: .3rem; }
-  /* 데스크톱: 사용 영역(모바일 폭 스테이지) 밖은 톤을 낮춰 구분 */
-  body::after { content: ""; position: fixed; top: 0; bottom: 0; left: 50%;
-                transform: translateX(-50%); width: min(100vw, 34rem); z-index: -1;
-                background: var(--bg);
-                box-shadow: 0 0 1.5rem light-dark(rgba(60,50,30,.12), rgba(0,0,0,.5)); }
 </style>
 </head>
 <body>
@@ -58,7 +50,7 @@
     <h1>누가 더 무거울까</h1>
     <p>아래 동물이 더 무거울까, 가벼울까?</p>
   </header>
-  <div id="streak" class="bl-num">연속 0개</div>
+  <div id="streak" class="bl-num bl-pill bl-pill--accent">연속 0개</div>
   <div id="stage">
     <div class="card" id="anchor">
       <span class="name" id="anchor-name">—</span>

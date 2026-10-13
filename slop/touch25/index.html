@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko">
+<html lang="ko" class="bl-stage">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
@@ -8,15 +8,11 @@
 <style>
   :root { color-scheme: light dark; --accent-h: 290; }
   html, body { margin: 0; height: 100%; overflow: hidden; touch-action: manipulation; }
-  html { background: var(--sunk); }
-  body { background: transparent;
-         display: flex; flex-direction: column; align-items: center;
+  body { display: flex; flex-direction: column; align-items: center;
          justify-content: center; gap: var(--s-4); padding: var(--s-4);
          box-sizing: border-box; user-select: none; -webkit-user-select: none; }
   .bl-head { margin: 0; }
-  #hud { display: flex; gap: .8rem; font-family: var(--mono); font-size: 1.15rem; font-weight: 700;
-         padding: .35rem 1.1rem; border-radius: var(--pill);
-         background: var(--field); border: 1px solid var(--line); }
+  #hud { display: flex; gap: .8rem; font-size: 1.15rem; padding: .35rem 1.1rem; }
   #timer.oops { color: var(--bad); }
   #best { color: var(--muted); font-size: var(--t-small); }
   #wrap { position: relative; }
@@ -43,11 +39,6 @@
   #grade { color: var(--muted); line-height: 1.55; }
   #go { font-size: 1.1rem; min-height: 3rem; padding: .7rem 2.2rem; }
   #hint { color: var(--muted); font-size: var(--t-caption); text-align: center; line-height: 1.5; }
-  /* 데스크톱: 사용 영역(모바일 폭 스테이지) 밖은 톤을 낮춰 구분 */
-  body::after { content: ""; position: fixed; top: 0; bottom: 0; left: 50%;
-                transform: translateX(-50%); width: min(100vw, 34rem); z-index: -1;
-                background: var(--bg);
-                box-shadow: 0 0 1.5rem light-dark(rgba(60,50,30,.12), rgba(0,0,0,.5)); }
 </style>
 </head>
 <body>
@@ -56,7 +47,7 @@
   <h1>숫자 순서대로 터치</h1>
   <p>1부터 25까지, 최대한 빨리</p>
 </header>
-<div id="hud" class="bl-num"><span id="timer">0.00초</span></div>
+<div id="hud" class="bl-num bl-pill"><span id="timer">0.00초</span></div>
 <div id="best" class="bl-num"></div>
 <div id="wrap">
   <div id="grid"></div>

@@ -29,12 +29,8 @@
   #retry { pointer-events: auto; min-height: 2rem; padding: .2rem .75rem; font-size: .9rem; }
   #overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
              display: flex; flex-direction: column; align-items: center; gap: .9rem;
-             width: min(84vw, 21rem); padding: 1.5rem 1.6rem; border-radius: var(--r-lg);
-             text-align: center; z-index: 5; box-sizing: border-box;
-             border: 1px solid var(--line);
-             background: color-mix(in srgb, var(--field) 94%, transparent);
-             box-shadow: 0 1rem 3rem light-dark(rgba(60,40,20,.18), rgba(0,0,0,.45));
-             backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+             width: min(84vw, 21rem); padding: 1.5rem 1.6rem;
+             text-align: center; z-index: 5; box-sizing: border-box; }
   #overlay.hide { display: none; }
   #overlay h1 { margin: -.2rem 0 0; font-size: var(--t-h1); font-weight: 800; letter-spacing: -.02em; }
   #overlay p { margin: 0; font-size: .88rem; line-height: 1.55; color: var(--muted);
@@ -51,7 +47,7 @@
   <span id="hStage" class="bl-num"></span>
   <button id="retry" class="bl-btn bl-btn--sm" title="포기하고 결과 보기">↻</button>
 </div>
-<div id="overlay">
+<div id="overlay" class="bl-glass">
   <p class="big bl-bubble" id="oEmoji">🏃</p>
   <h1 id="oTitle">게이트 러시</h1>
   <p id="oMsg">광고에서 보던 그 문 고르기 게임, 목숨 하나 버전.

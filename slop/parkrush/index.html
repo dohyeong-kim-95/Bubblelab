@@ -30,14 +30,11 @@
   .hud-chip:empty { display: none; }
   .hud-btn { pointer-events: auto; min-height: 2rem; padding: .2rem .75rem; }
 
-  /* 시작·결과 카드 — bl-panel 위에 방울·제목·설명·주 버튼 */
+  /* 시작·결과 카드 — 재료는 bl-glass, 위치·크기만 여기서. 방울·제목·설명·주 버튼 */
   #overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
              display: flex; flex-direction: column; align-items: center; gap: .85rem;
              width: min(84vw, 21rem); box-sizing: border-box; padding: 1.6rem 1.5rem 1.4rem;
-             text-align: center; z-index: 5;
-             background: color-mix(in srgb, var(--field) 92%, transparent);
-             box-shadow: 0 .6rem 2rem light-dark(rgb(60 50 30 / .14), rgb(0 0 0 / .5));
-             backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+             text-align: center; z-index: 5; }
   #overlay.hide { display: none; }
   #overlay .big { width: 4rem; font-size: 2rem; margin: 0 0 .1rem; }
   #overlay h1 { margin: 0; font-size: var(--t-h1); font-weight: 800; letter-spacing: -.02em;
@@ -59,7 +56,7 @@
   <button id="go" class="bl-btn bl-btn--sm bl-btn--primary hud-btn hide" disabled>출발!</button>
   <button id="retry" class="bl-btn bl-btn--sm hud-btn" title="그린 길 지우기">↻</button>
 </div>
-<div id="overlay" class="bl-panel">
+<div id="overlay" class="bl-glass">
   <p class="big bl-bubble" id="oEmoji">🚗</p>
   <h1 id="oTitle">주차 러시</h1>
   <p id="oMsg">주차선 긋기 게임의 한 판 승부 버전.

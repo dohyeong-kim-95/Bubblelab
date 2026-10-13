@@ -18,10 +18,7 @@
   #overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
              display: flex; flex-direction: column; align-items: center; gap: var(--s-4);
              padding: var(--s-5) var(--s-5) var(--s-4); text-align: center; box-sizing: border-box;
-             width: min(86vw, 20rem);
-             background: color-mix(in srgb, var(--field) 88%, transparent);
-             backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-             box-shadow: 0 .8rem 2rem light-dark(rgb(60 50 30 / .12), rgb(0 0 0 / .45)); }
+             width: min(86vw, 20rem); }
   #overlay.hide { display: none; }
   #overlay .bl-head { margin: 0; text-align: left; }
   #msg { margin: 0; color: var(--muted); line-height: 1.6; white-space: pre-line; }
@@ -35,7 +32,7 @@
 <body>
 <div id="score" class="bl-num">🫧 0개</div>
 <div id="time" class="bl-num">20.0초</div>
-<div id="overlay" class="bl-panel">
+<div id="overlay" class="bl-glass">
   <header class="bl-head">
     <span class="bl-bubble" aria-hidden="true">🫧</span>
     <h1>버블팝</h1>
