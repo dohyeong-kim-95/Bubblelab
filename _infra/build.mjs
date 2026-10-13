@@ -314,93 +314,119 @@ function listingPage(site, entries) {
 <title>${escapeHtml(site)}.bubblelab.dev</title>
 ${preconnectLinks}
 <style>
-  :root { color-scheme: light dark; }
-  body { font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; max-width: 52rem;
-         margin: 3rem auto 4rem; padding: 0 1.25rem; }
-  h1 { font-size: 1.25rem; text-align: center; margin: 0 0 .4rem; }
-  .site-switcher { position: relative; width: max-content; max-width: 100%; margin: 0 auto; }
-  .site-trigger { border: 0; padding: .35rem .5rem; border-radius: .55rem; background: transparent;
-          color: inherit; font: inherit; cursor: pointer; }
-  .site-trigger:hover, .site-trigger:focus-visible { background: light-dark(#edf1f5, #1a2330); outline: none; }
-  .site-trigger .domain { opacity: .45; font-weight: normal; }
-  .site-trigger .chevron { display: inline-block; margin-left: .18rem; opacity: .5; font-size: .8em;
+  /* 랜딩(www/index.html)과 같은 "비눗방울 실험실" 한 벌 — 토큰·글꼴을 맞춰 둔다 */
+  @font-face { font-family: "Gowun Batang"; font-weight: 700; font-display: swap;
+               src: url("/_shared/fonts/gowun-batang-700.woff2") format("woff2"); }
+  :root {
+    color-scheme: light dark;
+    --bg: light-dark(#f3f0e8, #0b0f17);
+    --ink: light-dark(#15171c, #ece8df);
+    --muted: light-dark(#5b5f68, #a3a7b0);
+    --line: light-dark(#d9d4c8, #232a36);
+    --field: light-dark(#fffdf8, #141a25);
+    --focus: light-dark(#3f5fd0, #8fa8ff);
+    --serif: "Gowun Batang", "Nanum Myeongjo", "AppleMyungjo", serif;
+    --sans: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+  }
+  html { background: var(--bg); }
+  body { font-family: var(--sans); color: var(--ink); background: var(--bg); max-width: 56rem;
+         margin: 0 auto; padding: 2.6rem 1.25rem 4rem; word-break: keep-all; -webkit-font-smoothing: antialiased; }
+  ::selection { background: light-dark(#cdd8ff, #2c3d78); }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+  h1 { margin: 0 0 1.4rem; font-weight: normal; }
+  .site-switcher { position: relative; width: max-content; max-width: 100%; margin: 0 auto; text-align: center; }
+  .site-trigger { border: 0; padding: .3rem .7rem; border-radius: 999px; background: transparent;
+          color: inherit; font: inherit; cursor: pointer; display: inline-flex; align-items: baseline; gap: .1rem; }
+  .site-trigger:hover, .site-trigger:focus-visible { background: light-dark(#e9e4d8, #161d2a); outline: none; }
+  .site-trigger strong { font-family: var(--serif); font-weight: 700; font-size: clamp(2.2rem, 8vw, 3.4rem);
+          letter-spacing: -.02em; line-height: 1.1; }
+  .site-trigger .domain { font-family: var(--mono); font-size: .85rem; color: var(--muted); }
+  .site-trigger .chevron { display: inline-block; margin: 0 .25rem; color: var(--muted); font-size: 1rem;
           transition: transform .15s; }
   .site-trigger[aria-expanded="true"] .chevron { transform: rotate(180deg); }
   .site-menu { position: absolute; z-index: 30; top: calc(100% + .3rem); left: 50%; transform: translateX(-50%);
-          width: 13rem; padding: .4rem; border-radius: .8rem;
-          background: light-dark(#fff, #141d28); border: 1px solid light-dark(#dce3ea, #2a3747);
-          box-shadow: 0 12px 30px light-dark(#1b27331f, #0008); text-align: left; }
+          width: 14rem; padding: .4rem; border-radius: 1rem;
+          background: var(--field); border: 1px solid var(--line);
+          box-shadow: 0 18px 40px -12px light-dark(#1b273333, #000a); text-align: left; }
   .site-menu[hidden] { display: none; }
   .site-menu a { display: grid; grid-template-columns: 1.3rem 1fr; align-items: center;
-          padding: .65rem .7rem; border-radius: .55rem; color: inherit; text-decoration: none; font-size: .9rem; }
-  .site-menu a:hover, .site-menu a:focus-visible { background: light-dark(#eef3f7, #202c3a); outline: none; }
+          padding: .65rem .7rem; border-radius: .7rem; color: inherit; text-decoration: none; font-size: .95rem; }
+  .site-menu a:hover, .site-menu a:focus-visible { background: light-dark(#f1ece1, #1b2331); outline: none; }
   .site-menu a[aria-current="page"] { font-weight: bold; }
   .site-menu a.loading { opacity: .65; pointer-events: none; }
   .site-menu a.loading::after { content: "…"; margin-left: auto; }
-  .site-menu .menu-home { border-bottom: 1px solid light-dark(#e6ebef, #263342); margin-bottom: .25rem; }
-  #crown { text-align: center; opacity: .6; font-size: .85rem;
-           margin: 0 0 .35rem; min-height: 1.2em; }
+  .site-menu .menu-home { border-bottom: 1px solid var(--line); margin-bottom: .25rem; }
+  #crown { text-align: center; color: var(--muted); font-size: .85rem; margin: -.6rem 0 1.4rem; min-height: 1.2em; }
   /* 연속 방문일: 우상단 구석의 조용한 배지 (🔥 N) */
-  #streak { position: fixed; top: .7rem; right: .8rem; z-index: 4;
-           opacity: .65; font-size: .85rem; }
+  #streak { position: fixed; top: .8rem; right: .9rem; z-index: 4; font-family: var(--mono);
+           color: var(--muted); font-size: .8rem; }
   /* 올타임 1위 — 존중의 자리. 시상대는 명예의 전당에, 여기엔 이름만 크게 */
-  #alltime-top { display: block; text-align: center; margin: 0 0 1.6rem;
-           text-decoration: none; color: inherit; }
+  #alltime-top { display: block; text-align: center; margin: 0 0 1.8rem; text-decoration: none; color: inherit; }
   #alltime-top[hidden] { display: none; }
-  #alltime-top .at-sub { display: block; font-size: .78rem; opacity: .8;
-           letter-spacing: .02em; color: light-dark(#8a6d12, #ffd873); }
-  #alltime-top .at-nick { display: block; font-size: 2.15rem; font-weight: 900;
+  #alltime-top .at-sub { display: block; font-family: var(--mono); font-size: .78rem;
+           color: light-dark(#7a5c0e, #ffd873); }
+  #alltime-top .at-nick { display: block; font-size: 2.15rem; font-weight: 800; letter-spacing: -.02em;
            line-height: 1.25; overflow-wrap: anywhere; }
-  #alltime-top:hover .at-nick { text-decoration: underline; }
+  #alltime-top:hover .at-nick { text-decoration: underline; text-underline-offset: .2em; }
   /* 이번 주 시상대는 올타임 1위보다 한 급 아래로 (공용 css보다 작게) */
   #week-podium .podium-title { font-size: .8rem; }
-  .grid { display: grid; gap: 1rem;
-          grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); }
-  .card { aspect-ratio: 1; border-radius: 1.25rem; text-decoration: none;
-          display: flex; flex-direction: column; align-items: center;
-          justify-content: center; gap: .55rem; padding: .75rem;
-          color: light-dark(hsl(var(--hue) 45% 22%), hsl(var(--hue) 55% 88%));
-          background: light-dark(hsl(var(--hue) 75% 91%), hsl(var(--hue) 35% 20%));
-          border: 2px solid light-dark(hsl(var(--hue) 60% 82%), hsl(var(--hue) 35% 30%));
-          box-shadow: 0 4px 0 light-dark(hsl(var(--hue) 55% 78%), hsl(var(--hue) 35% 12%));
-          transition: transform .12s, box-shadow .12s;
-          animation: pop .4s cubic-bezier(.2,1.5,.4,1) both;
-          animation-delay: calc(var(--i) * 45ms); }
-  .card:hover { transform: translateY(-3px);
-          box-shadow: 0 7px 0 light-dark(hsl(var(--hue) 55% 78%), hsl(var(--hue) 35% 12%)); }
-  .card:active { transform: translateY(2px); box-shadow: 0 1px 0
-          light-dark(hsl(var(--hue) 55% 78%), hsl(var(--hue) 35% 12%)); }
-  /* 명예의 전당: 한 행을 전부 채우는 가로형 금색 배너 (게임 카드와 차별화) */
-  .card--hof { grid-column: 1 / -1; aspect-ratio: auto; flex-direction: row;
-          justify-content: flex-start; gap: 1rem; padding: 1.05rem 1.4rem; text-align: left;
-          color: light-dark(#6a4e14, #ffe4a0);
-          background: light-dark(#fff4d6, #38301a);
-          border-color: light-dark(#ecca6e, #715d24);
-          box-shadow: 0 4px 0 light-dark(#eaca70, #221b0b); }
-  .card--hof:hover { box-shadow: 0 7px 0 light-dark(#eaca70, #221b0b); }
-  .card--hof:active { box-shadow: 0 1px 0 light-dark(#eaca70, #221b0b); }
-  .card--hof .hof-emoji { font-size: 2.3rem; line-height: 1; }
-  .card--hof .hof-text { display: flex; flex-direction: column; gap: .18rem; min-width: 0; }
-  .card--hof .hof-name { font-weight: bold; font-size: 1.1rem; }
-  .card--hof .hof-desc { font-size: .8rem; opacity: .72;
-          overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .card--hof .hof-arrow { margin-left: auto; font-size: 1.3rem; opacity: .5; }
-  /* 올타임 1위를 가장 많이 가진 3명 — 3·1·2 시상대 (명예의 전당 카드 위) */
-  .emoji { font-size: 2.6rem; line-height: 1; position: relative; display: inline-block; }
+  .grid { display: grid; gap: .9rem; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); }
+  /* 카드: 종이 위의 방울 하나 — 색은 이름 해시(--hue)가 방울에만 묻는다 */
+  .card { position: relative; aspect-ratio: 1; border-radius: 1.4rem; text-decoration: none; color: inherit;
+          display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .45rem;
+          padding: .8rem; background: var(--field); border: 1px solid var(--line);
+          transition: transform .25s cubic-bezier(.2, .9, .3, 1.2), border-color .2s, box-shadow .25s;
+          animation: pop .45s cubic-bezier(.2, 1.4, .4, 1) both; animation-delay: calc(var(--i) * 35ms); }
+  .card:hover, .card:focus-visible { transform: translateY(-3px);
+          border-color: light-dark(hsl(var(--hue) 50% 75%), hsl(var(--hue) 35% 38%));
+          box-shadow: 0 14px 28px -16px light-dark(hsl(var(--hue) 60% 45% / .45), #000c); }
+  .card:active { transform: translateY(1px); }
+  @keyframes pop { from { opacity: 0; transform: scale(.9); } }
+  @media (prefers-reduced-motion: reduce) { .card { animation: none; transition: none; } }
+  .emoji { position: relative; display: grid; place-items: center; width: 4.4rem; aspect-ratio: 1;
+          border-radius: 50%; font-size: 2.1rem; line-height: 1;
+          background: radial-gradient(circle at 32% 28%, rgb(255 255 255 / .85) 0 8%, transparent 22%),
+                      light-dark(hsl(var(--hue) 85% 88%), hsl(var(--hue) 45% 24%));
+          box-shadow: inset 0 0 0 1px light-dark(hsl(var(--hue) 60% 76%), hsl(var(--hue) 40% 36%));
+          transition: transform .35s cubic-bezier(.2, .9, .3, 1.3); }
+  .card:hover .emoji, .card:focus-visible .emoji { transform: scale(1.08) rotate(-6deg); }
   .emoji[data-badge]::after { content: attr(data-badge); position: absolute;
-          top: -.1em; right: -.28em; display: grid; place-items: center;
-          width: 1.15em; height: 1.15em; font-size: .95rem; font-weight: 900;
-          line-height: 1; border-radius: 50%; color: #fff; background: #7c5fd6;
-          box-shadow: 0 1px 2px rgba(0,0,0,.25); }
-  .name { font-weight: bold; font-size: 1.02rem; word-break: break-all;
-          text-align: center; }
-  .champ { opacity: .55; font-size: .72rem; min-height: 1em; max-width: 100%;
-           overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .mine { opacity: .48; font-size: .7rem; min-height: 1em; max-width: 100%;
-           overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .empty { text-align: center; opacity: .6; margin-top: 4rem; }
-  footer { margin-top: 3.5rem; opacity: .4; font-size: .8em; text-align: center; }
-  footer a { color: inherit; }
+          top: -.1rem; right: -.1rem; display: grid; place-items: center;
+          width: 1.3rem; height: 1.3rem; font-size: .9rem; font-weight: 900;
+          line-height: 1; border-radius: 50%; color: #fff; background: #5b47c4;
+          box-shadow: 0 1px 3px rgb(0 0 0 / .25); }
+  .name { font-family: var(--serif); font-weight: 700; font-size: 1.12rem; letter-spacing: -.01em;
+          word-break: break-all; text-align: center; line-height: 1.2; }
+  .champ, .mine { font-family: var(--mono); color: var(--muted); font-size: .7rem; min-height: 1em; max-width: 100%;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mine { opacity: .85; }
+  /* 기록이 없는 사이트(util 등)에선 두 줄이 늘 비어 방울이 위로 쏠려 보인다 — 빈 줄은 자리를 안 차지하게 */
+  .champ:empty, .mine:empty { display: none; }
+  /* 명예의 전당: 한 행을 전부 채우는 가로형 금빛 배너 (게임 카드와 차별화) */
+  .card--hof { grid-column: 1 / -1; aspect-ratio: auto; flex-direction: row;
+          justify-content: flex-start; gap: 1rem; padding: 1rem 1.3rem; text-align: left;
+          background: light-dark(#fbf1d6, #2a2414); border-color: light-dark(#e6cf8f, #5c4c22); }
+  .card--hof:hover, .card--hof:focus-visible { border-color: light-dark(#d9b45a, #8a7232); }
+  .card--hof .hof-emoji { display: grid; place-items: center; width: 3.2rem; aspect-ratio: 1; border-radius: 50%;
+          font-size: 1.7rem; line-height: 1;
+          background: radial-gradient(circle at 32% 28%, rgb(255 255 255 / .85) 0 8%, transparent 22%),
+                      light-dark(#f6dc8f, #6b5620); }
+  .card--hof .hof-text { display: flex; flex-direction: column; gap: .15rem; min-width: 0; }
+  .card--hof .hof-name { font-weight: 800; font-size: 1.1rem; letter-spacing: -.01em; }
+  .card--hof .hof-desc { font-size: .82rem; color: var(--muted);
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card--hof .hof-arrow { margin-left: auto; font-size: 1.3rem; color: var(--muted); }
+  .empty { text-align: center; color: var(--muted); margin-top: 4rem; }
+  footer { margin-top: 3.5rem; padding-top: 1.2rem; border-top: 1px solid var(--line);
+           font-family: var(--mono); color: var(--muted); font-size: .78rem; text-align: center; }
+  footer a { color: inherit; text-underline-offset: .2em; }
+  @media (max-width: 600px) {
+    body { padding-top: 2rem; }
+    .grid { gap: .65rem; grid-template-columns: repeat(auto-fill, minmax(8.2rem, 1fr)); }
+    .emoji { width: 3.7rem; font-size: 1.8rem; }
+    .name { font-size: 1rem; }
+  }
 </style>
 </head>
 <body>
