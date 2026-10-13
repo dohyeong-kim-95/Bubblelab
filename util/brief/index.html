@@ -90,18 +90,6 @@
 
   /* 토글 스위치 (설정·알림 공용) — bubble.css에 스위치 부품이 없어 토큰으로 직접 짓는다.
      켜지면 도구 강조색으로 찬다. */
-  .notify-toggle { position: relative; flex: none; width: 3rem; height: 1.7rem; padding: 0;
-                   border-radius: var(--pill); border: 1px solid var(--line); background: var(--sunk);
-                   transition: background .18s, border-color .18s; }
-  .notify-toggle::before { content: ""; position: absolute; top: 50%; left: .2rem;
-                   transform: translateY(-50%); width: 1.24rem; height: 1.24rem; border-radius: 50%;
-                   background: var(--field); box-shadow: 0 1px 3px #0003, inset 0 0 0 1px var(--line);
-                   transition: left .18s; }
-  .notify-toggle:hover:not(:disabled) { border-color: var(--accent-line); }
-  .notify-toggle[aria-checked="true"],
-  .notify-toggle[aria-checked="true"]:hover:not(:disabled) { background: var(--accent); border-color: transparent; }
-  .notify-toggle[aria-checked="true"]::before { left: calc(100% - 1.44rem); background: #fff; box-shadow: 0 1px 3px #0003; }
-  .notify-toggle:disabled { opacity: .5; cursor: default; }
 
   /* 데일리 알림 — fortune과 같은 모양이되 자리가 다르다.
      우하단은 공용 독(#bl-dock)이 fixed로 차지한다. 이 페이지는 짧아서 세로 중앙
@@ -150,17 +138,17 @@
     <div id="settings" class="bl-sunk" hidden>
       <h2>브리핑에 넣을 내용</h2>
       <div class="set-row">
-        <button type="button" id="set-weather" class="notify-toggle" role="switch"
+        <button type="button" id="set-weather" class="bl-switch" role="switch"
                 aria-checked="true" aria-label="날씨와 미세먼지 넣기"></button>
         <span>🌤️ 날씨 · 미세먼지</span>
       </div>
       <div class="set-row">
-        <button type="button" id="set-rates" class="notify-toggle" role="switch"
+        <button type="button" id="set-rates" class="bl-switch" role="switch"
                 aria-checked="true" aria-label="환율과 지수 넣기"></button>
         <span>💱 환율 · 지수</span>
       </div>
       <div class="set-row">
-        <button type="button" id="set-fortune" class="notify-toggle" role="switch"
+        <button type="button" id="set-fortune" class="bl-switch" role="switch"
                 aria-checked="true" aria-label="오늘의 운세 넣기"></button>
         <span>🔮 오늘의 운세</span>
       </div>
@@ -241,7 +229,7 @@
     <!-- 데일리 알림 (푸시 지원 시에만 노출). 토글이 행의 왼쪽인 이유는 위 CSS 주석 참고 -->
     <section id="notify" hidden>
       <div class="notify-row">
-        <button type="button" id="notify-btn" class="notify-toggle" role="switch" aria-checked="false" aria-label="매일 오전 8시 날씨 알림"></button>
+        <button type="button" id="notify-btn" class="bl-switch" role="switch" aria-checked="false" aria-label="매일 오전 8시 날씨 알림"></button>
         <span class="notify-title">🔔 매일 오전 8시 알림 받기</span>
       </div>
       <p class="notify-help bl-note" id="notify-help">브라우저 알림으로 매일 오전 8시(KST)에 선택한 지역의 날씨를 받아보세요.</p>

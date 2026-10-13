@@ -106,6 +106,21 @@ textarea.bl-input { line-height: 1.6; resize: vertical; }
 .bl-chip[aria-pressed="true"], .bl-chip[aria-selected="true"], .bl-chip.is-on {
   color: var(--accent-ink); background: var(--accent); border-color: transparent; }
 
+/* ── 스위치 (role="switch" + aria-checked) ─────────────── */
+/* <button class="bl-switch" role="switch" aria-checked="false" aria-label="…"></button> */
+.bl-switch { position: relative; flex: none; width: 3rem; height: 1.7rem; padding: 0;
+                 border-radius: var(--pill); border: 1px solid var(--line); background: var(--sunk);
+                 transition: background .18s, border-color .18s; }
+.bl-switch::before { content: ""; position: absolute; top: 50%; left: .2rem;
+                 transform: translateY(-50%); width: 1.24rem; height: 1.24rem; border-radius: 50%;
+                 background: var(--field); box-shadow: 0 1px 3px #0003, inset 0 0 0 1px var(--line);
+                 transition: left .18s; }
+.bl-switch:hover:not(:disabled) { border-color: var(--accent-line); }
+.bl-switch[aria-checked="true"],
+.bl-switch[aria-checked="true"]:hover:not(:disabled) { background: var(--accent); border-color: transparent; }
+.bl-switch[aria-checked="true"]::before { left: calc(100% - 1.44rem); background: #fff; box-shadow: 0 1px 3px #0003; }
+.bl-switch:disabled { opacity: .5; cursor: default; }
+
 /* ── 면 ───────────────────────────────────────── */
 .bl-panel { background: var(--field); border: 1px solid var(--line); border-radius: var(--r-lg);
             padding: 1rem 1.1rem; }
