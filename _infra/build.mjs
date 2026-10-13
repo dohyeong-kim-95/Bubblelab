@@ -239,6 +239,20 @@ function toyEmoji(site, name) {
   }
 }
 
+// 도구형 카테고리(util)는 카드 대신 묶음별 목록으로 보인다 — 한 줄 설명과 묶음은
+// 각 페이지의 <meta name="description">·<meta name="bl-group"> 에서 읽는다.
+// 묶음 순서는 아래 표, 표에 없는 묶음은 뒤에 붙는다.
+const GROUP_ORDER = ["매일", "사진·이미지", "글·문서", "함께"];
+function toyMeta(site, name) {
+  try {
+    const html = readFileSync(join(ROOT, site, name, "index.html"), "utf8");
+    const pick = (key) => html.match(new RegExp(`<meta name="${key}" content="([^"]*)"`))?.[1] ?? "";
+    return { desc: pick("description"), group: pick("bl-group") };
+  } catch {
+    return { desc: "", group: "" };
+  }
+}
+
 // 카드 페이지의 <title>을 랜딩 검색용으로 뽑아온다. 제목은 대개 한국어라
 // 폴더 이름(영문)만으로는 안 되는 검색을 이 한 줄이 거의 다 해결한다.
 //   title = 검색에 쓰는 제목 전체, label = 카드에 보여줄 앞부분
@@ -308,6 +322,21 @@ function listingPage(site, entries) {
     })
     .join("\n");
   const cards = hofCard + gameCards;
+  // 묶음이 적힌 카테고리(util)는 묶음별 목록 — 이름이 영문 폴더라 카드만으론 뭔지 모른다
+  const grouped = entries.some((e) => e.group);
+  const groupNames = [...new Set([...GROUP_ORDER, ...entries.map((e) => e.group || "기타")])]
+    .filter((g) => entries.some((e) => (e.group || "기타") === g));
+  const groupedList = groupNames.map((g) => {
+    const rows = entries
+      .filter((e) => (e.group || "기타") === g)
+      .map((e) => ({ ...e, label: toyTitle(site, e.name).label || e.name }))
+      .sort((a, b) => a.label.localeCompare(b.label, "ko"))
+      .map((e) => `      <li><a class="row" href="/${escapeHtml(e.name)}/" style="--hue:${hueOf(e.name)}">
+        <span class="emoji">${e.emoji.char}</span><b>${escapeHtml(e.label)}</b><small>${escapeHtml(e.desc)}</small>
+      </a></li>`)
+      .join("\n");
+    return `  <section class="group"><h2>${escapeHtml(g)}</h2>\n    <ul class="rows">\n${rows}\n    </ul></section>`;
+  }).join("\n");
   return `<!doctype html>
 <html lang="ko">
 <head>
@@ -434,10 +463,24 @@ ${preconnectLinks}
   body[data-site="slop"] .card:not(.card--hof) .champ:not(:empty) ~ .mine { display: none; }
   body[data-site="slop"] .card:not(.card--hof):has(.champ:not(:empty)) .emoji { width: 54%; }
   body[data-site="slop"] .card:not(.card--hof) .champ { font-size: clamp(.62rem, 2.6vw, .78rem); color: var(--ink); opacity: .75; }
+  /* 묶음별 목록(util): 랜딩의 카테고리 줄과 같은 모양 — 방울 + 이름 + 한 줄 설명 */
+  .group { max-width: 40rem; margin: 0 auto 2.2rem; }
+  .group h2 { margin: 0 0 .5rem; font-family: var(--mono); font-size: .78rem; font-weight: normal; color: var(--muted); }
+  .rows { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+  .rows li { border-bottom: 1px solid var(--line); }
+  .row { display: grid; grid-template-columns: 3rem 1fr auto; grid-template-areas: "e b go" "e s go";
+         column-gap: 1rem; align-items: center; padding: .9rem .25rem; text-decoration: none; color: inherit; }
+  .row .emoji { grid-area: e; width: 3rem; font-size: 1.4rem; }
+  .row b { grid-area: b; align-self: end; font-size: 1.08rem; font-weight: 700; letter-spacing: -.015em; line-height: 1.3; }
+  .row small { grid-area: s; align-self: start; color: var(--muted); font-size: .86rem; line-height: 1.45;
+         display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .row::after { content: "→"; grid-area: go; font-size: 1.2rem; color: var(--muted); transition: transform .25s ease, color .25s ease; }
+  .row:hover .emoji, .row:focus-visible .emoji { transform: scale(1.1) rotate(-6deg); }
+  .row:hover::after, .row:focus-visible::after { transform: translateX(.3rem); color: light-dark(hsl(var(--hue) 70% 40%), hsl(var(--hue) 70% 70%)); }
   @media (max-width: 600px) {
     body { padding-top: 2rem; }
     .grid { gap: .65rem; grid-template-columns: repeat(auto-fill, minmax(8.2rem, 1fr)); }
-    body:not([data-site="slop"]) .emoji { width: 3.7rem; font-size: 1.8rem; }
+    body:not([data-site="slop"]) .grid .emoji { width: 3.7rem; font-size: 1.8rem; }
     .name { font-size: 1rem; }
   }
 </style>
@@ -456,7 +499,7 @@ ${site === "slop" ? "" : '  <div id="crown" title="이번 주 1위를 가장 많
 ${site === "slop" ? '  <div id="streak" title="나의 Slop 연속 방문일"></div>' : ""}
 ${site === "slop" ? '  <a id="alltime-top" href="/hall-of-fame/" hidden><span class="at-sub"></span><strong class="at-nick"></strong></a>' : ""}
 ${site === "slop" ? '  <div id="week-podium" class="bl-podium" hidden><p class="podium-title">🔥 이번 주 slop 삼대장</p><div class="podium-row"></div></div>' : ""}
-${cards ? `  <div class="grid">\n${cards}\n  </div>` : `  <p class="empty">아직 아무것도 없어요 🫧</p>`}
+${grouped ? groupedList : cards ? `  <div class="grid">\n${cards}\n  </div>` : `  <p class="empty">아직 아무것도 없어요 🫧</p>`}
   <footer><a href="https://bubblelab.dev">bubblelab.dev</a></footer>
 <script>
 const SITE = ${JSON.stringify(site)};
@@ -671,6 +714,7 @@ for (const site of sites) {
     .map((d) => ({
       name: d.name,
       emoji: toyEmoji(site.name, d.name),
+      ...toyMeta(site.name, d.name),
     }))
     .sort((a, b) => a.name.localeCompare(b.name, "ko"));
 
