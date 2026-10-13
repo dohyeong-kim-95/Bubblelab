@@ -126,12 +126,6 @@ export function prepareCutRun({ cutDir, options, base, provider }) {
   return { meta, metaPath, runIndex: meta.runs.length - 1 };
 }
 
-export function updateCutRun(state, patch = {}) {
-  const now = new Date().toISOString();
-  state.meta = { ...state.meta, ...patch, updatedAt: now };
-  atomicWriteJson(state.metaPath, state.meta);
-}
-
 export function finishCutRun(state, status, error = null, patch = {}) {
   const completedAt = new Date().toISOString();
   const runs = [...state.meta.runs];

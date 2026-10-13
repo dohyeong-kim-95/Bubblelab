@@ -87,7 +87,7 @@ test("life 은 fail-closed 이고 게이트 뒤에서만 열린다", async () =>
     assert.equal(anonymous.status, 200, `${path} 는 로그인 없이 받을 수 있어야 한다`);
   }
   // 그 밖에는 전부 막힌다.
-  for (const path of ["/", "/app.js", "/store.js", "/invest/"]) {
+  for (const path of ["/", "/app.js", "/store.js", "/budget/"]) {
     const anonymous = await worker.fetch(new Request(`https://life.bubblelab.dev${path}`), env, ctx);
     assert.equal(anonymous.status, 303, `${path} 는 막혀야 한다`);
   }
@@ -761,7 +761,7 @@ test("/_health 는 서빙 중인 커밋과 바인딩을 읽기 전용으로 알�
         return Response.json(stamp);
       },
     },
-    CHAT: {}, INVEST: {},
+    CHAT: {},
   };
   const response = await worker.fetch(new Request("https://bubblelab.dev/_health"), env, ctx);
   assert.equal(response.status, 200);

@@ -103,9 +103,9 @@ test("자기 서브도메인과 딸린 파일은 통과한다", () => {
 });
 
 test("남의 서브도메인 파일은 거부된다", () => {
-  const result = commitWith("agent/duri/calendar", ["duri/index.html", "estate/index.html"]);
-  assert.equal(result.ok, false, "estate/ 가 섞였는데 커밋이 통과했다");
-  assert.match(result.stderr, /estate\/index\.html/);
+  const result = commitWith("agent/duri/calendar", ["duri/index.html", "life/index.html"]);
+  assert.equal(result.ok, false, "life/ 가 섞였는데 커밋이 통과했다");
+  assert.match(result.stderr, /life\/index\.html/);
 });
 
 test("이름이 겹쳐 보이는 남의 인프라 파일도 거부된다", () => {
@@ -122,7 +122,7 @@ test("공용 등록 파일은 허용하되 경고를 남긴다", () => {
 
 // 린트·테스트는 모든 브랜치에서 돈다. 소유 범위만 agent/… 브랜치 전용이다.
 test("agent 브랜치가 아니면 소유 범위를 검사하지 않는다", () => {
-  const result = commitWith("main-ish", ["estate/index.html", "duri/index.html"]);
+  const result = commitWith("main-ish", ["life/index.html", "duri/index.html"]);
   assert.equal(result.ok, true, result.stderr);
 });
 
@@ -174,7 +174,7 @@ test("문서만 바뀐 커밋에는 테스트를 돌리지 않는다", () => {
 });
 
 test("SKIP_HOOKS=1 이면 전부 우회한다", () => {
-  const result = commitWith("agent/slop/x", { "estate/index.html": "<p>남의 것" }, {
+  const result = commitWith("agent/slop/x", { "life/index.html": "<p>남의 것" }, {
     npmTest: "exit 1",
     skipHooks: true,
   });

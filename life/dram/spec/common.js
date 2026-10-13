@@ -16,13 +16,6 @@ export const SCOPES = {
   rank: { label: "랭크 전체", test: () => true },
 };
 
-/* 뱅크가 가질 수 있는 상태. JEDEC 의 state diagram 을 이 화면에 필요한 만큼만 줄인 것 —
- * 파워다운·셀프리프레시는 아직 없다(2단계). */
-export const BANK_STATES = {
-  idle: { label: "Idle", hint: "행이 닫혀 있다. ACT 로 열 수 있다." },
-  active: { label: "Active", hint: "행 하나가 센스앰프에 올라와 있다. RD/WR 가능." },
-};
-
 /* 커맨드 하나의 모양.
  *   op       화면과 규칙 표에서 쓰는 이름
  *   target   "bank" 한 뱅크를 고른다 | "all" 랭크 전체 | "none" 대상 없음

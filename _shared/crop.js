@@ -25,11 +25,3 @@ export function coverCrop(width, height, targetWidth, targetHeight, focus = "cen
     height: cropHeight,
   };
 }
-
-// 잘라낸 상자를 대상 크기로 낼 때의 실제 출력 크기.
-// **확대는 하지 않는다** — 원본이 작으면 비율만 맞춘 원본 해상도로 낸다.
-export function outputSize(crop, targetWidth, targetHeight) {
-  const scale = Math.min(1, targetWidth / crop.width, targetHeight / crop.height);
-  if (scale >= 1) return { width: crop.width, height: crop.height, upscaled: false };
-  return { width: targetWidth, height: targetHeight, upscaled: false };
-}

@@ -37,7 +37,6 @@ export const DURI_MAX_META_BLOB = 4 * 1024; // 사진 메타(이름·캡션) 암
 export const DURI_MAX_THUMB_BLOB = 24 * 1024;
 const MAX_BUFFER_ENTRIES = 5000; // 싱크가 오래 꺼져 있을 때의 상한
 const BACKFILL_LIMIT = 100; // 접속 직후 한 번에 보내는 최대 항목 수(나머지는 요청 시)
-export const DURI_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 미ack 항목 보존 30일
 const MAX_MESSAGE_BYTES = 32 * 1024;
 const MAX_CONNECTIONS = 8; // 두 사람 × 기기 몇 + 싱크
 const PING_INTERVAL_MS = 30_000;

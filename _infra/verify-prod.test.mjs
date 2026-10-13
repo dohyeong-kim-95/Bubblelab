@@ -28,7 +28,7 @@ const health = (over = {}) => ({
   builtAt: "2026-08-12T00:00:00.000Z",
   siteCount: 12,
   date: kstDate(),
-  bindings: { ASSETS: true, INVEST: true },
+  bindings: { ASSETS: true, DURI: true },
   ...over,
 });
 
@@ -47,8 +47,8 @@ test("서빙 중인 커밋이 배포한 커밋과 다르면 실패한다", () =>
 
 test("바인딩이 빠진 배포를 잡는다", () => {
   const checks = createChecks();
-  assertHealth(health({ bindings: { ASSETS: true, INVEST: false } }), checks, {});
-  assert.deepEqual(at(checks), ["health.bindings.INVEST"]);
+  assertHealth(health({ bindings: { ASSETS: true, DURI: false } }), checks, {});
+  assert.deepEqual(at(checks), ["health.bindings.DURI"]);
 });
 
 test("health 날짜가 KST 가 아니면 실패한다 (타임존이 새는 자리)", () => {

@@ -74,8 +74,8 @@ npm test                                                          # 인프라 �
   **이 순서를 뒤집으면 영구 손실이다.**
 - **미ack 버퍼를 줄이는 건 개수 상한 하나뿐이다.** `_infra/duri.js:537 (capBuffer)`
   가 `head - ackSeq` 이 `:34 MAX_BUFFER_ENTRIES`(5000)를 넘을 때만 오래된 것부터
-  버리고 `ackSeq` 를 올린다(=조용한 손실). **시간 기반 만료는 없다** — `:35
-  DURI_RETENTION_MS`(30일)는 **참조 0건의 죽은 상수**, `:618 (alarm)` 은 ping 전용.
+  버리고 `ackSeq` 를 올린다(=조용한 손실). **시간 기반 만료는 없다**(옛 `DURI_RETENTION_MS` 30일은 참조 0건이라 지웠다) —
+  `alarm` 은 ping 전용.
 - 캘린더는 버퍼가 아니라 DO 지속 상태(`cal:<id>`, LWW). 툼스톤은 접속(cal-hello)마다
   `_infra/duri.js:329 (sweepCalTombstones)` 이 `:51 CAL_TOMBSTONE_TTL_MS`(90일) 지난
   것을 지우고, 상한은 `:349 (calPut)` 이 `if (!v?.deleted) live++` 로 **살아 있는

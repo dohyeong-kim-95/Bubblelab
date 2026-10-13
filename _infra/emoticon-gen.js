@@ -75,7 +75,6 @@ export async function geminiGenerate({ apiKey, model = DEFAULT_IMAGE_MODEL, prom
 // "귀가 몇 개인가"는 VLM이 잘하는 일이다. 이미지 생성보다 훨씬 싸다.
 // 모델 이름을 상수로 박으면 안 된다 — gemini-2.5-flash는 "신규 사용자에게 더
 // 이상 제공되지 않는다"는 404로 죽었다. 실제 사용 가능한 목록을 조회해 고른다.
-export const DEFAULT_VISION_MODEL = "";   // 비우면 자동 선택
 
 // generateContent를 지원하는 모델 중 텍스트 응답에 맞는 것을 고른다.
 // 이미지 생성·TTS·임베딩 전용은 제외하고, 싸고 빠른 flash 계열을 우선한다.

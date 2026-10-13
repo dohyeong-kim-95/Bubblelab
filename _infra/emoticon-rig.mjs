@@ -10,7 +10,7 @@
 // 아트는 사람(여기서는 모델)이 그리고, 움직임은 리그가 만든다.
 //
 // 순수 함수라 비용이 없고 결정론적이며, 테스트로 검증된다.
-import { decodePng, encodePng } from "./png.mjs";
+import { decodePng } from "./png.mjs";
 
 // 임계값이 두 개인 이유: 머리 원 피팅은 **구조**(굵은 외곽선)를 봐야 하므로
 // 느슨하게 잡으면 안티에일리어싱 가장자리까지 머리로 세어 원이 틀어진다.
@@ -167,10 +167,6 @@ export function liftFrame(image, fraction) {
     out.set(data.subarray((y + dy) * width * 4, (y + dy + 1) * width * 4), y * width * 4);
   }
   return { width, height, data: out };
-}
-
-export function encodeRig(result) {
-  return encodePng(result.image);
 }
 
 // 리그 스펙 → 변형된 이미지. 현재 type은 "nod" 하나이며, 눈깜빡임처럼
