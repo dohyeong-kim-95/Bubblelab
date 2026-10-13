@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>게이트 러너 — 광고에서 본 그 게임</title>
+<title>🏃 게이트 러시 — 한 번 틀리면 끝</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🏃</text></svg>">
 <style>
   :root { color-scheme: light dark; }
@@ -43,19 +43,21 @@
 </head>
 <body>
 <div id="hud">
-  <span>🏃 <b>게이트 러너 (진짜임)</b></span>
+  <span>🏃 <b>게이트 러시</b></span>
   <span class="sp"></span>
   <span id="hStage"></span>
-  <button id="retry" title="다시 시작">↻</button>
+  <button id="retry" title="포기하고 결과 보기">↻</button>
 </div>
 <div id="overlay">
   <p class="big" id="oEmoji">🏃</p>
-  <h1 id="oTitle">게이트 러너</h1>
-  <p id="oMsg">광고에서 보던 바로 그 문 고르기 게임.
-근데 이건 진짜로 그 게임임.
+  <h1 id="oTitle">게이트 러시</h1>
+  <p id="oMsg">광고에서 보던 그 문 고르기 게임, 목숨 하나 버전.
 
 좌우로 드래그해서 좋은 문을 고르고,
-군중을 불려서 마지막 빨간 군단을 이기세요!</p>
+군중을 불려서 마지막 빨간 군단을 이기세요.
+
+스테이지 1부터 깰 때마다 바로 다음 판으로.
+한 번이라도 실패하면 끝 — 연속 클리어 수가 점수예요.</p>
   <button id="btn">시작</button>
   <p id="best"></p>
 </div>
@@ -208,7 +210,8 @@ window.blDiffAt = (s) => diffOf(genTuned(s), spdFor(s));
 window.blSimAt = (s) => s < 2 ? 0 : simFp(fpOf(genTuned(s)), fpOf(genTuned(s - 1)));
 
 /* ── 상태 ─────────────────────────────────────────────── */
-let stage = 1, best = +localStorage.getItem("gaterunner.best") || 0;
+let stage = 1, streak = 0, best = 0, advanceT = 0;
+try { best = +localStorage.getItem("bl-gaterush-best") || 0; } catch {}
 let phase = "title";              // title | play | boss | win | fail
 let pairs = [], gates = [], boss = null, count = 5;
 let mids = [], bullets = [], volleys = [], tRun = 0, invuln = 0, bulletSpd = 240;
@@ -253,18 +256,32 @@ function pop(text, x, y, col) { pops.push({ text, x, y, life: 1, col }); }
 function endStage(ok) {
   if (ok) {
     phase = "win";
-    if (stage > best) { best = stage; localStorage.setItem("gaterunner.best", best); }
-    window.blWeeklyReport?.(stage);
-    show("🏆", `스테이지 ${stage} 클리어!`,
-         `${count}명으로 ${boss.n}명 군단을 밀어버렸습니다.`, "다음 스테이지");
+    streak++;
+    if (streak > best) { best = streak; try { localStorage.setItem("bl-gaterush-best", best); } catch {} }
+    hud();
+    show("🏆", `${streak}연속 클리어!`,
+         `${count}명으로 ${boss.n}명 군단을 밀어버렸습니다.\n곧 다음 스테이지…`, "");
+    $("btn").hidden = true;
+    clearTimeout(advanceT);
+    advanceT = setTimeout(() => {
+      if (phase !== "win") return;
+      stage++;
+      $("btn").hidden = false;
+      $("overlay").classList.add("hide");
+      phase = "play"; loadStage();
+    }, 1000);
   } else {
     phase = "fail";
+    clearTimeout(advanceT);
+    $("btn").hidden = false;
+    if (streak >= 1) window.blWeeklyReport?.(streak);
     const quips = ["광고 속 그 사람도 맨날 -30 문으로 들어가던데요.",
                    "괜찮아요. 광고는 원래 지는 장면만 보여줘요.",
                    "이게 바로 광고에서 보던 그 발컨입니다."];
-    show("💀", "전멸…", (failMsg ?? (count <= 0 ? "군중이 다 사라졌어요." :
+    show("💀", `${streak}판 연속 클리어`, `스테이지 ${stage}에서 전멸.\n` +
+         (failMsg ?? (count <= 0 ? "군중이 다 사라졌어요." :
          `${count}명 vs ${boss.n}명. 역부족이었습니다.`)) +
-         "\n\n" + quips[(Math.random() * quips.length) | 0], "다시 도전");
+         "\n\n" + quips[(Math.random() * quips.length) | 0], "처음부터 다시");
     failMsg = null;
   }
 }
@@ -575,20 +592,22 @@ requestAnimationFrame(loop);
 
 /* ── 입력/UI ──────────────────────────────────────────── */
 const $ = (id) => document.getElementById(id);
-function hud() { $("hStage").textContent = `스테이지 ${stage} ${starsOf(dScore)} · 👥 ${count}`; }
+function hud() { $("hStage").textContent = `🔥 ${streak}연속 · 스테이지 ${stage} ${starsOf(dScore)} · 👥 ${count}`; }
 function show(emoji, title, msg, btnText) {
   $("oEmoji").textContent = emoji; $("oTitle").textContent = title;
   $("oMsg").textContent = msg; $("btn").textContent = btnText;
-  $("best").textContent = best ? `최고 기록: 스테이지 ${best}` : "";
+  $("best").textContent = best ? `최고 기록: ${best}연속` : "";
   $("overlay").classList.remove("hide");
 }
 $("btn").addEventListener("click", () => {
-  if (phase === "win") stage++;
+  if (phase === "win") return;               // 승리 후엔 자동으로 넘어간다
+  stage = 1; streak = 0;                      // 새 런은 항상 스테이지 1부터
   $("overlay").classList.add("hide");
   phase = "play"; loadStage();
 });
 $("retry").addEventListener("click", () => {
-  if (phase === "play" || phase === "boss") { phase = "play"; loadStage(); }
+  // 같은 판 재시작은 없다 — 포기 = 런 종료
+  if (phase === "play" || phase === "boss") { failMsg = "스스로 포기했습니다."; endStage(false); }
 });
 
 let dragging = false;
@@ -604,11 +623,12 @@ addEventListener("keydown", (e) => {
   if (e.key === "ArrowRight") targetX = MID + 70;
 });
 
-window.blShareText = () => `게이트 러너 스테이지 ${best}까지 뚫었음! 광고에서 본 그 게임, 진짜로 있음 🏃`;
-window.blWeekly = { game: "gaterunner", dir: "max", fmt: (v) => `스테이지 ${v}` };
+window.blShareText = () => `게이트 러시 ${best}연속! 한 번도 안 틀리고 도전해보세요 🏃`;
+window.blWeekly = { game: "gaterush", dir: "max", fmt: (v) => `${v}연속` };
+$("best").textContent = best ? `최고 기록: ${best}연속` : "";
 </script>
+<script defer src="/_shared/like.js"></script>
 <script defer src="/_shared/records.js"></script>
 <script defer src="/_shared/share.js"></script>
-<script defer src="/_shared/like.js"></script>
 </body>
 </html>

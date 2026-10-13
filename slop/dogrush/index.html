@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>벌떼에서 강아지 구하기 — 광고에서 본 그 게임</title>
+<title>🐶 강아지 러시 — 한 번 틀리면 끝</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🐶</text></svg>">
 <style>
   :root { color-scheme: light dark; }
@@ -49,27 +49,28 @@
   #btn { font: inherit; font-size: 1.05rem; padding: .75rem 2.2rem; border-radius: 2rem;
          border: 2px solid currentColor; background: none; color: inherit; cursor: pointer; }
   #btn:active { transform: scale(.96); }
+  #btn.hide { display: none; }
   #best { margin: 0; font-size: .8rem; opacity: .5; min-height: 1.1em; }
 </style>
 </head>
 <body>
 <div id="hud">
-  <span>🐶 <b>강아지 구하기 (진짜임)</b></span>
+  <span>🐶 <b>강아지 러시</b></span>
   <span class="sp"></span>
   <span id="hStage"></span>
-  <button id="retry" title="다시 시작">↻</button>
+  <button id="retry" title="선 다시 긋기">↻</button>
 </div>
 <div id="inkbar"><div id="ink"></div></div>
 <button id="go" class="hide">🐝 출발!</button>
 <div id="overlay">
   <p class="big" id="oEmoji">🐶</p>
-  <h1 id="oTitle">강아지를 구하세요</h1>
-  <p id="oMsg">광고에서 보던 바로 그 선 긋기 게임.
-근데 이건 진짜로 그 게임임.
-
-분홍 잉크로 벽을 그려서
+  <h1 id="oTitle">강아지 러시</h1>
+  <p id="oMsg">분홍 잉크로 벽을 그려서
 벌떼로부터 강아지를 5초 동안 지키세요.
-빈틈이 있으면 벌이 돌아 들어옵니다!</p>
+
+한 번이라도 물리면 끝!
+연속으로 지켜낸 판 수가 점수입니다.
+(출발 전에는 ↻로 선을 다시 그을 수 있어요)</p>
   <button id="btn">시작</button>
   <p id="best"></p>
 </div>
@@ -245,7 +246,10 @@ window.blDiffAt = (s) => diffOf(genTuned(s));
 window.blSimAt = (s) => s < 2 ? 0 : simFp(fpOf(genTuned(s)), fpOf(genTuned(s - 1)));
 
 /* ── 상태 ─────────────────────────────────────────────── */
-let stage = 1, best = +localStorage.getItem("savedog.best") || 0;
+const BEST_KEY = "bl-dogrush-best";
+let best = 0;
+try { best = +localStorage.getItem(BEST_KEY) || 0; } catch {}
+let stage = 1, score = 0, runId = 0;
 let phase = "title";       // title | draw | run | win | fail
 let dog, hives, walls = [], stroke = [], ink = 0, inkMax = 1, tip = "";
 let bees = [], timer = 0, spawnQueue = [], dogFace = "🐶";
@@ -327,15 +331,26 @@ function fail() {
   const quips = ["광고 속 그 사람은 일부러 못 그리는 거였는데, 이건 진심이네요.",
                  "괜찮아요. 광고에서도 맨날 물리던데요.",
                  "벌도 놀랐을 겁니다. 이렇게 큰 빈틈은 처음이라."];
-  show("🐝", "물렸다…", "벌이 강아지에게 도달했어요.\n\n" +
-       quips[(Math.random() * quips.length) | 0], "다시 도전");
+  runId++;
+  const isBest = score > 0 && score > best;
+  if (isBest) { best = score; try { localStorage.setItem(BEST_KEY, best); } catch {} }
+  if (score >= 1) window.blWeeklyReport?.(score);
+  show("🐝", `${score}판 연속 클리어`, `스테이지 ${stage}에서 물렸어요.` +
+       (isBest ? " 🎉 최고 기록!" : "") + "\n\n" +
+       quips[(Math.random() * quips.length) | 0], "처음부터 다시");
 }
 function win() {
   phase = "win"; dogFace = "🥰";
-  if (stage > best) { best = stage; localStorage.setItem("savedog.best", best); }
-  window.blWeeklyReport?.(stage);
-  show("🏆", `스테이지 ${stage} 클리어!`,
-       `5초 버티기 성공. 강아지가 무사합니다.\n남은 잉크 ${Math.round(ink)}px`, "다음 스테이지");
+  score++; hud();
+  show("🏆", `${score}연속!`, `스테이지 ${stage} 클리어 — 다음 판으로…`, "");
+  $("btn").classList.add("hide");
+  const id = runId;
+  setTimeout(() => {
+    if (id !== runId || phase !== "win") return;
+    stage++;
+    $("overlay").classList.add("hide"); $("btn").classList.remove("hide");
+    loadStage();
+  }, 900);
 }
 function endDrawUi() {
   document.getElementById("go").classList.add("hide");
@@ -412,22 +427,28 @@ requestAnimationFrame(loop);
 
 /* ── 입력/UI ──────────────────────────────────────────── */
 const $ = (id) => document.getElementById(id);
-function hud() { $("hStage").textContent = `스테이지 ${stage} ${starsOf(dScore)}`; }
+function hud() { $("hStage").textContent = `${score}연속 · 스테이지 ${stage} ${starsOf(dScore)}`; }
 function inkUi() { $("ink").style.width = (ink / inkMax * 100) + "%"; }
 function show(emoji, title, msg, btnText) {
   $("oEmoji").textContent = emoji; $("oTitle").textContent = title;
   $("oMsg").textContent = msg; $("btn").textContent = btnText;
-  $("best").textContent = best ? `최고 기록: 스테이지 ${best}` : "";
+  $("best").textContent = best ? `최고 기록: ${best}연속` : "";
   $("overlay").classList.remove("hide");
   endDrawUi();
 }
-$("btn").addEventListener("click", () => {
-  if (phase === "win") stage++;
-  $("overlay").classList.add("hide");
+function newRun() {
+  runId++; stage = 1; score = 0;
+  $("overlay").classList.add("hide"); $("btn").classList.remove("hide");
   loadStage();
+}
+$("btn").addEventListener("click", () => {
+  if (phase === "title" || phase === "fail") newRun();
 });
+$("best").textContent = best ? `최고 기록: ${best}연속` : "";
+window.__sdRun = () => ({ score, stage, best, phase });
+// 출발 전(그리기 단계)에만 선을 지우고 다시 긋기 — 달리는 중엔 실패를 피할 수 없다
 $("retry").addEventListener("click", () => {
-  if (phase === "draw" || phase === "run") loadStage();
+  if (phase === "draw") loadStage();
 });
 $("go").addEventListener("click", () => {
   if (phase !== "draw") return;
@@ -465,8 +486,8 @@ function addPt(x, y) {
   lastPt = [nx, ny];
 }
 
-window.blShareText = () => `벌떼에서 강아지를 스테이지 ${best}까지 지켜냈음! 광고 말고 진짜로 있는 게임 🐶`;
-window.blWeekly = { game: "savedog", dir: "max", fmt: (v) => `스테이지 ${v}` };
+window.blShareText = () => `강아지 러시 ${best}연속! 한 번도 안 틀리고 도전해보세요 🐶`;
+window.blWeekly = { game: "dogrush", dir: "max", fmt: (v) => `${v}연속` };
 </script>
 <script defer src="/_shared/records.js"></script>
 <script defer src="/_shared/share.js"></script>

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>광고에서 본 그 게임 — 핀 뽑기 구출</title>
+<title>📌 핀 러시 — 한 번 틀리면 끝</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>📌</text></svg>">
 <style>
   :root { color-scheme: light dark; }
@@ -44,20 +44,21 @@
 </head>
 <body>
 <div id="hud">
-  <span>📌 <b>그 게임 (진짜임)</b></span>
+  <span>📌 <b>핀 러시</b></span>
   <span class="sp"></span>
   <span id="hStage"></span>
+  <span id="hRun"></span>
   <span id="hGold"></span>
-  <button id="retry" title="다시 시작">↻</button>
+  <button id="retry" title="포기하고 이번 도전 끝내기">🏳️</button>
 </div>
 <div id="overlay">
   <p class="big" id="oEmoji">🤠</p>
-  <h1 id="oTitle">핀 뽑기 구출</h1>
-  <p id="oMsg">광고에서 보던 바로 그 게임.
-근데 이건 진짜로 그 게임임.
+  <h1 id="oTitle">핀 러시</h1>
+  <p id="oMsg">핀을 뽑아 보물💰을 냄비에 담고,
+용암🔥은 절대 냄비에 넣지 마세요.
 
-핀을 뽑아 보물💰을 냄비에 담고,
-용암🔥은 절대 냄비에 넣지 마세요.</p>
+목숨은 하나. 한 번이라도 실패하면 끝!
+스테이지 1부터 연속으로 깬 판 수가 점수예요.</p>
   <button id="btn">시작</button>
   <p id="best"></p>
 </div>
@@ -142,7 +143,10 @@ function levelFor(stage) {                          // 1~10 손제작 시그니�
 }
 
 /* ── 상태 ─────────────────────────────────────────────── */
-let stage = 1, best = +localStorage.getItem("pullpin.best") || 0;
+const BEST_KEY = "bl-pinrush-best";
+let best = 0;
+try { best = +localStorage.getItem(BEST_KEY) || 0; } catch (e) {}
+let stage = 1, score = 0, runId = 0;
 let phase = "title";              // title | play | win | fail
 let segs = [], pins = [], balls = [], parts = [], skulls = [];
 let need = 0, collected = 0, tip = "";
@@ -402,7 +406,7 @@ function loadStage() {
   };
   hud();
 }
-window.__ppJump = (s2) => { stage = s2;
+window.__ppJump = (s2) => { stage = s2; runId++;
   document.getElementById("overlay").classList.add("hide");
   phase = "play"; loadStage(); };
 window.__ppVerify = (s2) => {
@@ -443,17 +447,25 @@ function fail(msg) {
   const quips = ["광고 속 게임은 원래 지라고 만든 겁니다.",
                  "괜찮아요, 광고 속 그 사람도 맨날 지던데요.",
                  "이래서 광고에서 그렇게 실패하던 거였군요."];
-  show("💀", "실패…", msg + "\n\n" + quips[(Math.random() * quips.length) | 0], "다시 도전");
+  const isBest = score > 0 && score > best;
+  if (score > best) { best = score; try { localStorage.setItem(BEST_KEY, best); } catch (e) {} }
+  if (score >= 1) window.blWeeklyReport?.(score);
+  show("💀", `${score}판 연속 클리어`,
+       msg + (isBest ? "\n🎉 신기록!" : "") + "\n\n" + quips[(Math.random() * quips.length) | 0],
+       "처음부터 새 도전");
 }
 
 function win() {
   if (phase !== "play") return;
   phase = "win"; heroFace = "🤩";
-  if (stage > best) { best = stage; localStorage.setItem("pullpin.best", best); }
-  window.blWeeklyReport?.(stage);
-  show("🏆", `스테이지 ${stage} 클리어!`,
-       G.collected >= G.total ? "보물을 전부 담았어요. 완벽!" :
-       `보물 ${G.collected}개 획득. 다음 스테이지로!`, "다음 스테이지");
+  score++;
+  hud();
+  $("hStage").textContent = `🏆 클리어!`;
+  const id = runId;
+  setTimeout(() => {                 // 짧게 보여 주고 자동으로 다음 판
+    if (id !== runId || phase !== "win") return;
+    stage++; phase = "play"; loadStage();
+  }, 800);
 }
 
 // 물리 한 스텝 — 게임 런타임과 헤드리스 시뮬이 이 함수 하나를 공유한다 (P7)
@@ -636,20 +648,23 @@ requestAnimationFrame(loop);
 const $ = (id) => document.getElementById(id);
 function hud() {
   $("hStage").textContent = `스테이지 ${stage} ${starsOf(dScore)}`;
+  $("hRun").textContent = `🔥 ${score}연속`;
   $("hGold").textContent = `💰 ${G ? G.collected : 0}/${need}`;
 }
 function show(emoji, title, msg, btnText) {
   $("oEmoji").textContent = emoji; $("oTitle").textContent = title;
   $("oMsg").textContent = msg; $("btn").textContent = btnText;
-  $("best").textContent = best ? `최고 기록: 스테이지 ${best}` : "";
+  $("best").textContent = best ? `최고 기록: ${best}연속` : "";
   $("overlay").classList.remove("hide");
 }
-$("btn").addEventListener("click", () => {
-  if (phase === "win") stage++;
+function newRun() {
+  runId++; stage = 1; score = 0;
   $("overlay").classList.add("hide");
   phase = "play"; loadStage();
-});
-$("retry").addEventListener("click", () => { if (phase === "play") loadStage(); });
+}
+$("btn").addEventListener("click", newRun);
+// 판이 막혔을 때(보물이 걸려 멈춤 등) 빠져나갈 길 — 같은 판 재시도가 아니라 도전 종료
+$("retry").addEventListener("click", () => { if (phase === "play") fail("포기했어요."); });
 
 addEventListener("pointerdown", (e) => {
   if (e.target === cv) e.preventDefault();   // 모바일 더블탭 줌·고스트 클릭 방지
@@ -667,8 +682,8 @@ addEventListener("pointerdown", (e) => {
   if (bestPin) bestPin.pulled = true;
 });
 
-window.blShareText = () => `핀뽑기 스테이지 ${best}까지 깼음! 광고에서 본 그 게임, 이건 진짜임 📌`;
-window.blWeekly = { game: "pullpin", dir: "max", fmt: (v) => `스테이지 ${v}` };
+window.blShareText = () => `핀 러시 ${best}연속! 한 번도 안 틀리고 도전해보세요 📌`;
+window.blWeekly = { game: "pinrush", dir: "max", fmt: (v) => `${v}연속` };
 </script>
 <script defer src="/_shared/records.js"></script>
 <script defer src="/_shared/share.js"></script>
