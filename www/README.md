@@ -60,9 +60,12 @@
 **화면은 "비눗방울 실험실" 한 벌입니다.** 큰 한국어 헤드라인 뒤로 무지갯빛 방울
 (`.bubble`, 장식이라 `aria-hidden`)이 천천히 떠다니고, 카테고리·검색 결과는 카드 격자
 대신 색 방울(`--h`)이 달린 목록 한 줄씩입니다. 방울은 `.hero` 의 `overflow: clip` 안에서만
-움직여 가로 넘침을 만들지 않고, `prefers-reduced-motion` 이면 멈춥니다. 외부 폰트는 CSP
-(`font-src 'self'`)상 쓸 수 없어 시스템 한글 글꼴(Apple SD Gothic Neo·Noto Sans KR·맑은
-고딕)을 씁니다. 검색창은 테마 토큰(`--field`·`--line`)을 따르고, 머리의 "실험 N개"는
+움직여 가로 넘침을 만들지 않고, `prefers-reduced-motion` 이면 멈춥니다. 제목·카테고리 이름·로고는
+고운바탕 Bold(OFL, `www/fonts/OFL.txt`)이고 나머지는 시스템 한글 고딕입니다. 외부 폰트는
+CSP(`font-src 'self'`)상 못 불러와서 **랜딩 고정 문구에 쓰는 글자만 담은 부분 파일**
+(`www/fonts/gowun-batang-700.woff2`, 11KB)을 직접 둡니다 — 제목이나 카테고리 이름에 새 글자가
+생기면 Google Fonts `css2?family=Gowun+Batang:wght@700&text=…` 로 다시 받아 덮어씁니다(없는
+글자는 고딕으로 떨어져 섞여 보입니다). 검색 결과 이름은 글자를 미리 알 수 없어 고딕입니다. 검색창은 테마 토큰(`--field`·`--line`)을 따르고, 머리의 "실험 N개"는
 빌드가 심은 색인 개수라 색인이 빈 로컬 소스에서는 감춥니다.
 
 ## 데이터
