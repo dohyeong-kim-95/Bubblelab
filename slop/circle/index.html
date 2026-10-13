@@ -89,14 +89,18 @@ function analyze() {
   return { cx, cy, r, score, sweep: Math.abs(sweep) };
 }
 
-function hue(score) { return `hsl(${score * 1.2} 80% 50%)`; }
+// 라이트 배경에선 명도를 낮춰야 노랑~초록 점수가 3:1 대비를 넘는다
+const darkMQ = matchMedia("(prefers-color-scheme: dark)");
+darkMQ.addEventListener("change", () => redraw());
+function hue(score) { return `hsl(${score * 1.2} 80% ${darkMQ.matches ? 50 : 30}%)`; }
 
 function redraw() {
   ctx.clearRect(0, 0, W, H);
   if (pts.length < 2) return;
   const color = fit ? hue(fit.score) : "gray";
   if (done && fit) {
-    ctx.strokeStyle = "color-mix(in srgb, currentColor 25%, transparent)";
+    // 캔버스의 currentColor 는 다크 모드에서도 검정으로 풀린다 — 직접 고른다
+    ctx.strokeStyle = darkMQ.matches ? "rgb(255 255 255 / .25)" : "rgb(0 0 0 / .25)";
     ctx.setLineDash([6, 8]);
     ctx.lineWidth = 2;
     ctx.beginPath();
