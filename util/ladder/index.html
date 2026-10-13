@@ -7,82 +7,79 @@
 <meta name="description" content="이름과 결과를 적고 사다리를 타요. 커피 내기에.">
 <meta name="bl-group" content="함께">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🪜</text></svg>">
+<link rel="stylesheet" href="/_shared/bubble.css">
 <style>
-  :root { color-scheme: light dark; --bg: light-dark(#f2f4f7, #0d131c);
-          --panel: light-dark(#fff, #171f2b); --line: light-dark(#d9e0e7, #2a3646);
-          --text: light-dark(#1c2733, #e2e9f0); --muted: light-dark(#6e7985, #91a0b2);
-          --accent: #4f7fdd; --cell-fs: .78rem; }
+  :root { --accent-h: 50; --cell-fs: .8rem; }
   * { box-sizing: border-box; }
-  body { margin: 0; min-height: 100dvh; background: var(--bg); color: var(--text);
-         font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; }
-  .app { width: min(34rem, 100%); margin: 0 auto; padding: 1.2rem 1rem 2rem; }
-  h1 { margin: .2rem 0 .3rem; font-size: 1.25rem; }
-  .desc { margin: 0 0 1rem; color: var(--muted); font-size: .78rem; line-height: 1.6; }
-  button { font: inherit; color: inherit; cursor: pointer; border: 1px solid var(--line);
-           background: light-dark(#fff, #111923); border-radius: .6rem; padding: .55rem .9rem; }
-  button:active { transform: scale(.97); }
-  button:disabled { opacity: .42; cursor: default; transform: none; }
-  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  body { margin: 0; min-height: 100dvh; }
+  .app { width: min(34rem, 100%); margin: 0 auto; padding: 1.4rem 1rem 2rem; }
   button[hidden] { display: none; }
-  .primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: bold; }
 
-  .setup { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-bottom: .9rem; }
-  .setup .label { font-size: .75rem; color: var(--muted); }
+  .setup { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-bottom: .9rem; }
+  .setup .label { font-size: .82rem; color: var(--muted); }
   .stepper { display: inline-flex; align-items: center; border: 1px solid var(--line);
-             border-radius: .6rem; overflow: hidden; background: var(--panel); }
-  .stepper button { border: 0; border-radius: 0; padding: .45rem .8rem; background: none; font-size: 1rem; }
-  .stepper #count { min-width: 2.2rem; text-align: center; font-size: .85rem; font-weight: bold;
+             border-radius: var(--pill); overflow: hidden; background: var(--field); }
+  .stepper button { font: inherit; color: var(--ink); cursor: pointer; border: 0; background: none;
+                    min-height: 2.4rem; padding: .3rem .75rem; font-size: 1.05rem; }
+  .stepper button:hover:not(:disabled) { background: var(--sunk); }
+  .stepper button:disabled { opacity: .4; cursor: not-allowed; }
+  .setup .bl-btn--sm { padding: .35rem .55rem; }
+  .stepper #count { min-width: 2rem; text-align: center; font-size: .95rem; font-weight: 700;
                     font-variant-numeric: tabular-nums; }
-  .ghost { font-size: .72rem; padding: .45rem .7rem; color: var(--muted); }
 
   /* 사다리 무대 — 위 이름 / 사다리 / 아래 결과가 같은 폭의 열 격자를 공유한다.
      이름칸 가운데와 세로줄이 정확히 맞아야 해서 세 줄 모두 폭이 같아야 한다. */
-  #stage { background: var(--panel); border: 1px solid var(--line); border-radius: .9rem;
-           padding: .6rem .4rem; }
+  #stage { padding: .7rem .45rem; }
   .row { display: grid; grid-template-columns: repeat(var(--n, 4), 1fr); gap: 2px; }
-  .cell { width: 100%; min-width: 0; font: inherit; font-size: var(--cell-fs);
-          text-align: center; padding: .45rem .1rem; border-radius: .45rem;
-          border: 1px solid var(--line); background: light-dark(#fbfcfe, #101825);
-          color: var(--text); overflow: hidden; }
-  .cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-  .cell::placeholder { color: var(--muted); opacity: .65; }
+  .cell { width: 100%; min-width: 0; font: inherit; font-size: var(--cell-fs); font-weight: 600;
+          text-align: center; padding: .5rem .1rem; border-radius: var(--r-sm);
+          border: 1px solid var(--line); background: var(--sunk);
+          color: var(--ink); overflow: hidden; caret-color: var(--accent); }
+  .cell:focus-visible { outline: none; border-color: var(--accent); background: var(--field);
+                        box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+  .cell::placeholder { color: var(--muted); opacity: .7; font-weight: 400; }
   .cell:read-only { cursor: pointer; }
-  .cell.name:read-only { border-color: color-mix(in srgb, var(--c, var(--line)) 55%, transparent); }
-  .cell.hit { border-color: var(--c); color: var(--c); font-weight: bold;
-              background: color-mix(in srgb, var(--c) 13%, transparent); }
+  .cell.name:read-only { background: var(--field);
+                         border-color: color-mix(in srgb, var(--c, var(--line)) 55%, transparent); }
+  .cell.hit { border-color: var(--c); color: var(--c); font-weight: 800;
+              background: color-mix(in srgb, var(--c) 13%, var(--field)); }
   #ladder { display: block; width: 100%; }
-  #ladder .grid line { stroke: var(--line); stroke-width: 2; stroke-linecap: round; }
+  #ladder .grid line { stroke: color-mix(in srgb, var(--accent) 40%, var(--line)); stroke-width: 2.5; stroke-linecap: round; }
   #ladder .trace { fill: none; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
-  .hint { margin: .5rem 0 0; text-align: center; font-size: .7rem; color: var(--muted); }
+  .hint { margin: .55rem 0 0; text-align: center; font-size: .8rem; color: var(--muted); }
 
   .actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .9rem; }
-  .actions .primary { flex: 1; }
-  #result { list-style: none; margin: 1rem 0 0; padding: 0; font-size: .8rem; line-height: 1.9; }
-  #result li { display: flex; gap: .4rem; align-items: baseline;
-               border-bottom: 1px dashed var(--line); padding: .1rem 0; }
-  #result .who { font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .actions .bl-btn--primary { flex: 1; }
+  #result { list-style: none; margin: 1rem 0 0; padding: 0; font-size: .9rem; line-height: 1.9; }
+  #result:empty { display: none; }
+  #result li { display: flex; gap: .45rem; align-items: baseline;
+               border-bottom: 1px dashed var(--line); padding: .15rem .1rem; }
+  #result li:last-child { border-bottom: 0; }
+  #result .who { font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #result .arrow { color: var(--muted); }
-  .privacy { margin-top: 1.1rem; color: var(--muted); font-size: .68rem; line-height: 1.6; }
+  .privacy { margin-top: 1.1rem; }
 </style>
 </head>
 <body>
 <div class="app">
-  <h1>🪜 사다리타기</h1>
-  <p class="desc">이름과 결과를 적고 사다리를 만드세요. 이름을 누르면 그 줄이 어디로
-    내려가는지 따라 그려집니다. 커피 내기, 순서 정하기에 쓰세요.</p>
+  <header class="bl-head">
+    <span class="bl-bubble" aria-hidden="true">🪜</span>
+    <h1>사다리타기</h1>
+    <p>이름과 결과를 적고 사다리를 타요. 커피 내기에.</p>
+  </header>
 
   <div class="setup">
     <span class="label">인원</span>
-    <div class="stepper">
+    <div class="stepper bl-num">
       <button type="button" id="minus" aria-label="인원 줄이기">−</button>
       <span id="count">4</span>
       <button type="button" id="plus" aria-label="인원 늘리기">+</button>
     </div>
-    <button type="button" class="ghost" id="fillWin">🎯 당첨 하나</button>
-    <button type="button" class="ghost" id="fillRank">🥇 순서대로</button>
+    <button type="button" class="bl-btn bl-btn--ghost bl-btn--sm" id="fillWin">🎯 당첨 하나</button>
+    <button type="button" class="bl-btn bl-btn--ghost bl-btn--sm" id="fillRank">🥇 순서대로</button>
   </div>
 
-  <div id="stage">
+  <div id="stage" class="bl-panel">
     <div class="row" id="names"></div>
     <svg id="ladder" aria-label="사다리"></svg>
     <div class="row" id="prizes"></div>
@@ -90,14 +87,14 @@
   <p class="hint" id="hint">칸을 채우고 사다리를 만드세요</p>
 
   <div class="actions">
-    <button type="button" class="primary" id="start">🪜 사다리 만들기</button>
-    <button type="button" id="all" hidden>👀 전체 보기</button>
-    <button type="button" id="again" hidden>🎲 다시 만들기</button>
-    <button type="button" id="back" hidden>✏️ 고치기</button>
+    <button type="button" class="bl-btn bl-btn--primary" id="start">🪜 사다리 만들기</button>
+    <button type="button" class="bl-btn" id="all" hidden>👀 전체 보기</button>
+    <button type="button" class="bl-btn" id="again" hidden>🎲 다시 만들기</button>
+    <button type="button" class="bl-btn" id="back" hidden>✏️ 고치기</button>
   </div>
 
-  <ul id="result"></ul>
-  <p class="privacy">이름과 결과는 이 브라우저에만 저장되고 서버로 보내지 않습니다.</p>
+  <ul id="result" class="bl-num"></ul>
+  <p class="privacy bl-note">이름과 결과는 이 브라우저에만 저장되고 서버로 보내지 않습니다.</p>
 </div>
 <script>
 const NS = "http://www.w3.org/2000/svg";

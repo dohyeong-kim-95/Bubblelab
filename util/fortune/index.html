@@ -7,51 +7,46 @@
 <meta name="description" content="생년월일로 보는 오늘의 운세·사주·토정비결.">
 <meta name="bl-group" content="매일">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🔮</text></svg>">
+<link rel="stylesheet" href="/_shared/bubble.css">
 <style>
-  :root { color-scheme: light dark; }
+  :root { --accent-h: 201; }
   * { box-sizing: border-box; }
-  body { font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
-         margin: 0; min-height: 100dvh; display: flex; align-items: center; justify-content: center;
-         padding: 1.5rem;
-         background: light-dark(#eef2f6, #10161f);
-         color: light-dark(#1c2733, #dbe4ee); }
+  body { margin: 0; min-height: 100dvh; display: flex; align-items: center; justify-content: center;
+         padding: 1.5rem 1rem; }
   main { width: min(30rem, 100%); }
-  header { text-align: center; margin-bottom: 1.4rem; }
-  h1 { margin: 0; font-size: 1.15rem; font-weight: bold; letter-spacing: .02em; }
-  .date { margin: .35rem 0 0; opacity: .55; font-size: 1.15rem; }
+  .bl-head { margin-bottom: .5rem; }
+  .date { margin: 0 0 1rem; color: var(--muted); font-size: .85rem; }
 
-  .card { padding: 1.4rem 1.3rem; border-radius: .9rem;
-          border: 1px solid light-dark(#1c273322, #dbe4ee22);
-          background: light-dark(#ffffffaa, #182230aa); }
+  .card { padding: 1.3rem 1.2rem; }
 
   #fortune { text-align: center; }
   #fortune .emoji { font-size: 2.6rem; line-height: 1; }
-  #fortune .text { margin: 1rem 0 0; font-size: 1.05rem; line-height: 1.7;
+  #fortune .text { margin: 1rem 0 0; font-size: 1.08rem; line-height: 1.7;
                    min-height: 3.4em; display: flex; align-items: center; justify-content: center; }
-  #fortune .basis { margin: .65rem 0 0; font-size: .62rem; line-height: 1.45; opacity: .42; }
+  #fortune .basis { margin: .65rem 0 0; font-size: .7rem; line-height: 1.45; color: var(--muted); }
   .fortune-categories { display: grid; gap: .38rem; margin-top: 1rem; }
-  .fortune-category { display: grid; grid-template-columns: 3.2rem minmax(0, 1fr);
+  .fortune-category { display: grid; grid-template-columns: 3.4rem minmax(0, 1fr);
                       grid-template-areas: "name comment" "level comment";
-                      column-gap: .55rem; row-gap: .16rem; align-items: start; padding: .55rem .6rem;
-                      border-radius: .45rem; text-align: left; font-size: .74rem;
-                      line-height: 1.45; background: light-dark(#1c273307, #dbe4ee08); }
-  .fortune-category-name { grid-area: name; font-weight: bold; }
-  .fortune-category-comment { grid-area: comment; min-width: 0; opacity: .72; }
-  .fortune-category-level { grid-area: level; justify-self: start; padding: .08rem .35rem;
-                            border-radius: .28rem; font: 600 .7rem/1.45 ui-monospace, SFMono-Regular,
-                            Menlo, Consolas, monospace; white-space: nowrap;
-                            background: light-dark(#1c273310, #dbe4ee16); }
-  .fortune-category[data-level="원활"] .fortune-category-level { color: light-dark(#247b5f, #6fd4ac); }
-  .fortune-category[data-level="주의"] .fortune-category-level { color: light-dark(#b6483d, #ff8a7a); }
+                      column-gap: .6rem; row-gap: .2rem; align-items: start; padding: .6rem .7rem;
+                      border-radius: var(--r-sm); text-align: left; font-size: .8rem;
+                      line-height: 1.5; background: var(--sunk); }
+  .fortune-category-name { grid-area: name; font-weight: 700; }
+  .fortune-category-comment { grid-area: comment; min-width: 0; color: var(--muted); }
+  .fortune-category-level { grid-area: level; justify-self: start; padding: .05rem .45rem;
+                            border-radius: var(--pill); font: 600 .72rem/1.45 var(--sans); white-space: nowrap;
+                            background: var(--field); box-shadow: inset 0 0 0 1px var(--line); }
+  .fortune-category[data-level="원활"] .fortune-category-level { color: var(--ok); }
+  .fortune-category[data-level="주의"] .fortune-category-level { color: var(--bad); }
   #fortune.is-loading .emoji, #fortune.is-loading .text, #fortune.is-loading .fortune-category {
-    color: transparent; border-radius: .45rem;
+    color: transparent; border-radius: var(--r-sm);
     background: linear-gradient(100deg,
-      light-dark(#1c27330d, #dbe4ee0d) 25%,
-      light-dark(#1c27331c, #dbe4ee1c) 42%,
-      light-dark(#1c27330d, #dbe4ee0d) 58%);
+      var(--sunk) 25%,
+      color-mix(in srgb, var(--accent-soft) 70%, var(--sunk)) 42%,
+      var(--sunk) 58%);
     background-size: 220% 100%; animation: fortune-shimmer 1.25s ease-in-out infinite;
   }
-  #fortune.is-loading .emoji { width: 3rem; height: 3rem; margin: 0 auto; }
+  #fortune.is-loading .fortune-category-level { background: none; box-shadow: none; }
+  #fortune.is-loading .emoji { width: 3rem; height: 3rem; margin: 0 auto; border-radius: 50%; }
   #fortune.is-loading .text { width: min(22rem, 88%); min-height: 3.4rem; margin: 1rem auto 0; }
   #fortune.is-loading .fortune-category { min-height: 2.6rem; }
   @keyframes fortune-shimmer { to { background-position-x: -220%; } }
@@ -59,173 +54,144 @@
     #fortune.is-loading .emoji, #fortune.is-loading .text, #fortune.is-loading .fortune-category { animation: none; }
   }
 
-  button { font: inherit; color: inherit; background: none; cursor: pointer;
-           padding: .6rem 1.2rem; border-radius: .55rem;
-           border: 1px solid light-dark(#1c273355, #dbe4ee55); transition: background .15s; }
-  button:hover:not(:disabled) { background: light-dark(#1c273310, #dbe4ee14); }
-  button:active { transform: scale(.97); }
-  .link-btn { border: none; padding: .5rem; opacity: .7; text-decoration: underline;
-              text-underline-offset: 3px; font-size: .82rem; }
-  .link-btn:hover { opacity: 1; background: none !important; }
+  button { font: inherit; color: inherit; cursor: pointer; }
 
-  /* 데일리 알림 (토글 스위치) */
-  #notify { margin-top: 1.1rem; }
+  /* 데일리 알림 (토글 스위치) — bubble.css에 스위치가 없어 토큰으로 직접 짓는다 */
+  #notify { margin-top: 1.1rem; padding: 0 .3rem; }
   .notify-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-  .notify-title { font-size: .88rem; font-weight: bold; }
+  .notify-title { font-size: .9rem; font-weight: 700; }
   .notify-toggle { position: relative; flex: none; width: 3rem; height: 1.7rem; padding: 0;
-                   border-radius: 1rem; border: 1px solid light-dark(#1c273333, #dbe4ee33);
-                   background: light-dark(#1c273315, #dbe4ee15);
+                   border-radius: var(--pill); border: 1px solid var(--line); background: var(--sunk);
                    transition: background .18s, border-color .18s; }
   .notify-toggle::before { content: ""; position: absolute; top: 50%; left: .2rem;
                    transform: translateY(-50%); width: 1.24rem; height: 1.24rem; border-radius: 50%;
-                   background: light-dark(#fff, #dbe4ee); box-shadow: 0 1px 3px #0003;
+                   background: var(--field); box-shadow: 0 1px 3px #0003, inset 0 0 0 1px var(--line);
                    transition: left .18s; }
-  .notify-toggle:hover:not(:disabled) { background: light-dark(#1c273322, #dbe4ee22); }
+  .notify-toggle:hover:not(:disabled) { border-color: var(--accent-line); }
   .notify-toggle[aria-checked="true"],
-  .notify-toggle[aria-checked="true"]:hover:not(:disabled) {
-                   background: light-dark(#247b5f, #6fd4ac); border-color: transparent; }
-  .notify-toggle[aria-checked="true"]::before { left: calc(100% - 1.44rem); background: #fff; }
+  .notify-toggle[aria-checked="true"]:hover:not(:disabled) { background: var(--accent); border-color: transparent; }
+  .notify-toggle[aria-checked="true"]::before { left: calc(100% - 1.44rem); background: #fff; box-shadow: 0 1px 3px #0003; }
   .notify-toggle:disabled { opacity: .5; cursor: default; }
-  .notify-help { margin: .6rem 0 0; font-size: .72rem; line-height: 1.45; opacity: .5; }
+  .notify-help { margin: .6rem 0 0; }
 
-  section { margin-top: 1.4rem; }
+  section { margin-top: 1.2rem; }
   [hidden] { display: none !important; }
   .panel-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between;
-                  padding: 0; border: 0; border-radius: 0; text-align: left; }
-  .panel-toggle:hover { background: none !important; }
+                  padding: 0; border: 0; border-radius: 0; background: none; text-align: left; }
   .panel-toggle h2 { margin: 0 !important; }
-  .panel-chevron { opacity: .45; font-size: .8rem; transition: transform .18s ease; }
+  .panel-chevron { color: var(--muted); font-size: .8rem; transition: transform .18s ease; }
   .panel-toggle[aria-expanded="false"] .panel-chevron { transform: rotate(-90deg); }
   .panel-content { margin-top: .3rem; }
+  h2 { font-size: 1rem; font-weight: 800; letter-spacing: -.01em; }
 
   /* 생년월일 입력 */
   #reveal { text-align: center; }
-  #form .row { display: flex; gap: .5rem; align-items: center; margin-bottom: .8rem; }
-  #form label { width: 3.2rem; flex: none; opacity: .6; font-size: .82rem; text-align: right; }
-  #form select { flex: 1; min-width: 0; font: inherit; font-size: .85rem; color: inherit;
-                 background: light-dark(#eef2f6, #10161f);
-                 border: 1px solid light-dark(#1c273355, #dbe4ee55);
-                 border-radius: .4rem; padding: .35rem .4rem; }
-  #form input[type="time"] { flex: 1; min-width: 0; font: inherit; font-size: .85rem; color: inherit;
-                 background: light-dark(#eef2f6, #10161f);
-                 border: 1px solid light-dark(#1c273355, #dbe4ee55);
-                 border-radius: .4rem; padding: .35rem .4rem; }
-  .time-mode { display: grid; grid-template-columns: 1fr 1fr; gap: .3rem; width: 100%;
-               padding: .2rem; border-radius: .55rem;
-               background: light-dark(#1c27330b, #dbe4ee0d); }
-  .time-mode button { padding: .42rem .5rem; border: 0; font-size: .8rem; opacity: .58; }
-  .time-mode button[aria-pressed="true"] { opacity: 1; font-weight: bold;
-               background: light-dark(#fff, #273445); box-shadow: 0 1px 4px #0002; }
+  #form h2 { margin: 0 0 1rem; }
+  #form .row { display: flex; gap: .55rem; align-items: center; margin-bottom: .7rem; }
+  #form label { width: 3.2rem; flex: none; color: var(--muted); font-size: .84rem; text-align: right; }
+  #form .bl-input { flex: 1; min-width: 0; font-size: .92rem; padding: .5rem .6rem; }
+  .time-mode { display: grid; grid-template-columns: 1fr 1fr; gap: .35rem; width: 100%; }
+  .time-mode .bl-chip { justify-content: center; padding: .3rem .5rem; }
   .time-mode.gender-mode { grid-template-columns: repeat(3, 1fr); }
-  .time-help { margin: -.35rem 0 .8rem 3.7rem; font-size: .72rem; line-height: 1.45; opacity: .52; }
-  #form .form-actions { display: flex; gap: .6rem; margin-top: 1rem; }
+  .time-help { margin: -.3rem 0 .8rem 3.75rem; }
+  #form .form-actions { display: flex; gap: .6rem; margin-top: 1.1rem; }
   #form .form-actions button { flex: 1; }
-  #err { min-height: 1.1em; margin: .6rem 0 0; font-size: .8rem; text-align: center;
-         color: light-dark(#c0392b, #ff8a7a); }
+  #err { min-height: 1.1em; margin: .6rem 0 0; font-size: .84rem; text-align: center; color: var(--bad); }
 
   /* 바이오리듬 결과 */
-  #result h2 { margin: 0 0 .3rem; font-size: .95rem; }
-  #result .sub { margin: 0 0 1.1rem; font-size: .78rem; opacity: .55; }
-  #result .headline { margin: 0 0 1.2rem; font-size: 1rem; line-height: 1.65;
-                      text-align: center; }
+  #result .sub { margin: 0 0 1.1rem; font-size: .8rem; color: var(--muted); }
+  #result .headline { margin: 0 0 1.2rem; font-size: 1rem; line-height: 1.65; text-align: center; }
   .bio { margin-bottom: 1rem; }
   .bio:last-of-type { margin-bottom: 0; }
   .bio .bio-top { display: flex; justify-content: space-between; align-items: baseline;
-                  font-size: .82rem; margin-bottom: .35rem; }
-  .bio .bio-name { font-weight: bold; }
-  .bio .bio-name small { font-weight: normal; opacity: .5; margin-left: .35rem; }
-  .bio .bio-pct { font-variant-numeric: tabular-nums; opacity: .8; }
-  .track { position: relative; height: .5rem; border-radius: 1rem;
-           background: light-dark(#1c273315, #dbe4ee12); overflow: hidden; }
-  .track .mid { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px;
-                background: light-dark(#1c273330, #dbe4ee30); }
-  .track .fill { position: absolute; top: 0; bottom: 0; border-radius: 1rem;
+                  font-size: .86rem; margin-bottom: .35rem; }
+  .bio .bio-name { font-weight: 700; }
+  .bio .bio-name small { font-weight: normal; color: var(--muted); margin-left: .35rem; }
+  .bio .bio-pct { font-variant-numeric: tabular-nums; color: var(--muted); }
+  .track { position: relative; height: .5rem; border-radius: var(--pill); background: var(--sunk); overflow: hidden; }
+  .track .mid { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--line); }
+  .track .fill { position: absolute; top: 0; bottom: 0; border-radius: var(--pill);
                  transition: width .6s ease, left .6s ease; }
-  .bio.phy .fill { background: light-dark(#e05a4d, #ff8a7a); }
-  .bio.emo .fill { background: light-dark(#d99a26, #ffcf6b); }
-  .bio.int .fill { background: light-dark(#2f8f6e, #6fd4ac); }
-  .bio .bio-note { margin: .35rem 0 0; font-size: .78rem; line-height: 1.55; opacity: .75; }
+  .bio.phy .fill { background: var(--bad); }
+  .bio.emo .fill { background: var(--warn); }
+  .bio.int .fill { background: var(--ok); }
+  .bio .bio-note { margin: .35rem 0 0; font-size: .82rem; line-height: 1.55; color: var(--muted); }
   #result .footer { margin-top: 1.3rem; text-align: center; }
-  #result .saved { font-size: .78rem; opacity: .5; margin: 0 0 .6rem; }
+  #result .saved { margin: 0 0 .5rem; }
 
   /* 사주 명식 */
-  #saju h2 { margin: 0 0 .3rem; font-size: .95rem; }
-  #saju .sub { margin: 0 0 1rem; font-size: .72rem; opacity: .55; line-height: 1.5; }
-  .saju-status { margin: .55rem 0 0; font-size: .56rem; line-height: 1.4; opacity: .42; }
-  .saju-candidate + .saju-candidate { margin-top: 1rem; padding-top: 1rem;
-                                     border-top: 1px solid light-dark(#1c273322, #dbe4ee22); }
-  .saju-candidate-title { margin: 0 0 .55rem; font-size: .75rem; opacity: .62; }
+  .sub { color: var(--muted); }
+  #saju .sub { margin: 0 0 1rem; font-size: .76rem; line-height: 1.5; }
+  .saju-status { margin: .55rem 0 0; font-size: .66rem; line-height: 1.45; color: var(--muted); }
+  .saju-candidate + .saju-candidate { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+  .saju-candidate-title { margin: 0 0 .55rem; font-size: .8rem; color: var(--muted); }
   .saju-grid { display: grid; grid-template-columns: 3.2rem repeat(4, minmax(0, 1fr));
-               border: 1px solid light-dark(#1c273322, #dbe4ee22); border-radius: .65rem;
-               overflow: hidden; }
+               border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
   .saju-cell { min-width: 0; overflow: hidden; padding: .55rem .15rem; text-align: center;
-               border-right: 1px solid light-dark(#1c273318, #dbe4ee18);
-               border-bottom: 1px solid light-dark(#1c273318, #dbe4ee18); }
+               border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
   .saju-cell:nth-child(5n) { border-right: 0; }
   .saju-cell:nth-last-child(-n+5) { border-bottom: 0; }
-  .saju-head, .saju-label { display: grid; place-items: center; font-size: .7rem; opacity: .58;
-                            background: light-dark(#1c273307, #dbe4ee08); }
+  .saju-head, .saju-label { display: grid; place-items: center; font-size: .72rem; color: var(--muted);
+                            background: var(--sunk); }
   .saju-char { display: block; font-family: serif; font-size: 1.55rem; line-height: 1.2; }
-  .saju-korean { display: block; margin-top: .18rem; font-size: .72rem; }
-  .saju-meta, .saju-god { display: block; margin-top: .12rem; font-size: .56rem;
-                          line-height: 1.25; opacity: .52; white-space: normal; word-break: keep-all; }
-  .saju-god { margin-top: .08rem; opacity: .7; }
+  .saju-korean { display: block; margin-top: .18rem; font-size: .74rem; }
+  .saju-meta, .saju-god { display: block; margin-top: .12rem; font-size: .6rem;
+                          line-height: 1.25; color: var(--muted); white-space: normal; word-break: keep-all; }
+  .saju-god { margin-top: .08rem; color: var(--accent); }
   .saju-actions { display: flex; justify-content: flex-end; margin-top: .75rem; }
-  .saju-copy { padding: .38rem .65rem; font-size: .7rem; }
-  .saju-warning { margin: .8rem 0 0; padding: .65rem .75rem; border-radius: .5rem;
-                  font-size: .73rem; line-height: 1.5;
-                  background: light-dark(#d99a2614, #ffcf6b12); }
-  .saju-sub { display: block; font-size: .66rem; line-height: 1.35; word-break: keep-all; }
-  .saju-sub small { display: block; font-size: .52rem; opacity: .55; }
-  .saju-section { margin: 1rem 0 0; }
-  .saju-section h3 { margin: 0 0 .45rem; font-size: .76rem; font-weight: 600; opacity: .7; }
+  .saju-warning { margin: .8rem 0 0; padding: .65rem .8rem; border-radius: var(--r-sm);
+                  font-size: .76rem; line-height: 1.5;
+                  color: var(--ink); background: color-mix(in srgb, var(--warn) 14%, transparent);
+                  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warn) 30%, transparent); }
+  .saju-sub { display: block; font-size: .68rem; line-height: 1.35; word-break: keep-all; }
+  .saju-sub small { display: block; font-size: .56rem; color: var(--muted); }
+  .saju-section { margin: 1.1rem 0 0; }
+  .saju-section h3, .tj-h { margin: 0 0 .45rem; font-size: .8rem; font-weight: 700; color: var(--muted); }
   .saju-elements { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .3rem; }
-  .saju-element { padding: .4rem .1rem; border-radius: .45rem; text-align: center; font-size: .72rem;
-                  background: light-dark(#1c273308, #dbe4ee0a); }
-  .saju-element b { display: block; font-size: 1rem; }
+  .saju-element { padding: .45rem .1rem; border-radius: var(--r-sm); text-align: center; font-size: .74rem;
+                  background: var(--sunk); }
+  .saju-element b { display: block; font-size: 1rem; font-variant-numeric: tabular-nums; }
   .saju-element.none { opacity: .45; }
-  .saju-shinsal { margin: 0; padding: 0; list-style: none; display: grid; gap: .35rem; }
-  .saju-shinsal li { font-size: .74rem; line-height: 1.5; }
-  .saju-shinsal .tag { display: inline-block; margin-right: .35rem; padding: .05rem .4rem;
-                       border-radius: .4rem; font-weight: 600; background: light-dark(#2f8f6e18, #6fd4ac1c); }
-  .saju-shinsal .where { opacity: .5; font-size: .66rem; }
+  .saju-shinsal { margin: 0; padding: 0; list-style: none; display: grid; gap: .4rem; }
+  .saju-shinsal li { font-size: .8rem; line-height: 1.55; }
+  .saju-shinsal .tag { display: inline-block; margin-right: .35rem; padding: .05rem .5rem;
+                       border-radius: var(--pill); font-weight: 600; color: var(--accent);
+                       background: var(--accent-soft); }
+  .saju-shinsal .where { color: var(--muted); font-size: .7rem; }
   .saju-luck { display: flex; gap: .3rem; overflow-x: auto; padding-bottom: .2rem; }
-  .saju-luck div { flex: 0 0 auto; min-width: 2.9rem; padding: .35rem .2rem; border-radius: .45rem;
-                   text-align: center; font-size: .72rem; line-height: 1.35;
-                   border: 1px solid light-dark(#1c273318, #dbe4ee18); }
-  .saju-luck div.now { border-color: light-dark(#2f8f6e, #6fd4ac); background: light-dark(#2f8f6e14, #6fd4ac14); }
-  .saju-luck small { display: block; font-size: .56rem; opacity: .55; }
-  .saju-note { margin: .35rem 0 0; font-size: .7rem; line-height: 1.55; opacity: .7; }
+  .saju-luck div { flex: 0 0 auto; min-width: 2.9rem; padding: .35rem .2rem; border-radius: var(--r-sm);
+                   text-align: center; font-size: .74rem; line-height: 1.35; border: 1px solid var(--line); }
+  .saju-luck div.now { border-color: var(--accent); background: var(--accent-soft); }
+  .saju-luck small { display: block; font-size: .58rem; color: var(--muted); }
+  .saju-note { margin: .35rem 0 0; font-size: .74rem; line-height: 1.55; color: var(--muted); }
+
   /* 토정비결 */
-  #tojeong h2 { margin: 0 0 .3rem; font-size: .95rem; }
-  #tojeong .sub { margin: .6rem 0 .8rem; font-size: .72rem; opacity: .55; line-height: 1.5; }
-  .tj-years { display: flex; gap: .35rem; margin-top: .5rem; }
-  .tj-years button { padding: .3rem .7rem; font-size: .74rem; }
-  .tj-years button[aria-pressed="true"] { border-color: light-dark(#2f8f6e, #6fd4ac);
-                                          background: light-dark(#2f8f6e14, #6fd4ac14); }
-  .tj-title { padding: .8rem; border-radius: .6rem; text-align: center;
-              background: light-dark(#1c273307, #dbe4ee08); }
-  .tj-title .code { display: block; font-size: .64rem; opacity: .5; letter-spacing: .08em; }
-  .tj-title .hanja { display: block; margin: .15rem 0; font-family: serif; font-size: 1.35rem; }
-  .tj-title .ko { display: block; font-size: .78rem; opacity: .75; }
-  .tj-h { margin: 1.1rem 0 .4rem; font-size: .76rem; font-weight: 600; opacity: .7; }
+  #tojeong .sub { margin: .6rem 0 .8rem; font-size: .76rem; line-height: 1.5; }
+  .tj-years { margin-top: .6rem; }
+  .tj-title { padding: .9rem; border-radius: var(--r); text-align: center;
+              background: radial-gradient(circle at 30% 20%, color-mix(in srgb, var(--accent-soft) 80%, transparent), transparent 70%),
+                          var(--sunk); }
+  .tj-title .code { display: block; font-size: .68rem; color: var(--muted); letter-spacing: .08em;
+                    font-variant-numeric: tabular-nums; }
+  .tj-title .hanja { display: block; margin: .15rem 0; font-family: serif; font-size: 1.4rem; }
+  .tj-title .ko { display: block; font-size: .82rem; color: var(--muted); }
+  .tj-h { margin-top: 1.1rem; }
   .tj-lines { margin: 0; padding: 0; list-style: none; display: grid; gap: .55rem; }
-  .tj-lines li { font-size: .82rem; line-height: 1.55; word-break: keep-all; }
-  .tj-lines .orig { display: block; margin-top: .1rem; font-size: .64rem; opacity: .48; }
+  .tj-lines li { font-size: .88rem; line-height: 1.6; word-break: keep-all; }
+  .tj-lines .orig { display: block; margin-top: .1rem; font-size: .68rem; color: var(--muted); }
   .tj-lines .orig span { font-family: serif; }
-  .tj-month { border-top: 1px solid light-dark(#1c273314, #dbe4ee14); }
-  .tj-month summary { padding: .55rem 0; font-size: .8rem; cursor: pointer; }
-  .tj-month summary .hint { margin-left: .35rem; font-size: .68rem; opacity: .5; }
-  .tj-month[open] summary { font-weight: 600; }
+  .tj-month { border-top: 1px solid var(--line); }
+  .tj-month summary { padding: .6rem 0; font-size: .86rem; cursor: pointer; }
+  .tj-month summary .hint { margin-left: .35rem; font-size: .72rem; color: var(--muted); }
+  .tj-month[open] summary { font-weight: 700; }
   .tj-month .tj-lines { padding-bottom: .7rem; }
-  .tj-month.now summary::after { content: "이번 달"; margin-left: .4rem; padding: .05rem .35rem;
-                                 border-radius: .35rem; font-size: .6rem; font-weight: 600;
-                                 background: light-dark(#2f8f6e18, #6fd4ac1c); }
-  .tj-work { margin-top: .9rem; font-size: .72rem; }
-  .tj-work summary { cursor: pointer; opacity: .6; }
-  .tj-work p { margin: .45rem 0 0; line-height: 1.65; opacity: .75; word-break: keep-all; }
+  .tj-month.now summary::after { content: "이번 달"; margin-left: .4rem; padding: .05rem .45rem;
+                                 border-radius: var(--pill); font-size: .66rem; font-weight: 600;
+                                 color: var(--accent-ink); background: var(--accent); }
+  .tj-work { margin-top: .9rem; font-size: .78rem; }
+  .tj-work summary { cursor: pointer; color: var(--muted); }
+  .tj-work p { margin: .45rem 0 0; line-height: 1.65; color: var(--muted); word-break: keep-all; }
   @media (max-width: 390px) {
-    body { padding: 1rem; }
     .card { padding: 1.15rem .9rem; }
     .saju-grid { grid-template-columns: 2.65rem repeat(4, minmax(0, 1fr)); }
     .saju-char { font-size: 1.4rem; }
@@ -235,13 +201,15 @@
 </head>
 <body>
 <main>
-  <header>
-    <h1>🔮 오늘의 운세</h1>
-    <p class="date" id="today"></p>
+  <header class="bl-head">
+    <span class="bl-bubble" aria-hidden="true">🔮</span>
+    <h1>오늘의 운세</h1>
+    <p>생년월일로 보는 오늘의 운세·사주·토정비결.</p>
   </header>
+  <p class="date bl-num" id="today"></p>
 
   <!-- 랜덤 운세 -->
-  <div class="card" id="fortune">
+  <div class="card bl-panel" id="fortune">
     <div class="emoji" id="f-emoji">🔮</div>
     <p class="text" id="f-text"></p>
     <div class="fortune-categories" id="f-categories" hidden>
@@ -257,97 +225,97 @@
       <span class="notify-title">🔔 매일 오전 8시 알림 받기</span>
       <button type="button" id="notify-btn" class="notify-toggle" role="switch" aria-checked="false" aria-label="매일 오전 8시 운세 알림"></button>
     </div>
-    <p class="notify-help" id="notify-help">브라우저 알림으로 매일 오전 8시(KST) 오늘의 운세를 받아보세요.</p>
+    <p class="notify-help bl-note" id="notify-help">브라우저 알림으로 매일 오전 8시(KST) 오늘의 운세를 받아보세요.</p>
   </section>
 
   <!-- 개인 운세 진입 -->
   <section id="reveal">
-    <button class="link-btn" id="reveal-btn">나에게 맞는 운세를 보고싶다면? →</button>
+    <button class="link-btn bl-btn" id="reveal-btn">나에게 맞는 운세를 보고싶다면? →</button>
   </section>
 
   <!-- 생년월일 입력 -->
-  <section class="card" id="form" hidden>
-    <h2 style="margin:0 0 1rem;font-size:.95rem;">생년월일시를 입력해주세요</h2>
+  <section class="card bl-panel" id="form" hidden>
+    <h2>생년월일시를 입력해주세요</h2>
     <div class="row">
       <label>달력</label>
       <div class="time-mode" role="group" aria-label="생년월일 달력 방식">
-        <button type="button" id="mode-solar" aria-pressed="true">양력</button>
-        <button type="button" id="mode-lunar" aria-pressed="false">음력</button>
+        <button type="button" class="bl-chip" id="mode-solar" aria-pressed="true">양력</button>
+        <button type="button" class="bl-chip" id="mode-lunar" aria-pressed="false">음력</button>
       </div>
     </div>
     <div class="row">
       <label>성별</label>
       <div class="time-mode gender-mode" role="group" aria-label="성별">
-        <button type="button" id="gender-none" aria-pressed="true">미선택</button>
-        <button type="button" id="gender-male" aria-pressed="false">남</button>
-        <button type="button" id="gender-female" aria-pressed="false">여</button>
+        <button type="button" class="bl-chip" id="gender-none" aria-pressed="true">미선택</button>
+        <button type="button" class="bl-chip" id="gender-male" aria-pressed="false">남</button>
+        <button type="button" class="bl-chip" id="gender-female" aria-pressed="false">여</button>
       </div>
     </div>
     <div class="row">
       <label for="in-y">년</label>
-      <select id="in-y"></select>
+      <select id="in-y" class="bl-input"></select>
     </div>
     <div class="row">
       <label for="in-m">월</label>
-      <select id="in-m"></select>
+      <select id="in-m" class="bl-input"></select>
     </div>
     <div class="row">
       <label for="in-d">일</label>
-      <select id="in-d"></select>
+      <select id="in-d" class="bl-input"></select>
     </div>
     <div class="row" id="lunar-leap-row" hidden>
       <label for="in-lunar-leap">월 구분</label>
-      <select id="in-lunar-leap">
+      <select id="in-lunar-leap" class="bl-input">
         <option value="normal">평달</option>
         <option value="leap">윤달</option>
       </select>
     </div>
-    <p class="time-help" id="lunar-help" hidden>윤달 생일인 경우에만 윤달을 선택하세요.</p>
+    <p class="time-help bl-note" id="lunar-help" hidden>윤달 생일인 경우에만 윤달을 선택하세요.</p>
     <div class="row">
       <label>시간</label>
       <div class="time-mode" role="group" aria-label="출생시간 입력 방식">
-        <button type="button" id="mode-branch" aria-pressed="true">시진 · 자축인묘</button>
-        <button type="button" id="mode-clock" aria-pressed="false">정확한 시각</button>
+        <button type="button" class="bl-chip" id="mode-branch" aria-pressed="true">시진 · 자축인묘</button>
+        <button type="button" class="bl-chip" id="mode-clock" aria-pressed="false">정확한 시각</button>
       </div>
     </div>
     <div class="row" id="branch-row">
       <label for="in-h">시진</label>
-      <select id="in-h"></select>
+      <select id="in-h" class="bl-input"></select>
     </div>
-    <p class="time-help" id="branch-help">정확한 시각을 모르면 두 시간 단위의 시진을 선택하세요.</p>
+    <p class="time-help bl-note" id="branch-help">정확한 시각을 모르면 두 시간 단위의 시진을 선택하세요.</p>
     <div class="row" id="clock-row" hidden>
       <label for="in-time">시각</label>
-      <input type="time" id="in-time" step="60">
+      <input type="time" id="in-time" class="bl-input" step="60">
     </div>
-    <p class="time-help" id="clock-help" hidden>태어난 시각을 시·분까지 입력하세요.</p>
+    <p class="time-help bl-note" id="clock-help" hidden>태어난 시각을 시·분까지 입력하세요.</p>
     <div class="form-actions">
-      <button id="cancel">취소</button>
-      <button id="save">내 운세 보기</button>
+      <button id="cancel" class="bl-btn">취소</button>
+      <button id="save" class="bl-btn bl-btn--primary">내 운세 보기</button>
     </div>
     <p id="err"></p>
   </section>
 
   <!-- 사주 명식 -->
-  <section class="card" id="saju" hidden>
+  <section class="card bl-panel" id="saju" hidden>
     <button type="button" class="panel-toggle" aria-expanded="true" aria-controls="saju-content">
       <h2>🧭 사주 명식</h2><span class="panel-chevron" aria-hidden="true">▼</span>
     </button>
     <div class="panel-content" id="saju-content">
       <p class="sub" id="saju-rule">양력 · 대한민국 표준시(KST) · 00시 일주 변경 · 진태양시 미보정</p>
       <div id="saju-candidates"></div>
-      <div class="saju-actions"><button type="button" class="saju-copy" id="saju-copy" disabled>명식 이미지 복사</button></div>
+      <div class="saju-actions"><button type="button" class="saju-copy bl-btn bl-btn--sm" id="saju-copy" disabled>명식 이미지 복사</button></div>
       <p class="saju-status" id="saju-status">명식을 계산하고 있습니다…</p>
       <p class="saju-warning" id="saju-warning" hidden></p>
     </div>
   </section>
 
   <!-- 토정비결 -->
-  <section class="card" id="tojeong" hidden>
+  <section class="card bl-panel" id="tojeong" hidden>
     <button type="button" class="panel-toggle" aria-expanded="true" aria-controls="tj-content">
       <h2>📜 토정비결</h2><span class="panel-chevron" aria-hidden="true">▼</span>
     </button>
     <div class="panel-content" id="tj-content">
-      <div class="tj-years" id="tj-years" role="group" aria-label="보는 해"></div>
+      <div class="tj-years bl-chips" id="tj-years" role="group" aria-label="보는 해"></div>
       <p class="sub" id="tj-sub"></p>
       <div class="tj-title" id="tj-title"></div>
       <h3 class="tj-h">한 해 총운</h3>
@@ -364,7 +332,7 @@
   </section>
 
   <!-- 바이오리듬 결과 -->
-  <section class="card" id="result" hidden>
+  <section class="card bl-panel" id="result" hidden>
     <button type="button" class="panel-toggle" aria-expanded="true" aria-controls="bio-content">
       <h2>🌊 오늘의 바이오리듬</h2><span class="panel-chevron" aria-hidden="true">▼</span>
     </button>
@@ -389,8 +357,8 @@
     </div>
 
       <div class="footer">
-        <p class="saved" id="saved-info"></p>
-        <button class="link-btn" id="edit-btn">생년월일 다시 입력</button>
+        <p class="saved bl-note" id="saved-info"></p>
+        <button class="link-btn bl-btn bl-btn--ghost bl-btn--sm" id="edit-btn">생년월일 다시 입력</button>
       </div>
     </div>
   </section>
@@ -939,6 +907,7 @@
     for (const entry of list) {
       const button = document.createElement("button");
       button.type = "button";
+      button.className = "bl-chip";
       button.dataset.year = entry.year;
       button.textContent = `${entry.year}년`;
       button.addEventListener("click", () => showTojeongYear(data, entry));

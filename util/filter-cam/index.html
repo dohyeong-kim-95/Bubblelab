@@ -6,60 +6,65 @@
 <title>📷 필터 카메라</title>
 <meta name="description" content="플래시 디카·로파이·필름 같은 요즘 필터와 볼록거울·타임 워프 같은 장난 필터를 실시간으로 보며 찍고 저장하는 카메라. 사진은 기기 밖으로 나가지 않습니다.">
 <meta name="bl-group" content="사진·이미지">
+<link rel="stylesheet" href="/_shared/bubble.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>📷</text></svg>">
 <style>
-  :root { color-scheme: light dark; --bg: light-dark(#f2f4f7, #0d131c);
-          --panel: light-dark(#fff, #171f2b); --line: light-dark(#d9e0e7, #2a3646);
-          --text: light-dark(#1c2733, #e2e9f0); --muted: light-dark(#6e7985, #91a0b2);
-          --accent: #e0782f; }
+  :root { --accent-h: 66; }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
-  body { margin: 0; min-height: 100dvh; background: var(--bg); color: var(--text);
-         font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
-         user-select: none; -webkit-user-select: none; }
-  button { font: inherit; color: inherit; cursor: pointer; border: 1px solid var(--line);
-           background: var(--panel); border-radius: .75rem; padding: .7rem 1rem; }
+  body { margin: 0; min-height: 100dvh; user-select: none; -webkit-user-select: none; }
+  button { font: inherit; color: var(--ink); cursor: pointer; border: 1px solid var(--line);
+           background: var(--field); border-radius: var(--r); padding: .7rem 1rem; }
   button:active { transform: scale(.97); }
-  button:disabled { opacity: .42; cursor: default; }
-  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: bold; }
-  .app { width: min(30rem, 100%); margin: 0 auto; padding: .8rem 1rem 1.5rem;
+  button:disabled { opacity: .42; cursor: default; transform: none; }
+  .app { width: min(30rem, 100%); margin: 0 auto; padding: 1rem 1rem 1.5rem;
          display: flex; flex-direction: column; gap: .8rem; }
-  h1 { margin: .2rem 0 0; font-size: 1rem; text-align: center; }
-  .stage { position: relative; width: 100%; aspect-ratio: 4 / 5; border-radius: 1rem; overflow: hidden;
-           background: #000; border: 1px solid var(--line); }
+  .app > .bl-head { margin: 0 0 .1rem; }
+  /* 뷰파인더는 언제나 어두운 면 — 테마와 상관없이 검정 위 밝은 글씨 */
+  .stage { position: relative; width: 100%; aspect-ratio: 4 / 5; border-radius: var(--r-lg); overflow: hidden;
+           background: #000; box-shadow: 0 0 0 1px var(--line), 0 14px 32px -18px #0008; }
   .stage canvas, .stage img { width: 100%; height: 100%; display: block; object-fit: cover; }
   .empty { position: absolute; inset: 0; display: grid; place-content: center; gap: .8rem;
-           padding: 1.5rem; text-align: center; color: #e2e9f0; }
-  .empty p { margin: 0; font-size: .78rem; line-height: 1.6; color: #b9c4d0; }
-  .empty .notice { color: #ffd08a; min-height: 1.6em; }
+           padding: 1.5rem; text-align: center; color: #ece8df; }
+  .empty p { margin: 0; font-size: .88rem; line-height: 1.6; color: #b9bdc6; }
+  .empty .notice { color: #f3bd5c; min-height: 1.6em; }
+  #start { justify-self: center; min-width: 11rem; }
   /* 화면에 붙어 있어야 아이폰 사파리가 영상을 돌린다. 보이지 않게 캔버스 뒤에 깐다. */
   #camera { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none; }
   #result { position: absolute; inset: 0; }
-  .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: .4rem; }
-  .tabs button { padding: .55rem; font-size: .8rem; }
-  .tabs button[aria-selected="true"] { border-color: var(--accent); color: var(--accent); font-weight: bold; }
-  .filters { display: flex; gap: .45rem; overflow-x: auto; padding-bottom: .2rem;
+  /* 감성·장난 — 한 단 낮은 홈 안의 세그먼트 */
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: .25rem; padding: .25rem;
+          border-radius: var(--pill); }
+  .tabs button { padding: .5rem; min-height: 2.4rem; font-size: .9rem; border: 0; border-radius: var(--pill);
+                 background: transparent; color: var(--muted); }
+  .tabs button[aria-selected="true"] { background: var(--field); color: var(--ink); font-weight: 700;
+                                       box-shadow: 0 0 0 1px var(--accent-line), 0 1px 3px #0002; }
+  .filters { flex-wrap: nowrap; overflow-x: auto; padding-bottom: .2rem;
              scroll-snap-type: x proximity; scrollbar-width: none; }
   .filters::-webkit-scrollbar { display: none; }
-  .filters button { flex: none; scroll-snap-align: center; padding: .5rem .8rem; font-size: .78rem;
-                    border-radius: 999px; white-space: nowrap; }
-  .filters button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent);
-                                         color: #fff; font-weight: bold; }
+  .filters button { flex: none; scroll-snap-align: center; white-space: nowrap; }
+  .filters button[aria-pressed="true"] { font-weight: 700; }
   .controls { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: .8rem; }
+  /* 셔터 — 강조색 방울 */
   #shoot { width: 4.4rem; height: 4.4rem; border-radius: 50%; padding: 0;
-           border: .3rem solid var(--panel); background: var(--accent);
+           border: .3rem solid var(--bg);
+           background: radial-gradient(circle at 32% 28%, rgb(255 255 255 / .55) 0 9%, transparent 26%),
+                       var(--accent);
            box-shadow: 0 0 0 2px var(--accent); }
-  #switch { justify-self: start; }
+  #switch { justify-self: start; width: 3rem; height: 3rem; padding: 0; border-radius: 50%; font-size: 1.15rem; }
   #shotActions { display: none; gap: .6rem; }
   #shotActions.on { display: grid; grid-template-columns: 1fr 1fr; }
-  .status { margin: 0; min-height: 1.2em; text-align: center; font-size: .72rem; color: var(--muted); }
-  .privacy { margin: 0; text-align: center; font-size: .66rem; line-height: 1.55; color: var(--muted); }
+  .status { margin: 0; min-height: 1.2em; text-align: center; font-size: .82rem; color: var(--muted); }
+  .privacy { margin: 0; text-align: center; }
 </style>
 </head>
 <body>
 <main class="app">
-  <h1>📷 필터 카메라</h1>
+  <header class="bl-head">
+    <span class="bl-bubble" aria-hidden="true">📷</span>
+    <h1>필터 카메라</h1>
+    <p>플래시 디카·로파이·필름 같은 요즘 필터와 볼록거울·타임 워프 같은 장난 필터를 실시간으로 보며 찍고 저장하는 카메라.</p>
+  </header>
 
   <div class="stage">
     <video id="camera" autoplay muted playsinline></video>
@@ -68,15 +73,15 @@
     <div class="empty" id="empty">
       <p>요즘 유행하는 감성 필터와 장난 필터를 실시간으로 보면서 찍어요.</p>
       <p class="notice" id="notice" role="alert"></p>
-      <button class="primary" id="start" type="button">카메라 켜기</button>
+      <button class="primary bl-btn bl-btn--primary" id="start" type="button">카메라 켜기</button>
     </div>
   </div>
 
-  <div class="tabs" id="tabs" role="tablist" aria-label="필터 종류">
+  <div class="tabs bl-sunk" id="tabs" role="tablist" aria-label="필터 종류">
     <button type="button" role="tab" data-group="mood" aria-selected="true">✨ 감성</button>
     <button type="button" role="tab" data-group="fun" aria-selected="false">🤪 장난</button>
   </div>
-  <div class="filters" id="filters" role="group" aria-label="필터"></div>
+  <div class="filters bl-chips" id="filters" role="group" aria-label="필터"></div>
 
   <div class="controls" id="cameraControls">
     <button id="switch" type="button" disabled aria-label="전면·후면 전환">🔄</button>
@@ -84,12 +89,12 @@
     <span></span>
   </div>
   <div id="shotActions">
-    <button id="retake" type="button">다시 찍기</button>
-    <button class="primary" id="save" type="button">저장</button>
+    <button class="bl-btn" id="retake" type="button">다시 찍기</button>
+    <button class="primary bl-btn bl-btn--primary" id="save" type="button">저장</button>
   </div>
 
   <p class="status" id="status" role="status"></p>
-  <p class="privacy">사진은 이 기기 브라우저 안에서만 만들어지고 서버로 전송되지 않습니다.</p>
+  <p class="privacy bl-note">사진은 이 기기 브라우저 안에서만 만들어지고 서버로 전송되지 않습니다.</p>
 </main>
 
 <script type="module">
@@ -124,6 +129,7 @@ function showGroup(name) {
   for (const filter of FILTERS.filter((f) => f.group === name)) {
     const button = document.createElement("button");
     button.type = "button";
+    button.className = "bl-chip";
     button.textContent = filter.name;
     button.dataset.id = filter.id;
     button.setAttribute("aria-pressed", String(filter === current));
