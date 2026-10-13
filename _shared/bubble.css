@@ -159,6 +159,30 @@ textarea.bl-input { line-height: 1.6; resize: vertical; }
            border: 1.5px dashed var(--accent-line); border-radius: var(--r-lg); color: var(--muted);
            background: color-mix(in srgb, var(--accent-soft) 45%, transparent); cursor: pointer; }
 
+/* ── 무대: 데스크톱에서 가운데 모바일 폭 기둥만 종이, 바깥은 한 단 낮게 ─────────
+   <html lang="ko" class="bl-stage"> — 폰에서는 기둥이 화면 전체라 차이가 없다. */
+html.bl-stage { background: var(--sunk); }
+html.bl-stage body { background: transparent; }
+html.bl-stage body::after { content: ""; position: fixed; top: 0; bottom: 0; left: 50%;
+  transform: translateX(-50%); width: min(100vw, 34rem); z-index: -1; background: var(--bg);
+  box-shadow: 0 0 1.5rem light-dark(rgb(60 50 30 / .12), rgb(0 0 0 / .5)); }
+
+/* ── 유리: 놀이 화면 위에 뜨는 카드(시작·결과)의 재료 — 위치·크기는 각 페이지가 정한다 ── */
+.bl-glass { color: var(--ink); background: color-mix(in srgb, var(--field) 92%, transparent);
+  border: 1px solid var(--line); border-radius: var(--r-lg);
+  box-shadow: 0 .8rem 2.4rem light-dark(rgb(60 50 30 / .14), rgb(0 0 0 / .5));
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+/* 막: 화면 전체를 덮어 뒤를 흐리게 — 결과 카드를 감싸는 바탕 */
+.bl-scrim { background: color-mix(in srgb, var(--bg) 85%, transparent);
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+
+/* ── 알약 배지: 점수·타이머·연속 같은 작은 수치 ─────────────────── */
+.bl-pill { display: inline-flex; align-items: center; gap: .35rem; padding: .25rem .75rem;
+  border-radius: var(--pill); font-family: var(--mono); font-size: var(--t-small); font-weight: 700;
+  font-variant-numeric: tabular-nums; color: var(--ink); background: var(--field);
+  border: 1px solid var(--line); }
+.bl-pill--accent { color: var(--accent); background: var(--accent-soft); border-color: var(--accent-line); }
+
 /* ── 글 ───────────────────────────────────────── */
 .bl-note { color: var(--muted); font-size: .8rem; line-height: 1.55; }
 .bl-num { font-variant-numeric: tabular-nums; }

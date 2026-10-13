@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko">
+<html lang="ko" class="bl-stage">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
@@ -10,8 +10,7 @@
           /* 상승 빨강·하락 파랑(국내 증시 관례) — 캔들 색은 그대로, 글자로 쓸 때만 대비를 맞춘 값 */
           --up: light-dark(#c22f2f, #ff8a80); --down: light-dark(#2361ab, #84b6ef); }
   * { box-sizing: border-box; }
-  html { background: var(--sunk); }
-  body { margin: 0; height: 100dvh; background: transparent;
+  body { margin: 0; height: 100dvh;
          display: flex; flex-direction: column; user-select: none;
          -webkit-user-select: none; touch-action: manipulation; }
   #top { display: flex; justify-content: space-between; align-items: baseline;
@@ -87,11 +86,6 @@
   @keyframes shake { 25% { transform: translateX(-4px); }
                      75% { transform: translateX(4px); } }
   .cell.deny { animation: shake .18s 2; }
-  /* 데스크톱: 사용 영역(모바일 폭 스테이지) 밖은 톤을 낮춰 구분 */
-  body::after { content: ""; position: fixed; top: 0; bottom: 0; left: 50%;
-                transform: translateX(-50%); width: min(100vw, 34rem); z-index: -1;
-                background: var(--bg);
-                box-shadow: 0 0 1.5rem light-dark(rgba(60,50,30,.12), rgba(0,0,0,.5)); }
 </style>
 </head>
 <body>

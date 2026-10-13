@@ -9,7 +9,7 @@
 | --- | --- |
 | `realtime-client.js` | `/_rt/<namespace>` WebSocket 연결, JSON 경로 CRUD·구독·재접속 |
 | `multiplayer-room.js` | 방 생성·입장·퇴장·강퇴·방장 승계·온라인 상태 |
-| `records.js` | 주간 기록 배지, 닉네임 등록, 개인 최고 기록, 주간 리셋·공지 UI |
+| `records.js` | 주간 기록 배지, 닉네임 등록, 개인 최고 기록, 주간 리셋·공지 UI — 패널은 bubble.css 토큰을 쓰고(없는 페이지는 기본값), 신기록 입력창은 결과 카드와 겹치지 않게 화면 위쪽 가운데에 뜬다 |
 | `share.js` | Web Share API 또는 클립보드 기반 공유 버튼과 공유 이미지 지원 |
 | `tts.js` | 브라우저 내장 음성으로 텍스트 읽어주기 — 🔊 독 버튼과 `blTTS` API |
 | `fortune-common.js` | fortune·brief 공용 운세 상수 — 한 줄 문구, 12지시, 명식 요청 본문 |
@@ -205,6 +205,9 @@ window.blWeekly = {
 - 요소 기본값은 배경·글자·글꼴·선택·초점만 건드립니다. 나머지는 `bl-` 클래스를 골라 씁니다:
   `bl-head`(+`bl-bubble`), `bl-btn`(`--primary` `--ghost` `--block` `--sm`), `bl-input`·`bl-label`,
   `bl-chips`·`bl-chip`(`aria-pressed`/`aria-selected`/`.is-on`), `bl-panel`·`bl-sunk`·`bl-drop`, `bl-note`.
+- 게임·도구 화면용: `<html class="bl-stage">`(데스크톱에서 가운데 모바일 폭 기둥만 종이), `bl-glass`
+  (놀이 화면 위에 뜨는 시작·결과 카드의 **재료만** — 위치·크기는 페이지가 정한다), `bl-scrim`(화면 전체 막),
+  `bl-pill`·`bl-pill--accent`(점수·타이머·연속 같은 작은 수치), `bl-switch`(켜고 끄기).
 - 색이 필요하면 클래스 대신 토큰을 바로 씁니다: `--bg --ink --muted --line --field --sunk --accent
   --accent-soft --accent-line --ok --warn --bad`. 전부 `light-dark()` 라 다크모드는 따로 적지 않습니다.
 - `--accent-h` 는 카테고리 홈의 `hueOf(폴더 이름)` 값과 맞춥니다(방울 색과 화면 강조색이 같아진다).

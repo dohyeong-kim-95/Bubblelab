@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko">
+<html lang="ko" class="bl-stage">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -16,16 +16,13 @@
     src: url("/_shared/TwemojiCountryFlags.woff2") format("woff2");
     font-display: swap;
   }
-  html { background: var(--sunk); }
-  body { margin: 0; min-height: 100vh; background: transparent;
+  body { margin: 0; min-height: 100vh;
          display: flex; flex-direction: column; align-items: center;
          justify-content: center; gap: var(--s-4); text-align: center;
          padding: var(--s-5) var(--s-4); box-sizing: border-box; user-select: none;
          -webkit-user-select: none; touch-action: manipulation; }
   .bl-head { margin: 0; text-align: left; }
-  #streak { font-family: var(--mono); font-size: .95rem; font-weight: 700; min-height: 1.3em;
-            padding: .3rem 1rem; border-radius: var(--pill);
-            color: var(--accent); background: var(--accent-soft); }
+  #streak { font-size: .95rem; min-height: 1.3em; padding: .3rem 1rem; border: 0; }
   /* 국기는 놀이 내용 — 글꼴·크기 그대로 */
   #flag { font-size: 6.5rem; line-height: 1.15; min-height: 7.5rem;
           display: grid; place-items: center;
@@ -49,11 +46,6 @@
   #btn { font-size: 1.1rem; min-height: 3rem; padding: .7rem 2.4rem; display: none; }
   #btn.show { display: inline-flex; }
   #best { color: var(--muted); font-size: var(--t-small); min-height: 1.2em; }
-  /* 데스크톱: 사용 영역(모바일 폭 스테이지) 밖은 톤을 낮춰 구분 */
-  body::after { content: ""; position: fixed; top: 0; bottom: 0; left: 50%;
-                transform: translateX(-50%); width: min(100vw, 34rem); z-index: -1;
-                background: var(--bg);
-                box-shadow: 0 0 1.5rem light-dark(rgba(60,50,30,.12), rgba(0,0,0,.5)); }
 </style>
 </head>
 <body>
@@ -62,7 +54,7 @@
     <h1>국기 맞추기</h1>
     <p>국기를 보고 나라 이름 고르기</p>
   </header>
-  <div id="streak" class="bl-num">연속 0개</div>
+  <div id="streak" class="bl-num bl-pill bl-pill--accent">연속 0개</div>
   <div id="flag"></div>
   <div id="choices"></div>
   <div id="msg">한 번이라도 틀리면 그대로 끝!

@@ -13,12 +13,8 @@
   /* 시작·결과 카드 — 판(캔버스) 위에 떠 있는 종이 한 장 */
   #overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
              display: flex; flex-direction: column; align-items: center; gap: var(--s-4);
-             padding: var(--s-5) var(--s-5) var(--s-5); border-radius: var(--r-lg); text-align: center;
-             border: 1px solid var(--line); box-sizing: border-box;
-             background: color-mix(in srgb, var(--field) 92%, transparent);
-             box-shadow: 0 .8rem 2.4rem light-dark(rgb(60 50 30 / .14), rgb(0 0 0 / .5));
-             backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-             color: var(--ink); width: min(90vw, 22rem); z-index: 60; }
+             padding: var(--s-5) var(--s-5) var(--s-5); text-align: center; box-sizing: border-box;
+             width: min(90vw, 22rem); z-index: 60; }
   #overlay.hide { display: none; }
   #overlay .bl-head { margin: 0; align-self: stretch; text-align: left; }
   #msg { margin: 0; color: var(--muted); font-size: var(--t-small); white-space: pre-line; line-height: 1.6; }
@@ -35,7 +31,7 @@
 </head>
 <body>
 <!-- 카드 아이콘: 🎯+ (다트 + 작은 플러스 배지 — 소스 첫 이모지가 카드로 추출됨) -->
-<div id="overlay">
+<div id="overlay" class="bl-glass">
   <header class="bl-head">
     <span class="bl-bubble" aria-hidden="true">🎯</span>
     <h1>다트 서커스 EX</h1>

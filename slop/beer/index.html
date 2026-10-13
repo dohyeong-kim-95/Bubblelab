@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko">
+<html lang="ko" class="bl-stage">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
@@ -8,8 +8,7 @@
 <style>
   :root { color-scheme: light dark; --accent-h: 144; }
   html, body { margin: 0; height: 100%; overflow: hidden; touch-action: none; }
-  html { background: var(--sunk); }
-  body { background: transparent;
+  body {
          display: flex; flex-direction: column; align-items: center;
          justify-content: center; gap: .6rem; padding: 1rem 1rem 5rem;
          box-sizing: border-box; user-select: none; -webkit-user-select: none; }
@@ -89,13 +88,6 @@
          display: none; }  /* 첫 붓기 전에는 숨긴다 */
   #serve:active { transform: translateX(-50%) scale(.97); }
   #serve.show { display: inline-flex; }
-  /* 신기록 닉네임 패널이 서빙 버튼을 가리지 않게 이 페이지에선 위로 */
-  body #bl-claim { bottom: 8.4rem; }
-  /* 데스크톱: 사용 영역(모바일 폭 스테이지) 밖은 톤을 낮춰 구분 */
-  body::after { content: ""; position: fixed; top: 0; bottom: 0; left: 50%;
-                transform: translateX(-50%); width: min(100vw, 34rem); z-index: -1;
-                background: var(--bg);
-                box-shadow: 0 0 1.5rem light-dark(rgba(60,50,30,.12), rgba(0,0,0,.5)); }
 </style>
 </head>
 <body>

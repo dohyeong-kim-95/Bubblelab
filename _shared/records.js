@@ -18,36 +18,36 @@
       const style = document.createElement("style");
       style.textContent = `
       #bl-week-reset { position: fixed; top: 1rem; left: 50%; z-index: 9999;
-        transform: translateX(-50%); font: .85rem ui-monospace, "SF Mono",
-        "Cascadia Mono", "Roboto Mono", Consolas, monospace;
-        padding: .85rem 2.3rem .85rem 1.1rem; border-radius: 1rem;
-        border: 1.5px solid currentColor; color: light-dark(#334, #ccd);
+        transform: translateX(-50%); font: .85rem var(--sans, system-ui, sans-serif);
+        padding: .85rem 2.3rem .85rem 1.1rem; border-radius: var(--r-lg, 1.4rem);
+        border: 1px solid var(--line, light-dark(#d9d4c8, #232a36)); color: var(--ink, light-dark(#15171c, #ece8df));
         width: max-content; max-width: min(85vw, 22rem); white-space: pre-line;
-        background: light-dark(rgba(255,255,255,.92), rgba(20,26,36,.92));
-        backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+        background: color-mix(in srgb, var(--field, light-dark(#fffdf8, #141a25)) 94%, transparent);
+        backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    box-shadow: 0 .8rem 2.4rem light-dark(rgb(60 50 30 / .14), rgb(0 0 0 / .5));
         animation: bl-week-drop .35s cubic-bezier(.2,1.4,.4,1); }
       #bl-week-reset .x { position: absolute; top: .25rem; right: .5rem;
         border: 0; background: none; color: inherit; font: inherit;
         opacity: .5; cursor: pointer; padding: .2rem; }
       @keyframes bl-week-drop { from { transform: translate(-50%, -1.5rem); opacity: 0; } }
       #bl-notice { position: fixed; top: 50%; left: 50%; z-index: 10000;
-        transform: translate(-50%, -50%); font: .9rem ui-monospace, "SF Mono",
-        "Cascadia Mono", "Roboto Mono", Consolas, monospace;
-        padding: 1.15rem 1.25rem; border-radius: 1rem;
-        border: 1.5px solid currentColor; color: light-dark(#334, #ccd);
+        transform: translate(-50%, -50%); font: .9rem var(--sans, system-ui, sans-serif);
+        padding: 1.15rem 1.25rem; border-radius: var(--r-lg, 1.4rem);
+        border: 1px solid var(--line, light-dark(#d9d4c8, #232a36)); color: var(--ink, light-dark(#15171c, #ece8df));
         width: min(85vw, 20rem); white-space: pre-line; text-align: left;
-        background: light-dark(rgba(255,255,255,.96), rgba(20,26,36,.96));
+        background: color-mix(in srgb, var(--field, light-dark(#fffdf8, #141a25)) 94%, transparent);
         backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-        box-shadow: 0 12px 40px light-dark(rgba(30,50,70,.25), rgba(0,0,0,.55));
+        box-shadow: 0 .8rem 2.4rem light-dark(rgb(60 50 30 / .18), rgb(0 0 0 / .55));
         display: flex; flex-direction: column; gap: .9rem;
         animation: bl-notice-pop .3s cubic-bezier(.2,1.4,.4,1); }
       #bl-notice b { font-size: 1rem; }
       #bl-notice .btns { display: flex; gap: .5rem; justify-content: flex-end; }
-      #bl-notice button { font: inherit; font-size: .82rem; padding: .45rem .8rem;
-        border-radius: .6rem; border: 1.5px solid currentColor; background: none;
-        color: inherit; cursor: pointer; }
-      #bl-notice .never { opacity: .55; }
-      #bl-notice .ok { font-weight: bold; }
+      #bl-notice button { font: inherit; font-size: .85rem; font-weight: 600; min-height: 2.4rem;
+        padding: .45rem 1rem; border-radius: 999px; border: 1px solid var(--line, light-dark(#d9d4c8, #232a36)); cursor: pointer;
+        background: var(--field, light-dark(#fffdf8, #141a25)); color: inherit; }
+      #bl-notice .never { border-color: transparent; background: none; color: var(--muted, inherit); }
+      #bl-notice .ok { border-color: transparent; background: var(--accent, #3f5fd0);
+        color: var(--accent-ink, #fff); }
       @keyframes bl-notice-pop { from { transform: translate(-50%, -50%) scale(.9); opacity: 0; } }`;
       document.head.appendChild(style);
 
@@ -117,31 +117,35 @@
 
   const css = `
   #bl-weekly { position: fixed; left: 1rem; bottom: 1rem; z-index: 9999;
-    font: bold .85rem ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; padding: .6rem 1rem;
-    border-radius: 1.1rem; border: 1.5px solid currentColor;
-    color: light-dark(#334, #ccd); max-width: min(72vw, 18rem);
+    font: 700 .85rem var(--sans, system-ui, sans-serif); padding: .6rem 1rem;
+    border-radius: var(--r-lg, 1.4rem); border: 1px solid var(--line, light-dark(#d9d4c8, #232a36));
+    color: var(--ink, light-dark(#15171c, #ece8df)); max-width: min(72vw, 18rem); font-variant-numeric: tabular-nums;
     white-space: pre-line; line-height: 1.55; cursor: pointer;
-    background: light-dark(rgba(255,255,255,.75), rgba(20,26,36,.75));
-    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+    background: color-mix(in srgb, var(--field, light-dark(#fffdf8, #141a25)) 94%, transparent);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    box-shadow: 0 .8rem 2.4rem light-dark(rgb(60 50 30 / .14), rgb(0 0 0 / .5)); }
   #bl-weekly.collapsed { padding: .5rem .8rem; }
-  #bl-claim { position: fixed; left: 1rem; bottom: 7.4rem; z-index: 9999;
-    font: .85rem ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; padding: .9rem 1rem;
-    border-radius: 1rem; border: 1.5px solid currentColor;
-    color: light-dark(#334, #ccd); width: min(80vw, 17rem);
-    background: light-dark(rgba(255,255,255,.92), rgba(20,26,36,.92));
-    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  /* 결과 카드는 대개 화면 가운데에 뜬다 — 겹치지 않게 위쪽 가운데에서 내려온다 */
+  #bl-claim { position: fixed; top: calc(env(safe-area-inset-top, 0px) + .75rem); left: 50%;
+    transform: translateX(-50%); z-index: 9999;
+    font: .85rem var(--sans, system-ui, sans-serif); padding: .9rem 1rem;
+    border-radius: var(--r-lg, 1.4rem); border: 1px solid var(--line, light-dark(#d9d4c8, #232a36));
+    color: var(--ink, light-dark(#15171c, #ece8df)); width: min(92vw, 22rem);
+    background: color-mix(in srgb, var(--field, light-dark(#fffdf8, #141a25)) 94%, transparent);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    box-shadow: 0 .8rem 2.4rem light-dark(rgb(60 50 30 / .14), rgb(0 0 0 / .5));
     display: none; flex-direction: column; gap: .55rem; }
   #bl-claim.show { display: flex; }
   #bl-claim b { font-size: .95rem; }
   #bl-claim .row { display: flex; gap: .5rem; }
-  #bl-claim input { flex: 1; min-width: 0; font: inherit; padding: .45rem .6rem;
-    border-radius: .5rem; border: 1px solid currentColor; background: none; color: inherit; }
-  #bl-claim button { font: inherit; font-weight: bold; padding: .45rem .8rem;
-    border-radius: .5rem; border: 1.5px solid currentColor; background: none;
-    color: inherit; cursor: pointer; }
-  #bl-claim .msg { opacity: .65; min-height: 1em; }
-  #bl-claim .x { position: absolute; top: .3rem; right: .55rem; border: 0;
-    padding: .2rem; opacity: .5; font-weight: normal; }`;
+  #bl-claim input { flex: 1; min-width: 0; font: inherit; font-size: 1rem; padding: .55rem .8rem;
+    border-radius: var(--r-sm, .6rem); border: 1px solid var(--line, light-dark(#d9d4c8, #232a36)); background: var(--field, light-dark(#fffdf8, #141a25)); color: inherit; }
+  #bl-claim input:focus-visible { outline: 2px solid var(--focus, #3f5fd0); outline-offset: 1px; }
+  #bl-claim button { font: inherit; font-weight: 700; padding: .55rem 1rem; border-radius: 999px;
+    border: 0; background: var(--accent, #3f5fd0); color: var(--accent-ink, #fff); cursor: pointer; }
+  #bl-claim .msg { color: var(--muted, inherit); min-height: 1em; }
+  #bl-claim .x { position: absolute; top: .3rem; right: .45rem; padding: .3rem .45rem;
+    background: none; color: var(--muted, inherit); font-weight: normal; }`;
   const style = document.createElement("style");
   style.textContent = css;
   document.head.appendChild(style);

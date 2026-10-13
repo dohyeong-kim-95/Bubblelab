@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko">
+<html lang="ko" class="bl-stage">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
@@ -8,18 +8,14 @@
 <style>
   :root { color-scheme: light dark; --accent-h: 146; }
   html, body { margin: 0; height: 100%; overflow: hidden; touch-action: none; }
-  html { background: var(--sunk); }
-  body { background: transparent;
-         display: flex; flex-direction: column; align-items: center;
+  body { display: flex; flex-direction: column; align-items: center;
          justify-content: center; gap: var(--s-4); user-select: none;
          -webkit-user-select: none; padding: var(--s-4); box-sizing: border-box; }
   .bl-head { margin: 0; }
   #hud { display: flex; align-items: center; gap: .5rem; font-family: var(--mono);
          font-size: .9rem; color: var(--muted); }
-  #hud #score, #hud #best { padding: .3rem .85rem; border-radius: var(--pill);
-         background: var(--field); border: 1px solid var(--line); }
-  #hud #score { font-weight: 700; color: var(--accent); background: var(--accent-soft);
-                border-color: var(--accent-line); }
+  #hud .bl-pill { padding: .3rem .85rem; font-size: inherit; }
+  #hud #best { font-weight: 400; color: inherit; }
   /* 판·타일 색은 놀이 내용이라 그대로 둔다 */
   #wrap { position: relative; }
   #board { display: grid; grid-template-columns: repeat(4, 1fr);
@@ -50,16 +46,10 @@
   #over { position: absolute; inset: 0; border-radius: 1rem; display: none;
           flex-direction: column; align-items: center; justify-content: center;
           gap: var(--s-4); text-align: center; font-weight: 800; font-size: 1.3rem;
-          color: var(--ink); padding: var(--s-4); box-sizing: border-box;
-          background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(3px); }
+          color: var(--ink); padding: var(--s-4); box-sizing: border-box; }
   #over.show { display: flex; }
   #overmsg { font-variant-numeric: tabular-nums; }
   #hint { color: var(--muted); font-size: var(--t-caption); text-align: center; }
-  /* 데스크톱: 사용 영역(모바일 폭 스테이지) 밖은 톤을 낮춰 구분 */
-  body::after { content: ""; position: fixed; top: 0; bottom: 0; left: 50%;
-                transform: translateX(-50%); width: min(100vw, 34rem); z-index: -1;
-                background: var(--bg);
-                box-shadow: 0 0 1.5rem light-dark(rgba(60,50,30,.12), rgba(0,0,0,.5)); }
 </style>
 </head>
 <body>
@@ -68,10 +58,10 @@
   <h1>Number Bloom</h1>
   <p>같은 숫자를 합쳐 2048을 피워 보세요</p>
 </header>
-<div id="hud" class="bl-num"><span id="score">점수 0</span><span>·</span><span id="best"></span></div>
+<div id="hud" class="bl-num"><span id="score" class="bl-pill bl-pill--accent">점수 0</span><span>·</span><span id="best" class="bl-pill"></span></div>
 <div id="wrap">
   <div id="board"></div>
-  <div id="over"><span id="overmsg"></span><button id="retry" class="bl-btn bl-btn--primary">다시 시작</button></div>
+  <div id="over" class="bl-scrim"><span id="overmsg"></span><button id="retry" class="bl-btn bl-btn--primary">다시 시작</button></div>
 </div>
 <div id="hint">방향키 또는 스와이프로 타일을 합쳐보세요</div>
 <script>

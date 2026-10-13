@@ -62,7 +62,9 @@
 - 강조색은 OKLCH 라 어떤 색상각이든 흰 글자 대비가 나온다 — HSL 로 바꾸지 말 것.
 - 브랜드 가이드·토큰 표·부품 미리보기는 Design System 아티팩트에 있다(사용자 계정,
   https://claude.ai/artifact/SRC69QSshqNTt3EhqyttvE). `bubble.css` 를 크게 바꾸면 그것도 다시 맞춘다.
-- slop 토이는 아직 각자의 스타일이다(옮기지 않았다). 새 토이는 bubble.css 로 시작해도 된다.
+- slop·util·assets 전부 bubble.css 위에 있다. 게임은 **놀이 화면(캔버스·판·타일)은 그대로**, 둘레(머리·버튼·
+  결과 카드·HUD)만 공용 재료 — 결과 카드는 `bl-glass`, 데스크톱 무대는 `<html class="bl-stage">`, 점수 배지는
+  `bl-pill`. 새 토이도 이 재료로 시작한다(예: `slop/10sec`, `slop/pinrush`).
 
 ## 검증 방법
 
