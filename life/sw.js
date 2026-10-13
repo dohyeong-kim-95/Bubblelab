@@ -54,8 +54,8 @@ async function staleWhileRevalidate(request) {
   return (await fresh) ?? Response.error();
 }
 
-/* 스코프 밑에 폴더가 하나 더 있으면 도구다. 주소는 배포(life.bubblelab.dev/espanol/)와
- * 로컬(localhost/life/espanol/)이 다르므로 등록 스코프를 기준으로 잘라 본다. */
+/* 스코프 밑에 폴더가 하나 더 있으면 도구다. 주소는 배포(life.bubblelab.dev/kcal/)와
+ * 로컬(localhost/life/kcal/)이 다르므로 등록 스코프를 기준으로 잘라 본다. */
 const SCOPE = new URL(self.registration.scope).pathname;
 const isTool = (url) =>
   (url.pathname.startsWith(SCOPE) ? url.pathname.slice(SCOPE.length) : "").includes("/");

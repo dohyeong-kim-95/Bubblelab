@@ -38,9 +38,9 @@
 - 이름은 슬러그만 받는다(`[a-z0-9-]`, 32자). 주소에 그대로 들어가므로
   `javascript:` 나 `../` 같은 것이 섞이지 않게 `store.js` 에서 막는다.
 
-지금 있는 도구는 `library`(서재) · `pushup`(팔굽혀펴기) · `espanol`(노래 스페인어) ·
+지금 있는 도구는 `library`(서재) · `pushup`(팔굽혀펴기) ·
 `review`(돌아보기) · `backup`(백업) · `papers`(오늘의 최적화 논문) · `budget`(가계부) ·
-`kcal`(칼로리) · `dram`(DRAM 동작) 아홉이다.
+`kcal`(칼로리) · `dram`(DRAM 동작) 여덟이다.
 
 `papers` 만 다른 것들과 성격이 다르다 — 브라우저가 아니라 **서버에 쌓인 것을 읽는**
 화면이고, 매일 아침 디스코드로 보낸 다이제스트의 보관본이다(`life/papers/README.md`).

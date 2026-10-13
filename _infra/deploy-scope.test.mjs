@@ -29,13 +29,13 @@ test("life 변경은 sink를 포함한 life 전체 기능 테스트와 e2e를 �
   expectScoped("life/budget/store.js", "life", [
     "_infra/backup-slim.test.mjs", "_infra/backup.test.mjs",
     "_infra/budget-sms.test.mjs", "_infra/budget.test.mjs",
-    "_infra/discord.test.mjs", "_infra/dram.test.mjs", "_infra/espanol.test.mjs",
+    "_infra/discord.test.mjs", "_infra/dram.test.mjs",
     "_infra/kcal.test.mjs", "_infra/library.test.mjs", "_infra/life.test.mjs",
     "_infra/papers.test.mjs", "_infra/pops.test.mjs", "_infra/pushup.test.mjs",
     "_infra/review.test.mjs", "_infra/tts.test.mjs", "_src/life-sink/store.test.mjs",
   ], [
     "_infra/e2e/backup.spec.mjs", "_infra/e2e/budget.spec.mjs",
-    "_infra/e2e/espanol.spec.mjs", "_infra/e2e/kcal.spec.mjs",
+    "_infra/e2e/kcal.spec.mjs",
     "_infra/e2e/library.spec.mjs", "_infra/e2e/life.spec.mjs",
     "_infra/e2e/pushup.spec.mjs", "_infra/e2e/review.spec.mjs",
   ]);
