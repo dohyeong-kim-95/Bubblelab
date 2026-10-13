@@ -1,0 +1,115 @@
+/* bubble.css — "비눗방울 실험실" 공용 재료 (랜딩·카테고리 홈과 같은 토큰).
+ *
+ * 도구마다 레이아웃은 제각각이어도 같은 재료로 짓는다:
+ *   <link rel="stylesheet" href="/_shared/bubble.css">
+ *   <style> :root { --accent-h: 50; } … </style>   ← 홈 목록의 방울 색과 같은 색상각
+ *
+ * 요소 기본값은 최소한만 건드리고(배경·글자·글꼴·선택·초점), 부품은 bl- 접두사 클래스로
+ * 골라 쓴다. 값이 필요한 곳은 클래스 대신 var(--…) 토큰을 직접 써도 된다.
+ */
+
+:root {
+  color-scheme: light dark;
+  --accent-h: 230;
+
+  /* 바탕 — 종이와 잉크 */
+  --bg: light-dark(#f3f0e8, #0b0f17);
+  --ink: light-dark(#15171c, #ece8df);
+  --muted: light-dark(#5b5f68, #a3a7b0);
+  --line: light-dark(#d9d4c8, #232a36);
+  --field: light-dark(#fffdf8, #141a25);      /* 입력칸·패널 표면 */
+  --sunk: light-dark(#ebe6da, #10151f);       /* 패널 안의 한 단 낮은 면 */
+  --focus: light-dark(#3f5fd0, #8fa8ff);
+
+  --ok: light-dark(#1f7a4a, #6fd39b);
+  --warn: light-dark(#9a5b00, #f3bd5c);
+  --bad: light-dark(#b3261e, #ff8a80);
+
+  /* 글꼴 */
+  --sans: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+
+  /* 모양 */
+  --r-sm: .6rem;
+  --r: 1rem;
+  --r-lg: 1.4rem;
+  --pill: 999px;
+}
+
+/* 도구별 강조색 — --accent-h 하나로 정한다. :root 와 body 에서 **둘 다** 계산한다:
+   var() 는 선언된 요소에서 풀리므로 :root 에만 두면 body[data-…] { --accent-h } 로
+   바꾼 값이 반영되지 않는다(:root 에 적은 --accent-h 는 body 로 상속돼 그대로 먹는다). */
+:root, body {
+  --accent: light-dark(hsl(var(--accent-h) 62% 40%), hsl(var(--accent-h) 75% 70%));
+  --accent-ink: light-dark(#fff, #10131a);    /* 강조색 위 글자 */
+  --accent-soft: light-dark(hsl(var(--accent-h) 85% 92%), hsl(var(--accent-h) 40% 20%));
+  --accent-line: light-dark(hsl(var(--accent-h) 55% 78%), hsl(var(--accent-h) 35% 34%));
+}
+
+/* ── 요소 기본값 (최소한) ─────────────────────────── */
+html { background: var(--bg); }
+body { background: var(--bg); color: var(--ink); font-family: var(--sans);
+       word-break: keep-all; -webkit-font-smoothing: antialiased; }
+::selection { background: light-dark(#cdd8ff, #2c3d78); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* ── 머리: 이모지 방울 + 제목 + 한 줄 설명 ──────────── */
+.bl-head { display: grid; grid-template-columns: auto 1fr; column-gap: .85rem; align-items: center;
+           margin: 0 0 1.2rem; }
+.bl-head .bl-bubble { grid-row: span 2; }
+.bl-head h1 { margin: 0; font-size: 1.35rem; font-weight: 800; letter-spacing: -.02em; line-height: 1.25; }
+.bl-head p { margin: .15rem 0 0; color: var(--muted); font-size: .88rem; line-height: 1.5; }
+
+.bl-bubble { display: inline-grid; place-items: center; width: 2.8rem; aspect-ratio: 1; border-radius: 50%;
+             font-size: 1.35rem; line-height: 1;
+             background: radial-gradient(circle at 32% 28%, rgb(255 255 255 / .8) 0 8%, transparent 22%),
+                         var(--accent-soft);
+             box-shadow: inset 0 0 0 1px var(--accent-line); }
+
+/* ── 버튼 ─────────────────────────────────────── */
+.bl-btn { display: inline-flex; align-items: center; justify-content: center; gap: .4rem;
+          min-height: 2.75rem; padding: .55rem 1.1rem; border-radius: var(--pill);
+          font: inherit; font-size: .95rem; font-weight: 600; line-height: 1.2; cursor: pointer;
+          color: var(--ink); background: var(--field); border: 1px solid var(--line);
+          text-decoration: none; transition: transform .12s, background-color .15s, border-color .15s; }
+.bl-btn:hover { border-color: var(--accent-line); }
+.bl-btn:active { transform: scale(.97); }
+.bl-btn:disabled, .bl-btn[aria-disabled="true"] { opacity: .45; cursor: not-allowed; transform: none; }
+.bl-btn--primary { color: var(--accent-ink); background: var(--accent); border-color: transparent; }
+.bl-btn--primary:hover { border-color: transparent; filter: brightness(1.06); }
+.bl-btn--ghost { background: transparent; border-color: transparent; color: var(--muted); }
+.bl-btn--ghost:hover { color: var(--ink); background: var(--sunk); }
+.bl-btn--block { display: flex; width: 100%; }
+.bl-btn--sm { min-height: 2.2rem; padding: .35rem .8rem; font-size: .85rem; }
+
+/* ── 입력 ─────────────────────────────────────── */
+.bl-input { width: 100%; box-sizing: border-box; font: inherit; font-size: 1rem; color: var(--ink);
+            padding: .7rem .9rem; border-radius: var(--r-sm); background: var(--field);
+            border: 1px solid var(--line); caret-color: var(--accent);
+            transition: border-color .15s, box-shadow .15s; }
+.bl-input::placeholder { color: var(--muted); opacity: 1; }
+.bl-input:focus-visible { outline: none; border-color: var(--accent);
+                          box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+textarea.bl-input { line-height: 1.6; resize: vertical; }
+.bl-label { display: block; margin: 0 0 .35rem; font-size: .82rem; color: var(--muted); }
+
+/* ── 칩 (탭·토글 선택) ──────────────────────────── */
+.bl-chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+.bl-chip { display: inline-flex; align-items: center; gap: .3rem; min-height: 2.2rem; padding: .3rem .85rem;
+           border-radius: var(--pill); font: inherit; font-size: .88rem; cursor: pointer;
+           color: var(--ink); background: var(--field); border: 1px solid var(--line); }
+.bl-chip[aria-pressed="true"], .bl-chip[aria-selected="true"], .bl-chip.is-on {
+  color: var(--accent-ink); background: var(--accent); border-color: transparent; }
+
+/* ── 면 ───────────────────────────────────────── */
+.bl-panel { background: var(--field); border: 1px solid var(--line); border-radius: var(--r-lg);
+            padding: 1rem 1.1rem; }
+.bl-sunk { background: var(--sunk); border-radius: var(--r); padding: .8rem .9rem; }
+.bl-drop { display: grid; place-items: center; gap: .3rem; padding: 1.6rem 1rem; text-align: center;
+           border: 1.5px dashed var(--accent-line); border-radius: var(--r-lg); color: var(--muted);
+           background: color-mix(in srgb, var(--accent-soft) 45%, transparent); cursor: pointer; }
+
+/* ── 글 ───────────────────────────────────────── */
+.bl-note { color: var(--muted); font-size: .8rem; line-height: 1.55; }
+.bl-num { font-variant-numeric: tabular-nums; }
+.bl-mono { font-family: var(--mono); }
