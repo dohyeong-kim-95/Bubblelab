@@ -4,8 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>국기 맞추기</title>
+<link rel="stylesheet" href="/_shared/bubble.css">
 <style>
-  :root { color-scheme: light dark; }
+  :root { color-scheme: light dark; --accent-h: 255; }
   /* 국기 이모지가 없는 브라우저(Windows 등)에서도 국기가 보이게 하는
      자체 호스팅 웹폰트. unicode-range로 국기 코드포인트에만 적용된다. */
   @font-face {
@@ -15,50 +16,59 @@
     src: url("/_shared/TwemojiCountryFlags.woff2") format("woff2");
     font-display: swap;
   }
-  body { margin: 0; font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; min-height: 100vh;
+  html { background: var(--sunk); }
+  body { margin: 0; min-height: 100vh; background: transparent;
          display: flex; flex-direction: column; align-items: center;
-         justify-content: center; gap: 1rem; text-align: center;
-         padding: 1.5rem; box-sizing: border-box; user-select: none;
+         justify-content: center; gap: var(--s-4); text-align: center;
+         padding: var(--s-5) var(--s-4); box-sizing: border-box; user-select: none;
          -webkit-user-select: none; touch-action: manipulation; }
-  h1 { font-size: 1.1rem; margin: 0; opacity: .7; }
-  #streak { font-size: 1rem; opacity: .6; font-variant-numeric: tabular-nums; min-height: 1.3em; }
+  .bl-head { margin: 0; text-align: left; }
+  #streak { font-family: var(--mono); font-size: .95rem; font-weight: 700; min-height: 1.3em;
+            padding: .3rem 1rem; border-radius: var(--pill);
+            color: var(--accent); background: var(--accent-soft); }
+  /* 국기는 놀이 내용 — 글꼴·크기 그대로 */
   #flag { font-size: 6.5rem; line-height: 1.15; min-height: 7.5rem;
           display: grid; place-items: center;
           font-family: "BL Flags", "Apple Color Emoji", "Segoe UI Emoji",
                        "Noto Color Emoji", sans-serif; }
   #choices { display: flex; flex-direction: column; gap: .55rem;
              width: min(80vw, 18rem); }
-  #choices button { font: inherit; font-size: 1rem; padding: .75rem .9rem;
-             border-radius: .8rem; border: 2px solid currentColor;
-             background: none; color: inherit; cursor: pointer;
+  #choices button { font: inherit; font-size: 1rem; font-weight: 600; min-height: 2.9rem;
+             padding: .65rem .9rem; border-radius: var(--pill);
+             border: 1px solid var(--line); background: var(--field); color: var(--ink);
+             cursor: pointer; transition: transform .12s, border-color .15s, background-color .15s;
              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #choices button:hover:not(:disabled) { border-color: var(--accent-line); }
   #choices button:active { transform: scale(.98); }
-  #choices button.right { background: light-dark(#c9ecd3, #1d4a2c); }
-  #choices button.wrong { background: light-dark(#f6cdd0, #5a2026); }
-  #msg { opacity: .7; min-height: 2.6em; white-space: pre-line; }
-  #btn { font: inherit; font-size: 1.15rem; padding: .8rem 2.4rem;
-         border-radius: 2rem; border: 2px solid currentColor;
-         background: none; color: inherit; cursor: pointer; display: none; }
-  #btn.show { display: block; }
-  #best { opacity: .5; font-size: .85rem; min-height: 1.2em; }
+  #choices button:disabled { cursor: default; }
+  #choices button.right { background: color-mix(in srgb, var(--ok) 20%, var(--field));
+                          border-color: var(--ok); }
+  #choices button.wrong { background: color-mix(in srgb, var(--bad) 20%, var(--field));
+                          border-color: var(--bad); }
+  #msg { color: var(--muted); min-height: 2.6em; white-space: pre-line; line-height: 1.55; }
+  #btn { font-size: 1.1rem; min-height: 3rem; padding: .7rem 2.4rem; display: none; }
+  #btn.show { display: inline-flex; }
+  #best { color: var(--muted); font-size: var(--t-small); min-height: 1.2em; }
   /* 데스크톱: 사용 영역(모바일 폭 스테이지) 밖은 톤을 낮춰 구분 */
-  body::before { content: ""; position: fixed; inset: 0; z-index: -2;
-                 background: light-dark(#dee6ee, #0a0e15); }
   body::after { content: ""; position: fixed; top: 0; bottom: 0; left: 50%;
                 transform: translateX(-50%); width: min(100vw, 34rem); z-index: -1;
-                background: light-dark(#eef2f6, #10161f);
-                box-shadow: 0 0 1.5rem light-dark(rgba(30,50,70,.14), rgba(0,0,0,.5)); }
+                background: var(--bg);
+                box-shadow: 0 0 1.5rem light-dark(rgba(60,50,30,.12), rgba(0,0,0,.5)); }
 </style>
 </head>
 <body>
-  <h1>🌍 국기 맞추기</h1>
-  <div id="streak">연속 0개</div>
+  <header class="bl-head">
+    <span class="bl-bubble" aria-hidden="true">🌍</span>
+    <h1>국기 맞추기</h1>
+    <p>국기를 보고 나라 이름 고르기</p>
+  </header>
+  <div id="streak" class="bl-num">연속 0개</div>
   <div id="flag"></div>
   <div id="choices"></div>
   <div id="msg">한 번이라도 틀리면 그대로 끝!
 연속으로 맞춘 개수가 점수예요.</div>
-  <button id="btn">다시!</button>
-  <div id="best"></div>
+  <button id="btn" class="bl-btn bl-btn--primary">다시!</button>
+  <div id="best" class="bl-num"></div>
 <script>
 // 앞쪽일수록 유명한 나라 — 연속으로 맞출수록 출제 풀이 넓어진다.
 const COUNTRIES = [

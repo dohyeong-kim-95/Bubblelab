@@ -4,72 +4,80 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>누가 더 무거울까</title>
+<link rel="stylesheet" href="/_shared/bubble.css">
 <style>
-  :root { color-scheme: light dark; }
-  body { margin: 0; font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+  :root { color-scheme: light dark; --accent-h: 334; }
+  html { background: var(--sunk); }
+  body { margin: 0; background: transparent;
          min-height: 100vh; display: flex; flex-direction: column; align-items: center;
          justify-content: center; gap: .9rem; text-align: center;
          padding: 1.5rem; box-sizing: border-box; user-select: none;
          -webkit-user-select: none; touch-action: manipulation; }
-  h1 { font-size: 1.1rem; margin: 0; opacity: .7; }
-  #streak { font-size: .9rem; opacity: .55; font-variant-numeric: tabular-nums; }
+  .bl-head { margin: 0 0 .2rem; text-align: left; width: min(84vw, 20rem); }
+  #streak { font-family: var(--mono); font-size: .85rem; font-weight: 700;
+            padding: .3rem .85rem; border-radius: var(--pill);
+            color: var(--accent); background: var(--accent-soft);
+            box-shadow: inset 0 0 0 1px var(--accent-line); }
   #stage { display: flex; flex-direction: column; align-items: center; gap: .35rem;
-           width: min(80vw, 20rem); }
+           width: min(84vw, 20rem); }
   .card { width: 100%; box-sizing: border-box; padding: .9rem 1rem;
-          border-radius: 1.1rem; border: 2px solid currentColor;
-          display: flex; flex-direction: column; gap: .25rem; }
-  .card .name { font-size: 1.25rem; font-weight: bold; }
-  .card .val { font-size: 1.6rem; font-variant-numeric: tabular-nums; line-height: 1.1; }
-  #anchor { opacity: .75; }
-  #chal { animation: rise .3s cubic-bezier(.2,1.3,.4,1); }
+          border-radius: var(--r-lg); display: flex; flex-direction: column; gap: .25rem; }
+  .card .name { font-size: 1.25rem; font-weight: 800; letter-spacing: -.01em; }
+  .card .val { font-family: var(--mono); font-size: 1.6rem; font-weight: 700; line-height: 1.1; }
+  #anchor { background: var(--sunk); border: 1px solid var(--line); }
+  #anchor .val { color: var(--muted); }
+  #chal { border-color: var(--accent-line); border-width: 1.5px;
+          animation: rise .3s cubic-bezier(.2,1.3,.4,1); }
+  #chal .val { color: var(--accent); }
   @keyframes rise { from { transform: translateY(1.2rem); opacity: 0; } }
-  .vs { font-size: .8rem; opacity: .4; letter-spacing: .1em; }
-  #choices { display: flex; flex-direction: column; gap: .5rem; width: min(80vw, 20rem); }
-  #choices button { font: inherit; font-size: 1.05rem; padding: .85rem;
-                    border-radius: 1rem; border: 2px solid currentColor;
-                    background: none; color: inherit; cursor: pointer; }
-  #choices button:active { transform: scale(.98); }
-  #choices button:disabled { cursor: default; opacity: .35; }
-  #choices button.right { background: light-dark(#c8f0d0, #1d4429); opacity: 1; }
-  #choices button.wrong { background: light-dark(#f5cdcd, #4a1f22); opacity: 1; }
-  #msg { opacity: .75; min-height: 2.6em; white-space: pre-line; font-size: .92rem; }
-  #again { font: inherit; font-size: 1rem; padding: .6rem 1.4rem; border-radius: 1rem;
-           border: 2px solid currentColor; background: none; color: inherit;
-           cursor: pointer; display: none; }
-  #again.show { display: block; }
-  #best { opacity: .5; font-size: .85rem; min-height: 1.2em; }
-  #note { opacity: .35; font-size: .72rem; margin-top: .3rem; }
+  .vs { font-family: var(--mono); font-size: var(--t-caption); font-weight: 700;
+        color: var(--muted); letter-spacing: .12em; }
+  #choices { display: flex; flex-direction: column; gap: .5rem; width: min(84vw, 20rem); }
+  #choices .bl-btn { font-size: 1.05rem; min-height: 3.2rem; }
+  #choices .bl-btn:disabled { cursor: default; opacity: .4; }
+  #choices .bl-btn.right { opacity: 1; color: var(--ink); border-color: var(--ok);
+                           background: color-mix(in srgb, var(--ok) 20%, var(--field)); }
+  #choices .bl-btn.wrong { opacity: 1; color: var(--ink); border-color: var(--bad);
+                           background: color-mix(in srgb, var(--bad) 20%, var(--field)); }
+  #msg { color: var(--ink); min-height: 2.6em; white-space: pre-line; font-size: .95rem;
+         line-height: 1.5; }
+  #again { display: none; min-width: 9rem; }
+  #again.show { display: inline-flex; }
+  #best { color: var(--muted); font-size: .85rem; min-height: 1.2em; }
+  #note { margin-top: .3rem; }
   /* 데스크톱: 사용 영역(모바일 폭 스테이지) 밖은 톤을 낮춰 구분 */
-  body::before { content: ""; position: fixed; inset: 0; z-index: -2;
-                 background: light-dark(#dee6ee, #0a0e15); }
   body::after { content: ""; position: fixed; top: 0; bottom: 0; left: 50%;
                 transform: translateX(-50%); width: min(100vw, 34rem); z-index: -1;
-                background: light-dark(#eef2f6, #10161f);
-                box-shadow: 0 0 1.5rem light-dark(rgba(30,50,70,.14), rgba(0,0,0,.5)); }
+                background: var(--bg);
+                box-shadow: 0 0 1.5rem light-dark(rgba(60,50,30,.12), rgba(0,0,0,.5)); }
 </style>
 </head>
 <body>
-  <h1>🐋 누가 더 무거울까</h1>
-  <div id="streak">연속 0개</div>
+  <header class="bl-head">
+    <span class="bl-bubble" aria-hidden="true">🐋</span>
+    <h1>누가 더 무거울까</h1>
+    <p>아래 동물이 더 무거울까, 가벼울까?</p>
+  </header>
+  <div id="streak" class="bl-num">연속 0개</div>
   <div id="stage">
     <div class="card" id="anchor">
       <span class="name" id="anchor-name">—</span>
-      <span class="val" id="anchor-val">—</span>
+      <span class="val bl-num" id="anchor-val">—</span>
     </div>
     <div class="vs">VS</div>
-    <div class="card" id="chal">
+    <div class="card bl-panel" id="chal">
       <span class="name" id="chal-name">—</span>
-      <span class="val" id="chal-val">???</span>
+      <span class="val bl-num" id="chal-val">???</span>
     </div>
   </div>
   <div id="choices">
-    <button type="button" data-dir="up">🔼 더 무겁다</button>
-    <button type="button" data-dir="down">🔽 더 가볍다</button>
+    <button type="button" class="bl-btn bl-btn--block" data-dir="up">🔼 더 무겁다</button>
+    <button type="button" class="bl-btn bl-btn--block" data-dir="down">🔽 더 가볍다</button>
   </div>
   <div id="msg"></div>
-  <button id="again" type="button">다시!</button>
+  <button id="again" class="bl-btn bl-btn--primary" type="button">다시!</button>
   <div id="best"></div>
-  <div id="note">성체 평균 몸무게 기준 · 종·개체에 따라 차이가 있어요</div>
+  <div id="note" class="bl-note">성체 평균 몸무게 기준 · 종·개체에 따라 차이가 있어요</div>
 <script>
 // [이름, 성체 평균 몸무게(kg)] — 개체 편차를 감안해 페어는 항상 1.5배 이상 차이
 const ANIMALS = [

@@ -4,27 +4,31 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title>야추 봇 대전</title>
+<link rel="stylesheet" href="/_shared/bubble.css">
 <style>
-  :root { color-scheme: light dark; }
+  /* 재료는 /_shared/bubble.css — 여기는 강조색과 놀이판(주사위·점수표) 배치만 */
+  :root { color-scheme: light dark; --accent-h: 217; }
   html, body { margin: 0; }
-  body { font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
-         background: light-dark(#eef2f6, #10161f);
-         color: light-dark(#17202b, #dbe5ef);
+  body { font-family: var(--sans);
          display: flex; flex-direction: column; align-items: center;
          gap: .7rem; padding: .9rem .6rem 8rem; box-sizing: border-box;
          user-select: none; -webkit-user-select: none; min-height: 100vh; }
-  footer { margin-top: .4rem; font-size: .8rem; opacity: .55; display: flex;
-           gap: .8rem; align-items: baseline; }
-  footer b { font-size: .9rem; }
-  #status { font-size: .95rem; min-height: 1.3em; opacity: .85; text-align: center; }
+  /* 이름표 — bl-head 를 한 줄로: 방울 + 제목 + 내 최고 기록 */
+  footer.bl-head { margin: .4rem 0 0; column-gap: .6rem; }
+  footer.bl-head .bl-bubble { width: 2.4rem; font-size: 1.15rem; }
+  footer.bl-head b { font-size: 1rem; font-weight: 800; letter-spacing: -.02em; }
+  footer.bl-head #best { grid-column: 2; margin: 0; color: var(--muted); font-size: var(--t-small); }
+  #status { font-size: .95rem; font-weight: 600; min-height: 1.3em; text-align: center; }
   #dicebox { display: flex; gap: 2vw; justify-content: center;
-             width: min(96vw, 30rem); padding-top: .5rem; }
-  .die { font-size: clamp(3rem, 15vw, 4.2rem); line-height: 1;
-         border: 3px solid transparent; flex: 1; max-width: 5.2rem;
-         border-radius: .7rem; background: light-dark(#fff, #1c2735);
+             width: min(100%, 30rem); padding-top: .5rem; }
+  .die { font-size: clamp(2.4rem, 13vw, 4.2rem); line-height: 1;
+         border: 3px solid transparent; flex: 1; min-width: 0; max-width: 5.2rem;
+         border-radius: var(--r); background: var(--field);
+         box-shadow: inset 0 0 0 1px var(--line);
          padding: .1rem 0; cursor: pointer; transition: transform .1s;
          color: inherit; font-family: inherit; }
-  .die.held { border-color: light-dark(#3fae5f, #4dd07a); transform: translateY(-8px); }
+  .die.held { border-color: var(--accent); background: var(--accent-soft);
+              box-shadow: none; transform: translateY(-8px); }
   .die.bot { cursor: default; }
   .die:disabled { opacity: .9; }
   .die.rolling { animation: tumble .45s ease; }
@@ -35,58 +39,57 @@
   }
   /* 맨 아랫줄은 공통 유틸(주간 1위 배지·공유 버튼) 몫 — 굴리기는 그 윗줄 */
   #roll { position: fixed; bottom: 4.3rem; left: 50%; transform: translateX(-50%);
-          z-index: 50; font: inherit; font-weight: bold; font-size: 1.05rem;
-          padding: .85rem 1.4rem; white-space: nowrap;
-          border-radius: 2rem; border: 2px solid currentColor;
-          background: light-dark(rgba(255,255,255,.85), rgba(20,26,36,.85));
-          backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
-          color: inherit; cursor: pointer; }
-  #roll:disabled { opacity: .35; cursor: default; }
-  #hint { opacity: .55; font-size: .78rem; text-align: center; min-height: 1em; }
-  #tables { display: flex; gap: .5rem; width: min(96vw, 30rem);
+          z-index: 50; font-size: 1.05rem; font-weight: 800;
+          padding: .85rem 1.6rem; white-space: nowrap;
+          box-shadow: 0 .4rem 1.2rem light-dark(rgba(40,50,80,.2), rgba(0,0,0,.45)); }
+  #roll:active { transform: translateX(-50%) scale(.97); }
+  #roll:disabled { opacity: .45; transform: translateX(-50%); }
+  #hint { color: var(--muted); font-size: .78rem; text-align: center; min-height: 1em; }
+  #tables { display: flex; gap: .5rem; width: min(100%, 30rem);
             align-items: flex-start; -webkit-touch-callout: none; }
   #tip { position: fixed; bottom: 8.4rem; left: 50%; transform: translateX(-50%);
          z-index: 60; width: min(88vw, 20rem); box-sizing: border-box;
          font-size: .85rem; line-height: 1.5; padding: .8rem 1rem;
-         border-radius: 1rem; border: 1.5px solid currentColor;
-         background: light-dark(rgba(255,255,255,.95), rgba(20,26,36,.95));
-         backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+         border-radius: var(--r); border: 1px solid var(--accent-line);
+         background: var(--field);
+         box-shadow: 0 .4rem 1.2rem light-dark(rgba(40,50,80,.16), rgba(0,0,0,.45));
          display: none; pointer-events: none; }
   #tip.show { display: block; }
-  #tip b { display: block; margin-bottom: .2rem; }
-  table { border-collapse: collapse; font-size: .8rem; flex: 1; }
+  #tip b { display: block; margin-bottom: .2rem; color: var(--accent); }
+  table { border-collapse: collapse; font-size: .8rem; flex: 1; min-width: 0; }
+  td.me, td.bot { font-family: var(--mono); font-variant-numeric: tabular-nums; }
   /* 두 단의 행 높이를 고정해서 항목끼리 나란히 정렬되게 한다 */
   tr { height: 2.15rem; }
-  th, td { padding: 0 .3rem; text-align: right; border-bottom: 1px solid
-           light-dark(#d8e0e8, #263445); white-space: nowrap; }
+  th, td { padding: 0 .3rem; text-align: right; border-bottom: 1px solid var(--line);
+           white-space: nowrap; }
   th:first-child, td:first-child { text-align: left; }
-  thead th { opacity: .6; font-weight: normal; }
-  tr.cat.open td.me { cursor: pointer; }
-  tr.cat.open:hover td.me { background: light-dark(#dfe9f2, #1d2a3a); }
-  td.preview { opacity: .45; }
+  thead th { color: var(--muted); font-weight: normal; }
+  tr.cat.open td.me { cursor: pointer; color: var(--accent); }
+  tr.cat.open:hover td.me { background: var(--accent-soft); }
+  td.preview { opacity: .6; }
   td.me.just, td.bot.just { animation: flash .6s; }
   @keyframes flash { from { background: light-dark(#ffe9a8, #4a3711); } }
-  tr.sumrow td { font-weight: bold; border-top: 2px solid light-dark(#b9c6d2, #34455a);
+  tr.sumrow td { font-weight: bold; border-top: 2px solid var(--accent-line);
                  border-bottom: none; }
-  tr.bonusrow td { opacity: .7; font-size: .8rem; border-bottom: 2px solid
-                   light-dark(#b9c6d2, #34455a); }
-  #best { opacity: .6; font-size: .85rem; }
-  #over { position: fixed; inset: 0; display: none; flex-direction: column;
-          align-items: center; justify-content: center; gap: 1rem; z-index: 100;
-          background: light-dark(#eef2f6ee, #10161fee); backdrop-filter: blur(4px);
+  tr.bonusrow td { color: var(--muted); font-size: .8rem; border-bottom: 2px solid
+                   var(--accent-line); }
+  #over { position: fixed; inset: 0; display: none; place-items: center; z-index: 100;
+          background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(4px);
           text-align: center; padding: 1.5rem; }
-  #over.show { display: flex; }
-  #over .big { font-size: 2rem; font-weight: bold; }
-  #over button { font: inherit; font-weight: bold; padding: .7rem 1.8rem;
-                 border-radius: .8rem; border: 2px solid currentColor;
-                 background: none; color: inherit; cursor: pointer; }
+  #over.show { display: grid; }
+  #over .card { display: flex; flex-direction: column; align-items: center; gap: .9rem;
+                width: min(100%, 20rem); box-sizing: border-box; padding: 1.6rem 1.3rem;
+                border-radius: var(--r-lg); box-shadow: 0 1rem 3rem light-dark(rgba(40,50,80,.16), rgba(0,0,0,.45)); }
+  #over .big { font-size: 1.6rem; font-weight: 800; letter-spacing: -.02em; }
+  #oversub { color: var(--muted); font-size: var(--t-small); line-height: 1.5; }
+  #over button { min-width: 9rem; }
   /* 데스크톱: 사용 영역(모바일 폭 스테이지) 밖은 톤을 낮춰 구분 */
   body::before { content: ""; position: fixed; inset: 0; z-index: -2;
-                 background: light-dark(#dee6ee, #0a0e15); }
+                 background: light-dark(#e8e3d8, #070a10); }
   body::after { content: ""; position: fixed; top: 0; bottom: 0; left: 50%;
                 transform: translateX(-50%); width: min(100vw, 34rem); z-index: -1;
-                background: light-dark(#eef2f6, #10161f);
-                box-shadow: 0 0 1.5rem light-dark(rgba(30,50,70,.14), rgba(0,0,0,.5)); }
+                background: var(--bg);
+                box-shadow: 0 0 1.5rem light-dark(rgba(60,50,30,.12), rgba(0,0,0,.5)); }
 </style>
 </head>
 <body>
@@ -103,13 +106,15 @@
     <tbody></tbody>
   </table>
 </div>
-<footer><b>🤖 야추 봇 대전</b><span id="best"></span></footer>
+<footer class="bl-head"><span class="bl-bubble" aria-hidden="true">🤖</span><b>야추 봇 대전</b><span id="best" class="bl-num"></span></footer>
 <div id="tip"></div>
-<button id="roll">굴리기</button>
+<button id="roll" class="bl-btn bl-btn--primary">굴리기</button>
 <div id="over">
-  <div class="big" id="overtitle"></div>
-  <div id="oversub"></div>
-  <button id="again">다시 대결</button>
+  <div class="card bl-panel">
+    <div class="big" id="overtitle"></div>
+    <div id="oversub" class="bl-num"></div>
+    <button id="again" class="bl-btn bl-btn--primary">다시 대결</button>
+  </div>
 </div>
 <script>
 /* ---------- 야추 점수 규칙 (games/yacht와 동일 — 아소비대전51 버전) ---------- */

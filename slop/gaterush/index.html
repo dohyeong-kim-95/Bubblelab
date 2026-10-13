@@ -5,51 +5,54 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>🏃 게이트 러시 — 한 번 틀리면 끝</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🏃</text></svg>">
+<link rel="stylesheet" href="/_shared/bubble.css">
 <style>
-  :root { color-scheme: light dark; }
+  /* 재료는 /_shared/bubble.css — 3D 놀이판(트랙·군중·문) 색은 스크립트의 themeOf 그대로 */
+  :root { color-scheme: light dark; --accent-h: 27; }
   html, body { height: 100%; }
   body { margin: 0; overflow: hidden; user-select: none; -webkit-user-select: none;
-         touch-action: none; font-family: ui-monospace, "SF Mono", "Cascadia Mono",
-         "Roboto Mono", Consolas, monospace;
-         background: light-dark(#f6ead8, #1a1626); color: light-dark(#3a2b18, #e8ddcb); }
+         touch-action: none; font-family: var(--sans);
+         background: light-dark(#f6ead8, #1a1626); }
   canvas { display: block; touch-action: none; }
-  #hud { position: fixed; top: 0; left: 0; right: 0; display: flex; gap: .55rem;
-         align-items: center; padding: .5rem .7rem; font-size: .78rem; z-index: 3;
+  #hud { position: fixed; top: 0; left: 0; right: 0; display: flex; gap: .4rem;
+         align-items: center; padding: .5rem .6rem; font-size: .78rem; z-index: 3;
          pointer-events: none; white-space: nowrap; }
+  /* 3D 판 위에 얹히는 글자라 반투명 종이 띠를 깐다 */
+  #hud > span:first-child, #hStage { padding: .22rem .55rem; border-radius: var(--pill);
+         background: color-mix(in srgb, var(--field) 82%, transparent);
+         box-shadow: inset 0 0 0 1px var(--line); }
+  #hud > span:first-child b { font-weight: 800; letter-spacing: -.02em; }
+  #hStage:empty { display: none; }
   #hud .sp { flex: 1; }
   #hud > span:first-child { flex: 0 1 auto; min-width: 0; overflow: hidden;
                             text-overflow: ellipsis; }
-  #retry { pointer-events: auto; font: inherit; border: 1.5px solid currentColor;
-           background: none; color: inherit; border-radius: 1rem; padding: .15rem .7rem;
-           cursor: pointer; opacity: .75; }
-  #retry:active { transform: scale(.95); }
+  #retry { pointer-events: auto; min-height: 2rem; padding: .2rem .75rem; font-size: .9rem; }
   #overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
              display: flex; flex-direction: column; align-items: center; gap: .9rem;
-             width: min(84vw, 21rem); padding: 1.5rem 1.6rem; border-radius: 1.25rem;
-             text-align: center; z-index: 5;
-             border: 1.5px solid light-dark(rgba(90,60,20,.3), rgba(230,215,190,.25));
-             background: light-dark(rgba(255,250,240,.92), rgba(26,20,38,.92));
+             width: min(84vw, 21rem); padding: 1.5rem 1.6rem; border-radius: var(--r-lg);
+             text-align: center; z-index: 5; box-sizing: border-box;
+             border: 1px solid var(--line);
+             background: color-mix(in srgb, var(--field) 94%, transparent);
+             box-shadow: 0 1rem 3rem light-dark(rgba(60,40,20,.18), rgba(0,0,0,.45));
              backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
   #overlay.hide { display: none; }
-  #overlay h1 { margin: 0; font-size: 1.15rem; }
-  #overlay p { margin: 0; font-size: .88rem; line-height: 1.55; opacity: .75;
+  #overlay h1 { margin: -.2rem 0 0; font-size: var(--t-h1); font-weight: 800; letter-spacing: -.02em; }
+  #overlay p { margin: 0; font-size: .88rem; line-height: 1.55; color: var(--muted);
                white-space: pre-line; }
-  #overlay .big { font-size: 2.2rem; margin: 0; }
-  #btn { font: inherit; font-size: 1.05rem; padding: .75rem 2.2rem; border-radius: 2rem;
-         border: 2px solid currentColor; background: none; color: inherit; cursor: pointer; }
-  #btn:active { transform: scale(.96); }
-  #best { margin: 0; font-size: .8rem; opacity: .5; min-height: 1.1em; }
+  #overlay .big.bl-bubble { width: 3.6rem; font-size: 1.8rem; }
+  #btn { min-width: 9rem; font-size: 1.05rem; padding: .7rem 2.2rem; }
+  #overlay #best { font-size: .8rem; min-height: 1.1em; }
 </style>
 </head>
 <body>
 <div id="hud">
   <span>🏃 <b>게이트 러시</b></span>
   <span class="sp"></span>
-  <span id="hStage"></span>
-  <button id="retry" title="포기하고 결과 보기">↻</button>
+  <span id="hStage" class="bl-num"></span>
+  <button id="retry" class="bl-btn bl-btn--sm" title="포기하고 결과 보기">↻</button>
 </div>
 <div id="overlay">
-  <p class="big" id="oEmoji">🏃</p>
+  <p class="big bl-bubble" id="oEmoji">🏃</p>
   <h1 id="oTitle">게이트 러시</h1>
   <p id="oMsg">광고에서 보던 그 문 고르기 게임, 목숨 하나 버전.
 
@@ -58,8 +61,8 @@
 
 스테이지 1부터 깰 때마다 바로 다음 판으로.
 한 번이라도 실패하면 끝 — 연속 클리어 수가 점수예요.</p>
-  <button id="btn">시작</button>
-  <p id="best"></p>
+  <button id="btn" class="bl-btn bl-btn--primary">시작</button>
+  <p id="best" class="bl-num"></p>
 </div>
 <canvas id="cv"></canvas>
 <script type="module">

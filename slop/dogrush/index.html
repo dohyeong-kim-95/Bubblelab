@@ -5,65 +5,73 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>🐶 강아지 러시 — 한 번 틀리면 끝</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🐶</text></svg>">
+<link rel="stylesheet" href="/_shared/bubble.css">
 <style>
-  :root { color-scheme: light dark; }
+  /* 재료는 공용 bubble.css(토큰·bl- 부품). 판(캔버스)은 게임 내용이라 그대로 둔다. */
+  :root { color-scheme: light dark; --accent-h: 284; }
   html, body { height: 100%; }
   body { margin: 0; overflow: hidden; user-select: none; -webkit-user-select: none;
-         touch-action: none; font-family: ui-monospace, "SF Mono", "Cascadia Mono",
-         "Roboto Mono", Consolas, monospace;
-         background: light-dark(#f6ead8, #1a1626); color: light-dark(#3a2b18, #e8ddcb); }
+         touch-action: none; }
   canvas { display: block; touch-action: none; }
-  #hud { position: fixed; top: 0; left: 0; right: 0; display: flex; gap: .55rem;
-         align-items: center; padding: .5rem .7rem; font-size: .78rem; z-index: 3;
-         pointer-events: none; white-space: nowrap; }
+
+  /* HUD — 이름 방울 + 숫자 칩. 판 위에 떠 있으니 칩은 반투명 종이면 */
+  #hud { position: fixed; top: 0; left: 0; right: 0; display: flex; gap: .45rem;
+         align-items: center; padding: .5rem .7rem; font-size: var(--t-caption); z-index: 3;
+         pointer-events: none; white-space: nowrap; color: var(--ink); }
   #hud .sp { flex: 1; }
   #hud > span:first-child { flex: 0 1 auto; min-width: 0; overflow: hidden;
-                            text-overflow: ellipsis; }
-  #retry { pointer-events: auto; font: inherit; border: 1.5px solid currentColor;
-           background: none; color: inherit; border-radius: 1rem; padding: .15rem .7rem;
-           cursor: pointer; opacity: .75; }
-  #retry:active { transform: scale(.95); }
-  #inkbar { position: fixed; top: 2.2rem; left: 50%; transform: translateX(-50%);
-            width: min(60vw, 220px); height: 7px; border-radius: 4px; z-index: 3;
-            background: light-dark(rgba(58,43,24,.15), rgba(232,221,203,.15)); }
-  #ink { height: 100%; border-radius: 4px; background: #e93d82; width: 100%;
-         transition: width .1s; }
-  #go { position: fixed; bottom: 3.4rem; left: 50%; transform: translateX(-50%);
-        font: inherit; font-size: 1rem; padding: .6rem 1.8rem; border-radius: 2rem;
-        border: 2px solid currentColor; background: light-dark(rgba(255,250,240,.9), rgba(26,20,38,.9));
-        color: inherit; cursor: pointer; z-index: 3; }
-  #go:active { transform: translateX(-50%) scale(.96); }
-  #go.hide, #inkbar.hide { display: none; }
+                            text-overflow: ellipsis; display: inline-flex; align-items: center;
+                            gap: .4rem; font-size: var(--t-small); }
+  #hud b { font-weight: 800; letter-spacing: -.01em; }
+  .hud-bubble { width: 1.75rem; font-size: .95rem; flex: none; }
+  .hud-chip { padding: .22rem .6rem; border-radius: var(--pill); font-weight: 600;
+              background: color-mix(in srgb, var(--field) 86%, transparent);
+              border: 1px solid var(--line); }
+  .hud-chip:empty { display: none; }
+  .hud-btn { pointer-events: auto; min-height: 2rem; padding: .2rem .75rem; }
+
+  /* 시작·결과 카드 — bl-panel 위에 방울·제목·설명·주 버튼 */
   #overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
-             display: flex; flex-direction: column; align-items: center; gap: .9rem;
-             width: min(84vw, 21rem); padding: 1.5rem 1.6rem; border-radius: 1.25rem;
+             display: flex; flex-direction: column; align-items: center; gap: .85rem;
+             width: min(84vw, 21rem); box-sizing: border-box; padding: 1.6rem 1.5rem 1.4rem;
              text-align: center; z-index: 5;
-             border: 1.5px solid light-dark(rgba(90,60,20,.3), rgba(230,215,190,.25));
-             background: light-dark(rgba(255,250,240,.92), rgba(26,20,38,.92));
+             background: color-mix(in srgb, var(--field) 92%, transparent);
+             box-shadow: 0 .6rem 2rem light-dark(rgb(60 50 30 / .14), rgb(0 0 0 / .5));
              backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
   #overlay.hide { display: none; }
-  #overlay h1 { margin: 0; font-size: 1.15rem; }
-  #overlay p { margin: 0; font-size: .88rem; line-height: 1.55; opacity: .75;
+  #overlay .big { width: 4rem; font-size: 2rem; margin: 0 0 .1rem; }
+  #overlay h1 { margin: 0; font-size: var(--t-h1); font-weight: 800; letter-spacing: -.02em;
+                line-height: 1.25; }
+  #overlay p { margin: 0; font-size: var(--t-small); line-height: 1.6; color: var(--muted);
                white-space: pre-line; }
-  #overlay .big { font-size: 2.2rem; margin: 0; }
-  #btn { font: inherit; font-size: 1.05rem; padding: .75rem 2.2rem; border-radius: 2rem;
-         border: 2px solid currentColor; background: none; color: inherit; cursor: pointer; }
-  #btn:active { transform: scale(.96); }
+  #btn { font-size: 1.05rem; padding: .75rem 2.2rem; min-height: 3rem; }
+  #overlay #best { margin: 0; font-size: var(--t-caption); min-height: 1.1em; }
+
+  /* 잉크 게이지 — 분홍 채움은 게임의 잉크 색이라 그대로 */
+  #inkbar { position: fixed; top: 2.9rem; left: 50%; transform: translateX(-50%);
+            width: min(60vw, 220px); height: 7px; border-radius: var(--pill); z-index: 3;
+            background: var(--sunk); box-shadow: inset 0 0 0 1px var(--line); }
+  #ink { height: 100%; border-radius: var(--pill); background: #e93d82; width: 100%;
+         transition: width .1s; }
+  #go { position: fixed; bottom: 3.4rem; left: 50%; transform: translateX(-50%);
+        font-size: 1rem; padding: .6rem 1.8rem; z-index: 3;
+        box-shadow: 0 .4rem 1.2rem light-dark(rgb(60 50 30 / .18), rgb(0 0 0 / .5)); }
+  #go:active { transform: translateX(-50%) scale(.96); }
+  #go.hide, #inkbar.hide { display: none; }
   #btn.hide { display: none; }
-  #best { margin: 0; font-size: .8rem; opacity: .5; min-height: 1.1em; }
 </style>
 </head>
 <body>
 <div id="hud">
-  <span>🐶 <b>강아지 러시</b></span>
+  <span><span class="bl-bubble hud-bubble" aria-hidden="true">🐶</span> <b>강아지 러시</b></span>
   <span class="sp"></span>
-  <span id="hStage"></span>
-  <button id="retry" title="선 다시 긋기">↻</button>
+  <span id="hStage" class="hud-chip bl-num"></span>
+  <button id="retry" class="bl-btn bl-btn--sm hud-btn" title="선 다시 긋기">↻</button>
 </div>
 <div id="inkbar"><div id="ink"></div></div>
-<button id="go" class="hide">🐝 출발!</button>
-<div id="overlay">
-  <p class="big" id="oEmoji">🐶</p>
+<button id="go" class="bl-btn bl-btn--primary hide">🐝 출발!</button>
+<div id="overlay" class="bl-panel">
+  <p class="big bl-bubble" id="oEmoji">🐶</p>
   <h1 id="oTitle">강아지 러시</h1>
   <p id="oMsg">분홍 잉크로 벽을 그려서
 벌떼로부터 강아지를 5초 동안 지키세요.
@@ -71,8 +79,8 @@
 한 번이라도 물리면 끝!
 연속으로 지켜낸 판 수가 점수입니다.
 (출발 전에는 ↻로 선을 다시 그을 수 있어요)</p>
-  <button id="btn">시작</button>
-  <p id="best"></p>
+  <button id="btn" class="bl-btn bl-btn--primary">시작</button>
+  <p id="best" class="bl-note bl-num"></p>
 </div>
 <canvas id="cv"></canvas>
 <script>
@@ -378,7 +386,7 @@ function capsule(s, col) {
 function draw(now) {
   const D = dark.matches, dpr = devicePixelRatio || 1;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.fillStyle = D ? "#1a1626" : "#f6ead8";
+  ctx.fillStyle = D ? "#0b0f17" : "#f3f0e8";
   ctx.fillRect(0, 0, innerWidth, innerHeight);
   ctx.setTransform(dpr * scale, 0, 0, dpr * scale, dpr * ox, dpr * oy);
   if (phase === "title") return;

@@ -4,28 +4,32 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>완벽한 원 그리기</title>
+<link rel="stylesheet" href="/_shared/bubble.css">
 <style>
-  :root { color-scheme: light dark; }
+  :root { color-scheme: light dark; --accent-h: 176; }
   html, body { margin: 0; height: 100%; overflow: hidden; }
-  body { font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
-         background: light-dark(#eef2f6, #10161f); }
   #cv { display: block; touch-action: none; cursor: crosshair; }
   #hud { position: fixed; inset: 0; display: flex; flex-direction: column;
-         align-items: center; justify-content: center; gap: .5rem;
-         pointer-events: none; text-align: center; padding: 1.5rem;
+         align-items: center; justify-content: center; gap: var(--s-2);
+         pointer-events: none; text-align: center; padding: var(--s-5);
          user-select: none; -webkit-user-select: none; }
-  #score { font-size: 3.2rem; font-weight: bold; font-variant-numeric: tabular-nums;
+  /* 점수 글자색은 JS 가 정확도에 따라 직접 칠한다(빨강→초록) — 게임 의미라 그대로 */
+  #score { font-family: var(--mono); font-size: 3.2rem; font-weight: 800; letter-spacing: -.02em;
            min-height: 1em; transition: color .1s; }
-  #msg { opacity: .7; line-height: 1.5; }
-  #best { position: fixed; top: 1rem; left: 0; right: 0; text-align: center;
-          opacity: .6; font-size: .9rem; pointer-events: none; }
+  #msg { color: var(--muted); line-height: 1.6; max-width: 22rem; }
+  #best { position: fixed; top: 1rem; left: 50%; transform: translateX(-50%);
+          padding: .3rem .85rem; border-radius: var(--pill); white-space: nowrap;
+          font-family: var(--mono); font-size: var(--t-caption); font-weight: 600;
+          color: var(--ink); background: var(--accent-soft);
+          box-shadow: inset 0 0 0 1px var(--accent-line); pointer-events: none; }
+  #best:empty { display: none; }
 </style>
 </head>
 <body>
 <canvas id="cv"></canvas>
-<div id="best"></div>
+<div id="best" class="bl-num"></div>
 <div id="hud">
-  <div id="score"></div>
+  <div id="score" class="bl-num"></div>
   <div id="msg">⭕ 한 붓으로 최대한 완벽한 원을 그려보세요</div>
 </div>
 <script>

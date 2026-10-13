@@ -4,42 +4,52 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>10초 광클</title>
+<link rel="stylesheet" href="/_shared/bubble.css">
 <style>
-  :root { color-scheme: light dark; }
-  body { margin: 0; font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; min-height: 100vh;
+  :root { color-scheme: light dark; --accent-h: 13; }
+  html { background: var(--sunk); }
+  body { margin: 0; min-height: 100vh; background: transparent;
          display: flex; flex-direction: column; align-items: center;
-         justify-content: center; gap: 1.2rem; text-align: center;
-         padding: 1.5rem; box-sizing: border-box; user-select: none;
+         justify-content: center; gap: var(--s-5); text-align: center;
+         padding: var(--s-5) var(--s-4); box-sizing: border-box; user-select: none;
          -webkit-user-select: none; touch-action: manipulation; }
-  h1 { font-size: 1.1rem; margin: 0; opacity: .7; }
-  #count { font-size: 4.5rem; font-weight: bold; font-variant-numeric: tabular-nums;
+  .bl-head { margin: 0; text-align: left; }
+  #count { font-family: var(--mono); font-size: 4.5rem; font-weight: 700; color: var(--accent);
            min-height: 5rem; display: grid; place-items: center; line-height: 1; }
-  #time { font-size: 1.1rem; opacity: .6; font-variant-numeric: tabular-nums; min-height: 1.4em; }
-  #msg { opacity: .7; min-height: 2.6em; white-space: pre-line; }
-  #pad { font: inherit; font-size: 1.4rem; width: min(80vw, 18rem); height: 11rem;
-         border-radius: 1.5rem; border: 2px solid currentColor;
-         background: none; color: inherit; cursor: pointer; }
-  #pad:active { transform: scale(.97); }
-  #pad.done { opacity: .35; cursor: default; }
+  #time { font-family: var(--mono); font-size: 1.1rem; color: var(--muted); min-height: 1.4em; }
+  #msg { color: var(--muted); min-height: 2.6em; white-space: pre-line; line-height: 1.55; }
+  /* 두드리는 패드 — 강조색 방울 면 */
+  #pad { font: inherit; font-size: 1.4rem; font-weight: 800; width: min(80vw, 18rem); height: 11rem;
+         border-radius: var(--r-lg); border: 0; cursor: pointer;
+         color: var(--accent-ink); background: var(--accent);
+         background-image: linear-gradient(rgb(255 255 255 / .14), transparent 45%);
+         box-shadow: 0 .35rem 0 color-mix(in oklch, var(--accent) 70%, black),
+                     0 .6rem 1.4rem light-dark(rgba(60,50,30,.18), rgba(0,0,0,.45));
+         transition: transform .06s, box-shadow .06s; }
+  #pad:active { transform: translateY(.25rem) scale(.98);
+                box-shadow: 0 .1rem 0 color-mix(in oklch, var(--accent) 70%, black); }
+  #pad.done { opacity: .4; cursor: default; }
   #pad.done:active { transform: none; }
-  #best { opacity: .5; font-size: .85rem; min-height: 1.2em; }
+  #best { color: var(--muted); font-size: var(--t-small); min-height: 1.2em; }
   /* 데스크톱: 사용 영역(모바일 폭 스테이지) 밖은 톤을 낮춰 구분 */
-  body::before { content: ""; position: fixed; inset: 0; z-index: -2;
-                 background: light-dark(#dee6ee, #0a0e15); }
   body::after { content: ""; position: fixed; top: 0; bottom: 0; left: 50%;
                 transform: translateX(-50%); width: min(100vw, 34rem); z-index: -1;
-                background: light-dark(#eef2f6, #10161f);
-                box-shadow: 0 0 1.5rem light-dark(rgba(30,50,70,.14), rgba(0,0,0,.5)); }
+                background: var(--bg);
+                box-shadow: 0 0 1.5rem light-dark(rgba(60,50,30,.12), rgba(0,0,0,.5)); }
 </style>
 </head>
 <body>
-  <h1>👆 10초 광클</h1>
-  <div id="count">0</div>
-  <div id="time">10.0초</div>
+  <header class="bl-head">
+    <span class="bl-bubble" aria-hidden="true">👆</span>
+    <h1>10초 광클</h1>
+    <p>10초 동안 몇 번 두드릴 수 있을까</p>
+  </header>
+  <div id="count" class="bl-num">0</div>
+  <div id="time" class="bl-num">10.0초</div>
   <div id="msg">첫 클릭과 동시에 10초 카운트가 시작돼요.
 있는 힘껏 두드리세요!</div>
   <button id="pad">시작!</button>
-  <div id="best"></div>
+  <div id="best" class="bl-num"></div>
 <script>
 const countEl = document.getElementById("count");
 const timeEl = document.getElementById("time");

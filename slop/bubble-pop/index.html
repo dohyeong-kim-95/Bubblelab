@@ -4,45 +4,48 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>버블팝</title>
+<link rel="stylesheet" href="/_shared/bubble.css">
 <style>
-  :root { color-scheme: light dark; }
-  body { margin: 0; overflow: hidden; font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
-         background: light-dark(#eef6fb, #0b1420); user-select: none;
+  :root { color-scheme: light dark; --accent-h: 280; }
+  body { margin: 0; overflow: hidden; user-select: none;
          -webkit-user-select: none; touch-action: manipulation; }
   canvas { display: block; }
-  #score { position: fixed; top: 1rem; left: 1.25rem; font-size: 1.1rem;
-           color: light-dark(#123, #cde); }
-  #time { position: fixed; top: 1rem; right: 1.25rem; font-size: 1.1rem;
-          font-variant-numeric: tabular-nums; color: light-dark(#123, #cde); }
+  /* HUD — 숫자만 mono */
+  #score, #time { position: fixed; top: 1rem; font-family: var(--mono); font-size: 1.1rem;
+                  font-weight: 700; color: var(--ink); pointer-events: none; }
+  #score { left: 1.25rem; }
+  #time { right: 1.25rem; }
   #overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-             display: flex; flex-direction: column; align-items: center; gap: 1rem;
-             padding: 1.6rem 2rem; border-radius: 1.25rem; text-align: center;
-             border: 1.5px solid light-dark(rgba(30,50,70,.25), rgba(200,215,235,.25));
-             background: light-dark(rgba(255,255,255,.85), rgba(15,22,32,.85));
+             display: flex; flex-direction: column; align-items: center; gap: var(--s-4);
+             padding: var(--s-5) var(--s-5) var(--s-4); text-align: center; box-sizing: border-box;
+             width: min(86vw, 20rem);
+             background: color-mix(in srgb, var(--field) 88%, transparent);
              backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-             color: light-dark(#123, #cde); width: min(80vw, 18rem); }
+             box-shadow: 0 .8rem 2rem light-dark(rgb(60 50 30 / .12), rgb(0 0 0 / .45)); }
   #overlay.hide { display: none; }
-  #overlay h1 { font-size: 1.15rem; margin: 0; opacity: .75; }
-  #msg { margin: 0; opacity: .7; white-space: pre-line; }
-  #result { font-weight: bold; white-space: pre-line; min-height: 0; }
-  #btn { font: inherit; font-size: 1.15rem; padding: .8rem 2.4rem;
-         border-radius: 2rem; border: 2px solid currentColor;
-         background: none; color: inherit; cursor: pointer; }
-  #btn:active { transform: scale(.96); }
-  #btn:disabled { opacity: .4; cursor: default; }
-  #best { opacity: .5; font-size: .85rem; min-height: 1.2em; margin: 0; }
+  #overlay .bl-head { margin: 0; text-align: left; }
+  #msg { margin: 0; color: var(--muted); line-height: 1.6; white-space: pre-line; }
+  #msg:empty { display: none; }
+  #result { font-weight: 700; line-height: 1.6; white-space: pre-line; }
+  #result:empty { display: none; }
+  #btn { font-size: 1.1rem; min-height: 3rem; padding: .7rem 2.6rem; }
+  #best { margin: 0; color: var(--muted); font-size: var(--t-caption); min-height: 1.2em; }
 </style>
 </head>
 <body>
-<div id="score">🫧 0개</div>
-<div id="time">20.0초</div>
-<div id="overlay">
-  <h1>🫧 버블팝</h1>
+<div id="score" class="bl-num">🫧 0개</div>
+<div id="time" class="bl-num">20.0초</div>
+<div id="overlay" class="bl-panel">
+  <header class="bl-head">
+    <span class="bl-bubble" aria-hidden="true">🫧</span>
+    <h1>버블팝</h1>
+    <p>20초 동안 터트린 개수로 승부</p>
+  </header>
   <p id="msg">20초 동안 버블을
 최대한 많이 터트리세요!</p>
   <div id="result"></div>
-  <button id="btn">시작!</button>
-  <p id="best"></p>
+  <button id="btn" class="bl-btn bl-btn--primary">시작!</button>
+  <p id="best" class="bl-mono bl-num"></p>
 </div>
 <canvas id="c"></canvas>
 <script>

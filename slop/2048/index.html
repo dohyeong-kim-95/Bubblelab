@@ -4,18 +4,23 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title>Number Bloom</title>
+<link rel="stylesheet" href="/_shared/bubble.css">
 <style>
-  :root { color-scheme: light dark; }
+  :root { color-scheme: light dark; --accent-h: 146; }
   html, body { margin: 0; height: 100%; overflow: hidden; touch-action: none; }
-  body { font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
-         background: light-dark(#eef2f6, #10161f);
-         color: light-dark(#17202b, #dbe5ef);
+  html { background: var(--sunk); }
+  body { background: transparent;
          display: flex; flex-direction: column; align-items: center;
-         justify-content: center; gap: 1rem; user-select: none;
-         -webkit-user-select: none; padding: 1rem; box-sizing: border-box; }
-  h1 { margin: 0; font-size: 1.4rem; }
-  #hud { display: flex; gap: .8rem; font-size: .9rem; opacity: .8;
-         font-variant-numeric: tabular-nums; }
+         justify-content: center; gap: var(--s-4); user-select: none;
+         -webkit-user-select: none; padding: var(--s-4); box-sizing: border-box; }
+  .bl-head { margin: 0; }
+  #hud { display: flex; align-items: center; gap: .5rem; font-family: var(--mono);
+         font-size: .9rem; color: var(--muted); }
+  #hud #score, #hud #best { padding: .3rem .85rem; border-radius: var(--pill);
+         background: var(--field); border: 1px solid var(--line); }
+  #hud #score { font-weight: 700; color: var(--accent); background: var(--accent-soft);
+                border-color: var(--accent-line); }
+  /* 판·타일 색은 놀이 내용이라 그대로 둔다 */
   #wrap { position: relative; }
   #board { display: grid; grid-template-columns: repeat(4, 1fr);
            grid-template-rows: repeat(4, 1fr); gap: 2.5vmin;
@@ -23,7 +28,7 @@
            border-radius: 1rem; box-sizing: border-box;
            background: light-dark(#c8d2dc, #1c2735); }
   .cell { border-radius: .5rem; display: flex; align-items: center;
-          justify-content: center; font-weight: bold;
+          justify-content: center; font-weight: bold; font-family: var(--mono);
           font-size: clamp(1rem, 6.5vmin, 2rem);
           background: light-dark(#dde5ec, #26344455); color: #17202b; }
   .cell.small { font-size: clamp(.7rem, 4.5vmin, 1.4rem); }
@@ -44,28 +49,29 @@
   .vbig  { background: #1e293b; color: #fff; }
   #over { position: absolute; inset: 0; border-radius: 1rem; display: none;
           flex-direction: column; align-items: center; justify-content: center;
-          gap: .8rem; text-align: center; font-weight: bold; font-size: 1.3rem;
-          background: light-dark(#eef2f6cc, #10161fcc); backdrop-filter: blur(3px); }
+          gap: var(--s-4); text-align: center; font-weight: 800; font-size: 1.3rem;
+          color: var(--ink); padding: var(--s-4); box-sizing: border-box;
+          background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(3px); }
   #over.show { display: flex; }
-  button { font: inherit; font-weight: bold; padding: .6rem 1.2rem;
-           border-radius: .7rem; border: 1px solid currentColor;
-           background: none; color: inherit; cursor: pointer; }
-  #hint { opacity: .55; font-size: .8rem; text-align: center; }
+  #overmsg { font-variant-numeric: tabular-nums; }
+  #hint { color: var(--muted); font-size: var(--t-caption); text-align: center; }
   /* 데스크톱: 사용 영역(모바일 폭 스테이지) 밖은 톤을 낮춰 구분 */
-  body::before { content: ""; position: fixed; inset: 0; z-index: -2;
-                 background: light-dark(#dee6ee, #0a0e15); }
   body::after { content: ""; position: fixed; top: 0; bottom: 0; left: 50%;
                 transform: translateX(-50%); width: min(100vw, 34rem); z-index: -1;
-                background: light-dark(#eef2f6, #10161f);
-                box-shadow: 0 0 1.5rem light-dark(rgba(30,50,70,.14), rgba(0,0,0,.5)); }
+                background: var(--bg);
+                box-shadow: 0 0 1.5rem light-dark(rgba(60,50,30,.12), rgba(0,0,0,.5)); }
 </style>
 </head>
 <body>
-<h1>🔢 Number Bloom</h1>
-<div id="hud"><span id="score">점수 0</span><span>·</span><span id="best"></span></div>
+<header class="bl-head">
+  <span class="bl-bubble" aria-hidden="true">🔢</span>
+  <h1>Number Bloom</h1>
+  <p>같은 숫자를 합쳐 2048을 피워 보세요</p>
+</header>
+<div id="hud" class="bl-num"><span id="score">점수 0</span><span>·</span><span id="best"></span></div>
 <div id="wrap">
   <div id="board"></div>
-  <div id="over"><span id="overmsg"></span><button id="retry">다시 시작</button></div>
+  <div id="over"><span id="overmsg"></span><button id="retry" class="bl-btn bl-btn--primary">다시 시작</button></div>
 </div>
 <div id="hint">방향키 또는 스와이프로 타일을 합쳐보세요</div>
 <script>
