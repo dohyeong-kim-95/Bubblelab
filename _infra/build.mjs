@@ -425,12 +425,15 @@ ${preconnectLinks}
   footer a { color: inherit; text-underline-offset: .2em; }
   /* slop: 이름 없이 방울만, 항상 3열 — 이름은 aria-label·title 로 남긴다 */
   body[data-site="slop"] .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: 34rem; margin: 0 auto; }
-  body[data-site="slop"] .card:not(.card--hof) { gap: 0; }
   body[data-site="slop"] .card:not(.card--hof) .name,
-  body[data-site="slop"] .card:not(.card--hof) .champ,
   body[data-site="slop"] .card:not(.card--hof) .mine { position: absolute; width: 1px; height: 1px;
           overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   body[data-site="slop"] .card:not(.card--hof) .emoji { width: 62%; font-size: clamp(2rem, 9vw, 3.6rem); }
+  /* 이번 주 1위 기록 값 — 기록이 있으면 방울 아래 한 줄, 없으면(:empty) 방울만 가운데 */
+  body[data-site="slop"] .card:not(.card--hof) { gap: .4rem; }
+  body[data-site="slop"] .card:not(.card--hof) .champ:not(:empty) ~ .mine { display: none; }
+  body[data-site="slop"] .card:not(.card--hof):has(.champ:not(:empty)) .emoji { width: 54%; }
+  body[data-site="slop"] .card:not(.card--hof) .champ { font-size: clamp(.62rem, 2.6vw, .78rem); color: var(--ink); opacity: .75; }
   @media (max-width: 600px) {
     body { padding-top: 2rem; }
     .grid { gap: .65rem; grid-template-columns: repeat(auto-fill, minmax(8.2rem, 1fr)); }
@@ -530,8 +533,10 @@ async function renderWeekPodium(records) {
       const r = records[el.dataset.game];
       if (!r) continue;
       // text 없는 옛 기록은 생 float가 못생기지 않게 반올림해서 보여준다
-      el.textContent = \`👑 \${r.nick} · \${r.text ?? Math.round(r.score * 100) / 100}\`;
-      el.title = "이번 주 1위 — 월요일 09시 초기화";
+      const text = r.text ?? Math.round(r.score * 100) / 100;
+      // slop 은 이모지만 있는 좁은 3열이라 기록 값만 — 닉네임은 툴팁으로
+      el.textContent = SITE === "slop" ? \`👑 \${text}\` : \`👑 \${r.nick} · \${text}\`;
+      el.title = \`이번 주 1위 \${r.nick} · \${text} — 월요일 09시 초기화\`;
       wins[r.nick] = (wins[r.nick] ?? 0) + 1;
     }
     // 이번 주 삼대장 시상대 — 카드 챔피언과 같은 응답을 재활용해 따로 안 부른다.
