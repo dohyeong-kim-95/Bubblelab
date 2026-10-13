@@ -5,8 +5,8 @@ import { AssetFlagsDO } from "./asset-flags.js";
 
 const ctx = { waitUntil() {} };
 
-test("realtime and planner routes are closed unless explicitly enabled", async () => {
-  const env = { ENABLE_REALTIME: "false", ENABLE_PLANNER: "false" };
+test("realtime routes are closed unless explicitly enabled", async () => {
+  const env = { ENABLE_REALTIME: "false" };
   const realtime = await worker.fetch(
     new Request("https://games.bubblelab.dev/_rt/avalon", {
       headers: { Upgrade: "websocket" },
@@ -15,14 +15,6 @@ test("realtime and planner routes are closed unless explicitly enabled", async (
     ctx,
   );
   assert.equal(realtime.status, 503);
-
-  const planner = await worker.fetch(
-    new Request("https://util.bubblelab.dev/_planner/data"),
-    env,
-    ctx,
-  );
-  assert.equal(planner.status, 503);
-  assert.match(planner.headers.get("Content-Security-Policy"), /default-src 'self'/);
 
   const podcast = await worker.fetch(
     new Request("https://podcast.bubblelab.dev/_podcast/session"),
@@ -880,24 +872,3 @@ test("confidential static cache only admits code, fonts, and explicitly non-sens
   assert.equal(response.headers.get("Cache-Control"), "no-store", "문서는 no-store");
 });
 
-test("잠든 화면은 코드와 데이터를 남긴 채 입구만 닫힌다", async () => {
-  const env = { ASSETS: { fetch: () => new Response("page", { headers: { "Content-Type": "text/html" } }) } };
-  const get = (url) => worker.fetch(new Request(url), env, ctx);
-
-  for (const url of [
-    "https://estate.bubblelab.dev/",
-    "https://estate.bubblelab.dev/basemap-dongtan.png",
-    "https://trip.bubblelab.dev/",
-    "https://invest.bubblelab.dev/",
-    "https://util.bubblelab.dev/planner/",
-  ]) {
-    assert.equal((await get(url)).status, 404, url);
-  }
-  // 같은 서브도메인의 다른 화면은 멀쩡해야 한다.
-  assert.equal((await get("https://util.bubblelab.dev/")).status, 200);
-  assert.equal((await get("https://util.bubblelab.dev/calendar/")).status, 200);
-  // API 는 기능 플래그로 fail-closed.
-  for (const path of ["/_invest/state", "/_planner/data", "/_trip/watches"]) {
-    assert.equal((await get(`https://bubblelab.dev${path}`)).status, 503, path);
-  }
-});

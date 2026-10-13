@@ -5,7 +5,6 @@ import {
   assertChatWelcome,
   assertDuriStatus,
   assertHealth,
-  assertInvestState,
   assertStats,
   assertCatalog,
   assetCategories,
@@ -74,54 +73,6 @@ test("빈 집계는 통과시키지 않는다", () => {
   assert.deepEqual(at(checks), ["stats.pages"]);
 });
 
-const investState = (over = {}) => ({
-  updatedAt: Date.now(),
-  byCurrency: { KRW: { value: 1_000_000, cost: 900_000, pnl: 100_000, rate: 0.11 } },
-  positions: [{ symbol: "005930", value: 1_000_000 }],
-  series: { KRW: [{ date: kstDate(), value: 1_000_000 }] },
-  stale: false,
-  ...over,
-});
-
-test("정상 잔고 상태는 통과한다", () => {
-  const checks = createChecks();
-  assertInvestState(investState(), checks);
-  assert.deepEqual(checks.failures, []);
-});
-
-// 과거 사고의 회귀 테스트: 200 이어도 안이 비어 있으면 실패여야 한다.
-test("빈 값으로 덮인 잔고를 잡는다", () => {
-  const checks = createChecks();
-  assertInvestState({
-    updatedAt: Date.now(), byCurrency: {}, positions: [], series: {}, stale: false,
-  }, checks);
-  const labels = at(checks);
-  assert.ok(labels.includes("invest.byCurrency"));
-  assert.ok(labels.includes("invest.positions"));
-  assert.ok(labels.includes("invest.series"));
-});
-
-test("합계가 전부 0인 잔고도 잡는다", () => {
-  const checks = createChecks();
-  assertInvestState(investState({
-    byCurrency: { KRW: { value: 0, cost: 0, pnl: 0, rate: 0 } },
-  }), checks);
-  assert.ok(at(checks).some((label) => label.includes("전부 0이 아님")));
-});
-
-test("스냅샷이 아예 없으면(updatedAt null) 실패한다", () => {
-  const checks = createChecks();
-  assertInvestState(investState({ updatedAt: null }), checks);
-  assert.ok(at(checks).includes("invest.updatedAt"));
-});
-
-// 집 PC 데몬이 꺼져 있는 것은 배포 잘못이 아니다 — 되돌리지 않고 경고만.
-test("오래된 잔고는 경고지 실패가 아니다", () => {
-  const checks = createChecks();
-  assert.throws(() => assertInvestState(investState({ stale: true }), checks), Warning);
-  assert.deepEqual(checks.failures, []);
-});
-
 test("duri 상태: ack 가 head 를 넘어서면 실패", () => {
   const checks = createChecks();
   assertDuriStatus({ head: 3, ackSeq: 9, buffered: 0, cal: 0, pending: 0 }, checks);
@@ -184,7 +135,7 @@ test("커밋을 지정하지 않으면 health 프로브는 경고로만 다룬�
 test("자격증명이 없으면 게이트 안쪽은 SKIP (거짓 실패를 만들지 않는다)", async () => {
   const creds = credsFromEnv({});
   const probes = [{
-    id: "invest:state", surface: "do", title: "잔고", needs: "invest",
+    id: "duri:status", surface: "do", title: "듀리", needs: "duri",
     run: () => { throw new Error("불려서는 안 된다"); },
   }];
   const [result] = await runProbes(probes, { creds });
@@ -238,7 +189,7 @@ test("병렬 완료 순서와 무관하게 보고 순서와 실패 semantics를 
       async run() { await new Promise((resolve) => setTimeout(resolve, 25)); },
     },
     {
-      id: "skip", surface: "do", title: "건너뜀", needs: "invest",
+      id: "skip", surface: "do", title: "건너뜀", needs: "duri",
       run() { throw new Error("불려서는 안 된다"); },
     },
     {

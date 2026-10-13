@@ -47,7 +47,7 @@ test("카테고리 홈 자신에는 주입되지 않는다 (갈 곳이 없다)",
 });
 
 test("카드 구조가 아닌 서비스·비공개 사이트에는 주입되지 않는다", () => {
-  for (const site of ["podcast", "duri", "admin", "www", "work", "estate", "trip", "life"]) {
+  for (const site of ["podcast", "duri", "admin", "www", "work", "life"]) {
     const base = join(DIST, site);
     if (!existsSync(base)) continue;
     assert.ok(!has(join(base, "index.html")), `${site} 홈에 홈 버튼이 붙었다`);
@@ -163,17 +163,13 @@ test("비공개 서브도메인은 풀다운 메뉴에도 나오지 않는다", 
   const menuOf = (site) => readFileSync(join(DIST, site, "index.html"), "utf8");
   for (const site of ["slop", "util", "games"]) {
     const home = menuOf(site);
-    for (const hidden of ["invest", "admin", "work", "estate", "duri", "podcast", "test", "trip"]) {
+    for (const hidden of ["admin", "work", "duri", "podcast", "test"]) {
       assert.ok(!home.includes(`https://${hidden}.bubblelab.dev`),
         `${site} 홈 풀다운에 비공개 ${hidden}이 나온다`);
     }
   }
   // 페이지 자체는 살아 있어야 한다 (주소를 아는 사람은 들어간다)
   assert.ok(existsSync(join(DIST, "duri/index.html")));
-  // 잠든 서브도메인은 아예 배포되지 않는다 (_infra/dormant.js)
-  for (const site of ["espanol", "estate", "invest", "trip"]) {
-    assert.ok(!existsSync(join(DIST, site)), `잠든 ${site} 가 배포됐다`);
-  }
 });
 
 // ── 배경화면 상세페이지 (/assets/wallpaper/<id>/) ────────────────────────
@@ -212,20 +208,6 @@ function landingIndex() {
   return JSON.parse(raw);
 }
 
-test("sktest is deployed without appearing in public navigation or search", () => {
-  for (const file of ["index.html", "app.js", "core.js", "questions.js", "style.css", "robots.txt", "workbook/index.html", "vendor/pdf.mjs", "vendor/pdf.worker.mjs"]) {
-    assert.ok(existsSync(join(DIST, "sktest", file)), `sktest/${file} must be deployed`);
-  }
-  assert.ok(!landingIndex().some(card => card.site === "sktest"));
-  for (const site of ["www", ...CARD_SITES]) {
-    assert.doesNotMatch(readFileSync(join(DIST, site, "index.html"), "utf8"), /sktest\.bubblelab\.dev/);
-  }
-  assert.ok(!has(join(DIST, "sktest", "index.html")));
-  for (const file of ["index.html", "workbook/index.html"]) {
-    assert.doesNotMatch(readFileSync(join(DIST, "sktest", file), "utf8"), /engagement\.js|dock\.js/);
-  }
-});
-
 test("랜딩 검색 색인이 공개 카드로 채워진다", () => {
   const cards = landingIndex();
   assert.ok(cards.length >= 40, `색인이 ${cards.length}개뿐이다 — 빌드 산출물을 의심하라`);
@@ -257,7 +239,7 @@ test("에이전트 문서(README·CLAUDE·AGENTS)는 배포되지 않는다", ()
 test("비공개 서브도메인·감춘 카드는 검색 색인에도 없다", () => {
   const cards = landingIndex();
   // 카테고리 홈 카드에서 감춘 것과 같은 기준이어야 한다 — 검색이 뒷문이 되면 안 된다.
-  for (const site of ["admin", "work", "podcast", "estate", "duri", "test", "invest", "trip", "www"]) {
+  for (const site of ["admin", "work", "podcast", "duri", "test", "www"]) {
     const leaked = cards.filter((c) => c.site === site).map((c) => c.name);
     assert.deepEqual(leaked, [], `${site}가 검색 색인에 샜다`);
   }
@@ -274,7 +256,7 @@ test("life 에는 공용 스크립트를 넣지 않는다 (여는 속도)", () =
   }
   // 워커가 방문 집계에서 life 를 빼고 있고 공유·홈 버튼도 없다 — 받아 봐야 하는 일이 없다.
   const worker = readFileSync(new URL("./worker.js", import.meta.url), "utf8");
-  assert.match(worker, /!\["admin", "work", "estate", "life"\]\.includes\(site\)/);
+  assert.match(worker, /!\["admin", "work", "life"\]\.includes\(site\)/);
 
   // 다른 사이트는 그대로 받아야 한다.
   assert.ok(readFileSync(join(DIST, "slop/index.html"), "utf8").includes("engagement.js"));

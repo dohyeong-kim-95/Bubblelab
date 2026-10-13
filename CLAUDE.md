@@ -20,28 +20,10 @@
   main에서 직접 작업한다.
 - **명시적인 요청이 없으면 자기 서브도메인 밖은 add하지 않는다.** `git add -A`·
   `git add .` 금지. 여러 사람·여러 에이전트 세션이 같은 작업 트리를 동시에 쓴다 —
-  `invest`를 고치는 중이면 `invest/`와 그에 딸린 파일(`_infra/invest.js`,
-  `_src/invest-sink/`)만 add하고, 함께 바뀌어 있는 `duri/`·`estate/`는 남의
+  `duri`를 고치는 중이면 `duri/`와 그에 딸린 파일(`_infra/duri.js`,
+  `_src/duri-sink/`)만 add하고, 함께 바뀌어 있는 `life/`·`util/`은 남의
   작업이니 그대로 둔다(실제로 휩쓸려 나간 적이 있다). 커밋 전 `git status
   --short`로 확인한다. 이미 푸시된 이력은 혼자 다시 쓰지 말고 사용자에게 알린다.
-
-## 잠들어 있는 화면
-
-`espanol`, `estate`, `invest`, `trip`, `util/planner` 는 **내려 둔 상태**다. 목록은
-`_infra/dormant.js` 한 곳에 있고, 워커가 404 로 답하며 빌드가 아예 배포하지 않는다.
-`ENABLE_INVEST`·`ENABLE_TRIP_WATCH`·`ENABLE_PLANNER` 는 `"false"`, trip 가격 수집
-cron 도 빼 뒀다.
-
-**코드와 Durable Object 데이터는 그대로 있다.** 바인딩과 migrations 를 지우면
-invest 잔고 이력과 trip 가격 관측이 사라지고 되살릴 방법이 없으니 건드리지 말 것.
-하나씩 필요해질 때 `dormant.js` 에서 한 줄 지우고 해당 플래그를 되돌리면 살아난다
-(되살릴 항목은 그 파일에 적혀 있다).
-
-`espanol`(영화로 스페인어) 은 서버도 DO 도 쓰지 않아 폴더만 그대로 남아 있다.
-스페인어는 **`life/espanol/`(노래로 스페인어)** 로 자리를 옮겼다 — 목적도 방식도
-다른 별개의 도구이고, 옛 폴더에서 옮겨온 코드는 없다.
-
-아래 문서에 남아 있는 trip·estate·invest 설명은 되살릴 때를 위한 것이다.
 
 ## 토이 작성 관례
 
@@ -122,12 +104,11 @@ MCP 로 진행한다** — 순서는 같은 파일의 「`gh` 가 없는 환경�
   형태**를 본다. 새 서브도메인 폴더는 자동으로 프로브가 생긴다.
 - **검증은 프로덕션에 쓰지 않는다.** 검증 페이로드를 저장소에 넣는 방식은
   금지 — 예전에 그날 잔고 스냅샷을 빈 값으로 덮어써서 복구해야 했다. 쓰기
-  경로는 "지금 저장된 값이 비어 있지 않은지" 읽어서 검사한다(InvestDO 는
-  빈 스냅샷 덮어쓰기를 409로 거부한다).
-- 인증 게이트 뒤(invest·duri·admin)는 자격증명이 있을 때만 들어가고, 없으면
+  경로는 "지금 저장된 값이 비어 있지 않은지" 읽어서 검사한다.
+- 인증 게이트 뒤(duri·admin·life)는 자격증명이 있을 때만 들어가고, 없으면
   게이트가 막는지까지만 확인하고 SKIP 한다 — 거짓 실패를 만들지 않는다.
   자격증명은 `.verify.env`(커밋되지 않음)나 환경변수로 준다:
-  `BL_ADMIN_ID` `BL_ADMIN_PASSWORD` `BL_INVEST_PASSWORD` `BL_DURI_PASSWORD`.
+  `BL_ADMIN_ID` `BL_ADMIN_PASSWORD` `BL_DURI_PASSWORD` `BL_LIFE_PASSWORD`.
 - 배포 신원은 `/_health` — 빌드가 구운 커밋 SHA·바인딩·기능 플래그를 돌려준다.
   `make ship` 은 이 값이 방금 올린 커밋이 될 때까지 기다린 뒤 검증한다(옛 배포를
   검사하고 통과했다고 착각하지 않게).
@@ -285,43 +266,6 @@ scroll-snap 이다. 자세한 것은 `life/README.md`.
 서버는 E2E라 `kind` 를 못 보고 상한(2000)을 일정과 합쳐 세므로, 날마다 쌓이는
 기록은 **사람당 한 달 한 건**으로 묶는다(`duri/README.md`). 셋업·프로토콜·한계는
 `duri/README.md` 참고.
-
-## 여행 계획·예산 (trip/) — 잠들어 있음
-
-`trip/`은 혼자 쓰는 여행 계획·예산 화면이다(`CONFIDENTIAL_SUBDOMAINS`, 랜딩·풀다운·
-검색 미노출). 토이 관례(share.js, 주간 기록)를 적용하지 않는다. **로그인은 없고**
-estate·lab처럼 주소를 아는 사람은 들어온다 — 워커가 `no-store`·noindex를 붙이고
-방문 집계에서 뺀다.
-
-화면은 **계획 / 실행** 두 장이고 저장 경계가 다르다. **실행**(일정표·예산)은 브라우저
-localStorage에만 있고 서버로 가지 않는다(내보내기/가져오기 JSON이 유일한 백업).
-**계획**(여행 후보와 가격 관측)만 서버에 쌓인다 — 일정·예산·메모는 올라가지 않는다.
-이 경계를 흐리지 말 것.
-
-- 일정·예산 계산은 `trip/budget.js` 한 모듈에 모은다(화면과 `_infra/trip.test.mjs`가
-  같이 쓴다 — 합계를 화면 안에서 따로 더하지 말 것).
-- **관측 대상의 상위 개념은 여행지다**(`DestinationWatch`) — "몽골"이 여행지고
-  ICN→UBN 은 그걸 실현하는 노선 중 하나다. 기간·박수·인원은 여행지에 있고 격자·관측은
-  노선(`flights[]`)마다 붙는다. 패키지(`packages[]`)는 모델만 있고 수집기는 없다.
-- 가격 관측은 `_infra/trip-watch.js`(TripWatchDO)+`_infra/trip-flights.js`(프로바이더
-  계층: amadeus·sink·mock). cron `20 */6 * * *`이 오래 안 본 조합부터 조금씩만
-  갱신한다 — 한 번에 그리드 전체를 돌리면 상류 쿼터가 하루도 못 간다. 줄 세우는
-  기준은 가격을 받은 시각이 아니라 **조회를 시도한 시각**이다(항공편 없는 날짜가
-  큐 맨 앞에 영원히 남아 그리드 뒤쪽을 굶기는 사고가 있었다).
-- **가격의 성격을 섞지 말 것.** 관측마다 `quality`(reference·live·verified)를 저장하고
-  화면이 배지로 나눈다. "예매가(bookable)"라고 부르지 않는다 — 검색 결과 가격은 결제
-  화면에서 바뀔 수 있다. Amadeus Self-Service는 종료돼 신규 키를 못 받으므로 평소
-  경로는 집 PC 데몬(`sink`)이고, 자격증명이 없으면 `mock`(참고가)으로 돈다.
-- **패키지는 표시가만 저장하지 말 것.** `listedPrice`와 `effectivePrice`(표시가 + 아는
-  필수비용)를 나눠 두고, 금액을 모르는 항목은 0원으로 세지 말고 `unknownCosts`에
-  이름만 남긴다(화면이 "추가비용 확인 필요"로 표시). 최저가 정렬도 실질가 기준이다.
-  파서는 `node _infra/trip-package-parse.mjs 저장한페이지.html`로 실제 페이지에
-  맞춰 교정한다 — 셀렉터를 짐작해서 넣지 않는다.
-- `/_trip/*` 는 **읽기·쓰기 모두** admin 발급 토큰(`/api/trip/token`)을 요구한다 —
-  응답에 여행지·기간·인원이 들어 있어 공개하면 여행 의향이 읽힌다. 데몬 push만 별도
-  `TRIP_SINK_SECRET`. `ENABLE_TRIP_WATCH` var는 fail-closed.
-
-자세한 것은 `trip/README.md`.
 
 ## 인사이트 아카이브 (lab/claude-insights)
 

@@ -19,7 +19,6 @@
 | `idle/` | <https://idle.bubblelab.dev> | Experiment | 7일 단위 방치형 게임 |
 | `util/` | <https://util.bubblelab.dev> | Beta | 달력·운세·사진·PDF·이미지 변환·플래너 도구 |
 | `games/` | <https://games.bubblelab.dev> | Archived | 실시간 게임 서버 비활성·목록 비노출 |
-| `invest/` | <https://invest.bubblelab.dev> | Restricted | 토스증권 조회 전용 잔고·수익률 (비밀번호 게이트) |
 | `admin/` | <https://admin.bubblelab.dev> | Restricted | 인증 후 통계·기록·공지 관리 |
 | `work/` | <https://work.bubblelab.dev> | Restricted | 외주 작업 클라이언트 미리보기 (비밀번호 게이트) |
 
@@ -98,7 +97,7 @@ main push
 
 배포에는 `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` GitHub Actions secret이
 필요합니다. 운영 환경에는 `ADMIN_ID`, `ADMIN_PASSWORD`, `ADMIN_SESSION_SECRET`,
-`PLANNER_SESSION_SECRET`, `KASI_SERVICE_KEY`가 모두 Worker secret으로 필요합니다.
+`KASI_SERVICE_KEY`가 모두 Worker secret으로 필요합니다.
 자세한 API와 스토리지 구조는
 [`_infra/README.md`](_infra/README.md)를 참고하세요.
 
@@ -127,12 +126,12 @@ main push
 **명시적인 요청이 없으면 자기 서브도메인 밖은 `add` 하지 않습니다.**
 
 이 리포는 여러 사람·여러 에이전트 세션이 **같은 작업 트리를 동시에** 씁니다.
-지금 `invest`를 고치고 있다면 커밋에 들어갈 것은 `invest/`와 그에 딸린 파일
-(`_infra/invest.js`, `_src/invest-sink/`)뿐입니다. `duri/`나 `estate/`가 함께
+지금 `duri`를 고치고 있다면 커밋에 들어갈 것은 `duri/`와 그에 딸린 파일
+(`_infra/duri.js`, `_src/duri-sink/`)뿐입니다. `life/`나 `util/`이 함께
 바뀌어 있어도 그건 남이 하던 작업이니 그대로 둡니다.
 
 ```bash
-git add invest/ _infra/invest.js      # ✅ 내 서브도메인과 그에 딸린 파일만
+git add duri/ _infra/duri.js          # ✅ 내 서브도메인과 그에 딸린 파일만
 git add -A                            # ❌ 남의 미완성 작업까지 딸려 갑니다
 ```
 

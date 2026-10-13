@@ -8,7 +8,6 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 // 게이트 뒤(work·admin·duri·podcast)는 로그인이 필요해 스모크 대상이 아니다.
-// 잠들어 있는 화면(espanol·estate·invest·trip·util/planner)도 배포되지 않아 대상이 아니다 — _infra/dormant.js.
 const SCREENS = [
   { name: "랜딩", path: "/" },
   { name: "slop 홈", path: "/slop/" },

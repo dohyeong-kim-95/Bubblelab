@@ -21,7 +21,7 @@
 
   const page = `${site ?? ""}/${card ?? ""}`.toLowerCase();
   // 혼자 쓰는 화면은 집계하지 않는다 — 내 체류시간이 인기 카드 순위를 흔든다.
-  if (["admin", "work", "estate", "trip"].includes(site)) return;
+  if (["admin", "work"].includes(site)) return;
 
   // 유효 방문 확정: 화면에 실제로 표시된 채 3초 이상 머물거나 클릭·키·휠·
   // 터치·스크롤이 발생하면 /_visit 비콘을 한 번 보낸다. HTML만 여는 크롤러는

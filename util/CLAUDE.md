@@ -10,7 +10,6 @@
 | `brief/` | `/_brief/today`·`/rates`·`/push` → `_infra/brief.js` (BriefDO) | `_infra/brief.test.mjs`, e2e |
 | `fortune/` | `/_fortune/chart`·`/push` → `_infra/fortune.js` (FortuneDO), 신살·12운성·대운은 `_infra/saju-detail.js`, 토정비결 작괘는 `_infra/tojeong.js`(본문은 정적 `fortune/tojeong/<괘>.json`) | `_infra/fortune.test.mjs`, `_infra/saju-detail.test.mjs`, `_infra/tojeong.test.mjs`, e2e |
 | `yaksok/` | `/_yaksok/rooms[/<코드>[/<동작>]]` → `_infra/yaksok.js` (**방마다 `YaksokDO` 하나**, 사진도 이 DO 에 조각 저장), 캡처 인식은 `_infra/yaksok-receipt.js`(Gemini). 방 주소 `/yaksok/<코드>`는 워커가 화면+단계별 OG 로 내준다. 규칙은 `yaksok/logic.js` 하나(화면·서버 공용), 카드 `card.js`·캐릭터 `sprite.js`·ZIP `zip.js` | `_infra/yaksok.test.mjs`, `_infra/e2e/yaksok.spec.mjs`, verify `api:yaksok` |
-| `planner/` | `/_planner/login`·`logout`·`data` → `worker.js handlePlanner` + `_infra/planner.js` (PlannerDO) | `_infra/planner.test.mjs` |
 | `chat/` | `/_chat` WebSocket → `_infra/chat.js` `ChatDO` (`idFromName("lobby")`, 단일 로비) | `_infra/chat.test.mjs`, verify `chat:ws` |
 | `proofread/` | 없음 — 규칙표 `util/proofread/rules.js` 하나 | `_infra/proofread.test.mjs`, e2e |
 | `stars/` | 없음 — `util/stars/sky.js`·`skyline.js` | `_infra/stars.test.mjs`, `_infra/stars-skyline.test.mjs`, e2e |
@@ -21,8 +20,7 @@ util 소유 파일 목록은 `_infra/agent-scope.conf:20`. `_infra/worker.js`·`
 
 ## 로케일과 "오늘"의 경계
 
-페이지는 전부 `<html lang="ko">`. **예외는 `util/planner/index.html:2`의 `lang="en"`**
-— 화면 문구도 영어(PLAN/REAL)다. Worker는 UTC로 도니까 "오늘"은 도구마다 각자
+페이지는 전부 `<html lang="ko">`. Worker는 UTC로 도니까 "오늘"은 도구마다 각자
 KST로 자르며, 방식이 서로 다르다.
 
 - **brief** — `kstStamp()`는 UTC에 9시간 더해 ISO 앞 10자(`_infra/brief.js:85`), Open-Meteo
@@ -32,8 +30,6 @@ KST로 자르며, 방식이 서로 다르다.
 - **fortune** — `kstToday()`가 `Intl.DateTimeFormat`에 `RULES.timeZone`(`Asia/Seoul`)로
   자른다(`fortune.js:224`). 명식 규칙은 `RULES = korea-kst-midnight-v1`: 일 경계 자정,
   절기 분 단위, **진태양시 미적용**(`fortune.js:53`). 이 값이 응답에 그대로 실린다.
-- **planner** — `currentMonth()`가 `Intl` en-CA + `Asia/Seoul`로 `YYYY-MM`을 만들고,
-  서버는 **그 달 키만 남기고 지난 달을 버린다**(`planner.js:6`, `prunePlannerData`).
 - **calendar** — 서버가 없어 KST가 아니라 **기기 로컬시각**이다(`calendar/index.html:289`).
 - **cron은 UTC로 등록**한다. `0 23 * * *` = 08:00 KST 가 운세·브리핑 푸시
   (`wrangler.jsonc` triggers + `worker.js:1855`).
@@ -76,15 +72,14 @@ Cache API 캐시(`fortune.js:287`). 키가 없으면 `status:"not-configured"`�
   `indicesFailed`) 둘 다 죽을 때만 502. 캐시는 정상 1800초·부분 실패 300초, `today`는
   지역당 600초. 지수 상류는 TwelveData(`TWELVEDATA_API_KEY` 있을 때만) → Yahoo →
   Stooq(`brief.js:362`). fortune은 KASI 5초 타임아웃이며 실패해도 명식은 나간다.
-- **fail-closed 플래그** — `ENABLE_CHAT`(없으면 `/_chat` 503 + Retry-After 86400)·
-  `ENABLE_PLANNER`. 푸시는 `VAPID_PUBLIC_KEY` var + `VAPID_PRIVATE_KEY` secret이 둘 다 있어야
-  토글이 뜨고 cron도 돈다. planner 세션 키는 `PLANNER_SESSION_SECRET` → `ADMIN_SESSION_SECRET`
-  → `ADMIN_ID`+`ADMIN_PASSWORD` 순으로 대체되고, 셋 다 없으면 503.
+- **fail-closed 플래그** — `ENABLE_CHAT`(없으면 `/_chat` 503 + Retry-After 86400).
+  푸시는 `VAPID_PUBLIC_KEY` var + `VAPID_PRIVATE_KEY` secret이 둘 다 있어야
+  토글이 뜨고 cron도 돈다.
 - **chat 정원**은 기본 10명·범위 1~100, admin 💬 Chat에서 조정(`chat.js:23`). WebSocket은
   Origin 검증(없으면 403), 접속은 IP당 분당 20회.
 - **`_infra/verify-prod.mjs` 프로브** — `api:brief`는 `soft: true`(Open-Meteo가 흔들려도
   배포 실패로 보지 않는다)이고 `brief.date`가 KST 오늘인지까지 본다(:412). `gate:closed`가
-  `/_planner/data` 401·`/_chat` 403·`/_fortune/chart` GET 405를, `chat:ws`가 welcome을 본다.
+  `/_duri/status` 401·`/_chat` 403·`/_fortune/chart` GET 405를, `chat:ws`가 welcome을 본다.
 - util은 **퍼블릭**이라 `www/index.html`에 카드가 있어야 빌드가 통과한다(현재 :93).
   `passport-pic`은 `_infra/build.mjs`의 `UNLISTED_ENTRIES`(:34)로 카드에서 빼고 페이지에
   `noindex, nofollow`를 건다 — **둘 다** 걸어야 하고 `home-button.test.mjs:143`가 검사한다.
@@ -96,7 +91,7 @@ Cache API 캐시(`fortune.js:287`). 키가 없으면 `status:"not-configured"`�
 ```bash
 npm test                                  # 전체 (_infra/*.test.mjs)
 node --test _infra/brief.test.mjs         # 하나만
-node --test _infra/{brief,fortune,planner,chat,proofread,stars,stars-skyline}.test.mjs
+node --test _infra/{brief,fortune,chat,proofread,stars,stars-skyline}.test.mjs
 npm run test:e2e                          # 빌드 후 모바일 스모크
 ```
 

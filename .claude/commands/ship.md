@@ -79,7 +79,7 @@ Cloudflare의 직전 production version으로 복구하고 그 SHA까지 확인�
 - **성공 run인데 라이브 SHA 불일치** — 문서 전용 skip으로 확인되지 않으면 실패다.
   임의로 재배포하거나 git 이력을 바꾸지 말고 run과 `/_health` 값을 보고한다.
 
-검증이 게이트 뒤(invest·duri·admin)를 SKIP 했다면 자격증명이 없다는 뜻이지
+검증이 게이트 뒤(duri·admin·life)를 SKIP 했다면 자격증명이 없다는 뜻이지
 실패가 아니다. 자격증명은 `.verify.env`(커밋되지 않음)에 둔다.
 
 ## 하지 말 것

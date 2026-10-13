@@ -53,7 +53,7 @@ test("duri 변경은 sink와 duri 화면 전체를 고른다", () => {
 test("util 변경은 도메인 전체 단위 테스트와 smoke를 고른다", () => {
   expectScoped("util/stars/index.html", "util", [
     "_infra/brief.test.mjs", "_infra/chat.test.mjs", "_infra/fortune.test.mjs",
-    "_infra/planner.test.mjs", "_infra/proofread.test.mjs", "_infra/saju-detail.test.mjs",
+    "_infra/proofread.test.mjs", "_infra/saju-detail.test.mjs",
     "_infra/stars-skyline.test.mjs", "_infra/stars.test.mjs", "_infra/tojeong.test.mjs",
     "_infra/yaksok.test.mjs",
   ], ["_infra/e2e/yaksok.spec.mjs"]);
@@ -89,9 +89,9 @@ test("공용 랜딩인 www/index.html 변경은 전체 검증한다", () => {
 
 test("공용 www를 제외한 현재 배포 루트는 scoped 분류된다", () => {
   const sites = [
-    "admin", "assets", "duri", "espanol", "estate", "games", "idle", "invest", "lab",
-    "life", "mindfulness", "podcast", "puzzle", "sktest", "slop", "test",
-    "trip", "util", "work",
+    "admin", "assets", "duri", "games", "idle", "lab",
+    "life", "mindfulness", "podcast", "puzzle", "slop", "test",
+    "util", "work",
   ];
   for (const site of sites) {
     const plan = planDeployment([`${site}/index.html`]);

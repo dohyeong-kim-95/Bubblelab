@@ -12,7 +12,7 @@
 - 퍼블릭인데 카드가 없으면(build.mjs:70 throw):
   `public subdomain "<이름>" is missing from www/index.html — 랜딩에 카드를 추가하거나 _infra/build.mjs의 CONFIDENTIAL_SUBDOMAINS에 등록하세요`
 - confidential(`CONFIDENTIAL_SUBDOMAINS`, build.mjs:29 —
-  admin·work·podcast·estate·duri·test·invest·lab)인데 카드가 있으면(build.mjs:67 throw):
+  admin·work·podcast·duri·test·lab·life)인데 카드가 있으면(build.mjs:67 throw):
   `confidential subdomain "<이름>" must not be linked from www/index.html`
 
 즉 **다른 사람이 새 폴더를 만들면 랜딩이 빌드를 막는다.** 내 잘못이 아닌 실패도

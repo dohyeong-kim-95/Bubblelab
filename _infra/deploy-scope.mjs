@@ -7,9 +7,9 @@ import { fileURLToPath } from "node:url";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const SITES = [
-  "admin", "assets", "duri", "espanol", "estate", "games", "idle", "invest", "lab",
-  "life", "mindfulness", "podcast", "puzzle", "sktest", "slop", "test",
-  "trip", "util", "work", "www",
+  "admin", "assets", "duri", "games", "idle", "lab",
+  "life", "mindfulness", "podcast", "puzzle", "slop", "test",
+  "util", "work", "www",
 ];
 
 const SITE_TESTS = {
@@ -22,14 +22,11 @@ const SITE_TESTS = {
   duri: [
     "_infra/duri-world.test.mjs", "_infra/duri.test.mjs", "_src/duri-sink/store.test.mjs",
   ],
-  espanol: [],
-  estate: ["_infra/estate.test.mjs"],
   games: [
     "_infra/check-avalon-sync.test.mjs", "_infra/liargame.test.mjs",
     "_infra/realtime.test.mjs", "_infra/stepcam.test.mjs",
   ],
   idle: ["_infra/idle.test.mjs"],
-  invest: ["_infra/invest.test.mjs"],
   lab: ["_infra/insights-publish.test.mjs"],
   life: [
     "_infra/backup-slim.test.mjs", "_infra/backup.test.mjs",
@@ -42,15 +39,11 @@ const SITE_TESTS = {
   mindfulness: [],
   podcast: ["_infra/podcast-ai.test.mjs", "_infra/podcast.test.mjs"],
   puzzle: [],
-  sktest: ["_infra/sktest.test.mjs"],
   slop: ["_infra/animal-vs.test.mjs", "_infra/podium.test.mjs"],
   test: [],
-  trip: [
-    "_infra/trip-packages.test.mjs", "_infra/trip-watch.test.mjs", "_infra/trip.test.mjs",
-  ],
   util: [
     "_infra/brief.test.mjs", "_infra/chat.test.mjs", "_infra/fortune.test.mjs",
-    "_infra/planner.test.mjs", "_infra/proofread.test.mjs", "_infra/saju-detail.test.mjs",
+    "_infra/proofread.test.mjs", "_infra/saju-detail.test.mjs",
     "_infra/stars-skyline.test.mjs", "_infra/stars.test.mjs", "_infra/tojeong.test.mjs",
     "_infra/yaksok.test.mjs",
   ],
@@ -74,7 +67,6 @@ const SITE_E2E = {
     "_infra/e2e/library.spec.mjs", "_infra/e2e/life.spec.mjs",
     "_infra/e2e/pushup.spec.mjs", "_infra/e2e/review.spec.mjs",
   ],
-  sktest: ["_infra/e2e/sktest-workbook.spec.mjs"],
   util: ["_infra/e2e/yaksok.spec.mjs"],
 };
 

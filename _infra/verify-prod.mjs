@@ -15,14 +15,13 @@
 // 사용: node _infra/verify-prod.mjs [--domain bubblelab.dev] [--commit <sha>] [--json]
 import { readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dormantSubdomains } from "./dormant.js";
 
 const ROOT = new URL("..", import.meta.url);
 
 /** 로그인 게이트 뒤에 있는 서브도메인 (worker.js 의 site 분기와 같아야 한다). */
 export const GATED_SITES = new Set(["admin", "duri", "life"]);
 /** 배포되지 않는 폴더 규칙은 build.mjs 와 같다. */
-const SKIP_DIRS = new Set(["dist", "node_modules", "docs", "scripts", "pops_generator", ...dormantSubdomains()]);
+const SKIP_DIRS = new Set(["dist", "node_modules", "docs", "scripts", "pops_generator"]);
 
 export function listSites(root = fileURLToPath(ROOT)) {
   return readdirSync(root, { withFileTypes: true })
@@ -128,39 +127,6 @@ export function assertCatalog(catalog, checks, { categories = assetCategories() 
     checks.nonEmpty(`catalog.item[${item?.id}].id`, item?.id);
     checks.nonEmpty(`catalog.item[${item?.id}].title`, item?.title);
     checks.oneOf(`catalog.item[${item?.id}].category`, item?.category, categories);
-  }
-  return checks;
-}
-
-/**
- * **빈 값 덮어쓰기 탐지기.** 잔고 화면이 200을 주더라도 안쪽이 비어 있으면
- * 데몬이 빈 스냅샷을 올렸거나(과거 사고) 저장이 날아간 것이다.
- */
-export function assertInvestState(state, checks, { staleIsWarning = true } = {}) {
-  checks.number("invest.updatedAt", state?.updatedAt, { min: 1 });
-  checks.nonEmpty("invest.byCurrency", state?.byCurrency);
-  checks.minLength("invest.positions", state?.positions, 1);
-
-  const totals = Object.values(state?.byCurrency ?? {});
-  const anyValue = totals.some((bucket) => Number(bucket?.value) !== 0);
-  checks.ok("invest.byCurrency 합계가 전부 0이 아님", anyValue, "적어도 한 통화의 평가금액 != 0");
-  for (const [currency, bucket] of Object.entries(state?.byCurrency ?? {})) {
-    checks.number(`invest.byCurrency.${currency}.value`, bucket?.value);
-    checks.number(`invest.byCurrency.${currency}.cost`, bucket?.cost);
-  }
-
-  // 그래프 점 — 일별 스냅샷이 살아 있는지. 빈 값으로 덮이면 여기서도 티가 난다.
-  const series = Object.values(state?.series ?? {});
-  checks.ok("invest.series", series.length > 0, "통화별 시계열 1개 이상");
-  for (const points of series) {
-    checks.minLength("invest.series[].points", points, 1);
-    for (const point of (points ?? []).slice(-5)) {
-      checks.matches("invest.series[].date", point?.date, /^\d{4}-\d{2}-\d{2}$/);
-      checks.number("invest.series[].value", point?.value);
-    }
-  }
-  if (state?.stale && staleIsWarning) {
-    throw new Warning(`잔고가 오래됐습니다 (updatedAt=${new Date(state.updatedAt).toISOString()}) — 집 PC 데몬 확인`);
   }
   return checks;
 }
@@ -479,9 +445,7 @@ export function buildProbes({ sites, expectedCommit, ws }) {
     async run({ target, checks, timeoutMs }) {
       // 잠든 기능은 503, 살아 있으면 401 — 어느 쪽이든 익명에게 열리지 않는다.
       const cases = [
-        ["/_invest/state", [401, 503]],
         ["/_duri/status", [401]],
-        ["/_planner/data", [401, 503]],
         ["/_rt/avalon", [503]],       // ENABLE_REALTIME=false
         ["/_chat", [403]],            // Origin 없는 WebSocket 시도
         ["/_assets/upload/x.png", [404]],
@@ -559,12 +523,10 @@ export function credsFromEnv(env = process.env) {
   return {
     adminId: env.BL_ADMIN_ID || "",
     adminPassword: env.BL_ADMIN_PASSWORD || "",
-    investPassword: env.BL_INVEST_PASSWORD || "",
     duriPassword: env.BL_DURI_PASSWORD || "",
     lifePassword: env.BL_LIFE_PASSWORD || "",
     has(kind) {
       if (kind === "admin") return Boolean(this.adminId && this.adminPassword);
-      if (kind === "invest") return Boolean(this.investPassword);
       if (kind === "duri") return Boolean(this.duriPassword);
       if (kind === "life") return Boolean(this.lifePassword);
       return true;
@@ -652,13 +614,13 @@ const USAGE = `사용: node _infra/verify-prod.mjs [옵션]
   --base <URL>        로컬 서빙 검증 (예: http://localhost:8787)
   --commit <sha>      이 커밋이 서빙 중이어야 통과 (make ship 이 넘긴다)
   --wait <초>         --commit 이 서빙될 때까지 최대 이만큼 기다린다 (배포 전파)
-  --only <접두사>     프로브 id 필터 (예: --only invest)
+  --only <접두사>     프로브 id 필터 (예: --only duri)
   --timeout <초>      요청 하나의 제한시간 (기본 20)
   --no-ws             WebSocket 프로브 건너뛰기
   --json              결과를 JSON 으로 (make ship 이 diff 출력에 쓴다)
 
 자격증명(없으면 게이트 안쪽은 SKIP):
-  BL_ADMIN_ID / BL_ADMIN_PASSWORD / BL_INVEST_PASSWORD / BL_DURI_PASSWORD / BL_LIFE_PASSWORD
+  BL_ADMIN_ID / BL_ADMIN_PASSWORD / BL_DURI_PASSWORD / BL_LIFE_PASSWORD
 
 이 스크립트는 프로덕션에 **쓰기를 하지 않는다**.`;
 

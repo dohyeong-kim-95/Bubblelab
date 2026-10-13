@@ -5,8 +5,6 @@
 // 첫 번째 경로 세그먼트를 서브도메인 대신 사용한다:
 //   localhost:8787/slop/foo → dist/slop/foo
 
-import { isDormant } from "./dormant.js";
-
 const ROOT_DOMAIN = "bubblelab.dev";
 
 /* 게이트 뒤·비공개 사이트는 no-store 가 기본이다. 사용자 데이터가 아닌 게 확실하고
@@ -27,8 +25,6 @@ const CACHEABLE = {
   // 지도 경계 데이터(시군구 386KB · 나라 577KB). 커밋된 공개 지리 데이터이고 거의
   // 바뀌지 않는다 — 세계편을 열 때마다 다시 받으면 그대로 체감된다.
   duri: [[/^\/data\/.+\.geojson$/i, "private, max-age=2592000, stale-while-revalidate=86400"]],
-  // 배경지도 3MB. 공개 시세 화면이라 공유 캐시에 남아도 된다.
-  estate: [[/^\/basemap-[a-z0-9-]+\.(?:avif|jpe?g|png|webp)$/i, "public, max-age=604800, stale-while-revalidate=86400"]],
 };
 
 function confidentialCacheControl(site, path) {
@@ -78,7 +74,6 @@ const MOVED_PATHS = new Map([
 const REALTIME_NAMESPACES = new Set(["avalon", "liargame", "yacht"]);
 // cron이 리뷰를 주기적으로 동기화할 외주 프로젝트 목록 (커머스 API, 현재 mock).
 const WORK_REVIEW_PROJECTS = ["daonfit"];
-import { validPlannerCode } from "./planner.js";
 import { handleFortuneChart, handleFortunePush, sendFortuneDaily } from "./fortune.js";
 import { handleYaksokApi, renderRoomPage } from "./yaksok.js";
 import { CODE_RE as YAKSOK_CODE_RE } from "../util/yaksok/logic.js";
@@ -86,11 +81,9 @@ import { handleBriefPush, handleBriefRates, handleBriefToday, sendBriefDaily } f
 import { handlePodcast, handlePodcastAdmin, runDailyGeneration, runEveningReminder, UPLOAD_MAX_BYTES } from "./podcast.js";
 import { handlePapers, handlePapersComments, handlePapersSink } from "./papers.js";
 import { handleCommandRegistration, handleInteraction } from "./discord.js";
-import { handleEstateDeals } from "./estate.js";
 import { serveAssetDownload, serveAssetDownloadCounts } from "./downloads.js";
 import { fetchStoreReviews, REVIEWS_SYNC_VERSION } from "./reviews.js";
 import { DURI_MAX_PHOTO_BYTES } from "./duri.js";
-import { refreshTripWatches } from "./trip-watch.js";
 import { EMOTICON_MAX_BODY, EMOTICON_MAX_PROMPT, EMOTICON_MAX_REFERENCES, geminiGenerate } from "./emoticon-gen.js";
 import {
   applySecurityHeaders,
@@ -115,7 +108,6 @@ export { WorkReviewsDO } from "./reviews.js";
 export { EmoticonReviewDO } from "./emoticon-review.js";
 export { AnalyticsDO } from "./analytics.js";
 export { RecordsDO } from "./records.js";
-export { PlannerDO } from "./planner.js";
 export { PodcastDO } from "./podcast.js";
 export { RateLimiterDO } from "./security.js";
 export { DuriDO } from "./duri.js";
@@ -123,9 +115,7 @@ export { FortuneDO } from "./fortune.js";
 export { YaksokDO } from "./yaksok.js";
 export { BriefDO } from "./brief.js";
 export { AssetFlagsDO } from "./asset-flags.js";
-export { InvestDO } from "./invest.js";
 export { PapersDO } from "./papers.js";
-export { TripWatchDO } from "./trip-watch.js";
 export { LifeDO } from "./life.js";
 
 const LOGIN_PAGE = (failed = false, base = "") => `<!doctype html>
@@ -192,31 +182,6 @@ button { font: inherit; padding: .65rem; border: 0; border-radius: .6rem;
 <body><form method="post" action="${base}/login">
 <h1>💞 Duri</h1>
 <p>둘만의 비공개 공간입니다. 비밀번호를 입력해주세요. (한 번 입력하면 오래 유지됩니다)</p>
-<input name="password" type="password" autocomplete="current-password" aria-label="비밀번호" required autofocus>
-<p class="error">${failed ? "비밀번호가 맞지 않습니다." : ""}</p>
-<button type="submit">들어가기</button></form></body></html>`;
-
-// invest 게이트 로그인. 계좌 정보를 보여주는 화면이라 duri(1년)와 달리 세션이
-// 짧다 — 기기를 잃어버렸을 때 노출 창을 좁히는 쪽을 택했다.
-const INVEST_LOGIN_PAGE = (failed, base) => `<!doctype html><html lang="ko"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex, nofollow"><title>Invest</title><style>
-:root { color-scheme: light dark; }
-body { font-family: ui-monospace, monospace; min-height: 100dvh; margin: 0; display: grid;
-       place-items: center; background: light-dark(#fafbfc, #0f1216); color: light-dark(#1c2733, #e2e9f0); }
-form { display: grid; gap: .7rem; width: min(19rem, 88vw); padding: 1.6rem;
-       background: light-dark(#fff, #171b21); border: 1px solid light-dark(#e6eaef, #262c35);
-       border-radius: 1rem; }
-h1 { margin: 0; font-size: 1.05rem; }
-p { margin: 0; font-size: .74rem; opacity: .65; line-height: 1.6; }
-input { font: inherit; color: inherit; padding: .65rem .8rem; border-radius: .6rem;
-        border: 1px solid light-dark(#e6eaef, #262c35); background: transparent; }
-button { font: inherit; padding: .65rem; border: 0; border-radius: .6rem;
-         background: light-dark(#1f6f4a, #58c08c); color: light-dark(#fff, #0b1a12); font-weight: bold; cursor: pointer; }
-.error { color: #d05a5a; font-size: .74rem; min-height: 1em; margin: 0; }</style></head>
-<body><form method="post" action="${base}/login">
-<h1>📈 Invest</h1>
-<p>조회 전용 잔고 화면입니다. 비밀번호를 입력해주세요.</p>
 <input name="password" type="password" autocomplete="current-password" aria-label="비밀번호" required autofocus>
 <p class="error">${failed ? "비밀번호가 맞지 않습니다." : ""}</p>
 <button type="submit">들어가기</button></form></body></html>`;
@@ -348,64 +313,6 @@ async function workKeyOf(env) {
   );
 }
 
-async function issuePlannerSession(key, userId) {
-  const payload = `${Date.now() + 30 * 24 * 60 * 60 * 1000}.${userId}.${crypto.randomUUID()}`;
-  const sig = hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload)));
-  return `${payload}.${sig}`;
-}
-
-async function plannerSessionUser(key, token) {
-  const [expiry, userId, nonce, sig] = token?.split(".") ?? [];
-  if (!expiry || !/^[0-9a-f]{64}$/.test(userId ?? "") || !nonce || !/^[0-9a-f]+$/.test(sig ?? "")) return null;
-  if (!Number.isFinite(+expiry) || Date.now() > +expiry) return null;
-  const sigBytes = Uint8Array.from(sig.match(/../g) ?? [], (part) => parseInt(part, 16));
-  const valid = await crypto.subtle.verify(
-    "HMAC", key, sigBytes, new TextEncoder().encode(`${expiry}.${userId}.${nonce}`),
-  );
-  return valid ? userId : null;
-}
-
-async function handlePlanner(request, env, url) {
-  const plannerSecret = env.PLANNER_SESSION_SECRET || env.ADMIN_SESSION_SECRET ||
-    (env.ADMIN_ID && env.ADMIN_PASSWORD ? `${env.ADMIN_ID}\0${env.ADMIN_PASSWORD}` : null);
-  if (!plannerSecret) return new Response("planner session secret is not configured", { status: 503 });
-  const key = await crypto.subtle.importKey(
-    "raw", new TextEncoder().encode(`${plannerSecret}\0bl-planner-session`),
-    { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
-  );
-  const sessionUser = await plannerSessionUser(key, cookies(request).bl_planner);
-  const cookieFlags = `Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000${url.protocol === "https:" ? "; Secure" : ""}`;
-
-  if (url.pathname === "/_planner/login" && request.method === "POST") {
-    const body = await request.json().catch(() => ({}));
-    const supplied = String(body.code ?? "").trim().toUpperCase();
-    if (!validPlannerCode(supplied)) return Response.json({ error: "invalid code format" }, { status: 400 });
-    const userId = hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`user:${supplied}`)));
-    const token = await issuePlannerSession(key, userId);
-    return Response.json({ authenticated: true }, {
-      headers: { "Set-Cookie": `bl_planner=${token}; ${cookieFlags}`, "Cache-Control": "no-store" },
-    });
-  }
-
-  if (url.pathname === "/_planner/logout" && request.method === "POST") {
-    return Response.json({ authenticated: false }, {
-      headers: { "Set-Cookie": "bl_planner=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0" },
-    });
-  }
-
-  if (!sessionUser) return Response.json({ error: "authentication required" }, { status: 401 });
-  if (url.pathname === "/_planner/data" && ["GET", "PUT", "PATCH", "DELETE"].includes(request.method)) {
-    const id = env.PLANNER.idFromName(sessionUser);
-    return env.PLANNER.get(id).fetch("https://planner.internal/", {
-      method: request.method,
-      ...(["PUT", "PATCH"].includes(request.method) && {
-        headers: { "Content-Type": "application/json" }, body: await request.text(),
-      }),
-    });
-  }
-  return new Response("not found", { status: 404 });
-}
-
 /* 외주 작업 게이트. 루트(브랜딩·의뢰 안내 등 루트 파일)는 공개하고,
  * 프로젝트 폴더(/<의뢰ID>/…)만 로그인 뒤 접근된다. 의뢰 ID/비밀번호는
  * WORK_CLIENTS secret(JSON), WORK_PASSWORD 는 운영자 마스터(모든 프로젝트).
@@ -522,57 +429,6 @@ async function handleDuriGate(request, env, url, base = "") {
   if (url.pathname === "/login") {
     if (isAuthed) return redirect(`${base}/`);
     return new Response(DURI_LOGIN_PAGE(false, base), { headers: htmlHeaders });
-  }
-  if (!isAuthed) return redirect(`${base}/login`);
-  return null;
-}
-
-/* invest 전용 서브도메인(invest.bubblelab.dev) 게이트. 조회 전용 대시보드지만
- * 계좌 잔고가 보이므로 duri 보다 세션을 짧게(7일) 잡는다. 폴백 비밀번호는 두지
- * 않는다 — INVEST_PASSWORD 가 없으면 그냥 닫힌다(fail-closed). */
-const INVEST_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-
-function investPassword(env) {
-  return env.INVEST_PASSWORD || null;
-}
-
-async function investSessionKey(env) {
-  return crypto.subtle.importKey(
-    "raw", new TextEncoder().encode(`${investPassword(env)}\0bl-invest-session`),
-    { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
-  );
-}
-
-async function issueInvestSession(key) {
-  const payload = `${Date.now() + INVEST_SESSION_TTL_MS}.${crypto.randomUUID()}`;
-  const sig = hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload)));
-  return `${payload}.${sig}`;
-}
-
-async function handleInvestGate(request, env, url, base = "") {
-  const key = await investSessionKey(env);
-  const isAuthed = await validSession(key, cookies(request).bl_invest);
-  const cookieFlags = `Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(INVEST_SESSION_TTL_MS / 1000)}${url.protocol === "https:" ? "; Secure" : ""}`;
-  const htmlHeaders = { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" };
-
-  if (url.pathname === "/login" && request.method === "POST") {
-    const limited = await enforceRateLimit(request, env, {
-      scope: "invest-login", limit: 5, windowMs: 15 * 60 * 1000,
-    });
-    if (limited) return limited;
-    const form = await request.formData();
-    if (await matchesCredential(key, form.get("password"), investPassword(env))) {
-      const token = await issueInvestSession(key);
-      return redirect(`${base}/`, { "Set-Cookie": `bl_invest=${token}; ${cookieFlags}` });
-    }
-    return new Response(INVEST_LOGIN_PAGE(true, base), { status: 401, headers: htmlHeaders });
-  }
-  if (url.pathname === "/logout") {
-    return redirect(`${base}/login`, { "Set-Cookie": "bl_invest=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0" });
-  }
-  if (url.pathname === "/login") {
-    if (isAuthed) return redirect(`${base}/`);
-    return new Response(INVEST_LOGIN_PAGE(false, base), { headers: htmlHeaders });
   }
   if (!isAuthed) return redirect(`${base}/login`);
   return null;
@@ -714,101 +570,6 @@ async function handleLifeGate(request, env, url, base = "") {
   return null;
 }
 
-/* invest 조회 API. 게이트를 통과한 브라우저(bl_invest)만 부를 수 있고, 응답에는
- * 잔고 수치만 담긴다 — API 키·액세스 토큰은 워커 밖으로 절대 나가지 않는다. */
-async function handleInvest(request, env, url) {
-  if (!featureEnabled(env, "ENABLE_INVEST")) {
-    return Response.json({ error: "invest is temporarily unavailable" }, {
-      status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "86400" },
-    });
-  }
-  if (!investPassword(env)) {
-    return new Response("invest is not configured", { status: 503 });
-  }
-  const id = env.INVEST.idFromName("main");
-
-  // 데몬이 "지금 갱신" 요청이 걸려 있는지 물어본다. 1분마다 부르는 자리라
-  // 가볍고, 요청이 없으면 데몬은 토스를 부르지 않고 그냥 끝낸다.
-  if (url.pathname === "/_invest/pending" && request.method === "GET") {
-    if (!env.INVEST_SINK_SECRET) {
-      return new Response("invest sink is not configured", { status: 503 });
-    }
-    const offered = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
-    if (!await matchesCredential(await investSessionKey(env), offered, env.INVEST_SINK_SECRET)) {
-      return Response.json({ error: "unauthorized" }, { status: 401 });
-    }
-    const response = await env.INVEST.get(id).fetch(new Request("https://invest/pending"));
-    return new Response(response.body, {
-      status: response.status,
-      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
-    });
-  }
-
-  // 집 PC 데몬이 잔고를 올린다. 토스 허용 IP 때문에 조회는 엣지가 아니라 데몬이
-  // 하고, 여기는 받아서 보관만 한다 — 그래서 엣지에는 API 키가 없다.
-  if (url.pathname === "/_invest/snapshot" && request.method === "POST") {
-    if (!env.INVEST_SINK_SECRET) {
-      return new Response("invest sink is not configured", { status: 503 });
-    }
-    const limited = await enforceRateLimit(request, env, {
-      scope: "invest-push", limit: 20, windowMs: 60 * 1000,
-    });
-    if (limited) return limited;
-    const offered = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
-    if (!await matchesCredential(await investSessionKey(env), offered, env.INVEST_SINK_SECRET)) {
-      return Response.json({ error: "unauthorized" }, { status: 401 });
-    }
-    const response = await env.INVEST.get(id).fetch(
-      new Request(`https://invest/push${url.search}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: await request.text(),
-      }),
-    );
-    return new Response(response.body, {
-      status: response.status,
-      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
-    });
-  }
-
-  // 화면 조회는 게이트를 통과한 브라우저만.
-  const key = await investSessionKey(env);
-  if (!await validSession(key, cookies(request).bl_invest)) {
-    return Response.json({ error: "unauthorized" }, { status: 401, headers: { "Cache-Control": "no-store" } });
-  }
-  // "지금 갱신" — 방금 매수한 것을 바로 보고 싶을 때. 엣지가 토스를 부르는 게
-  // 아니라 요청만 남기고, 집 PC 데몬이 다음 순회(1분)에 가져가 올린다.
-  if (url.pathname === "/_invest/refresh" && request.method === "POST") {
-    const limited = await enforceRateLimit(request, env, {
-      scope: "invest-refresh", limit: 6, windowMs: 60 * 1000,
-    });
-    if (limited) return limited;
-    const response = await env.INVEST.get(id).fetch(
-      new Request("https://invest/refresh", { method: "POST" }),
-    );
-    return new Response(response.body, {
-      status: response.status,
-      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
-    });
-  }
-
-  if (url.pathname !== "/_invest/state" || request.method !== "GET") {
-    return new Response("not found", { status: 404 });
-  }
-  const limited = await enforceRateLimit(request, env, {
-    scope: "invest-state", limit: 30, windowMs: 60 * 1000,
-  });
-  if (limited) return limited;
-
-  const response = await env.INVEST.get(id).fetch(
-    new Request(`https://invest/state${url.search}`, { method: "GET" }),
-  );
-  return new Response(response.body, {
-    status: response.status,
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
-  });
-}
-
 /* Duri 실시간 중계 + 사진 버퍼. 접근은 둘 중 하나로만: duri 게이트를 통과한
  * 브라우저(bl_duri 쿠키) 또는 싱크 토큰을 제시한 데스크톱 데몬. 서버는 E2E
  * 암호블롭만 다루므로 평문·키·신원을 알지 못한다. 판정한 역할을 X-Duri-Role
@@ -835,106 +596,6 @@ function withDuriRole(request, role) {
   const headers = new Headers(request.headers);
   headers.set("X-Duri-Role", role);
   return new Request(request, { headers });
-}
-
-/* 여행지 가격 관측(trip/ 계획 탭).
- *
- * **읽기·쓰기 모두 admin 이 발급한 토큰을 요구한다.** 가격만 나가는 게 아니라
- * 여행지·기간·인원·노선까지 함께 나가 여행 의향이 읽히고, 혼자 쓰는 화면이라
- * 공개 조회로 얻는 이익이 없다. 데몬 push 만 별도 secret(TRIP_SINK_SECRET) 이라
- * 화면용 토큰이 새도 집 PC 경로는 분리돼 있다. */
-async function tripWatchKey(env) {
-  const secret = env.TRIP_WATCH_SECRET ||
-    (env.ADMIN_PASSWORD ? `${env.ADMIN_PASSWORD}\0bl-trip-watch` : null);
-  if (!secret) return null;
-  return crypto.subtle.importKey(
-    "raw", new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
-  );
-}
-
-async function handleTripWatch(request, env, url) {
-  if (!featureEnabled(env, "ENABLE_TRIP_WATCH")) {
-    return Response.json({ error: "trip watch is temporarily unavailable" }, {
-      status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "86400" },
-    });
-  }
-  if (!env.TRIP_WATCH) return new Response("trip watch is not configured", { status: 503 });
-
-  const path = url.pathname.slice("/_trip".length) || "/";
-  const stub = env.TRIP_WATCH.get(env.TRIP_WATCH.idFromName("main"));
-  const forward = (target, init) => stub.fetch(`https://trip-watch${target}`, init);
-  const bearer = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
-
-  // 데몬 전용 입구. 집 PC 가 실제 예매 화면에서 받아 온 값을 밀어 넣는다.
-  // 별도 secret 이라 화면용 토큰이 새도 이 경로는 분리돼 있다.
-  if (path === "/snapshot" && request.method === "POST") {
-    const secret = env.TRIP_SINK_SECRET;
-    if (!secret) return new Response("sink secret not configured", { status: 503 });
-    const sinkKey = await crypto.subtle.importKey(
-      "raw", new TextEncoder().encode(secret),
-      { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
-    );
-    if (!bearer || !await matchesCredential(sinkKey, bearer, secret)) {
-      return new Response("authentication required", { status: 401 });
-    }
-    const invalid = validateMutationRequest(request, 256 * 1024) ?? requireJsonRequest(request);
-    if (invalid) return invalid;
-    const body = await request.text();
-    // 같은 입구로 항공 관측과 패키지 관측을 받는다 — 데몬이 토큰을 하나만 들면 된다.
-    const parsed = (() => { try { return JSON.parse(body); } catch { return null; } })();
-    const target = Array.isArray(parsed?.packages) ? "/observe-packages" : "/observe";
-    return forward(target, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body,
-    });
-  }
-
-  // **읽기도 토큰을 요구한다.** 가격만 나가는 게 아니라 여행지·기간·인원·노선까지
-  // 함께 나가므로, 주소를 아는 사람에게 여행 의향이 읽힌다. 혼자 쓰는 화면이라
-  // 공개 조회로 얻는 이익이 없다.
-  const key = await tripWatchKey(env);
-  if (!key || !bearer || !await validSession(key, bearer)) {
-    return new Response("authentication required", { status: 401 });
-  }
-  const limited = await enforceRateLimit(request, env, {
-    scope: request.method === "GET" ? "trip-read" : "trip-write",
-    limit: request.method === "GET" ? 60 : 20,
-    windowMs: 60 * 1000,
-  });
-  if (limited) return limited;
-
-  if (request.method === "GET") {
-    if (path === "/destinations") return forward("/destinations");
-    if (path === "/grid") {
-      const flight = url.searchParams.get("flight") ?? url.searchParams.get("watch") ?? "";
-      return forward(`/grid?flight=${encodeURIComponent(flight)}`);
-    }
-    if (path === "/packages") {
-      const destination = url.searchParams.get("destination") ?? "";
-      return forward(`/packages?destination=${encodeURIComponent(destination)}`);
-    }
-    return new Response("not found", { status: 404 });
-  }
-
-  if (path === "/destinations" && request.method === "POST") {
-    const invalid = validateMutationRequest(request) ?? requireJsonRequest(request);
-    if (invalid) return invalid;
-    return forward("/destinations", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: await request.text(),
-    });
-  }
-  if (path.startsWith("/destinations/") && request.method === "DELETE") {
-    return forward(path, { method: "DELETE" });
-  }
-  // 화면의 "지금 갱신" — 상류 쿼터를 태우는 경로라 쓰기와 같은 토큰을 요구한다.
-  if (path === "/refresh" && request.method === "POST") {
-    const invalid = validateMutationRequest(request) ?? requireJsonRequest(request);
-    if (invalid) return invalid;
-    return forward("/refresh", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: await request.text(),
-    });
-  }
-  return new Response("not found", { status: 404 });
 }
 
 async function handleDuri(request, env, url) {
@@ -1083,8 +744,8 @@ async function serveAssetCatalog(request, env, url) {
 // 있어야 할 바인딩. 배포는 성공했는데 바인딩 하나가 빠져 특정 기능만 죽는
 // 경우가 실제로 잘 생긴다 — 화면을 열어봐야 알던 것을 프로브 한 번으로 본다.
 export const HEALTH_BINDINGS = [
-  "ASSETS", "ANALYTICS", "RECORDS", "RATE_LIMITER", "REALTIME", "PLANNER",
-  "CHAT", "PODCAST", "DURI", "INVEST", "ASSET_FLAGS", "BRIEF", "FORTUNE",
+  "ASSETS", "ANALYTICS", "RECORDS", "RATE_LIMITER", "REALTIME",
+  "CHAT", "PODCAST", "DURI", "ASSET_FLAGS", "BRIEF", "FORTUNE",
   "WORK_QNA", "WORK_REVIEWS", "EMOTICON_REVIEW", "PODCAST_BUCKET", "DURI_BUCKET", "LIFE",
   "LIFE_BUCKET", "YAKSOK",
 ];
@@ -1117,9 +778,7 @@ export async function serveHealth(request, env, url) {
       chat: featureEnabled(env, "ENABLE_CHAT"),
       podcast: featureEnabled(env, "ENABLE_PODCAST"),
       duri: featureEnabled(env, "ENABLE_DURI"),
-      invest: featureEnabled(env, "ENABLE_INVEST"),
       realtime: featureEnabled(env, "ENABLE_REALTIME"),
-      planner: featureEnabled(env, "ENABLE_PLANNER"),
       life: featureEnabled(env, "ENABLE_LIFE"),
     },
     bindings,
@@ -1334,16 +993,6 @@ async function handleAdmin(request, env, url, base = "") {
   if (url.pathname === "/api/assets") {
     return new Response("not found", { status: 404 });
   }
-  // 항공권 Watch 쓰기 토큰. trip 은 로그인이 없어서(주소를 아는 사람은 들어온다)
-  // 관측 대상을 만드는 권한만 여기서 발급해 화면에 한 번 저장시킨다 — 읽기는 공개,
-  // 쓰기만 토큰. 없으면 남이 Watch 를 만들어 상류 API 쿼터를 태울 수 있다.
-  if (url.pathname === "/api/trip/token" && request.method === "POST") {
-    const key = await tripWatchKey(env);
-    if (!key) return Response.json({ error: "TRIP_WATCH_SECRET is not configured" }, { status: 503 });
-    return Response.json({ token: await issueSinkToken(key) }, {
-      headers: { "Cache-Control": "no-store" },
-    });
-  }
   return null;
 }
 
@@ -1367,7 +1016,6 @@ export async function handleRequest(request, env, ctx) {
       path === "/_duri/photo" ? DURI_MAX_PHOTO_BYTES :
       path === "/_emoticon/generate" ? EMOTICON_MAX_BODY :
       path === "/_life/backup" ? 4 * 1024 * 1024 :
-      path === "/_planner/data" ? 600 * 1024 :
       yaksokBodyLimit(path) ?? 64 * 1024,
     );
     if (mutationError) return mutationError;
@@ -1403,34 +1051,6 @@ export async function handleRequest(request, env, ctx) {
     if (path.startsWith("/_shared/") || path.startsWith("/_assets/")) {
       const response = await env.ASSETS.fetch(request);
       return withCacheControl(response, staticCacheControl(path));
-    }
-
-    if (path.startsWith("/_planner/")) {
-      if (!featureEnabled(env, "ENABLE_PLANNER")) {
-        return Response.json({ error: "planner is temporarily unavailable" }, {
-          status: 503,
-          headers: { "Cache-Control": "no-store", "Retry-After": "86400" },
-        });
-      }
-      if (path === "/_planner/login" && request.method === "POST") {
-        const contentTypeError = requireJsonRequest(request);
-        if (contentTypeError) return contentTypeError;
-        const limited = await enforceRateLimit(request, env, {
-          scope: "planner-login", limit: 5, windowMs: 15 * 60 * 1000,
-        });
-        if (limited) return limited;
-      }
-      if (path === "/_planner/data" && ["PUT", "PATCH", "DELETE"].includes(request.method)) {
-        if (request.method !== "DELETE") {
-          const contentTypeError = requireJsonRequest(request);
-          if (contentTypeError) return contentTypeError;
-        }
-        const limited = await enforceRateLimit(request, env, {
-          scope: "planner-write", limit: 60, windowMs: 60 * 1000,
-        });
-        if (limited) return limited;
-      }
-      return handlePlanner(request, env, url);
     }
 
     // 생년월일시는 저장하지 않고 요청 순간에만 명식으로 변환한다.
@@ -1530,16 +1150,6 @@ export async function handleRequest(request, env, ctx) {
         if (limited) return limited;
       }
       return handleBriefPush(request, env);
-    }
-
-    // 국토부 아파트 실거래가 프록시 (estate.bubblelab.dev). 조회 전용이며
-    // 지역·기간은 estate.js가 허용 목록으로 고정하고 응답은 Cache API에 캐싱한다.
-    if (path === "/_estate/deals") {
-      const limited = await enforceRateLimit(request, env, {
-        scope: "estate-deals", limit: 120, windowMs: 60 * 1000,
-      });
-      if (limited) return limited;
-      return handleEstateDeals(request, env, url);
     }
 
     // 공개 페이지 통계 (카테고리 홈의 접속량순 정렬용). 개인 데이터 없음.
@@ -2072,18 +1682,8 @@ export async function handleRequest(request, env, ctx) {
       return handleDuri(request, env, url);
     }
 
-    // invest 잔고 조회 API: /_invest/state (invest.bubblelab.dev 전용, 조회만).
     if (path === "/_life" || path.startsWith("/_life/")) {
       return handleLifeBackup(request, env, url);
-    }
-
-    if (path === "/_invest" || path.startsWith("/_invest/")) {
-      return handleInvest(request, env, url);
-    }
-
-    // 항공권 가격 관측: /_trip/* (trip.bubblelab.dev 계획 탭).
-    if (path === "/_trip" || path.startsWith("/_trip/")) {
-      return handleTripWatch(request, env, url);
     }
 
     if (host === ROOT_DOMAIN || host === `www.${ROOT_DOMAIN}`) {
@@ -2097,10 +1697,6 @@ export async function handleRequest(request, env, ctx) {
       // 트레일링 슬래시 보존 (없으면 에셋 서버의 canonical 리다이렉트와 루프)
       if (url.pathname.endsWith("/") && !path.endsWith("/")) path += "/";
     }
-
-    // 내려 둔 화면은 없는 주소처럼 답한다. 정적 껍데기만 남아 반쯤 도는 것보다
-    // 닫혀 있는 편이 낫다 — 살릴 때는 _infra/dormant.js 에서 한 줄 지운다.
-    if (isDormant(site, path)) return new Response("not found", { status: 404 });
 
     // 폴더 이름을 바꾸면 예전 주소로 온 사람(북마크·공유 링크)이 404를 만난다.
     // 옮긴 자리만 알려주고 끝낸다 — 페이지를 남겨 두면 두 벌을 관리하게 된다.
@@ -2151,18 +1747,6 @@ export async function handleRequest(request, env, ctx) {
       duriUrl.pathname = path || "/";
       const duriResponse = await handleDuriGate(request, env, duriUrl, isProdHost ? "" : "/duri");
       if (duriResponse) return duriResponse;
-    }
-
-    if (site === "invest") {
-      // 조회 전용 잔고 화면. 비밀번호·기능 플래그 중 하나라도 없으면 fail-closed.
-      if (!featureEnabled(env, "ENABLE_INVEST") || !investPassword(env)) {
-        return new Response("invest is not configured", { status: 503 });
-      }
-      const isProdHost = host === ROOT_DOMAIN || host.endsWith(`.${ROOT_DOMAIN}`);
-      const investUrl = new URL(url);
-      investUrl.pathname = path || "/";
-      const investResponse = await handleInvestGate(request, env, investUrl, isProdHost ? "" : "/invest");
-      if (investResponse) return investResponse;
     }
 
     if (site === "life") {
@@ -2219,11 +1803,11 @@ export async function handleRequest(request, env, ctx) {
       }
     }
 
-    if (["admin", "work", "estate", "duri", "invest", "trip", "life", "sktest"].includes(site)) {
+    if (["admin", "work", "duri", "life"].includes(site)) {
       const headers = new Headers(response.headers);
       // 문서·JSON·인증 뒤 이미지는 디스크에 남기지 않는다. 실행 코드와 폰트는
-      // 사용자 데이터가 아니므로 브라우저 전용 캐시를 허용하고, 공개 데이터인
-      // estate 배경지도와 work 공개 showcase 미디어만 공유 캐시할 수 있게 한다.
+      // 사용자 데이터가 아니므로 브라우저 전용 캐시를 허용하고, work 공개 showcase
+      // 미디어만 공유 캐시할 수 있게 한다.
       headers.set("Cache-Control",
         response.status === 200 ? confidentialCacheControl(site, path) : "no-store");
       headers.set("X-Robots-Tag", "noindex, nofollow");
@@ -2246,7 +1830,7 @@ export async function handleRequest(request, env, ctx) {
     const isDocument = request.headers.get("Sec-Fetch-Dest") === "document";
     // bl_notrack: 운영자가 /_optout에서 켠 브라우저는 집계·쿠키 발급 모두 건너뛴다.
     const optedOut = cookies(request).bl_notrack === "1";
-    if (!["admin", "work", "estate", "life"].includes(site) && isDocument && !isBot && !optedOut && response.ok &&
+    if (!["admin", "work", "life"].includes(site) && isDocument && !isBot && !optedOut && response.ok &&
         response.headers.get("Content-Type")?.includes("text/html")) {
       const date = kstDate();
       const jar = cookies(request);
@@ -2307,14 +1891,6 @@ export default {
       if (env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY) {
         ctx.waitUntil(sendFortuneDaily(env));
         ctx.waitUntil(sendBriefDaily(env));
-      }
-      return;
-    }
-    // 항공권 가격 관측. 한 번에 그리드 전체를 돌리지 않고 오래된 조합부터
-    // 조금씩 갱신한다 — 상류 쿼터가 하루치 예산이기 때문이다.
-    if (controller.cron === "20 */6 * * *") {
-      if (featureEnabled(env, "ENABLE_TRIP_WATCH") && env.TRIP_WATCH) {
-        ctx.waitUntil(refreshTripWatches(env));
       }
       return;
     }
