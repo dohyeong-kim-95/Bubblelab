@@ -52,8 +52,8 @@ test("duri 변경은 sink와 duri 화면 전체를 고른다", () => {
 
 test("util 변경은 도메인 전체 단위 테스트와 smoke를 고른다", () => {
   expectScoped("util/stars/index.html", "util", [
-    "_infra/brief.test.mjs", "_infra/chat.test.mjs", "_infra/fortune.test.mjs",
-    "_infra/proofread.test.mjs", "_infra/saju-detail.test.mjs",
+    "_infra/brief.test.mjs", "_infra/chat.test.mjs", "_infra/filter-cam.test.mjs",
+    "_infra/fortune.test.mjs", "_infra/proofread.test.mjs", "_infra/saju-detail.test.mjs",
     "_infra/stars-skyline.test.mjs", "_infra/stars.test.mjs", "_infra/tojeong.test.mjs",
     "_infra/yaksok.test.mjs",
   ], ["_infra/e2e/yaksok.spec.mjs"]);

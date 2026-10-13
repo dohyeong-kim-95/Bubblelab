@@ -42,8 +42,8 @@ const SITE_TESTS = {
   slop: ["_infra/animal-vs.test.mjs", "_infra/podium.test.mjs"],
   test: [],
   util: [
-    "_infra/brief.test.mjs", "_infra/chat.test.mjs", "_infra/fortune.test.mjs",
-    "_infra/proofread.test.mjs", "_infra/saju-detail.test.mjs",
+    "_infra/brief.test.mjs", "_infra/chat.test.mjs", "_infra/filter-cam.test.mjs",
+    "_infra/fortune.test.mjs", "_infra/proofread.test.mjs", "_infra/saju-detail.test.mjs",
     "_infra/stars-skyline.test.mjs", "_infra/stars.test.mjs", "_infra/tojeong.test.mjs",
     "_infra/yaksok.test.mjs",
   ],

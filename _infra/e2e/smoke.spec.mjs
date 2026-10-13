@@ -27,6 +27,7 @@ const SCREENS = [
   { name: "별자리 배경화면", path: "/util/stars/" },
   // textarea 뒤에 거울을 깔아 밑줄을 그린다 — 두 층이 어긋나면 가로로 넘친다
   { name: "맞춤법 검사", path: "/util/proofread/" },
+  { name: "필터 카메라", path: "/util/filter-cam/" },
   // 카메라가 없는 환경(헤드리스)에서도 첫 화면이 떠야 한다 — 게임 로직은 단위 테스트가 본다
   { name: "발판 리듬", path: "/games/stepcam/" },
   // 리포트를 전부 스크립트로 그린다 — JSON을 못 읽으면 빈 화면이 된다
