@@ -497,6 +497,24 @@
               border: 1px solid var(--line); background: none; color: inherit; }
   #sink-box .sink-btn.primary { background: var(--pink); color: light-dark(#fff, #1a1016); border-color: transparent; }
   #sink-box #sink-copy { margin-top: .4rem; }
+  #pd-box { position: fixed; inset: 0; z-index: 78; display: flex; align-items: center; justify-content: center;
+    padding: 1rem; background: rgb(0 0 0 / .45); }
+  #pd-box[hidden] { display: none; }
+  #pd-box .pd-card { background: var(--panel); border: 1px solid var(--line); border-radius: .9rem;
+    padding: 1rem 1.1rem; width: min(26rem, 100%); max-height: 90dvh; overflow-y: auto; }
+  #pd-box .pd-head { display: flex; align-items: center; gap: .5rem; margin-bottom: .6rem; }
+  #pd-box .pd-head b { font-size: 1rem; margin-right: auto; }
+  #pd-steps, #pd-devices { margin: 0; padding: 0; list-style: none; display: grid; gap: .45rem; }
+  #pd-steps li, #pd-devices li { display: grid; grid-template-columns: 1.4rem minmax(0, 1fr); gap: .4rem;
+    font-size: .85rem; line-height: 1.5; }
+  #pd-steps li small, #pd-devices li small { grid-column: 2; color: var(--dim); font-size: .78rem; }
+  #pd-verdict { margin: .9rem 0 0; font-size: .88rem; font-weight: 700; line-height: 1.5; }
+  #pd-box .pd-sub { margin: 1rem 0 .4rem; font-size: .8rem; color: var(--dim); }
+  #pd-box .pd-actions { display: flex; justify-content: flex-end; margin-top: 1rem; }
+  #pd-box .pd-btn { font: inherit; font-size: .85rem; cursor: pointer; border-radius: .7rem; padding: .5rem .9rem;
+    border: 1px solid var(--line); background: var(--bg); color: inherit; }
+  #pd-box .pd-btn.primary { background: var(--pink); color: light-dark(#fff, #1a1016); border-color: transparent; }
+  #pd-box .pd-btn:disabled { opacity: .5; }
   /* 현재 위치 확인 시트 */
   #here-box { position: fixed; inset: 0; z-index: 77; display: flex; align-items: center; justify-content: center;
               background: #0007; padding: 1.2rem; }
@@ -791,7 +809,7 @@
     <div id="menu" class="menu" role="menu" hidden>
       <button id="push-toggle" role="menuitem" hidden aria-checked="false"
               title="새 메시지가 오면 이 기기로 알림을 받습니다(기본 켜짐)">🔔 푸시 알림: 꺼짐</button>
-      <button id="push-test" role="menuitem" hidden title="이 기기로 테스트 알림을 보내 알림이 실제로 오는지 확인">🔔 테스트 알림 보내기</button>
+      <button id="push-test" role="menuitem" hidden title="알림이 어디서 막히는지 단계별로 확인하고, 고칠 수 있는 건 바로 고친다">🩺 알림 진단</button>
       <button id="cal-open" role="menuitem" title="공유 캘린더">📅 캘린더</button>
       <button id="map-open" role="menuitem" title="함께 다닌 곳을 색칠한 지도">🗺️ 함께 다닌 곳 지도</button>
       <button id="sink-setup" role="menuitem" title="이 대화·사진을 내 PC에 자동으로 쌓는 백업 데몬 설정">💾 PC 백업 설정</button>
@@ -1064,6 +1082,23 @@
     </div>
     <div class="sink-actions">
       <button id="sink-issue" type="button" class="sink-btn primary">🔑 싱크 토큰 발급</button>
+    </div>
+  </div>
+</div>
+
+<!-- 알림 진단 — 권한·구독·서버 등록·발송·도착을 차례로 보고, 고칠 수 있는 건 고친다 -->
+<div id="pd-box" hidden>
+  <div class="pd-card">
+    <div class="pd-head">
+      <b>🩺 알림 진단</b>
+      <button id="pd-close" class="icon-btn" type="button" title="닫기" aria-label="닫기">✕</button>
+    </div>
+    <ol id="pd-steps"></ol>
+    <p id="pd-verdict"></p>
+    <p class="pd-sub">서버에 등록된 기기</p>
+    <ul id="pd-devices"></ul>
+    <div class="pd-actions">
+      <button id="pd-run" type="button" class="pd-btn primary">다시 진단</button>
     </div>
   </div>
 </div>
@@ -3443,35 +3478,152 @@ const swReady = (async () => {
     }
   });
 
-  // 자가진단: 내 기기로 테스트 알림을 쏴 어디서 막히는지 알려준다.
+  // ── 알림 진단 ──────────────────────────────────────────────
+  // "켰는데 자꾸 안 온다"를 매번 손으로 추적하지 않게, 알림이 지나는 길을 순서대로 본다:
+  // 설치형 앱 → 권한 → 서비스워커 → 이 기기 구독 → 서버 키 일치 → 서버 등록 → 발송 →
+  // **이 기기에 실제 도착**(sw.js 가 받은 즉시 postMessage). 고칠 수 있는 단계(구독 없음·
+  // 키 불일치·서버 미등록)는 그 자리에서 고치고 다시 확인한다.
   const testBtn = $("push-test");
-  testBtn?.addEventListener("click", async () => {
-    if (busy || !registration) return;
-    busy = true;
-    try {
-      const sub = await registration.pushManager.getSubscription();
-      if (!sub) {
-        showToast("먼저 위에서 푸시 알림을 켜주세요.");
-        return;
-      }
-      const res = await fetch("/_duri/push/test", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ endpoint: sub.endpoint }),
-      });
-      const r = await res.json().catch(() => ({}));
-      if (!res.ok) showToast("테스트에 실패했어요. 잠시 후 다시 시도해주세요.");
-      else if (r.reason === "no-vapid") showToast("서버에 알림 키가 설정되지 않았어요(운영자 확인 필요).");
-      else if (r.targeted === 0) showToast("이 기기의 구독을 서버가 못 찾았어요. 알림을 껐다 켜보세요.");
-      else if (r.sent > 0) showToast("보냈어요! 몇 초 안에 알림이 오지 않으면 기기 알림 설정을 확인해주세요.");
-      else if (r.gone > 0) showToast("구독이 만료됐어요. 알림을 껐다 켜서 다시 등록해주세요.");
-      else showToast("발송에 실패했어요(네트워크·푸시 서비스 문제).");
-    } catch {
-      showToast("테스트에 실패했어요. 잠시 후 다시 시도해주세요.");
-    } finally {
-      busy = false;
-      closeMenu();
+  const pdSteps = $("pd-steps"), pdVerdict = $("pd-verdict"), pdDevices = $("pd-devices"), pdRun = $("pd-run");
+  const sameKey = (sub) => {
+    const a = sub?.options?.applicationServerKey;
+    if (!a || !vapidPublicKey) return null; // 브라우저가 안 알려 주면 판정 보류
+    const x = new Uint8Array(a), y = vapidKeyBytes(vapidPublicKey);
+    return x.length === y.length && x.every((v, i) => v === y[i]);
+  };
+  const pushHost = (h) => /apple/.test(h) ? "아이폰·맥(애플)" : /google|fcm/.test(h) ? "안드로이드·크롬(구글)"
+    : /mozilla/.test(h) ? "파이어폭스" : /windows|notify/.test(h) ? "윈도우" : h;
+  const ago = (t) => {
+    const m = Math.round((Date.now() - t) / 60000);
+    return m < 1 ? "방금" : m < 60 ? `${m}분 전` : m < 1440 ? `${Math.round(m / 60)}시간 전` : `${Math.round(m / 1440)}일 전`;
+  };
+  function step(label) {
+    const li = document.createElement("li");
+    const icon = document.createElement("span"); icon.textContent = "⏳";
+    const text = document.createElement("span"); text.textContent = label;
+    const note = document.createElement("small");
+    li.append(icon, text, note);
+    pdSteps.append(li);
+    return {
+      set(state, msg = "") { icon.textContent = { ok: "✅", fail: "❌", warn: "⚠️", fix: "🔧" }[state] || "⏳"; note.textContent = msg; },
+    };
+  }
+  function renderDevices(devices) {
+    pdDevices.replaceChildren();
+    const me = duriDeviceId().slice(0, 4);
+    for (const d of devices || []) {
+      const li = document.createElement("li");
+      const ok = d.last ? (d.last.status >= 200 && d.last.status < 300) : null;
+      const icon = document.createElement("span"); icon.textContent = ok === false ? "❌" : "📱";
+      const text = document.createElement("span");
+      text.textContent = `${pushHost(d.host)}${d.device === me ? " — 이 기기" : ""}`;
+      const note = document.createElement("small");
+      note.textContent = (d.since ? `등록 ${ago(d.since)}` : "") +
+        (d.last ? ` · 마지막 발송 ${ago(d.last.at)} ${ok ? "성공" : `실패(${d.last.status || "네트워크"})`}` : " · 아직 발송 없음");
+      li.append(icon, text, note);
+      pdDevices.append(li);
     }
+    if (!pdDevices.children.length) {
+      const li = document.createElement("li");
+      li.textContent = "없음 — 어느 기기도 알림을 받을 수 없는 상태예요.";
+      pdDevices.append(li);
+    }
+  }
+  const diagApi = (body) => fetch("/_duri/push/test", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  }).then((r) => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)));
+  function waitArrival(nonce, ms) {
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => { navigator.serviceWorker.removeEventListener("message", on); resolve(false); }, ms);
+      function on(e) {
+        if (e.data?.type === "push-arrived" && e.data.nonce === nonce) {
+          clearTimeout(timer); navigator.serviceWorker.removeEventListener("message", on); resolve(true);
+        }
+      }
+      navigator.serviceWorker.addEventListener("message", on);
+    });
+  }
+  async function runDiag() {
+    pdSteps.replaceChildren(); pdVerdict.textContent = ""; pdRun.disabled = true;
+    const done = (msg) => { pdVerdict.textContent = msg; pdRun.disabled = false; };
+    try {
+      const ios = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+      const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+      const s1 = step("설치형 앱으로 열었나");
+      if (ios && !standalone) { s1.set("fail", "아이폰은 사파리 탭에서는 푸시가 오지 않아요."); return done("공유 → 홈 화면에 추가 한 뒤, 그 아이콘으로 열어 다시 진단하세요."); }
+      s1.set("ok", standalone ? "홈 화면 앱" : "브라우저(안드로이드·PC 는 괜찮아요)");
+
+      const s2 = step("알림 권한");
+      if (Notification.permission === "denied") { s2.set("fail", "거부됨"); return done("휴대폰 설정 → 알림에서 Duri(또는 브라우저)를 허용한 뒤 다시 진단하세요."); }
+      if (Notification.permission !== "granted") {
+        const p = await Notification.requestPermission();
+        if (p !== "granted") { s2.set("fail", "허용하지 않음"); return done("알림을 허용해야 받을 수 있어요."); }
+      }
+      s2.set("ok", "허용됨");
+
+      const s3 = step("서비스워커");
+      if (!registration?.active) { s3.set("fail", "동작하지 않음"); return done("앱을 완전히 닫았다가 다시 열어 주세요."); }
+      s3.set("ok", "동작 중");
+
+      const s4 = step("이 기기 구독");
+      let sub = await registration.pushManager.getSubscription();
+      if (!sub) { s4.set("fix", "없어서 새로 만드는 중…"); await enable(); sub = await registration.pushManager.getSubscription(); }
+      if (!sub) { s4.set("fail", "만들지 못했어요"); return done("브라우저가 구독을 거절했어요. 앱을 지웠다 다시 설치해 보세요."); }
+      s4.set("ok", new URL(sub.endpoint).host);
+
+      const s5 = step("서버 키와 맞나");
+      const same = sameKey(sub);
+      if (same === false) {
+        s5.set("fix", "옛 키로 된 구독 — 다시 만드는 중…");
+        await api("DELETE", { endpoint: sub.endpoint }).catch(() => {});
+        await sub.unsubscribe().catch(() => {});
+        await enable();
+        sub = await registration.pushManager.getSubscription();
+        s5.set(sub && sameKey(sub) !== false ? "ok" : "fail", sub ? "새로 만들었어요" : "다시 만들지 못했어요");
+        if (!sub) return done("구독을 다시 만들지 못했어요. 잠시 뒤 다시 진단하세요.");
+      } else s5.set(same ? "ok" : "warn", same ? "일치" : "브라우저가 키를 알려 주지 않아 건너뜀");
+      setState(true); localStorage.setItem(PREF_KEY, "on"); setMyEndpoint(sub.endpoint);
+
+      const s6 = step("서버에 등록돼 있나");
+      let r = await diagApi({ endpoint: sub.endpoint, dry: true });
+      if (r.reason === "no-vapid") { s6.set("fail", "서버에 알림 키가 없어요"); return done("운영자 확인이 필요해요(VAPID 미설정)."); }
+      if (!r.registered) {
+        s6.set("fix", "빠져 있어서 다시 등록하는 중…");
+        await putSubscription(sub);
+        r = await diagApi({ endpoint: sub.endpoint, dry: true });
+      }
+      renderDevices(r.devices);
+      if (!r.registered) { s6.set("fail", "등록이 안 돼요"); return done("서버가 등록을 받지 않았어요. 잠시 뒤 다시 진단하세요."); }
+      s6.set("ok", "등록됨");
+
+      const s7 = step("테스트 발송");
+      const nonce = randToken().slice(0, 16).replace(/[^A-Za-z0-9_-]/g, "x");
+      const arrived = waitArrival(nonce, 20000);
+      r = await diagApi({ endpoint: sub.endpoint, nonce });
+      renderDevices(r.devices);
+      if (r.gone) { s7.set("fail", "푸시 서비스가 구독을 만료시켰어요"); return done("다시 진단하면 새 구독을 만들어요."); }
+      if (!r.sent) { s7.set("fail", `푸시 서비스가 거절(${r.status ?? "네트워크"})`); return done("서버 → 푸시 서비스 단계에서 막혔어요. 이 화면을 캡처해 알려 주세요."); }
+      s7.set("ok", `푸시 서비스가 받음(${r.status})`);
+
+      const s8 = step("이 기기에 도착");
+      s8.set("", "최대 20초 기다리는 중…");
+      if (await arrived) { s8.set("ok", "도착했어요"); return done("✅ 이 기기는 정상이에요. 알림이 화면에 안 보였다면 휴대폰의 알림 표시 설정(방해 금지·집중 모드·배너)을 확인하세요."); }
+      s8.set("fail", "20초 안에 안 왔어요");
+      done(ios ? "푸시 서비스까지는 갔는데 기기가 안 받았어요. 앱을 홈 화면에서 지우고 다시 추가한 뒤 진단하세요."
+        : "푸시 서비스까지는 갔는데 기기가 안 받았어요. 휴대폰 설정에서 이 앱(또는 크롬)의 배터리 최적화를 '제한 없음'으로 바꿔 보세요.");
+    } catch (e) {
+      done(`진단 중 오류: ${e?.message || e}`);
+    }
+  }
+  testBtn?.addEventListener("click", () => {
+    if (!registration) return;
+    closeMenu();
+    $("pd-box").hidden = false;
+    runDiag();
   });
+  pdRun.addEventListener("click", runDiag);
+  $("pd-close").addEventListener("click", () => { $("pd-box").hidden = true; });
+  $("pd-box").addEventListener("click", (e) => { if (e.target === $("pd-box")) $("pd-box").hidden = true; });
 
   (async function init() {
     try {
@@ -3480,7 +3632,13 @@ const swReady = (async () => {
       if (!vapidPublicKey) return; // 서버에 푸시 미설정 시 버튼 숨김 유지(기능 자체가 없음)
       registration = await swReady;
       if (!registration) return; // 이 브라우저에선 서비스워커 자체가 안 됨
-      const sub = await registration.pushManager.getSubscription();
+      let sub = await registration.pushManager.getSubscription();
+      // 옛 서버 키로 만든 구독은 보내도 푸시 서비스가 거절한다(403) — 열 때마다 확인해 바꾼다.
+      if (sub && sameKey(sub) === false) {
+        await api("DELETE", { endpoint: sub.endpoint }).catch(() => {});
+        await sub.unsubscribe().catch(() => {});
+        sub = null;
+      }
       setState(Boolean(sub));
       if (sub) {
         setMyEndpoint(sub.endpoint); // 접속 시 hello 가 실을 수 있게 미리 등록

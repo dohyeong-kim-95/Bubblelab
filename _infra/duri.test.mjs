@@ -434,7 +434,7 @@ test("appending a msg/photo entry pushes the opaque blob to subscribers and prun
   assert.equal((await storage.list({ prefix: "push:" })).size, 1);
 });
 
-test("notifyPush skips devices that are currently connected (no silent push to active viewers)", async () => {
+test("notifyPush still pushes to connected devices (presence is not trusted)", async () => {
   const vapid = await generateVapidKeys();
   const storage = fakeStorage({ seq: 0, ackSeq: 0 });
   const room = new DuriDO({ storage, blockConcurrencyWhile: (fn) => fn() }, {
@@ -461,7 +461,9 @@ test("notifyPush skips devices that are currently connected (no silent push to a
   } finally {
     globalThis.fetch = originalFetch;
   }
-  assert.deepEqual(hits, [away]); // 접속 중인 online 은 건너뛰고, 자리 비운 away 에만 발송
+  // 접속 중이어도 보낸다 — 백그라운드 재접속이 "보는 중"으로 잡혀 푸시가 끊기던 버그.
+  // 보고 있는지는 기기의 sw.js 가 판단한다(알림을 띄웠다 바로 닫음).
+  assert.deepEqual(hits.sort(), [away, online].sort());
 });
 
 test("notifyPush skips every device of the sender (by who), sends high urgency, and records the last result", async () => {

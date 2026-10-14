@@ -86,10 +86,12 @@ npm test                                                          # 인프라 �
   옛 화면). `sw.js` 의 푸시 복호화는 `index.html` 의 `deriveKey`/`decryptJson`
   **중복 구현**이라 한쪽만 고치면 알림만 조용히 깨진다.
 - **푸시를 받고 알림을 안 띄우면 안 된다(silent push).** iOS 는 몇 번 쌓이면 구독을 끊는다 —
-  "켰는데 자꾸 안 온다"의 원인이었다. 서버는 접속 중인 기기와 **보낸 사람의 기기들**(hello 의
-  `who` = 이름 해시, 사진은 `X-Duri-Device` 헤더)을 빼고 `Urgency: high` 로 보내며, 그래도
-  새는 경우 `sw.js` 가 알림을 띄웠다 곧바로 닫는다. 구독별 마지막 발송 결과는
-  `/_duri/status` 의 `push` 칸(싱크 토큰 `Authorization: Bearer` 로 조회 가능).
+  "켰는데 자꾸 안 온다"의 원인이었다. 서버는 **보낸 사람의 기기들**(hello 의 `who` = 이름
+  해시, 사진은 `X-Duri-Device` 헤더)만 빼고 `Urgency: high` 로 보내고, 보고 있는 기기는
+  `sw.js` 가 알림을 띄웠다 곧바로 닫는다. **"접속 중"을 믿고 건너뛰는 로직을 다시 넣지
+  말 것** — 백그라운드 재접속(배포마다 일어난다)이 "보는 중"으로 잡혀 푸시가 끊겼다.
+  구독별 마지막 발송 결과는 `/_duri/status` 의 `push` 칸(싱크 토큰 `Authorization:
+  Bearer` 로 조회 가능), 사용자용은 앱의 ⚙️ → 🩺 알림 진단.
 - DuriDO는 `idFromName("main")` 단일 인스턴스다(`_infra/worker.js:653 (handleDuri)`).
   배포해도 **살아 있는 WebSocket이 있으면 옛 코드가 계속 돈다** — 서버 동작이 안
   바뀐 것처럼 보이면 PC 싱크와 열린 탭을 모두 끊었다가 다시 붙여 본다.

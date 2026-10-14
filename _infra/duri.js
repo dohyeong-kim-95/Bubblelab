@@ -194,11 +194,7 @@ export class DuriDO {
         cal: (await this.state.storage.list({ prefix: CAL_PREFIX, limit: MAX_CAL_EVENTS })).size,
         remind: (await this.state.storage.list({ prefix: REMIND_PREFIX, limit: REMIND_DAYS * 2 })).size,
         // 구독별 푸시 서비스(애플·구글·모질라)와 마지막 발송 결과. 주소·키는 빼고 보인다.
-        push: [...(await this.state.storage.list({ prefix: PUSH_PREFIX, limit: MAX_PUSH_SUBS * 2 })).values()]
-          .map((v) => ({
-            host: (() => { try { return new URL(v.endpoint).host; } catch { return "?"; } })(),
-            device: v.deviceId ? v.deviceId.slice(0, 4) : null, since: v.at ?? null, last: v.last ?? null,
-          })),
+        push: await this.pushDevices(),
       });
     }
     if (url.pathname.endsWith("/remind/fire") && request.method === "POST") {
@@ -590,12 +586,11 @@ export class DuriDO {
     if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return;
     const subs = await this.state.storage.list({ prefix: PUSH_PREFIX });
     if (subs.size === 0) return;
-    // 지금 접속 중(=앱을 보고 있는)인 기기의 endpoint 는 건너뛴다. 그 기기는 어차피
-    // 웹소켓으로 방금 실시간 수신했으니 알림이 필요 없고, 보내봐야 화면이 켜져 있어
-    // 알림이 안 뜨는 "silent push"가 되어 iOS 예산만 깎는다. 백그라운드로 내려가면
-    // 곧(핑 주기 내) 접속이 끊겨 이 집합에서 빠지고 정상적으로 푸시를 받는다.
-    const activeEndpoints = new Set();
-    for (const c of this.conns) if (c.endpoint) activeEndpoints.add(c.endpoint);
+    // 접속 중인 기기도 건너뛰지 않는다. 예전엔 "보고 있다"(hello·presence 의 endpoint)를
+    // 믿고 건너뛰었는데, 앱이 백그라운드에서 재접속하면(배포마다 모든 연결이 끊긴다)
+    // hello 가 endpoint 를 실어 서버는 "보는 중"으로 알고 그 연결이 살아 있는 내내 푸시를
+    // 안 보냈다 — "잠깐 오다가 배포하면 또 안 온다"의 원인. 보고 있는지는 기기 안의
+    // sw.js 가 판단하고, 그때는 알림을 띄웠다 바로 닫는다(silent push 가 안 되게).
     const mine = await this.senderDevices(sender);
     const vapid = {
       publicKey: VAPID_PUBLIC_KEY, privateKey: VAPID_PRIVATE_KEY,
@@ -603,7 +598,6 @@ export class DuriDO {
     };
     const body = JSON.stringify(this.buildPushPayload(full));
     for (const [key, sub] of subs) {
-      if (activeEndpoints.has(sub.endpoint)) continue; // 접속 중인 기기엔 안 보냄
       if (sub.deviceId && mine.has(sub.deviceId)) continue; // 보낸 사람의 기기엔 안 보냄
       let status;
       try {
@@ -619,6 +613,14 @@ export class DuriDO {
       const cur = await this.state.storage.get(key); // 그사이 알림을 껐으면 되살리지 않는다
       if (cur) await this.state.storage.put(key, { ...cur, last: { status, at: Date.now() } });
     }
+  }
+  // 구독별 푸시 서비스(애플·구글·모질라)와 마지막 발송 결과. 주소·키는 빼고 보인다.
+  async pushDevices() {
+    const subs = await this.state.storage.list({ prefix: PUSH_PREFIX, limit: MAX_PUSH_SUBS * 2 });
+    return [...subs.values()].map((v) => ({
+      host: (() => { try { return new URL(v.endpoint).host; } catch { return "?"; } })(),
+      device: v.deviceId ? v.deviceId.slice(0, 4) : null, since: v.at ?? null, last: v.last ?? null,
+    }));
   }
   // 보낸 사람의 기기 집합: 보낸 기기 자신 + 같은 who 로 접속했던 기기들.
   async senderDevices(sender) {
@@ -639,24 +641,30 @@ export class DuriDO {
     }
     const body = await request.json().catch(() => ({}));
     const onlyEndpoint = typeof body.endpoint === "string" ? body.endpoint : null;
+    const nonce = typeof body.nonce === "string" && /^[A-Za-z0-9_-]{4,40}$/.test(body.nonce) ? body.nonce : null;
     const subs = await this.state.storage.list({ prefix: PUSH_PREFIX });
+    const registered = onlyEndpoint ? subs.has(await endpointKey(onlyEndpoint)) : null;
+    const devices = () => this.pushDevices();
+    // dry: 보내지 않고 등록 여부·기기 목록만(진단 화면의 "서버에 등록돼 있나" 단계).
+    if (body.dry) return Response.json({ ok: true, subs: subs.size, registered, devices: await devices() });
     const vapid = {
       publicKey: VAPID_PUBLIC_KEY, privateKey: VAPID_PRIVATE_KEY,
       subject: VAPID_SUBJECT || "https://duri.bubblelab.dev",
     };
-    const payload = JSON.stringify({ kind: "test" });
-    let sent = 0, gone = 0, failed = 0, targeted = 0;
+    const payload = JSON.stringify({ kind: "test", ...(nonce && { nonce }) });
+    let sent = 0, gone = 0, failed = 0, targeted = 0, status = null;
     for (const [key, sub] of subs) {
       if (onlyEndpoint && sub.endpoint !== onlyEndpoint) continue;
       targeted++;
       try {
         const result = await sendWebPush(sub, payload, vapid, { urgency: "high" });
+        status = result.status;
         if (result.gone) { await this.state.storage.delete(key); gone++; }
         else if (result.ok) sent++;
         else failed++; // 403(키 불일치)·413 등 — 예전엔 이것도 "보냈어요"로 셌다
       } catch { failed++; }
     }
-    return Response.json({ ok: true, subs: subs.size, targeted, sent, gone, failed });
+    return Response.json({ ok: true, subs: subs.size, registered, targeted, sent, gone, failed, status, devices: await devices() });
   }
   buildPushPayload(full) {
     let content;

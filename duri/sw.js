@@ -106,7 +106,7 @@ self.addEventListener("activate", (event) => event.waitUntil((async () => {
 // /_duri·/_rt(실시간·게이트 API)는 항상 최신이어야 하므로 손대지 않는다 —
 // 실제 데이터·인증은 이 캐시와 무관하게 매번 쿠키·E2E 패스프레이즈로 따로
 // 검증되므로, 셸(빈 껍데기 마크업)을 캐싱해도 보안엔 영향이 없다.
-const SHELL_CACHE = "duri-shell-v16";
+const SHELL_CACHE = "duri-shell-v17";
 
 // 문서(HTML)는 '네트워크 우선'. 앱을 열 때마다 최신 코드를 받아, index.html만
 // 바뀐 배포도 "다음 실행"이 아니라 바로 이번 실행에 반영된다(예전 stale-while-
@@ -172,6 +172,13 @@ self.addEventListener("push", (event) => {
   event.waitUntil((async () => {
     let data = null;
     try { data = event.data?.json() ?? null; } catch { /* 형식이 다르면 일반 알림으로 */ }
+    // 진단 화면이 "서버가 보냈다"에서 멈추지 않고 "이 기기에 실제로 도착했다"까지 확인하게
+    // 받은 즉시 알린다(알림 표시와 무관하게).
+    if (data?.kind === "test" && data.nonce) {
+      for (const c of await self.clients.matchAll({ type: "window", includeUncontrolled: true })) {
+        c.postMessage({ type: "push-arrived", nonce: data.nonce });
+      }
+    }
     // 푸시를 받고 알림을 안 띄우면 안 된다. iOS 는 그걸 silent push 로 세어 몇 번
     // 쌓이면 구독을 끊고(그 뒤로 알림이 "자꾸" 안 온다), 크롬은 "백그라운드에서
     // 업데이트됨" 알림을 대신 띄운다. 그래서 알릴 필요가 없을 때(앱을 보고 있음·
