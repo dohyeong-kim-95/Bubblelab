@@ -109,7 +109,9 @@ export async function encryptPushPayload(payload, { p256dh, auth }) {
 }
 
 // 발송. 반환의 gone=true는 구독이 만료(404/410)되어 지워야 한다는 뜻.
-export async function sendWebPush(subscription, payload, vapid, { ttl = 24 * 60 * 60 } = {}) {
+// urgency "high" 는 사람이 기다리는 알림(채팅)용이다 — "normal" 이면 안드로이드는 절전
+// (Doze) 중 몇 시간씩 미루고 애플도 전원 상태에 맞춰 늦게·뭉쳐 보낸다.
+export async function sendWebPush(subscription, payload, vapid, { ttl = 24 * 60 * 60, urgency = "normal" } = {}) {
   const body = await encryptPushPayload(payload, subscription.keys);
   const authorization = await vapidAuthorization(subscription.endpoint, vapid);
   const response = await fetch(subscription.endpoint, {
@@ -119,7 +121,7 @@ export async function sendWebPush(subscription, payload, vapid, { ttl = 24 * 60 
       "Content-Encoding": "aes128gcm",
       "Content-Type": "application/octet-stream",
       TTL: String(ttl),
-      Urgency: "normal",
+      Urgency: urgency,
     },
     body,
   });

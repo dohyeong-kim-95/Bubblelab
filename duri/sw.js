@@ -106,7 +106,7 @@ self.addEventListener("activate", (event) => event.waitUntil((async () => {
 // /_duri·/_rt(실시간·게이트 API)는 항상 최신이어야 하므로 손대지 않는다 —
 // 실제 데이터·인증은 이 캐시와 무관하게 매번 쿠키·E2E 패스프레이즈로 따로
 // 검증되므로, 셸(빈 껍데기 마크업)을 캐싱해도 보안엔 영향이 없다.
-const SHELL_CACHE = "duri-shell-v15";
+const SHELL_CACHE = "duri-shell-v16";
 
 // 문서(HTML)는 '네트워크 우선'. 앱을 열 때마다 최신 코드를 받아, index.html만
 // 바뀐 배포도 "다음 실행"이 아니라 바로 이번 실행에 반영된다(예전 stale-while-
@@ -172,10 +172,19 @@ self.addEventListener("push", (event) => {
   event.waitUntil((async () => {
     let data = null;
     try { data = event.data?.json() ?? null; } catch { /* 형식이 다르면 일반 알림으로 */ }
-    // 테스트 알림은 앱을 보고 있어도 띄운다(자가진단 목적). 그 외에는 포커스 중이면 생략.
-    if (data?.kind !== "test" && await isAppFocused()) return;
-    const result = await buildNotification(data);
-    if (!result) return; // 내가 보낸 메시지 — 알리지 않는다
+    // 푸시를 받고 알림을 안 띄우면 안 된다. iOS 는 그걸 silent push 로 세어 몇 번
+    // 쌓이면 구독을 끊고(그 뒤로 알림이 "자꾸" 안 온다), 크롬은 "백그라운드에서
+    // 업데이트됨" 알림을 대신 띄운다. 그래서 알릴 필요가 없을 때(앱을 보고 있음·
+    // 내가 보낸 메시지)도 일단 띄웠다가 곧바로 닫는다. 서버도 이런 푸시를 애초에
+    // 안 보내려고 애쓰지만(접속 중인 기기·보낸 사람의 기기 제외), 어긋나는 틈이 있다.
+    const quiet = data?.kind !== "test" && await isAppFocused();
+    const result = quiet ? null : await buildNotification(data);
+    if (!result) {
+      await self.registration.showNotification("💞 Duri", { tag: "duri-quiet", silent: true });
+      const shown = await self.registration.getNotifications({ tag: "duri-quiet" });
+      for (const n of shown) n.close();
+      return;
+    }
     const { title, body } = result;
     await self.registration.showNotification(title, {
       body, icon: "icon.svg", tag: "duri-msg", renotify: true,

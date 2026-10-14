@@ -60,6 +60,10 @@ const CAL_ID = /^[A-Za-z0-9]{6,40}$/;
 const PUSH_PREFIX = "push:";
 const MAX_PUSH_SUBS = 8; // 두 사람 × 기기 몇 대
 const DEVICE_ID = /^[A-Za-z0-9_-]{6,64}$/; // 기기 식별자(구독 회전 시 옛 구독 정리용)
+// "같은 사람" 표식 — 앱이 이름에서 만든 해시(평문 이름은 아니다). 보낸 사람의 기기들에는
+// 푸시를 보내지 않으려고 쓴다: 받은 sw.js 가 "내 메시지"라 알림을 안 띄우면 그게 silent
+// push 가 되고, iOS 는 그게 몇 번 쌓이면 구독을 끊어 버린다(알림이 "자꾸" 안 오던 원인).
+const WHO = /^[0-9a-f]{8,32}$/;
 // 브라우저별 수신 커서. 싱크가 ack 했어도 아직 못 본 기기가 있으면 버퍼를 지우지
 // 않기 위해 둔다(사진이 그 기기에서 영영 안 보이던 문제). 한참 안 들르는 기기까지
 // 기다리면 버퍼가 무한히 쌓이므로 이 기간이 지나면 계산에서 뺀다.
@@ -189,6 +193,12 @@ export class DuriDO {
         buffered: buffered.size, firstSeq: first?.seq ?? null,
         cal: (await this.state.storage.list({ prefix: CAL_PREFIX, limit: MAX_CAL_EVENTS })).size,
         remind: (await this.state.storage.list({ prefix: REMIND_PREFIX, limit: REMIND_DAYS * 2 })).size,
+        // 구독별 푸시 서비스(애플·구글·모질라)와 마지막 발송 결과. 주소·키는 빼고 보인다.
+        push: [...(await this.state.storage.list({ prefix: PUSH_PREFIX, limit: MAX_PUSH_SUBS * 2 })).values()]
+          .map((v) => ({
+            host: (() => { try { return new URL(v.endpoint).host; } catch { return "?"; } })(),
+            device: v.deviceId ? v.deviceId.slice(0, 4) : null, since: v.at ?? null, last: v.last ?? null,
+          })),
       });
     }
     if (url.pathname.endsWith("/remind/fire") && request.method === "POST") {
@@ -302,10 +312,14 @@ export class DuriDO {
       // 접속 시점의 커서를 바로 기록한다 — 재접속 직후 싱크가 ack 해서 아직 못 본
       // 항목이 지워지는 걸 막는다("seen" 을 보낼 틈도 없이 사라지던 자리).
       const dev = typeof msg.deviceId === "string" && DEVICE_ID.test(msg.deviceId) ? msg.deviceId : null;
+      const who = typeof msg.who === "string" && WHO.test(msg.who) ? msg.who : null;
       if (conn.role === "peer" && dev) {
         conn.deviceId = dev;
-        this.state.blockConcurrencyWhile(() =>
-          this.state.storage.put(PEER_PREFIX + dev, { seq: since, at: Date.now() }));
+        conn.who = who;
+        this.state.blockConcurrencyWhile(async () => {
+          const cur = await this.state.storage.get(PEER_PREFIX + dev);
+          await this.state.storage.put(PEER_PREFIX + dev, { seq: since, at: Date.now(), who: who ?? cur?.who ?? null });
+        });
       }
       this.send(conn, { type: "welcome", head: this.head, online: this.peerCount() });
       this.broadcast({ type: "presence", online: this.peerCount() }, conn);
@@ -347,7 +361,7 @@ export class DuriDO {
           await this.state.storage.put(key, { ...cur, at: Date.now() });
           return;
         }
-        await this.state.storage.put(key, { seq: msg.seq, at: Date.now() });
+        await this.state.storage.put(key, { ...cur, seq: msg.seq, at: Date.now() });
       });
       return;
     }
@@ -374,7 +388,8 @@ export class DuriDO {
       }
       conn.stamps.push(now);
       this.state.blockConcurrencyWhile(() =>
-        this.append({ kind: "msg", at: now, iv: payload.iv, ct: payload.ct }));
+        this.append({ kind: "msg", at: now, iv: payload.iv, ct: payload.ct },
+          { deviceId: conn.deviceId ?? null, who: conn.who ?? null }));
       return;
     }
 
@@ -508,7 +523,8 @@ export class DuriDO {
   }
 
   // ── 버퍼 적재/폐기 ───────────────────────────────────────────
-  async append(entry) {
+  // sender: 보낸 기기 {deviceId, who} — 그 사람의 기기들은 푸시에서 뺀다(없으면 전체).
+  async append(entry, sender = null) {
     const seq = this.head + 1;
     const full = { seq, ...entry };
     await this.state.storage.put(bufKey(seq), full);
@@ -518,7 +534,7 @@ export class DuriDO {
     this.broadcast({ type: "entry", ...full });
     // 실시간 접속자는 이미 위 broadcast로 받으므로, 푸시는 앱이 꺼져 있는 기기를
     // 위한 것이다. 네트워크 호출이라 append 자체를 막지 않게 기다리지 않는다.
-    if (entry.kind === "msg" || entry.kind === "photo") this.notifyPush(full).catch(() => {});
+    if (entry.kind === "msg" || entry.kind === "photo") this.notifyPush(full, sender).catch(() => {});
     return full;
   }
 
@@ -569,7 +585,7 @@ export class DuriDO {
   }
   // 새 항목(msg/photo)이 생길 때마다 등록된 모든 기기로 발송(만료 구독은 정리).
   // 페이로드는 여전히 암호블롭뿐 — 서버는 누가 뭐라고 보냈는지 모른다.
-  async notifyPush(full) {
+  async notifyPush(full, sender = null) {
     const { VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT } = this.env;
     if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return;
     const subs = await this.state.storage.list({ prefix: PUSH_PREFIX });
@@ -580,6 +596,7 @@ export class DuriDO {
     // 곧(핑 주기 내) 접속이 끊겨 이 집합에서 빠지고 정상적으로 푸시를 받는다.
     const activeEndpoints = new Set();
     for (const c of this.conns) if (c.endpoint) activeEndpoints.add(c.endpoint);
+    const mine = await this.senderDevices(sender);
     const vapid = {
       publicKey: VAPID_PUBLIC_KEY, privateKey: VAPID_PRIVATE_KEY,
       subject: VAPID_SUBJECT || "https://duri.bubblelab.dev",
@@ -587,13 +604,31 @@ export class DuriDO {
     const body = JSON.stringify(this.buildPushPayload(full));
     for (const [key, sub] of subs) {
       if (activeEndpoints.has(sub.endpoint)) continue; // 접속 중인 기기엔 안 보냄
+      if (sub.deviceId && mine.has(sub.deviceId)) continue; // 보낸 사람의 기기엔 안 보냄
+      let status;
       try {
-        const result = await sendWebPush(sub, body, vapid);
-        if (result.gone) await this.state.storage.delete(key); // 만료 구독 정리
+        const result = await sendWebPush(sub, body, vapid, { urgency: "high" });
+        if (result.gone) { await this.state.storage.delete(key); continue; } // 만료 구독 정리
+        status = result.status;
       } catch (error) {
         console.error("duri push send failed", error);
+        status = 0;
       }
+      // 마지막 발송 결과를 남긴다 — 실패가 조용히 삼켜져 "왜 안 오지"를 알 길이 없었다.
+      // /status 의 push 칸으로 본다(주소·키는 내보내지 않는다).
+      const cur = await this.state.storage.get(key); // 그사이 알림을 껐으면 되살리지 않는다
+      if (cur) await this.state.storage.put(key, { ...cur, last: { status, at: Date.now() } });
     }
+  }
+  // 보낸 사람의 기기 집합: 보낸 기기 자신 + 같은 who 로 접속했던 기기들.
+  async senderDevices(sender) {
+    const set = new Set();
+    if (sender?.deviceId) set.add(sender.deviceId);
+    if (sender?.who) {
+      const peers = await this.state.storage.list({ prefix: PEER_PREFIX, limit: 32 });
+      for (const [k, v] of peers) if (v?.who === sender.who) set.add(k.slice(PEER_PREFIX.length));
+    }
+    return set;
   }
   // 자가진단용 테스트 알림. endpoint 를 주면 그 기기(내 기기)로만, 없으면 전체로.
   // 결과(구독 수·발송·만료·실패, VAPID 미설정 여부)를 돌려줘 어디서 막히는지 알린다.
@@ -615,8 +650,10 @@ export class DuriDO {
       if (onlyEndpoint && sub.endpoint !== onlyEndpoint) continue;
       targeted++;
       try {
-        const result = await sendWebPush(sub, payload, vapid);
-        if (result.gone) { await this.state.storage.delete(key); gone++; } else sent++;
+        const result = await sendWebPush(sub, payload, vapid, { urgency: "high" });
+        if (result.gone) { await this.state.storage.delete(key); gone++; }
+        else if (result.ok) sent++;
+        else failed++; // 403(키 불일치)·413 등 — 예전엔 이것도 "보냈어요"로 셌다
       } catch { failed++; }
     }
     return Response.json({ ok: true, subs: subs.size, targeted, sent, gone, failed });
@@ -746,13 +783,18 @@ export class DuriDO {
     const thumb = isBlob(thumbIv, 64) && isBlob(thumbCt, DURI_MAX_THUMB_BLOB)
       ? { thumbIv, thumbCt } : null; // 없으면 받는 쪽이 예전처럼 원본을 기다린다
     const album = parseAlbumHeader(request.headers.get("X-Duri-Album"));
+    const dev = request.headers.get("X-Duri-Device");
+    const senderDev = dev && DEVICE_ID.test(dev) ? dev : null;
+    const sender = senderDev
+      ? { deviceId: senderDev, who: (await this.state.storage.get(PEER_PREFIX + senderDev))?.who ?? null }
+      : null;
     const entry = await this.state.blockConcurrencyWhile(() => this.append({
       kind: "photo", at: Date.now(), r2key,
       imgIv: meta.imgIv, sha256: meta.sha256, bytes: body.byteLength,
       metaIv: meta.metaIv, metaCt: meta.metaCt,
       ...(thumb || {}),
       ...(album ? { album } : {}),
-    }));
+    }, sender));
     return Response.json({ seq: entry.seq, r2key }, { headers: { "Cache-Control": "no-store" } });
   }
 

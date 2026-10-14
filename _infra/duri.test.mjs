@@ -464,6 +464,54 @@ test("notifyPush skips devices that are currently connected (no silent push to a
   assert.deepEqual(hits, [away]); // 접속 중인 online 은 건너뛰고, 자리 비운 away 에만 발송
 });
 
+test("notifyPush skips every device of the sender (by who), sends high urgency, and records the last result", async () => {
+  const vapid = await generateVapidKeys();
+  const storage = fakeStorage({ seq: 0, ackSeq: 0 });
+  const room = new DuriDO({ storage, blockConcurrencyWhile: (fn) => fn() }, {
+    DURI_BUCKET: fakeBucket([]),
+    VAPID_PUBLIC_KEY: vapid.publicKey, VAPID_PRIVATE_KEY: vapid.privateKey,
+    VAPID_SUBJECT: "https://duri.bubblelab.dev",
+  });
+  await room.load();
+  // 나: 폰(phone-a)·PC(pc-a), 상대: 폰(phone-b). 내 PC 는 지금 접속해 있지 않다.
+  const sub = async (name, deviceId) =>
+    room.fetch(pushReq("POST", { subscription: await fakeSubscription(`https://push.example.com/${name}`), deviceId }));
+  await sub("phone-a", "phone-aaaaaa");
+  await sub("pc-a", "pc-aaaaaaaa");
+  await sub("phone-b", "phone-bbbbbb");
+  const noop = { send() {} };
+  for (const [deviceId, who] of [["pc-aaaaaaaa", "aaaaaaaaaaaaaaaa"], ["phone-bbbbbb", "bbbbbbbbbbbbbbbb"]]) {
+    const conn = { ws: noop, role: "peer", stamps: [], alive: true };
+    room.handle(conn, { type: "hello", since: 0, deviceId, who });
+    room.conns.delete?.(conn); // 접속 기록(peer:)만 남기고 지금은 자리 비움
+  }
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
+  const hits = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (endpoint, init) => {
+    hits.push([String(endpoint).split("/").pop(), init.headers.Urgency]);
+    return new Response(null, { status: 201 });
+  };
+  try {
+    // 내 폰에서 보낸 메시지 — 같은 who 인 내 PC 에도 보내지 않는다(받아 봐야 알림을 안
+    // 띄우는 silent push 가 되고, iOS 는 그게 쌓이면 구독을 끊는다).
+    await room.append({ kind: "msg", at: Date.now(), iv: "aXY=", ct: "Y2lwaGVy" },
+      { deviceId: "phone-aaaaaa", who: "aaaaaaaaaaaaaaaa" });
+    await new Promise((resolve) => setTimeout(resolve, 60));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  assert.deepEqual(hits, [["phone-b", "high"]]);
+
+  const status = await (await room.fetch(new Request("https://x/_duri/status", { headers: { "X-Duri-Role": "peer" } }))).json();
+  assert.equal(status.push.length, 3);
+  const b = status.push.find((p) => p.device === "phon" && p.last);
+  assert.equal(b.host, "push.example.com");
+  assert.equal(b.last.status, 201);
+  assert.ok(!JSON.stringify(status.push).includes("/phone-b")); // 주소는 내보내지 않는다
+});
+
 test("push subscriptions survive a redeploy (DO restart) — messages still push to away devices", async () => {
   const vapid = await generateVapidKeys();
   // 재배포 = Worker 재기동 → DO 인스턴스가 새로 만들어지지만 storage(구독)는 영속된다.
