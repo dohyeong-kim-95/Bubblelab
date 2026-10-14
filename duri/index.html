@@ -1499,7 +1499,7 @@ function connect() {
     }
     if (m.type === "reset") {
       // 지도 핀·툼스톤도 함께 비운다 — 안 그러면 "새로 시작" 뒤에도 옛 색칠이 남는다.
-      for (const k of ["duri:cal", PINS_KEY, PINS_HIDDEN_KEY, UNPIN_OUTBOX_KEY]) localStorage.removeItem(k);
+      for (const k of ["duri:cal", "duri:remindSig", PINS_KEY, PINS_HIDDEN_KEY, UNPIN_OUTBOX_KEY]) localStorage.removeItem(k);
       clearCache().then(() => location.reload());
       return;
     }
@@ -3586,6 +3586,7 @@ $("file").addEventListener("change", (e) => {
 // 이벤트는 각자 만든 사람(owner)과 공통(shared) 플래그를 담고, E2E 암호블롭으로
 // 서버 cal:<id> 에 rev 와 함께 저장·동기화된다(LWW). 색상은 기기별 설정으로 매핑.
 const calEvents = new Map(); // id → { id, rev, deleted, date?, title?, owner?, shared? }
+let calSynced = false, remindTimer = null; // 아침 리마인드(아래 uploadReminders)
 let calView = "month", calCursor = null, calSel = null, calDlgId = null, calDlgDate = null, calDlgCat = "mine";
 let calLastTap = { ds: null, t: 0 }; // 월간 격자 더블탭(같은 날짜 400ms 이내 재클릭) 판정용
 const calOutbox = [];
@@ -3660,6 +3661,7 @@ const calColorOf = (ev) => ev.holiday ? HOLIDAY_COLOR : ev.shared ? sharedColor(
 function calPersist() {
   try { const o = {}; for (const [id, ev] of calEvents) o[id] = ev; localStorage.setItem("duri:cal", JSON.stringify(o)); }
   catch { /* 최선노력 */ }
+  scheduleRemindUpload(); // 캘린더가 바뀌는 길은 전부 여기를 지난다
 }
 function calRestore() {
   try { const o = JSON.parse(localStorage.getItem("duri:cal") || "{}"); for (const id in o) calEvents.set(id, o[id]); }
@@ -3704,7 +3706,65 @@ async function applyCalEntry(entry) { // 실시간으로 한 건씩 오는 cal-p
 }
 async function applyCalEntries(entries) { // cal-state(접속 시 전체 동기화) 전용 — 한 번에 묶어 처리
   for (const entry of entries) await mergeCalEntry(entry);
+  calSynced = true; // 서버 상태를 다 받은 뒤에야 리마인드를 맡긴다(옛 사본으로 덮지 않게)
   scheduleCalFlush();
+}
+// ── 아침 일정 리마인드 (08:00 KST, 채팅 + 푸시) ─────────────────
+// 서버는 일정을 못 읽는다(E2E). 그래서 **그날 아침 올라갈 채팅 메시지를 이 기기가
+// 미리 암호화해 날짜별로 맡기고**, 서버 cron 이 08:00 에 그날 몫을 보통 메시지처럼
+// 올린다 — 채팅 알약·푸시·PC 백업이 기존 경로를 그대로 탄다. 서버가 아는 건 "어느
+// 날짜에 맡긴 게 있는가"뿐이다. 캘린더가 바뀔 때마다 앞으로 60일치를 다시 맡기므로
+// 아무도 앱을 60일 넘게 안 열면 그 뒤로는 리마인드가 끊긴다.
+const REMIND_AHEAD = 60;
+const REMIND_NAME = "📅 캘린더"; // 두 사람 이름과 겹치지 않아야 양쪽 다 알림을 받는다
+const REMIND_FRAME_BYTES = 24 * 1024; // 서버의 WS 프레임 상한(32KB) 아래로 나눠 보낸다
+const shiftYmd = (ds, n) => { const d = new Date(ds + "T00:00:00"); d.setDate(d.getDate() + n); return ymd(d); };
+function remindItems(ds) {
+  return calEventsOn(ds).filter((ev) => !ev.holiday)
+    .map((ev) => ({ start: ev.start || "", title: ev.title || "(제목 없음)", owner: ev.shared ? "" : (ev.owner || "") }));
+}
+function remindText(items) {
+  return "📅 오늘 일정 · " + items.map((i) => `${i.start ? i.start + " " : ""}${i.title}${i.owner ? ` (${i.owner})` : ""}`).join(" · ");
+}
+function scheduleRemindUpload() {
+  if (!calSynced) return;
+  clearTimeout(remindTimer);
+  remindTimer = setTimeout(() => uploadReminders().catch(() => {}), 1500);
+}
+async function uploadReminders() {
+  if (!ws || ws.readyState !== 1) return; // 재접속하면 cal-state → 다시 불린다
+  const from = todayYmd(), to = shiftYmd(from, REMIND_AHEAD - 1);
+  const plan = [];
+  for (let i = 0; i < REMIND_AHEAD; i++) {
+    const date = shiftYmd(from, i), items = remindItems(date);
+    if (items.length) plan.push({ date, items });
+  }
+  // 이 기기가 마지막으로 맡긴 것과 같으면 다시 보내지 않는다(날짜가 넘어가면 from 이 바뀐다).
+  const sig = JSON.stringify([from, plan]);
+  try { if (localStorage.getItem("duri:remindSig") === sig) return; } catch { /* */ }
+  const days = [];
+  for (const { date, items } of plan) {
+    const f = await encryptJson({ name: REMIND_NAME, sys: true, remind: { date, items }, text: remindText(items) });
+    days.push({ date, iv: f.iv, ct: f.ct });
+  }
+  // 구간 [from, to] 를 이어 붙인 덩어리로 나눈다 — 서버는 구간마다 통째로 갈아 끼운다.
+  const chunks = [[]];
+  let size = 0;
+  for (const d of days) {
+    const n = JSON.stringify(d).length;
+    if (size + n > REMIND_FRAME_BYTES && chunks.at(-1).length) { chunks.push([]); size = 0; }
+    chunks.at(-1).push(d); size += n;
+  }
+  chunks.forEach((chunk, i) => {
+    const next = chunks[i + 1];
+    ws.send(JSON.stringify({
+      type: "remind-set",
+      from: i === 0 ? from : chunk[0].date,
+      to: next ? shiftYmd(next[0].date, -1) : to,
+      days: chunk,
+    }));
+  });
+  try { localStorage.setItem("duri:remindSig", sig); } catch { /* */ }
 }
 function calSend(frame) {
   if (ws && ws.readyState === 1) ws.send(JSON.stringify(frame)); else calOutbox.push(frame);

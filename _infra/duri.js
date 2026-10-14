@@ -66,6 +66,13 @@ const DEVICE_ID = /^[A-Za-z0-9_-]{6,64}$/; // 기기 식별자(구독 회전 시
 const PEER_PREFIX = "peer:";
 const PEER_STALE_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_PUSH_PAYLOAD_BYTES = 3000; // 안전 상한 넘으면 내용 없는 일반 알림으로 대체
+// 아침 일정 리마인드. 서버는 일정을 못 읽으므로(E2E) **앱이 그날 보낼 채팅 메시지를
+// 미리 암호화해 날짜별로 맡겨 두고**, 08:00 KST cron 이 그날 몫을 꺼내 보통 메시지처럼
+// 올린다(채팅·푸시·PC 백업이 기존 경로를 그대로 탄다). 서버가 아는 것은 "어느 날짜에
+// 맡긴 게 있는가"뿐이다 — 제목·시간·누구 일정인지는 블롭 안에 있다.
+const REMIND_PREFIX = "remind:";
+export const REMIND_DAYS = 62; // 오늘부터 이만큼 앞까지만 받는다(앱은 60일치를 맡긴다)
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 const bufKey = (seq) => BUF_PREFIX + String(seq).padStart(12, "0");
 
@@ -113,6 +120,28 @@ export function parseAlbumHeader(value) {
 const R2_KEY = /^photo\/[0-9]{12}-[A-Za-z0-9]{8,32}$/;
 export const isPhotoKey = (key) => typeof key === "string" && R2_KEY.test(key);
 
+// KST 기준 날짜(YYYY-MM-DD). 두 사람 다 KST 라 앱이 쓰는 로컬 날짜와 같다.
+export const kstYmd = (ms = Date.now()) => new Date(ms + 9 * 3600_000).toISOString().slice(0, 10);
+const addDays = (ymd, n) => new Date(Date.parse(ymd + "T00:00:00Z") + n * 86400_000).toISOString().slice(0, 10);
+
+// remind-set 프레임 검사. 앱은 [from, to] 구간을 통째로 갈아 끼운다 — 그 구간에서
+// 빠진 날짜는 "이제 일정이 없다"는 뜻이라 지운다. 프레임 크기 상한(32KB) 때문에
+// 60일치를 몇 덩어리로 나눠 보내므로 구간 단위로 받는다.
+export function validateRemindSet(msg, today = kstYmd()) {
+  const { from, to, days } = msg ?? {};
+  if (!DATE_RE.test(from ?? "") || !DATE_RE.test(to ?? "") || from > to) throw new Error("invalid range");
+  // 어제는 허용한다 — 자정 직후 날짜가 기기와 서버에서 잠깐 어긋날 수 있다.
+  if (from < addDays(today, -1) || to > addDays(today, REMIND_DAYS)) throw new Error("range out of window");
+  if (!Array.isArray(days) || days.length > REMIND_DAYS + 1) throw new Error("invalid days");
+  const seen = new Set();
+  return days.map((d) => {
+    if (!DATE_RE.test(d?.date ?? "") || d.date < from || d.date > to || seen.has(d.date)) throw new Error("invalid day");
+    if (!isBlob(d.iv, 64) || !isBlob(d.ct, DURI_MAX_TEXT_BLOB)) throw new Error("invalid blob");
+    seen.add(d.date);
+    return { date: d.date, iv: d.iv, ct: d.ct };
+  });
+}
+
 export class DuriDO {
   constructor(state, env) {
     this.state = state;
@@ -133,7 +162,9 @@ export class DuriDO {
   async fetch(request) {
     await this.load();
     const url = new URL(request.url);
-    const role = request.headers.get("X-Duri-Role") === "sink" ? "sink" : "peer";
+    const header = request.headers.get("X-Duri-Role");
+    // cron 은 워커의 scheduled 만 붙인다 — 공개 경로는 withDuriRole 이 sink/peer 로 덮어쓴다.
+    const role = header === "sink" || header === "cron" ? header : "peer";
 
     if (request.headers.get("Upgrade")?.toLowerCase() === "websocket") {
       return this.handleSocket(request, role);
@@ -157,7 +188,12 @@ export class DuriDO {
         pending: this.head - this.ackSeq,
         buffered: buffered.size, firstSeq: first?.seq ?? null,
         cal: (await this.state.storage.list({ prefix: CAL_PREFIX, limit: MAX_CAL_EVENTS })).size,
+        remind: (await this.state.storage.list({ prefix: REMIND_PREFIX, limit: REMIND_DAYS * 2 })).size,
       });
+    }
+    if (url.pathname.endsWith("/remind/fire") && request.method === "POST") {
+      if (role !== "cron") return new Response("cron only", { status: 403 });
+      return Response.json(await this.state.blockConcurrencyWhile(() => this.fireReminder()));
     }
     if (url.pathname.endsWith("/reset") && request.method === "POST") {
       return this.handleReset();
@@ -205,12 +241,14 @@ export class DuriDO {
         cursor = listed.truncated ? listed.cursor : undefined;
       } while (cursor);
     }
-    // 3) 공유 캘린더도 비운다.
-    for (;;) {
-      const cal = await this.state.storage.list({ prefix: CAL_PREFIX, limit: 1000 });
-      if (cal.size === 0) break;
-      await this.state.storage.delete([...cal.keys()]);
-      if (cal.size < 1000) break;
+    // 3) 공유 캘린더와, 거기서 나온 아침 리마인드도 비운다.
+    for (const prefix of [CAL_PREFIX, REMIND_PREFIX]) {
+      for (;;) {
+        const cal = await this.state.storage.list({ prefix, limit: 1000 });
+        if (cal.size === 0) break;
+        await this.state.storage.delete([...cal.keys()]);
+        if (cal.size < 1000) break;
+      }
     }
     // 4) 전부 소비됨으로 표시(seq 는 유지).
     this.ackSeq = this.head;
@@ -348,6 +386,18 @@ export class DuriDO {
       this.state.blockConcurrencyWhile(() => this.calPut(conn, msg.id, msg.iv, msg.ct, msg.rev));
       return;
     }
+    // 아침 리마인드 맡기기: [from, to] 구간을 통째로 갈아 끼운다(브라우저만).
+    if (msg.type === "remind-set") {
+      if (conn.role !== "peer") return;
+      let days;
+      try { days = validateRemindSet(msg); } catch {
+        this.send(conn, { type: "error", error: "invalid remind" });
+        return;
+      }
+      conn.stamps.push(now);
+      this.state.blockConcurrencyWhile(() => this.setReminders(msg.from, msg.to, days));
+      return;
+    }
     // 캘린더 이벤트 삭제(툼스톤으로 전파).
     if (msg.type === "cal-del") {
       if (!CAL_ID.test(msg.id ?? "") || !Number.isFinite(msg.rev)) return;
@@ -433,6 +483,28 @@ export class DuriDO {
       await this.state.storage.delete(key);
     }
     this.broadcast({ type: "deleted", seq });
+  }
+
+  // ── 아침 리마인드 ────────────────────────────────────────────
+  async setReminders(from, to, days) {
+    const existing = await this.state.storage.list({
+      prefix: REMIND_PREFIX, start: REMIND_PREFIX + from, end: REMIND_PREFIX + to + "~",
+    });
+    const keep = new Set(days.map((d) => REMIND_PREFIX + d.date));
+    const gone = [...existing.keys()].filter((k) => !keep.has(k));
+    if (gone.length) await this.state.storage.delete(gone);
+    for (const d of days) await this.state.storage.put(REMIND_PREFIX + d.date, { iv: d.iv, ct: d.ct });
+  }
+  // 08:00 KST cron 이 부른다. 오늘 몫이 있으면 보통 메시지로 올리고(→ 실시간 전달·푸시·
+  // 싱크 백업), 오늘까지의 몫은 전부 지운다 — cron 이 두 번 돌아도 두 번 올리지 않고,
+  // 지나간 날짜가 쌓이지도 않는다.
+  async fireReminder(today = kstYmd()) {
+    const due = await this.state.storage.list({ prefix: REMIND_PREFIX, end: REMIND_PREFIX + today + "~" });
+    const todays = due.get(REMIND_PREFIX + today);
+    if (due.size) await this.state.storage.delete([...due.keys()]);
+    if (!todays) return { date: today, posted: false };
+    const entry = await this.append({ kind: "msg", at: Date.now(), iv: todays.iv, ct: todays.ct });
+    return { date: today, posted: true, seq: entry.seq };
   }
 
   // ── 버퍼 적재/폐기 ───────────────────────────────────────────

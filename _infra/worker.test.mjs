@@ -886,3 +886,25 @@ test("confidential static cache only admits code, fonts, and explicitly non-sens
   assert.equal(response.headers.get("Cache-Control"), "no-store", "문서는 no-store");
 });
 
+
+test("08:00 KST cron 은 VAPID 가 없어도 duri 오늘 일정 리마인드를 cron 역할로 부른다", async () => {
+  const calls = [];
+  const env = {
+    ENABLE_DURI: "true",
+    DURI: {
+      idFromName: (name) => name,
+      get: () => ({ fetch: async (request) => {
+        calls.push({ path: new URL(request.url).pathname, role: request.headers.get("X-Duri-Role") });
+        return Response.json({ posted: false });
+      } }),
+    },
+  };
+  const pending = [];
+  await worker.scheduled({ cron: "0 23 * * *" }, env, { waitUntil: (p) => pending.push(p) });
+  await Promise.all(pending);
+  assert.deepEqual(calls, [{ path: "/remind/fire", role: "cron" }]);
+
+  calls.length = 0;
+  await worker.scheduled({ cron: "0 23 * * *" }, { ...env, ENABLE_DURI: "false" }, { waitUntil: (p) => pending.push(p) });
+  assert.equal(calls.length, 0, "duri 를 끄면 부르지 않는다");
+});

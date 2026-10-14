@@ -604,6 +604,16 @@ function withDuriRole(request, role) {
   return new Request(request, { headers });
 }
 
+// 오늘 일정 리마인드를 DuriDO 에 올리게 한다. cron 역할은 이 내부 호출만 붙인다 —
+// 공개 /_duri/* 경로는 화이트리스트라 /remind/fire 로 닿지 않는다.
+async function fireDuriReminder(env) {
+  const stub = env.DURI.get(env.DURI.idFromName("main"));
+  const response = await stub.fetch(new Request("https://duri.internal/remind/fire", {
+    method: "POST", headers: { "X-Duri-Role": "cron" },
+  }));
+  if (!response.ok) console.error("duri remind fire failed", response.status);
+}
+
 async function handleDuri(request, env, url) {
   if (!featureEnabled(env, "ENABLE_DURI")) {
     return Response.json({ error: "duri is temporarily unavailable" }, {
@@ -1865,7 +1875,7 @@ async function syncWorkReviews(env) {
 export default {
   // cron 처리 (wrangler.jsonc triggers.crons):
   //  22:00 KST(13:00 UTC) → 팟캐스트 저녁 리마인더
-  //  08:00 KST(23:00 UTC) → 운세 데일리 알림 + 아침 브리핑(날씨) 알림
+  //  08:00 KST(23:00 UTC) → 운세 데일리 알림 + 아침 브리핑(날씨) 알림 + duri 오늘 일정
   //  06:40 KST(21:40 UTC) → 외주 리뷰 동기화 + 데일리 팟캐스트 생성
   async scheduled(controller, env, ctx) {
     const podcastReady = featureEnabled(env, "ENABLE_PODCAST") && env.PODCAST_BUCKET;
@@ -1874,6 +1884,8 @@ export default {
       return;
     }
     if (controller.cron === "0 23 * * *") {
+      // duri 리마인드는 푸시가 없어도 채팅에는 올라가야 하므로 VAPID 검사 밖에 둔다.
+      if (featureEnabled(env, "ENABLE_DURI") && env.DURI) ctx.waitUntil(fireDuriReminder(env));
       if (env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY) {
         ctx.waitUntil(sendFortuneDaily(env));
         ctx.waitUntil(sendBriefDaily(env));

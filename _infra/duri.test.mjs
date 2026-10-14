@@ -9,6 +9,8 @@ import {
   validatePhotoMeta,
   isPhotoKey,
   parseAlbumHeader,
+  validateRemindSet,
+  kstYmd,
 } from "./duri.js";
 import { b64uEncode, generateVapidKeys } from "./webpush.js";
 
@@ -519,4 +521,86 @@ test("buildPushPayload carries the opaque blob for msg/photo but falls back to g
   assert.deepEqual(room.buildPushPayload({ kind: "msg", iv: "aXY=", ct: "Y2lwaGVy" }), { kind: "msg", iv: "aXY=", ct: "Y2lwaGVy" });
   assert.deepEqual(room.buildPushPayload({ kind: "photo", metaIv: "aXY=", metaCt: "bWV0YQ==" }), { kind: "photo", metaIv: "aXY=", metaCt: "bWV0YQ==" });
   assert.deepEqual(room.buildPushPayload({ kind: "msg", iv: "aXY=", ct: "A".repeat(4000) }), { kind: "generic" });
+});
+
+// ── 아침 일정 리마인드 ───────────────────────────────────────────
+const remindDay = (date) => ({ date, iv: "aXY=", ct: "Y2lwaGVy" });
+
+test("kstYmd rolls over at 15:00 UTC (= KST midnight)", () => {
+  assert.equal(kstYmd(Date.parse("2026-10-14T14:59:59Z")), "2026-10-14");
+  assert.equal(kstYmd(Date.parse("2026-10-14T15:00:00Z")), "2026-10-15");
+});
+
+test("validateRemindSet accepts a range inside the window and rejects the rest", () => {
+  const today = "2026-10-14";
+  const ok = validateRemindSet({ from: "2026-10-14", to: "2026-12-12", days: [remindDay("2026-10-20")] }, today);
+  assert.deepEqual(ok, [remindDay("2026-10-20")]);
+  assert.deepEqual(validateRemindSet({ from: "2026-10-13", to: "2026-10-13", days: [] }, today), []); // 어제까지는 허용
+  const bad = [
+    { from: "2026-10-12", to: "2026-10-20", days: [] },                          // 그저께 — 창 밖
+    { from: "2026-10-14", to: "2026-12-16", days: [] },                          // 62일 넘게 앞
+    { from: "2026-10-20", to: "2026-10-14", days: [] },                          // 뒤집힌 구간
+    { from: "2026-10-14", to: "2026-10-20", days: [remindDay("2026-10-21")] },   // 구간 밖 날짜
+    { from: "2026-10-14", to: "2026-10-20", days: [remindDay("2026-10-15"), remindDay("2026-10-15")] }, // 중복
+    { from: "2026-10-14", to: "2026-10-20", days: [{ date: "2026-10-15", iv: "###", ct: "Y2lw" }] },    // 블롭 아님
+    { from: "14-10-2026", to: "2026-10-20", days: [] },
+  ];
+  for (const msg of bad) assert.throws(() => validateRemindSet(msg, today), undefined, JSON.stringify(msg));
+});
+
+test("remind-set replaces its range; fire posts today's once as a normal msg and clears the past", async () => {
+  const storage = fakeStorage({ seq: 0, ackSeq: 0 });
+  const room = new DuriDO({ storage, blockConcurrencyWhile: (fn) => fn() }, { DURI_BUCKET: fakeBucket([]) });
+  await room.load();
+  const sent = [];
+  room.conns.add({ ws: { send: (s) => sent.push(JSON.parse(s)) }, role: "peer", stamps: [], alive: true });
+  const reminders = () => [...storage.map.keys()].filter((k) => k.startsWith("remind:")).sort();
+
+  await room.setReminders("2026-10-13", "2026-10-20",
+    [remindDay("2026-10-13"), remindDay("2026-10-14"), remindDay("2026-10-16"), remindDay("2026-10-18")]);
+  await room.setReminders("2026-10-21", "2026-10-30", [remindDay("2026-10-25")]);
+  // 같은 구간을 다시 맡기면 빠진 날짜(16일)는 지워지고, 구간 밖(25일)은 그대로다.
+  await room.setReminders("2026-10-13", "2026-10-20",
+    [remindDay("2026-10-13"), remindDay("2026-10-14"), remindDay("2026-10-18")]);
+  assert.deepEqual(reminders(), ["remind:2026-10-13", "remind:2026-10-14", "remind:2026-10-18", "remind:2026-10-25"]);
+
+  const first = await room.fireReminder("2026-10-14");
+  assert.equal(first.posted, true);
+  assert.deepEqual(reminders(), ["remind:2026-10-18", "remind:2026-10-25"], "오늘까지의 몫은 지운다");
+  const entry = storage.map.get("buf:000000000001");
+  assert.equal(entry.kind, "msg");
+  assert.equal(entry.ct, "Y2lwaGVy");
+  assert.ok(sent.some((m) => m.type === "entry" && m.seq === 1), "접속자에게 바로 전달");
+
+  // cron 이 두 번 돌아도 두 번 올리지 않는다.
+  assert.equal((await room.fireReminder("2026-10-14")).posted, false);
+  assert.equal(room.head, 1);
+  // 맡긴 게 없는 날은 아무것도 올리지 않는다.
+  assert.equal((await room.fireReminder("2026-10-15")).posted, false);
+
+  await room.handleReset();
+  assert.deepEqual(reminders(), [], "방 초기화는 리마인드도 지운다");
+});
+
+test("remind/fire is reachable only with the cron role; remind-set only from a browser", async () => {
+  const storage = fakeStorage({ seq: 0, ackSeq: 0 });
+  const room = new DuriDO({ storage, blockConcurrencyWhile: (fn) => fn() }, { DURI_BUCKET: fakeBucket([]) });
+  const fire = (role) => room.fetch(new Request("https://x/remind/fire", { method: "POST", headers: { "X-Duri-Role": role } }));
+  assert.equal((await fire("peer")).status, 403);
+  assert.equal((await fire("sink")).status, 403);
+  const ok = await fire("cron");
+  assert.equal(ok.status, 200);
+  assert.equal((await ok.json()).posted, false);
+
+  const today = kstYmd();
+  const sinkConn = { ws: { send() {} }, role: "sink", stamps: [], alive: true };
+  room.handle(sinkConn, { type: "remind-set", from: today, to: today, days: [remindDay(today)] });
+  assert.equal(storage.map.has("remind:" + today), false, "싱크는 리마인드를 맡길 수 없다");
+  const errors = [];
+  const peerConn = { ws: { send: (s) => errors.push(JSON.parse(s)) }, role: "peer", stamps: [], alive: true };
+  room.handle(peerConn, { type: "remind-set", from: today, to: today, days: [remindDay(today)] });
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(storage.map.has("remind:" + today), true);
+  room.handle(peerConn, { type: "remind-set", from: "2000-01-01", to: "2000-01-02", days: [] });
+  assert.ok(errors.some((m) => m.error === "invalid remind"));
 });
