@@ -514,6 +514,40 @@ test("notifyPush skips every device of the sender (by who), sends high urgency, 
   assert.ok(!JSON.stringify(status.push).includes("/phone-b")); // 주소는 내보내지 않는다
 });
 
+test("push/recv records delivery receipts so 'sent but never arrived' is visible", async () => {
+  const vapid = await generateVapidKeys();
+  const storage = fakeStorage({ seq: 0, ackSeq: 0 });
+  const room = new DuriDO({ storage, blockConcurrencyWhile: (fn) => fn() }, {
+    DURI_BUCKET: fakeBucket([]),
+    VAPID_PUBLIC_KEY: vapid.publicKey, VAPID_PRIVATE_KEY: vapid.privateKey,
+  });
+  await room.load();
+  const endpoint = "https://web.push.apple.com/abc";
+  await room.fetch(pushReq("POST", { subscription: await fakeSubscription(endpoint), deviceId: "iphone-aaaa" }));
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(null, { status: 201 });
+  try {
+    await room.append({ kind: "msg", at: Date.now(), iv: "aXY=", ct: "Y2lwaGVy" });
+    await new Promise((resolve) => setTimeout(resolve, 60));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  const recvReq = (body, role = "peer") => new Request("https://x/_duri/push/recv", {
+    method: "POST", headers: { "Content-Type": "application/json", "X-Duri-Role": role }, body: JSON.stringify(body),
+  });
+  const status = async () => (await (await room.fetch(new Request("https://x/_duri/status", { headers: { "X-Duri-Role": "peer" } }))).json()).push[0];
+  let d = await status();
+  assert.equal(d.last.seq, 1);   // 발송은 됐지만
+  assert.equal(d.recv, null);    // 도착 확인은 아직 없다 → 화면이 ⚠️ 로 보인다
+
+  assert.equal((await room.fetch(recvReq({ endpoint, seq: 1, shown: true }, "sink"))).status, 403);
+  assert.deepEqual(await (await room.fetch(recvReq({ endpoint: "https://web.push.apple.com/unknown", seq: 1 }))).json(), { known: false });
+  await room.fetch(recvReq({ endpoint, seq: 1, shown: true }));
+  d = await status();
+  assert.equal(d.recv.seq, 1);
+  assert.equal(d.recv.shown, true);
+});
+
 test("push subscriptions survive a redeploy (DO restart) — messages still push to away devices", async () => {
   const vapid = await generateVapidKeys();
   // 재배포 = Worker 재기동 → DO 인스턴스가 새로 만들어지지만 storage(구독)는 영속된다.

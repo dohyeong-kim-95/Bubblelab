@@ -667,6 +667,10 @@ async function handleDuri(request, env, url) {
   if (path === "/_duri/push/test" && request.method === "POST") {
     return stub.fetch(withDuriRole(request, role));
   }
+  // 도착 확인: sw.js 가 푸시를 받으면 알린다 → "푸시 서비스는 받았는데 기기엔 안 옴"을 가른다.
+  if (path === "/_duri/push/recv" && request.method === "POST") {
+    return stub.fetch(withDuriRole(request, role));
+  }
 
   // 새 메시지 웹 푸시. 공개키 조회는 DO 없이 바로(민감하지 않음), 구독·해지는 DO에
   // 위임(peer 전용 — DO가 다시 확인한다).

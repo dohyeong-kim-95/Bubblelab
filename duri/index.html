@@ -3514,12 +3514,17 @@ const swReady = (async () => {
     for (const d of devices || []) {
       const li = document.createElement("li");
       const ok = d.last ? (d.last.status >= 200 && d.last.status < 300) : null;
-      const icon = document.createElement("span"); icon.textContent = ok === false ? "❌" : "📱";
+      // 발송은 성공했는데 그 푸시의 도착 확인(sw.js → /push/recv)이 없으면 애플·구글과
+      // 기기 사이에서 사라진 것이다(집중 모드·저전력·앱 정리 등).
+      const lost = ok && d.last.seq != null && !(d.recv?.seq >= d.last.seq);
+      const icon = document.createElement("span"); icon.textContent = ok === false ? "❌" : lost ? "⚠️" : "📱";
       const text = document.createElement("span");
       text.textContent = `${pushHost(d.host)}${d.device === me ? " — 이 기기" : ""}`;
       const note = document.createElement("small");
       note.textContent = (d.since ? `등록 ${ago(d.since)}` : "") +
-        (d.last ? ` · 마지막 발송 ${ago(d.last.at)} ${ok ? "성공" : `실패(${d.last.status || "네트워크"})`}` : " · 아직 발송 없음");
+        (d.last ? ` · 마지막 발송 ${ago(d.last.at)} ${ok ? "성공" : `실패(${d.last.status || "네트워크"})`}` : " · 아직 발송 없음") +
+        (d.recv ? ` · 마지막 도착 ${ago(d.recv.at)}${d.recv.shown === true ? "" : d.recv.shown === "quiet" ? " (보는 중이라 숨김)" : " (알림 표시 실패)"}` : "") +
+        (lost ? " — 마지막 푸시가 기기에 닿지 않았어요" : "");
       li.append(icon, text, note);
       pdDevices.append(li);
     }

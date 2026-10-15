@@ -106,7 +106,7 @@ self.addEventListener("activate", (event) => event.waitUntil((async () => {
 // /_duri·/_rt(실시간·게이트 API)는 항상 최신이어야 하므로 손대지 않는다 —
 // 실제 데이터·인증은 이 캐시와 무관하게 매번 쿠키·E2E 패스프레이즈로 따로
 // 검증되므로, 셸(빈 껍데기 마크업)을 캐싱해도 보안엔 영향이 없다.
-const SHELL_CACHE = "duri-shell-v17";
+const SHELL_CACHE = "duri-shell-v18";
 
 // 문서(HTML)는 '네트워크 우선'. 앱을 열 때마다 최신 코드를 받아, index.html만
 // 바뀐 배포도 "다음 실행"이 아니라 바로 이번 실행에 반영된다(예전 stale-while-
@@ -168,6 +168,19 @@ async function isAppFocused() {
   return list.some((c) => c.focused === true);
 }
 
+// 서버에 "이 기기에 도착했다"를 알린다(+ 알림을 띄웠는지·오류). 발송 성공은 애플·구글이
+// 받았다는 뜻일 뿐이라, 이게 없으면 "보냈는데 안 옴"이 어디서 막혔는지 알 수 없었다.
+async function reportReceived(data, shown, error) {
+  try {
+    const sub = await self.registration.pushManager.getSubscription();
+    if (!sub) return;
+    await fetch("/_duri/push/recv", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endpoint: sub.endpoint, seq: Number.isInteger(data?.seq) ? data.seq : null, shown, ...(error && { error }) }),
+    });
+  } catch { /* 최선 노력 */ }
+}
+
 self.addEventListener("push", (event) => {
   event.waitUntil((async () => {
     let data = null;
@@ -182,21 +195,29 @@ self.addEventListener("push", (event) => {
     // 푸시를 받고 알림을 안 띄우면 안 된다. iOS 는 그걸 silent push 로 세어 몇 번
     // 쌓이면 구독을 끊고(그 뒤로 알림이 "자꾸" 안 온다), 크롬은 "백그라운드에서
     // 업데이트됨" 알림을 대신 띄운다. 그래서 알릴 필요가 없을 때(앱을 보고 있음·
-    // 내가 보낸 메시지)도 일단 띄웠다가 곧바로 닫는다. 서버도 이런 푸시를 애초에
-    // 안 보내려고 애쓰지만(접속 중인 기기·보낸 사람의 기기 제외), 어긋나는 틈이 있다.
-    const quiet = data?.kind !== "test" && await isAppFocused();
-    const result = quiet ? null : await buildNotification(data);
-    if (!result) {
-      await self.registration.showNotification("💞 Duri", { tag: "duri-quiet", silent: true });
-      const shown = await self.registration.getNotifications({ tag: "duri-quiet" });
-      for (const n of shown) n.close();
-      return;
+    // 내가 보낸 메시지)도 일단 띄웠다가 곧바로 닫는다. 어떤 오류가 나도 마지막엔
+    // 일반 알림이라도 띄운다.
+    let shown = false, error = null;
+    try {
+      const quiet = data?.kind !== "test" && await isAppFocused();
+      const result = quiet ? null : await buildNotification(data);
+      if (!result) {
+        await self.registration.showNotification("💞 Duri", { tag: "duri-quiet", silent: true });
+        const list = await self.registration.getNotifications({ tag: "duri-quiet" });
+        for (const n of list) n.close();
+        shown = "quiet";
+      } else {
+        await self.registration.showNotification(result.title, {
+          body: result.body, icon: "icon.svg", tag: "duri-msg", renotify: true,
+          data: { url: "/" },
+        });
+        shown = true;
+      }
+    } catch (e) {
+      error = String(e?.message || e);
+      try { await self.registration.showNotification(GENERIC.title, { body: GENERIC.body, tag: "duri-msg" }); shown = true; } catch { /* 더는 할 수 없다 */ }
     }
-    const { title, body } = result;
-    await self.registration.showNotification(title, {
-      body, icon: "icon.svg", tag: "duri-msg", renotify: true,
-      data: { url: "/" },
-    });
+    await reportReceived(data, shown, error);
   })());
 });
 

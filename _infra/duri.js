@@ -204,6 +204,10 @@ export class DuriDO {
     if (url.pathname.endsWith("/reset") && request.method === "POST") {
       return this.handleReset();
     }
+    if (url.pathname.endsWith("/push/recv") && request.method === "POST") {
+      if (role !== "peer") return new Response("peer only", { status: 403 });
+      return this.pushReceived(request);
+    }
     if (url.pathname.endsWith("/push/test") && request.method === "POST") {
       if (role !== "peer") return new Response("peer only", { status: 403 });
       return this.testPush(request); // 자가진단: 내 기기로 테스트 알림 발송 + 결과 반환
@@ -596,7 +600,8 @@ export class DuriDO {
       publicKey: VAPID_PUBLIC_KEY, privateKey: VAPID_PRIVATE_KEY,
       subject: VAPID_SUBJECT || "https://duri.bubblelab.dev",
     };
-    const body = JSON.stringify(this.buildPushPayload(full));
+    // seq 는 도착 확인(/push/recv)이 "어느 푸시가 왔나"를 알리려고 싣는다(평문 숫자일 뿐).
+    const body = JSON.stringify({ ...this.buildPushPayload(full), seq: full.seq });
     for (const [key, sub] of subs) {
       if (sub.deviceId && mine.has(sub.deviceId)) continue; // 보낸 사람의 기기엔 안 보냄
       let status;
@@ -611,8 +616,27 @@ export class DuriDO {
       // 마지막 발송 결과를 남긴다 — 실패가 조용히 삼켜져 "왜 안 오지"를 알 길이 없었다.
       // /status 의 push 칸으로 본다(주소·키는 내보내지 않는다).
       const cur = await this.state.storage.get(key); // 그사이 알림을 껐으면 되살리지 않는다
-      if (cur) await this.state.storage.put(key, { ...cur, last: { status, at: Date.now() } });
+      if (cur) await this.state.storage.put(key, { ...cur, last: { status, at: Date.now(), seq: full.seq } });
     }
+  }
+  // sw.js 의 도착 확인. 발송(last)은 "푸시 서비스가 받았다"까지라, 애플·구글이 기기에
+  // 안 넘겨 주거나 기기가 알림을 못 띄우면 서버에선 성공으로만 보였다. recv 와 견주면 갈린다.
+  async pushReceived(request) {
+    const body = await request.json().catch(() => ({}));
+    if (typeof body.endpoint !== "string" || !body.endpoint.startsWith("https://")) {
+      return Response.json({ error: "invalid" }, { status: 400 });
+    }
+    const key = await endpointKey(body.endpoint);
+    const cur = await this.state.storage.get(key);
+    if (!cur) return Response.json({ known: false });
+    const recv = {
+      at: Date.now(),
+      seq: Number.isInteger(body.seq) ? body.seq : null,
+      shown: body.shown === true || (body.shown === "quiet" ? "quiet" : false), // quiet = 보는 중이라 띄웠다 닫음
+      ...(typeof body.error === "string" && { error: body.error.slice(0, 120) }),
+    };
+    await this.state.storage.put(key, { ...cur, recv });
+    return Response.json({ known: true });
   }
   // 구독별 푸시 서비스(애플·구글·모질라)와 마지막 발송 결과. 주소·키는 빼고 보인다.
   async pushDevices() {
@@ -620,6 +644,7 @@ export class DuriDO {
     return [...subs.values()].map((v) => ({
       host: (() => { try { return new URL(v.endpoint).host; } catch { return "?"; } })(),
       device: v.deviceId ? v.deviceId.slice(0, 4) : null, since: v.at ?? null, last: v.last ?? null,
+      recv: v.recv ?? null,
     }));
   }
   // 보낸 사람의 기기 집합: 보낸 기기 자신 + 같은 who 로 접속했던 기기들.
