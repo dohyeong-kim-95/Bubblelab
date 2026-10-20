@@ -290,6 +290,20 @@ scroll-snap 이다. 자세한 것은 `life/README.md`.
 cron 이 그날 몫을 보통 메시지로 올린다 — 서버는 날짜만 안다. 셋업·프로토콜·한계는
 `duri/README.md` 참고.
 
+## 아파트 실거래 (estate/)
+
+`estate/`는 동탄구·기흥구 아파트 매매·전월세 실거래 대시보드다(`CONFIDENTIAL_SUBDOMAINS`,
+랜딩·풀다운·검색 미노출). 토이 관례(share.js, 주간 기록)를 적용하지 않는다. **로그인은
+없고** 주소를 아는 사람은 들어온다 — 워커가 `no-store`·noindex를 붙이고 방문 집계에서 뺀다.
+`wrangler.jsonc` 에 estate 몫(var·DO·secret)은 없다.
+
+**운영 데이터는 커밋된 정적 JSON**(`estate/data/`, 월·지역·매매/전월세별 파일)이다.
+국토부 API가 해외 IP를 막아 운영 워커의 `/_estate/deals` 프록시(`_infra/estate.js`)는
+403이라 로컬 dev 용이다. 갱신은 **한국 IP 로컬에서** `bash _infra/estate-refresh.sh`
+— 수집·지오코딩·빌드 검증 뒤 `estate/` 를 커밋하고 **main 에 푸시까지** 하므로
+에이전트 레인에서 돌리지 말 것. 금액은 만원 정수, 면적은 전용㎡ 원본, 월 경계는 KST.
+화면·함정은 `estate/CLAUDE.md`, 배경은 `estate/README.md`.
+
 ## 인사이트 아카이브 (lab/claude-insights)
 
 `lab/`은 내가 쓰는 도구를 두는 비공개 서브도메인이다(`CONFIDENTIAL_SUBDOMAINS`,
