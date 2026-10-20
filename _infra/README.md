@@ -20,6 +20,11 @@ Bubblelab의 정적 빌드, 단일 Cloudflare Worker, Durable Object 저장소�
 | `webpush.js` | 표준 Web Push 발송기 (RFC 8291/8292, WebCrypto 자체 구현) |
 | `fortune.js` | KASI 양력·음력 변환과 사주 명식 응답 |
 | `brief.js` | 아침 브리핑 날씨·미세먼지(Open-Meteo)와 매일 8시 알림 `BriefDO` |
+| `estate.js` | 국토부 아파트 실거래가 프록시 (estate 서브도메인용, 로컬 dev 위주) |
+| `estate-import.mjs` | 실거래가를 estate/data/ 정적 JSON으로 내려받는 CLI (운영 데이터 경로) |
+| `estate-geocode.mjs` | 단지 지번을 VWorld 지오코더로 좌표 변환해 estate/data/geo.json 생성 |
+| `estate-basemap.mjs` | VWorld 배경지도를 지역별 PNG 스냅샷으로 이어붙여 estate/에 저장 |
+| `estate-refresh.sh` | 위 estate CLI들을 묶은 원클릭 갱신(수집→지오코딩→커밋→푸시) |
 | `assets.js` | 저장소 이미지 메타데이터 검증과 카탈로그 생성 |
 | `asset-flags.js` | 스티커 공개 여부 오버라이드 `AssetFlagsDO`와 카탈로그 필터 |
 | `assets-store.js` | R2용 데이터 변환 코드. 현재 운영 라우트에서는 비활성 |
@@ -42,6 +47,7 @@ Worker는 다음 우선순위로 요청을 처리합니다.
 | `/_shared/*`, `/_assets/*` | 모든 서브도메인의 공용 정적 파일 |
 | `/_assets/catalog.json` | 위와 같지만 admin에서 숨긴 항목을 빼고 내보냄 |
 | `/_fortune/chart` | 생년월일시를 명식·오늘 운세 계산용 데이터로 변환 |
+| `/_estate/deals` | 국토부 아파트 매매·전월세 실거래가 프록시 (지역·기간 허용 목록 고정) |
 | `/_stats`, `/_streak`, `/_engagement`, `/_visit` | 최근 방문량, Slop 연속 방문, 카드 활성 체류시간, 유효 방문 확정 |
 | `/_suggest` | 익명 토이 아이디어 제출 |
 | `/_records`, `/_personal` | 주간·올타임·개인 기록 조회와 제출 |
@@ -127,6 +133,9 @@ Worker secrets:
 - `ADMIN_ID`, `ADMIN_PASSWORD`: 운영 관리자 계정. 운영에서는 누락 시 fail-closed
 - `KASI_SERVICE_KEY`: 운세의 양력·음력 변환
 - `ADMIN_SESSION_SECRET`: 관리자 세션 서명과 rate-limit 식별자 분리 키
+- `MOLIT_SERVICE_KEY`: estate의 국토부 실거래가 조회 (선택). 단, 국토부가 해외
+  IP를 차단해 운영 Worker에서는 403 — 운영 데이터는 `estate-import.mjs`로 커밋하고,
+  이 키는 로컬 `.dev.vars`에서만 실질적으로 쓰인다
 
 Worker vars:
 

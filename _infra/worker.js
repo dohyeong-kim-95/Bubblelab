@@ -25,6 +25,8 @@ const CACHEABLE = {
   // 지도 경계 데이터(시군구 386KB · 나라 577KB). 커밋된 공개 지리 데이터이고 거의
   // 바뀌지 않는다 — 세계편을 열 때마다 다시 받으면 그대로 체감된다.
   duri: [[/^\/data\/.+\.geojson$/i, "private, max-age=2592000, stale-while-revalidate=86400"]],
+  // 배경지도 3MB. 공개 시세 화면이라 공유 캐시에 남아도 된다.
+  estate: [[/^\/basemap-[a-z0-9-]+\.(?:avif|jpe?g|png|webp)$/i, "public, max-age=604800, stale-while-revalidate=86400"]],
 };
 
 function confidentialCacheControl(site, path) {
@@ -87,6 +89,7 @@ import { handleBriefPush, handleBriefRates, handleBriefToday, sendBriefDaily } f
 import { handlePodcast, handlePodcastAdmin, runDailyGeneration, runEveningReminder, UPLOAD_MAX_BYTES } from "./podcast.js";
 import { handlePapers, handlePapersComments, handlePapersSink } from "./papers.js";
 import { handleCommandRegistration, handleInteraction } from "./discord.js";
+import { handleEstateDeals } from "./estate.js";
 import { serveAssetDownload, serveAssetDownloadCounts } from "./downloads.js";
 import { fetchStoreReviews, REVIEWS_SYNC_VERSION } from "./reviews.js";
 import { DURI_MAX_PHOTO_BYTES } from "./duri.js";
@@ -1172,6 +1175,16 @@ export async function handleRequest(request, env, ctx) {
       return handleBriefPush(request, env);
     }
 
+    // 국토부 아파트 실거래가 프록시 (estate.bubblelab.dev). 조회 전용이며
+    // 지역·기간은 estate.js가 허용 목록으로 고정하고 응답은 Cache API에 캐싱한다.
+    if (path === "/_estate/deals") {
+      const limited = await enforceRateLimit(request, env, {
+        scope: "estate-deals", limit: 120, windowMs: 60 * 1000,
+      });
+      if (limited) return limited;
+      return handleEstateDeals(request, env, url);
+    }
+
     // 공개 페이지 통계 (카테고리 홈의 접속량순 정렬용). 개인 데이터 없음.
     if (path === "/_stats") {
       if (request.method !== "GET") {
@@ -1803,11 +1816,11 @@ export async function handleRequest(request, env, ctx) {
       }
     }
 
-    if (["admin", "work", "duri", "life"].includes(site)) {
+    if (["admin", "work", "estate", "duri", "life"].includes(site)) {
       const headers = new Headers(response.headers);
       // 문서·JSON·인증 뒤 이미지는 디스크에 남기지 않는다. 실행 코드와 폰트는
-      // 사용자 데이터가 아니므로 브라우저 전용 캐시를 허용하고, work 공개 showcase
-      // 미디어만 공유 캐시할 수 있게 한다.
+      // 사용자 데이터가 아니므로 브라우저 전용 캐시를 허용하고, 공개 데이터인
+      // estate 배경지도와 work 공개 showcase 미디어만 공유 캐시할 수 있게 한다.
       headers.set("Cache-Control",
         response.status === 200 ? confidentialCacheControl(site, path) : "no-store");
       headers.set("X-Robots-Tag", "noindex, nofollow");
@@ -1830,7 +1843,7 @@ export async function handleRequest(request, env, ctx) {
     const isDocument = request.headers.get("Sec-Fetch-Dest") === "document";
     // bl_notrack: 운영자가 /_optout에서 켠 브라우저는 집계·쿠키 발급 모두 건너뛴다.
     const optedOut = cookies(request).bl_notrack === "1";
-    if (!["admin", "work", "life"].includes(site) && isDocument && !isBot && !optedOut && response.ok &&
+    if (!["admin", "work", "estate", "life"].includes(site) && isDocument && !isBot && !optedOut && response.ok &&
         response.headers.get("Content-Type")?.includes("text/html")) {
       const date = kstDate();
       const jar = cookies(request);

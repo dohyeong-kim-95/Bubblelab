@@ -89,7 +89,7 @@ test("공용 랜딩인 www/index.html 변경은 전체 검증한다", () => {
 
 test("공용 www를 제외한 현재 배포 루트는 scoped 분류된다", () => {
   const sites = [
-    "admin", "assets", "duri", "games", "idle", "lab",
+    "admin", "assets", "duri", "estate", "games", "idle", "lab",
     "life", "mindfulness", "podcast", "slop", "test",
     "util", "work",
   ];
