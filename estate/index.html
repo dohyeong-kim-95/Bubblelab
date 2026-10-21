@@ -137,6 +137,14 @@ svg text { font-family: inherit; font-size: 12px; fill: light-dark(#5a6b7d, #93a
 .fav-memo { font-size: 0.76rem; opacity: 0.7; margin-top: 3px; }
 .fav-del { position: absolute; right: 0; top: 7px; border: 0; background: none; cursor: pointer; opacity: 0.4; color: inherit; font-size: 0.8rem; }
 .fav-del:hover { opacity: 0.9; }
+.map-sel { fill: none; stroke: #e8590c; stroke-width: 3; pointer-events: none; }
+/* 단지 이름 검색 */
+.search-card input { width: 100%; box-sizing: border-box; font: inherit; font-size: 0.85rem; padding: 6px 10px;
+  border: 1px solid light-dark(#dce4ec, #33465c); border-radius: 8px; background: light-dark(#fff, #0f1926); color: inherit; }
+.search-hit { display: block; width: 100%; text-align: left; font: inherit; font-size: 0.82rem; cursor: pointer;
+  border: 0; border-bottom: 1px solid light-dark(#eef2f7, #1e2a3a); background: none; color: inherit; padding: 7px 2px; }
+.search-hit:hover b { text-decoration: underline; }
+.search-hit .sub { margin-left: 6px; }
 .fav-star { fill: #f59f00; paint-order: stroke; stroke: light-dark(#ffffff, #0d131c); stroke-width: 2.5px; }
 .map-dot, .pin-body { cursor: pointer; }
 .map-controls { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; font-size: 0.78rem; margin-bottom: 6px; }
@@ -257,6 +265,11 @@ tr.canceled td { text-decoration: line-through; opacity: 0.5; }
     <div class="card chart-wrap" id="chartRatio"></div>
 
     <h2>지도 <span class="sub">최근 6개월 매매 · 원 크기 = 거래 건수, 진할수록 평당가 높음 · 거리는 직선거리</span></h2>
+
+    <div class="card apt-card search-card">
+      <input id="aptSearch" type="search" autocomplete="off" placeholder="🔍 단지 이름으로 찾기 (예: 예당 푸르지오, 로얄듀크)">
+      <div id="searchList"></div>
+    </div>
 
     <div class="card apt-card hidden" id="favCard">
       <div class="card-head">⭐ 내 관심 단지 <span class="sub">이 브라우저에만 저장됨</span></div>
@@ -887,6 +900,9 @@ function renderMap() {
     if (notes[e.apt]?.fav) s += `<text class="fav-star" x="${cx}" y="${(+cy - r - 2 * ui).toFixed(1)}" text-anchor="middle" font-size="${(12 * ui).toFixed(1)}">★</text>`;
     return s;
   }).join("");
+  const sel = state.selectedApt && list.find((e) => e.apt === state.selectedApt.apt && e.dong === state.selectedApt.dong);
+  const selRing = sel
+    ? `<circle class="map-sel" cx="${px(sel.point).toFixed(1)}" cy="${py2(sel.point).toFixed(1)}" r="${(14 * ui).toFixed(1)}"/>` : "";
 
   // 철도 노선 폴리라인 + 역 강조점 (배경 위, 단지 점 아래). viewBox 밖으로
   // 뻗는 구간은 SVG overflow:hidden으로 잘린다 (탭 범위 밖 역 방향 암시).
@@ -946,7 +962,7 @@ function renderMap() {
   });
 
   chart.innerHTML = `<svg viewBox="0 0 ${VW} ${VH}" role="img" aria-label="단지 위치 지도">` +
-    `${baseImg}${railLines}${radiusCircle}${dots}${refMarks}${scaleBar}${pins}</svg>`;
+    `${baseImg}${railLines}${radiusCircle}${dots}${refMarks}${selRing}${scaleBar}${pins}</svg>`;
 
   // 색범례·핀 설명만 (노선 토글은 별도 셔틀 카드로 분리됨)
   const swatches = byDrop
@@ -987,7 +1003,68 @@ function renderShuttleToggles() {
 }
 
 // ── 활성 아파트 단지 설명 카드 ───────────────────────────────
-function selectApt(entry) { state.selectedApt = entry; renderAptCard(); }
+function selectApt(entry) { state.selectedApt = entry; renderAptCard(); renderMap(); }
+
+// ── 단지 이름 검색 ───────────────────────────────────────────
+// 네이버 등은 국토부 단지명 앞에 "동탄"·마을 이름을 붙인다("동탄예당마을푸르지오"
+// ↔ 국토부 "푸르지오"). 그래서 흔한 접두어·공백을 지우고, 검색어가 단지명을
+// 품는 경우(검색어 ⊃ 단지명)도 후보로 낸다. 후보는 최근 6개월 매매가 있는 단지 —
+// 지도·카드가 그리는 범위와 같다.
+const normName = (s) => s.replace(/\(.*?\)|아파트|동탄2신도시|동탄|[\s·,.\-]/g, "");
+const tabOf = (src, dong) => src === "giheung" ? "giheung" : DT1.has(dong) ? "dongtan1" : "dongtan2";
+let searchHits = [];
+
+async function searchIndex() {
+  const months = monthsBack(6);
+  await Promise.all(["dongtan", "giheung"].flatMap((src) => months.map((ym) => fetchMonth(src, "trade", ym))));
+  const byKey = new Map();
+  for (const src of ["dongtan", "giheung"]) {
+    for (const ym of months) {
+      const raw = store[src].trade[ym];
+      if (!Array.isArray(raw)) continue;
+      for (const r of raw) {
+        if (r.canceled) continue;
+        const k = `${src}|${r.apt}|${r.dong}`;
+        const e = byKey.get(k) ?? { src, apt: r.apt, dong: r.dong, built: r.built, cnt: 0, norm: normName(r.apt) };
+        e.cnt += 1;
+        byKey.set(k, e);
+      }
+    }
+  }
+  return [...byKey.values()];
+}
+
+async function runSearch(q) {
+  const box = $("searchList");
+  const nq = normName(q);
+  if (nq.length < 2) { box.innerHTML = ""; searchHits = []; return; }
+  const all = await searchIndex();
+  if (normName($("aptSearch").value) !== nq) return; // 그새 입력이 바뀜
+  const score = (e) => e.norm === nq ? 3 : e.norm.includes(nq) ? 2 : (e.norm.length >= 3 && nq.includes(e.norm)) ? 1 : 0;
+  searchHits = all.map((e) => ({ e, s: score(e) })).filter((x) => x.s)
+    .sort((a, b) => b.s - a.s || b.e.cnt - a.e.cnt).slice(0, 8).map((x) => x.e);
+  box.innerHTML = searchHits.length
+    ? searchHits.map((e, i) => `<button type="button" class="search-hit" data-hit="${i}"><b>${e.apt}</b>` +
+        `<span class="sub">${TABS[tabOf(e.src, e.dong)].label} ${e.dong} · ${e.built}년 · 최근 6개월 ${e.cnt}건</span></button>`).join("")
+    : `<span class="sub">최근 6개월 매매가 있는 단지 중에 없습니다.</span>`;
+}
+
+async function openSearchHit(hit) {
+  // 그 단지가 가려지지 않게: 탭을 맞추고 동·면적 필터를 푼다.
+  state.tab = tabOf(hit.src, hit.dong);
+  state.dong = ""; state.band = "all"; $("selBand").value = "all";
+  for (const b of $("regionTabs").children) b.setAttribute("aria-pressed", String(b.textContent === TABS[state.tab].label));
+  $("aptSearch").value = ""; $("searchList").innerHTML = "";
+  await ensureData();
+  let found = complexStats().find((s) => s.apt === hit.apt && s.dong === hit.dong);
+  if (!found && state.cap) { // 85㎡·25억 초과 거래만 있는 단지
+    state.cap = false; $("capToggle").checked = false; render();
+    found = complexStats().find((s) => s.apt === hit.apt && s.dong === hit.dong);
+  }
+  if (!found) return;
+  selectApt(found);
+  $("aptCard").scrollIntoView({ behavior: "smooth", block: "start" });
+}
 
 function renderAptCard() {
   const body = $("aptCardBody");
@@ -1061,7 +1138,7 @@ function renderAptCard() {
     `</div>` +
     `<div class="apt-links"><a href="${naverLink(e)}" target="_blank" rel="noreferrer">네이버에서 현재 매물 보기 ↗</a></div>`;
   renderAptChart($("aptChart"), series);
-  body.querySelector(".apt-close").onclick = () => { state.selectedApt = null; renderAptCard(); };
+  body.querySelector(".apt-close").onclick = () => selectApt(null);
   body.querySelector('[data-act="fav"]').onclick = () => { setNote(e.apt, { fav: !note.fav }); renderAptCard(); renderFavList(); renderMap(); };
   body.querySelector('[data-act="price"]').onchange = (ev) => {
     const v = parseFloat(ev.target.value);
@@ -1251,6 +1328,16 @@ function initControls() {
     if (del) { setNote(del.dataset.del, { fav: false }); renderFavList(); renderMap(); if (state.selectedApt?.apt === del.dataset.del) renderAptCard(); return; }
     const item = e.target.closest("[data-apt]");
     if (item) { const found = complexStats().find((s) => s.apt === item.dataset.apt); if (found) selectApt(found); }
+  });
+  // 단지 이름 검색
+  let searchTimer = 0;
+  $("aptSearch").addEventListener("input", (e) => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => runSearch(e.target.value), 150);
+  });
+  $("searchList").addEventListener("click", (e) => {
+    const hit = e.target.closest("[data-hit]");
+    if (hit) openSearchHit(searchHits[+hit.dataset.hit]);
   });
   // 셔틀 카드의 칩 클릭 = 노선(GTX·셔틀) 강조 토글
   $("shuttleToggles").addEventListener("click", (e) => {
