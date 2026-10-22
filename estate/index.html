@@ -393,13 +393,34 @@ async function loadStaticIndex() {
   } catch { staticIndex = false; }
 }
 
-async function fetchMonth(src, type, ym) {
+const monthRequests = new Map();
+const monthRetryAfter = new Map();
+async function fetchMonth(src, type, ym, retry = false) {
+  const key = `${src}|${type}|${ym}`;
+  if (Array.isArray(store[src][type][ym])) return "ok";
+  if (monthRequests.has(key)) return monthRequests.get(key);
+  if (!retry && (monthRetryAfter.get(key) ?? 0) > Date.now()) return "error";
+  const request = fetchMonthOnce(src, type, ym).catch(() => {
+    store[src][type][ym] = "error";
+    return "error";
+  }).then((result) => {
+    if (result === "ok") monthRetryAfter.delete(key);
+    else monthRetryAfter.set(key, Date.now() + 30000);
+    return result;
+  }).finally(() => monthRequests.delete(key));
+  monthRequests.set(key, request);
+  return request;
+}
+async function fetchMonthOnce(src, type, ym) {
   const bucket = store[src][type];
   if (Array.isArray(bucket[ym])) return "ok";
   if (staticIndex && staticIndex.months?.[`${type}:${src}`]?.includes(ym)) {
     try {
       const res = await fetch(`data/${type}-${src}-${ym}.json`);
-      if (res.ok) { bucket[ym] = (await res.json()).items; dataVersion += 1; return "ok"; }
+      if (res.ok) {
+        const body = await res.json();
+        if (Array.isArray(body.items)) { bucket[ym] = body.items; dataVersion += 1; return "ok"; }
+      }
     } catch { /* 프록시로 넘어감 */ }
   }
   if (proxyOff) { bucket[ym] = "error"; return "error"; }
@@ -412,13 +433,13 @@ async function fetchMonth(src, type, ym) {
     bucket[ym] = "error";
     return staticIndex ? "error" : "not-configured";
   }
-  if (body.status !== "ok") { bucket[ym] = "error"; return "error"; }
+  if (body.status !== "ok" || !Array.isArray(body.items)) { bucket[ym] = "error"; return "error"; }
   bucket[ym] = body.items;
   dataVersion += 1;
   return "ok";
 }
 
-async function ensureData() {
+async function ensureData(retry = false) {
   const seq = ++loadSeq;
   await Promise.all([loadStaticIndex(), loadGeo(), loadBasemap()]);
   populateRefs();
@@ -441,7 +462,7 @@ async function ensureData() {
   const workers = Array.from({ length: 6 }, async () => {
     while (queue.length && !aborted && seq === loadSeq) {
       const job = queue.shift();
-      const result = await fetchMonth(src, job.type, job.ym);
+      const result = await fetchMonth(src, job.type, job.ym, retry);
       if (result === "not-configured") {
         aborted = true;
         $("setup").classList.remove("hidden");
@@ -469,7 +490,7 @@ async function ensureData() {
     for (const type of ["trade", "rent"]) {
       for (const [ym, v] of Object.entries(bucket[type])) if (v === "error") delete bucket[type][ym];
     }
-    ensureData();
+    ensureData(true);
   });
   render();
 }
@@ -674,12 +695,14 @@ const distKm = (a, b) => {
   return 6371 * 2 * Math.asin(Math.sqrt(h));
 };
 
-function complexStats() {
+function complexStats(ignoreCap = false) {
   const src = TABS[state.tab].src;
   const ref = state.ref && geoData ? geoData.refs?.[state.ref] : null;
   const byApt = new Map();
   for (const ym of monthsBack(6)) {
-    for (const r of liveTrades(ym)) {
+    for (const r of (ignoreCap
+      ? (Array.isArray(store[src].trade[ym]) ? store[src].trade[ym] : []).filter((r) => !r.canceled && inTabDongs(TABS[state.tab], r.dong) && (!state.dong || r.dong === state.dong) && inBand(r.area))
+      : liveTrades(ym))) {
       const key = `${r.apt}|${r.dong}`;
       const entry = byApt.get(key) ?? { apt: r.apt, dong: r.dong, pys: [], deals: [], point: null };
       entry.pys.push(perPy(r.amt, r.area));
@@ -736,7 +759,9 @@ function allAptSeries() {
   const months = monthsBack(state.months);
   const perApt = new Map();
   for (const ym of months) {
-    for (const r of liveTrades(ym)) {
+    for (const r of (ignoreCap
+      ? (Array.isArray(store[src].trade[ym]) ? store[src].trade[ym] : []).filter((r) => !r.canceled && inTabDongs(TABS[state.tab], r.dong) && (!state.dong || r.dong === state.dong) && inBand(r.area))
+      : liveTrades(ym))) {
       const key = aptKey(r.apt, r.dong);
       let byYm = perApt.get(key);
       if (!byYm) { byYm = new Map(); perApt.set(key, byYm); }
@@ -1003,7 +1028,7 @@ function renderShuttleToggles() {
 }
 
 // ── 활성 아파트 단지 설명 카드 ───────────────────────────────
-function selectApt(entry) { state.selectedApt = entry; renderAptCard(); renderMap(); }
+function selectApt(entry) { selectionSeq += 1; state.selectedApt = entry; renderAptCard(); renderMap(); }
 
 // ── 단지 이름 검색 ───────────────────────────────────────────
 // 네이버 등은 국토부 단지명 앞에 "동탄"·마을 이름을 붙인다("동탄예당마을푸르지오"
@@ -1013,10 +1038,22 @@ function selectApt(entry) { state.selectedApt = entry; renderAptCard(); renderMa
 const normName = (s) => s.replace(/\(.*?\)|아파트|동탄2신도시|동탄|[\s·,.\-]/g, "");
 const tabOf = (src, dong) => src === "giheung" ? "giheung" : DT1.has(dong) ? "dongtan1" : "dongtan2";
 let searchHits = [];
+let searchSeq = 0, selectionSeq = 0;
+let searchIndexCache = null;
+const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+function invalidateSearch() {
+  searchSeq += 1;
+  searchHits = [];
+  $("searchList").innerHTML = "";
+}
 
-async function searchIndex() {
+async function searchIndex(retry = false) {
+  await loadStaticIndex();
   const months = monthsBack(6);
-  await Promise.all(["dongtan", "giheung"].flatMap((src) => months.map((ym) => fetchMonth(src, "trade", ym))));
+  const results = await Promise.all(["dongtan", "giheung"].flatMap((src) => months.map((ym) => fetchMonth(src, "trade", ym, retry))));
+  const failed = results.filter((r) => r !== "ok").length;
+  const sig = `${months.join()}|${dataVersion}`;
+  if (searchIndexCache?.sig === sig) return { all: searchIndexCache.all, failed };
   const byKey = new Map();
   for (const src of ["dongtan", "giheung"]) {
     for (const ym of months) {
@@ -1031,39 +1068,72 @@ async function searchIndex() {
       }
     }
   }
-  return [...byKey.values()];
+  const all = [...byKey.values()];
+  searchIndexCache = { sig, all };
+  return { all, failed };
 }
 
-async function runSearch(q) {
+async function runSearch(q, seq = searchSeq, retry = false) {
   const box = $("searchList");
   const nq = normName(q);
   if (nq.length < 2) { box.innerHTML = ""; searchHits = []; return; }
-  const all = await searchIndex();
-  if (normName($("aptSearch").value) !== nq) return; // 그새 입력이 바뀜
+  let result;
+  try { result = await searchIndex(retry); }
+  catch {
+    if (seq === searchSeq) box.innerHTML = '<span role="status">검색 데이터를 불러오지 못했습니다.</span><button type="button" data-search-retry>다시 시도</button>';
+    return;
+  }
+  if (seq !== searchSeq) return;
+  const { all, failed } = result;
   const score = (e) => e.norm === nq ? 3 : e.norm.includes(nq) ? 2 : (e.norm.length >= 3 && nq.includes(e.norm)) ? 1 : 0;
-  searchHits = all.map((e) => ({ e, s: score(e) })).filter((x) => x.s)
-    .sort((a, b) => b.s - a.s || b.e.cnt - a.e.cnt).slice(0, 8).map((x) => x.e);
+  const matches = all.map((e) => ({ e, s: score(e) })).filter((x) => x.s)
+    .sort((a, b) => b.s - a.s || b.e.cnt - a.e.cnt).map((x) => x.e);
+  searchHits = matches.slice(0, 8);
   box.innerHTML = searchHits.length
-    ? searchHits.map((e, i) => `<button type="button" class="search-hit" data-hit="${i}"><b>${e.apt}</b>` +
-        `<span class="sub">${TABS[tabOf(e.src, e.dong)].label} ${e.dong} · ${e.built}년 · 최근 6개월 ${e.cnt}건</span></button>`).join("")
-    : `<span class="sub">최근 6개월 매매가 있는 단지 중에 없습니다.</span>`;
+    ? searchHits.map((e, i) => `<button type="button" class="search-hit" data-hit="${i}"><b>${escapeHtml(e.apt)}</b>` +
+        `<span class="sub">${TABS[tabOf(e.src, e.dong)].label} ${escapeHtml(e.dong)} · ${e.built}년 · 최근 6개월 ${e.cnt}건</span></button>`).join("")
+    : failed ? "" : `<span class="sub">최근 6개월 매매가 있는 단지 중에 없습니다.</span>`;
+  if (matches.length > 8) box.innerHTML += '<span class="sub">상위 8개 결과입니다. 단지 이름을 더 입력해 주세요.</span>';
+  if (failed) box.innerHTML += `<div role="status">${failed}개 월·지역 데이터를 불러오지 못해 일부 단지가 빠질 수 있습니다. <button type="button" data-search-retry>다시 시도</button></div>`;
 }
 
 async function openSearchHit(hit) {
-  // 그 단지가 가려지지 않게: 탭을 맞추고 동·면적 필터를 푼다.
-  state.tab = tabOf(hit.src, hit.dong);
+  if (!hit) return;
+  const seq = ++selectionSeq;
+  const tab = tabOf(hit.src, hit.dong);
+  state.tab = tab;
+  state.selectedApt = null;
   state.dong = ""; state.band = "all"; $("selBand").value = "all";
-  for (const b of $("regionTabs").children) b.setAttribute("aria-pressed", String(b.textContent === TABS[state.tab].label));
-  $("aptSearch").value = ""; $("searchList").innerHTML = "";
-  await ensureData();
-  let found = complexStats().find((s) => s.apt === hit.apt && s.dong === hit.dong);
-  if (!found && state.cap) { // 85㎡·25억 초과 거래만 있는 단지
-    state.cap = false; $("capToggle").checked = false; render();
-    found = complexStats().find((s) => s.apt === hit.apt && s.dong === hit.dong);
+  for (const b of $("regionTabs").children) b.setAttribute("aria-pressed", String(b.textContent === TABS[tab].label));
+  invalidateSearch();
+  $("aptSearch").value = "";
+  try {
+    await ensureData();
+    if (seq !== selectionSeq || state.tab !== tab) return;
+    const matches = (s) => s.apt === hit.apt && s.dong === hit.dong;
+    let found = complexStats().find(matches);
+    let relaxed = false;
+    if (!found && state.cap) {
+      found = complexStats(true).find(matches);
+      if (found) {
+        state.cap = false; $("capToggle").checked = false;
+        found = complexStats().find(matches);
+        relaxed = true;
+      }
+    }
+    if (!found) {
+      $("searchList").textContent = "단지를 열지 못했습니다. 데이터 로드 상태를 확인하고 다시 검색해 주세요.";
+      render();
+      return;
+    }
+    state.selectedApt = found;
+    render();
+    $("searchList").textContent = (relaxed ? "선택한 단지를 표시하기 위해 85㎡·25억 상한을 해제했습니다. " : "") +
+      (!found.point ? "좌표가 없어 지도 강조는 표시하지 못합니다." : "");
+    $("aptCard").scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch {
+    if (seq === selectionSeq) $("searchList").textContent = "단지를 여는 중 오류가 발생했습니다. 다시 검색해 주세요.";
   }
-  if (!found) return;
-  selectApt(found);
-  $("aptCard").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function renderAptCard() {
@@ -1074,7 +1144,7 @@ function renderAptCard() {
     return;
   }
   const py84 = e.med * (84.9 / 3.3058);
-  const isPin = (geoData.pins ?? []).some((p) => p.name === e.apt);
+  const isPin = (geoData?.pins ?? []).some((p) => p.name === e.apt);
   let refDist = "";
   if (e.point && geoData?.refs) {
     refDist = Object.values(geoData.refs)
@@ -1289,6 +1359,7 @@ function initControls() {
   for (const [key, tab] of Object.entries(TABS)) {
     const btn = el("button", { type: "button", "aria-pressed": String(key === state.tab) }, tab.label);
     btn.addEventListener("click", () => {
+      selectionSeq += 1; state.selectedApt = null;
       state.tab = key; state.dong = "";
       for (const b of tabs.children) b.setAttribute("aria-pressed", String(b === btn));
       ensureData();
@@ -1304,6 +1375,9 @@ function initControls() {
       renderDeals();
     });
     dealTabs.appendChild(btn);
+  }
+  for (const id of ["selMonths", "selBand", "selDong", "selRef", "selRadius", "capToggle"]) {
+    $(id).addEventListener("change", () => { selectionSeq += 1; });
   }
   $("selMonths").addEventListener("change", (e) => {
     state.months = Math.min(+e.target.value, MAX_MONTHS); ensureData();
@@ -1333,9 +1407,16 @@ function initControls() {
   let searchTimer = 0;
   $("aptSearch").addEventListener("input", (e) => {
     clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => runSearch(e.target.value), 150);
+    invalidateSearch();
+    const q = e.target.value, seq = searchSeq;
+    searchTimer = setTimeout(() => runSearch(q, seq), 150);
   });
   $("searchList").addEventListener("click", (e) => {
+    if (e.target.closest("[data-search-retry]")) {
+      invalidateSearch();
+      runSearch($("aptSearch").value, searchSeq, true);
+      return;
+    }
     const hit = e.target.closest("[data-hit]");
     if (hit) openSearchHit(searchHits[+hit.dataset.hit]);
   });
@@ -1355,3 +1436,4 @@ ensureData();
 </script>
 </body>
 </html>
+
