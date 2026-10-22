@@ -410,6 +410,7 @@ async function addPdfFiles(files) {
 function closeDoc() {
   for (const src of store.sources) src.doc.destroy?.();
   store.sources = []; store.pages = []; store.name = "";
+  pageCache.clear(); // 키가 "원본번호:쪽"이라 다음 파일이 파괴된 옛 페이지를 받아 간다
   search.reset();
   refreshDoc();
 }
