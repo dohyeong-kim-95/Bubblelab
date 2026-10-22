@@ -80,10 +80,12 @@ async function networkFirst(request) {
  * 폴더를 찾아가는 대신 파일을 앱으로 보내는 쪽으로 뒤집으면 선택창이 통째로 없어진다
  * (폴더를 기억하는 길은 life/budget 이 File System Access API 로 따로 두고 있다).
  *
- * 셸은 어느 도구가 받는지 모른다 — life 안에서 POST 하는 곳은 여기뿐이라
- * 들어온 경로의 화면으로 그대로 넘긴다. */
+ * 가로채는 것은 매니페스트 share_target.action 경로 하나뿐이다. life 안에는 다른
+ * POST(댓글 저장·PC 토큰 발급·로그인 폼)도 있어서, 같은 출처 POST 를 전부 가로채면
+ * 그것들이 GET 으로 바뀌어 깨진다. 공유 자리를 옮기면 여기도 같이 고친다. */
 const SHARE_CACHE = "bl-life-share";
 const SHARE_KEY = "/__share";
+const SHARE_TARGET_PATH = SCOPE + "budget/"; // manifest.json 의 share_target.action ("./budget/")
 
 async function receiveShare(request, target) {
   let payload = "";
@@ -101,7 +103,7 @@ self.addEventListener("fetch", (event) => {
   const request = event.request;
   const shared = new URL(request.url);
   if (request.method === "POST" && shared.origin === self.location.origin
-    && shared.pathname.startsWith(SCOPE)) {
+    && shared.pathname === SHARE_TARGET_PATH) {
     event.respondWith(receiveShare(request, shared.pathname));
     return;
   }
