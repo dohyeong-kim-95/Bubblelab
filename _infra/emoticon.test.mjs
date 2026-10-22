@@ -280,6 +280,28 @@ test("/_emoticon/generate: 키·비밀번호 없으면 503, 인증 없거나 틀
   assert.equal(wrong.status, 401);
 });
 
+test("/_emoticon/generate: 비밀번호 비교 전에 IP당 시도 제한(emoticon-auth)을 먼저 건다", async () => {
+  const scopes = [];
+  const env = {
+    WORK_PASSWORD: "master-pw", GEMINI_STICKER_KEY: "sk", ADMIN_SESSION_SECRET: "s",
+    RATE_LIMITER: {
+      idFromName: (name) => name,
+      get: () => ({
+        fetch: async (url, init) => {
+          scopes.push(JSON.parse(init.body));
+          return Response.json({ allowed: false, retryAfter: 60 });
+        },
+      }),
+    },
+  };
+  const res = await worker.fetch(
+    generateRequest({ headers: { Authorization: "Bearer master-pw" } }), env, ctx,
+  );
+  assert.equal(res.status, 429);              // 맞는 비밀번호여도 제한이 먼저다
+  assert.equal(scopes.length, 1);
+  assert.equal(scopes[0].limit, 5);
+});
+
 test("/_emoticon/generate: 마스터 인증 시 Gemini를 대신 호출해 이미지를 돌려준다", async () => {
   const env = { WORK_PASSWORD: "master-pw", GEMINI_STICKER_KEY: "sk" };
   const auth = { Authorization: "Bearer master-pw" };

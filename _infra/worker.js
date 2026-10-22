@@ -1443,6 +1443,11 @@ export async function handleRequest(request, env, ctx) {
       }
       const contentTypeError = requireJsonRequest(request);
       if (contentTypeError) return contentTypeError;
+      // 비밀번호 대입 방지: 비교하기 전에 IP당 시도를 센다(5회/15분, 로그인과 같은 수준).
+      // CLI는 정상 호출이 많으므로 인증에 성공하면 그 IP의 횟수를 지운다 — 실패만 쌓인다.
+      const authLimit = { scope: "emoticon-auth", limit: 5, windowMs: 15 * 60 * 1000 };
+      const authLimited = await enforceRateLimit(request, env, authLimit);
+      if (authLimited) return authLimited;
       const key = await workKeyOf(env);
       const bearer = (request.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
       const master = bearer
@@ -1453,6 +1458,7 @@ export async function handleRequest(request, env, ctx) {
           status: 401, headers: { "Cache-Control": "no-store" },
         });
       }
+      await consumeRateLimit(request, env, { ...authLimit, reset: true });
       // 호출당 과금이므로 마스터 인증 뒤에도 폭주를 막는다 (60회/10분 ≈ 컷 5개)
       const limited = await enforceRateLimit(request, env, {
         scope: "emoticon-generate", limit: 60, windowMs: 10 * 60 * 1000,

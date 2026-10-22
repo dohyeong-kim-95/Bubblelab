@@ -202,7 +202,7 @@ export async function consumeRateLimit(request, env, options) {
   const response = await env.RATE_LIMITER.get(id).fetch("https://rate-limit.internal/check", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ limit, windowMs }),
+    body: JSON.stringify({ limit, windowMs, reset: options.reset === true }),
   });
   if (!response.ok) return { allowed: false, retryAfter: Math.ceil(windowMs / 1000) };
   return response.json();
@@ -234,6 +234,12 @@ export class RateLimiterDO {
     const windowMs = Math.min(MAX_WINDOW_MS, Math.max(MIN_WINDOW_MS, Math.floor(Number(body.windowMs))));
     if (!Number.isFinite(limit) || !Number.isFinite(windowMs)) {
       return new Response("invalid limit", { status: 400 });
+    }
+
+    // reset: 맞는 비밀번호로 들어온 뒤 그 IP의 실패 횟수를 지운다
+    if (body.reset === true) {
+      await this.state.storage.delete("current");
+      return Response.json({ allowed: true, retryAfter: 0 });
     }
 
     const now = Date.now();
