@@ -45,21 +45,33 @@ export class MultiplayerRooms {
   savePlayerName(name) { localStorage.setItem(`${this.gameId}_player_name`, normalizeName(name)); }
   roomPath(code, tail = "") { return `rooms/${normalizeRoomCode(code)}${tail ? `/${tail}` : ""}`; }
 
+  // 실시간 서버는 update 한 번에 64개 경로까지만 받는다(_infra/realtime.js
+  // MAX_UPDATE_ENTRIES). 방 하나가 경로 4개라 16개 방씩 나눠 보낸다.
+  // 정리는 덤이라 실패해도 방 만들기를 막지 않는다.
   async cleanupStaleRooms(now = Date.now()) {
     const rooms = await this.rt.get("rooms").catch(() => null);
     if (!rooms) return;
-    const updates = {};
+    const staleCodes = [];
     for (const [code, room] of Object.entries(rooms)) {
       const touched = room?.meta?.updatedAt || room?.meta?.createdAt || 0;
       const maxAge = room?.meta?.status === "finished" ? 30 * 60_000 : 3 * 60 * 60_000;
-      if (now - touched > maxAge) {
+      if (now - touched > maxAge) staleCodes.push(code);
+    }
+    const ROOMS_PER_UPDATE = 16;
+    for (let i = 0; i < staleCodes.length; i += ROOMS_PER_UPDATE) {
+      const updates = {};
+      for (const code of staleCodes.slice(i, i + ROOMS_PER_UPDATE)) {
         updates[`rooms/${code}`] = null;
         updates[`privateData/${code}`] = null;
         updates[`secrets/${code}`] = null;
         updates[`actions/${code}`] = null;
       }
+      try {
+        await this.rt.update("", updates);
+      } catch {
+        return; // 다음 방 만들기 때 다시 정리한다
+      }
     }
-    if (Object.keys(updates).length) await this.rt.update("", updates);
   }
 
   async createRoom(playerId, name, config = {}) {
