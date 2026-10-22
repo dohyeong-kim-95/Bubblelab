@@ -76,6 +76,16 @@ test('cancelled selection never relaxes cap or selects an apartment', async () =
   assert.equal(a.document.getElementById('searchList').textContent, '');
 });
 
+test('real aggregation and trend cache support uncapped selection', async () => {
+  const a = app();
+  a.run(`monthsBack = () => ['202610']; state.tab = 'giheung';
+    store.giheung.trade['202610'] = [{apt:'테스트',dong:'신갈동',area:100,amt:50000,date:'2026-10-01',canceled:false}];`);
+  assert.equal(a.run('complexStats().length'), 0);
+  assert.equal(a.run('complexStats(true).length'), 1);
+  a.run('state.cap = false');
+  assert.equal(a.run('complexStats().length'), 1);
+});
+
 test('missing selection retains cap; real uncapped selection relaxes it', async () => {
   const a = app();
   a.run('ensureData = async () => {}; render = () => {}; complexStats = () => []');

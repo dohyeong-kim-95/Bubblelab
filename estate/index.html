@@ -759,9 +759,7 @@ function allAptSeries() {
   const months = monthsBack(state.months);
   const perApt = new Map();
   for (const ym of months) {
-    for (const r of (ignoreCap
-      ? (Array.isArray(store[src].trade[ym]) ? store[src].trade[ym] : []).filter((r) => !r.canceled && inTabDongs(TABS[state.tab], r.dong) && (!state.dong || r.dong === state.dong) && inBand(r.area))
-      : liveTrades(ym))) {
+    for (const r of liveTrades(ym)) {
       const key = aptKey(r.apt, r.dong);
       let byYm = perApt.get(key);
       if (!byYm) { byYm = new Map(); perApt.set(key, byYm); }
