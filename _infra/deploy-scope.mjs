@@ -22,7 +22,7 @@ const SITE_TESTS = {
   duri: [
     "_infra/duri-world.test.mjs", "_infra/duri.test.mjs", "_src/duri-sink/store.test.mjs",
   ],
-  estate: ["_infra/estate.test.mjs"],
+  estate: ["_infra/estate.test.mjs", "_infra/estate-search.test.mjs"],
   games: [
     "_infra/check-avalon-sync.test.mjs", "_infra/liargame.test.mjs",
     "_infra/realtime.test.mjs", "_infra/stepcam.test.mjs",
@@ -57,6 +57,7 @@ const SITE_TESTS = {
 };
 
 const SITE_E2E = {
+  estate: ["_infra/e2e/estate.spec.mjs"],
   duri: [
     "_infra/e2e/duri-fit.spec.mjs", "_infra/e2e/duri-map.spec.mjs",
     "_infra/e2e/duri-picker.spec.mjs", "_infra/e2e/duri-timelapse.spec.mjs",
