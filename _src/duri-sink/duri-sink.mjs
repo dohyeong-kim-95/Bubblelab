@@ -180,7 +180,18 @@ function connect() {
     let m; try { m = JSON.parse(e.data); } catch { return; }
     if (m.type === "ping") { ws.send(JSON.stringify({ type: "pong" })); return; }
     if (m.type === "entry") { enqueue(m); return; }
-    if (m.type === "backfill-done") { log("백필 완료. head", m.head); markBackfilled(); return; }
+    // more 가 true 면 서버가 앞 구간을 잘라 보낸 것이다. 그 상태로 백필 완료로 보면
+    // drain 이 빈 번호를 "없는 항목"으로 건너뛰고 ack 해서 받지 못한 앞 구간이 지워진다.
+    // 그래서 앞 구간을 끝까지 더 받아 온 뒤에만 완료로 본다.
+    if (m.type === "backfill-done" || m.type === "older-done") {
+      if (m.more && Number.isInteger(m.oldest)) {
+        ws.send(JSON.stringify({ type: "fetch-older", before: m.oldest }));
+        return;
+      }
+      log("백필 완료. head", m.head ?? "");
+      markBackfilled();
+      return;
+    }
     if (m.type === "welcome") { log("welcome. head", m.head); return; }
     // 캘린더는 ack 이 없다(서버가 계속 들고 있는 지속 상태다). 실패해도 대화·사진
     // 보존을 막으면 안 되므로 커서와 분리해 여기서 삼키고 로그만 남긴다.

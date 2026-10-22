@@ -756,31 +756,58 @@ export class DuriDO {
 
   // 접속 직후엔 **최근 것부터 BACKFILL_LIMIT 개만** 보낸다. 그 앞은 클라이언트가
   // 위로 올려 필요해질 때 fetch-older 로 따로 가져간다(커서 기반 페이지네이션).
+  // 단 싱크에는 자르지 않고 전부 보낸다 — 싱크는 backfill-done 뒤의 빈 번호를
+  // "서버에 없는 항목"으로 보고 건너뛴 뒤 ack 하므로, 잘라 보내면 받지 못한 앞 구간이
+  // ack 되어 지워진다(옛 데몬은 more 를 보지 않는다).
   async backfill(conn, since) {
     const from = Math.max(since, this.ackSeq) + 1;
-    const all = await this.state.storage.list({ prefix: BUF_PREFIX, start: bufKey(from), limit: 1000 });
-    const values = [...all.values()];
-    const page = values.slice(-BACKFILL_LIMIT);
+    if (conn.role === "sink") {
+      await this.sendAllFrom(conn, from);
+      this.send(conn, { type: "backfill-done", head: this.head, oldest: null, more: false });
+      return;
+    }
+    // reverse 로 읽어야 "가장 최근" 것이 나온다(정방향 limit 은 가장 오래된 것부터 자른다).
+    const newestFirst = await this.state.storage.list({
+      prefix: BUF_PREFIX, start: bufKey(from), reverse: true, limit: BACKFILL_LIMIT + 1,
+    });
+    const page = [...newestFirst.values()].slice(0, BACKFILL_LIMIT).reverse();
     for (const value of page) this.send(conn, { type: "entry", ...value });
     this.send(conn, {
       type: "backfill-done", head: this.head,
       // 아직 서버에 남아 있는 더 오래된 구간이 있는지 알려 준다(있으면 위로 올릴 때 가져간다).
       oldest: page.length ? page[0].seq : null,
-      more: values.length > page.length,
+      more: newestFirst.size > BACKFILL_LIMIT,
     });
+  }
+
+  // from 이후 버퍼 전부를 오래된 순으로 보낸다(1000개씩 나눠 읽는다).
+  async sendAllFrom(conn, from) {
+    let start = bufKey(from);
+    while (true) {
+      const chunk = await this.state.storage.list({ prefix: BUF_PREFIX, start, limit: 1000 });
+      let lastSeq = null;
+      for (const value of chunk.values()) {
+        this.send(conn, { type: "entry", ...value });
+        lastSeq = value.seq;
+      }
+      if (chunk.size < 1000 || lastSeq === null) return;
+      start = bufKey(lastSeq + 1);
+    }
   }
 
   // 위로 올려 캐시가 바닥났을 때 서버에 남아 있는 그 앞 구간을 가져간다.
   async fetchOlder(conn, before, limit) {
     const end = bufKey(Math.max(0, before));
-    const all = await this.state.storage.list({ prefix: BUF_PREFIX, end, limit: 1000 });
-    const values = [...all.values()];
-    const page = values.slice(-Math.min(limit || BACKFILL_LIMIT, BACKFILL_LIMIT));
+    const pageSize = Math.min(limit || BACKFILL_LIMIT, BACKFILL_LIMIT);
+    const newestFirst = await this.state.storage.list({
+      prefix: BUF_PREFIX, end, reverse: true, limit: pageSize + 1,
+    });
+    const page = [...newestFirst.values()].slice(0, pageSize).reverse();
     for (const value of page) this.send(conn, { type: "entry", ...value });
     this.send(conn, {
       type: "older-done",
       oldest: page.length ? page[0].seq : null,
-      more: values.length > page.length,
+      more: newestFirst.size > pageSize,
     });
   }
 

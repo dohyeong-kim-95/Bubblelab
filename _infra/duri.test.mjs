@@ -35,10 +35,11 @@ function fakeStorage(initial) {
     async get(k) { return map.get(k); },
     async put(k, v) { map.set(k, v); },
     async delete(keys) { for (const k of [].concat(keys)) map.delete(k); },
-    async list({ prefix, start, end, limit } = {}) {
+    async list({ prefix, start, end, limit, reverse } = {}) {
       let ks = [...map.keys()].filter((k) => !prefix || k.startsWith(prefix)).sort();
       if (start) ks = ks.filter((k) => k >= start);
       if (end) ks = ks.filter((k) => k < end);
+      if (reverse) ks.reverse();
       if (limit != null) ks = ks.slice(0, limit);
       return new Map(ks.map((k) => [k, map.get(k)]));
     },
@@ -687,4 +688,60 @@ test("remind/fire is reachable only with the cron role; remind-set only from a b
   assert.equal(storage.map.has("remind:" + today), true);
   room.handle(peerConn, { type: "remind-set", from: "2000-01-01", to: "2000-01-02", days: [] });
   assert.ok(errors.some((m) => m.error === "invalid remind"));
+});
+
+// 싱크가 오래 꺼져 있다 돌아오면 버퍼가 100건(BACKFILL_LIMIT)을 넘는다. 예전엔 싱크에도
+// 최근 100건만 보내서, 싱크가 앞 50건을 "서버에 없는 구간"으로 건너뛰고 ack 했고
+// 서버가 받지도 못한 항목을 지웠다.
+test("backfill: 싱크에는 버퍼 전부를 보내 받기 전에는 아무것도 지워지지 않는다", async () => {
+  const initial = { seq: 150, ackSeq: 0 };
+  for (let seq = 1; seq <= 150; seq++) {
+    initial["buf:" + String(seq).padStart(12, "0")] = { seq, kind: "msg", at: seq, iv: "aXY=", ct: "Y3Q=" };
+  }
+  const storage = fakeStorage(initial);
+  const state = { storage, blockConcurrencyWhile: (fn) => fn() };
+  const room = new DuriDO(state, { DURI_BUCKET: fakeBucket([]) });
+  await room.load();
+  const sent = [];
+  const sink = { ws: { send: (s) => sent.push(JSON.parse(s)) }, role: "sink", stamps: [], alive: true };
+
+  await room.backfill(sink, 0);
+  const seqs = sent.filter((m) => m.type === "entry").map((m) => m.seq);
+  assert.equal(seqs.length, 150);
+  assert.equal(seqs[0], 1);
+  assert.equal(seqs[149], 150);
+  const done = sent.find((m) => m.type === "backfill-done");
+  assert.equal(done.more, false);
+  // 싱크가 받은 것만큼 ack 하기 전에는 버퍼가 그대로다
+  assert.equal((await storage.list({ prefix: "buf:" })).size, 150);
+});
+
+test("backfill/fetch-older: 브라우저에는 가장 최근 100건, 그 앞은 이어서 준다", async () => {
+  const initial = { seq: 150, ackSeq: 0 };
+  for (let seq = 1; seq <= 150; seq++) {
+    initial["buf:" + String(seq).padStart(12, "0")] = { seq, kind: "msg", at: seq, iv: "aXY=", ct: "Y3Q=" };
+  }
+  const storage = fakeStorage(initial);
+  const state = { storage, blockConcurrencyWhile: (fn) => fn() };
+  const room = new DuriDO(state, { DURI_BUCKET: fakeBucket([]) });
+  await room.load();
+  const sent = [];
+  const peer = { ws: { send: (s) => sent.push(JSON.parse(s)) }, role: "peer", stamps: [], alive: true };
+
+  await room.backfill(peer, 0);
+  const firstPage = sent.filter((m) => m.type === "entry").map((m) => m.seq);
+  assert.equal(firstPage.length, 100);
+  assert.equal(firstPage[0], 51);
+  assert.equal(firstPage[99], 150);
+  const done = sent.find((m) => m.type === "backfill-done");
+  assert.equal(done.oldest, 51);
+  assert.equal(done.more, true);
+
+  sent.length = 0;
+  await room.fetchOlder(peer, 51, 0);
+  const olderPage = sent.filter((m) => m.type === "entry").map((m) => m.seq);
+  assert.equal(olderPage.length, 50);
+  assert.equal(olderPage[0], 1);
+  assert.equal(olderPage[49], 50);
+  assert.equal(sent.find((m) => m.type === "older-done").more, false);
 });
