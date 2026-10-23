@@ -213,6 +213,28 @@
     else { clearChips(); }
     answers.note = skipped ? '' : noteResult;
 
+    saveDraft();
+    await confirmAndSend();
+  }
+
+  // 전송이 실패해도 적은 답을 잃지 않게 이 탭(sessionStorage)에 담아 둔다.
+  // 새로고침하거나 실수로 닫았다 다시 열어도 확인 단계부터 이어 간다.
+  var DRAFT_KEY = 'bl_work_request_draft';
+  function saveDraft(){
+    try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify(answers)); } catch (e) { /* 저장이 막혀도 화면 안에서는 산다 */ }
+  }
+  function loadDraft(){
+    try {
+      var saved = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || 'null');
+      if(!saved || !saved.what || !saved.contact) return null;
+      return saved;
+    } catch (e) { return null; }
+  }
+  function clearDraft(){
+    try { sessionStorage.removeItem(DRAFT_KEY); } catch (e) { /* 지우지 못해도 다음 접수에 덮인다 */ }
+  }
+
+  async function confirmAndSend(){
     await addBot('접수 내용을 확인해주세요.\n\n' +
       '📦 만들고 싶은 것: ' + answers.what + '\n' +
       '🗓️ 일정: ' + (answers.when || '미정') + '\n' +
@@ -223,28 +245,60 @@
       { label: '접수하기', value: 'submit', primary: true },
       { label: '처음부터 다시', value: 'reset' },
     ]);
-    if(confirm.value === 'reset'){ location.reload(); return; }
+    if(confirm.value === 'reset'){ clearDraft(); location.reload(); return; }
     addMe('접수하기');
 
+    // 실패하면 같은 답으로 다시 보낸다 — 새로고침하지 않으므로 적은 것이 그대로 남는다.
+    while(true){
+      var failure = await sendOnce();
+      if(!failure) break;
+      await addBot(failure === '429'
+        ? '접수가 너무 잦아요. 잠시 후 다시 시도해주세요. 적어주신 내용은 그대로 남아 있어요.'
+        : '전송에 실패했습니다. 적어주신 내용은 그대로 남아 있어요 — 잠시 후 다시 시도하거나 boson95@gmail.com 으로 보내주세요.');
+      await addChips([{ label: '다시 시도', value: 'retry', primary: true }]);
+      addMe('다시 시도');
+    }
+    clearDraft();
+    step('완료');
+    await addBot('접수됐습니다! 영업일 기준 1~2일 안에 남겨주신 연락처로 회신드릴게요. 감사합니다 🫧');
+    await addChips([{ label: '홈으로', value: 'home', primary: true }]);
+    location.href = './';
+  }
+
+  // 보냈으면 null, 실패했으면 이유(상태 코드 또는 'network').
+  async function sendOnce(){
     try {
       var res = await fetch('/_workintake', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(answers),
       });
-      if(!res.ok) throw new Error(res.status);
-      step('완료');
-      await addBot('접수됐습니다! 영업일 기준 1~2일 안에 남겨주신 연락처로 회신드릴게요. 감사합니다 🫧');
-      await addChips([{ label: '홈으로', value: 'home', primary: true }]);
-      location.href = './';
+      if(!res.ok) return String(res.status);
+      return null;
     } catch (err) {
-      await addBot(String(err.message) === '429'
-        ? '접수가 너무 잦아요. 잠시 후 다시 시도해주세요.'
-        : '전송에 실패했습니다. 잠시 후 다시 시도하거나 boson95@gmail.com 으로 보내주세요.');
-      await addChips([{ label: '다시 시도', value: 'retry', primary: true }]);
-      location.reload();
+      return 'network';
     }
   }
-  run();
+
+  async function start(){
+    var draft = loadDraft();
+    if(!draft){ await run(); return; }
+    answers = draft;
+    step('마무리');
+    await addBot('아까 작성하시던 내용이 남아 있어요. 이어서 접수할까요?');
+    var resume = await addChips([
+      { label: '이어서 접수하기', value: 'resume', primary: true },
+      { label: '처음부터 다시', value: 'reset' },
+    ]);
+    if(resume.value === 'reset'){
+      clearDraft();
+      answers = { what: '', when: '', budget: '', note: '', name: '', contact: '' };
+      await run();
+      return;
+    }
+    addMe('이어서 접수하기');
+    await confirmAndSend();
+  }
+  start();
 })();
 </script>
 </body>
