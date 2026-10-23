@@ -34,7 +34,7 @@ export class LobbyView {
           <h1 class="view-title">대기실</h1>
           <div class="room-code-display">
             <span class="room-code-label">방 코드</span>
-            <span class="room-code" id="room-code">${this.roomCode}</span>
+            <span class="room-code" id="room-code">${this.escapeHtml(this.roomCode)}</span>
             <button class="btn-copy" id="btn-copy" title="복사">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>

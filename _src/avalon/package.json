@@ -15,7 +15,8 @@
     "test:button-labels": "node ./scripts/check-button-label-invariants.mjs",
     "test:missions": "node ./scripts/check-mission-rules.mjs",
     "test:result-replay": "node ./scripts/check-result-replay-invariants.mjs",
-    "test:ci": "npm run test:sim && npm run test:lobby && npm run test:game-phases && npm run test:button-labels && npm run test:missions && npm run test:result-replay && npm run build"
+    "test:room-cleanup": "node ./scripts/check-room-cleanup.mjs",
+    "test:ci": "npm run test:sim && npm run test:lobby && npm run test:game-phases && npm run test:button-labels && npm run test:missions && npm run test:result-replay && npm run test:room-cleanup && npm run build"
   },
   "devDependencies": {
     "vite": "^7.3.1"
