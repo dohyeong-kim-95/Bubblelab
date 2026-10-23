@@ -61,3 +61,10 @@ node --test _infra/idle.test.mjs
 
 설계 근거와 참고 문헌은 [`docs/progression-research.md`](docs/progression-research.md)에
 모아 두었습니다.
+
+## 관례 면제
+
+`idle/`은 홈·게임·명예의 전당 모두 손으로 짠 화면이라 공용 재료(`_shared/bubble.css`)를
+쓰지 않습니다 — 게임 화면은 밝은 방치형 UI, 명예의 전당은 어두운 시상식 화면으로
+고정이고, 공용 재료로 바꾸면 화면이 크게 달라집니다. 공유 버튼·주간 보드 관례를 쓰지
+않는 이유는 `idle/CLAUDE.md` 에 있습니다.
