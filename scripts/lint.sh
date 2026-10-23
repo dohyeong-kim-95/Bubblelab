@@ -55,12 +55,10 @@ for file in "${files[@]}"; do
   esac
 done
 
-# 도우미가 없는 사본(lint.sh 만 복사해 쓰는 훅 테스트 등)에서는 HTML 단계만 건너뛴다.
+# 도우미가 없으면 조용히 건너뛰지 않고 실패한다 — HTML 을 안 보고 통과라고 말하면 안 된다.
 if [ ${#html_files[@]} -gt 0 ] && [ ! -f scripts/lint-html.mjs ]; then
-  echo "lint: scripts/lint-html.mjs 가 없어 HTML 인라인 스크립트 검사는 건너뜀" >&2
-  html_files=()
-fi
-if [ ${#html_files[@]} -gt 0 ]; then
+  report "scripts/lint-html.mjs" "HTML 인라인 스크립트 검사 도우미가 없다 (lint.sh 와 같이 복사해야 한다)"
+elif [ ${#html_files[@]} -gt 0 ]; then
   html_out="$(node scripts/lint-html.mjs "${html_files[@]}")" || fail=1
   html_checked="$(printf '%s\n' "$html_out" | sed -n 's/^checked //p' | tail -1)"
   checked=$((checked + ${html_checked:-0}))

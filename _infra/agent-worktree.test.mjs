@@ -60,6 +60,7 @@ const commitWith = (branch, files, { npmTest, skipHooks } = {}) => {
     cpSync(join(ROOT, "_infra/agent-hooks/pre-commit"), join(dir, "_infra/agent-hooks/pre-commit"));
     cpSync(join(ROOT, "_infra/agent-scope.conf"), join(dir, "_infra/agent-scope.conf"));
     cpSync(join(ROOT, "scripts/lint.sh"), join(dir, "scripts/lint.sh"));
+    cpSync(join(ROOT, "scripts/lint-html.mjs"), join(dir, "scripts/lint-html.mjs"));
     if (npmTest) {
       mkdirSync(join(dir, "node_modules"), { recursive: true });
       writeFileSync(
