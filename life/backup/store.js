@@ -3,6 +3,9 @@
 //
 // 도구 목록을 어디에도 적어 두지 않는다. 도구가 생겼다 없어졌다 하는데 목록을
 // 두면 등록을 잊는 순간 조용히 백업에서 빠진다. 대신 접두사로 찾는다.
+
+import { kstDate } from "../lib.js";
+
 export const PREFIX = "bl_";
 export const FORMAT = 1;
 
@@ -77,8 +80,5 @@ export function slimEnvelope(envelope) {
 }
 
 export function fileName(now = new Date()) {
-  const stamp = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit",
-  }).format(now);
-  return `life-backup-${stamp}.json`;
+  return `life-backup-${kstDate(now)}.json`;
 }

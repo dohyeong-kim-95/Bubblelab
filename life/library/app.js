@@ -1,3 +1,4 @@
+import { node } from "../lib.js";
 import {
   COVER_MAX_BYTES, NOTE_MAX, groupByYear, kstDate, makeBook, normalizeBook, validateBook,
 } from "./store.js";
@@ -59,13 +60,6 @@ async function shrinkCover(file) {
 }
 
 /* ── 그리기 ─────────────────────────────────────────────────────────── */
-function node(tag, className, text) {
-  const element = document.createElement(tag);
-  if (className) element.className = className;
-  if (text != null) element.textContent = text;
-  return element;
-}
-
 function bookCard(book) {
   const card = node("button", "book");
   card.type = "button";

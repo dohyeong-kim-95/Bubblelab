@@ -4,6 +4,11 @@
 // 이 화면이 답하려는 것은 "오늘 더 먹어도 되나"다. 그래서 합계보다 **남은 것**이
 // 먼저 나오고, 탄단지는 그램이 아니라 목표 대비 얼마나 찼는지로 보여 준다.
 
+import { kstDate } from "../lib.js";
+
+// 오늘(KST). 도구들이 같은 것을 쓰도록 ../lib.js 한 곳에 두고 여기서 다시 내보낸다.
+export { kstDate };
+
 export const NAME_MAX = 40;
 export const KCAL_MAX = 10_000;      // 한 끼에 이보다 많을 리 없다 — 오타를 거른다
 export const GRAM_MAX = 2_000;
@@ -17,12 +22,6 @@ const DAY_MS = 86_400_000;
 
 /* 열량 환산. 탄단지에서 칼로리를 되짚을 때 쓴다(Atwater 계수). */
 export const KCAL_PER_GRAM = { carb: 4, protein: 4, fat: 9 };
-
-export function kstDate(value = new Date()) {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: KST, year: "numeric", month: "2-digit", day: "2-digit",
-  }).format(value);
-}
 
 export const isDate = (value) => DATE.test(value ?? "");
 const dayNumber = (date) => { const [y, m, d] = date.split("-").map(Number); return Date.UTC(y, m - 1, d) / DAY_MS; };

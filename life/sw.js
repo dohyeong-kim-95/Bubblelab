@@ -83,6 +83,8 @@ async function networkFirst(request) {
  * 가로채는 것은 매니페스트 share_target.action 경로 하나뿐이다. life 안에는 다른
  * POST(댓글 저장·PC 토큰 발급·로그인 폼)도 있어서, 같은 출처 POST 를 전부 가로채면
  * 그것들이 GET 으로 바뀌어 깨진다. 공유 자리를 옮기면 여기도 같이 고친다. */
+// life/lib.js 의 SHARE_CACHE·SHARE_KEY 와 같은 값이다(이 파일은 클래식 스크립트라 import 하지
+// 못한다). _infra/budget.test.mjs 가 두 곳이 같은지 확인한다.
 const SHARE_CACHE = "bl-life-share";
 const SHARE_KEY = "/__share";
 const SHARE_TARGET_PATH = SCOPE + "budget/"; // manifest.json 의 share_target.action ("./budget/")

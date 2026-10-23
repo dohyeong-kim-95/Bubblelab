@@ -1,3 +1,4 @@
+import { SHARE_CACHE, SHARE_KEY, node } from "../lib.js";
 import {
   CATEGORIES, addEntries, addEntry, byCategory, categoryFor, categoryLabel, cycleLabel, cycleOf,
   editEntry, emptyState, entriesIn, exportText, groupByDay, inCycle, kstDate, markSynced,
@@ -35,13 +36,6 @@ function update(next) {
   state = next;
   save();
   render();
-}
-
-function node(tag, className, text) {
-  const element = document.createElement(tag);
-  if (className) element.className = className;
-  if (text != null) element.textContent = text;
-  return element;
 }
 
 const short = (date) => {
@@ -551,8 +545,6 @@ $("sms").addEventListener("close", () => { pending = []; });
  *
  * ?text= 도 계속 받는다: 이미 설치된 폰의 WebAPK 는 매니페스트가 갱신될 때까지 옛
  * 방식(GET)으로 보낸다. */
-const SHARE_CACHE = "bl-life-share";
-const SHARE_KEY = "/__share";
 
 async function takeShared() {
   const params = new URLSearchParams(location.search);

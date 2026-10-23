@@ -6,6 +6,11 @@
 // 고르게 나눈 값이다 — 월초에 몰아 쓰는 사람에게는 박하지만, 그 박함이 이 화면의
 // 쓸모다(남은 날에 하루 얼마씩 쓸 수 있는지가 매일 다시 계산된다).
 
+import { kstDate } from "../lib.js";
+
+// 오늘(KST). 도구들이 같은 것을 쓰도록 ../lib.js 한 곳에 두고 여기서 다시 내보낸다.
+export { kstDate };
+
 export const DEFAULT_LIMIT = 1_000_000;
 export const LIMIT_MAX = 100_000_000;
 export const AMOUNT_MAX = 100_000_000;
@@ -17,16 +22,8 @@ export const START_DAY_MAX = 28;
 // 경고가 뜨면 경고를 읽지 않게 된다.
 const ON_PACE = 0.02;
 
-const KST = "Asia/Seoul";
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const DAY_MS = 86_400_000;
-
-/** 오늘. 자정 경계는 KST 한 곳에서만 다룬다. */
-export function kstDate(value = new Date()) {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: KST, year: "numeric", month: "2-digit", day: "2-digit",
-  }).format(value);
-}
 
 const parts = (date) => String(date).split("-").map(Number);
 const pad = (n) => String(n).padStart(2, "0");

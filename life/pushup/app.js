@@ -1,3 +1,4 @@
+import { node } from "../lib.js";
 import {
   GOAL, REST_SECONDS, bestRecord, completeSession, emptyState, isDone, makePlan,
   nextDay, parseState, retest, sessionCount, totalReps,
@@ -27,13 +28,6 @@ function update(next) {
   plan = makePlan(state.max);
   save();
   render();
-}
-
-function node(tag, className, text) {
-  const element = document.createElement(tag);
-  if (className) element.className = className;
-  if (text != null) element.textContent = text;
-  return element;
 }
 
 const setsLabel = (item) => `${item.sets.slice(0, -1).join(" · ")} · ${item.target}+`;
