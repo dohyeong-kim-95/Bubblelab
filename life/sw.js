@@ -6,7 +6,7 @@
 // 보이지 않는 반면, 캐시를 먼저 내주면 **배포한 것이 한 박자 늦게 도착한다** —
 // 고쳐서 배포했는데 폰에서 그대로인 사고가 실제로 났다. 그래서 도구는 네트워크 먼저,
 // 실패하면 캐시(오프라인에서도 열린다).
-const CACHE = "life-v7";
+const CACHE = "life-v8";
 const SHELL = ["./", "index.html", "styles.css", "app.js", "store.js"];
 // 크롬이 설치 가능 여부를 판단할 때 직접 보는 것들. 서비스워커가 만지지 않는다.
 const INSTALL_ASSETS = ["/manifest.json", "/icon.svg", "/icon-192.png", "/icon-512.png"];

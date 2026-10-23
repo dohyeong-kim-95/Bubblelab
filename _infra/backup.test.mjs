@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const { FORMAT, PREFIX, fileName, isOurs, makeEnvelope, parseEnvelope, summarize } =
+const { DEVICE_ONLY, FORMAT, PREFIX, fileName, isOurs, makeEnvelope, parseEnvelope, summarize } =
   await import("../life/backup/store.js");
 
 const AT = new Date("2026-08-19T02:00:00.000Z");
@@ -63,4 +63,23 @@ test("파일 이름에 KST 날짜가 들어간다", () => {
 
 test("접두사는 한 곳에만 있다", () => {
   assert.equal(PREFIX, "bl_");
+});
+
+test("이 기기에서만 뜻이 있는 것(자동 올리기 토글·가계부 폴더 손잡이)은 담지도 되돌리지도 않는다", () => {
+  assert.deepEqual(DEVICE_ONLY, ["bl_backup_auto", "bl_budget_fs"]);
+  for (const name of DEVICE_ONLY) assert.equal(isOurs(name), false, name);
+  const envelope = makeEnvelope({
+    local: { bl_life_v1: "{}", bl_backup_auto: "off" },
+    databases: [{ name: "bl_budget_fs", stores: [] }, { name: "bl_library", stores: [] }],
+  }, AT);
+  assert.deepEqual(Object.keys(envelope.local), ["bl_life_v1"]);
+  assert.deepEqual(envelope.databases.map((d) => d.name), ["bl_library"]);
+  // 손잡이가 `{}` 로 담긴 옛 백업 파일을 읽어도 걸러진다.
+  const old = parseEnvelope(JSON.stringify({
+    app: "life", format: FORMAT,
+    local: { bl_backup_auto: "off", bl_life_v1: "{}" },
+    databases: [{ name: "bl_budget_fs", stores: [{ name: "handles", rows: [{}], keys: ["folder"] }] }],
+  }));
+  assert.deepEqual(Object.keys(old.local), ["bl_life_v1"]);
+  assert.deepEqual(old.databases, []);
 });

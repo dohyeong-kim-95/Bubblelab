@@ -6,7 +6,14 @@
 export const PREFIX = "bl_";
 export const FORMAT = 1;
 
-export const isOurs = (name) => typeof name === "string" && name.startsWith(PREFIX);
+/* 접두사는 맞지만 **이 기기에서만 뜻이 있는 것**. 백업에 담지 않고, 되돌릴 때 지우지도 않는다.
+ * - bl_backup_auto: 이 기기의 자동 올리기 켜기/끄기(백업에 담기면 다른 기기 설정까지 바뀐다)
+ * - bl_budget_fs: 가계부가 기억한 폴더 손잡이. JSON 으로 담으면 `{}` 가 되어 되돌린 뒤
+ *   자동 받기가 "백업을 읽지 못했어요" 로 멈춘다. */
+export const DEVICE_ONLY = ["bl_backup_auto", "bl_budget_fs"];
+
+export const isOurs = (name) =>
+  typeof name === "string" && name.startsWith(PREFIX) && !DEVICE_ONLY.includes(name);
 
 export function makeEnvelope({ local = {}, databases = [] }, now = new Date()) {
   return {
