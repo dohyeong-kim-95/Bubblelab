@@ -149,6 +149,7 @@
   <input id="text" class="bl-input" maxlength="500" autocomplete="off" placeholder="메시지 입력…" disabled>
   <button id="send" class="bl-btn bl-btn--primary" type="submit" disabled>전송</button>
 </form>
+<script src="../photo/sticker-picker.js"></script>
 <script>
 "use strict";
 // 스티커 팩 목록은 빌드가 생성하는 /_assets/catalog.json에서 온다 —
@@ -268,59 +269,11 @@ function stickerUrl(pack, n) {
   return `/_assets/sticker/${pack}/${String(n).padStart(2, "0")}.png`;
 }
 
-// ── 누끼: 흰 배경 제거 (util/photo와 같은 테두리 flood fill) ──
-const cutoutCache = new Map(); // "pack/n" → Promise<url>
-
-function cutoutWhiteBackground(imageData) {
-  const { data, width, height } = imageData;
-  // 이미 누끼가 된 PNG(모서리가 투명)는 건너뛴다. 생성 시점에 엄격한 임계값으로 땄는데
-  // 여기서 느슨한 임계값으로 한 번 더 따면 투명 픽셀에서 번져 흰 몸통·털까지 지워진다.
-  const corners = [0, width - 1, (height - 1) * width, height * width - 1];
-  if (corners.some((p) => data[p * 4 + 3] === 0)) return;
-  const whiteness = (i) => Math.min(data[i], data[i + 1], data[i + 2]);
-  const visited = new Uint8Array(width * height);
-  const queue = [];
-  for (let x = 0; x < width; x++) queue.push(x, (height - 1) * width + x);
-  for (let y = 0; y < height; y++) queue.push(y * width, y * width + width - 1);
-  while (queue.length) {
-    const p = queue.pop();
-    if (visited[p]) continue;
-    visited[p] = 1;
-    const i = p * 4;
-    const w = whiteness(i);
-    if (w < 208) continue;
-    // 235 이상은 완전 투명, 208~235는 경계 안티앨리어싱을 살려 반투명 처리
-    data[i + 3] = w >= 235 ? 0 : Math.round(((235 - w) / 27) * 255);
-    const x = p % width, y = (p / width) | 0;
-    if (x > 0) queue.push(p - 1);
-    if (x < width - 1) queue.push(p + 1);
-    if (y > 0) queue.push(p - width);
-    if (y < height - 1) queue.push(p + width);
-  }
-}
-
+// ── 누끼: 흰 배경 제거 — util/photo·calendar 와 같이 쓰는 ../photo/sticker-picker.js ──
 function stickerObjectUrl(pack, n) {
   if (PACK_IDS.get(pack)?.cutout === false) return Promise.resolve(stickerUrl(pack, n));
-  const key = `${pack}/${n}`;
-  if (!cutoutCache.has(key)) {
-    cutoutCache.set(key, (async () => {
-      const source = new Image();
-      source.src = stickerUrl(pack, n);
-      await source.decode();
-      const canvas = document.createElement("canvas");
-      canvas.width = source.naturalWidth;
-      canvas.height = source.naturalHeight;
-      const context = canvas.getContext("2d");
-      context.drawImage(source, 0, 0);
-      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-      cutoutWhiteBackground(imageData);
-      context.putImageData(imageData, 0, 0);
-      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
-      if (!blob) throw new Error("cutout failed");
-      return URL.createObjectURL(blob);
-    })().catch(() => stickerUrl(pack, n))); // 실패하면 원본 그대로
-  }
-  return cutoutCache.get(key);
+  // 실패하면 원본 그대로
+  return window.blStickers.cutoutStickerUrl(stickerUrl(pack, n)).catch(() => stickerUrl(pack, n));
 }
 
 function stickerImg(pack, n, alt) {
