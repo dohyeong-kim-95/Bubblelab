@@ -87,8 +87,8 @@ function loadBest() {
 }
 function saveBest() {
   try { localStorage.setItem(BEST_KEY, String(best)); } catch {}
-if (best !== null) bestEl.textContent = `최고 기록: ${best.toFixed(1)}초`;
 }
+if (best !== null) bestEl.textContent = `최고 기록: ${best.toFixed(1)}초`;
 
 window.blWeekly = { game: "logroll", dir: "max", fmt: (v) => v.toFixed(1) + "초" };
 window.blShareText = () => `통나무 위에서 ${(best ?? survived).toFixed(1)}초 버팀! 도전해보세요`;

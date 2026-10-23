@@ -75,8 +75,8 @@ function loadBest() {
 }
 function saveBest() {
   try { localStorage.setItem(BEST_KEY, String(best)); } catch {}
-if (best !== null) bestEl.textContent = `최고 기록: ${best}개`;
 }
+if (best !== null) bestEl.textContent = `최고 기록: ${best}개`;
 
 window.blWeekly = { game: "bubble-pop", dir: "max", fmt: (v) => v + "개" };
 window.blShareText = () => `20초 동안 버블 ${best ?? popped}개 터트림! 도전해보세요`;

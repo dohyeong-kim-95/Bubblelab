@@ -71,8 +71,8 @@ function loadBest() {
 }
 function saveBest() {
   try { localStorage.setItem(BEST_KEY, String(best)); } catch {}
-if (best !== null) bestEl.textContent = `최고 기록: ${best}회`;
 }
+if (best !== null) bestEl.textContent = `최고 기록: ${best}회`;
 
 window.blWeekly = { game: "clicker", dir: "max", fmt: (v) => v + "회" };
 window.blShareText = () => `10초 동안 ${best ?? count}번 클릭! 도전해보세요`;

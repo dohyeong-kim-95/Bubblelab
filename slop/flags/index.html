@@ -132,8 +132,8 @@ function loadBest() {
 }
 function saveBest() {
   try { localStorage.setItem(BEST_KEY, String(best)); } catch {}
-if (best !== null) bestEl.textContent = `최고 기록: 연속 ${best}개`;
 }
+if (best !== null) bestEl.textContent = `최고 기록: 연속 ${best}개`;
 let locked = false;
 const recent = []; // 최근 출제 코드 (반복 방지)
 
