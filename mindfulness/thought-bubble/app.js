@@ -122,11 +122,7 @@
   againButton.addEventListener("click", returnToIntro);
 
   infoButton.addEventListener("click", () => infoDialog.showModal());
-  dialogClose.addEventListener("click", () => infoDialog.close());
-  dialogConfirm.addEventListener("click", () => infoDialog.close());
-  infoDialog.addEventListener("click", (event) => {
-    if (event.target === infoDialog) infoDialog.close();
-  });
+  window.mindCommon.bindInfoDialog(infoDialog, [dialogClose, dialogConfirm]);
 
   addEventListener("pagehide", () => {
     clearTimers();

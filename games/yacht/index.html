@@ -471,7 +471,7 @@ function renderBoard(ps, finished) {
   const cell = (p, cat) => {
     const v = state.scores?.[p.id]?.[cat];
     const cls = p.id === state.turn?.pid && !finished ? 'turn-col' : '';
-    if (v != null) return `<td class="${cls}">${v}</td>`;
+    if (v != null) return `<td class="${cls}">${Number(v)}</td>`;   // 다른 플레이어가 쓴 값 — 숫자로만 넣는다
     if (p.id === uid && mine)
       return `<td class="avail ${selCat === cat ? 'sel' : ''} ${cls}"
                 data-cat="${cat}">${SCORERS[cat](dice)}</td>`;
@@ -485,11 +485,11 @@ function renderBoard(ps, finished) {
     <tbody>
       ${UPPER.map(row).join('')}
       <tr class="sect"><td>보너스 (63↑ +35)</td>
-        ${ps.map((p) => `<td>${upperSum(state.scores?.[p.id])}/63
+        ${ps.map((p) => `<td>${Number(upperSum(state.scores?.[p.id]))}/63
           ${bonusOf(state.scores?.[p.id]) ? ' ✓' : ''}</td>`).join('')}</tr>
       ${LOWER.map(row).join('')}
       <tr class="total"><td>합계</td>
-        ${ps.map((p) => `<td>${totalOf(state.scores?.[p.id])}</td>`).join('')}</tr>
+        ${ps.map((p) => `<td>${Number(totalOf(state.scores?.[p.id]))}</td>`).join('')}</tr>
     </tbody></table>`;
 }
 
@@ -497,14 +497,17 @@ function renderRanks(ps) {
   const ranked = [...ps].sort((a, b) => totalOf(state.scores?.[b.id]) - totalOf(state.scores?.[a.id]));
   const top = totalOf(state.scores?.[ranked[0].id]);
   return `<div class="players">${ranked.map((p, i) => {
-    const t = totalOf(state.scores?.[p.id]);
+    const t = Number(totalOf(state.scores?.[p.id]));
     return `<div class="rank ${t === top ? 'win' : ''}">
       <span>${t === top ? '🏆' : `${i + 1}위`} ${esc(p.name)}${p.id === uid ? ' (나)' : ''}</span>
       <span><b>${t}</b>점</span></div>`;
   }).join('')}</div>`;
 }
 
-const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+// 속성값에도 넣을 수 있게 따옴표까지 바꾼다 — liargame·idle 명예의 전당과 같은 구현.
+const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+})[char]);
 
 /* ---------- 진입 ---------- */
 $('#create').addEventListener('click', () => createRoom().catch((e) => showErr(e.message)));

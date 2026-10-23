@@ -76,7 +76,10 @@
 </div>
 <div id="toast" class="hide"></div>
 <canvas id="cv"></canvas>
+<script src="../canvas-kit.js"></script>
 <script>
+// 콘솔 디버그 훅(정답·스테이지 점프·강제 승리)은 ?debug 주소에서만 붙인다 — 기록 조작을 쉽게 만들지 않게.
+const DEBUG = new URLSearchParams(location.search).has("debug");
 "use strict";
 // 정적 난이도(0~100)와 별점 — DIFFICULTY.md Phase 1
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
@@ -84,19 +87,7 @@ const starsOf = (d) => "\u2605".repeat(Math.max(1, Math.min(5, Math.ceil(d / 20)
 let dScore = 0;
 const targetD = (s) => Math.min(90, 5 + 4.7 * s);
 
-// 구형 모바일 브라우저(iOS 15 이하 등)엔 roundRect가 없다 — 없으면 폴리필
-if (!CanvasRenderingContext2D.prototype.roundRect) {
-  CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
-    r = Math.min(Array.isArray(r) ? r[0] : (r ?? 0), w / 2, h / 2);
-    this.moveTo(x + r, y);
-    this.arcTo(x + w, y, x + w, y + h, r);
-    this.arcTo(x + w, y + h, x, y + h, r);
-    this.arcTo(x, y + h, x, y, r);
-    this.arcTo(x, y, x + w, y, r);
-    this.closePath();
-    return this;
-  };
-}
+// roundRect 폴리필은 ../canvas-kit.js
 /* ── 상수/난수 ────────────────────────────────────────── */
 const W = 360, H = 640, SCREW_R = 11, TRAY_CAP = 5;
 const PAL = ["#e5484d", "#3b82f6", "#46a758", "#f79009", "#8e4ec6", "#12a594", "#e93d82"];
@@ -230,7 +221,7 @@ function loadStage() {
   qi = 0; boxFill = 0; tray = []; anims = []; denyId = -1;
   dScore = diffOf(G);
   phase = "play";
-  window.__sw = {                                      // 테스트/디버그용
+  if (DEBUG) window.__sw = {                                      // 테스트/디버그용
     solution: G.solution,
     pos: (id) => G.posOf(G.screws.find((s) => s.id === id)),
     state: () => ({ qi, boxFill, active: activeColor(), tray: tray.map((s) => s.col) }),
@@ -469,7 +460,7 @@ addEventListener("pointerdown", (e) => {
 window.blShareText = () => `나사 러시 ${best}연속! 한 번도 안 틀리고 도전해보세요 🔩`;
 window.blWeekly = { game: "screwrush", dir: "max", fmt: (v) => `${v}연속` };
 if (best) $("best").textContent = `최고 기록: ${best}연속`;
-window.__swRun = { state: () => ({ phase, stage, score, best }), win: () => win(),
+if (DEBUG) window.__swRun = { state: () => ({ phase, stage, score, best }), win: () => win(),
                    fail: (m = "테스트 실패") => fail(m), newRun: () => newRun() };
 </script>
 <script defer src="/_shared/records.js"></script>

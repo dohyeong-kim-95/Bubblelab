@@ -251,7 +251,7 @@ function playersHtml(kickable = false) {
       <div class="badges">${id === hostId ? '<span class="badge host">방장</span>' : ""}
         ${id === playerId ? '<span class="badge me">나</span>' : ""}
         ${player.online === false ? '<span class="badge">접속 끊김</span>' : ""}</div>
-      ${kickable && id !== playerId ? `<button class="kick danger" data-kick="${id}">내보내기</button>` : ""}
+      ${kickable && id !== playerId ? `<button class="kick danger" data-kick="${esc(id)}">내보내기</button>` : ""}
     </div>`).join("");
 }
 
@@ -372,7 +372,7 @@ function renderVoting() {
   return `${topbar()}<div class="phase-head"><p class="phase-kicker">SECRET VOTE</p><h2>라이어를 지목하세요</h2>
     <p>선택은 투표가 끝날 때까지 공개되지 않습니다.</p></div>
     ${voted ? `<div class="panel" style="text-align:center"><h3>투표 완료</h3><p class="muted">다른 플레이어를 기다리고 있습니다<span class="waiting-dots"></span></p></div>`
-      : `<div class="vote-list">${ids.filter((id) => id !== playerId).map((id) => `<button class="vote-target ${selectedVote === id ? "selected" : ""}" data-vote="${id}">${esc(room.players?.[id]?.name || "?")}</button>`).join("")}</div>
+      : `<div class="vote-list">${ids.filter((id) => id !== playerId).map((id) => `<button class="vote-target ${selectedVote === id ? "selected" : ""}" data-vote="${esc(id)}">${esc(room.players?.[id]?.name || "?")}</button>`).join("")}</div>
         <button class="primary" id="submitVote" ${selectedVote ? "" : "disabled"}>이 사람에게 투표</button>`}
     ${progressHtml("votes")}${roleReminder()}`;
 }
@@ -380,7 +380,7 @@ function renderVoting() {
 function voteCountsHtml() {
   const counts = room.gameState.voteResult?.counts || {};
   return `<div class="vote-counts">${Object.entries(counts).sort((a,b) => b[1]-a[1]).map(([id, count]) => `
-    <div class="vote-count"><span>${esc(room.players?.[id]?.name || "?")}</span><strong>${count}표</strong></div>`).join("")}</div>`;
+    <div class="vote-count"><span>${esc(room.players?.[id]?.name || "?")}</span><strong>${Number(count) || 0}표</strong></div>`).join("")}</div>`;
 }
 
 function renderTieBreak() {
@@ -390,7 +390,7 @@ function renderTieBreak() {
   return `${topbar()}<div class="phase-head"><p class="phase-kicker">TIE BREAK</p><h2>투표가 동률입니다</h2>
     <p>${esc(room.players?.[moderatorId]?.name)}님이 최종 지목자를 결정합니다.</p></div>
     <div class="panel">${voteCountsHtml()}</div>
-    ${canChoose ? `<div class="vote-list">${state.tiedIds.map((id) => `<button class="vote-target" data-tie="${id}">${esc(room.players?.[id]?.name || "?")} 지목</button>`).join("")}</div>`
+    ${canChoose ? `<div class="vote-list">${state.tiedIds.map((id) => `<button class="vote-target" data-tie="${esc(id)}">${esc(room.players?.[id]?.name || "?")} 지목</button>`).join("")}</div>`
       : '<div class="panel muted" style="text-align:center">진행자가 결정하고 있습니다<span class="waiting-dots"></span></div>'}`;
 }
 

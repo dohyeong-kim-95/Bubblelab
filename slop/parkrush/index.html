@@ -70,6 +70,8 @@
 </div>
 <canvas id="cv"></canvas>
 <script>
+// 콘솔 디버그 훅(정답·스테이지 점프·강제 승리)은 ?debug 주소에서만 붙인다 — 기록 조작을 쉽게 만들지 않게.
+const DEBUG = new URLSearchParams(location.search).has("debug");
 "use strict";
 // 정적 난이도(0~100)와 별점 — DIFFICULTY.md Phase 1
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
@@ -269,11 +271,11 @@ function loadStage() {
   phase = "draw";
   const go = document.getElementById("go");
   go.classList.remove("hide"); go.disabled = true;
-  window.__pm = {                                    // 테스트/디버그용
+  if (DEBUG) window.__pm = {                                    // 테스트/디버그용
     defs: g.defs, boxes: g.boxes,
     state: () => ({ phase, stage, score, best }),
   };
-  window.__pmGen = (s) => {                          // 생성기 대량 검사용
+  if (DEBUG) window.__pmGen = (s) => {                          // 생성기 대량 검사용
     const r = gen(s);
     return { n: r.defs.length, defs: r.defs, boxes: r.boxes };
   };
@@ -436,9 +438,9 @@ $("btn").addEventListener("click", () => {
 $("retry").addEventListener("click", () => {   // 그린 길만 지우기 (출발 후엔 불가)
   if (phase === "draw") loadStage();
 });
-window.__pmJump = (s) => { clearTimeout(advanceT); stage = s; $("overlay").classList.add("hide"); loadStage(); };
-window.__pmWin = () => { if (phase === "draw" || phase === "run") win(); };
-window.__pmFail = () => { if (phase === "draw" || phase === "run") fail(); };
+if (DEBUG) window.__pmJump = (s) => { clearTimeout(advanceT); stage = s; $("overlay").classList.add("hide"); loadStage(); };
+if (DEBUG) window.__pmWin = () => { if (phase === "draw" || phase === "run") win(); };
+if (DEBUG) window.__pmFail = () => { if (phase === "draw" || phase === "run") fail(); };
 $("go").addEventListener("click", () => {
   if (phase !== "draw" || !cars.every((c) => c.path)) return;
   phase = "run"; timer = 0; $("go").classList.add("hide");

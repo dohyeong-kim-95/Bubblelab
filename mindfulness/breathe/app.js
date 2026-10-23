@@ -1,5 +1,7 @@
 (() => {
   "use strict";
+  const { stopNodes, requestWakeLock, releaseWakeLock } = window.mindCommon;
+  const showToast = (message) => window.mindCommon.showToast(toast, message, 2200);
 
   const PREP_MS = 5000;
   const INHALE_MS = 4000;
@@ -46,8 +48,6 @@
   let animationFrame = 0;
   let sessionState = "idle";
   let lastPhaseKey = "";
-  let wakeLock = null;
-  let toastTimer = 0;
 
   const hasAudio = () => mode === "audio" || mode === "both";
   const hasVisual = () => mode === "visual" || mode === "both";
@@ -55,12 +55,6 @@
   const totalBreathMs = () => cycleCount() * (INHALE_MS + EXHALE_MS);
   const dbVolume = () => Math.pow(Number(volume.value) / 100, 1.35) * 0.2;
 
-  function showToast(message) {
-    toast.textContent = message;
-    toast.classList.add("show");
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => toast.classList.remove("show"), 2200);
-  }
 
   function setView(view) {
     body.dataset.view = view;
@@ -83,13 +77,6 @@
     return true;
   }
 
-  function stopNodes(nodes) {
-    for (const node of nodes) {
-      try { node.stop(); } catch {}
-      try { node.disconnect(); } catch {}
-    }
-    nodes.length = 0;
-  }
 
   function makeTone(start, duration, fromHz, toHz, gain = 1, target = scheduledNodes) {
     const oscillator = audioContext.createOscillator();
@@ -165,16 +152,7 @@
     setTimeout(() => previewButton.removeAttribute("aria-label"), 4900);
   }
 
-  async function requestWakeLock() {
-    if (!("wakeLock" in navigator)) return;
-    try { wakeLock = await navigator.wakeLock.request("screen"); } catch {}
-  }
 
-  function releaseWakeLock() {
-    if (!wakeLock) return;
-    wakeLock.release().catch(() => {});
-    wakeLock = null;
-  }
 
   function nowMs() {
     if (hasAudio() && audioContext) return audioContext.currentTime * 1000;
@@ -310,6 +288,11 @@
   function resetSession() {
     cancelAnimationFrame(animationFrame);
     stopNodes(scheduledNodes);
+    // 잠들기 모드의 볼륨 페이드 예약이 남으면 다음 세션·미리듣기 소리를 없앤다.
+    if (masterGain && audioContext) {
+      masterGain.gain.cancelScheduledValues(audioContext.currentTime);
+      masterGain.gain.setValueAtTime(dbVolume(), audioContext.currentTime);
+    }
     if (audioContext?.state === "suspended") audioContext.resume();
     releaseWakeLock();
     sessionState = "idle";
@@ -375,9 +358,7 @@
   pauseButton.addEventListener("click", togglePause);
   stopButton.addEventListener("click", stopSession);
   infoButton.addEventListener("click", () => infoDialog.showModal());
-  dialogClose.addEventListener("click", () => infoDialog.close());
-  dialogConfirm.addEventListener("click", () => infoDialog.close());
-  infoDialog.addEventListener("click", (event) => { if (event.target === infoDialog) infoDialog.close(); });
+  window.mindCommon.bindInfoDialog(infoDialog, [dialogClose, dialogConfirm]);
   addEventListener("pagehide", () => {
     cancelAnimationFrame(animationFrame);
     stopNodes(scheduledNodes);

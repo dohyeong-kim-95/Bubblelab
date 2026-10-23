@@ -137,7 +137,23 @@ const again = document.getElementById("again");
 const bestEl = document.getElementById("best");
 
 let streak = 0;
-let best = null;
+// 최고 기록은 새로고침해도 남게 localStorage 에 둔다(키 bl-<게임>-best 로 통일).
+const BEST_KEY = "bl-animal-vs-best";
+let best = loadBest();
+function loadBest() {
+  try {
+    const saved = localStorage.getItem(BEST_KEY);
+    if (saved === null) return null;
+    const value = Number(saved);
+    return Number.isFinite(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+function saveBest() {
+  try { localStorage.setItem(BEST_KEY, String(best)); } catch {}
+if (best !== null) bestEl.textContent = `최고 기록: 연속 ${best}개`;
+}
 let locked = false;
 let anchor = null;
 let chal = null;
@@ -179,6 +195,7 @@ function pickChallenger(base) {
 }
 
 function round() {
+  cancelAnimationFrame(countUpFrame);
   locked = false;
   streakEl.textContent = `연속 ${streak}개`;
   chal = pickChallenger(anchor);
@@ -204,6 +221,8 @@ function round() {
 }
 
 // 가려져 있던 몸무게를 0부터 굴려 올린다 — 이 장르의 핵심 연출
+// round()가 이걸 끊는다 — 안 그러면 "다시!" 직후 새 문제의 ??? 자리에 이전 무게가 그려진다.
+let countUpFrame = 0;
 function countUp(target) {
   const dur = 600;
   const t0 = performance.now();
@@ -211,7 +230,7 @@ function countUp(target) {
     const p = Math.min(1, (now - t0) / dur);
     const eased = 1 - Math.pow(1 - p, 3);
     chalVal.textContent = fmtW(target * eased);
-    if (p < 1) requestAnimationFrame(step);
+    if (p < 1) countUpFrame = requestAnimationFrame(step);
     else chalVal.textContent = fmtW(target);
   })(t0);
 }
@@ -241,6 +260,7 @@ function pick(dir) {
     `${chal[0]} ${fmtW(chal[1])} · ${anchor[0]} ${fmtW(anchor[1])}\n연속 ${streak}개 ${grade}`;
   if (best === null || streak > best) {
     best = streak;
+    saveBest();
     bestEl.textContent = `최고 기록: 연속 ${best}개`;
   }
   if (streak > 0) window.blWeeklyReport?.(streak);

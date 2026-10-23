@@ -75,7 +75,23 @@ let rot = 0;              // 원의 현재 회전각(라디안)
 let baseSpeed = 0.9;      // 등각속도(라디안/초)
 let dir = 1;              // 회전 방향
 let score = 0;
-let best = null;
+// 최고 기록은 새로고침해도 남게 localStorage 에 둔다(키 bl-<게임>-best 로 통일).
+const BEST_KEY = "bl-dart-adv-best";
+let best = loadBest();
+function loadBest() {
+  try {
+    const saved = localStorage.getItem(BEST_KEY);
+    if (saved === null) return null;
+    const value = Number(saved);
+    return Number.isFinite(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+function saveBest() {
+  try { localStorage.setItem(BEST_KEY, String(best)); } catch {}
+if (best !== null) bestEl.textContent = `최고 기록: ${best}개`;
+}
 
 let cx = 0, cy = 0, R = 90;
 const NEEDLE = 46;        // 바늘 길이(원 바깥으로 뻗음)
@@ -276,6 +292,7 @@ function finish() {
   charging = false;
   if (best === null || score > best) {
     best = score;
+    saveBest();
     bestEl.textContent = `최고 기록: ${best}개`;
   }
   const grade =

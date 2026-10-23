@@ -117,7 +117,23 @@ const btn = document.getElementById("btn");
 const bestEl = document.getElementById("best");
 
 let streak = 0;
-let best = null;
+// 최고 기록은 새로고침해도 남게 localStorage 에 둔다(키 bl-<게임>-best 로 통일).
+const BEST_KEY = "bl-flags-best";
+let best = loadBest();
+function loadBest() {
+  try {
+    const saved = localStorage.getItem(BEST_KEY);
+    if (saved === null) return null;
+    const value = Number(saved);
+    return Number.isFinite(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+function saveBest() {
+  try { localStorage.setItem(BEST_KEY, String(best)); } catch {}
+if (best !== null) bestEl.textContent = `최고 기록: 연속 ${best}개`;
+}
 let locked = false;
 const recent = []; // 최근 출제 코드 (반복 방지)
 
@@ -178,6 +194,7 @@ function pick(b, code, [answerCode, answerName]) {
   msg.textContent = `정답은 ${answerName}!\n연속 ${streak}개 ${grade}`;
   if (best === null || streak > best) {
     best = streak;
+    saveBest();
     bestEl.textContent = `최고 기록: 연속 ${best}개`;
   }
   if (streak > 0) window.blWeeklyReport?.(streak);

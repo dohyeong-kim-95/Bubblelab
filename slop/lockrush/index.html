@@ -60,6 +60,8 @@
 </div>
 <canvas id="cv"></canvas>
 <script>
+// 콘솔 디버그 훅(정답·스테이지 점프·강제 승리)은 ?debug 주소에서만 붙인다 — 기록 조작을 쉽게 만들지 않게.
+const DEBUG = new URLSearchParams(location.search).has("debug");
 "use strict";
 /* ── 상수 ─────────────────────────────────────────────── */
 const W = 360, H = 640, CX = 180, CY = 340, R = 112;
@@ -288,7 +290,7 @@ addEventListener("pointerdown", (e) => {
 });
 addEventListener("keydown", (e) => { if (e.key === " ") tap(); });
 
-window.__pl = {                                  // 테스트/디버그용
+if (DEBUG) window.__pl = {                                  // 테스트/디버그용
   state: () => ({ score, combo, lock, picks, need, ang, notch, half, spd, dir, phase }),
   aligned: (m = 3) => Math.abs(angDiff(ang, notch)) <= Math.max(2, half - m),
   perfectAligned: () => Math.abs(angDiff(ang, notch)) <= half * 0.3,
