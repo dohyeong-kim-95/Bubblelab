@@ -220,6 +220,54 @@ test("all-time hall of fame: updates on accept, survives weekly pruning", async 
   assert.equal((await alltime()).watersort.nick, "퍼즐러");
   // 은퇴 키로 새 기록은 받지 않는다 (GAMES 미등록 → 400)
   assert.equal((await post(records, { game: "watersort", nick: "퍼즐러", score: 43 })).status, 400);
+
+  // idle 의 누적 기록은 slop 게임이 아니다 — slop 보드·시상대 집계에 섞이면 404 링크가 된다
+  await post(records, { game: "bubble-pop-idle", nick: "방치왕", score: 1e9 });
+  await storage.put("alltime:gone-game", { nick: "옛날", score: 1, at: 1 }); // 미등록 잔재
+  const slopAfterIdle = await scoped("slop");
+  assert.equal("bubble-pop-idle" in slopAfterIdle, false);
+  assert.equal("gone-game" in slopAfterIdle, false);
+  assert.equal((await alltime())["bubble-pop-idle"].nick, "방치왕"); // admin 엔 보인다
+});
+
+test("프로토타입 키는 등록된 게임이 아니다 (명예의 전당 조작 방지)", async () => {
+  const storage = new MemoryStorage();
+  const records = new RecordsDO({ storage });
+  const vid = "00000000-0000-4000-8000-000000000001";
+  for (const game of ["constructor", "__proto__", "toString", "valueOf", "hasOwnProperty"]) {
+    assert.equal((await post(records, { game, nick: "해커", score: 1 })).status, 400, game);
+    const personal = await records.fetch(new Request("https://records.internal/_personal", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ vid, game, score: 1 }),
+    }));
+    assert.equal(personal.status, 400, game);
+    const like = await records.fetch(new Request("https://records.internal/_like", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ vid, game }),
+    }));
+    assert.equal(like.status, 400, game);
+    const likeRead = await records.fetch(new Request(`https://records.internal/_like?game=${game}`));
+    assert.equal(likeRead.status, 400, game);
+  }
+  assert.equal([...storage.data.keys()].some((key) => key.startsWith("alltime:")), false);
+});
+
+test("주간 보드 점수 범위는 사람이 낼 수 있는 값까지만 받는다", async () => {
+  const records = new RecordsDO({ storage: new MemoryStorage() });
+  const status = async (game, score) => (await post(records, { game, nick: "검사", score })).status;
+  assert.equal(await status("reactiontime", 0), 400);
+  assert.equal(await status("reactiontime", 99), 400);
+  assert.equal(await status("reactiontime", 150), 200);
+  assert.equal(await status("touch25", 0), 400);
+  assert.equal(await status("touch25", 4.9), 400);
+  assert.equal(await status("touch25", 9.5), 200);
+  assert.equal(await status("clicker", 2000), 400);
+  assert.equal(await status("clicker", 301), 400);
+  assert.equal(await status("clicker", 120), 200);
+  assert.equal(await status("bubble-pop", 300), 400);
+  assert.equal(await status("bubble-pop", 151), 400);
+  assert.equal(await status("bubble-pop", 70), 200);
+  assert.equal(await status("10sec", 0.004), 200);
 });
 
 test("notice: set, piggybacks on record reads, delete, validation", async () => {
@@ -303,7 +351,7 @@ test("rejects malformed submissions", async () => {
     { game: "touch25", nick: "철수", score: Infinity },
     { game: "Touch 25", nick: "철수", score: 1 },           // 게임 이름
     { game: "lotto", nick: "철수", score: 1 },              // GAMES 미등록
-    { game: "touch25", nick: "철수", score: -1 },           // 범위 밖 (min 0)
+    { game: "touch25", nick: "철수", score: -1 },           // 범위 밖 (min 5)
     { game: "touch25", nick: "철수", score: 999999 },       // 범위 밖 (max 3600)
     { game: "circle", nick: "철수", score: 100.1 },         // 100% 초과
     { game: "reactiontime", nick: "봇임", score: 60001 },   // 범위 밖 (max 60000)
@@ -313,6 +361,6 @@ test("rejects malformed submissions", async () => {
     assert.equal(res.status, 400, JSON.stringify(body));
   }
   // 한글/영문/숫자 6자 + 범위 내 점수는 통과
-  const ok = await post(records, { game: "touch25", nick: "김a1나2", score: 1 });
+  const ok = await post(records, { game: "touch25", nick: "김a1나2", score: 10 });
   assert.equal(ok.status, 200);
 });
