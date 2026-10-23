@@ -25,7 +25,8 @@ function readViewed() {
 function markViewed(id) {
   const viewed = readViewed();
   viewed.add(id);
-  localStorage.setItem(VIEWED_KEY, JSON.stringify([...viewed].slice(-1000)));
+  // 저장이 막힌 브라우저에서도 화면 갱신은 이어져야 한다 — 본 표시만 이번에 못 남긴다.
+  try { localStorage.setItem(VIEWED_KEY, JSON.stringify([...viewed].slice(-1000))); } catch { /* 무시 */ }
 }
 
 function renderItem(item, index) {

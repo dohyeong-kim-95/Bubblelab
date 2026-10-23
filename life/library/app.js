@@ -142,7 +142,9 @@ async function submit(event) {
 async function remove() {
   const id = $("book-id").value;
   if (!id) return;
-  await removeOne(id);
+  // IndexedDB 가 실패하면 이유를 적고 대화상자는 열어 둔다(목록에서도 빼지 않는다).
+  try { await removeOne(id); }
+  catch (error) { $("editor-error").textContent = `지우지 못했습니다: ${error.message}`; return; }
   books = books.filter((item) => item.id !== id);
   render();
   $("editor").close();
