@@ -109,6 +109,7 @@ let rows = 0, rungs = new Set();     // 가로칸 열쇠 `행:왼쪽열` — 열
 let phase = "edit";
 let results = new Map();             // 참가자 → 도착한 결과 칸
 let running = 0;                     // 진행 중인 애니메이션 수
+let round = 0;                       // 화면이 바뀔 때마다 1씩 — 옛 판의 예약된 그리기를 버린다
 let geom = { w: 0, h: 0 };
 
 /* ---------- 저장 ---------- */
@@ -264,10 +265,13 @@ function drawTrace(who, animate) {
   path.style.strokeDashoffset = len;
   running++;
   let done = false;
+  const startRound = round;
   const finish = () => {
     if (done) return;
     done = true;
     running--;
+    // 도는 중에 "고치기"를 누르면 편집 화면에 결과가 다시 생기던 것을 막는다
+    if (startRound !== round) { updateButtons(); return; }
     dot(who, end);
     markPrize(who, end);
     renderResult();
@@ -299,7 +303,11 @@ function trace(who) {
 function revealAll() {
   const rest = [];
   for (let i = 0; i < n; i++) if (!results.has(i)) rest.push(i);
-  rest.forEach((i, k) => setTimeout(() => trace(i), k * 140));
+  const startRound = round;
+  rest.forEach((i, k) => setTimeout(() => {
+    if (startRound !== round) return;   // 그사이 "고치기"·"다시"로 판이 바뀌었다
+    trace(i);
+  }, k * 140));
 }
 
 function renderResult() {
@@ -313,6 +321,7 @@ function renderResult() {
 /* ---------- 상태 ---------- */
 function setPhase(next) {
   phase = next;
+  round++;
   if (phase === "edit") { rungs = new Set(); rows = 0; results.clear(); }
   renderCells();
   renderResult();
