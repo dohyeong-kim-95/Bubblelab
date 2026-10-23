@@ -34,6 +34,7 @@ test("life 변경은 sink를 포함한 life 전체 기능 테스트와 e2e를 �
     "_infra/kcal.test.mjs", "_infra/library.test.mjs", "_infra/life.test.mjs",
     "_infra/papers.test.mjs", "_infra/pops.test.mjs", "_infra/pushup.test.mjs",
     "_infra/review.test.mjs", "_infra/tts.test.mjs", "_src/life-sink/store.test.mjs",
+    "_src/papers-sink/common.test.mjs",
   ], [
     "_infra/e2e/backup.spec.mjs", "_infra/e2e/budget.spec.mjs",
     "_infra/e2e/kcal.spec.mjs",
@@ -72,6 +73,7 @@ test("games 변경은 멀티플레이와 Avalon 검증까지 고른다", () => {
   expectScoped("games/avalon/index.html", "games", [
     "_infra/check-avalon-sync.test.mjs", "_infra/liargame.test.mjs",
     "_infra/realtime.test.mjs", "_infra/stepcam.test.mjs",
+    "_src/tests/multiplayer-room.test.mjs",
   ]);
 });
 
@@ -133,7 +135,7 @@ test("full 계획은 현재 unit 및 e2e 파일을 빠짐없이 열거한다", (
     ...readdirSync(join(ROOT, "_infra"), { withFileTypes: true })
       .filter((entry) => entry.isFile() && entry.name.endsWith(".test.mjs"))
       .map((entry) => `_infra/${entry.name}`),
-    ...["duri-sink", "life-sink"].flatMap((dir) =>
+    ...["duri-sink", "life-sink", "papers-sink", "tests"].flatMap((dir) =>
       readdirSync(join(ROOT, "_src", dir), { withFileTypes: true })
         .filter((entry) => entry.isFile() && entry.name.endsWith(".test.mjs"))
         .map((entry) => `_src/${dir}/${entry.name}`)),

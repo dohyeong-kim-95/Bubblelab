@@ -24,6 +24,7 @@ const SITE_TESTS = {
   games: [
     "_infra/check-avalon-sync.test.mjs", "_infra/liargame.test.mjs",
     "_infra/realtime.test.mjs", "_infra/stepcam.test.mjs",
+    "_src/tests/multiplayer-room.test.mjs",
   ],
   idle: ["_infra/idle.test.mjs"],
   lab: ["_infra/insights-publish.test.mjs"],
@@ -34,11 +35,12 @@ const SITE_TESTS = {
     "_infra/kcal.test.mjs", "_infra/library.test.mjs", "_infra/life.test.mjs",
     "_infra/papers.test.mjs", "_infra/pops.test.mjs", "_infra/pushup.test.mjs",
     "_infra/review.test.mjs", "_infra/tts.test.mjs", "_src/life-sink/store.test.mjs",
+    "_src/papers-sink/common.test.mjs",
   ],
   mindfulness: [],
   podcast: ["_infra/podcast-ai.test.mjs", "_infra/podcast.test.mjs"],
   slop: ["_infra/animal-vs.test.mjs", "_infra/podium.test.mjs"],
-  test: [],
+  test: ["_src/tests/datalab.test.mjs"],
   util: [
     "_infra/brief.test.mjs", "_infra/chat.test.mjs", "_infra/filter-cam.test.mjs",
     "_infra/fortune.test.mjs", "_infra/proofread.test.mjs", "_infra/saju-detail.test.mjs",
@@ -79,12 +81,15 @@ const GLOBAL_TESTS = [
   "_infra/sites.test.mjs", "_infra/html.test.mjs",
   "_infra/verify-prod.test.mjs",
   "_infra/ship.test.mjs", "_infra/webpush.test.mjs", "_infra/worker.test.mjs",
+  "_src/tests/lint-html.test.mjs", "_src/tests/records-client.test.mjs", "_src/tests/zip.test.mjs",
 ];
 const CLASSIFIED_TESTS = new Set([...GLOBAL_TESTS, ...Object.values(SITE_TESTS).flat()]);
 const BUILD_CONTRACT = "_infra/home-button.test.mjs";
 const SMOKE = "_infra/e2e/smoke.spec.mjs";
 const CLASSIFIED_E2E = new Set([SMOKE, ...Object.values(SITE_E2E).flat()]);
-const TEST_DIRECTORIES = ["_infra", "_src/duri-sink", "_src/life-sink"];
+const TEST_DIRECTORIES = [
+  "_infra", "_src/duri-sink", "_src/life-sink", "_src/papers-sink", "_src/tests",
+];
 const E2E_DIRECTORIES = ["_infra/e2e"];
 
 function sortedUnique(values) {
