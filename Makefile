@@ -6,7 +6,7 @@
 
 help:
 	@echo "make test    — 인프라 단위 테스트"
-	@echo "make lint    — 문법 검사 (js/mjs/json/sh)"
+	@echo "make lint    — 문법 검사 (js/mjs/json/sh + HTML 인라인 스크립트)"
 	@echo "make build   — dist/ 빌드 (_health.json 스탬프 포함)"
 	@echo "make e2e     — 모바일 스모크 (빌드 후 Playwright)"
 	@echo "make verify  — 지금 라이브를 읽기 전용으로 검증"
