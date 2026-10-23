@@ -556,6 +556,7 @@ function showResult() {
       ? "건물 실루엣은 넣지 않았어요 — 하늘과 건물의 경계가 뚜렷하지 않았습니다."
       : "건물 실루엣은 넣지 않았어요 — 카메라가 꺼져 있습니다.";
   const canvas = renderWallpaper();
+  stopCamera();   // 스카이라인은 위에서 이미 읽었다
   const url = canvas.toDataURL("image/png");
   $("shot").src = url;
   const d = state.date;
@@ -571,6 +572,7 @@ $("shoot").addEventListener("click", showResult);
 $("again").addEventListener("click", () => {
   $("result").hidden = true;
   $("aim").hidden = false;
+  if (cameraWanted) startCamera();
   queueLive();
 });
 
@@ -709,9 +711,14 @@ let sensorSeen = 0;
 // 어긋날 수 있어서, 그때는 방위를 한 번 직접 맞추라고 화면에 적는다.
 // 고도(beta·gamma)는 중력 기준이라 어느 쪽이든 절대값이다.
 let lastRelativeAz = null;
+// Android Chrome 은 absolute·relative 이벤트를 둘 다 보낸다. 절대값을 한 번이라도
+// 받았으면 relative 는 버린다 — 안 그러면 안내 문구가 이벤트마다 바뀌며 깜빡인다.
+let absoluteSeen = false;
 function onOrientation(event) {
   const heading = event.webkitCompassHeading;
   const absolute = heading != null || event.absolute === true;
+  if (absolute) absoluteSeen = true;
+  if (!absolute && absoluteSeen) return;
   const alpha = heading != null ? 360 - heading : event.alpha;
   if (alpha == null || event.beta == null || event.gamma == null) return;
 
@@ -786,15 +793,33 @@ async function startSensors() {
   return "on";
 }
 
+// 한 번 켠 카메라는 결과 화면·탭을 떠날 때 끄고, 겨누기로 돌아오면 다시 켠다
+// (켜 둔 채면 결과를 보는 동안에도 표시등이 켜져 있고 배터리를 쓴다).
+let cameraWanted = false;
 async function startCamera() {
   if (!navigator.mediaDevices?.getUserMedia) return false;
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: { ideal: "environment" } }, audio: false });
     $("cam").srcObject = stream;
+    cameraWanted = true;
     return true;
   } catch { return false; }
 }
+
+function stopCamera() {
+  const stream = $("cam").srcObject;
+  if (!stream) return;
+  for (const track of stream.getTracks()) track.stop();
+  $("cam").srcObject = null;
+}
+
+window.addEventListener("pagehide", stopCamera);
+window.addEventListener("pageshow", (event) => {
+  // 뒤로 가기 캐시에서 돌아왔을 때만 — 첫 로드는 버튼을 눌러야 켠다
+  if (!event.persisted || !cameraWanted || $("aim").hidden) return;
+  startCamera();
+});
 
 // 손으로 겨누기를 기본으로 두고, 센서·카메라는 버튼을 눌렀을 때만 청한다.
 // 두 권한을 한꺼번에 띄우면 iOS에서 팝업이 겹쳐 한쪽이 묻히므로 방향 → 카메라 순서로,
