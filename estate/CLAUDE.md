@@ -44,7 +44,7 @@
 - **`wrangler.jsonc`에 estate 몫이 없다** — `ENABLE_*` var도 DO도 R2도 cron도 없고,
   정적 자산 + 라우트 하나(`/_estate/deals`, 분당 120회, `_infra/worker.js:1175`)뿐.
 - **로그인 게이트는 없다**(`_infra/verify-prod.mjs:22` `GATED_SITES` =
-  admin·invest·duri). 대신 Worker가 `no-store` + `X-Robots-Tag: noindex, nofollow`를
+  admin·duri·life). 대신 Worker가 `no-store` + `X-Robots-Tag: noindex, nofollow`를
   붙이고(`worker.js:1777`) 방문 집계에서 뺀다(`:1798`). 주소를 알면 그냥 들어온다.
 - `_infra/build.mjs:30` `CONFIDENTIAL_SUBDOMAINS` 등록. www 랜딩에 링크를 만들면
   **빌드가 실패**하고, 홈 버튼(`_infra/home-button.test.mjs:50`)·풀다운(`:166`)·검색
