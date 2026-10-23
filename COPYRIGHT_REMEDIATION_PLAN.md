@@ -97,7 +97,7 @@ reserved로 해석되나, 외부 OSS/퍼블릭 에셋 혼입 시 출처 추적 �
   may not be copied, modified, or redistributed without permission.
   ```
 - **`THIRD_PARTY_NOTICES.md` 보강:** 2048(B안 채택 시)·폰트·아이콘·음악 등 외부 출처 추가.
-  (현재 manseryeok·jpeg-js만 등재)
+  (2026-10-23 기준: manseryeok·jpeg-js·pdf.js·pdf-lib·three.js·Twemoji·고운바탕과 외부 데이터 출처 등재)
 - README 문구를 "복제·재배포·상업적 이용 금지"처럼 **범위 명확화**
   (브라우저의 HTML/JS 다운로드 실행까지 금지하는 모호한 해석 방지).
 
@@ -111,21 +111,31 @@ reserved로 해석되나, 외부 OSS/퍼블릭 에셋 혼입 시 출처 추적 �
 4. Sandtrix/Tetris 계열: 미추가 또는 핵심 구조까지 충분히 변형
 5. 루트 `LICENSE` + `THIRD_PARTY_NOTICES.md` 정리
 
-## 실행 현황 (2026-07-22)
+## 실행 현황 (2026-10-23 갱신)
 
-- [x] **2048 → A안 리디자인** — 이름 `Number Bloom`, 타일 팔레트 블루→바이올렛→로즈
+- [x] **2048 → A안 리디자인** (2026-07-22) — 이름 `Number Bloom`, 타일 팔레트 블루→바이올렛→로즈
   고유 팔레트로 전면 교체, 연출(`bloom`) 변경. **폴더 `slop/2048`·`records.js`
   키·`localStorage`(`bl-2048-best`)·`blWeekly.game` 유지** → 기존 기록 보존.
-- [x] **fruitmerge 최소 변경** — 과일 세트·진화 순서 독자화, 최종 단계를
+  코드 실측(2026-10-22): 원작 팔레트값(`#eee4da` 등) 0건.
+- [x] **fruitmerge 최소 변경** (2026-07-22) — 과일 세트·진화 순서 독자화, 최종 단계를
   수박🍉 → 코코넛🥥로 변경(카드 아이콘·히어로·공유문구 동기화). 규칙·기록키 유지.
+  코드 실측: 🍉 0건.
 - [x] **루트 `LICENSE` 신설** + README 문구를 "복제·재배포·상업적 이용 금지"로 명확화,
   `LICENSE`·`THIRD_PARTY_NOTICES.md` 링크 추가.
-- [ ] **yacht-bot 명칭 정리(3순위)** — 미실행. 표기 방향 확정 후 진행.
+- [x] **`THIRD_PARTY_NOTICES.md` 보강** (2026-10-23) — 저장소에 들어 있던 외부 출처 셋을
+  추가: **three.js r182**(MIT, `_shared/vendor/three.*.min.js`, slop/gaterush),
+  **Twemoji 국기 웹폰트**(아트워크 CC BY 4.0 + 패키징 MIT, `_shared/TwemojiCountryFlags.woff2`),
+  **고운바탕**(SIL OFL 1.1, `_shared/fonts/gowun-batang-700.woff2`). 개별 라이선스 원문은
+  `_shared/` 에 그대로 있다. 음악·효과음 등 다른 외부 에셋이 새로 들어오면 같은 파일에 더한다.
+- [ ] **yacht-bot 명칭 정리(3순위)** — **보류(소유자 결정)**. "야추" 표기는 지금 그대로 둔다.
+  하게 되면 범위는 `slop/yacht-bot/index.html`(10곳, "아소비대전51" 주석 포함)에 더해
+  **`games/yacht/index.html`(11곳)** 도 같이 본다 — 처음 계획에서 빠져 있던 범위다.
 - [ ] Tetris/Sandtrix 계열 — 해당 없음(예방 지침만 유지).
 
-## 결정 필요 사항 (사용자 확인 요청)
+## 남은 결정 사항
 
-- **2048**: A안(리디자인) vs B안(포크 인정+고지) — 어느 쪽으로?
-- 리디자인 시 **폴더/URL(`slop/2048`) 및 `records.js` 기존 기록 키** 유지 vs 신규(기록 초기화)?
-- **fruitmerge**: 테마 전면 교체(Bubble Bloom) vs 최소 변경(엔딩·순서만)?
-- 위 확정되면 실제 코드 수정·빌드 검증(`node _infra/build.mjs`)·커밋까지 진행.
+2048(A안)·기록 키 유지·fruitmerge(최소 변경)는 위에서 결정·이행되었다. 남은 것은 하나다.
+
+- **yacht 계열 "야추" 표기**: 지금처럼 유지할지, 3순위 권장안("Yacht Dice / 주사위 족보
+  게임" 계열)으로 바꿀지. 바꾸면 `slop/yacht-bot`·`games/yacht` 두 곳을 함께 고친다
+  (경로·기록 키는 유지).
