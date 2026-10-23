@@ -66,6 +66,8 @@
 </div>
 <canvas id="cv"></canvas>
 <script>
+// 콘솔 디버그 훅(정답·스테이지 점프·강제 승리)은 ?debug 주소에서만 붙인다 — 기록 조작을 쉽게 만들지 않게.
+const DEBUG = new URLSearchParams(location.search).has("debug");
 "use strict";
 // 정적 난이도(0~100)와 별점 — DIFFICULTY.md Phase 1
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
@@ -215,15 +217,16 @@ try { best = +localStorage.getItem(BEST_KEY) || 0; } catch {}
 let stage = 1, score = 0;
 let phase = "title";
 let grid = [], picks = 0, gemsLeft = 0, parts = [], shakeT = 0;
+const cellPos = (c, r) => [GX + c * CELL + CELL / 2, GY + r * CELL + CELL / 2];
 
 function loadStage() {
   const g = genTuned(stage);
   grid = g.grid; picks = g.picks; gemsLeft = g.gems;
   dScore = diffOf(g);
   parts = []; phase = "play";
-  window.__ic = {                                    // 테스트/디버그용
+  if (DEBUG) window.__ic = {                                    // 테스트/디버그용
     solution: g.solution,
-    cellPos: (c, r) => [GX + c * CELL + CELL / 2, GY + r * CELL + CELL / 2],
+    cellPos,
     state: () => ({ picks, gemsLeft }),
   };
   hud();
@@ -241,7 +244,7 @@ function hitCell(cell, dmg) {
   cell.hp -= dmg;
   if (cell.hp > 0) return null;
   cell.hp = 0;
-  const [x, y] = window.__ic.cellPos(cell.c, cell.r);
+  const [x, y] = cellPos(cell.c, cell.r);
   poof(x, y, cell.what === "gem" ? "#ffd75e" : "#bde3f5");
   return cell.what;                                 // 열렸을 때 내용물
 }

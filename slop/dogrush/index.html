@@ -81,6 +81,8 @@
 </div>
 <canvas id="cv"></canvas>
 <script>
+// 콘솔 디버그 훅(정답·스테이지 점프·강제 승리)은 ?debug 주소에서만 붙인다 — 기록 조작을 쉽게 만들지 않게.
+const DEBUG = new URLSearchParams(location.search).has("debug");
 "use strict";
 // 정적 난이도(0~100)와 별점 — DIFFICULTY.md Phase 1
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
@@ -281,12 +283,12 @@ function loadStage() {
   phase = "draw";
   document.getElementById("go").classList.remove("hide");
   document.getElementById("inkbar").classList.remove("hide");
-  window.__sd = { solution: g.solution, ink: g.ink,
+  if (DEBUG) window.__sd = { solution: g.solution, ink: g.ink,
                   state: () => ({ phase, timer, ink }) };
-  window.__sdGen = (s2) => gen(s2);
+  if (DEBUG) window.__sdGen = (s2) => gen(s2);
   hud(); inkUi();
 }
-window.__sdJump = (s2) => { stage = s2;
+if (DEBUG) window.__sdJump = (s2) => { stage = s2;
   document.getElementById("overlay").classList.add("hide"); loadStage(); };
 
 /* ── 물리 ─────────────────────────────────────────────── */
@@ -450,7 +452,7 @@ $("btn").addEventListener("click", () => {
   if (phase === "title" || phase === "fail") newRun();
 });
 $("best").textContent = best ? `최고 기록: ${best}연속` : "";
-window.__sdRun = () => ({ score, stage, best, phase });
+if (DEBUG) window.__sdRun = () => ({ score, stage, best, phase });
 // 출발 전(그리기 단계)에만 선을 지우고 다시 긋기 — 달리는 중엔 실패를 피할 수 없다
 $("retry").addEventListener("click", () => {
   if (phase === "draw") loadStage();

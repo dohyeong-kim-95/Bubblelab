@@ -62,6 +62,8 @@
 </div>
 <canvas id="cv"></canvas>
 <script type="module">
+// 콘솔 디버그 훅(정답·스테이지 점프·강제 승리)은 ?debug 주소에서만 붙인다 — 기록 조작을 쉽게 만들지 않게.
+const DEBUG = new URLSearchParams(location.search).has("debug");
 // three.js는 CDN 없이 셀프호스팅(/_shared/vendor/ — 빌드 도구 불필요)
 import * as THREE from "/_shared/vendor/three.module.min.js";
 // 정적 난이도(0~100)와 별점 — DIFFICULTY.md Phase 1
@@ -213,7 +215,7 @@ let stage = 1, streak = 0, best = 0, advanceT = 0;
 try { best = +localStorage.getItem("bl-gaterush-best") || 0; } catch {}
 let phase = "title";              // title | play | boss | win | fail
 let pairs = [], gates = [], boss = null, count = 5;
-let mids = [], bullets = [], volleys = [], tRun = 0, invuln = 0, bulletSpd = 240;
+let mids = [], bullets = [], volleys = [], tRun = 0, invuln = 0, bulletSpd = 240, bulletDmg = 1;
 let crowdX = MID, targetX = MID, speed = 150, scroll = 0;
 let pops = [];                    // {text,x,y,life,col}
 let battle = null;                // {me, foe, t}
@@ -229,11 +231,11 @@ function loadStage() {
   volleys = g.volleys.map((v) => ({ ...v, fired: false }));
   bullets = []; tRun = 0; invuln = 0;
   bulletSpd = Math.min(380, 230 + stage * 2.5);
-  window.__grDmg = g.dmg;
+  bulletDmg = g.dmg;
   count = 5; crowdX = MID; targetX = MID; battle = null; pops = [];
   speed = Math.min(150 + stage * 10, 280);
   dScore = diffOf(g, speed);
-  window.__gr = {                          // 테스트/디버그용
+  if (DEBUG) window.__gr = {                          // 테스트/디버그용
     pairs: g.pairs, boss: g.boss,
     state: () => {
       const next = gates.findIndex((gt) => !gt.done);
@@ -244,7 +246,7 @@ function loadStage() {
     },
     steer: (x) => { targetX = x; },
   };
-  window.__grJump = (s2) => { stage = s2;
+  if (DEBUG) window.__grJump = (s2) => { stage = s2;
     document.getElementById("overlay").classList.add("hide");
     phase = "play"; loadStage(); };
   hud();
@@ -333,9 +335,9 @@ function step(dt) {
     b.y += bulletSpd * dt;
     if (invuln <= 0 && Math.abs(b.y - CROWD_Y) < 22 && Math.abs(b.x - crowdX) < 26) {
       b.y = H + 99;
-      count -= window.__gr ? (window.__grDmg ?? 1) : 1;
+      count -= bulletDmg;
       invuln = 0.6;
-      pop(`-${window.__grDmg ?? 1}`, crowdX, CROWD_Y - 50, "#e5484d");
+      pop(`-${bulletDmg}`, crowdX, CROWD_Y - 50, "#e5484d");
       hud();
       if (count <= 0) { count = 0; endStage(false); return; }
     }
@@ -484,9 +486,18 @@ const POPS3 = Array.from({ length: 8 }, () => {
 
 // 스테이지가 바뀌면(gates 배열 교체) 게이트·중간보스 메시를 다시 만든다
 let gatesRef = null, gateObjs = [];
+// scene.remove 만으로는 GPU 버퍼·텍스처가 남는다 — 스테이지가 쌓이면 저사양 폰이 컨텍스트를 잃는다.
+function disposeGroup(grp) {
+  scene.remove(grp);
+  grp.traverse((o) => {
+    o.geometry?.dispose();
+    o.material?.map?.dispose();
+    o.material?.dispose();
+  });
+}
 function rebuild3D() {
   gatesRef = gates;
-  for (const o of gateObjs) scene.remove(o.grp);
+  for (const o of gateObjs) disposeGroup(o.grp);
   gateObjs = gates.map((g) => {
     const grp = new THREE.Group();
     for (let s = 0; s < 2; s++) {
@@ -508,7 +519,7 @@ function rebuild3D() {
     scene.add(grp);
     return { grp, g };
   });
-  for (const v of midViz) scene.remove(v.grp);
+  for (const v of midViz) disposeGroup(v.grp);
   midViz = mids.map(() => crowdViz(0xe5484d));
   bossViz.lastN = -1;                      // 새 판 숫자 다시 그리기
   meViz.lastN = -1;

@@ -73,6 +73,8 @@
 </div>
 <canvas id="cv"></canvas>
 <script>
+// 콘솔 디버그 훅(정답·스테이지 점프·강제 승리)은 ?debug 주소에서만 붙인다 — 기록 조작을 쉽게 만들지 않게.
+const DEBUG = new URLSearchParams(location.search).has("debug");
 "use strict";
 // 정적 난이도(0~100)와 별점 — DIFFICULTY.md Phase 1
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
@@ -405,7 +407,7 @@ function loadStage() {
   segs = G.segs; pins = G.pins; balls = G.balls;
   need = lv.need; tip = lv.tip ?? ""; heroFace = "🤠";
   dScore = stage <= LEVELS.length ? diffHand(stage) : genTuned(stage).meta.d;
-  window.__pp = {
+  if (DEBUG) window.__pp = {
     solution: stage > LEVELS.length ? genTuned(stage).meta.solution : null,
     nPins: G.pins.length,
     pinPos: (i) => [(G.pins[i].x1 + G.pins[i].x2) / 2, (G.pins[i].y1 + G.pins[i].y2) / 2],
@@ -415,10 +417,10 @@ function loadStage() {
   };
   hud();
 }
-window.__ppJump = (s2) => { stage = s2; runId++;
+if (DEBUG) window.__ppJump = (s2) => { stage = s2; runId++;
   document.getElementById("overlay").classList.add("hide");
   phase = "play"; loadStage(); };
-window.__ppVerify = (s2) => {
+if (DEBUG) window.__ppVerify = (s2) => {
   const r2 = genTuned(s2);
   return { need: r2.lv.need, gold: r2.meta.gold, collected: r2.meta.collected,
            m: r2.meta.m, vents: r2.meta.vents, traps: r2.meta.traps,
