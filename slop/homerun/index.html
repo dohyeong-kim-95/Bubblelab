@@ -14,6 +14,7 @@
   }
   #field {
     position: relative; width: 100%; height: 100dvh; overflow: hidden; cursor: pointer;
+    touch-action: manipulation;   /* 빠른 연타가 더블탭 줌으로 먹히지 않게 */
     /* 다크 기본값(고정) — light-dark() 리페인트 깜빡임 방지: 다크모드에선 절대 밝은 초록 안 뜸 */
     background:
       linear-gradient(transparent 22.5%, #1c3a24 23%, #1c3a24 27%, transparent 27.5%),          /* 외야 펜스 */
@@ -653,7 +654,9 @@ function firstStart() {
   initAudio(); if (ctx.state === "suspended") ctx.resume();
   overlay.classList.add("hidden");
   perfectGame = true; won = false; homers = 0; maxDist = 0; boardRecords();
-  startGroove(ctx.currentTime + 0.45); loadBGM(); startLevel(0);   // BGM은 프리로드만(기본 OFF)
+  startGroove(ctx.currentTime + 0.45); startLevel(0);
+  // BGM은 기본 OFF라 프리로드만 — 시작 전에 켜 뒀다면(🔊) 로드 끝나는 대로 튼다
+  loadBGM().then(() => { if (bgmOn) playBGM(); });
 }
 btn.onclick = firstStart;
 // BGM 토글은 우하단 공용 유틸 독에 등록한다. 직접 고정 배치하면 같은 자리를
