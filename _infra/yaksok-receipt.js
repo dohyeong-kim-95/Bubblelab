@@ -53,7 +53,9 @@ export function cleanParsed(raw) {
 }
 
 export async function parseReceipt(env, { data, mime }, fetchImpl = fetch) {
-  const key = env.YAKSOK_VISION_API_KEY || env.GEMINI_API_KEY;
+  // 전용 키만 쓴다. 팟캐스트 키(GEMINI_API_KEY)로 폴백하면 익명 방에서의 남용이
+  // 같은 쿼터를 먹어 아침 팟캐스트 생성이 429 로 실패한다.
+  const key = env.YAKSOK_VISION_API_KEY;
   if (!key) {
     throw Object.assign(new Error("자동 인식을 지금 쓸 수 없어요. 금액을 직접 적어 주세요."), { status: 503 });
   }

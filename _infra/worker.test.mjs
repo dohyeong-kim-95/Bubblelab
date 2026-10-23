@@ -775,6 +775,7 @@ test("/_health 는 서빙 중인 커밋과 바인딩을 읽기 전용으로 알�
   assert.equal(body.features.realtime, false);
   assert.equal(body.bindings.CHAT, true);
   assert.equal(body.bindings.RECORDS, false, "없는 바인딩을 있다고 하면 안 된다");
+  assert.equal(body.bindings.PAPERS, false, "논문 DO 바인딩도 검사 대상이다");
   // 서브도메인 이름 목록은 담지 않는다 — 비공개 서브도메인은 주소를 모르는 것이
   // 유일한 장벽이라 개수만 센다. (플래그·바인딩 이름은 공개 리포의 wrangler.jsonc
   // 에 이미 있으므로 새로 새는 정보가 아니다.)
@@ -964,4 +965,57 @@ test("공개 /_stats 와 방문 집계는 비공개 서브도메인 이름을 �
   }
   await Promise.all(pending);
   assert.deepEqual(tracked, ["slop/circle"]);
+});
+
+test("약속 영수증 인식은 방과 무관하게 IP당 하루 한도(yaksok-parse)를 먼저 건다", async () => {
+  const scopes = [];
+  const env = {
+    ENABLE_YAKSOK: "true", ADMIN_SESSION_SECRET: "s",
+    RATE_LIMITER: {
+      idFromName: (name) => name,
+      get: () => ({
+        fetch: async (url, init) => {
+          const body = JSON.parse(init.body);
+          scopes.push(body);
+          return Response.json(body.windowMs === 24 * 60 * 60 * 1000
+            ? { allowed: false, retryAfter: 3600 } : { allowed: true, retryAfter: 0 });
+        },
+      }),
+    },
+  };
+  const response = await worker.fetch(new Request("https://util.bubblelab.dev/_yaksok/rooms/abc123/parse", {
+    method: "POST", headers: { "Content-Type": "application/json", Origin: "https://util.bubblelab.dev" },
+    body: JSON.stringify({ data: "AA==", mime: "image/jpeg" }),
+  }), env, ctx);
+  assert.equal(response.status, 429);
+  assert.deepEqual(scopes.map((body) => body.limit), [20]);
+});
+
+test("/_papers 조회는 LIFE 세션이나 papers sink secret 이 있어야 열린다", async () => {
+  const reached = [];
+  const env = {
+    ENABLE_PAPERS: "true", PAPERS_SINK_SECRET: "sink-secret",
+    ENABLE_LIFE: "true", LIFE_PASSWORD: "only-me", LIFE_SESSION_SECRET: "session-secret",
+    PAPERS: {
+      idFromName: () => "main",
+      get: () => ({ fetch: (req) => { reached.push(new URL(req.url).pathname); return Response.json({ empty: true }); } }),
+    },
+  };
+  const get = (path, headers = {}) =>
+    worker.fetch(new Request(`https://life.bubblelab.dev${path}`, { headers }), env, ctx);
+
+  assert.equal((await get("/_papers/latest")).status, 401);
+  assert.equal((await get("/_papers/archive")).status, 401);
+  assert.equal((await get("/_papers/latest", { Authorization: "Bearer wrong" })).status, 401);
+  assert.deepEqual(reached, [], "인증 없이 DO 까지 갔다");
+
+  assert.equal((await get("/_papers/latest", { Authorization: "Bearer sink-secret" })).status, 200);
+
+  const form = new FormData();
+  form.set("password", "only-me");
+  const login = await worker.fetch(
+    new Request("https://life.bubblelab.dev/login", { method: "POST", body: form }), env, ctx);
+  const cookie = login.headers.get("Set-Cookie").split(";", 1)[0];
+  assert.equal((await get("/_papers/archive?limit=21", { Cookie: cookie })).status, 200);
+  assert.deepEqual(reached, ["/latest", "/archive"]);
 });

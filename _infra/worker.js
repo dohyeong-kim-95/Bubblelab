@@ -403,7 +403,8 @@ const LIFE_PUBLIC_PATHS = new Set([
   "/sw.js",
 ]);
 
-// 서버에 남는 것이 없으므로 비밀번호와 세션 비밀만 있으면 열린다.
+// 게이트는 비밀번호와 세션 비밀만 있으면 열린다. 백업(/_life/backup)은 LIFE_BUCKET 이
+// 따로 있어야 하고, 없으면 그 경로만 503 이다.
 function lifeConfigured(env) {
   return featureEnabled(env, "ENABLE_LIFE") && Boolean(env.LIFE_PASSWORD && env.LIFE_SESSION_SECRET);
 }
@@ -519,6 +520,18 @@ async function handleLifeGate(request, env, url, base = "") {
   // 적어 둔 내용은 한 줄도 나가지 않는다.
   if (!authenticated && !LIFE_PUBLIC_PATHS.has(url.pathname)) return redirect(`${base}/login`);
   return null;
+}
+
+// 논문 다이제스트 조회 권한: LIFE 게이트 세션 또는 papers sink secret(Bearer).
+async function canReadPapers(request, env) {
+  if (lifeConfigured(env)) {
+    const sessionKey = await lifeKey(env.LIFE_SESSION_SECRET, "bl-life-session");
+    if (await isValidToken(sessionKey, cookies(request).bl_life)) return true;
+  }
+  const bearer = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+  if (!bearer || !env.PAPERS_SINK_SECRET) return false;
+  const compareKey = await hmacKey("bl-papers-read");
+  return matchesCredential(compareKey, bearer, env.PAPERS_SINK_SECRET);
 }
 
 /* Duri 실시간 중계 + 사진 버퍼. 접근은 둘 중 하나로만: duri 게이트를 통과한
@@ -706,8 +719,9 @@ async function serveAssetCatalog(request, env, url) {
 export const HEALTH_BINDINGS = [
   "ASSETS", "ANALYTICS", "RECORDS", "RATE_LIMITER", "REALTIME",
   "CHAT", "PODCAST", "DURI", "ASSET_FLAGS", "BRIEF", "FORTUNE",
-  "WORK_QNA", "WORK_REVIEWS", "EMOTICON_REVIEW", "PODCAST_BUCKET", "DURI_BUCKET", "LIFE",
-  "LIFE_BUCKET", "YAKSOK",
+  "WORK_QNA", "WORK_REVIEWS", "EMOTICON_REVIEW", "PODCAST_BUCKET", "DURI_BUCKET",
+  "LIFE_BUCKET", "YAKSOK", "PAPERS",
+  // LIFE(LifeDO)는 마이그레이션 때문에 남겨 둔 빈 클래스라 쓰는 곳이 없어 보지 않는다.
 ];
 
 /**
@@ -1077,6 +1091,14 @@ export async function handleRequest(request, env, ctx) {
       }
       // 사진 썸네일은 한 화면에 수십 장을 한꺼번에 받으므로 읽기와 따로 넉넉히 센다.
       const media = request.method === "GET" && /\/(photos\/[0-9a-f]{16}|og\.png)$/.test(path);
+      // 영수증 인식(Gemini)은 방마다 하루 30회지만 방은 IP당 계속 만들 수 있다 —
+      // 과금 호출이라 IP당 하루 한도를 따로 둔다.
+      if (request.method === "POST" && /^\/_yaksok\/rooms\/[a-z0-9]{6}\/parse$/.test(path)) {
+        const parseLimited = await enforceRateLimit(request, env, {
+          scope: "yaksok-parse", limit: 20, windowMs: 24 * 60 * 60 * 1000,
+        });
+        if (parseLimited) return parseLimited;
+      }
       const limited = await enforceRateLimit(request, env, creating
         ? { scope: "yaksok-create", limit: 5, windowMs: 10 * 60 * 1000 }
         : request.method === "POST"
@@ -1560,8 +1582,10 @@ export async function handleRequest(request, env, ctx) {
       return Response.json(data, { headers: { "Cache-Control": "no-store" } });
     }
 
-    // 매일 논문 다이제스트 (life.bubblelab.dev/papers). 밖에는 읽기 전용 조회만
-    // 열려 있고, 하루치를 만드는 경로는 집 PC 데몬만 부른다(sink secret).
+    // 매일 논문 다이제스트 (life.bubblelab.dev/papers). 조회(latest·archive)는 LIFE
+    // 세션(life/papers 화면이 같은 출처로 부른다)이나 papers sink secret(집 PC 데몬)이
+    // 있어야 열린다 — 채점 이유에 주인의 업무 관심사가 그대로 들어 있어, life 를
+    // 비공개로 두는 방침과 맞춘다. 하루치를 만드는 경로는 데몬만 부른다(sink secret).
     if (path.startsWith("/_papers/")) {
       if (!featureEnabled(env, "ENABLE_PAPERS") || !env.PAPERS) {
         return Response.json({ error: "papers is temporarily unavailable" }, {
@@ -1582,9 +1606,15 @@ export async function handleRequest(request, env, ctx) {
       // 리뷰는 GET 만 위에서 세션으로 갈라졌고, 쓰기(POST)는 여기로 온다.
       const sinkPrefixes = ["/_papers/asks", "/_papers/digest", "/_papers/chat",
         "/_papers/profile", "/_papers/reviews"];
-      return sinkPrefixes.some((prefix) => path.startsWith(prefix))
-        ? handlePapersSink(request, env, url)
-        : handlePapers(request, env, url);
+      if (sinkPrefixes.some((prefix) => path.startsWith(prefix))) {
+        return handlePapersSink(request, env, url);
+      }
+      if (!(await canReadPapers(request, env))) {
+        return Response.json({ error: "authentication required" }, {
+          status: 401, headers: { "Cache-Control": "no-store" },
+        });
+      }
+      return handlePapers(request, env, url);
     }
 
     // 디스코드 슬래시 명령. 게이트를 두지 않는 대신 **Ed25519 서명**으로만 받는다
@@ -1654,7 +1684,7 @@ export async function handleRequest(request, env, ctx) {
       return env.REALTIME.get(id).fetch(request);
     }
 
-    // Duri 실시간 중계 + 사진 버퍼: /_duri (work.bubblelab.dev/duri 전용).
+    // Duri 실시간 중계 + 사진 버퍼: /_duri (duri.bubblelab.dev 앱과 집 PC 싱크 데몬).
     // 서버는 E2E 암호블롭만 중계·버퍼링하고, 데스크톱 싱크가 받아 ack 하면 폐기한다.
     if (path === "/_duri" || path.startsWith("/_duri/")) {
       return handleDuri(request, env, url);
