@@ -4,6 +4,7 @@ import { readFileSync, rmSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { deriveKey, createStore, extOfBytes, SALT, ITER } from "./store.mjs";
+import { createSinkQueue, backfillReply, ACK_DELAY_MS, FAIL_RETRY_MS, GAP_RETRY_MS } from "./queue.mjs";
 
 const enc = new TextEncoder();
 const b64 = (buf) => Buffer.from(new Uint8Array(buf)).toString("base64");
@@ -250,4 +251,126 @@ test("wrong passphrase throws (so the daemon can halt instead of acking away dat
     const store = createStore({ dir, key: await deriveKey("틀린문구"), fetchPhoto: async () => new Uint8Array() });
     await assert.rejects(store.persist({ seq: 1, kind: "msg", at, iv: frame.iv, ct: frame.ct }));
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// ── 순서 큐(queue.mjs) ─────────────────────────────────────────
+// 같은 파일에 두는 이유: deploy-scope 가 _src/duri-sink 의 테스트를 파일 이름으로
+// 분류하는데, 새 파일은 분류표에 없어서 배포 전체를 full 로 올린다.
+
+// 소켓·디스크·타이머를 가짜로 바꾼 큐. timers 에 쌓인 콜백은 runTimers 로 직접 돌린다.
+function fakeSink(options = {}) {
+  const saved = [];
+  const acks = [];
+  const timers = [];
+  const cursorWrites = [];
+  const persist = options.persist || (async (entry) => { saved.push(entry.seq); });
+  const sink = createSinkQueue({
+    cursor: options.cursor || 0,
+    persist,
+    quarantine: async (entry) => `${entry.seq}.json`,
+    writeCursor: (seq) => cursorWrites.push(seq),
+    sendAck: (seq) => acks.push(seq),
+    setTimer: (fn, ms) => timers.push({ fn, ms }),
+    log: () => {},
+    stop: (message) => { throw new Error(message); },
+  });
+  async function runTimers() {
+    const due = timers.splice(0, timers.length);
+    for (const timer of due) await timer.fn();
+  }
+  return { sink, saved, acks, timers, cursorWrites, runTimers };
+}
+
+const entry = (seq) => ({ seq, kind: "msg" });
+
+test("queue: 백필이 more=true 로 잘려 오면 앞 구간을 다 받기 전까지 쓰지도 ack 하지도 않는다", async () => {
+  const { sink, saved, acks, runTimers } = fakeSink();
+  sink.startBackfill();
+  // 서버는 150건 중 최근 100건(51~150)만 먼저 보내고 more=true 를 붙인다.
+  for (let seq = 51; seq <= 150; seq += 1) await sink.enqueue(entry(seq));
+  const reply = backfillReply({ type: "backfill-done", more: true, oldest: 51 });
+  assert.deepEqual(reply, { type: "fetch-older", before: 51 });
+  assert.deepEqual(saved, []);
+  await runTimers(); // 빈 번호 대기 재시도가 돌아도 건너뛰지 않는다
+  assert.deepEqual(saved, []);
+  assert.deepEqual(acks, []);
+
+  for (let seq = 1; seq <= 50; seq += 1) await sink.enqueue(entry(seq));
+  assert.equal(backfillReply({ type: "older-done", more: false }), null);
+  await sink.finishBackfill();
+  assert.equal(saved.length, 150);
+  assert.equal(saved[0], 1);
+  await runTimers();
+  assert.deepEqual(acks, [150]);
+});
+
+test("queue: 백필이 끝난 뒤의 빈 번호는 서버에 없는 항목이라 건너뛴다", async () => {
+  const { sink, saved, cursorWrites } = fakeSink({ cursor: 10 });
+  sink.startBackfill();
+  await sink.enqueue(entry(14));
+  assert.deepEqual(saved, []);
+  await sink.finishBackfill();
+  assert.deepEqual(saved, [14]);
+  assert.deepEqual(cursorWrites, [13, 14]);
+  assert.equal(sink.cursor(), 14);
+});
+
+test("queue: 백필 전 빈 번호는 기다리고 재시도를 예약한다", async () => {
+  const { sink, timers } = fakeSink();
+  sink.startBackfill();
+  await sink.enqueue(entry(3));
+  assert.equal(timers.length, 1);
+  assert.equal(timers[0].ms, GAP_RETRY_MS);
+});
+
+test("queue: 보존 실패하면 커서를 멈추고 새 항목이 없어도 스스로 다시 시도한다", async () => {
+  let failures = 1;
+  const saved = [];
+  const { sink, acks, timers, runTimers } = fakeSink({
+    persist: async (item) => {
+      if (failures > 0) {
+        failures -= 1;
+        throw new Error("photo HTTP 503");
+      }
+      saved.push(item.seq);
+    },
+  });
+  await sink.finishBackfill();
+  await sink.enqueue(entry(1));
+  assert.deepEqual(saved, []);
+  assert.equal(sink.cursor(), 0);
+  const retry = timers.find((timer) => timer.ms === FAIL_RETRY_MS);
+  assert.ok(retry, "실패 경로에도 재시도 타이머가 있어야 한다");
+  await runTimers();
+  assert.deepEqual(saved, [1]);
+  await runTimers();
+  assert.deepEqual(acks, [1]);
+});
+
+test("queue: ack 는 몰아서 한 번, 마지막으로 쓴 커서로 보낸다", async () => {
+  const { sink, acks, timers, runTimers } = fakeSink();
+  await sink.finishBackfill();
+  for (let seq = 1; seq <= 5; seq += 1) await sink.enqueue(entry(seq));
+  const ackTimers = timers.filter((timer) => timer.ms === ACK_DELAY_MS);
+  assert.equal(ackTimers.length, 1);
+  await runTimers();
+  assert.deepEqual(acks, [5]);
+});
+
+test("queue: 이미 보존한 번호는 다시 쓰지 않는다", async () => {
+  const { sink, saved } = fakeSink({ cursor: 5 });
+  await sink.finishBackfill();
+  await sink.enqueue(entry(4));
+  await sink.enqueue(entry(6));
+  await sink.enqueue(entry(6));
+  assert.deepEqual(saved, [6]);
+});
+
+test("queue: 복호화 실패는 격리하고 넘어가되 연속 10건이면 멈춘다", async () => {
+  const decryptError = Object.assign(new Error("bad"), { name: "OperationError" });
+  const { sink } = fakeSink({ persist: async () => { throw decryptError; } });
+  await sink.finishBackfill();
+  for (let seq = 1; seq <= 9; seq += 1) await sink.enqueue(entry(seq));
+  assert.equal(sink.cursor(), 9);
+  await assert.rejects(sink.enqueue(entry(10)), /연속 10건/);
 });
