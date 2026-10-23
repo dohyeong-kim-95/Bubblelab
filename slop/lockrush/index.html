@@ -60,9 +60,9 @@
 </div>
 <canvas id="cv"></canvas>
 <script>
+"use strict";
 // 콘솔 디버그 훅(정답·스테이지 점프·강제 승리)은 ?debug 주소에서만 붙인다 — 기록 조작을 쉽게 만들지 않게.
 const DEBUG = new URLSearchParams(location.search).has("debug");
-"use strict";
 /* ── 상수 ─────────────────────────────────────────────── */
 const W = 360, H = 640, CX = 180, CY = 340, R = 112;
 const dark = matchMedia("(prefers-color-scheme: dark)");

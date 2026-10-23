@@ -74,9 +74,9 @@
 <canvas id="cv"></canvas>
 <script src="../canvas-kit.js"></script>
 <script>
+"use strict";
 // 콘솔 디버그 훅(정답·스테이지 점프·강제 승리)은 ?debug 주소에서만 붙인다 — 기록 조작을 쉽게 만들지 않게.
 const DEBUG = new URLSearchParams(location.search).has("debug");
-"use strict";
 // 정적 난이도(0~100)와 별점 — DIFFICULTY.md Phase 1
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
 const starsOf = (d) => "\u2605".repeat(Math.max(1, Math.min(5, Math.ceil(d / 20))));
