@@ -160,6 +160,19 @@ test("가계부 — 공유 시트로 보낸 백업 파일을 서비스워커가 
   });
   expect(status).toBe(200);   // 서비스워커가 ?share=1 로 돌려보내고 그 화면이 온다
 
+  /* 가로채는 것은 share_target.action(budget/) 하나뿐이다. 프로덕션은 스코프가 / 라
+   * 같은 출처 POST 를 전부 가로채면 논문 댓글·PC 토큰 발급·로그인 폼이 GET 으로 바뀌어
+   * 깨졌다. 스코프 안의 다른 POST 는 서비스워커를 지나치고 공유 캐시를 덮지 않아야 한다. */
+  const others = await page.evaluate(async () => {
+    const results = [];
+    for (const path of ["/life/backup/", "/life/papers/", "/life/login"]) {
+      const response = await fetch(path, { method: "POST", body: new FormData() });
+      results.push({ path, shared: new URL(response.url).searchParams.has("share") });
+    }
+    return results;
+  });
+  expect(others.filter((one) => one.shared)).toEqual([]);
+
   await page.goto("/life/budget/?share=1");
   await expect(page.locator("#sms")).toBeVisible();
   await expect(page.locator("#sms-summary")).toContainText("1건 읽음");
