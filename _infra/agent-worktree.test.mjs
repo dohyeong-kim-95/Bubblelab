@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readFileSync, existsSync, readdirSync } from "node:fs";
+import { isolatedGitEnv } from "./git-isolation.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -42,8 +43,11 @@ test("레인을 만드는 서브도메인 목록이 빌드의 사이트 목록�
 
 // --- 훅 실기동 -------------------------------------------------------------
 
+// 임시 리포 전용 환경 — 훅 안에서 돌 때 물려받은 GIT_DIR 이 진짜 리포를 가리킨다.
 const git = (cwd, ...args) =>
-  execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  execFileSync("git", args, {
+    cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: isolatedGitEnv(),
+  });
 
 /**
  * 훅이 걸린 임시 리포를 만들고, 주어진 파일들을 스테이지한 뒤 커밋을 시도한다.
@@ -56,8 +60,6 @@ const commitWith = (branch, files, { npmTest, skipHooks } = {}) => {
   const dir = mkdtempSync(join(tmpdir(), "agent-hook-"));
   try {
     git(dir, "init", "--quiet", "-b", "main");
-    git(dir, "config", "user.email", "t@t");
-    git(dir, "config", "user.name", "t");
     mkdirSync(join(dir, "_infra/agent-hooks"), { recursive: true });
     mkdirSync(join(dir, "scripts"), { recursive: true });
     cpSync(join(ROOT, "_infra/agent-hooks/pre-commit"), join(dir, "_infra/agent-hooks/pre-commit"));
@@ -84,7 +86,7 @@ const commitWith = (branch, files, { npmTest, skipHooks } = {}) => {
     const done = spawnSync("git", ["commit", "--quiet", "-m", "t"], {
       cwd: dir,
       encoding: "utf8",
-      env: skipHooks ? { ...process.env, SKIP_HOOKS: "1" } : process.env,
+      env: skipHooks ? isolatedGitEnv({ SKIP_HOOKS: "1" }) : isolatedGitEnv(),
     });
     return { ok: done.status === 0, stderr: done.stderr };
   } finally {
@@ -163,6 +165,14 @@ test("코드가 스테이지되면 테스트가 돌고, 실패하면 커밋이 �
 test("테스트가 통과하면 커밋된다", () => {
   const result = commitWith("main-ish", { "slop/toy/game.js": "export const x = 1;\n" }, {
     npmTest: "echo '# pass 1'",
+  });
+  assert.equal(result.ok, true, result.stderr);
+});
+
+test("훅은 git 이 넣어 준 GIT_* 변수를 지우고 테스트를 돌린다", () => {
+  // 훅 안의 npm test 가 GIT_DIR 을 물려받으면 테스트가 띄운 git 이 진짜 리포를 고친다.
+  const result = commitWith("main-ish", { "slop/toy/game.js": "export const x = 1;\n" }, {
+    npmTest: "env | grep -q '^GIT_' && { env | grep '^GIT_'; exit 1; }; echo '# pass 1'",
   });
   assert.equal(result.ok, true, result.stderr);
 });

@@ -75,7 +75,8 @@ const GLOBAL_TESTS = [
   "_infra/agent-worktree.test.mjs", "_infra/csp-serve.test.mjs",
   "_infra/deploy-check.test.mjs", "_infra/deploy-prepare.test.mjs",
   "_infra/deploy-release.test.mjs", "_infra/deploy-scope.test.mjs",
-  "_infra/deploy-workflow.test.mjs", "_infra/home-button.test.mjs", "_infra/lint.test.mjs",
+  "_infra/deploy-workflow.test.mjs", "_infra/git-isolation.test.mjs",
+  "_infra/home-button.test.mjs", "_infra/lint.test.mjs",
   "_infra/records.test.mjs", "_infra/security.test.mjs", "_infra/verify-prod.test.mjs",
   "_infra/ship.test.mjs", "_infra/webpush.test.mjs", "_infra/worker.test.mjs",
 ];
