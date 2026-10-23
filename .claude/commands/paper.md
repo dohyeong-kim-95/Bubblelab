@@ -24,10 +24,11 @@ curl -s -H "Authorization: Bearer $PAPERS_SINK_SECRET" \
   https://life.bubblelab.dev/_papers/profile
 ```
 
-번호가 없으면 오늘 것을 보여주고 고르게 한다(이건 인증이 필요 없다):
+번호가 없으면 오늘 것을 보여주고 고르게 한다(이것도 같은 비밀키가 필요하다):
 
 ```bash
-curl -s https://life.bubblelab.dev/_papers/latest
+curl -s -H "Authorization: Bearer $PAPERS_SINK_SECRET" \
+  https://life.bubblelab.dev/_papers/latest
 ```
 
 ### 비밀키가 없는 자리라면 (웹 세션 등)
