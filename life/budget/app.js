@@ -5,7 +5,7 @@ import {
   setStartDay, shiftDate, shortWon, toggleSkip, won,
 } from "./store.js";
 import { MERCHANTS } from "./merchants.js";
-import { parseBackupOrText, seenSigs } from "./sms.js";
+import { parseBackupOrText, seenSigs, takeSeen } from "./sms.js";
 
 const $ = (id) => document.getElementById(id);
 const STORAGE_KEY = "bl_budget_v1";
@@ -277,8 +277,7 @@ function readSms(text, fileName = "") {
   const seen = seenSigs(state);
   pending = found.map(({ entry }) => {
     // 같은 문자를 두 번 담지 않는다. 한 번에 붙여넣은 것 안에서 겹치는 것도 본다.
-    const duplicate = seen.has(entry.sig);
-    seen.add(entry.sig);
+    const duplicate = takeSeen(seen, entry.sig);
     return { entry, duplicate, take: !duplicate };
   });
 
@@ -462,8 +461,7 @@ function takeNew(text) {
   const seen = seenSigs(state);
   const drafts = [];
   for (const { entry } of found) {
-    if (entry.sig && seen.has(entry.sig)) continue;
-    if (entry.sig) seen.add(entry.sig);
+    if (takeSeen(seen, entry.sig)) continue;
     drafts.push(entry);
   }
   // 담은 것이 없어도 오늘 읽은 것으로 친다 — 열 때마다 폴더를 들추지 않게.

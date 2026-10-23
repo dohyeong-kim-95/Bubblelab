@@ -6,7 +6,7 @@ import { webcrypto } from "node:crypto";
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
-const { parseMessage, parseMessages, splitMessages, seenSigs } =
+const { parseMessage, parseMessages, splitMessages, seenSigs, takeSeen } =
   await import("../life/budget/sms.js");
 const { addEntry, emptyState } = await import("../life/budget/store.js");
 
@@ -24,7 +24,7 @@ test("신한 — 승인 문자에서 금액·가맹점·날짜를 뽑는다", ()
   assert.equal(entry.amount, 12000);
   assert.equal(entry.memo, "백암순대 강남점");
   assert.equal(entry.on, "2026-08-23");
-  assert.equal(entry.sig, "2026-08-23T14:22-12000");
+  assert.equal(entry.sig, "2026-08-23T14:22-12000@백암순대강남점");
 });
 
 test("누적·잔액 금액에 속지 않는다", () => {
@@ -40,7 +40,7 @@ test("취소·환불은 음수로 담는다", () => {
 무신사`);
   assert.equal(cancelled, true);
   assert.equal(entry.amount, -30000);
-  assert.equal(entry.sig, "2026-08-23T15:00--30000", "취소는 승인과 다른 표식이라야 둘 다 담긴다");
+  assert.equal(entry.sig, "2026-08-23T15:00--30000@무신사", "취소는 승인과 다른 표식이라야 둘 다 담긴다");
 });
 
 test("할부 개월수를 날짜나 금액으로 읽지 않는다", () => {
@@ -173,6 +173,30 @@ test("같은 문자를 두 번 담지 않는다", () => {
   assert.equal(seenSigs(state).has(read(message).entry.sig), true);
   // 같은 가게에서 같은 금액이라도 시각이 다르면 다른 결제다.
   assert.equal(seenSigs(state).has(read("신한카드(1234)승인 12,000원 08/23 18:40 백암순대").entry.sig), false);
+});
+
+test("시각 없는 같은 날 같은 금액이라도 가맹점이 다르면 둘 다 담긴다", () => {
+  const first = read("신한카드(1234) 자동이체 9,900원 08/23 넷플릭스").entry;
+  const second = read("신한카드(1234) 자동이체 9,900원 08/23 유튜브프리미엄").entry;
+  assert.notEqual(first.sig, second.sig);
+  const seen = new Set();
+  assert.equal(takeSeen(seen, first.sig), false);
+  assert.equal(takeSeen(seen, second.sig), false);
+  assert.equal(takeSeen(seen, read("신한카드(1234) 자동이체 9,900원 08/23 넷플릭스").entry.sig), true, "같은 문자는 여전히 한 번");
+  const state = addEntry(emptyState(), first, new Date(`${TODAY}T05:22:00Z`));
+  assert.ok(state.entries[0].sig === first.sig, "40자 저장 상한 안에 든다");
+});
+
+test("가맹점을 넣기 전의 옛 표식과도 겹침을 본다 — 옛 표식 하나는 한 번만 쓴다", () => {
+  const entry = read("신한카드(1234) 자동이체 9,900원 08/23 넷플릭스").entry;
+  const legacy = entry.sig.split("@")[0];
+  assert.equal(legacy, "2026-08-23T??:??-9900");
+  const state = addEntry(emptyState(), { ...entry, sig: legacy }, new Date(`${TODAY}T05:22:00Z`));
+  const seen = seenSigs(state);
+  assert.equal(takeSeen(seen, entry.sig), true, "옛 표식으로 담긴 같은 문자는 다시 담지 않는다");
+  // 예전에 옛 표식 때문에 빠졌던 다른 가게 결제는 이번에 담긴다.
+  assert.equal(takeSeen(seen, read("신한카드(1234) 자동이체 9,900원 08/23 유튜브프리미엄").entry.sig), false);
+  assert.equal(takeSeen(new Set(), ""), false, "표식이 없으면 겹침을 보지 않는다");
 });
 
 /* ── 문자 백업 파일 ─────────────────────────────────────────────── */
