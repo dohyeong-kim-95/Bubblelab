@@ -3,27 +3,9 @@
 //   - 모바일: OS 공유 시트 (카카오톡/문자 등 포함)
 //   - 데스크톱: 클립보드에 링크 복사 + 토스트
 (() => {
-  const css = `
-  #bl-toast { position: fixed; left: 50%; bottom: 4.2rem; z-index: 9999;
-    transform: translateX(-50%); font: .85rem ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
-    padding: .55rem 1rem; border-radius: 2rem; pointer-events: none;
-    color: light-dark(#fff, #123); background: light-dark(#333c46, #dce6f0);
-    opacity: 0; transition: opacity .25s; }
-  #bl-toast.show { opacity: 1; }`;
-
-  const style = document.createElement("style");
-  style.textContent = css;
-  document.head.appendChild(style);
-
-  const toastEl = document.createElement("div");
-  toastEl.id = "bl-toast";
-  document.body.appendChild(toastEl);
-  let toastTimer;
+  // 토스트 모양·동작은 dock.js 의 window.blToast 하나다.
   function toast(msg) {
-    toastEl.textContent = msg;
-    toastEl.classList.add("show");
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => toastEl.classList.remove("show"), 1800);
+    window.blToast?.(msg);
   }
 
   // 토이가 자랑 문구를 지정할 수 있다:
@@ -37,6 +19,9 @@
   // 토이가 이미지를 함께 공유하도록 파일을 넘길 수 있다:
   //   window.blShareFiles = async () => [new File([blob], "x.png", {type:"image/png"})];
   // (File 배열 반환. 없거나 null이면 텍스트/링크만 공유)
+  // 파일을 오래 만들면 iOS Safari 는 탭(사용자 제스처)의 유효시간이 지나
+  // navigator.share 를 NotAllowedError 로 거절한다. 그때는 링크 복사로 넘어가면서
+  // 왜 이미지가 빠졌는지 토스트로 알린다(조용히 다른 동작을 하지 않는다).
   async function shareFiles() {
     const f = window.blShareFiles;
     if (typeof f !== "function") return null;
@@ -82,6 +67,11 @@
         return;
       } catch (err) {
         if (err.name === "AbortError") return; // 사용자가 시트를 닫음
+        if (err.name === "NotAllowedError") {
+          await copyLink();
+          toast("공유 창을 열지 못해 링크를 복사했어요 — 한 번 더 누르면 이미지와 함께 공유돼요");
+          return;
+        }
       }
     }
     copyLink();
