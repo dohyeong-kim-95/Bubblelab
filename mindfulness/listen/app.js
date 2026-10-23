@@ -198,18 +198,18 @@
     enterSegment();
   }
 
+  // iOS 는 volume 을 바꿀 수 없어 muted 로 소리를 막고 재생 잠금만 푼다.
   async function unlockTrack() {
-    const previousVolume = track.volume;
-    track.volume = 0;
+    track.muted = true;
     try {
       await track.play();
       track.pause();
       track.currentTime = 0;
-      track.volume = previousVolume;
       return true;
     } catch {
-      track.volume = previousVolume;
       return false;
+    } finally {
+      track.muted = false;
     }
   }
   function configureMediaSession() {

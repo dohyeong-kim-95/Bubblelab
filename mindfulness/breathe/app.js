@@ -310,6 +310,11 @@
   function resetSession() {
     cancelAnimationFrame(animationFrame);
     stopNodes(scheduledNodes);
+    // 잠들기 모드의 볼륨 페이드 예약이 남으면 다음 세션·미리듣기 소리를 없앤다.
+    if (masterGain && audioContext) {
+      masterGain.gain.cancelScheduledValues(audioContext.currentTime);
+      masterGain.gain.setValueAtTime(dbVolume(), audioContext.currentTime);
+    }
     if (audioContext?.state === "suspended") audioContext.resume();
     releaseWakeLock();
     sessionState = "idle";
