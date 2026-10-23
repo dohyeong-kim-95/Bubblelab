@@ -13,7 +13,7 @@
 # 게이트가 제대로 막는지만 확인하고 SKIP 으로 남긴다 — 거짓 실패를 만들지 않는다.
 # 자격증명은 아래 파일이나 환경변수로 준다 (파일은 커밋되지 않는다):
 #   .verify.env  또는  ~/.config/bubblelab/verify.env
-#     BL_ADMIN_ID=... BL_ADMIN_PASSWORD=... BL_INVEST_PASSWORD=... BL_DURI_PASSWORD=...
+#     BL_ADMIN_ID=... BL_ADMIN_PASSWORD=... BL_DURI_PASSWORD=... BL_LIFE_PASSWORD=...
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
