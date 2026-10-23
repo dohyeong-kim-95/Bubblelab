@@ -72,6 +72,7 @@
   <p id="best" class="bl-note bl-num"></p>
 </div>
 <canvas id="cv"></canvas>
+<script src="../canvas-kit.js"></script>
 <script>
 // 콘솔 디버그 훅(정답·스테이지 점프·강제 승리)은 ?debug 주소에서만 붙인다 — 기록 조작을 쉽게 만들지 않게.
 const DEBUG = new URLSearchParams(location.search).has("debug");
@@ -623,16 +624,7 @@ function draw() {
   if (tip && phase === "play") {
     ctx.font = "12px ui-monospace, monospace";
     ctx.fillStyle = D ? "rgba(232,221,203,.65)" : "rgba(58,43,24,.6)";
-    // 화면 폭에 맞춰 단어 단위 줄바꿈
-    const words = tip.split(" "), lines = [];
-    let line = "";
-    for (const w2 of words) {
-      const t2 = line ? line + " " + w2 : w2;
-      if (ctx.measureText(t2).width > 330 && line) { lines.push(line); line = w2; }
-      else line = t2;
-    }
-    lines.push(line);
-    lines.forEach((l, i) => ctx.fillText(l, W / 2, 48 + i * 16));
+    drawWrappedTip(ctx, tip, W / 2, 48, 330, 16);   // ../canvas-kit.js
   }
 }
 
