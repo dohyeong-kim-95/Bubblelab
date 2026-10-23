@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>우드 스택 — 통나무 쌓기</title>
+<title>🪵 우드 스택 — 통나무 쌓기</title>
 <link rel="stylesheet" href="/_shared/bubble.css">
 <style>
   :root { color-scheme: light dark; --accent-h: 75; }
@@ -468,7 +468,8 @@ function gameOver() {
   stack.splice(Math.max(1, stack.length - collapseN));
   moving = null;
   combo = 0; updateCombo();
-  if (score > hi) { hi = score; try { localStorage.setItem("woodstack-hi", String(hi)); } catch {} }
+  const isBest = score > hi;   // 갱신 전에 판정 — 동점은 경신이 아니다
+  if (isBest) { hi = score; try { localStorage.setItem("woodstack-hi", String(hi)); } catch {} }
   $("hi").textContent = hi;
   window.blWeeklyReport?.(score);
   setTimeout(() => {
@@ -478,7 +479,7 @@ function gameOver() {
       `<div id="scores"><div><b>${score}</b><span>SCORE</span></div>` +
       `<div><b>${bestCombo}</b><span>BEST COMBO</span></div>` +
       `<div><b>${hi}</b><span>BEST</span></div></div>` +
-      (score >= hi && score > 0 ? "🎉 최고 기록 경신!" : "한 판만 더 쌓아볼까요?");
+      (isBest ? "🎉 최고 기록 경신!" : "한 판만 더 쌓아볼까요?");
     btn.textContent = "다시";
     overlay.classList.remove("hidden");
     hint.classList.add("hidden");
