@@ -1,5 +1,7 @@
 (() => {
   "use strict";
+  const { stopNodes, requestWakeLock, releaseWakeLock } = window.mindCommon;
+  const showToast = (message) => window.mindCommon.showToast(toast, message, 2400);
 
   const SESSION_SECONDS = 120;
   const PREP_SECONDS = 5;
@@ -49,8 +51,6 @@
   let sessionState = "idle";
   let animationFrame = 0;
   let lastPhase = "";
-  let wakeLock = null;
-  let toastTimer = 0;
 
   const level = () => Math.pow(Number(volume.value) / 100, 1.45) * .3;
 
@@ -61,12 +61,6 @@
     completeView.hidden = view !== "complete";
   }
 
-  function showToast(message) {
-    toast.textContent = message;
-    toast.classList.add("show");
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => toast.classList.remove("show"), 2400);
-  }
 
   function createImpulse(context, seconds = 2.4, decay = 2.8) {
     const length = Math.floor(context.sampleRate * seconds);
@@ -102,13 +96,6 @@
     return true;
   }
 
-  function stopNodes(nodes) {
-    for (const node of nodes) {
-      try { node.stop(); } catch {}
-      try { node.disconnect(); } catch {}
-    }
-    nodes.length = 0;
-  }
 
   function makeSpatialNode(start, duration, index) {
     if (listenMode === "headphones" && typeof audioContext.createPanner === "function") {
@@ -208,16 +195,7 @@
     setTimeout(() => previewButton.removeAttribute("aria-label"), 7400);
   }
 
-  async function requestWakeLock() {
-    if (!("wakeLock" in navigator)) return;
-    try { wakeLock = await navigator.wakeLock.request("screen"); } catch {}
-  }
 
-  function releaseWakeLock() {
-    if (!wakeLock) return;
-    wakeLock.release().catch(() => {});
-    wakeLock = null;
-  }
 
   function phaseAt(elapsed) {
     if (elapsed < PREP_SECONDS) return { type: "prep", progress: elapsed / PREP_SECONDS };
@@ -356,9 +334,7 @@
   pauseButton.addEventListener("click", togglePause);
   stopButton.addEventListener("click", stopSession);
   infoButton.addEventListener("click", () => infoDialog.showModal());
-  dialogClose.addEventListener("click", () => infoDialog.close());
-  dialogConfirm.addEventListener("click", () => infoDialog.close());
-  infoDialog.addEventListener("click", (event) => { if (event.target === infoDialog) infoDialog.close(); });
+  window.mindCommon.bindInfoDialog(infoDialog, [dialogClose, dialogConfirm]);
   addEventListener("pagehide", () => {
     cancelAnimationFrame(animationFrame);
     stopNodes(scheduledNodes);

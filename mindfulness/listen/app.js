@@ -1,5 +1,7 @@
 (() => {
   "use strict";
+  const { requestWakeLock, releaseWakeLock } = window.mindCommon;
+  const showToast = (message) => window.mindCommon.showToast(toast, message, 2600);
 
   const TRACK_SECONDS = 27.633;
   const ARTWORK_URL = "https://assets.bubblelab.dev/_assets/music/upward-drift/upward_drift_preview.webp";
@@ -40,8 +42,6 @@
   let timerRemaining = 0;
   let animationFrame = 0;
   let audioContext = null;
-  let wakeLock = null;
-  let toastTimer = 0;
 
   const threePlan = () => [
     { type: "prepare", duration: 5, step: 0 },
@@ -70,21 +70,6 @@
     introView.hidden = view !== "intro";
     practiceView.hidden = view !== "practice";
     completeView.hidden = view !== "complete";
-  }
-  function showToast(message) {
-    toast.textContent = message;
-    toast.classList.add("show");
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => toast.classList.remove("show"), 2600);
-  }
-  async function requestWakeLock() {
-    if (!("wakeLock" in navigator)) return;
-    try { wakeLock = await navigator.wakeLock.request("screen"); } catch {}
-  }
-  function releaseWakeLock() {
-    if (!wakeLock) return;
-    wakeLock.release().catch(() => {});
-    wakeLock = null;
   }
 
   function ensureChime() {
@@ -329,9 +314,7 @@
   pauseButton.addEventListener("click", togglePause);
   stopButton.addEventListener("click", stopSession);
   infoButton.addEventListener("click", () => infoDialog.showModal());
-  dialogClose.addEventListener("click", () => infoDialog.close());
-  dialogConfirm.addEventListener("click", () => infoDialog.close());
-  infoDialog.addEventListener("click", (event) => { if (event.target === infoDialog) infoDialog.close(); });
+  window.mindCommon.bindInfoDialog(infoDialog, [dialogClose, dialogConfirm]);
   addEventListener("pagehide", resetSession);
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && sessionState === "running") requestWakeLock();
