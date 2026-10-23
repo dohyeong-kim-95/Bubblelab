@@ -45,7 +45,7 @@ const SITE_TESTS = {
     "_infra/brief.test.mjs", "_infra/chat.test.mjs", "_infra/filter-cam.test.mjs",
     "_infra/fortune.test.mjs", "_infra/proofread.test.mjs", "_infra/saju-detail.test.mjs",
     "_infra/stars-skyline.test.mjs", "_infra/stars.test.mjs", "_infra/tojeong.test.mjs",
-    "_infra/yaksok.test.mjs",
+    "_infra/util-stickers.test.mjs", "_infra/yaksok.test.mjs",
   ],
   work: [
     "_infra/emoticon-gate.test.mjs", "_infra/emoticon-prompt.test.mjs",
