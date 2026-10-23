@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { claudeArgs, createHeartbeat } from "./common.mjs";
+import { claudeArgs, createHeartbeat, edgeAuthHeaders } from "./common.mjs";
 
 test("claudeArgs: 도구를 --tools \"\" 로 전부 끈다", () => {
   const args = claudeArgs("질문");
@@ -94,4 +94,8 @@ test("heartbeat: stop 은 지터 타이머와 interval 을 모두 지운다", ()
   timers.fire("timeout");
   heartbeat.stop();
   assert.equal(timers.live.size, 0);
+});
+
+test("edgeAuthHeaders: /_papers/latest 도 싱크 비밀값으로 부른다", () => {
+  assert.deepEqual(edgeAuthHeaders("s3cret"), { Authorization: "Bearer s3cret" });
 });

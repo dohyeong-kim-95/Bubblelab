@@ -23,7 +23,7 @@ import {
   buildSummaryPrompt, CHAT_ANSWER_LIMIT, fetchCandidates, parseScores, parseSummary,
   parseVerb, pickPapers, RESEARCH_PROFILE, runVerb,
 } from "../../_infra/papers.js";
-import { claudeArgs } from "./common.mjs";
+import { claudeArgs, edgeAuthHeaders } from "./common.mjs";
 
 const BASE = (process.env.PAPERS_ENDPOINT ?? "").trim() || "https://life.bubblelab.dev";
 const CLAUDE = (process.env.CLAUDE_BIN ?? "").trim() || "claude";
@@ -47,16 +47,16 @@ function required(name) {
 async function api(path, secret, init = {}) {
   const response = await fetch(`${BASE}/_papers${path}`, {
     ...init,
-    headers: { Authorization: `Bearer ${secret}`, "Content-Type": "application/json", ...init.headers },
+    headers: { ...edgeAuthHeaders(secret), "Content-Type": "application/json", ...init.headers },
   });
   if (!response.ok) throw new Error(`${path} 실패 (HTTP ${response.status})`);
   return response.json();
 }
 
-/** 최신 다이제스트. 공개 경로라 인증이 필요 없다. */
-async function latestDigest() {
+/** 최신 다이제스트. 공개 경로가 아니다 — 싱크 비밀값으로 인증한다. */
+async function latestDigest(secret) {
   try {
-    const response = await fetch(`${BASE}/_papers/latest`);
+    const response = await fetch(`${BASE}/_papers/latest`, { headers: edgeAuthHeaders(secret) });
     const body = await response.json();
     return body?.empty ? null : body;
   } catch {
@@ -177,7 +177,7 @@ async function chat(secret) {
   const question = messages.map((m) => m.text).join("\n").slice(0, 2000);
   console.log(`${new Date().toLocaleString("ko-KR")} 대화: ${question.slice(0, 60)}`);
 
-  const digest = await latestDigest();
+  const digest = await latestDigest(secret);
   const profile = process.env.PAPERS_PROFILE || RESEARCH_PROFILE;
   const history = poll.history ?? [];
   const focus = poll.focus ?? null;
@@ -234,7 +234,7 @@ async function main() {
     return buildDigest(secret);
   }
 
-  const digest = await latestDigest();
+  const digest = await latestDigest(secret);
   const profile = process.env.PAPERS_PROFILE || RESEARCH_PROFILE;
   const done = [];
 

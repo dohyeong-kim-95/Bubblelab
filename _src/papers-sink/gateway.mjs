@@ -22,7 +22,7 @@ import {
   buildChatAnswerPrompt, buildChatPrompt, CHAT_ANSWER_LIMIT,
   parseVerb, RESEARCH_PROFILE, runVerb,
 } from "../../_infra/papers.js";
-import { claudeArgs, createHeartbeat } from "./common.mjs";
+import { claudeArgs, createHeartbeat, edgeAuthHeaders } from "./common.mjs";
 
 const BASE = (process.env.PAPERS_ENDPOINT ?? "").trim() || "https://life.bubblelab.dev";
 const CLAUDE = (process.env.CLAUDE_BIN ?? "").trim() || "claude";
@@ -109,7 +109,7 @@ function typing() {
 async function edge(path, init = {}) {
   const response = await fetch(`${BASE}/_papers${path}`, {
     ...init,
-    headers: { Authorization: `Bearer ${SECRET}`, "Content-Type": "application/json", ...init.headers },
+    headers: { ...edgeAuthHeaders(SECRET), "Content-Type": "application/json", ...init.headers },
   });
   if (!response.ok) throw new Error(`${path} 실패 (HTTP ${response.status})`);
   return response.json();
@@ -117,7 +117,8 @@ async function edge(path, init = {}) {
 
 async function latestDigest() {
   try {
-    const body = await (await fetch(`${BASE}/_papers/latest`)).json();
+    const response = await fetch(`${BASE}/_papers/latest`, { headers: edgeAuthHeaders(SECRET) });
+    const body = await response.json();
     return body?.empty ? null : body;
   } catch {
     return null;

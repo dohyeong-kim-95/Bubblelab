@@ -20,6 +20,19 @@ export function claudeArgs(prompt) {
 }
 
 /**
+ * 엣지(/_papers/*)에 보낼 인증 헤더. 싱크 비밀값(PAPERS_SINK_SECRET) 하나로
+ * 싱크 전용 경로와 /_papers/latest(이제 인증이 필요하다) 를 모두 부른다.
+ *
+ * Args:
+ *   secret: PAPERS_SINK_SECRET
+ * Returns:
+ *   { Authorization: "Bearer <secret>" }
+ */
+export function edgeAuthHeaders(secret) {
+  return { Authorization: `Bearer ${secret}` };
+}
+
+/**
  * 디스코드 게이트웨이 박동.
  *
  * HELLO 를 받으면 start, 소켓이 닫히면 stop. 첫 박동은 지터를 줘서 여러 봇이
