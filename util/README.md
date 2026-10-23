@@ -58,8 +58,8 @@
   방마다 50장·100MB. 올린 사람·방장만 지운다. 전체·골라서 ZIP(`zip.js`, 압축 없이)으로 받고,
   **카톡 인앱 브라우저면 "기본 브라우저로 열기"**(`kakaotalk://web/openExternal`, 내 토큰을
   실어 같은 사람으로 이어진다).
-- **정산**: 결제내역 캡처를 올리면 Gemini(`_infra/yaksok-receipt.js`, `GEMINI_API_KEY`,
-  모델은 `YAKSOK_VISION_MODEL`)가 가게·금액·시각·취소를 읽어 **후보로만** 보여 주고, 사람이
+- **정산**: 결제내역 캡처를 올리면 Gemini(`_infra/yaksok-receipt.js`, 키는 `YAKSOK_VISION_API_KEY` 가 있으면 그것,
+  없으면 `GEMINI_API_KEY` — 공용 쿼터는 워커의 IP당 하루 20회 한도가 지킨다, 모델은 `YAKSOK_VISION_MODEL`)가 가게·금액·시각·취소를 읽어 **후보로만** 보여 주고, 사람이
   고쳐 넣어야 정산에 들어간다. 캡처는 저장하지 않는다. 방마다 하루 30번, 키가 없거나 막히면
   직접 입력. 항목마다 뺄 사람을 고르고(술 안 마신 사람), 원 단위 나머지는 앞사람부터 1원씩,
   송금은 큰 금액끼리 짝지어 최소로(`logic.js` `settle`). 받는 사람이 카카오페이 송금 링크

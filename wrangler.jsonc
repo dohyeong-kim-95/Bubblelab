@@ -90,7 +90,10 @@
       "TWELVEDATA_API_KEY",
       "LIFE_PASSWORD",
       "LIFE_SESSION_SECRET",
-      "LIFE_SINK_SECRET"
+      "LIFE_SINK_SECRET",
+      // 약속 영수증 인식 전용 Gemini 키. 없으면 GEMINI_API_KEY 로 폴백한다
+      // (공용 쿼터는 워커의 IP당 하루 한도 yaksok-parse 가 지킨다).
+      "YAKSOK_VISION_API_KEY"
     ]
   },
   // /_rt/<이름> 실시간 데이터 서버 (아발론 등 멀티플레이어 토이용)
