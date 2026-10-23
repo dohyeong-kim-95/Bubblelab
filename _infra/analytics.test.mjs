@@ -163,6 +163,36 @@ test("daily cleanup also expires old qualified-visitor keys", async () => {
   assert.equal([...storage.data.keys()].some((k) => k.startsWith("qseen:2026-05-01")), false);
 });
 
+test("daily cleanup lists by prefix, expires idle streaks, and deletes in batches of 128", async () => {
+  const entries = [
+    ["streak:00000000-0000-4000-8000-00000000000a", { lastDate: "2026-07-09", streak: 4 }],
+    ["streak:00000000-0000-4000-8000-00000000000b", { lastDate: "2026-04-01", streak: 9 }],
+    ["download:music/a/a.mp3", 3],
+  ];
+  for (let i = 0; i < 300; i++) {
+    entries.push([`seen:2026-04-01:00000000-0000-4000-8000-${String(i).padStart(12, "0")}`, true]);
+  }
+  const storage = new MemoryStorage(entries);
+  const prefixes = [];
+  const deleteSizes = [];
+  const list = storage.list.bind(storage);
+  storage.list = async (options = {}) => { prefixes.push(options.prefix); return list(options); };
+  const remove = storage.delete.bind(storage);
+  storage.delete = async (keys) => { deleteSizes.push(Array.isArray(keys) ? keys.length : 1); return remove(keys); };
+
+  const analytics = new AnalyticsDO({ storage });
+  await analytics.fetch(new Request("https://analytics.internal/track", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ visitorId: "00000000-0000-4000-8000-000000000001", date: "2026-07-10" }),
+  }));
+  assert.equal(prefixes.includes(undefined), false, "prefix 없이 전체를 list 하지 않는다");
+  assert.ok(deleteSizes.every((size) => size <= 128), deleteSizes.join(","));
+  assert.equal([...storage.data.keys()].some((k) => k.startsWith("seen:2026-04-01")), false);
+  assert.equal(storage.data.has("streak:00000000-0000-4000-8000-00000000000a"), true, "어제 온 방문자는 남는다");
+  assert.equal(storage.data.has("streak:00000000-0000-4000-8000-00000000000b"), false, "오래 안 온 방문자는 지운다");
+  assert.equal(storage.data.get("download:music/a/a.mp3"), 3);
+});
+
 test("ranks monthly top pages by unique visitors, excluding site homes", async () => {
   const vid = (n) => `00000000-0000-4000-8000-00000000000${n}`;
   const storage = new MemoryStorage([

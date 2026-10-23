@@ -21,6 +21,31 @@ function median(values) {
     : Math.round((sorted[middle - 1] + sorted[middle]) / 2);
 }
 
+// 두 번째 조각이 날짜인 버킷 키들. 정리·날짜 초기화는 이 prefix 들만 따로 list 한다 —
+// prefix 없이 list 하면 download:·streak: 까지 전부 메모리로 읽는다.
+const DATED_PREFIXES = ["seen:", "pv:", "eng:", "qseen:", "cleanup:"];
+// 연속 방문(streak:)은 어제 다녀가지 않으면 어차피 1로 돌아간다. 이만큼 안 온 방문자의
+// 키는 지운다 — 지우는 곳이 없어 방문자 수만큼 영원히 쌓였다.
+const STREAK_KEEP_DAYS = 35;
+
+async function datedKeys(storage, shouldDelete) {
+  const keys = [];
+  for (const prefix of DATED_PREFIXES) {
+    const stored = await storage.list({ prefix });
+    for (const key of stored.keys()) {
+      if (shouldDelete(key.split(":")[1])) keys.push(key);
+    }
+  }
+  return keys;
+}
+
+async function deleteInBatches(storage, keys) {
+  // DO storage.delete 는 한 번에 128개까지 받는다.
+  for (let start = 0; start < keys.length; start += 128) {
+    await storage.delete(keys.slice(start, start + 128));
+  }
+}
+
 function recentDates(endDate, count) {
   const end = new Date(`${endDate}T00:00:00+09:00`);
   return Array.from({ length: count }, (_, i) => {
@@ -123,11 +148,12 @@ export class AnalyticsDO {
       const cleanupKey = `cleanup:${date}`;
       if (!(await this.state.storage.get(cleanupKey))) {
         const keep = new Set(recentDates(date, 35));
-        const stored = await this.state.storage.list();
-        // 모든 key(seen:/pv:/cleanup:)는 두 번째 조각이 날짜다.
-        const stale = [...stored.keys()].filter((k) =>
-          /^(seen|pv|eng|qseen|cleanup):/.test(k) && !keep.has(k.split(":")[1]));
-        if (stale.length) await this.state.storage.delete(stale);
+        const stale = await datedKeys(this.state.storage, (day) => !keep.has(day));
+        const streakKeep = new Set(recentDates(date, STREAK_KEEP_DAYS));
+        for (const [key, value] of await this.state.storage.list({ prefix: "streak:" })) {
+          if (!streakKeep.has(value?.lastDate)) stale.push(key);
+        }
+        await deleteInBatches(this.state.storage, stale);
         await this.state.storage.put(cleanupKey, true);
       }
 
@@ -151,10 +177,8 @@ export class AnalyticsDO {
     if (request.method === "POST" && url.pathname === "/reset") {
       const date = url.searchParams.get("date");
       if (!DATE_KEY.test(date ?? "")) return new Response("invalid date", { status: 400 });
-      const stored = await this.state.storage.list();
-      const targets = [...stored.keys()].filter((key) =>
-        /^(seen|pv|eng|qseen|cleanup):/.test(key) && key.split(":")[1] === date);
-      if (targets.length) await this.state.storage.delete(targets);
+      const targets = await datedKeys(this.state.storage, (day) => day === date);
+      await deleteInBatches(this.state.storage, targets);
       return Response.json({ date, deleted: targets.length });
     }
 
