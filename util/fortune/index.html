@@ -455,7 +455,8 @@
     const o = document.createElement("option");
     o.value = val; o.textContent = label; sel.appendChild(o);
   }
-  for (let y = thisYear; y >= 1920; y--) opt(selY, y, y + "년");
+  // brief 와 같은 범위 — 거기서 1900년대 초를 저장하면 여기서 연도가 비었다
+  for (let y = thisYear; y >= 1900; y--) opt(selY, y, y + "년");
   for (let m = 1; m <= 12; m++) opt(selM, m, m + "월");
   function fillDays() {
     const y = +selY.value, m = +selM.value;
@@ -734,15 +735,8 @@
       const response = await fetch("/_fortune/chart", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          year: birth.y, month: birth.m, day: birth.d,
-          calendar: birth.calendar === "lunar" ? "lunar" : "solar",
-          lunarLeap: birth.lunarLeap === true,
-          gender: birth.gender,
-          timeMode: birth.timeMode === "clock" ? "clock" : "branch",
-          time: birth.time,
-          branch: birth.h,
-        }),
+        // 요청 본문은 brief 와 같은 공용 함수로 만든다(형식이 어긋나면 400)
+        body: JSON.stringify(window.blFortuneChartBody(birth)),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "명식을 계산하지 못했습니다.");

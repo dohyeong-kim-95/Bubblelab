@@ -106,7 +106,8 @@ function showHome() {
   bindStepper("c-cap", () => capacity, (next) => { capacity = next; $("c-cap-val").textContent = next; });
   $("c-code").value = randomCode();
 
-  // 방 열기: 없는 코드면 만들고, 있는 코드면 그 방에 참여한다 — PC·폰에서 같은 코드면 같은 방.
+  // 방 열기: 없는 코드면 만들고, 있는 코드면 한 번 물은 뒤 그 방에 참여한다 — PC·폰에서
+  // 같은 코드면 같은 방. 묻지 않으면 우연히 같은 코드를 고른 남의 방에 내 닉네임으로 들어간다.
   $("create").addEventListener("submit", async (event) => {
     event.preventDefault();
     const button = event.submitter;
@@ -123,6 +124,11 @@ function showHome() {
       if (error.data?.exists) {
         // 이미 있는 방 — 내 토큰이 있으면 그냥 열고, 없으면 이 닉네임으로 참여한다.
         if (loadRooms()[code]?.token) { location.href = code; return; }
+        if (!confirm("이미 있는 방이에요. 들어갈까요?")) {
+          $("c-err").textContent = "다른 코드를 쓰거나 🎲 로 새 코드를 뽑아 주세요.";
+          button.disabled = false;
+          return;
+        }
         try {
           const joined = await api(`/${code}/join`, { method: "POST", body: { name } });
           saveRoom(code, { token: joined.token });

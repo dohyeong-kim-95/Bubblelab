@@ -632,7 +632,7 @@
   $("speak").addEventListener("click", () => {
     if (!window.blTTS) return;
     if (window.blTTS.speaking) { window.blTTS.stop(); return; }
-    window.blTTS.speak(brief?.text ?? "");
+    window.blTTS.speak(window.blSpeakText());
   });
   addEventListener("load", () => {
     window.blTTS?.on("start", () => { $("speak").textContent = "⏹ 멈추기"; });

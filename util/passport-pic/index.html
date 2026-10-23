@@ -8,30 +8,28 @@
 <meta name="robots" content="noindex, nofollow">
 <title>🛂 여권사진 도우미</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🛂</text></svg>">
+<link rel="stylesheet" href="/_shared/bubble.css">
 <style>
-  :root { color-scheme: light dark; --bg: light-dark(#f2f4f7, #0d131c);
-          --panel: light-dark(#fff, #171f2b); --line: light-dark(#d9e0e7, #2a3646);
-          --text: light-dark(#1c2733, #e2e9f0); --muted: light-dark(#6e7985, #91a0b2);
-          --accent: #4f7fdd; --warn: #d08a3a; --ok: #4d9e6a; }
+  /* 색·글꼴은 공용 재료(bubble.css) — 여기 이름(--panel·--text)은 그 토큰의 별칭일 뿐 */
+  :root { --accent-h: 23; --panel: var(--field); --text: var(--ink); }
   * { box-sizing: border-box; }
-  body { margin: 0; min-height: 100dvh; background: var(--bg); color: var(--text);
-         font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace; }
+  body { margin: 0; min-height: 100dvh; }
   .app { width: min(34rem, 100%); margin: 0 auto; padding: 1.2rem 1rem 2rem; }
   h1 { margin: .2rem 0 .3rem; font-size: 1.25rem; }
   h2 { margin: 1.4rem 0 .5rem; font-size: .95rem; }
   .desc { margin: 0 0 1.1rem; color: var(--muted); font-size: .78rem; line-height: 1.6; }
   button { font: inherit; color: inherit; cursor: pointer; border: 1px solid var(--line);
-           background: light-dark(#fff, #111923); border-radius: .6rem; padding: .55rem .9rem; }
+           background: var(--field); border-radius: .6rem; padding: .55rem .9rem; }
   button:active { transform: scale(.97); }
   button:disabled { opacity: .42; cursor: default; transform: none; }
   button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: bold; }
+  .primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: bold; }
   [hidden] { display: none !important; }
 
   #drop { display: grid; place-items: center; gap: .4rem; padding: 2rem 1rem; text-align: center;
           border: 2px dashed var(--line); border-radius: 1rem; background: var(--panel);
           cursor: pointer; transition: border-color .15s, background .15s; }
-  #drop.over { border-color: var(--accent); background: light-dark(#eef3fd, #1a2436); }
+  #drop.over { border-color: var(--accent); background: var(--accent-soft); }
   #drop .big { font-size: 2.2rem; }
   #drop p { margin: 0; font-size: .8rem; color: var(--muted); line-height: 1.6; }
   #file { display: none; }
@@ -40,7 +38,7 @@
 
   .stage { position: relative; width: min(19rem, 100%); margin: 0 auto; aspect-ratio: 35 / 45;
            border-radius: .8rem; overflow: hidden; border: 1px solid var(--line);
-           background: light-dark(#e8ecf1, #10161f); }
+           background: var(--sunk); }
   .stage video, .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
   .stage video { object-fit: cover; transform: scaleX(-1); }
   .stage video.rear { transform: none; }
@@ -346,12 +344,16 @@ zoomInput.addEventListener("input", () => {
 });
 $("#rotate").addEventListener("click", async () => {
   if (!img) return;
+  // iOS Safari 캔버스 면적 한계(약 1677만 px)를 넘는 큰 사진은 비율을 지켜 줄여서 돌린다
+  const scale = Math.min(1, Math.sqrt(16_000_000 / (img.width * img.height)));
+  const width = Math.floor(img.width * scale), height = Math.floor(img.height * scale);
   const c = document.createElement("canvas");
-  c.width = img.height; c.height = img.width;
+  c.width = height; c.height = width;
   const ctx = c.getContext("2d");
+  if (!ctx) return;
   ctx.translate(c.width / 2, c.height / 2);
   ctx.rotate(Math.PI / 2);
-  ctx.drawImage(img, -img.width / 2, -img.height / 2);
+  ctx.drawImage(img, -width / 2, -height / 2, width, height);
   setImage(await createImageBitmap(c));
 });
 $("#rePick").addEventListener("click", () => show("pick"));

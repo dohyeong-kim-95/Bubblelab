@@ -541,14 +541,19 @@ const viewer = (() => {
     host.replaceChildren();
   }
 
+  // layout() 은 쪽마다 await 한다. 그사이 확대 연타·resize 로 다음 호출이 시작되면
+  // 앞선 호출은 그만둔다 — 안 그러면 새 boxes 에 옛 상자가 섞여 엉뚱한 쪽이 그려진다.
+  let layoutRun = 0;
   async function layout() {
     if (!hasDoc() || $("#paneView").hidden) return;
+    const run = ++layoutRun;
     clear();
     const avail = Math.max(160, host.clientWidth - 24);
     if (fitMode) zoom = 1;
     const nodes = [];
     for (const [i, entry] of store.pages.entries()) {
       const page = await getPage(entry);
+      if (run !== layoutRun) return;
       const unit = page.getViewport({ scale: 1, rotation: totalRotation(page, entry) });
       const scale = (avail / unit.width) * zoom;
       const width = Math.round(unit.width * scale);
@@ -973,6 +978,9 @@ $("#delSel").addEventListener("click", () => {
 async function libDoc(index, PDFLib) {
   const source = store.sources[index];
   source.lib ??= await PDFLib.PDFDocument.load(source.bytes, { ignoreEncryption: true });
+  // 인쇄·복사만 막힌 PDF 는 pdf.js 로는 열리지만, pdf-lib 은 내용을 복호화하지 않고
+  // 복사해 빈 쪽·깨진 쪽이 저장된다. 조용히 깨진 파일을 주느니 막고 알린다.
+  if (source.lib.isEncrypted) throw new Error("암호화된 PDF는 저장할 수 없어요");
   return source.lib;
 }
 
@@ -1103,14 +1111,18 @@ async function imageBytes(item) {
     return { bytes: new Uint8Array(await item.file.arrayBuffer()), kind: isJpg ? "jpg" : "png" };
   }
   const bitmap = await createImageBitmap(item.file);
+  // iOS Safari 캔버스 면적 한계(약 1677만 px)를 넘으면 비율을 지켜 줄인다
+  const scale = Math.min(1, Math.sqrt(16_000_000 / (bitmap.width * bitmap.height)));
   const canvas = el("canvas");
-  canvas.width = bitmap.width; canvas.height = bitmap.height;
+  canvas.width = Math.floor(bitmap.width * scale); canvas.height = Math.floor(bitmap.height * scale);
   const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("이미지가 너무 커요");
   ctx.fillStyle = "#fff";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(bitmap, 0, 0);
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   bitmap.close?.();
   const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
+  if (!blob) throw new Error("이미지가 너무 커요");   // 한계를 넘으면 오류 대신 null 이 온다
   return { bytes: new Uint8Array(await blob.arrayBuffer()), kind: "jpg" };
 }
 
