@@ -278,7 +278,7 @@ test("push subscribe/unsubscribe is peer-only, dedupes by endpoint, and caps sub
   const state = { storage, blockConcurrencyWhile: (fn) => fn() };
   const room = new DuriDO(state, { DURI_BUCKET: fakeBucket([]) });
   await room.load();
-  const sub = await fakeSubscription("https://push.example.com/a");
+  const sub = await fakeSubscription("https://fcm.googleapis.com/fcm/send/a");
 
   const sinkRejected = await room.fetch(pushReq("POST", { subscription: sub }, "sink"));
   assert.equal(sinkRejected.status, 403); // 싱크(데스크톱 데몬)는 알림을 구독할 수 없다
@@ -295,12 +295,12 @@ test("push subscribe/unsubscribe is peer-only, dedupes by endpoint, and caps sub
 
   // 이미 1개(sub) 있으니 7개를 더 채우면 상한(8)에 정확히 닿는다.
   for (let i = 0; i < 7; i++) {
-    await room.fetch(pushReq("POST", { subscription: await fakeSubscription(`https://push.example.com/extra${i}`) }));
+    await room.fetch(pushReq("POST", { subscription: await fakeSubscription(`https://fcm.googleapis.com/fcm/send/extra${i}`) }));
   }
   assert.equal((await storage.list({ prefix: "push:" })).size, 8);
   // 상한을 넘으면 거절하지 않고 가장 오래된 구독을 밀어낸다. 방금 알림을 켠 기기가
   // 좀비 구독 때문에 등록에 실패해 조용히 알림이 끊기는 쪽이 훨씬 나쁘다.
-  const newest = await fakeSubscription("https://push.example.com/one-too-many");
+  const newest = await fakeSubscription("https://fcm.googleapis.com/fcm/send/one-too-many");
   const full = await room.fetch(pushReq("POST", { subscription: newest }));
   assert.equal(full.status, 200);
   const after = await storage.list({ prefix: "push:" });
@@ -322,24 +322,24 @@ test("push subscribe replaces the same device's rotated subscription", async () 
   const room = new DuriDO(state, { DURI_BUCKET: fakeBucket([]) });
   await room.load();
 
-  const first = await fakeSubscription("https://push.example.com/rot-1");
+  const first = await fakeSubscription("https://fcm.googleapis.com/fcm/send/rot-1");
   await room.fetch(pushReq("POST", { subscription: first, deviceId: "device-aaaaaa" }));
   assert.equal((await storage.list({ prefix: "push:" })).size, 1);
 
   // 같은 기기가 회전한 새 endpoint 로 다시 등록 → 옛 것은 사라지고 하나만 남는다.
-  const rotated = await fakeSubscription("https://push.example.com/rot-2");
+  const rotated = await fakeSubscription("https://fcm.googleapis.com/fcm/send/rot-2");
   await room.fetch(pushReq("POST", { subscription: rotated, deviceId: "device-aaaaaa" }));
   const subs = await storage.list({ prefix: "push:" });
   assert.equal(subs.size, 1);
   assert.equal([...subs.values()][0].endpoint, rotated.endpoint);
 
   // 다른 기기는 그대로 공존한다(상대방 기기가 밀려나면 안 된다).
-  const other = await fakeSubscription("https://push.example.com/other");
+  const other = await fakeSubscription("https://fcm.googleapis.com/fcm/send/other");
   await room.fetch(pushReq("POST", { subscription: other, deviceId: "device-bbbbbb" }));
   assert.equal((await storage.list({ prefix: "push:" })).size, 2);
 
   // 형식이 틀린 deviceId 는 없는 셈 친다(회전 정리만 못 할 뿐 구독은 정상 등록).
-  const noId = await fakeSubscription("https://push.example.com/no-id");
+  const noId = await fakeSubscription("https://fcm.googleapis.com/fcm/send/no-id");
   const res = await room.fetch(pushReq("POST", { subscription: noId, deviceId: "!!" }));
   assert.equal(res.status, 200);
   assert.equal((await storage.list({ prefix: "push:" })).size, 3);
@@ -378,9 +378,9 @@ test("push/test self-diagnostic reports no-vapid, targets only my endpoint, and 
     VAPID_SUBJECT: "https://duri.bubblelab.dev",
   });
   await room.load();
-  const mine = "https://push.example.com/mine";
+  const mine = "https://fcm.googleapis.com/fcm/send/mine";
   await room.fetch(pushReq("POST", { subscription: await fakeSubscription(mine) }));
-  await room.fetch(pushReq("POST", { subscription: await fakeSubscription("https://push.example.com/other") }));
+  await room.fetch(pushReq("POST", { subscription: await fakeSubscription("https://fcm.googleapis.com/fcm/send/other") }));
 
   let hit = null;
   const originalFetch = globalThis.fetch;
@@ -408,8 +408,8 @@ test("appending a msg/photo entry pushes the opaque blob to subscribers and prun
     VAPID_SUBJECT: "https://duri.bubblelab.dev",
   });
   await room.load();
-  await room.fetch(pushReq("POST", { subscription: await fakeSubscription("https://push.example.com/live") }));
-  await room.fetch(pushReq("POST", { subscription: await fakeSubscription("https://push.example.com/expired") }));
+  await room.fetch(pushReq("POST", { subscription: await fakeSubscription("https://fcm.googleapis.com/fcm/send/live") }));
+  await room.fetch(pushReq("POST", { subscription: await fakeSubscription("https://fcm.googleapis.com/fcm/send/expired") }));
 
   // sendWebPush 는 페이로드를 aes128gcm 으로 암호화해 보내므로(웹 표준 자체가
   // 요구하는 암호화 — webpush.test.mjs 가 그 라운드트립을 이미 검증한다), 여기선
@@ -444,8 +444,8 @@ test("notifyPush still pushes to connected devices (presence is not trusted)", a
     VAPID_SUBJECT: "https://duri.bubblelab.dev",
   });
   await room.load();
-  const online = "https://push.example.com/online";
-  const away = "https://push.example.com/away";
+  const online = "https://fcm.googleapis.com/fcm/send/online";
+  const away = "https://fcm.googleapis.com/fcm/send/away";
   await room.fetch(pushReq("POST", { subscription: await fakeSubscription(online) }));
   await room.fetch(pushReq("POST", { subscription: await fakeSubscription(away) }));
 
@@ -478,7 +478,7 @@ test("notifyPush skips every device of the sender (by who), sends high urgency, 
   await room.load();
   // 나: 폰(phone-a)·PC(pc-a), 상대: 폰(phone-b). 내 PC 는 지금 접속해 있지 않다.
   const sub = async (name, deviceId) =>
-    room.fetch(pushReq("POST", { subscription: await fakeSubscription(`https://push.example.com/${name}`), deviceId }));
+    room.fetch(pushReq("POST", { subscription: await fakeSubscription(`https://fcm.googleapis.com/fcm/send/${name}`), deviceId }));
   await sub("phone-a", "phone-aaaaaa");
   await sub("pc-a", "pc-aaaaaaaa");
   await sub("phone-b", "phone-bbbbbb");
@@ -510,7 +510,7 @@ test("notifyPush skips every device of the sender (by who), sends high urgency, 
   const status = await (await room.fetch(new Request("https://x/_duri/status", { headers: { "X-Duri-Role": "peer" } }))).json();
   assert.equal(status.push.length, 3);
   const b = status.push.find((p) => p.device === "phon" && p.last);
-  assert.equal(b.host, "push.example.com");
+  assert.equal(b.host, "fcm.googleapis.com");
   assert.equal(b.last.status, 201);
   assert.ok(!JSON.stringify(status.push).includes("/phone-b")); // 주소는 내보내지 않는다
 });
@@ -561,7 +561,7 @@ test("push subscriptions survive a redeploy (DO restart) — messages still push
 
   const before = mkRoom();
   await before.load();
-  await before.fetch(pushReq("POST", { subscription: await fakeSubscription("https://push.example.com/away") }));
+  await before.fetch(pushReq("POST", { subscription: await fakeSubscription("https://fcm.googleapis.com/fcm/send/away") }));
   assert.equal((await storage.list({ prefix: "push:" })).size, 1);
 
   // 재배포: 새 DO 인스턴스(메모리상 conns 비어 있음), 같은 storage 로 load.
@@ -578,7 +578,7 @@ test("push subscriptions survive a redeploy (DO restart) — messages still push
   } finally {
     globalThis.fetch = originalFetch;
   }
-  assert.deepEqual(hits, ["https://push.example.com/away"]); // 재배포 뒤에도 알림 정상 발송
+  assert.deepEqual(hits, ["https://fcm.googleapis.com/fcm/send/away"]); // 재배포 뒤에도 알림 정상 발송
 });
 
 test("deleteEntry removes the buffer entry + R2 원본 and broadcasts deleted to both", async () => {
@@ -716,14 +716,30 @@ test("backfill: 싱크에는 버퍼 전부를 보내 받기 전에는 아무것�
   assert.equal((await storage.list({ prefix: "buf:" })).size, 150);
 });
 
-test("backfill/fetch-older: 브라우저에는 가장 최근 100건, 그 앞은 이어서 준다", async () => {
-  const initial = { seq: 150, ackSeq: 0 };
-  for (let seq = 1; seq <= 150; seq++) {
-    initial["buf:" + String(seq).padStart(12, "0")] = { seq, kind: "msg", at: seq, iv: "aXY=", ct: "Y3Q=" };
+// 버퍼가 1000건을 넘어야 원래 버그가 드러난다 — 정방향 list(limit 1000) 뒤 slice(-100)
+// 하던 옛 코드는 1101~1200 이 아니라 901~1000 을 줬다(150건에서는 옛 코드도 통과했다).
+function bufferedRoom(count, { ackSeq = 0, photoEvery = 0 } = {}) {
+  const initial = { seq: count, ackSeq };
+  const photoKeys = [];
+  for (let seq = ackSeq + 1; seq <= count; seq++) {
+    const key = "buf:" + String(seq).padStart(12, "0");
+    if (photoEvery && seq % photoEvery === 0) {
+      const r2key = `photo/${String(seq).padStart(12, "0")}-a1b2c3d4e5f6a7b8`;
+      photoKeys.push(r2key);
+      initial[key] = { seq, kind: "photo", at: seq, r2key };
+    } else {
+      initial[key] = { seq, kind: "msg", at: seq, iv: "aXY=", ct: "Y3Q=" };
+    }
   }
   const storage = fakeStorage(initial);
+  const bucket = fakeBucket(photoKeys);
   const state = { storage, blockConcurrencyWhile: (fn) => fn() };
-  const room = new DuriDO(state, { DURI_BUCKET: fakeBucket([]) });
+  const room = new DuriDO(state, { DURI_BUCKET: bucket });
+  return { room, storage, bucket, photoKeys };
+}
+
+test("backfill/fetch-older: 브라우저에는 가장 최근 100건, 그 앞은 이어서 준다 (버퍼 1200건)", async () => {
+  const { room } = bufferedRoom(1200);
   await room.load();
   const sent = [];
   const peer = { ws: { send: (s) => sent.push(JSON.parse(s)) }, role: "peer", stamps: [], alive: true };
@@ -731,17 +747,99 @@ test("backfill/fetch-older: 브라우저에는 가장 최근 100건, 그 앞은 
   await room.backfill(peer, 0);
   const firstPage = sent.filter((m) => m.type === "entry").map((m) => m.seq);
   assert.equal(firstPage.length, 100);
-  assert.equal(firstPage[0], 51);
-  assert.equal(firstPage[99], 150);
+  assert.equal(firstPage[0], 1101);
+  assert.equal(firstPage[99], 1200);
   const done = sent.find((m) => m.type === "backfill-done");
-  assert.equal(done.oldest, 51);
+  assert.equal(done.oldest, 1101);
   assert.equal(done.more, true);
 
   sent.length = 0;
-  await room.fetchOlder(peer, 51, 0);
+  await room.fetchOlder(peer, 1101, 0);
   const olderPage = sent.filter((m) => m.type === "entry").map((m) => m.seq);
-  assert.equal(olderPage.length, 50);
-  assert.equal(olderPage[0], 1);
-  assert.equal(olderPage[49], 50);
+  assert.equal(olderPage.length, 100);
+  assert.equal(olderPage[0], 1001);
+  assert.equal(olderPage[99], 1100);
+  assert.equal(sent.find((m) => m.type === "older-done").more, true);
+
+  sent.length = 0;
+  await room.fetchOlder(peer, 51, 0);
+  const firstOnes = sent.filter((m) => m.type === "entry").map((m) => m.seq);
+  assert.deepEqual([firstOnes[0], firstOnes.at(-1), firstOnes.length], [1, 50, 50]);
   assert.equal(sent.find((m) => m.type === "older-done").more, false);
+});
+
+test("backfill: 싱크에는 1200건 전부를 작은 청크로 나눠 순서대로 보낸다", async () => {
+  const { room, storage } = bufferedRoom(1200);
+  await room.load();
+  const limits = [];
+  const list = storage.list;
+  storage.list = (options = {}) => {
+    if (options.prefix === "buf:") limits.push(options.limit);
+    return list(options);
+  };
+  const sent = [];
+  const sink = { ws: { send: (s) => sent.push(JSON.parse(s)) }, role: "sink", stamps: [], alive: true };
+  room.conns.add(sink);
+
+  await room.backfill(sink, 0);
+  const seqs = sent.filter((m) => m.type === "entry").map((m) => m.seq);
+  assert.equal(seqs.length, 1200, "싱크에는 자르지 않는다");
+  assert.ok(seqs.every((seq, index) => seq === index + 1), "오래된 순서 그대로");
+  assert.ok(limits.every((limit) => limit <= 200), `청크 크기: ${limits.join(",")}`);
+  assert.equal(sent.at(-1).type, "backfill-done");
+  assert.equal(sent.at(-1).more, false);
+});
+
+test("prune: ack 가 1000건 넘게 한 번에 올라가도 버퍼·R2 사진을 끝까지 지운다", async () => {
+  const { room, storage, bucket, photoKeys } = bufferedRoom(2500, { photoEvery: 10 });
+  await room.load();
+  const deleteSizes = [];
+  const remove = storage.delete;
+  storage.delete = (keys) => { deleteSizes.push([].concat(keys).length); return remove(keys); };
+  const r2Calls = [];
+  const r2Delete = bucket.delete;
+  bucket.delete = (keys) => { r2Calls.push([].concat(keys).length); return r2Delete(keys); };
+
+  await room.prune(2400);
+  const left = [...storage.map.keys()].filter((key) => key.startsWith("buf:"));
+  assert.equal(left.length, 100);
+  assert.equal(left[0], "buf:000000002401");
+  assert.equal(storage.map.get("ackSeq"), 2400);
+  assert.deepEqual([...bucket.set], photoKeys.filter((key) => Number(key.slice(6, 18)) > 2400));
+  assert.ok(deleteSizes.every((size) => size <= 128), "DO storage.delete 는 128개까지");
+  assert.ok(r2Calls.length <= 3 && r2Calls.every((size) => size <= 1000), "R2 는 한 번에 묶어 지운다");
+});
+
+test("사진 업로드는 본문을 메모리에 올리지 않고 R2 로 흘려보낸다", async () => {
+  const storage = fakeStorage({ seq: 0, ackSeq: 0 });
+  const puts = [];
+  const bucket = {
+    ...fakeBucket([]),
+    async put(key, value) { puts.push({ key, value }); return { size: 5 }; },
+  };
+  const room = new DuriDO({ storage, blockConcurrencyWhile: (fn) => fn() }, { DURI_BUCKET: bucket });
+  await room.load();
+  const headers = {
+    "X-Duri-Role": "peer",
+    "X-Duri-Img-Iv": "aXZpdml2aXZpdg==",
+    "X-Duri-Sha256": "a".repeat(64),
+    "X-Duri-Meta-Iv": "aXZpdml2aXZpdg==",
+    "X-Duri-Meta": "bWV0YQ==",
+  };
+  const upload = (extra, body) => {
+    const request = new Request("https://x/_duri/photo", { method: "POST", headers: { ...headers, ...extra }, body, duplex: "half" });
+    request.arrayBuffer = () => assert.fail("본문을 통째로 읽었다");
+    return room.fetch(request);
+  };
+
+  const ok = await upload({ "Content-Length": "5" }, new Uint8Array([1, 2, 3, 4, 5]));
+  assert.equal(ok.status, 200);
+  assert.equal(puts.length, 1);
+  assert.ok(puts[0].value instanceof ReadableStream, "스트림 그대로 R2 에 넘긴다");
+  const entry = storage.map.get("buf:000000000001");
+  assert.equal(entry.bytes, 5);
+
+  assert.equal((await upload({}, new Uint8Array([1]))).status, 411);
+  assert.equal((await upload({ "Content-Length": String(200 * 1024 * 1024) }, new Uint8Array([1]))).status, 413);
+  assert.equal(puts.length, 1, "거절한 업로드는 R2 에 쓰지 않는다");
 });

@@ -18,11 +18,11 @@ TREES="$(cd "$ROOT/.." && pwd)/worktrees"
 
 die() { echo "error: $*" >&2; exit 1; }
 
-# 서브도메인 = 루트의 `_`/`.` 로 시작하지 않고 SKIP에도 없는 폴더.
-# **제외 목록은 build.mjs에서 그대로 읽는다** — 여기에 따로 적어 두면 언젠가
+# 서브도메인 = 루트의 `_`/`.` 로 시작하지 않고 NON_SITE_DIRS 에도 없는 폴더.
+# **제외 목록은 sites.js 에서 그대로 읽는다** — 여기에 따로 적어 두면 언젠가
 # 어긋나서 서브도메인 아닌 폴더(scripts/ 등)에 레인이 생긴다.
 skip_names() {
-  sed -n 's/^const SKIP = new Set(\[\(.*\)\]);$/\1/p' "$ROOT/_infra/build.mjs" |
+  sed -n 's/^export const NON_SITE_DIRS = new Set(\[\(.*\)\]);$/\1/p' "$ROOT/_infra/sites.js" |
     tr -d ' "' | tr ',' '\n' | grep -v '^$'
 }
 

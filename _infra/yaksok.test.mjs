@@ -403,16 +403,23 @@ test("정산 항목·보냈어요·받았어요와 송금 정보(참여자에게
   assert.ok(got.body.state.sent["m3>m2"].receivedAt);
 });
 
-test("캡처 파싱: Gemini 결과를 다듬어 후보로만 돌려주고, 키가 없으면 503, 하루 30번", async () => {
+test("캡처 파싱: Gemini 결과를 다듬어 후보로만 돌려주고, 전용 키가 없으면 503, 하루 30번", async () => {
   const env = fakeEnv();
   const { code, b } = await threeFriends(env);
   const img = Buffer.from([0xff, 0xd8, 0xff, 1, 2, 3]).toString("base64");
   assert.equal((await call(env, "POST", `/_yaksok/rooms/${code}/parse`, { data: img, mime: "image/jpeg" }, b)).status, 503);
 
   const room = env.rooms.get(code);
+  // 팟캐스트 키로는 폴백하지 않는다 — 전용 키가 없으면 503
+  room.env = { GEMINI_API_KEY: "podcast-key", fetchImpl: async () => assert.fail("팟캐스트 키로 호출했다") };
+  assert.equal((await call(env, "POST", `/_yaksok/rooms/${code}/parse`, { data: img, mime: "image/jpeg" }, b)).status, 503);
+  const afterRefusal = await room.storage.get("room");
+  afterRefusal.parseCount = 0;
+  await room.storage.put("room", afterRefusal);
+
   let asked = null;
   room.env = {
-    GEMINI_API_KEY: "k",
+    YAKSOK_VISION_API_KEY: "k",
     fetchImpl: async (url, init) => {
       asked = { url, body: JSON.parse(init.body), key: init.headers["x-goog-api-key"] };
       return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ items: [

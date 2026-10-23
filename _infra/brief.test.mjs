@@ -193,7 +193,7 @@ test("/_brief/today는 미세먼지가 실패해도 날씨만으로 응답한다
 test("익명 구독을 지역과 함께 저장하고 지운다", async () => {
   const storage = new MemoryStorage();
   const brief = new BriefDO({ storage }, {});
-  const sub = await fakeSubscription("https://push.example.com/a");
+  const sub = await fakeSubscription("https://fcm.googleapis.com/fcm/send/a");
 
   const ok = await brief.fetch(pushReq("POST", { subscription: sub, region: "busan" }));
   assert.deepEqual(await ok.json(), { subscribed: true, region: "busan" });
@@ -217,10 +217,15 @@ test("잘못된 구독과 알 수 없는 지역을 방어한다", async () => {
   const brief = new BriefDO({ storage }, {});
   const bad = await brief.fetch(pushReq("POST", { subscription: { endpoint: "http://insecure", keys: {} } }));
   assert.equal(bad.status, 400);
+  // 푸시 서비스가 아닌 https 주소도 거절한다 (슬롯 고갈·cron 이 남의 URL 로 POST)
+  const foreign = await brief.fetch(pushReq("POST", {
+    subscription: await fakeSubscription("https://attacker.example/collect"),
+  }));
+  assert.equal(foreign.status, 400);
   assert.equal((await storage.list({ prefix: "push:" })).size, 0);
 
   // 모르는 지역은 거절이 아니라 기본값(서울)로 떨어진다 — 알림은 계속 와야 한다
-  const sub = await fakeSubscription("https://push.example.com/b");
+  const sub = await fakeSubscription("https://fcm.googleapis.com/fcm/send/b");
   const ok = await brief.fetch(pushReq("POST", { subscription: sub, region: "atlantis" }));
   assert.deepEqual(await ok.json(), { subscribed: true, region: "seoul" });
 });
@@ -233,11 +238,11 @@ test("알림은 지역별로 한 번만 조회해 구독자에게 보내고 만�
     VAPID_SUBJECT: "https://util.bubblelab.dev",
   });
   await brief.fetch(pushReq("POST",
-    { subscription: await fakeSubscription("https://push.example.com/seoul-1"), region: "seoul" }));
+    { subscription: await fakeSubscription("https://fcm.googleapis.com/fcm/send/seoul-1"), region: "seoul" }));
   await brief.fetch(pushReq("POST",
-    { subscription: await fakeSubscription("https://push.example.com/seoul-2"), region: "seoul" }));
+    { subscription: await fakeSubscription("https://fcm.googleapis.com/fcm/send/seoul-2"), region: "seoul" }));
   await brief.fetch(pushReq("POST",
-    { subscription: await fakeSubscription("https://push.example.com/expired"), region: "busan" }));
+    { subscription: await fakeSubscription("https://fcm.googleapis.com/fcm/send/expired"), region: "busan" }));
 
   const upstream = [];
   const originalFetch = globalThis.fetch;
@@ -267,7 +272,7 @@ test("날씨를 못 받은 지역은 빈 알림을 보내지 않고 건너뛴다
     VAPID_PUBLIC_KEY: vapid.publicKey, VAPID_PRIVATE_KEY: vapid.privateKey,
   });
   await brief.fetch(pushReq("POST",
-    { subscription: await fakeSubscription("https://push.example.com/a"), region: "seoul" }));
+    { subscription: await fakeSubscription("https://fcm.googleapis.com/fcm/send/a"), region: "seoul" }));
 
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (target) => (String(target).includes("open-meteo")

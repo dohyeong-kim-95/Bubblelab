@@ -15,18 +15,16 @@
 // 사용: node _infra/verify-prod.mjs [--domain bubblelab.dev] [--commit <sha>] [--json]
 import { readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { GATED_SITES, isSiteDirectoryName } from "./sites.js";
 
 const ROOT = new URL("..", import.meta.url);
 
-/** 로그인 게이트 뒤에 있는 서브도메인 (worker.js 의 site 분기와 같아야 한다). */
-export const GATED_SITES = new Set(["admin", "duri", "life"]);
-/** 배포되지 않는 폴더 규칙은 build.mjs 와 같다. */
-const SKIP_DIRS = new Set(["dist", "node_modules", "docs", "scripts", "pops_generator"]);
+/** 로그인 게이트 뒤에 있는 서브도메인·배포되는 폴더 규칙은 sites.js 한 곳에 있다. */
+export { GATED_SITES };
 
 export function listSites(root = fileURLToPath(ROOT)) {
   return readdirSync(root, { withFileTypes: true })
-    .filter((d) => d.isDirectory() && !d.name.startsWith("_") && !d.name.startsWith(".") &&
-      !SKIP_DIRS.has(d.name))
+    .filter((d) => d.isDirectory() && isSiteDirectoryName(d.name))
     .map((d) => d.name)
     .sort();
 }

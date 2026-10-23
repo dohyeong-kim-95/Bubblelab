@@ -168,7 +168,7 @@ export function applySecurityHeaders(response, request) {
 
 async function rateLimitName(request, env, scope, secretOverride) {
   const address = request.headers.get("CF-Connecting-IP") || "unknown";
-  const secret = secretOverride || env.ADMIN_SESSION_SECRET || env.PLANNER_SESSION_SECRET || env.ADMIN_PASSWORD;
+  const secret = secretOverride || env.ADMIN_SESSION_SECRET || env.ADMIN_PASSWORD;
   if (!secret) return null;
   const key = await crypto.subtle.importKey(
     "raw",
@@ -202,7 +202,7 @@ export async function consumeRateLimit(request, env, options) {
   const response = await env.RATE_LIMITER.get(id).fetch("https://rate-limit.internal/check", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ limit, windowMs, reset: options.reset === true }),
+    body: JSON.stringify({ limit, windowMs, refund: options.refund === true }),
   });
   if (!response.ok) return { allowed: false, retryAfter: Math.ceil(windowMs / 1000) };
   return response.json();
@@ -236,16 +236,18 @@ export class RateLimiterDO {
       return new Response("invalid limit", { status: 400 });
     }
 
-    // reset: 맞는 비밀번호로 들어온 뒤 그 IP의 실패 횟수를 지운다
-    if (body.reset === true) {
-      await this.state.storage.delete("current");
-      return Response.json({ allowed: true, retryAfter: 0 });
-    }
-
     const now = Date.now();
     const bucket = Math.floor(now / windowMs);
     const current = await this.state.storage.get("current");
     const count = current?.bucket === bucket ? Number(current.count) || 0 : 0;
+
+    // refund: 맞는 비밀번호로 들어온 요청은 자기가 쓴 한 번만 돌려받는다. 횟수를
+    // 통째로 지우면 같은 공인 IP(CGNAT 등)의 남이 쌓은 실패까지 사라진다.
+    // 세는 것은 여전히 비교 전이라 동시에 몰아 보내도 한도를 넘지 못한다.
+    if (body.refund === true) {
+      if (count > 0) await this.state.storage.put("current", { bucket, count: count - 1 });
+      return Response.json({ allowed: true, retryAfter: 0 });
+    }
     const resetAt = (bucket + 1) * windowMs;
 
     if (count >= limit) {

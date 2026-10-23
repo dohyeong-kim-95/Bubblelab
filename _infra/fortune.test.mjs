@@ -160,7 +160,7 @@ test("converts a lunar birth date before building the chart", async () => {
 test("stores and removes an anonymous push subscription", async () => {
   const storage = new MemoryStorage();
   const fortune = new FortuneDO({ storage }, {});
-  const sub = await fakeSubscription("https://push.example.com/a");
+  const sub = await fakeSubscription("https://fcm.googleapis.com/fcm/send/a");
 
   const ok = await fortune.fetch(pushReq("POST", { subscription: sub }));
   assert.equal(ok.status, 200);
@@ -180,6 +180,11 @@ test("rejects an invalid subscription", async () => {
   const fortune = new FortuneDO({ storage }, {});
   const bad = await fortune.fetch(pushReq("POST", { subscription: { endpoint: "http://insecure", keys: {} } }));
   assert.equal(bad.status, 400);
+  // 푸시 서비스가 아닌 https 주소도 거절한다 (슬롯 고갈·cron 이 남의 URL 로 POST)
+  const foreign = await fortune.fetch(pushReq("POST", {
+    subscription: await fakeSubscription("https://attacker.example/collect"),
+  }));
+  assert.equal(foreign.status, 400);
   assert.equal((await storage.list({ prefix: "push:" })).size, 0);
 });
 
@@ -190,8 +195,8 @@ test("notifyDaily sends to every subscriber and prunes expired ones", async () =
     VAPID_PUBLIC_KEY: vapid.publicKey, VAPID_PRIVATE_KEY: vapid.privateKey,
     VAPID_SUBJECT: "https://util.bubblelab.dev",
   });
-  await fortune.fetch(pushReq("POST", { subscription: await fakeSubscription("https://push.example.com/live") }));
-  await fortune.fetch(pushReq("POST", { subscription: await fakeSubscription("https://push.example.com/expired") }));
+  await fortune.fetch(pushReq("POST", { subscription: await fakeSubscription("https://fcm.googleapis.com/fcm/send/live") }));
+  await fortune.fetch(pushReq("POST", { subscription: await fakeSubscription("https://fcm.googleapis.com/fcm/send/expired") }));
 
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (endpoint) => new Response(null, {

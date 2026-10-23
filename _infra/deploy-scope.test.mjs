@@ -9,6 +9,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { planDeployment } from "./deploy-scope.mjs";
+import { isolatedGitEnv } from "./git-isolation.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SCRIPT = join(ROOT, "_infra/deploy-scope.mjs");
@@ -197,8 +198,9 @@ test("삭제된 파일과 두 사이트 사이 rename도 존재 여부와 무관
   assert.ok(plan.tests.includes("_infra/stars.test.mjs"));
 });
 
+// 임시 리포 전용 환경 — 훅 안에서 돌 때 물려받은 GIT_DIR 이 진짜 리포를 가리킨다.
 function git(cwd, args) {
-  return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+  return execFileSync("git", args, { cwd, encoding: "utf8", env: isolatedGitEnv() }).trim();
 }
 
 test("CLI는 --no-renames diff로 rename 양쪽과 삭제 경로를 JSON에 쓴다", () => {
@@ -211,16 +213,16 @@ test("CLI는 --no-renames diff로 rename 양쪽과 삭제 경로를 JSON에 쓴�
     writeFileSync(join(root, "life/old.js"), "same\n");
     writeFileSync(join(root, "duri/deleted.js"), "gone\n");
     git(root, ["add", "."]);
-    git(root, ["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "base"]);
+    git(root, ["commit", "-qm", "base"]);
     const base = git(root, ["rev-parse", "HEAD"]);
     renameSync(join(root, "life/old.js"), join(root, "util/new.js"));
     unlinkSync(join(root, "duri/deleted.js"));
     git(root, ["add", "-A"]);
-    git(root, ["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "head"]);
+    git(root, ["commit", "-qm", "head"]);
     const head = git(root, ["rev-parse", "HEAD"]);
     const output = join(root, "plan.json");
     const result = spawnSync(process.execPath, [SCRIPT, "--base", base, "--head", head, "--output", output], {
-      cwd: root, encoding: "utf8",
+      cwd: root, encoding: "utf8", env: isolatedGitEnv(),
     });
     assert.equal(result.status, 0, result.stderr);
     const plan = JSON.parse(readFileSync(output, "utf8"));
@@ -230,7 +232,7 @@ test("CLI는 --no-renames diff로 rename 양쪽과 삭제 경로를 JSON에 쓴�
     const fullOutput = join(root, "full-plan.json");
     const fullResult = spawnSync(process.execPath, [
       SCRIPT, "--base", base, "--head", head, "--output", fullOutput, "--full",
-    ], { cwd: root, encoding: "utf8" });
+    ], { cwd: root, encoding: "utf8", env: isolatedGitEnv() });
     assert.equal(fullResult.status, 0, fullResult.stderr);
     assert.equal(JSON.parse(readFileSync(fullOutput, "utf8")).mode, "full");
   } finally {
@@ -245,7 +247,7 @@ test("CLI는 유효하지 않은 commit을 실패로 드러내고 출력 파일�
     const output = join(root, "plan.json");
     const result = spawnSync(process.execPath, [
       SCRIPT, "--base", "not-a-commit", "--head", "also-bad", "--output", output,
-    ], { cwd: root, encoding: "utf8" });
+    ], { cwd: root, encoding: "utf8", env: isolatedGitEnv() });
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /invalid --base commit/);
     assert.throws(() => readFileSync(output), /ENOENT/);

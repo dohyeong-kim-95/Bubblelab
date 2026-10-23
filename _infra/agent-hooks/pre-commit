@@ -101,7 +101,11 @@ if [ "$needs_test" = "1" ]; then
     exit 0
   }
   echo "훅: npm test (빌드 검사 포함) …"
-  if ! (cd "$root" && npm test >/tmp/bl-hook-test.$$ 2>&1); then
+  # git 이 훅에 넣어 준 GIT_DIR·GIT_INDEX_FILE·GIT_WORK_TREE 등을 지우고 돌린다.
+  # 물려받으면 테스트가 임시 폴더에서 띄운 git 이 이 리포(특히 worktree 의 진짜
+  # 리포)를 고친다 — core.bare=true·남의 커밋·브랜치가 실제로 생겼다.
+  if ! (cd "$root" && for name in $(compgen -e | grep '^GIT_'); do unset "$name"; done &&
+        npm test >/tmp/bl-hook-test.$$ 2>&1); then
     tail -30 /tmp/bl-hook-test.$$ >&2
     rm -f /tmp/bl-hook-test.$$
     {

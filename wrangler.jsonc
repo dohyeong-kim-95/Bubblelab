@@ -27,12 +27,14 @@
     "ENABLE_PODCAST": "true",
     // Web Push 공개키(브라우저로 전달됨). 개인키는 VAPID_PRIVATE_KEY secret에.
     "VAPID_PUBLIC_KEY": "BPtXxH7yViqaAU9lHlCugA07o7hUL22Ft35dMvMnOXRp6q_YN3hrYQ2WAtY5_KRsfmkF-CeZBpfokdb7SmBXKNM",
-    // Duri 대화·사진 백업(work/duri). 개인 데이터라 fail-closed로 설계.
-    // 켜져 있어도 R2 버킷(bubblelab-duri)·WORK_PASSWORD가 없으면 /_duri 는
-    // 런타임에서 닫힌다. 싱크 토큰을 별도 키로 서명하려면 DURI_SINK_SECRET 준비.
+    // Duri 대화·사진 중계(duri.bubblelab.dev). 개인 데이터라 fail-closed로 설계.
+    // 켜져 있어도 R2 버킷(bubblelab-duri)과 DURI_PASSWORD(없으면 WORK_PASSWORD 폴백)가
+    // 없으면 /_duri 는 런타임에서 닫힌다. 싱크 토큰을 별도 키로 서명하려면 DURI_SINK_SECRET 준비.
     "ENABLE_DURI": "true",
-    // 할 일 앱. 서버 저장이 없어 게이트만 담당한다 — LIFE_PASSWORD 와
-    // LIFE_SESSION_SECRET 이 있어야 열린다(없으면 플래그와 무관하게 503).
+    // 할 일 앱. 할 일은 브라우저에 있고, 서버는 게이트와 하루 한 번 올라오는 평문 백업
+    // 한 덩어리(LIFE_BUCKET, /_life/backup)만 맡는다. LIFE_PASSWORD 와 LIFE_SESSION_SECRET 이
+    // 있어야 열린다(없으면 플래그와 무관하게 503). 집 PC 데몬이 백업을 받아 가려면
+    // LIFE_SINK_SECRET 도 있어야 한다.
     "ENABLE_LIFE": "true",
     // 매일 논문 다이제스트(life/papers/). 채점·요약은 엣지가 아니라 집 PC 의
     // Claude Code 가 만들고, 여기서는 받아서 보관하고 디스코드로 보낸다 —
@@ -52,8 +54,9 @@
     // DO 값 한도(128KB)를 넘길 수 있어 R2 에 둔다.
     { "binding": "LIFE_BUCKET", "bucket_name": "bubblelab-life" }
   ],
-  // 매일 06:40 KST(21:40 UTC) 팟캐스트 자동 생성
-  // · 08:00 KST(23:00 UTC) 운세 알림 + 아침 브리핑(날씨) 알림
+  // 06:40 KST(21:40 UTC) 외주 리뷰 동기화 + 팟캐스트 자동 생성
+  // · 22:00 KST(13:00 UTC) 팟캐스트 저녁 리마인더
+  // · 08:00 KST(23:00 UTC) 운세 알림 + 아침 브리핑(날씨) 알림 + duri 오늘 일정 리마인드
   "triggers": { "crons": ["40 21 * * *", "0 13 * * *", "0 23 * * *"] },
   "routes": [
     { "pattern": "bubblelab.dev/*", "zone_name": "bubblelab.dev" },

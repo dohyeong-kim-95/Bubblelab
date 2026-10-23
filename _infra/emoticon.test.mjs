@@ -302,6 +302,36 @@ test("/_emoticon/generate: 비밀번호 비교 전에 IP당 시도 제한(emotic
   assert.equal(scopes[0].limit, 5);
 });
 
+test("/_emoticon/generate: 인증에 성공하면 자기 몫 한 번만 돌려받고 실패는 그대로 둔다", async () => {
+  const bodies = [];
+  const env = {
+    WORK_PASSWORD: "master-pw", GEMINI_STICKER_KEY: "sk", ADMIN_SESSION_SECRET: "s",
+    RATE_LIMITER: {
+      idFromName: (name) => name,
+      get: () => ({
+        fetch: async (url, init) => {
+          bodies.push(JSON.parse(init.body));
+          return Response.json({ allowed: true, retryAfter: 0 });
+        },
+      }),
+    },
+  };
+  const wrong = await worker.fetch(
+    generateRequest({ headers: { Authorization: "Bearer nope" }, payload: { prompt: "" } }), env, ctx,
+  );
+  assert.equal(wrong.status, 401);
+  assert.equal(bodies.some((body) => body.refund), false, "실패는 돌려받지 않는다");
+
+  bodies.length = 0;
+  const right = await worker.fetch(
+    generateRequest({ headers: { Authorization: "Bearer master-pw" }, payload: { prompt: "" } }), env, ctx,
+  );
+  assert.equal(right.status, 400); // 인증은 통과, 본문이 비어 거절
+  const authCalls = bodies.filter((body) => body.limit === 5);
+  assert.deepEqual(authCalls.map((body) => body.refund), [false, true]);
+  assert.equal(bodies.some((body) => "reset" in body), false);
+});
+
 test("/_emoticon/generate: 마스터 인증 시 Gemini를 대신 호출해 이미지를 돌려준다", async () => {
   const env = { WORK_PASSWORD: "master-pw", GEMINI_STICKER_KEY: "sk" };
   const auth = { Authorization: "Bearer master-pw" };

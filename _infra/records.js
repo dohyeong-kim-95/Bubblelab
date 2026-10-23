@@ -19,15 +19,15 @@ const SUG_DAILY = 5;   // 방문자당 하루 제출 수
 // 서버가 고정한다 — 클라이언트가 보낸 dir은 무시된다 (dir 바꿔치기·
 // 터무니없는 점수 등록 방지). 등록 안 된 게임의 제출은 거절된다.
 export const GAMES = {
-  "10sec":      { dir: "min", min: 0, max: 60 },        // 10초 오차(초)
+  "10sec":      { dir: "min", min: 0, max: 60 },        // 10초 오차(초) — 타이머 해상도에서 0도 실제로 나온다
   "animal-vs":  { dir: "max", min: 0, max: 1000 },      // 몸무게 대결 연속 정답 수
   beer:         { dir: "min", min: 0, max: 501 },       // 500cc 오차(cc)+시간 타이브레이커
   "2048":       { dir: "max", min: 0, max: 1000000 },   // 점수
   fruitmerge:   { dir: "max", min: 0, max: 1000000000 }, // 합체 점수
-  "bubble-pop": { dir: "max", min: 0, max: 300 },       // 20초 터트린 버블 수
+  "bubble-pop": { dir: "max", min: 0, max: 150 },       // 20초 터트린 버블 수 (최고 등급이 70개)
   "bubble-pop-idle": { dir: "max", min: 0, max: 1e100 }, // 7일 누적 버블 수
   circle:       { dir: "max", min: 0, max: 100 },       // 정확도(%)
-  clicker:      { dir: "max", min: 0, max: 2000 },      // 10초 클릭 수
+  clicker:      { dir: "max", min: 0, max: 300 },       // 10초 클릭 수 (멀티터치 연타까지 초당 30회)
   dart:         { dir: "max", min: 0, max: 1000 },      // 원에 꽂은 다트 수
   dino:         { dir: "max", min: 0, max: 1000000 },   // 공룡 점프 주파 거리(m)
   "dart-adv":   { dir: "max", min: 0, max: 1000 },      // 파워 게이지 다트 수
@@ -40,14 +40,22 @@ export const GAMES = {
   parkrush:     { dir: "max", min: 1, max: 10000 },     // 주차 러시 연속 클리어 수 (구 parkmaster)
   screwrush:    { dir: "max", min: 1, max: 10000 },     // 나사 러시 연속 클리어 수 (구 screwout)
   icerush:      { dir: "max", min: 1, max: 10000 },     // 얼음 러시 연속 클리어 수 (구 icebreak)
-  reactiontime: { dir: "min", min: 0, max: 60000 },     // 반응속도(ms)
+  reactiontime: { dir: "min", min: 100, max: 60000 },   // 반응속도 평균(ms) — 사람은 100ms 밑으로 못 낸다
   "sort-line":  { dir: "max", min: 0, max: 100000 },    // 컨베이어 분류 정답 수
-  touch25:      { dir: "min", min: 0, max: 3600 },      // 완주 시간(초)
+  touch25:      { dir: "min", min: 5, max: 3600 },      // 완주 시간(초) — 25칸을 찾아 누르는 데 5초는 걸린다
   trader:       { dir: "max", min: -1, max: 100 },      // 수익률(비율)
   woodstack:    { dir: "max", min: 0, max: 100000 },    // 쌓은 통나무 층수
   "yacht-bot":  { dir: "max", min: 0, max: 400 },       // 야추 총점
 };
 const HISTORICAL_GAMES = new Set(["bubble-pop-idle"]);
+
+// GAMES 는 평범한 객체라 GAMES["constructor"] 같은 프로토타입 키도 참이 된다.
+// 등록 여부는 반드시 이 함수로 본다(없으면 null).
+export function gameConfig(game) {
+  if (typeof game !== "string") return null;
+  if (!Object.hasOwn(GAMES, game)) return null;
+  return GAMES[game];
+}
 
 // 개편으로 은퇴한 키 — 어느 보드에도 안 보이고(스코프 필터), 삭제만 가능
 const RETIRED_SET = new Set([
@@ -57,6 +65,14 @@ const RETIRED_SET = new Set([
   "pullpin", "gaterunner", "savedog", "parkmaster", "screwout", "icebreak",
   "watersort", "trafficjam", "fillfridge",
 ]);
+
+// slop 공개 보드에 나오는 게임: 등록돼 있고, 은퇴하지 않았고, idle 같은 다른
+// 서브도메인의 누적 기록(HISTORICAL_GAMES)이 아닌 것.
+function isSlopBoardGame(game) {
+  if (RETIRED_SET.has(game)) return false;
+  if (HISTORICAL_GAMES.has(game)) return false;
+  return gameConfig(game) !== null;
+}
 
 const beats = (dir, score, record) =>
   !record || (dir === "max" ? score > record.score : score < record.score);
@@ -90,12 +106,12 @@ export class RecordsDO {
       const game = url.searchParams.get("game") ?? "";
       const likes = (await this.state.storage.get("likes")) ?? {};
       if (game === "__all__") return Response.json(likes);
-      if (!GAMES[game]) return new Response("unknown game", { status: 400 });
+      if (!gameConfig(game)) return new Response("unknown game", { status: 400 });
       return Response.json({ game, n: likes[game] ?? 0 });
     }
     if (url.pathname === "/_like" && request.method === "POST") {
       const { game, vid } = await request.json().catch(() => ({}));
-      if (!GAMES[game]) return new Response("unknown game", { status: 400 });
+      if (!gameConfig(game)) return new Response("unknown game", { status: 400 });
       if (!VISITOR_ID.test(vid ?? "")) return new Response("no visitor", { status: 400 });
       const likes = (await this.state.storage.get("likes")) ?? {};
       const dedupeKey = `liked:${game}:${vid}`;
@@ -226,11 +242,10 @@ export class RecordsDO {
       }
       // 올타임 명예의 전당: 저장된 올타임 + 이번 주 기록의 병합.
       // (올타임 저장 기능 도입 전에 세워진 이번 주 기록도 보이게 한다)
-      // scope=slop 은 은퇴 키를 뺀 공개 보드 (기본은 전부 — admin용).
+      // scope=slop 은 은퇴·idle·미등록 키를 뺀 공개 보드 (기본은 전부 — admin용).
       if (url.searchParams.has("alltime")) {
         const scope = url.searchParams.get("scope");
-        const inScope = (g) =>
-          scope === "slop" ? !RETIRED_SET.has(g) : true;
+        const inScope = (g) => (scope === "slop" ? isSlopBoardGame(g) : true);
         const records = {};
         for (const [k, v] of await this.state.storage.list({ prefix: "alltime:" })) {
           const game = k.slice("alltime:".length);
@@ -239,7 +254,7 @@ export class RecordsDO {
         for (const [k, v] of await this.state.storage.list({ prefix: `rec:${week}:` })) {
           const game = k.split(":")[2];
           if (!inScope(game)) continue;
-          if (beats(GAMES[game]?.dir ?? v.dir, v.score, records[game])) records[game] = v;
+          if (beats(gameConfig(game)?.dir ?? v.dir, v.score, records[game])) records[game] = v;
         }
         for (const game of Object.keys(records)) records[game] = presentRecord(game, records[game]);
         return Response.json({ records }, { headers: { "Cache-Control": "no-store" } });
@@ -257,7 +272,7 @@ export class RecordsDO {
         for (const g of batch.split(",").filter((g) => GAME.test(g)).slice(0, 50)) {
           const r = await this.state.storage.get(`rec:${week}:${g}`);
           if (r) records[g] = presentRecord(g, r);
-          if (GAMES[g]) {
+          if (gameConfig(g)) {
             supported.push(g);
             if (VISITOR_ID.test(vid ?? "")) {
               const mine = await this.state.storage.get(`personal:${vid}:${g}`);
@@ -285,7 +300,7 @@ export class RecordsDO {
 
     if (request.method === "POST" && url.pathname === "/_personal") {
       const { game, score, text, vid } = await request.json().catch(() => ({}));
-      const cfg = GAMES[game];
+      const cfg = gameConfig(game);
       if (!cfg || !VISITOR_ID.test(vid ?? "") ||
           typeof score !== "number" || !Number.isFinite(score) ||
           score < cfg.min || score > cfg.max) {
@@ -305,7 +320,7 @@ export class RecordsDO {
 
     if (request.method === "POST") {
       const { game, nick, score, text } = await request.json().catch(() => ({}));
-      const cfg = GAMES[game];
+      const cfg = gameConfig(game);
       if (!cfg || !NICK.test(nick ?? "") ||
           typeof score !== "number" || !Number.isFinite(score) ||
           score < cfg.min || score > cfg.max) {
@@ -352,7 +367,7 @@ export class RecordsDO {
           if (HISTORICAL_GAMES.has(g)) {
             await this.state.storage.put(`idlehall:${oldWeek}:${g}`, v);
           }
-          if (beats(GAMES[g]?.dir ?? v.dir, v.score, await this.state.storage.get(`alltime:${g}`))) {
+          if (beats(gameConfig(g)?.dir ?? v.dir, v.score, await this.state.storage.get(`alltime:${g}`))) {
             await this.state.storage.put(`alltime:${g}`, v);
           }
         }

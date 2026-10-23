@@ -7,8 +7,9 @@ import {
   AI_DEFAULTS, chunkTurns, createScriptProvider, createTtsProvider, pcmToWav,
   SUPPORTED_SOURCE_TYPES, wavDurationSeconds,
 } from "./podcast-ai.js";
-import { sendWebPush } from "./webpush.js";
+import { isPushServiceEndpoint, sendWebPush } from "./webpush.js";
 import { consumeRateLimit, rateLimitResponse, requireJsonRequest } from "./security.js";
+import { hmacKey, issueSubjectToken, readCookie, tokenSubject } from "./session.js";
 
 const MAX_SOURCE_BYTES = 10 * 1024 * 1024;
 const MAX_SOURCES_PER_DAY = 20;
@@ -113,42 +114,12 @@ function pickNotify(tone, kind, index) {
   return pack[index % pack.length];
 }
 
-// ── 세션 (planner와 같은 HMAC 서명 토큰, 쿠키 bl_pod) ─────────────
+// ── 세션 (session.js 의 subject 토큰 "만료.사용자.난수.서명", 쿠키 bl_pod) ──
 async function sessionHmacKey(env) {
   const secret = env.PODCAST_SESSION_SECRET || env.ADMIN_SESSION_SECRET ||
     (env.ADMIN_ID && env.ADMIN_PASSWORD ? `${env.ADMIN_ID}\0${env.ADMIN_PASSWORD}` : null);
   if (!secret) return null;
-  return crypto.subtle.importKey(
-    "raw", new TextEncoder().encode(`${secret}\0bl-podcast-session`),
-    { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
-  );
-}
-
-async function issueSession(key, userId) {
-  const payload = `${Date.now() + SESSION_TTL_MS}.${userId}.${crypto.randomUUID()}`;
-  const sig = hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload)));
-  return `${payload}.${sig}`;
-}
-
-async function sessionUser(key, token) {
-  const parts = token?.split(".") ?? [];
-  if (parts.length !== 4) return null;
-  const [expiry, userId, nonce, sig] = parts;
-  if (!expiry || !userId || !nonce || !/^[0-9a-f]{64}$/.test(sig ?? "")) return null;
-  if (!Number.isFinite(+expiry) || Date.now() > +expiry) return null;
-  const sigBytes = Uint8Array.from(sig.match(/../g) ?? [], (h) => parseInt(h, 16));
-  const valid = await crypto.subtle.verify(
-    "HMAC", key, sigBytes, new TextEncoder().encode(`${expiry}.${userId}.${nonce}`),
-  );
-  return valid ? userId : null;
-}
-
-function cookieValue(request, name) {
-  for (const part of (request.headers.get("Cookie") ?? "").split(";")) {
-    const [key, ...value] = part.trim().split("=");
-    if (key === name) return value.join("=");
-  }
-  return undefined;
+  return hmacKey(`${secret}\0bl-podcast-session`);
 }
 
 const podcastStub = (env) => env.PODCAST.get(env.PODCAST.idFromName("global"));
@@ -163,7 +134,7 @@ export async function handlePodcast(request, env, url) {
   if (!key) return new Response("podcast session secret is not configured", { status: 503 });
   const stub = podcastStub(env);
   const path = url.pathname;
-  const uid = await sessionUser(key, cookieValue(request, "bl_pod"));
+  const uid = await tokenSubject(key, readCookie(request, "bl_pod"));
   const cookieFlags = `Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000${url.protocol === "https:" ? "; Secure" : ""}`;
 
   if (path === "/_podcast/login" && request.method === "POST") {
@@ -183,7 +154,7 @@ export async function handlePodcast(request, env, url) {
     if (!response.ok) return json({ error: "등록되지 않은 코드입니다" }, { status: 401 });
     const { userId } = await response.json();
     return json({ authenticated: true }, {
-      headers: { "Set-Cookie": `bl_pod=${await issueSession(key, userId)}; ${cookieFlags}`, "Cache-Control": "no-store" },
+      headers: { "Set-Cookie": `bl_pod=${await issueSubjectToken(key, SESSION_TTL_MS, userId)}; ${cookieFlags}`, "Cache-Control": "no-store" },
     });
   }
 
@@ -235,7 +206,7 @@ export async function handlePodcast(request, env, url) {
     if (!SUPPORTED_SOURCE_TYPES.has(mime)) {
       return json({ error: "PDF·이미지(PNG/JPEG/WebP)·텍스트(.txt/.md)만 올릴 수 있습니다" }, { status: 415 });
     }
-    const name = decodeURIComponent(request.headers.get("X-File-Name") ?? "")
+    const name = decodeFileName(request.headers.get("X-File-Name") ?? "")
       .replace(/[\r\n]/g, " ").trim().slice(0, 120) || "이름 없는 파일";
     // 본문을 메모리에 쌓지 않고 R2로 바로 스트리밍한다 (수신과 저장이 겹쳐 빨라짐).
     const size = Number(request.headers.get("Content-Length")) || 0;
@@ -305,17 +276,42 @@ export async function handlePodcast(request, env, url) {
   return notFound();
 }
 
+// 잘못된 퍼센트 인코딩(예: "%E0%A4%A")이면 URIError 로 500 이 났다 — 원문을 그대로 쓴다.
+function decodeFileName(raw) {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
 async function serveAudio(env, request, url, audioKey, title) {
   const range = /^bytes=(\d+)-(\d*)$/.exec(request.headers.get("Range") ?? "");
-  const object = range
-    ? await env.PODCAST_BUCKET.get(audioKey, {
-        range: {
-          offset: Number(range[1]),
-          ...(range[2] && { length: Number(range[2]) - Number(range[1]) + 1 }),
-        },
-      })
-    : await env.PODCAST_BUCKET.get(audioKey);
+  if (!range) {
+    const object = await env.PODCAST_BUCKET.get(audioKey);
+    if (!object) return notFound();
+    return fullAudio(object, url, title);
+  }
+  // 범위를 R2 에 넘기기 전에 크기와 견준다. 끝이 시작보다 앞이거나 파일 밖이면 R2 가
+  // 오류를 던져 500 이 됐다 — 표준대로 416 을 돌려준다.
+  const head = await env.PODCAST_BUCKET.head(audioKey);
+  if (!head) return notFound();
+  const total = head.size;
+  const offset = Number(range[1]);
+  const requestedEnd = range[2] ? Number(range[2]) : total - 1;
+  if (offset >= total || requestedEnd < offset) {
+    return new Response(null, { status: 416, headers: { "Content-Range": `bytes */${total}` } });
+  }
+  const end = Math.min(requestedEnd, total - 1);
+  const object = await env.PODCAST_BUCKET.get(audioKey, { range: { offset, length: end - offset + 1 } });
   if (!object) return notFound();
+  const headers = audioHeaders(url, title);
+  headers.set("Content-Range", `bytes ${offset}-${end}/${total}`);
+  headers.set("Content-Length", String(end - offset + 1));
+  return new Response(object.body, { status: 206, headers });
+}
+
+function audioHeaders(url, title) {
   const headers = new Headers({
     "Content-Type": "audio/wav",
     "Accept-Ranges": "bytes",
@@ -325,14 +321,11 @@ async function serveAudio(env, request, url, audioKey, title) {
     const safe = encodeURIComponent(`${title || "podcast"}.wav`);
     headers.set("Content-Disposition", `attachment; filename*=UTF-8''${safe}`);
   }
-  if (range) {
-    const total = object.size;
-    const offset = Number(range[1]);
-    const end = range[2] ? Math.min(Number(range[2]), total - 1) : total - 1;
-    headers.set("Content-Range", `bytes ${offset}-${end}/${total}`);
-    headers.set("Content-Length", String(end - offset + 1));
-    return new Response(object.body, { status: 206, headers });
-  }
+  return headers;
+}
+
+function fullAudio(object, url, title) {
+  const headers = audioHeaders(url, title);
   headers.set("Content-Length", String(object.size));
   return new Response(object.body, { headers });
 }
@@ -523,7 +516,7 @@ export class PodcastDO {
   async addPushSubscription(user, request) {
     const body = await request.json().catch(() => ({}));
     const sub = body.subscription ?? body;
-    if (typeof sub?.endpoint !== "string" || !sub.endpoint.startsWith("https://") ||
+    if (!isPushServiceEndpoint(sub?.endpoint) ||
         typeof sub?.keys?.p256dh !== "string" || typeof sub?.keys?.auth !== "string") {
       return json({ error: "invalid subscription" }, { status: 400 });
     }

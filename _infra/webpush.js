@@ -5,6 +5,31 @@
 
 const encoder = new TextEncoder();
 
+// 구독 endpoint 는 브라우저 푸시 서비스 주소만 받는다. 익명 구독(운세·브리핑)에
+// 아무 https URL 이나 넣을 수 있으면 구독 슬롯(2만)을 가짜로 채워 실제 사용자를 막고,
+// 매일 08:00 cron 이 공격자가 정한 URL 수만 개로 POST 를 보내게 된다.
+const PUSH_SERVICE_HOSTS = new Set([
+  "fcm.googleapis.com",                // Chrome·Android·Samsung Internet·Opera
+  "android.googleapis.com",            // 예전 Chrome(GCM) 구독
+  "updates.push.services.mozilla.com", // Firefox
+  "web.push.apple.com",                // Safari·iOS 홈 화면 앱
+]);
+const PUSH_SERVICE_SUFFIXES = [".push.apple.com", ".notify.windows.com"]; // Apple 지역 서버, Edge(WNS)
+
+export function isPushServiceEndpoint(endpoint) {
+  if (typeof endpoint !== "string") return false;
+  let url;
+  try {
+    url = new URL(endpoint);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "https:") return false;
+  if (url.username || url.password || url.port) return false;
+  if (PUSH_SERVICE_HOSTS.has(url.hostname)) return true;
+  return PUSH_SERVICE_SUFFIXES.some((suffix) => url.hostname.endsWith(suffix));
+}
+
 export function b64uEncode(bytes) {
   let binary = "";
   for (const b of bytes) binary += String.fromCharCode(b);

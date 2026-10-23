@@ -3,14 +3,12 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { KNOWN_SITES } from "./sites.js";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-const SITES = [
-  "admin", "assets", "duri", "estate", "games", "idle", "lab",
-  "life", "mindfulness", "podcast", "slop", "test",
-  "util", "work", "www",
-];
+// 이 판정이 아는 서브도메인 목록은 sites.js 의 KNOWN_SITES 가 원본이다.
+const SITES = KNOWN_SITES;
 
 const SITE_TESTS = {
   admin: ["_infra/analytics.test.mjs"],
@@ -75,8 +73,11 @@ const GLOBAL_TESTS = [
   "_infra/agent-worktree.test.mjs", "_infra/csp-serve.test.mjs",
   "_infra/deploy-check.test.mjs", "_infra/deploy-prepare.test.mjs",
   "_infra/deploy-release.test.mjs", "_infra/deploy-scope.test.mjs",
-  "_infra/deploy-workflow.test.mjs", "_infra/home-button.test.mjs", "_infra/lint.test.mjs",
-  "_infra/records.test.mjs", "_infra/security.test.mjs", "_infra/verify-prod.test.mjs",
+  "_infra/deploy-workflow.test.mjs", "_infra/git-isolation.test.mjs",
+  "_infra/home-button.test.mjs", "_infra/lint.test.mjs",
+  "_infra/records.test.mjs", "_infra/security.test.mjs", "_infra/session.test.mjs",
+  "_infra/sites.test.mjs", "_infra/html.test.mjs",
+  "_infra/verify-prod.test.mjs",
   "_infra/ship.test.mjs", "_infra/webpush.test.mjs", "_infra/worker.test.mjs",
 ];
 const CLASSIFIED_TESTS = new Set([...GLOBAL_TESTS, ...Object.values(SITE_TESTS).flat()]);

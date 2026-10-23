@@ -775,6 +775,7 @@ test("/_health 는 서빙 중인 커밋과 바인딩을 읽기 전용으로 알�
   assert.equal(body.features.realtime, false);
   assert.equal(body.bindings.CHAT, true);
   assert.equal(body.bindings.RECORDS, false, "없는 바인딩을 있다고 하면 안 된다");
+  assert.equal(body.bindings.PAPERS, false, "논문 DO 바인딩도 검사 대상이다");
   // 서브도메인 이름 목록은 담지 않는다 — 비공개 서브도메인은 주소를 모르는 것이
   // 유일한 장벽이라 개수만 센다. (플래그·바인딩 이름은 공개 리포의 wrangler.jsonc
   // 에 이미 있으므로 새로 새는 정보가 아니다.)
@@ -907,4 +908,114 @@ test("08:00 KST cron 은 VAPID 가 없어도 duri 오늘 일정 리마인드를 
   calls.length = 0;
   await worker.scheduled({ cron: "0 23 * * *" }, { ...env, ENABLE_DURI: "false" }, { waitUntil: (p) => pending.push(p) });
   assert.equal(calls.length, 0, "duri 를 끄면 부르지 않는다");
+});
+
+test("work 로그인: 프로토타입 키(constructor 등)는 의뢰 계정이 아니다", async () => {
+  const env = { WORK_PASSWORD: "master", WORK_CLIENTS: JSON.stringify({ daonfit: "pw" }) };
+  const login = (id, password) => {
+    const form = new FormData();
+    form.set("id", id);
+    form.set("password", password);
+    return worker.fetch(new Request("https://work.bubblelab.dev/login", { method: "POST", body: form }), env, ctx);
+  };
+  const forged = await login("constructor", "function Object() { [native code] }");
+  assert.equal(forged.status, 401);
+  assert.equal(forged.headers.get("Set-Cookie"), null);
+  assert.equal((await login("tostring", "x")).status, 401);
+  const real = await login("daonfit", "pw");
+  assert.equal(real.status, 303);
+  assert.equal(real.headers.get("Location"), "/daonfit/");
+});
+
+test("공개 /_stats 와 방문 집계는 비공개 서브도메인 이름을 내보내지 않는다", async () => {
+  const tracked = [];
+  const env = {
+    ANALYTICS: {
+      idFromName: (name) => name,
+      get: () => ({
+        fetch: async (url, init) => {
+          if (String(url).includes("/pages")) {
+            return Response.json({
+              date: "2026-10-23", days: 7,
+              pages: { "slop/circle": 3, "lab/claude-insights": 1, podcast: 2, "test/x": 1, util: 4 },
+            });
+          }
+          tracked.push(JSON.parse(init.body).page);
+          return new Response(null, { status: 204 });
+        },
+      }),
+    },
+    ASSETS: {
+      fetch: async () => new Response("<p>hi</p>", { headers: { "Content-Type": "text/html" } }),
+    },
+  };
+  const stats = await worker.fetch(new Request("https://slop.bubblelab.dev/_stats"), env, ctx);
+  assert.equal(stats.status, 200);
+  assert.deepEqual((await stats.json()).pages, { "slop/circle": 3, util: 4 });
+  assert.match(stats.headers.get("Cache-Control"), /max-age=300/);
+
+  const pending = [];
+  const trackingCtx = { waitUntil: (promise) => pending.push(promise) };
+  const visit = (url) => worker.fetch(new Request(url, {
+    headers: { "Sec-Fetch-Dest": "document", "User-Agent": "Mozilla/5.0 Safari" },
+  }), env, trackingCtx);
+  for (const url of ["https://lab.bubblelab.dev/claude-insights/", "https://podcast.bubblelab.dev/",
+    "https://test.bubblelab.dev/x/", "https://slop.bubblelab.dev/circle/"]) {
+    await visit(url);
+  }
+  await Promise.all(pending);
+  assert.deepEqual(tracked, ["slop/circle"]);
+});
+
+test("약속 영수증 인식은 방과 무관하게 IP당 하루 한도(yaksok-parse)를 먼저 건다", async () => {
+  const scopes = [];
+  const env = {
+    ENABLE_YAKSOK: "true", ADMIN_SESSION_SECRET: "s",
+    RATE_LIMITER: {
+      idFromName: (name) => name,
+      get: () => ({
+        fetch: async (url, init) => {
+          const body = JSON.parse(init.body);
+          scopes.push(body);
+          return Response.json(body.windowMs === 24 * 60 * 60 * 1000
+            ? { allowed: false, retryAfter: 3600 } : { allowed: true, retryAfter: 0 });
+        },
+      }),
+    },
+  };
+  const response = await worker.fetch(new Request("https://util.bubblelab.dev/_yaksok/rooms/abc123/parse", {
+    method: "POST", headers: { "Content-Type": "application/json", Origin: "https://util.bubblelab.dev" },
+    body: JSON.stringify({ data: "AA==", mime: "image/jpeg" }),
+  }), env, ctx);
+  assert.equal(response.status, 429);
+  assert.deepEqual(scopes.map((body) => body.limit), [20]);
+});
+
+test("/_papers 조회는 LIFE 세션이나 papers sink secret 이 있어야 열린다", async () => {
+  const reached = [];
+  const env = {
+    ENABLE_PAPERS: "true", PAPERS_SINK_SECRET: "sink-secret",
+    ENABLE_LIFE: "true", LIFE_PASSWORD: "only-me", LIFE_SESSION_SECRET: "session-secret",
+    PAPERS: {
+      idFromName: () => "main",
+      get: () => ({ fetch: (req) => { reached.push(new URL(req.url).pathname); return Response.json({ empty: true }); } }),
+    },
+  };
+  const get = (path, headers = {}) =>
+    worker.fetch(new Request(`https://life.bubblelab.dev${path}`, { headers }), env, ctx);
+
+  assert.equal((await get("/_papers/latest")).status, 401);
+  assert.equal((await get("/_papers/archive")).status, 401);
+  assert.equal((await get("/_papers/latest", { Authorization: "Bearer wrong" })).status, 401);
+  assert.deepEqual(reached, [], "인증 없이 DO 까지 갔다");
+
+  assert.equal((await get("/_papers/latest", { Authorization: "Bearer sink-secret" })).status, 200);
+
+  const form = new FormData();
+  form.set("password", "only-me");
+  const login = await worker.fetch(
+    new Request("https://life.bubblelab.dev/login", { method: "POST", body: form }), env, ctx);
+  const cookie = login.headers.get("Set-Cookie").split(";", 1)[0];
+  assert.equal((await get("/_papers/archive?limit=21", { Cookie: cookie })).status, 200);
+  assert.deepEqual(reached, ["/latest", "/archive"]);
 });
