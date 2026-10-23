@@ -20,7 +20,9 @@ class MemoryStorage {
   async setAlarm(t) { this.alarm = t; }
 }
 
-async function serveYaksok(page, rooms = new Map()) {
+// "방 열기"가 이미 있는 코드를 만나면 confirm 으로 묻는다 — 기본은 "들어간다".
+async function serveYaksok(page, rooms = new Map(), { joinExisting = true } = {}) {
+  page.on("dialog", (dialog) => (joinExisting ? dialog.accept() : dialog.dismiss()));
   const env = {
     YAKSOK: {
       idFromName: (name) => name,
@@ -188,6 +190,27 @@ test("PC·폰에서 같은 코드를 치면 같은 방이 열리고, 🎲 는 �
   await tablet.waitForURL(/\/util\/yaksok\/meet26$/);
   await expect(tablet.locator("#join")).toBeVisible();
   await expect(tablet.locator("#j-err")).toContainText("이어하기 링크");
+});
+
+test("방 열기 — 이미 있는 코드면 묻고, 아니라고 하면 남의 방에 들어가지 않는다", async ({ browser }) => {
+  const rooms = new Map();
+  const host = await (await browser.newContext()).newPage();
+  await serveYaksok(host, rooms);
+  await createRoom(host, "taken1");
+
+  const stranger = await (await browser.newContext()).newPage();
+  await serveYaksok(stranger, rooms, { joinExisting: false });
+  await stranger.goto("/util/yaksok/");
+  await expect(stranger.locator("#c-code")).toHaveAttribute("placeholder", /🎲/);
+  const asked = stranger.waitForEvent("dialog");
+  await stranger.fill("#c-code", "taken1");
+  await stranger.fill("#c-name", "남");
+  await stranger.click("#create button[type=submit]");
+  expect((await asked).message()).toBe("이미 있는 방이에요. 들어갈까요?");
+  await expect(stranger.locator("#c-err")).toContainText("🎲");
+  expect(new URL(stranger.url()).pathname).toBe("/util/yaksok/");
+  const [room] = rooms.values();
+  expect((await room.storage.get("room")).members).toHaveLength(1);
 });
 
 test("코드로 들어가기 — 코드만 넣으면 그 방이 열리고 방 안에서 참여한다", async ({ page, browser }) => {
