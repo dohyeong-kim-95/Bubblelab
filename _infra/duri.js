@@ -26,7 +26,7 @@
 // entry(텍스트): { type:"entry", seq, kind:"msg", at, iv, ct }
 // entry(사진)  : { type:"entry", seq, kind:"photo", at, r2key, imgIv, sha256, bytes, metaIv, metaCt }
 
-import { sendWebPush } from "./webpush.js";
+import { isPushServiceEndpoint, sendWebPush } from "./webpush.js";
 
 export const DURI_MAX_TEXT_BLOB = 16 * 1024; // 암호화된 텍스트 base64 상한
 export const DURI_MAX_PHOTO_BYTES = 96 * 1024 * 1024; // 암호화된 사진 원본 상한(원본 보존이 원칙)
@@ -37,6 +37,13 @@ export const DURI_MAX_META_BLOB = 4 * 1024; // 사진 메타(이름·캡션) 암
 export const DURI_MAX_THUMB_BLOB = 24 * 1024;
 const MAX_BUFFER_ENTRIES = 5000; // 싱크가 오래 꺼져 있을 때의 상한
 const BACKFILL_LIMIT = 100; // 접속 직후 한 번에 보내는 최대 항목 수(나머지는 요청 시)
+// 싱크 전체 백필은 이만큼씩 읽어 보내고 사이사이 이벤트 루프에 양보한다 — 버퍼 전체
+// (최대 5000건, 썸네일이 24KB 씩)를 한 핸들러에서 몰아 보내면 읽은 청크와 아직
+// 못 나간 송신 버퍼가 DO 메모리(128MB)에 함께 쌓인다.
+const SINK_BACKFILL_CHUNK = 200;
+// 버퍼 정리는 이만큼씩 읽는다. R2 는 한 번에 1000개까지, DO storage.delete 는 128개까지 지운다.
+const PRUNE_PAGE = 1000;
+const STORAGE_DELETE_MAX = 128;
 const MAX_MESSAGE_BYTES = 32 * 1024;
 const MAX_CONNECTIONS = 8; // 두 사람 × 기기 몇 + 싱크
 const PING_INTERVAL_MS = 30_000;
@@ -228,17 +235,10 @@ export class DuriDO {
   async handleReset() {
     // 1) 버퍼의 모든 항목 삭제 (+ 참조 R2 사진). 1000개씩 페이지.
     for (;;) {
-      const entries = await this.state.storage.list({ prefix: BUF_PREFIX, limit: 1000 });
+      const entries = await this.state.storage.list({ prefix: BUF_PREFIX, limit: PRUNE_PAGE });
       if (entries.size === 0) break;
-      const keys = [];
-      for (const [key, value] of entries) {
-        if (value.kind === "photo" && isPhotoKey(value.r2key)) {
-          await this.env.DURI_BUCKET?.delete(value.r2key).catch(() => {});
-        }
-        keys.push(key);
-      }
-      await this.state.storage.delete(keys);
-      if (entries.size < 1000) break;
+      await this.dropEntries(entries);
+      if (entries.size < PRUNE_PAGE) break;
     }
     // 2) 버퍼에서 이미 폐기됐으나 R2엔 남은 고아 사진까지 prefix 전체 정리.
     if (this.env.DURI_BUCKET) {
@@ -542,7 +542,7 @@ export class DuriDO {
   async subscribePush(request) {
     const body = await request.json().catch(() => ({}));
     const sub = body.subscription ?? body;
-    if (typeof sub?.endpoint !== "string" || !sub.endpoint.startsWith("https://") ||
+    if (!isPushServiceEndpoint(sub?.endpoint) ||
         typeof sub?.keys?.p256dh !== "string" || typeof sub?.keys?.auth !== "string") {
       return Response.json({ error: "invalid subscription" }, { status: 400 });
     }
@@ -623,7 +623,7 @@ export class DuriDO {
   // 안 넘겨 주거나 기기가 알림을 못 띄우면 서버에선 성공으로만 보였다. recv 와 견주면 갈린다.
   async pushReceived(request) {
     const body = await request.json().catch(() => ({}));
-    if (typeof body.endpoint !== "string" || !body.endpoint.startsWith("https://")) {
+    if (!isPushServiceEndpoint(body.endpoint)) {
       return Response.json({ error: "invalid" }, { status: 400 });
     }
     const key = await endpointKey(body.endpoint);
@@ -715,20 +715,36 @@ export class DuriDO {
     }
     return upto;
   }
+  // 버퍼 항목들을 지운다. 사진은 R2 에서 한 번에(최대 1000개), 버퍼 키는 DO 한도인
+  // 128개씩 — 예전처럼 한 장씩 await 하면 blockConcurrencyWhile 30초를 넘겨 DO 가 리셋됐다.
+  async dropEntries(entries) {
+    const keys = [];
+    const photoKeys = [];
+    for (const [key, value] of entries) {
+      keys.push(key);
+      if (value?.kind === "photo" && isPhotoKey(value.r2key)) photoKeys.push(value.r2key);
+    }
+    if (photoKeys.length && this.env.DURI_BUCKET) {
+      await this.env.DURI_BUCKET.delete(photoKeys).catch(() => {});
+    }
+    for (let start = 0; start < keys.length; start += STORAGE_DELETE_MAX) {
+      await this.state.storage.delete(keys.slice(start, start + STORAGE_DELETE_MAX));
+    }
+  }
+
+  // ack 한 구간을 끝까지 지운다. 한 페이지(1000)만 지우고 ackSeq 를 올리면 나머지가
+  // backfill(ackSeq+1 부터)에서도 안 보이는 고아로 남았다(버퍼·R2 누수).
   async prune(seq) {
     const upto = Math.min(await this.safePruneSeq(seq), this.head);
     if (upto <= this.ackSeq) return;
-    const entries = await this.state.storage.list({
-      prefix: BUF_PREFIX, end: bufKey(upto + 1), limit: 1000,
-    });
-    const keys = [];
-    for (const [key, value] of entries) {
-      if (value.kind === "photo" && isPhotoKey(value.r2key)) {
-        await this.env.DURI_BUCKET.delete(value.r2key).catch(() => {});
-      }
-      keys.push(key);
+    for (;;) {
+      const entries = await this.state.storage.list({
+        prefix: BUF_PREFIX, end: bufKey(upto + 1), limit: PRUNE_PAGE,
+      });
+      if (entries.size === 0) break;
+      await this.dropEntries(entries);
+      if (entries.size < PRUNE_PAGE) break;
     }
-    if (keys.length) await this.state.storage.delete(keys);
     this.ackSeq = upto;
     await this.state.storage.put(ACK_KEY, upto);
   }
@@ -741,16 +757,9 @@ export class DuriDO {
     const entries = await this.state.storage.list({
       prefix: BUF_PREFIX, limit: overflow,
     });
-    const keys = [];
     let last = this.ackSeq;
-    for (const [key, value] of entries) {
-      if (value.kind === "photo" && isPhotoKey(value.r2key)) {
-        await this.env.DURI_BUCKET.delete(value.r2key).catch(() => {});
-      }
-      keys.push(key);
-      last = value.seq;
-    }
-    if (keys.length) await this.state.storage.delete(keys);
+    for (const value of entries.values()) last = value.seq;
+    await this.dropEntries(entries);
     if (last > this.ackSeq) { this.ackSeq = last; await this.state.storage.put(ACK_KEY, last); }
   }
 
@@ -780,18 +789,21 @@ export class DuriDO {
     });
   }
 
-  // from 이후 버퍼 전부를 오래된 순으로 보낸다(1000개씩 나눠 읽는다).
+  // from 이후 버퍼 전부를 오래된 순으로 보낸다. 싱크에는 절대 자르지 않는다(위 주석).
+  // 작은 청크로 읽고 청크마다 양보해, 버퍼 전체가 한꺼번에 메모리에 올라오지 않게 한다.
   async sendAllFrom(conn, from) {
     let start = bufKey(from);
-    while (true) {
-      const chunk = await this.state.storage.list({ prefix: BUF_PREFIX, start, limit: 1000 });
+    for (;;) {
+      const chunk = await this.state.storage.list({ prefix: BUF_PREFIX, start, limit: SINK_BACKFILL_CHUNK });
       let lastSeq = null;
       for (const value of chunk.values()) {
         this.send(conn, { type: "entry", ...value });
         lastSeq = value.seq;
       }
-      if (chunk.size < 1000 || lastSeq === null) return;
+      if (chunk.size < SINK_BACKFILL_CHUNK || lastSeq === null) return;
+      if (!this.conns.has(conn)) return; // 보내는 사이 끊겼다 — 다음 접속 때 처음부터 다시 받는다
       start = bufKey(lastSeq + 1);
+      await new Promise((resolve) => setTimeout(resolve, 0));
     }
   }
 
@@ -821,23 +833,28 @@ export class DuriDO {
       metaCt: request.headers.get("X-Duri-Meta"),
     });
     if (!meta) return new Response("invalid photo metadata", { status: 400 });
-    // 큰 업로드는 메모리에 담기 전에 Content-Length 로 먼저 거른다.
-    const declared = Number(request.headers.get("Content-Length") || 0);
+    // 본문을 메모리에 담지 않고 R2 로 바로 흘려보낸다 — 96MB 원본을 arrayBuffer() 로
+    // 받으면 그것만으로 DO 메모리(128MB)에 닿아 OOM 재시작으로 모든 연결이 끊긴다.
+    // 스트림 길이를 미리 알아야 R2 에 넣을 수 있고 크기도 막을 수 있으므로
+    // Content-Length 가 없는 업로드는 받지 않는다(브라우저 fetch 는 늘 붙인다).
+    const rawLength = request.headers.get("Content-Length");
+    if (rawLength === null) return new Response("content-length required", { status: 411 });
+    const declared = Number(rawLength);
+    if (!Number.isInteger(declared) || declared <= 0 || !request.body) {
+      return new Response("empty body", { status: 400 });
+    }
     if (declared > DURI_MAX_PHOTO_BYTES) {
       return new Response(`photo too large (${declared} bytes, max ${DURI_MAX_PHOTO_BYTES})`, { status: 413 });
-    }
-    const body = await request.arrayBuffer();
-    if (body.byteLength === 0) return new Response("empty body", { status: 400 });
-    if (body.byteLength > DURI_MAX_PHOTO_BYTES) {
-      return new Response(`photo too large (${body.byteLength} bytes, max ${DURI_MAX_PHOTO_BYTES})`, { status: 413 });
     }
     const seq = this.head + 1;
     const rand = [...crypto.getRandomValues(new Uint8Array(8))]
       .map((b) => b.toString(16).padStart(2, "0")).join("");
     const r2key = `photo/${String(seq).padStart(12, "0")}-${rand}`;
-    await this.env.DURI_BUCKET.put(r2key, body, {
+    // 런타임이 Content-Length 와 실제 본문 길이가 다르면 put 을 실패시킨다.
+    const stored = await this.env.DURI_BUCKET.put(r2key, request.body, {
       httpMetadata: { contentType: "application/octet-stream" },
     });
+    const bytes = stored?.size ?? declared;
     const thumbIv = request.headers.get("X-Duri-Thumb-Iv");
     const thumbCt = request.headers.get("X-Duri-Thumb");
     const thumb = isBlob(thumbIv, 64) && isBlob(thumbCt, DURI_MAX_THUMB_BLOB)
@@ -850,7 +867,7 @@ export class DuriDO {
       : null;
     const entry = await this.state.blockConcurrencyWhile(() => this.append({
       kind: "photo", at: Date.now(), r2key,
-      imgIv: meta.imgIv, sha256: meta.sha256, bytes: body.byteLength,
+      imgIv: meta.imgIv, sha256: meta.sha256, bytes,
       metaIv: meta.metaIv, metaCt: meta.metaCt,
       ...(thumb || {}),
       ...(album ? { album } : {}),
