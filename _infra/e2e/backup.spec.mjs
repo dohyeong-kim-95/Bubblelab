@@ -74,3 +74,15 @@ test("백업 — 남의 파일은 거절하고 기존 기록을 건드리지 않
   await expect(page.locator("#confirm")).toBeHidden();
   expect(await page.evaluate(() => localStorage.getItem("bl_life_v1"))).not.toBeNull();
 });
+
+test("백업 — 자동 올리기를 끄면 이 기기에만 남고 백업 목록에는 없다", async ({ page }) => {
+  await page.goto("/life/backup/");
+  await expect(page.locator("#sink-auto")).toBeChecked();   // 기본은 켜짐
+  await page.locator("#sink-auto").uncheck();
+  expect(await page.evaluate(() => localStorage.getItem("bl_backup_auto"))).toBe("off");
+  await page.reload();
+  await expect(page.locator("#sink-auto")).not.toBeChecked();
+  await expect(page.locator("#current li")).not.toContainText([/backup_auto/]);
+  await page.locator("#sink-auto").check();
+  expect(await page.evaluate(() => localStorage.getItem("bl_backup_auto"))).toBe(null);
+});

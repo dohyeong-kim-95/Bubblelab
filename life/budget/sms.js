@@ -9,7 +9,7 @@
 // 세 가지(금액·시각·가맹점 자리)를 위치가 아니라 생김새로 찾는다 — 새 카드사를
 // 만나도 대개 그대로 걸리고, 못 걸리면 화면이 "못 읽은 문자"로 보여 준다.
 
-import { MEMO_MAX, kstDate } from "./store.js";
+import { MEMO_MAX, kstDate, ruleKey } from "./store.js";
 
 /** 금액이지만 결제액이 아닌 것들. 이 말이 앞에 있으면 건너뛴다. */
 const NOT_SPENDING = /(누적|잔액|한도|합계|가용|사용가능|잔여|포인트|적립|캐시백|할인)\s*$/;
@@ -160,8 +160,10 @@ export function parseMessage(raw, today = kstDate()) {
       memo,
       on,
       // 같은 문자를 두 번 담지 않으려는 표식이다. 같은 가게에서 같은 금액을 다른
-      // 시각에 쓴 것은 다른 결제이므로 시각까지 넣는다.
-      sig: `${on}T${time ?? "??:??"}-${cancelled ? "-" : ""}${found.amount}`,
+      // 시각에 쓴 것은 다른 결제이므로 시각까지 넣는다. 시각이 없는 문자(자동이체·
+      // 정기결제)는 시각이 모두 ??:?? 라, 가맹점까지 넣어야 같은 날 같은 금액의 다른
+      // 결제(9,900원 구독 둘)가 하나로 뭉개지지 않는다. 저장 상한(40자) 안에 들게 자른다.
+      sig: `${on}T${time ?? "??:??"}-${cancelled ? "-" : ""}${found.amount}${SIG_SHOP}${ruleKey(memo).slice(0, 12)}`,
     },
     cancelled,
     time,
@@ -243,4 +245,24 @@ export function parseBackupOrText(text, today = kstDate()) {
 }
 
 /** 이미 담긴 문자인지. 표식이 없던 시절의 기록과도 겹치지 않게 sig 로만 본다. */
+/* 표식에서 가맹점이 시작하는 자리. 가맹점을 넣기 전(옛 표식)에는 이 뒤가 없었다. */
+const SIG_SHOP = "@";
+
+/**
+ * 이미 담긴 것인지 보고, 아니면 본 것으로 적어 둔다. 담긴 것이면 true.
+ * 가맹점을 넣기 전에 담긴 항목은 옛 표식(`…-금액`)만 갖고 있다 — 같은 문자를 다시
+ * 읽어도 겹친다고 보도록 옛 모양과도 견준다. 다만 옛 표식 하나는 **한 번만** 쓴다:
+ * 예전에 그 표식 때문에 두 번째 결제가 빠졌다면, 이번에는 그것이 담겨야 한다.
+ */
+export function takeSeen(seen, sig) {
+  if (!sig) return false;
+  if (seen.has(sig)) return true;
+  seen.add(sig);
+  const legacy = sig.split(SIG_SHOP)[0];
+  if (legacy === sig) return false;
+  if (!seen.has(legacy)) return false;
+  seen.delete(legacy);
+  return true;
+}
+
 export const seenSigs = (state) => new Set(state.entries.map((entry) => entry.sig).filter(Boolean));

@@ -3,10 +3,20 @@
 //
 // 도구 목록을 어디에도 적어 두지 않는다. 도구가 생겼다 없어졌다 하는데 목록을
 // 두면 등록을 잊는 순간 조용히 백업에서 빠진다. 대신 접두사로 찾는다.
+
+import { kstDate } from "../lib.js";
+
 export const PREFIX = "bl_";
 export const FORMAT = 1;
 
-export const isOurs = (name) => typeof name === "string" && name.startsWith(PREFIX);
+/* 접두사는 맞지만 **이 기기에서만 뜻이 있는 것**. 백업에 담지 않고, 되돌릴 때 지우지도 않는다.
+ * - bl_backup_auto: 이 기기의 자동 올리기 켜기/끄기(백업에 담기면 다른 기기 설정까지 바뀐다)
+ * - bl_budget_fs: 가계부가 기억한 폴더 손잡이. JSON 으로 담으면 `{}` 가 되어 되돌린 뒤
+ *   자동 받기가 "백업을 읽지 못했어요" 로 멈춘다. */
+export const DEVICE_ONLY = ["bl_backup_auto", "bl_budget_fs"];
+
+export const isOurs = (name) =>
+  typeof name === "string" && name.startsWith(PREFIX) && !DEVICE_ONLY.includes(name);
 
 export function makeEnvelope({ local = {}, databases = [] }, now = new Date()) {
   return {
@@ -70,8 +80,5 @@ export function slimEnvelope(envelope) {
 }
 
 export function fileName(now = new Date()) {
-  const stamp = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit",
-  }).format(now);
-  return `life-backup-${stamp}.json`;
+  return `life-backup-${kstDate(now)}.json`;
 }

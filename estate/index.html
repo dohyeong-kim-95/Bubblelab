@@ -277,7 +277,7 @@ tr.canceled td { text-decoration: line-through; opacity: 0.5; }
     </div>
 
     <div class="card toggle-card" id="shuttleCard">
-      <div class="card-head">통근 셔틀 노선 <span class="sub">눌러서 강조 (여러 개 가능)</span></div>
+      <div class="card-head">셔틀 노선 <span class="sub">눌러서 강조 (여러 개 가능)</span></div>
       <div id="shuttleToggles" class="toggle-row"></div>
     </div>
 
@@ -964,13 +964,13 @@ function renderMap() {
     const x = px(r), y = py2(r);
     refMarks += `<path class="map-ref" d="M${x} ${y - 9 * ui} L${x + 6 * ui} ${y + 3 * ui} L${x - 6 * ui} ${y + 3 * ui} Z"/>` +
       `<text class="map-ref-label" x="${x}" y="${y + 16 * ui}" text-anchor="middle" font-size="${Math.round(12 * ui)}">` +
-      `${r.label.replace("삼성 ", "")}</text>`;
+      `${r.label}</text>`;
   }
   const sy = VH - 12 * ui, sx = MAP_PAD * ui;
   const scaleBar = `<line class="map-scale" x1="${sx}" x2="${sx + 2 * pxPerKm}" y1="${sy}" y2="${sy}"/>` +
     `<text x="${sx + pxPerKm}" y="${sy - 5 * ui}" text-anchor="middle" font-size="${Math.round(12 * ui)}">2km</text>`;
 
-  // 추천 핀(초록·보라 셔틀 둘 다 도보권 + 8억 미만). 최상단 레이어. 클릭 대상.
+  // 추천 핀(geo.json pins — 조건은 생성 스크립트가 정한다). 최상단 레이어. 클릭 대상.
   let pins = "";
   (geoData.pins ?? []).forEach((p, i) => {
     const x = px(p), y = py2(p), r = 6.5 * ui;
@@ -997,7 +997,7 @@ function renderMap() {
       ? (list.some((e) => e.drop == null) ? `<span><i class="sw qna"></i>표본 부족</span>` : "") +
         `<span>${state.months}개월 내 고점 대비 (진할수록 많이 빠짐)</span>`
       : `<span>만원/평 (중앙값)</span>`) +
-    (geoData.pins?.length ? `<span><b style="color:#e8590c">📍</b> 추천 (셔틀 도보권·8억↓)</span>` : "") +
+    (geoData.pins?.length ? `<span><b style="color:#e8590c">📍</b> 추천 단지</span>` : "") +
     (base ? `<span style="margin-left:auto">배경지도 © 브이월드</span>` : "");
   $("mapNote").textContent = state.ref && +state.radius
     ? `반경 내 ${list.filter(inRadius).length}개 단지` : `${list.length}개 단지`;
@@ -1146,7 +1146,7 @@ function renderAptCard() {
   let refDist = "";
   if (e.point && geoData?.refs) {
     refDist = Object.values(geoData.refs)
-      .map((r) => `${r.label.replace("삼성 ", "")} <b>${distKm(r, e.point).toFixed(1)}km</b>`).join(" · ");
+      .map((r) => `${r.label} <b>${distKm(r, e.point).toFixed(1)}km</b>`).join(" · ");
   }
   let nearShuttle = "";
   if (e.point && geoData?.shuttles) {
@@ -1166,8 +1166,8 @@ function renderAptCard() {
   const pct = (v) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
   body.innerHTML =
     `<button class="apt-close" aria-label="닫기">✕</button>` +
-    `<div class="apt-name">${e.apt}${isPin ? '<span class="pin-badge">추천</span>' : ""}</div>` +
-    `<div class="sub">${e.dong}</div>` +
+    `<div class="apt-name">${escapeHtml(e.apt)}${isPin ? '<span class="pin-badge">추천</span>' : ""}</div>` +
+    `<div class="sub">${escapeHtml(e.dong)}</div>` +
     `<div class="apt-grid">` +
     `<div><div class="k">중앙 평당가</div><div class="v">${fmtMan(e.med)}만</div></div>` +
     `<div><div class="k">전용 84㎡ 환산</div><div class="v">${fmtEok(py84)}</div></div>` +
@@ -1228,16 +1228,16 @@ function renderFavList() {
       const e = stats.find((s) => s.apt === apt);
       const real = e ? fmtEok(e.med * 84.9 / 3.3058) : "—";
       const gap = (n.price && e) ? n.price - e.med * 84.9 / 3.3058 / 10000 : null;
-      return `<div class="fav-item"${e ? ` data-apt="${apt}"` : ""}>` +
-        `<button class="fav-del" data-del="${apt}" aria-label="삭제">✕</button>` +
-        `<b>★ ${apt}</b>` +
+      return `<div class="fav-item"${e ? ` data-apt="${escapeHtml(apt)}"` : ""}>` +
+        `<button class="fav-del" data-del="${escapeHtml(apt)}" aria-label="삭제">✕</button>` +
+        `<b>★ ${escapeHtml(apt)}</b>` +
         `<div class="fav-line">` +
         (n.price ? `내 호가 <b>${n.price}억</b> · ` : "") +
         `실거래 84㎡ ${real}` +
         (gap != null ? ` · 갭 ${gap >= 0 ? "+" : ""}${gap.toFixed(2)}억` : "") +
         (e ? "" : ` <span class="sub">(다른 지역/탭)</span>`) +
         `</div>` +
-        (n.memo ? `<div class="fav-memo">${n.memo}</div>` : "") +
+        (n.memo ? `<div class="fav-memo">${escapeHtml(n.memo)}</div>` : "") +
         `</div>`;
     }).join("");
 }
@@ -1269,7 +1269,7 @@ function renderRank() {
     (hasRef ? `<th class="num sortable" data-sort="dist"${sortAttr("dist")}>거리${arrow("dist")}</th>` : "") +
     `<th class="num sortable" data-sort="drop"${sortAttr("drop")}>고점 대비${arrow("drop")}</th>` +
     `<th class="num">최근 거래</th><th>매물</th></tr></thead><tbody>` +
-    list.map((e) => `<tr><td>${e.apt}</td><td>${e.dong}</td><td class="num">${e.cnt}건</td>` +
+    list.map((e) => `<tr><td>${escapeHtml(e.apt)}</td><td>${escapeHtml(e.dong)}</td><td class="num">${e.cnt}건</td>` +
       `<td class="num">${fmtMan(e.med)}만</td>` +
       (hasRef ? `<td class="num">${e.dist != null ? `${e.dist.toFixed(1)}km` : "—"}</td>` : "") +
       `<td class="num">${dropCell(e.drop)}</td>` +
@@ -1295,10 +1295,10 @@ function renderDeals() {
     ? `<tr><th>날짜</th><th>단지</th><th>법정동</th><th class="num">전용</th><th class="num">층</th><th class="num">금액</th><th class="num">평당</th></tr>`
     : `<tr><th>날짜</th><th>단지</th><th>법정동</th><th class="num">전용</th><th class="num">층</th><th class="num">보증금</th><th class="num">월세</th><th>구분</th></tr>`;
   $("dealTable").innerHTML = `<thead>${head}</thead><tbody>` + cut.map((r) => {
-    const base = `<td>${r.date.slice(2)}</td><td>${r.apt}` +
+    const base = `<td>${r.date.slice(2)}</td><td>${escapeHtml(r.apt)}` +
       (r.canceled ? `<span class="badge cancel">해제</span>` : "") +
       (r.direct ? `<span class="badge">직거래</span>` : "") +
-      `</td><td>${r.dong}</td><td class="num">${r.area.toFixed(1)}㎡</td><td class="num">${r.floor}층</td>`;
+      `</td><td>${escapeHtml(r.dong)}</td><td class="num">${r.area.toFixed(1)}㎡</td><td class="num">${r.floor}층</td>`;
     const tail = type === "trade"
       ? `<td class="num">${fmtEok(r.amt)}</td><td class="num">${fmtMan(perPy(r.amt, r.area))}만</td>`
       : `<td class="num">${fmtEok(r.dep)}</td><td class="num">${r.rent ? `${fmtMan(r.rent)}만` : "—"}</td>` +

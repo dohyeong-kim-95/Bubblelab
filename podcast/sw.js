@@ -12,8 +12,10 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
+    // 우리 것(bl-podcast-*)의 옛 버전만 지운다. 로컬 dev 는 출처가 하나라 접두사 없이
+    // 지우면 life·duri 의 캐시까지 날아간다.
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key)))),
+      Promise.all(keys.filter((key) => key.startsWith("bl-podcast-") && key !== CACHE).map((key) => caches.delete(key)))),
   );
   self.clients.claim();
 });

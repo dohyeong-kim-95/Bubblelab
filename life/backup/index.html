@@ -33,9 +33,12 @@
     <p id="status" class="fine-print" role="status" aria-live="polite"></p>
 
     <h2 class="section">집 PC 로 보내기</h2>
-    <p class="fine-print">폰이 하루에 한 번 자동으로 올리고, 집 PC 데몬이 받아 갑니다.
+    <p class="fine-print">폰이 하루에 한 번 서버에 올리고, 집 PC 데몬이 받아 갑니다.
+      서버에는 최신 한 벌이 <b>암호화 없이</b> 남습니다(가계부·몸 정보·할 일 포함).
       <b>표지 같은 이미지는 보내지 않습니다</b> — 그건 위의 파일 내보내기로만 보관됩니다.</p>
     <dl class="status-list">
+      <div><dt><label for="sink-auto">하루 한 번 자동으로 올리기</label></dt>
+        <dd><input id="sink-auto" type="checkbox" class="toggle"></dd></div>
       <div><dt>마지막으로 올린 때</dt><dd id="sink-state">확인 중…</dd></div>
     </dl>
     <div class="button-row">

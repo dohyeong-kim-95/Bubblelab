@@ -1,6 +1,6 @@
 import { collectAll, restoreAll } from "./collect.js";
 import { PREFIX, fileName, parseEnvelope, summarize } from "./store.js";
-import { push } from "./push.js";
+import { autoPushOn, push, setAutoPush } from "./push.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -60,6 +60,9 @@ $("sink-push").addEventListener("click", async () => {
   try { await push(); } catch (error) { $("status").textContent = error.message; }
   await refreshSink();
 });
+
+$("sink-auto").checked = autoPushOn();
+$("sink-auto").addEventListener("change", () => setAutoPush($("sink-auto").checked));
 
 $("sink-token").addEventListener("click", async () => {
   $("token-output").hidden = false;

@@ -423,7 +423,10 @@ async function renderCuts() {
     thumb.src = URL.createObjectURL(cut.frames[0]);
     const meta = document.createElement("div");
     meta.className = "meta";
-    meta.innerHTML = `<b>${id}</b> — ${cut.motion}<br>${cut.frames.length}프레임 @${cut.fps}fps`;
+    // 모션 글은 사람이 적은 것이라 마크업으로 넣지 않는다(textContent).
+    const name = document.createElement("b");
+    name.textContent = id;
+    meta.append(name, ` — ${cut.motion}`, document.createElement("br"), `${cut.frames.length}프레임 @${cut.fps}fps`);
     const build = document.createElement("button");
     build.textContent = "APNG 굽기";
     build.onclick = () => buildCut(id, cut, build);

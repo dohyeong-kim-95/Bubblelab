@@ -1,6 +1,11 @@
 // 읽은 책 기록. 화면과 테스트가 같이 쓰는 순수 함수만 둔다 —
 // 저장은 IndexedDB(app.js)이고 서버로 나가는 것은 없다.
 
+import { kstDate } from "../lib.js";
+
+// 오늘(KST). 도구들이 같은 것을 쓰도록 ../lib.js 한 곳에 두고 여기서 다시 내보낸다.
+export { kstDate };
+
 export const TITLE_MAX = 120;
 export const AUTHOR_MAX = 60;
 export const NOTE_MAX = 140;   // "짧은 한두 줄"이 이 화면의 규칙이다
@@ -8,12 +13,6 @@ export const COVER_MAX_BYTES = 400 * 1024;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 const clean = (value, max) => String(value ?? "").replace(/\s+/g, " ").trim().slice(0, max);
-
-export function kstDate(value = new Date()) {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit",
-  }).format(value);
-}
 
 export function makeBook(fields = {}, now = new Date()) {
   return {

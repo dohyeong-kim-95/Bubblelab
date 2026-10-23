@@ -399,11 +399,13 @@ const PUSH_EVERY_MS = 24 * 60 * 60 * 1000;
 const idle = globalThis.requestIdleCallback ?? ((fn) => setTimeout(fn, 1200));
 idle(() => {
   // 보낼 때가 됐는지 여기서 먼저 본다 — 아니면 모듈을 받아 오지도 않는다.
+  // 백업 화면에서 자동 올리기를 껐으면("bl_backup_auto" = "off", life/backup/push.js) 보내지 않는다.
+  if (localStorage.getItem("bl_backup_auto") === "off") return;
   const last = Number(localStorage.getItem("bl_backup_pushed_at") ?? 0);
   if (!navigator.onLine || Date.now() - last < PUSH_EVERY_MS) return;
   // 아직 아무것도 없으면 보내지 않는다. 빈 백업으로 지난 것을 덮을 이유가 없다.
   const hasData = Object.keys(localStorage)
-    .some((key) => key.startsWith("bl_") && key !== "bl_backup_pushed_at");
+    .some((key) => key.startsWith("bl_") && key !== "bl_backup_pushed_at" && key !== "bl_backup_auto");
   if (!hasData) return;
   import("./backup/push.js").then((module) => module.push()).catch(() => {});
 });

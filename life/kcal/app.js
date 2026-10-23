@@ -1,3 +1,4 @@
+import { node } from "../lib.js";
 import {
   ACTIVITY, AIMS, EFFORTS, EXERCISE_NAMES, MEALS, SPLITS, addEntries, addEntry, addWorkout,
   autoGoal, bmr, burn, dayReport, editEntry, editWorkout, emptyState, exerciseLabel, findEffort,
@@ -37,13 +38,6 @@ function update(next) {
   state = next;
   save();
   render();
-}
-
-function node(tag, className, text) {
-  const element = document.createElement(tag);
-  if (className) element.className = className;
-  if (text != null) element.textContent = text;
-  return element;
 }
 
 const gram = (value) => `${Math.round(value * 10) / 10}g`;

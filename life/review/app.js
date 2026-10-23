@@ -1,14 +1,8 @@
+import { node } from "../lib.js";
 import { hasAnything, summarize, yearsIn } from "./store.js";
 
 const $ = (id) => document.getElementById(id);
 const MONTH_LABELS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
-
-function node(tag, className, text) {
-  const element = document.createElement(tag);
-  if (className) element.className = className;
-  if (text != null) element.textContent = text;
-  return element;
-}
 
 /* 도구가 없어졌거나 저장 형식이 달라졌을 수 있다 — 읽다 실패하면 그 도구만 빼고
  * 나머지는 그대로 보여 준다. */

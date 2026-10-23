@@ -128,31 +128,12 @@
   #reset-status { opacity: .6; font-size: .78rem; }
   #warning { display: none; margin-top: 1rem; padding: .85rem 1rem; border-radius: .8rem;
              background: light-dark(#fff2c7, #4a3711); color: light-dark(#6a4a00, #ffe49a); }
-  .upload-card { padding: 1.15rem; border-radius: 1rem; background: light-dark(#fff, #151e2a);
-                 border: 1px solid light-dark(#dce4ec, #263445); }
-  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; }
   .field { display: flex; flex-direction: column; gap: .35rem; }
-  .field.full { grid-column: 1 / -1; }
-  .field label, .file-labels label { opacity: .65; font-size: .75rem; }
-  .field input, .field select, .field textarea, .file-labels input { width: 100%; padding: .7rem .75rem;
+  .field label { opacity: .65; font-size: .75rem; }
+  .field input, .field select, .field textarea { width: 100%; padding: .7rem .75rem;
         border-radius: .65rem; border: 1px solid light-dark(#dce4ec, #263445);
         background: none; color: inherit; font: inherit; }
   .field textarea { resize: vertical; }
-  .drop { padding: 1.3rem; border: 1px dashed light-dark(#afbac6, #425267); border-radius: .8rem;
-          text-align: center; cursor: pointer; }
-  .drop input { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; }
-  .drop strong, .drop small { display: block; }
-  .drop small { margin-top: .35rem; opacity: .5; font-size: .7rem; }
-  .file-labels { display: grid; gap: .5rem; margin-top: .7rem; }
-  .file-row { display: grid; grid-template-columns: 3.2rem 1fr; gap: .6rem; align-items: center; }
-  .file-row img { width: 3.2rem; height: 3.2rem; border-radius: .5rem; object-fit: cover;
-                  background: light-dark(#eef1f4, #0d131c); }
-  .upload-actions { display: flex; align-items: center; gap: .8rem; margin-top: 1rem; }
-  .primary { padding: .7rem 1.1rem; border: 0; border-radius: .65rem; background: #477a5d;
-             color: #fff; font: inherit; font-weight: bold; cursor: pointer; }
-  .primary:disabled { opacity: .45; cursor: default; }
-  #upload-status { opacity: .6; font-size: .75rem; }
-  #asset-list { display: grid; gap: .6rem; margin-top: .8rem; }
   .asset-row { display: grid; grid-template-columns: 4.2rem 1fr auto; align-items: center; gap: .8rem;
                padding: .7rem; border-radius: .8rem; background: light-dark(#fff, #151e2a);
                border: 1px solid light-dark(#dce4ec, #263445); }
@@ -186,8 +167,6 @@
     .cards, .hub-grid { grid-template-columns: 1fr; }
     .card { min-height: 8rem; }
     .hub-card { min-height: 9rem; }
-    .form-grid { grid-template-columns: 1fr; }
-    .field.full { grid-column: auto; }
   }
 </style>
 </head>
@@ -240,21 +219,6 @@
       <span id="reset-status"></span>
     </div>
   </section>
-  </section>
-  <section class="view" id="view-upload" hidden>
-    <h2 class="view-title">🖼️ Upload</h2>
-    <form class="upload-card" id="asset-form">
-      <div class="form-grid">
-        <div class="field"><label for="asset-category">종류</label><select id="asset-category" name="category" required><option value="wallpaper">Wallpaper</option><option value="sticker">Sticker</option><option value="photo-frame">Photo frame</option></select></div>
-        <div class="field"><label for="asset-title">제목</label><input id="asset-title" name="title" maxlength="50" required placeholder="예: 여름 구름"></div>
-        <div class="field full"><label for="asset-description">설명</label><textarea id="asset-description" name="description" maxlength="200" rows="2" placeholder="이미지에 대한 짧은 설명"></textarea></div>
-        <div class="field full"><label for="asset-tags">태그</label><input id="asset-tags" name="tags" maxlength="120" placeholder="여름, 하늘, 파랑 (쉼표로 구분)"></div>
-        <label class="drop field full" for="asset-files"><input id="asset-files" name="files" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple required><strong>사진을 선택하거나 여기에 놓아주세요</strong><small>PNG · JPG · WebP · GIF / 파일당 10MB / 최대 4개</small></label>
-      </div>
-      <div class="file-labels" id="file-labels"></div>
-      <div class="upload-actions"><button class="primary" id="upload-button" type="submit">업로드</button><span id="upload-status"></span></div>
-    </form>
-    <section class="top" aria-label="업로드 이미지"><h2>최근 업로드</h2><div id="asset-list"><div class="asset-empty">불러오는 중…</div></div></section>
   </section>
   <section class="view" id="view-slop" hidden>
   <h2 class="view-title">🎮 Slop</h2>
@@ -461,6 +425,15 @@ async function loadStats() {
   }
 }
 const base = location.hostname.endsWith('bubblelab.dev') ? '' : '/admin';
+
+// 지우기 요청. 세션이 끊기면 서버가 로그인 페이지로 돌려보내 200 이 오므로
+// redirected 도 실패로 본다. 실패하면 알리고 false — 화면에서 행을 지우지 않는다.
+async function deleteOk(url) {
+  const res = await fetch(url, { method: 'DELETE' });
+  if (res.ok && !res.redirected) return true;
+  alert(res.redirected ? '세션이 끊겼어요. 다시 로그인해 주세요.' : `삭제하지 못했습니다 (HTTP ${res.status})`);
+  return false;
+}
 showView();
 
 for (const button of document.querySelectorAll('.period button')) {
@@ -496,92 +469,6 @@ document.getElementById('reset-run').addEventListener('click', async () => {
   }
 });
 
-const assetForm = document.getElementById('asset-form');
-const assetFiles = document.getElementById('asset-files');
-const fileLabels = document.getElementById('file-labels');
-const uploadStatus = document.getElementById('upload-status');
-const uploadButton = document.getElementById('upload-button');
-
-assetFiles.addEventListener('change', () => {
-  const files = [...assetFiles.files];
-  if (files.length > 4) {
-    uploadStatus.textContent = '한 번에 최대 4개까지 선택할 수 있습니다.';
-    assetFiles.value = '';
-    fileLabels.replaceChildren();
-    return;
-  }
-  const invalid = files.find((file) => !['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(file.type) || file.size > 10 * 1024 * 1024);
-  if (invalid) {
-    uploadStatus.textContent = `${invalid.name}: 지원하지 않는 형식이거나 10MB를 넘습니다.`;
-    assetFiles.value = '';
-    fileLabels.replaceChildren();
-    return;
-  }
-  uploadStatus.textContent = '';
-  fileLabels.replaceChildren();
-  files.forEach((file, index) => {
-    const row = document.createElement('div');
-    row.className = 'file-row';
-    const img = document.createElement('img');
-    img.src = URL.createObjectURL(file);
-    img.alt = '';
-    img.addEventListener('load', () => URL.revokeObjectURL(img.src), { once: true });
-    const label = document.createElement('input');
-    label.className = 'asset-file-label';
-    label.maxLength = 30;
-    label.placeholder = assetFiles.files.length === 1 ? '다운로드 버튼 이름' : `파일 ${index + 1} 용도 (예: 모바일)`;
-    row.append(img, label);
-    fileLabels.append(row);
-  });
-});
-
-assetForm.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  if (!assetFiles.files.length || assetFiles.files.length > 4) return;
-  uploadButton.disabled = true;
-  uploadStatus.textContent = '업로드 중…';
-  const form = new FormData(assetForm);
-  form.set('labels', JSON.stringify([...document.querySelectorAll('.asset-file-label')].map((input) => input.value)));
-  try {
-    const res = await fetch(`${base}/api/assets`, { method: 'POST', body: form });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    uploadStatus.textContent = '업로드 완료';
-    assetForm.reset();
-    fileLabels.replaceChildren();
-    await loadAssets();
-  } catch (error) {
-    uploadStatus.textContent = `업로드 실패: ${error.message}`;
-  } finally { uploadButton.disabled = false; }
-});
-
-async function loadAssets() {
-  const list = document.getElementById('asset-list');
-  try {
-    const res = await fetch(`${base}/api/assets`, { cache: 'no-store' });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    if (!data.items.length) { list.innerHTML = '<div class="asset-empty">아직 업로드한 이미지가 없습니다.</div>'; return; }
-    list.replaceChildren();
-    for (const item of data.items) {
-      const row = document.createElement('article');
-      row.className = 'asset-row';
-      const img = document.createElement('img'); img.src = item.preview; img.alt = '';
-      const info = document.createElement('span');
-      const title = document.createElement('strong'); title.textContent = item.title;
-      const meta = document.createElement('small'); meta.textContent = `${item.category} · ${item.downloads.length}개 파일 · ${item.createdAt}`;
-      info.append(title, meta);
-      const del = document.createElement('button'); del.type = 'button'; del.textContent = '삭제';
-      del.addEventListener('click', async () => {
-        if (!confirm(`“${item.title}”과 파일을 삭제할까요?`)) return;
-        const response = await fetch(`${base}/api/assets?id=${encodeURIComponent(item.id)}`, { method: 'DELETE' });
-        if (response.ok) row.remove(); else alert('삭제하지 못했습니다.');
-      });
-      row.append(img, info, del); list.append(row);
-    }
-  } catch (error) { list.innerHTML = `<div class="asset-empty">불러오지 못했습니다: ${error.message}</div>`; }
-}
-
 async function loadSuggestions() {
   const list = document.getElementById('suggestions');
   const empty = (text) => {
@@ -609,7 +496,7 @@ async function loadSuggestions() {
       del.textContent = '✕';
       del.title = '삭제';
       del.addEventListener('click', async () => {
-        await fetch(`${base}/api/suggestions?id=${encodeURIComponent(item.id)}`, { method: 'DELETE' });
+        if (!await deleteOk(`${base}/api/suggestions?id=${encodeURIComponent(item.id)}`)) return;
         li.remove();
         if (!list.children.length) empty('아직 들어온 아이디어가 없어요');
       });
@@ -652,7 +539,7 @@ async function loadRecords() {
       del.title = `${game} 기록 리셋`;
       del.addEventListener('click', async () => {
         if (!confirm(`${game}의 이번 주 기록(${r.nick})을 리셋할까요?`)) return;
-        await fetch(`${base}/api/records?game=${encodeURIComponent(game)}`, { method: 'DELETE' });
+        if (!await deleteOk(`${base}/api/records?game=${encodeURIComponent(game)}`)) return;
         loadRecords();
         loadAlltime();   // 올타임 표시는 이번 주 기록과 병합이라 함께 갱신
       });
@@ -696,8 +583,7 @@ async function loadAlltime() {
       del.title = `${game} 올타임 기록 삭제`;
       del.addEventListener('click', async () => {
         if (!confirm(`${game}의 올타임 기록(${r.nick})을 삭제할까요? 되돌릴 수 없어요.`)) return;
-        await fetch(`${base}/api/records?game=${encodeURIComponent(game)}&alltime=1`,
-                    { method: 'DELETE' });
+        if (!await deleteOk(`${base}/api/records?game=${encodeURIComponent(game)}&alltime=1`)) return;
         loadAlltime();
       });
       li.append(text, meta, del);
@@ -737,7 +623,7 @@ async function loadIntake() {
       del.title = '접수 삭제';
       del.addEventListener('click', async () => {
         if (!confirm(`${item.nick} 님의 접수를 삭제할까요?`)) return;
-        await fetch(`${base}/api/work?id=${encodeURIComponent(item.id)}`, { method: 'DELETE' });
+        if (!await deleteOk(`${base}/api/work?id=${encodeURIComponent(item.id)}`)) return;
         li.remove();
         if (!list.children.length) empty('아직 접수된 의뢰가 없어요');
       });
@@ -784,7 +670,7 @@ document.getElementById('notice-save').addEventListener('click', async () => {
 
 document.getElementById('notice-clear').addEventListener('click', async () => {
   if (!confirm('공지를 내릴까요?')) return;
-  await fetch(`${base}/api/notice`, { method: 'DELETE' });
+  if (!await deleteOk(`${base}/api/notice`)) return;
   loadNotice();
 });
 

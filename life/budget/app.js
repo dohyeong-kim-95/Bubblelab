@@ -1,3 +1,4 @@
+import { SHARE_CACHE, SHARE_KEY, node } from "../lib.js";
 import {
   CATEGORIES, addEntries, addEntry, byCategory, categoryFor, categoryLabel, cycleLabel, cycleOf,
   editEntry, emptyState, entriesIn, exportText, groupByDay, inCycle, kstDate, markSynced,
@@ -5,7 +6,7 @@ import {
   setStartDay, shiftDate, shortWon, toggleSkip, won,
 } from "./store.js";
 import { MERCHANTS } from "./merchants.js";
-import { parseBackupOrText, seenSigs } from "./sms.js";
+import { parseBackupOrText, seenSigs, takeSeen } from "./sms.js";
 
 const $ = (id) => document.getElementById(id);
 const STORAGE_KEY = "bl_budget_v1";
@@ -35,13 +36,6 @@ function update(next) {
   state = next;
   save();
   render();
-}
-
-function node(tag, className, text) {
-  const element = document.createElement(tag);
-  if (className) element.className = className;
-  if (text != null) element.textContent = text;
-  return element;
 }
 
 const short = (date) => {
@@ -277,8 +271,7 @@ function readSms(text, fileName = "") {
   const seen = seenSigs(state);
   pending = found.map(({ entry }) => {
     // 같은 문자를 두 번 담지 않는다. 한 번에 붙여넣은 것 안에서 겹치는 것도 본다.
-    const duplicate = seen.has(entry.sig);
-    seen.add(entry.sig);
+    const duplicate = takeSeen(seen, entry.sig);
     return { entry, duplicate, take: !duplicate };
   });
 
@@ -366,6 +359,8 @@ async function savedFolder() {
       request.onerror = () => resolve(null);
     });
   } catch { folder = null; }
+  // 옛 백업에서 되돌린 손잡이는 JSON 을 거쳐 `{}` 다. 손잡이가 아니면 기억한 폴더가 없는 것으로 본다.
+  if (folder && typeof folder.entries !== "function") folder = null;
   return folder;
 }
 
@@ -460,8 +455,7 @@ function takeNew(text) {
   const seen = seenSigs(state);
   const drafts = [];
   for (const { entry } of found) {
-    if (entry.sig && seen.has(entry.sig)) continue;
-    if (entry.sig) seen.add(entry.sig);
+    if (takeSeen(seen, entry.sig)) continue;
     drafts.push(entry);
   }
   // 담은 것이 없어도 오늘 읽은 것으로 친다 — 열 때마다 폴더를 들추지 않게.
@@ -551,8 +545,6 @@ $("sms").addEventListener("close", () => { pending = []; });
  *
  * ?text= 도 계속 받는다: 이미 설치된 폰의 WebAPK 는 매니페스트가 갱신될 때까지 옛
  * 방식(GET)으로 보낸다. */
-const SHARE_CACHE = "bl-life-share";
-const SHARE_KEY = "/__share";
 
 async function takeShared() {
   const params = new URLSearchParams(location.search);

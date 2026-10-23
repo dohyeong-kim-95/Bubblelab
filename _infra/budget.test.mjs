@@ -371,3 +371,15 @@ test("씨앗 표는 형식이 맞고 겹치지 않는다", () => {
     seen.add(key);
   }
 });
+
+test("공유 캐시 이름·열쇠는 서비스워커와 가계부가 같은 값을 쓴다", async () => {
+  // sw.js 는 클래식 스크립트라 ../lib.js 를 import 하지 못해 글자로 적어 둔다.
+  // 한쪽만 바뀌면 공유가 조용히 끊기므로 여기서 묶는다.
+  const { readFile } = await import("node:fs/promises");
+  const { SHARE_CACHE, SHARE_KEY } = await import("../life/lib.js");
+  const sw = await readFile(new URL("../life/sw.js", import.meta.url), "utf8");
+  assert.match(sw, new RegExp(`const SHARE_CACHE = "${SHARE_CACHE}";`));
+  assert.match(sw, new RegExp(`const SHARE_KEY = "${SHARE_KEY}";`));
+  const app = await readFile(new URL("../life/budget/app.js", import.meta.url), "utf8");
+  assert.doesNotMatch(app, /const SHARE_(CACHE|KEY) =/, "가계부는 ../lib.js 의 값을 쓴다");
+});
