@@ -611,6 +611,14 @@ async function handleDuri(request, env, url) {
     return stub.fetch(withDuriRole(request, role));
   }
 
+  // 사진 업로드는 DO 가 본문을 R2 로 흘려보내므로 길이를 미리 알아야 한다. 길이 없는
+  // 업로드를 DO 까지 넘기면 워커가 본문을 펌핑하는 도중에 DO 가 411 로 먼저 답해
+  // "Can't read from request stream after response has been sent" 예외가 난다 — 그래서
+  // 본문을 건드리기 전에 여기서 거절하고, 본문은 취소해 버린다.
+  if (path === "/_duri/photo" && request.method === "POST" && request.headers.get("Content-Length") === null) {
+    request.body?.cancel().catch(() => {});
+    return new Response("content-length required", { status: 411 });
+  }
   if (path === "/_duri/photo" || path.startsWith("/_duri/photo/") || path === "/_duri/status") {
     return stub.fetch(withDuriRole(request, role));
   }

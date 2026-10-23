@@ -380,6 +380,35 @@ test("duri subdomain gates with its own long-lived bl_duri session", async () =>
       headers: { Cookie: cookie.split(";")[0] },
     }), relayEnv, ctx);
   assert.equal(response.status, 404);
+
+  // 길이 없는(chunked) 사진 업로드는 DO 에 넘기기 전에 411 — 본문은 읽지 않고 취소한다
+  let relayed = 0;
+  let canceled = false;
+  const photoEnv = {
+    ...env,
+    DURI_BUCKET: {},
+    DURI: { idFromName: () => "main", get: () => ({ fetch: async () => { relayed += 1; return new Response("ok"); } }) },
+  };
+  const chunked = new ReadableStream({
+    pull: () => assert.fail("본문을 읽었다"),
+    cancel: () => { canceled = true; },
+  }, { highWaterMark: 0 });
+  response = await worker.fetch(
+    new Request("https://duri.bubblelab.dev/_duri/photo", {
+      method: "POST", headers: { Cookie: cookie.split(";")[0] }, body: chunked, duplex: "half",
+    }), photoEnv, ctx);
+  assert.equal(response.status, 411);
+  assert.equal(relayed, 0, "DO 로 넘기지 않는다");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.ok(canceled, "본문 스트림을 취소한다");
+
+  // 길이가 있으면 그대로 DO 로 간다
+  response = await worker.fetch(
+    new Request("https://duri.bubblelab.dev/_duri/photo", {
+      method: "POST", headers: { Cookie: cookie.split(";")[0], "Content-Length": "3" }, body: new Uint8Array([1, 2, 3]),
+    }), photoEnv, ctx);
+  assert.equal(response.status, 200);
+  assert.equal(relayed, 1);
 });
 
 test("duri prefers DURI_PASSWORD over WORK_PASSWORD and room reset is owner-only", async () => {
