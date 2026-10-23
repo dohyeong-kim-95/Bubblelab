@@ -9,7 +9,7 @@
 // `claude -p` 는 이미 쓰는 구독에서 차감되므로 키도 청구서도 늘지 않는다.
 // 대신 이 PC 가 켜져 있어야 한다.
 //
-// **도구 없이 부른다(`--allowed-tools ""`).** 프롬프트에 arXiv 초록이 그대로
+// **도구 없이 부른다(`--tools ""`, `common.mjs` 의 `claudeArgs`).** 프롬프트에 arXiv 초록이 그대로
 // 들어가는데, 그건 남이 쓴 검증되지 않은 텍스트다. 도구가 없으면 초록에 지시를
 // 심어 둬도 읽고 답하는 것 말고 할 수 있는 게 없다.
 //
@@ -23,6 +23,7 @@ import {
   buildSummaryPrompt, CHAT_ANSWER_LIMIT, fetchCandidates, parseScores, parseSummary,
   parseVerb, pickPapers, RESEARCH_PROFILE, runVerb,
 } from "../../_infra/papers.js";
+import { claudeArgs } from "./common.mjs";
 
 const BASE = (process.env.PAPERS_ENDPOINT ?? "").trim() || "https://life.bubblelab.dev";
 const CLAUDE = (process.env.CLAUDE_BIN ?? "").trim() || "claude";
@@ -75,7 +76,7 @@ async function latestDigest() {
  */
 function ask(prompt) {
   return new Promise((resolve, reject) => {
-    const child = spawn(CLAUDE, ["-p", prompt, "--allowed-tools", "", "--output-format", "text"], {
+    const child = spawn(CLAUDE, claudeArgs(prompt), {
       stdio: ["ignore", "pipe", "pipe"],
       env: { ...process.env, PATH: `${dirname(process.execPath)}:${process.env.PATH ?? ""}` },
     });

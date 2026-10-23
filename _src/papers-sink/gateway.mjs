@@ -22,6 +22,7 @@ import {
   buildChatAnswerPrompt, buildChatPrompt, CHAT_ANSWER_LIMIT,
   parseVerb, RESEARCH_PROFILE, runVerb,
 } from "../../_infra/papers.js";
+import { claudeArgs, createHeartbeat } from "./common.mjs";
 
 const BASE = (process.env.PAPERS_ENDPOINT ?? "").trim() || "https://life.bubblelab.dev";
 const CLAUDE = (process.env.CLAUDE_BIN ?? "").trim() || "claude";
@@ -128,7 +129,7 @@ async function latestDigest() {
 /** 도구를 주지 않는다 — 프롬프트에 남이 쓴 초록이 들어가기 때문이다. */
 function ask(prompt) {
   return new Promise((resolve, reject) => {
-    const child = spawn(CLAUDE, ["-p", prompt, "--allowed-tools", "", "--output-format", "text"], {
+    const child = spawn(CLAUDE, claudeArgs(prompt), {
       stdio: ["ignore", "pipe", "pipe"],
       env: { ...process.env, PATH: `${dirname(process.execPath)}:${process.env.PATH ?? ""}` },
     });
@@ -216,19 +217,19 @@ function handle(message) {
  */
 
 let socket = null;
-let heartbeat = null;
-let acked = true;
+// 박동 규칙은 common.mjs. 응답이 없으면 소켓을 닫고 close 가 다시 붙는다.
+const heartbeat = createHeartbeat({
+  sendBeat: () => send({ op: 1, d: seq }),
+  onMissedAck: () => { log("박동 응답 없음 — 다시 붙는다"); socket.close(4000); },
+  timers: { setTimeout, clearTimeout, setInterval, clearInterval },
+  random: Math.random,
+});
 let seq = null;
 let sessionId = null;
 let resumeUrl = null;
 let backoff = 1000;
 
 const send = (payload) => socket?.readyState === 1 && socket.send(JSON.stringify(payload));
-
-function stopHeartbeat() {
-  if (heartbeat) clearInterval(heartbeat);
-  heartbeat = null;
-}
 
 function connect() {
   const url = `${resumeUrl ?? "wss://gateway.discord.gg"}/?v=10&encoding=json`;
@@ -243,23 +244,15 @@ function connect() {
     if (s !== null && s !== undefined) seq = s;
 
     if (op === 10) {
-      // HELLO. 첫 박동은 지터를 줘서 여러 봇이 동시에 때리지 않게 한다(스펙 권고).
-      acked = true;
-      stopHeartbeat();
-      const beat = () => {
-        if (!acked) { log("박동 응답 없음 — 다시 붙는다"); socket.close(4000); return; }
-        acked = false;
-        send({ op: 1, d: seq });
-      };
-      setTimeout(() => { beat(); heartbeat = setInterval(beat, d.heartbeat_interval); },
-        d.heartbeat_interval * Math.random());
+      // HELLO. 박동을 (다시) 시작한다 — 옛 지터 타이머까지 start 가 지운다.
+      heartbeat.start(d.heartbeat_interval);
 
       if (sessionId && seq !== null) send({ op: 6, d: { token: TOKEN, session_id: sessionId, seq } });
       else send({ op: 2, d: { token: TOKEN, intents: INTENTS, properties: { os: "linux", browser: "papers", device: "papers" } } });
       return;
     }
 
-    if (op === 11) { acked = true; return; }
+    if (op === 11) { heartbeat.ack(); return; }
     if (op === 1) { send({ op: 1, d: seq }); return; }
     if (op === 7) { log("디스코드가 재접속을 요청"); socket.close(4000); return; }
     if (op === 9) {
@@ -292,7 +285,7 @@ function connect() {
   });
 
   socket.addEventListener("close", ({ code }) => {
-    stopHeartbeat();
+    heartbeat.stop();
     // 4004(인증 실패)·4014(인텐트 거부)는 다시 붙어도 같은 결과다. 무한 재시도로
     // 로그를 채우지 말고 사람이 고치게 세운다.
     if (code === 4004 || code === 4014) {
