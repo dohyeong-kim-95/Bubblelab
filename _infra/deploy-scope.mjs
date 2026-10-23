@@ -76,7 +76,7 @@ const GLOBAL_TESTS = [
   "_infra/deploy-workflow.test.mjs", "_infra/git-isolation.test.mjs",
   "_infra/home-button.test.mjs", "_infra/lint.test.mjs",
   "_infra/records.test.mjs", "_infra/security.test.mjs", "_infra/session.test.mjs",
-  "_infra/sites.test.mjs",
+  "_infra/sites.test.mjs", "_infra/html.test.mjs",
   "_infra/verify-prod.test.mjs",
   "_infra/ship.test.mjs", "_infra/webpush.test.mjs", "_infra/worker.test.mjs",
 ];

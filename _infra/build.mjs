@@ -17,6 +17,7 @@ import { fileURLToPath } from "node:url";
 import { generateAssetCatalog } from "./assets.js";
 import { emitEmoticonHistory } from "./emoticon-history.mjs";
 import { CONFIDENTIAL_SUBDOMAINS, isSiteDirectoryName } from "./sites.js";
+import { escapeHtml } from "./html.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const DIST = join(ROOT, "dist");
@@ -72,8 +73,6 @@ for (const site of sites) {
   });
 }
 
-const escapeHtml = (s) =>
-  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 // 공용 에셋은 dist 루트로 (worker가 /_shared/* 를 프리픽스 없이 서빙)
 if (existsSync(join(ROOT, "_shared"))) {
