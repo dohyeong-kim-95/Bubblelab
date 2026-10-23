@@ -122,18 +122,25 @@ test("durable rate limiter persists a fixed-window limit", async () => {
   assert.ok(blocked.retryAfter >= 1 && blocked.retryAfter <= 60);
 });
 
-test("rate limiter reset clears the count for that key", async () => {
+test("rate limiter refund gives back only one attempt", async () => {
   const limiter = new RateLimiterDO({ storage: new MemoryStorage() });
   const send = (extra = {}) => limiter.fetch(new Request("https://rate-limit.internal/check", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ limit: 1, windowMs: 60_000, ...extra }),
+    body: JSON.stringify({ limit: 2, windowMs: 60_000, ...extra }),
   })).then((response) => response.json());
 
+  assert.equal((await send()).allowed, true);   // 남의 실패 1회
+  assert.equal((await send()).allowed, true);   // 내 성공 1회
+  await send({ refund: true });                 // 내 몫만 돌려받는다
+  assert.equal((await send()).allowed, true);   // 다시 2회째
+  assert.equal((await send()).allowed, false, "남이 쌓은 실패는 지워지지 않는다");
+  await send({ refund: true });
+  await send({ refund: true });
+  await send({ refund: true });                 // 0 밑으로는 내려가지 않는다
+  assert.equal((await send()).allowed, true);
   assert.equal((await send()).allowed, true);
   assert.equal((await send()).allowed, false);
-  await send({ reset: true });
-  assert.equal((await send()).allowed, true);
 });
 
 // 별자리 화면은 기기 방향과 위치를 쓴다. 기본 정책이 이 넷을 빈 목록으로 잠가 두면
