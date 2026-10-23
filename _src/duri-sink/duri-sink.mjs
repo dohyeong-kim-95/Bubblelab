@@ -96,7 +96,16 @@ function saveCal(entries, note) {
 let backoff = 1000;
 function connect() {
   const wsUrl = `${cfg.url.replace(/^http/, "ws")}/_duri?token=${encodeURIComponent(cfg.token)}`;
-  const ws = new WebSocket(wsUrl);
+  // 토큰은 Authorization 헤더로 보낸다(주소의 토큰은 프록시·서버 로그에 남는다).
+  // 옛 서버는 ?token= 만 읽으므로 둘 다 보낸다. Node 22 의 WebSocket 은 headers 옵션을
+  // 받는다. Node 20.10~21 의 실험판은 이 옵션을 무시하거나 거절할 수 있어, 거절하면
+  // 헤더 없이 다시 연다(?token= 이 대신한다).
+  let ws;
+  try {
+    ws = new WebSocket(wsUrl, { headers: { Authorization: `Bearer ${cfg.token}` } });
+  } catch {
+    ws = new WebSocket(wsUrl);
+  }
   socket = ws;
   ws.addEventListener("open", () => {
     backoff = 1000;
