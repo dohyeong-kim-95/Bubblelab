@@ -9,6 +9,9 @@
  * `--allowed-tools ""` 만으로는 안 된다 — 그건 "묻지 않고 허락할" 목록일 뿐이라
  * 권한 확인이 필요 없는 읽기 도구(Read·Grep·Glob)가 그대로 살아서 작업 폴더의
  * 파일(.verify.env 등)을 읽어 답에 옮길 수 있었다. 끄는 옵션은 `--tools ""` 다.
+ * 다만 `--tools ""` 는 내장 도구만 끈다 — 사용자·프로젝트에 설정된 MCP 서버의 도구는
+ * 그대로 보인다. `--strict-mcp-config` 를 같이 주고 `--mcp-config` 는 주지 않아 MCP 도구도
+ * 0개로 만든다.
  *
  * Args:
  *   prompt: 모델에 줄 프롬프트
@@ -16,7 +19,7 @@
  *   spawn 에 넘길 인자 배열
  */
 export function claudeArgs(prompt) {
-  return ["-p", prompt, "--tools", "", "--allowed-tools", "", "--output-format", "text"];
+  return ["-p", prompt, "--tools", "", "--strict-mcp-config", "--allowed-tools", "", "--output-format", "text"];
 }
 
 /**

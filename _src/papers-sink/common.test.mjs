@@ -12,6 +12,12 @@ test("claudeArgs: 도구를 --tools \"\" 로 전부 끈다", () => {
   assert.equal(args[args.indexOf("--output-format") + 1], "text");
 });
 
+test("claudeArgs: --strict-mcp-config 로 설정된 MCP 서버 도구도 끈다", () => {
+  const args = claudeArgs("질문");
+  assert.ok(args.includes("--strict-mcp-config"), "--tools \"\" 는 MCP 도구를 끄지 않는다");
+  assert.ok(!args.includes("--mcp-config"), "MCP 설정을 주면 그 서버 도구가 살아난다");
+});
+
 test("claudeArgs: 프롬프트가 옵션처럼 생겨도 -p 의 값으로만 들어간다", () => {
   const args = claudeArgs("--tools default");
   assert.equal(args[1], "--tools default");
