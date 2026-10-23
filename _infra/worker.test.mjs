@@ -908,3 +908,60 @@ test("08:00 KST cron 은 VAPID 가 없어도 duri 오늘 일정 리마인드를 
   await worker.scheduled({ cron: "0 23 * * *" }, { ...env, ENABLE_DURI: "false" }, { waitUntil: (p) => pending.push(p) });
   assert.equal(calls.length, 0, "duri 를 끄면 부르지 않는다");
 });
+
+test("work 로그인: 프로토타입 키(constructor 등)는 의뢰 계정이 아니다", async () => {
+  const env = { WORK_PASSWORD: "master", WORK_CLIENTS: JSON.stringify({ daonfit: "pw" }) };
+  const login = (id, password) => {
+    const form = new FormData();
+    form.set("id", id);
+    form.set("password", password);
+    return worker.fetch(new Request("https://work.bubblelab.dev/login", { method: "POST", body: form }), env, ctx);
+  };
+  const forged = await login("constructor", "function Object() { [native code] }");
+  assert.equal(forged.status, 401);
+  assert.equal(forged.headers.get("Set-Cookie"), null);
+  assert.equal((await login("tostring", "x")).status, 401);
+  const real = await login("daonfit", "pw");
+  assert.equal(real.status, 303);
+  assert.equal(real.headers.get("Location"), "/daonfit/");
+});
+
+test("공개 /_stats 와 방문 집계는 비공개 서브도메인 이름을 내보내지 않는다", async () => {
+  const tracked = [];
+  const env = {
+    ANALYTICS: {
+      idFromName: (name) => name,
+      get: () => ({
+        fetch: async (url, init) => {
+          if (String(url).includes("/pages")) {
+            return Response.json({
+              date: "2026-10-23", days: 7,
+              pages: { "slop/circle": 3, "lab/claude-insights": 1, podcast: 2, "test/x": 1, util: 4 },
+            });
+          }
+          tracked.push(JSON.parse(init.body).page);
+          return new Response(null, { status: 204 });
+        },
+      }),
+    },
+    ASSETS: {
+      fetch: async () => new Response("<p>hi</p>", { headers: { "Content-Type": "text/html" } }),
+    },
+  };
+  const stats = await worker.fetch(new Request("https://slop.bubblelab.dev/_stats"), env, ctx);
+  assert.equal(stats.status, 200);
+  assert.deepEqual((await stats.json()).pages, { "slop/circle": 3, util: 4 });
+  assert.match(stats.headers.get("Cache-Control"), /max-age=300/);
+
+  const pending = [];
+  const trackingCtx = { waitUntil: (promise) => pending.push(promise) };
+  const visit = (url) => worker.fetch(new Request(url, {
+    headers: { "Sec-Fetch-Dest": "document", "User-Agent": "Mozilla/5.0 Safari" },
+  }), env, trackingCtx);
+  for (const url of ["https://lab.bubblelab.dev/claude-insights/", "https://podcast.bubblelab.dev/",
+    "https://test.bubblelab.dev/x/", "https://slop.bubblelab.dev/circle/"]) {
+    await visit(url);
+  }
+  await Promise.all(pending);
+  assert.deepEqual(tracked, ["slop/circle"]);
+});

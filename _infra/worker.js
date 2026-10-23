@@ -93,6 +93,15 @@ import { handleEstateDeals } from "./estate.js";
 import { serveAssetDownload, serveAssetDownloadCounts } from "./downloads.js";
 import { fetchStoreReviews, REVIEWS_SYNC_VERSION } from "./reviews.js";
 import { DURI_MAX_PHOTO_BYTES } from "./duri.js";
+import { CONFIDENTIAL_SUBDOMAINS, NO_STORE_SITES } from "./sites.js";
+import {
+  hmacKey,
+  isValidToken,
+  issueSubjectToken,
+  issueToken,
+  matchesCredential,
+  tokenSubject,
+} from "./session.js";
 import { EMOTICON_MAX_BODY, EMOTICON_MAX_PROMPT, EMOTICON_MAX_REFERENCES, geminiGenerate } from "./emoticon-gen.js";
 import {
   applySecurityHeaders,
@@ -248,61 +257,12 @@ function visitorId(request) {
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 
 async function sessionKey(env, adminId, adminPassword) {
-  const secret = env.ADMIN_SESSION_SECRET || `${adminId}\0${adminPassword}\0bl-admin-session`;
-  return crypto.subtle.importKey(
-    "raw", new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
-  );
+  return hmacKey(env.ADMIN_SESSION_SECRET || `${adminId}\0${adminPassword}\0bl-admin-session`);
 }
 
-const hex = (buf) =>
-  [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
 
-async function issueSession(key) {
-  const payload = `${Date.now() + SESSION_TTL_MS}.${crypto.randomUUID()}`;
-  const sig = hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload)));
-  return `${payload}.${sig}`;
-}
-
-async function validSession(key, token) {
-  const [expiry, nonce, sig] = token?.split(".") ?? [];
-  if (!expiry || !nonce || !/^[0-9a-f]{64}$/.test(sig ?? "")) return false;
-  if (!Number.isFinite(+expiry) || Date.now() > +expiry) return false;
-  const sigBytes = Uint8Array.from(sig.match(/../g) ?? [], (h) => parseInt(h, 16));
-  return crypto.subtle.verify(
-    "HMAC", key, sigBytes, new TextEncoder().encode(`${expiry}.${nonce}`),
-  );
-}
-
-async function matchesCredential(key, supplied, expected) {
-  const expectedBytes = new TextEncoder().encode(String(expected));
-  const signature = await crypto.subtle.sign("HMAC", key, expectedBytes);
-  return crypto.subtle.verify(
-    "HMAC",
-    key,
-    signature,
-    new TextEncoder().encode(String(supplied ?? "")),
-  );
-}
-
-/* work 의뢰 세션: 만료.의뢰ID.난수 에 HMAC 서명. 의뢰 ID가 payload 에 들어가
- * 프로젝트별 접근 범위를 갖는다. 운영자 마스터는 ID "*" (모든 프로젝트). */
-async function issueWorkSession(key, client) {
-  const payload = `${Date.now() + SESSION_TTL_MS}.${client}.${crypto.randomUUID()}`;
-  const sig = hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload)));
-  return `${payload}.${sig}`;
-}
-
-async function workSessionClient(key, token) {
-  const [expiry, client, nonce, sig] = token?.split(".") ?? [];
-  if (!expiry || !client || !nonce || !/^[0-9a-f]{64}$/.test(sig ?? "")) return null;
-  if (!Number.isFinite(+expiry) || Date.now() > +expiry) return null;
-  const sigBytes = Uint8Array.from(sig.match(/../g) ?? [], (h) => parseInt(h, 16));
-  const valid = await crypto.subtle.verify(
-    "HMAC", key, sigBytes, new TextEncoder().encode(`${expiry}.${client}.${nonce}`),
-  );
-  return valid ? client : null;
-}
+/* work 의뢰 세션: 만료.의뢰ID.난수 에 HMAC 서명(session.js 의 subject 토큰). 의뢰 ID가
+ * payload 에 들어가 프로젝트별 접근 범위를 갖는다. 운영자 마스터는 ID "*" (모든 프로젝트). */
 
 // 의뢰 계정: WORK_CLIENTS secret 에 JSON 으로 { "의뢰ID": "비밀번호" }.
 // ID는 프로젝트 폴더명과 같다 (예: {"daonfit": "..."}).
@@ -316,10 +276,7 @@ function workClients(env) {
 }
 
 async function workKeyOf(env) {
-  return crypto.subtle.importKey(
-    "raw", new TextEncoder().encode(`${env.WORK_PASSWORD}\0bl-work-session`),
-    { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
-  );
+  return hmacKey(`${env.WORK_PASSWORD}\0bl-work-session`);
 }
 
 /* 외주 작업 게이트. 루트(브랜딩·의뢰 안내 등 루트 파일)는 공개하고,
@@ -330,7 +287,7 @@ const WORK_PUBLIC_PAGES = new Set(["request", "showcase"]); // 확장자 없는 
 
 async function handleWork(request, env, url, base = "") {
   const key = await workKeyOf(env);
-  const client = await workSessionClient(key, cookies(request).bl_work);
+  const client = await tokenSubject(key, cookies(request).bl_work);
   const cookieFlags = `Path=/; HttpOnly; SameSite=Strict; Max-Age=86400${url.protocol === "https:" ? "; Secure" : ""}`;
   const htmlHeaders = { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" };
   const homeOf = (grant) => (grant === "*" ? `${base}/` : `${base}/${grant}/`);
@@ -348,14 +305,17 @@ async function handleWork(request, env, url, base = "") {
     const password = form.get("password");
     const accounts = workClients(env);
     let grant = null;
-    if (/^[a-z0-9-]{1,32}$/.test(id) && accounts[id]
+    // accounts 는 JSON.parse 한 평범한 객체라 accounts.constructor 같은 프로토타입
+    // 값도 나온다 — 자기 키이고 문자열 비밀번호인 것만 계정으로 본다.
+    const isAccount = Object.hasOwn(accounts, id) && typeof accounts[id] === "string";
+    if (/^[a-z0-9-]{1,32}$/.test(id) && isAccount
       && await matchesCredential(key, password, accounts[id])) {
       grant = id;
     } else if (await matchesCredential(key, password, env.WORK_PASSWORD)) {
       grant = "*"; // 운영자 마스터 — ID 무관
     }
     if (grant) {
-      const token = await issueWorkSession(key, grant);
+      const token = await issueSubjectToken(key, SESSION_TTL_MS, grant);
       const dest = next && (grant === "*" || grant === next) ? `${base}/${next}/` : homeOf(grant);
       return redirect(dest, { "Set-Cookie": `bl_work=${token}; ${cookieFlags}` });
     }
@@ -399,21 +359,12 @@ function duriPassword(env) {
 }
 
 async function duriSessionKey(env) {
-  return crypto.subtle.importKey(
-    "raw", new TextEncoder().encode(`${duriPassword(env)}\0bl-duri-session`),
-    { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
-  );
-}
-
-async function issueDuriSession(key) {
-  const payload = `${Date.now() + DURI_SESSION_TTL_MS}.${crypto.randomUUID()}`;
-  const sig = hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload)));
-  return `${payload}.${sig}`;
+  return hmacKey(`${duriPassword(env)}\0bl-duri-session`);
 }
 
 async function handleDuriGate(request, env, url, base = "") {
   const key = await duriSessionKey(env);
-  const isAuthed = await validSession(key, cookies(request).bl_duri);
+  const isAuthed = await isValidToken(key, cookies(request).bl_duri);
   // SameSite=Lax: 홈 화면에서 PWA를 새로 띄우는 top-level 진입에도 쿠키가 실려
   // 매번 재로그인하지 않게 한다(Strict는 이 진입에서 쿠키가 누락됨). 교차 사이트
   // 하위요청엔 안 실려 CSRF 보호는 유지된다.
@@ -427,7 +378,7 @@ async function handleDuriGate(request, env, url, base = "") {
     if (limited) return limited;
     const form = await request.formData();
     if (await matchesCredential(key, form.get("password"), duriPassword(env))) {
-      const token = await issueDuriSession(key);
+      const token = await issueToken(key, DURI_SESSION_TTL_MS);
       return redirect(`${base}/`, { "Set-Cookie": `bl_duri=${token}; ${cookieFlags}` });
     }
     return new Response(DURI_LOGIN_PAGE(true, base), { status: 401, headers: htmlHeaders });
@@ -458,16 +409,7 @@ function lifeConfigured(env) {
 }
 
 async function lifeKey(secret, purpose) {
-  return crypto.subtle.importKey(
-    "raw", new TextEncoder().encode(`${secret}\0${purpose}`),
-    { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
-  );
-}
-
-async function issueLifeSession(key) {
-  const payload = `${Date.now() + LIFE_SESSION_TTL_MS}.${crypto.randomUUID()}`;
-  const sig = hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload)));
-  return `${payload}.${sig}`;
+  return hmacKey(`${secret}\0${purpose}`);
 }
 
 /* LIFE 백업 중계. 서버에 상시 저장하는 것은 이 한 덩어리뿐이고, 폰이 올린 것을
@@ -490,10 +432,10 @@ async function handleLifeBackup(request, env, url) {
   }
   const path = url.pathname.slice("/_life".length) || "/";
   const sessionKey = await lifeKey(env.LIFE_SESSION_SECRET, "bl-life-session");
-  const owner = await validSession(sessionKey, cookies(request).bl_life);
+  const owner = await isValidToken(sessionKey, cookies(request).bl_life);
   const sinkKey = await lifeSinkKey(env);
   const bearer = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
-  const sink = Boolean(bearer && sinkKey) && await validSession(sinkKey, bearer);
+  const sink = Boolean(bearer && sinkKey) && await isValidToken(sinkKey, bearer);
   const json = (body, status = 200) =>
     Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 
@@ -549,7 +491,7 @@ async function handleLifeBackup(request, env, url) {
 async function handleLifeGate(request, env, url, base = "") {
   if (!lifeConfigured(env)) return new Response("life is not configured", { status: 503 });
   const key = await lifeKey(env.LIFE_SESSION_SECRET, "bl-life-session");
-  const authenticated = await validSession(key, cookies(request).bl_life);
+  const authenticated = await isValidToken(key, cookies(request).bl_life);
   const headers = { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" };
   const secure = url.protocol === "https:" ? "; Secure" : "";
   const cookieFlags = `Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(LIFE_SESSION_TTL_MS / 1000)}${secure}`;
@@ -560,7 +502,7 @@ async function handleLifeGate(request, env, url, base = "") {
     if (limited) return limited;
     const form = await request.formData();
     if (await matchesCredential(key, form.get("password"), env.LIFE_PASSWORD)) {
-      return redirect(`${base}/`, { "Set-Cookie": `bl_life=${await issueLifeSession(key)}; ${cookieFlags}` });
+      return redirect(`${base}/`, { "Set-Cookie": `bl_life=${await issueToken(key, LIFE_SESSION_TTL_MS)}; ${cookieFlags}` });
     }
     return new Response(LIFE_LOGIN_PAGE(true, base), { status: 401, headers });
   }
@@ -589,16 +531,11 @@ async function duriSinkKey(env) {
   const pw = duriPassword(env);
   const secret = env.DURI_SINK_SECRET || (pw ? `${pw}\0bl-duri-sink` : null);
   if (!secret) return null;
-  return crypto.subtle.importKey(
-    "raw", new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
-  );
+  return hmacKey(secret);
 }
 
 async function issueSinkToken(key) {
-  const payload = `${Date.now() + SINK_TOKEN_TTL_MS}.${crypto.randomUUID()}`;
-  const sig = hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload)));
-  return `${payload}.${sig}`;
+  return issueToken(key, SINK_TOKEN_TTL_MS);
 }
 
 function withDuriRole(request, role) {
@@ -630,11 +567,11 @@ async function handleDuri(request, env, url) {
   const path = url.pathname;
 
   const gateKey = await duriSessionKey(env);
-  const gated = await validSession(gateKey, cookies(request).bl_duri);
+  const gated = await isValidToken(gateKey, cookies(request).bl_duri);
   const sinkKey = await duriSinkKey(env);
   const token = url.searchParams.get("token") ||
     (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
-  const sinkOk = !!(sinkKey && token) && await validSession(sinkKey, token);
+  const sinkOk = !!(sinkKey && token) && await isValidToken(sinkKey, token);
 
   // 소유자(duri 게이트)만 싱크 토큰을 발급받는다 → 데스크톱 데몬 설정에 넣는다.
   if (path === "/_duri/sink-token" && request.method === "POST") {
@@ -849,7 +786,7 @@ async function handleAdmin(request, env, url, base = "") {
   const adminId = env.ADMIN_ID || "admin";
   const adminPassword = env.ADMIN_PASSWORD || "admin";
   const key = await sessionKey(env, adminId, adminPassword);
-  const isAuthed = await validSession(key, cookies(request).bl_admin);
+  const isAuthed = await isValidToken(key, cookies(request).bl_admin);
   const cookieFlags = `Path=/; HttpOnly; SameSite=Strict; Max-Age=86400${url.protocol === "https:" ? "; Secure" : ""}`;
 
   if (url.pathname === "/login" && request.method === "POST") {
@@ -863,7 +800,7 @@ async function handleAdmin(request, env, url, base = "") {
       matchesCredential(key, form.get("password"), adminPassword),
     ]);
     if (idMatches && passwordMatches) {
-      const token = await issueSession(key);
+      const token = await issueToken(key, SESSION_TTL_MS);
       return redirect(`${base}/`, { "Set-Cookie": `bl_admin=${token}; ${cookieFlags}` });
     }
     return new Response(LOGIN_PAGE(true, base), {
@@ -1017,6 +954,43 @@ async function handleAdmin(request, env, url, base = "") {
     return new Response("not found", { status: 404 });
   }
   return null;
+}
+
+// 공개 페이지 통계 (카테고리 홈의 접속량순 정렬). 카테고리 홈을 열 때마다 불리는데
+// AnalyticsDO 는 35일치 pv: 키를 훑어야 답할 수 있어서 엣지 캐시에 5분 둔다
+// (Cache-Control 만으로는 워커 응답이 엣지에 남지 않는다). 비공개 서브도메인 페이지는
+// 집계 전부터 쌓인 키가 있을 수 있어 여기서 한 번 더 걸러 낸다 — 이름이 곧 장벽이다.
+const PUBLIC_STATS_MAX_AGE = 300;
+
+function isPublicPage(page) {
+  const site = page.split("/")[0];
+  return !CONFIDENTIAL_SUBDOMAINS.has(site);
+}
+
+async function servePublicStats(env) {
+  const date = kstDate();
+  const cache = typeof caches === "undefined" ? null : caches.default;
+  const cacheKey = new Request(`https://stats-cache.bubblelab.dev/v1/pages/${date}`);
+  const cached = await cache?.match(cacheKey);
+  if (cached) return new Response(cached.body, cached);
+
+  const id = env.ANALYTICS.idFromName("global");
+  const upstream = await env.ANALYTICS.get(id).fetch(
+    `https://analytics.internal/pages?date=${date}&days=7`,
+  );
+  if (!upstream.ok) {
+    return new Response(upstream.body, { status: upstream.status, headers: { "Cache-Control": "no-store" } });
+  }
+  const data = await upstream.json();
+  const pages = {};
+  for (const [page, users] of Object.entries(data.pages ?? {})) {
+    if (isPublicPage(page)) pages[page] = users;
+  }
+  const response = Response.json({ ...data, pages }, {
+    headers: { "Cache-Control": `public, max-age=${PUBLIC_STATS_MAX_AGE}` },
+  });
+  await cache?.put(cacheKey, response.clone());
+  return response;
 }
 
 // 약속 방에서 큰 본문을 받는 곳 — 사진(긴 변 2048px JPEG + 썸네일, base64), 결제내역 캡처,
@@ -1194,13 +1168,7 @@ export async function handleRequest(request, env, ctx) {
         scope: "public-stats", limit: 60, windowMs: 60 * 1000,
       });
       if (limited) return limited;
-      const id = env.ANALYTICS.idFromName("global");
-      const response = await env.ANALYTICS.get(id).fetch(
-        `https://analytics.internal/pages?date=${kstDate()}&days=7`,
-      );
-      const headers = new Headers(response.headers);
-      headers.set("Cache-Control", "public, max-age=300");
-      return new Response(response.body, { status: response.status, headers });
+      return servePublicStats(env);
     }
 
     if (path === "/_streak" && request.method === "GET") {
@@ -1395,7 +1363,7 @@ export async function handleRequest(request, env, ctx) {
       if (!env.WORK_PASSWORD) {
         return new Response("work preview is not configured", { status: 503 });
       }
-      const client = await workSessionClient(await workKeyOf(env), cookies(request).bl_work);
+      const client = await tokenSubject(await workKeyOf(env), cookies(request).bl_work);
       if (!client) {
         return Response.json({ error: "authentication required" }, { status: 401 });
       }
@@ -1453,7 +1421,7 @@ export async function handleRequest(request, env, ctx) {
       const bearer = (request.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
       const master = bearer
         ? await matchesCredential(key, bearer, env.WORK_PASSWORD)
-        : (await workSessionClient(key, cookies(request).bl_work)) === "*";
+        : (await tokenSubject(key, cookies(request).bl_work)) === "*";
       if (!master) {
         return Response.json({ error: "authentication required" }, {
           status: 401, headers: { "Cache-Control": "no-store" },
@@ -1520,7 +1488,7 @@ export async function handleRequest(request, env, ctx) {
       const contentTypeError = requireJsonRequest(request);
       if (contentTypeError) return contentTypeError;
       const key = await workKeyOf(env);
-      if ((await workSessionClient(key, cookies(request).bl_work)) !== "*") {
+      if ((await tokenSubject(key, cookies(request).bl_work)) !== "*") {
         return Response.json({ error: "authentication required" }, {
           status: 401, headers: { "Cache-Control": "no-store" },
         });
@@ -1545,7 +1513,7 @@ export async function handleRequest(request, env, ctx) {
       if (!env.WORK_PASSWORD) {
         return new Response("work preview is not configured", { status: 503 });
       }
-      const client = await workSessionClient(await workKeyOf(env), cookies(request).bl_work);
+      const client = await tokenSubject(await workKeyOf(env), cookies(request).bl_work);
       if (!client) {
         return Response.json({ error: "authentication required" }, { status: 401 });
       }
@@ -1605,7 +1573,7 @@ export async function handleRequest(request, env, ctx) {
       if (path.startsWith("/_papers/comments")
         || (path === "/_papers/reviews" && request.method === "GET")) {
         const key = await lifeKey(env.LIFE_SESSION_SECRET, "bl-life-session");
-        const owner = lifeConfigured(env) && await validSession(key, cookies(request).bl_life);
+        const owner = lifeConfigured(env) && await isValidToken(key, cookies(request).bl_life);
         return handlePapersComments(request, env, url, owner);
       }
       // 집 PC 데몬 전용 경로는 sink secret 으로, 나머지는 읽기 전용으로 연다.
@@ -1823,7 +1791,7 @@ export async function handleRequest(request, env, ctx) {
       }
     }
 
-    if (["admin", "work", "estate", "duri", "life"].includes(site)) {
+    if (NO_STORE_SITES.has(site)) {
       const headers = new Headers(response.headers);
       // 문서·JSON·인증 뒤 이미지는 디스크에 남기지 않는다. 실행 코드와 폰트는
       // 사용자 데이터가 아니므로 브라우저 전용 캐시를 허용하고, 공개 데이터인
@@ -1850,7 +1818,8 @@ export async function handleRequest(request, env, ctx) {
     const isDocument = request.headers.get("Sec-Fetch-Dest") === "document";
     // bl_notrack: 운영자가 /_optout에서 켠 브라우저는 집계·쿠키 발급 모두 건너뛴다.
     const optedOut = cookies(request).bl_notrack === "1";
-    if (!["admin", "work", "estate", "life"].includes(site) && isDocument && !isBot && !optedOut && response.ok &&
+    // 비공개 서브도메인은 집계하지 않는다 — 공개 /_stats 가 페이지 이름을 내보낸다.
+    if (!CONFIDENTIAL_SUBDOMAINS.has(site) && isDocument && !isBot && !optedOut && response.ok &&
         response.headers.get("Content-Type")?.includes("text/html")) {
       const date = kstDate();
       const jar = cookies(request);

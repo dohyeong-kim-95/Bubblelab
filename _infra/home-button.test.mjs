@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { CONFIDENTIAL_SUBDOMAINS } from "./sites.js";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -255,8 +256,10 @@ test("life 에는 공용 스크립트를 넣지 않는다 (여는 속도)", () =
     assert.ok(!html.includes(script), `life 에 ${script} 가 붙었다`);
   }
   // 워커가 방문 집계에서 life 를 빼고 있고 공유·홈 버튼도 없다 — 받아 봐야 하는 일이 없다.
+  // 집계 제외는 비공개 서브도메인 전체(sites.js 한 곳)이고 life 가 그 안에 있다.
   const worker = readFileSync(new URL("./worker.js", import.meta.url), "utf8");
-  assert.match(worker, /!\["admin", "work", "estate", "life"\]\.includes\(site\)/);
+  assert.match(worker, /!CONFIDENTIAL_SUBDOMAINS\.has\(site\) && isDocument/);
+  assert.equal(CONFIDENTIAL_SUBDOMAINS.has("life"), true);
 
   // 다른 사이트는 그대로 받아야 한다.
   assert.ok(readFileSync(join(DIST, "slop/index.html"), "utf8").includes("engagement.js"));

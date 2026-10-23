@@ -16,18 +16,13 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { generateAssetCatalog } from "./assets.js";
 import { emitEmoticonHistory } from "./emoticon-history.mjs";
+import { CONFIDENTIAL_SUBDOMAINS, isSiteDirectoryName } from "./sites.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const DIST = join(ROOT, "dist");
-// docs/ 는 서브도메인이 아니라 개발 워크플로 문서다(병렬 에이전트 판정 기록 등).
-// 루트 폴더라 그냥 두면 docs.bubblelab.dev 로 배포되고 랜딩 카드 검사에 걸린다.
-// scripts/ 는 배포 스크립트(make ship·verify-prod)라 서브도메인이 아니다.
-const SKIP = new Set(["dist", "node_modules", "docs", "scripts", "pops_generator"]);
-// 서브도메인 공개 구분. 퍼블릭은 www 랜딩 카드와 카테고리 홈 풀다운 메뉴에
+// 서브도메인이 아닌 루트 폴더(NON_SITE_DIRS)와 공개 구분(CONFIDENTIAL_SUBDOMAINS)은
+// sites.js 한 곳에 있다. 퍼블릭은 www 랜딩 카드와 카테고리 홈 풀다운 메뉴에
 // 노출되고, confidential은 주소를 직접 쳐야만 들어갈 수 있다(어디에도 링크 없음).
-// 새 폴더는 기본 퍼블릭이며, 빌드가 www 랜딩 카드 존재 여부를 검사한다.
-const CONFIDENTIAL_SUBDOMAINS = new Set(
-  ["admin", "work", "podcast", "estate", "duri", "test", "lab", "life"]);
 // 카테고리 홈 카드 목록에서 감춘다. 소스와 직접 URL은 그대로 살아 있고,
 // 공개할 준비가 되면 이 목록에서 빼면 된다. (서브도메인 단위 비공개는
 // CONFIDENTIAL_SUBDOMAINS 쪽이다 — 여기는 카테고리 안의 개별 카드용.)
@@ -38,11 +33,7 @@ const UNLISTED_ENTRIES = new Map([
   ["util", new Set(["passport-pic"])],
 ]);
 
-const isSite = (d) =>
-  d.isDirectory() &&
-  !d.name.startsWith("_") &&
-  !d.name.startsWith(".") &&
-  !SKIP.has(d.name);
+const isSite = (d) => d.isDirectory() && isSiteDirectoryName(d.name);
 
 rmSync(DIST, { recursive: true, force: true });
 mkdirSync(DIST);
@@ -69,7 +60,7 @@ const sites = readdirSync(ROOT, { withFileTypes: true }).filter(isSite);
     if (!CONFIDENTIAL_SUBDOMAINS.has(name) && !linked) {
       throw new Error(
         `public subdomain "${name}" is missing from www/index.html — ` +
-        `랜딩에 카드를 추가하거나 _infra/build.mjs의 CONFIDENTIAL_SUBDOMAINS에 등록하세요`,
+        `랜딩에 카드를 추가하거나 _infra/sites.js의 CONFIDENTIAL_SUBDOMAINS에 등록하세요`,
       );
     }
   }

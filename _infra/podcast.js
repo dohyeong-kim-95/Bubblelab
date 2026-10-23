@@ -9,6 +9,7 @@ import {
 } from "./podcast-ai.js";
 import { sendWebPush } from "./webpush.js";
 import { consumeRateLimit, rateLimitResponse, requireJsonRequest } from "./security.js";
+import { hmacKey, issueSubjectToken, readCookie, tokenSubject } from "./session.js";
 
 const MAX_SOURCE_BYTES = 10 * 1024 * 1024;
 const MAX_SOURCES_PER_DAY = 20;
@@ -113,42 +114,12 @@ function pickNotify(tone, kind, index) {
   return pack[index % pack.length];
 }
 
-// ── 세션 (planner와 같은 HMAC 서명 토큰, 쿠키 bl_pod) ─────────────
+// ── 세션 (session.js 의 subject 토큰 "만료.사용자.난수.서명", 쿠키 bl_pod) ──
 async function sessionHmacKey(env) {
   const secret = env.PODCAST_SESSION_SECRET || env.ADMIN_SESSION_SECRET ||
     (env.ADMIN_ID && env.ADMIN_PASSWORD ? `${env.ADMIN_ID}\0${env.ADMIN_PASSWORD}` : null);
   if (!secret) return null;
-  return crypto.subtle.importKey(
-    "raw", new TextEncoder().encode(`${secret}\0bl-podcast-session`),
-    { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
-  );
-}
-
-async function issueSession(key, userId) {
-  const payload = `${Date.now() + SESSION_TTL_MS}.${userId}.${crypto.randomUUID()}`;
-  const sig = hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload)));
-  return `${payload}.${sig}`;
-}
-
-async function sessionUser(key, token) {
-  const parts = token?.split(".") ?? [];
-  if (parts.length !== 4) return null;
-  const [expiry, userId, nonce, sig] = parts;
-  if (!expiry || !userId || !nonce || !/^[0-9a-f]{64}$/.test(sig ?? "")) return null;
-  if (!Number.isFinite(+expiry) || Date.now() > +expiry) return null;
-  const sigBytes = Uint8Array.from(sig.match(/../g) ?? [], (h) => parseInt(h, 16));
-  const valid = await crypto.subtle.verify(
-    "HMAC", key, sigBytes, new TextEncoder().encode(`${expiry}.${userId}.${nonce}`),
-  );
-  return valid ? userId : null;
-}
-
-function cookieValue(request, name) {
-  for (const part of (request.headers.get("Cookie") ?? "").split(";")) {
-    const [key, ...value] = part.trim().split("=");
-    if (key === name) return value.join("=");
-  }
-  return undefined;
+  return hmacKey(`${secret}\0bl-podcast-session`);
 }
 
 const podcastStub = (env) => env.PODCAST.get(env.PODCAST.idFromName("global"));
@@ -163,7 +134,7 @@ export async function handlePodcast(request, env, url) {
   if (!key) return new Response("podcast session secret is not configured", { status: 503 });
   const stub = podcastStub(env);
   const path = url.pathname;
-  const uid = await sessionUser(key, cookieValue(request, "bl_pod"));
+  const uid = await tokenSubject(key, readCookie(request, "bl_pod"));
   const cookieFlags = `Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000${url.protocol === "https:" ? "; Secure" : ""}`;
 
   if (path === "/_podcast/login" && request.method === "POST") {
@@ -183,7 +154,7 @@ export async function handlePodcast(request, env, url) {
     if (!response.ok) return json({ error: "등록되지 않은 코드입니다" }, { status: 401 });
     const { userId } = await response.json();
     return json({ authenticated: true }, {
-      headers: { "Set-Cookie": `bl_pod=${await issueSession(key, userId)}; ${cookieFlags}`, "Cache-Control": "no-store" },
+      headers: { "Set-Cookie": `bl_pod=${await issueSubjectToken(key, SESSION_TTL_MS, userId)}; ${cookieFlags}`, "Cache-Control": "no-store" },
     });
   }
 

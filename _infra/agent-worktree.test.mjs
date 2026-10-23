@@ -12,14 +12,13 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { isolatedGitEnv } from "./git-isolation.mjs";
+import { NON_SITE_DIRS, isSiteDirectoryName } from "./sites.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-test("docs/ 는 빌드 SKIP 목록에 있다 (서브도메인으로 배포되지 않는다)", () => {
-  const build = readFileSync(join(ROOT, "_infra/build.mjs"), "utf8");
-  const skip = build.match(/const SKIP = new Set\(\[([^\]]*)\]\)/);
-  assert.ok(skip, "build.mjs의 SKIP 선언을 찾지 못했다");
-  assert.match(skip[1], /"docs"/);
+test("docs/ 는 서브도메인이 아니다 (배포되지 않는다)", () => {
+  assert.equal(NON_SITE_DIRS.has("docs"), true);
+  assert.equal(isSiteDirectoryName("docs"), false);
 });
 
 test("레인을 만드는 서브도메인 목록이 빌드의 사이트 목록과 같다", () => {
@@ -29,12 +28,8 @@ test("레인을 만드는 서브도메인 목록이 빌드의 사이트 목록�
     encoding: "utf8",
   }).trim().split("\n");
 
-  const build = readFileSync(join(ROOT, "_infra/build.mjs"), "utf8");
-  const skip = new Set(
-    build.match(/const SKIP = new Set\(\[([^\]]*)\]\)/)[1].match(/"([^"]+)"/g).map((s) => s.slice(1, -1)),
-  );
   const fromBuild = readdirSync(ROOT, { withFileTypes: true })
-    .filter((d) => d.isDirectory() && !d.name.startsWith("_") && !d.name.startsWith(".") && !skip.has(d.name))
+    .filter((d) => d.isDirectory() && isSiteDirectoryName(d.name))
     .map((d) => d.name)
     .sort();
 
