@@ -1,5 +1,7 @@
 name: CI
 
+# 배포 판정의 원본은 deploy.yml 이다(main 직접 push → 변경 범위만큼 검증·배포).
+# 이 워크플로는 PR·수동 실행용 전체 검사다. main push 에는 돌지 않는다.
 on:
   pull_request:
   workflow_dispatch:
@@ -34,8 +36,14 @@ jobs:
       - name: Lint (syntax)
         run: bash scripts/lint.sh
 
-      - name: Test infra
-        run: node --test _infra/*.test.mjs
+      # 데이터랩 모범답안 체인 테스트(_src/tests/datalab.test.mjs)는 이 패키지가
+      # 없으면 건너뛴다 — PR 검사에서는 실제로 돌게 깔아 둔다.
+      - name: Install Python packages for datalab tests
+        run: python3 -m pip install --quiet numpy pandas scipy scikit-learn statsmodels matplotlib
+
+      # package.json 의 npm test 와 같은 범위(sink·공용 테스트 포함)를 본다.
+      - name: Test
+        run: npm test
 
       - name: Build Bubblelab
         run: node _infra/build.mjs
