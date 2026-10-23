@@ -8,8 +8,8 @@
 - **루트 폴더 = 서브도메인**: `slop/` → slop.bubblelab.dev, `games/` →
   games.bubblelab.dev, `www/` → bubblelab.dev(apex). 새 폴더 = 새 서브도메인.
   퍼블릭 서브도메인은 `www/index.html` 랜딩에 카드 추가 필수(빌드가 검사),
-  비공개는 `_infra/build.mjs`의 `CONFIDENTIAL_SUBDOMAINS`에 등록(랜딩·풀다운
-  미노출, 직접 주소로만 접근).
+  비공개는 `_infra/sites.js`의 `CONFIDENTIAL_SUBDOMAINS`에 등록(랜딩·풀다운·검색·
+  공개 방문 통계 미노출, 직접 주소로만 접근). 서브도메인 분류는 그 파일 한 곳이다.
 - `_`나 `.`로 시작하는 폴더는 배포되지 않는다 (`_infra`, `_src`, `_shared`는
   각각 인프라, 빌드 소스, 공용 에셋).
 - 토이 하나 = 폴더 하나 (`slop/이름/index.html`). 의존성·빌드 도구 없는
@@ -265,9 +265,13 @@ PNG·JPEG를 모두 받고, JPEG는 `npm ci` 필요. 검증은 `_infra/wallpaper
 지킨 것은 관계다(tRC = tRAS + tRP, tFAW > 4×tRRD 등을 테스트가 고정한다). 출처 어휘에
 데이터시트 층이 아예 없어 `mock` 아닌 값은 테스트가 거절한다(`life/dram/README.md`).
 
-**서버에 아무것도 저장하지 않는다** — 할 일은 브라우저 localStorage 에만 있고, 워커는
-비밀번호 게이트(`bl_life` 쿠키·`LIFE_PASSWORD`)만 담당한다. `/_life/*` API 는 없다.
-`ENABLE_LIFE` var는 fail-closed. 상태 규칙은 `life/store.js` 한 곳, 좌우 이동은 CSS
+**할 일의 원본은 브라우저 localStorage 다.** 워커는 비밀번호 게이트(`bl_life` 쿠키·
+`LIFE_PASSWORD`)와 **하루 한 번 올라오는 평문 백업 한 덩어리**만 맡는다 —
+`PUT /_life/backup`(게이트 세션 필요, R2 `LIFE_BUCKET`), 집 PC 데몬(`_src/life-sink/`)이
+`GET /_life/backup` 으로 받아 간다(싱크 토큰 필요 — `POST /_life/sink-token` 으로 세션에서
+발급, `LIFE_SINK_SECRET`). 평문인 것은 의도다(암호를 잃으면 백업도 잃는다).
+`/_papers/latest`·`/archive`(논문 다이제스트)도 LIFE 세션이나 papers sink secret 이 있어야
+읽힌다. `ENABLE_LIFE` var는 fail-closed. 상태 규칙은 `life/store.js` 한 곳, 좌우 이동은 CSS
 scroll-snap 이다. 자세한 것은 `life/README.md`.
 
 ## 둘만의 기록 (duri/)

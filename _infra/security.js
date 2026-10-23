@@ -168,7 +168,7 @@ export function applySecurityHeaders(response, request) {
 
 async function rateLimitName(request, env, scope, secretOverride) {
   const address = request.headers.get("CF-Connecting-IP") || "unknown";
-  const secret = secretOverride || env.ADMIN_SESSION_SECRET || env.PLANNER_SESSION_SECRET || env.ADMIN_PASSWORD;
+  const secret = secretOverride || env.ADMIN_SESSION_SECRET || env.ADMIN_PASSWORD;
   if (!secret) return null;
   const key = await crypto.subtle.importKey(
     "raw",

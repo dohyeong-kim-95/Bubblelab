@@ -8,7 +8,9 @@ Bubblelab의 정적 빌드, 단일 Cloudflare Worker, Durable Object 저장소�
 | 파일 | 역할 |
 | --- | --- |
 | `build.mjs` | 공개 사이트·공용 파일을 `dist/`로 복사하고 카드 페이지와 404 생성 |
-| `worker.js` | 호스트 라우팅, 공개 API, 관리자·플래너 세션 처리 |
+| `worker.js` | 호스트 라우팅, 공개 API, 로그인 게이트(admin·work·duri·life) |
+| `session.js` | "만료.난수.HMAC" 세션·싱크 토큰 발급·검증 한 곳 (worker·podcast 가 같이 쓴다) |
+| `sites.js` | 서브도메인 분류 원본: 비공개·게이트·no-store·배포 판정이 아는 목록, 서브도메인이 아닌 폴더 |
 | `security.js` | 동일 출처 검사, 보안 헤더, IP 원문을 남기지 않는 `RateLimiterDO` |
 | `realtime.js` | 경로 기반 JSON 실시간 서버 `RealtimeDO` |
 | `chat.js` | 익명 채팅 단일 로비 `ChatDO`. 메시지 미저장, 설정만 보관 |
@@ -28,6 +30,7 @@ Bubblelab의 정적 빌드, 단일 Cloudflare Worker, Durable Object 저장소�
 | `assets.js` | 저장소 이미지 메타데이터 검증과 카탈로그 생성 |
 | `asset-flags.js` | 스티커 공개 여부 오버라이드 `AssetFlagsDO`와 카탈로그 필터 |
 | `assets-store.js` | R2용 데이터 변환 코드. 현재 운영 라우트에서는 비활성 |
+| `git-isolation.mjs` | 테스트가 임시 리포에서 git 을 띄울 때 쓰는 환경(GIT_* 제거) — 훅에서 진짜 리포를 고치지 않게 |
 | `idle-balance.mjs` | Bubble Pop Idle 밸런스 시뮬레이터 |
 | `deploy-scope.mjs` | 변경 파일을 문서 전용·서브도메인 범위·전체 검증으로 분류 |
 | `deploy-prepare.mjs` | 라이브 SHA부터 현재 SHA까지의 배포 계획을 Actions에 생성 |
@@ -85,7 +88,7 @@ node _infra/build.mjs
 
 랜딩 검색 색인은 각 카드 페이지의 `<title>`(대개 한국어)과 폴더 이름(영문)을 모은
 목록이다. **카테고리 홈 카드와 같은 기준으로 거른다** —
-`CONFIDENTIAL_SUBDOMAINS`·`UNLISTED_ENTRIES`에 걸린 것은 검색에도 나오지 않는다
+`CONFIDENTIAL_SUBDOMAINS`(`sites.js`)·`UNLISTED_ENTRIES`에 걸린 것은 검색에도 나오지 않는다
 (검사: `_infra/home-button.test.mjs`). 자리 표시자가 없으면 빌드가 멈춘다. 규칙 엔진과
 설계는 `_shared/search-rules.js`·`www/README.md`.
 

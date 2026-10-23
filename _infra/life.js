@@ -1,5 +1,6 @@
-// life 서브도메인은 서버에 아무것도 저장하지 않는다. 할 일은 브라우저의
-// localStorage 에만 있고, 워커가 하는 일은 로그인 게이트뿐이다.
+// 이 DO 는 쓰지 않는다. life 의 할 일은 브라우저 localStorage 에 있고, 서버에 남는
+// 것은 워커(worker.js handleLifeBackup)가 R2(LIFE_BUCKET)에 두는 하루치 평문 백업
+// 한 덩어리뿐이다 — DO 저장소는 쓰지 않는다.
 //
 // 이 클래스가 남아 있는 이유는 하나다: wrangler.jsonc 의 v17 마이그레이션이
 // 이미 프로덕션에 적용됐고, Durable Object 마이그레이션은 append-only 라
