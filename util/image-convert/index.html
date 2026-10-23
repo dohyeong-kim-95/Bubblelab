@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>🖼️ 이미지 형식 변환</title>
-<meta name="description" content="HEIC·WebP 를 JPG·PNG 로. 여러 장은 ZIP 으로 한 번에.">
+<meta name="description" content="WebP·HEIC(Safari) 를 JPG·PNG 로. 여러 장은 ZIP 으로 한 번에.">
 <meta name="bl-group" content="사진·이미지">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🖼️</text></svg>">
 <link rel="stylesheet" href="/_shared/bubble.css">
@@ -50,12 +50,12 @@
   <header class="bl-head">
     <span class="bl-bubble" aria-hidden="true">🖼️</span>
     <h1>이미지 형식 변환</h1>
-    <p>HEIC·WebP 를 JPG·PNG 로. 여러 장은 ZIP 으로 한 번에.</p>
+    <p>WebP·HEIC 를 JPG·PNG 로. 여러 장은 ZIP 으로 한 번에.</p>
   </header>
 
   <div id="drop" class="bl-drop" role="button" tabindex="0" aria-label="이미지 선택">
     <p><strong>여기를 눌러 이미지를 고르거나</strong><br>파일을 끌어다 놓으세요 (붙여넣기도 가능)<br>
-      HEIC·WebP·BMP 등 브라우저가 읽는 형식이면 무엇이든</p>
+      WebP·BMP 등 브라우저가 읽는 형식이면 무엇이든<br>HEIC(아이폰 사진)는 Safari 에서만 열려요</p>
   </div>
   <input id="file" type="file" accept="image/*" multiple>
 
@@ -124,34 +124,57 @@ async function addFiles(fileList) {
     items.push(it);
     try {
       it.img = await createImageBitmap(file);
-      row.querySelector("img").src = URL.createObjectURL(file);
+      it.thumb = URL.createObjectURL(file);   // 비우기에서 같이 회수한다
+      row.querySelector("img").src = it.thumb;
       await convert(it);
     } catch {
       // 클래스를 바꾸면 다시 ".info" 로는 못 찾는다 — 한 번 잡아 둔다
       const info = row.querySelector(".info");
       info.className = "err";
-      info.textContent = "이 형식은 브라우저가 읽지 못해요 (예: HEIC)";
+      info.textContent = "이 형식은 브라우저가 읽지 못해요 (HEIC 는 Safari 에서만)";
     }
   }
   $("#actions").hidden = items.length === 0;
+}
+
+// iOS Safari 는 캔버스 면적이 약 1677만 px 을 넘으면 그리기·인코딩을 거부한다
+// (24MP 아이폰 사진 5712×4284 가 넘는다). 그보다 크면 비율을 지켜 줄인다.
+const MAX_CANVAS_PIXELS = 16_000_000;
+function fitCanvasSize(width, height) {
+  const pixels = width * height;
+  if (pixels <= MAX_CANVAS_PIXELS) return { width, height, shrunk: false };
+  const scale = Math.sqrt(MAX_CANVAS_PIXELS / pixels);
+  return { width: Math.floor(width * scale), height: Math.floor(height * scale), shrunk: true };
+}
+
+function showConvertError(it) {
+  if (it.url) URL.revokeObjectURL(it.url);
+  it.url = null; it.blob = null;
+  it.row.querySelector(".info").textContent = "변환하지 못했어요 — 사진이 너무 크거나 메모리가 부족해요";
+  it.row.querySelector("a").hidden = true;
 }
 
 function convert(it) {
   if (!it.img) return;
   return new Promise((resolve) => {
     const { mime, ext } = FMT[fmt];
+    const size = fitCanvasSize(it.img.width, it.img.height);
     const canvas = document.createElement("canvas");
-    canvas.width = it.img.width; canvas.height = it.img.height;
+    canvas.width = size.width; canvas.height = size.height;
     const ctx = canvas.getContext("2d");
+    if (!ctx) { showConvertError(it); resolve(); return; }
     if (fmt === "jpg") { ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height); } // JPG는 투명도가 없어서 흰 배경을 깐다
-    ctx.drawImage(it.img, 0, 0);
+    ctx.drawImage(it.img, 0, 0, canvas.width, canvas.height);
     canvas.toBlob((blob) => {
+      // 한계를 넘으면 오류 대신 null 이 온다 — 그대로 두면 "읽는 중…"에 멈춘다
+      if (!blob) { showConvertError(it); resolve(); return; }
       if (it.url) URL.revokeObjectURL(it.url);
       it.blob = blob;
       it.url = URL.createObjectURL(blob);
       it.outName = `${baseName(it.file.name)}.${ext}`;
       it.row.querySelector(".info").textContent =
-        `${it.img.width}×${it.img.height} · ${fmtSize(it.file.size)} → ${ext.toUpperCase()} ${fmtSize(blob.size)}`;
+        `${it.img.width}×${it.img.height} · ${fmtSize(it.file.size)} → ${ext.toUpperCase()} ${fmtSize(blob.size)}` +
+        (size.shrunk ? ` (${size.width}×${size.height} 로 줄임)` : "");
       const a = it.row.querySelector("a");
       a.href = it.url; a.download = it.outName; a.hidden = false;
       resolve();
@@ -186,7 +209,11 @@ $("#saveAll").addEventListener("click", async () => {
   }
 });
 $("#clear").addEventListener("click", () => {
-  items.forEach((it) => { it.url && URL.revokeObjectURL(it.url); it.img?.close?.(); });
+  items.forEach((it) => {
+    if (it.url) URL.revokeObjectURL(it.url);
+    if (it.thumb) URL.revokeObjectURL(it.thumb);
+    it.img?.close?.();
+  });
   items.length = 0; list.innerHTML = ""; $("#actions").hidden = true;
 });
 
