@@ -12,6 +12,10 @@
     return (c ^ 0xffffffff) >>> 0;
   };
 
+  // general purpose bit 11: "파일명은 UTF-8". 이게 없으면 Windows 탐색기 등이
+  // 파일명을 CP437/CP949 로 읽어 한글 이름이 깨진다.
+  const UTF8_NAME_FLAG = 0x0800;
+
   window.blMakeZip = function blMakeZip(files) {
     const chunks = [], central = [];
     let offset = 0;
@@ -20,12 +24,14 @@
       const crc = crc32(f.data);
       const head = new DataView(new ArrayBuffer(30));
       head.setUint32(0, 0x04034b50, true); head.setUint16(4, 20, true);
+      head.setUint16(6, UTF8_NAME_FLAG, true);
       head.setUint32(14, crc, true);
       head.setUint32(18, f.data.length, true); head.setUint32(22, f.data.length, true);
       head.setUint16(26, name.length, true);
       chunks.push(new Uint8Array(head.buffer), name, f.data);
       const cd = new DataView(new ArrayBuffer(46));
       cd.setUint32(0, 0x02014b50, true); cd.setUint16(4, 20, true); cd.setUint16(6, 20, true);
+      cd.setUint16(8, UTF8_NAME_FLAG, true);
       cd.setUint32(16, crc, true);
       cd.setUint32(20, f.data.length, true); cd.setUint32(24, f.data.length, true);
       cd.setUint16(28, name.length, true); cd.setUint32(42, offset, true);
