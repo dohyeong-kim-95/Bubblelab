@@ -15,6 +15,69 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Duri">
 <title>💞 Duri</title>
+<script>
+// 시작 감시 — 아이폰에서 앱이 까만 화면으로 멈춘 일(2026-10)을 진단하려고 둔다.
+// 8초 안에 시작이 끝나지 않으면 어디까지 왔는지·오류·기기 정보를 화면에 띄운다.
+// 아주 오래된 엔진에서도 돌도록 일부러 옛 문법(var·function)만 쓴다.
+(function () {
+  window.__duriStep = "html";
+  window.__duriReady = false;
+  var errors = [];
+  window.addEventListener("error", function (event) {
+    errors.push(String(event.message || event.type) + " @" + (event.lineno || "?"));
+  });
+  window.addEventListener("unhandledrejection", function (event) {
+    var reason = event.reason;
+    errors.push("promise: " + String(reason && reason.message ? reason.message : reason));
+  });
+
+  function resetShell() {
+    var jobs = [];
+    if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+      jobs.push(navigator.serviceWorker.getRegistrations().then(function (list) {
+        return Promise.all(list.map(function (registration) { return registration.unregister(); }));
+      }));
+    }
+    if (window.caches) {
+      jobs.push(caches.keys().then(function (keys) {
+        var shellKeys = keys.filter(function (key) { return key.indexOf("duri-shell-") === 0; });
+        return Promise.all(shellKeys.map(function (key) { return caches.delete(key); }));
+      }));
+    }
+    Promise.all(jobs).catch(function () {}).then(function () { location.reload(); });
+  }
+
+  function addButton(panel, label, onClick) {
+    var button = document.createElement("button");
+    button.textContent = label;
+    button.style.cssText = "display:block;width:100%;margin-top:12px;padding:12px;font-size:16px;";
+    button.addEventListener("click", onClick);
+    panel.appendChild(button);
+  }
+
+  function showPanel() {
+    if (window.__duriReady || !document.body) return;
+    var standalone = window.navigator.standalone === true ? "홈 화면 앱" : "브라우저";
+    var lines = [
+      "두리가 시작하다 멈췄어요. 이 화면을 캡처해서 보내 주세요.",
+      "",
+      "단계: " + window.__duriStep,
+      "실행: " + standalone,
+      "기기: " + navigator.userAgent,
+      "서비스워커 제어: " + (navigator.serviceWorker && navigator.serviceWorker.controller ? "예" : "아니오"),
+      "오류: " + (errors.length ? errors.slice(-5).join(" / ") : "없음"),
+    ];
+    var panel = document.createElement("div");
+    panel.style.cssText = "position:fixed;inset:0;z-index:2147483647;overflow:auto;padding:48px 20px 20px;" +
+      "background:#fff;color:#000;font:14px/1.5 -apple-system,sans-serif;white-space:pre-wrap;word-break:break-all;";
+    panel.textContent = lines.join("\n");
+    addButton(panel, "새로고침", function () { location.reload(); });
+    addButton(panel, "앱 캐시 초기화 (대화·로그인은 유지, 알림은 다시 켜야 할 수 있음)", resetShell);
+    document.body.appendChild(panel);
+  }
+  setTimeout(showPanel, 8000);
+})();
+</script>
 <style>
   :root { color-scheme: light dark; --pink: light-dark(#c0568a, #f0a8ce); --line: light-dark(#e6eaef, #232c38);
           --panel: light-dark(#ffffff, #161c25); --bg: light-dark(#fafbfc, #10151c); --dim: light-dark(#5b6875, #8b97a6);
@@ -5970,12 +6033,16 @@ calRestore();
 
 // 저장된 키·이름이 있으면 곧바로 입장 (아무것도 안 해도 이어짐)
 (async () => {
+  window.__duriStep = "자동 입장 시작";
   const savedName = localStorage.getItem("duri:name");
   if (savedName) $("name").value = savedName; // 이름은 항상 미리 채운다(문구만 다시 입력 시 편하게)
   if (!savedName) return;
 
+  window.__duriStep = "저장소(IndexedDB) 여는 중";
   await ensureDB();
+  window.__duriStep = "저장된 키 읽는 중";
   const savedKey = await getMeta("key");
+  window.__duriStep = "대화 화면 그리는 중";
   if (savedKey) { await enterWith(savedKey, savedName); return; }
 
   // 마이그레이션: 예전 버전이 남긴 평문 문구가 있으면 이번 한 번만 읽어서 키로
@@ -5983,7 +6050,7 @@ calRestore();
   const legacyPass = localStorage.getItem("duri:pass") ?? await getMeta("pass");
   if (legacyPass) { await enterWith(await deriveKey(legacyPass), savedName); return; }
   // 키도 문구도 없으면 셋업 화면 그대로 — 문구를 다시 받는다.
-})();
+})().finally(() => { window.__duriReady = true; }); // 시작 감시(머리의 스크립트)에 "다 떴다"고 알린다
 </script>
 </body>
 </html>
