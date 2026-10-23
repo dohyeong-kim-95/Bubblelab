@@ -220,34 +220,9 @@
   if (cfg().dock === false) return;
 
   // 눌렀는데 아무 일도 안 일어나면 사용자는 고장으로 받아들인다. 이유를 말해준다.
-  // 토스트의 원본은 dock.js 의 window.blToast 다(빌드가 모든 페이지에 독을 붙인다).
-  // 아래는 독 없이 이 파일만 불렸을 때(_infra/tts.test.mjs 의 가짜 창)를 위한
-  // 대체 경로다 — 같은 id 를 써서 이미 있는 토스트는 재사용한다.
-  let toastTimer = 0;
+  // 토스트의 원본은 dock.js 의 window.blToast 하나다(빌드가 모든 페이지에 독을 붙인다).
   function toast(msg) {
-    if (window.blToast) {
-      window.blToast(msg);
-      return;
-    }
-    let el = document.getElementById("bl-toast");
-    if (!el) {
-      const style = document.createElement("style");
-      style.textContent = `
-  #bl-toast { position: fixed; left: 50%; bottom: 4.2rem; z-index: 9999;
-    transform: translateX(-50%); font: .85rem var(--sans, system-ui, sans-serif);
-    padding: .55rem 1rem; border-radius: 2rem; pointer-events: none;
-    color: light-dark(#fff, #123); background: light-dark(#333c46, #dce6f0);
-    opacity: 0; transition: opacity .25s; }
-  #bl-toast.show { opacity: 1; }`;
-      document.head.appendChild(style);
-      el = document.createElement("div");
-      el.id = "bl-toast";
-      document.body.appendChild(el);
-    }
-    el.textContent = msg;
-    el.classList.add("show");
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => el.classList.remove("show"), 1800);
+    window.blToast?.(msg);
   }
 
   // 우하단 공용 유틸 독에 등록한다. 독이 아직 안 떴어도 큐에 쌓였다가 그려진다.

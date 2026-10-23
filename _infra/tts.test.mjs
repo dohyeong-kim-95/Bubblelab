@@ -58,20 +58,14 @@ function load({ speech = makeSpeech(), config } = {}) {
     queueMicrotask,
   };
   win.window = win;
-  // 토스트가 만드는 DOM만 흉내 낸다 — 붙은 노드를 id로 되찾을 수 있어야 한다
-  const nodes = {};
+  // 토스트는 dock.js 의 window.blToast 가 띄운다 — 받은 문구만 모아 둔다
+  const toasts = [];
+  win.blToast = (msg) => { toasts.push(msg); };
+  win.toasts = toasts;
   win.document = {
     hidden: false,
     addEventListener(type, cb) { (listeners[type] ||= []).push(cb); },
-    createElement: (tag) => ({
-      tagName: tag, id: "", textContent: "",
-      classList: { has: new Set(), add(c) { this.has.add(c); }, remove(c) { this.has.delete(c); } },
-    }),
-    getElementById: (id) => nodes[id] || null,
-    head: { appendChild(el) { nodes[el.id] = el; } },
-    body: { appendChild(el) { nodes[el.id] = el; } },
   };
-  win.nodes = nodes;
   vm.createContext(win);
   vm.runInContext(SOURCE, win);
   return { win, speech, fire: (type, ...args) => (listeners[type] || []).forEach((cb) => cb(...args)) };
@@ -246,7 +240,7 @@ test("독 버튼이 blSpeakText를 읽고, 다시 누르면 멈춘다", async ()
 test("읽을 게 없거나 목소리가 없으면 이유를 알려준다", async () => {
   const withVoice = load({ speech: makeSpeech({ voices: KOREAN, autoEnd: false }) });
   withVoice.win.blDock.find((d) => d.id === "bl-tts").onClick();   // blSpeakText 없음
-  assert.match(withVoice.win.nodes["bl-toast"]?.textContent ?? "", /읽을 내용/);
+  assert.match(withVoice.win.toasts.at(-1) ?? "", /읽을 내용/);
 
   // 목소리가 하나도 없는 기기(일부 데스크톱 리눅스)에서는 speak()가 조용히 무시된다
   const noVoice = load({ speech: makeSpeech({ voices: [], autoEnd: false }) });
@@ -254,7 +248,7 @@ test("읽을 게 없거나 목소리가 없으면 이유를 알려준다", async
   await noVoice.win.blTTS.ready;                     // 목록 로딩이 끝난 뒤에만 판정한다
   noVoice.win.blDock.find((d) => d.id === "bl-tts").onClick();
   assert.equal(noVoice.speech.spoken.length, 0);
-  assert.match(noVoice.win.nodes["bl-toast"]?.textContent ?? "", /목소리가 없어요/);
+  assert.match(noVoice.win.toasts.at(-1) ?? "", /목소리가 없어요/);
 });
 
 test("목소리 목록을 아직 못 받았으면 없다고 단정하지 않는다", () => {
@@ -281,12 +275,8 @@ test("쓸 수 없는 목소리를 넘겨도 재생 상태가 굳지 않는다", 
   assert.equal(speech.spoken.length, 1, "기본 목소리로도 읽지 못했다");
 });
 
-test("토스트는 share.js가 이미 만든 것을 재사용한다 (id 충돌 금지)", () => {
-  const { win } = load({ speech: makeSpeech({ voices: KOREAN, autoEnd: false }) });
-  const existing = { id: "bl-toast", textContent: "", classList: { add() {}, remove() {} } };
-  win.nodes["bl-toast"] = existing;                  // share.js가 먼저 뜬 상황
-  win.blDock.find((d) => d.id === "bl-tts").onClick();
-  assert.match(existing.textContent, /읽을 내용/, "기존 토스트를 두고 새로 만들었다");
+test("토스트는 독의 window.blToast 하나로 띄우고 따로 만들지 않는다", () => {
+  assert.doesNotMatch(SOURCE, /createElement\(["']div["']\)|#bl-toast/, "토스트 사본이 남아 있다");
 });
 
 // 공용 UI 규칙 — home-button.test.mjs와 같은 소스 계약 검사
