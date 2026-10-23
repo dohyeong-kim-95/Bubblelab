@@ -7,7 +7,7 @@ import {
   AI_DEFAULTS, chunkTurns, createScriptProvider, createTtsProvider, pcmToWav,
   SUPPORTED_SOURCE_TYPES, wavDurationSeconds,
 } from "./podcast-ai.js";
-import { sendWebPush } from "./webpush.js";
+import { isPushServiceEndpoint, sendWebPush } from "./webpush.js";
 import { consumeRateLimit, rateLimitResponse, requireJsonRequest } from "./security.js";
 import { hmacKey, issueSubjectToken, readCookie, tokenSubject } from "./session.js";
 
@@ -206,7 +206,7 @@ export async function handlePodcast(request, env, url) {
     if (!SUPPORTED_SOURCE_TYPES.has(mime)) {
       return json({ error: "PDF·이미지(PNG/JPEG/WebP)·텍스트(.txt/.md)만 올릴 수 있습니다" }, { status: 415 });
     }
-    const name = decodeURIComponent(request.headers.get("X-File-Name") ?? "")
+    const name = decodeFileName(request.headers.get("X-File-Name") ?? "")
       .replace(/[\r\n]/g, " ").trim().slice(0, 120) || "이름 없는 파일";
     // 본문을 메모리에 쌓지 않고 R2로 바로 스트리밍한다 (수신과 저장이 겹쳐 빨라짐).
     const size = Number(request.headers.get("Content-Length")) || 0;
@@ -276,17 +276,42 @@ export async function handlePodcast(request, env, url) {
   return notFound();
 }
 
+// 잘못된 퍼센트 인코딩(예: "%E0%A4%A")이면 URIError 로 500 이 났다 — 원문을 그대로 쓴다.
+function decodeFileName(raw) {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
 async function serveAudio(env, request, url, audioKey, title) {
   const range = /^bytes=(\d+)-(\d*)$/.exec(request.headers.get("Range") ?? "");
-  const object = range
-    ? await env.PODCAST_BUCKET.get(audioKey, {
-        range: {
-          offset: Number(range[1]),
-          ...(range[2] && { length: Number(range[2]) - Number(range[1]) + 1 }),
-        },
-      })
-    : await env.PODCAST_BUCKET.get(audioKey);
+  if (!range) {
+    const object = await env.PODCAST_BUCKET.get(audioKey);
+    if (!object) return notFound();
+    return fullAudio(object, url, title);
+  }
+  // 범위를 R2 에 넘기기 전에 크기와 견준다. 끝이 시작보다 앞이거나 파일 밖이면 R2 가
+  // 오류를 던져 500 이 됐다 — 표준대로 416 을 돌려준다.
+  const head = await env.PODCAST_BUCKET.head(audioKey);
+  if (!head) return notFound();
+  const total = head.size;
+  const offset = Number(range[1]);
+  const requestedEnd = range[2] ? Number(range[2]) : total - 1;
+  if (offset >= total || requestedEnd < offset) {
+    return new Response(null, { status: 416, headers: { "Content-Range": `bytes */${total}` } });
+  }
+  const end = Math.min(requestedEnd, total - 1);
+  const object = await env.PODCAST_BUCKET.get(audioKey, { range: { offset, length: end - offset + 1 } });
   if (!object) return notFound();
+  const headers = audioHeaders(url, title);
+  headers.set("Content-Range", `bytes ${offset}-${end}/${total}`);
+  headers.set("Content-Length", String(end - offset + 1));
+  return new Response(object.body, { status: 206, headers });
+}
+
+function audioHeaders(url, title) {
   const headers = new Headers({
     "Content-Type": "audio/wav",
     "Accept-Ranges": "bytes",
@@ -296,14 +321,11 @@ async function serveAudio(env, request, url, audioKey, title) {
     const safe = encodeURIComponent(`${title || "podcast"}.wav`);
     headers.set("Content-Disposition", `attachment; filename*=UTF-8''${safe}`);
   }
-  if (range) {
-    const total = object.size;
-    const offset = Number(range[1]);
-    const end = range[2] ? Math.min(Number(range[2]), total - 1) : total - 1;
-    headers.set("Content-Range", `bytes ${offset}-${end}/${total}`);
-    headers.set("Content-Length", String(end - offset + 1));
-    return new Response(object.body, { status: 206, headers });
-  }
+  return headers;
+}
+
+function fullAudio(object, url, title) {
+  const headers = audioHeaders(url, title);
   headers.set("Content-Length", String(object.size));
   return new Response(object.body, { headers });
 }
@@ -494,7 +516,7 @@ export class PodcastDO {
   async addPushSubscription(user, request) {
     const body = await request.json().catch(() => ({}));
     const sub = body.subscription ?? body;
-    if (typeof sub?.endpoint !== "string" || !sub.endpoint.startsWith("https://") ||
+    if (!isPushServiceEndpoint(sub?.endpoint) ||
         typeof sub?.keys?.p256dh !== "string" || typeof sub?.keys?.auth !== "string") {
       return json({ error: "invalid subscription" }, { status: 400 });
     }

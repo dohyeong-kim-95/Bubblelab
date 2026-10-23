@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PodcastDO, hashInviteCode, newInviteCode, normalizeInviteCode, validInviteCode, kstToday } from "./podcast.js";
+import { PodcastDO, handlePodcast, hashInviteCode, newInviteCode, normalizeInviteCode, validInviteCode, kstToday } from "./podcast.js";
+import { hmacKey, issueSubjectToken } from "./session.js";
 import { bytesToBase64 } from "./podcast-ai.js";
 
 class MemoryStorage {
@@ -413,9 +414,9 @@ test("저녁 리마인더는 자료 없고 알림 켠 사용자에게만 보낸�
   podcastDO.sendPush = async (userId, msg) => { sent.push({ userId, ...msg }); return 1; };
 
   const a = (await (await podcastDO.fetch(post("/admin/users", { name: "A" }))).json()).user;
-  await storage.put(`push:${a.id}:x`, { endpoint: "https://p/", keys: { p256dh: "k", auth: "k" } });
+  await storage.put(`push:${a.id}:x`, { endpoint: "https://fcm.googleapis.com/fcm/send/p", keys: { p256dh: "k", auth: "k" } });
   const b = (await (await podcastDO.fetch(post("/admin/users", { name: "B" }))).json()).user;
-  await storage.put(`push:${b.id}:x`, { endpoint: "https://p/", keys: { p256dh: "k", auth: "k" } });
+  await storage.put(`push:${b.id}:x`, { endpoint: "https://fcm.googleapis.com/fcm/send/p", keys: { p256dh: "k", auth: "k" } });
   await podcastDO.fetch(post(`/sources?uid=${b.id}`, { name: "d.pdf", mime: "application/pdf", size: 1 }));
   await podcastDO.fetch(post("/admin/users", { name: "C" })); // 알림 안 켬
 
@@ -449,4 +450,81 @@ test("prefs는 유효한 말투만 저장한다", async () => {
   }));
   assert.equal((await (await setTone("warm")).json()).notifyTone, "warm");
   assert.equal((await (await setTone("hacker")).json()).notifyTone, "warm"); // 무효값 무시
+});
+
+// ── 워커 라우트의 오류 처리 ──────────────────────────────────────
+async function podcastRoute({ audioBytes = new Uint8Array(1000) } = {}) {
+  const secret = "pod-secret";
+  const key = await hmacKey(`${secret}\0bl-podcast-session`);
+  const cookie = `bl_pod=${await issueSubjectToken(key, 60_000, "u1")}`;
+  const registered = [];
+  const env = {
+    PODCAST_SESSION_SECRET: secret,
+    PODCAST_BUCKET: {
+      async head(k) { return k === "audio/a.wav" ? { size: audioBytes.length } : null; },
+      async get(k, options) {
+        if (k !== "audio/a.wav") return null;
+        const offset = options?.range?.offset ?? 0;
+        const length = options?.range?.length ?? audioBytes.length - offset;
+        if (offset >= audioBytes.length || offset + length > audioBytes.length) throw new Error("R2 range error");
+        return { size: audioBytes.length, body: audioBytes.slice(offset, offset + length) };
+      },
+      async put() {},
+    },
+    PODCAST: {
+      idFromName: () => "global",
+      get: () => ({
+        fetch: async (url, init) => {
+          const path = new URL(url).pathname;
+          if (path === "/audio-meta") return Response.json({ userId: "u1", audioKey: "audio/a.wav", title: "t" });
+          if (path === "/sources") {
+            registered.push(JSON.parse(init.body));
+            return Response.json({ source: { id: "s1", r2Key: "src/s1" } });
+          }
+          return Response.json({});
+        },
+      }),
+    },
+  };
+  const call = (path, init = {}) => {
+    const request = new Request(`https://podcast.bubblelab.dev${path}`, {
+      ...init, headers: { Cookie: cookie, ...init.headers },
+    });
+    return handlePodcast(request, env, new URL(request.url));
+  };
+  return { call, registered };
+}
+
+test("오디오 Range: 잘못된 범위는 500 이 아니라 416, 파일 끝을 넘는 끝은 잘라 206", async () => {
+  const { call } = await podcastRoute();
+  const ranged = (value) => call("/_podcast/audio/p1", { headers: { Range: value } });
+
+  const backwards = await ranged("bytes=500-100");
+  assert.equal(backwards.status, 416);
+  assert.equal(backwards.headers.get("Content-Range"), "bytes */1000");
+  assert.equal((await ranged("bytes=5000-")).status, 416);
+
+  const clipped = await ranged("bytes=900-99999");
+  assert.equal(clipped.status, 206);
+  assert.equal(clipped.headers.get("Content-Range"), "bytes 900-999/1000");
+  assert.equal(clipped.headers.get("Content-Length"), "100");
+
+  const open = await ranged("bytes=0-");
+  assert.equal(open.status, 206);
+  assert.equal(open.headers.get("Content-Range"), "bytes 0-999/1000");
+
+  const full = await call("/_podcast/audio/p1");
+  assert.equal(full.status, 200);
+  assert.equal(full.headers.get("Content-Length"), "1000");
+});
+
+test("업로드 파일 이름의 잘못된 퍼센트 인코딩은 500 이 아니라 원문 그대로", async () => {
+  const { call, registered } = await podcastRoute();
+  const response = await call("/_podcast/upload", {
+    method: "POST",
+    headers: { "Content-Type": "text/plain", "Content-Length": "3", "X-File-Name": "%E0%A4%Anotes.txt" },
+    body: "abc",
+  });
+  assert.equal(response.status, 200);
+  assert.equal(registered[0].name, "%E0%A4%Anotes.txt");
 });
