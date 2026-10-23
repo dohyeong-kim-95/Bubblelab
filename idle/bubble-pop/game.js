@@ -401,30 +401,29 @@ function finish() {
   saveState();
   finishShown = true;
   $("#final-score").textContent = formatNumber(state.lifetime);
-  $("#form-message").textContent = "마지막 기록을 확인하고 있어요…";
+  // 종료 시각엔 이미 새 주라 서버가 새 시즌에 넣는다 — 마지막 주기 동기화가 정본이다.
+  $("#form-message").textContent = "마지막 자동 저장 기록으로 순위가 결정됩니다.";
   finishModal.hidden = false;
   render(true);
-  syncRecord(true).then((sent) => {
-    $("#form-message").textContent = sent
-      ? "이번 주 마지막 기록이 저장됐습니다."
-      : "마지막 자동 저장 기록으로 순위가 결정됩니다.";
-  });
 }
 
-async function syncRecord(force = false) {
-  if (!state?.nick || seasonBounds().key !== state.season || state.lifetime <= 0 ||
-      (!force && state.lifetime <= (state.lastSubmitted || 0))) return false;
+// 직전 제출보다 이만큼(0.1%)도 안 늘었으면 보내지 않는다 — 레이트리밋(IP당 분당 10회)을 아낀다.
+const MIN_SYNC_GROWTH = 1.001;
+
+async function syncRecord() {
+  if (!state?.nick || seasonBounds().key !== state.season || state.lifetime <= 0) return false;
+  if (state.lifetime <= (state.lastSubmitted || 0) * MIN_SYNC_GROWTH) return false;
   const score = Math.min(state.lifetime, 1e100);
   try {
     const response = await fetch("/_records", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json" }, keepalive: true,
       body: JSON.stringify({ game: "bubble-pop-idle", nick: state.nick, score, text: `${formatNumber(score)} 버블` }),
     });
     if (!response.ok) throw new Error("record rejected");
     state.lastSubmitted = score;
     saveState();
     return true;
-  } catch { if (force) toast("기록 서버 연결에 실패했어요"); return false; }
+  } catch { return false; }
 }
 
 function tick() {
@@ -440,7 +439,8 @@ function tick() {
     lastTick = now;
     if (now >= endsAt(state)) finish();
     if (now - lastSave >= 5000) { saveState(); lastSave = now; }
-    const syncInterval = endsAt(state) - now <= 5 * 60 * 1000 ? 5000 : 30000;
+    // 마지막 5분도 15초 간격 — 분당 4회라 같은 IP의 다른 게임 제출 몫이 남는다.
+    const syncInterval = endsAt(state) - now <= 5 * 60 * 1000 ? 15000 : 30000;
     if (now - lastSyncAt >= syncInterval) { syncRecord(); lastSyncAt = now; }
     render();
   }
