@@ -1,7 +1,7 @@
 # lab — 작업 도구를 두는 비공개 서브도메인
 
 lab.bubblelab.dev. 토이가 아니라 내가 쓰는 도구 자리라서 랜딩·풀다운에
-노출되지 않는다(`_infra/build.mjs`의 `CONFIDENTIAL_SUBDOMAINS`). 주소를 알면
+노출되지 않는다(`_infra/sites.js`의 `CONFIDENTIAL_SUBDOMAINS`). 주소를 알면
 열리는 정적 페이지일 뿐 로그인은 없다 — 남에게 보이면 곤란한 것은 두지 않는다.
 `lab/` 홈은 빌드가 카드 목록으로 자동 생성한다.
 

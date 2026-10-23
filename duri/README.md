@@ -6,7 +6,7 @@
 시스템. 여기에 둘만의 **공유 캘린더**와 다녀온 곳을 색칠하는 **지도**가 같은
 앱 안에 탭으로 붙어 있다. 대화·사진 백업이 목적이라 bubblelab의 "토이 · 외부 서비스 금지" 원칙과
 결이 다르므로, 랜딩·풀다운에 노출되지 않는 비공개 **전용 서브도메인**
-`duri.bubblelab.dev`에 둔다(`_infra/build.mjs`의 `CONFIDENTIAL_SUBDOMAINS`).
+`duri.bubblelab.dev`에 둔다(`_infra/sites.js`의 `CONFIDENTIAL_SUBDOMAINS`).
 
 원래 `work.bubblelab.dev/duri`(work 게이트 하위 경로)였으나, 앱화 후 work 홈
 경유·주소 재입력이 번거로워 전용 서브도메인으로 승격했다. DuriDO는 호스트와

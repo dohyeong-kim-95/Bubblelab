@@ -46,7 +46,7 @@
 - **로그인 게이트는 없다**(`_infra/verify-prod.mjs:22` `GATED_SITES` =
   admin·duri·life). 대신 Worker가 `no-store` + `X-Robots-Tag: noindex, nofollow`를
   붙이고(`worker.js:1777`) 방문 집계에서 뺀다(`:1798`). 주소를 알면 그냥 들어온다.
-- `_infra/build.mjs:30` `CONFIDENTIAL_SUBDOMAINS` 등록. www 랜딩에 링크를 만들면
+- `_infra/sites.js` `CONFIDENTIAL_SUBDOMAINS` 등록. www 랜딩에 링크를 만들면
   **빌드가 실패**하고, 홈 버튼(`_infra/home-button.test.mjs:50`)·풀다운(`:166`)·검색
   색인(`:242`)에도 나오면 안 된다. 검증: `node _infra/verify-prod.mjs --only site:estate`.
 - **운영 Worker에서 국토부 API는 403이다** — RTMS가 해외 IP를 차단한다

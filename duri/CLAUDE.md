@@ -42,7 +42,7 @@
   `:462 (duri:status)` 는 `needs:"duri"` 라 `BL_DURI_PASSWORD` 가 없으면 **SKIP**
   (`:539`), 있으면 `head`/`ackSeq`/`buffered`/`cal` 형태를 본다(`:167
   assertDuriStatus`). ship 로그의 `duri:status … 자격증명 없음` 은 정상이다.
-- `_infra/build.mjs:29 (CONFIDENTIAL_SUBDOMAINS)` 라 랜딩 카드·풀다운에 **노출되지
+- `_infra/sites.js` 의 `CONFIDENTIAL_SUBDOMAINS` 라 랜딩 카드·풀다운에 **노출되지
   않고**(카드 추가 금지), 자체 `index.html` 이 있어 자동 생성 홈·홈 버튼 대상에서도
   빠진다(`:619-624 cardSites 루프`).
 

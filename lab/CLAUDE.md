@@ -27,7 +27,7 @@
 
 공통 의례는 `make ship`(= `/ship`). 여기 고유한 것만:
 
-- lab 은 `CONFIDENTIAL_SUBDOMAINS`(`_infra/build.mjs:29`)라 **랜딩 카드가 있으면
+- lab 은 `CONFIDENTIAL_SUBDOMAINS`(`_infra/sites.js`)라 **랜딩 카드가 있으면
   빌드가 실패한다**(반대로 공개 서브도메인은 카드가 없으면 실패 —
   `_infra/build.mjs:60-76`). 카테고리 홈 풀다운(`build.mjs:275 (listingPage)`)과
   랜딩 검색 색인(`build.mjs:650 (cards 수집)`)도 이 집합을 건너뛰기 때문에 빠진다

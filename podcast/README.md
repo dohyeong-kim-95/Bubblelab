@@ -68,7 +68,7 @@ GEMINI_API_KEY=... node _infra/podcast-pipeline.mjs 자료.pdf
    응답의 초대 코드를 전달 (코드는 이때 한 번만 보이고 서버엔 해시만 남는다)
 
 confidential 서브도메인이라 랜딩·풀다운에 노출되지 않는다
-(`_infra/build.mjs`의 `CONFIDENTIAL_SUBDOMAINS`). 공개 서비스로 전환할 때
+(`_infra/sites.js`의 `CONFIDENTIAL_SUBDOMAINS`). 공개 서비스로 전환할 때
 목록에서 빼고 `www/index.html`에 카드를 추가하면 된다.
 
 ## 로컬 개발

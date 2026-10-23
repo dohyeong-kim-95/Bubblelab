@@ -10,9 +10,9 @@
 실패**한다 (build.mjs:61 — 랜딩 카드 검사 블록. 줄번호는 밀리니 앵커로 찾아라).
 
 - 퍼블릭인데 카드가 없으면(build.mjs:70 throw):
-  `public subdomain "<이름>" is missing from www/index.html — 랜딩에 카드를 추가하거나 _infra/build.mjs의 CONFIDENTIAL_SUBDOMAINS에 등록하세요`
-- confidential(`CONFIDENTIAL_SUBDOMAINS`, build.mjs:29 —
-  admin·work·podcast·duri·test·lab·life)인데 카드가 있으면(build.mjs:67 throw):
+  `public subdomain "<이름>" is missing from www/index.html — 랜딩에 카드를 추가하거나 _infra/sites.js의 CONFIDENTIAL_SUBDOMAINS에 등록하세요`
+- confidential(`CONFIDENTIAL_SUBDOMAINS`, `_infra/sites.js` —
+  admin·work·podcast·estate·duri·test·lab·life)인데 카드가 있으면(build.mjs:67 throw):
   `confidential subdomain "<이름>" must not be linked from www/index.html`
 
 즉 **다른 사람이 새 폴더를 만들면 랜딩이 빌드를 막는다.** 내 잘못이 아닌 실패도
@@ -85,5 +85,5 @@ node _infra/build.mjs                      # 카드 존재 검사 + 색인 생�
   색(`--h`)을 물려준다(index.html:110 `categories`/`hueOf`) — 다르면 기본값으로 떨어진다.
 - `<small>` 설명도 검색 대상이니(가중치 0.7, search-rules.js:27 `FIELDS`) 카테고리를
   한국어로 찾게 하는 문장을 쓴다. `--h` 는 색상환 각도 — 옆 카드와 겹치지 않게.
-- 비공개로 둘 폴더면 카드 대신 `CONFIDENTIAL_SUBDOMAINS` 에 등록한다(www 소유가
+- 비공개로 둘 폴더면 카드 대신 `_infra/sites.js` 의 `CONFIDENTIAL_SUBDOMAINS` 에 등록한다(www 소유가
   아니니 해당 폴더 담당이 넣는다).

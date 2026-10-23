@@ -70,7 +70,7 @@
 
 ```bash
 npm test                     # 인프라 단위 테스트
-make lint                    # 문법 검사 (js/mjs/json/sh) — eslint 없음, 파싱만 본다
+make lint                    # 문법 검사 (js/mjs/json/sh·HTML 인라인 스크립트) — eslint 없음, 파싱만 본다
 node _infra/build.mjs        # 빌드 (dist/ 생성, 에러 없어야 함)
 npm run test:e2e             # 핵심 화면 모바일 스모크 (빌드 후 Playwright)
 npx wrangler@4 dev --local --local-upstream localhost   # 로컬 서빙
@@ -241,10 +241,10 @@ PNG·JPEG를 모두 받고, JPEG는 `npm ci` 필요. 검증은 `_infra/wallpaper
 
 ## 할 일 (life/)
 
-`life/`는 목록 여러 개를 좌우로 넘기며 쓰는 할 일 PWA다(`CONFIDENTIAL_SUBDOMAINS`).
+`life/`는 목록 여러 개를 좌우로 넘기며 쓰는 할 일 PWA다(`_infra/sites.js` 의 `CONFIDENTIAL_SUBDOMAINS`).
 토이 관례(share.js, 주간 기록)를 적용하지 않는다.
 
-할 일 밖의 도구는 `life/<이름>/` 폴더 하나가 전부다(서재·팔굽혀펴기·돌아보기·백업).
+할 일 밖의 도구는 `life/<이름>/` 폴더 하나가 전부다(서재·팔굽혀펴기·돌아보기·백업·논문·Pops 세로 영상 피드).
 **`life/budget/`(가계부)** 는 카드 한 장의 소비를 한 주기 한도(기본 100만원)와 견준다 —
 합계보다 "오늘까지의 기준선"과 "남은 날에 하루 얼마"가 먼저 나온다. 주기 긋기·페이스
 계산은 `life/budget/store.js` 한 곳이다(`life/budget/README.md`). 카드 승인 문자를

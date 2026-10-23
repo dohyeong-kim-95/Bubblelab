@@ -1,6 +1,6 @@
 # test — 데이터랩 (데이터사이언스 문제은행)
 
-test.bubblelab.dev. **비공개 서브도메인**(`CONFIDENTIAL_SUBDOMAINS`) — 랜딩·풀다운에
+test.bubblelab.dev. **비공개 서브도메인**(`_infra/sites.js` 의 `CONFIDENTIAL_SUBDOMAINS`) — 랜딩·풀다운에
 노출되지 않고 직접 주소로만 접근한다. 토이 관례(share.js, 주간 기록)를 적용하지 않는다.
 
 빅데이터분석기사/ADP 실기 스타일의 문제를 브라우저 안 파이썬(Pyodide/WebAssembly)으로

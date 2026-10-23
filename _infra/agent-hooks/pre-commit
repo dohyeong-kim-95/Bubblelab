@@ -2,7 +2,7 @@
 # 커밋 전에 자동으로 도는 세 가지.
 #
 #   1. 소유 범위   — agent/<서브도메인>/… 브랜치에서 남의 파일 커밋 거부
-#   2. 린트        — 스테이지된 js/mjs/json/sh 문법 검사 (scripts/lint.sh)
+#   2. 린트        — 스테이지된 js/mjs/json/sh·HTML 인라인 스크립트 문법 검사 (scripts/lint.sh)
 #   3. 테스트      — 코드가 스테이지됐으면 npm test (빌드 검사 포함)
 #
 # **stash 하지 않는다.** 보통 훅은 `git stash --keep-index` 로 스테이지된

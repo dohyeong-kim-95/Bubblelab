@@ -53,7 +53,7 @@ work은 토이가 아니라 **여러 앱이 한 서브도메인에 모인 작업
 - 게이트: `/login`·`/logout`, 쿠키 `bl_work` 24시간, 로그인 15분당 5회.
   공개는 루트 `/`, `WORK_PUBLIC_PAGES`(`request`·`showcase`), 확장자 있는 루트
   파일뿐(`worker.js:380`).
-- `_infra/build.mjs:29`의 `CONFIDENTIAL_SUBDOMAINS`에 `work`가 들어 있다 —
+- `_infra/sites.js`의 `CONFIDENTIAL_SUBDOMAINS`에 `work`가 들어 있다 —
   `www/index.html`에 링크를 만들면 빌드가 실패한다.
 - `_infra/verify-prod.mjs`: `GATED_SITES`에 work은 **없다**(:22 — 루트가 공개라
   `site:work`는 200을 기대). 전용 프로브는 `api:emoticon-review`(:397, `/_emoticon/review`가

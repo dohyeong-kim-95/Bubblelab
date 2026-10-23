@@ -48,7 +48,7 @@
   로그인 15분 5회 제한(worker.js:856, `scope: "admin-login"`). 응답에는
   `no-store` + `noindex, nofollow`가 강제로 붙고(worker.js:1777의 게이트 사이트
   분기) admin 방문은 통계에 잡히지 않는다(worker.js:1798).
-- **`CONFIDENTIAL_SUBDOMAINS`에 들어 있다**(build.mjs:29-30) — `www/index.html`
+- **`CONFIDENTIAL_SUBDOMAINS`에 들어 있다**(`_infra/sites.js`) — `www/index.html`
   에 admin 링크를 넣으면 빌드가 실패한다(build.mjs:66-68, `must not be linked`).
 - **이 `CLAUDE.md`와 `README.md`는 배포되지 않는다** — 빌드의 `AGENT_DOCS`
   정규식이 거른다(build.mjs:54, `README|CLAUDE|AGENTS`). 안 그러면 게이트·
