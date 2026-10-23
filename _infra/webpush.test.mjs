@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  b64uDecode, b64uEncode, encryptPushPayload, generateVapidKeys, vapidAuthorization,
+  b64uDecode, b64uEncode, encryptPushPayload, generateVapidKeys, isPushServiceEndpoint,
+  vapidAuthorization,
 } from "./webpush.js";
 
 test("generates web-push 형식의 VAPID 키쌍", async () => {
@@ -83,4 +84,24 @@ test("aes128gcm 암호문을 수신 측 절차로 복호화하면 원문이 나�
 
   assert.equal(record.at(-1), 2); // 마지막 레코드 구분자
   assert.equal(new TextDecoder().decode(record.slice(0, -1)), message);
+});
+
+test("구독 endpoint 는 브라우저 푸시 서비스 주소만 받는다", () => {
+  for (const ok of [
+    "https://fcm.googleapis.com/fcm/send/abc",
+    "https://updates.push.services.mozilla.com/wpush/v2/abc",
+    "https://web.push.apple.com/QX",
+    "https://api.push.apple.com/3/device/abc",
+    "https://wns2-par02p.notify.windows.com/w/?token=abc",
+  ]) assert.equal(isPushServiceEndpoint(ok), true, ok);
+  for (const bad of [
+    "https://attacker.example/collect",
+    "http://fcm.googleapis.com/fcm/send/abc",
+    "https://fcm.googleapis.com.attacker.example/x",
+    "https://evilnotify.windows.com/x",
+    "https://fcm.googleapis.com:8443/x",
+    "https://user:pw@fcm.googleapis.com/x",
+    "not a url",
+    undefined,
+  ]) assert.equal(isPushServiceEndpoint(bad), false, String(bad));
 });

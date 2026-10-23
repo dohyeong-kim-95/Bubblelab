@@ -1,5 +1,5 @@
 import manseryeok from "manseryeok";
-import { sendWebPush } from "./webpush.js";
+import { isPushServiceEndpoint, sendWebPush } from "./webpush.js";
 import { buildSajuDetail, twelveShinsal } from "./saju-detail.js";
 import { tojeongHexagram } from "./tojeong.js";
 
@@ -531,7 +531,7 @@ export class FortuneDO {
   async subscribe(request) {
     const body = await request.json().catch(() => ({}));
     const sub = body.subscription ?? body;
-    if (typeof sub?.endpoint !== "string" || !sub.endpoint.startsWith("https://") ||
+    if (!isPushServiceEndpoint(sub?.endpoint) ||
         typeof sub?.keys?.p256dh !== "string" || typeof sub?.keys?.auth !== "string") {
       return Response.json({ error: "invalid subscription" }, { status: 400 });
     }

@@ -4,7 +4,7 @@
 // 부르지 않고 Worker를 거치는 이유는 셋이다: ① 브리핑 문장을 만드는 코드가
 // 화면과 cron 알림에서 하나여야 한다 ② Cache API로 지역당 호출을 10분에 한 번으로
 // 묶는다 ③ 좌표를 클라이언트가 정하지 못하게 지역 허용 목록으로 고정한다.
-import { sendWebPush } from "./webpush.js";
+import { isPushServiceEndpoint, sendWebPush } from "./webpush.js";
 
 // 광역시는 시청, 도는 도청 소재지 좌표. 사용자가 고르는 값은 이 id뿐이라
 // 위치 권한도, 좌표 입력도 받지 않는다.
@@ -595,7 +595,7 @@ export class BriefDO {
   async subscribe(request) {
     const body = await request.json().catch(() => ({}));
     const sub = body.subscription ?? body;
-    if (typeof sub?.endpoint !== "string" || !sub.endpoint.startsWith("https://") ||
+    if (!isPushServiceEndpoint(sub?.endpoint) ||
         typeof sub?.keys?.p256dh !== "string" || typeof sub?.keys?.auth !== "string") {
       return Response.json({ error: "invalid subscription" }, { status: 400 });
     }
