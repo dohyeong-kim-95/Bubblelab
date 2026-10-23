@@ -56,7 +56,23 @@ let phase = "idle"; // idle | running | done
 let startTime = 0;
 let count = 0;
 let raf = null;
-let best = null;
+// 최고 기록은 새로고침해도 남게 localStorage 에 둔다(키 bl-<게임>-best 로 통일).
+const BEST_KEY = "bl-clicker-best";
+let best = loadBest();
+function loadBest() {
+  try {
+    const saved = localStorage.getItem(BEST_KEY);
+    if (saved === null) return null;
+    const value = Number(saved);
+    return Number.isFinite(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+function saveBest() {
+  try { localStorage.setItem(BEST_KEY, String(best)); } catch {}
+if (best !== null) bestEl.textContent = `최고 기록: ${best}회`;
+}
 
 window.blWeekly = { game: "clicker", dir: "max", fmt: (v) => v + "회" };
 window.blShareText = () => `10초 동안 ${best ?? count}번 클릭! 도전해보세요`;
@@ -77,6 +93,7 @@ function finish() {
   const cps = count / LIMIT;
   if (best === null || count > best) {
     best = count;
+    saveBest();
     bestEl.textContent = `최고 기록: ${best}회`;
   }
   const grade =

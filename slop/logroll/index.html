@@ -72,7 +72,23 @@ const hintR = document.getElementById("hintR");
 
 let phase = "idle";          // idle | running | done
 let survived = 0;            // 버틴 시간(초) = 점수
-let best = null;
+// 최고 기록은 새로고침해도 남게 localStorage 에 둔다(키 bl-<게임>-best 로 통일).
+const BEST_KEY = "bl-logroll-best";
+let best = loadBest();
+function loadBest() {
+  try {
+    const saved = localStorage.getItem(BEST_KEY);
+    if (saved === null) return null;
+    const value = Number(saved);
+    return Number.isFinite(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+function saveBest() {
+  try { localStorage.setItem(BEST_KEY, String(best)); } catch {}
+if (best !== null) bestEl.textContent = `최고 기록: ${best.toFixed(1)}초`;
+}
 
 window.blWeekly = { game: "logroll", dir: "max", fmt: (v) => v.toFixed(1) + "초" };
 window.blShareText = () => `통나무 위에서 ${(best ?? survived).toFixed(1)}초 버팀! 도전해보세요`;
@@ -158,6 +174,7 @@ function fall() {
   phase = "done";
   if (best === null || survived > best) {
     best = survived;
+    saveBest();
     bestEl.textContent = `최고 기록: ${best.toFixed(1)}초`;
   }
   const s = survived;

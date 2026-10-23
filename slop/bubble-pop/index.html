@@ -60,7 +60,23 @@ const LIMIT = 20;   // 초
 let phase = "idle"; // idle | running | done
 let startTime = 0;
 let popped = 0;
-let best = null;
+// 최고 기록은 새로고침해도 남게 localStorage 에 둔다(키 bl-<게임>-best 로 통일).
+const BEST_KEY = "bl-bubble-pop-best";
+let best = loadBest();
+function loadBest() {
+  try {
+    const saved = localStorage.getItem(BEST_KEY);
+    if (saved === null) return null;
+    const value = Number(saved);
+    return Number.isFinite(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+function saveBest() {
+  try { localStorage.setItem(BEST_KEY, String(best)); } catch {}
+if (best !== null) bestEl.textContent = `최고 기록: ${best}개`;
+}
 
 window.blWeekly = { game: "bubble-pop", dir: "max", fmt: (v) => v + "개" };
 window.blShareText = () => `20초 동안 버블 ${best ?? popped}개 터트림! 도전해보세요`;
@@ -118,6 +134,7 @@ function finish() {
   timeEl.textContent = "0.0초";
   if (best === null || popped > best) {
     best = popped;
+    saveBest();
     bestEl.textContent = `최고 기록: ${best}개`;
   }
   const grade =
@@ -135,7 +152,13 @@ function finish() {
   window.blWeeklyReport?.(popped);
 }
 
+// 프레임 수가 아니라 흐른 시간으로 움직인다 — 120Hz 기기가 버블을 두 배 받지 않게.
+// frames = 60Hz 기준으로 몇 프레임만큼 시간이 흘렀나(탭 복귀 때 튀지 않게 3프레임 상한).
+let lastFrameAt = 0;
+
 function tick(t) {
+  const frames = lastFrameAt ? Math.min((t - lastFrameAt) / (1000 / 60), 3) : 1;
+  lastFrameAt = t;
   const running = phase === "running";
   if (running) {
     const left = LIMIT - (performance.now() - startTime) / 1000;
@@ -145,12 +168,12 @@ function tick(t) {
   // 게임 중에는 버블이 더 자주, 더 많이 올라온다
   const cap = running ? 35 : 25;
   const rate = running ? 0.18 : 0.08;
-  if (bubbles.length < cap && Math.random() < rate) spawn();
+  if (bubbles.length < cap && Math.random() < rate * frames) spawn();
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   for (let i = bubbles.length - 1; i >= 0; i--) {
     const b = bubbles[i];
-    b.y -= b.v;
-    b.x += Math.sin(t / 900 + b.wobble) * 0.4;
+    b.y -= b.v * frames;
+    b.x += Math.sin(t / 900 + b.wobble) * 0.4 * frames;
     if (b.y < -b.r) { bubbles.splice(i, 1); continue; }
     ctx.beginPath();
     ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);

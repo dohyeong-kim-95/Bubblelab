@@ -42,11 +42,30 @@ const bestEl = document.getElementById("best");
 let running = false;
 let startTime = 0;
 let raf = null;
-let best = null;
+// 최고 기록은 새로고침해도 남게 localStorage 에 둔다(키 bl-<게임>-best 로 통일).
+const BEST_KEY = "bl-10sec-best";
+let best = loadBest();
+function loadBest() {
+  try {
+    const saved = localStorage.getItem(BEST_KEY);
+    if (saved === null) return null;
+    const value = Number(saved);
+    return Number.isFinite(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+function saveBest() {
+  try { localStorage.setItem(BEST_KEY, String(best)); } catch {}
+}
 
 const formatError = (seconds) =>
   `${Math.round(seconds * 1000).toLocaleString("ko-KR")} ms`;
 
+if (best !== null) bestEl.textContent = `최고 기록: 오차 ${formatError(best)}`;
+window.blShareText = () => best === null
+  ? "10초 맞추기, 정확히 10초에 멈출 수 있을까요? 도전해보세요"
+  : `10초 맞추기 오차 ${formatError(best)}! 도전해보세요`;
 window.blWeekly = { game: "10sec", dir: "min", fmt: (v) => "오차 " + formatError(v) };
 
 function tick() {
@@ -73,6 +92,7 @@ btn.addEventListener("click", () => {
     const diff = Math.abs(t - 10);
     if (best === null || diff < best) {
       best = diff;
+      saveBest();
       bestEl.textContent = `최고 기록: 오차 ${formatError(best)}`;
     }
     const grade =
