@@ -366,6 +366,8 @@ async function savedFolder() {
       request.onerror = () => resolve(null);
     });
   } catch { folder = null; }
+  // 옛 백업에서 되돌린 손잡이는 JSON 을 거쳐 `{}` 다. 손잡이가 아니면 기억한 폴더가 없는 것으로 본다.
+  if (folder && typeof folder.entries !== "function") folder = null;
   return folder;
 }
 
