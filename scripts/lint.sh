@@ -8,6 +8,9 @@
 #
 #   bash scripts/lint.sh              # 추적 중인 파일 전부
 #   bash scripts/lint.sh a.js b.json  # 지정한 파일만 (pre-commit 훅이 이렇게 쓴다)
+#
+# .html 은 안의 인라인 <script> 만 본다(scripts/lint-html.mjs). 토이 로직은 대부분
+# index.html 안에 있다. 인라인 스크립트가 없는 HTML 은 검사 수에 세지 않는다.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -15,11 +18,12 @@ cd "$ROOT"
 
 files=("$@")
 if [ ${#files[@]} -eq 0 ]; then
-  mapfile -t files < <(git ls-files -- '*.js' '*.mjs' '*.json' '*.sh')
+  mapfile -t files < <(git ls-files -- '*.js' '*.mjs' '*.json' '*.sh' '*.html')
 fi
 
 fail=0
 checked=0
+html_files=()
 
 report() { printf '\033[31m✗ %s\033[0m\n  %s\n' "$1" "$2" >&2; fail=1; }
 
@@ -45,8 +49,22 @@ for file in "${files[@]}"; do
       out="$(bash -n "$file" 2>&1)" || report "$file — 셸 문법 오류" "$out"
       checked=$((checked + 1))
       ;;
+    *.html)
+      html_files+=("$file")   # 아래에서 node 한 번으로 몰아서 본다
+      ;;
   esac
 done
+
+# 도우미가 없는 사본(lint.sh 만 복사해 쓰는 훅 테스트 등)에서는 HTML 단계만 건너뛴다.
+if [ ${#html_files[@]} -gt 0 ] && [ ! -f scripts/lint-html.mjs ]; then
+  echo "lint: scripts/lint-html.mjs 가 없어 HTML 인라인 스크립트 검사는 건너뜀" >&2
+  html_files=()
+fi
+if [ ${#html_files[@]} -gt 0 ]; then
+  html_out="$(node scripts/lint-html.mjs "${html_files[@]}")" || fail=1
+  html_checked="$(printf '%s\n' "$html_out" | sed -n 's/^checked //p' | tail -1)"
+  checked=$((checked + ${html_checked:-0}))
+fi
 
 if [ "$fail" -eq 0 ]; then
   echo "lint: ${checked}개 파일 문법 통과"

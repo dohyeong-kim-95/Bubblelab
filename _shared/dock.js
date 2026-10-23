@@ -12,6 +12,37 @@
 //
 // 필드: id(필수) · icon(필수) · label(스크린리더/툴팁) · order(작을수록 아래쪽)
 //       href(링크로 만들 때) · onClick(버튼으로 만들 때) · ready(el)(생성 직후 콜백)
+//
+// 짧은 알림 토스트의 원본도 여기다: window.blToast("복사했어요 ✓").
+// (공유·읽어주기가 같은 모양을 각자 복사해 두다가 한쪽만 고쳐져 어긋났다.)
+// 독은 빌드가 모든 페이지에 붙이므로(admin 제외) 클릭 시점에는 늘 있다.
+(() => {
+  let toastEl = null;
+  let toastTimer = 0;
+  window.blToast = (message) => {
+    if (!toastEl) toastEl = document.getElementById("bl-toast");
+    if (!toastEl) {
+      const style = document.createElement("style");
+      style.textContent = `
+  #bl-toast { position: fixed; left: 50%; bottom: 4.2rem; z-index: 9999;
+    transform: translateX(-50%); font: .85rem var(--sans, system-ui, sans-serif);
+    padding: .55rem 1rem; border-radius: 2rem; pointer-events: none;
+    color: var(--bg, light-dark(#fff, #123)); background: var(--ink, light-dark(#333c46, #dce6f0));
+    opacity: 0; transition: opacity .25s; }
+  #bl-toast.show { opacity: 1; }`;
+      document.head.appendChild(style);
+      toastEl = document.createElement("div");
+      toastEl.id = "bl-toast";
+      toastEl.setAttribute("role", "status");
+      document.body.appendChild(toastEl);
+    }
+    toastEl.textContent = message;
+    toastEl.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove("show"), 1800);
+  };
+})();
+
 (() => {
   const MAX_INLINE = 3; // 이보다 많아지면 접기 토글이 붙는다
   const STORE = "bl-dock-collapsed";

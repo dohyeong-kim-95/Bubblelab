@@ -63,8 +63,6 @@
       localStorage.setItem("bl-seen-week", week);
       if (prev && prev !== week) { // 처음 온 사람에게 리셋 안내는 무의미
         const lines = ["🧹 새로운 한 주가 시작됐어요!\n주간 1위 보드는 매주 월요일 09시에 리셋돼요. 빈자리를 노려보세요 👑"];
-        // 2026-07-13 주 한정 안내 (공지 기능 도입 전 주의 기록 — 다음부터는 admin 공지로)
-        if (week === "2026-07-13") lines.push("지난주 통합 1위는 김윤배님이었어요 🏆");
         const box = document.createElement("div");
         box.id = "bl-week-reset";
         box.setAttribute("role", "status");
@@ -109,6 +107,37 @@
       }
     } catch {} // localStorage 불가(시크릿 모드 등)면 조용히 넘어간다
   };
+
+  // 순위 계산 — DOM 없이 테스트할 수 있게 순수 함수로 두고 밖에도 내놓는다
+  // (_src/tests/records-client.test.mjs). dir 은 "min"(작을수록 좋음) 또는 "max".
+  const ranking = {
+    // score 가 record 보다 좋은가. 비교할 기록이 없으면 무조건 좋다.
+    beats(dir, score, record) {
+      if (!record) return true;
+      if (dir === "max") return score > record.score;
+      return score < record.score;
+    },
+    // 이 점수가 주간 3위 안에 들 수 있는가 (자리가 남았거나 현재 3위보다 좋음)
+    inTop3(dir, score, top3) {
+      if (top3.length < 3) return true;
+      return ranking.beats(dir, score, top3[2]);
+    },
+    // 지금 등록하면 몇 위가 될지. 같은 점수는 먼저 낸 사람이 앞이다 — 서버
+    // (_infra/records.js)가 새 기록을 뒤에 붙이고 안정 정렬하기 때문이다.
+    expectedRank(dir, score, top3) {
+      let ahead = 0;
+      for (const record of top3) {
+        if (!ranking.beats(dir, score, record)) ahead += 1;
+      }
+      return ahead + 1;
+    },
+    // 등록 대기 중인 기록(pending)을 새 점수로 바꿀 것인가. 대기 중인 게 없거나 새 점수가 더 좋을 때만.
+    replacesPending(dir, score, pending) {
+      if (pending === null) return true;
+      return ranking.beats(dir, score, { score: pending });
+    },
+  };
+  window.blWeeklyRanking = ranking;
 
   const cfg = window.blWeekly;
   if (!cfg?.game || !["min", "max"].includes(cfg.dir)) return;
@@ -170,7 +199,7 @@
   document.body.appendChild(claim);
   const input = claim.querySelector("input");
   const msgEl = claim.querySelector(".msg");
-  input.value = localStorage.getItem("bl-nick") ?? "";
+  try { input.value = localStorage.getItem("bl-nick") ?? ""; } catch {} // 저장소가 막혀도 폼은 붙는다
 
   // 전체 화면을 클릭 영역으로 쓰는 토이에 이벤트가 새지 않게
   for (const el of [badge, claim]) {
@@ -185,12 +214,6 @@
   let collapsed = false; // 배지 접힘 상태(탭으로 토글, 저장됨)
   try { collapsed = localStorage.getItem("bl-weekly-collapsed") === "1"; } catch {}
   if (collapsed) { badge.classList.add("collapsed"); badge.textContent = "👑 ▸"; }
-
-  const beats = (score, record) =>
-    !record || (cfg.dir === "max" ? score > record.score : score < record.score);
-
-  // 이 점수가 주간 3위 안에 들 수 있는가 (자리가 남았거나 현재 3위보다 좋음)
-  const inTop3 = (score) => top3.length < 3 || beats(score, top3[2]);
 
   function renderBadge() {
     badge.classList.toggle("collapsed", collapsed);
@@ -236,10 +259,10 @@
       body: JSON.stringify({ game: cfg.game, score, text: fmt(score) }),
       keepalive: true,
     }).catch(() => {});
-    if (!inTop3(score)) return;
-    if (pending && !beats(score, { score: pending })) return; // 이미 더 좋은 게 대기 중
+    if (!ranking.inTop3(cfg.dir, score, top3)) return;
+    if (!ranking.replacesPending(cfg.dir, score, pending)) return; // 이미 더 좋은 게 대기 중
     pending = score;
-    const rank = top3.filter((r) => beats(r.score, { score })).length + 1; // 예상 순위
+    const rank = ranking.expectedRank(cfg.dir, score, top3);
     claim.querySelector(".score").textContent =
       `${fmt(score)} — 주간 ${rank}위예요! 닉네임을 남겨보세요!`;
     msgEl.textContent = "한글/영문/숫자 6자 이내";
@@ -258,7 +281,7 @@
       msgEl.textContent = "⚠️ 한글/영문/숫자만, 1~6자로 부탁해요";
       return;
     }
-    localStorage.setItem("bl-nick", nick);
+    try { localStorage.setItem("bl-nick", nick); } catch {} // 기억 못 해도 등록은 한다
     msgEl.textContent = "등록 중…";
     try {
       const res = await fetch("/_records", {

@@ -7,6 +7,10 @@ name: Buckets
 
 on: workflow_dispatch
 
+# 버킷은 Cloudflare 토큰으로 만든다 — 저장소 토큰은 읽기만 있으면 된다.
+permissions:
+  contents: read
+
 jobs:
   create:
     runs-on: ubuntu-latest

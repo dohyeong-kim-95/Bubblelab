@@ -77,7 +77,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      # 쓰기 토큰을 .git/config 에 남기지 않는다 — push 는 마지막에 scripts/push-main.sh 만 한다.
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -166,19 +169,22 @@ jobs:
               SEQ=$(node -p "require('./$JOB').skeletons")
               GRID_FLAG=""
               node -e "process.exit(require('./$JOB').grid ? 0 : 1)" && GRID_FLAG="--grid"
-              REF_FLAG=""
-              node -e "process.exit(require('./$JOB').ref ? 0 : 1)" \
-                && REF_FLAG="--ref $(node -p "require('./$JOB').ref || ''")"
+              # 경로에 공백·글롭 문자가 있어도 쪼개지지 않게 배열로 넘긴다
+              REF_ARGS=()
+              if node -e "process.exit(require('./$JOB').ref ? 0 : 1)"; then
+                REF_ARGS=(--ref "$(node -p "require('./$JOB').ref")")
+              fi
               node _infra/emoticon.mjs cut "$WORKDIR" "$CUT_ID" --skeletons "$SEQ" \
-                --fps "$FPS" $GRID_FLAG $REF_FLAG $FORCE_FLAG $RESUME_FLAG "${BUDGET_FLAGS[@]}"
+                --fps "$FPS" $GRID_FLAG "${REF_ARGS[@]}" $FORCE_FLAG $RESUME_FLAG "${BUDGET_FLAGS[@]}"
             elif [[ -f "$JOB" ]] && node -e "process.exit(Array.isArray(require('./$JOB').keys) ? 0 : 1)"; then
               # pose-to-pose 모드 (권장): job.json의 keys/breakdowns/assembly를 spec으로
               node -e "const j = require('./$JOB'); require('fs').writeFileSync('/tmp/keys.json', JSON.stringify({ motion: j.prompt, keys: j.keys, breakdowns: j.breakdowns, assembly: j.assembly, invariants: j.invariants, poseConstants: j.poseConstants, breakdownNote: j.breakdownNote, repeat: j.repeat }))"
-              KEYS_REF_FLAG=""
-              node -e "process.exit(require('./$JOB').ref ? 0 : 1)" \
-                && KEYS_REF_FLAG="--ref $(node -p "require('./$JOB').ref || ''")"
+              KEYS_REF_ARGS=()
+              if node -e "process.exit(require('./$JOB').ref ? 0 : 1)"; then
+                KEYS_REF_ARGS=(--ref "$(node -p "require('./$JOB').ref")")
+              fi
               node _infra/emoticon.mjs cut "$WORKDIR" "$CUT_ID" --keys /tmp/keys.json --fps "$FPS" \
-                $KEYS_REF_FLAG $FORCE_FLAG $RESUME_FLAG "${BUDGET_FLAGS[@]}"
+                "${KEYS_REF_ARGS[@]}" $FORCE_FLAG $RESUME_FLAG "${BUDGET_FLAGS[@]}"
             else
               POSES_FLAG=""
               if [[ -f "$JOB" ]] && node -e "process.exit(Array.isArray(require('./$JOB').poses) ? 0 : 1)"; then
@@ -244,10 +250,7 @@ jobs:
           git add -A _src/emoticon
           git diff --cached --quiet && { echo "변경 없음"; exit 0; }
           git commit -m "emoticon: 생성 산출물 (actions)"
-          for i in 1 2 3; do
-            git pull --rebase origin main && git push origin HEAD:main && break
-            sleep $((i * 2))
-          done
+          bash scripts/push-main.sh
           # GITHUB_TOKEN으로 만든 push는 다른 워크플로의 push 트리거를 **발동시키지
           # 않는다**(재귀 방지). 그래서 생성 산출물만 커밋되면 Deploy가 안 돌아
           # history 페이지가 한 세대씩 뒤처졌다. workflow_dispatch는 같은 토큰으로도

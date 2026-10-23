@@ -325,3 +325,54 @@ Twelve Data — https://twelvedata.com/
 지수 자체의 권리는 S&P Dow Jones Indices(다우존스)와 Nasdaq, Inc.(나스닥 종합)에
 있습니다. 무료 티어의 재배포·공개 표시 허용 범위는 제공자 약관을 따르며, 이
 브리핑을 상업적으로 쓰게 되면 티어와 약관을 다시 확인해야 합니다.
+
+## three.js r182
+
+`_shared/vendor/three.core.min.js`, `_shared/vendor/three.module.min.js`
+(slop/gaterush 가 쓴다). 파일 머리의 `@license` 주석을 그대로 두었습니다.
+
+MIT License
+
+Copyright © 2010-2025 three.js authors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+## Twemoji 국기 웹폰트 (TwemojiCountryFlags)
+
+`_shared/TwemojiCountryFlags.woff2` — 국기 이모지가 없는 브라우저(Windows 등)에서도
+국기가 보이게 하는 웹폰트(slop/flags 등). 원본 고지는
+`_shared/TwemojiCountryFlags.LICENSE.txt` 에 그대로 두었습니다.
+
+- 폰트 아트워크: Twemoji © Twitter, Inc. and other contributors —
+  Creative Commons Attribution 4.0 International (CC BY 4.0),
+  https://creativecommons.org/licenses/by/4.0/ · https://github.com/twitter/twemoji
+- 폰트 빌드/패키징: country-flag-emoji-polyfill © 2022 TalkJS — MIT License,
+  https://github.com/talkjs/country-flag-emoji-polyfill
+
+## 고운바탕 (Gowun Batang)
+
+`_shared/fonts/gowun-batang-700.woff2` — 사이트·카테고리·랜딩 제목용 부분 파일
+(`bubble.css` 의 `--serif`). 라틴과 랜딩 제목에 쓰는 한글만 남기도록 서브셋했으며,
+폰트 이름은 바꾸지 않았습니다(OFL 의 예약 이름 조항이 없는 폰트입니다).
+
+Copyright 2021 The Gowun Batang Project Authors
+(https://github.com/yangheeryu/Gowun-Batang)
+
+SIL Open Font License, Version 1.1 — 전문은 `_shared/fonts/GowunBatang-OFL.txt` 에
+그대로 두었습니다. https://openfontlicense.org

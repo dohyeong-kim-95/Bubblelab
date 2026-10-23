@@ -34,7 +34,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      # 쓰기 토큰을 .git/config 에 남기지 않는다 — push 는 마지막에 scripts/push-main.sh 만 한다.
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
@@ -86,9 +89,8 @@ jobs:
           git add -A _src/emoticon
           git diff --cached --quiet && { echo "변경 없음"; exit 0; }
           git commit -m "emoticon: 비전 부품 검사 결과 (actions)"
-          for i in 1 2 3; do
-            git pull --rebase origin main && git push origin HEAD:main && break
-            sleep $((i * 2))
-          done
+          bash scripts/push-main.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 # (erase 후 재검사)
 # (bounce4 부품 검사)

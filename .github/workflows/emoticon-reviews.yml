@@ -28,7 +28,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      # 쓰기 토큰을 .git/config 에 남기지 않는다 — push 는 마지막에 scripts/push-main.sh 만 한다.
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Pull review notes
         run: |
@@ -50,10 +53,9 @@ jobs:
           git add -A _src/emoticon/reviews.json
           git diff --cached --quiet && { echo "새 댓글 없음"; exit 0; }
           git commit -m "emoticon: 검수 댓글 동기화 (actions)"
-          for i in 1 2 3; do
-            git pull --rebase origin main && git push origin HEAD:main && break
-            sleep $((i * 2))
-          done
+          bash scripts/push-main.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 # (동기화 트리거)
 # (동기화)

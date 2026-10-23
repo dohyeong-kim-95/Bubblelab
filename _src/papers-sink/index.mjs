@@ -9,7 +9,7 @@
 // `claude -p` 는 이미 쓰는 구독에서 차감되므로 키도 청구서도 늘지 않는다.
 // 대신 이 PC 가 켜져 있어야 한다.
 //
-// **도구 없이 부른다(`--allowed-tools ""`).** 프롬프트에 arXiv 초록이 그대로
+// **도구 없이 부른다(`--tools ""`, `common.mjs` 의 `claudeArgs`).** 프롬프트에 arXiv 초록이 그대로
 // 들어가는데, 그건 남이 쓴 검증되지 않은 텍스트다. 도구가 없으면 초록에 지시를
 // 심어 둬도 읽고 답하는 것 말고 할 수 있는 게 없다.
 //
@@ -23,6 +23,7 @@ import {
   buildSummaryPrompt, CHAT_ANSWER_LIMIT, fetchCandidates, parseScores, parseSummary,
   parseVerb, pickPapers, RESEARCH_PROFILE, runVerb,
 } from "../../_infra/papers.js";
+import { claudeArgs, edgeAuthHeaders } from "./common.mjs";
 
 const BASE = (process.env.PAPERS_ENDPOINT ?? "").trim() || "https://life.bubblelab.dev";
 const CLAUDE = (process.env.CLAUDE_BIN ?? "").trim() || "claude";
@@ -46,16 +47,16 @@ function required(name) {
 async function api(path, secret, init = {}) {
   const response = await fetch(`${BASE}/_papers${path}`, {
     ...init,
-    headers: { Authorization: `Bearer ${secret}`, "Content-Type": "application/json", ...init.headers },
+    headers: { ...edgeAuthHeaders(secret), "Content-Type": "application/json", ...init.headers },
   });
   if (!response.ok) throw new Error(`${path} 실패 (HTTP ${response.status})`);
   return response.json();
 }
 
-/** 최신 다이제스트. 공개 경로라 인증이 필요 없다. */
-async function latestDigest() {
+/** 최신 다이제스트. 공개 경로가 아니다 — 싱크 비밀값으로 인증한다. */
+async function latestDigest(secret) {
   try {
-    const response = await fetch(`${BASE}/_papers/latest`);
+    const response = await fetch(`${BASE}/_papers/latest`, { headers: edgeAuthHeaders(secret) });
     const body = await response.json();
     return body?.empty ? null : body;
   } catch {
@@ -75,7 +76,7 @@ async function latestDigest() {
  */
 function ask(prompt) {
   return new Promise((resolve, reject) => {
-    const child = spawn(CLAUDE, ["-p", prompt, "--allowed-tools", "", "--output-format", "text"], {
+    const child = spawn(CLAUDE, claudeArgs(prompt), {
       stdio: ["ignore", "pipe", "pipe"],
       env: { ...process.env, PATH: `${dirname(process.execPath)}:${process.env.PATH ?? ""}` },
     });
@@ -176,7 +177,7 @@ async function chat(secret) {
   const question = messages.map((m) => m.text).join("\n").slice(0, 2000);
   console.log(`${new Date().toLocaleString("ko-KR")} 대화: ${question.slice(0, 60)}`);
 
-  const digest = await latestDigest();
+  const digest = await latestDigest(secret);
   const profile = process.env.PAPERS_PROFILE || RESEARCH_PROFILE;
   const history = poll.history ?? [];
   const focus = poll.focus ?? null;
@@ -233,7 +234,7 @@ async function main() {
     return buildDigest(secret);
   }
 
-  const digest = await latestDigest();
+  const digest = await latestDigest(secret);
   const profile = process.env.PAPERS_PROFILE || RESEARCH_PROFILE;
   const done = [];
 

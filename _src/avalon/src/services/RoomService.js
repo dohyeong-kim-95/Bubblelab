@@ -1,6 +1,7 @@
 import { db, ref, set, get, update, remove, onValue, serverTimestamp } from '../firebase.js';
 import { MAX_PLAYERS } from '../config/gameConfig.js';
 import { normalizeRoleConfig } from '../lobby/roleConfigState.js';
+import { staleRoomUpdates } from '../lobby/roomCleanupState.js';
 
 function generateRoomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -16,29 +17,17 @@ function normalizePlayerName(name) {
 }
 
 export class RoomService {
-  // 방 생성 전 2시간 이상 오래된 방 정리 (누적 방 문제 방지)
+  // 방 생성 전 오래된 방 정리 (누적 방 문제 방지). 규칙은 lobby/roomCleanupState.js —
+  // 사람이 접속해 있는 방은 오래 진행 중이어도 남기고, 서버 상한(64)에 맞춰 나눠 지운다.
   static async _cleanupStaleRooms() {
     try {
       const snapshot = await get(ref(db, 'rooms'));
       if (!snapshot.exists()) return;
-      const rooms = snapshot.val();
-      const now = Date.now();
-      const TWO_HOURS = 2 * 60 * 60 * 1000;
-      const updates = {};
-      for (const [code, room] of Object.entries(rooms)) {
-        const createdAt = room.meta?.createdAt || 0;
-        const status = room.meta?.status;
-        // 2시간 이상 된 방이거나, 끝난 방 중 30분 이상 된 방 삭제
-        if (now - createdAt > TWO_HOURS || (status === 'finished' && now - createdAt > 30 * 60 * 1000)) {
-          updates[`rooms/${code}`] = null;
-          updates[`privateData/${code}`] = null;
-        }
-      }
-      if (Object.keys(updates).length > 0) {
+      for (const updates of staleRoomUpdates(snapshot.val(), Date.now())) {
         await update(ref(db), updates);
       }
     } catch (e) {
-      // 정리 실패 무시
+      // 정리 실패 무시 — 다음 방 만들기 때 다시 시도한다
     }
   }
 

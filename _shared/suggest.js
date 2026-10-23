@@ -1,36 +1,35 @@
 // 토이 아이디어 우편함 버튼. 카테고리 홈에 자동 포함된다 (build.mjs).
 // 우측 하단 💡 버튼 → 텍스트 입력 → /_suggest 로 제출 → admin에서 조회.
 (() => {
+  // 색·글꼴은 bubble.css 토큰(카테고리 홈은 bubble.css 를 불러온다). 괄호 안은 토큰이
+  // 없는 페이지를 위한 예전 값이다. 본문은 --sans — 모노는 숫자·라벨에만 쓴다.
   const css = `
   #bl-suggest { position: fixed; right: 1rem; bottom: 1rem; z-index: 9999;
     width: 3.2rem; height: 3.2rem; border-radius: 50%; cursor: pointer;
-    font-size: 1.6rem; line-height: 1; border: 1.5px solid currentColor;
-    color: light-dark(#334, #ccd);
-    background: light-dark(rgba(255,255,255,.75), rgba(20,26,36,.75));
+    font-size: 1.6rem; line-height: 1; border: 1.5px solid var(--line, currentColor);
+    color: var(--ink, light-dark(#334, #ccd));
+    background: color-mix(in srgb, var(--field, light-dark(#fff, #141a24)) 75%, transparent);
     backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
   #bl-suggest:active { transform: scale(.92); }
-  /* 공유 버튼이 있는 페이지에서는 그 위로 비켜난다 */
-  body:has(#bl-share) #bl-suggest { bottom: 3.8rem; }
   #bl-suggest-panel { position: fixed; right: 1rem; bottom: 4.2rem; z-index: 9999;
-    width: min(85vw, 19rem); padding: 1rem; border-radius: 1rem;
-    border: 1.5px solid currentColor; color: light-dark(#334, #ccd);
-    font: .85rem ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
-    background: light-dark(rgba(255,255,255,.95), rgba(20,26,36,.95));
+    width: min(85vw, 19rem); padding: 1rem; border-radius: var(--r-lg, 1rem);
+    border: 1.5px solid var(--line, currentColor); color: var(--ink, light-dark(#334, #ccd));
+    font: .85rem var(--sans, system-ui, sans-serif);
+    background: color-mix(in srgb, var(--field, light-dark(#fff, #141a24)) 95%, transparent);
     backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
     display: none; flex-direction: column; gap: .6rem; box-sizing: border-box; }
-  body:has(#bl-share) #bl-suggest-panel { bottom: 7rem; }
   #bl-suggest-panel.show { display: flex; }
   #bl-suggest-panel b { font-size: .95rem; }
   #bl-suggest-panel textarea { font: inherit; padding: .5rem .6rem; resize: none;
-    border-radius: .5rem; border: 1px solid currentColor; background: none;
+    border-radius: var(--r-sm, .5rem); border: 1px solid var(--line, currentColor); background: none;
     color: inherit; height: 4.2em; }
   #bl-suggest-panel .row { display: flex; justify-content: space-between;
     align-items: center; gap: .5rem; }
-  #bl-suggest-panel .count { opacity: .5; font-size: .75rem; }
+  #bl-suggest-panel .count { color: var(--muted, inherit); font: .75rem var(--mono, ui-monospace, monospace); }
   #bl-suggest-panel button { font: inherit; font-weight: bold; padding: .45rem .9rem;
-    border-radius: .5rem; border: 1.5px solid currentColor; background: none;
+    border-radius: 999px; border: 1.5px solid var(--line, currentColor); background: none;
     color: inherit; cursor: pointer; }
-  #bl-suggest-panel .msg { opacity: .65; min-height: 1em; font-size: .78rem; }
+  #bl-suggest-panel .msg { color: var(--muted, inherit); min-height: 1em; font-size: .78rem; }
   #bl-suggest-panel .x { position: absolute; top: .35rem; right: .55rem;
     border: 0; background: none; color: inherit; opacity: .5; cursor: pointer;
     font: inherit; padding: .2rem; }
