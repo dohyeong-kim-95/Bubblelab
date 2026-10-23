@@ -63,7 +63,7 @@
 const champion = document.getElementById("champion");
 const historyEl = document.getElementById("history");
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
-  "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;",
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
 })[char]);
 try {
   const response = await fetch("/_records?history=1&game=bubble-pop-idle", { cache: "no-store" });
