@@ -232,7 +232,7 @@ test("운동: unfit 은 그날만 빼고, 없으면 아무것도 안 쓴다 / fi
   assert.deepEqual(plan(validateAction({ op: "unfit", date: "2026-10-20" }, ctx, TODAY), { events, sender: "도경" }).puts, []);
   const list = plan(validateAction({ op: "fitlist" }, ctx, TODAY), { events, sender: "도경" });
   assert.equal(list.reply, "💪 10월 운동 기록\n· 도경 2회 (3, 24일)\n· 민지 1회 (10일)");
-  assert.match(plan(validateAction({ op: "fitlist", month: "2026-09" }, ctx, TODAY), { events, sender: "도경" }).reply, /9월 운동 기록이 아직 없어요/);
+  assert.equal(plan(validateAction({ op: "fitlist", month: "2026-09" }, ctx, TODAY), { events, sender: "도경" }).reply, "💪 9월 운동 기록이 아직 없어요");
 });
 
 test("시간: 하나만 end 에 들어오면 시작 시각으로 본다", () => {
@@ -248,4 +248,34 @@ test("운동: 달 이름표가 프롬프트에 있고, 내용 없는 메모는 �
   assert.deepEqual(validateAction({ op: "fit", memo: "운동" }, ctx, TODAY), { op: "fit", date: "2026-10-25" });
   assert.deepEqual(validateAction({ op: "fit", memo: "운동 인증" }, ctx, TODAY), { op: "fit", date: "2026-10-25" });
   assert.equal(validateAction({ op: "fit", memo: "운동장 5바퀴" }, ctx, TODAY).memo, "운동장 5바퀴");
+});
+
+test("운동: 주간 요약은 기간 안 날짜·메모를, 0회인 사람도 보여 준다", () => {
+  const ctx = buildContext(EVENTS, TODAY);
+  assert.deepEqual(validateAction({ op: "fitlist", week: "this" }, ctx, TODAY), { op: "fitlist", from: "2026-10-19", to: "2026-10-25" });
+  assert.deepEqual(validateAction({ op: "fitlist", week: "last" }, ctx, TODAY), { op: "fitlist", from: "2026-10-12", to: "2026-10-18" });
+  assert.deepEqual(validateAction({ op: "fitlist", week: "this" }, ctx, "2026-10-19"), { op: "fitlist", from: "2026-10-19", to: "2026-10-19" }); // 월요일
+  const events = [...EVENTS,
+    { id: fitId("2026-10", "도경"), rev: 1, deleted: false, kind: "workout", month: "2026-10", owner: "도경",
+      days: { "18": { at: 1 }, "20": { at: 1, memo: "헬스 1시간" }, "24": { at: 1 } } },
+    { id: fitId("2026-10", "민지"), rev: 1, deleted: false, kind: "workout", month: "2026-10", owner: "민지", days: { "2": { at: 1 } } },
+  ];
+  const a = validateAction({ op: "fitlist", from: "2026-10-19", to: "2026-10-31" }, ctx, TODAY);
+  assert.deepEqual(a, { op: "fitlist", from: "2026-10-19", to: "2026-10-25" }); // 앞날은 자른다
+  assert.equal(plan(a, { events, sender: "도경" }).reply,
+    "💪 10/19 (월) ~ 10/25 (일) 운동 요약\n· 도경 2회 — 10/20 (화) 헬스 1시간, 10/24 (토)\n· 민지 0회");
+  // 달을 넘는 주도 센다
+  const cross = [...events, { id: fitId("2026-11", "민지"), rev: 1, deleted: false, kind: "workout", month: "2026-09", owner: "민지", days: { "30": { at: 1 } } }];
+  assert.match(plan(validateAction({ op: "fitlist", from: "2026-09-28", to: "2026-10-04" }, ctx, TODAY), { events: cross, sender: "도경" }).reply,
+    /민지 2회 — 9\/30 \(수\), 10\/2 \(금\)/);
+  assert.equal(validateAction({ op: "fitlist", from: "2026-01-01", to: "2026-10-25" }, ctx, TODAY).op, "unknown");
+});
+
+test("운동: 운동 낱말이 없으면 운동 동작을 쓰지 않는다", () => {
+  const ctx = buildContext(EVENTS, TODAY);
+  assert.deepEqual(validateAction({ op: "fitlist", from: "2026-10-26", to: "2026-11-01" }, ctx, TODAY, "이번 주 일정"),
+    { op: "list", from: "2026-10-26", to: "2026-11-01" });
+  assert.equal(validateAction({ op: "fit", date: "2026-10-25" }, ctx, TODAY, "제주 여행 넣어줘").op, "unknown");
+  assert.equal(validateAction({ op: "fit", date: "2026-10-25" }, ctx, TODAY, "오늘 러닝했어").op, "fit");
+  assert.equal(validateAction({ op: "fitlist" }, ctx, TODAY, "이번주 운동 요약해줘").op, "fitlist");
 });

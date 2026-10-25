@@ -95,12 +95,12 @@ export function buildMessages(command, ctx) {
     '{"op":"delete","id":"e번호"}',
     '{"op":"fit","date":"YYYY-MM-DD","memo":"한 줄 메모 또는 생략"}',
     '{"op":"unfit","date":"YYYY-MM-DD"}',
-    '{"op":"fitlist","month":"YYYY-MM"}',
+    '{"op":"fitlist","month":"YYYY-MM"} 또는 {"op":"fitlist","week":"this 또는 last"}',
     '{"op":"chat","reply":"당이 말투로 1~3문장 답"}',
     '{"op":"unknown","reason":"짧은 이유"}',
     "규칙: 날짜는 아래 날짜표에서만 고른다. 요일·'다음주'·'내일'은 날짜표로 바꾼다. 시간이 없으면 start 를 생략한다(종일).",
     "오후 3시는 15:00. 옮기기·삭제는 아래 일정 목록의 e번호로만 가리킨다. 목록에 없으면 unknown.",
-    "운동 인증: '운동했어'·'오늘 헬스 1시간' 은 말한 사람의 그날 운동 체크(fit, 날짜 없으면 오늘, memo 는 운동 종류·양만 적고 없으면 생략). 체크 취소는 unfit, '이번 달 운동 몇 번?'·'운동 기록' 은 fitlist.",
+    "운동 인증(운동·헬스·러닝 같은 운동 얘기일 때만. 일정·여행 얘기엔 쓰지 않는다): '운동했어'·'오늘 헬스 1시간' 은 말한 사람의 그날 운동 체크(fit, 날짜 없으면 오늘, memo 는 운동 종류·양만 적고 없으면 생략). 체크 취소는 unfit, '이번 달 운동 몇 번?'·'운동 기록'·'운동 요약' 은 fitlist(달이면 month, 이번 주·지난주면 week).",
     "일정과 상관없는 인사·잡담·간단한 질문이면 chat 으로 짧게 답한다. 날씨·뉴스·시세처럼 지금 정보는 모른다고 솔직히 말한다.",
     "",
     `달: ${ctx.months}`,
@@ -115,7 +115,11 @@ export function buildMessages(command, ctx) {
 }
 
 /** 모델 답을 믿지 않고 검증한다. 통과하면 정규화된 동작, 아니면 { op:"unknown", reason }. */
-export function validateAction(raw, ctx, today) {
+// 운동 얘기인지 — 작은 모델이 "이번 주 일정"·"제주 여행" 까지 운동 요약으로 고르는 일이 있어서
+// 요청에 운동 낱말이 없으면 운동 동작을 일정 동작으로 돌린다(command 를 모르면 검사하지 않는다).
+const FIT_WORDS = /운동|헬스|러닝|런닝|조깅|달리|뛰|걷기|걸었|산책|수영|요가|필라테스|PT|피티|스쿼트|자전거|등산|클라이밍|크로스핏|홈트|스트레칭|💪/i;
+
+export function validateAction(raw, ctx, today, command) {
   const bad = (reason) => ({ op: "unknown", reason });
   if (!raw || typeof raw !== "object") return bad("이해하지 못했어요");
   const minDate = addDays(today, -366), maxDate = addDays(today, 3 * 366);
@@ -128,6 +132,10 @@ export function validateAction(raw, ctx, today) {
     if (s && e && e <= s) return { start: s };
     return { start: s, end: e };
   };
+  if (command != null && ["fit", "unfit", "fitlist"].includes(raw.op) && !FIT_WORDS.test(command)) {
+    if (raw.op !== "fitlist") return bad("운동 얘기인지 일정 얘기인지 헷갈려요");
+    raw = { op: "list", from: raw.from, to: raw.to }; // 기간을 물었으니 일정 목록으로
+  }
   switch (raw.op) {
     case "add": {
       const title = String(raw.title ?? "").trim().slice(0, 120);
@@ -166,8 +174,24 @@ export function validateAction(raw, ctx, today) {
       return { op: "fit", date, ...(memo && { memo }) };
     }
     case "fitlist": {
+      // 주는 모델이 날짜를 세지 않게 "this"/"last" 만 받는다(날짜를 주면 일정 요청까지 그 날짜를 베낀다).
+      // 주는 월~일, 이번 주는 오늘까지.
+      if (raw.week === "this" || raw.week === "last") {
+        const mon = addDays(today, -((parseYmd(today).getDay() + 6) % 7));
+        return raw.week === "this"
+          ? { op: "fitlist", from: mon, to: today }
+          : { op: "fitlist", from: addDays(mon, -7), to: addDays(mon, -1) };
+      }
+      // 기간(from/to)이 있으면 그 기간, 아니면 달. 앞으로 올 날은 셀 게 없으니 오늘에서 자른다.
+      if (okDate(raw.from) && okDate(raw.to) && raw.from <= raw.to) {
+        let to = raw.to > today ? today : raw.to;
+        if (to < raw.from) to = raw.from;
+        if (dayDiff(raw.from, to) > 62) return bad("기간이 너무 길어요 (두 달 안쪽으로)");
+        return { op: "fitlist", from: raw.from, to };
+      }
       const month = typeof raw.month === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(raw.month) ? raw.month : today.slice(0, 7);
-      return { op: "fitlist", month };
+      const last = ymd(new Date(Number(month.slice(0, 4)), Number(month.slice(5)), 0));
+      return { op: "fitlist", from: `${month}-01`, to: last, month };
     }
     case "chat": {
       const reply = String(raw.reply ?? "").trim().slice(0, 400);
@@ -230,19 +254,29 @@ export function plan(action, { events, sender, now = Date.now() }) {
       : `💪 ${sender}님 ${label(action.date)} 운동 완료!${action.memo ? ` — ${action.memo}` : ""} (${Number(month.slice(5))}월 ${n}회째)`;
     return { puts: [{ id: fitId(month, sender), rev, content }], dels: [], reply };
   }
-  if (action.op === "fitlist") {
-    const recs = events.filter((e) => !e.deleted && e.kind === "workout" && e.month === action.month
-      && e.days && Object.keys(e.days).length);
-    const m = Number(action.month.slice(5));
-    if (!recs.length) return { puts: [], dels: [], reply: `💪 ${m}월 운동 기록이 아직 없어요` };
-    const lines = recs.map((r) => {
-      const ds = Object.keys(r.days).map(Number).sort((a, b) => a - b);
-      return `· ${r.owner || "?"} ${ds.length}회 (${ds.join(", ")}일)`;
-    });
-    return { puts: [], dels: [], reply: [`💪 ${m}월 운동 기록`, ...lines].join("\n") };
-  }
+  if (action.op === "fitlist") return { puts: [], dels: [], reply: fitSummary(events, action) };
   if (action.op === "chat") return { puts: [], dels: [], reply: action.reply };
   return { puts: [], dels: [], reply: `🤖 ${action.reason}` };
+}
+
+// 기간 안 둘의 운동 체크. 짧은 기간(주)은 날짜·메모까지, 달은 날짜 숫자만. 한 번도 기록이
+// 없는 사람은 모르니(이름을 모른다) 운동 레코드가 있는 사람만 센다 — 이 기간 0회도 보인다.
+function fitSummary(events, { from, to, month }) {
+  const recs = events.filter((e) => !e.deleted && e.kind === "workout" && e.days && typeof e.days === "object");
+  const owners = [...new Set(recs.map((r) => r.owner || "?"))];
+  const title = month ? `${Number(month.slice(5))}월 운동 기록` : `${label(from)} ~ ${label(to)} 운동 요약`;
+  const hits = new Map(owners.map((o) => [o, []]));
+  for (let d = from; d <= to; d = addDays(d, 1)) {
+    const mo = d.slice(0, 7), day = String(Number(d.slice(8)));
+    for (const r of recs) if (r.month === mo && r.days[day]) hits.get(r.owner || "?").push({ d, memo: r.days[day].memo });
+  }
+  if (![...hits.values()].some((h) => h.length)) return `💪 ${title.replace(/ (기록|요약)$/, "")} 기록이 아직 없어요`;
+  const lines = [...hits].map(([o, h]) => {
+    if (!h.length) return `· ${o} 0회`;
+    if (month) return `· ${o} ${h.length}회 (${h.map((x) => Number(x.d.slice(8))).join(", ")}일)`;
+    return `· ${o} ${h.length}회 — ${h.map((x) => `${label(x.d)}${x.memo ? ` ${x.memo}` : ""}`).join(", ")}`;
+  });
+  return [`💪 ${title}`, ...lines].join("\n");
 }
 
 const confirmText = (a) => a.op === "delete"
@@ -303,7 +337,7 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
       await io.say("🤖 로컬 모델이 응답하지 않아요 (PC의 Ollama 확인)");
       return;
     }
-    const action = validateAction(raw, ctx, today);
+    const action = validateAction(raw, ctx, today, command);
     io.log?.("당이:", JSON.stringify(raw), "→", action.op);
     if (action.op === "move" || action.op === "delete") {
       pending.set(name, { action, until: now() + PENDING_MS });
