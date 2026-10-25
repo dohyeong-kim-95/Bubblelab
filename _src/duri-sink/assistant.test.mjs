@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  BOT_NAME, MAX_AGE_MS, buildContext, buildMessages, createAssistant, parseTrigger, plan, validateAction, ymd,
+  BOT_NAME, MAX_AGE_MS, buildContext, buildMessages, createAssistant, fitId, parseTrigger, plan, validateAction, whoKey, ymd,
 } from "./assistant.mjs";
 
 const NOW = new Date(2026, 9, 25, 12, 0).getTime(); // 2026-10-25 (일) 정오, 로컬
@@ -38,13 +38,14 @@ test("@당이·@당 으로 시작하는 말만 명령이다", () => {
   assert.equal(parseTrigger(undefined), null);
 });
 
-test("문맥: 일반 일정만 별칭으로, 날짜표는 오늘부터 60일", () => {
+test("문맥: 일반 일정만 별칭으로, 날짜표는 오늘부터 60일 + 지난 7일은 따로", () => {
   const ctx = buildContext(EVENTS, TODAY);
   assert.deepEqual([...ctx.aliases.values()].map((e) => e.id), ["aaaaaa3", "aaaaaa1", "aaaaaa2"]);
   assert.equal(ctx.days.length, 60);
-  assert.match(ctx.days[24], /^2026-11-18 수$/);
   assert.match(ctx.days[0], /^2026-10-25 일 \(오늘\)$/);
   assert.match(ctx.days[6], /^2026-10-31 토$/);
+  assert.match(ctx.days[24], /^2026-11-18 수$/);
+  assert.match(ctx.past, /^2026-10-24 토 \(어제\), 2026-10-23 금 \(그제\), .*2026-10-18 일$/);
   const [sys, user] = buildMessages("토요일 임장 일정 지워줘", ctx);
   assert.match(sys.content, /e2: 2026-10-31 10:00 "르파비스 임장"/);
   assert.equal(user.content, "토요일 임장 일정 지워줘");
@@ -193,4 +194,58 @@ test("잡담: chat 은 말투 그대로 답만 하고 캘린더는 건드리지 
   assert.deepEqual(plan(a, { events: EVENTS, sender: "도경" }), { puts: [], dels: [], reply: "안녕! 오늘도 힘내승~ 푸히힝" });
   assert.equal(validateAction({ op: "chat", reply: "  " }, ctx, TODAY).op, "unknown");
   assert.equal(validateAction({ op: "chat", reply: "가".repeat(900) }, ctx, TODAY).reply.length, 400);
+});
+
+test("운동: whoKey·fitId 가 웹앱(duri/index.html)과 같은 id 를 만든다", async () => {
+  const { readFileSync } = await import("node:fs");
+  const html = readFileSync(new URL("../../duri/index.html", import.meta.url), "utf8");
+  const src = html.match(/function whoKey\(name\) \{[\s\S]*?\n\}/)[0];
+  const appWhoKey = new Function(`${src}; return whoKey;`)();
+  for (const name of ["도경", "민지", "Kim", "🐴 당근", ""]) assert.equal(whoKey(name), appWhoKey(name));
+  assert.match(html, /const fitId = \(month, name\) => `wk\$\{month\.replace\("-", ""\)\}\$\{whoKey\(name\)\}`;/);
+  assert.equal(fitId("2026-10", "도경"), `wk202610${whoKey("도경")}`);
+});
+
+test("운동: fit 은 말한 사람 달 레코드에 그날을 더하고, 기존 날·메모는 지킨다", () => {
+  const ctx = buildContext(EVENTS, TODAY);
+  const id = fitId("2026-10", "도경");
+  const events = [...EVENTS, { id, rev: 1, deleted: false, kind: "workout", month: "2026-10", owner: "도경", days: { "3": { at: 1, memo: "러닝" } } }];
+  const a = validateAction({ op: "fit", memo: " 헬스 1시간 " }, ctx, TODAY); // 날짜 없으면 오늘
+  assert.deepEqual(a, { op: "fit", date: "2026-10-25", memo: "헬스 1시간" });
+  const p = plan(a, { events, sender: "도경", now: 99 });
+  assert.equal(p.puts[0].id, id);
+  assert.deepEqual(p.puts[0].content, { kind: "workout", month: "2026-10", owner: "도경", at: 99,
+    days: { "3": { at: 1, memo: "러닝" }, "25": { at: 99, memo: "헬스 1시간" } } });
+  assert.match(p.reply, /도경님 10\/25 \(일\) 운동 완료! — 헬스 1시간 \(10월 2회째\)/);
+  // 상대 레코드는 따로 — 민지가 하면 민지 id
+  assert.equal(plan(a, { events, sender: "민지", now: 99 }).puts[0].id, fitId("2026-10", "민지"));
+  assert.equal(validateAction({ op: "fit", date: "2026-10-26" }, ctx, TODAY).op, "unknown"); // 미래
+});
+
+test("운동: unfit 은 그날만 빼고, 없으면 아무것도 안 쓴다 / fitlist 는 둘 다 센다", () => {
+  const ctx = buildContext(EVENTS, TODAY);
+  const mine = { id: fitId("2026-10", "도경"), rev: 1, deleted: false, kind: "workout", month: "2026-10", owner: "도경", days: { "3": { at: 1 }, "24": { at: 2 } } };
+  const hers = { id: fitId("2026-10", "민지"), rev: 1, deleted: false, kind: "workout", month: "2026-10", owner: "민지", days: { "10": { at: 1 } } };
+  const events = [...EVENTS, mine, hers];
+  const off = plan(validateAction({ op: "unfit", date: "2026-10-24" }, ctx, TODAY), { events, sender: "도경", now: 5 });
+  assert.deepEqual(off.puts[0].content.days, { "3": { at: 1 } });
+  assert.deepEqual(plan(validateAction({ op: "unfit", date: "2026-10-20" }, ctx, TODAY), { events, sender: "도경" }).puts, []);
+  const list = plan(validateAction({ op: "fitlist" }, ctx, TODAY), { events, sender: "도경" });
+  assert.equal(list.reply, "💪 10월 운동 기록\n· 도경 2회 (3, 24일)\n· 민지 1회 (10일)");
+  assert.match(plan(validateAction({ op: "fitlist", month: "2026-09" }, ctx, TODAY), { events, sender: "도경" }).reply, /9월 운동 기록이 아직 없어요/);
+});
+
+test("시간: 하나만 end 에 들어오면 시작 시각으로 본다", () => {
+  const ctx = buildContext(EVENTS, TODAY);
+  const a = validateAction({ op: "add", title: "치과", date: "2026-10-26", start: "", end: "15:00" }, ctx, TODAY);
+  assert.equal(a.start, "15:00");
+  assert.equal(a.end, undefined);
+});
+
+test("운동: 달 이름표가 프롬프트에 있고, 내용 없는 메모는 버린다", () => {
+  const ctx = buildContext(EVENTS, TODAY);
+  assert.match(buildMessages("지난달 운동", ctx)[0].content, /달: 이번 달 2026-10, 지난달 2026-09, 다음 달 2026-11/);
+  assert.deepEqual(validateAction({ op: "fit", memo: "운동" }, ctx, TODAY), { op: "fit", date: "2026-10-25" });
+  assert.deepEqual(validateAction({ op: "fit", memo: "운동 인증" }, ctx, TODAY), { op: "fit", date: "2026-10-25" });
+  assert.equal(validateAction({ op: "fit", memo: "운동장 5바퀴" }, ctx, TODAY).memo, "운동장 5바퀴");
 });

@@ -19,6 +19,10 @@ const NO = /^(아니|아니요|아뇨|취소|ㄴㄴ|no)[.!~ ]*$/i;
 export const MAX_AGE_MS = 10 * 60 * 1000;
 const PENDING_MS = 10 * 60 * 1000;
 const DAYS_AHEAD = 60;
+// 운동 인증의 "어제 운동했어" 처럼 지난 날도 고를 수 있게 — 단, 날짜표에 섞으면 일정 요청
+// ("이번 주", "토요일")까지 지난 날을 고르므로 날짜표와 따로 한 줄로 준다.
+const DAYS_BEHIND = 7;
+const DAY_TAG = { "-2": " (그제)", "-1": " (어제)", 0: " (오늘)", 1: " (내일)", 2: " (모레)" };
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
 const pad2 = (n) => String(n).padStart(2, "0");
@@ -32,6 +36,19 @@ const isYmd = (s) => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && y
 const isHm = (s) => typeof s === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(s);
 const randId = () => Array.from(crypto.getRandomValues(new Uint8Array(12)),
   (b) => "abcdefghijklmnopqrstuvwxyz0123456789"[b % 36]).join("");
+
+// ── 운동 인증(💪) — 웹앱(duri/index.html 의 fitId·whoKey·fitWrite)과 같은 레코드를 쓴다 ──
+// 사람마다 달마다 하나: id "wk"+YYYYMM+이름해시, 내용 { kind:"workout", month, owner, days:{ "5": {at, memo?} }, at }.
+// whoKey 가 앱과 한 글자라도 다르면 다른 레코드가 생겨 앱에 안 보인다(테스트가 앱 코드와 맞춰 본다).
+const FIT_MEMO_MAX = 120;
+export function whoKey(name) {
+  let h = 0;
+  for (let i = 0; i < (name || "").length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return h.toString(36).padStart(6, "0").slice(-6);
+}
+export const fitId = (month, name) => `wk${month.replace("-", "")}${whoKey(name)}`;
+const fitRecord = (events, month, name) => events.find((e) =>
+  e.id === fitId(month, name) && !e.deleted && e.kind === "workout") ?? null;
 
 /** "@당이 …"·"@당 …" 이면 뒤 문장, 아니면 null. */
 export function parseTrigger(text) {
@@ -57,11 +74,11 @@ export function buildContext(events, today) {
     .slice(0, 40);
   const aliases = new Map(list.map((e, i) => [`e${i + 1}`, e]));
   // 날짜표는 일정 목록과 같은 60일 — 21일이면 "11월 18일" 처럼 3주 넘는 날을 못 골라 unknown 이 됐다.
-  const days = Array.from({ length: DAYS_AHEAD }, (_, i) => {
-    const s = addDays(today, i);
-    return `${s} ${WEEKDAYS[parseYmd(s).getDay()]}${i === 0 ? " (오늘)" : i === 1 ? " (내일)" : ""}`;
-  });
-  return { aliases, days };
+  const tag = (i) => { const s = addDays(today, i); return `${s} ${WEEKDAYS[parseYmd(s).getDay()]}${DAY_TAG[i] ?? ""}`; };
+  const days = Array.from({ length: DAYS_AHEAD }, (_, i) => tag(i));
+  const past = Array.from({ length: DAYS_BEHIND }, (_, k) => tag(-1 - k)).join(", ");
+  const monthOf = (n) => { const d = parseYmd(today); d.setDate(1); d.setMonth(d.getMonth() + n); return ymd(d).slice(0, 7); };
+  return { aliases, days, past, months: `이번 달 ${monthOf(0)}, 지난달 ${monthOf(-1)}, 다음 달 ${monthOf(1)}` };
 }
 
 export function buildMessages(command, ctx) {
@@ -76,12 +93,18 @@ export function buildMessages(command, ctx) {
     '{"op":"list","from":"YYYY-MM-DD","to":"YYYY-MM-DD"}',
     '{"op":"move","id":"e번호","date":"YYYY-MM-DD 또는 생략","start":"HH:MM 또는 생략","end":"HH:MM 또는 생략"}',
     '{"op":"delete","id":"e번호"}',
+    '{"op":"fit","date":"YYYY-MM-DD","memo":"한 줄 메모 또는 생략"}',
+    '{"op":"unfit","date":"YYYY-MM-DD"}',
+    '{"op":"fitlist","month":"YYYY-MM"}',
     '{"op":"chat","reply":"당이 말투로 1~3문장 답"}',
     '{"op":"unknown","reason":"짧은 이유"}',
     "규칙: 날짜는 아래 날짜표에서만 고른다. 요일·'다음주'·'내일'은 날짜표로 바꾼다. 시간이 없으면 start 를 생략한다(종일).",
     "오후 3시는 15:00. 옮기기·삭제는 아래 일정 목록의 e번호로만 가리킨다. 목록에 없으면 unknown.",
+    "운동 인증: '운동했어'·'오늘 헬스 1시간' 은 말한 사람의 그날 운동 체크(fit, 날짜 없으면 오늘, memo 는 운동 종류·양만 적고 없으면 생략). 체크 취소는 unfit, '이번 달 운동 몇 번?'·'운동 기록' 은 fitlist.",
     "일정과 상관없는 인사·잡담·간단한 질문이면 chat 으로 짧게 답한다. 날씨·뉴스·시세처럼 지금 정보는 모른다고 솔직히 말한다.",
     "",
+    `달: ${ctx.months}`,
+    `지난 날(운동 인증 fit·unfit 에만 쓴다): ${ctx.past}`,
     "날짜표:",
     ...ctx.days,
     "",
@@ -100,7 +123,8 @@ export function validateAction(raw, ctx, today) {
   const times = (start, end) => {
     if (start != null && start !== "" && !isHm(start)) return null;
     if (end != null && end !== "" && !isHm(end)) return null;
-    const s = start || undefined, e = s && end ? end : undefined;
+    // 시간 하나만 end 에 넣는 경우가 있다("오후 3시" → end:"15:00") — 그건 시작 시각이다.
+    const s = start || end || undefined, e = start && end ? end : undefined;
     if (s && e && e <= s) return { start: s };
     return { start: s, end: e };
   };
@@ -131,6 +155,19 @@ export function validateAction(raw, ctx, today) {
       if (!t) return bad("시간 형식이 이상해요");
       if (date === ev.date && t.start === ev.start && t.end === ev.end) return bad("바뀌는 게 없어요");
       return { op: "move", event: ev, date, ...t };
+    }
+    case "fit": case "unfit": {
+      const date = raw.date == null || raw.date === "" ? today : raw.date;
+      if (!okDate(date)) return bad("운동한 날짜를 못 정했어요");
+      if (date > today) return bad("아직 안 온 날은 운동 체크를 못 해요");
+      if (raw.op === "unfit") return { op: "unfit", date };
+      let memo = typeof raw.memo === "string" ? raw.memo.trim().slice(0, FIT_MEMO_MAX) : "";
+      if (/^운동( ?(인증|체크|했어|했다|함|완료))?[.!~ ]*$/.test(memo)) memo = ""; // 내용 없는 메모는 버린다
+      return { op: "fit", date, ...(memo && { memo }) };
+    }
+    case "fitlist": {
+      const month = typeof raw.month === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(raw.month) ? raw.month : today.slice(0, 7);
+      return { op: "fitlist", month };
     }
     case "chat": {
       const reply = String(raw.reply ?? "").trim().slice(0, 400);
@@ -174,6 +211,35 @@ export function plan(action, { events, sender, now = Date.now() }) {
     // 웹앱(calDeleteEvent)처럼 댓글도 같이 지운다 — 남기면 고아 레코드가 된다.
     const comments = events.filter((c) => !c.deleted && c.kind === "comment" && c.eventId === ev.id);
     return { puts: [], dels: [ev.id, ...comments.map((c) => c.id)].map((id) => ({ id, rev })), reply: `📅 "${ev.title}" (${whenText(ev)}) 일정 삭제됨` };
+  }
+  if (action.op === "fit" || action.op === "unfit") {
+    const month = action.date.slice(0, 7), day = String(Number(action.date.slice(8)));
+    const cur = fitRecord(events, month, sender);
+    const days = { ...(cur?.days || {}) };
+    if (action.op === "unfit") {
+      if (!days[day]) return { puts: [], dels: [], reply: `💪 ${label(action.date)}엔 ${sender}님 운동 체크가 없어요` };
+      delete days[day];
+    } else {
+      days[day] = { ...(days[day] || { at: now }) };
+      if (action.memo) days[day].memo = action.memo;
+    }
+    const content = { kind: "workout", month, owner: sender, days, at: now };
+    const n = Object.keys(days).length;
+    const reply = action.op === "unfit"
+      ? `💪 ${sender}님 ${label(action.date)} 운동 체크 취소 (${Number(month.slice(5))}월 ${n}회)`
+      : `💪 ${sender}님 ${label(action.date)} 운동 완료!${action.memo ? ` — ${action.memo}` : ""} (${Number(month.slice(5))}월 ${n}회째)`;
+    return { puts: [{ id: fitId(month, sender), rev, content }], dels: [], reply };
+  }
+  if (action.op === "fitlist") {
+    const recs = events.filter((e) => !e.deleted && e.kind === "workout" && e.month === action.month
+      && e.days && Object.keys(e.days).length);
+    const m = Number(action.month.slice(5));
+    if (!recs.length) return { puts: [], dels: [], reply: `💪 ${m}월 운동 기록이 아직 없어요` };
+    const lines = recs.map((r) => {
+      const ds = Object.keys(r.days).map(Number).sort((a, b) => a - b);
+      return `· ${r.owner || "?"} ${ds.length}회 (${ds.join(", ")}일)`;
+    });
+    return { puts: [], dels: [], reply: [`💪 ${m}월 운동 기록`, ...lines].join("\n") };
   }
   if (action.op === "chat") return { puts: [], dels: [], reply: action.reply };
   return { puts: [], dels: [], reply: `🤖 ${action.reason}` };
