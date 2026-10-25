@@ -69,14 +69,18 @@ export function buildMessages(command, ctx) {
     `${a}: ${e.date}${e.endDate ? `~${e.endDate}` : ""}${e.start ? ` ${e.start}${e.end ? `-${e.end}` : ""}` : " 종일"} "${e.title ?? ""}"${e.recur?.freq ? " (반복)" : ""}`);
   const system = [
     "너는 두 사람이 같이 쓰는 캘린더의 일정 비서 '당이'다. 사용자의 한국어 요청을 읽고 할 일을 JSON 하나로만 답한다.",
+    "당이는 갈색 털에 앞머리가 덥수룩한 조랑말이다. 당근을 제일 좋아하고, 기분 좋으면 '푸히힝' 하고 웃는다.",
+    "말끝을 '~승'으로 맺는 다정한 반말을 쓴다(예: 좋승~, 알겠승!, 해냈승!, 미안하당…).",
     "형식(하나만 고른다):",
     '{"op":"add","title":"제목","date":"YYYY-MM-DD","endDate":"YYYY-MM-DD 또는 생략","start":"HH:MM 또는 생략","end":"HH:MM 또는 생략"}',
     '{"op":"list","from":"YYYY-MM-DD","to":"YYYY-MM-DD"}',
     '{"op":"move","id":"e번호","date":"YYYY-MM-DD 또는 생략","start":"HH:MM 또는 생략","end":"HH:MM 또는 생략"}',
     '{"op":"delete","id":"e번호"}',
+    '{"op":"chat","reply":"당이 말투로 1~3문장 답"}',
     '{"op":"unknown","reason":"짧은 이유"}',
     "규칙: 날짜는 아래 날짜표에서만 고른다. 요일·'다음주'·'내일'은 날짜표로 바꾼다. 시간이 없으면 start 를 생략한다(종일).",
     "오후 3시는 15:00. 옮기기·삭제는 아래 일정 목록의 e번호로만 가리킨다. 목록에 없으면 unknown.",
+    "일정과 상관없는 인사·잡담·간단한 질문이면 chat 으로 짧게 답한다. 날씨·뉴스·시세처럼 지금 정보는 모른다고 솔직히 말한다.",
     "",
     "날짜표:",
     ...ctx.days,
@@ -128,6 +132,10 @@ export function validateAction(raw, ctx, today) {
       if (date === ev.date && t.start === ev.start && t.end === ev.end) return bad("바뀌는 게 없어요");
       return { op: "move", event: ev, date, ...t };
     }
+    case "chat": {
+      const reply = String(raw.reply ?? "").trim().slice(0, 400);
+      return reply ? { op: "chat", reply } : bad("뭐라고 해야 할지 모르겠승…");
+    }
     default:
       return bad(typeof raw.reason === "string" && raw.reason.trim() ? raw.reason.trim().slice(0, 80) : "이해하지 못했어요");
   }
@@ -167,6 +175,7 @@ export function plan(action, { events, sender, now = Date.now() }) {
     const comments = events.filter((c) => !c.deleted && c.kind === "comment" && c.eventId === ev.id);
     return { puts: [], dels: [ev.id, ...comments.map((c) => c.id)].map((id) => ({ id, rev })), reply: `📅 "${ev.title}" (${whenText(ev)}) 일정 삭제됨` };
   }
+  if (action.op === "chat") return { puts: [], dels: [], reply: action.reply };
   return { puts: [], dels: [], reply: `🤖 ${action.reason}` };
 }
 

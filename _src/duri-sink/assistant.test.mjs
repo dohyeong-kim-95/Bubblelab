@@ -182,3 +182,15 @@ test("install.sh 가 데몬이 import 하는 모듈을 전부 복사한다", asy
   assert.ok(local.includes("assistant.mjs"));
   for (const f of local) assert.match(install, new RegExp(`\\$HERE/${f.replace(".", "\\.")}`), `install.sh 가 ${f} 를 복사하지 않는다`);
 });
+
+test("잡담: chat 은 말투 그대로 답만 하고 캘린더는 건드리지 않는다", () => {
+  const ctx = buildContext(EVENTS, TODAY);
+  const [sys] = buildMessages("안녕", ctx);
+  assert.match(sys.content, /조랑말/);
+  assert.match(sys.content, /"op":"chat"/);
+  const a = validateAction({ op: "chat", reply: "  안녕! 오늘도 힘내승~ 푸히힝  " }, ctx, TODAY);
+  assert.deepEqual(a, { op: "chat", reply: "안녕! 오늘도 힘내승~ 푸히힝" });
+  assert.deepEqual(plan(a, { events: EVENTS, sender: "도경" }), { puts: [], dels: [], reply: "안녕! 오늘도 힘내승~ 푸히힝" });
+  assert.equal(validateAction({ op: "chat", reply: "  " }, ctx, TODAY).op, "unknown");
+  assert.equal(validateAction({ op: "chat", reply: "가".repeat(900) }, ctx, TODAY).reply.length, 400);
+});
