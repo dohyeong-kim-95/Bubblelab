@@ -20,7 +20,8 @@ const SITE_TESTS = {
     "_infra/sticker-pack.test.mjs", "_infra/wallpaper.test.mjs",
   ],
   duri: [
-    "_infra/duri-world.test.mjs", "_infra/duri.test.mjs", "_src/duri-sink/store.test.mjs",
+    "_infra/duri-world.test.mjs", "_infra/duri.test.mjs", "_src/duri-sink/assistant.test.mjs",
+    "_src/duri-sink/store.test.mjs",
   ],
   estate: ["_infra/estate.test.mjs", "_infra/estate-search.test.mjs"],
   games: [

@@ -169,7 +169,7 @@
      상대에게도 알리는 용도. 실제 대화(bubble)와 안 헷갈리게 가운데 정렬 알약. */
   .sysnotice { align-self: center; display: flex; max-width: 88%; margin: .35rem 0; }
   .sysnotice span { font-size: .72rem; color: var(--dim); background: light-dark(#eef1f4, #1b232e);
-                    padding: .3rem .8rem; border-radius: 1rem; text-align: center; }
+                    padding: .3rem .8rem; border-radius: 1rem; text-align: center; white-space: pre-line; }
   .bubble { padding: .5rem .75rem; border-radius: .9rem; background: var(--panel); border: 1px solid var(--line);
             white-space: pre-wrap; word-break: break-word; line-height: 1.5; font-size: .95rem;
             font-family: var(--chat-font); }
@@ -2383,7 +2383,9 @@ function appendRecord(rec, { silent = false, into = null } = {}) {
   if (seen.has(rec.seq)) return;
   seen.add(rec.seq);
   if (rec.seq > getLastSeq()) setLastSeq(rec.seq);
-  if (rec.name) notePeerName(rec.name); // 상대 이름을 알아야 색상 설정에 상대 칸을 보여줄 수 있다
+  // 상대 이름을 알아야 색상 설정에 상대 칸을 보여줄 수 있다. 시스템 알림(📅 캘린더 리마인드·
+  // 🤖 비서)은 사람이 아니라서 상대 이름으로 기억하면 안 된다 — 색 설정이 비서 이름으로 바뀐다.
+  if (rec.name && !rec.sys) notePeerName(rec.name);
   collectPin(rec).catch(() => {}); // 위치가 있으면 지도 핀으로(공유 저장소에 올린다)
   // silent(초기 히스토리 대량 로드)일 땐 스크롤 위치를 매번 재지 않는다 —
   // atBottom()·scroll() 둘 다 레이아웃을 강제로 다시 계산시키는 연산이라

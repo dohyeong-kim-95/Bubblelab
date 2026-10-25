@@ -2,5 +2,6 @@
   "url": "https://duri.bubblelab.dev",
   "token": "여기에 앱의 [⚙️ → 💾 PC 백업 설정]에서 발급받은 싱크 토큰",
   "passphrase": "여기에 암호 문구를 그대로 적어주세요",
-  "dir": "./DuriStorage"
+  "dir": "./DuriStorage",
+  "assistant": { "enabled": false, "ollama": "http://127.0.0.1:11434", "model": "qwen2.5:7b" }
 }

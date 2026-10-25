@@ -43,7 +43,8 @@ test("life 변경은 sink를 포함한 life 전체 기능 테스트와 e2e를 �
 
 test("duri 변경은 sink와 duri 화면 전체를 고른다", () => {
   expectScoped("duri/map.js", "duri", [
-    "_infra/duri-world.test.mjs", "_infra/duri.test.mjs", "_src/duri-sink/store.test.mjs",
+    "_infra/duri-world.test.mjs", "_infra/duri.test.mjs", "_src/duri-sink/assistant.test.mjs",
+    "_src/duri-sink/store.test.mjs",
   ], [
     "_infra/e2e/duri-fit.spec.mjs", "_infra/e2e/duri-map.spec.mjs",
     "_infra/e2e/duri-picker.spec.mjs", "_infra/e2e/duri-timelapse.spec.mjs",

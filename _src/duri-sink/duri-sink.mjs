@@ -15,7 +15,8 @@
 import { readFileSync, mkdirSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { deriveKey, createStore, atomicWrite } from "./store.mjs";
+import { deriveKey, createStore, atomicWrite, encryptJson } from "./store.mjs";
+import { createAssistant, ollamaAsk, BOT_NAME } from "./assistant.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const fatal = (msg) => { console.error("✖", msg); process.exit(1); };
@@ -39,6 +40,12 @@ function loadConfig() {
     token: process.env.DURI_TOKEN || file.token,
     passphrase: process.env.DURI_PASSPHRASE || file.passphrase,
     dir: process.env.DURI_DIR || file.dir || join(HERE, "DuriStorage"),
+    // 일정 비서(선택, 기본 꺼짐) — 로컬 Ollama 로 "@비서 …" 를 처리한다(assistant.mjs).
+    assistant: {
+      enabled: process.env.DURI_ASSISTANT ? process.env.DURI_ASSISTANT === "1" : Boolean(file.assistant?.enabled),
+      ollama: process.env.OLLAMA_URL || file.assistant?.ollama || "http://127.0.0.1:11434",
+      model: process.env.DURI_MODEL || file.assistant?.model || "qwen2.5:7b",
+    },
   };
   for (const k of ["url", "token", "passphrase"]) {
     if (!cfg[k]) fatal(`설정 누락: ${k} (env DURI_${k.toUpperCase()} 또는 duri-sink.config.json)`);
@@ -99,8 +106,10 @@ async function drain() {
     }
     let keepGoing = true;
     try {
-      await store.persist(entry);
+      const payload = await store.persist(entry);
       decryptFails = 0;
+      // 보존이 끝난 뒤에만 비서에게 넘긴다(비서가 느려도 persist → ack 순서는 그대로).
+      if (assistant && payload?.text) assistant.onMessage({ name: payload.name, text: payload.text, at: payload.at ?? entry.at });
     } catch (e) {
       if (e?.name === "OperationError" || /decrypt/i.test(String(e))) {
         // 산발적으로 안 풀리는 한 건(문구를 바꾸기 전의 옛 항목 등) 때문에 그 뒤
@@ -208,9 +217,45 @@ function connect() {
   ws.addEventListener("error", () => { try { ws.close(); } catch { /* 이미 닫힘 */ } });
 }
 
+// ── 일정 비서 → 서버로 보내기 ────────────────────────────────
+// 일정은 웹앱(calSaveEvent)과 같은 평문 구조를 같은 키로 암호화해 cal-put 한다.
+// 서버는 보낸 연결에는 되돌려 주지 않으므로 로컬 백업(events.json)도 여기서 바로 고친다.
+let assistant = null;
+function sendFrame(frame) {
+  if (socket?.readyState !== 1) throw new Error("서버와 연결이 끊겨 있음");
+  socket.send(JSON.stringify(frame));
+}
+async function assistantApply({ puts, dels }) {
+  const local = [];
+  for (const { id, rev, content } of puts) {
+    const f = await encryptJson(key, content);
+    sendFrame({ type: "cal-put", id, iv: f.iv, ct: f.ct, rev });
+    local.push({ id, rev, iv: f.iv, ct: f.ct });
+  }
+  for (const { id, rev } of dels) {
+    sendFrame({ type: "cal-del", id, rev });
+    local.push({ id, rev, deleted: true });
+  }
+  saveCal(local);
+}
+async function assistantSay(text) {
+  const f = await encryptJson(key, { name: BOT_NAME, text, at: Date.now(), sys: true });
+  try { sendFrame({ type: "msg", ...f }); } catch (e) { log("비서 답 전송 실패:", String(e?.message || e)); }
+}
+
 // ── 시작 ─────────────────────────────────────────────────────
 const key = await deriveKey(cfg.passphrase);
 store = createStore({ dir: cfg.dir, key, fetchPhoto: downloadPhoto });
+if (cfg.assistant.enabled) {
+  assistant = createAssistant({
+    ask: ollamaAsk({ url: cfg.assistant.ollama, model: cfg.assistant.model }),
+    events: () => store.calendarEvents(),
+    apply: assistantApply,
+    say: assistantSay,
+    log,
+  });
+  log(`일정 비서 켜짐 — ${cfg.assistant.model} @ ${cfg.assistant.ollama} (채팅에서 "@비서 …")`);
+}
 mkdirSync(cfg.dir, { recursive: true });
 log(`Duri 싱크 시작 — 저장 위치: ${cfg.dir}`);
 connect();

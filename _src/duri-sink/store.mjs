@@ -19,8 +19,15 @@ export async function deriveKey(passphrase) {
   const base = await crypto.subtle.importKey("raw", enc.encode(passphrase), "PBKDF2", false, ["deriveKey"]);
   return crypto.subtle.deriveKey(
     { name: "PBKDF2", salt: SALT, iterations: ITER, hash: "SHA-256" },
-    base, { name: "AES-GCM", length: 256 }, false, ["decrypt"],
+    base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"],
   );
+}
+
+// 웹앱 encryptJson 과 같은 프레임 { iv, ct }(둘 다 base64). 일정 비서가 답장·일정을 보낼 때 쓴다.
+export async function encryptJson(key, obj) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, enc.encode(JSON.stringify(obj)));
+  return { iv: Buffer.from(iv).toString("base64"), ct: Buffer.from(ct).toString("base64") };
 }
 
 export function atomicWrite(path, data) {
@@ -144,16 +151,18 @@ export function createStore({ dir, key, fetchPhoto }) {
     atomicWrite(join(monthDir(month), "messages.md"), renderMarkdown(month, logs));
   }
 
+  // 메시지면 복호화한 본문을 돌려준다(일정 비서가 읽는다). 이미 보존된 seq 는 undefined.
   async function persist(entry) {
     const month = monthOf(entry.at);
     const logs = loadMonth(month);
     if (logs.some((l) => l.seq === entry.seq)) return; // 멱등
 
+    let payload;
     if (entry.kind === "msg") {
-      const p = await decryptJson(entry.iv, entry.ct);
+      const p = payload = await decryptJson(entry.iv, entry.ct);
       // 지도 핀 삭제(unpin)는 대화가 아니라 조용한 제어 항목이다 — 그대로 두면
       // 백업에 본문 없는 빈 줄로 쌓인다.
-      if (p.unpin) return;
+      if (p.unpin) return payload;
       const base = { seq: entry.seq, at: p.at ?? entry.at, name: p.name };
       // 스티커·위치는 text 가 없다. 예전엔 둘 다 text:undefined 인 message 로 남아
       // 대화록에 이름만 있고 내용은 빈 줄이었다 — 무엇이 오갔는지 알 수 있게 남긴다.
@@ -180,6 +189,7 @@ export function createStore({ dir, key, fetchPhoto }) {
 
     logs.sort((a, b) => a.seq - b.seq);
     saveMonth(month);
+    return payload;
   }
 
   // 복호화되지 않는 항목을 **암호블롭 그대로** 남긴다. 문구를 바꾸기 전의 옛 항목
@@ -241,5 +251,8 @@ export function createStore({ dir, key, fetchPhoto }) {
     return events.length;
   }
 
-  return { persist, persistCalendar, quarantine, decryptBytes };
+  // 지금 보관 중인 캘린더 레코드 전부(툼스톤·kind 레코드 포함, 평문).
+  const calendarEvents = () => [...loadCalendar().values()];
+
+  return { persist, persistCalendar, quarantine, decryptBytes, calendarEvents };
 }
