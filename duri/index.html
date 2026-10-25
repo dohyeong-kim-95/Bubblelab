@@ -174,6 +174,29 @@
             white-space: pre-wrap; word-break: break-word; line-height: 1.5; font-size: .95rem;
             font-family: var(--chat-font); }
   .row.me .bubble { background: light-dark(#fbe6f0, #3a2233); border-color: light-dark(#f2cfe1, #4d2c40); }
+  /* 프로필 사진 — 상대(와 당이) 말풍선 왼쪽 동그라미. 그룹 첫 줄에만 그리고 이어지는 줄은 자리만 비운다.
+     이모티콘은 위쪽 글씨를 잘라 얼굴만 보이게 확대해서 아래쪽을 맞춘다. */
+  .row.av-row { position: relative; padding-left: 2.7rem; }
+  .av { position: absolute; left: 0; top: 0; width: 2.3rem; height: 2.3rem; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center; overflow: hidden;
+        background: light-dark(#f6ead9, #4a3626) no-repeat 50% 79% / 143% auto; border: 1px solid var(--line);
+        color: #fff; font-family: var(--chat-font); font-size: .95rem; font-weight: 700; }
+  .av.photo { background-size: cover; background-position: center; }
+  .av.big { position: static; width: 4.6rem; height: 4.6rem; font-size: 1.9rem; flex: none; }
+  /* 일정 비서 당이 — 사람처럼 왼쪽 말풍선이되 갈색, 프로필은 다그당스1 07번 얼굴 */
+  .av.bot { background-position: 40% 79%; border-color: light-dark(#dcc4a8, #5a4130); }
+  .row.bot .bubble { background: light-dark(#f1e2cf, #3b2b1f); border-color: light-dark(#dcc4a8, #5a4130); }
+  #av-box .av-now { display: flex; align-items: center; gap: .8rem; }
+  #av-box .av-now b { font-size: .95rem; }
+  #av-box .av-acts { display: flex; gap: .4rem; flex-wrap: wrap; }
+  #av-box .av-acts button, #av-pack { font: inherit; font-size: .82rem; padding: .45rem .8rem; border-radius: .6rem;
+                                      border: 1px solid var(--line); background: var(--bg); color: inherit; cursor: pointer; }
+  #av-msg { font-size: .78rem; color: var(--dim); min-height: 1.1rem; margin: 0; }
+  #av-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: .4rem; max-height: 15rem; overflow-y: auto; }
+  #av-grid button { aspect-ratio: 1; padding: .15rem; border: 1px solid var(--line); border-radius: .6rem;
+                    background: var(--bg); cursor: pointer; }
+  #av-grid button[aria-pressed=true] { border-color: var(--pink); box-shadow: 0 0 0 2px var(--pink); }
+  #av-grid img { width: 100%; height: 100%; object-fit: contain; display: block; }
   .bubble img { max-width: 18rem; border-radius: .5rem; display: block; cursor: pointer; }
   .bubble .cap { font-size: .82rem; margin-top: .3rem; color: var(--dim); }
   /* 앨범(묶어보내기): 한 말풍선 안 사진 그리드. 사진이 올라오는 대로 채워진다. */
@@ -742,12 +765,12 @@
   /* 키보드가 올라오면 --kb-live 만큼 아래 여백을 더해, 가운데 정렬 기준이 키보드
      위 보이는 영역으로 좁혀지게 한다(전체 화면 기준 가운데 정렬이면 다이얼로그가
      키보드에 가려질 수 있다). */
-  #cal-dialog, #cal-colorbox { position: fixed; inset: 0; z-index: 70; display: flex;
+  #cal-dialog, #cal-colorbox, #av-box { position: fixed; inset: 0; z-index: 70; display: flex;
                                background: light-dark(#0f17223d, #000000a8); backdrop-filter: blur(2px);
                                align-items: center; justify-content: center; padding: 1rem;
                                padding-bottom: calc(1rem + var(--kb-live, 0px));
                                transition: padding-bottom .18s ease; }
-  #cal-dialog[hidden], #cal-colorbox[hidden] { display: none; }
+  #cal-dialog[hidden], #cal-colorbox[hidden], #av-box[hidden] { display: none; }
   .cal-card { width: min(22rem, 92vw); max-height: 100%; overflow-y: auto; background: var(--panel);
               border: 1px solid var(--line); border-radius: 1.1rem; padding: 1.1rem; display: flex;
               flex-direction: column; gap: .7rem; box-shadow: 0 18px 44px light-dark(#0f172226, #0009); }
@@ -875,6 +898,7 @@
       <button id="push-test" role="menuitem" hidden title="알림이 어디서 막히는지 단계별로 확인하고, 고칠 수 있는 건 바로 고친다">🩺 알림 진단</button>
       <button id="cal-open" role="menuitem" title="공유 캘린더">📅 캘린더</button>
       <button id="map-open" role="menuitem" title="함께 다닌 곳을 색칠한 지도">🗺️ 함께 다닌 곳 지도</button>
+      <button id="avatar-open" role="menuitem" title="상대 화면의 내 말풍선 옆에 보이는 사진">🙂 내 프로필 사진</button>
       <button id="sink-setup" role="menuitem" title="이 대화·사진을 내 PC에 자동으로 쌓는 백업 데몬 설정">💾 PC 백업 설정</button>
       <button id="relogin" role="menuitem" title="암호 문구를 잘못 입력했을 때 다시 입력">🔑 문구 다시 입력</button>
       <button id="clear-cache" role="menuitem" title="이 기기에 저장된 대화 기록만 지우기">🧹 기록 지우기</button>
@@ -1057,6 +1081,24 @@
     <div id="cal-col-names"></div>
     <label>공통 일정 <input type="color" id="cal-col-shared"></label>
     <div class="cal-dlg-actions"><span style="flex:1"></span><button id="cal-col-done" class="cal-primary">확인</button></div>
+  </div>
+</div>
+
+<!-- 내 프로필 사진 -->
+<div id="av-box" hidden>
+  <div class="cal-card">
+    <h3>내 프로필 사진</h3>
+    <div class="av-now"><span id="av-preview" class="av big"></span><b id="av-name"></b></div>
+    <p class="cal-col-note" style="margin:0">상대 화면에서 내 말풍선 옆에 보여요. 사진은 아주 작게 줄여 암호화한 뒤 동기화해요.</p>
+    <div class="av-acts">
+      <button id="av-photo" type="button">🖼️ 사진에서 고르기</button>
+      <button id="av-clear" type="button">기본으로</button>
+    </div>
+    <input id="av-file" type="file" accept="image/*" hidden>
+    <p id="av-msg"></p>
+    <select id="av-pack" aria-label="이모티콘 묶음"></select>
+    <div id="av-grid"></div>
+    <div class="cal-dlg-actions"><span style="flex:1"></span><button id="av-done" class="cal-primary" type="button">닫기</button></div>
   </div>
 </div>
 
@@ -2376,6 +2418,9 @@ function trimDom() {
     first.remove();
   }
 }
+// 당이의 답은 PC 싱크가 보내는 시스템 메시지다 — 이름이 assistant.mjs 의 BOT_NAME 과 같아야 한다.
+const DANGI_NAME = "🤖 당이";
+const DANGI_AVATAR = { pack: "dageudangseu-1", n: 7 };
 function appendRecord(rec, { silent = false, into = null } = {}) {
   // into: 옛 대화를 위쪽에 이어 붙일 때 쓰는 임시 컨테이너. 주어지면 화면 정리·
   // 스크롤은 건드리지 않고 그리기만 한다(호출자가 통째로 앞에 삽입한다).
@@ -2408,7 +2453,9 @@ function appendRecord(rec, { silent = false, into = null } = {}) {
   }
 
   // 시스템 알림("/일정" 명령 등): 이름·말풍선 없이 가운데 정렬 알약 하나로 그린다.
-  if (rec.sys) {
+  // 당이만은 대화 상대처럼 말풍선으로 그린다.
+  const bot = rec.sys && rec.name === DANGI_NAME;
+  if (rec.sys && !bot) {
     const day = dayLabel(rec.at);
     if (day !== grpDay) {
       const sep = document.createElement("div"); sep.className = "daysep";
@@ -2466,8 +2513,16 @@ function appendRecord(rec, { silent = false, into = null } = {}) {
     timeEl = buildBubble(row, rec.name, at, (b) => { b.classList.add("sticker"); b.appendChild(stickerImg(rec.sticker.pack, rec.sticker.n, "스티커")); }, showName);
   } else if (rec.broken) {
     timeEl = buildBubble(row, "🔒", at, (b) => { const s = document.createElement("span"); s.className = "broken"; s.textContent = rec.broken; b.appendChild(s); }, showName);
+  } else if (bot) {
+    row.classList.add("bot");
+    timeEl = buildBubble(row, "당이", at, (b) => { b.textContent = rec.text; }, showName);
   } else {
     timeEl = buildBubble(row, rec.name, at, (b) => { b.textContent = rec.text; }, showName);
+  }
+  // 상대·당이 말풍선 옆 프로필 사진(카톡처럼 내 말풍선엔 없다).
+  if (!mine && !broken) {
+    row.classList.add("av-row");
+    if (showName) row.prepend(avatarEl(bot ? DANGI_NAME : rec.name || ""));
   }
   box.appendChild(row);
 
@@ -3364,6 +3419,7 @@ window.addEventListener("popstate", () => {
   if (!$("meta-box").hidden) { $("meta-box").hidden = true; trapBack(); return; }         // 사진 정보 모달
   if (!$("cal-dialog").hidden) { closeCalDialog(); trapBack(); return; }     // 이벤트 다이얼로그
   if (!$("cal-colorbox").hidden) { $("cal-colorbox").hidden = true; trapBack(); return; } // 색상 설정
+  if (!$("av-box").hidden) { $("av-box").hidden = true; trapBack(); return; }           // 프로필 사진
   { const mp = $("cal-day").querySelector(".marker-popup");
     if (mp && !mp.hidden) { mp.hidden = true; trapBack(); return; } } // 표식 이모지 팝업 먼저 닫기
   if (!$("bucket").hidden) { closeBucket(); trapBack(); return; }            // 버킷리스트
@@ -3803,6 +3859,132 @@ const DEFAULT_SHARED_COLOR = "#498d6d";
 // 저장소에 팔레트 레코드 하나(고정 id, kind:"palette")를 동기화해 — 누가
 // 바꾸든 byName(이름별 색)·shared(공통 색) 둘 다 양쪽 기기가 같은 값을 본다.
 // 아직 아무도 안 고른 이름은 문자열 해시로 기본값을 낸다(OWNER_PALETTE).
+// ── 프로필 사진 ─────────────────────────────────────────────
+// 팔레트처럼 캘린더 저장소(cal:<id>, E2E)에 사람마다 레코드 하나(kind:"profile")를 둔다 —
+// 둘이 동시에 바꿔도 서로 덮어쓰지 않게 id 를 이름별로 나눈다. 내용은 이모티콘
+// { sticker:{pack,n} } 또는 아주 작게 줄인 사진 { photo:"data:…" }, 둘 다 없으면 기본(이름 첫 글자).
+// 서버의 캘린더 블롭 상한(_infra/duri.js DURI_MAX_CAL_BLOB 4KB)에 들어가야 해서 사진은
+// 들어갈 때까지 줄인다.
+const CAL_BLOB_MAX = 4 * 1024;
+const profileId = (name) => `pf${whoKey(name)}`;
+function profileOf(name) {
+  const ev = calEvents.get(profileId(name));
+  return (ev && !ev.deleted && ev.kind === "profile" && ev.owner === name) ? ev : null;
+}
+function avatarEl(name) {
+  const av = document.createElement("span");
+  av.className = "av"; av.dataset.who = name; av.setAttribute("aria-hidden", "true");
+  paintAvatar(av);
+  return av;
+}
+function paintAvatar(av) {
+  const name = av.dataset.who;
+  const bot = name === DANGI_NAME;
+  const pf = bot ? { sticker: DANGI_AVATAR } : profileOf(name);
+  av.classList.toggle("bot", bot);
+  av.classList.toggle("photo", !!pf?.photo);
+  av.textContent = ""; av.style.backgroundImage = ""; av.style.backgroundColor = "";
+  if (pf?.photo && /^data:image\/(jpeg|webp|png);base64,/.test(pf.photo)) {
+    av.style.backgroundImage = `url("${pf.photo}")`;
+  } else if (pf?.sticker && Number.isInteger(pf.sticker.n)) {
+    const { pack, n } = pf.sticker;
+    stickerObjectUrl(pack, n).then((url) => {
+      if (av.dataset.who === name) av.style.backgroundImage = `url("${url}")`;
+    }).catch(() => {});
+  } else {
+    av.style.backgroundColor = colorForOwner(name);
+    av.textContent = Array.from(name.replace(/^[\s\p{Extended_Pictographic}\uFE0F]+/u, "") || "?")[0];
+  }
+}
+// 프로필 레코드가 바뀌면(상대가 바꿨거나 접속 직후 동기화) 화면에 이미 그린 것도 갈아 끼운다.
+function refreshAvatars() {
+  document.querySelectorAll(".av[data-who]").forEach(paintAvatar);
+}
+async function setMyProfile(extra) {
+  await calPutRecord(profileId(MY_NAME), { kind: "profile", owner: MY_NAME, at: Date.now(), ...extra });
+  refreshAvatars();
+}
+// 가운데를 정사각형으로 잘라 상한에 들어갈 때까지 크기·화질을 낮춘다. 못 넣으면 null.
+async function profilePhotoFrom(file) {
+  const bmp = await createImageBitmap(file);
+  const side = Math.min(bmp.width, bmp.height);
+  const sx = (bmp.width - side) / 2, sy = (bmp.height - side) / 2;
+  try {
+    for (const edge of [96, 80, 64, 56, 48]) {
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = edge;
+      canvas.getContext("2d").drawImage(bmp, sx, sy, side, side, 0, 0, edge, edge);
+      for (const q of [0.75, 0.6, 0.45]) {
+        for (const type of ["image/webp", "image/jpeg"]) {
+          const url = canvas.toDataURL(type, q);
+          if (!url.startsWith(`data:${type}`)) continue; // webp 를 못 만드는 브라우저(png 로 돌려준다)
+          const frame = await encryptJson({ kind: "profile", owner: MY_NAME, at: Date.now(), photo: url });
+          if (frame.ct.length <= CAL_BLOB_MAX) return url;
+        }
+      }
+    }
+    return null;
+  } finally { bmp.close?.(); }
+}
+
+let avPack = DANGI_AVATAR.pack;
+function openAvatarBox() {
+  closeMenu();
+  $("av-name").textContent = MY_NAME || "";
+  $("av-msg").textContent = "";
+  const sel = $("av-pack");
+  sel.replaceChildren(...PACKS.map((p) => new Option(p.title, p.id)));
+  if (!PACK_IDS.has(avPack)) avPack = PACKS[0]?.id;
+  sel.value = avPack || "";
+  renderAvatarBox();
+  $("av-box").hidden = false;
+}
+function renderAvatarBox() {
+  const prev = $("av-preview");
+  prev.dataset.who = MY_NAME || "";
+  paintAvatar(prev);
+  const pack = PACK_IDS.get(avPack);
+  const cur = profileOf(MY_NAME)?.sticker;
+  const grid = $("av-grid");
+  grid.replaceChildren();
+  for (let n = 1; pack && n <= pack.count; n++) {
+    const b = document.createElement("button");
+    b.type = "button"; b.setAttribute("aria-label", `${pack.title} ${n}번`);
+    b.setAttribute("aria-pressed", String(cur?.pack === pack.id && cur?.n === n));
+    const img = document.createElement("img"); img.alt = ""; img.decoding = "async";
+    stickerObjectUrl(pack.id, n).then((url) => { img.src = url; }).catch(() => {});
+    b.appendChild(img);
+    b.addEventListener("click", async () => {
+      await setMyProfile({ sticker: { pack: pack.id, n } });
+      $("av-msg").textContent = "바꿨어요";
+      renderAvatarBox();
+    });
+    grid.appendChild(b);
+  }
+}
+$("avatar-open").addEventListener("click", openAvatarBox);
+$("av-done").addEventListener("click", () => { $("av-box").hidden = true; });
+$("av-box").addEventListener("click", (e) => { if (e.target === $("av-box")) $("av-box").hidden = true; });
+$("av-pack").addEventListener("change", (e) => { avPack = e.target.value; renderAvatarBox(); });
+$("av-photo").addEventListener("click", () => $("av-file").click());
+$("av-clear").addEventListener("click", async () => {
+  await setMyProfile({});
+  $("av-msg").textContent = "기본(이름 첫 글자)으로 돌렸어요";
+  renderAvatarBox();
+});
+$("av-file").addEventListener("change", async (e) => {
+  const file = e.target.files?.[0];
+  e.target.value = "";
+  if (!file) return;
+  $("av-msg").textContent = "줄이는 중…";
+  let photo = null;
+  try { photo = await profilePhotoFrom(file); } catch { /* HEIC 등 못 여는 형식 */ }
+  if (!photo) { $("av-msg").textContent = "이 사진은 쓸 수 없어요 (다른 사진이나 이모티콘을 골라 주세요)"; return; }
+  await setMyProfile({ photo });
+  $("av-msg").textContent = "바꿨어요";
+  renderAvatarBox();
+});
+
 const OWNER_PALETTE = ["#b65d7b", "#5481b6", "#6f8347", "#a0703e", "#6a5b9e", "#458484", "#af5a4a", "#5d7a3e"];
 const PALETTE_ID = "palettecolors";
 function paletteRecord() {
@@ -3898,6 +4080,7 @@ function scheduleCalFlush() {
     if (!$("cal").classList.contains("cal-off")) renderCal();
     else renderBucket(); // 캘린더는 닫혀 있고 버킷리스트만 열려 있을 때도 상대 변경을 반영
     renderFit();         // 운동 화면도 열려 있으면 상대 체크를 바로 반영(닫혀 있으면 그냥 나간다)
+    refreshAvatars();    // 프로필 사진(kind:"profile")도 같은 저장소로 온다
   }, 30);
 }
 async function applyCalEntry(entry) { // 실시간으로 한 건씩 오는 cal-put/cal-del
@@ -5882,7 +6065,7 @@ function curPane() {
 }
 let paneDrag = null;
 function paneDragStart(e) {
-  if (!$("cal-dialog").hidden || !$("cal-colorbox").hidden || !$("meta-box").hidden || !$("region-box").hidden) return; // 다이얼로그 위에선 안 함
+  if (!$("cal-dialog").hidden || !$("cal-colorbox").hidden || !$("av-box").hidden || !$("meta-box").hidden || !$("region-box").hidden) return; // 다이얼로그 위에선 안 함
   const t = e.touches[0];
   paneDrag = { x: t.clientX, y: t.clientY, w: innerWidth, pane: curPane(), el: null, opening: false, moved: false, progress: 0 };
 }
