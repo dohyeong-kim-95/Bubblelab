@@ -78,14 +78,25 @@ export function buildContext(events, today) {
   const days = Array.from({ length: DAYS_AHEAD }, (_, i) => tag(i));
   const past = Array.from({ length: DAYS_BEHIND }, (_, k) => tag(-1 - k)).join(", ");
   const monthOf = (n) => { const d = parseYmd(today); d.setDate(1); d.setMonth(d.getMonth() + n); return ymd(d).slice(0, 7); };
-  return { aliases, days, past, months: `이번 달 ${monthOf(0)}, 지난달 ${monthOf(-1)}, 다음 달 ${monthOf(1)}` };
+  return { aliases, days, past, months: `이번 달 ${monthOf(0)}, 지난달 ${monthOf(-1)}, 다음 달 ${monthOf(1)}`, people: peopleOf(events) };
+}
+
+/** 캘린더에 나오는 사람 이름(색 설정·일정 주인·운동 기록). 일정을 그 사람 색(개인 일정)으로 넣을 때 쓴다. */
+function peopleOf(events) {
+  const names = new Set();
+  for (const e of events) {
+    if (e.deleted) continue;
+    if (e.kind === "palette" && e.byName && typeof e.byName === "object") Object.keys(e.byName).forEach((n) => names.add(n));
+    if (typeof e.owner === "string" && e.owner.trim()) names.add(e.owner.trim());
+  }
+  names.delete(BOT_NAME);
+  return [...names].filter((n) => n.length <= 20).sort();
 }
 
 const PERSONA = [
-  "풀네임은 '다그당스'이고, '당이'는 애칭이다(이름을 물으면 둘 다 알려 준다).",
-  "당이는 갈색 털에 앞머리가 덥수룩한 조랑말이다. 당근을 제일 좋아하고, 기분 좋으면 '푸히힝' 하고 웃는다.",
+  "본명은 '다그당스', 애칭은 '당이'다(이름을 물으면 둘 다 알려 준다). 3살 된 갈색 말이고 MBTI 는 ESFJ 다.",
+  "좋아하는 음식은 사과랑 각설탕이다. 쫑이랑 빵이에게 충성하는 말로, 다정하고 세심하고 귀엽다. 기분 좋으면 '푸히힝' 하고 웃는다.",
   "말끝을 '~승'으로 맺는 다정한 반말을 쓴다(예: 좋승~, 알겠승!, 해냈승!, 미안하당…).",
-  "MBTI 는 ESFJ 다 — 사교적이고 따뜻하며, 두 사람을 살뜰히 챙기고 칭찬과 응원을 아끼지 않는다.",
 ];
 // 말한 사람은 맨 뒤 시스템 메시지로 따로 준다 — 앞쪽(긴 지시문)이 사람마다 같아야 모델 서버가 재사용한다.
 const whoMessage = (sender) => ({ role: "system", content: `말한 사람: ${sender}. 답할 때 이름을 불러 줘도 좋다(예: ${sender}아/야).` });
@@ -97,7 +108,8 @@ export function buildMessages(command, ctx, sender) {
     "너는 두 사람이 같이 쓰는 캘린더의 일정 비서 '당이'다. 사용자의 한국어 요청을 읽고 할 일을 JSON 하나로만 답한다.",
     ...PERSONA,
     "형식(하나만 고른다):",
-    '{"op":"add","title":"제목","date":"YYYY-MM-DD","endDate":"YYYY-MM-DD 또는 생략","start":"HH:MM 또는 생략","end":"HH:MM 또는 생략"}',
+    '{"op":"add","title":"제목","date":"YYYY-MM-DD","endDate":"YYYY-MM-DD 또는 생략","start":"HH:MM 또는 생략","end":"HH:MM 또는 생략","who":"사람 이름 또는 생략"}',
+    '{"op":"repeat","title":"제목","weekdays":["수"],"months":["YYYY-MM"],"start":"HH:MM 또는 생략","end":"HH:MM 또는 생략","who":"사람 이름 또는 생략"} — 달 단위가 아니면 months 대신 "from":"YYYY-MM-DD","to":"YYYY-MM-DD"',
     '{"op":"list","from":"YYYY-MM-DD","to":"YYYY-MM-DD"}',
     '{"op":"move","id":"e번호","date":"YYYY-MM-DD 또는 생략","start":"HH:MM 또는 생략","end":"HH:MM 또는 생략"}',
     '{"op":"delete","id":"e번호"}',
@@ -107,9 +119,11 @@ export function buildMessages(command, ctx, sender) {
     '{"op":"recall","query":"찾을 낱말 1~3개(없으면 빈칸)","from":"YYYY-MM-DD 또는 생략","to":"YYYY-MM-DD 또는 생략","month":"YYYY-MM 또는 생략"}',
     '{"op":"chat","reply":"당이 말투로 1~3문장 답"}',
     '{"op":"unknown","reason":"짧은 이유"}',
+    "요일을 정해 여러 날 넣는 일정(매주 수요일, 11월이랑 12월 모든 수요일, 이번 달 남은 화요일이랑 목요일, 평일마다)은 add 가 아니라 repeat. weekdays 는 요일 글자들(월~일). 기간이 달이면 months 에 그 달들만 적는다(예: 11월이랑 12월 → [\"2026-11\",\"2026-12\"], 이번 달 → 이번 달 하나, 다음 달 → 다음 달 하나만). 날짜는 코드가 센다(지난 날은 빼고).",
+    `사람: ${ctx.people?.length ? ctx.people.join(", ") : "(모름)"}. '쫑이의 레슨'·'빵 회식' 처럼 한 사람의 일정이면 who 에 그 사람 이름(목록의 이름 그대로)을 쓰고 title 엔 이름을 빼고 적는다. 말한 사람 자신이어도 이름을 말하지 않았으면, 또 둘이 같이·누구 건지 말이 없으면 who 를 생략한다(공통 일정).`,
     "규칙: 날짜는 아래 날짜표에서만 고른다. 요일·'다음주'·'내일'은 날짜표로 바꾼다. 시간이 없으면 start 를 생략한다(종일).",
     "오후 3시는 15:00. 옮기기·삭제는 아래 일정 목록의 e번호로만 가리킨다. 목록에 없으면 unknown.",
-    "운동 인증(운동·헬스·러닝 같은 운동 얘기일 때만. 일정·여행 얘기엔 쓰지 않는다): '운동했어'·'오늘 헬스 1시간' 은 말한 사람의 그날 운동 체크(fit, 날짜 없으면 오늘, memo 는 운동 종류·양만 적고 없으면 생략). 체크 취소는 unfit, '이번 달 운동 몇 번?'·'운동 기록'·'운동 요약' 은 fitlist(달이면 month, 이번 주·지난주면 week).",
+    "운동 인증(운동·헬스·러닝 같은 운동 얘기일 때만. 일정·여행 얘기엔 쓰지 않는다): '운동했어'·'오늘 헬스 1시간' 은 말한 사람의 그날 운동 체크(fit, 날짜 없으면 오늘, memo 는 운동 종류·양만 적고 없으면 생략). 체크 취소는 unfit, '이번 달 운동 몇 번?'·'운동 기록'·'운동 요약'·'지난주 운동 어땠어?' 은 fitlist(달이면 month, 이번 주·지난주면 week).",
     "기억: 둘이 예전에 나눈 얘기·보낸 사진·있었던 일을 물으면(그 카페 이름 뭐였지? 지난달에 어디 갔었지? 어제 무슨 얘기 했어?) recall. query 엔 찾을 핵심 낱말만(조사 빼고), 기간을 말했으면 from/to 나 month.",
     "일정과 상관없는 인사·잡담·간단한 질문이면 chat 으로 짧게 답한다. 날씨·뉴스·시세처럼 지금 정보는 모른다고 솔직히 말한다.",
     "",
@@ -148,6 +162,48 @@ export function buildRecallMessages(command, lines, sender) {
 const RECALL_STOP = new Set(["얘기", "이야기", "대화", "무슨", "뭐", "뭘", "우리", "했어", "했지", "했던", "기록", "내용", "언제", "어디", "누가", "그", "거"]);
 const FIT_WORDS = /운동|헬스|러닝|런닝|조깅|달리|뛰|걷기|걸었|산책|수영|요가|필라테스|PT|피티|스쿼트|자전거|등산|클라이밍|크로스핏|홈트|스트레칭|💪/i;
 
+const REPEAT_MAX = 60;
+// 요청 문장에 적힌 달들. "이번 달"·"다음 달"·"11월"(지난 달이면 내년). 없으면 [].
+function monthsSaid(command, today) {
+  if (typeof command !== "string") return [];
+  const y = Number(today.slice(0, 4)), m = Number(today.slice(5, 7));
+  const key = (yy, mm) => `${yy + Math.floor((mm - 1) / 12)}-${pad2(((mm - 1) % 12) + 1)}`;
+  const out = new Set();
+  if (/이번\s?달/.test(command)) out.add(key(y, m));
+  if (/다음\s?달/.test(command)) out.add(key(y, m + 1));
+  for (const [, n] of command.matchAll(/(?<![\d.\/-])(1[0-2]|[1-9])\s?월(?!\s?\d)/g)) {
+    const mm = Number(n);
+    out.add(key(mm < m ? y + 1 : y, mm));
+  }
+  return [...out].sort();
+}
+const WD = { 일: 0, 월: 1, 화: 2, 수: 3, 목: 4, 금: 5, 토: 6, sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+function weekdaysOf(v) {
+  const list = Array.isArray(v) ? v : typeof v === "string" ? v.split(/[\s,·/]+/) : [];
+  const out = new Set();
+  for (const x of list) {
+    if (Number.isInteger(x) && x >= 0 && x <= 6) { out.add(x); continue; }
+    const s = String(x).trim().toLowerCase();
+    if (s === "평일") [1, 2, 3, 4, 5].forEach((d) => out.add(d));
+    else if (s === "주말") [0, 6].forEach((d) => out.add(d));
+    else if (WD[s[0]] != null && /^[일월화수목금토](요일)?$/.test(s)) out.add(WD[s[0]]);
+    else if (WD[s.slice(0, 3)] != null) out.add(WD[s.slice(0, 3)]);
+  }
+  return [...out].sort();
+}
+
+// 누구 일정인지 — 목록의 이름만 받는다(지어낸 이름은 공통으로). "쫑이"·"쫑이의"·"쫑님" 은 "쫑".
+// 모델이 who 를 빠뜨려도 요청에 "쫑이의 …"·"쫑의 …" 가 있으면 그 사람 것으로 본다.
+function resolveWho(who, people, command) {
+  const norm = (s) => String(s ?? "").trim().replace(/\s+/g, "").replace(/(의|님|씨)$/, "");
+  const find = (s) => people.find((p) => p === s) ?? people.find((p) => `${p}이` === s);
+  const hit = find(norm(who));
+  if (hit) return hit;
+  if (typeof command !== "string") return null;
+  const owners = people.filter((p) => new RegExp(`${p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(이)?(의|님의)\\s`).test(command));
+  return owners.length === 1 ? owners[0] : null;
+}
+
 export function validateAction(raw, ctx, today, command) {
   const bad = (reason) => ({ op: "unknown", reason });
   if (!raw || typeof raw !== "object") return bad("이해하지 못했어요");
@@ -165,6 +221,12 @@ export function validateAction(raw, ctx, today, command) {
     if (raw.op !== "fitlist") return bad("운동 얘기인지 일정 얘기인지 헷갈려요");
     raw = { op: "list", from: raw.from, to: raw.to }; // 기간을 물었으니 일정 목록으로
   }
+  const who = resolveWho(raw.who, ctx.people ?? [], command);
+  // "쫑이의 테니스 레슨" → 주인은 who 로 가니 제목에선 뺀다(앱에서 색으로 보인다).
+  if (who && typeof raw.title === "string") {
+    const t = raw.title.trim().replace(new RegExp(`^${who.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(이)?(의|님의)?\\s+`), "");
+    if (t) raw = { ...raw, title: t };
+  }
   switch (raw.op) {
     case "add": {
       const title = String(raw.title ?? "").trim().slice(0, 120);
@@ -173,7 +235,38 @@ export function validateAction(raw, ctx, today, command) {
       const t = times(raw.start, raw.end);
       if (!t) return bad("시간 형식이 이상해요");
       const endDate = okDate(raw.endDate) && raw.endDate > raw.date ? raw.endDate : undefined;
-      return { op: "add", title, date: raw.date, endDate, ...t };
+      return { op: "add", title, date: raw.date, endDate, ...t, ...(who && { who }) };
+    }
+    case "repeat": {
+      const title = String(raw.title ?? "").trim().slice(0, 120);
+      if (!title) return bad("일정 제목을 못 찾았어요");
+      const wds = weekdaysOf(raw.weekdays);
+      if (!wds.length) return bad("무슨 요일인지 못 정했어요");
+      // 달로 주면(months) 그 달들의 1일~말일. 모델이 날짜표(60일) 안에서 기간을 잘라 버리는 일이 있어서
+      // 달 단위 요청은 달만 고르게 하고 날짜는 여기서 센다.
+      const months = (Array.isArray(raw.months) ? raw.months : typeof raw.months === "string" ? [raw.months] : [])
+        .filter((m) => typeof m === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(m)).sort();
+      // 요청에 달이 적혀 있으면("다음 달", "11월이랑 12월") 그걸 따른다 — 모델이 "다음 달" 을 두 달로 고르곤 했다.
+      const said = monthsSaid(command, today);
+      if (months.length && said.length) months.splice(0, months.length, ...said);
+      let rFrom = raw.from, rTo = raw.to;
+      if (months.length) {
+        rFrom = `${months[0]}-01`;
+        const last = months[months.length - 1];
+        rTo = ymd(new Date(Number(last.slice(0, 4)), Number(last.slice(5)), 0));
+      }
+      if (!okDate(rFrom) || !okDate(rTo) || rTo < rFrom) return bad("언제부터 언제까지인지 알려 주세요");
+      const from = rFrom < today ? today : rFrom; // 지난 날은 넣지 않는다
+      if (dayDiff(from, rTo) > 366) return bad("기간이 너무 길어요 (1년 안쪽으로)");
+      const t = times(raw.start, raw.end);
+      if (!t) return bad("시간 형식이 이상해요");
+      const dates = [];
+      for (let d = from; d <= rTo; d = addDays(d, 1)) {
+        if (wds.includes(parseYmd(d).getDay()) && (!months.length || months.includes(d.slice(0, 7)))) dates.push(d);
+      }
+      if (!dates.length) return bad("그 기간엔 그 요일이 없어요");
+      if (dates.length > REPEAT_MAX) return bad(`한 번에 ${REPEAT_MAX}개까지만 넣을 수 있어요`);
+      return { op: "repeat", title, dates, weekdays: wds, ...t, ...(who && { who }) };
     }
     case "list": {
       const from = okDate(raw.from) ? raw.from : today;
@@ -253,12 +346,18 @@ export function validateAction(raw, ctx, today, command) {
 /** 동작 → 캘린더 변경(평문)과 채팅 답. 실제 암호화·전송은 호출자 몫. */
 export function plan(action, { events, sender, now = Date.now() }) {
   const rev = now;
+  // who 가 있으면 그 사람의 개인 일정(앱에서 그 사람 색), 없으면 공통 일정.
+  const base = (a) => ({ title: a.title, owner: a.who ?? sender, shared: !a.who,
+    ...(a.start && { start: a.start }), ...(a.end && { end: a.end }) });
+  const whose = (a) => (a.who ? `${a.who} 일정` : "공통");
   if (action.op === "add") {
-    const content = { date: action.date, title: action.title, owner: sender, shared: true };
-    if (action.start) content.start = action.start;
-    if (action.end) content.end = action.end;
+    const content = { date: action.date, ...base(action) };
     if (action.endDate) content.endDate = action.endDate;
-    return { puts: [{ id: randId(), rev, content }], dels: [], reply: `📅 "${action.title}" 일정 추가됨 (${whenText(content)})` };
+    return { puts: [{ id: randId(), rev, content }], dels: [], reply: `📅 "${action.title}" 일정 추가됨 (${whenText(content)}${action.who ? `, ${whose(action)}` : ""})` };
+  }
+  if (action.op === "repeat") {
+    const puts = action.dates.map((date) => ({ id: randId(), rev, content: { date, ...base(action) } }));
+    return { puts, dels: [], reply: `📅 "${action.title}" ${action.dates.length}개 추가됨 (${whose(action)}${action.start ? `, ${action.start}` : ""})\n${repeatDates(action.dates)}` };
   }
   if (action.op === "list") {
     const hits = plans(events)
@@ -327,7 +426,17 @@ function fitSummary(events, { from, to, month }) {
   return [`💪 ${title}`, ...lines].join("\n");
 }
 
-const confirmText = (a) => a.op === "delete"
+// 날짜를 달별로 한 줄씩: "11월 4, 11, 18, 25일 (수)"
+function repeatDates(dates) {
+  const byMonth = new Map();
+  for (const d of dates) { const m = Number(d.slice(5, 7)); byMonth.set(m, [...(byMonth.get(m) ?? []), Number(d.slice(8))]); }
+  const wd = [...new Set(dates.map((d) => WEEKDAYS[parseYmd(d).getDay()]))].join("·");
+  return [...byMonth].map(([m, ds]) => `· ${m}월 ${ds.join(", ")}일 (${wd})`).join("\n");
+}
+
+const confirmText = (a) => a.op === "repeat"
+  ? `🤖 "${a.title}" ${a.who ? `${a.who} 일정` : "공통 일정"} ${a.dates.length}개${a.start ? ` (${a.start})` : ""}를 넣을까요? "@당이 응" 이면 넣어요.\n${repeatDates(a.dates)}`
+  : a.op === "delete"
   ? `🤖 "${a.event.title}" (${whenText(a.event)}) 일정을 지울까요? "@당이 응" 이면 지워요.`
   : `🤖 "${a.event.title}" ${whenText(a.event)} → ${whenText({ ...a.event, date: a.date, start: a.start, end: a.end, endDate: undefined })}로 옮길까요? "@당이 응" 이면 옮겨요.`;
 
@@ -412,7 +521,8 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
       return;
     }
     io.log?.("당이:", JSON.stringify(raw), "→", action.op);
-    if (action.op === "move" || action.op === "delete") {
+    // 여러 개를 한꺼번에 넣는 repeat 도 되묻는다 — 잘못 알아들으면 하나씩 지우기 번거롭다.
+    if (action.op === "move" || action.op === "delete" || (action.op === "repeat" && action.dates.length > 1)) {
       pending.set(name, { action, until: now() + PENDING_MS });
       await io.say(confirmText(action));
       return;

@@ -211,7 +211,8 @@ test("install.sh 가 데몬이 import 하는 모듈을 전부 복사한다", asy
 test("잡담: chat 은 말투 그대로 답만 하고 캘린더는 건드리지 않는다", () => {
   const ctx = buildContext(EVENTS, TODAY);
   const [sys] = buildMessages("안녕", ctx);
-  assert.match(sys.content, /조랑말/);
+  assert.match(sys.content, /다그당스/);
+  assert.match(sys.content, /사과랑 각설탕/);
   assert.match(sys.content, /"op":"chat"/);
   const a = validateAction({ op: "chat", reply: "  안녕! 오늘도 힘내승~ 푸히힝  " }, ctx, TODAY);
   assert.deepEqual(a, { op: "chat", reply: "안녕! 오늘도 힘내승~ 푸히힝" });
@@ -343,4 +344,86 @@ test("말한 사람 이름은 긴 지시문 뒤 별도 시스템 메시지로 �
   assert.equal(a[0].content, b[0].content);
   assert.match(a[1].content, /말한 사람: 도경/);
   assert.equal(a[2].content, "안녕");
+});
+
+// ── 반복 일정(repeat)·누구 일정(who) — "@당이 당이야 11월이랑 12월 모든 수요일에 쫑이의 테니스 레슨 일정을 추가해줘" ──
+// 앱에서 일정 색은 공통이면 공통 색, 아니면 주인(owner)의 색이다(쫑 = 노랑). 그래서 쫑의 일정은
+// owner:"쫑", shared:false 여야 노란 라벨로 보인다.
+const PEOPLE_EVENTS = [
+  ...EVENTS,
+  { id: "palettecolors", rev: 1, deleted: false, kind: "palette", byName: { 쫑: "#bcc900", 빵: "#9529e3" }, shared: "#ff5c5c" },
+];
+const TENNIS = "당이야 11월이랑 12월 모든 수요일에 쫑이의 테니스 레슨 일정을 추가해줘";
+
+test("문맥: 사람 목록은 색 설정·일정 주인에서 모은다(당이 빼고)", () => {
+  const ctx = buildContext([...PEOPLE_EVENTS, { id: "x", rev: 1, deleted: false, date: "2026-11-01", title: "t", owner: BOT_NAME }], TODAY);
+  assert.deepEqual(ctx.people, ["도형", "빵", "쫑"]);
+  assert.match(buildMessages("hi", ctx)[0].content, /사람: 도형, 빵, 쫑\./);
+});
+
+test("repeat: 11·12월 모든 수요일 → 코드가 날짜를 세고, 쫑의 개인 일정(노란 라벨)으로", () => {
+  const ctx = buildContext(PEOPLE_EVENTS, TODAY);
+  const a = validateAction({ op: "repeat", title: "테니스 레슨", weekdays: ["수"], from: "2026-11-01", to: "2026-12-31", who: "쫑이" }, ctx, TODAY, TENNIS);
+  assert.equal(a.op, "repeat");
+  assert.equal(a.who, "쫑");
+  assert.deepEqual(a.dates, ["2026-11-04", "2026-11-11", "2026-11-18", "2026-11-25", "2026-12-02", "2026-12-09", "2026-12-16", "2026-12-23", "2026-12-30"]);
+  const p = plan(a, { events: PEOPLE_EVENTS, sender: "빵", now: NOW });
+  assert.equal(p.puts.length, 9);
+  for (const { content } of p.puts) assert.deepEqual({ ...content, date: undefined }, { date: undefined, title: "테니스 레슨", owner: "쫑", shared: false });
+  assert.equal(new Set(p.puts.map((x) => x.id)).size, 9);
+  assert.match(p.reply, /9개 추가됨 \(쫑 일정\)/);
+  assert.match(p.reply, /11월 4, 11, 18, 25일 \(수\)\n· 12월 2, 9, 16, 23, 30일 \(수\)/);
+});
+
+test("repeat: 모델이 who 를 빠뜨려도 요청의 '쫑이의 …' 로 주인을 찾는다, 지어낸 이름은 공통", () => {
+  const ctx = buildContext(PEOPLE_EVENTS, TODAY);
+  const r = { op: "repeat", title: "테니스 레슨", weekdays: "수요일", from: "2026-11-01", to: "2026-12-31" };
+  assert.equal(validateAction(r, ctx, TODAY, TENNIS).who, "쫑");
+  assert.equal(validateAction({ ...r, who: "철수" }, ctx, TODAY, "매주 수요일 테니스").who, undefined);
+  assert.equal(validateAction({ ...r, who: "빵" }, ctx, TODAY, "빵 테니스").who, "빵");
+  // 제목에 붙은 주인 이름은 뺀다
+  assert.equal(validateAction({ ...r, title: "쫑이의 테니스 레슨", who: "쫑" }, ctx, TODAY, TENNIS).title, "테니스 레슨");
+  // 단건 add 도 같다
+  assert.equal(validateAction({ op: "add", title: "레슨", date: "2026-11-04", who: "쫑님" }, ctx, TODAY, "x").who, "쫑");
+  const add = plan(validateAction({ op: "add", title: "레슨", date: "2026-11-04" }, ctx, TODAY, "쫑이의 레슨 넣어줘"), { events: PEOPLE_EVENTS, sender: "빵", now: NOW });
+  assert.deepEqual([add.puts[0].content.owner, add.puts[0].content.shared], ["쫑", false]);
+  assert.match(add.reply, /쫑 일정/);
+});
+
+test("repeat: 요일·기간 검증 — 지난 날은 빼고, 너무 많거나 길면 거절", () => {
+  const ctx = buildContext(PEOPLE_EVENTS, TODAY);
+  const v = (r) => validateAction({ op: "repeat", title: "t", ...r }, ctx, TODAY, "x");
+  assert.deepEqual(v({ weekdays: ["화", "목"], from: "2026-10-01", to: "2026-11-01" }).dates, ["2026-10-27", "2026-10-29"]);
+  assert.equal(v({ weekdays: ["평일"], from: "2026-10-26", to: "2026-10-30" }).dates.length, 5);
+  assert.equal(v({ weekdays: ["wed"], from: "2026-11-01", to: "2026-11-30" }).dates.length, 4);
+  assert.equal(v({ weekdays: ["수"], from: "2026-11-01" }).op, "unknown"); // 언제까지인지 모름
+  assert.equal(v({ weekdays: [], from: "2026-11-01", to: "2026-11-30" }).op, "unknown");
+  assert.equal(v({ weekdays: ["매일"], from: "2026-11-01", to: "2026-11-30" }).op, "unknown");
+  assert.match(v({ weekdays: ["평일"], from: "2026-11-01", to: "2027-03-31" }).reason, /60개까지/);
+  assert.match(v({ weekdays: ["수"], from: "2026-11-01", to: "2028-01-01" }).reason, /1년/);
+  // 달로 주면 그 달들만(사이 달을 건너뛰어도) — 이번 달이면 남은 날만
+  assert.equal(v({ weekdays: ["수"], months: ["2026-11", "2026-12"] }).dates.length, 9);
+  assert.deepEqual(v({ weekdays: ["화", "목"], months: ["2026-10"] }).dates, ["2026-10-27", "2026-10-29"]);
+  assert.deepEqual(v({ weekdays: ["금"], months: "2026-11" }).dates, ["2026-11-06", "2026-11-13", "2026-11-20", "2026-11-27"]);
+  assert.equal(v({ weekdays: ["월"], months: ["2026-11", "2027-01"] }).dates.filter((d) => d.startsWith("2026-12")).length, 0);
+  // 요청에 적힌 달이 모델이 고른 달보다 우선
+  const vc = (r, cmd) => validateAction({ op: "repeat", title: "t", ...r }, ctx, TODAY, cmd);
+  assert.deepEqual(vc({ weekdays: ["금"], months: ["2026-11", "2026-12"] }, "다음 달 매주 금요일 필라테스").dates, ["2026-11-06", "2026-11-13", "2026-11-20", "2026-11-27"]);
+  assert.equal(vc({ weekdays: ["수"], months: ["2026-11"] }, TENNIS).dates.length, 9);
+  assert.deepEqual(vc({ weekdays: ["월"], months: ["2026-11"] }, "1월 매주 월요일 수영").dates[0], "2027-01-04");
+  assert.equal(vc({ weekdays: ["월"], months: ["2026-11"] }, "11월 3일부터 월요일마다").dates.length, 5); // "11월 3일" 은 날짜라 달로 안 센다 → 모델 값
+});
+
+test("repeat: 여러 개는 되묻고 '@당이 응' 에 한꺼번에 넣는다", async () => {
+  const said = [], applied = [];
+  const a = createAssistant({
+    ask: async () => ({ op: "repeat", title: "테니스 레슨", weekdays: ["수"], months: ["2026-11", "2026-12"], who: "쫑" }),
+    events: () => PEOPLE_EVENTS, apply: async (p) => { applied.push(p); }, say: async (t) => { said.push(t); },
+  }, { now: () => NOW });
+  await a.onMessage({ name: "빵", text: `@당이 ${TENNIS}`, at: NOW - 1000 });
+  assert.equal(applied.length, 0);
+  assert.match(said[0], /"테니스 레슨" 쫑 일정 9개를 넣을까요\? "@당이 응"/);
+  await a.onMessage({ name: "빵", text: "@당이 응", at: NOW - 500 });
+  assert.equal(applied[0].puts.length, 9);
+  assert.match(said[1], /9개 추가됨/);
 });

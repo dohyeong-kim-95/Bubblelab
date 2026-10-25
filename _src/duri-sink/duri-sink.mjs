@@ -232,9 +232,14 @@ function sendFrame(frame) {
   if (socket?.readyState !== 1) throw new Error("서버와 연결이 끊겨 있음");
   socket.send(JSON.stringify(frame));
 }
+// 서버는 연결마다 10초에 30프레임까지만 받는다(_infra/duri.js FLOOD_LIMIT). 당이가 반복 일정을
+// 한꺼번에 넣을 때 넘지 않게 많으면 사이를 띄운다(25개/10초).
+const PACE_MS = 400;
 async function assistantApply({ puts, dels }) {
   const local = [];
+  const pace = puts.length + dels.length > 10;
   for (const { id, rev, content } of puts) {
+    if (pace && local.length) await new Promise((r) => setTimeout(r, PACE_MS));
     const f = await encryptJson(key, content);
     sendFrame({ type: "cal-put", id, iv: f.iv, ct: f.ct, rev });
     local.push({ id, rev, iv: f.iv, ct: f.ct });
