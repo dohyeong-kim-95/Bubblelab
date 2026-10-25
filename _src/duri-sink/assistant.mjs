@@ -117,14 +117,17 @@ export function buildMessages(command, ctx, sender) {
     '{"op":"unfit","date":"YYYY-MM-DD"}',
     '{"op":"fitlist","month":"YYYY-MM"} 또는 {"op":"fitlist","week":"this 또는 last"}',
     '{"op":"recall","query":"찾을 낱말 1~3개(없으면 빈칸)","from":"YYYY-MM-DD 또는 생략","to":"YYYY-MM-DD 또는 생략","month":"YYYY-MM 또는 생략"}',
+    '{"op":"bucket","show":"todo 또는 done 또는 all","query":"찾을 낱말 또는 생략"}',
+    '{"op":"recommend","hint":"조건(이번 주말·실내·비 오는 날·저녁 등) 또는 생략"}',
     '{"op":"chat","reply":"당이 말투로 1~3문장 답"}',
     '{"op":"unknown","reason":"짧은 이유"}',
     "요일을 정해 여러 날 넣는 일정(매주 수요일, 11월이랑 12월 모든 수요일, 이번 달 남은 화요일이랑 목요일, 평일마다)은 add 가 아니라 repeat. weekdays 는 요일 글자들(월~일). 기간이 달이면 months 에 그 달들만 적는다(예: 11월이랑 12월 → [\"2026-11\",\"2026-12\"], 이번 달 → 이번 달 하나, 다음 달 → 다음 달 하나만). 날짜는 코드가 센다(지난 날은 빼고).",
-    `사람: ${ctx.people?.length ? ctx.people.join(", ") : "(모름)"}. '쫑이의 레슨'·'빵 회식' 처럼 한 사람의 일정이면 who 에 그 사람 이름(목록의 이름 그대로)을 쓰고 title 엔 이름을 빼고 적는다. 말한 사람 자신이어도 이름을 말하지 않았으면, 또 둘이 같이·누구 건지 말이 없으면 who 를 생략한다(공통 일정).`,
+    `사람: ${ctx.people?.length ? ctx.people.join(", ") : "(모름)"}. '쫑이의 레슨'·'빵 회식' 처럼 한 사람의 일정이면 who 에 그 사람 이름(목록의 이름 그대로)을 쓰고, title 은 요청의 일정 이름을 그대로 두되 사람 이름만 뺀다(예: '쫑이의 테니스 레슨' → who 쫑, title '테니스 레슨'). 말한 사람 자신이어도 이름을 말하지 않았으면, 또 둘이 같이·누구 건지 말이 없으면 who 를 생략한다(공통 일정).`,
     "규칙: 날짜는 아래 날짜표에서만 고른다. 요일·'다음주'·'내일'은 날짜표로 바꾼다. 시간이 없으면 start 를 생략한다(종일).",
     "오후 3시는 15:00. 옮기기·삭제는 아래 일정 목록의 e번호로만 가리킨다. 목록에 없으면 unknown.",
     "운동 인증(운동·헬스·러닝 같은 운동 얘기일 때만. 일정·여행 얘기엔 쓰지 않는다): '운동했어'·'오늘 헬스 1시간' 은 말한 사람의 그날 운동 체크(fit, 날짜 없으면 오늘, memo 는 운동 종류·양만 적고 없으면 생략). 체크 취소는 unfit, '이번 달 운동 몇 번?'·'운동 기록'·'운동 요약'·'지난주 운동 어땠어?' 은 fitlist(달이면 month, 이번 주·지난주면 week).",
     "기억: 둘이 예전에 나눈 얘기·보낸 사진·있었던 일을 물으면(그 카페 이름 뭐였지? 지난달에 어디 갔었지? 어제 무슨 얘기 했어?) recall. query 엔 찾을 핵심 낱말만(조사 빼고), 기간을 말했으면 from/to 나 month.",
+    "버킷리스트(둘이 해보고 싶은 것 목록)를 보여 달라·뭐 남았어·뭐 했어·○○ 있어? 는 bucket(남은 것 todo, 한 것 done, 둘 다 all, 특정 항목을 찾으면 query). 데이트·같이 할 것·주말에 뭐 할지 추천해 달라면 recommend.",
     "일정과 상관없는 인사·잡담·간단한 질문이면 chat 으로 짧게 답한다. 날씨·뉴스·시세처럼 지금 정보는 모른다고 솔직히 말한다.",
     "",
     `달: ${ctx.months}`,
@@ -334,6 +337,16 @@ export function validateAction(raw, ctx, today, command) {
       if (from > to) from = to;
       return { op: "recall", terms, from, to };
     }
+    case "bucket": {
+      const show = ["todo", "done", "all"].includes(raw.show) ? raw.show : "todo";
+      const q = Array.isArray(raw.query) ? raw.query.join(" ") : String(raw.query ?? "");
+      const terms = q.split(/[\s,]+/).map((x) => x.trim().slice(0, 20)).filter((x) => x && !/^(버킷|버킷리스트|리스트|목록)$/.test(x)).slice(0, 4);
+      return { op: "bucket", show: terms.length ? "all" : show, terms };
+    }
+    case "recommend": {
+      const hint = typeof raw.hint === "string" ? raw.hint.trim().slice(0, 60) : "";
+      return { op: "recommend", ...(hint && { hint }) };
+    }
     case "chat": {
       const reply = String(raw.reply ?? "").trim().slice(0, 400);
       return reply ? { op: "chat", reply } : bad("뭐라고 해야 할지 모르겠승…");
@@ -402,6 +415,7 @@ export function plan(action, { events, sender, now = Date.now() }) {
     return { puts: [{ id: fitId(month, sender), rev, content }], dels: [], reply };
   }
   if (action.op === "fitlist") return { puts: [], dels: [], reply: fitSummary(events, action) };
+  if (action.op === "bucket") return { puts: [], dels: [], reply: bucketSummary(events, action) };
   if (action.op === "chat") return { puts: [], dels: [], reply: action.reply };
   return { puts: [], dels: [], reply: `🤖 ${action.reason}` };
 }
@@ -424,6 +438,79 @@ function fitSummary(events, { from, to, month }) {
     return `· ${o} ${h.length}회 — ${h.map((x) => `${label(x.d)}${x.memo ? ` ${x.memo}` : ""}`).join(", ")}`;
   });
   return [`💪 ${title}`, ...lines].join("\n");
+}
+
+// ── 데이트 버킷리스트(✓) — 앱의 kind:"bucket" 레코드를 읽기만 한다 ──
+// 항목 { kind:"bucket", title, by, at, list?(캔버스 id), memo?, done?, doneAt?, doneBy? },
+// 캔버스(목록) { kind:"bucketcanvas", title }. list 가 없으면 "기본" 목록.
+const BUCKET_SHOW_MAX = 25;
+function bucketItems(events) {
+  const canvases = new Map(events.filter((e) => !e.deleted && e.kind === "bucketcanvas" && e.title).map((e) => [e.id, String(e.title)]));
+  return events
+    .filter((e) => !e.deleted && e.kind === "bucket" && typeof e.title === "string" && e.title.trim())
+    .map((e) => ({ title: e.title.trim(), memo: typeof e.memo === "string" ? e.memo.trim() : "", done: !!e.done,
+      doneAt: Number(e.doneAt) || 0, at: Number(e.at) || 0, list: canvases.get(e.list) ?? "기본" }));
+}
+function bucketSummary(events, { show, terms }) {
+  let items = bucketItems(events);
+  if (!items.length) return "✓ 버킷리스트가 아직 비어 있어요 (헤더의 ✓ 에서 추가)";
+  const total = items.length, doneN = items.filter((i) => i.done).length;
+  if (terms.length) {
+    const words = terms.map((t) => t.toLowerCase());
+    items = items.filter((i) => words.some((w) => `${i.title} ${i.memo}`.toLowerCase().includes(w)));
+    if (!items.length) return `✓ 버킷리스트에 "${terms.join(" ")}" 은(는) 없어요 (전체 ${total}개)`;
+  }
+  const todo = items.filter((i) => !i.done).sort((a, b) => a.at - b.at);
+  const done = items.filter((i) => i.done).sort((a, b) => b.doneAt - a.doneAt);
+  const lists = new Set(items.map((i) => i.list)).size > 1;
+  const line = (i) => `· ${i.title}${lists ? ` [${i.list}]` : ""}${i.done && i.doneAt ? ` (${label(ymd(new Date(i.doneAt)))} 달성)` : ""}`;
+  const block = (head, xs) => {
+    if (!xs.length) return [];
+    const out = [head, ...xs.slice(0, BUCKET_SHOW_MAX).map(line)];
+    if (xs.length > BUCKET_SHOW_MAX) out.push(`… 외 ${xs.length - BUCKET_SHOW_MAX}개`);
+    return out;
+  };
+  const head = `✓ 버킷리스트 ${total}개 중 ${doneN}개 달성`;
+  const body = [
+    ...(show !== "done" ? block(`남은 것 ${todo.length}개`, todo) : []),
+    ...(show !== "todo" ? block(`해낸 것 ${done.length}개`, done) : []),
+  ];
+  if (!body.length) return `${head}${show === "todo" ? " — 남은 게 없어요! 🎉" : ""}`;
+  return [head, ...body].join("\n");
+}
+
+// 앞으로 3주 안의 주말 중 일정이 없는 날(데이트 추천에 "언제" 를 붙이려고).
+function freeWeekends(events, today, days = 21) {
+  const busy = new Set();
+  for (const e of plans(events)) {
+    for (let d = e.date; d <= (e.endDate && e.endDate > e.date ? e.endDate : e.date); d = addDays(d, 1)) busy.add(d);
+  }
+  const out = [];
+  for (let i = 0; i < days; i++) {
+    const d = addDays(today, i), wd = parseYmd(d).getDay();
+    if ((wd === 0 || wd === 6) && !busy.has(d)) out.push(label(d));
+  }
+  return out;
+}
+
+/** 데이트 추천 2단계: 아직 안 한 버킷리스트·최근 해낸 것·빈 주말만 보여 주고 고르게 한다. */
+export function buildRecommendMessages(command, { todo, done, free }, sender) {
+  const system = [
+    "너는 두 사람의 채팅 앱에 사는 비서 '당이'다.",
+    ...PERSONA,
+    "두 사람에게 데이트를 추천한다. 아래 '아직 안 한 버킷리스트' 에서 요청 조건에 맞는 것을 먼저 고르고, 빈 주말이 있으면 언제 하면 좋을지도 붙인다.",
+    "1~3개를 짧게, 하나마다 이유 한 줄. 목록에 맞는 게 없으면 비슷한 걸 제안해도 되지만 가게·장소 이름, 날씨, 영업시간은 지어내지 않는다. 이미 해낸 것은 다시 권하지 않는다.",
+    '답은 JSON {"reply":"…"} 하나로만.',
+    "",
+    "아직 안 한 버킷리스트:",
+    ...(todo.length ? todo : ["(없음)"]),
+    "",
+    "최근 해낸 것:",
+    ...(done.length ? done : ["(없음)"]),
+    "",
+    `일정 없는 주말(3주 안): ${free.length ? free.join(", ") : "(없음)"}`,
+  ].join("\n");
+  return [{ role: "system", content: system }, ...(sender ? [whoMessage(sender)] : []), { role: "user", content: command }];
 }
 
 // 날짜를 달별로 한 줄씩: "11월 4, 11, 18, 25일 (수)"
@@ -520,6 +607,11 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
       await io.say(await recall(action, command, name));
       return;
     }
+    if (action.op === "recommend") {
+      io.log?.("당이:", JSON.stringify({ op: "recommend" }), "→ recommend");
+      await io.say(await recommend(command, name, today));
+      return;
+    }
     io.log?.("당이:", JSON.stringify(raw), "→", action.op);
     // 여러 개를 한꺼번에 넣는 repeat 도 되묻는다 — 잘못 알아들으면 하나씩 지우기 번거롭다.
     if (action.op === "move" || action.op === "delete" || (action.op === "repeat" && action.dates.length > 1)) {
@@ -547,6 +639,23 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
     io.log?.(`당이: 기억 ${lines.length}줄 읽고 답함`); // 대화 내용은 로그에 남기지 않는다
     const reply = String(raw?.reply ?? "").trim().slice(0, 600);
     return reply || "기록은 읽었는데 뭐라고 할지 모르겠승…";
+  }
+
+  async function recommend(command, name, today) {
+    const events = io.events();
+    const items = bucketItems(events);
+    const line = (i) => `- ${i.title.slice(0, 80)}${i.memo ? ` (메모: ${i.memo.slice(0, 60)})` : ""}`;
+    const todo = items.filter((i) => !i.done).sort((a, b) => a.at - b.at).slice(0, 40).map(line);
+    const done = items.filter((i) => i.done).sort((a, b) => b.doneAt - a.doneAt).slice(0, 10).map(line);
+    let raw;
+    try { raw = await io.ask(buildRecommendMessages(command, { todo, done, free: freeWeekends(events, today) }, name)); }
+    catch (e) {
+      io.log?.("당이: 모델 호출 실패", String(e?.message || e));
+      return "🤖 로컬 모델이 응답하지 않아요 (PC의 모델 서버 확인)";
+    }
+    io.log?.(`당이: 버킷리스트 ${todo.length}개 보고 추천함`); // 내용은 로그에 남기지 않는다
+    const reply = String(raw?.reply ?? "").trim().slice(0, 600);
+    return reply || "음… 추천할 게 안 떠오르승. 버킷리스트에 하고 싶은 걸 더 적어 줘!";
   }
 
   return {

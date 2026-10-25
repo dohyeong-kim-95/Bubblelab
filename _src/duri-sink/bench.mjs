@@ -16,6 +16,10 @@ const events = [
   ev("a5", "2026-11-04", "치과", { start: "15:00" }), ev("a6", "2026-11-07", "결혼식", { start: "12:00" }),
   ev("a7", "2026-11-10", "엄마 생신"), ev("a8", "2026-11-12", "출장", { endDate: "2026-11-13" }),
   { id: "palettecolors", rev: 1, kind: "palette", byName: { 쫑: "#bcc900", 빵: "#9529e3" }, shared: "#ff5c5c" },
+  { id: "bk1", rev: 1, kind: "bucket", title: "한강 피크닉", by: "쫑", at: 1 },
+  { id: "bk2", rev: 1, kind: "bucket", title: "도자기 공방 원데이 클래스", by: "빵", at: 2 },
+  { id: "bk3", rev: 1, kind: "bucket", title: "제주도 일출 보기", by: "빵", at: 3 },
+  { id: "bk4", rev: 1, kind: "bucket", title: "방탈출 카페", by: "쫑", at: 4, done: true, doneAt: 5 },
 ];
 const ctx = A.buildContext(events, today);
 const idOf = (title) => [...ctx.aliases].find(([, e]) => e.title === title)?.[0];
@@ -46,6 +50,12 @@ const cases = [
   ["이번 달 남은 화요일이랑 목요일에 영어 스터디 추가", (r, v) => v.op === "repeat" && !v.who && v.dates.join() === "2026-10-27,2026-10-29"],
   ["내일 오후 2시 쫑이 치과", (r, v) => v.op === "add" && v.who === "쫑" && v.date === "2026-10-26" && v.start === "14:00"],
   ["토요일에 같이 영화 보기 넣어줘", (r, v) => v.op === "add" && !v.who && v.date === "2026-10-31"],
+  // 버킷리스트·데이트 추천(2026-10-25 추가)
+  ["버킷리스트 뭐 남았어?", (r, v) => v.op === "bucket" && v.show === "todo"],
+  ["우리 버킷리스트에서 해본 거 보여줘", (r, v) => v.op === "bucket" && v.show === "done"],
+  ["버킷리스트에 제주도 있어?", (r, v) => v.op === "bucket" && v.terms.some((t) => /제주/.test(t))],
+  ["이번 주말 데이트 추천해줘", (r, v) => v.op === "recommend"],
+  ["비 오는 날 둘이 할 만한 거 추천해줄래?", (r, v) => v.op === "recommend"],
 ];
 const recallCases = [
   ["우리 성수동에서 갔던 카페 이름 뭐였지?", (r) => r.op === "recall" && /카페|성수/.test(JSON.stringify(r))],
@@ -100,7 +110,16 @@ for (const [q, check] of grounded) {
   if (check(t)) out.grounded++; else out.bad.push(`${q} → ${String(r.content).replace(/\s+/g," ").slice(0,120)}`);
   out.chats.push(t);
 }
+// 데이트 추천 2단계 — 안 한 버킷리스트에서 고르고, 해낸 것(방탈출)은 다시 권하지 않아야 한다.
+out.rec = 0;
+const recCtx = { todo: ["- 한강 피크닉", "- 도자기 공방 원데이 클래스", "- 제주도 일출 보기"], done: ["- 방탈출 카페"], free: ["11/1 (일)", "11/7 (토)"] };
+for (const q of ["이번 주말 데이트 추천해줘", "비 오는 날 둘이 할 만한 거 추천해줄래?"]) {
+  const s = Date.now(); const r = await ask(A.buildRecommendMessages(q, recCtx, "쫑")); out.times.push((Date.now() - s) / 1000);
+  const t = String(parse(r.content)?.reply ?? "");
+  if (/피크닉|공방|일출/.test(t) && !/방탈출/.test(t)) out.rec++; else out.bad.push(`[추천] ${q} → ${t.slice(0, 120)}`);
+  out.chats.push(t);
+}
 const avg = out.times.reduce((a, b) => a + b, 0) / out.times.length;
-console.log(`### ${label}: 일정·운동·잡담·반복 ${out.sched}/${cases.length} · 기억분류 ${out.recall}/4 · 기억답 ${out.grounded}/3 · 첫답 ${out.cold.toFixed(1)}s · 이후평균 ${avg.toFixed(1)}s · 최대생성 ${Math.max(...out.gens)}tok`);
+console.log(`### ${label}: 일정·운동·잡담·반복 ${out.sched}/${cases.length} · 기억분류 ${out.recall}/4 · 기억답 ${out.grounded}/3 · 추천답 ${out.rec}/2 · 첫답 ${out.cold.toFixed(1)}s · 이후평균 ${avg.toFixed(1)}s · 최대생성 ${Math.max(...out.gens)}tok`);
 for (const x of out.bad) console.log("  ✗ " + x);
 for (const x of out.chats) console.log("  💬 " + x);

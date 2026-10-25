@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  BOT_NAME, MAX_AGE_MS, buildContext, buildMessages, createAssistant, fitId, parseTrigger, plan, validateAction, whoKey, ymd,
+  BOT_NAME, MAX_AGE_MS, buildContext, buildMessages, buildRecommendMessages, createAssistant, fitId, parseTrigger, plan, validateAction, whoKey, ymd,
 } from "./assistant.mjs";
 
 const NOW = new Date(2026, 9, 25, 12, 0).getTime(); // 2026-10-25 (일) 정오, 로컬
@@ -426,4 +426,59 @@ test("repeat: 여러 개는 되묻고 '@당이 응' 에 한꺼번에 넣는다",
   await a.onMessage({ name: "빵", text: "@당이 응", at: NOW - 500 });
   assert.equal(applied[0].puts.length, 9);
   assert.match(said[1], /9개 추가됨/);
+});
+
+// ── 버킷리스트(✓) 읽기·데이트 추천 — 앱의 kind:"bucket"/"bucketcanvas" 레코드(읽기만) ──
+const BUCKET_EVENTS = [
+  ...EVENTS,
+  { id: "cv00001", rev: 1, deleted: false, kind: "bucketcanvas", title: "여행", by: "쫑", at: 1 },
+  { id: "bk00001", rev: 1, deleted: false, kind: "bucket", title: "한강 피크닉", by: "쫑", at: 10 },
+  { id: "bk00002", rev: 1, deleted: false, kind: "bucket", title: "도자기 공방", by: "빵", at: 20, memo: "원데이 클래스" },
+  { id: "bk00003", rev: 1, deleted: false, kind: "bucket", title: "제주도 일출", by: "빵", at: 30, list: "cv00001" },
+  { id: "bk00004", rev: 1, deleted: false, kind: "bucket", title: "방탈출", by: "쫑", at: 5, done: true, doneAt: new Date(2026, 9, 3).getTime(), doneBy: "빵" },
+  { id: "bk00005", rev: 1, deleted: true, kind: "bucket", title: "지운 항목" },
+];
+
+test("bucket: 남은 것·해낸 것·찾기를 코드가 정리한다(목록이 여럿이면 목록 이름)", () => {
+  const ctx = buildContext(BUCKET_EVENTS, TODAY);
+  const run = (raw) => plan(validateAction({ op: "bucket", ...raw }, ctx, TODAY, "x"), { events: BUCKET_EVENTS, sender: "쫑", now: NOW }).reply;
+  const todo = run({});
+  assert.match(todo, /^✓ 버킷리스트 4개 중 1개 달성\n남은 것 3개\n· 한강 피크닉 \[기본\]\n· 도자기 공방 \[기본\]\n· 제주도 일출 \[여행\]$/);
+  assert.doesNotMatch(todo, /지운 항목|방탈출/);
+  assert.match(run({ show: "done" }), /해낸 것 1개\n· 방탈출 \[기본\] \(10\/3 \(토\) 달성\)/);
+  assert.match(run({ show: "all" }), /남은 것 3개[\s\S]*해낸 것 1개/);
+  assert.match(run({ query: "제주" }), /· 제주도 일출/);
+  assert.match(run({ query: "공방" }), /도자기 공방/); // 메모·제목 어디든
+  assert.match(run({ query: "스카이다이빙" }), /"스카이다이빙" 은\(는\) 없어요/);
+  assert.match(plan({ op: "bucket", show: "todo", terms: [] }, { events: EVENTS, sender: "쫑" }).reply, /비어 있어요/);
+});
+
+test("recommend: 안 한 버킷리스트·빈 주말만 근거로 2단계 질의하고, 해낸 건 '최근 해낸 것' 으로만", async () => {
+  const said = [], asks = [];
+  const answers = [{ op: "recommend", hint: "이번 주말" }, { reply: "이번 주말엔 한강 피크닉 어떠승?" }];
+  const a = createAssistant({
+    ask: async (m) => { asks.push(m); return answers.shift(); },
+    events: () => BUCKET_EVENTS, apply: async () => { throw new Error("캘린더를 고치면 안 됨"); }, say: async (t) => { said.push(t); },
+  }, { now: () => NOW });
+  await a.onMessage({ name: "쫑", text: "@당이 이번 주말 데이트 추천해줘", at: NOW - 1000 });
+  assert.equal(said[0], "이번 주말엔 한강 피크닉 어떠승?");
+  const sys = asks[1][0].content;
+  assert.match(sys, /아직 안 한 버킷리스트:\n- 한강 피크닉\n- 도자기 공방 \(메모: 원데이 클래스\)\n- 제주도 일출\n/);
+  assert.match(sys, /최근 해낸 것:\n- 방탈출\n/);
+  // 10/31 (토) 은 "르파비스 임장" 이 있어 빠지고, 11/1 (일) 은 비어 있다
+  assert.match(sys, /일정 없는 주말\(3주 안\): 10\/25 \(일\), 11\/1 \(일\), 11\/7 \(토\)/);
+  assert.doesNotMatch(sys, /지운 항목/);
+  assert.equal(asks[1].at(-1).content, "이번 주말 데이트 추천해줘");
+});
+
+test("recommend: 버킷리스트가 비어도 답한다, 모델이 죽으면 그렇다고", async () => {
+  const msgs = buildRecommendMessages("추천", { todo: [], done: [], free: [] }, "빵");
+  assert.match(msgs[0].content, /아직 안 한 버킷리스트:\n\(없음\)/);
+  const said = [];
+  const a = createAssistant({
+    ask: (() => { let n = 0; return async () => { if (n++ === 0) return { op: "recommend" }; throw new Error("ECONNREFUSED"); }; })(),
+    events: () => EVENTS, apply: async () => {}, say: async (t) => { said.push(t); },
+  }, { now: () => NOW });
+  await a.onMessage({ name: "빵", text: "@당이 데이트 추천", at: NOW - 1000 });
+  assert.match(said[0], /모델 서버/);
 });
