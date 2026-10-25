@@ -747,3 +747,68 @@ test("backfill/fetch-older: 브라우저에는 가장 최근 100건, 그 앞은 
   assert.equal(olderPage[49], 50);
   assert.equal(sent.find((m) => m.type === "older-done").more, false);
 });
+
+// ── sw.js 푸시 처리 — "두리 안에 있는데 알림이 계속 온다"(2026-10-25 사용자 보고) ──
+// sw.js 를 가짜 서비스워커 전역에 올려 push 이벤트를 흘려 본다. 서버는 접속 중인 기기에도
+// 보내므로(위 notifyPush 테스트) "보고 있으면 안 띄움"은 전적으로 sw.js 의 판단이다.
+async function loadServiceWorker({ clients: windows = [] } = {}) {
+  const { readFile } = await import("node:fs/promises");
+  const vm = await import("node:vm");
+  const src = await readFile(new URL("../duri/sw.js", import.meta.url), "utf8");
+  const handlers = {};
+  const open = []; // 아직 닫히지 않은 알림
+  const registration = {
+    showNotification: async (title, opts = {}) => { open.push({ title, ...opts, close() { open.splice(open.indexOf(this), 1); } }); },
+    getNotifications: async ({ tag } = {}) => open.filter((n) => !tag || n.tag === tag),
+    pushManager: { getSubscription: async () => null },
+  };
+  const clientsApi = { matchAll: async () => windows, claim: async () => {}, openWindow: async () => {} };
+  const self = { addEventListener: (type, fn) => { handlers[type] = fn; }, registration, clients: clientsApi, skipWaiting() {} };
+  vm.runInNewContext(src, { self, clients: clientsApi, caches: {}, fetch: async () => new Response(null), Response, URL,
+    TextEncoder, TextDecoder, btoa, atob, crypto, setTimeout, console });
+  const fire = async (type, init) => {
+    let job = null;
+    handlers[type]?.({ ...init, waitUntil: (p) => { job = p; } });
+    await job;
+  };
+  const push = (data) => fire("push", { data: { json: () => data } });
+  return { handlers, open, push, fire };
+}
+
+test("sw: 앱에 포커스가 있으면 알림을 띄웠다 바로 닫는다(남는 알림 없음, silent push 아님)", async () => {
+  const sw = await loadServiceWorker({ clients: [{ focused: true, visibilityState: "visible", postMessage() {} }] });
+  await sw.push({ kind: "generic", seq: 1 });
+  assert.equal(sw.open.length, 0);
+});
+
+test("sw: 앱이 닫혀 있으면 알림이 남는다", async () => {
+  const sw = await loadServiceWorker({ clients: [] });
+  await sw.push({ kind: "generic", seq: 1 });
+  assert.equal(sw.open.length, 1);
+  assert.equal(sw.open[0].tag, "duri-msg");
+});
+
+// 스펙(아직 실패) — 두리 화면 안에 있으면 연속으로 메시지가 와도 남는 알림이 없어야 한다.
+// 확인(2026-10-25, iPhone 홈 화면 PWA): 채팅을 보고 있는데 "빵 / from Duri / 헉아직두?" 처럼
+// 보낸 사람·본문이 든 **진짜 알림** 배너가 떴다 — 조용한 "💞 Duri" 가 아니므로 isAppFocused() 가
+// false 였다는 뜻이다(알림을 띄웠다 닫는 길로 가지 않았다).
+// iOS 홈 화면 PWA 는 앞에 떠 있는 창도 focused:false 로 보고할 수 있고, 백그라운드 창도
+// visibilityState:"visible" 로 보고할 수 있어 sw.js 가 clients 만으로는 구분하지 못한다.
+// 그래서 앱이 앞/뒤로 갈 때 서비스워커에 직접 알려 주고({type:"app-foreground"} /
+// {type:"app-background"}), sw.js 는 최근 "앞" 신호를 믿는 방향을 가정한다. 고치면 todo 를 뗀다.
+test("sw: 두리 화면 안(iOS: focused:false·visible)에서는 메시지가 연달아 와도 알림이 남지 않는다", { todo: "두리 안에서 알림이 계속 온다 — 미해결" }, async () => {
+  const win = { focused: false, visibilityState: "visible", postMessage() {} };
+  const sw = await loadServiceWorker({ clients: [win] });
+  await sw.fire("message", { data: { type: "app-foreground" }, source: win });
+  for (let seq = 1; seq <= 3; seq++) await sw.push({ kind: "generic", seq });
+  assert.equal(sw.open.length, 0);
+});
+
+test("sw: 두리를 내려 두면(iOS: 여전히 visible 로 보고) 알림이 남는다", { todo: "위 스펙과 짝 — 고칠 때 silent push 로 새지 않는지 확인" }, async () => {
+  const win = { focused: false, visibilityState: "visible", postMessage() {} };
+  const sw = await loadServiceWorker({ clients: [win] });
+  await sw.fire("message", { data: { type: "app-foreground" }, source: win });
+  await sw.fire("message", { data: { type: "app-background" }, source: win });
+  await sw.push({ kind: "generic", seq: 1 });
+  assert.equal(sw.open.length, 1);
+});
