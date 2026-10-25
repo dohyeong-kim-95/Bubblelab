@@ -669,6 +669,32 @@ test("remind-set replaces its range; fire posts today's once as a normal msg and
   assert.deepEqual(reminders(), [], "방 초기화는 리마인드도 지운다");
 });
 
+test("brief-done: 당이가 오늘 브리핑했다고 알리면(싱크만, 오늘만) 08:10 리마인드는 올리지 않는다", async () => {
+  const storage = fakeStorage({ seq: 0, ackSeq: 0 });
+  const room = new DuriDO({ storage, blockConcurrencyWhile: (fn) => fn() }, { DURI_BUCKET: fakeBucket([]) });
+  await room.load();
+  const today = kstYmd();
+  await room.setReminders(today, today, [remindDay(today)]);
+  const peer = { ws: { send() {} }, role: "peer", stamps: [], alive: true };
+  const sink = { ws: { send() {} }, role: "sink", stamps: [], alive: true };
+  room.handle(peer, { type: "brief-done", date: today });
+  room.handle(sink, { type: "brief-done", date: "2000-01-01" });
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(storage.map.has("briefDone"), false, "브라우저·다른 날짜는 무시");
+  room.handle(sink, { type: "brief-done", date: today });
+  await new Promise((r) => setTimeout(r, 0));
+  const r = await room.fireReminder(today);
+  assert.equal(r.posted, false);
+  assert.equal(r.briefed, true);
+  assert.equal(room.head, 0, "채팅에 올리지 않았다");
+  assert.equal(storage.map.has("remind:" + today), false, "그날 몫은 치운다");
+
+  // 다음 날 당이가 못 하면(PC 꺼짐) 리마인드가 fallback 으로 올라간다.
+  const tomorrow = new Date(Date.parse(today + "T00:00:00Z") + 86400_000).toISOString().slice(0, 10);
+  storage.map.set("remind:" + tomorrow, { iv: remindDay(tomorrow).iv, ct: remindDay(tomorrow).ct });
+  assert.equal((await room.fireReminder(tomorrow)).posted, true);
+});
+
 test("remind/fire is reachable only with the cron role; remind-set only from a browser", async () => {
   const storage = fakeStorage({ seq: 0, ackSeq: 0 });
   const room = new DuriDO({ storage, blockConcurrencyWhile: (fn) => fn() }, { DURI_BUCKET: fakeBucket([]) });

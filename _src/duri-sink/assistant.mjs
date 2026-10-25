@@ -59,6 +59,34 @@ export function parseTrigger(text) {
 /** 일반 일정만(표식·댓글·핀·색설정 같은 kind 레코드와 툼스톤 제외). */
 const plans = (events) => events.filter((e) => !e.deleted && !e.kind && isYmd(e.date));
 
+// ── 반복 일정 — 웹앱(duri/index.html 의 recurMatches·calEventOnDate)과 같은 판정 ──
+// recur { freq: daily|weekly|monthly|yearly, until?, count?, exclude? }. 시리즈 하나가 회차 전체를 대표한다.
+function recurMatches(ev, ds) {
+  if (ds < ev.date) return false;
+  if (ev.recur.exclude && ev.recur.exclude.includes(ds)) return false;
+  if (ev.recur.until && ds > ev.recur.until) return false;
+  const start = new Date(ev.date + "T00:00:00"), cur = new Date(ds + "T00:00:00");
+  const diffDays = Math.round((cur - start) / 86400000);
+  let matches, occurrenceIndex;
+  switch (ev.recur.freq) {
+    case "daily": matches = true; occurrenceIndex = diffDays; break;
+    case "weekly": matches = diffDays % 7 === 0; occurrenceIndex = diffDays / 7; break;
+    case "monthly": matches = start.getDate() === cur.getDate();
+      occurrenceIndex = (cur.getFullYear() - start.getFullYear()) * 12 + (cur.getMonth() - start.getMonth()); break;
+    case "yearly": matches = start.getMonth() === cur.getMonth() && start.getDate() === cur.getDate();
+      occurrenceIndex = cur.getFullYear() - start.getFullYear(); break;
+    default: return false;
+  }
+  if (!matches) return false;
+  if (ev.recur.count && occurrenceIndex >= ev.recur.count) return false; // count 는 첫 회차 포함 총 횟수
+  return true;
+}
+export function calEventOnDate(ev, ds) {
+  if (ev.recur && ev.recur.freq && ev.recur.freq !== "none") return recurMatches(ev, ds);
+  if (ev.endDate && ev.endDate > ev.date) return ds >= ev.date && ds <= ev.endDate; // 여러 날 일정
+  return ev.date === ds;
+}
+
 function whenText(e) {
   const t = e.start ? ` ${e.start}${e.end ? `–${e.end}` : ""}` : "";
   const span = e.endDate && e.endDate > e.date ? ` ~ ${label(e.endDate)}` : "";
@@ -481,16 +509,79 @@ function bucketSummary(events, { show, terms }) {
 
 // 앞으로 3주 안의 주말 중 일정이 없는 날(데이트 추천에 "언제" 를 붙이려고).
 function freeWeekends(events, today, days = 21) {
-  const busy = new Set();
-  for (const e of plans(events)) {
-    for (let d = e.date; d <= (e.endDate && e.endDate > e.date ? e.endDate : e.date); d = addDays(d, 1)) busy.add(d);
-  }
-  const out = [];
+  const list = plans(events), out = [];
   for (let i = 0; i < days; i++) {
     const d = addDays(today, i), wd = parseYmd(d).getDay();
-    if ((wd === 0 || wd === 6) && !busy.has(d)) out.push(label(d));
+    if ((wd === 0 || wd === 6) && !list.some((e) => calEventOnDate(e, d))) out.push(label(d));
   }
   return out;
+}
+
+// ── 아침 브리핑(매일 08:00 KST) ──
+// 일정은 코드가 고르고(반복·여러 날 포함), 모델은 당이 말투로 엮기만 한다. 모델 답에 오늘
+// 일정 제목·시각이 하나라도 빠지면 모델 답을 버리고 틀에 맞춘 문장을 보낸다 — 아침 알림에서
+// 일정을 빠뜨리거나 지어내면 안 된다. 한국은 서머타임이 없어 KST 는 UTC+9 고정이다.
+// 서버의 "📅 캘린더" 리마인드(08:10 cron)는 당이가 못 한 날의 fallback 이다 — 그래서 늦은
+// 브리핑은 10분 안에만 한다. 그 뒤엔 리마인드가 이미 올라갔을 수 있어 둘이 겹친다.
+const KST_MS = 9 * 3600 * 1000;
+export const kstYmd = (t) => new Date(t + KST_MS).toISOString().slice(0, 10);
+const BRIEF_GRACE_MIN = 10; // 08:00~08:09 에 1분마다 다시 해 본다(08:10 엔 서버 fallback)
+const BRIEF_ITEMS_MAX = 12;
+export const BRIEF_RE = /^(오늘\s*)?(일정\s*)?브리핑/;
+
+/** 지금(now) 브리핑할 때인지. last: 마지막으로 브리핑한 KST 날짜. */
+export function briefDue(now, last, at = "08:00") {
+  if (!isHm(at)) return false;
+  const [h, m] = at.split(":").map(Number), d = new Date(now + KST_MS);
+  const min = d.getUTCHours() * 60 + d.getUTCMinutes(), from = h * 60 + m;
+  return last !== kstYmd(now) && min >= from && min < from + BRIEF_GRACE_MIN;
+}
+
+function dayItems(events, ds) {
+  return plans(events).filter((e) => calEventOnDate(e, ds))
+    .sort((a, b) => String(a.start ?? "").localeCompare(String(b.start ?? "")) || String(a.title).localeCompare(String(b.title)))
+    .map((e) => ({ start: isHm(e.start) ? e.start : "", end: isHm(e.end) ? e.end : "",
+      title: String(e.title || "(제목 없음)").trim().slice(0, 60), who: e.shared ? "" : String(e.owner || "").trim() }));
+}
+const itemText = (i) => `${i.start ? `${i.start}${i.end ? `–${i.end}` : ""} ` : ""}${i.title}${i.who ? ` (${i.who})` : ""}`;
+
+export function briefFacts(events, today) {
+  return { today, todays: dayItems(events, today), tomorrows: dayItems(events, addDays(today, 1)) };
+}
+
+export function buildBriefingMessages({ today, todays, tomorrows }) {
+  const list = (xs) => (xs.length ? xs.slice(0, BRIEF_ITEMS_MAX).map((i) => `- ${itemText(i)}`) : ["(없음)"]);
+  const system = [
+    "너는 두 사람의 채팅 앱에 사는 비서 '당이'다.",
+    ...PERSONA,
+    "매일 아침 8시에 두 사람(쫑이·빵이)에게 오늘 일정을 브리핑한다. 아침 인사 한 줄 → 오늘 일정을 한 줄에 하나씩(시각·제목·이름은 목록 그대로, 하나도 빼지 않는다) → 내일 일정은 짧게 → 응원 한마디.",
+    "목록에 없는 일정·장소·날씨는 지어내지 않는다. 오늘 일정이 없으면 없다고 하고 다정한 한마디를 한다. 8줄 안쪽.",
+    '답은 JSON {"reply":"…"} 하나로만.',
+  ].join("\n");
+  const user = [`오늘: ${label(today)}`, "오늘 일정:", ...list(todays), "", "내일 일정:", ...list(tomorrows)].join("\n");
+  return [{ role: "system", content: system }, { role: "user", content: user }];
+}
+
+// 모델 답이 오늘 일정을 다 담았는지 — 제목과 시각(10:00 또는 10시)이 모두 있어야 한다.
+function briefCovers(reply, todays) {
+  const flat = reply.replace(/\s+/g, "");
+  return todays.slice(0, BRIEF_ITEMS_MAX).every((i) => {
+    if (!flat.includes(i.title.replace(/\s+/g, ""))) return false;
+    if (!i.start) return true;
+    const h = Number(i.start.slice(0, 2)), h12 = h > 12 ? h - 12 : h;
+    return reply.includes(i.start) || new RegExp(`(^|[^0-9])(${h}|${h12})시`).test(reply);
+  });
+}
+
+export function briefFallback({ today, todays, tomorrows }) {
+  const out = [`좋은 아침이승~ ☀️ ${label(today)}`];
+  if (todays.length) {
+    out.push(`오늘 일정 ${todays.length}개 알려 주승!`, ...todays.slice(0, BRIEF_ITEMS_MAX).map((i) => `· ${itemText(i)}`));
+    if (todays.length > BRIEF_ITEMS_MAX) out.push(`… 외 ${todays.length - BRIEF_ITEMS_MAX}개`);
+  } else out.push("오늘은 일정이 없승! 푹 쉬어도 좋승~");
+  if (tomorrows.length) out.push(`내일은 ${tomorrows.slice(0, 3).map(itemText).join(", ")}${tomorrows.length > 3 ? ` 외 ${tomorrows.length - 3}개` : ""} 있승.`);
+  out.push("오늘도 힘내승! 푸히힝 🐴");
+  return out.join("\n");
 }
 
 /** 데이트 추천 2단계: 아직 안 한 버킷리스트·최근 해낸 것·빈 주말만 보여 주고 고르게 한다. */
@@ -593,6 +684,7 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
     if (!command) { await io.say('🤖 예: "@당이 토요일 10시 르파비스 임장 넣어줘", "@당 이번 주 일정"'); return; }
 
     const today = ymd(new Date(now()));
+    if (BRIEF_RE.test(command)) { await io.say(await briefing()); return; } // "@당이 브리핑" — 아침 브리핑을 지금
     const ctx = buildContext(io.events(), today);
     let raw;
     try { raw = await io.ask(buildMessages(command, ctx, name)); }
@@ -658,7 +750,23 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
     return reply || "음… 추천할 게 안 떠오르승. 버킷리스트에 하고 싶은 걸 더 적어 줘!";
   }
 
+  async function briefing() {
+    const facts = briefFacts(io.events(), kstYmd(now()));
+    let reply = "";
+    try { reply = String((await io.ask(buildBriefingMessages(facts)))?.reply ?? "").trim().slice(0, 800); }
+    catch (e) { io.log?.("당이: 모델 호출 실패", String(e?.message || e)); }
+    const ok = reply && briefCovers(reply, facts.todays);
+    io.log?.(`당이: 아침 브리핑 — 오늘 ${facts.todays.length}개·내일 ${facts.tomorrows.length}개${ok ? "" : " (틀 문장)"}`); // 내용은 로그에 남기지 않는다
+    return ok ? reply : briefFallback(facts);
+  }
+
   return {
+    /** 아침 브리핑 문장을 만든다(보내는 건 부르는 쪽). 명령 처리와 같은 줄에 서서 모델을 겹쳐 부르지 않는다. */
+    brief() {
+      const p = chain.then(() => briefing());
+      chain = p.catch(() => {});
+      return p;
+    },
     onMessage(msg) {
       chain = chain.then(() => handle(msg)).catch((e) => io.log?.("당이 오류:", String(e?.message || e)));
       return chain;

@@ -887,7 +887,7 @@ test("confidential static cache only admits code, fonts, and explicitly non-sens
 });
 
 
-test("08:00 KST cron 은 VAPID 가 없어도 duri 오늘 일정 리마인드를 cron 역할로 부른다", async () => {
+test("08:10 KST cron 은 VAPID 가 없어도 duri 오늘 일정 리마인드를 cron 역할로 부른다(08:00 은 당이 몫)", async () => {
   const calls = [];
   const env = {
     ENABLE_DURI: "true",
@@ -902,9 +902,12 @@ test("08:00 KST cron 은 VAPID 가 없어도 duri 오늘 일정 리마인드를 
   const pending = [];
   await worker.scheduled({ cron: "0 23 * * *" }, env, { waitUntil: (p) => pending.push(p) });
   await Promise.all(pending);
+  assert.equal(calls.length, 0, "08:00 엔 PC 의 당이가 브리핑한다");
+  await worker.scheduled({ cron: "10 23 * * *" }, env, { waitUntil: (p) => pending.push(p) });
+  await Promise.all(pending);
   assert.deepEqual(calls, [{ path: "/remind/fire", role: "cron" }]);
 
   calls.length = 0;
-  await worker.scheduled({ cron: "0 23 * * *" }, { ...env, ENABLE_DURI: "false" }, { waitUntil: (p) => pending.push(p) });
+  await worker.scheduled({ cron: "10 23 * * *" }, { ...env, ENABLE_DURI: "false" }, { waitUntil: (p) => pending.push(p) });
   assert.equal(calls.length, 0, "duri 를 끄면 부르지 않는다");
 });

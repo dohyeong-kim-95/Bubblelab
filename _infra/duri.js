@@ -74,7 +74,11 @@ const MAX_PUSH_PAYLOAD_BYTES = 3000; // 안전 상한 넘으면 내용 없는 �
 // 미리 암호화해 날짜별로 맡겨 두고**, 08:00 KST cron 이 그날 몫을 꺼내 보통 메시지처럼
 // 올린다(채팅·푸시·PC 백업이 기존 경로를 그대로 탄다). 서버가 아는 것은 "어느 날짜에
 // 맡긴 게 있는가"뿐이다 — 제목·시간·누구 일정인지는 블롭 안에 있다.
+// PC 의 당이(duri-sink)가 08:00 에 일정 브리핑을 하면 "brief-done" 으로 그날을 알려 오고,
+// 08:10 cron 은 그날 리마인드를 올리지 않는다 — 당이가 대신했으니. PC 가 꺼졌거나 당이가
+// 못 했으면 예전처럼 맡겨 둔 리마인드가 올라간다(fallback).
 const REMIND_PREFIX = "remind:";
+const BRIEF_KEY = "briefDone";
 export const REMIND_DAYS = 62; // 오늘부터 이만큼 앞까지만 받는다(앱은 60일치를 맡긴다)
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -401,6 +405,13 @@ export class DuriDO {
       this.state.blockConcurrencyWhile(() => this.calPut(conn, msg.id, msg.iv, msg.ct, msg.rev));
       return;
     }
+    // 당이가 오늘 아침 브리핑을 했다(싱크만, 오늘 날짜만) → 08:10 리마인드를 건너뛴다.
+    if (msg.type === "brief-done") {
+      if (conn.role !== "sink" || msg.date !== kstYmd()) return;
+      conn.stamps.push(now);
+      this.state.blockConcurrencyWhile(() => this.state.storage.put(BRIEF_KEY, msg.date));
+      return;
+    }
     // 아침 리마인드 맡기기: [from, to] 구간을 통째로 갈아 끼운다(브라우저만).
     if (msg.type === "remind-set") {
       if (conn.role !== "peer") return;
@@ -510,13 +521,14 @@ export class DuriDO {
     if (gone.length) await this.state.storage.delete(gone);
     for (const d of days) await this.state.storage.put(REMIND_PREFIX + d.date, { iv: d.iv, ct: d.ct });
   }
-  // 08:00 KST cron 이 부른다. 오늘 몫이 있으면 보통 메시지로 올리고(→ 실시간 전달·푸시·
+  // 08:10 KST cron 이 부른다. 오늘 몫이 있으면 보통 메시지로 올리고(→ 실시간 전달·푸시·
   // 싱크 백업), 오늘까지의 몫은 전부 지운다 — cron 이 두 번 돌아도 두 번 올리지 않고,
-  // 지나간 날짜가 쌓이지도 않는다.
+  // 지나간 날짜가 쌓이지도 않는다. 당이가 오늘 브리핑했으면 지우기만 한다.
   async fireReminder(today = kstYmd()) {
     const due = await this.state.storage.list({ prefix: REMIND_PREFIX, end: REMIND_PREFIX + today + "~" });
     const todays = due.get(REMIND_PREFIX + today);
     if (due.size) await this.state.storage.delete([...due.keys()]);
+    if (await this.state.storage.get(BRIEF_KEY) === today) return { date: today, posted: false, briefed: true };
     if (!todays) return { date: today, posted: false };
     const entry = await this.append({ kind: "msg", at: Date.now(), iv: todays.iv, ct: todays.ct });
     return { date: today, posted: true, seq: entry.seq };

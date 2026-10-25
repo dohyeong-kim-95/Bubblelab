@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  BOT_NAME, MAX_AGE_MS, buildContext, buildMessages, buildRecommendMessages, createAssistant, fitId, parseTrigger, plan, validateAction, whoKey, ymd,
+  BOT_NAME, MAX_AGE_MS, briefDue, briefFacts, briefFallback, buildBriefingMessages, buildContext, buildMessages, buildRecommendMessages,
+  calEventOnDate, createAssistant, fitId, kstYmd, parseTrigger, plan, validateAction, whoKey, ymd,
 } from "./assistant.mjs";
 
 const NOW = new Date(2026, 9, 25, 12, 0).getTime(); // 2026-10-25 (일) 정오, 로컬
@@ -481,4 +482,107 @@ test("recommend: 버킷리스트가 비어도 답한다, 모델이 죽으면 그
   }, { now: () => NOW });
   await a.onMessage({ name: "빵", text: "@당이 데이트 추천", at: NOW - 1000 });
   assert.match(said[0], /모델 서버/);
+});
+
+test("반복: calEventOnDate 가 웹앱(duri/index.html)의 recurMatches·calEventOnDate 와 같다", async () => {
+  const { readFileSync } = await import("node:fs");
+  const html = readFileSync(new URL("../../duri/index.html", import.meta.url), "utf8");
+  const src = ["recurMatches", "calEventOnDate"].map((f) => html.match(new RegExp(`function ${f}\\(ev, ds\\) \\{[\\s\\S]*?\\n\\}`))[0]).join("\n");
+  const app = new Function(`${src}; return calEventOnDate;`)();
+  const evs = [
+    { date: "2026-10-27", recur: { freq: "weekly" } },
+    { date: "2026-10-27", recur: { freq: "weekly", count: 3, exclude: ["2026-11-03"] } },
+    { date: "2026-01-31", recur: { freq: "monthly", until: "2026-12-31" } },
+    { date: "2024-02-29", recur: { freq: "yearly" } },
+    { date: "2026-10-30", recur: { freq: "daily", count: 2 } },
+    { date: "2026-11-03", endDate: "2026-11-04" },
+    { date: "2026-10-31" },
+  ];
+  for (const ev of evs) for (let i = -3; i < 60; i++) {
+    const d = new Date(2026, 9, 25 + i), ds = ymd(d);
+    assert.equal(calEventOnDate(ev, ds), app(ev, ds), `${JSON.stringify(ev)} @ ${ds}`);
+  }
+});
+
+test("브리핑: 08:00~08:09 KST, 그날 한 번만(PC 시간대와 무관, 08:10 은 서버 fallback)", () => {
+  const at = (iso) => Date.parse(iso); // UTC 로 적는다: KST = UTC+9
+  assert.equal(kstYmd(at("2026-10-25T23:30:00Z")), "2026-10-26");
+  assert.equal(briefDue(at("2026-10-25T22:59:00Z"), ""), false); // 07:59
+  assert.equal(briefDue(at("2026-10-25T23:00:00Z"), ""), true); // 08:00
+  assert.equal(briefDue(at("2026-10-25T23:09:00Z"), "2026-10-25"), true); // 08:09, 어제 했음
+  assert.equal(briefDue(at("2026-10-25T23:10:00Z"), ""), false); // 08:10 — 서버 리마인드 몫
+  assert.equal(briefDue(at("2026-10-25T23:30:00Z"), "2026-10-26"), false); // 이미 함
+  assert.equal(briefDue(at("2026-10-26T00:05:00Z"), "", "09:00"), true);
+  assert.equal(briefDue(at("2026-10-26T00:00:00Z"), "", "off"), false);
+});
+
+const BRIEF_EVENTS = [
+  { id: "b1", rev: 1, date: "2026-10-26", title: "치과", start: "15:00", owner: "쫑", shared: false },
+  { id: "b2", rev: 1, date: "2026-10-19", title: "테니스 레슨", start: "19:00", end: "20:00", recur: { freq: "weekly" }, owner: "쫑", shared: false },
+  { id: "b3", rev: 1, date: "2026-10-25", endDate: "2026-10-27", title: "출장", owner: "빵", shared: false },
+  { id: "b4", rev: 1, date: "2026-10-27", title: "저녁 약속", start: "18:30", shared: true },
+  { id: "b5", rev: 1, date: "2026-10-28", title: "모레 일정", shared: true },
+  { id: "b6", rev: 1, kind: "bucket", title: "제주도" },
+  { id: "b7", rev: 1, date: "2026-10-26", title: "지운 일정", deleted: true },
+];
+
+test("브리핑: 오늘·내일 일정을 코드가 고른다(반복·여러 날 포함, 지운 것·표식 제외)", () => {
+  const f = briefFacts(BRIEF_EVENTS, "2026-10-26");
+  assert.deepEqual(f.todays.map((i) => i.title), ["출장", "치과", "테니스 레슨"]);
+  assert.deepEqual(f.tomorrows.map((i) => i.title), ["출장", "저녁 약속"]);
+  const [sys, user] = buildBriefingMessages(f);
+  assert.match(sys.content, /다그당스/);
+  assert.match(user.content, /10\/26 \(월\)/);
+  assert.match(user.content, /- 19:00–20:00 테니스 레슨 \(쫑\)/);
+  assert.match(user.content, /- 출장 \(빵\)/);
+  assert.doesNotMatch(user.content, /모레 일정|지운 일정|제주도/);
+  assert.match(briefFallback({ today: "2026-10-26", todays: [], tomorrows: [] }), /오늘은 일정이 없승/);
+});
+
+function briefHarness(answer, events = BRIEF_EVENTS) {
+  const logs = [], said = [];
+  const a = createAssistant({
+    ask: async () => { if (answer instanceof Error) throw answer; return answer; },
+    events: () => events, apply: async () => {}, say: async (t) => { said.push(t); },
+    log: (...x) => logs.push(x.join(" ")),
+  }, { now: () => Date.parse("2026-10-25T23:00:00Z") });
+  return { a, logs, said };
+}
+
+test("브리핑: 모델 답이 오늘 일정을 다 담으면 그대로, 빠뜨리거나 모델이 죽으면 틀 문장", async () => {
+  const good = "좋은 아침이승~ ☀️\n· 빵이 출장 중이승\n· 오후 3시 쫑이 치과\n· 19:00 쫑이 테니스 레슨\n내일은 저녁 약속 있승! 힘내승~";
+  const ok = briefHarness({ reply: good });
+  assert.equal(await ok.a.brief(), good);
+  assert.match(ok.logs.join("\n"), /아침 브리핑 — 오늘 3개·내일 2개$/m);
+  assert.doesNotMatch(ok.logs.join("\n"), /치과/); // 내용은 로그에 없다
+
+  const missing = briefHarness({ reply: "좋은 아침이승! 오늘은 치과랑 테니스 레슨 있승" }); // 시각·출장 빠짐
+  const text = await missing.a.brief();
+  assert.match(text, /· 15:00 치과 \(쫑\)/);
+  assert.match(text, /· 출장 \(빵\)/);
+  assert.match(missing.logs.join("\n"), /틀 문장/);
+
+  const dead = briefHarness(new Error("down"));
+  assert.match(await dead.a.brief(), /오늘 일정 3개/);
+});
+
+test("브리핑: '@당이 브리핑' 이면 지금 바로 채팅에 한다", async () => {
+  const h = briefHarness({ reply: "오늘은 일정이 없승~ 푹 쉬승!" }, []);
+  await h.a.onMessage({ name: "쫑", text: "@당이 오늘 브리핑 해줘", at: Date.parse("2026-10-25T23:00:00Z") });
+  assert.deepEqual(h.said, ["오늘은 일정이 없승~ 푹 쉬승!"]);
+});
+
+test("빈 주말: 매주 반복되는 주말 일정이 있는 날은 비어 있지 않다", async () => {
+  const asks = [];
+  let n = 0; // 첫 질의는 분류, 두 번째가 추천
+  const b = createAssistant({
+    ask: async (m) => { asks.push(m); return n++ === 0 ? { op: "recommend" } : { reply: "피크닉 가자승" }; },
+    events: () => [{ id: "r1", rev: 1, date: "2026-10-31", title: "등산", recur: { freq: "weekly" }, shared: true }],
+    apply: async () => {}, say: async () => {},
+  }, { now: () => NOW });
+  await b.onMessage({ name: "쫑", text: "@당이 주말 데이트 추천해줘", at: NOW - 1000 });
+  const sys = asks.at(-1)[0].content;
+  const line = sys.split("\n").find((l) => l.startsWith("일정 없는 주말"));
+  assert.doesNotMatch(line, /10\/31|11\/7|11\/14/); // 토요일 등산(매주)
+  assert.match(line, /11\/1 \(일\)/);
 });

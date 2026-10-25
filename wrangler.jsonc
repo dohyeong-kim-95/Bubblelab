@@ -54,7 +54,8 @@
   ],
   // 매일 06:40 KST(21:40 UTC) 팟캐스트 자동 생성
   // · 08:00 KST(23:00 UTC) 운세 알림 + 아침 브리핑(날씨) 알림
-  "triggers": { "crons": ["40 21 * * *", "0 13 * * *", "0 23 * * *"] },
+  // · 08:10 KST(23:10 UTC) duri 오늘 일정 리마인드(당이가 08:00 에 브리핑 못 한 날만)
+  "triggers": { "crons": ["40 21 * * *", "0 13 * * *", "0 23 * * *", "10 23 * * *"] },
   "routes": [
     { "pattern": "bubblelab.dev/*", "zone_name": "bubblelab.dev" },
     { "pattern": "*.bubblelab.dev/*", "zone_name": "bubblelab.dev" }

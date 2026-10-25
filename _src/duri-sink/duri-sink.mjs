@@ -16,7 +16,7 @@ import { readFileSync, mkdirSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deriveKey, createStore, atomicWrite, encryptJson } from "./store.mjs";
-import { createAssistant, ollamaAsk, llamaAsk, parseTrigger, BOT_NAME } from "./assistant.mjs";
+import { createAssistant, ollamaAsk, llamaAsk, parseTrigger, briefDue, kstYmd, BOT_NAME } from "./assistant.mjs";
 import { createArchive } from "./archive.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -50,6 +50,8 @@ function loadConfig() {
       ollama: process.env.OLLAMA_URL || file.assistant?.ollama || "http://127.0.0.1:11434",
       model: process.env.DURI_MODEL || file.assistant?.model || "qwen2.5:7b",
       keepAlive: process.env.DURI_KEEP_ALIVE || file.assistant?.keepAlive || "1h",
+      // 아침 브리핑 시각(KST, "HH:MM"). false 또는 "off" 면 끈다.
+      briefing: process.env.DURI_BRIEF || (file.assistant?.briefing === false ? "off" : file.assistant?.briefing) || "08:00",
     },
   };
   for (const k of ["url", "token", "passphrase"]) {
@@ -255,6 +257,29 @@ async function assistantSay(text) {
   try { sendFrame({ type: "msg", ...f }); } catch (e) { log("당이 답 전송 실패:", String(e?.message || e)); }
 }
 
+// ── 아침 브리핑 ──────────────────────────────────────────────
+// 1분마다 시각을 보고, 그날(KST) 아직 안 했으면 당이가 일정 브리핑을 채팅에 올린다.
+// 마지막으로 한 날짜를 설치 폴더에 남겨 데몬을 다시 띄워도 두 번 하지 않는다. 서버에
+// 실제로 보낸 뒤에만 남긴다 — 연결이 끊겨 있으면 다음 분에 다시 한다. 보낸 뒤 서버에
+// "brief-done" 을 알려 08:10 의 "📅 캘린더" 리마인드(fallback)를 건너뛰게 한다.
+const briefPath = join(HERE, ".dangi-brief");
+let briefLast = (() => { try { return readFileSync(briefPath, "utf8").trim(); } catch { return ""; } })();
+let briefBusy = false;
+async function briefTick() {
+  if (briefBusy || !briefDue(Date.now(), briefLast, cfg.assistant.briefing) || socket?.readyState !== 1) return;
+  briefBusy = true;
+  try {
+    const day = kstYmd(Date.now()), text = await assistant.brief();
+    const f = await encryptJson(key, { name: BOT_NAME, text, at: Date.now(), sys: true });
+    sendFrame({ type: "msg", ...f });
+    sendFrame({ type: "brief-done", date: day });
+    briefLast = day;
+    atomicWrite(briefPath, day);
+  } catch (e) {
+    log("아침 브리핑 실패(다음 분에 다시):", String(e?.message || e));
+  } finally { briefBusy = false; }
+}
+
 // ── 시작 ─────────────────────────────────────────────────────
 const key = await deriveKey(cfg.passphrase);
 store = createStore({ dir: cfg.dir, key, fetchPhoto: downloadPhoto });
@@ -272,6 +297,10 @@ if (cfg.assistant.enabled) {
     log,
   });
   log(`일정 비서 당이 켜짐 — ${cfg.assistant.api === "llama" ? `llama-server @ ${cfg.assistant.llama}` : `${cfg.assistant.model} @ ${cfg.assistant.ollama}`} (채팅에서 "@당이 …")`);
+  if (cfg.assistant.briefing !== "off") {
+    setInterval(briefTick, 60_000);
+    log(`아침 브리핑 매일 ${cfg.assistant.briefing} KST`);
+  }
 }
 mkdirSync(cfg.dir, { recursive: true });
 log(`Duri 싱크 시작 — 저장 위치: ${cfg.dir}`);
