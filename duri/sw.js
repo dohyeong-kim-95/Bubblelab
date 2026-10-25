@@ -106,7 +106,7 @@ self.addEventListener("activate", (event) => event.waitUntil((async () => {
 // /_duri·/_rt(실시간·게이트 API)는 항상 최신이어야 하므로 손대지 않는다 —
 // 실제 데이터·인증은 이 캐시와 무관하게 매번 쿠키·E2E 패스프레이즈로 따로
 // 검증되므로, 셸(빈 껍데기 마크업)을 캐싱해도 보안엔 영향이 없다.
-const SHELL_CACHE = "duri-shell-v23";
+const SHELL_CACHE = "duri-shell-v24";
 
 // 문서(HTML)는 '네트워크 우선'. 앱을 열 때마다 최신 코드를 받아, index.html만
 // 바뀐 배포도 "다음 실행"이 아니라 바로 이번 실행에 반영된다(예전 stale-while-
@@ -153,19 +153,38 @@ self.addEventListener("fetch", (event) => {
   })());
 });
 
-// 이 기기에서 이미 앱 화면을 보고 있으면(포커스 중) 시스템 알림을 띄우지
-// 않는다 — 어차피 웹소켓으로 화면에 바로 뜨는데 알림까지 겹칠 필요가 없다.
+// 이 기기에서 이미 앱 화면을 보고 있으면 알림을 띄웠다 바로 닫는다 — 어차피 웹소켓으로
+// 화면에 바로 뜨는데 알림까지 겹칠 필요가 없다. 서버는 접속 중인 기기에도 보낸다.
 //
-// 판정은 **focused 만** 믿는다. iOS(홈 화면 PWA)는 백그라운드로 내려간 창을
-// visibilityState:"visible" 로 보고하는 경우가 있어서, 그 말을 믿고 알림을
-// 건너뛰면 iOS 기준 "푸시를 받고도 알림을 안 띄운 것"(silent push)이 된다.
-// iOS 는 이걸 예산에서 깎고, 반복되면 **구독 자체를 취소**해 버린다 — 알림이
-// 어느 날부터 조용히 영영 안 오는 가장 흔한 경로다. 접속 중인 기기에는 서버가
-// 애초에 푸시를 보내지 않으므로(notifyPush 의 activeEndpoints), 이 판정을
-// 좁혀도 "보고 있는데 알림이 겹치는" 일은 거의 생기지 않는다.
+// clients 의 visibilityState 는 믿지 않는다. iOS(홈 화면 PWA)는 백그라운드로 내려간 창도
+// "visible" 로 보고해서, 그걸 믿으면 내려 둔 사이 알림이 사라진다. 반대로 앞에 떠 있는
+// 창도 focused:false 로 보고해서, focused 만 믿으면 **두리를 보고 있는데 알림이 계속
+// 뜬다**(2026-10-25). 그래서 페이지가 직접 알려 준다: 화면 앞뒤로 갈 때와 10초마다
+// app-foreground / app-background 를 보내고, 기록이 없으면(서비스워커가 새로 떴을 때)
+// 물어본다 — 얼어 있는 백그라운드 페이지는 답하지 못하므로 답이 오면 앞에 있는 것이다.
+const FG_TTL_MS = 30_000;
+const appState = new Map(); // client id → { fg, at }
+const fgWaiters = new Set();
+self.addEventListener("message", (event) => {
+  const type = event.data?.type;
+  if (type !== "app-foreground" && type !== "app-background") return;
+  appState.set(event.source?.id ?? "?", { fg: type === "app-foreground", at: Date.now() });
+  if (type === "app-foreground") for (const w of [...fgWaiters]) w();
+});
 async function isAppFocused() {
   const list = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-  return list.some((c) => c.focused === true);
+  if (list.some((c) => c.focused === true)) return true;
+  if (!list.length) return false;
+  const now = Date.now();
+  const known = list.map((c) => appState.get(c.id ?? "?")).filter((s) => s && now - s.at < FG_TTL_MS);
+  if (known.length) return known.some((s) => s.fg);
+  return new Promise((resolve) => {
+    const done = (v) => { clearTimeout(timer); fgWaiters.delete(onFg); resolve(v); };
+    const onFg = () => done(true);
+    const timer = setTimeout(() => done(false), 500);
+    fgWaiters.add(onFg);
+    for (const c of list) { try { c.postMessage({ type: "visibility-query" }); } catch { /* 닫히는 중 */ } }
+  });
 }
 
 // 서버에 "이 기기에 도착했다"를 알린다(+ 알림을 띄웠는지·오류). 발송 성공은 애플·구글이

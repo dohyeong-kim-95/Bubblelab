@@ -765,7 +765,7 @@ async function loadServiceWorker({ clients: windows = [] } = {}) {
   const clientsApi = { matchAll: async () => windows, claim: async () => {}, openWindow: async () => {} };
   const self = { addEventListener: (type, fn) => { handlers[type] = fn; }, registration, clients: clientsApi, skipWaiting() {} };
   vm.runInNewContext(src, { self, clients: clientsApi, caches: {}, fetch: async () => new Response(null), Response, URL,
-    TextEncoder, TextDecoder, btoa, atob, crypto, setTimeout, console });
+    TextEncoder, TextDecoder, btoa, atob, crypto, setTimeout, clearTimeout, Date, console });
   const fire = async (type, init) => {
     let job = null;
     handlers[type]?.({ ...init, waitUntil: (p) => { job = p; } });
@@ -788,27 +788,70 @@ test("sw: 앱이 닫혀 있으면 알림이 남는다", async () => {
   assert.equal(sw.open[0].tag, "duri-msg");
 });
 
-// 스펙(아직 실패) — 두리 화면 안에 있으면 연속으로 메시지가 와도 남는 알림이 없어야 한다.
-// 확인(2026-10-25, iPhone 홈 화면 PWA): 채팅을 보고 있는데 "빵 / from Duri / 헉아직두?" 처럼
-// 보낸 사람·본문이 든 **진짜 알림** 배너가 떴다 — 조용한 "💞 Duri" 가 아니므로 isAppFocused() 가
-// false 였다는 뜻이다(알림을 띄웠다 닫는 길로 가지 않았다).
-// iOS 홈 화면 PWA 는 앞에 떠 있는 창도 focused:false 로 보고할 수 있고, 백그라운드 창도
-// visibilityState:"visible" 로 보고할 수 있어 sw.js 가 clients 만으로는 구분하지 못한다.
-// 그래서 앱이 앞/뒤로 갈 때 서비스워커에 직접 알려 주고({type:"app-foreground"} /
-// {type:"app-background"}), sw.js 는 최근 "앞" 신호를 믿는 방향을 가정한다. 고치면 todo 를 뗀다.
-test("sw: 두리 화면 안(iOS: focused:false·visible)에서는 메시지가 연달아 와도 알림이 남지 않는다", { todo: "두리 안에서 알림이 계속 온다 — 미해결" }, async () => {
-  const win = { focused: false, visibilityState: "visible", postMessage() {} };
+// "두리 안에 있는데 알림이 계속 온다"(2026-10-25, iPhone 홈 화면 PWA): 채팅을 보고 있는데
+// "빵 / from Duri / 헉아직두?" 처럼 보낸 사람·본문이 든 진짜 알림 배너가 떴다. iOS 는 앞에 떠
+// 있는 창도 focused:false 로, 내려 둔 창도 visibilityState:"visible" 로 보고해서 clients 만으론
+// 구분이 안 된다 — 페이지가 app-foreground/app-background 를 직접 알려 준다(index.html tellSwVisibility).
+const iosWindow = () => ({ id: "w1", focused: false, visibilityState: "visible", postMessage() {} });
+
+test("sw: 두리 화면 안(iOS: focused:false·visible)에서는 메시지가 연달아 와도 알림이 남지 않는다", async () => {
+  const win = iosWindow();
   const sw = await loadServiceWorker({ clients: [win] });
   await sw.fire("message", { data: { type: "app-foreground" }, source: win });
   for (let seq = 1; seq <= 3; seq++) await sw.push({ kind: "generic", seq });
   assert.equal(sw.open.length, 0);
 });
 
-test("sw: 두리를 내려 두면(iOS: 여전히 visible 로 보고) 알림이 남는다", { todo: "위 스펙과 짝 — 고칠 때 silent push 로 새지 않는지 확인" }, async () => {
-  const win = { focused: false, visibilityState: "visible", postMessage() {} };
+test("sw: 두리를 내려 두면(iOS: 여전히 visible 로 보고) 알림이 남는다", async () => {
+  const win = iosWindow();
   const sw = await loadServiceWorker({ clients: [win] });
   await sw.fire("message", { data: { type: "app-foreground" }, source: win });
   await sw.fire("message", { data: { type: "app-background" }, source: win });
   await sw.push({ kind: "generic", seq: 1 });
   assert.equal(sw.open.length, 1);
+});
+
+test("sw: 기록이 없으면(서비스워커가 새로 뜸) 페이지에 물어보고, 답하면 앞에 있는 것으로 본다", async () => {
+  let sw;
+  const win = { ...iosWindow(), postMessage(m) { if (m.type === "visibility-query") sw.fire("message", { data: { type: "app-foreground" }, source: win }); } };
+  sw = await loadServiceWorker({ clients: [win] });
+  await sw.push({ kind: "generic", seq: 1 });
+  assert.equal(sw.open.length, 0);
+});
+
+test("sw: 물어봐도 답이 없으면(얼어 있는 백그라운드 페이지) 알림이 남는다", async () => {
+  const sw = await loadServiceWorker({ clients: [iosWindow()] });
+  await sw.push({ kind: "generic", seq: 1 });
+  assert.equal(sw.open.length, 1);
+});
+
+test("sw: 앞 신호가 30초 넘게 끊기면 믿지 않는다(내려 갈 때 신호를 못 보낸 경우)", async () => {
+  const win = iosWindow();
+  const sw = await loadServiceWorker({ clients: [win] });
+  const realNow = Date.now;
+  try {
+    await sw.fire("message", { data: { type: "app-foreground" }, source: win });
+    Date.now = () => realNow() + 31_000;
+    await sw.push({ kind: "generic", seq: 1 });
+  } finally { Date.now = realNow; }
+  assert.equal(sw.open.length, 1);
+});
+
+test("sw: 테스트 알림은 앱을 보고 있어도 남는다(🩺 알림 진단)", async () => {
+  const win = iosWindow();
+  const sw = await loadServiceWorker({ clients: [win] });
+  await sw.fire("message", { data: { type: "app-foreground" }, source: win });
+  await sw.push({ kind: "test", nonce: "n1" });
+  assert.equal(sw.open.length, 1);
+});
+
+test("index.html 이 서비스워커에 화면 앞뒤를 알린다(sw.js 와 메시지 이름이 같아야 한다)", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const html = await readFile(new URL("../duri/index.html", import.meta.url), "utf8");
+  const sw = await readFile(new URL("../duri/sw.js", import.meta.url), "utf8");
+  for (const name of ["app-foreground", "app-background", "visibility-query"]) {
+    assert.ok(html.includes(`"${name}"`), `index.html 에 ${name} 없음`);
+    assert.ok(sw.includes(`"${name}"`), `sw.js 에 ${name} 없음`);
+  }
+  assert.match(html, /addEventListener\("pagehide", \(\) => tellSwVisibility\(true\)\)/);
 });

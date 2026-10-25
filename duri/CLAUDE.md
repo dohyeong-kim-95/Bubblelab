@@ -92,6 +92,11 @@ npm test                                                          # 인프라 �
   말 것** — 백그라운드 재접속(배포마다 일어난다)이 "보는 중"으로 잡혀 푸시가 끊겼다.
   구독별 마지막 발송 결과는 `/_duri/status` 의 `push` 칸(싱크 토큰 `Authorization:
   Bearer` 로 조회 가능), 사용자용은 앱의 ⚙️ → 🩺 알림 진단.
+- **"보는 중" 판정은 페이지가 직접 알려 준다.** iOS 홈 화면 PWA 는 앞 창도 `focused:false`, 내려 둔 창도
+  `visibilityState:"visible"` 로 보고해서 `clients` 만으론 구분이 안 된다(두리를 보는데 진짜 알림이 계속
+  뜨던 원인). `index.html` 의 `tellSwVisibility` 가 `app-foreground`/`app-background` 를 보내고(전환·10초마다·
+  pagehide), `sw.js` 의 `isAppFocused` 가 30초 안의 신호를 믿고 없으면 `visibility-query` 로 물어본다(500ms).
+  어느 쪽이든 알림은 띄웠다 닫는다 — 건너뛰지 않는다. 테스트는 `_infra/duri.test.mjs` 의 `sw:` 들.
 - DuriDO는 `idFromName("main")` 단일 인스턴스다(`_infra/worker.js:653 (handleDuri)`).
   배포해도 **살아 있는 WebSocket이 있으면 옛 코드가 계속 돈다** — 서버 동작이 안
   바뀐 것처럼 보이면 PC 싱크와 열린 탭을 모두 끊었다가 다시 붙여 본다.
