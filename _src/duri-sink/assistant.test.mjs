@@ -279,3 +279,44 @@ test("운동: 운동 낱말이 없으면 운동 동작을 쓰지 않는다", () 
   assert.equal(validateAction({ op: "fit", date: "2026-10-25" }, ctx, TODAY, "오늘 러닝했어").op, "fit");
   assert.equal(validateAction({ op: "fitlist" }, ctx, TODAY, "이번주 운동 요약해줘").op, "fitlist");
 });
+
+test("기억: recall 은 백업에서 찾은 줄만 모델에 주고 그 답을 한다(쓰기 없음)", async () => {
+  const said = [], asks = [], searched = [], applied = [];
+  const answers = [{ op: "recall", query: "카페 이름" }, { reply: "어니언이었승! 푸히힝" }];
+  const a = createAssistant({
+    ask: async (m) => { asks.push(m); return answers.shift(); },
+    events: () => EVENTS, apply: async (p) => { applied.push(p); }, say: async (t) => { said.push(t); },
+    archive: { search: (q) => { searched.push(q); return ["9/12 (토) 13:00 도경: 성수동 카페 어니언 가자"]; } },
+  }, { now: () => NOW });
+  await a.onMessage({ name: "민지", text: "@당이 우리 갔던 카페 이름 뭐였지", at: NOW - 1000 });
+  assert.deepEqual(searched, [{ terms: ["카페", "이름"], from: "2023-10-23", to: "2026-10-25" }]); // 기간 없으면 3년(3×366일)
+  assert.match(asks[1][0].content, /성수동 카페 어니언 가자/);
+  assert.match(asks[1][1].content, /말한 사람: 민지/);
+  assert.equal(asks[1][2].content, "우리 갔던 카페 이름 뭐였지");
+  assert.deepEqual(said, ["어니언이었승! 푸히힝"]);
+  assert.equal(applied.length, 0);
+});
+
+test("기억: 기간 해석, 못 찾음, 백업 없음", async () => {
+  const ctx = buildContext(EVENTS, TODAY);
+  assert.deepEqual(validateAction({ op: "recall", query: "", month: "2026-09" }, ctx, TODAY), { op: "recall", terms: [], from: "2026-09-01", to: "2026-09-30" });
+  assert.deepEqual(validateAction({ op: "recall" }, ctx, TODAY), { op: "recall", terms: [], from: "2026-10-24", to: "2026-10-25" });
+  assert.deepEqual(validateAction({ op: "recall", query: "얘기", from: "2026-10-24", to: "2026-10-24" }, ctx, TODAY).terms, []); // 뜻 없는 낱말은 버린다
+  assert.deepEqual(validateAction({ op: "recall", query: ["여행"], from: "2026-10-20", to: "2026-12-01" }, ctx, TODAY).to, "2026-10-25");
+  const run = async (archive) => {
+    const said = [];
+    await createAssistant({ ask: async () => ({ op: "recall", query: "제주" }), events: () => [], apply: async () => {}, say: async (t) => { said.push(t); }, archive },
+      { now: () => NOW }).onMessage({ name: "민지", text: "@당 제주 언제 갔지", at: NOW });
+    return said[0];
+  };
+  assert.match(await run({ search: () => [] }), /못 찾았승.*"제주"/);
+  assert.match(await run(undefined), /백업 기록을 읽을 수 없어요/);
+});
+
+test("말한 사람 이름은 긴 지시문 뒤 별도 시스템 메시지로 간다(앞부분 재사용)", () => {
+  const ctx = buildContext(EVENTS, TODAY);
+  const a = buildMessages("안녕", ctx, "도경"), b = buildMessages("안녕", ctx, "민지");
+  assert.equal(a[0].content, b[0].content);
+  assert.match(a[1].content, /말한 사람: 도경/);
+  assert.equal(a[2].content, "안녕");
+});

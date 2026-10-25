@@ -16,7 +16,8 @@ import { readFileSync, mkdirSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deriveKey, createStore, atomicWrite, encryptJson } from "./store.mjs";
-import { createAssistant, ollamaAsk, BOT_NAME } from "./assistant.mjs";
+import { createAssistant, ollamaAsk, parseTrigger, BOT_NAME } from "./assistant.mjs";
+import { createArchive } from "./archive.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const fatal = (msg) => { console.error("✖", msg); process.exit(1); };
@@ -255,6 +256,9 @@ if (cfg.assistant.enabled) {
     events: () => store.calendarEvents(),
     apply: assistantApply,
     say: assistantSay,
+    // 당이가 지난 대화를 찾아 읽는 백업 — 읽기 전용(archive.mjs 엔 쓰는 함수가 없다).
+    // 당이 자신의 답과 "@당이 …" 명령은 근거에서 뺀다.
+    archive: createArchive(cfg.dir, { skip: (name, text) => name === BOT_NAME || parseTrigger(text) !== null }),
     log,
   });
   log(`일정 비서 당이 켜짐 — ${cfg.assistant.model} @ ${cfg.assistant.ollama} (채팅에서 "@당이 …")`);

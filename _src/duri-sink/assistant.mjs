@@ -81,13 +81,19 @@ export function buildContext(events, today) {
   return { aliases, days, past, months: `이번 달 ${monthOf(0)}, 지난달 ${monthOf(-1)}, 다음 달 ${monthOf(1)}` };
 }
 
-export function buildMessages(command, ctx) {
+const PERSONA = [
+  "당이는 갈색 털에 앞머리가 덥수룩한 조랑말이다. 당근을 제일 좋아하고, 기분 좋으면 '푸히힝' 하고 웃는다.",
+  "말끝을 '~승'으로 맺는 다정한 반말을 쓴다(예: 좋승~, 알겠승!, 해냈승!, 미안하당…).",
+];
+// 말한 사람은 맨 뒤 시스템 메시지로 따로 준다 — 앞쪽(긴 지시문)이 사람마다 같아야 Ollama 가 재사용한다.
+const whoMessage = (sender) => ({ role: "system", content: `말한 사람: ${sender}. 답할 때 이름을 불러 줘도 좋다(예: ${sender}아/야).` });
+
+export function buildMessages(command, ctx, sender) {
   const evLines = [...ctx.aliases].map(([a, e]) =>
     `${a}: ${e.date}${e.endDate ? `~${e.endDate}` : ""}${e.start ? ` ${e.start}${e.end ? `-${e.end}` : ""}` : " 종일"} "${e.title ?? ""}"${e.recur?.freq ? " (반복)" : ""}`);
   const system = [
     "너는 두 사람이 같이 쓰는 캘린더의 일정 비서 '당이'다. 사용자의 한국어 요청을 읽고 할 일을 JSON 하나로만 답한다.",
-    "당이는 갈색 털에 앞머리가 덥수룩한 조랑말이다. 당근을 제일 좋아하고, 기분 좋으면 '푸히힝' 하고 웃는다.",
-    "말끝을 '~승'으로 맺는 다정한 반말을 쓴다(예: 좋승~, 알겠승!, 해냈승!, 미안하당…).",
+    ...PERSONA,
     "형식(하나만 고른다):",
     '{"op":"add","title":"제목","date":"YYYY-MM-DD","endDate":"YYYY-MM-DD 또는 생략","start":"HH:MM 또는 생략","end":"HH:MM 또는 생략"}',
     '{"op":"list","from":"YYYY-MM-DD","to":"YYYY-MM-DD"}',
@@ -96,27 +102,48 @@ export function buildMessages(command, ctx) {
     '{"op":"fit","date":"YYYY-MM-DD","memo":"한 줄 메모 또는 생략"}',
     '{"op":"unfit","date":"YYYY-MM-DD"}',
     '{"op":"fitlist","month":"YYYY-MM"} 또는 {"op":"fitlist","week":"this 또는 last"}',
+    '{"op":"recall","query":"찾을 낱말 1~3개(없으면 빈칸)","from":"YYYY-MM-DD 또는 생략","to":"YYYY-MM-DD 또는 생략","month":"YYYY-MM 또는 생략"}',
     '{"op":"chat","reply":"당이 말투로 1~3문장 답"}',
     '{"op":"unknown","reason":"짧은 이유"}',
     "규칙: 날짜는 아래 날짜표에서만 고른다. 요일·'다음주'·'내일'은 날짜표로 바꾼다. 시간이 없으면 start 를 생략한다(종일).",
     "오후 3시는 15:00. 옮기기·삭제는 아래 일정 목록의 e번호로만 가리킨다. 목록에 없으면 unknown.",
     "운동 인증(운동·헬스·러닝 같은 운동 얘기일 때만. 일정·여행 얘기엔 쓰지 않는다): '운동했어'·'오늘 헬스 1시간' 은 말한 사람의 그날 운동 체크(fit, 날짜 없으면 오늘, memo 는 운동 종류·양만 적고 없으면 생략). 체크 취소는 unfit, '이번 달 운동 몇 번?'·'운동 기록'·'운동 요약' 은 fitlist(달이면 month, 이번 주·지난주면 week).",
+    "기억: 둘이 예전에 나눈 얘기·보낸 사진·있었던 일을 물으면(그 카페 이름 뭐였지? 지난달에 어디 갔었지? 어제 무슨 얘기 했어?) recall. query 엔 찾을 핵심 낱말만(조사 빼고), 기간을 말했으면 from/to 나 month.",
     "일정과 상관없는 인사·잡담·간단한 질문이면 chat 으로 짧게 답한다. 날씨·뉴스·시세처럼 지금 정보는 모른다고 솔직히 말한다.",
     "",
     `달: ${ctx.months}`,
-    `지난 날(운동 인증 fit·unfit 에만 쓴다): ${ctx.past}`,
+    `지난 날(운동 인증 fit·unfit 과 기억 recall 에만 쓴다): ${ctx.past}`,
     "날짜표:",
     ...ctx.days,
     "",
     "일정 목록:",
     ...(evLines.length ? evLines : ["(없음)"]),
   ].join("\n");
-  return [{ role: "system", content: system }, { role: "user", content: command }];
+  const out = [{ role: "system", content: system }];
+  if (sender) out.push(whoMessage(sender));
+  out.push({ role: "user", content: command });
+  return out;
+}
+
+/** 기억(recall) 2단계: 백업에서 찾은 줄만 근거로 답하게 한다. */
+export function buildRecallMessages(command, lines, sender) {
+  const system = [
+    "너는 두 사람의 채팅 앱에 사는 비서 '당이'다.",
+    ...PERSONA,
+    "아래는 두 사람의 지난 대화 기록 중 질문과 관련된 부분이다(시간순, '날짜 시각 이름: 내용').",
+    "이 기록에 있는 것만 근거로 1~3문장으로 답한다. 기록에 없으면 모른다고 한다. 지어내지 않는다.",
+    '답은 JSON {"reply":"…"} 하나로만.',
+    "",
+    "기록:",
+    ...lines,
+  ].join("\n");
+  return [{ role: "system", content: system }, ...(sender ? [whoMessage(sender)] : []), { role: "user", content: command }];
 }
 
 /** 모델 답을 믿지 않고 검증한다. 통과하면 정규화된 동작, 아니면 { op:"unknown", reason }. */
 // 운동 얘기인지 — 작은 모델이 "이번 주 일정"·"제주 여행" 까지 운동 요약으로 고르는 일이 있어서
 // 요청에 운동 낱말이 없으면 운동 동작을 일정 동작으로 돌린다(command 를 모르면 검사하지 않는다).
+const RECALL_STOP = new Set(["얘기", "이야기", "대화", "무슨", "뭐", "뭘", "우리", "했어", "했지", "했던", "기록", "내용", "언제", "어디", "누가", "그", "거"]);
 const FIT_WORDS = /운동|헬스|러닝|런닝|조깅|달리|뛰|걷기|걸었|산책|수영|요가|필라테스|PT|피티|스쿼트|자전거|등산|클라이밍|크로스핏|홈트|스트레칭|💪/i;
 
 export function validateAction(raw, ctx, today, command) {
@@ -192,6 +219,25 @@ export function validateAction(raw, ctx, today, command) {
       const month = typeof raw.month === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(raw.month) ? raw.month : today.slice(0, 7);
       const last = ymd(new Date(Number(month.slice(0, 4)), Number(month.slice(5)), 0));
       return { op: "fitlist", from: `${month}-01`, to: last, month };
+    }
+    case "recall": {
+      const q = Array.isArray(raw.query) ? raw.query.join(" ") : String(raw.query ?? "");
+      // "어제 무슨 얘기 했지" 에 모델이 query:"얘기" 를 넣는다 — 그런 낱말로 찾으면 오히려 다 놓친다.
+      const terms = q.split(/[\s,]+/).map((s) => s.trim().slice(0, 20))
+        .filter((s) => s && !RECALL_STOP.has(s)).slice(0, 4);
+      let from = null, to = today;
+      if (typeof raw.month === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(raw.month)) {
+        from = `${raw.month}-01`;
+        to = ymd(new Date(Number(raw.month.slice(0, 4)), Number(raw.month.slice(5)), 0));
+      } else {
+        if (isYmd(raw.from)) from = raw.from;
+        if (isYmd(raw.to)) to = raw.to;
+      }
+      // 기간이 없으면: 낱말이 있으면 전부(3년), 없으면 어제·오늘(그냥 "무슨 얘기 했어?").
+      if (!from) from = terms.length ? addDays(today, -3 * 366) : addDays(today, -1);
+      if (to > today) to = today;
+      if (from > to) from = to;
+      return { op: "recall", terms, from, to };
     }
     case "chat": {
       const reply = String(raw.reply ?? "").trim().slice(0, 400);
@@ -291,7 +337,8 @@ export function ollamaAsk({ url, model, keepAlive, timeoutMs = 180_000 }) {
     const res = await fetch(`${url.replace(/\/+$/, "")}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model, messages, stream: false, format: "json", options: { temperature: 0 },
+      // num_ctx: Ollama 기본 4096 이면 일정 40개 + 날짜표로 2900 토큰이라 빠듯하다. 넘치면 앞(지시문)이 잘린다.
+      body: JSON.stringify({ model, messages, stream: false, format: "json", options: { temperature: 0, num_ctx: 8192 },
         ...(keepAlive && { keep_alive: keepAlive }) }),
       signal: AbortSignal.timeout(timeoutMs),
     });
@@ -331,13 +378,18 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
     const today = ymd(new Date(now()));
     const ctx = buildContext(io.events(), today);
     let raw;
-    try { raw = await io.ask(buildMessages(command, ctx)); }
+    try { raw = await io.ask(buildMessages(command, ctx, name)); }
     catch (e) {
       io.log?.("당이: 모델 호출 실패", String(e?.message || e));
       await io.say("🤖 로컬 모델이 응답하지 않아요 (PC의 Ollama 확인)");
       return;
     }
     const action = validateAction(raw, ctx, today, command);
+    if (action.op === "recall") {
+      io.log?.("당이:", JSON.stringify({ op: "recall", terms: action.terms, from: action.from, to: action.to }), "→ recall");
+      await io.say(await recall(action, command, name));
+      return;
+    }
     io.log?.("당이:", JSON.stringify(raw), "→", action.op);
     if (action.op === "move" || action.op === "delete") {
       pending.set(name, { action, until: now() + PENDING_MS });
@@ -347,6 +399,23 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
     const p = plan(action, { events: io.events(), sender: name, now: now() });
     if (p.puts.length || p.dels.length) await io.apply(p);
     await io.say(p.reply);
+  }
+
+  // 백업(io.archive, 읽기 전용)에서 관련 줄을 찾아 그것만 보여 주고 답하게 한다.
+  async function recall(action, command, name) {
+    if (!io.archive) return "🤖 백업 기록을 읽을 수 없어요";
+    const lines = io.archive.search({ terms: action.terms, from: action.from, to: action.to });
+    const span = action.from === action.to ? label(action.from) : `${label(action.from)}~${label(action.to)}`;
+    if (!lines.length) return `기록에서 못 찾았승… (${span}${action.terms.length ? `, "${action.terms.join(" ")}"` : ""})`;
+    let raw;
+    try { raw = await io.ask(buildRecallMessages(command, lines, name)); }
+    catch (e) {
+      io.log?.("당이: 모델 호출 실패", String(e?.message || e));
+      return "🤖 로컬 모델이 응답하지 않아요 (PC의 Ollama 확인)";
+    }
+    io.log?.(`당이: 기억 ${lines.length}줄 읽고 답함`); // 대화 내용은 로그에 남기지 않는다
+    const reply = String(raw?.reply ?? "").trim().slice(0, 600);
+    return reply || "기록은 읽었는데 뭐라고 할지 모르겠승…";
   }
 
   return {
