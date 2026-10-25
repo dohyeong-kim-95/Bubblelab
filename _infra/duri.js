@@ -17,10 +17,10 @@
 //                { type:"msg", iv, ct }             … E2E 암호화된 텍스트
 //                { type:"ack", seq }                … (sink) seq 까지 디스크 보존 완료
 //                { type:"pong" }
-//   서버 → 클라: { type:"welcome", head, online }   … 현재 최신 seq + 접속 인원(peer 만)
+//   서버 → 클라: { type:"welcome", head, online, sink } … 최신 seq + 접속 인원(peer 만) + PC 싱크 접속 여부
 //                { type:"entry", ... }              … 버퍼/실시간 항목(아래 참조)
 //                { type:"backfill-done", head }
-//                { type:"presence", online }
+//                { type:"presence", online, sink }
 //                { type:"ping" } / { type:"error", error }
 //
 // entry(텍스트): { type:"entry", seq, kind:"msg", at, iv, ct }
@@ -321,8 +321,8 @@ export class DuriDO {
           await this.state.storage.put(PEER_PREFIX + dev, { seq: since, at: Date.now(), who: who ?? cur?.who ?? null });
         });
       }
-      this.send(conn, { type: "welcome", head: this.head, online: this.peerCount() });
-      this.broadcast({ type: "presence", online: this.peerCount() }, conn);
+      this.send(conn, { type: "welcome", head: this.head, ...this.presence() });
+      this.broadcast({ type: "presence", ...this.presence() }, conn);
       this.backfill(conn, since);
       return;
     }
@@ -897,6 +897,11 @@ export class DuriDO {
     for (const c of this.conns) if (c.role === "peer") n++;
     return n;
   }
+  // sink: PC 싱크가 붙어 있는지. 채팅의 "@당이" 비서는 PC 에서 도므로, 꺼져 있으면
+  // 앱이 바로 "자고 있어요" 라고 알려 줄 수 있게 한다(사람 수 online 과는 따로 센다).
+  presence() {
+    return { online: this.peerCount(), sink: [...this.conns].some((c) => c.role === "sink") };
+  }
   send(conn, obj) {
     if (!conn) return; // 보낸 주체가 없는 경로(내부 호출)도 있다
     try { conn.ws.send(JSON.stringify(obj)); } catch { this.onClose(conn); }
@@ -912,6 +917,6 @@ export class DuriDO {
 
   onClose(conn) {
     if (!this.conns.delete(conn)) return;
-    this.broadcast({ type: "presence", online: this.peerCount() });
+    this.broadcast({ type: "presence", ...this.presence() });
   }
 }

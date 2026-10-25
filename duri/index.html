@@ -1592,7 +1592,7 @@ function connect() {
   ws.onmessage = (e) => {
     let m; try { m = JSON.parse(e.data); } catch { return; }
     if (m.type === "ping") { ws.send(JSON.stringify({ type: "pong" })); return; }
-    if (m.type === "welcome" || m.type === "presence") { setStatus(true, m.online > 1); return; }
+    if (m.type === "welcome" || m.type === "presence") { setStatus(true, m.online > 1); sinkAwake = !!m.sink; return; }
     // 접속 직후엔 최근 것만 온다. 서버에 그 앞이 더 남아 있으면 위로 올릴 때 가져간다.
     if (m.type === "backfill-done" || m.type === "older-done") {
       serverHasOlder = !!m.more;
@@ -2384,7 +2384,7 @@ function appendRecord(rec, { silent = false, into = null } = {}) {
   seen.add(rec.seq);
   if (rec.seq > getLastSeq()) setLastSeq(rec.seq);
   // 상대 이름을 알아야 색상 설정에 상대 칸을 보여줄 수 있다. 시스템 알림(📅 캘린더 리마인드·
-  // 🤖 비서)은 사람이 아니라서 상대 이름으로 기억하면 안 된다 — 색 설정이 비서 이름으로 바뀐다.
+  // 🤖 당이)은 사람이 아니라서 상대 이름으로 기억하면 안 된다 — 색 설정이 비서 이름으로 바뀐다.
   if (rec.name && !rec.sys) notePeerName(rec.name);
   collectPin(rec).catch(() => {}); // 위치가 있으면 지도 핀으로(공유 저장소에 올린다)
   // silent(초기 히스토리 대량 로드)일 땐 스크롤 위치를 매번 재지 않는다 —
@@ -2621,6 +2621,18 @@ async function fetchPhotoBlob(m) {
 async function sendText(text) {
   const frame = await encryptJson({ name: MY_NAME, text, at: Date.now() });
   ws.send(JSON.stringify({ type: "msg", ...frame }));
+  if (DANGI_RE.test(text) && !sinkAwake) setTimeout(() => localNotice("💤 당이가 자고 있어요 (PC가 꺼져 있어요)"), 400);
+}
+// "@당이"(일정 비서)는 PC 싱크(_src/duri-sink/assistant.mjs)에서 돈다 — 같은 규칙이어야 한다.
+// 싱크가 안 붙어 있으면(서버 presence 의 sink) 답할 쪽이 없으니 이 기기에서만 바로 알린다.
+const DANGI_RE = /^\s*@당이?(?=\s|$)/;
+let sinkAwake = false;
+function localNotice(text) { // 이 화면에만 그리는 알림(전송·저장하지 않는다)
+  const notice = document.createElement("div"); notice.className = "sysnotice";
+  const span = document.createElement("span"); span.textContent = text; notice.appendChild(span);
+  log().appendChild(notice);
+  grpSender = null;
+  scroll();
 }
 // 오픈카톡 입장 메시지 벤치마킹: 실제 대화가 아니라 "무슨 일이 있었는지" 알리는
 // 문구. 진짜 메시지처럼 E2E 암호화되어 상대·PC 백업에도 남지만, sys 플래그로

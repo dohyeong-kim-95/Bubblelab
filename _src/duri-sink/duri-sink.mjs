@@ -40,7 +40,7 @@ function loadConfig() {
     token: process.env.DURI_TOKEN || file.token,
     passphrase: process.env.DURI_PASSPHRASE || file.passphrase,
     dir: process.env.DURI_DIR || file.dir || join(HERE, "DuriStorage"),
-    // 일정 비서(선택, 기본 꺼짐) — 로컬 Ollama 로 "@비서 …" 를 처리한다(assistant.mjs).
+    // 일정 비서 "당이"(선택, 기본 꺼짐) — 로컬 Ollama 로 "@당이 …" 를 처리한다(assistant.mjs).
     assistant: {
       enabled: process.env.DURI_ASSISTANT ? process.env.DURI_ASSISTANT === "1" : Boolean(file.assistant?.enabled),
       ollama: process.env.OLLAMA_URL || file.assistant?.ollama || "http://127.0.0.1:11434",
@@ -108,8 +108,10 @@ async function drain() {
     try {
       const payload = await store.persist(entry);
       decryptFails = 0;
-      // 보존이 끝난 뒤에만 비서에게 넘긴다(비서가 느려도 persist → ack 순서는 그대로).
-      if (assistant && payload?.text) assistant.onMessage({ name: payload.name, text: payload.text, at: payload.at ?? entry.at });
+      // 보존이 끝난 뒤에만 당이에게 넘긴다(느려도 persist → ack 순서는 그대로). 접속 직후
+      // 백필로 받은 것은 싱크가 없던 동안 온 말이다 — 그때 앱이 이미 "당이가 자고 있어요" 라고
+      // 했으니 실행하지 않는다. 실시간으로 받은 것(live)만 처리한다.
+      if (assistant && entry.live && payload?.text) assistant.onMessage({ name: payload.name, text: payload.text, at: payload.at ?? entry.at });
     } catch (e) {
       if (e?.name === "OperationError" || /decrypt/i.test(String(e))) {
         // 산발적으로 안 풀리는 한 건(문구를 바꾸기 전의 옛 항목 등) 때문에 그 뒤
@@ -188,7 +190,7 @@ function connect() {
   ws.addEventListener("message", (e) => {
     let m; try { m = JSON.parse(e.data); } catch { return; }
     if (m.type === "ping") { ws.send(JSON.stringify({ type: "pong" })); return; }
-    if (m.type === "entry") { enqueue(m); return; }
+    if (m.type === "entry") { enqueue({ ...m, live: backfilled }); return; }
     // more 가 true 면 서버가 앞 구간을 잘라 보낸 것이다. 그 상태로 백필 완료로 보면
     // drain 이 빈 번호를 "없는 항목"으로 건너뛰고 ack 해서 받지 못한 앞 구간이 지워진다.
     // 그래서 앞 구간을 끝까지 더 받아 온 뒤에만 완료로 본다.
@@ -240,7 +242,7 @@ async function assistantApply({ puts, dels }) {
 }
 async function assistantSay(text) {
   const f = await encryptJson(key, { name: BOT_NAME, text, at: Date.now(), sys: true });
-  try { sendFrame({ type: "msg", ...f }); } catch (e) { log("비서 답 전송 실패:", String(e?.message || e)); }
+  try { sendFrame({ type: "msg", ...f }); } catch (e) { log("당이 답 전송 실패:", String(e?.message || e)); }
 }
 
 // ── 시작 ─────────────────────────────────────────────────────
@@ -254,7 +256,7 @@ if (cfg.assistant.enabled) {
     say: assistantSay,
     log,
   });
-  log(`일정 비서 켜짐 — ${cfg.assistant.model} @ ${cfg.assistant.ollama} (채팅에서 "@비서 …")`);
+  log(`일정 비서 당이 켜짐 — ${cfg.assistant.model} @ ${cfg.assistant.ollama} (채팅에서 "@당이 …")`);
 }
 mkdirSync(cfg.dir, { recursive: true });
 log(`Duri 싱크 시작 — 저장 위치: ${cfg.dir}`);

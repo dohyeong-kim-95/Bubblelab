@@ -222,10 +222,12 @@ test("presence counts people only — the sink daemon must not look like the par
   const me = mk("peer");
   room.conns.add(me);
   assert.equal(room.peerCount(), 1);
+  assert.deepEqual(room.presence(), { online: 1, sink: false }); // PC 꺼짐 → 앱이 "당이가 자고 있어요"
 
   room.conns.add(mk("sink")); // 데스크톱 백업이 붙어도
   assert.equal(room.peerCount(), 1); // 여전히 사람은 나 혼자다
   assert.equal(room.conns.size, 2);
+  assert.deepEqual(room.presence(), { online: 1, sink: true }); // 대신 당이가 깨어 있다고 알린다
 
   room.conns.add(mk("peer")); // 상대가 실제로 들어오면
   assert.equal(room.peerCount(), 2); // 그때 비로소 2명

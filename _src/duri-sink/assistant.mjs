@@ -1,4 +1,4 @@
-// Duri 일정 비서 — 채팅의 "@비서 …" 를 로컬 모델(Ollama)로 읽어 공유 캘린더를 고친다.
+// Duri 일정 비서 "당이" — 채팅의 "@당이 …"(또는 "@당 …") 를 로컬 모델(Ollama)로 읽어 공유 캘린더를 고친다.
 //
 // E2E 를 깨지 않으려고 **PC 안에서만** 돈다: 싱크가 이미 복호화한 메시지를 받아
 // 로컬 모델에 묻고, 결과를 같은 패스프레이즈로 암호화해 cal-put/cal-del·채팅 답으로
@@ -6,14 +6,17 @@
 //
 // 모델은 "무엇을 할지"만 JSON 으로 고른다. 날짜 계산·id 해석·검증은 전부 여기서
 // 한다 — 작은 CPU 모델이 날짜를 직접 세면 자주 틀린다. 옮기기·삭제는 되묻고
-// "@비서 응" 을 받아야 실행한다(공유 캘린더라 잘못 지우면 둘 다 곤란하다).
+// "@당이 응" 을 받아야 실행한다(공유 캘린더라 잘못 지우면 둘 다 곤란하다).
 
-export const BOT_NAME = "🤖 비서"; // 두 사람 이름과 겹치면 안 된다(자기 답을 명령으로 읽는다)
-const TRIGGER = /^\s*@비서\s*/;
+export const BOT_NAME = "🤖 당이"; // 두 사람 이름과 겹치면 안 된다(자기 답을 명령으로 읽는다)
+// "@당이"·"@당" 뒤엔 공백이나 끝이 와야 한다("@당근" 은 명령이 아니다).
+// 앱(duri/index.html 의 DANGI_RE)도 같은 규칙으로 "자고 있어요" 를 띄운다 — 같이 고칠 것.
+const TRIGGER = /^\s*@당이?(?=\s|$)\s*/;
 const YES = /^(응|네|넹|예|ㅇㅇ|ㅇ|좋아|확인|그래|ok|yes)[.!~ ]*$/i;
 const NO = /^(아니|아니요|아뇨|취소|ㄴㄴ|no)[.!~ ]*$/i;
-export const MAX_AGE_MS = 10 * 60 * 1000;   // 이보다 늦게 받은 명령은 실행하지 않는다
-const STALE_NOTICE_MS = 12 * 60 * 60 * 1000; // 이보다 오래된 건 답도 하지 않는다(백필 폭주 방지)
+// 이보다 늦게 받은 명령은 조용히 버린다. PC 가 꺼져 있던 동안의 명령이라, 그때 이미
+// 앱이 "당이가 자고 있어요" 라고 알렸다(서버 presence 의 sink). 나중에 실행하면 헷갈린다.
+export const MAX_AGE_MS = 10 * 60 * 1000;
 const PENDING_MS = 10 * 60 * 1000;
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -29,7 +32,7 @@ const isHm = (s) => typeof s === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(s)
 const randId = () => Array.from(crypto.getRandomValues(new Uint8Array(12)),
   (b) => "abcdefghijklmnopqrstuvwxyz0123456789"[b % 36]).join("");
 
-/** "@비서 …" 이면 뒤 문장, 아니면 null. */
+/** "@당이 …"·"@당 …" 이면 뒤 문장, 아니면 null. */
 export function parseTrigger(text) {
   if (typeof text !== "string" || !TRIGGER.test(text)) return null;
   return text.replace(TRIGGER, "").trim();
@@ -63,7 +66,7 @@ export function buildMessages(command, ctx) {
   const evLines = [...ctx.aliases].map(([a, e]) =>
     `${a}: ${e.date}${e.endDate ? `~${e.endDate}` : ""}${e.start ? ` ${e.start}${e.end ? `-${e.end}` : ""}` : " 종일"} "${e.title ?? ""}"${e.recur?.freq ? " (반복)" : ""}`);
   const system = [
-    "너는 두 사람이 같이 쓰는 캘린더의 일정 비서다. 사용자의 한국어 요청을 읽고 할 일을 JSON 하나로만 답한다.",
+    "너는 두 사람이 같이 쓰는 캘린더의 일정 비서 '당이'다. 사용자의 한국어 요청을 읽고 할 일을 JSON 하나로만 답한다.",
     "형식(하나만 고른다):",
     '{"op":"add","title":"제목","date":"YYYY-MM-DD","endDate":"YYYY-MM-DD 또는 생략","start":"HH:MM 또는 생략","end":"HH:MM 또는 생략"}',
     '{"op":"list","from":"YYYY-MM-DD","to":"YYYY-MM-DD"}',
@@ -166,8 +169,8 @@ export function plan(action, { events, sender, now = Date.now() }) {
 }
 
 const confirmText = (a) => a.op === "delete"
-  ? `🤖 "${a.event.title}" (${whenText(a.event)}) 일정을 지울까요? "@비서 응" 이면 지워요.`
-  : `🤖 "${a.event.title}" ${whenText(a.event)} → ${whenText({ ...a.event, date: a.date, start: a.start, end: a.end, endDate: undefined })}로 옮길까요? "@비서 응" 이면 옮겨요.`;
+  ? `🤖 "${a.event.title}" (${whenText(a.event)}) 일정을 지울까요? "@당이 응" 이면 지워요.`
+  : `🤖 "${a.event.title}" ${whenText(a.event)} → ${whenText({ ...a.event, date: a.date, start: a.start, end: a.end, endDate: undefined })}로 옮길까요? "@당이 응" 이면 옮겨요.`;
 
 /** Ollama /api/chat. format:"json" 으로 JSON 만 받는다. */
 export function ollamaAsk({ url, model, timeoutMs = 180_000 }) {
@@ -198,11 +201,7 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
     if (!name || name === BOT_NAME) return;
     const command = parseTrigger(text);
     if (command === null) return;
-    const age = now() - (at ?? 0);
-    if (age > MAX_AGE_MS) {
-      if (age < STALE_NOTICE_MS) await io.say(`🤖 PC가 꺼져 있던 때의 요청이라 처리하지 않았어요: "${command.slice(0, 40)}"`);
-      return;
-    }
+    if (now() - (at ?? 0) > MAX_AGE_MS) { io.log?.("당이: 늦게 받은 명령이라 건너뜀 —", command.slice(0, 40)); return; }
     const wait = pending.get(name);
     if (wait && wait.until > now() && (YES.test(command) || NO.test(command))) {
       pending.delete(name);
@@ -213,19 +212,19 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
       return;
     }
     pending.delete(name); // 새 요청이 오면 묵은 확인 대기는 버린다
-    if (!command) { await io.say('🤖 예: "@비서 토요일 10시 르파비스 임장 넣어줘", "@비서 이번 주 일정"'); return; }
+    if (!command) { await io.say('🤖 예: "@당이 토요일 10시 르파비스 임장 넣어줘", "@당 이번 주 일정"'); return; }
 
     const today = ymd(new Date(now()));
     const ctx = buildContext(io.events(), today);
     let raw;
     try { raw = await io.ask(buildMessages(command, ctx)); }
     catch (e) {
-      io.log?.("비서: 모델 호출 실패", String(e?.message || e));
+      io.log?.("당이: 모델 호출 실패", String(e?.message || e));
       await io.say("🤖 로컬 모델이 응답하지 않아요 (PC의 Ollama 확인)");
       return;
     }
     const action = validateAction(raw, ctx, today);
-    io.log?.("비서:", JSON.stringify(raw), "→", action.op);
+    io.log?.("당이:", JSON.stringify(raw), "→", action.op);
     if (action.op === "move" || action.op === "delete") {
       pending.set(name, { action, until: now() + PENDING_MS });
       await io.say(confirmText(action));
@@ -238,7 +237,7 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
 
   return {
     onMessage(msg) {
-      chain = chain.then(() => handle(msg)).catch((e) => io.log?.("비서 오류:", String(e?.message || e)));
+      chain = chain.then(() => handle(msg)).catch((e) => io.log?.("당이 오류:", String(e?.message || e)));
       return chain;
     },
   };

@@ -28,10 +28,13 @@ function harness(answers) {
   return { said, applied, asks, send };
 }
 
-test("@비서 로 시작하는 말만 명령이다", () => {
-  assert.equal(parseTrigger("@비서 내일 회의 넣어줘"), "내일 회의 넣어줘");
-  assert.equal(parseTrigger("  @비서이번 주 일정"), "이번 주 일정");
-  assert.equal(parseTrigger("비서야 해줘"), null);
+test("@당이·@당 으로 시작하는 말만 명령이다", () => {
+  assert.equal(parseTrigger("@당이 내일 회의 넣어줘"), "내일 회의 넣어줘");
+  assert.equal(parseTrigger("  @당 이번 주 일정"), "이번 주 일정");
+  assert.equal(parseTrigger("@당이"), "");
+  assert.equal(parseTrigger("@당근 사 와"), null); // 뒤에 공백이 없으면 다른 말이다
+  assert.equal(parseTrigger("@비서 해줘"), null);
+  assert.equal(parseTrigger("당이야 해줘"), null);
   assert.equal(parseTrigger(undefined), null);
 });
 
@@ -61,7 +64,7 @@ test("검증: 모델이 지어낸 날짜·id·시간은 통과시키지 않는�
 
 test("추가는 바로 하고, 웹앱과 같은 일정 구조로 만든다", async () => {
   const h = harness([{ op: "add", title: "르파비스 임장", date: "2026-11-01", start: "10:00" }]);
-  await h.send("@비서 다음 일요일 10시 르파비스 임장 넣어줘");
+  await h.send("@당이 다음 일요일 10시 르파비스 임장 넣어줘");
   assert.equal(h.applied.length, 1);
   const { puts, dels } = h.applied[0];
   assert.equal(dels.length, 0);
@@ -70,19 +73,19 @@ test("추가는 바로 하고, 웹앱과 같은 일정 구조로 만든다", asy
   assert.equal(h.said[0], '📅 "르파비스 임장" 일정 추가됨 (11/1 (일) 10:00)');
 });
 
-test("옮기기·삭제는 되묻고 '@비서 응' 이어야 실행한다", async () => {
+test("옮기기·삭제는 되묻고 '@당이 응' 이어야 실행한다", async () => {
   const h = harness([{ op: "move", id: "e2", date: "2026-11-01" }, { op: "delete", id: "e3" }]);
-  await h.send("@비서 임장 일요일로 옮겨줘");
+  await h.send("@당이 임장 일요일로 옮겨줘");
   assert.equal(h.applied.length, 0);
   assert.match(h.said[0], /옮길까요/);
-  await h.send("@비서 응");
+  await h.send("@당이 응");
   assert.equal(h.applied.length, 1);
   assert.deepEqual(h.applied[0].puts[0].content,
     { date: "2026-11-01", title: "르파비스 임장", owner: "도형", shared: true, start: "10:00" });
   assert.match(h.said[1], /→ 11\/1 \(일\) 10:00로 옮김/);
 
-  await h.send("@비서 출장 지워줘");
-  await h.send("@비서 취소");
+  await h.send("@당이 출장 지워줘");
+  await h.send("@당이 취소");
   assert.equal(h.applied.length, 1);
   assert.equal(h.said.at(-1), "🤖 취소했어요");
   assert.equal(h.asks.length, 2); // 응/취소는 모델에 묻지 않는다
@@ -108,29 +111,28 @@ test("조회: 범위 안 일반 일정만, 반복은 빼고", () => {
   assert.match(p.reply, /11\/3 \(화\) ~ 11\/4 \(수\) 출장/);
 });
 
-test("늦게 받은 명령·비서 자신의 말·일반 대화는 무시한다", async () => {
+test("늦게 받은 명령·당이 자신의 말·일반 대화는 조용히 무시한다", async () => {
   const h = harness([]);
-  await h.send("@비서 내일 회의", { at: NOW - MAX_AGE_MS - 1 });
-  assert.match(h.said[0], /PC가 꺼져 있던 때/);
-  await h.send("@비서 내일 회의", { at: NOW - 24 * 3600_000 }); // 아주 오래된 건 답도 안 한다
+  // PC 가 꺼져 있던 동안의 명령 — 그때 앱이 이미 "자고 있어요" 라고 했다.
+  await h.send("@당이 내일 회의", { at: NOW - MAX_AGE_MS - 1 });
   await a_noop(h);
-  assert.equal(h.said.length, 1);
+  assert.equal(h.said.length, 0);
   assert.equal(h.asks.length, 0);
 });
 async function a_noop(h) {
   await h.send("오늘 저녁 뭐 먹지");
   await createAssistant({ ask: async () => { throw new Error("불리면 안 됨"); }, events: () => [], apply: async () => {}, say: async () => { throw new Error("답하면 안 됨"); } }, { now: () => NOW })
-    .onMessage({ name: BOT_NAME, text: "@비서 응", at: NOW });
+    .onMessage({ name: BOT_NAME, text: "@당이 응", at: NOW });
 }
 
 test("모델이 죽어 있으면 그렇다고 답한다", async () => {
   const h = harness([new Error("ECONNREFUSED")]);
-  await h.send("@비서 내일 회의 넣어줘");
+  await h.send("@당이 내일 회의 넣어줘");
   assert.equal(h.applied.length, 0);
   assert.match(h.said[0], /Ollama/);
 });
 
-test("비서가 암호화한 일정은 싱크 저장 계층이 그대로 푼다(웹앱과 같은 프레임)", async () => {
+test("당이가 암호화한 일정은 싱크 저장 계층이 그대로 푼다(웹앱과 같은 프레임)", async () => {
   const { deriveKey, encryptJson, createStore } = await import("./store.mjs");
   const { mkdtempSync, rmSync } = await import("node:fs");
   const { tmpdir } = await import("node:os");
