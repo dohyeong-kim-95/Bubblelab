@@ -18,6 +18,7 @@ const NO = /^(아니|아니요|아뇨|취소|ㄴㄴ|no)[.!~ ]*$/i;
 // 앱이 "당이가 자고 있어요" 라고 알렸다(서버 presence 의 sink). 나중에 실행하면 헷갈린다.
 export const MAX_AGE_MS = 10 * 60 * 1000;
 const PENDING_MS = 10 * 60 * 1000;
+const DAYS_AHEAD = 60;
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
 const pad2 = (n) => String(n).padStart(2, "0");
@@ -55,7 +56,8 @@ export function buildContext(events, today) {
     .sort((a, b) => a.date.localeCompare(b.date) || String(a.start ?? "").localeCompare(String(b.start ?? "")))
     .slice(0, 40);
   const aliases = new Map(list.map((e, i) => [`e${i + 1}`, e]));
-  const days = Array.from({ length: 21 }, (_, i) => {
+  // 날짜표는 일정 목록과 같은 60일 — 21일이면 "11월 18일" 처럼 3주 넘는 날을 못 골라 unknown 이 됐다.
+  const days = Array.from({ length: DAYS_AHEAD }, (_, i) => {
     const s = addDays(today, i);
     return `${s} ${WEEKDAYS[parseYmd(s).getDay()]}${i === 0 ? " (오늘)" : i === 1 ? " (내일)" : ""}`;
   });
@@ -173,12 +175,15 @@ const confirmText = (a) => a.op === "delete"
   : `🤖 "${a.event.title}" ${whenText(a.event)} → ${whenText({ ...a.event, date: a.date, start: a.start, end: a.end, endDate: undefined })}로 옮길까요? "@당이 응" 이면 옮겨요.`;
 
 /** Ollama /api/chat. format:"json" 으로 JSON 만 받는다. */
-export function ollamaAsk({ url, model, timeoutMs = 180_000 }) {
+// keepAlive: 마지막 요청 뒤 모델을 메모리에 붙잡아 두는 시간(Ollama 기본 5분). 다시 올리면
+// 긴 지시문을 처음부터 읽느라 CPU 에서 20초 안팎이 걸리고, 붙어 있으면 몇 초다.
+export function ollamaAsk({ url, model, keepAlive, timeoutMs = 180_000 }) {
   return async (messages) => {
     const res = await fetch(`${url.replace(/\/+$/, "")}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model, messages, stream: false, format: "json", options: { temperature: 0 } }),
+      body: JSON.stringify({ model, messages, stream: false, format: "json", options: { temperature: 0 },
+        ...(keepAlive && { keep_alive: keepAlive }) }),
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!res.ok) throw new Error(`ollama HTTP ${res.status}`);

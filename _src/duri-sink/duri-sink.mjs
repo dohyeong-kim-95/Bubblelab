@@ -45,6 +45,7 @@ function loadConfig() {
       enabled: process.env.DURI_ASSISTANT ? process.env.DURI_ASSISTANT === "1" : Boolean(file.assistant?.enabled),
       ollama: process.env.OLLAMA_URL || file.assistant?.ollama || "http://127.0.0.1:11434",
       model: process.env.DURI_MODEL || file.assistant?.model || "qwen2.5:7b",
+      keepAlive: process.env.DURI_KEEP_ALIVE || file.assistant?.keepAlive || "1h",
     },
   };
   for (const k of ["url", "token", "passphrase"]) {
@@ -250,7 +251,7 @@ const key = await deriveKey(cfg.passphrase);
 store = createStore({ dir: cfg.dir, key, fetchPhoto: downloadPhoto });
 if (cfg.assistant.enabled) {
   assistant = createAssistant({
-    ask: ollamaAsk({ url: cfg.assistant.ollama, model: cfg.assistant.model }),
+    ask: ollamaAsk({ url: cfg.assistant.ollama, model: cfg.assistant.model, keepAlive: cfg.assistant.keepAlive }),
     events: () => store.calendarEvents(),
     apply: assistantApply,
     say: assistantSay,

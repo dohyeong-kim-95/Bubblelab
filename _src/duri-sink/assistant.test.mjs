@@ -38,10 +38,11 @@ test("@당이·@당 으로 시작하는 말만 명령이다", () => {
   assert.equal(parseTrigger(undefined), null);
 });
 
-test("문맥: 일반 일정만 별칭으로, 날짜표는 오늘부터 21일", () => {
+test("문맥: 일반 일정만 별칭으로, 날짜표는 오늘부터 60일", () => {
   const ctx = buildContext(EVENTS, TODAY);
   assert.deepEqual([...ctx.aliases.values()].map((e) => e.id), ["aaaaaa3", "aaaaaa1", "aaaaaa2"]);
-  assert.equal(ctx.days.length, 21);
+  assert.equal(ctx.days.length, 60);
+  assert.match(ctx.days[24], /^2026-11-18 수$/);
   assert.match(ctx.days[0], /^2026-10-25 일 \(오늘\)$/);
   assert.match(ctx.days[6], /^2026-10-31 토$/);
   const [sys, user] = buildMessages("토요일 임장 일정 지워줘", ctx);
@@ -161,13 +162,14 @@ test("ollamaAsk: /api/chat 에 JSON 형식으로 묻고 content 를 파싱한다
   });
   await new Promise((r) => srv.listen(0, "127.0.0.1", r));
   try {
-    const ask = ollamaAsk({ url: `http://127.0.0.1:${srv.address().port}/`, model: "qwen2.5:7b" });
+    const ask = ollamaAsk({ url: `http://127.0.0.1:${srv.address().port}/`, model: "qwen2.5:7b", keepAlive: "1h" });
     const out = await ask([{ role: "user", content: "이번 주" }]);
     assert.deepEqual(out, { op: "list", from: "2026-10-25", to: "2026-10-31" });
     assert.equal(got.url, "/api/chat");
     assert.equal(got.body.format, "json");
     assert.equal(got.body.stream, false);
     assert.equal(got.body.model, "qwen2.5:7b");
+    assert.equal(got.body.keep_alive, "1h");
   } finally { srv.close(); }
 });
 
