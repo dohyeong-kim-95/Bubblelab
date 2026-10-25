@@ -170,3 +170,13 @@ test("ollamaAsk: /api/chat 에 JSON 형식으로 묻고 content 를 파싱한다
     assert.equal(got.body.model, "qwen2.5:7b");
   } finally { srv.close(); }
 });
+
+test("install.sh 가 데몬이 import 하는 모듈을 전부 복사한다", async () => {
+  const { readFileSync } = await import("node:fs");
+  const here = new URL(".", import.meta.url);
+  const sink = readFileSync(new URL("duri-sink.mjs", here), "utf8");
+  const install = readFileSync(new URL("install.sh", here), "utf8");
+  const local = [...sink.matchAll(/from "\.\/([\w-]+\.mjs)"/g)].map((m) => m[1]);
+  assert.ok(local.includes("assistant.mjs"));
+  for (const f of local) assert.match(install, new RegExp(`\\$HERE/${f.replace(".", "\\.")}`), `install.sh 가 ${f} 를 복사하지 않는다`);
+});
