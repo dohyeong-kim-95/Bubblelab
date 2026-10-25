@@ -102,7 +102,7 @@ systemd 가 없으면 설치까지만 하고 이 안내를 띄운다.
 
 ## 일정 비서 "당이" (선택, 기본 꺼짐)
 
-채팅에 **`@당이 …`**(줄여서 **`@당 …`**)라고 쓰면 이 데몬이 **PC 안의 로컬 모델(Ollama)** 로
+채팅에 **`@당이 …`**(줄여서 **`@당 …`**)라고 쓰면 이 데몬이 **PC 안의 로컬 모델(llama.cpp 또는 Ollama)** 로
 읽어 공유 캘린더를 고치고 채팅으로 답한다(`assistant.mjs`). 데몬이 이미 복호화한 메시지를
 쓰고 결과도 같은 패스프레이즈로 암호화해 보내므로 **E2E 는 그대로**다 — 서버는 여전히
 암호블롭만 본다. 그래서 **PC가 켜져 있고 데몬이 돌 때만** 된다.
@@ -123,7 +123,7 @@ systemd 가 없으면 설치까지만 하고 이 안내를 띄운다.
   기록에 없으면 모른다고 한다. 당이 자신의 답과 `@당` 명령은 근거에서 뺀다. 데몬 로그엔 대화 내용
   대신 "기억 N줄 읽고 답함" 만 남긴다. 낱말은 조사를 떼고("어니언에서"→"어니언") 끝 글자도 떼어
   ("제주도"→"제주") 찾고, "얘기"·"무슨" 같은 뜻 없는 낱말은 버린다.
-- 말한 사람 이름은 긴 지시문 뒤 별도 시스템 메시지로 준다(앞부분이 같아야 Ollama 가 재사용한다).
+- 말한 사람 이름은 긴 지시문 뒤 별도 시스템 메시지로 준다(앞부분이 같아야 모델 서버가 재사용한다).
 
 - **운동 인증은 앱의 💪 와 같은 레코드**를 고친다(`wk`+YYYYMM+이름해시, `kind:"workout"`). id 를
   만드는 `whoKey` 가 앱과 같아야 해서 테스트가 `duri/index.html` 의 함수를 직접 꺼내 비교한다.
@@ -154,21 +154,51 @@ systemd 가 없으면 설치까지만 하고 이 안내를 띄운다.
   (다그당스1 07번 얼굴)** 로 그린다(`duri/index.html` 의 `DANGI_NAME` — 이름을 바꾸면 둘 다). 두 사람
   이름과 겹치면 안 된다.
 
-켜기 — PC에 [Ollama](https://ollama.com) 를 깔고 모델을 받은 뒤 설정에 `assistant` 를 넣고
-데몬을 다시 시작한다:
+켜기 — PC에 로컬 모델 서버를 띄우고 설정에 `assistant` 를 넣은 뒤 데몬을 다시 시작한다.
+지금은 **llama.cpp `llama-server`(Vulkan, 내장 GPU)** 를 쓴다. Ollama 도 그대로 된다(`api` 를 빼면 Ollama).
 
 ```bash
-ollama pull gemma4:e4b        # 지금 쓰는 모델. 받기 9.6GB, 올리면 RAM 약 10GB
+# llama.cpp 릴리스(ubuntu-vulkan-x64)와 모델을 홈에 받는다 — sudo 필요 없음
+mkdir -p ~/llama.cpp/models && cd ~/llama.cpp
+gh release download <태그> -R ggml-org/llama.cpp -p 'llama-*-bin-ubuntu-vulkan-x64.tar.gz' && tar xzf llama-*.tar.gz
+ln -sfn ~/llama.cpp/llama-<태그> ~/llama.cpp/current
+curl -L -o models/gemma-4-E4B-it-Q4_0.gguf \
+  https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_0.gguf   # 4.6GB
+~/llama.cpp/current/llama-server --list-devices    # Vulkan0: AMD Radeon 680M 이 보여야 한다
+```
+
+`~/.config/systemd/user/llama-server.service` 로 상시 띄운다(`systemctl --user enable --now llama-server`):
+
+```ini
+[Service]
+ExecStart=%h/llama.cpp/current/llama-server -m %h/llama.cpp/models/gemma-4-E4B-it-Q4_0.gguf -ngl 99 -fa on -c 8192 -np 1 -t 8 --cache-reuse 256 --chat-template-kwargs '{"enable_thinking":false}' --host 127.0.0.1 --port 8090
+Restart=always
 ```
 
 ```json
-"assistant": { "enabled": true, "ollama": "http://127.0.0.1:11434", "model": "gemma4:e4b", "keepAlive": "1h" }
+"assistant": { "enabled": true, "api": "llama", "llama": "http://127.0.0.1:8090" }
 ```
 
-env 로는 `DURI_ASSISTANT=1` / `OLLAMA_URL` / `DURI_MODEL` / `DURI_KEEP_ALIVE`. 모델을 안 적으면
-`qwen2.5:7b`, `keepAlive` 를 안 적으면 `1h`.
+Ollama 로 돌릴 땐 `"assistant": { "enabled": true, "ollama": "http://127.0.0.1:11434", "model": "gemma4:e4b", "keepAlive": "1h" }`
+(`ollama pull gemma4:e4b`, 받기 9.6GB, 올리면 RAM 약 10GB). Ollama 가 저장한 gemma4 파일은 llama.cpp 가 못 연다
+(텐서 구성이 다르다) — 그래서 GGUF 를 따로 받는다.
 
-**모델 고르기 (2026-10-25, Ryzen 9 6900HX CPU 전용, 실제 당이 프롬프트·가짜 캘린더로 6문항)**
+env 로는 `DURI_ASSISTANT=1` / `DURI_MODEL_API` (`llama`|`ollama`) / `LLAMA_URL` / `OLLAMA_URL` / `DURI_MODEL` /
+`DURI_KEEP_ALIVE`. `api` 를 안 적으면 Ollama, 모델을 안 적으면 `qwen2.5:7b`, `keepAlive` 를 안 적으면 `1h`.
+
+**실행기 고르기 (2026-10-25, Ryzen 9 6900HX + Radeon 680M, 실제 당이 프롬프트·가짜 캘린더 20문항, gemma4 E4B)**
+
+| | 정답 | 긴 지시문을 처음 읽을 때 | 이어지는 답 | RAM |
+|---|---|---|---|---|
+| llama-server Vulkan (Q4_0) | 18/20 | 6.1초 | 평균 1.9초 | 약 5GB |
+| Ollama 0.24 (CPU만) | 17/20 | 38.4초 | 평균 2.8초 | 약 10GB |
+
+Ollama 0.24 는 이 내장 GPU 를 안 쓴다(로그 `offloaded 0/43 layers to GPU`). 지시문 2900토큰 읽기 속도가
+CPU 72 tok/s → Vulkan 312 tok/s, 쓰기는 14.6 → 19.7 tok/s (`llama-bench -p 2900 -n 64`).
+**gemma4 는 속생각(thinking)을 꺼야 한다** — 켜 두면 JSON 한 줄에 150~200토큰을 먼저 써서 평균 17초가 된다.
+서버 옵션과 요청(`chat_template_kwargs.enable_thinking:false`) 양쪽에서 끈다.
+
+**모델 고르기 (같은 날, Ollama CPU, 6문항)**
 
 | 모델 | 정답 | 모델이 내려가 있을 때 첫 답 | 올라와 있을 때 |
 |---|---|---|---|
@@ -177,9 +207,9 @@ env 로는 `DURI_ASSISTANT=1` / `OLLAMA_URL` / `DURI_MODEL` / `DURI_KEEP_ALIVE`.
 | `llama3.2:3b` | 3/6 | 10초 | 1–2초 |
 
 느린 건 모델이 아니라 **긴 지시문(날짜표 60일 + 일정 목록)을 처음 읽는 시간**이다. 한 번 읽으면
-Ollama 가 재사용하므로, `keepAlive`(기본 1h) 동안 모델을 붙잡아 둬서 이어지는 요청을 몇 초로
-만든다. 대신 그동안 RAM 을 차지한다(gemma4 약 10GB). 남은 오답은 "다음주 토요일"(주 경계).
-`qwen3.5:4b` 는 Ollama 0.24 에서 못 받는다(더 새 Ollama 필요) — 올리면 같은 방법으로 재 볼 것. 데몬 로그에 `일정 비서 당이 켜짐` 과
+서버가 재사용한다(llama-server 는 상시 떠 있고, Ollama 는 `keepAlive` 동안 붙잡아 둔다). 남은 오답은
+"일요일로 옮겨줘"(주 경계, 옮기기는 확인을 받는다). `qwen3.5:4b` 는 Ollama 0.24 에서 못 받는다 — llama.cpp
+GGUF 로 같은 방법으로 재 볼 것. 데몬 로그에 `일정 비서 당이 켜짐` 과
 요청마다 `당이: {모델 JSON} → add` 가 찍힌다. 모델이 이상한 걸 고르면 여기서 보인다.
 
 ## 주의

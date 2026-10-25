@@ -1,4 +1,4 @@
-// Duri 일정 비서 "당이" — 채팅의 "@당이 …"(또는 "@당 …") 를 로컬 모델(Ollama)로 읽어 공유 캘린더를 고친다.
+// Duri 일정 비서 "당이" — 채팅의 "@당이 …"(또는 "@당 …") 를 로컬 모델(llama-server 또는 Ollama)로 읽어 공유 캘린더를 고친다.
 //
 // E2E 를 깨지 않으려고 **PC 안에서만** 돈다: 싱크가 이미 복호화한 메시지를 받아
 // 로컬 모델에 묻고, 결과를 같은 패스프레이즈로 암호화해 cal-put/cal-del·채팅 답으로
@@ -85,7 +85,7 @@ const PERSONA = [
   "당이는 갈색 털에 앞머리가 덥수룩한 조랑말이다. 당근을 제일 좋아하고, 기분 좋으면 '푸히힝' 하고 웃는다.",
   "말끝을 '~승'으로 맺는 다정한 반말을 쓴다(예: 좋승~, 알겠승!, 해냈승!, 미안하당…).",
 ];
-// 말한 사람은 맨 뒤 시스템 메시지로 따로 준다 — 앞쪽(긴 지시문)이 사람마다 같아야 Ollama 가 재사용한다.
+// 말한 사람은 맨 뒤 시스템 메시지로 따로 준다 — 앞쪽(긴 지시문)이 사람마다 같아야 모델 서버가 재사용한다.
 const whoMessage = (sender) => ({ role: "system", content: `말한 사람: ${sender}. 답할 때 이름을 불러 줘도 좋다(예: ${sender}아/야).` });
 
 export function buildMessages(command, ctx, sender) {
@@ -348,6 +348,25 @@ export function ollamaAsk({ url, model, keepAlive, timeoutMs = 180_000 }) {
   };
 }
 
+/** llama.cpp llama-server 의 OpenAI 호환 /v1/chat/completions. 모델은 서버가 띄운 하나뿐이다. */
+// 이 PC(내장 GPU Radeon 680M)에선 Ollama 가 GPU 를 안 써서 긴 지시문을 처음 읽는 데 38초,
+// llama-server(Vulkan)는 6초다. cache_prompt 로 같은 앞부분은 다시 안 읽는다.
+// enable_thinking:false — gemma4 는 기본으로 속생각을 150~200토큰 쓰고 답해 17초가 걸린다.
+export function llamaAsk({ url, timeoutMs = 180_000 }) {
+  return async (messages) => {
+    const res = await fetch(`${url.replace(/\/+$/, "")}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages, temperature: 0, response_format: { type: "json_object" }, cache_prompt: true,
+        chat_template_kwargs: { enable_thinking: false } }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!res.ok) throw new Error(`llama-server HTTP ${res.status}`);
+    const body = await res.json();
+    return JSON.parse(body.choices?.[0]?.message?.content ?? "null");
+  };
+}
+
 /**
  * 비서 본체. io 는 바깥(싱크)이 준다:
  *   ask(messages) → 모델 JSON, events() → 지금 캘린더 배열,
@@ -381,7 +400,7 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
     try { raw = await io.ask(buildMessages(command, ctx, name)); }
     catch (e) {
       io.log?.("당이: 모델 호출 실패", String(e?.message || e));
-      await io.say("🤖 로컬 모델이 응답하지 않아요 (PC의 Ollama 확인)");
+      await io.say("🤖 로컬 모델이 응답하지 않아요 (PC의 모델 서버 확인)");
       return;
     }
     const action = validateAction(raw, ctx, today, command);
@@ -411,7 +430,7 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
     try { raw = await io.ask(buildRecallMessages(command, lines, name)); }
     catch (e) {
       io.log?.("당이: 모델 호출 실패", String(e?.message || e));
-      return "🤖 로컬 모델이 응답하지 않아요 (PC의 Ollama 확인)";
+      return "🤖 로컬 모델이 응답하지 않아요 (PC의 모델 서버 확인)";
     }
     io.log?.(`당이: 기억 ${lines.length}줄 읽고 답함`); // 대화 내용은 로그에 남기지 않는다
     const reply = String(raw?.reply ?? "").trim().slice(0, 600);

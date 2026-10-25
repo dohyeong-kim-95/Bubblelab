@@ -16,7 +16,7 @@ import { readFileSync, mkdirSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deriveKey, createStore, atomicWrite, encryptJson } from "./store.mjs";
-import { createAssistant, ollamaAsk, parseTrigger, BOT_NAME } from "./assistant.mjs";
+import { createAssistant, ollamaAsk, llamaAsk, parseTrigger, BOT_NAME } from "./assistant.mjs";
 import { createArchive } from "./archive.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -41,9 +41,12 @@ function loadConfig() {
     token: process.env.DURI_TOKEN || file.token,
     passphrase: process.env.DURI_PASSPHRASE || file.passphrase,
     dir: process.env.DURI_DIR || file.dir || join(HERE, "DuriStorage"),
-    // 일정 비서 "당이"(선택, 기본 꺼짐) — 로컬 Ollama 로 "@당이 …" 를 처리한다(assistant.mjs).
+    // 일정 비서 "당이"(선택, 기본 꺼짐) — 로컬 모델로 "@당이 …" 를 처리한다(assistant.mjs).
+    // api: "llama"(llama.cpp llama-server) 또는 "ollama"(기본).
     assistant: {
       enabled: process.env.DURI_ASSISTANT ? process.env.DURI_ASSISTANT === "1" : Boolean(file.assistant?.enabled),
+      api: process.env.DURI_MODEL_API || file.assistant?.api || "ollama",
+      llama: process.env.LLAMA_URL || file.assistant?.llama || "http://127.0.0.1:8090",
       ollama: process.env.OLLAMA_URL || file.assistant?.ollama || "http://127.0.0.1:11434",
       model: process.env.DURI_MODEL || file.assistant?.model || "qwen2.5:7b",
       keepAlive: process.env.DURI_KEEP_ALIVE || file.assistant?.keepAlive || "1h",
@@ -252,7 +255,9 @@ const key = await deriveKey(cfg.passphrase);
 store = createStore({ dir: cfg.dir, key, fetchPhoto: downloadPhoto });
 if (cfg.assistant.enabled) {
   assistant = createAssistant({
-    ask: ollamaAsk({ url: cfg.assistant.ollama, model: cfg.assistant.model, keepAlive: cfg.assistant.keepAlive }),
+    ask: cfg.assistant.api === "llama"
+      ? llamaAsk({ url: cfg.assistant.llama })
+      : ollamaAsk({ url: cfg.assistant.ollama, model: cfg.assistant.model, keepAlive: cfg.assistant.keepAlive }),
     events: () => store.calendarEvents(),
     apply: assistantApply,
     say: assistantSay,
@@ -261,7 +266,7 @@ if (cfg.assistant.enabled) {
     archive: createArchive(cfg.dir, { skip: (name, text) => name === BOT_NAME || parseTrigger(text) !== null }),
     log,
   });
-  log(`일정 비서 당이 켜짐 — ${cfg.assistant.model} @ ${cfg.assistant.ollama} (채팅에서 "@당이 …")`);
+  log(`일정 비서 당이 켜짐 — ${cfg.assistant.api === "llama" ? `llama-server @ ${cfg.assistant.llama}` : `${cfg.assistant.model} @ ${cfg.assistant.ollama}`} (채팅에서 "@당이 …")`);
 }
 mkdirSync(cfg.dir, { recursive: true });
 log(`Duri 싱크 시작 — 저장 위치: ${cfg.dir}`);

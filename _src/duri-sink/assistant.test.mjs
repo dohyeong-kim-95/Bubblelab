@@ -131,7 +131,7 @@ test("모델이 죽어 있으면 그렇다고 답한다", async () => {
   const h = harness([new Error("ECONNREFUSED")]);
   await h.send("@당이 내일 회의 넣어줘");
   assert.equal(h.applied.length, 0);
-  assert.match(h.said[0], /Ollama/);
+  assert.match(h.said[0], /모델 서버/);
 });
 
 test("당이가 암호화한 일정은 싱크 저장 계층이 그대로 푼다(웹앱과 같은 프레임)", async () => {
@@ -171,6 +171,30 @@ test("ollamaAsk: /api/chat 에 JSON 형식으로 묻고 content 를 파싱한다
     assert.equal(got.body.stream, false);
     assert.equal(got.body.model, "qwen2.5:7b");
     assert.equal(got.body.keep_alive, "1h");
+  } finally { srv.close(); }
+});
+
+test("llamaAsk: /v1/chat/completions 에 JSON·속생각 끄기로 묻고 content 를 파싱한다", async () => {
+  const { llamaAsk } = await import("./assistant.mjs");
+  const { createServer } = await import("node:http");
+  let got;
+  const srv = createServer((req, res) => {
+    let b = ""; req.on("data", (c) => { b += c; });
+    req.on("end", () => {
+      got = { url: req.url, body: JSON.parse(b) };
+      res.end(JSON.stringify({ choices: [{ message: { content: '{"op":"chat","reply":"푸히힝"}' } }] }));
+    });
+  });
+  await new Promise((r) => srv.listen(0, "127.0.0.1", r));
+  try {
+    const ask = llamaAsk({ url: `http://127.0.0.1:${srv.address().port}/` });
+    const out = await ask([{ role: "user", content: "안녕" }]);
+    assert.deepEqual(out, { op: "chat", reply: "푸히힝" });
+    assert.equal(got.url, "/v1/chat/completions");
+    assert.deepEqual(got.body.response_format, { type: "json_object" });
+    assert.equal(got.body.temperature, 0);
+    assert.equal(got.body.cache_prompt, true);
+    assert.equal(got.body.chat_template_kwargs.enable_thinking, false);
   } finally { srv.close(); }
 });
 
