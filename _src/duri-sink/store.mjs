@@ -168,7 +168,7 @@ export function createStore({ dir, key, fetchPhoto }) {
       // 대화록에 이름만 있고 내용은 빈 줄이었다 — 무엇이 오갔는지 알 수 있게 남긴다.
       if (p.sticker) logs.push({ ...base, type: "sticker", sticker: p.sticker });
       else if (p.here) logs.push({ ...base, type: "location", loc: p.here });
-      else logs.push({ ...base, type: "message", text: p.text, ...(p.sys && { sys: true }) });
+      else logs.push({ ...base, type: "message", text: p.text, ...(p.sys && { sys: true }), ...(p.botSticker && { sticker: p.botSticker }) });
     } else if (entry.kind === "photo") {
       const meta = await decryptJson(entry.metaIv, entry.metaCt);
       const blob = await fetchPhoto(entry.r2key);

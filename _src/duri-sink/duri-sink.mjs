@@ -16,7 +16,7 @@ import { readFileSync, mkdirSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deriveKey, createStore, atomicWrite, encryptJson } from "./store.mjs";
-import { createAssistant, ollamaAsk, llamaAsk, parseTrigger, briefDue, kstYmd, BOT_NAME } from "./assistant.mjs";
+import { createAssistant, ollamaAsk, llamaAsk, parseTrigger, briefDue, kstYmd, BOT_NAME, STICKERS } from "./assistant.mjs";
 import { createArchive } from "./archive.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -252,8 +252,9 @@ async function assistantApply({ puts, dels }) {
   }
   saveCal(local);
 }
-async function assistantSay(text) {
-  const f = await encryptJson(key, { name: BOT_NAME, text, at: Date.now(), sys: true });
+// sticker: 다그당스 이모티콘 {pack,n}(선택) — 글과 같은 메시지에 botSticker 로 싣는다.
+async function assistantSay(text, sticker) {
+  const f = await encryptJson(key, { name: BOT_NAME, text, at: Date.now(), sys: true, ...(sticker && { botSticker: sticker }) });
   try { sendFrame({ type: "msg", ...f }); } catch (e) { log("당이 답 전송 실패:", String(e?.message || e)); }
 }
 
@@ -270,7 +271,7 @@ async function briefTick() {
   briefBusy = true;
   try {
     const day = kstYmd(Date.now()), text = await assistant.brief();
-    const f = await encryptJson(key, { name: BOT_NAME, text, at: Date.now(), sys: true });
+    const f = await encryptJson(key, { name: BOT_NAME, text, at: Date.now(), sys: true, botSticker: STICKERS.morning });
     sendFrame({ type: "msg", ...f });
     sendFrame({ type: "brief-done", date: day });
     briefLast = day;

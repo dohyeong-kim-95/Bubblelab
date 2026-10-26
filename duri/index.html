@@ -227,6 +227,7 @@
   /* 스티커는 정사각 자리를 먼저 잡고, 말풍선 배경 없이 투명하게 */
   .bubble.sticker, .row.me .bubble.sticker { background: none; border: none; padding: .2rem; }
   .bubble.sticker img { width: 8.5rem; aspect-ratio: 1 / 1; height: auto; border-radius: 0; }
+  .bubble img.dangi-sticker { display: block; width: 6.5rem; aspect-ratio: 1 / 1; height: auto; margin-top: .4rem; border-radius: 0; }
   .sticker-anim { will-change: transform; } /* 움직이는 스티커: 합성 힌트 */
   .time { font-size: .62rem; color: var(--dim); margin: .1rem .3rem 0; }
   .broken { color: light-dark(#b4453a, #f0a8a2); font-size: .82rem; }
@@ -2534,7 +2535,11 @@ function appendRecord(rec, { silent = false, into = null } = {}) {
     timeEl = buildBubble(row, "🔒", at, (b) => { const s = document.createElement("span"); s.className = "broken"; s.textContent = rec.broken; b.appendChild(s); }, showName);
   } else if (bot) {
     row.classList.add("bot");
-    timeEl = buildBubble(row, "당이", at, (b) => { b.textContent = rec.text; }, showName);
+    timeEl = buildBubble(row, "당이", at, (b) => {
+      b.textContent = rec.text;
+      const st = rec.botSticker;
+      if (st && PACK_IDS.has(st.pack)) { const img = stickerImg(st.pack, st.n, "당이 이모티콘"); img.classList.add("dangi-sticker"); b.appendChild(img); }
+    }, showName);
   } else {
     timeEl = buildBubble(row, rec.name, at, (b) => { b.textContent = rec.text; }, showName);
   }
@@ -2575,7 +2580,14 @@ async function renderEntry(m) {
         rec.here = p.here;
         rec.sys = true;
         rec.text = (p.name === MY_NAME ? "📍 내가" : `📍 ${p.name || "상대"}님이`) + " 위치를 남겼어요";
-      } else { rec.text = p.text; if (p.sys) rec.sys = true; }
+      } else {
+        rec.text = p.text;
+        if (p.sys) rec.sys = true;
+        // 당이 답에 곁들인 다그당스 이모티콘(말풍선 아래). 글과 한 메시지라 알림도 하나다.
+        if (p.sys && p.name === DANGI_NAME && Number.isInteger(p.botSticker?.n) && typeof p.botSticker.pack === "string") {
+          rec.botSticker = { pack: p.botSticker.pack, n: p.botSticker.n };
+        }
+      }
       appendRecord(rec); putEntry(rec);
     } else if (m.kind === "photo") {
       const meta = await decryptJson(m.metaIv, m.metaCt);

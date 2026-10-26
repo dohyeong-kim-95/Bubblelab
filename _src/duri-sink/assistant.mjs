@@ -126,6 +126,48 @@ const PERSONA = [
   "좋아하는 음식은 사과랑 각설탕이다. 쫑이랑 빵이에게 충성하는 말로, 다정하고 세심하고 귀엽다. 기분 좋으면 '푸히힝' 하고 웃는다.",
   "말끝을 '~승'으로 맺는 다정한 반말을 쓴다(예: 좋승~, 알겠승!, 해냈승!, 미안하당…).",
 ];
+// ── 다그당스 이모티콘 — 당이 답에 곁들인다 ──
+// 메시지 하나에 글과 함께 botSticker:{pack,n} 로 싣는다(따로 보내면 알림이 두 번 온다).
+// 앱은 당이 말풍선 아래에 그리고, 이 필드를 모르는 옛 앱은 글만 보여 준다(sticker 필드를
+// 쓰면 옛 앱이 이모티콘만 그리고 당이를 상대 이름으로 배운다). 고르는 건 코드다 — 모델
+// 프롬프트를 늘리지 않는다. 팩 번호는 _assets/sticker/dageudangseu-N/metadata.json 의 순서.
+const dg = (v, n) => ({ pack: `dageudangseu-${v}`, n });
+export const STICKERS = {
+  morning: dg(3, 1), // 좋은 아침이승!
+  added: dg(3, 2), // 일정 넣었승!
+  fit: dg(1, 13), // 해냈승!
+  ok: dg(1, 14), // 좋승~
+  sorry: dg(1, 10), // 미안하당...
+  date: dg(3, 14), // 데이트 가자승!
+};
+// 잡담(chat)엔 말한 사람의 말에 맞는 게 있을 때만 붙인다.
+const CHAT_STICKERS = [
+  [/잘\s*자|굿\s*나잇|졸려/, dg(3, 6)], // 잘 자승~
+  [/좋은\s*아침|굿\s*모닝|일어났/, dg(3, 1)],
+  [/사과/, dg(3, 3)], // 사과 최고승
+  [/각설탕/, dg(3, 15)], // 각설탕 하나만…
+  [/사랑|안아|보고\s*싶/, dg(3, 13)], // 꼬옥 안아주승
+  [/힘들|피곤|지쳤|지쳐|우울|속상/, dg(3, 9)], // 토닥토닥
+  [/배고/, dg(3, 8)], // 배고팠승…
+  [/퇴근/, dg(3, 16)], // 퇴근했승!
+  [/생일/, dg(3, 10)], // 생일 축하하승!
+  [/화이팅|파이팅|응원/, dg(3, 7)], // 응원하승!
+  [/고마|땡큐|감사/, dg(3, 5)], // 고마웁승
+  [/데이트/, dg(3, 14)],
+  [/충성/, dg(3, 4)],
+];
+export function chatSticker(command) {
+  const hit = CHAT_STICKERS.find(([re]) => re.test(command));
+  if (hit) return hit[1];
+  if (!/이모티콘|스티커|이모지/.test(command)) return null;
+  // "이모티콘 보내줘" — 다그당스 3 중 하나(같은 말엔 같은 것, 테스트가 정해진 값을 본다).
+  let h = 0;
+  for (const ch of command) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+  return dg(3, 1 + (h % 16));
+}
+const stickerFor = (op, command) => ({ add: STICKERS.added, repeat: STICKERS.added, move: STICKERS.ok, delete: STICKERS.ok,
+  fit: STICKERS.fit, chat: chatSticker(command) })[op] ?? null;
+
 // 말한 사람은 맨 뒤 시스템 메시지로 따로 준다 — 앞쪽(긴 지시문)이 사람마다 같아야 모델 서버가 재사용한다.
 const whoMessage = (sender) => ({ role: "system", content: `말한 사람: ${sender}. 답할 때 이름을 불러 줘도 좋다(예: ${sender}아/야).` });
 
@@ -677,20 +719,20 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
       if (NO.test(command)) { await io.say("🤖 취소했어요"); return; }
       const p = plan(wait.action, { events: io.events(), sender: name, now: now() });
       await io.apply(p);
-      await io.say(p.reply);
+      await io.say(p.reply, stickerFor(wait.action.op, command));
       return;
     }
     pending.delete(name); // 새 요청이 오면 묵은 확인 대기는 버린다
     if (!command) { await io.say('🤖 예: "@당이 토요일 10시 르파비스 임장 넣어줘", "@당 이번 주 일정"'); return; }
 
     const today = ymd(new Date(now()));
-    if (BRIEF_RE.test(command)) { await io.say(await briefing()); return; } // "@당이 브리핑" — 아침 브리핑을 지금
+    if (BRIEF_RE.test(command)) { await io.say(await briefing(), STICKERS.morning); return; } // "@당이 브리핑" — 아침 브리핑을 지금
     const ctx = buildContext(io.events(), today);
     let raw;
     try { raw = await io.ask(buildMessages(command, ctx, name)); }
     catch (e) {
       io.log?.("당이: 모델 호출 실패", String(e?.message || e));
-      await io.say("🤖 로컬 모델이 응답하지 않아요 (PC의 모델 서버 확인)");
+      await io.say("🤖 로컬 모델이 응답하지 않아요 (PC의 모델 서버 확인)", STICKERS.sorry);
       return;
     }
     const action = validateAction(raw, ctx, today, command);
@@ -701,7 +743,8 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
     }
     if (action.op === "recommend") {
       io.log?.("당이:", JSON.stringify({ op: "recommend" }), "→ recommend");
-      await io.say(await recommend(command, name, today));
+      const reply = await recommend(command, name, today);
+      await io.say(reply, reply.startsWith("🤖") ? STICKERS.sorry : STICKERS.date);
       return;
     }
     io.log?.("당이:", JSON.stringify(raw), "→", action.op);
@@ -713,7 +756,7 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
     }
     const p = plan(action, { events: io.events(), sender: name, now: now() });
     if (p.puts.length || p.dels.length) await io.apply(p);
-    await io.say(p.reply);
+    await io.say(p.reply, p.puts.length || p.dels.length || action.op === "chat" ? stickerFor(action.op, command) : null);
   }
 
   // 백업(io.archive, 읽기 전용)에서 관련 줄을 찾아 그것만 보여 주고 답하게 한다.
