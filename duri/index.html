@@ -1403,6 +1403,7 @@ const DURI_ONLY_PACKS = [
   { id: "dageudangseu-1", title: "다그당스1", count: 16, cutout: true },
   { id: "dageudangseu-2", title: "다그당스2", count: 16, cutout: true },
   { id: "dageudangseu-3", title: "다그당스3", count: 16, cutout: true },
+  { id: "dageudangseu-4", title: "다그당스4", count: 16, cutout: true },
   // 움직이는 이모티콘 시험판 (work/emoticon). 장수는 늘어나는 대로 count만 올린다.
   // cutout:false 필수 — 클라이언트 누끼는 캔버스로 다시 그리는 방식이라
   // APNG를 첫 프레임짜리 정지 이미지로 만들어 버린다. 이 팩은 이미 투명 배경이다.
@@ -1413,12 +1414,15 @@ function setPacks(list) {
   PACKS.length = 0; PACK_IDS.clear();
   for (const pack of list) { PACKS.push(pack); PACK_IDS.set(pack.id, pack); }
 }
+// duri 전용 팩은 코드에 있으니 언제나 그릴 수 있다. 캐시된 목록(지난번 카탈로그)엔 새로 넣은
+// 팩이 없어서, 카탈로그를 다시 받기 전에 그린 메시지에서 이모티콘이 빠졌다(iOS 에서 당이 이모티콘).
+const knownPack = (id) => PACK_IDS.has(id) || DURI_ONLY_PACKS.some((p) => p.id === id);
 // 지난번에 받아 둔 팩 목록을 캐시에서 즉시 채운다 — 네트워크를 기다리지 않아야
 // 채팅 히스토리 렌더(로컬 데이터)가 카탈로그 fetch에 발목 잡히지 않는다.
 function hydratePacksFromCache() {
   try {
     const cached = JSON.parse(localStorage.getItem(PACKS_CACHE_KEY) || "null");
-    if (Array.isArray(cached)) setPacks(cached);
+    if (Array.isArray(cached)) setPacks([...DURI_ONLY_PACKS.filter((p) => !cached.some((c) => c?.id === p.id)), ...cached]);
   } catch { /* 최선노력 — 캐시가 없으면 그냥 빈 채로 시작 */ }
 }
 // 최신 목록은 네트워크로 조용히 받아 갱신한다(로그인 흐름을 막지 않도록 await 안 함
@@ -2529,7 +2533,7 @@ function appendRecord(rec, { silent = false, into = null } = {}) {
       b.appendChild(photoImg(rec.blob || rec.thumb, rec.caption, rec.seq, rec));
       if (rec.caption) { const c = document.createElement("div"); c.className = "cap"; c.textContent = rec.caption; b.appendChild(c); }
     }, showName);
-  } else if (rec.sticker && PACK_IDS.has(rec.sticker.pack)) {
+  } else if (rec.sticker && knownPack(rec.sticker.pack)) {
     timeEl = buildBubble(row, rec.name, at, (b) => { b.classList.add("sticker"); b.appendChild(stickerImg(rec.sticker.pack, rec.sticker.n, "스티커")); }, showName);
   } else if (rec.broken) {
     timeEl = buildBubble(row, "🔒", at, (b) => { const s = document.createElement("span"); s.className = "broken"; s.textContent = rec.broken; b.appendChild(s); }, showName);
@@ -2538,7 +2542,7 @@ function appendRecord(rec, { silent = false, into = null } = {}) {
     timeEl = buildBubble(row, "당이", at, (b) => {
       b.textContent = rec.text;
       const st = rec.botSticker;
-      if (st && PACK_IDS.has(st.pack)) { const img = stickerImg(st.pack, st.n, "당이 이모티콘"); img.classList.add("dangi-sticker"); b.appendChild(img); }
+      if (st && knownPack(st.pack)) { const img = stickerImg(st.pack, st.n, "당이 이모티콘"); img.classList.add("dangi-sticker"); b.appendChild(img); }
     }, showName);
   } else {
     timeEl = buildBubble(row, rec.name, at, (b) => { b.textContent = rec.text; }, showName);

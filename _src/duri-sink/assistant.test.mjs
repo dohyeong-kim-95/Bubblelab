@@ -629,4 +629,10 @@ test("이모티콘: 당이가 쓰는 번호가 팩에 있고, duri 앱 서랍(DU
     assert.match(html, new RegExp(`id: "${pack}", title: "[^"]+", count: ${meta.downloads.length}`), `${pack} 가 duri 서랍에 없다`);
   }
   assert.match(html, /p\.botSticker/, "앱이 botSticker 를 읽는다");
+  // 캐시된 팩 목록에 새 팩이 없어도 그린다(iOS 에서 당이 이모티콘이 안 보이던 원인).
+  assert.match(html, /if \(st && knownPack\(st\.pack\)\)/);
+  const known = new Function("PACK_IDS", "DURI_ONLY_PACKS", `${html.match(/const knownPack = [^\n]+/)[0]}; return knownPack;`)(
+    new Map(), [{ id: "dageudangseu-3" }]);
+  assert.equal(known("dageudangseu-3"), true);
+  assert.equal(known("nope"), false);
 });

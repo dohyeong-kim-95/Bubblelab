@@ -1,0 +1,83 @@
+{
+  "title": "다그당스 4 이모티콘 16종",
+  "description": "",
+  "preview": "preview.png",
+  "tags": [
+    "말",
+    "다그당스",
+    "이모티콘",
+    "캐릭터",
+    "손그림"
+  ],
+  "createdAt": "2026-10-26",
+  "active": false,
+  "chat": {
+    "title": "다그당스4"
+  },
+  "downloads": [
+    {
+      "label": "01. 안뇽~",
+      "file": "01.png"
+    },
+    {
+      "label": "02. 웅웅!",
+      "file": "02.png"
+    },
+    {
+      "label": "03. 히히",
+      "file": "03.png"
+    },
+    {
+      "label": "04. >_<",
+      "file": "04.png"
+    },
+    {
+      "label": "05. 키키키",
+      "file": "05.png"
+    },
+    {
+      "label": "06. 헐…!",
+      "file": "06.png"
+    },
+    {
+      "label": "07. 기여워!",
+      "file": "07.png"
+    },
+    {
+      "label": "08. 호이잇!",
+      "file": "08.png"
+    },
+    {
+      "label": "09. 잘대따!",
+      "file": "09.png"
+    },
+    {
+      "label": "10. 대박잉!",
+      "file": "10.png"
+    },
+    {
+      "label": "11. 나두나두!",
+      "file": "11.png"
+    },
+    {
+      "label": "12. 와용~",
+      "file": "12.png"
+    },
+    {
+      "label": "13. 오나용?",
+      "file": "13.png"
+    },
+    {
+      "label": "14. 야호 신나!",
+      "file": "14.png"
+    },
+    {
+      "label": "15. 테니스 치러 가승!",
+      "file": "15.png"
+    },
+    {
+      "label": "16. 오늘도 수고했승",
+      "file": "16.png"
+    }
+  ]
+}
