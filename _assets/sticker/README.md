@@ -25,6 +25,7 @@
 | `jeju-cat` | 제주냥이 이모티콘 16종 | `01.png`–`16.png` |
 | `dageudangseu-1` | 다그당스 1 이모티콘 16종 | `01.png`–`16.png` |
 | `dageudangseu-2` | 다그당스 2 이모티콘 16종 | `01.png`–`16.png` |
+| `dageudangseu-3` | 다그당스 3 이모티콘 16종 | `01.png`–`16.png` |
 
 위 표의 팩이 실제로 목록에 나오는지는 admin의 ✨ Sticker 화면에서 팩마다 켜고 끌
 수 있습니다(기본값은 `metadata.json`의 `active`). 숨겨도 파일 주소는 살아 있습니다.

@@ -42,6 +42,7 @@ export const CHAT_STICKER_PACKS = new Map([
   ["cream-hoodie-girl", 16],
   ["dageudangseu-1", 16],
   ["dageudangseu-2", 16],
+  ["dageudangseu-3", 16],
   ["day-off-seal", 16],
   ["dog-cat-friends", 16],
   ["golden-retriever", 16],

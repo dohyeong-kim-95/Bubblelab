@@ -1,0 +1,83 @@
+{
+  "title": "다그당스 3 이모티콘 16종",
+  "description": "",
+  "preview": "preview.png",
+  "tags": [
+    "말",
+    "다그당스",
+    "이모티콘",
+    "캐릭터",
+    "손그림"
+  ],
+  "createdAt": "2026-10-26",
+  "active": false,
+  "chat": {
+    "title": "다그당스3"
+  },
+  "downloads": [
+    {
+      "label": "01. 좋은 아침이승!",
+      "file": "01.png"
+    },
+    {
+      "label": "02. 일정 넣었승!",
+      "file": "02.png"
+    },
+    {
+      "label": "03. 사과 최고승",
+      "file": "03.png"
+    },
+    {
+      "label": "04. 충성!",
+      "file": "04.png"
+    },
+    {
+      "label": "05. 고마웁승",
+      "file": "05.png"
+    },
+    {
+      "label": "06. 잘 자승~",
+      "file": "06.png"
+    },
+    {
+      "label": "07. 응원하승!",
+      "file": "07.png"
+    },
+    {
+      "label": "08. 배고팠승…",
+      "file": "08.png"
+    },
+    {
+      "label": "09. 토닥토닥",
+      "file": "09.png"
+    },
+    {
+      "label": "10. 생일 축하하승!",
+      "file": "10.png"
+    },
+    {
+      "label": "11. 기다리고 있승",
+      "file": "11.png"
+    },
+    {
+      "label": "12. 삐졌승",
+      "file": "12.png"
+    },
+    {
+      "label": "13. 꼬옥 안아주승",
+      "file": "13.png"
+    },
+    {
+      "label": "14. 데이트 가자승!",
+      "file": "14.png"
+    },
+    {
+      "label": "15. 각설탕 하나만…",
+      "file": "15.png"
+    },
+    {
+      "label": "16. 퇴근했승!",
+      "file": "16.png"
+    }
+  ]
+}
