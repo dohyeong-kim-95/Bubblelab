@@ -610,8 +610,12 @@ test("이모티콘: 잡담은 말에 맞는 게 있을 때만, '이모티콘 보
   assert.deepEqual(chatSticker("당이야 잘 자"), { pack: "dageudangseu-3", n: 6 });
   assert.deepEqual(chatSticker("오늘 너무 힘들었어"), { pack: "dageudangseu-3", n: 9 });
   assert.equal(chatSticker("오늘 뭐 해?"), null);
+  assert.deepEqual(chatSticker("헐 대박"), { pack: "dageudangseu-4", n: 6 }); // 먼저 맞는 것 하나
+  assert.deepEqual(chatSticker("오늘도 수고했어"), { pack: "dageudangseu-4", n: 16 });
   const r = chatSticker("이모티콘 보내줘");
-  assert.equal(r.pack, "dageudangseu-3");
+  assert.match(r.pack, /^dageudangseu-[34]$/);
+  const packs = new Set(["1", "2", "3", "4", "5", "6"].map((x) => chatSticker(`이모티콘 ${x}`).pack));
+  assert.equal(packs.size, 2, "3·4 둘 다 나온다");
   assert.ok(r.n >= 1 && r.n <= 16);
   assert.deepEqual(chatSticker("이모티콘 보내줘"), r, "같은 말엔 같은 것");
   const h = stickerHarness([{ op: "chat", reply: "고마웁승~" }]);
@@ -622,7 +626,8 @@ test("이모티콘: 잡담은 말에 맞는 게 있을 때만, '이모티콘 보
 test("이모티콘: 당이가 쓰는 번호가 팩에 있고, duri 앱 서랍(DURI_ONLY_PACKS)에 그 팩이 있다", async () => {
   const { readFileSync } = await import("node:fs");
   const html = readFileSync(new URL("../../duri/index.html", import.meta.url), "utf8");
-  const used = [...["잘 자", "사과", "각설탕", "사랑해", "힘들어", "배고파", "퇴근", "생일", "화이팅", "고마워", "굿모닝", "데이트", "충성"].map(chatSticker)];
+  const used = [...["잘 자", "사과", "각설탕", "사랑해", "힘들어", "배고파", "퇴근", "생일", "화이팅", "고마워", "굿모닝", "데이트", "충성",
+    "안녕", "웅웅", "히히", "부끄", "키키", "헐", "귀여워", "호이", "잘됐다", "대박", "나두", "우와", "알림", "신나", "테니스", "수고"].map(chatSticker)];
   for (const { pack, n } of used) {
     const meta = JSON.parse(readFileSync(new URL(`../../_assets/sticker/${pack}/metadata.json`, import.meta.url), "utf8"));
     assert.ok(n >= 1 && n <= meta.downloads.length, `${pack}/${n}`);
