@@ -12,19 +12,31 @@ const ymdOf = (at) => { const d = new Date(at); return `${d.getFullYear()}-${pad
 const LINE_MAX = 200;
 const JOSA = /(에서|에게|한테|으로|이랑|하고|까지|부터|처럼|에|로|은|는|이|가|을|를|도|랑|와|과)$/;
 
-/** 한 줄 요약. 당이가 근거로 읽을 수 없는 것(이모티콘·좌표)은 null. */
-function lineOf(l) {
+/** 찾을 낱말 하나 → 맞는 걸로 볼 꼴들. 조사를 뗀 것·끝 한 글자를 뗀 것도("어니언에서"·"제주도" 로 물어도 걸리게). */
+export function wordVariants(t) {
+  const w = String(t).trim().toLowerCase();
+  if (!w) return null;
+  const bare = w.replace(JOSA, "");
+  return [...new Set([w, ...(bare.length >= 2 ? [bare] : []), ...(w.length >= 3 ? [w.slice(0, -1)] : [])])];
+}
+
+/** 한 줄 요약. 당이가 근거로 읽을 수 없는 것(이모티콘)은 null. 좌표는 place 가 있으면 지역 이름으로. */
+function lineOf(l, place) {
   if (l.type === "message" && typeof l.text === "string" && l.text.trim()) return l.text.trim();
-  if (l.type === "photo") return `🖼️ 사진${l.photo?.caption ? ` "${l.photo.caption}"` : ""}`;
+  const where = l.loc && place ? place(Number(l.loc.lat), Number(l.loc.lng)) : null;
+  if (l.type === "photo") return `🖼️ 사진${l.photo?.caption ? ` "${l.photo.caption}"` : ""}${where ? ` 📍${where}` : ""}`;
+  if (l.type === "location" && where) return `📍 위치 공유 — ${where}`;
   return null;
 }
 
 /**
  * dir: 싱크 저장 위치(DuriStorage). skip(name, text) 이 참인 줄은 뺀다(당이 자신의 답·명령).
+ * place(lat, lng): 좌표 → 지역 이름(places.mjs). 없으면 사진은 장소 없이 읽는다.
  * search({ terms, from, to, limit }) → 시간순 줄 배열 "10/12 (일) 14:03 도경: …"
  *   terms 가 있으면 낱말이 많이 맞는 줄 + 앞뒤 한 줄씩, 없으면 기간의 마지막 limit 줄.
+ * day(ymd) → { photos, places } 그날 사진 수와 찍은 곳(아침 브리핑의 "1년 전 오늘").
  */
-export function createArchive(dir, { skip = () => false } = {}) {
+export function createArchive(dir, { skip = () => false, place = null } = {}) {
   const cache = new Map(); // 파일 → { mtimeMs, rows }
 
   function monthFiles(from, to) {
@@ -52,9 +64,10 @@ export function createArchive(dir, { skip = () => false } = {}) {
     try { logs = JSON.parse(readFileSync(file, "utf8")).logs ?? []; } catch { /* 쓰는 중이면 다음에 */ }
     const rows = [];
     for (const l of logs) {
-      const text = lineOf(l);
+      const text = lineOf(l, place);
       if (!text || !Number.isFinite(l.at) || skip(l.name, text)) continue;
-      rows.push({ at: l.at, date: ymdOf(l.at), name: l.name ?? "?", text });
+      const where = l.type === "photo" && l.loc && place ? place(Number(l.loc.lat), Number(l.loc.lng)) : null;
+      rows.push({ at: l.at, date: ymdOf(l.at), name: l.name ?? "?", text, photo: l.type === "photo", where });
     }
     cache.set(file, { mtimeMs, rows });
     return rows;
@@ -66,15 +79,13 @@ export function createArchive(dir, { skip = () => false } = {}) {
     return `${d.getMonth() + 1}/${d.getDate()} (${WEEKDAYS[d.getDay()]}) ${pad2(d.getHours())}:${pad2(d.getMinutes())} ${r.name}: ${text}`;
   }
 
+  const rowsIn = (from, to) => monthFiles(from, to).flatMap(rowsOf)
+    .filter((r) => r.date >= from && r.date <= to)
+    .sort((a, b) => a.at - b.at);
+
   function search({ terms = [], from, to, limit = 14 }) {
-    const rows = monthFiles(from, to).flatMap(rowsOf)
-      .filter((r) => r.date >= from && r.date <= to)
-      .sort((a, b) => a.at - b.at);
-    // 조사를 뗀 것·끝 한 글자를 뗀 것도 맞는 걸로 본다 — "어니언에서"·"제주도" 로 물어도 걸리게.
-    const words = terms.map((t) => String(t).trim().toLowerCase()).filter(Boolean).map((w) => {
-      const bare = w.replace(JOSA, "");
-      return [...new Set([w, ...(bare.length >= 2 ? [bare] : []), ...(w.length >= 3 ? [w.slice(0, -1)] : [])])];
-    });
+    const rows = rowsIn(from, to);
+    const words = terms.map(wordVariants).filter(Boolean);
     if (!words.length) return rows.slice(-limit * 2).map(fmt); // 기간 요약: 마지막 몇 줄
     const scored = rows.map((r, i) => ({ i, score: words.filter((vs) => vs.some((w) => r.text.toLowerCase().includes(w))).length }))
       .filter((s) => s.score > 0)
@@ -85,5 +96,10 @@ export function createArchive(dir, { skip = () => false } = {}) {
     return [...keep].sort((a, b) => a - b).map((j) => fmt(rows[j]));
   }
 
-  return { search };
+  function day(ds) {
+    const photos = rowsIn(ds, ds).filter((r) => r.photo);
+    return { photos: photos.length, places: [...new Set(photos.map((r) => r.where).filter(Boolean))] };
+  }
+
+  return { search, day };
 }

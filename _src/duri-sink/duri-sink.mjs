@@ -18,6 +18,7 @@ import { fileURLToPath } from "node:url";
 import { deriveKey, createStore, atomicWrite, encryptJson } from "./store.mjs";
 import { createAssistant, ollamaAsk, llamaAsk, parseTrigger, briefDue, kstYmd, BOT_NAME } from "./assistant.mjs";
 import { createArchive } from "./archive.mjs";
+import { createPlaces } from "./places.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const fatal = (msg) => { console.error("✖", msg); process.exit(1); };
@@ -293,8 +294,8 @@ if (cfg.assistant.enabled) {
     apply: assistantApply,
     say: assistantSay,
     // 당이가 지난 대화를 찾아 읽는 백업 — 읽기 전용(archive.mjs 엔 쓰는 함수가 없다).
-    // 당이 자신의 답과 "@당이 …" 명령은 근거에서 뺀다.
-    archive: createArchive(cfg.dir, { skip: (name, text) => name === BOT_NAME || parseTrigger(text) !== null }),
+    // 당이 자신의 답과 "@당이 …" 명령은 근거에서 뺀다. 사진 좌표는 앱 지도와 같은 geojson 으로 지역 이름이 된다.
+    archive: createArchive(cfg.dir, { skip: (name, text) => name === BOT_NAME || parseTrigger(text) !== null, place: createPlaces() }),
     log,
   });
   log(`일정 비서 당이 켜짐 — ${cfg.assistant.api === "llama" ? `llama-server @ ${cfg.assistant.llama}` : `${cfg.assistant.model} @ ${cfg.assistant.ollama}`} (채팅에서 "@당이 …")`);

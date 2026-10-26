@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   BOT_NAME, MAX_AGE_MS, briefDue, briefFacts, briefFallback, buildBriefingMessages, buildContext, buildMessages, buildRecommendMessages,
-  calEventOnDate, chatSticker, createAssistant, fitId, kstYmd, parseTrigger, plan, validateAction, whoKey, ymd,
+  calEventOnDate, chatSticker, createAssistant, memoryFacts, onThisDay, fitId, kstYmd, parseTrigger, plan, validateAction, whoKey, ymd,
 } from "./assistant.mjs";
 
 const NOW = new Date(2026, 9, 25, 12, 0).getTime(); // 2026-10-25 (일) 정오, 로컬
@@ -337,6 +337,74 @@ test("기억: 기간 해석, 못 찾음, 백업 없음", async () => {
   };
   assert.match(await run({ search: () => [] }), /못 찾았승.*"제주"/);
   assert.match(await run(undefined), /백업 기록을 읽을 수 없어요/);
+});
+
+const MEMORY_EVENTS = [
+  { id: "m1", rev: 1, date: "2026-03-14", endDate: "2026-03-16", title: "제주도 여행", owner: "도경", shared: true },
+  { id: "m2", rev: 1, date: "2026-09-12", title: "성수동 데이트", start: "13:00", owner: "민지", shared: true },
+  { id: "m3", rev: 1, date: "2026-11-20", title: "제주 출장", owner: "도경", shared: false }, // 아직 안 온 일
+  { id: "m4", rev: 1, date: "2026-01-05", title: "테니스 레슨", recur: { freq: "weekly" }, shared: true }, // 반복은 추억 아님
+  { id: "m5", rev: 1, kind: "bucket", title: "제주 한라산 등반", done: true, doneAt: new Date(2026, 2, 15, 10).getTime() },
+  { id: "m6", rev: 1, kind: "bucket", title: "한강 피크닉", done: true }, // 달성 날짜 없음
+  { id: "m7", rev: 1, kind: "bucket", title: "제주 오름", done: false }, // 아직 안 함
+];
+
+test("추억: 지난 일정·해낸 버킷리스트에서 낱말·기간이 맞는 것(반복·앞으로 올 일·안 한 것 제외)", () => {
+  assert.deepEqual(memoryFacts(MEMORY_EVENTS, { terms: ["제주도"], from: "2023-10-23", to: TODAY }), {
+    plans: ["📅 3/14 (토) ~ 3/16 (월) 제주도 여행"],
+    bucket: ["✓ 3/15 (일) 버킷리스트 달성: 제주 한라산 등반"],
+  });
+  // 낱말 없이 기간만: 그 기간의 것 전부. 달성 날짜 없는 옛 항목은 기간 질문엔 끼지 않는다.
+  assert.deepEqual(memoryFacts(MEMORY_EVENTS, { terms: [], from: "2026-09-01", to: "2026-09-30" }),
+    { plans: ["📅 9/12 (토) 13:00 성수동 데이트"], bucket: [] });
+  assert.deepEqual(memoryFacts(MEMORY_EVENTS, { terms: ["한강"], from: "2026-09-01", to: TODAY }).bucket, ["✓ 버킷리스트 달성: 한강 피크닉"]);
+  assert.deepEqual(memoryFacts(MEMORY_EVENTS, { terms: ["테니스"], from: "2023-10-23", to: TODAY }), { plans: [], bucket: [] });
+});
+
+test("추억: recall 은 대화가 없어도 캘린더에 남은 것으로 답한다", async () => {
+  const asks = [], said = [];
+  const answers = [{ op: "recall", query: "제주도" }, { reply: "3월 14일에 갔승!" }];
+  await createAssistant({
+    ask: async (m) => { asks.push(m); return answers.shift(); },
+    events: () => MEMORY_EVENTS, apply: async () => {}, say: async (t) => { said.push(t); },
+    archive: { search: () => [] },
+  }, { now: () => NOW }).onMessage({ name: "민지", text: "@당 우리 제주도 언제 갔지", at: NOW });
+  assert.match(asks[1][0].content, /지난 일정:\n📅 3\/14 \(토\) ~ 3\/16 \(월\) 제주도 여행/);
+  assert.match(asks[1][0].content, /해낸 버킷리스트:\n✓ 3\/15 \(일\) 버킷리스트 달성: 제주 한라산 등반/);
+  assert.match(asks[1][0].content, /기록:\n\(없음\)/);
+  assert.deepEqual(said, ["3월 14일에 갔승!"]);
+  // 백업이 없어도 캘린더 추억은 읽는다
+  const said2 = [], answers2 = [{ op: "recall", query: "제주도" }, { reply: "갔승" }];
+  await createAssistant({ ask: async () => answers2.shift(), events: () => MEMORY_EVENTS, apply: async () => {}, say: async (t) => { said2.push(t); } },
+    { now: () => NOW }).onMessage({ name: "민지", text: "@당 제주도 언제 갔지", at: NOW });
+  assert.deepEqual(said2, ["갔승"]);
+});
+
+test("1년 전 오늘: 1~3년 전 같은 날의 일정·사진·해낸 버킷리스트를 코드가 한 줄로", () => {
+  const events = [
+    { id: "y1", rev: 1, date: "2025-10-25", endDate: "2025-10-27", title: "강릉 여행", shared: true },
+    { id: "y2", rev: 1, date: "2024-10-26", title: "첫 데이트", shared: true },
+    { id: "y3", rev: 1, date: "2025-10-26", title: "주간 회의", recur: { freq: "weekly" }, shared: true },
+    { id: "y4", rev: 1, kind: "bucket", title: "바다 수영", done: true, doneAt: new Date(2025, 9, 26, 15).getTime() },
+  ];
+  const archive = { day: (ds) => (ds === "2025-10-26" ? { photos: 4, places: ["강원특별자치도 강릉시"] } : { photos: 0, places: [] }) };
+  assert.deepEqual(onThisDay(events, archive, "2026-10-26"), [
+    "📸 1년 전 오늘 (10/26 (일)) — 📅 강릉 여행 · 🖼️ 사진 4장 (강원특별자치도 강릉시) · ✓ 바다 수영 달성",
+    "📸 2년 전 오늘 (10/26 (토)) — 📅 첫 데이트",
+  ]);
+  assert.deepEqual(onThisDay(events, undefined, "2026-10-20"), []);
+  assert.deepEqual(onThisDay([], archive, "2028-02-29"), []); // 윤날은 건너뛴다
+});
+
+test("1년 전 오늘: 브리핑 끝에 붙고, 없으면 아무것도 안 붙는다", async () => {
+  const events = [...BRIEF_EVENTS, { id: "y1", rev: 1, date: "2025-10-26", title: "강릉 여행", shared: true }];
+  const logs = [];
+  const a = createAssistant({ ask: async () => { throw new Error("down"); }, events: () => events, apply: async () => {}, say: async () => {},
+    log: (...x) => logs.push(x.join(" ")) }, { now: () => Date.parse("2026-10-25T23:00:00Z") });
+  const text = await a.brief();
+  assert.match(text, /오늘도 힘내승! 푸히힝 🐴\n📸 1년 전 오늘 \(10\/26 \(일\)\) — 📅 강릉 여행$/);
+  assert.match(logs.join("\n"), /추억 1줄/);
+  assert.doesNotMatch(await briefHarness(new Error("down")).a.brief(), /년 전 오늘/);
 });
 
 test("말한 사람 이름은 긴 지시문 뒤 별도 시스템 메시지로 간다(앞부분 재사용)", () => {

@@ -8,6 +8,8 @@
 // 한다 — 작은 CPU 모델이 날짜를 직접 세면 자주 틀린다. 옮기기·삭제는 되묻고
 // "@당이 응" 을 받아야 실행한다(공유 캘린더라 잘못 지우면 둘 다 곤란하다).
 
+import { wordVariants } from "./archive.mjs";
+
 export const BOT_NAME = "🤖 당이"; // 두 사람 이름과 겹치면 안 된다(자기 답을 명령으로 읽는다). 앱의 DANGI_NAME 과 같아야 말풍선으로 그린다
 // "@당이"·"@당" 뒤엔 공백이나 끝이 와야 한다("@당근" 은 명령이 아니다).
 // 앱(duri/index.html 의 DANGI_RE)도 같은 규칙으로 "자고 있어요" 를 띄운다 — 같이 고칠 것.
@@ -204,7 +206,7 @@ export function buildMessages(command, ctx, sender) {
     "규칙: 날짜는 아래 날짜표에서만 고른다. 요일·'다음주'·'내일'은 날짜표로 바꾼다. 시간이 없으면 start 를 생략한다(종일).",
     "오후 3시는 15:00. 옮기기·삭제는 아래 일정 목록의 e번호로만 가리킨다. 목록에 없으면 unknown.",
     "운동 인증(운동·헬스·러닝 같은 운동 얘기일 때만. 일정·여행 얘기엔 쓰지 않는다): '운동했어'·'오늘 헬스 1시간' 은 말한 사람의 그날 운동 체크(fit, 날짜 없으면 오늘, memo 는 운동 종류·양만 적고 없으면 생략). 체크 취소는 unfit, '이번 달 운동 몇 번?'·'운동 기록'·'운동 요약'·'지난주 운동 어땠어?' 은 fitlist(달이면 month, 이번 주·지난주면 week).",
-    "기억: 둘이 예전에 나눈 얘기·보낸 사진·있었던 일을 물으면(그 카페 이름 뭐였지? 지난달에 어디 갔었지? 어제 무슨 얘기 했어?) recall. query 엔 찾을 핵심 낱말만(조사 빼고), 기간을 말했으면 from/to 나 month.",
+    "기억: 둘이 예전에 나눈 얘기·보낸 사진·있었던 일·다녀온 곳·해낸 것을 물으면(그 카페 이름 뭐였지? 지난달에 어디 갔었지? 제주도 언제 갔지? 어제 무슨 얘기 했어?) recall. query 엔 찾을 핵심 낱말만(조사 빼고), 기간을 말했으면 from/to 나 month.",
     "버킷리스트(둘이 해보고 싶은 것 목록)를 보여 달라·뭐 남았어·뭐 했어·○○ 있어? 는 bucket(남은 것 todo, 한 것 done, 둘 다 all, 특정 항목을 찾으면 query). 데이트·같이 할 것·주말에 뭐 할지 추천해 달라면 recommend.",
     "일정과 상관없는 인사·잡담·간단한 질문이면 chat 으로 짧게 답한다. 날씨·뉴스·시세처럼 지금 정보는 모른다고 솔직히 말한다.",
     "",
@@ -222,17 +224,41 @@ export function buildMessages(command, ctx, sender) {
   return out;
 }
 
-/** 기억(recall) 2단계: 백업에서 찾은 줄만 근거로 답하게 한다. */
-export function buildRecallMessages(command, lines, sender) {
+// ── 추억 — 대화 말고도 캘린더에 남은 것(지난 일정·해낸 버킷리스트)을 기억의 근거로 쓴다 ──
+// 대화엔 "제주" 가 없어도 "제주 여행" 일정은 있다. 반복 일정은 뺀다(매주 레슨은 추억이 아니다).
+const MEMORY_MAX = 10;
+const matchAny = (text, words) => !words.length || words.some((vs) => vs.some((w) => text.toLowerCase().includes(w)));
+
+/** 기간 안의 지난 일정·해낸 버킷리스트 중 낱말이 맞는 것(낱말이 없으면 전부, 최근 것부터 10개씩). */
+export function memoryFacts(events, { terms = [], from, to }) {
+  const words = terms.map(wordVariants).filter(Boolean);
+  const pastPlans = plans(events)
+    .filter((e) => !e.recur?.freq && (e.endDate || e.date) >= from && e.date <= to && matchAny(String(e.title ?? ""), words))
+    .sort((a, b) => b.date.localeCompare(a.date)).slice(0, MEMORY_MAX).reverse()
+    .map((e) => `📅 ${whenText(e)} ${e.title ?? ""}${e.shared === false && e.owner ? ` (${e.owner})` : ""}`);
+  // 달성 날짜가 없는 옛 항목은 낱말로 콕 집어 물을 때만 낸다(기간 질문에 날짜 없이 끼면 헷갈린다).
+  const done = bucketItems(events).filter((i) => i.done && matchAny(`${i.title} ${i.memo}`, words)).filter((i) => {
+    if (!i.doneAt) return words.length > 0;
+    const d = ymd(new Date(i.doneAt));
+    return d >= from && d <= to;
+  }).sort((a, b) => b.doneAt - a.doneAt).slice(0, MEMORY_MAX).reverse()
+    .map((i) => `✓ ${i.doneAt ? `${label(ymd(new Date(i.doneAt)))} ` : ""}버킷리스트 달성: ${i.title}${i.memo ? ` (메모: ${i.memo.slice(0, 60)})` : ""}`);
+  return { plans: pastPlans, bucket: done };
+}
+
+/** 기억(recall) 2단계: 백업에서 찾은 줄(+ 지난 일정·해낸 버킷리스트)만 근거로 답하게 한다. */
+export function buildRecallMessages(command, lines, sender, { plans: planLines = [], bucket = [] } = {}) {
   const system = [
     "너는 두 사람의 채팅 앱에 사는 비서 '당이'다.",
     ...PERSONA,
-    "아래는 두 사람의 지난 대화 기록 중 질문과 관련된 부분이다(시간순, '날짜 시각 이름: 내용').",
+    "아래는 두 사람의 지난 기록 중 질문과 관련된 부분이다: 캘린더에 있던 일정, 해낸 버킷리스트, 대화(시간순, '날짜 시각 이름: 내용'. 🖼️ 사진의 📍는 찍은 곳).",
     "이 기록에 있는 것만 근거로 1~3문장으로 답한다. 기록에 없으면 모른다고 한다. 지어내지 않는다.",
     '답은 JSON {"reply":"…"} 하나로만.',
+    ...(planLines.length ? ["", "지난 일정:", ...planLines] : []),
+    ...(bucket.length ? ["", "해낸 버킷리스트:", ...bucket] : []),
     "",
     "기록:",
-    ...lines,
+    ...(lines.length ? lines : ["(없음)"]),
   ].join("\n");
   return [{ role: "system", content: system }, ...(sender ? [whoMessage(sender)] : []), { role: "user", content: command }];
 }
@@ -623,6 +649,23 @@ function briefCovers(reply, todays) {
   });
 }
 
+// "1년 전 오늘" — 1~3년 전 같은 날의 일정·사진(찍은 곳)·해낸 버킷리스트. 모델이 아니라 코드가 만든 한 줄을
+// 브리핑 끝에 붙인다(추억을 지어내면 안 된다). 없으면 빈 배열 — 아무것도 붙이지 않는다.
+export function onThisDay(events, archive, today, years = 3) {
+  const out = [];
+  for (let n = 1; n <= years; n++) {
+    const t = parseYmd(today), d = new Date(t.getFullYear() - n, t.getMonth(), t.getDate());
+    if (d.getMonth() !== t.getMonth()) continue; // 2/29
+    const ds = ymd(d), bits = [];
+    for (const e of plans(events)) if (!e.recur?.freq && calEventOnDate(e, ds)) bits.push(`📅 ${String(e.title || "(제목 없음)").trim().slice(0, 40)}`);
+    const day = archive?.day?.(ds);
+    if (day?.photos) bits.push(`🖼️ 사진 ${day.photos}장${day.places.length ? ` (${day.places.slice(0, 2).join(", ")})` : ""}`);
+    for (const i of bucketItems(events)) if (i.done && i.doneAt && ymd(new Date(i.doneAt)) === ds) bits.push(`✓ ${i.title.slice(0, 40)} 달성`);
+    if (bits.length) out.push(`📸 ${n}년 전 오늘 (${label(ds)}) — ${bits.slice(0, 5).join(" · ")}`);
+  }
+  return out;
+}
+
 export function briefFallback({ today, todays, tomorrows }) {
   const out = [`좋은 아침이승~ ☀️ ${label(today)}`];
   if (todays.length) {
@@ -768,17 +811,19 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
 
   // 백업(io.archive, 읽기 전용)에서 관련 줄을 찾아 그것만 보여 주고 답하게 한다.
   async function recall(action, command, name) {
-    if (!io.archive) return "🤖 백업 기록을 읽을 수 없어요";
-    const lines = io.archive.search({ terms: action.terms, from: action.from, to: action.to });
+    const facts = memoryFacts(io.events(), action);
+    const extra = facts.plans.length + facts.bucket.length;
+    if (!io.archive && !extra) return "🤖 백업 기록을 읽을 수 없어요";
+    const lines = io.archive ? io.archive.search({ terms: action.terms, from: action.from, to: action.to }) : [];
     const span = action.from === action.to ? label(action.from) : `${label(action.from)}~${label(action.to)}`;
-    if (!lines.length) return `기록에서 못 찾았승… (${span}${action.terms.length ? `, "${action.terms.join(" ")}"` : ""})`;
+    if (!lines.length && !extra) return `기록에서 못 찾았승… (${span}${action.terms.length ? `, "${action.terms.join(" ")}"` : ""})`;
     let raw;
-    try { raw = await io.ask(buildRecallMessages(command, lines, name)); }
+    try { raw = await io.ask(buildRecallMessages(command, lines, name, facts)); }
     catch (e) {
       io.log?.("당이: 모델 호출 실패", String(e?.message || e));
       return "🤖 로컬 모델이 응답하지 않아요 (PC의 모델 서버 확인)";
     }
-    io.log?.(`당이: 기억 ${lines.length}줄 읽고 답함`); // 대화 내용은 로그에 남기지 않는다
+    io.log?.(`당이: 기억 ${lines.length}줄·일정 ${facts.plans.length}·버킷 ${facts.bucket.length} 읽고 답함`); // 대화 내용은 로그에 남기지 않는다
     const reply = String(raw?.reply ?? "").trim().slice(0, 600);
     return reply || "기록은 읽었는데 뭐라고 할지 모르겠승…";
   }
@@ -801,13 +846,16 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
   }
 
   async function briefing() {
-    const facts = briefFacts(io.events(), kstYmd(now()));
+    const today = kstYmd(now());
+    const facts = briefFacts(io.events(), today);
     let reply = "";
     try { reply = String((await io.ask(buildBriefingMessages(facts)))?.reply ?? "").trim().slice(0, 800); }
     catch (e) { io.log?.("당이: 모델 호출 실패", String(e?.message || e)); }
     const ok = reply && briefCovers(reply, facts.todays);
-    io.log?.(`당이: 아침 브리핑 — 오늘 ${facts.todays.length}개·내일 ${facts.tomorrows.length}개${ok ? "" : " (틀 문장)"}`); // 내용은 로그에 남기지 않는다
-    return ok ? reply : briefFallback(facts);
+    let memories = [];
+    try { memories = onThisDay(io.events(), io.archive, today); } catch (e) { io.log?.("당이: 1년 전 오늘 못 읽음", String(e?.message || e)); }
+    io.log?.(`당이: 아침 브리핑 — 오늘 ${facts.todays.length}개·내일 ${facts.tomorrows.length}개${ok ? "" : " (틀 문장)"}${memories.length ? ` · 추억 ${memories.length}줄` : ""}`); // 내용은 로그에 남기지 않는다
+    return [ok ? reply : briefFallback(facts), ...memories].join("\n");
   }
 
   return {

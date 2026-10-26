@@ -4,6 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "nod
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createArchive } from "./archive.mjs";
+import { createPlaces } from "./places.mjs";
 
 const at = (y, mo, d, h, mi = 0) => new Date(y, mo - 1, d, h, mi).getTime(); // 로컬 시각
 
@@ -50,14 +51,49 @@ test("백업 검색: 낱말이 맞는 줄과 앞뒤 한 줄을 시간순으로, 
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("백업 검색은 읽기 전용이다 — 모듈에 쓰기 API 가 없고, 검색해도 파일이 그대로다", () => {
-  const src = readFileSync(new URL("archive.mjs", import.meta.url), "utf8");
-  assert.doesNotMatch(src, /write|append|rename|unlink|rmSync|rmdir|mkdir|copyFile|truncate|chmod|createWriteStream/i);
+test("백업 검색은 읽기 전용이다 — 모듈(장소 포함)에 쓰기 API 가 없고, 검색해도 파일이 그대로다", () => {
+  for (const f of ["archive.mjs", "places.mjs"]) {
+    const src = readFileSync(new URL(f, import.meta.url), "utf8");
+    assert.doesNotMatch(src, /write|append|rename|unlink|rmSync|rmdir|mkdir|copyFile|truncate|chmod|createWriteStream/i, f);
+  }
   const dir = fixture();
   try {
     const f = join(dir, "timeline", "2026", "2026-09", "metadata.json");
     const before = readFileSync(f, "utf8");
     createArchive(dir, { skip }).search({ terms: ["카페"], from: "2026-01-01", to: "2026-10-25" });
     assert.equal(readFileSync(f, "utf8"), before);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("장소: 사진 좌표는 앱 지도와 같은 geojson 으로 시군구(한국)·나라 이름이 된다", () => {
+  const place = createPlaces();
+  assert.equal(place(37.5446, 127.0557), "서울특별시 성동구"); // 성수동
+  assert.equal(place(33.4996, 126.5312), "제주특별자치도 제주시");
+  assert.equal(place(35.6812, 139.7671), "일본");
+  assert.equal(place(0, -140), null); // 바다
+  assert.equal(place(NaN, 127), null);
+  assert.equal(createPlaces([join(tmpdir(), "duri-places-없음")])(37.5446, 127.0557), null); // 파일 없으면 이름 없이
+});
+
+test("장소: 사진 줄에 찍은 곳이 붙고, day() 는 그날 사진 수와 장소를 준다", () => {
+  const dir = mkdtempSync(join(tmpdir(), "duri-archive-"));
+  try {
+    mkdirSync(join(dir, "timeline", "2025", "2025-10"), { recursive: true });
+    writeFileSync(join(dir, "timeline", "2025", "2025-10", "metadata.json"), JSON.stringify({ month: "2025-10", logs: [
+      { seq: 1, type: "photo", at: at(2025, 10, 27, 12), name: "도경", photo: { file: "a.jpg" }, loc: { lat: 33.4996, lng: 126.5312 } },
+      { seq: 2, type: "photo", at: at(2025, 10, 27, 13), name: "민지", photo: { file: "b.jpg" }, loc: { lat: 33.5, lng: 126.53 } },
+      { seq: 3, type: "photo", at: at(2025, 10, 27, 18), name: "민지", photo: { file: "c.jpg" } },
+      { seq: 4, type: "location", at: at(2025, 10, 28, 9), name: "도경", loc: { lat: 37.5446, lng: 127.0557 } },
+    ] }));
+    const a = createArchive(dir, { skip, place: createPlaces() });
+    assert.deepEqual(a.search({ terms: ["제주"], from: "2025-10-01", to: "2025-10-31" }), [
+      "10/27 (월) 12:00 도경: 🖼️ 사진 📍제주특별자치도 제주시",
+      "10/27 (월) 13:00 민지: 🖼️ 사진 📍제주특별자치도 제주시",
+      "10/27 (월) 18:00 민지: 🖼️ 사진",
+    ]);
+    assert.deepEqual(a.search({ terms: ["성동"], from: "2025-10-01", to: "2025-10-31" }).at(-1), "10/28 (화) 09:00 도경: 📍 위치 공유 — 서울특별시 성동구");
+    assert.deepEqual(a.day("2025-10-27"), { photos: 3, places: ["제주특별자치도 제주시"] });
+    assert.deepEqual(a.day("2025-10-26"), { photos: 0, places: [] });
+    assert.deepEqual(createArchive(dir, { skip }).day("2025-10-27"), { photos: 3, places: [] }); // place 없으면 장소 없이
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
