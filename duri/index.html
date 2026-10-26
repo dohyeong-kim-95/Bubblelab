@@ -228,6 +228,10 @@
   .bubble.sticker, .row.me .bubble.sticker { background: none; border: none; padding: .2rem; }
   .bubble.sticker img { width: 8.5rem; aspect-ratio: 1 / 1; height: auto; border-radius: 0; }
   .bubble img.dangi-sticker { display: block; width: 6.5rem; aspect-ratio: 1 / 1; height: auto; margin-top: .4rem; border-radius: 0; }
+  /* 당이가 가져온 사진 — 이 기기 캐시에 있는 원래 사진을 그대로 그린다(지역 앨범과 같은 격자) */
+  .dangi-photos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .25rem; margin-top: .45rem; min-width: 12rem; }
+  .bubble .dangi-photos img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border-radius: .45rem; display: block; cursor: pointer; }
+  .dangi-photos .none { grid-column: 1 / -1; font-size: .78rem; color: var(--dim); }
   .sticker-anim { will-change: transform; } /* 움직이는 스티커: 합성 힌트 */
   .time { font-size: .62rem; color: var(--dim); margin: .1rem .3rem 0; }
   .broken { color: light-dark(#b4453a, #f0a8a2); font-size: .82rem; }
@@ -1750,6 +1754,17 @@ function putEntry(rec) {
     if (rec.seq > MAX_CACHE) store.delete(IDBKeyRange.upperBound(rec.seq - MAX_CACHE)); // 오래된 것 정리
   } catch { /* 캐시는 최선노력 */ }
 }
+// seq 들의 캐시 항목(없는 건 빠진다). 당이가 가져온 사진을 그릴 때 쓴다.
+function getEntries(seqs) {
+  return Promise.all(seqs.map((seq) => new Promise((resolve) => {
+    if (!db) return resolve(null);
+    try {
+      const req = db.transaction("entries").objectStore("entries").get(seq);
+      req.onsuccess = () => resolve(req.result ?? null);
+      req.onerror = () => resolve(null);
+    } catch { resolve(null); }
+  }))).then((xs) => xs.filter(Boolean));
+}
 function allEntries() {
   return new Promise((resolve) => {
     if (!db) return resolve([]);
@@ -2317,12 +2332,29 @@ function photoImg(blob, alt, seq, rec) {
   img.src = URL.createObjectURL(blob);
   img.addEventListener("click", () => {
     if (photoLongFired) { photoLongFired = false; return; } // 방금 롱프레스면 라이트박스 열지 않음
-    const album = img.closest(".bubble.album");
+    const album = img.closest(".bubble.album, .dangi-photos"); // 당이가 가져온 묶음도 넘겨 보게
     const imgs = album ? [...album.querySelectorAll("img")] : [img];
     openLightbox(imgs.map((i) => i.src), imgs.indexOf(img), imgs.map((i) => i.__blob));
   });
   armPhotoDelete(img); // 꾹 누르면 삭제 버튼
   return img;
+}
+// 당이가 가져온 사진: 서버로 다시 올리지 않고 seq 만 받아 **이 기기 캐시의 원래 사진**을 그린다
+// (지도 탭 지역 앨범과 같은 재료). 다시 올리면 백업·지도에 같은 사진이 두 장씩 쌓인다.
+// 오래돼 이 기기에서 정리된 사진은 빠진다 — 지도 탭과 같은 한계다.
+function dangiPhotos(seqs) {
+  const grid = document.createElement("div");
+  grid.className = "dangi-photos";
+  getEntries(seqs).then((recs) => {
+    const have = recs.filter((r) => r.kind === "photo" && (r.blob || r.thumb));
+    for (const r of have) grid.appendChild(photoImg(r.blob || r.thumb, r.caption, r.seq, r));
+    if (have.length < seqs.length) {
+      const p = document.createElement("div"); p.className = "none";
+      p.textContent = have.length ? `${seqs.length - have.length}장은 이 기기에 없어요(오래돼 정리됨)` : "이 기기엔 그 사진이 없어요(오래돼 정리됨)";
+      grid.appendChild(p);
+    }
+  });
+  return grid;
 }
 // 사진을 꾹 누르면 그 위에 "🗑 삭제" 버튼을 띄운다(양쪽 기기에서 지움).
 function armPhotoDelete(img) {
@@ -2358,6 +2390,7 @@ document.addEventListener("pointerdown", (e) => { // 다른 곳 누르면 삭제
 function removeEntry(seq) {
   document.querySelectorAll(`img[data-seq="${seq}"]`).forEach((img) => {
     if (img.src && img.src.startsWith("blob:")) URL.revokeObjectURL(img.src);
+    if (img.closest(".dangi-photos")) { img.remove(); return; } // 당이 답 속 사본 — 말풍선(글)은 남긴다
     const album = img.closest(".bubble.album");
     if (album) { img.remove(); if (!album.querySelector("img")) album.closest(".row")?.remove(); }
     else img.closest(".row")?.remove();
@@ -2543,6 +2576,7 @@ function appendRecord(rec, { silent = false, into = null } = {}) {
       b.textContent = rec.text;
       const st = rec.botSticker;
       if (st && knownPack(st.pack)) { const img = stickerImg(st.pack, st.n, "당이 이모티콘"); img.classList.add("dangi-sticker"); b.appendChild(img); }
+      if (rec.botPhotos?.length) b.appendChild(dangiPhotos(rec.botPhotos));
     }, showName);
   } else {
     timeEl = buildBubble(row, rec.name, at, (b) => { b.textContent = rec.text; }, showName);
@@ -2590,6 +2624,11 @@ async function renderEntry(m) {
         // 당이 답에 곁들인 다그당스 이모티콘(말풍선 아래). 글과 한 메시지라 알림도 하나다.
         if (p.sys && p.name === DANGI_NAME && Number.isInteger(p.botSticker?.n) && typeof p.botSticker.pack === "string") {
           rec.botSticker = { pack: p.botSticker.pack, n: p.botSticker.n };
+        }
+        // 당이가 가져온 사진(seq 목록) — 사진은 이 기기 캐시에서 꺼내 그린다.
+        if (p.sys && p.name === DANGI_NAME && Array.isArray(p.botPhotos)) {
+          const seqs = p.botPhotos.filter(Number.isInteger).slice(0, 9);
+          if (seqs.length) rec.botPhotos = seqs;
         }
       }
       appendRecord(rec); putEntry(rec);

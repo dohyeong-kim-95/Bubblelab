@@ -197,6 +197,7 @@ export function buildMessages(command, ctx, sender) {
     '{"op":"unfit","date":"YYYY-MM-DD"}',
     '{"op":"fitlist","month":"YYYY-MM"} 또는 {"op":"fitlist","week":"this 또는 last"}',
     '{"op":"recall","query":"찾을 낱말 1~3개(없으면 빈칸)","from":"YYYY-MM-DD 또는 생략","to":"YYYY-MM-DD 또는 생략","month":"YYYY-MM 또는 생략"}',
+    '{"op":"photos","query":"찍은 곳·사진 설명 낱말 1~2개(없으면 빈칸)","from":"YYYY-MM-DD 또는 생략","to":"YYYY-MM-DD 또는 생략","month":"YYYY-MM 또는 생략"}',
     '{"op":"bucket","show":"todo 또는 done 또는 all","query":"찾을 낱말 또는 생략"}',
     '{"op":"recommend","hint":"조건(이번 주말·실내·비 오는 날·저녁 등) 또는 생략"}',
     '{"op":"chat","reply":"당이 말투로 1~3문장 답"}',
@@ -207,6 +208,7 @@ export function buildMessages(command, ctx, sender) {
     "오후 3시는 15:00. 옮기기·삭제는 아래 일정 목록의 e번호로만 가리킨다. 목록에 없으면 unknown.",
     "운동 인증(운동·헬스·러닝 같은 운동 얘기일 때만. 일정·여행 얘기엔 쓰지 않는다): '운동했어'·'오늘 헬스 1시간' 은 말한 사람의 그날 운동 체크(fit, 날짜 없으면 오늘, memo 는 운동 종류·양만 적고 없으면 생략). 체크 취소는 unfit, '이번 달 운동 몇 번?'·'운동 기록'·'운동 요약'·'지난주 운동 어땠어?' 은 fitlist(달이면 month, 이번 주·지난주면 week).",
     "기억: 둘이 예전에 나눈 얘기·보낸 사진·있었던 일·다녀온 곳·해낸 것을 물으면(그 카페 이름 뭐였지? 지난달에 어디 갔었지? 제주도 언제 갔지? 어제 무슨 얘기 했어?) recall. query 엔 찾을 핵심 낱말만(조사 빼고), 기간을 말했으면 from/to 나 month.",
+    "사진: 예전 사진을 보여 달라·가져와 달라(제주에서 찍은 사진 보여줘, 지난달 사진, 강남 사진 가져와)는 photos. query 엔 장소 이름만(조사 빼고, '사진' 은 빼고), 기간을 말했으면 from/to 나 month. '언제 갔지' 처럼 묻기만 하면 recall.",
     "버킷리스트(둘이 해보고 싶은 것 목록)를 보여 달라·뭐 남았어·뭐 했어·○○ 있어? 는 bucket(남은 것 todo, 한 것 done, 둘 다 all, 특정 항목을 찾으면 query). 데이트·같이 할 것·주말에 뭐 할지 추천해 달라면 recommend.",
     "일정과 상관없는 인사·잡담·간단한 질문이면 chat 으로 짧게 답한다. 날씨·뉴스·시세처럼 지금 정보는 모른다고 솔직히 말한다.",
     "",
@@ -266,6 +268,9 @@ export function buildRecallMessages(command, lines, sender, { plans: planLines =
 /** 모델 답을 믿지 않고 검증한다. 통과하면 정규화된 동작, 아니면 { op:"unknown", reason }. */
 // 운동 얘기인지 — 작은 모델이 "이번 주 일정"·"제주 여행" 까지 운동 요약으로 고르는 일이 있어서
 // 요청에 운동 낱말이 없으면 운동 동작을 일정 동작으로 돌린다(command 를 모르면 검사하지 않는다).
+const PHOTO_WORDS = /사진|포토|📸|🖼|앨범/;
+const PHOTO_ASK = (command) => PHOTO_WORDS.test(command) && /보여|가져|줘|볼래|보자/.test(command);
+const PHOTO_STOP = new Set(["사진", "사진들", "포토", "앨범", "보여줘", "가져와", "찍은", "우리", "거"]);
 const RECALL_STOP = new Set(["얘기", "이야기", "대화", "무슨", "뭐", "뭘", "우리", "했어", "했지", "했던", "기록", "내용", "언제", "어디", "누가", "그", "거"]);
 const FIT_WORDS = /운동|헬스|러닝|런닝|조깅|달리|뛰|걷기|걸었|산책|수영|요가|필라테스|PT|피티|스쿼트|자전거|등산|클라이밍|크로스핏|홈트|스트레칭|💪/i;
 
@@ -328,6 +333,8 @@ export function validateAction(raw, ctx, today, command) {
     if (raw.op !== "fitlist") return bad("운동 얘기인지 일정 얘기인지 헷갈려요");
     raw = { op: "list", from: raw.from, to: raw.to }; // 기간을 물었으니 일정 목록으로
   }
+  // "사진 보여줘" 처럼 장소가 없으면 작은 모델이 unknown·chat 을 고른다 — 사진을 달라는 말이 분명하면 사진으로.
+  if (command != null && (raw.op === "unknown" || raw.op === "chat") && PHOTO_ASK(command)) raw = { op: "photos", query: "" };
   const who = resolveWho(raw.who, ctx.people ?? [], command);
   // "쫑이의 테니스 레슨" → 주인은 who 로 가니 제목에선 뺀다(앱에서 색으로 보인다).
   if (who && typeof raw.title === "string") {
@@ -422,11 +429,15 @@ export function validateAction(raw, ctx, today, command) {
       const last = ymd(new Date(Number(month.slice(0, 4)), Number(month.slice(5)), 0));
       return { op: "fitlist", from: `${month}-01`, to: last, month };
     }
-    case "recall": {
+    case "photos": case "recall": {
+      // 사진 낱말이 없는데 photos 면 묻는 말(recall)로, "사진 보여줘" 인데 recall 이면 photos 로.
+      const op = command == null ? raw.op : PHOTO_ASK(command) ? "photos"
+        : raw.op === "photos" && !PHOTO_WORDS.test(command) ? "recall" : raw.op;
+      const stop = op === "photos" ? PHOTO_STOP : RECALL_STOP;
       const q = Array.isArray(raw.query) ? raw.query.join(" ") : String(raw.query ?? "");
       // "어제 무슨 얘기 했지" 에 모델이 query:"얘기" 를 넣는다 — 그런 낱말로 찾으면 오히려 다 놓친다.
       const terms = q.split(/[\s,]+/).map((s) => s.trim().slice(0, 20))
-        .filter((s) => s && !RECALL_STOP.has(s)).slice(0, 4);
+        .filter((s) => s && !stop.has(s) && !RECALL_STOP.has(s)).slice(0, 4);
       let from = null, to = today;
       if (typeof raw.month === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(raw.month)) {
         from = `${raw.month}-01`;
@@ -436,10 +447,11 @@ export function validateAction(raw, ctx, today, command) {
         if (isYmd(raw.to)) to = raw.to;
       }
       // 기간이 없으면: 낱말이 있으면 전부(3년), 없으면 어제·오늘(그냥 "무슨 얘기 했어?").
-      if (!from) from = terms.length ? addDays(today, -3 * 366) : addDays(today, -1);
+      // 사진은 낱말도 기간도 없으면("사진 보여줘") 전부에서 최근 것.
+      if (!from) from = terms.length || op === "photos" ? addDays(today, -3 * 366) : addDays(today, -1);
       if (to > today) to = today;
       if (from > to) from = to;
-      return { op: "recall", terms, from, to };
+      return { op, terms, from, to };
     }
     case "bucket": {
       const show = ["todo", "done", "all"].includes(raw.show) ? raw.show : "todo";
@@ -548,6 +560,7 @@ function fitSummary(events, { from, to, month }) {
 // 항목 { kind:"bucket", title, by, at, list?(캔버스 id), memo?, done?, doneAt?, doneBy? },
 // 캔버스(목록) { kind:"bucketcanvas", title }. list 가 없으면 "기본" 목록.
 const BUCKET_SHOW_MAX = 25;
+const PHOTO_MAX = 6; // 당이가 한 번에 가져오는 사진(앱은 9장까지 받는다)
 function bucketItems(events) {
   const canvases = new Map(events.filter((e) => !e.deleted && e.kind === "bucketcanvas" && e.title).map((e) => [e.id, String(e.title)]));
   return events
@@ -792,6 +805,12 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
       await io.say(await recall(action, command, name));
       return;
     }
+    if (action.op === "photos") {
+      const r = photos(action);
+      io.log?.(`당이: 사진 ${r.seqs.length}장 가져옴`); // 어떤 사진인지는 로그에 남기지 않는다
+      await io.say(r.text, null, r.seqs);
+      return;
+    }
     if (action.op === "recommend") {
       io.log?.("당이:", JSON.stringify({ op: "recommend" }), "→ recommend");
       await io.say(await recommend(command, name, today));
@@ -826,6 +845,25 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
     io.log?.(`당이: 기억 ${lines.length}줄·일정 ${facts.plans.length}·버킷 ${facts.bucket.length} 읽고 답함`); // 대화 내용은 로그에 남기지 않는다
     const reply = String(raw?.reply ?? "").trim().slice(0, 600);
     return reply || "기록은 읽었는데 뭐라고 할지 모르겠승…";
+  }
+
+  // 사진은 다시 올리지 않고 seq 만 보낸다 — 앱이 자기 캐시의 원래 사진을 그린다(duri/index.html 의 dangiPhotos).
+  // 많으면 기간 전체에 고르게 퍼지게 PHOTO_MAX 장을 고른다(최근 것만 고르면 한 날 사진만 나온다).
+  function photos(action) {
+    const span = action.from === action.to ? label(action.from) : `${label(action.from)}~${label(action.to)}`;
+    const what = action.terms.length ? `"${action.terms.join(" ")}" ` : "";
+    if (!io.archive?.photos) return { text: "🤖 백업 기록을 읽을 수 없어요", seqs: [] };
+    const all = io.archive.photos(action);
+    if (!all.length) return { text: `${what}사진은 못 찾았승… (${span})`, seqs: [] };
+    const pick = all.length <= PHOTO_MAX ? all
+      : Array.from({ length: PHOTO_MAX }, (_, i) => all[Math.round((i * (all.length - 1)) / (PHOTO_MAX - 1))]);
+    const places = [...new Set(pick.map((p) => p.where).filter(Boolean))].slice(0, 2);
+    const first = pick[0].date, last = pick[pick.length - 1].date;
+    const when = first === last ? label(first) : `${label(first)}~${label(last)}`;
+    return {
+      text: `📸 ${what}사진 ${all.length}장${all.length > pick.length ? ` 중 ${pick.length}장` : ""} 가져왔승! (${when}${places.length ? `, ${places.join(", ")}` : ""})`,
+      seqs: pick.map((p) => p.seq),
+    };
   }
 
   async function recommend(command, name, today) {

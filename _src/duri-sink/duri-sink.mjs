@@ -254,8 +254,9 @@ async function assistantApply({ puts, dels }) {
   saveCal(local);
 }
 // sticker: 다그당스 이모티콘 {pack,n}(선택) — 글과 같은 메시지에 botSticker 로 싣는다.
-async function assistantSay(text, sticker) {
-  const f = await encryptJson(key, { name: BOT_NAME, text, at: Date.now(), sys: true, ...(sticker && { botSticker: sticker }) });
+async function assistantSay(text, sticker, photos) {
+  const f = await encryptJson(key, { name: BOT_NAME, text, at: Date.now(), sys: true, ...(sticker && { botSticker: sticker }),
+    ...(photos?.length && { botPhotos: photos }) }); // 사진은 seq 만 — 앱이 자기 캐시에서 꺼내 그린다
   try { sendFrame({ type: "msg", ...f }); } catch (e) { log("당이 답 전송 실패:", String(e?.message || e)); }
 }
 

@@ -407,6 +407,43 @@ test("1년 전 오늘: 브리핑 끝에 붙고, 없으면 아무것도 안 붙�
   assert.doesNotMatch(await briefHarness(new Error("down")).a.brief(), /년 전 오늘/);
 });
 
+test("사진: photos 는 사진 낱말이 있어야 하고, '사진 보여줘' 는 recall 로 골라도 photos 다", () => {
+  const ctx = buildContext(EVENTS, TODAY);
+  assert.deepEqual(validateAction({ op: "photos", query: "제주 사진" }, ctx, TODAY, "제주에서 찍은 사진 보여줘"),
+    { op: "photos", terms: ["제주"], from: "2023-10-23", to: TODAY });
+  assert.deepEqual(validateAction({ op: "recall", query: "강남" }, ctx, TODAY, "강남 사진 가져와").op, "photos");
+  assert.deepEqual(validateAction({ op: "photos", query: "" }, ctx, TODAY, "사진 보여줘"), { op: "photos", terms: [], from: "2023-10-23", to: TODAY });
+  assert.deepEqual(validateAction({ op: "photos", query: "", month: "2026-09" }, ctx, TODAY, "9월 사진 보여줘"),
+    { op: "photos", terms: [], from: "2026-09-01", to: "2026-09-30" });
+  assert.equal(validateAction({ op: "photos", query: "제주" }, ctx, TODAY, "제주도 언제 갔지").op, "recall"); // 사진 얘기가 아니다
+  assert.equal(validateAction({ op: "unknown", reason: "?" }, ctx, TODAY, "사진 보여줘").op, "photos"); // 작은 모델이 놓쳐도
+  assert.equal(validateAction({ op: "chat", reply: "응" }, ctx, TODAY, "사진 잘 나왔어?").op, "chat"); // 달라는 말이 아니면 그대로
+});
+
+test("사진: 백업에서 고른 사진의 seq 만 보낸다(많으면 기간 전체에 고르게 6장)", async () => {
+  const rows = Array.from({ length: 13 }, (_, i) => ({ seq: 100 + i, at: 0, date: `2026-09-${String(10 + i).padStart(2, "0")}`, where: i < 7 ? "제주특별자치도 제주시" : "제주특별자치도 서귀포시" }));
+  const said = [], queried = [];
+  const archive = { photos: (q) => { queried.push(q); return q.terms.includes("없는곳") ? [] : rows; } };
+  const run = (query, text) => createAssistant({ ask: async () => ({ op: "photos", query }), events: () => [], apply: async () => {},
+    say: async (t, st, ph) => { said.push([t, st, ph]); }, archive }, { now: () => NOW }).onMessage({ name: "민지", text, at: NOW });
+  await run("제주", "@당 제주 사진 보여줘");
+  assert.deepEqual(queried[0], { op: "photos", terms: ["제주"], from: "2023-10-23", to: TODAY });
+  assert.deepEqual(said[0], ['📸 "제주" 사진 13장 중 6장 가져왔승! (9/10 (목)~9/22 (화), 제주특별자치도 제주시, 제주특별자치도 서귀포시)', null, [100, 102, 105, 107, 110, 112]]);
+  await run("없는곳", "@당 없는곳 사진 보여줘");
+  assert.match(said[1][0], /"없는곳" 사진은 못 찾았승/);
+  assert.deepEqual(said[1][2], []); // 빈 목록이면 앱엔 글만 간다
+});
+
+test("사진: 앱이 당이 메시지의 botPhotos 를 읽어 캐시의 사진을 그린다(다시 올리지 않는다)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const app = readFileSync(new URL("../../duri/index.html", import.meta.url), "utf8");
+  assert.match(app, /p\.name === DANGI_NAME && Array\.isArray\(p\.botPhotos\)/);
+  assert.match(app, /rec\.botPhotos\?\.length\) b\.appendChild\(dangiPhotos\(rec\.botPhotos\)\)/);
+  const sink = readFileSync(new URL("duri-sink.mjs", import.meta.url), "utf8");
+  assert.match(sink, /botPhotos: photos/);
+  assert.doesNotMatch(sink, /_duri\/photo["`]\s*,\s*\{\s*method:\s*"POST"/); // 사진 업로드 경로는 없다
+});
+
 test("말한 사람 이름은 긴 지시문 뒤 별도 시스템 메시지로 간다(앞부분 재사용)", () => {
   const ctx = buildContext(EVENTS, TODAY);
   const a = buildMessages("안녕", ctx, "도경"), b = buildMessages("안녕", ctx, "민지");

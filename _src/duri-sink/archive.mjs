@@ -35,6 +35,8 @@ function lineOf(l, place) {
  * search({ terms, from, to, limit }) → 시간순 줄 배열 "10/12 (일) 14:03 도경: …"
  *   terms 가 있으면 낱말이 많이 맞는 줄 + 앞뒤 한 줄씩, 없으면 기간의 마지막 limit 줄.
  * day(ymd) → { photos, places } 그날 사진 수와 찍은 곳(아침 브리핑의 "1년 전 오늘").
+ * photos({ terms, from, to }) → 낱말이 찍은 곳·캡션에 맞는 사진(낱말이 없으면 기간의 전부), 시간순
+ *   [{ seq, at, date, where }]. 당이가 채팅에 "가져오는" 사진 — 앱이 seq 로 자기 캐시에서 꺼내 그린다.
  */
 export function createArchive(dir, { skip = () => false, place = null } = {}) {
   const cache = new Map(); // 파일 → { mtimeMs, rows }
@@ -67,7 +69,7 @@ export function createArchive(dir, { skip = () => false, place = null } = {}) {
       const text = lineOf(l, place);
       if (!text || !Number.isFinite(l.at) || skip(l.name, text)) continue;
       const where = l.type === "photo" && l.loc && place ? place(Number(l.loc.lat), Number(l.loc.lng)) : null;
-      rows.push({ at: l.at, date: ymdOf(l.at), name: l.name ?? "?", text, photo: l.type === "photo", where });
+      rows.push({ seq: l.seq, at: l.at, date: ymdOf(l.at), name: l.name ?? "?", text, photo: l.type === "photo", where, caption: l.photo?.caption ?? "" });
     }
     cache.set(file, { mtimeMs, rows });
     return rows;
@@ -101,5 +103,13 @@ export function createArchive(dir, { skip = () => false, place = null } = {}) {
     return { photos: photos.length, places: [...new Set(photos.map((r) => r.where).filter(Boolean))] };
   }
 
-  return { search, day };
+  function photos({ terms = [], from, to }) {
+    const words = terms.map(wordVariants).filter(Boolean);
+    return rowsIn(from, to)
+      .filter((r) => r.photo && Number.isInteger(r.seq))
+      .filter((r) => !words.length || words.some((vs) => vs.some((w) => `${r.where ?? ""} ${r.caption}`.toLowerCase().includes(w))))
+      .map((r) => ({ seq: r.seq, at: r.at, date: r.date, where: r.where }));
+  }
+
+  return { search, day, photos };
 }
