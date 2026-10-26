@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   BOT_NAME, MAX_AGE_MS, briefDue, briefFacts, briefFallback, buildBriefingMessages, buildContext, buildMessages, buildRecommendMessages,
-  STICKERS, calEventOnDate, chatSticker, createAssistant, fitId, kstYmd, parseTrigger, plan, validateAction, whoKey, ymd,
+  calEventOnDate, chatSticker, createAssistant, fitId, kstYmd, parseTrigger, plan, validateAction, whoKey, ymd,
 } from "./assistant.mjs";
 
 const NOW = new Date(2026, 9, 25, 12, 0).getTime(); // 2026-10-25 (일) 정오, 로컬
@@ -596,12 +596,14 @@ function stickerHarness(answers, events = []) {
   return { said, send: (text) => a.onMessage({ name: "쫑", text, at: NOW - 1000 }) };
 }
 
-test("이모티콘: 일정을 넣으면 '일정 넣었승!', 모델이 죽으면 '미안하당', 목록 보기엔 없음", async () => {
-  const h = stickerHarness([{ op: "add", title: "치과", date: "2026-10-27", start: "15:00" }, new Error("down"), { op: "list", from: "2026-10-25", to: "2026-10-31" }]);
-  await h.send("@당이 내일 3시 치과 넣어줘");
+test("이모티콘: 일 답(일정 넣기·오류·목록·버킷)엔 붙이지 않는다 — 필요할 때만", async () => {
+  const h = stickerHarness([{ op: "add", title: "치과", date: "2026-10-27", start: "15:00" }, new Error("down"),
+    { op: "list", from: "2026-10-25", to: "2026-10-31" }, { op: "chat", reply: "응 듣고 있승" }]);
+  await h.send("@당이 내일 3시 치과 넣어줘 고마워"); // 고마워가 있어도 일정 넣기 답엔 안 붙인다
   await h.send("@당이 아무거나");
   await h.send("@당이 이번 주 일정");
-  assert.deepEqual(h.said.map((x) => x.sticker), [STICKERS.added, STICKERS.sorry, null]);
+  await h.send("@당이 오늘 뭐 해?"); // 잡담이어도 맞는 말이 없으면 안 붙인다
+  assert.deepEqual(h.said.map((x) => x.sticker ?? null), [null, null, null, null]);
 });
 
 test("이모티콘: 잡담은 말에 맞는 게 있을 때만, '이모티콘 보내줘' 는 다그당스 3 중 하나", async () => {
@@ -620,7 +622,7 @@ test("이모티콘: 잡담은 말에 맞는 게 있을 때만, '이모티콘 보
 test("이모티콘: 당이가 쓰는 번호가 팩에 있고, duri 앱 서랍(DURI_ONLY_PACKS)에 그 팩이 있다", async () => {
   const { readFileSync } = await import("node:fs");
   const html = readFileSync(new URL("../../duri/index.html", import.meta.url), "utf8");
-  const used = [...Object.values(STICKERS), ...["잘 자", "사과", "각설탕", "사랑해", "힘들어", "배고파", "퇴근", "생일", "화이팅", "고마워", "굿모닝", "데이트", "충성"].map(chatSticker)];
+  const used = [...["잘 자", "사과", "각설탕", "사랑해", "힘들어", "배고파", "퇴근", "생일", "화이팅", "고마워", "굿모닝", "데이트", "충성"].map(chatSticker)];
   for (const { pack, n } of used) {
     const meta = JSON.parse(readFileSync(new URL(`../../_assets/sticker/${pack}/metadata.json`, import.meta.url), "utf8"));
     assert.ok(n >= 1 && n <= meta.downloads.length, `${pack}/${n}`);

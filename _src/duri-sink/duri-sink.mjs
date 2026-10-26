@@ -16,7 +16,7 @@ import { readFileSync, mkdirSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deriveKey, createStore, atomicWrite, encryptJson } from "./store.mjs";
-import { createAssistant, ollamaAsk, llamaAsk, parseTrigger, briefDue, kstYmd, BOT_NAME, STICKERS } from "./assistant.mjs";
+import { createAssistant, ollamaAsk, llamaAsk, parseTrigger, briefDue, kstYmd, BOT_NAME } from "./assistant.mjs";
 import { createArchive } from "./archive.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -271,7 +271,7 @@ async function briefTick() {
   briefBusy = true;
   try {
     const day = kstYmd(Date.now()), text = await assistant.brief();
-    const f = await encryptJson(key, { name: BOT_NAME, text, at: Date.now(), sys: true, botSticker: STICKERS.morning });
+    const f = await encryptJson(key, { name: BOT_NAME, text, at: Date.now(), sys: true });
     sendFrame({ type: "msg", ...f });
     sendFrame({ type: "brief-done", date: day });
     briefLast = day;
