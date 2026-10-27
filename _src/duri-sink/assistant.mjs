@@ -8,7 +8,7 @@
 // 한다 — 작은 CPU 모델이 날짜를 직접 세면 자주 틀린다. 옮기기·삭제는 되묻고
 // "@당이 응" 을 받아야 실행한다(공유 캘린더라 잘못 지우면 둘 다 곤란하다).
 
-import { wordVariants } from "./archive.mjs";
+import { wordVariants, hasWord } from "./archive.mjs";
 
 export const BOT_NAME = "🤖 당이"; // 두 사람 이름과 겹치면 안 된다(자기 답을 명령으로 읽는다). 앱의 DANGI_NAME 과 같아야 말풍선으로 그린다
 // "@당이"·"@당" 뒤엔 공백이나 끝이 와야 한다("@당근" 은 명령이 아니다).
@@ -36,6 +36,7 @@ const parseYmd = (s) => { const [y, m, d] = s.split("-").map(Number); return new
 const addDays = (s, n) => { const d = parseYmd(s); d.setDate(d.getDate() + n); return ymd(d); };
 const dayDiff = (a, b) => Math.round((parseYmd(b) - parseYmd(a)) / 86400000);
 const label = (s) => { const d = parseYmd(s); return `${d.getMonth() + 1}/${d.getDate()} (${WEEKDAYS[d.getDay()]})`; };
+const monthDay = (s) => { const d = parseYmd(s); return `${d.getMonth() + 1}월 ${d.getDate()}일`; };
 const isYmd = (s) => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && ymd(parseYmd(s)) === s;
 const isHm = (s) => typeof s === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(s);
 const randId = () => Array.from(crypto.getRandomValues(new Uint8Array(12)),
@@ -231,7 +232,7 @@ export function buildMessages(command, ctx, sender) {
 // ── 추억 — 대화 말고도 캘린더에 남은 것(지난 일정·해낸 버킷리스트)을 기억의 근거로 쓴다 ──
 // 대화엔 "제주" 가 없어도 "제주 여행" 일정은 있다. 반복 일정은 뺀다(매주 레슨은 추억이 아니다).
 const MEMORY_MAX = 10;
-const matchAny = (text, words) => !words.length || words.some((vs) => vs.some((w) => text.toLowerCase().includes(w)));
+const matchAny = (text, words) => !words.length || words.some((vs) => hasWord(text, vs));
 
 /** 기간 안의 지난 일정·해낸 버킷리스트 중 낱말이 맞는 것(낱말이 없으면 전부, 최근 것부터 10개씩). */
 export function memoryFacts(events, { terms = [], from, to }) {
@@ -264,7 +265,7 @@ export function buildRecallMessages(command, lines, sender, { plans: planLines =
     "아래는 두 사람의 지난 기록 중 질문과 관련된 부분이다: 캘린더에 있던 일정, 해낸 버킷리스트, 대화(시간순, '날짜 시각 이름: 내용'. 🖼️ 사진의 📍는 찍은 곳).",
     "이 기록에 있는 것만 근거로 1~3문장으로 답한다. 기록에 없으면 모른다고 한다. 지어내지 않는다.",
     "언제였는지 물으면 날짜를 'N월 N일' 로 또렷하게 말하고, 그때를 떠올리는 다정한 한마디를 붙인다(기록에 있는 것만으로).",
-    ...(photo ? [`그날 사진 한 장(${photo})을 답과 같이 보낸다 — '그날 사진도 가져왔승' 처럼 한마디 해도 좋다. 사진 내용은 모르니 묘사하지 않는다.`]
+    ...(photo ? [`${photo.when}${photo.title ? ` "${photo.title}"` : ""} 사진 한 장을 답과 같이 보낸다${photo.desc ? ` — 찍힌 것: ${photo.desc}` : ""}. 답에 그 날짜(${photo.when})를 넣고 '그날 사진도 가져왔승' 처럼 한마디 한다. ${photo.desc ? "사진은 이 설명에 있는 것만 말한다." : "사진 내용은 모르니 묘사하지 않는다."}`]
       : ["보내는 사진은 없다. 사진을 찍었다거나 가져왔다고 말하지 않는다."]),
     '답은 JSON {"reply":"…"} 하나로만.',
     ...(planLines.length ? ["", "지난 일정:", ...planLines] : []),
@@ -883,7 +884,7 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
     if (!lines.length && !extra) return text(`기록에서 못 찾았승… (${span}${action.terms.length ? `, "${action.terms.join(" ")}"` : ""})`);
     const photo = recallPhoto(action, facts);
     let raw;
-    try { raw = await io.ask(buildRecallMessages(command, lines, name, facts, photo && `${label(photo.date)}${photo.title ? ` "${photo.title}"` : ""}`)); }
+    try { raw = await io.ask(buildRecallMessages(command, lines, name, facts, photo && { when: monthDay(photo.date), title: photo.title, desc: photo.desc })); }
     catch (e) {
       io.log?.("당이: 모델 호출 실패", String(e?.message || e));
       return text("🤖 로컬 모델이 응답하지 않아요 (PC의 모델 서버 확인)");
@@ -894,20 +895,25 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
     return { text: reply, photos: photo ? [photo.seq] : undefined };
   }
 
-  // 기억 답에 곁들일 사진 한 장 — 하루를 콕 집어 물으면 그날, 아니면 찾은 일정의 날 → 낱말이 맞는 대화가 있던 날 →
-  // 찍은 곳·캡션이 맞는 사진 순.
+  // 기억 답에 곁들일 사진 한 장 — 하루를 콕 집어 물으면 그날, 아니면 찍은 곳·사진 설명이 낱말에 맞는 사진 →
+  // 찾은 일정의 날 → 낱말이 맞는 대화가 있던 날 순. ("회 뭐였지" 면 회가 찍힌 그 사진 — 그날 아무 사진이 아니라)
   // "봉천동" 처럼 동 이름은 사진 장소(시군구)에 안 맞으니, 그 말을 한 날의 사진을 쓴다. 그날 가운데쯤 찍은 것.
   function recallPhoto(action, facts) {
     if (!io.archive?.photos) return null;
     const mid = (xs) => (xs.length ? xs[Math.floor((xs.length - 1) / 2)] : null);
     if (!action.terms.length && action.from === action.to) return mid(io.archive.photos({ terms: [], from: action.from, to: action.to })); // "9월 13일에 뭐 했지" — 그날 사진
     if (!action.terms.length && !facts.spans.length) return null;
+    const direct = action.terms.length ? io.archive.photos(action) : [];
+    if (direct.length) {
+      const hit = direct.at(-1); // 가장 최근 것
+      return { ...hit, title: facts.spans.find((s) => s.from <= hit.date && hit.date <= s.to)?.title };
+    }
     const spans = [...facts.spans, ...(io.archive.hitDates?.(action) ?? []).slice(0, 5).map((d) => ({ from: d, to: d }))];
     for (const s of spans) {
       const hit = mid(io.archive.photos({ terms: [], from: s.from, to: s.to }));
       if (hit) return { ...hit, title: s.title };
     }
-    return action.terms.length ? mid(io.archive.photos(action)) : null;
+    return null;
   }
 
   // 사진은 다시 올리지 않고 seq 만 보낸다 — 앱이 자기 캐시의 원래 사진을 그린다(duri/index.html 의 dangiPhotos).

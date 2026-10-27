@@ -20,6 +20,14 @@ export function wordVariants(t) {
   return [...new Set([w, ...(bare.length >= 2 ? [bare] : []), ...(w.length >= 3 ? [w.slice(0, -1)] : [])])];
 }
 
+/** text 에 낱말(wordVariants 의 꼴들)이 있는지. 한 글자 낱말("회")은 따로 떨어진 말일 때만 — 안 그러면
+ *  회식·교회·회사 까지 다 걸린다. "회를"·"회 먹자" 는 걸리고 "회색" 은 안 걸린다. */
+export function hasWord(text, vs) {
+  const t = String(text).toLowerCase();
+  return vs.some((w) => w.length > 1 ? t.includes(w)
+    : t.split(/[^\p{L}\p{N}]+/u).some((tok) => tok === w || tok.replace(JOSA, "") === w));
+}
+
 /** 한 줄 요약. 당이가 근거로 읽을 수 없는 것(이모티콘)은 null. 좌표는 place 가 있으면 지역 이름으로.
  *  seen: 당이가 한가할 때 달아 둔 사진 설명(captions.mjs) — "[케이크가 놓인 카페 테이블]" 로 붙는다. */
 function lineOf(l, place, seen) {
@@ -40,7 +48,7 @@ function lineOf(l, place, seen) {
  * 사진 설명(DuriStorage/captions.json, captions.mjs 가 쓴다)이 있으면 줄·사진 찾기에 같이 맞춘다 — 여기선 읽기만.
  * day(ymd) → { photos, places } 그날 사진 수와 찍은 곳(아침 브리핑의 "1년 전 오늘").
  * photos({ terms, from, to }) → 낱말이 찍은 곳·캡션에 맞는 사진(낱말이 없으면 기간의 전부), 시간순
- *   [{ seq, at, date, where }]. 당이가 채팅에 "가져오는" 사진 — 앱이 seq 로 자기 캐시에서 꺼내 그린다.
+ *   [{ seq, at, date, where, desc? }] (desc: 달아 둔 사진 설명). 당이가 채팅에 "가져오는" 사진 — 앱이 seq 로 자기 캐시에서 꺼내 그린다.
  */
 export function createArchive(dir, { skip = () => false, place = null } = {}) {
   const cache = new Map(); // 파일 → { mtimeMs, rows }
@@ -84,7 +92,7 @@ export function createArchive(dir, { skip = () => false, place = null } = {}) {
       const text = lineOf(l, place, cap?.desc ? cap : null);
       if (!text || !Number.isFinite(l.at) || skip(l.name, text)) continue;
       const where = l.type === "photo" && l.loc && place ? place(Number(l.loc.lat), Number(l.loc.lng)) : null;
-      rows.push({ seq: l.seq, at: l.at, date: ymdOf(l.at), name: l.name ?? "?", text, photo: l.type === "photo", where, caption: [l.photo?.caption, cap?.desc, ...(cap?.tags ?? [])].filter(Boolean).join(" "),
+      rows.push({ seq: l.seq, at: l.at, date: ymdOf(l.at), name: l.name ?? "?", text, photo: l.type === "photo", where, caption: [l.photo?.caption, cap?.desc, ...(cap?.tags ?? [])].filter(Boolean).join(" "), desc: cap?.desc ?? null,
         ...(l.type === "photo" && typeof l.photo?.file === "string" && { path: join(dirname(file), "photos", l.photo.file), mime: l.photo.mime }) });
     }
     cache.set(file, { mtimeMs, rows });
@@ -113,7 +121,7 @@ export function createArchive(dir, { skip = () => false, place = null } = {}) {
 
   // 낱말이 맞는 줄 — 많이 맞는 것, 같으면 최근 순.
   function scoreRows(rows, words) {
-    return rows.map((r, i) => ({ i, score: words.filter((vs) => vs.some((w) => r.text.toLowerCase().includes(w))).length }))
+    return rows.map((r, i) => ({ i, score: words.filter((vs) => hasWord(r.text, vs)).length }))
       .filter((s) => s.score > 0)
       .sort((a, b) => b.score - a.score || b.i - a.i);
   }
@@ -135,8 +143,8 @@ export function createArchive(dir, { skip = () => false, place = null } = {}) {
     const words = terms.map(wordVariants).filter(Boolean);
     return rowsIn(from, to)
       .filter((r) => r.photo && Number.isInteger(r.seq))
-      .filter((r) => !words.length || words.some((vs) => vs.some((w) => `${r.where ?? ""} ${r.caption}`.toLowerCase().includes(w))))
-      .map((r) => ({ seq: r.seq, at: r.at, date: r.date, where: r.where }));
+      .filter((r) => !words.length || words.some((vs) => hasWord(`${r.where ?? ""} ${r.caption}`, vs)))
+      .map((r) => ({ seq: r.seq, at: r.at, date: r.date, where: r.where, ...(r.desc && { desc: r.desc }) }));
   }
 
   /** seq 의 사진 원본 파일 { path, mime } — 당이가 폰에 없는 옛 사진을 빌려줄 때. 없으면 null(읽는 건 부르는 쪽). */

@@ -476,7 +476,7 @@ test("기억 + 사진: 사진이 어느 일정에서 왔는지 모델에 알려 
   await createAssistant({ ask: async (m) => { asks.push(m); return answers.shift(); }, events: () => MEMORY_EVENTS, apply: async () => {}, say: async () => {},
     archive: { search: () => [], hitDates: () => [], photos: (q) => (q.from === "2026-03-14" ? [{ seq: 7, date: "2026-03-15" }] : []) } },
   { now: () => NOW }).onMessage({ name: "민지", text: "@당 3월에 어디 갔었지?", at: NOW });
-  assert.match(asks[1][0].content, /그날 사진 한 장\(3\/15 \(일\) "제주도 여행"\)/);
+  assert.match(asks[1][0].content, /3월 15일 "제주도 여행" 사진 한 장을 답과 같이 보낸다\. 답에 그 날짜\(3월 15일\)를 넣고/);
   const asks2 = [];
   const answers2 = [{ op: "recall", query: "" }, { reply: "평창 갔승" }];
   await createAssistant({ ask: async (m) => { asks2.push(m); return answers2.shift(); }, events: () => MEMORY_EVENTS, apply: async () => {}, say: async () => {},
@@ -512,7 +512,7 @@ test("기억 + 사진: '봉천동 언제 갔지' 는 그 말을 한 날의 사�
     say: async (t, st, ph) => { said.push([t, ph]); }, archive }, { now: () => NOW })
     .onMessage({ name: "민지", text: "@당아 우리 봉천동 언제 갔었지?", at: NOW });
   assert.deepEqual(said, [["잠깐만! 찾아볼게승~ 🐴", undefined], ["9월 12일에 갔승! 그날 사진도 가져왔승~", [502]]]);
-  assert.match(asks[1][0].content, /그날 사진 한 장\(9\/12 \(토\)\)/);
+  assert.match(asks[1][0].content, /9월 12일 사진 한 장을 답과 같이 보낸다\. .*사진 내용은 모르니 묘사하지 않는다/);
   assert.match(asks[1][0].content, /'N월 N일'/);
   // 일정이 있으면 일정 날이 먼저, 사진이 없으면 사진 없이
   const said2 = [];
@@ -839,4 +839,21 @@ test("한가할 때 뒷일: 10분 안에 누가 불렀으면 안 하고, 하면 
   assert.equal(await a.idle(async () => ++ran), 2);
   await a.onMessage({ name: "쫑", text: "그냥 대화", at: t }); // 당이를 부른 게 아니면 한가함 그대로
   assert.equal(await a.idle(async () => ++ran), 3);
+});
+
+test("기억 + 사진: '회 뭐였지' 는 그날 아무 사진이 아니라 설명에 회가 있는 그 사진, 설명과 날짜를 모델에 준다", async () => {
+  const said = [], asks = [];
+  const answers = [{ op: "recall", query: "회" }, { reply: "10월 5일에 먹은 회였승!" }];
+  const archive = {
+    search: () => ["10/5 (월) 19:42 쫑: 🖼️ 사진 [얼음 위에 담긴 회 접시]"],
+    hitDates: () => ["2026-10-05"],
+    photos: (q) => (q.terms.length ? [{ seq: 1248, date: "2026-10-05", desc: "얼음 위에 담긴 회 접시" }]
+      : [{ seq: 1201, date: "2026-10-05" }, { seq: 1202, date: "2026-10-05" }, { seq: 1248, date: "2026-10-05" }]),
+  };
+  await createAssistant({ ask: async (m) => { asks.push(m); return answers.shift(); }, events: () => [], apply: async () => {},
+    say: async (t, st, ph) => { said.push([t, ph]); }, archive }, { now: () => NOW })
+    .onMessage({ name: "빵", text: "@당이 우리 예전에 먹었던 회 뭐였지?", at: NOW });
+  assert.deepEqual(said.at(-1), ["10월 5일에 먹은 회였승!", [1248]]);
+  assert.match(asks[1][0].content, /10월 5일 사진 한 장을 답과 같이 보낸다 — 찍힌 것: 얼음 위에 담긴 회 접시\. 답에 그 날짜\(10월 5일\)를 넣고/);
+  assert.match(asks[1][0].content, /사진은 이 설명에 있는 것만 말한다/);
 });

@@ -65,6 +65,15 @@ test("백업 검색: 달아 둔 사진 설명으로 사진·날을 찾는다(나
     writeFileSync(join(dir, "captions.json"), JSON.stringify({ "a_1.jpg": { desc: "모래사장과 파도", tags: ["바다", "해변"] }, "b_2.jpg": { fails: 1 } }));
     assert.deepEqual(archive.photos(q).map((p) => p.seq), [1]);
     assert.deepEqual(archive.hitDates({ terms: ["파도"], from: "2026-01-01", to: "2026-12-31" }), ["2026-09-12"]);
+    assert.deepEqual(archive.photos({ ...q, terms: ["해변"] })[0].desc, "모래사장과 파도");
     assert.match(archive.search({ terms: ["파도"], from: "2026-01-01", to: "2026-12-31" })[0], /🖼️ 사진 \[모래사장과 파도\]/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("한 글자 낱말은 따로 떨어진 말일 때만 맞는다 — '회' 가 회식·교회·회색에 걸리지 않게", async () => {
+  const { hasWord, wordVariants } = await import("./archive.mjs");
+  const v = wordVariants("회");
+  for (const t of ["회를 먹었다", "얼음 위에 담긴 회와 소스", "회,회 접시"]) assert.equal(hasWord(t, v), true, t);
+  for (const t of ["난제회식", "교회50주년", "회색 고양이", "나 회사 가기 싫어"]) assert.equal(hasWord(t, v), false, t);
+  assert.equal(hasWord("제주도 여행", wordVariants("제주")), true);
 });
