@@ -477,7 +477,8 @@ export function validateAction(raw, ctx, today, command) {
       if (!from) from = terms.length || op === "photos" ? addDays(today, -3 * 366) : addDays(today, -1);
       if (to > today) to = today;
       if (from > to) from = to;
-      return { op, terms, from, to };
+      const count = op === "photos" ? countSaid(command) : null;
+      return { op, terms, from, to, ...(count && { count }) };
     }
     case "bucket": {
       const show = ["todo", "done", "all"].includes(raw.show) ? raw.show : "todo";
@@ -599,6 +600,17 @@ export function spreadPick(all, n) {
     for (let i = 0; i < days.length && left > 0; i++) if (quota[i] < days[i].length) { quota[i]++; left--; }
   }
   return days.flatMap((d, i) => even(d, quota[i]));
+}
+
+// "사진 하나 보여줘"·"두 장만" — 몇 장 달라고 했는지(PHOTO_MAX 까지). 말이 없으면 null.
+const COUNT_WORDS = { 한: 1, 하나: 1, 두: 2, 둘: 2, 세: 3, 셋: 3, 석: 3, 네: 4, 넷: 4, 다섯: 5, 여섯: 6 };
+export function countSaid(command) {
+  if (typeof command !== "string") return null;
+  const m = command.match(/(\d{1,2}|한|두|세|석|네|다섯|여섯)\s?장/) ?? command.match(/(?<![가-힣])(하나|둘|셋|넷|다섯|여섯)(?:만|만요)?(?![가-힣])/)
+    ?? command.match(/(하나|한\s?개)(?:만)?\s*(?:보여|가져|줘)/);
+  if (!m) return null;
+  const n = /^\d+$/.test(m[1]) ? Number(m[1]) : COUNT_WORDS[m[1].replace(/\s?개$/, "")] ?? 1;
+  return n >= 1 ? Math.min(n, PHOTO_MAX) : null;
 }
 
 const RECALL_WAIT = "잠깐만! 찾아볼게승~ 🐴";
@@ -924,7 +936,7 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
     if (!io.archive?.photos) return { text: "🤖 백업 기록을 읽을 수 없어요", seqs: [] };
     const all = io.archive.photos(action);
     if (!all.length) return { text: `${what}사진은 못 찾았승… (${span})`, seqs: [] };
-    const pick = spreadPick(all, PHOTO_MAX);
+    const pick = spreadPick(all, action.count ?? PHOTO_MAX);
     const places = [...new Set(pick.map((p) => p.where).filter(Boolean))].slice(0, 2);
     const first = pick[0].date, last = pick[pick.length - 1].date;
     const when = first === last ? label(first) : `${label(first)}~${label(last)}`;

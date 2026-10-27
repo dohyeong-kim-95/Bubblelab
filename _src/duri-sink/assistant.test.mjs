@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   BOT_NAME, MAX_AGE_MS, briefDue, briefFacts, briefFallback, buildBriefingMessages, buildContext, buildMessages, buildRecommendMessages,
-  calEventOnDate, chatSticker, createAssistant, memoryFacts, onThisDay, spreadPick, fitId, kstYmd, parseTrigger, plan, validateAction, whoKey, ymd,
+  calEventOnDate, chatSticker, createAssistant, memoryFacts, onThisDay, spreadPick, countSaid, fitId, kstYmd, parseTrigger, plan, validateAction, whoKey, ymd,
 } from "./assistant.mjs";
 
 const NOW = new Date(2026, 9, 25, 12, 0).getTime(); // 2026-10-25 (일) 정오, 로컬
@@ -856,4 +856,21 @@ test("기억 + 사진: '회 뭐였지' 는 그날 아무 사진이 아니라 설
   assert.deepEqual(said.at(-1), ["10월 5일에 먹은 회였승!", [1248]]);
   assert.match(asks[1][0].content, /10월 5일 사진 한 장을 답과 같이 보낸다 — 찍힌 것: 얼음 위에 담긴 회 접시\. 답에 그 날짜\(10월 5일\)를 넣고/);
   assert.match(asks[1][0].content, /사진은 이 설명에 있는 것만 말한다/);
+});
+
+test("사진: '하나 보여줘'·'두 장' 이면 그만큼만 가져온다", async () => {
+  assert.equal(countSaid("우리 세종에서 찍은 사진 하나 보여줘"), 1);
+  assert.equal(countSaid("사진 두 장만"), 2);
+  assert.equal(countSaid("3장 보여줘"), 3);
+  assert.equal(countSaid("20장 보여줘"), 6);
+  assert.equal(countSaid("제주 사진 보여줘"), null);
+  assert.equal(countSaid("하나님 사진"), null);
+  const said = [];
+  const answers = [{ op: "photos", query: "세종" }];
+  const all = [890, 965, 966, 967, 968].map((seq, i) => ({ seq, date: i ? "2026-08-17" : "2026-08-15", where: "세종특별자치시 세종시" }));
+  await createAssistant({ ask: async () => answers.shift(), events: () => [], apply: async () => {},
+    say: async (t, st, ph) => { said.push([t, ph]); }, archive: { photos: () => all } }, { now: () => NOW })
+    .onMessage({ name: "빵", text: "@당이 우리 세종에서 찍은 사진 하나 보여줘", at: NOW });
+  assert.equal(said[0][1].length, 1);
+  assert.match(said[0][0], /사진 5장 중 1장/);
 });

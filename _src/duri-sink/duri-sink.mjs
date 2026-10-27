@@ -257,15 +257,14 @@ async function assistantApply({ puts, dels }) {
   saveCal(local);
 }
 // ── 옛 사진 빌려주기 ─────────────────────────────────────────
-// 폰은 최근 MAX_CACHE(2000) 항목만 들고 있어(duri/index.html) 석 달쯤 지난 사진은 없다. 당이가 그런 사진을
-// 보여 줄 땐 PC 원본을 같은 문구로 암호화해 서버에 7일 맡기고(/_duri/lend, 채팅 버퍼 밖이라 백업·지도에
-// 안 겹친다) 열쇠를 메시지에 싣는다. 폰 캐시보다 조금 일찍(1800) 빌려준다 — 앞뒤로 몇십 개는 겹쳐도 된다.
-const LEND_BELOW = 1800;
+// 폰은 최근 MAX_CACHE(2000) 항목만 들고 있고(duri/index.html), 그마저 기기마다 다르다(새 폰·지운 캐시·
+// 앱을 깔기 전 사진). seq 만 보고는 그 폰에 있는지 알 수 없어서 — "2000 안쪽이면 있겠지" 로 빼먹었다가 사진이
+// 하나도 안 뜬 적이 있다(2026-10-27) — 당이가 보여 주는 사진은 **전부** PC 원본을 같은 문구로 암호화해 서버에
+// 7일 맡기고(/_duri/lend, 채팅 버퍼 밖이라 백업·지도에 안 겹친다) 열쇠를 싣는다. 앱은 캐시에 있으면 그걸 쓴다.
 const LEND_MAX_BYTES = 25 * 1024 * 1024; // 동영상 같은 큰 원본은 빌려주지 않는다(서버 상한보다 훨씬 작게)
 async function lendPhotos(seqs) {
   const out = [];
   for (const seq of seqs) {
-    if (cursor - seq < LEND_BELOW) continue; // 아직 폰에 있다
     const f = archive?.photoFile(seq);
     if (!f) continue;
     try {
