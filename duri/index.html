@@ -2353,28 +2353,43 @@ async function fetchLent(l) {
   lentBlobs.set(l.key, blob);
   return blob;
 }
+// 캐시의 Blob 이 실제로 그려지는지 — 기기 캐시에 항목은 있는데 사진이 안 열려 말풍선이 조용히 비던 일이
+// 있었다(2026-10-27, 회 사진). 안 열리면 빌린 원본으로 넘어간다.
+function blobDraws(blob) {
+  return new Promise((resolve) => {
+    let url;
+    try { url = URL.createObjectURL(blob); } catch { resolve(false); return; }
+    const im = new Image(), done = (ok) => { URL.revokeObjectURL(url); resolve(ok); };
+    const t = setTimeout(() => done(false), 8000);
+    im.onload = () => { clearTimeout(t); done(im.naturalWidth > 0); };
+    im.onerror = () => { clearTimeout(t); done(false); };
+    im.src = url;
+  });
+}
 function dangiPhotos(seqs, lend = []) {
   const grid = document.createElement("div");
   grid.className = "dangi-photos";
+  const say = (text) => { const p = document.createElement("div"); p.className = "none"; p.textContent = text; grid.appendChild(p); };
   getEntries(seqs).then(async (recs) => {
     const cached = new Map(recs.filter((r) => r.kind === "photo" && (r.blob || r.thumb)).map((r) => [r.seq, r]));
     const lent = new Map(lend.map((l) => [l.seq, l]));
     let missing = 0, expired = 0;
     for (const seq of seqs) { // 당이가 고른 순서대로
-      const r = cached.get(seq);
-      if (r) { grid.appendChild(photoImg(r.blob || r.thumb, r.caption, r.seq, r)); continue; }
+      // 빌린 원본이 있으면 그것부터(PC 가 방금 맡긴 원본이라 확실하다), 안 되면 기기 캐시.
       const l = lent.get(seq);
-      if (!l) { missing++; continue; }
-      try { grid.appendChild(photoImg(await fetchLent(l), "당이가 가져온 사진")); }
-      catch (e) { if (e.message === "410" || e.message === "404") expired++; else missing++; }
+      if (l) {
+        try { grid.appendChild(photoImg(await fetchLent(l), "당이가 가져온 사진")); continue; }
+        catch (e) { if (e.message === "410" || e.message === "404") { if (!cached.has(seq)) { expired++; continue; } } }
+      }
+      const r = cached.get(seq), blob = r && (r.blob || r.thumb);
+      if (blob && await blobDraws(blob)) { grid.appendChild(photoImg(blob, r.caption, r.seq, r)); continue; }
+      missing++;
     }
     if (missing || expired) {
-      const p = document.createElement("div"); p.className = "none";
-      p.textContent = expired ? `${expired + missing}장은 빌린 기한(7일)이 지났어요 — 당이에게 다시 물어봐 주세요`
-        : missing === seqs.length ? "이 기기엔 그 사진이 없어요(오래돼 정리됨)" : `${missing}장은 이 기기에 없어요(오래돼 정리됨)`;
-      grid.appendChild(p);
+      say(expired ? `${expired + missing}장은 빌린 기한(7일)이 지났어요 — 당이에게 다시 물어봐 주세요`
+        : missing === seqs.length ? "이 기기엔 그 사진이 없어요 — 당이에게 다시 물어봐 주세요" : `${missing}장은 이 기기에 없어요`);
     }
-  });
+  }).catch(() => say("사진을 그리지 못했어요 — 당이에게 다시 물어봐 주세요"));
   return grid;
 }
 // 사진을 꾹 누르면 그 위에 "🗑 삭제" 버튼을 띄운다(양쪽 기기에서 지움).
