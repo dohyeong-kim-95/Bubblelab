@@ -4,7 +4,7 @@
 // 만드는 뷰). 날짜는 at(epoch)을 이 PC 로컬 시각으로 바꿔 쓴다 — messages.md 의 "## 날짜" 는
 // UTC 라 KST 00~09시가 전날로 들어가 있다(duri/CLAUDE.md 「로케일」).
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const pad2 = (n) => String(n).padStart(2, "0");
@@ -35,6 +35,7 @@ function lineOf(l, place) {
  * search({ terms, from, to, limit }) → 시간순 줄 배열 "10/12 (일) 14:03 도경: …"
  *   terms 가 있으면 낱말이 많이 맞는 줄 + 앞뒤 한 줄씩, 없으면 기간의 마지막 limit 줄.
  * hitDates({ terms, from, to }) → 낱말이 맞는 대화가 있었던 날들(잘 맞는 날 먼저).
+ * photoFile(seq) → { path, mime } 그 사진의 원본 파일 위치(읽지는 않는다).
  * day(ymd) → { photos, places } 그날 사진 수와 찍은 곳(아침 브리핑의 "1년 전 오늘").
  * photos({ terms, from, to }) → 낱말이 찍은 곳·캡션에 맞는 사진(낱말이 없으면 기간의 전부), 시간순
  *   [{ seq, at, date, where }]. 당이가 채팅에 "가져오는" 사진 — 앱이 seq 로 자기 캐시에서 꺼내 그린다.
@@ -70,7 +71,8 @@ export function createArchive(dir, { skip = () => false, place = null } = {}) {
       const text = lineOf(l, place);
       if (!text || !Number.isFinite(l.at) || skip(l.name, text)) continue;
       const where = l.type === "photo" && l.loc && place ? place(Number(l.loc.lat), Number(l.loc.lng)) : null;
-      rows.push({ seq: l.seq, at: l.at, date: ymdOf(l.at), name: l.name ?? "?", text, photo: l.type === "photo", where, caption: l.photo?.caption ?? "" });
+      rows.push({ seq: l.seq, at: l.at, date: ymdOf(l.at), name: l.name ?? "?", text, photo: l.type === "photo", where, caption: l.photo?.caption ?? "",
+        ...(l.type === "photo" && typeof l.photo?.file === "string" && { path: join(dirname(file), "photos", l.photo.file), mime: l.photo.mime }) });
     }
     cache.set(file, { mtimeMs, rows });
     return rows;
@@ -124,5 +126,11 @@ export function createArchive(dir, { skip = () => false, place = null } = {}) {
       .map((r) => ({ seq: r.seq, at: r.at, date: r.date, where: r.where }));
   }
 
-  return { search, hitDates, day, photos };
+  /** seq 의 사진 원본 파일 { path, mime } — 당이가 폰에 없는 옛 사진을 빌려줄 때. 없으면 null(읽는 건 부르는 쪽). */
+  function photoFile(seq) {
+    const r = rowsIn("2000-01-01", "2999-12-31").find((x) => x.photo && x.seq === seq);
+    return r?.path ? { path: r.path, mime: r.mime ?? null } : null;
+  }
+
+  return { search, hitDates, day, photos, photoFile };
 }

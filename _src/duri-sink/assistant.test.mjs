@@ -443,10 +443,14 @@ test("사진: 앱이 당이 메시지의 botPhotos 를 읽어 캐시의 사진�
   const { readFileSync } = await import("node:fs");
   const app = readFileSync(new URL("../../duri/index.html", import.meta.url), "utf8");
   assert.match(app, /p\.name === DANGI_NAME && Array\.isArray\(p\.botPhotos\)/);
-  assert.match(app, /rec\.botPhotos\?\.length\) b\.appendChild\(dangiPhotos\(rec\.botPhotos\)\)/);
   const sink = readFileSync(new URL("duri-sink.mjs", import.meta.url), "utf8");
   assert.match(sink, /botPhotos: photos/);
   assert.doesNotMatch(sink, /_duri\/photo["`]\s*,\s*\{\s*method:\s*"POST"/); // 사진 업로드 경로는 없다
+  // 폰 캐시 밖의 옛 사진은 원본을 빌려준다(/_duri/lend — 채팅 버퍼 밖) — 앱은 그 열쇠로 받는다
+  assert.match(sink, /_duri\/lend`, \{\s*method: "POST"/);
+  assert.match(sink, /botLend: lend/);
+  assert.match(app, /rec\.botLend = lend/);
+  assert.match(app, /dangiPhotos\(rec\.botPhotos, rec\.botLend\)/);
 });
 
 test("앱의 DANGI_RE 와 데몬의 TRIGGER 가 같은 말을 명령으로 본다", async () => {

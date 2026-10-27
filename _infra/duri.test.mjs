@@ -8,6 +8,8 @@ import {
   validateMsgFrame,
   validatePhotoMeta,
   isPhotoKey,
+  isLendKey,
+  DURI_LEND_TTL_MS,
   parseAlbumHeader,
   validateRemindSet,
   kstYmd,
@@ -612,6 +614,45 @@ test("buildPushPayload carries the opaque blob for msg/photo but falls back to g
 
 // ── 아침 일정 리마인드 ───────────────────────────────────────────
 const remindDay = (date) => ({ date, iv: "aXY=", ct: "Y2lwaGVy" });
+
+// 당이가 빌려주는 옛 사진: 싱크만 올리고, 채팅 버퍼(seq)엔 안 들어가며, 7일 지나면 410 + 지워진다.
+function fakeR2() {
+  const map = new Map();
+  return {
+    map,
+    async put(k, body) { map.set(k, new Uint8Array(body)); },
+    async get(k) { return map.has(k) ? { body: map.get(k) } : null; },
+    async delete(k) { for (const key of [].concat(k)) map.delete(key); },
+    async list({ prefix } = {}) { return { objects: [...map.keys()].filter((k) => !prefix || k.startsWith(prefix)).map((key) => ({ key })), truncated: false }; },
+  };
+}
+test("lend: 싱크만 옛 사진을 맡기고, 버퍼·seq 는 그대로, 누구나 받고, 7일 지나면 410 으로 지운다", async () => {
+  const storage = fakeStorage({ seq: 5, ackSeq: 5 });
+  const bucket = fakeR2();
+  const room = new DuriDO({ storage, blockConcurrencyWhile: (fn) => fn() }, { DURI_BUCKET: bucket });
+  const up = (role, body = new Uint8Array([1, 2, 3])) => room.fetch(new Request("https://x/_duri/lend", { method: "POST", headers: { "X-Duri-Role": role }, body }));
+  assert.equal((await up("peer")).status, 403);
+  assert.equal((await up("sink", new Uint8Array(0))).status, 400);
+  const res = await up("sink");
+  assert.equal(res.status, 200);
+  const { key } = await res.json();
+  assert.ok(isLendKey(key), key);
+  assert.equal(room.head, 5); // 채팅 항목이 아니다 — 백업·지도·알림에 안 겹친다
+  const got = await room.fetch(new Request(`https://x/_duri/${key}`, { headers: { "X-Duri-Role": "peer" } }));
+  assert.deepEqual(new Uint8Array(await got.arrayBuffer()), new Uint8Array([1, 2, 3]));
+  assert.equal((await room.fetch(new Request("https://x/_duri/lend/123-abc", { headers: { "X-Duri-Role": "peer" } }))).status, 400);
+  // 기한 지난 것: 받으려 하면 410 + 삭제, 새로 맡길 때도 같이 쓸어 낸다
+  const old = `lend/${Date.now() - DURI_LEND_TTL_MS - 1000}-0123456789abcdef`, old2 = `lend/${Date.now() - DURI_LEND_TTL_MS - 5000}-fedcba9876543210`;
+  bucket.map.set(old, new Uint8Array([9])); bucket.map.set(old2, new Uint8Array([9]));
+  assert.equal((await room.fetch(new Request(`https://x/_duri/${old}`, { headers: { "X-Duri-Role": "peer" } }))).status, 410);
+  assert.equal(bucket.map.has(old), false);
+  await up("sink");
+  assert.equal(bucket.map.has(old2), false);
+  assert.equal(bucket.map.has(key), true); // 기한 안의 것은 남는다
+  // 방 초기화는 빌린 사진도 지운다
+  await room.fetch(new Request("https://x/_duri/reset", { method: "POST", headers: { "X-Duri-Role": "peer" } }));
+  assert.equal([...bucket.map.keys()].filter((k) => k.startsWith("lend/")).length, 0);
+});
 
 test("kstYmd rolls over at 15:00 UTC (= KST midnight)", () => {
   assert.equal(kstYmd(Date.parse("2026-10-14T14:59:59Z")), "2026-10-14");

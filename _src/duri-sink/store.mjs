@@ -30,6 +30,13 @@ export async function encryptJson(key, obj) {
   return { iv: Buffer.from(iv).toString("base64"), ct: Buffer.from(ct).toString("base64") };
 }
 
+// 바이트 암호화(웹앱 encryptBytes 와 같다). 당이가 옛 사진을 빌려줄 때 쓴다. iv 는 base64, ct 는 바이트.
+export async function encryptBytes(key, bytes) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, bytes));
+  return { iv: Buffer.from(iv).toString("base64"), ct };
+}
+
 export function atomicWrite(path, data) {
   mkdirSync(dirname(path), { recursive: true });
   const tmp = `${path}.tmp-${process.pid}`;

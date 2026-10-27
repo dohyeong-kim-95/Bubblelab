@@ -15,7 +15,7 @@
 import { readFileSync, mkdirSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { deriveKey, createStore, atomicWrite, encryptJson } from "./store.mjs";
+import { deriveKey, createStore, atomicWrite, encryptJson, encryptBytes } from "./store.mjs";
 import { createAssistant, ollamaAsk, llamaAsk, parseTrigger, briefDue, kstYmd, BOT_NAME } from "./assistant.mjs";
 import { createArchive } from "./archive.mjs";
 import { createPlaces } from "./places.mjs";
@@ -80,7 +80,7 @@ async function downloadPhoto(r2key) {
 // 엔트리는 seq 순으로 도착한다. 하나씩 디스크에 쓰고 커서를 전진시킨다.
 // 실패(예: 사진 다운로드 일시 오류)하면 커서를 멈추고 재시도 — ack 하지 않으므로
 // 서버가 폐기하지 않아 데이터가 유실되지 않는다.
-let store, cursor = loadCursor();
+let store, archive, cursor = loadCursor();
 const queue = [];
 let draining = false, ackTimer = null, socket = null;
 // 이번 연결에서 백필(서버가 가진 것 전부 전송)이 끝났는지 — 갭을 기다릴지 건너뛸지 가른다.
@@ -253,10 +253,42 @@ async function assistantApply({ puts, dels }) {
   }
   saveCal(local);
 }
+// ── 옛 사진 빌려주기 ─────────────────────────────────────────
+// 폰은 최근 MAX_CACHE(2000) 항목만 들고 있어(duri/index.html) 석 달쯤 지난 사진은 없다. 당이가 그런 사진을
+// 보여 줄 땐 PC 원본을 같은 문구로 암호화해 서버에 7일 맡기고(/_duri/lend, 채팅 버퍼 밖이라 백업·지도에
+// 안 겹친다) 열쇠를 메시지에 싣는다. 폰 캐시보다 조금 일찍(1800) 빌려준다 — 앞뒤로 몇십 개는 겹쳐도 된다.
+const LEND_BELOW = 1800;
+const LEND_MAX_BYTES = 25 * 1024 * 1024; // 동영상 같은 큰 원본은 빌려주지 않는다(서버 상한보다 훨씬 작게)
+async function lendPhotos(seqs) {
+  const out = [];
+  for (const seq of seqs) {
+    if (cursor - seq < LEND_BELOW) continue; // 아직 폰에 있다
+    const f = archive?.photoFile(seq);
+    if (!f) continue;
+    try {
+      const bytes = readFileSync(f.path);
+      if (bytes.length > LEND_MAX_BYTES) continue;
+      const { iv, ct } = await encryptBytes(key, bytes);
+      const res = await fetch(`${cfg.url}/_duri/lend`, {
+        method: "POST", body: ct,
+        headers: { Authorization: `Bearer ${cfg.token}`, "Content-Type": "application/octet-stream" },
+        signal: AbortSignal.timeout(120_000),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const { key: lendKey } = await res.json();
+      out.push({ seq, key: lendKey, iv, ...(f.mime && { mime: f.mime }) });
+    } catch (e) { log("당이: 옛 사진 빌려주기 실패", String(e?.message || e)); }
+  }
+  if (out.length) log(`당이: 옛 사진 ${out.length}장 빌려줌(7일)`);
+  return out;
+}
+
 // sticker: 다그당스 이모티콘 {pack,n}(선택) — 글과 같은 메시지에 botSticker 로 싣는다.
 async function assistantSay(text, sticker, photos) {
+  const lend = photos?.length ? await lendPhotos(photos) : [];
   const f = await encryptJson(key, { name: BOT_NAME, text, at: Date.now(), sys: true, ...(sticker && { botSticker: sticker }),
-    ...(photos?.length && { botPhotos: photos }) }); // 사진은 seq 만 — 앱이 자기 캐시에서 꺼내 그린다
+    ...(photos?.length && { botPhotos: photos }), // 사진은 seq — 앱이 자기 캐시에서 꺼내 그린다
+    ...(lend.length && { botLend: lend }) }); // 캐시에 없을 옛 사진은 빌려준 열쇠로
   try { sendFrame({ type: "msg", ...f }); } catch (e) { log("당이 답 전송 실패:", String(e?.message || e)); }
 }
 
@@ -287,6 +319,8 @@ async function briefTick() {
 const key = await deriveKey(cfg.passphrase);
 store = createStore({ dir: cfg.dir, key, fetchPhoto: downloadPhoto });
 if (cfg.assistant.enabled) {
+  // 당이 자신의 답과 "@당이 …" 명령은 근거에서 뺀다. 사진 좌표는 앱 지도와 같은 geojson 으로 지역 이름이 된다.
+  archive = createArchive(cfg.dir, { skip: (name, text) => name === BOT_NAME || parseTrigger(text) !== null, place: createPlaces() });
   assistant = createAssistant({
     ask: cfg.assistant.api === "llama"
       ? llamaAsk({ url: cfg.assistant.llama })
@@ -294,9 +328,7 @@ if (cfg.assistant.enabled) {
     events: () => store.calendarEvents(),
     apply: assistantApply,
     say: assistantSay,
-    // 당이가 지난 대화를 찾아 읽는 백업 — 읽기 전용(archive.mjs 엔 쓰는 함수가 없다).
-    // 당이 자신의 답과 "@당이 …" 명령은 근거에서 뺀다. 사진 좌표는 앱 지도와 같은 geojson 으로 지역 이름이 된다.
-    archive: createArchive(cfg.dir, { skip: (name, text) => name === BOT_NAME || parseTrigger(text) !== null, place: createPlaces() }),
+    archive, // 당이가 지난 대화를 찾아 읽는 백업 — 읽기 전용(archive.mjs 엔 쓰는 함수가 없다)
     log,
   });
   log(`일정 비서 당이 켜짐 — ${cfg.assistant.api === "llama" ? `llama-server @ ${cfg.assistant.llama}` : `${cfg.assistant.model} @ ${cfg.assistant.ollama}`} (채팅에서 "@당이 …")`);

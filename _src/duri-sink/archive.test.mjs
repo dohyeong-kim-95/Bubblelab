@@ -103,5 +103,9 @@ test("장소: 사진 줄에 찍은 곳이 붙고, day() 는 그날 사진 수와
     assert.deepEqual(a.photos({ terms: [], from: "2025-10-27", to: "2025-10-27" }).map((p) => [p.seq, p.where]),
       [[1, "제주특별자치도 제주시"], [2, "제주특별자치도 제주시"], [3, null]]);
     assert.deepEqual(a.photos({ terms: ["서울"], from: "2025-10-01", to: "2025-10-31" }), []); // 위치 공유는 사진이 아니다
+    // photoFile(): 옛 사진을 빌려줄 원본 위치(읽지는 않는다)
+    assert.deepEqual(a.photoFile(2), { path: join(dir, "timeline", "2025", "2025-10", "photos", "b.jpg"), mime: null });
+    assert.equal(a.photoFile(4), null); // 위치 공유
+    assert.equal(a.photoFile(999), null);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

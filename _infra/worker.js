@@ -661,7 +661,8 @@ async function handleDuri(request, env, url) {
     return stub.fetch(withDuriRole(request, role));
   }
 
-  if (path === "/_duri/photo" || path.startsWith("/_duri/photo/") || path === "/_duri/status") {
+  if (path === "/_duri/photo" || path.startsWith("/_duri/photo/") || path === "/_duri/status" ||
+      path === "/_duri/lend" || path.startsWith("/_duri/lend/")) { // lend: 당이가 빌려주는 옛 사진(올리기는 싱크만 — DO 가 막는다)
     return stub.fetch(withDuriRole(request, role));
   }
 
@@ -1036,7 +1037,7 @@ export async function handleRequest(request, env, ctx) {
     const mutationError = validateMutationRequest(
       request,
       path === "/_podcast/upload" ? UPLOAD_MAX_BYTES :
-      path === "/_duri/photo" ? DURI_MAX_PHOTO_BYTES :
+      path === "/_duri/photo" || path === "/_duri/lend" ? DURI_MAX_PHOTO_BYTES :
       path === "/_emoticon/generate" ? EMOTICON_MAX_BODY :
       path === "/_life/backup" ? 4 * 1024 * 1024 :
       yaksokBodyLimit(path) ?? 64 * 1024,

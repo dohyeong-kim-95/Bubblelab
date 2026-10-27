@@ -2341,16 +2341,37 @@ function photoImg(blob, alt, seq, rec) {
 }
 // 당이가 가져온 사진: 서버로 다시 올리지 않고 seq 만 받아 **이 기기 캐시의 원래 사진**을 그린다
 // (지도 탭 지역 앨범과 같은 재료). 다시 올리면 백업·지도에 같은 사진이 두 장씩 쌓인다.
-// 오래돼 이 기기에서 정리된 사진은 빠진다 — 지도 탭과 같은 한계다.
-function dangiPhotos(seqs) {
+// 캐시에서 정리된 옛 사진은 당이(PC)가 원본을 암호화해 7일 빌려준다(lend: {seq,key,iv,mime}) —
+// 기한이 지나면 "당이에게 다시 물어봐 주세요". 빌린 사진은 원래 항목이 아니라 꾹 눌러 지우기는 없다.
+const lentBlobs = new Map(); // 빌린 열쇠 → Blob(이 세션에서 다시 받지 않게)
+async function fetchLent(l) {
+  if (lentBlobs.has(l.key)) return lentBlobs.get(l.key);
+  const res = await fetch(`/_duri/${l.key}`, { cache: "no-store" });
+  if (!res.ok) throw new Error(String(res.status));
+  const plain = await decryptBytes(l.iv, await res.arrayBuffer());
+  const blob = new Blob([plain], { type: l.mime || "image/jpeg" });
+  lentBlobs.set(l.key, blob);
+  return blob;
+}
+function dangiPhotos(seqs, lend = []) {
   const grid = document.createElement("div");
   grid.className = "dangi-photos";
-  getEntries(seqs).then((recs) => {
-    const have = recs.filter((r) => r.kind === "photo" && (r.blob || r.thumb));
-    for (const r of have) grid.appendChild(photoImg(r.blob || r.thumb, r.caption, r.seq, r));
-    if (have.length < seqs.length) {
+  getEntries(seqs).then(async (recs) => {
+    const cached = new Map(recs.filter((r) => r.kind === "photo" && (r.blob || r.thumb)).map((r) => [r.seq, r]));
+    const lent = new Map(lend.map((l) => [l.seq, l]));
+    let missing = 0, expired = 0;
+    for (const seq of seqs) { // 당이가 고른 순서대로
+      const r = cached.get(seq);
+      if (r) { grid.appendChild(photoImg(r.blob || r.thumb, r.caption, r.seq, r)); continue; }
+      const l = lent.get(seq);
+      if (!l) { missing++; continue; }
+      try { grid.appendChild(photoImg(await fetchLent(l), "당이가 가져온 사진")); }
+      catch (e) { if (e.message === "410" || e.message === "404") expired++; else missing++; }
+    }
+    if (missing || expired) {
       const p = document.createElement("div"); p.className = "none";
-      p.textContent = have.length ? `${seqs.length - have.length}장은 이 기기에 없어요(오래돼 정리됨)` : "이 기기엔 그 사진이 없어요(오래돼 정리됨)";
+      p.textContent = expired ? `${expired + missing}장은 빌린 기한(7일)이 지났어요 — 당이에게 다시 물어봐 주세요`
+        : missing === seqs.length ? "이 기기엔 그 사진이 없어요(오래돼 정리됨)" : `${missing}장은 이 기기에 없어요(오래돼 정리됨)`;
       grid.appendChild(p);
     }
   });
@@ -2576,7 +2597,7 @@ function appendRecord(rec, { silent = false, into = null } = {}) {
       b.textContent = rec.text;
       const st = rec.botSticker;
       if (st && knownPack(st.pack)) { const img = stickerImg(st.pack, st.n, "당이 이모티콘"); img.classList.add("dangi-sticker"); b.appendChild(img); }
-      if (rec.botPhotos?.length) b.appendChild(dangiPhotos(rec.botPhotos));
+      if (rec.botPhotos?.length) b.appendChild(dangiPhotos(rec.botPhotos, rec.botLend));
     }, showName);
   } else {
     timeEl = buildBubble(row, rec.name, at, (b) => { b.textContent = rec.text; }, showName);
@@ -2629,6 +2650,11 @@ async function renderEntry(m) {
         if (p.sys && p.name === DANGI_NAME && Array.isArray(p.botPhotos)) {
           const seqs = p.botPhotos.filter(Number.isInteger).slice(0, 9);
           if (seqs.length) rec.botPhotos = seqs;
+          // 캐시에 없을 옛 사진의 빌린 열쇠(PC 가 7일 맡겨 둔 암호 원본)
+          const lend = (Array.isArray(p.botLend) ? p.botLend : []).filter((l) => seqs.includes(l?.seq)
+            && /^lend\/[0-9]{13}-[0-9a-f]{16}$/.test(l.key) && typeof l.iv === "string" && l.iv.length <= 64)
+            .map((l) => ({ seq: l.seq, key: l.key, iv: l.iv, ...(typeof l.mime === "string" && /^image\//.test(l.mime) && { mime: l.mime }) }));
+          if (lend.length) rec.botLend = lend;
         }
       }
       appendRecord(rec); putEntry(rec);

@@ -127,6 +127,13 @@ export function parseAlbumHeader(value) {
 // 안전한 R2 키인지 (버퍼 항목이 참조하는 사진만 다운로드 허용)
 const R2_KEY = /^photo\/[0-9]{12}-[A-Za-z0-9]{8,32}$/;
 export const isPhotoKey = (key) => typeof key === "string" && R2_KEY.test(key);
+// 당이가 빌려주는 옛 사진(R2 lend/). 폰 캐시에서 정리된 사진을 PC 싱크가 원본으로 암호화해 잠깐
+// 맡긴다 — 채팅 버퍼에 넣지 않으니(seq 없음) 백업·지도·알림에 겹치지 않는다. 만든 시각(ms)을 키에
+// 넣어 목록만 보고 만료를 가린다. 올리는 건 싱크만, 받는 건 누구나(게이트 통과한 기기).
+export const DURI_LEND_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const LEND_KEY = /^lend\/([0-9]{13})-[0-9a-f]{16}$/;
+export const isLendKey = (key) => typeof key === "string" && LEND_KEY.test(key);
+const lendExpired = (key, now) => now - Number(LEND_KEY.exec(key)[1]) > DURI_LEND_TTL_MS;
 
 // KST 기준 날짜(YYYY-MM-DD). 두 사람 다 KST 라 앱이 쓰는 로컬 날짜와 같다.
 export const kstYmd = (ms = Date.now()) => new Date(ms + 9 * 3600_000).toISOString().slice(0, 10);
@@ -176,6 +183,13 @@ export class DuriDO {
 
     if (request.headers.get("Upgrade")?.toLowerCase() === "websocket") {
       return this.handleSocket(request, role);
+    }
+    if (url.pathname.endsWith("/lend") && request.method === "POST") {
+      return this.handleLendUpload(request, role);
+    }
+    const lendAt = url.pathname.indexOf("/lend/");
+    if (lendAt !== -1 && request.method === "GET") {
+      return this.handleLendDownload(url.pathname.slice(lendAt + 1));
     }
     if (url.pathname.endsWith("/photo") && request.method === "POST") {
       return this.handlePhotoUpload(request);
@@ -244,16 +258,18 @@ export class DuriDO {
       await this.state.storage.delete(keys);
       if (entries.size < 1000) break;
     }
-    // 2) 버퍼에서 이미 폐기됐으나 R2엔 남은 고아 사진까지 prefix 전체 정리.
+    // 2) 버퍼에서 이미 폐기됐으나 R2엔 남은 고아 사진, 당이가 빌려준 사진까지 prefix 전체 정리.
     if (this.env.DURI_BUCKET) {
-      let cursor;
-      do {
-        const listed = await this.env.DURI_BUCKET.list({ prefix: "photo/", cursor });
-        if (listed.objects.length) {
-          await this.env.DURI_BUCKET.delete(listed.objects.map((o) => o.key)).catch(() => {});
-        }
-        cursor = listed.truncated ? listed.cursor : undefined;
-      } while (cursor);
+      for (const prefix of ["photo/", "lend/"]) {
+        let cursor;
+        do {
+          const listed = await this.env.DURI_BUCKET.list({ prefix, cursor });
+          if (listed.objects.length) {
+            await this.env.DURI_BUCKET.delete(listed.objects.map((o) => o.key)).catch(() => {});
+          }
+          cursor = listed.truncated ? listed.cursor : undefined;
+        } while (cursor);
+      }
     }
     // 3) 공유 캘린더와, 거기서 나온 아침 리마인드도 비운다.
     for (const prefix of [CAL_PREFIX, REMIND_PREFIX]) {
@@ -868,6 +884,46 @@ export class DuriDO {
       ...(album ? { album } : {}),
     }, sender));
     return Response.json({ seq: entry.seq, r2key }, { headers: { "Cache-Control": "no-store" } });
+  }
+
+  // ── 당이가 빌려주는 옛 사진 (R2 lend/, 7일) ──────────────────
+  async handleLendUpload(request, role) {
+    if (role !== "sink") return new Response("sink only", { status: 403 });
+    if (!this.env.DURI_BUCKET) return new Response("storage unavailable", { status: 503 });
+    const declared = Number(request.headers.get("Content-Length") || 0);
+    if (declared > DURI_MAX_PHOTO_BYTES) return new Response("photo too large", { status: 413 });
+    const body = await request.arrayBuffer();
+    if (body.byteLength === 0) return new Response("empty body", { status: 400 });
+    if (body.byteLength > DURI_MAX_PHOTO_BYTES) return new Response("photo too large", { status: 413 });
+    const now = Date.now();
+    await this.sweepLends(now);
+    const rand = [...crypto.getRandomValues(new Uint8Array(8))].map((b) => b.toString(16).padStart(2, "0")).join("");
+    const key = `lend/${now}-${rand}`;
+    await this.env.DURI_BUCKET.put(key, body, { httpMetadata: { contentType: "application/octet-stream" } });
+    return Response.json({ key, expiresAt: now + DURI_LEND_TTL_MS }, { headers: { "Cache-Control": "no-store" } });
+  }
+
+  async handleLendDownload(key) {
+    if (!isLendKey(key)) return new Response("invalid key", { status: 400 });
+    if (!this.env.DURI_BUCKET) return new Response("storage unavailable", { status: 503 });
+    if (lendExpired(key, Date.now())) {
+      await this.env.DURI_BUCKET.delete(key).catch(() => {});
+      return new Response("expired", { status: 410 });
+    }
+    const object = await this.env.DURI_BUCKET.get(key);
+    if (!object) return new Response("not found", { status: 404 });
+    return new Response(object.body, { headers: { "Content-Type": "application/octet-stream", "Cache-Control": "no-store" } });
+  }
+
+  // 만료된 빌림은 새로 빌려줄 때 같이 지운다(빌림은 당이가 답할 때만 생기니 따로 알람이 필요 없다).
+  async sweepLends(now) {
+    let cursor;
+    do {
+      const listed = await this.env.DURI_BUCKET.list({ prefix: "lend/", cursor });
+      const old = listed.objects.map((o) => o.key).filter((k) => isLendKey(k) && lendExpired(k, now));
+      if (old.length) await this.env.DURI_BUCKET.delete(old).catch(() => {});
+      cursor = listed.truncated ? listed.cursor : undefined;
+    } while (cursor);
   }
 
   async handlePhotoDownload(key) {
