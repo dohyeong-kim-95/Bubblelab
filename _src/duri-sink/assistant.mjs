@@ -247,8 +247,11 @@ export function memoryFacts(events, { terms = [], from, to }) {
     return d >= from && d <= to;
   }).sort((a, b) => b.doneAt - a.doneAt).slice(0, MEMORY_MAX).reverse()
     .map((i) => `✓ ${i.doneAt ? `${label(ymd(new Date(i.doneAt)))} ` : ""}버킷리스트 달성: ${i.title}${i.memo ? ` (메모: ${i.memo.slice(0, 60)})` : ""}`);
-  // 사진을 찾아볼 날들(최근 일정 먼저). 낱말 없이 기간만 물으면 고르지 않는다(아무 날이나 고르게 된다).
-  const spans = words.length ? hit.map((e) => ({ from: e.date, to: e.endDate && e.endDate > e.date ? e.endDate : e.date })) : [];
+  // 사진을 찾아볼 날들(최근 일정 먼저, 어느 일정인지도). 낱말 없이 기간만 물으면("지난달에 어디 갔지") 두 달
+  // 안쪽 기간의 **여러 날 일정(여행)만** — 회식·테니스 같은 하루 일정 사진을 붙이면 답(여행)과 어긋난다.
+  const multi = (e) => e.endDate && e.endDate > e.date;
+  const spans = (words.length ? hit : dayDiff(from, to) <= 62 ? hit.filter(multi) : [])
+    .map((e) => ({ from: e.date, to: multi(e) ? e.endDate : e.date, title: String(e.title ?? "").slice(0, 40) }));
   return { plans: pastPlans, bucket: done, spans };
 }
 
@@ -260,7 +263,8 @@ export function buildRecallMessages(command, lines, sender, { plans: planLines =
     "아래는 두 사람의 지난 기록 중 질문과 관련된 부분이다: 캘린더에 있던 일정, 해낸 버킷리스트, 대화(시간순, '날짜 시각 이름: 내용'. 🖼️ 사진의 📍는 찍은 곳).",
     "이 기록에 있는 것만 근거로 1~3문장으로 답한다. 기록에 없으면 모른다고 한다. 지어내지 않는다.",
     "언제였는지 물으면 날짜를 'N월 N일' 로 또렷하게 말하고, 그때를 떠올리는 다정한 한마디를 붙인다(기록에 있는 것만으로).",
-    ...(photo ? [`그날 사진 한 장(${photo})을 답과 같이 보낸다 — '그날 사진도 가져왔승' 처럼 한마디 해도 좋다. 사진 내용은 모르니 묘사하지 않는다.`] : []),
+    ...(photo ? [`그날 사진 한 장(${photo})을 답과 같이 보낸다 — '그날 사진도 가져왔승' 처럼 한마디 해도 좋다. 사진 내용은 모르니 묘사하지 않는다.`]
+      : ["보내는 사진은 없다. 사진을 찍었다거나 가져왔다고 말하지 않는다."]),
     '답은 JSON {"reply":"…"} 하나로만.',
     ...(planLines.length ? ["", "지난 일정:", ...planLines] : []),
     ...(bucket.length ? ["", "해낸 버킷리스트:", ...bucket] : []),
@@ -275,6 +279,17 @@ export function buildRecallMessages(command, lines, sender, { plans: planLines =
 // 운동 얘기인지 — 작은 모델이 "이번 주 일정"·"제주 여행" 까지 운동 요약으로 고르는 일이 있어서
 // 요청에 운동 낱말이 없으면 운동 동작을 일정 동작으로 돌린다(command 를 모르면 검사하지 않는다).
 const PHOTO_WORDS = /사진|포토|📸|🖼|앨범/;
+const PERIOD_WORD = /^(\d{1,2}월(에|에서|의|달)?|\d{1,2}일(에|날)?|(이번|지난|저번)\s?(달|주)|작년|올해|어제|그제|오늘|주말)$/;
+// 지나간 일을 묻는 "7월" — 아직 안 온 달이면 작년이다(일정용 monthsSaid 는 내년으로 본다). 없으면 null.
+function pastMonthSaid(command, today) {
+  if (typeof command !== "string") return null;
+  const y = Number(today.slice(0, 4)), m = Number(today.slice(5, 7));
+  if (/(지난|저번)\s?달/.test(command)) return m === 1 ? `${y - 1}-12` : `${y}-${pad2(m - 1)}`;
+  const hit = command.match(/(?<![\d.\/-])(1[0-2]|[1-9])\s?월(?!\s?\d)/);
+  if (!hit) return null;
+  const mm = Number(hit[1]);
+  return `${mm > m ? y - 1 : y}-${pad2(mm)}`;
+}
 const PHOTO_ASK = (command) => PHOTO_WORDS.test(command) && /보여|가져|줘|볼래|보자/.test(command);
 const PHOTO_STOP = new Set(["사진", "사진들", "포토", "앨범", "보여줘", "가져와", "찍은", "우리", "거"]);
 const RECALL_STOP = new Set(["얘기", "이야기", "대화", "무슨", "뭐", "뭘", "우리", "했어", "했지", "했던", "기록", "내용", "언제", "어디", "누가", "그", "거"]);
@@ -442,12 +457,15 @@ export function validateAction(raw, ctx, today, command) {
       const stop = op === "photos" ? PHOTO_STOP : RECALL_STOP;
       const q = Array.isArray(raw.query) ? raw.query.join(" ") : String(raw.query ?? "");
       // "어제 무슨 얘기 했지" 에 모델이 query:"얘기" 를 넣는다 — 그런 낱말로 찾으면 오히려 다 놓친다.
+      // "7월에 찍은 사진" 에 모델이 query 에 "7월" 을 넣기도 한다 — 기간 말은 낱말이 아니다(아래에서 달로 읽는다).
       const terms = q.split(/[\s,]+/).map((s) => s.trim().slice(0, 20))
-        .filter((s) => s && !stop.has(s) && !RECALL_STOP.has(s)).slice(0, 4);
+        .filter((s) => s && !stop.has(s) && !RECALL_STOP.has(s) && !PERIOD_WORD.test(s)).slice(0, 4);
       let from = null, to = today;
-      if (typeof raw.month === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(raw.month)) {
-        from = `${raw.month}-01`;
-        to = ymd(new Date(Number(raw.month.slice(0, 4)), Number(raw.month.slice(5)), 0));
+      const month = typeof raw.month === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(raw.month) ? raw.month
+        : !isYmd(raw.from) ? pastMonthSaid(command, today) : null;
+      if (month) {
+        from = `${month}-01`;
+        to = ymd(new Date(Number(month.slice(0, 4)), Number(month.slice(5)), 0));
       } else {
         if (isYmd(raw.from)) from = raw.from;
         if (isYmd(raw.to)) to = raw.to;
@@ -566,6 +584,21 @@ function fitSummary(events, { from, to, month }) {
 // 항목 { kind:"bucket", title, by, at, list?(캔버스 id), memo?, done?, doneAt?, doneBy? },
 // 캔버스(목록) { kind:"bucketcanvas", title }. list 가 없으면 "기본" 목록.
 const BUCKET_SHOW_MAX = 25;
+// 사진 n장을 날짜에 고르게 — 한 날에 수십 장 보낸 날이 있으면 장 수로 고르면 그날만 나온다.
+// 날이 n개 이상이면 날을 고르게 골라 그날 가운데 한 장, 적으면 날마다 한 장씩 돌아가며 더 고른다. 시간순.
+export function spreadPick(all, n) {
+  if (all.length <= n) return all;
+  const days = [];
+  for (const p of all) { if (days.at(-1)?.[0].date === p.date) days.at(-1).push(p); else days.push([p]); }
+  const even = (xs, k) => Array.from({ length: k }, (_, i) => xs[k === 1 ? Math.floor((xs.length - 1) / 2) : Math.round((i * (xs.length - 1)) / (k - 1))]);
+  if (days.length >= n) return even(days, n).map((d) => even(d, 1)[0]);
+  const quota = days.map(() => 1);
+  for (let left = n - days.length; left > 0;) {
+    for (let i = 0; i < days.length && left > 0; i++) if (quota[i] < days[i].length) { quota[i]++; left--; }
+  }
+  return days.flatMap((d, i) => even(d, quota[i]));
+}
+
 const RECALL_WAIT = "잠깐만! 찾아볼게승~ 🐴";
 const PHOTO_MAX = 6; // 당이가 한 번에 가져오는 사진(앱은 9장까지 받는다)
 function bucketItems(events) {
@@ -848,7 +881,7 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
     if (!lines.length && !extra) return text(`기록에서 못 찾았승… (${span}${action.terms.length ? `, "${action.terms.join(" ")}"` : ""})`);
     const photo = recallPhoto(action, facts);
     let raw;
-    try { raw = await io.ask(buildRecallMessages(command, lines, name, facts, photo && label(photo.date))); }
+    try { raw = await io.ask(buildRecallMessages(command, lines, name, facts, photo && `${label(photo.date)}${photo.title ? ` "${photo.title}"` : ""}`)); }
     catch (e) {
       io.log?.("당이: 모델 호출 실패", String(e?.message || e));
       return text("🤖 로컬 모델이 응답하지 않아요 (PC의 모델 서버 확인)");
@@ -859,17 +892,20 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
     return { text: reply, photos: photo ? [photo.seq] : undefined };
   }
 
-  // 기억 답에 곁들일 사진 한 장 — 찾은 일정의 날 → 낱말이 맞는 대화가 있던 날 → 찍은 곳·캡션이 맞는 사진 순.
+  // 기억 답에 곁들일 사진 한 장 — 하루를 콕 집어 물으면 그날, 아니면 찾은 일정의 날 → 낱말이 맞는 대화가 있던 날 →
+  // 찍은 곳·캡션이 맞는 사진 순.
   // "봉천동" 처럼 동 이름은 사진 장소(시군구)에 안 맞으니, 그 말을 한 날의 사진을 쓴다. 그날 가운데쯤 찍은 것.
   function recallPhoto(action, facts) {
-    if (!io.archive?.photos || !action.terms.length) return null;
+    if (!io.archive?.photos) return null;
     const mid = (xs) => (xs.length ? xs[Math.floor((xs.length - 1) / 2)] : null);
+    if (!action.terms.length && action.from === action.to) return mid(io.archive.photos({ terms: [], from: action.from, to: action.to })); // "9월 13일에 뭐 했지" — 그날 사진
+    if (!action.terms.length && !facts.spans.length) return null;
     const spans = [...facts.spans, ...(io.archive.hitDates?.(action) ?? []).slice(0, 5).map((d) => ({ from: d, to: d }))];
     for (const s of spans) {
       const hit = mid(io.archive.photos({ terms: [], from: s.from, to: s.to }));
-      if (hit) return hit;
+      if (hit) return { ...hit, title: s.title };
     }
-    return mid(io.archive.photos(action));
+    return action.terms.length ? mid(io.archive.photos(action)) : null;
   }
 
   // 사진은 다시 올리지 않고 seq 만 보낸다 — 앱이 자기 캐시의 원래 사진을 그린다(duri/index.html 의 dangiPhotos).
@@ -880,8 +916,7 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
     if (!io.archive?.photos) return { text: "🤖 백업 기록을 읽을 수 없어요", seqs: [] };
     const all = io.archive.photos(action);
     if (!all.length) return { text: `${what}사진은 못 찾았승… (${span})`, seqs: [] };
-    const pick = all.length <= PHOTO_MAX ? all
-      : Array.from({ length: PHOTO_MAX }, (_, i) => all[Math.round((i * (all.length - 1)) / (PHOTO_MAX - 1))]);
+    const pick = spreadPick(all, PHOTO_MAX);
     const places = [...new Set(pick.map((p) => p.where).filter(Boolean))].slice(0, 2);
     const first = pick[0].date, last = pick[pick.length - 1].date;
     const when = first === last ? label(first) : `${label(first)}~${label(last)}`;

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   BOT_NAME, MAX_AGE_MS, briefDue, briefFacts, briefFallback, buildBriefingMessages, buildContext, buildMessages, buildRecommendMessages,
-  calEventOnDate, chatSticker, createAssistant, memoryFacts, onThisDay, fitId, kstYmd, parseTrigger, plan, validateAction, whoKey, ymd,
+  calEventOnDate, chatSticker, createAssistant, memoryFacts, onThisDay, spreadPick, fitId, kstYmd, parseTrigger, plan, validateAction, whoKey, ymd,
 } from "./assistant.mjs";
 
 const NOW = new Date(2026, 9, 25, 12, 0).getTime(); // 2026-10-25 (일) 정오, 로컬
@@ -357,11 +357,13 @@ test("추억: 지난 일정·해낸 버킷리스트에서 낱말·기간이 맞�
   assert.deepEqual(memoryFacts(MEMORY_EVENTS, { terms: ["제주도"], from: "2023-10-23", to: TODAY }), {
     plans: ["📅 3/14 (토) ~ 3/16 (월) 제주도 여행"],
     bucket: ["✓ 3/15 (일) 버킷리스트 달성: 제주 한라산 등반"],
-    spans: [{ from: "2026-03-14", to: "2026-03-16" }],
+    spans: [{ from: "2026-03-14", to: "2026-03-16", title: "제주도 여행" }],
   });
   // 낱말 없이 기간만: 그 기간의 것 전부. 달성 날짜 없는 옛 항목은 기간 질문엔 끼지 않는다.
   assert.deepEqual(memoryFacts(MEMORY_EVENTS, { terms: [], from: "2026-09-01", to: "2026-09-30" }),
-    { plans: ["📅 9/12 (토) 13:00 성수동 데이트"], bucket: [], spans: [] }); // 낱말이 없으면 사진 고를 날도 없다
+    { plans: ["📅 9/12 (토) 13:00 성수동 데이트"], bucket: [], spans: [] }); // 기간만이면 여러 날 일정(여행)에서만 사진을 고른다
+  assert.deepEqual(memoryFacts(MEMORY_EVENTS, { terms: [], from: "2026-03-01", to: "2026-03-31" }).spans, [{ from: "2026-03-14", to: "2026-03-16", title: "제주도 여행" }]);
+  assert.deepEqual(memoryFacts(MEMORY_EVENTS, { terms: [], from: "2026-01-01", to: TODAY }).spans, []); // 긴 기간이면 아무 날이나가 되니 안 고른다
   assert.deepEqual(memoryFacts(MEMORY_EVENTS, { terms: ["한강"], from: "2026-09-01", to: TODAY }).bucket, ["✓ 버킷리스트 달성: 한강 피크닉"]);
   assert.deepEqual(memoryFacts(MEMORY_EVENTS, { terms: ["테니스"], from: "2023-10-23", to: TODAY }), { plans: [], bucket: [], spans: [] });
 });
@@ -422,6 +424,11 @@ test("사진: photos 는 사진 낱말이 있어야 하고, '사진 보여줘' �
     { op: "photos", terms: [], from: "2026-09-01", to: "2026-09-30" });
   assert.equal(validateAction({ op: "photos", query: "제주" }, ctx, TODAY, "제주도 언제 갔지").op, "recall"); // 사진 얘기가 아니다
   assert.equal(validateAction({ op: "unknown", reason: "?" }, ctx, TODAY, "사진 보여줘").op, "photos"); // 작은 모델이 놓쳐도
+  // "7월" 은 낱말이 아니라 기간 — 지난 달이면 올해, 아직 안 온 달이면 작년
+  assert.deepEqual(validateAction({ op: "photos", query: "7월" }, ctx, TODAY, "7월에 찍은 사진 보여줘"), { op: "photos", terms: [], from: "2026-07-01", to: "2026-07-31" });
+  assert.deepEqual(validateAction({ op: "photos", query: "12월 제주" }, ctx, TODAY, "12월에 제주 사진 보여줘"), { op: "photos", terms: ["제주"], from: "2025-12-01", to: "2025-12-31" });
+  assert.deepEqual(validateAction({ op: "recall", query: "" }, ctx, TODAY, "지난달에 우리 어디 갔었지?"), { op: "recall", terms: [], from: "2026-09-01", to: "2026-09-30" });
+  assert.deepEqual(validateAction({ op: "recall", query: "13일", from: "2026-09-13", to: "2026-09-13" }, ctx, TODAY, "9월 13일에 뭐 했지?"), { op: "recall", terms: [], from: "2026-09-13", to: "2026-09-13" });
   assert.equal(validateAction({ op: "chat", reply: "응" }, ctx, TODAY, "사진 잘 나왔어?").op, "chat"); // 달라는 말이 아니면 그대로
 });
 
@@ -451,6 +458,37 @@ test("사진: 앱이 당이 메시지의 botPhotos 를 읽어 캐시의 사진�
   assert.match(sink, /botLend: lend/);
   assert.match(app, /rec\.botLend = lend/);
   assert.match(app, /dangiPhotos\(rec\.botPhotos, rec\.botLend\)/);
+});
+
+test("사진 고르기: 한 날에 몰리지 않게 날짜에 고르게(시간순)", () => {
+  const ph = (seq, date) => ({ seq, date });
+  const many = [...Array.from({ length: 30 }, (_, i) => ph(i, "2026-07-26")), ph(40, "2026-07-28"), ph(41, "2026-07-31"), ph(42, "2026-07-31")];
+  const got = spreadPick(many, 6);
+  assert.equal(got.length, 6);
+  assert.deepEqual([...new Set(got.map((p) => p.date))], ["2026-07-26", "2026-07-28", "2026-07-31"]); // 세 날 모두 나온다
+  assert.deepEqual(got.map((p) => p.seq), [0, 15, 29, 40, 41, 42]);
+  assert.equal(spreadPick(many.slice(0, 3), 6).length, 3);
+});
+
+test("기억 + 사진: 사진이 어느 일정에서 왔는지 모델에 알려 주고, 사진이 없으면 사진 얘기를 못 하게 한다", async () => {
+  const asks = [];
+  const answers = [{ op: "recall", query: "" }, { reply: "평창 갔승" }];
+  await createAssistant({ ask: async (m) => { asks.push(m); return answers.shift(); }, events: () => MEMORY_EVENTS, apply: async () => {}, say: async () => {},
+    archive: { search: () => [], hitDates: () => [], photos: (q) => (q.from === "2026-03-14" ? [{ seq: 7, date: "2026-03-15" }] : []) } },
+  { now: () => NOW }).onMessage({ name: "민지", text: "@당 3월에 어디 갔었지?", at: NOW });
+  assert.match(asks[1][0].content, /그날 사진 한 장\(3\/15 \(일\) "제주도 여행"\)/);
+  const asks2 = [];
+  const answers2 = [{ op: "recall", query: "" }, { reply: "평창 갔승" }];
+  await createAssistant({ ask: async (m) => { asks2.push(m); return answers2.shift(); }, events: () => MEMORY_EVENTS, apply: async () => {}, say: async () => {},
+    archive: { search: () => [], hitDates: () => [], photos: () => [] } },
+  { now: () => NOW }).onMessage({ name: "민지", text: "@당 3월에 어디 갔었지?", at: NOW });
+  assert.match(asks2[1][0].content, /사진을 찍었다거나 가져왔다고 말하지 않는다/);
+  // 하루를 콕 집어 물으면 그날 사진
+  const said3 = [], answers3 = [{ op: "recall", query: "", from: "2026-09-13", to: "2026-09-13" }, { reply: "바베큐 했승" }];
+  await createAssistant({ ask: async () => answers3.shift(), events: () => [], apply: async () => {}, say: async (t, st, ph) => { said3.push([t, ph]); },
+    archive: { search: () => ["9/13 (일) 12:00 쫑: 고기 굽자"], hitDates: () => [], photos: (q) => (q.from === "2026-09-13" ? [{ seq: 1, date: "2026-09-13" }, { seq: 2, date: "2026-09-13" }] : []) } },
+  { now: () => NOW }).onMessage({ name: "민지", text: "@당 9월 13일에 뭐 했지?", at: NOW });
+  assert.deepEqual(said3.at(-1), ["바베큐 했승", [1]]);
 });
 
 test("앱의 DANGI_RE 와 데몬의 TRIGGER 가 같은 말을 명령으로 본다", async () => {
