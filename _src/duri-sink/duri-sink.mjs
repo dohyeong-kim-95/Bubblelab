@@ -187,10 +187,35 @@ function saveCal(entries, note) {
 
 // ── WebSocket 접속 루프 ──────────────────────────────────────
 let backoff = 1000;
+// 감시견 — 끊긴 뒤 다시 붙으려던 소켓이 열리지도 닫히지도 않고 멈춘 적이 있다(2026-10-27 18:35, 2시간 반 동안
+// 당이도 백업도 멈춤). close 이벤트만 믿지 않고, 30초 안에 안 열리거나 열린 채 2분 동안 아무것도(서버는 30초마다
+// ping) 안 오면 그 소켓을 버리고 새로 붙는다. 버린 소켓의 늦은 close 는 retry 가 한 번만 받는다.
+const CONNECT_TIMEOUT_MS = 30_000, SILENT_MS = 120_000;
+let lastHeard = 0, openedAt = 0;
+setInterval(() => {
+  const ws = socket;
+  if (!ws) return;
+  const stuck = ws.readyState === 0 && Date.now() - openedAt > CONNECT_TIMEOUT_MS;
+  const silent = ws.readyState === 1 && Date.now() - lastHeard > SILENT_MS;
+  if (!stuck && !silent) return;
+  log(stuck ? "접속이 30초 넘게 안 열림 — 새로 붙음" : "2분 동안 서버 소식 없음 — 새로 붙음");
+  ws.__retry?.();
+  try { ws.close(); } catch { /* 이미 닫힘 */ }
+}, 15_000).unref();
+
 function connect() {
   const wsUrl = `${cfg.url.replace(/^http/, "ws")}/_duri?token=${encodeURIComponent(cfg.token)}`;
   const ws = new WebSocket(wsUrl);
   socket = ws;
+  openedAt = lastHeard = Date.now();
+  let retried = false;
+  ws.__retry = () => {
+    if (retried) return;
+    retried = true;
+    log("연결 끊김. 재연결", backoff, "ms 후");
+    setTimeout(connect, backoff);
+    backoff = Math.min(backoff * 2, 30000);
+  };
   ws.addEventListener("open", () => {
     backoff = 1000;
     backfilled = false; // 재연결마다 다시 백필을 받는다
@@ -199,6 +224,7 @@ function connect() {
     ws.send(JSON.stringify({ type: "cal-hello" })); // 공유 캘린더 전체 상태도 받는다
   });
   ws.addEventListener("message", (e) => {
+    lastHeard = Date.now();
     let m; try { m = JSON.parse(e.data); } catch { return; }
     if (m.type === "ping") { ws.send(JSON.stringify({ type: "pong" })); return; }
     if (m.type === "entry") { enqueue({ ...m, live: backfilled }); return; }
@@ -222,11 +248,7 @@ function connect() {
     if (m.type === "cal-del") { saveCal([{ id: m.id, rev: m.rev, deleted: true }]); return; }
     if (m.type === "error") { log("서버 오류:", m.error); return; }
   });
-  ws.addEventListener("close", () => {
-    log("연결 끊김. 재연결", backoff, "ms 후");
-    setTimeout(connect, backoff);
-    backoff = Math.min(backoff * 2, 30000);
-  });
+  ws.addEventListener("close", () => ws.__retry());
   ws.addEventListener("error", () => { try { ws.close(); } catch { /* 이미 닫힘 */ } });
 }
 
