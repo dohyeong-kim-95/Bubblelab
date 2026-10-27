@@ -29,8 +29,12 @@ function harness(answers) {
   return { said, applied, asks, send };
 }
 
-test("@당이·@당 으로 시작하는 말만 명령이다", () => {
+test("@당이·@당·@당아 로 시작하는 말만 명령이다", () => {
   assert.equal(parseTrigger("@당이 내일 회의 넣어줘"), "내일 회의 넣어줘");
+  assert.equal(parseTrigger("@당아 우리 봉천동 언제 갔었지?"), "우리 봉천동 언제 갔었지?");
+  assert.equal(parseTrigger("@당야, 안녕"), "안녕");
+  assert.equal(parseTrigger("@당이야! 고마워"), "고마워");
+  assert.equal(parseTrigger("@당아지 귀여워"), null);
   assert.equal(parseTrigger("  @당 이번 주 일정"), "이번 주 일정");
   assert.equal(parseTrigger("@당이"), "");
   assert.equal(parseTrigger("@당근 사 와"), null); // 뒤에 공백이 없으면 다른 말이다
@@ -319,7 +323,7 @@ test("기억: recall 은 백업에서 찾은 줄만 모델에 주고 그 답을 
   assert.match(asks[1][0].content, /성수동 카페 어니언 가자/);
   assert.match(asks[1][1].content, /말한 사람: 민지/);
   assert.equal(asks[1][2].content, "우리 갔던 카페 이름 뭐였지");
-  assert.deepEqual(said, ["어니언이었승! 푸히힝"]);
+  assert.deepEqual(said, ["잠깐만! 찾아볼게승~ 🐴", "어니언이었승! 푸히힝"]); // 먼저 "잠깐만", 그다음 답
   assert.equal(applied.length, 0);
 });
 
@@ -333,7 +337,7 @@ test("기억: 기간 해석, 못 찾음, 백업 없음", async () => {
     const said = [];
     await createAssistant({ ask: async () => ({ op: "recall", query: "제주" }), events: () => [], apply: async () => {}, say: async (t) => { said.push(t); }, archive },
       { now: () => NOW }).onMessage({ name: "민지", text: "@당 제주 언제 갔지", at: NOW });
-    return said[0];
+    return said.at(-1);
   };
   assert.match(await run({ search: () => [] }), /못 찾았승.*"제주"/);
   assert.match(await run(undefined), /백업 기록을 읽을 수 없어요/);
@@ -353,12 +357,13 @@ test("추억: 지난 일정·해낸 버킷리스트에서 낱말·기간이 맞�
   assert.deepEqual(memoryFacts(MEMORY_EVENTS, { terms: ["제주도"], from: "2023-10-23", to: TODAY }), {
     plans: ["📅 3/14 (토) ~ 3/16 (월) 제주도 여행"],
     bucket: ["✓ 3/15 (일) 버킷리스트 달성: 제주 한라산 등반"],
+    spans: [{ from: "2026-03-14", to: "2026-03-16" }],
   });
   // 낱말 없이 기간만: 그 기간의 것 전부. 달성 날짜 없는 옛 항목은 기간 질문엔 끼지 않는다.
   assert.deepEqual(memoryFacts(MEMORY_EVENTS, { terms: [], from: "2026-09-01", to: "2026-09-30" }),
-    { plans: ["📅 9/12 (토) 13:00 성수동 데이트"], bucket: [] });
+    { plans: ["📅 9/12 (토) 13:00 성수동 데이트"], bucket: [], spans: [] }); // 낱말이 없으면 사진 고를 날도 없다
   assert.deepEqual(memoryFacts(MEMORY_EVENTS, { terms: ["한강"], from: "2026-09-01", to: TODAY }).bucket, ["✓ 버킷리스트 달성: 한강 피크닉"]);
-  assert.deepEqual(memoryFacts(MEMORY_EVENTS, { terms: ["테니스"], from: "2023-10-23", to: TODAY }), { plans: [], bucket: [] });
+  assert.deepEqual(memoryFacts(MEMORY_EVENTS, { terms: ["테니스"], from: "2023-10-23", to: TODAY }), { plans: [], bucket: [], spans: [] });
 });
 
 test("추억: recall 은 대화가 없어도 캘린더에 남은 것으로 답한다", async () => {
@@ -372,12 +377,12 @@ test("추억: recall 은 대화가 없어도 캘린더에 남은 것으로 답�
   assert.match(asks[1][0].content, /지난 일정:\n📅 3\/14 \(토\) ~ 3\/16 \(월\) 제주도 여행/);
   assert.match(asks[1][0].content, /해낸 버킷리스트:\n✓ 3\/15 \(일\) 버킷리스트 달성: 제주 한라산 등반/);
   assert.match(asks[1][0].content, /기록:\n\(없음\)/);
-  assert.deepEqual(said, ["3월 14일에 갔승!"]);
+  assert.deepEqual(said, ["잠깐만! 찾아볼게승~ 🐴", "3월 14일에 갔승!"]);
   // 백업이 없어도 캘린더 추억은 읽는다
   const said2 = [], answers2 = [{ op: "recall", query: "제주도" }, { reply: "갔승" }];
   await createAssistant({ ask: async () => answers2.shift(), events: () => MEMORY_EVENTS, apply: async () => {}, say: async (t) => { said2.push(t); } },
     { now: () => NOW }).onMessage({ name: "민지", text: "@당 제주도 언제 갔지", at: NOW });
-  assert.deepEqual(said2, ["갔승"]);
+  assert.deepEqual(said2.at(-1), "갔승");
 });
 
 test("1년 전 오늘: 1~3년 전 같은 날의 일정·사진·해낸 버킷리스트를 코드가 한 줄로", () => {
@@ -442,6 +447,39 @@ test("사진: 앱이 당이 메시지의 botPhotos 를 읽어 캐시의 사진�
   const sink = readFileSync(new URL("duri-sink.mjs", import.meta.url), "utf8");
   assert.match(sink, /botPhotos: photos/);
   assert.doesNotMatch(sink, /_duri\/photo["`]\s*,\s*\{\s*method:\s*"POST"/); // 사진 업로드 경로는 없다
+});
+
+test("앱의 DANGI_RE 와 데몬의 TRIGGER 가 같은 말을 명령으로 본다", async () => {
+  const { readFileSync } = await import("node:fs");
+  const app = readFileSync(new URL("../../duri/index.html", import.meta.url), "utf8");
+  const re = new RegExp(app.match(/^const DANGI_RE = \/(.+)\/;/m)[1]);
+  for (const t of ["@당이 해줘", "@당 해줘", "@당아 해줘", "@당야, 안녕", "@당이야! 고마워", "@당이", "@당근 사 와", "@당아지 귀여워", "당이야 해줘", "@비서 해줘"]) {
+    assert.equal(re.test(t), parseTrigger(t) !== null, t);
+  }
+});
+
+test("기억 + 사진: '봉천동 언제 갔지' 는 그 말을 한 날의 사진 한 장을 답에 곁들인다", async () => {
+  const said = [], asks = [];
+  const answers = [{ op: "recall", query: "봉천동" }, { reply: "9월 12일에 갔승! 그날 사진도 가져왔승~" }];
+  const archive = {
+    search: () => ["9/12 (토) 13:00 도경: 봉천동 샤로수길 도착"],
+    hitDates: () => ["2026-09-12"],
+    photos: (q) => (q.from === "2026-09-12" ? [{ seq: 501, date: "2026-09-12" }, { seq: 502, date: "2026-09-12" }, { seq: 503, date: "2026-09-12" }] : []),
+  };
+  await createAssistant({ ask: async (m) => { asks.push(m); return answers.shift(); }, events: () => [], apply: async () => {},
+    say: async (t, st, ph) => { said.push([t, ph]); }, archive }, { now: () => NOW })
+    .onMessage({ name: "민지", text: "@당아 우리 봉천동 언제 갔었지?", at: NOW });
+  assert.deepEqual(said, [["잠깐만! 찾아볼게승~ 🐴", undefined], ["9월 12일에 갔승! 그날 사진도 가져왔승~", [502]]]);
+  assert.match(asks[1][0].content, /그날 사진 한 장\(9\/12 \(토\)\)/);
+  assert.match(asks[1][0].content, /'N월 N일'/);
+  // 일정이 있으면 일정 날이 먼저, 사진이 없으면 사진 없이
+  const said2 = [];
+  const answers2 = [{ op: "recall", query: "제주도" }, { reply: "3월에 갔승" }];
+  await createAssistant({ ask: async () => answers2.shift(), events: () => MEMORY_EVENTS, apply: async () => {},
+    say: async (t, st, ph) => { said2.push([t, ph]); },
+    archive: { search: () => [], hitDates: () => [], photos: (q) => (q.from === "2026-03-14" && q.to === "2026-03-16" ? [{ seq: 7, date: "2026-03-15" }] : []) } },
+  { now: () => NOW }).onMessage({ name: "민지", text: "@당 제주도 언제 갔지", at: NOW });
+  assert.deepEqual(said2.at(-1), ["3월에 갔승", [7]]);
 });
 
 test("말한 사람 이름은 긴 지시문 뒤 별도 시스템 메시지로 간다(앞부분 재사용)", () => {

@@ -34,6 +34,7 @@ function lineOf(l, place) {
  * place(lat, lng): 좌표 → 지역 이름(places.mjs). 없으면 사진은 장소 없이 읽는다.
  * search({ terms, from, to, limit }) → 시간순 줄 배열 "10/12 (일) 14:03 도경: …"
  *   terms 가 있으면 낱말이 많이 맞는 줄 + 앞뒤 한 줄씩, 없으면 기간의 마지막 limit 줄.
+ * hitDates({ terms, from, to }) → 낱말이 맞는 대화가 있었던 날들(잘 맞는 날 먼저).
  * day(ymd) → { photos, places } 그날 사진 수와 찍은 곳(아침 브리핑의 "1년 전 오늘").
  * photos({ terms, from, to }) → 낱말이 찍은 곳·캡션에 맞는 사진(낱말이 없으면 기간의 전부), 시간순
  *   [{ seq, at, date, where }]. 당이가 채팅에 "가져오는" 사진 — 앱이 seq 로 자기 캐시에서 꺼내 그린다.
@@ -89,13 +90,25 @@ export function createArchive(dir, { skip = () => false, place = null } = {}) {
     const rows = rowsIn(from, to);
     const words = terms.map(wordVariants).filter(Boolean);
     if (!words.length) return rows.slice(-limit * 2).map(fmt); // 기간 요약: 마지막 몇 줄
-    const scored = rows.map((r, i) => ({ i, score: words.filter((vs) => vs.some((w) => r.text.toLowerCase().includes(w))).length }))
-      .filter((s) => s.score > 0)
-      .sort((a, b) => b.score - a.score || b.i - a.i) // 많이 맞는 것, 같으면 최근
-      .slice(0, limit);
+    const scored = scoreRows(rows, words).slice(0, limit);
     const keep = new Set();
     for (const { i } of scored) for (const j of [i - 1, i, i + 1]) if (rows[j]) keep.add(j);
     return [...keep].sort((a, b) => a - b).map((j) => fmt(rows[j]));
+  }
+
+  // 낱말이 맞는 줄 — 많이 맞는 것, 같으면 최근 순.
+  function scoreRows(rows, words) {
+    return rows.map((r, i) => ({ i, score: words.filter((vs) => vs.some((w) => r.text.toLowerCase().includes(w))).length }))
+      .filter((s) => s.score > 0)
+      .sort((a, b) => b.score - a.score || b.i - a.i);
+  }
+
+  /** 낱말이 맞는 대화가 있었던 날들(잘 맞는 날 먼저). 기억 답에 그날 사진을 곁들일 때 쓴다. */
+  function hitDates({ terms = [], from, to }) {
+    const words = terms.map(wordVariants).filter(Boolean);
+    if (!words.length) return [];
+    const rows = rowsIn(from, to);
+    return [...new Set(scoreRows(rows, words).map(({ i }) => rows[i].date))];
   }
 
   function day(ds) {
@@ -111,5 +124,5 @@ export function createArchive(dir, { skip = () => false, place = null } = {}) {
       .map((r) => ({ seq: r.seq, at: r.at, date: r.date, where: r.where }));
   }
 
-  return { search, day, photos };
+  return { search, hitDates, day, photos };
 }

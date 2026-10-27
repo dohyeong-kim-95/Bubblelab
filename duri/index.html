@@ -2754,7 +2754,7 @@ async function sendText(text) {
 }
 // "@당이"(일정 비서)는 PC 싱크(_src/duri-sink/assistant.mjs)에서 돈다 — 같은 규칙이어야 한다.
 // 싱크가 안 붙어 있으면(서버 presence 의 sink) 답할 쪽이 없으니 이 기기에서만 바로 알린다.
-const DANGI_RE = /^\s*@당이?(?=\s|$)/;
+const DANGI_RE = /^\s*@당(?:이야|이|아|야)?(?=[\s,!~]|$)/; // 데몬(assistant.mjs 의 TRIGGER)과 같은 규칙
 let sinkAwake = false;
 function localNotice(text) { // 이 화면에만 그리는 알림(전송·저장하지 않는다)
   const notice = document.createElement("div"); notice.className = "sysnotice";

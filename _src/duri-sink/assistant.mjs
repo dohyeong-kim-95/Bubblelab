@@ -13,7 +13,8 @@ import { wordVariants } from "./archive.mjs";
 export const BOT_NAME = "🤖 당이"; // 두 사람 이름과 겹치면 안 된다(자기 답을 명령으로 읽는다). 앱의 DANGI_NAME 과 같아야 말풍선으로 그린다
 // "@당이"·"@당" 뒤엔 공백이나 끝이 와야 한다("@당근" 은 명령이 아니다).
 // 앱(duri/index.html 의 DANGI_RE)도 같은 규칙으로 "자고 있어요" 를 띄운다 — 같이 고칠 것.
-const TRIGGER = /^\s*@당이?(?=\s|$)\s*/;
+// "@당아"·"@당야"·"@당이야" 처럼 부르는 말도 받는다. 뒤에 쉼표·느낌표가 붙어도 된다("@당아, …").
+const TRIGGER = /^\s*@당(?:이야|이|아|야)?(?=[\s,!~]|$)[\s,!~]*/;
 const YES = /^(응|네|넹|예|ㅇㅇ|ㅇ|좋아|확인|그래|ok|yes)[.!~ ]*$/i;
 const NO = /^(아니|아니요|아뇨|취소|ㄴㄴ|no)[.!~ ]*$/i;
 // 이보다 늦게 받은 명령은 조용히 버린다. PC 가 꺼져 있던 동안의 명령이라, 그때 이미
@@ -52,7 +53,7 @@ export const fitId = (month, name) => `wk${month.replace("-", "")}${whoKey(name)
 const fitRecord = (events, month, name) => events.find((e) =>
   e.id === fitId(month, name) && !e.deleted && e.kind === "workout") ?? null;
 
-/** "@당이 …"·"@당 …" 이면 뒤 문장, 아니면 null. */
+/** "@당이 …"·"@당 …"·"@당아 …" 이면 뒤 문장, 아니면 null. */
 export function parseTrigger(text) {
   if (typeof text !== "string" || !TRIGGER.test(text)) return null;
   return text.replace(TRIGGER, "").trim();
@@ -234,9 +235,10 @@ const matchAny = (text, words) => !words.length || words.some((vs) => vs.some((w
 /** 기간 안의 지난 일정·해낸 버킷리스트 중 낱말이 맞는 것(낱말이 없으면 전부, 최근 것부터 10개씩). */
 export function memoryFacts(events, { terms = [], from, to }) {
   const words = terms.map(wordVariants).filter(Boolean);
-  const pastPlans = plans(events)
+  const hit = plans(events)
     .filter((e) => !e.recur?.freq && (e.endDate || e.date) >= from && e.date <= to && matchAny(String(e.title ?? ""), words))
-    .sort((a, b) => b.date.localeCompare(a.date)).slice(0, MEMORY_MAX).reverse()
+    .sort((a, b) => b.date.localeCompare(a.date)).slice(0, MEMORY_MAX);
+  const pastPlans = [...hit].reverse()
     .map((e) => `📅 ${whenText(e)} ${e.title ?? ""}${e.shared === false && e.owner ? ` (${e.owner})` : ""}`);
   // 달성 날짜가 없는 옛 항목은 낱말로 콕 집어 물을 때만 낸다(기간 질문에 날짜 없이 끼면 헷갈린다).
   const done = bucketItems(events).filter((i) => i.done && matchAny(`${i.title} ${i.memo}`, words)).filter((i) => {
@@ -245,16 +247,20 @@ export function memoryFacts(events, { terms = [], from, to }) {
     return d >= from && d <= to;
   }).sort((a, b) => b.doneAt - a.doneAt).slice(0, MEMORY_MAX).reverse()
     .map((i) => `✓ ${i.doneAt ? `${label(ymd(new Date(i.doneAt)))} ` : ""}버킷리스트 달성: ${i.title}${i.memo ? ` (메모: ${i.memo.slice(0, 60)})` : ""}`);
-  return { plans: pastPlans, bucket: done };
+  // 사진을 찾아볼 날들(최근 일정 먼저). 낱말 없이 기간만 물으면 고르지 않는다(아무 날이나 고르게 된다).
+  const spans = words.length ? hit.map((e) => ({ from: e.date, to: e.endDate && e.endDate > e.date ? e.endDate : e.date })) : [];
+  return { plans: pastPlans, bucket: done, spans };
 }
 
 /** 기억(recall) 2단계: 백업에서 찾은 줄(+ 지난 일정·해낸 버킷리스트)만 근거로 답하게 한다. */
-export function buildRecallMessages(command, lines, sender, { plans: planLines = [], bucket = [] } = {}) {
+export function buildRecallMessages(command, lines, sender, { plans: planLines = [], bucket = [] } = {}, photo = null) {
   const system = [
     "너는 두 사람의 채팅 앱에 사는 비서 '당이'다.",
     ...PERSONA,
     "아래는 두 사람의 지난 기록 중 질문과 관련된 부분이다: 캘린더에 있던 일정, 해낸 버킷리스트, 대화(시간순, '날짜 시각 이름: 내용'. 🖼️ 사진의 📍는 찍은 곳).",
     "이 기록에 있는 것만 근거로 1~3문장으로 답한다. 기록에 없으면 모른다고 한다. 지어내지 않는다.",
+    "언제였는지 물으면 날짜를 'N월 N일' 로 또렷하게 말하고, 그때를 떠올리는 다정한 한마디를 붙인다(기록에 있는 것만으로).",
+    ...(photo ? [`그날 사진 한 장(${photo})을 답과 같이 보낸다 — '그날 사진도 가져왔승' 처럼 한마디 해도 좋다. 사진 내용은 모르니 묘사하지 않는다.`] : []),
     '답은 JSON {"reply":"…"} 하나로만.',
     ...(planLines.length ? ["", "지난 일정:", ...planLines] : []),
     ...(bucket.length ? ["", "해낸 버킷리스트:", ...bucket] : []),
@@ -560,6 +566,7 @@ function fitSummary(events, { from, to, month }) {
 // 항목 { kind:"bucket", title, by, at, list?(캔버스 id), memo?, done?, doneAt?, doneBy? },
 // 캔버스(목록) { kind:"bucketcanvas", title }. list 가 없으면 "기본" 목록.
 const BUCKET_SHOW_MAX = 25;
+const RECALL_WAIT = "잠깐만! 찾아볼게승~ 🐴";
 const PHOTO_MAX = 6; // 당이가 한 번에 가져오는 사진(앱은 9장까지 받는다)
 function bucketItems(events) {
   const canvases = new Map(events.filter((e) => !e.deleted && e.kind === "bucketcanvas" && e.title).map((e) => [e.id, String(e.title)]));
@@ -802,7 +809,9 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
     const action = validateAction(raw, ctx, today, command);
     if (action.op === "recall") {
       io.log?.("당이:", JSON.stringify({ op: "recall", terms: action.terms, from: action.from, to: action.to }), "→ recall");
-      await io.say(await recall(action, command, name));
+      await io.say(RECALL_WAIT); // 찾고 답하는 데 몇 초 걸린다 — 먼저 대답해 둔다
+      const r = await recall(action, command, name);
+      await io.say(r.text, null, r.photos);
       return;
     }
     if (action.op === "photos") {
@@ -832,19 +841,35 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
   async function recall(action, command, name) {
     const facts = memoryFacts(io.events(), action);
     const extra = facts.plans.length + facts.bucket.length;
-    if (!io.archive && !extra) return "🤖 백업 기록을 읽을 수 없어요";
+    const text = (t) => ({ text: t });
+    if (!io.archive && !extra) return text("🤖 백업 기록을 읽을 수 없어요");
     const lines = io.archive ? io.archive.search({ terms: action.terms, from: action.from, to: action.to }) : [];
     const span = action.from === action.to ? label(action.from) : `${label(action.from)}~${label(action.to)}`;
-    if (!lines.length && !extra) return `기록에서 못 찾았승… (${span}${action.terms.length ? `, "${action.terms.join(" ")}"` : ""})`;
+    if (!lines.length && !extra) return text(`기록에서 못 찾았승… (${span}${action.terms.length ? `, "${action.terms.join(" ")}"` : ""})`);
+    const photo = recallPhoto(action, facts);
     let raw;
-    try { raw = await io.ask(buildRecallMessages(command, lines, name, facts)); }
+    try { raw = await io.ask(buildRecallMessages(command, lines, name, facts, photo && label(photo.date))); }
     catch (e) {
       io.log?.("당이: 모델 호출 실패", String(e?.message || e));
-      return "🤖 로컬 모델이 응답하지 않아요 (PC의 모델 서버 확인)";
+      return text("🤖 로컬 모델이 응답하지 않아요 (PC의 모델 서버 확인)");
     }
-    io.log?.(`당이: 기억 ${lines.length}줄·일정 ${facts.plans.length}·버킷 ${facts.bucket.length} 읽고 답함`); // 대화 내용은 로그에 남기지 않는다
+    io.log?.(`당이: 기억 ${lines.length}줄·일정 ${facts.plans.length}·버킷 ${facts.bucket.length} 읽고 답함${photo ? " + 사진 1장" : ""}`); // 대화 내용은 로그에 남기지 않는다
     const reply = String(raw?.reply ?? "").trim().slice(0, 600);
-    return reply || "기록은 읽었는데 뭐라고 할지 모르겠승…";
+    if (!reply) return text("기록은 읽었는데 뭐라고 할지 모르겠승…");
+    return { text: reply, photos: photo ? [photo.seq] : undefined };
+  }
+
+  // 기억 답에 곁들일 사진 한 장 — 찾은 일정의 날 → 낱말이 맞는 대화가 있던 날 → 찍은 곳·캡션이 맞는 사진 순.
+  // "봉천동" 처럼 동 이름은 사진 장소(시군구)에 안 맞으니, 그 말을 한 날의 사진을 쓴다. 그날 가운데쯤 찍은 것.
+  function recallPhoto(action, facts) {
+    if (!io.archive?.photos || !action.terms.length) return null;
+    const mid = (xs) => (xs.length ? xs[Math.floor((xs.length - 1) / 2)] : null);
+    const spans = [...facts.spans, ...(io.archive.hitDates?.(action) ?? []).slice(0, 5).map((d) => ({ from: d, to: d }))];
+    for (const s of spans) {
+      const hit = mid(io.archive.photos({ terms: [], from: s.from, to: s.to }));
+      if (hit) return hit;
+    }
+    return mid(io.archive.photos(action));
   }
 
   // 사진은 다시 올리지 않고 seq 만 보낸다 — 앱이 자기 캐시의 원래 사진을 그린다(duri/index.html 의 dangiPhotos).

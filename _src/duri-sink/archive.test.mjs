@@ -47,6 +47,9 @@ test("백업 검색: 낱말이 맞는 줄과 앞뒤 한 줄을 시간순으로, 
       ["10/24 (토) 20:00 민지: 내일 뭐 먹을까", "10/25 (일) 09:00 도경: 카페 말고 국밥"]);
     assert.deepEqual(a.search({ terms: ["없는말"], from: "2026-01-01", to: "2026-10-25" }), []);
     assert.equal(a.search({ terms: ["어니언에서"], from: "2026-01-01", to: "2026-10-25" }).length, 4); // 조사를 떼고도 찾는다(두 줄 + 앞뒤)
+    assert.deepEqual(a.hitDates({ terms: ["카페"], from: "2026-01-01", to: "2026-10-25" }), ["2026-10-25", "2026-09-12"]); // 최근 먼저(같은 점수)
+    assert.deepEqual(a.hitDates({ terms: ["카페", "어니언"], from: "2026-01-01", to: "2026-10-25" })[0], "2026-09-12"); // 많이 맞는 날 먼저
+    assert.deepEqual(a.hitDates({ terms: [], from: "2026-01-01", to: "2026-10-25" }), []);
     assert.deepEqual(createArchive(join(dir, "없음")).search({ terms: ["카페"], from: "2026-01-01", to: "2026-10-25" }), []);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
