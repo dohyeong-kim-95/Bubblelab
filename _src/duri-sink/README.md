@@ -215,7 +215,7 @@ curl -L -o models/gemma-4-E4B-it-Q4_0.gguf \
 
 ```ini
 [Service]
-ExecStart=%h/llama.cpp/current/llama-server -m %h/llama.cpp/models/gemma-4-E4B-it-Q4_0.gguf -ngl 99 -fa on -c 8192 -np 1 -t 8 --cache-reuse 256 --chat-template-kwargs '{"enable_thinking":false}' --host 127.0.0.1 --port 8090
+ExecStart=%h/llama.cpp/current/llama-server -m %h/llama.cpp/models/gemma-4-E4B-it-Q4_0.gguf --mmproj %h/llama.cpp/models/mmproj-gemma-4-E4B-it-Q8_0.gguf -ngl 99 -fa on -c 8192 -np 1 -t 8 --cache-reuse 256 --chat-template-kwargs '{"enable_thinking":false}' --host 127.0.0.1 --port 8090
 Restart=always
 ```
 
@@ -233,6 +233,12 @@ env 로는 `DURI_ASSISTANT=1` / `DURI_MODEL_API` (`llama`|`ollama`) / `LLAMA_URL
 **벤치마크** — `node _src/duri-sink/bench.mjs http://127.0.0.1:8090` (모델 서버가 떠 있어야 한다, `npm test` 아님).
 가짜 캘린더로 일정·운동·잡담·반복/누구 일정·버킷리스트·추천 분류 30문항 + 기억 찾기 4 + 기록 보고 답하기 3 + 추천 답 2.
 2026-10-25 gemma4 E4B(llama-server Vulkan): 39/39 세 번 연속, 이어지는 답 평균 3.0–3.2초. 문항을 고치면 여기 점수도 갱신한다.
+
+**비전(사진 읽기) 켜기 (2026-10-27)** — 같은 모델에 `--mmproj`(`mmproj-gemma-4-E4B-it-Q8_0.gguf`, 560MB, 같은
+HF 저장소)를 붙이면 이미지 입력이 된다(`/props` 의 `modalities.vision: true`). 메모리 +0.4GB(서버 약 3.9GB).
+사진 10장 캡션 시험: 폰 원본(2~3.5MB)은 이미지 1142토큰 → **장당 18~25초**, 작은 이미지는 4~8초, 평균 19초.
+설명 품질은 쓸 만하다("붉은 국물에 면과 두부, 계란이 든 냄비 요리" 등). 글 벤치는 켜고 끈 상태 모두 29~30/30으로
+차이가 없다(틀리는 문항이 실행마다 다른 요일→날짜 약점). 아직 사진 설명을 만들어 쓰는 코드는 없다 — 시험만 했다.
 
 **실행기 고르기 (2026-10-25, Ryzen 9 6900HX + Radeon 680M, 실제 당이 프롬프트·가짜 캘린더 20문항, gemma4 E4B)**
 
