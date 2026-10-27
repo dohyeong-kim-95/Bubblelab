@@ -188,30 +188,35 @@ function saveCal(entries, note) {
 // ── WebSocket 접속 루프 ──────────────────────────────────────
 let backoff = 1000;
 // 감시견 — 끊긴 뒤 다시 붙으려던 소켓이 열리지도 닫히지도 않고 멈춘 적이 있다(2026-10-27 18:35, 2시간 반 동안
-// 당이도 백업도 멈춤). close 이벤트만 믿지 않고, 30초 안에 안 열리거나 열린 채 2분 동안 아무것도(서버는 30초마다
-// ping) 안 오면 그 소켓을 버리고 새로 붙는다. 버린 소켓의 늦은 close 는 retry 가 한 번만 받는다.
+// 당이도 백업도 멈춤. 같은 날 22:21 재부팅 직후에도). Node 22 의 WebSocket 은 **접속에 실패하면 error 만 내고
+// close 는 끝내 안 낸다**(readyState 가 0, close() 를 부르면 2 에 멈춘다) — close 만 기다리던 재연결이 영영
+// 안 왔다. 그래서 error 에서도 다시 붙고, 30초 넘게 열려 있지 않거나 열린 채 2분 동안 아무것도(서버는 30초마다
+// ping) 안 오면 그 소켓을 버리고 새로 붙는다. retry 는 소켓마다 한 번만 돈다.
+// 시계는 performance.now()(단조) — 부팅 직후 시각 맞추기로 Date.now() 가 뒤로 뛰면 감시견이 잠든다.
 const CONNECT_TIMEOUT_MS = 30_000, SILENT_MS = 120_000;
+const mono = () => performance.now();
 let lastHeard = 0, openedAt = 0;
 setInterval(() => {
   const ws = socket;
   if (!ws) return;
-  const stuck = ws.readyState === 0 && Date.now() - openedAt > CONNECT_TIMEOUT_MS;
-  const silent = ws.readyState === 1 && Date.now() - lastHeard > SILENT_MS;
+  const stuck = ws.readyState !== 1 && mono() - openedAt > CONNECT_TIMEOUT_MS;
+  const silent = ws.readyState === 1 && mono() - lastHeard > SILENT_MS;
   if (!stuck && !silent) return;
+  if (ws.__retried) return; // 이미 다시 붙는 중(다음 소켓이 곧 socket 이 된다)
   log(stuck ? "접속이 30초 넘게 안 열림 — 새로 붙음" : "2분 동안 서버 소식 없음 — 새로 붙음");
   ws.__retry?.();
   try { ws.close(); } catch { /* 이미 닫힘 */ }
-}, 15_000).unref();
+}, 15_000);
 
 function connect() {
   const wsUrl = `${cfg.url.replace(/^http/, "ws")}/_duri?token=${encodeURIComponent(cfg.token)}`;
   const ws = new WebSocket(wsUrl);
   socket = ws;
-  openedAt = lastHeard = Date.now();
+  openedAt = lastHeard = mono();
   let retried = false;
   ws.__retry = () => {
     if (retried) return;
-    retried = true;
+    retried = ws.__retried = true;
     log("연결 끊김. 재연결", backoff, "ms 후");
     setTimeout(connect, backoff);
     backoff = Math.min(backoff * 2, 30000);
@@ -224,7 +229,7 @@ function connect() {
     ws.send(JSON.stringify({ type: "cal-hello" })); // 공유 캘린더 전체 상태도 받는다
   });
   ws.addEventListener("message", (e) => {
-    lastHeard = Date.now();
+    lastHeard = mono();
     let m; try { m = JSON.parse(e.data); } catch { return; }
     if (m.type === "ping") { ws.send(JSON.stringify({ type: "pong" })); return; }
     if (m.type === "entry") { enqueue({ ...m, live: backfilled }); return; }
@@ -249,7 +254,7 @@ function connect() {
     if (m.type === "error") { log("서버 오류:", m.error); return; }
   });
   ws.addEventListener("close", () => ws.__retry());
-  ws.addEventListener("error", () => { try { ws.close(); } catch { /* 이미 닫힘 */ } });
+  ws.addEventListener("error", () => { ws.__retry(); try { ws.close(); } catch { /* 이미 닫힘 */ } });
 }
 
 // ── 일정 비서 → 서버로 보내기 ────────────────────────────────
