@@ -55,7 +55,7 @@ test("백업 검색: 낱말이 맞는 줄과 앞뒤 한 줄을 시간순으로, 
 });
 
 test("백업 검색은 읽기 전용이다 — 모듈(장소 포함)에 쓰기 API 가 없고, 검색해도 파일이 그대로다", () => {
-  for (const f of ["archive.mjs", "places.mjs"]) {
+  for (const f of ["archive.mjs", "places.mjs"]) { // 사진 설명을 쓰는 건 captions.mjs — archive 는 읽기만
     const src = readFileSync(new URL(f, import.meta.url), "utf8");
     assert.doesNotMatch(src, /write|append|rename|unlink|rmSync|rmdir|mkdir|copyFile|truncate|chmod|createWriteStream/i, f);
   }

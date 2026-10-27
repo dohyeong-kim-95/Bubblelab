@@ -4,7 +4,7 @@
 // 만드는 뷰). 날짜는 at(epoch)을 이 PC 로컬 시각으로 바꿔 쓴다 — messages.md 의 "## 날짜" 는
 // UTC 라 KST 00~09시가 전날로 들어가 있다(duri/CLAUDE.md 「로케일」).
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const pad2 = (n) => String(n).padStart(2, "0");
@@ -20,11 +20,12 @@ export function wordVariants(t) {
   return [...new Set([w, ...(bare.length >= 2 ? [bare] : []), ...(w.length >= 3 ? [w.slice(0, -1)] : [])])];
 }
 
-/** 한 줄 요약. 당이가 근거로 읽을 수 없는 것(이모티콘)은 null. 좌표는 place 가 있으면 지역 이름으로. */
-function lineOf(l, place) {
+/** 한 줄 요약. 당이가 근거로 읽을 수 없는 것(이모티콘)은 null. 좌표는 place 가 있으면 지역 이름으로.
+ *  seen: 당이가 한가할 때 달아 둔 사진 설명(captions.mjs) — "[케이크가 놓인 카페 테이블]" 로 붙는다. */
+function lineOf(l, place, seen) {
   if (l.type === "message" && typeof l.text === "string" && l.text.trim()) return l.text.trim();
   const where = l.loc && place ? place(Number(l.loc.lat), Number(l.loc.lng)) : null;
-  if (l.type === "photo") return `🖼️ 사진${l.photo?.caption ? ` "${l.photo.caption}"` : ""}${where ? ` 📍${where}` : ""}`;
+  if (l.type === "photo") return `🖼️ 사진${l.photo?.caption ? ` "${l.photo.caption}"` : ""}${seen ? ` [${seen.desc}]` : ""}${where ? ` 📍${where}` : ""}`;
   if (l.type === "location" && where) return `📍 위치 공유 — ${where}`;
   return null;
 }
@@ -35,13 +36,24 @@ function lineOf(l, place) {
  * search({ terms, from, to, limit }) → 시간순 줄 배열 "10/12 (일) 14:03 도경: …"
  *   terms 가 있으면 낱말이 많이 맞는 줄 + 앞뒤 한 줄씩, 없으면 기간의 마지막 limit 줄.
  * hitDates({ terms, from, to }) → 낱말이 맞는 대화가 있었던 날들(잘 맞는 날 먼저).
- * photoFile(seq) → { path, mime } 그 사진의 원본 파일 위치(읽지는 않는다).
+ * photoFile(seq) → { path, mime } 그 사진의 원본 파일 위치(읽지는 않는다). photoFiles() → 모든 사진의 그것(시간순).
+ * 사진 설명(DuriStorage/captions.json, captions.mjs 가 쓴다)이 있으면 줄·사진 찾기에 같이 맞춘다 — 여기선 읽기만.
  * day(ymd) → { photos, places } 그날 사진 수와 찍은 곳(아침 브리핑의 "1년 전 오늘").
  * photos({ terms, from, to }) → 낱말이 찍은 곳·캡션에 맞는 사진(낱말이 없으면 기간의 전부), 시간순
  *   [{ seq, at, date, where }]. 당이가 채팅에 "가져오는" 사진 — 앱이 seq 로 자기 캐시에서 꺼내 그린다.
  */
 export function createArchive(dir, { skip = () => false, place = null } = {}) {
   const cache = new Map(); // 파일 → { mtimeMs, rows }
+  let seen = {}, seenMtime = -1; // 사진 설명 — 바뀌면 줄을 다시 만든다
+
+  function loadSeen() {
+    let m = 0;
+    try { m = statSync(join(dir, "captions.json")).mtimeMs; } catch { /* 아직 없음 */ }
+    if (m === seenMtime) return;
+    seenMtime = m;
+    try { seen = m ? JSON.parse(readFileSync(join(dir, "captions.json"), "utf8")) ?? {} : {}; } catch { seen = {}; }
+    cache.clear();
+  }
 
   function monthFiles(from, to) {
     const root = join(dir, "timeline");
@@ -68,10 +80,11 @@ export function createArchive(dir, { skip = () => false, place = null } = {}) {
     try { logs = JSON.parse(readFileSync(file, "utf8")).logs ?? []; } catch { /* 쓰는 중이면 다음에 */ }
     const rows = [];
     for (const l of logs) {
-      const text = lineOf(l, place);
+      const cap = l.type === "photo" && typeof l.photo?.file === "string" ? seen[basename(l.photo.file)] : null;
+      const text = lineOf(l, place, cap?.desc ? cap : null);
       if (!text || !Number.isFinite(l.at) || skip(l.name, text)) continue;
       const where = l.type === "photo" && l.loc && place ? place(Number(l.loc.lat), Number(l.loc.lng)) : null;
-      rows.push({ seq: l.seq, at: l.at, date: ymdOf(l.at), name: l.name ?? "?", text, photo: l.type === "photo", where, caption: l.photo?.caption ?? "",
+      rows.push({ seq: l.seq, at: l.at, date: ymdOf(l.at), name: l.name ?? "?", text, photo: l.type === "photo", where, caption: [l.photo?.caption, cap?.desc, ...(cap?.tags ?? [])].filter(Boolean).join(" "),
         ...(l.type === "photo" && typeof l.photo?.file === "string" && { path: join(dirname(file), "photos", l.photo.file), mime: l.photo.mime }) });
     }
     cache.set(file, { mtimeMs, rows });
@@ -84,7 +97,7 @@ export function createArchive(dir, { skip = () => false, place = null } = {}) {
     return `${d.getMonth() + 1}/${d.getDate()} (${WEEKDAYS[d.getDay()]}) ${pad2(d.getHours())}:${pad2(d.getMinutes())} ${r.name}: ${text}`;
   }
 
-  const rowsIn = (from, to) => monthFiles(from, to).flatMap(rowsOf)
+  const rowsIn = (from, to) => (loadSeen(), monthFiles(from, to)).flatMap(rowsOf)
     .filter((r) => r.date >= from && r.date <= to)
     .sort((a, b) => a.at - b.at);
 
@@ -132,5 +145,7 @@ export function createArchive(dir, { skip = () => false, place = null } = {}) {
     return r?.path ? { path: r.path, mime: r.mime ?? null } : null;
   }
 
-  return { search, hitDates, day, photos, photoFile };
+  const photoFiles = () => rowsIn("2000-01-01", "2999-12-31").filter((r) => r.photo && r.path).map((r) => ({ path: r.path, mime: r.mime ?? null }));
+
+  return { search, hitDates, day, photos, photoFile, photoFiles };
 }

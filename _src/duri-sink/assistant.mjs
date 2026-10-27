@@ -20,6 +20,7 @@ const NO = /^(아니|아니요|아뇨|취소|ㄴㄴ|no)[.!~ ]*$/i;
 // 이보다 늦게 받은 명령은 조용히 버린다. PC 가 꺼져 있던 동안의 명령이라, 그때 이미
 // 앱이 "당이가 자고 있어요" 라고 알렸다(서버 presence 의 sink). 나중에 실행하면 헷갈린다.
 export const MAX_AGE_MS = 10 * 60 * 1000;
+export const IDLE_MS = 10 * 60 * 1000; // 이만큼 아무도 안 부르면 한가한 것 — 사진 설명을 단다
 const PENDING_MS = 10 * 60 * 1000;
 const DAYS_AHEAD = 60;
 // 운동 인증의 "어제 운동했어" 처럼 지난 날도 고를 수 있게 — 단, 날짜표에 섞으면 일정 요청
@@ -209,7 +210,7 @@ export function buildMessages(command, ctx, sender) {
     "오후 3시는 15:00. 옮기기·삭제는 아래 일정 목록의 e번호로만 가리킨다. 목록에 없으면 unknown.",
     "운동 인증(운동·헬스·러닝 같은 운동 얘기일 때만. 일정·여행 얘기엔 쓰지 않는다): '운동했어'·'오늘 헬스 1시간' 은 말한 사람의 그날 운동 체크(fit, 날짜 없으면 오늘, memo 는 운동 종류·양만 적고 없으면 생략). 체크 취소는 unfit, '이번 달 운동 몇 번?'·'운동 기록'·'운동 요약'·'지난주 운동 어땠어?' 은 fitlist(달이면 month, 이번 주·지난주면 week).",
     "기억: 둘이 예전에 나눈 얘기·보낸 사진·있었던 일·다녀온 곳·해낸 것을 물으면(그 카페 이름 뭐였지? 지난달에 어디 갔었지? 제주도 언제 갔지? 어제 무슨 얘기 했어?) recall. query 엔 찾을 핵심 낱말만(조사 빼고), 기간을 말했으면 from/to 나 month.",
-    "사진: 예전 사진을 보여 달라·가져와 달라(제주에서 찍은 사진 보여줘, 지난달 사진, 강남 사진 가져와)는 photos. query 엔 장소 이름만(조사 빼고, '사진' 은 빼고), 기간을 말했으면 from/to 나 month. '언제 갔지' 처럼 묻기만 하면 recall.",
+    "사진: 예전 사진을 보여 달라·가져와 달라(제주에서 찍은 사진 보여줘, 지난달 사진, 강남 사진 가져와, 바다 사진, 케이크 사진)는 photos. query 엔 장소 이름이나 찍힌 것(바다·케이크·고양이)만(조사 빼고, '사진' 은 빼고), 기간을 말했으면 from/to 나 month. '언제 갔지' 처럼 묻기만 하면 recall.",
     "버킷리스트(둘이 해보고 싶은 것 목록)를 보여 달라·뭐 남았어·뭐 했어·○○ 있어? 는 bucket(남은 것 todo, 한 것 done, 둘 다 all, 특정 항목을 찾으면 query). 데이트·같이 할 것·주말에 뭐 할지 추천해 달라면 recommend.",
     "일정과 상관없는 인사·잡담·간단한 질문이면 chat 으로 짧게 답한다. 날씨·뉴스·시세처럼 지금 정보는 모른다고 솔직히 말한다.",
     "",
@@ -811,6 +812,7 @@ export function llamaAsk({ url, timeoutMs = 180_000 }) {
 export function createAssistant(io, { now = () => Date.now() } = {}) {
   const pending = new Map(); // 보낸 사람 → { action, until }
   let chain = Promise.resolve();
+  let lastUsed = 0, idleBusy = false; // 마지막으로 누가 당이를 부른 때 — 한가할 때만 뒷일(사진 설명)을 한다
 
   async function handle({ name, text, at }) {
     if (!name || name === BOT_NAME) return;
@@ -944,6 +946,7 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
   }
 
   async function briefing() {
+    lastUsed = now();
     const today = kstYmd(now());
     const facts = briefFacts(io.events(), today);
     let reply = "";
@@ -963,7 +966,16 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
       chain = p.catch(() => {});
       return p;
     },
+    /** 최근 quietMs 동안 당이를 아무도 안 불렀으면 job 을 명령과 같은 줄에 세운다(모델을 겹쳐 부르지 않게). 한 번에 하나. */
+    idle(job, quietMs = IDLE_MS) {
+      if (idleBusy || now() - lastUsed < quietMs) return Promise.resolve(false);
+      idleBusy = true;
+      const p = chain.then(() => (now() - lastUsed < quietMs ? false : job())); // 기다리는 사이 누가 불렀으면 건너뛴다
+      chain = p.catch(() => {});
+      return p.finally(() => { idleBusy = false; });
+    },
     onMessage(msg) {
+      if (msg?.name !== BOT_NAME && parseTrigger(msg?.text) !== null) lastUsed = now(); // 줄에 서기 전에 — 돌던 뒷일 뒤엔 더 안 붙는다
       chain = chain.then(() => handle(msg)).catch((e) => io.log?.("당이 오류:", String(e?.message || e)));
       return chain;
     },

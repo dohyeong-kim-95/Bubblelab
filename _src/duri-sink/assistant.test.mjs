@@ -826,3 +826,17 @@ test("이모티콘: 당이가 쓰는 번호가 팩에 있고, duri 앱 서랍(DU
   assert.equal(known("dageudangseu-3"), true);
   assert.equal(known("nope"), false);
 });
+
+test("한가할 때 뒷일: 10분 안에 누가 불렀으면 안 하고, 하면 명령과 같은 줄에 선다", async () => {
+  let t = NOW;
+  const a = createAssistant({ ask: async () => ({ op: "chat", reply: "응" }), events: () => [], apply: async () => {}, say: async () => {} }, { now: () => t });
+  let ran = 0;
+  assert.equal(await a.idle(async () => ++ran), 1); // 처음엔 아무도 안 불렀다
+  await a.onMessage({ name: "쫑", text: "@당이 안녕", at: t });
+  t += 9 * 60_000;
+  assert.equal(await a.idle(async () => ++ran), false);
+  t += 2 * 60_000;
+  assert.equal(await a.idle(async () => ++ran), 2);
+  await a.onMessage({ name: "쫑", text: "그냥 대화", at: t }); // 당이를 부른 게 아니면 한가함 그대로
+  assert.equal(await a.idle(async () => ++ran), 3);
+});

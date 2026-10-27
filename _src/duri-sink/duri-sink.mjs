@@ -19,6 +19,7 @@ import { deriveKey, createStore, atomicWrite, encryptJson, encryptBytes } from "
 import { createAssistant, ollamaAsk, llamaAsk, parseTrigger, briefDue, kstYmd, BOT_NAME } from "./assistant.mjs";
 import { createArchive } from "./archive.mjs";
 import { createPlaces } from "./places.mjs";
+import { createCaptioner } from "./captions.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const fatal = (msg) => { console.error("✖", msg); process.exit(1); };
@@ -53,6 +54,8 @@ function loadConfig() {
       keepAlive: process.env.DURI_KEEP_ALIVE || file.assistant?.keepAlive || "1h",
       // 아침 브리핑 시각(KST, "HH:MM"). false 또는 "off" 면 끈다.
       briefing: process.env.DURI_BRIEF || (file.assistant?.briefing === false ? "off" : file.assistant?.briefing) || "08:00",
+      // 한가할 때 사진 설명 달기(llama + 비전일 때만). false 면 끈다.
+      captions: file.assistant?.captions !== false,
     },
   };
   for (const k of ["url", "token", "passphrase"]) {
@@ -315,6 +318,26 @@ async function briefTick() {
   } finally { briefBusy = false; }
 }
 
+// ── 사진 설명 달기 ───────────────────────────────────────────
+// 모델 서버에 비전(mmproj)이 켜져 있으면, 당이가 10분 넘게 한가할 때 30초마다 사진 한 장씩 보고 설명을
+// captions.json 에 남긴다(captions.mjs). 당이가 사진을 찾을 땐 그 글만 읽는다 — 묻는 순간엔 비전을 안 쓴다.
+async function startCaptions() {
+  if (cfg.assistant.api !== "llama" || cfg.assistant.captions === false) return;
+  try {
+    const props = await (await fetch(`${cfg.assistant.llama}/props`, { signal: AbortSignal.timeout(10_000) })).json();
+    if (!props?.modalities?.vision) { log("사진 설명: 모델 서버에 비전이 없어 끔(--mmproj)"); return; }
+  } catch { setTimeout(startCaptions, 5 * 60_000); return; } // 모델 서버가 아직 안 떴다 — 나중에 다시
+  const captioner = createCaptioner({ dir: cfg.dir, list: () => archive.photoFiles(), see: llamaAsk({ url: cfg.assistant.llama, timeoutMs: 120_000 }), log });
+  let reported = false;
+  setInterval(() => {
+    assistant.idle(() => captioner.step()).then((did) => {
+      if (did) reported = false;
+      else if (!reported && captioner.left() === 0) { reported = true; log("사진 설명: 다 달았음"); }
+    }).catch((e) => log("사진 설명 오류:", String(e?.message || e)));
+  }, 30_000);
+  log(`사진 설명 켜짐 — 남은 사진 ${captioner.left()}장, 당이가 10분 한가할 때 한 장씩`);
+}
+
 // ── 시작 ─────────────────────────────────────────────────────
 const key = await deriveKey(cfg.passphrase);
 store = createStore({ dir: cfg.dir, key, fetchPhoto: downloadPhoto });
@@ -336,6 +359,7 @@ if (cfg.assistant.enabled) {
     setInterval(briefTick, 60_000);
     log(`아침 브리핑 매일 ${cfg.assistant.briefing} KST`);
   }
+  startCaptions();
 }
 mkdirSync(cfg.dir, { recursive: true });
 log(`Duri 싱크 시작 — 저장 위치: ${cfg.dir}`);
