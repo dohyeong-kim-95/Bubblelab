@@ -874,3 +874,29 @@ test("사진: '하나 보여줘'·'두 장' 이면 그만큼만 가져온다", a
   assert.equal(said[0][1].length, 1);
   assert.match(said[0][0], /사진 5장 중 1장/);
 });
+
+test("자는 시간: 모델 서버가 꺼졌거나 모델을 올리는 중(503)이면 '자는 중' 이고, 새벽엔 자는 시간을 알려 준다", async () => {
+  const { llamaAsk, ModelAsleep, downText } = await import("./assistant.mjs");
+  const { createServer } = await import("node:http");
+  const srv = createServer((req, res) => { res.statusCode = 503; res.end('{"error":{"message":"Loading model"}}'); });
+  await new Promise((r) => srv.listen(0, "127.0.0.1", r));
+  const port = srv.address().port;
+  try {
+    await assert.rejects(llamaAsk({ url: `http://127.0.0.1:${port}` })([]), (e) => e.asleep === true);
+  } finally { srv.close(); }
+  await new Promise((r) => srv.once("close", r));
+  await assert.rejects(llamaAsk({ url: `http://127.0.0.1:${port}` })([]), (e) => e.asleep === true); // 꺼져 있음(연결 거부)
+
+  const kst = (h) => Date.parse(`2026-10-29T${String(h).padStart(2, "0")}:30:00+09:00`);
+  assert.match(downText(new ModelAsleep("x"), kst(4)), /새벽 3시~6시에 자고/);
+  assert.match(downText(new ModelAsleep("x"), kst(6)), /새벽 3시~6시에 자고/); // 기상이 최대 한 시간 늦어진다
+  assert.match(downText(new ModelAsleep("x"), kst(14)), /지금 자고 있어요/);
+  assert.match(downText(new Error("llama-server HTTP 500"), kst(4)), /모델 서버 확인/); // 고장은 고장이라고
+
+  const said = [];
+  const at = kst(4);
+  const a = createAssistant({ ask: async () => { throw new ModelAsleep("꺼짐"); }, events: () => EVENTS, apply: async () => {},
+    say: async (t) => { said.push(t); } }, { now: () => at });
+  await a.onMessage({ name: "빵", text: "@당이 이번 주 일정", at: at - 1000 });
+  assert.deepEqual(said, ["😴 당이는 새벽 3시~6시에 자고 있어요. 6시 넘어서 다시 불러 주승!"]);
+});

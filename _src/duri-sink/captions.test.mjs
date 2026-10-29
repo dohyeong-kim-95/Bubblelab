@@ -77,3 +77,19 @@ test("한 글자 낱말은 따로 떨어진 말일 때만 맞는다 — '회' �
   for (const t of ["난제회식", "교회50주년", "회색 고양이", "나 회사 가기 싫어"]) assert.equal(hasWord(t, v), false, t);
   assert.equal(hasWord("제주도 여행", wordVariants("제주")), true);
 });
+
+test("사진 설명: 모델 서버가 자는 중이면 실패로 세지 않고 깨면 다시 본다", async () => {
+  const dir = fixture();
+  try {
+    const archive = createArchive(dir);
+    let asleep = true;
+    const c = createCaptioner({ dir, list: () => archive.photoFiles(),
+      see: async () => { if (asleep) throw Object.assign(new Error("꺼짐"), { asleep: true }); return { desc: "바다" }; } });
+    for (let i = 0; i < 5; i++) assert.equal(await c.step(), false);
+    assert.deepEqual(readCaptions(dir), {});
+    assert.equal(c.left(), 2);
+    asleep = false;
+    assert.equal(await c.step(), true);
+    assert.equal(readCaptions(dir)["b_2.jpg"].desc, "바다");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

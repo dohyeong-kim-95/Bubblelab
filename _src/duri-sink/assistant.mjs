@@ -778,12 +778,36 @@ const confirmText = (a) => a.op === "repeat"
   ? `🤖 "${a.event.title}" (${whenText(a.event)}) 일정을 지울까요? "@당이 응" 이면 지워요.`
   : `🤖 "${a.event.title}" ${whenText(a.event)} → ${whenText({ ...a.event, date: a.date, start: a.start, end: a.end, endDate: undefined })}로 옮길까요? "@당이 응" 이면 옮겨요.`;
 
+// 모델 서버가 꺼져 있거나(매일 03~06시는 당이가 자는 시간 — YOUTUBE 쪽 cron 이 llama-server 를 끄고 켠다.
+// 그 밖에도 PC 에서 다른 무거운 일을 할 때 끈다) 막 켜져 모델을 올리는 중(503)이면 "고장" 이 아니라 "자는 중" 이다.
+// 답은 자고 있다고 하고, 사진 설명은 실패로 세지 않는다. 시간이 다 돼서 끊긴 것(타임아웃)은 진짜 실패다.
+export class ModelAsleep extends Error { asleep = true; }
+async function reach(url, init) {
+  let res;
+  try { res = await fetch(url, init); }
+  catch (e) {
+    if (e?.name === "TimeoutError" || e?.name === "AbortError") throw e;
+    throw new ModelAsleep(`모델 서버 꺼짐 (${e?.cause?.code || e?.message || e})`);
+  }
+  if (res.status === 503) throw new ModelAsleep("모델 서버가 모델을 올리는 중 (HTTP 503)");
+  return res;
+}
+
+/** 모델을 못 부를 때 채팅 답. 자는 중이면 새벽(KST 03~07시 — 06시 기상이 최대 1시간 늦어진다)엔 자는 시간을 알려 준다. */
+export function downText(e, at = Date.now()) {
+  if (!e?.asleep) return "🤖 로컬 모델이 응답하지 않아요 (PC의 모델 서버 확인)";
+  const h = new Date(at + 9 * 3600_000).getUTCHours();
+  return h >= 3 && h < 7
+    ? "😴 당이는 새벽 3시~6시에 자고 있어요. 6시 넘어서 다시 불러 주승!"
+    : "😴 당이가 지금 자고 있어요. 조금 뒤에 다시 불러 주승!";
+}
+
 /** Ollama /api/chat. format:"json" 으로 JSON 만 받는다. */
 // keepAlive: 마지막 요청 뒤 모델을 메모리에 붙잡아 두는 시간(Ollama 기본 5분). 다시 올리면
 // 긴 지시문을 처음부터 읽느라 CPU 에서 20초 안팎이 걸리고, 붙어 있으면 몇 초다.
 export function ollamaAsk({ url, model, keepAlive, timeoutMs = 180_000 }) {
   return async (messages) => {
-    const res = await fetch(`${url.replace(/\/+$/, "")}/api/chat`, {
+    const res = await reach(`${url.replace(/\/+$/, "")}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       // num_ctx: Ollama 기본 4096 이면 일정 40개 + 날짜표로 2900 토큰이라 빠듯하다. 넘치면 앞(지시문)이 잘린다.
@@ -803,7 +827,7 @@ export function ollamaAsk({ url, model, keepAlive, timeoutMs = 180_000 }) {
 // enable_thinking:false — gemma4 는 기본으로 속생각을 150~200토큰 쓰고 답해 17초가 걸린다.
 export function llamaAsk({ url, timeoutMs = 180_000 }) {
   return async (messages) => {
-    const res = await fetch(`${url.replace(/\/+$/, "")}/v1/chat/completions`, {
+    const res = await reach(`${url.replace(/\/+$/, "")}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ messages, temperature: 0, response_format: { type: "json_object" }, cache_prompt: true,
@@ -851,7 +875,7 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
     try { raw = await io.ask(buildMessages(command, ctx, name)); }
     catch (e) {
       io.log?.("당이: 모델 호출 실패", String(e?.message || e));
-      await io.say("🤖 로컬 모델이 응답하지 않아요 (PC의 모델 서버 확인)");
+      await io.say(downText(e, now()));
       return;
     }
     const action = validateAction(raw, ctx, today, command);
@@ -899,7 +923,7 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
     try { raw = await io.ask(buildRecallMessages(command, lines, name, facts, photo && { when: monthDay(photo.date), title: photo.title, desc: photo.desc })); }
     catch (e) {
       io.log?.("당이: 모델 호출 실패", String(e?.message || e));
-      return text("🤖 로컬 모델이 응답하지 않아요 (PC의 모델 서버 확인)");
+      return text(downText(e, now()));
     }
     io.log?.(`당이: 기억 ${lines.length}줄·일정 ${facts.plans.length}·버킷 ${facts.bucket.length} 읽고 답함${photo ? " + 사진 1장" : ""}`); // 대화 내용은 로그에 남기지 않는다
     const reply = String(raw?.reply ?? "").trim().slice(0, 600);
@@ -956,7 +980,7 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
     try { raw = await io.ask(buildRecommendMessages(command, { todo, done, free: freeWeekends(events, today) }, name)); }
     catch (e) {
       io.log?.("당이: 모델 호출 실패", String(e?.message || e));
-      return "🤖 로컬 모델이 응답하지 않아요 (PC의 모델 서버 확인)";
+      return downText(e, now());
     }
     io.log?.(`당이: 버킷리스트 ${todo.length}개 보고 추천함`); // 내용은 로그에 남기지 않는다
     const reply = String(raw?.reply ?? "").trim().slice(0, 600);

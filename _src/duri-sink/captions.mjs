@@ -40,7 +40,7 @@ export function cleanCaption(raw) {
 
 /**
  * dir: DuriStorage. list() → [{ path, mime? }] 설명을 달 사진(archive.photoFiles). see(messages) → 모델 JSON.
- * step() 은 아직 설명이 없는 사진 하나를 보고 결과를 적는다. 할 게 없으면 false.
+ * step() 은 아직 설명이 없는 사진 하나를 보고 결과를 적는다. 할 게 없거나 모델 서버가 자는 중이면 false.
  */
 export function createCaptioner({ dir, list, see, log, now = () => Date.now() }) {
   const file = join(dir, CAPTIONS_FILE);
@@ -65,6 +65,7 @@ export function createCaptioner({ dir, list, see, log, now = () => Date.now() })
       if (!cap) throw new Error("빈 설명");
       caps[name] = { ...cap, at: now() };
     } catch (e) {
+      if (e?.asleep) return false; // 모델 서버가 자는 중(새벽 3~6시 등) — 실패로 세지 않고 깨면 다시 본다
       caps[name] = { fails: (caps[name]?.fails ?? 0) + 1 };
       log?.("당이: 사진 설명 실패", name.slice(-16), String(e?.message || e));
     }

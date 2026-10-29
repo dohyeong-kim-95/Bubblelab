@@ -229,6 +229,13 @@ Ollama 로 돌릴 땐 `"assistant": { "enabled": true, "ollama": "http://127.0.0
 (`ollama pull gemma4:e4b`, 받기 9.6GB, 올리면 RAM 약 10GB). Ollama 가 저장한 gemma4 파일은 llama.cpp 가 못 연다
 (텐서 구성이 다르다) — 그래서 GGUF 를 따로 받는다.
 
+**자는 시간** — 매일 03:00~06:00 KST 엔 모델 서버를 끈다(YOUTUBE 워크스페이스의 crontab →
+`scripts/dangi-sleep.sh sleep|wake`, 06:00 기상은 그쪽 나레이션 작업이 남았으면 최대 60분 늦어진다). 데몬은
+시각이 아니라 **상태**로 판단한다 — 모델 서버에 연결이 안 되거나 503(모델 올리는 중)이면 "자는 중"
+(`ModelAsleep`)이라 `@당이` 에 "😴 당이는 새벽 3시~6시에 자고 있어요" 로 답하고(새벽 3~7시 밖이면 "지금 자고
+있어요"), 사진 설명은 실패로 세지 않는다. 타임아웃·500 같은 건 그대로 고장으로 알린다. 싱크(`duri-sink.service`)는
+계속 돈다.
+
 env 로는 `DURI_ASSISTANT=1` / `DURI_MODEL_API` (`llama`|`ollama`) / `LLAMA_URL` / `OLLAMA_URL` / `DURI_MODEL` /
 `DURI_KEEP_ALIVE`. `api` 를 안 적으면 Ollama, 모델을 안 적으면 `qwen2.5:7b`, `keepAlive` 를 안 적으면 `1h`.
 
