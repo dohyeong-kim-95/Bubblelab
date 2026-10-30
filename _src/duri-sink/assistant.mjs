@@ -386,11 +386,17 @@ export function validateAction(raw, ctx, today, command) {
       // 요청에 달이 적혀 있으면("다음 달", "11월이랑 12월") 그걸 따른다 — 모델이 "다음 달" 을 두 달로 고르곤 했다.
       const said = monthsSaid(command, today);
       if (months.length && said.length) months.splice(0, months.length, ...said);
+      const monthEnd = (m) => ymd(new Date(Number(m.slice(0, 4)), Number(m.slice(5)), 0));
       let rFrom = raw.from, rTo = raw.to;
       if (months.length) {
         rFrom = `${months[0]}-01`;
-        const last = months[months.length - 1];
-        rTo = ymd(new Date(Number(last.slice(0, 4)), Number(last.slice(5)), 0));
+        rTo = monthEnd(months[months.length - 1]);
+      } else if (said.length && !/부터|까지|동안/.test(command) && okDate(rFrom) && okDate(rTo)) {
+        // 달을 말했는데 모델이 from/to 로 답하면 그 달들 밖은 잘라 낸다 — "이번 달 남은 화·목" 을 다음 달 말까지
+        // 잡곤 했다. "11월부터 석 달" 처럼 기간을 따로 말했으면 모델 값을 그대로 둔다.
+        if (rFrom < `${said[0]}-01`) rFrom = `${said[0]}-01`;
+        if (rTo > monthEnd(said[said.length - 1])) rTo = monthEnd(said[said.length - 1]);
+        months.push(...said);
       }
       if (!okDate(rFrom) || !okDate(rTo) || rTo < rFrom) return bad("언제부터 언제까지인지 알려 주세요");
       const from = rFrom < today ? today : rFrom; // 지난 날은 넣지 않는다

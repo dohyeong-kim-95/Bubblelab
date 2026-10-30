@@ -208,18 +208,44 @@ systemd 가 없으면 설치까지만 하고 이 안내를 띄운다.
 mkdir -p ~/llama.cpp/models && cd ~/llama.cpp
 gh release download <태그> -R ggml-org/llama.cpp -p 'llama-*-bin-ubuntu-vulkan-x64.tar.gz' && tar xzf llama-*.tar.gz
 ln -sfn ~/llama.cpp/llama-<태그> ~/llama.cpp/current
-curl -L -o models/gemma-4-E4B-it-Q4_0.gguf \
-  https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_0.gguf   # 4.6GB
+B=https://huggingface.co/google/gemma-4-26B-A4B-it-qat-q4_0-gguf/resolve/main   # 당이(26B MoE, 2026-10-30~)
+curl -fL -o models/gemma-4-26B-A4B-it-qat-Q4_0.gguf $B/gemma-4-26B_q4_0-it.gguf          # 14.4GB
+curl -fL -o models/mmproj-gemma-4-26B-A4B-it.gguf $B/gemma-4-26B-it-mmproj.gguf          # 1.2GB
+B=https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF/resolve/main                     # 예비(E4B)
+curl -fL -o models/gemma-4-E4B-it-Q4_0.gguf $B/gemma-4-E4B-it-Q4_0.gguf                  # 4.6GB
+curl -fL -o models/mmproj-gemma-4-E4B-it-Q8_0.gguf $B/mmproj-gemma-4-E4B-it-Q8_0.gguf    # 560MB
 ~/llama.cpp/current/llama-server --list-devices    # Vulkan0: AMD Radeon 680M 이 보여야 한다
 ```
 
-`~/.config/systemd/user/llama-server.service` 로 상시 띄운다(`systemctl --user enable --now llama-server`):
+`~/.config/systemd/user/llama-server.service`(26B) 로 상시 띄우고(`systemctl --user enable --now llama-server`),
+**5분 안에 세 번 죽으면**(메모리 부족 등) 예비 `llama-server-fallback.service`(E4B)가 같은 8090 으로 대신 뜬다.
+데몬은 주소가 같아 바뀐 줄 모른다. 공통 플래그는 `-ngl 99 -fa on -c 8192 -np 1 -t 8 --cache-reuse 256
+--chat-template-kwargs '{"enable_thinking":false}' --host 127.0.0.1 --port 8090`(아래 `<공통>`).
 
 ```ini
+# llama-server.service
+[Unit]
+StartLimitIntervalSec=300
+StartLimitBurst=3
+OnFailure=llama-server-fallback.service
 [Service]
-ExecStart=%h/llama.cpp/current/llama-server -m %h/llama.cpp/models/gemma-4-E4B-it-Q4_0.gguf --mmproj %h/llama.cpp/models/mmproj-gemma-4-E4B-it-Q8_0.gguf -ngl 99 -fa on -c 8192 -np 1 -t 8 --cache-reuse 256 --chat-template-kwargs '{"enable_thinking":false}' --host 127.0.0.1 --port 8090
+ExecStart=%h/llama.cpp/current/llama-server -m %h/llama.cpp/models/gemma-4-26B-A4B-it-qat-Q4_0.gguf --mmproj %h/llama.cpp/models/mmproj-gemma-4-26B-A4B-it.gguf <공통>
 Restart=always
+RestartSec=10
+RestartMode=direct   # 이게 없으면 죽을 때마다 OnFailure 가 불려 둘이 번갈아 뜬다(systemd 254+)
+
+# llama-server-fallback.service — enable 하지 않는다(OnFailure 로만 뜬다)
+[Unit]
+Conflicts=llama-server.service   # 본 서비스를 start 하면 예비는 내려간다
+PartOf=llama-server.service      # 자는 시간의 stop llama-server 가 예비까지 재운다
+[Service]
+ExecStart=%h/llama.cpp/current/llama-server -m %h/llama.cpp/models/gemma-4-E4B-it-Q4_0.gguf --mmproj %h/llama.cpp/models/mmproj-gemma-4-E4B-it-Q8_0.gguf <공통>
+Restart=on-failure
 ```
+
+예비로 넘어갔으면 원인을 고친 뒤 `systemctl --user reset-failed llama-server && systemctl --user start llama-server`
+(5분 안에 다시 켜면 횟수 제한에 걸려 거절된다). 지금 어느 모델인지는 `curl -s 127.0.0.1:8090/props` 의 `model_path`.
+손으로 예비로 내리려면 `systemctl --user start llama-server-fallback`.
 
 ```json
 "assistant": { "enabled": true, "api": "llama", "llama": "http://127.0.0.1:8090" }
@@ -241,7 +267,8 @@ env 로는 `DURI_ASSISTANT=1` / `DURI_MODEL_API` (`llama`|`ollama`) / `LLAMA_URL
 
 **벤치마크** — `node _src/duri-sink/bench.mjs http://127.0.0.1:8090` (모델 서버가 떠 있어야 한다, `npm test` 아님).
 가짜 캘린더로 일정·운동·잡담·반복/누구 일정·버킷리스트·추천 분류 30문항 + 기억 찾기 4 + 기록 보고 답하기 3 + 추천 답 2.
-2026-10-25 gemma4 E4B(llama-server Vulkan): 39/39 세 번 연속, 이어지는 답 평균 3.0–3.2초. 문항을 고치면 여기 점수도 갱신한다.
+2026-10-25 gemma4 E4B(llama-server Vulkan): 39/39 세 번 연속, 이어지는 답 평균 3.0–3.2초. 2026-10-30 gemma4 26B-A4B: 39/39,
+2.9초. 문항을 고치면 여기 점수도 갱신한다.
 
 **비전(사진 읽기) 켜기 (2026-10-27)** — 같은 모델에 `--mmproj`(`mmproj-gemma-4-E4B-it-Q8_0.gguf`, 560MB, 같은
 HF 저장소)를 붙이면 이미지 입력이 된다(`/props` 의 `modalities.vision: true`). 메모리 +0.4GB(서버 약 3.9GB).
@@ -281,11 +308,25 @@ CPU 72 tok/s → Vulkan 312 tok/s, 쓰기는 14.6 → 19.7 tok/s (`llama-bench -
 "일요일로 옮겨줘"(주 경계, 옮기기는 확인을 받는다). `qwen3.5:4b` 는 Ollama 0.24 에서 못 받는다 — llama.cpp
 GGUF 로 같은 방법으로 재 볼 것.
 
+**당이를 26B MoE 로 올림 (2026-10-30, gemma-4-26B-A4B-it Google QAT Q4_0, b11871 그대로)** — 26B 지만 한 토큰에
+4B 만 계산해서 쓰기 속도는 E4B 와 같다(19~20 tok/s). 내장 GPU 가 공유 메모리를 끌어다 써서 이 PC(27GB)에 올라간다.
+
+| | 벤치 | 이어지는 답 | 메모리(PC 전체 사용) | 사진 설명 |
+|---|---|---|---|---|
+| gemma-4-E4B (예비) | 39/39 | 3.0초 | 약 10GB | 장당 약 19초 |
+| gemma-4-26B-A4B (당이) | 38/39 → 39/39 | 2.9초 | 약 19GB(남는 것 7GB) | 장당 약 19초 |
+
+벤치로는 차이가 안 나지만(이미 만점) 같은 질문 5개·사진 5장을 견주면 26B 가 낫다 — 논리 문제에서 앞뒤가 엇갈리지
+않고, 사진의 간판 글씨를 읽는다("놀이공원 입구" → "레츠런파크 포니랜드 입구"), 말투가 더 자연스럽다. 처음 놓친
+한 문항("이번 달 남은 화·목")은 모델이 `months` 대신 `from/to` 로 다음 달 말까지 잡은 것이라 코드에서 막았다
+(요청에 달이 적혀 있으면 그 달 밖을 잘라 낸다, "부터·까지·동안" 이 있으면 모델 값). 메모리가 빠듯해지므로 다른
+무거운 작업(TTS 등)은 자는 시간에만 돌린다.
+
 **LFM3 (Liquid AI, 2026-10-27 공개) — 기각 (2026-10-30, `bench.mjs` 39문항, llama-server Vulkan, Q4_0)**
 
 | 모델 | 일정·운동·잡담·반복 | 기억분류 | 기억답 | 추천답 | 합계 | 이어지는 답 |
 |---|---|---|---|---|---|---|
-| gemma-4-E4B (지금 당이, b11871) | 30/30 | 4/4 | 3/3 | 2/2 | **39/39** | 3.0초 |
+| gemma-4-E4B (당시 당이, b11871) | 30/30 | 4/4 | 3/3 | 2/2 | **39/39** | 3.0초 |
 | LFM3-VL-2B QAD-Q4_0 + mmproj Q8_0 (b11982) | 20/30 | 4/4 | 2/3 | 1/2 | 27/39 | 1.4초 |
 | LFM3-1.7B QAD-Q4_0 (b11982) | 13/30 | 3/4 | 2/3 | 2/2 | 20/39 | 1.7초 |
 

@@ -598,6 +598,10 @@ test("repeat: 요일·기간 검증 — 지난 날은 빼고, 너무 많거나 �
   assert.equal(vc({ weekdays: ["수"], months: ["2026-11"] }, TENNIS).dates.length, 9);
   assert.deepEqual(vc({ weekdays: ["월"], months: ["2026-11"] }, "1월 매주 월요일 수영").dates[0], "2027-01-04");
   assert.equal(vc({ weekdays: ["월"], months: ["2026-11"] }, "11월 3일부터 월요일마다").dates.length, 5); // "11월 3일" 은 날짜라 달로 안 센다 → 모델 값
+  // 달을 말했는데 모델이 from/to 로 넘치게 잡으면 그 달 안으로 자른다(좁게 잡은 건 그대로), "부터" 가 있으면 모델 값
+  assert.deepEqual(vc({ weekdays: ["화", "목"], from: "2026-10-27", to: "2026-11-30" }, "이번 달 남은 화요일이랑 목요일에 영어 스터디 추가").dates, ["2026-10-27", "2026-10-29"]);
+  assert.deepEqual(vc({ weekdays: ["금"], from: "2026-11-15", to: "2026-11-30" }, "다음 달 셋째 주 금요일마다 회의").dates, ["2026-11-20", "2026-11-27"]);
+  assert.equal(vc({ weekdays: ["수"], from: "2026-11-01", to: "2027-01-31" }, "11월부터 석 달 동안 수요일마다 수영").dates.length, 13);
 });
 
 test("repeat: 여러 개는 되묻고 '@당이 응' 에 한꺼번에 넣는다", async () => {
