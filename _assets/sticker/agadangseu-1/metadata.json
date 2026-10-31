@@ -1,0 +1,83 @@
+{
+  "title": "아가당스 이모티콘 16종",
+  "description": "",
+  "preview": "preview.png",
+  "tags": [
+    "말",
+    "다그당스",
+    "아가당스",
+    "이모티콘",
+    "캐릭터",
+    "손그림"
+  ],
+  "createdAt": "2026-10-31",
+  "chat": {
+    "title": "아가당스"
+  },
+  "downloads": [
+    {
+      "label": "01. 안녕",
+      "file": "01.png"
+    },
+    {
+      "label": "02. 좋아",
+      "file": "02.png"
+    },
+    {
+      "label": "03. 신나",
+      "file": "03.png"
+    },
+    {
+      "label": "04. 졸려",
+      "file": "04.png"
+    },
+    {
+      "label": "05. 잘 자",
+      "file": "05.png"
+    },
+    {
+      "label": "06. 일어났어",
+      "file": "06.png"
+    },
+    {
+      "label": "07. 배고파",
+      "file": "07.png"
+    },
+    {
+      "label": "08. 냠냠",
+      "file": "08.png"
+    },
+    {
+      "label": "09. 부끄러워",
+      "file": "09.png"
+    },
+    {
+      "label": "10. 사랑해",
+      "file": "10.png"
+    },
+    {
+      "label": "11. 뭐야?",
+      "file": "11.png"
+    },
+    {
+      "label": "12. 슬퍼",
+      "file": "12.png"
+    },
+    {
+      "label": "13. 삐짐",
+      "file": "13.png"
+    },
+    {
+      "label": "14. 놀람",
+      "file": "14.png"
+    },
+    {
+      "label": "15. 미안해",
+      "file": "15.png"
+    },
+    {
+      "label": "16. 안아줘",
+      "file": "16.png"
+    }
+  ]
+}
