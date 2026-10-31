@@ -9,6 +9,7 @@
 // "@당이 응" 을 받아야 실행한다(공유 캘린더라 잘못 지우면 둘 다 곤란하다).
 
 import { wordVariants, hasWord } from "./archive.mjs";
+import { HINTS } from "./weather.mjs";
 
 export const BOT_NAME = "🤖 당이"; // 두 사람 이름과 겹치면 안 된다(자기 답을 명령으로 읽는다). 앱의 DANGI_NAME 과 같아야 말풍선으로 그린다
 // "@당이"·"@당" 뒤엔 공백이나 끝이 와야 한다("@당근" 은 명령이 아니다).
@@ -129,8 +130,10 @@ function peopleOf(events) {
 const PERSONA = [
   "본명은 '다그당스', 애칭은 '당이'다(이름을 물으면 둘 다 알려 준다). 3살 된 갈색 말이고 MBTI 는 ESFJ 다.",
   "좋아하는 음식은 사과랑 각설탕이다. 쫑이랑 빵이에게 충성하는 말로, 다정하고 세심하고 귀엽다. 기분 좋으면 '푸히힝' 하고 웃는다.",
-  "말끝을 '~승'으로 맺는 다정한 반말을 쓴다(예: 좋승~, 알겠승!, 해냈승!, 미안하당…).",
+  "말끝을 '~승'으로 맺는 다정한 반말을 쓴다(예: 좋승~, 알겠승!, 해냈승!, 없승!, 아침이승!). '~당'과 '~승'을 겹쳐 '없당승'처럼 쓰지 않는다.",
 ];
+// 그래도 작은 모델은 한 번씩 '없당승'·'아침이당승' 처럼 겹친다 — 말끝의 '당승' 은 '승' 으로 고친다.
+export const fixTone = (t) => (typeof t === "string" ? t.replace(/당승(?![가-힣])/g, "승") : t);
 // ── 다그당스 이모티콘 — 당이 답에 곁들인다 ──
 // 메시지 하나에 글과 함께 botSticker:{pack,n} 로 싣는다(따로 보내면 알림이 두 번 온다).
 // 앱은 당이 말풍선 아래에 그리고, 이 필드를 모르는 옛 앱은 글만 보여 준다(sticker 필드를
@@ -854,7 +857,8 @@ export function llamaAsk({ url, timeoutMs = 180_000 }) {
  *   apply({ puts, dels }) → 캘린더 반영, say(text) → 채팅 답(E2E), log(...)
  * onMessage 는 한 번에 하나씩만 처리한다(CPU 모델 응답에 수십 초가 걸린다).
  */
-export function createAssistant(io, { now = () => Date.now() } = {}) {
+export function createAssistant(io0, { now = () => Date.now() } = {}) {
+  const io = { ...io0, say: (t, ...rest) => io0.say(fixTone(t), ...rest) }; // 당이가 하는 말은 모두 말끝을 다듬어 내보낸다
   const pending = new Map(); // 보낸 사람 → { action, until }
   let chain = Promise.resolve();
   let lastUsed = 0, idleBusy = false; // 마지막으로 누가 당이를 부른 때 — 한가할 때만 뒷일(사진 설명)을 한다
@@ -1008,7 +1012,11 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
     let memories = [];
     try { memories = onThisDay(io.events(), io.archive, today); } catch (e) { io.log?.("당이: 1년 전 오늘 못 읽음", String(e?.message || e)); }
     io.log?.(`당이: 아침 브리핑 — 오늘 ${facts.todays.length}개·내일 ${facts.tomorrows.length}개${ok ? "" : " (틀 문장)"}${weather.length ? ` · 날씨 ${weather.length - 1}곳` : ""}${memories.length ? ` · 추억 ${memories.length}줄` : ""}`); // 내용은 로그에 남기지 않는다
-    return [ok ? reply : briefFallback(facts), ...weather, ...memories].join("\n");
+    if (ok) weather = weather.map((l) => { // 인사가 이미 우산·마스크를 말했으면 날씨 줄 끝 안내는 뗀다
+      for (const [k, w] of [["umbrella", "우산"], ["mask", "마스크"]]) if (reply.includes(w)) l = l.replace(HINTS[k], "");
+      return l;
+    });
+    return fixTone([ok ? reply : briefFallback(facts), ...weather, ...memories].join("\n"));
   }
 
   return {

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   BOT_NAME, MAX_AGE_MS, briefDue, briefFacts, briefFallback, buildBriefingMessages, buildContext, buildMessages, buildRecommendMessages,
   calEventOnDate, chatSticker, createAssistant, memoryFacts, onThisDay, spreadPick, countSaid, fitId, kstYmd, parseTrigger, plan, validateAction, whoKey, ymd,
+  fixTone,
 } from "./assistant.mjs";
 
 const NOW = new Date(2026, 9, 25, 12, 0).getTime(); // 2026-10-25 (일) 정오, 로컬
@@ -432,6 +433,24 @@ test("브리핑: 오늘 날씨 줄은 모델 답 뒤·추억 앞에 붙고, 날�
   assert.match(asked[0], /오늘 날씨:\n- 청주 ☁️ 흐림 · 비 60%/);
   assert.doesNotMatch(asked[0], /🌡️/);
   assert.match(asked[1], /오늘 날씨:\n\(모름\)/);
+  // 인사가 우산·마스크를 이미 말했으면 날씨 줄 끝 안내는 떼고, 말 안 한 쪽은 남긴다
+  const line = "· 청주 ☁️ 흐림 · 비 60% · 미세먼지 나쁨 ☔ 우산 챙기승! 😷 마스크 챙기승!";
+  const said = (reply) => createAssistant({ ask: async () => ({ reply }), events: () => [], apply: async () => {}, say: async () => {},
+    weather: async () => ["🌡️ 오늘 날씨", line], log: () => {} }, { now: () => Date.parse("2026-10-25T23:00:00Z") }).brief();
+  assert.match(await said("좋은 아침이승! 마스크 꼭 챙기승!"), /미세먼지 나쁨 ☔ 우산 챙기승!$/m);
+  assert.match(await said("좋은 아침이승! 우산이랑 마스크 챙기승!"), /미세먼지 나쁨$/m);
+  assert.match(await said("좋은 아침이승!"), /☔ 우산 챙기승! 😷 마스크 챙기승!$/m);
+});
+
+test("말투: 말끝에 겹친 '당승' 은 '승' 으로 — 보내는 말과 브리핑 모두", async () => {
+  assert.equal(fixTone("오늘 일정은 없당승! 좋은 아침이당승~ 바란당승"), "오늘 일정은 없승! 좋은 아침이승~ 바란승");
+  assert.equal(fixTone("미안하당… 다그당스 당승리"), "미안하당… 다그당스 당승리"); // 말끝이 아니면 그대로
+  const said = [];
+  await createAssistant({ ask: async () => ({ op: "chat", reply: "그건 모르겠당승!" }), events: () => [], apply: async () => {},
+    say: async (t) => { said.push(t); } }, { now: () => NOW }).onMessage({ name: "민지", text: "@당이 안녕", at: NOW });
+  assert.match(said[0], /모르겠승!/);
+  assert.match(await createAssistant({ ask: async () => ({ reply: "일정 없당승!" }), events: () => [], apply: async () => {}, say: async () => {}, log: () => {} },
+    { now: () => NOW }).brief(), /^일정 없승!/);
 });
 
 test("사진: photos 는 사진 낱말이 있어야 하고, '사진 보여줘' 는 recall 로 골라도 photos 다", () => {

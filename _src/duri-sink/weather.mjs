@@ -8,6 +8,8 @@ const FORECAST_URL = "https://api.open-meteo.com/v1/forecast";
 const AIR_URL = "https://air-quality-api.open-meteo.com/v1/air-quality";
 const TIMEOUT_MS = 8000;
 const RAIN_ALERT = 30; // 이 이상이면 우산 안내
+// 줄 끝 안내. 당이 인사가 이미 같은 말을 했으면 브리핑이 떼어 낸다(assistant.mjs) — 두 번 말하지 않게.
+export const HINTS = { umbrella: " ☔ 우산 챙기승!", mask: " 😷 마스크 챙기승!" };
 
 // 시청 좌표. 설정 assistant.weather 로 바꾼다.
 export const DEFAULT_PLACES = [
@@ -59,8 +61,8 @@ export function weatherLine(name, forecast, air, today) {
   const a = airLabel(air?.current?.pm10, air?.current?.pm2_5);
   if (a) bits.push(`미세먼지 ${a}`);
   let line = bits.join(" · ");
-  if (rain !== null && rain >= RAIN_ALERT) line += " ☔ 우산 챙기승!";
-  if (a === "나쁨" || a === "매우 나쁨") line += " 😷 마스크 챙기승!";
+  if (rain !== null && rain >= RAIN_ALERT) line += HINTS.umbrella;
+  if (a === "나쁨" || a === "매우 나쁨") line += HINTS.mask;
   return line;
 }
 
