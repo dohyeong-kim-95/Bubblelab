@@ -423,6 +423,15 @@ test("브리핑: 오늘 날씨 줄은 모델 답 뒤·추억 앞에 붙고, 날�
   assert.deepEqual(days, ["2026-10-26"]); // KST 오늘
   assert.match(text, /🌡️ 오늘 날씨\n· 청주 ☀️ 맑음\n📸 1년 전 오늘/);
   assert.match(await mk(async () => { throw new Error("offline"); }).brief(), /\n📸 1년 전 오늘/);
+  // 모델도 날씨를 보고 인사를 맞춘다 — 날씨를 못 가져왔으면 (모름)
+  const asked = [];
+  const ask = (weather) => createAssistant({ ask: async (m) => { asked.push(m[1].content); return { reply: "좋은 아침이승~" }; }, events: () => events,
+    apply: async () => {}, say: async () => {}, weather, log: () => {} }, { now: () => Date.parse("2026-10-25T23:00:00Z") }).brief();
+  await ask(async () => ["🌡️ 오늘 날씨", "· 청주 ☁️ 흐림 · 비 60% ☔ 우산 챙기승!"]);
+  await ask(async () => { throw new Error("offline"); });
+  assert.match(asked[0], /오늘 날씨:\n- 청주 ☁️ 흐림 · 비 60%/);
+  assert.doesNotMatch(asked[0], /🌡️/);
+  assert.match(asked[1], /오늘 날씨:\n\(모름\)/);
 });
 
 test("사진: photos 는 사진 낱말이 있어야 하고, '사진 보여줘' 는 recall 로 골라도 photos 다", () => {

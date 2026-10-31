@@ -698,16 +698,18 @@ export function briefFacts(events, today) {
   return { today, todays: dayItems(events, today), tomorrows: dayItems(events, addDays(today, 1)) };
 }
 
-export function buildBriefingMessages({ today, todays, tomorrows }) {
+export function buildBriefingMessages({ today, todays, tomorrows }, weather = []) {
   const list = (xs) => (xs.length ? xs.slice(0, BRIEF_ITEMS_MAX).map((i) => `- ${itemText(i)}`) : ["(없음)"]);
   const system = [
     "너는 두 사람의 채팅 앱에 사는 비서 '당이'다.",
     ...PERSONA,
     "매일 아침 8시에 두 사람(쫑이·빵이)에게 오늘 일정을 브리핑한다. 아침 인사 한 줄 → 오늘 일정을 한 줄에 하나씩(시각·제목·이름은 목록 그대로, 하나도 빼지 않는다) → 내일 일정은 짧게 → 응원 한마디.",
     "목록에 없는 일정·장소·날씨는 지어내지 않는다. 오늘 일정이 없으면 없다고 하고 다정한 한마디를 한다. 8줄 안쪽.",
+    "오늘 날씨가 주어지면 응원 한마디를 날씨에 맞춘다(비면 우산·실내, 미세먼지 나쁘면 마스크, 춥거나 더우면 옷차림). 기온·확률 같은 숫자는 브리핑 아래에 따로 붙으니 되풀이하지 않는다. 날씨가 (모름)이면 날씨 얘기를 하지 않는다.",
     '답은 JSON {"reply":"…"} 하나로만.',
   ].join("\n");
-  const user = [`오늘: ${label(today)}`, "오늘 일정:", ...list(todays), "", "내일 일정:", ...list(tomorrows)].join("\n");
+  const sky = weather.filter((l) => l.startsWith("· ")).map((l) => l.slice(2));
+  const user = [`오늘: ${label(today)}`, "오늘 일정:", ...list(todays), "", "내일 일정:", ...list(tomorrows), "", "오늘 날씨:", ...(sky.length ? sky.map((l) => `- ${l}`) : ["(모름)"])].join("\n");
   return [{ role: "system", content: system }, { role: "user", content: user }];
 }
 
@@ -997,14 +999,14 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
     lastUsed = now();
     const today = kstYmd(now());
     const facts = briefFacts(io.events(), today);
+    let weather = []; // 지역마다 한 줄(weather.mjs) — 숫자는 코드가 만든 이 줄이 맡고, 모델은 보고 인사만 맞춘다
+    try { weather = (await io.weather?.(today)) ?? []; } catch (e) { io.log?.("당이: 날씨 못 가져옴", String(e?.message || e)); }
     let reply = "";
-    try { reply = String((await io.ask(buildBriefingMessages(facts)))?.reply ?? "").trim().slice(0, 800); }
+    try { reply = String((await io.ask(buildBriefingMessages(facts, weather)))?.reply ?? "").trim().slice(0, 800); }
     catch (e) { io.log?.("당이: 모델 호출 실패", String(e?.message || e)); }
     const ok = reply && briefCovers(reply, facts.todays);
     let memories = [];
     try { memories = onThisDay(io.events(), io.archive, today); } catch (e) { io.log?.("당이: 1년 전 오늘 못 읽음", String(e?.message || e)); }
-    let weather = []; // 지역마다 한 줄(weather.mjs) — 모델이 아니라 코드가 만든 줄이라 모델 답 뒤에 붙인다
-    try { weather = (await io.weather?.(today)) ?? []; } catch (e) { io.log?.("당이: 날씨 못 가져옴", String(e?.message || e)); }
     io.log?.(`당이: 아침 브리핑 — 오늘 ${facts.todays.length}개·내일 ${facts.tomorrows.length}개${ok ? "" : " (틀 문장)"}${weather.length ? ` · 날씨 ${weather.length - 1}곳` : ""}${memories.length ? ` · 추억 ${memories.length}줄` : ""}`); // 내용은 로그에 남기지 않는다
     return [ok ? reply : briefFallback(facts), ...weather, ...memories].join("\n");
   }
