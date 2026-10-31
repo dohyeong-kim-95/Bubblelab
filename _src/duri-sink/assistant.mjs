@@ -1003,8 +1003,10 @@ export function createAssistant(io, { now = () => Date.now() } = {}) {
     const ok = reply && briefCovers(reply, facts.todays);
     let memories = [];
     try { memories = onThisDay(io.events(), io.archive, today); } catch (e) { io.log?.("당이: 1년 전 오늘 못 읽음", String(e?.message || e)); }
-    io.log?.(`당이: 아침 브리핑 — 오늘 ${facts.todays.length}개·내일 ${facts.tomorrows.length}개${ok ? "" : " (틀 문장)"}${memories.length ? ` · 추억 ${memories.length}줄` : ""}`); // 내용은 로그에 남기지 않는다
-    return [ok ? reply : briefFallback(facts), ...memories].join("\n");
+    let weather = []; // 지역마다 한 줄(weather.mjs) — 모델이 아니라 코드가 만든 줄이라 모델 답 뒤에 붙인다
+    try { weather = (await io.weather?.(today)) ?? []; } catch (e) { io.log?.("당이: 날씨 못 가져옴", String(e?.message || e)); }
+    io.log?.(`당이: 아침 브리핑 — 오늘 ${facts.todays.length}개·내일 ${facts.tomorrows.length}개${ok ? "" : " (틀 문장)"}${weather.length ? ` · 날씨 ${weather.length - 1}곳` : ""}${memories.length ? ` · 추억 ${memories.length}줄` : ""}`); // 내용은 로그에 남기지 않는다
+    return [ok ? reply : briefFallback(facts), ...weather, ...memories].join("\n");
   }
 
   return {

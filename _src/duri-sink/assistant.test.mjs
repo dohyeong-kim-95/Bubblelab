@@ -414,6 +414,17 @@ test("1년 전 오늘: 브리핑 끝에 붙고, 없으면 아무것도 안 붙�
   assert.doesNotMatch(await briefHarness(new Error("down")).a.brief(), /년 전 오늘/);
 });
 
+test("브리핑: 오늘 날씨 줄은 모델 답 뒤·추억 앞에 붙고, 날씨가 죽어도 브리핑은 나간다", async () => {
+  const events = [...BRIEF_EVENTS, { id: "y1", rev: 1, date: "2025-10-26", title: "강릉 여행", shared: true }];
+  const mk = (weather) => createAssistant({ ask: async () => ({ reply: "좋은 아침이승~" }), events: () => events, apply: async () => {}, say: async () => {},
+    weather, log: () => {} }, { now: () => Date.parse("2026-10-25T23:00:00Z") });
+  const days = [];
+  const text = await mk(async (d) => { days.push(d); return ["🌡️ 오늘 날씨", "· 청주 ☀️ 맑음"]; }).brief();
+  assert.deepEqual(days, ["2026-10-26"]); // KST 오늘
+  assert.match(text, /🌡️ 오늘 날씨\n· 청주 ☀️ 맑음\n📸 1년 전 오늘/);
+  assert.match(await mk(async () => { throw new Error("offline"); }).brief(), /\n📸 1년 전 오늘/);
+});
+
 test("사진: photos 는 사진 낱말이 있어야 하고, '사진 보여줘' 는 recall 로 골라도 photos 다", () => {
   const ctx = buildContext(EVENTS, TODAY);
   assert.deepEqual(validateAction({ op: "photos", query: "제주 사진" }, ctx, TODAY, "제주에서 찍은 사진 보여줘"),

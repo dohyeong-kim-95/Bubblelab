@@ -43,7 +43,7 @@ mkdir -p "$DEST"
 # 그렇다. 그때는 원본과 사본이 같은 파일이라 복사를 건너뛴다(cp 가 죽는다).
 if [ "$HERE" != "$DEST" ]; then
   # 데몬이 import 하는 모듈은 전부 여기 있어야 한다 — 하나라도 빠지면 시작하자마자 죽는다.
-  cp "$HERE/duri-sink.mjs" "$HERE/store.mjs" "$HERE/assistant.mjs" "$HERE/archive.mjs" "$HERE/places.mjs" "$HERE/captions.mjs" "$DEST/"
+  cp "$HERE/duri-sink.mjs" "$HERE/store.mjs" "$HERE/assistant.mjs" "$HERE/archive.mjs" "$HERE/places.mjs" "$HERE/captions.mjs" "$HERE/weather.mjs" "$DEST/"
   # 사진 좌표 → 지역 이름(당이의 기억). 앱 지도와 같은 파일 — 없어도 데몬은 돈다(장소만 빠진다).
   mkdir -p "$DEST/data"
   cp "$HERE/../../duri/data/kr-sgg.geojson" "$HERE/../../duri/data/world-countries.geojson" "$DEST/data/" 2>/dev/null || true

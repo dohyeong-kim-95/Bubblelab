@@ -15,11 +15,13 @@
 import { readFileSync, mkdirSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { setDefaultAutoSelectFamilyAttemptTimeout } from "node:net";
 import { deriveKey, createStore, atomicWrite, encryptJson, encryptBytes } from "./store.mjs";
 import { createAssistant, ollamaAsk, llamaAsk, parseTrigger, briefDue, kstYmd, BOT_NAME } from "./assistant.mjs";
 import { createArchive } from "./archive.mjs";
 import { createPlaces } from "./places.mjs";
 import { createCaptioner } from "./captions.mjs";
+import { weatherLines, DEFAULT_PLACES } from "./weather.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const fatal = (msg) => { console.error("✖", msg); process.exit(1); };
@@ -56,6 +58,8 @@ function loadConfig() {
       briefing: process.env.DURI_BRIEF || (file.assistant?.briefing === false ? "off" : file.assistant?.briefing) || "08:00",
       // 한가할 때 사진 설명 달기(llama + 비전일 때만). false 면 끈다.
       captions: file.assistant?.captions !== false,
+      // 아침 브리핑에 붙일 오늘 날씨 지역 [{ name, lat, lon }]. false 면 끈다(기본 청주·용인).
+      weather: file.assistant?.weather === false ? [] : Array.isArray(file.assistant?.weather) ? file.assistant.weather : DEFAULT_PLACES,
     },
   };
   for (const k of ["url", "token", "passphrase"]) {
@@ -365,6 +369,9 @@ async function startCaptions() {
 }
 
 // ── 시작 ─────────────────────────────────────────────────────
+// fetch 는 IPv6·IPv4 를 주소마다 250ms 씩만 기다린다. 이 PC 는 IPv6 가 막혀 있고 유럽 서버(Open-Meteo)는
+// IPv4 연결에도 250ms 넘게 걸려 둘 다 ETIMEDOUT 이 났다(curl 은 됨). 한 주소에 2초까지 기다린다.
+setDefaultAutoSelectFamilyAttemptTimeout(2000);
 const key = await deriveKey(cfg.passphrase);
 store = createStore({ dir: cfg.dir, key, fetchPhoto: downloadPhoto });
 if (cfg.assistant.enabled) {
@@ -378,6 +385,7 @@ if (cfg.assistant.enabled) {
     apply: assistantApply,
     say: assistantSay,
     archive, // 당이가 지난 대화를 찾아 읽는 백업 — 읽기 전용(archive.mjs 엔 쓰는 함수가 없다)
+    weather: (today) => weatherLines(cfg.assistant.weather, today, { log }),
     log,
   });
   log(`일정 비서 당이 켜짐 — ${cfg.assistant.api === "llama" ? `llama-server @ ${cfg.assistant.llama}` : `${cfg.assistant.model} @ ${cfg.assistant.ollama}`} (채팅에서 "@당이 …")`);
