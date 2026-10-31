@@ -35,6 +35,7 @@ export const DURI_MAX_META_BLOB = 4 * 1024; // 사진 메타(이름·캡션) 암
 // 내려받기 전에 바로 그릴 수 있어야 채팅이 즉시 뜬다(텔레그램 photoStrippedSize,
 // 왓츠앱 envelope thumbnail 과 같은 방식). 서버는 여전히 암호블롭만 본다.
 export const DURI_MAX_THUMB_BLOB = 24 * 1024;
+const PROBE_MAX_DELAY_MS = 15_000; // 🧪 실전 테스트 푸시를 미루는 최대 시간(DO 가 그동안 살아 있어야 한다)
 const MAX_BUFFER_ENTRIES = 5000; // 싱크가 오래 꺼져 있을 때의 상한
 const BACKFILL_LIMIT = 100; // 접속 직후 한 번에 보내는 최대 항목 수(나머지는 요청 시)
 const MAX_MESSAGE_BYTES = 32 * 1024;
@@ -704,20 +705,34 @@ export class DuriDO {
       publicKey: VAPID_PUBLIC_KEY, privateKey: VAPID_PRIVATE_KEY,
       subject: VAPID_SUBJECT || "https://duri.bubblelab.dev",
     };
-    const payload = JSON.stringify({ kind: "test", ...(nonce && { nonce }) });
-    let sent = 0, gone = 0, failed = 0, targeted = 0, status = null;
-    for (const [key, sub] of subs) {
-      if (onlyEndpoint && sub.endpoint !== onlyEndpoint) continue;
-      targeted++;
-      try {
-        const result = await sendWebPush(sub, payload, vapid, { urgency: "high" });
-        status = result.status;
-        if (result.gone) { await this.state.storage.delete(key); gone++; }
-        else if (result.ok) sent++;
-        else failed++; // 403(키 불일치)·413 등 — 예전엔 이것도 "보냈어요"로 셌다
-      } catch { failed++; }
+    // probe: 🧪 실전 테스트 — 보통 메시지처럼 "보고 있으면 숨김" 판정을 거치는 푸시를 delayMs 뒤에 보낸다.
+    // 그사이 사람이 홈으로 나가거나 화면을 보고 있으면서 두 경우를 직접 확인한다(내 기기에만).
+    const probe = body.probe === true && onlyEndpoint;
+    const payload = JSON.stringify({ kind: probe ? "probe" : "test", ...(nonce && { nonce }) });
+    const send = async () => {
+      let sent = 0, gone = 0, failed = 0, targeted = 0, status = null;
+      for (const [key, sub] of subs) {
+        if (onlyEndpoint && sub.endpoint !== onlyEndpoint) continue;
+        targeted++;
+        try {
+          const result = await sendWebPush(sub, payload, vapid, { urgency: "high" });
+          status = result.status;
+          if (result.gone) { await this.state.storage.delete(key); gone++; }
+          else if (result.ok) sent++;
+          else failed++; // 403(키 불일치)·413 등 — 예전엔 이것도 "보냈어요"로 셌다
+        } catch { failed++; }
+      }
+      return { targeted, sent, gone, failed, status };
+    };
+    if (probe) {
+      if (!registered) return Response.json({ ok: false, reason: "not-registered" });
+      const delayMs = Math.min(Math.max(Number(body.delayMs) || 0, 0), PROBE_MAX_DELAY_MS);
+      // 기다리는 동안 앱이 내려가 요청이 끊겨도 보내야 하므로 응답을 먼저 돌려준다.
+      const job = new Promise((r) => setTimeout(r, delayMs)).then(send).catch((e) => console.error("duri probe failed", e));
+      this.state.waitUntil?.(job);
+      return Response.json({ ok: true, scheduled: true, delayMs });
     }
-    return Response.json({ ok: true, subs: subs.size, registered, targeted, sent, gone, failed, status, devices: await devices() });
+    return Response.json({ ok: true, subs: subs.size, registered, ...(await send()), devices: await devices() });
   }
   buildPushPayload(full) {
     let content;

@@ -67,6 +67,9 @@ async function buildNotification(data) {
   if (data && data.kind === "test") { // 자가진단: 앱을 보고 있어도 무조건 뜬다
     return { title: "🔔 Duri 테스트 알림", body: "알림이 정상 동작해요!" };
   }
+  if (data && data.kind === "probe") { // 🧪 실전 테스트: 보통 메시지와 같은 판정을 거친다(보고 있으면 여기 안 온다)
+    return { title: "🧪 Duri 실전 테스트", body: "두리 밖에 있어서 알림이 떴어요 — 정상이에요" };
+  }
   if (!data || data.kind === "generic") return GENERIC;
   try {
     const db = await openDB();
@@ -106,7 +109,7 @@ self.addEventListener("activate", (event) => event.waitUntil((async () => {
 // /_duri·/_rt(실시간·게이트 API)는 항상 최신이어야 하므로 손대지 않는다 —
 // 실제 데이터·인증은 이 캐시와 무관하게 매번 쿠키·E2E 패스프레이즈로 따로
 // 검증되므로, 셸(빈 껍데기 마크업)을 캐싱해도 보안엔 영향이 없다.
-const SHELL_CACHE = "duri-shell-v32";
+const SHELL_CACHE = "duri-shell-v33";
 
 // 문서(HTML)는 '네트워크 우선'. 앱을 열 때마다 최신 코드를 받아, index.html만
 // 바뀐 배포도 "다음 실행"이 아니라 바로 이번 실행에 반영된다(예전 stale-while-
@@ -159,32 +162,57 @@ self.addEventListener("fetch", (event) => {
 // clients 의 visibilityState 는 믿지 않는다. iOS(홈 화면 PWA)는 백그라운드로 내려간 창도
 // "visible" 로 보고해서, 그걸 믿으면 내려 둔 사이 알림이 사라진다. 반대로 앞에 떠 있는
 // 창도 focused:false 로 보고해서, focused 만 믿으면 **두리를 보고 있는데 알림이 계속
-// 뜬다**(2026-10-25). 그래서 페이지가 직접 알려 준다: 화면 앞뒤로 갈 때와 10초마다
-// app-foreground / app-background 를 보내고, 기록이 없으면(서비스워커가 새로 떴을 때)
-// 물어본다 — 얼어 있는 백그라운드 페이지는 답하지 못하므로 답이 오면 앞에 있는 것이다.
-const FG_TTL_MS = 30_000;
-const appState = new Map(); // client id → { fg, at }
-const fgWaiters = new Set();
+// 뜬다**(2026-10-25). 그래서 푸시가 올 때마다 페이지에 **지금** 묻는다(visibility-query) —
+// 앞에 있는 페이지는 곧바로 app-foreground 로 답하고, 얼어 있는(내려 둔) 페이지는 답하지 못한다.
+// 예전엔 10초마다 오는 앞 신호를 30초 믿었는데, iOS 는 나가는 순간 페이지를 얼려 app-background
+// 를 못 보낼 때가 있어서 **나가고 30초 안에 온 메시지는 알림이 안 떴다**(2026-10-31).
+const ASK_MS = 800;
+const appState = new Map(); // client id → { fg, at } — 판정이 아니라 기록(pushlog)용
+const waiters = new Set();
 self.addEventListener("message", (event) => {
   const type = event.data?.type;
   if (type !== "app-foreground" && type !== "app-background") return;
-  appState.set(event.source?.id ?? "?", { fg: type === "app-foreground", at: Date.now() });
-  if (type === "app-foreground") for (const w of [...fgWaiters]) w();
+  const id = event.source?.id ?? "?";
+  appState.set(id, { fg: type === "app-foreground", at: Date.now() });
+  for (const w of [...waiters]) w(id, type === "app-foreground");
 });
-async function isAppFocused() {
+/** → { fg, answer: "focused"|"fg"|"bg"|"none"|"no-window", ms, clients } */
+async function askApp() {
   const list = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-  if (list.some((c) => c.focused === true)) return true;
-  if (!list.length) return false;
-  const now = Date.now();
-  const known = list.map((c) => appState.get(c.id ?? "?")).filter((s) => s && now - s.at < FG_TTL_MS);
-  if (known.length) return known.some((s) => s.fg);
+  const clients = list.map((c) => ({ focused: c.focused, vis: c.visibilityState }));
+  const t0 = Date.now();
+  if (!list.length) return { fg: false, answer: "no-window", ms: 0, clients };
+  if (list.some((c) => c.focused === true)) return { fg: true, answer: "focused", ms: 0, clients };
   return new Promise((resolve) => {
-    const done = (v) => { clearTimeout(timer); fgWaiters.delete(onFg); resolve(v); };
-    const onFg = () => done(true);
-    const timer = setTimeout(() => done(false), 500);
-    fgWaiters.add(onFg);
+    const bg = new Set();
+    const done = (fg, answer) => { clearTimeout(timer); waiters.delete(on); resolve({ fg, answer, ms: Date.now() - t0, clients }); };
+    const on = (id, fg) => {
+      if (fg) return done(true, "fg");
+      bg.add(id);
+      if (bg.size >= list.length) done(false, "bg"); // 모두 뒤에 있다고 답함 — 더 기다릴 것 없다
+    };
+    const timer = setTimeout(() => done(false, "none"), ASK_MS);
+    waiters.add(on);
     for (const c of list) { try { c.postMessage({ type: "visibility-query" }); } catch { /* 닫히는 중 */ } }
   });
+}
+
+// ── 기기 기록(pushlog) — 아이폰에서 실제로 무슨 일이 있었는지 나중에 보려고 ──
+// 푸시마다 판정과 그 근거(창 상태·페이지의 답)를 IndexedDB meta 에 최근 60개 남긴다. 페이지도
+// 화면 앞뒤 전환을 같은 곳에 적어서(index.html logPush) 🩺 알림 진단에서 한 줄 시간표로 본다.
+// 내용(보낸 사람·본문)은 적지 않는다.
+const LOG_MAX = 60;
+async function logPush(entry) {
+  try {
+    const db = await openDB();
+    if (!db || !db.objectStoreNames.contains("meta")) return;
+    await new Promise((resolve) => {
+      const tx = db.transaction("meta", "readwrite"), st = tx.objectStore("meta");
+      const r = st.get("pushlog");
+      r.onsuccess = () => { st.put({ id: "pushlog", value: [...(r.result?.value ?? []), { at: Date.now(), src: "sw", ...entry }].slice(-LOG_MAX) }); };
+      tx.oncomplete = tx.onerror = tx.onabort = () => resolve();
+    });
+  } catch { /* 기록은 최선 노력 */ }
 }
 
 // 서버에 "이 기기에 도착했다"를 알린다(+ 알림을 띄웠는지·오류). 발송 성공은 애플·구글이
@@ -206,7 +234,7 @@ self.addEventListener("push", (event) => {
     try { data = event.data?.json() ?? null; } catch { /* 형식이 다르면 일반 알림으로 */ }
     // 진단 화면이 "서버가 보냈다"에서 멈추지 않고 "이 기기에 실제로 도착했다"까지 확인하게
     // 받은 즉시 알린다(알림 표시와 무관하게).
-    if (data?.kind === "test" && data.nonce) {
+    if ((data?.kind === "test" || data?.kind === "probe") && data.nonce) {
       for (const c of await self.clients.matchAll({ type: "window", includeUncontrolled: true })) {
         c.postMessage({ type: "push-arrived", nonce: data.nonce });
       }
@@ -216,9 +244,10 @@ self.addEventListener("push", (event) => {
     // 업데이트됨" 알림을 대신 띄운다. 그래서 알릴 필요가 없을 때(앱을 보고 있음·
     // 내가 보낸 메시지)도 일단 띄웠다가 곧바로 닫는다. 어떤 오류가 나도 마지막엔
     // 일반 알림이라도 띄운다.
-    let shown = false, error = null;
+    let shown = false, error = null, seen = null;
     try {
-      const quiet = data?.kind !== "test" && await isAppFocused();
+      seen = data?.kind === "test" ? null : await askApp();
+      const quiet = !!seen?.fg;
       const result = quiet ? null : await buildNotification(data);
       if (!result) {
         await self.registration.showNotification("💞 Duri", { tag: "duri-quiet", silent: true });
@@ -235,6 +264,14 @@ self.addEventListener("push", (event) => {
     } catch (e) {
       error = String(e?.message || e);
       try { await self.registration.showNotification(GENERIC.title, { body: GENERIC.body, tag: "duri-msg" }); shown = true; } catch { /* 더는 할 수 없다 */ }
+    }
+    await logPush({ ev: "push", kind: data?.kind ?? null, seq: Number.isInteger(data?.seq) ? data.seq : null,
+      nonce: data?.nonce ?? null, shown, answer: seen?.answer ?? null, ms: seen?.ms ?? null, clients: seen?.clients ?? null,
+      ...(error && { error }) });
+    if (data?.kind === "probe") { // 실전 테스트 — 보고 있는 화면이 그 자리에서 결과를 보이게
+      for (const c of await self.clients.matchAll({ type: "window", includeUncontrolled: true })) {
+        c.postMessage({ type: "probe-result", nonce: data.nonce, shown, answer: seen?.answer ?? null });
+      }
     }
     await reportReceived(data, shown, error);
   })());

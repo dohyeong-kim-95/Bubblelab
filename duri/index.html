@@ -606,6 +606,13 @@
     border: 1px solid var(--line); background: var(--bg); color: inherit; }
   #pd-box .pd-btn.primary { background: var(--pink); color: light-dark(#fff, #1a1016); border-color: transparent; }
   #pd-box .pd-btn:disabled { opacity: .5; }
+  #pd-box .pd-probe { justify-content: flex-start; gap: .5rem; margin-top: .2rem; }
+  #pd-probe-msg { margin: .6rem 0 0; font-size: .85rem; line-height: 1.5; }
+  #pd-probe-msg:empty { display: none; }
+  #pd-log { margin-top: 1rem; font-size: .8rem; }
+  #pd-log summary { cursor: pointer; color: var(--dim); }
+  #pd-log-list { margin: .5rem 0; padding: 0; list-style: none; display: grid; gap: .2rem;
+    font-family: ui-monospace, monospace; font-size: .72rem; line-height: 1.4; overflow-wrap: anywhere; }
   /* 현재 위치 확인 시트 */
   #here-box { position: fixed; inset: 0; z-index: 77; display: flex; align-items: center; justify-content: center;
               background: #0007; padding: 1.2rem; }
@@ -1207,6 +1214,17 @@
     <p id="pd-verdict"></p>
     <p class="pd-sub">서버에 등록된 기기</p>
     <ul id="pd-devices"></ul>
+    <p class="pd-sub">🧪 실전 테스트 — 진짜 메시지처럼 "보고 있으면 숨김" 판정을 거쳐요</p>
+    <div class="pd-actions pd-probe">
+      <button id="pd-probe-away" type="button" class="pd-btn">나가서 받기</button>
+      <button id="pd-probe-here" type="button" class="pd-btn">보면서 받기</button>
+    </div>
+    <p id="pd-probe-msg"></p>
+    <details id="pd-log">
+      <summary>📋 이 기기 기록 (최근 푸시·화면 전환)</summary>
+      <ol id="pd-log-list"></ol>
+      <button id="pd-log-copy" type="button" class="pd-btn">기록 복사</button>
+    </details>
     <div class="pd-actions">
       <button id="pd-run" type="button" class="pd-btn primary">다시 진단</button>
     </div>
@@ -1686,19 +1704,41 @@ document.addEventListener("visibilitychange", () => {
 // 서비스워커에 "지금 이 화면을 보고 있다"를 직접 알린다. iOS 홈 화면 PWA 는 앞에 떠 있는
 // 창도 focused:false 로 보고해서, sw.js 가 그것만 보고는 두리를 보는 중에도 알림을 띄웠다.
 // 화면 앞뒤 전환·10초마다·sw.js 가 물어볼 때(visibility-query) 보낸다(sw.js isAppFocused).
-function tellSwVisibility(hidden = false) {
-  const sw = navigator.serviceWorker?.controller;
-  if (!sw) return;
+// 물음(visibility-query)에는 **물어본 서비스워커에게** 답한다 — controller 가 없는 페이지(첫 설치·
+// 강력 새로고침 직후)는 예전엔 답을 못 해서, 보고 있는데도 알림이 떴다.
+function tellSwVisibility(hidden = false, to = null) {
+  const sw = to ?? navigator.serviceWorker?.controller;
+  if (!sw) return null;
   const fg = !hidden && document.visibilityState === "visible";
   try { sw.postMessage({ type: fg ? "app-foreground" : "app-background" }); } catch { /* 업데이트 중 */ }
+  return fg;
 }
+// 🩺 알림 진단의 기기 기록(pushlog) — sw.js 가 푸시마다 판정을 적고, 페이지는 화면 앞뒤 전환을 적는다.
+// 아이폰이 실제로 무엇을 보고했는지(visibilityState·controller 유무)를 나중에 시간순으로 본다.
+const PUSHLOG_MAX = 60;
+async function logPush(entry) {
+  try {
+    const d = await ensureDB();
+    if (!d || !d.objectStoreNames.contains("meta")) return;
+    const tx = d.transaction("meta", "readwrite"), st = tx.objectStore("meta");
+    const r = st.get("pushlog");
+    r.onsuccess = () => { st.put({ id: "pushlog", value: [...(r.result?.value ?? []), { at: Date.now(), src: "page", ...entry }].slice(-PUSHLOG_MAX) }); };
+  } catch { /* 기록은 최선 노력 */ }
+}
+const logScreen = (ev) => logPush({ ev, vis: document.visibilityState, sw: !!navigator.serviceWorker?.controller });
 if ("serviceWorker" in navigator) {
-  document.addEventListener("visibilitychange", () => tellSwVisibility());
-  window.addEventListener("pageshow", () => tellSwVisibility());
+  document.addEventListener("visibilitychange", () => { tellSwVisibility(); logScreen("visibilitychange"); });
+  window.addEventListener("pageshow", () => { tellSwVisibility(); logScreen("pageshow"); });
   window.addEventListener("focus", () => tellSwVisibility());
-  window.addEventListener("pagehide", () => tellSwVisibility(true));
+  window.addEventListener("pagehide", () => { tellSwVisibility(true); logScreen("pagehide"); });
+  document.addEventListener("freeze", () => logScreen("freeze"));
+  document.addEventListener("resume", () => logScreen("resume"));
   navigator.serviceWorker.addEventListener("controllerchange", () => tellSwVisibility());
-  navigator.serviceWorker.addEventListener("message", (e) => { if (e.data?.type === "visibility-query") tellSwVisibility(); });
+  navigator.serviceWorker.addEventListener("message", (e) => {
+    if (e.data?.type !== "visibility-query") return;
+    const fg = tellSwVisibility(false, e.source);
+    logPush({ ev: "answer", fg, vis: document.visibilityState, sw: !!navigator.serviceWorker.controller });
+  });
   setInterval(() => { if (document.visibilityState === "visible") tellSwVisibility(); }, 10_000);
   tellSwVisibility();
 }
@@ -3815,6 +3855,77 @@ const swReady = (async () => {
       done(`진단 중 오류: ${e?.message || e}`);
     }
   }
+  // ── 🧪 실전 테스트 ── 서버가 몇 초 뒤 이 기기에만 probe 푸시를 보낸다. sw.js 는 그것을 보통 메시지와
+  // 똑같이 "지금 보고 있나" 판정에 넣는다 — 나가 있으면 알림이 떠야, 보고 있으면 안 떠야 정상.
+  // 결과는 sw.js 가 남긴 기기 기록(pushlog)에서 nonce 로 찾아 판정한다(나가 있던 동안 페이지는 얼어 있다).
+  const probeMsg = $("pd-probe-msg");
+  const readLog = async () => (await ensureDB(), (await getMeta("pushlog")) ?? []);
+  const hms = (t) => new Date(t).toLocaleTimeString("ko-KR", { hour12: false });
+  const ANSWER = { focused: "창 포커스", fg: "페이지가 '보는 중' 답함", bg: "페이지가 '뒤에 있음' 답함", none: "페이지 무응답(얼어 있음)", "no-window": "열린 창 없음" };
+  function logLine(e) {
+    if (e.src === "sw") {
+      const what = e.kind === "probe" ? "🧪실전" : e.kind === "test" ? "🔔테스트" : `${e.kind ?? "?"}${e.seq != null ? `#${e.seq}` : ""}`;
+      const res = e.shown === true ? "알림 띄움" : e.shown === "quiet" ? "숨김" : "표시 실패";
+      const wins = (e.clients ?? []).map((c) => `${c.focused ? "F" : "f"}/${c.vis}`).join(",") || "-";
+      return `${hms(e.at)} SW 푸시 ${what} → ${res} · ${e.answer ? ANSWER[e.answer] ?? e.answer : "판정 안 함"}${e.ms ? ` ${e.ms}ms` : ""} · 창 ${wins}${e.error ? ` · 오류 ${e.error}` : ""}`;
+    }
+    if (e.ev === "answer") return `${hms(e.at)} 페이지 물음에 답: ${e.fg ? "보는 중" : "뒤에 있음"} (vis=${e.vis}${e.sw ? "" : ", controller 없음"})`;
+    return `${hms(e.at)} 페이지 ${e.ev} vis=${e.vis}${e.sw ? "" : " (controller 없음)"}`;
+  }
+  async function renderLog() {
+    const list = $("pd-log-list");
+    const log = await readLog();
+    list.replaceChildren(...log.slice(-30).reverse().map((e) => { const li = document.createElement("li"); li.textContent = logLine(e); return li; }));
+    if (!log.length) list.textContent = "아직 기록이 없어요.";
+  }
+  $("pd-log").addEventListener("toggle", () => { if ($("pd-log").open) renderLog(); });
+  $("pd-log-copy").addEventListener("click", async () => {
+    const log = await readLog();
+    const text = [`duri pushlog ${new Date().toISOString()} ${navigator.userAgent}`, ...log.map(logLine)].join("\n");
+    try { await navigator.clipboard.writeText(text); $("pd-log-copy").textContent = "복사했어요"; }
+    catch { $("pd-log-copy").textContent = "복사 실패"; }
+    setTimeout(() => { $("pd-log-copy").textContent = "기록 복사"; }, 1500);
+  });
+
+  let probe = null; // { nonce, away, at }
+  async function judgeProbe() {
+    if (!probe) return;
+    const hit = (await readLog()).find((e) => e.src === "sw" && e.kind === "probe" && e.nonce === probe.nonce);
+    if (!hit) {
+      if (Date.now() - probe.at < 40_000) { probeMsg.textContent = "⏳ 아직 테스트 푸시 기록이 없어요. 조금 뒤 다시 확인할게요."; setTimeout(judgeProbe, 3000); return; }
+      probeMsg.textContent = "❌ 테스트 푸시가 이 기기에 오지 않았어요. 위의 '다시 진단'으로 도착 단계부터 확인해 보세요.";
+      probe = null; return;
+    }
+    const why = ANSWER[hit.answer] ?? hit.answer;
+    const ok = probe.away ? hit.shown === true : hit.shown === "quiet";
+    probeMsg.textContent = ok
+      ? (probe.away ? `✅ 나가 있을 때 알림이 떴어요 (${why}). 정상이에요.` : `✅ 보고 있을 때 알림을 숨겼어요 (${why}). 정상이에요.`)
+      : (probe.away ? `❌ 나가 있었는데 알림을 숨겼어요 (${why}). '기록 복사'를 눌러 보내 주세요.`
+        : `❌ 보고 있었는데 알림이 떴어요 (${why}). '기록 복사'를 눌러 보내 주세요.`);
+    probe = null;
+    if ($("pd-log").open) renderLog();
+  }
+  async function startProbe(away) {
+    const sub = await registration?.pushManager.getSubscription();
+    if (!sub) { probeMsg.textContent = "이 기기 구독이 없어요. 먼저 '다시 진단'을 눌러 주세요."; return; }
+    const nonce = randToken().slice(0, 16).replace(/[^A-Za-z0-9_-]/g, "x");
+    const delayMs = away ? 8000 : 5000;
+    const r = await diagApi({ endpoint: sub.endpoint, nonce, probe: true, delayMs }).catch((e) => ({ ok: false, reason: e.message }));
+    if (!r.ok) { probeMsg.textContent = r.reason === "not-registered" ? "서버에 이 기기가 없어요. '다시 진단'을 먼저 눌러 주세요." : `보내지 못했어요 (${r.reason})`; return; }
+    probe = { nonce, away, at: Date.now() };
+    probeMsg.textContent = away
+      ? "8초 뒤에 테스트 푸시가 와요. 지금 홈 화면으로 나가거나 화면을 잠그세요 → 🧪 알림이 떠야 정상. 돌아오면 결과를 보여 드려요."
+      : "5초 뒤에 테스트 푸시가 와요. 이 화면을 그대로 보고 계세요 → 알림이 안 떠야 정상.";
+  }
+  $("pd-probe-away").addEventListener("click", () => startProbe(true));
+  $("pd-probe-here").addEventListener("click", () => startProbe(false));
+  navigator.serviceWorker?.addEventListener("message", (e) => {
+    if (e.data?.type === "probe-result" && probe && e.data.nonce === probe.nonce) setTimeout(judgeProbe, 300); // 기록이 먼저 써지게
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && probe) setTimeout(judgeProbe, 1500); // 나갔다 돌아오면
+  });
+
   testBtn?.addEventListener("click", () => {
     if (!registration) return;
     closeMenu();

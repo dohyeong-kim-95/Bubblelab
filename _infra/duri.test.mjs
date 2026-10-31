@@ -400,6 +400,32 @@ test("push/test self-diagnostic reports no-vapid, targets only my endpoint, and 
   } finally {
     globalThis.fetch = originalFetch;
   }
+
+  // 🧪 실전 테스트(probe): 응답은 바로, 발송은 delayMs 뒤 — 그사이 앱이 내려가 요청이 끊겨도 간다.
+  const hits = [];
+  let job = null;
+  room.state.waitUntil = (p) => { job = p; };
+  globalThis.fetch = async (endpoint) => { hits.push(String(endpoint)); return new Response(null, { status: 201 }); };
+  try {
+    const r = await (await room.fetch(testReq({ endpoint: mine, nonce: "probe1", probe: true, delayMs: 30 }))).json();
+    assert.deepEqual(r, { ok: true, scheduled: true, delayMs: 30 });
+    assert.equal(hits.length, 0); // 아직 안 보냄
+    await job;
+    assert.deepEqual(hits, [mine]);
+    // 등록 안 된 기기·최대 지연
+    assert.deepEqual(await (await room.fetch(testReq({ endpoint: "https://push.example.com/nope", probe: true }))).json(), { ok: false, reason: "not-registered" });
+    const realTimeout = globalThis.setTimeout;
+    let waited = null;
+    globalThis.setTimeout = (fn, ms) => { waited = ms; return realTimeout(fn, 0); };
+    try {
+      const capped = await (await room.fetch(testReq({ endpoint: mine, probe: true, delayMs: 999_999 }))).json();
+      assert.equal(capped.delayMs, 15_000);
+    } finally { globalThis.setTimeout = realTimeout; }
+    assert.equal(waited, 15_000);
+    await job;
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("appending a msg/photo entry pushes the opaque blob to subscribers and prunes expired ones", async () => {
@@ -831,15 +857,25 @@ async function loadServiceWorker({ clients: windows = [] } = {}) {
   };
   const clientsApi = { matchAll: async () => windows, claim: async () => {}, openWindow: async () => {} };
   const self = { addEventListener: (type, fn) => { handlers[type] = fn; }, registration, clients: clientsApi, skipWaiting() {} };
+  // 아주 작은 가짜 IndexedDB — meta 스토어 하나(pushlog 기록용)
+  const meta = new Map();
+  const req = (fn) => { const r = {}; queueMicrotask(() => { r.result = fn(); r.onsuccess?.(); }); return r; };
+  const store = { get: (id) => req(() => meta.get(id)), put: (v) => req(() => { meta.set(v.id, v); }) };
+  const fakeDb = { objectStoreNames: { contains: (n) => n === "meta" }, transaction: () => {
+    const tx = { objectStore: () => store };
+    queueMicrotask(() => queueMicrotask(() => queueMicrotask(() => tx.oncomplete?.())));
+    return tx;
+  } };
+  const indexedDB = { open: () => req(() => fakeDb) };
   vm.runInNewContext(src, { self, clients: clientsApi, caches: {}, fetch: async () => new Response(null), Response, URL,
-    TextEncoder, TextDecoder, btoa, atob, crypto, setTimeout, clearTimeout, Date, console });
+    TextEncoder, TextDecoder, btoa, atob, crypto, setTimeout, clearTimeout, Date, console, indexedDB, queueMicrotask });
   const fire = async (type, init) => {
     let job = null;
     handlers[type]?.({ ...init, waitUntil: (p) => { job = p; } });
     await job;
   };
   const push = (data) => fire("push", { data: { json: () => data } });
-  return { handlers, open, push, fire };
+  return { handlers, open, push, fire, log: () => meta.get("pushlog")?.value ?? [] };
 }
 
 test("sw: 앱에 포커스가 있으면 알림을 띄웠다 바로 닫는다(남는 알림 없음, silent push 아님)", async () => {
@@ -862,9 +898,9 @@ test("sw: 앱이 닫혀 있으면 알림이 남는다", async () => {
 const iosWindow = () => ({ id: "w1", focused: false, visibilityState: "visible", postMessage() {} });
 
 test("sw: 두리 화면 안(iOS: focused:false·visible)에서는 메시지가 연달아 와도 알림이 남지 않는다", async () => {
-  const win = iosWindow();
-  const sw = await loadServiceWorker({ clients: [win] });
-  await sw.fire("message", { data: { type: "app-foreground" }, source: win });
+  let sw;
+  const win = { ...iosWindow(), postMessage(m) { if (m.type === "visibility-query") sw.fire("message", { data: { type: "app-foreground" }, source: win }); } };
+  sw = await loadServiceWorker({ clients: [win] });
   for (let seq = 1; seq <= 3; seq++) await sw.push({ kind: "generic", seq });
   assert.equal(sw.open.length, 0);
 });
@@ -892,16 +928,51 @@ test("sw: 물어봐도 답이 없으면(얼어 있는 백그라운드 페이지)
   assert.equal(sw.open.length, 1);
 });
 
-test("sw: 앞 신호가 30초 넘게 끊기면 믿지 않는다(내려 갈 때 신호를 못 보낸 경우)", async () => {
-  const win = iosWindow();
+// iPhone 에서 "두 가지가 동시에 안 된다"(2026-10-31): 두리를 보다가 홈으로 나가거나 잠그면 iOS 가
+// 페이지를 곧바로 얼려서 app-background 를 못 보낼 때가 있다. 예전엔 마지막 앞 신호를 30초 믿어서
+// 나가고 30초 안에 온 메시지는 알림이 안 떴다. 이제는 푸시가 올 때마다 페이지에 지금 묻는다.
+test("sw: 두리를 보다가 나가자마자(신호 못 보내고 얼음) 온 메시지도 알림이 남는다", async () => {
+  const win = iosWindow(); // 얼어 있어서 물음에 답하지 못한다
   const sw = await loadServiceWorker({ clients: [win] });
-  const realNow = Date.now;
-  try {
-    await sw.fire("message", { data: { type: "app-foreground" }, source: win });
-    Date.now = () => realNow() + 31_000;
-    await sw.push({ kind: "generic", seq: 1 });
-  } finally { Date.now = realNow; }
+  await sw.fire("message", { data: { type: "app-foreground" }, source: win });
+  await sw.push({ kind: "generic", seq: 1 });
   assert.equal(sw.open.length, 1);
+});
+
+test("sw: 보고 있는 페이지가 '뒤에 있다'고 답하면 기다리지 않고 바로 알린다", async () => {
+  let sw;
+  const win = { ...iosWindow(), postMessage(m) { if (m.type === "visibility-query") sw.fire("message", { data: { type: "app-background" }, source: win }); } };
+  sw = await loadServiceWorker({ clients: [win] });
+  const t = Date.now();
+  await sw.push({ kind: "generic", seq: 1 });
+  assert.equal(sw.open.length, 1);
+  assert.ok(Date.now() - t < 400, "답이 왔으면 시간 제한까지 기다리지 않는다");
+});
+
+test("sw: 🧪 실전 테스트(probe)는 보통 메시지와 같은 판정 — 보고 있으면 숨기고, 나가 있으면 뜬다", async () => {
+  let sw, fg = true;
+  const win = { ...iosWindow(), postMessage(m) { if (m.type === "visibility-query" && fg) sw.fire("message", { data: { type: "app-foreground" }, source: win }); } };
+  sw = await loadServiceWorker({ clients: [win] });
+  await sw.push({ kind: "probe", nonce: "p1" });
+  assert.equal(sw.open.length, 0);
+  fg = false;
+  await sw.push({ kind: "probe", nonce: "p2" });
+  assert.equal(sw.open.length, 1);
+  assert.match(sw.open[0].title, /실전 테스트/);
+});
+
+test("sw: 푸시마다 판정 근거를 기기 기록(pushlog)에 남긴다 — 아이폰에서 무슨 일이 있었는지 나중에 본다", async () => {
+  let sw;
+  const win = { ...iosWindow(), postMessage(m) { if (m.type === "visibility-query") sw.fire("message", { data: { type: "app-foreground" }, source: win }); } };
+  sw = await loadServiceWorker({ clients: [win] });
+  await sw.push({ kind: "generic", seq: 7 });
+  const log = sw.log();
+  assert.equal(log.length, 1);
+  assert.equal(log[0].ev, "push");
+  assert.equal(log[0].seq, 7);
+  assert.equal(log[0].shown, "quiet");
+  assert.equal(log[0].answer, "fg");
+  assert.deepEqual(JSON.parse(JSON.stringify(log[0].clients)), [{ focused: false, vis: "visible" }]);
 });
 
 test("sw: 테스트 알림은 앱을 보고 있어도 남는다(🩺 알림 진단)", async () => {
@@ -920,5 +991,12 @@ test("index.html 이 서비스워커에 화면 앞뒤를 알린다(sw.js 와 메
     assert.ok(html.includes(`"${name}"`), `index.html 에 ${name} 없음`);
     assert.ok(sw.includes(`"${name}"`), `sw.js 에 ${name} 없음`);
   }
-  assert.match(html, /addEventListener\("pagehide", \(\) => tellSwVisibility\(true\)\)/);
+  assert.match(html, /addEventListener\("pagehide", \(\) => \{ tellSwVisibility\(true\)/);
+  // 물음에는 물어본 서비스워커(e.source)에게 답한다 — controller 없는 페이지도 답할 수 있게
+  assert.match(html, /tellSwVisibility\(false, e\.source\)/);
+  // 🧪 실전 테스트·기기 기록: 페이지와 sw.js 가 같은 이름을 쓴다
+  for (const name of ["probe-result", "pushlog", '"probe"']) {
+    assert.ok(html.includes(name), `index.html 에 ${name} 없음`);
+    assert.ok(sw.includes(name), `sw.js 에 ${name} 없음`);
+  }
 });
