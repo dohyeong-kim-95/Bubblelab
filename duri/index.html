@@ -1429,8 +1429,8 @@ const PACKS_CACHE_KEY = "duri:packs";
 // assets 카탈로그에서 비공개(active:false)로 내린 뒤에도 duri에서만 계속 쓰는 팩.
 // 파일은 dist/_assets/sticker/ 에 그대로 배포되므로 목록만 여기서 보강한다.
 const DURI_ONLY_PACKS = [
-  { id: "dageudangseu-1", title: "다그당스1", count: 16, cutout: true },
-  { id: "dageudangseu-2", title: "다그당스2", count: 16, cutout: true },
+  { id: "dageudangseu-1", title: "다그당스1", count: 16, cutout: true, rev: 2 },
+  { id: "dageudangseu-2", title: "다그당스2", count: 16, cutout: true, rev: 2 },
   { id: "dageudangseu-3", title: "다그당스3", count: 16, cutout: true },
   { id: "dageudangseu-4", title: "다그당스4", count: 16, cutout: true },
   { id: "agadangs-1", title: "아가당스", count: 16, cutout: true },
@@ -1465,7 +1465,7 @@ async function loadPacks() {
     const fresh = [];
     for (const item of items ?? []) {
       if (item.category !== "sticker" || !item.chat?.title || !Array.isArray(item.downloads)) continue;
-      fresh.push({ id: item.id, title: item.chat.title, count: item.downloads.length, cutout: item.chat.cutout !== false });
+      fresh.push({ id: item.id, title: item.chat.title, count: item.downloads.length, cutout: item.chat.cutout !== false, rev: item.chat.rev });
     }
     const merged = [
       ...DURI_ONLY_PACKS.filter((p) => !fresh.some((f) => f.id === p.id)),
@@ -1476,7 +1476,9 @@ async function loadPacks() {
   } catch { /* 카탈로그 없이도 텍스트·사진은 동작 — 캐시가 있으면 그걸로 계속 동작 */ }
 }
 
-const stickerUrl = (pack, n) => `/_assets/sticker/${pack}/${String(n).padStart(2, "0")}.png`;
+// rev(catalog 의 chat.rev) — 같은 id 로 다시 그린 팩은 주소를 바꿔 폰의 7일 캐시를 넘긴다
+const stickerRev = (pack) => (PACK_IDS.get(pack) ?? DURI_ONLY_PACKS.find((p) => p.id === pack))?.rev;
+const stickerUrl = (pack, n) => `/_assets/sticker/${pack}/${String(n).padStart(2, "0")}.png${stickerRev(pack) ? `?v=${stickerRev(pack)}` : ""}`;
 const cutoutCache = new Map();
 
 // 흰 배경 누끼 (util/chat 와 동일한 테두리 flood fill)

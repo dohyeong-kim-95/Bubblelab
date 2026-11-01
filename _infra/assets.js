@@ -38,10 +38,13 @@ export function readAssetMetadata(root, category, itemDir) {
   // 클라이언트는 catalog.json에서 chat 팩 목록을 읽는다 (하드코딩 없음).
   // 서버 검증(_infra/chat.js CHAT_STICKER_PACKS)은 sticker-pack.test.mjs가 동기화를 검사한다.
   // cutout:false = 클라이언트 흰 배경 누끼 생략 (흰 캐릭터가 같이 지워지는 팩용).
+  // rev = 그림을 같은 id 로 다시 그렸을 때 올리는 번호. 클라이언트가 주소에 ?v= 로 붙여
+  // 폰의 7일 캐시를 넘긴다(id 를 바꾸면 지난 메시지의 {pack, n} 이 깨진다).
   const chat = typeof data.chat?.title === "string" && data.chat.title.trim()
     ? {
         title: data.chat.title.trim(),
         ...(data.chat.cutout === false ? { cutout: false } : {}),
+        ...(Number.isInteger(data.chat.rev) && data.chat.rev > 1 ? { rev: data.chat.rev } : {}),
       }
     : null;
   if (data.chat && !chat) throw new Error(`${category}/${id}: chat.title must be a non-empty string`);

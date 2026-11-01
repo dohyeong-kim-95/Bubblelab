@@ -167,7 +167,7 @@ async function loadPacks() {
       if (item.category !== "sticker" || !item.chat?.title || !Array.isArray(item.downloads)) continue;
       // cutout:false = 흰 배경 누끼 생략 (흰 캐릭터 팩·이미 투명한 팩)
       const pack = { id: item.id, title: item.chat.title, count: item.downloads.length,
-                     cutout: item.chat.cutout !== false };
+                     cutout: item.chat.cutout !== false, rev: item.chat.rev };
       PACKS.push(pack);
       PACK_IDS.set(pack.id, pack);
     }
@@ -265,7 +265,8 @@ function addSystem(text) {
 }
 
 function stickerUrl(pack, n) {
-  return `/_assets/sticker/${pack}/${String(n).padStart(2, "0")}.png`;
+  const rev = PACK_IDS.get(pack)?.rev; // 같은 id 로 다시 그린 팩 — 주소를 바꿔 7일 캐시를 넘긴다
+  return `/_assets/sticker/${pack}/${String(n).padStart(2, "0")}.png${rev ? `?v=${rev}` : ""}`;
 }
 
 // ── 누끼: 흰 배경 제거 (util/photo와 같은 테두리 flood fill) ──

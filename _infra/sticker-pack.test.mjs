@@ -315,3 +315,13 @@ test("every sticker metadata with a chat field is registered in CHAT_STICKER_PAC
       "(node _infra/sticker-pack.mjs가 자동 등록합니다)");
   }
 });
+
+test("duri 전용 목록의 rev 는 metadata 의 chat.rev 와 같다 (카탈로그 전에 그린 메시지도 새 주소로)", () => {
+  const html = readFileSync(join(ROOT, "duri", "index.html"), "utf8");
+  for (const [, id, rev] of html.matchAll(/\{ id: "([^"]+)", title: "[^"]+", count: \d+, cutout: \w+(?:, rev: (\d+))? \}/g)) {
+    const path = join(ROOT, "_assets", "sticker", id, "metadata.json");
+    if (!existsSync(path)) continue;
+    const meta = JSON.parse(readFileSync(path, "utf8"));
+    assert.equal(rev ? Number(rev) : undefined, meta.chat?.rev, `${id}: duri DURI_ONLY_PACKS 의 rev 가 metadata 와 다릅니다`);
+  }
+});

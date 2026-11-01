@@ -106,3 +106,15 @@ test("previewSize is passed through and half-written values are rejected", () =>
   writeFileSync(join(item, "metadata.json"), JSON.stringify({ ...base, previewSize: { width: 369 } }));
   assert.throws(() => generateAssetCatalog(root), /previewSize must be/);
 });
+
+test("chat.rev passes through so clients can bust the 7-day sticker cache", () => {
+  const root = mkdtempSync(join(tmpdir(), "bubblelab-assets-"));
+  const item = join(root, "sticker", "redrawn");
+  mkdirSync(item, { recursive: true });
+  writeFileSync(join(item, "01.png"), "");
+  const base = { title: "다시 그림", preview: "01.png", downloads: [{ label: "01", file: "01.png" }] };
+  writeFileSync(join(item, "metadata.json"), JSON.stringify({ ...base, chat: { title: "다시", rev: 2 } }));
+  assert.deepEqual(generateAssetCatalog(root)[0].chat, { title: "다시", rev: 2 });
+  writeFileSync(join(item, "metadata.json"), JSON.stringify({ ...base, chat: { title: "다시", rev: "2" } }));
+  assert.deepEqual(generateAssetCatalog(root)[0].chat, { title: "다시" }, "숫자가 아니면 버린다");
+});
