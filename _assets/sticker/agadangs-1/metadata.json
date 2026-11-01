@@ -11,6 +11,7 @@
     "손그림"
   ],
   "createdAt": "2026-10-31",
+  "active": false,
   "chat": {
     "title": "아가당스"
   },
