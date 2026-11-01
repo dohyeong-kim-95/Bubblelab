@@ -585,6 +585,14 @@ function weekdaysOf(v) {
   return [...out].sort();
 }
 
+// "내 테니스"·"나 PT 넣어줘"·"제 일정" — 말한 사람 자신의 일정. 앞뒤가 띄어진 낱말만 본다("내일"·"제주"·"나중에" 는
+// 아니다). "우리"·"같이" 가 있거나 다른 사람 이름이 같이 나오면 둘의 일이니 공통으로 둔다.
+const SELF_WORD = /(^|[\s,])(내|나의|제|저의|나|저)(는|도)?\s/;
+const TOGETHER_WORD = /우리|같이|함께|둘이|둘\s?다/;
+function selfWho(sender, people, command) {
+  if (!sender || typeof command !== "string" || !SELF_WORD.test(command) || TOGETHER_WORD.test(command)) return null;
+  return people.some((p) => p !== sender && command.includes(p)) ? null : sender;
+}
 // 누구 일정인지 — 목록의 이름만 받는다(지어낸 이름은 공통으로). "쫑이"·"쫑이의"·"쫑님" 은 "쫑".
 // 모델이 who 를 빠뜨려도 요청에 "쫑이의 …"·"쫑의 …" 가 있으면 그 사람 것으로 본다.
 function resolveWho(who, people, command) {
@@ -597,7 +605,7 @@ function resolveWho(who, people, command) {
   return owners.length === 1 ? owners[0] : null;
 }
 
-export function validateAction(raw, ctx, today, command) {
+export function validateAction(raw, ctx, today, command, sender) {
   const bad = (reason) => ({ op: "unknown", reason });
   if (!raw || typeof raw !== "object") return bad("이해하지 못했어요");
   const minDate = addDays(today, -366), maxDate = addDays(today, 3 * 366);
@@ -616,7 +624,11 @@ export function validateAction(raw, ctx, today, command) {
   }
   // "사진 보여줘" 처럼 장소가 없으면 작은 모델이 unknown·chat 을 고른다 — 사진을 달라는 말이 분명하면 사진으로.
   if (command != null && (raw.op === "unknown" || raw.op === "chat") && PHOTO_ASK(command)) raw = { op: "photos", query: "" };
-  const who = resolveWho(raw.who, ctx.people ?? [], command);
+  let who = resolveWho(raw.who, ctx.people ?? [], command);
+  if (!who && ["add", "repeat"].includes(raw.op)) {
+    who = selfWho(sender, ctx.people ?? [], command); // sender 를 모르면(벤치) 보지 않는다
+    if (who && typeof raw.title === "string") { const t = raw.title.trim().replace(/^(내|나의|제|저의)\s+/, ""); if (t) raw = { ...raw, title: t }; }
+  }
   // "쫑이의 테니스 레슨" → 주인은 who 로 가니 제목에선 뺀다(앱에서 색으로 보인다).
   if (who && typeof raw.title === "string") {
     const t = raw.title.trim().replace(new RegExp(`^${who.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(이)?(의|님의)?\\s+`), "");
@@ -959,7 +971,7 @@ export function createAssistant(io0, { now = () => Date.now() } = {}) {
       await io.say(downText(e, now()));
       return;
     }
-    const action = validateAction(raw, ctx, today, command);
+    const action = validateAction(raw, ctx, today, command, name);
     if (Object.hasOwn(RUNNERS, action.op)) { await RUNNERS[action.op](action, command, name, today); return; }
     io.log?.("당이:", JSON.stringify(raw), "→", action.op);
     const question = confirmText(action);

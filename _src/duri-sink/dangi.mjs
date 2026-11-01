@@ -134,14 +134,13 @@ async function main(argv) {
     const line = raw.trim();
     if (line === "/quit" || line === "/q") break;
     if (!process.stdin.isTTY && line) console.log(line); // 파이프 입력은 화면에 안 보이니 따라 적는다
-    if (line.startsWith("/as ")) who = line.slice(4).trim() || who;
-    else if (line === "/yes" || line === "/no") { if (!(await h.tap(who, line === "/yes"))) console.log(dim("  누를 카드가 없어요")); }
-    else if (line === "/cal") console.log(calText(h.events()));
-    else if (line === "/reset") { h.reset(); console.log(dim("  일정을 처음대로 돌렸어요")); }
-    else if (line) {
-      const m = line.match(/^([^\s:@]{1,8}):\s*(.+)$/);
-      await run(m ? m[1] : who, m ? m[2] : line);
-    }
+    const m = line.match(/^([^\s:@/]{1,8}):\s*(.+)$/); // "빵: …" — 그 사람이 말하거나 누른 것("빵: /yes")
+    const by = m ? m[1] : who, said = m ? m[2] : line;
+    if (said.startsWith("/as ")) who = said.slice(4).trim() || who;
+    else if (said === "/yes" || said === "/no") { if (!(await h.tap(by, said === "/yes"))) console.log(dim("  누를 카드가 없어요")); }
+    else if (said === "/cal") console.log(calText(h.events()));
+    else if (said === "/reset") { h.reset(); console.log(dim("  일정을 처음대로 돌렸어요")); }
+    else if (said) await run(by, said);
     prompt();
   }
   rl.close();

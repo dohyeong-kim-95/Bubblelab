@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   BOT_NAME, MAX_AGE_MS, briefDue, briefFacts, briefFallback, buildBriefingMessages, buildContext, buildMessages, buildRecommendMessages,
   calEventOnDate, chatSticker, createAssistant, memoryFacts, onThisDay, spreadPick, countSaid, fitId, kstYmd, parseTrigger, plan, validateAction, whoKey, ymd,
-  fixTone,
+  fixTone, confirmText,
 } from "./assistant.mjs";
 
 const NOW = new Date(2026, 9, 25, 12, 0).getTime(); // 2026-10-25 (일) 정오, 로컬
@@ -942,4 +942,20 @@ test("자는 시간: 모델 서버가 꺼졌거나 모델을 올리는 중(503)�
     say: async (t) => { said.push(t); } }, { now: () => at });
   await a.onMessage({ name: "빵", text: "@당이 이번 주 일정", at: at - 1000 });
   assert.deepEqual(said, ["😴 당이는 새벽 3시~6시에 자고 있어요. 6시 넘어서 다시 불러 주승!"]);
+});
+
+test("누구 일정: '내'·'나'·'제' 는 말한 사람 일정, '우리'·'같이'·다른 이름이 있으면 공통", () => {
+  const ctx = buildContext(PEOPLE_EVENTS, TODAY);
+  const add = (title, command, sender = "빵") => validateAction({ op: "add", title, date: "2026-10-31", start: "19:00" }, ctx, TODAY, command, sender);
+  assert.deepEqual([add("내 PT", "토요일 7시 내 PT 넣어줘").who, add("내 PT", "토요일 7시 내 PT 넣어줘").title], ["빵", "PT"]);
+  assert.equal(add("PT", "나 토요일 7시 PT 있어 넣어줘").who, "빵");
+  assert.equal(add("PT", "제 일정으로 토요일 7시 PT", "쫑").who, "쫑");
+  assert.equal(add("영화", "우리 토요일 7시 영화 넣어줘").who, undefined);
+  assert.equal(add("영화", "나 쫑이랑 토요일 7시 영화").who, undefined);
+  assert.equal(add("영화", "토요일 7시 영화 넣어줘").who, undefined);
+  assert.equal(add("제주 여행", "내일 제주 여행 넣어줘").who, undefined, "'내일'·'제주' 는 '내'·'제' 가 아니다");
+  assert.equal(add("PT", "토요일 7시 내 PT 넣어줘", null).who, undefined, "말한 사람을 모르면 공통");
+  const r = validateAction({ op: "repeat", title: "테니스", weekdays: ["수"], months: ["2026-11"] }, ctx, TODAY, "11월 매주 수요일 내 테니스 넣어줘", "쫑");
+  assert.equal(r.who, "쫑");
+  assert.match(confirmText(r), /쫑 일정 4개/);
 });
