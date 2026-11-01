@@ -126,7 +126,8 @@ async function drain() {
       // 보존이 끝난 뒤에만 당이에게 넘긴다(느려도 persist → ack 순서는 그대로). 접속 직후
       // 백필로 받은 것은 싱크가 없던 동안 온 말이다 — 그때 앱이 이미 "당이가 자고 있어요" 라고
       // 했으니 실행하지 않는다. 실시간으로 받은 것(live)만 처리한다.
-      if (assistant && entry.live && payload?.text) assistant.onMessage({ name: payload.name, text: payload.text, at: payload.at ?? entry.at });
+      if (assistant && entry.live && payload?.text) assistant.onMessage({ name: payload.name, text: payload.text, at: payload.at ?? entry.at,
+        ...(typeof payload.dangiAnswer?.id === "string" && { answer: { id: payload.dangiAnswer.id.slice(0, 24), ok: payload.dangiAnswer.ok === true } }) });
     } catch (e) {
       if (e?.name === "OperationError" || /decrypt/i.test(String(e))) {
         // 산발적으로 안 풀리는 한 건(문구를 바꾸기 전의 옛 항목 등) 때문에 그 뒤
@@ -317,9 +318,11 @@ async function lendPhotos(seqs) {
 }
 
 // sticker: 다그당스 이모티콘 {pack,n}(선택) — 글과 같은 메시지에 botSticker 로 싣는다.
-async function assistantSay(text, sticker, photos) {
+// meta.ask: 되묻는 말풍선의 카드({ id, by, until } — 앱이 [승인][취소] 버튼을 단다), meta.done: 답이 끝난 카드 id(버튼을 끈다).
+async function assistantSay(text, sticker, photos, meta) {
   const lend = photos?.length ? await lendPhotos(photos) : [];
   const f = await encryptJson(key, { name: BOT_NAME, text, at: Date.now(), sys: true, ...(sticker && { botSticker: sticker }),
+    ...(meta?.ask && { botAsk: meta.ask }), ...(meta?.done && { botDone: meta.done }),
     ...(photos?.length && { botPhotos: photos }), // 사진은 seq — 앱이 자기 캐시에서 꺼내 그린다
     ...(lend.length && { botLend: lend }) }); // 캐시에 없을 옛 사진은 빌려준 열쇠로
   try { sendFrame({ type: "msg", ...f }); } catch (e) { log("당이 답 전송 실패:", String(e?.message || e)); }

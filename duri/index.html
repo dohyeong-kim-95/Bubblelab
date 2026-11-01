@@ -232,6 +232,13 @@
   .dangi-photos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .25rem; margin-top: .45rem; min-width: 12rem; }
   .bubble .dangi-photos img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border-radius: .45rem; display: block; cursor: pointer; }
   .dangi-photos .none { grid-column: 1 / -1; font-size: .78rem; color: var(--dim); }
+  /* 당이가 되묻는 부탁(옮기기·지우기·여러 개 넣기)의 승인 카드 — "@당이 응" 을 손으로 쓰지 않게 */
+  .dangi-ask { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-top: .55rem; }
+  .dangi-ask button { font: inherit; font-size: .85rem; font-weight: 700; padding: .45rem 1.05rem; border-radius: .7rem; cursor: pointer;
+                      border: 1px solid light-dark(#c9a988, #6b4d38); background: light-dark(#fff8ef, #2a1e15); color: inherit; }
+  .dangi-ask button.yes { background: light-dark(#8a5a35, #c08a5c); border-color: transparent; color: light-dark(#fff, #1d140d); }
+  .dangi-ask button:disabled { opacity: .45; cursor: default; }
+  .dangi-ask .note { flex-basis: 100%; font-size: .74rem; color: var(--dim); }
   .sticker-anim { will-change: transform; } /* 움직이는 스티커: 합성 힌트 */
   .time { font-size: .62rem; color: var(--dim); margin: .1rem .3rem 0; }
   .broken { color: light-dark(#b4453a, #f0a8a2); font-size: .82rem; }
@@ -2555,6 +2562,8 @@ function trimDom() {
 const DANGI_NAME = "🤖 당이";
 const DANGI_AVATAR = { pack: "dageudangseu-1", n: 7 };
 function appendRecord(rec, { silent = false, into = null } = {}) {
+  if (rec.botDone) closeDangiAsk(rec.botDone); // 답이 끝난 부탁 — 두 기기의 카드 버튼을 같이 끈다
+  if (rec.dangiAnswer) closeDangiAsk(rec.dangiAnswer.id);
   // into: 옛 대화를 위쪽에 이어 붙일 때 쓰는 임시 컨테이너. 주어지면 화면 정리·
   // 스크롤은 건드리지 않고 그리기만 한다(호출자가 통째로 앞에 삽입한다).
   const box = into || log();
@@ -2653,6 +2662,7 @@ function appendRecord(rec, { silent = false, into = null } = {}) {
       const st = rec.botSticker;
       if (st && knownPack(st.pack)) { const img = stickerImg(st.pack, st.n, "당이 이모티콘"); img.classList.add("dangi-sticker"); b.appendChild(img); }
       if (rec.botPhotos?.length) b.appendChild(dangiPhotos(rec.botPhotos, rec.botLend));
+      if (rec.botAsk) b.appendChild(dangiAskCard(rec.botAsk));
     }, showName);
   } else {
     timeEl = buildBubble(row, rec.name, at, (b) => { b.textContent = rec.text; }, showName);
@@ -2710,6 +2720,17 @@ async function renderEntry(m) {
             && /^lend\/[0-9]{13}-[0-9a-f]{16}$/.test(l.key) && typeof l.iv === "string" && l.iv.length <= 64)
             .map((l) => ({ seq: l.seq, key: l.key, iv: l.iv, ...(typeof l.mime === "string" && /^image\//.test(l.mime) && { mime: l.mime }) }));
           if (lend.length) rec.botLend = lend;
+        }
+        // 당이가 되묻는 부탁의 카드({ id, by, until }) · 답이 끝난 카드 id
+        const ask = p.sys && p.name === DANGI_NAME ? p.botAsk : null;
+        if (ask && /^[a-z0-9]{12}$/.test(ask.id) && typeof ask.by === "string" && Number.isFinite(ask.until)) {
+          rec.botAsk = { id: ask.id, by: ask.by.slice(0, 40), until: ask.until };
+        }
+        if (p.sys && p.name === DANGI_NAME && typeof p.botDone === "string") rec.botDone = p.botDone.slice(0, 24);
+        // 카드 버튼으로 보낸 답 — 글은 "@당이 응"(옛 앱·옛 싱크도 알아듣게)이지만 화면엔 누른 버튼으로
+        if (!p.sys && typeof p.dangiAnswer?.id === "string") {
+          rec.dangiAnswer = { id: p.dangiAnswer.id.slice(0, 24), ok: p.dangiAnswer.ok === true };
+          rec.text = rec.dangiAnswer.ok ? "✅ 승인" : "✖️ 취소";
         }
       }
       appendRecord(rec); putEntry(rec);
@@ -2832,6 +2853,47 @@ async function sendText(text) {
   const frame = await encryptJson({ name: MY_NAME, text, at: Date.now() });
   ws.send(JSON.stringify({ type: "msg", ...frame }));
   if (DANGI_RE.test(text) && !sinkAwake) setTimeout(() => localNotice("💤 당이가 자고 있어요 (PC가 꺼져 있어요)"), 400);
+}
+// 당이 승인 카드. 부탁한 사람만 누를 수 있다(데몬도 같은 규칙으로 막는다). 누르면 "@당이 응/취소" 를
+// dangiAnswer:{id, ok} 와 함께 보낸다 — 어느 부탁인지 id 로 알고, 옛 싱크는 글만 보고도 알아듣는다.
+// 끝난 카드는 당이 결과 말풍선의 botDone(또는 누가 보낸 답)이 끈다. 10분이 지나면 데몬이 "지난 부탁" 으로 끈다.
+const dangiAsksDone = new Set();
+function dangiAskCard(ask) {
+  const box = document.createElement("div");
+  box.className = "dangi-ask"; box.dataset.ask = ask.id;
+  const btn = (label, ok) => {
+    const b = document.createElement("button"); b.type = "button"; b.textContent = label;
+    if (ok) b.className = "yes";
+    b.addEventListener("click", async () => {
+      if (box.dataset.closed) return;
+      if (!(await sendDangiAnswer(ask.id, ok))) { localNotice("📡 연결이 끊겨 있어요 — 잠시 뒤 다시 눌러 주세요"); return; }
+      closeDangiAsk(ask.id);
+    });
+    return b;
+  };
+  box.append(btn("승인", true), btn("취소", false));
+  if (ask.by !== MY_NAME) {
+    box.querySelectorAll("button").forEach((b) => { b.disabled = true; });
+    const note = document.createElement("span"); note.className = "note"; note.textContent = `${ask.by}님이 누를 수 있어요`;
+    box.appendChild(note);
+  }
+  if (dangiAsksDone.has(ask.id) || Date.now() > ask.until) markAskClosed(box);
+  return box;
+}
+function markAskClosed(box) {
+  box.dataset.closed = "1";
+  box.querySelectorAll("button").forEach((b) => { b.disabled = true; });
+}
+function closeDangiAsk(id) {
+  dangiAsksDone.add(id);
+  document.querySelectorAll(".dangi-ask").forEach((box) => { if (box.dataset.ask === id) markAskClosed(box); });
+}
+async function sendDangiAnswer(id, ok) {
+  if (!ws || ws.readyState !== 1) return false;
+  const frame = await encryptJson({ name: MY_NAME, text: ok ? "@당이 응" : "@당이 취소", at: Date.now(), dangiAnswer: { id, ok } });
+  ws.send(JSON.stringify({ type: "msg", ...frame }));
+  if (!sinkAwake) setTimeout(() => localNotice("💤 당이가 자고 있어요 (PC가 꺼져 있어요)"), 400);
+  return true;
 }
 // "@당이"(일정 비서)는 PC 싱크(_src/duri-sink/assistant.mjs)에서 돈다 — 같은 규칙이어야 한다.
 // 싱크가 안 붙어 있으면(서버 presence 의 sink) 답할 쪽이 없으니 이 기기에서만 바로 알린다.

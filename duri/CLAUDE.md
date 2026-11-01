@@ -95,7 +95,9 @@ npm test                                                          # 인프라 �
 - **"보는 중" 판정은 페이지가 직접 알려 준다.** iOS 홈 화면 PWA 는 앞 창도 `focused:false`, 내려 둔 창도
   `visibilityState:"visible"` 로 보고해서 `clients` 만으론 구분이 안 된다(두리를 보는데 진짜 알림이 계속
   뜨던 원인). `index.html` 의 `tellSwVisibility` 가 `app-foreground`/`app-background` 를 보내고(전환·10초마다·
-  pagehide), `sw.js` 의 `isAppFocused` 가 30초 안의 신호를 믿고 없으면 `visibility-query` 로 물어본다(500ms).
+  pagehide), `sw.js` 의 `askApp` 은 그 신호를 믿지 않고 **푸시마다 지금** `visibility-query` 로 묻는다(800ms,
+  답은 `e.source` 로). 예전의 "30초 안 신호를 믿기" 는 iOS 가 나갈 때 페이지를 얼려 신호를 못 보내 나간 뒤 30초
+  알림이 막혔다 — 되살리지 말 것. 아이폰 실측은 🩺 진단의 🧪 실전 테스트·📋 기기 기록.
   어느 쪽이든 알림은 띄웠다 닫는다 — 건너뛰지 않는다. 테스트는 `_infra/duri.test.mjs` 의 `sw:` 들.
 - DuriDO는 `idFromName("main")` 단일 인스턴스다(`_infra/worker.js:653 (handleDuri)`).
   배포해도 **살아 있는 WebSocket이 있으면 옛 코드가 계속 돈다** — 서버 동작이 안

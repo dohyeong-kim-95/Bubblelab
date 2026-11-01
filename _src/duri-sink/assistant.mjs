@@ -187,6 +187,282 @@ export function chatSticker(command) {
 // 말한 사람은 맨 뒤 시스템 메시지로 따로 준다 — 앞쪽(긴 지시문)이 사람마다 같아야 모델 서버가 재사용한다.
 const whoMessage = (sender) => ({ role: "system", content: `말한 사람: ${sender}. 답할 때 이름을 불러 줘도 좋다(예: ${sender}아/야).` });
 
+// ── 도구 목록 — 당이가 할 수 있는 일 하나 = 항목 하나 ──
+// 모델에게 보이는 형식(form)·지시(guide), 모델 답을 믿지 않고 다시 세우는 검증(check), 캘린더·채팅으로 옮기는
+// 실행(plan), 실행 전에 되묻는 말(confirm)이 한곳에 모여 있다. 새 능력은 여기 항목 하나를 더하는 데서 시작한다 —
+// 프롬프트·검증·실행·되묻기가 따로 놀지 않게. 모델이 고른 op 가 목록에 없으면 unknown 이다.
+// plan 이 없는 도구(recall·photos·recommend)는 모델을 한 번 더 부르거나 백업을 읽어야 해서 createAssistant 의
+// RUNNERS 가 맡는다. **항목 순서가 곧 프롬프트 순서다** — 바꾸면 모델 서버의 프롬프트 캐시와 벤치 점수가 달라진다.
+// who 가 있으면 그 사람의 개인 일정(앱에서 그 사람 색), 없으면 공통 일정.
+const baseOf = (a, sender) => ({ title: a.title, owner: a.who ?? sender, shared: !a.who,
+  ...(a.start && { start: a.start }), ...(a.end && { end: a.end }) });
+const whose = (a) => (a.who ? `${a.who} 일정` : "공통");
+const checkMoveDelete = (raw, { ctx, today, command, okDate, times, who, bad }) => {
+      const ev = ctx.aliases.get(String(raw.id ?? "").trim());
+      if (!ev) return bad("어떤 일정인지 못 찾았어요");
+      if (ev.recur?.freq) return bad("반복 일정은 캘린더 탭에서 고쳐 주세요");
+      if (raw.op === "delete") return { op: "delete", event: ev };
+      const date = raw.date == null || raw.date === "" ? ev.date : raw.date;
+      if (!okDate(date)) return bad("옮길 날짜를 못 정했어요");
+      const t = times(raw.start ?? ev.start, raw.end ?? (raw.start ? undefined : ev.end));
+      if (!t) return bad("시간 형식이 이상해요");
+      if (date === ev.date && t.start === ev.start && t.end === ev.end) return bad("바뀌는 게 없어요");
+      return { op: "move", event: ev, date, ...t };
+    
+    };
+const checkFit = (raw, { ctx, today, command, okDate, times, who, bad }) => {
+      const date = raw.date == null || raw.date === "" ? today : raw.date;
+      if (!okDate(date)) return bad("운동한 날짜를 못 정했어요");
+      if (date > today) return bad("아직 안 온 날은 운동 체크를 못 해요");
+      if (raw.op === "unfit") return { op: "unfit", date };
+      let memo = typeof raw.memo === "string" ? raw.memo.trim().slice(0, FIT_MEMO_MAX) : "";
+      if (/^운동( ?(인증|체크|했어|했다|함|완료))?[.!~ ]*$/.test(memo)) memo = ""; // 내용 없는 메모는 버린다
+      return { op: "fit", date, ...(memo && { memo }) };
+    
+    };
+const checkMemory = (raw, { ctx, today, command, okDate, times, who, bad }) => {
+      // 사진 낱말이 없는데 photos 면 묻는 말(recall)로, "사진 보여줘" 인데 recall 이면 photos 로.
+      const op = command == null ? raw.op : PHOTO_ASK(command) ? "photos"
+        : raw.op === "photos" && !PHOTO_WORDS.test(command) ? "recall" : raw.op;
+      const stop = op === "photos" ? PHOTO_STOP : RECALL_STOP;
+      const q = Array.isArray(raw.query) ? raw.query.join(" ") : String(raw.query ?? "");
+      // "어제 무슨 얘기 했지" 에 모델이 query:"얘기" 를 넣는다 — 그런 낱말로 찾으면 오히려 다 놓친다.
+      // "7월에 찍은 사진" 에 모델이 query 에 "7월" 을 넣기도 한다 — 기간 말은 낱말이 아니다(아래에서 달로 읽는다).
+      const terms = q.split(/[\s,]+/).map((s) => s.trim().slice(0, 20))
+        .filter((s) => s && !stop.has(s) && !RECALL_STOP.has(s) && !PERIOD_WORD.test(s)).slice(0, 4);
+      let from = null, to = today;
+      const month = typeof raw.month === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(raw.month) ? raw.month
+        : !isYmd(raw.from) ? pastMonthSaid(command, today) : null;
+      if (month) {
+        from = `${month}-01`;
+        to = ymd(new Date(Number(month.slice(0, 4)), Number(month.slice(5)), 0));
+      } else {
+        if (isYmd(raw.from)) from = raw.from;
+        if (isYmd(raw.to)) to = raw.to;
+      }
+      // 기간이 없으면: 낱말이 있으면 전부(3년), 없으면 어제·오늘(그냥 "무슨 얘기 했어?").
+      // 사진은 낱말도 기간도 없으면("사진 보여줘") 전부에서 최근 것.
+      if (!from) from = terms.length || op === "photos" ? addDays(today, -3 * 366) : addDays(today, -1);
+      if (to > today) to = today;
+      if (from > to) from = to;
+      const count = op === "photos" ? countSaid(command) : null;
+      return { op, terms, from, to, ...(count && { count }) };
+    
+    };
+const planFit = (action, { events, sender, now, rev }) => {
+      const month = action.date.slice(0, 7), day = String(Number(action.date.slice(8)));
+      const cur = fitRecord(events, month, sender);
+      const days = { ...(cur?.days || {}) };
+      if (action.op === "unfit") {
+        if (!days[day]) return { puts: [], dels: [], reply: `💪 ${label(action.date)}엔 ${sender}님 운동 체크가 없어요` };
+        delete days[day];
+      } else {
+        days[day] = { ...(days[day] || { at: now }) };
+        if (action.memo) days[day].memo = action.memo;
+      }
+      const content = { kind: "workout", month, owner: sender, days, at: now };
+      const n = Object.keys(days).length;
+      const reply = action.op === "unfit"
+        ? `💪 ${sender}님 ${label(action.date)} 운동 체크 취소 (${Number(month.slice(5))}월 ${n}회)`
+        : `💪 ${sender}님 ${label(action.date)} 운동 완료!${action.memo ? ` — ${action.memo}` : ""} (${Number(month.slice(5))}월 ${n}회째)`;
+      return { puts: [{ id: fitId(month, sender), rev, content }], dels: [], reply };
+    };
+const confirmMove = (a) => `🤖 "${a.event.title}" ${whenText(a.event)} → ${whenText({ ...a.event, date: a.date, start: a.start, end: a.end, endDate: undefined })}로 옮길까요? "@당이 응" 이면 옮겨요.`;
+
+export const TOOLS = {
+  add: {
+    form: '{"op":"add","title":"제목","date":"YYYY-MM-DD","endDate":"YYYY-MM-DD 또는 생략","start":"HH:MM 또는 생략","end":"HH:MM 또는 생략","who":"사람 이름 또는 생략"}',
+    check: (raw, { ctx, today, command, okDate, times, who, bad }) => {
+      const title = String(raw.title ?? "").trim().slice(0, 120);
+      if (!title) return bad("일정 제목을 못 찾았어요");
+      if (!okDate(raw.date)) return bad("날짜를 못 정했어요");
+      const t = times(raw.start, raw.end);
+      if (!t) return bad("시간 형식이 이상해요");
+      const endDate = okDate(raw.endDate) && raw.endDate > raw.date ? raw.endDate : undefined;
+      return { op: "add", title, date: raw.date, endDate, ...t, ...(who && { who }) };
+    
+    },
+    plan: (action, { events, sender, now, rev }) => {
+      const content = { date: action.date, ...baseOf(action, sender) };
+      if (action.endDate) content.endDate = action.endDate;
+      return { puts: [{ id: randId(), rev, content }], dels: [], reply: `📅 "${action.title}" 일정 추가됨 (${whenText(content)}${action.who ? `, ${whose(action)}` : ""})` };
+    },
+  },
+  repeat: {
+    form: '{"op":"repeat","title":"제목","weekdays":["수"],"months":["YYYY-MM"],"start":"HH:MM 또는 생략","end":"HH:MM 또는 생략","who":"사람 이름 또는 생략"} — 달 단위가 아니면 months 대신 "from":"YYYY-MM-DD","to":"YYYY-MM-DD"',
+    // 사람·날짜 규칙은 add·repeat 둘 다의 것이지만 지금 프롬프트 자리(repeat 지시 바로 뒤)를 지킨다.
+    guide: (ctx) => [
+      "요일을 정해 여러 날 넣는 일정(매주 수요일, 11월이랑 12월 모든 수요일, 이번 달 남은 화요일이랑 목요일, 평일마다)은 add 가 아니라 repeat. weekdays 는 요일 글자들(월~일). 기간이 달이면 months 에 그 달들만 적는다(예: 11월이랑 12월 → [\"2026-11\",\"2026-12\"], 이번 달 → 이번 달 하나, 다음 달 → 다음 달 하나만). 날짜는 코드가 센다(지난 날은 빼고).",
+      `사람: ${ctx.people?.length ? ctx.people.join(", ") : "(모름)"}. '쫑이의 레슨'·'빵 회식' 처럼 한 사람의 일정이면 who 에 그 사람 이름(목록의 이름 그대로)을 쓰고, title 은 요청의 일정 이름을 그대로 두되 사람 이름만 뺀다(예: '쫑이의 테니스 레슨' → who 쫑, title '테니스 레슨'). 말한 사람 자신이어도 이름을 말하지 않았으면, 또 둘이 같이·누구 건지 말이 없으면 who 를 생략한다(공통 일정).`,
+      "규칙: 날짜는 아래 날짜표에서만 고른다. 요일·'다음주'·'내일'은 날짜표로 바꾼다. 시간이 없으면 start 를 생략한다(종일).",
+    ],
+    check: (raw, { ctx, today, command, okDate, times, who, bad }) => {
+      const title = String(raw.title ?? "").trim().slice(0, 120);
+      if (!title) return bad("일정 제목을 못 찾았어요");
+      const wds = weekdaysOf(raw.weekdays);
+      if (!wds.length) return bad("무슨 요일인지 못 정했어요");
+      // 달로 주면(months) 그 달들의 1일~말일. 모델이 날짜표(60일) 안에서 기간을 잘라 버리는 일이 있어서
+      // 달 단위 요청은 달만 고르게 하고 날짜는 여기서 센다.
+      const months = (Array.isArray(raw.months) ? raw.months : typeof raw.months === "string" ? [raw.months] : [])
+        .filter((m) => typeof m === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(m)).sort();
+      // 요청에 달이 적혀 있으면("다음 달", "11월이랑 12월") 그걸 따른다 — 모델이 "다음 달" 을 두 달로 고르곤 했다.
+      const said = monthsSaid(command, today);
+      if (months.length && said.length) months.splice(0, months.length, ...said);
+      const monthEnd = (m) => ymd(new Date(Number(m.slice(0, 4)), Number(m.slice(5)), 0));
+      let rFrom = raw.from, rTo = raw.to;
+      if (months.length) {
+        rFrom = `${months[0]}-01`;
+        rTo = monthEnd(months[months.length - 1]);
+      } else if (said.length && !/부터|까지|동안/.test(command) && okDate(rFrom) && okDate(rTo)) {
+        // 달을 말했는데 모델이 from/to 로 답하면 그 달들 밖은 잘라 낸다 — "이번 달 남은 화·목" 을 다음 달 말까지
+        // 잡곤 했다. "11월부터 석 달" 처럼 기간을 따로 말했으면 모델 값을 그대로 둔다.
+        if (rFrom < `${said[0]}-01`) rFrom = `${said[0]}-01`;
+        if (rTo > monthEnd(said[said.length - 1])) rTo = monthEnd(said[said.length - 1]);
+        months.push(...said);
+      }
+      if (!okDate(rFrom) || !okDate(rTo) || rTo < rFrom) return bad("언제부터 언제까지인지 알려 주세요");
+      const from = rFrom < today ? today : rFrom; // 지난 날은 넣지 않는다
+      if (dayDiff(from, rTo) > 366) return bad("기간이 너무 길어요 (1년 안쪽으로)");
+      const t = times(raw.start, raw.end);
+      if (!t) return bad("시간 형식이 이상해요");
+      const dates = [];
+      for (let d = from; d <= rTo; d = addDays(d, 1)) {
+        if (wds.includes(parseYmd(d).getDay()) && (!months.length || months.includes(d.slice(0, 7)))) dates.push(d);
+      }
+      if (!dates.length) return bad("그 기간엔 그 요일이 없어요");
+      if (dates.length > REPEAT_MAX) return bad(`한 번에 ${REPEAT_MAX}개까지만 넣을 수 있어요`);
+      return { op: "repeat", title, dates, weekdays: wds, ...t, ...(who && { who }) };
+    
+    },
+    plan: (action, { events, sender, now, rev }) => {
+      const puts = action.dates.map((date) => ({ id: randId(), rev, content: { date, ...baseOf(action, sender) } }));
+      return { puts, dels: [], reply: `📅 "${action.title}" ${action.dates.length}개 추가됨 (${whose(action)}${action.start ? `, ${action.start}` : ""})\n${repeatDates(action.dates)}` };
+    },
+    // 여러 개를 한꺼번에 넣는 repeat 도 되묻는다 — 잘못 알아들으면 하나씩 지우기 번거롭다.
+    confirm: (a) => (a.dates.length > 1
+      ? `🤖 "${a.title}" ${a.who ? `${a.who} 일정` : "공통 일정"} ${a.dates.length}개${a.start ? ` (${a.start})` : ""}를 넣을까요? "@당이 응" 이면 넣어요.\n${repeatDates(a.dates)}`
+      : null),
+  },
+  list: {
+    form: '{"op":"list","from":"YYYY-MM-DD","to":"YYYY-MM-DD"}',
+    check: (raw, { ctx, today, command, okDate, times, who, bad }) => {
+      const from = okDate(raw.from) ? raw.from : today;
+      let to = okDate(raw.to) && raw.to >= from ? raw.to : addDays(from, 6);
+      if (dayDiff(from, to) > 62) to = addDays(from, 62);
+      return { op: "list", from, to };
+    
+    },
+    plan: (action, { events, sender, now, rev }) => {
+      const hits = plans(events)
+        .filter((e) => !e.recur?.freq && (e.endDate || e.date) >= action.from && e.date <= action.to)
+        .sort((a, b) => a.date.localeCompare(b.date) || String(a.start ?? "").localeCompare(String(b.start ?? "")));
+      const head = `📅 ${label(action.from)} ~ ${label(action.to)} 일정 ${hits.length}개`;
+      const body = hits.slice(0, 20).map((e) => `· ${whenText(e)} ${e.title ?? ""}`);
+      if (hits.length > 20) body.push(`… 외 ${hits.length - 20}개`);
+      return { puts: [], dels: [], reply: [head, ...body].join("\n") };
+    },
+  },
+  move: {
+    form: '{"op":"move","id":"e번호","date":"YYYY-MM-DD 또는 생략","start":"HH:MM 또는 생략","end":"HH:MM 또는 생략"}',
+    guide: () => ["오후 3시는 15:00. 옮기기·삭제는 아래 일정 목록의 e번호로만 가리킨다. 목록에 없으면 unknown."],
+    check: checkMoveDelete,
+    plan: (action, { events, sender, now, rev }) => {
+      const ev = action.event;
+      const { id: _i, rev: _r, deleted: _d, ...content } = ev;
+      if (content.endDate) content.endDate = addDays(content.endDate, dayDiff(ev.date, action.date));
+      content.date = action.date;
+      if (action.start) content.start = action.start; else delete content.start;
+      if (action.end) content.end = action.end; else delete content.end;
+      return { puts: [{ id: ev.id, rev, content }], dels: [], reply: `📅 "${ev.title}" ${whenText(ev)} → ${whenText(content)}로 옮김` };
+    },
+    confirm: confirmMove,
+  },
+  delete: {
+    form: '{"op":"delete","id":"e번호"}',
+    check: checkMoveDelete,
+    plan: (action, { events, sender, now, rev }) => {
+      const ev = action.event;
+      // 웹앱(calDeleteEvent)처럼 댓글도 같이 지운다 — 남기면 고아 레코드가 된다.
+      const comments = events.filter((c) => !c.deleted && c.kind === "comment" && c.eventId === ev.id);
+      return { puts: [], dels: [ev.id, ...comments.map((c) => c.id)].map((id) => ({ id, rev })), reply: `📅 "${ev.title}" (${whenText(ev)}) 일정 삭제됨` };
+    },
+    confirm: (a) => `🤖 "${a.event.title}" (${whenText(a.event)}) 일정을 지울까요? "@당이 응" 이면 지워요.`,
+  },
+  fit: {
+    form: '{"op":"fit","date":"YYYY-MM-DD","memo":"한 줄 메모 또는 생략"}',
+    guide: () => ["운동 인증(운동·헬스·러닝 같은 운동 얘기일 때만. 일정·여행 얘기엔 쓰지 않는다): '운동했어'·'오늘 헬스 1시간' 은 말한 사람의 그날 운동 체크(fit, 날짜 없으면 오늘, memo 는 운동 종류·양만 적고 없으면 생략). 체크 취소는 unfit, '이번 달 운동 몇 번?'·'운동 기록'·'운동 요약'·'지난주 운동 어땠어?' 은 fitlist(달이면 month, 이번 주·지난주면 week)."],
+    check: checkFit,
+    plan: planFit,
+  },
+  unfit: { form: '{"op":"unfit","date":"YYYY-MM-DD"}', check: checkFit, plan: planFit },
+  fitlist: {
+    form: '{"op":"fitlist","month":"YYYY-MM"} 또는 {"op":"fitlist","week":"this 또는 last"}',
+    check: (raw, { ctx, today, command, okDate, times, who, bad }) => {
+      // 주는 모델이 날짜를 세지 않게 "this"/"last" 만 받는다(날짜를 주면 일정 요청까지 그 날짜를 베낀다).
+      // 주는 월~일, 이번 주는 오늘까지.
+      if (raw.week === "this" || raw.week === "last") {
+        const mon = addDays(today, -((parseYmd(today).getDay() + 6) % 7));
+        return raw.week === "this"
+          ? { op: "fitlist", from: mon, to: today }
+          : { op: "fitlist", from: addDays(mon, -7), to: addDays(mon, -1) };
+      }
+      // 기간(from/to)이 있으면 그 기간, 아니면 달. 앞으로 올 날은 셀 게 없으니 오늘에서 자른다.
+      if (okDate(raw.from) && okDate(raw.to) && raw.from <= raw.to) {
+        let to = raw.to > today ? today : raw.to;
+        if (to < raw.from) to = raw.from;
+        if (dayDiff(raw.from, to) > 62) return bad("기간이 너무 길어요 (두 달 안쪽으로)");
+        return { op: "fitlist", from: raw.from, to };
+      }
+      const month = typeof raw.month === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(raw.month) ? raw.month : today.slice(0, 7);
+      const last = ymd(new Date(Number(month.slice(0, 4)), Number(month.slice(5)), 0));
+      return { op: "fitlist", from: `${month}-01`, to: last, month };
+    
+    },
+    plan: (action, { events }) => ({ puts: [], dels: [], reply: fitSummary(events, action) }),
+  },
+  recall: {
+    form: '{"op":"recall","query":"찾을 낱말 1~3개(없으면 빈칸)","from":"YYYY-MM-DD 또는 생략","to":"YYYY-MM-DD 또는 생략","month":"YYYY-MM 또는 생략"}',
+    guide: () => ["기억: 둘이 예전에 나눈 얘기·보낸 사진·있었던 일·다녀온 곳·해낸 것을 물으면(그 카페 이름 뭐였지? 지난달에 어디 갔었지? 제주도 언제 갔지? 어제 무슨 얘기 했어?) recall. query 엔 찾을 핵심 낱말만(조사 빼고), 기간을 말했으면 from/to 나 month."],
+    check: checkMemory,
+  },
+  photos: {
+    form: '{"op":"photos","query":"찍은 곳·사진 설명 낱말 1~2개(없으면 빈칸)","from":"YYYY-MM-DD 또는 생략","to":"YYYY-MM-DD 또는 생략","month":"YYYY-MM 또는 생략"}',
+    guide: () => ["사진: 예전 사진을 보여 달라·가져와 달라(제주에서 찍은 사진 보여줘, 지난달 사진, 강남 사진 가져와, 바다 사진, 케이크 사진)는 photos. query 엔 장소 이름이나 찍힌 것(바다·케이크·고양이)만(조사 빼고, '사진' 은 빼고), 기간을 말했으면 from/to 나 month. '언제 갔지' 처럼 묻기만 하면 recall."],
+    check: checkMemory,
+  },
+  bucket: {
+    form: '{"op":"bucket","show":"todo 또는 done 또는 all","query":"찾을 낱말 또는 생략"}',
+    guide: () => ["버킷리스트(둘이 해보고 싶은 것 목록)를 보여 달라·뭐 남았어·뭐 했어·○○ 있어? 는 bucket(남은 것 todo, 한 것 done, 둘 다 all, 특정 항목을 찾으면 query). 데이트·같이 할 것·주말에 뭐 할지 추천해 달라면 recommend."],
+    check: (raw, { ctx, today, command, okDate, times, who, bad }) => {
+      const show = ["todo", "done", "all"].includes(raw.show) ? raw.show : "todo";
+      const q = Array.isArray(raw.query) ? raw.query.join(" ") : String(raw.query ?? "");
+      const terms = q.split(/[\s,]+/).map((x) => x.trim().slice(0, 20)).filter((x) => x && !/^(버킷|버킷리스트|리스트|목록)$/.test(x)).slice(0, 4);
+      return { op: "bucket", show: terms.length ? "all" : show, terms };
+    
+    },
+    plan: (action, { events }) => ({ puts: [], dels: [], reply: bucketSummary(events, action) }),
+  },
+  recommend: {
+    form: '{"op":"recommend","hint":"조건(이번 주말·실내·비 오는 날·저녁 등) 또는 생략"}',
+    check: (raw, { ctx, today, command, okDate, times, who, bad }) => {
+      const hint = typeof raw.hint === "string" ? raw.hint.trim().slice(0, 60) : "";
+      return { op: "recommend", ...(hint && { hint }) };
+    
+    },
+  },
+  chat: {
+    form: '{"op":"chat","reply":"당이 말투로 1~3문장 답"}',
+    guide: () => ["일정과 상관없는 인사·잡담·간단한 질문이면 chat 으로 짧게 답한다. 날씨·뉴스·시세처럼 지금 정보는 모른다고 솔직히 말한다."],
+    check: (raw, { ctx, today, command, okDate, times, who, bad }) => {
+      const reply = String(raw.reply ?? "").trim().slice(0, 400);
+      return reply ? { op: "chat", reply } : bad("뭐라고 해야 할지 모르겠승…");
+    
+    },
+    plan: (action) => ({ puts: [], dels: [], reply: action.reply }),
+  },
+  unknown: { form: '{"op":"unknown","reason":"짧은 이유"}' },
+};
+
 export function buildMessages(command, ctx, sender) {
   const evLines = [...ctx.aliases].map(([a, e]) =>
     `${a}: ${e.date}${e.endDate ? `~${e.endDate}` : ""}${e.start ? ` ${e.start}${e.end ? `-${e.end}` : ""}` : " 종일"} "${e.title ?? ""}"${e.recur?.freq ? " (반복)" : ""}`);
@@ -194,29 +470,8 @@ export function buildMessages(command, ctx, sender) {
     "너는 두 사람이 같이 쓰는 캘린더의 일정 비서 '당이'다. 사용자의 한국어 요청을 읽고 할 일을 JSON 하나로만 답한다.",
     ...PERSONA,
     "형식(하나만 고른다):",
-    '{"op":"add","title":"제목","date":"YYYY-MM-DD","endDate":"YYYY-MM-DD 또는 생략","start":"HH:MM 또는 생략","end":"HH:MM 또는 생략","who":"사람 이름 또는 생략"}',
-    '{"op":"repeat","title":"제목","weekdays":["수"],"months":["YYYY-MM"],"start":"HH:MM 또는 생략","end":"HH:MM 또는 생략","who":"사람 이름 또는 생략"} — 달 단위가 아니면 months 대신 "from":"YYYY-MM-DD","to":"YYYY-MM-DD"',
-    '{"op":"list","from":"YYYY-MM-DD","to":"YYYY-MM-DD"}',
-    '{"op":"move","id":"e번호","date":"YYYY-MM-DD 또는 생략","start":"HH:MM 또는 생략","end":"HH:MM 또는 생략"}',
-    '{"op":"delete","id":"e번호"}',
-    '{"op":"fit","date":"YYYY-MM-DD","memo":"한 줄 메모 또는 생략"}',
-    '{"op":"unfit","date":"YYYY-MM-DD"}',
-    '{"op":"fitlist","month":"YYYY-MM"} 또는 {"op":"fitlist","week":"this 또는 last"}',
-    '{"op":"recall","query":"찾을 낱말 1~3개(없으면 빈칸)","from":"YYYY-MM-DD 또는 생략","to":"YYYY-MM-DD 또는 생략","month":"YYYY-MM 또는 생략"}',
-    '{"op":"photos","query":"찍은 곳·사진 설명 낱말 1~2개(없으면 빈칸)","from":"YYYY-MM-DD 또는 생략","to":"YYYY-MM-DD 또는 생략","month":"YYYY-MM 또는 생략"}',
-    '{"op":"bucket","show":"todo 또는 done 또는 all","query":"찾을 낱말 또는 생략"}',
-    '{"op":"recommend","hint":"조건(이번 주말·실내·비 오는 날·저녁 등) 또는 생략"}',
-    '{"op":"chat","reply":"당이 말투로 1~3문장 답"}',
-    '{"op":"unknown","reason":"짧은 이유"}',
-    "요일을 정해 여러 날 넣는 일정(매주 수요일, 11월이랑 12월 모든 수요일, 이번 달 남은 화요일이랑 목요일, 평일마다)은 add 가 아니라 repeat. weekdays 는 요일 글자들(월~일). 기간이 달이면 months 에 그 달들만 적는다(예: 11월이랑 12월 → [\"2026-11\",\"2026-12\"], 이번 달 → 이번 달 하나, 다음 달 → 다음 달 하나만). 날짜는 코드가 센다(지난 날은 빼고).",
-    `사람: ${ctx.people?.length ? ctx.people.join(", ") : "(모름)"}. '쫑이의 레슨'·'빵 회식' 처럼 한 사람의 일정이면 who 에 그 사람 이름(목록의 이름 그대로)을 쓰고, title 은 요청의 일정 이름을 그대로 두되 사람 이름만 뺀다(예: '쫑이의 테니스 레슨' → who 쫑, title '테니스 레슨'). 말한 사람 자신이어도 이름을 말하지 않았으면, 또 둘이 같이·누구 건지 말이 없으면 who 를 생략한다(공통 일정).`,
-    "규칙: 날짜는 아래 날짜표에서만 고른다. 요일·'다음주'·'내일'은 날짜표로 바꾼다. 시간이 없으면 start 를 생략한다(종일).",
-    "오후 3시는 15:00. 옮기기·삭제는 아래 일정 목록의 e번호로만 가리킨다. 목록에 없으면 unknown.",
-    "운동 인증(운동·헬스·러닝 같은 운동 얘기일 때만. 일정·여행 얘기엔 쓰지 않는다): '운동했어'·'오늘 헬스 1시간' 은 말한 사람의 그날 운동 체크(fit, 날짜 없으면 오늘, memo 는 운동 종류·양만 적고 없으면 생략). 체크 취소는 unfit, '이번 달 운동 몇 번?'·'운동 기록'·'운동 요약'·'지난주 운동 어땠어?' 은 fitlist(달이면 month, 이번 주·지난주면 week).",
-    "기억: 둘이 예전에 나눈 얘기·보낸 사진·있었던 일·다녀온 곳·해낸 것을 물으면(그 카페 이름 뭐였지? 지난달에 어디 갔었지? 제주도 언제 갔지? 어제 무슨 얘기 했어?) recall. query 엔 찾을 핵심 낱말만(조사 빼고), 기간을 말했으면 from/to 나 month.",
-    "사진: 예전 사진을 보여 달라·가져와 달라(제주에서 찍은 사진 보여줘, 지난달 사진, 강남 사진 가져와, 바다 사진, 케이크 사진)는 photos. query 엔 장소 이름이나 찍힌 것(바다·케이크·고양이)만(조사 빼고, '사진' 은 빼고), 기간을 말했으면 from/to 나 month. '언제 갔지' 처럼 묻기만 하면 recall.",
-    "버킷리스트(둘이 해보고 싶은 것 목록)를 보여 달라·뭐 남았어·뭐 했어·○○ 있어? 는 bucket(남은 것 todo, 한 것 done, 둘 다 all, 특정 항목을 찾으면 query). 데이트·같이 할 것·주말에 뭐 할지 추천해 달라면 recommend.",
-    "일정과 상관없는 인사·잡담·간단한 질문이면 chat 으로 짧게 답한다. 날씨·뉴스·시세처럼 지금 정보는 모른다고 솔직히 말한다.",
+    ...Object.values(TOOLS).map((t) => t.form),
+    ...Object.values(TOOLS).flatMap((t) => t.guide?.(ctx) ?? []),
     "",
     `달: ${ctx.months}`,
     `지난 날(운동 인증 fit·unfit 과 기억 recall 에만 쓴다): ${ctx.past}`,
@@ -367,208 +622,15 @@ export function validateAction(raw, ctx, today, command) {
     const t = raw.title.trim().replace(new RegExp(`^${who.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(이)?(의|님의)?\\s+`), "");
     if (t) raw = { ...raw, title: t };
   }
-  switch (raw.op) {
-    case "add": {
-      const title = String(raw.title ?? "").trim().slice(0, 120);
-      if (!title) return bad("일정 제목을 못 찾았어요");
-      if (!okDate(raw.date)) return bad("날짜를 못 정했어요");
-      const t = times(raw.start, raw.end);
-      if (!t) return bad("시간 형식이 이상해요");
-      const endDate = okDate(raw.endDate) && raw.endDate > raw.date ? raw.endDate : undefined;
-      return { op: "add", title, date: raw.date, endDate, ...t, ...(who && { who }) };
-    }
-    case "repeat": {
-      const title = String(raw.title ?? "").trim().slice(0, 120);
-      if (!title) return bad("일정 제목을 못 찾았어요");
-      const wds = weekdaysOf(raw.weekdays);
-      if (!wds.length) return bad("무슨 요일인지 못 정했어요");
-      // 달로 주면(months) 그 달들의 1일~말일. 모델이 날짜표(60일) 안에서 기간을 잘라 버리는 일이 있어서
-      // 달 단위 요청은 달만 고르게 하고 날짜는 여기서 센다.
-      const months = (Array.isArray(raw.months) ? raw.months : typeof raw.months === "string" ? [raw.months] : [])
-        .filter((m) => typeof m === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(m)).sort();
-      // 요청에 달이 적혀 있으면("다음 달", "11월이랑 12월") 그걸 따른다 — 모델이 "다음 달" 을 두 달로 고르곤 했다.
-      const said = monthsSaid(command, today);
-      if (months.length && said.length) months.splice(0, months.length, ...said);
-      const monthEnd = (m) => ymd(new Date(Number(m.slice(0, 4)), Number(m.slice(5)), 0));
-      let rFrom = raw.from, rTo = raw.to;
-      if (months.length) {
-        rFrom = `${months[0]}-01`;
-        rTo = monthEnd(months[months.length - 1]);
-      } else if (said.length && !/부터|까지|동안/.test(command) && okDate(rFrom) && okDate(rTo)) {
-        // 달을 말했는데 모델이 from/to 로 답하면 그 달들 밖은 잘라 낸다 — "이번 달 남은 화·목" 을 다음 달 말까지
-        // 잡곤 했다. "11월부터 석 달" 처럼 기간을 따로 말했으면 모델 값을 그대로 둔다.
-        if (rFrom < `${said[0]}-01`) rFrom = `${said[0]}-01`;
-        if (rTo > monthEnd(said[said.length - 1])) rTo = monthEnd(said[said.length - 1]);
-        months.push(...said);
-      }
-      if (!okDate(rFrom) || !okDate(rTo) || rTo < rFrom) return bad("언제부터 언제까지인지 알려 주세요");
-      const from = rFrom < today ? today : rFrom; // 지난 날은 넣지 않는다
-      if (dayDiff(from, rTo) > 366) return bad("기간이 너무 길어요 (1년 안쪽으로)");
-      const t = times(raw.start, raw.end);
-      if (!t) return bad("시간 형식이 이상해요");
-      const dates = [];
-      for (let d = from; d <= rTo; d = addDays(d, 1)) {
-        if (wds.includes(parseYmd(d).getDay()) && (!months.length || months.includes(d.slice(0, 7)))) dates.push(d);
-      }
-      if (!dates.length) return bad("그 기간엔 그 요일이 없어요");
-      if (dates.length > REPEAT_MAX) return bad(`한 번에 ${REPEAT_MAX}개까지만 넣을 수 있어요`);
-      return { op: "repeat", title, dates, weekdays: wds, ...t, ...(who && { who }) };
-    }
-    case "list": {
-      const from = okDate(raw.from) ? raw.from : today;
-      let to = okDate(raw.to) && raw.to >= from ? raw.to : addDays(from, 6);
-      if (dayDiff(from, to) > 62) to = addDays(from, 62);
-      return { op: "list", from, to };
-    }
-    case "move": case "delete": {
-      const ev = ctx.aliases.get(String(raw.id ?? "").trim());
-      if (!ev) return bad("어떤 일정인지 못 찾았어요");
-      if (ev.recur?.freq) return bad("반복 일정은 캘린더 탭에서 고쳐 주세요");
-      if (raw.op === "delete") return { op: "delete", event: ev };
-      const date = raw.date == null || raw.date === "" ? ev.date : raw.date;
-      if (!okDate(date)) return bad("옮길 날짜를 못 정했어요");
-      const t = times(raw.start ?? ev.start, raw.end ?? (raw.start ? undefined : ev.end));
-      if (!t) return bad("시간 형식이 이상해요");
-      if (date === ev.date && t.start === ev.start && t.end === ev.end) return bad("바뀌는 게 없어요");
-      return { op: "move", event: ev, date, ...t };
-    }
-    case "fit": case "unfit": {
-      const date = raw.date == null || raw.date === "" ? today : raw.date;
-      if (!okDate(date)) return bad("운동한 날짜를 못 정했어요");
-      if (date > today) return bad("아직 안 온 날은 운동 체크를 못 해요");
-      if (raw.op === "unfit") return { op: "unfit", date };
-      let memo = typeof raw.memo === "string" ? raw.memo.trim().slice(0, FIT_MEMO_MAX) : "";
-      if (/^운동( ?(인증|체크|했어|했다|함|완료))?[.!~ ]*$/.test(memo)) memo = ""; // 내용 없는 메모는 버린다
-      return { op: "fit", date, ...(memo && { memo }) };
-    }
-    case "fitlist": {
-      // 주는 모델이 날짜를 세지 않게 "this"/"last" 만 받는다(날짜를 주면 일정 요청까지 그 날짜를 베낀다).
-      // 주는 월~일, 이번 주는 오늘까지.
-      if (raw.week === "this" || raw.week === "last") {
-        const mon = addDays(today, -((parseYmd(today).getDay() + 6) % 7));
-        return raw.week === "this"
-          ? { op: "fitlist", from: mon, to: today }
-          : { op: "fitlist", from: addDays(mon, -7), to: addDays(mon, -1) };
-      }
-      // 기간(from/to)이 있으면 그 기간, 아니면 달. 앞으로 올 날은 셀 게 없으니 오늘에서 자른다.
-      if (okDate(raw.from) && okDate(raw.to) && raw.from <= raw.to) {
-        let to = raw.to > today ? today : raw.to;
-        if (to < raw.from) to = raw.from;
-        if (dayDiff(raw.from, to) > 62) return bad("기간이 너무 길어요 (두 달 안쪽으로)");
-        return { op: "fitlist", from: raw.from, to };
-      }
-      const month = typeof raw.month === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(raw.month) ? raw.month : today.slice(0, 7);
-      const last = ymd(new Date(Number(month.slice(0, 4)), Number(month.slice(5)), 0));
-      return { op: "fitlist", from: `${month}-01`, to: last, month };
-    }
-    case "photos": case "recall": {
-      // 사진 낱말이 없는데 photos 면 묻는 말(recall)로, "사진 보여줘" 인데 recall 이면 photos 로.
-      const op = command == null ? raw.op : PHOTO_ASK(command) ? "photos"
-        : raw.op === "photos" && !PHOTO_WORDS.test(command) ? "recall" : raw.op;
-      const stop = op === "photos" ? PHOTO_STOP : RECALL_STOP;
-      const q = Array.isArray(raw.query) ? raw.query.join(" ") : String(raw.query ?? "");
-      // "어제 무슨 얘기 했지" 에 모델이 query:"얘기" 를 넣는다 — 그런 낱말로 찾으면 오히려 다 놓친다.
-      // "7월에 찍은 사진" 에 모델이 query 에 "7월" 을 넣기도 한다 — 기간 말은 낱말이 아니다(아래에서 달로 읽는다).
-      const terms = q.split(/[\s,]+/).map((s) => s.trim().slice(0, 20))
-        .filter((s) => s && !stop.has(s) && !RECALL_STOP.has(s) && !PERIOD_WORD.test(s)).slice(0, 4);
-      let from = null, to = today;
-      const month = typeof raw.month === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(raw.month) ? raw.month
-        : !isYmd(raw.from) ? pastMonthSaid(command, today) : null;
-      if (month) {
-        from = `${month}-01`;
-        to = ymd(new Date(Number(month.slice(0, 4)), Number(month.slice(5)), 0));
-      } else {
-        if (isYmd(raw.from)) from = raw.from;
-        if (isYmd(raw.to)) to = raw.to;
-      }
-      // 기간이 없으면: 낱말이 있으면 전부(3년), 없으면 어제·오늘(그냥 "무슨 얘기 했어?").
-      // 사진은 낱말도 기간도 없으면("사진 보여줘") 전부에서 최근 것.
-      if (!from) from = terms.length || op === "photos" ? addDays(today, -3 * 366) : addDays(today, -1);
-      if (to > today) to = today;
-      if (from > to) from = to;
-      const count = op === "photos" ? countSaid(command) : null;
-      return { op, terms, from, to, ...(count && { count }) };
-    }
-    case "bucket": {
-      const show = ["todo", "done", "all"].includes(raw.show) ? raw.show : "todo";
-      const q = Array.isArray(raw.query) ? raw.query.join(" ") : String(raw.query ?? "");
-      const terms = q.split(/[\s,]+/).map((x) => x.trim().slice(0, 20)).filter((x) => x && !/^(버킷|버킷리스트|리스트|목록)$/.test(x)).slice(0, 4);
-      return { op: "bucket", show: terms.length ? "all" : show, terms };
-    }
-    case "recommend": {
-      const hint = typeof raw.hint === "string" ? raw.hint.trim().slice(0, 60) : "";
-      return { op: "recommend", ...(hint && { hint }) };
-    }
-    case "chat": {
-      const reply = String(raw.reply ?? "").trim().slice(0, 400);
-      return reply ? { op: "chat", reply } : bad("뭐라고 해야 할지 모르겠승…");
-    }
-    default:
-      return bad(typeof raw.reason === "string" && raw.reason.trim() ? raw.reason.trim().slice(0, 80) : "이해하지 못했어요");
-  }
+  const tool = Object.hasOwn(TOOLS, raw.op) ? TOOLS[raw.op] : null;
+  if (tool?.check) return tool.check(raw, { ctx, today, command, okDate, times, who, bad });
+  return bad(typeof raw.reason === "string" && raw.reason.trim() ? raw.reason.trim().slice(0, 80) : "이해하지 못했어요");
 }
 
 /** 동작 → 캘린더 변경(평문)과 채팅 답. 실제 암호화·전송은 호출자 몫. */
 export function plan(action, { events, sender, now = Date.now() }) {
-  const rev = now;
-  // who 가 있으면 그 사람의 개인 일정(앱에서 그 사람 색), 없으면 공통 일정.
-  const base = (a) => ({ title: a.title, owner: a.who ?? sender, shared: !a.who,
-    ...(a.start && { start: a.start }), ...(a.end && { end: a.end }) });
-  const whose = (a) => (a.who ? `${a.who} 일정` : "공통");
-  if (action.op === "add") {
-    const content = { date: action.date, ...base(action) };
-    if (action.endDate) content.endDate = action.endDate;
-    return { puts: [{ id: randId(), rev, content }], dels: [], reply: `📅 "${action.title}" 일정 추가됨 (${whenText(content)}${action.who ? `, ${whose(action)}` : ""})` };
-  }
-  if (action.op === "repeat") {
-    const puts = action.dates.map((date) => ({ id: randId(), rev, content: { date, ...base(action) } }));
-    return { puts, dels: [], reply: `📅 "${action.title}" ${action.dates.length}개 추가됨 (${whose(action)}${action.start ? `, ${action.start}` : ""})\n${repeatDates(action.dates)}` };
-  }
-  if (action.op === "list") {
-    const hits = plans(events)
-      .filter((e) => !e.recur?.freq && (e.endDate || e.date) >= action.from && e.date <= action.to)
-      .sort((a, b) => a.date.localeCompare(b.date) || String(a.start ?? "").localeCompare(String(b.start ?? "")));
-    const head = `📅 ${label(action.from)} ~ ${label(action.to)} 일정 ${hits.length}개`;
-    const body = hits.slice(0, 20).map((e) => `· ${whenText(e)} ${e.title ?? ""}`);
-    if (hits.length > 20) body.push(`… 외 ${hits.length - 20}개`);
-    return { puts: [], dels: [], reply: [head, ...body].join("\n") };
-  }
-  if (action.op === "move") {
-    const ev = action.event;
-    const { id: _i, rev: _r, deleted: _d, ...content } = ev;
-    if (content.endDate) content.endDate = addDays(content.endDate, dayDiff(ev.date, action.date));
-    content.date = action.date;
-    if (action.start) content.start = action.start; else delete content.start;
-    if (action.end) content.end = action.end; else delete content.end;
-    return { puts: [{ id: ev.id, rev, content }], dels: [], reply: `📅 "${ev.title}" ${whenText(ev)} → ${whenText(content)}로 옮김` };
-  }
-  if (action.op === "delete") {
-    const ev = action.event;
-    // 웹앱(calDeleteEvent)처럼 댓글도 같이 지운다 — 남기면 고아 레코드가 된다.
-    const comments = events.filter((c) => !c.deleted && c.kind === "comment" && c.eventId === ev.id);
-    return { puts: [], dels: [ev.id, ...comments.map((c) => c.id)].map((id) => ({ id, rev })), reply: `📅 "${ev.title}" (${whenText(ev)}) 일정 삭제됨` };
-  }
-  if (action.op === "fit" || action.op === "unfit") {
-    const month = action.date.slice(0, 7), day = String(Number(action.date.slice(8)));
-    const cur = fitRecord(events, month, sender);
-    const days = { ...(cur?.days || {}) };
-    if (action.op === "unfit") {
-      if (!days[day]) return { puts: [], dels: [], reply: `💪 ${label(action.date)}엔 ${sender}님 운동 체크가 없어요` };
-      delete days[day];
-    } else {
-      days[day] = { ...(days[day] || { at: now }) };
-      if (action.memo) days[day].memo = action.memo;
-    }
-    const content = { kind: "workout", month, owner: sender, days, at: now };
-    const n = Object.keys(days).length;
-    const reply = action.op === "unfit"
-      ? `💪 ${sender}님 ${label(action.date)} 운동 체크 취소 (${Number(month.slice(5))}월 ${n}회)`
-      : `💪 ${sender}님 ${label(action.date)} 운동 완료!${action.memo ? ` — ${action.memo}` : ""} (${Number(month.slice(5))}월 ${n}회째)`;
-    return { puts: [{ id: fitId(month, sender), rev, content }], dels: [], reply };
-  }
-  if (action.op === "fitlist") return { puts: [], dels: [], reply: fitSummary(events, action) };
-  if (action.op === "bucket") return { puts: [], dels: [], reply: bucketSummary(events, action) };
-  if (action.op === "chat") return { puts: [], dels: [], reply: action.reply };
+  const tool = Object.hasOwn(TOOLS, action.op) ? TOOLS[action.op] : null;
+  if (tool?.plan) return tool.plan(action, { events, sender, now, rev: now });
   return { puts: [], dels: [], reply: `🤖 ${action.reason}` };
 }
 
@@ -783,11 +845,8 @@ function repeatDates(dates) {
   return [...byMonth].map(([m, ds]) => `· ${m}월 ${ds.join(", ")}일 (${wd})`).join("\n");
 }
 
-const confirmText = (a) => a.op === "repeat"
-  ? `🤖 "${a.title}" ${a.who ? `${a.who} 일정` : "공통 일정"} ${a.dates.length}개${a.start ? ` (${a.start})` : ""}를 넣을까요? "@당이 응" 이면 넣어요.\n${repeatDates(a.dates)}`
-  : a.op === "delete"
-  ? `🤖 "${a.event.title}" (${whenText(a.event)}) 일정을 지울까요? "@당이 응" 이면 지워요.`
-  : `🤖 "${a.event.title}" ${whenText(a.event)} → ${whenText({ ...a.event, date: a.date, start: a.start, end: a.end, endDate: undefined })}로 옮길까요? "@당이 응" 이면 옮겨요.`;
+/** 실행 전에 되물을 말. 도구가 confirm 을 안 갖고 있거나 null 이면 바로 한다. */
+export const confirmText = (a) => TOOLS[a.op]?.confirm?.(a) ?? null;
 
 // 모델 서버가 꺼져 있거나(매일 03~06시는 당이가 자는 시간 — YOUTUBE 쪽 cron 이 llama-server 를 끄고 켠다.
 // 그 밖에도 PC 에서 다른 무거운 일을 할 때 끈다) 막 켜져 모델을 올리는 중(503)이면 "고장" 이 아니라 "자는 중" 이다.
@@ -859,25 +918,35 @@ export function llamaAsk({ url, timeoutMs = 180_000 }) {
  */
 export function createAssistant(io0, { now = () => Date.now() } = {}) {
   const io = { ...io0, say: (t, ...rest) => io0.say(fixTone(t), ...rest) }; // 당이가 하는 말은 모두 말끝을 다듬어 내보낸다
-  const pending = new Map(); // 보낸 사람 → { action, until }
+  // 되묻고 기다리는 부탁: 카드 id → { id, by, action, until }. 사람마다 하나 — 새 부탁이 오면 묵은 건 버린다.
+  // 답은 두 길로 온다: 앱의 카드 버튼(answer: { id, ok } — 어느 부탁인지 id 로 안다)과 손으로 쓴 "@당이 응/취소".
+  const asks = new Map();
+  const askOf = (name) => [...asks.values()].find((a) => a.by === name) ?? null;
   let chain = Promise.resolve();
   let lastUsed = 0, idleBusy = false; // 마지막으로 누가 당이를 부른 때 — 한가할 때만 뒷일(사진 설명)을 한다
 
-  async function handle({ name, text, at }) {
+  async function handle({ name, text, at, answer }) {
     if (!name || name === BOT_NAME) return;
     const command = parseTrigger(text);
     if (command === null) return;
     if (now() - (at ?? 0) > MAX_AGE_MS) { io.log?.("당이: 늦게 받은 명령이라 건너뜀 —", command.slice(0, 40)); return; }
-    const wait = pending.get(name);
-    if (wait && wait.until > now() && (YES.test(command) || NO.test(command))) {
-      pending.delete(name);
-      if (NO.test(command)) { await io.say("🤖 취소했어요"); return; }
-      const p = plan(wait.action, { events: io.events(), sender: name, now: now() });
-      await io.apply(p);
-      await io.say(p.reply);
+    if (answer && typeof answer.id === "string") { // 카드 버튼
+      const ask = asks.get(answer.id);
+      if (!ask || ask.until <= now()) {
+        if (ask) asks.delete(ask.id);
+        await io.say("🤖 지난 부탁이라 다시 말해 주세요", null, null, { done: answer.id });
+        return;
+      }
+      if (ask.by !== name) { await io.say(`🤖 ${ask.by}님이 부탁한 거라 ${ask.by}님이 눌러야 해요`); return; }
+      await settle(ask, answer.ok === true, name);
       return;
     }
-    pending.delete(name); // 새 요청이 오면 묵은 확인 대기는 버린다
+    const wait = askOf(name);
+    if (wait && wait.until > now() && (YES.test(command) || NO.test(command))) {
+      await settle(wait, !NO.test(command), name);
+      return;
+    }
+    if (wait) asks.delete(wait.id); // 새 요청이 오면 묵은 확인 대기는 버린다(그 카드를 누르면 "지난 부탁")
     if (!command) { await io.say('🤖 예: "@당이 토요일 10시 르파비스 임장 넣어줘", "@당 이번 주 일정"'); return; }
 
     const today = ymd(new Date(now()));
@@ -891,35 +960,47 @@ export function createAssistant(io0, { now = () => Date.now() } = {}) {
       return;
     }
     const action = validateAction(raw, ctx, today, command);
-    if (action.op === "recall") {
-      io.log?.("당이:", JSON.stringify({ op: "recall", terms: action.terms, from: action.from, to: action.to }), "→ recall");
-      await io.say(RECALL_WAIT); // 찾고 답하는 데 몇 초 걸린다 — 먼저 대답해 둔다
-      const r = await recall(action, command, name);
-      await io.say(r.text, null, r.photos);
-      return;
-    }
-    if (action.op === "photos") {
-      const r = photos(action);
-      io.log?.(`당이: 사진 ${r.seqs.length}장 가져옴`); // 어떤 사진인지는 로그에 남기지 않는다
-      await io.say(r.text, null, r.seqs);
-      return;
-    }
-    if (action.op === "recommend") {
-      io.log?.("당이:", JSON.stringify({ op: "recommend" }), "→ recommend");
-      await io.say(await recommend(command, name, today));
-      return;
-    }
+    if (Object.hasOwn(RUNNERS, action.op)) { await RUNNERS[action.op](action, command, name, today); return; }
     io.log?.("당이:", JSON.stringify(raw), "→", action.op);
-    // 여러 개를 한꺼번에 넣는 repeat 도 되묻는다 — 잘못 알아들으면 하나씩 지우기 번거롭다.
-    if (action.op === "move" || action.op === "delete" || (action.op === "repeat" && action.dates.length > 1)) {
-      pending.set(name, { action, until: now() + PENDING_MS });
-      await io.say(confirmText(action));
+    const question = confirmText(action);
+    if (question) {
+      const id = randId(), until = now() + PENDING_MS;
+      asks.set(id, { id, by: name, action, until });
+      await io.say(question, null, null, { ask: { id, by: name, until } }); // 앱은 이 말풍선에 [승인][취소] 를 단다
       return;
     }
     const p = plan(action, { events: io.events(), sender: name, now: now() });
     if (p.puts.length || p.dels.length) await io.apply(p);
     await io.say(p.reply, action.op === "chat" ? chatSticker(command) : null);
   }
+
+  // 되물은 부탁에 답이 왔다. 결과 말풍선에 done 을 실어 보내 두 기기의 카드 버튼을 같이 끈다.
+  async function settle(ask, ok, name) {
+    asks.delete(ask.id);
+    if (!ok) { await io.say("🤖 취소했어요", null, null, { done: ask.id }); return; }
+    const p = plan(ask.action, { events: io.events(), sender: name, now: now() });
+    await io.apply(p);
+    await io.say(p.reply, null, null, { done: ask.id });
+  }
+
+  // plan 이 없는 도구들 — 백업을 읽거나 모델을 한 번 더 부른다(TOOLS 의 recall·photos·recommend).
+  const RUNNERS = {
+    async recall(action, command, name) {
+      io.log?.("당이:", JSON.stringify({ op: "recall", terms: action.terms, from: action.from, to: action.to }), "→ recall");
+      await io.say(RECALL_WAIT); // 찾고 답하는 데 몇 초 걸린다 — 먼저 대답해 둔다
+      const r = await recall(action, command, name);
+      await io.say(r.text, null, r.photos);
+    },
+    async photos(action) {
+      const r = photos(action);
+      io.log?.(`당이: 사진 ${r.seqs.length}장 가져옴`); // 어떤 사진인지는 로그에 남기지 않는다
+      await io.say(r.text, null, r.seqs);
+    },
+    async recommend(action, command, name, today) {
+      io.log?.("당이:", JSON.stringify({ op: "recommend" }), "→ recommend");
+      await io.say(await recommend(command, name, today));
+    },
+  };
 
   // 백업(io.archive, 읽기 전용)에서 관련 줄을 찾아 그것만 보여 주고 답하게 한다.
   async function recall(action, command, name) {

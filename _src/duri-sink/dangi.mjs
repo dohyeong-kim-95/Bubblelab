@@ -10,7 +10,7 @@
 //   --url http://…    모델 서버(기본 LLAMA_URL 또는 http://127.0.0.1:8090)
 //   -q                당이 내부 로그(모델 JSON → op)를 숨긴다
 //
-// 대화형 명령: /as 이름 · /cal(지금 일정) · /reset(일정 처음대로) · /quit. "브리핑" 이라고 하면 아침 브리핑.
+// 대화형 명령: /as 이름 · /yes /no(카드 버튼 누르기) · /cal(지금 일정) · /reset(일정 처음대로) · /quit. "브리핑" 이라고 하면 아침 브리핑.
 // 데몬과 모델 서버를 같이 쓰므로, 누가 두리에서 당이를 부르면 그쪽이 잠깐 기다린다(겹쳐 부르진 않는다).
 import { readFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -26,7 +26,7 @@ import { FAKE_TODAY, FAKE_EVENTS } from "./fixtures.mjs";
  */
 export function createHarness({ ask, events, archive = null, weather = null, now = () => Date.now(), out = () => {} }) {
   const fresh = () => new Map(structuredClone(events).map((e) => [e.id, e]));
-  let cal = fresh();
+  let cal = fresh(), lastAsk = null; // 앱 카드처럼 마지막으로 되물은 부탁 — /yes /no 가 누른다
   const assistant = createAssistant({
     ask,
     events: () => [...cal.values()],
@@ -35,7 +35,11 @@ export function createHarness({ ask, events, archive = null, weather = null, now
       for (const { id, rev } of dels) cal.set(id, { id, rev, deleted: true });
       out({ type: "apply", puts: puts.map((p) => p.content), dels: dels.map((d) => d.id) });
     },
-    say: async (text, sticker, photos) => out({ type: "say", text, sticker, photos }),
+    say: async (text, sticker, photos, meta) => {
+      if (meta?.ask) lastAsk = meta.ask;
+      if (meta?.done && lastAsk?.id === meta.done) lastAsk = null;
+      out({ type: "say", text, sticker, photos, ask: meta?.ask, done: meta?.done });
+    },
     archive,
     ...(weather && { weather }),
     log: (...a) => out({ type: "log", text: a.map(String).join(" ") }),
@@ -45,6 +49,12 @@ export function createHarness({ ask, events, archive = null, weather = null, now
     send(name, text) {
       const t = parseTrigger(text) === null ? `@당이 ${text}` : text;
       return assistant.onMessage({ name, text: t, at: now() });
+    },
+    /** 앱 카드의 [승인]/[취소] 를 name 이 누른다(앱이 보내는 것과 같은 메시지). 누를 카드가 없으면 false. */
+    async tap(name, ok) {
+      if (!lastAsk) return false;
+      await assistant.onMessage({ name, text: ok ? "@당이 응" : "@당이 취소", at: now(), answer: { id: lastAsk.id, ok } });
+      return true;
     },
     events: () => [...cal.values()],
     reset() { cal = fresh(); },
@@ -64,6 +74,7 @@ function printer(quiet) {
     }
     const extra = [e.sticker && `[이모티콘 ${e.sticker.pack} #${e.sticker.n}]`, e.photos?.length && `[사진 ${e.photos.length}장]`].filter(Boolean).join(" ");
     console.log(brown(`${BOT_NAME} │ `) + String(e.text).replace(/\n/g, `\n${" ".repeat(BOT_NAME.length + 1)}│ `) + (extra ? ` ${dim(extra)}` : ""));
+    if (e.ask) console.log(dim(`${" ".repeat(BOT_NAME.length + 1)}│ [승인] [취소] — ${e.ask.by}만 누를 수 있음 · /yes /no`));
   };
 }
 function calText(events) {
@@ -117,13 +128,14 @@ async function main(argv) {
   const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: process.stdin.isTTY });
   let who = opt.as;
   const prompt = () => { rl.setPrompt(`${who}> `); rl.prompt(); };
-  console.log(dim(`"빵: 이번 주 일정" 처럼 이름을 앞에 쓰면 그 사람이 말한 것 · /as /cal /reset /quit`));
+  console.log(dim(`"빵: 이번 주 일정" 처럼 이름을 앞에 쓰면 그 사람이 말한 것 · /as /yes /no /cal /reset /quit`));
   prompt();
   for await (const raw of rl) { // 줄을 쌓아 두고 하나씩 꺼낸다 — 파이프로 여러 줄을 넣어도 차례대로 답한다
     const line = raw.trim();
     if (line === "/quit" || line === "/q") break;
     if (!process.stdin.isTTY && line) console.log(line); // 파이프 입력은 화면에 안 보이니 따라 적는다
     if (line.startsWith("/as ")) who = line.slice(4).trim() || who;
+    else if (line === "/yes" || line === "/no") { if (!(await h.tap(who, line === "/yes"))) console.log(dim("  누를 카드가 없어요")); }
     else if (line === "/cal") console.log(calText(h.events()));
     else if (line === "/reset") { h.reset(); console.log(dim("  일정을 처음대로 돌렸어요")); }
     else if (line) {
