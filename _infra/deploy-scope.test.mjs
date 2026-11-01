@@ -46,6 +46,7 @@ test("duri 변경은 sink와 duri 화면 전체를 고른다", () => {
     "_infra/duri-world.test.mjs", "_infra/duri.test.mjs", "_src/duri-sink/archive.test.mjs",
     "_src/duri-sink/assistant.test.mjs",
     "_src/duri-sink/captions.test.mjs",
+    "_src/duri-sink/dangi.test.mjs",
     "_src/duri-sink/store.test.mjs",
     "_src/duri-sink/weather.test.mjs",
   ], [

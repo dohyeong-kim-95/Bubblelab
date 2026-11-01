@@ -8,19 +8,7 @@
 // 결과는 README 「실행기·모델 고르기」 표에 옮긴다.
 const A = await import("./assistant.mjs");
 const base = (process.argv[2] || "http://127.0.0.1:8090").replace(/\/+$/, ""), label = process.argv[3] || base;
-const today = "2026-10-25"; // 일요일
-const ev = (id, date, title, extra = {}) => ({ id, date, title, rev: 1, ...extra });
-const events = [
-  ev("a1", "2026-10-27", "회식", { start: "19:00" }), ev("a2", "2026-10-29", "PT", { start: "07:00" }),
-  ev("a3", "2026-10-31", "임장", { start: "10:00" }), ev("a4", "2026-11-02", "테스트"),
-  ev("a5", "2026-11-04", "치과", { start: "15:00" }), ev("a6", "2026-11-07", "결혼식", { start: "12:00" }),
-  ev("a7", "2026-11-10", "엄마 생신"), ev("a8", "2026-11-12", "출장", { endDate: "2026-11-13" }),
-  { id: "palettecolors", rev: 1, kind: "palette", byName: { 쫑: "#bcc900", 빵: "#9529e3" }, shared: "#ff5c5c" },
-  { id: "bk1", rev: 1, kind: "bucket", title: "한강 피크닉", by: "쫑", at: 1 },
-  { id: "bk2", rev: 1, kind: "bucket", title: "도자기 공방 원데이 클래스", by: "빵", at: 2 },
-  { id: "bk3", rev: 1, kind: "bucket", title: "제주도 일출 보기", by: "빵", at: 3 },
-  { id: "bk4", rev: 1, kind: "bucket", title: "방탈출 카페", by: "쫑", at: 4, done: true, doneAt: 5 },
-];
+const { FAKE_TODAY: today, FAKE_EVENTS: events } = await import("./fixtures.mjs");
 const ctx = A.buildContext(events, today);
 const idOf = (title) => [...ctx.aliases].find(([, e]) => e.title === title)?.[0];
 const cases = [

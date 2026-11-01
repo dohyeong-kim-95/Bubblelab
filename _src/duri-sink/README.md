@@ -275,6 +275,12 @@ env 로는 `DURI_ASSISTANT=1` / `DURI_MODEL_API` (`llama`|`ollama`) / `LLAMA_URL
 2026-10-25 gemma4 E4B(llama-server Vulkan): 39/39 세 번 연속, 이어지는 답 평균 3.0–3.2초. 2026-10-30 gemma4 26B-A4B: 39/39,
 2.9초. 문항을 고치면 여기 점수도 갱신한다.
 
+**터미널 하네스** — `node _src/duri-sink/dangi.mjs "이번 주 일정"` (한 번) 또는 인자 없이(대화형, `빵: …` 으로 사람 바꾸기,
+`/cal` `/reset` `/quit`). 데몬과 **같은 `createAssistant`** 에 진짜 모델을 붙이되 바깥 io 를 전부 메모리로 바꿨다 — 답은
+화면에만, 일정 변경은 메모리에만 반영되고 두리 채팅·서버·`events.json` 에는 아무것도 쓰지 않는다. 기본은 벤치와 같은
+가짜 캘린더(`fixtures.mjs`, 오늘 2026-10-25 고정)이고 `--real` 이면 설치 폴더의 진짜 캘린더·대화 백업을 **읽기만** 한다.
+새 기능을 두리에 켜기 전에 여기서 먼저 굴려 본다. 본체(`createHarness`)는 `dangi.test.mjs` 가 "원본을 안 건드린다"를 묶어 둔다.
+
 **비전(사진 읽기) 켜기 (2026-10-27)** — 같은 모델에 `--mmproj`(`mmproj-gemma-4-E4B-it-Q8_0.gguf`, 560MB, 같은
 HF 저장소)를 붙이면 이미지 입력이 된다(`/props` 의 `modalities.vision: true`). 메모리 +0.4GB(서버 약 3.9GB).
 사진 10장 캡션 시험: 폰 원본(2~3.5MB)은 이미지 1142토큰 → **장당 18~25초**, 작은 이미지는 4~8초, 평균 19초.
