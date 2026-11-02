@@ -12,7 +12,8 @@
 
 1. `episodes.json` 에 화를 추가한다(`art` 는 `_src/dageudangs/art/<팩번호>-<컷번호>.png`).
 2. `python3 _src/dageudangs/render.py ep02` (Pillow 필요) → `dageudangs/ep02/` 생성.
-3. 결과 JPEG 를 직접 열어 보고 커밋한다.
+3. 결과 JPEG 를 직접 열어 보고 커밋한다. 이미 올린 화를 다시 구웠으면 그 화의 `rev` 를 1 올린다
+   (컷 JPEG 는 7일 캐시라 주소가 같으면 옛 그림이 보인다).
 
 글자는 전부 렌더러가 Jua 폰트로 넣는다 — 그림 생성기가 쓴 글자는 맞춤법이 깨진다.
 Jua 에는 `…` 글리프가 없어 □ 로 나오므로 `...` 를 쓴다.
