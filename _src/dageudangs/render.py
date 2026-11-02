@@ -72,7 +72,7 @@ def render_cut(ep, i, cut):
     d = ImageDraw.Draw(img)
     d.rounded_rectangle(panel, 40, outline=INK, width=7)
     y = M + 42
-    if i == 0:  # 첫 장은 제목
+    if i == 0 and ep.get("kind") != "zzal":  # 화의 첫 장은 제목 (짤은 한 장이라 없음)
         tag = text_box(d, (M + 42, y), f"{ep['no']}화", 40, pad=(24, 12), fill=ACCENT, shadow=0)
         d.text((tag[2] + 22, (tag[1] + tag[3]) // 2), ep["title"], font=font(56), fill=INK, anchor="lm")
         y = tag[3] + 30
@@ -81,7 +81,8 @@ def render_cut(ep, i, cut):
         say_bubble(d, cut["say"], panel)
     if cut.get("end"):
         text_box(d, (W // 2, panel[3] - 130), cut["end"], 46, pad=(36, 18), fill=INK, shadow=0, anchor="mt")
-    d.text((panel[2] - 26, panel[3] - 20), f"@{ACCOUNT['handle']}  {i + 1}/{len(ep['cuts'])}",
+    page = f"  {i + 1}/{len(ep['cuts'])}" if len(ep["cuts"]) > 1 else ""
+    d.text((panel[2] - 26, panel[3] - 20), f"@{ACCOUNT['handle']}{page}",
            font=font(28), fill=INK, anchor="rb")
     return img
 
