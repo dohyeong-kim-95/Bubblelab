@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>🐴 다그당스 인스타툰 미리보기</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🐴</text></svg>">
+<style>
+  /* 인스타그램에 올렸을 때 어떻게 보일지 — 프로필 격자와 게시물(넘겨 보기)만 흉내 낸다 */
+  :root { color-scheme: light dark;
+          --bg: light-dark(#fff, #000); --text: light-dark(#0c1014, #f5f5f5);
+          --muted: light-dark(#737373, #a8a8a8); --line: light-dark(#dbdbdb, #262626);
+          --chip: light-dark(#efefef, #262626); --link: light-dark(#00376b, #e0f1ff);
+          --dot: light-dark(#a8a8a8, #555); --dot-on: #0095f6; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif; }
+  .app { width: min(470px, 100%); margin: 0 auto; min-height: 100dvh;
+         padding-bottom: env(safe-area-inset-bottom); }
+  button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+  button:focus-visible, a:focus-visible { outline: 2px solid var(--dot-on); outline-offset: 2px; }
+
+  .bar { position: sticky; top: 0; z-index: 2; background: var(--bg); display: flex; align-items: center;
+         gap: 12px; height: 52px; padding: 0 16px; padding-top: env(safe-area-inset-top);
+         box-sizing: content-box; border-bottom: 1px solid var(--line); font-weight: 700; font-size: 16px; }
+  .bar .back { font-size: 22px; line-height: 1; padding: 4px 6px 4px 0; }
+  .bar .sub { margin-left: auto; font-weight: 400; font-size: 12px; color: var(--muted); }
+
+  /* 프로필 */
+  .profile { display: grid; grid-template-columns: 86px 1fr; gap: 18px; align-items: center; padding: 16px; }
+  .avatar { width: 86px; height: 86px; border-radius: 50%; padding: 3px;
+            background: conic-gradient(#feda75, #fa7e1e, #d62976, #962fbf, #4f5bd5, #feda75); }
+  .avatar img, .mini img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover;
+            border: 3px solid var(--bg); background: #ffe6c2; display: block; }
+  .stats { display: flex; gap: 22px; }
+  .stats div { text-align: center; } .stats b { display: block; font-size: 16px; }
+  .stats span { color: var(--muted); font-size: 13px; }
+  .bio { padding: 0 16px 14px; white-space: pre-line; }
+  .bio b { display: block; }
+  .note { margin: 0 16px 14px; padding: 10px 12px; border-radius: 8px; background: var(--chip);
+          color: var(--muted); font-size: 12px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; border-top: 1px solid var(--line); padding-top: 2px; }
+  .grid button { position: relative; aspect-ratio: 3 / 4; overflow: hidden; background: var(--chip); }
+  .grid img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .grid .multi { position: absolute; top: 6px; right: 6px; width: 18px; height: 18px; fill: #fff;
+                 filter: drop-shadow(0 0 2px rgba(0,0,0,.5)); }
+
+  /* 게시물 */
+  .post-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; }
+  .mini { width: 34px; height: 34px; border-radius: 50%; padding: 2px;
+          background: conic-gradient(#feda75, #fa7e1e, #d62976, #962fbf, #4f5bd5, #feda75); }
+  .mini img { border-width: 2px; }
+  .post-head b { font-size: 14px; }
+  .carousel-wrap { position: relative; }
+  .carousel { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none;
+              aspect-ratio: 4 / 5; overscroll-behavior-x: contain; }
+  .carousel::-webkit-scrollbar { display: none; }
+  .carousel img { flex: 0 0 100%; width: 100%; height: 100%; object-fit: cover; scroll-snap-align: center; display: block; }
+  .count { position: absolute; top: 12px; right: 12px; padding: 3px 9px; border-radius: 12px;
+           background: rgba(0,0,0,.65); color: #fff; font-size: 12px; }
+  .nav { position: absolute; top: 50%; translate: 0 -50%; width: 30px; height: 30px; border-radius: 50%;
+         background: rgba(255,255,255,.85); color: #222; font-size: 18px; line-height: 30px; text-align: center;
+         box-shadow: 0 1px 4px rgba(0,0,0,.25); }
+  .nav.prev { left: 10px; } .nav.next { right: 10px; }
+  .nav[hidden] { display: none; }
+  .actions { display: flex; align-items: center; gap: 14px; padding: 8px 12px 4px; position: relative; }
+  .actions svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.9;
+                 stroke-linejoin: round; stroke-linecap: round; }
+  .actions .save { margin-left: auto; }
+  .dots { position: absolute; left: 50%; translate: -50% 0; display: flex; gap: 4px; }
+  .dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--dot); }
+  .dots i.on { background: var(--dot-on); }
+  .caption { padding: 4px 12px 0; white-space: pre-line; overflow-wrap: anywhere; }
+  .caption .tags { color: var(--link); }
+  .meta { padding: 8px 12px 24px; display: flex; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
+  .meta a { color: inherit; }
+  .script { margin: 0 12px 28px; border-top: 1px solid var(--line); padding-top: 14px; }
+  .script h2 { font-size: 13px; margin: 0 0 8px; color: var(--muted); font-weight: 600; }
+  .script ol { margin: 0; padding-left: 22px; display: grid; gap: 4px; }
+  .script li button { text-align: left; }
+  .script li.on { font-weight: 700; }
+  .script small { color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+<script>
+  const app = document.getElementById("app");
+  let data = null;
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const src = (ep, i) => `${ep.id}/${String(i + 1).padStart(2, "0")}.jpg`;
+  const MULTI = '<svg class="multi" viewBox="0 0 24 24"><path d="M5 3h12a2 2 0 0 1 2 2v12h-2V5H5z"/><rect x="2" y="7" width="13" height="15" rx="2"/></svg>';
+
+  const avatar = (cls) => `<div class="${cls}"><img src="avatar.jpg" alt=""></div>`;
+
+  function profile() {
+    const { account, episodes } = data;
+    const newest = [...episodes].sort((a, b) => b.no - a.no);
+    app.innerHTML = `
+      <div class="bar">${esc(account.handle)}<span class="sub">미리보기 · 비공개</span></div>
+      <div class="profile">${avatar("avatar")}
+        <div class="stats"><div><b>${episodes.length}</b><span>게시물</span></div>
+          <div><b>주 1회</b><span>연재</span></div></div></div>
+      <div class="bio"><b>${esc(account.name)}</b>${esc(account.bio)}</div>
+      <div class="note">아직 올리지 않은 시안입니다. 칸을 누르면 인스타에서 넘겨 보는 그대로 보입니다.</div>
+      <div class="grid">${newest.map((ep) => `
+        <button data-ep="${esc(ep.id)}" aria-label="${ep.no}화 ${esc(ep.title)}">
+          <img src="${src(ep, 0)}" alt="" loading="lazy">${ep.cuts.length > 1 ? MULTI : ""}</button>`).join("")}
+      </div>`;
+    app.querySelectorAll(".grid button").forEach((b) => b.addEventListener("click", () => { location.hash = b.dataset.ep; }));
+    window.scrollTo(0, 0);
+  }
+
+  function post(ep) {
+    const n = ep.cuts.length;
+    app.innerHTML = `
+      <div class="bar"><button class="back" aria-label="프로필로">‹</button>게시물<span class="sub">${ep.no}화</span></div>
+      <div class="post-head">${avatar("mini")}<b>${esc(data.account.handle)}</b></div>
+      <div class="carousel-wrap">
+        <div class="carousel" tabindex="0" aria-label="${ep.no}화 컷 ${n}장">
+          ${ep.cuts.map((c, i) => `<img src="${src(ep, i)}" alt="${i + 1}컷: ${esc(c.narr)}" ${i ? 'loading="lazy"' : ""}>`).join("")}
+        </div>
+        <span class="count">1/${n}</span>
+        <button class="nav prev" aria-label="이전 컷" hidden>‹</button>
+        <button class="nav next" aria-label="다음 컷">›</button>
+      </div>
+      <div class="actions">
+        <svg viewBox="0 0 24 24"><path d="M12 20.5s-8-4.7-8-10.7A4.6 4.6 0 0 1 12 7a4.6 4.6 0 0 1 8 2.8c0 6-8 10.7-8 10.7z"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M20.5 11.7a8.5 8.5 0 0 1-12.6 7.4L3.5 20.5l1.4-4.3a8.5 8.5 0 1 1 15.6-4.5z"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M21.5 3 10 13.5M21.5 3l-7 18-4.5-7.5L2.5 9z"/></svg>
+        <div class="dots">${ep.cuts.map((_, i) => `<i${i ? "" : ' class="on"'}></i>`).join("")}</div>
+        <svg class="save" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V4a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1z"/></svg>
+      </div>
+      <div class="caption"><b>${esc(data.account.handle)}</b> [${ep.no}화] ${esc(ep.title)}
+${esc(ep.caption)}
+<span class="tags">${ep.tags.map((t) => "#" + esc(t)).join(" ")}</span></div>
+      <div class="meta"><span>시안</span><a class="dl" href="${src(ep, 0)}" download>이 컷 저장 (1080×1350)</a></div>
+      <div class="script"><h2>콘티</h2><ol>${ep.cuts.map((c, i) => `
+        <li${i ? "" : ' class="on"'}><button data-i="${i}">${esc(c.narr)}${c.say ? ` <small>— “${esc(c.say.replace(/\n/g, " "))}”</small>` : ""}${c.end ? ` <small>· ${esc(c.end)}</small>` : ""}</button></li>`).join("")}</ol></div>`;
+
+    const car = app.querySelector(".carousel");
+    const count = app.querySelector(".count");
+    const dots = [...app.querySelectorAll(".dots i")];
+    const items = [...app.querySelectorAll(".script li")];
+    const prev = app.querySelector(".prev"), next = app.querySelector(".next");
+    const dl = app.querySelector(".dl");
+    const go = (i) => car.scrollTo({ left: Math.max(0, Math.min(n - 1, i)) * car.clientWidth, behavior: "smooth" });
+    const at = () => Math.round(car.scrollLeft / car.clientWidth);
+    car.addEventListener("scroll", () => {
+      const i = at();
+      count.textContent = `${i + 1}/${n}`;
+      dots.forEach((d, k) => d.classList.toggle("on", k === i));
+      items.forEach((d, k) => d.classList.toggle("on", k === i));
+      prev.hidden = i === 0; next.hidden = i === n - 1;
+      dl.href = src(ep, i); dl.textContent = `이 컷 저장 (${i + 1}/${n}, 1080×1350)`;
+    }, { passive: true });
+    prev.addEventListener("click", () => go(at() - 1));
+    next.addEventListener("click", () => go(at() + 1));
+    car.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowRight") { e.preventDefault(); go(at() + 1); }
+      if (e.key === "ArrowLeft") { e.preventDefault(); go(at() - 1); }
+    });
+    app.querySelectorAll(".script button").forEach((b) => b.addEventListener("click", () => go(+b.dataset.i)));
+    app.querySelector(".back").addEventListener("click", () => { location.hash = ""; });
+    window.scrollTo(0, 0);
+  }
+
+  function route() {
+    if (!data) return;
+    const ep = data.episodes.find((e) => e.id === location.hash.slice(1));
+    ep ? post(ep) : profile();
+  }
+
+  addEventListener("hashchange", route);
+  fetch("episodes.json").then((r) => r.json()).then((d) => { data = d; route(); })
+    .catch(() => { app.textContent = "에피소드 목록을 불러오지 못했습니다."; });
+</script>
+</body>
+</html>

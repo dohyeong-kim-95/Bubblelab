@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const SITES = [
-  "admin", "assets", "duri", "estate", "games", "idle", "lab",
+  "admin", "assets", "dageudangs", "duri", "estate", "games", "idle", "lab",
   "life", "mindfulness", "podcast", "slop", "test",
   "util", "work", "www",
 ];
@@ -19,6 +19,7 @@ const SITE_TESTS = {
     "_infra/devices.test.mjs", "_infra/downloads.test.mjs", "_infra/gif.test.mjs",
     "_infra/sticker-pack.test.mjs", "_infra/wallpaper.test.mjs",
   ],
+  dageudangs: [],
   duri: [
     "_infra/duri-world.test.mjs", "_infra/duri.test.mjs", "_src/duri-sink/archive.test.mjs",
     "_src/duri-sink/assistant.test.mjs", "_src/duri-sink/captions.test.mjs", "_src/duri-sink/dangi.test.mjs",

@@ -304,6 +304,13 @@ cron 이 그날 몫을 보통 메시지로 올린다 — 서버는 날짜만 안
 에이전트 레인에서 돌리지 말 것. 금액은 만원 정수, 면적은 전용㎡ 원본, 월 경계는 KST.
 화면·함정은 `estate/CLAUDE.md`, 배경은 `estate/README.md`.
 
+## 다그당스 인스타툰 (dageudangs/)
+
+`dageudangs/`는 인스타툰 시안을 인스타그램 프로필·넘겨 보기처럼 미리 보는 비공개 화면이다
+(`CONFIDENTIAL_SUBDOMAINS`, 로그인 없음·noindex). 콘티 원본은 `dageudangs/episodes.json`,
+컷 JPEG 는 `_src/dageudangs/render.py` 가 굽는다 — 컷 이미지를 손으로 고치지 말 것.
+글자는 렌더러가 폰트로 넣는다(`dageudangs/README.md`).
+
 ## 인사이트 아카이브 (lab/claude-insights)
 
 `lab/`은 내가 쓰는 도구를 두는 비공개 서브도메인이다(`CONFIDENTIAL_SUBDOMAINS`,
