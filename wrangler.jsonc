@@ -22,8 +22,8 @@
     "ENABLE_CHAT": "true",
     // 약속 방(util/yaksok). 방마다 YaksokDO 하나, 만료 알람으로 저절로 사라진다.
     "ENABLE_YAKSOK": "true",
-    // 데일리 팟캐스트(podcast/). 켜기 전에 GEMINI_API_KEY·PODCAST_SESSION_SECRET
-    // secret과 R2 버킷(bubblelab-podcast)이 준비되어야 한다.
+    // 데일리 팟캐스트(podcast/). 켜기 전에 PODCAST_SESSION_SECRET secret과
+    // R2 버킷(bubblelab-podcast)이 준비되어야 한다. 생성은 집 PC(_src/podcast-worker/).
     "ENABLE_PODCAST": "true",
     // Web Push 공개키(브라우저로 전달됨). 개인키는 VAPID_PRIVATE_KEY secret에.
     "VAPID_PUBLIC_KEY": "BPtXxH7yViqaAU9lHlCugA07o7hUL22Ft35dMvMnOXRp6q_YN3hrYQ2WAtY5_KRsfmkF-CeZBpfokdb7SmBXKNM",

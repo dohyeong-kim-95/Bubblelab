@@ -1,12 +1,10 @@
 // podcast.bubblelab.dev — 데일리 팟캐스트 서비스.
 // 낮에 모은 PDF·이미지를 다음 날 아침 한국어 대담 오디오로 만들어 준다.
 // 저장: 메타데이터는 PodcastDO(단일 인스턴스), 파일은 R2(PODCAST_BUCKET).
-// 생성: cron(06:40 KST) 또는 수동 요청 → 작업 큐 → DO alarm이 한 건씩 처리.
-// AI 호출은 podcast-ai.js 프로바이더 계층을 거친다 (env로 모델·업체 교체).
-import {
-  AI_DEFAULTS, chunkTurns, createScriptProvider, createTtsProvider, pcmToWav,
-  SUPPORTED_SOURCE_TYPES, wavDurationSeconds,
-} from "./podcast-ai.js";
+// 생성: cron(06:40 KST) 또는 수동 요청 → 작업 큐 → 집 PC 생성기가 가져가서
+// 대본(당이)·녹음(로컬 TTS)을 끝내고 WAV를 올린다(`_src/podcast-worker/`).
+// 워커는 외부 AI API를 부르지 않는다 — 큐·파일·완료 커밋만 맡는다.
+import { SUPPORTED_SOURCE_TYPES } from "./podcast-ai.js";
 import { sendWebPush } from "./webpush.js";
 import { consumeRateLimit, rateLimitResponse, requireJsonRequest } from "./security.js";
 
@@ -16,12 +14,15 @@ const MAX_GENERATION_BYTES = 20 * 1024 * 1024; // 생성 1회에 넣을 소스 �
 const MAX_KEEP_BYTES = 50 * 1024 * 1024;       // 1인당 보관(매일 사용) 자료 총량
 const MAX_JOB_ATTEMPTS = 3;                    // 같은 단계 연속 실패 허용 횟수
 const STALE_GENERATION_MS = 30 * 60 * 1000;    // 이보다 오래 멈춘 생성은 재시도 허용
+const WORKER_ONLINE_MS = 5 * 60 * 1000;        // PC 생성기가 이 안에 다녀갔으면 켜진 것으로 본다
+const MAX_AUDIO_BYTES = 90 * 1024 * 1024;      // 24kHz 모노 WAV 약 30분
 const MAX_MEMORY_CHARS = 2000;
 const MAX_PUSH_SUBS = 5;
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const RECENT_PODCASTS = 7;
 
 export const UPLOAD_MAX_BYTES = MAX_SOURCE_BYTES + 64 * 1024;
+export const WORKER_AUDIO_MAX_BYTES = MAX_AUDIO_BYTES;
 
 // 초대 코드: 헷갈리는 글자(I·O·0·1)를 뺀 12자. 서버에는 해시만 저장한다.
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -51,13 +52,6 @@ export async function hashInviteCode(code) {
 export function kstToday() {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit",
-  }).format(new Date());
-}
-
-// Google 무료 쿼터는 태평양 시간 자정에 리셋되므로 호출 집계도 같은 기준일을 쓴다
-export function quotaDay() {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit",
   }).format(new Date());
 }
 
@@ -200,6 +194,8 @@ export async function handlePodcast(request, env, url) {
     );
   }
 
+  if (path.startsWith("/_podcast/worker/")) return handleWorker(request, env, url, stub);
+
   if (!uid) return json({ error: "authentication required" }, { status: 401 });
 
   if (path === "/_podcast/home" && request.method === "GET") {
@@ -337,11 +333,73 @@ async function serveAudio(env, request, url, audioKey, title) {
   return new Response(object.body, { headers });
 }
 
+// ── 집 PC 생성기 라우트: /_podcast/worker/* (Bearer 토큰) ──────────
+// 토큰은 admin 🎙️ Podcast 화면에서 발급하고 DO에는 해시만 남는다.
+// 생성기 하나만 붙는다고 보고, 큐 맨 앞 작업을 가져가서 끝까지 만든다.
+const USER_ID_RE = /^[0-9a-f-]{36}$/;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+async function handleWorker(request, env, url, stub) {
+  const token = /^Bearer (\S+)$/.exec(request.headers.get("Authorization") ?? "")?.[1];
+  if (!token) return json({ error: "worker token required" }, { status: 401 });
+  const authed = await stub.fetch("https://podcast.internal/worker/auth", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tokenHash: await hashWorkerToken(token) }),
+  });
+  if (!authed.ok) return json({ error: "invalid worker token" }, { status: 401 });
+
+  const path = url.pathname.slice("/_podcast/worker".length);
+  if (path === "/claim" && request.method === "POST") {
+    return stub.fetch("https://podcast.internal/worker/claim", { method: "POST" });
+  }
+  if (path === "/source" && request.method === "GET") {
+    const key = url.searchParams.get("key") ?? "";
+    if (!/^src\/[0-9a-f-]{36}\/[0-9]+-[0-9]{8}$/.test(key)) return notFound();
+    const object = await env.PODCAST_BUCKET.get(key);
+    if (!object) return notFound();
+    return new Response(object.body, {
+      headers: { "Content-Type": "application/octet-stream", "Cache-Control": "no-store" },
+    });
+  }
+  if (["/progress", "/fail"].includes(path) && request.method === "POST") {
+    const contentTypeError = requireJsonRequest(request);
+    if (contentTypeError) return contentTypeError;
+    return stub.fetch(`https://podcast.internal/worker${path}`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: await request.text(),
+    });
+  }
+  if (path === "/audio" && request.method === "PUT") {
+    const userId = url.searchParams.get("user") ?? "";
+    const date = url.searchParams.get("date") ?? "";
+    const size = Number(request.headers.get("Content-Length")) || 0;
+    if (!USER_ID_RE.test(userId) || !DATE_RE.test(date)) return json({ error: "bad job" }, { status: 400 });
+    if (size <= 44 || size > MAX_AUDIO_BYTES) return json({ error: "bad audio size" }, { status: 413 });
+    const audioKey = `audio/${userId}/${date}-${crypto.randomUUID().slice(0, 8)}.wav`;
+    await env.PODCAST_BUCKET.put(audioKey, request.body, { httpMetadata: { contentType: "audio/wav" } });
+    const done = await stub.fetch("https://podcast.internal/worker/complete", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId, date, audioKey, sizeBytes: size,
+        title: url.searchParams.get("title") ?? "",
+        durationSeconds: Number(url.searchParams.get("duration")) || null,
+      }),
+    });
+    if (!done.ok) await env.PODCAST_BUCKET.delete(audioKey).catch(() => {});
+    return done;
+  }
+  return notFound();
+}
+
+export async function hashWorkerToken(token) {
+  return hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`bl-podcast-worker:${token}`)));
+}
+
 // ── admin 라우트: /api/podcast/users (admin 세션 뒤에서 호출됨) ──
 export async function handlePodcastAdmin(request, env, url) {
   const stub = podcastStub(env);
-  if (url.pathname === "/api/podcast/usage" && request.method === "GET") {
-    return stub.fetch("https://podcast.internal/admin/usage");
+  if (url.pathname === "/api/podcast/worker") {
+    if (request.method === "GET") return stub.fetch("https://podcast.internal/admin/worker");
+    if (request.method === "POST") return stub.fetch("https://podcast.internal/admin/worker", { method: "POST" });
   }
   if (url.pathname === "/api/podcast/users") {
     if (request.method === "GET") return stub.fetch("https://podcast.internal/admin/users");
@@ -394,12 +452,8 @@ export class PodcastDO {
     }
 
     if (url.pathname === "/admin/users") return this.adminUsers(request, url);
-    if (url.pathname === "/admin/usage" && request.method === "GET") {
-      const entries = [...(await this.storage.list({ prefix: "usage:" })).entries()]
-        .map(([key, calls]) => ({ day: key.slice("usage:".length), calls }))
-        .sort((a, b) => (a.day < b.day ? 1 : -1)).slice(0, 14);
-      return json({ today: quotaDay(), days: entries });
-    }
+    if (url.pathname === "/admin/worker") return this.adminWorker(request);
+    if (url.pathname.startsWith("/worker/")) return this.workerRoute(request, url.pathname.slice("/worker".length));
     if (url.pathname === "/run-daily" && request.method === "POST") return this.runDaily();
     if (url.pathname === "/evening-reminder" && request.method === "POST") return this.eveningReminder();
     if (url.pathname === "/audio-meta" && request.method === "GET") {
@@ -462,6 +516,7 @@ export class PodcastDO {
       today,
       todayPodcast: todayPod ? project(todayPod) : null,
       queued: jobs.some((job) => job.userId === user.id),
+      workerOnline: Date.now() - ((await this.storage.get("workerSeenAt")) ?? 0) < WORKER_ONLINE_MS,
       sources: sources.map(({ id, name, mime, size, uploadedAt, keep }) => ({ id, name, mime, size, uploadedAt, keep: Boolean(keep) })),
       podcasts: pods.map(project),
     }, { headers: { "Cache-Control": "no-store" } });
@@ -608,12 +663,11 @@ export class PodcastDO {
       id: existing?.id ?? crypto.randomUUID(),
       date, status: "pending", stage: null, title: null, audioKey: null,
       durationSeconds: null, sizeBytes: null, error: null, manual,
-      sourceNames: [], script: null, ttsDone: 0, chunkKeys: [], sampleRate: null,
-      consumedKeys: [], createdAt: existing?.createdAt ?? Date.now(), updatedAt: Date.now(),
+      sourceNames: [], consumedKeys: [],
+      createdAt: existing?.createdAt ?? Date.now(), updatedAt: Date.now(),
     };
     await this.storage.put(`pod:${userId}:${date}`, pod);
     await this.storage.put(`podidx:${pod.id}`, { userId, date });
-    await this.storage.setAlarm(Date.now() + 100);
     return json({ queued: true, podcast: pod });
   }
 
@@ -630,67 +684,120 @@ export class PodcastDO {
     return json({ queued: queuedCount });
   }
 
-  // 큐 맨 앞 작업의 "한 단계"만 실행한다 (대본 → TTS 조각 하나 → 조립).
-  // 각 단계가 1~2분 안에 끝나므로 실행 시간 제한에 안전하고, 처리 중
-  // DO가 죽어도 워치독 알람이 진행분부터 재개한다. 같은 단계가 연속으로
-  // MAX_JOB_ATTEMPTS번 실패하면 실패 처리한다.
-  async alarm() {
+  // 예전(Gemini) 생성기가 걸어 둔 알람이 남아 있을 수 있다 — 지금은 할 일이 없다.
+  async alarm() {}
+
+  async adminWorker(request) {
+    if (request.method === "POST") {
+      // 새 토큰을 발급하면 옛 토큰은 바로 무효가 된다. 응답에서 한 번만 보여준다.
+      const token = `pw_${hex(crypto.getRandomValues(new Uint8Array(24)))}`;
+      await this.storage.put("workerTokenHash", await hashWorkerToken(token));
+      return json({ token });
+    }
     const jobs = (await this.storage.get("jobs")) ?? [];
-    const job = jobs[0];
-    if (!job) return;
-    job.attempts = (job.attempts ?? 0) + 1;
-    let stepFailed = false;
-    if (job.attempts > MAX_JOB_ATTEMPTS) {
-      jobs.shift();
+    return json({
+      hasToken: Boolean(await this.storage.get("workerTokenHash")),
+      seenAt: (await this.storage.get("workerSeenAt")) ?? null,
+      queued: jobs.length,
+    });
+  }
+
+  async workerRoute(request, path) {
+    if (path === "/auth") {
+      const { tokenHash } = await request.json().catch(() => ({}));
+      const stored = await this.storage.get("workerTokenHash");
+      return stored && tokenHash === stored ? json({ ok: true }) : json({ ok: false }, { status: 401 });
+    }
+    if (path === "/claim") return this.workerClaim();
+    const body = await request.json().catch(() => ({}));
+    const job = (((await this.storage.get("jobs")) ?? []))
+      .find((item) => item.userId === body.userId && item.date === body.date);
+    if (!job) return json({ error: "no such job" }, { status: 409 });
+    if (path === "/progress") {
+      const patch = { stage: ["script", "tts", "store"].includes(body.stage) ? body.stage : "script" };
+      if (typeof body.title === "string" && body.title.trim()) patch.title = body.title.trim().slice(0, 120);
+      await this.updatePod(job, patch);
+      return json({ ok: true });
+    }
+    if (path === "/fail") {
+      // 큐에는 남겨 둔다 — 다음 claim이 시도 횟수를 세고 상한에서 실패 처리한다.
+      await this.updatePod(job, { error: String(body.error ?? "생성 실패").slice(0, 300) });
+      return json({ ok: true });
+    }
+    if (path === "/complete") return this.workerComplete(job, body);
+    return notFound();
+  }
+
+  // 큐 맨 앞 작업을 PC 생성기에 내준다. 같은 작업을 다시 가져가면(PC가 중간에
+  // 꺼졌다 켜진 경우) 처음부터 다시 만들고, MAX_JOB_ATTEMPTS번을 넘기면 실패 처리한다.
+  async workerClaim() {
+    await this.storage.put("workerSeenAt", Date.now());
+    const jobs = (await this.storage.get("jobs")) ?? [];
+    while (jobs.length > 0) {
+      const job = jobs[0];
+      const pod = await this.storage.get(`pod:${job.userId}:${job.date}`);
+      const user = await this.storage.get(`user:${job.userId}`);
+      if (!pod || !user || pod.status === "completed") { jobs.shift(); continue; }
+      job.attempts = (job.attempts ?? 0) + 1;
+      if (job.attempts > MAX_JOB_ATTEMPTS) {
+        jobs.shift();
+        await this.markFailed(job, new Error(pod.error ? `여러 번 시도했지만 완료하지 못했습니다 — ${pod.error}` : "여러 번 시도했지만 완료하지 못했습니다"));
+        continue;
+      }
+      // 보관(keep) 자료 먼저, 나머지는 업로드 순서. 입력 총량 상한 내에서만 넘기고,
+      // 실제 사용된 일회성 소스만 삭제 대상으로 기록한다 (초과분·보관분은 남는다).
+      const entries = [...(await this.storage.list({ prefix: `src:${job.userId}:` })).entries()];
+      const ordered = [...entries.filter(([, m]) => m.keep), ...entries.filter(([, m]) => !m.keep)];
+      const sources = [];
+      const consumed = [];
+      let totalBytes = 0;
+      for (const [key, meta] of ordered) {
+        if (totalBytes + meta.size > MAX_GENERATION_BYTES) continue;
+        totalBytes += meta.size;
+        sources.push({ key: meta.r2Key, name: meta.name, mime: meta.mime, size: meta.size });
+        if (!meta.keep) consumed.push({ key, r2Key: meta.r2Key });
+      }
+      if (sources.length === 0) {
+        jobs.shift();
+        await this.markFailed(job, new Error("올려둔 소스가 없습니다"));
+        continue;
+      }
       await this.storage.put("jobs", jobs);
-      await this.markFailed(job, new Error("여러 번 시도했지만 완료하지 못했습니다"));
-    } else {
-      await this.storage.put("jobs", jobs); // 시도 횟수 기록, 큐에는 유지
-      await this.storage.setAlarm(Date.now() + 15 * 60 * 1000); // 워치독
-      let outcome = null;
-      try {
-        outcome = await this.processStep(job);
-      } catch (error) {
-        stepFailed = true;
-        console.error("podcast step failed", job.userId, error);
-        // 재시도 예정이지만 사용자에게 마지막 오류를 보여준다
-        await this.updatePod(job, { error: String(error?.message ?? error).slice(0, 300) });
-      }
-      const current = (await this.storage.get("jobs")) ?? [];
-      const index = current.findIndex((item) => item.userId === job.userId && item.date === job.date);
-      if (index >= 0) {
-        if (outcome === "done") current.splice(index, 1);
-        else if (!stepFailed) current[index].attempts = 0; // 진행됐으면 시도 횟수 리셋
-        await this.storage.put("jobs", current);
-      }
+      await this.updatePod(job, {
+        status: "generating", stage: "script", error: null,
+        consumedKeys: consumed, sourceNames: sources.map((s) => s.name).slice(0, 20),
+      });
+      return json({
+        job: { userId: job.userId, date: job.date, attempt: job.attempts },
+        memory: user.memory ?? "", sources,
+      });
     }
-    const left = (await this.storage.get("jobs")) ?? [];
-    if (left.length > 0) {
-      // 실패 후 재시도는 잠시 기다렸다가 (API 일시 오류·쿼터 완화 대기)
-      await this.storage.setAlarm(Date.now() + (stepFailed ? 60 * 1000 * job.attempts : 750));
-    } else {
-      await this.storage.deleteAlarm();
-    }
+    await this.storage.put("jobs", jobs);
+    return new Response(null, { status: 204 });
   }
 
-  // 프로바이더에 호출 집계 훅을 붙인 env
-  aiEnv() {
-    return { ...this.env, recordAiCall: (kind, model, ok) => this.recordAiCall(kind, model, ok) };
-  }
-
-  // AI 호출 자체 집계 — 쿼터 기준일(태평양)별, 종류·모델별 성공/실패 카운트.
-  // Google 측 집계와 어긋날 수 있는 근사치다 (내부 재시도는 1회로 센다).
-  async recordAiCall(kind, model, ok) {
-    const key = `usage:${quotaDay()}`;
-    const usage = (await this.storage.get(key)) ?? {};
-    const bucket = `${kind}:${model}`;
-    usage[bucket] = usage[bucket] ?? { ok: 0, fail: 0 };
-    usage[bucket][ok ? "ok" : "fail"] += 1;
-    await this.storage.put(key, usage);
-    // 오래된 집계는 정리 (14일 보관)
-    for (const oldKey of (await this.storage.list({ prefix: "usage:" })).keys()) {
-      if (oldKey < `usage:${shiftDays(quotaDay(), -14)}`) await this.storage.delete(oldKey);
+  // 오디오는 라우트가 R2에 이미 올렸다. 완료 상태를 먼저 커밋한 뒤에 정리한다 —
+  // 정리가 실패해도 결과·원본이 함께 사라지는 일이 없다 (정리 실패는 무해).
+  async workerComplete(job, body) {
+    const pod = await this.storage.get(`pod:${job.userId}:${job.date}`);
+    if (!pod) return json({ error: "no such podcast" }, { status: 409 });
+    const title = String(body.title ?? "").trim().slice(0, 120) || pod.title || "오늘의 팟캐스트";
+    const consumedKeys = [...(pod.consumedKeys ?? [])];
+    await this.updatePod(job, {
+      status: "completed", stage: null, error: null, title, audioKey: body.audioKey,
+      durationSeconds: Number(body.durationSeconds) || null, sizeBytes: Number(body.sizeBytes) || null,
+      consumedKeys: [],
+    });
+    const jobs = ((await this.storage.get("jobs")) ?? [])
+      .filter((item) => !(item.userId === job.userId && item.date === job.date));
+    await this.storage.put("jobs", jobs);
+    const bucket = this.env.PODCAST_BUCKET;
+    for (const { key, r2Key } of consumedKeys) {
+      await this.storage.delete(key);
+      await bucket.delete(r2Key).catch(() => {});
     }
+    await this.notifyCompleted(job, title);
+    return json({ completed: true });
   }
 
   async updatePod(job, patch) {
@@ -706,99 +813,6 @@ export class PodcastDO {
     await this.updatePod(job, {
       status: "failed", stage: null, error: String(error?.message ?? error).slice(0, 300),
     });
-  }
-
-  // 생성의 한 단계를 실행하고 "done" | "continue"를 반환한다.
-  async processStep(job) {
-    const pod = await this.storage.get(`pod:${job.userId}:${job.date}`);
-    const user = await this.storage.get(`user:${job.userId}`);
-    if (!pod || !user || pod.status === "completed") return "done";
-    const bucket = this.env.PODCAST_BUCKET;
-
-    // 1단계 — 소스 읽기 + 대본 생성
-    if (!pod.script) {
-      await this.updatePod(job, { status: "generating", stage: "script", error: null });
-      const sourceEntries = [...(await this.storage.list({ prefix: `src:${job.userId}:` })).entries()];
-      // 보관(keep) 자료 먼저, 나머지는 업로드 순서. AI 입력 총량 상한 내에서만 읽고,
-      // 실제 사용된 일회성 소스만 삭제 대상으로 기록한다 (초과분·보관분은 남는다).
-      const ordered = [
-        ...sourceEntries.filter(([, meta]) => meta.keep),
-        ...sourceEntries.filter(([, meta]) => !meta.keep),
-      ];
-      const sources = [];
-      const consumed = [];
-      let totalBytes = 0;
-      for (const [key, meta] of ordered) {
-        if (totalBytes + meta.size > MAX_GENERATION_BYTES) continue;
-        const object = await bucket.get(meta.r2Key);
-        if (!object) continue;
-        const bytes = new Uint8Array(await object.arrayBuffer());
-        totalBytes += meta.size; // 상한 판정은 등록된 크기 기준으로 일관되게
-        sources.push({ name: meta.name, mime: meta.mime, bytes });
-        if (!meta.keep) consumed.push({ key, r2Key: meta.r2Key });
-      }
-      if (sources.length === 0) throw new Error("소스 파일을 읽지 못했습니다");
-
-      const script = await createScriptProvider(this.aiEnv()).generate({
-        sources, memory: user.memory, dateKst: job.date,
-      });
-      if (chunkTurns(script.turns).length > AI_DEFAULTS.maxTtsChunks) {
-        throw new Error("대본이 너무 깁니다 — 소스를 줄여주세요");
-      }
-      await this.updatePod(job, {
-        stage: "tts", title: script.title, script, ttsDone: 0, chunkKeys: [],
-        consumedKeys: consumed, sourceNames: sources.map((s) => s.name).slice(0, 20),
-      });
-      return "continue";
-    }
-
-    // 2단계 — TTS 조각 하나씩 합성해 R2에 보관
-    const chunks = chunkTurns(pod.script.turns);
-    if ((pod.ttsDone ?? 0) < chunks.length) {
-      await this.updatePod(job, { stage: "tts" });
-      const part = await createTtsProvider(this.aiEnv()).synthesizeChunk(chunks[pod.ttsDone]);
-      const chunkKey = `tmp/${job.userId}/${job.date}-${pod.ttsDone}.pcm`;
-      await bucket.put(chunkKey, part.pcm);
-      await this.updatePod(job, {
-        ttsDone: pod.ttsDone + 1,
-        chunkKeys: [...(pod.chunkKeys ?? []), chunkKey],
-        sampleRate: part.sampleRate,
-      });
-      return "continue";
-    }
-
-    // 3단계 — 조각 조립 → 오디오 저장 → 완료 커밋 → 소스·임시파일 정리
-    await this.updatePod(job, { stage: "store" });
-    const pcmParts = [];
-    for (const chunkKey of pod.chunkKeys ?? []) {
-      const object = await bucket.get(chunkKey);
-      if (!object) throw new Error("합성된 조각이 사라졌습니다 — 다시 시도해주세요");
-      pcmParts.push(new Uint8Array(await object.arrayBuffer()));
-    }
-    const sampleRate = pod.sampleRate ?? AI_DEFAULTS.sampleRate;
-    const wav = pcmToWav(pcmParts, { sampleRate });
-    const audioKey = `audio/${job.userId}/${job.date}-${crypto.randomUUID().slice(0, 8)}.wav`;
-    await bucket.put(audioKey, wav, { httpMetadata: { contentType: "audio/wav" } });
-
-    // 완료 상태를 먼저 커밋한 뒤에 정리한다 — 마지막 단계가 실패해도
-    // 결과·원본이 함께 사라지는 일이 없다 (정리 실패는 무해).
-    const title = pod.title;
-    const consumedKeys = [...(pod.consumedKeys ?? [])];
-    const chunkKeys = [...(pod.chunkKeys ?? [])];
-    await this.updatePod(job, {
-      status: "completed", stage: null, audioKey,
-      durationSeconds: wavDurationSeconds(wav, { sampleRate }), sizeBytes: wav.length,
-      script: null, chunkKeys: [], consumedKeys: [],
-    });
-    for (const { key, r2Key } of consumedKeys) {
-      await this.storage.delete(key);
-      await bucket.delete(r2Key).catch(() => {});
-    }
-    for (const chunkKey of chunkKeys) {
-      await bucket.delete(chunkKey).catch(() => {});
-    }
-    await this.notifyCompleted(job, title);
-    return "done";
   }
 
   // 한 사용자의 등록된 모든 기기로 푸시를 보낸다 (만료 구독은 정리).

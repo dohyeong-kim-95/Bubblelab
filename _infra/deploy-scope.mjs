@@ -41,7 +41,7 @@ const SITE_TESTS = {
     "_infra/review.test.mjs", "_infra/tts.test.mjs", "_src/life-sink/store.test.mjs",
   ],
   mindfulness: [],
-  podcast: ["_infra/podcast-ai.test.mjs", "_infra/podcast.test.mjs"],
+  podcast: ["_infra/podcast-ai.test.mjs", "_infra/podcast.test.mjs", "_src/podcast-worker/pipeline.test.mjs"],
   slop: ["_infra/animal-vs.test.mjs", "_infra/podium.test.mjs"],
   test: [],
   util: [
@@ -86,7 +86,7 @@ const CLASSIFIED_TESTS = new Set([...GLOBAL_TESTS, ...Object.values(SITE_TESTS).
 const BUILD_CONTRACT = "_infra/home-button.test.mjs";
 const SMOKE = "_infra/e2e/smoke.spec.mjs";
 const CLASSIFIED_E2E = new Set([SMOKE, ...Object.values(SITE_E2E).flat()]);
-const TEST_DIRECTORIES = ["_infra", "_src/duri-sink", "_src/life-sink"];
+const TEST_DIRECTORIES = ["_infra", "_src/duri-sink", "_src/life-sink", "_src/podcast-worker"];
 const E2E_DIRECTORIES = ["_infra/e2e"];
 
 function sortedUnique(values) {

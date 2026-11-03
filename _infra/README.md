@@ -15,8 +15,8 @@ Bubblelab의 정적 빌드, 단일 Cloudflare Worker, Durable Object 저장소�
 | `analytics.js` | 익명 방문 집계와 Slop 연속 방문 `AnalyticsDO` |
 | `records.js` | 주간·개인·올타임 기록, 공지, 아이디어 우편함 `RecordsDO` |
 | `podcast.js` | 데일리 팟캐스트 `PodcastDO` + `/_podcast/*` 라우트 (podcast/README.md) |
-| `podcast-ai.js` | 팟캐스트 대본·음성 프로바이더 계층 (env로 모델·업체 교체) |
-| `podcast-pipeline.mjs` | 생성 파이프라인 로컬 품질 검증 CLI, VAPID 키 생성 |
+| `podcast-ai.js` | 팟캐스트 대본 프롬프트·검증 규칙 (집 PC 생성기 `_src/podcast-worker/`와 공용) |
+| `podcast-pipeline.mjs` | 팟캐스트 푸시용 VAPID 키 생성 CLI |
 | `webpush.js` | 표준 Web Push 발송기 (RFC 8291/8292, WebCrypto 자체 구현) |
 | `fortune.js` | KASI 양력·음력 변환과 사주 명식 응답 |
 | `brief.js` | 아침 브리핑 날씨·미세먼지(Open-Meteo)와 매일 8시 알림 `BriefDO` |
@@ -108,8 +108,9 @@ node _infra/build.mjs
   스티커는 `{ pack, n }` 참조를 허용 목록으로 검증하고, 접속당 플러드 제한과
   정원(기본 10명)을 강제합니다.
 - `PodcastDO`: 데일리 팟캐스트의 사용자·소스·에피소드 메타데이터와 생성 큐를
-  보관합니다. cron(06:40 KST)이나 수동 요청이 큐에 넣으면 alarm이 한 건씩
-  대본 생성 → TTS → R2 저장 → Web Push 순서로 처리합니다. 파일 본문은
+  보관합니다. cron(06:40 KST)이나 수동 요청이 큐에 넣으면 집 PC 생성기가
+  `/_podcast/worker/*`(Bearer 토큰)로 가져가 대본(당이)·녹음(Supertonic)을 만들고
+  WAV를 올립니다. 워커는 완료 커밋·소스 정리·Web Push만 합니다. 파일 본문은
   R2(`bubblelab-podcast`)에만 둡니다.
 - `AssetFlagsDO`: 스티커 팩의 공개 여부 오버라이드(`"sticker/<id>": true|false`)만
   보관합니다. 빌드가 굽는 `catalog.json`에는 숨긴 항목까지 들어 있고, 공개 목록은
@@ -142,8 +143,8 @@ Worker vars:
 - `ENABLE_REALTIME`: 기본 `false`. ACL 검토 없이 `true`로 바꾸지 않습니다.
 - `ENABLE_CHAT`: 익명 채팅 로비. 값이 없으면 fail-closed로 닫힙니다.
 - `ENABLE_PODCAST`: 데일리 팟캐스트. 기본 `false`(fail-closed). 켜기 전에
-  `GEMINI_API_KEY`·`PODCAST_SESSION_SECRET` secret과 R2 버킷
-  `bubblelab-podcast`가 필요합니다. 푸시는 `VAPID_PUBLIC_KEY` var와
+  `PODCAST_SESSION_SECRET` secret과 R2 버킷 `bubblelab-podcast`가 필요합니다.
+  생성은 집 PC 생성기(`_src/podcast-worker/`)가 하므로 AI API 키는 없습니다. 푸시는 `VAPID_PUBLIC_KEY` var와
   `VAPID_PRIVATE_KEY` secret까지 있어야 켜집니다. 상세는 podcast/README.md.
 
 로컬에서만 관리자 기본값 `admin/admin`을 허용합니다. 플래너 코드는 복구할 수

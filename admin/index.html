@@ -48,16 +48,7 @@
   #top .medal { font-size: 1.3rem; }
   #top .page { flex: 1; font-weight: bold; overflow-wrap: anywhere; }
   #top .users { opacity: .6; font-size: .9rem; font-variant-numeric: tabular-nums; }
-  #top .empty, #engagement .empty, #suggestions .empty, #records .empty, #podcast-users .empty, #podcast-usage .empty { opacity: .55; justify-content: center; }
-  #podcast-usage { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .6rem; }
-  #podcast-usage li { display: flex; flex-wrap: wrap; align-items: baseline; gap: .3rem .8rem;
-                      padding: .85rem 1.1rem; border-radius: 1rem; font-size: .82rem;
-                      background: light-dark(#fff, #151e2a);
-                      border: 1px solid light-dark(#dce4ec, #263445); }
-  #podcast-usage .day { font-weight: bold; }
-  #podcast-usage .today { color: #4f7fdd; }
-  #podcast-usage .item { opacity: .8; }
-  #podcast-usage .fail { color: #d05a5a; }
+  #top .empty, #engagement .empty, #suggestions .empty, #records .empty, #podcast-users .empty { opacity: .55; justify-content: center; }
   .insight-heading { display: flex; align-items: center; justify-content: space-between; gap: .8rem; margin-bottom: .8rem; }
   .insight-heading h2 { margin: 0; }
   .period { display: flex; padding: .2rem; border-radius: .65rem;
@@ -103,7 +94,8 @@
               background: light-dark(#fff, #151e2a);
               border: 1px solid light-dark(#dce4ec, #263445); }
   .ext-link:hover { border-color: #4f7fdd; }
-  #chat-card, #podcast-card { padding: 1rem 1.1rem; border-radius: 1rem;
+  #podcast-worker-new code { overflow-wrap: anywhere; font-weight: bold; }
+  #chat-card, #podcast-card, #podcast-worker-card { padding: 1rem 1.1rem; border-radius: 1rem;
                background: light-dark(#fff, #151e2a);
                border: 1px solid light-dark(#dce4ec, #263445);
                display: flex; flex-direction: column; gap: .9rem; }
@@ -331,16 +323,14 @@
     <h2>👥 사용자 목록</h2>
     <ol id="podcast-users"><li class="empty">불러오는 중…</li></ol>
   </section>
-  <section class="top" aria-label="AI 호출 자체 집계">
-    <h2>📈 AI 호출 집계 <span style="opacity:.5;font-weight:normal;font-size:.8rem">자체 카운트 · 쿼터 기준일(태평양, 오후 4~5시 KST 리셋) · Google 집계와 다를 수 있어요</span></h2>
-    <ol id="podcast-usage"><li class="empty">불러오는 중…</li></ol>
-  </section>
-  <section class="top" aria-label="Gemini API 사용량">
-    <h2>🔑 Gemini API <span style="opacity:.5;font-weight:normal;font-size:.8rem">공식 잔여 한도는 Google AI Studio에서 확인해요</span></h2>
-    <div class="link-row">
-      <a class="ext-link" href="https://aistudio.google.com/usage" target="_blank" rel="noopener">📊 사용량 보기 ↗</a>
-      <a class="ext-link" href="https://aistudio.google.com/rate-limits" target="_blank" rel="noopener">⏱️ 비율 제한 보기 ↗</a>
-      <a class="ext-link" href="https://aistudio.google.com/api-keys" target="_blank" rel="noopener">🗝️ API 키 관리 ↗</a>
+  <section class="top" aria-label="집 PC 생성기">
+    <h2>🖥️ PC 생성기 <span style="opacity:.5;font-weight:normal;font-size:.8rem">대본(당이)·녹음(Supertonic)은 집 PC가 만든다 — 토큰은 발급 직후 한 번만 보여요</span></h2>
+    <div id="podcast-worker-card">
+      <div class="notice-actions">
+        <span id="podcast-worker-status" style="flex:1">불러오는 중…</span>
+        <button id="podcast-worker-token">토큰 발급</button>
+      </div>
+      <div id="podcast-worker-new"></div>
     </div>
   </section>
   </section>
@@ -939,47 +929,43 @@ async function loadPodcastUsers() {
   }
 }
 
-async function loadPodcastUsage() {
-  const list = document.getElementById('podcast-usage');
-  const empty = (text) => {
-    const li = document.createElement('li');
-    li.className = 'empty';
-    li.textContent = text;
-    list.replaceChildren(li);
-  };
+async function loadPodcastWorker() {
+  const status = document.getElementById('podcast-worker-status');
   try {
-    const res = await fetch(`${base}/api/podcast/usage`, { cache: 'no-store' });
-    if (res.status === 503) return empty('팟캐스트가 꺼져 있어요');
+    const res = await fetch(`${base}/api/podcast/worker`, { cache: 'no-store' });
+    if (res.status === 503) { status.textContent = '팟캐스트가 꺼져 있어요'; return; }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const { today, days } = await res.json();
-    if (!days.length) return empty('아직 집계된 호출이 없어요');
-    list.replaceChildren();
-    for (const entry of days) {
-      const li = document.createElement('li');
-      const day = document.createElement('span');
-      day.className = entry.day === today ? 'day today' : 'day';
-      day.textContent = entry.day === today ? `${entry.day} (오늘 쿼터)` : entry.day;
-      li.append(day);
-      for (const [bucket, counts] of Object.entries(entry.calls)) {
-        const [kind, ...modelParts] = bucket.split(':');
-        const label = kind === 'script' ? '대본' : kind === 'tts' ? '음성' : kind;
-        const item = document.createElement('span');
-        item.className = 'item';
-        item.textContent = `${label} ${modelParts.join(':').replace(/^gemini-/, '')} ${counts.ok}회`;
-        li.append(item);
-        if (counts.fail) {
-          const fail = document.createElement('span');
-          fail.className = 'fail';
-          fail.textContent = `실패 ${counts.fail}`;
-          li.append(fail);
-        }
-      }
-      list.append(li);
-    }
+    const { hasToken, seenAt, queued } = await res.json();
+    const ago = seenAt ? Math.round((Date.now() - seenAt) / 60000) : null;
+    status.textContent = !hasToken ? '토큰이 없어요 — 발급해서 PC 설정에 넣어 주세요'
+      : ago === null ? '아직 PC가 한 번도 오지 않았어요'
+      : `${ago <= 5 ? '🟢 켜짐' : '⚪ 꺼짐'} · 마지막 확인 ${ago < 1 ? '방금' : `${ago}분 전`}${queued ? ` · 대기 ${queued}건` : ''}`;
   } catch (err) {
-    empty(`불러오지 못했어요: ${err.message}`);
+    status.textContent = `불러오지 못했어요: ${err.message}`;
   }
 }
+
+document.getElementById('podcast-worker-token').addEventListener('click', async () => {
+  if (!confirm('새 토큰을 발급하면 지금 PC에 넣어 둔 토큰은 바로 무효가 됩니다. 발급할까요?')) return;
+  const box = document.getElementById('podcast-worker-new');
+  const res = await fetch(`${base}/api/podcast/worker`, { method: 'POST' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.token) { box.textContent = `⚠️ 발급 실패 (${data.error ?? `HTTP ${res.status}`})`; return; }
+  box.replaceChildren();
+  const code = document.createElement('code');
+  code.textContent = data.token;
+  const copy = document.createElement('button');
+  copy.type = 'button';
+  copy.textContent = '복사';
+  copy.addEventListener('click', async () => {
+    await navigator.clipboard.writeText(data.token).catch(() => {});
+    copy.textContent = '복사됨';
+  });
+  const note = document.createElement('small');
+  note.textContent = ' ~/podcast-worker/podcast-worker.config.json 의 token 에 넣고 bash ~/podcast-worker/install.sh';
+  box.append(code, ' ', copy, note);
+  loadPodcastWorker();
+});
 
 document.getElementById('podcast-create').addEventListener('click', async () => {
   const nameInput = document.getElementById('podcast-name');
@@ -1031,9 +1017,9 @@ loadStickers();
 
 loadIntake();
 loadPodcastUsers();
-loadPodcastUsage();
+loadPodcastWorker();
 setInterval(loadIntake, 60_000);
-setInterval(loadPodcastUsage, 60_000);
+setInterval(loadPodcastWorker, 60_000);
 setInterval(loadChat, 60_000);
 setInterval(loadStats, 60_000);
 setInterval(loadSuggestions, 60_000);

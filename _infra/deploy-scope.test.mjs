@@ -137,7 +137,7 @@ test("full 계획은 현재 unit 및 e2e 파일을 빠짐없이 열거한다", (
     ...readdirSync(join(ROOT, "_infra"), { withFileTypes: true })
       .filter((entry) => entry.isFile() && entry.name.endsWith(".test.mjs"))
       .map((entry) => `_infra/${entry.name}`),
-    ...["duri-sink", "life-sink"].flatMap((dir) =>
+    ...["duri-sink", "life-sink", "podcast-worker"].flatMap((dir) =>
       readdirSync(join(ROOT, "_src", dir), { withFileTypes: true })
         .filter((entry) => entry.isFile() && entry.name.endsWith(".test.mjs"))
         .map((entry) => `_src/${dir}/${entry.name}`)),

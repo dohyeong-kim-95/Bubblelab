@@ -1,0 +1,7 @@
+{
+  "server": "https://podcast.bubblelab.dev",
+  "token": "여기에 admin 🎙️ Podcast 화면에서 발급한 pw_ 토큰",
+  "llama": "http://127.0.0.1:8090",
+  "voiceA": "F1",
+  "voiceB": "M1"
+}

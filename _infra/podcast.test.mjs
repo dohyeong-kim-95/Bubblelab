@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { PodcastDO, hashInviteCode, newInviteCode, normalizeInviteCode, validInviteCode, kstToday } from "./podcast.js";
-import { bytesToBase64 } from "./podcast-ai.js";
 
 class MemoryStorage {
   constructor() { this.data = new Map(); this.alarmAt = null; }
@@ -44,7 +43,7 @@ const post = (path, body) => internal(path, {
 function makeDO(env = {}) {
   const storage = new MemoryStorage();
   const bucket = new FakeBucket();
-  const podcastDO = new PodcastDO({ storage }, { PODCAST_BUCKET: bucket, GEMINI_API_KEY: "k", ...env });
+  const podcastDO = new PodcastDO({ storage }, { PODCAST_BUCKET: bucket, ...env });
   return { podcastDO, storage, bucket };
 }
 
@@ -53,13 +52,20 @@ async function createUser(podcastDO, name = "테스터") {
   return response.json();
 }
 
-// 단계 실행 파이프라인: 큐가 빌 때까지 알람을 반복 호출한다
-async function drainQueue(podcastDO, storage, max = 30) {
-  for (let i = 0; i < max; i++) {
-    if ((((await storage.get("jobs")) ?? []).length) === 0) return;
-    await podcastDO.alarm();
-  }
-  throw new Error("queue did not drain");
+// 집 PC 생성기 흉내: 일감을 가져가 (소스를 읽고) 오디오를 올린 뒤 완료를 알린다.
+// 실제 라우트는 오디오를 R2에 먼저 올리고 /worker/complete 를 부른다.
+async function runWorker(podcastDO, bucket, { title = "아침 방송", durationSeconds = 2 } = {}) {
+  const claimed = await podcastDO.fetch(post("/worker/claim", {}));
+  if (claimed.status === 204) return null;
+  const { job, sources } = await claimed.json();
+  for (const source of sources) assert.ok(await bucket.get(source.key), `source ${source.key} readable`);
+  const audioKey = `audio/${job.userId}/${job.date}-test.wav`;
+  await bucket.put(audioKey, new Uint8Array(100));
+  const done = await podcastDO.fetch(post("/worker/complete", {
+    ...job, audioKey, sizeBytes: 100, title, durationSeconds,
+  }));
+  assert.equal(done.status, 200);
+  return { job, sources };
 }
 
 test("초대 코드 형식과 해시", async () => {
@@ -112,7 +118,7 @@ test("소스 등록·삭제와 생성 큐잉 규칙", async () => {
 
   const queued = await podcastDO.fetch(internal(`/generate?uid=${user.id}`, { method: "POST" }));
   assert.equal(queued.status, 200);
-  assert.ok(storage.alarmAt !== null);
+  assert.equal((await storage.get("jobs")).length, 1);
 
   // 같은 날 두 번째 생성 → 거절 (pending 상태)
   const again = await podcastDO.fetch(internal(`/generate?uid=${user.id}`, { method: "POST" }));
@@ -123,20 +129,7 @@ test("소스 등록·삭제와 생성 큐잉 규칙", async () => {
   assert.equal(home.queued, true);
 });
 
-const sse = (payload) => new Response(`data: ${JSON.stringify(payload)}\n\n`, { status: 200 });
-
-const geminiResponses = (pcm) => async (url) => {
-  if (String(url).includes("preview-tts")) {
-    return sse({
-      candidates: [{ content: { parts: [{ inlineData: { mimeType: "audio/L16;rate=24000", data: bytesToBase64(pcm) } }] } }],
-    });
-  }
-  return sse({
-    candidates: [{ content: { parts: [{ text: '{"title":"아침 방송","turns":[{"speaker":"A","text":"안녕하세요"},{"speaker":"B","text":"반갑습니다"}]}' }] } }],
-  });
-};
-
-test("alarm이 대본→TTS→저장→소스 정리까지 처리한다", async () => {
+test("PC 생성기가 일감을 가져가 완료하면 오디오가 걸리고 소스가 정리된다", async () => {
   const { podcastDO, storage, bucket } = makeDO();
   const { user } = await createUser(podcastDO);
   const { source } = await (await podcastDO.fetch(post(`/sources?uid=${user.id}`, {
@@ -145,11 +138,9 @@ test("alarm이 대본→TTS→저장→소스 정리까지 처리한다", async 
   await bucket.put(source.r2Key, new Uint8Array([1, 2, 3]));
   await podcastDO.fetch(internal(`/generate?uid=${user.id}`, { method: "POST" }));
 
-  const pcm = new Uint8Array(24000 * 2 * 2); // 2초
-  const original = globalThis.fetch;
-  globalThis.fetch = async (url) => geminiResponses(pcm)(url);
-  try { await drainQueue(podcastDO, storage); }
-  finally { globalThis.fetch = original; }
+  const ran = await runWorker(podcastDO, bucket);
+  assert.equal(ran.job.userId, user.id);
+  assert.deepEqual(ran.sources.map((s) => s.name), ["doc.pdf"]);
 
   const home = await (await podcastDO.fetch(internal(`/home?uid=${user.id}`))).json();
   const pod = home.todayPodcast;
@@ -158,18 +149,19 @@ test("alarm이 대본→TTS→저장→소스 정리까지 처리한다", async 
   assert.equal(pod.durationSeconds, 2);
   assert.deepEqual(pod.sourceNames, ["doc.pdf"]);
   assert.deepEqual(home.sources, []); // 소비된 소스는 정리
+  assert.equal(home.workerOnline, true);
   assert.equal(bucket.objects.has(source.r2Key), false);
   assert.equal((await storage.get("jobs")).length, 0);
 
-  // 오디오 메타 조회 → R2에 실제 오디오 존재
-  const podId = pod.id;
-  const meta = await (await podcastDO.fetch(internal(`/audio-meta?pod=${podId}`))).json();
+  const meta = await (await podcastDO.fetch(internal(`/audio-meta?pod=${pod.id}`))).json();
   assert.equal(meta.userId, user.id);
-  const audio = await bucket.get(meta.audioKey);
-  assert.ok(audio && audio.size > 44);
+  assert.ok(await bucket.get(meta.audioKey));
+
+  // 할 일이 없으면 204
+  assert.equal((await podcastDO.fetch(post("/worker/claim", {}))).status, 204);
 });
 
-test("생성 실패 시 소스는 남고 실패 상태·사유가 기록된다", async () => {
+test("PC 생성기 실패는 사유를 남기고, 다시 가져가다 상한을 넘으면 실패 처리된다", async () => {
   const { podcastDO, storage, bucket } = makeDO();
   const { user } = await createUser(podcastDO);
   const { source } = await (await podcastDO.fetch(post(`/sources?uid=${user.id}`, {
@@ -178,19 +170,60 @@ test("생성 실패 시 소스는 남고 실패 상태·사유가 기록된다",
   await bucket.put(source.r2Key, new Uint8Array([1, 2, 3]));
   await podcastDO.fetch(internal(`/generate?uid=${user.id}`, { method: "POST" }));
 
-  const original = globalThis.fetch;
-  globalThis.fetch = async () => new Response("quota exceeded", { status: 429 });
-  try { await drainQueue(podcastDO, storage); }
-  finally { globalThis.fetch = original; }
+  for (let i = 0; i < 3; i++) {
+    const { job } = await (await podcastDO.fetch(post("/worker/claim", {}))).json();
+    assert.equal(job.attempt, i + 1);
+    await podcastDO.fetch(post("/worker/fail", { ...job, error: "당이가 응답하지 않습니다" }));
+    const home = await (await podcastDO.fetch(internal(`/home?uid=${user.id}`))).json();
+    assert.equal(home.todayPodcast.status, "generating");
+    assert.match(home.todayPodcast.error, /당이/);
+  }
+  assert.equal((await podcastDO.fetch(post("/worker/claim", {}))).status, 204);
 
   const home = await (await podcastDO.fetch(internal(`/home?uid=${user.id}`))).json();
   assert.equal(home.todayPodcast.status, "failed");
-  assert.ok(home.todayPodcast.error.length > 0);
-  assert.equal(home.sources.length, 1); // 재시도 가능
+  assert.match(home.todayPodcast.error, /여러 번.*당이/);
+  assert.deepEqual(await storage.get("jobs"), []);
+  assert.equal(home.sources.length, 1); // 소스는 보존되어 재시도 가능
 
-  // 실패 상태에서는 재생성 허용
   const retry = await podcastDO.fetch(internal(`/generate?uid=${user.id}`, { method: "POST" }));
   assert.equal(retry.status, 200);
+});
+
+test("진행 보고는 단계·제목만 바꾸고, 큐에 없는 작업은 거절한다", async () => {
+  const { podcastDO, bucket } = makeDO();
+  const { user } = await createUser(podcastDO);
+  const { source } = await (await podcastDO.fetch(post(`/sources?uid=${user.id}`, {
+    name: "a.txt", mime: "text/plain", size: 1,
+  }))).json();
+  await bucket.put(source.r2Key, new Uint8Array([65]));
+  await podcastDO.fetch(internal(`/generate?uid=${user.id}`, { method: "POST" }));
+  const { job } = await (await podcastDO.fetch(post("/worker/claim", {}))).json();
+
+  await podcastDO.fetch(post("/worker/progress", { ...job, stage: "tts", title: "제목" }));
+  const home = await (await podcastDO.fetch(internal(`/home?uid=${user.id}`))).json();
+  assert.equal(home.todayPodcast.stage, "tts");
+  assert.equal(home.todayPodcast.title, "제목");
+
+  const stray = await podcastDO.fetch(post("/worker/progress", { userId: user.id, date: "2000-01-01", stage: "tts" }));
+  assert.equal(stray.status, 409);
+});
+
+test("생성기 토큰은 발급 때 한 번만 보이고 새로 발급하면 옛 토큰은 무효다", async () => {
+  const { podcastDO } = makeDO();
+  const { hashWorkerToken } = await import("./podcast.js");
+  const status0 = await (await podcastDO.fetch(internal("/admin/worker"))).json();
+  assert.equal(status0.hasToken, false);
+  const auth = async (token) => (await podcastDO.fetch(post("/worker/auth", { tokenHash: await hashWorkerToken(token) }))).status;
+  assert.equal(await auth("anything"), 401);
+
+  const { token: first } = await (await podcastDO.fetch(internal("/admin/worker", { method: "POST" }))).json();
+  assert.match(first, /^pw_[0-9a-f]{48}$/);
+  assert.equal(await auth(first), 200);
+  const { token: second } = await (await podcastDO.fetch(internal("/admin/worker", { method: "POST" }))).json();
+  assert.equal(await auth(first), 401);
+  assert.equal(await auth(second), 200);
+  assert.equal((await (await podcastDO.fetch(internal("/admin/worker"))).json()).hasToken, true);
 });
 
 test("보관(keep) 소스는 생성에 쓰이되 삭제되지 않는다", async () => {
@@ -212,11 +245,7 @@ test("보관(keep) 소스는 생성에 쓰이되 삭제되지 않는다", async 
   assert.equal(patched.status, 200);
 
   await podcastDO.fetch(internal(`/generate?uid=${user.id}`, { method: "POST" }));
-  const pcm = new Uint8Array(24000 * 2);
-  const original = globalThis.fetch;
-  globalThis.fetch = async (url) => geminiResponses(pcm)(url);
-  try { await drainQueue(podcastDO, storage); }
-  finally { globalThis.fetch = original; }
+  await runWorker(podcastDO, bucket);
 
   const home = await (await podcastDO.fetch(internal(`/home?uid=${user.id}`))).json();
   assert.equal(home.todayPodcast.status, "completed");
@@ -247,7 +276,7 @@ test("보관함 50MB 한도를 강제한다", async () => {
   assert.equal(keepSmall.status, 409); // 45 + 10 > 50MB
 });
 
-test("AI 입력 상한(20MB)을 넘는 소스는 삭제되지 않고 남는다", async () => {
+test("입력 상한(20MB)을 넘는 소스는 삭제되지 않고 남는다", async () => {
   const { podcastDO, storage, bucket } = makeDO();
   const { user } = await createUser(podcastDO);
   const first = await (await podcastDO.fetch(post(`/sources?uid=${user.id}`, {
@@ -259,41 +288,13 @@ test("AI 입력 상한(20MB)을 넘는 소스는 삭제되지 않고 남는다",
   await bucket.put(first.source.r2Key, new Uint8Array([1]));
   await bucket.put(second.source.r2Key, new Uint8Array([2]));
   await podcastDO.fetch(internal(`/generate?uid=${user.id}`, { method: "POST" }));
-
-  const pcm = new Uint8Array(24000 * 2);
-  const original = globalThis.fetch;
-  globalThis.fetch = async (url) => geminiResponses(pcm)(url);
-  try { await drainQueue(podcastDO, storage); }
-  finally { globalThis.fetch = original; }
+  await runWorker(podcastDO, bucket);
 
   const home = await (await podcastDO.fetch(internal(`/home?uid=${user.id}`))).json();
   assert.equal(home.todayPodcast.status, "completed");
   assert.deepEqual(home.todayPodcast.sourceNames, ["먼저.pdf"]);
   assert.deepEqual(home.sources.map((s) => s.name), ["초과.pdf"]); // 미사용분은 보존
   assert.equal(bucket.objects.has(second.source.r2Key), true);
-});
-
-test("작업은 시도 상한을 넘으면 실패 처리되고 큐·알람이 정리된다", async () => {
-  const { podcastDO, storage, bucket } = makeDO();
-  const { user } = await createUser(podcastDO);
-  const { source } = await (await podcastDO.fetch(post(`/sources?uid=${user.id}`, {
-    name: "doc.pdf", mime: "application/pdf", size: 3,
-  }))).json();
-  await bucket.put(source.r2Key, new Uint8Array([1]));
-  await podcastDO.fetch(internal(`/generate?uid=${user.id}`, { method: "POST" }));
-
-  // 처리 중 DO가 반복적으로 죽은 상황을 흉내: 시도 횟수만 상한까지 채운다
-  const jobs = await storage.get("jobs");
-  jobs[0].attempts = 3;
-  await storage.put("jobs", jobs);
-  await podcastDO.alarm();
-
-  const home = await (await podcastDO.fetch(internal(`/home?uid=${user.id}`))).json();
-  assert.equal(home.todayPodcast.status, "failed");
-  assert.match(home.todayPodcast.error, /여러 번/);
-  assert.deepEqual(await storage.get("jobs"), []);
-  assert.equal(storage.alarmAt, null);
-  assert.equal(home.sources.length, 1); // 소스는 보존되어 재시도 가능
 });
 
 test("30분 넘게 멈춘 생성은 재시도할 수 있다", async () => {
@@ -320,32 +321,6 @@ test("30분 넘게 멈춘 생성은 재시도할 수 있다", async () => {
   const retry = await podcastDO.fetch(internal(`/generate?uid=${user.id}`, { method: "POST" }));
   assert.equal(retry.status, 200);
   assert.equal(((await storage.get("jobs")) ?? []).length, 1);
-});
-
-test("생성 시 AI 호출이 쿼터 기준일별로 집계된다", async () => {
-  const { podcastDO, storage, bucket } = makeDO();
-  const { user } = await createUser(podcastDO);
-  const { source } = await (await podcastDO.fetch(post(`/sources?uid=${user.id}`, {
-    name: "doc.pdf", mime: "application/pdf", size: 3,
-  }))).json();
-  await bucket.put(source.r2Key, new Uint8Array([1]));
-  await podcastDO.fetch(internal(`/generate?uid=${user.id}`, { method: "POST" }));
-
-  const pcm = new Uint8Array(24000 * 2);
-  const original = globalThis.fetch;
-  globalThis.fetch = async (url) => geminiResponses(pcm)(url);
-  try { await drainQueue(podcastDO, storage); }
-  finally { globalThis.fetch = original; }
-
-  const { today, days } = await (await podcastDO.fetch(internal("/admin/usage"))).json();
-  assert.equal(days.length, 1);
-  assert.equal(days[0].day, today);
-  const buckets = days[0].calls;
-  const scriptBucket = Object.keys(buckets).find((k) => k.startsWith("script:"));
-  const ttsBucket = Object.keys(buckets).find((k) => k.startsWith("tts:"));
-  assert.equal(buckets[scriptBucket].ok, 1);
-  assert.ok(buckets[ttsBucket].ok >= 1);
-  assert.equal(buckets[scriptBucket].fail, 0);
 });
 
 test("run-daily는 소스 있는 사용자만 큐잉한다", async () => {

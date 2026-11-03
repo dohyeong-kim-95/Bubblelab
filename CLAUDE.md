@@ -235,9 +235,11 @@ PNG·JPEG를 모두 받고, JPEG는 `npm ci` 필요. 검증은 `_infra/wallpaper
 
 `podcast/`는 토이가 아니라 초대 코드 기반 서비스다 — 토이 관례(share.js,
 주간 기록)를 적용하지 않는다. 서버는 `_infra/podcast.js`(PodcastDO +
-`/_podcast/*` 라우트), AI 호출은 `_infra/podcast-ai.js` 프로바이더 계층
-(env로 모델·업체 교체). `ENABLE_PODCAST` var는 fail-closed. 셋업·운영은
-`podcast/README.md` 참고.
+`/_podcast/*` 라우트)로 큐·파일·완료만 맡고, **대본과 녹음은 집 PC가 만든다** —
+`_src/podcast-worker/` 데몬이 큐에서 일감을 가져가 당이(llama-server)로 대본을 쓰고
+Supertonic(로컬 한국어 TTS)으로 녹음해 올린다. **외부 AI API(Gemini 등)는 쓰지 않는다**
+(테스트가 막는다). 대본 규칙은 `_infra/podcast-ai.js` 하나를 워커·데몬이 같이 쓴다.
+`ENABLE_PODCAST` var는 fail-closed. 셋업·운영은 `podcast/README.md`.
 
 ## 할 일 (life/)
 

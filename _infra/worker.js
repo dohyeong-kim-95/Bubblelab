@@ -86,7 +86,7 @@ import { handleFortuneChart, handleFortunePush, sendFortuneDaily } from "./fortu
 import { handleYaksokApi, renderRoomPage } from "./yaksok.js";
 import { CODE_RE as YAKSOK_CODE_RE } from "../util/yaksok/logic.js";
 import { handleBriefPush, handleBriefRates, handleBriefToday, sendBriefDaily } from "./brief.js";
-import { handlePodcast, handlePodcastAdmin, runDailyGeneration, runEveningReminder, UPLOAD_MAX_BYTES } from "./podcast.js";
+import { handlePodcast, handlePodcastAdmin, runDailyGeneration, runEveningReminder, UPLOAD_MAX_BYTES, WORKER_AUDIO_MAX_BYTES } from "./podcast.js";
 import { handlePapers, handlePapersComments, handlePapersSink } from "./papers.js";
 import { handleCommandRegistration, handleInteraction } from "./discord.js";
 import { handleEstateDeals } from "./estate.js";
@@ -1037,6 +1037,7 @@ export async function handleRequest(request, env, ctx) {
     const mutationError = validateMutationRequest(
       request,
       path === "/_podcast/upload" ? UPLOAD_MAX_BYTES :
+      path === "/_podcast/worker/audio" ? WORKER_AUDIO_MAX_BYTES :
       path === "/_duri/photo" || path === "/_duri/lend" ? DURI_MAX_PHOTO_BYTES :
       path === "/_emoticon/generate" ? EMOTICON_MAX_BODY :
       path === "/_life/backup" ? 4 * 1024 * 1024 :
