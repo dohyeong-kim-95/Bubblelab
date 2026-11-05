@@ -118,19 +118,6 @@
   header .dot.on { opacity: 1; }
   /* 헤더의 ✓ 는 이모지가 아니라 글자다 — 옆의 ⚙️ 와 시각적 무게를 맞춘다 */
   #bucket-open { font-size: 1.15rem; font-weight: 700; line-height: 1; }
-  /* 데이트 세션: 진행 중이면 헤더 💕 에 옅은 분홍 바탕, 채팅 위에 띠 하나 */
-  header #date-open.on { background: light-dark(#fbe6f0, #3a2233); }
-  #date-band { flex: none; display: flex; align-items: center; flex-wrap: wrap; gap: .35rem .4rem;
-               padding: .45rem calc(1rem + env(safe-area-inset-right, 0px)) .45rem calc(1rem + env(safe-area-inset-left, 0px));
-               background: light-dark(#fdf2f7, #241821); border-bottom: 1px solid var(--line);
-               font-family: var(--chat-font); font-size: .84rem; }
-  #date-band[hidden] { display: none; }
-  #date-band .txt { flex: 1; min-width: 9rem; color: var(--pink); font-weight: 600; }
-  #date-band button { font: inherit; font-size: .78rem; cursor: pointer; border-radius: 999px; padding: .28rem .7rem;
-                      border: 1px solid var(--pink); background: var(--panel); color: var(--pink); }
-  #date-band button.main { background: var(--pink); color: light-dark(#fff, #1b1b1e); }
-  #date-band button:disabled { opacity: .5; cursor: default; }
-  .row .date-tag { font-family: var(--chat-font); font-size: .66rem; color: var(--pink); margin: .12rem .3rem 0; }
   /* 헤더 우측 아이콘 버튼(설정·나가기) — 텍스트 대신 이모지 한 글자라 줄바꿈이 없다 */
   header .icon-btn { flex-shrink: 0; font: inherit; font-size: 1.15rem; line-height: 1; background: none;
                      border: 0; color: inherit; cursor: pointer; padding: .3rem; border-radius: .5rem;
@@ -922,7 +909,6 @@
   </span>
   <button id="bucket-open" class="icon-btn" type="button" title="데이트 버킷리스트" aria-label="데이트 버킷리스트">✓</button>
   <button id="fit-open" class="icon-btn" type="button" title="운동 인증" aria-label="운동 인증">💪</button>
-  <button id="date-open" class="icon-btn" type="button" title="데이트 시작" aria-label="데이트 시작">💕</button>
   <div class="menu-wrap">
     <button id="menu-btn" class="icon-btn" title="설정" aria-haspopup="true" aria-expanded="false">⚙️</button>
     <div id="menu" class="menu" role="menu" hidden>
@@ -940,10 +926,6 @@
     </div>
   </div>
 </header>
-
-<!-- 데이트 세션 띠 — 시작·상대 확인·진행 중·사진 올리기(renderDateBand) -->
-<div id="date-band" hidden></div>
-<input id="date-file" type="file" accept="image/*" multiple hidden>
 
 <div id="log-wrap" class="hidden">
   <div id="log"><div id="log-inner"></div></div>
@@ -2264,225 +2246,6 @@ $("bucket-form").addEventListener("submit", (e) => {
   bucketAdd(v);
 });
 
-// ── 데이트 세션 ─────────────────────────────────────────────
-// 한 사람이 💕 로 시작하면(지금 위치를 담아) 상대가 "함께 있어요"로 확인한다 — 두 폰의
-// 위치가 가까울 때만 세션이 열린다. 블루투스 근접 확인을 웹에서 대신하는 방법이다(웹은
-// 블루투스로 상대 폰을 찾을 수 없고, 아이폰은 웹 블루투스 자체가 없다).
-// 세션 중·끝난 뒤 하루까지 "📷 사진"으로 여러 장을 고르면 **촬영 시각이 세션 안인 것만**
-// 보내고, 그 사진은 48시간 뒤 두 폰의 화면·캐시에서 사라진다. PC 백업에는 남는다(서버는
-// 원래 싱크가 받아 가면 지운다). 세션은 cal:<id> 저장소에 사람마다 레코드 하나
-// (kind:"date", role a=시작한 사람·b=확인한 사람) — 각자 자기 레코드만 쓰니 LWW 가 겹치지 않는다.
-const DATE_NEAR_M = 300;                   // 이 안이면 함께 있다(두 기기의 GPS 오차는 따로 더한다)
-const DATE_NEAR_MAX_M = 1000;              // 오차를 더해도 이보다 멀면 함께로 치지 않는다
-const DATE_PENDING_MS = 6 * 3600e3;        // 상대 확인을 기다리는 시간
-const DATE_MAX_MS = 24 * 3600e3;           // 끝내기를 잊어도 세션은 하루면 닫힌다
-const DATE_UPLOAD_GRACE_MS = 24 * 3600e3;  // 끝난 뒤에도 사진을 올릴 수 있는 시간
-const DATE_PHOTO_TTL_MS = 48 * 3600e3;     // 데이트 사진이 폰에 머무는 시간
-const DATE_SLACK_MS = 10 * 60e3;           // 촬영 시각 판정 여유(기기 시계 차이·시작 직전 사진)
-const DATE_DISMISS_KEY = "duri:dateDismissed";
-const dateExpiring = new Map();            // 화면에 그린 데이트 사진 seq → 사라질 시각
-
-function dateSessions() {
-  const by = new Map();
-  for (const ev of calEvents.values()) {
-    if (ev.deleted || ev.kind !== "date" || typeof ev.sid !== "string") continue;
-    const s = by.get(ev.sid) || {};
-    s[ev.role === "b" ? "b" : "a"] = ev;
-    by.set(ev.sid, s);
-  }
-  const out = [];
-  for (const [sid, { a, b }] of by) {
-    if (!a || !Number.isFinite(a.startedAt)) continue;
-    const ended = [a.endedAt, b?.endedAt].filter(Number.isFinite);
-    out.push({ sid, a, b, start: a.startedAt, endAt: Math.min(a.startedAt + DATE_MAX_MS, ...ended), cancelled: !!a.cancelled });
-  }
-  return out.sort((x, y) => y.start - x.start);
-}
-// 지금 띠에 보일 세션: pending(확인 대기) · active(데이트 중) · after(끝, 사진은 아직 올릴 수 있음)
-function dateState(now = Date.now()) {
-  const s = dateSessions().find((x) => !x.cancelled);
-  if (!s) return null;
-  if (s.b?.ok) {
-    if (now < s.endAt) return { ...s, phase: "active" };
-    if (now < s.endAt + DATE_UPLOAD_GRACE_MS) return { ...s, phase: "after" };
-    return null;
-  }
-  if (now < Math.min(s.endAt, s.start + DATE_PENDING_MS)) return { ...s, phase: "pending", mine: s.a.owner === MY_NAME };
-  return null;
-}
-function distM(p, q) {
-  const R = 6371000, rad = Math.PI / 180;
-  const dLat = (q.lat - p.lat) * rad, dLng = (q.lng - p.lng) * rad;
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(p.lat * rad) * Math.cos(q.lat * rad) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
-}
-const fmtDist = (m) => (m < 1000 ? `${Math.max(10, Math.round(m / 10) * 10)}m` : `${(m / 1000).toFixed(1)}km`);
-function fmtDur(ms) {
-  const min = Math.max(1, Math.round(ms / 60000)), h = Math.floor(min / 60);
-  return h ? `${h}시간${min % 60 ? ` ${min % 60}분` : ""}` : `${min}분`;
-}
-// 좌표는 소수 넷째 자리(약 10m)까지만 — 함께 있는지 보는 데는 그걸로 충분하다.
-async function dateFix() {
-  if (!navigator.geolocation) throw new Error("이 브라우저는 위치를 지원하지 않아요");
-  const { latitude, longitude, accuracy } = (await bestFix({ goodEnough: 50, maxWaitMs: 10000 })).coords;
-  return { lat: +latitude.toFixed(4), lng: +longitude.toFixed(4), acc: Math.round(accuracy) };
-}
-let dateBusy = false;
-async function dateRun(fn) {
-  if (dateBusy) return;
-  dateBusy = true; renderDateBand();
-  try { await fn(); }
-  catch (e) {
-    showToast(e?.code === 1 ? "위치 권한이 꺼져 있어요 — 브라우저 설정에서 허용해 주세요"
-      : e?.code || e?.message === "no-fix" ? "위치를 못 잡았어요 — 잠시 뒤 다시 눌러 주세요" : String(e?.message || e), 4000);
-  } finally { dateBusy = false; renderDateBand(); }
-}
-// 내 레코드를 고쳐 쓴다(calEvents 에 붙은 id·rev·deleted 는 떼고 내용만).
-function datePutMine(rec, patch) {
-  const { id, rev, deleted, ...content } = rec;
-  return calPutRecord(id, { ...content, ...patch, at: Date.now() });
-}
-
-function dateStart() {
-  const cur = dateState();
-  if (cur?.phase === "pending" && !cur.mine) return dateJoin(cur); // 상대가 먼저 시작했으면 확인으로
-  if (cur && cur.phase !== "after") { showToast("💕 이미 데이트 중이에요 — 채팅 위 띠를 봐 주세요"); return; }
-  if (!confirm("💕 데이트를 시작할까요?\n지금 위치를 상대에게 보내고(암호화), 상대 폰이 가까이 있는지 확인해요.")) return;
-  return dateRun(async () => {
-    showToast("📍 위치 확인 중…");
-    const fix = await dateFix();
-    const sid = randToken(), now = Date.now();
-    await calPutRecord(`dt${sid}a`, { kind: "date", sid, role: "a", owner: MY_NAME, startedAt: now, at: now, ...fix });
-    try { localStorage.removeItem(DATE_DISMISS_KEY); } catch { /* */ }
-    await sendSysNotice(`💕 ${MY_NAME}님이 데이트를 시작했어요 — 함께 있으면 확인해 주세요`);
-  });
-}
-// 시작한 사람의 위치가 오래됐으면(만나기 전에 눌렀다면) 다시 알린다.
-function dateRefix(s) {
-  return dateRun(async () => {
-    showToast("📍 위치 확인 중…");
-    await datePutMine(s.a, await dateFix());
-    showToast("📍 지금 위치를 다시 알렸어요");
-  });
-}
-function dateJoin(s) {
-  return dateRun(async () => {
-    showToast("📍 함께 있는지 확인 중…");
-    const fix = await dateFix();
-    const d = distM(fix, s.a);
-    const limit = Math.min(DATE_NEAR_MAX_M, DATE_NEAR_M + (fix.acc || 0) + (s.a.acc || 0));
-    if (d > limit) {
-      showToast(`약 ${fmtDist(d)} 떨어져 있어요 — 만나서 다시 눌러 주세요 (${s.a.owner}님이 '📍 위치 다시'를 누르면 최신 위치로 봐요)`, 5000);
-      return;
-    }
-    await calPutRecord(`dt${s.sid}b`, { kind: "date", sid: s.sid, role: "b", owner: MY_NAME, ok: true,
-      dist: Math.round(d), at: Date.now(), ...fix });
-    await sendSysNotice(`💕 데이트 시작! 두 폰이 ${fmtDist(d)} 거리에 있어요`);
-  });
-}
-function dateCancel(s) {
-  if (!confirm("데이트 시작을 취소할까요?")) return;
-  return dateRun(() => datePutMine(s.a, { cancelled: true }));
-}
-function dateEnd(s) {
-  const mine = s.a.owner === MY_NAME ? s.a : s.b?.owner === MY_NAME ? s.b : null;
-  if (!mine || !confirm("데이트를 끝낼까요?\n끝난 뒤에도 하루 동안은 사진을 올릴 수 있어요.")) return;
-  return dateRun(async () => {
-    await datePutMine(mine, { endedAt: Date.now() });
-    await sendSysNotice(`💕 데이트 끝 — ${fmtDur(Date.now() - s.start)} 함께했어요`);
-  });
-}
-
-// 촬영 시각: EXIF(DateTimeOriginal, 기기 로컬 시각) → 없으면 파일 수정 시각.
-// 안드로이드는 고를 때 EXIF 가 지워지는 일이 많아 그때는 파일 시각으로 본다.
-async function shotTime(file) {
-  try {
-    const head = new Uint8Array(await file.slice(0, 256 * 1024).arrayBuffer());
-    const m = /^(\d{4}):(\d\d):(\d\d) (\d\d):(\d\d):(\d\d)/.exec(exifInfo(head).dateTime || "");
-    if (m) return new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +m[6]).getTime();
-  } catch { /* 못 읽으면 파일 시각 */ }
-  return file.lastModified || 0;
-}
-let datePhotoSession = null;
-async function sendDatePhotos(files, s) {
-  const lo = s.start - DATE_SLACK_MS, hi = Math.min(s.endAt, Date.now()) + DATE_SLACK_MS;
-  const keep = [];
-  for (const f of files) { const t = await shotTime(f); if (t >= lo && t <= hi) keep.push(f); }
-  const out = files.length - keep.length;
-  if (!keep.length) { showToast(`데이트 시간에 찍은 사진이 없어요 (${files.length}장 모두 시간 밖)`, 4000); return; }
-  showToast(`💕 ${keep.length}장 보내요${out ? ` · ${out}장은 데이트 시간 밖이라 뺐어요` : ""}`, 4000);
-  const extra = { date: s.sid, until: Date.now() + DATE_PHOTO_TTL_MS };
-  for (let start = 0; start < keep.length; start += ALBUM_MAX) {
-    const chunk = keep.slice(start, start + ALBUM_MAX), n = chunk.length;
-    const albumId = n >= 2 ? randToken() : null;
-    for (let i = 0; i < n; i++) await sendPhoto(chunk[i], albumId ? { id: albumId, i: i + 1, n } : null, null, null, extra);
-  }
-}
-$("date-file").addEventListener("change", (e) => {
-  const files = [...e.target.files]; e.target.value = "";
-  const s = datePhotoSession; datePhotoSession = null;
-  if (files.length && s) sendDatePhotos(files, s);
-});
-
-function dateTag(until) {
-  const t = document.createElement("div");
-  t.className = "date-tag";
-  const d = new Date(until);
-  t.textContent = `💕 데이트 사진 · ${d.getMonth() + 1}/${d.getDate()} ${fmtTime(until)}에 사라져요`;
-  return t;
-}
-// 기한이 된 데이트 사진을 이 기기에서 지운다 — 화면은 매분, 캐시 전체는 접속 때·매시간.
-function purgeDatePhotos() {
-  const now = Date.now();
-  for (const [seq, until] of dateExpiring) if (until <= now) forgetLocal(seq);
-}
-async function sweepDateCache() {
-  const now = Date.now();
-  for (const r of await allEntries()) if (r.until && r.until <= now) forgetLocal(r.seq);
-}
-
-function renderDateBand() {
-  const band = $("date-band");
-  const s = MY_NAME ? dateState() : null;
-  let dismissed = null;
-  try { dismissed = localStorage.getItem(DATE_DISMISS_KEY); } catch { /* */ }
-  $("date-open").classList.toggle("on", s?.phase === "active");
-  if (!s || (s.phase === "after" && dismissed === s.sid)) { band.hidden = true; band.replaceChildren(); return; }
-  const now = Date.now(), peer = peerName || "상대";
-  const txt = document.createElement("span");
-  txt.className = "txt";
-  const btns = [];
-  const btn = (label, fn, main) => {
-    const b = document.createElement("button");
-    b.type = "button"; b.textContent = label; b.disabled = dateBusy;
-    if (main) b.className = "main";
-    b.addEventListener("click", fn);
-    btns.push(b);
-  };
-  const pickPhotos = () => { datePhotoSession = s; $("date-file").click(); };
-  if (s.phase === "pending" && s.mine) {
-    txt.textContent = `💕 ${peer}님의 확인을 기다리는 중`;
-    btn("📍 위치 다시", () => dateRefix(s));
-    btn("취소", () => dateCancel(s));
-  } else if (s.phase === "pending") {
-    txt.textContent = `💕 ${s.a.owner || peer}님이 데이트를 시작했어요`;
-    btn("📍 함께 있어요", () => dateJoin(s), true);
-  } else if (s.phase === "active") {
-    txt.textContent = `💕 데이트 중 · ${fmtDur(now - s.start)}`;
-    btn("📷 사진", pickPhotos, true);
-    btn("끝내기", () => dateEnd(s));
-  } else {
-    txt.textContent = `💕 데이트 ${fmtDur(s.endAt - s.start)} · 사진은 ${fmtDur(s.endAt + DATE_UPLOAD_GRACE_MS - now)} 더 올릴 수 있어요`;
-    btn("📷 사진", pickPhotos, true);
-    btn("✕", () => { try { localStorage.setItem(DATE_DISMISS_KEY, s.sid); } catch { /* */ } renderDateBand(); });
-  }
-  band.replaceChildren(txt, ...btns);
-  band.hidden = false;
-}
-$("date-open").addEventListener("click", () => dateStart());
-setInterval(() => { purgeDatePhotos(); renderDateBand(); }, 60e3);
-setInterval(() => sweepDateCache().catch(() => {}), 3600e3);
-
 // ── 렌더 ─────────────────────────────────────────────────────
 const log = () => $("log-inner");   // 메시지가 쌓이는 곳(순서 그대로)
 const logBox = () => $("log");      // 스크롤 컨테이너(column-reverse)
@@ -2711,13 +2474,6 @@ document.addEventListener("pointerdown", (e) => { // 다른 곳 누르면 삭제
 }, true);
 // 서버가 "deleted" 를 보내면(내가 지웠든 상대가 지웠든) 화면·캐시·지도핀에서 제거.
 function removeEntry(seq) {
-  forgetLocal(seq);
-  hidePins([seq]); // 항목 자체가 사라졌으니 그 핀도 양쪽에서 지운다
-  if (!$("map").classList.contains("map-off")) renderMap().catch(() => {});
-}
-// 이 기기의 화면·캐시에서만 지운다(서버·상대·PC 백업은 그대로) — 데이트 사진의 48시간 만료가 쓴다.
-function forgetLocal(seq) {
-  dateExpiring.delete(seq);
   document.querySelectorAll(`img[data-seq="${seq}"]`).forEach((img) => {
     if (img.src && img.src.startsWith("blob:")) URL.revokeObjectURL(img.src);
     if (img.closest(".dangi-photos")) { img.remove(); return; } // 당이 답 속 사본 — 말풍선(글)은 남긴다
@@ -2725,6 +2481,8 @@ function forgetLocal(seq) {
     if (album) { img.remove(); if (!album.querySelector("img")) album.closest(".row")?.remove(); }
     else img.closest(".row")?.remove();
   });
+  hidePins([seq]); // 항목 자체가 사라졌으니 그 핀도 양쪽에서 지운다
+  if (!$("map").classList.contains("map-off")) renderMap().catch(() => {});
   if (db) { try { db.transaction("entries", "readwrite").objectStore("entries").delete(seq); } catch { /* 캐시 최선노력 */ } }
 }
 
@@ -2815,10 +2573,6 @@ function appendRecord(rec, { silent = false, into = null } = {}) {
   if (seen.has(rec.seq)) return;
   seen.add(rec.seq);
   if (rec.seq > getLastSeq()) setLastSeq(rec.seq);
-  if (rec.until) { // 데이트 사진: 기한이 지났으면 그리지 않고, 남았으면 기한에 지우도록 적어 둔다
-    if (rec.until <= Date.now()) { forgetLocal(rec.seq); return; }
-    dateExpiring.set(rec.seq, rec.until);
-  }
   // 상대 이름을 알아야 색상 설정에 상대 칸을 보여줄 수 있다. 시스템 알림(📅 캘린더 리마인드·
   // 🤖 당이)은 사람이 아니라서 상대 이름으로 기억하면 안 된다 — 색 설정이 비서 이름으로 바뀐다.
   if (rec.name && !rec.sys) notePeerName(rec.name);
@@ -2916,7 +2670,6 @@ function appendRecord(rec, { silent = false, into = null } = {}) {
   } else {
     timeEl = buildBubble(row, rec.name, at, (b) => { b.textContent = rec.text; }, showName);
   }
-  if (rec.until && timeEl) timeEl.before(dateTag(rec.until));
   // 상대·당이 말풍선 옆 프로필 사진(카톡처럼 내 말풍선엔 없다).
   if (!mine && !broken) {
     row.classList.add("av-row");
@@ -2990,14 +2743,6 @@ async function renderEntry(m) {
       const rec = { seq: m.seq, kind: "photo", at: meta.at ?? m.at, name: meta.name, caption: meta.caption };
       if (meta.loc) rec.loc = meta.loc; // 촬영 위치(E2E) — "함께 다닌 곳 지도"용. 캐시에도 저장돼 지도가 읽는다.
       if (meta.bucket) rec.bucket = meta.bucket; // 버킷리스트 증명 사진 태그
-      if (typeof meta.date === "string" && Number.isFinite(meta.until)) { // 데이트 사진 — 48시간 뒤 폰에서 사라진다
-        rec.date = meta.date.slice(0, 24); rec.until = meta.until;
-        if (rec.until <= Date.now()) { // 이미 지난 것(오래 꺼져 있던 기기) — 그리지도 캐시하지도 않는다
-          seen.add(m.seq);
-          if (m.seq > getLastSeq()) setLastSeq(m.seq);
-          return;
-        }
-      }
       if (meta.w && meta.h) { rec.w = meta.w; rec.h = meta.h; } // 원본 비율 — 자리를 미리 잡아 화면이 안 튄다
       if (m.album) rec.album = m.album; // 앨범 묶음(평문 그룹정보)
 
@@ -3434,7 +3179,7 @@ async function makeThumb(file) {
   } catch { return null; } // HEIC 등 브라우저가 못 여는 형식
 }
 
-async function sendPhoto(file, album, locOverride, bucketId, extra) {
+async function sendPhoto(file, album, locOverride, bucketId) {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const sha256 = hex(await crypto.subtle.digest("SHA-256", bytes));
   const img = await encryptBytes(bytes);
@@ -3450,7 +3195,6 @@ async function sendPhoto(file, album, locOverride, bucketId, extra) {
     ...(thumb && { w: thumb.w, h: thumb.h }), // 원본 비율 — 미리보기 자리를 미리 잡는다
     ...(loc && { loc }),
     ...(bucketId && { bucket: bucketId }), // 버킷리스트 항목의 증명 사진(지역 앨범과 같은 패턴)
-    ...extra, // 데이트 사진: { date: 세션 id, until: 폰에서 사라질 시각 }
   });
   const headers = { "X-Duri-Img-Iv": img.iv, "X-Duri-Sha256": sha256, "X-Duri-Meta-Iv": meta.iv, "X-Duri-Meta": meta.ct,
     "X-Duri-Device": duriDeviceId() }; // 보낸 사람의 기기들엔 푸시를 안 보내게(서버가 who 를 찾는다)
@@ -3847,8 +3591,6 @@ async function enterWith(key, name) {
   // 그 자리에서 복호화하고, 페이지는 새로고침 뒤에도 문구 없이 이어 들어간다.
   putMeta("key", KEY);
   putMeta("name", name); // 내가 보낸 메시지는 내 기기에 푸시 알림을 띄우지 않게 비교용
-  renderDateBand();                     // 진행 중인 데이트 세션 띠
-  sweepDateCache().catch(() => {});     // 기한 지난 데이트 사진을 이 기기 캐시에서 지운다
   // 예전 버전이 남긴 평문 문구는 보이는 대로 지운다(마이그레이션).
   localStorage.removeItem("duri:pass");
   delMeta("pass");
@@ -4629,7 +4371,6 @@ function scheduleCalFlush() {
     if (!$("cal").classList.contains("cal-off")) renderCal();
     else renderBucket(); // 캘린더는 닫혀 있고 버킷리스트만 열려 있을 때도 상대 변경을 반영
     renderFit();         // 운동 화면도 열려 있으면 상대 체크를 바로 반영(닫혀 있으면 그냥 나간다)
-    renderDateBand();    // 데이트 세션(kind:"date")도 같은 저장소로 온다
     refreshAvatars();    // 프로필 사진(kind:"profile")도 같은 저장소로 온다
   }, 30);
 }
