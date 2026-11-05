@@ -113,6 +113,9 @@ apple/mobile 메타만으로 구성한 **최소 설치형 PWA**다. 최신 Chrom
 - 메시지는 여전히 `{pack,n}` 참조라 프로토콜·E2E·DO·당이(`botSticker`)는 그대로다.
 - 방 초기화는 R2 의 `photo/`·`lend/` 만 지우므로 `stickers/` 는 남는다.
 - 원본은 로컬 `~/dageudangs-lab/stickers/`, 올리기·새 팩 절차는 `_src/duri-stickers/README.md`.
+- 움직이는 팩(`dageudangseu-4-anim`, APNG)은 `cutout: false` — 캔버스 누끼가 첫 프레임 정지
+  이미지로 만들어 버린다. R2 에 번호 순서대로 올리는 중엔 없는 번호가 404 라, 서랍·프로필 고르기는
+  그 칸을 **지운다**(깨진 그림 아이콘 대신). 당이 `botSticker` 표에는 아직 없다.
 
 ### TODO — 스티커가 늦게 뜬다 (사용자 보고 2026-11-05, 아직 안 고침)
 
