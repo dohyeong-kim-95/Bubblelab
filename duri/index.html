@@ -1430,10 +1430,10 @@ const PACKS_CACHE_KEY = "duri:packs";
 // private: true 는 공개 저장소에 두지 않는 그림(다그당스 등) — R2 stickers/ 에 있고 워커가
 // bl_duri 게이트 뒤 /_duri/sticker/ 로만 내준다. 올리는 법은 _src/duri-stickers/README.md.
 const DURI_ONLY_PACKS = [
-  { id: "dageudangseu-1", title: "다그당스1", count: 16, cutout: true, rev: 3, private: true },
-  { id: "dageudangseu-2", title: "다그당스2", count: 16, cutout: true, rev: 3, private: true },
-  { id: "dageudangseu-3", title: "다그당스3", count: 16, cutout: true, rev: 2, private: true },
-  { id: "dageudangseu-4", title: "다그당스4", count: 16, cutout: true, rev: 2, private: true },
+  { id: "dageudangseu-1", title: "다그당스1", count: 16, cutout: true, rev: 4, private: true },
+  { id: "dageudangseu-2", title: "다그당스2", count: 16, cutout: true, rev: 4, private: true },
+  { id: "dageudangseu-3", title: "다그당스3", count: 16, cutout: true, rev: 3, private: true },
+  { id: "dageudangseu-4", title: "다그당스4", count: 16, cutout: true, rev: 3, private: true },
   { id: "agadangs-1", title: "아가당스", count: 16, cutout: true, private: true },
   // 움직이는 이모티콘 시험판 (work/emoticon). 장수는 늘어나는 대로 count만 올린다.
   // cutout:false 필수 — 클라이언트 누끼는 캔버스로 다시 그리는 방식이라
@@ -1441,7 +1441,7 @@ const DURI_ONLY_PACKS = [
   { id: "emoticon-anim", title: "애니메이션", count: 3, cutout: false },
   // 다그당스4 움짤(APNG) — cutout:false 이유는 위 emoticon-anim 과 같다. R2 에 번호 순서대로
   // 올라가는 중이라 아직 없는 번호(404)가 있다 — 고르기 화면은 그 칸을 지운다(stickerButton).
-  { id: "dageudangseu-4-anim", title: "다그당스4 움짤", count: 16, cutout: false, private: true },
+  { id: "dageudangseu-4-anim", title: "다그당스4 움짤", count: 16, cutout: false, rev: 2, private: true },
 ];
 
 function setPacks(list) {
