@@ -1439,6 +1439,9 @@ const DURI_ONLY_PACKS = [
   // cutout:false 필수 — 클라이언트 누끼는 캔버스로 다시 그리는 방식이라
   // APNG를 첫 프레임짜리 정지 이미지로 만들어 버린다. 이 팩은 이미 투명 배경이다.
   { id: "emoticon-anim", title: "애니메이션", count: 3, cutout: false },
+  // 다그당스4 움짤(APNG) — cutout:false 이유는 위 emoticon-anim 과 같다. R2 에 번호 순서대로
+  // 올라가는 중이라 아직 없는 번호(404)가 있다 — 고르기 화면은 그 칸을 지운다(stickerButton).
+  { id: "dageudangseu-4-anim", title: "다그당스4 움짤", count: 16, cutout: false, private: true },
 ];
 
 function setPacks(list) {
@@ -3376,7 +3379,10 @@ function onStickerClick(button, pack, n) {
 function stickerButton(pack, n) {
   const button = document.createElement("button");
   button.type = "button";
-  button.append(stickerImg(pack, n, `${PACK_IDS.get(pack)?.title ?? ""} ${n}`));
+  const img = stickerImg(pack, n, `${PACK_IDS.get(pack)?.title ?? ""} ${n}`);
+  // 아직 없는 번호(R2 에 순차로 올리는 중인 팩)는 깨진 그림 대신 칸째 지운다
+  img.addEventListener("error", () => button.remove(), { once: true });
+  button.append(img);
   button.addEventListener("click", () => onStickerClick(button, pack, n));
   return button;
 }
@@ -4247,6 +4253,7 @@ function renderAvatarBox() {
     b.type = "button"; b.setAttribute("aria-label", `${pack.title} ${n}번`);
     b.setAttribute("aria-pressed", String(cur?.pack === pack.id && cur?.n === n));
     const img = document.createElement("img"); img.alt = ""; img.decoding = "async";
+    img.addEventListener("error", () => b.remove(), { once: true }); // 아직 없는 번호
     stickerObjectUrl(pack.id, n).then((url) => { img.src = url; }).catch(() => {});
     b.appendChild(img);
     b.addEventListener("click", async () => {
