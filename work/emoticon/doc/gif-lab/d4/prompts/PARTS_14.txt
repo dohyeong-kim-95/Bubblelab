@@ -1,0 +1,8 @@
+Generate ONE image: a cut-out puppet PARTS SHEET for 2D animation of the character in the attached image (Dageudangs: a happy golden tan bipedal horse with a big cream muzzle, dark brown straight-cut bangs and shaggy mane, happy closed eyes, open laughing mouth, dark brown hooves, short tail, colored-pencil grain, dark brown outlines). Keep exactly the same drawing style, colors, size and view as the attached image.
+
+Draw exactly THREE separate parts on a plain white background, left to right, with wide white space between them, nothing overlapping:
+1. BODY WITHOUT LEGS: the character exactly as in the attached image (head, ears, mane, happy face, both arms raised exactly as they are, torso, tail), but with NO legs at all. The torso ends at the hips in a smooth ROUNDED bottom with a complete closed dark brown outline. Same size as in the attached image.
+2. LEFT LEG alone: one short chubby leg with its dark brown hoof, standing perfectly STRAIGHT and VERTICAL (hoof at the bottom, flat sole), the top end rounded and outlined, the same golden tan as the body. Its length and thickness match the legs in the attached image.
+3. RIGHT LEG alone: identical shape and size to part 2, straight and vertical, colored one shade DARKER (#ad8a64) with a dark brown hoof.
+
+No text, no labels, no motion lines, no music notes, no dust, no shadows, no ground line.

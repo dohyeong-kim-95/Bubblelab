@@ -1,0 +1,12 @@
+Generate ONE sprite sheet image (not a GIF) with EXACTLY 24 hand-drawn animation frames in EXACTLY 4 ROWS x 6 COLUMNS of equal square cells, read left-to-right, top-to-bottom. It will be cut into cells and played as a looping walk, with NO interpolation.
+
+THIS IS A CLEAN-UP PASS OVER A ROUGH ANIMATION:
+- Image 2 is the ROUGH: a 4x6 walk animation of the character made from cut-out puppet parts. Its poses, foot positions and timing are CORRECT and must be kept cell by cell: in each output cell, the body height, which foot is in front, which foot is behind, which foot is lifted and how far each foot is from the body must match the SAME cell of Image 2. Do not reorder, skip or repeat cells.
+- What is wrong with the rough: it looks like separate parts stuck together. REDRAW each cell as ONE natural hand drawing: legs grow smoothly out of the body with no seams, the knees bend slightly as each leg swings and takes weight, the hips and belly shift a little with each step, and the body bobs and sways with the walk.
+- Image 1 = WHO: copy the character identity and drawing style only — Dageudangs, a very happy golden tan bipedal horse (#dfa461), big cream muzzle (#fce7c9) with two nostrils, dark brown straight-cut bangs and shaggy mane (#6c5036), two pointed ears, happy closed eyes (upside-down U), wide open laughing mouth, rosy cheeks, both arms raised in joy with dark brown hoof hands, short tail, colored-pencil grain, dark dashed brown outlines (#2c241e). NO backpack. Same size and the same front 3/4 view as Image 1 in every cell.
+
+GREEN SOCK (keep it exactly): in Image 2 the character's LEFT foot wears a bright pure GREEN sock (#00c000). Keep that green sock on that SAME foot in every output cell, at the same place as in Image 2 — including the cells where the legs cross. Exactly one green foot per cell, never two, never zero, never moved to the other foot. The other foot stays dark brown. The right leg stays one shade darker (#ad8a64) than the left leg.
+
+HAPPY SKIPPING WALK: bouncy, joyful hop-steps in place — the body springs up when a foot pushes off and squashes a little on landing, the raised arms bob with the body, the head bounces slightly late. Keep the happy face in every cell.
+
+STAGE: walking in place, plain white background, same floor height and same character size in every cell, fully visible, ample white space between cells. No grid lines, no borders, no numbers, no text, no music notes, no motion lines, no dust, no shadows, no scenery.
