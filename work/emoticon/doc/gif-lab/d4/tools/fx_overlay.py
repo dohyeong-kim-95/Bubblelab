@@ -10,7 +10,7 @@
 import argparse, glob, json, math, os
 from PIL import Image
 ap = argparse.ArgumentParser(); ap.add_argument("frames"); ap.add_argument("split"); ap.add_argument("out")
-ap.add_argument("--float", default=""); ap.add_argument("--static", default=""); ap.add_argument("--twinkle", default=""); ap.add_argument("--blink", default=""); ap.add_argument("--blink-on", default="1-6"); ap.add_argument("--puff", default=""); ap.add_argument("--puff-at", default="1,13")
+ap.add_argument("--float", default=""); ap.add_argument("--static", default=""); ap.add_argument("--twinkle", default=""); ap.add_argument("--static-dy", type=float, default=0, help="--static 부품을 스티커 px 만큼 위(-)/아래(+)로 — 점프가 글자에 닿을 때"); ap.add_argument("--blink", default=""); ap.add_argument("--blink-on", default="1-6"); ap.add_argument("--puff", default=""); ap.add_argument("--puff-at", default="1,13")
 ap.add_argument("--match-char", action="store_true", help="첫 칸 캐릭터 크기·자리를 스티커 속 캐릭터에 맞춰 효과를 원래 자리에(필요하면 프레임을 넓힌다)")
 ap.add_argument("--period", type=int, default=0, help="효과 한 주기 칸 수(0=전체). 캐릭터가 12칸 주기면 12 — LINE 이 한 주기만 담아도 이어진다")
 ap.add_argument("--rise", type=float, default=0.10, help="떠오르는 높이(프레임 높이 비율)")
@@ -26,7 +26,7 @@ if a.match_char:
     sb = _bb(Image.open(f"{a.split}/char.png")); fb = _bb(F0)
     k = (fb[3] - fb[1]) / (sb[3] - sb[1])
     x0 = (fb[0] + fb[2]) / 2 - (sb[0] + sb[2]) / 2 * k; y0 = fb[3] - sb[3] * k   # 스티커 (0,0) 의 프레임 좌표
-    L, T, R, B = min(0, x0), min(0, y0), max(FW, x0 + SW * k), max(FH, y0 + SH * k)
+    L, T, R, B = min(0, x0), min(0, y0 + min(0, a.static_dy) * k), max(FW, x0 + SW * k), max(FH, y0 + SH * k)
     side = int(max(R - L, B - T)); OX, OY = int(-L + (side - (R - L)) / 2), int(-T + (side - (B - T)) / 2)
     FW = FH = side; _sx0, _sy0 = x0 + OX, y0 + OY
 def part(pid): return Image.open(f"{a.split}/parts/{pid}.png").convert("RGBA"), P[pid]["box"]
@@ -51,7 +51,7 @@ def place(can, img, box, s, dx=0, dy=0, rot=0):
 P_ = a.period or N
 for i, f in enumerate(files):
     can = Image.new("RGBA", (FW, FH), (0, 0, 0, 0)); can.alpha_composite(Image.open(f).convert("RGBA"), (OX, OY))
-    for img, box in statics: place(can, img, box, 1.0)
+    for img, box in statics: place(can, img, box, 1.0, dy=a.static_dy * k)
     for j, (img, box) in enumerate(twinks):
         t = (i % P_) / P_ + j / max(1, len(twinks)) * 0.5
         place(can, img, box, 0.95 + 0.2 * math.sin(2 * math.pi * 2 * t), rot=10 * math.sin(2 * math.pi * t))
