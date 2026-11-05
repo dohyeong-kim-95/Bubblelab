@@ -7,11 +7,24 @@ import argparse, glob, json, math, os
 from PIL import Image
 ap = argparse.ArgumentParser(); ap.add_argument("frames"); ap.add_argument("split"); ap.add_argument("out")
 ap.add_argument("--float", default=""); ap.add_argument("--puff", default=""); ap.add_argument("--puff-at", default="1,13")
+ap.add_argument("--match-char", action="store_true", help="첫 칸 캐릭터 크기·자리를 스티커 속 캐릭터에 맞춰 효과를 원래 자리에(필요하면 프레임을 넓힌다)")
+ap.add_argument("--period", type=int, default=0, help="효과 한 주기 칸 수(0=전체). 캐릭터가 12칸 주기면 12 — LINE 이 한 주기만 담아도 이어진다")
 ap.add_argument("--rise", type=float, default=0.10, help="떠오르는 높이(프레임 높이 비율)")
 a = ap.parse_args(); os.makedirs(a.out, exist_ok=True)
 meta = json.load(open(f"{a.split}/parts.json")); SW, SH = meta["size"]; P = {p["id"]: p for p in meta["parts"]}
 files = sorted(glob.glob(f"{a.frames}/*.png")); N = len(files)
 F0 = Image.open(files[0]); FW, FH = F0.size; k = min(FW / SW, FH / SH) * 0.95
+OX = OY = 0                                                   # 프레임을 넓힌 만큼의 여백(--match-char)
+if a.match_char:
+    # 스티커 안 캐릭터 범위(split/char.png)와 첫 칸 캐릭터 범위를 맞춘다(키 비율 + 아랫단·가로 가운데). 효과가 원래 자리(캐릭터 기준)에 온다.
+    import numpy as _np
+    def _bb(im): ys, xs = _np.where(_np.asarray(im.convert("RGBA"))[..., 3] > 60); return xs.min(), ys.min(), xs.max(), ys.max()
+    sb = _bb(Image.open(f"{a.split}/char.png")); fb = _bb(F0)
+    k = (fb[3] - fb[1]) / (sb[3] - sb[1])
+    x0 = (fb[0] + fb[2]) / 2 - (sb[0] + sb[2]) / 2 * k; y0 = fb[3] - sb[3] * k   # 스티커 (0,0) 의 프레임 좌표
+    L, T, R, B = min(0, x0), min(0, y0), max(FW, x0 + SW * k), max(FH, y0 + SH * k)
+    side = int(max(R - L, B - T)); OX, OY = int(-L + (side - (R - L)) / 2), int(-T + (side - (B - T)) / 2)
+    FW = FH = side; _sx0, _sy0 = x0 + OX, y0 + OY
 def part(pid): return Image.open(f"{a.split}/parts/{pid}.png").convert("RGBA"), P[pid]["box"]
 floats = [part(p) for p in a.float.split(",") if p]; puffs = [part(p) for p in a.puff.split(",") if p]
 puff_at = [int(x) - 1 for x in a.puff_at.split(",") if x]
@@ -19,18 +32,20 @@ ease = lambda t: 0.5 - 0.5 * math.cos(math.pi * max(0, min(1, t)))
 def place(can, img, box, s, dx=0, dy=0, rot=0):
     w, h = img.size; im = img.resize((max(1, round(w * k * s)), max(1, round(h * k * s))), Image.LANCZOS)
     if rot: im = im.rotate(rot, expand=True, resample=Image.BICUBIC)
-    cx = FW / 2 + ((box[0] + box[2]) / 2 - SW / 2) * k + dx; cy = FH / 2 + ((box[1] + box[3]) / 2 - SH / 2) * k + dy
+    if a.match_char: cx = _sx0 + (box[0] + box[2]) / 2 * k + dx; cy = _sy0 + (box[1] + box[3]) / 2 * k + dy
+    else: cx = FW / 2 + ((box[0] + box[2]) / 2 - SW / 2) * k + dx; cy = FH / 2 + ((box[1] + box[3]) / 2 - SH / 2) * k + dy
     can.alpha_composite(im, (round(cx - im.width / 2), round(cy - im.height / 2)))
+P_ = a.period or N
 for i, f in enumerate(files):
-    can = Image.open(f).convert("RGBA")
+    can = Image.new("RGBA", (FW, FH), (0, 0, 0, 0)); can.alpha_composite(Image.open(f).convert("RGBA"), (OX, OY))
     for j, (img, box) in enumerate(floats):                    # 한 주기에 한 번 떠올랐다 사라짐, 부품마다 반 주기 시차
-        t = (i / N + j / max(1, len(floats))) % 1
+        t = ((i % P_) / P_ + j / max(1, len(floats))) % 1
         s = 0.6 + 0.5 * ease(t / 0.3) - 1.1 * ease((t - 0.8) / 0.2)
         if s <= 0.05: continue
         place(can, img, box, s, dx=4 * math.sin(2 * math.pi * 2 * t), dy=-a.rise * FH * ease(t), rot=12 * math.sin(2 * math.pi * 2 * t + j))
     for img, box in puffs:                                     # 착지 칸부터 4칸 동안 퐁
         for c in puff_at:
-            d = (i - c) % N
+            d = (i - c) % P_
             if d < 4: place(can, img, box, 0.5 + 0.25 * d, dy=-2 * d)
     can.save(f"{a.out}/{i+1:02d}.png")
 print("ok", N, "frames", len(floats), "float", len(puffs), "puff")

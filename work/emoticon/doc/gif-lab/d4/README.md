@@ -44,6 +44,50 @@
 - LINE 은 24칸 중 12장만 남기고(홀드 우선) 빠진 칸 시간을 앞 칸에 합쳐 정확히 2.0초 × 2회다. **용량이 300KB 한도에 붙어 있다**(색연필 질감 때문).
   글자를 얹거나 효과를 늘리면 넘을 수 있으니, 그때는 `--line-frames 10` 으로 줄이거나 색 수를 더 깎는다.
 
+## 재시범 v2 (2026-11-06) — "종이인형"·"다리 모양" 피드백 반영
+
+사용자 판정(v1): "종이인형을 흔드는 느낌(01·07), 다리 모양이 자연스럽지 않음(14), 동선 궤적이 단순했다."
+원인: v1 은 한 축 회전·좌우 살랑만 있고 다른 부위는 고정, 01 은 다듬기 없음·07 은 생성 0회라 같은 그림이 통째로 기울었고, 14 는 무릎 없는 곧은 다리 회전이었다.
+v2 는 출근 합격작과 같은 순서(**러프 리그 → image_gen 다듬기 → 검증**)를 세 종 모두에 적용했다. 이미지는 전부 로컬 `~/dageudangs-lab/work/d4/<종>/v2/`.
+
+| 종 | 러프(코드) — 무엇이 움직이나 | 다듬기 | image_gen(v2) |
+|---|---|---|---|
+| 01 안뇽~ | `tools/rig_01.py` — 팔을 위팔·아래팔로 나눠 **어깨-팔꿈치 2단**(아래팔이 2칸 늦게 끌려와 손이 호를 그림, 양 끝 홀드), 흔들 때마다 몸 squash/stretch 바운스, 머리 2~3칸 늦게 갸웃, 귀 한 칸 더 늦게 펄럭 | `prompts/CLEAN_01.txt` | 1 |
+| 07 기여워! | `tools/rig_07.py` — 몸통이 먼저 작게, **머리+손이 2칸 늦게 더 크게**(S 곡선), 끝에서 볼 꾹(가로로 넓게) + 어깨 내려앉음, 귀 한 칸 더 늦게 | `prompts/CLEAN_07.txt` | 1 |
+| 14 야호 신나! | `tools/rig_14.py --sock` — 다리를 허벅지·정강이로 나눠 **엉덩이-무릎 IK**, 깡충 궤적(디딤에서 무릎이 받고, 흔드는 발은 무릎이 앞으로 높이 올라왔다 뻗어 착지), 착지 squash·밀기 stretch·디딤발 쪽 기울기, 머리·귀·든 팔·꼬리 1~2칸 늦게. 12칸 = 두 걸음, 2초에 네 걸음 | `prompts/CLEAN_14v2.txt` | 1 |
+
+부품은 새로 그리지 않았다 — v1 부품 시트(01·14)와 스티커 캐릭터(07)를 `rig_lib.py` 의 `cut()` 으로 더 잘랐다(이음매는 다듬기가 다시 그린다).
+v2 는 **12칸 한 주기를 다듬고 두 번 이어 24장(2초)** 이다 — 칸이 커서 다듬기 품질이 낫고, LINE 은 한 주기(1초)만 담아 4회 반복(`d4_export.py --line-period 12`)해 칸을 버리지 않는다.
+
+```bash
+T=work/emoticon/doc/gif-lab/d4/tools; D=~/dageudangs-lab/work/d4
+python3 $T/rig_14.py $D/14/parts.png $D/14/v2/rig --sock            # 러프 4×3 시트 + frames + feet.json (01: rig_01.py parts.png, 07: rig_07.py split)
+# 다듬기(image_gen 1회): 레퍼런스 [$D/14/split/char_ref.png, $D/14/v2/rig/rig_sheet.png] → $D/14/v2/clean_sheet.png
+python3 $T/feet_check.py $D/14/v2/rig/rig_sheet.png $D/14/v2/clean_sheet.png $D/14/v2   # track.png(초록발 궤적 러프 vs 다듬기) + legs.jpg(하반신 확대)
+python3 $T/../../loop/tools/unsock.py $D/14/v2/clean_sheet.png $D/14/v2/clean_unsock.png  # 14 만
+python3 $T/cutout.py $D/14/v2/clean_unsock.png:3x4 $D/14/v2/cut
+python3 $T/register.py $D/14/v2/cut $D/14/v2/rig/frames $D/14/v2/reg    # 칸마다 러프 자리에 맞춤(흉상은 --band)
+MS=$($T/loop24.sh $D/14/v2/reg $D/14/v2/char24 $D/14/v2/rig/ms.json)
+python3 $T/fx_overlay.py $D/14/v2/char24 $D/14/split $D/14/v2/frames --float 11,12 --puff 17,18 --puff-at 1,7 --period 12 --match-char
+python3 $T/d4_export.py $D/14/v2/frames $D/14/v2/out --ms "$MS" --line-period 12
+```
+
+- `register.py`: image_gen 은 칸마다 캐릭터를 조금씩 다른 자리에 그린다 → 칸마다 (가로 가운데, 아랫단)을 러프 같은 칸에 맞추고 배율은 하나로.
+- `fx_overlay.py --match-char`: 효과(하트·음표·먼지)를 스티커 속 캐릭터 기준 원래 자리에(v1 은 프레임 기준이라 07 하트가 얼굴을 덮었다). `--period 12` 로 효과도 12칸 주기.
+- 14 검증: `track.png` 에서 초록(왼)발 x·높이 곡선이 러프를 점프 없이 따라가고, 12칸 모두 초록 발 1개(`legs.jpg`). 무릎 굽힘은 다듬기에서 러프보다 약간 얕아졌다 — 사람 판정 대상.
+- 다듬기 전 버전도 남겼다: `<종>/v2/rig/rig.gif`(러프), v1 결과는 `<종>/preview/` 그대로.
+- 01 러프는 `rig_01.py` 가 목 틈 메우기를 '목 근처 띠'로 바꾸기 전 판(머리 전체 겹쳐 그리기)으로 다듬었다 — 차이는 이음매 잔선뿐이고 다듬기가 지웠다.
+
+### 규격(v2, `d4_export.py` 가 파일을 다시 읽어 잰 값)
+
+| 종 | 카카오 GIF | LINE APNG | LINE main | LINE tab |
+|---|---|---|---|---|
+| 01 | 360², 24f, 2.00s, 1.35MB ✓ | 270², 12f, 1s×4, 294KB ✓ | 240², 293KB ✓ | 96×74 ✓ |
+| 07 | 360², 24f, 2.00s, 1.28MB ✓ | 270², 12f, 1s×4, 297KB ✓ | 240², 293KB ✓ | 96×74 ✓ |
+| 14 | 360², 24f, 2.00s, 945KB ✓ | 270², 12f, 1s×4, 263KB ✓ | 240², 215KB ✓ | 96×74 ✓ |
+
+LINE 01·07 은 96색까지 줄여 300KB 에 붙어 있다(글자를 얹으면 `--line-frames 10` 이나 색 수 감량이 필요). 카카오 트랙 관점에서는 07 도 이제 AI 다듬기를 거치므로 "AI 단계 0" 장점이 없다(아래 절은 v1 기준).
+
 ## 카카오 트랙으로 가려면
 
 카카오는 생성형 AI 이모티콘 입점을 2023-09부터 사실상 막고 있다(`../../kakao-emoticon-guide.md` §1). 지금 흐름에서 image_gen 이 들어가는 곳은

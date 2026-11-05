@@ -362,6 +362,7 @@ def main():
     ap.add_argument("--text", default="", help="글자 얹기(자리만 — 미구현)")
     ap.add_argument("--line-keep", default="", help="LINE 에 남길 프레임 번호(1부터), 예 '1,3,5'. 없으면 자동")
     ap.add_argument("--line-frames", type=int, default=12, help="자동 선택 시 남길 장수(10~12 권장, 기본 12)")
+    ap.add_argument("--line-period", type=int, default=0, help="앞 P 장이 한 주기이고 나머지는 반복일 때 — LINE 은 한 주기만 담고 루프(예: 12)")
     ap.add_argument("--line-sec", type=int, default=0, help="LINE 총 길이(초, 1~4). 0=원본 길이를 반올림")
     ap.add_argument("--line-loop", type=int, default=0, help="LINE 루프 횟수(1~4). 0=floor(4/초)")
     a = ap.parse_args()
@@ -398,9 +399,13 @@ def main():
     keep = [int(x) for x in a.line_keep.split(",") if x.strip()] if a.line_keep else None
     if keep and 1 not in keep:
         notes.append("LINE: --line-keep 에 1번이 없다 — 맨 앞 빠진 칸들의 시간은 마지막 남은 칸에 합쳤다")
-    f270 = fit(src, LINE["w"], LINE["h"])
-    kept, dur = select_line(f270, ms, keep, a.line_frames)
-    total_src = sum(ms)
+    l_src, l_ms = src, ms
+    if a.line_period:                                  # 앞 P 장이 한 주기(뒤는 그 반복) — 한 주기만 담고 루프로 늘린다(칸을 버리지 않는다)
+        l_src, l_ms = src[:a.line_period], ms[:a.line_period]
+        notes.append(f"LINE: 한 주기 {a.line_period}장({sum(l_ms)}ms)만 담고 루프로 반복")
+    f270 = fit(l_src, LINE["w"], LINE["h"])
+    kept, dur = select_line(f270, l_ms, keep, a.line_frames)
+    total_src = sum(l_ms)
     sec = a.line_sec or min(4, max(1, int(round(total_src / 1000))))
     if sec not in LINE["secs"]:
         sys.exit("--line-sec 는 1~4")
@@ -420,7 +425,7 @@ def main():
         if size <= LINE["max_bytes"]:
             break
     l_colors = l_tries[-1][0]
-    f240 = fit(src, MAIN["w"], MAIN["h"])
+    f240 = fit(l_src, MAIN["w"], MAIN["h"])
     m_frames = [f240[i] for i in kept]
     m_tries = []
     for c in LINE_COLORS:
@@ -428,7 +433,7 @@ def main():
         m_tries.append((used, size))
         if size <= LINE["max_bytes"]:
             break
-    tab = fit([src[kept[0]]], TAB["w"], TAB["h"])[0]
+    tab = fit([l_src[kept[0]]], TAB["w"], TAB["h"])[0]
     (out / "line").mkdir(parents=True, exist_ok=True)
     tab.save(out / "line/tab.png", optimize=True)
 
