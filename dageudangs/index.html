@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
-<title>📷 인스타툰 미리보기</title>
+<title>📷 인스타툰·릴스 미리보기</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>📷</text></svg>">
 <style>
   /* 인스타그램에 올렸을 때 어떻게 보일지 — 프로필 격자와 게시물(넘겨 보기)만 흉내 낸다 */
@@ -91,6 +91,72 @@
   .script li button { text-align: left; }
   .script li.on { font-weight: 700; }
   .script small { color: var(--muted); }
+
+  /* 탭 줄 (게시물 | 릴스) */
+  .tabs { display: flex; border-top: 1px solid var(--line); }
+  .tabs button { flex: 1; display: flex; justify-content: center; align-items: center; height: 44px;
+                 color: var(--muted); border-top: 1px solid transparent; margin-top: -1px; }
+  .tabs button[aria-selected="true"] { color: var(--text); border-top-color: var(--text); }
+  .tabs svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+  .tabs + .grid { border-top: 0; }
+
+  /* 로컬 파일 불러오기 */
+  .loader { display: flex; gap: 8px; flex-wrap: wrap; padding: 0 16px 12px; }
+  .loader label, .loader button { position: relative; flex: 1 1 8rem; padding: 8px 10px; border-radius: 8px; background: var(--chip);
+                 font-weight: 600; font-size: 13px; text-align: center; cursor: pointer; }
+  .loader input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+  .loader label:focus-within { outline: 2px solid var(--dot-on); outline-offset: 2px; }
+  .loader p { flex-basis: 100%; margin: 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+  .loader button[hidden] { display: none; }
+  body.dragging .app { outline: 3px dashed var(--dot-on); outline-offset: -6px; }
+
+  /* 릴스 격자 (9:16) */
+  .grid.reels button, .grid.reels .empty { aspect-ratio: 9 / 16; }
+  .grid.reels video, .grid.reels img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
+  .grid .play { position: absolute; left: 6px; bottom: 6px; display: flex; align-items: center; gap: 3px;
+                color: #fff; font-size: 12px; font-weight: 600; filter: drop-shadow(0 0 2px rgba(0,0,0,.6)); }
+  .grid .play svg { width: 14px; height: 14px; fill: #fff; }
+
+  /* 릴스 전체 화면 */
+  html.lock, html.lock body { overflow: hidden; }
+  .player { position: fixed; inset: 0; z-index: 10; background: #000; color: #fff; }
+  .player .feed { height: 100dvh; overflow-y: auto; scroll-snap-type: y mandatory; scrollbar-width: none;
+                  overscroll-behavior: contain; outline: none; }
+  .player .feed::-webkit-scrollbar { display: none; }
+  .reel { position: relative; height: 100dvh; scroll-snap-align: start; scroll-snap-stop: always;
+          display: flex; justify-content: center; }
+  .reel .stage { position: relative; height: 100%; width: min(100vw, calc(100dvh * 9 / 16)); background: #111; overflow: hidden; }
+  .reel video, .reel .stage > img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .reel .paused-ico { position: absolute; inset: 0; margin: auto; width: 72px; height: 72px; fill: rgba(255,255,255,.85);
+                      pointer-events: none; opacity: 0; transition: opacity .15s; }
+  .reel.paused .paused-ico { opacity: 1; }
+  .reel .shade { position: absolute; inset: auto 0 0 0; height: 45%; pointer-events: none;
+                 background: linear-gradient(transparent, rgba(0,0,0,.55)); }
+  .reel .side { position: absolute; right: 10px; bottom: calc(96px + env(safe-area-inset-bottom)); display: grid; gap: 18px;
+                justify-items: center; font-size: 12px; text-shadow: 0 0 3px rgba(0,0,0,.6); }
+  .reel .side span { display: grid; justify-items: center; gap: 3px; }
+  .reel .side svg { width: 28px; height: 28px; fill: none; stroke: #fff; stroke-width: 1.9; stroke-linejoin: round;
+                    stroke-linecap: round; filter: drop-shadow(0 0 2px rgba(0,0,0,.5)); }
+  .reel .info { position: absolute; left: 12px; right: 64px; bottom: calc(18px + env(safe-area-inset-bottom));
+                text-shadow: 0 0 3px rgba(0,0,0,.6); }
+  .reel .who { display: flex; align-items: center; gap: 8px; font-weight: 700; margin-bottom: 6px; }
+  .reel .who .mini { width: 30px; height: 30px; flex: none; }
+  .reel .who .ph, .reel .who img { border-color: #000; }
+  .reel .follow { padding: 2px 8px; border: 1px solid rgba(255,255,255,.8); border-radius: 6px; font-size: 12px; font-weight: 600; }
+  .reel .cap { white-space: pre-line; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2;
+               -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
+  .reel .cap.open { display: block; max-height: 40dvh; overflow-y: auto; }
+  .reel .cap.none { opacity: .7; }
+  .reel .edit { margin-top: 6px; font-size: 12px; text-decoration: underline; opacity: .85; color: #fff; }
+  .reel textarea { width: 100%; min-height: 5.5em; margin-top: 6px; border-radius: 8px; border: 0; padding: 8px;
+                   font: inherit; color: #000; background: #fff; }
+  .player .top { position: absolute; top: 0; left: 0; right: 0; z-index: 1; display: flex; align-items: center; gap: 10px;
+                 height: 52px; padding: env(safe-area-inset-top) 12px 0; box-sizing: content-box; font-weight: 700; font-size: 18px;
+                 pointer-events: none; text-shadow: 0 0 3px rgba(0,0,0,.6); }
+  .player .top button { pointer-events: auto; font-size: 26px; line-height: 1; padding: 4px 8px 4px 0; color: #fff; }
+  .player .top .sound { margin-left: auto; font-size: 18px; width: 36px; height: 36px; border-radius: 50%;
+                        background: rgba(0,0,0,.45); padding: 0; text-align: center; }
+  .player .top .pos { font-size: 12px; font-weight: 400; opacity: .8; }
 </style>
 </head>
 <body>
@@ -98,33 +164,289 @@
 <script>
   const app = document.getElementById("app");
   let data = null;
+  let tab = "posts";                       // 프로필 탭: posts(게시물 격자) | reels
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+  // ── 로컬 파일 ────────────────────────────────────────────────
+  // 다그당스 그림·영상은 공개 저장소에 두지 않는다. 화면을 채우는 건 사용자가 고른 이 기기의 파일뿐 —
+  // 서버로 올리지 않고 URL.createObjectURL 로 그 자리에서만 보인다(새로고침하면 사라진다).
+  const local = new Map();                 // 게시물 폴더 안 상대 경로 → { file, url }
+  let reels = [];                          // { name, url, file, kind: "video"|"gif", caption }
+  let loadMsg = "";
+  const NN = (i) => String(i + 1).padStart(2, "0");
   // 컷 JPEG 는 7일 캐시라, 다시 구우면 episodes.json 의 rev 를 올려 주소를 바꾼다
-  const src = (ep, i) => `${ep.id}/${String(i + 1).padStart(2, "0")}.jpg${ep.rev ? `?v=${ep.rev}` : ""}`;
+  const src = (ep, i) => local.get(`${ep.id}/${NN(i)}.jpg`)?.url ?? `${ep.id}/${NN(i)}.jpg${ep.rev ? `?v=${ep.rev}` : ""}`;
   const MULTI = '<svg class="multi" viewBox="0 0 24 24"><path d="M5 3h12a2 2 0 0 1 2 2v12h-2V5H5z"/><rect x="2" y="7" width="13" height="15" rx="2"/></svg>';
+  const PLAY = '<svg viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z"/></svg>';
+  const ICON = {
+    grid: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="1"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg>',
+    reels: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M3 8h18M8 3l3 5M14 3l3 5M10.5 11.5v5l4.5-2.5z"/></svg>',
+    heart: '<svg viewBox="0 0 24 24"><path d="M12 20.5s-8-4.7-8-10.7A4.6 4.6 0 0 1 12 7a4.6 4.6 0 0 1 8 2.8c0 6-8 10.7-8 10.7z"/></svg>',
+    comment: '<svg viewBox="0 0 24 24"><path d="M20.5 11.7a8.5 8.5 0 0 1-12.6 7.4L3.5 20.5l1.4-4.3a8.5 8.5 0 1 1 15.6-4.5z"/></svg>',
+    send: '<svg viewBox="0 0 24 24"><path d="M21.5 3 10 13.5M21.5 3l-7 18-4.5-7.5L2.5 9z"/></svg>',
+    more: '<svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>',
+  };
+  const MEDIA = /\.(mp4|webm|mov|m4v|gif)$/i;
+  const isMedia = (f) => /^video\//.test(f.type) || f.type === "image/gif" || MEDIA.test(f.name);
+  const isGif = (f) => f.type === "image/gif" || /\.gif$/i.test(f.name);
+  const dirOf = (p) => p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "";
+  const baseName = (p) => p.slice(p.lastIndexOf("/") + 1);
+
+  // reels.json — `{"reels":[{"file":"a.mp4","caption":"…"}]}` 또는 같은 모양의 배열. 순서도 이걸 따른다.
+  function reelSpec(json) {
+    const list = Array.isArray(json) ? json : Array.isArray(json?.reels) ? json.reels : [];
+    return list.filter((r) => r && typeof r.file === "string").map((r) => ({ file: baseName(r.file), caption: String(r.caption ?? "") }));
+  }
+
+  async function ingest(entries) {          // entries: [{ file, path }] (path = 고른 폴더 기준 상대 경로)
+    const byName = (n) => entries.find((e) => baseName(e.path) === n);
+    const said = [];
+    const epEntry = byName("episodes.json");
+    if (epEntry) {
+      try {
+        const json = JSON.parse(await epEntry.file.text());
+        if (!Array.isArray(json?.episodes)) throw new Error("episodes 배열이 없습니다");
+        for (const { url } of local.values()) URL.revokeObjectURL(url);
+        local.clear();
+        const base = dirOf(epEntry.path);
+        for (const e of entries) {
+          if (base && !e.path.startsWith(base + "/")) continue;
+          const rel = base ? e.path.slice(base.length + 1) : e.path;
+          if (/\.(jpe?g|png|webp)$/i.test(rel)) local.set(rel, { file: e.file, url: URL.createObjectURL(e.file) });
+        }
+        data = { account: { handle: "handle", ...json.account }, episodes: json.episodes };
+        said.push(`게시물 ${json.episodes.length}개`);
+      } catch (err) { said.push(`episodes.json 을 읽지 못했습니다(${err.message})`); }
+    }
+    let spec = [];
+    const specEntry = byName("reels.json");
+    if (specEntry) { try { spec = reelSpec(JSON.parse(await specEntry.file.text())); } catch { said.push("reels.json 을 읽지 못했습니다"); } }
+    const added = entries.filter((e) => isMedia(e.file))
+      .sort((a, b) => a.path.localeCompare(b.path, "ko", { numeric: true }))
+      .map((e) => ({ name: e.file.name, file: e.file, url: URL.createObjectURL(e.file), kind: isGif(e.file) ? "gif" : "video", caption: "" }));
+    if (spec.length || added.length) {
+      const all = [...reels, ...added];
+      const rank = (r) => { const i = spec.findIndex((s) => s.file === r.name); return i < 0 ? Infinity : i; };
+      for (const r of all) { const s = spec.find((x) => x.file === r.name); if (s && !r.caption) r.caption = s.caption; }
+      reels = all.map((r, i) => [r, i]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(([r]) => r);
+      if (added.length) said.push(`릴스 ${added.length}개`);
+    }
+    loadMsg = said.length ? `불러옴: ${said.join(", ")} — 이 기기에서만 보이고 서버로 올라가지 않습니다.` : "불러올 파일이 없습니다 (episodes.json·컷 이미지·mp4·webm·gif).";
+    if (added.length && !epEntry) tab = "reels";
+    const want = tab === "reels" ? "#reels" : "";
+    if (location.hash !== want) location.hash = want; else route();
+  }
+  const fromInput = (input) => ingest([...input.files].map((file) => ({ file, path: file.webkitRelativePath || file.name })));
+
+  // 폴더를 끌어다 놓으면 하위까지 읽는다(webkitGetAsEntry). 경로는 놓은 폴더 이름부터.
+  async function readEntry(entry, out) {
+    if (entry.isFile) { out.push({ file: await new Promise((ok, no) => entry.file(ok, no)), path: entry.fullPath.replace(/^\//, "") }); return; }
+    const reader = entry.createReader();
+    for (;;) {
+      const batch = await new Promise((ok, no) => reader.readEntries(ok, no));
+      if (!batch.length) break;
+      for (const child of batch) await readEntry(child, out);
+    }
+  }
+  addEventListener("dragover", (e) => { if (e.dataTransfer?.types.includes("Files")) { e.preventDefault(); document.body.classList.add("dragging"); } });
+  addEventListener("dragleave", (e) => { if (!e.relatedTarget) document.body.classList.remove("dragging"); });
+  addEventListener("drop", async (e) => {
+    if (!e.dataTransfer?.types.includes("Files")) return;
+    e.preventDefault();
+    document.body.classList.remove("dragging");
+    const items = [...e.dataTransfer.items].map((it) => it.webkitGetAsEntry?.()).filter(Boolean);
+    const out = [];
+    if (items.length) { for (const it of items) await readEntry(it, out).catch(() => {}); }
+    else for (const file of e.dataTransfer.files) out.push({ file, path: file.name });
+    ingest(out);
+  });
+
+  function loader() {
+    return `<div class="loader">
+        <label>📂 폴더 불러오기<input type="file" class="pick-dir" webkitdirectory multiple></label>
+        <label>🎞️ 파일 고르기<input type="file" class="pick-files" multiple accept="video/mp4,video/webm,video/quicktime,image/gif,.json,image/jpeg"></label>
+        <button type="button" class="save-caps"${tab === "reels" && reels.length ? "" : " hidden"}>💾 reels.json</button>
+        <button type="button" class="clear-reels"${tab === "reels" && reels.length ? "" : " hidden"}>비우기</button>
+        <p aria-live="polite">${esc(loadMsg || (tab === "reels"
+          ? "mp4·webm·gif 를 고르거나 끌어다 놓으면 여기서 바로 미리 봅니다. 같은 폴더의 reels.json 이 있으면 캡션을 읽습니다."
+          : "episodes.json 과 <화id>/NN.jpg 가 든 폴더(~/dageudangs-lab/toon/dageudangs)를 고르면 게시물이 채워집니다."))}</p>
+      </div>`;
+  }
+  function bindLoader() {
+    app.querySelector(".pick-dir").addEventListener("change", (e) => fromInput(e.target));
+    app.querySelector(".pick-files").addEventListener("change", (e) => fromInput(e.target));
+    app.querySelector(".clear-reels").addEventListener("click", () => {
+      for (const r of reels) URL.revokeObjectURL(r.url);
+      reels = []; loadMsg = ""; route();
+    });
+    // 화면에서 고친 캡션을 같은 폴더에 둘 reels.json 으로 받는다(다음에 폴더째 불러오면 그대로 읽힌다)
+    app.querySelector(".save-caps").addEventListener("click", () => {
+      const body = JSON.stringify({ reels: reels.map((r) => ({ file: r.name, caption: r.caption })) }, null, 2) + "\n";
+      const url = URL.createObjectURL(new Blob([body], { type: "application/json" }));
+      const a = Object.assign(document.createElement("a"), { href: url, download: "reels.json" });
+      document.body.append(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    });
+  }
 
   const label = (ep) => ep.kind === "zzal" ? "짤" : `${ep.no}화`;
   // 프로필 사진은 episodes.json 의 account.avatar(같은 폴더 기준 경로)가 있을 때만. 없으면 회색 자리표시
-  const avatar = (cls) => `<div class="${cls}">${data.account.avatar ? `<img src="${esc(data.account.avatar)}" alt="">` : '<span class="ph"></span>'}</div>`;
+  const avatarUrl = () => data.account.avatar ? (local.get(data.account.avatar)?.url ?? data.account.avatar) : "";
+  const avatar = (cls) => `<div class="${cls}">${avatarUrl() ? `<img src="${esc(avatarUrl())}" alt="">` : '<span class="ph"></span>'}</div>`;
+  const EMPTY3 = '<div class="empty"></div><div class="empty"></div><div class="empty"></div>';
+
+  function postsGrid() {
+    const newest = [...data.episodes].reverse();   // episodes.json 은 올린 순서
+    return `<div class="grid">${newest.length ? "" : `${EMPTY3}
+        <p class="empty-msg">게시물이 없습니다 — 위에서 로컬 폴더를 불러오거나, episodes.json 에 화를 넣고 렌더러로 컷을 구우면 여기에 보입니다.</p>`}${newest.map((ep) => `
+        <button data-ep="${esc(ep.id)}" aria-label="${label(ep)} ${esc(ep.title)}">
+          <img src="${esc(src(ep, 0))}" alt="" loading="lazy">${ep.cuts.length > 1 ? MULTI : ""}</button>`).join("")}
+      </div>`;
+  }
+  function reelsGrid() {
+    return `<div class="grid reels">${reels.length ? "" : `${EMPTY3}
+        <p class="empty-msg">릴스가 없습니다 — mp4·webm·gif 를 고르거나 끌어다 놓으세요. 서버로 올라가지 않습니다.</p>`}${reels.map((r, i) => `
+        <button data-reel="${i}" aria-label="릴스 ${i + 1}: ${esc(r.caption || r.name)}">
+          ${r.kind === "gif" ? `<img src="${esc(r.url)}" alt="">` : `<video src="${esc(r.url)}#t=0.1" muted playsinline preload="metadata"></video>`}
+          <span class="play">${PLAY}${i + 1}</span></button>`).join("")}
+      </div>`;
+  }
 
   function profile() {
     const { account, episodes } = data;
-    const newest = [...episodes].reverse();   // episodes.json 은 올린 순서
     app.innerHTML = `
       <div class="bar">${esc(account.handle)}<span class="sub">미리보기 · 비공개</span></div>
       <div class="profile">${avatar("avatar")}
         <div class="stats"><div><b>${episodes.length}</b><span>게시물</span></div>
+          <div><b>${reels.length}</b><span>릴스</span></div>
           <div><b>주 1회</b><span>연재</span></div></div></div>
       <div class="bio">${account.name ? `<b>${esc(account.name)}</b>` : ""}${esc(account.bio || "")}</div>
-      <div class="note">아직 올리지 않은 시안입니다. 칸을 누르면 인스타에서 넘겨 보는 그대로 보입니다.</div>
-      <div class="grid">${newest.length ? "" : `<div class="empty"></div><div class="empty"></div><div class="empty"></div>
-        <p class="empty-msg">게시물이 없습니다 — episodes.json 의 episodes 에 화를 넣고 렌더러로 컷을 구우면 여기에 보입니다.</p>`}${newest.map((ep) => `
-        <button data-ep="${esc(ep.id)}" aria-label="${label(ep)} ${esc(ep.title)}">
-          <img src="${src(ep, 0)}" alt="" loading="lazy">${ep.cuts.length > 1 ? MULTI : ""}</button>`).join("")}
-      </div>`;
-    app.querySelectorAll(".grid button").forEach((b) => b.addEventListener("click", () => { location.hash = b.dataset.ep; }));
-    window.scrollTo(0, 0);
+      <div class="note">아직 올리지 않은 시안입니다. 칸을 누르면 인스타에서 보는 그대로 보입니다.</div>
+      ${loader()}
+      <div class="tabs" role="tablist">
+        <button role="tab" data-tab="posts" aria-selected="${tab === "posts"}" aria-label="게시물">${ICON.grid}</button>
+        <button role="tab" data-tab="reels" aria-selected="${tab === "reels"}" aria-label="릴스">${ICON.reels}</button>
+      </div>
+      ${tab === "reels" ? reelsGrid() : postsGrid()}`;
+    bindLoader();
+    app.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => {
+      location.hash = b.dataset.tab === "reels" ? "reels" : "";
+    }));
+    app.querySelectorAll(".grid button[data-ep]").forEach((b) => b.addEventListener("click", () => { location.hash = b.dataset.ep; }));
+    app.querySelectorAll(".grid button[data-reel]").forEach((b) => b.addEventListener("click", () => { location.hash = `reels/${b.dataset.reel}`; }));
   }
+
+  // ── 릴스 전체 화면: 세로 스와이프, 자동 반복, 소리 켜기/끄기 ─────────
+  let player = null;
+  let audible = false;
+  function closePlayer() {
+    if (!player) return;
+    player.observer.disconnect();
+    removeEventListener("keydown", player.onKey);
+    player.el.querySelectorAll("video").forEach((v) => v.pause());
+    player.el.remove();
+    document.documentElement.classList.remove("lock");
+    player = null;
+  }
+  function setAudible(on) {
+    audible = on;
+    if (!player) return;
+    const btn = player.el.querySelector(".sound");
+    btn.textContent = on ? "🔊" : "🔇";
+    btn.setAttribute("aria-label", on ? "소리 끄기" : "소리 켜기");
+    btn.setAttribute("aria-pressed", String(on));
+    player.el.querySelectorAll("video").forEach((v) => { v.muted = !on; });
+  }
+  function reelCaption(box, r) {
+    const cap = box.querySelector(".cap");
+    cap.textContent = r.caption || "캡션 없음";
+    cap.classList.toggle("none", !r.caption);
+  }
+  function editCaption(box, i) {
+    const r = reels[i];
+    const edit = box.querySelector(".edit");
+    if (box.querySelector("textarea")) return;
+    const ta = Object.assign(document.createElement("textarea"), { value: r.caption, placeholder: "캡션 (#태그 포함)" });
+    edit.textContent = "저장";
+    box.querySelector(".cap").hidden = true;
+    edit.before(ta);
+    ta.focus();
+    const done = (e) => {
+      e.stopImmediatePropagation();          // 같은 버튼의 "고치기" 리스너가 편집을 다시 열지 않게
+      r.caption = ta.value.trim();
+      ta.remove(); box.querySelector(".cap").hidden = false; edit.textContent = "✏️ 캡션 고치기";
+      reelCaption(box, r);
+    };
+    edit.addEventListener("click", done, { once: true, capture: true });
+  }
+  function openPlayer(start) {
+    closePlayer();
+    const el = document.createElement("div");
+    el.className = "player";
+    el.setAttribute("role", "dialog");
+    el.setAttribute("aria-label", "릴스");
+    el.innerHTML = `<div class="top"><button class="close" aria-label="릴스 닫기">‹</button>릴스<span class="pos"></span>
+        <button class="sound" aria-pressed="false" aria-label="소리 켜기">🔇</button></div>
+      <div class="feed" tabindex="0">${reels.map((r, i) => `
+        <section class="reel" data-i="${i}"><div class="stage">
+          ${r.kind === "gif" ? `<img src="${esc(r.url)}" alt="">` : `<video src="${esc(r.url)}" loop muted playsinline preload="metadata"></video>`}
+          <svg class="paused-ico" viewBox="0 0 24 24">${PLAY.slice(PLAY.indexOf("<path"), PLAY.indexOf("</svg>"))}</svg>
+          <div class="shade"></div>
+          <div class="side">
+            <span>${ICON.heart}좋아요</span><span>${ICON.comment}댓글</span><span>${ICON.send}공유</span><span>${ICON.more}</span>
+          </div>
+          <div class="info">
+            <div class="who">${avatar("mini")}${esc(data.account.handle)}<span class="follow">팔로우</span></div>
+            <div class="cap"></div>
+            <button class="edit">✏️ 캡션 고치기</button>
+          </div>
+        </div></section>`).join("")}</div>`;
+    document.body.append(el);
+    document.documentElement.classList.add("lock");
+    const feed = el.querySelector(".feed");
+    const pos = el.querySelector(".pos");
+    const sections = [...el.querySelectorAll(".reel")];
+    sections.forEach((box, i) => {
+      reelCaption(box, reels[i]);
+      box.querySelector(".cap").addEventListener("click", (e) => e.currentTarget.classList.toggle("open"));
+      box.querySelector(".edit").addEventListener("click", () => editCaption(box, i));
+      const v = box.querySelector("video");
+      // 화면을 누르면 일시정지/재생 (버튼·캡션·입력칸은 제외)
+      box.querySelector(".stage").addEventListener("click", (e) => {
+        if (!v || e.target.closest("button, textarea, .cap")) return;
+        if (v.paused) { v.play().catch(() => {}); box.classList.remove("paused"); }
+        else { v.pause(); box.classList.add("paused"); }
+      });
+    });
+    // 화면에 반 넘게 들어온 것만 재생한다. 지금 위치는 주소에 남겨(replaceState — hashchange 안 남) 새로고침해도 그 자리.
+    const observer = new IntersectionObserver((list) => {
+      for (const en of list) {
+        const box = en.target, i = +box.dataset.i, v = box.querySelector("video");
+        if (en.isIntersecting) {
+          pos.textContent = `${i + 1} / ${reels.length}`;
+          history.replaceState(null, "", `#reels/${i}`);
+          if (v) { v.muted = !audible; v.play().then(() => box.classList.remove("paused")).catch(() => box.classList.add("paused")); }
+        } else if (v) { v.pause(); v.currentTime = 0; box.classList.remove("paused"); }
+      }
+    }, { root: feed, threshold: 0.6 });
+    sections.forEach((s) => observer.observe(s));
+    player = { el, observer };
+    el.querySelector(".close").addEventListener("click", () => { location.hash = "reels"; });
+    el.querySelector(".sound").addEventListener("click", () => setAudible(!audible));
+    // 키는 창 전체에서 받는다 — 소리 버튼을 누르면 포커스가 피드 밖으로 나간다
+    player.onKey = (e) => {
+      if (e.target.closest?.("textarea")) return;
+      const i = Math.round(feed.scrollTop / feed.clientHeight);
+      if (e.key === "ArrowDown" || e.key === "j") { e.preventDefault(); sections[Math.min(i + 1, sections.length - 1)].scrollIntoView({ behavior: "smooth" }); }
+      if (e.key === "ArrowUp" || e.key === "k") { e.preventDefault(); sections[Math.max(i - 1, 0)].scrollIntoView({ behavior: "smooth" }); }
+      if (e.key === "m") setAudible(!audible);
+    };
+    addEventListener("keydown", player.onKey);
+    setAudible(audible);
+    sections[start]?.scrollIntoView({ block: "start" });
+    feed.focus({ preventScroll: true });
+  }
+  addEventListener("keydown", (e) => { if (e.key === "Escape" && player && !e.target.closest("textarea")) location.hash = "reels"; });
 
   function post(ep) {
     const n = ep.cuts.length;
@@ -133,16 +455,14 @@
       <div class="post-head">${avatar("mini")}<b>${esc(data.account.handle)}</b></div>
       <div class="carousel-wrap">
         <div class="carousel" tabindex="0" aria-label="${label(ep)} 컷 ${n}장">
-          ${ep.cuts.map((c, i) => `<img src="${src(ep, i)}" alt="${i + 1}컷: ${esc(c.narr)}" ${i ? 'loading="lazy"' : ""}>`).join("")}
+          ${ep.cuts.map((c, i) => `<img src="${esc(src(ep, i))}" alt="${i + 1}컷: ${esc(c.narr)}" ${i ? 'loading="lazy"' : ""}>`).join("")}
         </div>
         <span class="count"${n > 1 ? "" : " hidden"}>1/${n}</span>
         <button class="nav prev" aria-label="이전 컷" hidden>‹</button>
         <button class="nav next" aria-label="다음 컷"${n > 1 ? "" : " hidden"}>›</button>
       </div>
       <div class="actions">
-        <svg viewBox="0 0 24 24"><path d="M12 20.5s-8-4.7-8-10.7A4.6 4.6 0 0 1 12 7a4.6 4.6 0 0 1 8 2.8c0 6-8 10.7-8 10.7z"/></svg>
-        <svg viewBox="0 0 24 24"><path d="M20.5 11.7a8.5 8.5 0 0 1-12.6 7.4L3.5 20.5l1.4-4.3a8.5 8.5 0 1 1 15.6-4.5z"/></svg>
-        <svg viewBox="0 0 24 24"><path d="M21.5 3 10 13.5M21.5 3l-7 18-4.5-7.5L2.5 9z"/></svg>
+        ${ICON.heart}${ICON.comment}${ICON.send}
         <div class="dots"${n > 1 ? "" : " hidden"}>${ep.cuts.map((_, i) => `<i${i ? "" : ' class="on"'}></i>`).join("")}</div>
         <svg class="save" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V4a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1z"/></svg>
       </div>
@@ -155,7 +475,7 @@ ${esc(ep.caption || "")}
         <button class="copy alt">📋 캡션 복사</button>
         <p class="save-msg" aria-live="polite"></p>
       </div>
-      <div class="meta"><span>시안</span><a class="dl" href="${src(ep, 0)}" download>이 컷 저장 (1080×1350)</a></div>
+      <div class="meta"><span>시안</span><a class="dl" href="${esc(src(ep, 0))}" download="${esc(fileName(ep, 0))}">이 컷 저장 (1080×1350)</a></div>
       <div class="script"><h2>콘티</h2><ol>${ep.cuts.map((c, i) => `
         <li${i ? "" : ' class="on"'}><button data-i="${i}">${esc(c.narr)}${c.say ? ` <small>— “${esc(c.say.replace(/\n/g, " "))}”</small>` : ""}${c.end ? ` <small>· ${esc(c.end)}</small>` : ""}</button></li>`).join("")}</ol></div>`;
 
@@ -173,7 +493,7 @@ ${esc(ep.caption || "")}
       dots.forEach((d, k) => d.classList.toggle("on", k === i));
       items.forEach((d, k) => d.classList.toggle("on", k === i));
       prev.hidden = i === 0; next.hidden = i === n - 1;
-      dl.href = src(ep, i); dl.textContent = `이 컷 저장 (${i + 1}/${n}, 1080×1350)`;
+      dl.href = src(ep, i); dl.download = fileName(ep, i); dl.textContent = `이 컷 저장 (${i + 1}/${n}, 1080×1350)`;
     }, { passive: true });
     prev.addEventListener("click", () => go(at() - 1));
     next.addEventListener("click", () => go(at() + 1));
@@ -184,14 +504,16 @@ ${esc(ep.caption || "")}
     app.querySelectorAll(".script button").forEach((b) => b.addEventListener("click", () => go(+b.dataset.i)));
     app.querySelector(".back").addEventListener("click", () => { location.hash = ""; });
     setupSaveAll(ep);
-    window.scrollTo(0, 0);
   }
 
   // 인스타에 올릴 컷 전부 받기. 폰은 공유 시트(인스타로 바로 보내거나 갤러리에 저장),
   // 그 밖에는 한 장씩 내려받기 — 압축 파일은 폰에서 풀기 번거로워 쓰지 않는다.
-  const fileName = (ep, i) => `${data.account.handle}-${ep.id}-${String(i + 1).padStart(2, "0")}.jpg`;
+  const fileName = (ep, i) => `${data.account.handle}-${ep.id}-${NN(i)}.jpg`;
   async function fetchAll(ep) {
     return Promise.all(ep.cuts.map(async (_, i) => {
+      // 로컬에서 불러온 컷은 파일을 그대로 쓴다(blob: 주소는 CSP connect-src 밖이라 fetch 가 막힌다)
+      const mine = local.get(`${ep.id}/${NN(i)}.jpg`);
+      if (mine) return new File([mine.file], fileName(ep, i), { type: "image/jpeg" });
       const r = await fetch(src(ep, i));
       if (!r.ok) throw new Error(r.status);
       return new File([await r.blob()], fileName(ep, i), { type: "image/jpeg" });
@@ -240,15 +562,25 @@ ${esc(ep.caption || "")}
     });
   }
 
+  // 주소: "" 게시물 격자 · #reels 릴스 격자 · #reels/N 릴스 N번째 전체 화면 · #<화id> 게시물
   function route() {
     if (!data) return;
-    const ep = data.episodes.find((e) => e.id === location.hash.slice(1));
-    ep ? post(ep) : profile();
+    const h = decodeURIComponent(location.hash.slice(1));
+    const m = h.match(/^reels(?:\/(\d+))?$/);
+    if (m) {
+      tab = "reels";
+      if (m[1] != null && reels[+m[1]]) { if (!player) { profile(); openPlayer(+m[1]); } return; }
+      closePlayer(); profile(); window.scrollTo(0, 0); return;
+    }
+    closePlayer();
+    const ep = data.episodes.find((e) => e.id === h);
+    if (ep) { post(ep); window.scrollTo(0, 0); return; }
+    tab = "posts"; profile(); window.scrollTo(0, 0);
   }
 
   addEventListener("hashchange", route);
-  fetch("episodes.json").then((r) => r.json()).then((d) => { data = d; route(); })
-    .catch(() => { app.textContent = "에피소드 목록을 불러오지 못했습니다."; });
+  fetch("episodes.json").then((r) => r.json()).then((d) => { data = { account: { handle: "handle", ...d.account }, episodes: d.episodes ?? [] }; route(); })
+    .catch(() => { data = { account: { handle: "handle" }, episodes: [] }; route(); });
 </script>
 </body>
 </html>

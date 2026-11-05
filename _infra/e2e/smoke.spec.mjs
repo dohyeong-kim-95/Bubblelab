@@ -31,6 +31,9 @@ const SCREENS = [
   { name: "발판 리듬", path: "/games/stepcam/" },
   // 리포트를 전부 스크립트로 그린다 — JSON을 못 읽으면 빈 화면이 된다
   { name: "클로드 인사이트", path: "/lab/claude-insights/" },
+  // 데이터가 저장소에 없는(빈 episodes.json) 첫 화면 — 자리표시·탭·불러오기 버튼이 떠야 한다
+  { name: "다그당스 미리보기", path: "/dageudangs/" },
+  { name: "다그당스 릴스 탭", path: "/dageudangs/#reels" },
   // 화면을 전부 스크립트로 그린다. 저장본이 없는 첫 방문에서도 안내가 떠야 한다
 ];
 
