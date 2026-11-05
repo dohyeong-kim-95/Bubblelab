@@ -1,0 +1,6 @@
+(2회 생성. 1회차: B 프롬프트에서 셀을 2x6=12칸 '한 걸음'만으로 줄이고 위 LEG IDENTITY 블록의 cells 1-12 부분만 사용.)
+2회차 프롬프트(1회차 시트를 레퍼런스 이미지로 첨부):
+The attached sheet is STEP 1 of a walk (12 cells, left-to-right, top-to-bottom). Draw STEP 2 as a new 2x6 sheet: the same 12 body/head/arm timings and the same character size, camera, floor line and hip x position, BUT the leg roles are swapped: now the FAR RIGHT leg (one shade darker, partly hidden) swings forward behind the standing NEAR LEFT leg and lands in front at the end. Do not copy step 1's leg drawings. Cell 12 of step 2 must lead into cell 1 of step 1.
+(조립: 1회차 12칸 + 2회차 12칸 = 24칸, B_timing 의 ms 그대로)
+
+(피곤한 걸음: B2_tired.txt 블록을 함께 넣고, common.txt 의 WALK MECHANICS 문장은 빼고 B2_tired 로 바꾼다. 조립은 B_tired.gif 의 ms(걸음당 120 90 80 140 100 70 60 60 60 60 70 90, 2.0s))

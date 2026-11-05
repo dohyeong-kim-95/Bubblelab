@@ -7,6 +7,47 @@ Emoji 탭(lead·work·draw)이 다그당스 일을 시작할 때 읽는 한 장.
 — 기존 스티커에서 잘라 붙인 것이다(새로 생성한 그림 아님). draw 에 레퍼런스로 줄 때 이 파일이나
 아래 원본 PNG 를 쓴다.
 
+## 합격 레시피: 뼈대 → 부품 리그 → 클린업 (움직이는 컷)
+
+2026-11-05 에 피곤한 출근 걷기 `CLEAN_walk.gif`(로컬 `~/dageudangs-lab/work/emoticon/doc/gif-lab/loop/CLEAN_walk.gif`)가 **첫 합격**을 받았다(24칸, 360², 2.0s).
+다른 동작에도 같은 순서로 쓴다. 원칙은 하나다. **궤적·순서·좌우는 코드가 정하고, 이미지 모델은 그 위를 손그림으로 다듬기만 한다.**
+스크립트·프롬프트는 `doc/gif-lab/loop/`(아래 `L=`)에 있다. **다그당스 GIF·PNG 이미지는 저장소에 올리지 않는다(사용자 지시)** — 레퍼런스·부품·결과 이미지는 전부 로컬 `~/dageudangs-lab/` 에 리포 경로 그대로 둔다(아래 `IMG=`). 새로 만든 이미지도 커밋하지 말고 그쪽에 둔다. 실험 경위는 [`doc/dageudangs-gif.md`](doc/dageudangs-gif.md) 끝의 네 절에 있다.
+
+```bash
+L=work/emoticon/doc/gif-lab/loop; T=$L/tools; IMG=~/dageudangs-lab/$L      # 이미지는 로컬에만
+# 1. 뼈대(동작 설계) — 2등신 비율, L 초록 / R 자홍, 24칸. 동작을 바꾸려면 sk_walk.py 의 pose()·foot() 만 고친다
+python3 $T/sk_walk.py out/sk                      # → out/sk/SK_skeleton_sheet.png, SK_skeleton.gif (뼈대만 재생해 동작부터 확인)
+# 2. 리그 부품(image_gen 1회) — prompt: $L/prompts/RIG_parts.txt, 레퍼런스: $IMG/RIG_ref.png(단일 컷)
+#    → 다리 없는 몸(아랫면 둥글게 닫힘) + 곧은 왼다리 + 한 톤 어두운 오른다리. 지금 것: $IMG/RIG_parts.png (다른 동작에도 재사용)
+# 3. 러프(코드 리그) — 다리를 뼈대 각도로 엉덩이 축 회전·길이 조절, --sock 으로 왼발 초록 양말
+python3 $T/parts_rig.py $IMG/RIG_parts.png out/rig --stride 1.8 --hipL 425 --hipR 465 --sock   # → out/rig/rig_sheet.png (4×6 밑그림)
+# 4. 클린업(image_gen 1회) — prompt: $L/prompts/CLEAN.txt, 레퍼런스 순서 [$IMG/RIG_ref.png, out/rig/rig_sheet.png] → sheet.png
+# 5. 양말 지우기 + 조립(B2_timing: contact·down 홀드, 걸음당 120 90 80 140 100 70 60 60 60 60 70 90)
+python3 $T/unsock.py sheet.png sheet_unsock.png
+python3 $T/assemble_order.py sheet_unsock.png walk.gif "$(seq -s, 1 24)" "120,90,80,140,100,70,60,60,60,60,70,90,120,90,80,140,100,70,60,60,60,60,70,90"
+# 6. 검증 — 지표로 합격을 판정하지 않는다. 다리가 바뀌었는지만 본다
+python3 $T/foot_track.py track.png "RIG=out/rig/rig_sheet.png" "CLEAN=sheet.png"   # 초록(왼)발 곡선이 러프 곡선을 점프 없이 따라가야 한다
+python3 $T/passing_zoom.py out/rig/rig_sheet.png sheet.png passing.jpg             # passing 전후 칸에서 초록 양말이 같은 발·같은 자리인지
+```
+
+- **피곤 강화 변형(CLEAN2)**: 3단계 리그 옵션만 바꾼다(클린업 프롬프트·양말·검증은 같다). 결과는 `CLEAN2_walk.gif`(로컬 `~/dageudangs-lab/work/emoticon/doc/gif-lab/loop/CLEAN2_walk.gif`).
+  `parts_rig.py ... --stride 1.25 --lift 3 --bob 3 --lean 7 --droop 8 --nod 3 --nodlag 2 --hipL 410 --hipR 475 --darkR 0.85 --legw 0.85 --sock`
+  (보폭은 1.8 → 1.25 배, 발 들기 6 → 3, 상체 7° 숙임, 고개 8° 처짐에 걸음마다 ±3° 끄덕임(2틱 늦게), 먼 다리 15% 어둡게, 다리 폭 0.85 배로 가림을 푼다.)
+  머리는 `--headpoly`(부품 좌표 다각형)로 잘라 `--neck` 축으로 돌린다. 이음매는 클린업이 다시 그린다.
+- **초록 양말 표식**: 왼(근)발 발굽만 순수 초록(#00c000)으로 칠한다. 캐릭터에 없는 색이고 뼈대의 L 색과 같다. 겹치는 칸에서도 모델이 같은 발을 추적하게 하는 장치다.
+  조립 직전에 `unsock.py` 로 발굽 색(#655846)으로 되돌린다. 빨강은 입·볼 색과 겹쳐 쓰지 않는다.
+- `sk_walk.py` 와 `parts_rig.py` 는 뼈대 식을 각자 갖고 있다. 한쪽을 고치면 다른 쪽도 같이 고친다.
+  `--stride 1.8` 은 통통한 다리가 서로 가려 교차가 안 보여서 리그에서만 키운 값이다.
+- 레퍼런스는 **단일 컷**만 준다. 시트나 글자가 든 스티커를 주면 시트·글자를 복제한다(`lesson_learned.md` §23).
+- 사람 판정이 기준이다. 이번 실험에서 이음매 지표 1위(A_trim)는 사람 판정과 어긋났다.
+
+**실패한 길(다시 하지 말 것)** — 자세한 경위는 `doc/dageudangs-gif.md`.
+- **24칸을 image_gen 으로 직접 생성(A·B·B2·C·D)**: 캐릭터는 일관되지만, 두 번째 걸음을 첫 걸음의 복사로 그려 같은 다리만 나가고(B), 칸을 빼고 재조립해도 한계가 있다(B2_fix).
+- **뼈대만 레퍼런스로 주기(SK)**: 보폭·발 높이만 따르고 L/R 교대는 따르지 않는다.
+- **표식·한 걸음씩 생성(SK2)**: 다리 정체성은 지키지만 흔드는 발이 몸 뒤↔앞을 **한 칸에 건너뛴다**. 모델은 다리를 벌린 상태만 그리고, 몸 밑을 지나는 중간 위치는 그리지 않는다(발굽 궤적 그래프 `TRACK_feet.png`(로컬 `~/dageudangs-lab/work/emoticon/doc/gif-lab/loop/TRACK_feet.png`)).
+- **FILM 보간**: 작은 변형(끄덕임·눈깜빡임)에만 통한다. 다리 교차·팔 들기는 디졸브·잔상이 된다.
+- **키프레임을 따로 생성(K)**: 칸마다 전체가 다시 그려져 색·질감이 깜빡인다.
+
 ## 프로필
 
 | 항목 | 값 |
@@ -86,6 +127,37 @@ duri 채팅의 AI 비서 `🤖 당이` 가 이 캐릭터다. 잡담 답만 "~승
 - 1화 「월요일은 말이 안 통해」 10컷, 짤 3개(월요일 출근 직전·답장 기다리는 중·월급날 D-1)
 - 컷 그림은 스티커를 2배로 키운 `_src/dageudangs/art/<팩>-<번호>.png` 이다. 콘티 원본은 `dageudangs/episodes.json`.
 - 캡션 말투: "~하승", 끝인사는 "다음 주 월요일에 또 만나승!"
+
+## GIF 실험 (2026-11-05)
+
+이 절과 아래 기록에 나오는 이미지는 저장소에 없다. 레시피에 쓰는 것과 합격 결과는 `~/dageudangs-lab/<리포 경로>`에, † 표시 실험 이미지는 `~/dageudangs-lab/archive-experiments-2026-11-05/<리포 경로>`에 있다.
+
+전체 기록은 [`doc/dageudangs-gif.md`](doc/dageudangs-gif.md)에 있다. 20컷을 만들었고, 컷별 판정·리서치·재현 명령이 거기 있다.
+요약은 이렇다.
+
+- **스프라이트 시트 한 장**(격자에 4~6프레임)이 가장 낫다. 한 호출 안에서 그려야 같은 캐릭터가 나온다.
+  키프레임을 따로 생성하면 "나머지 그대로"라고 해도 전체가 다시 그려져 색과 질감이 깜빡인다.
+- **FILM 보간은 작은 변형에만 쓴다**(끄덕임 `doc/gif-lab/gif/10.gif` 가 가장 자연스러웠다). 팔을 들고 내리거나
+  다리가 교차하면 디졸브·잔상이 생기므로, 그런 구간은 홀드로 끊는다. 하트 같은 효과는 원화 위에 코드로 얹는다.
+- 생성용 기준 포즈는 `doc/gif-lab/base-front.png`†를 쓴다.
+  글자가 든 스티커를 레퍼런스로 주면 글자와 소품까지 복제된다.
+- Codex 내장 이미지 도구는 정지 PNG 만 낸다. GIF 출력(`output_format: gif`, 2~16프레임)은 Images API 의
+  preview 기능이라 API 키와 권한이 필요한데, 지금은 둘 다 없다.
+
+### 걷기 루프 이음매 (24칸 시트 → 50ms GIF)
+
+전체 기록은 [`doc/dageudangs-gif.md`](doc/dageudangs-gif.md)의 「루프 이음매 실험」 절이다. 리서치 출처, 변형별 수치,
+프롬프트 원문(`doc/gif-lab/loop/prompts/`)이 거기 있다.
+
+- **사람 판정: 변형 모두 만족스럽지 않았고, 그중 B(24칸에 걷기 키포즈를 칸별로 배정)가 제일 나았다.**
+  다음 실험의 출발점은 B 프롬프트(`doc/gif-lab/loop/prompts/common.txt` + `B.txt`)다 → `doc/gif-lab/loop/B.gif`†.
+- 이음매 지표(하반신 실루엣 변화량, `seam.py`)는 사람 판정을 **예측하지 못했다.** 지표 1위였던 A_trim(정체 칸을 뺀 것)은
+  사람 눈으로는 B 보다 못했다. 지표는 정체·튐을 찾는 보조 도구로만 쓰고, 채택은 사람 검수로 한다.
+- 다음 실험의 근거 자료는 [`doc/human-animation-research.md`](doc/human-animation-research.md)다(카카오·LINE 작가와 애니메이터가
+  24프레임 루프를 실제로 만드는 법, 출처 포함). 요점: 사람은 키포즈 몇 장을 먼저 그리고 그림 6~20장을 칸마다 다른 표시 시간으로 쓴다.
+  "24장 모두 다르게, 전부 50ms" 는 그 반대이고, 카카오 강의가 꼽는 '속도가 일정함' 실수가 우리 실패와 겹친다.
+- B 재조립 5종(크기·타이밍·둘 다·bbox 비교, 새 생성 없음)은 `doc/gif-lab/loop/B_*.gif` 에 있다. 판정은 사용자가 한다(`doc/dageudangs-gif.md` 「B 재조립」).
+- A 의 이음매 문제 자체는 **포즈 정체**였다. 23·24·1·2번 칸이 거의 같은 보폭 최대 포즈라 약 200ms 멈춘다.
 
 ## 규칙 / 함정
 

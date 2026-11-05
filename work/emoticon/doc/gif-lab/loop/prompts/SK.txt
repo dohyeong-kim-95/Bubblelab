@@ -1,0 +1,12 @@
+Generate ONE sprite sheet image (not a GIF) with EXACTLY 24 hand-drawn animation frames in EXACTLY 4 ROWS x 6 COLUMNS of equal square cells, read left-to-right, top-to-bottom. It will be cut into cells and played as a loop, with NO interpolation.
+
+TWO INPUT IMAGES WITH DIFFERENT JOBS:
+- Image 1 = WHO. A single drawing of the character Dageudangs. Copy ONLY its identity and style: golden tan bipedal horse (#dfa461), big cream muzzle (#fce7c9) with two nostrils, dark brown straight-cut bangs and shaggy mane (#6c5036), two pointed ears, half-closed tired eyes, small open sighing mouth, dark brown hooves (#655846) on hands and feet, short tail, BLUE backpack, colored-pencil grain, dark brown outlines. Same size, same 3/4 side view facing SCREEN LEFT, same tired face in all 24 cells. Exactly two arms and two legs.
+- Image 2 = HOW IT MOVES. A 4x6 pose guide with the SAME cell layout. In each output cell, pose the character to match the guide in the SAME cell: the big gray circle is the head size and position (the short gray line points where the muzzle points), the gray line is the spine/neck, GREEN lines and dots are the character's LEFT (near, camera-side) arm and leg, MAGENTA lines and dots are the character's RIGHT (far) arm and leg. The dots at the bottom are exactly where each hoof is: match which hoof is in front (screen left), which is behind, and which one is lifted.
+- The guide is an INSTRUCTION ONLY. NEVER draw any guide line, dot, circle, green or magenta color in the output. The output shows only the character on plain white.
+
+LEG IDENTITY: draw the RIGHT (far, magenta-in-guide) leg and arm one shade darker (#ad8a64) than the LEFT (near, green-in-guide) leg and arm in every cell, so the viewer can tell the legs apart. The guide already alternates: cell 1 the left leg is in front, cell 13 the right leg is in front. Follow the guide cell by cell; do not copy rows.
+
+TIRED WALK feel (consistent with the guide): short strides, hooves stay low near the floor, knees bend only a little, body sinks heavily and bobs only a little, upper body leans forward, shoulders droop, head hangs, arms hang almost straight with tiny swing, the backpack sags and pulls the shoulders down.
+
+STAGE: walking in place (no travel), plain white background, the same floor height in every cell, the character the same size in every cell, fully visible and uncropped, ample white space between cells. No grid lines, no borders, no numbers, no text, no motion lines, no shadows, no scenery.

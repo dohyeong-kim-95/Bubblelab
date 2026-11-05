@@ -1,0 +1,4 @@
+(B 프롬프트에서 시점 문장을 바꾸고 LEG IDENTITY 블록을 함께 쓴다)
+CAMERA: three-quarter FRONT view — the character faces screen left but is turned about 30 degrees toward the viewer, so BOTH legs are visible side by side below the body (the far right leg is not hidden), with the far leg one shade darker. Keep the backpack visible on the back.
+
+(피곤한 걸음: B2_tired.txt 블록을 함께 넣고, common.txt 의 WALK MECHANICS 문장은 빼고 B2_tired 로 바꾼다. 조립은 B_tired.gif 의 ms(걸음당 120 90 80 140 100 70 60 60 60 60 70 90, 2.0s))

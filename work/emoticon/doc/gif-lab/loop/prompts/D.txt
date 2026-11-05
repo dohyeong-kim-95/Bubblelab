@@ -1,0 +1,4 @@
+SCHEDULE (one full cycle over 24 cells, 12 cells per step, but the loop starts and ends at PASSING, the fastest-changing part of the step, never at the contact extreme):
+cell 1 = passing: right leg swinging past the standing left leg, legs nearly together, body highest | 2-3 = up, right leg extending forward | 4-6 = right leg reaching forward and landing | cell 7 = contact, RIGHT leg in front (widest stride) | 8-9 = settling | 10 = down (lowest) | 11-12 = rising
+cell 13 = passing: left leg swinging past the standing right leg | 14-15 = up | 16-18 = left leg reaching forward and landing | cell 19 = contact, LEFT leg in front (widest stride) | 20-21 = settling | 22 = down | 23-24 = rising toward passing — cell 24 is the moment just BEFORE cell 1's passing pose (left leg is the standing leg, right leg just behind it starting to swing), not a copy of cell 1.
+The widest stride appears ONLY in cells 7 and 19.

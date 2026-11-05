@@ -1,0 +1,4 @@
+SCHEDULE (TWO identical full cycles in the sheet: one full walk cycle = 12 cells = 2 steps, drawn in rows 1-2, then rows 3-4 repeat rows 1-2 pose-for-pose):
+cell 1 = contact, LEFT leg in front | 2 = down (lowest) | 3 = passing (right leg swinging past, highest) | 4 = up | 5 = right leg reaching forward, hoof in the air | 6 = just before right contact
+cell 7 = contact, RIGHT leg in front | 8 = down | 9 = passing (left leg swinging past) | 10 = up | 11 = left leg reaching forward, hoof in the air | 12 = just before left contact, NOT a copy of cell 1
+cells 13-24 = exactly the same 12 poses as cells 1-12 in the same order (cell 13 = cell 1's pose, cell 24 = cell 12's pose). So the transition 24 -> 1 is the same motion as 12 -> 13. The widest stride appears ONLY in cells 1, 7, 13 and 19.
