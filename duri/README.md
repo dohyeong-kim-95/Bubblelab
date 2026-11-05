@@ -101,6 +101,19 @@ apple/mobile 메타만으로 구성한 **최소 설치형 PWA**다. 최신 Chrom
 - 즉, **Duri에서 반응 좋았던 모션 명세 = 그대로 내보내기 후보**. (렌더러는 추후
   구현. AI 캐릭터 정책은 스토어 제출 시점에 별도 확인.)
 
+## 비공개 스티커 (다그당스 — R2, 게이트 뒤)
+
+리포가 PUBLIC 이라 `_assets/` 에 둔 그림은 GitHub 에서 누구나 본다. 다그당스 1–4·아가당스는
+그래서 저장소에 두지 않고 **R2 `DURI_BUCKET` 의 `stickers/<팩>/NN.png`** 에 두며, 워커가
+**bl_duri 게이트 세션에게만** `/_duri/sticker/<팩>/<NN|preview>.png` 로 내준다
+(`Cache-Control: private, max-age=604800`, 싱크 토큰으로는 못 받는다).
+
+- 앱은 `DURI_ONLY_PACKS` 에서 `private: true` 인 팩만 이 주소로 그린다(`stickerUrl`). 판정은
+  코드 목록으로만 한다 — localStorage 의 캐시된 팩 목록(예전 카탈로그의 다그당스1·2)엔 플래그가 없다.
+- 메시지는 여전히 `{pack,n}` 참조라 프로토콜·E2E·DO·당이(`botSticker`)는 그대로다.
+- 방 초기화는 R2 의 `photo/`·`lend/` 만 지우므로 `stickers/` 는 남는다.
+- 원본은 로컬 `~/dageudangs-lab/stickers/`, 올리기·새 팩 절차는 `_src/duri-stickers/README.md`.
+
 ## E2E 암호화 (공유 패스프레이즈)
 
 - 두 사람이 **같은 암호 문구**를 각자 최초 1회 입력 → PBKDF2(210k, SHA-256)로

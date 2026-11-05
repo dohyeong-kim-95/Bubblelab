@@ -318,7 +318,7 @@ test("every sticker metadata with a chat field is registered in CHAT_STICKER_PAC
 
 test("duri 전용 목록의 rev 는 metadata 의 chat.rev 와 같다 (카탈로그 전에 그린 메시지도 새 주소로)", () => {
   const html = readFileSync(join(ROOT, "duri", "index.html"), "utf8");
-  for (const [, id, rev] of html.matchAll(/\{ id: "([^"]+)", title: "[^"]+", count: \d+, cutout: \w+(?:, rev: (\d+))? \}/g)) {
+  for (const [, id, rev] of html.matchAll(/\{ id: "([^"]+)", title: "[^"]+", count: \d+, cutout: \w+(?:, rev: (\d+))?(?:, private: true)? \}/g)) {
     const path = join(ROOT, "_assets", "sticker", id, "metadata.json");
     if (!existsSync(path)) continue;
     const meta = JSON.parse(readFileSync(path, "utf8"));

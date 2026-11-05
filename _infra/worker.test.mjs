@@ -420,6 +420,60 @@ test("duri prefers DURI_PASSWORD over WORK_PASSWORD and room reset is owner-only
   assert.deepEqual(await response.json(), { ok: true });
 });
 
+test("duri private stickers come from R2 stickers/ only behind the bl_duri session", async () => {
+  const gets = [];
+  const bucket = {
+    get: async (key, opts) => {
+      gets.push(key);
+      if (key !== "stickers/dageudangseu-1/07.png") return null;
+      const etag = '"abc"';
+      if (opts?.onlyIf?.get?.("If-None-Match") === etag) return { httpEtag: etag }; // 본문 없음 = 조건 실패
+      return { httpEtag: etag, body: new Blob([new Uint8Array([137, 80, 78, 71])]).stream() };
+    },
+  };
+  const sinkStub = { fetch: async () => new Response("relayed") };
+  const env = {
+    DURI_PASSWORD: "duonly", ENABLE_DURI: "true", DURI_BUCKET: bucket,
+    ASSETS: { fetch: async () => new Response("x") },
+    DURI: { idFromName: () => "main", get: () => sinkStub },
+  };
+  const form = new FormData();
+  form.set("password", "duonly");
+  const login = await worker.fetch(
+    new Request("https://duri.bubblelab.dev/login", { method: "POST", body: form }), env, ctx);
+  const cookie = login.headers.get("Set-Cookie").split(";")[0];
+  const get = (path, headers = {}) =>
+    worker.fetch(new Request(`https://duri.bubblelab.dev${path}`, { headers }), env, ctx);
+
+  // 쿠키 없으면 401, R2 를 읽지도 않는다
+  let response = await get("/_duri/sticker/dageudangseu-1/07.png");
+  assert.equal(response.status, 401);
+  assert.equal(gets.length, 0);
+
+  // 게이트 세션 → R2 stickers/ 에서 PNG, 캐시는 private
+  response = await get("/_duri/sticker/dageudangseu-1/07.png?v=2", { Cookie: cookie });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("Content-Type"), "image/png");
+  assert.match(response.headers.get("Cache-Control"), /^private\b/);
+  assert.equal(response.headers.get("ETag"), '"abc"');
+  assert.equal((await response.arrayBuffer()).byteLength, 4);
+  assert.deepEqual(gets, ["stickers/dageudangseu-1/07.png"]);
+
+  // 같은 ETag → 304
+  response = await get("/_duri/sticker/dageudangseu-1/07.png", { Cookie: cookie, "If-None-Match": '"abc"' });
+  assert.equal(response.status, 304);
+
+  // 없는 그림 → 404, 경로를 벗어나는 이름은 라우트에 안 걸린다(→ 일반 404)
+  response = await get("/_duri/sticker/dageudangseu-1/99.png", { Cookie: cookie });
+  assert.equal(response.status, 404);
+  gets.length = 0;
+  for (const bad of ["/_duri/sticker/a%2F..%2Fphoto/01.png", "/_duri/sticker/Dag/01.png", "/_duri/sticker/a/1.png", "/_duri/sticker/a/01.jpg"]) {
+    response = await get(bad, { Cookie: cookie });
+    assert.equal(response.status, 404, bad);
+  }
+  assert.equal(gets.length, 0);
+});
+
 test("subdomain .html redirects strip the internal /site prefix from Location", async () => {
   // 에셋 서버가 .html→확장자 제거로 307을 돌려줄 때 Location에 내부 /work
   // 프리픽스가 담긴다. 서브도메인 공개 URL에는 site 세그먼트가 없으므로 워커가

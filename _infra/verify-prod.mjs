@@ -446,6 +446,7 @@ export function buildProbes({ sites, expectedCommit, ws }) {
       // 잠든 기능은 503, 살아 있으면 401 — 어느 쪽이든 익명에게 열리지 않는다.
       const cases = [
         ["/_duri/status", [401]],
+        ["/_duri/sticker/dageudangseu-1/01.png", [401]], // 비공개 스티커는 게이트 뒤 R2 에만
         ["/_rt/avalon", [503]],       // ENABLE_REALTIME=false
         ["/_chat", [403]],            // Origin 없는 WebSocket 시도
         ["/_assets/upload/x.png", [404]],

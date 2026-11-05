@@ -617,6 +617,25 @@ async function fireDuriReminder(env) {
   if (!response.ok) console.error("duri remind fire failed", response.status);
 }
 
+// /_duri/sticker/<팩>/<NN|preview>.png → R2 stickers/<팩>/<파일>. 팩 이름은 소문자·숫자·하이픈만.
+export const DURI_STICKER_PATH = /^\/_duri\/sticker\/([a-z0-9]+(?:-[a-z0-9]+)*)\/(\d{2}|preview)\.png$/;
+// 앱이 ?v=rev 로 주소를 바꿔 다시 그린 팩을 넘기므로 길게 둬도 된다. 공유 캐시엔 두지 않는다(private).
+const DURI_STICKER_CACHE = "private, max-age=604800";
+
+async function serveDuriSticker(request, env, gated, pack, file) {
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    return new Response("method not allowed", { status: 405, headers: { Allow: "GET, HEAD" } });
+  }
+  if (!gated) return new Response("authentication required", { status: 401, headers: { "Cache-Control": "no-store" } });
+  // onlyIf 로 If-None-Match 를 R2 에 넘긴다 — 맞으면 본문 없는 객체가 와서 304 로 끝난다.
+  const object = await env.DURI_BUCKET.get(`stickers/${pack}/${file}.png`, { onlyIf: request.headers });
+  if (!object) return new Response("not found", { status: 404, headers: { "Cache-Control": "no-store" } });
+  const headers = new Headers({ "Content-Type": "image/png", "Cache-Control": DURI_STICKER_CACHE });
+  if (object.httpEtag) headers.set("ETag", object.httpEtag);
+  if (!object.body) return new Response(null, { status: 304, headers });
+  return new Response(request.method === "HEAD" ? null : object.body, { headers });
+}
+
 async function handleDuri(request, env, url) {
   if (!featureEnabled(env, "ENABLE_DURI")) {
     return Response.json({ error: "duri is temporarily unavailable" }, {
@@ -644,6 +663,11 @@ async function handleDuri(request, env, url) {
       headers: { "Cache-Control": "no-store" },
     });
   }
+
+  // 비공개 스티커(다그당스 등): 공개 저장소·정적 asset 에 두지 않고 R2(stickers/)에만 두며
+  // duri 게이트 세션(bl_duri)에게만 내준다. 싱크 토큰은 {pack,n} 만 쓰므로 그림을 받을 일이 없다.
+  const sticker = path.match(DURI_STICKER_PATH);
+  if (sticker) return serveDuriSticker(request, env, gated, sticker[1], sticker[2]);
 
   if (!gated && !sinkOk) return new Response("authentication required", { status: 401 });
   const role = sinkOk ? "sink" : "peer";
