@@ -313,6 +313,13 @@ cron 이 그날 몫을 보통 메시지로 올린다 — 서버는 날짜만 안
 컷 JPEG 는 `_src/dageudangs/render.py` 가 굽는다 — 컷 이미지를 손으로 고치지 말 것.
 글자는 렌더러가 폰트로 넣는다(`dageudangs/README.md`).
 
+## 집안일 동선 계산기 (interior/)
+
+`interior/`는 3D 평면에 가구를 놓고 빨래·설거지·청소 동선(주당 걷는 거리)을 재서 담금질로 줄이는
+비공개 화면이다(`CONFIDENTIAL_SUBDOMAINS`, 로그인·서버 저장 없음 — 도면은 localStorage). 계산은 전부
+`interior/engine.js` 순수 함수(테스트 `_infra/interior.test.mjs`), 화면은 three.js(`/_shared/vendor/`).
+도면 초안은 LLM 이 화면의 「LLM 요청문」 형식대로 JSON 을 써 주는 방식이다 — 형식·규칙은 `interior/README.md`.
+
 ## 인사이트 아카이브 (lab/claude-insights)
 
 `lab/`은 내가 쓰는 도구를 두는 비공개 서브도메인이다(`CONFIDENTIAL_SUBDOMAINS`,

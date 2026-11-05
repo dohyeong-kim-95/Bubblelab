@@ -1,0 +1,49 @@
+{
+  "name": "예시 — 거실·주방·안방·욕실·다용도실",
+  "room": {"w": 1000, "d": 800},
+  "walls": [
+    {"x1": 0, "y1": 150, "x2": 300, "y2": 150},
+    {"x1": 500, "y1": 150, "x2": 750, "y2": 150},
+    {"x1": 850, "y1": 150, "x2": 1000, "y2": 150},
+    {"x1": 600, "y1": 150, "x2": 600, "y2": 520},
+    {"x1": 600, "y1": 620, "x2": 600, "y2": 800},
+    {"x1": 600, "y1": 520, "x2": 900, "y2": 520},
+    {"x1": 980, "y1": 520, "x2": 1000, "y2": 520},
+    {"x1": 600, "y1": 620, "x2": 640, "y2": 620},
+    {"x1": 720, "y1": 620, "x2": 840, "y2": 620},
+    {"x1": 920, "y1": 620, "x2": 1000, "y2": 620},
+    {"x1": 800, "y1": 620, "x2": 800, "y2": 800}
+  ],
+  "zones": [
+    {"id": "veranda", "label": "베란다", "x0": 0, "y0": 0, "x1": 1000, "y1": 145},
+    {"id": "living", "label": "거실·주방", "x0": 0, "y0": 155, "x1": 595, "y1": 800},
+    {"id": "master", "label": "안방", "x0": 605, "y0": 155, "x1": 1000, "y1": 515},
+    {"id": "hall", "label": "복도", "x0": 605, "y0": 525, "x1": 1000, "y1": 615},
+    {"id": "bath", "label": "욕실", "x0": 605, "y0": 625, "x1": 795, "y1": 800},
+    {"id": "utility", "label": "다용도실", "x0": 805, "y0": 625, "x1": 1000, "y1": 800}
+  ],
+  "items": [
+    {"id": "washer", "label": "세탁기", "kind": "laundry", "x": 950, "y": 768, "w": 60, "d": 64, "h": 85, "rot": 180, "fixed": true, "wall": true},
+    {"id": "dryer", "label": "건조기", "kind": "laundry", "x": 100, "y": 32, "w": 60, "d": 64, "h": 85, "rot": 0, "wall": true, "zone": ["veranda", "utility"]},
+    {"id": "rack", "label": "건조대", "kind": "laundry", "x": 650, "y": 75, "w": 150, "d": 55, "h": 110, "zone": ["veranda", "living", "master"]},
+    {"id": "hamper", "label": "빨래바구니", "kind": "laundry", "x": 630, "y": 190, "w": 45, "d": 40, "h": 55, "zone": ["master", "hall", "bath", "utility"]},
+    {"id": "closet", "label": "옷장", "kind": "storage", "x": 970, "y": 300, "w": 200, "d": 60, "h": 210, "rot": 90, "wall": true, "zone": "master"},
+    {"id": "bed", "label": "침대", "kind": "furniture", "x": 710, "y": 380, "w": 160, "d": 210, "h": 45, "rot": 270, "wall": true, "zone": "master"},
+    {"id": "sofa", "label": "소파", "kind": "furniture", "x": 45, "y": 330, "w": 220, "d": 90, "h": 80, "rot": 270, "wall": true, "zone": "living"},
+    {"id": "tv", "label": "TV장", "kind": "furniture", "x": 575, "y": 330, "w": 200, "d": 40, "h": 50, "rot": 90, "wall": true, "zone": "living"},
+    {"id": "table", "label": "식탁", "kind": "kitchen", "x": 250, "y": 560, "w": 140, "d": 80, "h": 75, "zone": "living"},
+    {"id": "sink", "label": "싱크대", "kind": "kitchen", "x": 150, "y": 770, "w": 240, "d": 60, "h": 90, "rot": 180, "fixed": true, "wall": true},
+    {"id": "cupboard", "label": "식기수납장", "kind": "storage", "x": 150, "y": 178, "w": 120, "d": 45, "h": 180, "rot": 0, "wall": true, "zone": "living"},
+    {"id": "trash", "label": "분리수거함", "kind": "cleaning", "x": 420, "y": 780, "w": 60, "d": 40, "h": 70, "rot": 180, "wall": true, "zone": ["living", "utility", "veranda"]},
+    {"id": "vacuum", "label": "청소기", "kind": "cleaning", "x": 650, "y": 500, "w": 30, "d": 30, "h": 110, "rot": 180, "wall": true, "zone": ["living", "hall", "master", "utility"]},
+    {"id": "entrance", "label": "현관", "kind": "door", "x": 520, "y": 780, "w": 0, "d": 0, "fixed": true, "pass": true}
+  ],
+  "tasks": [
+    {"id": "laundry-in", "label": "빨래 넣기", "perWeek": 4, "stops": ["hamper", "washer"]},
+    {"id": "dry", "label": "건조기 돌리고 수납", "perWeek": 3, "stops": ["washer", "dryer", "closet"]},
+    {"id": "hang", "label": "널고 걷어 수납", "perWeek": 1, "stops": ["washer", "rack", "closet"]},
+    {"id": "dishes", "label": "설거지", "perWeek": 14, "stops": ["table", "sink", "cupboard"]},
+    {"id": "trash", "label": "분리수거", "perWeek": 3, "stops": ["sink", "trash", "entrance"]},
+    {"id": "clean", "label": "청소기", "perWeek": 2, "stops": ["vacuum", "bed", "sofa", "table", "vacuum"]}
+  ]
+}
