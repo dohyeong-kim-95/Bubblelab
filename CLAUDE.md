@@ -306,11 +306,12 @@ cron 이 그날 몫을 보통 메시지로 올린다 — 서버는 날짜만 안
 에이전트 레인에서 돌리지 말 것. 금액은 만원 정수, 면적은 전용㎡ 원본, 월 경계는 KST.
 화면·함정은 `estate/CLAUDE.md`, 배경은 `estate/README.md`.
 
-## 다그당스 인스타툰 (dageudangs/)
+## 인스타툰 미리보기 (dageudangs/)
 
 `dageudangs/`는 인스타툰 시안을 인스타그램 프로필·넘겨 보기처럼 미리 보는 비공개 화면이다
-(`CONFIDENTIAL_SUBDOMAINS`, 로그인 없음·noindex). 콘티 원본은 `dageudangs/episodes.json`,
-컷 JPEG 는 `_src/dageudangs/render.py` 가 굽는다 — 컷 이미지를 손으로 고치지 말 것.
+(`CONFIDENTIAL_SUBDOMAINS`, 로그인 없음·noindex). **저장소에는 mock 인스타 화면 형식(`index.html`)과
+빈 `episodes.json`, 렌더러(`_src/dageudangs/render.py`)·폰트만 있다** — 계정·콘티·캡션·컷 JPEG·그림은
+로컬 `~/dageudangs-lab/toon/`에만 두고 커밋하지 않는다. 렌더러는 그 폴더(`DGD_TOON`)에서 돈다.
 글자는 렌더러가 폰트로 넣는다(`dageudangs/README.md`).
 
 ## 집안일 동선 계산기 (interior/)

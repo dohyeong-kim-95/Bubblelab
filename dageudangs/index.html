@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
-<title>🐴 다그당스 인스타툰 미리보기</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🐴</text></svg>">
+<title>📷 인스타툰 미리보기</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>📷</text></svg>">
 <style>
   /* 인스타그램에 올렸을 때 어떻게 보일지 — 프로필 격자와 게시물(넘겨 보기)만 흉내 낸다 */
   :root { color-scheme: light dark;
@@ -32,7 +32,9 @@
   .avatar { width: 86px; height: 86px; border-radius: 50%; padding: 3px;
             background: conic-gradient(#feda75, #fa7e1e, #d62976, #962fbf, #4f5bd5, #feda75); }
   .avatar img, .mini img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover;
-            border: 3px solid var(--bg); background: #ffe6c2; display: block; }
+            border: 3px solid var(--bg); background: var(--chip); display: block; }
+  .ph { display: block; width: 100%; height: 100%; border-radius: 50%; border: 3px solid var(--bg); background: var(--chip); }
+  .mini .ph { border-width: 2px; }
   .stats { display: flex; gap: 22px; }
   .stats div { text-align: center; } .stats b { display: block; font-size: 16px; }
   .stats span { color: var(--muted); font-size: 13px; }
@@ -43,6 +45,8 @@
   .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; border-top: 1px solid var(--line); padding-top: 2px; }
   .grid button { position: relative; aspect-ratio: 3 / 4; overflow: hidden; background: var(--chip); }
   .grid img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .grid .empty { aspect-ratio: 3 / 4; background: var(--chip); }
+  .empty-msg { grid-column: 1 / -1; padding: 28px 16px; text-align: center; color: var(--muted); font-size: 13px; }
   .grid .multi { position: absolute; top: 6px; right: 6px; width: 18px; height: 18px; fill: #fff;
                  filter: drop-shadow(0 0 2px rgba(0,0,0,.5)); }
 
@@ -100,7 +104,8 @@
   const MULTI = '<svg class="multi" viewBox="0 0 24 24"><path d="M5 3h12a2 2 0 0 1 2 2v12h-2V5H5z"/><rect x="2" y="7" width="13" height="15" rx="2"/></svg>';
 
   const label = (ep) => ep.kind === "zzal" ? "짤" : `${ep.no}화`;
-  const avatar = (cls) => `<div class="${cls}"><img src="avatar.jpg" alt=""></div>`;
+  // 프로필 사진은 episodes.json 의 account.avatar(같은 폴더 기준 경로)가 있을 때만. 없으면 회색 자리표시
+  const avatar = (cls) => `<div class="${cls}">${data.account.avatar ? `<img src="${esc(data.account.avatar)}" alt="">` : '<span class="ph"></span>'}</div>`;
 
   function profile() {
     const { account, episodes } = data;
@@ -110,9 +115,10 @@
       <div class="profile">${avatar("avatar")}
         <div class="stats"><div><b>${episodes.length}</b><span>게시물</span></div>
           <div><b>주 1회</b><span>연재</span></div></div></div>
-      <div class="bio"><b>${esc(account.name)}</b>${esc(account.bio)}</div>
+      <div class="bio">${account.name ? `<b>${esc(account.name)}</b>` : ""}${esc(account.bio || "")}</div>
       <div class="note">아직 올리지 않은 시안입니다. 칸을 누르면 인스타에서 넘겨 보는 그대로 보입니다.</div>
-      <div class="grid">${newest.map((ep) => `
+      <div class="grid">${newest.length ? "" : `<div class="empty"></div><div class="empty"></div><div class="empty"></div>
+        <p class="empty-msg">게시물이 없습니다 — episodes.json 의 episodes 에 화를 넣고 렌더러로 컷을 구우면 여기에 보입니다.</p>`}${newest.map((ep) => `
         <button data-ep="${esc(ep.id)}" aria-label="${label(ep)} ${esc(ep.title)}">
           <img src="${src(ep, 0)}" alt="" loading="lazy">${ep.cuts.length > 1 ? MULTI : ""}</button>`).join("")}
       </div>`;
@@ -141,8 +147,8 @@
         <svg class="save" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V4a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1z"/></svg>
       </div>
       <div class="caption"><b>${esc(data.account.handle)}</b> ${ep.kind === "zzal" ? "" : `[${label(ep)}] `}${esc(ep.title)}
-${esc(ep.caption)}
-<span class="tags">${ep.tags.map((t) => "#" + esc(t)).join(" ")}</span></div>
+${esc(ep.caption || "")}
+<span class="tags">${(ep.tags || []).map((t) => "#" + esc(t)).join(" ")}</span></div>
       <div class="save-all">
         <button class="share" hidden>📲 ${n}장 공유 (인스타·갤러리)</button>
         <button class="all${n > 1 ? "" : " alt"}">⬇️ ${n > 1 ? `${n}장 한 번에 받기` : "사진 받기"}</button>
@@ -183,7 +189,7 @@ ${esc(ep.caption)}
 
   // 인스타에 올릴 컷 전부 받기. 폰은 공유 시트(인스타로 바로 보내거나 갤러리에 저장),
   // 그 밖에는 한 장씩 내려받기 — 압축 파일은 폰에서 풀기 번거로워 쓰지 않는다.
-  const fileName = (ep, i) => `dageudangs-${ep.id}-${String(i + 1).padStart(2, "0")}.jpg`;
+  const fileName = (ep, i) => `${data.account.handle}-${ep.id}-${String(i + 1).padStart(2, "0")}.jpg`;
   async function fetchAll(ep) {
     return Promise.all(ep.cuts.map(async (_, i) => {
       const r = await fetch(src(ep, i));
@@ -200,7 +206,7 @@ ${esc(ep.caption)}
     const busy = (on, text = "") => { share.disabled = all.disabled = on; msg.textContent = text; };
     app.querySelector(".save-all .copy").addEventListener("click", async () => {
       const head = ep.kind === "zzal" ? ep.title : `[${label(ep)}] ${ep.title}`;
-      const text = `${head}\n${ep.caption}\n\n${ep.tags.map((t) => "#" + t).join(" ")}`;
+      const text = `${head}\n${ep.caption}\n\n${(ep.tags || []).map((t) => "#" + t).join(" ")}`;
       try { await navigator.clipboard.writeText(text); msg.textContent = "캡션을 복사했습니다. 인스타 글쓰기 칸에 붙여 넣으세요."; }
       catch { msg.textContent = text; }
     });

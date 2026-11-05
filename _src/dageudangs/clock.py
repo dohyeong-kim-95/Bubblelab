@@ -1,12 +1,14 @@
 # art/2-15.png 의 아날로그 시계(5시 59분이 아님)를 지우고 17:59 디지털 시계를 말 뒤에 깐다 → art/2-15d.png
 # usage: python3 _src/dageudangs/clock.py   (Pillow·numpy·scipy 필요)
+# 그림은 저장소에 없다 — DGD_TOON(기본 ~/dageudangs-lab/toon)/_src/dageudangs/art 에서 읽고 쓴다.
+import os
 from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageDraw
 from scipy import ndimage as nd
 
-ART = Path(__file__).resolve().parent / "art"
+ART = Path(os.environ.get("DGD_TOON", Path.home() / "dageudangs-lab" / "toon")).expanduser() / "_src" / "dageudangs" / "art"
 a = np.asarray(Image.open(ART / "2-15.png").convert("RGBA")).astype(int)
 H, W = a.shape[:2]
 yy, xx = np.mgrid[:H, :W]
