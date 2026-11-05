@@ -1,0 +1,9 @@
+(피곤한 걸음 블록 — B2_leg_shading / B2_two_calls / B2_three_quarter 어느 것에도 덧붙인다. common.txt 의 WALK MECHANICS 문장을 이것으로 바꾼다)
+TIRED WALK (the eyes are tired AND the whole body must look tired — this must NOT look like a bouncy, happy walk):
+- SHORT strides: at contact the feet are only about one hoof-length apart, never a wide stride.
+- Feet barely leave the floor: the swinging hoof slides forward just above the floor line (shuffling, almost dragging), the knee bends only a little, no high knee lift, no kicking leg.
+- Heavy, sinking body: at 'down' the body sinks low and stays low for a moment; it rises only a little at 'passing' (small vertical bob), then sinks heavily again.
+- Posture: upper body leans forward, shoulders rounded and drooping, head hanging forward and slightly lagging behind the body's motion, ears drooping slightly backward.
+- Arms hang down almost straight with very small, late swing; hooves dangle.
+- The blue backpack looks heavy: straps pull the shoulders down, the bag sags low on the back and lags behind the body's bob.
+- Face: half-closed tired eyes, small open mouth (sighing), same in every cell.
