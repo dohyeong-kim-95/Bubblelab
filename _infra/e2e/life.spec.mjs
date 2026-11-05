@@ -129,7 +129,12 @@ test("Pops 50개 영상을 연속 스와이프해도 다음 영상이 준비된�
       await expect(cards.nth(index + 1).locator("video")).toHaveAttribute("src", /videos\/a1-/);
     }
   }
-  await page.evaluate(() => document.querySelector("#feed").scrollTo({ top: document.querySelector("#feed").scrollHeight, behavior: "auto" }));
+  // 끝으로 돌아가는 감지는 "아래로 움직였고 바닥에 닿음"이다. 마지막 카드에서 이미 바닥이면 scrollTo 가
+  // 위치를 바꾸지 않아 감지가 안 일어나 가끔 실패했다 — 조금 올렸다가 바닥으로 내려 움직임을 만든다.
+  const feed = page.locator("#feed");
+  await feed.evaluate((el) => el.scrollTo({ top: el.scrollHeight - el.clientHeight - 200, behavior: "auto" }));
+  await page.waitForTimeout(100);
+  await feed.evaluate((el) => el.scrollTo({ top: el.scrollHeight, behavior: "auto" }));
   await expect(page.locator("#position")).toHaveText("1 / 50");
 });
 
