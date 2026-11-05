@@ -55,6 +55,7 @@ python3 $T/passing_zoom.py out/rig/rig_sheet.png sheet.png passing.jpg          
 원본은 `dageudangseu-4` 정지 스티커 16종이다(로컬 `~/dageudangs-lab/stickers/dageudangseu-4/NN.png`). 움직이는 판은 **캐릭터만**(글자 없음) 만들고,
 글자는 나중에 코드로 얹는다(`d4_export.py --text` 자리). 원본 산출물은 투명 PNG 24장 시퀀스이고 이미지는 전부 로컬 `~/dageudangs-lab/work/d4/`다.
 시범 v2(관절 2단·겹침 동작·다듬기)의 도구·순서는 [`doc/gif-lab/d4/README.md`](doc/gif-lab/d4/README.md) 「재시범 v2」. 분류: **A** 얼굴·머리·효과만 움직임 / **B** 상체(팔·몸통) / **C** 온몸(다리까지). 2초·24프레임 기준이다.
+**타겟은 LINE**(2026-11-06 사용자) — 판단·최적화는 LINE 기준, 카카오 'AI 없는 제작' 때문에 품질을 낮추지 않는다. 출력은 카카오·LINE 둘 다 뽑고, 종마다 AI 사용 단계는 d4 README 「AI 사용 기록」에 남긴다.
 
 | # | 글자 | 분류 | 움직임 한 줄 |
 |---|---|---|---|
@@ -199,4 +200,4 @@ duri 채팅의 AI 비서 `🤖 당이` 가 이 캐릭터다. 잡담 답만 "~승
 - 움직이는 이모티콘 파이프라인(`_src/emoticon/`)의 지금 캐릭터는 **토끼**(`rabbit/`)다. 다그당스를 움직이려면
   `_src/emoticon/dageudangs/refs/` 에 기준 포즈를 두고 `doc/prompting.md` 의 부품 인벤토리(invariants)를
   말 기준으로 새로 써야 한다(귀 두 개, 앞머리 갈기, 주둥이, 발굽 앞발 두 개, 뒷발…).
-- 카카오는 생성형 AI 입점이 막혀 있다. 유료 판매는 LINE 부터 본다(`doc/kakao-emoticon-guide.md` §1).
+- 카카오는 생성형 AI 입점이 막혀 있다. 유료 판매 타겟은 LINE 이다(2026-11-06 확정, `doc/kakao-emoticon-guide.md` §1). LINE 제출 때 AI 사용은 정직하게 표시한다.
