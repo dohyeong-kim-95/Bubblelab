@@ -101,7 +101,11 @@ if [ "$needs_test" = "1" ]; then
     exit 0
   }
   echo "훅: npm test (빌드 검사 포함) …"
-  if ! (cd "$root" && npm test >/tmp/bl-hook-test.$$ 2>&1); then
+  # git 이 훅에 넘긴 GIT_* 를 지우고 테스트한다. worktree(레인)에서는 GIT_DIR·GIT_INDEX_FILE 이
+  # 절대경로라, 임시 리포를 만드는 테스트의 git 이 그걸 물려받아 진짜 리포를 건드렸다
+  # (2026-11-05: 공유 .git/config 에 core.bare=true·user.name=t, 가짜 agent/duri/calendar 브랜치).
+  if ! (cd "$root" && unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES \
+        && npm test >/tmp/bl-hook-test.$$ 2>&1); then
     tail -30 /tmp/bl-hook-test.$$ >&2
     rm -f /tmp/bl-hook-test.$$
     {

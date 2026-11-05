@@ -14,6 +14,10 @@ import { readFileSync, existsSync, readdirSync } from "node:fs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
+// 임시 리포에 거는 git 이 커밋 훅의 GIT_DIR·GIT_INDEX_FILE 을 물려받으면 진짜 리포를 건드린다
+// (레인 worktree 에서는 절대경로라 실제로 공유 .git/config 를 망가뜨렸다). 훅도 지우지만 여기서도 끊는다.
+for (const key of Object.keys(process.env)) if (key.startsWith("GIT_")) delete process.env[key];
+
 test("docs/ 는 빌드 SKIP 목록에 있다 (서브도메인으로 배포되지 않는다)", () => {
   const build = readFileSync(join(ROOT, "_infra/build.mjs"), "utf8");
   const skip = build.match(/const SKIP = new Set\(\[([^\]]*)\]\)/);
