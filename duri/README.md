@@ -114,6 +114,43 @@ apple/mobile 메타만으로 구성한 **최소 설치형 PWA**다. 최신 Chrom
 - 방 초기화는 R2 의 `photo/`·`lend/` 만 지우므로 `stickers/` 는 남는다.
 - 원본은 로컬 `~/dageudangs-lab/stickers/`, 올리기·새 팩 절차는 `_src/duri-stickers/README.md`.
 
+### TODO — 스티커가 늦게 뜬다 (사용자 보고 2026-11-05, 아직 안 고침)
+
+R2 로 옮긴 직후 "이미지 로딩이 너무 느리다"는 보고가 들어왔다. 고치기 전에 **어느 단계가 느린지부터
+잰다**. 아래는 코드를 읽고 추린 후보이고, 각 줄 끝에 재는 방법을 붙였다.
+
+1. **엣지 캐시가 없다 (가장 유력).** 옮기기 전에는 `/_assets/` 정적 asset 이라 Cloudflare 엣지가
+   바로 내줬다. 지금은 `private` 라 공유 캐시를 못 타고, 브라우저 캐시가 비어 있으면 매 장이 **워커
+   (세션 HMAC 검증) → R2 GET** 을 거친다. 버킷 위치가 한국에서 멀면 한 장마다 대양을 건넌다.
+   달라진 것은 이것뿐이다 — PNG·누끼 코드는 옮기기 전과 똑같았다.
+   *재기:* `curl -s -o /dev/null -w '%{time_starttransfer} %{time_total}\n' -H "Cookie: bl_duri=…" https://duri.bubblelab.dev/_duri/sticker/dageudangseu-3/01.png`
+   와 공개 팩 `/_assets/sticker/couple-cat/01.png` 의 TTFB 를 견준다. 버킷 위치는 `npx wrangler@4 r2 bucket info bubblelab-duri`.
+2. **원본 PNG 가 크다.** 팩당 1.8–3.1MB(16장), 장당 약 110–200KB(리마스터 2배, 247–524px)다.
+   그런데 화면에는 8.5rem(약 136px)으로 그린다. 서랍 탭 하나에 16장이면 약 2.4MB를 받는다. WebP 나
+   축소본(약 280px)이면 수 배 작아진다.
+   *재기:* DevTools Network 에서 서랍 탭 하나를 열 때의 전송량·완료 시각(Slow 4G 스로틀).
+3. **누끼를 매번 다시 한다.** `stickerObjectUrl` 은 이미 투명한 PNG 라도(모서리가 투명하면
+   flood fill 만 건너뛸 뿐) **decode → 캔버스 → `getImageData` → `toBlob("image/png")` 재인코딩**을
+   장마다 한다. 결과(`cutoutCache`)는 메모리에만 있어서 앱을 켤 때마다 처음부터 다시 한다. iOS 에서는
+   `toBlob` PNG 인코딩이 무겁다. 다그당스는 생성 때 이미 누끼를 땄으니 `cutout: false` 로 이 파이프라인을
+   통째로 건너뛸 수 있다(80장 모두 네 모서리가 투명함을 확인했다 — 지금은 flood fill 없이 재인코딩만 하는 셈).
+   *재기:* `stickerObjectUrl` 앞뒤에 `performance.now()` 를 찍어, 받기가 끝난 시점(`source.decode()` 직후)과
+   blob 이 나온 시점의 차이를 `console.log` 로 본다.
+4. **동시 요청 수 — 후보에서 거의 뺀다.** 서랍은 열린 탭 한 팩(16장)만 그리고(`renderGrid`), 팩 탭은 글자
+   버튼이라 5팩×16장이 한꺼번에 나가지는 않는다. 다만 다그당스 스티커가 많은 대화 기록을 처음 열 때는
+   메시지 수만큼 요청과 누끼가 한꺼번에 몰린다.
+   *재기:* Network 의 Waterfall 에서 `/_duri/sticker/` 요청이 겹치는 정도, 그리고 Queueing·Stalled 시간.
+5. **SW 가 `/_duri/*` 를 건드리지 않는다.** `sw.js` 는 `/_duri/` 를 그냥 통과시킨다. 그래서 오프라인이거나
+   브라우저 HTTP 캐시에서 밀려나면 다시 받는다. 정상이라면 `private, max-age=604800` 덕에 두 번째부터는
+   브라우저 캐시가 맞아야 한다.
+   *재기:* 두 번째로 열 때 Network 의 Size 칸이 `(disk cache)`·`(memory cache)` 로 나오는지 본다. 매번 200 이 오면
+   캐시가 안 맞는 것이다(iOS 홈 화면 PWA 는 캐시를 쉽게 비운다). 그때 SW 에서 `/_duri/sticker/` 만
+   cache-first 로 두는 것을 검토한다(게이트 뒤라도 같은 오리진·같은 기기라 괜찮다).
+
+고칠 순서 후보는 이렇다. 먼저 ③ `cutout: false`(코드 한 줄, 효과가 바로 보인다). 다음은 ② WebP·축소본을 다시
+올리고 `rev` 를 올린다. 그다음 ⑤ SW cache-first. ① 엣지 캐시는 `private` 를 포기하는 일이라
+마지막에 둔다(공유 캐시에 비공개 그림을 올리지 않는다).
+
 ## E2E 암호화 (공유 패스프레이즈)
 
 - 두 사람이 **같은 암호 문구**를 각자 최초 1회 입력 → PBKDF2(210k, SHA-256)로
