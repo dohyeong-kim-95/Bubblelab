@@ -1,0 +1,7 @@
+Generate ONE image: a cut-out puppet PARTS SHEET for 2D animation of the character in the attached image (Dageudangs: a golden tan bipedal horse with a big cream muzzle, dark brown straight-cut bangs and shaggy mane, cheerful open mouth, dark brown hooves, colored-pencil grain, dark brown outlines). Keep exactly the same drawing style, colors, size and view as the attached image.
+
+Draw exactly TWO separate parts on a plain white background, left to right, with wide white space between them, nothing overlapping:
+1. BODY WITHOUT THE RAISED ARM: the character exactly as in the attached image (head, ears, mane, face, torso, everything else), but the arm that is raised on the SCREEN-LEFT side is removed. Where that arm joined, the shoulder and side of the torso are smoothly closed with the dark brown outline, as if the arm were hidden behind. Same size and position as in the attached image.
+2. THAT RAISED ARM alone: upper arm + forearm + the dark brown hoof hand, pointing STRAIGHT UP (hoof at the top, palm facing the viewer as in the image), the bottom end (shoulder joint) rounded and closed with an outline. Same length and thickness as in the attached image.
+
+No text, no labels, no motion lines, no effects, no shadows, no ground line.
