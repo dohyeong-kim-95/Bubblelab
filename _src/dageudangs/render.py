@@ -1,15 +1,29 @@
-# 다그당스 인스타툰 렌더러 — dageudangs/episodes.json 의 컷을 1080×1350(4:5) JPEG 로 굽는다.
+# 인스타툰 렌더러 — episodes.json 의 컷을 1080×1350(4:5) JPEG 로 굽는다.
 # 글자는 전부 여기서 폰트로 넣는다(그림 생성기가 쓴 글자는 맞춤법이 깨진다).
-# usage: python3 _src/dageudangs/render.py [ep01 …]   (Pillow 필요)
+# 데이터(콘티·그림·결과 JPEG)는 저장소에 두지 않는다 — 로컬 작업 폴더에서 돈다.
+#   작업 폴더: --toon DIR 또는 환경변수 DGD_TOON (기본 ~/dageudangs-lab/toon)
+#     DIR/dageudangs/episodes.json   콘티 원본
+#     DIR/_src/dageudangs/art/*.png   컷 그림
+#     DIR/dageudangs/<id>/NN.jpg      결과(여기에 굽는다)
+#   하나씩 바꾸려면 --data FILE --art DIR --out DIR
+# usage: python3 _src/dageudangs/render.py [--toon DIR] [ep01 …]   (Pillow 필요)
+import argparse
 import json
-import sys
+import os
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-ROOT = Path(__file__).resolve().parents[2]
-SRC = Path(__file__).resolve().parent
-OUT = ROOT / "dageudangs"
+SRC = Path(__file__).resolve().parent          # 폰트는 저장소에 있다
+ap = argparse.ArgumentParser()
+ap.add_argument("ids", nargs="*", help="구울 화 id (없으면 전부)")
+ap.add_argument("--toon", default=os.environ.get("DGD_TOON", str(Path.home() / "dageudangs-lab" / "toon")))
+ap.add_argument("--data"); ap.add_argument("--art"); ap.add_argument("--out")
+args = ap.parse_args()
+TOON = Path(args.toon).expanduser()
+DATA = Path(args.data).expanduser() if args.data else TOON / "dageudangs" / "episodes.json"
+ART = Path(args.art).expanduser() if args.art else TOON / "_src" / "dageudangs" / "art"
+OUT = Path(args.out).expanduser() if args.out else DATA.parent
 W, H = 1080, 1350
 M = 54                      # 종이 여백
 PAPER, INK, WHITE = "#fbf6ec", "#2a2620", "#ffffff"
@@ -63,7 +77,7 @@ def render_cut(ep, i, cut):
     ImageDraw.Draw(mask).rounded_rectangle(panel, 40, fill=255)
     img.paste(scene, (0, 0), mask)
 
-    art = Image.open(SRC / "art" / f"{cut['art']}.png").convert("RGBA")
+    art = Image.open(ART / f"{cut['art']}.png").convert("RGBA")
     box_w, box_h = 880, panel[3] - panel[1] - 330
     s = min(box_w / art.width, box_h / art.height)
     art = art.resize((round(art.width * s), round(art.height * s)), Image.LANCZOS)
@@ -87,13 +101,13 @@ def render_cut(ep, i, cut):
     return img
 
 
-data = json.loads((OUT / "episodes.json").read_text())
+data = json.loads(DATA.read_text())
 ACCOUNT = data["account"]
-want = set(sys.argv[1:])
+want = set(args.ids)
 for ep in data["episodes"]:
     if want and ep["id"] not in want:
         continue
-    (OUT / ep["id"]).mkdir(exist_ok=True)
+    (OUT / ep["id"]).mkdir(parents=True, exist_ok=True)
     for i, cut in enumerate(ep["cuts"]):
         render_cut(ep, i, cut).save(OUT / ep["id"] / f"{i + 1:02d}.jpg", quality=88, optimize=True, progressive=True)
     print(ep["id"], len(ep["cuts"]), "컷")
