@@ -322,7 +322,8 @@ const valid = (plan, item) => placementProblems(plan, item).length === 0;
  * 비용 = 주당 걷는 거리 + 못 가는 구간 벌점. 놓을 수 없는 자리는 아예 받지 않는다.
  * onProgress(i, best) 는 가끔 불린다. 돌려주는 것은 가장 좋았던 배치.
  */
-export function optimize(plan, { iterations = 1500, seed = 1, cell = 20, onProgress } = {}) {
+// 격자는 화면과 같은 10cm 다 — 20cm 로 재면 70cm 문이 막혀 화면과 다른 답을 냈다(실측: 4배 빨라도 못 씀).
+export function optimize(plan, { iterations = 1500, seed = 1, cell = 10, onProgress } = {}) {
   const rand = rng(seed);
   const cost = (p) => evaluate(p, { cell }).weeklyCm;
   let cur = clonePlan(plan);
