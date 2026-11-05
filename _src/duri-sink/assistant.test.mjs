@@ -856,10 +856,11 @@ test("이모티콘: 당이가 쓰는 번호가 팩에 있고, duri 앱 서랍(DU
   const html = readFileSync(new URL("../../duri/index.html", import.meta.url), "utf8");
   const used = [...["잘 자", "사과", "각설탕", "사랑해", "힘들어", "배고파", "퇴근", "생일", "화이팅", "고마워", "굿모닝", "데이트", "충성",
     "안녕", "웅웅", "히히", "부끄", "키키", "헐", "귀여워", "호이", "잘됐다", "대박", "나두", "우와", "알림", "신나", "테니스", "수고"].map(chatSticker)];
+  // 그림은 저장소가 아니라 R2(비공개)라 장수는 duri 서랍 목록(private: true)이 원본이다.
   for (const { pack, n } of used) {
-    const meta = JSON.parse(readFileSync(new URL(`../../_assets/sticker/${pack}/metadata.json`, import.meta.url), "utf8"));
-    assert.ok(n >= 1 && n <= meta.downloads.length, `${pack}/${n}`);
-    assert.match(html, new RegExp(`id: "${pack}", title: "[^"]+", count: ${meta.downloads.length}`), `${pack} 가 duri 서랍에 없다`);
+    const entry = html.match(new RegExp(`\\{ id: "${pack}", title: "[^"]+", count: (\\d+), [^}]*private: true \\}`));
+    assert.ok(entry, `${pack} 가 duri 서랍(private 팩)에 없다`);
+    assert.ok(n >= 1 && n <= Number(entry[1]), `${pack}/${n}`);
   }
   assert.match(html, /p\.botSticker/, "앱이 botSticker 를 읽는다");
   // 캐시된 팩 목록에 새 팩이 없어도 그린다(iOS 에서 당이 이모티콘이 안 보이던 원인).

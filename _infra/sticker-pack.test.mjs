@@ -316,12 +316,13 @@ test("every sticker metadata with a chat field is registered in CHAT_STICKER_PAC
   }
 });
 
-test("duri 전용 목록의 rev 는 metadata 의 chat.rev 와 같다 (카탈로그 전에 그린 메시지도 새 주소로)", () => {
+test("duri 비공개 팩(private: true)은 공개 저장소 _assets 와 util/chat 등록에 없다", () => {
+  // 리포가 PUBLIC 이라 _assets/ 에 두면 GitHub 에서 다 보인다 — 그림은 R2(_src/duri-stickers)에만.
   const html = readFileSync(join(ROOT, "duri", "index.html"), "utf8");
-  for (const [, id, rev] of html.matchAll(/\{ id: "([^"]+)", title: "[^"]+", count: \d+, cutout: \w+(?:, rev: (\d+))?(?:, private: true)? \}/g)) {
-    const path = join(ROOT, "_assets", "sticker", id, "metadata.json");
-    if (!existsSync(path)) continue;
-    const meta = JSON.parse(readFileSync(path, "utf8"));
-    assert.equal(rev ? Number(rev) : undefined, meta.chat?.rev, `${id}: duri DURI_ONLY_PACKS 의 rev 가 metadata 와 다릅니다`);
+  const ids = [...html.matchAll(/\{ id: "([^"]+)", title: "[^"]+", count: \d+, cutout: \w+(?:, rev: \d+)?, private: true \}/g)].map((m) => m[1]);
+  assert.ok(ids.length >= 5, `private 팩을 못 찾았습니다(${ids.length}) — DURI_ONLY_PACKS 형식이 바뀌었으면 이 정규식도`);
+  for (const id of ids) {
+    assert.ok(!existsSync(join(ROOT, "_assets", "sticker", id)), `${id}: 비공개 팩이 _assets/sticker/ 에 커밋돼 있습니다`);
+    assert.ok(!CHAT_STICKER_PACKS.has(id), `${id}: 비공개 팩이 CHAT_STICKER_PACKS(util/chat 공개)에 있습니다`);
   }
 });

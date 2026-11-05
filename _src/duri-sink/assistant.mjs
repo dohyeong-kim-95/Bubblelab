@@ -138,7 +138,7 @@ export const fixTone = (t) => (typeof t === "string" ? t.replace(/당승(?![가-
 // 메시지 하나에 글과 함께 botSticker:{pack,n} 로 싣는다(따로 보내면 알림이 두 번 온다).
 // 앱은 당이 말풍선 아래에 그리고, 이 필드를 모르는 옛 앱은 글만 보여 준다(sticker 필드를
 // 쓰면 옛 앱이 이모티콘만 그리고 당이를 상대 이름으로 배운다). 고르는 건 코드다 — 모델
-// 프롬프트를 늘리지 않는다. 팩 번호는 _assets/sticker/dageudangseu-N/metadata.json 의 순서.
+// 프롬프트를 늘리지 않는다. 팩 번호는 ~/dageudangs-lab/stickers/dageudangseu-N/metadata.json 의 순서(그림은 R2, _src/duri-stickers).
 // 매번 붙이면 시끄럽다(사용자 요청) — 일정·운동·브리핑·추천 같은 일 답엔 안 붙이고, 잡담에서
 // 마음을 표현할 말(잘 자·힘들어·고마워·생일…)이거나 "이모티콘 보내줘" 일 때만 붙인다.
 const dg = (v, n) => ({ pack: `dageudangseu-${v}`, n });

@@ -59,20 +59,24 @@ Emoji 탭(lead·work·draw)이 다그당스 일을 시작할 때 읽는 한 장.
 
 ## 이미 있는 것
 
-### 스티커 팩 (`_assets/sticker/`, 각 16종)
+### 스티커 팩 (각 16종 — 저장소에 없다)
+
+리포가 PUBLIC 이라 다그당스 그림은 커밋하지 않는다. 원본은 로컬 `~/dageudangs-lab/stickers/<팩>/`,
+서비스는 R2(`DURI_BUCKET` 의 `stickers/`)에서 duri 게이트 뒤로만 한다 — 절차는 `_src/duri-stickers/README.md`.
+새 팩도 `_infra/sticker-pack.mjs` 결과를 커밋하지 말고 그 README 의 「새 비공개 팩」대로 한다.
 
 | 팩 | 만든 날 | 공개 | 성격 |
 |---|---|---|---|
-| `dageudangseu-1` | 2026-07-31 | 공개 | 말장난, 기본 표정 (탑승했승~ … 푸히힝ㅋㅋ) |
-| `dageudangseu-2` | 2026-07-31 | 공개 | "~승" 말장난 (멘탈 가출했승, 말조심…) |
-| `dageudangseu-3` | 2026-10-26 | 비공개, duri 전용 | 일상 인사와 마음 (좋은 아침이승, 잘 자승, 토닥토닥, 퇴근했승) |
-| `dageudangseu-4` | 2026-10-26 | 비공개, duri 전용 | 짧은 리액션 (안뇽~, 히히, >_<, 헐, 테니스 치러 가승) |
-| `agadangs-1` | 2026-10-31 | 숨김(duri 서랍에만) | 아가당스, 대사 없는 동작 |
+| `dageudangseu-1` | 2026-07-31 | duri 전용 (2026-11 util/chat 에서 내림) | 말장난, 기본 표정 (탑승했승~ … 푸히힝ㅋㅋ) |
+| `dageudangseu-2` | 2026-07-31 | duri 전용 (2026-11 util/chat 에서 내림) | "~승" 말장난 (멘탈 가출했승, 말조심…) |
+| `dageudangseu-3` | 2026-10-26 | duri 전용 | 일상 인사와 마음 (좋은 아침이승, 잘 자승, 토닥토닥, 퇴근했승) |
+| `dageudangseu-4` | 2026-10-26 | duri 전용 | 짧은 리액션 (안뇽~, 히히, >_<, 헐, 테니스 치러 가승) |
+| `agadangs-1` | 2026-10-31 | duri 전용 | 아가당스, 대사 없는 동작 |
 
 - 1·2 는 2026-11-01 에 리마스터했다(waifu2x 노이즈 제거와 2배 확대, 누끼 재작업, 흰 테두리 → `chat.rev: 2`).
-- **그림을 다시 그리면 팩 id 는 그대로 두고 `chat.rev` 를 올린다.** duri 의 `DURI_ONLY_PACKS`
-  (`duri/index.html`)에 있는 팩이면 거기 `rev` 도 같이 올린다. 폰이 7일 캐시하기 때문이다(`_assets/sticker/README.md`).
-- 공개 여부는 admin ✨ Sticker 화면에서 토글한다. 재배포는 필요 없다.
+- **그림을 다시 그리면 팩 id 는 그대로 두고** R2 에 다시 올린 뒤 duri 의 `DURI_ONLY_PACKS`
+  (`duri/index.html`) `rev` 를 올린다. 폰이 7일 캐시하기 때문이다.
+- admin ✨ Sticker 공개 토글은 `_assets/` 팩에만 해당한다 — 다그당스는 거기 없다.
 
 ### duri 속 당이 (`_src/duri-sink/README.md`)
 
@@ -91,7 +95,7 @@ duri 채팅의 AI 비서 `🤖 당이` 가 이 캐릭터다. 잡담 답만 "~승
 
 - **글자는 그림에 그리지 않는다.** 생성기가 쓴 한글은 맞춤법이 깨진다. 인스타툰 글자는 렌더러가 Jua 폰트로 넣는다.
   Jua 에는 `…`·`·`·한자 글리프가 없어 □ 로 나온다. `...`·`-` 를 쓴다.
-- 기존 스티커 시트는 4×4 한 장으로 받아 `_infra/sticker-pack.mjs` 로 넣었다(CLAUDE.md 「스티커 팩 추가」).
+- 기존 스티커 시트는 4×4 한 장으로 받아 `_infra/sticker-pack.mjs` 로 잘랐다(CLAUDE.md 「스티커 팩 추가」) — 결과는 저장소가 아니라 로컬·R2 로.
 - 움직이는 이모티콘 파이프라인(`_src/emoticon/`)의 지금 캐릭터는 **토끼**(`rabbit/`)다. 다그당스를 움직이려면
   `_src/emoticon/dageudangs/refs/` 에 기준 포즈를 두고 `doc/prompting.md` 의 부품 인벤토리(invariants)를
   말 기준으로 새로 써야 한다(귀 두 개, 앞머리 갈기, 주둥이, 발굽 앞발 두 개, 뒷발…).

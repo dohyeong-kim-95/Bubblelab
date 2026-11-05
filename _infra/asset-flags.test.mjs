@@ -31,7 +31,7 @@ const flagsRequest = (method, body) => new Request("https://assetflags.internal/
 });
 
 test("토글 키는 스티커만, 경로 조작은 막는다", () => {
-  assert.equal(assetFlagKey("sticker", "dageudangseu-1"), "sticker/dageudangseu-1");
+  assert.equal(assetFlagKey("sticker", "couple-cat"), "sticker/couple-cat");
   // 배경화면은 빌드가 상세페이지를 굽기 때문에 런타임 토글 대상이 아니다
   assert.equal(assetFlagKey("wallpaper", "night-sky"), null);
   assert.equal(assetFlagKey("sticker", "../../etc/passwd"), null);
