@@ -3,9 +3,11 @@
 Emoji 탭(lead·work·draw)이 다그당스 일을 시작할 때 읽는 한 장. 움직이는 이모티콘
 파이프라인 자체는 [`README.md`](README.md), 여기는 **캐릭터와 그 캐릭터가 이미 쓰이는 곳**만 모은다.
 
-프로필 시트(그림 레퍼런스): [`_src/emoticon/dageudangs/refs/profile.png`](../../_src/emoticon/dageudangs/refs/profile.png)
-— 기존 스티커에서 잘라 붙인 것이다(새로 생성한 그림 아님). draw 에 레퍼런스로 줄 때 이 파일이나
-아래 원본 PNG 를 쓴다.
+프로필 시트(그림 레퍼런스): 로컬 `~/dageudangs-lab/refs/profile.png` — 저장소에는 없다(다그당스 이미지는 로컬에만, 사용자 지시).
+기존 스티커에서 잘라 붙인 것이다(새로 생성한 그림 아님). draw 에 레퍼런스로 줄 때는 **절대 경로**
+`/home/kimdohyeong/dageudangs-lab/refs/profile.png` 나 아래 원본 스티커 PNG 를 쓴다. 단, 글자가 들어 있어 생성 레퍼런스로는
+글자까지 복제된다 — 생성에는 글자 없는 단일 컷(`~/dageudangs-lab/work/emoticon/doc/gif-lab/loop/RIG_ref.png`)이 낫다.
+색 원본은 텍스트라 저장소에 남는다: [`_src/emoticon/dageudangs/tokens.json`](../../_src/emoticon/dageudangs/tokens.json).
 
 ## 합격 레시피: 뼈대 → 부품 리그 → 클린업 (움직이는 컷)
 
@@ -125,7 +127,8 @@ duri 채팅의 AI 비서 `🤖 당이` 가 이 캐릭터다. 잡담 답만 "~승
 
 - 계정: `@dageudangs` "말 직장인 다그당스의 하루 🐴 / 매주 한 편 · AI 보조 제작"
 - 1화 「월요일은 말이 안 통해」 10컷, 짤 3개(월요일 출근 직전·답장 기다리는 중·월급날 D-1)
-- 컷 그림은 스티커를 2배로 키운 `_src/dageudangs/art/<팩>-<번호>.png` 이다. 콘티 원본은 `dageudangs/episodes.json`.
+- **저장소에는 화면 형식만 남는다**(feat/dageudangs-toon-mock). 계정·콘티(`episodes.json`)·컷 JPEG·컷 그림(스티커를 2배로 키운 `<팩>-<번호>.png`)은
+  로컬 `~/dageudangs-lab/toon/`(원래 구조)에만 있고, 렌더러는 `DGD_TOON` 으로 그 폴더에서 돈다(`dageudangs/README.md`).
 - 캡션 말투: "~하승", 끝인사는 "다음 주 월요일에 또 만나승!"
 
 ## GIF 실험 (2026-11-05)
