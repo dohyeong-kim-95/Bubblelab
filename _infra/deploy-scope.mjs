@@ -8,7 +8,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const SITES = [
   "admin", "assets", "dageudangs", "duri", "estate", "games", "idle", "interior", "lab",
-  "life", "mindfulness", "podcast", "slop", "test",
+  "life", "mindfulness", "opic", "podcast", "slop", "test",
   "util", "work", "www",
 ];
 
@@ -32,6 +32,7 @@ const SITE_TESTS = {
   ],
   idle: ["_infra/idle.test.mjs"],
   interior: ["_infra/interior.test.mjs"],
+  opic: ["_infra/opic.test.mjs"],
   lab: ["_infra/insights-publish.test.mjs"],
   life: [
     "_infra/backup-slim.test.mjs", "_infra/backup.test.mjs",

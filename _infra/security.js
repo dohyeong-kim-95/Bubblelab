@@ -74,6 +74,15 @@ function isSkyPage(url) {
 // 기본 정책의 geolocation=() 는 권한을 묻기도 전에 막으므로 duri 에 한해 self 로 연다.
 const DURI_POLICY = "accelerometer=(), camera=(self), geolocation=(self), "
   + "gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()";
+// opic 모의고사는 답변을 녹음한다 — 기본 정책의 microphone=() 는 권한을 묻기도 전에 막으므로
+// opic 에 한해 마이크만 self 로 연다(녹음은 기기 안에만 두고 서버로 보내지 않는다).
+const OPIC_POLICY = "accelerometer=(), camera=(), geolocation=(), "
+  + "gyroscope=(), magnetometer=(), microphone=(self), payment=(), usb=()";
+function isOpicPage(url) {
+  const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  return url.hostname === "opic.bubblelab.dev" ||
+    (local && (url.pathname === "/opic" || url.pathname.startsWith("/opic/")));
+}
 const LIFE_CSP = [
   "default-src 'self'", "base-uri 'self'", "object-src 'none'", "frame-ancestors 'none'",
   "form-action 'self'", "script-src 'self'", "style-src 'self'", "img-src 'self' data:",
@@ -151,6 +160,7 @@ export function applySecurityHeaders(response, request) {
   if (isDuriPage(url)) {
     headers.set("Permissions-Policy", DURI_POLICY);
   }
+  if (isOpicPage(url)) headers.set("Permissions-Policy", OPIC_POLICY);
   if (isLifePage(url)) headers.set("Content-Security-Policy", LIFE_CSP);
   if (url.protocol === "https:") {
     headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");

@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>🎙️ 오픽 모의고사</title>
+<meta name="description" content="폰으로 보는 오픽(OPIc) 모의고사 — 서베이·자가평가·15문항·녹음 다시 듣기">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🎙️</text></svg>">
+<style>
+  /* 디자인 토큰 — OPIc 응시 화면(opicdemo.actfltesting.org/css/master.css)에서 뽑은 값.
+     시험 화면은 흰 바탕 한 가지라 다크 모드를 두지 않는다(실제 시험과 같은 느낌을 연습하는 화면). */
+  :root {
+    color-scheme: light;
+    --o-primary: #ff6633;        /* 주 버튼·재생·진행 칸 */
+    --o-primary-hover: #ff4a0f;
+    --o-primary-active: #d54406; /* 눌림·선택된 단계 글자·오류 제목 */
+    --o-on-primary: #212529;     /* 주황 버튼 위 글자는 흰색이 아니라 잉크색 */
+    --o-blue: #3366ff;           /* 녹음 중 띠·응답 시간·마이크 게이지 */
+    --o-green: #15874e;          /* 끝낸 단계·지나간 문항 */
+    --o-red: #ea131b;
+    --o-purple: #8960b5;         /* 안내 상자 */
+    --o-ink: #212529;
+    --o-muted: #666d73;          /* 머리 밑줄·비활성 버튼·아직 안 푼 문항 */
+    --o-gray: #6c757d;
+    --o-line: #ced4da;
+    --o-line-soft: #dee2e6;
+    --o-surface: #eeeeee;        /* 재생 막대·결과 상자 */
+    --o-surface-2: #f8f9fa;
+    --o-tint: #ffe0d6;           /* 주황 계열 알림 바탕 */
+    --o-tint-line: #ffd4c6;
+    --o-tint-ink: #94472e;
+    --o-bg: #ffffff;
+    --o-radius: 0;               /* 버튼·입력·상자 전부 각진 모서리 */
+    --o-shadow-btn: 0 2px 1px 0 rgba(0, 0, 0, .2);
+    --o-shadow-tile: 1px 1px 1px 0 rgba(0, 0, 0, .2);
+    --o-shadow-modal: 0 2px 2px 0 rgba(0, 0, 0, .4);
+    --o-focus: #007bff;
+    --o-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Apple SD Gothic Neo", "Noto Sans KR", "Helvetica Neue", Arial, sans-serif;
+    --o-btn-h: 3.4rem;           /* 주 버튼 높이 */
+    --o-rec-h: 4.2rem;           /* 녹음·재생 버튼 높이 */
+    --o-tile: 3.6rem;            /* 문항 번호 칸·재생 버튼 한 변 */
+    --gutter-l: max(16px, env(safe-area-inset-left, 0px));
+    --gutter-r: max(16px, env(safe-area-inset-right, 0px));
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; font-size: 13px; }
+  @media (min-width: 560px) { html { font-size: 15px; } }
+  body { margin: 0; background: var(--o-bg); color: var(--o-ink); font-family: var(--o-font); line-height: 1.5; min-height: 100dvh; }
+  [hidden] { display: none !important; }
+  button { font: inherit; }
+
+  .top { position: sticky; top: 0; z-index: 5; background: var(--o-bg); border-bottom: 1px solid var(--o-muted);
+         padding: calc(env(safe-area-inset-top, 0px) + .7rem) var(--gutter-r) .7rem var(--gutter-l);
+         display: flex; align-items: center; gap: 1rem; }
+  .brand { font-weight: 800; font-size: 1.5rem; letter-spacing: -.01em; color: var(--o-ink); margin: 0; }
+  .brand b { color: var(--o-primary); }
+  .brand small { font-size: .9rem; font-weight: 600; color: var(--o-muted); margin-left: .4rem; }
+  .clock { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 700; font-size: 1.2rem; color: var(--o-muted); }
+  .clock.low { color: var(--o-primary-active); }
+
+  main { max-width: 46rem; margin: 0 auto; padding: 1rem var(--gutter-r) calc(env(safe-area-inset-bottom, 0px) + 7rem) var(--gutter-l); }
+
+  /* 단계 막대 — 선택 단계는 주황 칸, 끝낸 단계는 초록 글자 */
+  .steps { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--o-line); margin: 0 0 1.4rem; padding: 0; list-style: none; }
+  .steps li { padding: .5rem .4rem; color: var(--o-gray); font-size: 1rem; line-height: 1.25; min-width: 0; }
+  .steps li + li { border-left: 1px solid var(--o-line); }
+  .steps li b { display: block; font-size: 1.05rem; }
+  .steps li b::before { content: "Step "; }
+  .steps li span { display: block; font-size: .85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .steps li.selected { background: var(--o-primary); color: var(--o-on-primary); }
+  .steps li.checked b { color: var(--o-green); }
+  .steps li.checked b::after { content: " ✓"; }
+
+  h2.head { border-bottom: 1px solid var(--o-line); font-size: 1.45rem; font-weight: 700; margin: 0 0 1rem; padding: .4rem 0; text-wrap: balance; }
+  h2.hero { color: var(--o-blue); font-size: 2.4rem; font-weight: 800; margin: .6rem 0 .2rem; letter-spacing: -.02em; }
+  p { margin: 0 0 .9rem; }
+  .muted { color: var(--o-muted); }
+
+  /* 버튼 — 각진 모서리, 굵은 글씨, 살짝 떠 있는 그림자 */
+  .btn { border-radius: var(--o-radius); box-shadow: var(--o-shadow-btn); border: 2px solid transparent; cursor: pointer;
+         font-weight: 700; font-size: 1.2rem; height: var(--o-btn-h); padding: 0 2rem; display: inline-flex; align-items: center;
+         justify-content: center; gap: .5rem; background: transparent; color: var(--o-ink); touch-action: manipulation; }
+  .btn:focus-visible { outline: 2px solid var(--o-focus); }
+  .btn:active:not(:disabled) { transform: scale(.98); }
+  .btn-primary { background: var(--o-primary); color: var(--o-on-primary); }
+  .btn-primary:hover:not(:disabled) { background: var(--o-primary-hover); }
+  .btn-primary:active:not(:disabled) { background: var(--o-primary-active); color: #fff; border-color: var(--o-primary); box-shadow: none; }
+  .btn-primary:disabled, .btn-rec:disabled { background: var(--o-muted); color: #fff; cursor: default; }
+  .btn-primary.next::after { content: "›"; font-size: 1.7rem; line-height: 1; margin-top: -.15rem; }
+  .btn-secondary { border-color: var(--o-muted); background: var(--o-bg); }
+  .btn-secondary.back::before { content: "‹"; font-size: 1.7rem; line-height: 1; margin-top: -.15rem; }
+  .btn-rec { background: var(--o-primary); color: var(--o-on-primary); height: var(--o-rec-h); padding: 0 1rem; }
+  .btn-square { width: var(--o-tile); height: var(--o-tile); padding: 0; box-shadow: none; background: var(--o-primary); color: var(--o-on-primary); font-size: 1.3rem; }
+  .btn-square:disabled { background: var(--o-muted); color: #fff; }
+
+  /* 화면 아래 고정 내비 — 모바일 엄지 자리 */
+  .nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; background: var(--o-bg); border-top: 1px solid var(--o-line-soft);
+         padding: .8rem var(--gutter-r) calc(env(safe-area-inset-bottom, 0px) + .8rem) var(--gutter-l);
+         display: flex; gap: .8rem; justify-content: flex-end; align-items: center; }
+  .nav .hint { margin-right: auto; color: var(--o-muted); font-size: 1rem; min-width: 0; }
+
+  /* 안내 상자 */
+  .alert-purple { background: var(--o-purple); color: #fff; padding: 1rem 1.1rem; margin: 0 0 1rem; }
+  .alert-blue { background: var(--o-blue); color: #fff; padding: 1rem 1.1rem; margin: 0 0 1rem; }
+  .alert-tint { background: var(--o-tint); color: var(--o-tint-ink); border: 1px solid var(--o-tint-line); padding: .9rem 1.1rem; margin: 0 0 1rem; }
+  .alert-purple p, .alert-blue p, .alert-tint p { margin: 0; }
+  ul.dots { margin: .3rem 0 1rem; padding-left: 1.4rem; }
+  ul.dots li { margin: .2rem 0; }
+
+  /* 서베이·자가평가 선택지 */
+  fieldset { border: 0; padding: 0; margin: 0 0 1.4rem; min-width: 0; }
+  legend { font-weight: 700; font-size: 1.15rem; margin-bottom: .5rem; padding: 0; }
+  .opt { display: flex; gap: .7rem; align-items: flex-start; padding: .75rem .8rem; border: 1px solid var(--o-line); margin-top: -1px; cursor: pointer; background: var(--o-bg); }
+  .opt input { accent-color: var(--o-primary); width: 1.25rem; height: 1.25rem; margin: .1rem 0 0; flex: none; }
+  .opt:has(input:checked) { background: var(--o-tint); border-color: var(--o-tint-line); position: relative; }
+  .picks { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 3.6rem); z-index: 2; background: var(--o-bg); padding: .5rem 0; font-weight: 700; }
+  .picks .n { color: var(--o-primary-active); }
+  .picks.ok .n { color: var(--o-green); }
+  .lvl { display: grid; grid-template-columns: var(--o-tile) 1fr; gap: .8rem; align-items: start; }
+  .lvl .no { width: var(--o-tile); height: var(--o-tile); display: grid; place-items: center; background: var(--o-muted); color: #fff; font-weight: 800; font-size: 1.3rem; box-shadow: var(--o-shadow-tile); }
+  .opt:has(input:checked) .lvl .no { background: var(--o-primary); color: var(--o-on-primary); }
+  .opt.level input { position: absolute; opacity: 0; pointer-events: none; }
+
+  /* 마이크 게이지 — 파랑 막대 */
+  .gauge { height: 1rem; border: 1px solid var(--o-line); background: var(--o-surface-2); margin: .4rem 0 1rem; }
+  .gauge i { display: block; height: 100%; width: 0%; background: var(--o-blue); transition: width .08s linear; }
+  .row { display: flex; gap: .8rem; flex-wrap: wrap; align-items: center; margin-bottom: 1rem; }
+
+  /* 시험 화면 */
+  .stage { display: grid; gap: 1rem; }
+  .avatar { position: relative; width: 100%; max-width: 22rem; aspect-ratio: 1; margin: 0 auto; background: var(--o-surface); overflow: hidden; }
+  .avatar svg { width: 100%; height: 100%; display: block; }
+  .avatar .mouth { transform-origin: 100px 118px; }
+  .avatar.talking .mouth { animation: talk .22s ease-in-out infinite alternate; }
+  @keyframes talk { from { transform: scaleY(.35); } to { transform: scaleY(1.25); } }
+  .avatar .big-play { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 5rem; height: 3.4rem;
+                      background: var(--o-primary); color: var(--o-on-primary); border: 0; box-shadow: var(--o-shadow-btn); font-size: 1.6rem; cursor: pointer; }
+  .avatar .big-play:hover { background: var(--o-primary-hover); }
+  .avatar .big-play:active { background: var(--o-primary-active); color: #fff; }
+  .qno { text-align: center; font-weight: 800; font-size: 1.6rem; margin: 0; }
+  .qno small { display: block; font-size: 1rem; font-weight: 600; color: var(--o-muted); }
+  .controls { display: grid; grid-template-columns: var(--o-tile) 1fr; gap: .8rem; align-items: center; max-width: 22rem; width: 100%; margin: 0 auto; }
+  .playback { background: var(--o-surface); height: var(--o-tile); padding: 0 1rem; display: flex; flex-direction: column; justify-content: center; gap: .35rem; font-size: .95rem; color: var(--o-muted); }
+  .track-well { border: 1px solid var(--o-muted); height: .45rem; }
+  .track { background: var(--o-blue); height: 100%; width: 0%; }
+  .alert-recording { background: var(--o-blue); color: #fff; height: 4rem; display: flex; align-items: center; justify-content: center; gap: .9rem;
+                     font-weight: 700; font-size: 1.15rem; box-shadow: var(--o-shadow-tile); max-width: 22rem; width: 100%; margin: 0 auto; }
+  .alert-recording .dot { width: 1.4rem; height: 1.4rem; border-radius: 50%; background: #fff; position: relative; }
+  .alert-recording .dot::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: #fff; animation: stretch .8s linear infinite; }
+  @keyframes stretch { from { opacity: .5; transform: scale(1); } to { opacity: 0; transform: scale(1.9); } }
+  .alert-recording .t { font-variant-numeric: tabular-nums; font-weight: 600; opacity: .9; }
+  .alert-wait { background: var(--o-surface); color: var(--o-muted); }
+  .alert-wait .dot { display: none; }
+  .response { max-width: 22rem; width: 100%; margin: 0 auto; }
+  .response .well { border: 1px solid var(--o-ink); height: 14px; }
+  .response .bar { background: var(--o-blue); height: 12px; width: 0%; }
+  .response .left { text-align: right; font-size: .9rem; color: var(--o-muted); margin-top: .25rem; }
+
+  /* 문항 번호 칸 — 회색 = 아직, 초록 = 지나감, 주황 = 지금 */
+  .prompt-list { list-style: none; padding: 0; margin: 0 auto; display: flex; flex-wrap: wrap; gap: .35rem; justify-content: center; max-width: 30rem; }
+  .prompt-list li { width: 2.5rem; height: 2.5rem; line-height: 2.5rem; text-align: center; font-weight: 700; color: #fff; background: var(--o-muted); box-shadow: var(--o-shadow-tile); font-size: 1rem; }
+  .prompt-list li.visited { background: var(--o-green); }
+  .prompt-list li.active { background: var(--o-primary); color: var(--o-on-primary); }
+
+  /* 난이도 재조정 모달 */
+  .modal { position: fixed; inset: 0; z-index: 10; background: rgba(33, 37, 41, .5); display: grid; place-items: center; padding: 1rem var(--gutter-r) 1rem var(--gutter-l); }
+  .modal .box { background: var(--o-bg); box-shadow: var(--o-shadow-modal); width: 100%; max-width: 30rem; padding: 1.6rem 1.4rem; }
+  .modal .box h3 { margin: 0 0 .6rem; font-size: 1.3rem; }
+  .modal .opt { cursor: pointer; }
+
+  /* 결과 */
+  .result { background: var(--o-surface); border-left: 4px solid var(--o-green); padding: .9rem 1rem; margin-bottom: 1.2rem; }
+  .result strong { color: var(--o-green); }
+  .answers { list-style: none; padding: 0; margin: 0 0 1.4rem; display: grid; gap: .9rem; }
+  .answers li { border: 1px solid var(--o-line); padding: .9rem 1rem; min-width: 0; }
+  .answers .meta { display: flex; gap: .6rem; align-items: baseline; flex-wrap: wrap; margin-bottom: .45rem; }
+  .answers .meta b { background: var(--o-green); color: #fff; padding: 0 .5rem; font-size: 1rem; }
+  .answers .meta span { color: var(--o-muted); font-size: .95rem; }
+  .answers .meta .len { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--o-ink); font-weight: 700; }
+  .answers .meta .len.short { color: var(--o-primary-active); }
+  .answers details { margin: .3rem 0 .5rem; }
+  .answers summary { cursor: pointer; color: var(--o-blue); font-weight: 600; }
+  .answers .text { margin: .4rem 0 0; font-size: 1.05rem; overflow-wrap: anywhere; }
+  .answers audio { width: 100%; height: 2.6rem; }
+  .answers .none { color: var(--o-muted); font-size: .95rem; }
+  .answers a.dl { font-size: .95rem; color: var(--o-blue); }
+  .check { list-style: none; padding: 0; margin: 0 0 1.4rem; border: 1px solid var(--o-line); }
+  .check li { padding: .7rem 1rem; border-top: 1px solid var(--o-line-soft); }
+  .check li:first-child { border-top: 0; }
+  .check label { display: flex; gap: .6rem; align-items: flex-start; cursor: pointer; }
+  .check input { accent-color: var(--o-green); width: 1.2rem; height: 1.2rem; margin-top: .15rem; flex: none; }
+  .foot { color: var(--o-muted); font-size: .9rem; margin-top: 2rem; }
+  .err { color: var(--o-primary-active); font-weight: 600; }
+  /* 공용 독(공유 버튼)은 우하단 fixed — 아래 고정 내비의 「다음」을 덮으므로 내비 위로 올리고, 시험 중에는 숨긴다 */
+  #bl-dock { bottom: calc(env(safe-area-inset-bottom, 0px) + 5.6rem) !important; }
+  body.testing #bl-dock, body.testing #bl-toast { display: none !important; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1 class="brand"><b>OPIc</b> 모의고사<small>비공식 연습</small></h1>
+  <span class="clock" id="clock" hidden aria-live="off"></span>
+</header>
+
+<main>
+  <ol class="steps" id="steps" hidden>
+    <li data-step="survey"><b>1</b><span>Background Survey</span></li>
+    <li data-step="self"><b>2</b><span>Self Assessment</span></li>
+    <li data-step="setup"><b>3</b><span>Setup</span></li>
+    <li data-step="test"><b>4</b><span>Begin Test</span></li>
+  </ol>
+
+  <!-- 시작 -->
+  <section id="v-intro">
+    <h2 class="hero">OPIc</h2>
+    <p class="muted" style="margin-top:0">Oral Proficiency Interview - computer · 모의고사</p>
+    <div class="alert-purple"><p>실제 시험과 같은 순서로 진행합니다 — 서베이 → 자가평가 → 마이크 확인 → 15문항(40분).</p></div>
+    <ul class="dots">
+      <li>질문은 영어 음성으로 나옵니다. 문제 글자는 시험이 끝난 뒤에만 보여 줘요.</li>
+      <li>질문을 다 들은 뒤 <b>5초 안에 한 번</b> 다시 들을 수 있어요. 그 뒤 바로 녹음이 시작됩니다.</li>
+      <li>답을 마치면 <b>다음</b>을 누르세요. 7번이 끝나면 남은 문제의 난이도를 다시 고릅니다.</li>
+      <li>녹음은 이 폰 안에만 남습니다. 서버로 보내지 않아요. 페이지를 닫으면 사라집니다.</li>
+      <li>조용한 곳에서 이어폰(마이크 달린 것)을 끼고 보는 걸 권해요.</li>
+    </ul>
+    <p class="muted">이 화면은 연습용 모의고사이며 OPIc 주관사(ACTFL·LTI·멀티캠퍼스)와 관계가 없습니다. 문항은 출제 형식을 따라 새로 쓴 연습 문항입니다.</p>
+    <p class="err" id="intro-err" hidden></p>
+  </section>
+
+  <!-- Step 1 서베이 -->
+  <section id="v-survey" hidden>
+    <h2 class="head">Background Survey</h2>
+    <p class="muted">질문을 읽고 정확히 답해 주세요. 응답에 따라 문항이 정해집니다.</p>
+    <div id="survey-form"></div>
+  </section>
+
+  <!-- Step 2 자가평가 -->
+  <section id="v-self" hidden>
+    <h2 class="head">Self Assessment</h2>
+    <p class="muted">본 Self Assessment 에 대한 응답을 기초로 개인별 문항이 출제됩니다. 설명을 잘 읽고 본인의 영어 말하기 능력과 비슷한 수준을 골라 주세요.</p>
+    <fieldset id="self-form"><legend class="sr">자가평가 단계</legend></fieldset>
+  </section>
+
+  <!-- Step 3 마이크 확인 -->
+  <section id="v-setup" hidden>
+    <h2 class="head">Setup</h2>
+    <p>마이크를 켜고 말을 해 보세요. 파란 막대가 움직이면 녹음이 됩니다.</p>
+    <div class="gauge" aria-label="마이크 입력"><i id="gauge"></i></div>
+    <div class="row">
+      <button class="btn btn-secondary" id="mic-on" type="button">🎤 마이크 켜기</button>
+      <button class="btn btn-rec" id="rec-test" type="button" disabled>● 5초 녹음해 보기</button>
+    </div>
+    <audio id="rec-test-audio" controls hidden style="width:100%"></audio>
+    <p>질문 음성도 확인해 주세요.</p>
+    <div class="row">
+      <button class="btn btn-secondary" id="tts-test" type="button">▶ 샘플 질문 듣기</button>
+      <span class="muted" id="voice-name"></span>
+    </div>
+    <p class="err" id="setup-err" hidden></p>
+  </section>
+
+  <!-- Step 4 시험 -->
+  <section id="v-test" hidden>
+    <div class="stage">
+      <p class="qno" id="qno">Question 1 <small>of 15</small></p>
+      <div class="avatar" id="avatar">
+        <svg viewBox="0 0 200 200" aria-hidden="true">
+          <rect width="200" height="200" fill="#e7e9ec"/>
+          <path d="M30 200c6-38 34-56 70-56s64 18 70 56z" fill="#4a5560"/>
+          <path d="M84 132h32v18c0 8-32 8-32 0z" fill="#e9b996"/>
+          <path d="M88 150l12 14 12-14" fill="#fff"/>
+          <ellipse cx="100" cy="92" rx="36" ry="42" fill="#f1c7a5"/>
+          <path d="M62 92c-4-36 16-56 40-56 26 0 44 20 38 54-4-14-12-24-22-28-14 8-34 10-56 30z" fill="#3b2a22"/>
+          <path d="M64 88c-6 18-4 44 4 58 4-14 2-34-4-58zM138 86c6 20 4 44-4 58-3-14-1-34 4-58z" fill="#3b2a22"/>
+          <ellipse cx="86" cy="96" rx="3.4" ry="4.2" fill="#2b2b2b"/>
+          <ellipse cx="114" cy="96" rx="3.4" ry="4.2" fill="#2b2b2b"/>
+          <path d="M80 86q6-4 12 0M108 86q6-4 12 0" stroke="#3b2a22" stroke-width="2" fill="none" stroke-linecap="round"/>
+          <path d="M100 100q-3 8 0 10" stroke="#d29a78" stroke-width="2" fill="none" stroke-linecap="round"/>
+          <ellipse class="mouth" cx="100" cy="118" rx="8" ry="3.2" fill="#b85a5a"/>
+        </svg>
+        <button class="big-play" id="play" type="button" aria-label="질문 듣기">▶</button>
+      </div>
+      <div class="controls">
+        <button class="btn btn-square" id="replay" type="button" disabled aria-label="질문 다시 듣기">↻</button>
+        <div class="playback"><span id="pb-label">▶ 를 눌러 질문을 들으세요</span><div class="track-well"><div class="track" id="track"></div></div></div>
+      </div>
+      <div class="alert-recording alert-wait" id="rec-banner"><span class="dot"></span><span id="rec-label">대기 중</span><span class="t" id="rec-time"></span></div>
+      <ol class="prompt-list" id="prompts"></ol>
+    </div>
+  </section>
+
+  <!-- 결과 -->
+  <section id="v-done" hidden>
+    <h2 class="head">시험 종료</h2>
+    <div class="result"><strong>수고하셨습니다!</strong> <span id="done-sum"></span></div>
+    <div class="alert-tint"><p>채점은 하지 않아요. 녹음을 다시 들으며 아래 체크리스트로 스스로 점검해 보세요. 실제 시험은 2026년 10월부터 AI 채점이 도입됐지만 채점 기준은 그대로입니다.</p></div>
+    <h2 class="head">내 답변</h2>
+    <ul class="answers" id="answers"></ul>
+    <h2 class="head">셀프 체크 (IH·AL 기준)</h2>
+    <ul class="check" id="checklist"></ul>
+    <p class="foot">연습용 비공식 모의고사입니다. 녹음 파일은 이 기기에만 있고 새로고침하면 사라져요 — 남기고 싶으면 「저장」을 누르세요.</p>
+  </section>
+</main>
+
+<nav class="nav" id="nav">
+  <span class="hint" id="hint"></span>
+  <button class="btn btn-secondary back" id="back" type="button" hidden>이전</button>
+  <button class="btn btn-primary next" id="next" type="button">시작하기</button>
+</nav>
+
+<div class="modal" id="adjust" hidden role="dialog" aria-modal="true" aria-labelledby="adjust-h">
+  <div class="box">
+    <h3 id="adjust-h">난이도 재조정</h3>
+    <p class="muted">지금부터 나올 질문의 난이도를 골라 주세요.</p>
+    <label class="opt"><input type="radio" name="adj" value="-1"><span>쉬운 질문</span></label>
+    <label class="opt"><input type="radio" name="adj" value="0" checked><span>비슷한 질문</span></label>
+    <label class="opt"><input type="radio" name="adj" value="1"><span>어려운 질문</span></label>
+    <div class="row" style="justify-content:flex-end;margin:1.2rem 0 0"><button class="btn btn-primary next" id="adjust-ok" type="button">다음</button></div>
+  </div>
+</div>
+
+<script type="module" src="./app.js"></script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>

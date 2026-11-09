@@ -169,4 +169,16 @@ test("별자리 화면만 방향·위치 기능을 self로 연다", () => {
     assert.match(policy, /accelerometer=\(\)/, `${url} 에서 방향 센서가 열렸다`);
     assert.match(policy, /microphone=\(\)/, `${url} 에서 마이크가 열렸다`);
   }
+
+  // opic 모의고사는 답변을 녹음하므로 마이크만 self 로 연다(카메라·위치는 잠근 채로).
+  for (const url of ["https://opic.bubblelab.dev/", "http://localhost:8787/opic/"]) {
+    const policy = policyOf(url);
+    assert.match(policy, /microphone=\(self\)/, `${url} 에서 마이크가 막혀 있다`);
+    for (const feature of ["camera", "geolocation", "accelerometer"]) {
+      assert.match(policy, new RegExp(`${feature}=\\(\\)`), `${url} 에서 ${feature}가 열렸다`);
+    }
+  }
+  for (const url of ["https://bubblelab.dev/", "https://slop.bubblelab.dev/opic/", "http://localhost:8787/util/"]) {
+    assert.match(policyOf(url), /microphone=\(\)/, `${url} 에서 마이크가 열렸다`);
+  }
 });
