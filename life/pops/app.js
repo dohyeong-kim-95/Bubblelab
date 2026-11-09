@@ -8,8 +8,7 @@ const MAX_PREPARED_AHEAD = 1;
 let items = [];
 let activeIndex = -1;
 let audible = false;
-let wrapping = false;
-let previousScrollTop = 0;
+let settleTimer = 0;
 
 const esc = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;",
@@ -92,7 +91,9 @@ function activate(index) {
   const cards = [...feed.querySelectorAll(".pop")];
   cards.forEach((card, cardIndex) => {
     const video = card.querySelector("video");
-    const near = Math.abs(cardIndex - index) <= MAX_PREPARED_AHEAD;
+    // 피드는 끝과 처음이 이어져 있으니 거리도 고리로 잰다 — 마지막 카드에서는 첫 카드가 '다음'이다.
+    const gap = Math.abs(cardIndex - index);
+    const near = Math.min(gap, cards.length - gap) <= MAX_PREPARED_AHEAD;
     if (near) setSource(card, cardIndex === index);
     else releaseSource(card);
     if (cardIndex === index) {
@@ -133,9 +134,9 @@ async function load() {
       .map((item) => ({ ...item, src: `${item.src}?v=${assetVersion}` }))
     : [];
   if (!items.length) { empty.hidden = false; return; }
-  feed.replaceChildren(...items.map(renderItem));
+  feed.replaceChildren(renderEdge("end"), ...items.map(renderItem), renderEdge("start"));
+  feed.scrollTop = cardTop(0);
   const observer = new IntersectionObserver((entries) => {
-    if (wrapping) return;
     const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
     if (visible) activate(Number(visible.target.dataset.index));
   }, { root: feed, threshold: [0.6, 0.85] });
@@ -144,23 +145,33 @@ async function load() {
 }
 
 sound.addEventListener("click", () => setAudible(!audible));
-feed.addEventListener("scroll", () => {
-  if (wrapping || feed.scrollHeight <= feed.clientHeight) return;
-  const current = feed.scrollTop;
-  const last = current + feed.clientHeight >= feed.scrollHeight - 2 && current > previousScrollTop;
-  const first = current <= 2 && current < previousScrollTop;
-  previousScrollTop = current;
-  if (!last && !first) return;
-  wrapping = true;
-  feed.classList.add("wrapping");
-  requestAnimationFrame(() => {
-    feed.scrollTo({ top: last ? 2 : feed.scrollHeight - feed.clientHeight - 2, behavior: "auto" });
-    activate(last ? 0 : items.length - 1);
-    requestAnimationFrame(() => {
-      previousScrollTop = feed.scrollTop;
-      feed.classList.remove("wrapping");
-      wrapping = false;
-    });
-  });
-});
+// 끝과 처음을 잇는 방법: 피드 양 끝에 영상 없는 가장자리 카드를 하나씩 둔다. 스크롤이 그 카드에
+// 멈추면 반대쪽 진짜 카드로 순간 이동한다. 이동 목적지가 정확히 스냅 지점이라 스냅이 다시 끌어당길
+// 일이 없다. (예전에는 바닥에 닿는 순간 2px 비낀 자리로 옮겼는데, 스냅이 그 2px 을 되돌리는 스크롤이
+// 다시 '반대쪽 끝에 닿음'으로 읽혀 처음↔끝을 끝없이 오갔다 — 화면은 1/50 과 50/50 사이를 깜빡였다.)
+function cardTop(index) {
+  return feed.querySelector(`.pop[data-index="${index}"]`)?.offsetTop ?? 0;
+}
+
+function renderEdge(target) {
+  const edge = document.createElement("div");
+  edge.className = "pop-edge";
+  edge.dataset.edge = target;
+  edge.setAttribute("aria-hidden", "true");
+  edge.textContent = target === "start" ? "↻ 처음부터" : "↻ 마지막으로";
+  return edge;
+}
+
+function settle() {
+  if (!items.length) return;
+  const max = feed.scrollHeight - feed.clientHeight;
+  const target = feed.scrollTop >= max - 1 ? 0 : feed.scrollTop <= 1 ? items.length - 1 : -1;
+  if (target < 0) return;
+  feed.scrollTo({ top: cardTop(target), behavior: "instant" });
+  activate(target);
+}
+
+// 스크롤이 멈춘 뒤에만 판정한다. scrollend 가 없는 브라우저는 마지막 스크롤 뒤 잠깐 조용해지면 멈춘 것으로 본다.
+if ("onscrollend" in feed) feed.addEventListener("scrollend", settle);
+else feed.addEventListener("scroll", () => { clearTimeout(settleTimer); settleTimer = setTimeout(settle, 150); });
 load();

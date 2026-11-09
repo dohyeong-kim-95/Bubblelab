@@ -32,8 +32,17 @@ body { position: relative; overflow: hidden; }
   overscroll-behavior-y: contain;
   scrollbar-width: none;
 }
-.feed.wrapping { scroll-snap-type: none; }
 .feed::-webkit-scrollbar { display: none; }
+.pop-edge {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  color: var(--pops-muted);
+  background: #111;
+  font-size: 15px;
+}
 .pop {
   position: relative;
   isolation: isolate;
