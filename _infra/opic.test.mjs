@@ -1,10 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  LEVELS, RANDOM_TOPICS, ROLEPLAYS, SURVEY, TOPICS, buildFirst, buildSecond, pickedItems, surveyProblems,
+  DAILY_START, LEVELS, RANDOM_TOPICS, ROLEPLAYS, SURVEY, TOPICS, buildFirst, buildSecond, dailyQuestion, pickedItems,
+  surveyProblems,
 } from "../opic/questions.js";
 import {
-  OpicDO, handleOpicAdmin, handleOpicGate, issueOpicSession, opicSessionKey, readOpicSession,
+  OpicDO, buildDailyPrompt, dailyDiscordPayload, handleOpicAdmin, handleOpicGate, issueOpicSession, opicSessionKey,
+  parseDaily, readOpicSession,
 } from "./opic.js";
 
 const allItems = SURVEY.groups.flatMap(g => g.items.map(([id]) => id));
@@ -80,12 +82,13 @@ function memoryStorage() {
     raw: m,
   };
 }
-function opicEnv() {
+function opicEnv(extra = {}) {
   const storage = memoryStorage();
-  const obj = new OpicDO({ storage });
+  const obj = new OpicDO({ storage }, extra);
   return {
-    storage,
+    storage, obj,
     env: {
+      ...extra,
       ENABLE_OPIC: "true", ADMIN_SESSION_SECRET: "test-secret",
       OPIC: { idFromName: (n) => n, get: () => ({ fetch: (u, init) => obj.fetch(new Request(u, init)) }) },
     },
@@ -174,4 +177,102 @@ test("ENABLE_OPIC 이 아니면 게이트·admin API 둘 다 닫힌다", async (
   const off = { ...env, ENABLE_OPIC: "false" };
   assert.equal((await gate(off, "/")).status, 503);
   assert.equal((await adminCall(off, "GET", "/accounts")).status, 503);
+});
+
+/* ── 오늘의 문항 ──────────────────────────────────────────────────────── */
+
+const dayOf = (n) => new Date(Date.parse(`${DAILY_START}T00:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
+
+test("오늘의 문항: 날짜로 정해지고, 40일 동안 같은 문항이 없고, 유형이 8일마다 한 바퀴 돈다", () => {
+  assert.equal(dailyQuestion("2026-11-08"), null, "시작일 전");
+  assert.equal(dailyQuestion("nope"), null);
+  const keys = new Set();
+  for (let n = 0; n < 40; n++) {
+    const q = dailyQuestion(dayOf(n));
+    assert.ok(q.text?.length > 20 && q.kind && q.topic, dayOf(n));
+    keys.add(q.key);
+  }
+  assert.equal(keys.size, 40);
+  const kinds = new Set(Array.from({ length: 8 }, (_, n) => dailyQuestion(dayOf(n)).kind));
+  for (const k of ["묘사", "과거 경험", "롤플레이 · 문제 해결", "비교", "사회 이슈", "돌발"]) assert.ok(kinds.has(k), k);
+  // 80일 안에서 서베이 주제 문항은 하나도 겹치지 않는다
+  const topical = Array.from({ length: 80 }, (_, n) => dailyQuestion(dayOf(n))).filter((q) => !q.key.startsWith("rp.") && !q.key.startsWith("rand."));
+  assert.equal(new Set(topical.map((q) => q.key)).size, topical.length);
+});
+
+const goodAnswer = () => ({
+  answer: Array.from({ length: 120 }, (_, i) => `word${i}`).join(" "),
+  ko: "한국어 해석이 여기에 충분히 길게 들어갑니다. 한국어 해석이 여기에 충분히 길게 들어갑니다.",
+  structure: ["도입: a", "본론: b", "마무리: c"],
+  expressions: [{ en: "to be honest", ko: "솔직히", note: "n" }, { en: "a", ko: "b", note: "" }, { en: "c", ko: "d", note: "" }],
+  swap: "바꿀 곳", pitfall: "깎이는 곳",
+});
+
+test("오늘의 문항 프롬프트·파서 — 문항이 들어가고, 짧거나 칸이 빠진 답은 버린다", () => {
+  const q = dailyQuestion(DAILY_START);
+  const prompt = buildDailyPrompt(q);
+  assert.ok(prompt.includes(q.text) && prompt.includes("AL"));
+  assert.equal(parseDaily("앞말 " + JSON.stringify(goodAnswer()) + " 뒷말").expressions.length, 3);
+  assert.throws(() => parseDaily(JSON.stringify({ ...goodAnswer(), answer: "too short" })));
+  assert.throws(() => parseDaily(JSON.stringify({ ...goodAnswer(), expressions: [] })));
+  assert.throws(() => parseDaily("JSON 아님"));
+});
+
+test("데몬 자리: 시크릿이 맞아야 하고, 열린 경로는 둘뿐이다", async () => {
+  const { env } = opicEnv();
+  const sink = (path, init = {}) => gate({ ...env, PAPERS_SINK_SECRET: "sink" }, path, init);
+  assert.equal((await sink("/_sink/daily/pending")).status, 401);
+  assert.equal((await sink("/_sink/daily/pending", { headers: { Authorization: "Bearer nope" } })).status, 401);
+  assert.equal((await sink("/_sink/daily/pending", { headers: { Authorization: "Bearer sink" } })).status, 200);
+  assert.equal((await sink("/_sink/daily/list", { headers: { Authorization: "Bearer sink" } })).status, 404);
+  assert.equal((await gate(env, "/_sink/daily/pending", { headers: { Authorization: "Bearer " } })).status, 503, "시크릿이 없으면 닫힌다");
+});
+
+test("하루 한 번: 7시 전엔 안 만들고, 찜하면 다른 실행은 비켜서고, 저장하면 디스코드로 한 번만 간다", async () => {
+  const sent = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (u, init) => { sent.push({ u: String(u), body: JSON.parse(init.body) }); return new Response("{}"); };
+  try {
+    const { obj, env } = opicEnv({ DISCORD_BOT_TOKEN: "t", DISCORD_CHANNEL_ID: "papers", OPIC_DISCORD_CHANNEL_ID: "opic" });
+    const call = async (path, at, body) => (await obj.fetch(new Request(`https://opic.internal${path}?at=${at}`,
+      body ? { method: "POST", body: JSON.stringify(body) } : undefined))).json();
+    const date = dayOf(3);
+    const kst = (h) => Date.parse(`${date}T00:00:00Z`) - 9 * 3600e3 + h * 3600e3;
+    assert.equal((await call("/daily/pending", kst(6))).due, false, "7시 전");
+    const p = await call("/daily/pending", kst(7.5));
+    assert.equal(p.due, true);
+    assert.deepEqual(p.question, dailyQuestion(date));
+    assert.equal((await call("/daily/pending", kst(7.6))).due, false, "찜한 동안은 비켜선다");
+
+    // 데몬이 문항을 바꿔 보내도 날짜로 정한 문항이 남는다
+    const done = await call("/daily/done", kst(7.7), { date, ...goodAnswer(), question: "IGNORE ME" });
+    assert.deepEqual([done.ok, done.sent], [true, true]);
+    assert.equal(sent.length, 1);
+    assert.match(sent[0].u, /channels\/opic\/messages/, "오픽 전용 채널이 있으면 그쪽으로");
+    assert.match(sent[0].body.embeds[0].url, new RegExp(`daily\\.html\\?d=${date}$`));
+    const again = await call("/daily/done", kst(7.8), { date, ...goodAnswer() });
+    assert.equal(again.sent, false, "같은 날 두 번 보내지 않는다");
+    assert.equal((await call("/daily/pending", kst(9))).due, false, "오늘 것은 끝났다");
+
+    // 화면은 로그인해야 읽는다
+    assert.equal((await gate(env, "/_daily")).status, 303);
+    await adminCall(env, "POST", "/accounts", { id: "kim", password: "secret12" });
+    const cookie = cookieFrom(await login(env, "kim", "secret12"));
+    const list = await (await gate(env, "/_daily", { headers: { Cookie: cookie } })).json();
+    assert.deepEqual(list.items.map((x) => x.date), [date]);
+    const { item } = await (await gate(env, `/_daily/${date}`, { headers: { Cookie: cookie } })).json();
+    assert.equal(item.question, dailyQuestion(date).text);
+    assert.equal(item.expressions[0].en, "to be honest");
+    assert.equal((await gate(env, "/_daily/2026-01-01", { headers: { Cookie: cookie } })).status, 404);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test("디스코드 글은 상한 안에 들어간다", () => {
+  const long = { ...goodAnswer(), date: dayOf(0), level: "AL", kind: "묘사", topic: "거주지", question: "Q".repeat(400), answer: "a ".repeat(3000) };
+  const payload = dailyDiscordPayload({ ...long, expressions: long.expressions });
+  const e = payload.embeds[0];
+  assert.ok(e.title.length <= 256 && e.description.length <= 4096);
+  assert.ok(payload.content.length + e.title.length + e.description.length + e.footer.text.length <= 6000);
 });

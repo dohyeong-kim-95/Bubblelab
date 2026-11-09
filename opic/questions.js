@@ -341,3 +341,43 @@ export function buildSecond({ survey, level, adjust = 0, used = [], seed = Date.
 
 export const TOTAL_SECONDS = 40 * 60;
 export const REPLAY_WINDOW_MS = 5000;
+
+/* ── 오늘의 문항 (매일 아침 AL 모범답안) ────────────────────────────────────
+ * 날짜 하나로 그날 문항이 정해진다 — 엣지(보관·디스코드)와 화면이 같은 함수를 쓴다.
+ * 8일 주기로 유형이 돈다: 묘사 → 습관 → 과거 경험 → 문제 해결 → 비교 → 사회 이슈 → 돌발 → 질문하기.
+ * 주제는 AL 준비에서 흔히 고르는 서베이 조합(DAILY_POOL)에서 3칸씩 건너뛰며 고른다 —
+ * 3 과 10 이 서로소라 80일(10주기) 동안 같은 (주제, 유형)이 다시 나오지 않는다. */
+export const DAILY_START = "2026-11-09";
+export const DAILY_LEVEL = "AL";
+export const DAILY_POOL = ["home", "movie", "park", "cafe", "music", "walking", "jogging", "staycation", "domestic", "overseas"];
+const DAILY_CYCLE = ["d", "r", "p", "fix", "c", "i", "rand", "ask"];
+const TOPIC_KIND = { d: "묘사", r: "습관·루틴", p: "과거 경험", c: "비교", i: "사회 이슈" };
+
+export function dailyDay(date) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date))) return -1;
+  return Math.round((Date.parse(`${date}T00:00:00Z`) - Date.parse(`${DAILY_START}T00:00:00Z`)) / 86400000);
+}
+
+/** 그날 문항 { day, key, kind, topic, text } — 시작일 전이면 null. */
+export function dailyQuestion(date) {
+  const day = dailyDay(date);
+  if (!(day >= 0)) return null;
+  const k = Math.floor(day / DAILY_CYCLE.length);
+  const slot = DAILY_CYCLE[day % DAILY_CYCLE.length];
+  const pos = day % DAILY_CYCLE.length;
+  if (TOPIC_KIND[slot]) {
+    const id = DAILY_POOL[(3 * k + pos) % DAILY_POOL.length];
+    return { day, key: `${id}.${slot}`, kind: TOPIC_KIND[slot], topic: TOPICS[id].label, text: TOPICS[id][slot] };
+  }
+  if (slot === "rand") {
+    const ids = Object.keys(RANDOM_TOPICS);
+    const id = ids[k % ids.length];
+    const sub = ["d", "p", "r"][Math.floor(k / ids.length) % 3];
+    return { day, key: `rand.${id}.${sub}`, kind: "돌발", topic: RANDOM_TOPICS[id].label, text: RANDOM_TOPICS[id][sub] };
+  }
+  const rp = ROLEPLAYS[k % ROLEPLAYS.length];
+  // 질문하기는 다섯 상황을 한 바퀴 돈 뒤 '관련 경험'(롤플레이 3번째 문항)으로 바뀐다
+  if (slot === "fix") return { day, key: `rp.${k % ROLEPLAYS.length}.fix`, kind: "롤플레이 · 문제 해결", topic: rp.label, text: rp.fix };
+  const late = k >= ROLEPLAYS.length;
+  return { day, key: `rp.${k % ROLEPLAYS.length}.${late ? "past" : "ask"}`, kind: late ? "롤플레이 · 관련 경험" : "롤플레이 · 질문하기", topic: rp.label, text: late ? rp.past : rp.ask };
+}

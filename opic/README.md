@@ -21,6 +21,23 @@
 - 마이크: 사이트 기본 `Permissions-Policy` 가 `microphone=()` 라 `_infra/security.js` 의 `OPIC_POLICY` 로
   이 서브도메인만 `microphone=(self)` 로 연다(테스트 `_infra/security.test.mjs`).
 
+## 오늘의 문항 (`daily.html`)
+
+매일 아침 7시(KST)에 실제 출제 형식대로 한 문항씩 **AL 목표 모범답안**이 쌓이고 디스코드로 알린다.
+논문 다이제스트와 같은 구조다 — LLM 은 엣지에 없고 집 PC 의 `claude -p`(구독 차감, API 비용 0).
+
+- **문항은 날짜가 정한다** — `questions.js` 의 `dailyQuestion(date)`. 8일 주기로 묘사 → 습관 → 과거 경험 →
+  문제 해결 → 비교 → 사회 이슈 → 돌발 → 질문하기, 주제는 `DAILY_POOL`(흔한 AL 서베이 조합)에서 3칸씩 건너뛴다.
+  서베이 주제 문항은 80일 동안 겹치지 않는다. 롤플레이 상황은 다섯 개라 문제 해결은 41일째부터 다시 나온다.
+- 데몬 `_src/opic-sink/index.mjs`(cron 5분마다): `GET /_sink/daily/pending`(7시 이후·오늘 것 없음·20분 찜) →
+  `buildDailyPrompt` → `claude -p --allowed-tools ""` → `parseDaily` → `POST /_sink/daily/done`.
+  인증은 papers 와 같은 `PAPERS_SINK_SECRET`(같은 PC·같은 `~/.bubblelab/papers.env`). PC 가 꺼져 있으면 켜질 때 만든다.
+  `--dry` 는 엣지 없이 오늘 답안만 찍어 본다.
+- **문항 글은 데몬이 보낸 것을 믿지 않는다** — `done` 이 날짜로 다시 정하고, 받는 것은 답안 칸뿐(길이 잘라 저장).
+- 보관은 `OpicDO` 의 `d:<날짜>`, 화면은 로그인 뒤 `_daily`(목록)·`_daily/<날짜>`. 디스코드는 처음 저장할 때 한 번,
+  `OPIC_DISCORD_CHANNEL_ID` var 가 있으면 그 채널, 없으면 papers 채널(`DISCORD_CHANNEL_ID`).
+- 음성은 화면에서 기기 내장 `speechSynthesis` 로 읽는다(녹음 파일 없음).
+
 ## 디자인 토큰
 
 `bubble.css` 대신 **OPIc 응시 화면의 토큰**을 쓴다(사용자 요청 — 실제 시험 화면에 익숙해지는 게 목적).

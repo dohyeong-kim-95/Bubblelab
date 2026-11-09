@@ -5,6 +5,9 @@
 // gen 은 비밀번호 재설정·삭제 때 올라가서, 그 전에 나간 세션을 문서 요청에서 끊는다.
 // 녹음·답변은 지금처럼 폰에만 있다 — 서버에 남는 것은 계정뿐이다.
 
+import { DAILY_LEVEL, dailyQuestion } from "../opic/questions.js";
+import { createDelivery, kstDate, postToDiscord, secretMatches } from "./papers.js";
+
 export const OPIC_ID_RE = /^[a-z0-9][a-z0-9._-]{2,31}$/;
 export const OPIC_PW_MIN = 6;
 export const OPIC_PW_MAX = 128;
@@ -46,8 +49,9 @@ function sameHex(a, b) {
 const publicAccount = ({ id, note, createdAt, lastLoginAt }) => ({ id, note: note || "", createdAt, lastLoginAt: lastLoginAt ?? null });
 
 export class OpicDO {
-  constructor(state) {
+  constructor(state, env = {}) {
     this.storage = state.storage;
+    this.env = env;
   }
 
   async fetch(request) {
@@ -111,8 +115,124 @@ export class OpicDO {
       return json({ ok: true });
     }
 
+    if (url.pathname.startsWith("/daily/")) return this.daily(request, url, body, json);
+
     return json({ error: "not found" }, 404);
   }
+
+  /* 오늘의 문항 — 집 PC 데몬이 만들고(claude -p), 여기서 보관하고 디스코드로 보낸다. */
+  async daily(request, url, body, json) {
+    const at = Number(url.searchParams.get("at")) || Date.now();
+    if (url.pathname === "/daily/pending" && request.method === "GET") {
+      const date = kstDate(at);
+      const question = dailyQuestion(date);
+      if (!question) return json({ due: false, reason: "시작일 전입니다" });
+      if (await this.storage.get(`d:${date}`)) return json({ due: false, reason: "오늘 것은 이미 만들었습니다" });
+      const hourKst = new Date(at + 9 * 3600 * 1000).getUTCHours();
+      if (hourKst < DAILY_HOUR_KST) return json({ due: false, reason: `${DAILY_HOUR_KST}시 이후에 만듭니다` });
+      const claimed = (await this.storage.get("daily-claim")) ?? 0;
+      if (at - claimed < DAILY_CLAIM_TTL_MS) return json({ due: false, reason: "다른 실행이 만드는 중입니다" });
+      if (url.searchParams.get("peek") !== "1") await this.storage.put("daily-claim", at);
+      return json({ due: true, date, level: DAILY_LEVEL, question });
+    }
+    if (url.pathname === "/daily/done" && request.method === "POST") {
+      const date = String(body.date ?? "");
+      const question = dailyQuestion(date);
+      // 문항은 데몬이 보낸 것을 믿지 않고 날짜로 다시 정한다 — 남는 것은 답안 칸뿐이다
+      if (!question) return json({ error: "날짜가 이상해요" }, 400);
+      const item = normalizeDaily(body, question, at);
+      if (!item) return json({ error: "답안이 비었어요" }, 400);
+      const first = !(await this.storage.get(`d:${date}`));
+      await this.storage.put(`d:${date}`, item);
+      await this.storage.delete("daily-claim");
+      let sent = false;
+      const delivery = createDelivery({ ...this.env, DISCORD_CHANNEL_ID: this.env.OPIC_DISCORD_CHANNEL_ID || this.env.DISCORD_CHANNEL_ID });
+      if (first && delivery && body.notify !== false) {
+        await postToDiscord(delivery, dailyDiscordPayload(item, this.env.OPIC_ORIGIN || "https://opic.bubblelab.dev"));
+        sent = true;
+      }
+      return json({ ok: true, date, sent });
+    }
+    if (url.pathname === "/daily/list" && request.method === "GET") {
+      const all = await this.storage.list({ prefix: "d:" });
+      const items = [...all.values()].map(({ date, kind, topic, question }) => ({ date, kind, topic, question }))
+        .sort((a, b) => b.date.localeCompare(a.date));
+      return json({ items });
+    }
+    if (url.pathname === "/daily/get" && request.method === "GET") {
+      const item = await this.storage.get(`d:${url.searchParams.get("date")}`);
+      return item ? json({ item }) : json({ error: "없어요" }, 404);
+    }
+    return json({ error: "not found" }, 404);
+  }
+}
+
+/* ── 오늘의 문항: 프롬프트 · 검증 · 디스코드 ───────────────────────────────── */
+
+export const DAILY_HOUR_KST = 7;
+export const DAILY_CLAIM_TTL_MS = 20 * 60 * 1000;
+const cut = (v, n) => String(v ?? "").replace(/\s+$/u, "").trim().slice(0, n);
+
+/** 데몬이 claude -p 에 건네는 글. 문항은 우리 문항 은행에서 온 것이라 남이 쓴 글이 섞이지 않는다. */
+export function buildDailyPrompt(question, level = DAILY_LEVEL) {
+  return `You are an OPIc (ACTFL Oral Proficiency Interview - computer) coach for a Korean office worker aiming for ${level}.
+Write a model spoken answer to today's practice question, then explain it in Korean.
+
+Question type: ${question.kind} / topic: ${question.topic}
+Question: "${question.text}"
+
+Rules for the answer (English):
+- Sound like natural speech, not an essay: first person, contractions, a few natural fillers ("you know", "I mean", "to be honest") but not many.
+- ${level} level: about 220–280 words (around 2 minutes spoken). Clear opening, organized body with concrete details, a short wrap-up.
+- Match the task: description → vivid detail; habit → present tense routine; past experience → accurate past tenses with a story arc; comparison → past vs present with reasons; social issue → opinion with reasons and examples; role-play "ask" → speak to the other person and ask 3–4 questions; role-play "problem" → explain the problem to the other person and offer 2–3 alternatives.
+- Personal details must be plausible but generic (no real names of people or companies).
+
+Return ONLY one JSON object, no markdown fences:
+{"answer": "...English answer...",
+ "ko": "...Korean translation of the whole answer...",
+ "structure": ["도입: ...", "본론: ...", "마무리: ..."],
+ "expressions": [{"en": "phrase", "ko": "뜻", "note": "언제 쓰는지 한 줄"}],
+ "swap": "내 얘기로 바꿔 말할 때 바꿀 부분 1–2문장 (한국어)",
+ "pitfall": "${level} 에서 이 유형에서 흔히 깎이는 점 한 줄 (한국어)"}
+Give 5 or 6 expressions taken from your answer.`;
+}
+
+/** 모델 출력에서 JSON 하나를 꺼내 칸을 확인한다. 모자라면 throw. */
+export function parseDaily(text) {
+  const raw = String(text ?? "");
+  const start = raw.indexOf("{"), end = raw.lastIndexOf("}");
+  if (start < 0 || end <= start) throw new Error("JSON 이 없다");
+  const data = JSON.parse(raw.slice(start, end + 1));
+  if (typeof data.answer !== "string" || data.answer.split(/\s+/).length < 80) throw new Error("답안이 너무 짧다");
+  if (typeof data.ko !== "string" || data.ko.length < 40) throw new Error("해석이 없다");
+  if (!Array.isArray(data.expressions) || data.expressions.length < 3) throw new Error("표현이 모자라다");
+  return data;
+}
+
+export function normalizeDaily(body, question, at = Date.now()) {
+  const answer = cut(body.answer, 4000);
+  if (answer.length < 200) return null;
+  return {
+    date: String(body.date), level: DAILY_LEVEL, kind: question.kind, topic: question.topic, question: question.text,
+    answer, ko: cut(body.ko, 4000),
+    structure: (Array.isArray(body.structure) ? body.structure : []).slice(0, 6).map((s) => cut(s, 200)).filter(Boolean),
+    expressions: (Array.isArray(body.expressions) ? body.expressions : []).slice(0, 8)
+      .map((e) => ({ en: cut(e?.en, 120), ko: cut(e?.ko, 120), note: cut(e?.note, 200) })).filter((e) => e.en),
+    swap: cut(body.swap, 400), pitfall: cut(body.pitfall, 300), at,
+  };
+}
+
+export function dailyDiscordPayload(item, origin = "https://opic.bubblelab.dev") {
+  const clip = (s, n) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+  const exprs = item.expressions.slice(0, 6).map((e) => `• **${e.en}** — ${e.ko}`).join("\n");
+  const description = clip(`${clip(item.answer, 700)}\n\n**핵심 표현**\n${exprs}${item.pitfall ? `\n\n⚠️ ${item.pitfall}` : ""}`, 3500);
+  return {
+    content: `🗣️ **${item.date} 오늘의 오픽** · ${item.kind} · ${item.topic} (${item.level} 모범답안)`,
+    embeds: [{
+      title: clip(item.question, 256), url: `${origin}/daily.html?d=${item.date}`, description,
+      footer: { text: "해석·구성·음성 듣기는 제목을 눌러 오픽 화면에서" },
+    }],
+  };
 }
 
 /* ── 세션 ─────────────────────────────────────────────────────────────── */
@@ -158,6 +278,7 @@ export async function handleOpicGate(request, env, url, base = "", limit = async
   const html = { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" };
   const secure = url.protocol === "https:" ? "; Secure" : "";
   const clear = "bl_opic=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0";
+  if (url.pathname.startsWith("/_sink/")) return handleOpicSink(request, env, url);
   const session = await readOpicSession(key, cookieOf(request));
 
   if (url.pathname === "/login" && request.method === "POST") {
@@ -193,10 +314,34 @@ export async function handleOpicGate(request, env, url, base = "", limit = async
     const alive = res.ok && (await res.json()).ok;
     if (!alive) return new Response(null, { status: 303, headers: { Location: `${base}/login`, "Set-Cookie": clear } });
   }
+  if (url.pathname === "/_daily" || /^\/_daily\/\d{4}-\d{2}-\d{2}$/.test(url.pathname)) {
+    if (request.method !== "GET") return new Response("not found", { status: 404 });
+    const date = url.pathname.slice("/_daily/".length);
+    const res = await stub(env).fetch(date ? `https://opic.internal/daily/get?date=${date}` : "https://opic.internal/daily/list");
+    return new Response(res.body, { status: res.status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+  }
   if (url.pathname === "/_me") {
     return Response.json({ id: session.id }, { headers: { "Cache-Control": "no-store" } });
   }
   return null;
+}
+
+/**
+ * 집 PC 데몬 자리 — 논문 다이제스트와 같은 PAPERS_SINK_SECRET 을 쓴다(같은 PC·같은 env 파일이라
+ * 시크릿을 늘리지 않는다). 경로·메서드는 둘만 연다.
+ */
+export async function handleOpicSink(request, env, url) {
+  const routes = { "GET /_sink/daily/pending": "/daily/pending", "POST /_sink/daily/done": "/daily/done" };
+  const target = routes[`${request.method} ${url.pathname}`];
+  if (!target) return new Response("not found", { status: 404 });
+  if (!env.PAPERS_SINK_SECRET) return new Response("sink is not configured", { status: 503 });
+  const offered = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+  if (!secretMatches(offered, env.PAPERS_SINK_SECRET)) return Response.json({ error: "unauthorized" }, { status: 401 });
+  const peek = url.searchParams.get("peek") === "1" ? "?peek=1" : "";
+  const res = await stub(env).fetch(`https://opic.internal${target}${peek}`, request.method === "POST"
+    ? { method: "POST", headers: { "Content-Type": "application/json" }, body: await request.text() }
+    : undefined);
+  return new Response(res.body, { status: res.status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
 }
 
 /** admin 의 /api/opic/accounts — 인증은 handleAdmin 이 이미 했다. */

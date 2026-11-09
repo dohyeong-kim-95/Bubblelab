@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>📅 오늘의 오픽</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>📅</text></svg>">
+<style>
+  /* index.html 과 같은 OPIc 응시 화면 토큰(opic/README.md 「디자인 토큰」) */
+  :root {
+    color-scheme: light;
+    --o-primary: #ff6633; --o-primary-hover: #ff4a0f; --o-primary-active: #d54406; --o-on-primary: #212529;
+    --o-blue: #3366ff; --o-green: #15874e; --o-purple: #8960b5; --o-ink: #212529; --o-muted: #666d73; --o-gray: #6c757d;
+    --o-line: #ced4da; --o-line-soft: #dee2e6; --o-surface: #eeeeee; --o-surface-2: #f8f9fa;
+    --o-tint: #ffe0d6; --o-tint-line: #ffd4c6; --o-tint-ink: #94472e; --o-bg: #ffffff; --o-focus: #007bff;
+    --o-shadow-btn: 0 2px 1px 0 rgba(0, 0, 0, .2);
+    --o-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Apple SD Gothic Neo", "Noto Sans KR", "Helvetica Neue", Arial, sans-serif;
+    --gutter-l: max(16px, env(safe-area-inset-left, 0px)); --gutter-r: max(16px, env(safe-area-inset-right, 0px));
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; font-size: 13px; }
+  @media (min-width: 560px) { html { font-size: 15px; } }
+  body { margin: 0; background: var(--o-bg); color: var(--o-ink); font-family: var(--o-font); line-height: 1.55; min-height: 100dvh; }
+  [hidden] { display: none !important; }
+  button, select { font: inherit; }
+  .top { position: sticky; top: 0; z-index: 5; background: var(--o-bg); border-bottom: 1px solid var(--o-muted);
+         padding: calc(env(safe-area-inset-top, 0px) + .7rem) var(--gutter-r) .7rem var(--gutter-l); display: flex; align-items: center; gap: 1rem; }
+  .brand { font-weight: 800; font-size: 1.5rem; margin: 0; letter-spacing: -.01em; }
+  .brand b { color: var(--o-primary); }
+  .brand small { font-size: .9rem; font-weight: 600; color: var(--o-muted); margin-left: .4rem; }
+  .top a { margin-left: auto; color: var(--o-muted); font-weight: 700; font-size: 1rem; white-space: nowrap; }
+  main { max-width: 46rem; margin: 0 auto; padding: 1rem var(--gutter-r) calc(env(safe-area-inset-bottom, 0px) + 3rem) var(--gutter-l); }
+
+  .days { display: flex; gap: .5rem; align-items: center; margin: 0 0 1.2rem; }
+  .days select { flex: 1; min-width: 0; height: 3rem; border: 1px solid var(--o-gray); border-radius: 0; padding: 0 .7rem; background: var(--o-bg); color: var(--o-ink); font-size: 1.05rem; }
+  .btn { border-radius: 0; box-shadow: var(--o-shadow-btn); border: 2px solid transparent; cursor: pointer; font-weight: 700; font-size: 1.1rem;
+         height: 3rem; padding: 0 1.1rem; display: inline-flex; align-items: center; justify-content: center; gap: .4rem; background: var(--o-primary); color: var(--o-on-primary); touch-action: manipulation; }
+  .btn:hover:not(:disabled) { background: var(--o-primary-hover); }
+  .btn:active:not(:disabled) { background: var(--o-primary-active); color: #fff; box-shadow: none; transform: scale(.98); }
+  .btn:disabled { background: var(--o-muted); color: #fff; cursor: default; }
+  .btn:focus-visible { outline: 2px solid var(--o-focus); }
+  .btn-secondary { background: var(--o-bg); border-color: var(--o-muted); }
+  .btn-secondary:hover:not(:disabled) { background: var(--o-surface-2); }
+  .btn.sq { width: 3rem; padding: 0; }
+
+  .tags { display: flex; flex-wrap: wrap; gap: .4rem; margin: 0 0 .6rem; }
+  .tag { background: var(--o-surface); padding: .15rem .6rem; font-size: .95rem; font-weight: 700; color: var(--o-muted); }
+  .tag.lv { background: var(--o-blue); color: #fff; }
+  h2.head { border-bottom: 1px solid var(--o-line); font-size: 1.3rem; font-weight: 700; margin: 1.6rem 0 .8rem; padding: .3rem 0; }
+  .q { background: var(--o-purple); color: #fff; padding: 1rem 1.1rem; margin: 0 0 .7rem; font-size: 1.15rem; }
+  .row { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; margin: 0 0 .8rem; }
+  .speed { color: var(--o-muted); font-size: 1rem; display: inline-flex; gap: .3rem; align-items: center; }
+  .speed select { height: 2.4rem; border: 1px solid var(--o-line); border-radius: 0; background: var(--o-bg); color: var(--o-ink); }
+  .answer { font-size: 1.15rem; white-space: pre-line; margin: 0 0 .8rem; }
+  .ko { background: var(--o-surface-2); border-left: 4px solid var(--o-line); padding: .8rem 1rem; white-space: pre-line; color: var(--o-ink); }
+  ol.structure { margin: 0; padding-left: 1.4rem; } ol.structure li { margin: .25rem 0; }
+  ul.expr { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--o-line); }
+  ul.expr li { border-bottom: 1px solid var(--o-line); padding: .7rem 0; display: grid; grid-template-columns: 2.6rem 1fr; gap: .2rem .8rem; }
+  ul.expr button { grid-row: span 3; width: 2.6rem; height: 2.6rem; border: 0; background: var(--o-primary); color: var(--o-on-primary); cursor: pointer; font-size: 1rem; }
+  ul.expr b { font-size: 1.1rem; } ul.expr span { color: var(--o-ink); } ul.expr small { color: var(--o-muted); font-size: .95rem; }
+  .alert-tint { background: var(--o-tint); color: var(--o-tint-ink); border: 1px solid var(--o-tint-line); padding: .9rem 1.1rem; margin: 1rem 0 0; }
+  .alert-tint p { margin: 0; }
+  .swap { border: 1px solid var(--o-line); padding: .9rem 1.1rem; margin: 1rem 0 0; }
+  .swap b { color: var(--o-green); }
+  .empty { color: var(--o-muted); padding: 2rem 0; text-align: center; }
+  .foot { color: var(--o-muted); font-size: .95rem; margin-top: 2rem; }
+  mark.on { background: #fff3a8; }
+</style>
+</head>
+<body>
+<header class="top">
+  <p class="brand"><b>OPIc</b> 오늘의 문항<small>📅</small></p>
+  <a href="./">모의고사 ›</a>
+</header>
+<main>
+  <div class="days">
+    <button class="btn btn-secondary sq" id="prev" type="button" aria-label="이전 날">‹</button>
+    <select id="pick" aria-label="날짜 고르기"></select>
+    <button class="btn btn-secondary sq" id="next" type="button" aria-label="다음 날">›</button>
+  </div>
+
+  <p class="empty" id="empty" hidden>아직 쌓인 문항이 없어요. 매일 아침 7시에 하나씩 올라와요.</p>
+
+  <article id="card" hidden>
+    <div class="tags"><span class="tag lv" id="level"></span><span class="tag" id="kind"></span><span class="tag" id="topic"></span></div>
+    <p class="q" id="question"></p>
+    <div class="row">
+      <button class="btn" id="play-q" type="button">▶ 질문 듣기</button>
+      <span class="muted" id="tts-note" hidden>이 기기에는 영어 음성이 없어요</span>
+    </div>
+
+    <h2 class="head">모범답안</h2>
+    <div class="row">
+      <button class="btn" id="play-a" type="button">▶ 답안 듣기</button>
+      <label class="speed">속도 <select id="rate"><option value="0.8">0.8×</option><option value="0.95" selected>0.95×</option><option value="1.1">1.1×</option></select></label>
+      <button class="btn btn-secondary" id="toggle-ko" type="button" aria-expanded="false">해석 보기</button>
+    </div>
+    <p class="answer" id="answer"></p>
+    <p class="ko" id="ko" hidden></p>
+
+    <h2 class="head">구성</h2>
+    <ol class="structure" id="structure"></ol>
+
+    <h2 class="head">핵심 표현</h2>
+    <ul class="expr" id="expr"></ul>
+
+    <div class="swap" id="swap-box"><b>내 얘기로 바꾸기</b><p id="swap" style="margin:.3rem 0 0"></p></div>
+    <div class="alert-tint" id="pit-box"><p>⚠️ <span id="pitfall"></span></p></div>
+  </article>
+
+  <p class="foot">매일 아침 7시(KST)에 실제 출제 형식대로 한 문항씩 올라오는 AL 목표 모범답안이에요. 통째로 외우기보다 구성과 표현을 가져다 내 얘기로 바꿔 말해 보세요. 연습용 비공식 자료이며 OPIc 주관사와 관계가 없습니다.</p>
+</main>
+<script type="module" src="./daily.js"></script>
+</body>
+</html>

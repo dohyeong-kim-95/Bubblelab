@@ -327,6 +327,8 @@ cron 이 그날 몫을 보통 메시지로 올린다 — 서버는 날짜만 안
 계정만 로그인**한다 — 가입 화면 없음. 게이트·계정 DO 는 `_infra/opic.js`(`OpicDO`), 세션은
 `ADMIN_SESSION_SECRET` 파생 키라 새 시크릿이 없다. 서버에는 계정(PBKDF2 해시)만 남고 녹음은 폰에만 있다.
 화면 토큰은 bubble.css 가 아니라 OPIc 응시 화면 값(`opic/README.md`). 문항은 출제 형식을 따라 새로 쓴 것이다.
+**「오늘의 문항」**(`opic/daily.html`)은 매일 7시 AL 모범답안 — 집 PC `_src/opic-sink/` 가 `claude -p` 로 쓰고 엣지가
+보관·디스코드 발송(논문 다이제스트와 같은 구조, `PAPERS_SINK_SECRET` 공유). 문항은 날짜가 정한다(`dailyQuestion`).
 
 ## 인사이트 아카이브 (lab/claude-insights)
 
