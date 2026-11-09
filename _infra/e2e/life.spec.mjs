@@ -114,6 +114,21 @@ test("연결한 pops 도구를 더블클릭하면 Pops UI가 열린다", async (
   await expect(page.locator("#sound")).toBeVisible();
 });
 
+// 그 카드가 피드 맨 위에 맞춰져 있고, 20프레임 동안 스크롤이 움직이지 않는다(=스냅·순간 이동이 끝났다).
+async function expectSettledOn(feed, index) {
+  await expect.poll(() => feed.evaluate((el, i) => new Promise((resolve) => {
+    const offset = () => Math.round(el.querySelectorAll(".pop")[i].getBoundingClientRect().top - el.getBoundingClientRect().top);
+    const start = el.scrollTop;
+    let frames = 0;
+    const tick = () => {
+      if (el.scrollTop !== start) resolve("moving");
+      else if (++frames >= 20) resolve(offset() === 0 ? "settled" : `offset ${offset()}`);
+      else requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }), index)).toBe("settled");
+}
+
 test("Pops 50개 영상을 연속 스와이프해도 다음 영상이 준비된다", async ({ page }) => {
   await page.goto("/life/pops/");
   const cards = page.locator(".pop");
@@ -129,13 +144,18 @@ test("Pops 50개 영상을 연속 스와이프해도 다음 영상이 준비된�
       await expect(cards.nth(index + 1).locator("video")).toHaveAttribute("src", /videos\/a1-/);
     }
   }
-  // 끝으로 돌아가는 감지는 "아래로 움직였고 바닥에 닿음"이다. 마지막 카드에서 이미 바닥이면 scrollTo 가
-  // 위치를 바꾸지 않아 감지가 안 일어나 가끔 실패했다 — 조금 올렸다가 바닥으로 내려 움직임을 만든다.
+  // 마지막 카드 다음은 가장자리 카드다. 거기서 멈추면 첫 카드로 넘어가고, 거기 머물러야 한다
+  // (예전에는 처음↔끝을 끝없이 오가서 기다린 시점에 따라 1/50 이었다 50/50 이었다 했다).
   const feed = page.locator("#feed");
-  await feed.evaluate((el) => el.scrollTo({ top: el.scrollHeight - el.clientHeight - 200, behavior: "auto" }));
-  await page.waitForTimeout(100);
-  await feed.evaluate((el) => el.scrollTo({ top: el.scrollHeight, behavior: "auto" }));
-  await expect(page.locator("#position")).toHaveText("1 / 50");
+  const position = page.locator("#position");
+  await feed.evaluate((el) => el.scrollTo({ top: el.scrollHeight, behavior: "instant" }));
+  await expect(position).toHaveText("1 / 50");
+  await expectSettledOn(feed, 0);
+  await expect(cards.nth(0).locator("video")).toHaveAttribute("src", /videos\/a1-/);
+  // 첫 카드에서 위로 넘기면 마지막 카드로.
+  await feed.evaluate((el) => el.scrollTo({ top: 0, behavior: "instant" }));
+  await expect(position).toHaveText("50 / 50");
+  await expectSettledOn(feed, 49);
 });
 
 test("PWA 로 설치되면 주소창 없이 뜬다", async ({ page }) => {
