@@ -122,7 +122,7 @@ test("모든 서브도메인에 첫 화면 프로브가 하나씩 생긴다", ()
   }
   assert.equal(new Set(probes.map((p) => p.id)).size, probes.length, "프로브 id 가 겹친다");
   // 게이트 뒤 서브도메인은 worker.js 의 분기와 같아야 한다.
-  assert.deepEqual([...GATED_SITES].sort(), ["admin", "duri", "life"]);
+  assert.deepEqual([...GATED_SITES].sort(), ["admin", "duri", "life", "opic"]);
 });
 
 test("커밋을 지정하지 않으면 health 프로브는 경고로만 다룬다", () => {

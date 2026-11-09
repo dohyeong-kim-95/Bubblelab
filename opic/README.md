@@ -11,6 +11,13 @@
 - `app.js` — 화면 흐름. 질문 음성은 브라우저 내장 `speechSynthesis`(en-US), 녹음은 `MediaRecorder`.
   질문이 끝나면 5초 안에 한 번 다시 듣기, 그 뒤 자동 녹음, 「다음」으로 넘긴다(실제 시험 규칙).
   **아무것도 서버로 보내지 않는다** — 녹음은 메모리의 blob 이고 결과 화면에서 「저장」으로 받는다.
+- **로그인**: admin 이 발급한 계정만 들어온다(가입 화면 없음, `CONFIDENTIAL_SUBDOMAINS` — 랜딩 미노출).
+  - 계정 발급·비밀번호 재설정·삭제는 admin 🗣️ OPIc 화면(`/api/opic/accounts*`).
+  - 게이트·계정 DO 는 `_infra/opic.js`(`OpicDO`, 바인딩 `OPIC`, 마이그레이션 v21). 비밀번호는 PBKDF2-SHA256 10만 회
+    해시로만 남는다. 세션 쿠키 `bl_opic`(30일)는 `ADMIN_SESSION_SECRET` 에서 용도를 달리해 파생한 키로 서명 —
+    새 시크릿이 필요 없다. `ENABLE_OPIC` var 는 fail-closed.
+  - 비밀번호를 바꾸거나 계정을 지우면 `gen` 이 달라져, 그 전 세션은 다음에 화면을 열 때 끊긴다.
+  - 서버에 남는 것은 계정뿐이다. 녹음·답변은 여전히 폰에만 있다. 테스트 `_infra/opic.test.mjs`.
 - 마이크: 사이트 기본 `Permissions-Policy` 가 `microphone=()` 라 `_infra/security.js` 의 `OPIC_POLICY` 로
   이 서브도메인만 `microphone=(self)` 로 연다(테스트 `_infra/security.test.mjs`).
 

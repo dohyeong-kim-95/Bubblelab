@@ -321,6 +321,13 @@ cron 이 그날 몫을 보통 메시지로 올린다 — 서버는 날짜만 안
 `interior/engine.js` 순수 함수(테스트 `_infra/interior.test.mjs`), 화면은 three.js(`/_shared/vendor/`).
 도면 초안은 LLM 이 화면의 「LLM 요청문」 형식대로 JSON 을 써 주는 방식이다 — 형식·규칙은 `interior/README.md`.
 
+## 오픽 모의고사 (opic/)
+
+`opic/`은 폰으로 보는 OPIc 모의고사다(`CONFIDENTIAL_SUBDOMAINS`). **admin 🗣️ OPIc 화면에서 발급한
+계정만 로그인**한다 — 가입 화면 없음. 게이트·계정 DO 는 `_infra/opic.js`(`OpicDO`), 세션은
+`ADMIN_SESSION_SECRET` 파생 키라 새 시크릿이 없다. 서버에는 계정(PBKDF2 해시)만 남고 녹음은 폰에만 있다.
+화면 토큰은 bubble.css 가 아니라 OPIc 응시 화면 값(`opic/README.md`). 문항은 출제 형식을 따라 새로 쓴 것이다.
+
 ## 인사이트 아카이브 (lab/claude-insights)
 
 `lab/`은 내가 쓰는 도구를 두는 비공개 서브도메인이다(`CONFIDENTIAL_SUBDOMAINS`,

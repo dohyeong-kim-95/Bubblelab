@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import {
   LEVELS, RANDOM_TOPICS, ROLEPLAYS, SURVEY, TOPICS, buildFirst, buildSecond, pickedItems, surveyProblems,
 } from "../opic/questions.js";
+import {
+  OpicDO, handleOpicAdmin, handleOpicGate, issueOpicSession, opicSessionKey, readOpicSession,
+} from "./opic.js";
 
 const allItems = SURVEY.groups.flatMap(g => g.items.map(([id]) => id));
 const survey = (picks = allItems.slice(0, 12)) => ({ job: "business", student: "no", housing: "family", picks });
@@ -63,4 +66,112 @@ test("난이도: 높은 단계는 롤플레이 문제 해결과 비교·사회 �
 
 test("같은 시드면 같은 시험지", () => {
   assert.deepEqual(whole(4, 0, 42), whole(4, 0, 42));
+});
+
+/* ── 로그인(계정 DO · 세션 · 게이트) ─────────────────────────────────────── */
+
+function memoryStorage() {
+  const m = new Map();
+  return {
+    async get(k) { return structuredClone(m.get(k)); },
+    async put(k, v) { m.set(k, structuredClone(v)); },
+    async delete(k) { return m.delete(k); },
+    async list({ prefix = "" } = {}) { return new Map([...m].filter(([k]) => k.startsWith(prefix))); },
+    raw: m,
+  };
+}
+function opicEnv() {
+  const storage = memoryStorage();
+  const obj = new OpicDO({ storage });
+  return {
+    storage,
+    env: {
+      ENABLE_OPIC: "true", ADMIN_SESSION_SECRET: "test-secret",
+      OPIC: { idFromName: (n) => n, get: () => ({ fetch: (u, init) => obj.fetch(new Request(u, init)) }) },
+    },
+  };
+}
+const adminCall = (env, method, path, body) => handleOpicAdmin(new Request(`https://admin.bubblelab.dev/api/opic${path}`, {
+  method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined,
+}), env, new URL(`https://admin.bubblelab.dev/api/opic${path}`));
+const gate = (env, path, init = {}) => {
+  const url = new URL(`https://opic.bubblelab.dev${path}`);
+  return handleOpicGate(new Request(url, init), env, url, "");
+};
+const login = (env, username, password) => gate(env, "/login", {
+  method: "POST", body: new URLSearchParams({ username, password }),
+});
+const cookieFrom = (res) => (res.headers.get("Set-Cookie") || "").split(";")[0];
+
+test("admin 이 발급한 계정만 만들어지고, 비밀번호는 해시로만 남는다", async () => {
+  const { env, storage } = opicEnv();
+  assert.equal((await adminCall(env, "POST", "/accounts", { id: "Kim.D", password: "secret12", note: "나" })).status, 201);
+  assert.equal((await adminCall(env, "POST", "/accounts", { id: "kim.d", password: "another1" })).status, 409, "대소문자만 다른 같은 아이디");
+  assert.equal((await adminCall(env, "POST", "/accounts", { id: "ab", password: "secret12" })).status, 400, "아이디가 너무 짧다");
+  assert.equal((await adminCall(env, "POST", "/accounts", { id: "lee", password: "123" })).status, 400, "비밀번호가 너무 짧다");
+  const saved = [...storage.raw.values()][0];
+  assert.equal(saved.id, "kim.d");
+  assert.ok(!JSON.stringify(saved).includes("secret12"), "평문 비밀번호가 남았다");
+  const list = await (await adminCall(env, "GET", "/accounts")).json();
+  assert.deepEqual(list.accounts.map(a => [a.id, a.note]), [["kim.d", "나"]]);
+  assert.ok(!("hash" in list.accounts[0]) && !("salt" in list.accounts[0]), "목록에 해시가 나갔다");
+  assert.equal((await adminCall(env, "PUT", "/accounts")).status, 404);
+});
+
+test("게이트: 로그인 전엔 막고, 맞는 아이디·비밀번호면 세션 쿠키로 들어온다", async () => {
+  const { env } = opicEnv();
+  await adminCall(env, "POST", "/accounts", { id: "kim", password: "secret12" });
+
+  const blocked = await gate(env, "/");
+  assert.equal(blocked.status, 303);
+  assert.equal(blocked.headers.get("Location"), "/login");
+  assert.equal((await gate(env, "/login")).status, 200);
+
+  assert.equal((await login(env, "kim", "wrong-pw")).status, 401);
+  assert.equal((await login(env, "nobody", "secret12")).status, 401);
+
+  const ok = await login(env, "KIM", "secret12");
+  assert.equal(ok.status, 303);
+  assert.match(ok.headers.get("Set-Cookie"), /bl_opic=.+HttpOnly; SameSite=Lax; Max-Age=\d+; Secure/);
+  const cookie = cookieFrom(ok);
+  assert.equal(await gate(env, "/", { headers: { Cookie: cookie } }), null, "로그인했는데 막혔다");
+  assert.equal(await gate(env, "/app.js", { headers: { Cookie: cookie } }), null);
+  const me = await gate(env, "/_me", { headers: { Cookie: cookie } });
+  assert.deepEqual(await me.json(), { id: "kim" });
+
+  const out = await gate(env, "/logout", { headers: { Cookie: cookie } });
+  assert.match(out.headers.get("Set-Cookie"), /Max-Age=0/);
+});
+
+test("비밀번호를 바꾸거나 계정을 지우면 옛 세션은 화면을 열 때 끊긴다", async () => {
+  const { env } = opicEnv();
+  await adminCall(env, "POST", "/accounts", { id: "kim", password: "secret12" });
+  const cookie = cookieFrom(await login(env, "kim", "secret12"));
+  await adminCall(env, "POST", "/accounts/password", { id: "kim", password: "newpass99" });
+  const kicked = await gate(env, "/", { headers: { Cookie: cookie } });
+  assert.equal(kicked.status, 303);
+  assert.match(kicked.headers.get("Set-Cookie"), /Max-Age=0/);
+  assert.equal((await login(env, "kim", "secret12")).status, 401, "옛 비밀번호가 아직 된다");
+
+  const fresh = cookieFrom(await login(env, "kim", "newpass99"));
+  assert.equal(await gate(env, "/", { headers: { Cookie: fresh } }), null);
+  await adminCall(env, "POST", "/accounts/delete", { id: "kim" });
+  assert.equal((await gate(env, "/", { headers: { Cookie: fresh } })).status, 303);
+});
+
+test("세션 토큰은 서명·만료를 지킨다 — 아이디를 바꿔 치면 안 된다", async () => {
+  const key = await opicSessionKey({ ADMIN_SESSION_SECRET: "s" });
+  const token = await issueOpicSession(key, "kim", 1);
+  assert.deepEqual(await readOpicSession(key, token), { id: "kim", gen: 1 });
+  assert.equal(await readOpicSession(key, token.replace(".kim.", ".lee.")), null);
+  assert.equal(await readOpicSession(key, token, Date.now() + 31 * 24 * 3600 * 1000), null);
+  const other = await opicSessionKey({ ADMIN_SESSION_SECRET: "other" });
+  assert.equal(await readOpicSession(other, token), null, "다른 시크릿으로 서명한 토큰이 통과했다");
+});
+
+test("ENABLE_OPIC 이 아니면 게이트·admin API 둘 다 닫힌다", async () => {
+  const { env } = opicEnv();
+  const off = { ...env, ENABLE_OPIC: "false" };
+  assert.equal((await gate(off, "/")).status, 503);
+  assert.equal((await adminCall(off, "GET", "/accounts")).status, 503);
 });

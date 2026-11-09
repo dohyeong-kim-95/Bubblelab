@@ -40,7 +40,10 @@
     // DISCORD_BOT_TOKEN+DISCORD_CHANNEL_ID 와 PAPERS_SINK_SECRET 이 있어야 돈다.
     // DISCORD_CHAT_CHANNEL_ID 를 더 주면 그 채널에서 자유 대화가 열린다(선택) —
     // 개발자 포털에서 Message Content 인텐트를 켜야 봇이 글을 읽을 수 있다.
-    "ENABLE_PAPERS": "true"
+    "ENABLE_PAPERS": "true",
+    // 오픽 모의고사 로그인. 계정은 admin 에서만 발급한다(OPIC DO). 세션 서명은
+    // ADMIN_SESSION_SECRET 에서 파생하므로 새 시크릿이 필요 없다.
+    "ENABLE_OPIC": "true"
   },
   // 팟캐스트 소스 파일·생성 오디오 저장소 (계정에 R2 활성화 필요).
   // 바인딩이 없으면 팟캐스트 라우트는 503으로 닫힌다 (fail-closed).
@@ -114,7 +117,9 @@
       // 쓰지 않는다. v17 마이그레이션이 이미 적용돼 있어 클래스를 지우면
       // 배포가 거부되므로 자리만 남겨 둔다 (_infra/life.js 주석 참고).
       { "name": "LIFE", "class_name": "LifeDO" },
-      { "name": "YAKSOK", "class_name": "YaksokDO" }
+      { "name": "YAKSOK", "class_name": "YaksokDO" },
+      // 오픽 모의고사 계정(아이디·PBKDF2 해시). 녹음·답변은 저장하지 않는다.
+      { "name": "OPIC", "class_name": "OpicDO" }
     ]
   },
   "migrations": [
@@ -139,6 +144,7 @@
     { "tag": "v19", "new_sqlite_classes": ["YaksokDO"] },
     // 내려 둔 planner·invest·trip 을 데이터째 지웠다. 되돌릴 수 없다 — 이 태그가 적용된
     // 뒤에 같은 이름의 클래스를 다시 쓰려면 새 태그에서 new_sqlite_classes 로 처음부터 만든다.
-    { "tag": "v20", "deleted_classes": ["PlannerDO", "InvestDO", "TripWatchDO"] }
+    { "tag": "v20", "deleted_classes": ["PlannerDO", "InvestDO", "TripWatchDO"] },
+    { "tag": "v21", "new_sqlite_classes": ["OpicDO"] }
   ]
 }

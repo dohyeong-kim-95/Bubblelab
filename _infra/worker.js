@@ -90,6 +90,7 @@ import { handlePodcast, handlePodcastAdmin, runDailyGeneration, runEveningRemind
 import { handlePapers, handlePapersComments, handlePapersSink } from "./papers.js";
 import { handleCommandRegistration, handleInteraction } from "./discord.js";
 import { handleEstateDeals } from "./estate.js";
+import { handleOpicAdmin, handleOpicGate } from "./opic.js";
 import { serveAssetDownload, serveAssetDownloadCounts } from "./downloads.js";
 import { fetchStoreReviews, REVIEWS_SYNC_VERSION } from "./reviews.js";
 import { DURI_MAX_PHOTO_BYTES } from "./duri.js";
@@ -126,6 +127,7 @@ export { BriefDO } from "./brief.js";
 export { AssetFlagsDO } from "./asset-flags.js";
 export { PapersDO } from "./papers.js";
 export { LifeDO } from "./life.js";
+export { OpicDO } from "./opic.js";
 
 const LOGIN_PAGE = (failed = false, base = "") => `<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -795,7 +797,7 @@ export const HEALTH_BINDINGS = [
   "ASSETS", "ANALYTICS", "RECORDS", "RATE_LIMITER", "REALTIME",
   "CHAT", "PODCAST", "DURI", "ASSET_FLAGS", "BRIEF", "FORTUNE",
   "WORK_QNA", "WORK_REVIEWS", "EMOTICON_REVIEW", "PODCAST_BUCKET", "DURI_BUCKET", "LIFE",
-  "LIFE_BUCKET", "YAKSOK",
+  "LIFE_BUCKET", "YAKSOK", "OPIC",
 ];
 
 /**
@@ -828,6 +830,7 @@ export async function serveHealth(request, env, url) {
       duri: featureEnabled(env, "ENABLE_DURI"),
       realtime: featureEnabled(env, "ENABLE_REALTIME"),
       life: featureEnabled(env, "ENABLE_LIFE"),
+      opic: featureEnabled(env, "ENABLE_OPIC"),
     },
     bindings,
   }, { headers: { "Cache-Control": "no-store" } });
@@ -1041,6 +1044,9 @@ async function handleAdmin(request, env, url, base = "") {
   if (url.pathname === "/api/assets") {
     return new Response("not found", { status: 404 });
   }
+  // opic 모의고사 계정 발급·비밀번호 재설정·삭제 (가입 화면이 없어 여기서만 만든다)
+  const opicResponse = await handleOpicAdmin(request, env, url);
+  if (opicResponse) return opicResponse;
   return null;
 }
 
@@ -1802,6 +1808,19 @@ export async function handleRequest(request, env, ctx) {
       if (lifeResponse) return lifeResponse;
     }
 
+    if (site === "opic") {
+      // admin 이 발급한 계정만 들어온다(ENABLE_OPIC 이 아니면 fail-closed).
+      const isProdHost = host === ROOT_DOMAIN || host.endsWith(`.${ROOT_DOMAIN}`);
+      const opicUrl = new URL(url);
+      opicUrl.pathname = path || "/";
+      const opicResponse = await handleOpicGate(request, env, opicUrl, isProdHost ? "" : "/opic",
+        (req) => enforceRateLimit(req, env, {
+          scope: "opic-login", limit: 10, windowMs: 15 * 60 * 1000,
+          secret: env.ADMIN_SESSION_SECRET || `${env.ADMIN_ID}\0${env.ADMIN_PASSWORD}\0bl-opic-login`,
+        }));
+      if (opicResponse) return opicResponse;
+    }
+
     // 약속 방 주소(/yaksok/<코드>)는 파일이 없다 — 방 화면을 내주고 카톡 미리보기용 OG 를 끼운다.
     // 방은 개인 모임이라 검색·캐시에서 뺀다.
     if (site === "util" && path.startsWith("/yaksok/")) {
@@ -1848,7 +1867,7 @@ export async function handleRequest(request, env, ctx) {
       }
     }
 
-    if (["admin", "work", "estate", "duri", "life"].includes(site)) {
+    if (["admin", "work", "estate", "duri", "life", "opic"].includes(site)) {
       const headers = new Headers(response.headers);
       // 문서·JSON·인증 뒤 이미지는 디스크에 남기지 않는다. 실행 코드와 폰트는
       // 사용자 데이터가 아니므로 브라우저 전용 캐시를 허용하고, 공개 데이터인
@@ -1875,7 +1894,7 @@ export async function handleRequest(request, env, ctx) {
     const isDocument = request.headers.get("Sec-Fetch-Dest") === "document";
     // bl_notrack: 운영자가 /_optout에서 켠 브라우저는 집계·쿠키 발급 모두 건너뛴다.
     const optedOut = cookies(request).bl_notrack === "1";
-    if (!["admin", "work", "estate", "life"].includes(site) && isDocument && !isBot && !optedOut && response.ok &&
+    if (!["admin", "work", "estate", "life", "opic"].includes(site) && isDocument && !isBot && !optedOut && response.ok &&
         response.headers.get("Content-Type")?.includes("text/html")) {
       const date = kstDate();
       const jar = cookies(request);

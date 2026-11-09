@@ -48,7 +48,7 @@
   #top .medal { font-size: 1.3rem; }
   #top .page { flex: 1; font-weight: bold; overflow-wrap: anywhere; }
   #top .users { opacity: .6; font-size: .9rem; font-variant-numeric: tabular-nums; }
-  #top .empty, #engagement .empty, #suggestions .empty, #records .empty, #podcast-users .empty { opacity: .55; justify-content: center; }
+  #top .empty, #engagement .empty, #suggestions .empty, #records .empty, #podcast-users .empty, #opic-users .empty { opacity: .55; justify-content: center; }
   .insight-heading { display: flex; align-items: center; justify-content: space-between; gap: .8rem; margin-bottom: .8rem; }
   .insight-heading h2 { margin: 0; }
   .period { display: flex; padding: .2rem; border-radius: .65rem;
@@ -69,17 +69,17 @@
   .engagement-bar { display: block; height: 100%; min-width: .25rem; border-radius: inherit; background: #5a8f70; }
   .engagement-meta { display: flex; flex-wrap: wrap; gap: .35rem .9rem; opacity: .58;
                      font-size: .75rem; font-variant-numeric: tabular-nums; }
-  #suggestions, #records, #podcast-users { list-style: none; margin: 0; padding: 0; display: flex;
+  #suggestions, #records, #podcast-users, #opic-users { list-style: none; margin: 0; padding: 0; display: flex;
                  flex-direction: column; gap: .6rem; }
-  #suggestions li, #records li, #podcast-users li { display: flex; align-items: baseline; gap: .8rem;
+  #suggestions li, #records li, #podcast-users li, #opic-users li { display: flex; align-items: baseline; gap: .8rem;
                     padding: .85rem 1.1rem; border-radius: 1rem;
                     background: light-dark(#fff, #151e2a);
                     border: 1px solid light-dark(#dce4ec, #263445); }
-  #suggestions .text, #records .text, #podcast-users .text { flex: 1; overflow-wrap: anywhere; }
-  #suggestions .meta, #records .meta, #podcast-users .meta { opacity: .5; font-size: .78rem; white-space: nowrap; }
-  #suggestions .del, #records .del, #podcast-users .del { border: 0; background: none; color: inherit;
+  #suggestions .text, #records .text, #podcast-users .text, #opic-users .text { flex: 1; overflow-wrap: anywhere; }
+  #suggestions .meta, #records .meta, #podcast-users .meta, #opic-users .meta { opacity: .5; font-size: .78rem; white-space: nowrap; }
+  #suggestions .del, #records .del, #podcast-users .del, #opic-users .del { border: 0; background: none; color: inherit;
                       opacity: .45; cursor: pointer; font: inherit; padding: 0 .2rem; }
-  #suggestions .del:hover, #records .del:hover, #podcast-users .del:hover { opacity: 1; }
+  #suggestions .del:hover, #records .del:hover, #podcast-users .del:hover, #opic-users .del:hover { opacity: 1; }
   #podcast-code { display: none; padding: .9rem 1.1rem; border-radius: .8rem;
                   background: light-dark(#e8f3ec, #16301f); border: 1px solid #477a5d;
                   line-height: 1.7; overflow-wrap: anywhere; }
@@ -194,6 +194,7 @@
       <a class="hub-card" href="#chat"><span class="hub-icon">💬</span><span><strong>Chat</strong><small>익명 채팅 정원 관리</small></span></a>
       <a class="hub-card" href="#sticker"><span class="hub-icon">✨</span><span><strong>Sticker</strong><small>스티커 팩 공개 여부</small></span></a>
       <a class="hub-card" href="#podcast"><span class="hub-icon">🎙️</span><span><strong>Podcast</strong><small>데일리 팟캐스트 사용자 관리</small></span></a>
+      <a class="hub-card" href="#opic"><span class="hub-icon">🗣️</span><span><strong>OPIc</strong><small>오픽 모의고사 계정 발급</small></span></a>
       <a class="hub-card" href="optout"><span class="hub-icon">🫥</span><span><strong>집계 제외</strong><small>이 브라우저를 방문 통계에서 빼기</small></span></a>
     </div>
   </section>
@@ -334,11 +335,29 @@
     </div>
   </section>
   </section>
+  <section class="view" id="view-opic" hidden>
+  <h2 class="view-title">🗣️ OPIc</h2>
+  <section class="top" aria-label="오픽 계정 발급">
+    <h2>➕ 계정 발급 <span style="opacity:.5;font-weight:normal;font-size:.8rem">opic.bubblelab.dev 는 여기서 만든 계정만 들어와요 — 비밀번호는 해시로만 남아요</span></h2>
+    <div class="notice-actions" style="flex-wrap:wrap">
+      <input id="opic-id" maxlength="32" placeholder="아이디 (영문 소문자·숫자 3–32자)" autocapitalize="none" spellcheck="false" style="flex:1 1 12rem;font:inherit;color:inherit;padding:.6rem .7rem;border-radius:.6rem;border:1px solid light-dark(#dce4ec,#263445);background:none">
+      <input id="opic-pw" maxlength="128" placeholder="비밀번호 (6자 이상)" style="flex:1 1 10rem;font:inherit;color:inherit;padding:.6rem .7rem;border-radius:.6rem;border:1px solid light-dark(#dce4ec,#263445);background:none">
+      <input id="opic-note" maxlength="60" placeholder="메모 (예: 누구)" style="flex:1 1 8rem;font:inherit;color:inherit;padding:.6rem .7rem;border-radius:.6rem;border:1px solid light-dark(#dce4ec,#263445);background:none">
+      <button id="opic-gen" type="button">무작위</button>
+      <button id="opic-create" type="button">발급</button>
+    </div>
+    <span id="opic-meta" class="meta" style="opacity:.7;font-size:.82rem"></span>
+  </section>
+  <section class="top" aria-label="오픽 계정 목록">
+    <h2>👥 계정 목록</h2>
+    <ol id="opic-users"><li class="empty">불러오는 중…</li></ol>
+  </section>
+  </section>
   <div id="warning">⚠️ 초기 계정 admin/admin을 사용 중입니다. Cloudflare secrets를 설정해 변경하세요.</div>
   <footer id="status">불러오는 중…</footer>
 </main>
 <script>
-const views = ['home', 'insights', 'slop', 'work', 'chat', 'sticker', 'podcast'];
+const views = ['home', 'insights', 'slop', 'work', 'chat', 'sticker', 'podcast', 'opic'];
 function showView() {
   const selected = views.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'home';
   document.body.dataset.view = selected;
@@ -1006,6 +1025,70 @@ document.getElementById('podcast-create').addEventListener('click', async () => 
   loadPodcastUsers();
 });
 
+// ── OPIc 계정 ──
+const opicMeta = document.getElementById('opic-meta');
+const opicPost = (path, body) => fetch(`${base}/api/opic${path}`, {
+  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+});
+function randomPassword() {
+  const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
+  return Array.from(crypto.getRandomValues(new Uint8Array(10)), (b) => chars[b % chars.length]).join('');
+}
+async function loadOpicUsers() {
+  const list = document.getElementById('opic-users');
+  const empty = (text) => { const li = document.createElement('li'); li.className = 'empty'; li.textContent = text; list.replaceChildren(li); };
+  try {
+    const res = await fetch(`${base}/api/opic/accounts`, { cache: 'no-store' });
+    if (res.status === 503) return empty('오픽 로그인이 꺼져 있어요 (ENABLE_OPIC)');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const { accounts } = await res.json();
+    if (!accounts.length) return empty('아직 계정이 없어요');
+    list.replaceChildren();
+    for (const a of accounts) {
+      const li = document.createElement('li');
+      const text = document.createElement('span'); text.className = 'text';
+      text.textContent = a.note ? `${a.id} · ${a.note}` : a.id;
+      const meta = document.createElement('span'); meta.className = 'meta';
+      meta.textContent = a.lastLoginAt
+        ? `최근 로그인 ${new Date(a.lastLoginAt).toLocaleDateString('ko-KR')}`
+        : `${new Date(a.createdAt).toLocaleDateString('ko-KR')} 발급 · 미접속`;
+      const reset = document.createElement('button'); reset.className = 'del'; reset.textContent = '🔑'; reset.title = '비밀번호 재설정';
+      reset.addEventListener('click', async () => {
+        const pw = prompt(`“${a.id}” 새 비밀번호 (6자 이상). 비워 두면 무작위로 만들어요.`, '');
+        if (pw === null) return;
+        const password = pw.trim() || randomPassword();
+        const r = await opicPost('/accounts/password', { id: a.id, password });
+        const d = await r.json().catch(() => ({}));
+        opicMeta.textContent = r.ok ? `🔑 ${a.id} 새 비밀번호: ${password} — 지금만 보여요. 이 계정의 기존 로그인은 끊겨요.` : `⚠️ ${d.error ?? `HTTP ${r.status}`}`;
+      });
+      const del = document.createElement('button'); del.className = 'del'; del.textContent = '✕'; del.title = '계정 삭제';
+      del.addEventListener('click', async () => {
+        if (!confirm(`“${a.id}” 계정을 삭제할까요? 바로 로그아웃돼요.`)) return;
+        const r = await opicPost('/accounts/delete', { id: a.id });
+        if (r.ok) loadOpicUsers(); else alert('삭제하지 못했습니다.');
+      });
+      li.append(text, meta, reset, del);
+      list.append(li);
+    }
+  } catch (err) {
+    empty(`불러오지 못했어요: ${err.message}`);
+  }
+}
+document.getElementById('opic-gen').addEventListener('click', () => { document.getElementById('opic-pw').value = randomPassword(); });
+document.getElementById('opic-create').addEventListener('click', async () => {
+  const id = document.getElementById('opic-id').value.trim().toLowerCase();
+  const password = document.getElementById('opic-pw').value;
+  const note = document.getElementById('opic-note').value.trim();
+  if (!id || !password) { opicMeta.textContent = '⚠️ 아이디와 비밀번호를 넣어 주세요'; return; }
+  opicMeta.textContent = '발급 중…';
+  const r = await opicPost('/accounts', { id, password, note });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { opicMeta.textContent = `⚠️ ${d.error ?? `HTTP ${r.status}`}`; return; }
+  opicMeta.textContent = `✅ ${id} / ${password} 발급했어요 — 비밀번호는 지금만 보여요. 전달해 주세요.`;
+  for (const f of ['opic-id', 'opic-pw', 'opic-note']) document.getElementById(f).value = '';
+  loadOpicUsers();
+});
+
 loadStats();
 loadSuggestions();
 loadRecords();
@@ -1017,6 +1100,7 @@ loadStickers();
 
 loadIntake();
 loadPodcastUsers();
+loadOpicUsers();
 loadPodcastWorker();
 setInterval(loadIntake, 60_000);
 setInterval(loadPodcastWorker, 60_000);

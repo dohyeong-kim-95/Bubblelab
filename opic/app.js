@@ -393,3 +393,5 @@ addEventListener("beforeunload", (e) => { if (st.view === "test" || (st.view ===
 
 if ("speechSynthesis" in window) { pickVoice(); speechSynthesis.addEventListener?.("voiceschanged", pickVoice); }
 show("intro");
+// 로그인한 아이디(게이트가 /_me 로 알려 준다) — 실패해도 화면은 그대로 쓴다
+fetch("_me", { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(d => { if (d?.id) $("me").textContent = d.id; }).catch(() => {});
