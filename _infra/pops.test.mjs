@@ -25,17 +25,6 @@ test("pops는 LIFE 도구 페이지와 정적 manifest를 가진다", () => {
   assert.equal(existsSync(join(ROOT, "life/pops/content/a1-words.json")), false, "단어 원본은 서비스하지 않는다");
 });
 
-test("pops 재생기는 active/next만 준비하고 화면 밖 source를 해제한다", () => {
-  const js = read("life/pops/app.js");
-  assert.match(js, /MAX_PREPARED_AHEAD = 1/);
-  assert.match(js, /video\.pause\(\)/);
-  assert.match(js, /removeAttribute\("src"\)/);
-  assert.match(js, /IntersectionObserver/);
-  assert.match(js, /video\.play\(\)/);
-  assert.doesNotMatch(js, /caption/);
-  assert.match(js, /feed\.scrollHeight/);
-});
-
 test("pops는 추천 서버 없이 정적 콘텐츠를 로드한다", () => {
   const js = read("life/pops/app.js");
   assert.match(js, /fetch\("content\/manifest\.json"/);

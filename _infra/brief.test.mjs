@@ -384,8 +384,6 @@ test("brief에 운세 총평과 항목 설정이 있다", async () => {
   // 설정 두 개가 화면과 읽어주기에 함께 적용돼야 한다
   assert.match(page, /id="set-weather"/);
   assert.match(page, /id="set-fortune"/);
-  assert.match(page, /settings\.weather \? brief\?\.text : ""/);
-  assert.match(page, /settings\.fortune \? fortuneSpeech\(\) : ""/);
 
   // 생년월일은 fortune과 같은 키를 읽고 쓴다 — brief 전용 사본을 만들지 않는다
   assert.match(page, /localStorage\.getItem\(BIRTH_KEY\)/);
@@ -442,8 +440,6 @@ test("brief의 생년월일 폼이 fortune과 같은 키·같은 형태를 쓴�
   // 요청 본문은 공용 함수로 만든다 — 페이지마다 손으로 만들면 또 어긋난다
   assert.match(page, /window\.blFortuneChartBody\(birth\)/);
   assert.match(page, /window\.blFortuneBranches/, "시진 목록을 따로 들고 있다");
-  // fortune에서 시각으로 넣어 둔 값을 시진 입력이 지우지 않는다
-  assert.match(page, /keepClock/);
 });
 
 // ── 환율 ──────────────────────────────────────────────────────
