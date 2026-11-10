@@ -264,8 +264,9 @@ Supertonic(로컬 한국어 TTS)으로 녹음해 올린다. **외부 AI API(Gemi
 지킨 것은 관계다(tRC = tRAS + tRP, tFAW > 4×tRRD 등을 테스트가 고정한다). 출처 어휘에
 데이터시트 층이 아예 없어 `mock` 아닌 값은 테스트가 거절한다(`life/dram/README.md`).
 
-**서버에 아무것도 저장하지 않는다** — 할 일은 브라우저 localStorage 에만 있고, 워커는
-비밀번호 게이트(`bl_life` 쿠키·`LIFE_PASSWORD`)만 담당한다. `/_life/*` API 는 없다.
+**기록의 원본은 브라우저 localStorage 다** — 워커는 비밀번호 게이트(`bl_life` 쿠키·
+`LIFE_PASSWORD`)를 맡고, 서버에 남는 것은 `life/backup` 이 하루 한 번 올리는 백업 한 덩어리
+(`/_life/backup`, R2 `LIFE_BUCKET`)뿐이다. 그 밖의 `/_life/*` API 는 없다.
 `ENABLE_LIFE` var는 fail-closed. 상태 규칙은 `life/store.js` 한 곳, 좌우 이동은 CSS
 scroll-snap 이다. 자세한 것은 `life/README.md`.
 
@@ -366,8 +367,7 @@ _infra/agent-worktree.sh task <서브도메인> <슬러그>  # agent/<서브도�
 
 `agent/<서브도메인>/…` 브랜치에서는 pre-commit 훅이 소유 밖 파일의 커밋을
 거부한다(소유 목록은 `_infra/agent-scope.conf`). 구현 에이전트는 머지하지
-않는다 — Gate 리뷰어(`docs/review-checklist.md`)가 통과시킨 브랜치만
-오케스트레이터가 머지하고, 판정은 `docs/decisions.md` 에 남는다.
+않는다 — 오케스트레이터(메인 세션)가 diff 를 읽고 테스트를 직접 돌려 본 뒤 머지한다.
 전체 흐름은 `docs/parallel-agents.md`.
 
 ## 더 읽을 것 (필요할 때만)

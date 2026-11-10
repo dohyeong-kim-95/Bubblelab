@@ -173,7 +173,7 @@ test("테스트가 통과하면 커밋된다", () => {
 
 test("문서만 바뀐 커밋에는 테스트를 돌리지 않는다", () => {
   // 11초가 매번 붙으면 사람들이 훅을 꺼 버린다 — .md 만이면 건너뛴다
-  const result = commitWith("main-ish", { "docs/decisions.md": "# 기록\n" }, { npmTest: "exit 1" });
+  const result = commitWith("main-ish", { "docs/notes.md": "# 기록\n" }, { npmTest: "exit 1" });
   assert.equal(result.ok, true, result.stderr);
 });
 
