@@ -30,7 +30,7 @@
   문제 해결 → 비교 → 사회 이슈 → 돌발 → 질문하기, 주제는 `DAILY_POOL`(흔한 AL 서베이 조합)에서 3칸씩 건너뛴다.
   서베이 주제 문항은 80일 동안 겹치지 않는다. 롤플레이 상황은 다섯 개라 문제 해결은 41일째부터 다시 나온다.
 - 데몬 `_src/opic-sink/index.mjs`(cron 5분마다): `GET /_sink/daily/pending`(7시 이후·오늘 것 없음·20분 찜) →
-  `buildDailyPrompt` → `claude -p --allowed-tools ""` → `parseDaily` → `POST /_sink/daily/done`.
+  `buildDailyPrompt` → `claude -p`(도구 없이 — `_src/claude-ask.mjs`) → `parseDaily` → `POST /_sink/daily/done`.
   인증은 papers 와 같은 `PAPERS_SINK_SECRET`(같은 PC·같은 `~/.bubblelab/papers.env`). PC 가 꺼져 있으면 켜질 때 만든다.
   `--dry` 는 엣지 없이 오늘 답안만 찍어 본다.
 - **문항 글은 데몬이 보낸 것을 믿지 않는다** — `done` 이 날짜로 다시 정하고, 받는 것은 답안 칸뿐(길이 잘라 저장).

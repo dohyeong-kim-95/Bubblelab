@@ -9,23 +9,20 @@
 // `claude -p` 는 이미 쓰는 구독에서 차감되므로 키도 청구서도 늘지 않는다.
 // 대신 이 PC 가 켜져 있어야 한다.
 //
-// **도구 없이 부른다(`--allowed-tools ""`).** 프롬프트에 arXiv 초록이 그대로
+// **도구 없이 부른다(`_src/claude-ask.mjs`).** 프롬프트에 arXiv 초록이 그대로
 // 들어가는데, 그건 남이 쓴 검증되지 않은 텍스트다. 도구가 없으면 초록에 지시를
 // 심어 둬도 읽고 답하는 것 말고 할 수 있는 게 없다.
 //
 //   PAPERS_SINK_SECRET=... node _src/papers-sink/index.mjs
-
-import { spawn } from "node:child_process";
-import { dirname } from "node:path";
 
 import {
   ANSWER_LIMIT, buildAskPrompt, buildChatAnswerPrompt, buildChatPrompt, buildScorePrompt,
   buildSummaryPrompt, CHAT_ANSWER_LIMIT, fetchCandidates, parseScores, parseSummary,
   parseVerb, pickPapers, RESEARCH_PROFILE, runVerb,
 } from "../../_infra/papers.js";
+import { askClaude } from "../claude-ask.mjs";
 
 const BASE = (process.env.PAPERS_ENDPOINT ?? "").trim() || "https://life.bubblelab.dev";
-const CLAUDE = (process.env.CLAUDE_BIN ?? "").trim() || "claude";
 // 한 번에 답할 개수. 폭주해도 구독 한도를 한꺼번에 태우지 않게 막아 둔다.
 const MAX_PER_RUN = 3;
 const TIMEOUT_MS = 180_000;
@@ -63,35 +60,7 @@ async function latestDigest() {
   }
 }
 
-/**
- * Claude Code 헤드리스 호출. 도구를 주지 않는다.
- *
- * 두 가지를 cron 환경에 맞춰 둔다:
- *  · **stdin 을 닫는다.** 열어 두면 claude 가 파이프 입력을 3초 기다렸다가
- *    "no stdin data received" 경고를 내고 진행한다 — 질문마다 3초씩 손해다.
- *  · **PATH 에 node 디렉터리를 넣는다.** cron 의 PATH 는 /usr/bin:/bin 뿐이라
- *    claude 의 플러그인 훅이 `node` 를 못 찾고 실패 로그를 남긴다(답변 자체는
- *    나오지만 로그가 지저분해져 진짜 오류가 묻힌다).
- */
-function ask(prompt) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(CLAUDE, ["-p", prompt, "--allowed-tools", "", "--output-format", "text"], {
-      stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, PATH: `${dirname(process.execPath)}:${process.env.PATH ?? ""}` },
-    });
-
-    let out = "", err = "";
-    const timer = setTimeout(() => { child.kill("SIGKILL"); reject(new Error("시간 초과")); }, TIMEOUT_MS);
-    child.stdout.on("data", (chunk) => { out += chunk; });
-    child.stderr.on("data", (chunk) => { err += chunk; });
-    child.on("error", (error) => { clearTimeout(timer); reject(error); });
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      if (code === 0) resolve(out.trim());
-      else reject(new Error(`claude 실패 (exit ${code}): ${err.trim().slice(0, 200)}`));
-    });
-  });
-}
+const ask = (prompt) => askClaude(prompt, { timeoutMs: TIMEOUT_MS });
 
 /** 디스코드의 원래 메시지를 답으로 갈아끼운다. 봇 토큰이 필요 없다. */
 async function reply(applicationId, token, embed) {

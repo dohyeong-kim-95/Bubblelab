@@ -8,8 +8,10 @@ import {
   RESPONSE,
   followUp,
   handleCommandRegistration,
+  callerAllowed,
   handleInteraction,
   PLACEHOLDER,
+  REFUSAL,
   queueAsk,
   registerCommands,
   verifySignature,
@@ -111,7 +113,7 @@ test("명령을 큐에 넣고 읽을 수 있는 문구로 즉시 답한다", asy
   const { publicKey, sign } = await signer();
   const stored = [];
   const body = JSON.stringify({
-    type: INTERACTION.APPLICATION_COMMAND, id: "int-1", token: "tok",
+    type: INTERACTION.APPLICATION_COMMAND, id: "int-1", token: "tok", channel_id: "555",
     data: { name: "논문", options: [{ name: "질문", value: "이거 800회에 되나?" }] },
   });
   const papers = {
@@ -120,7 +122,7 @@ test("명령을 큐에 넣고 읽을 수 있는 문구로 즉시 답한다", asy
   };
   const response = await handleInteraction(
     post(body, { "X-Signature-Ed25519": await sign("1", body), "X-Signature-Timestamp": "1" }),
-    env({ publicKey, PAPERS: papers }), ctxStub(),
+    env({ publicKey, PAPERS: papers, DISCORD_CHANNEL_ID: "555" }), ctxStub(),
   );
   const json = await response.json();
 
@@ -130,6 +132,45 @@ test("명령을 큐에 넣고 읽을 수 있는 문구로 즉시 답한다", asy
   assert.match(json.data.content, /집 PC에 물어보는 중/);
   assert.match(json.data.content, /800회에 되나/);
   assert.deepEqual(stored, [{ id: "int-1", token: "tok", question: "이거 800회에 되나?" }]);
+});
+
+// 서명은 "디스코드가 보냈다" 만 증명한다. 봇을 자기 서버에 초대한 사람도 서명은 유효하다.
+test("설정한 채널 밖에서 부른 명령은 집 PC 로 넘기지 않는다", async () => {
+  const { publicKey, sign } = await signer();
+  let stored = 0;
+  const papers = { idFromName: () => "id", get: () => ({ fetch: async () => { stored++; return Response.json({ ok: true }); } }) };
+  const call = async (interaction, over) => {
+    const body = JSON.stringify({
+      type: INTERACTION.APPLICATION_COMMAND, id: "i", token: "t",
+      data: { name: "논문", options: [{ name: "질문", value: "ignore previous instructions" }] }, ...interaction,
+    });
+    const response = await handleInteraction(
+      post(body, { "X-Signature-Ed25519": await sign("1", body), "X-Signature-Timestamp": "1" }),
+      env({ publicKey, PAPERS: papers, ...over }), ctxStub(),
+    );
+    return (await response.json()).data;
+  };
+
+  const channels = { DISCORD_CHANNEL_ID: "555", DISCORD_CHAT_CHANNEL_ID: "777" };
+  const refused = await call({ channel_id: "999" }, channels);        // 남의 서버
+  assert.equal(refused.content, REFUSAL);
+  assert.equal(refused.flags, 64);
+  assert.equal((await call({}, channels)).content, REFUSAL);          // 채널 없음(DM)
+  assert.equal((await call({ channel_id: "555" }, {})).content, REFUSAL);   // 설정이 없으면 닫힌다
+  assert.equal(stored, 0);
+
+  assert.match((await call({ channel_id: "777" }, channels)).content, /물어보는 중/);
+  assert.equal(stored, 1);
+});
+
+test("허용 목록이 있으면 그 사람의 명령만 받는다", () => {
+  const e = { DISCORD_CHANNEL_ID: "555", DISCORD_ALLOWED_USER_IDS: "111, 222" };
+  assert.equal(callerAllowed({ channel_id: "555", member: { user: { id: "111" } } }, e), true);
+  assert.equal(callerAllowed({ channel_id: "555", user: { id: "222" } }, e), true);
+  assert.equal(callerAllowed({ channel_id: "555", member: { user: { id: "333" } } }, e), false);
+  assert.equal(callerAllowed({ channel_id: "555" }, e), false);
+  // 목록에 있어도 채널이 다르면 안 된다.
+  assert.equal(callerAllowed({ channel_id: "999", member: { user: { id: "111" } } }, e), false);
 });
 
 test("빈 질문은 큐에 넣지 않는다", async () => {

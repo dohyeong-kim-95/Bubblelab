@@ -15,16 +15,13 @@
 // **여기는 거르는 자리다.** 초록까지만 보고 읽어볼 만한지 가른다. 제대로 읽는
 // 것은 사람이 `/paper` 로 직접 하고, life/papers 에는 그렇게 이해한 것만 남는다.
 
-import { spawn } from "node:child_process";
-import { dirname } from "node:path";
-
 import {
-  buildChatAnswerPrompt, buildChatPrompt, CHAT_ANSWER_LIMIT,
+  allowedDiscordUser, buildChatAnswerPrompt, buildChatPrompt, CHAT_ANSWER_LIMIT,
   parseVerb, RESEARCH_PROFILE, runVerb,
 } from "../../_infra/papers.js";
+import { askClaude } from "../claude-ask.mjs";
 
 const BASE = (process.env.PAPERS_ENDPOINT ?? "").trim() || "https://life.bubblelab.dev";
-const CLAUDE = (process.env.CLAUDE_BIN ?? "").trim() || "claude";
 const API = "https://discord.com/api/v10";
 const TIMEOUT_MS = 180_000;
 const DISCORD_MESSAGE_LIMIT = 2000;
@@ -125,25 +122,8 @@ async function latestDigest() {
 
 /* ── Claude ────────────────────────────────────────────────────────────── */
 
-/** 도구를 주지 않는다 — 프롬프트에 남이 쓴 초록이 들어가기 때문이다. */
-function ask(prompt) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(CLAUDE, ["-p", prompt, "--allowed-tools", "", "--output-format", "text"], {
-      stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, PATH: `${dirname(process.execPath)}:${process.env.PATH ?? ""}` },
-    });
-    let out = "", err = "";
-    const timer = setTimeout(() => { child.kill("SIGKILL"); reject(new Error("시간 초과")); }, TIMEOUT_MS);
-    child.stdout.on("data", (c) => { out += c; });
-    child.stderr.on("data", (c) => { err += c; });
-    child.on("error", (error) => { clearTimeout(timer); reject(error); });
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      if (code === 0) resolve(out.trim());
-      else reject(new Error(`claude 실패 (exit ${code}): ${err.trim().slice(0, 200)}`));
-    });
-  });
-}
+/** 도구를 주지 않는다 — 프롬프트에 남이 쓴 초록이 들어가기 때문이다(`_src/claude-ask.mjs`). */
+const ask = (prompt) => askClaude(prompt, { timeoutMs: TIMEOUT_MS });
 
 /**
  * 한 마디에 답한다.
@@ -281,8 +261,9 @@ function connect() {
     if (t === "RESUMED") { backoff = 1000; log("이어붙임"); return; }
     if (t !== "MESSAGE_CREATE") return;
 
-    // 우리 채널의, 봇이 아닌, 내용이 있는 말만.
+    // 우리 채널의, 봇이 아닌, (허용 목록이 있으면 거기 있는 사람의,) 내용이 있는 말만.
     if (d.channel_id !== CHANNEL || d.author?.bot) return;
+    if (!allowedDiscordUser(process.env, d.author?.id)) return;
     const text = String(d.content ?? "").trim();
     if (!text) {
       log("내용이 비어 있다 — 개발자 포털에서 Message Content 인텐트를 켜세요");

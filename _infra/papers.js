@@ -650,7 +650,14 @@ export class PapersDO {
     }
 
     // 디스코드는 최신순으로 준다. 오래된 것부터 읽어야 말의 순서가 맞는다.
-    const humans = rows.filter((row) => !row.author?.bot);
+    // 허용 목록 밖의 사람은 봇과 같이 취급한다 — 그 글은 집 PC 로 가지 않는다.
+    const humans = rows.filter((row) => !row.author?.bot && allowedDiscordUser(this.env, row.author?.id));
+    // 답할 것이 하나도 없으면 자리만 옮긴다. 안 그러면 남의 글 20개가 쌓였을 때
+    // 그 뒤에 온 내 글이 조회 창(20개) 밖으로 밀려 영영 안 보인다.
+    if (!humans.length) {
+      if (rows[0]?.id) await this.state.storage.put("chat:last", rows[0].id);
+      return { messages: [] };
+    }
     const messages = humans
       .filter((row) => String(row.content ?? "").trim())
       .map((row) => ({ id: row.id, text: String(row.content).trim().slice(0, 2000) }))
@@ -1033,6 +1040,21 @@ export function secretMatches(offered, expected) {
   let diff = a.length ^ b.length;
   for (let i = 0; i < Math.max(a.length, b.length); i++) diff |= (a[i] ?? 0) ^ (b[i] ?? 0);
   return diff === 0;
+}
+
+/** 쉼표·공백으로 나눈 디스코드 ID 들. 숫자가 아닌 것은 버린다. */
+export const discordIds = (...values) => new Set(
+  values.flatMap((value) => String(value ?? "").split(/[\s,]+/)).filter((id) => /^\d+$/.test(id)),
+);
+
+/**
+ * 이 사람의 글을 집 PC 로 넘겨도 되는가. `DISCORD_ALLOWED_USER_IDS` 가 있으면 거기 적힌
+ * 사람만이고, 없으면 채널에 글을 쓸 수 있는 사람 전부다(그때는 채널 권한이 문지기).
+ * 슬래시 명령·채널 대화·상주 데몬이 같은 규칙을 쓴다 — 셋 다 `claude -p` 로 이어진다.
+ */
+export function allowedDiscordUser(env, userId) {
+  const allowed = discordIds(env?.DISCORD_ALLOWED_USER_IDS);
+  return !allowed.size || allowed.has(String(userId ?? ""));
 }
 
 /** 데몬 인증. 질문 원문과 다이제스트가 오가므로 아무나 읽게 두지 않는다. */

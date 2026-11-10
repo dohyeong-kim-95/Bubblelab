@@ -12,7 +12,7 @@
 
 
 
-import { secretMatches } from "./papers.js";
+import { allowedDiscordUser, discordIds, secretMatches } from "./papers.js";
 
 export const INTERACTION = { PING: 1, APPLICATION_COMMAND: 2 };
 export const RESPONSE = { PONG: 1, MESSAGE: 4, DEFERRED: 5 };
@@ -97,6 +97,23 @@ export async function queueAsk(interaction, env) {
 }
 
 /**
+ * 누가 어디서 불렀는가. **서명은 "디스코드가 보냈다" 만 증명한다** — 명령이 전역 등록이라
+ * 봇을 자기 서버에 초대한 사람도 똑같이 유효한 서명으로 들어온다. 질문은 집 PC 의
+ * `claude -p` 로 넘어가므로 아무나 넣게 두지 않는다.
+ *
+ *  · 채널: 우리가 설정한 채널(발송·대화)에서 온 것만. 따로 넣을 설정이 없고, 남의
+ *    서버에서는 채널 ID 가 다르므로 그 길이 닫힌다. 설정된 채널이 없으면 전부 거절한다.
+ *  · 사람: `DISCORD_ALLOWED_USER_IDS` 가 있으면 그 사람만.
+ */
+export function callerAllowed(interaction, env) {
+  const channels = discordIds(env.DISCORD_CHANNEL_ID, env.DISCORD_CHAT_CHANNEL_ID);
+  if (!channels.has(String(interaction?.channel_id ?? ""))) return false;
+  return allowedDiscordUser(env, interaction?.member?.user?.id ?? interaction?.user?.id);
+}
+
+export const REFUSAL = "이 명령은 지정된 채널에서, 허용된 사람만 쓸 수 있습니다.";
+
+/**
  * 엔드포인트. 서명 확인 → PING 응답 → 명령은 먼저 미뤄 두고 뒤에서 처리한다.
  *
  * `ctx.waitUntil` 이 핵심이다. 응답을 돌려준 뒤에도 LLM 호출이 살아 있어야 하는데,
@@ -124,6 +141,10 @@ export async function handleInteraction(request, env, ctx) {
   if (interaction.type === INTERACTION.APPLICATION_COMMAND) {
     if (interaction?.data?.name !== "논문" || !env.PAPERS) {
       return Response.json({ type: RESPONSE.MESSAGE, data: { content: "모르는 명령입니다." } });
+    }
+    // flags 64 = 부른 사람에게만 보인다.
+    if (!callerAllowed(interaction, env)) {
+      return Response.json({ type: RESPONSE.MESSAGE, data: { content: REFUSAL, flags: 64 } });
     }
     const queued = await queueAsk(interaction, env);
     return Response.json({ type: RESPONSE.MESSAGE, data: { content: queued.message } });

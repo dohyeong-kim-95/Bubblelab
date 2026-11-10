@@ -32,7 +32,7 @@ function expectScoped(file, site, tests, e2e = []) {
 test("life 변경은 sink를 포함한 life 전체 기능 테스트와 e2e를 고른다", () => {
   expectScoped("life/budget/store.js", "life", [
     "_infra/backup-slim.test.mjs", "_infra/backup.test.mjs",
-    "_infra/budget-sms.test.mjs", "_infra/budget.test.mjs",
+    "_infra/budget-sms.test.mjs", "_infra/budget.test.mjs", "_infra/claude-ask.test.mjs",
     "_infra/discord.test.mjs", "_infra/dram.test.mjs",
     "_infra/kcal.test.mjs", "_infra/library.test.mjs", "_infra/life.test.mjs",
     "_infra/papers.test.mjs", "_infra/pops.test.mjs", "_infra/pushup.test.mjs",

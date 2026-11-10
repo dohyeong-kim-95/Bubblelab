@@ -4,41 +4,20 @@
 // 논문 다이제스트(_src/papers-sink)와 같은 구조다: 엣지가 "오늘 것을 만들 때인가"를 판단하고
 // 문항을 정해 주면, 여기서 집 PC 의 Claude Code(`claude -p`, 구독 차감 — API 키·청구서 없음)가
 // 답안을 쓰고, 엣지가 보관·디스코드 발송을 한다. PC 가 꺼져 있으면 켜질 때 만든다.
-// 도구 없이 부른다(`--allowed-tools ""`) — 프롬프트는 우리 문항 은행뿐이지만 습관으로 막아 둔다.
+// 도구 없이 부른다(`_src/claude-ask.mjs`) — 프롬프트는 우리 문항 은행뿐이지만 습관으로 막아 둔다.
 //
 //   PAPERS_SINK_SECRET=... node _src/opic-sink/index.mjs
 //   node _src/opic-sink/index.mjs --dry   # 엣지 없이 오늘 문항으로 답안만 만들어 출력
 
-import { spawn } from "node:child_process";
-import { dirname } from "node:path";
-
 import { buildDailyPrompt, parseDaily } from "../../_infra/opic.js";
 import { kstDate } from "../../_infra/papers.js";
 import { dailyQuestion, DAILY_LEVEL } from "../../opic/questions.js";
+import { askClaude } from "../claude-ask.mjs";
 
 const BASE = (process.env.OPIC_ENDPOINT ?? "").trim() || "https://opic.bubblelab.dev";
-const CLAUDE = (process.env.CLAUDE_BIN ?? "").trim() || "claude";
 const TIMEOUT_MS = 240_000;
 
-function ask(prompt) {
-  return new Promise((resolve, reject) => {
-    // stdin 을 닫고(3초 대기 방지), cron 의 좁은 PATH 에 node 를 넣는다 — papers-sink 와 같은 이유
-    const child = spawn(CLAUDE, ["-p", prompt, "--allowed-tools", "", "--output-format", "text"], {
-      stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, PATH: `${dirname(process.execPath)}:${process.env.PATH ?? ""}` },
-    });
-    let out = "", err = "";
-    const timer = setTimeout(() => { child.kill("SIGKILL"); reject(new Error("시간 초과")); }, TIMEOUT_MS);
-    child.stdout.on("data", (c) => { out += c; });
-    child.stderr.on("data", (c) => { err += c; });
-    child.on("error", (e) => { clearTimeout(timer); reject(e); });
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      if (code === 0) resolve(out.trim());
-      else reject(new Error(`claude 실패 (exit ${code}): ${err.trim().slice(0, 200)}`));
-    });
-  });
-}
+const ask = (prompt) => askClaude(prompt, { timeoutMs: TIMEOUT_MS });
 
 /** 형식이 어긋나면 한 번만 다시 쓴다. */
 async function write(question, level) {

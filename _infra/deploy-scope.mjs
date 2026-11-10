@@ -36,7 +36,7 @@ const SITE_TESTS = {
   lab: ["_infra/insights-publish.test.mjs"],
   life: [
     "_infra/backup-slim.test.mjs", "_infra/backup.test.mjs",
-    "_infra/budget-sms.test.mjs", "_infra/budget.test.mjs",
+    "_infra/budget-sms.test.mjs", "_infra/budget.test.mjs", "_infra/claude-ask.test.mjs",
     "_infra/discord.test.mjs", "_infra/dram.test.mjs",
     "_infra/kcal.test.mjs", "_infra/library.test.mjs", "_infra/life.test.mjs",
     "_infra/papers.test.mjs", "_infra/pops.test.mjs", "_infra/pushup.test.mjs",

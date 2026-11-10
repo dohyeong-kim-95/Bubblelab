@@ -85,6 +85,10 @@
       "DISCORD_BOT_TOKEN",
       "DISCORD_CHANNEL_ID",
       "DISCORD_CHAT_CHANNEL_ID",
+      //   DISCORD_ALLOWED_USER_IDS → 쉼표로 나눈 디스코드 사용자 ID. 있으면 그 사람의
+      //     슬래시 명령·채널 글만 집 PC 로 넘긴다(없으면 채널에 쓸 수 있는 사람 전부).
+      //     슬래시 명령은 이것과 별개로 위 두 채널에서 온 것만 받는다.
+      "DISCORD_ALLOWED_USER_IDS",
       "DISCORD_PUBLIC_KEY",
       "DISCORD_APPLICATION_ID",
       "PAPERS_SINK_SECRET",
