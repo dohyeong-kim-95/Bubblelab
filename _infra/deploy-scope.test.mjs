@@ -71,7 +71,7 @@ test("util 변경은 도메인 전체 단위 테스트와 smoke를 고른다", (
 test("assets 변경은 카탈로그와 생성기 전체 테스트를 고른다", () => {
   expectScoped("assets/catalog.json", "assets", [
     "_infra/asset-flags.test.mjs", "_infra/assets-store.test.mjs", "_infra/assets.test.mjs",
-    "_infra/devices.test.mjs", "_infra/downloads.test.mjs", "_infra/gif.test.mjs",
+    "_infra/devices.test.mjs", "_infra/downloads.test.mjs",
     "_infra/sticker-pack.test.mjs", "_infra/wallpaper.test.mjs",
   ]);
 });
@@ -85,10 +85,7 @@ test("games 변경은 멀티플레이와 Avalon 검증까지 고른다", () => {
 
 test("work 변경은 생성·리뷰·문의 기능 전체 테스트를 고른다", () => {
   expectScoped("work/index.html", "work", [
-    "_infra/emoticon-gate.test.mjs", "_infra/emoticon-prompt.test.mjs",
-    "_infra/emoticon-review.test.mjs", "_infra/emoticon-rig.test.mjs",
-    "_infra/emoticon-vision.test.mjs", "_infra/emoticon.test.mjs",
-    "_infra/reviews.test.mjs", "_infra/skeleton.test.mjs", "_infra/workqna.test.mjs",
+    "_infra/reviews.test.mjs", "_infra/workqna.test.mjs",
   ]);
 });
 
@@ -270,8 +267,8 @@ test("agent-scope.conf 가 한 서브도메인 소유로 적은 _infra 파일은
   assert.ok(util.tests.includes("_infra/yaksok.test.mjs"));
   assert.ok(util.e2e.includes("_infra/e2e/yaksok.spec.mjs"));
 
-  // 와일드카드 소유(_infra/emoticon*.mjs, _src/avalon/*)도 따른다
-  assert.deepEqual(planDeployment(["_infra/emoticon-ai.mjs"]).sites, ["work"]);
+  // 와일드카드 소유(_src/emoticon/*, _src/avalon/*)도 따른다
+  assert.deepEqual(planDeployment(["_src/emoticon/dageudangs/tokens.json"]).sites, ["work"]);
   const avalon = planDeployment(["_src/avalon/src/firebase.js"]);
   assert.deepEqual([avalon.mode, avalon.sites, avalon.avalon], ["scoped", ["games"], true]);
 

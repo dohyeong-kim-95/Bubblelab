@@ -394,21 +394,6 @@ export function buildProbes({ sites, expectedCommit, ws }) {
   });
 
   add({
-    id: "api:emoticon-review", surface: "do", title: "이모티콘 검수 (EmoticonReviewDO)",
-    async run({ target, checks, timeoutMs }) {
-      const { status, text } = await request(target.apiOn("work", "/_emoticon/review"), { timeoutMs });
-      checks.eq("GET /_emoticon/review status", status, 200);
-      const body = parseJson(text) ?? {};
-      checks.eq("review.version", body.version, 1);
-      checks.ok("review.items 배열", Array.isArray(body.items), "array");
-      for (const item of (body.items ?? []).slice(0, 5)) {
-        checks.nonEmpty("review.item.id", item?.id);
-        checks.nonEmpty("review.item.character", item?.character);
-      }
-    },
-  });
-
-  add({
     id: "api:brief", surface: "worker", title: "아침 브리핑 날씨 (BriefDO·상류)",
     soft: true, // Open-Meteo 가 흔들리면 우리 배포와 무관하게 실패할 수 있다.
     async run({ target, checks, timeoutMs }) {

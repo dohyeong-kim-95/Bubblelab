@@ -68,7 +68,7 @@ _infra/agent-worktree.sh remove <서브도메인> [--force]
 | `_src/<이름>/**`, `_src/<이름>-*/**` | `_src/duri-sink/` |
 
 이름이 서브도메인과 다른 파일(`util` → `_infra/brief.js`, `work` →
-`_infra/emoticon*`, `assets` → `_infra/wallpaper.mjs` …)은
+`_infra/reviews.js`, `assets` → `_infra/wallpaper.mjs` …)은
 **`_infra/agent-scope.conf`** 에 명시돼 있다. 테스트가 그 경로들이 실재하는지
 검사하므로 파일을 옮기면 conf도 같이 고쳐야 한다.
 

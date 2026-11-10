@@ -94,7 +94,6 @@ import { handleOpicAdmin, handleOpicGate } from "./opic.js";
 import { serveAssetDownload, serveAssetDownloadCounts } from "./downloads.js";
 import { fetchStoreReviews, REVIEWS_SYNC_VERSION } from "./reviews.js";
 import { DURI_MAX_PHOTO_BYTES } from "./duri.js";
-import { EMOTICON_MAX_BODY, EMOTICON_MAX_PROMPT, EMOTICON_MAX_REFERENCES, geminiGenerate } from "./emoticon-gen.js";
 import {
   applySecurityHeaders,
   consumeRateLimit,
@@ -115,7 +114,6 @@ export { RealtimeDO } from "./realtime.js";
 export { ChatDO } from "./chat.js";
 export { WorkQnaDO } from "./workqna.js";
 export { WorkReviewsDO } from "./reviews.js";
-export { EmoticonReviewDO } from "./emoticon-review.js";
 export { AnalyticsDO } from "./analytics.js";
 export { RecordsDO } from "./records.js";
 export { PodcastDO } from "./podcast.js";
@@ -796,7 +794,7 @@ async function serveAssetCatalog(request, env, url) {
 export const HEALTH_BINDINGS = [
   "ASSETS", "ANALYTICS", "RECORDS", "RATE_LIMITER", "REALTIME",
   "CHAT", "PODCAST", "DURI", "ASSET_FLAGS", "BRIEF", "FORTUNE",
-  "WORK_QNA", "WORK_REVIEWS", "EMOTICON_REVIEW", "PODCAST_BUCKET", "DURI_BUCKET", "LIFE",
+  "WORK_QNA", "WORK_REVIEWS", "PODCAST_BUCKET", "DURI_BUCKET", "LIFE",
   "LIFE_BUCKET", "YAKSOK", "OPIC",
 ];
 
@@ -1069,7 +1067,6 @@ export async function handleRequest(request, env, ctx) {
       path === "/_podcast/upload" ? UPLOAD_MAX_BYTES :
       path === "/_podcast/worker/audio" ? WORKER_AUDIO_MAX_BYTES :
       path === "/_duri/photo" || path === "/_duri/lend" ? DURI_MAX_PHOTO_BYTES :
-      path === "/_emoticon/generate" ? EMOTICON_MAX_BODY :
       path === "/_life/backup" ? 4 * 1024 * 1024 :
       yaksokBodyLimit(path) ?? 64 * 1024,
     );
@@ -1457,115 +1454,6 @@ export async function handleRequest(request, env, ctx) {
         ...(request.method === "POST" && {
           headers: { "Content-Type": "application/json" }, body: await request.text(),
         }),
-      });
-    }
-
-    // AI 이모티콘 생성 프록시 (work/emoticon CLI의 edge 프로바이더 전용).
-    // Gemini 키가 GEMINI_STICKER_KEY Worker secret에만 있으므로 엣지가 대신
-    // 호출한다. work 마스터(비밀번호 Bearer 또는 마스터 세션 쿠키)만 쓸 수
-    // 있고, 키·비밀번호 미설정이면 fail-closed. 키는 응답에 노출되지 않는다.
-    if (path === "/_emoticon/generate") {
-      if (!env.WORK_PASSWORD || !env.GEMINI_STICKER_KEY) {
-        return new Response("emoticon generator is not configured", {
-          status: 503, headers: { "Cache-Control": "no-store" },
-        });
-      }
-      if (request.method !== "POST") {
-        return new Response("method not allowed", { status: 405, headers: { Allow: "POST" } });
-      }
-      const contentTypeError = requireJsonRequest(request);
-      if (contentTypeError) return contentTypeError;
-      // 비밀번호 대입 방지: 비교하기 전에 IP당 시도를 센다(5회/15분, 로그인과 같은 수준).
-      // CLI는 정상 호출이 많으므로 인증에 성공하면 그 IP의 횟수를 지운다 — 실패만 쌓인다.
-      const authLimit = { scope: "emoticon-auth", limit: 5, windowMs: 15 * 60 * 1000 };
-      const authLimited = await enforceRateLimit(request, env, authLimit);
-      if (authLimited) return authLimited;
-      const key = await workKeyOf(env);
-      const bearer = (request.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
-      const master = bearer
-        ? await matchesCredential(key, bearer, env.WORK_PASSWORD)
-        : (await workSessionClient(key, cookies(request).bl_work)) === "*";
-      if (!master) {
-        return Response.json({ error: "authentication required" }, {
-          status: 401, headers: { "Cache-Control": "no-store" },
-        });
-      }
-      await consumeRateLimit(request, env, { ...authLimit, reset: true });
-      // 호출당 과금이므로 마스터 인증 뒤에도 폭주를 막는다 (60회/10분 ≈ 컷 5개)
-      const limited = await enforceRateLimit(request, env, {
-        scope: "emoticon-generate", limit: 60, windowMs: 10 * 60 * 1000,
-      });
-      if (limited) return limited;
-      let payload;
-      try { payload = await request.json(); } catch {
-        return Response.json({ error: "invalid json" }, { status: 400 });
-      }
-      const prompt = String(payload?.prompt ?? "").trim();
-      const references = Array.isArray(payload?.references) ? payload.references : [];
-      if (!prompt || prompt.length > EMOTICON_MAX_PROMPT
-        || references.length > EMOTICON_MAX_REFERENCES
-        || references.some((r) => typeof r !== "string" || !/^[A-Za-z0-9+/=]+$/.test(r))) {
-        return Response.json({ error: "invalid payload" }, { status: 400 });
-      }
-      try {
-        const bytes = await geminiGenerate({
-          apiKey: env.GEMINI_STICKER_KEY,
-          model: env.EMOTICON_IMAGE_MODEL || undefined,
-          prompt,
-          referencesB64: references,
-        });
-        return new Response(bytes, {
-          headers: {
-            "Content-Type": bytes[0] === 0xff ? "image/jpeg" : "image/png",
-            "Cache-Control": "no-store",
-          },
-        });
-      } catch (error) {
-        return Response.json({ error: String(error?.message ?? error) }, {
-          status: 502, headers: { "Cache-Control": "no-store" },
-        });
-      }
-    }
-
-    // 컷별 사람 검수 댓글. 자동 게이트가 못 잡는 "지시대로 움직였는가"를
-    // 컷 id에 붙여 남긴다. 읽기는 공개(Actions가 secret 없이 끌어가 리포에
-    // 커밋한다), 쓰기는 work 마스터만.
-    if (path === "/_emoticon/review") {
-      const id = env.EMOTICON_REVIEW.idFromName("board");
-      const stub = env.EMOTICON_REVIEW.get(id);
-      if (request.method === "GET") {
-        const limited = await enforceRateLimit(request, env, {
-          scope: "emoticon-review-read", limit: 120, windowMs: 60 * 1000,
-        });
-        if (limited) return limited;
-        return stub.fetch("https://emoticon-review.internal/");
-      }
-      if (request.method !== "POST") {
-        return new Response("method not allowed", { status: 405, headers: { Allow: "GET, POST" } });
-      }
-      if (!env.WORK_PASSWORD) {
-        return new Response("emoticon review board is not configured", {
-          status: 503, headers: { "Cache-Control": "no-store" },
-        });
-      }
-      const contentTypeError = requireJsonRequest(request);
-      if (contentTypeError) return contentTypeError;
-      const key = await workKeyOf(env);
-      if ((await workSessionClient(key, cookies(request).bl_work)) !== "*") {
-        return Response.json({ error: "authentication required" }, {
-          status: 401, headers: { "Cache-Control": "no-store" },
-        });
-      }
-      const limited = await enforceRateLimit(request, env, {
-        scope: "emoticon-review-write", limit: 30, windowMs: 10 * 60 * 1000,
-      });
-      if (limited) return limited;
-      const requested = new URL(request.url).searchParams.get("action");
-      const action = ["delete", "verdict"].includes(requested) ? requested : "add";
-      return stub.fetch(`https://emoticon-review.internal/${action}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: await request.text(),
       });
     }
 

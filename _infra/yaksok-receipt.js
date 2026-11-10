@@ -3,7 +3,7 @@
 // 결과는 **후보**일 뿐이다: 화면이 보여 주고 사람이 고쳐서 확정해야 정산에 들어간다.
 // 캡처 원본은 저장하지 않는다(카드번호 뒷자리 같은 게 찍혀 있다) — 여기서 읽고 버린다.
 // 모델은 env.YAKSOK_VISION_MODEL 로 바꾼다. 이름을 박아 두면 신규 키에서 404 가 나는 일이
-// 있어(emoticon-vision.test.mjs 참고) 기본값은 버전 없는 "flash-latest" 별칭이다.
+// 있어 기본값은 버전 없는 "flash-latest" 별칭이다.
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
 const DEFAULT_MODEL = "gemini-flash-latest";
 const TIMEOUT_MS = 25000;

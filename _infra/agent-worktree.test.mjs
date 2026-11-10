@@ -133,7 +133,7 @@ test("agent 브랜치가 아니면 소유 범위를 검사하지 않는다", () 
 test("agent-scope.conf 에 적힌 소유 파일은 통과한다", () => {
   // 이름이 서브도메인과 다른 파일들 — conf가 없으면 전부 거부된다
   assert.equal(commitWith("agent/util/brief", ["_infra/brief.js"]).ok, true);
-  assert.equal(commitWith("agent/work/emoticon", ["_infra/emoticon-gate.mjs"]).ok, true);
+  assert.equal(commitWith("agent/work/emoticon", ["_infra/workqna.js"]).ok, true);
   assert.equal(commitWith("agent/assets/wall", ["_infra/wallpaper.mjs"]).ok, true);
 });
 

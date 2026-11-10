@@ -16,7 +16,7 @@ const SITE_TESTS = {
   admin: ["_infra/analytics.test.mjs"],
   assets: [
     "_infra/asset-flags.test.mjs", "_infra/assets-store.test.mjs", "_infra/assets.test.mjs",
-    "_infra/devices.test.mjs", "_infra/downloads.test.mjs", "_infra/gif.test.mjs",
+    "_infra/devices.test.mjs", "_infra/downloads.test.mjs",
     "_infra/sticker-pack.test.mjs", "_infra/wallpaper.test.mjs",
   ],
   dageudangs: [],
@@ -53,10 +53,7 @@ const SITE_TESTS = {
     "_infra/yaksok.test.mjs",
   ],
   work: [
-    "_infra/emoticon-gate.test.mjs", "_infra/emoticon-prompt.test.mjs",
-    "_infra/emoticon-review.test.mjs", "_infra/emoticon-rig.test.mjs",
-    "_infra/emoticon-vision.test.mjs", "_infra/emoticon.test.mjs",
-    "_infra/reviews.test.mjs", "_infra/skeleton.test.mjs", "_infra/workqna.test.mjs",
+    "_infra/reviews.test.mjs", "_infra/workqna.test.mjs",
   ],
   www: ["_infra/search-rules.test.mjs"],
 };

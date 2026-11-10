@@ -110,7 +110,6 @@
       { "name": "CHAT", "class_name": "ChatDO" },
       { "name": "PODCAST", "class_name": "PodcastDO" },
       { "name": "DURI", "class_name": "DuriDO" },
-      { "name": "EMOTICON_REVIEW", "class_name": "EmoticonReviewDO" },
       { "name": "FORTUNE", "class_name": "FortuneDO" },
       { "name": "BRIEF", "class_name": "BriefDO" },
       // 에셋(스티커) 공개 여부 오버라이드 — admin에서 토글, 재배포 없이 반영
@@ -149,6 +148,9 @@
     // 내려 둔 planner·invest·trip 을 데이터째 지웠다. 되돌릴 수 없다 — 이 태그가 적용된
     // 뒤에 같은 이름의 클래스를 다시 쓰려면 새 태그에서 new_sqlite_classes 로 처음부터 만든다.
     { "tag": "v20", "deleted_classes": ["PlannerDO", "InvestDO", "TripWatchDO"] },
-    { "tag": "v21", "new_sqlite_classes": ["OpicDO"] }
+    { "tag": "v21", "new_sqlite_classes": ["OpicDO"] },
+    // 컷마다 새로 그리던 이모티콘 생성 파이프라인을 걷어내며 검수 게시판도 데이터째 지웠다
+    // (2026-11-10. 댓글 29건의 마지막 사본은 git 이력의 _src/emoticon/reviews.json).
+    { "tag": "v22", "deleted_classes": ["EmoticonReviewDO"] }
   ]
 }
