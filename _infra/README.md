@@ -29,9 +29,9 @@ Bubblelab의 정적 빌드, 단일 Cloudflare Worker, Durable Object 저장소�
 | `asset-flags.js` | 스티커 공개 여부 오버라이드 `AssetFlagsDO`와 카탈로그 필터 |
 | `assets-store.js` | R2용 데이터 변환 코드. 현재 운영 라우트에서는 비활성 |
 | `idle-balance.mjs` | Bubble Pop Idle 밸런스 시뮬레이터 |
-| `deploy-scope.mjs` | 변경 파일을 문서 전용·서브도메인 범위·전체 검증으로 분류 |
+| `deploy-scope.mjs` | 변경 파일로 브라우저 검증 범위를 고른다(문서 전용·서브도메인·전체). 단위 테스트는 언제나 전부 |
 | `deploy-prepare.mjs` | 라이브 SHA부터 현재 SHA까지의 배포 계획을 Actions에 생성 |
-| `deploy-check.mjs` | 계획에 든 단위·브라우저 검증과 전체 bundle 빌드를 실행 |
+| `deploy-check.mjs` | 린트·단위 테스트 전체(빌드 포함)와 계획에 든 브라우저 검증을 실행 |
 | `deploy-release.mjs` | publish·라이브 SHA 검증·Cloudflare 직전 version 복구를 처리 |
 | `verify-prod.mjs` | 배포된 사이트를 실제로 찌르는 읽기 전용 검증기 (Actions·`make verify`) |
 
@@ -171,8 +171,8 @@ npx wrangler@4 dev --local --local-upstream localhost
 - `ci.yml`: pull request에서 루트 인프라 테스트·전체 빌드를
   실행합니다. 배포용 secret을 사용하지 않으며 Cloudflare에 배포하지 않습니다.
 - `deploy.yml`: `main` push와 `main` 대상 수동 실행에서 동작하는 배포의 기준
-  구현입니다. 알려진 단일 서브도메인은 해당 단위 테스트와 관련 E2E를 고르고,
-  공용·인프라·미분류 변경 또는 미분류 테스트가 있으면 전체 검증으로 전환합니다.
+  구현입니다. 단위 테스트는 언제나 전부 실행하고, 브라우저 검증만 고릅니다 — 단일
+  서브도메인 변경은 스모크와 그 서브도메인 E2E, 공용·인프라·모르는 경로가 끼면 E2E 전부.
   `_infra/`·`_src/` 파일이라도 `agent-scope.conf`가 한 서브도메인 소유로 적어 둔 것
   (예: util 의 `_infra/yaksok.js`)은 그 서브도메인 범위로 봅니다 — `*shared*` 줄은 소유가
   아니라 전체입니다. 새 서브도메인 서버 코드는 그 줄에 적어야 배포가 가벼워집니다.

@@ -7,17 +7,16 @@ import { fileURLToPath } from "node:url";
 export function checkCommands(plan, phase) {
   if (!["unit", "e2e"].includes(phase)) throw new Error(`Unknown validation phase: ${phase}`);
   if (plan.mode === "none") return [];
-  if (!plan.tests.includes("_infra/home-button.test.mjs") || plan.e2e.length === 0) {
-    throw new Error("Deployment must include build contract and browser checks");
-  }
+  if (!plan.e2e?.length) throw new Error("Deployment must include browser checks");
   if (phase === "unit") {
     const files = plan.files.filter(file => existsSync(file));
     return [
       // No arguments means all tracked files to lint.sh.
       ...(plan.mode === "full" ? [["bash", "scripts/lint.sh"]]
         : files.length ? [["bash", "scripts/lint.sh", ...files]] : []),
-      [process.execPath, "--test", ...plan.tests],
-      // home-button.test.mjs creates and verifies the complete dist once.
+      // Every unit test, every time — the whole suite is seconds, and selecting needed a table
+      // that each new test had to be added to. home-button.test.mjs builds and verifies dist once.
+      ["npm", "test"],
     ];
   }
   if (phase === "e2e") return [[process.execPath, "node_modules/@playwright/test/cli.js", "test", ...plan.e2e]];

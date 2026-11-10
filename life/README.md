@@ -101,10 +101,9 @@ node --test _infra/life.test.mjs
 npx playwright test _infra/e2e/life.spec.mjs
 ```
 
-배포 때는 `life/` 만 바뀌면 Actions 가 life 범위만 검증한다 — 도구들의 단위 테스트
-(`_infra/deploy-scope.mjs` 의 `SITE_TESTS.life`)와 브라우저 스펙 8개, 스모크의 life 화면.
-새 도구에 테스트를 더하면 그 목록에도 한 줄 넣는다. 빠뜨려도 조용히 넘어가지는 않는다 —
-목록에 없는 테스트 파일이 생기면 배포가 전체 검증으로 올라간다.
+배포 때 단위 테스트는 언제나 전부 돈다(등록할 곳 없음). `life/` 만 바뀌면 브라우저 쪽은
+life 스펙 7개와 스모크의 life 화면만 돈다 — 스펙을 새로 만들면 `_infra/deploy-scope.mjs` 의
+`SITE_E2E.life` 에 한 줄 넣는다. 빠뜨리면 그 스펙이 모든 배포에서 돌 뿐 검사가 빠지지는 않는다.
 
 프로덕션에는 `ENABLE_LIFE`, `LIFE_PASSWORD`, `LIFE_SESSION_SECRET` 이 필요하다.
 `LIFE` Durable Object 바인딩은 쓰지 않지만, 적용된 마이그레이션을 되돌릴 수 없어

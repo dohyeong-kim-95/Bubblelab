@@ -32,7 +32,7 @@ export async function prepareDeployment({ head, forceFull = false }, io = { git,
   } catch (error) {
     reason = `Full validation: cannot establish deployed baseline (${error.message})`;
   }
-  const plan = planDeployment(reason || forceFull ? [".github/workflows/deploy.yml"] : files);
+  const plan = planDeployment(files, { full: Boolean(reason) || forceFull });
   return { ...plan, base, reason, head, startedAt };
 }
 
@@ -41,5 +41,5 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
   writeFileSync(".deploy-plan.json", JSON.stringify(plan, null, 2) + "\n");
   if (plan.reason) console.warn(plan.reason);
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `mode=${plan.mode}\n`);
-  console.log(`Deployment scope: ${plan.mode}; sites: ${plan.sites.join(", ") || "all/none"}; tests: ${plan.tests.length}; browser specs: ${plan.e2e.length}`);
+  console.log(`Deployment scope: ${plan.mode}; sites: ${plan.sites.join(", ") || "none"}; browser specs: ${plan.e2e.length}`);
 }
