@@ -14,8 +14,6 @@
   각각 인프라, 빌드 소스, 공용 에셋).
 - 토이 하나 = 폴더 하나 (`slop/이름/index.html`). 의존성·빌드 도구 없는
   바닐라 HTML이 기본. 카테고리 홈의 카드 목록은 자동 생성된다.
-- **`games/avalon/`은 빌드 산출물 — 직접 수정 금지.** 소스는 `_src/avalon/`,
-  수정 후 `_src/avalon/rebuild.sh` 실행해서 산출물을 갱신·커밋한다.
 - main에 push하면 GitHub Actions가 자동 배포한다 (~1분). PR 불필요,
   main에서 직접 작업한다.
 - **명시적인 요청이 없으면 자기 서브도메인 밖은 add하지 않는다.** `git add -A`·
@@ -146,11 +144,10 @@ MCP 로 진행한다** — 순서는 같은 파일의 「`gh` 가 없는 환경�
 `npm ci` 가 어떤 실행에서는 2초, 어떤 실행에서는 4분 15초였다(총 13분 6초까지 간 적이
 있고 그중 11분 16초가 두 번의 설치였다. 바로 다음 실행은 캐시가 미스인데도 2초였다).
 러너·레지스트리 사정이라 우리가 줄일 수 있는 값이 아니므로 **설치에 걸리는 횟수와 노출
-자체를 줄였다** — `node_modules` 를 통째로 캐시해 맞으면 설치 단계가 사라지고
-(`setup-node` 의 캐시는 내려받기만 아끼고 압축 해제·링크는 매번 다시 한다), **아발론은
-소스·산출물의 내용 해시가 그대로면 검증을 건너뛴다**(몇 주씩 안 바뀌는데 매번 vite 를
-새로 깔고 같은 결론을 냈다). 내용 해시라 한 글자만 바뀌어도 반드시 다시 돈다.
-`_infra/deploy-workflow.test.mjs` 가 이 둘과 wrangler 핀을 묶어 둔다 — 성능 회귀는 조용히
+자체를 줄였다** — `node_modules` 를 통째로 캐시해 맞으면 설치 단계가 사라진다
+(`setup-node` 의 캐시는 내려받기만 아끼고 압축 해제·링크는 매번 다시 한다). 따로 설치가
+필요하던 아발론(vite)은 2026-11-10 에 걷어냈다.
+`_infra/deploy-workflow.test.mjs` 가 이것과 wrangler 핀을 묶어 둔다 — 성능 회귀는 조용히
 돌아오고 아무도 눈치채지 못하기 때문이다.
 
 **한 번의 실행만 보고 원인을 구조 탓으로 돌리지 말 것.** 실제로 그렇게 진단했다가 다음
@@ -161,16 +158,16 @@ MCP 로 진행한다** — 순서는 같은 파일의 「`gh` 가 없는 환경�
 대상 화면은 `_infra/e2e/smoke.spec.mjs`의 `SCREENS`. 컨테이너에 크로미움이 이미
 있으면 `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium`을 앞에 붙인다.
 
-아발론을 고쳤으면 `_src/avalon/rebuild.sh` 실행 후 산출물까지 커밋해야 한다 —
-Deploy·CI가 `_infra/check-avalon-sync.mjs`로 `games/avalon`이 소스 빌드와
-같은지 확인하고, 다르면 배포가 멈춘다.
-
 ## 멀티플레이어가 필요하면
 
 자체 실시간 서버(Durable Object)가 `/_rt/<이름>` 에 있다 (Firebase RTDB
-서브셋: 경로 트리 + 구독 + onDisconnect). 클라이언트 어댑터 예시는
-`_src/avalon/src/firebase.js` — 복사해서 시작하면 된다. 외부 서비스를
+서브셋: 경로 트리 + 구독 + onDisconnect). 클라이언트는 `_shared/realtime-client.js`,
+방 관리는 `_shared/multiplayer-room.js`(쓰는 예: `games/liargame`). 외부 서비스를
 추가하지 말 것.
+
+**지금은 닫혀 있다** — `ENABLE_REALTIME=false`(2026-07-17~)라 `/_rt/*` 는 503 이고,
+이것을 쓰는 `games/yacht`·`games/liargame` 은 카드 목록에서 빠져 있다. 사용자 인증과
+방별 읽기·쓰기 권한이 없어서다. 값만 `true` 로 바꾸지 말 것(`games/README.md`).
 
 익명 채팅(`util/chat`)은 별도의 전용 DO를 쓴다: `_infra/chat.js`의
 `ChatDO`(`/_chat` WebSocket, 단일 로비, 메시지 미저장 브로드캐스트).
@@ -376,5 +373,4 @@ _infra/agent-worktree.sh task <서브도메인> <슬러그>  # agent/<서브도�
 ## 더 읽을 것 (필요할 때만)
 
 - 배포/워커/빌드 파이프라인 내부: `_infra/README.md`
-- 아발론 이력·재빌드: `_src/avalon/MIGRATION.md`
 - 사람용 전체 안내: `README.md`

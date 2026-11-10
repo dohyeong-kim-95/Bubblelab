@@ -432,7 +432,7 @@ export function buildProbes({ sites, expectedCommit, ws }) {
       const cases = [
         ["/_duri/status", [401]],
         ["/_duri/sticker/dageudangseu-1/01.png", [401]], // 비공개 스티커는 게이트 뒤 R2 에만
-        ["/_rt/avalon", [503]],       // ENABLE_REALTIME=false
+        ["/_rt/yacht", [503]],       // ENABLE_REALTIME=false
         ["/_chat", [403]],            // Origin 없는 WebSocket 시도
         ["/_assets/upload/x.png", [404]],
       ];

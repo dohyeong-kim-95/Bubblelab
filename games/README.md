@@ -1,17 +1,16 @@
 # games — 승격된 게임
 
 <https://games.bubblelab.dev>의 승격 게임 소스입니다. 카드 페이지에 보이는 것은
-서버가 필요 없는 `stepcam/` 하나뿐이고, 실시간 멀티플레이 게임 3개는 **Archived**
+서버가 필요 없는 `stepcam/` 하나뿐이고, 실시간 멀티플레이 게임 2개는 **Archived**
 상태로 목록에서 빠져 있습니다.
 
-> 공개 보안 정비 중에는 인증·방 권한 모델이 필요한 실시간 게임 3개를 카드
+> 공개 보안 정비 중에는 인증·방 권한 모델이 필요한 실시간 게임 2개를 카드
 > 목록에서 숨기고 `ENABLE_REALTIME=false`로 서버 경로를 닫아 둡니다. 소스와
 > 직접 URL은 삭제하지 않습니다.
 
 | 경로 | 상태 | 게임 | 구성 |
 | --- | --- | --- | --- |
 | `stepcam/` | 공개 | 발판 리듬 | 카메라로 발을 보는 1인용 펌프·DDR (서버 없음) |
-| `avalon/` | Archived | The Resistance: Avalon | 5–10인 실시간 멀티플레이 |
 | `liargame/` | Archived | 라이어 게임 | 각자의 휴대폰으로 함께 플레이 |
 | `yacht/` | Archived | 야추 | `/_rt/yacht`를 사용하는 실시간 주사위 게임 |
 
@@ -37,20 +36,9 @@
 각 게임이 자기 방의 공개 상태와 비공개 역할만 읽도록 서버 권한 모델을 추가한 뒤
 개별 상태를 Beta로 바꿉니다.
 
-## Avalon 빌드
-
-`games/avalon/`은 Vite 빌드 산출물입니다. 직접 수정하지 말고
-`_src/avalon/`에서 수정한 뒤 다음 명령으로 다시 생성합니다.
-
-```bash
-cd _src/avalon
-./rebuild.sh
-```
-
-실시간 동기화는 Bubblelab Worker의 `/_rt/avalon` Durable Object를 사용하며
-Firebase나 별도 외부 백엔드 키가 필요하지 않습니다. 상세 내용은
-[`_src/avalon/README.md`](../_src/avalon/README.md)와
-[`_src/avalon/MIGRATION.md`](../_src/avalon/MIGRATION.md)를 참고하세요.
+아발론(The Resistance: Avalon, Vite 빌드)은 2026-11-10 에 걷어냈습니다 — 실시간 서버가
+닫힌 넉 달 동안 전용 빌드·동기화 검사만 배포에 붙어 있었습니다. 소스는 git 이력에
+있습니다(`git log -- _src/avalon`).
 
 새 정적 게임은 이 폴더에 바로 추가할 수 있지만, 보통 `slop/`에서 먼저 검증한 뒤
 승격합니다.

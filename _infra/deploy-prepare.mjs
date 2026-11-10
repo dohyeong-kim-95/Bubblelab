@@ -40,6 +40,6 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
   const plan = await prepareDeployment({ head: process.env.GITHUB_SHA, forceFull: process.env.DEPLOY_FORCE_FULL === "true" });
   writeFileSync(".deploy-plan.json", JSON.stringify(plan, null, 2) + "\n");
   if (plan.reason) console.warn(plan.reason);
-  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `mode=${plan.mode}\navalon=${plan.avalon}\n`);
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `mode=${plan.mode}\n`);
   console.log(`Deployment scope: ${plan.mode}; sites: ${plan.sites.join(", ") || "all/none"}; tests: ${plan.tests.length}; browser specs: ${plan.e2e.length}`);
 }

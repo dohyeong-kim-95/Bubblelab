@@ -32,7 +32,7 @@ const CONFIDENTIAL_SUBDOMAINS = new Set(
 // CONFIDENTIAL_SUBDOMAINS 쪽이다 — 여기는 카테고리 안의 개별 카드용.)
 const UNLISTED_ENTRIES = new Map([
   // 백엔드가 보안상 닫혀 있는 동안 발견되지 않게 한다(인증/ACL 검토 후 해제).
-  ["games", new Set(["avalon", "liargame", "yacht"])],
+  ["games", new Set(["liargame", "yacht"])],
   // 여권사진은 비공개 요청으로 목록에서 내렸다.
   ["util", new Set(["passport-pic"])],
 ]);

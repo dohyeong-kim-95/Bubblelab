@@ -27,8 +27,7 @@ const SITE_TESTS = {
   ],
   estate: ["_infra/estate.test.mjs", "_infra/estate-search.test.mjs"],
   games: [
-    "_infra/check-avalon-sync.test.mjs", "_infra/liargame.test.mjs",
-    "_infra/realtime.test.mjs", "_infra/stepcam.test.mjs",
+    "_infra/liargame.test.mjs", "_infra/realtime.test.mjs", "_infra/stepcam.test.mjs",
   ],
   idle: ["_infra/idle.test.mjs"],
   interior: ["_infra/interior.test.mjs"],
@@ -150,7 +149,6 @@ function fullPlan(files, root, discoveredTests, discoveredE2e) {
     sites: [...SITES],
     tests: discoveredTests ?? discover(root, TEST_DIRECTORIES, ".test.mjs"),
     e2e: discoveredE2e ?? discover(root, E2E_DIRECTORIES, ".spec.mjs"),
-    avalon: true,
     files,
   };
 }
@@ -180,7 +178,7 @@ export function planDeployment(files, { root = repoRoot, full = false } = {}) {
   }
 
   if (sites.size === 0) {
-    return { mode: "none", sites: [], tests: [], e2e: [], avalon: false, files: normalized };
+    return { mode: "none", sites: [], tests: [], e2e: [], files: normalized };
   }
 
   const selectedSites = [...sites].sort();
@@ -193,7 +191,6 @@ export function planDeployment(files, { root = repoRoot, full = false } = {}) {
       ...selectedSites.flatMap((site) => SITE_TESTS[site]).filter((file) => availableTests.has(file)),
     ]),
     e2e: sortedUnique([SMOKE, ...selectedSites.flatMap((site) => SITE_E2E[site] ?? [])]),
-    avalon: sites.has("games"),
     files: normalized,
   };
 }

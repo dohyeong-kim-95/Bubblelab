@@ -168,7 +168,7 @@ npx wrangler@4 dev --local --local-upstream localhost
 
 ## CI와 배포
 
-- `ci.yml`: pull request에서 루트 인프라 테스트·전체 빌드와 Avalon 테스트·빌드를
+- `ci.yml`: pull request에서 루트 인프라 테스트·전체 빌드를
   실행합니다. 배포용 secret을 사용하지 않으며 Cloudflare에 배포하지 않습니다.
 - `deploy.yml`: `main` push와 `main` 대상 수동 실행에서 동작하는 배포의 기준
   구현입니다. 알려진 단일 서브도메인은 해당 단위 테스트와 관련 E2E를 고르고,

@@ -98,7 +98,7 @@
       "LIFE_SINK_SECRET"
     ]
   },
-  // /_rt/<이름> 실시간 데이터 서버 (아발론 등 멀티플레이어 토이용)
+  // /_rt/<이름> 실시간 데이터 서버 (야추·라이어 게임 — ENABLE_REALTIME 으로 닫혀 있다)
   "durable_objects": {
     "bindings": [
       { "name": "REALTIME", "class_name": "RealtimeDO" },

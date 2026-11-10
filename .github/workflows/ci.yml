@@ -24,9 +24,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            _src/avalon/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install root dependencies
         run: npm ci
@@ -39,15 +37,6 @@ jobs:
 
       - name: Build Bubblelab
         run: node _infra/build.mjs
-
-      - name: Install Avalon dependencies
-        run: npm ci --prefix _src/avalon
-
-      - name: Test and build Avalon
-        run: npm run test:ci --prefix _src/avalon
-
-      - name: Verify games/avalon matches the source build
-        run: node _infra/check-avalon-sync.mjs
 
       - name: Install Chromium for smoke tests
         run: npx playwright install --with-deps chromium

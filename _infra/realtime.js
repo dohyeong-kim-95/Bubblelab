@@ -1,7 +1,7 @@
 // 범용 실시간 데이터 서버 (Durable Object).
 // Firebase Realtime Database의 서브셋을 WebSocket 위에 구현한다:
 // 경로 기반 JSON 트리 + get/set/update/구독 + 접속종료 시 쓰기(onDisconnect).
-// /_rt/<이름> 으로 접속하면 이름당 하나의 독립된 트리를 갖는다 (예: /_rt/avalon).
+// /_rt/<이름> 으로 접속하면 이름당 하나의 독립된 트리를 갖는다 (예: /_rt/yacht).
 //
 // 프로토콜 (JSON 텍스트 프레임):
 //   클라 → 서버: { id?, op, path, value? }

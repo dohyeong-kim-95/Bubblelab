@@ -25,7 +25,6 @@ function expectScoped(file, site, tests, e2e = []) {
   assert.deepEqual(plan.sites, [site]);
   assert.deepEqual(plan.tests, [BUILD_CONTRACT, ...tests].sort());
   assert.deepEqual(plan.e2e, [SMOKE, ...e2e].sort());
-  assert.equal(plan.avalon, site === "games");
   assert.deepEqual(plan.files, [file]);
 }
 
@@ -76,10 +75,9 @@ test("assets 변경은 카탈로그와 생성기 전체 테스트를 고른다",
   ]);
 });
 
-test("games 변경은 멀티플레이와 Avalon 검증까지 고른다", () => {
-  expectScoped("games/avalon/index.html", "games", [
-    "_infra/check-avalon-sync.test.mjs", "_infra/liargame.test.mjs",
-    "_infra/realtime.test.mjs", "_infra/stepcam.test.mjs",
+test("games 변경은 멀티플레이 테스트까지 고른다", () => {
+  expectScoped("games/yacht/index.html", "games", [
+    "_infra/liargame.test.mjs", "_infra/realtime.test.mjs", "_infra/stepcam.test.mjs",
   ]);
 });
 
@@ -119,7 +117,7 @@ test("앱 안 README는 실제 서빙 파일일 수 있어 scoped다", () => {
 test("배포되지 않는 문서만 바뀌면 실행할 일이 없다", () => {
   const files = ["README.md", "docs/ops.md", ".omx/notepad.md", ".codex/config.md", ".agents/notes.md"];
   assert.deepEqual(planDeployment(files), {
-    mode: "none", sites: [], tests: [], e2e: [], avalon: false, files: [...files].sort(),
+    mode: "none", sites: [], tests: [], e2e: [], files: [...files].sort(),
   });
 });
 
@@ -149,7 +147,6 @@ test("full 계획은 현재 unit 및 e2e 파일을 빠짐없이 열거한다", (
   const plan = planDeployment(["_shared/share.js"]);
   assert.deepEqual(plan.tests, unit);
   assert.deepEqual(plan.e2e, e2e);
-  assert.equal(plan.avalon, true);
 });
 
 test("npm test 또는 e2e 경로의 새 검사가 분류표에 없으면 앱 변경도 full로 넓힌다", () => {
@@ -169,8 +166,8 @@ test("npm test 또는 e2e 경로의 새 검사가 분류표에 없으면 앱 변
 test("npm test 밖의 source 테스트는 배포 범위를 넓히지 않는다", () => {
   const root = mkdtempSync(join(tmpdir(), "deploy-scope-source-tests-"));
   try {
-    mkdirSync(join(root, "_src/avalon"), { recursive: true });
-    writeFileSync(join(root, "_src/avalon/vitest.test.mjs"), "");
+    mkdirSync(join(root, "_src/some-app"), { recursive: true });
+    writeFileSync(join(root, "_src/some-app/vitest.test.mjs"), "");
     const plan = planDeployment(["life/index.html"], { root });
     assert.equal(plan.mode, "scoped");
     assert.deepEqual(plan.sites, ["life"]);
@@ -267,10 +264,9 @@ test("agent-scope.conf 가 한 서브도메인 소유로 적은 _infra 파일은
   assert.ok(util.tests.includes("_infra/yaksok.test.mjs"));
   assert.ok(util.e2e.includes("_infra/e2e/yaksok.spec.mjs"));
 
-  // 와일드카드 소유(_src/emoticon/*, _src/avalon/*)도 따른다
-  assert.deepEqual(planDeployment(["_src/emoticon/dageudangs/tokens.json"]).sites, ["work"]);
-  const avalon = planDeployment(["_src/avalon/src/firebase.js"]);
-  assert.deepEqual([avalon.mode, avalon.sites, avalon.avalon], ["scoped", ["games"], true]);
+  // 와일드카드 소유(_src/emoticon/*)도 따른다
+  const wild = planDeployment(["_src/emoticon/dageudangs/tokens.json"]);
+  assert.deepEqual([wild.mode, wild.sites], ["scoped", ["work"]]);
 
   // *shared* 줄은 소유가 아니다 — 공용이 하나라도 끼면 전체
   for (const shared of ["_infra/worker.js", "_infra/build.mjs", "_infra/e2e/smoke.spec.mjs", "wrangler.jsonc"]) {

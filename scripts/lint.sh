@@ -27,8 +27,6 @@ for file in "${files[@]}"; do
   [ -f "$file" ] || continue          # 삭제된 파일은 건너뛴다
   case "$file" in
     node_modules/*|dist/*|*/node_modules/*) continue ;;
-    # 아발론 빌드 산출물은 번들러가 만든 것이라 검사 대상이 아니다
-    games/avalon/*|_src/avalon/dist/*) continue ;;
   esac
 
   case "$file" in

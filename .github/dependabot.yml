@@ -10,15 +10,6 @@ updates:
       timezone: Asia/Seoul
     open-pull-requests-limit: 5
 
-  - package-ecosystem: npm
-    directory: /_src/avalon
-    schedule:
-      interval: weekly
-      day: monday
-      time: "09:00"
-      timezone: Asia/Seoul
-    open-pull-requests-limit: 5
-
   - package-ecosystem: github-actions
     directory: /
     schedule:

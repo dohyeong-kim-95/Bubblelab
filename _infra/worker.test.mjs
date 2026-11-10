@@ -8,7 +8,7 @@ const ctx = { waitUntil() {} };
 test("realtime routes are closed unless explicitly enabled", async () => {
   const env = { ENABLE_REALTIME: "false" };
   const realtime = await worker.fetch(
-    new Request("https://games.bubblelab.dev/_rt/avalon", {
+    new Request("https://games.bubblelab.dev/_rt/yacht", {
       headers: { Upgrade: "websocket" },
     }),
     env,
@@ -175,7 +175,7 @@ test("life 백업은 세션이 올리고 sink 토큰이 받아 간다", async ()
 
 test("enabled realtime still rejects missing websocket origin before binding access", async () => {
   const response = await worker.fetch(
-    new Request("https://games.bubblelab.dev/_rt/avalon", {
+    new Request("https://games.bubblelab.dev/_rt/yacht", {
       headers: { Upgrade: "websocket" },
     }),
     { ENABLE_REALTIME: "true" },
@@ -873,7 +873,7 @@ test("public static assets cache by stability while HTML and JSON keep their exi
   };
 
   const fetch = (url) => worker.fetch(new Request(url), env, ctx);
-  let response = await fetch("https://games.bubblelab.dev/avalon/assets/index-DwRzto2u.js");
+  let response = await fetch("https://games.bubblelab.dev/some-app/assets/index-DwRzto2u.js");
   assert.equal(response.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
 
   response = await fetch("https://www.bubblelab.dev/_shared/search-rules.js");

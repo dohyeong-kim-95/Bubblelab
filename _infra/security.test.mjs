@@ -56,7 +56,7 @@ test("rejects cross-origin mutations and oversized declared bodies", () => {
 });
 
 test("requires an exact browser origin for websocket upgrades", () => {
-  const allowed = new Request("https://games.bubblelab.dev/_rt/avalon", {
+  const allowed = new Request("https://games.bubblelab.dev/_rt/yacht", {
     headers: { Origin: "https://games.bubblelab.dev" },
   });
   assert.equal(validateWebSocketOrigin(allowed), null);

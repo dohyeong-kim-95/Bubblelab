@@ -16,7 +16,6 @@ pops_generator/
 # verify-prod 자격증명 (로컬 전용)
 .verify.env
 .deploy-plan.json
-.avalon-verified
 
 
 # sudo 없이 받은 WebKit e2e 용 시스템 라이브러리(scripts/webkit-libs.sh)

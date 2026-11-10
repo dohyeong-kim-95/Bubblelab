@@ -47,18 +47,6 @@ test("설치된 Chrome과 공통 선택기로 검증하고 라이브 검증까�
   assert.match(workflow, /github.ref == 'refs\/heads\/main'/);
 });
 
-test("아발론은 내용이 바뀌었을 때만 검증한다", () => {
-  // 키가 소스와 산출물의 내용 해시여야 한다. 커밋 이력을 보면 force-push 에 취약하다.
-  assert.match(workflow, /key:\s*avalon-\$\{\{\s*hashFiles\('_src\/avalon\/\*\*',\s*'games\/avalon\/\*\*'\)/,
-    "아발론 캐시 키가 내용 해시가 아니다");
-  for (const step of ["Test and build Avalon", "Verify games/avalon matches the source build"]) {
-    const at = workflow.indexOf(step);
-    assert.ok(at > 0, `${step} 단계가 없다`);
-    assert.match(workflow.slice(at, at + 260), /steps\.avalon\.outputs\.cache-hit\s*!=\s*'true'/,
-      `${step} 이 무조건 돈다 — 몇 주씩 안 바뀌는 것을 매번 다시 검증하게 된다`);
-  }
-});
-
 test("설치는 audit·funding 왕복을 하지 않는다", () => {
   for (const [, cmd] of workflow.matchAll(/run:\s*(npm ci[^\n]*)/g)) {
     assert.match(cmd, /--no-audit/, `${cmd} 에 --no-audit 이 없다`);

@@ -44,8 +44,6 @@ copy_deps() {
   local dir="$1"
   [ -d "$ROOT/node_modules" ] && [ ! -e "$dir/node_modules" ] &&
     cp -r "$ROOT/node_modules" "$dir/node_modules"
-  [ -d "$ROOT/_src/avalon/node_modules" ] && [ ! -e "$dir/_src/avalon/node_modules" ] &&
-    cp -r "$ROOT/_src/avalon/node_modules" "$dir/_src/avalon/node_modules"
   return 0
 }
 

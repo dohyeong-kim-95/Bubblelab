@@ -79,7 +79,7 @@ const PUZZLE_TO_SLOP = new Map([
   ["pullpin", "pinrush"], ["gaterunner", "gaterush"], ["savedog", "dogrush"],
   ["parkmaster", "parkrush"], ["screwout", "screwrush"], ["icebreak", "icerush"],
 ]);
-const REALTIME_NAMESPACES = new Set(["avalon", "liargame", "yacht"]);
+const REALTIME_NAMESPACES = new Set(["liargame", "yacht"]);
 // cron이 리뷰를 주기적으로 동기화할 외주 프로젝트 목록 (커머스 API, 현재 mock).
 const WORK_REVIEW_PROJECTS = ["daonfit"];
 import { handleFortuneChart, handleFortunePush, sendFortuneDaily } from "./fortune.js";
