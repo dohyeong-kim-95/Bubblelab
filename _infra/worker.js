@@ -79,7 +79,6 @@ const PUZZLE_TO_SLOP = new Map([
   ["pullpin", "pinrush"], ["gaterunner", "gaterush"], ["savedog", "dogrush"],
   ["parkmaster", "parkrush"], ["screwout", "screwrush"], ["icebreak", "icerush"],
 ]);
-const REALTIME_NAMESPACES = new Set(["liargame", "yacht"]);
 // cron이 리뷰를 주기적으로 동기화할 외주 프로젝트 목록 (커머스 API, 현재 mock).
 const WORK_REVIEW_PROJECTS = ["daonfit"];
 import { handleFortuneChart, handleFortunePush, sendFortuneDaily } from "./fortune.js";
@@ -110,7 +109,6 @@ import {
   publicCatalog,
 } from "./asset-flags.js";
 
-export { RealtimeDO } from "./realtime.js";
 export { ChatDO } from "./chat.js";
 export { WorkQnaDO } from "./workqna.js";
 export { WorkReviewsDO } from "./reviews.js";
@@ -792,7 +790,7 @@ async function serveAssetCatalog(request, env, url) {
 // 있어야 할 바인딩. 배포는 성공했는데 바인딩 하나가 빠져 특정 기능만 죽는
 // 경우가 실제로 잘 생긴다 — 화면을 열어봐야 알던 것을 프로브 한 번으로 본다.
 export const HEALTH_BINDINGS = [
-  "ASSETS", "ANALYTICS", "RECORDS", "RATE_LIMITER", "REALTIME",
+  "ASSETS", "ANALYTICS", "RECORDS", "RATE_LIMITER",
   "CHAT", "PODCAST", "DURI", "ASSET_FLAGS", "BRIEF", "FORTUNE",
   "WORK_QNA", "WORK_REVIEWS", "PODCAST_BUCKET", "DURI_BUCKET", "LIFE",
   "LIFE_BUCKET", "YAKSOK", "OPIC",
@@ -826,7 +824,6 @@ export async function serveHealth(request, env, url) {
       chat: featureEnabled(env, "ENABLE_CHAT"),
       podcast: featureEnabled(env, "ENABLE_PODCAST"),
       duri: featureEnabled(env, "ENABLE_DURI"),
-      realtime: featureEnabled(env, "ENABLE_REALTIME"),
       life: featureEnabled(env, "ENABLE_LIFE"),
       opic: featureEnabled(env, "ENABLE_OPIC"),
     },
@@ -1580,29 +1577,6 @@ export async function handleRequest(request, env, ctx) {
       if (limited) return limited;
       const id = env.CHAT.idFromName("lobby");
       return env.CHAT.get(id).fetch(request);
-    }
-
-    // 실시간 데이터 서버: /_rt/<이름> → 이름당 Durable Object 하나.
-    // 임의 이름 폭주로 DO가 무한 생성되지 않게 형식·길이를 제한한다.
-    if (path.startsWith("/_rt/")) {
-      if (!featureEnabled(env, "ENABLE_REALTIME")) {
-        return Response.json({ error: "realtime experiments are temporarily unavailable" }, {
-          status: 503,
-          headers: { "Cache-Control": "no-store", "Retry-After": "86400" },
-        });
-      }
-      const name = path.slice("/_rt/".length).split("/")[0];
-      if (!REALTIME_NAMESPACES.has(name)) {
-        return new Response("invalid name", { status: 400 });
-      }
-      const originError = validateWebSocketOrigin(request);
-      if (originError) return originError;
-      const limited = await enforceRateLimit(request, env, {
-        scope: `realtime-connect:${name}`, limit: 20, windowMs: 60 * 1000,
-      });
-      if (limited) return limited;
-      const id = env.REALTIME.idFromName(name);
-      return env.REALTIME.get(id).fetch(request);
     }
 
     // Duri 실시간 중계 + 사진 버퍼: /_duri (work.bubblelab.dev/duri 전용).

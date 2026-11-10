@@ -143,9 +143,9 @@ test("남의 conf 소유 파일은 거부된다", () => {
 });
 
 test("아무에게도 속하지 않는 공용 인프라는 거부된다", () => {
-  // security.js/webpush.js/realtime.js 는 오케스트레이터 몫이다
+  // security.js/webpush.js 는 오케스트레이터 몫이다
   assert.equal(commitWith("agent/duri/x", ["_infra/security.js"]).ok, false);
-  assert.equal(commitWith("agent/games/x", ["_infra/realtime.js"]).ok, false);
+  assert.equal(commitWith("agent/games/x", ["_infra/webpush.js"]).ok, false);
 });
 
 // --- 린트·테스트 게이트 ----------------------------------------------------

@@ -10,7 +10,6 @@ Bubblelab의 정적 빌드, 단일 Cloudflare Worker, Durable Object 저장소�
 | `build.mjs` | 공개 사이트·공용 파일을 `dist/`로 복사하고 카드 페이지와 404 생성 |
 | `worker.js` | 호스트 라우팅, 공개 API, 관리자·플래너 세션 처리 |
 | `security.js` | 동일 출처 검사, 보안 헤더, IP 원문을 남기지 않는 `RateLimiterDO` |
-| `realtime.js` | 경로 기반 JSON 실시간 서버 `RealtimeDO` |
 | `chat.js` | 익명 채팅 단일 로비 `ChatDO`. 메시지 미저장, 설정만 보관 |
 | `analytics.js` | 익명 방문 집계와 Slop 연속 방문 `AnalyticsDO` |
 | `records.js` | 주간·개인·올타임 기록, 공지, 아이디어 우편함 `RecordsDO` |
@@ -53,7 +52,6 @@ Worker는 다음 우선순위로 요청을 처리합니다.
 | `/_records`, `/_personal` | 주간·올타임·개인 기록 조회와 제출 |
 | `/_chat` | 익명 채팅 로비 WebSocket (util/chat). 메시지 미저장 |
 | `/_podcast/*` | 데일리 팟캐스트 API (초대 코드 로그인·업로드·생성·오디오). 기본 비활성 |
-| `/_rt/<namespace>` | namespace별 실시간 Durable Object. 기본 비활성 |
 | 나머지 | 호스트명을 `dist/<site>/`에 매핑 |
 
 예를 들어 `slop.bubblelab.dev/fruitmerge`는 `dist/slop/fruitmerge`로,
@@ -91,9 +89,6 @@ node _infra/build.mjs
 
 ## Durable Object
 
-- `RealtimeDO`: Firebase RTDB와 비슷한 `get`, `set`, `update`, 구독,
-  `onDisconnect`, 서버 타임스탬프를 WebSocket 위에 제공합니다. namespace별 JSON
-  트리를 통째로 저장하므로 소규모 친구 게임에 맞춘 구조입니다.
 - `AnalyticsDO`: IP와 User-Agent를 저장하지 않고 익명 방문자 쿠키 기준으로 HTML
   문서 방문을 멱등 집계합니다. HTML을 연 브라우저 전체(`seen:`)와 별도로, 화면
   표시 3초+ 체류 또는 상호작용이 확인된 유효 방문자(`qseen:`)를 함께 셉니다 —
@@ -140,7 +135,6 @@ Worker secrets:
 
 Worker vars:
 
-- `ENABLE_REALTIME`: 기본 `false`. ACL 검토 없이 `true`로 바꾸지 않습니다.
 - `ENABLE_CHAT`: 익명 채팅 로비. 값이 없으면 fail-closed로 닫힙니다.
 - `ENABLE_PODCAST`: 데일리 팟캐스트. 기본 `false`(fail-closed). 켜기 전에
   `PODCAST_SESSION_SECRET` secret과 R2 버킷 `bubblelab-podcast`가 필요합니다.

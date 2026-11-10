@@ -160,14 +160,10 @@ MCP 로 진행한다** — 순서는 같은 파일의 「`gh` 가 없는 환경�
 
 ## 멀티플레이어가 필요하면
 
-자체 실시간 서버(Durable Object)가 `/_rt/<이름>` 에 있다 (Firebase RTDB
-서브셋: 경로 트리 + 구독 + onDisconnect). 클라이언트는 `_shared/realtime-client.js`,
-방 관리는 `_shared/multiplayer-room.js`(쓰는 예: `games/liargame`). 외부 서비스를
-추가하지 말 것.
-
-**지금은 닫혀 있다** — `ENABLE_REALTIME=false`(2026-07-17~)라 `/_rt/*` 는 503 이고,
-이것을 쓰는 `games/yacht`·`games/liargame` 은 카드 목록에서 빠져 있다. 사용자 인증과
-방별 읽기·쓰기 권한이 없어서다. 값만 `true` 로 바꾸지 말 것(`games/README.md`).
+**범용 실시간 서버는 없다.** 예전의 `/_rt/<이름>`(`RealtimeDO`)과 그것을 쓰던 야추·라이어
+게임은 2026-11-10 에 걷어냈다 — 사용자 인증과 방별 읽기·쓰기 권한이 없어 넉 달째 닫혀
+있었다. 다시 만든다면 그 권한 모델부터 설계하고, 외부 서비스(Firebase 등)는 추가하지 말 것.
+소스는 git 이력에 있다(`git log -- _infra/realtime.js`).
 
 익명 채팅(`util/chat`)은 별도의 전용 DO를 쓴다: `_infra/chat.js`의
 `ChatDO`(`/_chat` WebSocket, 단일 로비, 메시지 미저장 브로드캐스트).

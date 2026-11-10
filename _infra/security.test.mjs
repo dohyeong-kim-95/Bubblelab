@@ -21,9 +21,9 @@ class MemoryStorage {
 }
 
 test("security-sensitive feature flags are exact and default closed", () => {
-  assert.equal(featureEnabled({}, "ENABLE_REALTIME"), false);
-  assert.equal(featureEnabled({ ENABLE_REALTIME: "false" }, "ENABLE_REALTIME"), false);
-  assert.equal(featureEnabled({ ENABLE_REALTIME: "true" }, "ENABLE_REALTIME"), true);
+  assert.equal(featureEnabled({}, "ENABLE_CHAT"), false);
+  assert.equal(featureEnabled({ ENABLE_CHAT: "false" }, "ENABLE_CHAT"), false);
+  assert.equal(featureEnabled({ ENABLE_CHAT: "true" }, "ENABLE_CHAT"), true);
 });
 
 test("requires JSON for JSON-only API requests", () => {
@@ -56,8 +56,8 @@ test("rejects cross-origin mutations and oversized declared bodies", () => {
 });
 
 test("requires an exact browser origin for websocket upgrades", () => {
-  const allowed = new Request("https://games.bubblelab.dev/_rt/yacht", {
-    headers: { Origin: "https://games.bubblelab.dev" },
+  const allowed = new Request("https://util.bubblelab.dev/_chat", {
+    headers: { Origin: "https://util.bubblelab.dev" },
   });
   assert.equal(validateWebSocketOrigin(allowed), null);
   assert.equal(validateWebSocketOrigin(new Request(allowed.url))?.status, 403);

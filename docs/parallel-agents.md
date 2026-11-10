@@ -79,7 +79,7 @@ _infra/agent-worktree.sh remove <서브도메인> [--force]
 잡는다.
 
 어디에도 속하지 않는 공용 인프라(`_infra/security.js`, `webpush.js`,
-`realtime.js`, `home-button.test.mjs`, `_shared/` 대부분)는 **에이전트가 못
+`home-button.test.mjs`, `_shared/` 대부분)는 **에이전트가 못
 건드린다.** 필요하면 오케스트레이터가 별도로 처리한다.
 
 ## 흐름

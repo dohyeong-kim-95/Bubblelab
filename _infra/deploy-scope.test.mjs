@@ -32,7 +32,7 @@ test("서브도메인 하나만 바뀌면 스모크와 그 서브도메인의 sp
     "_infra/e2e/duri-picker.spec.mjs", "_infra/e2e/duri-timelapse.spec.mjs",
   ]);
   expectScoped("util/stars/index.html", "util", ["_infra/e2e/yaksok.spec.mjs"]);
-  expectScoped("games/yacht/index.html", "games");
+  expectScoped("games/stepcam/index.html", "games");
 });
 
 test("공용 www를 제외한 현재 배포 루트는 scoped 분류된다", () => {

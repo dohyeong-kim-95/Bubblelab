@@ -5,17 +5,8 @@ import { AssetFlagsDO } from "./asset-flags.js";
 
 const ctx = { waitUntil() {} };
 
-test("realtime routes are closed unless explicitly enabled", async () => {
-  const env = { ENABLE_REALTIME: "false" };
-  const realtime = await worker.fetch(
-    new Request("https://games.bubblelab.dev/_rt/yacht", {
-      headers: { Upgrade: "websocket" },
-    }),
-    env,
-    ctx,
-  );
-  assert.equal(realtime.status, 503);
-
+test("podcast routes are closed unless explicitly enabled", async () => {
+  const env = {};
   const podcast = await worker.fetch(
     new Request("https://podcast.bubblelab.dev/_podcast/session"),
     env,
@@ -171,17 +162,6 @@ test("life 백업은 세션이 올리고 sink 토큰이 받아 간다", async ()
     method: "PUT", body: backup,
     headers: { Authorization: `Bearer ${token}`, Origin: "https://life.bubblelab.dev", "Content-Type": "application/json" },
   }), env, ctx)).status, 401);
-});
-
-test("enabled realtime still rejects missing websocket origin before binding access", async () => {
-  const response = await worker.fetch(
-    new Request("https://games.bubblelab.dev/_rt/yacht", {
-      headers: { Upgrade: "websocket" },
-    }),
-    { ENABLE_REALTIME: "true" },
-    ctx,
-  );
-  assert.equal(response.status, 403);
 });
 
 test("work preview stays closed without a password and gates access with one", async () => {
@@ -807,7 +787,7 @@ test("/_health 는 서빙 중인 커밋과 바인딩을 읽기 전용으로 알�
   const stamp = { commit: "c".repeat(40), builtAt: "2026-08-12T00:00:00.000Z", siteCount: 14 };
   let assetRequests = 0;
   const env = {
-    ENABLE_CHAT: "true", ENABLE_REALTIME: "false",
+    ENABLE_CHAT: "true",
     ASSETS: {
       fetch(request) {
         assetRequests++;
@@ -826,7 +806,7 @@ test("/_health 는 서빙 중인 커밋과 바인딩을 읽기 전용으로 알�
   assert.equal(body.siteCount, 14);
   assert.match(body.date, /^\d{4}-\d{2}-\d{2}$/);
   assert.equal(body.features.chat, true);
-  assert.equal(body.features.realtime, false);
+  assert.equal(body.features.podcast, false);
   assert.equal(body.bindings.CHAT, true);
   assert.equal(body.bindings.RECORDS, false, "없는 바인딩을 있다고 하면 안 된다");
   // 서브도메인 이름 목록은 담지 않는다 — 비공개 서브도메인은 주소를 모르는 것이

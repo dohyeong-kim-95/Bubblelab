@@ -141,7 +141,7 @@ test("소리 토글을 쓰는 토이가 빠짐없이 독을 쓴다", () => {
 
 // 비공개 카드는 목록에서 빠지되 주소로는 열려야 한다. 한쪽만 걸면 어중간해진다.
 test("비공개 카드는 카테고리 홈에 없지만 페이지는 살아 있다", () => {
-  for (const [site, names] of [["util", ["passport-pic"]], ["games", ["liargame", "yacht"]]]) {
+  for (const [site, names] of [["util", ["passport-pic"]]]) {
     const home = readFileSync(join(DIST, site, "index.html"), "utf8");
     for (const name of names) {
       assert.ok(!home.includes(`href="/${name}/"`), `${site} 홈에 ${name} 카드가 다시 나왔다`);
@@ -243,7 +243,7 @@ test("비공개 서브도메인·감춘 카드는 검색 색인에도 없다", (
     const leaked = cards.filter((c) => c.site === site).map((c) => c.name);
     assert.deepEqual(leaked, [], `${site}가 검색 색인에 샜다`);
   }
-  for (const name of ["liargame", "yacht", "passport-pic"]) {
+  for (const name of ["passport-pic"]) {
     const leaked = cards.filter((c) => c.name === name).map((c) => `${c.site}/${c.name}`);
     assert.deepEqual(leaked, [], `${name}이 검색 색인에 샜다`);
   }
