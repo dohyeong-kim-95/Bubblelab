@@ -8,7 +8,7 @@
 | 폴더 | 서버 | 테스트 |
 | --- | --- | --- |
 | `brief/` | `/_brief/today`·`/rates`·`/push` → `_infra/brief.js` (BriefDO) | `_infra/brief.test.mjs`, e2e |
-| `fortune/` | `/_fortune/chart`·`/push` → `_infra/fortune.js` (FortuneDO), 신살·12운성·대운은 `_infra/saju-detail.js`, 토정비결 작괘는 `_infra/tojeong.js`(본문은 정적 `fortune/tojeong/<괘>.json`) | `_infra/fortune.test.mjs`, `_infra/saju-detail.test.mjs`, `_infra/tojeong.test.mjs`, e2e |
+| `fortune/` | `/_fortune/chart`(`partner` 본문이 오면 궁합까지)·`/push` → `_infra/fortune.js` (FortuneDO, 오늘의 운세 v3), 신살·12운성·대운은 `_infra/saju-detail.js`, 명식 풀이·궁합 문단은 `_infra/saju-reading.js`, 토정비결 작괘는 `_infra/tojeong.js`(본문은 정적 `fortune/tojeong/<괘>.json`), 토정 현대어 해설은 `fortune/tojeong-reading.js`(브라우저·테스트 공용) | `_infra/fortune.test.mjs`, `_infra/saju-detail.test.mjs`, `_infra/saju-reading.test.mjs`, `_infra/tojeong.test.mjs`, `_infra/tojeong-reading.test.mjs`, e2e |
 | `yaksok/` | `/_yaksok/rooms[/<코드>[/<동작>]]` → `_infra/yaksok.js` (**방마다 `YaksokDO` 하나**, 사진도 이 DO 에 조각 저장), 캡처 인식은 `_infra/yaksok-receipt.js`(Gemini). 방 주소 `/yaksok/<코드>`는 워커가 화면+단계별 OG 로 내준다. 규칙은 `yaksok/logic.js` 하나(화면·서버 공용), 카드 `card.js`·캐릭터 `sprite.js`·ZIP `zip.js` | `_infra/yaksok.test.mjs`, `_infra/e2e/yaksok.spec.mjs`, verify `api:yaksok` |
 | `chat/` | `/_chat` WebSocket → `_infra/chat.js` `ChatDO` (`idFromName("lobby")`, 단일 로비) | `_infra/chat.test.mjs`, verify `chat:ws` |
 | `proofread/` | 없음 — 규칙표 `util/proofread/rules.js` 하나 | `_infra/proofread.test.mjs`, e2e |
@@ -39,6 +39,11 @@ KST로 자르며, 방식이 서로 다르다.
 `_infra/saju-detail.js`가 통용 기준 하나를 골라 `SHINSAL_RULES`(`shinsal-kr-v1`)로 버전을
 붙이고 응답·화면에 밝힌다. 표를 고치면 버전을 올리고, 표에 없는 신살은 지어 넣지 않는다.
 대운은 라이브러리 값이며 성별이 있어야 나온다.
+
+**풀이 문장은 조각 표의 조합이다.** 명식 풀이·오늘의 운세·궁합·토정 해설 모두 해요체 문단을
+조건별 조각에서 골라 접속어로 잇는다(LLM·외부 API 없음). 결과마다 `picks`(고른 조각 키)를 실어
+테스트는 문장이 아니라 선택 규칙을 본다. 표를 고치면 버전(`saju-reading-kr-v1`,
+`natal-daymaster+daily-pillar-v3`, `tojeong-reading-kr-v1`)을 올린다. 단정·공포 표현 대신 조언형.
 
 **토정비결 본문은 손으로 고치지 않는다.** `util/fortune/tojeong/*.json` 144개는
 `node _infra/tojeong-import.mjs`가 원문(한문·독음)·번역표·교정표를 합쳐 쓰고, 번역이 빠진

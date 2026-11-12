@@ -4,185 +4,211 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>오늘의 운세 · 사주 · 토정비결</title>
-<meta name="description" content="생년월일로 보는 오늘의 운세·사주·토정비결.">
+<meta name="description" content="생년월일로 보는 오늘의 운세·사주 풀이·궁합·토정비결.">
 <meta name="bl-group" content="매일">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🔮</text></svg>">
 <link rel="stylesheet" href="/_shared/bubble.css">
 <style>
   :root { --accent-h: 201; }
   * { box-sizing: border-box; }
-  body { margin: 0; min-height: 100dvh; display: flex; align-items: center; justify-content: center;
-         padding: 1.5rem 1rem; }
-  main { width: min(30rem, 100%); }
+  /* 아래 여백은 우하단 유틸 독(홈·공유) 몫 — 마지막 내용이 독 밑에 깔리지 않게 */
+  body { margin: 0; min-height: 100dvh; padding: 1.5rem 1rem 6.5rem; }
+  main { width: min(30rem, 100%); margin: 0 auto; }
   .bl-head { margin-bottom: .5rem; }
-  .date { margin: 0 0 1rem; color: var(--muted); font-size: .85rem; }
+  .date { margin: 0 0 .8rem; color: var(--muted); font-size: .85rem; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  [hidden] { display: none !important; }
+  h2 { margin: 0 0 .6rem; font-size: 1rem; font-weight: 800; letter-spacing: -.01em; }
+  h3 { margin: 0 0 .4rem; font-size: .84rem; font-weight: 700; }
+  .card { padding: 1.2rem 1.1rem; }
+  .stack > * + * { margin-top: .9rem; }
+  .prose { margin: 0; font-size: .92rem; line-height: 1.75; word-break: keep-all; }
+  .sub { color: var(--muted); }
+  .note { margin: .5rem 0 0; font-size: .74rem; line-height: 1.55; color: var(--muted); }
 
-  .card { padding: 1.3rem 1.2rem; }
+  /* 탭 — 생년월일이 있을 때만 뜬다. 위에 붙어 있어 긴 탭에서도 바로 옮겨 갈 수 있다. */
+  .tabs { position: sticky; top: 0; z-index: 5; display: flex; gap: .35rem; margin: 0 -1rem .9rem;
+          padding: .5rem 1rem; overflow-x: auto; scrollbar-width: none; background: var(--bg);
+          border-bottom: 1px solid var(--line); }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tabs .bl-chip { flex: none; padding: .3rem .8rem; font-size: .86rem; }
 
-  #fortune { text-align: center; }
-  #fortune .emoji { font-size: 2.6rem; line-height: 1; }
-  #fortune .text { margin: 1rem 0 0; font-size: 1.08rem; line-height: 1.7;
-                   min-height: 3.4em; display: flex; align-items: center; justify-content: center; }
-  #fortune .basis { margin: .65rem 0 0; font-size: .7rem; line-height: 1.45; color: var(--muted); }
-  .fortune-categories { display: grid; gap: .38rem; margin-top: 1rem; }
-  .fortune-category { display: grid; grid-template-columns: 3.4rem minmax(0, 1fr);
-                      grid-template-areas: "name comment" "level comment";
-                      column-gap: .6rem; row-gap: .2rem; align-items: start; padding: .6rem .7rem;
-                      border-radius: var(--r-sm); text-align: left; font-size: .8rem;
-                      line-height: 1.5; background: var(--sunk); }
-  .fortune-category-name { grid-area: name; font-weight: 700; }
-  .fortune-category-comment { grid-area: comment; min-width: 0; color: var(--muted); }
-  .fortune-category-level { grid-area: level; justify-self: start; padding: .05rem .45rem;
-                            border-radius: var(--pill); font: 600 .72rem/1.45 var(--sans); white-space: nowrap;
+  /* 용어 풀이 — 점선 밑줄 단어를 누르면 아래에서 뜬다 */
+  .term { padding: 0; border: 0; background: none; color: inherit; font: inherit;
+          text-decoration: underline dotted color-mix(in srgb, var(--accent) 70%, transparent);
+          text-underline-offset: .2em; cursor: help; }
+  #gloss { position: fixed; left: 50%; bottom: 1rem; z-index: 10000; width: min(28rem, calc(100% - 2rem));
+           transform: translateX(-50%); padding: 1rem 1.1rem 1.05rem; }
+  #gloss h3 { margin: 0 2rem .35rem 0; font-size: .95rem; color: var(--accent); }
+  #gloss p { margin: 0; font-size: .86rem; line-height: 1.65; }
+  #gloss-close { position: absolute; top: .45rem; right: .45rem; width: 2rem; height: 2rem; border: 0;
+                 border-radius: 50%; background: var(--sunk); }
+
+  /* 오늘의 운세 */
+  #fortune .head { display: flex; gap: .75rem; align-items: flex-start; }
+  #fortune .emoji { flex: none; font-size: 2.2rem; line-height: 1; }
+  #fortune .text { margin: 0; font-size: .98rem; line-height: 1.75; word-break: keep-all; }
+  #fortune.generic .head { flex-direction: column; align-items: center; text-align: center; }
+  #fortune.generic .emoji { font-size: 2.6rem; }
+  .fortune-categories { display: grid; gap: .4rem; margin-top: 1rem; }
+  .fortune-category { padding: .65rem .75rem; border-radius: var(--r-sm); background: var(--sunk);
+                      font-size: .84rem; line-height: 1.6; }
+  .fortune-category-top { display: flex; align-items: center; gap: .45rem; margin-bottom: .15rem; }
+  .fortune-category-name { font-weight: 700; }
+  .fortune-category-level { padding: .02rem .5rem; border-radius: var(--pill); font: 600 .72rem/1.45 var(--sans);
                             background: var(--field); box-shadow: inset 0 0 0 1px var(--line); }
   .fortune-category[data-level="원활"] .fortune-category-level { color: var(--ok); }
   .fortune-category[data-level="주의"] .fortune-category-level { color: var(--bad); }
+  .fortune-category-comment { margin: 0; color: var(--muted); word-break: keep-all; }
+  .lucky { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .4rem; margin-top: 1rem; }
+  .lucky div { padding: .55rem .3rem; border-radius: var(--r-sm); text-align: center;
+               background: color-mix(in srgb, var(--accent-soft) 70%, transparent); }
+  .lucky small { display: block; font-size: .68rem; color: var(--muted); }
+  .lucky b { display: block; margin-top: .1rem; font-size: .9rem; word-break: keep-all; }
+  .times { margin: .8rem 0 0; padding: 0; list-style: none; display: grid; gap: .35rem; }
+  .times li { font-size: .84rem; line-height: 1.6; word-break: keep-all; }
+  .times b { margin-right: .3rem; }
   #fortune.is-loading .emoji, #fortune.is-loading .text, #fortune.is-loading .fortune-category {
     color: transparent; border-radius: var(--r-sm);
-    background: linear-gradient(100deg,
-      var(--sunk) 25%,
-      color-mix(in srgb, var(--accent-soft) 70%, var(--sunk)) 42%,
-      var(--sunk) 58%);
-    background-size: 220% 100%; animation: fortune-shimmer 1.25s ease-in-out infinite;
-  }
-  #fortune.is-loading .fortune-category-level { background: none; box-shadow: none; }
-  #fortune.is-loading .emoji { width: 3rem; height: 3rem; margin: 0 auto; border-radius: 50%; }
-  #fortune.is-loading .text { width: min(22rem, 88%); min-height: 3.4rem; margin: 1rem auto 0; }
-  #fortune.is-loading .fortune-category { min-height: 2.6rem; }
+    background: linear-gradient(100deg, var(--sunk) 25%,
+      color-mix(in srgb, var(--accent-soft) 70%, var(--sunk)) 42%, var(--sunk) 58%);
+    background-size: 220% 100%; animation: fortune-shimmer 1.25s ease-in-out infinite; }
+  #fortune.is-loading .fortune-category * { visibility: hidden; }
+  #fortune.is-loading .emoji { width: 2.4rem; height: 2.4rem; border-radius: 50%; }
+  #fortune.is-loading .text { flex: 1; min-height: 4.5rem; }
+  #fortune.is-loading .fortune-category { min-height: 3.4rem; }
   @keyframes fortune-shimmer { to { background-position-x: -220%; } }
   @media (prefers-reduced-motion: reduce) {
     #fortune.is-loading .emoji, #fortune.is-loading .text, #fortune.is-loading .fortune-category { animation: none; }
   }
+  .actions { display: flex; flex-wrap: wrap; gap: .45rem; justify-content: flex-end; margin-top: .9rem; }
+  .saved { margin: 1rem 0 0; text-align: center; }
+  .saved p { margin: 0 0 .4rem; }
 
-  button { font: inherit; color: inherit; cursor: pointer; }
-
-  /* 데일리 알림 (토글 스위치) — bubble.css에 스위치가 없어 토큰으로 직접 짓는다 */
-  #notify { margin-top: 1.1rem; padding: 0 .3rem; }
+  /* 알림 토글 */
+  #notify { padding: 0 .3rem; }
   .notify-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
   .notify-title { font-size: .9rem; font-weight: 700; }
   .notify-help { margin: .6rem 0 0; }
 
-  section { margin-top: 1.2rem; }
-  [hidden] { display: none !important; }
-  .panel-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between;
-                  padding: 0; border: 0; border-radius: 0; background: none; text-align: left; }
-  .panel-toggle h2 { margin: 0 !important; }
-  .panel-chevron { color: var(--muted); font-size: .8rem; transition: transform .18s ease; }
-  .panel-toggle[aria-expanded="false"] .panel-chevron { transform: rotate(-90deg); }
-  .panel-content { margin-top: .3rem; }
-  h2 { font-size: 1rem; font-weight: 800; letter-spacing: -.01em; }
-
-  /* 생년월일 입력 */
+  /* 생년월일 입력 (내 것·상대 것 같은 모양) */
   #reveal { text-align: center; }
-  #form h2 { margin: 0 0 1rem; }
-  #form .row { display: flex; gap: .55rem; align-items: center; margin-bottom: .7rem; }
-  #form label { width: 3.2rem; flex: none; color: var(--muted); font-size: .84rem; text-align: right; }
-  #form .bl-input { flex: 1; min-width: 0; font-size: .92rem; padding: .5rem .6rem; }
+  .birth-form .row { display: flex; gap: .55rem; align-items: center; margin-bottom: .7rem; }
+  .birth-form label { width: 3.2rem; flex: none; color: var(--muted); font-size: .84rem; text-align: right; }
+  .birth-form .bl-input { flex: 1; min-width: 0; font-size: .92rem; padding: .5rem .6rem; }
   .time-mode { display: grid; grid-template-columns: 1fr 1fr; gap: .35rem; width: 100%; }
   .time-mode .bl-chip { justify-content: center; padding: .3rem .5rem; }
   .time-mode.gender-mode { grid-template-columns: repeat(3, 1fr); }
   .time-help { margin: -.3rem 0 .8rem 3.75rem; }
-  #form .form-actions { display: flex; gap: .6rem; margin-top: 1.1rem; }
-  #form .form-actions button { flex: 1; }
-  #err { min-height: 1.1em; margin: .6rem 0 0; font-size: .84rem; text-align: center; color: var(--bad); }
+  .form-actions { display: flex; gap: .6rem; margin-top: 1.1rem; }
+  .form-actions button { flex: 1; }
+  .err { min-height: 1.1em; margin: .6rem 0 0; font-size: .84rem; text-align: center; color: var(--bad); }
 
-  /* 바이오리듬 결과 */
-  #result .sub { margin: 0 0 1.1rem; font-size: .8rem; color: var(--muted); }
-  #result .headline { margin: 0 0 1.2rem; font-size: 1rem; line-height: 1.65; text-align: center; }
-  .bio { margin-bottom: 1rem; }
-  .bio:last-of-type { margin-bottom: 0; }
-  .bio .bio-top { display: flex; justify-content: space-between; align-items: baseline;
-                  font-size: .86rem; margin-bottom: .35rem; }
-  .bio .bio-name { font-weight: 700; }
-  .bio .bio-name small { font-weight: normal; color: var(--muted); margin-left: .35rem; }
-  .bio .bio-pct { font-variant-numeric: tabular-nums; color: var(--muted); }
-  .track { position: relative; height: .5rem; border-radius: var(--pill); background: var(--sunk); overflow: hidden; }
-  .track .mid { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--line); }
-  .track .fill { position: absolute; top: 0; bottom: 0; border-radius: var(--pill);
-                 transition: width .6s ease, left .6s ease; }
-  .bio.phy .fill { background: var(--bad); }
-  .bio.emo .fill { background: var(--warn); }
-  .bio.int .fill { background: var(--ok); }
-  .bio .bio-note { margin: .35rem 0 0; font-size: .82rem; line-height: 1.55; color: var(--muted); }
-  #result .footer { margin-top: 1.3rem; text-align: center; }
-  #result .saved { margin: 0 0 .5rem; }
-
-  /* 사주 명식 */
-  .sub { color: var(--muted); }
-  #saju .sub { margin: 0 0 1rem; font-size: .76rem; line-height: 1.5; }
-  .saju-status { margin: .55rem 0 0; font-size: .66rem; line-height: 1.45; color: var(--muted); }
-  .saju-candidate + .saju-candidate { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+  /* 사주 */
+  .me { text-align: center; }
+  .me .hanja { display: block; font-family: serif; font-size: 2.2rem; line-height: 1.1; }
+  .me .name { display: block; margin-top: .3rem; font-weight: 800; }
+  .me .key { display: block; font-size: .8rem; color: var(--muted); }
+  .me .prose { margin-top: .8rem; text-align: left; }
+  .saju-candidate + .saju-candidate { margin-top: 1.4rem; padding-top: 1.2rem; border-top: 1px solid var(--line); }
   .saju-candidate-title { margin: 0 0 .55rem; font-size: .8rem; color: var(--muted); }
-  .saju-grid { display: grid; grid-template-columns: 3.2rem repeat(4, minmax(0, 1fr));
+  .saju-grid { display: grid; grid-template-columns: 2.9rem repeat(4, minmax(0, 1fr));
                border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
-  .saju-cell { min-width: 0; overflow: hidden; padding: .55rem .15rem; text-align: center;
+  .saju-cell { min-width: 0; overflow: hidden; padding: .5rem .15rem; text-align: center;
                border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
   .saju-cell:nth-child(5n) { border-right: 0; }
   .saju-cell:nth-last-child(-n+5) { border-bottom: 0; }
   .saju-head, .saju-label { display: grid; place-items: center; font-size: .72rem; color: var(--muted);
                             background: var(--sunk); }
-  .saju-char { display: block; font-family: serif; font-size: 1.55rem; line-height: 1.2; }
-  .saju-korean { display: block; margin-top: .18rem; font-size: .74rem; }
-  .saju-meta, .saju-god { display: block; margin-top: .12rem; font-size: .6rem;
-                          line-height: 1.25; color: var(--muted); white-space: normal; word-break: keep-all; }
-  .saju-god { margin-top: .08rem; color: var(--accent); }
-  .saju-actions { display: flex; justify-content: flex-end; margin-top: .75rem; }
-  .saju-warning { margin: .8rem 0 0; padding: .65rem .8rem; border-radius: var(--r-sm);
-                  font-size: .76rem; line-height: 1.5;
-                  color: var(--ink); background: color-mix(in srgb, var(--warn) 14%, transparent);
-                  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warn) 30%, transparent); }
+  .saju-cell.is-me { background: color-mix(in srgb, var(--accent-soft) 55%, transparent); }
+  .saju-char { display: block; font-family: serif; font-size: 1.45rem; line-height: 1.2; }
+  .saju-korean { display: block; margin-top: .15rem; font-size: .72rem; }
+  .saju-meta, .saju-god { display: block; margin-top: .1rem; font-size: .6rem;
+                          line-height: 1.25; color: var(--muted); word-break: keep-all; }
+  .saju-god { color: var(--accent); }
   .saju-sub { display: block; font-size: .68rem; line-height: 1.35; word-break: keep-all; }
   .saju-sub small { display: block; font-size: .56rem; color: var(--muted); }
-  .saju-section { margin: 1.1rem 0 0; }
-  .saju-section h3, .tj-h { margin: 0 0 .45rem; font-size: .8rem; font-weight: 700; color: var(--muted); }
-  .saju-elements { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .3rem; }
-  .saju-element { padding: .45rem .1rem; border-radius: var(--r-sm); text-align: center; font-size: .74rem;
+  .reading { margin-top: 1.1rem; }
+  .reading h3 { color: var(--accent); }
+  .reading + .reading { padding-top: 1rem; border-top: 1px dashed var(--line); }
+  .saju-elements { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .3rem; margin-bottom: .6rem; }
+  .saju-element { padding: .4rem .1rem; border-radius: var(--r-sm); text-align: center; font-size: .74rem;
                   background: var(--sunk); }
   .saju-element b { display: block; font-size: 1rem; font-variant-numeric: tabular-nums; }
   .saju-element.none { opacity: .45; }
-  .saju-shinsal { margin: 0; padding: 0; list-style: none; display: grid; gap: .4rem; }
-  .saju-shinsal li { font-size: .8rem; line-height: 1.55; }
-  .saju-shinsal .tag { display: inline-block; margin-right: .35rem; padding: .05rem .5rem;
-                       border-radius: var(--pill); font-weight: 600; color: var(--accent);
-                       background: var(--accent-soft); }
-  .saju-shinsal .where { color: var(--muted); font-size: .7rem; }
-  .saju-luck { display: flex; gap: .3rem; overflow-x: auto; padding-bottom: .2rem; }
+  .saju-element.many { box-shadow: inset 0 0 0 1.5px var(--accent-line); }
+  .groups { display: flex; flex-wrap: wrap; gap: .3rem; margin-bottom: .6rem; }
+  .groups span { padding: .1rem .55rem; border-radius: var(--pill); font-size: .74rem; background: var(--sunk); }
+  .groups span b { margin-left: .2rem; font-variant-numeric: tabular-nums; }
+  .saju-luck { display: flex; gap: .3rem; overflow-x: auto; padding-bottom: .2rem; margin-top: .6rem; }
   .saju-luck div { flex: 0 0 auto; min-width: 2.9rem; padding: .35rem .2rem; border-radius: var(--r-sm);
                    text-align: center; font-size: .74rem; line-height: 1.35; border: 1px solid var(--line); }
   .saju-luck div.now { border-color: var(--accent); background: var(--accent-soft); }
   .saju-luck small { display: block; font-size: .58rem; color: var(--muted); }
-  .saju-note { margin: .35rem 0 0; font-size: .74rem; line-height: 1.55; color: var(--muted); }
+  details.more { margin-top: 1.1rem; border-top: 1px solid var(--line); }
+  details.more > summary { padding: .7rem 0 .2rem; font-size: .84rem; color: var(--muted); cursor: pointer; }
+  details.more[open] > summary { color: var(--ink); font-weight: 700; }
+  details.more > .inner { padding-top: .5rem; }
+  .saju-shinsal { margin: .6rem 0 0; padding: 0; list-style: none; display: grid; gap: .4rem; }
+  .saju-shinsal li { font-size: .8rem; line-height: 1.55; }
+  .saju-shinsal .tag { display: inline-block; margin-right: .35rem; padding: .05rem .5rem;
+                       border-radius: var(--pill); font-weight: 600; color: var(--accent); background: var(--accent-soft); }
+  .saju-shinsal .where { color: var(--muted); font-size: .7rem; }
+  .warning { margin: .8rem 0 0; padding: .65rem .8rem; border-radius: var(--r-sm); font-size: .78rem; line-height: 1.5;
+             background: color-mix(in srgb, var(--warn) 14%, transparent);
+             box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warn) 30%, transparent); }
+  .basis-list { margin: 0; padding-left: 1.1rem; font-size: .74rem; line-height: 1.7; color: var(--muted); }
+  .basis-list code { font-family: var(--mono); font-size: .7rem; }
+
+  /* 궁합 */
+  .score { display: flex; align-items: baseline; justify-content: center; gap: .5rem; margin: .2rem 0 .8rem; }
+  .score b { font: 800 2.4rem/1 var(--sans); color: var(--accent); font-variant-numeric: tabular-nums; }
+  .pair { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: .5rem; margin-bottom: .9rem; text-align: center; }
+  .pair .who small { display: block; font-size: .72rem; color: var(--muted); }
+  .pair .who span { display: block; font-family: serif; font-size: 1.5rem; }
+  .pair .heart { font-size: 1.2rem; }
 
   /* 토정비결 */
-  #tojeong .sub { margin: .6rem 0 .8rem; font-size: .76rem; line-height: 1.5; }
-  .tj-years { margin-top: .6rem; }
+  .tj-years { margin-bottom: .6rem; }
   .tj-title { padding: .9rem; border-radius: var(--r); text-align: center;
-              background: radial-gradient(circle at 30% 20%, color-mix(in srgb, var(--accent-soft) 80%, transparent), transparent 70%),
-                          var(--sunk); }
-  .tj-title .code { display: block; font-size: .68rem; color: var(--muted); letter-spacing: .08em;
-                    font-variant-numeric: tabular-nums; }
+              background: radial-gradient(circle at 30% 20%, color-mix(in srgb, var(--accent-soft) 80%, transparent), transparent 70%), var(--sunk); }
+  .tj-title .code { display: block; font-size: .68rem; color: var(--muted); letter-spacing: .08em; font-variant-numeric: tabular-nums; }
   .tj-title .hanja { display: block; margin: .15rem 0; font-family: serif; font-size: 1.4rem; }
   .tj-title .ko { display: block; font-size: .82rem; color: var(--muted); }
-  .tj-h { margin-top: 1.1rem; }
   .tj-lines { margin: 0; padding: 0; list-style: none; display: grid; gap: .55rem; }
-  .tj-lines li { font-size: .88rem; line-height: 1.6; word-break: keep-all; }
+  .tj-lines li { font-size: .84rem; line-height: 1.6; word-break: keep-all; }
   .tj-lines .orig { display: block; margin-top: .1rem; font-size: .68rem; color: var(--muted); }
   .tj-lines .orig span { font-family: serif; }
-  .tj-month { border-top: 1px solid var(--line); }
-  .tj-month summary { padding: .6rem 0; font-size: .86rem; cursor: pointer; }
-  .tj-month summary .hint { margin-left: .35rem; font-size: .72rem; color: var(--muted); }
-  .tj-month[open] summary { font-weight: 700; }
-  .tj-month .tj-lines { padding-bottom: .7rem; }
-  .tj-month.now summary::after { content: "이번 달"; margin-left: .4rem; padding: .05rem .45rem;
-                                 border-radius: var(--pill); font-size: .66rem; font-weight: 600;
-                                 color: var(--accent-ink); background: var(--accent); }
-  .tj-work { margin-top: .9rem; font-size: .78rem; }
-  .tj-work summary { cursor: pointer; color: var(--muted); }
-  .tj-work p { margin: .45rem 0 0; line-height: 1.65; color: var(--muted); word-break: keep-all; }
+  .tj-month { padding: .7rem 0; border-top: 1px solid var(--line); }
+  .tj-month h4 { margin: 0 0 .2rem; font-size: .86rem; }
+  .tj-month.now h4::after { content: "이번 달"; margin-left: .4rem; padding: .05rem .45rem; border-radius: var(--pill);
+                            font-size: .66rem; font-weight: 600; color: var(--accent-ink); background: var(--accent); }
+  .tj-month .prose { font-size: .86rem; line-height: 1.7; }
+  .tj-month[data-tone="good"] h4 { color: var(--ok); }
+  .tj-month[data-tone="bad"] h4 { color: var(--warn); }
+  details.orig-box { margin-top: .35rem; }
+  details.orig-box summary { font-size: .74rem; color: var(--muted); cursor: pointer; }
+  details.orig-box .tj-lines { margin-top: .45rem; }
+
+  /* 바이오리듬 */
+  .headline { margin: 0 0 1.1rem; font-size: 1rem; line-height: 1.65; text-align: center; }
+  .bio { margin-bottom: 1rem; }
+  .bio:last-child { margin-bottom: 0; }
+  .bio .bio-top { display: flex; justify-content: space-between; align-items: baseline; font-size: .86rem; margin-bottom: .35rem; }
+  .bio .bio-name { font-weight: 700; }
+  .bio .bio-name small { font-weight: normal; color: var(--muted); margin-left: .35rem; }
+  .bio .bio-pct { font-variant-numeric: tabular-nums; color: var(--muted); }
+  .track { position: relative; height: .5rem; border-radius: var(--pill); background: var(--sunk); overflow: hidden; }
+  .track .mid { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--line); }
+  .track .fill { position: absolute; top: 0; bottom: 0; border-radius: var(--pill); transition: width .6s ease, left .6s ease; }
+  .bio.phy .fill { background: var(--bad); }
+  .bio.emo .fill { background: var(--warn); }
+  .bio.int .fill { background: var(--ok); }
+  .bio .bio-note { margin: .35rem 0 0; font-size: .82rem; line-height: 1.55; color: var(--muted); }
   @media (max-width: 390px) {
-    .card { padding: 1.15rem .9rem; }
-    .saju-grid { grid-template-columns: 2.65rem repeat(4, minmax(0, 1fr)); }
-    .saju-char { font-size: 1.4rem; }
+    .card { padding: 1.1rem .85rem; }
+    .saju-grid { grid-template-columns: 2.5rem repeat(4, minmax(0, 1fr)); }
+    .saju-char { font-size: 1.3rem; }
     .saju-korean { font-size: .66rem; }
   }
 </style>
@@ -192,142 +218,161 @@
   <header class="bl-head">
     <span class="bl-bubble" aria-hidden="true">🔮</span>
     <h1>오늘의 운세</h1>
-    <p>생년월일로 보는 오늘의 운세·사주·토정비결.</p>
+    <p>생년월일로 보는 오늘의 운세·사주 풀이·궁합·토정비결.</p>
   </header>
   <p class="date bl-num" id="today"></p>
 
-  <!-- 랜덤 운세 -->
-  <div class="card bl-panel" id="fortune">
-    <div class="emoji" id="f-emoji">🔮</div>
-    <p class="text" id="f-text"></p>
-    <div class="fortune-categories" id="f-categories" hidden>
-      <div class="fortune-category" id="f-wealth"><span class="fortune-category-name">재물운</span><code class="fortune-category-level"></code><span class="fortune-category-comment"></span></div>
-      <div class="fortune-category" id="f-career"><span class="fortune-category-name">직업운</span><code class="fortune-category-level"></code><span class="fortune-category-comment"></span></div>
-      <div class="fortune-category" id="f-love"><span class="fortune-category-name">연애운</span><code class="fortune-category-level"></code><span class="fortune-category-comment"></span></div>
+  <nav class="tabs" id="tabs" role="tablist" aria-label="운세 보기" hidden>
+    <button type="button" class="bl-chip" role="tab" data-tab="today" aria-selected="true">오늘</button>
+    <button type="button" class="bl-chip" role="tab" data-tab="saju" aria-selected="false">사주</button>
+    <button type="button" class="bl-chip" role="tab" data-tab="match" aria-selected="false">궁합</button>
+    <button type="button" class="bl-chip" role="tab" data-tab="tojeong" aria-selected="false">토정비결</button>
+    <button type="button" class="bl-chip" role="tab" data-tab="bio" aria-selected="false">바이오리듬</button>
+  </nav>
+
+  <!-- ☀️ 오늘 -->
+  <div class="stack" data-panel="today" role="tabpanel">
+    <div class="card bl-panel generic" id="fortune">
+      <div class="head">
+        <div class="emoji" id="f-emoji">🔮</div>
+        <p class="text" id="f-text"></p>
+      </div>
+      <div class="fortune-categories" id="f-categories" hidden></div>
+      <div id="f-extra" hidden>
+        <div class="lucky" id="f-lucky"></div>
+        <p class="note" id="f-lucky-text"></p>
+        <ul class="times" id="f-times"></ul>
+        <div class="actions">
+          <button type="button" class="bl-btn bl-btn--sm" id="story-today">📲 스토리 카드 저장</button>
+        </div>
+      </div>
     </div>
-    <p class="basis" id="f-basis" hidden></p>
+
+    <section id="notify" hidden>
+      <div class="notify-row">
+        <span class="notify-title">🔔 매일 오전 8시 알림 받기</span>
+        <button type="button" id="notify-btn" class="bl-switch" role="switch" aria-checked="false" aria-label="매일 오전 8시 운세 알림"></button>
+      </div>
+      <p class="notify-help bl-note" id="notify-help">브라우저 알림으로 매일 오전 8시(KST) 오늘의 운세를 받아보세요.</p>
+    </section>
+
+    <section id="reveal">
+      <button class="bl-btn" id="reveal-btn">나에게 맞는 운세를 보고싶다면? →</button>
+    </section>
+
+    <section class="card bl-panel birth-form" id="form" hidden>
+      <h2>생년월일시를 입력해주세요</h2>
+      <div class="row">
+        <label>달력</label>
+        <div class="time-mode" role="group" aria-label="생년월일 달력 방식">
+          <button type="button" class="bl-chip" id="mode-solar" aria-pressed="true">양력</button>
+          <button type="button" class="bl-chip" id="mode-lunar" aria-pressed="false">음력</button>
+        </div>
+      </div>
+      <div class="row">
+        <label>성별</label>
+        <div class="time-mode gender-mode" role="group" aria-label="성별">
+          <button type="button" class="bl-chip" id="gender-none" aria-pressed="true">미선택</button>
+          <button type="button" class="bl-chip" id="gender-male" aria-pressed="false">남</button>
+          <button type="button" class="bl-chip" id="gender-female" aria-pressed="false">여</button>
+        </div>
+      </div>
+      <div class="row"><label for="in-y">년</label><select id="in-y" class="bl-input"></select></div>
+      <div class="row"><label for="in-m">월</label><select id="in-m" class="bl-input"></select></div>
+      <div class="row"><label for="in-d">일</label><select id="in-d" class="bl-input"></select></div>
+      <div class="row" id="lunar-leap-row" hidden>
+        <label for="in-lunar-leap">월 구분</label>
+        <select id="in-lunar-leap" class="bl-input">
+          <option value="normal">평달</option>
+          <option value="leap">윤달</option>
+        </select>
+      </div>
+      <p class="time-help bl-note" id="lunar-help" hidden>윤달 생일인 경우에만 윤달을 선택하세요.</p>
+      <div class="row">
+        <label>시간</label>
+        <div class="time-mode" role="group" aria-label="출생시간 입력 방식">
+          <button type="button" class="bl-chip" id="mode-branch" aria-pressed="true">시진 · 자축인묘</button>
+          <button type="button" class="bl-chip" id="mode-clock" aria-pressed="false">정확한 시각</button>
+        </div>
+      </div>
+      <div class="row" id="branch-row"><label for="in-h">시진</label><select id="in-h" class="bl-input"></select></div>
+      <p class="time-help bl-note" id="branch-help">정확한 시각을 모르면 두 시간 단위의 시진을 선택하세요.</p>
+      <div class="row" id="clock-row" hidden><label for="in-time">시각</label><input type="time" id="in-time" class="bl-input" step="60"></div>
+      <p class="time-help bl-note" id="clock-help" hidden>태어난 시각을 시·분까지 입력하세요.</p>
+      <div class="form-actions">
+        <button id="cancel" class="bl-btn">취소</button>
+        <button id="save" class="bl-btn bl-btn--primary">내 운세 보기</button>
+      </div>
+      <p class="err" id="err"></p>
+    </section>
+
+    <div class="saved" id="saved" hidden>
+      <p class="bl-note" id="saved-info"></p>
+      <button class="bl-btn bl-btn--ghost bl-btn--sm" id="edit-btn">생년월일 다시 입력</button>
+    </div>
   </div>
-  <!-- 데일리 알림 (푸시 지원 시에만 노출) -->
-  <section id="notify" hidden>
-    <div class="notify-row">
-      <span class="notify-title">🔔 매일 오전 8시 알림 받기</span>
-      <button type="button" id="notify-btn" class="bl-switch" role="switch" aria-checked="false" aria-label="매일 오전 8시 운세 알림"></button>
+
+  <!-- 🧭 사주 -->
+  <section class="card bl-panel" id="saju" data-panel="saju" role="tabpanel" hidden>
+    <p class="note" id="saju-status">명식을 계산하고 있습니다…</p>
+    <p class="warning" id="saju-warning" hidden></p>
+    <div id="saju-candidates"></div>
+    <div class="actions">
+      <button type="button" class="bl-btn bl-btn--sm" id="saju-copy" disabled>명식 이미지 복사</button>
+      <button type="button" class="bl-btn bl-btn--sm" id="story-saju" disabled>📲 스토리 카드 저장</button>
     </div>
-    <p class="notify-help bl-note" id="notify-help">브라우저 알림으로 매일 오전 8시(KST) 오늘의 운세를 받아보세요.</p>
+    <details class="more" id="basis">
+      <summary>계산 기준</summary>
+      <div class="inner"><ul class="basis-list" id="basis-list"></ul></div>
+    </details>
   </section>
 
-  <!-- 개인 운세 진입 -->
-  <section id="reveal">
-    <button class="link-btn bl-btn" id="reveal-btn">나에게 맞는 운세를 보고싶다면? →</button>
-  </section>
-
-  <!-- 생년월일 입력 -->
-  <section class="card bl-panel" id="form" hidden>
-    <h2>생년월일시를 입력해주세요</h2>
-    <div class="row">
-      <label>달력</label>
-      <div class="time-mode" role="group" aria-label="생년월일 달력 방식">
-        <button type="button" class="bl-chip" id="mode-solar" aria-pressed="true">양력</button>
-        <button type="button" class="bl-chip" id="mode-lunar" aria-pressed="false">음력</button>
-      </div>
-    </div>
-    <div class="row">
-      <label>성별</label>
-      <div class="time-mode gender-mode" role="group" aria-label="성별">
-        <button type="button" class="bl-chip" id="gender-none" aria-pressed="true">미선택</button>
-        <button type="button" class="bl-chip" id="gender-male" aria-pressed="false">남</button>
-        <button type="button" class="bl-chip" id="gender-female" aria-pressed="false">여</button>
-      </div>
-    </div>
-    <div class="row">
-      <label for="in-y">년</label>
-      <select id="in-y" class="bl-input"></select>
-    </div>
-    <div class="row">
-      <label for="in-m">월</label>
-      <select id="in-m" class="bl-input"></select>
-    </div>
-    <div class="row">
-      <label for="in-d">일</label>
-      <select id="in-d" class="bl-input"></select>
-    </div>
-    <div class="row" id="lunar-leap-row" hidden>
-      <label for="in-lunar-leap">월 구분</label>
-      <select id="in-lunar-leap" class="bl-input">
-        <option value="normal">평달</option>
-        <option value="leap">윤달</option>
-      </select>
-    </div>
-    <p class="time-help bl-note" id="lunar-help" hidden>윤달 생일인 경우에만 윤달을 선택하세요.</p>
-    <div class="row">
-      <label>시간</label>
-      <div class="time-mode" role="group" aria-label="출생시간 입력 방식">
-        <button type="button" class="bl-chip" id="mode-branch" aria-pressed="true">시진 · 자축인묘</button>
-        <button type="button" class="bl-chip" id="mode-clock" aria-pressed="false">정확한 시각</button>
-      </div>
-    </div>
-    <div class="row" id="branch-row">
-      <label for="in-h">시진</label>
-      <select id="in-h" class="bl-input"></select>
-    </div>
-    <p class="time-help bl-note" id="branch-help">정확한 시각을 모르면 두 시간 단위의 시진을 선택하세요.</p>
-    <div class="row" id="clock-row" hidden>
-      <label for="in-time">시각</label>
-      <input type="time" id="in-time" class="bl-input" step="60">
-    </div>
-    <p class="time-help bl-note" id="clock-help" hidden>태어난 시각을 시·분까지 입력하세요.</p>
-    <div class="form-actions">
-      <button id="cancel" class="bl-btn">취소</button>
-      <button id="save" class="bl-btn bl-btn--primary">내 운세 보기</button>
-    </div>
-    <p id="err"></p>
-  </section>
-
-  <!-- 사주 명식 -->
-  <section class="card bl-panel" id="saju" hidden>
-    <button type="button" class="panel-toggle" aria-expanded="true" aria-controls="saju-content">
-      <h2>🧭 사주 명식</h2><span class="panel-chevron" aria-hidden="true">▼</span>
-    </button>
-    <div class="panel-content" id="saju-content">
-      <p class="sub" id="saju-rule">양력 · 대한민국 표준시(KST) · 00시 일주 변경 · 진태양시 미보정</p>
-      <div id="saju-candidates"></div>
-      <div class="saju-actions"><button type="button" class="saju-copy bl-btn bl-btn--sm" id="saju-copy" disabled>명식 이미지 복사</button></div>
-      <p class="saju-status" id="saju-status">명식을 계산하고 있습니다…</p>
-      <p class="saju-warning" id="saju-warning" hidden></p>
+  <!-- 💞 궁합 -->
+  <section class="card bl-panel" id="match" data-panel="match" role="tabpanel" hidden>
+    <div id="match-result" hidden></div>
+    <div class="birth-form" id="match-form">
+      <h2>상대의 생년월일을 넣어 주세요</h2>
+      <div class="row"><label for="p-name">이름</label><input id="p-name" class="bl-input" maxlength="12" placeholder="선택 · 이 기기에만 저장"></div>
+      <div class="row"><label for="p-cal">달력</label>
+        <select id="p-cal" class="bl-input"><option value="solar">양력</option><option value="lunar">음력 평달</option><option value="leap">음력 윤달</option></select></div>
+      <div class="row"><label for="p-gender">성별</label>
+        <select id="p-gender" class="bl-input"><option value="unspecified">미선택</option><option value="male">남</option><option value="female">여</option></select></div>
+      <div class="row"><label for="p-y">년</label><select id="p-y" class="bl-input"></select></div>
+      <div class="row"><label for="p-m">월</label><select id="p-m" class="bl-input"></select></div>
+      <div class="row"><label for="p-d">일</label><select id="p-d" class="bl-input"></select></div>
+      <div class="row"><label for="p-h">시진</label><select id="p-h" class="bl-input"></select></div>
+      <div class="form-actions"><button id="p-save" class="bl-btn bl-btn--primary">궁합 보기</button></div>
+      <p class="err" id="p-err"></p>
+      <p class="note">상대 정보는 이 기기에만 저장돼요. 서버는 계산할 때만 쓰고 남기지 않아요.</p>
     </div>
   </section>
 
-  <!-- 토정비결 -->
-  <section class="card bl-panel" id="tojeong" hidden>
-    <button type="button" class="panel-toggle" aria-expanded="true" aria-controls="tj-content">
-      <h2>📜 토정비결</h2><span class="panel-chevron" aria-hidden="true">▼</span>
-    </button>
-    <div class="panel-content" id="tj-content">
-      <div class="tj-years bl-chips" id="tj-years" role="group" aria-label="보는 해"></div>
-      <p class="sub" id="tj-sub"></p>
-      <div class="tj-title" id="tj-title"></div>
-      <h3 class="tj-h">한 해 총운</h3>
-      <ol class="tj-lines" id="tj-summary"></ol>
-      <h3 class="tj-h">달마다</h3>
+  <!-- 📜 토정비결 -->
+  <section class="card bl-panel" id="tojeong" data-panel="tojeong" role="tabpanel" hidden>
+    <div class="tj-years bl-chips" id="tj-years" role="group" aria-label="보는 해"></div>
+    <div class="tj-title" id="tj-title"></div>
+    <div class="reading">
+      <h3>한 해 총운</h3>
+      <p class="prose" id="tj-overview"></p>
+      <details class="orig-box"><summary>총운 원문 보기 (9구)</summary><ol class="tj-lines" id="tj-summary"></ol></details>
+    </div>
+    <div class="reading">
+      <h3>달마다</h3>
       <div id="tj-months"></div>
-      <details class="tj-work">
-        <summary>괘를 짓는 법</summary>
-        <p id="tj-work"></p>
-      </details>
-      <p class="saju-warning" id="tj-assume" hidden></p>
-      <p class="saju-status" id="tj-source"></p>
     </div>
+    <details class="more">
+      <summary>괘를 짓는 법</summary>
+      <div class="inner"><p class="note" id="tj-sub"></p><p class="note" id="tj-work"></p></div>
+    </details>
+    <p class="warning" id="tj-assume" hidden></p>
+    <p class="note" id="tj-source"></p>
   </section>
 
-  <!-- 바이오리듬 결과 -->
-  <section class="card bl-panel" id="result" hidden>
-    <button type="button" class="panel-toggle" aria-expanded="true" aria-controls="bio-content">
-      <h2>🌊 오늘의 바이오리듬</h2><span class="panel-chevron" aria-hidden="true">▼</span>
-    </button>
-    <div class="panel-content" id="bio-content">
-      <p class="sub" id="bio-sub"></p>
-      <p class="headline" id="bio-headline"></p>
-
+  <!-- 🌊 바이오리듬 -->
+  <section class="card bl-panel" id="result" data-panel="bio" role="tabpanel" hidden>
+    <h2>오늘의 바이오리듬</h2>
+    <p class="note" id="bio-sub"></p>
+    <p class="headline" id="bio-headline"></p>
     <div class="bio phy">
       <div class="bio-top"><span class="bio-name">신체 <small>Physical</small></span><span class="bio-pct" id="pct-phy"></span></div>
       <div class="track"><span class="mid"></span><span class="fill" id="fill-phy"></span></div>
@@ -343,34 +388,127 @@
       <div class="track"><span class="mid"></span><span class="fill" id="fill-int"></span></div>
       <p class="bio-note" id="note-int"></p>
     </div>
-
-      <div class="footer">
-        <p class="saved bl-note" id="saved-info"></p>
-        <button class="link-btn bl-btn bl-btn--ghost bl-btn--sm" id="edit-btn">생년월일 다시 입력</button>
-      </div>
-    </div>
   </section>
 </main>
+
+<div class="bl-glass" id="gloss" role="dialog" aria-modal="false" aria-labelledby="gloss-title" hidden>
+  <h3 id="gloss-title"></h3>
+  <p id="gloss-text"></p>
+  <button type="button" id="gloss-close" aria-label="닫기">✕</button>
+</div>
 
 <!-- defer가 아니다: 아래 인라인 스크립트가 첫 화면을 즉시 그리며 문구를 쓴다 -->
 <script src="/_shared/fortune-common.js"></script>
 <script>
   "use strict";
   const KEY = "bl-fortune-birth";
+  const PARTNER_KEY = "bl-fortune-partner";   // 궁합 상대 — 내 생년월일과 따로 둔다
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, className, text) => {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text != null) node.textContent = text;
+    return node;
+  };
+  // 받침 따라 조사 고르기(괄호 속 한자는 건너뛴다)
+  function josa(word, withBatchim, without) {
+    const plain = String(word).replace(/\([^)]*\)\s*$/, "");
+    const code = plain.charCodeAt(plain.length - 1) - 0xac00;
+    return word + (code >= 0 && code <= 11171 && code % 28 ? withBatchim : without);
+  }
 
-  // ── 랜덤 운세 문구 ─────────────────────────────────────────────
-  // 문구 목록은 /_shared/fortune-lines.js에 있다 — util/brief가 같은 문구를
-  // 보여주므로 복사하지 않고 공용으로 둔다.
+  // ── 용어 풀이 ────────────────────────────────────────────────
+  // 점선 밑줄 단어를 누르면 화면 아래에 짧은 설명이 뜬다. 문장 속 괄호 풀이가 먼저고
+  // 이건 보조다 — 표의 머리글처럼 문장이 없는 자리에서 쓴다.
+  const GLOSSARY = {
+    명식: "태어난 연·월·일·시를 천간과 지지 두 글자씩, 모두 여덟 글자로 적은 거예요. 그래서 사주팔자라고도 불러요.",
+    천간: "하늘의 기운을 열 글자(갑·을·병·정·무·기·경·신·임·계)로 나눈 거예요. 명식 표의 윗줄이에요.",
+    지지: "땅의 기운을 열두 글자(자·축·인·묘·진·사·오·미·신·유·술·해)로 나눈 거예요. 띠 동물과 같은 글자이고, 명식 표의 아랫줄이에요.",
+    기둥: "연주(태어난 해)·월주(달)·일주(날)·시주(시) 네 기둥이에요. 연주는 집안과 어린 시절, 월주는 사회와 부모, 일주는 나와 배우자, 시주는 자녀와 말년을 본다고 해요.",
+    일간: "태어난 날의 천간이에요. 사주에서는 이 글자를 '나 자신'으로 보고, 나머지 글자를 이 글자와의 관계로 읽어요.",
+    오행: "목(나무)·화(불)·토(흙)·금(쇠)·수(물) 다섯 기운이에요. 서로 낳아 주고(상생) 누르는(상극) 관계로 읽어요.",
+    십성: "다른 글자가 일간(나)에게 어떤 관계인지 열 가지로 나눈 거예요. 나와 같으면 비견·겁재, 내가 낳으면 식신·상관, 내가 누르면 편재·정재, 나를 누르면 편관·정관, 나를 낳으면 편인·정인이에요.",
+    지장간: "지지 속에 숨어 있는 천간이에요. 겉으로는 안 보여도 속에서 작용하는 기운으로 봐요.",
+    "12운성": "일간의 기운이 각 지지에서 얼마나 힘을 쓰는지, 태어남(장생)부터 준비(양)까지 열두 단계로 나눈 거예요.",
+    "12신살": "지지끼리의 자리 관계에 붙인 열두 가지 이름(역마·도화·화개 등)이에요. 태어난 해(연지)와 날(일지) 기준을 함께 적었어요.",
+    신살: "특정 글자 조합에 붙이는 전통적인 별명이에요. 좋은 뜻(귀인)도, 조심하라는 뜻(살)도 있는데, 학파마다 표가 달라 참고로만 봐 주세요.",
+    대운: "10년마다 바뀌는 큰 흐름이에요. 월주에서 출발해 성별과 태어난 해의 음양에 따라 앞으로(순행) 또는 뒤로(역행) 흘러가요.",
+    세운: "그해 자체의 간지가 나에게 주는 기운이에요. 대운이 10년의 계절이라면 세운은 그해의 날씨예요.",
+    일진: "그날의 간지예요. 오늘의 운세는 오늘 일진이 내 명식과 어떻게 만나는지로 봐요.",
+    공망: "일주로 정해지는, 힘이 비어 있는 두 지지예요. 그 자리의 기대가 덜 채워진다고 봐요.",
+    합충: "합은 두 지지가 서로 끌어안아 어울리는 관계, 충은 정반대 자리의 두 지지가 부딪히는 관계예요. 합은 이어짐, 충은 변화·이동의 신호로 봐요.",
+    시진: "하루를 두 시간씩 열둘로 나눈 옛 시간 단위예요. 자시가 23~01시, 축시가 01~03시처럼 이어져요.",
+    토정비결: "조선 시대 토정 이지함이 지었다고 전하는 한 해 신수 풀이예요. 음력 생년월일로 세 자리 괘를 짓고, 괘마다 한 해 총운과 달마다의 구절이 있어요.",
+    궁합: "두 사람의 명식을 견주어 보는 거예요. 여기서는 일간(나 자신)끼리의 오행 관계, 일지(배우자 자리)끼리의 합충, 서로 비어 있는 오행을 채워 주는지를 봐요.",
+  };
+  const gloss = $("gloss");
+  let glossFrom = null;
+  function term(text, key = text) {
+    const button = el("button", "term", text);
+    button.type = "button";
+    button.dataset.term = key;
+    return button;
+  }
+  function openGloss(key, from) {
+    if (!GLOSSARY[key]) return;
+    $("gloss-title").textContent = key;
+    $("gloss-text").textContent = GLOSSARY[key];
+    gloss.hidden = false;
+    glossFrom = from;
+    $("gloss-close").focus({ preventScroll: true });
+  }
+  function closeGloss() {
+    if (gloss.hidden) return;
+    gloss.hidden = true;
+    glossFrom?.focus({ preventScroll: true });
+    glossFrom = null;
+  }
+  document.addEventListener("click", (event) => {
+    const target = event.target.closest?.(".term");
+    if (target) { openGloss(target.dataset.term, target); return; }
+    if (!gloss.hidden && !gloss.contains(event.target)) closeGloss();
+  });
+  $("gloss-close").addEventListener("click", closeGloss);
+  document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeGloss(); });
+
+  // ── 탭 ──────────────────────────────────────────────────────
+  // 주소 해시(#saju 등)로 지금 탭을 기억한다 — 생년월일은 주소에 넣지 않는다.
+  const TABS = ["today", "saju", "match", "tojeong", "bio"];
+  const tabsNav = $("tabs");
+  let currentTab = "today";
+  const tabHooks = {};
+  function showTab(name, { scroll = false } = {}) {
+    if (!TABS.includes(name)) name = "today";
+    currentTab = name;
+    for (const button of tabsNav.querySelectorAll("[data-tab]")) {
+      button.setAttribute("aria-selected", String(button.dataset.tab === name));
+    }
+    for (const panel of document.querySelectorAll("[data-panel]")) {
+      // 탭이 숨겨진 상태(생년월일 없음)에서는 오늘만 보인다
+      panel.hidden = tabsNav.hidden ? panel.dataset.panel !== "today" : panel.dataset.panel !== name;
+    }
+    if (location.hash.slice(1) !== name && !tabsNav.hidden) history.replaceState(null, "", name === "today" ? location.pathname : `#${name}`);
+    tabHooks[name]?.();
+    if (scroll) tabsNav.scrollIntoView({ block: "start" });
+  }
+  tabsNav.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-tab]");
+    if (button) showTab(button.dataset.tab, { scroll: window.scrollY > tabsNav.offsetTop });
+  });
+  function setTabsVisible(on) {
+    tabsNav.hidden = !on;
+    showTab(on ? currentTab : "today");
+  }
+
+  // ── 오늘의 운세 ──────────────────────────────────────────────
   const FORTUNES = window.blFortuneLines;
+  const fEmoji = $("f-emoji");
+  const fText = $("f-text");
+  const fCategories = $("f-categories");
+  const fortuneCard = $("fortune");
+  const CATEGORY_LIST = [["wealth", "재물운"], ["career", "직업운"], ["love", "연애운"],
+    ["health", "건강운"], ["social", "대인운"], ["study", "학업운"]];
 
-  const fEmoji = document.getElementById("f-emoji");
-  const fText = document.getElementById("f-text");
-  const fBasis = document.getElementById("f-basis");
-  const fCategories = document.getElementById("f-categories");
-  const fortuneCard = document.getElementById("fortune");
-
-  // 오늘의 한줄: 무작위가 아니라 날짜(+생년월일·바이오리듬 수치)로 결정.
-  // → 하루 동안 같은 문구가 유지되고, 사람마다 다르게 나온다.
   function todayNum() {
     return Math.floor(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / 86400000);
   }
@@ -379,74 +517,82 @@
     x -= Math.floor(x);
     return Math.floor(x * FORTUNES.length);
   }
-  let currentLine = FORTUNES[0];   // 공유 이미지에서 재사용
-  let currentDaily = null;          // 분야별 운세 공유 이미지에서 재사용
+  let currentLine = FORTUNES[0];   // 공유 문구에서 재사용
+  let currentDaily = null;          // 공유 이미지에서 재사용
   let fallbackFortuneSeed = 0;
   function showFortuneLoading() {
     currentDaily = null;
     fortuneCard.classList.add("is-loading");
+    fortuneCard.classList.remove("generic");
     fortuneCard.setAttribute("aria-busy", "true");
     fEmoji.textContent = "";
     fText.textContent = "";
+    fCategories.replaceChildren(...CATEGORY_LIST.slice(0, 3).map(() => el("div", "fortune-category", "")));
     fCategories.hidden = false;
-    fBasis.hidden = true;
+    $("f-extra").hidden = true;
   }
   function showFortune(seed) {
-    const i = seedToIdx(seed);
     currentDaily = null;
-    currentLine = FORTUNES[i];
+    currentLine = FORTUNES[seedToIdx(seed)];
     fEmoji.textContent = currentLine[0];
     fText.textContent = currentLine[1];
     fCategories.hidden = true;
-    fBasis.hidden = true;
+    $("f-extra").hidden = true;
+    fortuneCard.classList.add("generic");
     fortuneCard.classList.remove("is-loading");
     fortuneCard.removeAttribute("aria-busy");
-  }
-  function showFortuneCategory(key, category) {
-    const row = document.getElementById(`f-${key}`);
-    row.dataset.level = category.level;
-    row.querySelector(".fortune-category-level").textContent = category.level;
-    row.querySelector(".fortune-category-comment").textContent = category.comment;
   }
   function showSajuFortune(daily) {
     currentLine = [daily.emoji, daily.text];
     currentDaily = daily;
     fEmoji.textContent = daily.emoji;
     fText.textContent = daily.text;
-    for (const key of ["wealth", "career", "love"]) showFortuneCategory(key, daily.categories[key]);
+    fCategories.replaceChildren();
+    for (const [key, name] of CATEGORY_LIST) {
+      const category = daily.categories[key];
+      if (!category) continue;
+      const row = el("div", "fortune-category");
+      row.dataset.level = category.level;
+      const top = el("div", "fortune-category-top");
+      top.append(el("span", "fortune-category-name", name), el("span", "fortune-category-level", category.level));
+      row.append(top, el("p", "fortune-category-comment", category.comment));
+      fCategories.appendChild(row);
+    }
     fCategories.hidden = false;
-    fBasis.hidden = false;
-    fBasis.textContent = `명식 일간 + 오늘 일진 ${daily.iljin}(${daily.iljinHanja}) · ${daily.tenGod} · ${daily.method}`;
-    fortuneCard.classList.remove("is-loading");
+    const extra = $("f-extra");
+    extra.hidden = !daily.lucky;
+    if (daily.lucky) {
+      const lucky = $("f-lucky");
+      lucky.replaceChildren();
+      for (const [label, value] of [["행운의 색", daily.lucky.color], ["방향", daily.lucky.direction], ["숫자", String(daily.lucky.number)]]) {
+        const box = el("div");
+        box.append(el("small", null, label), el("b", null, value));
+        lucky.appendChild(box);
+      }
+      $("f-lucky-text").textContent = daily.lucky.text;
+      const times = $("f-times");
+      times.replaceChildren();
+      for (const [label, item] of [["⏰ 조심할 때", daily.times.caution], ["🤝 좋은 때", daily.times.good]]) {
+        const li = el("li");
+        li.append(el("b", null, label), item.text);
+        times.appendChild(li);
+      }
+    }
+    fortuneCard.classList.remove("is-loading", "generic");
     fortuneCard.removeAttribute("aria-busy");
   }
 
   // ── 날짜 표기 ─────────────────────────────────────────────────
   const now = new Date();
   const WD = ["일", "월", "화", "수", "목", "금", "토"];
-  document.getElementById("today").textContent =
-    `${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일 (${WD[now.getDay()]})`;
+  $("today").textContent = `${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일 (${WD[now.getDay()]})`;
 
-  // ── 입력 폼 옵션 채우기 ────────────────────────────────────────
-  const selY = document.getElementById("in-y");
-  const selM = document.getElementById("in-m");
-  const selD = document.getElementById("in-d");
-  const selH = document.getElementById("in-h");
-  const inTime = document.getElementById("in-time");
-  const modeSolar = document.getElementById("mode-solar");
-  const modeLunar = document.getElementById("mode-lunar");
-  const genderNone = document.getElementById("gender-none");
-  const genderMale = document.getElementById("gender-male");
-  const genderFemale = document.getElementById("gender-female");
-  const lunarLeapRow = document.getElementById("lunar-leap-row");
-  const lunarLeap = document.getElementById("in-lunar-leap");
-  const lunarHelp = document.getElementById("lunar-help");
-  const modeBranch = document.getElementById("mode-branch");
-  const modeClock = document.getElementById("mode-clock");
-  const branchRow = document.getElementById("branch-row");
-  const branchHelp = document.getElementById("branch-help");
-  const clockRow = document.getElementById("clock-row");
-  const clockHelp = document.getElementById("clock-help");
+  // ── 입력 폼 ────────────────────────────────────────────────
+  const selY = $("in-y"), selM = $("in-m"), selD = $("in-d"), selH = $("in-h"), inTime = $("in-time");
+  const modeSolar = $("mode-solar"), modeLunar = $("mode-lunar");
+  const genderNone = $("gender-none"), genderMale = $("gender-male"), genderFemale = $("gender-female");
+  const lunarLeap = $("in-lunar-leap");
+  const modeBranch = $("mode-branch"), modeClock = $("mode-clock");
   let calendarMode = "solar";
   let genderMode = "unspecified";
   let timeMode = "branch";
@@ -455,16 +601,19 @@
     const o = document.createElement("option");
     o.value = val; o.textContent = label; sel.appendChild(o);
   }
-  for (let y = thisYear; y >= 1920; y--) opt(selY, y, y + "년");
-  for (let m = 1; m <= 12; m++) opt(selM, m, m + "월");
-  function fillDays() {
-    const y = +selY.value, m = +selM.value;
-    const keep = selD.value;
-    const days = calendarMode === "lunar" ? 30 : new Date(y, m, 0).getDate();
-    selD.innerHTML = "";
-    for (let d = 1; d <= days; d++) opt(selD, d, d + "일");
-    if (keep && +keep <= days) selD.value = keep;
+  function fillYearMonth(y, m) {
+    for (let year = thisYear; year >= 1920; year--) opt(y, year, year + "년");
+    for (let month = 1; month <= 12; month++) opt(m, month, month + "월");
   }
+  function fillDaysOf(y, m, d, lunar) {
+    const keep = d.value;
+    const days = lunar ? 30 : new Date(+y.value, +m.value, 0).getDate();
+    d.innerHTML = "";
+    for (let day = 1; day <= days; day++) opt(d, day, day + "일");
+    if (keep && +keep <= days) d.value = keep;
+  }
+  fillYearMonth(selY, selM);
+  const fillDays = () => fillDaysOf(selY, selM, selD, calendarMode === "lunar");
   selY.addEventListener("change", fillDays);
   selM.addEventListener("change", fillDays);
   fillDays();
@@ -473,8 +622,8 @@
     const isLunar = calendarMode === "lunar";
     modeSolar.setAttribute("aria-pressed", String(!isLunar));
     modeLunar.setAttribute("aria-pressed", String(isLunar));
-    lunarLeapRow.hidden = !isLunar;
-    lunarHelp.hidden = !isLunar;
+    $("lunar-leap-row").hidden = !isLunar;
+    $("lunar-help").hidden = !isLunar;
     fillDays();
   }
   modeSolar.addEventListener("click", () => setCalendarMode("solar"));
@@ -488,25 +637,24 @@
   genderNone.addEventListener("click", () => setGenderMode("unspecified"));
   genderMale.addEventListener("click", () => setGenderMode("male"));
   genderFemale.addEventListener("click", () => setGenderMode("female"));
-  // 십이지시(十二支時): 자시(23~01)부터 두 시간 단위
-  // 12지시 목록은 /_shared/fortune-common.js에 있다 — brief의 생년월일시 입력이
-  // 같은 목록을 써야 저장값(h = 인덱스)이 두 화면에서 같은 뜻을 갖는다.
+  // 12지시 목록은 /_shared/fortune-common.js — brief와 저장값(h = 인덱스)의 뜻이 같아야 한다.
   const BRANCHES = window.blFortuneBranches;
-  opt(selH, "", "모름");
-  BRANCHES.forEach((b, i) => opt(selH, i, `${b.k}시 (${b.c}, ${b.range})`));
+  for (const sel of [selH, $("p-h")]) {
+    opt(sel, "", "모름");
+    BRANCHES.forEach((b, i) => opt(sel, i, `${b.k}시 (${b.c}, ${b.range})`));
+  }
   function setTimeMode(mode) {
     timeMode = mode === "clock" ? "clock" : "branch";
     const isClock = timeMode === "clock";
     modeBranch.setAttribute("aria-pressed", String(!isClock));
     modeClock.setAttribute("aria-pressed", String(isClock));
-    branchRow.hidden = isClock;
-    branchHelp.hidden = isClock;
-    clockRow.hidden = !isClock;
-    clockHelp.hidden = !isClock;
+    $("branch-row").hidden = isClock;
+    $("branch-help").hidden = isClock;
+    $("clock-row").hidden = !isClock;
+    $("clock-help").hidden = !isClock;
   }
   modeBranch.addEventListener("click", () => setTimeMode("branch"));
   modeClock.addEventListener("click", () => setTimeMode("clock"));
-
   // 23~01시는 자시, 이후에는 두 시간마다 축·인·묘…로 진행한다.
   function branchFromClock(value) {
     if (!/^\d{2}:\d{2}$/.test(value)) return null;
@@ -514,219 +662,235 @@
     if (hour === 23 || hour === 0) return 0;
     return Math.floor((hour + 1) / 2);
   }
-  // 기본값: 90년생 정도로 시작
   selY.value = "1990"; selM.value = "1"; fillDays(); selD.value = "1";
 
-  // ── 바이오리듬 계산 ────────────────────────────────────────────
+  // ── 바이오리듬 ────────────────────────────────────────────────
   const CYCLES = [
     { key: "phy", name: "신체", period: 23 },
     { key: "emo", name: "감성", period: 28 },
     { key: "int", name: "지성", period: 33 },
   ];
   function daysBetween(birth, today) {
-    // 자정 기준 경과 일수 (시간 무시)
     const a = Date.UTC(birth.y, birth.m - 1, birth.d);
     const b = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
     return Math.round((b - a) / 86400000);
   }
-  // 값별 코멘트 (v: -1~1)
+  // 값별 코멘트 (v: -1~1). 이름마다 받침이 달라 조사를 골라 붙인다(신체가·감성이).
   function noteFor(name, v) {
-    if (v >= 0.7) return `${name} 최고조! 자신 있게 밀어붙여도 좋은 날.`;
-    if (v >= 0.2) return `${name}이(가) 상승세. 컨디션이 받쳐줍니다.`;
-    if (v > -0.2) return `${name}이(가) 전환점. 무리 없이 평소대로.`;
-    if (v > -0.7) return `${name}이(가) 저조. 욕심내지 말고 페이스 조절을.`;
-    return `${name} 바닥권. 오늘은 회복과 휴식에 집중하세요.`;
+    const subject = josa(name, "이", "가");
+    if (v >= 0.7) return `${name} 최고조! 자신 있게 밀어붙여도 좋은 날이에요.`;
+    if (v >= 0.2) return `${subject} 오르는 중이에요. 컨디션이 받쳐 줘요.`;
+    if (v > -0.2) return `${subject} 바뀌는 길목이에요. 무리 없이 평소대로 가세요.`;
+    if (v > -0.7) return `${subject} 가라앉아 있어요. 욕심내지 말고 속도를 조절하세요.`;
+    return `${name} 바닥권이에요. 오늘은 회복과 휴식에 집중하세요.`;
   }
   function setBar(key, v) {
     const pct = Math.round(v * 100);
-    document.getElementById("pct-" + key).textContent = (pct > 0 ? "+" : "") + pct + "%";
-    // 바: 중앙(50%)이 0, 왼쪽이 -100, 오른쪽이 +100
-    const fill = document.getElementById("fill-" + key);
-    if (v >= 0) { fill.style.left = "50%"; fill.style.width = (v * 50) + "%"; }
-    else { fill.style.left = (50 + v * 50) + "%"; fill.style.width = (-v * 50) + "%"; }
+    $("pct-" + key).textContent = (pct > 0 ? "+" : "") + pct + "%";
+    const fill = $("fill-" + key);
+    fill.style.setProperty("left", (v >= 0 ? 50 : 50 + v * 50) + "%");
+    fill.style.setProperty("width", Math.abs(v * 50) + "%");
   }
 
   // ── 사주 명식 ──────────────────────────────────────────────────
-  const sajuSec = document.getElementById("saju");
-  const sajuCandidates = document.getElementById("saju-candidates");
-  const sajuStatus = document.getElementById("saju-status");
-  const sajuWarning = document.getElementById("saju-warning");
-  const sajuCopy = document.getElementById("saju-copy");
+  const sajuSec = $("saju");
+  const sajuCandidates = $("saju-candidates");
+  const sajuStatus = $("saju-status");
+  const sajuWarning = $("saju-warning");
+  const sajuCopy = $("saju-copy");
   const SAJU_COLUMNS = [["hour", "시주"], ["day", "일주"], ["month", "월주"], ["year", "연주"]];
   let sajuRequestId = 0;
   let lastSajuData = null;
 
-  function addSajuCell(grid, className, text) {
-    const cell = document.createElement("div");
-    cell.className = `saju-cell ${className}`;
-    cell.textContent = text;
+  function addSajuCell(grid, className, content) {
+    const cell = el("div", `saju-cell ${className}`);
+    if (content instanceof Node) cell.appendChild(content);
+    else if (content != null) cell.textContent = content;
     grid.appendChild(cell);
     return cell;
   }
-
-  function addPillarPart(grid, part) {
-    const cell = addSajuCell(grid, "", "");
+  function addPillarPart(grid, part, isMe) {
+    const cell = addSajuCell(grid, isMe ? "is-me" : "", null);
     if (!part) {
       cell.textContent = "미상";
-      cell.style.opacity = ".45";
+      cell.classList.add("sub");
       return;
     }
-    const char = document.createElement("span");
-    char.className = "saju-char";
-    char.textContent = part.hanja;
-    const korean = document.createElement("span");
-    korean.className = "saju-korean";
-    korean.textContent = part.korean;
-    const meta = document.createElement("span");
-    meta.className = "saju-meta";
-    meta.textContent = `${part.yinYang}·${part.element}`;
-    cell.append(char, korean, meta);
-    if (part.tenGod) {
-      const god = document.createElement("span");
-      god.className = "saju-god";
-      god.textContent = part.tenGod;
-      cell.appendChild(god);
-    }
+    cell.append(el("span", "saju-char", part.hanja), el("span", "saju-korean", part.korean),
+      el("span", "saju-meta", `${part.yinYang}·${part.element}`));
+    if (part.tenGod) cell.appendChild(el("span", "saju-god", part.tenGod === "일간" ? "나(일간)" : part.tenGod));
+  }
+  const shinsalLabel = (name) => (name === "년살" ? "도화(년살)" : name);
+
+  function readingBlock(title, termKey) {
+    const block = el("div", "reading");
+    const h = el("h3");
+    h.textContent = title;
+    if (termKey) h.append(" · ", term(termKey));
+    block.appendChild(h);
+    return block;
   }
 
   function renderSajuCandidate(candidate, showTitle) {
-    const wrap = document.createElement("div");
-    wrap.className = "saju-candidate";
-    if (showTitle) {
-      const title = document.createElement("p");
-      title.className = "saju-candidate-title";
-      title.textContent = candidate.timeLabel;
-      wrap.appendChild(title);
+    const wrap = el("div", "saju-candidate");
+    if (showTitle) wrap.appendChild(el("p", "saju-candidate-title", candidate.timeLabel));
+    const reading = candidate.reading;
+    const dm = reading?.dayMaster;
+    // ① 나는 어떤 사람인가 — 한 문단 요약이 맨 위
+    if (dm) {
+      const me = el("div", "me");
+      me.append(el("span", "hanja", `${dm.hanja}${{ 목: "木", 화: "火", 토: "土", 금: "金", 수: "水" }[dm.element]}`),
+        el("span", "name", `${dm.name} · ${dm.image}`), el("span", "key", dm.keyword),
+        el("p", "prose", reading.overview.paragraph));
+      wrap.appendChild(me);
     }
-    const grid = document.createElement("div");
-    grid.className = "saju-grid";
-    addSajuCell(grid, "saju-head", "");
-    for (const [, label] of SAJU_COLUMNS) addSajuCell(grid, "saju-head", label);
-    addSajuCell(grid, "saju-label", "천간");
-    for (const [key] of SAJU_COLUMNS) addPillarPart(grid, candidate.pillars[key]?.stem);
-    addSajuCell(grid, "saju-label", "지지");
-    for (const [key] of SAJU_COLUMNS) addPillarPart(grid, candidate.pillars[key]?.branch);
-    const detail = candidate.detail;
-    if (detail) {
-      addDetailRow(grid, "지장간", (d) => d.hiddenStems.map((h) => h.stem).join(" "));
-      addDetailRow(grid, "12운성", (d) => d.stage);
-      addDetailRow(grid, "12신살", (d) => shinsalLabel(d.shinsalByYear), (d) => `일지 ${shinsalLabel(d.shinsalByDay)}`);
-    }
-    wrap.appendChild(grid);
-    if (detail) renderSajuDetail(wrap, detail);
+    // ② 명식 표 — 천간·지지 두 줄만. 머리글은 누르면 뜻이 뜬다.
+    const grid = el("div", "saju-grid");
+    grid.setAttribute("aria-label", "사주 명식 표");
+    addSajuCell(grid, "saju-head", term("명식"));
+    for (const [, label] of SAJU_COLUMNS) addSajuCell(grid, "saju-head", term(label, "기둥"));
+    addSajuCell(grid, "saju-label", term("천간"));
+    for (const [key] of SAJU_COLUMNS) addPillarPart(grid, candidate.pillars[key]?.stem, key === "day");
+    addSajuCell(grid, "saju-label", term("지지"));
+    for (const [key] of SAJU_COLUMNS) addPillarPart(grid, candidate.pillars[key]?.branch, false);
+    const tableBlock = el("div", "reading");
+    tableBlock.appendChild(grid);
+    const hint = el("p", "note");
+    hint.append("가운데 강조된 칸이 ", term("일간"), "(나 자신)이에요. 작은 글씨는 일간에게 그 글자가 어떤 관계인지(", term("십성"), ")예요.");
+    tableBlock.appendChild(hint);
+    wrap.appendChild(tableBlock);
+
+    if (reading) renderReading(wrap, candidate, reading);
+    if (candidate.detail) renderRawDetail(wrap, candidate);
     sajuCandidates.appendChild(wrap);
-
-    function addDetailRow(target, label, main, sub) {
-      addSajuCell(target, "saju-label", label);
-      for (const [key] of SAJU_COLUMNS) {
-        const d = detail.pillars[key];
-        const cell = addSajuCell(target, "", "");
-        const text = document.createElement("span");
-        text.className = "saju-sub";
-        text.textContent = d ? main(d) : "—";
-        if (d && sub) {
-          const small = document.createElement("small");
-          small.textContent = sub(d);
-          text.appendChild(small);
-        }
-        cell.appendChild(text);
-      }
-    }
   }
 
-  const shinsalLabel = (name) => (name === "년살" ? "도화(년살)" : name);
+  function renderReading(wrap, candidate, reading) {
+    const detail = candidate.detail;
+    const character = readingBlock("타고난 성향");
+    character.appendChild(el("p", "prose", reading.dayMaster.paragraph));
+    wrap.appendChild(character);
 
-  function sajuSection(wrap, title) {
-    const section = document.createElement("div");
-    section.className = "saju-section";
-    const h = document.createElement("h3");
-    h.textContent = title;
-    section.appendChild(h);
-    wrap.appendChild(section);
-    return section;
-  }
-
-  function renderSajuDetail(wrap, detail) {
-    const elements = document.createElement("div");
-    elements.className = "saju-elements";
-    for (const [name, count] of Object.entries(detail.elements)) {
-      const item = document.createElement("div");
-      item.className = count ? "saju-element" : "saju-element none";
-      const b = document.createElement("b");
-      b.textContent = count;
-      item.append(b, name);
-      elements.appendChild(item);
+    const elements = readingBlock("다섯 기운의 분포", "오행");
+    const bars = el("div", "saju-elements");
+    for (const [name, count] of Object.entries(reading.elements.counts)) {
+      const item = el("div", "saju-element" + (count ? "" : " none") + (reading.elements.excess.includes(name) ? " many" : ""));
+      item.append(el("b", null, String(count)), name);
+      bars.appendChild(item);
     }
-    sajuSection(wrap, "오행 분포 (천간·지지 여덟 글자)").appendChild(elements);
+    elements.append(bars, el("p", "prose", reading.elements.paragraph), el("p", "prose", reading.strength.paragraph));
+    wrap.appendChild(elements);
 
-    const list = document.createElement("ul");
-    list.className = "saju-shinsal";
-    for (const item of detail.shinsal) {
-      const li = document.createElement("li");
-      const tag = document.createElement("span");
-      tag.className = "tag";
-      tag.textContent = item.name;
-      const where = document.createElement("span");
-      where.className = "where";
-      where.textContent = ` ${item.pillarNames.join("·")} · ${item.basis} 기준`;
-      li.append(tag, item.meaning, where);
-      list.appendChild(li);
+    const gods = readingBlock("역할의 무게", "십성");
+    const chips = el("div", "groups");
+    for (const [group, count] of Object.entries(reading.tenGods.counts)) {
+      const chip = el("span", null, group);
+      chip.appendChild(el("b", null, String(count)));
+      chips.appendChild(chip);
     }
-    const shinsalSection = sajuSection(wrap, "신살");
-    if (detail.shinsal.length) shinsalSection.appendChild(list);
-    else {
-      const none = document.createElement("p");
-      none.className = "saju-note";
-      none.textContent = "원국에 두드러지는 신살이 없습니다.";
-      shinsalSection.appendChild(none);
+    gods.append(chips, el("p", "prose", reading.tenGods.paragraph));
+    wrap.appendChild(gods);
+
+    if (reading.annual) {
+      const annual = readingBlock(`${reading.annual.year}년 운`, "세운");
+      annual.appendChild(el("p", "prose", reading.annual.paragraph));
+      wrap.appendChild(annual);
     }
-
-    const annual = detail.annual;
-    const annualSection = sajuSection(wrap, `${annual.year}년 세운 · ${annual.ganji}(${annual.hanja})`);
-    const annualNote = document.createElement("p");
-    annualNote.className = "saju-note";
-    annualNote.textContent = `일간에게 ${annual.tenGod}의 해 · 12운성 ${annual.stage} · 12신살 연지 ${shinsalLabel(annual.shinsalByYear)} / 일지 ${shinsalLabel(annual.shinsalByDay)}`;
-    annualSection.appendChild(annualNote);
-
-    const luckSection = sajuSection(wrap, "대운");
-    if (!detail.luck) {
-      const note = document.createElement("p");
-      note.className = "saju-note";
-      note.textContent = "대운은 순행·역행이 성별로 정해져 성별을 선택하면 표시됩니다.";
-      luckSection.appendChild(note);
-    } else {
-      const strip = document.createElement("div");
-      strip.className = "saju-luck";
+    const luck = readingBlock("10년 흐름", "대운");
+    if (reading.luck && detail?.luck) {
+      luck.appendChild(el("p", "prose", reading.luck.paragraph));
+      const strip = el("div", "saju-luck");
       detail.luck.pillars.forEach((item, index) => {
-        const box = document.createElement("div");
-        if (index === detail.luck.current) box.className = "now";
-        const age = document.createElement("small");
-        age.textContent = `${item.age}세`;
-        const stage = document.createElement("small");
-        stage.textContent = item.stage;
-        box.append(age, item.ganji, stage);
+        const box = el("div", index === detail.luck.current ? "now" : "");
+        box.append(el("small", null, `${item.age}세`), item.ganji, el("small", null, item.stage));
         strip.appendChild(box);
       });
-      luckSection.appendChild(strip);
-      const note = document.createElement("p");
-      note.className = "saju-note";
-      note.textContent = `${detail.luck.forward ? "순행" : "역행"} · 대운수 ${detail.luck.startAge}`
-        + (detail.luck.current >= 0 ? ` · 지금은 ${detail.luck.pillars[detail.luck.current].ganji} 대운` : "");
-      luckSection.appendChild(note);
+      luck.appendChild(strip);
+      luck.appendChild(el("p", "note", `${detail.luck.forward ? "순행" : "역행"} · 첫 대운 ${detail.luck.startAge}세`));
+    } else {
+      luck.appendChild(el("p", "prose", "대운은 성별에 따라 흐르는 방향(순행·역행)이 정해져서, 성별을 선택하면 풀이해 드려요."));
     }
+    wrap.appendChild(luck);
+  }
 
-    const rule = document.createElement("p");
-    rule.className = "saju-status";
-    rule.textContent = `신살 기준 ${detail.rules.version} — ${detail.rules.twelveShinsal}, 양인은 ${detail.rules.yangin}`;
-    wrap.appendChild(rule);
+  // ③ 세부 데이터 — 지장간·12운성·12신살·신살은 접어 둔다(궁금한 사람만).
+  function renderRawDetail(wrap, candidate) {
+    const detail = candidate.detail;
+    const more = el("details", "more");
+    const summary = el("summary", null, "세부 데이터 — 지장간·12운성·신살");
+    const inner = el("div", "inner");
+    const grid = el("div", "saju-grid");
+    addSajuCell(grid, "saju-head", "");
+    for (const [, label] of SAJU_COLUMNS) addSajuCell(grid, "saju-head", label);
+    const row = (label, main, sub) => {
+      addSajuCell(grid, "saju-label", term(label));
+      for (const [key] of SAJU_COLUMNS) {
+        const d = detail.pillars[key];
+        const text = el("span", "saju-sub", d ? main(d) : "—");
+        if (d && sub) text.appendChild(el("small", null, sub(d)));
+        addSajuCell(grid, "", text);
+      }
+    };
+    row("지장간", (d) => d.hiddenStems.map((h) => h.stem).join(" "));
+    row("12운성", (d) => d.stage);
+    row("12신살", (d) => shinsalLabel(d.shinsalByYear), (d) => `일지 ${shinsalLabel(d.shinsalByDay)}`);
+    inner.appendChild(grid);
+
+    const head = el("p", "note");
+    head.append("원국의 ", term("신살"), " — 전통적으로 붙이는 별명이에요. 길흉을 단정하지 말고 성향의 힌트로 봐 주세요.");
+    inner.appendChild(head);
+    if (detail.shinsal.length) {
+      const list = el("ul", "saju-shinsal");
+      for (const item of detail.shinsal) {
+        const li = el("li");
+        const tag = item.name === "공망" ? term("공망") : el("span", null, item.name);
+        tag.classList.add("tag");
+        li.append(tag, item.meaning, el("span", "where", ` ${item.pillarNames.join("·")} · ${item.basis} 기준`));
+        list.appendChild(li);
+      }
+      inner.appendChild(list);
+    } else {
+      inner.appendChild(el("p", "note", "원국에 두드러지는 신살이 없어요."));
+    }
+    const a = detail.annual;
+    inner.appendChild(el("p", "note", `${a.year}년 세운 ${a.ganji}(${a.hanja}) · ${a.tenGod} · 12운성 ${a.stage} · 12신살 연지 ${shinsalLabel(a.shinsalByYear)} / 일지 ${shinsalLabel(a.shinsalByDay)}`));
+    more.append(summary, inner);
+    wrap.appendChild(more);
+  }
+
+  // "계산 기준" — 버전 문자열·교차검증은 읽기 흐름에서 빼고 여기 모은다.
+  function renderBasis(data) {
+    const list = $("basis-list");
+    list.replaceChildren();
+    const item = (label, code) => {
+      const li = el("li", null, `${label} `);
+      if (code) li.appendChild(el("code", null, code));
+      list.appendChild(li);
+    };
+    const verifyText = {
+      verified: "한국천문연구원(KASI) 일진과 교차검증 완료",
+      mismatch: "KASI 일진과 계산값이 달라 확인이 필요합니다",
+      unavailable: "KASI 연결 없이 내장 정밀 만세력으로 계산",
+      "not-configured": "내장 정밀 만세력으로 계산",
+    }[data.verification?.status] || "내장 정밀 만세력으로 계산";
+    item(verifyText);
+    item(data.inputCalendar === "lunar"
+      ? `음력 ${data.inputDate.leap ? "윤달" : "평달"} → 양력 ${data.solarDate.year}.${data.solarDate.month}.${data.solarDate.day} · 대한민국 표준시(KST) · 00시 일주 변경 · 진태양시 미보정`
+      : "양력 · 대한민국 표준시(KST) · 00시 일주 변경 · 진태양시 미보정");
+    item("명식 규칙", data.rules?.version);
+    const detailRules = data.candidates[0]?.detail?.rules;
+    if (detailRules) item(`신살 표 — ${detailRules.twelveShinsal}, 양인은 ${detailRules.yangin}`, detailRules.version);
+    if (data.readingRules) item(`풀이 문장 — ${data.readingRules.strength}`, data.readingRules.version);
+    if (data.dailyFortunes?.[0]) item("오늘의 운세 — 명식 일간 + 오늘 일진", data.dailyFortunes[0].method);
+    item("풀이는 전래 해석을 생활 언어로 옮긴 참고용이에요. 중요한 결정의 근거로 삼지는 마세요.");
   }
 
   async function renderSaju(birth) {
     const requestId = ++sajuRequestId;
-    sajuSec.hidden = false;
     sajuCandidates.replaceChildren();
     lastSajuData = null;
     sajuCopy.disabled = true;
+    $("story-saju").disabled = true;
     sajuStatus.hidden = false;
     sajuStatus.textContent = "명식을 계산하고 있습니다…";
     sajuWarning.hidden = true;
@@ -734,76 +898,58 @@
       const response = await fetch("/_fortune/chart", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          year: birth.y, month: birth.m, day: birth.d,
-          calendar: birth.calendar === "lunar" ? "lunar" : "solar",
-          lunarLeap: birth.lunarLeap === true,
-          gender: birth.gender,
-          timeMode: birth.timeMode === "clock" ? "clock" : "branch",
-          time: birth.time,
-          branch: birth.h,
-        }),
+        body: JSON.stringify(window.blFortuneChartBody(birth)),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "명식을 계산하지 못했습니다.");
       if (requestId !== sajuRequestId) return;
       lastSajuData = data;
       sajuCopy.disabled = false;
+      $("story-saju").disabled = false;
       if (birth.calendar === "lunar") {
         birth.solar = { y: data.solarDate.year, m: data.solarDate.month, d: data.solarDate.day };
         try { localStorage.setItem(KEY, JSON.stringify(birth)); } catch (e) {}
         renderBioResult(birth, birth.solar);
-        document.getElementById("saju-rule").textContent =
-          `음력 ${birth.lunarLeap ? "윤달" : "평달"} → 양력 ${data.solarDate.year}.${data.solarDate.month}.${data.solarDate.day} · 대한민국 표준시(KST) · 00시 일주 변경`;
-      } else {
-        document.getElementById("saju-rule").textContent =
-          "양력 · 대한민국 표준시(KST) · 00시 일주 변경 · 진태양시 미보정";
       }
       if (data.dailyFortunes?.[0]) showSajuFortune(data.dailyFortunes[0]);
       renderTojeong(data);
       for (const candidate of data.candidates) renderSajuCandidate(candidate, data.ambiguous);
-      const verifyText = {
-        verified: "KASI 일진 교차검증 완료",
-        mismatch: "KASI 일진과 계산값이 달라 확인이 필요합니다",
-        unavailable: "KASI 연결 없이 내장 정밀 만세력으로 계산했습니다",
-        "not-configured": "내장 정밀 만세력으로 계산했습니다",
-      }[data.verification?.status] || "내장 정밀 만세력으로 계산했습니다";
-      sajuStatus.textContent = `${verifyText} · 계산 기준 ${data.rules.version}`;
+      renderBasis(data);
+      sajuStatus.hidden = true;
       if (data.ambiguous) {
         sajuWarning.hidden = false;
-        sajuWarning.textContent = `⚠️ ${data.ambiguityReason} 가능한 명식을 함께 표시했습니다.`;
+        sajuWarning.textContent = `⚠️ ${data.ambiguityReason} 가능한 명식을 함께 보여 드려요. 오늘의 운세는 첫 번째 명식으로 봤어요.`;
       }
+      if (currentTab === "match") tabHooks.match();
     } catch (error) {
       if (requestId !== sajuRequestId) return;
-      tojeongSec.hidden = true;
+      tabsNav.querySelector('[data-tab="tojeong"]').hidden = true;
       sajuStatus.textContent = error.message || "명식을 계산하지 못했습니다.";
       showFortune(fallbackFortuneSeed);
-      if (birth.calendar === "lunar" && !birth.solar) document.getElementById("form").hidden = false;
+      if (birth.calendar === "lunar" && !birth.solar) $("form").hidden = false;
     }
   }
 
   // ── 토정비결 ────────────────────────────────────────────────
-  // 괘는 서버가 짓고(_infra/tojeong.js), 본문은 괘마다 정적 JSON 하나를 받아 온다.
-  const tojeongSec = document.getElementById("tojeong");
+  // 괘는 서버가 짓고(_infra/tojeong.js), 본문은 괘마다 정적 JSON 하나, 쉬운 해설은
+  // tojeong-reading.js 가 그 본문의 한문을 규칙으로 읽어 만든다.
   const LUNAR_MONTHS = ["정월", "2월", "3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "동짓달", "섣달"];
   const ASSUMPTION_TEXT = {
-    leapBirth: "윤달에 태어나셨네요. 전래 작괘법에 윤달 규칙이 없어 같은 달 평달로 계산했습니다.",
-    missingDay: "올해 음력 생월에 30일이 없어, 생일 일진은 그달 말일(29일)로 계산했습니다.",
+    leapBirth: "윤달에 태어나셨네요. 전래 작괘법에 윤달 규칙이 없어 같은 달 평달로 계산했어요.",
+    missingDay: "올해 음력 생월에 30일이 없어, 생일 일진은 그달 말일(29일)로 계산했어요.",
   };
   const tojeongCache = new Map();
   let tojeongSources = null;
   let tojeongRequestId = 0;
+  let tojeongModule = null;
+  const loadTojeongReading = () => (tojeongModule ??= import("./tojeong-reading.js"));
 
   function tojeongLines(target, lines) {
     target.replaceChildren();
     for (const line of lines) {
-      const li = document.createElement("li");
-      li.textContent = line.ko || line.reading;
-      const orig = document.createElement("small");
-      orig.className = "orig";
-      const hanja = document.createElement("span");
-      hanja.textContent = line.hanja;
-      orig.append(hanja, ` ${line.reading}`);
+      const li = el("li", null, line.ko || line.reading);
+      const orig = el("small", "orig");
+      orig.append(el("span", null, line.hanja), ` ${line.reading}`);
       if (line.fix) orig.append(` · 전사본 표기 ${line.fix.from} — ${line.fix.why}`);
       if (line.note) orig.append(` · ${line.note}`);
       if (line.unsure) orig.append(" · 뜻이 분명치 않아 가장 그럴듯하게 옮김");
@@ -811,7 +957,6 @@
       target.appendChild(li);
     }
   }
-
   async function fetchTojeong(code) {
     if (!tojeongCache.has(code)) {
       tojeongCache.set(code, fetch(`tojeong/${code}.json`).then((r) => {
@@ -829,242 +974,216 @@
       button.setAttribute("aria-pressed", String(+button.dataset.year === entry.year));
     }
     const b = entry.lunarBirth;
-    document.getElementById("tj-sub").textContent =
-      `음력 ${b.year}.${b.month}.${b.day}생 · ${entry.year}년 세는나이 ${entry.age}세 · 괘 ${entry.code}`;
+    $("tj-sub").textContent = `음력 ${b.year}.${b.month}.${b.day}생 · ${entry.year}년 세는나이 ${entry.age}세 · 괘 ${entry.code}`;
     const w = entry.work;
-    document.getElementById("tj-work").textContent =
+    $("tj-work").textContent =
       `상괘 = (나이 ${entry.age} + 태세수 ${w.taesae.value}[${w.taesae.ganji}년]) ÷ 8의 나머지 → ${entry.upper} · `
       + `중괘 = (생월 날수 ${w.wolgeon.monthLength} + 월건수 ${w.wolgeon.value}[${w.wolgeon.ganji}월]) ÷ 6의 나머지 → ${entry.middle} · `
       + `하괘 = (생일 ${b.day} + 일진수 ${w.iljin.value}[${w.iljin.ganji}일]) ÷ 3의 나머지 → ${entry.lower}. `
       + `나머지가 0이면 나눈 수를 씁니다. 연·월·일 간지는 모두 ${entry.year}년 것입니다(${entry.rules.version}).`;
-    const assume = document.getElementById("tj-assume");
+    const assume = $("tj-assume");
     assume.hidden = !entry.assumptions.length;
     assume.textContent = entry.assumptions.map((a) => ASSUMPTION_TEXT[a]).join(" ");
 
-    const title = document.getElementById("tj-title");
+    const title = $("tj-title");
     title.textContent = "본문을 불러오고 있습니다…";
-    document.getElementById("tj-summary").replaceChildren();
-    document.getElementById("tj-months").replaceChildren();
+    $("tj-overview").textContent = "";
+    $("tj-summary").replaceChildren();
+    $("tj-months").replaceChildren();
     try {
-      const text = await fetchTojeong(entry.code);
+      const [text, readingModule] = await Promise.all([fetchTojeong(entry.code), loadTojeongReading()]);
       if (requestId !== tojeongRequestId) return;
       title.replaceChildren();
       for (const [cls, value] of [["code", `${entry.year}년 · 괘 ${entry.code}`], ["hanja", text.title.hanja],
-        ["ko", `${text.title.reading} — ${text.title.ko}`]]) {
-        const span = document.createElement("span");
-        span.className = cls;
-        span.textContent = value;
-        title.appendChild(span);
-      }
-      tojeongLines(document.getElementById("tj-summary"), text.summary);
-      const months = document.getElementById("tj-months");
+        ["ko", `${text.title.reading} — ${text.title.ko}`]]) title.appendChild(el("span", cls, value));
+      const reading = readingModule.yearReading(text);
+      $("tj-overview").textContent = reading.paragraph;
+      tojeongLines($("tj-summary"), text.summary);
+      const months = $("tj-months");
       const nowMonth = data.lunarToday?.year === entry.year ? data.lunarToday.month : 0;
       text.months.forEach((lines, index) => {
-        const details = document.createElement("details");
-        details.className = index + 1 === nowMonth ? "tj-month now" : "tj-month";
-        details.open = index + 1 === nowMonth;
-        const summary = document.createElement("summary");
-        summary.textContent = LUNAR_MONTHS[index];
-        const hint = document.createElement("span");
-        hint.className = "hint";
-        hint.textContent = lines[0]?.ko ? lines[0].ko.slice(0, 18) + (lines[0].ko.length > 18 ? "…" : "") : "";
-        summary.appendChild(hint);
-        const ol = document.createElement("ol");
-        ol.className = "tj-lines";
+        const month = reading.months[index];
+        const box = el("div", index + 1 === nowMonth ? "tj-month now" : "tj-month");
+        box.dataset.tone = month.tone;
+        const orig = el("details", "orig-box");
+        const ol = el("ol", "tj-lines");
         tojeongLines(ol, lines);
-        details.append(summary, ol);
-        months.appendChild(details);
+        orig.append(el("summary", null, "원문 보기"), ol);
+        box.append(el("h4", null, LUNAR_MONTHS[index]), el("p", "prose", month.text), orig);
+        months.appendChild(box);
       });
       if (!tojeongSources) {
         tojeongSources = await fetch("tojeong/sources.json").then((r) => (r.ok ? r.json() : null)).catch(() => null);
       }
-      document.getElementById("tj-source").textContent = tojeongSources?.credit
-        ?? "원문은 전래 판본, 풀이는 bubblelab 자체 번역입니다.";
+      $("tj-source").textContent = (tojeongSources?.credit ?? "원문은 전래 판본, 풀이는 bubblelab 자체 번역입니다.")
+        + " 위 해설은 원문 구절의 길흉·분야를 규칙으로 읽어 쉬운 말로 옮긴 것이에요.";
     } catch (error) {
       if (requestId !== tojeongRequestId) return;
       title.textContent = error.message || "본문을 불러오지 못했습니다.";
     }
   }
-
+  let tojeongData = null;
   function renderTojeong(data) {
     const list = data.tojeong ?? [];
-    tojeongSec.hidden = !list.length;
-    if (!list.length) return;
-    const years = document.getElementById("tj-years");
+    tojeongData = list.length ? data : null;
+    tabsNav.querySelector('[data-tab="tojeong"]').hidden = !list.length;
+    if (!list.length) { if (currentTab === "tojeong") showTab("today"); return; }
+    const years = $("tj-years");
     years.replaceChildren();
     for (const entry of list) {
-      const button = document.createElement("button");
+      const button = el("button", "bl-chip", `${entry.year}년`);
       button.type = "button";
-      button.className = "bl-chip";
       button.dataset.year = entry.year;
-      button.textContent = `${entry.year}년`;
       button.addEventListener("click", () => showTojeongYear(data, entry));
       years.appendChild(button);
     }
     showTojeongYear(data, list[0]);
   }
 
-  function drawSajuCard(data) {
-    const S = 2, W = 500, pad = 28, rowLabelW = 54;
-    const cellW = (W - pad * 2 - rowLabelW) / 4;
-    const candidateH = 248;
-    const titleExtra = data.ambiguous ? 28 : 0;
-    const H = 102 + data.candidates.length * (candidateH + titleExtra) + 34;
-    const cv = document.createElement("canvas");
-    cv.width = W * S; cv.height = H * S;
-    const ctx = cv.getContext("2d");
-    ctx.scale(S, S);
-    const MONO = 'ui-monospace, "SF Mono", monospace';
-    const SERIF = 'serif';
-    const INK = "#dbe4ee", DIM = "rgba(219,228,238,.56)", LINE = "rgba(219,228,238,.15)";
-    const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, "#182230"); g.addColorStop(1, "#10161f");
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = INK; ctx.textAlign = "left"; ctx.font = `bold 20px ${MONO}`;
-    ctx.fillText("🧭 사주 명식", pad, 34);
-    ctx.fillStyle = DIM; ctx.font = `11px ${MONO}`;
-    const calendarNote = data.inputCalendar === "lunar"
-      ? `음력${data.inputDate.leap ? " 윤달" : " 평달"} → 양력 ${data.solarDate.year}.${data.solarDate.month}.${data.solarDate.day}`
-      : "양력";
-    ctx.fillText(`${calendarNote} · 대한민국 표준시(KST) · 00시 일주 변경`, pad, 60);
-    let y = 84;
-
-    const drawCell = (x, top, w, h, fill) => {
-      ctx.fillStyle = fill || "rgba(219,228,238,.025)"; ctx.fillRect(x, top, w, h);
-      ctx.strokeStyle = LINE; ctx.strokeRect(x, top, w, h);
-    };
-    const drawPart = (part, x, top, w, h) => {
-      drawCell(x, top, w, h);
-      ctx.textAlign = "center";
-      if (!part) {
-        ctx.fillStyle = DIM; ctx.font = `13px ${MONO}`; ctx.fillText("미상", x + w / 2, top + h / 2);
-        return;
-      }
-      ctx.fillStyle = INK; ctx.font = `30px ${SERIF}`; ctx.fillText(part.hanja, x + w / 2, top + 31);
-      ctx.font = `12px ${MONO}`; ctx.fillText(part.korean, x + w / 2, top + 59);
-      ctx.fillStyle = DIM; ctx.font = `10px ${MONO}`;
-      ctx.fillText(`${part.yinYang}·${part.element}`, x + w / 2, top + 78);
-      if (part.tenGod) ctx.fillText(part.tenGod, x + w / 2, top + 94);
-    };
-
-    for (const candidate of data.candidates) {
-      if (data.ambiguous) {
-        ctx.fillStyle = DIM; ctx.textAlign = "left"; ctx.font = `11px ${MONO}`;
-        ctx.fillText(candidate.timeLabel, pad, y + 10); y += 28;
-      }
-      const headH = 34, partH = 105;
-      drawCell(pad, y, rowLabelW, headH, "rgba(219,228,238,.055)");
-      SAJU_COLUMNS.forEach(([, label], i) => {
-        const x = pad + rowLabelW + cellW * i;
-        drawCell(x, y, cellW, headH, "rgba(219,228,238,.055)");
-        ctx.fillStyle = DIM; ctx.textAlign = "center"; ctx.font = `11px ${MONO}`;
-        ctx.fillText(label, x + cellW / 2, y + headH / 2);
-      });
-      ["stem", "branch"].forEach((partKey, row) => {
-        const top = y + headH + partH * row;
-        drawCell(pad, top, rowLabelW, partH, "rgba(219,228,238,.055)");
-        ctx.fillStyle = DIM; ctx.textAlign = "center"; ctx.font = `11px ${MONO}`;
-        ctx.fillText(row === 0 ? "천간" : "지지", pad + rowLabelW / 2, top + partH / 2);
-        SAJU_COLUMNS.forEach(([key], i) => drawPart(
-          candidate.pillars[key]?.[partKey], pad + rowLabelW + cellW * i, top, cellW, partH
-        ));
-      });
-      y += candidateH;
-    }
-    ctx.fillStyle = "rgba(219,228,238,.5)"; ctx.textAlign = "center"; ctx.font = `bold 11px ${MONO}`;
-    ctx.fillText("util.bubblelab.dev/fortune", W / 2, H - 19);
-    return cv;
-  }
-
-  sajuCopy.addEventListener("click", async () => {
-    if (!lastSajuData) return;
-    const original = "명식 이미지 복사";
+  // ── 궁합 ────────────────────────────────────────────────────
+  const pY = $("p-y"), pM = $("p-m"), pD = $("p-d"), pH = $("p-h"), pCal = $("p-cal");
+  fillYearMonth(pY, pM);
+  const fillPartnerDays = () => fillDaysOf(pY, pM, pD, pCal.value !== "solar");
+  for (const sel of [pY, pM, pCal]) sel.addEventListener("change", fillPartnerDays);
+  pY.value = "1990"; pM.value = "1"; fillPartnerDays(); pD.value = "1";
+  function loadPartner() {
     try {
-      if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
-        throw new Error("이 브라우저에서는 이미지 복사를 지원하지 않습니다.");
-      }
-      const cv = drawSajuCard(lastSajuData);
-      const blob = await new Promise((resolve) => cv.toBlob(resolve, "image/png"));
-      if (!blob) throw new Error("이미지를 만들지 못했습니다.");
-      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-      sajuCopy.textContent = "복사됨 ✓";
+      const o = JSON.parse(localStorage.getItem(PARTNER_KEY) || "null");
+      return o && o.y && o.m && o.d ? o : null;
+    } catch (e) { return null; }
+  }
+  function fillPartnerForm(p) {
+    if (!p) return;
+    $("p-name").value = p.name || "";
+    pCal.value = p.calendar === "lunar" ? (p.lunarLeap ? "leap" : "lunar") : "solar";
+    $("p-gender").value = p.gender || "unspecified";
+    pY.value = p.y; pM.value = p.m; fillPartnerDays(); pD.value = p.d;
+    pH.value = p.h == null ? "" : p.h;
+  }
+  let matchRequestId = 0;
+  let matchShownFor = "";
+  async function renderMatch(force = false) {
+    const me = load();
+    const partner = loadPartner();
+    const result = $("match-result");
+    if (!me) return;
+    if (!partner) { result.hidden = true; $("match-form").hidden = false; return; }
+    const signature = JSON.stringify([me, partner]);
+    if (!force && signature === matchShownFor) return;
+    const requestId = ++matchRequestId;
+    $("match-form").hidden = true;
+    result.hidden = false;
+    result.replaceChildren(el("p", "note", "궁합을 계산하고 있어요…"));
+    try {
+      const { name, ...partnerBirth } = partner;   // 이름은 서버로 보내지 않는다
+      const response = await fetch("/_fortune/chart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...window.blFortuneChartBody(me), partner: window.blFortuneChartBody(partnerBirth) }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "궁합을 계산하지 못했습니다.");
+      if (requestId !== matchRequestId) return;
+      matchShownFor = signature;
+      const c = data.compatibility;
+      const who = partner.name || "상대";
+      const heading = el("h2");
+      heading.append(`나와 ${who}의 `, term("궁합"));
+      const pair = el("div", "pair");
+      const person = (label, pillar) => {
+        const box = el("div", "who");
+        box.append(el("small", null, label), el("span", null, pillar.hanja), el("small", null, `${pillar.korean} 일주`));
+        return box;
+      };
+      pair.append(person("나", data.candidates[0].pillars.day), el("span", "heart", "💞"), person(who, data.partner.pillars.day));
+      const score = el("div", "score");
+      score.append(el("b", null, String(c.score)), el("span", "sub", `/ 100 · ${c.level}`));
+      result.replaceChildren(heading, pair, score, ...c.paragraphs.map((p) => el("p", "prose", p)));
+      const note = el("p", "note");
+      note.append("점수는 ", term("일간"), "의 오행 관계, 일지 ", term("합충", "합충"), ", 오행 보완을 더해 낸 참고값이에요.");
+      if (data.partner.ambiguous) note.append(" 상대의 시진 안에서 명식이 갈려 첫 번째 명식으로 봤어요.");
+      const actions = el("div", "actions");
+      const edit = el("button", "bl-btn bl-btn--sm", "상대 정보 바꾸기");
+      edit.addEventListener("click", () => { fillPartnerForm(loadPartner()); result.hidden = true; $("match-form").hidden = false; });
+      const clear = el("button", "bl-btn bl-btn--ghost bl-btn--sm", "지우기");
+      clear.addEventListener("click", () => {
+        try { localStorage.removeItem(PARTNER_KEY); } catch (e) {}
+        matchShownFor = "";
+        result.hidden = true; $("match-form").hidden = false;
+      });
+      actions.append(edit, clear);
+      result.append(note, actions);
     } catch (error) {
-      sajuCopy.textContent = "복사 실패";
-      sajuStatus.hidden = false;
-      sajuStatus.textContent = error.message || "이미지를 복사하지 못했습니다.";
-    } finally {
-      setTimeout(() => { sajuCopy.textContent = original; }, 1800);
+      if (requestId !== matchRequestId) return;
+      result.replaceChildren(el("p", "err", error.message || "궁합을 계산하지 못했습니다."));
+      $("match-form").hidden = false;
     }
+  }
+  tabHooks.match = () => renderMatch();
+  $("p-save").addEventListener("click", () => {
+    const y = +pY.value, m = +pM.value, d = +pD.value;
+    if (pCal.value === "solar" && new Date(y, m - 1, d) > now) { $("p-err").textContent = "미래 날짜는 입력할 수 없어요."; return; }
+    $("p-err").textContent = "";
+    const partner = {
+      name: $("p-name").value.trim().slice(0, 12),
+      y, m, d, calendar: pCal.value === "solar" ? "solar" : "lunar", lunarLeap: pCal.value === "leap",
+      gender: $("p-gender").value, timeMode: "branch", h: pH.value === "" ? null : +pH.value, time: null,
+    };
+    try { localStorage.setItem(PARTNER_KEY, JSON.stringify(partner)); } catch (e) {}
+    renderMatch(true);
   });
 
-  let lastBio = null;   // { n, vals, head } — 공유 이미지에서 재사용
+  // ── 바이오리듬 결과 ───────────────────────────────────────────
+  let lastBio = null;
   function renderBioResult(birth, solarBirth) {
-    document.getElementById("form").hidden = true;
-    document.getElementById("reveal").hidden = true;
-    const res = document.getElementById("result");
-    res.hidden = false;
-
     const n = daysBetween(solarBirth, now);
     const vals = {};
     for (const c of CYCLES) {
       const v = Math.sin((2 * Math.PI * n) / c.period);
       vals[c.key] = v;
       setBar(c.key, v);
-      document.getElementById("note-" + c.key).textContent = noteFor(c.name, v);
+      $("note-" + c.key).textContent = noteFor(c.name, v);
     }
     const avg = (vals.phy + vals.emo + vals.int) / 3;
-
-    // 오늘의 한줄을 생년월일·바이오리듬 수치로 갱신 (하루 동안 고정)
-    const seed = todayNum() + n +
-      Math.round((vals.phy + vals.emo + vals.int) * 1000);
-    fallbackFortuneSeed = seed;
-
+    fallbackFortuneSeed = todayNum() + n + Math.round((vals.phy + vals.emo + vals.int) * 1000);
     let head;
-    if (avg >= 0.5) head = "✨ 세 리듬이 모두 좋은 날! 자신감을 가져도 좋습니다.";
-    else if (avg >= 0.15) head = "🙂 전반적으로 순조로운 흐름. 무난하게 좋은 하루.";
+    if (avg >= 0.5) head = "✨ 세 리듬이 모두 좋은 날! 자신감을 가져도 좋아요.";
+    else if (avg >= 0.15) head = "🙂 전반적으로 순조로운 흐름. 무난하게 좋은 하루예요.";
     else if (avg > -0.15) head = "😌 균형 잡힌 날. 큰 기복 없이 차분하게 보내기 좋아요.";
-    else if (avg > -0.5) head = "🌥️ 리듬이 다소 가라앉는 날. 무리하지 말고 쉬엄쉬엄.";
+    else if (avg > -0.5) head = "🌥️ 리듬이 다소 가라앉는 날. 무리하지 말고 쉬엄쉬엄 가요.";
     else head = "🛌 컨디션 저점 구간. 오늘은 나를 아껴주는 하루로.";
-    document.getElementById("bio-headline").textContent = head;
-
-    document.getElementById("bio-sub").textContent = `태어난 지 ${n.toLocaleString()}일째`;
-
+    $("bio-headline").textContent = head;
+    $("bio-sub").textContent = `태어난 지 ${n.toLocaleString()}일째`;
+    lastBio = { n, vals, head };
+    updateSavedInfo(birth, solarBirth);
+  }
+  function updateSavedInfo(birth, solarBirth) {
     const b = BRANCHES[birth.h];
-    const hourTxt = birth.timeMode === "clock" && birth.time
-      ? ` ${birth.time}`
-      : (b ? ` ${b.k}시(${b.c})` : "");
+    const hourTxt = birth.timeMode === "clock" && birth.time ? ` ${birth.time}` : (b ? ` ${b.k}시(${b.c})` : "");
     const dateTxt = birth.calendar === "lunar"
-      ? `음력 ${birth.y}.${birth.m}.${birth.d} ${birth.lunarLeap ? "윤달" : "평달"} → 양력 ${solarBirth.y}.${solarBirth.m}.${solarBirth.d}`
+      ? `음력 ${birth.y}.${birth.m}.${birth.d} ${birth.lunarLeap ? "윤달" : "평달"}${solarBirth ? ` → 양력 ${solarBirth.y}.${solarBirth.m}.${solarBirth.d}` : ""}`
       : `양력 ${birth.y}.${birth.m}.${birth.d}`;
-    document.getElementById("saved-info").textContent =
-      `저장됨: ${dateTxt}${hourTxt} · 이 기기에만 저장됩니다`;
-
-    lastBio = { n, vals, head };   // 공유 이미지에서 재사용
+    $("saved-info").textContent = `저장됨: ${dateTxt}${hourTxt} · 이 기기에만 저장돼요`;
   }
 
   function renderResult(birth) {
-    document.getElementById("form").hidden = true;
-    document.getElementById("reveal").hidden = true;
+    $("form").hidden = true;
+    $("reveal").hidden = true;
+    $("saved").hidden = false;
+    setTabsVisible(true);
     showFortuneLoading();
-    if (birth.calendar === "lunar") {
-      if (birth.solar) renderBioResult(birth, birth.solar);
-      else {
-        lastBio = null;
-        document.getElementById("result").hidden = true;
-      }
-    } else {
-      renderBioResult(birth, birth);
-    }
+    updateSavedInfo(birth, birth.calendar === "lunar" ? birth.solar : birth);
+    if (birth.calendar !== "lunar") renderBioResult(birth, birth);
+    else if (birth.solar) renderBioResult(birth, birth.solar);
+    else lastBio = null;
+    matchShownFor = "";
     renderSaju(birth);
   }
 
   // ── 저장/불러오기 ──────────────────────────────────────────────
   function load() {
     try {
-      const raw = localStorage.getItem(KEY);
-      if (!raw) return null;
-      const o = JSON.parse(raw);
+      const o = JSON.parse(localStorage.getItem(KEY) || "null");
       if (o && o.y && o.m && o.d) return o;
     } catch (e) {}
     return null;
@@ -1079,243 +1198,315 @@
     inTime.value = b.time || "";
     setTimeMode(b.timeMode === "clock" ? "clock" : "branch");
   }
-
-  const revealSec = document.getElementById("reveal");
-  const formSec = document.getElementById("form");
-  const errEl = document.getElementById("err");
-
-  document.getElementById("reveal-btn").addEventListener("click", () => {
-    revealSec.hidden = true;
-    formSec.hidden = false;
+  const errEl = $("err");
+  $("reveal-btn").addEventListener("click", () => {
+    $("reveal").hidden = true;
+    $("form").hidden = false;
     errEl.textContent = "";
   });
-  document.getElementById("cancel").addEventListener("click", () => {
-    formSec.hidden = true;
-    if (!load()) revealSec.hidden = false;
-    else renderResult(load());
+  $("cancel").addEventListener("click", () => {
+    $("form").hidden = true;
+    const saved = load();
+    if (!saved) $("reveal").hidden = false;
+    else renderResult(saved);
   });
-  document.getElementById("edit-btn").addEventListener("click", () => {
-    document.getElementById("result").hidden = true;
-    sajuSec.hidden = true;
-    tojeongSec.hidden = true;
+  $("edit-btn").addEventListener("click", () => {
     sajuRequestId++;
+    setTabsVisible(false);
+    $("saved").hidden = true;
     fillForm(load());
-    formSec.hidden = false;
+    $("form").hidden = false;
     errEl.textContent = "";
+    $("form").scrollIntoView({ block: "start" });
   });
-  document.getElementById("save").addEventListener("click", () => {
+  $("save").addEventListener("click", () => {
     const y = +selY.value, m = +selM.value, d = +selD.value;
     const time = timeMode === "clock" ? inTime.value : "";
     if (timeMode === "clock" && !time) {
       errEl.textContent = "정확한 시각을 입력하거나 시진 입력을 선택해주세요.";
       return;
     }
-    const h = timeMode === "clock"
-      ? branchFromClock(time)
-      : (selH.value === "" ? null : +selH.value);
+    const h = timeMode === "clock" ? branchFromClock(time) : (selH.value === "" ? null : +selH.value);
     const birth = {
       y, m, d, calendar: calendarMode,
       lunarLeap: calendarMode === "lunar" && lunarLeap.value === "leap",
-      gender: genderMode,
-      timeMode, h, time: time || null,
+      gender: genderMode, timeMode, h, time: time || null,
     };
-    // 미래 날짜 방어
-    const bd = new Date(y, m - 1, d);
-    if (calendarMode === "solar" && bd > now) { errEl.textContent = "미래 날짜는 입력할 수 없어요."; return; }
+    if (calendarMode === "solar" && new Date(y, m - 1, d) > now) { errEl.textContent = "미래 날짜는 입력할 수 없어요."; return; }
     errEl.textContent = "";
     try { localStorage.setItem(KEY, JSON.stringify(birth)); } catch (e) {}
+    currentTab = "today";
     renderResult(birth);
-  });
-
-  document.querySelectorAll(".panel-toggle").forEach((toggle) => {
-    toggle.addEventListener("click", () => {
-      const content = document.getElementById(toggle.getAttribute("aria-controls"));
-      const expanded = toggle.getAttribute("aria-expanded") === "true";
-      toggle.setAttribute("aria-expanded", String(!expanded));
-      content.hidden = expanded;
-    });
   });
 
   // ── 초기 상태 ──────────────────────────────────────────────────
   const saved = load();
-  if (saved) { fillForm(saved); renderResult(saved); }
-  else { showFortune(todayNum()); }  // 생년월일 없으면 오늘 날짜 기준
+  if (saved) {
+    currentTab = TABS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "today";
+    fillForm(saved);
+    fillPartnerForm(loadPartner());
+    renderResult(saved);
+  } else {
+    showFortune(todayNum());
+    showTab("today");
+  }
 
-  // ── 공유 ───────────────────────────────────────────────────────
-  const dateStr = document.getElementById("today").textContent;
-
-  // 공유 텍스트: 오늘의 문구를 항상 포함.
-  // (생년월일 미입력자는 이 텍스트만, 입력자는 이미지와 함께 공유된다)
+  // ── 공유: 스토리 카드(1080×1920) ─────────────────────────────────
+  const dateStr = $("today").textContent;
   window.blShareText = () => {
     const [emoji, text] = currentLine;
     return `🔮 오늘의 운세 · ${dateStr}\n${emoji} ${text}`;
   };
 
-  // 공유 이미지: 명식 기반 분야별 운세가 계산된 경우에만 생성.
   function rr(ctx, x, y, w, h, r) {
-    r = Math.min(r, Math.abs(w) / 2, h / 2);
-    if (w < 0) { x += w; w = -w; }
     ctx.beginPath();
     if (ctx.roundRect) ctx.roundRect(x, y, w, h, r);
-    else {
-      ctx.moveTo(x + r, y);
-      ctx.arcTo(x + w, y, x + w, y + h, r);
-      ctx.arcTo(x + w, y + h, x, y + h, r);
-      ctx.arcTo(x, y + h, x, y, r);
-      ctx.arcTo(x, y, x + w, y, r);
-      ctx.closePath();
-    }
+    else ctx.rect(x, y, w, h);
   }
   function wrapLines(ctx, text, maxW) {
+    // 띄어쓰기 단위로 끊고, 한 어절이 너무 길면 글자 단위로 자른다.
     const lines = [];
     let cur = "";
-    for (const ch of text) {
-      const test = cur + ch;
-      if (ctx.measureText(test).width > maxW && cur) { lines.push(cur); cur = ch; }
-      else cur = test;
+    for (const word of String(text).split(/(\s+)/)) {
+      const test = cur + word;
+      if (ctx.measureText(test).width <= maxW || !cur.trim()) { cur = test; continue; }
+      lines.push(cur.trim());
+      cur = word.trimStart();
     }
-    if (cur) lines.push(cur);
-    return lines;
-  }
-
-  function drawCard() {
-    const S = 2, W = 450, pad = 34, innerW = W - pad * 2;
-    const MONO = 'ui-monospace, "SF Mono", monospace';
-    const [emoji, text] = currentLine;
-    const categoryData = [
-      ["재물운", currentDaily.categories.wealth],
-      ["직업운", currentDaily.categories.career],
-      ["연애운", currentDaily.categories.love],
-    ];
-
-    // 측정용 컨텍스트로 문구 줄바꿈 계산
-    const meas = document.createElement("canvas").getContext("2d");
-    meas.font = "19px " + MONO;
-    const lines = wrapLines(meas, text, innerW);
-    meas.font = "12px " + MONO;
-    const categoryRows = categoryData.map(([name, category]) => {
-      const commentLines = wrapLines(meas, category.comment, innerW - 82);
-      return { name, ...category, commentLines, height: Math.max(62, 20 + commentLines.length * 19) };
+    if (cur.trim()) lines.push(cur.trim());
+    return lines.flatMap((line) => {
+      if (ctx.measureText(line).width <= maxW) return [line];
+      const out = []; let part = "";
+      for (const ch of line) {
+        if (ctx.measureText(part + ch).width > maxW && part) { out.push(part); part = ch; } else part += ch;
+      }
+      return part ? [...out, part] : out;
     });
+  }
+  const SANS = '"Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif';
+  const LEVEL_COLOR = { 원활: "#6fd39b", 무난: "#dbe4ee", 주의: "#ff8a80" };
 
-    // 높이 계산
-    let H = 34;             // top pad
-    H += 26 + 20;           // title + date
-    H += 30;                // gap
-    H += 52;                // emoji
-    H += lines.length * 28; // 문구
-    H += 26;                // gap
-    H += 1 + 22;            // divider + gap
-    H += categoryRows.reduce((sum, row) => sum + row.height + 8, 0);
-    H += 26;                // gap
-    H += 20;                // footer
-    H += 48;                // footer가 잘리지 않도록 넉넉한 bottom pad
+  // 오늘의 운세 + 명식 요약을 인스타 스토리 크기 한 장에. (데이터가 없는 칸은 건너뛴다)
+  function drawStoryCard() {
+    const W = 1080, H = 1920, pad = 84, innerW = W - pad * 2;
+    const cv = document.createElement("canvas");
+    cv.width = W; cv.height = H;
+    const ctx = cv.getContext("2d");
+    const g = ctx.createLinearGradient(0, 0, W, H);
+    g.addColorStop(0, "#14243a"); g.addColorStop(.55, "#0f1824"); g.addColorStop(1, "#1b1530");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    const glow = ctx.createRadialGradient(W * .8, 260, 20, W * .8, 260, 520);
+    glow.addColorStop(0, "rgba(120,190,255,.20)"); glow.addColorStop(1, "rgba(120,190,255,0)");
+    ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+    const INK = "#eef3f8", DIM = "rgba(238,243,248,.62)", FAINT = "rgba(238,243,248,.10)";
+    ctx.textBaseline = "alphabetic";
+    let y = 150;
+    const [emoji, text] = currentLine;
+    ctx.fillStyle = INK; ctx.textAlign = "left"; ctx.font = `800 64px ${SANS}`;
+    ctx.fillText("🔮 오늘의 운세", pad, y);
+    ctx.textAlign = "right"; ctx.font = `120px ${SANS}`; ctx.fillText(emoji, W - pad, y + 50);
+    ctx.textAlign = "left";
+    y += 62; ctx.fillStyle = DIM; ctx.font = `500 36px ${SANS}`;
+    const daily = currentDaily;
+    ctx.fillText(daily ? `${dateStr} · ${daily.iljin}(${daily.iljinHanja})일` : dateStr, pad, y);
 
+    // 오늘의 한 문단 — 길면 일곱 줄에서 자른다
+    y += 50;
+    ctx.font = `500 42px ${SANS}`; ctx.fillStyle = INK;
+    let lines = wrapLines(ctx, text, innerW);
+    if (lines.length > 7) { lines = lines.slice(0, 7); lines[6] = lines[6].replace(/.{1,2}$/, "…"); }
+    for (const line of lines) { y += 62; ctx.fillText(line, pad, y); }
+
+    // 분야별 여섯 칸
+    if (daily) {
+      y += 70;
+      const colW = (innerW - 24) / 2, boxH = 112;
+      CATEGORY_LIST.forEach(([key, name], i) => {
+        const c = daily.categories[key];
+        if (!c) return;
+        const x = pad + (i % 2) * (colW + 24), top = y + Math.floor(i / 2) * (boxH + 20);
+        ctx.fillStyle = FAINT; rr(ctx, x, top, colW, boxH, 26); ctx.fill();
+        ctx.fillStyle = DIM; ctx.font = `600 34px ${SANS}`; ctx.fillText(name, x + 32, top + 70);
+        ctx.fillStyle = LEVEL_COLOR[c.level] ?? INK; ctx.font = `800 44px ${SANS}`; ctx.textAlign = "right";
+        ctx.fillText(c.level, x + colW - 32, top + 72); ctx.textAlign = "left";
+      });
+      y += 3 * (boxH + 20);
+      if (daily.lucky) {
+        y += 40;
+        ctx.fillStyle = DIM; ctx.font = `600 32px ${SANS}`; ctx.fillText("오늘의 행운", pad, y);
+        y += 62; ctx.fillStyle = INK; ctx.font = `700 40px ${SANS}`;
+        ctx.fillText(`🎨 ${daily.lucky.color}   🧭 ${daily.lucky.direction}   🔢 ${daily.lucky.number}`, pad, y);
+        y += 56; ctx.fillStyle = DIM; ctx.font = `500 32px ${SANS}`;
+        ctx.fillText(`⏰ 조심할 때 ${daily.times.caution.branch}시(${daily.times.caution.range})`, pad, y);
+      }
+    }
+
+    // 아래: 명식 네 기둥과 일간 한 줄
+    const cand = lastSajuData?.candidates?.[0];
+    if (cand) {
+      // 위 내용이 길어도 겹치지 않게 내용 바로 아래에 두되, 바닥 주소와는 띄운다.
+      const top = Math.min(Math.max(y + 70, H - 560), H - 470);
+      ctx.fillStyle = FAINT; rr(ctx, pad, top, innerW, 330, 34); ctx.fill();
+      ctx.fillStyle = DIM; ctx.font = `600 30px ${SANS}`; ctx.fillText("🧭 나의 사주 명식", pad + 40, top + 62);
+      const cellW = (innerW - 80) / 4;
+      SAJU_COLUMNS.forEach(([key, label], i) => {
+        const p = cand.pillars[key];
+        const cx = pad + 40 + cellW * i + cellW / 2;
+        ctx.textAlign = "center";
+        ctx.fillStyle = DIM; ctx.font = `500 26px ${SANS}`; ctx.fillText(label, cx, top + 112);
+        ctx.fillStyle = key === "day" ? "#9fd2ff" : INK; ctx.font = `64px serif`;
+        ctx.fillText(p ? p.stem.hanja : "·", cx, top + 190);
+        ctx.fillText(p ? p.branch.hanja : "·", cx, top + 262);
+      });
+      ctx.textAlign = "left";
+      const dm = cand.reading?.dayMaster;
+      if (dm) {
+        ctx.fillStyle = INK; ctx.font = `600 34px ${SANS}`;
+        ctx.fillText(`나는 ${dm.name} · ${dm.keyword}`, pad, top + 395);
+      }
+    }
+    ctx.fillStyle = DIM; ctx.font = `700 34px ${SANS}`; ctx.textAlign = "center";
+    ctx.fillText("util.bubblelab.dev/fortune", W / 2, H - 70);
+    return cv;
+  }
+  async function storyFile() {
+    const blob = await new Promise((resolve) => drawStoryCard().toBlob(resolve, "image/png"));
+    if (!blob) throw new Error("이미지를 만들지 못했어요.");
+    return new File([blob], `오늘의운세-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}.png`, { type: "image/png" });
+  }
+  // 저장: 파일 공유가 되는 폰이면 공유 시트(사진 저장·인스타 스토리), 아니면 내려받기.
+  async function saveStory(button) {
+    const original = button.textContent;
+    button.disabled = true;
+    try {
+      const file = await storyFile();
+      if (navigator.canShare?.({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: "오늘의 운세" });
+          button.textContent = "공유함 ✓";
+          return;
+        } catch (error) {
+          if (error.name === "AbortError") return;
+        }
+      }
+      const url = URL.createObjectURL(file);
+      const a = el("a");
+      a.href = url; a.download = file.name;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      button.textContent = "저장됨 ✓";
+    } catch (error) {
+      button.textContent = "저장 실패";
+    } finally {
+      button.disabled = false;
+      setTimeout(() => { button.textContent = original; }, 1800);
+    }
+  }
+  $("story-today").addEventListener("click", (e) => saveStory(e.currentTarget));
+  $("story-saju").addEventListener("click", (e) => saveStory(e.currentTarget));
+  window.blDrawStoryCard = drawStoryCard;   // 확인용(검증 스크립트가 그림을 꺼내 본다)
+
+  // 명식 표만 작은 이미지로 클립보드에 — 대화창에 붙여 넣기 좋게.
+  function drawSajuCard(data) {
+    const S = 2, W = 500, pad = 28, rowLabelW = 54;
+    const cellW = (W - pad * 2 - rowLabelW) / 4;
+    const candidateH = 248;
+    const titleExtra = data.ambiguous ? 28 : 0;
+    const H = 102 + data.candidates.length * (candidateH + titleExtra) + 34;
     const cv = document.createElement("canvas");
     cv.width = W * S; cv.height = H * S;
     const ctx = cv.getContext("2d");
     ctx.scale(S, S);
-
-    // 배경
+    const INK = "#dbe4ee", DIM = "rgba(219,228,238,.56)", LINE = "rgba(219,228,238,.15)";
     const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, "#141c27");
-    g.addColorStop(1, "#0f151d");
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, W, H);
-
-    const INK = "#dbe4ee", DIM = "rgba(219,228,238,";
-    ctx.textBaseline = "alphabetic";
-    let y = 34;
-
-    // 타이틀
-    ctx.textAlign = "left";
-    ctx.fillStyle = INK;
-    ctx.font = "bold 20px " + MONO;
-    y += 20;
-    ctx.fillText("🔮 오늘의 운세", pad, y);
-    ctx.fillStyle = DIM + "0.5)";
-    ctx.font = "13px " + MONO;
-    y += 20;
-    ctx.fillText(dateStr, pad, y);
-
-    // 오늘의 문구
-    y += 30;
-    ctx.textAlign = "center";
-    ctx.font = "40px " + MONO;
-    y += 40;
-    ctx.fillText(emoji, W / 2, y);
-    ctx.fillStyle = INK;
-    ctx.font = "19px " + MONO;
-    y += 12;
-    for (const ln of lines) { y += 28; ctx.fillText(ln, W / 2, y); }
-
-    // 구분선
-    y += 26;
-    ctx.fillStyle = DIM + "0.12)";
-    ctx.fillRect(pad, y, innerW, 1);
-
-    // 재물운 · 직업운 · 연애운
-    y += 22;
-    for (const category of categoryRows) {
-      const top = y;
-      ctx.fillStyle = "rgba(219,228,238,.035)";
-      rr(ctx, pad, top, innerW, category.height, 8); ctx.fill();
-
-      const left = pad + 12;
-      ctx.fillStyle = INK;
-      ctx.font = "bold 13px " + MONO;
-      ctx.textAlign = "left";
-      ctx.fillText(category.name, left, top + 21);
-
-      ctx.font = "bold 11px " + MONO;
-      const badgeW = ctx.measureText(category.level).width + 12;
-      ctx.fillStyle = "rgba(219,228,238,.10)";
-      rr(ctx, left, top + 31, badgeW, 20, 4); ctx.fill();
-      ctx.fillStyle = category.level === "원활" ? "#6fd4ac"
-        : category.level === "주의" ? "#ff8a7a" : INK;
-      ctx.fillText(category.level, left + 6, top + 45);
-
-      ctx.fillStyle = DIM + "0.75)";
-      ctx.font = "12px " + MONO;
-      category.commentLines.forEach((line, index) => {
-        ctx.fillText(line, pad + 82, top + 21 + index * 19);
-      });
-      y += category.height + 8;
-    }
-
-    // 푸터 (링크)
-    ctx.fillStyle = DIM + "0.72)";
-    ctx.font = "bold 13px " + MONO;
-    ctx.textAlign = "center";
+    g.addColorStop(0, "#182230"); g.addColorStop(1, "#10161f");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     ctx.textBaseline = "middle";
-    ctx.fillText("👉 util.bubblelab.dev/fortune", W / 2, H - 28);
-
+    ctx.fillStyle = INK; ctx.textAlign = "left"; ctx.font = `bold 20px ${SANS}`;
+    ctx.fillText("🧭 사주 명식", pad, 34);
+    ctx.fillStyle = DIM; ctx.font = `11px ${SANS}`;
+    const calendarNote = data.inputCalendar === "lunar"
+      ? `음력${data.inputDate.leap ? " 윤달" : " 평달"} → 양력 ${data.solarDate.year}.${data.solarDate.month}.${data.solarDate.day}`
+      : "양력";
+    ctx.fillText(`${calendarNote} · 대한민국 표준시(KST) · 00시 일주 변경`, pad, 60);
+    let y = 84;
+    const drawCell = (x, top, w, h, fill) => {
+      ctx.fillStyle = fill || "rgba(219,228,238,.025)"; ctx.fillRect(x, top, w, h);
+      ctx.strokeStyle = LINE; ctx.strokeRect(x, top, w, h);
+    };
+    const drawPart = (part, x, top, w, h) => {
+      drawCell(x, top, w, h);
+      ctx.textAlign = "center";
+      if (!part) { ctx.fillStyle = DIM; ctx.font = `13px ${SANS}`; ctx.fillText("미상", x + w / 2, top + h / 2); return; }
+      ctx.fillStyle = INK; ctx.font = "30px serif"; ctx.fillText(part.hanja, x + w / 2, top + 31);
+      ctx.font = `12px ${SANS}`; ctx.fillText(part.korean, x + w / 2, top + 59);
+      ctx.fillStyle = DIM; ctx.font = `10px ${SANS}`;
+      ctx.fillText(`${part.yinYang}·${part.element}`, x + w / 2, top + 78);
+      if (part.tenGod) ctx.fillText(part.tenGod, x + w / 2, top + 94);
+    };
+    for (const candidate of data.candidates) {
+      if (data.ambiguous) {
+        ctx.fillStyle = DIM; ctx.textAlign = "left"; ctx.font = `11px ${SANS}`;
+        ctx.fillText(candidate.timeLabel, pad, y + 10); y += 28;
+      }
+      const headH = 34, partH = 105;
+      drawCell(pad, y, rowLabelW, headH, "rgba(219,228,238,.055)");
+      SAJU_COLUMNS.forEach(([, label], i) => {
+        const x = pad + rowLabelW + cellW * i;
+        drawCell(x, y, cellW, headH, "rgba(219,228,238,.055)");
+        ctx.fillStyle = DIM; ctx.textAlign = "center"; ctx.font = `11px ${SANS}`;
+        ctx.fillText(label, x + cellW / 2, y + headH / 2);
+      });
+      ["stem", "branch"].forEach((partKey, row) => {
+        const top = y + headH + partH * row;
+        drawCell(pad, top, rowLabelW, partH, "rgba(219,228,238,.055)");
+        ctx.fillStyle = DIM; ctx.textAlign = "center"; ctx.font = `11px ${SANS}`;
+        ctx.fillText(row === 0 ? "천간" : "지지", pad + rowLabelW / 2, top + partH / 2);
+        SAJU_COLUMNS.forEach(([key], i) => drawPart(candidate.pillars[key]?.[partKey], pad + rowLabelW + cellW * i, top, cellW, partH));
+      });
+      y += candidateH;
+    }
+    ctx.fillStyle = "rgba(219,228,238,.5)"; ctx.textAlign = "center"; ctx.font = `bold 11px ${SANS}`;
+    ctx.fillText("util.bubblelab.dev/fortune", W / 2, H - 19);
     return cv;
   }
-
-  window.blShareFiles = async () => {
-    if (!load() || !currentDaily) return null;   // 명식 운세가 없으면 이미지 없이 텍스트만
+  sajuCopy.addEventListener("click", async () => {
+    if (!lastSajuData) return;
+    const original = "명식 이미지 복사";
     try {
-      const cv = drawCard();
-      const blob = await new Promise((res) => cv.toBlob(res, "image/png"));
-      if (!blob) return null;
-      return [new File([blob], "오늘의운세.png", { type: "image/png" })];
-    } catch (e) { return null; }
+      if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
+        throw new Error("이 브라우저에서는 이미지 복사를 지원하지 않아요. 스토리 카드 저장을 써 주세요.");
+      }
+      const blob = await new Promise((resolve) => drawSajuCard(lastSajuData).toBlob(resolve, "image/png"));
+      if (!blob) throw new Error("이미지를 만들지 못했어요.");
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      sajuCopy.textContent = "복사됨 ✓";
+    } catch (error) {
+      sajuCopy.textContent = "복사 실패";
+      sajuStatus.hidden = false;
+      sajuStatus.textContent = error.message || "이미지를 복사하지 못했어요.";
+    } finally {
+      setTimeout(() => { sajuCopy.textContent = original; }, 1800);
+    }
+  });
+
+  // 우하단 공유 버튼(share.js)도 같은 스토리 카드를 붙인다(명식 운세가 있을 때만).
+  window.blShareFiles = async () => {
+    if (!load() || !currentDaily) return null;
+    try { return [await storyFile()]; } catch (e) { return null; }
   };
 
   // ── 매일 오전 8시(KST) 알림 ────────────────────────────────────
   // 서버(Cloudflare cron)가 08:00 KST에 구독한 기기로 Web Push를 보낸다.
   // 개인 명식은 이 기기에만 있으므로 알림은 "운세를 확인하세요" 넛지다.
   (function setupNotify() {
-    const notifySec = document.getElementById("notify");
-    const notifyBtn = document.getElementById("notify-btn");
-    const notifyHelp = document.getElementById("notify-help");
+    const notifySec = $("notify");
+    const notifyBtn = $("notify-btn");
+    const notifyHelp = $("notify-help");
     const supported = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
-    if (!supported || !isSecureContext) return;   // 미지원 브라우저·http에서는 노출하지 않음
-
+    if (!supported || !isSecureContext) return;
     function vapidKeyBytes(base64url) {
-      const padded = base64url.replace(/-/g, "+").replace(/_/g, "/")
-        .padEnd(Math.ceil(base64url.length / 4) * 4, "=");
+      const padded = base64url.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(base64url.length / 4) * 4, "=");
       return Uint8Array.from(atob(padded), (c) => c.charCodeAt(0));
     }
     function setState(on) {
@@ -1324,18 +1515,12 @@
         ? "매일 오전 8시(KST)에 오늘의 운세를 알려드려요. 토글을 끄면 해지됩니다."
         : "브라우저 알림으로 매일 오전 8시(KST) 오늘의 운세를 받아보세요.";
     }
-
     let vapidPublicKey = null;
     let registration = null;
     let busy = false;
-
-    async function api(method, body) {
-      return fetch("/_fortune/push", {
-        method,
-        ...(body && { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
-      });
-    }
-
+    const api = (method, body) => fetch("/_fortune/push", {
+      method, ...(body && { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+    });
     async function enable() {
       if ((await Notification.requestPermission()) !== "granted") {
         notifyHelp.textContent = "브라우저 설정에서 알림을 허용해야 받을 수 있어요.";
@@ -1348,7 +1533,6 @@
       if (!res.ok) { await subscription.unsubscribe().catch(() => {}); throw new Error("subscribe failed"); }
       return true;
     }
-
     async function disable() {
       const subscription = await registration.pushManager.getSubscription();
       if (subscription) {
@@ -1357,25 +1541,19 @@
       }
       return false;
     }
-
     notifyBtn.addEventListener("click", async () => {
       if (busy || !vapidPublicKey || !registration) return;
       busy = true; notifyBtn.disabled = true;
       const turningOn = notifyBtn.getAttribute("aria-checked") !== "true";
-      try {
-        setState(turningOn ? await enable() : await disable());
-      } catch (e) {
-        notifyHelp.textContent = "알림 설정에 실패했어요. 잠시 후 다시 시도해주세요.";
-      } finally {
-        busy = false; notifyBtn.disabled = false;
-      }
+      try { setState(turningOn ? await enable() : await disable()); }
+      catch (e) { notifyHelp.textContent = "알림 설정에 실패했어요. 잠시 후 다시 시도해주세요."; }
+      finally { busy = false; notifyBtn.disabled = false; }
     });
-
     (async function init() {
       try {
         const res = await fetch("/_fortune/push", { method: "GET" });
         vapidPublicKey = res.ok ? (await res.json()).vapidPublicKey : null;
-        if (!vapidPublicKey) return;   // 서버에 푸시 미설정 시 버튼 숨김 유지
+        if (!vapidPublicKey) return;
         registration = await navigator.serviceWorker.register("sw.js");
         await navigator.serviceWorker.ready;
         setState(Boolean(await registration.pushManager.getSubscription()));

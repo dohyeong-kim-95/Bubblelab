@@ -94,13 +94,14 @@ test("builds a deterministic daily fortune from the natal chart and KST date", (
   const daily = buildDailyFortune(chart.candidates[0], { year: 2026, month: 7, day: 15 });
   assert.deepEqual(
     { date: daily.date, iljin: daily.iljin, tenGod: daily.tenGod, method: daily.method },
-    { date: "2026-07-15", iljin: "경인", tenGod: "정인", method: "natal-daymaster+daily-pillar-v2" },
+    { date: "2026-07-15", iljin: "경인", tenGod: "정인", method: "natal-daymaster+daily-pillar-v3" },
   );
   assert.match(daily.text, /배우고 도움받는 흐름/);
-  assert.deepEqual(
-    Object.fromEntries(Object.entries(daily.categories).map(([key, value]) => [key, value.level])),
-    { wealth: "무난", career: "원활", love: "무난" },
-  );
+  const levels = Object.fromEntries(Object.entries(daily.categories).map(([key, value]) => [key, value.level]));
+  // 재물·직업·연애는 v2 판정 그대로여야 한다(가중치를 옮기지 않았다).
+  assert.deepEqual({ wealth: levels.wealth, career: levels.career, love: levels.love },
+    { wealth: "무난", career: "원활", love: "무난" });
+  assert.deepEqual(Object.keys(daily.categories), ["wealth", "career", "love", "health", "social", "study"]);
 });
 
 test("uses selected gender only as a supporting traditional spouse-star signal", () => {
@@ -213,4 +214,68 @@ test("notifyDaily is a no-op without VAPID configuration", async () => {
   const fortune = new FortuneDO({ storage }, {});
   const response = await fortune.fetch(new Request("https://fortune.internal/notify", { method: "POST" }));
   assert.deepEqual(await response.json(), { sent: 0 });
+});
+
+// ── v3: 풀이 문장은 근거 조각을 골라 잇는다 — 문장보다 "어떤 조각이 골라졌나"를 고정한다.
+const natal = () => buildChart({ year: 1992, month: 10, day: 24, timeMode: "clock", time: "05:30" }).candidates[0];
+
+test("daily v3: 오늘 십성과 합충이 본문 조각을 고르고, 해요체 문단이 된다", () => {
+  const daily = buildDailyFortune(natal(), { year: 2026, month: 7, day: 15 });
+  assert.equal(daily.picks[0], "god:정인");
+  assert.match(daily.text, /경인\(庚寅\)일이에요/);
+  assert.match(daily.text, /정인\(나를 돕고 가르치는 기운\)이라서/);
+  assert.doesNotMatch(daily.text, /니다\./, "해요체로 통일");
+  for (const category of Object.values(daily.categories)) {
+    assert.doesNotMatch(category.comment, /니다\./);
+    assert.ok(category.comment.length > 20);
+  }
+});
+
+test("daily v3: 학업은 정인 날 원활, 근거에 god:정인 이 잡힌다", () => {
+  const daily = buildDailyFortune(natal(), { year: 2026, month: 7, day: 15 });
+  assert.equal(daily.categories.study.level, "원활");
+  assert.ok(daily.categories.study.reasons.includes("god:정인"));
+  assert.match(daily.categories.study.comment, /^오늘 들어온 정인/);
+});
+
+test("daily v3: 근거가 엇갈리면 무난이고 두 신호를 함께 밝힌다", () => {
+  // 계유 일주, 2026-07-15 경인일: 정인(+1)이지만 일지 유와 인이 원진, 명식 신과 인이 충.
+  const daily = buildDailyFortune(natal(), { year: 2026, month: 7, day: 15 });
+  const social = daily.categories.social;
+  assert.ok(social.reasons.includes("natal:충") && social.reasons.includes("day:원진"));
+  assert.notEqual(social.level, "원활");
+});
+
+test("daily v3: 행운 표시는 가장 모자란 오행에서, 숫자는 일간 음양으로 고른다", () => {
+  const daily = buildDailyFortune(natal(), { year: 2026, month: 7, day: 15 });
+  // 명식 목2 화0 토1 금3 수2 + 경인(금·목) → 화가 0으로 가장 모자라다.
+  assert.equal(daily.lucky.element, "화");
+  assert.equal(daily.lucky.direction, "남쪽");
+  assert.equal(daily.lucky.number, 2, "경(양간) 날은 하도 생수");
+});
+
+test("daily v3: 조심할 시간은 일진 지지와 충하는 시진, 좋은 시간은 일지와 육합하는 시진", () => {
+  const daily = buildDailyFortune(natal(), { year: 2026, month: 7, day: 15 });
+  assert.equal(daily.times.caution.branch, "신");   // 인 ↔ 신 충
+  assert.equal(daily.times.good.branch, "진");      // 유 ↔ 진 육합
+  assert.match(daily.times.caution.text, /^신시\(15~17시\)는/);
+});
+
+test("chart: 후보마다 풀이가 붙고, partner 가 오면 궁합과 상대 팔자만 싣는다", async () => {
+  const body = {
+    year: 1992, month: 10, day: 24, timeMode: "clock", time: "05:30", gender: "male",
+    partner: { year: 1988, month: 8, day: 17, timeMode: "branch", branch: 4, gender: "female" },
+  };
+  const response = await handleFortuneChart(new Request("https://util.bubblelab.dev/_fortune/chart", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  }), {});
+  const data = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(data.readingRules.version, "saju-reading-kr-v1");
+  assert.ok(data.candidates[0].reading.overview.paragraph.startsWith("계수(癸水) 일간이라"));
+  assert.ok(data.compatibility.score >= 30 && data.compatibility.score <= 98);
+  assert.equal(data.partner.pillars.day.korean.length, 2);
+  assert.deepEqual(data.partner.solarDate, { year: 1988, month: 8, day: 17 });
+  assert.equal(data.partner.name, undefined, "이름 같은 부가 정보는 응답에 싣지 않는다");
+  assert.equal(data.dailyFortunes[0].method, "natal-daymaster+daily-pillar-v3");
 });
