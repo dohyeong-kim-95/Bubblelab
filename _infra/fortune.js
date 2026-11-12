@@ -6,6 +6,7 @@ import {
   elementWord, josa, stemElement, TEN_GOD_GLOSS, tenGodOf,
 } from "./saju-reading.js";
 import { tojeongHexagram } from "./tojeong.js";
+import { buildLifeCurve } from "./life-curve.js";
 
 const {
   calculateFourPillars,
@@ -446,6 +447,10 @@ export function buildChart(input, today = kstToday()) {
         birth: { year, month, day }, today, luck: result.luckPillars ?? null, tenGod,
       });
       candidate.reading = buildSajuReading(candidate, candidate.detail);
+      candidate.lifeCurve = buildLifeCurve(candidate, {
+        luck: result.luckPillars ?? null, birth: { year, month, day }, today,
+        strengthLevel: candidate.reading.strength.level,
+      });
       candidates.push(candidate);
     }
   }

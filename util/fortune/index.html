@@ -160,6 +160,29 @@
   .basis-list { margin: 0; padding-left: 1.1rem; font-size: .74rem; line-height: 1.7; color: var(--muted); }
   .basis-list code { font-family: var(--mono); font-size: .7rem; }
 
+  /* 인생 곡선 — 색은 전부 토큰(라이트·다크 자동). 좌표는 viewBox 기준이라 폭에 맞춰 늘어난다. */
+  .life-curve { margin-top: 1.1rem; }
+  .life-curve svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .lc-grid { stroke: var(--line); stroke-width: .6; }
+  .lc-axis { fill: var(--muted); font: 9px var(--sans); }
+  .lc-area { fill: color-mix(in srgb, var(--accent-soft) 85%, transparent); }
+  .lc-line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
+  .lc-before { stroke-dasharray: 3 3; opacity: .7; }
+  .lc-hit { fill: transparent; cursor: pointer; }
+  .lc-hit:focus-visible { outline: none; }
+  .lc-sel { fill: color-mix(in srgb, var(--accent) 12%, transparent); }
+  .lc-best { fill: var(--ok); }
+  .lc-worst { fill: var(--warn); }
+  .lc-tag { font: 700 9.5px var(--sans); }
+  .lc-tag.best { fill: var(--ok); }
+  .lc-tag.worst { fill: var(--warn); }
+  .lc-now { stroke: var(--ink); stroke-width: 1; stroke-dasharray: 2 2; }
+  .lc-now-label { fill: var(--ink); font: 700 9px var(--sans); }
+  .lc-year { fill: var(--ink); opacity: .55; }
+  .lc-note { margin: .5rem 0 0; padding: .6rem .75rem; border-radius: var(--r-sm); background: var(--sunk);
+             font-size: .86rem; line-height: 1.65; word-break: keep-all; }
+  .lc-note b { color: var(--accent); }
+
   /* 궁합 */
   .score { display: flex; align-items: baseline; justify-content: center; gap: .5rem; margin: .2rem 0 .8rem; }
   .score b { font: 800 2.4rem/1 var(--sans); color: var(--accent); font-variant-numeric: tabular-nums; }
@@ -760,6 +783,12 @@
     tableBlock.appendChild(hint);
     wrap.appendChild(tableBlock);
 
+    if (candidate.lifeCurve) wrap.appendChild(renderLifeCurve(candidate.lifeCurve));
+    else if (reading) {
+      const block = readingBlock("인생 곡선");
+      block.appendChild(el("p", "note", "대운은 성별에 따라 흐르는 방향이 정해져서, 성별을 선택하면 인생 곡선을 그려 드려요."));
+      wrap.appendChild(block);
+    }
     if (reading) renderReading(wrap, candidate, reading);
     if (candidate.detail) renderRawDetail(wrap, candidate);
     sajuCandidates.appendChild(wrap);
@@ -811,6 +840,93 @@
       luck.appendChild(el("p", "prose", "대운은 성별에 따라 흐르는 방향(순행·역행)이 정해져서, 성별을 선택하면 풀이해 드려요."));
     }
     wrap.appendChild(luck);
+  }
+
+  // ── 인생 곡선 ── 대운마다 매긴 점수(_infra/life-curve.js)를 계단 곡선으로. 구간을 누르면 근거 한 줄.
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  function svg(tag, attrs = {}, cls) {
+    const node = document.createElementNS(SVG_NS, tag);
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
+    if (cls) node.setAttribute("class", cls);
+    return node;
+  }
+  function renderLifeCurve(curve) {
+    const block = readingBlock("인생 곡선", "대운");
+    const W = 360, H = 190, L = 26, R = 8, T = 22, B = 22;
+    const maxAge = Math.max(90, curve.sections.at(-1).to);
+    const x = (age) => L + (age / maxAge) * (W - L - R);
+    const y = (score) => T + (1 - score / 100) * (H - T - B);
+    const root = svg("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": `인생 곡선 — ${curve.best.label}, ${curve.worst.label}` });
+    for (const v of [25, 50, 75]) {
+      root.append(svg("line", { x1: L, x2: W - R, y1: y(v), y2: y(v) }, "lc-grid"));
+    }
+    for (const a of [0, 20, 40, 60, 80]) {
+      const t = svg("text", { x: x(a), y: H - 6, "text-anchor": "middle" }, "lc-axis");
+      t.textContent = `${a}세`;
+      root.appendChild(t);
+    }
+    for (const [v, label] of [[85, "흐름 ↑"], [15, "↓"]]) {
+      const t = svg("text", { x: 2, y: y(v) + 3 }, "lc-axis");
+      t.textContent = label;
+      root.appendChild(t);
+    }
+    const selLayer = svg("g");
+    root.appendChild(selLayer);
+    // 계단 곡선: 구간마다 수평선, 구간 사이는 세로로 잇는다.
+    let d = "", area = `M${x(curve.sections[0].from)},${y(0)}`;
+    curve.sections.forEach((s, i) => {
+      d += `${i ? "L" : "M"}${x(s.from).toFixed(1)},${y(s.score).toFixed(1)}L${x(s.to).toFixed(1)},${y(s.score).toFixed(1)}`;
+      area += `L${x(s.from).toFixed(1)},${y(s.score).toFixed(1)}L${x(s.to).toFixed(1)},${y(s.score).toFixed(1)}`;
+    });
+    area += `L${x(curve.sections.at(-1).to)},${y(0)}Z`;
+    root.append(svg("path", { d: area }, "lc-area"), svg("path", { d }, "lc-line"));
+    if (curve.sections[0].kind === "before") {
+      const s = curve.sections[0];
+      root.appendChild(svg("line", { x1: x(s.from), x2: x(s.to), y1: y(s.score), y2: y(s.score) }, "lc-line lc-before"));
+    }
+    // 전성기·조심할 때 표시
+    for (const [key, cls, dy] of [["best", "best", -7], ["worst", "worst", 13]]) {
+      const s = curve.sections[curve[key].index];
+      const cx = (x(s.from) + x(s.to)) / 2;
+      root.appendChild(svg("circle", { cx, cy: y(s.score), r: 3.2 }, `lc-${cls}`));
+      const t = svg("text", { x: Math.min(Math.max(cx, L + 30), W - R - 30), y: y(s.score) + dy, "text-anchor": "middle" }, `lc-tag ${cls}`);
+      t.textContent = curve[key].label;
+      root.appendChild(t);
+    }
+    // 지금 대운 안의 해마다 점(세운)
+    for (const p of curve.yearly) {
+      root.appendChild(svg("circle", { cx: x(p.age + 0.5), cy: y(p.score), r: 1.6 }, "lc-year"));
+    }
+    // 지금 여기
+    const nx = x(curve.age);
+    root.append(svg("line", { x1: nx, x2: nx, y1: T - 6, y2: H - B }, "lc-now"));
+    const nowLabel = svg("text", { x: Math.min(Math.max(nx, L + 22), W - R - 22), y: T - 9, "text-anchor": "middle" }, "lc-now-label");
+    nowLabel.textContent = `지금 여기 · ${Math.floor(curve.age)}세`;
+    root.appendChild(nowLabel);
+
+    const note = el("p", "lc-note");
+    note.setAttribute("aria-live", "polite");
+    const select = (i) => {
+      const s = curve.sections[i];
+      selLayer.replaceChildren(svg("rect", { x: x(s.from), y: T - 4, width: Math.max(1, x(s.to) - x(s.from)), height: H - B - T + 4 }, "lc-sel"));
+      note.replaceChildren(el("b", null, `${s.ganji} · ${s.god} `), s.text);
+    };
+    // 누르는 자리: 구간마다 투명 사각형(키보드로도 고를 수 있게 tabindex)
+    curve.sections.forEach((s, i) => {
+      const hit = svg("rect", { x: x(s.from), y: T - 4, width: Math.max(1, x(s.to) - x(s.from)), height: H - B - T + 4,
+        tabindex: 0, role: "button", "aria-label": `${s.ganji} ${s.kind === "before" ? "대운 전" : "대운"} 풀이 보기` }, "lc-hit");
+      hit.addEventListener("click", () => select(i));
+      hit.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(i); } });
+      root.appendChild(hit);
+    });
+    select(curve.currentIndex >= 0 ? curve.currentIndex : curve.best.index);
+
+    const summary = el("p", "prose", `${curve.best.text} 반대로 ${curve.worst.text}`);
+    const disclaimer = el("p", "note", "곡선은 대운의 천간·지지가 내 명식과 맞는지를 규칙으로 매긴 점수예요. 앞날을 맞히는 예측이 아니라 흐름을 읽는 참고로 봐 주세요. 구간을 누르면 근거가 보여요.");
+    const wrapCurve = el("div", "life-curve");
+    wrapCurve.append(root);
+    block.append(wrapCurve, note, summary, disclaimer);
+    return block;
   }
 
   // ③ 세부 데이터 — 지장간·12운성·12신살·신살은 접어 둔다(궁금한 사람만).
@@ -882,6 +998,8 @@
     if (detailRules) item(`신살 표 — ${detailRules.twelveShinsal}, 양인은 ${detailRules.yangin}`, detailRules.version);
     if (data.readingRules) item(`풀이 문장 — ${data.readingRules.strength}`, data.readingRules.version);
     if (data.dailyFortunes?.[0]) item("오늘의 운세 — 명식 일간 + 오늘 일진", data.dailyFortunes[0].method);
+    const curve = data.candidates[0]?.lifeCurve;
+    if (curve) item(`인생 곡선 — ${curve.basis} · 대운수 ${curve.startAge}세 · 간이 용신 ${curve.favorable.yong}`, curve.version);
     item("풀이는 전래 해석을 생활 언어로 옮긴 참고용이에요. 중요한 결정의 근거로 삼지는 마세요.");
   }
 
