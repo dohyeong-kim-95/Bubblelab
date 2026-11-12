@@ -1,10 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import manseryeok from "manseryeok";
 import { buildChart } from "./fortune.js";
 import { ageRange, buildLifeCurve, favorableElements, LIFE_CURVE_RULES, scorePillar, spreadOf } from "./life-curve.js";
 
 const TODAY = { year: 2026, month: 11, day: 12 };
 // 1992-10-24 05:30 남 = 임신·경술·계유·을묘, 대운수 4년 9개월 7일(순행)
+const rawLuck = () => manseryeok.calculateFourPillars({ year: 1992, month: 10, day: 24, hour: 5, minute: 30, gender: "male" }).luckPillars;
 const me = (gender = "male") => buildChart({ year: 1992, month: 10, day: 24, timeMode: "clock", time: "05:30", gender }, TODAY).candidates[0];
 
 test("버전·구간 수·점수 범위", () => {
@@ -52,13 +54,61 @@ test("대운 시작 전인 아이는 '대운 전' 구간에 있고, 성별이 �
   assert.equal(me("unspecified").lifeCurve, null);
 });
 
-test("전성기·조심할 때는 대운 구간 중 최고·최저", () => {
+test("전성기·조심할 때는 지금 구간부터 앞으로 중 최고·최저 — 지난 구간에는 이름을 붙이지 않는다", () => {
   const c = me().lifeCurve;
-  const luck = c.sections.filter((s) => s.kind === "luck").map((s) => s.score);
-  assert.equal(c.sections[c.best.index].score, Math.max(...luck));
-  assert.equal(c.sections[c.worst.index].score, Math.min(...luck));
+  const ahead = c.sections.slice(c.currentIndex);
+  assert.equal(c.sections[c.best.index].score, Math.max(...ahead.map((s) => s.score)));
+  assert.equal(c.sections[c.worst.index].score, Math.min(...ahead.map((s) => s.score)));
+  assert.ok(c.best.index >= c.currentIndex && c.worst.index >= c.currentIndex);
+  // 이 명식의 전체 최저는 지나간 5~14세(41점)지만, 앞으로 중 최저는 지금 25~34세 계축(50점)
+  assert.equal(c.sections[1].score, 41);
+  assert.notEqual(c.worst.index, 1);
   assert.match(c.best.label, /^전성기 \d+~\d+세$/);
   assert.match(c.worst.label, /^조심할 때 \d+~\d+세$/);
+  assert.equal(c.flat, false);
+});
+
+test("앞으로가 고르면(최고=최저이거나 차이 8점 미만) 조심할 때 없이 '고른 편' 문장", () => {
+  const base = me().lifeCurve;
+  // 대운이 다 끝나 가는 나이(마지막 구간 하나만 남음) → 최고 = 최저
+  const late = buildLifeCurve(me(), { luck: rawLuck(), birth: { year: 1992, month: 10, day: 24 },
+    today: { year: 2080, month: 1, day: 1 }, strengthLevel: "중" });
+  assert.equal(late.sections.length - late.currentIndex, 1);
+  assert.equal(late.worst, null);
+  assert.equal(late.flat, true);
+  assert.equal(late.sections[late.best.index], late.sections.at(-1));
+  assert.match(late.summary, /앞으로는 큰 굴곡 없이 고른 편이에요\.$/);
+  // 차이 8점 미만: 60갑자 중 점수 차가 1~7점인 두 기둥으로 대운 목록을 직접 만든다(지금 = 첫 대운).
+  const cand = me();
+  const fav = favorableElements(cand, "중");
+  const STEMS = ["갑", "을", "병", "정", "무", "기", "경", "신", "임", "계"];
+  const BR = ["자", "축", "인", "묘", "진", "사", "오", "미", "신", "유", "술", "해"];
+  const ganji = Array.from({ length: 60 }, (_, i) => [STEMS[i % 10], BR[i % 12]]);
+  const scored = ganji.map(([st, br]) => ({ st, br, score: scorePillar(cand, fav, st, br).score }));
+  const a = scored[0];
+  const b = scored.find((x) => x.score !== a.score && Math.abs(x.score - a.score) < 8);
+  const far = scored.find((x) => Math.abs(x.score - a.score) >= 8);
+  const fake = (list) => ({ startYears: 1, startMonths: 0, startDays: 0, forward: true,
+    pillars: list.map((x, i) => ({ age: 1 + i * 10, pillar: { heavenlyStem: x.st, earthlyBranch: x.br }, korean: x.st + x.br })) });
+  const at5 = { year: 2000, month: 1, day: 1 };
+  const born = { year: 1995, month: 1, day: 1 };
+  const near = buildLifeCurve(cand, { luck: fake([a, b]), birth: born, today: at5, strengthLevel: "중" });
+  assert.equal(near.sections[near.currentIndex].ganji, a.st + a.br);
+  assert.equal(near.worst, null, `${a.score} vs ${b.score}`);
+  assert.equal(near.flat, true);
+  assert.notEqual(near.best, null);
+  const wide = buildLifeCurve(cand, { luck: fake([a, far]), birth: born, today: at5, strengthLevel: "중" });
+  assert.notEqual(wide.worst, null);
+  assert.equal(wide.flat, false);
+});
+
+test("90세가 넘어 지금 구간이 없으면 이름표 없이 고른 편 문장만", () => {
+  const old = buildLifeCurve(me(), { luck: rawLuck(), birth: { year: 1992, month: 10, day: 24 },
+    today: { year: 2090, month: 1, day: 1 }, strengthLevel: "중" });
+  assert.equal(old.currentIndex, -1);
+  assert.equal(old.best, null);
+  assert.equal(old.worst, null);
+  assert.equal(old.summary, "앞으로는 큰 굴곡 없이 고른 편이에요.");
 });
 
 test("희용신: 신약이면 인성·비겁, 신강이면 식상·재성·관성을 반긴다", () => {
@@ -95,4 +145,10 @@ test("분포: 표본 120명 — 모두 평평하거나 모두 극단이 아니�
 
 test("buildLifeCurve 는 대운 정보가 없으면 null", () => {
   assert.equal(buildLifeCurve(me(), { luck: null, birth: { year: 1992, month: 10, day: 24 }, today: TODAY, strengthLevel: "중" }), null);
+});
+
+test("요약 문장은 전성기·조심할 때 문장이다(구간 풀이를 되풀이하지 않는다)", () => {
+  const c = me().lifeCurve;
+  assert.match(c.summary, /^\d+~\d+세 .+(이|가) 앞으로 남은 흐름에서 가장 높은 곳이에요\./);
+  assert.match(c.summary, /반대로 \d+~\d+세 .+(은|는) 앞으로 남은 흐름에서 가장 낮아요\./);
 });

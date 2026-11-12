@@ -22,6 +22,8 @@ export const LIFE_CURVE_RULES = {
   version: "life-curve-v1",
   basis: "간이 신강·신약으로 희용·기신을 가르고, 대운 천간·지지의 오행과 일지·월지 합충으로 가감(5~95)",
   maxAge: 90,
+  flatGap: 8,
+  flatText: "앞으로는 큰 굴곡 없이 고른 편이에요.",
 };
 
 const ELEMENTS = ["목", "화", "토", "금", "수"];
@@ -149,9 +151,13 @@ export function buildLifeCurve(candidate, { luck, birth, today, strengthLevel })
   }
   const age = Math.max(0, yearsBetween(birth, today));
   const currentIndex = sections.findIndex((s) => age >= s.from && age < s.to);
-  const luckSections = sections.filter((s) => s.kind === "luck");
-  const best = luckSections.reduce((a, b) => (b.score > a.score ? b : a), luckSections[0]);
-  const worst = luckSections.reduce((a, b) => (b.score < a.score ? b : a), luckSections[0]);
+  // 전성기·조심할 때는 **지금 구간부터 앞으로**에서만 고른다 — 지나간 구간에 이름을 붙여도 쓸 데가 없다.
+  // 남은 구간이 고르면(최고=최저이거나 차이가 FLAT_GAP 미만) 조심할 때를 붙이지 않는다.
+  const ahead = currentIndex >= 0 ? sections.slice(currentIndex) : [];
+  const best = ahead.length ? ahead.reduce((a, b) => (b.score > a.score ? b : a)) : null;
+  let worst = ahead.length ? ahead.reduce((a, b) => (b.score < a.score ? b : a)) : null;
+  const flat = !best || worst === best || best.score - worst.score < LIFE_CURVE_RULES.flatGap;
+  if (flat) worst = null;
 
   // 지금 대운 안의 해마다(세운) 점 — 같은 규칙으로.
   const yearly = [];
@@ -163,6 +169,11 @@ export function buildLifeCurve(candidate, { luck, birth, today, strengthLevel })
     }
   }
   const range = ageRange;
+  const name = (x) => `${x.ganji}${x.kind === "luck" ? " 대운" : ""}`;
+  const bestOut = best && { index: sections.indexOf(best), label: `전성기 ${range(best)}`,
+    text: `${range(best)} ${josa(name(best), "이", "가")} 앞으로 남은 흐름에서 가장 높은 곳이에요. 하고 싶던 일을 크게 펼쳐 보기 좋은 때로 읽혀요.` };
+  const worstOut = worst && { index: sections.indexOf(worst), label: `조심할 때 ${range(worst)}`,
+    text: `${range(worst)} ${josa(name(worst), "은", "는")} 앞으로 남은 흐름에서 가장 낮아요. 무리한 확장보다 건강과 기반을 지키는 쪽이 좋아요.` };
   return {
     version: LIFE_CURVE_RULES.version,
     basis: LIFE_CURVE_RULES.basis,
@@ -174,10 +185,10 @@ export function buildLifeCurve(candidate, { luck, birth, today, strengthLevel })
       score: s.score, god: s.god, group: s.group, why: s.why, text: s.text,
     })),
     currentIndex,
-    best: { index: sections.indexOf(best), label: `전성기 ${range(best)}`,
-      text: `${range(best)} ${best.ganji} 대운이 곡선의 가장 높은 곳이에요. 하고 싶던 일을 크게 펼쳐 보기 좋은 때로 읽혀요.` },
-    worst: { index: sections.indexOf(worst), label: `조심할 때 ${range(worst)}`,
-      text: `${range(worst)} ${worst.ganji} 대운은 곡선이 가장 낮아요. 무리한 확장보다 건강과 기반을 지키는 쪽이 좋아요.` },
+    best: bestOut,
+    worst: worstOut,
+    flat,
+    summary: [bestOut?.text, worstOut ? `반대로 ${worstOut.text}` : LIFE_CURVE_RULES.flatText].filter(Boolean).join(" "),
     yearly,
   };
 }
