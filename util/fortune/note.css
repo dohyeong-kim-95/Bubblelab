@@ -157,7 +157,9 @@ h2, h3 { margin: 0; font-weight: 400; }
 }
 .blank:focus { border-bottom-color: var(--blue); }
 .blank::placeholder { color: rgba(124, 119, 110, .45); }
-.blank.w4 { width: 3.6em; } .blank.w2 { width: 2.1em; } .blank.wname { width: 5.5em; }
+.blank.w4 { width: 3em; } .blank.w2 { width: 1.7em; } .blank.wname { width: 5.5em; }
+.date-line { white-space: nowrap; }
+.teaser { margin: 18px 0 0; padding: 10px 12px; border-left: 3px solid var(--red); font-size: var(--t-s); line-height: 1.7; }
 .blank.bad { border-bottom-color: var(--red); }
 .pick { position: relative; background: none; border: 0; padding: 0 6px; margin: 0 1px; color: var(--pencil); }
 .pick[aria-pressed="false"] { color: var(--faint); }

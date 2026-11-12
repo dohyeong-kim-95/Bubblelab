@@ -24,6 +24,7 @@
   <section id="form" hidden>
     <h1 class="hand h-title ask" id="ask">앉아 봐요.<br>태어난 날부터 적어 볼게요.</h1>
     <form id="birth-form" class="fill" autocomplete="off" novalidate></form>
+    <p class="teaser" id="comic-teaser" hidden><span class="hand h-s red">선착순 10명</span> — 만화로 그린 사주를 메일로 보내 드려요. 풀이가 다 적히면 사주 탭 맨 아래에서 메일 주소만 적으면 돼요. <span class="small" id="comic-teaser-left"></span></p>
     <p class="small" id="form-foot">정해진 계산 규칙으로만 풀어요. 같은 날 태어났으면 언제 와도 같은 풀이가 나와요. 적은 날짜는 이 기기에만 남아요.</p>
     <p class="generic-line" id="generic"></p>
   </section>
@@ -329,7 +330,7 @@
       form.append(nameLine);
     }
     line1.append(partner ? "그 사람은 " : "「 ", solar, "·", lunar, leap, " ");
-    const line2 = el("div");
+    const line2 = el("div", "date-line");   // 년·월·일은 한 줄에서 끊기지 않게
     line2.append(y, "년 ", m, "월 ", d, "일");
     const line3 = el("div");
     line3.append(timeBox, branchLabel, partner ? "에 태어났고," : "에 태어났어요 」");
@@ -460,6 +461,7 @@
     const line = window.blFortuneLine(window.blFortuneDaySeed(now));
     $("generic").append(el("span", "hand h-s faint", "오늘의 한 줄 — "), line.text);
     meForm.set(prefill);
+    refreshComic();
     scrollTo({ top: 0 });
   }
 
@@ -1283,11 +1285,14 @@
       comicOpen = !!s.open;
       box.hidden = false;
       $("comic-left").textContent = s.open ? `남은 자리 ${s.remaining}` : "";
+      $("comic-teaser").hidden = !s.open;
+      $("comic-teaser-left").textContent = s.open ? `(남은 자리 ${s.remaining})` : "";
       $("comic-form").hidden = !s.open;
       $("comic-closed").hidden = !!s.open;
       fontsReady.then(() => requestAnimationFrame(() => { N.checkbox($("comic-consent"), comicConsent); N.ring($("comic-send"), N.INK.blue); }));
     } catch {
       box.hidden = true;   // 이벤트 서버가 없으면(로컬 등) 조용히 감춘다
+      $("comic-teaser").hidden = true;
       comicChecked = false;
     }
   }
