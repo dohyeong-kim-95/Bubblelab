@@ -35,7 +35,7 @@ const SITE_E2E = {
     "_infra/e2e/library.spec.mjs", "_infra/e2e/life.spec.mjs",
     "_infra/e2e/pushup.spec.mjs", "_infra/e2e/review.spec.mjs",
   ],
-  util: ["_infra/e2e/yaksok.spec.mjs"],
+  util: ["_infra/e2e/fortune.spec.mjs", "_infra/e2e/yaksok.spec.mjs"],
 };
 const SITE_SPECS = new Set(Object.values(SITE_E2E).flat());
 const E2E_DIRECTORY = "_infra/e2e";

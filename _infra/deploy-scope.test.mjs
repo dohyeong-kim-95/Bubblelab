@@ -31,7 +31,7 @@ test("서브도메인 하나만 바뀌면 스모크와 그 서브도메인의 sp
     "_infra/e2e/duri-fit.spec.mjs", "_infra/e2e/duri-map.spec.mjs",
     "_infra/e2e/duri-picker.spec.mjs", "_infra/e2e/duri-timelapse.spec.mjs",
   ]);
-  expectScoped("util/stars/index.html", "util", ["_infra/e2e/yaksok.spec.mjs"]);
+  expectScoped("util/stars/index.html", "util", ["_infra/e2e/fortune.spec.mjs", "_infra/e2e/yaksok.spec.mjs"]);
   expectScoped("games/stepcam/index.html", "games");
 });
 
