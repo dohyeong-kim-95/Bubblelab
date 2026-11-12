@@ -36,7 +36,12 @@
   /* 버튼이 적으면 토글 자체를 숨긴다 — 접을 이유가 없다 */
   #bl-dock .bl-dock-toggle { display: none; }
   #bl-dock.crowded .bl-dock-toggle { display: inline-flex; }
-  #bl-dock.crowded.collapsed .bl-dock-btn:not(.bl-dock-toggle) { display: none; }`;
+  #bl-dock.crowded.collapsed .bl-dock-btn:not(.bl-dock-toggle) { display: none; }
+  /* 아래로 스크롤하며 읽는 동안은 오른쪽 밖으로 비켜서고, 위로 올리면 돌아온다.
+     떠 있는 버튼은 언젠가 글 위를 지나가므로 늘 보이게 두면 글을 가린다. */
+  #bl-dock { transition: transform .22s ease, opacity .22s ease; }
+  #bl-dock.bl-dock-away { transform: translateX(calc(100% + 1.5rem)); opacity: 0; pointer-events: none; }
+  @media (prefers-reduced-motion: reduce) { #bl-dock { transition: none; } }`;
 
   const style = document.createElement("style");
   style.textContent = css;
@@ -103,6 +108,28 @@
     item.ready?.(el);
     return el;
   }
+
+  // 스크롤 방향 따라 숨김/표시. 문서 맨 위·맨 아래에서는 늘 보인다(맨 위는 처음 본 화면,
+  // 맨 아래는 다 읽고 공유할 때). 작은 흔들림(8px 미만)은 무시한다. 창 스크롤이 없는
+  // 토이(캔버스 게임·내부 스크롤 화면)에서는 이벤트가 오지 않아 지금처럼 늘 보인다.
+  let lastY = window.scrollY;
+  let ticking = false;
+  function onScroll() {
+    ticking = false;
+    const y = window.scrollY;
+    const atTop = y < 80;
+    const atEnd = y + window.innerHeight >= document.documentElement.scrollHeight - 4;
+    if (atTop || atEnd) dock.classList.remove("bl-dock-away");
+    else if (y - lastY > 8) dock.classList.add("bl-dock-away");
+    else if (lastY - y > 8) dock.classList.remove("bl-dock-away");
+    else return; // 흔들림 — 기준점을 옮기지 않는다
+    lastY = y;
+  }
+  window.addEventListener("scroll", () => {
+    if (!ticking) { ticking = true; requestAnimationFrame(onScroll); }
+  }, { passive: true });
+  // 키보드로 독에 들어오면 숨어 있어도 다시 보인다.
+  dock.addEventListener("focusin", () => dock.classList.remove("bl-dock-away"));
 
   // 먼저 실행된 등록들(배열에 쌓인 큐)을 흡수하고, 이후 push는 바로 처리한다.
   const queued = Array.isArray(window.blDock) ? window.blDock : [];
