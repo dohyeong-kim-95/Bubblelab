@@ -124,3 +124,19 @@ test("만화 사주: 동의해야 접수되고, 접수하면 순서대로 보낸
   const saved = [...fortune.storage.data.values()].find((v) => v?.email === "me@example.com");
   expect(saved.birth).toMatchObject({ y: 1992, m: 8, d: 20, h: 5 });
 });
+
+// 2026-11-12 실제 폰(갤럭시, 폭 ~360)에서 '일'이 다음 줄로 밀렸고, 첫 화면에는 선착순 안내가 없어
+// 신청 칸을 못 찾았다(사주 탭 맨 아래에만 있었다).
+test("좁은 폰 첫 화면: 년·월·일이 한 줄이고, 만화 사주 선착순 안내가 보인다", async ({ browser }) => {
+  const ctx = await browser.newContext({ viewport: { width: 360, height: 780 } });
+  const page = await ctx.newPage();
+  await serveFortune(page);
+  await page.goto("/util/fortune/");
+  await expect(page.locator("#comic-teaser")).toBeVisible();
+  await expect(page.locator("#comic-teaser-left")).toHaveText("(남은 자리 10)");
+  const { h, lh } = await page.locator(".date-line").first().evaluate((l) => ({
+    h: l.getBoundingClientRect().height, lh: parseFloat(getComputedStyle(l).lineHeight) }));
+  expect(h).toBeLessThan(lh * 1.5);
+  expect(await overflow(page)).toBeLessThanOrEqual(0);
+  await ctx.close();
+});
