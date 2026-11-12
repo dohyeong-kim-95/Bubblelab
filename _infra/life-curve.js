@@ -129,6 +129,8 @@ function sentence(section, fav) {
  * @param luck manseryeok 의 luckPillars(성별이 없으면 null → 곡선 없음)
  * @param birth {year,month,day} 양력, today {year,month,day} KST
  */
+const firstSentence = (text) => /^[^.]+\./.exec(text)?.[0] ?? text;
+
 export function buildLifeCurve(candidate, { luck, birth, today, strengthLevel }) {
   if (!luck?.pillars?.length) return null;
   const fav = favorableElements(candidate, strengthLevel);
@@ -189,6 +191,9 @@ export function buildLifeCurve(candidate, { luck, birth, today, strengthLevel })
     worst: worstOut,
     flat,
     summary: [bestOut?.text, worstOut ? `반대로 ${worstOut.text}` : LIFE_CURVE_RULES.flatText].filter(Boolean).join(" "),
+    // 형광펜·물결 밑줄 자리(marks-v1 과 같은 모양): 전성기 첫 문장 = key, 조심할 때 첫 문장 = caution
+    marks: [bestOut && { kind: "key", text: firstSentence(bestOut.text) },
+      worstOut && { kind: "caution", text: firstSentence(worstOut.text).replace(/\.$/, "") }].filter(Boolean),
     yearly,
   };
 }

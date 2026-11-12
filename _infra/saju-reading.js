@@ -18,6 +18,55 @@ export const READING_RULES = {
   gunghap: "일간 오행 생극·천간합, 일지 육합·충·원진, 서로 비어 있는 오행을 채우는지",
 };
 
+// ── 형광펜·물결 밑줄 표시(marks) ─────────────────────────────────────
+// 화면이 문단의 어느 곳에 형광펜(key)을 긋고 어느 곳에 빨간 물결 밑줄(caution)을 칠지
+// **규칙으로** 고른다 — 손으로 고르면 문장 표가 바뀔 때마다 어긋난다. 문단마다
+// key 한 문장 + caution 한 구절이 최대다. text 는 문단 안에 그대로 있는 부분 문자열이라
+// 화면은 찾아서 감싸기만 한다.
+export const MARK_RULES = {
+  version: "marks-v1",
+  key: "조언으로 끝나는 문장(…세요/좋아요/맞아요/돼요) 중 조심 문장이 아닌 마지막 것, 없으면 20자 이상인 첫 문장",
+  caution: "조심 낱말(다만으로 여는 문장·조심·피하·부담·서운·걱정·고집…)이 든 첫 문장에서 그 낱말이 든 쉼표 구절, 앞 접속어는 뗀다",
+};
+// "쉬워요"만으로는 고르지 않는다 — "인정받는 일이 생기기 쉬운 해"처럼 좋은 뜻에도 쓰인다.
+const CAUTION_WORDS = /(^다만 |조심|주의|피하|(?<!마)무리|부담|서운|엇갈리|부딪|약해지|늦어지|흩어지|밀리|고집|걱정|지나치|벅차)/;
+const ADVICE_END = /(세요|좋아요|맞아요|돼요|좋겠어요|빛나요|힘이 나요|장점이에요)\.$/;
+const LEAD_JOINER = /^(다만|그리고|그런데|반대로|한편|또|게다가|특히|그래서|그래도)\s+/;
+
+function sentencesOf(paragraph) {
+  const out = [];
+  const re = /[^.!?]+[.!?]+(?=\s|$)/g;
+  let m;
+  while ((m = re.exec(paragraph))) {
+    const raw = m[0];
+    const lead = raw.length - raw.trimStart().length;
+    out.push({ text: raw.trim(), start: m.index + lead });
+  }
+  return out;
+}
+
+export function markSpans(paragraph) {
+  const text = String(paragraph ?? "");
+  const sentences = sentencesOf(text);
+  if (!sentences.length) return [];
+  const marks = [];
+  const cautionSentence = sentences.find((s) => CAUTION_WORDS.test(s.text));
+  if (cautionSentence) {
+    // 쉼표로 나눈 구절 가운데 조심 낱말이 든 것 — 문장 전체에 물결을 치면 문단이 빨개진다.
+    const clauses = cautionSentence.text.split(/,\s+/);
+    const hit = (c) => CAUTION_WORDS.test(c) && !/^다만 $/.test(c);
+    const clause = [...clauses].reverse().find((c) => hit(c.replace(LEAD_JOINER, ""))) ?? clauses[0];
+    const span = clause.replace(LEAD_JOINER, "").replace(/[.!?]$/, "");
+    if (span.length >= 6) marks.push({ kind: "caution", text: span });
+  }
+  const advice = sentences.filter((s) => s !== cautionSentence && ADVICE_END.test(s.text));
+  // 조언 문장이 없으면 조심 문장이 아닌 첫 문장 — 다만 "오늘은 경인일이에요."처럼 짧은 머리말(20자 미만)은 건너뛴다
+  const plain = sentences.filter((s) => s !== cautionSentence);
+  const key = advice.at(-1) ?? plain.find((s) => s.text.length >= 20) ?? plain[0] ?? null;
+  if (key) marks.unshift({ kind: "key", text: key.text.replace(LEAD_JOINER, "") });
+  return marks;
+}
+
 const STEMS = ["갑", "을", "병", "정", "무", "기", "경", "신", "임", "계"];
 const BRANCHES = ["자", "축", "인", "묘", "진", "사", "오", "미", "신", "유", "술", "해"];
 const ELEMENTS = ["목", "화", "토", "금", "수"];
@@ -401,8 +450,9 @@ export function buildSajuReading(candidate, detail) {
   const dm = DAY_MASTER[dayStem];
   const element = stemElement(dayStem);
   const elements = readElements(candidate);
-  return {
+  const out = {
     version: READING_RULES.version,
+    markRules: MARK_RULES.version,
     overview: readOverview(candidate, elements),
     dayMaster: {
       stem: dayStem, hanja: STEM_HANJA[dayStem], element, yinYang: isYang(dayStem) ? "양" : "음",
@@ -415,6 +465,11 @@ export function buildSajuReading(candidate, detail) {
     annual: readAnnual(candidate, detail),
     luck: readLuck(candidate, detail),
   };
+  for (const part of Object.values(out)) {
+    if (part && typeof part.paragraph === "string") part.marks = markSpans(part.paragraph);
+  }
+  out.dayMaster.marks = markSpans(out.dayMaster.paragraph);
+  return out;
 }
 
 // ── 궁합 ────────────────────────────────────────────────
@@ -494,8 +549,10 @@ export function buildCompatibility(a, b) {
     노력형: "전체적으로 다른 점이 분명한 만큼, 대화로 맞춰 갈 때 단단해지는 궁합이에요.",
     "조율 필요": "전체적으로 차이가 뚜렷해서, 생활 규칙을 정해 두고 서로 배려하면 좋아지는 궁합이에요.",
   }[level];
-  return {
+  const result = {
     version: READING_RULES.version, score, level, picks,
     paragraphs: [first.join(" "), [...second, closing].join(" ")],
   };
+  result.marks = result.paragraphs.map(markSpans);
+  return result;
 }

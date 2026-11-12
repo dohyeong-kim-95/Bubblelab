@@ -328,9 +328,55 @@ KASI 키는 Worker secret에만 있으며 응답이나 정적 JavaScript에 포�
   저장합니다. 계산은 `/_fortune/chart`에 내 본문과 `partner` 본문을 함께 보내 서버가 같은 방식으로
   상대 명식을 세우고 `buildCompatibility`로 견줍니다(일간 오행 생극·천간합, 일지 육합·충·원진,
   서로 비어 있는 오행 채우기). 이름은 서버로 보내지 않고, 응답에는 상대의 팔자·궁합 문단만 실립니다.
-- **공유·저장** — 「📲 스토리 카드 저장」은 오늘의 운세와 명식 요약을 1080×1920 캔버스로
+- **공유·저장** — 「스토리 카드로 저장」은 오늘의 운세와 명식 요약을 1080×1920 캔버스(모눈 노트 한 장)로
   그려, 파일 공유가 되는 폰은 공유 시트로(사진 저장·스토리), 아니면 PNG 내려받기로 넘깁니다.
   우하단 공유 버튼도 같은 카드를 붙입니다. 「명식 이미지 복사」는 명식 표만 클립보드에.
+
+**화면 — "운세 노트, 연필로 풀어 준"** (2026-11): 길거리 사주 좌판에서 맞은편 사람이 모눈 노트에
+연필로 명식을 적어 가며 풀어 주는 결이다. 경쟁 화면들의 "화려한 운명서" 대신 손으로 계산하고 손으로
+짚어 주는 정직함 — 실제로 풀이가 LLM 이 아니라 규칙이라 겉과 속이 맞는다.
+
+- 토큰·부품은 이 페이지 전용 `fortune/note.css`(bubble.css 를 쓰지 않는다), 그리기는 `fortune/note.js`
+  (`window.Note`: rough.js 연필 선·동그라미·휜 화살표·명식 표·오행 막대·인생 곡선·쓰는 동작).
+  지금은 **밝은 화면만** — `color-scheme: light` 와 바탕색을 못 박아 OS 다크 모드에서도 종이로 보인다.
+- 손글씨(나눔손글씨 펜, 글자 키가 작아 1.4배)는 제목·라벨·주석·간지에만, 본문은 고운돋움, 한자는
+  Noto Serif KR. 셋 다 OFL 로 `fortune/fonts/` 에 **잘라서** 둔다 — 화면·조각 표가 쓰는 글자만 든
+  core(손글씨 약 140KB·본문 약 83KB·한자 5KB)를 먼저 받고, 나머지 한글은 rest 조각 넷(사람이 친 이름 등),
+  토정 괘 이름·원문 한자는 그 탭·원문을 펼칠 때만 받는다(unicode-range). 문구를 바꾸면
+  `_src/util-fortune-fonts/build.py` 를 다시 돌린다 — `fortune.test.mjs` 가 core 에서 빠진 글자를 잡는다.
+- rough.js(MIT)는 `fortune/vendor/`. **시드는 생년월일(시·성별 포함)에서** 뽑아 같은 사람은 언제나 같은 획이다.
+- 형광펜(key)·빨간 물결(caution)은 화면이 고르지 않는다 — 서버가 문단마다 `marks: [{kind, text}]` 를
+  규칙(`MARK_RULES` = `marks-v1`, `_infra/saju-reading.js` `markSpans`)으로 실어 보낸다(문단마다 key 하나,
+  caution 많아야 하나). 사실을 적는 문단(신강약·십성·대운)은 화면이 형광펜을 빼고 물결만 남긴다.
+- 첫 방문은 폼이 아니라 빈칸 문장(「____년 __월 __일 __시 __분에 태어났어요」, 시만 적으면 시진, 분까지 적으면
+  정확한 시각 — 저장 모양은 예전 그대로). 적고 나면 사주 탭에서 3~4초 **쓰는 동작**(글자 → 오행 막대 → 곡선 →
+  "지금 여기")이 돌고, 곡선이 첫 화면 아래면 막대가 다 칠해지는 순간(애니메이션 완료 이벤트) 따라 내려간다.
+  화면을 누르면 끝까지, `prefers-reduced-motion` 이면 처음부터 다 그려진 채. 다시 온 사람은 노트가 바로 열리고
+  오늘 탭이면 하루 한 번 0.5초 장을 넘긴다(`bl-fortune-turned`). 저장 키(`bl-fortune-birth`·`bl-fortune-partner`)는 그대로다.
+- 인생 곡선 이름표("지금 여기"·"여기가 제일 좋아요"·"조심할 때")는 후보 자리 → 판 전체 훑기 순으로, 곡선 선분·축·
+  세운 점·별·다른 이름표·화살표와 겹치지 않는 자리를 찾는다. 결과는 `.curve-plot[data-labels]` 에 남아 e2e 가 본다.
+- CSP: 화면에 `style=` 속성이나 인라인 `<style>` 을 쓰지 않는다(계산한 값은 `el.style.setProperty`).
+  life 와 같은 `style-src 'self'` 로 돌려도 위반이 없다. Google Fonts 같은 바깥 글꼴은 부르지 않는다.
+
+**만화 사주 선착순(이벤트)**: 사주 탭 맨 아래 한 곳과, 쓰는 동작이 끝난 뒤 한 줄로만 알린다. 메일 주소만
+적으면(생년월일·성별은 이미 적은 값) 선착순 10명에게 다그당스 만화 사주를 사람이 직접 메일로 보낸다.
+동의(받는 항목: 메일·생년월일시·성별 / 쓰는 곳: 만화 사주를 그려 보내는 것 / 보관: 보내고 나면 바로 삭제 /
+거부 가능, 대신 못 보냄)가 필수다. 신청은 `FortuneDO`(새 바인딩 없음)에 두고, 집 PC 가
+`PAPERS_SINK_SECRET` 으로 목록을 받아 간 뒤 보낼 때마다 `done` 으로 개인정보를 지운다 — 남는 건 받은 수뿐이고
+그 수는 줄지 않는다(지워도 자리가 다시 나지 않는다).
+
+| 경로 | 인증 | 요청 | 응답 |
+| --- | --- | --- | --- |
+| `GET /_fortune/comic-request/status` | 없음 | — | `{ open, remaining }` (개인정보 없음) |
+| `POST /_fortune/comic-request` | 없음, IP 당 10분 5회 | `{ email, birth: { y, m, d, h, calendar?, lunarLeap? }, gender, consent: true, website? }` — `h` 는 12지시 인덱스(0~11) 또는 `null`, `website` 는 사람 눈에 안 보이는 칸 | 200 `{ ok: true, remaining }` |
+| `GET /_fortune/comic-requests` | `Authorization: Bearer <PAPERS_SINK_SECRET>` | — | `{ count, remaining, requests: [{ id, email, birth, gender, created }] }` (오래된 순) |
+| `POST /_fortune/comic-requests/<id>/done` | Bearer | — | `{ ok: true, count }` — 그 신청의 메일·생년월일 삭제 |
+
+오류: 400 `{ error: "invalid" | "consent" | "email" | "birth" }`, 409 `{ error: "full" }`(11번째부터) ·
+`{ error: "dup" }`(같은 메일, 대소문자·앞뒤 공백 무시), 413 `too-large`, 429(속도 제한), 401 `unauthorized`,
+503 `not configured`(시크릿 없음), 404 `not found`(없는 id). 숨은 칸이 차 있으면 저장하지 않고 200
+`{ ok: true, remaining: null }` 로만 답한다. 검사는 `_infra/fortune.test.mjs`(상한·중복·동의·인증·done 삭제·
+상태에 개인정보 없음), `_infra/e2e/fortune.spec.mjs`.
 
 **📜 토정비결**: 음력 생년월일(양력 입력은 음력으로 바꿔서)로 올해·내년 괘를 짓고, **현대어
 해설을 먼저** 보여 줍니다 — 한 해 총운 한 문단("올해는 처음엔 답답하지만 뒤로 갈수록…"), 달마다

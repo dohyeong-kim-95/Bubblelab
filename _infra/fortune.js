@@ -1,8 +1,9 @@
 import manseryeok from "manseryeok";
 import { sendWebPush } from "./webpush.js";
+import { secretMatches } from "./papers.js";
 import { LITERARY_STAR, buildSajuDetail, twelveShinsal } from "./saju-detail.js";
 import {
-  READING_RULES, branchRelation as branchRelationName, buildCompatibility, buildSajuReading, elementCounts,
+  READING_RULES, branchRelation as branchRelationName, buildCompatibility, buildSajuReading, elementCounts, markSpans,
   elementWord, josa, stemElement, TEN_GOD_GLOSS, tenGodOf,
 } from "./saju-reading.js";
 import { tojeongHexagram } from "./tojeong.js";
@@ -406,6 +407,7 @@ export function buildDailyFortune(candidate, date, gender = "unspecified") {
     tenGod: god,
     emoji: STEM_EMOJI[god],
     text: parts.join(" "),
+    marks: markSpans(parts.join(" ")),
     headline: dailyHeadline(god, harmony.length > 0, clash.length > 0),
     categories,
     lucky: luckyOf(candidate, todayPillar, dayElement),
@@ -718,6 +720,77 @@ export function sendFortuneDaily(env) {
   return fortuneStub(env).fetch("https://fortune.internal/notify", { method: "POST" });
 }
 
+// ── 만화 사주 선착순 신청 (이벤트) ─────────────────────────────────
+// 메일 주소를 남기면 선착순 COMIC_CAP 명에게 다그당스 만화 사주를 사람이 직접 보낸다.
+// 신청은 FortuneDO 한 인스턴스에 두고, 집 PC 가 PAPERS_SINK_SECRET 으로 목록을 받아 간 뒤
+// 보낼 때마다 done 으로 개인정보(메일·생년월일)를 지운다. 남는 것은 받은 수뿐이다.
+export const COMIC_CAP = 10;
+const EMAIL_RE = /^[^\s@<>()",;:]{1,64}@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*\.[a-z]{2,24}$/i;
+
+async function comicEmailKey(email) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(email).trim().toLowerCase()));
+  return hexDigest(digest).slice(0, 32);
+}
+
+/** 신청 본문 검사 — 통과하면 저장할 모양으로 다듬은 값, 아니면 { error }. */
+export function validateComicRequest(body, today = kstToday()) {
+  if (!body || typeof body !== "object") return { error: "invalid" };
+  if (body.website) return { error: "bot" };   // 사람에게는 보이지 않는 칸
+  if (body.consent !== true) return { error: "consent" };
+  const email = typeof body.email === "string" ? body.email.trim() : "";
+  if (email.length < 6 || email.length > 254 || !EMAIL_RE.test(email)) return { error: "email" };
+  const b = body.birth ?? {};
+  const y = Number(b.y), m = Number(b.m), d = Number(b.d);
+  const h = b.h == null || b.h === "" ? null : Number(b.h);
+  const calendar = b.calendar === "lunar" ? "lunar" : "solar";
+  if (!Number.isInteger(y) || y < 1900 || y > today.year || !Number.isInteger(m) || m < 1 || m > 12
+    || !Number.isInteger(d) || d < 1 || (calendar === "lunar" ? d > 30 : !validSolarDate(y, m, d))
+    || (h !== null && (!Number.isInteger(h) || h < 0 || h > 11))) return { error: "birth" };
+  const gender = ["male", "female"].includes(body.gender) ? body.gender : "unspecified";
+  return { value: { email: email.toLowerCase(), birth: { y, m, d, h, calendar, lunarLeap: b.lunarLeap === true }, gender } };
+}
+
+/**
+ * 워커 라우트(속도 제한은 worker.js 가 먼저 건다):
+ *   GET  /_fortune/comic-request/status        → { open, remaining }
+ *   POST /_fortune/comic-request               → { ok, remaining } | { error }
+ *   GET  /_fortune/comic-requests              (Bearer PAPERS_SINK_SECRET) → { count, remaining, requests }
+ *   POST /_fortune/comic-requests/<id>/done    (Bearer) → { ok } — 그 신청의 메일·생년월일 삭제
+ */
+export async function handleFortuneComic(request, env, url) {
+  const path = url.pathname;
+  const json = (body, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
+  const relay = async (target, init) => {
+    const res = await fortuneStub(env).fetch(`https://fortune.internal${target}`, init);
+    return new Response(res.body, { status: res.status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+  };
+  if (path === "/_fortune/comic-request/status") {
+    if (request.method !== "GET") return json({ error: "method" }, 405);
+    return relay("/comic/status");
+  }
+  if (path === "/_fortune/comic-request") {
+    if (request.method !== "POST") return json({ error: "method" }, 405);
+    if (+(request.headers.get("Content-Length") ?? 0) > 2048) return json({ error: "too-large" }, 413);
+    const body = await request.json().catch(() => null);
+    const checked = validateComicRequest(body);
+    if (checked.error === "bot") return json({ ok: true, remaining: null });   // 봇에게는 티 내지 않는다
+    if (checked.error) return json({ error: checked.error }, 400);
+    return relay("/comic/request", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(checked.value) });
+  }
+  // 아래는 집 PC 몫 — 논문·오픽과 같은 시크릿.
+  const done = /^\/_fortune\/comic-requests\/([0-9a-f]{16})\/done$/.exec(path);
+  if (path !== "/_fortune/comic-requests" && !done) return json({ error: "not found" }, 404);
+  if (!env.PAPERS_SINK_SECRET) return json({ error: "not configured" }, 503);
+  const offered = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+  if (!secretMatches(offered, env.PAPERS_SINK_SECRET)) return json({ error: "unauthorized" }, 401);
+  if (done) {
+    if (request.method !== "POST") return json({ error: "method" }, 405);
+    return relay(`/comic/done/${done[1]}`, { method: "POST" });
+  }
+  if (request.method !== "GET") return json({ error: "method" }, 405);
+  return relay("/comic/list");
+}
+
 export class FortuneDO {
   constructor(state, env) {
     this.storage = state.storage;
@@ -729,6 +802,7 @@ export class FortuneDO {
     if (url.pathname === "/push" && request.method === "POST") return this.subscribe(request);
     if (url.pathname === "/push" && request.method === "DELETE") return this.unsubscribe(request);
     if (url.pathname === "/notify" && request.method === "POST") return this.notifyDaily();
+    if (url.pathname.startsWith("/comic/")) return this.comic(request, url);
     return new Response("not found", { status: 404 });
   }
 
@@ -758,6 +832,44 @@ export class FortuneDO {
     const endpoint = String(body.endpoint ?? "");
     if (endpoint) await this.storage.delete(await endpointKey(endpoint));
     return Response.json({ subscribed: false });
+  }
+
+  // ── 만화 사주 선착순 신청 ── 개인정보는 comic:req:<id> 한 곳, 보내고 나면(done) 지운다.
+  // comic:count 는 받은 수라 줄지 않는다(지워도 자리가 다시 나지 않는다).
+  async comic(request, url) {
+    const path = url.pathname;
+    const count = (await this.storage.get("comic:count")) ?? 0;
+    if (path === "/comic/status" && request.method === "GET") {
+      const remaining = Math.max(0, COMIC_CAP - count);
+      return Response.json({ open: remaining > 0, remaining });
+    }
+    if (path === "/comic/request" && request.method === "POST") {
+      const value = await request.json().catch(() => null);
+      if (!value?.email) return Response.json({ error: "invalid" }, { status: 400 });
+      if (count >= COMIC_CAP) return Response.json({ error: "full", remaining: 0 }, { status: 409 });
+      const emailKey = `comic:email:${await comicEmailKey(value.email)}`;
+      if (await this.storage.get(emailKey)) return Response.json({ error: "dup" }, { status: 409 });
+      const id = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+      await this.storage.put(`comic:req:${id}`, { id, ...value, created: new Date().toISOString() });
+      await this.storage.put(emailKey, id);
+      await this.storage.put("comic:count", count + 1);
+      return Response.json({ ok: true, remaining: Math.max(0, COMIC_CAP - count - 1) });
+    }
+    if (path === "/comic/list" && request.method === "GET") {
+      const items = [...(await this.storage.list({ prefix: "comic:req:" })).values()]
+        .sort((a, b) => (a.created < b.created ? -1 : 1));
+      return Response.json({ count, remaining: Math.max(0, COMIC_CAP - count), requests: items });
+    }
+    const done = /^\/comic\/done\/([0-9a-f]{16})$/.exec(path);
+    if (done && request.method === "POST") {
+      const key = `comic:req:${done[1]}`;
+      const item = await this.storage.get(key);
+      if (!item) return Response.json({ error: "not found" }, { status: 404 });
+      await this.storage.delete(key);
+      await this.storage.delete(`comic:email:${await comicEmailKey(item.email)}`);
+      return Response.json({ ok: true, count });
+    }
+    return new Response("not found", { status: 404 });
   }
 
   async notifyDaily() {

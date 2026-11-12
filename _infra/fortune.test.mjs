@@ -357,3 +357,134 @@ test("회귀(4차): 근거 없는 분야의 첫머리가 비문이 아니다('�
     for (const c of Object.values(daily.categories)) assert.doesNotMatch(c.comment, /^이 분야로는/, c.comment);
   });
 });
+
+// ── 만화 사주 선착순 신청 ───────────────────────────────────────────
+// 워커 → FortuneDO 를 메모리 저장소 하나로 잇는다(실제 바인딩 대신).
+async function comicEnv(extra = {}) {
+  const { handleFortuneComic } = await import("./fortune.js");
+  const storage = new MemoryStorage();
+  const fortune = new FortuneDO({ storage }, {});
+  const stub = { fetch: (input, init) => fortune.fetch(new Request(input, init)) };
+  const env = { FORTUNE: { idFromName: () => "global", get: () => stub }, PAPERS_SINK_SECRET: "sink-secret", ...extra };
+  const call = (method, path, body, headers = {}) => {
+    const url = new URL(`https://util.bubblelab.dev${path}`);
+    return handleFortuneComic(new Request(url, {
+      method, headers: { "Content-Type": "application/json", ...headers },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    }), env, url);
+  };
+  return { storage, call };
+}
+const comicBody = (email, extra = {}) => ({
+  email, birth: { y: 1992, m: 8, d: 20, h: 5 }, gender: "male", consent: true, ...extra,
+});
+const AUTH = { Authorization: "Bearer sink-secret" };
+
+test("만화 사주: 선착순 10명까지만 받고 11번째부터는 full", async () => {
+  const { call } = await comicEnv();
+  for (let i = 1; i <= 10; i++) {
+    const res = await call("POST", "/_fortune/comic-request", comicBody(`p${i}@example.com`));
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { ok: true, remaining: 10 - i });
+  }
+  const full = await call("POST", "/_fortune/comic-request", comicBody("late@example.com"));
+  assert.equal(full.status, 409);
+  assert.equal((await full.json()).error, "full");
+  assert.deepEqual(await (await call("GET", "/_fortune/comic-request/status")).json(), { open: false, remaining: 0 });
+});
+
+test("만화 사주: 같은 메일은 dup, 대소문자·공백이 달라도 같은 메일", async () => {
+  const { call } = await comicEnv();
+  assert.equal((await call("POST", "/_fortune/comic-request", comicBody("me@example.com"))).status, 200);
+  const dup = await call("POST", "/_fortune/comic-request", comicBody("  ME@Example.com "));
+  assert.equal(dup.status, 409);
+  assert.equal((await dup.json()).error, "dup");
+});
+
+test("만화 사주: 동의·메일·생년월일이 없거나 틀리면 거절, 숨은 칸이 차 있으면 저장하지 않는다", async () => {
+  const { call, storage } = await comicEnv();
+  const cases = [
+    [comicBody("a@example.com", { consent: undefined }), "consent"],
+    [comicBody("a@example.com", { consent: "true" }), "consent"],
+    [comicBody("not-an-email"), "email"],
+    [comicBody(`${"x".repeat(250)}@example.com`), "email"],
+    [comicBody("a@example.com", { birth: { y: 1992, m: 2, d: 30 } }), "birth"],
+    [comicBody("a@example.com", { birth: { y: 1800, m: 1, d: 1 } }), "birth"],
+    [comicBody("a@example.com", { birth: { y: 1992, m: 1, d: 1, h: 12 } }), "birth"],
+  ];
+  for (const [body, error] of cases) {
+    const res = await call("POST", "/_fortune/comic-request", body);
+    assert.equal(res.status, 400, JSON.stringify(body));
+    assert.equal((await res.json()).error, error);
+  }
+  const bot = await call("POST", "/_fortune/comic-request", comicBody("bot@example.com", { website: "http://spam" }));
+  assert.equal(bot.status, 200);
+  assert.equal((await storage.list({ prefix: "comic:" })).size, 0, "봇 신청이 저장됐다");
+});
+
+test("만화 사주: 목록·완료는 시크릿 없이 못 쓰고, 상태에는 개인정보가 없다", async () => {
+  const { call } = await comicEnv();
+  await call("POST", "/_fortune/comic-request", comicBody("me@example.com"));
+  assert.equal((await call("GET", "/_fortune/comic-requests")).status, 401);
+  assert.equal((await call("GET", "/_fortune/comic-requests", undefined, { Authorization: "Bearer wrong" })).status, 401);
+  assert.equal((await call("POST", "/_fortune/comic-requests/0123456789abcdef/done")).status, 401);
+  const status = await (await call("GET", "/_fortune/comic-request/status")).text();
+  assert.deepEqual(JSON.parse(status), { open: true, remaining: 9 });
+  assert.doesNotMatch(status, /example|1992|male/);
+  // 시크릿이 설정되지 않은 배포에서는 목록 자체가 닫힌다
+  const closed = await comicEnv({ PAPERS_SINK_SECRET: undefined });
+  assert.equal((await closed.call("GET", "/_fortune/comic-requests", undefined, AUTH)).status, 503);
+});
+
+test("만화 사주: done 하면 메일·생년월일이 지워지고 받은 수만 남는다(자리는 다시 나지 않는다)", async () => {
+  const { call, storage } = await comicEnv();
+  await call("POST", "/_fortune/comic-request", comicBody("me@example.com"));
+  await call("POST", "/_fortune/comic-request", comicBody("you@example.com"));
+  const list = await (await call("GET", "/_fortune/comic-requests", undefined, AUTH)).json();
+  assert.equal(list.requests.length, 2);
+  const mine = list.requests.find((r) => r.email === "me@example.com");
+  assert.deepEqual(Object.keys(mine).sort(), ["birth", "created", "email", "gender", "id"]);
+  assert.deepEqual(mine.birth, { y: 1992, m: 8, d: 20, h: 5, calendar: "solar", lunarLeap: false });
+  const done = await call("POST", `/_fortune/comic-requests/${mine.id}/done`, undefined, AUTH);
+  assert.equal(done.status, 200);
+  const dump = JSON.stringify([...(await storage.list({ prefix: "" })).entries()]);
+  assert.doesNotMatch(dump, /me@example\.com/);
+  assert.equal((await storage.get("comic:count")), 2);
+  const after = await (await call("GET", "/_fortune/comic-requests", undefined, AUTH)).json();
+  assert.deepEqual(after.requests.map((r) => r.email), ["you@example.com"]);
+  assert.equal(after.remaining, 8);
+  assert.equal((await call("POST", `/_fortune/comic-requests/${mine.id}/done`, undefined, AUTH)).status, 404);
+});
+
+// ── 운세 노트 글꼴 조각 ── 화면 문구·풀이 조각 표의 한글이 처음 받는 core 조각에 다 들어 있어야 한다.
+// 빠지면 그 글자 하나 때문에 100KB 남짓한 rest 조각을 더 받는다. 문구를 바꿨으면
+// `_src/util-fortune-fonts/build.py` 를 다시 돌린다.
+test("운세 노트: core 글꼴 조각이 화면·조각 표의 한글을 모두 덮고, 라이선스가 함께 있다", async () => {
+  const { readFileSync, readdirSync, existsSync } = await import("node:fs");
+  const root = new URL("../", import.meta.url);
+  const read = (p) => readFileSync(new URL(p, root), "utf8");
+  const css = read("util/fortune/fonts/fonts.css");
+  const rangeOf = (file) => {
+    const m = new RegExp(`${file.replace(".", "\\.")}"\\) format\\("woff2"\\); font-display: swap; unicode-range: ([^;]+);`).exec(css);
+    assert.ok(m, `${file} 가 fonts.css 에 없다`);
+    const set = new Set();
+    for (const part of m[1].split(",")) {
+      const [a, b] = part.replace(/U\+/g, "").split("-").map((x) => parseInt(x, 16));
+      for (let c = a; c <= (b ?? a); c++) set.add(c);
+    }
+    return set;
+  };
+  const hangul = (text) => [...new Set(text)].filter((ch) => ch >= "가" && ch <= "힣");
+  const hand = rangeOf("hand-core.woff2"), body = rangeOf("body-core.woff2");
+  const page = read("util/fortune/index.html") + read("util/fortune/note.js");
+  assert.deepEqual(hangul(page).filter((ch) => !hand.has(ch.codePointAt(0))), [], "손글씨 core 에 없는 글자");
+  const tj = readdirSync(new URL("util/fortune/tojeong/", root)).map((f) => read(`util/fortune/tojeong/${f}`)).join("");
+  const all = page + read("_infra/saju-reading.js") + read("_infra/fortune.js") + read("_infra/life-curve.js") + tj;
+  assert.deepEqual(hangul(all).filter((ch) => !body.has(ch.codePointAt(0))), [], "본문 core 에 없는 글자");
+  for (const f of ["NanumPenScript-OFL.txt", "GowunDodum-OFL.txt", "NotoSerifKR-OFL.txt"]) {
+    assert.ok(existsSync(new URL(`util/fortune/fonts/${f}`, root)), `${f} 라이선스가 없다`);
+  }
+  assert.ok(existsSync(new URL("util/fortune/vendor/rough.LICENSE.txt", root)));
+  // 페이지는 Google Fonts 같은 바깥 글꼴을 부르지 않는다(CSP font-src 'self')
+  assert.doesNotMatch(read("util/fortune/index.html"), /fonts\.googleapis|fonts\.gstatic/);
+});

@@ -3,435 +3,157 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#4A4038">
 <title>오늘의 운세 · 사주 · 토정비결</title>
-<meta name="description" content="생년월일로 보는 오늘의 운세·사주 풀이·궁합·토정비결.">
+<meta name="description" content="생년월일을 알려 주면 연필로 풀어 주는 오늘의 운세·사주·궁합·토정비결.">
 <meta name="bl-group" content="매일">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🔮</text></svg>">
-<link rel="stylesheet" href="/_shared/bubble.css">
-<style>
-  :root { --accent-h: 201; }
-  * { box-sizing: border-box; }
-  /* 아래 여백은 우하단 유틸 독(홈·공유) 몫 — 마지막 내용이 독 밑에 깔리지 않게 */
-  body { margin: 0; min-height: 100dvh; padding: 1.5rem 1rem 6.5rem; }
-  main { width: min(30rem, 100%); margin: 0 auto; }
-  .bl-head { margin-bottom: .5rem; }
-  .date { margin: 0 0 .8rem; color: var(--muted); font-size: .85rem; }
-  button { font: inherit; color: inherit; cursor: pointer; }
-  [hidden] { display: none !important; }
-  h2 { margin: 0 0 .6rem; font-size: 1rem; font-weight: 800; letter-spacing: -.01em; }
-  h3 { margin: 0 0 .4rem; font-size: .84rem; font-weight: 700; }
-  .card { padding: 1.2rem 1.1rem; }
-  .stack > * + * { margin-top: .9rem; }
-  .prose { margin: 0; font-size: .92rem; line-height: 1.75; word-break: keep-all; }
-  .sub { color: var(--muted); }
-  .note { margin: .5rem 0 0; font-size: .74rem; line-height: 1.55; color: var(--muted); }
-
-  /* 탭 — 생년월일이 있을 때만 뜬다. 위에 붙어 있어 긴 탭에서도 바로 옮겨 갈 수 있다. */
-  .tabs { position: sticky; top: 0; z-index: 5; display: flex; gap: .35rem; margin: 0 -1rem .9rem;
-          padding: .5rem 1rem; overflow-x: auto; scrollbar-width: none; background: var(--bg);
-          border-bottom: 1px solid var(--line); }
-  .tabs::-webkit-scrollbar { display: none; }
-  .tabs .bl-chip { flex: none; padding: .3rem .8rem; font-size: .86rem; }
-
-  /* 용어 풀이 — 점선 밑줄 단어를 누르면 아래에서 뜬다 */
-  .term { padding: 0; border: 0; background: none; color: inherit; font: inherit;
-          text-decoration: underline dotted color-mix(in srgb, var(--accent) 70%, transparent);
-          text-underline-offset: .2em; cursor: help; }
-  #gloss { position: fixed; left: 50%; bottom: 1rem; z-index: 10000; width: min(28rem, calc(100% - 2rem));
-           transform: translateX(-50%); padding: 1rem 1.1rem 1.05rem; }
-  #gloss h3 { margin: 0 2rem .35rem 0; font-size: .95rem; color: var(--accent); }
-  #gloss p { margin: 0; font-size: .86rem; line-height: 1.65; }
-  #gloss-close { position: absolute; top: .45rem; right: .45rem; width: 2rem; height: 2rem; border: 0;
-                 border-radius: 50%; background: var(--sunk); }
-
-  /* 오늘의 운세 */
-  #fortune .head { display: flex; gap: .75rem; align-items: flex-start; }
-  #fortune .emoji { flex: none; font-size: 2.2rem; line-height: 1; }
-  #fortune .text { margin: 0; font-size: .98rem; line-height: 1.75; word-break: keep-all; }
-  #fortune.generic .head { flex-direction: column; align-items: center; text-align: center; }
-  #fortune.generic .emoji { font-size: 2.6rem; }
-  .fortune-categories { display: grid; gap: .4rem; margin-top: 1rem; }
-  .fortune-category { padding: .65rem .75rem; border-radius: var(--r-sm); background: var(--sunk);
-                      font-size: .84rem; line-height: 1.6; }
-  .fortune-category-top { display: flex; align-items: center; gap: .45rem; margin-bottom: .15rem; }
-  .fortune-category-name { font-weight: 700; }
-  .fortune-category-level { padding: .02rem .5rem; border-radius: var(--pill); font: 600 .72rem/1.45 var(--sans);
-                            background: var(--field); box-shadow: inset 0 0 0 1px var(--line); }
-  .fortune-category[data-level="원활"] .fortune-category-level { color: var(--ok); }
-  .fortune-category[data-level="주의"] .fortune-category-level { color: var(--bad); }
-  .fortune-category-comment { margin: 0; color: var(--muted); word-break: keep-all; }
-  .lucky { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .4rem; margin-top: 1rem; }
-  .lucky div { padding: .55rem .3rem; border-radius: var(--r-sm); text-align: center;
-               background: color-mix(in srgb, var(--accent-soft) 70%, transparent); }
-  .lucky small { display: block; font-size: .68rem; color: var(--muted); }
-  .lucky b { display: block; margin-top: .1rem; font-size: .9rem; word-break: keep-all; }
-  .times { margin: .8rem 0 0; padding: 0; list-style: none; display: grid; gap: .35rem; }
-  .times li { font-size: .84rem; line-height: 1.6; word-break: keep-all; }
-  .times b { margin-right: .3rem; }
-  #fortune.is-loading .emoji, #fortune.is-loading .text, #fortune.is-loading .fortune-category {
-    color: transparent; border-radius: var(--r-sm);
-    background: linear-gradient(100deg, var(--sunk) 25%,
-      color-mix(in srgb, var(--accent-soft) 70%, var(--sunk)) 42%, var(--sunk) 58%);
-    background-size: 220% 100%; animation: fortune-shimmer 1.25s ease-in-out infinite; }
-  #fortune.is-loading .fortune-category * { visibility: hidden; }
-  #fortune.is-loading .emoji { width: 2.4rem; height: 2.4rem; border-radius: 50%; }
-  #fortune.is-loading .text { flex: 1; min-height: 4.5rem; }
-  #fortune.is-loading .fortune-category { min-height: 3.4rem; }
-  @keyframes fortune-shimmer { to { background-position-x: -220%; } }
-  @media (prefers-reduced-motion: reduce) {
-    #fortune.is-loading .emoji, #fortune.is-loading .text, #fortune.is-loading .fortune-category { animation: none; }
-  }
-  .actions { display: flex; flex-wrap: wrap; gap: .45rem; justify-content: flex-end; margin-top: .9rem; }
-  .saved { margin: 1rem 0 0; text-align: center; }
-  .saved p { margin: 0 0 .4rem; }
-
-  /* 알림 토글 */
-  #notify { padding: 0 .3rem; }
-  .notify-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-  .notify-title { font-size: .9rem; font-weight: 700; }
-  .notify-help { margin: .6rem 0 0; }
-
-  /* 생년월일 입력 (내 것·상대 것 같은 모양) */
-  #reveal { text-align: center; }
-  .birth-form .row { display: flex; gap: .55rem; align-items: center; margin-bottom: .7rem; }
-  .birth-form label { width: 3.2rem; flex: none; color: var(--muted); font-size: .84rem; text-align: right; }
-  .birth-form .bl-input { flex: 1; min-width: 0; font-size: .92rem; padding: .5rem .6rem; }
-  .time-mode { display: grid; grid-template-columns: 1fr 1fr; gap: .35rem; width: 100%; }
-  .time-mode .bl-chip { justify-content: center; padding: .3rem .5rem; }
-  .time-mode.gender-mode { grid-template-columns: repeat(3, 1fr); }
-  .time-help { margin: -.3rem 0 .8rem 3.75rem; }
-  .form-actions { display: flex; gap: .6rem; margin-top: 1.1rem; }
-  .form-actions button { flex: 1; }
-  .err { min-height: 1.1em; margin: .6rem 0 0; font-size: .84rem; text-align: center; color: var(--bad); }
-
-  /* 사주 */
-  .me { text-align: center; }
-  .me .hanja { display: block; font-family: serif; font-size: 2.2rem; line-height: 1.1; }
-  .me .name { display: block; margin-top: .3rem; font-weight: 800; }
-  .me .key { display: block; font-size: .8rem; color: var(--muted); }
-  .me .prose { margin-top: .8rem; text-align: left; }
-  .saju-candidate + .saju-candidate { margin-top: 1.4rem; padding-top: 1.2rem; border-top: 1px solid var(--line); }
-  .saju-candidate-title { margin: 0 0 .55rem; font-size: .8rem; color: var(--muted); }
-  .saju-grid { display: grid; grid-template-columns: 2.9rem repeat(4, minmax(0, 1fr));
-               border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
-  .saju-cell { min-width: 0; overflow: hidden; padding: .5rem .15rem; text-align: center;
-               border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-  .saju-cell:nth-child(5n) { border-right: 0; }
-  .saju-cell:nth-last-child(-n+5) { border-bottom: 0; }
-  .saju-head, .saju-label { display: grid; place-items: center; font-size: .72rem; color: var(--muted);
-                            background: var(--sunk); }
-  .saju-cell.is-me { background: color-mix(in srgb, var(--accent-soft) 55%, transparent); }
-  .saju-char { display: block; font-family: serif; font-size: 1.45rem; line-height: 1.2; }
-  .saju-korean { display: block; margin-top: .15rem; font-size: .72rem; }
-  .saju-meta, .saju-god { display: block; margin-top: .1rem; font-size: .6rem;
-                          line-height: 1.25; color: var(--muted); word-break: keep-all; }
-  .saju-god { color: var(--accent); }
-  .saju-sub { display: block; font-size: .68rem; line-height: 1.35; word-break: keep-all; }
-  .saju-sub small { display: block; font-size: .56rem; color: var(--muted); }
-  .reading { margin-top: 1.1rem; }
-  .reading h3 { color: var(--accent); }
-  .reading + .reading { padding-top: 1rem; border-top: 1px dashed var(--line); }
-  .saju-elements { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .3rem; margin-bottom: .6rem; }
-  .saju-element { padding: .4rem .1rem; border-radius: var(--r-sm); text-align: center; font-size: .74rem;
-                  background: var(--sunk); }
-  .saju-element b { display: block; font-size: 1rem; font-variant-numeric: tabular-nums; }
-  .saju-element.none { opacity: .45; }
-  .saju-element.many { box-shadow: inset 0 0 0 1.5px var(--accent-line); }
-  .groups { display: flex; flex-wrap: wrap; gap: .3rem; margin-bottom: .6rem; }
-  .groups span { padding: .1rem .55rem; border-radius: var(--pill); font-size: .74rem; background: var(--sunk); }
-  .groups span b { margin-left: .2rem; font-variant-numeric: tabular-nums; }
-  .saju-luck { display: flex; gap: .3rem; overflow-x: auto; padding-bottom: .2rem; margin-top: .6rem; }
-  .saju-luck div { flex: 0 0 auto; min-width: 2.9rem; padding: .35rem .2rem; border-radius: var(--r-sm);
-                   text-align: center; font-size: .74rem; line-height: 1.35; border: 1px solid var(--line); }
-  .saju-luck div.now { border-color: var(--accent); background: var(--accent-soft); }
-  .saju-luck small { display: block; font-size: .58rem; color: var(--muted); }
-  details.more { margin-top: 1.1rem; border-top: 1px solid var(--line); }
-  details.more > summary { padding: .7rem 0 .2rem; font-size: .84rem; color: var(--muted); cursor: pointer; }
-  details.more[open] > summary { color: var(--ink); font-weight: 700; }
-  details.more > .inner { padding-top: .5rem; }
-  .saju-shinsal { margin: .6rem 0 0; padding: 0; list-style: none; display: grid; gap: .4rem; }
-  .saju-shinsal li { font-size: .8rem; line-height: 1.55; }
-  .saju-shinsal .tag { display: inline-block; margin-right: .35rem; padding: .05rem .5rem;
-                       border-radius: var(--pill); font-weight: 600; color: var(--accent); background: var(--accent-soft); }
-  .saju-shinsal .where { color: var(--muted); font-size: .7rem; }
-  .warning { margin: .8rem 0 0; padding: .65rem .8rem; border-radius: var(--r-sm); font-size: .78rem; line-height: 1.5;
-             background: color-mix(in srgb, var(--warn) 14%, transparent);
-             box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warn) 30%, transparent); }
-  .basis-list { margin: 0; padding-left: 1.1rem; font-size: .74rem; line-height: 1.7; color: var(--muted); }
-  .basis-list code { font-family: var(--mono); font-size: .7rem; }
-
-  /* 인생 곡선 — 색은 전부 토큰(라이트·다크 자동). 좌표는 viewBox 기준이라 폭에 맞춰 늘어난다. */
-  .life-curve { margin-top: 1.1rem; }
-  .life-curve svg { display: block; width: 100%; height: auto; overflow: visible; }
-  .lc-grid { stroke: var(--line); stroke-width: .6; }
-  .lc-axis { fill: var(--muted); font: 9px var(--sans); }
-  .lc-area { fill: color-mix(in srgb, var(--accent-soft) 85%, transparent); }
-  .lc-line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
-  .lc-before { stroke-dasharray: 3 3; opacity: .7; }
-  .lc-hit { fill: transparent; cursor: pointer; }
-  .lc-hit:focus-visible { outline: none; }
-  .lc-sel { fill: color-mix(in srgb, var(--accent) 12%, transparent); }
-  .lc-best { fill: var(--ok); }
-  .lc-worst { fill: var(--warn); }
-  .lc-tag { font: 700 9.5px var(--sans); }
-  .lc-tag.best { fill: var(--ok); }
-  .lc-tag.worst { fill: var(--warn); }
-  .lc-now { stroke: var(--ink); stroke-width: 1; stroke-dasharray: 2 2; }
-  .lc-now-label { fill: var(--ink); font: 700 9px var(--sans); }
-  .lc-year { fill: var(--ink); opacity: .55; }
-  .lc-note { margin: .5rem 0 0; padding: .6rem .75rem; border-radius: var(--r-sm); background: var(--sunk);
-             font-size: .86rem; line-height: 1.65; word-break: keep-all; }
-  .lc-note b { color: var(--accent); }
-
-  /* 궁합 */
-  .score { display: flex; align-items: baseline; justify-content: center; gap: .5rem; margin: .2rem 0 .8rem; }
-  .score b { font: 800 2.4rem/1 var(--sans); color: var(--accent); font-variant-numeric: tabular-nums; }
-  .pair { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: .5rem; margin-bottom: .9rem; text-align: center; }
-  .pair .who small { display: block; font-size: .72rem; color: var(--muted); }
-  .pair .who span { display: block; font-family: serif; font-size: 1.5rem; }
-  .pair .heart { font-size: 1.2rem; }
-
-  /* 토정비결 */
-  .tj-years { margin-bottom: .6rem; }
-  .tj-title { padding: .9rem; border-radius: var(--r); text-align: center;
-              background: radial-gradient(circle at 30% 20%, color-mix(in srgb, var(--accent-soft) 80%, transparent), transparent 70%), var(--sunk); }
-  .tj-title .code { display: block; font-size: .68rem; color: var(--muted); letter-spacing: .08em; font-variant-numeric: tabular-nums; }
-  .tj-title .hanja { display: block; margin: .15rem 0; font-family: serif; font-size: 1.4rem; }
-  .tj-title .ko { display: block; font-size: .82rem; color: var(--muted); }
-  .tj-lines { margin: 0; padding: 0; list-style: none; display: grid; gap: .55rem; }
-  .tj-lines li { font-size: .84rem; line-height: 1.6; word-break: keep-all; }
-  .tj-lines .orig { display: block; margin-top: .1rem; font-size: .68rem; color: var(--muted); }
-  .tj-lines .orig span { font-family: serif; }
-  .tj-month { padding: .7rem 0; border-top: 1px solid var(--line); }
-  .tj-month h4 { margin: 0 0 .2rem; font-size: .86rem; }
-  .tj-month.now h4::after { content: "이번 달"; margin-left: .4rem; padding: .05rem .45rem; border-radius: var(--pill);
-                            font-size: .66rem; font-weight: 600; color: var(--accent-ink); background: var(--accent); }
-  .tj-month .prose { font-size: .86rem; line-height: 1.7; }
-  .tj-month[data-tone="good"] h4 { color: var(--ok); }
-  .tj-month[data-tone="bad"] h4 { color: var(--warn); }
-  details.orig-box { margin-top: .35rem; }
-  details.orig-box summary { font-size: .74rem; color: var(--muted); cursor: pointer; }
-  details.orig-box .tj-lines { margin-top: .45rem; }
-
-  /* 바이오리듬 */
-  .headline { margin: 0 0 1.1rem; font-size: 1rem; line-height: 1.65; text-align: center; }
-  .bio { margin-bottom: 1rem; }
-  .bio:last-child { margin-bottom: 0; }
-  .bio .bio-top { display: flex; justify-content: space-between; align-items: baseline; font-size: .86rem; margin-bottom: .35rem; }
-  .bio .bio-name { font-weight: 700; }
-  .bio .bio-name small { font-weight: normal; color: var(--muted); margin-left: .35rem; }
-  .bio .bio-pct { font-variant-numeric: tabular-nums; color: var(--muted); }
-  .track { position: relative; height: .5rem; border-radius: var(--pill); background: var(--sunk); overflow: hidden; }
-  .track .mid { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--line); }
-  .track .fill { position: absolute; top: 0; bottom: 0; border-radius: var(--pill); transition: width .6s ease, left .6s ease; }
-  .bio.phy .fill { background: var(--bad); }
-  .bio.emo .fill { background: var(--warn); }
-  .bio.int .fill { background: var(--ok); }
-  .bio .bio-note { margin: .35rem 0 0; font-size: .82rem; line-height: 1.55; color: var(--muted); }
-  @media (max-width: 390px) {
-    .card { padding: 1.1rem .85rem; }
-    .saju-grid { grid-template-columns: 2.5rem repeat(4, minmax(0, 1fr)); }
-    .saju-char { font-size: 1.3rem; }
-    .saju-korean { font-size: .66rem; }
-  }
-</style>
+<link rel="preload" href="fonts/hand-core.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/body-core.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="fonts/fonts.css">
+<link rel="stylesheet" href="note.css">
 </head>
 <body>
-<main>
-  <header class="bl-head">
-    <span class="bl-bubble" aria-hidden="true">🔮</span>
-    <h1>오늘의 운세</h1>
-    <p>생년월일로 보는 오늘의 운세·사주 풀이·궁합·토정비결.</p>
-  </header>
-  <p class="date bl-num" id="today"></p>
+<div class="book">
+<main class="page" id="page">
+  <div class="persp" id="persp"></div>
+  <p class="small" id="today"></p>
 
-  <nav class="tabs" id="tabs" role="tablist" aria-label="운세 보기" hidden>
-    <button type="button" class="bl-chip" role="tab" data-tab="today" aria-selected="true">오늘</button>
-    <button type="button" class="bl-chip" role="tab" data-tab="saju" aria-selected="false">사주</button>
-    <button type="button" class="bl-chip" role="tab" data-tab="match" aria-selected="false">궁합</button>
-    <button type="button" class="bl-chip" role="tab" data-tab="tojeong" aria-selected="false">토정비결</button>
-    <button type="button" class="bl-chip" role="tab" data-tab="bio" aria-selected="false">바이오리듬</button>
-  </nav>
+  <!-- 처음 온 사람: 빈칸 채우기 문장 -->
+  <section id="form" hidden>
+    <h1 class="hand h-title ask" id="ask">앉아 봐요.<br>태어난 날부터 적어 볼게요.</h1>
+    <form id="birth-form" class="fill" autocomplete="off" novalidate></form>
+    <p class="small" id="form-foot">정해진 계산 규칙으로만 풀어요. 같은 날 태어났으면 언제 와도 같은 풀이가 나와요. 적은 날짜는 이 기기에만 남아요.</p>
+    <p class="generic-line" id="generic"></p>
+  </section>
 
-  <!-- ☀️ 오늘 -->
-  <div class="stack" data-panel="today" role="tabpanel">
-    <div class="card bl-panel generic" id="fortune">
-      <div class="head">
-        <div class="emoji" id="f-emoji">🔮</div>
-        <p class="text" id="f-text"></p>
-      </div>
-      <div class="fortune-categories" id="f-categories" hidden></div>
-      <div id="f-extra" hidden>
-        <div class="lucky" id="f-lucky"></div>
-        <p class="note" id="f-lucky-text"></p>
-        <ul class="times" id="f-times"></ul>
-        <div class="actions">
-          <button type="button" class="bl-btn bl-btn--sm" id="story-today">📲 스토리 카드 저장</button>
-        </div>
-      </div>
-    </div>
-
-    <section id="notify" hidden>
-      <div class="notify-row">
-        <span class="notify-title">🔔 매일 오전 8시 알림 받기</span>
-        <button type="button" id="notify-btn" class="bl-switch" role="switch" aria-checked="false" aria-label="매일 오전 8시 운세 알림"></button>
-      </div>
-      <p class="notify-help bl-note" id="notify-help">브라우저 알림으로 매일 오전 8시(KST) 오늘의 운세를 받아보세요.</p>
+  <!-- 오늘 -->
+  <section data-panel="today" role="tabpanel" aria-labelledby="tab-today" hidden>
+    <div id="fortune"></div>
+    <section id="notify" class="switch-row" hidden>
+      <button type="button" class="check" id="notify-btn" role="switch" aria-checked="false" aria-label="매일 오전 8시 운세 알림"></button>
+      <div><span class="hand h-s">매일 아침 8시에 알려 드릴까요?</span>
+        <p class="small" id="notify-help">브라우저 알림으로 매일 오전 8시(KST) 오늘의 운세를 받아요.</p></div>
     </section>
-
-    <section id="reveal">
-      <button class="bl-btn" id="reveal-btn">나에게 맞는 운세를 보고싶다면? →</button>
-    </section>
-
-    <section class="card bl-panel birth-form" id="form" hidden>
-      <h2>생년월일시를 입력해주세요</h2>
-      <div class="row">
-        <label>달력</label>
-        <div class="time-mode" role="group" aria-label="생년월일 달력 방식">
-          <button type="button" class="bl-chip" id="mode-solar" aria-pressed="true">양력</button>
-          <button type="button" class="bl-chip" id="mode-lunar" aria-pressed="false">음력</button>
-        </div>
-      </div>
-      <div class="row">
-        <label>성별</label>
-        <div class="time-mode gender-mode" role="group" aria-label="성별">
-          <button type="button" class="bl-chip" id="gender-none" aria-pressed="true">미선택</button>
-          <button type="button" class="bl-chip" id="gender-male" aria-pressed="false">남</button>
-          <button type="button" class="bl-chip" id="gender-female" aria-pressed="false">여</button>
-        </div>
-      </div>
-      <div class="row"><label for="in-y">년</label><select id="in-y" class="bl-input"></select></div>
-      <div class="row"><label for="in-m">월</label><select id="in-m" class="bl-input"></select></div>
-      <div class="row"><label for="in-d">일</label><select id="in-d" class="bl-input"></select></div>
-      <div class="row" id="lunar-leap-row" hidden>
-        <label for="in-lunar-leap">월 구분</label>
-        <select id="in-lunar-leap" class="bl-input">
-          <option value="normal">평달</option>
-          <option value="leap">윤달</option>
-        </select>
-      </div>
-      <p class="time-help bl-note" id="lunar-help" hidden>윤달 생일인 경우에만 윤달을 선택하세요.</p>
-      <div class="row">
-        <label>시간</label>
-        <div class="time-mode" role="group" aria-label="출생시간 입력 방식">
-          <button type="button" class="bl-chip" id="mode-branch" aria-pressed="true">시진 · 자축인묘</button>
-          <button type="button" class="bl-chip" id="mode-clock" aria-pressed="false">정확한 시각</button>
-        </div>
-      </div>
-      <div class="row" id="branch-row"><label for="in-h">시진</label><select id="in-h" class="bl-input"></select></div>
-      <p class="time-help bl-note" id="branch-help">정확한 시각을 모르면 두 시간 단위의 시진을 선택하세요.</p>
-      <div class="row" id="clock-row" hidden><label for="in-time">시각</label><input type="time" id="in-time" class="bl-input" step="60"></div>
-      <p class="time-help bl-note" id="clock-help" hidden>태어난 시각을 시·분까지 입력하세요.</p>
-      <div class="form-actions">
-        <button id="cancel" class="bl-btn">취소</button>
-        <button id="save" class="bl-btn bl-btn--primary">내 운세 보기</button>
-      </div>
-      <p class="err" id="err"></p>
-    </section>
-
-    <div class="saved" id="saved" hidden>
-      <p class="bl-note" id="saved-info"></p>
-      <button class="bl-btn bl-btn--ghost bl-btn--sm" id="edit-btn">생년월일 다시 입력</button>
+    <div class="saved" id="saved">
+      <p class="small" id="saved-info"></p>
+      <button type="button" class="link" id="edit-btn">생년월일 다시 적기</button>
     </div>
-  </div>
+  </section>
 
-  <!-- 🧭 사주 -->
-  <section class="card bl-panel" id="saju" data-panel="saju" role="tabpanel" hidden>
-    <p class="note" id="saju-status">명식을 계산하고 있습니다…</p>
-    <p class="warning" id="saju-warning" hidden></p>
-    <div id="saju-candidates"></div>
-    <div class="actions">
-      <button type="button" class="bl-btn bl-btn--sm" id="saju-copy" disabled>명식 이미지 복사</button>
-      <button type="button" class="bl-btn bl-btn--sm" id="story-saju" disabled>📲 스토리 카드 저장</button>
+  <!-- 사주 -->
+  <section data-panel="saju" role="tabpanel" aria-labelledby="tab-saju" hidden>
+    <p class="hand h-s faint talk" id="talk" aria-live="polite"></p>
+    <p class="hand h-sub faint" id="saju-status">명식을 적고 있어요…</p>
+    <p class="warning small" id="saju-warning" hidden></p>
+    <div id="saju-sheet"></div>
+    <div class="row-actions" id="saju-actions" hidden>
+      <button type="button" class="pen sm" id="story-saju">스토리 카드로 저장</button>
+      <button type="button" class="pen sm" id="saju-copy">명식 이미지 복사</button>
     </div>
-    <details class="more" id="basis">
+    <section class="scrap comic" id="comic" hidden>
+      <span class="tape"></span>
+      <h2 class="hand h-sub say">선착순 10명, 만화로 그려서 메일로 보내 드릴게요</h2>
+      <p class="small" id="comic-left"></p>
+      <form id="comic-form" novalidate>
+        <label class="small" for="comic-email">메일 주소만 적어 주세요. 생년월일은 위에 적은 걸로 그릴게요.</label><br>
+        <input class="blank wmail" id="comic-email" type="email" inputmode="email" autocomplete="email" maxlength="254" placeholder="you@example.com">
+        <input class="honey" id="comic-web" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <div class="consent">
+          <button type="button" class="check" id="comic-consent" role="checkbox" aria-checked="false" aria-labelledby="comic-consent-text"></button>
+          <p id="comic-consent-text">메일 주소와 생년월일시·성별을 받아요. 만화 사주를 그려 보내는 데만 쓰고, 보내고 나면 바로 지워요. 동의하지 않아도 괜찮지만, 그러면 보내 드릴 수 없어요.</p>
+        </div>
+        <button type="submit" class="pen sm" id="comic-send">이렇게 신청할게요 →</button>
+        <p class="err small red" id="comic-err"></p>
+      </form>
+      <p id="comic-done" hidden>접수됐어요. 신청하신 순서대로 하나씩 그려서 메일로 보내 드릴게요.</p>
+      <p class="hand h-sub faint" id="comic-closed" hidden>마감됐어요. 관심 가져 줘서 고마워요.</p>
+    </section>
+    <details class="fold" id="basis">
       <summary>계산 기준</summary>
-      <div class="inner"><ul class="basis-list" id="basis-list"></ul></div>
+      <ul class="basis-list" id="basis-list"></ul>
     </details>
   </section>
 
-  <!-- 💞 궁합 -->
-  <section class="card bl-panel" id="match" data-panel="match" role="tabpanel" hidden>
+  <!-- 궁합 -->
+  <section data-panel="match" role="tabpanel" aria-labelledby="tab-match" hidden>
     <div id="match-result" hidden></div>
-    <div class="birth-form" id="match-form">
-      <h2>상대의 생년월일을 넣어 주세요</h2>
-      <div class="row"><label for="p-name">이름</label><input id="p-name" class="bl-input" maxlength="12" placeholder="선택 · 이 기기에만 저장"></div>
-      <div class="row"><label for="p-cal">달력</label>
-        <select id="p-cal" class="bl-input"><option value="solar">양력</option><option value="lunar">음력 평달</option><option value="leap">음력 윤달</option></select></div>
-      <div class="row"><label for="p-gender">성별</label>
-        <select id="p-gender" class="bl-input"><option value="unspecified">미선택</option><option value="male">남</option><option value="female">여</option></select></div>
-      <div class="row"><label for="p-y">년</label><select id="p-y" class="bl-input"></select></div>
-      <div class="row"><label for="p-m">월</label><select id="p-m" class="bl-input"></select></div>
-      <div class="row"><label for="p-d">일</label><select id="p-d" class="bl-input"></select></div>
-      <div class="row"><label for="p-h">시진</label><select id="p-h" class="bl-input"></select></div>
-      <div class="form-actions"><button id="p-save" class="bl-btn bl-btn--primary">궁합 보기</button></div>
-      <p class="err" id="p-err"></p>
-      <p class="note">상대 정보는 이 기기에만 저장돼요. 서버는 계산할 때만 쓰고 남기지 않아요.</p>
+    <div id="match-form-box">
+      <h2 class="hand h-title ask">이번엔 그 사람 차례예요.</h2>
+      <form id="match-form" class="fill" autocomplete="off" novalidate></form>
+      <p class="small">상대 정보는 이 기기에만 남아요. 이름은 서버로 보내지 않고, 서버는 계산할 때만 쓰고 남기지 않아요.</p>
     </div>
   </section>
 
-  <!-- 📜 토정비결 -->
-  <section class="card bl-panel" id="tojeong" data-panel="tojeong" role="tabpanel" hidden>
-    <div class="tj-years bl-chips" id="tj-years" role="group" aria-label="보는 해"></div>
-    <div class="tj-title" id="tj-title"></div>
-    <div class="reading">
-      <h3>한 해 총운</h3>
-      <p class="prose" id="tj-overview"></p>
-      <details class="orig-box"><summary>총운 원문 보기 (9구)</summary><ol class="tj-lines" id="tj-summary"></ol></details>
-    </div>
-    <div class="reading">
-      <h3>달마다</h3>
-      <div id="tj-months"></div>
-    </div>
-    <details class="more">
+  <!-- 토정비결 -->
+  <section data-panel="tojeong" role="tabpanel" aria-labelledby="tab-tojeong" hidden>
+    <h2 class="hand h-sub say">어느 해를 볼까요?</h2>
+    <div class="years" id="tj-years" role="group" aria-label="보는 해"></div>
+    <section class="scrap tj-title" id="tj-title"><span class="tape right"></span><span id="tj-title-body"></span></section>
+    <h2 class="hand h-sub say gap">한 해를 통으로 보면</h2>
+    <p id="tj-overview"></p>
+    <details class="orig-box"><summary>총운 원문 보기 (9구)</summary><ol class="tj-lines" id="tj-summary"></ol></details>
+    <h2 class="hand h-sub say gap">달마다 짚어 볼게요</h2>
+    <div id="tj-months"></div>
+    <details class="fold">
       <summary>괘를 짓는 법</summary>
-      <div class="inner"><p class="note" id="tj-sub"></p><p class="note" id="tj-work"></p></div>
+      <p class="small" id="tj-sub"></p><p class="small" id="tj-work"></p>
     </details>
-    <p class="warning" id="tj-assume" hidden></p>
-    <p class="note" id="tj-source"></p>
+    <p class="warning small" id="tj-assume" hidden></p>
+    <p class="small" id="tj-source"></p>
   </section>
 
-  <!-- 🌊 바이오리듬 -->
-  <section class="card bl-panel" id="result" data-panel="bio" role="tabpanel" hidden>
-    <h2>오늘의 바이오리듬</h2>
-    <p class="note" id="bio-sub"></p>
-    <p class="headline" id="bio-headline"></p>
-    <div class="bio phy">
-      <div class="bio-top"><span class="bio-name">신체 <small>Physical</small></span><span class="bio-pct" id="pct-phy"></span></div>
-      <div class="track"><span class="mid"></span><span class="fill" id="fill-phy"></span></div>
-      <p class="bio-note" id="note-phy"></p>
-    </div>
-    <div class="bio emo">
-      <div class="bio-top"><span class="bio-name">감성 <small>Emotional</small></span><span class="bio-pct" id="pct-emo"></span></div>
-      <div class="track"><span class="mid"></span><span class="fill" id="fill-emo"></span></div>
-      <p class="bio-note" id="note-emo"></p>
-    </div>
-    <div class="bio int">
-      <div class="bio-top"><span class="bio-name">지성 <small>Intellectual</small></span><span class="bio-pct" id="pct-int"></span></div>
-      <div class="track"><span class="mid"></span><span class="fill" id="fill-int"></span></div>
-      <p class="bio-note" id="note-int"></p>
-    </div>
+  <!-- 바이오리듬 -->
+  <section data-panel="bio" role="tabpanel" aria-labelledby="tab-bio" hidden>
+    <h2 class="hand h-title">오늘의 바이오리듬</h2>
+    <p class="small" id="bio-sub"></p>
+    <p class="sub headline"><span class="hl" id="bio-headline"></span></p>
+    <div class="bio" data-key="phy"><div class="bio-top"><span class="hand h-sub">신체</span><span class="hand h-sub" id="pct-phy"></span></div><div class="bio-svg"></div><p id="note-phy"></p></div>
+    <div class="bio" data-key="emo"><div class="bio-top"><span class="hand h-sub">감성</span><span class="hand h-sub" id="pct-emo"></span></div><div class="bio-svg"></div><p id="note-emo"></p></div>
+    <div class="bio" data-key="int"><div class="bio-top"><span class="hand h-sub">지성</span><span class="hand h-sub" id="pct-int"></span></div><div class="bio-svg"></div><p id="note-int"></p></div>
+    <p class="small gap">바이오리듬은 태어난 날부터 센 날수로 23·28·33일 주기의 사인 곡선을 그린 거예요. 재미로 봐 주세요.</p>
   </section>
 </main>
-
-<div class="bl-glass" id="gloss" role="dialog" aria-modal="false" aria-labelledby="gloss-title" hidden>
-  <h3 id="gloss-title"></h3>
-  <p id="gloss-text"></p>
-  <button type="button" id="gloss-close" aria-label="닫기">✕</button>
+<nav class="tabs off" id="tabs" role="tablist" aria-label="운세 보기">
+  <button type="button" class="tab" role="tab" id="tab-today" data-tab="today" aria-selected="true">오늘</button>
+  <button type="button" class="tab" role="tab" id="tab-saju" data-tab="saju" aria-selected="false">사주</button>
+  <button type="button" class="tab" role="tab" id="tab-match" data-tab="match" aria-selected="false">궁합</button>
+  <button type="button" class="tab" role="tab" id="tab-tojeong" data-tab="tojeong" aria-selected="false">토정비결</button>
+  <button type="button" class="tab" role="tab" id="tab-bio" data-tab="bio" aria-selected="false">바이오리듬</button>
+</nav>
 </div>
 
-<!-- defer가 아니다: 아래 인라인 스크립트가 첫 화면을 즉시 그리며 문구를 쓴다 -->
+<div class="scrap" id="gloss" role="dialog" aria-modal="false" aria-labelledby="gloss-title" hidden>
+  <h3 class="hand h-sub" id="gloss-title"></h3>
+  <p id="gloss-text"></p>
+  <button type="button" id="gloss-close" aria-label="닫기">×</button>
+</div>
+
+<!-- defer가 아니다: 아래 인라인 스크립트가 첫 화면을 즉시 그리며 문구·그리기 부품을 쓴다 -->
 <script src="/_shared/fortune-common.js"></script>
+<script src="vendor/rough.min.js"></script>
+<script src="note.js"></script>
 <script>
   "use strict";
   const KEY = "bl-fortune-birth";
   const PARTNER_KEY = "bl-fortune-partner";   // 궁합 상대 — 내 생년월일과 따로 둔다
+  const TURN_KEY = "bl-fortune-turned";       // 오늘 장을 넘긴 날(KST 아님, 기기 날짜) — 하루 한 번만 넘긴다
   const $ = (id) => document.getElementById(id);
+  const N = window.Note;
+  // 형광펜은 문단마다 하나까지 실려 오지만, 사실을 적는 문단(신강약·십성·대운)까지 다 칠하면
+  // 화면이 노랗게 덮여 강조가 사라진다. 그 문단에서는 조심(물결)만 남긴다.
+  const cautionOnly = (marks) => (marks || []).filter((m) => m.kind === "caution");
   const el = (tag, className, text) => {
     const node = document.createElement(tag);
     if (className) node.className = className;
     if (text != null) node.textContent = text;
     return node;
+  };
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch { /* 저장 못 해도 화면은 그린다 */ } },
+    del(k) { try { localStorage.removeItem(k); } catch { /* */ } },
   };
   // 받침 따라 조사 고르기(괄호 속 한자는 건너뛴다)
   function josa(word, withBatchim, without) {
@@ -439,6 +161,9 @@
     const code = plain.charCodeAt(plain.length - 1) - 0xac00;
     return word + (code >= 0 && code <= 11171 && code % 28 ? withBatchim : without);
   }
+  const fontsReady = (document.fonts?.ready ?? Promise.resolve()).then(() => Promise.all([
+    document.fonts?.load?.("20px NoteHand", "가나다"), document.fonts?.load?.("16px NoteBody", "가나다"),
+  ].filter(Boolean)).catch(() => null));
 
   // ── 용어 풀이 ────────────────────────────────────────────────
   // 점선 밑줄 단어를 누르면 화면 아래에 짧은 설명이 뜬다. 문장 속 괄호 풀이가 먼저고
@@ -494,204 +219,357 @@
   $("gloss-close").addEventListener("click", closeGloss);
   document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeGloss(); });
 
+  // ── 다시 그리기(창 크기·글꼴·데이터가 바뀔 때) ─────────────────────────
+  // 화살표·메모·동그라미는 글자 위치를 재서 그리므로, 크기가 바뀌면 다시 잰다.
+  const redraws = new Set();
+  let comicOpen = false, comicConsent = false, comicChecked = false;   // 만화 사주 이벤트(아래)
+  let redrawTimer = 0;
+  function redrawAll() { for (const fn of redraws) { try { fn(); } catch (e) { console.error(e); } } }
+  let lastWidth = innerWidth;
+  addEventListener("resize", () => {
+    if (innerWidth === lastWidth) return;   // 폰 주소창이 접히는 세로 변화는 무시
+    lastWidth = innerWidth;
+    clearTimeout(redrawTimer);
+    redrawTimer = setTimeout(redrawAll, 120);
+  });
+
   // ── 탭 ──────────────────────────────────────────────────────
   // 주소 해시(#saju 등)로 지금 탭을 기억한다 — 생년월일은 주소에 넣지 않는다.
   const TABS = ["today", "saju", "match", "tojeong", "bio"];
   const tabsNav = $("tabs");
   let currentTab = "today";
   const tabHooks = {};
-  function showTab(name, { scroll = false } = {}) {
+  function showTab(name) {
     if (!TABS.includes(name)) name = "today";
     currentTab = name;
+    const on = !tabsNav.classList.contains("off");
     for (const button of tabsNav.querySelectorAll("[data-tab]")) {
-      button.setAttribute("aria-selected", String(button.dataset.tab === name));
+      button.setAttribute("aria-selected", String(on && button.dataset.tab === name));
+      button.tabIndex = on && button.dataset.tab === name ? 0 : -1;
     }
-    for (const panel of document.querySelectorAll("[data-panel]")) {
-      // 탭이 숨겨진 상태(생년월일 없음)에서는 오늘만 보인다
-      panel.hidden = tabsNav.hidden ? panel.dataset.panel !== "today" : panel.dataset.panel !== name;
-    }
-    if (location.hash.slice(1) !== name && !tabsNav.hidden) history.replaceState(null, "", name === "today" ? location.pathname : `#${name}`);
-    tabHooks[name]?.();
-    if (scroll) tabsNav.scrollIntoView({ block: "start" });
+    for (const panel of document.querySelectorAll("[data-panel]")) panel.hidden = !on || panel.dataset.panel !== name;
+    if (on && location.hash.slice(1) !== name) history.replaceState(null, "", name === "today" ? location.pathname : `#${name}`);
+    if (on) tabHooks[name]?.();
   }
   tabsNav.addEventListener("click", (event) => {
     const button = event.target.closest("[data-tab]");
-    if (button) showTab(button.dataset.tab, { scroll: window.scrollY > tabsNav.offsetTop });
+    if (!button || tabsNav.classList.contains("off")) return;
+    showTab(button.dataset.tab);
+    if (scrollY > 0) scrollTo({ top: 0 });
   });
-  function setTabsVisible(on) {
-    tabsNav.hidden = !on;
+  tabsNav.addEventListener("keydown", (event) => {
+    if (!["ArrowDown", "ArrowUp"].includes(event.key) || tabsNav.classList.contains("off")) return;
+    event.preventDefault();
+    const visible = [...tabsNav.querySelectorAll("[data-tab]")].filter((b) => !b.hidden);
+    const i = visible.findIndex((b) => b.dataset.tab === currentTab);
+    const next = visible[(i + (event.key === "ArrowDown" ? 1 : visible.length - 1)) % visible.length];
+    showTab(next.dataset.tab);
+    next.focus();
+  });
+  function setTabsOn(on) {
+    tabsNav.classList.toggle("off", !on);
+    for (const b of tabsNav.querySelectorAll("[data-tab]")) b.disabled = !on;
     showTab(on ? currentTab : "today");
   }
 
-  // ── 오늘의 운세 ──────────────────────────────────────────────
-  const FORTUNES = window.blFortuneLines;
-  const fEmoji = $("f-emoji");
-  const fText = $("f-text");
-  const fCategories = $("f-categories");
-  const fortuneCard = $("fortune");
-  const CATEGORY_LIST = [["wealth", "재물운"], ["career", "직업운"], ["love", "연애운"],
-    ["health", "건강운"], ["social", "대인운"], ["study", "학업운"]];
-
-  function todayNum() {
-    return Math.floor(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / 86400000);
-  }
-  function seedToIdx(seed) {
-    let x = Math.sin(seed) * 10000;
-    x -= Math.floor(x);
-    return Math.floor(x * FORTUNES.length);
-  }
-  let currentLine = FORTUNES[0];   // 공유 문구에서 재사용
-  let currentDaily = null;          // 공유 이미지에서 재사용
-  let fallbackFortuneSeed = 0;
-  function showFortuneLoading() {
-    currentDaily = null;
-    fortuneCard.classList.add("is-loading");
-    fortuneCard.classList.remove("generic");
-    fortuneCard.setAttribute("aria-busy", "true");
-    fEmoji.textContent = "";
-    fText.textContent = "";
-    fCategories.replaceChildren(...CATEGORY_LIST.slice(0, 3).map(() => el("div", "fortune-category", "")));
-    fCategories.hidden = false;
-    $("f-extra").hidden = true;
-  }
-  function showFortune(seed) {
-    currentDaily = null;
-    currentLine = FORTUNES[seedToIdx(seed)];
-    fEmoji.textContent = currentLine[0];
-    fText.textContent = currentLine[1];
-    fCategories.hidden = true;
-    $("f-extra").hidden = true;
-    fortuneCard.classList.add("generic");
-    fortuneCard.classList.remove("is-loading");
-    fortuneCard.removeAttribute("aria-busy");
-  }
-  function showSajuFortune(daily) {
-    currentLine = [daily.emoji, daily.text];
-    currentDaily = daily;
-    fEmoji.textContent = daily.emoji;
-    fText.textContent = daily.text;
-    fCategories.replaceChildren();
-    for (const [key, name] of CATEGORY_LIST) {
-      const category = daily.categories[key];
-      if (!category) continue;
-      const row = el("div", "fortune-category");
-      row.dataset.level = category.level;
-      const top = el("div", "fortune-category-top");
-      top.append(el("span", "fortune-category-name", name), el("span", "fortune-category-level", category.level));
-      row.append(top, el("p", "fortune-category-comment", category.comment));
-      fCategories.appendChild(row);
-    }
-    fCategories.hidden = false;
-    const extra = $("f-extra");
-    extra.hidden = !daily.lucky;
-    if (daily.lucky) {
-      const lucky = $("f-lucky");
-      lucky.replaceChildren();
-      for (const [label, value] of [["행운의 색", daily.lucky.color], ["방향", daily.lucky.direction], ["숫자", String(daily.lucky.number)]]) {
-        const box = el("div");
-        box.append(el("small", null, label), el("b", null, value));
-        lucky.appendChild(box);
-      }
-      $("f-lucky-text").textContent = daily.lucky.text;
-      const times = $("f-times");
-      times.replaceChildren();
-      for (const [label, item] of [["⏰ 조심할 때", daily.times.caution], ["🤝 좋은 때", daily.times.good]]) {
-        const li = el("li");
-        li.append(el("b", null, label), item.text);
-        times.appendChild(li);
-      }
-    }
-    fortuneCard.classList.remove("is-loading", "generic");
-    fortuneCard.removeAttribute("aria-busy");
-  }
-
-  // ── 날짜 표기 ─────────────────────────────────────────────────
+  // ── 날짜 ─────────────────────────────────────────────────────
   const now = new Date();
   const WD = ["일", "월", "화", "수", "목", "금", "토"];
-  $("today").textContent = `${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일 (${WD[now.getDay()]})`;
-
-  // ── 입력 폼 ────────────────────────────────────────────────
-  const selY = $("in-y"), selM = $("in-m"), selD = $("in-d"), selH = $("in-h"), inTime = $("in-time");
-  const modeSolar = $("mode-solar"), modeLunar = $("mode-lunar");
-  const genderNone = $("gender-none"), genderMale = $("gender-male"), genderFemale = $("gender-female");
-  const lunarLeap = $("in-lunar-leap");
-  const modeBranch = $("mode-branch"), modeClock = $("mode-clock");
-  let calendarMode = "solar";
-  let genderMode = "unspecified";
-  let timeMode = "branch";
+  const todayStamp = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
+  const dateStr = `${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일 (${WD[now.getDay()]})`;
+  $("today").textContent = `${now.getFullYear()}. ${now.getMonth() + 1}. ${now.getDate()}. ${WD[now.getDay()]}요일`;
   const thisYear = now.getFullYear();
-  function opt(sel, val, label) {
-    const o = document.createElement("option");
-    o.value = val; o.textContent = label; sel.appendChild(o);
-  }
-  function fillYearMonth(y, m) {
-    for (let year = thisYear; year >= 1920; year--) opt(y, year, year + "년");
-    for (let month = 1; month <= 12; month++) opt(m, month, month + "월");
-  }
-  function fillDaysOf(y, m, d, lunar) {
-    const keep = d.value;
-    const days = lunar ? 30 : new Date(+y.value, +m.value, 0).getDate();
-    d.innerHTML = "";
-    for (let day = 1; day <= days; day++) opt(d, day, day + "일");
-    if (keep && +keep <= days) d.value = keep;
-  }
-  fillYearMonth(selY, selM);
-  const fillDays = () => fillDaysOf(selY, selM, selD, calendarMode === "lunar");
-  selY.addEventListener("change", fillDays);
-  selM.addEventListener("change", fillDays);
-  fillDays();
-  function setCalendarMode(mode) {
-    calendarMode = mode === "lunar" ? "lunar" : "solar";
-    const isLunar = calendarMode === "lunar";
-    modeSolar.setAttribute("aria-pressed", String(!isLunar));
-    modeLunar.setAttribute("aria-pressed", String(isLunar));
-    $("lunar-leap-row").hidden = !isLunar;
-    $("lunar-help").hidden = !isLunar;
-    fillDays();
-  }
-  modeSolar.addEventListener("click", () => setCalendarMode("solar"));
-  modeLunar.addEventListener("click", () => setCalendarMode("lunar"));
-  function setGenderMode(gender) {
-    genderMode = ["male", "female"].includes(gender) ? gender : "unspecified";
-    genderNone.setAttribute("aria-pressed", String(genderMode === "unspecified"));
-    genderMale.setAttribute("aria-pressed", String(genderMode === "male"));
-    genderFemale.setAttribute("aria-pressed", String(genderMode === "female"));
-  }
-  genderNone.addEventListener("click", () => setGenderMode("unspecified"));
-  genderMale.addEventListener("click", () => setGenderMode("male"));
-  genderFemale.addEventListener("click", () => setGenderMode("female"));
-  // 12지시 목록은 /_shared/fortune-common.js — brief와 저장값(h = 인덱스)의 뜻이 같아야 한다.
-  const BRANCHES = window.blFortuneBranches;
-  for (const sel of [selH, $("p-h")]) {
-    opt(sel, "", "모름");
-    BRANCHES.forEach((b, i) => opt(sel, i, `${b.k}시 (${b.c}, ${b.range})`));
-  }
-  function setTimeMode(mode) {
-    timeMode = mode === "clock" ? "clock" : "branch";
-    const isClock = timeMode === "clock";
-    modeBranch.setAttribute("aria-pressed", String(!isClock));
-    modeClock.setAttribute("aria-pressed", String(isClock));
-    $("branch-row").hidden = isClock;
-    $("branch-help").hidden = isClock;
-    $("clock-row").hidden = !isClock;
-    $("clock-help").hidden = !isClock;
-  }
-  modeBranch.addEventListener("click", () => setTimeMode("branch"));
-  modeClock.addEventListener("click", () => setTimeMode("clock"));
-  // 23~01시는 자시, 이후에는 두 시간마다 축·인·묘…로 진행한다.
+
+  // ── 빈칸 문장(내 것·상대 것 같은 부품) ───────────────────────────────────
+  // 「 (양력·음력) ____년 __월 __일 __시 __분에 태어났어요 」 + 성별 동그라미.
+  // 시만 적으면 시진으로, 분까지 적으면 정확한 시각으로 저장한다(저장 모양은 예전 그대로).
+  const BRANCHES = window.blFortuneBranches;   // 12지시(저장값 h = 인덱스, brief 와 같은 뜻)
   function branchFromClock(value) {
     if (!/^\d{2}:\d{2}$/.test(value)) return null;
     const hour = +value.slice(0, 2);
     if (hour === 23 || hour === 0) return 0;
     return Math.floor((hour + 1) / 2);
   }
-  selY.value = "1990"; selM.value = "1"; fillDays(); selD.value = "1";
+  function pickButton(label, pressed = false) {
+    const b = el("button", "pick", label);
+    b.type = "button";
+    b.setAttribute("aria-pressed", String(pressed));
+    return b;
+  }
+  function blank(cls, label, max, placeholder = "") {
+    const i = el("input", `blank ${cls}`);
+    i.type = "text"; i.inputMode = "numeric"; i.maxLength = max; i.placeholder = placeholder;
+    i.setAttribute("aria-label", label);
+    i.addEventListener("input", () => { i.value = i.value.replace(/\D/g, "").slice(0, max); i.classList.remove("bad"); });
+    return i;
+  }
+  function birthSentence(form, { partner = false, submitLabel, onSubmit }) {
+    const st = { calendar: "solar", leap: false, gender: "unspecified", branch: null, branchMode: false };
+    form.replaceChildren();
+    const name = partner ? el("input", "blank wname") : null;
+    if (name) {
+      name.type = "text"; name.maxLength = 12; name.placeholder = "이름(선택)";
+      name.setAttribute("aria-label", "상대 이름(선택, 이 기기에만 저장)");
+    }
+    const solar = pickButton("양력", true), lunar = pickButton("음력"), leap = pickButton("윤달");
+    leap.hidden = true;
+    const y = blank("w4", "태어난 해", 4), m = blank("w2", "월", 2), d = blank("w2", "일", 2);
+    const hh = blank("w2", "시(0~23, 몰라도 돼요)", 2), mm = blank("w2", "분(선택)", 2);
+    const timeBox = el("span");
+    const minuteBit = el("span");
+    minuteBit.append(" ", mm, "분");
+    if (partner) minuteBit.hidden = true;
+    const branchLabel = el("span", "hand h-sub blue");
+    timeBox.append(hh, "시", minuteBit);
+    const male = pickButton("남자"), female = pickButton("여자");
+    const line1 = el("div");
+    if (name) {
+      const nameLine = el("div");
+      nameLine.append("이름 ", name, el("span", "small", " 몰라도 돼요"));
+      form.append(nameLine);
+    }
+    line1.append(partner ? "그 사람은 " : "「 ", solar, "·", lunar, leap, " ");
+    const line2 = el("div");
+    line2.append(y, "년 ", m, "월 ", d, "일");
+    const line3 = el("div");
+    line3.append(timeBox, branchLabel, partner ? "에 태어났고," : "에 태어났어요 」");
+    const tnote = el("div", "small");
+    const toggleBranch = el("button", "link", "시진으로 고르기");
+    toggleBranch.type = "button";
+    tnote.append(partner ? "시간을 몰라도 돼요 · " : "시간은 몰라도 돼요, 빼고 볼게요 · ", toggleBranch);
+    const branchRow = el("div", "branch-row");
+    branchRow.hidden = true;
+    const bPicks = BRANCHES.map((b, i) => {
+      const p = pickButton(`${b.k}시`);
+      p.title = b.range;
+      p.setAttribute("aria-label", `${b.k}시 ${b.range}`);
+      p.addEventListener("click", () => { st.branch = st.branch === i ? null : i; paint(); });
+      return p;
+    });
+    branchRow.append(...bPicks);
+    const line4 = el("div");
+    if (!partner) line4.append("저는 ");
+    line4.append(male, "/", female, "예요.");
+    const gnote = el("div", "small", partner ? "" : "성별을 골라 주면 대운과 인생 곡선까지 그려 볼게요.");
+    const go = el("button", "pen", submitLabel);
+    go.type = "submit";
+    const err = el("p", "err small red");
+    err.setAttribute("aria-live", "polite");
+    form.append(line1, line2, line3, tnote, branchRow, line4);
+    if (!partner) form.append(gnote);
+    form.append(go, err);
+
+    function paint() {
+      solar.setAttribute("aria-pressed", String(st.calendar === "solar"));
+      lunar.setAttribute("aria-pressed", String(st.calendar === "lunar"));
+      leap.hidden = st.calendar !== "lunar";
+      leap.setAttribute("aria-pressed", String(st.leap));
+      male.setAttribute("aria-pressed", String(st.gender === "male"));
+      female.setAttribute("aria-pressed", String(st.gender === "female"));
+      timeBox.hidden = st.branchMode;
+      branchRow.hidden = !st.branchMode;
+      toggleBranch.textContent = st.branchMode ? "시·분으로 적기" : "시진으로 고르기";
+      branchLabel.textContent = st.branchMode ? (st.branch == null ? " 모르는 시" : ` ${BRANCHES[st.branch].k}시`) : "";
+      bPicks.forEach((p, i) => p.setAttribute("aria-pressed", String(st.branch === i)));
+      rings();
+    }
+    function rings() {
+      for (const p of form.querySelectorAll(".pick")) {
+        p.querySelector(":scope > svg.ring")?.remove();
+        if (p.getAttribute("aria-pressed") === "true" && !p.hidden && p.offsetParent) N.ring(p, N.INK.blue);
+      }
+      if (!go.querySelector(":scope > svg.ring") && go.offsetParent) N.ring(go, N.INK.blue);
+    }
+    solar.addEventListener("click", () => { st.calendar = "solar"; st.leap = false; paint(); });
+    lunar.addEventListener("click", () => { st.calendar = "lunar"; paint(); });
+    leap.addEventListener("click", () => { st.leap = !st.leap; paint(); });
+    male.addEventListener("click", () => { st.gender = st.gender === "male" ? "unspecified" : "male"; paint(); });
+    female.addEventListener("click", () => { st.gender = st.gender === "female" ? "unspecified" : "female"; paint(); });
+    toggleBranch.addEventListener("click", () => {
+      st.branchMode = !st.branchMode;
+      if (st.branchMode && hh.value !== "") st.branch = branchFromClock(`${hh.value.padStart(2, "0")}:00`);
+      if (st.branchMode) { hh.value = ""; mm.value = ""; }
+      paint();
+    });
+    const fail = (msg, field) => { err.textContent = msg; field?.classList.add("bad"); field?.focus(); return null; };
+    function read() {
+      err.textContent = "";
+      const yy = +y.value, mo = +m.value, dd = +d.value;
+      if (!(yy >= 1920 && yy <= thisYear)) return fail(`태어난 해는 1920~${thisYear} 사이로 적어 주세요.`, y);
+      if (!(mo >= 1 && mo <= 12)) return fail("월은 1~12로 적어 주세요.", m);
+      const days = st.calendar === "lunar" ? 30 : new Date(yy, mo, 0).getDate();
+      if (!(dd >= 1 && dd <= days)) return fail(`${mo}월은 ${days}일까지예요.`, d);
+      if (st.calendar === "solar" && new Date(yy, mo - 1, dd) > now) return fail("아직 오지 않은 날이에요.", d);
+      let timeMode = "branch", h = null, time = null;
+      if (st.branchMode) h = st.branch;
+      else if (hh.value !== "") {
+        const hour = +hh.value;
+        if (!(hour >= 0 && hour <= 23)) return fail("시는 0~23으로 적어 주세요.", hh);
+        if (mm.value !== "" && !partner) {
+          const minute = +mm.value;
+          if (!(minute >= 0 && minute <= 59)) return fail("분은 0~59로 적어 주세요.", mm);
+          timeMode = "clock";
+          time = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+          h = branchFromClock(time);
+        } else h = branchFromClock(`${String(hour).padStart(2, "0")}:00`);
+      }
+      const out = { y: yy, m: mo, d: dd, calendar: st.calendar, lunarLeap: st.calendar === "lunar" && st.leap,
+        gender: st.gender, timeMode, h, time };
+      if (partner) out.name = name.value.trim().slice(0, 12);
+      return out;
+    }
+    function set(b) {
+      if (!b) { paint(); return; }
+      st.calendar = b.calendar === "lunar" ? "lunar" : "solar";
+      st.leap = !!b.lunarLeap;
+      st.gender = ["male", "female"].includes(b.gender) ? b.gender : "unspecified";
+      y.value = b.y ?? ""; m.value = b.m ?? ""; d.value = b.d ?? "";
+      hh.value = ""; mm.value = "";
+      if (b.timeMode === "clock" && /^\d{2}:\d{2}$/.test(b.time || "")) {
+        st.branchMode = false;
+        hh.value = String(+b.time.slice(0, 2)); mm.value = b.time.slice(3);
+      } else if (b.h != null && BRANCHES[b.h]) { st.branchMode = true; st.branch = b.h; }
+      else { st.branchMode = false; st.branch = null; }
+      if (name) name.value = b.name || "";
+      paint();
+    }
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const value = read();
+      if (value) onSubmit(value, err);
+    });
+    redraws.add(() => { if (form.offsetParent) { go.querySelector(":scope > svg.ring")?.remove(); rings(); } });
+    return { set, paint, rings, focus: () => y.focus() };
+  }
+
+  // ── 첫 방문 / 다시 적기 ────────────────────────────────────────
+  const meForm = birthSentence($("birth-form"), {
+    submitLabel: "자, 풀어 봐 주세요 →",
+    onSubmit(birth) {
+      store.set(KEY, JSON.stringify(birth));
+      store.set(TURN_KEY, todayStamp);   // 방금 적었으니 오늘 장은 넘기지 않는다
+      currentTab = "saju";
+      renderResult(birth, { write: true });
+    },
+  });
+  function showForm(prefill) {
+    sajuRequestId++;
+    $("form").hidden = false;
+    setTabsOn(false);
+    $("generic").replaceChildren();
+    const line = window.blFortuneLine(window.blFortuneDaySeed(now));
+    $("generic").append(el("span", "hand h-s faint", "오늘의 한 줄 — "), line.text);
+    meForm.set(prefill);
+    scrollTo({ top: 0 });
+  }
+
+  // ── 오늘의 운세 ──────────────────────────────────────────────
+  const CATEGORY_LIST = [["wealth", "재물운"], ["career", "직업운"], ["love", "연애운"],
+    ["health", "건강운"], ["social", "대인운"], ["study", "학업운"]];
+  const fortuneBox = $("fortune");
+  let currentLine = window.blFortuneLine(window.blFortuneDaySeed(now));   // 공유 문구에서 재사용
+  let currentDaily = null;
+  let fallbackFortuneSeed = window.blFortuneDaySeed(now);
+  function showFortuneLoading() {
+    currentDaily = null;
+    fortuneBox.replaceChildren(el("p", "hand h-sub faint", "오늘 일진을 맞춰 보고 있어요…"));
+    fortuneBox.setAttribute("aria-busy", "true");
+  }
+  function showGenericFortune(seed) {
+    currentDaily = null;
+    currentLine = window.blFortuneLine(seed);
+    fortuneBox.removeAttribute("aria-busy");
+    fortuneBox.replaceChildren(el("h2", "hand h-title", "오늘의 한 줄"), el("p", "sub headline", currentLine.text),
+      el("p", "small", "명식을 계산하지 못해 날짜로 고른 한 줄을 보여 드려요."));
+  }
+  function showSajuFortune(daily) {
+    currentLine = { emoji: daily.emoji, text: daily.text };
+    currentDaily = daily;
+    fortuneBox.removeAttribute("aria-busy");
+    const title = el("h2", "hand h-title");
+    title.append(`오늘은 ${daily.iljin}일 `, el("span", "hj sub", daily.iljinHanja));
+    const head = el("p", "sub headline");
+    head.append(el("span", "hl", daily.headline));
+    const body = N.paragraph(daily.text, daily.marks, { terms: [{ word: "일진" }] });
+    fortuneBox.replaceChildren(title, head, body);
+
+    // 분야 여섯 개: 제일 좋은 것·제일 조심할 것만 크게, 나머지는 한 줄씩 작게.
+    const entries = CATEGORY_LIST.map(([key, nm]) => ({ key, nm, c: daily.categories[key] })).filter((x) => x.c);
+    const best = entries.find((x) => x.c.level === "원활");
+    const worst = entries.find((x) => x.c.level === "주의");
+    const big = (x, bad) => {
+      const box = el("div", `pick-note${bad ? " bad" : ""}`);
+      const who = el("span", "hand h-sub who");
+      who.append(bad ? "오늘 조심할 건 " : "오늘 제일 좋은 건 ");
+      const nm = el("span", "circled", x.nm);
+      who.append(nm, bad ? "이에요" : "이에요");
+      box.append(who, el("p", null, x.c.comment));
+      redraws.add(() => { if (nm.offsetParent) N.ring(nm, bad ? N.INK.red : N.INK.pencil); });
+      return box;
+    };
+    const rest = entries.filter((x) => x !== best && x !== worst);
+    const sec = el("section", "gap");
+    sec.append(el("h3", "hand h-sub say", "하나씩 짚어 볼게요"));
+    if (best) sec.append(big(best, false));
+    if (worst) sec.append(big(worst, true));
+    if (rest.length) {
+      const ul = el("ul", "cats");
+      for (const x of rest) {
+        const li = el("li");
+        li.append(el("span", "nm", x.nm), el("span", `lv${x.c.level === "원활" ? " good" : x.c.level === "주의" ? " bad" : ""}`, x.c.level), el("span", null, x.c.comment));
+        ul.append(li);
+      }
+      if (best || worst) sec.append(el("p", "small gap-s", "나머지는 이래요"));
+      sec.append(ul);
+    }
+    fortuneBox.append(sec);
+
+    if (daily.times) {
+      const t = el("section", "times gap");
+      t.append(el("h3", "hand h-sub say", "시간은 이렇게 써 봐요"));
+      const good = el("p");
+      good.append(el("span", "hand h-sub blue", daily.times.good.range), " ", el("span", "small", `${daily.times.good.branch}시 · 좋아요`), el("br"), daily.times.good.text);
+      const bad = el("p");
+      bad.append(el("span", "hand h-sub red", daily.times.caution.range), " ", el("span", "small", `${daily.times.caution.branch}시 · 피해요`), el("br"), daily.times.caution.text);
+      t.append(good, bad);
+      fortuneBox.append(t);
+    }
+    if (daily.lucky) {
+      const EL_HJ = { 목: "木", 화: "火", 토: "土", 금: "金", 수: "水" };
+      const lucky = el("section", "scrap lucky");
+      lucky.append(el("span", "tape right"), el("h3", "hand h-sub", `모자란 ${daily.lucky.element}(${EL_HJ[daily.lucky.element]}), 이걸로 채워요`),
+        el("span", `hand h-sub val el-${daily.lucky.element}`, `${daily.lucky.color} · ${daily.lucky.direction} · ${daily.lucky.number}`),
+        el("p", null, daily.lucky.text));
+      fortuneBox.append(lucky);
+    }
+    const actions = el("div", "row-actions");
+    const story = el("button", "pen sm", "스토리 카드로 저장");
+    story.type = "button";
+    story.addEventListener("click", (e) => saveStory(e.currentTarget));
+    actions.append(story);
+    redraws.add(() => { if (story.offsetParent) N.ring(story, N.INK.blue); });
+    fortuneBox.append(actions);
+    fontsReady.then(() => requestAnimationFrame(() => { redrawAll(); }));
+  }
+
+  // 다시 온 사람: 오늘 장을 하루 한 번 0.5초 넘긴다(어제 장이 왼쪽으로 넘어가며 오늘이 드러난다).
+  function turnPage() {
+    if (N.reduced() || store.get(TURN_KEY) === todayStamp) return;
+    store.set(TURN_KEY, todayStamp);
+    const prev = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+    const sheet = el("div", "flipper");
+    sheet.append(el("p", "small", `${prev.getFullYear()}. ${prev.getMonth() + 1}. ${prev.getDate()}.`), el("p", "hand h-title faint", "어제 장"));
+    $("persp").append(sheet);
+    const a = sheet.animate([{ transform: "rotateY(0deg)", opacity: 1 }, { transform: "rotateY(-96deg)", opacity: 1, offset: .92 },
+      { transform: "rotateY(-100deg)", opacity: 0 }], { duration: 500, easing: "cubic-bezier(.4,.1,.5,1)", fill: "forwards" });
+    a.finished.then(() => sheet.remove(), () => sheet.remove());
+  }
 
   // ── 바이오리듬 ────────────────────────────────────────────────
   const CYCLES = [
-    { key: "phy", name: "신체", period: 23 },
-    { key: "emo", name: "감성", period: 28 },
-    { key: "int", name: "지성", period: 33 },
+    { key: "phy", name: "신체", period: 23, color: "#C8432F" },
+    { key: "emo", name: "감성", period: 28, color: "#B98A3E" },
+    { key: "int", name: "지성", period: 33, color: "#4E8A4B" },
   ];
   function daysBetween(birth, today) {
     const a = Date.UTC(birth.y, birth.m - 1, birth.d);
@@ -707,272 +585,348 @@
     if (v > -0.7) return `${subject} 가라앉아 있어요. 욕심내지 말고 속도를 조절하세요.`;
     return `${name} 바닥권이에요. 오늘은 회복과 휴식에 집중하세요.`;
   }
-  function setBar(key, v) {
-    const pct = Math.round(v * 100);
-    $("pct-" + key).textContent = (pct > 0 ? "+" : "") + pct + "%";
-    const fill = $("fill-" + key);
-    fill.style.setProperty("left", (v >= 0 ? 50 : 50 + v * 50) + "%");
-    fill.style.setProperty("width", Math.abs(v * 50) + "%");
+  let lastBio = null;
+  function drawBio() {
+    if (!lastBio) return;
+    for (const c of CYCLES) {
+      const host = document.querySelector(`.bio[data-key="${c.key}"] .bio-svg`);
+      if (host.offsetParent) N.bioBar(host, lastBio.vals[c.key], c.color);
+    }
+  }
+  redraws.add(drawBio);
+  tabHooks.bio = () => fontsReady.then(drawBio);
+  function renderBioResult(birth, solarBirth) {
+    const n = daysBetween(solarBirth, now);
+    const vals = {};
+    for (const c of CYCLES) {
+      const v = Math.sin((2 * Math.PI * n) / c.period);
+      vals[c.key] = v;
+      const pct = Math.round(v * 100);
+      $("pct-" + c.key).textContent = (pct > 0 ? "+" : "") + pct + "%";
+      $("note-" + c.key).textContent = noteFor(c.name, v);
+    }
+    const avg = (vals.phy + vals.emo + vals.int) / 3;
+    fallbackFortuneSeed = window.blFortuneDaySeed(now) + n + Math.round((vals.phy + vals.emo + vals.int) * 1000);
+    let head;
+    if (avg >= 0.5) head = "세 리듬이 모두 좋은 날이에요. 자신감을 가져도 좋아요.";
+    else if (avg >= 0.15) head = "전반적으로 순조로운 흐름이에요. 무난하게 좋은 하루예요.";
+    else if (avg > -0.15) head = "균형 잡힌 날이에요. 큰 기복 없이 차분하게 보내기 좋아요.";
+    else if (avg > -0.5) head = "리듬이 다소 가라앉는 날이에요. 무리하지 말고 쉬엄쉬엄 가요.";
+    else head = "컨디션 저점 구간이에요. 오늘은 나를 아껴 주는 하루로.";
+    $("bio-headline").textContent = head;
+    $("bio-sub").textContent = `태어난 지 ${n.toLocaleString()}일째`;
+    lastBio = { n, vals, head };
+    drawBio();
+    updateSavedInfo(birth, solarBirth);
   }
 
-  // ── 사주 명식 ──────────────────────────────────────────────────
-  const sajuSec = $("saju");
-  const sajuCandidates = $("saju-candidates");
+  // ── 사주 ──────────────────────────────────────────────────────
+  const sheet = $("saju-sheet");
   const sajuStatus = $("saju-status");
   const sajuWarning = $("saju-warning");
-  const sajuCopy = $("saju-copy");
-  const SAJU_COLUMNS = [["hour", "시주"], ["day", "일주"], ["month", "월주"], ["year", "연주"]];
+  const talk = $("talk");
   let sajuRequestId = 0;
   let lastSajuData = null;
-
-  function addSajuCell(grid, className, content) {
-    const cell = el("div", `saju-cell ${className}`);
-    if (content instanceof Node) cell.appendChild(content);
-    else if (content != null) cell.textContent = content;
-    grid.appendChild(cell);
-    return cell;
-  }
-  function addPillarPart(grid, part, isMe) {
-    const cell = addSajuCell(grid, isMe ? "is-me" : "", null);
-    if (!part) {
-      cell.textContent = "미상";
-      cell.classList.add("sub");
-      return;
-    }
-    cell.append(el("span", "saju-char", part.hanja), el("span", "saju-korean", part.korean),
-      el("span", "saju-meta", `${part.yinYang}·${part.element}`));
-    if (part.tenGod) cell.appendChild(el("span", "saju-god", part.tenGod === "일간" ? "나(일간)" : part.tenGod));
-  }
+  let writeNext = false;     // 다음에 사주를 그릴 때 "적어 나가는" 동작을 보일지
+  let motion = null;
   const shinsalLabel = (name) => (name === "년살" ? "도화(년살)" : name);
 
-  function readingBlock(title, termKey) {
-    const block = el("div", "reading");
-    const h = el("h3");
-    h.textContent = title;
-    if (termKey) h.append(" · ", term(termKey));
-    block.appendChild(h);
-    return block;
+  function say(text) {      // 위쪽 한 줄 — 맞은편에서 말하는 투
+    talk.textContent = text;
   }
+  function renderSajuSheet(data, { write = false } = {}) {
+    motion?.cancel();
+    sheet.replaceChildren();
+    redraws.delete(sheet._redraw);
+    const c = data.candidates[0];
+    const reading = c.reading;
+    const dm = reading.dayMaster;
+    N.setSeed(load());
 
-  function renderSajuCandidate(candidate, showTitle) {
-    const wrap = el("div", "saju-candidate");
-    if (showTitle) wrap.appendChild(el("p", "saju-candidate-title", candidate.timeLabel));
-    const reading = candidate.reading;
-    const dm = reading?.dayMaster;
-    // ① 나는 어떤 사람인가 — 한 문단 요약이 맨 위
-    if (dm) {
-      const me = el("div", "me");
-      me.append(el("span", "hanja", `${dm.hanja}${{ 목: "木", 화: "火", 토: "土", 금: "金", 수: "水" }[dm.element]}`),
-        el("span", "name", `${dm.name} · ${dm.image}`), el("span", "key", dm.keyword),
-        el("p", "prose", reading.overview.paragraph));
-      wrap.appendChild(me);
-    }
-    // ② 명식 표 — 천간·지지 두 줄만. 머리글은 누르면 뜻이 뜬다.
-    const grid = el("div", "saju-grid");
-    grid.setAttribute("aria-label", "사주 명식 표");
-    addSajuCell(grid, "saju-head", term("명식"));
-    for (const [, label] of SAJU_COLUMNS) addSajuCell(grid, "saju-head", term(label, "기둥"));
-    addSajuCell(grid, "saju-label", term("천간"));
-    for (const [key] of SAJU_COLUMNS) addPillarPart(grid, candidate.pillars[key]?.stem, key === "day");
-    addSajuCell(grid, "saju-label", term("지지"));
-    for (const [key] of SAJU_COLUMNS) addPillarPart(grid, candidate.pillars[key]?.branch, false);
-    const tableBlock = el("div", "reading");
-    tableBlock.appendChild(grid);
-    const hint = el("p", "note");
-    hint.append("가운데 강조된 칸이 ", term("일간"), "(나 자신)이에요. 작은 글씨는 일간에게 그 글자가 어떤 관계인지(", term("십성"), ")예요.");
-    tableBlock.appendChild(hint);
-    wrap.appendChild(tableBlock);
+    // ① 제목 — 일간 한 줄
+    const head = el("header", "sheet-head");
+    const who = el("p", "small", savedText(load(), data));
+    const title = el("h2", "hand h-title");
+    const plainName = dm.name.replace(/\(.*\)$/, "");
+    title.append(`${plainName}, `, el("span", "hl", dm.image), " 같은 사람");
+    const kw = el("p", "kw");
+    const chip = el("span", "circled", dm.keyword);
+    kw.append(el("span", "small", "한마디로 "), chip);
+    head.append(who, title, kw);
+    sheet.append(head);
 
-    if (candidate.lifeCurve) wrap.appendChild(renderLifeCurve(candidate.lifeCurve));
-    else if (reading) {
-      const block = readingBlock("인생 곡선");
-      block.appendChild(el("p", "note", "대운은 성별에 따라 흐르는 방향이 정해져서, 성별을 선택하면 인생 곡선을 그려 드려요."));
-      wrap.appendChild(block);
-    }
-    if (reading) renderReading(wrap, candidate, reading);
-    if (candidate.detail) renderRawDetail(wrap, candidate);
-    sajuCandidates.appendChild(wrap);
-  }
+    // ② 명식 표
+    const chart = N.chartTable(c.pillars, { term });
+    sheet.append(chart.wrap);
 
-  function renderReading(wrap, candidate, reading) {
-    const detail = candidate.detail;
-    const character = readingBlock("타고난 성향");
-    character.appendChild(el("p", "prose", reading.dayMaster.paragraph));
-    wrap.appendChild(character);
+    // ③ 오행
+    const elemBox = el("section", "scrap");
+    const bars = N.elementBars(reading.elements.counts);
+    const elemTitle = el("h3", "hand h-sub say");
+    elemTitle.append(term("오행"), ", 몇 개씩 있나 볼게요");
+    const elemP = N.paragraph(reading.elements.paragraph, reading.elements.marks);
+    elemP.classList.add("after-bars");
+    elemBox.append(elemTitle, bars.box, elemP);
+    sheet.append(elemBox);
 
-    const elements = readingBlock("다섯 기운의 분포", "오행");
-    const bars = el("div", "saju-elements");
-    for (const [name, count] of Object.entries(reading.elements.counts)) {
-      const item = el("div", "saju-element" + (count ? "" : " none") + (reading.elements.excess.includes(name) ? " many" : ""));
-      item.append(el("b", null, String(count)), name);
-      bars.appendChild(item);
-    }
-    elements.append(bars, el("p", "prose", reading.elements.paragraph), el("p", "prose", reading.strength.paragraph));
-    wrap.appendChild(elements);
-
-    const gods = readingBlock("역할의 무게", "십성");
-    const chips = el("div", "groups");
-    for (const [group, count] of Object.entries(reading.tenGods.counts)) {
-      const chip = el("span", null, group);
-      chip.appendChild(el("b", null, String(count)));
-      chips.appendChild(chip);
-    }
-    gods.append(chips, el("p", "prose", reading.tenGods.paragraph));
-    wrap.appendChild(gods);
-
-    if (reading.annual) {
-      const annual = readingBlock(`${reading.annual.year}년 운`, "세운");
-      annual.appendChild(el("p", "prose", reading.annual.paragraph));
-      wrap.appendChild(annual);
-    }
-    const luck = readingBlock("10년 흐름", "대운");
-    if (reading.luck && detail?.luck) {
-      luck.appendChild(el("p", "prose", reading.luck.paragraph));
-      const strip = el("div", "saju-luck");
-      detail.luck.pillars.forEach((item, index) => {
-        const box = el("div", index === detail.luck.current ? "now" : "");
-        box.append(el("small", null, `${item.age}세`), item.ganji, el("small", null, item.stage));
-        strip.appendChild(box);
+    // ④ 인생 곡선
+    let curveParts = null;
+    const curveBox = el("section", "scrap tilt");
+    curveBox.append(el("span", "tape right"));
+    const curveTitle = el("h3", "hand h-sub say");
+    curveTitle.append("인생 곡선, ", term("대운", "대운"), " 따라 그려 볼게요");
+    curveBox.append(curveTitle);
+    const explain = el("div", "explain");
+    explain.setAttribute("aria-live", "polite");
+    if (c.lifeCurve) {
+      const lc = c.lifeCurve;
+      curveParts = N.lifeCurve(lc, {
+        onPick(i, s) {
+          const tag = lc.best && i === lc.best.index ? "전성기" : lc.worst && i === lc.worst.index ? "조심할 때" : i === lc.currentIndex ? "지금" : "";
+          const label = el("span", "hand h-sub blue");
+          label.append(`${Math.round(s.from)}~${Math.max(Math.round(s.from), Math.round(s.to) - 1)}세 · ${s.ganji}${s.kind === "luck" ? " 대운" : " (대운 전)"}`);
+          if (tag) label.append(" · ", el("span", tag === "전성기" ? "hl" : tag === "조심할 때" ? "warn red" : "", tag));
+          explain.replaceChildren(label, el("span", null, s.text));
+        },
       });
-      luck.appendChild(strip);
-      luck.appendChild(el("p", "note", `${detail.luck.forward ? "순행" : "역행"} · 첫 대운 ${detail.luck.startAge}세`));
+      curveBox.append(curveParts.host, explain, N.paragraph(lc.summary, lc.marks, { className: "curve-summary" }),
+        el("p", "small", "곡선은 대운의 천간·지지가 내 명식과 맞는지를 규칙으로 매긴 점수예요. 앞날을 맞히는 예측이 아니라 흐름을 읽는 참고로 봐 주세요. 구간을 누르면 근거가 보여요."));
     } else {
-      luck.appendChild(el("p", "prose", "대운은 성별에 따라 흐르는 방향(순행·역행)이 정해져서, 성별을 선택하면 풀이해 드려요."));
+      curveBox.append(el("p", null, "대운은 성별에 따라 흐르는 방향이 정해져서, 성별을 골라 주면 인생 곡선을 그려 드려요."));
+      const edit = el("button", "link", "성별 고르러 가기");
+      edit.type = "button";
+      edit.addEventListener("click", () => showForm(load()));
+      curveBox.append(edit);
     }
-    wrap.appendChild(luck);
-  }
+    sheet.append(curveBox);
 
-  // ── 인생 곡선 ── 대운마다 매긴 점수(_infra/life-curve.js)를 계단 곡선으로. 구간을 누르면 근거 한 줄.
-  const SVG_NS = "http://www.w3.org/2000/svg";
-  function svg(tag, attrs = {}, cls) {
-    const node = document.createElementNS(SVG_NS, tag);
-    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
-    if (cls) node.setAttribute("class", cls);
-    return node;
-  }
-  function renderLifeCurve(curve) {
-    const block = readingBlock("인생 곡선", "대운");
-    const W = 360, H = 190, L = 26, R = 8, T = 22, B = 22;
-    const maxAge = Math.max(90, curve.sections.at(-1).to);
-    const x = (age) => L + (age / maxAge) * (W - L - R);
-    const y = (score) => T + (1 - score / 100) * (H - T - B);
-    const root = svg("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": `인생 곡선 — ${[curve.best?.label, curve.worst?.label ?? "앞으로 고른 흐름"].filter(Boolean).join(", ")}` });
-    for (const v of [25, 50, 75]) {
-      root.append(svg("line", { x1: L, x2: W - R, y1: y(v), y2: y(v) }, "lc-grid"));
+    // ⑤ 말로 풀면
+    const read = el("section", "read-all");
+    const r1 = el("div", "read");
+    r1.append(el("h3", "hand h-sub say", "말로 풀면 이래요"), N.paragraph(reading.overview.paragraph, reading.overview.marks));
+    const r2 = el("div", "read");
+    const termNoteBox = el("div", "margin-note");
+    const termNote = el("span", "note hand h-s blue", "일간 = 태어난 날 윗글자, 곧 당신");
+    termNoteBox.append(termNote);
+    const dmP = N.paragraph(dm.paragraph, dm.marks, { terms: [{ word: "일간", id: "term-ilgan" }] });
+    r2.append(el("h3", "hand h-sub say", "타고난 성향"), termNoteBox, dmP, N.paragraph(reading.strength.paragraph, cautionOnly(reading.strength.marks)));
+    const r3 = el("div", "read");
+    const godsTitle = el("h3", "hand h-sub say");
+    godsTitle.append("역할의 무게 · ", term("십성"));
+    const groups = el("div", "groups");
+    for (const [g, n] of Object.entries(reading.tenGods.counts)) {
+      const s = el("span", null, g);
+      s.append(el("b", null, String(n)));
+      groups.append(s);
     }
-    for (const a of [0, 20, 40, 60, 80]) {
-      const t = svg("text", { x: x(a), y: H - 6, "text-anchor": "middle" }, "lc-axis");
-      t.textContent = `${a}세`;
-      root.appendChild(t);
+    r3.append(godsTitle, groups, N.paragraph(reading.tenGods.paragraph, cautionOnly(reading.tenGods.marks)));
+    read.append(r1, r2, r3);
+    if (reading.annual) {
+      const r4 = el("div", "read");
+      const t = el("h3", "hand h-sub say");
+      t.append(`${reading.annual.year}년은 · `, term("세운"));
+      r4.append(t, N.paragraph(reading.annual.paragraph, reading.annual.marks));
+      read.append(r4);
     }
-    for (const [v, label] of [[85, "흐름 ↑"], [15, "↓"]]) {
-      const t = svg("text", { x: 2, y: y(v) + 3 }, "lc-axis");
-      t.textContent = label;
-      root.appendChild(t);
+    const r5 = el("div", "read");
+    const lt = el("h3", "hand h-sub say");
+    lt.append("10년 흐름 · ", term("대운"));
+    r5.append(lt);
+    if (reading.luck && c.detail?.luck) {
+      r5.append(N.paragraph(reading.luck.paragraph, cautionOnly(reading.luck.marks)));
+      const strip = el("div", "luck-strip");
+      c.detail.luck.pillars.forEach((item, index) => {
+        const box = el("div", index === c.detail.luck.current ? "now" : "");
+        box.append(el("span", "a", `${item.age}세`), el("span", "g", item.ganji), el("span", "a", item.stage));
+        strip.append(box);
+      });
+      r5.append(strip, el("p", "small", `${c.detail.luck.forward ? "순행" : "역행"} · 첫 대운 ${c.detail.luck.startAge}세`));
+    } else {
+      r5.append(el("p", null, "대운은 성별에 따라 흐르는 방향(순행·역행)이 정해져서, 성별을 골라 주면 풀이해 드려요."));
     }
-    const selLayer = svg("g");
-    root.appendChild(selLayer);
-    // 계단 곡선: 구간마다 수평선, 구간 사이는 세로로 잇는다.
-    let d = "", area = `M${x(curve.sections[0].from)},${y(0)}`;
-    curve.sections.forEach((s, i) => {
-      d += `${i ? "L" : "M"}${x(s.from).toFixed(1)},${y(s.score).toFixed(1)}L${x(s.to).toFixed(1)},${y(s.score).toFixed(1)}`;
-      area += `L${x(s.from).toFixed(1)},${y(s.score).toFixed(1)}L${x(s.to).toFixed(1)},${y(s.score).toFixed(1)}`;
-    });
-    area += `L${x(curve.sections.at(-1).to)},${y(0)}Z`;
-    root.append(svg("path", { d: area }, "lc-area"), svg("path", { d }, "lc-line"));
-    if (curve.sections[0].kind === "before") {
-      const s = curve.sections[0];
-      root.appendChild(svg("line", { x1: x(s.from), x2: x(s.to), y1: y(s.score), y2: y(s.score) }, "lc-line lc-before"));
-    }
-    // 지금 대운 안의 해마다 점(세운) — 이름표보다 먼저 그려 글자를 덮지 않게
-    for (const p of curve.yearly) {
-      root.appendChild(svg("circle", { cx: x(p.age + 0.5), cy: y(p.score), r: 1.6 }, "lc-year"));
-    }
-    // 전성기·조심할 때 표시
-    for (const [key, cls, dy] of [["best", "best", -7], ["worst", "worst", 13]]) {
-      if (!curve[key]) continue;   // 지난 구간만 남았거나 앞으로가 고르면 이름을 붙이지 않는다
-      const s = curve.sections[curve[key].index];
-      const cx = (x(s.from) + x(s.to)) / 2;
-      root.appendChild(svg("circle", { cx, cy: y(s.score), r: 3.2 }, `lc-${cls}`));
-      const t = svg("text", { x: Math.min(Math.max(cx, L + 30), W - R - 30), y: y(s.score) + dy, "text-anchor": "middle" }, `lc-tag ${cls}`);
-      t.textContent = curve[key].label;
-      root.appendChild(t);
-    }
-    // 지금 여기
-    const nx = x(curve.age);
-    root.append(svg("line", { x1: nx, x2: nx, y1: T - 6, y2: H - B }, "lc-now"));
-    const nowLabel = svg("text", { x: Math.min(Math.max(nx, L + 22), W - R - 22), y: T - 9, "text-anchor": "middle" }, "lc-now-label");
-    nowLabel.textContent = `지금 여기 · ${Math.floor(curve.age)}세`;
-    root.appendChild(nowLabel);
+    read.append(r5);
+    sheet.append(read);
 
-    const note = el("p", "lc-note");
-    note.setAttribute("aria-live", "polite");
-    const select = (i) => {
-      const s = curve.sections[i];
-      selLayer.replaceChildren(svg("rect", { x: x(s.from), y: T - 4, width: Math.max(1, x(s.to) - x(s.from)), height: H - B - T + 4 }, "lc-sel"));
-      note.replaceChildren(el("b", null, `${s.ganji} · ${s.god} `), s.text);
+    // ⑥ 다른 후보(시간 범위 안에서 명식이 갈릴 때)·세부 데이터
+    for (const other of data.candidates.slice(1)) {
+      const fold = el("details", "fold");
+      fold.append(el("summary", null, `다른 후보 — ${other.timeLabel}`));
+      const t = N.chartTable(other.pillars, { term });
+      t.note.remove();
+      fold.append(t.wrap);
+      fold.addEventListener("toggle", () => { if (fold.open) t.draw(); });
+      sheet.append(fold);
+    }
+    if (c.detail) sheet.append(rawDetail(c));
+
+    // 그리기(글꼴이 다 들어온 뒤 — 손글씨 폭을 재서 메모 자리를 잡는다)
+    const drawAll = () => {
+      if (!sheet.isConnected || !sheet.offsetParent) return;
+      N.setSeed(load());
+      N.ring(chip);
+      chart.draw();
+      bars.draw();
+      curveParts?.draw();
+      // "일간" 여백 메모 → 문단 속 낱말
+      r2.querySelector(":scope > svg.overlay")?.remove();
+      const ov = N.overlayOf(r2);
+      const tn = N.rel(termNote, r2), tw = N.rel($("term-ilgan"), r2);
+      N.bentArrow(ov, [tn.x + 16, tn.y + tn.h], [tw.x + tw.w / 2, tw.y - 2], N.INK.blue, .3);
     };
-    // 누르는 자리: 구간마다 투명 사각형(키보드로도 고를 수 있게 tabindex)
-    curve.sections.forEach((s, i) => {
-      const hit = svg("rect", { x: x(s.from), y: T - 4, width: Math.max(1, x(s.to) - x(s.from)), height: H - B - T + 4,
-        tabindex: 0, role: "button", "aria-label": `${s.ganji} ${s.kind === "before" ? "대운 전" : "대운"} 풀이 보기` }, "lc-hit");
-      hit.addEventListener("click", () => select(i));
-      hit.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(i); } });
-      root.appendChild(hit);
-    });
-    select(curve.currentIndex >= 0 ? curve.currentIndex : curve.sections.length - 1);
-
-    const summary = el("p", "prose", curve.summary);
-    const disclaimer = el("p", "note", "곡선은 대운의 천간·지지가 내 명식과 맞는지를 규칙으로 매긴 점수예요. 앞날을 맞히는 예측이 아니라 흐름을 읽는 참고로 봐 주세요. 구간을 누르면 근거가 보여요.");
-    const wrapCurve = el("div", "life-curve");
-    wrapCurve.append(root);
-    block.append(wrapCurve, note, summary, disclaimer);
-    return block;
+    sheet._redraw = drawAll;
+    redraws.add(drawAll);
+    const run = () => {
+      drawAll();
+      if (write) playWriting({ head, chart, bars, elemBox, elemP, curveBox, curveParts, explain, read, chip });
+      else say("");
+    };
+    if (sheet.offsetParent) fontsReady.then(() => requestAnimationFrame(run));
+    else tabHooks._pendingSaju = run;
   }
 
-  // ③ 세부 데이터 — 지장간·12운성·12신살·신살은 접어 둔다(궁금한 사람만).
-  function renderRawDetail(wrap, candidate) {
+  // ── 장면 2: 맞은편에서 연필로 적어 나가는 3~4초 ──
+  // 하나의 시간표로 지연을 걸어 두고, 곡선이 화면 아래에 있으면 막대가 다 칠해지는 "순간"(애니메이션
+  // 완료 이벤트)에 곡선 쪽으로 따라 내려간다. 화면을 누르면 끝까지, 움직임 줄이기면 처음부터 다 그려진 채.
+  function playWriting(p) {
+    motion = N.Motion();
+    if (!motion.on) { afterWriting(); return; }
+    const M = motion;
+    const lines = [["잠깐만요, 적어 볼게요", 0, 1400], ["오행은 몇 개씩 있나…", 1400, 2300], ["이제 곡선 하나 그려 볼게요", 2300, 3650]];
+    talk.replaceChildren(...lines.map(([t]) => el("span", "talk-line", t)));
+    [...talk.children].forEach((s, i) => {
+      const [, a, b] = lines[i];
+      M.add(s.animate([{ opacity: 0 }, { opacity: 1, offset: .12 }, { opacity: 1, offset: .88 }, { opacity: 0 }], { delay: a, duration: b - a, fill: "both" }));
+    });
+    M.fade(p.head, 0, 250);
+    p.chart.lines.forEach((l, i) => M.stroke(l, 100 + i * 30, 220));
+    const cells = [...p.chart.cells].filter((c) => c.dataset.el).sort((a, b) => a.dataset.order - b.dataset.order);
+    const CH0 = 300, CHD = 120;
+    // 연필 — 글자를 따라 오른쪽(연주)부터 왼쪽(시주)으로
+    const pencil = N.svgEl(64, 64, "pencil");
+    pencil.innerHTML = '<g transform="rotate(-38 32 32)"><path d="M8 29 L46 29 L46 35 L8 35 Z" fill="#E9C766" stroke="#2E2C29" stroke-width="1"/><path d="M46 29 L56 32 L46 35 Z" fill="#EBD7B5" stroke="#2E2C29" stroke-width="1"/><path d="M53.5 31.2 L56 32 L53.5 32.8 Z" fill="#2E2C29"/><path d="M4 29 L8 29 L8 35 L4 35 Z" fill="#C9C3B6" stroke="#2E2C29" stroke-width="1"/></g>';
+    p.chart.wrap.append(pencil);
+    const total = CH0 + cells.length * CHD + 240;
+    const kf = [];
+    cells.forEach((c, i) => {
+      const k = c.querySelector(".k"), hj = c.querySelector(".hj"), god = c.querySelector(".god"), mk = c.querySelector("svg.mark g");
+      const t0 = CH0 + i * CHD;
+      M.write(k, t0, CHD * .8); M.fade(hj, t0 + CHD * .6, 120); M.fade(god, t0 + CHD * .7, 120);
+      M.stroke(mk, t0 + CHD * .8, 140);
+      const r = N.rel(k, p.chart.wrap);
+      kf.push({ offset: t0 / total, transform: `translate(${r.x - 50}px, ${r.y + r.h * .55 - 46}px)`, opacity: 1 });
+      kf.push({ offset: (t0 + CHD * .8) / total, transform: `translate(${r.x + r.w - 50}px, ${r.y + r.h * .5 - 46}px)`, opacity: 1 });
+    });
+    if (kf.length) {
+      kf.unshift({ offset: 0, transform: "translate(300px, -80px)", opacity: 0 }, { ...kf[0], offset: Math.max(0, kf[0].offset - .06) });
+      kf.push({ offset: 1, transform: "translate(300px, 200px)", opacity: 0 });
+      M.add(pencil.animate(kf, { duration: total, fill: "both", easing: "ease-in-out" }));
+    }
+    const C1 = CH0 + cells.length * CHD;
+    M.stroke(p.chart.arrow, C1 + 40, 260); M.fade(p.chart.note, C1 + 40, 200); M.fade(p.chart.legend, C1 + 80, 200);
+    M.fade(p.chip.querySelector("svg.ring"), C1, 250);
+    // 오행 막대
+    const B0 = C1 + 60;
+    M.fade(p.elemBox, B0 - 100, 160);
+    let lastBar = null;
+    p.bars.shapes.forEach((s, i) => {
+      if (s.dashed) M.fade(s.g, B0 + i * 130, 300); else M.stroke(s.g, B0 + i * 130, 380);
+      if (s.note) M.fade(s.note, B0 + 600, 220);
+      lastBar = M.list.at(-1);
+    });
+    M.fade(p.elemP, B0 + 500, 400);
+    // 인생 곡선
+    const L0 = B0 + 5 * 130 + 250;
+    M.fade(p.curveBox, L0 - 150, 160);
+    const P = p.curveParts?.P;
+    if (P) {
+      M.stroke(P.axes, L0, 240);
+      P.ticks.forEach((t, i) => M.fade(t, L0 + 100 + i * 15, 120));
+      M.stroke(P.fill, L0 + 200, 600);
+      M.stroke(P.line, L0 + 240, 650);
+      P.dots.forEach((d, i) => M.fade(d, L0 + 850 + i * 25, 80));
+      P.marks.forEach((m) => (m.tagName === "g" ? M.stroke(m, L0 + 900, 240) : M.fade(m, L0 + 900, 200)));
+      P.labels.forEach((l) => M.fade(l, L0 + 950, 200));
+      M.stroke(P.nowArrow, L0 + 1100, 320);
+      M.fade(p.explain, L0 + 500, 400);
+    }
+    // 아래 글은 곡선과 함께 차례로 — 화면이 오래 비어 있지 않게
+    for (const node of p.curveBox.querySelectorAll(":scope > p")) M.fade(node, L0 + 900, 400);
+    M.fade(p.read, L0 + 1100, 400);
+    // 곡선이 화면 아래면 막대가 다 칠해지는 순간 따라 내려간다. 사람이 먼저 움직이면 따라가지 않는다.
+    let userMoved = false;
+    const stopFollow = () => { userMoved = true; };
+    addEventListener("wheel", stopFollow, { once: true, passive: true });
+    addEventListener("touchmove", stopFollow, { once: true, passive: true });
+    lastBar?.finished.then(() => {
+      if (userMoved || skipped) return;
+      const r = p.curveBox.getBoundingClientRect();
+      if (r.bottom > innerHeight - 8) p.curveBox.scrollIntoView({ behavior: "smooth", block: r.height < innerHeight - 40 ? "end" : "start" });
+    }, () => null);
+    let skipped = false;
+    const skip = (e) => {
+      if (e.target.closest?.("#tabs, #bl-dock")) return;
+      skipped = true;
+      M.finish();
+    };
+    addEventListener("pointerdown", skip);
+    M.done().then(() => {
+      removeEventListener("pointerdown", skip);
+      removeEventListener("wheel", stopFollow);
+      removeEventListener("touchmove", stopFollow);
+      pencil.remove();
+      afterWriting();
+    });
+  }
+  // 다 적은 뒤 한 줄 — 만화 사주 이벤트는 여기와 사주 탭 맨 아래 두 곳뿐이다.
+  function afterWriting() {
+    talk.replaceChildren();
+    if (!comicOpen) { say("자, 다 적었어요."); return; }
+    const go = el("button", "link", "만화로도 그려 드려요(선착순)");
+    go.type = "button";
+    go.addEventListener("click", () => $("comic").scrollIntoView({ behavior: N.reduced() ? "auto" : "smooth", block: "center" }));
+    talk.append("자, 다 적었어요. ", go);
+  }
+
+  // 세부 데이터 — 지장간·12운성·12신살·신살은 접어 둔다(궁금한 사람만).
+  function rawDetail(candidate) {
     const detail = candidate.detail;
-    const more = el("details", "more");
-    const summary = el("summary", null, "세부 데이터 — 지장간·12운성·신살");
-    const inner = el("div", "inner");
-    const grid = el("div", "saju-grid");
-    addSajuCell(grid, "saju-head", "");
-    for (const [, label] of SAJU_COLUMNS) addSajuCell(grid, "saju-head", label);
+    const more = el("details", "fold");
+    more.append(el("summary", null, "세부 데이터 — 지장간·12운성·신살"));
+    const grid = el("div", "detail-grid");
+    grid.append(el("span", "lab", ""));
+    for (const label of ["시주", "일주", "월주", "연주"]) grid.append(el("span", "lab", label));
     const row = (label, main, sub) => {
-      addSajuCell(grid, "saju-label", term(label));
-      for (const [key] of SAJU_COLUMNS) {
+      const lab = el("span", "lab");
+      lab.append(term(label));
+      grid.append(lab);
+      for (const key of ["hour", "day", "month", "year"]) {
         const d = detail.pillars[key];
-        const text = el("span", "saju-sub", d ? main(d) : "—");
-        if (d && sub) text.appendChild(el("small", null, sub(d)));
-        addSajuCell(grid, "", text);
+        const cell = el("span", null, d ? main(d) : "—");
+        if (d && sub) cell.append(el("small", null, sub(d)));
+        grid.append(cell);
       }
     };
-    row("지장간", (d) => d.hiddenStems.map((h) => h.stem).join(" "));
+    row("지장간", (d) => d.hiddenStems.map((x) => x.stem).join(" "));
     row("12운성", (d) => d.stage);
     row("12신살", (d) => shinsalLabel(d.shinsalByYear), (d) => `일지 ${shinsalLabel(d.shinsalByDay)}`);
-    inner.appendChild(grid);
-
-    const head = el("p", "note");
+    more.append(grid);
+    const head = el("p", "small gap-s");
     head.append("원국의 ", term("신살"), " — 전통적으로 붙이는 별명이에요. 길흉을 단정하지 말고 성향의 힌트로 봐 주세요.");
-    inner.appendChild(head);
+    more.append(head);
     if (detail.shinsal.length) {
-      const list = el("ul", "saju-shinsal");
+      const list = el("ul", "shinsal");
       for (const item of detail.shinsal) {
         const li = el("li");
         const tag = item.name === "공망" ? term("공망") : el("span", null, item.name);
         tag.classList.add("tag");
-        li.append(tag, item.meaning, el("span", "where", ` ${item.pillarNames.join("·")} · ${item.basis} 기준`));
-        list.appendChild(li);
+        li.append(tag, item.meaning, el("span", "faint", ` ${item.pillarNames.join("·")} · ${item.basis} 기준`));
+        list.append(li);
       }
-      inner.appendChild(list);
-    } else {
-      inner.appendChild(el("p", "note", "원국에 두드러지는 신살이 없어요."));
-    }
+      more.append(list);
+    } else more.append(el("p", "small", "원국에 두드러지는 신살이 없어요."));
     const a = detail.annual;
-    inner.appendChild(el("p", "note", `${a.year}년 세운 ${a.ganji}(${a.hanja}) · ${a.tenGod} · 12운성 ${a.stage} · 12신살 연지 ${shinsalLabel(a.shinsalByYear)} / 일지 ${shinsalLabel(a.shinsalByDay)}`));
-    more.append(summary, inner);
-    wrap.appendChild(more);
+    more.append(el("p", "small", `${a.year}년 세운 ${a.ganji}(${a.hanja}) · ${a.tenGod} · 12운성 ${a.stage} · 12신살 연지 ${shinsalLabel(a.shinsalByYear)} / 일지 ${shinsalLabel(a.shinsalByDay)}`));
+    return more;
   }
 
   // "계산 기준" — 버전 문자열·교차검증은 읽기 흐름에서 빼고 여기 모은다.
@@ -981,8 +935,8 @@
     list.replaceChildren();
     const item = (label, code) => {
       const li = el("li", null, `${label} `);
-      if (code) li.appendChild(el("code", null, code));
-      list.appendChild(li);
+      if (code) li.append(el("code", null, code));
+      list.append(li);
     };
     const verifyText = {
       verified: "한국천문연구원(KASI) 일진과 교차검증 완료",
@@ -998,20 +952,29 @@
     const detailRules = data.candidates[0]?.detail?.rules;
     if (detailRules) item(`신살 표 — ${detailRules.twelveShinsal}, 양인은 ${detailRules.yangin}`, detailRules.version);
     if (data.readingRules) item(`풀이 문장 — ${data.readingRules.strength}`, data.readingRules.version);
+    const markRules = data.candidates[0]?.reading?.markRules;
+    if (markRules) item("형광펜(핵심 한 문장)·물결 밑줄(조심 한 구절)은 규칙으로 고른 자리예요", markRules);
     if (data.dailyFortunes?.[0]) item("오늘의 운세 — 명식 일간 + 오늘 일진", data.dailyFortunes[0].method);
     const curve = data.candidates[0]?.lifeCurve;
     if (curve) item(`인생 곡선 — ${curve.basis} · 대운수 ${curve.startAge}세 · 간이 용신 ${curve.favorable.yong}`, curve.version);
     item("풀이는 전래 해석을 생활 언어로 옮긴 참고용이에요. 중요한 결정의 근거로 삼지는 마세요.");
   }
 
+  tabHooks.saju = () => {
+    const run = tabHooks._pendingSaju;
+    tabHooks._pendingSaju = null;
+    if (run) fontsReady.then(() => requestAnimationFrame(run));
+    else fontsReady.then(() => requestAnimationFrame(redrawAll));
+    refreshComic();
+  };
+
   async function renderSaju(birth) {
     const requestId = ++sajuRequestId;
-    sajuCandidates.replaceChildren();
+    sheet.replaceChildren();
     lastSajuData = null;
-    sajuCopy.disabled = true;
-    $("story-saju").disabled = true;
+    $("saju-actions").hidden = true;
     sajuStatus.hidden = false;
-    sajuStatus.textContent = "명식을 계산하고 있습니다…";
+    sajuStatus.textContent = "명식을 적고 있어요…";
     sajuWarning.hidden = true;
     try {
       const response = await fetch("/_fortune/chart", {
@@ -1023,29 +986,31 @@
       if (!response.ok) throw new Error(data.error || "명식을 계산하지 못했습니다.");
       if (requestId !== sajuRequestId) return;
       lastSajuData = data;
-      sajuCopy.disabled = false;
-      $("story-saju").disabled = false;
+      $("saju-actions").hidden = false;
       if (birth.calendar === "lunar") {
         birth.solar = { y: data.solarDate.year, m: data.solarDate.month, d: data.solarDate.day };
-        try { localStorage.setItem(KEY, JSON.stringify(birth)); } catch (e) {}
+        store.set(KEY, JSON.stringify(birth));
         renderBioResult(birth, birth.solar);
       }
       if (data.dailyFortunes?.[0]) showSajuFortune(data.dailyFortunes[0]);
+      else showGenericFortune(fallbackFortuneSeed);
       renderTojeong(data);
-      for (const candidate of data.candidates) renderSajuCandidate(candidate, data.ambiguous);
-      renderBasis(data);
       sajuStatus.hidden = true;
+      const write = writeNext;
+      writeNext = false;
+      renderSajuSheet(data, { write });
+      renderBasis(data);
       if (data.ambiguous) {
         sajuWarning.hidden = false;
-        sajuWarning.textContent = `⚠️ ${data.ambiguityReason} 가능한 명식을 함께 보여 드려요. 오늘의 운세는 첫 번째 명식으로 봤어요.`;
+        sajuWarning.textContent = `${data.ambiguityReason} 그래서 가능한 명식이 둘이에요. 위에는 첫 번째로 적었고, 다른 후보는 아래에 접어 뒀어요. 오늘의 운세도 첫 번째로 봤어요.`;
       }
       if (currentTab === "match") tabHooks.match();
     } catch (error) {
       if (requestId !== sajuRequestId) return;
       tabsNav.querySelector('[data-tab="tojeong"]').hidden = true;
       sajuStatus.textContent = error.message || "명식을 계산하지 못했습니다.";
-      showFortune(fallbackFortuneSeed);
-      if (birth.calendar === "lunar" && !birth.solar) $("form").hidden = false;
+      showGenericFortune(fallbackFortuneSeed);
+      if (birth.calendar === "lunar" && !birth.solar) showForm(birth);
     }
   }
 
@@ -1062,18 +1027,17 @@
   let tojeongRequestId = 0;
   let tojeongModule = null;
   const loadTojeongReading = () => (tojeongModule ??= import("./tojeong-reading.js"));
-
   function tojeongLines(target, lines) {
     target.replaceChildren();
     for (const line of lines) {
       const li = el("li", null, line.ko || line.reading);
       const orig = el("small", "orig");
-      orig.append(el("span", null, line.hanja), ` ${line.reading}`);
+      orig.append(el("span", "hj", line.hanja), ` ${line.reading}`);
       if (line.fix) orig.append(` · 전사본 표기 ${line.fix.from} — ${line.fix.why}`);
       if (line.note) orig.append(` · ${line.note}`);
       if (line.unsure) orig.append(" · 뜻이 분명치 않아 가장 그럴듯하게 옮김");
-      li.appendChild(orig);
-      target.appendChild(li);
+      li.append(orig);
+      target.append(li);
     }
   }
   async function fetchTojeong(code) {
@@ -1086,12 +1050,20 @@
     try { return await tojeongCache.get(code); }
     catch (error) { tojeongCache.delete(code); throw error; }
   }
-
+  function paintYearRings() {
+    for (const b of document.querySelectorAll("#tj-years .pick")) {
+      b.querySelector(":scope > svg.ring")?.remove();
+      if (b.getAttribute("aria-pressed") === "true" && b.offsetParent) N.ring(b, N.INK.blue);
+    }
+  }
+  redraws.add(paintYearRings);
+  tabHooks.tojeong = () => fontsReady.then(() => requestAnimationFrame(paintYearRings));
   async function showTojeongYear(data, entry) {
     const requestId = ++tojeongRequestId;
-    for (const button of document.querySelectorAll("#tj-years button")) {
+    for (const button of document.querySelectorAll("#tj-years .pick")) {
       button.setAttribute("aria-pressed", String(+button.dataset.year === entry.year));
     }
+    paintYearRings();
     const b = entry.lunarBirth;
     $("tj-sub").textContent = `음력 ${b.year}.${b.month}.${b.day}생 · ${entry.year}년 세는나이 ${entry.age}세 · 괘 ${entry.code}`;
     const w = entry.work;
@@ -1103,18 +1075,16 @@
     const assume = $("tj-assume");
     assume.hidden = !entry.assumptions.length;
     assume.textContent = entry.assumptions.map((a) => ASSUMPTION_TEXT[a]).join(" ");
-
-    const title = $("tj-title");
-    title.textContent = "본문을 불러오고 있습니다…";
+    const title = $("tj-title-body");
+    title.textContent = "본문을 펴고 있어요…";
     $("tj-overview").textContent = "";
     $("tj-summary").replaceChildren();
     $("tj-months").replaceChildren();
     try {
       const [text, readingModule] = await Promise.all([fetchTojeong(entry.code), loadTojeongReading()]);
       if (requestId !== tojeongRequestId) return;
-      title.replaceChildren();
-      for (const [cls, value] of [["code", `${entry.year}년 · 괘 ${entry.code}`], ["hanja", text.title.hanja],
-        ["ko", `${text.title.reading} — ${text.title.ko}`]]) title.appendChild(el("span", cls, value));
+      title.replaceChildren(el("span", "small code", `${entry.year}년 · 괘 ${entry.code}`), el("span", "hj hanja", text.title.hanja),
+        el("span", "hand h-sub", `${text.title.reading} — ${text.title.ko}`));
       const reading = readingModule.yearReading(text);
       $("tj-overview").textContent = reading.paragraph;
       tojeongLines($("tj-summary"), text.summary);
@@ -1122,77 +1092,80 @@
       const nowMonth = data.lunarToday?.year === entry.year ? data.lunarToday.month : 0;
       text.months.forEach((lines, index) => {
         const month = reading.months[index];
-        const box = el("div", index + 1 === nowMonth ? "tj-month now" : "tj-month");
+        const box = el("div", "tj-month");
         box.dataset.tone = month.tone;
+        const mn = el("div", "mn");
+        mn.append(el("span", null, LUNAR_MONTHS[index]));
+        if (index + 1 === nowMonth) mn.append(el("small", null, "이번 달"));
+        const body = el("div");
         const orig = el("details", "orig-box");
         const ol = el("ol", "tj-lines");
         tojeongLines(ol, lines);
         orig.append(el("summary", null, "원문 보기"), ol);
-        box.append(el("h4", null, LUNAR_MONTHS[index]), el("p", "prose", month.text), orig);
-        months.appendChild(box);
+        body.append(el("p", null, month.text), orig);
+        box.append(mn, body);
+        months.append(box);
       });
       if (!tojeongSources) {
         tojeongSources = await fetch("tojeong/sources.json").then((r) => (r.ok ? r.json() : null)).catch(() => null);
       }
       $("tj-source").textContent = (tojeongSources?.credit ?? "원문은 전래 판본, 풀이는 bubblelab 자체 번역입니다.")
-        + " 위 해설은 원문 구절의 길흉·분야를 규칙으로 읽어 쉬운 말로 옮긴 것이에요.";
+        + " 위 해설은 원문 구절의 길흉·분야를 규칙으로 읽어 쉬운 말로 옮긴 것이에요. 형광펜은 좋은 달, 물결은 조심할 달이에요.";
     } catch (error) {
       if (requestId !== tojeongRequestId) return;
       title.textContent = error.message || "본문을 불러오지 못했습니다.";
     }
   }
-  let tojeongData = null;
   function renderTojeong(data) {
     const list = data.tojeong ?? [];
-    tojeongData = list.length ? data : null;
     tabsNav.querySelector('[data-tab="tojeong"]').hidden = !list.length;
     if (!list.length) { if (currentTab === "tojeong") showTab("today"); return; }
     const years = $("tj-years");
     years.replaceChildren();
     for (const entry of list) {
-      const button = el("button", "bl-chip", `${entry.year}년`);
-      button.type = "button";
+      const button = pickButton(`${entry.year}년`);
+      button.classList.add("hand", "h-sub");
       button.dataset.year = entry.year;
       button.addEventListener("click", () => showTojeongYear(data, entry));
-      years.appendChild(button);
+      years.append(button);
     }
     showTojeongYear(data, list[0]);
   }
 
   // ── 궁합 ────────────────────────────────────────────────────
-  const pY = $("p-y"), pM = $("p-m"), pD = $("p-d"), pH = $("p-h"), pCal = $("p-cal");
-  fillYearMonth(pY, pM);
-  const fillPartnerDays = () => fillDaysOf(pY, pM, pD, pCal.value !== "solar");
-  for (const sel of [pY, pM, pCal]) sel.addEventListener("change", fillPartnerDays);
-  pY.value = "1990"; pM.value = "1"; fillPartnerDays(); pD.value = "1";
   function loadPartner() {
     try {
-      const o = JSON.parse(localStorage.getItem(PARTNER_KEY) || "null");
+      const o = JSON.parse(store.get(PARTNER_KEY) || "null");
       return o && o.y && o.m && o.d ? o : null;
-    } catch (e) { return null; }
+    } catch { return null; }
   }
-  function fillPartnerForm(p) {
-    if (!p) return;
-    $("p-name").value = p.name || "";
-    pCal.value = p.calendar === "lunar" ? (p.lunarLeap ? "leap" : "lunar") : "solar";
-    $("p-gender").value = p.gender || "unspecified";
-    pY.value = p.y; pM.value = p.m; fillPartnerDays(); pD.value = p.d;
-    pH.value = p.h == null ? "" : p.h;
-  }
+  const partnerForm = birthSentence($("match-form"), {
+    partner: true,
+    submitLabel: "둘이 맞나 볼게요 →",
+    onSubmit(partner) {
+      store.set(PARTNER_KEY, JSON.stringify(partner));
+      renderMatch(true);
+    },
+  });
   let matchRequestId = 0;
   let matchShownFor = "";
+  function showMatchForm(prefill) {
+    $("match-result").hidden = true;
+    $("match-form-box").hidden = false;
+    partnerForm.set(prefill);
+  }
   async function renderMatch(force = false) {
     const me = load();
     const partner = loadPartner();
     const result = $("match-result");
     if (!me) return;
-    if (!partner) { result.hidden = true; $("match-form").hidden = false; return; }
+    if (!partner) { showMatchForm(null); return; }
     const signature = JSON.stringify([me, partner]);
-    if (!force && signature === matchShownFor) return;
+    if (!force && signature === matchShownFor) { fontsReady.then(() => requestAnimationFrame(redrawAll)); return; }
     const requestId = ++matchRequestId;
-    $("match-form").hidden = true;
+    $("match-form-box").hidden = true;
     result.hidden = false;
-    result.replaceChildren(el("p", "note", "궁합을 계산하고 있어요…"));
+    result.replaceChildren(el("p", "hand h-sub faint", "두 사람 명식을 나란히 적고 있어요…"));
     try {
       const { name, ...partnerBirth } = partner;   // 이름은 서버로 보내지 않는다
       const response = await fetch("/_fortune/chart", {
@@ -1205,183 +1178,172 @@
       if (requestId !== matchRequestId) return;
       matchShownFor = signature;
       const c = data.compatibility;
-      const who = partner.name || "상대";
-      const heading = el("h2");
-      heading.append(`나와 ${who}의 `, term("궁합"));
+      const who = partner.name || "그 사람";
+      const heading = el("h2", "hand h-title");
+      heading.append(`나와 ${who}, `, term("궁합"), "을 볼게요");
       const pair = el("div", "pair");
       const person = (label, pillar) => {
         const box = el("div", "who");
-        box.append(el("small", null, label), el("span", null, pillar.hanja), el("small", null, `${pillar.korean} 일주`));
+        box.append(el("small", null, label), el("span", "g", pillar.korean), el("small", null, `${pillar.hanja} 일주`));
         return box;
       };
-      pair.append(person("나", data.candidates[0].pillars.day), el("span", "heart", "💞"), person(who, data.partner.pillars.day));
+      pair.append(person("나", data.candidates[0].pillars.day), el("span", "vs", "와"), person(who, data.partner.pillars.day));
       const score = el("div", "score");
-      score.append(el("b", null, String(c.score)), el("span", "sub", `/ 100 · ${c.level}`));
-      result.replaceChildren(heading, pair, score, ...c.paragraphs.map((p) => el("p", "prose", p)));
-      const note = el("p", "note");
+      const num = el("span", "num circled", String(c.score));
+      score.append(num, el("span", "hand h-sub", ` / 100 · ${c.level}`));
+      const paras = c.paragraphs.map((p, i) => N.paragraph(p, c.marks?.[i]));
+      const note = el("p", "small");
       note.append("점수는 ", term("일간"), "의 오행 관계, 일지 ", term("합충", "합충"), ", 오행 보완을 더해 낸 참고값이에요.");
       if (data.partner.ambiguous) note.append(" 상대의 시진 안에서 명식이 갈려 첫 번째 명식으로 봤어요.");
-      const actions = el("div", "actions");
-      const edit = el("button", "bl-btn bl-btn--sm", "상대 정보 바꾸기");
-      edit.addEventListener("click", () => { fillPartnerForm(loadPartner()); result.hidden = true; $("match-form").hidden = false; });
-      const clear = el("button", "bl-btn bl-btn--ghost bl-btn--sm", "지우기");
+      const actions = el("div", "row-actions");
+      const edit = el("button", "link", "상대 다시 적기");
+      edit.type = "button";
+      edit.addEventListener("click", () => showMatchForm(loadPartner()));
+      const clear = el("button", "link", "지우기");
+      clear.type = "button";
       clear.addEventListener("click", () => {
-        try { localStorage.removeItem(PARTNER_KEY); } catch (e) {}
+        store.del(PARTNER_KEY);
         matchShownFor = "";
-        result.hidden = true; $("match-form").hidden = false;
+        showMatchForm(null);
       });
       actions.append(edit, clear);
-      result.append(note, actions);
+      result.replaceChildren(heading, pair, score, ...paras, note, actions);
+      const ringIt = () => { if (num.offsetParent) N.ring(num, N.INK.red); };
+      redraws.add(ringIt);
+      fontsReady.then(() => requestAnimationFrame(ringIt));
     } catch (error) {
       if (requestId !== matchRequestId) return;
-      result.replaceChildren(el("p", "err", error.message || "궁합을 계산하지 못했습니다."));
-      $("match-form").hidden = false;
+      result.replaceChildren(el("p", "err small red", error.message || "궁합을 계산하지 못했습니다."));
+      $("match-form-box").hidden = false;
     }
   }
-  tabHooks.match = () => renderMatch();
-  $("p-save").addEventListener("click", () => {
-    const y = +pY.value, m = +pM.value, d = +pD.value;
-    if (pCal.value === "solar" && new Date(y, m - 1, d) > now) { $("p-err").textContent = "미래 날짜는 입력할 수 없어요."; return; }
-    $("p-err").textContent = "";
-    const partner = {
-      name: $("p-name").value.trim().slice(0, 12),
-      y, m, d, calendar: pCal.value === "solar" ? "solar" : "lunar", lunarLeap: pCal.value === "leap",
-      gender: $("p-gender").value, timeMode: "branch", h: pH.value === "" ? null : +pH.value, time: null,
-    };
-    try { localStorage.setItem(PARTNER_KEY, JSON.stringify(partner)); } catch (e) {}
-    renderMatch(true);
-  });
+  tabHooks.match = () => { renderMatch(); fontsReady.then(() => requestAnimationFrame(() => partnerForm.rings())); };
 
-  // ── 바이오리듬 결과 ───────────────────────────────────────────
-  let lastBio = null;
-  function renderBioResult(birth, solarBirth) {
-    const n = daysBetween(solarBirth, now);
-    const vals = {};
-    for (const c of CYCLES) {
-      const v = Math.sin((2 * Math.PI * n) / c.period);
-      vals[c.key] = v;
-      setBar(c.key, v);
-      $("note-" + c.key).textContent = noteFor(c.name, v);
-    }
-    const avg = (vals.phy + vals.emo + vals.int) / 3;
-    fallbackFortuneSeed = todayNum() + n + Math.round((vals.phy + vals.emo + vals.int) * 1000);
-    let head;
-    if (avg >= 0.5) head = "✨ 세 리듬이 모두 좋은 날! 자신감을 가져도 좋아요.";
-    else if (avg >= 0.15) head = "🙂 전반적으로 순조로운 흐름. 무난하게 좋은 하루예요.";
-    else if (avg > -0.15) head = "😌 균형 잡힌 날. 큰 기복 없이 차분하게 보내기 좋아요.";
-    else if (avg > -0.5) head = "🌥️ 리듬이 다소 가라앉는 날. 무리하지 말고 쉬엄쉬엄 가요.";
-    else head = "🛌 컨디션 저점 구간. 오늘은 나를 아껴주는 하루로.";
-    $("bio-headline").textContent = head;
-    $("bio-sub").textContent = `태어난 지 ${n.toLocaleString()}일째`;
-    lastBio = { n, vals, head };
-    updateSavedInfo(birth, solarBirth);
+  // ── 저장/불러오기 ──────────────────────────────────────────────
+  // 저장 모양은 예전과 같다: { y, m, d, calendar, lunarLeap, gender, timeMode, h, time [, solar] }.
+  function load() {
+    try {
+      const o = JSON.parse(store.get(KEY) || "null");
+      if (o && o.y && o.m && o.d) return o;
+    } catch { /* 깨진 값은 없는 셈 */ }
+    return null;
+  }
+  function savedText(birth, data) {
+    if (!birth) return "";
+    const b = BRANCHES[birth.h];
+    const hourTxt = birth.timeMode === "clock" && birth.time ? ` ${birth.time}` : (b ? ` ${b.k}시` : "");
+    const solar = birth.calendar === "lunar" && (birth.solar || data?.solarDate);
+    const dateTxt = birth.calendar === "lunar"
+      ? `음력 ${birth.y}. ${birth.m}. ${birth.d}.${birth.lunarLeap ? " 윤달" : ""}${solar ? ` (양력 ${solar.y ?? solar.year}. ${solar.m ?? solar.month}. ${solar.d ?? solar.day}.)` : ""}`
+      : `${birth.y}. ${birth.m}. ${birth.d}.`;
+    const g = { male: " · 남자", female: " · 여자" }[birth.gender] ?? "";
+    return `${dateTxt}${hourTxt}${g}`;
   }
   function updateSavedInfo(birth, solarBirth) {
-    const b = BRANCHES[birth.h];
-    const hourTxt = birth.timeMode === "clock" && birth.time ? ` ${birth.time}` : (b ? ` ${b.k}시(${b.c})` : "");
-    const dateTxt = birth.calendar === "lunar"
-      ? `음력 ${birth.y}.${birth.m}.${birth.d} ${birth.lunarLeap ? "윤달" : "평달"}${solarBirth ? ` → 양력 ${solarBirth.y}.${solarBirth.m}.${solarBirth.d}` : ""}`
-      : `양력 ${birth.y}.${birth.m}.${birth.d}`;
-    $("saved-info").textContent = `저장됨: ${dateTxt}${hourTxt} · 이 기기에만 저장돼요`;
+    $("saved-info").textContent = `${savedText(birth, solarBirth ? { solarDate: { year: solarBirth.y, month: solarBirth.m, day: solarBirth.d } } : null)} · 이 기기에만 남아요`;
   }
-
-  function renderResult(birth) {
+  function renderResult(birth, { write = false } = {}) {
     $("form").hidden = true;
-    $("reveal").hidden = true;
-    $("saved").hidden = false;
-    setTabsVisible(true);
+    setTabsOn(true);
     showFortuneLoading();
     updateSavedInfo(birth, birth.calendar === "lunar" ? birth.solar : birth);
     if (birth.calendar !== "lunar") renderBioResult(birth, birth);
     else if (birth.solar) renderBioResult(birth, birth.solar);
     else lastBio = null;
     matchShownFor = "";
+    writeNext = write;
+    say("");
+    scrollTo({ top: 0 });
     renderSaju(birth);
   }
+  $("edit-btn").addEventListener("click", () => showForm(load()));
 
-  // ── 저장/불러오기 ──────────────────────────────────────────────
-  function load() {
-    try {
-      const o = JSON.parse(localStorage.getItem(KEY) || "null");
-      if (o && o.y && o.m && o.d) return o;
-    } catch (e) {}
-    return null;
-  }
-  function fillForm(b) {
-    if (!b) return;
-    setCalendarMode(b.calendar === "lunar" ? "lunar" : "solar");
-    setGenderMode(b.gender);
-    selY.value = b.y; selM.value = b.m; fillDays(); selD.value = b.d;
-    lunarLeap.value = b.lunarLeap ? "leap" : "normal";
-    selH.value = (b.h == null || !BRANCHES[b.h]) ? "" : b.h;
-    inTime.value = b.time || "";
-    setTimeMode(b.timeMode === "clock" ? "clock" : "branch");
-  }
-  const errEl = $("err");
-  $("reveal-btn").addEventListener("click", () => {
-    $("reveal").hidden = true;
-    $("form").hidden = false;
-    errEl.textContent = "";
-  });
-  $("cancel").addEventListener("click", () => {
-    $("form").hidden = true;
-    const saved = load();
-    if (!saved) $("reveal").hidden = false;
-    else renderResult(saved);
-  });
-  $("edit-btn").addEventListener("click", () => {
-    sajuRequestId++;
-    setTabsVisible(false);
-    $("saved").hidden = true;
-    fillForm(load());
-    $("form").hidden = false;
-    errEl.textContent = "";
-    $("form").scrollIntoView({ block: "start" });
-  });
-  $("save").addEventListener("click", () => {
-    const y = +selY.value, m = +selM.value, d = +selD.value;
-    const time = timeMode === "clock" ? inTime.value : "";
-    if (timeMode === "clock" && !time) {
-      errEl.textContent = "정확한 시각을 입력하거나 시진 입력을 선택해주세요.";
-      return;
-    }
-    const h = timeMode === "clock" ? branchFromClock(time) : (selH.value === "" ? null : +selH.value);
-    const birth = {
-      y, m, d, calendar: calendarMode,
-      lunarLeap: calendarMode === "lunar" && lunarLeap.value === "leap",
-      gender: genderMode, timeMode, h, time: time || null,
-    };
-    if (calendarMode === "solar" && new Date(y, m - 1, d) > now) { errEl.textContent = "미래 날짜는 입력할 수 없어요."; return; }
-    errEl.textContent = "";
-    try { localStorage.setItem(KEY, JSON.stringify(birth)); } catch (e) {}
-    currentTab = "today";
-    renderResult(birth);
-  });
-
-  // ── 초기 상태 ──────────────────────────────────────────────────
+  // ── 처음 상태 ──────────────────────────────────────────────────
   const saved = load();
   if (saved) {
+    // 다시 온 사람(예전 화면에서 적어 둔 사람 포함) — 바로 노트를 편다.
     currentTab = TABS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "today";
-    fillForm(saved);
-    fillPartnerForm(loadPartner());
     renderResult(saved);
+    if (currentTab === "today") turnPage();
+    else store.set(TURN_KEY, todayStamp);
   } else {
-    showFortune(todayNum());
-    showTab("today");
+    showForm(null);
   }
+  fontsReady.then(() => requestAnimationFrame(redrawAll));
 
-  // ── 공유: 스토리 카드(1080×1920) ─────────────────────────────────
-  const dateStr = $("today").textContent;
-  window.blShareText = () => {
-    const [emoji, text] = currentLine;
-    return `🔮 오늘의 운세 · ${dateStr}\n${emoji} ${text}`;
-  };
-
-  function rr(ctx, x, y, w, h, r) {
-    ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(x, y, w, h, r);
-    else ctx.rect(x, y, w, h);
+  // ── 만화 사주 선착순(이벤트) ─────────────────────────────────────
+  async function refreshComic() {
+    const box = $("comic");
+    if (comicChecked) return;
+    comicChecked = true;
+    try {
+      const res = await fetch("/_fortune/comic-request/status", { cache: "no-store" });
+      if (!res.ok) throw new Error("status");
+      const s = await res.json();
+      comicOpen = !!s.open;
+      box.hidden = false;
+      $("comic-left").textContent = s.open ? `남은 자리 ${s.remaining}` : "";
+      $("comic-form").hidden = !s.open;
+      $("comic-closed").hidden = !!s.open;
+      fontsReady.then(() => requestAnimationFrame(() => { N.checkbox($("comic-consent"), comicConsent); N.ring($("comic-send"), N.INK.blue); }));
+    } catch {
+      box.hidden = true;   // 이벤트 서버가 없으면(로컬 등) 조용히 감춘다
+      comicChecked = false;
+    }
   }
+  $("comic-consent").addEventListener("click", () => {
+    comicConsent = !comicConsent;
+    N.checkbox($("comic-consent"), comicConsent);
+  });
+  redraws.add(() => { if ($("comic-send").offsetParent) N.ring($("comic-send"), N.INK.blue); });
+  $("comic-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const err = $("comic-err");
+    const email = $("comic-email").value.trim();
+    err.textContent = "";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { err.textContent = "메일 주소를 다시 확인해 주세요."; $("comic-email").focus(); return; }
+    if (!comicConsent) { err.textContent = "동의해 주셔야 보내 드릴 수 있어요."; return; }
+    const birth = load();
+    if (!birth) { err.textContent = "생년월일을 먼저 적어 주세요."; return; }
+    const send = $("comic-send");
+    send.disabled = true;
+    try {
+      const res = await fetch("/_fortune/comic-request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email, consent: true, website: $("comic-web").value,
+          birth: { y: birth.y, m: birth.m, d: birth.d, h: birth.h ?? null, calendar: birth.calendar === "lunar" ? "lunar" : "solar", lunarLeap: !!birth.lunarLeap },
+          gender: birth.gender,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok && body.ok) {
+        $("comic-form").hidden = true;
+        $("comic-done").hidden = false;
+        if (body.remaining != null) $("comic-left").textContent = `남은 자리 ${body.remaining}`;
+        return;
+      }
+      if (body.error === "full") {
+        $("comic-form").hidden = true; $("comic-closed").hidden = false; $("comic-left").textContent = ""; comicOpen = false;
+        return;
+      }
+      err.textContent = {
+        dup: "이 메일로는 이미 신청돼 있어요. 차례대로 보내 드릴게요.",
+        email: "메일 주소를 다시 확인해 주세요.",
+        consent: "동의해 주셔야 보내 드릴 수 있어요.",
+        birth: "생년월일을 다시 적어 주세요.",
+      }[body.error] ?? (res.status === 429 ? "잠시 뒤에 다시 해 주세요." : "지금은 접수하지 못했어요. 잠시 뒤에 다시 해 주세요.");
+    } catch {
+      err.textContent = "지금은 접수하지 못했어요. 잠시 뒤에 다시 해 주세요.";
+    } finally {
+      send.disabled = false;
+    }
+  });
+
+  // ── 공유: 스토리 카드(1080×1920) — 노트 한 장처럼 ─────────────────────────
+  window.blShareText = () => `오늘의 운세 · ${dateStr}\n${currentLine.text}`;
+
   function wrapLines(ctx, text, maxW) {
     // 띄어쓰기 단위로 끊고, 한 어절이 너무 길면 글자 단위로 자른다.
     const lines = [];
@@ -1402,94 +1364,111 @@
       return part ? [...out, part] : out;
     });
   }
-  const SANS = '"Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif';
-  const LEVEL_COLOR = { 원활: "#6fd39b", 무난: "#dbe4ee", 주의: "#ff8a80" };
-
-  // 오늘의 운세 + 명식 요약을 인스타 스토리 크기 한 장에. (데이터가 없는 칸은 건너뛴다)
-  function drawStoryCard() {
-    const W = 1080, H = 1920, pad = 84, innerW = W - pad * 2;
+  const CV = { paper: "#FBFAF6", grid: "#DDE6EE", pencil: "#2E2C29", faint: "#7C776E", hl: "rgba(255,212,0,.45)", red: "#C8432F", blue: "#2F5DA8", tape: "rgba(233,224,190,.85)" };
+  const HAND = '"NoteHand", "NoteHanja", sans-serif';
+  const BODY = '"NoteBody", "NoteHanja", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif';
+  const HANJA = '"NoteHanja", serif';
+  function paperBg(ctx, W, H, g) {
+    ctx.fillStyle = CV.paper; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = CV.grid; ctx.lineWidth = 2;
+    for (let x = 0; x <= W; x += g) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+    for (let y = 0; y <= H; y += g) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+  }
+  function tape(ctx, x, y, w, h, deg) {
+    ctx.save(); ctx.translate(x, y); ctx.rotate(deg * Math.PI / 180);
+    ctx.fillStyle = CV.tape; ctx.fillRect(-w / 2, -h / 2, w, h); ctx.restore();
+  }
+  async function drawStoryCard() {
+    await fontsReady;
+    const W = 1080, H = 1920, pad = 100, innerW = W - pad * 2;
     const cv = document.createElement("canvas");
     cv.width = W; cv.height = H;
     const ctx = cv.getContext("2d");
-    const g = ctx.createLinearGradient(0, 0, W, H);
-    g.addColorStop(0, "#14243a"); g.addColorStop(.55, "#0f1824"); g.addColorStop(1, "#1b1530");
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    const glow = ctx.createRadialGradient(W * .8, 260, 20, W * .8, 260, 520);
-    glow.addColorStop(0, "rgba(120,190,255,.20)"); glow.addColorStop(1, "rgba(120,190,255,0)");
-    ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
-    const INK = "#eef3f8", DIM = "rgba(238,243,248,.62)", FAINT = "rgba(238,243,248,.10)";
-    ctx.textBaseline = "alphabetic";
-    let y = 150;
-    const [emoji, text] = currentLine;
-    ctx.fillStyle = INK; ctx.textAlign = "left"; ctx.font = `800 64px ${SANS}`;
-    ctx.fillText("🔮 오늘의 운세", pad, y);
-    ctx.textAlign = "right"; ctx.font = `120px ${SANS}`; ctx.fillText(emoji, W - pad, y + 50);
-    ctx.textAlign = "left";
-    y += 62; ctx.fillStyle = DIM; ctx.font = `500 36px ${SANS}`;
+    paperBg(ctx, W, H, 54);
+    const rough = window.rough.canvas(cv);
+    N.setSeed(load());
+    ctx.textBaseline = "alphabetic"; ctx.textAlign = "left";
+    let y = 170;
     const daily = currentDaily;
-    ctx.fillText(daily ? `${dateStr} · ${daily.iljin}(${daily.iljinHanja})일` : dateStr, pad, y);
-
-    // 오늘의 한 문단 — 길면 일곱 줄에서 자른다
-    y += 50;
-    ctx.font = `500 42px ${SANS}`; ctx.fillStyle = INK;
-    let lines = wrapLines(ctx, text, innerW);
-    if (lines.length > 7) { lines = lines.slice(0, 7); lines[6] = lines[6].replace(/.{1,2}$/, "…"); }
-    for (const line of lines) { y += 62; ctx.fillText(line, pad, y); }
-
-    // 분야별 여섯 칸
+    ctx.fillStyle = CV.faint; ctx.font = `40px ${BODY}`;
+    ctx.fillText(dateStr, pad, y);
+    y += 120;
+    ctx.fillStyle = CV.pencil; ctx.font = `104px ${HAND}`;
+    ctx.fillText(daily ? `오늘은 ${daily.iljin}일` : "오늘의 한 줄", pad, y);
+    if (daily) { const w = ctx.measureText(`오늘은 ${daily.iljin}일 `).width; ctx.font = `52px ${HANJA}`; ctx.fillStyle = CV.faint; ctx.fillText(daily.iljinHanja, pad + w, y); }
+    // 형광펜 한 줄 요약
+    y += 60;
+    ctx.font = `50px ${BODY}`;
+    const headLines = wrapLines(ctx, daily ? daily.headline : currentLine.text, innerW);
+    for (const line of headLines.slice(0, 3)) {
+      y += 78;
+      const w = ctx.measureText(line).width;
+      ctx.fillStyle = CV.hl; ctx.fillRect(pad - 6, y - 36, w + 12, 44);
+      ctx.fillStyle = CV.pencil; ctx.fillText(line, pad, y);
+    }
     if (daily) {
-      y += 70;
-      const colW = (innerW - 24) / 2, boxH = 112;
-      CATEGORY_LIST.forEach(([key, name], i) => {
-        const c = daily.categories[key];
-        if (!c) return;
-        const x = pad + (i % 2) * (colW + 24), top = y + Math.floor(i / 2) * (boxH + 20);
-        ctx.fillStyle = FAINT; rr(ctx, x, top, colW, boxH, 26); ctx.fill();
-        ctx.fillStyle = DIM; ctx.font = `600 34px ${SANS}`; ctx.fillText(name, x + 32, top + 70);
-        ctx.fillStyle = LEVEL_COLOR[c.level] ?? INK; ctx.font = `800 44px ${SANS}`; ctx.textAlign = "right";
-        ctx.fillText(c.level, x + colW - 32, top + 72); ctx.textAlign = "left";
-      });
-      y += 3 * (boxH + 20);
+      // 분야: 좋은 것·조심할 것만 크게
+      y += 110;
+      const entries = CATEGORY_LIST.map(([k, nm]) => ({ nm, c: daily.categories[k] })).filter((x) => x.c);
+      const best = entries.find((x) => x.c.level === "원활"), worst = entries.find((x) => x.c.level === "주의");
+      for (const [x, bad] of [[best, false], [worst, true]]) {
+        if (!x) continue;
+        ctx.font = `64px ${HAND}`; ctx.fillStyle = bad ? CV.red : CV.pencil;
+        const lead = bad ? "조심할 건 " : "제일 좋은 건 ";
+        ctx.fillText(lead, pad, y);
+        const lw = ctx.measureText(lead).width, nw = ctx.measureText(x.nm).width;
+        ctx.fillText(x.nm, pad + lw, y);
+        rough.ellipse(pad + lw + nw / 2, y - 20, nw + 50, 84, N.o({ stroke: bad ? CV.red : CV.pencil, strokeWidth: 3 }));
+        y += 96;
+      }
+      ctx.font = `38px ${BODY}`; ctx.fillStyle = CV.faint;
+      const restTxt = entries.filter((x) => x !== best && x !== worst).map((x) => `${x.nm} ${x.c.level}`).join(" · ");
+      for (const line of wrapLines(ctx, restTxt, innerW)) { ctx.fillText(line, pad, y); y += 56; }
       if (daily.lucky) {
-        y += 40;
-        ctx.fillStyle = DIM; ctx.font = `600 32px ${SANS}`; ctx.fillText("오늘의 행운", pad, y);
-        y += 62; ctx.fillStyle = INK; ctx.font = `700 40px ${SANS}`;
-        ctx.fillText(`🎨 ${daily.lucky.color}   🧭 ${daily.lucky.direction}   🔢 ${daily.lucky.number}`, pad, y);
-        y += 56; ctx.fillStyle = DIM; ctx.font = `500 32px ${SANS}`;
-        ctx.fillText(`⏰ 조심할 때 ${daily.times.caution.branch}시(${daily.times.caution.range})`, pad, y);
+        y += 50;
+        const top = y;
+        ctx.save(); ctx.translate(W / 2, top + 110); ctx.rotate(1.2 * Math.PI / 180);
+        ctx.fillStyle = "#FFFFFD"; ctx.fillRect(-innerW / 2 + 30, -110, innerW - 60, 230);
+        ctx.strokeStyle = "rgba(46,44,41,.35)"; ctx.lineWidth = 2; ctx.strokeRect(-innerW / 2 + 30, -110, innerW - 60, 230);
+        ctx.fillStyle = CV.pencil; ctx.font = `56px ${HAND}`; ctx.fillText(`모자란 ${daily.lucky.element}, 이걸로 채워요`, -innerW / 2 + 70, -30);
+        ctx.fillStyle = CV.blue; ctx.font = `60px ${HAND}`; ctx.fillText(`${daily.lucky.color} · ${daily.lucky.direction} · ${daily.lucky.number}`, -innerW / 2 + 70, 60);
+        ctx.restore();
+        tape(ctx, W - pad - 90, top - 6, 150, 46, 6);
+        y = top + 280;
       }
     }
-
-    // 아래: 명식 네 기둥과 일간 한 줄
+    // 아래: 명식 여덟 글자를 모눈에
     const cand = lastSajuData?.candidates?.[0];
     if (cand) {
-      // 위 내용이 길어도 겹치지 않게 내용 바로 아래에 두되, 바닥 주소와는 띄운다.
-      const top = Math.min(Math.max(y + 70, H - 560), H - 470);
-      ctx.fillStyle = FAINT; rr(ctx, pad, top, innerW, 330, 34); ctx.fill();
-      ctx.fillStyle = DIM; ctx.font = `600 30px ${SANS}`; ctx.fillText("🧭 나의 사주 명식", pad + 40, top + 62);
-      const cellW = (innerW - 80) / 4;
-      SAJU_COLUMNS.forEach(([key, label], i) => {
+      const top = Math.min(Math.max(y + 40, H - 560), H - 470);
+      ctx.fillStyle = CV.pencil; ctx.font = `52px ${HAND}`;
+      ctx.fillText(`${cand.reading?.dayMaster ? `${cand.reading.dayMaster.name.replace(/\(.*\)$/, "")}, ${cand.reading.dayMaster.image} 같은 사람` : "나의 명식"}`, pad, top);
+      const cellW = 162, x0 = pad + 70;
+      [["hour", "시"], ["day", "일"], ["month", "월"], ["year", "년"]].forEach(([key, label], i) => {
         const p = cand.pillars[key];
-        const cx = pad + 40 + cellW * i + cellW / 2;
+        const cx = x0 + cellW * i + cellW / 2;
         ctx.textAlign = "center";
-        ctx.fillStyle = DIM; ctx.font = `500 26px ${SANS}`; ctx.fillText(label, cx, top + 112);
-        ctx.fillStyle = key === "day" ? "#9fd2ff" : INK; ctx.font = `64px serif`;
-        ctx.fillText(p ? p.stem.hanja : "·", cx, top + 190);
-        ctx.fillText(p ? p.branch.hanja : "·", cx, top + 262);
+        ctx.fillStyle = CV.faint; ctx.font = `40px ${HAND}`; ctx.fillText(label, cx, top + 80);
+        ctx.fillStyle = key === "day" ? CV.blue : CV.pencil; ctx.font = `96px ${HAND}`;
+        ctx.fillText(p ? p.stem.korean : "?", cx, top + 190);
+        ctx.fillStyle = CV.pencil;
+        ctx.fillText(p ? p.branch.korean : "?", cx, top + 310);
+        if (p) for (const [part, yy] of [[p.stem, top + 210], [p.branch, top + 330]]) {
+          rough.line(cx - 40, yy, cx + 40, yy + 2, N.o({ stroke: N.EL[part.element], strokeWidth: 6, roughness: 1.6 }));
+        }
       });
       ctx.textAlign = "left";
-      const dm = cand.reading?.dayMaster;
-      if (dm) {
-        ctx.fillStyle = INK; ctx.font = `600 34px ${SANS}`;
-        ctx.fillText(`나는 ${dm.name} · ${dm.keyword}`, pad, top + 395);
-      }
+      rough.line(x0, top + 100, x0 + cellW * 4, top + 100, N.o({ strokeWidth: 3 }));
+      rough.line(x0, top + 240, x0 + cellW * 4, top + 240, N.o({ stroke: CV.faint, strokeWidth: 2 }));
+      rough.line(x0, top + 360, x0 + cellW * 4, top + 360, N.o({ strokeWidth: 3 }));
     }
-    ctx.fillStyle = DIM; ctx.font = `700 34px ${SANS}`; ctx.textAlign = "center";
-    ctx.fillText("util.bubblelab.dev/fortune", W / 2, H - 70);
+    ctx.fillStyle = CV.faint; ctx.font = `38px ${HAND}`; ctx.textAlign = "center";
+    ctx.fillText("util.bubblelab.dev/fortune — 연필로 풀어 준 운세 노트", W / 2, H - 80);
     return cv;
   }
   async function storyFile() {
-    const blob = await new Promise((resolve) => drawStoryCard().toBlob(resolve, "image/png"));
+    const cv = await drawStoryCard();
+    const blob = await new Promise((resolve) => cv.toBlob(resolve, "image/png"));
     if (!blob) throw new Error("이미지를 만들지 못했어요.");
     return new File([blob], `오늘의운세-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}.png`, { type: "image/png" });
   }
@@ -1502,7 +1481,7 @@
       if (navigator.canShare?.({ files: [file] })) {
         try {
           await navigator.share({ files: [file], title: "오늘의 운세" });
-          button.textContent = "공유함 ✓";
+          button.textContent = "공유했어요";
           return;
         } catch (error) {
           if (error.name === "AbortError") return;
@@ -1511,108 +1490,86 @@
       const url = URL.createObjectURL(file);
       const a = el("a");
       a.href = url; a.download = file.name;
-      document.body.appendChild(a); a.click(); a.remove();
+      document.body.append(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 4000);
-      button.textContent = "저장됨 ✓";
-    } catch (error) {
-      button.textContent = "저장 실패";
+      button.textContent = "저장했어요";
+    } catch {
+      button.textContent = "저장하지 못했어요";
     } finally {
       button.disabled = false;
-      setTimeout(() => { button.textContent = original; }, 1800);
+      setTimeout(() => { button.textContent = original; N.ring(button, N.INK.blue); }, 1800);
     }
   }
-  $("story-today").addEventListener("click", (e) => saveStory(e.currentTarget));
   $("story-saju").addEventListener("click", (e) => saveStory(e.currentTarget));
   window.blDrawStoryCard = drawStoryCard;   // 확인용(검증 스크립트가 그림을 꺼내 본다)
 
-  // 명식 표만 작은 이미지로 클립보드에 — 대화창에 붙여 넣기 좋게.
-  function drawSajuCard(data) {
-    const S = 2, W = 500, pad = 28, rowLabelW = 54;
-    const cellW = (W - pad * 2 - rowLabelW) / 4;
-    const candidateH = 248;
-    const titleExtra = data.ambiguous ? 28 : 0;
-    const H = 102 + data.candidates.length * (candidateH + titleExtra) + 34;
+  // 명식 표만 작은 이미지로 클립보드에 — 대화창에 붙여 넣기 좋게(모눈 종이 한 조각).
+  async function drawSajuCard(data) {
+    await fontsReady;
+    const S = 2, W = 520, H = 330;
     const cv = document.createElement("canvas");
     cv.width = W * S; cv.height = H * S;
     const ctx = cv.getContext("2d");
     ctx.scale(S, S);
-    const INK = "#dbe4ee", DIM = "rgba(219,228,238,.56)", LINE = "rgba(219,228,238,.15)";
-    const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, "#182230"); g.addColorStop(1, "#10161f");
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = INK; ctx.textAlign = "left"; ctx.font = `bold 20px ${SANS}`;
-    ctx.fillText("🧭 사주 명식", pad, 34);
-    ctx.fillStyle = DIM; ctx.font = `11px ${SANS}`;
-    const calendarNote = data.inputCalendar === "lunar"
-      ? `음력${data.inputDate.leap ? " 윤달" : " 평달"} → 양력 ${data.solarDate.year}.${data.solarDate.month}.${data.solarDate.day}`
-      : "양력";
-    ctx.fillText(`${calendarNote} · 대한민국 표준시(KST) · 00시 일주 변경`, pad, 60);
-    let y = 84;
-    const drawCell = (x, top, w, h, fill) => {
-      ctx.fillStyle = fill || "rgba(219,228,238,.025)"; ctx.fillRect(x, top, w, h);
-      ctx.strokeStyle = LINE; ctx.strokeRect(x, top, w, h);
-    };
-    const drawPart = (part, x, top, w, h) => {
-      drawCell(x, top, w, h);
+    paperBg(ctx, W, H, 20);
+    const rough = window.rough.canvas(cv);
+    N.setSeed(load());
+    const c = data.candidates[0];
+    ctx.fillStyle = CV.pencil; ctx.font = `30px ${HAND}`; ctx.textAlign = "left";
+    ctx.fillText("내 명식", 30, 46);
+    ctx.fillStyle = CV.faint; ctx.font = `12px ${BODY}`;
+    ctx.fillText(`${data.inputCalendar === "lunar" ? "음력 입력 → 양력 변환" : "양력"} · KST · 00시 일주 변경`, 120, 44);
+    const x0 = 70, cellW = 100;
+    [["hour", "시"], ["day", "일"], ["month", "월"], ["year", "년"]].forEach(([key, label], i) => {
+      const p = c.pillars[key];
+      const cx = x0 + cellW * i + cellW / 2;
       ctx.textAlign = "center";
-      if (!part) { ctx.fillStyle = DIM; ctx.font = `13px ${SANS}`; ctx.fillText("미상", x + w / 2, top + h / 2); return; }
-      ctx.fillStyle = INK; ctx.font = "30px serif"; ctx.fillText(part.hanja, x + w / 2, top + 31);
-      ctx.font = `12px ${SANS}`; ctx.fillText(part.korean, x + w / 2, top + 59);
-      ctx.fillStyle = DIM; ctx.font = `10px ${SANS}`;
-      ctx.fillText(`${part.yinYang}·${part.element}`, x + w / 2, top + 78);
-      if (part.tenGod) ctx.fillText(part.tenGod, x + w / 2, top + 94);
-    };
-    for (const candidate of data.candidates) {
-      if (data.ambiguous) {
-        ctx.fillStyle = DIM; ctx.textAlign = "left"; ctx.font = `11px ${SANS}`;
-        ctx.fillText(candidate.timeLabel, pad, y + 10); y += 28;
+      ctx.fillStyle = CV.faint; ctx.font = `20px ${HAND}`; ctx.fillText(label, cx, 90);
+      for (const [part, yy] of [[p?.stem, 165], [p?.branch, 255]]) {
+        ctx.fillStyle = key === "day" && part === p?.stem ? CV.blue : CV.pencil; ctx.font = `52px ${HAND}`;
+        ctx.fillText(part ? part.korean : "?", cx - 8, yy);
+        if (part) {
+          ctx.fillStyle = CV.faint; ctx.font = `14px ${HANJA}`; ctx.fillText(part.hanja, cx + 24, yy);
+          ctx.font = `12px ${BODY}`; ctx.fillText(part.tenGod === "일간" ? "나" : part.tenGod, cx, yy + 26);
+          rough.line(cx - 26, yy + 8, cx + 14, yy + 9, N.o({ stroke: N.EL[part.element], strokeWidth: 3, roughness: 1.6 }));
+        }
       }
-      const headH = 34, partH = 105;
-      drawCell(pad, y, rowLabelW, headH, "rgba(219,228,238,.055)");
-      SAJU_COLUMNS.forEach(([, label], i) => {
-        const x = pad + rowLabelW + cellW * i;
-        drawCell(x, y, cellW, headH, "rgba(219,228,238,.055)");
-        ctx.fillStyle = DIM; ctx.textAlign = "center"; ctx.font = `11px ${SANS}`;
-        ctx.fillText(label, x + cellW / 2, y + headH / 2);
-      });
-      ["stem", "branch"].forEach((partKey, row) => {
-        const top = y + headH + partH * row;
-        drawCell(pad, top, rowLabelW, partH, "rgba(219,228,238,.055)");
-        ctx.fillStyle = DIM; ctx.textAlign = "center"; ctx.font = `11px ${SANS}`;
-        ctx.fillText(row === 0 ? "천간" : "지지", pad + rowLabelW / 2, top + partH / 2);
-        SAJU_COLUMNS.forEach(([key], i) => drawPart(candidate.pillars[key]?.[partKey], pad + rowLabelW + cellW * i, top, cellW, partH));
-      });
-      y += candidateH;
-    }
-    ctx.fillStyle = "rgba(219,228,238,.5)"; ctx.textAlign = "center"; ctx.font = `bold 11px ${SANS}`;
-    ctx.fillText("util.bubblelab.dev/fortune", W / 2, H - 19);
+    });
+    ctx.textAlign = "left";
+    rough.line(30, 104, W - 30, 104, N.o({ strokeWidth: 1.5 }));
+    rough.line(30, 196, W - 30, 196, N.o({ stroke: CV.faint, strokeWidth: 1 }));
+    rough.line(30, 290, W - 30, 290, N.o({ strokeWidth: 1.5 }));
+    ctx.fillStyle = CV.faint; ctx.font = `16px ${HAND}`; ctx.textAlign = "right";
+    ctx.fillText("util.bubblelab.dev/fortune", W - 30, H - 14);
     return cv;
   }
-  sajuCopy.addEventListener("click", async () => {
+  $("saju-copy").addEventListener("click", async (e) => {
+    const button = e.currentTarget;
     if (!lastSajuData) return;
     const original = "명식 이미지 복사";
     try {
       if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
-        throw new Error("이 브라우저에서는 이미지 복사를 지원하지 않아요. 스토리 카드 저장을 써 주세요.");
+        throw new Error("이 브라우저에서는 이미지 복사가 안 돼요. 스토리 카드 저장을 써 주세요.");
       }
-      const blob = await new Promise((resolve) => drawSajuCard(lastSajuData).toBlob(resolve, "image/png"));
+      const cv = await drawSajuCard(lastSajuData);
+      const blob = await new Promise((resolve) => cv.toBlob(resolve, "image/png"));
       if (!blob) throw new Error("이미지를 만들지 못했어요.");
       await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-      sajuCopy.textContent = "복사됨 ✓";
+      button.textContent = "복사했어요";
     } catch (error) {
-      sajuCopy.textContent = "복사 실패";
+      button.textContent = "복사하지 못했어요";
       sajuStatus.hidden = false;
       sajuStatus.textContent = error.message || "이미지를 복사하지 못했어요.";
     } finally {
-      setTimeout(() => { sajuCopy.textContent = original; }, 1800);
+      setTimeout(() => { button.textContent = original; N.ring(button, N.INK.blue); }, 1800);
     }
   });
+  redraws.add(() => { for (const b of document.querySelectorAll("#saju-actions .pen")) if (b.offsetParent) N.ring(b, N.INK.blue); });
 
   // 우하단 공유 버튼(share.js)도 같은 스토리 카드를 붙인다(명식 운세가 있을 때만).
   window.blShareFiles = async () => {
     if (!load() || !currentDaily) return null;
-    try { return [await storyFile()]; } catch (e) { return null; }
+    try { return [await storyFile()]; } catch { return null; }
   };
 
   // ── 매일 오전 8시(KST) 알림 ────────────────────────────────────
@@ -1629,10 +1586,10 @@
       return Uint8Array.from(atob(padded), (c) => c.charCodeAt(0));
     }
     function setState(on) {
-      notifyBtn.setAttribute("aria-checked", String(on));
+      N.checkbox(notifyBtn, on);
       notifyHelp.textContent = on
-        ? "매일 오전 8시(KST)에 오늘의 운세를 알려드려요. 토글을 끄면 해지됩니다."
-        : "브라우저 알림으로 매일 오전 8시(KST) 오늘의 운세를 받아보세요.";
+        ? "매일 오전 8시(KST)에 오늘의 운세를 알려 드려요. 다시 누르면 그만 받아요."
+        : "브라우저 알림으로 매일 오전 8시(KST) 오늘의 운세를 받아요.";
     }
     let vapidPublicKey = null;
     let registration = null;
@@ -1665,7 +1622,7 @@
       busy = true; notifyBtn.disabled = true;
       const turningOn = notifyBtn.getAttribute("aria-checked") !== "true";
       try { setState(turningOn ? await enable() : await disable()); }
-      catch (e) { notifyHelp.textContent = "알림 설정에 실패했어요. 잠시 후 다시 시도해주세요."; }
+      catch { notifyHelp.textContent = "알림 설정에 실패했어요. 잠시 후 다시 해 주세요."; }
       finally { busy = false; notifyBtn.disabled = false; }
     });
     (async function init() {
@@ -1675,9 +1632,10 @@
         if (!vapidPublicKey) return;
         registration = await navigator.serviceWorker.register("sw.js");
         await navigator.serviceWorker.ready;
-        setState(Boolean(await registration.pushManager.getSubscription()));
         notifySec.hidden = false;
-      } catch (e) { /* 조용히 미노출 */ }
+        await fontsReady;
+        setState(Boolean(await registration.pushManager.getSubscription()));
+      } catch { /* 조용히 미노출 */ }
     })();
   })();
 </script>

@@ -128,3 +128,66 @@ test("궁합: 천간합이면 union 조각, 일지 충이면 감점", () => {
     { pillars: { day: { stem: { korean: "기" }, branch: { korean: "인" } } } });
   assert.match(d.paragraphs[0], /그래도 두 일간이 천간합\(갑목과 기토가/);
 });
+
+// ── 형광펜·물결 밑줄(marks) — 규칙으로 고르고, 문단마다 key 하나·caution 하나까지 ──
+test("marks: 문단마다 key 한 개, caution 많아야 한 개, 모두 문단 안의 부분 문자열", async () => {
+  const { buildChart } = await import("./fortune.js");
+  const today = { year: 2026, month: 11, day: 12 };
+  let cautions = 0, paragraphs = 0;
+  for (let i = 0; i < 60; i++) {
+    const y = 1950 + (i * 7) % 60, m = 1 + (i * 5) % 12, d = 1 + (i * 11) % 28;
+    const chart = buildChart({ year: y, month: m, day: d, timeMode: "branch", branch: i % 12, gender: i % 2 ? "male" : "female" }, today);
+    const r = chart.candidates[0].reading;
+    for (const key of ["overview", "dayMaster", "elements", "strength", "tenGods", "annual", "luck"]) {
+      const part = r[key];
+      if (!part) continue;
+      paragraphs++;
+      assert.ok(Array.isArray(part.marks), `${key} 에 marks 가 없다`);
+      const keys = part.marks.filter((mk) => mk.kind === "key");
+      const cs = part.marks.filter((mk) => mk.kind === "caution");
+      assert.equal(keys.length, 1, `${key}: key 는 정확히 하나`);
+      assert.ok(cs.length <= 1, `${key}: caution 은 많아야 하나`);
+      cautions += cs.length;
+      for (const mk of part.marks) assert.ok(part.paragraph.includes(mk.text), `${key}: "${mk.text}" 가 문단에 없다`);
+      if (cs.length) assert.ok(!keys[0].text.includes(cs[0].text) && !cs[0].text.includes(keys[0].text), `${key}: key 와 caution 이 겹친다`);
+    }
+  }
+  // 조심 표시가 문단마다 붙으면 화면이 빨개진다 — 절반을 넘지 않게
+  assert.ok(cautions < paragraphs / 2, `caution ${cautions}/${paragraphs}`);
+});
+
+test("marks: 같은 문단이면 언제나 같은 표시(결정적), 좋은 뜻의 '쉬워요'·'마무리'는 조심으로 고르지 않는다", async () => {
+  const { markSpans, MARK_RULES } = await import("./saju-reading.js");
+  assert.equal(MARK_RULES.version, "marks-v1");
+  const p = "토는 중심을 잡는 힘이라, 이게 넘치면 걱정이 쌓이기 쉬워요. 가끔은 새로운 곳에 가 보는 것도 좋아요.";
+  assert.deepEqual(markSpans(p), markSpans(p));
+  assert.deepEqual(markSpans(p), [
+    { kind: "key", text: "가끔은 새로운 곳에 가 보는 것도 좋아요." },
+    { kind: "caution", text: "이게 넘치면 걱정이 쌓이기 쉬워요" },
+  ]);
+  const good = "올해는 인정받는 일이 생기기 쉬운 해예요. 바탕의 기세는 '사'(하나를 마무리하는 자리)예요. 기회를 잡아 보세요.";
+  assert.deepEqual(markSpans(good).map((mk) => mk.kind), ["key"]);
+  // 접속어는 떼고 표시한다
+  const lead = markSpans("부지런한 편이에요. 다만 서두르면 실수가 잦으니 한 번 더 보세요.");
+  assert.equal(lead.find((mk) => mk.kind === "caution").text, "서두르면 실수가 잦으니 한 번 더 보세요");
+  assert.deepEqual(markSpans(""), []);
+  // 조언 문장이 없으면 짧은 머리말 대신 다음 문장을 칠한다
+  const head = markSpans("오늘은 경인(庚寅)일이에요. 일진의 천간이 나에게 겁재라서 추진력이 커지는 날이에요. 다만 충동 지출은 조심하세요.");
+  assert.equal(head[0].text, "일진의 천간이 나에게 겁재라서 추진력이 커지는 날이에요.");
+});
+
+test("marks: 궁합 문단·오늘의 운세·인생 곡선 요약에도 같은 모양으로 실린다", async () => {
+  const { buildChart, buildDailyFortune } = await import("./fortune.js");
+  const { buildCompatibility } = await import("./saju-reading.js");
+  const today = { year: 2026, month: 11, day: 12 };
+  const a = buildChart({ year: 1992, month: 8, day: 20, timeMode: "clock", time: "10:00", gender: "male" }, today).candidates[0];
+  const b = buildChart({ year: 1994, month: 2, day: 3, timeMode: "branch", branch: 5, gender: "female" }, today).candidates[0];
+  const c = buildCompatibility(a, b);
+  assert.equal(c.marks.length, c.paragraphs.length);
+  c.marks.forEach((ms, i) => ms.forEach((mk) => assert.ok(c.paragraphs[i].includes(mk.text))));
+  const daily = buildDailyFortune(a, today, "male");
+  assert.ok(daily.marks.length >= 1 && daily.marks.every((mk) => daily.text.includes(mk.text)));
+  const curve = a.lifeCurve;
+  assert.deepEqual(curve.marks.map((mk) => mk.kind), ["key", "caution"]);
+  for (const mk of curve.marks) assert.ok(curve.summary.includes(mk.text));
+});

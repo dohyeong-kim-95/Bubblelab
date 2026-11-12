@@ -81,7 +81,7 @@ const PUZZLE_TO_SLOP = new Map([
 ]);
 // cron이 리뷰를 주기적으로 동기화할 외주 프로젝트 목록 (커머스 API, 현재 mock).
 const WORK_REVIEW_PROJECTS = ["daonfit"];
-import { handleFortuneChart, handleFortunePush, sendFortuneDaily } from "./fortune.js";
+import { handleFortuneChart, handleFortuneComic, handleFortunePush, sendFortuneDaily } from "./fortune.js";
 import { handleYaksokApi, renderRoomPage } from "./yaksok.js";
 import { CODE_RE as YAKSOK_CODE_RE } from "../util/yaksok/logic.js";
 import { handleBriefPush, handleBriefRates, handleBriefToday, sendBriefDaily } from "./brief.js";
@@ -1138,6 +1138,21 @@ export async function handleRequest(request, env, ctx) {
             : { scope: "yaksok-read", limit: 120, windowMs: 60 * 1000 });
       if (limited) return limited;
       return handleYaksokApi(request, env, path);
+    }
+
+    // 만화 사주 선착순 신청(util/fortune 이벤트). 신청 POST 만 IP 당 한도를 건다 —
+    // 상태 GET 은 개인정보가 없고, 목록·완료는 집 PC 의 시크릿이 지킨다(fortune.js).
+    if (path === "/_fortune/comic-request" || path.startsWith("/_fortune/comic-request/")
+      || path === "/_fortune/comic-requests" || path.startsWith("/_fortune/comic-requests/")) {
+      if (path === "/_fortune/comic-request" && request.method === "POST") {
+        const contentTypeError = requireJsonRequest(request);
+        if (contentTypeError) return contentTypeError;
+        const limited = await enforceRateLimit(request, env, {
+          scope: "fortune-comic", limit: 5, windowMs: 10 * 60 * 1000,
+        });
+        if (limited) return limited;
+      }
+      return handleFortuneComic(request, env, url);
     }
 
     // 매일 오전 8시(KST) 운세 알림 구독 — 익명 Web Push. GET은 공개키 조회.
