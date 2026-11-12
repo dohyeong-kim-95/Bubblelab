@@ -42,8 +42,11 @@ KST로 자르며, 방식이 서로 다르다.
 
 **풀이 문장은 조각 표의 조합이다.** 명식 풀이·오늘의 운세·궁합·토정 해설 모두 해요체 문단을
 조건별 조각에서 골라 접속어로 잇는다(LLM·외부 API 없음). 결과마다 `picks`(고른 조각 키)를 실어
-테스트는 문장이 아니라 선택 규칙을 본다. 표를 고치면 버전(`saju-reading-kr-v1`,
-`natal-daymaster+daily-pillar-v3`, `tojeong-reading-kr-v1`)을 올린다. 단정·공포 표현 대신 조언형.
+테스트는 문장이 아니라 선택 규칙을 본다. 표를 고치면 버전(`READING_RULES.version`,
+`buildDailyFortune` 의 `method`, `TOJEONG_READING_VERSION`)을 올린다. 단정·공포 표현 대신 조언형.
+문장을 바꾼 뒤에는 `node _src/util-fortune-review/index.mjs`(구독 `claude -p` 심사, 도구 없음)로
+다시 채점하고, 새로 나온 실패 유형은 `*-reading.test.mjs`·`fortune.test.mjs` 의 "회귀" 테스트로 고정한다.
+심사기가 제안한 문장을 그대로 박지 말고 규칙·조각 표를 고친다.
 
 **토정비결 본문은 손으로 고치지 않는다.** `util/fortune/tojeong/*.json` 144개는
 `node _infra/tojeong-import.mjs`가 원문(한문·독음)·번역표·교정표를 합쳐 쓰고, 번역이 빠진

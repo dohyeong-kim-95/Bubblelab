@@ -311,11 +311,11 @@ KASI 키는 Worker secret에만 있으며 응답이나 정적 JavaScript에 포�
 - **☀️ 오늘** — 일진 한 문단, 분야 여섯 개(재물·직업·연애·건강·대인·학업)마다 상태와 근거
   문장, 행운의 색·방향·숫자(명식+오늘 일진에서 가장 모자란 오행), 조심할 때(일진 지지와 충하는
   시진)·좋은 때(내 일지와 육합하는 시진). 규칙은 `_infra/fortune.js`
-  `natal-daymaster+daily-pillar-v3` — 재물·직업·연애 가중치는 v2 그대로라 판정이 바뀌지
+  `natal-daymaster+daily-pillar-v6` — 재물·직업·연애 가중치는 v2 그대로라 판정이 바뀌지
   않았습니다. 건강 주의 문장은 일간 오행의 전통 대응 부위를 말할 뿐 의학적 진단이 아닙니다.
 - **🧭 사주** — 맨 위에 일간 요약 한 문단, 그 아래 명식 표(천간·지지 두 줄), 그다음
   타고난 성향·오행 분포(과다/결핍)·간이 신강약·십성 다섯 갈래·올해 세운·지금 대운을 문단으로.
-  규칙은 `_infra/saju-reading.js`(`READING_RULES` = `saju-reading-kr-v1`). 지장간·12운성·
+  규칙은 `_infra/saju-reading.js`(`READING_RULES` = `saju-reading-kr-v3`). 지장간·12운성·
   12신살 행과 원국 신살(천을귀인·문창귀인·양인·백호·괴강·홍염·도화·역마·화개·귀문관·원진·공망)은
   「세부 데이터」에 접어 둡니다. 버전 문자열·KASI 교차검증 여부는 맨 아래 「계산 기준」에만
   적습니다. 신살 표는 학파마다 달라 `shinsal-kr-v1` 기준입니다.
@@ -347,6 +347,23 @@ KASI 키는 Worker secret에만 있으며 응답이나 정적 JavaScript에 포�
 글자로 교정했습니다. **한국어 풀이는 bubblelab이 한문에서 직접 옮긴 것**이고 외부 풀이는
 보지 않았습니다. 오기로 보고 옮긴 구와 뜻이 분명치 않은 구는 원문 줄에 작게 밝힙니다.
 본문을 바꿀 때는 `node _infra/tojeong-import.mjs`로 다시 씁니다. 
+
+**풀이 문장 품질 심사(피드백 루프)**: 규칙으로 조합한 문장(토정 총운 144·달 해설 표본, 사주 풀이,
+오늘의 운세, 궁합)을 집 PC 의 구독 `claude -p`(도구 없음, `_src/claude-ask.mjs`)에 묶음으로 읽혀
+자연스러움·충실도·톤을 1~5점으로 채점받습니다. API 키·비용이 없고 배포되지 않습니다.
+
+```bash
+node _src/util-fortune-review/index.mjs --out ~/fortune-review/r1          # 전부(약 30묶음)
+node _src/util-fortune-review/index.mjs --only tojeong --limit 40 --out /tmp/x
+node _src/util-fortune-review/index.mjs --only saju,daily --dry            # 프롬프트만 출력
+```
+
+`--only tojeong|tojeong-year|tojeong-month|saju|daily|match`, `--limit N`(종류마다), `--batch N`,
+`--concurrency 1|2`, `--dry`. 리포트는 `--out` 폴더(기본 `~/.bubblelab/fortune-review/<시각>`, 저장소
+밖)에 `report.json`·`report.md` 로 남고, 실패한 묶음은 한 번 다시 묻고 건너뛰며 리포트에 적힙니다.
+규칙을 고칠 때는 **조각 표·규칙을 고치고** 다시 돌립니다 — 심사기가 제안한 문장을 그대로 박지
+않습니다(비유 구절 표 항목 추가는 예외). 심사에서 나온 대표 실패 유형은 `_infra/saju-reading.test.mjs`·
+`_infra/tojeong-reading.test.mjs`·`_infra/fortune.test.mjs` 에 결정적 테스트로 고정합니다.
 
 **매일 오전 8시 알림**: "매일 오전 8시 알림 받기" 버튼은 익명 Web Push를 구독합니다.
 구독은 로그인 없이 `/_fortune/push`(POST/DELETE)로 등록·해지하며, `FortuneDO` 한

@@ -94,7 +94,7 @@ test("builds a deterministic daily fortune from the natal chart and KST date", (
   const daily = buildDailyFortune(chart.candidates[0], { year: 2026, month: 7, day: 15 });
   assert.deepEqual(
     { date: daily.date, iljin: daily.iljin, tenGod: daily.tenGod, method: daily.method },
-    { date: "2026-07-15", iljin: "경인", tenGod: "정인", method: "natal-daymaster+daily-pillar-v3" },
+    { date: "2026-07-15", iljin: "경인", tenGod: "정인", method: "natal-daymaster+daily-pillar-v6" },
   );
   assert.match(daily.text, /배우고 도움받는 흐름/);
   const levels = Object.fromEntries(Object.entries(daily.categories).map(([key, value]) => [key, value.level]));
@@ -235,7 +235,7 @@ test("daily v3: 학업은 정인 날 원활, 근거에 god:정인 이 잡힌다"
   const daily = buildDailyFortune(natal(), { year: 2026, month: 7, day: 15 });
   assert.equal(daily.categories.study.level, "원활");
   assert.ok(daily.categories.study.reasons.includes("god:정인"));
-  assert.match(daily.categories.study.comment, /^오늘 들어온 정인/);
+  assert.match(daily.categories.study.comment, /^오늘은 정인 기운이 함께해서/);
 });
 
 test("daily v3: 근거가 엇갈리면 무난이고 두 신호를 함께 밝힌다", () => {
@@ -271,13 +271,13 @@ test("chart: 후보마다 풀이가 붙고, partner 가 오면 궁합과 상대 
   }), {});
   const data = await response.json();
   assert.equal(response.status, 200);
-  assert.equal(data.readingRules.version, "saju-reading-kr-v1");
+  assert.equal(data.readingRules.version, "saju-reading-kr-v3");
   assert.ok(data.candidates[0].reading.overview.paragraph.startsWith("계수(癸水) 일간이라"));
   assert.ok(data.compatibility.score >= 30 && data.compatibility.score <= 98);
   assert.equal(data.partner.pillars.day.korean.length, 2);
   assert.deepEqual(data.partner.solarDate, { year: 1988, month: 8, day: 17 });
   assert.equal(data.partner.name, undefined, "이름 같은 부가 정보는 응답에 싣지 않는다");
-  assert.equal(data.dailyFortunes[0].method, "natal-daymaster+daily-pillar-v3");
+  assert.equal(data.dailyFortunes[0].method, "natal-daymaster+daily-pillar-v6");
 });
 
 test("headline: brief 용 한 문장 — 해요체, 40자 안팎, 합·충에 따라 꼬리가 갈린다", async () => {
@@ -292,4 +292,68 @@ test("headline: brief 용 한 문장 — 해요체, 40자 안팎, 합·충에 �
       assert.ok(line.length >= 14 && line.length <= 48, `${line} (${line.length}자)`);
     }
   }
+});
+
+// ── 심사 루프(_src/util-fortune-review)에서 나온 대표 실패 유형을 고정한다 ──────────
+const everyDay = (fn) => {
+  const c = natal();
+  for (let i = 0; i < 60; i += 1) {
+    const d = new Date(Date.UTC(2026, 0, 1 + i));
+    fn(buildDailyFortune(c, { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() }, "male"));
+  }
+};
+
+test("회귀: 분야 근거 절이 여섯 번 똑같이 반복되지 않는다(십성 괄호 풀이는 총평에서만)", () => {
+  everyDay((daily) => {
+    const leads = Object.values(daily.categories).map((c) => c.comment.split(/서 |서, /)[0]);
+    const godLeads = leads.filter((l) => l.includes(daily.tenGod));
+    assert.ok(new Set(godLeads).size === godLeads.length || godLeads.length <= 1, godLeads.join(" / "));
+    for (const c of Object.values(daily.categories)) assert.doesNotMatch(c.comment, /\(나를|\(내가|\(크게|\(차곡/, "분야 문장에 십성 괄호 풀이");
+  });
+});
+
+test("회귀: 괄호가 겹치지 않는다 — '일지(…) 충' 같은 라벨 금지", () => {
+  everyDay((daily) => {
+    for (const c of Object.values(daily.categories)) assert.doesNotMatch(c.comment, /\([^)]*\([^)]*\)[^)]*\)/, c.comment);
+  });
+});
+
+test("회귀: 근거 하나뿐인 무난은 '조금 ~지만'으로 받는다(근거와 결론이 어긋나지 않게)", () => {
+  everyDay((daily) => {
+    for (const c of Object.values(daily.categories)) {
+      if (c.level === "무난" && /^(오늘 |일진이 |\S+의 기운이 도는)/.test(c.comment) && !c.comment.startsWith("오늘 지지가")) {
+        assert.match(c.comment, /(조금 힘이 실리고|살짝 보탬이 되고|한결 수월해지고|조금 신경 쓰일 수 있지만|살짝 걸리는 데가 있지만|조금 거슬릴 수 있지만),/, c.comment);
+      }
+    }
+  });
+});
+
+test("회귀: 같은 시진을 좋은 때·조심할 때로 동시에 말하지 않는다", () => {
+  everyDay((daily) => assert.notEqual(daily.times.good.branch, daily.times.caution.branch, daily.date));
+});
+
+test("회귀: 숫자 조사(8이·2가)와 접속어 반복", async () => {
+  const { dailyHeadline } = await import("./fortune.js");
+  everyDay((daily) => {
+    assert.doesNotMatch(daily.lucky.text, /[013678]가 오늘|[2459]이 오늘/, daily.lucky.text);
+    assert.doesNotMatch(daily.text, /다만[^.]*\. 다만/, "다만 연달아");
+  });
+  for (const god of ["겁재", "상관", "편관"]) {
+    assert.doesNotMatch(dailyHeadline(god, false, true), /지만.*지만/, "한 줄에 '지만' 두 번");
+  }
+});
+
+test("회귀(3차): 분야 근거 절에서 '기운'·'의 기운의'·화개 문구가 겹치지 않는다", () => {
+  everyDay((daily) => {
+    for (const c of Object.values(daily.categories)) {
+      assert.doesNotMatch(c.comment, /기운이 도는 날이라서 기운이|기운이 함께해서 기운이|의 기운의/, c.comment);
+      if (daily.text.includes("화개(")) assert.doesNotMatch(c.comment, /화개\(/, "총평에서 이미 화개를 풀었다");
+    }
+  });
+});
+
+test("회귀(4차): 근거 없는 분야의 첫머리가 비문이 아니다('이 분야로는 …' 금지)", () => {
+  everyDay((daily) => {
+    for (const c of Object.values(daily.categories)) assert.doesNotMatch(c.comment, /^이 분야로는/, c.comment);
+  });
 });

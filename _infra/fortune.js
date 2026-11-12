@@ -23,11 +23,11 @@ const STEM_EMOJI = { 비견: "🤝", 겁재: "⚡", 식신: "🌱", 상관: "�
 // 오늘 일진의 천간이 나에게 무엇인지(십성)를 밝힌 절 뒤에 바로 이어지는 문장.
 const DAILY_BODY = {
   비견: "내 기준이 또렷해지는 날이에요. 함께하더라도 역할과 경계를 분명히 해 두면 편해요.",
-  겁재: "경쟁심과 추진력이 커지는 날이에요. 그래서 일은 빨리 나아가지만, 즉흥 지출과 성급한 승부만은 조심하세요.",
+  겁재: "경쟁심과 추진력이 커지는 날이에요. 일이 빨리 나아가는 대신, 즉흥 지출과 성급한 승부는 조심하세요.",
   식신: "꾸준히 만들고 표현하기 좋은 날이에요. 작은 결과물 하나를 끝까지 완성해 보세요.",
   상관: "아이디어와 말에 힘이 붙는 날이에요. 다만 솔직함이 날카로움으로 들리지 않게 한 번 다듬어 주세요.",
   편재: "사람과 기회가 넓게 들어오는 날이에요. 가능성은 크게 보되 약속과 지출은 현실적으로 확인하세요.",
-  정재: "실무와 돈 감각이 안정되는 날이에요. 미뤄 둔 정리나 확실한 한 걸음을 내딛기에 좋아요.",
+  정재: "실무와 돈 감각이 안정되는 날이에요. 미뤄 둔 정리를 끝내거나 확실한 한 걸음을 내딛기에 좋아요.",
   편관: "해야 할 일과 긴장감이 몰려오는 날이에요. 그래서 다 해내려 하기보다 우선순위부터 세우는 게 좋아요.",
   정관: "책임과 질서를 세우기 좋은 날이에요. 원칙대로 처리할수록 신뢰를 얻기 쉬워요.",
   편인: "익숙한 답보다 새로운 관점이 눈에 들어오는 날이에요. 바로 결론 내리기보다 한 번 더 살펴보세요.",
@@ -35,10 +35,10 @@ const DAILY_BODY = {
 };
 // brief 총평용 한 문장(40자 안팎). 십성마다 "~날" 명사구 하나, 합·충이면 꼬리 하나를 붙인다.
 const HEADLINE_CORE = {
-  비견: "내 기준을 또렷이 세우기 좋은 날", 겁재: "추진력은 크지만 지출은 아껴야 할 날",
-  식신: "작은 결과물을 완성하기 좋은 날", 상관: "아이디어가 빛나지만 말은 다듬을 날",
+  비견: "내 기준을 또렷이 세우기 좋은 날", 겁재: "추진력이 커지는 날",
+  식신: "작은 결과물을 완성하기 좋은 날", 상관: "아이디어가 빛나는 날",
   편재: "사람과 기회가 넓게 들어오는 날", 정재: "미뤄 둔 정리를 끝내기 좋은 날",
-  편관: "할 일이 몰려 우선순위가 중요한 날", 정관: "원칙대로 하면 신뢰를 얻는 날",
+  편관: "할 일이 몰려오는 날", 정관: "원칙대로 하면 신뢰를 얻는 날",
   편인: "새로운 관점이 눈에 들어오는 날", 정인: "배우고 도움받기 좋은 날",
 };
 const HEADLINE_TAIL = {
@@ -51,6 +51,7 @@ export function dailyHeadline(god, harmony, clash) {
   const kind = harmony && clash ? "both" : harmony ? "harmony" : clash ? "clash" : "none";
   return HEADLINE_TAIL[kind](HEADLINE_CORE[god]);
 }
+const TRIADS = [["신", "자", "진"], ["인", "오", "술"], ["사", "유", "축"], ["해", "묘", "미"]];
 const BRANCH_HARMONY = new Set(["자축", "인해", "묘술", "진유", "사신", "오미"]);
 const BRANCH_CLASH = new Set(["자오", "축미", "인신", "묘유", "진술", "사해"]);
 // 분야별 십성 가중치. wealth·career·love 는 v2 와 같다(기존 판정이 바뀌지 않게).
@@ -98,7 +99,25 @@ const CATEGORY_TEXT = {
     주의: "집중이 흩어지기 쉬워요. 25분씩 짧게 끊어서 해 보세요.",
   },
 };
-const NO_SIGNAL = ["특별히 걸리는 신호가 없어서", "크게 기우는 신호가 없어서", "눈에 띄는 합이나 충이 없어서"];
+// 근거가 엇갈릴 때의 절 — 같은 두 근거가 여러 분야에 걸려도 틀이 겹치지 않게 돌려 쓴다.
+const MIXED_LEAD = [
+  (p, n) => `${josa(p, "과", "와")} ${josa(n, "이", "가")} 엇갈려서`,
+  (p, n) => `좋은 신호(${p})와 조심할 신호(${n})가 맞물려서`,
+  (p, n) => `${josa(p, "은", "는")} 도움이 되고 ${josa(n, "은", "는")} 부담이 돼서`,
+];
+// 근거가 하나뿐인 무난 — "조금 힘이 실리고," 같은 절을 분야마다 돌려 쓴다.
+const WEAK_POS = ["조금 힘이 실리고,", "살짝 보탬이 되고,", "한결 수월해지고,"];
+const WEAK_NEG = ["조금 신경 쓰일 수 있지만,", "살짝 걸리는 데가 있지만,", "조금 거슬릴 수 있지만,"];
+const NO_SIGNAL = ["특별히 걸리는 신호가 없어서", "크게 기우는 신호가 없어서", "오늘은 이쪽으로 기우는 신호가 없어서"];
+// 십성 근거 절 — 분야마다 틀을 돌려 써서 같은 절이 여섯 번 반복되지 않게 한다(괄호 풀이는 총평에서 한 번만).
+const GOD_CAUSE = [
+  (god) => `오늘 ${god}의 기운이 들어와서`,
+  (god) => `일진이 나에게 ${josa(god, "이라서", "라서")}`,
+  (god) => `${god}의 기운이 도는 날이라서`,
+  (god) => `${josa(god, "이", "가")} 들어온 날이라서`,
+  (god) => `${god}의 흐름을 타는 날이라서`,
+  (god) => `오늘은 ${god} 기운이 함께해서`,
+];
 const ELEMENT_BODY = { 목: "간·눈·근육", 화: "심장·혈액순환", 토: "위장·소화", 금: "폐·호흡기·피부", 수: "신장·몸의 수분" };
 // 행운 표시 — 오행마다 전래 대응(색·방위·하도수).
 const LUCKY = {
@@ -242,8 +261,11 @@ function categoryResult(key, reasons, seed, dayElement) {
   let lead;
   if (level === "원활") lead = pos.cause;
   else if (level === "주의") lead = neg.cause;
-  else if (pos && neg) lead = `좋은 신호(${pos.label})와 조심할 신호(${neg.label})가 섞여 있어서`;
-  else lead = (pos ?? neg)?.cause ?? NO_SIGNAL[seed % NO_SIGNAL.length];
+  else if (pos && neg) lead = MIXED_LEAD[CATEGORY_KEYS.indexOf(key) % MIXED_LEAD.length](pos.label, neg.label);
+  // 근거가 하나뿐인데 무난이면(점수 ±1) "조금 ~지만"으로 받아야 결론과 어긋나지 않는다.
+  else if (pos) lead = `${pos.cause} ${WEAK_POS[CATEGORY_KEYS.indexOf(key) % WEAK_POS.length]}`;
+  else if (neg) lead = `${neg.cause} ${WEAK_NEG[CATEGORY_KEYS.indexOf(key) % WEAK_NEG.length]}`;
+  else lead = NO_SIGNAL[seed % NO_SIGNAL.length];
   const body = CATEGORY_TEXT[key][level].replace("{body}", ELEMENT_BODY[dayElement]);
   return { level, comment: `${lead} ${body}`, reasons: reasons.map((r) => r.key) };
 }
@@ -251,15 +273,16 @@ function categoryResult(key, reasons, seed, dayElement) {
 function godReason(key, god) {
   const w = CATEGORY_GOD_WEIGHT[key][god] ?? 0;
   if (!w) return [];
-  return [{ key: `god:${god}`, w, label: `${god}의 기운`,
-    cause: `오늘 들어온 ${god}(${TEN_GOD_GLOSS[god]})${josa(god, "이라서", "라서").slice(god.length)}` }];
+  const i = CATEGORY_KEYS.indexOf(key);
+  return [{ key: `god:${god}`, w, label: `${god}의 기운`, cause: GOD_CAUSE[i % GOD_CAUSE.length](god) }];
 }
 
 function relationReason(prefix, place, relation, weight) {
   if (!relation) return [];
+  const short = place.replace(/\(.*\)$/, "");   // 라벨에는 괄호 풀이를 넣지 않는다(괄호 겹침)
   return relation > 0
-    ? [{ key: `${prefix}:합`, w: weight, label: `${place} 합`, cause: `오늘 지지가 ${place}와 합을 이뤄서` }]
-    : [{ key: `${prefix}:충`, w: -weight, label: `${place} 충`, cause: `오늘 지지가 ${place}와 부딪혀서(충)` }];
+    ? [{ key: `${prefix}:합`, w: weight, label: `${short} 합`, cause: `오늘 지지가 ${place}와 합을 이뤄서` }]
+    : [{ key: `${prefix}:충`, w: -weight, label: `${short} 충`, cause: `오늘 지지가 ${place}와 부딪혀서(충)` }];
 }
 
 function categoryFortunes(candidate, today, god, harmony, clash, gender, seed) {
@@ -269,8 +292,8 @@ function categoryFortunes(candidate, today, god, harmony, clash, gender, seed) {
   const dayRelation = branchRelation(candidate.pillars.day?.branch.korean, todayBranch);
   const monthRelation = branchRelation(candidate.pillars.month?.branch.korean, todayBranch);
   const general = [
-    ...(harmony.length ? [{ key: "natal:합", w: 1, label: "명식과 합", cause: "오늘 지지가 명식과 합을 이뤄서" }] : []),
-    ...(clash.length ? [{ key: "natal:충", w: -1, label: "명식과 충", cause: "오늘 지지가 명식과 충(부딪침)이라" }] : []),
+    ...(harmony.length ? [{ key: "natal:합", w: 1, label: "명식과의 합", cause: "오늘 지지가 명식과 합을 이뤄서" }] : []),
+    ...(clash.length ? [{ key: "natal:충", w: -1, label: "명식과의 충", cause: "오늘 지지가 명식과 충(부딪침)이라서" }] : []),
   ];
   const spouse = (gender === "male" && ["정재", "편재"].includes(god))
     || (gender === "female" && ["정관", "편관"].includes(god))
@@ -287,11 +310,11 @@ function categoryFortunes(candidate, today, god, harmony, clash, gender, seed) {
       cause: `이미 많은 ${elementWord(e)} 기운이 오늘 더 보태져서` })),
   ];
   const dayResentment = branchRelationName(candidate.pillars.day.branch.korean, todayBranch) === "원진"
-    ? [{ key: "day:원진", w: -1, label: "일지 원진", cause: "오늘 지지가 일지와 원진(까닭 없이 서로 꺼림)이라" }] : [];
+    ? [{ key: "day:원진", w: -1, label: "일지 원진", cause: "오늘 지지가 일지와 원진(까닭 없이 서로 꺼림)이라서" }] : [];
   const literary = LITERARY_STAR[dayStem] === todayBranch
     ? [{ key: "문창", w: 2, label: "문창", cause: "오늘 지지가 문창(글과 시험의 별) 자리라서" }] : [];
   const hwagae = twelveShinsal(candidate.pillars.day.branch.korean, todayBranch) === "화개살"
-    ? [{ key: "화개", w: 1, label: "화개", cause: "화개(혼자 몰두하는 별)가 드는 날이라서" }] : [];
+    ? [{ key: "화개", w: 1, label: "화개", cause: "혼자 몰두하기 좋은 날이라서" }] : [];
   const dayClashOnly = dayRelation < 0 ? relationReason("day", "일지(나 자신의 자리)", dayRelation, 1) : [];
   const reasons = {
     wealth: [...godReason("wealth", god), ...general],
@@ -328,13 +351,21 @@ function timesOf(candidate, today) {
   const todayIndex = BRANCH_NAMES.indexOf(today.branch.korean);
   const clashIndex = (todayIndex + 6) % 12;
   const dayBranch = candidate.pillars.day.branch.korean;
-  const goodIndex = BRANCH_NAMES.findIndex((b) => b !== dayBranch && BRANCH_HARMONY.has(pairKey(b, dayBranch)));
+  // 좋은 때는 일지와 육합하는 시진. 그 시진이 오늘 조심할 때와 같으면 삼합 짝으로 옮긴다
+  // (같은 시간을 좋다·조심하라 두 번 말하지 않게).
+  let goodIndex = BRANCH_NAMES.findIndex((b) => b !== dayBranch && BRANCH_HARMONY.has(pairKey(b, dayBranch)));
+  let goodWhy = "합하는";
+  if (goodIndex === clashIndex) {
+    const triad = TRIADS.find((t) => t.includes(dayBranch)).filter((b) => b !== dayBranch && BRANCH_NAMES.indexOf(b) !== clashIndex);
+    goodIndex = BRANCH_NAMES.indexOf(triad[0]);
+    goodWhy = "삼합으로 어울리는";
+  }
   const label = (i) => `${BRANCH_NAMES[i]}시(${BRANCH_RANGE[i]})`;
   return {
     caution: { branch: BRANCH_NAMES[clashIndex], range: BRANCH_RANGE[clashIndex],
       text: `${josa(label(clashIndex), "은", "는")} 오늘 일진의 ${josa(today.branch.korean, "과", "와")} 정면으로 부딪히는(충) 시간이라, 중요한 결정이나 말다툼은 이때를 피하는 게 좋아요.` },
     good: { branch: BRANCH_NAMES[goodIndex], range: BRANCH_RANGE[goodIndex],
-      text: `${josa(label(goodIndex), "은", "는")} 내 일지 ${josa(dayBranch, "과", "와")} 합하는 시간이라, 연락·약속·부탁을 잡기에 좋아요.` },
+      text: `${josa(label(goodIndex), "은", "는")} 내 일지 ${josa(dayBranch, "과", "와")} ${goodWhy} 시간이라, 연락·약속·부탁을 잡기에 좋아요.` },
   };
 }
 
@@ -361,7 +392,11 @@ export function buildDailyFortune(candidate, date, gender = "unspecified") {
   const picks = [`god:${god}`];
   if (harmony.length && clash.length) { picks.push("accent:both"); parts.push("그리고 명식과 합(어울림)과 충(부딪침)이 함께 걸려 있어서, 속도보다 조율이 중요해요."); }
   else if (harmony.length) { picks.push("accent:harmony"); parts.push("게다가 오늘 지지가 내 명식과 합(어울림)을 이뤄서 사람이나 계획을 잇기에 좋아요."); }
-  else if (clash.length) { picks.push("accent:clash"); parts.push("다만 오늘 지지가 내 명식과 충(부딪침)이라 일정이 바뀌거나 감정이 앞서기 쉬우니 여유를 두세요."); }
+  else if (clash.length) {
+    picks.push("accent:clash");
+    const joiner = DAILY_BODY[god].includes("다만") ? "그리고" : "다만";   // 같은 접속어 연달아 쓰지 않기
+    parts.push(`${joiner} 오늘 지지가 내 명식과 충(부딪침)이라 일정이 바뀌거나 감정이 앞서기 쉬우니 여유를 두세요.`);
+  }
   if (SHINSAL_ACCENT[todayShinsal]) { picks.push(`shinsal:${todayShinsal}`); parts.push(SHINSAL_ACCENT[todayShinsal]); }
   return {
     date: `${date.year}-${String(date.month).padStart(2, "0")}-${String(date.day).padStart(2, "0")}`,
@@ -376,7 +411,7 @@ export function buildDailyFortune(candidate, date, gender = "unspecified") {
     times: timesOf(candidate, todayPillar),
     signals: { harmony, clash, shinsal: todayShinsal },
     picks,
-    method: "natal-daymaster+daily-pillar-v3",
+    method: "natal-daymaster+daily-pillar-v6",
   };
 }
 

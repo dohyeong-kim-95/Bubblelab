@@ -11,7 +11,7 @@
 // 같이 실어 테스트가 문장 내용이 아니라 선택 규칙을 고정한다.
 
 export const READING_RULES = {
-  version: "saju-reading-kr-v1",
+  version: "saju-reading-kr-v3",
   elements: "천간·지지 겉글자 기준(지장간 제외). 0개는 결핍, 전체의 3/8 이상이면 과다",
   tenGods: "일간을 뺀 겉글자(지지는 본기)의 십성을 비겁·식상·재성·관성·인성 다섯 갈래로 센다",
   strength: "간이 판정 — 일간과 같은 오행·일간을 낳는 오행의 글자 수(월지 2배)를 나머지와 견준다",
@@ -44,7 +44,8 @@ export const controls = (a, b) => (ELEMENTS.indexOf(a) + 2) % 5 === ELEMENTS.ind
 
 // 받침 유무로 조사를 고른다. 괄호 안 한자는 건너뛰고 한글 마지막 글자를 본다.
 export function josa(word, withBatchim, without) {
-  const plain = String(word).replace(/\([^)]*\)\s*$/, "");
+  const plain = String(word).replace(/\([^)]*\)\s*$/, "").replace(/['"’]+$/, "");
+  if (/[0-9]$/.test(plain)) return `${word}${"013678".includes(plain.at(-1)) ? withBatchim : without}`;
   const code = plain.charCodeAt(plain.length - 1) - 0xac00;
   const has = code >= 0 && code <= 11171 && code % 28 !== 0;
   return `${word}${has ? withBatchim : without}`;
@@ -152,7 +153,7 @@ export const ELEMENT_MEANING = {
     missing: { effect: "생활 리듬이나 마음의 중심이 쉽게 흔들릴 수 있어요.", tip: "일정한 기상 시간이나 식사 같은 루틴, 꾸준한 저축이 받침이 돼요." },
     excess: { effect: "익숙한 것에 머무르려 하고 걱정이 쌓이기 쉬워요.", tip: "가끔은 계획 없이 새로운 곳에 가 보는 것도 좋아요." } },
   금: { role: "정리하고 결단하는 힘",
-    missing: { effect: "맺고 끊는 결단이 필요한 순간에 오래 망설이기 쉬워요.", tip: "중요한 결정은 기한을 먼저 정해 두면 도움이 돼요." },
+    missing: { effect: "맺고 끊는 결단이 필요한 순간에 오래 망설이기 쉬워요.", tip: "맺고 끊을 일은 기한을 먼저 정해 두세요." },
     excess: { effect: "기준이 엄격해져서 나와 남에게 날카로워질 수 있어요.", tip: "옳고 그름을 따지기 전에 상대의 사정을 한 번 더 물어보세요." } },
   수: { role: "쉬고 생각하며 흘려보내는 힘",
     missing: { effect: "쉬는 법을 잊고 스스로를 몰아붙이기 쉬워요.", tip: "충분한 잠과 물, 하루를 돌아보는 짧은 기록이 균형을 잡아 줘요." },
@@ -163,19 +164,19 @@ export const ELEMENT_MEANING = {
 export const GROUP_MEANING = {
   비겁: { gloss: "나와 같은 기운",
     many: "자기 주관이 뚜렷하고 혼자서도 해내는 힘이 있어요", manyTip: "함께 일할 땐 나눌 몫과 규칙을 미리 정해 두면 서운할 일이 줄어요.",
-    none: "남과 겨루기보다 맞춰 주는 쪽이라 내 편을 챙기는 데 약할 수 있어요" },
+    none: "혼자 버티기보다 주변과 함께할 때 힘이 나는 편이에요.", noneTip: "곁에서 힘을 보태 줄 사람을 챙겨 두세요." },
   식상: { gloss: "내가 밖으로 내보내는 재능과 표현",
     many: "말과 글, 손으로 만드는 재주가 넘쳐요", manyTip: "표현이 많은 만큼 중요한 말은 한 번 고르고 하는 게 좋아요.",
-    none: "생각을 겉으로 꺼내는 데 시간이 걸리는 편이라, 작게라도 결과물을 만들어 보여 주면 기회가 열려요" },
+    none: "생각을 겉으로 꺼내는 데 시간이 걸리는 편이에요.", noneTip: "작게라도 결과물을 만들어 보여 주면 기회가 열려요." },
   재성: { gloss: "내가 다루는 돈과 현실",
     many: "현실 감각과 셈이 빠르고 결과를 중시해요", manyTip: "일을 많이 벌이면 관리가 벅차지니 우선순위를 좁혀 보세요.",
-    none: "돈이나 성과를 직접 쫓는 데는 관심이 덜한 편이라, 가계부나 목표 숫자처럼 눈에 보이는 기준을 하나 두면 좋아요" },
+    none: "돈이나 성과를 직접 쫓는 데는 관심이 덜한 편이에요.", noneTip: "가계부나 목표 숫자처럼 눈에 보이는 기준을 하나 두면 좋아요." },
   관성: { gloss: "나를 다스리는 책임과 규칙",
     many: "책임감이 강하고 조직과 규칙 안에서 인정받아요", manyTip: "기대를 다 짊어지다 지치지 않게 거절하는 연습도 필요해요.",
-    none: "틀에 얽매이지 않는 자유로운 기질이라, 스스로 정한 마감이 있으면 능력이 더 잘 드러나요" },
+    none: "틀에 얽매이지 않는 자유로운 기질이에요.", noneTip: "스스로 정한 마감이 있으면 능력이 더 잘 드러나요." },
   인성: { gloss: "나를 돕는 배움과 보살핌",
     many: "배우고 생각하는 힘이 크고 도움을 받는 복이 있어요", manyTip: "생각이 실행보다 길어지지 않게 '일단 해 보기'를 곁들여 보세요.",
-    none: "남의 도움보다 스스로 부딪혀 익히는 편이라, 믿을 만한 조언자를 한 명 두면 길이 빨라져요" },
+    none: "남의 도움보다 스스로 부딪혀 익히는 편이에요.", noneTip: "믿을 만한 조언자를 한 명 두면 길이 빨라져요." },
 };
 
 // 세운: effect 는 "~라서," 뒤에 이어지는 결과, tip 은 조언.
@@ -193,11 +194,11 @@ export const YEAR_TEN_GOD = {
 };
 // 대운: 10년 단위의 결.
 export const LUCK_GROUP = {
-  비겁: "나를 세우는 10년으로, 독립이나 내 일, 동료와의 연대가 주제가 되기 쉬워요.",
-  식상: "펼치는 10년으로, 재능과 표현을 밖으로 내보이며 활동 무대가 넓어지기 쉬워요.",
-  재성: "거두는 10년으로, 돈과 현실을 다루는 일이 늘고 생활 기반을 다지기 좋아요.",
-  관성: "책임지는 10년으로, 직장이나 사회적 역할이 커지는 만큼 무게도 함께 늘어요.",
-  인성: "채우는 10년으로, 배움과 자격, 보살핌을 통해 안쪽을 단단히 하기 좋아요.",
+  비겁: { name: "나를 세우는 10년", text: "독립이나 내 일, 동료와의 연대가 주제가 되기 쉬워요." },
+  식상: { name: "펼치는 10년", text: "재능과 표현을 밖으로 내보이며 활동 무대가 넓어지기 쉬워요." },
+  재성: { name: "거두는 10년", text: "돈과 현실을 다루는 일이 늘고 생활 기반을 다지기 좋아요." },
+  관성: { name: "책임지는 10년", text: "직장이나 사회적 역할이 커지는 만큼 무게도 함께 늘어요." },
+  인성: { name: "채우는 10년", text: "배움과 자격, 보살핌을 통해 안쪽을 단단히 하기 좋아요." },
 };
 // 12운성: gloss 는 괄호 풀이, advice 는 이어지는 조언.
 export const STAGE_MEANING = {
@@ -205,7 +206,7 @@ export const STAGE_MEANING = {
   목욕: { gloss: "호기심 많고 흔들리며 배우는 자리", advice: "이것저것 해 보되 중요한 약속은 가볍게 하지 마세요." },
   관대: { gloss: "자신감이 차올라 나서는 자리", advice: "앞에 나서기 좋지만 과시로 보이지 않게만 조심하세요." },
   건록: { gloss: "제 힘으로 서는 자리", advice: "스스로 꾸려 가는 일에서 안정감을 얻기 좋아요." },
-  제왕: { gloss: "기세가 정점에 이른 자리", advice: "주도권을 잡기 좋지만, 정점 다음을 미리 준비해 두세요." },
+  제왕: { gloss: "기세가 정점에 이른 자리", advice: "주도권을 잡기 좋아요. 다만 정점 다음도 미리 준비해 두세요." },
   쇠: { gloss: "노련해져 한발 물러서는 자리", advice: "앞장서기보다 경험을 나누는 쪽이 잘 풀려요." },
   병: { gloss: "힘을 아끼고 돌봄이 필요한 자리", advice: "무리한 확장보다 컨디션 관리가 먼저예요." },
   사: { gloss: "하나를 마무리하는 자리", advice: "끝낼 것을 깔끔히 정리하면 다음 문이 열려요." },
@@ -256,12 +257,13 @@ function readElements(candidate) {
   missing.forEach((e, i) => {
     const m = ELEMENT_MEANING[e];
     picks.push(`missing:${e}`);
-    const lead = i === 0 ? (excess.length ? "반대로 " : "") : "그리고 ";
-    parts.push(`${lead}${josa(elementWord(e), "은", "는")} 하나도 없어요. ${josa(e, "은", "는")} ${m.role}이라, 이게 비어 있으면 ${m.missing.effect} ${m.missing.tip}`);
+    // 첫 결핍은 "반대로 화(火)가", 둘째부터는 "금(金)도" — 같은 틀이 연달아 반복되지 않게.
+    const subject = i === 0 ? `${excess.length ? "반대로 " : ""}${josa(elementWord(e), "이", "가")}` : `${elementWord(e)}도`;
+    parts.push(`${subject} 하나도 없어요. ${josa(e, "은", "는")} ${m.role}이라, 이게 비어 있으면 ${m.missing.effect} ${m.missing.tip}`);
   });
   if (!parts.length) {
     picks.push("balanced");
-    parts.push("다섯 기운이 고루 퍼져 있어서 한쪽으로 치우치지 않는 편이에요. 그래서 상황에 따라 여러 방식을 바꿔 쓸 수 있는 게 장점이에요.");
+    parts.push("다섯 기운이 모두 한두 개씩 있어서 어느 한쪽으로 쏠리지 않아요. 그래서 낯선 상황에서도 균형을 잃지 않는 편이에요.");
   }
   return { counts, total, missing, excess, picks, paragraph: parts.join(" ") };
 }
@@ -290,7 +292,7 @@ function readTenGods(candidate) {
   if (none.length) {
     const g = none[0];
     picks.push(`none:${g}`);
-    parts.push(`${dominant.length ? "반대로" : "다만"} ${g}(${GROUP_MEANING[g].gloss})은 하나도 없어서, ${GROUP_MEANING[g].none}.`);
+    parts.push(`${dominant.length ? "반대로" : "다만"} ${g}(${GROUP_MEANING[g].gloss})은 하나도 없어요. 그래서 ${GROUP_MEANING[g].none} ${GROUP_MEANING[g].noneTip}`);
   }
   return { counts, dominant, none, picks, paragraph: parts.join(" ") };
 }
@@ -308,7 +310,7 @@ function readStrength(candidate) {
   const level = support - other >= 2 ? "강" : other - support >= 2 ? "약" : "중";
   const paragraph = {
     강: "명식 전체로 보면 나를 받쳐 주는 기운(같은 오행과 나를 낳는 오행)이 많은 편이에요. 그래서 스스로 밀고 나가는 힘이 좋고, 그 힘을 표현·성과·책임처럼 밖으로 쓰는 일에서 빛나요.",
-    약: "명식 전체로 보면 나를 받쳐 주는 기운(같은 오행과 나를 낳는 오행)이 적은 편이에요. 그래서 혼자 다 짊어지기보다 배움과 사람의 도움을 끌어올 때 힘이 나요.",
+    약: "명식 전체로 보면 나를 받쳐 주는 기운(같은 오행과 나를 낳는 오행)이 적은 편이에요. 그래서 배움과 조언을 가까이 둘 때 힘이 나요.",
     중: "명식 전체로 보면 나를 받쳐 주는 기운과 내가 써야 하는 기운이 비슷해요. 그래서 상황에 따라 밀고 당기는 균형 감각이 장점이에요.",
   }[level];
   return { support, other, level, picks: [`strength:${level}`], paragraph };
@@ -325,7 +327,7 @@ function readAnnual(candidate, detail) {
   const parts = [
     `${annual.year}년은 ${annual.ganji}(${annual.hanja})년이에요.`,
     `한 해를 이끄는 천간 ${josa(`${stem}${stemElement(stem)}`, "은", "는")} ${dayStem}${stemElement(dayStem)}인 나에게 ${annual.tenGod}(${TEN_GOD_GLOSS[annual.tenGod]})${josa(annual.tenGod, "이라서", "라서").slice(annual.tenGod.length)} ${y.effect} ${y.tip}`,
-    `그리고 기운의 성쇠를 열두 단계로 보는 12운성으로는 '${annual.stage}'(${s.gloss})에 해당해서 ${s.advice}`,
+    `그리고 기운의 성쇠를 열두 단계로 보는 12운성으로는 '${annual.stage}'(${s.gloss})에 해당해요. ${s.advice}`,
   ];
   const picks = [`year:${annual.tenGod}`, `stage:${annual.stage}`];
   if (relation && RELATION_YEAR[relation]) {
@@ -351,8 +353,8 @@ function readLuck(candidate, detail) {
   const s = STAGE_MEANING[now.stage];
   const parts = [
     `대운(10년마다 바뀌는 큰 흐름)으로 보면 지금은 ${now.age}세부터 이어지는 ${now.ganji} 대운 안에 있어요.`,
-    `이 대운의 천간이 나에게 ${god}(${TEN_GOD_GLOSS[god]})${josa(god, "이에요", "예요").slice(god.length)}. 그래서 ${LUCK_GROUP[group]}`,
-    `바탕의 기세는 12운성 '${now.stage}'(${s.gloss})라서 ${s.advice}`,
+    `이 대운의 천간이 나에게 ${god}(${TEN_GOD_GLOSS[god]})${josa(god, "이라서", "라서").slice(god.length)}, 지금은 ${LUCK_GROUP[group].name}이에요. ${LUCK_GROUP[group].text}`,
+    `바탕의 기세는 12운성으로 '${now.stage}'(${s.gloss})${josa(now.stage, "이에요", "예요").slice(now.stage.length)}.`,
   ];
   const picks = [`luck:${group}`, `luckStage:${now.stage}`];
   if (next) {
@@ -375,20 +377,21 @@ function readOverview(candidate, elements) {
   const picks = [`dayMaster:${dayStem}`];
   const focusMissing = elements.missing[0];
   const focusExcess = elements.excess[0];
+  // 요약에서는 결핍·과다를 "무엇을 길러라/다스려라" 한 마디로만 짚는다 — 효과와 조언은 아래 오행
+  // 문단이 맡는다(같은 문장이 두 번 나오면 기계적으로 읽힌다).
   if (focusMissing) {
     const m = ELEMENT_MEANING[focusMissing];
-    // 비어 있는 기운이 나를 낳는 오행이면 "특히", 아니면 성향과 대비되므로 "그런데".
     const joiner = generates(focusMissing, me) ? "특히" : "그런데";
     picks.push(`overview:missing:${focusMissing}`);
-    parts.push(`${joiner} 명식에 ${josa(elementWord(focusMissing), "이", "가")} 하나도 없어서, ${m.missing.effect} ${m.missing.tip}`);
+    parts.push(`${joiner} 명식에 ${josa(elementWord(focusMissing), "이", "가")} 하나도 없어서, ${josa(m.role, "을", "를")} 의식해서 길러 두면 좋아요.`);
   } else if (focusExcess) {
     const m = ELEMENT_MEANING[focusExcess];
     const joiner = focusExcess === me ? "특히" : "다만";
     picks.push(`overview:excess:${focusExcess}`);
-    parts.push(`${joiner} ${elementWord(focusExcess)} 기운이 ${elements.counts[focusExcess]}개로 몰려 있어서, ${m.excess.effect} ${m.excess.tip}`);
+    parts.push(`${joiner} ${elementWord(focusExcess)} 기운이 ${elements.counts[focusExcess]}개로 몰려 있어서, ${josa(m.role, "이", "가")} 지나치지 않게 다스리는 게 좋아요.`);
   } else {
     picks.push("overview:balanced");
-    parts.push(`${dm.more} 게다가 다섯 기운이 고루 있어서 큰 치우침 없이 그 장점을 쓰기 좋아요.`);
+    parts.push("게다가 다섯 기운이 고루 갖춰져 있어서, 이 성향을 여러 상황에서 두루 꺼내 쓰기 좋아요.");
   }
   return { picks, paragraph: parts.join(" ") };
 }
@@ -416,16 +419,16 @@ export function buildSajuReading(candidate, detail) {
 
 // ── 궁합 ────────────────────────────────────────────────
 const ELEMENT_PAIR = {
-  같음: { score: 6, text: "같은 오행을 타고나서 생각의 결이 비슷하고 말이 잘 통해요. 다만 둘 다 같은 곳에서 약해질 수 있으니, 서로의 빈 곳은 바깥에서 채워 오는 게 좋아요." },
+  같음: { score: 6, text: "같은 오행을 타고나서 생각의 결이 비슷하고 말이 잘 통해요. 다만 둘 다 같은 곳에서 약해질 수 있으니, 약한 부분은 함께 보완할 방법을 찾아 두면 좋아요." },
   a생b: { score: 10, text: "내 기운이 상대를 키워 주는 상생(서로 살림) 관계예요. 그래서 내가 챙기고 상대가 자라는 흐름이 자연스러운데, 한쪽만 주는 관계로 굳지 않게 고마움을 자주 표현해 주세요." },
   b생a: { score: 10, text: "상대의 기운이 나를 키워 주는 상생(서로 살림) 관계예요. 그래서 곁에 있으면 힘을 얻는 사이인데, 받은 만큼 상대가 원하는 방식으로 돌려주면 더 단단해져요." },
   a극b: { score: -4, text: "내 기운이 상대를 누르는 상극(한쪽이 다른 쪽을 제어함) 관계예요. 그래서 내가 이끌고 상대가 맞추기 쉬운데, 결정 전에 상대 의견을 먼저 물어보는 습관이 균형을 잡아 줘요." },
-  b극a: { score: -4, text: "상대의 기운이 나를 누르는 상극(한쪽이 다른 쪽을 제어함) 관계예요. 그래서 배울 점이 많은 긴장감이 있지만, 참기만 하면 쌓이니 불편한 점은 그때그때 말해 주세요." },
+  b극a: { score: -4, text: "상대의 기운이 나를 누르는 상극(한쪽이 다른 쪽을 제어함) 관계예요. 그래서 배울 점이 많은 긴장감이 있지만, 참기만 하면 서운함이 쌓이니 불편한 점은 그때그때 말해 주세요." },
 };
 const DAY_BRANCH = {
   합: { score: 12, joiner: "게다가", text: "두 사람의 일지(배우자 자리)가 육합(서로 끌어안는 짝)이라 생활 리듬과 정서가 잘 맞물려요." },
   같음: { score: 4, joiner: "게다가", text: "두 사람의 일지(배우자 자리)가 같아서 일상의 취향이 닮았어요." },
-  충: { score: -10, joiner: "다만", text: "두 사람의 일지(배우자 자리)가 충(서로 부딪침)이라 끌림이 강한 만큼 부딪힘도 커요. 생활 방식의 차이를 미리 대화로 정해 두면 오히려 서로를 자극하는 짝이 돼요." },
+  충: { score: -10, joiner: "다만", text: "두 사람의 일지(배우자 자리)가 충(서로 부딪침)이라 생활 리듬이 엇갈리기 쉬워요. 차이를 미리 대화로 맞춰 두면 오히려 서로에게 좋은 자극이 되는 짝이에요." },
   원진: { score: -8, joiner: "다만", text: "두 사람의 일지(배우자 자리)가 원진(까닭 없이 서로 꺼림)이라 별일 아닌 일에 서운함이 쌓이기 쉬워요. 감정을 짐작하지 말고 직접 묻는 연습이 도움이 돼요." },
 };
 
@@ -446,7 +449,8 @@ export function buildCompatibility(a, b) {
   if (STEM_UNION.has(unionKey)) {
     score += 10;
     picks.push("union");
-    first.push(`특히 두 일간이 천간합(${aStem}${bStem}, 서로 끌어당겨 하나로 묶이는 짝)을 이뤄서 처음 만나도 낯설지 않은 인연으로 봐요.`);
+    // 상극이면 "그래도"로 받아야 앞 문장과 이어진다.
+    first.push(`${ELEMENT_PAIR[pairKind].score < 0 ? "그래도" : "특히"} 두 일간이 천간합(${josa(`${aStem}${stemElement(aStem)}`, "과", "와")} ${josa(`${bStem}${stemElement(bStem)}`, "이", "가")} 서로 끌어당겨 하나로 묶이는 짝)을 이뤄서 처음 만나도 낯설지 않은 인연으로 봐요.`);
   }
 
   const second = [];
@@ -470,7 +474,8 @@ export function buildCompatibility(a, b) {
     const bits = [];
     if (aFilled.length) bits.push(`나에게 없는 ${aFilled.map(elementWord).join("·")} 기운을 상대가 넉넉히 가졌어요`);
     if (bFilled.length) bits.push(`${aFilled.length ? "또 " : ""}상대에게 없는 ${bFilled.map(elementWord).join("·")} 기운은 내가 채워 줘요`);
-    second.push(`그리고 ${bits.join(". ")}. 그래서 서로의 빈자리를 메워 주는 짝이에요.`);
+    const whose = aFilled.length && bFilled.length ? "서로의" : aFilled.length ? "나의" : "상대의";
+    second.push(`그리고 ${bits.join(". ")}. 그래서 ${whose} 빈자리를 메워 주는 짝이에요.`);
   } else {
     const both = ELEMENTS.filter((e) => ac[e] === 0 && bc[e] === 0);
     if (both.length) {
@@ -487,7 +492,7 @@ export function buildCompatibility(a, b) {
     "잘 맞음": "전체적으로 기운이 서로를 살려 주는 편안한 궁합이에요.",
     좋음: "전체적으로 기본 결이 잘 맞고, 다른 점은 서로를 넓혀 주는 궁합이에요.",
     노력형: "전체적으로 다른 점이 분명한 만큼, 대화로 맞춰 갈 때 단단해지는 궁합이에요.",
-    "조율 필요": "전체적으로 부딪히는 지점이 뚜렷해서, 규칙과 배려를 미리 정해 두면 좋은 궁합이에요.",
+    "조율 필요": "전체적으로 차이가 뚜렷해서, 생활 규칙을 정해 두고 서로 배려하면 좋아지는 궁합이에요.",
   }[level];
   return {
     version: READING_RULES.version, score, level, picks,

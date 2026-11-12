@@ -46,6 +46,10 @@ test("첫머리 요약: 비어 있는 오행이 있으면 그 결핍 조각을 �
   assert.deepEqual(reading.overview.picks, ["dayMaster:계", "overview:missing:화"]);
   assert.match(reading.overview.paragraph, /^계수\(癸水\) 일간이라 /);
   assert.match(reading.overview.paragraph, /그런데 명식에 화\(火\)가 하나도 없어서/);
+  // 회귀: 요약이 오행 문단의 효과·조언 문장을 그대로 되풀이하지 않는다.
+  const sentences = (t) => t.split(/(?<=요\.)\s+/);
+  const overlap = sentences(reading.overview.paragraph).filter((x) => sentences(reading.elements.paragraph).some((y) => y.includes(x) || x.includes(y)));
+  assert.deepEqual(overlap, []);
 });
 
 test("오행: 과다·결핍 조각을 모두 고르고, 고루 퍼지면 균형 조각", () => {
@@ -82,6 +86,21 @@ test("대운: 지금 대운의 갈래와 다음 대운으로의 이동", () => {
   assert.deepEqual(luck.picks, ["luck:비겁", "luckStage:관대", "next:식상"]);
 });
 
+test("회귀: 12운성·십성 뒤 조사, 결핍 둘째부터 '도', 십성 없음은 두 문장, 대운은 '10년이에요'", () => {
+  for (let i = 0; i < 80; i += 1) {
+    const d = new Date(Date.UTC(1960 + (i % 45), (i * 5) % 12, 1 + ((i * 11) % 28)));
+    const c = buildChart({ year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate(),
+      timeMode: "branch", branch: i % 12, gender: i % 2 ? "male" : "female" }, TODAY).candidates[0];
+    const r = c.reading;
+    const all = [r.overview, r.dayMaster, r.elements, r.tenGods, r.strength, r.annual, r.luck].filter(Boolean).map((p) => p.paragraph).join(" ");
+    assert.doesNotMatch(all, /'(장생|목욕|건록|제왕|병|절|양)'\([^)]*\)(라서|예요)/, "받침 있는 운성 뒤 '라서·예요'");
+    assert.doesNotMatch(all, /없어서, [^.]*편이라,/, "없어서, ~편이라, 겹접속");
+    assert.doesNotMatch(all, /10년으로,/);
+    assert.doesNotMatch(all, /그리고 \S+\(.\)는 하나도 없어요/, "둘째 결핍은 '~도'");
+    assert.doesNotMatch(all, /금\(金\)가|화\(火\)이 |목\(木\)가|수\(水\)이 |토\(土\)이 /, "오행 뒤 조사");
+  }
+});
+
 test("성별이 없으면 대운 풀이는 비운다", () => {
   assert.equal(chartOf({ year: 1992, month: 10, day: 24 }).reading.luck, null);
 });
@@ -104,4 +123,8 @@ test("궁합: 천간합이면 union 조각, 일지 충이면 감점", () => {
   const c = buildCompatibility(a, b);
   assert.ok(c.picks.includes("union"));
   assert.ok(c.picks.includes("branch:충"));
+  // 회귀: 상극 뒤의 천간합은 "그래도"로 받고, 조사가 맞는다(기토가).
+  const d = buildCompatibility({ pillars: { day: { stem: { korean: "갑" }, branch: { korean: "자" } } } },
+    { pillars: { day: { stem: { korean: "기" }, branch: { korean: "인" } } } });
+  assert.match(d.paragraphs[0], /그래도 두 일간이 천간합\(갑목과 기토가/);
 });
