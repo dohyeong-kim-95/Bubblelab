@@ -279,3 +279,17 @@ test("chart: 후보마다 풀이가 붙고, partner 가 오면 궁합과 상대 
   assert.equal(data.partner.name, undefined, "이름 같은 부가 정보는 응답에 싣지 않는다");
   assert.equal(data.dailyFortunes[0].method, "natal-daymaster+daily-pillar-v3");
 });
+
+test("headline: brief 용 한 문장 — 해요체, 40자 안팎, 합·충에 따라 꼬리가 갈린다", async () => {
+  const { dailyHeadline } = await import("./fortune.js");
+  const daily = buildDailyFortune(natal(), { year: 2026, month: 7, day: 15 });
+  assert.equal(daily.headline, dailyHeadline("정인", false, true));
+  assert.match(daily.headline, /이지만, 일정 변화엔 여유를 두세요\.$/);
+  for (const god of ["비견", "겁재", "식신", "상관", "편재", "정재", "편관", "정관", "편인", "정인"]) {
+    for (const [h, c] of [[false, false], [true, false], [false, true], [true, true]]) {
+      const line = dailyHeadline(god, h, c);
+      assert.match(line, /요\.$/, line);
+      assert.ok(line.length >= 14 && line.length <= 48, `${line} (${line.length}자)`);
+    }
+  }
+});

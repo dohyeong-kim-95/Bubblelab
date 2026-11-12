@@ -33,6 +33,24 @@ const DAILY_BODY = {
   편인: "익숙한 답보다 새로운 관점이 눈에 들어오는 날이에요. 바로 결론 내리기보다 한 번 더 살펴보세요.",
   정인: "배우고 도움받는 흐름이 좋은 날이에요. 기록하고 조언을 구하면 실마리가 생겨요.",
 };
+// brief 총평용 한 문장(40자 안팎). 십성마다 "~날" 명사구 하나, 합·충이면 꼬리 하나를 붙인다.
+const HEADLINE_CORE = {
+  비견: "내 기준을 또렷이 세우기 좋은 날", 겁재: "추진력은 크지만 지출은 아껴야 할 날",
+  식신: "작은 결과물을 완성하기 좋은 날", 상관: "아이디어가 빛나지만 말은 다듬을 날",
+  편재: "사람과 기회가 넓게 들어오는 날", 정재: "미뤄 둔 정리를 끝내기 좋은 날",
+  편관: "할 일이 몰려 우선순위가 중요한 날", 정관: "원칙대로 하면 신뢰를 얻는 날",
+  편인: "새로운 관점이 눈에 들어오는 날", 정인: "배우고 도움받기 좋은 날",
+};
+const HEADLINE_TAIL = {
+  harmony: (core) => `${core}이고, 사람을 잇기에도 좋아요.`,
+  clash: (core) => `${core}이지만, 일정 변화엔 여유를 두세요.`,
+  both: (core) => `${core}이에요. 속도보다 조율이 먼저예요.`,
+  none: (core) => `${core}이에요.`,
+};
+export function dailyHeadline(god, harmony, clash) {
+  const kind = harmony && clash ? "both" : harmony ? "harmony" : clash ? "clash" : "none";
+  return HEADLINE_TAIL[kind](HEADLINE_CORE[god]);
+}
 const BRANCH_HARMONY = new Set(["자축", "인해", "묘술", "진유", "사신", "오미"]);
 const BRANCH_CLASH = new Set(["자오", "축미", "인신", "묘유", "진술", "사해"]);
 // 분야별 십성 가중치. wealth·career·love 는 v2 와 같다(기존 판정이 바뀌지 않게).
@@ -352,6 +370,7 @@ export function buildDailyFortune(candidate, date, gender = "unspecified") {
     tenGod: god,
     emoji: STEM_EMOJI[god],
     text: parts.join(" "),
+    headline: dailyHeadline(god, harmony.length > 0, clash.length > 0),
     categories,
     lucky: luckyOf(candidate, todayPillar, dayElement),
     times: timesOf(candidate, todayPillar),

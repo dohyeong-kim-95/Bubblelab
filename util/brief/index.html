@@ -500,7 +500,8 @@
       const daily = (await res.json()).dailyFortunes?.[0];
       if (!daily) return;
       fortuneLine = {
-        emoji: daily.emoji, text: daily.text,
+        // 훑어보는 화면이라 한 문장만 — 서버의 headline, 옛 응답이면 text 첫 문장.
+        emoji: daily.emoji, text: daily.headline || (/^.*?[.!?](?=\s|$)/.exec(daily.text ?? "")?.[0] ?? daily.text),
         basis: `명식 일간 + 오늘 일진 ${daily.iljin}(${daily.iljinHanja}) · ${daily.tenGod}`,
       };
       showFortune();
