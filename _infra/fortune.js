@@ -1,6 +1,7 @@
 import manseryeok from "manseryeok";
 import { sendWebPush } from "./webpush.js";
 import { createDelivery, postToDiscord, secretMatches } from "./papers.js";
+import { COMIC_CAP, comicNotice, comicReadyNotice } from "./fortune-comic-notice.js";
 import { LITERARY_STAR, buildSajuDetail, twelveShinsal } from "./saju-detail.js";
 import {
   READING_RULES, branchRelation as branchRelationName, buildCompatibility, buildSajuReading, elementCounts, markSpans,
@@ -724,25 +725,18 @@ export function sendFortuneDaily(env) {
 // 메일 주소를 남기면 선착순 COMIC_CAP 명에게 다그당스 만화 사주를 사람이 직접 보낸다.
 // 신청은 FortuneDO 한 인스턴스에 두고, 집 PC 가 PAPERS_SINK_SECRET 으로 목록을 받아 간 뒤
 // 보낼 때마다 done 으로 개인정보(메일·생년월일)를 지운다. 남는 것은 받은 수뿐이다.
-export const COMIC_CAP = 10;
+export { COMIC_CAP };
 const EMAIL_RE = /^[^\s@<>()",;:]{1,64}@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*\.[a-z]{2,24}$/i;
 
-// 새 신청을 논문 다이제스트와 같은 디스코드 채널에 알린다. 메일·생년월일은 싣지 않는다 —
-// 디스코드에는 지우는 절차(done)가 닿지 않으니, 남는 것은 몇 번째인지와 남은 자리뿐이다.
-// 알림이 실패해도 신청은 이미 저장됐으므로 신청자에게는 성공으로 답한다.
-export function comicNotice(nth, remaining) {
-  return {
-    content: `🎨 만화 사주 신청이 들어왔어요 — ${nth}번째 (남은 자리 ${remaining}/${COMIC_CAP})\n` +
-      "Master 세션에 \"신청 확인해 줘\" 라고 하면 그려서 메일 파일을 드려요.",
-    allowed_mentions: { parse: [] },
-  };
+function notifyComicRequest(env, nth, remaining) {
+  return postComicNotice(env, comicNotice(nth, remaining));
 }
 
-async function notifyComicRequest(env, nth, remaining) {
+async function postComicNotice(env, payload) {
   const delivery = createDelivery(env ?? {});
   if (!delivery) return false;
   try {
-    return await postToDiscord(delivery, comicNotice(nth, remaining), { sleep: async () => {} });
+    return await postToDiscord(delivery, payload, { sleep: async () => {} });
   } catch (error) {
     console.error("comic request discord notice failed", error);
     return false;
@@ -778,6 +772,7 @@ export function validateComicRequest(body, today = kstToday()) {
  *   POST /_fortune/comic-request               → { ok, remaining } | { error }
  *   GET  /_fortune/comic-requests              (Bearer PAPERS_SINK_SECRET) → { count, remaining, requests }
  *   POST /_fortune/comic-requests/<id>/done    (Bearer) → { ok } — 그 신청의 메일·생년월일 삭제
+ *   POST /_fortune/comic-requests/<id>/ready   (Bearer) {status:"drafted"|"failed", reason} → 디스코드 알림
  */
 export async function handleFortuneComic(request, env, url) {
   const path = url.pathname;
@@ -801,13 +796,21 @@ export async function handleFortuneComic(request, env, url) {
   }
   // 아래는 집 PC 몫 — 논문·오픽과 같은 시크릿.
   const done = /^\/_fortune\/comic-requests\/([0-9a-f]{16})\/done$/.exec(path);
-  if (path !== "/_fortune/comic-requests" && !done) return json({ error: "not found" }, 404);
+  const ready = /^\/_fortune\/comic-requests\/([0-9a-f]{16})\/ready$/.exec(path);
+  if (path !== "/_fortune/comic-requests" && !done && !ready) return json({ error: "not found" }, 404);
   if (!env.PAPERS_SINK_SECRET) return json({ error: "not configured" }, 503);
   const offered = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
   if (!secretMatches(offered, env.PAPERS_SINK_SECRET)) return json({ error: "unauthorized" }, 401);
   if (done) {
     if (request.method !== "POST") return json({ error: "method" }, 405);
     return relay(`/comic/done/${done[1]}`, { method: "POST" });
+  }
+  if (ready) {
+    if (request.method !== "POST") return json({ error: "method" }, 405);
+    const body = await request.json().catch(() => ({}));
+    const status = body?.status === "failed" ? "failed" : "drafted";
+    const reason = String(body?.reason ?? "").replace(/[\u0000-\u001f@<>]/g, " ").slice(0, 120);
+    return relay(`/comic/ready/${ready[1]}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status, reason }) });
   }
   if (request.method !== "GET") return json({ error: "method" }, 405);
   return relay("/comic/list");
@@ -892,6 +895,13 @@ export class FortuneDO {
       await this.storage.delete(key);
       await this.storage.delete(`comic:email:${await comicEmailKey(item.email)}`);
       return Response.json({ ok: true, count });
+    }
+    const ready = /^\/comic\/ready\/([0-9a-f]{16})$/.exec(path);
+    if (ready && request.method === "POST") {
+      if (!(await this.storage.get(`comic:req:${ready[1]}`))) return Response.json({ error: "not found" }, { status: 404 });
+      const { status, reason } = await request.json().catch(() => ({}));
+      const sent = await postComicNotice(this.env, comicReadyNotice(status, reason));
+      return Response.json({ ok: true, notified: sent });
     }
     return new Response("not found", { status: 404 });
   }

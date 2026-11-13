@@ -528,3 +528,21 @@ test("만화 사주: 디스코드 설정이 없으면 알림을 보내지 않는
     () => call("POST", "/_fortune/comic-request", comicBody("a@example.com")));
   assert.equal(calls, 0);
 });
+
+test("만화 사주: 집 PC 의 준비됨/실패 알림은 시크릿이 있어야 하고, 개인정보 없이 디스코드로 간다", async () => {
+  const { call } = await comicEnv(DISCORD);
+  const sent = [];
+  await withFetch(async (url, init) => { sent.push(JSON.parse(init.body).content); return new Response("{}"); }, async () => {
+    await call("POST", "/_fortune/comic-request", comicBody("who@example.com"));
+    const { requests } = await (await call("GET", "/_fortune/comic-requests", undefined, AUTH)).json();
+    const id = requests[0].id;
+    assert.equal((await call("POST", `/_fortune/comic-requests/${id}/ready`, { status: "drafted" })).status, 401);
+    assert.equal((await call("POST", `/_fortune/comic-requests/${id}/ready`, { status: "drafted" }, AUTH)).status, 200);
+    assert.equal((await call("POST", `/_fortune/comic-requests/${id}/ready`, { status: "failed", reason: "시주 불일치 x@y.com" }, AUTH)).status, 200);
+    assert.equal((await call("POST", "/_fortune/comic-requests/0000000000000000/ready", { status: "drafted" }, AUTH)).status, 404);
+    for (const text of sent) assert.ok(!text.includes(id) && !text.includes("who@"), text);
+  });
+  assert.equal(sent.length, 3);   // 신청 1 + 준비됨 1 + 실패 1
+  assert.match(sent[1], /임시보관함/);
+  assert.match(sent[2], /멈췄어요 — 시주 불일치 x y\.com/);
+});
