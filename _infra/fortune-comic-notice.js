@@ -8,7 +8,7 @@ export const COMIC_CAP = 10;
 export function comicNotice(nth, remaining) {
   return {
     content: `🎨 만화 사주 신청이 들어왔어요 — ${nth}번째 (남은 자리 ${remaining}/${COMIC_CAP})\n` +
-      "Master 세션에 \"신청 확인해 줘\" 라고 하면 그려서 메일 파일을 드려요.",
+      "집 PC 가 5분 안에 집어 가서 그리기 시작해요(30분쯤). 다 되면 📬 알림이 한 번 더 와요.",
     allowed_mentions: { parse: [] },
   };
 }
