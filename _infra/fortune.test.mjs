@@ -363,9 +363,10 @@ test("회귀(4차): 근거 없는 분야의 첫머리가 비문이 아니다('�
 async function comicEnv(extra = {}) {
   const { handleFortuneComic } = await import("./fortune.js");
   const storage = new MemoryStorage();
-  const fortune = new FortuneDO({ storage }, {});
+  const env = { PAPERS_SINK_SECRET: "sink-secret", ...extra };
+  const fortune = new FortuneDO({ storage }, env);
   const stub = { fetch: (input, init) => fortune.fetch(new Request(input, init)) };
-  const env = { FORTUNE: { idFromName: () => "global", get: () => stub }, PAPERS_SINK_SECRET: "sink-secret", ...extra };
+  env.FORTUNE = { idFromName: () => "global", get: () => stub };
   const call = (method, path, body, headers = {}) => {
     const url = new URL(`https://util.bubblelab.dev${path}`);
     return handleFortuneComic(new Request(url, {
@@ -487,4 +488,43 @@ test("운세 노트: core 글꼴 조각이 화면·조각 표의 한글을 모�
   assert.ok(existsSync(new URL("util/fortune/vendor/rough.LICENSE.txt", root)));
   // 페이지는 Google Fonts 같은 바깥 글꼴을 부르지 않는다(CSP font-src 'self')
   assert.doesNotMatch(read("util/fortune/index.html"), /fonts\.googleapis|fonts\.gstatic/);
+});
+
+// 신청이 들어와도 사용자가 알 길이 없었다 — 디스코드로 알리되 개인정보는 싣지 않는다.
+async function withFetch(fake, fn) {
+  const real = globalThis.fetch;
+  globalThis.fetch = fake;
+  try { return await fn(); } finally { globalThis.fetch = real; }
+}
+const DISCORD = { DISCORD_BOT_TOKEN: "bot-token", DISCORD_CHANNEL_ID: "123" };
+
+test("만화 사주: 새 신청은 디스코드에 알리고, 메일·생년월일은 싣지 않는다", async () => {
+  const { call } = await comicEnv(DISCORD);
+  const sent = [];
+  await withFetch(async (url, init) => { sent.push({ url: String(url), init }); return new Response("{}"); }, async () => {
+    const res = await call("POST", "/_fortune/comic-request", comicBody("secret.person@example.com"));
+    assert.equal(res.status, 200);
+  });
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].url, "https://discord.com/api/v10/channels/123/messages");
+  const body = sent[0].init.body;
+  assert.match(JSON.parse(body).content, /1번째 \(남은 자리 9\/10\)/);
+  for (const leak of ["secret.person", "example.com", "1992", "male"]) assert.ok(!body.includes(leak), `알림에 ${leak} 이 실렸다`);
+});
+
+test("만화 사주: 디스코드가 실패해도 신청은 저장되고 성공으로 답한다", async () => {
+  const { call, storage } = await comicEnv(DISCORD);
+  const res = await withFetch(async () => new Response("nope", { status: 500 }),
+    () => call("POST", "/_fortune/comic-request", comicBody("a@example.com")));
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { ok: true, remaining: 9 });
+  assert.equal((await storage.list({ prefix: "comic:req:" })).size, 1);
+});
+
+test("만화 사주: 디스코드 설정이 없으면 알림을 보내지 않는다", async () => {
+  const { call } = await comicEnv();
+  let calls = 0;
+  await withFetch(async () => { calls += 1; return new Response("{}"); },
+    () => call("POST", "/_fortune/comic-request", comicBody("a@example.com")));
+  assert.equal(calls, 0);
 });

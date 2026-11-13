@@ -1,6 +1,6 @@
 import manseryeok from "manseryeok";
 import { sendWebPush } from "./webpush.js";
-import { secretMatches } from "./papers.js";
+import { createDelivery, postToDiscord, secretMatches } from "./papers.js";
 import { LITERARY_STAR, buildSajuDetail, twelveShinsal } from "./saju-detail.js";
 import {
   READING_RULES, branchRelation as branchRelationName, buildCompatibility, buildSajuReading, elementCounts, markSpans,
@@ -727,6 +727,28 @@ export function sendFortuneDaily(env) {
 export const COMIC_CAP = 10;
 const EMAIL_RE = /^[^\s@<>()",;:]{1,64}@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*\.[a-z]{2,24}$/i;
 
+// 새 신청을 논문 다이제스트와 같은 디스코드 채널에 알린다. 메일·생년월일은 싣지 않는다 —
+// 디스코드에는 지우는 절차(done)가 닿지 않으니, 남는 것은 몇 번째인지와 남은 자리뿐이다.
+// 알림이 실패해도 신청은 이미 저장됐으므로 신청자에게는 성공으로 답한다.
+export function comicNotice(nth, remaining) {
+  return {
+    content: `🎨 만화 사주 신청이 들어왔어요 — ${nth}번째 (남은 자리 ${remaining}/${COMIC_CAP})\n` +
+      "Master 세션에 \"신청 확인해 줘\" 라고 하면 그려서 메일 파일을 드려요.",
+    allowed_mentions: { parse: [] },
+  };
+}
+
+async function notifyComicRequest(env, nth, remaining) {
+  const delivery = createDelivery(env ?? {});
+  if (!delivery) return false;
+  try {
+    return await postToDiscord(delivery, comicNotice(nth, remaining), { sleep: async () => {} });
+  } catch (error) {
+    console.error("comic request discord notice failed", error);
+    return false;
+  }
+}
+
 async function comicEmailKey(email) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(email).trim().toLowerCase()));
   return hexDigest(digest).slice(0, 32);
@@ -853,7 +875,9 @@ export class FortuneDO {
       await this.storage.put(`comic:req:${id}`, { id, ...value, created: new Date().toISOString() });
       await this.storage.put(emailKey, id);
       await this.storage.put("comic:count", count + 1);
-      return Response.json({ ok: true, remaining: Math.max(0, COMIC_CAP - count - 1) });
+      const remaining = Math.max(0, COMIC_CAP - count - 1);
+      await notifyComicRequest(this.env, count + 1, remaining);
+      return Response.json({ ok: true, remaining });
     }
     if (path === "/comic/list" && request.method === "GET") {
       const items = [...(await this.storage.list({ prefix: "comic:req:" })).values()]
