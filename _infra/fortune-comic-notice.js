@@ -13,12 +13,12 @@ export function comicNotice(nth, remaining) {
   };
 }
 
-// 집 PC 가 만화를 다 만들어 Gmail 임시보관함에 넣었을 때(또는 자동 점검에서 멈췄을 때) 알린다.
+// 집 PC 가 만화를 다 만들어 보낼 재료(제목·본문·zip)를 꾸렸을 때(또는 자동 점검에서 멈췄을 때) 알린다.
 // 신청 id·메일·생년월일은 싣지 않는다 — 사유는 집 PC 가 개인정보 없이 짧게 쓴다.
 export function comicReadyNotice(status, reason) {
   const content = status === "failed"
     ? `⚠️ 만화 사주 자동 준비가 멈췄어요${reason ? ` — ${reason}` : ""}\nMaster 세션에 "만화 사주 실패 봐 줘" 라고 해 주세요.`
-    : "📬 만화 사주가 Gmail 임시보관함에 준비됐어요 — 열어서 확인하고 '보내기'만 누르면 돼요.\n보낸 뒤 Master 세션에 \"보냈어\" 라고 하면 개인정보를 지워요.";
+    : "📬 만화 사주 메일 재료가 준비됐어요 — Master 세션에 \"만화 사주 줘\" 라고 하면 제목·본문·zip 을 드려요.\n보낸 뒤 \"보냈어\" 라고 하면 개인정보를 지워요.";
   return { content, allowed_mentions: { parse: [] } };
 }
 

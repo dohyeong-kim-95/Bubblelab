@@ -772,7 +772,7 @@ export function validateComicRequest(body, today = kstToday()) {
  *   POST /_fortune/comic-request               → { ok, remaining } | { error }
  *   GET  /_fortune/comic-requests              (Bearer PAPERS_SINK_SECRET) → { count, remaining, requests }
  *   POST /_fortune/comic-requests/<id>/done    (Bearer) → { ok } — 그 신청의 메일·생년월일 삭제
- *   POST /_fortune/comic-requests/<id>/ready   (Bearer) {status:"drafted"|"failed", reason} → 디스코드 알림
+ *   POST /_fortune/comic-requests/<id>/ready   (Bearer) {status:"packaged"|"failed", reason} → 디스코드 알림
  */
 export async function handleFortuneComic(request, env, url) {
   const path = url.pathname;
@@ -808,7 +808,7 @@ export async function handleFortuneComic(request, env, url) {
   if (ready) {
     if (request.method !== "POST") return json({ error: "method" }, 405);
     const body = await request.json().catch(() => ({}));
-    const status = body?.status === "failed" ? "failed" : "drafted";
+    const status = body?.status === "failed" ? "failed" : "packaged";
     const reason = String(body?.reason ?? "").replace(/[\u0000-\u001f@<>]/g, " ").slice(0, 120);
     return relay(`/comic/ready/${ready[1]}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status, reason }) });
   }
