@@ -82,6 +82,7 @@ const PUZZLE_TO_SLOP = new Map([
 // cron이 리뷰를 주기적으로 동기화할 외주 프로젝트 목록 (커머스 API, 현재 mock).
 const WORK_REVIEW_PROJECTS = ["daonfit"];
 import { handleFortuneChart, handleFortuneComic, handleFortunePush, handleFortuneReview, handleFortuneShare, sendFortuneDaily } from "./fortune.js";
+import { shareBodyLimit } from "./fortune-share.js";
 import { handleYaksokApi, renderRoomPage } from "./yaksok.js";
 import { CODE_RE as YAKSOK_CODE_RE } from "../util/yaksok/logic.js";
 import { handleBriefPush, handleBriefRates, handleBriefToday, sendBriefDaily } from "./brief.js";
@@ -1065,7 +1066,7 @@ export async function handleRequest(request, env, ctx) {
       path === "/_podcast/worker/audio" ? WORKER_AUDIO_MAX_BYTES :
       path === "/_duri/photo" || path === "/_duri/lend" ? DURI_MAX_PHOTO_BYTES :
       path === "/_life/backup" ? 4 * 1024 * 1024 :
-      yaksokBodyLimit(path) ?? 64 * 1024,
+      yaksokBodyLimit(path) ?? shareBodyLimit(path) ?? 64 * 1024,
     );
     if (mutationError) return mutationError;
 

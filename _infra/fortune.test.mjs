@@ -658,3 +658,17 @@ test("다운로드 링크: 7일이 지나면 410 이고 R2 파일까지 지워�
   assert.equal(bucket.data.size, 0);
   assert.equal(await storage.get(`share:${token}`), undefined);
 });
+
+// 회귀(2026-11-14): 워커 앞단 공통 한도(64KB)에 막혀 링크 파일 올리기가 전부 413 이었다.
+test("다운로드 링크: 워커 앞단 본문 한도가 파일 올리기(최대 12MB)를 막지 않는다", async () => {
+  const { shareBodyLimit, SHARE_MAX_BYTES } = await import("./fortune-share.js");
+  const { validateMutationRequest } = await import("./security.js");
+  const { readFileSync } = await import("node:fs");
+  const path = "/_fortune/share/AAAAAAAAAAAAAAAAAAAAAA/saju_comic.pdf";
+  const put = (len) => new Request(`https://util.bubblelab.dev${path}`, { method: "PUT", headers: { "Content-Length": String(len) } });
+  assert.equal(validateMutationRequest(put(3 * 1024 * 1024), shareBodyLimit(path)), null);
+  assert.equal(validateMutationRequest(put(SHARE_MAX_BYTES + 1), shareBodyLimit(path)).status, 413);
+  assert.equal(shareBodyLimit("/_fortune/share"), null);
+  assert.equal(shareBodyLimit("/_fortune/review"), null);
+  assert.match(readFileSync(new URL("./worker.js", import.meta.url), "utf8"), /shareBodyLimit\(path\)/);
+});

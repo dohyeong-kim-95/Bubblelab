@@ -8,7 +8,11 @@ const fortuneStub = (env) => env.FORTUNE.get(env.FORTUNE.idFromName("global"));
 // 파일은 R2(FORTUNE_BUCKET) share/<토큰>/<파일>, 목록·만료는 FortuneDO. 7일 지나면 지운다.
 export const SHARE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const SHARE_FILES = ["saju-01.jpg", "saju-02.jpg", "saju-03.jpg", "saju-04.jpg", "saju-05.jpg", "saju-06.jpg", "saju_comic.pdf", "comic.zip"];
-const SHARE_MAX_BYTES = 12 * 1024 * 1024;
+export const SHARE_MAX_BYTES = 12 * 1024 * 1024;
+// 워커 앞단의 공통 본문 한도(64KB)를 파일 올리기 경로만 넘게 해 준다 — 빠뜨려서 모든 업로드가 413 이었다(2026-11-14).
+export function shareBodyLimit(path) {
+  return /^\/_fortune\/share\/[A-Za-z0-9_-]{22}\/[A-Za-z0-9_.-]+$/.test(path) ? SHARE_MAX_BYTES : null;
+}
 const TOKEN_RE = /^[A-Za-z0-9_-]{22}$/;
 const shareType = (file) => file.endsWith(".pdf") ? "application/pdf" : file.endsWith(".zip") ? "application/zip" : "image/jpeg";
 
