@@ -91,6 +91,8 @@
       "DISCORD_PUBLIC_KEY",
       "DISCORD_APPLICATION_ID",
       "PAPERS_SINK_SECRET",
+      //   COMIC_SINK_SECRET → 만화 사주 신청 목록·후기(개인정보) 전용 집 PC 인증 — PAPERS 와 따로.
+      "COMIC_SINK_SECRET",
       "TWELVEDATA_API_KEY",
       "LIFE_PASSWORD",
       "LIFE_SESSION_SECRET",

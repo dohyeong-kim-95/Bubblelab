@@ -323,3 +323,12 @@ details.orig-box > summary { cursor: pointer; color: var(--faint); font: calc(va
   border: 1px solid var(--line); border-radius: 3px; outline: none; }
 .note-area:focus { border-color: var(--blue); }
 .count { text-align: right; margin: 2px 0 10px; }
+
+/* ── 개인정보처리방침(privacy/) ── */
+.policy-table { width: 100%; border-collapse: collapse; font-size: var(--t-s); line-height: 1.6; margin: 6px 0 10px; background: var(--scrap); }
+.policy-table th, .policy-table td { border: 1px solid var(--line); padding: 6px 7px; text-align: left; vertical-align: top; }
+.policy-table th { font-weight: 600; background: rgba(46, 44, 41, .05); }
+.policy-list { margin: 0 0 12px; padding-left: 1.2em; }
+.policy-list li { margin: 0 0 6px; }
+.policy h2 { margin-top: 22px; }
+@media (max-width: 420px) { .policy-table { font-size: 12px; } .policy-table th, .policy-table td { padding: 5px; } }

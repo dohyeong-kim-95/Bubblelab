@@ -723,7 +723,7 @@ export function sendFortuneDaily(env) {
 
 // ── 만화 사주 선착순 신청 (이벤트) ─────────────────────────────────
 // 메일 주소를 남기면 선착순 COMIC_CAP 명에게 다그당스 만화 사주를 사람이 직접 보낸다.
-// 신청은 FortuneDO 한 인스턴스에 두고, 집 PC 가 PAPERS_SINK_SECRET 으로 목록을 받아 간 뒤
+// 신청은 FortuneDO 한 인스턴스에 두고, 집 PC 가 COMIC_SINK_SECRET(개인정보 전용 — 논문·오픽의 PAPERS_SINK_SECRET 과 따로)으로 목록을 받아 간 뒤
 // 보낼 때마다 done 으로 개인정보(메일·생년월일)를 지운다. 남는 것은 받은 수뿐이다.
 export { COMIC_CAP };
 const EMAIL_RE = /^[^\s@<>()",;:]{1,64}@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*\.[a-z]{2,24}$/i;
@@ -770,7 +770,7 @@ export function validateComicRequest(body, today = kstToday()) {
  * 워커 라우트(속도 제한은 worker.js 가 먼저 건다):
  *   GET  /_fortune/comic-request/status        → { open, remaining }
  *   POST /_fortune/comic-request               → { ok, remaining } | { error }
- *   GET  /_fortune/comic-requests              (Bearer PAPERS_SINK_SECRET) → { count, remaining, requests }
+ *   GET  /_fortune/comic-requests              (Bearer COMIC_SINK_SECRET) → { count, remaining, requests }
  *   POST /_fortune/comic-requests/<id>/done    (Bearer) → { ok } — 그 신청의 메일·생년월일 삭제
  *   POST /_fortune/comic-requests/<id>/ready   (Bearer) {status:"packaged"|"failed", reason} → 디스코드 알림
  */
@@ -790,7 +790,7 @@ export function validateReview(body) {
 
 /**
  *   POST /_fortune/review     {rating, text, nick?, publish?}  → { ok } | { error }
- *   GET  /_fortune/reviews    (Bearer PAPERS_SINK_SECRET) → { count, reviews }
+ *   GET  /_fortune/reviews    (Bearer COMIC_SINK_SECRET) → { count, reviews }
  */
 export async function handleFortuneReview(request, env, url) {
   const json = (body, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -808,9 +808,9 @@ export async function handleFortuneReview(request, env, url) {
   }
   if (url.pathname !== "/_fortune/reviews") return json({ error: "not found" }, 404);
   if (request.method !== "GET") return json({ error: "method" }, 405);
-  if (!env.PAPERS_SINK_SECRET) return json({ error: "not configured" }, 503);
+  if (!env.COMIC_SINK_SECRET) return json({ error: "not configured" }, 503);
   const offered = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
-  if (!secretMatches(offered, env.PAPERS_SINK_SECRET)) return json({ error: "unauthorized" }, 401);
+  if (!secretMatches(offered, env.COMIC_SINK_SECRET)) return json({ error: "unauthorized" }, 401);
   return relay("/review/list");
 }
 
@@ -838,9 +838,9 @@ export async function handleFortuneComic(request, env, url) {
   const done = /^\/_fortune\/comic-requests\/([0-9a-f]{16})\/done$/.exec(path);
   const ready = /^\/_fortune\/comic-requests\/([0-9a-f]{16})\/ready$/.exec(path);
   if (path !== "/_fortune/comic-requests" && !done && !ready) return json({ error: "not found" }, 404);
-  if (!env.PAPERS_SINK_SECRET) return json({ error: "not configured" }, 503);
+  if (!env.COMIC_SINK_SECRET) return json({ error: "not configured" }, 503);
   const offered = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
-  if (!secretMatches(offered, env.PAPERS_SINK_SECRET)) return json({ error: "unauthorized" }, 401);
+  if (!secretMatches(offered, env.COMIC_SINK_SECRET)) return json({ error: "unauthorized" }, 401);
   if (done) {
     if (request.method !== "POST") return json({ error: "method" }, 405);
     return relay(`/comic/done/${done[1]}`, { method: "POST" });

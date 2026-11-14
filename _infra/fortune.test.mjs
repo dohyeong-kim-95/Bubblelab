@@ -363,7 +363,7 @@ test("회귀(4차): 근거 없는 분야의 첫머리가 비문이 아니다('�
 async function comicEnv(extra = {}) {
   const { handleFortuneComic } = await import("./fortune.js");
   const storage = new MemoryStorage();
-  const env = { PAPERS_SINK_SECRET: "sink-secret", ...extra };
+  const env = { COMIC_SINK_SECRET: "sink-secret", ...extra };
   const fortune = new FortuneDO({ storage }, env);
   const stub = { fetch: (input, init) => fortune.fetch(new Request(input, init)) };
   env.FORTUNE = { idFromName: () => "global", get: () => stub };
@@ -433,7 +433,7 @@ test("만화 사주: 목록·완료는 시크릿 없이 못 쓰고, 상태에는
   assert.deepEqual(JSON.parse(status), { open: true, remaining: 9 });
   assert.doesNotMatch(status, /example|1992|male/);
   // 시크릿이 설정되지 않은 배포에서는 목록 자체가 닫힌다
-  const closed = await comicEnv({ PAPERS_SINK_SECRET: undefined });
+  const closed = await comicEnv({ COMIC_SINK_SECRET: undefined });
   assert.equal((await closed.call("GET", "/_fortune/comic-requests", undefined, AUTH)).status, 503);
 });
 
@@ -551,7 +551,7 @@ test("만화 사주: 집 PC 의 준비됨/실패 알림은 시크릿이 있어�
 async function reviewEnv(extra = {}) {
   const { handleFortuneReview } = await import("./fortune.js");
   const storage = new MemoryStorage();
-  const env = { PAPERS_SINK_SECRET: "sink-secret", ...extra };
+  const env = { COMIC_SINK_SECRET: "sink-secret", ...extra };
   const fortune = new FortuneDO({ storage }, env);
   const stub = { fetch: (input, init) => fortune.fetch(new Request(input, init)) };
   env.FORTUNE = { idFromName: () => "global", get: () => stub };
@@ -593,4 +593,13 @@ test("후기: 새 후기는 별점과 앞부분만 디스코드로 간다", asyn
   assert.equal(sent.length, 1);
   assert.match(sent[0], /★★★☆☆ — 곰/);
   assert.match(sent[0], /…$/);
+});
+
+// 개인정보(신청 목록·후기)는 논문·오픽과 같은 키로 열리면 안 된다 — 키를 나눴다(2026-11-14).
+test("만화 사주·후기 목록은 COMIC_SINK_SECRET 으로만 열리고 PAPERS_SINK_SECRET 으로는 안 열린다", async () => {
+  const { call } = await comicEnv({ PAPERS_SINK_SECRET: "papers-secret" });
+  assert.equal((await call("GET", "/_fortune/comic-requests", undefined, { Authorization: "Bearer papers-secret" })).status, 401);
+  assert.equal((await call("GET", "/_fortune/comic-requests", undefined, AUTH)).status, 200);
+  const r = await reviewEnv({ PAPERS_SINK_SECRET: "papers-secret" });
+  assert.equal((await r.call("GET", "/_fortune/reviews", undefined, { Authorization: "Bearer papers-secret" })).status, 401);
 });
