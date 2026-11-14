@@ -22,3 +22,13 @@ export function comicReadyNotice(status, reason) {
   return { content, allowed_mentions: { parse: [] } };
 }
 
+
+// 만화 사주 후기가 들어오면 알린다. 후기에는 연락처가 없다(받지 않는다) — 별점과 앞부분만.
+export function reviewNotice(rating, text, nick) {
+  const head = String(text).replace(/\s+/g, " ").slice(0, 80);
+  const stars = "★".repeat(rating) + "☆".repeat(5 - rating);
+  return {
+    content: `📝 만화 사주 후기 ${stars}${nick ? ` — ${nick}` : ""}\n> ${head}${text.length > 80 ? "…" : ""}`,
+    allowed_mentions: { parse: [] },
+  };
+}

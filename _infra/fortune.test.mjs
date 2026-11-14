@@ -546,3 +546,51 @@ test("만화 사주: 집 PC 의 준비됨/실패 알림은 시크릿이 있어�
   assert.match(sent[1], /재료가 준비됐어요/);
   assert.match(sent[2], /멈췄어요 — 시주 불일치 x y\.com/);
 });
+
+// ── 만화 사주 후기 ──
+async function reviewEnv(extra = {}) {
+  const { handleFortuneReview } = await import("./fortune.js");
+  const storage = new MemoryStorage();
+  const env = { PAPERS_SINK_SECRET: "sink-secret", ...extra };
+  const fortune = new FortuneDO({ storage }, env);
+  const stub = { fetch: (input, init) => fortune.fetch(new Request(input, init)) };
+  env.FORTUNE = { idFromName: () => "global", get: () => stub };
+  const call = (method, path, body, headers = {}) => {
+    const url = new URL(`https://util.bubblelab.dev${path}`);
+    return handleFortuneReview(new Request(url, { method, headers: { "Content-Type": "application/json", ...headers },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }) }), env, url);
+  };
+  return { storage, call };
+}
+
+test("후기: 별점 1~5·글 5~500자만 받고, 봇 칸은 티 없이 버리고, 목록은 시크릿으로만", async () => {
+  const { call, storage } = await reviewEnv();
+  for (const [body, error] of [
+    [{ rating: 0, text: "좋았어요 정말" }, "rating"], [{ rating: 6, text: "좋았어요 정말" }, "rating"],
+    [{ rating: 5, text: "좋아" }, "text"], [{ rating: 5, text: "가".repeat(501) }, "text"],
+  ]) {
+    const res = await call("POST", "/_fortune/review", body);
+    assert.equal(res.status, 400); assert.equal((await res.json()).error, error);
+  }
+  const bot = await call("POST", "/_fortune/review", { rating: 5, text: "광고 광고 광고", website: "http://spam" });
+  assert.deepEqual(await bot.json(), { ok: true });
+  assert.equal((await storage.list({ prefix: "review:item:" })).size, 0);
+  const ok = await call("POST", "/_fortune/review", { rating: 4, text: "  만화로 보니 술술 읽혀요  ", nick: "  아주아주아주긴별명입니다요  ", publish: "yes" });
+  assert.deepEqual(await ok.json(), { ok: true });
+  assert.equal((await call("GET", "/_fortune/reviews")).status, 401);
+  const list = await (await call("GET", "/_fortune/reviews", undefined, AUTH)).json();
+  assert.equal(list.count, 1);
+  assert.equal(list.reviews[0].text, "만화로 보니 술술 읽혀요");
+  assert.equal(list.reviews[0].nick.length, 12);
+  assert.equal(list.reviews[0].publish, false);   // true 만 동의로 본다
+});
+
+test("후기: 새 후기는 별점과 앞부분만 디스코드로 간다", async () => {
+  const { call } = await reviewEnv(DISCORD);
+  const sent = [];
+  await withFetch(async (url, init) => { sent.push(JSON.parse(init.body).content); return new Response("{}"); },
+    () => call("POST", "/_fortune/review", { rating: 3, text: "가".repeat(120), nick: "곰" }));
+  assert.equal(sent.length, 1);
+  assert.match(sent[0], /★★★☆☆ — 곰/);
+  assert.match(sent[0], /…$/);
+});

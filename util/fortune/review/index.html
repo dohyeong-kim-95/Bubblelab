@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#4A4038">
+<meta name="robots" content="noindex">
+<title>만화 사주 후기 · 운세 노트</title>
+<meta name="description" content="운세 노트가 그려 드린 만화 사주를 받아 보셨다면 짧은 후기를 남겨 주세요.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>📝</text></svg>">
+<link rel="stylesheet" href="../fonts/fonts.css">
+<link rel="stylesheet" href="../note.css">
+</head>
+<body>
+<div class="book">
+<main class="page review-page">
+  <h1 class="hand h-title ask">만화 사주,<br>어떠셨어요?</h1>
+  <p>운세 노트가 그려 드린 만화 사주를 받아 보셨다면, 짧게라도 후기를 남겨 주세요. 다음 만화를 그릴 때 큰 힘이 돼요.</p>
+
+  <section class="scrap" id="review">
+    <span class="tape"></span>
+    <form id="review-form" novalidate>
+      <p class="hand h-sub say" id="stars-label">별점</p>
+      <div class="stars" role="radiogroup" aria-labelledby="stars-label" id="stars"></div>
+
+      <label class="hand h-sub say gap-s" for="review-text">한 줄이라도 좋아요</label>
+      <textarea class="note-area" id="review-text" maxlength="500" rows="5" placeholder="예) 제 성격이랑 꼭 닮아서 웃었어요. 만화로 보니 술술 읽혀요."></textarea>
+      <p class="small count" id="review-count">0 / 500</p>
+
+      <label class="small" for="review-nick">별명(안 적어도 돼요)</label><br>
+      <input class="blank wname" id="review-nick" maxlength="12" autocomplete="off" placeholder="익명">
+      <input class="honey" id="review-web" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+
+      <div class="consent">
+        <button type="button" class="check" id="review-publish" role="checkbox" aria-checked="false" aria-labelledby="review-publish-text"></button>
+        <p id="review-publish-text">운세 노트 화면에 이 후기를 소개해도 괜찮아요. 적은 별명으로만 싣고, 메일 주소나 생년월일은 받지 않아요. 체크하지 않으면 저희만 읽어요.</p>
+      </div>
+
+      <button type="submit" class="pen sm" id="review-send">후기 남기기 →</button>
+      <p class="err small red" id="review-err"></p>
+    </form>
+    <div id="review-done" hidden>
+      <p class="hand h-sub say">고마워요!</p>
+      <p>남겨 주신 후기는 잘 읽을게요.</p>
+    </div>
+  </section>
+
+  <p class="small"><a class="link" href="../">← 운세 노트로 가기</a></p>
+</main>
+</div>
+<script src="../vendor/rough.min.js"></script>
+<script src="../note.js"></script>
+<script src="review.js"></script>
+</body>
+</html>

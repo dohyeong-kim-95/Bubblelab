@@ -309,3 +309,17 @@ details.orig-box > summary { cursor: pointer; color: var(--faint); font: calc(va
 @media (prefers-reduced-motion: reduce) {
   .flipper, .pencil { display: none; }
 }
+
+/* ── 만화 사주 후기(review/) ── */
+.review-page .consent { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 8px; align-items: start; margin: 14px 0 6px; }
+.review-page .consent p { margin: 0; font-size: var(--t-s); line-height: 1.6; }
+.stars { display: flex; gap: 2px; margin: 0 0 6px; }
+.star { border: 0; background: none; padding: 2px 4px; font-size: 34px; line-height: 1; color: rgba(124, 119, 110, .35); }
+.star.on { color: var(--red); }
+.star:focus-visible { outline: 2px dashed var(--blue); outline-offset: 2px; }
+.note-area { display: block; width: 100%; min-height: 8em; resize: vertical; padding: 6px 8px;
+  font: calc(var(--t-sub) * var(--hs))/1.4 var(--hand); color: var(--blue);
+  background: repeating-linear-gradient(transparent 0, transparent calc(1.4em - 1px), var(--line) calc(1.4em - 1px), var(--line) 1.4em);
+  border: 1px solid var(--line); border-radius: 3px; outline: none; }
+.note-area:focus { border-color: var(--blue); }
+.count { text-align: right; margin: 2px 0 10px; }

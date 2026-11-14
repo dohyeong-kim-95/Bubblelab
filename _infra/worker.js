@@ -81,7 +81,7 @@ const PUZZLE_TO_SLOP = new Map([
 ]);
 // cron이 리뷰를 주기적으로 동기화할 외주 프로젝트 목록 (커머스 API, 현재 mock).
 const WORK_REVIEW_PROJECTS = ["daonfit"];
-import { handleFortuneChart, handleFortuneComic, handleFortunePush, sendFortuneDaily } from "./fortune.js";
+import { handleFortuneChart, handleFortuneComic, handleFortunePush, handleFortuneReview, sendFortuneDaily } from "./fortune.js";
 import { handleYaksokApi, renderRoomPage } from "./yaksok.js";
 import { CODE_RE as YAKSOK_CODE_RE } from "../util/yaksok/logic.js";
 import { handleBriefPush, handleBriefRates, handleBriefToday, sendBriefDaily } from "./brief.js";
@@ -1153,6 +1153,19 @@ export async function handleRequest(request, env, ctx) {
         if (limited) return limited;
       }
       return handleFortuneComic(request, env, url);
+    }
+
+    // 만화 사주 후기(util/fortune/review). 글쓰기만 IP 당 한도, 목록은 집 PC 시크릿(fortune.js).
+    if (path === "/_fortune/review" || path === "/_fortune/reviews") {
+      if (path === "/_fortune/review" && request.method === "POST") {
+        const contentTypeError = requireJsonRequest(request);
+        if (contentTypeError) return contentTypeError;
+        const limited = await enforceRateLimit(request, env, {
+          scope: "fortune-review", limit: 3, windowMs: 10 * 60 * 1000,
+        });
+        if (limited) return limited;
+      }
+      return handleFortuneReview(request, env, url);
     }
 
     // 매일 오전 8시(KST) 운세 알림 구독 — 익명 Web Push. GET은 공개키 조회.

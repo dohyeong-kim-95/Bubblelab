@@ -1,7 +1,7 @@
 import manseryeok from "manseryeok";
 import { sendWebPush } from "./webpush.js";
 import { createDelivery, postToDiscord, secretMatches } from "./papers.js";
-import { COMIC_CAP, comicNotice, comicReadyNotice } from "./fortune-comic-notice.js";
+import { COMIC_CAP, comicNotice, comicReadyNotice, reviewNotice } from "./fortune-comic-notice.js";
 import { LITERARY_STAR, buildSajuDetail, twelveShinsal } from "./saju-detail.js";
 import {
   READING_RULES, branchRelation as branchRelationName, buildCompatibility, buildSajuReading, elementCounts, markSpans,
@@ -774,6 +774,46 @@ export function validateComicRequest(body, today = kstToday()) {
  *   POST /_fortune/comic-requests/<id>/done    (Bearer) → { ok } — 그 신청의 메일·생년월일 삭제
  *   POST /_fortune/comic-requests/<id>/ready   (Bearer) {status:"packaged"|"failed", reason} → 디스코드 알림
  */
+// ── 만화 사주 후기 ── util/fortune/review/ 에서 받는다. 연락처는 받지 않는다(별점·글·별명·소개 동의만).
+// 소개 동의(publish)는 나중에 화면에 이름 없이 싣는 것에 대한 것 — 지금은 싣지 않고 모으기만 한다.
+export const REVIEW_CAP = 500;
+export function validateReview(body) {
+  if (!body || typeof body !== "object") return { error: "invalid" };
+  if (body.website) return { error: "bot" };
+  const rating = Number(body.rating);
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) return { error: "rating" };
+  const text = typeof body.text === "string" ? body.text.replace(/\r\n?/g, "\n").trim() : "";
+  if (text.length < 5 || text.length > 500) return { error: "text" };
+  const nick = typeof body.nick === "string" ? body.nick.replace(/\s+/g, " ").trim().slice(0, 12) : "";
+  return { value: { rating, text, nick, publish: body.publish === true } };
+}
+
+/**
+ *   POST /_fortune/review     {rating, text, nick?, publish?}  → { ok } | { error }
+ *   GET  /_fortune/reviews    (Bearer PAPERS_SINK_SECRET) → { count, reviews }
+ */
+export async function handleFortuneReview(request, env, url) {
+  const json = (body, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
+  const relay = async (target, init) => {
+    const res = await fortuneStub(env).fetch(`https://fortune.internal${target}`, init);
+    return new Response(res.body, { status: res.status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+  };
+  if (url.pathname === "/_fortune/review") {
+    if (request.method !== "POST") return json({ error: "method" }, 405);
+    if (+(request.headers.get("Content-Length") ?? 0) > 4096) return json({ error: "too-large" }, 413);
+    const checked = validateReview(await request.json().catch(() => null));
+    if (checked.error === "bot") return json({ ok: true });
+    if (checked.error) return json({ error: checked.error }, 400);
+    return relay("/review/add", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(checked.value) });
+  }
+  if (url.pathname !== "/_fortune/reviews") return json({ error: "not found" }, 404);
+  if (request.method !== "GET") return json({ error: "method" }, 405);
+  if (!env.PAPERS_SINK_SECRET) return json({ error: "not configured" }, 503);
+  const offered = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+  if (!secretMatches(offered, env.PAPERS_SINK_SECRET)) return json({ error: "unauthorized" }, 401);
+  return relay("/review/list");
+}
+
 export async function handleFortuneComic(request, env, url) {
   const path = url.pathname;
   const json = (body, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -828,6 +868,7 @@ export class FortuneDO {
     if (url.pathname === "/push" && request.method === "DELETE") return this.unsubscribe(request);
     if (url.pathname === "/notify" && request.method === "POST") return this.notifyDaily();
     if (url.pathname.startsWith("/comic/")) return this.comic(request, url);
+    if (url.pathname.startsWith("/review/")) return this.review(request, url);
     return new Response("not found", { status: 404 });
   }
 
@@ -902,6 +943,26 @@ export class FortuneDO {
       const { status, reason } = await request.json().catch(() => ({}));
       const sent = await postComicNotice(this.env, comicReadyNotice(status, reason));
       return Response.json({ ok: true, notified: sent });
+    }
+    return new Response("not found", { status: 404 });
+  }
+
+  async review(request, url) {
+    if (url.pathname === "/review/add" && request.method === "POST") {
+      const value = await request.json().catch(() => null);
+      if (!value?.text) return Response.json({ error: "invalid" }, { status: 400 });
+      const count = (await this.storage.get("review:count")) ?? 0;
+      if (count >= REVIEW_CAP) return Response.json({ error: "full" }, { status: 409 });
+      const created = new Date().toISOString();
+      const id = `${created}-${crypto.randomUUID().slice(0, 8)}`;
+      await this.storage.put(`review:item:${id}`, { id, ...value, created });
+      await this.storage.put("review:count", count + 1);
+      await postComicNotice(this.env, reviewNotice(value.rating, value.text, value.nick));
+      return Response.json({ ok: true });
+    }
+    if (url.pathname === "/review/list" && request.method === "GET") {
+      const reviews = [...(await this.storage.list({ prefix: "review:item:" })).values()];
+      return Response.json({ count: reviews.length, reviews });
     }
     return new Response("not found", { status: 404 });
   }

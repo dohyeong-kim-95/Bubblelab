@@ -3,7 +3,7 @@
 // 보는 것: 첫 방문 빈칸 문장 → 쓰는 동작(탭하면 끝) → 다시 온 사람의 오늘 장 넘기기(하루 한 번),
 // 어두운 OS 에서도 밝은 종이, 인생 곡선 이름표가 겹치지 않는 자리, 만화 사주 신청(동의 필수).
 import { expect, test } from "@playwright/test";
-import { FortuneDO, handleFortuneChart, handleFortuneComic } from "../fortune.js";
+import { FortuneDO, handleFortuneChart, handleFortuneComic, handleFortuneReview } from "../fortune.js";
 
 class MemoryStorage {
   constructor() { this.data = new Map(); }
@@ -22,6 +22,7 @@ async function serveFortune(page) {
     const request = new Request(url, { method: req.method(), headers: req.headers(), body: req.method() === "GET" ? undefined : req.postData() });
     const res = url.pathname === "/_fortune/chart" ? await handleFortuneChart(request, {})
       : url.pathname.startsWith("/_fortune/comic") ? await handleFortuneComic(request, env, url)
+      : url.pathname.startsWith("/_fortune/review") ? await handleFortuneReview(request, env, url)
       : Response.json({ vapidPublicKey: null });
     await route.fulfill({ status: res.status, contentType: "application/json", body: await res.text() });
   });
@@ -137,6 +138,27 @@ test("좁은 폰 첫 화면: 년·월·일이 한 줄이고, 만화 사주 선�
   const { h, lh } = await page.locator(".date-line").first().evaluate((l) => ({
     h: l.getBoundingClientRect().height, lh: parseFloat(getComputedStyle(l).lineHeight) }));
   expect(h).toBeLessThan(lh * 1.5);
+  expect(await overflow(page)).toBeLessThanOrEqual(0);
+  await ctx.close();
+});
+
+// 만화 사주를 받은 사람이 메일의 주소로 와서 후기를 남긴다(연락처는 받지 않는다).
+test("후기: 좁은 폰에서 별점 없이는 안 가고, 별점·글을 적으면 저장된다", async ({ browser }) => {
+  const ctx = await browser.newContext({ viewport: { width: 360, height: 780 } });
+  const page = await ctx.newPage();
+  const fortune = await serveFortune(page);
+  await page.goto("/util/fortune/review/");
+  await page.fill("#review-text", "제 성격이랑 꼭 닮아서 웃었어요.");
+  await page.click("#review-send");
+  await expect(page.locator("#review-err")).toContainText("별점");
+  await page.locator(".star").nth(3).click();
+  await page.fill("#review-nick", "토끼");
+  await page.click("#review-publish");
+  await page.click("#review-send");
+  await expect(page.locator("#review-done")).toBeVisible();
+  const items = [...(await fortune.storage.list({ prefix: "review:item:" })).values()];
+  expect(items).toHaveLength(1);
+  expect(items[0]).toMatchObject({ rating: 4, nick: "토끼", publish: true, text: "제 성격이랑 꼭 닮아서 웃었어요." });
   expect(await overflow(page)).toBeLessThanOrEqual(0);
   await ctx.close();
 });
