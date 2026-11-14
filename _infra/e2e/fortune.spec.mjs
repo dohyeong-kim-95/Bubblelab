@@ -3,7 +3,7 @@
 // 보는 것: 첫 방문 빈칸 문장 → 쓰는 동작(탭하면 끝) → 다시 온 사람의 오늘 장 넘기기(하루 한 번),
 // 어두운 OS 에서도 밝은 종이, 인생 곡선 이름표가 겹치지 않는 자리, 만화 사주 신청(동의 필수).
 import { expect, test } from "@playwright/test";
-import { FortuneDO, handleFortuneChart, handleFortuneComic, handleFortuneReview } from "../fortune.js";
+import { FortuneDO, handleFortuneChart, handleFortuneComic, handleFortuneReview, handleFortuneShare } from "../fortune.js";
 
 class MemoryStorage {
   constructor() { this.data = new Map(); }
@@ -13,9 +13,23 @@ class MemoryStorage {
   async list({ prefix = "" } = {}) { return new Map([...this.data].filter(([k]) => k.startsWith(prefix))); }
 }
 
+class MemoryBucket {
+  constructor() { this.data = new Map(); }
+  async put(k, v) { this.data.set(k, new Uint8Array(v)); }
+  async get(k) { return this.data.has(k) ? { body: this.data.get(k) } : null; }
+  async delete(k) { this.data.delete(k); }
+  async list({ prefix }) { return { objects: [...this.data.keys()].filter((k) => k.startsWith(prefix)).map((key) => ({ key })) }; }
+}
+
 async function serveFortune(page) {
-  const fortune = new FortuneDO({ storage: new MemoryStorage() }, {});
-  const env = { FORTUNE: { idFromName: () => "global", get: () => ({ fetch: (u, i) => fortune.fetch(new Request(u, i)) }) } };
+  const env = { COMIC_SINK_SECRET: "sink", FORTUNE_BUCKET: new MemoryBucket() };
+  const fortune = new FortuneDO({ storage: new MemoryStorage() }, env);
+  env.FORTUNE = { idFromName: () => "global", get: () => ({ fetch: (u, i) => fortune.fetch(new Request(u, i)) }) };
+  fortune.env = env;
+  fortune.share = (method, path, body) => {
+    const url = new URL(`https://util.bubblelab.dev${path}`);
+    return handleFortuneShare(new Request(url, { method, headers: { Authorization: "Bearer sink" }, ...(body ? { body } : {}) }), env, url);
+  };
   await page.route(/\/_fortune\//, async (route) => {
     const req = route.request();
     const url = new URL(req.url());
@@ -23,8 +37,9 @@ async function serveFortune(page) {
     const res = url.pathname === "/_fortune/chart" ? await handleFortuneChart(request, {})
       : url.pathname.startsWith("/_fortune/comic") ? await handleFortuneComic(request, env, url)
       : url.pathname.startsWith("/_fortune/review") ? await handleFortuneReview(request, env, url)
+      : url.pathname.startsWith("/_fortune/share") ? await handleFortuneShare(request, env, url)
       : Response.json({ vapidPublicKey: null });
-    await route.fulfill({ status: res.status, contentType: "application/json", body: await res.text() });
+    await route.fulfill({ status: res.status, headers: Object.fromEntries(res.headers), body: Buffer.from(await res.arrayBuffer()) });
   });
   return fortune;
 }
@@ -160,5 +175,25 @@ test("후기: 좁은 폰에서 별점 없이는 안 가고, 별점·글을 적�
   expect(items).toHaveLength(1);
   expect(items[0]).toMatchObject({ rating: 4, nick: "토끼", publish: true, text: "제 성격이랑 꼭 닮아서 웃었어요." });
   expect(await overflow(page)).toBeLessThanOrEqual(0);
+  await ctx.close();
+});
+
+// 인스타 DM 신청분은 메일 대신 링크(#토큰)로 받는다 — 제목·PDF·그림이 보이고, 지난 링크는 지웠다고 말한다.
+test("만화 사주 받기: 링크로 열면 제목·PDF·그림이 보이고, 잘못된 링크는 안내한다", async ({ browser }) => {
+  const ctx = await browser.newContext({ viewport: { width: 360, height: 780 } });
+  const page = await ctx.newPage();
+  const fortune = await serveFortune(page);
+  const { token } = await (await fortune.share("POST", "/_fortune/share", JSON.stringify({ title: "촛불 켠 사람" }))).json();
+  await fortune.share("PUT", `/_fortune/share/${token}/saju-01.jpg`, new Uint8Array([255, 216, 255]));
+  await fortune.share("PUT", `/_fortune/share/${token}/saju_comic.pdf`, new Uint8Array([37, 80, 68, 70]));
+  await page.goto(`/util/fortune/get/#${token}`);
+  await expect(page.locator("#get-title")).toHaveText("「촛불 켠 사람」");
+  await expect(page.locator("#get-pdf")).toHaveAttribute("href", `/_fortune/share/${token}/saju_comic.pdf`);
+  await expect(page.locator("#get-pages img")).toHaveCount(1);
+  await expect(page.locator("#get-expire")).toContainText("7일");
+  expect(await overflow(page)).toBeLessThanOrEqual(0);
+  await page.goto("/util/fortune/get/#AAAAAAAAAAAAAAAAAAAAAA");
+  await page.reload();
+  await expect(page.locator("#get-status")).toContainText("지워졌어요");
   await ctx.close();
 });

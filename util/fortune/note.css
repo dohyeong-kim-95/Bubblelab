@@ -332,3 +332,8 @@ details.orig-box > summary { cursor: pointer; color: var(--faint); font: calc(va
 .policy-list li { margin: 0 0 6px; }
 .policy h2 { margin-top: 22px; }
 @media (max-width: 420px) { .policy-table { font-size: 12px; } .policy-table th, .policy-table td { padding: 5px; } }
+
+/* ── 만화 사주 받기(get/) ── */
+.get-pages { display: grid; gap: 10px; margin: 14px 0 6px; }
+.get-pages img { display: block; width: 100%; max-width: 100%; height: auto; border-radius: 6px; box-shadow: 0 1px 4px rgba(46, 44, 41, .18); }
+a.pen { text-decoration: none; }

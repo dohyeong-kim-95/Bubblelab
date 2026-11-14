@@ -81,7 +81,7 @@ const PUZZLE_TO_SLOP = new Map([
 ]);
 // cron이 리뷰를 주기적으로 동기화할 외주 프로젝트 목록 (커머스 API, 현재 mock).
 const WORK_REVIEW_PROJECTS = ["daonfit"];
-import { handleFortuneChart, handleFortuneComic, handleFortunePush, handleFortuneReview, sendFortuneDaily } from "./fortune.js";
+import { handleFortuneChart, handleFortuneComic, handleFortunePush, handleFortuneReview, handleFortuneShare, sendFortuneDaily } from "./fortune.js";
 import { handleYaksokApi, renderRoomPage } from "./yaksok.js";
 import { CODE_RE as YAKSOK_CODE_RE } from "../util/yaksok/logic.js";
 import { handleBriefPush, handleBriefRates, handleBriefToday, sendBriefDaily } from "./brief.js";
@@ -1153,6 +1153,11 @@ export async function handleRequest(request, env, ctx) {
         if (limited) return limited;
       }
       return handleFortuneComic(request, env, url);
+    }
+
+    // 만화 사주 다운로드 링크(인스타 DM 신청분). 올리기·지우기는 집 PC 시크릿, 읽기는 토큰(fortune.js).
+    if (path === "/_fortune/share" || path.startsWith("/_fortune/share/")) {
+      return handleFortuneShare(request, env, url);
     }
 
     // 만화 사주 후기(util/fortune/review). 글쓰기만 IP 당 한도, 목록은 집 PC 시크릿(fortune.js).

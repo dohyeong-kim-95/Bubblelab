@@ -52,7 +52,9 @@
     { "binding": "DURI_BUCKET", "bucket_name": "bubblelab-duri" },
     // LIFE 백업 한 덩어리. 표지 같은 큰 것은 담지 않아 작지만, 몇 해 쌓이면
     // DO 값 한도(128KB)를 넘길 수 있어 R2 에 둔다.
-    { "binding": "LIFE_BUCKET", "bucket_name": "bubblelab-life" }
+    { "binding": "LIFE_BUCKET", "bucket_name": "bubblelab-life" },
+    // 만화 사주 다운로드 링크(인스타 DM 신청분). 7일 뒤 FortuneDO 가 지우고, 버킷 수명 규칙(share/ 8일)이 한 번 더 지운다.
+    { "binding": "FORTUNE_BUCKET", "bucket_name": "bubblelab-fortune" }
   ],
   // 매일 06:40 KST(21:40 UTC) 팟캐스트 자동 생성
   // · 08:00 KST(23:00 UTC) 운세 알림 + 아침 브리핑(날씨) 알림

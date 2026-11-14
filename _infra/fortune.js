@@ -2,6 +2,8 @@ import manseryeok from "manseryeok";
 import { sendWebPush } from "./webpush.js";
 import { createDelivery, postToDiscord, secretMatches } from "./papers.js";
 import { COMIC_CAP, comicNotice, comicReadyNotice, reviewNotice } from "./fortune-comic-notice.js";
+import { shareInDO } from "./fortune-share.js";
+export { handleFortuneShare, SHARE_FILES, SHARE_TTL_MS } from "./fortune-share.js";
 import { LITERARY_STAR, buildSajuDetail, twelveShinsal } from "./saju-detail.js";
 import {
   READING_RULES, branchRelation as branchRelationName, buildCompatibility, buildSajuReading, elementCounts, markSpans,
@@ -869,6 +871,7 @@ export class FortuneDO {
     if (url.pathname === "/notify" && request.method === "POST") return this.notifyDaily();
     if (url.pathname.startsWith("/comic/")) return this.comic(request, url);
     if (url.pathname.startsWith("/review/")) return this.review(request, url);
+    if (url.pathname.startsWith("/share/")) return shareInDO(this.storage, this.env, request, url);
     return new Response("not found", { status: 404 });
   }
 

@@ -603,3 +603,58 @@ test("만화 사주·후기 목록은 COMIC_SINK_SECRET 으로만 열리고 PAPE
   const r = await reviewEnv({ PAPERS_SINK_SECRET: "papers-secret" });
   assert.equal((await r.call("GET", "/_fortune/reviews", undefined, { Authorization: "Bearer papers-secret" })).status, 401);
 });
+
+// ── 만화 사주 다운로드 링크(인스타 DM 신청분) ──
+class FakeR2 {
+  constructor() { this.data = new Map(); }
+  async put(k, v) { this.data.set(k, new Uint8Array(v)); }
+  async get(k) { return this.data.has(k) ? { body: this.data.get(k) } : null; }
+  async delete(k) { this.data.delete(k); }
+  async list({ prefix }) { return { objects: [...this.data.keys()].filter((k) => k.startsWith(prefix)).map((key) => ({ key })) }; }
+}
+async function shareEnv() {
+  const { handleFortuneShare } = await import("./fortune.js");
+  const storage = new MemoryStorage();
+  const bucket = new FakeR2();
+  const env = { COMIC_SINK_SECRET: "sink-secret", FORTUNE_BUCKET: bucket };
+  const fortune = new FortuneDO({ storage }, env);
+  env.FORTUNE = { idFromName: () => "global", get: () => ({ fetch: (i, n) => fortune.fetch(new Request(i, n)) }) };
+  const call = (method, path, body, headers = {}) => {
+    const url = new URL(`https://util.bubblelab.dev${path}`);
+    return handleFortuneShare(new Request(url, { method, headers, ...(body === undefined ? {} : { body }) }), env, url);
+  };
+  return { storage, bucket, call };
+}
+
+test("다운로드 링크: 시크릿으로만 만들고 올리며, 토큰으로 읽고, 정해진 파일만 받는다", async () => {
+  const { call, bucket } = await shareEnv();
+  assert.equal((await call("POST", "/_fortune/share", JSON.stringify({ title: "x" }))).status, 401);
+  const made = await (await call("POST", "/_fortune/share", JSON.stringify({ title: "촛불 켠 사람" }), AUTH)).json();
+  assert.match(made.token, /^[A-Za-z0-9_-]{22}$/);
+  const t = made.token;
+  assert.equal((await call("PUT", `/_fortune/share/${t}/saju-01.jpg`, new Uint8Array([1, 2, 3]))).status, 401);
+  assert.equal((await call("PUT", `/_fortune/share/${t}/saju-01.jpg`, new Uint8Array([1, 2, 3]), AUTH)).status, 200);
+  assert.equal((await call("PUT", `/_fortune/share/${t}/evil.html`, new Uint8Array([1]), AUTH)).status, 404);
+  const meta = await (await call("GET", `/_fortune/share/${t}`)).json();
+  assert.deepEqual(meta.files, ["saju-01.jpg"]);
+  assert.equal(meta.title, "촛불 켠 사람");
+  const img = await call("GET", `/_fortune/share/${t}/saju-01.jpg`);
+  assert.equal(img.headers.get("Content-Type"), "image/jpeg");
+  assert.match(img.headers.get("Cache-Control"), /no-store/);
+  assert.equal((await call("GET", "/_fortune/share/AAAAAAAAAAAAAAAAAAAAAA")).status, 410);
+  assert.equal((await call("GET", "/_fortune/share/../x")).status, 404);
+  assert.equal((await call("DELETE", `/_fortune/share/${t}`, undefined, AUTH)).status, 200);
+  assert.equal((await call("GET", `/_fortune/share/${t}`)).status, 410);
+  assert.equal(bucket.data.size, 0);
+});
+
+test("다운로드 링크: 7일이 지나면 410 이고 R2 파일까지 지워진다", async () => {
+  const { call, bucket, storage } = await shareEnv();
+  const { token } = await (await call("POST", "/_fortune/share", JSON.stringify({ title: "a" }), AUTH)).json();
+  await call("PUT", `/_fortune/share/${token}/saju_comic.pdf`, new Uint8Array([9]), AUTH);
+  const item = await storage.get(`share:${token}`);
+  item.expires = Date.now() - 1; await storage.put(`share:${token}`, item);
+  assert.equal((await call("GET", `/_fortune/share/${token}/saju_comic.pdf`)).status, 410);
+  assert.equal(bucket.data.size, 0);
+  assert.equal(await storage.get(`share:${token}`), undefined);
+});
