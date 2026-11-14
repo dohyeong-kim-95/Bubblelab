@@ -81,7 +81,7 @@ const PUZZLE_TO_SLOP = new Map([
 ]);
 // cron이 리뷰를 주기적으로 동기화할 외주 프로젝트 목록 (커머스 API, 현재 mock).
 const WORK_REVIEW_PROJECTS = ["daonfit"];
-import { handleFortuneChart, handleFortuneComic, handleFortunePush, handleFortuneReview, handleFortuneShare, sendFortuneDaily } from "./fortune.js";
+import { handleFortuneChart, handleFortuneComic, handleFortuneIg, handleFortunePush, handleFortuneReview, handleFortuneShare, sendFortuneDaily } from "./fortune.js";
 import { shareBodyLimit } from "./fortune-share.js";
 import { handleYaksokApi, renderRoomPage } from "./yaksok.js";
 import { CODE_RE as YAKSOK_CODE_RE } from "../util/yaksok/logic.js";
@@ -1159,6 +1159,11 @@ export async function handleRequest(request, env, ctx) {
     // 만화 사주 다운로드 링크(인스타 DM 신청분). 올리기·지우기는 집 PC 시크릿, 읽기는 토큰(fortune.js).
     if (path === "/_fortune/share" || path.startsWith("/_fortune/share/")) {
       return handleFortuneShare(request, env, url);
+    }
+
+    // 인스타그램 "사주" 댓글·DM 웹훅(Meta 서명 검사)과 집 PC 큐(시크릿) — fortune-ig.js.
+    if (path === "/_fortune/ig/webhook" || path === "/_fortune/ig-requests" || path.startsWith("/_fortune/ig-requests/")) {
+      return handleFortuneIg(request, env, url);
     }
 
     // 만화 사주 후기(util/fortune/review). 글쓰기만 IP 당 한도, 목록은 집 PC 시크릿(fortune.js).
