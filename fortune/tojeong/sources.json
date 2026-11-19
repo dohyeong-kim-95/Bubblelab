@@ -1,0 +1,30 @@
+{
+  "credit": "한문 원문은 춘호재 소장 토정비결 필사본(국립중앙도서관 디지털화, 퍼블릭 도메인)을 bubblelab 이 직접 판독한 것이고, 한 해 풀이와 달 풀이는 그 4구를 바탕으로 새로 쓴 운세 노트 자체 해설입니다. 흘림이 심한 글자는 원문 줄에 작게 밝혔어요.",
+  "edition": "괘마다 4구(8자), 144괘 — 필사본 3–26쪽",
+  "sources": [
+    {
+      "role": "한문 원문",
+      "title": "土亭秘訣 필사본(춘호재 소장, 국립중앙도서관 CNTS-00076808100)",
+      "url": "https://commons.wikimedia.org/wiki/File:CNTS-00076808100_-%E5%9C%9F%E4%BA%AD%E7%A7%98%E8%A8%A3-.pdf",
+      "license": "PD-South Korea",
+      "sha256": "91c4f42d1778bee5e98a546e8867b94b86cbfd81a440efd032677faa64f073c9"
+    },
+    {
+      "role": "작괘법",
+      "title": "한국민족문화대백과사전 '토정비결'",
+      "url": "https://encykorea.aks.ac.kr/Article/E0059207",
+      "license": "공공누리"
+    }
+  ],
+  "translation": "운세 노트 자체 해설(필사본 4구에서 직접, 다른 판본·외부 풀이 미참조)",
+  "reading": {
+    "lines": 576,
+    "chars": 4608,
+    "conf": {
+      "상": 276,
+      "중": 235,
+      "하": 65
+    },
+    "unread": 18
+  }
+}

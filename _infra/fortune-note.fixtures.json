@@ -1,0 +1,955 @@
+{
+ "_about": "M4 노트 검사용 고정 입력. palm = palm-lab 실결과(palm.m2.v1) 13장에서 traits 만 옮김(사진·선 좌표·풀이 없음). people = 설계 §9-1 가상 인물 5명 — expect 는 saju-traits-v2(신강약을 거드는 값으로) 기준 실행값(v1 은 프로토타입과 같았다).",
+ "palm": {
+  "p1_h00370": {
+   "schema": "palm.m2.v1",
+   "ok": true,
+   "status": "ok",
+   "traits": [
+    {
+     "trait": "relationship.balanced",
+     "confidence": "high",
+     "evidence": [
+      "palm:heart.ends_under=between_index_middle",
+      "감정선 끝이 검지와 중지 사이"
+     ]
+    },
+    {
+     "trait": "emotion.expressive",
+     "confidence": "high",
+     "evidence": [
+      "palm:heart.shape=curved_up",
+      "감정선 끝이 손가락 쪽으로 올라감"
+     ]
+    },
+    {
+     "trait": "thinking.balanced",
+     "confidence": "high",
+     "evidence": [
+      "palm:head.slope=gentle",
+      "두뇌선이 완만하게 내려감"
+     ]
+    },
+    {
+     "trait": "thinking.deep",
+     "confidence": "high",
+     "evidence": [
+      "palm:head.length=long",
+      "두뇌선이 길게 이어짐"
+     ]
+    },
+    {
+     "trait": "work.independent",
+     "confidence": "high",
+     "evidence": [
+      "palm:head.start_relation_with_life=wide_apart",
+      "두뇌선과 생명선이 떨어져서 시작"
+     ]
+    },
+    {
+     "trait": "energy.outgoing",
+     "confidence": "medium",
+     "evidence": [
+      "palm:life.curve=wide",
+      "생명선이 손바닥 안쪽으로 넓게 감쌈"
+     ]
+    },
+    {
+     "trait": "hand.fire",
+     "confidence": "medium",
+     "evidence": [
+      "palm:hand_shape.palm=long",
+      "palm:hand_shape.fingers=short",
+      "손바닥이 길고 손가락이 짧음"
+     ]
+    }
+   ]
+  },
+  "p1_me_a": {
+   "schema": "palm.m2.v1",
+   "ok": true,
+   "status": "ok",
+   "traits": [
+    {
+     "trait": "relationship.idealistic",
+     "confidence": "high",
+     "evidence": [
+      "palm:heart.ends_under=index",
+      "감정선 끝이 검지 아래까지 감"
+     ]
+    },
+    {
+     "trait": "emotion.steady",
+     "confidence": "high",
+     "evidence": [
+      "palm:heart.shape=straight",
+      "감정선이 곧게 뻗음"
+     ]
+    },
+    {
+     "trait": "thinking.balanced",
+     "confidence": "medium",
+     "evidence": [
+      "palm:head.slope=gentle",
+      "두뇌선이 완만하게 내려감"
+     ]
+    },
+    {
+     "trait": "thinking.deep",
+     "confidence": "medium",
+     "evidence": [
+      "palm:head.length=long",
+      "두뇌선이 길게 이어짐"
+     ]
+    },
+    {
+     "trait": "work.careful_start",
+     "confidence": "medium",
+     "evidence": [
+      "palm:head.start_relation_with_life=joined",
+      "두뇌선과 생명선이 붙어서 시작"
+     ]
+    },
+    {
+     "trait": "hand.fire",
+     "confidence": "medium",
+     "evidence": [
+      "palm:hand_shape.palm=long",
+      "palm:hand_shape.fingers=short",
+      "손바닥이 길고 손가락이 짧음"
+     ]
+    }
+   ]
+  },
+  "p2_h01110": {
+   "schema": "palm.m2.v1",
+   "ok": true,
+   "status": "ok",
+   "traits": [
+    {
+     "trait": "relationship.balanced",
+     "confidence": "medium",
+     "evidence": [
+      "palm:heart.ends_under=between_index_middle",
+      "감정선 끝이 검지와 중지 사이"
+     ]
+    },
+    {
+     "trait": "emotion.steady",
+     "confidence": "medium",
+     "evidence": [
+      "palm:heart.shape=straight",
+      "감정선이 곧게 뻗음"
+     ]
+    },
+    {
+     "trait": "thinking.balanced",
+     "confidence": "medium",
+     "evidence": [
+      "palm:head.slope=gentle",
+      "두뇌선이 완만하게 내려감"
+     ]
+    },
+    {
+     "trait": "thinking.deep",
+     "confidence": "medium",
+     "evidence": [
+      "palm:head.length=long",
+      "두뇌선이 길게 이어짐"
+     ]
+    },
+    {
+     "trait": "work.careful_start",
+     "confidence": "medium",
+     "evidence": [
+      "palm:head.start_relation_with_life=joined",
+      "두뇌선과 생명선이 붙어서 시작"
+     ]
+    }
+   ]
+  },
+  "p2_me_b": {
+   "schema": "palm.m2.v1",
+   "ok": true,
+   "status": "ok",
+   "traits": [
+    {
+     "trait": "relationship.idealistic",
+     "confidence": "high",
+     "evidence": [
+      "palm:heart.ends_under=index",
+      "감정선 끝이 검지 아래까지 감"
+     ]
+    },
+    {
+     "trait": "emotion.inward",
+     "confidence": "high",
+     "evidence": [
+      "palm:heart.shape=curved_down",
+      "감정선 끝이 아래로 휨"
+     ]
+    },
+    {
+     "trait": "thinking.balanced",
+     "confidence": "medium",
+     "evidence": [
+      "palm:head.slope=gentle",
+      "두뇌선이 완만하게 내려감"
+     ]
+    },
+    {
+     "trait": "thinking.deep",
+     "confidence": "medium",
+     "evidence": [
+      "palm:head.length=long",
+      "두뇌선이 길게 이어짐"
+     ]
+    },
+    {
+     "trait": "work.careful_start",
+     "confidence": "medium",
+     "evidence": [
+      "palm:head.start_relation_with_life=joined",
+      "두뇌선과 생명선이 붙어서 시작"
+     ]
+    },
+    {
+     "trait": "energy.outgoing",
+     "confidence": "medium",
+     "evidence": [
+      "palm:life.curve=wide",
+      "생명선이 손바닥 안쪽으로 넓게 감쌈"
+     ]
+    },
+    {
+     "trait": "hand.fire",
+     "confidence": "medium",
+     "evidence": [
+      "palm:hand_shape.palm=long",
+      "palm:hand_shape.fingers=short",
+      "손바닥이 길고 손가락이 짧음"
+     ]
+    }
+   ]
+  },
+  "p3_h01480": {
+   "schema": "palm.m2.v1",
+   "ok": true,
+   "status": "ok",
+   "traits": [
+    {
+     "trait": "relationship.practical",
+     "confidence": "high",
+     "evidence": [
+      "palm:heart.ends_under=middle",
+      "감정선 끝이 중지 아래"
+     ]
+    },
+    {
+     "trait": "emotion.expressive",
+     "confidence": "high",
+     "evidence": [
+      "palm:heart.shape=curved_up",
+      "감정선 끝이 손가락 쪽으로 올라감"
+     ]
+    },
+    {
+     "trait": "thinking.balanced",
+     "confidence": "medium",
+     "evidence": [
+      "palm:head.slope=gentle",
+      "두뇌선이 완만하게 내려감"
+     ]
+    },
+    {
+     "trait": "thinking.deep",
+     "confidence": "medium",
+     "evidence": [
+      "palm:head.length=long",
+      "두뇌선이 길게 이어짐"
+     ]
+    },
+    {
+     "trait": "energy.outgoing",
+     "confidence": "medium",
+     "evidence": [
+      "palm:life.curve=wide",
+      "생명선이 손바닥 안쪽으로 넓게 감쌈"
+     ]
+    },
+    {
+     "trait": "hand.fire",
+     "confidence": "medium",
+     "evidence": [
+      "palm:hand_shape.palm=long",
+      "palm:hand_shape.fingers=short",
+      "손바닥이 길고 손가락이 짧음"
+     ]
+    }
+   ]
+  },
+  "p3_me_c": {
+   "schema": "palm.m2.v1",
+   "ok": true,
+   "status": "ok",
+   "traits": [
+    {
+     "trait": "relationship.idealistic",
+     "confidence": "medium",
+     "evidence": [
+      "palm:heart.ends_under=index",
+      "감정선 끝이 검지 아래까지 감"
+     ]
+    },
+    {
+     "trait": "emotion.inward",
+     "confidence": "medium",
+     "evidence": [
+      "palm:heart.shape=curved_down",
+      "감정선 끝이 아래로 휨"
+     ]
+    },
+    {
+     "trait": "thinking.balanced",
+     "confidence": "medium",
+     "evidence": [
+      "palm:head.slope=gentle",
+      "두뇌선이 완만하게 내려감"
+     ]
+    },
+    {
+     "trait": "thinking.deep",
+     "confidence": "medium",
+     "evidence": [
+      "palm:head.length=long",
+      "두뇌선이 길게 이어짐"
+     ]
+    },
+    {
+     "trait": "work.careful_start",
+     "confidence": "medium",
+     "evidence": [
+      "palm:head.start_relation_with_life=joined",
+      "두뇌선과 생명선이 붙어서 시작"
+     ]
+    },
+    {
+     "trait": "hand.fire",
+     "confidence": "medium",
+     "evidence": [
+      "palm:hand_shape.palm=long",
+      "palm:hand_shape.fingers=short",
+      "손바닥이 길고 손가락이 짧음"
+     ]
+    }
+   ]
+  },
+  "p4_h01850": {
+   "schema": "palm.m2.v1",
+   "ok": true,
+   "status": "ok",
+   "traits": [
+    {
+     "trait": "relationship.balanced",
+     "confidence": "high",
+     "evidence": [
+      "palm:heart.ends_under=between_index_middle",
+      "감정선 끝이 검지와 중지 사이"
+     ]
+    },
+    {
+     "trait": "emotion.expressive",
+     "confidence": "high",
+     "evidence": [
+      "palm:heart.shape=curved_up",
+      "감정선 끝이 손가락 쪽으로 올라감"
+     ]
+    },
+    {
+     "trait": "thinking.balanced",
+     "confidence": "high",
+     "evidence": [
+      "palm:head.slope=gentle",
+      "두뇌선이 완만하게 내려감"
+     ]
+    },
+    {
+     "trait": "thinking.deep",
+     "confidence": "high",
+     "evidence": [
+      "palm:head.length=long",
+      "두뇌선이 길게 이어짐"
+     ]
+    },
+    {
+     "trait": "work.careful_start",
+     "confidence": "high",
+     "evidence": [
+      "palm:head.start_relation_with_life=joined",
+      "두뇌선과 생명선이 붙어서 시작"
+     ]
+    },
+    {
+     "trait": "energy.outgoing",
+     "confidence": "medium",
+     "evidence": [
+      "palm:life.curve=wide",
+      "생명선이 손바닥 안쪽으로 넓게 감쌈"
+     ]
+    }
+   ]
+  },
+  "p5_h02590": {
+   "schema": "palm.m2.v1",
+   "ok": true,
+   "status": "ok",
+   "traits": [
+    {
+     "trait": "relationship.practical",
+     "confidence": "high",
+     "evidence": [
+      "palm:heart.ends_under=middle",
+      "감정선 끝이 중지 아래"
+     ]
+    },
+    {
+     "trait": "emotion.expressive",
+     "confidence": "high",
+     "evidence": [
+      "palm:heart.shape=curved_up",
+      "감정선 끝이 손가락 쪽으로 올라감"
+     ]
+    },
+    {
+     "trait": "thinking.balanced",
+     "confidence": "high",
+     "evidence": [
+      "palm:head.slope=gentle",
+      "두뇌선이 완만하게 내려감"
+     ]
+    },
+    {
+     "trait": "thinking.deep",
+     "confidence": "high",
+     "evidence": [
+      "palm:head.length=long",
+      "두뇌선이 길게 이어짐"
+     ]
+    },
+    {
+     "trait": "work.careful_start",
+     "confidence": "high",
+     "evidence": [
+      "palm:head.start_relation_with_life=joined",
+      "두뇌선과 생명선이 붙어서 시작"
+     ]
+    },
+    {
+     "trait": "energy.outgoing",
+     "confidence": "medium",
+     "evidence": [
+      "palm:life.curve=wide",
+      "생명선이 손바닥 안쪽으로 넓게 감쌈"
+     ]
+    }
+   ]
+  },
+  "p6_h03700": {
+   "schema": "palm.m2.v1",
+   "ok": true,
+   "status": "ok",
+   "traits": [
+    {
+     "trait": "relationship.balanced",
+     "confidence": "high",
+     "evidence": [
+      "palm:heart.ends_under=between_index_middle",
+      "감정선 끝이 검지와 중지 사이"
+     ]
+    },
+    {
+     "trait": "emotion.steady",
+     "confidence": "high",
+     "evidence": [
+      "palm:heart.shape=straight",
+      "감정선이 곧게 뻗음"
+     ]
+    },
+    {
+     "trait": "thinking.balanced",
+     "confidence": "medium",
+     "evidence": [
+      "palm:head.slope=gentle",
+      "두뇌선이 완만하게 내려감"
+     ]
+    },
+    {
+     "trait": "thinking.deep",
+     "confidence": "medium",
+     "evidence": [
+      "palm:head.length=long",
+      "두뇌선이 길게 이어짐"
+     ]
+    },
+    {
+     "trait": "work.independent",
+     "confidence": "medium",
+     "evidence": [
+      "palm:head.start_relation_with_life=slightly_apart",
+      "두뇌선과 생명선이 떨어져서 시작"
+     ]
+    },
+    {
+     "trait": "energy.outgoing",
+     "confidence": "medium",
+     "evidence": [
+      "palm:life.curve=wide",
+      "생명선이 손바닥 안쪽으로 넓게 감쌈"
+     ]
+    }
+   ]
+  },
+  "p7_h04440": {
+   "schema": "palm.m2.v1",
+   "ok": true,
+   "status": "ok",
+   "traits": [
+    {
+     "trait": "relationship.practical",
+     "confidence": "high",
+     "evidence": [
+      "palm:heart.ends_under=middle",
+      "감정선 끝이 중지 아래"
+     ]
+    },
+    {
+     "trait": "emotion.expressive",
+     "confidence": "high",
+     "evidence": [
+      "palm:heart.shape=curved_up",
+      "감정선 끝이 손가락 쪽으로 올라감"
+     ]
+    },
+    {
+     "trait": "thinking.imaginative",
+     "confidence": "medium",
+     "evidence": [
+      "palm:head.slope=steep",
+      "두뇌선이 손목 쪽으로 깊게 내려감"
+     ]
+    },
+    {
+     "trait": "thinking.deep",
+     "confidence": "medium",
+     "evidence": [
+      "palm:head.length=long",
+      "두뇌선이 길게 이어짐"
+     ]
+    },
+    {
+     "trait": "hand.air",
+     "confidence": "medium",
+     "evidence": [
+      "palm:hand_shape.palm=square",
+      "palm:hand_shape.fingers=long",
+      "손바닥이 네모나고 손가락이 김"
+     ]
+    }
+   ]
+  },
+  "p8_h05920": {
+   "schema": "palm.m2.v1",
+   "ok": true,
+   "status": "ok",
+   "traits": [
+    {
+     "trait": "relationship.idealistic",
+     "confidence": "high",
+     "evidence": [
+      "palm:heart.ends_under=index",
+      "감정선 끝이 검지 아래까지 감"
+     ]
+    },
+    {
+     "trait": "emotion.steady",
+     "confidence": "high",
+     "evidence": [
+      "palm:heart.shape=straight",
+      "감정선이 곧게 뻗음"
+     ]
+    },
+    {
+     "trait": "thinking.imaginative",
+     "confidence": "medium",
+     "evidence": [
+      "palm:head.slope=steep",
+      "두뇌선이 손목 쪽으로 깊게 내려감"
+     ]
+    },
+    {
+     "trait": "thinking.deep",
+     "confidence": "medium",
+     "evidence": [
+      "palm:head.length=long",
+      "두뇌선이 길게 이어짐"
+     ]
+    },
+    {
+     "trait": "energy.outgoing",
+     "confidence": "medium",
+     "evidence": [
+      "palm:life.curve=wide",
+      "생명선이 손바닥 안쪽으로 넓게 감쌈"
+     ]
+    },
+    {
+     "trait": "hand.air",
+     "confidence": "medium",
+     "evidence": [
+      "palm:hand_shape.palm=square",
+      "palm:hand_shape.fingers=long",
+      "손바닥이 네모나고 손가락이 김"
+     ]
+    }
+   ]
+  },
+  "x1_back": {
+   "schema": "palm.m2.v1",
+   "ok": false,
+   "status": "rejected",
+   "traits": []
+  },
+  "x2_book": {
+   "schema": "palm.m2.v1",
+   "ok": false,
+   "status": "rejected",
+   "traits": []
+  }
+ },
+ "people": [
+  {
+   "name": "가",
+   "birth": {
+    "year": 1992,
+    "month": 3,
+    "day": 8,
+    "timeMode": "clock",
+    "time": "07:10",
+    "gender": "female"
+   },
+   "palm": "p1_h00370",
+   "tarot": "maj_00",
+   "expect": {
+    "saju": [
+     [
+      "thinking.intuitive",
+      0.5
+     ],
+     [
+      "thinking.deep",
+      0.45
+     ],
+     [
+      "emotion.sensitive",
+      0.4
+     ],
+     [
+      "relationship.selective",
+      0.25
+     ],
+     [
+      "thinking.learner",
+      0.25
+     ]
+    ],
+    "shown": [
+     [
+      "○thinking.intuitive",
+      "○thinking.deep"
+     ],
+     [
+      "◎thinking.deep",
+      "○thinking.intuitive",
+      "○emotion.expressive"
+     ],
+     [
+      "◎thinking.deep",
+      "○thinking.intuitive",
+      "○emotion.expressive"
+     ]
+    ],
+    "excluded": [
+     [
+      "energy.outgoing",
+      "relationship.selective"
+     ]
+    ],
+    "lines": [
+     "emotion.sensitive",
+     "relationship.balanced",
+     "state.starting"
+    ]
+   }
+  },
+  {
+   "name": "나",
+   "birth": {
+    "year": 1985,
+    "month": 11,
+    "day": 23,
+    "timeMode": "clock",
+    "time": "22:40",
+    "gender": "male"
+   },
+   "palm": "p3_h01480",
+   "tarot": "maj_09",
+   "expect": {
+    "saju": [
+     [
+      "emotion.expressive",
+      0.5
+     ],
+     [
+      "relationship.warm_host",
+      0.4
+     ],
+     [
+      "temperament.careful",
+      0.3
+     ],
+     [
+      "temperament.change_seeking",
+      0.25
+     ]
+    ],
+    "shown": [
+     [
+      "○emotion.expressive"
+     ],
+     [
+      "◎emotion.expressive",
+      "○relationship.practical",
+      "○energy.outgoing"
+     ],
+     [
+      "◎emotion.expressive",
+      "○relationship.practical",
+      "○energy.outgoing"
+     ]
+    ],
+    "excluded": [
+     [
+      "temperament.bold",
+      "temperament.careful"
+     ]
+    ],
+    "lines": [
+     "relationship.warm_host",
+     "thinking.balanced",
+     "state.pausing"
+    ]
+   }
+  },
+  {
+   "name": "다",
+   "birth": {
+    "year": 2001,
+    "month": 7,
+    "day": 2,
+    "timeMode": "branch",
+    "branch": null,
+    "gender": "female"
+   },
+   "palm": "p5_h02590",
+   "tarot": "maj_07",
+   "expect": {
+    "saju": [
+     [
+      "relationship.warm_host",
+      0.47
+     ],
+     [
+      "emotion.expressive",
+      0.4
+     ],
+     [
+      "emotion.vivid",
+      0.3
+     ],
+     [
+      "energy.outgoing",
+      0.25
+     ],
+     [
+      "temperament.free",
+      0.25
+     ]
+    ],
+    "shown": [
+     [
+      "○relationship.warm_host"
+     ],
+     [
+      "◎emotion.expressive",
+      "◎energy.outgoing",
+      "○relationship.warm_host"
+     ],
+     [
+      "◎emotion.expressive",
+      "◎energy.outgoing",
+      "○relationship.warm_host"
+     ]
+    ],
+    "excluded": [],
+    "lines": [
+     "emotion.expressive",
+     "relationship.practical",
+     "state.moving"
+    ]
+   }
+  },
+  {
+   "name": "라",
+   "birth": {
+    "year": 1978,
+    "month": 1,
+    "day": 15,
+    "timeMode": "branch",
+    "branch": 0,
+    "gender": "male"
+   },
+   "palm": "p6_h03700",
+   "tarot": "maj_13",
+   "expect": {
+    "saju": [
+     [
+      "relationship.caring",
+      0.5
+     ],
+     [
+      "emotion.expressive",
+      0.4
+     ],
+     [
+      "energy.immersive",
+      0.4
+     ],
+     [
+      "emotion.vivid",
+      0.35
+     ],
+     [
+      "temperament.careful",
+      0.3
+     ],
+     [
+      "work.hands_on",
+      0.3
+     ],
+     [
+      "relationship.selective",
+      0.25
+     ]
+    ],
+    "shown": [
+     [
+      "○relationship.caring"
+     ],
+     [
+      "○relationship.caring",
+      "○relationship.balanced",
+      "○thinking.balanced"
+     ],
+     [
+      "○relationship.caring",
+      "○relationship.balanced",
+      "○thinking.balanced"
+     ]
+    ],
+    "excluded": [
+     [
+      "emotion.steady",
+      "emotion.vivid"
+     ],
+     [
+      "energy.outgoing",
+      "relationship.selective"
+     ]
+    ],
+    "lines": [
+     "energy.immersive",
+     "thinking.deep",
+     "state.closing"
+    ]
+   }
+  },
+  {
+   "name": "마",
+   "birth": {
+    "year": 1996,
+    "month": 9,
+    "day": 30,
+    "timeMode": "clock",
+    "time": "13:05",
+    "gender": "female"
+   },
+   "palm": "p2_h01110",
+   "tarot": "maj_14",
+   "expect": {
+    "saju": [
+     [
+      "relationship.direct",
+      0.5
+     ],
+     [
+      "temperament.dutiful",
+      0.45
+     ],
+     [
+      "emotion.expressive",
+      0.4
+     ],
+     [
+      "emotion.vivid",
+      0.35
+     ],
+     [
+      "temperament.bold",
+      0.25
+     ]
+    ],
+    "shown": [
+     [
+      "○relationship.direct",
+      "○temperament.dutiful"
+     ],
+     [
+      "○relationship.direct",
+      "○relationship.balanced",
+      "○temperament.dutiful"
+     ],
+     [
+      "○relationship.direct",
+      "○relationship.balanced",
+      "○temperament.dutiful"
+     ]
+    ],
+    "excluded": [
+     [
+      "emotion.steady",
+      "emotion.vivid"
+     ],
+     [
+      "temperament.careful",
+      "temperament.bold"
+     ]
+    ],
+    "lines": [
+     "relationship.direct",
+     "thinking.balanced",
+     "state.ordering"
+    ]
+   }
+  }
+ ]
+}

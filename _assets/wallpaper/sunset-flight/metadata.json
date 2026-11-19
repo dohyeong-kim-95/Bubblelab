@@ -1,0 +1,27 @@
+{
+  "title": "노을을 나는 아이들",
+  "description": "고래와 해파리가 떠다니는 노을 하늘을 아이들이 헤엄치듯 날아갑니다.",
+  "preview": "preview.jpg",
+  "previewSize": {
+    "width": 370,
+    "height": 800
+  },
+  "tags": [
+    "노을",
+    "고래",
+    "아이들",
+    "하늘",
+    "일러스트",
+    "따뜻한"
+  ],
+  "createdAt": "2026-08-06",
+  "downloads": [
+    {
+      "label": "모바일 851×1844",
+      "file": "mobile.jpg",
+      "device": "mobile",
+      "width": 851,
+      "height": 1844
+    }
+  ]
+}

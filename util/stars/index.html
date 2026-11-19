@@ -1,0 +1,844 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>별자리 배경화면</title>
+<meta name="description" content="폰을 겨눈 쪽 하늘의 별자리를 그려 배경화면으로.">
+<meta name="bl-group" content="사진·이미지">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🌌</text></svg>">
+<link rel="stylesheet" href="/_shared/bubble.css">
+<style>
+  /* 밤하늘 도구라 공용 토큰의 어두운 쪽으로 고정한다(밤에 겨누는 화면이 눈부시지 않게).
+     재료는 bubble.css 그대로 — 패널·알약·칩·입력이 같은 토큰에서 나온다. */
+  :root { color-scheme: dark; --accent-h: 17;
+          --sky: #05070f; }                          /* 하늘·조준 화면 바탕 */
+  * { box-sizing: border-box; }
+  html { background: var(--sky); }
+  body { margin: 0; min-height: 100dvh; background: var(--sky); color: var(--ink);
+         display: flex; flex-direction: column; align-items: center;
+         padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom)); }
+  main { width: min(26rem, 100%); flex: 1; display: flex; flex-direction: column; gap: .8rem; }
+  #aim { display: flex; flex-direction: column; gap: .8rem; }
+
+  .bl-head { margin: 0; }
+  .bl-head .bl-bubble { background: radial-gradient(circle at 32% 28%, rgb(255 255 255 / .55) 0 7%, transparent 22%),
+                                    var(--accent-soft); }
+
+  /* ── 조준 화면 ── */
+  .viewer { position: relative; width: 100%; aspect-ratio: 3 / 4; border-radius: var(--r-lg);
+            overflow: hidden; background: #0a0f1c; border: 1px solid var(--line);
+            touch-action: none; }
+  .viewer video { position: absolute; inset: 0; width: 100%; height: 100%;
+                  object-fit: cover; opacity: .5; }
+  .viewer canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .hud { position: absolute; inset: auto 0 0; padding: .6rem .8rem;
+         display: flex; justify-content: space-between; align-items: flex-end; gap: .5rem;
+         font-size: .72rem; background: linear-gradient(transparent, #05070fcc); }
+  .hud b { font-weight: 800; font-size: .9rem; letter-spacing: -.01em; }
+  .hud .dir { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .reticle { position: absolute; left: 50%; top: 50%; width: 3.4rem; height: 3.4rem;
+             transform: translate(-50%, -50%); border: 1px solid #9fc4ff55; border-radius: 50%; }
+  .reticle::before, .reticle::after { content: ""; position: absolute; background: #9fc4ff55; }
+  .reticle::before { left: 50%; top: -.5rem; bottom: -.5rem; width: 1px; }
+  .reticle::after { top: 50%; left: -.5rem; right: -.5rem; height: 1px; }
+
+  .row { display: flex; gap: .5rem; }
+  .row > * { flex: 1; }
+
+  .panel { display: grid; gap: .6rem; }
+  .panel h2 { margin: 0; font-size: .82rem; font-weight: 700; color: var(--muted); }
+  .field { display: grid; gap: .3rem; }
+  .field .bl-label { display: flex; justify-content: space-between; margin: 0; }
+  .field .bl-label span { color: var(--ink); font-variant-numeric: tabular-nums; }
+  label.check { display: flex; align-items: center; gap: .55rem; cursor: pointer;
+                font-size: .85rem; line-height: 1.45; color: var(--ink); }
+  label.check input { accent-color: var(--accent); width: 1.05rem; height: 1.05rem; flex: none; margin: 0; }
+  input[type=range] { width: 100%; margin: .2rem 0; accent-color: var(--accent); }
+  select.bl-input { font-size: .92rem; padding: .6rem .8rem; }
+  .note { margin: 0; }
+  .warn { color: var(--bad); }
+
+  /* ── 결과 화면 ── */
+  #result img { width: 100%; border-radius: var(--r-lg); border: 1px solid var(--line); display: block; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header class="bl-head">
+    <span class="bl-bubble" aria-hidden="true">🌌</span>
+    <h1>별자리 배경화면</h1>
+    <p>폰을 겨눈 쪽 하늘의 별자리를 그려 배경화면으로.</p>
+  </header>
+  <p class="lede bl-note">휴대폰을 아무 데나 겨누세요. 그 방향의 하늘을 그려 드려요
+    — 바닥을 겨누면 지구 반대편 하늘이 나옵니다.</p>
+
+  <section id="aim">
+    <div class="viewer" id="viewer">
+      <video id="cam" playsinline muted autoplay></video>
+      <canvas id="live"></canvas>
+      <div class="reticle"></div>
+      <div class="hud">
+        <div><b id="hud-con">하늘을 찾는 중</b><div class="dir" id="hud-dir"></div></div>
+        <div class="dir"><span id="hud-mode"></span><div id="hud-place"></div></div>
+      </div>
+    </div>
+
+    <div class="row">
+      <button class="bl-btn" id="sensor-btn">폰 돌려서 겨누기</button>
+      <button class="bl-btn bl-btn--primary primary" id="shoot">이 방향 찍기</button>
+    </div>
+
+    <label class="check"><input type="checkbox" id="with-skyline" checked>
+      <span>지평선에 건물 실루엣 넣기 (카메라가 본 스카이라인)</span></label>
+
+    <div class="panel bl-panel" id="manual" hidden>
+      <h2>방향 직접 맞추기</h2>
+      <div class="field"><label class="bl-label" for="az">방위 <span id="az-out"></span></label>
+        <input type="range" id="az" min="0" max="359" step="1" value="180"></div>
+      <div class="field"><label class="bl-label" for="alt">고도 <span id="alt-out"></span></label>
+        <input type="range" id="alt" min="-90" max="90" step="1" value="35"></div>
+      <label class="check"><input type="checkbox" id="invert-y">
+        <span>위아래 반대로 밀기 (위로 밀면 위를 봄)</span></label>
+      <p class="note bl-note" id="manual-why"></p>
+    </div>
+
+    <div class="panel bl-panel">
+      <h2>내 위치</h2>
+      <select class="bl-input" id="place" aria-label="내 위치"></select>
+      <p class="note bl-note" id="place-note"></p>
+      <p class="note bl-note">별자리는 보는 위치와 시각에 따라 달라집니다. 위치는 이 브라우저 안에서만
+        쓰이고 서버로 보내지 않아요.</p>
+    </div>
+  </section>
+
+  <section id="result" hidden>
+    <img id="shot" alt="만들어진 별자리 배경화면">
+    <div class="row" style="margin-top:.7rem">
+      <a class="btn primary bl-btn bl-btn--primary" id="save" download>저장</a>
+      <button class="bl-btn" id="again">다시 찍기</button>
+    </div>
+    <p class="note bl-note" id="result-note" style="margin-top:.55rem" hidden></p>
+    <p class="note bl-note" style="margin-top:.35rem">저장이 안 되면 이미지를 길게 눌러 저장하세요.</p>
+  </section>
+
+  <p class="note bl-note">별 위치는 J2000 기준 밝은 별 목록이고, 별자리 선은 직접 이은 것입니다.
+    맨눈으로 형태를 알아볼 수 있는 별자리만 담았습니다.</p>
+</main>
+
+<script type="module">
+import {
+  SEGMENTS, dominantConstellation, equatorialToHorizontal, horizontalToEquatorial,
+  makeProjection, starsInView,
+} from "./sky.js";
+import {
+  bandAltitudes, downsampleLuma, extractSkyline, profileAzimuth,
+} from "./skyline.js";
+
+const $ = (id) => document.getElementById(id);
+const D2R = Math.PI / 180, R2D = 180 / Math.PI;
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+// 테스트·데스크톱에서 화면을 고정하려고 주소로 상태를 받는다.
+const params = new URLSearchParams(location.search);
+const num = (key) => (params.has(key) ? Number(params.get(key)) : null);
+
+const PLACES = [
+  { id: "seoul", name: "서울", lat: 37.5665, lon: 126.9780 },
+  { id: "busan", name: "부산", lat: 35.1796, lon: 129.0756 },
+  { id: "daegu", name: "대구", lat: 35.8714, lon: 128.6014 },
+  { id: "incheon", name: "인천", lat: 37.4563, lon: 126.7052 },
+  { id: "gwangju", name: "광주", lat: 35.1595, lon: 126.8526 },
+  { id: "daejeon", name: "대전", lat: 36.3504, lon: 127.3845 },
+  { id: "gangneung", name: "강릉", lat: 37.7519, lon: 128.8761 },
+  { id: "jeju", name: "제주", lat: 33.4996, lon: 126.5312 },
+];
+
+const state = {
+  place: PLACES[0],
+  lat: num("lat") ?? PLACES[0].lat,
+  lon: num("lon") ?? PLACES[0].lon,
+  placeLabel: PLACES[0].name,
+  date: params.has("t") ? new Date(params.get("t")) : new Date(),
+  az: num("az") ?? 180,
+  alt: num("alt") ?? 35,
+  sensors: false,
+  absoluteHeading: false,
+  follow: false,
+  invertY: false,
+  skyline: null,        // { profile, confidence } — 찍는 순간의 스카이라인
+};
+if (Number.isNaN(state.date.getTime())) state.date = new Date();
+const frozenTime = params.has("t");
+
+// 주소로 좌표를 받았으면 지명도 거기에 맞춘다 — 좌표는 부산인데 "서울"이라고
+// 새겨지면 결과물이 거짓말을 한다. 아는 도시가 없으면 지명 없이 방향만 적는다.
+if (params.has("lat") || params.has("lon")) {
+  const near = PLACES.find((p) =>
+    Math.abs(p.lat - state.lat) < 0.4 && Math.abs(p.lon - state.lon) < 0.4);
+  state.place = near ?? state.place;
+  state.placeLabel = near ? near.name : "";
+}
+
+// ── 방향 계산 ────────────────────────────────────────────────
+// 화면이 겨눈 지평좌표(고도·방위) → 그 방향의 하늘(적경·적위)과 투영 함수.
+// 화면 위쪽이 하늘의 위(천정)가 되도록 회전각을 맞춘다 — 안 맞추면 별자리가
+// 누운 채로 그려져서 "내가 본 하늘"처럼 보이지 않는다.
+function viewFor(alt, az) {
+  const { lat, lon, date } = state;
+  const center = horizontalToEquatorial(alt, az, lat, lon, date);
+  const flip = alt > 89 ? -1 : 1;
+  const probe = horizontalToEquatorial(clamp(alt + flip, -90, 90), az, lat, lon, date);
+  const flat = makeProjection(center.ra, center.dec, 0);
+  const p = flat(probe.ra, probe.dec);
+  const roll = p ? Math.atan2(p.x, p.y) * R2D * flip : 0;
+  return { center, project: makeProjection(center.ra, center.dec, -roll) };
+}
+
+const compass = (az) => {
+  const names = ["북", "북동", "동", "남동", "남", "남서", "서", "북서"];
+  return names[Math.round(((az % 360) + 360) % 360 / 45) % 8];
+};
+const heightWord = (alt) => (alt > 60 ? "머리 위" : alt > 15 ? "하늘" : alt >= 0 ? "지평선 근처" : "땅 아래");
+
+// ── 그리기 ───────────────────────────────────────────────────
+// 입체투영에서 각거리 c는 화면 반지름 2·tan(c/2)에 대응한다. 세로 화각으로 배율을 정한다.
+const FOV_V = 104;                       // 배경화면 한 장에 별자리 하나가 시원하게 담기는 정도
+const scaleFor = (height) => (height / 2) / (2 * Math.tan((FOV_V / 4) * D2R));
+
+const mulberry32 = (seed) => () => {
+  seed = (seed + 0x6d2b79f5) | 0;
+  let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+
+const STAR_TINT = { w: [255, 208, 168], b: [186, 214, 255] };
+const tintOf = (star) => STAR_TINT[star.color] ?? [255, 252, 246];
+
+function drawSky(ctx, W, H, view, opts = {}) {
+  const { detail = "full" } = opts;
+  const scale = scaleFor(H) * (opts.zoom ?? 1);
+  // 배경화면이라 아래쪽은 제목·날짜가 앉을 자리로 비워 둔다 — 그림은 위쪽 2/3에.
+  const cx = W / 2, cy = H * (detail === "full" ? 0.44 : 0.5);
+  const rand = mulberry32(Math.round(view.center.ra * 3600) * 31 + Math.round(view.center.dec * 60));
+
+  if (detail === "full") {
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, "#04060e");
+    sky.addColorStop(0.45, "#0a1024");
+    sky.addColorStop(1, "#12182c");
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, H);
+
+    // 옅은 성운 — 밋밋한 검정 대신 깊이를 준다
+    for (let i = 0; i < 3; i++) {
+      const gx = rand() * W, gy = H * (0.2 + rand() * 0.6), gr = W * (0.35 + rand() * 0.4);
+      const hue = [[120, 140, 220], [180, 140, 210], [110, 170, 200]][i];
+      const neb = ctx.createRadialGradient(gx, gy, 0, gx, gy, gr);
+      neb.addColorStop(0, `rgba(${hue.join(",")},0.075)`);
+      neb.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = neb;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    // 배경 잔별 — 카탈로그에 없는 어두운 별들의 자리
+    for (let i = 0; i < Math.round(W * H / 3200); i++) {
+      const x = rand() * W, y = rand() * H, r = rand() * 1.1 + 0.25;
+      ctx.globalAlpha = 0.12 + rand() * 0.5;
+      ctx.fillStyle = "#dfe8ff";
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  const place = (star) => {
+    const p = view.project(star.ra, star.dec);
+    return p ? { x: cx + p.x * scale, y: cy - p.y * scale, cosC: p.cosC } : null;
+  };
+
+  const visible = starsInView(view.center.ra, view.center.dec, 80, detail === "full" ? 4.6 : 3.6);
+  const shown = new Map();
+  for (const star of visible) {
+    const p = place(star);
+    if (p) shown.set(star.id, p);
+  }
+
+  const lead = dominantConstellation(view.center.ra, view.center.dec, 32);
+
+  // 별자리 선. 대표 별자리는 밝게, 나머지는 은은하게 — 화면이 어수선해지지 않게.
+  ctx.lineCap = "round";
+  for (const seg of SEGMENTS) {
+    const a = shown.get(seg.a.id), b = shown.get(seg.b.id);
+    if (!a || !b || a.cosC < 0.1 || b.cosC < 0.1) continue;
+    const main = lead && seg.con === lead.id;
+    ctx.strokeStyle = main ? "rgba(178,208,255,0.62)" : "rgba(150,185,240,0.2)";
+    ctx.lineWidth = (main ? 1.9 : 1.2) * (H / 2400);
+    ctx.shadowBlur = main && detail === "full" ? 10 * (H / 2400) : 0;
+    ctx.shadowColor = "rgba(120,170,255,0.6)";
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+  }
+  ctx.shadowBlur = 0;
+
+  // 별
+  const unit = H / 2400;
+  for (const star of visible) {
+    const p = shown.get(star.id);
+    if (!p || p.cosC < 0.05) continue;
+    const r = Math.max(1.1, (5.0 - star.mag) * 1.55) * unit;
+    const [cr, cg, cb] = tintOf(star);
+    if (detail === "full") {
+      const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 5.5);
+      glow.addColorStop(0, `rgba(${cr},${cg},${cb},0.55)`);
+      glow.addColorStop(0.35, `rgba(${cr},${cg},${cb},0.13)`);
+      glow.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.arc(p.x, p.y, r * 5.5, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.fillStyle = `rgb(${cr},${cg},${cb})`;
+    ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
+  }
+
+  if (detail !== "full") return lead;
+
+  // 밝은 별의 이름. 화면 밖으로 잘리거나 서로 겹치면 아예 안 적는 게 낫다 —
+  // 배경화면에서 글자가 잘려 있으면 그것만 눈에 띈다.
+  ctx.font = `${Math.round(23 * unit)}px ui-monospace, monospace`;
+  ctx.fillStyle = "rgba(219,232,255,0.5)";
+  ctx.textBaseline = "middle";
+  const boxes = [];
+  const overlaps = (box) => boxes.some((b) =>
+    box.x < b.x + b.w && box.x + box.w > b.x && box.y < b.y + b.h && box.y + box.h > b.y);
+  const named = visible.filter((s) => s.name && s.mag <= 1.9).sort((a, b) => a.mag - b.mag);
+  for (const star of named) {
+    const p = shown.get(star.id);
+    if (!p || p.cosC < 0.05) continue;
+    const w = ctx.measureText(star.name).width, h = 30 * unit;
+    const gap = 15 * unit;
+    // 오른쪽이 좁으면 왼쪽에 적는다
+    const left = p.x + gap + w > W - 12 * unit;
+    const x = left ? p.x - gap - w : p.x + gap;
+    const box = { x, y: p.y - h / 2, w, h };
+    if (x < 12 * unit || x + w > W - 12 * unit) continue;
+    if (p.y < 40 * unit || p.y > H * 0.78) continue;             // 아래 새김 구역은 비운다
+    if (overlaps(box)) continue;
+    boxes.push(box);
+    ctx.textAlign = "left";
+    ctx.fillText(star.name, x, p.y);
+  }
+
+  return lead;
+}
+
+// ── 지평선의 건물 실루엣 ─────────────────────────────────────
+// 카메라가 본 스카이라인을 고도 0~10° 띠에 앉힌다. 사진이 아니라 열별 높이
+// 숫자만 쓰므로 결과물에는 창문도 간판도 남지 않는다 — 검은 윤곽뿐이다.
+const SKYLINE_TOP_ALT = 10;
+
+// 찍는 순간의 카메라 한 장에서 스카이라인을 뽑는다. 카메라가 없거나 경계가
+// 뚜렷하지 않으면 null — 억지로 그리면 배경화면에 얼룩이 생긴다.
+function readSkyline() {
+  const video = $("cam");
+  if (!video.srcObject || video.videoWidth < 8) return null;
+  const w = 240, h = Math.max(8, Math.round(240 * video.videoHeight / video.videoWidth));
+  const scratch = document.createElement("canvas");
+  scratch.width = w; scratch.height = h;
+  const sctx = scratch.getContext("2d", { willReadFrequently: true });
+  try {
+    sctx.drawImage(video, 0, 0, w, h);
+    const found = extractSkyline(downsampleLuma(sctx.getImageData(0, 0, w, h)));
+    return found.confidence >= 0.35 ? found : null;
+  } catch { return null; }         // 다른 출처 프레임 등 — 조용히 건너뛴다
+}
+
+function drawSkyline(ctx, W, H, view, scale, cx, cy, skyline) {
+  const { profile } = skyline;
+  const place = (alt, az) => {
+    const eq = horizontalToEquatorial(alt, az, state.lat, state.lon, state.date);
+    const p = view.project(eq.ra, eq.dec);
+    return p && p.cosC > 0 ? { x: cx + p.x * scale, y: cy - p.y * scale } : null;
+  };
+
+  // 가장 낮은 지점을 지평선에 앉히고 높이차만 0~10°에 담는다(skyline.js 참고).
+  const band = bandAltitudes(profile, state.alt, SKYLINE_TOP_ALT);
+  const tops = [];
+  for (let i = 0; i < profile.length; i++) {
+    const point = place(band[i], profileAzimuth(i, profile.length, state.az));
+    if (point) tops.push(point);
+  }
+  // 지평선이 화면 밖이면(하늘만 겨눔) 그릴 것이 없다
+  if (tops.length < profile.length * 0.6) return false;
+  if (tops.every((p) => p.y < 0 || p.y > H)) return false;
+
+  // 카메라 화각(약 45°)이 배경화면 폭(약 51°)보다 좁아서, 그대로 두면 양옆에
+  // 지평선이 없는 빈틈이 생겨 실루엣이 공중에 뜬 판처럼 보인다. 양 끝 높이를
+  // 화면 끝까지 이어 준다 — 못 본 구간은 "이대로 이어진다"로 두는 셈이다.
+  const first = tops[0], last = tops[tops.length - 1];
+  const edged = [{ x: -2, y: first.y }, ...tops, { x: W + 2, y: last.y }];
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(edged[0].x, edged[0].y);
+  for (const p of edged.slice(1)) ctx.lineTo(p.x, p.y);
+  ctx.lineTo(W + 2, H + 2);
+  ctx.lineTo(-2, H + 2);
+  ctx.closePath();
+
+  const top = Math.min(...edged.map((p) => p.y));
+  const fill = ctx.createLinearGradient(0, top, 0, H);
+  fill.addColorStop(0, "rgba(2,4,10,0.42)");     // 하늘과 만나는 윗선은 투명하게
+  fill.addColorStop(1, "rgba(2,4,10,0.82)");
+  ctx.fillStyle = fill;
+  ctx.fill();
+
+  // 윤곽선 한 줄 — 실루엣이 배경에 녹아 사라지지 않게
+  ctx.strokeStyle = "rgba(150,180,230,0.22)";
+  ctx.lineWidth = Math.max(1, 1.4 * (H / 2400));
+  ctx.beginPath();
+  ctx.moveTo(edged[0].x, edged[0].y);
+  for (const p of edged.slice(1)) ctx.lineTo(p.x, p.y);
+  ctx.stroke();
+  ctx.restore();
+  return true;
+}
+
+// ── 아래쪽 새김 ──────────────────────────────────────────────
+// 별자리 이름 · 좌표 · 시각을 판에 새기듯 앉힌다. 이 토이의 목적이 정확도가
+// 아니라 "그날 그 자리의 하늘"을 남기는 것이라, 이 블록이 결과물의 절반이다.
+
+// 자간을 준 가운데 정렬. 캔버스의 letterSpacing은 기기별 지원이 갈려서 직접 그린다.
+function spaced(ctx, text, cx, y, gap) {
+  const chars = [...text];
+  const widths = chars.map((c) => ctx.measureText(c).width);
+  const total = widths.reduce((a, b) => a + b, 0) + gap * (chars.length - 1);
+  let x = cx - total / 2;
+  const align = ctx.textAlign;
+  ctx.textAlign = "left";
+  chars.forEach((c, i) => { ctx.fillText(c, x, y); x += widths[i] + gap; });
+  ctx.textAlign = align;
+}
+
+// 도·분 표기 — 소수점보다 이쪽이 좌표답게 보인다. 37.5665 → 37° 34′ N
+function dms(value, positive, negative) {
+  const side = value < 0 ? negative : positive;
+  const abs = Math.abs(value);
+  let deg = Math.floor(abs);
+  let min = Math.round((abs - deg) * 60);
+  if (min === 60) { deg += 1; min = 0; }
+  return `${deg}° ${String(min).padStart(2, "0")}′ ${side}`;
+}
+
+// 네 갈래로 뻗는 작은 빛 — 이모지를 쓰면 카드 아이콘 추출이 흔들려서 직접 그린다.
+function sparkle(ctx, x, y, r) {
+  ctx.beginPath();
+  ctx.moveTo(x, y - r);
+  ctx.quadraticCurveTo(x + r * 0.16, y - r * 0.16, x + r, y);
+  ctx.quadraticCurveTo(x + r * 0.16, y + r * 0.16, x, y + r);
+  ctx.quadraticCurveTo(x - r * 0.16, y + r * 0.16, x - r, y);
+  ctx.quadraticCurveTo(x - r * 0.16, y - r * 0.16, x, y - r);
+  ctx.fill();
+}
+
+function drawCaption(ctx, W, H, lead) {
+  const unit = H / 2400;
+  const d = state.date;
+  const pad = (n) => String(n).padStart(2, "0");
+
+  const band = ctx.createLinearGradient(0, H * 0.70, 0, H);
+  band.addColorStop(0, "rgba(4,6,14,0)");
+  band.addColorStop(0.55, "rgba(4,6,14,0.55)");
+  band.addColorStop(1, "rgba(4,6,14,0.86)");
+  ctx.fillStyle = band;
+  ctx.fillRect(0, H * 0.70, W, H * 0.30);
+
+  ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+
+  if (lead) {
+    ctx.font = `${Math.round(74 * unit)}px ui-monospace, monospace`;
+    ctx.shadowBlur = 30 * unit; ctx.shadowColor = "rgba(18,36,82,0.95)";
+    ctx.fillStyle = "rgba(236,243,255,0.95)";
+    spaced(ctx, lead.ko, W / 2, H - 386 * unit, 6 * unit);
+    ctx.shadowBlur = 0;
+    ctx.font = `${Math.round(25 * unit)}px ui-monospace, monospace`;
+    ctx.fillStyle = "rgba(186,206,238,0.52)";
+    spaced(ctx, lead.la.toUpperCase(), W / 2, H - 338 * unit, 7 * unit);
+  } else {
+    ctx.font = `${Math.round(40 * unit)}px ui-monospace, monospace`;
+    ctx.fillStyle = "rgba(226,236,255,0.72)";
+    spaced(ctx, "이름 없는 하늘", W / 2, H - 350 * unit, 5 * unit);
+  }
+
+  // 가는 선 사이에 작은 빛 하나
+  const midY = H - 276 * unit, half = W * 0.30, gap = 22 * unit;
+  ctx.strokeStyle = "rgba(178,202,240,0.34)";
+  ctx.lineWidth = Math.max(1, 1.1 * unit);
+  ctx.beginPath();
+  ctx.moveTo(W / 2 - half, midY); ctx.lineTo(W / 2 - gap, midY);
+  ctx.moveTo(W / 2 + gap, midY); ctx.lineTo(W / 2 + half, midY);
+  ctx.stroke();
+  ctx.fillStyle = "rgba(214,230,255,0.72)";
+  sparkle(ctx, W / 2, midY, 9 * unit);
+
+  // 좌표 — 이 하늘을 본 자리
+  ctx.font = `${Math.round(31 * unit)}px ui-monospace, monospace`;
+  ctx.fillStyle = "rgba(222,234,255,0.78)";
+  spaced(ctx, `${dms(state.lat, "N", "S")}   ${dms(state.lon, "E", "W")}`,
+    W / 2, H - 210 * unit, 2.5 * unit);
+
+  // 시각 — 이 하늘을 본 때
+  ctx.font = `${Math.round(28 * unit)}px ui-monospace, monospace`;
+  ctx.fillStyle = "rgba(216,230,255,0.6)";
+  spaced(ctx, `${d.getFullYear()}. ${pad(d.getMonth() + 1)}. ${pad(d.getDate())}.   `
+    + `${pad(d.getHours())}:${pad(d.getMinutes())}`, W / 2, H - 162 * unit, 3 * unit);
+
+  // 어디서 어느 쪽을 보았는지
+  ctx.font = `${Math.round(24 * unit)}px ui-monospace, monospace`;
+  ctx.fillStyle = "rgba(198,214,242,0.42)";
+  const facing = `${compass(state.az)}쪽 ${heightWord(state.alt)}`;
+  spaced(ctx, state.placeLabel ? `${state.placeLabel} · ${facing}` : facing,
+    W / 2, H - 118 * unit, 2.5 * unit);
+}
+
+// ── 조준 화면의 실시간 미리보기 ──────────────────────────────
+const live = $("live");
+const liveCtx = live.getContext("2d");
+let liveQueued = false;
+
+function renderLive() {
+  liveQueued = false;
+  const rect = live.getBoundingClientRect();
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const W = Math.max(1, Math.round(rect.width * dpr)), H = Math.max(1, Math.round(rect.height * dpr));
+  if (live.width !== W || live.height !== H) { live.width = W; live.height = H; }
+  liveCtx.clearRect(0, 0, W, H);
+  const view = viewFor(state.alt, state.az);
+  const lead = drawSky(liveCtx, W, H, view, { detail: "live", zoom: 0.62 });
+  $("hud-con").textContent = lead ? lead.ko : "이름난 별자리 없음";
+  $("hud-dir").textContent = `${compass(state.az)} ${Math.round(state.az)}° · 고도 ${Math.round(state.alt)}°`;
+  $("hud-mode").textContent = !sensorsLive() ? "" : state.follow ? "따라가는 중" : "직접 겨누는 중";
+  $("az-out").textContent = `${compass(state.az)} ${Math.round(state.az)}°`;
+  $("alt-out").textContent = `${Math.round(state.alt)}°`;
+}
+const queueLive = () => {
+  if (liveQueued) return;
+  liveQueued = true;
+  requestAnimationFrame(renderLive);
+};
+
+// ── 배경화면 만들기 ──────────────────────────────────────────
+function renderWallpaper() {
+  const screenW = window.screen?.width || window.innerWidth || 393;
+  const screenH = window.screen?.height || window.innerHeight || 852;
+  const aspect = clamp(screenH / screenW, 1.5, 2.4);
+  const W = clamp(Math.round(screenW * (window.devicePixelRatio || 2)), 900, 1440);
+  const H = Math.round(W * aspect);
+  const canvas = document.createElement("canvas");
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext("2d");
+  const view = viewFor(state.alt, state.az);
+  const lead = drawSky(ctx, W, H, view);
+  // 별 위, 새김 아래. 아래 새김의 어두운 띠가 실루엣을 한 겹 눌러 줘서 글씨가 뜬다.
+  if (state.skyline) drawSkyline(ctx, W, H, view, scaleFor(H), W / 2, H * 0.44, state.skyline);
+  drawCaption(ctx, W, H, lead);
+  return canvas;
+}
+
+function showResult() {
+  if (!frozenTime) state.date = new Date();
+  // 찍는 순간의 카메라 한 장에서 스카이라인을 읽는다. 사진 자체는 버린다.
+  state.skyline = skylineInput.checked ? (demoSkyline ?? readSkyline()) : null;
+  // 실루엣을 켜 뒀는데 안 들어갔으면 이유를 적는다 — 조용히 빠지면 고장으로 읽힌다.
+  const note = $("result-note");
+  note.hidden = !skylineInput.checked || Boolean(state.skyline);
+  note.textContent = note.hidden ? ""
+    : $("cam").srcObject
+      ? "건물 실루엣은 넣지 않았어요 — 하늘과 건물의 경계가 뚜렷하지 않았습니다."
+      : "건물 실루엣은 넣지 않았어요 — 카메라가 꺼져 있습니다.";
+  const canvas = renderWallpaper();
+  const url = canvas.toDataURL("image/png");
+  $("shot").src = url;
+  const d = state.date;
+  const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+  $("save").href = url;
+  $("save").download = `bubblelab-stars-${stamp}.png`;
+  $("aim").hidden = true;
+  $("result").hidden = false;
+  window.scrollTo({ top: 0 });
+}
+
+$("shoot").addEventListener("click", showResult);
+$("again").addEventListener("click", () => {
+  $("result").hidden = true;
+  $("aim").hidden = false;
+  queueLive();
+});
+
+// ── 위치 ─────────────────────────────────────────────────────
+const placeSelect = $("place");
+for (const p of PLACES) {
+  const option = document.createElement("option");
+  option.value = p.id; option.textContent = p.name;
+  placeSelect.append(option);
+}
+const gpsOption = document.createElement("option");
+gpsOption.value = "gps"; gpsOption.textContent = "현재 위치 쓰기";
+placeSelect.append(gpsOption);
+
+const placeNote = $("place-note");
+// 위치를 못 받았을 때 드롭다운만 "현재 위치 쓰기"에 머물러 있으면 성공한 것처럼
+// 보인다 — 고른 도시로 되돌리고 이유를 적는다. 응답이 몇 초 걸리므로 대기도 알린다.
+function fallBackToCity(reason) {
+  placeSelect.value = state.place.id;
+  placeSelect.disabled = false;
+  placeNote.textContent = `${reason} ${state.place.name} 기준으로 그립니다.`;
+}
+
+placeSelect.addEventListener("change", () => {
+  if (placeSelect.value === "gps") {
+    if (!navigator.geolocation) {
+      fallBackToCity("이 브라우저는 위치를 알려주지 않아요.");
+      return;
+    }
+    placeSelect.disabled = true;
+    placeNote.textContent = "위치 확인 중… (권한을 물어보면 허용해 주세요)";
+    navigator.geolocation.getCurrentPosition((pos) => {
+      state.lat = pos.coords.latitude;
+      state.lon = pos.coords.longitude;
+      state.placeLabel = "현재 위치";
+      placeSelect.disabled = false;
+      placeNote.textContent = `현재 위치를 씁니다 (${state.lat.toFixed(1)}°, ${state.lon.toFixed(1)}°).`;
+      $("hud-place").textContent = `현재 위치 ${state.lat.toFixed(1)}°, ${state.lon.toFixed(1)}°`;
+      queueLive();
+    }, (error) => {
+      fallBackToCity(error.code === error.PERMISSION_DENIED
+        ? "위치 접근이 거부됐어요."
+        : "위치를 못 받았어요(신호가 약하거나 시간이 초과됐어요).");
+    }, { timeout: 8000, maximumAge: 300000 });
+    return;
+  }
+  placeNote.textContent = "";
+  state.place = PLACES.find((p) => p.id === placeSelect.value) ?? PLACES[0];
+  state.lat = state.place.lat; state.lon = state.place.lon; state.placeLabel = state.place.name;
+  $("hud-place").textContent = state.placeLabel;
+  queueLive();
+});
+$("hud-place").textContent = state.placeLabel;
+
+// ── 손으로 겨누기 (센서가 없거나 거부됐을 때의 기본 경로) ────
+const azInput = $("az"), altInput = $("alt");
+azInput.value = String(Math.round(state.az));
+altInput.value = String(Math.round(state.alt));
+azInput.addEventListener("input", () => { setFollow(false); state.az = Number(azInput.value); queueLive(); });
+altInput.addEventListener("input", () => { setFollow(false); state.alt = Number(altInput.value); queueLive(); });
+
+// 뷰파인더를 끌어서도 돌릴 수 있게 — 슬라이더보다 이쪽이 손에 붙는다.
+let drag = null;
+$("viewer").addEventListener("pointerdown", (e) => {
+  setFollow(false);                          // 손이 닿는 순간 카메라에서 떨어진다
+  drag = { x: e.clientX, y: e.clientY, az: state.az, alt: state.alt };
+  $("viewer").setPointerCapture(e.pointerId);
+});
+// 좌우는 끄는 방향이 곧 겨누는 방향이다 — 오른쪽으로 밀면 오른쪽을 본다.
+// 위아래는 취향이 갈리는 축이라 설정으로 뺐다. 기본은 위로 밀면 고도가 내려가는 쪽
+// (화면을 위로 밀어 올려 아래 하늘을 끌어오는 감각), 체크하면 반대가 된다.
+$("viewer").addEventListener("pointermove", (e) => {
+  if (!drag) return;
+  const rect = $("viewer").getBoundingClientRect();
+  const upSign = state.invertY ? -1 : 1;
+  state.az = ((drag.az + (e.clientX - drag.x) / rect.width * 120) % 360 + 360) % 360;
+  state.alt = clamp(drag.alt + upSign * (e.clientY - drag.y) / rect.height * 120, -90, 90);
+  azInput.value = String(Math.round(state.az));
+  altInput.value = String(Math.round(state.alt));
+  queueLive();
+});
+
+// 실루엣 넣기 여부도 기억해 둔다.
+const SKYLINE_KEY = "bl-stars-skyline";
+const skylineInput = $("with-skyline");
+try { skylineInput.checked = localStorage.getItem(SKYLINE_KEY) !== "0"; } catch { /* 최선노력 */ }
+skylineInput.addEventListener("change", () => {
+  try { localStorage.setItem(SKYLINE_KEY, skylineInput.checked ? "1" : "0"); } catch { /* 최선노력 */ }
+});
+
+// 개발용: 카메라 없이 실루엣 배치를 확인한다 (?demo-skyline=1).
+const demoSkyline = params.get("demo-skyline") === "1"
+  ? { confidence: 1, profile: Array.from({ length: 96 }, (_, i) => {
+      // 6~10칸짜리 건물이 늘어선 모양 — 칸 안에서는 높이가 같다
+      const block = Math.floor(i / 7);
+      const heights = [0.70, 0.62, 0.66, 0.55, 0.68, 0.60, 0.72, 0.58, 0.65, 0.69, 0.61, 0.67, 0.71, 0.63];
+      return heights[block % heights.length];
+    }) }
+  : null;
+
+// 이 취향은 기기마다 한 번 정하면 바뀌지 않는다 — 이 브라우저에 기억해 둔다.
+const INVERT_KEY = "bl-stars-invert-y";
+const invertInput = $("invert-y");
+try { state.invertY = localStorage.getItem(INVERT_KEY) === "1"; } catch { /* 최선노력 */ }
+invertInput.checked = state.invertY;
+invertInput.addEventListener("change", () => {
+  state.invertY = invertInput.checked;
+  try { localStorage.setItem(INVERT_KEY, state.invertY ? "1" : "0"); } catch { /* 최선노력 */ }
+});
+const endDrag = () => { drag = null; };
+$("viewer").addEventListener("pointerup", endDrag);
+$("viewer").addEventListener("pointercancel", endDrag);
+
+// ── 기기 방향 센서 ───────────────────────────────────────────
+// alpha·beta·gamma(Z-X'-Y'' 내재 회전)로 회전행렬을 만들고, 뒷면 카메라가 보는
+// -Z축을 세계좌표(X=동, Y=북, Z=위)로 옮겨 방위·고도를 얻는다.
+function directionFrom(alpha, beta, gamma) {
+  const a = alpha * D2R, b = beta * D2R, g = gamma * D2R;
+  const cA = Math.cos(a), sA = Math.sin(a), cB = Math.cos(b);
+  const sB = Math.sin(b), cG = Math.cos(g), sG = Math.sin(g);
+  const east = -(cA * sG + sA * sB * cG);
+  const north = -(sA * sG - cA * sB * cG);
+  const up = -(cB * cG);
+  const len = Math.hypot(east, north, up) || 1;
+  return {
+    az: ((Math.atan2(east, north) * R2D) % 360 + 360) % 360,
+    alt: Math.asin(clamp(up / len, -1, 1)) * R2D,
+  };
+}
+
+let sensorSeen = 0;
+// 방위를 절대값(나침반)으로 받지 못하는 기기·상황이 있다. 예전에는 그런 이벤트를
+// 통째로 버려서 화면이 아예 안 따라 움직였다 — 폰을 돌리면 하늘이 따라 도는 것이
+// 이 토이의 전부인데 그걸 정확도 때문에 포기한 셈이다.
+// 이제는 절대값이 없으면 **변화량만** 방위에 더한다. 따라 움직이되 북쪽 기준이
+// 어긋날 수 있어서, 그때는 방위를 한 번 직접 맞추라고 화면에 적는다.
+// 고도(beta·gamma)는 중력 기준이라 어느 쪽이든 절대값이다.
+let lastRelativeAz = null;
+function onOrientation(event) {
+  const heading = event.webkitCompassHeading;
+  const absolute = heading != null || event.absolute === true;
+  const alpha = heading != null ? 360 - heading : event.alpha;
+  if (alpha == null || event.beta == null || event.gamma == null) return;
+
+  const dir = directionFrom(alpha, event.beta, event.gamma);
+  state.sensors = true;
+  state.absoluteHeading = absolute;
+  sensorSeen = Date.now();
+
+  // 손으로 겨누는 중이면 센서 값으로 덮지 않는다. 다만 기준점은 계속 따라가
+  // 둬야, 다시 맞출 때 그동안 움직인 만큼 튀지 않는다.
+  if (!state.follow) {
+    lastRelativeAz = absolute ? null : dir.az;
+    updateFollowUi();
+    return;
+  }
+
+  if (absolute) {
+    state.az = dir.az;
+    lastRelativeAz = null;
+  } else {
+    if (lastRelativeAz !== null) {
+      let delta = dir.az - lastRelativeAz;
+      if (delta > 180) delta -= 360;
+      if (delta < -180) delta += 360;
+      state.az = ((state.az + delta) % 360 + 360) % 360;
+    }
+    lastRelativeAz = dir.az;
+  }
+  state.alt = dir.alt;
+  azInput.value = String(Math.round(state.az));
+  altInput.value = String(Math.round(state.alt));
+  queueLive();
+}
+
+// 따라가기 ↔ 직접 겨누기. 손으로 움직이는 순간 따라가기가 풀리고, 맞추기를
+// 누르면 다시 붙는다 — 센서가 매 프레임 덮어쓰면 손으로는 아무것도 못 옮긴다.
+function setFollow(on) {
+  if (state.follow === on) return;
+  state.follow = on;
+  // 다시 붙을 때 첫 이벤트는 기준점만 잡게 한다. 상대 방위에서 그동안의 차이가
+  // 한꺼번에 더해지면 화면이 홱 돌아간다.
+  if (on) lastRelativeAz = null;
+  updateFollowUi();
+}
+
+const sensorsLive = () => state.sensors && Date.now() - sensorSeen < 3000;
+
+function updateFollowUi() {
+  const live = sensorsLive();
+  $("manual").hidden = live && state.follow;
+  if (!live) return;                       // 실패 안내는 enableAiming이 쓴다
+  sensorBtn.hidden = state.follow;         // 따라가는 동안은 맞출 것이 없다
+  sensorBtn.disabled = false;
+  sensorBtn.textContent = "카메라에 다시 맞추기";
+  $("manual-why").textContent = state.absoluteHeading
+    ? "손으로 겨누는 중이에요. 위 버튼을 누르면 다시 카메라를 따라갑니다."
+    : "나침반이 없어 북쪽 기준이 어긋날 수 있어요 — 방위를 한 번 맞춘 뒤 따라가게 하면 그 값이 유지됩니다.";
+}
+
+// iOS는 사용자 제스처 안에서 requestPermission()을 불러야 하고, 한 번 거부하면
+// 다시 묻지 않는다. 그래서 "눌러서 다시 시도"할 수 있는 버튼에 묶어 둔다.
+// 반환값: "on" | "denied" | "unsupported"
+async function startSensors() {
+  if (typeof DeviceOrientationEvent === "undefined") return "unsupported";
+  if (typeof DeviceOrientationEvent.requestPermission === "function") {
+    try {
+      if (await DeviceOrientationEvent.requestPermission() !== "granted") return "denied";
+    } catch { return "denied"; }
+  }
+  window.addEventListener("deviceorientationabsolute", onOrientation);
+  window.addEventListener("deviceorientation", onOrientation);
+  return "on";
+}
+
+async function startCamera() {
+  if (!navigator.mediaDevices?.getUserMedia) return false;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" } }, audio: false });
+    $("cam").srcObject = stream;
+    return true;
+  } catch { return false; }
+}
+
+// 손으로 겨누기를 기본으로 두고, 센서·카메라는 버튼을 눌렀을 때만 청한다.
+// 두 권한을 한꺼번에 띄우면 iOS에서 팝업이 겹쳐 한쪽이 묻히므로 방향 → 카메라 순서로,
+// 방향 쪽 결과를 받은 뒤에 카메라를 청한다.
+const sensorBtn = $("sensor-btn");
+async function enableAiming() {
+  sensorBtn.disabled = true;
+  sensorBtn.textContent = "권한 확인 중…";
+  const sensors = await startSensors();
+  if (sensors === "on") state.follow = true;   // 켜자마자 따라간다
+
+  // 센서 상태 판정은 카메라와 묶지 않는다. 카메라 권한 팝업을 사람이 누를 때까지
+  // getUserMedia가 몇 초씩 매달려 있는데, 그동안 방향 안내가 멈춰 있으면
+  // 실제로는 잘 도는 화면을 두고 "아무 반응 없다"고 읽게 된다.
+  setTimeout(() => {
+    if (sensorsLive()) { updateFollowUi(); return; }
+    state.follow = false;
+    $("manual").hidden = false;
+    sensorBtn.hidden = false;
+    sensorBtn.disabled = false;
+    sensorBtn.textContent = "방향 센서 다시 시도";
+    $("manual-why").textContent = sensors === "denied"
+      ? "방향 접근이 거부됐어요. iOS는 설정 → Safari → 동작 및 방향 접근을 켠 뒤 다시 시도하세요."
+      : sensors === "unsupported"
+        ? "이 기기·브라우저는 방향 센서를 지원하지 않아요. 화면을 끌어 겨누세요."
+        : "방향 값이 안 들어와요. 나침반 보정(폰을 8자로 흔들기) 후 다시 시도하거나, 화면을 끌어 겨누세요.";
+  }, 1200);
+
+  if (!await startCamera()) $("cam").hidden = true;
+}
+
+$("manual").hidden = false;
+$("manual-why").textContent = "손으로 겨누는 중이에요. 폰을 돌려서 겨누려면 위 버튼을 누르세요.";
+// 같은 버튼이 상황에 따라 두 가지 일을 한다 — 아직 안 켰으면 권한부터,
+// 이미 켜져 있으면 카메라에 다시 맞추기(sync).
+sensorBtn.addEventListener("click", () => {
+  if (sensorsLive()) { setFollow(true); queueLive(); return; }
+  enableAiming();
+});
+
+window.addEventListener("resize", queueLive);
+renderLive();
+if (params.get("auto") === "1") showResult();
+</script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>

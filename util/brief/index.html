@@ -1,0 +1,735 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>아침 브리핑</title>
+<meta name="description" content="날씨·미세먼지·환율·운세를 아침 한 장에. 8시 알림도 받아요.">
+<meta name="bl-group" content="매일">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🌤️</text></svg>">
+<link rel="stylesheet" href="/_shared/bubble.css">
+<style>
+  :root { --accent-h: 10; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100dvh; display: flex; align-items: center; justify-content: center;
+         /* 우하단 독은 fixed라 문서 흐름을 밀어내지 않는다. 독이 차지하는 높이
+            (버튼 3개 ≈ 133px + 아래 여백 16px)만큼 아래를 비워 카드가 그 위로
+            올라오게 한다 — 짧은 화면에서 안내 문구가 독에 가리던 문제. */
+         padding: 1.5rem 1rem 10rem; }
+  main { width: min(30rem, 100%); }
+  .bl-head { margin-bottom: .5rem; }
+  .date { margin: 0 0 1rem; color: var(--muted); font-size: .82rem; }
+
+  .card { padding: 1.3rem 1.2rem; }
+
+  /* 지역 선택 + 설정 */
+  .region-row { display: flex; align-items: center; gap: .55rem; margin-bottom: 1rem; }
+  .region-row label { font-size: .8rem; color: var(--muted); flex: none; }
+  .region-row .bl-input { flex: 1; min-width: 0; padding: .55rem .7rem; font-size: .92rem; }
+  .icon-btn { flex: none; padding: .35rem .7rem; }
+
+  /* 설정 패널 — 브리핑에 무엇을 넣을지 고른다 */
+  #settings { margin: -.3rem 0 1rem; }
+  #settings h2 { margin: 0 0 .5rem; font-size: .78rem; color: var(--muted); font-weight: 600; }
+  .set-row { display: flex; align-items: center; gap: .6rem; padding: .3rem 0; font-size: .88rem; }
+  #settings .warn { margin: .5rem 0 0; font-size: .76rem; line-height: 1.45; color: var(--bad); }
+
+  /* 생년월일시 (운세를 켰을 때만) — fortune과 같은 값을 읽고 쓴다 */
+  #birth { margin: .7rem 0 0; padding-top: .7rem; border-top: 1px solid var(--line); }
+  #birth .brow { display: flex; gap: .35rem; align-items: center; margin-bottom: .45rem; }
+  #birth select.bl-input { flex: 1; min-width: 0; font-size: .85rem; padding: .45rem .4rem; }
+  #birth .seg { display: flex; gap: .3rem; }
+  #birth .seg .bl-chip { flex: 1; justify-content: center; padding: .25rem .4rem; font-size: .82rem; }
+  #birth-save { margin-top: .55rem; }
+  #birth-msg { margin: .45rem 0 0; }
+
+  /* 브리핑 읽기 — 화면 최상단의 주 동작 */
+  #speak { min-height: 3.2rem; font-size: 1rem; font-weight: 700; margin-bottom: 1rem; }
+
+  /* 환율 */
+  #rates { margin-top: 1.1rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+  .rate-row { display: flex; align-items: baseline; gap: .5rem; padding: .28rem 0; font-size: .9rem;
+              font-variant-numeric: tabular-nums; }
+  .rate-row .name { flex: none; width: 4.6rem; color: var(--muted); font-size: .8rem; }
+  .rate-row .val { font-weight: 700; }
+  .rate-row .chg { font-size: .76rem; }
+  .rate-row .chg.up { color: var(--bad); }
+  .rate-row .chg.down { color: var(--focus); }
+  .basis { margin: .5rem 0 0; font-size: .7rem; line-height: 1.5; color: var(--muted); }
+  .basis a, .source a { color: inherit; }
+
+  /* 운세 총평 */
+  #fortune { margin-top: 1.1rem; padding-top: 1rem; border-top: 1px solid var(--line);
+             display: flex; align-items: flex-start; gap: .8rem; }
+  #fortune .icon { font-size: 1.9rem; line-height: 1.2; flex: none; }
+  #fortune .text { font-size: .92rem; line-height: 1.65; }
+  #fortune .basis { margin-top: .35rem; }
+  /* 총평 아래 작은 유도 버튼. 브리핑 흐름을 끊지 않도록 카드 안에서 가장 작게 둔다 */
+  .fo-action { margin-top: .55rem; min-height: 2rem; font-size: .76rem; font-weight: 600; }
+
+  /* 지금 */
+  .now { display: flex; align-items: center; gap: 1rem; }
+  .now .icon { font-size: 3.2rem; line-height: 1; flex: none; }
+  .now .temp { font-size: 2.5rem; font-weight: 800; line-height: 1.1; letter-spacing: -.02em;
+               font-variant-numeric: tabular-nums; }
+  .now .sky { font-size: .92rem; color: var(--muted); margin-top: .15rem; }
+
+  /* 오늘 요약 */
+  .facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .4rem;
+           margin-top: 1.1rem; }
+  .fact { padding: .6rem .5rem; border-radius: var(--r-sm); text-align: center; background: var(--sunk); }
+  .fact .k { font-size: .72rem; color: var(--muted); }
+  .fact .v { font-size: 1rem; font-weight: 700; margin-top: .22rem; font-variant-numeric: tabular-nums; }
+  .fact[data-grade="나쁨"] .v, .fact[data-grade="매우 나쁨"] .v { color: var(--bad); }
+  .fact[data-grade="좋음"] .v { color: var(--ok); }
+
+  .tomorrow { margin: 1rem 0 0; font-size: .84rem; line-height: 1.5; color: var(--muted); }
+  .source { margin: .7rem 0 0; font-size: .68rem; line-height: 1.45; color: var(--muted); }
+
+  button { font: inherit; color: inherit; cursor: pointer; }
+
+  /* 토글 스위치 (설정·알림 공용) — bubble.css에 스위치 부품이 없어 토큰으로 직접 짓는다.
+     켜지면 도구 강조색으로 찬다. */
+
+  /* 데일리 알림 — fortune과 같은 모양이되 자리가 다르다.
+     우하단은 공용 독(#bl-dock)이 fixed로 차지한다. 이 페이지는 짧아서 세로 중앙
+     정렬을 하면 알림 행이 정확히 그 코너에 놓이고, 360px 화면에서는 토글을 눌러도
+     독의 버튼이 눌렸다. 그래서 ① 알림을 카드 안으로 넣고 ② 토글을 행의 왼쪽에
+     둔다 — 조작 요소가 오른쪽 코너에 없으면 독과 구조적으로 겹칠 수 없다. */
+  #notify { margin-top: 1.1rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+  .notify-row { display: flex; align-items: center; justify-content: flex-start; gap: .7rem; }
+  .notify-title { font-size: .9rem; font-weight: 700; }
+  .notify-help { margin: .6rem 0 0; }
+
+  /* 아래 여백은 문서 끝에서만 독을 비켜 준다. 설정을 펼쳐 페이지가 길어지면
+     스크롤 위치에 따라 안내 문구가 독 아래로 들어가므로, 카드가 독 근처까지
+     오는 좁은 화면에서는 독이 쓰는 세로 열(48px + 여백)만큼 오른쪽을 비운다. */
+  @media (max-width: 520px) { #notify { padding-right: 3.2rem; } }
+
+  section { margin-top: 1.2rem; }
+  [hidden] { display: none !important; }
+  #err { margin: 1rem 0 0; font-size: .84rem; line-height: 1.5; text-align: center; color: var(--bad); }
+
+  /* 불러오는 동안 뼈대만 흐리게 — 값이 튀어 보이지 않게 한다 */
+  .card.is-loading .now, .card.is-loading .facts, .card.is-loading .tomorrow { opacity: .35; }
+</style>
+</head>
+<body>
+<main>
+  <header class="bl-head">
+    <span class="bl-bubble" aria-hidden="true">🌤️</span>
+    <h1>아침 브리핑</h1>
+    <p>날씨·미세먼지·환율·운세를 아침 한 장에. 8시 알림도 받아요.</p>
+  </header>
+  <p class="date bl-num" id="date">오늘의 날씨와 미세먼지</p>
+
+  <!-- 브리핑 읽기는 이 화면의 주 동작이라 카드보다 위, 크게 둔다 -->
+  <button type="button" id="speak" class="bl-btn bl-btn--primary bl-btn--block">🔊 브리핑 읽어주기</button>
+
+  <div class="card bl-panel is-loading" id="card">
+    <div class="region-row">
+      <label for="region">지역</label>
+      <select id="region" class="bl-input"></select>
+      <button type="button" class="icon-btn bl-btn bl-btn--sm" id="settings-btn"
+              aria-expanded="false" aria-controls="settings" aria-label="브리핑 설정">⚙️</button>
+    </div>
+
+    <!-- 브리핑에 넣을 항목 고르기 (화면·읽어주기 모두에 적용) -->
+    <div id="settings" class="bl-sunk" hidden>
+      <h2>브리핑에 넣을 내용</h2>
+      <div class="set-row">
+        <button type="button" id="set-weather" class="bl-switch" role="switch"
+                aria-checked="true" aria-label="날씨와 미세먼지 넣기"></button>
+        <span>🌤️ 날씨 · 미세먼지</span>
+      </div>
+      <div class="set-row">
+        <button type="button" id="set-rates" class="bl-switch" role="switch"
+                aria-checked="true" aria-label="환율과 지수 넣기"></button>
+        <span>💱 환율 · 지수</span>
+      </div>
+      <div class="set-row">
+        <button type="button" id="set-fortune" class="bl-switch" role="switch"
+                aria-checked="true" aria-label="오늘의 운세 넣기"></button>
+        <span>🔮 오늘의 운세</span>
+      </div>
+      <p class="warn" id="set-warn" hidden>둘 다 끄면 읽어줄 내용이 없어요.</p>
+
+      <!-- 생년월일시. fortune과 같은 저장값을 쓰므로 어느 쪽에서 넣어도 함께 바뀐다 -->
+      <div id="birth" hidden>
+        <div class="brow">
+          <select id="b-y" class="bl-input" aria-label="태어난 해"></select>
+          <select id="b-m" class="bl-input" aria-label="태어난 달"></select>
+          <select id="b-d" class="bl-input" aria-label="태어난 날"></select>
+        </div>
+        <div class="brow">
+          <div class="seg" style="flex:1">
+            <button type="button" class="bl-chip" id="b-solar" aria-pressed="true">양력</button>
+            <button type="button" class="bl-chip" id="b-lunar" aria-pressed="false">음력</button>
+          </div>
+          <div class="seg" id="b-leap-wrap" hidden style="flex:1">
+            <button type="button" class="bl-chip" id="b-normal" aria-pressed="true">평달</button>
+            <button type="button" class="bl-chip" id="b-leap" aria-pressed="false">윤달</button>
+          </div>
+        </div>
+        <div class="brow">
+          <select id="b-h" class="bl-input" aria-label="태어난 시진"></select>
+          <select id="b-g" class="bl-input" aria-label="성별">
+            <option value="unspecified">성별 미지정</option>
+            <option value="male">남성</option>
+            <option value="female">여성</option>
+          </select>
+        </div>
+        <button type="button" id="birth-save" class="bl-btn bl-btn--sm bl-btn--block">생년월일시 저장</button>
+        <p id="birth-msg" class="bl-note"></p>
+      </div>
+    </div>
+
+    <div id="weather-block">
+    <div class="now">
+      <span class="icon" id="now-icon">⏳</span>
+      <div>
+        <div class="temp" id="now-temp">--°</div>
+        <div class="sky" id="now-sky">불러오는 중…</div>
+      </div>
+    </div>
+
+    <div class="facts">
+      <div class="fact"><div class="k">낮 최고</div><div class="v" id="f-max">--°</div></div>
+      <div class="fact"><div class="k">아침 최저</div><div class="v" id="f-min">--°</div></div>
+      <div class="fact"><div class="k">강수확률</div><div class="v" id="f-rain">--%</div></div>
+      <div class="fact"><div class="k">미세먼지</div><div class="v" id="f-pm10">--</div></div>
+      <div class="fact"><div class="k">초미세먼지</div><div class="v" id="f-pm25">--</div></div>
+      <div class="fact" id="fact-air"><div class="k">종합</div><div class="v" id="f-air">--</div></div>
+    </div>
+
+    <p class="tomorrow" id="tomorrow"></p>
+    <p class="source">날씨·대기질 데이터: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0)</p>
+    </div><!-- /weather-block -->
+
+    <!-- 환율 (ECB 고시 기준) -->
+    <div id="rates" hidden>
+      <div id="rate-list"></div>
+      <div id="index-list"></div>
+      <p class="basis" id="rate-note" hidden></p>
+      <p class="basis" id="rate-basis"></p>
+    </div>
+
+    <!-- 오늘의 운세 총평 (바이오리듬·분야별은 util/fortune에서) -->
+    <div id="fortune" hidden>
+      <span class="icon" id="fo-icon">🔮</span>
+      <div>
+        <div class="text" id="fo-text"></div>
+        <p class="basis" id="fo-basis"></p>
+        <!-- 안 넣은 사람은 입력으로, 넣은 사람은 자세히 보기로 -->
+        <button type="button" class="fo-action bl-btn bl-btn--sm" id="fo-setup" hidden>맞춤 정보 입력</button>
+        <a class="fo-action bl-btn bl-btn--sm" id="fo-more" href="/fortune" hidden>자세히 보기 →</a>
+      </div>
+    </div>
+
+    <!-- 데일리 알림 (푸시 지원 시에만 노출). 토글이 행의 왼쪽인 이유는 위 CSS 주석 참고 -->
+    <section id="notify" hidden>
+      <div class="notify-row">
+        <button type="button" id="notify-btn" class="bl-switch" role="switch" aria-checked="false" aria-label="매일 오전 8시 날씨 알림"></button>
+        <span class="notify-title">🔔 매일 오전 8시 알림 받기</span>
+      </div>
+      <p class="notify-help bl-note" id="notify-help">브라우저 알림으로 매일 오전 8시(KST)에 선택한 지역의 날씨를 받아보세요.</p>
+    </section>
+  </div>
+
+  <p id="err" hidden></p>
+</main>
+
+<!-- defer가 아니다: 아래 인라인 스크립트가 첫 화면을 그리며 문구를 쓴다 -->
+<script src="/_shared/fortune-common.js"></script>
+<script>
+  // 지역 목록은 서버의 허용 목록과 같아야 한다 (_infra/brief.js BRIEF_REGIONS).
+  // 화면은 id만 서버로 보내고 좌표는 다루지 않는다 — 위치 권한을 쓰지 않는 이유다.
+  const REGIONS = [
+    ["seoul", "서울"], ["busan", "부산"], ["daegu", "대구"], ["incheon", "인천"],
+    ["gwangju", "광주"], ["daejeon", "대전"], ["ulsan", "울산"], ["sejong", "세종"],
+    ["gyeonggi", "경기(수원)"], ["gangwon", "강원(춘천)"], ["chungbuk", "충북(청주)"],
+    ["chungnam", "충남(홍성)"], ["jeonbuk", "전북(전주)"], ["jeonnam", "전남(무안)"],
+    ["gyeongbuk", "경북(안동)"], ["gyeongnam", "경남(창원)"], ["jeju", "제주"],
+  ];
+  const STORE_KEY = "bl-brief-region";
+
+  const $ = (id) => document.getElementById(id);
+  const card = $("card"), errEl = $("err"), regionSel = $("region");
+
+  let brief = null;
+  let region = localStorage.getItem(STORE_KEY);
+  if (!REGIONS.some(([id]) => id === region)) region = "seoul";
+
+  for (const [id, name] of REGIONS) {
+    regionSel.append(new Option(name, id, false, id === region));
+  }
+
+  // ── 설정: 브리핑에 무엇을 넣을지 ─────────────────────────────
+  // 화면과 읽어주기에 똑같이 적용된다. 8시 푸시는 서버가 보내는 것이라
+  // 개인 명식을 모르고, 여기 설정과 무관하게 날씨 요약만 간다.
+  const SET_KEY = "bl-brief-sections";
+  const TOGGLES = [["weather", "set-weather"], ["rates", "set-rates"], ["fortune", "set-fortune"]];
+  const settings = { weather: true, rates: true, fortune: true, ...readSettings() };
+  function readSettings() {
+    try { return JSON.parse(localStorage.getItem(SET_KEY)) || {}; } catch (e) { return {}; }
+  }
+  function saveSettings() {
+    try { localStorage.setItem(SET_KEY, JSON.stringify(settings)); } catch (e) {}
+  }
+
+  // 읽어주기(_shared/tts.js)가 읽을 문장. 켜 둔 항목만, 화면과 같은 순서로 읽는다.
+  window.blSpeakText = () => [
+    settings.weather ? brief?.text : "",
+    settings.rates ? rates?.text : "",
+    settings.fortune ? fortuneSpeech() : "",
+  ].filter(Boolean).join("\n");
+
+  const degree = (v) => (v === null || v === undefined ? "--°" : `${v}°`);
+
+  function render(data) {
+    brief = data;
+    $("date").textContent = `${data.date} (${data.weekday}) · ${data.region.name}`;
+    $("now-icon").textContent = data.current.icon;
+    $("now-temp").textContent = degree(data.current.temp);
+    $("now-sky").textContent = data.current.label;
+    $("f-max").textContent = degree(data.today?.max);
+    $("f-min").textContent = degree(data.today?.min);
+    $("f-rain").textContent = data.today?.rainChance === null || data.today?.rainChance === undefined
+      ? "--%" : `${data.today.rainChance}%`;
+    // 농도 칸은 색을 입히지 않는다 — 등급은 둘 중 나쁜 쪽으로 정해지므로
+    // 좋은 쪽 칸까지 빨갛게 물들면 어느 게 나쁜지 거꾸로 읽힌다.
+    $("f-pm10").textContent = data.air.pm10 === null ? "--" : `${data.air.pm10}㎍`;
+    $("f-pm25").textContent = data.air.pm25 === null ? "--" : `${data.air.pm25}㎍`;
+    $("f-air").textContent = data.air.label ?? "--";
+    $("fact-air").dataset.grade = data.air.label ?? "";
+    $("tomorrow").textContent = data.tomorrow
+      ? `내일 ${data.tomorrow.icon} ${data.tomorrow.label} · ${degree(data.tomorrow.min)} ~ ${degree(data.tomorrow.max)}`
+      : "";
+    card.classList.remove("is-loading");
+    errEl.hidden = true;
+  }
+
+  async function load() {
+    card.classList.add("is-loading");
+    $("speak").disabled = true;
+    try {
+      const res = await fetch(`/_brief/today?region=${encodeURIComponent(region)}`);
+      if (!res.ok) throw new Error(`http ${res.status}`);
+      render(await res.json());
+    } catch (e) {
+      // 조용히 실패하면 사용자는 왜 비어 있는지 알 수 없다.
+      errEl.textContent = "날씨를 불러오지 못했어요. 잠시 후 다시 시도해주세요.";
+      errEl.hidden = false;
+      $("now-sky").textContent = "불러오기 실패";
+      $("now-icon").textContent = "❔";
+    }
+    applySettings();     // 날씨가 실패해도 운세만으로 읽을 수 있다
+  }
+
+  // ── 환율 ─────────────────────────────────────────────────────
+  // 지역과 달리 전 세계 공통이라 지역을 바꿔도 다시 부르지 않는다.
+  let rates = null;
+
+  // 미국장이 열려 있는 동안 Yahoo 일봉의 마지막 행은 오늘치 미완성 봉이다.
+  // 그걸 "종가"라고 부르면 틀린 말이 되므로 서버가 준 indexLive로 갈라 적는다.
+  function indexBasis() {
+    const when = rates?.indexDate ? `${rates.indexDate} ` : "";
+    return `${when}${rates?.indexLive ? "장중" : "종가"}`;
+  }
+
+  function showRates() {
+    const box = $("rates");
+    const hasAny = rates && ((rates.items?.length ?? 0) + (rates.indices?.length ?? 0)) > 0;
+    if (!settings.rates) { box.hidden = true; return; }
+    if (!hasAny) {
+      // 켜 둔 항목이 통째로 사라지면 설정이 안 먹은 것처럼 보인다 — 실패를 적는다.
+      $("rate-list").replaceChildren();
+      $("index-list").replaceChildren();
+      $("rate-basis").textContent = "";
+      const note = $("rate-note");
+      note.textContent = "환율·지수를 불러오지 못했어요 · 잠시 뒤 다시 시도해요";
+      note.hidden = false;
+      box.hidden = false;
+      return;
+    }
+    const list = $("rate-list");
+    list.replaceChildren();
+    for (const item of rates.items) {
+      const row = document.createElement("div");
+      row.className = "rate-row";
+      const name = document.createElement("span");
+      name.className = "name";
+      name.textContent = `${item.unit === 100 ? "100" : ""}${item.code}`;
+      const val = document.createElement("span");
+      val.className = "val";
+      val.textContent = `${item.value.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}원`;
+      row.append(name, val);
+      if (item.change !== null && item.change !== 0) {
+        const chg = document.createElement("span");
+        chg.className = `chg ${item.change > 0 ? "up" : "down"}`;
+        chg.textContent = `${item.change > 0 ? "▲" : "▼"} ${Math.abs(item.change).toFixed(2)}`;
+        row.append(chg);
+      }
+      list.append(row);
+    }
+
+    // 지수 (다우·나스닥). 환율과 상류가 달라 한쪽만 있을 수도 있다.
+    const indexList = $("index-list");
+    indexList.replaceChildren();
+    for (const index of rates.indices ?? []) {
+      const row = document.createElement("div");
+      row.className = "rate-row";
+      const name = document.createElement("span");
+      name.className = "name";
+      name.textContent = index.label;
+      const val = document.createElement("span");
+      val.className = "val";
+      val.textContent = index.value.toLocaleString("ko-KR", { maximumFractionDigits: 2 });
+      row.append(name, val);
+      if (index.changePct !== null && index.changePct !== 0) {
+        const chg = document.createElement("span");
+        chg.className = `chg ${index.changePct > 0 ? "up" : "down"}`;
+        chg.textContent = `${index.changePct > 0 ? "▲" : "▼"} ${Math.abs(index.changePct).toFixed(2)}%`;
+        row.append(chg);
+      }
+      indexList.append(row);
+    }
+    // 한쪽 상류가 죽으면 그 줄만 조용히 사라져서 아무도 고장을 눈치채지 못했다.
+    // 무엇이 안 왔는지 화면에 적는다(값을 지어내지는 않는다).
+    const note = $("rate-note");
+    const missing = [];
+    if (rates.ratesFailed) missing.push("환율");
+    if (rates.indicesFailed) missing.push("지수");
+    note.textContent = missing.length ? `${missing.join("·")}를 불러오지 못했어요 · 잠시 뒤 다시 시도해요` : "";
+    note.hidden = !missing.length;
+
+    // 기준일을 반드시 적는다 — ECB는 하루 한 번 고시라 아침에는 전 영업일 값이다.
+    const basis = $("rate-basis");
+    if (!rates.items?.length) {                 // 지수만 받은 경우
+      basis.textContent = `${indexBasis()} · ${rates.indexSource ?? "출처 미상"}`;
+      box.hidden = false;
+      return;
+    }
+    basis.replaceChildren(document.createTextNode(rates.stale
+      ? `${rates.date} 유럽중앙은행(ECB) 고시 · 최신 고시가 늦어지고 있어요 · `
+      : `${rates.date} 유럽중앙은행(ECB) 고시 기준 · 은행 매매기준율과 다를 수 있어요 · `));
+    const link = document.createElement("a");
+    link.href = "https://frankfurter.dev/";
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = "Frankfurter";
+    basis.append(link);
+    // 어느 상류가 답했는지 밝힌다(상류가 막히면 다음 상류로 넘어가므로 고정이 아니다).
+    // 실패 안내는 위의 #rate-note가 이미 하므로 여기서 다시 말하지 않는다.
+    if (rates.indices?.length) {
+      basis.append(document.createTextNode(` · ${indexBasis()} ${rates.indexSource ?? ""}`.trimEnd()));
+    }
+    box.hidden = false;
+  }
+
+  async function loadRates() {
+    try {
+      const res = await fetch("/_brief/rates");
+      if (!res.ok) throw new Error(`http ${res.status}`);
+      rates = await res.json();
+    } catch (e) {
+      rates = null;              // 실패하면 섹션을 아예 그리지 않는다(빈 칸 금지)
+    }
+    showRates();
+  }
+
+  // ── 오늘의 운세 총평 ─────────────────────────────────────────
+  // util/fortune과 같은 오리진이라 그 페이지가 저장해 둔 생년월일을 그대로 읽는다.
+  // 있으면 fortune과 똑같은 사주 총평을, 없으면 날짜로 고른 한 줄을 보여준다.
+  // (분야별 운세·바이오리듬은 여기서 다루지 않는다 — 총평만.)
+  const BIRTH_KEY = "bl-fortune-birth";
+  let fortuneLine = null;                       // { emoji, text, basis }
+
+  function fortuneSpeech() {
+    return fortuneLine ? `오늘의 운세입니다. ${fortuneLine.text}` : "";
+  }
+
+  function readBirth() {
+    try {
+      const o = JSON.parse(localStorage.getItem(BIRTH_KEY));
+      return o && o.y && o.m && o.d ? o : null;
+    } catch (e) { return null; }
+  }
+
+  function showFortune() {
+    const box = $("fortune");
+    if (!settings.fortune || !fortuneLine) { box.hidden = true; return; }
+    $("fo-icon").textContent = fortuneLine.emoji;
+    $("fo-text").textContent = fortuneLine.text;
+    $("fo-basis").textContent = fortuneLine.basis;
+    // 안 넣은 사람에게는 입력을 권하고, 넣은 사람에게는 분야별 운세로 가는 길을 준다
+    const hasBirth = !!readBirth();
+    $("fo-setup").hidden = hasBirth;
+    $("fo-more").hidden = !hasBirth;
+    box.hidden = false;
+  }
+
+  // "맞춤 정보 입력" — 설정을 열어 생년월일 폼까지 데려다 준다
+  $("fo-setup").addEventListener("click", () => {
+    if ($("settings").hidden) $("settings-btn").click();
+    fillBirthForm();
+    $("birth").scrollIntoView({ behavior: "smooth", block: "center" });
+    $("b-y").focus({ preventScroll: true });
+  });
+
+  async function loadFortune() {
+    // 우선 날짜 기준 한 줄로 즉시 채운다 — 명식 계산을 기다리며 비워 두지 않는다.
+    fortuneLine = { ...window.blFortuneLine(window.blFortuneDaySeed()), basis: "" };
+    showFortune();
+
+    const birth = readBirth();
+    if (!birth) {
+      fortuneLine.basis = "생년월일을 넣으면 사주 기반 총평으로 바뀝니다.";
+      showFortune();
+      return;
+    }
+    try {
+      // 생년월일은 이 기기에만 있고, 서버는 계산에만 쓰고 저장하지 않는다.
+      // 요청 본문은 fortune과 같은 함수로 만든다 — 형식이 어긋나면 400이 나고,
+      // 그러면 총평이 조용히 일반 문구로 남는다(실제로 그런 적이 있다).
+      const res = await fetch("/_fortune/chart", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(window.blFortuneChartBody(birth)),
+      });
+      if (!res.ok) return;                      // 실패해도 위의 한 줄이 남는다
+      const daily = (await res.json()).dailyFortunes?.[0];
+      if (!daily) return;
+      fortuneLine = {
+        // 훑어보는 화면이라 한 문장만 — 서버의 headline, 옛 응답이면 text 첫 문장.
+        emoji: daily.emoji, text: daily.headline || (/^.*?[.!?](?=\s|$)/.exec(daily.text ?? "")?.[0] ?? daily.text),
+        basis: `명식 일간 + 오늘 일진 ${daily.iljin}(${daily.iljinHanja}) · ${daily.tenGod}`,
+      };
+      showFortune();
+    } catch (e) { /* 한 줄 운세를 그대로 둔다 */ }
+  }
+
+  // ── 생년월일시 입력 ──────────────────────────────────────────
+  // fortune과 같은 키·같은 형태로 저장한다. 어느 화면에서 넣어도 다른 쪽이
+  // 그대로 읽으므로 따로 동기화할 것이 없다.
+  const BRANCHES = window.blFortuneBranches;
+  const bY = $("b-y"), bM = $("b-m"), bD = $("b-d"), bH = $("b-h"), bG = $("b-g");
+  let calendarMode = "solar", leapMode = false;
+
+  const option = (sel, value, label) => sel.append(new Option(label, value));
+  const thisYear = new Date().getFullYear();
+  for (let y = thisYear; y >= 1900; y--) option(bY, y, `${y}년`);
+  for (let m = 1; m <= 12; m++) option(bM, m, `${m}월`);
+  option(bH, "", "태어난 시 모름");
+  BRANCHES.forEach((b, i) => option(bH, i, `${b.k}시 (${b.range})`));
+
+  function fillDays() {
+    const keep = bD.value;
+    const last = new Date(+bY.value, +bM.value, 0).getDate();   // 윤년까지 반영
+    bD.replaceChildren();
+    for (let d = 1; d <= last; d++) option(bD, d, `${d}일`);
+    bD.value = keep && +keep <= last ? keep : "1";
+  }
+  function setCalendar(mode) {
+    calendarMode = mode === "lunar" ? "lunar" : "solar";
+    $("b-solar").setAttribute("aria-pressed", String(calendarMode === "solar"));
+    $("b-lunar").setAttribute("aria-pressed", String(calendarMode === "lunar"));
+    $("b-leap-wrap").hidden = calendarMode !== "lunar";        // 윤달은 음력에만 있다
+  }
+  function setLeap(on) {
+    leapMode = !!on;
+    $("b-leap").setAttribute("aria-pressed", String(leapMode));
+    $("b-normal").setAttribute("aria-pressed", String(!leapMode));
+  }
+
+  $("b-solar").addEventListener("click", () => setCalendar("solar"));
+  $("b-lunar").addEventListener("click", () => setCalendar("lunar"));
+  $("b-normal").addEventListener("click", () => setLeap(false));
+  $("b-leap").addEventListener("click", () => setLeap(true));
+  bY.addEventListener("change", fillDays);
+  bM.addEventListener("change", fillDays);
+
+  function fillBirthForm() {
+    const b = readBirth();
+    bY.value = b?.y ?? 1990;
+    bM.value = b?.m ?? 1;
+    fillDays();
+    bD.value = b?.d ?? 1;
+    setCalendar(b?.calendar);
+    setLeap(b?.lunarLeap);
+    bH.value = b && b.h != null && BRANCHES[b.h] ? String(b.h) : "";
+    bG.value = ["male", "female"].includes(b?.gender) ? b.gender : "unspecified";
+    $("birth-msg").textContent = b
+      ? "저장된 값입니다. 운세 페이지와 같은 값을 씁니다."
+      : "넣으면 사주 기반 총평으로 바뀝니다. 운세 페이지와 같은 값을 씁니다.";
+  }
+
+  $("birth-save").addEventListener("click", () => {
+    const y = +bY.value, m = +bM.value, d = +bD.value;
+    if (calendarMode === "solar" && new Date(y, m - 1, d) > new Date()) {
+      $("birth-msg").textContent = "미래 날짜는 넣을 수 없어요.";
+      return;
+    }
+    const branch = bH.value === "" ? null : +bH.value;
+    const previous = readBirth();
+    // fortune에서 정확한 시각으로 넣어 둔 값을 시진만 보고 지우지 않는다 —
+    // 시진을 건드리지 않았으면 원래의 시각 입력을 그대로 남긴다.
+    const keepClock = previous?.timeMode === "clock" && previous.h === branch;
+    const birth = {
+      y, m, d,
+      calendar: calendarMode,
+      lunarLeap: calendarMode === "lunar" && leapMode,
+      gender: bG.value,
+      timeMode: keepClock ? "clock" : "branch",
+      h: branch,
+      time: keepClock ? previous.time : null,
+    };
+    try { localStorage.setItem(BIRTH_KEY, JSON.stringify(birth)); } catch (e) {}
+    $("birth-msg").textContent = "저장했어요. 총평을 다시 계산합니다…";
+    window.blTTS?.stop();
+    loadFortune().then(() => {
+      $("birth-msg").textContent = "저장했어요. 운세 페이지에도 같은 값이 적용됩니다.";
+      applySettings();
+    });
+  });
+
+  // ── 설정 패널 ────────────────────────────────────────────────
+  function applySettings() {
+    $("birth").hidden = !settings.fortune;        // 운세를 꺼 두면 입력할 이유가 없다
+    $("weather-block").hidden = !settings.weather;
+    for (const [key, id] of TOGGLES) $(id).setAttribute("aria-checked", String(settings[key]));
+    $("set-warn").hidden = TOGGLES.some(([key]) => settings[key]);
+    showRates();
+    showFortune();
+    // 읽을 게 없으면 버튼을 눌러도 아무 일이 없다 — 미리 꺼 둔다.
+    $("speak").disabled = !window.blSpeakText();
+  }
+
+  $("settings-btn").addEventListener("click", () => {
+    const open = $("settings").hidden;
+    // 열 때마다 저장값을 다시 읽는다 — fortune 탭에서 바꾼 값이 반영돼야 한다
+    if (open) fillBirthForm();
+    $("settings").hidden = !open;
+    $("settings-btn").setAttribute("aria-expanded", String(open));
+  });
+  for (const [key, id] of TOGGLES) {
+    $(id).addEventListener("click", () => {
+      settings[key] = !settings[key];
+      saveSettings();
+      window.blTTS?.stop();
+      applySettings();
+    });
+  }
+
+  regionSel.addEventListener("change", () => {
+    region = regionSel.value;
+    localStorage.setItem(STORE_KEY, region);
+    window.blTTS?.stop();
+    load();
+    syncSubscribedRegion();
+  });
+
+  // 읽어주기 버튼. 독의 🔊와 같은 동작이지만, 이 페이지에서는 브리핑이 본론이라
+  // 카드 안에도 큰 버튼을 둔다. iOS 제약 때문에 클릭 안에서 await 하지 않는다.
+  $("speak").addEventListener("click", () => {
+    if (!window.blTTS) return;
+    if (window.blTTS.speaking) { window.blTTS.stop(); return; }
+    window.blTTS.speak(brief?.text ?? "");
+  });
+  addEventListener("load", () => {
+    window.blTTS?.on("start", () => { $("speak").textContent = "⏹ 멈추기"; });
+    window.blTTS?.on("end", () => { $("speak").textContent = "🔊 브리핑 읽어주기"; });
+  });
+
+  applySettings();
+  load();
+  loadRates().then(applySettings);
+  loadFortune().then(applySettings);
+
+  // ── 매일 오전 8시(KST) 알림 ────────────────────────────────────
+  // 서버(Cloudflare cron)가 08:00 KST에 구독한 기기로 Web Push를 보낸다.
+  // 구독에는 고른 지역 id만 함께 저장한다(좌표·위치 권한 없음).
+  let syncSubscribedRegion = () => {};
+  (function setupNotify() {
+    const notifySec = $("notify"), notifyBtn = $("notify-btn"), notifyHelp = $("notify-help");
+    const supported = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+    if (!supported || !isSecureContext) return;   // 미지원 브라우저·http에서는 노출하지 않음
+
+    function vapidKeyBytes(base64url) {
+      const padded = base64url.replace(/-/g, "+").replace(/_/g, "/")
+        .padEnd(Math.ceil(base64url.length / 4) * 4, "=");
+      return Uint8Array.from(atob(padded), (c) => c.charCodeAt(0));
+    }
+    function setState(on) {
+      notifyBtn.setAttribute("aria-checked", String(on));
+      notifyHelp.textContent = on
+        ? "매일 오전 8시(KST)에 선택한 지역의 날씨를 알려드려요. 토글을 끄면 해지됩니다."
+        : "브라우저 알림으로 매일 오전 8시(KST)에 선택한 지역의 날씨를 받아보세요.";
+    }
+
+    let vapidPublicKey = null, registration = null, busy = false;
+
+    const api = (method, body) => fetch("/_brief/push", {
+      method,
+      ...(body && { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+    });
+
+    async function enable() {
+      if ((await Notification.requestPermission()) !== "granted") {
+        notifyHelp.textContent = "브라우저 설정에서 알림을 허용해야 받을 수 있어요.";
+        return false;
+      }
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true, applicationServerKey: vapidKeyBytes(vapidPublicKey),
+      });
+      const res = await api("POST", { subscription, region });
+      if (!res.ok) { await subscription.unsubscribe().catch(() => {}); throw new Error("subscribe failed"); }
+      return true;
+    }
+
+    async function disable() {
+      const subscription = await registration.pushManager.getSubscription();
+      if (subscription) {
+        await api("DELETE", { endpoint: subscription.endpoint }).catch(() => {});
+        await subscription.unsubscribe().catch(() => {});
+      }
+      return false;
+    }
+
+    // 지역을 바꾸면 이미 켜 둔 알림도 그 지역으로 따라가야 한다 — 안 그러면
+    // 화면은 부산인데 알림은 계속 서울이 온다.
+    syncSubscribedRegion = async () => {
+      if (!registration || notifyBtn.getAttribute("aria-checked") !== "true") return;
+      const subscription = await registration.pushManager.getSubscription().catch(() => null);
+      if (subscription) await api("POST", { subscription, region }).catch(() => {});
+    };
+
+    notifyBtn.addEventListener("click", async () => {
+      if (busy || !vapidPublicKey || !registration) return;
+      busy = true; notifyBtn.disabled = true;
+      const turningOn = notifyBtn.getAttribute("aria-checked") !== "true";
+      try {
+        setState(turningOn ? await enable() : await disable());
+      } catch (e) {
+        notifyHelp.textContent = "알림 설정에 실패했어요. 잠시 후 다시 시도해주세요.";
+      } finally {
+        busy = false; notifyBtn.disabled = false;
+      }
+    });
+
+    (async function init() {
+      try {
+        const res = await api("GET");
+        vapidPublicKey = res.ok ? (await res.json()).vapidPublicKey : null;
+        if (!vapidPublicKey) return;   // 서버에 푸시 미설정 시 버튼 숨김 유지
+        registration = await navigator.serviceWorker.register("sw.js");
+        await navigator.serviceWorker.ready;
+        setState(Boolean(await registration.pushManager.getSubscription()));
+        notifySec.hidden = false;
+      } catch (e) { /* 조용히 미노출 */ }
+    })();
+  })();
+</script>
+<script defer src="/_shared/tts.js"></script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>

@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>🐶 강아지 러시 — 한 번 틀리면 끝</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🐶</text></svg>">
+<link rel="stylesheet" href="/_shared/bubble.css">
+<style>
+  /* 재료는 공용 bubble.css(토큰·bl- 부품). 판(캔버스)은 게임 내용이라 그대로 둔다. */
+  :root { color-scheme: light dark; --accent-h: 284; }
+  html, body { height: 100%; }
+  body { margin: 0; overflow: hidden; user-select: none; -webkit-user-select: none;
+         touch-action: none; }
+  canvas { display: block; touch-action: none; }
+
+  /* HUD — 이름 방울 + 숫자 칩. 판 위에 떠 있으니 칩은 반투명 종이면 */
+  #hud { position: fixed; top: 0; left: 0; right: 0; display: flex; gap: .45rem;
+         align-items: center; padding: .5rem .7rem; font-size: var(--t-caption); z-index: 3;
+         pointer-events: none; white-space: nowrap; color: var(--ink); }
+  #hud .sp { flex: 1; }
+  #hud > span:first-child { flex: 0 1 auto; min-width: 0; overflow: hidden;
+                            text-overflow: ellipsis; display: inline-flex; align-items: center;
+                            gap: .4rem; font-size: var(--t-small); }
+  #hud b { font-weight: 800; letter-spacing: -.01em; }
+  .hud-bubble { width: 1.75rem; font-size: .95rem; flex: none; }
+  .hud-chip { padding: .22rem .6rem; border-radius: var(--pill); font-weight: 600;
+              background: color-mix(in srgb, var(--field) 86%, transparent);
+              border: 1px solid var(--line); }
+  .hud-chip:empty { display: none; }
+  .hud-btn { pointer-events: auto; min-height: 2rem; padding: .2rem .75rem; }
+
+  /* 시작·결과 카드 — 재료는 bl-glass, 위치·크기만 여기서. 방울·제목·설명·주 버튼 */
+  #overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+             display: flex; flex-direction: column; align-items: center; gap: .85rem;
+             width: min(84vw, 21rem); box-sizing: border-box; padding: 1.6rem 1.5rem 1.4rem;
+             text-align: center; z-index: 5; }
+  #overlay.hide { display: none; }
+  #overlay .big { width: 4rem; font-size: 2rem; margin: 0 0 .1rem; }
+  #overlay h1 { margin: 0; font-size: var(--t-h1); font-weight: 800; letter-spacing: -.02em;
+                line-height: 1.25; }
+  #overlay p { margin: 0; font-size: var(--t-small); line-height: 1.6; color: var(--muted);
+               white-space: pre-line; }
+  #btn { font-size: 1.05rem; padding: .75rem 2.2rem; min-height: 3rem; }
+  #overlay #best { margin: 0; font-size: var(--t-caption); min-height: 1.1em; }
+
+  /* 잉크 게이지 — 분홍 채움은 게임의 잉크 색이라 그대로 */
+  #inkbar { position: fixed; top: 2.9rem; left: 50%; transform: translateX(-50%);
+            width: min(60vw, 220px); height: 7px; border-radius: var(--pill); z-index: 3;
+            background: var(--sunk); box-shadow: inset 0 0 0 1px var(--line); }
+  #ink { height: 100%; border-radius: var(--pill); background: #e93d82; width: 100%;
+         transition: width .1s; }
+  #go { position: fixed; bottom: 3.4rem; left: 50%; transform: translateX(-50%);
+        font-size: 1rem; padding: .6rem 1.8rem; z-index: 3;
+        box-shadow: 0 .4rem 1.2rem light-dark(rgb(60 50 30 / .18), rgb(0 0 0 / .5)); }
+  #go:active { transform: translateX(-50%) scale(.96); }
+  #go.hide, #inkbar.hide { display: none; }
+  #btn.hide { display: none; }
+</style>
+</head>
+<body>
+<div id="hud">
+  <span><span class="bl-bubble hud-bubble" aria-hidden="true">🐶</span> <b>강아지 러시</b></span>
+  <span class="sp"></span>
+  <span id="hStage" class="hud-chip bl-num"></span>
+  <button id="retry" class="bl-btn bl-btn--sm hud-btn" title="선 다시 긋기">↻</button>
+</div>
+<div id="inkbar"><div id="ink"></div></div>
+<button id="go" class="bl-btn bl-btn--primary hide">🐝 출발!</button>
+<div id="overlay" class="bl-glass">
+  <p class="big bl-bubble" id="oEmoji">🐶</p>
+  <h1 id="oTitle">강아지 러시</h1>
+  <p id="oMsg">분홍 잉크로 벽을 그려서
+벌떼로부터 강아지를 5초 동안 지키세요.
+
+한 번이라도 물리면 끝!
+연속으로 지켜낸 판 수가 점수입니다.
+(출발 전에는 ↻로 선을 다시 그을 수 있어요)</p>
+  <button id="btn" class="bl-btn bl-btn--primary">시작</button>
+  <p id="best" class="bl-note bl-num"></p>
+</div>
+<canvas id="cv"></canvas>
+<script>
+"use strict";
+// 정적 난이도(0~100)와 별점 — DIFFICULTY.md Phase 1
+const clamp01 = (x) => Math.max(0, Math.min(1, x));
+const starsOf = (d) => "\u2605".repeat(Math.max(1, Math.min(5, Math.ceil(d / 20))));
+let dScore = 0;
+const targetD = (s) => Math.min(90, 5 + 4.7 * s);
+
+/* ── 상수 ─────────────────────────────────────────────── */
+const W = 360, H = 640, DOG_R = 14, BEE_R = 5, SURVIVE = 5;
+const dark = matchMedia("(prefers-color-scheme: dark)");
+
+/* ── 자동 레벨 제너레이터 ─────────────────────────────── */
+// 구성적 풀이 보장: 강아지를 두른 사각 방을 먼저 짓고 일부러 틈을 N개 낸다.
+// 정답은 "각 틈을 직선으로 막기"로 정해져 있고 잉크 = Σ(틈+겹침) × 슬랙이라
+// 풀이 존재가 보장된다. 벌집은 각 틈을 정조준하도록 배치해 "안 막으면
+// 반드시 물리는" 것도 함께 보장한다. salt까지 시드 고정 — 모두 같은 판.
+const mulberry32 = (a) => () => {
+  a |= 0; a = (a + 0x6D2B79F5) | 0;
+  let t = Math.imul(a ^ (a >>> 15), 1 | a);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+function segPointDist2(a, b, p) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy || 1;
+  let t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  return Math.hypot(p[0] - (a[0] + dx * t), p[1] - (a[1] + dy * t));
+}
+
+function gen(stage, salt = 0, forceGaps = 0) {
+  const nGaps = forceGaps || 1 + Math.min(4, Math.floor((stage - 1) / 3));
+  const spd = Math.min(190, 95 + stage * 1.1);
+  const perBees = 3 + Math.min(12, Math.floor(stage / 2));
+  const slack = Math.max(1.06, 1.34 - stage * 0.012);
+  const nHives = Math.min(6, nGaps + (stage >= 10 ? 1 : 0) + (stage >= 25 ? 1 : 0));
+  for (let attempt = 0; attempt < 800; attempt++) {
+    const rnd = mulberry32(stage * 91193 + attempt * 887 + salt * 41221 + 3);
+    const rw = 62 + rnd() * 55, rh = 62 + rnd() * 55;
+    const dgx = 14 + rw + rnd() * (346 - 14 - 2 * rw);
+    const dgy = 78 + rh + rnd() * (556 - 78 - 2 * rh);  // 하단 출발 버튼 영역 회피
+    const x1 = dgx - rw, x2 = dgx + rw, y1 = dgy - rh, y2 = dgy + rh;
+    const sides = [
+      { a: [x1, y1], d: [1, 0], L: x2 - x1, n: [0, -1], horiz: true },
+      { a: [x1, y2], d: [1, 0], L: x2 - x1, n: [0, 1], horiz: true },
+      { a: [x1, y1], d: [0, 1], L: y2 - y1, n: [-1, 0], horiz: false },
+      { a: [x2, y1], d: [0, 1], L: y2 - y1, n: [1, 0], horiz: false },
+    ];
+    // 틈 배치 (변마다 최대 2개, 코너에서 14px 이상)
+    const gaps = [];
+    let ok = true;
+    for (let gi = 0; gi < nGaps && ok; gi++) {
+      let placed = false;
+      for (let t2 = 0; t2 < 40 && !placed; t2++) {
+        const side = sides[(rnd() * 4) | 0];
+        const gw = 46 + rnd() * 40;
+        if (side.L < gw + 36) continue;
+        const off = 14 + rnd() * (side.L - gw - 28);
+        if (gaps.filter((g2) => g2.side === side).length >= 2) continue;
+        if (gaps.some((g2) => g2.side === side &&
+            !(off + gw + 26 < g2.off || g2.off + g2.gw + 26 < off))) continue;
+        const A = [side.a[0] + side.d[0] * off, side.a[1] + side.d[1] * off];
+        const B = [A[0] + side.d[0] * gw, A[1] + side.d[1] * gw];
+        const SA = [A[0] - side.d[0] * 12, A[1] - side.d[1] * 12];
+        const SB = [B[0] + side.d[0] * 12, B[1] + side.d[1] * 12];
+        if (segPointDist2(SA, SB, [dgx, dgy]) < 30) continue;   // 그리기 금지 반경 회피
+        gaps.push({ side, off, gw, A, B, SA, SB });
+        placed = true;
+      }
+      if (!placed) ok = false;
+    }
+    if (!ok) continue;
+    // 벌집: 각 틈의 바깥 법선 방향에 배치해 틈을 정조준
+    const hives = [];
+    for (let hi = 0; hi < nHives && ok; hi++) {
+      const g2 = gaps[hi % nGaps];
+      let placed = false;
+      for (let t2 = 0; t2 < 50 && !placed; t2++) {
+        const mid = [(g2.A[0] + g2.B[0]) / 2, (g2.A[1] + g2.B[1]) / 2];
+        const d3 = 70 + rnd() * 100;
+        const lat = (rnd() - 0.5) * Math.min(30, g2.gw - 30);
+        const hx = mid[0] + g2.side.n[0] * d3 + g2.side.d[0] * lat;
+        const hy = mid[1] + g2.side.n[1] * d3 + g2.side.d[1] * lat;
+        if (hx < 24 || hx > 336 || hy < 76 || hy > 604) continue;
+        if (hx > 104 && hx < 256 && hy > 548) continue;   // 하단 출발 버튼 영역 회피
+        if (hives.some((o) => Math.hypot(hx - o[0], hy - o[1]) < 56)) continue;
+        // 벌집→강아지 직선이 자기 틈 안을 지나는지 (막지 않으면 반드시 진입)
+        const sideCoord = g2.side.horiz ? g2.side.a[1] : g2.side.a[0];
+        const hCoord = g2.side.horiz ? hy : hx, dCoord = g2.side.horiz ? dgy : dgx;
+        const tt = (sideCoord - hCoord) / (dCoord - hCoord || 1);
+        if (tt <= 0 || tt >= 1) continue;
+        const cross = g2.side.horiz ? hx + (dgx - hx) * tt : hy + (dgy - hy) * tt;
+        const lo = Math.min(g2.side.horiz ? g2.A[0] : g2.A[1], g2.side.horiz ? g2.B[0] : g2.B[1]);
+        const hi2 = Math.max(g2.side.horiz ? g2.A[0] : g2.A[1], g2.side.horiz ? g2.B[0] : g2.B[1]);
+        if (cross < lo + 9 || cross > hi2 - 9) continue;
+        hives.push([hx, hy, perBees]);
+        placed = true;
+      }
+      if (!placed) ok = false;
+    }
+    if (!ok) continue;
+    // 벽 = 각 변에서 틈을 뺀 구간들
+    const walls = [];
+    for (const side of sides) {
+      const cuts = gaps.filter((g2) => g2.side === side)
+        .map((g2) => [g2.off, g2.off + g2.gw]).sort((p, q) => p[0] - q[0]);
+      let cur = 0;
+      for (const [o1, o2] of cuts) {
+        if (o1 > cur + 1) walls.push([side.a[0] + side.d[0] * cur, side.a[1] + side.d[1] * cur,
+                                      side.a[0] + side.d[0] * o1, side.a[1] + side.d[1] * o1]);
+        cur = o2;
+      }
+      if (cur < side.L - 1) walls.push([side.a[0] + side.d[0] * cur, side.a[1] + side.d[1] * cur,
+                                        side.a[0] + side.d[0] * side.L, side.a[1] + side.d[1] * side.L]);
+    }
+    const ink2 = Math.round(gaps.reduce((k, g2) => k + g2.gw + 24, 0) * slack);
+    return { dog: [dgx, dgy], hives, walls, ink: ink2, spd,
+             solution: gaps.map((g2) => [g2.SA, g2.SB]),
+             feats: { nGaps, bees: hives.length * perBees, spd, slack } };
+  }
+  // 실패 시 틈 하나 줄여 재시도 (우아한 강등)
+  if (nGaps > 1) return gen(stage, salt, nGaps - 1);
+  return gen(1, salt + 97, 1);
+}
+
+const diffOf = (g) => 100 * clamp01((g.feats.nGaps - 1) / 4 * 0.35 +
+  (g.feats.bees - 8) / 45 * 0.25 + (g.feats.spd - 95) / 95 * 0.2 +
+  (1.34 - g.feats.slack) / 0.28 * 0.2);
+
+// 유사도 지문: 강아지 자리·틈 위치(솔루션 선분)·벌집 자리 양자화 토큰
+const fpOf = (g) => [
+  `d:${Math.round(g.dog[0] / 40)},${Math.round(g.dog[1] / 40)}`,
+  ...g.solution.map(([A, B]) =>
+    `s:${Math.round(A[0] / 30)},${Math.round(A[1] / 30)},${Math.round(B[0] / 30)},${Math.round(B[1] / 30)}`),
+  ...g.hives.map((h) => `h:${Math.round(h[0] / 40)},${Math.round(h[1] / 40)}`),
+];
+const simFp = (a, b) => {
+  const A = new Set(a), B = new Set(b);
+  let hit = 0;
+  for (const x of A) if (B.has(x)) hit++;
+  return hit / Math.max(1, Math.max(A.size, B.size));
+};
+const fpCache = new Map();
+const structFp = (s2) => {
+  if (s2 < 1) return [];
+  if (!fpCache.has(s2)) fpCache.set(s2, fpOf(gen(s2, 0)));
+  return fpCache.get(s2);
+};
+
+// 레벨 자동 재배치 + 유사도 검출: 후보 판마다 (목표 난이도와의 거리) +
+// (직전 두 스테이지 구조 지문과의 자카드 유사도 × 30) 점수가 가장 낮은
+// 판을 채택한다. 이웃 지문은 살트0 구조라 스테이지의 순수 함수 —
+// 시드 고정 결정론(모두 같은 판)이 그대로 유지된다.
+function genTuned(stage) {
+  const T = targetD(stage);
+  const p1 = structFp(stage - 1), p2 = structFp(stage - 2);
+  let best2 = null, bestScore = Infinity;
+  for (let v = 0; v < 4; v++) {
+    const g = gen(stage, v);
+    const fp = fpOf(g);
+    const score = Math.abs(diffOf(g) - T) +
+      30 * Math.max(simFp(fp, p1), simFp(fp, p2));
+    if (score < bestScore) { bestScore = score; best2 = g; }
+    if (bestScore <= 6) break;
+  }
+  return best2;
+}
+window.blDiffAt = (s) => diffOf(genTuned(s));
+window.blSimAt = (s) => s < 2 ? 0 : simFp(fpOf(genTuned(s)), fpOf(genTuned(s - 1)));
+
+/* ── 상태 ─────────────────────────────────────────────── */
+const BEST_KEY = "bl-dogrush-best";
+let best = 0;
+try { best = +localStorage.getItem(BEST_KEY) || 0; } catch {}
+let stage = 1, score = 0, runId = 0;
+let phase = "title";       // title | draw | run | win | fail
+let dog, hives, walls = [], stroke = [], ink = 0, inkMax = 1, tip = "";
+let bees = [], timer = 0, spawnQueue = [], dogFace = "🐶";
+let beeSpd = 95, lastPt = null;
+
+const seg = (x1, y1, x2, y2, r = 5) => ({ x1, y1, x2, y2, r });
+
+function loadStage() {
+  const g = genTuned(stage);
+  dog = g.dog; hives = g.hives;
+  tip = stage === 1 ? "울타리의 틈을 직선으로 막으세요!"
+      : stage === 2 ? "잉크가 아슬아슬 — 틈만 정확히" : "";
+  dScore = diffOf(g);
+  walls = g.walls.map((w) => seg(...w));
+  stroke = []; lastPt = null;
+  ink = inkMax = g.ink; beeSpd = g.spd;
+  bees = []; timer = 0; dogFace = "🐶";
+  spawnQueue = [];
+  hives.forEach(([hx, hy, n], hi) => {
+    for (let i = 0; i < n; i++) {
+      spawnQueue.push({ at: 0.5 + i * 0.09 + hi * 0.03, x: hx, y: hy });
+    }
+  });
+  phase = "draw";
+  document.getElementById("go").classList.remove("hide");
+  document.getElementById("inkbar").classList.remove("hide");
+  window.__sd = { solution: g.solution, ink: g.ink,
+                  state: () => ({ phase, timer, ink }) };
+  window.__sdGen = (s2) => gen(s2);
+  hud(); inkUi();
+}
+window.__sdJump = (s2) => { stage = s2;
+  document.getElementById("overlay").classList.add("hide"); loadStage(); };
+
+/* ── 물리 ─────────────────────────────────────────────── */
+function pushOut(b, s) {
+  const dx = s.x2 - s.x1, dy = s.y2 - s.y1, l2 = dx * dx + dy * dy || 1;
+  let t = ((b.x - s.x1) * dx + (b.y - s.y1) * dy) / l2;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const px = s.x1 + dx * t, py = s.y1 + dy * t;
+  let nx = b.x - px, ny = b.y - py;
+  const d = Math.hypot(nx, ny), rr = BEE_R + s.r;
+  if (d >= rr || d < 1e-6) return;
+  b.x += (nx / d) * (rr - d); b.y += (ny / d) * (rr - d);
+}
+
+function step(dt) {
+  timer += dt;
+  for (const q of spawnQueue) {
+    if (!q.done && timer >= q.at) {
+      q.done = true;
+      bees.push({ x: q.x + (Math.random() - 0.5) * 14, y: q.y + (Math.random() - 0.5) * 14,
+                  t: Math.random() * 9, ph: Math.random() * 9 });
+    }
+  }
+  for (const b of bees) {
+    b.t += dt;
+    let dx = dog[0] - b.x, dy = dog[1] - b.y;
+    const d = Math.hypot(dx, dy) || 1;
+    dx /= d; dy /= d;
+    const wob = Math.sin(b.t * 6 + b.ph) * 0.45;
+    let vx = dx - dy * wob, vy = dy + dx * wob;
+    const vl = Math.hypot(vx, vy) || 1;
+    b.x += (vx / vl) * beeSpd * dt;
+    b.y += (vy / vl) * beeSpd * dt;
+    b.x = Math.max(6, Math.min(354, b.x));
+    b.y = Math.max(6, Math.min(634, b.y));
+    for (let it = 0; it < 2; it++) {
+      for (const s of walls) pushOut(b, s);
+      for (const s of stroke) pushOut(b, s);
+    }
+    if (Math.hypot(b.x - dog[0], b.y - dog[1]) < DOG_R + BEE_R + 1) return fail();
+  }
+  if (timer >= SURVIVE) win();
+}
+
+function fail() {
+  phase = "fail"; dogFace = "😵";
+  const quips = ["광고 속 그 사람은 일부러 못 그리는 거였는데, 이건 진심이네요.",
+                 "괜찮아요. 광고에서도 맨날 물리던데요.",
+                 "벌도 놀랐을 겁니다. 이렇게 큰 빈틈은 처음이라."];
+  runId++;
+  const isBest = score > 0 && score > best;
+  if (isBest) { best = score; try { localStorage.setItem(BEST_KEY, best); } catch {} }
+  if (score >= 1) window.blWeeklyReport?.(score);
+  show("🐝", `${score}판 연속 클리어`, `스테이지 ${stage}에서 물렸어요.` +
+       (isBest ? " 🎉 최고 기록!" : "") + "\n\n" +
+       quips[(Math.random() * quips.length) | 0], "처음부터 다시");
+}
+function win() {
+  phase = "win"; dogFace = "🥰";
+  score++; hud();
+  show("🏆", `${score}연속!`, `스테이지 ${stage} 클리어 — 다음 판으로…`, "");
+  $("btn").classList.add("hide");
+  const id = runId;
+  setTimeout(() => {
+    if (id !== runId || phase !== "win") return;
+    stage++;
+    $("overlay").classList.add("hide"); $("btn").classList.remove("hide");
+    loadStage();
+  }, 900);
+}
+function endDrawUi() {
+  document.getElementById("go").classList.add("hide");
+  document.getElementById("inkbar").classList.add("hide");
+}
+
+/* ── 그리기 ───────────────────────────────────────────── */
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+let scale = 1, ox = 0, oy = 0;
+function resize() {
+  const dpr = devicePixelRatio || 1;
+  cv.width = innerWidth * dpr; cv.height = innerHeight * dpr;
+  cv.style.width = innerWidth + "px"; cv.style.height = innerHeight + "px";
+  scale = Math.min(innerWidth / W, innerHeight / H);
+  ox = (innerWidth - W * scale) / 2; oy = (innerHeight - H * scale) / 2;
+}
+addEventListener("resize", resize); resize();
+
+function capsule(s, col) {
+  ctx.beginPath(); ctx.lineWidth = s.r * 2; ctx.lineCap = "round";
+  ctx.strokeStyle = col;
+  ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2); ctx.stroke();
+}
+
+function draw(now) {
+  const D = dark.matches, dpr = devicePixelRatio || 1;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = D ? "#0b0f17" : "#f3f0e8";
+  ctx.fillRect(0, 0, innerWidth, innerHeight);
+  ctx.setTransform(dpr * scale, 0, 0, dpr * scale, dpr * ox, dpr * oy);
+  if (phase === "title") return;
+
+  const wood = D ? "#6e4522" : "#8a5a33";
+  for (const s of walls) capsule(s, wood);
+  for (const s of stroke) capsule(s, "#e93d82");
+
+  ctx.textAlign = "center";
+  ctx.font = "22px system-ui";
+  for (const [hx, hy] of hives) ctx.fillText("🍯", hx, hy + 8);
+  ctx.font = "28px system-ui";
+  ctx.fillText(dogFace, dog[0], dog[1] + 10);
+  ctx.font = "13px system-ui";
+  for (const b of bees) ctx.fillText("🐝", b.x, b.y + 4.5);
+
+  if (phase === "run") {
+    ctx.font = "bold 26px ui-monospace, monospace";
+    ctx.fillStyle = D ? "#e8ddcb" : "#3a2b18";
+    ctx.fillText(Math.max(0, SURVIVE - timer).toFixed(1), W / 2, 150);
+  }
+  if (tip && phase === "draw") {
+    ctx.font = "12px ui-monospace, monospace";
+    ctx.fillStyle = D ? "rgba(232,221,203,.65)" : "rgba(58,43,24,.6)";
+    const words = tip.split(" "), lines = [];
+    let line = "";
+    for (const w2 of words) {
+      const t2 = line ? line + " " + w2 : w2;
+      if (ctx.measureText(t2).width > 330 && line) { lines.push(line); line = w2; }
+      else line = t2;
+    }
+    lines.push(line);
+    lines.forEach((l, i) => ctx.fillText(l, W / 2, 78 + i * 16));
+  }
+}
+
+let last = performance.now();
+function loop(t) {
+  let dt = (t - last) / 1000; last = t;
+  if (dt > 0.05) dt = 0.05;
+  if (phase === "run") step(dt);
+  draw(t);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+/* ── 입력/UI ──────────────────────────────────────────── */
+const $ = (id) => document.getElementById(id);
+function hud() { $("hStage").textContent = `${score}연속 · 스테이지 ${stage} ${starsOf(dScore)}`; }
+function inkUi() { $("ink").style.width = (ink / inkMax * 100) + "%"; }
+function show(emoji, title, msg, btnText) {
+  $("oEmoji").textContent = emoji; $("oTitle").textContent = title;
+  $("oMsg").textContent = msg; $("btn").textContent = btnText;
+  $("best").textContent = best ? `최고 기록: ${best}연속` : "";
+  $("overlay").classList.remove("hide");
+  endDrawUi();
+}
+function newRun() {
+  runId++; stage = 1; score = 0;
+  $("overlay").classList.add("hide"); $("btn").classList.remove("hide");
+  loadStage();
+}
+$("btn").addEventListener("click", () => {
+  if (phase === "title" || phase === "fail") newRun();
+});
+$("best").textContent = best ? `최고 기록: ${best}연속` : "";
+window.__sdRun = () => ({ score, stage, best, phase });
+// 출발 전(그리기 단계)에만 선을 지우고 다시 긋기 — 달리는 중엔 실패를 피할 수 없다
+$("retry").addEventListener("click", () => {
+  if (phase === "draw") loadStage();
+});
+$("go").addEventListener("click", () => {
+  if (phase !== "draw") return;
+  phase = "run"; timer = 0; endDrawUi();
+});
+
+const toPt = (e) => [(e.clientX - ox) / scale, (e.clientY - oy) / scale];
+const nearEntity = (x, y) =>
+  Math.hypot(x - dog[0], y - dog[1]) < DOG_R + 12 ||
+  hives.some(([hx, hy]) => Math.hypot(x - hx, y - hy) < 30);
+let drawing = false;
+cv.addEventListener("pointerdown", (e) => {
+  e.preventDefault();                        // 모바일 더블탭 줌·고스트 클릭 방지
+  if (phase !== "draw" || ink <= 0) return;
+  drawing = true; lastPt = null;
+  addPt(...toPt(e));
+});
+addEventListener("pointermove", (e) => {
+  if (drawing && phase === "draw") addPt(...toPt(e));
+});
+addEventListener("pointerup", () => { drawing = false; lastPt = null; });
+
+function addPt(x, y) {
+  x = Math.max(0, Math.min(W, x)); y = Math.max(0, Math.min(H, y));
+  if (nearEntity(x, y)) { lastPt = null; return; }   // 강아지·벌집 위엔 못 그림
+  if (!lastPt) { lastPt = [x, y]; return; }
+  const len = Math.hypot(x - lastPt[0], y - lastPt[1]);
+  if (len < 7) return;
+  const use = Math.min(len, ink);
+  const f = use / len;
+  const nx = lastPt[0] + (x - lastPt[0]) * f, ny = lastPt[1] + (y - lastPt[1]) * f;
+  stroke.push(seg(lastPt[0], lastPt[1], nx, ny, 4.5));
+  ink -= use; inkUi();
+  if (ink <= 0.5) { ink = 0; drawing = false; lastPt = null; inkUi(); return; }
+  lastPt = [nx, ny];
+}
+
+window.blShareText = () => `강아지 러시 ${best}연속! 한 번도 안 틀리고 도전해보세요 🐶`;
+window.blWeekly = { game: "dogrush", dir: "max", fmt: (v) => `${v}연속` };
+</script>
+<script defer src="/_shared/records.js"></script>
+<script defer src="/_shared/share.js"></script>
+<script defer src="/_shared/like.js"></script>
+</body>
+</html>

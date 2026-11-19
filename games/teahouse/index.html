@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#141019">
+<meta name="bl-dock" content="off">
+<meta name="description" content="잠 못 드는 사람들이 꿈속에서 찾아오는 찻집. 손님이 기억하는 그 맛을 찾아 주는 힐링 스토리 게임.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🍵</text></svg>">
+<title>새벽 두 시의 찻집 — 잠 못 드는 밤의 힐링 게임</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="새벽찻집">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="style.css">
+<script type="module" src="src/main.js"></script>
+</head>
+<body>
+<main id="app">
+  <header class="top">
+    <h1>새벽 두 시의 찻집</h1>
+    <div class="top-actions">
+      <button id="menu-btn" class="ghost small">📓 기록</button>
+      <button id="sound" class="ghost small">♪ 소리 켜짐</button>
+    </div>
+  </header>
+
+  <div id="stage"><canvas id="scene" width="160" height="120" aria-label="찻집 장면"></canvas></div>
+
+  <!-- 쯔꾸르식 스탠딩: 왼쪽에 크게, 머리는 찻집 그림 모서리에 걸치고 몸은 대화창을 덮는다 (맨 위 층) -->
+  <div id="stand" aria-hidden="true"></div>
+
+  <section id="dialog" class="box" hidden>
+    <div class="portrait" hidden></div>
+    <div class="name"></div>
+    <p class="text"></p>
+    <div class="choices"></div>
+    <span class="next" hidden>▼</span>
+    <button class="auto-toggle" type="button" aria-pressed="false" title="대사 자동 넘기기">자동 ▶</button>
+  </section>
+
+  <section id="blend" class="box" hidden></section>
+
+  <section id="title" class="box center">
+    <p class="kicker">🍵 데모 · 네 번의 밤</p>
+    <h2>새벽 두 시의 찻집</h2>
+    <p class="lede">잠 못 드는 사람들이 꿈속에서만 찾아오는 찻집.<br>손님이 기억하는 <b>그 맛</b>을 찾아 주면, 비로소 푹 잠들어요.</p>
+    <button id="open" class="primary">찻집 문 열기</button>
+    <button id="fresh" class="ghost small" hidden>처음부터</button>
+    <button class="ghost install" data-install hidden>📲 앱으로 설치하기</button>
+    <p class="note">소리가 있어요 · 약 40분 · 밤마다 저장돼요</p>
+  </section>
+
+  <section id="between" class="box center" hidden>
+    <p class="kicker">✦ 밤이 끝났어요</p>
+    <h2>다음 밤에도 찻집은 열려요</h2>
+    <p class="lede">진행이 저장됐어요.<br>지금 이어 가도 되고, 내일 밤에 열어도 돼요.</p>
+    <button class="primary" data-next>다음 밤 열기</button>
+    <button class="ghost small" data-share>📸 이 장면 공유하기</button>
+    <button class="ghost" data-title>오늘은 여기까지</button>
+  </section>
+
+  <section id="ending" class="box center" hidden>
+    <p class="kicker">✦ 지금까지 열린 마지막 밤이 끝났어요</p>
+    <h2>다음 손님은 곧 찾아와요</h2>
+    <p class="lede">플레이해 주셔서 고마워요.<br>이 찻집의 이야기는 볼륨으로 이어질 예정이에요.</p>
+    <button class="primary install" data-install hidden>📲 앱으로 설치하고 다음 밤 기다리기</button>
+    <button class="ghost" data-share>📸 이 장면 공유하기</button>
+    <button class="ghost" data-title>타이틀로</button>
+    <button id="again" class="ghost small">처음부터 다시</button>
+  </section>
+</main>
+
+<div id="menu" class="sheet" hidden>
+  <div class="box">
+    <p class="kicker">📓 기록</p>
+    <section class="menu-sec settings">
+      <h3>설정</h3>
+      <label class="switch"><input type="checkbox" id="set-auto"> <span>대사 자동 넘기기</span></label>
+      <label class="switch"><input type="checkbox" id="set-minigames"> <span>차 미니게임 하기 <small>(끄면 바로 잔이 나와요)</small></span></label>
+    </section>
+    <section class="menu-sec">
+      <h3>🐾 고양이 선물함 <span id="gift-count"></span></h3>
+      <ul id="gift-list" class="gift-list"></ul>
+    </section>
+    <section class="menu-sec">
+      <h3>이어하기 코드</h3>
+      <p class="note">다른 기기나 새 주소로 진행을 옮길 때 써요. 코드를 복사해 두었다가, 옮겨 갈 곳에서 붙여 넣으면 돼요.</p>
+      <textarea id="code-out" rows="3" readonly></textarea>
+      <button id="code-copy" class="ghost small">코드 복사</button>
+      <textarea id="code-in" rows="2" placeholder="여기에 코드를 붙여 넣어요"></textarea>
+      <button id="code-load" class="ghost small">불러오기</button>
+      <p id="code-msg" class="note" aria-live="polite"></p>
+    </section>
+    <section class="menu-sec credits">
+      <h3>크레딧</h3>
+      <ul>
+        <li>글꼴 — <b>Galmuri11</b> by Lee Minseo · SIL Open Font License 1.1</li>
+        <li>악기 샘플 — <b>VSCO 2 Community Edition</b>, <b>Versilian Community Sample Library</b> by Versilian Studios · CC0</li>
+        <li>문 종소리 — "sh_shop_door_bell_openclose.wav" by <b>shall555</b> (<a href="https://freesound.org/s/72197/" target="_blank" rel="noopener">Freesound</a>) · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> · 잘라서 모노로 바꾸고 끝을 페이드아웃함</li>
+        <li>인물 일러스트 — AI 이미지 생성(Codex)으로 만들고 다듬음, 제작자 지시</li>
+        <li>빗소리 — 제작자가 직접 녹음 (2026-11-17)</li>
+        <li>찻집 그림·작곡·이야기 — 직접 만듦 (찻집 그림은 코드로 그린 픽셀아트)</li>
+      </ul>
+    </section>
+    <button class="primary" data-close>닫기</button>
+  </div>
+</div>
+
+<div id="ios-install" class="sheet" hidden>
+  <div class="box">
+    <p class="kicker">📲 아이폰에서 앱으로 설치하기</p>
+    <ol>
+      <li>Safari 아래쪽의 <b>공유 버튼</b>(네모에 화살표)을 눌러요.</li>
+      <li>목록에서 <b>홈 화면에 추가</b>를 골라요.</li>
+      <li>오른쪽 위 <b>추가</b>를 누르면 끝!</li>
+    </ol>
+    <p class="note">설치하면 주소창 없이 전체 화면으로 열리고, 인터넷이 없어도 플레이할 수 있어요.</p>
+    <button class="primary">알겠어요</button>
+  </div>
+</div>
+</body>
+</html>

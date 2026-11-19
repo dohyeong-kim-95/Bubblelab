@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>통나무굴리기</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🪵</text></svg>">
+<link rel="stylesheet" href="/_shared/bubble.css">
+<style>
+  :root { color-scheme: light dark; --accent-h: 73; }
+  html, body { height: 100%; }
+  /* 바탕색은 하늘(판의 일부) — 캔버스가 반투명 하늘·물을 이 위에 칠한다 */
+  html, body { background: light-dark(#dfeef7, #0b1420); }
+  body { margin: 0; overflow: hidden; user-select: none;
+         -webkit-user-select: none; touch-action: none; }
+  canvas { display: block; }
+  /* 좌우 조작 힌트 */
+  .hint { position: fixed; top: 0; bottom: 0; width: 50%; display: flex;
+          align-items: center; justify-content: center; font-size: 3rem;
+          color: var(--ink); opacity: 0; pointer-events: none;
+          transition: opacity .08s; }
+  .hint.l { left: 0; } .hint.r { right: 0; }
+  .hint.on { opacity: .28; }
+  /* 시작·결과 카드 — 판 위에 떠 있는 종이 한 장 */
+  #overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+             display: flex; flex-direction: column; align-items: center; gap: var(--s-4);
+             padding: var(--s-5); text-align: center; box-sizing: border-box;
+             width: min(88vw, 20.5rem); z-index: 5;
+             /* 재료는 bl-glass — 그림자만 하늘·물 판에 맞춘 푸른 기 */
+             box-shadow: 0 .8rem 2.4rem light-dark(rgb(30 50 70 / .16), rgb(0 0 0 / .5)); }
+  #overlay.hide { display: none; }
+  #overlay .bl-head { margin: 0; align-self: stretch; text-align: left; }
+  #msg { margin: 0; color: var(--muted); white-space: pre-line; font-size: var(--t-small); line-height: 1.6; }
+  #msg:empty { display: none; }
+  #result { font-size: 1.15rem; font-weight: 800; white-space: pre-line; line-height: 1.5; min-height: 0; }
+  #result:empty { display: none; }
+  #btn { font-size: 1.1rem; min-height: 3.2rem; padding: .7rem 2.6rem; }
+  #best { margin: 0; }
+  #best:empty { display: none; }
+</style>
+</head>
+<body>
+<div class="hint l" id="hintL">◀</div>
+<div class="hint r" id="hintR">▶</div>
+<div id="overlay" class="bl-glass">
+  <header class="bl-head">
+    <span class="bl-bubble" aria-hidden="true">🪵</span>
+    <h1>통나무굴리기</h1>
+    <p>통나무 위에서 오래 버티기</p>
+  </header>
+  <p id="msg">통나무 위 사람이 떨어지지 않게
+균형을 잡으세요!
+
+화면 왼쪽/오른쪽(← →)을 눌러
+통나무를 그 방향으로 굴립니다.
+오래 버틸수록 고득점!</p>
+  <div id="result" class="bl-num"></div>
+  <button id="btn" class="bl-btn bl-btn--primary">시작!</button>
+  <p id="best" class="bl-note bl-num"></p>
+</div>
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+const overlay = document.getElementById("overlay");
+const msg = document.getElementById("msg");
+const result = document.getElementById("result");
+const btn = document.getElementById("btn");
+const bestEl = document.getElementById("best");
+const hintL = document.getElementById("hintL");
+const hintR = document.getElementById("hintR");
+
+let phase = "idle";          // idle | running | done
+let survived = 0;            // 버틴 시간(초) = 점수
+let best = null;
+
+window.blWeekly = { game: "logroll", dir: "max", fmt: (v) => v.toFixed(1) + "초" };
+window.blShareText = () => `통나무 위에서 ${(best ?? survived).toFixed(1)}초 버팀! 도전해보세요`;
+
+/* ── 물리 상태 ───────────────────────────────────────────
+   통나무: logAngle(굴러간 각), logVel(각속도) — 플레이어가 직접 조종
+   사람:   manAngle(수직 기준 기운 각), manVel — 역진자 밸런싱
+   부호: 오른쪽(+), 왼쪽(-). 통나무를 오른쪽으로 굴리면 발밑 표면이
+         오른쪽으로 밀려 사람은 왼쪽으로 넘어간다 → 반대로 굴려 되돌린다. */
+let logAngle = 0, logVel = 0;
+let manAngle = 0, manVel = 0;
+let wind = 0, nextWind = 0, windTimer = 0; // 3초마다 바뀌는 바람 + 다음 예고
+let windScroll = 0;                        // 배경 하이라이트 누적 위치
+
+// 튜닝 상수 (난이도: 적당히 — 초반 여유, 시간 갈수록 예민)
+const FALL      = 0.82;      // 낙하 임계 각(rad) ≈ 47°
+const G0        = 5.0;       // 초기 전복 계수
+const GRAMP     = 0.06;      // 초당 예민해지는 정도
+const GMAX      = 11;
+const COUPLING  = 0.55;      // 통나무 회전 → 사람에게 전달되는 세기
+const LOG_ACCEL = 9;         // 누르는 동안 통나무 각가속도
+const LOG_MAXV  = 5;         // 통나무 최대 각속도
+const LOG_DAMP  = 1.4;       // 통나무 회전 감쇠(손 떼면 서서히 멈춤)
+const MAN_DAMP  = 0.6;       // 사람 미세 감쇠
+const WIND_INT  = 3;         // 바람이 바뀌는 간격(초)
+
+// 다음 바람 한 방향 뽑기 — 시간 갈수록 세짐
+function pickWind() {
+  const amp = Math.min(0.055, 0.02 + survived * 0.0011);
+  return (Math.random() < 0.5 ? -1 : 1) * amp * (0.55 + Math.random() * 0.45);
+}
+
+// 입력: 여러 손가락 동시 지원 (pointerId → 'l'|'r')
+const pointers = new Map();
+let leftHeld = false, rightHeld = false;
+function refreshHeld() {
+  let l = false, r = false;
+  for (const side of pointers.values()) { if (side === "l") l = true; else r = true; }
+  leftHeld = l || keyL;
+  rightHeld = r || keyR;
+  hintL.classList.toggle("on", leftHeld);
+  hintR.classList.toggle("on", rightHeld);
+}
+let keyL = false, keyR = false;
+
+canvas.addEventListener("pointerdown", (e) => {
+  const side = e.clientX < innerWidth / 2 ? "l" : "r";
+  pointers.set(e.pointerId, side);
+  refreshHeld();
+});
+function release(e) {
+  if (pointers.delete(e.pointerId)) refreshHeld();
+}
+canvas.addEventListener("pointerup", release);
+canvas.addEventListener("pointercancel", release);
+canvas.addEventListener("pointerleave", release);
+addEventListener("keydown", (e) => {
+  if (e.key === "ArrowLeft") { keyL = true; e.preventDefault(); refreshHeld(); }
+  else if (e.key === "ArrowRight") { keyR = true; e.preventDefault(); refreshHeld(); }
+  else if ((e.key === " " || e.key === "Enter") && phase !== "running" && !btn.disabled) start();
+});
+addEventListener("keyup", (e) => {
+  if (e.key === "ArrowLeft") { keyL = false; refreshHeld(); }
+  else if (e.key === "ArrowRight") { keyR = false; refreshHeld(); }
+});
+// 오버레이 조작이 게임 입력으로 새지 않게
+for (const ev of ["pointerdown", "pointerup", "click"]) {
+  overlay.addEventListener(ev, (e) => e.stopPropagation());
+}
+
+btn.addEventListener("click", start);
+function start() {
+  if (phase === "running") return;
+  phase = "running";
+  survived = 0;
+  logAngle = logVel = manAngle = manVel = 0;
+  wind = pickWind(); nextWind = pickWind(); windTimer = WIND_INT;
+  pointers.clear(); keyL = keyR = false; refreshHeld();
+  overlay.classList.add("hide");
+}
+
+function fall() {
+  phase = "done";
+  if (best === null || survived > best) {
+    best = survived;
+    bestEl.textContent = `최고 기록: ${best.toFixed(1)}초`;
+  }
+  const s = survived;
+  const grade =
+    s >= 60 ? "🌲 통나무의 지배자" :
+    s >= 40 ? "🤸 프로 벌목꾼" :
+    s >= 25 ? "🔥 균형의 달인" :
+    s >= 12 ? "🙂 제법인데요" :
+    s >= 5  ? "🌊 첨벙!" : "💦 순삭…";
+  result.textContent = `${s.toFixed(1)}초 버팀!\n${grade}`;
+  msg.textContent = "";
+  btn.textContent = "다시!";
+  overlay.classList.remove("hide");
+  btn.disabled = true;
+  setTimeout(() => { btn.disabled = false; }, 800);
+  window.blWeeklyReport?.(survived);
+}
+
+/* ── 고정 타임스텝 물리 ─────────────────────────────────── */
+const STEP = 1 / 120;
+function step() {
+  const G = Math.min(GMAX, G0 + survived * GRAMP);
+
+  // 입력 → 통나무 각가속도
+  const input = (rightHeld ? 1 : 0) - (leftHeld ? 1 : 0);
+  logVel += input * LOG_ACCEL * STEP;
+  logVel *= Math.exp(-LOG_DAMP * STEP);
+  if (logVel > LOG_MAXV) logVel = LOG_MAXV;
+  if (logVel < -LOG_MAXV) logVel = -LOG_MAXV;
+  logAngle += logVel * STEP;
+
+  // 3초마다 바람이 새 값으로 바뀐다 (다음 바람은 게이지에 미리 예고됨)
+  windTimer -= STEP;
+  if (windTimer <= 0) {
+    wind = nextWind;
+    nextWind = pickWind();
+    windTimer += WIND_INT;
+  }
+
+  // 사람: 역진자 + 통나무 표면 끌림 + 바람
+  let acc = G * Math.sin(manAngle);   // 기울수록 더 빨리 넘어감(불안정)
+  acc += -COUPLING * logVel;          // 통나무가 굴러가면 반대로 밀림
+  acc += wind;
+  manVel += acc * STEP;
+  manVel *= Math.exp(-MAN_DAMP * STEP);
+  manAngle += manVel * STEP;
+
+  survived += STEP;
+  if (Math.abs(manAngle) > FALL) fall();
+}
+
+/* ── 렌더링 ─────────────────────────────────────────────── */
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(devicePixelRatio || 1, 2);
+  W = innerWidth; H = innerHeight;
+  canvas.width = W * DPR; canvas.height = H * DPR;
+  canvas.style.width = W + "px"; canvas.style.height = H + "px";
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+addEventListener("resize", resize);
+resize();
+
+function draw(t) {
+  const waterY = H * 0.66;
+  const R = Math.max(48, Math.min(W, H) * 0.15);
+  const cx = W / 2, cy = waterY;           // 통나무 단면 중심(수면 높이)
+  const topY = cy - R;                      // 사람 발 접점(통나무 꼭대기)
+
+  ctx.clearRect(0, 0, W, H);
+
+  // 하늘
+  const sky = ctx.createLinearGradient(0, 0, 0, waterY);
+  sky.addColorStop(0, "rgba(140,190,225,.30)");
+  sky.addColorStop(1, "rgba(180,215,235,.12)");
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, W, waterY);
+
+  // 물
+  const water = ctx.createLinearGradient(0, waterY, 0, H);
+  water.addColorStop(0, "rgba(60,130,175,.55)");
+  water.addColorStop(1, "rgba(30,80,120,.75)");
+  ctx.fillStyle = water;
+  ctx.fillRect(0, waterY, W, H - waterY);
+  // 물결
+  ctx.strokeStyle = "rgba(255,255,255,.18)";
+  ctx.lineWidth = 2;
+  for (let k = 0; k < 3; k++) {
+    ctx.beginPath();
+    const yy = waterY + 14 + k * 22;
+    for (let x = 0; x <= W; x += 12)
+      ctx.lineTo(x, yy + Math.sin(x / 55 + t / 700 + k) * 4);
+    ctx.stroke();
+  }
+
+  // ── 바람: 배경 물결 + 흐르는 하이라이트(속도=세기, 방향=바람방향) ──
+  drawWindField(t);
+
+  // ── 통나무(단면) ──
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, Math.PI * 2);
+  ctx.clip();                              // 무늬를 원 안으로 제한
+  ctx.fillStyle = "#b5814e";
+  ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
+  // 나이테(회전으로 굴러가는 느낌)
+  ctx.translate(cx, cy);
+  ctx.rotate(logAngle);
+  ctx.strokeStyle = "rgba(90,55,25,.55)";
+  ctx.lineWidth = 2;
+  for (let rr = R * 0.18; rr < R; rr += R * 0.16) {
+    ctx.beginPath();
+    ctx.arc(0, 0, rr, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  // 방사형 결 — 회전이 뚜렷이 보이게
+  ctx.strokeStyle = "rgba(90,55,25,.4)";
+  for (let a = 0; a < 6; a++) {
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(Math.cos(a / 6 * Math.PI * 2) * R, Math.sin(a / 6 * Math.PI * 2) * R);
+    ctx.stroke();
+  }
+  // 옹이
+  ctx.fillStyle = "rgba(70,42,18,.6)";
+  ctx.beginPath();
+  ctx.arc(R * 0.32, -R * 0.1, R * 0.1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // 물에 잠긴 아래쪽을 물색으로 덮어 반쯤 잠긴 느낌
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, Math.PI * 2);
+  ctx.clip();
+  ctx.fillStyle = "rgba(40,95,135,.45)";
+  ctx.fillRect(cx - R, cy, R * 2, R);
+  ctx.restore();
+  // 통나무 테두리
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, Math.PI * 2);
+  ctx.strokeStyle = "rgba(70,42,18,.85)";
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // ── 사람(막대 인간, 발끝을 축으로 기움) ──
+  ctx.save();
+  ctx.translate(cx, topY);
+  ctx.rotate(manAngle);                    // +면 오른쪽으로 기움
+  const u = R * 0.9;                        // 사람 크기 단위
+  const near = phase === "running" && Math.abs(manAngle) > FALL * 0.6;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  // 갈색 통나무·파란 물 어디서든 잘 보이게 밝은 색 + 어두운 그림자 테두리
+  ctx.strokeStyle = near ? "#ff3b30" : "#fafdff";
+  ctx.fillStyle = near ? "#ff3b30" : "#fafdff";
+  ctx.shadowColor = "rgba(0,0,0,.5)";
+  ctx.shadowBlur = Math.max(4, u * 0.12);
+  ctx.lineWidth = Math.max(3, u * 0.11);
+  const hip = -u * 0.9, sh = -u * 1.5, head = -u * 1.85;
+  // 다리(살짝 벌려 균형)
+  ctx.beginPath();
+  ctx.moveTo(-u * 0.22, 0); ctx.lineTo(0, hip); ctx.lineTo(u * 0.22, 0);
+  ctx.stroke();
+  // 몸통
+  ctx.beginPath();
+  ctx.moveTo(0, hip); ctx.lineTo(0, sh);
+  ctx.stroke();
+  // 팔 — 기운 반대로 뻗어 버둥대는 느낌
+  const flail = -manAngle * 1.6 + Math.sin(t / 120) * 0.12;
+  ctx.beginPath();
+  ctx.moveTo(0, sh - u * 0.05);
+  ctx.lineTo(Math.cos(Math.PI + flail) * u * 0.75, sh - u * 0.05 + Math.sin(Math.PI + flail) * u * 0.75);
+  ctx.moveTo(0, sh - u * 0.05);
+  ctx.lineTo(Math.cos(-flail) * u * 0.75, sh - u * 0.05 + Math.sin(-flail) * u * 0.75);
+  ctx.stroke();
+  // 머리 — 기운 정도에 따라 표정 변화 (안정 😄 → 기우뚱 😐 → 위태 😰)
+  const tilt = Math.abs(manAngle);
+  const face = phase !== "running" ? "😄"
+    : tilt < FALL * 0.32 ? "😄"
+    : tilt < FALL * 0.6  ? "😐" : "😰";
+  ctx.shadowBlur = 0;
+  ctx.font = `${u * 0.66}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(face, 0, head);
+  ctx.restore();
+
+  // 버틴 시간 — 통나무 중앙에 (거의 떨어질 땐 빨강)
+  if (phase === "running") {
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = `bold ${Math.round(R * 0.5)}px ui-monospace, monospace`;
+    ctx.fillStyle = near ? "#ff3b30" : "rgba(255,255,255,.96)";
+    ctx.shadowColor = "rgba(0,0,0,.6)";
+    ctx.shadowBlur = 6;
+    ctx.fillText(survived.toFixed(1), cx, cy);
+    ctx.restore();
+  }
+
+  drawNextWind();
+}
+
+// 바람 세기를 기호로 (<< / < / – / > / >>), 방향은 좌/우 — 다음 바람 예고용
+const WIND_REF = 0.055;                    // 이 세기에서 최대(>>>) 단계
+function windSymbol(w) {
+  const mag = Math.abs(w) / WIND_REF;
+  if (mag < 0.12) return "–";
+  const n = mag < 0.4 ? 1 : mag < 0.75 ? 2 : 3;
+  return (w < 0 ? "<" : ">").repeat(n);
+}
+
+// 배경: 반투명 물결 + 바람 따라 흐르는 하이라이트 줄무늬
+// 줄무늬가 흐르는 속도 = 바람 세기, 흐르는 방향 = 바람 방향
+function drawWindField(t) {
+  const intensity = Math.min(1, Math.abs(wind) / WIND_REF);
+  ctx.save();
+  // 반투명 물결 (전체 배경에 옅게)
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = "rgba(255,255,255,.05)";
+  const rows = 8;
+  for (let i = 0; i < rows; i++) {
+    const y = (i + 0.5) / rows * H;
+    ctx.beginPath();
+    for (let x = 0; x <= W; x += 16)
+      ctx.lineTo(x, y + Math.sin(x / 85 + t / 1500 + i * 1.7) * 9);
+    ctx.stroke();
+  }
+  // 흐르는 하이라이트 줄무늬 (바람 방향으로 windScroll 만큼 이동)
+  if (intensity > 0.02) {
+    const gap = 240, bw = 95;
+    const off = ((windScroll % gap) + gap) % gap;
+    for (let hx = off - gap; hx < W + gap; hx += gap) {
+      const g = ctx.createLinearGradient(hx - bw, 0, hx + bw, 0);
+      g.addColorStop(0, "rgba(200,232,255,0)");
+      g.addColorStop(0.5, `rgba(205,235,255,${0.16 * intensity})`);
+      g.addColorStop(1, "rgba(200,232,255,0)");
+      ctx.fillStyle = g;
+      ctx.fillRect(hx - bw, 0, bw * 2, H);
+    }
+  }
+  ctx.restore();
+}
+
+// 중앙 상단: 다음 바람 예고(크게) + 바뀜 카운트다운
+function drawNextWind() {
+  const pw = 172, ph = 66, px = W / 2 - pw / 2, py = 12, rad = 14, cx0 = W / 2;
+  ctx.save();
+  ctx.beginPath();
+  roundRect(px, py, pw, ph, rad);
+  ctx.fillStyle = "rgba(18,24,34,.5)";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(200,215,235,.22)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  // 라벨 + 카운트다운
+  ctx.fillStyle = "rgba(240,248,255,.8)";
+  ctx.font = "600 12px ui-monospace, monospace";
+  const cd = phase === "running" ? `   ⟳ ${windTimer.toFixed(1)}s` : "";
+  ctx.fillText("다음 바람" + cd, cx0, py + 18);
+  // 큰 기호
+  ctx.fillStyle = "rgba(240,248,255,.95)";
+  ctx.font = "bold 34px ui-monospace, monospace";
+  ctx.fillText(windSymbol(nextWind), cx0, py + 45);
+  ctx.restore();
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+/* ── 메인 루프 ──────────────────────────────────────────── */
+let last = performance.now();
+let acc = 0;
+function loop(t) {
+  let dt = (t - last) / 1000;
+  last = t;
+  if (dt > 0.05) dt = 0.05;                // 탭 전환 등으로 인한 폭주 방지
+  if (phase === "running") {
+    acc += dt;
+    while (acc >= STEP) { acc -= STEP; if (phase === "running") step(); }
+  } else {
+    acc = 0;
+  }
+  windScroll += wind * 4500 * dt;           // 배경 하이라이트 흐름(속도=바람)
+  draw(t);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+<script defer src="/_shared/records.js"></script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>

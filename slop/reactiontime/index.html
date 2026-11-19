@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>4분할 반응속도 테스트</title>
+<link rel="stylesheet" href="/_shared/bubble.css">
+<style>
+  :root { color-scheme: light dark; --accent-h: 54; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overscroll-behavior: none; }
+  html { background: var(--sunk); }
+  body {
+    background: var(--sunk);
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  #app {
+    position: relative;
+    z-index: 1;
+    width: min(100%, 34rem);
+    height: 100svh;
+    margin: auto;
+    padding: .9rem .9rem 4.7rem;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: .8rem;
+    background: var(--bg);
+    box-shadow: 0 0 1.5rem light-dark(rgba(60,50,30,.12), rgba(0,0,0,.5));
+  }
+  header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: .5rem .8rem;
+    align-items: center;
+  }
+  header .bl-head { margin: 0; }
+  #summary {
+    grid-column: 1 / -1;
+    min-height: 2.6em;
+    margin: 0;
+    color: var(--muted);
+    font-size: .8rem;
+    line-height: 1.45;
+  }
+  #start {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 4.6rem;
+  }
+  #grid {
+    min-height: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    gap: .65rem;
+  }
+  .zone {
+    min-width: 0;
+    min-height: 0;
+    padding: .5rem;
+    border: 1.5px solid var(--line);
+    border-radius: var(--r-lg);
+    display: grid;
+    place-content: center;
+    gap: .35rem;
+    text-align: center;
+    touch-action: manipulation;
+    font: inherit;
+    color: var(--ink);
+    cursor: pointer;
+    transition: background .12s, transform .12s, border-color .12s;
+  }
+  .zone:active { transform: scale(.98); }
+  .zone.idle {
+    background: var(--field);
+    cursor: default;
+  }
+  .zone.idle strong { color: var(--muted); }
+  /* 빨강·초록·노랑은 게임의 신호라 그대로 둔다 */
+  .zone.wait {
+    background: light-dark(#d94f58, #762128);
+    border-color: transparent;
+    color: #fff;
+  }
+  .zone.go {
+    background: light-dark(#35a85b, #1c6d39);
+    border-color: light-dark(#147e38, #68e38d);
+    color: #fff;
+    transform: scale(1.015);
+  }
+  .zone.done {
+    background: var(--accent-soft);
+    border-color: var(--accent-line);
+    cursor: default;
+  }
+  .zone.early {
+    background: light-dark(#f1c76e, #735515);
+    color: light-dark(#3d2a00, #fff3c4);
+    cursor: default;
+  }
+  .zone strong {
+    font-family: var(--mono);
+    font-size: clamp(1.25rem, 7vw, 2.25rem);
+    font-variant-numeric: tabular-nums;
+  }
+  .zone.wait strong, .zone.go strong { font-family: var(--sans); font-weight: 800; }
+  .zone span { min-height: 1.2em; font-size: .78rem; opacity: .8; }
+  #result-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: grid;
+    place-items: center;
+    padding: 1.2rem 1.2rem 5rem;
+    background: color-mix(in srgb, var(--sunk) 80%, transparent);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  #result-overlay.hidden { display: none; }
+  #result-card {
+    width: min(86vw, 20rem);
+    padding: 1.5rem 1.35rem;
+    box-shadow: 0 1rem 3rem light-dark(rgba(60,50,30,.18), rgba(0,0,0,.5));
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .75rem;
+    text-align: center;
+  }
+  #result-icon { width: 3.4rem; font-size: 1.7rem; }
+  #result-title { margin: 0; font-size: 1.1rem; font-weight: 800; }
+  #result-average {
+    font-family: var(--mono);
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  #result-grade { margin: -.2rem 0 .1rem; font-size: .88rem; color: var(--muted); }
+  #result-breakdown {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: .45rem;
+  }
+  .result-item {
+    padding: .6rem .4rem;
+    border-radius: var(--r-sm);
+    background: var(--sunk);
+    display: flex;
+    flex-direction: column;
+    gap: .15rem;
+  }
+  .result-item.penalty { background: color-mix(in srgb, var(--warn) 20%, var(--field)); }
+  .result-item small { color: var(--muted); font-size: var(--t-caption); }
+  .result-item b { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  #result-best { margin: 0; min-height: 1.2em; font-size: .82rem; color: var(--muted); }
+  #retry { min-width: 10rem; font-size: 1.05rem; }
+  #retry:disabled { opacity: .4; cursor: default; transform: none; }
+  @media (max-height: 570px) {
+    #app { padding-top: .55rem; gap: .5rem; }
+    #summary { min-height: 1.2em; }
+    #result-card { padding: 1rem 1.1rem; gap: .5rem; }
+    #result-icon { width: 2.6rem; font-size: 1.3rem; }
+    #result-average { font-size: 1.8rem; }
+  }
+</style>
+</head>
+<body>
+<main id="app">
+  <header>
+    <div class="bl-head">
+      <span class="bl-bubble" aria-hidden="true">⚡</span>
+      <h1>4분할 반응속도</h1>
+      <p>네 칸, 초록이 되는 순간 탭!</p>
+    </div>
+    <button id="start" class="bl-btn bl-btn--primary" type="button">시작</button>
+    <p id="summary">네 칸이 각각 초록색으로 바뀌는 순간 누르세요.<br>미리 누른 칸은 1000ms로 계산됩니다.</p>
+  </header>
+  <section id="grid" aria-label="반응속도 측정 영역">
+    <button class="zone idle" type="button" aria-label="1번 반응속도 영역">
+      <strong>1</strong><span>대기</span>
+    </button>
+    <button class="zone idle" type="button" aria-label="2번 반응속도 영역">
+      <strong>2</strong><span>대기</span>
+    </button>
+    <button class="zone idle" type="button" aria-label="3번 반응속도 영역">
+      <strong>3</strong><span>대기</span>
+    </button>
+    <button class="zone idle" type="button" aria-label="4번 반응속도 영역">
+      <strong>4</strong><span>대기</span>
+    </button>
+  </section>
+</main>
+<div id="result-overlay" class="hidden" role="dialog" aria-modal="true" aria-labelledby="result-title">
+  <section id="result-card" class="bl-panel">
+    <div id="result-icon" class="bl-bubble" aria-hidden="true">⚡</div>
+    <h2 id="result-title">측정 완료!</h2>
+    <div id="result-average" class="bl-num">평균 0ms</div>
+    <p id="result-grade"></p>
+    <div id="result-breakdown"></div>
+    <p id="result-best"></p>
+    <button id="retry" class="bl-btn bl-btn--primary" type="button">다시 도전</button>
+  </section>
+</div>
+<script>
+const zones = [...document.querySelectorAll(".zone")];
+const startBtn = document.getElementById("start");
+const summary = document.getElementById("summary");
+const resultOverlay = document.getElementById("result-overlay");
+const resultTitle = document.getElementById("result-title");
+const resultAverage = document.getElementById("result-average");
+const resultGrade = document.getElementById("result-grade");
+const resultBreakdown = document.getElementById("result-breakdown");
+const resultBest = document.getElementById("result-best");
+const retryBtn = document.getElementById("retry");
+const bestKey = "bl-reactiontime-4-best";
+
+let running = false;
+let completed = 0;
+let lastAverage = null;
+let bestAverage = +localStorage.getItem(bestKey) || null;
+let round = [];
+let previousOrder = "";
+
+const fmt = (v) => `${Math.round(v)}ms`;
+
+window.blWeekly = { game: "reactiontime", dir: "min", fmt };
+window.blShareText = () => {
+  const score = bestAverage ?? lastAverage;
+  return score
+    ? `4분할 반응속도 평균 ${fmt(score)}! ⚡ 도전해보세요`
+    : "⚡ 4분할 반응속도 테스트 — 도전해보세요!";
+};
+
+function randomActivationPlan() {
+  let order;
+  do {
+    order = zones.map((_, index) => index);
+    for (let i = order.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [order[i], order[j]] = [order[j], order[i]];
+    }
+  } while (order.join("") === previousOrder);
+  previousOrder = order.join("");
+
+  let delay = 1200 + Math.random() * 800;
+  return order.map((zoneIndex) => {
+    const item = { zoneIndex, delay };
+    delay += 650 + Math.random() * 700;
+    return item;
+  });
+}
+
+function renderZone(index, className, mainText, detail) {
+  const zone = zones[index];
+  zone.className = `zone ${className}`;
+  zone.querySelector("strong").textContent = mainText;
+  zone.querySelector("span").textContent = detail;
+}
+
+function activate(index) {
+  const item = round[index];
+  if (!running || item.state !== "wait") return;
+  item.state = "go";
+  item.goAt = performance.now();
+  renderZone(index, "go", "지금!", "클릭");
+}
+
+function finishZone(index, score, early) {
+  const item = round[index];
+  item.state = "done";
+  item.score = score;
+  item.early = early;
+  completed++;
+  renderZone(index, early ? "early" : "done", fmt(score), early ? "조기 클릭" : "완료");
+  if (completed === zones.length) finishRound();
+}
+
+function respond(index) {
+  if (!running) return;
+  const item = round[index];
+  if (item.state === "wait") {
+    clearTimeout(item.timer);
+    finishZone(index, 1000, true);
+    return;
+  }
+  if (item.state === "go") {
+    finishZone(index, Math.round(performance.now() - item.goAt), false);
+  }
+}
+
+function grade(score) {
+  return score < 200 ? "⚡ 번개보다 빠른 손" :
+         score < 250 ? "🔥 아주 빠른데요" :
+         score < 320 ? "👍 평균 이상" :
+         score < 500 ? "🙂 조금만 더 집중!" : "🐢 초록색을 기다려보세요";
+}
+
+function finishRound() {
+  running = false;
+  const scores = round.map((item) => item.score);
+  lastAverage = Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length);
+  const isBest = bestAverage === null || lastAverage < bestAverage;
+  if (isBest) {
+    bestAverage = lastAverage;
+    localStorage.setItem(bestKey, bestAverage);
+  }
+  summary.textContent =
+    `평균 ${fmt(lastAverage)} · 최고 평균 ${fmt(bestAverage)} · ` +
+    scores.map((score, index) => `${index + 1}번 ${fmt(score)}`).join(" / ");
+  startBtn.disabled = false;
+  startBtn.textContent = "다시";
+  resultTitle.textContent = isBest ? "🎉 최고 기록!" : "측정 완료!";
+  resultAverage.textContent = `평균 ${fmt(lastAverage)}`;
+  resultGrade.textContent = grade(lastAverage);
+  resultBest.textContent = `최고 평균 ${fmt(bestAverage)}`;
+  resultBreakdown.replaceChildren();
+  round.forEach((item, index) => {
+    const box = document.createElement("div");
+    box.className = "result-item" + (item.early ? " penalty" : "");
+    const label = document.createElement("small");
+    label.textContent = `${index + 1}번${item.early ? " · 조기" : ""}`;
+    const value = document.createElement("b");
+    value.textContent = fmt(item.score);
+    box.append(label, value);
+    resultBreakdown.append(box);
+  });
+  resultOverlay.classList.remove("hidden");
+  retryBtn.disabled = true;
+  setTimeout(() => { retryBtn.disabled = false; }, 800);
+  window.blWeeklyReport?.(lastAverage);
+}
+
+function startRound() {
+  if (running) return;
+  running = true;
+  completed = 0;
+  round.forEach((item) => clearTimeout(item.timer));
+  round = zones.map(() => ({ state: "wait", timer: null, goAt: 0, score: null, early: false }));
+  resultOverlay.classList.add("hidden");
+  summary.textContent = "빨간 칸은 기다리고, 초록색으로 바뀐 칸만 누르세요.";
+  startBtn.disabled = true;
+  startBtn.textContent = "진행 중";
+
+  round.forEach((item, index) => {
+    renderZone(index, "wait", "기다려…", `${index + 1}번`);
+  });
+  for (const { zoneIndex, delay } of randomActivationPlan()) {
+    round[zoneIndex].timer = setTimeout(() => activate(zoneIndex), delay);
+  }
+}
+
+zones.forEach((zone, index) => {
+  zone.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    respond(index);
+  });
+  zone.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    respond(index);
+  });
+});
+startBtn.addEventListener("click", startRound);
+retryBtn.addEventListener("click", startRound);
+for (const eventName of ["pointerdown", "click", "keydown"]) {
+  resultOverlay.addEventListener(eventName, (event) => event.stopPropagation());
+}
+</script>
+<script defer src="/_shared/records.js"></script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>

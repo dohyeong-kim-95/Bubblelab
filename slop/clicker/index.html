@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ko" class="bl-stage">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>10초 광클</title>
+<link rel="stylesheet" href="/_shared/bubble.css">
+<style>
+  :root { color-scheme: light dark; --accent-h: 13; }
+  body { margin: 0; min-height: 100vh;
+         display: flex; flex-direction: column; align-items: center;
+         justify-content: center; gap: var(--s-5); text-align: center;
+         padding: var(--s-5) var(--s-4); box-sizing: border-box; user-select: none;
+         -webkit-user-select: none; touch-action: manipulation; }
+  .bl-head { margin: 0; text-align: left; }
+  #count { font-family: var(--mono); font-size: 4.5rem; font-weight: 700; color: var(--accent);
+           min-height: 5rem; display: grid; place-items: center; line-height: 1; }
+  #time { font-family: var(--mono); font-size: 1.1rem; color: var(--muted); min-height: 1.4em; }
+  #msg { color: var(--muted); min-height: 2.6em; white-space: pre-line; line-height: 1.55; }
+  /* 두드리는 패드 — 강조색 방울 면 */
+  #pad { font: inherit; font-size: 1.4rem; font-weight: 800; width: min(80vw, 18rem); height: 11rem;
+         border-radius: var(--r-lg); border: 0; cursor: pointer;
+         color: var(--accent-ink); background: var(--accent);
+         background-image: linear-gradient(rgb(255 255 255 / .14), transparent 45%);
+         box-shadow: 0 .35rem 0 color-mix(in oklch, var(--accent) 70%, black),
+                     0 .6rem 1.4rem light-dark(rgba(60,50,30,.18), rgba(0,0,0,.45));
+         transition: transform .06s, box-shadow .06s; }
+  #pad:active { transform: translateY(.25rem) scale(.98);
+                box-shadow: 0 .1rem 0 color-mix(in oklch, var(--accent) 70%, black); }
+  #pad.done { opacity: .4; cursor: default; }
+  #pad.done:active { transform: none; }
+  #best { color: var(--muted); font-size: var(--t-small); min-height: 1.2em; }
+</style>
+</head>
+<body>
+  <header class="bl-head">
+    <span class="bl-bubble" aria-hidden="true">👆</span>
+    <h1>10초 광클</h1>
+    <p>10초 동안 몇 번 두드릴 수 있을까</p>
+  </header>
+  <div id="count" class="bl-num">0</div>
+  <div id="time" class="bl-num">10.0초</div>
+  <div id="msg">첫 클릭과 동시에 10초 카운트가 시작돼요.
+있는 힘껏 두드리세요!</div>
+  <button id="pad">시작!</button>
+  <div id="best" class="bl-num"></div>
+<script>
+const countEl = document.getElementById("count");
+const timeEl = document.getElementById("time");
+const msg = document.getElementById("msg");
+const pad = document.getElementById("pad");
+const bestEl = document.getElementById("best");
+
+const LIMIT = 10;   // 초
+let phase = "idle"; // idle | running | done
+let startTime = 0;
+let count = 0;
+let raf = null;
+let best = null;
+
+window.blWeekly = { game: "clicker", dir: "max", fmt: (v) => v + "회" };
+window.blShareText = () => `10초 동안 ${best ?? count}번 클릭! 도전해보세요`;
+
+function tick() {
+  const left = LIMIT - (performance.now() - startTime) / 1000;
+  if (left <= 0) return finish();
+  timeEl.textContent = left.toFixed(1) + "초";
+  raf = requestAnimationFrame(tick);
+}
+
+function finish() {
+  phase = "done";
+  cancelAnimationFrame(raf);
+  timeEl.textContent = "0.0초";
+  pad.classList.add("done");
+  pad.textContent = "끝!";
+  const cps = count / LIMIT;
+  if (best === null || count > best) {
+    best = count;
+    bestEl.textContent = `최고 기록: ${best}회`;
+  }
+  const grade =
+    cps >= 12 ? "🤖 사람 맞아요?" :
+    cps >= 9  ? "⚡ 광클의 신" :
+    cps >= 7  ? "🔥 대단한데요" :
+    cps >= 5  ? "👍 나쁘지 않아요" :
+    cps >= 3  ? "🙂 준비운동은 됐어요" : "🫠 손가락 깨우고 오세요…";
+  msg.textContent = `${count}회 (초당 ${cps.toFixed(1)}회) ${grade}`;
+  window.blWeeklyReport?.(count);
+  setTimeout(() => {
+    phase = "idle";
+    pad.classList.remove("done");
+    pad.textContent = "다시!";
+  }, 1200);
+}
+
+pad.addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  if (phase === "done") return;
+  if (phase === "idle") {
+    phase = "running";
+    count = 0;
+    startTime = performance.now();
+    msg.textContent = "…";
+    tick();
+  }
+  if ((performance.now() - startTime) / 1000 >= LIMIT) return finish();
+  count++;
+  countEl.textContent = count;
+  pad.textContent = "클릭!!";
+});
+</script>
+<script defer src="/_shared/records.js"></script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>

@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>✍️ 맞춤법 검사·글자수 세기</title>
+<meta name="description" content="맞춤법·띄어쓰기 검사와 글자수 세기. 글은 밖으로 안 나가요.">
+<meta name="bl-group" content="글·문서">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>✍️</text></svg>">
+<link rel="stylesheet" href="/_shared/bubble.css">
+<style>
+  :root { --accent-h: 2;
+          --spell: light-dark(#c8403b, #ef7f7a); --space: light-dark(#a8670c, #e0a54a);
+          --style: light-dark(#3f63c4, #8fa8ff); --format: light-dark(#2f7a48, #79b98a); }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; min-height: 100dvh; }
+  .app { width: min(40rem, 100%); margin: 0 auto; padding: 1.4rem 1rem 3rem; }
+  h2 { display: flex; align-items: baseline; gap: .5rem; margin: 1.8rem 0 .65rem;
+       font-size: .9rem; font-weight: 700; color: var(--ink); }
+  h2 #total { color: var(--accent); font-weight: 700; }
+
+  /* ---------- 편집기: textarea 뒤에 같은 글을 그린 거울을 깔고 밑줄만 보여 준다 ----------
+     contenteditable을 쓰면 한글 입력(IME) 조합이 깨져서, 진짜 입력은 textarea가 받는다. */
+  .editor { position: relative; border: 1px solid var(--line); border-radius: var(--r-lg);
+            background: var(--field); overflow: hidden; transition: border-color .15s, box-shadow .15s; }
+  .editor:focus-within { border-color: var(--accent);
+                         box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent); }
+  .editor > #mirror, .editor > #text {
+    margin: 0; border: 0; width: 100%; padding: 1rem 1.05rem;
+    font: inherit; font-size: 1rem; line-height: 1.8; letter-spacing: normal;
+    white-space: pre-wrap; overflow-wrap: break-word; word-break: break-word; }
+  #mirror { position: absolute; inset: 0; overflow: hidden; color: transparent;
+            pointer-events: none; user-select: none;
+            padding-right: calc(1.05rem + var(--sbw, 0px)); }
+  #text { position: relative; display: block; background: transparent; color: var(--ink);
+          caret-color: var(--accent); resize: vertical; min-height: 13rem; max-height: 60vh; overflow-y: auto; }
+  #text:focus-visible { outline: none; }
+  #text::placeholder { color: var(--muted); opacity: 1; }
+  mark { background: none; color: transparent; border-radius: .15rem;
+         box-shadow: inset 0 -.45em 0 -.05em light-dark(rgba(0,0,0,.06), rgba(255,255,255,.07)); }
+  mark[data-kind="spell"] { border-bottom: 2px solid var(--spell); }
+  mark[data-kind="space"] { border-bottom: 2px solid var(--space); }
+  mark[data-kind="style"] { border-bottom: 2px dotted var(--style); }
+  mark[data-kind="format"] { border-bottom: 2px dotted var(--format); }
+  mark.on { box-shadow: inset 0 -1.2em 0 -.05em color-mix(in srgb, var(--accent) 24%, transparent); }
+
+  .tools { display: flex; flex-wrap: wrap; gap: .45rem; margin: .75rem 0 0; }
+  .tools .bl-btn { padding-inline: .9rem; }
+  .tools .grow { flex: 1 1 8rem; }
+  .note { margin: .6rem 0 0; }
+
+  /* ---------- 글자수 ---------- */
+  .counts { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; }
+  .count { padding: .75rem .5rem; text-align: center; border-radius: var(--r); }
+  .count b { display: block; font-size: 1.4rem; font-weight: 800; letter-spacing: -.02em; }
+  .count:first-child b { color: var(--accent); }
+  .count span { font-size: .72rem; color: var(--muted); }
+  /* 한 칸이 좁으면 "바이트(UTF-8)" 같은 이름이 줄바꿈되어 표가 들쭉날쭉해진다 */
+  .more { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+          gap: .1rem 1rem; margin-top: .6rem; padding: .4rem .9rem; font-size: .8rem; color: var(--muted); }
+  .more div { display: flex; justify-content: space-between; gap: .5rem; white-space: nowrap;
+              border-bottom: 1px dashed var(--line); padding: .35rem 0; }
+  .more b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* ---------- 목표 글자수 ---------- */
+  .goal { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+  .goal .bl-input { width: auto; padding: .45rem .7rem; font-size: .9rem; min-height: 2.2rem; }
+  .goal input.bl-input { width: 7rem; }
+  .bar { height: .55rem; border-radius: var(--pill); background: var(--sunk);
+         box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; margin-top: .7rem; }
+  .bar i { display: block; height: 100%; width: 0; border-radius: inherit;
+           background: linear-gradient(90deg, var(--accent-line), var(--accent));
+           transition: width .15s; }
+  .bar.over i { background: var(--bad); }
+  #goalText { margin: .4rem 0 0; font-size: .8rem; color: var(--muted); }
+
+  /* ---------- 검사 결과 ---------- */
+  /* 분류 칩은 켜짐이 강조색 채움이 아니라 분류색 테두리 — 네 분류가 한눈에 갈려야 한다 */
+  .chips .bl-chip { font-weight: 600; }
+  .chip[aria-pressed="true"] { color: var(--kc); background: color-mix(in srgb, var(--kc) 12%, var(--field));
+                               border-color: var(--kc); }
+  .chip[aria-pressed="false"] { color: var(--muted); opacity: .6; }
+  [data-kind="spell"] { --kc: var(--spell); }
+  [data-kind="space"] { --kc: var(--space); }
+  [data-kind="style"] { --kc: var(--style); }
+  [data-kind="format"] { --kc: var(--format); }
+
+  #issues { list-style: none; padding: 0; margin: .8rem 0 0; }
+  #issues li { background: var(--field); border: 1px solid var(--line); border-radius: var(--r);
+               padding: .7rem .8rem; margin-bottom: .5rem; display: grid; cursor: pointer;
+               grid-template-columns: 1fr auto; gap: .35rem .6rem; align-items: center;
+               transition: border-color .15s; }
+  #issues li:hover { border-color: var(--accent-line); }
+  #issues li.on { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent); }
+  .issue-head { grid-column: 1; font-size: .9rem; font-weight: 600; display: flex; flex-wrap: wrap;
+                align-items: baseline; gap: .4rem; }
+  .issue-kind { font-size: .7rem; font-weight: 700; padding: .1rem .5rem; border-radius: var(--pill);
+                color: var(--kc); background: color-mix(in srgb, var(--kc) 13%, transparent); }
+  .issue-soft { font-size: .7rem; font-weight: 400; color: var(--warn); }
+  .issue-why { grid-column: 1 / -1; font-size: .8rem; color: var(--muted); line-height: 1.6; }
+  .issue-snip { grid-column: 1 / -1; font-size: .82rem; color: var(--muted);
+                overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .issue-snip b { color: var(--ink); background: color-mix(in srgb, var(--bad) 16%, transparent);
+                  border-radius: .2rem; padding: 0 .1rem; }
+  #issues li > * { min-width: 0; }   /* 그리드 칸이 내용 너비만큼 밀려 나가지 않게 */
+  #issues button { grid-column: 2; grid-row: 1; white-space: nowrap; }
+  .empty { border: 1px dashed var(--line); border-radius: var(--r);
+           padding: 1.1rem 1rem; text-align: center; font-size: .85rem; color: var(--muted);
+           line-height: 1.7; margin-top: .8rem; }
+  .privacy { margin-top: 1.6rem; }
+  .privacy b { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="bl-head">
+    <span class="bl-bubble" aria-hidden="true">✍️</span>
+    <h1>맞춤법 검사·글자수 세기</h1>
+    <p>맞춤법·띄어쓰기 검사와 글자수 세기. 글은 밖으로 안 나가요.</p>
+  </header>
+
+  <div class="editor">
+    <div id="mirror" aria-hidden="true"></div>
+    <textarea id="text" spellcheck="false" placeholder="여기에 글을 쓰거나 붙여 넣으세요."
+      aria-label="검사할 글"></textarea>
+  </div>
+
+  <div class="tools">
+    <button id="fixAll" class="primary grow bl-btn bl-btn--primary">확실한 것 모두 고치기</button>
+    <button id="sample" class="bl-btn">예시</button>
+    <button id="copy" class="bl-btn">복사</button>
+    <button id="clear" class="bl-btn bl-btn--ghost">지우기</button>
+  </div>
+  <p class="note bl-note" id="tooLong" hidden>글이 길어 밑줄 표시는 껐습니다. 아래 목록은 그대로 나옵니다.</p>
+
+  <h2>글자 수</h2>
+  <div class="counts">
+    <div class="count bl-panel"><b id="c-chars" class="bl-num">0</b><span>공백 포함</span></div>
+    <div class="count bl-panel"><b id="c-nospace" class="bl-num">0</b><span>공백 제외</span></div>
+    <div class="count bl-panel"><b id="c-manuscript" class="bl-num">0</b><span>원고지(200자)</span></div>
+  </div>
+  <div class="more bl-sunk">
+    <div><span>단어</span><b id="c-words">0</b></div>
+    <div><span>문장</span><b id="c-sentences">0</b></div>
+    <div><span>문단</span><b id="c-paragraphs">0</b></div>
+    <div><span>줄</span><b id="c-lines">0</b></div>
+    <div><span>공백·부호 제외</span><b id="c-nomark">0</b></div>
+    <div><span>바이트(UTF-8)</span><b id="c-utf8">0</b></div>
+    <div><span>바이트(2바이트)</span><b id="c-bytes2">0</b></div>
+  </div>
+
+  <h2>목표 글자 수</h2>
+  <div class="goal">
+    <input type="number" id="goal" class="bl-input bl-num" min="0" step="10" placeholder="예: 1000" aria-label="목표 글자 수">
+    <select id="goalBasis" class="bl-input" aria-label="목표 기준">
+      <option value="chars">공백 포함</option>
+      <option value="charsNoSpace">공백 제외</option>
+      <option value="bytes2">2바이트 기준</option>
+    </select>
+    <button class="bl-chip" data-goal="500">자소서 500</button>
+    <button class="bl-chip" data-goal="1000">1000</button>
+    <button class="bl-chip" data-goal="1500">1500</button>
+  </div>
+  <div class="bar" id="goalBar"><i></i></div>
+  <p id="goalText">목표를 넣으면 남은 글자 수를 알려 줍니다.</p>
+
+  <h2>검사 결과 <span id="total"></span></h2>
+  <div class="chips bl-chips" id="chips"></div>
+  <ul id="issues"></ul>
+  <div class="empty" id="empty">글을 넣으면 검사합니다.</div>
+
+  <p class="privacy bl-note">글·목표 설정은 이 브라우저에만 저장되고, 어디로도 전송되지 않습니다.
+    검사기는 사전이나 문법 분석이 아니라 <b>자주 틀리는 표현 목록</b>으로 찾습니다.
+    그래서 지적이 없다고 해서 맞는 글이라는 뜻은 아니고, 지적 중에도 문맥에 따라
+    그대로 두는 편이 맞는 것이 있습니다. '확인 필요'로 표시된 것은 '모두 고치기'에서 빠집니다.</p>
+</div>
+
+<script type="module">
+import { KINDS, applyAllFixes, applyFix, check, countText } from "./rules.js";
+
+const $ = (sel) => document.querySelector(sel);
+const textEl = $("#text");
+const mirror = $("#mirror");
+const issuesEl = $("#issues");
+const emptyEl = $("#empty");
+const chipsEl = $("#chips");
+const goalEl = $("#goal");
+const goalBasisEl = $("#goalBasis");
+const goalBar = $("#goalBar");
+
+const STORE = "bl-proofread";
+// 이보다 길면 거울(밑줄)만 끈다 — 목록과 글자 수는 그대로 나온다.
+const HIGHLIGHT_LIMIT = 30_000;
+const num = (n) => n.toLocaleString("ko-KR");
+
+const state = {
+  issues: [],
+  active: -1,                                  // 목록에서 고른 지적
+  kinds: new Set(KINDS.map((k) => k.id)),      // 켜 둔 분류
+};
+
+/* ---------- 저장 (이 브라우저에만) ---------- */
+function save() {
+  try {
+    localStorage.setItem(STORE, JSON.stringify({
+      text: textEl.value, goal: goalEl.value, basis: goalBasisEl.value,
+      kinds: [...state.kinds],
+    }));
+  } catch { /* 저장 공간이 없어도 도구는 그대로 쓴다 */ }
+}
+function load() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORE) || "{}");
+    if (saved.text) textEl.value = saved.text;
+    if (saved.goal) goalEl.value = saved.goal;
+    if (saved.basis) goalBasisEl.value = saved.basis;
+    if (Array.isArray(saved.kinds) && saved.kinds.length) state.kinds = new Set(saved.kinds);
+  } catch { /* 저장된 값이 깨졌으면 빈 화면에서 시작한다 */ }
+}
+
+/* ---------- 분류 칩 ---------- */
+const chipButtons = new Map();
+for (const kind of KINDS) {
+  const button = document.createElement("button");
+  button.className = "chip bl-chip";
+  button.dataset.kind = kind.id;
+  button.addEventListener("click", () => {
+    if (state.kinds.has(kind.id)) state.kinds.delete(kind.id);
+    else state.kinds.add(kind.id);
+    save();
+    run();
+  });
+  chipsEl.append(button);
+  chipButtons.set(kind.id, button);
+}
+const kindLabel = (id) => KINDS.find((k) => k.id === id).label;
+
+/* ---------- 거울에 밑줄 그리기 ---------- */
+const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+
+function drawMirror(text, issues) {
+  const off = text.length > HIGHLIGHT_LIMIT;
+  $("#tooLong").hidden = !off;
+  if (off) { mirror.textContent = ""; return; }
+  let html = "";
+  let at = 0;
+  issues.forEach((issue, i) => {
+    html += escapeHtml(text.slice(at, issue.start));
+    html += `<mark data-kind="${issue.kind}"${i === state.active ? ' class="on"' : ""}>`
+      + `${escapeHtml(text.slice(issue.start, issue.end))}</mark>`;
+    at = issue.end;
+  });
+  // 마지막 줄이 빈 줄이면 높이가 한 줄 모자라 스크롤이 어긋난다 — 줄바꿈을 하나 덧댄다.
+  mirror.innerHTML = `${html}${escapeHtml(text.slice(at))}\n`;
+  syncScroll();
+}
+function syncScroll() {
+  mirror.scrollTop = textEl.scrollTop;
+  mirror.style.setProperty("--sbw", `${textEl.offsetWidth - textEl.clientWidth}px`);
+}
+
+/* ---------- 지적 목록 ---------- */
+function snippetOf(text, issue) {
+  const from = Math.max(0, issue.start - 12);
+  const to = Math.min(text.length, issue.end + 12);
+  const flat = (s) => escapeHtml(s.replace(/\s+/g, " "));
+  // 공백·줄바꿈만 잡힌 지적(줄 끝 공백 같은)은 그냥 두면 보이지 않는다.
+  const found = /^\s+$/.test(issue.found) ? "␣".repeat(issue.found.length) : flat(issue.found);
+  return (from > 0 ? "…" : "") + flat(text.slice(from, issue.start))
+    + `<b>${found}</b>` + flat(text.slice(issue.end, to)) + (to < text.length ? "…" : "");
+}
+
+function focusIssue(index) {
+  state.active = index;
+  const issue = state.issues[index];
+  drawMirror(textEl.value, state.issues);
+  [...issuesEl.children].forEach((li, i) => li.classList.toggle("on", i === index));
+  if (!issue) return;
+  textEl.focus();
+  textEl.setSelectionRange(issue.start, issue.end);
+}
+
+function renderIssues(text, issues) {
+  issuesEl.replaceChildren();
+  const counts = Object.fromEntries(KINDS.map((k) => [k.id, 0]));
+  for (const issue of issues) counts[issue.kind]++;
+  for (const kind of KINDS) {
+    const button = chipButtons.get(kind.id);
+    const on = state.kinds.has(kind.id);
+    button.textContent = `${kind.label} ${on ? counts[kind.id] : "—"}`;
+    button.setAttribute("aria-pressed", String(on));
+  }
+  $("#total").textContent = issues.length ? `${num(issues.length)}곳` : "";
+  $("#fixAll").disabled = !issues.some((i) => i.suggestion != null && !i.soft);
+
+  emptyEl.hidden = issues.length > 0;
+  if (!issues.length) {
+    emptyEl.textContent = text.trim()
+      ? "찾은 지적이 없습니다. (목록에 없는 오타까지 맞다는 뜻은 아닙니다)"
+      : "글을 넣으면 검사합니다.";
+    return;
+  }
+
+  issues.forEach((issue, index) => {
+    const li = document.createElement("li");
+    if (index === state.active) li.classList.add("on");
+
+    const head = document.createElement("div");
+    head.className = "issue-head";
+    head.innerHTML = `<span class="issue-kind" data-kind="${issue.kind}">${kindLabel(issue.kind)}</span>`
+      + `<span>${escapeHtml(issue.title)}</span>`
+      + (issue.soft ? '<span class="issue-soft">확인 필요</span>' : "");
+
+    const snip = document.createElement("div");
+    snip.className = "issue-snip";
+    snip.innerHTML = snippetOf(text, issue);
+
+    const why = document.createElement("div");
+    why.className = "issue-why";
+    why.textContent = issue.why;
+
+    li.append(head, snip, why);
+    if (issue.suggestion != null) {
+      const fix = document.createElement("button");
+      fix.className = "bl-btn bl-btn--sm";
+      fix.textContent = "고치기";
+      fix.addEventListener("click", (event) => {
+        event.stopPropagation();
+        setText(applyFix(textEl.value, issue), issue.start + issue.suggestion.length);
+      });
+      li.append(fix);
+    }
+    li.addEventListener("click", () => focusIssue(index));
+    issuesEl.append(li);
+  });
+}
+
+/* ---------- 글자 수 · 목표 ---------- */
+function renderCounts(text) {
+  const c = countText(text);
+  $("#c-chars").textContent = num(c.chars);
+  $("#c-nospace").textContent = num(c.charsNoSpace);
+  $("#c-manuscript").textContent = num(c.manuscript);
+  $("#c-words").textContent = num(c.words);
+  $("#c-sentences").textContent = num(c.sentences);
+  $("#c-paragraphs").textContent = num(c.paragraphs);
+  $("#c-lines").textContent = num(c.lines);
+  $("#c-nomark").textContent = num(c.charsNoMark);
+  $("#c-utf8").textContent = num(c.bytesUtf8);
+  $("#c-bytes2").textContent = num(c.bytes2);
+
+  const goal = Number(goalEl.value);
+  const basis = goalBasisEl.value;
+  const now = c[basis];
+  if (!goal || goal <= 0) {
+    goalBar.querySelector("i").style.width = "0%";
+    goalBar.classList.remove("over");
+    $("#goalText").textContent = "목표를 넣으면 남은 글자 수를 알려 줍니다.";
+    return;
+  }
+  const ratio = now / goal;
+  goalBar.querySelector("i").style.width = `${Math.min(100, ratio * 100)}%`;
+  goalBar.classList.toggle("over", now > goal);
+  const label = goalBasisEl.selectedOptions[0].textContent;
+  $("#goalText").textContent = now > goal
+    ? `${label} ${num(now)} / ${num(goal)} — ${num(now - goal)} 넘었습니다`
+    : `${label} ${num(now)} / ${num(goal)} — ${num(goal - now)} 남았습니다`;
+}
+
+/* ---------- 한 번 돌리기 ---------- */
+function run() {
+  const text = textEl.value;
+  state.issues = check(text, { kinds: [...state.kinds] });
+  if (state.active >= state.issues.length) state.active = -1;
+  drawMirror(text, state.issues);
+  renderIssues(text, state.issues);
+  renderCounts(text);
+}
+
+function setText(next, caret) {
+  textEl.value = next;
+  if (caret != null) textEl.setSelectionRange(caret, caret);
+  state.active = -1;
+  save();
+  run();
+}
+
+let timer;
+textEl.addEventListener("input", () => {
+  state.active = -1;
+  // 검사는 잠시 미루되 거울은 바로 따라가야 한다 — 안 그러면 방금 친 글자 위에
+  // 이전 밑줄이 그대로 남아 어긋나 보인다.
+  if (textEl.value.length <= HIGHLIGHT_LIMIT) mirror.textContent = `${textEl.value}\n`;
+  clearTimeout(timer);
+  timer = setTimeout(() => { save(); run(); }, 150);
+});
+textEl.addEventListener("scroll", syncScroll);
+window.addEventListener("resize", syncScroll);
+
+$("#fixAll").addEventListener("click", () => {
+  const { text, fixed } = applyAllFixes(textEl.value, state.issues, { kinds: [...state.kinds] });
+  if (fixed) setText(text, text.length);
+});
+$("#clear").addEventListener("click", () => setText(""));
+$("#copy").addEventListener("click", async () => {
+  const button = $("#copy");
+  try {
+    await navigator.clipboard.writeText(textEl.value);
+    button.textContent = "복사됨";
+  } catch {
+    button.textContent = "복사 실패";
+  }
+  setTimeout(() => { button.textContent = "복사"; }, 1200);
+});
+$("#sample").addEventListener("click", () => setText(
+  "오랫만에 글을 써 보는데 왠일인지 잘 안되.\n"
+  + "이렇게 하면 않되는 걸 알면서도 자꾸 되풀이 되요.\n"
+  + "그래도 꾸준히 하면 좋은 결과가 보여질것같아요 !"));
+
+for (const button of document.querySelectorAll("[data-goal]")) {
+  button.addEventListener("click", () => {
+    goalEl.value = button.dataset.goal;
+    save();
+    renderCounts(textEl.value);
+  });
+}
+goalEl.addEventListener("input", () => { save(); renderCounts(textEl.value); });
+goalBasisEl.addEventListener("change", () => { save(); renderCounts(textEl.value); });
+
+load();
+run();
+
+window.blShareText = () => "맞춤법 검사하고 글자 수까지 한 번에! 글은 브라우저 밖으로 안 나가요";
+</script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>

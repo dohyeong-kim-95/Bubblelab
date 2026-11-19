@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#4A4038">
+<meta name="robots" content="noindex">
+<title>만화 사주 신청서 · 운세 노트</title>
+<meta name="description" content="여기 적어 주시면 만화 사주를 그려 인스타그램 DM 이나 메일로 보내 드려요.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>📸</text></svg>">
+<link rel="stylesheet" href="../fonts/fonts.css">
+<link rel="stylesheet" href="../note.css">
+</head>
+<body>
+<div class="book">
+<main class="page review-page insta-page">
+  <h1 class="hand h-title ask">만화 사주<br>신청서</h1>
+  <p>적어 주신 생년월일로 만화 사주를 그려서, 다 되면 인스타 DM 이나 메일로 보내 드려요.</p>
+  <p class="small" id="insta-left" aria-live="polite"></p>
+
+  <section class="scrap" id="insta">
+    <span class="tape"></span>
+    <form id="insta-form" novalidate hidden>
+      <p class="hand h-sub say">어디로 받을까요?</p>
+      <p class="field" role="group" aria-label="받을 곳">
+        <button type="button" class="pick" data-contact="instagram" aria-pressed="true">인스타 DM</button>
+        <button type="button" class="pick" data-contact="email" aria-pressed="false">메일</button>
+      </p>
+      <div id="insta-handle-row">
+        <label class="small" for="insta-handle">인스타 아이디</label>
+        <p class="field one"><span class="at">@</span><input class="blank wfull" id="insta-handle" maxlength="31" autocomplete="off" autocapitalize="none" spellcheck="false" inputmode="email" placeholder="dageudangs.zip"></p>
+        <p class="small faint">이 아이디로 DM 을 보내 드려요.</p>
+      </div>
+      <div id="insta-email-row" hidden>
+        <label class="small" for="insta-email">메일 주소</label>
+        <p class="field one"><input class="blank wfull" id="insta-email" type="email" maxlength="254" autocomplete="email" autocapitalize="none" spellcheck="false" inputmode="email" placeholder="you@example.com"></p>
+        <p class="small faint">이 주소로 메일을 보내 드려요.</p>
+      </div>
+
+      <label class="hand h-sub say gap-s" for="insta-name">표지에 쓸 이름</label>
+      <p class="field"><input class="blank wname" id="insta-name" maxlength="12" autocomplete="off" placeholder="별명도 좋아요">님의 만화 사주</p>
+      <p class="small faint" id="insta-name-help">안 적으면 아이디로 써요.</p>
+
+      <p class="hand h-sub say gap-s">태어난 날</p>
+      <p class="field" role="group" aria-label="양력·음력">
+        <button type="button" class="pick" data-cal="solar" aria-pressed="true">양력</button>
+        <button type="button" class="pick" data-cal="lunar" aria-pressed="false">음력</button>
+        <label class="small leap" id="insta-leap-row" hidden><input type="checkbox" id="insta-leap"> 윤달</label>
+      </p>
+      <p class="field one">
+        <input class="blank w4" id="insta-y" inputmode="numeric" maxlength="4" aria-label="태어난 해" placeholder="1995">년
+        <input class="blank w2" id="insta-m" inputmode="numeric" maxlength="2" aria-label="월" placeholder="3">월
+        <input class="blank w2" id="insta-d" inputmode="numeric" maxlength="2" aria-label="일" placeholder="9">일
+      </p>
+      <p class="field"><label class="small" for="insta-h">태어난 시</label>
+        <select class="blank wtime" id="insta-h"><option value="">모름</option></select></p>
+
+      <p class="hand h-sub say gap-s">성별</p>
+      <p class="field" role="group" aria-label="성별">
+        <button type="button" class="pick" data-gender="female" aria-pressed="false">여자</button>
+        <button type="button" class="pick" data-gender="male" aria-pressed="false">남자</button>
+        <button type="button" class="pick" data-gender="unspecified" aria-pressed="false">안 밝힐래요</button>
+      </p>
+      <input class="honey" id="insta-web" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+
+      <div class="consent">
+        <button type="button" class="check" id="insta-consent" role="checkbox" aria-checked="false" aria-labelledby="insta-consent-text"></button>
+        <p id="insta-consent-text">고르신 연락처 하나(인스타 아이디나 메일 주소), 표지 이름, 생년월일·태어난 시, 성별, 양력·음력을 받아요. 만화 사주를 그려 보내는 데만 쓰고, <b>보내고 나면 연락처·이름·생년월일을 바로 지워요.</b> 동의하지 않아도 괜찮지만, 그러면 그려 드릴 수 없어요. <a class="link" href="../privacy/">개인정보처리방침</a></p>
+      </div>
+
+      <button type="submit" class="pen sm" id="insta-send">이렇게 신청할게요 →</button>
+      <p class="err small red" id="insta-err" role="alert"></p>
+    </form>
+    <div id="insta-done" hidden>
+      <p class="hand h-sub say">접수됐어요!</p>
+      <p id="insta-done-how">다 되면 인스타 DM 으로 보내 드려요.</p>
+      <p><b>보통 하루 안에 완성돼요, 이 링크를 저장해 두세요.</b></p>
+      <p class="receipt-url"><a class="link" id="insta-receipt" href="../receipt/">접수증</a></p>
+      <p class="row-actions"><button type="button" class="pen sm" id="insta-copy">링크 복사</button></p>
+      <p class="small faint">이 링크에서 지금 몇 번째인지, 다 됐는지 볼 수 있어요. 다 되면 여기서도 바로 받을 수 있어요. 링크를 아는 사람만 열 수 있으니 남에게 보내지 마세요.</p>
+    </div>
+    <p class="hand h-sub faint" id="insta-closed" hidden>지금은 신청을 받지 않아요. 다음 게시글에서 만나요!</p>
+  </section>
+  <p class="small" id="insta-mine" hidden><a class="link" id="insta-mine-link" href="../receipt/">이 기기에서 낸 신청 확인하기 →</a></p>
+
+  <p class="small"><a class="link" href="../">← 운세 노트로 가기</a></p>
+</main>
+</div>
+<script src="../vendor/rough.min.js"></script>
+<script src="../note.js"></script>
+<script src="insta.js"></script>
+</body>
+</html>

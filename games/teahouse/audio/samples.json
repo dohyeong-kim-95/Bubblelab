@@ -1,0 +1,317 @@
+{
+ "format": "mp3",
+ "rate": 44100,
+ "instruments": {
+  "piano": {
+   "release": 0.5,
+   "attack": 0.004,
+   "layers": {
+    "pp": 0.5,
+    "mf": 1
+   },
+   "zones": [
+    {
+     "root": 30.87,
+     "layer": "pp",
+     "file": "samples/piano/G1_pp.mp3",
+     "len": 4.5
+    },
+    {
+     "root": 30.93,
+     "layer": "mf",
+     "file": "samples/piano/G1_mf.mp3",
+     "len": 4.5
+    },
+    {
+     "root": 35.9,
+     "layer": "pp",
+     "file": "samples/piano/C2_pp.mp3",
+     "len": 4.5
+    },
+    {
+     "root": 35.95,
+     "layer": "mf",
+     "file": "samples/piano/C2_mf.mp3",
+     "len": 4.5
+    },
+    {
+     "root": 42.99,
+     "layer": "pp",
+     "file": "samples/piano/G2_pp.mp3",
+     "len": 4.5
+    },
+    {
+     "root": 43.03,
+     "layer": "mf",
+     "file": "samples/piano/G2_mf.mp3",
+     "len": 4.5
+    },
+    {
+     "root": 47.98,
+     "layer": "pp",
+     "file": "samples/piano/C3_pp.mp3",
+     "len": 3.5
+    },
+    {
+     "root": 48.03,
+     "layer": "mf",
+     "file": "samples/piano/C3_mf.mp3",
+     "len": 3.5
+    },
+    {
+     "root": 54.98,
+     "layer": "pp",
+     "file": "samples/piano/G3_pp.mp3",
+     "len": 3.5
+    },
+    {
+     "root": 55.05,
+     "layer": "mf",
+     "file": "samples/piano/G3_mf.mp3",
+     "len": 3.5
+    },
+    {
+     "root": 59.97,
+     "layer": "pp",
+     "file": "samples/piano/C4_pp.mp3",
+     "len": 3.5
+    },
+    {
+     "root": 59.99,
+     "layer": "mf",
+     "file": "samples/piano/C4_mf.mp3",
+     "len": 3.5
+    },
+    {
+     "root": 67.06,
+     "layer": "pp",
+     "file": "samples/piano/G4_pp.mp3",
+     "len": 3.5
+    },
+    {
+     "root": 67.08,
+     "layer": "mf",
+     "file": "samples/piano/G4_mf.mp3",
+     "len": 3.5
+    },
+    {
+     "root": 72.03,
+     "layer": "pp",
+     "file": "samples/piano/C5_pp.mp3",
+     "len": 2.5
+    },
+    {
+     "root": 72.05,
+     "layer": "mf",
+     "file": "samples/piano/C5_mf.mp3",
+     "len": 2.5
+    },
+    {
+     "root": 79.02,
+     "layer": "pp",
+     "file": "samples/piano/G5_pp.mp3",
+     "len": 2.5
+    },
+    {
+     "root": 79.05,
+     "layer": "mf",
+     "file": "samples/piano/G5_mf.mp3",
+     "len": 2.5
+    },
+    {
+     "root": 84.07,
+     "layer": "mf",
+     "file": "samples/piano/C6_mf.mp3",
+     "len": 2.5
+    },
+    {
+     "root": 84.13,
+     "layer": "pp",
+     "file": "samples/piano/C6_pp.mp3",
+     "len": 2.5
+    },
+    {
+     "root": 91.03,
+     "layer": "pp",
+     "file": "samples/piano/G6_pp.mp3",
+     "len": 2.5
+    },
+    {
+     "root": 91.04,
+     "layer": "mf",
+     "file": "samples/piano/G6_mf.mp3",
+     "len": 2.5
+    },
+    {
+     "root": 96,
+     "layer": "pp",
+     "file": "samples/piano/C7_pp.mp3",
+     "len": 2.5
+    },
+    {
+     "root": 96.1,
+     "layer": "mf",
+     "file": "samples/piano/C7_mf.mp3",
+     "len": 2.5
+    }
+   ]
+  },
+  "kalimba": {
+   "release": 0.3,
+   "attack": 0.004,
+   "layers": {
+    "main": 1
+   },
+   "zones": [
+    {
+     "root": 58.94,
+     "layer": "main",
+     "file": "samples/kalimba/B3.mp3",
+     "len": 2.2
+    },
+    {
+     "root": 61.16,
+     "layer": "main",
+     "file": "samples/kalimba/Cs4.mp3",
+     "len": 2.2
+    },
+    {
+     "root": 63.05,
+     "layer": "main",
+     "file": "samples/kalimba/Ds4.mp3",
+     "len": 2.2
+    },
+    {
+     "root": 67.15,
+     "layer": "main",
+     "file": "samples/kalimba/G4.mp3",
+     "len": 2.2
+    },
+    {
+     "root": 75.13,
+     "layer": "main",
+     "file": "samples/kalimba/Ds5.mp3",
+     "len": 1.598
+    }
+   ]
+  },
+  "cello": {
+   "release": 0.8,
+   "attack": 0.25,
+   "layers": {
+    "main": 1
+   },
+   "zones": [
+    {
+     "root": 36.02,
+     "layer": "main",
+     "file": "samples/cello/C2.mp3",
+     "len": 6
+    },
+    {
+     "root": 40.01,
+     "layer": "main",
+     "file": "samples/cello/E2.mp3",
+     "len": 6
+    },
+    {
+     "root": 43,
+     "layer": "main",
+     "file": "samples/cello/G2.mp3",
+     "len": 6
+    },
+    {
+     "root": 47.04,
+     "layer": "main",
+     "file": "samples/cello/B2.mp3",
+     "len": 6
+    },
+    {
+     "root": 50.05,
+     "layer": "main",
+     "file": "samples/cello/D3.mp3",
+     "len": 6
+    },
+    {
+     "root": 53.01,
+     "layer": "main",
+     "file": "samples/cello/F3.mp3",
+     "len": 6
+    },
+    {
+     "root": 57.01,
+     "layer": "main",
+     "file": "samples/cello/A3.mp3",
+     "len": 6
+    },
+    {
+     "root": 60.03,
+     "layer": "main",
+     "file": "samples/cello/C4.mp3",
+     "len": 6
+    },
+    {
+     "root": 64,
+     "layer": "main",
+     "file": "samples/cello/E4.mp3",
+     "len": 6
+    },
+    {
+     "root": 67.18,
+     "layer": "main",
+     "file": "samples/cello/G4.mp3",
+     "len": 6
+    }
+   ]
+  },
+  "glock": {
+   "release": 0.4,
+   "attack": 0.004,
+   "layers": {
+    "main": 1
+   },
+   "zones": [
+    {
+     "root": 79.07,
+     "layer": "main",
+     "file": "samples/glock/G5.mp3",
+     "len": 2.5
+    },
+    {
+     "root": 84.12,
+     "layer": "main",
+     "file": "samples/glock/C6.mp3",
+     "len": 2.5
+    },
+    {
+     "root": 91.12,
+     "layer": "main",
+     "file": "samples/glock/G6.mp3",
+     "len": 2.5
+    },
+    {
+     "root": 96.15,
+     "layer": "main",
+     "file": "samples/glock/C7.mp3",
+     "len": 2.5
+    }
+   ]
+  }
+ },
+ "sfx": {
+  "bell": {
+   "file": "sfx/bell.mp3",
+   "start": 0,
+   "dur": 3.55,
+   "fade": 0,
+   "gain": 1
+  }
+ },
+ "ambience": {
+  "rain": {
+   "file": "ambience/rain.mp3",
+   "loopStart": 0.5,
+   "loopEnd": 28.5
+  }
+ }
+}

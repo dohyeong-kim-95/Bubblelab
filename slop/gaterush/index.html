@@ -1,0 +1,633 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>🏃 게이트 러시 — 한 번 틀리면 끝</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🏃</text></svg>">
+<link rel="stylesheet" href="/_shared/bubble.css">
+<style>
+  /* 재료는 /_shared/bubble.css — 3D 놀이판(트랙·군중·문) 색은 스크립트의 themeOf 그대로 */
+  :root { color-scheme: light dark; --accent-h: 27; }
+  html, body { height: 100%; }
+  body { margin: 0; overflow: hidden; user-select: none; -webkit-user-select: none;
+         touch-action: none; font-family: var(--sans);
+         background: light-dark(#f6ead8, #1a1626); }
+  canvas { display: block; touch-action: none; }
+  #hud { position: fixed; top: 0; left: 0; right: 0; display: flex; gap: .4rem;
+         align-items: center; padding: .5rem .6rem; font-size: .78rem; z-index: 3;
+         pointer-events: none; white-space: nowrap; }
+  /* 3D 판 위에 얹히는 글자라 반투명 종이 띠를 깐다 */
+  #hud > span:first-child, #hStage { padding: .22rem .55rem; border-radius: var(--pill);
+         background: color-mix(in srgb, var(--field) 82%, transparent);
+         box-shadow: inset 0 0 0 1px var(--line); }
+  #hud > span:first-child b { font-weight: 800; letter-spacing: -.02em; }
+  #hStage:empty { display: none; }
+  #hud .sp { flex: 1; }
+  #hud > span:first-child { flex: 0 1 auto; min-width: 0; overflow: hidden;
+                            text-overflow: ellipsis; }
+  #retry { pointer-events: auto; min-height: 2rem; padding: .2rem .75rem; font-size: .9rem; }
+  #overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+             display: flex; flex-direction: column; align-items: center; gap: .9rem;
+             width: min(84vw, 21rem); padding: 1.5rem 1.6rem;
+             text-align: center; z-index: 5; box-sizing: border-box; }
+  #overlay.hide { display: none; }
+  #overlay h1 { margin: -.2rem 0 0; font-size: var(--t-h1); font-weight: 800; letter-spacing: -.02em; }
+  #overlay p { margin: 0; font-size: .88rem; line-height: 1.55; color: var(--muted);
+               white-space: pre-line; }
+  #overlay .big.bl-bubble { width: 3.6rem; font-size: 1.8rem; }
+  #btn { min-width: 9rem; font-size: 1.05rem; padding: .7rem 2.2rem; }
+  #overlay #best { font-size: .8rem; min-height: 1.1em; }
+</style>
+</head>
+<body>
+<div id="hud">
+  <span>🏃 <b>게이트 러시</b></span>
+  <span class="sp"></span>
+  <span id="hStage" class="bl-num"></span>
+  <button id="retry" class="bl-btn bl-btn--sm" title="포기하고 결과 보기">↻</button>
+</div>
+<div id="overlay" class="bl-glass">
+  <p class="big bl-bubble" id="oEmoji">🏃</p>
+  <h1 id="oTitle">게이트 러시</h1>
+  <p id="oMsg">광고에서 보던 그 문 고르기 게임, 목숨 하나 버전.
+
+좌우로 드래그해서 좋은 문을 고르고,
+군중을 불려서 마지막 빨간 군단을 이기세요.
+
+스테이지 1부터 깰 때마다 바로 다음 판으로.
+한 번이라도 실패하면 끝 — 연속 클리어 수가 점수예요.</p>
+  <button id="btn" class="bl-btn bl-btn--primary">시작</button>
+  <p id="best" class="bl-num"></p>
+</div>
+<canvas id="cv"></canvas>
+<script type="module">
+// three.js는 CDN 없이 셀프호스팅(/_shared/vendor/ — 빌드 도구 불필요)
+import * as THREE from "/_shared/vendor/three.module.min.js";
+// 정적 난이도(0~100)와 별점 — DIFFICULTY.md Phase 1
+const clamp01 = (x) => Math.max(0, Math.min(1, x));
+const starsOf = (d) => "\u2605".repeat(Math.max(1, Math.min(5, Math.ceil(d / 20))));
+let dScore = 0;
+const targetD = (s) => Math.min(90, 5 + 4.7 * s);
+
+/* ── 상수/난수 ────────────────────────────────────────── */
+const W = 360, H = 640, LANE_L = 40, LANE_R = 320, MID = 180, CROWD_Y = 505;
+const dark = matchMedia("(prefers-color-scheme: dark)");
+const mulberry32 = (a) => () => {
+  a |= 0; a = (a + 0x6D2B79F5) | 0;
+  let t = Math.imul(a ^ (a >>> 15), 1 | a);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+
+const apply = (c, g) =>
+  g.op === "+" ? c + g.v :
+  g.op === "-" ? c - g.v :
+  g.op === "x" ? Math.min(9999, c * g.v) : Math.floor(c / g.v);
+const label = (g) => (g.op === "x" ? "×" : g.op === "/" ? "÷" : g.op) + g.v;
+const isGood = (g) => g.op === "+" || g.op === "x";
+
+/* ── 스테이지 생성 (그리디로 이길 수 있는 판만) ───────── */
+function gen(stage, salt = 0) {
+  for (let attempt = 0; attempt < 80; attempt++) {
+    const rnd = mulberry32(stage * 8009 + attempt * 50021 + salt * 30467 + 7);
+    const n = Math.min(6 + stage, 14);
+    const plus = () => ({ op: "+", v: 2 + ((rnd() * (8 + stage * 2)) | 0) });
+    const minus = () => ({ op: "-", v: 3 + ((rnd() * (6 + stage * 3)) | 0) });
+    const mul = () => ({ op: "x", v: 2 });
+    const div = () => ({ op: "/", v: 2 });
+    const pairs = [];
+    let c = 5, dead = false, bad = 0;
+    for (let i = 0; i < n; i++) {
+      const r = rnd();
+      let a, b;
+      if (r < 0.5) { a = plus(); b = minus(); }
+      else if (r < 0.68) { a = mul(); b = rnd() < 0.5 ? minus() : div(); }
+      else if (r < 0.88) { a = plus(); b = div(); }
+      else { a = minus(); b = div(); bad++; }   // 둘 다 나쁨: 덜 나쁜 쪽 고르기
+      if (rnd() < 0.5) [a, b] = [b, a];
+      pairs.push([a, b]);
+      c = Math.max(apply(c, a), apply(c, b));   // 그리디(매번 더 좋은 문)
+      if (c <= 0) { dead = true; break; }
+    }
+    if (dead || c < 6) continue;
+
+    // 중간 보스: 그리디 군중의 일부를 요구하는 벽. 탄막 최대 피격을
+    // 가정해도 넘을 수 있는 크기만 허용 (풀이 보장 유지)
+    const dmg = 1 + (stage / 8 | 0);              // 탄막 피격당 손실
+    const hitsBudget = 3 + (stage / 8 | 0);       // 가정하는 최대 피격 수
+    const M = stage >= 4 ? Math.min(3, 1 + ((stage - 4) / 8 | 0)) : 0;
+    const midIdx = Array.from({ length: M },
+      (_, j) => Math.max(1, Math.round(n * (j + 1) / (M + 1)) - 1));
+    const mids = [];
+    let cur = 5, dead2 = false;
+    for (let i = 0; i < n; i++) {
+      cur = Math.max(apply(cur, pairs[i][0]), apply(cur, pairs[i][1]));
+      if (midIdx.includes(i)) {
+        const size = Math.max(2, Math.floor(cur * (0.24 + rnd() * 0.12)));
+        // 피격 예산을 다 써도 보스를 넘고 25% 헤드룸이 남아야 채택
+        if (cur - hitsBudget * dmg - size < Math.max(4, cur * 0.25)) { dead2 = true; break; }
+        mids.push({ gateIdx: i, n: size });
+        cur -= size;
+      }
+    }
+    if (dead2) continue;
+    const worstFinal = cur - hitsBudget * dmg;
+    if (worstFinal < 6) continue;
+    const boss = Math.max(3, Math.floor(worstFinal * 0.62));
+
+    // 탄막 스케줄: 5개 차선 중 k개에 발사 — 항상 빈 차선이 있어 회피 가능
+    const volleys = [];
+    if (stage >= 3) {
+      const LANES = [70, 125, 180, 235, 290];
+      const interval = Math.max(1.1, 2.3 - stage * 0.025);
+      const k = Math.min(3, 1 + (stage >= 12 ? 1 : 0) + (stage >= 30 ? 1 : 0));
+      const spdC = Math.min(150 + stage * 10, 280);
+      const courseT = (120 + n * 250 + 320) / spdC;
+      // 패턴 제약: 왼편(70·125)·오른편(235·290)에서 각각 최대 1발만 —
+      // 어느 편에 있든 항상 피할 자리가 남는다 (회피 가능 보장)
+      const leftL = [70, 125], rightL = [235, 290];
+      for (let t3 = 1.4; t3 < courseT; t3 += interval) {
+        const xs = [];
+        const first = rnd() < 0.5 ? leftL[(rnd() * 2) | 0] : rightL[(rnd() * 2) | 0];
+        xs.push(first);
+        if (k >= 2) {
+          const other = first < 180 ? rightL : leftL;
+          xs.push(other[(rnd() * 2) | 0]);
+        }
+        if (k >= 3) xs.push(180);
+        volleys.push({ at: t3, xs });
+      }
+    }
+    return { pairs, boss, bad, mids, volleys, dmg,
+             bps: volleys.length ? (volleys[0] ? (stage >= 3 ? 1 / Math.max(1.1, 2.3 - stage * 0.025) : 0) : 0) : 0 };
+  }
+  return { pairs: [[{ op: "+", v: 5 }, { op: "-", v: 3 }]], boss: 4, bad: 0,
+           mids: [], volleys: [], dmg: 1, bps: 0 };
+}
+const diffOf = (g, spd2) => 100 * clamp01((g.pairs.length - 7) / 7 * 0.3 +
+  (spd2 - 160) / 120 * 0.15 + g.bad / 3 * 0.1 + g.mids.length / 3 * 0.2 +
+  clamp01(g.bps / 0.9) * 0.15 + (g.dmg - 1) / 4 * 0.1);
+const spdFor = (s) => Math.min(150 + s * 10, 280);
+
+// 유사도 지문: 문 순서(연산·양자화 값) + 중간 보스 자리 토큰
+const fpOf = (g) => g.pairs.map(([a, b], i) =>
+  `g${i}:${a.op}${Math.round(a.v / 4)}|${b.op}${Math.round(b.v / 4)}`)
+  .concat(g.mids.map((m2) => `m:${m2.gateIdx}`));
+const simFp = (a, b) => {
+  const A = new Set(a), B = new Set(b);
+  let hit = 0;
+  for (const x of A) if (B.has(x)) hit++;
+  return hit / Math.max(1, Math.max(A.size, B.size));
+};
+const fpCache = new Map();
+const structFp = (s2) => {
+  if (s2 < 1) return [];
+  if (!fpCache.has(s2)) fpCache.set(s2, fpOf(gen(s2, 0)));
+  return fpCache.get(s2);
+};
+
+// 레벨 자동 재배치 + 유사도 검출: 후보 판마다 (목표 난이도와의 거리) +
+// (직전 두 스테이지 구조 지문과의 자카드 유사도 × 30) 점수가 가장 낮은
+// 판을 채택한다. 이웃 지문은 살트0 구조라 스테이지의 순수 함수 —
+// 시드 고정 결정론(모두 같은 판)이 그대로 유지된다.
+function genTuned(stage) {
+  const T = targetD(stage);
+  const p1 = structFp(stage - 1), p2 = structFp(stage - 2);
+  let best = null, bestScore = Infinity;
+  for (let v = 0; v < 6; v++) {
+    const g = gen(stage, v);
+    const fp = fpOf(g);
+    const score = Math.abs(diffOf(g, spdFor(stage)) - T) +
+      30 * Math.max(simFp(fp, p1), simFp(fp, p2));
+    if (score < bestScore) { bestScore = score; best = g; }
+    if (bestScore <= 6) break;
+  }
+  return best;
+}
+window.blDiffAt = (s) => diffOf(genTuned(s), spdFor(s));
+window.blSimAt = (s) => s < 2 ? 0 : simFp(fpOf(genTuned(s)), fpOf(genTuned(s - 1)));
+
+/* ── 상태 ─────────────────────────────────────────────── */
+let stage = 1, streak = 0, best = 0, advanceT = 0;
+try { best = +localStorage.getItem("bl-gaterush-best") || 0; } catch {}
+let phase = "title";              // title | play | boss | win | fail
+let pairs = [], gates = [], boss = null, count = 5;
+let mids = [], bullets = [], volleys = [], tRun = 0, invuln = 0, bulletSpd = 240;
+let crowdX = MID, targetX = MID, speed = 150, scroll = 0;
+let pops = [];                    // {text,x,y,life,col}
+let battle = null;                // {me, foe, t}
+let failMsg = null;
+
+function loadStage() {
+  const g = genTuned(stage);
+  pairs = g.pairs;
+  const spacing = 250;
+  gates = g.pairs.map((p, i) => ({ p, y: -120 - i * spacing, done: false }));
+  boss = { n: g.boss, y: -120 - g.pairs.length * spacing - 320, done: false };
+  mids = g.mids.map((m) => ({ n: m.n, y: -120 - m.gateIdx * spacing - 125, done: false }));
+  volleys = g.volleys.map((v) => ({ ...v, fired: false }));
+  bullets = []; tRun = 0; invuln = 0;
+  bulletSpd = Math.min(380, 230 + stage * 2.5);
+  window.__grDmg = g.dmg;
+  count = 5; crowdX = MID; targetX = MID; battle = null; pops = [];
+  speed = Math.min(150 + stage * 10, 280);
+  dScore = diffOf(g, speed);
+  window.__gr = {                          // 테스트/디버그용
+    pairs: g.pairs, boss: g.boss,
+    state: () => {
+      const next = gates.findIndex((gt) => !gt.done);
+      return { count, x: crowdX, next,
+               nextY: next >= 0 ? gates[next].y : -999,
+               bullets: bullets.map((b) => [b.x, b.y]),
+               mids: mids.filter((m) => !m.done).map((m) => [m.y, m.n]) };
+    },
+    steer: (x) => { targetX = x; },
+  };
+  window.__grJump = (s2) => { stage = s2;
+    document.getElementById("overlay").classList.add("hide");
+    phase = "play"; loadStage(); };
+  hud();
+}
+
+function pop(text, x, y, col) { pops.push({ text, x, y, life: 1, col }); }
+
+function endStage(ok) {
+  if (ok) {
+    phase = "win";
+    streak++;
+    if (streak > best) { best = streak; try { localStorage.setItem("bl-gaterush-best", best); } catch {} }
+    hud();
+    show("🏆", `${streak}연속 클리어!`,
+         `${count}명으로 ${boss.n}명 군단을 밀어버렸습니다.\n곧 다음 스테이지…`, "");
+    $("btn").hidden = true;
+    clearTimeout(advanceT);
+    advanceT = setTimeout(() => {
+      if (phase !== "win") return;
+      stage++;
+      $("btn").hidden = false;
+      $("overlay").classList.add("hide");
+      phase = "play"; loadStage();
+    }, 1000);
+  } else {
+    phase = "fail";
+    clearTimeout(advanceT);
+    $("btn").hidden = false;
+    if (streak >= 1) window.blWeeklyReport?.(streak);
+    const quips = ["광고 속 그 사람도 맨날 -30 문으로 들어가던데요.",
+                   "괜찮아요. 광고는 원래 지는 장면만 보여줘요.",
+                   "이게 바로 광고에서 보던 그 발컨입니다."];
+    show("💀", `${streak}판 연속 클리어`, `스테이지 ${stage}에서 전멸.\n` +
+         (failMsg ?? (count <= 0 ? "군중이 다 사라졌어요." :
+         `${count}명 vs ${boss.n}명. 역부족이었습니다.`)) +
+         "\n\n" + quips[(Math.random() * quips.length) | 0], "처음부터 다시");
+    failMsg = null;
+  }
+}
+
+/* ── 진행 ─────────────────────────────────────────────── */
+function step(dt) {
+  scroll = (scroll + speed * dt) % 48;
+  crowdX += (targetX - crowdX) * Math.min(1, dt * 10);
+  crowdX = Math.max(LANE_L + 24, Math.min(LANE_R - 24, crowdX));
+
+  for (const g of gates) {
+    g.y += speed * dt;
+    if (!g.done && g.y >= CROWD_Y) {
+      g.done = true;
+      const side = crowdX < MID ? 0 : 1;
+      const chosen = g.p[side];
+      count = apply(count, chosen);
+      pop(label(chosen), crowdX, CROWD_Y - 60,
+          isGood(chosen) ? "#46a758" : "#e5484d");
+      hud();
+      if (count <= 0) { count = 0; endStage(false); return; }
+    }
+  }
+  // 중간 보스: 군중이 더 많아야 뚫는다
+  for (const m of mids) {
+    m.y += speed * dt;
+    if (!m.done && m.y >= CROWD_Y - 30) {
+      m.done = true;
+      if (count > m.n) {
+        count -= m.n;
+        pop(`-${m.n}`, crowdX, CROWD_Y - 70, "#e5484d");
+        hud();
+      } else {
+        count = Math.max(0, count - m.n);
+        failMsg = `중간 보스 군단(${m.n}명)에 밀렸습니다.`;
+        endStage(false); return;
+      }
+    }
+  }
+  // 탄막: 시드 스케줄대로 발사, 맞으면 dmg만큼 손실 (짧은 무적)
+  tRun += dt;
+  if (invuln > 0) invuln -= dt;
+  for (const v of volleys) {
+    if (!v.fired && tRun >= v.at) {
+      v.fired = true;
+      for (const x of v.xs) bullets.push({ x, y: -24 });
+    }
+  }
+  for (const b of bullets) {
+    b.y += bulletSpd * dt;
+    if (invuln <= 0 && Math.abs(b.y - CROWD_Y) < 22 && Math.abs(b.x - crowdX) < 26) {
+      b.y = H + 99;
+      count -= window.__gr ? (window.__grDmg ?? 1) : 1;
+      invuln = 0.6;
+      pop(`-${window.__grDmg ?? 1}`, crowdX, CROWD_Y - 50, "#e5484d");
+      hud();
+      if (count <= 0) { count = 0; endStage(false); return; }
+    }
+  }
+  bullets = bullets.filter((b) => b.y < H + 40);
+
+  boss.y += speed * dt;
+  if (!boss.done && boss.y >= CROWD_Y - 90) {
+    boss.done = true; phase = "boss";
+    battle = { me: count, foe: boss.n, t: 0 };
+  }
+  if (phase === "boss" && battle) {
+    battle.t += dt;
+    const drain = Math.ceil(Math.max(battle.me, battle.foe) * dt / 0.9);
+    if (battle.t > 0.35) {
+      battle.me -= drain; battle.foe -= drain;
+      if (battle.foe <= 0 || battle.me <= 0) {
+        const ok = count > boss.n;
+        battle.me = Math.max(0, ok ? count - boss.n : 0);
+        battle.foe = Math.max(0, ok ? 0 : boss.n - count);
+        endStage(ok);
+      }
+    }
+  }
+}
+
+/* ── 그리기 (three.js — 광고처럼 진짜 3D) ─────────────────
+   게임 로직 좌표(x 40~320, y 아래로, 군중 y=505)는 그대로 두고
+   월드로 사상만 한다: 36px = 1유닛, y → -z(전방). */
+const cv = document.getElementById("cv");
+const wX = (x) => (x - MID) / 36;
+const wZ = (y) => (y - CROWD_Y) / 36;
+const px = (v) => v / 36;
+const themeOf = () => dark.matches
+  ? { bg: 0x1a1626, track: 0x241d33, wall: 0x6e4522, dash: 0x4a4062, ink: "#e8ddcb" }
+  : { bg: 0xf6ead8, track: 0xefe0c8, wall: 0x8a5a33, dash: 0xd8c5a5, ink: "#3a2b18" };
+
+let renderer = null;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+} catch {
+  document.getElementById("oMsg").textContent =
+    "이 기기는 WebGL(3D)을 지원하지 않아 게임을 표시할 수 없어요.";
+}
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 60);
+camera.position.set(0, 5.4, 6.2);
+scene.add(new THREE.AmbientLight(0xffffff, 1.15));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+sun.position.set(3, 8, 4);
+scene.add(sun);
+
+const trackMat = new THREE.MeshLambertMaterial();
+const track = new THREE.Mesh(new THREE.PlaneGeometry(7.8, 96), trackMat);
+track.rotation.x = -Math.PI / 2;
+track.position.set(0, 0, -32);
+scene.add(track);
+const wallMat = new THREE.MeshLambertMaterial();
+for (const sx of [-1, 1]) {
+  const wall = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.5, 96), wallMat);
+  wall.position.set(sx * 4.0, 0.25, -32);
+  scene.add(wall);
+}
+const dashMat = new THREE.MeshBasicMaterial();
+const DASHES = Array.from({ length: 50 }, () => {
+  const d = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.015, 0.55), dashMat);
+  scene.add(d);
+  return d;
+});
+
+// 텍스트 스프라이트 (캔버스 텍스처 — 폰트는 게임과 동일 톤)
+function textSprite(fontPx = 46, w2 = 2.4, h2 = 0.6) {
+  const c2 = document.createElement("canvas");
+  c2.width = 256; c2.height = 64;
+  const x2 = c2.getContext("2d");
+  const tex = new THREE.CanvasTexture(c2);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial(
+    { map: tex, transparent: true, depthTest: false }));
+  spr.scale.set(w2, h2, 1);
+  spr.renderOrder = 5;
+  return { spr, draw(text, col) {
+    x2.clearRect(0, 0, 256, 64);
+    x2.font = `bold ${fontPx}px ui-monospace, monospace`;
+    x2.textAlign = "center"; x2.textBaseline = "middle";
+    x2.lineWidth = 8; x2.strokeStyle = "rgba(0,0,0,.35)";
+    x2.strokeText(text, 128, 34);
+    x2.fillStyle = col;
+    x2.fillText(text, 128, 34);
+    tex.needsUpdate = true;
+  } };
+}
+
+// 군중(수를 가진 무리) — 인스턴스 캡슐 + 머리 위 숫자
+const M4 = new THREE.Matrix4();
+function crowdViz(color, cap = 64) {
+  const grp = new THREE.Group();
+  const inst = new THREE.InstancedMesh(
+    new THREE.CapsuleGeometry(0.11, 0.2, 3, 10),
+    new THREE.MeshLambertMaterial({ color, transparent: true }), cap);
+  inst.frustumCulled = false;
+  const label = textSprite(48, 2.1, 0.55);
+  grp.add(inst, label.spr);
+  grp.visible = false;
+  scene.add(grp);
+  const viz = {
+    grp, lastN: -1, lastShown: -1,
+    set(n, x, z, alpha = 1) {
+      grp.visible = n > 0;
+      grp.position.set(x, 0, z);
+      const m = Math.min(n, cap);
+      if (m !== viz.lastShown) {
+        for (let k = 0; k < m; k++) {
+          const r2 = px(5.2 * Math.sqrt(k)), a2 = k * 2.39996;
+          M4.makeTranslation(Math.cos(a2) * r2, 0.26, Math.sin(a2) * r2 * 0.75);
+          inst.setMatrixAt(k, M4);
+        }
+        inst.count = m; inst.instanceMatrix.needsUpdate = true;
+        viz.lastShown = m;
+      }
+      inst.material.opacity = alpha;
+      if (n !== viz.lastN) { viz.lastN = n; label.draw(String(n), themeOf().ink); }
+      label.spr.position.set(0, 0.75 + px(Math.sqrt(m) * 5), 0);
+    },
+    hide() { grp.visible = false; },
+  };
+  return viz;
+}
+const meViz = crowdViz(0x3b82f6);
+const bossViz = crowdViz(0xe5484d);
+let midViz = [];
+
+// 탄막·팝업 풀
+const BULLETS3 = Array.from({ length: 16 }, () => {
+  const b = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 10),
+    new THREE.MeshLambertMaterial({ color: 0xe5484d, emissive: 0x991111 }));
+  b.visible = false; scene.add(b);
+  return b;
+});
+const POPS3 = Array.from({ length: 8 }, () => {
+  const t2 = textSprite(44, 2.2, 0.55);
+  t2.spr.visible = false; t2.text = null; scene.add(t2.spr);
+  return t2;
+});
+
+// 스테이지가 바뀌면(gates 배열 교체) 게이트·중간보스 메시를 다시 만든다
+let gatesRef = null, gateObjs = [];
+function rebuild3D() {
+  gatesRef = gates;
+  for (const o of gateObjs) scene.remove(o.grp);
+  gateObjs = gates.map((g) => {
+    const grp = new THREE.Group();
+    for (let s = 0; s < 2; s++) {
+      const gd = isGood(g.p[s]);
+      const col = gd ? 0x46a758 : 0xe5484d;
+      const geo = new THREE.BoxGeometry(3.5, 1.5, 0.1);
+      const panel = new THREE.Mesh(geo,
+        new THREE.MeshLambertMaterial({ color: col, transparent: true, opacity: 0.4 }));
+      panel.position.set(s === 0 ? -1.95 : 1.95, 1.0, 0);
+      const frame = new THREE.LineSegments(new THREE.EdgesGeometry(geo),
+        new THREE.LineBasicMaterial({ color: col }));
+      frame.position.copy(panel.position);
+      const lb = textSprite(56, 2.6, 0.65);
+      lb.draw(label(g.p[s]), gd ? "#bff0c6" : "#ffd6d6");
+      lb.spr.position.set(panel.position.x, 1.05, 0.2);
+      grp.add(panel, frame, lb.spr);
+    }
+    grp.visible = false;
+    scene.add(grp);
+    return { grp, g };
+  });
+  for (const v of midViz) scene.remove(v.grp);
+  midViz = mids.map(() => crowdViz(0xe5484d));
+  bossViz.lastN = -1;                      // 새 판 숫자 다시 그리기
+  meViz.lastN = -1;
+}
+
+function applyTheme() {
+  const th = themeOf();
+  scene.background = new THREE.Color(th.bg);
+  scene.fog = new THREE.Fog(th.bg, 17, 40);
+  trackMat.color.set(th.track);
+  wallMat.color.set(th.wall);
+  dashMat.color.set(th.dash);
+  meViz.lastN = -1; bossViz.lastN = -1;    // 잉크색 라벨 다시 그리기
+  for (const v of midViz) v.lastN = -1;
+}
+dark.addEventListener?.("change", applyTheme);
+applyTheme();
+
+function resize() {
+  renderer?.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+}
+addEventListener("resize", resize); resize();
+
+function draw() {
+  if (!renderer) return;
+  if (gatesRef !== gates) rebuild3D();
+  const cx = wX(crowdX);
+  camera.position.x = cx * 0.35;
+  camera.lookAt(cx * 0.5, 0.7, -7);
+  for (let k = 0; k < DASHES.length; k++) {
+    DASHES[k].position.set(0, 0.01, wZ(-1800 + k * 48 + scroll));
+  }
+  for (const o of gateObjs) {
+    o.grp.visible = !o.g.done && o.g.y > -1400;
+    o.grp.position.z = wZ(o.g.y);
+  }
+  mids.forEach((m, i) => {
+    if (m.done || m.y < -1400) midViz[i].hide();
+    else midViz[i].set(m.n, 0, wZ(m.y));
+  });
+  if (boss && boss.y > -1300) {
+    const b = battle ?? { me: count, foe: boss.n };
+    if (b.foe > 0) bossViz.set(b.foe, 0, wZ(Math.min(boss.y, CROWD_Y - 130)));
+    else bossViz.hide();
+  } else bossViz.hide();
+  const me = battle ? battle.me : count;
+  if (phase !== "title" && me > 0) {
+    meViz.set(me, cx, 0, invuln > 0 ? 0.45 + 0.35 * Math.sin(invuln * 40) : 1);
+  } else meViz.hide();
+  for (let i = 0; i < BULLETS3.length; i++) {
+    const b = bullets[i];
+    BULLETS3[i].visible = !!b;
+    if (b) BULLETS3[i].position.set(wX(b.x), 0.34, wZ(b.y));
+  }
+  for (let i = 0; i < POPS3.length; i++) {
+    const p = pops[i];
+    POPS3[i].spr.visible = !!p;
+    if (!p) continue;
+    if (POPS3[i].text !== p.text) { POPS3[i].text = p.text; POPS3[i].draw(p.text, p.col); }
+    POPS3[i].spr.material.opacity = Math.max(0, p.life);
+    POPS3[i].spr.position.set(wX(p.x), 1.5 + (1 - p.life) * 0.9, wZ(p.y));
+  }
+  renderer.render(scene, camera);
+}
+
+/* ── 루프 ─────────────────────────────────────────────── */
+let last = performance.now();
+function loop(t) {
+  let dt = (t - last) / 1000; last = t;
+  if (dt > 0.05) dt = 0.05;
+  if (phase === "play" || phase === "boss") step(dt);
+  for (const p of pops) p.life -= dt * 1.4;
+  pops = pops.filter((p) => p.life > 0);
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+/* ── 입력/UI ──────────────────────────────────────────── */
+const $ = (id) => document.getElementById(id);
+function hud() { $("hStage").textContent = `🔥 ${streak}연속 · 스테이지 ${stage} ${starsOf(dScore)} · 👥 ${count}`; }
+function show(emoji, title, msg, btnText) {
+  $("oEmoji").textContent = emoji; $("oTitle").textContent = title;
+  $("oMsg").textContent = msg; $("btn").textContent = btnText;
+  $("best").textContent = best ? `최고 기록: ${best}연속` : "";
+  $("overlay").classList.remove("hide");
+}
+$("btn").addEventListener("click", () => {
+  if (phase === "win") return;               // 승리 후엔 자동으로 넘어간다
+  stage = 1; streak = 0;                      // 새 런은 항상 스테이지 1부터
+  $("overlay").classList.add("hide");
+  phase = "play"; loadStage();
+});
+$("retry").addEventListener("click", () => {
+  // 같은 판 재시작은 없다 — 포기 = 런 종료
+  if (phase === "play" || phase === "boss") { failMsg = "스스로 포기했습니다."; endStage(false); }
+});
+
+let dragging = false;
+const toX = (e) => LANE_L + (e.clientX / innerWidth) * (LANE_R - LANE_L);
+addEventListener("pointerdown", (e) => {
+  if (e.target === cv) e.preventDefault();   // 모바일 더블탭 줌·고스트 클릭 방지
+  dragging = true; targetX = toX(e);
+});
+addEventListener("pointermove", (e) => { if (dragging) targetX = toX(e); });
+addEventListener("pointerup", () => { dragging = false; });
+addEventListener("keydown", (e) => {
+  if (e.key === "ArrowLeft") targetX = MID - 70;
+  if (e.key === "ArrowRight") targetX = MID + 70;
+});
+
+window.blShareText = () => `게이트 러시 ${best}연속! 한 번도 안 틀리고 도전해보세요 🏃`;
+window.blWeekly = { game: "gaterush", dir: "max", fmt: (v) => `${v}연속` };
+$("best").textContent = best ? `최고 기록: ${best}연속` : "";
+</script>
+<script defer src="/_shared/like.js"></script>
+<script defer src="/_shared/records.js"></script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>

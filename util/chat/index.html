@@ -1,0 +1,679 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>익명 채팅</title>
+<meta name="description" content="지금 접속한 사람끼리 익명 대화. 메시지는 저장하지 않아요.">
+<meta name="bl-group" content="함께">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>💬</text></svg>">
+<link rel="stylesheet" href="/_shared/bubble.css">
+<style>
+  :root { --accent-h: 296; }
+  * { box-sizing: border-box; }
+  body { margin: 0; height: 100dvh; display: flex; flex-direction: column; }
+  header { flex: none; position: relative; display: flex; align-items: center; gap: .6rem;
+           padding: .7rem 1rem; border-bottom: 1px solid var(--line); background: var(--bg); }
+  header .bl-head { flex: 1; min-width: 0; margin: 0; column-gap: .65rem; }
+  header .bl-bubble { width: 2.4rem; font-size: 1.15rem; }
+  .title-row { display: flex; align-items: baseline; gap: .5rem; min-width: 0; }
+  header .bl-head h1 { font-size: 1.1rem; white-space: nowrap; }
+  header .bl-head p { font-size: .78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #online { color: var(--muted); font-size: .8rem; font-variant-numeric: tabular-nums;
+            background: none; border: 0; font-family: inherit; white-space: nowrap;
+            cursor: pointer; padding: .2rem .1rem;
+            text-decoration: underline dotted; text-underline-offset: .25em; }
+  #online:hover { color: var(--accent); }
+  /* 접속자 목록 팝오버 (n명 클릭) */
+  #roster { position: absolute; top: calc(100% + .4rem); left: 1rem; z-index: 6;
+            min-width: 11rem; max-width: 16rem; max-height: 40dvh; overflow-y: auto;
+            padding: .5rem; border-radius: var(--r);
+            background: var(--field); border: 1px solid var(--line);
+            box-shadow: 0 10px 28px light-dark(#15171c22, #0008); }
+  #roster[hidden] { display: none; }
+  #roster ul { list-style: none; margin: 0; padding: 0; display: flex;
+               flex-direction: column; gap: .1rem; }
+  #roster li { padding: .4rem .6rem; border-radius: var(--r-sm); font-size: .85rem;
+               overflow-wrap: anywhere; }
+  #roster li.me { background: var(--accent-soft); color: var(--ink); font-weight: 700; }
+  #me { flex: none; max-width: 11rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        display: block; line-height: 1.4; }
+  /* 공유 버튼(/_shared/share.js)은 기본 우하단 고정이라 전송 버튼과 겹친다
+     → 헤더로 옮겨 닉네임 옆 알약 버튼으로 표시 */
+  header #bl-share { position: static; flex: none; font: inherit; font-size: .85rem; font-weight: 600;
+                     min-height: 2.2rem; padding: .35rem .8rem; border-radius: var(--pill);
+                     border: 1px solid var(--line); backdrop-filter: none;
+                     -webkit-backdrop-filter: none; background: var(--field); color: var(--ink);
+                     box-shadow: none; }
+  #notice { flex: none; margin: 0; padding: .5rem 1rem; text-align: center; font-size: .75rem; }
+  #log-wrap { flex: 1; min-height: 0; position: relative; display: flex; }
+  #log { flex: 1; overflow-y: auto; padding: .4rem 1rem 1rem; display: flex;
+         flex-direction: column; gap: .55rem; scrollbar-width: thin; }
+  #to-bottom { position: absolute; left: 50%; transform: translateX(-50%); bottom: .8rem;
+               width: 2.6rem; height: 2.6rem; border-radius: 50%;
+               border: 1px solid var(--accent-line); background: var(--field); color: var(--accent);
+               font-size: 1.05rem; cursor: pointer; box-shadow: 0 4px 12px light-dark(#15171c22, #0006); }
+  #to-bottom[hidden] { display: none; }
+  .sys { align-self: center; font-size: .74rem; color: var(--muted); padding: .15rem .7rem;
+         background: var(--sunk); border-radius: var(--pill); }
+  .msg { max-width: min(75%, 26rem); display: flex; flex-direction: column; gap: .25rem;
+         align-self: flex-start; align-items: flex-start; }
+  .msg.mine { align-self: flex-end; align-items: flex-end; }
+  .msg .nick { font-size: .72rem; color: var(--muted); padding: 0 .3rem; }
+  .msg.mine .nick { display: none; }
+  .bubble { padding: .55rem .85rem; border-radius: var(--r); font-size: .92rem; line-height: 1.55;
+            white-space: pre-wrap; overflow-wrap: anywhere;
+            background: var(--field); border: 1px solid var(--line);
+            border-top-left-radius: .3rem; }
+  .msg.mine .bubble { background: var(--accent-soft); border-color: var(--accent-line);
+                      border-top-left-radius: var(--r); border-top-right-radius: .3rem; }
+  /* 스티커는 정사각형 자리를 먼저 잡아 로드 시 스크롤이 밀리지 않게 한다 */
+  .bubble img { display: block; width: clamp(6.5rem, 30vw, 9rem); aspect-ratio: 1 / 1; height: auto; }
+  /* 누끼 스티커는 내 말풍선(.msg.mine .bubble) 배경보다 우선해 완전 투명으로 */
+  .bubble.sticker, .msg.mine .bubble.sticker { padding: .25rem; background: none; border: none; }
+  #status { flex: none; text-align: center; font-size: .78rem; padding: .3rem;
+            color: var(--warn); min-height: 1.3rem; }
+  #status:empty { display: none; }
+  form { flex: none; display: flex; gap: .5rem; padding: .7rem 1rem;
+         padding-bottom: max(.7rem, env(safe-area-inset-bottom));
+         border-top: 1px solid var(--line); background: var(--bg); }
+  #sticker-btn { flex: none; width: 2.75rem; padding: 0; font-size: 1.15rem; touch-action: manipulation; }
+  #sticker-btn[aria-expanded="true"] { background: var(--accent-soft); border-color: var(--accent-line); }
+  #text { flex: 1; min-width: 0; border-radius: var(--pill); padding: .6rem 1rem; }
+  #send { flex: none; padding: .55rem 1.1rem; }
+  #text:disabled { opacity: .5; }
+  #picker { flex: none; position: relative; border-top: 1px solid var(--line); background: var(--sunk); }
+  #picker[hidden] { display: none; }
+  /* 선택한 스티커 미리보기 — 픽커 바로 위에 떠서 로그를 가리지 않게 통과 클릭 */
+  #preview { position: absolute; bottom: calc(100% + .6rem); left: 50%; transform: translateX(-50%);
+             display: flex; flex-direction: column; align-items: center; gap: .35rem;
+             padding: .7rem .9rem .55rem; border-radius: var(--r-lg); z-index: 2; pointer-events: none;
+             background: color-mix(in srgb, var(--field) 92%, transparent);
+             border: 1px solid var(--accent-line); box-shadow: 0 10px 28px light-dark(#15171c26, #0008); }
+  #preview[hidden] { display: none; }
+  #preview img { width: clamp(7rem, 34vw, 9.5rem); aspect-ratio: 1 / 1; height: auto; display: block; }
+  #preview span { font-size: .74rem; color: var(--muted); max-width: 12rem; text-align: center; }
+  #tabs { display: flex; flex-wrap: nowrap; gap: .35rem; padding: .6rem .8rem .1rem; overflow-x: auto;
+          scrollbar-width: none; }
+  #tabs .bl-chip { flex: none; min-height: 2rem; padding: .25rem .75rem; font-size: .8rem;
+                   white-space: nowrap; touch-action: manipulation; }
+  #tabs .bl-chip[aria-selected="true"] { font-weight: 700; }
+  #picker-hint { font-size: .72rem; color: var(--muted); padding: .45rem .9rem 0; min-height: 1.4rem; }
+  /* 키보드 높이를 측정해 두면(--kb) 그 자리를 그대로 차지한다 — 카카오톡처럼 */
+  #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(4.2rem, 1fr));
+          gap: .3rem; padding: .4rem .8rem .6rem;
+          height: max(11rem, calc(var(--kb, 16rem) - 4.8rem));
+          max-height: 45dvh; overflow-y: auto; }
+  #grid button { padding: .3rem; background: none; border: 2px solid transparent;
+                 border-radius: var(--r-sm); cursor: pointer; touch-action: manipulation; }
+  #grid button:hover { background: var(--field); }
+  #grid button.selected { border-color: var(--accent); background: var(--accent-soft); }
+  #grid img { width: 100%; aspect-ratio: 1 / 1; height: auto; display: block; }
+  #grid .empty { grid-column: 1 / -1; text-align: center; font-size: .8rem;
+                 color: var(--muted); padding: 1.5rem 0; }
+  @media (max-width: 520px) {
+    header .bl-head { grid-template-columns: auto 1fr; }
+    header .bl-head p { display: none; }
+    header .bl-bubble { grid-row: auto; width: 2.2rem; font-size: 1.05rem; }
+    #me { max-width: 7.5rem; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="bl-head">
+    <span class="bl-bubble" aria-hidden="true">💬</span>
+    <div class="title-row">
+      <h1>익명 채팅</h1>
+      <button id="online" type="button" aria-expanded="false" title="접속자 보기">접속 중…</button>
+    </div>
+    <p>지금 접속한 사람끼리 익명 대화. 메시지는 저장하지 않아요.</p>
+  </div>
+  <button id="me" class="bl-btn bl-btn--sm" type="button" title="닉네임 바꾸기">…</button>
+  <div id="roster" hidden></div>
+</header>
+<p id="notice" class="bl-note">메시지는 서버에 저장되지 않아요 — 지금 접속한 사람들에게만 전달됩니다.</p>
+<div id="log-wrap">
+  <div id="log" aria-live="polite"></div>
+  <button id="to-bottom" type="button" hidden aria-label="맨 아래로">⬇</button>
+</div>
+<div id="status"></div>
+<div id="picker" hidden>
+  <div id="preview" hidden></div>
+  <div id="tabs" role="tablist"></div>
+  <div id="picker-hint">스티커를 누르면 미리보기, 한 번 더 누르면 전송돼요</div>
+  <div id="grid"></div>
+</div>
+<form id="composer">
+  <button id="sticker-btn" class="bl-btn" type="button" aria-expanded="false" aria-label="스티커 선택">🐴</button>
+  <input id="text" class="bl-input" maxlength="500" autocomplete="off" placeholder="메시지 입력…" disabled>
+  <button id="send" class="bl-btn bl-btn--primary" type="submit" disabled>전송</button>
+</form>
+<script>
+"use strict";
+// 스티커 팩 목록은 빌드가 생성하는 /_assets/catalog.json에서 온다 —
+// metadata.json에 chat.title이 있는 sticker 항목이 서랍에 노출된다.
+// (새 팩은 node _infra/sticker-pack.mjs 한 번으로 등록되며 여기는 손댈 곳 없음.
+//  카탈로그 로드 실패 시 텍스트 채팅만 동작한다.)
+const PACKS = [];
+const PACK_IDS = new Map();
+
+async function loadPacks() {
+  try {
+    const res = await fetch("/_assets/catalog.json");
+    if (!res.ok) throw new Error();
+    const { items } = await res.json();
+    for (const item of items ?? []) {
+      if (item.category !== "sticker" || !item.chat?.title || !Array.isArray(item.downloads)) continue;
+      // cutout:false = 흰 배경 누끼 생략 (흰 캐릭터 팩·이미 투명한 팩)
+      const pack = { id: item.id, title: item.chat.title, count: item.downloads.length,
+                     cutout: item.chat.cutout !== false, rev: item.chat.rev };
+      PACKS.push(pack);
+      PACK_IDS.set(pack.id, pack);
+    }
+  } catch { /* 카탈로그 없이도 채팅은 되게 조용히 넘어간다 */ }
+}
+const RECENT_KEY = "bl-chat-recent-stickers";
+const NICK_KEY = "bl-chat-nick";
+
+const $ = (id) => document.getElementById(id);
+const log = $("log");
+const statusLine = $("status");
+const toBottom = $("to-bottom");
+
+let ws = null;
+let myId = null;
+let myNick = null;
+let online = new Map();
+let retryMs = 1000;
+let closedByFull = false;
+// 재접속 플랩 억제: 나감 메시지를 잠시 보류했다가 같은 닉이 돌아오면 둘 다 생략
+const REJOIN_GRACE_MS = 6000;
+const pendingLeaves = new Map(); // nick → timer
+
+function setStatus(text) { statusLine.textContent = text; }
+function setComposerEnabled(enabled) {
+  $("text").disabled = !enabled;
+  $("send").disabled = !enabled;
+  $("sticker-btn").disabled = !enabled;
+}
+
+const roster = $("roster");
+
+function renderRoster() {
+  const ul = document.createElement("ul");
+  for (const [id, nick] of online) {
+    const li = document.createElement("li");
+    li.textContent = id === myId ? `${nick} (나)` : nick;
+    if (id === myId) li.classList.add("me");
+    ul.append(li);
+  }
+  roster.replaceChildren(ul);
+}
+
+function closeRoster() {
+  roster.hidden = true;
+  $("online").setAttribute("aria-expanded", "false");
+}
+
+function renderOnline() {
+  const names = [...online.values()];
+  $("online").textContent = `${names.length}명`;
+  $("online").title = names.join(", ");
+  if (!roster.hidden) renderRoster();
+}
+
+$("online").addEventListener("click", (event) => {
+  event.stopPropagation();
+  if (roster.hidden) {
+    renderRoster();
+    roster.hidden = false;
+    $("online").setAttribute("aria-expanded", "true");
+  } else {
+    closeRoster();
+  }
+});
+document.addEventListener("click", (event) => {
+  if (!roster.hidden && !roster.contains(event.target)) closeRoster();
+});
+
+function nearBottom() {
+  return log.scrollHeight - log.scrollTop - log.clientHeight < 60;
+}
+function scrollToBottom(smooth = false) {
+  log.scrollTo({ top: log.scrollHeight, behavior: smooth ? "smooth" : "auto" });
+}
+function updateToBottom() { toBottom.hidden = nearBottom(); }
+
+// force = 내 메시지: 어디를 보고 있었든 맨 아래로 따라간다
+function append(el, force = false) {
+  const stick = force || nearBottom();
+  log.append(el);
+  while (log.children.length > 300) log.firstChild.remove();
+  if (stick) scrollToBottom();
+  updateToBottom(); // 위를 보는 중에 새 메시지가 오면 ⬇ 버튼을 띄운다
+}
+
+log.addEventListener("scroll", updateToBottom, { passive: true });
+toBottom.addEventListener("click", () => scrollToBottom(true));
+
+function addSystem(text) {
+  const div = document.createElement("div");
+  div.className = "sys";
+  div.textContent = text;
+  append(div);
+}
+
+function stickerUrl(pack, n) {
+  const rev = PACK_IDS.get(pack)?.rev; // 같은 id 로 다시 그린 팩 — 주소를 바꿔 7일 캐시를 넘긴다
+  return `/_assets/sticker/${pack}/${String(n).padStart(2, "0")}.png${rev ? `?v=${rev}` : ""}`;
+}
+
+// ── 누끼: 흰 배경 제거 (util/photo와 같은 테두리 flood fill) ──
+const cutoutCache = new Map(); // "pack/n" → Promise<url>
+
+function cutoutWhiteBackground(imageData) {
+  const { data, width, height } = imageData;
+  // 이미 누끼가 된 PNG(모서리가 투명)는 건너뛴다. 생성 시점에 엄격한 임계값으로 땄는데
+  // 여기서 느슨한 임계값으로 한 번 더 따면 투명 픽셀에서 번져 흰 몸통·털까지 지워진다.
+  const corners = [0, width - 1, (height - 1) * width, height * width - 1];
+  if (corners.some((p) => data[p * 4 + 3] === 0)) return;
+  const whiteness = (i) => Math.min(data[i], data[i + 1], data[i + 2]);
+  const visited = new Uint8Array(width * height);
+  const queue = [];
+  for (let x = 0; x < width; x++) queue.push(x, (height - 1) * width + x);
+  for (let y = 0; y < height; y++) queue.push(y * width, y * width + width - 1);
+  while (queue.length) {
+    const p = queue.pop();
+    if (visited[p]) continue;
+    visited[p] = 1;
+    const i = p * 4;
+    const w = whiteness(i);
+    if (w < 208) continue;
+    // 235 이상은 완전 투명, 208~235는 경계 안티앨리어싱을 살려 반투명 처리
+    data[i + 3] = w >= 235 ? 0 : Math.round(((235 - w) / 27) * 255);
+    const x = p % width, y = (p / width) | 0;
+    if (x > 0) queue.push(p - 1);
+    if (x < width - 1) queue.push(p + 1);
+    if (y > 0) queue.push(p - width);
+    if (y < height - 1) queue.push(p + width);
+  }
+}
+
+function stickerObjectUrl(pack, n) {
+  if (PACK_IDS.get(pack)?.cutout === false) return Promise.resolve(stickerUrl(pack, n));
+  const key = `${pack}/${n}`;
+  if (!cutoutCache.has(key)) {
+    cutoutCache.set(key, (async () => {
+      const source = new Image();
+      source.src = stickerUrl(pack, n);
+      await source.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = source.naturalWidth;
+      canvas.height = source.naturalHeight;
+      const context = canvas.getContext("2d");
+      context.drawImage(source, 0, 0);
+      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+      cutoutWhiteBackground(imageData);
+      context.putImageData(imageData, 0, 0);
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+      if (!blob) throw new Error("cutout failed");
+      return URL.createObjectURL(blob);
+    })().catch(() => stickerUrl(pack, n))); // 실패하면 원본 그대로
+  }
+  return cutoutCache.get(key);
+}
+
+function stickerImg(pack, n, alt) {
+  const img = document.createElement("img");
+  img.alt = alt;
+  img.decoding = "async";
+  stickerObjectUrl(pack, n).then((url) => { img.src = url; });
+  return img;
+}
+
+function addChat({ id, nick, kind, text, pack, n, at }) {
+  if (kind === "sticker" && (!PACK_IDS.has(pack) || !Number.isInteger(n) || n < 1 ||
+      n > PACK_IDS.get(pack).count)) return;
+  const mine = id === myId;
+  const wrap = document.createElement("div");
+  wrap.className = "msg" + (mine ? " mine" : "");
+  const who = document.createElement("span");
+  who.className = "nick";
+  who.textContent = nick;
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  if (kind === "sticker") {
+    bubble.classList.add("sticker");
+    bubble.append(stickerImg(pack, n, `${PACK_IDS.get(pack).title} 스티커`));
+  } else {
+    bubble.textContent = text;
+  }
+  bubble.title = new Date(at).toLocaleTimeString("ko-KR");
+  wrap.append(who, bubble);
+  append(wrap, mine);
+}
+
+function connect() {
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  // 저장된 닉네임은 접속 시점에 서버가 바로 적용한다 (재접속 개명 소음 방지)
+  const saved = localStorage.getItem(NICK_KEY);
+  const query = saved ? `?nick=${encodeURIComponent(saved)}` : "";
+  ws = new WebSocket(`${proto}//${location.host}/_chat${query}`);
+  closedByFull = false;
+  setStatus("연결 중…");
+
+  ws.addEventListener("message", (event) => {
+    let msg;
+    try { msg = JSON.parse(event.data); } catch { return; }
+    if (msg.type === "ping") { // 서버 생존 확인 — 유령 연결 정리용
+      ws.send(JSON.stringify({ type: "pong" }));
+    } else if (msg.type === "welcome") {
+      myId = msg.id;
+      myNick = msg.nick;
+      online = new Map(msg.online.map((user) => [user.id, user.nick]));
+      renderOnline();
+      setStatus("");
+      setComposerEnabled(true);
+      retryMs = 1000;
+      addSystem(`입장했어요 — 지금 ${online.size}명 (최대 ${msg.max}명)`);
+      $("me").textContent = myNick;
+    } else if (msg.type === "chat") {
+      addChat(msg);
+    } else if (msg.type === "join") {
+      online.set(msg.id, msg.nick);
+      renderOnline();
+      // 방금 나갔던 닉네임이 바로 돌아왔으면(재접속 플랩) 입퇴장 메시지를 삼킨다
+      const pending = pendingLeaves.get(msg.nick);
+      if (pending) {
+        clearTimeout(pending);
+        pendingLeaves.delete(msg.nick);
+      } else {
+        addSystem(`${msg.nick} 님이 들어왔어요`);
+      }
+    } else if (msg.type === "leave") {
+      online.delete(msg.id);
+      renderOnline();
+      // 나감 메시지는 잠시 미뤄 두고, 곧 재접속하면 조용히 지운다
+      const nick = msg.nick;
+      clearTimeout(pendingLeaves.get(nick));
+      pendingLeaves.set(nick, setTimeout(() => {
+        pendingLeaves.delete(nick);
+        addSystem(`${nick} 님이 나갔어요`);
+      }, REJOIN_GRACE_MS));
+    } else if (msg.type === "nick") {
+      online.set(msg.id, msg.nick);
+      renderOnline();
+      if (msg.id === myId) {
+        myNick = msg.nick;
+        $("me").textContent = myNick;
+      }
+      addSystem(`${msg.prev} → ${msg.nick}`);
+    } else if (msg.type === "full") {
+      closedByFull = true;
+      setStatus(`정원이 가득 찼어요 (최대 ${msg.max}명). 잠시 후 다시 연결합니다…`);
+    } else if (msg.type === "error" && msg.error === "rate") {
+      setStatus("너무 빨라요 — 잠시 쉬었다 보내주세요");
+      setTimeout(() => setStatus(""), 3000);
+    } else if (msg.type === "error" && msg.error === "nick-taken") {
+      setStatus("이미 사용 중인 닉네임이에요 — 다른 이름을 골라주세요");
+      setTimeout(() => setStatus(""), 3000);
+    }
+  });
+
+  ws.addEventListener("close", () => {
+    setComposerEnabled(false);
+    online = new Map();
+    $("online").textContent = "연결 끊김";
+    if (!closedByFull) setStatus("연결이 끊겼어요. 다시 연결하는 중…");
+    const delay = closedByFull ? 10_000 : retryMs;
+    retryMs = Math.min(retryMs * 2, 15_000);
+    setTimeout(connect, delay);
+  });
+}
+
+$("composer").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const text = $("text").value.trim();
+  if (!text || ws?.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ type: "text", text }));
+  $("text").value = "";
+  $("text").focus();
+});
+
+$("me").addEventListener("click", () => {
+  const nick = prompt("새 닉네임 (최대 16자)", myNick ?? "");
+  if (nick === null) return;
+  const trimmed = nick.trim().slice(0, 16);
+  if (!trimmed || ws?.readyState !== WebSocket.OPEN) return;
+  localStorage.setItem(NICK_KEY, trimmed);
+  ws.send(JSON.stringify({ type: "nick", nick: trimmed }));
+});
+
+// ── 스티커 픽커 ──────────────────────────────────────────
+const picker = $("picker");
+const tabs = $("tabs");
+const grid = $("grid");
+const pickerHint = $("picker-hint");
+const preview = $("preview");
+const HINT_DEFAULT = "스티커를 누르면 미리보기, 한 번 더 누르면 전송돼요";
+const labelCache = new Map();  // pack → Promise<[라벨…]>
+const gridPages = new Map();   // pack → 만들어 둔 그리드 노드 (열 때마다 재생성하지 않는다)
+let activeTab = "recent";
+let selectedKey = null;        // "pack/n" — 한 번 더 누르면 전송
+
+function recentStickers() {
+  try {
+    const list = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]");
+    return Array.isArray(list) ? list.filter((key) => {
+      const [pack, n] = String(key).split("/");
+      return PACK_IDS.has(pack) && Number(n) >= 1 && Number(n) <= (PACK_IDS.get(pack)?.count ?? 0);
+    }) : [];
+  } catch { return []; }
+}
+
+function rememberSticker(pack, n) {
+  const key = `${pack}/${n}`;
+  const list = [key, ...recentStickers().filter((item) => item !== key)].slice(0, 16);
+  localStorage.setItem(RECENT_KEY, JSON.stringify(list));
+}
+
+function packLabels(pack) {
+  if (!labelCache.has(pack)) {
+    labelCache.set(pack, fetch(`/_assets/sticker/${pack}/metadata.json`)
+      .then((res) => res.json())
+      .then((meta) => (meta.downloads ?? []).map((item) => String(item.label ?? "")))
+      .catch(() => []));
+  }
+  return labelCache.get(pack);
+}
+
+function clearSelection() {
+  selectedKey = null;
+  pickerHint.textContent = HINT_DEFAULT;
+  preview.hidden = true;
+  preview.replaceChildren();
+  for (const button of grid.querySelectorAll("button.selected")) button.classList.remove("selected");
+}
+
+function showPreview(pack, n, label) {
+  const caption = document.createElement("span");
+  caption.textContent = label ? `${label} — 한 번 더 누르면 전송` : "한 번 더 누르면 전송";
+  preview.replaceChildren(stickerImg(pack, n, label || "선택한 스티커"), caption);
+  preview.hidden = false;
+}
+
+function sendSticker(pack, n) {
+  if (ws?.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ type: "sticker", pack, n }));
+  rememberSticker(pack, n);
+}
+
+function onStickerClick(button, pack, n) {
+  const key = `${pack}/${n}`;
+  if (selectedKey === key) {          // 두 번째 클릭(더블클릭·더블터치) → 전송
+    clearSelection();
+    sendSticker(pack, n);
+    return;
+  }
+  clearSelection();
+  selectedKey = key;
+  button.classList.add("selected");
+  showPreview(pack, n, button.title);
+}
+
+function stickerButton(pack, n, label) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.title = label || "";
+  button.dataset.key = `${pack}/${n}`;
+  button.append(stickerImg(pack, n, label || `${PACK_IDS.get(pack).title} ${n}`));
+  button.addEventListener("click", () => onStickerClick(button, pack, n));
+  return button;
+}
+
+// 팩 그리드는 한 번만 만들어 두고 탭 전환 시 노드를 통째로 갈아끼운다.
+// 라벨은 기다리지 않고 그리드부터 그린 뒤 도착하면 title만 채운다.
+function packGridPage(packId) {
+  if (!gridPages.has(packId)) {
+    const pack = PACK_IDS.get(packId);
+    const buttons = [];
+    for (let n = 1; n <= pack.count; n++) buttons.push(stickerButton(packId, n));
+    gridPages.set(packId, buttons);
+    packLabels(packId).then((labels) => {
+      buttons.forEach((button, index) => {
+        if (labels[index]) {
+          button.title = labels[index];
+          button.querySelector("img").alt = labels[index];
+        }
+      });
+    });
+  }
+  return gridPages.get(packId);
+}
+
+function renderGrid() {
+  clearSelection();
+  if (activeTab === "recent") {
+    const list = recentStickers();
+    if (!list.length) {
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      empty.textContent = "최근 보낸 스티커가 여기 모여요";
+      grid.replaceChildren(empty);
+      return;
+    }
+    grid.replaceChildren(...list.map((key) => {
+      const [pack, n] = key.split("/");
+      return stickerButton(pack, Number(n));
+    }));
+    return;
+  }
+  grid.replaceChildren(...packGridPage(activeTab));
+}
+
+function renderTabs() {
+  tabs.replaceChildren();
+  for (const tab of [{ id: "recent", title: "🕘 최근" }, ...PACKS]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "bl-chip";
+    button.role = "tab";
+    button.textContent = tab.title;
+    button.setAttribute("aria-selected", String(tab.id === activeTab));
+    button.addEventListener("click", () => {
+      activeTab = tab.id;
+      renderTabs();
+      renderGrid();
+    });
+    tabs.append(button);
+  }
+  // 스와이프·클릭으로 바뀐 활성 탭이 탭바 스크롤 밖에 있으면 보이게 당겨온다
+  tabs.querySelector('[aria-selected="true"]')?.scrollIntoView({ inline: "nearest", block: "nearest" });
+}
+
+// 모바일: 그리드를 좌우로 스와이프하면 이웃 팩 탭으로 이동
+// (세로 제스처는 그리드 스크롤이므로 가로가 확실할 때만 반응)
+let swipeStart = null;
+grid.addEventListener("touchstart", (event) => {
+  swipeStart = event.touches.length === 1
+    ? { x: event.touches[0].clientX, y: event.touches[0].clientY }
+    : null;
+}, { passive: true });
+grid.addEventListener("touchend", (event) => {
+  if (!swipeStart) return;
+  const dx = event.changedTouches[0].clientX - swipeStart.x;
+  const dy = event.changedTouches[0].clientY - swipeStart.y;
+  swipeStart = null;
+  if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+  const order = ["recent", ...PACKS.map((pack) => pack.id)];
+  const next = order[order.indexOf(activeTab) + (dx < 0 ? 1 : -1)];
+  if (!next) return; // 양 끝에서는 멈춘다
+  activeTab = next;
+  renderTabs();
+  renderGrid();
+}, { passive: true });
+
+function openPicker() {
+  $("text").blur(); // 모바일: 키보드를 내리고 그 자리를 패널이 차지한다
+  picker.hidden = false;
+  $("sticker-btn").setAttribute("aria-expanded", "true");
+  if (activeTab === "recent" && !recentStickers().length && PACKS.length) activeTab = PACKS[0].id;
+  renderTabs();
+  renderGrid();
+  scrollToBottom();
+}
+
+function closePicker() {
+  picker.hidden = true;
+  $("sticker-btn").setAttribute("aria-expanded", "false");
+  clearSelection();
+}
+
+$("sticker-btn").addEventListener("click", () => {
+  if (picker.hidden) openPicker();
+  else closePicker();
+});
+
+// 입력창을 누르면(키보드가 올라오면) 패널을 접는다 — 둘이 겹치지 않게
+$("text").addEventListener("focus", () => { if (!picker.hidden) closePicker(); });
+
+// 키보드 높이를 재서 패널 높이(--kb)로 사용 (visualViewport 지원 브라우저)
+if (window.visualViewport) {
+  visualViewport.addEventListener("resize", () => {
+    const diff = window.innerHeight - visualViewport.height;
+    if (diff > 150) document.documentElement.style.setProperty("--kb", `${diff}px`);
+  });
+}
+
+// 팩 목록이 도착하면, 첫 오픈이 느리지 않게 유휴 시간에 미리 데워 둔다:
+// 라벨 전부 + 최근 사용·첫 팩의 누끼 이미지
+const idle = window.requestIdleCallback ?? ((fn) => setTimeout(fn, 400));
+loadPacks().then(() => idle(() => {
+  if (!PACKS.length) return;
+  for (const pack of PACKS) packLabels(pack.id);
+  const warm = [...new Set([
+    ...recentStickers(),
+    ...Array.from({ length: PACKS[0].count }, (_, i) => `${PACKS[0].id}/${i + 1}`),
+  ])];
+  (function next() {
+    const key = warm.shift();
+    if (!key) return;
+    const [pack, n] = key.split("/");
+    stickerObjectUrl(pack, Number(n)).finally(() => idle(next));
+  })();
+}));
+
+window.blShareText = () => "util.bubblelab.dev/chat — 익명 채팅방에서 말 스티커로 수다 떨어요 💬";
+
+// share.js가 만든 고정 버튼을 헤더 안으로 옮긴다 (전송 버튼과 겹치지 않게)
+addEventListener("load", () => {
+  const share = document.getElementById("bl-share");
+  if (share) document.querySelector("header").append(share);
+});
+
+connect();
+</script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>

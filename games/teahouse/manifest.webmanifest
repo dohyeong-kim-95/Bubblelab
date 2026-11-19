@@ -1,0 +1,19 @@
+{
+  "name": "새벽 두 시의 찻집",
+  "short_name": "새벽찻집",
+  "description": "잠 못 드는 사람들이 꿈속에서 찾아오는 찻집. 손님이 기억하는 그 맛을 찾아 주는 힐링 스토리 게임.",
+  "lang": "ko",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#141019",
+  "theme_color": "#141019",
+  "categories": ["games"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

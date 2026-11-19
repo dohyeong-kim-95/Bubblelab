@@ -1,0 +1,12 @@
+{
+  "name": "만화 사주 접수증",
+  "short_name": "만화 사주",
+  "description": "신청하신 만화 사주가 지금 어디쯤인지 보는 곳이에요.",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#FBFAF6",
+  "theme_color": "#4A4038",
+  "icons": [{ "src": "../icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

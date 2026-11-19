@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="ko" class="bl-stage">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>국기 맞추기</title>
+<link rel="stylesheet" href="/_shared/bubble.css">
+<style>
+  :root { color-scheme: light dark; --accent-h: 255; }
+  /* 국기 이모지가 없는 브라우저(Windows 등)에서도 국기가 보이게 하는
+     자체 호스팅 웹폰트. unicode-range로 국기 코드포인트에만 적용된다. */
+  @font-face {
+    font-family: "BL Flags";
+    unicode-range: U+1F1E6-1F1FF, U+1F3F4, U+E0062-E0063, U+E0065, U+E0067,
+      U+E006C, U+E006E, U+E0073-E0074, U+E0077, U+E007F;
+    src: url("/_shared/TwemojiCountryFlags.woff2") format("woff2");
+    font-display: swap;
+  }
+  body { margin: 0; min-height: 100vh;
+         display: flex; flex-direction: column; align-items: center;
+         justify-content: center; gap: var(--s-4); text-align: center;
+         padding: var(--s-5) var(--s-4); box-sizing: border-box; user-select: none;
+         -webkit-user-select: none; touch-action: manipulation; }
+  .bl-head { margin: 0; text-align: left; }
+  #streak { font-size: .95rem; min-height: 1.3em; padding: .3rem 1rem; border: 0; }
+  /* 국기는 놀이 내용 — 글꼴·크기 그대로 */
+  #flag { font-size: 6.5rem; line-height: 1.15; min-height: 7.5rem;
+          display: grid; place-items: center;
+          font-family: "BL Flags", "Apple Color Emoji", "Segoe UI Emoji",
+                       "Noto Color Emoji", sans-serif; }
+  #choices { display: flex; flex-direction: column; gap: .55rem;
+             width: min(80vw, 18rem); }
+  #choices button { font: inherit; font-size: 1rem; font-weight: 600; min-height: 2.9rem;
+             padding: .65rem .9rem; border-radius: var(--pill);
+             border: 1px solid var(--line); background: var(--field); color: var(--ink);
+             cursor: pointer; transition: transform .12s, border-color .15s, background-color .15s;
+             overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #choices button:hover:not(:disabled) { border-color: var(--accent-line); }
+  #choices button:active { transform: scale(.98); }
+  #choices button:disabled { cursor: default; }
+  #choices button.right { background: color-mix(in srgb, var(--ok) 20%, var(--field));
+                          border-color: var(--ok); }
+  #choices button.wrong { background: color-mix(in srgb, var(--bad) 20%, var(--field));
+                          border-color: var(--bad); }
+  #msg { color: var(--muted); min-height: 2.6em; white-space: pre-line; line-height: 1.55; }
+  #btn { font-size: 1.1rem; min-height: 3rem; padding: .7rem 2.4rem; display: none; }
+  #btn.show { display: inline-flex; }
+  #best { color: var(--muted); font-size: var(--t-small); min-height: 1.2em; }
+</style>
+</head>
+<body>
+  <header class="bl-head">
+    <span class="bl-bubble" aria-hidden="true">🌍</span>
+    <h1>국기 맞추기</h1>
+    <p>국기를 보고 나라 이름 고르기</p>
+  </header>
+  <div id="streak" class="bl-num bl-pill bl-pill--accent">연속 0개</div>
+  <div id="flag"></div>
+  <div id="choices"></div>
+  <div id="msg">한 번이라도 틀리면 그대로 끝!
+연속으로 맞춘 개수가 점수예요.</div>
+  <button id="btn" class="bl-btn bl-btn--primary">다시!</button>
+  <div id="best" class="bl-num"></div>
+<script>
+// 앞쪽일수록 유명한 나라 — 연속으로 맞출수록 출제 풀이 넓어진다.
+const COUNTRIES = [
+  ["KR","대한민국"],["JP","일본"],["CN","중국"],["US","미국"],["GB","영국"],
+  ["FR","프랑스"],["DE","독일"],["IT","이탈리아"],["ES","스페인"],["CA","캐나다"],
+  ["AU","호주"],["BR","브라질"],["IN","인도"],["RU","러시아"],["MX","멕시코"],
+  ["TH","태국"],["VN","베트남"],["PH","필리핀"],["ID","인도네시아"],["TR","튀르키예"],
+  ["GR","그리스"],["NL","네덜란드"],["CH","스위스"],["SE","스웨덴"],["NO","노르웨이"],
+  ["DK","덴마크"],["FI","핀란드"],["PL","폴란드"],["PT","포르투갈"],["AR","아르헨티나"],
+  ["EG","이집트"],["SA","사우디아라비아"],["IL","이스라엘"],["SG","싱가포르"],["MY","말레이시아"],
+  ["NZ","뉴질랜드"],["IE","아일랜드"],["AT","오스트리아"],["BE","벨기에"],["CZ","체코"],
+  ["HU","헝가리"],["UA","우크라이나"],["ZA","남아프리카공화국"],["NG","나이지리아"],["KE","케냐"],
+  ["MA","모로코"],["CL","칠레"],["PE","페루"],["CO","콜롬비아"],["CU","쿠바"],
+  ["MN","몽골"],["NP","네팔"],["BD","방글라데시"],["PK","파키스탄"],["LK","스리랑카"],
+  ["MM","미얀마"],["KH","캄보디아"],["LA","라오스"],["TW","대만"],["HK","홍콩"],
+  ["KZ","카자흐스탄"],["UZ","우즈베키스탄"],["IR","이란"],["IQ","이라크"],["JO","요르단"],
+  ["LB","레바논"],["QA","카타르"],["AE","아랍에미리트"],["KW","쿠웨이트"],["OM","오만"],
+  ["IS","아이슬란드"],["RO","루마니아"],["BG","불가리아"],["HR","크로아티아"],["RS","세르비아"],
+  ["SK","슬로바키아"],["SI","슬로베니아"],["EE","에스토니아"],["LV","라트비아"],["LT","리투아니아"],
+  ["BY","벨라루스"],["GE","조지아"],["AM","아르메니아"],["AZ","아제르바이잔"],["DZ","알제리"],
+  ["TN","튀니지"],["LY","리비아"],["SD","수단"],["ET","에티오피아"],["GH","가나"],
+  ["CM","카메룬"],["SN","세네갈"],["TZ","탄자니아"],["UG","우간다"],["ZW","짐바브웨"],
+  ["VE","베네수엘라"],["EC","에콰도르"],["BO","볼리비아"],["UY","우루과이"],["PY","파라과이"],
+  ["PA","파나마"],["CR","코스타리카"],["GT","과테말라"],["HN","온두라스"],["NI","니카라과"],
+  ["SV","엘살바도르"],["DO","도미니카공화국"],["HT","아이티"],["JM","자메이카"],["TT","트리니다드토바고"],
+  ["FJ","피지"],["PG","파푸아뉴기니"],["WS","사모아"],["TO","통가"],["VU","바누아투"],
+  ["MV","몰디브"],["BT","부탄"],["BN","브루나이"],["TL","동티모르"],["KG","키르기스스탄"],
+  ["TJ","타지키스탄"],["TM","투르크메니스탄"],["AF","아프가니스탄"],["SY","시리아"],["YE","예멘"],
+  ["BH","바레인"],["CY","키프로스"],["MT","몰타"],["LI","리히텐슈타인"],["SM","산마리노"],
+  ["AD","안도라"],["AL","알바니아"],["MK","북마케도니아"],["BA","보스니아헤르체고비나"],["ME","몬테네그로"],
+  ["MD","몰도바"],["CI","코트디부아르"],["ML","말리"],["NE","니제르"],["ZM","잠비아"],
+  ["MZ","모잠비크"],["MG","마다가스카르"],["NA","나미비아"],["BW","보츠와나"],["RW","르완다"],
+  ["GY","가이아나"],["SR","수리남"],
+  ["LU","룩셈부르크"],["MC","모나코"],["VA","바티칸"],["AO","앙골라"],
+  ["BJ","베냉"],["BF","부르키나파소"],["BI","부룬디"],["CV","카보베르데"],
+  ["CF","중앙아프리카공화국"],["TD","차드"],["KM","코모로"],["CG","콩고공화국"],
+  ["CD","콩고민주공화국"],["DJ","지부티"],["GQ","적도기니"],["ER","에리트레아"],
+  ["SZ","에스와티니"],["GA","가봉"],["GM","감비아"],["GN","기니"],["GW","기니비사우"],
+  ["LS","레소토"],["LR","라이베리아"],["MW","말라위"],["MR","모리타니"],["MU","모리셔스"],
+  ["ST","상투메프린시페"],["SC","세이셸"],["SL","시에라리온"],["SO","소말리아"],
+  ["SS","남수단"],["TG","토고"],["AG","앤티가바부다"],["BS","바하마"],["BB","바베이도스"],
+  ["BZ","벨리즈"],["DM","도미니카연방"],["GD","그레나다"],["KN","세인트키츠네비스"],
+  ["LC","세인트루시아"],["VC","세인트빈센트그레나딘"],["KI","키리바시"],["MH","마셜제도"],
+  ["FM","미크로네시아"],["NR","나우루"],["PW","팔라우"],["SB","솔로몬제도"],["TV","투발루"],
+];
+const flagOf = (code) =>
+  String.fromCodePoint(...[...code].map((c) => 0x1f1a5 + c.charCodeAt(0)));
+
+const streakEl = document.getElementById("streak");
+const flagEl = document.getElementById("flag");
+const choicesEl = document.getElementById("choices");
+const msg = document.getElementById("msg");
+const btn = document.getElementById("btn");
+const bestEl = document.getElementById("best");
+
+let streak = 0;
+let best = null;
+let locked = false;
+const recent = []; // 최근 출제 코드 (반복 방지)
+
+window.blWeekly = { game: "flags", dir: "max", fmt: (v) => v + "개 연속" };
+window.blShareText = () => `국기 ${best ?? streak}개 연속으로 맞춤! 도전해보세요`;
+
+const shuffle = (a) => {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+};
+
+function round() {
+  locked = false;
+  streakEl.textContent = `연속 ${streak}개`;
+  // 처음엔 유명한 40개국, 맞출 때마다 8개국씩 넓어진다
+  const pool = COUNTRIES.slice(0, Math.min(COUNTRIES.length, 40 + streak * 8));
+  const fresh = pool.filter(([code]) => !recent.includes(code));
+  const answer = fresh[Math.floor(Math.random() * fresh.length)];
+  recent.push(answer[0]);
+  if (recent.length > 20) recent.shift();
+
+  const options = shuffle([
+    answer,
+    ...shuffle(pool.filter((c) => c !== answer)).slice(0, 3),
+  ]);
+  flagEl.textContent = flagOf(answer[0]);
+  choicesEl.replaceChildren(...options.map(([code, name]) => {
+    const b = document.createElement("button");
+    b.textContent = name;
+    b.addEventListener("click", () => pick(b, code, answer));
+    return b;
+  }));
+}
+
+function pick(b, code, [answerCode, answerName]) {
+  if (locked) return;
+  locked = true;
+  if (code === answerCode) {
+    b.classList.add("right");
+    streak++;
+    setTimeout(round, 220);
+    return;
+  }
+  // 게임 오버
+  b.classList.add("wrong");
+  for (const el of choicesEl.children) {
+    el.disabled = true;
+    if (el.textContent === answerName) el.classList.add("right");
+  }
+  const grade =
+    streak >= 40 ? "🤖 지리 교사 자격 취득" :
+    streak >= 25 ? "🌏 세계지도가 머릿속에" :
+    streak >= 15 ? "🔥 대단한데요" :
+    streak >= 7  ? "🙂 나쁘지 않아요" : "🫠 세계는 넓어요…";
+  msg.textContent = `정답은 ${answerName}!\n연속 ${streak}개 ${grade}`;
+  if (best === null || streak > best) {
+    best = streak;
+    bestEl.textContent = `최고 기록: 연속 ${best}개`;
+  }
+  if (streak > 0) window.blWeeklyReport?.(streak);
+  btn.classList.add("show");
+}
+
+btn.addEventListener("click", () => {
+  streak = 0;
+  msg.textContent = "";
+  btn.classList.remove("show");
+  round();
+});
+
+// 국기 웹폰트를 먼저 로드해, 국기 이모지가 없는 브라우저에서도 첫 문제부터
+// 나라 코드(예: "KR")가 잠깐 비쳤다가 바뀌는 일이 없게 한다. 로드 실패해도
+// (네이티브 국기가 있는 Mac/모바일 등) 그냥 시작한다.
+const ready = document.fonts
+  ? document.fonts.load('1em "BL Flags"', flagOf("KR")).catch(() => {})
+  : Promise.resolve();
+ready.finally(round);
+</script>
+<script defer src="/_shared/records.js"></script>
+<script defer src="/_shared/share.js"></script>
+</body>
+</html>

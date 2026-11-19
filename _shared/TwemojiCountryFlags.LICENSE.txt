@@ -1,0 +1,10 @@
+TwemojiCountryFlags.woff2
+
+국기 이모지가 없는 브라우저(Windows 등)에서도 국기가 보이도록 쓰는 웹폰트.
+unicode-range로 국기 코드포인트에만 적용된다 (slop/flags 등).
+
+- 폰트 아트워크: Twemoji (© Twitter, Inc. and contributors)
+  CC-BY 4.0 — https://creativecommons.org/licenses/by/4.0/
+  https://github.com/twitter/twemoji
+- 폰트 빌드/패키징: country-flag-emoji-polyfill (© 2022 TalkJS), MIT
+  https://github.com/talkjs/country-flag-emoji-polyfill

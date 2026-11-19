@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#4A4038">
+<meta name="robots" content="noindex">
+<title>손금 보기(베타) · 운세 노트</title>
+<meta name="description" content="손바닥 사진 한 장으로 생명선·두뇌선·감정선·운명선을 사진 위에 그리고 풀이해 드려요.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>✋</text></svg>">
+<link rel="stylesheet" href="../fonts/fonts.css">
+<link rel="stylesheet" href="../note.css">
+</head>
+<body>
+<div class="book">
+<main class="page review-page palm-page">
+  <h1 class="hand h-title ask">손금 보기 <span class="beta">베타</span></h1>
+  <p>손바닥 사진 한 장이면 생명선·두뇌선·감정선·운명선을 사진 위에 그려 드리고, 풀이해 드려요.</p>
+
+  <section class="scrap" id="palm"></section>
+
+  <p class="small"><a class="link" href="../">← 운세 노트로 가기</a></p>
+</main>
+</div>
+<script src="../vendor/rough.min.js"></script>
+<script src="../note.js"></script>
+<script type="module">
+  // 손금 칸은 모듈 하나(원본 fortune/palm/palm.js — 이주 동안 _infra/build.mjs 가 이 폴더로 복사해 둔다)
+  import { mountPalm } from "./palm.js";
+  mountPalm(document.getElementById("palm"));
+</script>
+</body>
+</html>

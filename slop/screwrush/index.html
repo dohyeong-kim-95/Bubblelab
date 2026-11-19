@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>🔩 나사 러시 — 한 번 틀리면 끝</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🔩</text></svg>">
+<link rel="stylesheet" href="/_shared/bubble.css">
+<style>
+  /* 재료는 공용 bubble.css(토큰·bl- 부품). 판(캔버스)은 게임 내용이라 그대로 둔다. */
+  :root { color-scheme: light dark; --accent-h: 188; }
+  html, body { height: 100%; }
+  body { margin: 0; overflow: hidden; user-select: none; -webkit-user-select: none;
+         touch-action: manipulation; }
+  canvas { display: block; touch-action: none; }
+
+  /* HUD — 이름 방울 + 숫자 칩. 판 위에 떠 있으니 칩은 반투명 종이면 */
+  #hud { position: fixed; top: 0; left: 0; right: 0; display: flex; gap: .45rem;
+         align-items: center; padding: .5rem .7rem; font-size: var(--t-caption); z-index: 3;
+         pointer-events: none; white-space: nowrap; color: var(--ink); }
+  #hud .sp { flex: 1; }
+  #hud > span:first-child { flex: 0 1 auto; min-width: 0; overflow: hidden;
+                            text-overflow: ellipsis; display: inline-flex; align-items: center;
+                            gap: .4rem; font-size: var(--t-small); }
+  #hud b { font-weight: 800; letter-spacing: -.01em; }
+  .hud-bubble { width: 1.75rem; font-size: .95rem; flex: none; }
+  .hud-chip { padding: .22rem .6rem; border-radius: var(--pill); font-weight: 600;
+              background: color-mix(in srgb, var(--field) 86%, transparent);
+              border: 1px solid var(--line); }
+  .hud-chip:empty { display: none; }
+  .hud-btn { pointer-events: auto; min-height: 2rem; padding: .2rem .75rem; }
+
+  /* 시작·결과 카드 — 재료는 bl-glass, 위치·크기만 여기서. 방울·제목·설명·주 버튼 */
+  #overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+             display: flex; flex-direction: column; align-items: center; gap: .85rem;
+             width: min(84vw, 21rem); box-sizing: border-box; padding: 1.6rem 1.5rem 1.4rem;
+             text-align: center; z-index: 5; }
+  #overlay.hide { display: none; }
+  #overlay .big { width: 4rem; font-size: 2rem; margin: 0 0 .1rem; }
+  #overlay h1 { margin: 0; font-size: var(--t-h1); font-weight: 800; letter-spacing: -.02em;
+                line-height: 1.25; }
+  #overlay p { margin: 0; font-size: var(--t-small); line-height: 1.6; color: var(--muted);
+               white-space: pre-line; }
+  #btn { font-size: 1.05rem; padding: .75rem 2.2rem; min-height: 3rem; }
+  #overlay #best { margin: 0; font-size: var(--t-caption); min-height: 1.1em; }
+
+  #toast { position: fixed; top: 22%; left: 50%; transform: translateX(-50%);
+           z-index: 4; pointer-events: none; padding: .6rem 1.2rem; border-radius: var(--pill);
+           font-size: 1rem; font-weight: 700; white-space: nowrap; color: var(--ink);
+           background: color-mix(in srgb, var(--field) 92%, transparent);
+           border: 1px solid var(--accent-line);
+           box-shadow: 0 .4rem 1.2rem light-dark(rgb(60 50 30 / .14), rgb(0 0 0 / .45)); }
+  #toast.hide { display: none; }
+</style>
+</head>
+<body>
+<div id="hud">
+  <span><span class="bl-bubble hud-bubble" aria-hidden="true">🔩</span> <b>나사 러시</b></span>
+  <span class="sp"></span>
+  <span id="hStage" class="hud-chip bl-num"></span>
+  <button id="retry" class="bl-btn bl-btn--sm hud-btn" title="처음부터 새로 시작">↻</button>
+</div>
+<div id="overlay" class="bl-glass">
+  <p class="big bl-bubble" id="oEmoji">🔩</p>
+  <h1 id="oTitle">나사 러시</h1>
+  <p id="oMsg">광고에서 보던 바로 그 나사 게임, 러시 모드.
+한 번이라도 실패하면 끝!
+연속으로 클리어한 판 수가 점수예요.
+
+위에 판자가 없는 나사만 풀 수 있어요.
+상자 색에 맞춰 3개씩 담고,
+안 맞는 나사는 임시 트레이(5칸)로.
+트레이가 넘치면 끝장!</p>
+  <button id="btn" class="bl-btn bl-btn--primary">시작</button>
+  <p id="best" class="bl-note bl-num"></p>
+</div>
+<div id="toast" class="hide"></div>
+<canvas id="cv"></canvas>
+<script>
+"use strict";
+// 정적 난이도(0~100)와 별점 — DIFFICULTY.md Phase 1
+const clamp01 = (x) => Math.max(0, Math.min(1, x));
+const starsOf = (d) => "\u2605".repeat(Math.max(1, Math.min(5, Math.ceil(d / 20))));
+let dScore = 0;
+const targetD = (s) => Math.min(90, 5 + 4.7 * s);
+
+// 구형 모바일 브라우저(iOS 15 이하 등)엔 roundRect가 없다 — 없으면 폴리필
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+    r = Math.min(Array.isArray(r) ? r[0] : (r ?? 0), w / 2, h / 2);
+    this.moveTo(x + r, y);
+    this.arcTo(x + w, y, x + w, y + h, r);
+    this.arcTo(x + w, y + h, x, y + h, r);
+    this.arcTo(x, y + h, x, y, r);
+    this.arcTo(x, y, x + w, y, r);
+    this.closePath();
+    return this;
+  };
+}
+/* ── 상수/난수 ────────────────────────────────────────── */
+const W = 360, H = 640, SCREW_R = 11, TRAY_CAP = 5;
+const PAL = ["#e5484d", "#3b82f6", "#46a758", "#f79009", "#8e4ec6", "#12a594", "#e93d82"];
+const WOODS = ["#c9974f", "#b9834a", "#d2a55e", "#aa7840", "#c08d52"];
+const dark = matchMedia("(prefers-color-scheme: dark)");
+const mulberry32 = (a) => () => {
+  a |= 0; a = (a + 0x6D2B79F5) | 0;
+  let t = Math.imul(a ^ (a >>> 15), 1 | a);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+
+/* ── 스테이지 생성 (역방향: 추출 순서 → 상자 색 배정) ── */
+function gen(stage, salt = 0) {
+  const rnd = mulberry32(stage * 15013 + salt * 50333 + 3);
+  const nB = Math.min(3 + stage, 9);
+  const C = Math.min(3 + Math.floor(stage / 2), 7);
+  const boards = [], screws = [];
+  for (let z = 0; z < nB; z++) {
+    const w = 140 + rnd() * 60, h = 40 + rnd() * 12;
+    const b = { z, w, h, ang: (rnd() - 0.5) * 1.3,
+                cx: 90 + rnd() * 180, cy: 170 + rnd() * 280,
+                col: WOODS[(rnd() * WOODS.length) | 0], dead: false, fall: 0 };
+    boards.push(b);
+    const n = 2 + (rnd() < 0.45 ? 1 : 0);
+    const offs = n === 2 ? [-(w / 2 - 24), w / 2 - 24] : [-(w / 2 - 24), 0, w / 2 - 24];
+    for (const ox of offs) screws.push({ id: screws.length, bz: z, ox, state: "on" });
+  }
+  // 나사 수를 3의 배수로 (3개짜리 판의 가운데 나사부터 제거)
+  while (screws.filter((s) => s.state === "on").length % 3 !== 0) {
+    const mid = screws.find((s) => s.state === "on" && s.ox === 0 &&
+      screws.filter((k) => k.state === "on" && k.bz === s.bz).length === 3);
+    if (mid) { mid.state = "cut"; continue; }
+    const bz = boards.filter((b) => screws.some((s) => s.bz === b.z && s.state === "on"))
+                     .slice(-1)[0].z;
+    for (const s of screws) if (s.bz === bz) s.state = "cut";
+  }
+  const live = screws.filter((s) => s.state === "on");
+  for (const b of boards) b.ghost = !live.some((s) => s.bz === b.z);   // 나사 없는 판은 없는 셈
+  // 추출 가능 순서 시뮬레이션 (판 위에 다른 판이 없으면 풀 수 있음)
+  const posOf = (s) => {
+    const b = boards[s.bz];
+    return [b.cx + Math.cos(b.ang) * s.ox, b.cy + Math.sin(b.ang) * s.ox];
+  };
+  const inBoard = (b, x, y) => {
+    const dx = x - b.cx, dy = y - b.cy;
+    const lx = dx * Math.cos(-b.ang) - dy * Math.sin(-b.ang);
+    const ly = dx * Math.sin(-b.ang) + dy * Math.cos(-b.ang);
+    return Math.abs(lx) < b.w / 2 - 4 && Math.abs(ly) < b.h / 2 - 4;
+  };
+  const taken = new Set(), order = [];
+  while (order.length < live.length) {
+    const aliveZ = new Set(live.filter((s) => !taken.has(s.id)).map((s) => s.bz));
+    const free = live.filter((s) => {
+      if (taken.has(s.id)) return false;
+      const [x, y] = posOf(s);
+      return !boards.some((b) => b.z > s.bz && aliveZ.has(b.z) && inBoard(b, x, y));
+    });
+    const pick = free[(rnd() * free.length) | 0];
+    taken.add(pick.id); order.push(pick.id);
+  }
+  // 3개씩 끊어 상자 색 배정 (연속 같은 색 회피)
+  const queue = [];
+  let prev = -1;
+  for (let i = 0; i < order.length / 3; i++) {
+    let c = (rnd() * C) | 0;
+    if (c === prev) c = (c + 1) % C;
+    prev = c; queue.push(c);
+    for (let k = 0; k < 3; k++) {
+      live.find((s) => s.id === order[i * 3 + k]).col = c;
+    }
+  }
+  return { boards, screws: live.map((s) => ({ ...s, state: "on" })), queue,
+           solution: order, posOf, inBoard };
+}
+
+const diffOf = (g) => {
+  const uniq = new Set(g.queue).size;
+  return 100 * clamp01((g.queue.length - 3) / 8 * 0.6 + (uniq - 3) / 4 * 0.4);
+};
+
+// 유사도 지문: 판자 배치(양자화 좌표·기울기) + 상자 색 순서 토큰
+const fpOf = (g) => g.boards.filter((b) => !b.ghost)
+  .map((b) => `b:${Math.round(b.cx / 40)},${Math.round(b.cy / 40)},${Math.round(b.ang * 2)}`)
+  .concat(g.queue.map((c, i) => `q${i}:${c}`));
+const simFp = (a, b) => {
+  const A = new Set(a), B = new Set(b);
+  let hit = 0;
+  for (const x of A) if (B.has(x)) hit++;
+  return hit / Math.max(1, Math.max(A.size, B.size));
+};
+const fpCache = new Map();
+const structFp = (s2) => {
+  if (s2 < 1) return [];
+  if (!fpCache.has(s2)) fpCache.set(s2, fpOf(gen(s2, 0)));
+  return fpCache.get(s2);
+};
+
+// 레벨 자동 재배치 + 유사도 검출: 후보 판마다 (목표 난이도와의 거리) +
+// (직전 두 스테이지 구조 지문과의 자카드 유사도 × 30) 점수가 가장 낮은
+// 판을 채택한다. 이웃 지문은 살트0 구조라 스테이지의 순수 함수 —
+// 시드 고정 결정론(모두 같은 판)이 그대로 유지된다.
+function genTuned(stage) {
+  const T = targetD(stage);
+  const p1 = structFp(stage - 1), p2 = structFp(stage - 2);
+  let best = null, bestScore = Infinity;
+  for (let v = 0; v < 6; v++) {
+    const g = gen(stage, v);
+    const fp = fpOf(g);
+    const score = Math.abs(diffOf(g) - T) +
+      30 * Math.max(simFp(fp, p1), simFp(fp, p2));
+    if (score < bestScore) { bestScore = score; best = g; }
+    if (bestScore <= 6) break;
+  }
+  return best;
+}
+window.blDiffAt = (s) => diffOf(genTuned(s));
+window.blSimAt = (s) => s < 2 ? 0 : simFp(fpOf(genTuned(s)), fpOf(genTuned(s - 1)));
+
+/* ── 상태 ─────────────────────────────────────────────── */
+const BEST_KEY = "bl-screwrush-best";
+let best = 0;
+try { best = +localStorage.getItem(BEST_KEY) || 0; } catch {}
+let stage = 1, score = 0, advT = 0;
+let phase = "title";
+let G = null, qi = 0, boxFill = 0, tray = [], anims = [], denyId = -1, denyT = 0;
+
+function loadStage() {
+  G = genTuned(stage);
+  for (const b of G.boards) { b.dead = b.ghost; b.fall = b.ghost ? 99 : 0; }
+  qi = 0; boxFill = 0; tray = []; anims = []; denyId = -1;
+  dScore = diffOf(G);
+  phase = "play";
+  window.__sw = {                                      // 테스트/디버그용
+    solution: G.solution,
+    pos: (id) => G.posOf(G.screws.find((s) => s.id === id)),
+    state: () => ({ qi, boxFill, active: activeColor(), tray: tray.map((s) => s.col) }),
+    list: () => G.screws.map((s) => ({ id: s.id, col: s.col, state: s.state,
+                                       acc: accessible(s) })),
+  };
+  hud();
+}
+
+const aliveBoards = () => G.boards.filter((b) => !b.dead);
+function accessible(s) {
+  if (s.state !== "on") return false;
+  const [x, y] = G.posOf(s);
+  return !aliveBoards().some((b) => b.z > s.bz && G.inBoard(b, x, y));
+}
+function checkBoardDeath(bz) {
+  if (!G.screws.some((s) => s.bz === bz && s.state === "on")) {
+    G.boards[bz].dead = true;
+  }
+}
+function activeColor() { return G.queue[qi]; }
+
+function autoMove() {
+  let moved = true;
+  while (moved) {
+    moved = false;
+    const i = tray.findIndex((s) => s.col === activeColor());
+    if (i >= 0 && boxFill < 3) {
+      tray.splice(i, 1)[0].state = "boxed";
+      boxFill++; moved = true;
+    }
+    if (boxFill === 3) { qi++; boxFill = 0; moved = qi < G.queue.length; }
+  }
+  hud();
+}
+
+function tap(id) {
+  if (phase !== "play") return;
+  const s = G.screws.find((k) => k.id === id);
+  if (!s || s.state !== "on") return;
+  if (!accessible(s)) { denyId = id; denyT = 0.5; return; }
+  const [x, y] = G.posOf(s);
+  s.state = "moving";
+  if (s.col === activeColor() && boxFill < 3) {
+    boxFill++; s.state = "boxed";
+    anims.push({ x, y, tx: 120, ty: 62, col: PAL[s.col], t: 0 });
+    if (boxFill === 3) { qi++; boxFill = 0; autoMove(); }
+  } else {
+    s.state = "tray"; tray.push(s);
+    anims.push({ x, y, tx: 80 + (tray.length - 1) * 50, ty: 545, col: PAL[s.col], t: 0 });
+    if (tray.length > TRAY_CAP) return fail("트레이가 넘쳤어요!");
+  }
+  checkBoardDeath(s.bz);
+  if (G.screws.every((k) => k.state !== "on" && k.state !== "tray")) return win();
+  // 데드락: 트레이 만석 + 꺼낼 수 있는 나사 중 상자 색이 없음
+  if (tray.length === TRAY_CAP && qi < G.queue.length &&
+      !G.screws.some((k) => k.state === "on" && k.col === activeColor() && accessible(k)) &&
+      !tray.some((k) => k.col === activeColor())) {
+    return fail("트레이가 꽉 차서 손이 묶였어요.");
+  }
+  hud();
+}
+
+function fail(msg) {
+  phase = "fail";
+  clearTimeout(advT);
+  if (score > best) {
+    best = score;
+    try { localStorage.setItem(BEST_KEY, best); } catch {}
+  }
+  if (score >= 1) window.blWeeklyReport?.(score);
+  hud();
+  const quips = ["광고 속 그 사람도 트레이부터 채우더라고요.",
+                 "괜찮아요. 나사는 원래 풀라고 있는 건데 뭐.",
+                 "드라이버 탓을 해봅시다."];
+  show("🧰", `${score}판 연속 클리어`,
+       msg + `\n스테이지 ${stage}에서 끝났어요.\n\n` + quips[(Math.random() * quips.length) | 0],
+       "처음부터 다시");
+}
+function win() {
+  phase = "win";
+  score++;
+  hud();
+  const t = $("toast");
+  t.textContent = `🏆 ${score}연속! 다음 판으로…`;
+  t.classList.remove("hide");
+  clearTimeout(advT);
+  advT = setTimeout(() => {
+    t.classList.add("hide");
+    if (phase !== "win") return;
+    stage++;
+    loadStage();
+  }, 900);
+}
+
+/* ── 그리기 ───────────────────────────────────────────── */
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+let scale = 1, ox = 0, oy = 0;
+function resize() {
+  const dpr = devicePixelRatio || 1;
+  cv.width = innerWidth * dpr; cv.height = innerHeight * dpr;
+  cv.style.width = innerWidth + "px"; cv.style.height = innerHeight + "px";
+  scale = Math.min(innerWidth / W, innerHeight / H);
+  ox = (innerWidth - W * scale) / 2; oy = (innerHeight - H * scale) / 2;
+}
+addEventListener("resize", resize); resize();
+
+function drawScrew(x, y, col, dim) {
+  ctx.beginPath(); ctx.arc(x, y, SCREW_R, 0, 7);
+  ctx.fillStyle = col; ctx.fill();
+  ctx.lineWidth = 2; ctx.strokeStyle = "rgba(0,0,0,.35)"; ctx.stroke();
+  ctx.beginPath(); ctx.lineWidth = 2.5; ctx.strokeStyle = "rgba(255,255,255,.75)";
+  ctx.moveTo(x - 5, y); ctx.lineTo(x + 5, y);
+  ctx.moveTo(x, y - 5); ctx.lineTo(x, y + 5); ctx.stroke();
+  if (dim) { ctx.beginPath(); ctx.arc(x, y, SCREW_R, 0, 7);
+             ctx.fillStyle = "rgba(0,0,0,.28)"; ctx.fill(); }
+}
+
+function draw(dt) {
+  const D = dark.matches, dpr = devicePixelRatio || 1;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = D ? "#0b0f17" : "#f3f0e8";
+  ctx.fillRect(0, 0, innerWidth, innerHeight);
+  ctx.setTransform(dpr * scale, 0, 0, dpr * scale, dpr * ox, dpr * oy);
+  if (phase === "title" || !G) return;
+
+  // 상자(진행) UI
+  const ac = activeColor();
+  if (qi < G.queue.length) {
+    ctx.fillStyle = D ? "#241d33" : "#fff7e8";
+    ctx.strokeStyle = PAL[ac]; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.roundRect(60, 42, 120, 40, 10); ctx.fill(); ctx.stroke();
+    for (let k = 0; k < 3; k++) {
+      ctx.beginPath(); ctx.arc(90 + k * 30, 62, 10, 0, 7);
+      if (k < boxFill) { ctx.fillStyle = PAL[ac]; ctx.fill(); }
+      else { ctx.strokeStyle = PAL[ac]; ctx.lineWidth = 2; ctx.setLineDash([3, 3]);
+             ctx.stroke(); ctx.setLineDash([]); }
+    }
+    for (let k = 1; k <= 2 && qi + k < G.queue.length; k++) {
+      ctx.beginPath(); ctx.arc(206 + k * 26, 62, 8, 0, 7);
+      ctx.fillStyle = PAL[G.queue[qi + k]]; ctx.globalAlpha = 0.5; ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // 판자 + 나사 (z 낮은 것부터)
+  for (const b of G.boards) {
+    if (b.dead && b.fall > 1.2) continue;
+    if (b.dead) b.fall += dt * 2.2;
+    const fy = b.dead ? b.fall * b.fall * 220 : 0;
+    ctx.save();
+    ctx.globalAlpha = b.dead ? Math.max(0, 1 - b.fall) : 1;
+    ctx.translate(b.cx, b.cy + fy); ctx.rotate(b.ang);
+    ctx.fillStyle = b.col;
+    ctx.strokeStyle = "rgba(0,0,0,.25)"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(-b.w / 2, -b.h / 2, b.w, b.h, 12);
+    ctx.fill(); ctx.stroke();
+    ctx.restore();
+    for (const s of G.screws) {
+      if (s.bz !== b.z || s.state !== "on") continue;
+      const [x, y] = G.posOf(s);
+      const shake = s.id === denyId && denyT > 0 ? Math.sin(denyT * 60) * 3 : 0;
+      drawScrew(x + shake, y, PAL[s.col], !accessible(s));
+    }
+  }
+  if (denyT > 0) denyT -= dt;
+
+  // 트레이
+  ctx.fillStyle = D ? "#241d33" : "#fff7e8";
+  ctx.strokeStyle = D ? "rgba(232,221,203,.3)" : "rgba(58,43,24,.3)";
+  ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.roundRect(52, 522, 256, 46, 12); ctx.fill(); ctx.stroke();
+  for (let k = 0; k < TRAY_CAP; k++) {
+    const tx2 = 80 + k * 50;
+    if (k < tray.length) drawScrew(tx2, 545, PAL[tray[k].col], false);
+    else { ctx.beginPath(); ctx.arc(tx2, 545, 10, 0, 7);
+           ctx.strokeStyle = D ? "rgba(232,221,203,.25)" : "rgba(58,43,24,.25)";
+           ctx.lineWidth = 2; ctx.setLineDash([3, 3]); ctx.stroke(); ctx.setLineDash([]); }
+  }
+
+  // 날아가는 나사 애니메이션
+  for (const a of anims) {
+    a.t += dt * 2.6;
+    const f = Math.min(1, a.t), e = 1 - (1 - f) * (1 - f);
+    drawScrew(a.x + (a.tx - a.x) * e, a.y + (a.ty - a.y) * e, a.col, false);
+  }
+  anims = anims.filter((a) => a.t < 1);
+}
+
+let last = performance.now();
+function loop(t) {
+  let dt = (t - last) / 1000; last = t;
+  if (dt > 0.05) dt = 0.05;
+  draw(dt);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+/* ── 입력/UI ──────────────────────────────────────────── */
+const $ = (id) => document.getElementById(id);
+function hud() {
+  const left = G ? G.screws.filter((s) => s.state === "on").length : 0;
+  $("hStage").textContent = `🔥 ${score}연속 · 스테이지 ${stage} ${starsOf(dScore)} · 🔩 ${left}`;
+}
+function show(emoji, title, msg, btnText) {
+  $("oEmoji").textContent = emoji; $("oTitle").textContent = title;
+  $("oMsg").textContent = msg; $("btn").textContent = btnText;
+  $("best").textContent = best ? `최고 기록: ${best}연속` : "";
+  $("overlay").classList.remove("hide");
+}
+function newRun() {
+  clearTimeout(advT);
+  $("toast").classList.add("hide");
+  stage = 1; score = 0;
+  $("overlay").classList.add("hide");
+  loadStage();
+}
+$("btn").addEventListener("click", newRun);
+// ↻ 는 같은 판 재시도가 아니라 이번 판을 포기하고 1스테이지부터 새로 시작한다
+$("retry").addEventListener("click", () => { if (phase === "play" || phase === "win") newRun(); });
+
+addEventListener("pointerdown", (e) => {
+  if (e.target === cv) e.preventDefault();   // 모바일 더블탭 줌·고스트 클릭 방지
+  if (phase !== "play") return;
+  const x = (e.clientX - ox) / scale, y = (e.clientY - oy) / scale;
+  let hit = null, hd = 22;
+  for (const s of G.screws) {
+    if (s.state !== "on") continue;
+    const [sx, sy] = G.posOf(s);
+    const d = Math.hypot(x - sx, y - sy);
+    if (d < hd) { hd = d; hit = s; }
+  }
+  if (hit) tap(hit.id);
+});
+
+window.blShareText = () => `나사 러시 ${best}연속! 한 번도 안 틀리고 도전해보세요 🔩`;
+window.blWeekly = { game: "screwrush", dir: "max", fmt: (v) => `${v}연속` };
+if (best) $("best").textContent = `최고 기록: ${best}연속`;
+window.__swRun = { state: () => ({ phase, stage, score, best }), win: () => win(),
+                   fail: (m = "테스트 실패") => fail(m), newRun: () => newRun() };
+</script>
+<script defer src="/_shared/records.js"></script>
+<script defer src="/_shared/share.js"></script>
+<script defer src="/_shared/like.js"></script>
+</body>
+</html>

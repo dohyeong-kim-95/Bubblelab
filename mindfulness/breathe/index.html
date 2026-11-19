@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#e9f7f4">
+  <meta name="description" content="버블의 움직임과 소리를 따라 편안하게 호흡하는 1분 마음챙김 카드">
+  <title>숨방울 — Bubble Mindfulness</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body data-view="intro" data-mode="both">
+  <div class="ambient" aria-hidden="true">
+    <i></i><i></i><i></i><i></i><i></i>
+  </div>
+
+  <header class="topbar">
+    <a class="back" href="../" aria-label="마음챙김 카드로 돌아가기">‹ <span>카드</span></a>
+    <a class="brand" href="../">mindfulness<span>.bubblelab.dev</span></a>
+    <button class="quiet-button" id="infoButton" type="button" aria-haspopup="dialog">안내</button>
+  </header>
+
+  <main>
+    <section class="intro-view" id="introView" aria-labelledby="pageTitle">
+      <div class="hero-bubble" aria-hidden="true"><span></span></div>
+      <p class="eyebrow">1 minute mindful breathing</p>
+      <h1 id="pageTitle">숨방울</h1>
+      <p class="lead">버블의 흐름을 따라<br>편안한 만큼 호흡해요.</p>
+
+      <fieldset class="mode-picker">
+        <legend>어떻게 안내받을까요?</legend>
+        <div class="mode-grid">
+          <label class="mode-card">
+            <input type="radio" name="mode" value="visual">
+            <span class="mode-icon" aria-hidden="true">◉</span>
+            <strong>버블 보기</strong>
+            <small>움직임과 문구</small>
+          </label>
+          <label class="mode-card">
+            <input type="radio" name="mode" value="audio">
+            <span class="mode-icon sound-icon" aria-hidden="true">♪</span>
+            <strong>소리 듣기</strong>
+            <small>휴대폰을 내려놓고</small>
+          </label>
+          <label class="mode-card">
+            <input type="radio" name="mode" value="both" checked>
+            <span class="mode-icon" aria-hidden="true">◉<b>♪</b></span>
+            <strong>함께하기</strong>
+            <small>버블과 소리</small>
+          </label>
+        </div>
+      </fieldset>
+
+      <div class="audio-options" id="audioOptions">
+        <button class="preview-button" id="previewButton" type="button">
+          <span class="preview-icon" aria-hidden="true">♪</span>
+          <span><strong>소리 미리 듣기</strong><small>올라가면 들이마시고, 내려가면 내쉬어요</small></span>
+        </button>
+        <div class="volume-control">
+          <label for="volume">음량</label>
+          <input id="volume" type="range" min="0" max="100" value="55">
+          <output id="volumeOutput" for="volume">55%</output>
+        </div>
+      </div>
+
+      <details class="advanced-settings" id="advancedSettings">
+        <summary>고급 설정 <span>＋</span></summary>
+        <label class="sleep-setting">
+          <span>
+            <strong>잠들기 모드</strong>
+            <small>5분 동안 이어지고 마지막 1분에 소리가 사라져요</small>
+          </span>
+          <input id="sleepMode" type="checkbox" role="switch">
+        </label>
+        <p>종료음과 완료 알림 없이 조용히 끝납니다. 화면도 서서히 어두워져요.</p>
+      </details>
+
+      <button class="start-button" id="startButton" type="button">
+        <span>시작하기</span><small id="startSummary">4초 들이마시고 · 6초 내쉬기</small>
+      </button>
+      <p class="gentle-note">버블보다 내 호흡을 우선해도 괜찮아요.</p>
+    </section>
+
+    <section class="practice-view" id="practiceView" aria-labelledby="phaseText" hidden>
+      <div class="practice-heading">
+        <p id="roundText">준비</p>
+        <div class="round-dots" id="roundDots" aria-hidden="true">
+          <i></i><i></i><i></i><i></i><i></i><i></i>
+        </div>
+      </div>
+
+      <div class="breath-stage" id="breathStage">
+        <div class="breath-ring" aria-hidden="true"></div>
+        <div class="breath-bubble" id="breathBubble" aria-hidden="true">
+          <span class="shine"></span>
+          <i></i><i></i><i></i>
+        </div>
+        <div class="audio-rest" aria-hidden="true"><span>♪</span></div>
+      </div>
+
+      <div class="phase-copy">
+        <p class="phase-kicker" id="phaseKicker">잠시 후 시작해요</p>
+        <h2 id="phaseText" aria-live="polite">편안한 자세를 찾아보세요</h2>
+        <p id="phaseHint">휴대폰을 내려놓아도 좋아요</p>
+      </div>
+
+      <div class="practice-controls">
+        <button id="pauseButton" type="button"><span aria-hidden="true">Ⅱ</span><b>일시정지</b></button>
+        <button id="stopButton" type="button"><span aria-hidden="true">×</span><b>그만하기</b></button>
+      </div>
+    </section>
+
+    <section class="complete-view" id="completeView" aria-labelledby="completeTitle" hidden>
+      <div class="complete-bubbles" aria-hidden="true"><i></i><i></i><i></i></div>
+      <p class="eyebrow">welcome back</p>
+      <h2 id="completeTitle">잠깐 멈춰<br>있었습니다.</h2>
+      <p>호흡을 조절하지 않아도 괜찮아요.<br>지금의 몸과 마음을 가볍게 느껴보세요.</p>
+      <div class="complete-actions">
+        <button id="againButton" class="start-button" type="button">다시 하기</button>
+        <a href="../">카드로 돌아가기</a>
+      </div>
+    </section>
+  </main>
+
+  <div class="sleep-shade" aria-hidden="true"></div>
+
+  <dialog id="infoDialog">
+    <div class="dialog-card">
+      <button class="dialog-close" id="dialogClose" type="button" aria-label="닫기">×</button>
+      <p class="eyebrow">before you begin</p>
+      <h2>내 호흡이 먼저예요.</h2>
+      <p>버블과 소리는 가벼운 안내일 뿐이에요. 억지로 깊게 쉬거나 정확히 맞추지 않아도 괜찮습니다.</p>
+      <ul>
+        <li>눈은 감거나 편안한 한곳을 바라보세요.</li>
+        <li>답답하거나 어지러우면 자연스러운 호흡으로 돌아가세요.</li>
+        <li>언제든 멈추거나 나갈 수 있어요.</li>
+      </ul>
+      <button class="dialog-confirm" id="dialogConfirm" type="button">알겠어요</button>
+    </div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="./app.js"></script>
+</body>
+</html>

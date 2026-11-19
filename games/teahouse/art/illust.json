@@ -1,0 +1,50 @@
+{
+  "harin": {
+    "ext": "webp",
+    "faces": [
+      "normal",
+      "surprised",
+      "teary",
+      "sleepy",
+      "smile"
+    ],
+    "standing": [
+      512,
+      768
+    ],
+    "face": [
+      192,
+      192
+    ]
+  },
+  "mother": {
+    "ext": "webp",
+    "faces": [
+      "normal",
+      "smile"
+    ],
+    "standing": [
+      512,
+      768
+    ],
+    "face": [
+      192,
+      192
+    ]
+  },
+  "cat": {
+    "ext": "webp",
+    "faces": [
+      "normal",
+      "blink"
+    ],
+    "standing": [
+      512,
+      768
+    ],
+    "face": [
+      192,
+      192
+    ]
+  }
+}

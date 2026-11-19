@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#4A4038">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>만화 사주 접수증 · 운세 노트</title>
+<meta name="description" content="신청하신 만화 사주가 지금 어디쯤인지 보는 곳이에요.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🧾</text></svg>">
+<link rel="stylesheet" href="../fonts/fonts.css">
+<link rel="stylesheet" href="../note.css">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-title" content="만화 사주">
+</head>
+<body>
+<div class="book">
+<main class="page receipt-page">
+  <h1 class="hand h-title ask">만화 사주<br>접수증</h1>
+
+  <section class="scrap" id="rc">
+    <span class="tape"></span>
+    <p class="hand h-sub say" id="rc-head" aria-live="polite">불러오는 중이에요…</p>
+    <p id="rc-text"></p>
+    <p class="row-actions" id="rc-get-row" hidden><a class="pen sm" id="rc-get" href="../get/">만화 사주 보러 가기 →</a></p>
+    <p class="small" id="rc-expire" hidden></p>
+  </section>
+
+  <section id="rc-paste" hidden>
+    <p>신청을 마치고 받은 접수증 링크를 붙여 넣어 주세요. 이 기기에 적어 두고 다음부터는 바로 열어요.</p>
+    <p class="field one"><input class="blank wfull" id="rc-paste-input" autocomplete="off" autocapitalize="none" spellcheck="false" inputmode="url" placeholder="접수증 링크" aria-label="접수증 링크"></p>
+    <p class="row-actions"><button type="button" class="pen sm" id="rc-paste-go">열기</button></p>
+    <p class="small" id="rc-paste-err" aria-live="polite"></p>
+  </section>
+
+  <section id="rc-keep" hidden>
+    <p><b>보통 하루 안에 완성돼요, 이 링크를 저장해 두세요.</b></p>
+    <p class="small">다 되면 적어 주신 인스타 DM 이나 메일로 링크를 보내 드려요. 아래 알림과 캘린더는 덤이라, 안 해 두셔도 받으실 수 있어요. 이 링크는 링크를 아는 사람만 열 수 있으니 남에게 보내지 마세요.</p>
+    <p class="row-actions">
+      <button type="button" class="pen sm" id="rc-copy">링크 복사</button>
+      <button type="button" class="pen sm" id="rc-again">다시 보기</button>
+    </p>
+  </section>
+
+  <section id="rc-extra" hidden>
+    <p class="row-actions" id="rc-push-row" hidden><button type="button" class="pen sm" id="rc-push">완성되면 알림 받기</button></p>
+    <div id="rc-ios" hidden>
+      <p>아이폰은 홈 화면에 추가한 앱에서만 알림을 받을 수 있어요.</p>
+      <ol class="steps small">
+        <li>위의 「링크 복사」를 먼저 눌러 두세요.</li>
+        <li>공유 버튼 → 「홈 화면에 추가」를 눌러요.</li>
+        <li>홈 화면에서 열고(링크를 물으면 붙여 넣어요) 「완성되면 알림 받기」를 눌러요.</li>
+      </ol>
+    </div>
+    <p class="small" id="rc-push-help" aria-live="polite"></p>
+    <p class="row-actions"><a class="pen sm" id="rc-cal" href="/_fortune/ig-form/reminder.ics">내일 확인 알림을 캘린더에 넣기</a></p>
+  </section>
+
+  <p class="small gap"><a class="link" href="../">운세 노트에서 오늘의 운세 보기 →</a> · <a class="link" href="../privacy/">개인정보처리방침</a></p>
+</main>
+</div>
+<script src="../vendor/rough.min.js"></script>
+<script src="../note.js"></script>
+<script src="receipt-lib.js"></script>
+<script src="receipt.js"></script>
+</body>
+</html>

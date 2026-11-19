@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>🚗 주차 러시 — 한 번 박으면 끝</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🚗</text></svg>">
+<link rel="stylesheet" href="/_shared/bubble.css">
+<style>
+  /* 재료는 공용 bubble.css(토큰·bl- 부품). 판(캔버스)은 게임 내용이라 그대로 둔다. */
+  :root { color-scheme: light dark; --accent-h: 10; }
+  html, body { height: 100%; }
+  body { margin: 0; overflow: hidden; user-select: none; -webkit-user-select: none;
+         touch-action: none; }
+  canvas { display: block; touch-action: none; }
+
+  /* HUD — 이름 방울 + 숫자 칩. 판 위에 떠 있으니 칩은 반투명 종이면 */
+  #hud { position: fixed; top: 0; left: 0; right: 0; display: flex; gap: .45rem;
+         align-items: center; padding: .5rem .7rem; font-size: var(--t-caption); z-index: 3;
+         pointer-events: none; white-space: nowrap; color: var(--ink); }
+  #hud .sp { flex: 1; }
+  #hud > span:first-child { flex: 0 1 auto; min-width: 0; overflow: hidden;
+                            text-overflow: ellipsis; display: inline-flex; align-items: center;
+                            gap: .4rem; font-size: var(--t-small); }
+  #hud b { font-weight: 800; letter-spacing: -.01em; }
+  .hud-bubble { width: 1.75rem; font-size: .95rem; flex: none; }
+  .hud-chip { padding: .22rem .6rem; border-radius: var(--pill); font-weight: 600;
+              background: color-mix(in srgb, var(--field) 86%, transparent);
+              border: 1px solid var(--line); }
+  .hud-chip:empty { display: none; }
+  .hud-btn { pointer-events: auto; min-height: 2rem; padding: .2rem .75rem; }
+
+  /* 시작·결과 카드 — 재료는 bl-glass, 위치·크기만 여기서. 방울·제목·설명·주 버튼 */
+  #overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+             display: flex; flex-direction: column; align-items: center; gap: .85rem;
+             width: min(84vw, 21rem); box-sizing: border-box; padding: 1.6rem 1.5rem 1.4rem;
+             text-align: center; z-index: 5; }
+  #overlay.hide { display: none; }
+  #overlay .big { width: 4rem; font-size: 2rem; margin: 0 0 .1rem; }
+  #overlay h1 { margin: 0; font-size: var(--t-h1); font-weight: 800; letter-spacing: -.02em;
+                line-height: 1.25; }
+  #overlay p { margin: 0; font-size: var(--t-small); line-height: 1.6; color: var(--muted);
+               white-space: pre-line; }
+  #btn { font-size: 1.05rem; padding: .75rem 2.2rem; min-height: 3rem; }
+  #overlay #best { margin: 0; font-size: var(--t-caption); min-height: 1.1em; }
+
+  #go.hide { display: none; }
+  #btn.hide { display: none; }
+</style>
+</head>
+<body>
+<div id="hud">
+  <span><span class="bl-bubble hud-bubble" aria-hidden="true">🚗</span> <b>주차 러시</b></span>
+  <span class="sp"></span>
+  <span id="hStage" class="hud-chip bl-num"></span>
+  <button id="go" class="bl-btn bl-btn--sm bl-btn--primary hud-btn hide" disabled>출발!</button>
+  <button id="retry" class="bl-btn bl-btn--sm hud-btn" title="그린 길 지우기">↻</button>
+</div>
+<div id="overlay" class="bl-glass">
+  <p class="big bl-bubble" id="oEmoji">🚗</p>
+  <h1 id="oTitle">주차 러시</h1>
+  <p id="oMsg">주차선 긋기 게임의 한 판 승부 버전.
+차에서 같은 색 P까지 길을 그리고 출발!
+모든 차가 동시에 달립니다.
+
+한 번이라도 부딪히면 그대로 끝.
+스테이지 1부터 몇 판 연속 클리어하나가 점수예요.</p>
+  <button id="btn" class="bl-btn bl-btn--primary">시작</button>
+  <p id="best" class="bl-note bl-num"></p>
+</div>
+<canvas id="cv"></canvas>
+<script>
+"use strict";
+// 정적 난이도(0~100)와 별점 — DIFFICULTY.md Phase 1
+const clamp01 = (x) => Math.max(0, Math.min(1, x));
+const starsOf = (d) => "\u2605".repeat(Math.max(1, Math.min(5, Math.ceil(d / 20))));
+let dScore = 0;
+const targetD = (s) => Math.min(90, 5 + 4.7 * s);
+
+/* ── 상수 ─────────────────────────────────────────────── */
+const W = 360, H = 640, CAR_R = 15, CRASH_D = 30, BASE_SPD = 130;
+const PAL = ["#e5484d", "#3b82f6", "#46a758", "#f79009", "#8e4ec6"];
+const dark = matchMedia("(prefers-color-scheme: dark)");
+
+/* ── 자동 레벨 제너레이터 ─────────────────────────────── */
+// 구성적 풀이 보장: k번째 차는 자기 전용 스톨 존(사각 구역)에서 앞선 차들이
+// 전부 주차할 때까지 맴돌다가 존 중심 → 주차칸 직선으로 출발하면 항상 성공.
+// 생성 시 그 전략이 성립하는 기하 여유(존끼리·존-주차칸·경로-존 거리)를
+// 검사하고, 난이도는 "직선끼리 가까이 지나가는 쌍" 수로 강제한다.
+const mulberry32 = (a) => () => {
+  a |= 0; a = (a + 0x6D2B79F5) | 0;
+  let t = Math.imul(a ^ (a >>> 15), 1 | a);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+const dist2 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+function segPointDist(a, b, p) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy || 1;
+  let t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  return Math.hypot(p[0] - (a[0] + dx * t), p[1] - (a[1] + dy * t));
+}
+const rectPointDist = (bx, p) => Math.hypot(
+  Math.max(bx.x1 - p[0], 0, p[0] - bx.x2), Math.max(bx.y1 - p[1], 0, p[1] - bx.y2));
+const rectGap = (a, b) => Math.hypot(
+  Math.max(a.x1 - b.x2, 0, b.x1 - a.x2), Math.max(a.y1 - b.y2, 0, b.y1 - a.y2));
+function segRectDist(a, b, bx) {                    // 샘플링 근사(8px 간격)
+  const n = Math.max(2, Math.ceil(dist2(a, b) / 8));
+  let m = Infinity;
+  for (let i = 0; i <= n; i++) {
+    m = Math.min(m, rectPointDist(bx, [a[0] + (b[0] - a[0]) * i / n,
+                                       a[1] + (b[1] - a[1]) * i / n]));
+  }
+  return m;
+}
+function segSegDist(a, b, c, d) {
+  const n = Math.max(2, Math.ceil(dist2(a, b) / 10));
+  let m = Infinity;
+  for (let i = 0; i <= n; i++) {
+    m = Math.min(m, segPointDist(c, d, [a[0] + (b[0] - a[0]) * i / n,
+                                        a[1] + (b[1] - a[1]) * i / n]));
+  }
+  return m;
+}
+const carsFor = (stage) =>
+  1 + (stage >= 2 ? 1 : 0) + (stage >= 5 ? 1 : 0) + (stage >= 9 ? 1 : 0) +
+  (stage >= 14 ? 1 : 0) + (stage >= 40 ? 1 : 0);
+
+function gen(stage, salt = 0, forceCars = 0) {
+  const nCars = forceCars || carsFor(stage);
+  // 대수가 늘수록 화면이 비좁아 존·간격 요구를 단계적으로 완화한다
+  // (충돌 안전에 필요한 최소 여유(차 지름 30px)는 항상 지킨다)
+  const half = nCars >= 6 ? 28 : nCars >= 5 ? 36 : 46;
+  const startGap = nCars >= 6 ? 66 : nCars >= 5 ? 82 : 90;
+  const spotGap = nCars >= 6 ? 58 : nCars >= 5 ? 72 : 80;
+  const spotStart = nCars >= 6 ? 52 : 60;
+  const driveMin = nCars >= 6 ? 185 : 220;
+  const boxGap = nCars >= 6 ? 32 : 34;
+  const lineSpot = nCars >= 6 ? 34 : 36;
+  const lineBox = nCars >= 6 ? 31 : 30;
+  const maxPairs = nCars * (nCars - 1) / 2;
+  const baseCross = nCars < 2 ? 0 : stage < 5 ? 1
+    : Math.min(maxPairs - 1, nCars - 1 + Math.max(0, Math.floor((stage - 14) / 12)));
+  for (const needCross of [baseCross, Math.floor(baseCross / 2), 0]) {
+    for (let attempt = 0; attempt < 2200; attempt++) {
+      const rnd = mulberry32(stage * 70241 + attempt * 449 + needCross * 131 + salt * 15877 + 7);
+      const P = () => [50 + rnd() * 260, 85 + rnd() * 510];
+      const starts = [], spots = [];
+      let ok = true;
+      for (let i = 0; i < nCars && ok; i++) {
+        let s = null, g = null;
+        for (let t = 0; t < 60 && !s; t++) {
+          const c = P();
+          if (starts.every((o) => dist2(c, o) >= startGap) &&
+              spots.every((o) => dist2(c, o) >= spotStart)) s = c;
+        }
+        if (!s) { ok = false; break; }
+        starts.push(s);
+        for (let t = 0; t < 60 && !g; t++) {
+          const c = P();
+          if (dist2(c, s) >= driveMin && spots.every((o) => dist2(c, o) >= spotGap) &&
+              starts.every((o) => dist2(c, o) >= spotStart)) g = c;
+        }
+        if (!g) { ok = false; break; }
+        spots.push(g);
+      }
+      if (!ok) continue;
+      // 스톨 존 (1번 차부터)
+      const boxes = [null];
+      for (let k = 1; k < nCars && ok; k++) {
+        const b = { x1: Math.max(16, starts[k][0] - half), y1: Math.max(70, starts[k][1] - half),
+                    x2: Math.min(344, starts[k][0] + half), y2: Math.min(624, starts[k][1] + half) };
+        if (boxes.some((o) => o && rectGap(b, o) < boxGap)) ok = false;
+        if (rectPointDist(b, starts[0]) < boxGap) ok = false;
+        for (const g of spots) if (rectPointDist(b, g) < boxGap) ok = false;
+        boxes.push(b);
+      }
+      if (!ok) continue;
+      // 출발 경로(존 중심 → 주차칸): 먼저 주차된 칸·아직 대기 중인 존과 여유
+      for (let k = 0; k < nCars && ok; k++) {
+        const from = k === 0 ? starts[0]
+          : [(boxes[k].x1 + boxes[k].x2) / 2, (boxes[k].y1 + boxes[k].y2) / 2];
+        for (let j = 0; j < k && ok; j++) {
+          if (segPointDist(from, spots[k], spots[j]) < lineSpot) ok = false;
+        }
+        for (let j = k + 1; j < nCars && ok; j++) {
+          if (segRectDist(from, spots[k], boxes[j]) < lineBox) ok = false;
+        }
+      }
+      if (!ok) continue;
+      // 난이도: 순진한 동시 직진이 위험해지는(가까이 지나는) 쌍 수
+      let cross = 0;
+      for (let i = 0; i < nCars; i++) {
+        for (let j = i + 1; j < nCars; j++) {
+          if (segSegDist(starts[i], spots[i], starts[j], spots[j]) < 42) cross++;
+        }
+      }
+      if (cross < needCross) continue;
+      return { defs: starts.map((s, i) => [s[0], s[1], spots[i][0], spots[i][1]]), boxes, cross };
+    }
+  }
+  // 그래도 실패하면 한 대 줄여 재시도 (1대 더미 대신 우아한 강등)
+  if (nCars > 1) return gen(stage, salt, nCars - 1);
+  return { defs: [[80, 520, 280, 120]], boxes: [null], cross: 0 };
+}
+const diffOf = (g) => 100 * clamp01((g.defs.length - 1) / 4 * 0.7 +
+  (g.cross ?? 0) / Math.max(1, g.defs.length * (g.defs.length - 1) / 2) * 0.3);
+
+// 유사도 지문: 출발 칸·주차 칸(60px 양자화, 순서 무관) 토큰
+const fpOf = (g) => g.defs.flatMap(([sx, sy, tx, ty]) => [
+  `s:${Math.round(sx / 60)},${Math.round(sy / 60)}`,
+  `p:${Math.round(tx / 60)},${Math.round(ty / 60)}`,
+]);
+const simFp = (a, b) => {
+  const A = new Set(a), B = new Set(b);
+  let hit = 0;
+  for (const x of A) if (B.has(x)) hit++;
+  return hit / Math.max(1, Math.max(A.size, B.size));
+};
+const fpCache = new Map();
+const structFp = (s2) => {
+  if (s2 < 1) return [];
+  if (!fpCache.has(s2)) fpCache.set(s2, fpOf(gen(s2, 0)));
+  return fpCache.get(s2);
+};
+
+// 레벨 자동 재배치 + 유사도 검출: 후보 판마다 (목표 난이도와의 거리) +
+// (직전 두 스테이지 구조 지문과의 자카드 유사도 × 30) 점수가 가장 낮은
+// 판을 채택한다. 이웃 지문은 살트0 구조라 스테이지의 순수 함수 —
+// 시드 고정 결정론(모두 같은 판)이 그대로 유지된다.
+function genTuned(stage) {
+  const T = targetD(stage);
+  const p1 = structFp(stage - 1), p2 = structFp(stage - 2);
+  let best = null, bestScore = Infinity;
+  for (let v = 0; v < 3; v++) {
+    const g = gen(stage, v);
+    const fp = fpOf(g);
+    const score = Math.abs(diffOf(g) - T) +
+      30 * Math.max(simFp(fp, p1), simFp(fp, p2));
+    if (score < bestScore) { bestScore = score; best = g; }
+    if (bestScore <= 6) break;
+  }
+  return best;
+}
+window.blDiffAt = (s) => diffOf(genTuned(s));
+window.blSimAt = (s) => s < 2 ? 0 : simFp(fpOf(genTuned(s)), fpOf(genTuned(s - 1)));
+
+/* ── 상태 ─────────────────────────────────────────────── */
+const BEST_KEY = "bl-parkrush-best";
+const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+let stage = 1, score = 0, best = +lsGet(BEST_KEY) || 0;
+let phase = "title";           // title | draw | run | win | fail
+let advanceT = 0;
+let cars = [], timer = 0, spd = BASE_SPD, tip = "", boom = null;
+let drawingCar = -1, curPath = [];
+
+function loadStage() {
+  const g = genTuned(stage);
+  spd = BASE_SPD;
+  dScore = diffOf(g);
+  tip = stage === 1 ? "차를 누른 채 P까지 길을 그리세요"
+      : stage === 2 ? "직선끼리는 부딪혀요. 길이로 타이밍을 벌리세요" : "";
+  cars = g.defs.map(([sx, sy, tx, ty], i) => ({
+    sx, sy, tx, ty, col: PAL[i % PAL.length],
+    path: null, len: 0, cum: [], x: sx, y: sy, hx: 0, hy: -1, parked: false,
+  }));
+  timer = 0; boom = null; drawingCar = -1; curPath = [];
+  phase = "draw";
+  const go = document.getElementById("go");
+  go.classList.remove("hide"); go.disabled = true;
+  window.__pm = {                                    // 테스트/디버그용
+    defs: g.defs, boxes: g.boxes,
+    state: () => ({ phase, stage, score, best }),
+  };
+  window.__pmGen = (s) => {                          // 생성기 대량 검사용
+    const r = gen(s);
+    return { n: r.defs.length, defs: r.defs, boxes: r.boxes };
+  };
+  hud();
+}
+
+function setPath(c, pts) {
+  c.path = pts; c.cum = [0]; c.len = 0;
+  for (let i = 1; i < pts.length; i++) {
+    c.len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+    c.cum.push(c.len);
+  }
+  document.getElementById("go").disabled = !cars.every((k) => k.path);
+}
+
+function posAt(c, d) {
+  if (d >= c.len) return [c.path[c.path.length - 1], true];
+  let i = 1;
+  while (c.cum[i] < d) i++;
+  const f = (d - c.cum[i - 1]) / (c.cum[i] - c.cum[i - 1] || 1);
+  const a = c.path[i - 1], b = c.path[i];
+  return [[a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f], false];
+}
+
+/* ── 진행 ─────────────────────────────────────────────── */
+function step(dt) {
+  timer += dt;
+  for (const c of cars) {
+    const [p, done] = posAt(c, spd * timer);
+    if (!done && (p[0] !== c.x || p[1] !== c.y)) {
+      const hl = Math.hypot(p[0] - c.x, p[1] - c.y);
+      c.hx = (p[0] - c.x) / hl; c.hy = (p[1] - c.y) / hl;
+    }
+    c.x = p[0]; c.y = p[1]; c.parked = done;
+  }
+  for (let i = 0; i < cars.length; i++) {
+    for (let j = i + 1; j < cars.length; j++) {
+      if (Math.hypot(cars[i].x - cars[j].x, cars[i].y - cars[j].y) < CRASH_D) {
+        boom = [(cars[i].x + cars[j].x) / 2, (cars[i].y + cars[j].y) / 2];
+        return fail();
+      }
+    }
+  }
+  if (cars.every((c) => c.parked)) win();
+}
+
+function fail() {
+  phase = "fail";
+  if (score > best) { best = score; lsSet(BEST_KEY, best); }
+  if (score >= 1) window.blWeeklyReport?.(score);
+  const quips = ["광고 속 그 사람도 딱 이렇게 박던데요.",
+                 "보험사에 광고 탓이라고 해보세요.",
+                 "괜찮아요. 어차피 광고엔 이 게임이 없었잖아요."];
+  show("💥", `${score}판 연속 클리어`, `스테이지 ${stage}에서 쾅…\n\n` +
+       quips[(Math.random() * quips.length) | 0], "처음부터 다시");
+}
+function win() {
+  phase = "win";
+  score++; hud();
+  show("🏆", `${score}연속!`, `스테이지 ${stage} 클리어 — 다음 스테이지로`, "");
+  $("btn").classList.add("hide");
+  clearTimeout(advanceT);
+  advanceT = setTimeout(() => {               // 자동으로 다음 스테이지
+    if (phase !== "win") return;
+    stage++;
+    $("overlay").classList.add("hide");
+    loadStage();
+  }, 900);
+}
+
+/* ── 그리기 ───────────────────────────────────────────── */
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+let scale = 1, ox = 0, oy = 0;
+function resize() {
+  const dpr = devicePixelRatio || 1;
+  cv.width = innerWidth * dpr; cv.height = innerHeight * dpr;
+  cv.style.width = innerWidth + "px"; cv.style.height = innerHeight + "px";
+  scale = Math.min(innerWidth / W, innerHeight / H);
+  ox = (innerWidth - W * scale) / 2; oy = (innerHeight - H * scale) / 2;
+}
+addEventListener("resize", resize); resize();
+
+function polyline(pts, col, dash) {
+  ctx.beginPath(); ctx.lineWidth = 3; ctx.strokeStyle = col;
+  ctx.setLineDash(dash ? [7, 7] : []);
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  ctx.stroke(); ctx.setLineDash([]);
+}
+
+function draw() {
+  const D = dark.matches, dpr = devicePixelRatio || 1;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = D ? "#0b0f17" : "#f3f0e8";
+  ctx.fillRect(0, 0, innerWidth, innerHeight);
+  ctx.setTransform(dpr * scale, 0, 0, dpr * scale, dpr * ox, dpr * oy);
+  if (phase === "title") return;
+
+  ctx.textAlign = "center";
+  for (const c of cars) {                                   // 주차 자리
+    ctx.beginPath(); ctx.setLineDash([6, 6]); ctx.lineWidth = 2.5;
+    ctx.strokeStyle = c.col;
+    ctx.arc(c.tx, c.ty, 19, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+    ctx.font = "bold 15px ui-monospace, monospace"; ctx.fillStyle = c.col;
+    ctx.fillText("P", c.tx, c.ty + 5.5);
+  }
+  ctx.globalAlpha = 0.55;
+  for (const c of cars) if (c.path) polyline(c.path, c.col, true);
+  if (curPath.length > 1 && drawingCar >= 0)
+    polyline(curPath, cars[drawingCar].col, true);
+  ctx.globalAlpha = 1;
+
+  for (const c of cars) {                                   // 차
+    ctx.beginPath(); ctx.fillStyle = c.col;
+    ctx.arc(c.x, c.y, CAR_R, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.fillStyle = "rgba(255,255,255,.85)";
+    ctx.arc(c.x + c.hx * 6, c.y + c.hy * 6, 5.5, 0, 7); ctx.fill();
+  }
+  if (boom) {
+    ctx.font = "34px system-ui";
+    ctx.fillText("💥", boom[0], boom[1] + 12);
+  }
+  if (tip && phase === "draw") {
+    ctx.font = "12px ui-monospace, monospace";
+    ctx.fillStyle = D ? "rgba(232,221,203,.65)" : "rgba(58,43,24,.6)";
+    ctx.fillText(tip, W / 2, 52);
+  }
+}
+
+let last = performance.now();
+function loop(t) {
+  let dt = (t - last) / 1000; last = t;
+  if (dt > 0.05) dt = 0.05;
+  if (phase === "run") step(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+/* ── 입력/UI ──────────────────────────────────────────── */
+const $ = (id) => document.getElementById(id);
+function hud() { $("hStage").textContent = `${score}연속 · 스테이지 ${stage} ${starsOf(dScore)}`; }
+function show(emoji, title, msg, btnText) {
+  $("oEmoji").textContent = emoji; $("oTitle").textContent = title;
+  $("oMsg").textContent = msg; $("btn").textContent = btnText;
+  $("btn").classList.remove("hide");
+  $("best").textContent = best ? `최고 기록: ${best}연속` : "";
+  $("overlay").classList.remove("hide");
+  $("go").classList.add("hide");
+}
+function newRun() {                          // 새 런은 항상 스테이지 1부터
+  clearTimeout(advanceT);
+  stage = 1; score = 0;
+  $("overlay").classList.add("hide");
+  loadStage();
+}
+$("btn").addEventListener("click", () => {
+  if (phase === "title" || phase === "fail") newRun();
+});
+$("retry").addEventListener("click", () => {   // 그린 길만 지우기 (출발 후엔 불가)
+  if (phase === "draw") loadStage();
+});
+window.__pmJump = (s) => { clearTimeout(advanceT); stage = s; $("overlay").classList.add("hide"); loadStage(); };
+window.__pmWin = () => { if (phase === "draw" || phase === "run") win(); };
+window.__pmFail = () => { if (phase === "draw" || phase === "run") fail(); };
+$("go").addEventListener("click", () => {
+  if (phase !== "draw" || !cars.every((c) => c.path)) return;
+  phase = "run"; timer = 0; $("go").classList.add("hide");
+});
+
+const toPt = (e) => [(e.clientX - ox) / scale, (e.clientY - oy) / scale];
+cv.addEventListener("pointerdown", (e) => {
+  e.preventDefault();                        // 모바일 더블탭 줌·고스트 클릭 방지
+  if (phase !== "draw") return;
+  const [x, y] = toPt(e);
+  drawingCar = cars.findIndex((c) => Math.hypot(x - c.sx, y - c.sy) < 26);
+  if (drawingCar >= 0) curPath = [[cars[drawingCar].sx, cars[drawingCar].sy]];
+});
+addEventListener("pointermove", (e) => {
+  if (phase !== "draw" || drawingCar < 0) return;
+  const [x, y] = toPt(e);
+  const lp = curPath[curPath.length - 1];
+  if (Math.hypot(x - lp[0], y - lp[1]) >= 8) curPath.push([x, y]);
+});
+addEventListener("pointerup", () => {
+  if (phase !== "draw" || drawingCar < 0) return;
+  const c = cars[drawingCar];
+  const lp = curPath[curPath.length - 1];
+  if (Math.hypot(lp[0] - c.tx, lp[1] - c.ty) < 32) {
+    curPath.push([c.tx, c.ty]);
+    setPath(c, curPath);
+  }
+  drawingCar = -1; curPath = [];
+});
+
+window.blShareText = () => `주차 러시 ${best}연속! 한 번도 안 박고 도전해보세요 🚗`;
+window.blWeekly = { game: "parkrush", dir: "max", fmt: (v) => `${v}연속` };
+</script>
+<script defer src="/_shared/records.js"></script>
+<script defer src="/_shared/share.js"></script>
+<script defer src="/_shared/like.js"></script>
+</body>
+</html>

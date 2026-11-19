@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#4A4038">
+<title>다그당스 운세 노트</title>
+<meta name="description" content="다그당스가 노트에 적어 가며 봐 주는 타로·사주·손금. 두 운세가 같은 말을 하는 곳은 형광펜으로 이어 줘요.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🔮</text></svg>">
+<link rel="preload" href="fonts/hand-core-a0fe07cab8.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/body-core-d929b0d70d.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="fonts/fonts.css">
+<link rel="stylesheet" href="note.css">
+<link rel="stylesheet" href="notebook/notebook.css">
+</head>
+<body>
+<!-- 펼친 노트 한 장 — 다그당스가 위에서 아래로 이어 쓴다(notebook/consult.js). 칸·메뉴·폼 없음. -->
+<div class="book solo"><main class="page nb" id="page" aria-live="polite"></main></div>
+<img class="dg" id="dg" alt="곁에서 노트를 쓰는 다그당스" width="96" height="85">
+<noscript><p>노트를 쓰려면 자바스크립트가 필요해요.</p></noscript>
+<script src="/_shared/fortune-common.js"></script>
+<script src="vendor/rough.min.js"></script>
+<script src="note/note.js"></script>
+<script type="module" src="notebook/consult.js"></script>
+</body>
+</html>

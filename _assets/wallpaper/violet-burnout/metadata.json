@@ -1,0 +1,27 @@
+{
+  "title": "보라빛 골목의 번아웃",
+  "description": "자판기 불빛 아래 기타를 치는 밤. 보랏빛 네온과 젖은 골목을 그린 일러스트.",
+  "preview": "preview.jpg",
+  "previewSize": {
+    "width": 370,
+    "height": 800
+  },
+  "tags": [
+    "보라",
+    "네온",
+    "밤거리",
+    "기타",
+    "일러스트",
+    "다크"
+  ],
+  "createdAt": "2026-08-06",
+  "downloads": [
+    {
+      "label": "모바일 851×1844",
+      "file": "mobile.jpg",
+      "device": "mobile",
+      "width": 851,
+      "height": 1844
+    }
+  ]
+}

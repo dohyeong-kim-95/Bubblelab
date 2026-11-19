@@ -1,0 +1,34 @@
+# assets — 에셋 카탈로그 UI
+
+상태: **Beta**. 저장소에서 검토·커밋된 파일만 공개합니다.
+
+<https://assets.bubblelab.dev>의 공개 에셋 카탈로그입니다. 루트 카드는 빌드 시
+자동 생성되며 현재 `sticker/`, `wallpaper/`, `music/`, `photo-frame/` 화면을
+제공합니다.
+
+- `catalog.js`: `/_assets/catalog.json`을 읽어 항목 카드, 미디어와 다운로드 버튼 생성
+- `catalog.css`: 모든 카테고리가 함께 사용하는 반응형 스타일
+- `sticker/index.html`: 스티커 목록
+- `wallpaper/index.html`: 배경화면 목록 ([전체 | 모바일 | PC] 탭)
+- `item.js`, `item.css`: 배경화면 상세페이지 동작·스타일. 페이지 자체는
+  `_infra/build.mjs`가 항목마다 `/assets/wallpaper/<id>/`로 생성합니다
+- `music/index.html`: 음악 재생 및 다운로드 목록
+- `photo-frame/index.html`: 네컷사진 공용 프레임 목록 (`util/photo`에서 자동 사용)
+
+실제 파일과 메타데이터는 공개 UI 폴더가 아니라 [`../_assets/`](../_assets/)에서
+관리합니다. 항목 추가 후 `node _infra/build.mjs`로 생성 카탈로그를 검증하세요.
+
+스티커와 배경화면은 이미지 하나로 항목을 통째로 만드는 CLI가 있습니다 —
+`node _infra/sticker-pack.mjs`(4x4 시트 → 팩),
+`node _infra/wallpaper.mjs`(이미지 → 기기별 규격). 사용법은 각
+`_assets/<카테고리>/README.md`에 있습니다.
+
+현재 파일은 저장소에서 정적으로 배포됩니다. 관리자 화면의 업로드 UI와 R2 공개
+경로는 비활성 상태이므로 새 에셋은 `_assets/`에 커밋해야 합니다.
+
+다운로드 파일 경로는 허용된 카테고리와 평면 파일명만 받습니다. 카운터 조작을
+줄이기 위해 같은 IP의 같은 파일은 하루 한 번만 집계하며 IP 원문은 저장하지
+않습니다. 파일 다운로드 자체는 카운터나 통계 인프라가 실패해도 막지 않습니다.
+
+공개 전에 각 에셋의 개인·상업적 사용, 수정, 재배포, 저작자 표시, AI 생성 여부와
+음원 권리 범위를 `_assets/` 문서 또는 metadata에 명시해야 합니다.
